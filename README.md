@@ -40,6 +40,8 @@ stove/
 └── docker-compose.apps.yml 9개 서비스 + 게이트웨이 컨테이너 실행
 ```
 
+서비스별 API·상태머신·이벤트 목록은 [docs/services.md](docs/services.md) 에 정리했다.
+
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
 스키마가 유동적인 패치 매니페스트는 MongoDB, 검색 트래픽은 Elasticsearch.
 서비스마다 스키마를 분리(Database per Service)하고 Flyway 로만 스키마를 바꾼다(`ddl-auto: validate`).
