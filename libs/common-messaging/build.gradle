@@ -1,0 +1,9 @@
+apply plugin: 'java-library'
+
+dependencies {
+    api project(':libs:common-core')
+    api project(':libs:common-event')
+    api project(':libs:common-jpa')
+    api 'org.springframework.kafka:spring-kafka'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+}

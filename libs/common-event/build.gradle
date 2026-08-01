@@ -1,0 +1,8 @@
+apply plugin: 'java-library'
+
+dependencies {
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    // 이벤트 계약에는 Kafka 메시지 헤더/봉투 규약까지 포함된다(JPA 는 포함하지 않는다).
+    api 'org.apache.kafka:kafka-clients'
+}

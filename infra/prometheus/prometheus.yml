@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: stove-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # 로컬 실행 기준(호스트에서 부트 앱 구동). 컨테이너로 띄우면 서비스명:포트로 교체
+      - targets:
+          - host.docker.internal:8080   # gateway
+          - host.docker.internal:8081   # catalog
+          - host.docker.internal:8082   # order
+          - host.docker.internal:8083   # payment
+          - host.docker.internal:8084   # license
+          - host.docker.internal:8085   # studio
+          - host.docker.internal:8086   # review
+          - host.docker.internal:8087   # store
+          - host.docker.internal:8088   # download
+          - host.docker.internal:8089   # settlement

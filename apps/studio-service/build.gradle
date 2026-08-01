@@ -1,0 +1,4 @@
+dependencies {
+    implementation project(':libs:common-web')
+    implementation project(':libs:common-messaging')
+}

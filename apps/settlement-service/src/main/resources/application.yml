@@ -1,0 +1,63 @@
+server:
+  port: 8089
+  shutdown: graceful
+
+spring:
+  application:
+    name: settlement-service
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/stove_settlement?serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${DB_USER:stove}
+    password: ${DB_PASSWORD:stove1234}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 100
+        order_inserts: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    consumer:
+      group-id: settlement-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+
+stove:
+  settlement:
+    self-seller-id: 1          # 자체 판매(수수료 0%)
+    partner-fee-rate: 0.3000   # 입점 판매 중개 수수료 30%
+    close-cron: "0 0 3 1 * *"  # 매월 1일 03:00 KST 전월 마감
+  outbox:
+    # 정산은 이벤트를 발행하지 않는 종단 컨슈머 — 릴레이 비활성화
+    relay-enabled: false
+
+management:
+  endpoints.web.exposure.include: health,info,prometheus,metrics
+  endpoint.health.probes.enabled: true
+  metrics.tags.application: settlement-service
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  level:
+    com.stove: DEBUG

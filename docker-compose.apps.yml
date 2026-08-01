@@ -1,0 +1,113 @@
+# 9개 서비스 + 게이트웨이를 컨테이너로 띄운다.
+#
+#   ./gradlew build -x test                     # bootJar 생성
+#   docker compose up -d                        # 인프라
+#   docker compose -f docker-compose.apps.yml up -d --build
+#
+# 인프라(docker-compose.yml)가 만든 stove_default 네트워크에 합류한다.
+name: stove-apps
+
+x-common-env: &common-env
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_USER: stove
+  DB_PASSWORD: stove1234
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  KAFKA_BROKERS: kafka:19092
+  ES_URIS: http://elasticsearch:9200
+  MONGO_URI: mongodb://mongodb:27017/stove_download
+
+x-app: &app
+  restart: unless-stopped
+  networks:
+    - stove
+
+services:
+  gateway:
+    <<: *app
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    image: stove/gateway
+    ports: ["8080:8080"]
+    environment:
+      CATALOG_URI: http://catalog-service:8081
+      ORDER_URI: http://order-service:8082
+      PAYMENT_URI: http://payment-service:8083
+      LICENSE_URI: http://license-service:8084
+      STUDIO_URI: http://studio-service:8085
+      REVIEW_URI: http://review-service:8086
+      STORE_URI: http://store:8087
+      DOWNLOAD_URI: http://download-service:8088
+      SETTLEMENT_URI: http://settlement-service:8089
+
+  studio-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/studio-service/Dockerfile }
+    image: stove/studio-service
+    ports: ["8085:8085"]
+    environment: *common-env
+
+  review-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/review-service/Dockerfile }
+    image: stove/review-service
+    ports: ["8086:8086"]
+    environment: *common-env
+
+  catalog-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/catalog-service/Dockerfile }
+    image: stove/catalog-service
+    ports: ["8081:8081"]
+    environment: *common-env
+
+  store:
+    <<: *app
+    build: { context: ., dockerfile: apps/store/Dockerfile }
+    image: stove/store
+    ports: ["8087:8087"]
+    environment: *common-env
+
+  order-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/order-service/Dockerfile }
+    image: stove/order-service
+    ports: ["8082:8082"]
+    environment:
+      <<: *common-env
+      CATALOG_BASE_URL: http://catalog-service:8081
+
+  payment-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/payment-service/Dockerfile }
+    image: stove/payment-service
+    ports: ["8083:8083"]
+    environment: *common-env
+
+  license-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/license-service/Dockerfile }
+    image: stove/license-service
+    ports: ["8084:8084"]
+    environment: *common-env
+
+  download-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/download-service/Dockerfile }
+    image: stove/download-service
+    ports: ["8088:8088"]
+    environment: *common-env
+
+  settlement-service:
+    <<: *app
+    build: { context: ., dockerfile: apps/settlement-service/Dockerfile }
+    image: stove/settlement-service
+    ports: ["8089:8089"]
+    environment: *common-env
+
+networks:
+  stove:
+    name: stove_default
+    external: true

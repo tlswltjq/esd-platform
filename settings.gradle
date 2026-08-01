@@ -1,0 +1,33 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'stove'
+
+// ── 공용 라이브러리 ────────────────────────────────────────────────
+include 'libs:common-core'
+include 'libs:common-web'
+include 'libs:common-event'
+include 'libs:common-jpa'
+include 'libs:common-messaging'
+
+// ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
+include 'apps:gateway'
+
+// 트랙 A. 크리에이터 (입점~노출)
+include 'apps:studio-service'
+include 'apps:review-service'
+include 'apps:catalog-service'
+
+// 트랙 B. 커머스 (구매~결제)
+include 'apps:store'
+include 'apps:order-service'
+include 'apps:payment-service'
+
+// 트랙 C. 이용/정산 (지급~배분)
+include 'apps:license-service'
+include 'apps:download-service'
+include 'apps:settlement-service'
