@@ -102,6 +102,24 @@ stove/
 ### 개발 환경 준비
 
 작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
+준비 부담이 적은 순서대로 두 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
+
+#### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
+
+`.devcontainer/devcontainer.json` 이 JDK·Gradle·Docker 를 모두 정의한다.
+VS Code 의 *Reopen in Container*, IntelliJ, `devcontainer` CLI 가 같은 파일을 읽는다.
+
+```bash
+devcontainer up --workspace-folder .
+```
+
+`docker-in-docker` 를 쓰므로 컨테이너가 자기 Docker 데몬을 갖는다 — Testcontainers 테스트와
+`docker compose up` 이 호스트 환경을 가정하지 않고 그대로 돈다.
+GitHub Codespaces 도 이 파일을 그대로 사용하므로, 브라우저만으로도 열린다.
+
+#### B. 로컬 직접 실행
+
+머신에 도구 두 개를 깔 수 있다면 이쪽이 가장 빠르다.
 
 | 필요한 것 | 조달 방법 |
 |---|---|
