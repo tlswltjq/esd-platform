@@ -3,9 +3,9 @@ package com.stove.order.infrastructure.client;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.core.response.ApiResponse;
-import com.stove.order.api.application.port.CatalogPort;
-import com.stove.order.api.application.port.CatalogQuote;
-import com.stove.order.api.application.port.QuoteItem;
+import com.stove.order.core.domain.Quote;
+import com.stove.order.core.domain.QuoteItem;
+import com.stove.order.core.port.CatalogPort;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,16 +27,16 @@ import org.springframework.web.client.RestClientException;
 @RequiredArgsConstructor
 public class CatalogRestAdapter implements CatalogPort {
 
-    private static final ParameterizedTypeReference<ApiResponse<CatalogQuote>> QUOTE_TYPE =
+    private static final ParameterizedTypeReference<ApiResponse<Quote>> QUOTE_TYPE =
             new ParameterizedTypeReference<>() {
             };
 
     private final RestClient catalogRestClient;
 
     @Override
-    public CatalogQuote quote(List<QuoteItem> items) {
+    public Quote quote(List<QuoteItem> items) {
         try {
-            ApiResponse<CatalogQuote> response = catalogRestClient.post()
+            ApiResponse<Quote> response = catalogRestClient.post()
                     .uri("/api/v1/products/quote")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new QuoteCommand(items))

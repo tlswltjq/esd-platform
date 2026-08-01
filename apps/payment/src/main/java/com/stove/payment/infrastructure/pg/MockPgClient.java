@@ -1,7 +1,8 @@
 package com.stove.payment.infrastructure.pg;
 
-import java.util.UUID;
+import com.stove.payment.core.domain.PgPreparation;
 import com.stove.payment.core.port.PgClient;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -13,11 +14,11 @@ import org.springframework.stereotype.Component;
 public class MockPgClient implements PgClient {
 
     @Override
-    public PgPrepareResult prepare(String orderNo, long amount, String currency, String method) {
+    public PgPreparation prepare(String orderNo, long amount, String currency, String method) {
         String pgTxId = "PG-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
         log.info("[MOCK PG] 사전등록 orderNo={} amount={}{} method={} → pgTxId={}",
                 orderNo, amount, currency, method, pgTxId);
-        return new PgPrepareResult(pgTxId, "https://mock-pg.local/checkout/" + pgTxId);
+        return new PgPreparation(pgTxId, "https://mock-pg.local/checkout/" + pgTxId);
     }
 
     @Override

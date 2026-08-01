@@ -1,6 +1,6 @@
 package com.stove.order.api.controller.dto;
 
-import com.stove.order.api.application.port.QuoteItem;
+import com.stove.order.core.domain.QuoteItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;

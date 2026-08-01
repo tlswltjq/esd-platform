@@ -11,6 +11,7 @@ import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgApproval;
+import com.stove.payment.core.domain.PgPreparation;
 import com.stove.payment.core.port.PgClient;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +54,7 @@ public class PaymentService {
     /** 게이트 2: PG 사전등록 */
     public PaymentPreparation prepare(String orderNo, String method) {
         Payment payment = findPayment(orderNo);
-        PgClient.PgPrepareResult result =
+        PgPreparation result =
                 pgClient.prepare(orderNo, payment.getAmount(), payment.getCurrency(), method);
         payment.prepare(result.pgTxId(), method);
 

@@ -1,7 +1,5 @@
 package com.stove.common.archunit;
 
-import static com.tngtech.archunit.base.DescribedPredicate.not;
-import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -20,22 +18,25 @@ import com.tngtech.archunit.lang.ArchRule;
  * ├── &lt;App&gt;Application
  * ├── config/                 스프링 설정, @ConfigurationProperties
  * ├── core/                   단일 도메인. 이 모듈의 존재 이유.
- * │   ├── domain/             엔티티(JPA 허용), VO, enum, 정책, Repository 인터페이스
- * │   ├── port/               core 가 필요로 하는 아웃바운드 포트 (PG, CDN, 스토리지 …)
+ * │   ├── domain/             엔티티(JPA 허용), VO, enum, 정책, Repository 인터페이스,
+ * │   │                       포트가 주고받는 값 타입
+ * │   ├── port/               아웃바운드 포트 인터페이스 — PG, CDN, 스토리지, 외부 도메인까지 전부
  * │   └── service/            단일 애그리거트 동작 + 트랜잭션 경계
  * ├── api/                    바깥 세계와의 접점
  * │   ├── controller/         HTTP 인바운드 — 엔드포인트, 요청/응답 DTO
  * │   ├── listener/           Kafka 인바운드
  * │   ├── scheduler/          배치/스케줄 인바운드
- * │   └── application/        조율이 필요한 경우의 파사드 + port/ (외부 도메인 포트)
+ * │   └── application/        조율이 필요한 경우의 파사드
  * └── infrastructure/         모든 아웃바운드 포트 구현체
  * </pre>
  *
- * <p>확정된 설계 결정 3가지가 규칙에 반영되어 있다.
+ * <p>확정된 설계 결정이 규칙에 반영되어 있다.
  * <ol>
  *   <li>포트 구현체는 같은 모듈의 {@code infrastructure} 어댑터다. 앱 간 컴파일 의존은 없다.</li>
  *   <li>파사드는 강제하지 않는다 — 인바운드가 {@code core.service} 를 직접 호출해도 된다.</li>
  *   <li>도메인 객체와 엔티티를 분리하지 않는다 — {@code core.domain} 의 JPA 의존을 허용한다.</li>
+ *   <li>포트는 DDD 의 리포지토리 인터페이스와 같은 자리, 즉 안쪽({@code core.port})에 둔다.
+ *       외부 시스템이든 외부 도메인이든 구분하지 않는다.</li>
  * </ol>
  *
  * <p>각 앱의 테스트에서 {@code ArchTests.in(ModulePackageRules.class)} 로 가져다 쓴다.
@@ -46,7 +47,6 @@ public final class ModulePackageRules {
     private static final String CORE_PORT = "..core.port..";
     private static final String CORE_SERVICE = "..core.service..";
     private static final String APPLICATION = "..api.application..";
-    private static final String APP_PORT = "..api.application.port..";
     private static final String CONTROLLER = "..api.controller..";
     private static final String LISTENER = "..api.listener..";
     private static final String SCHEDULER = "..api.scheduler..";
@@ -55,9 +55,8 @@ public final class ModulePackageRules {
 
     /** 아웃바운드 포트 인터페이스. 구현체가 어디에 있어야 하는지를 판정하는 기준이 된다. */
     private static final DescribedPredicate<JavaClass> PORT_INTERFACE =
-            DescribedPredicate.describe("아웃바운드 포트 인터페이스", javaClass -> javaClass.isInterface()
-                    && (javaClass.getPackageName().endsWith(".core.port")
-                            || javaClass.getPackageName().endsWith(".api.application.port")));
+            DescribedPredicate.describe("아웃바운드 포트 인터페이스",
+                    javaClass -> javaClass.isInterface() && javaClass.getPackageName().endsWith(".core.port"));
 
     private ModulePackageRules() {
     }
@@ -80,8 +79,9 @@ public final class ModulePackageRules {
      * <p>파사드를 강제하지 않으므로 인바운드는 {@code application} 과 {@code core.service} 를 모두 호출할 수 있다.
      * 반대로 {@code infrastructure}(포트 구현체)는 DI 로만 주입되어야 하므로 아무도 직접 참조하지 못한다.
      *
-     * <p>포트 패키지는 자기 계층에서 떼어내 별도 레이어로 둔다. 어댑터는 자신이 구현하는 포트를
-     * 반드시 참조해야 하지만, 그렇다고 파사드나 서비스 본체까지 볼 수 있어서는 안 되기 때문이다.
+     * <p>아웃바운드 포트는 모듈당 {@code core.port} 한 곳에만 둔다(DDD 의 리포지토리 인터페이스와 같은 자리).
+     * 어댑터는 자신이 구현하는 포트를 반드시 참조해야 하므로 {@code Infrastructure → CorePort} 는 허용하되,
+     * 서비스 본체나 파사드까지 볼 수는 없다.
      */
     @ArchTest
     public static final ArchRule 계층_접근_방향 = layeredArchitecture()
@@ -90,9 +90,7 @@ public final class ModulePackageRules {
             .optionalLayer("Domain").definedBy(DOMAIN)
             .optionalLayer("CorePort").definedBy(CORE_PORT)
             .optionalLayer("CoreService").definedBy(CORE_SERVICE)
-            .optionalLayer("AppPort").definedBy(APP_PORT)
-            .optionalLayer("Application")
-            .definedBy(resideInAPackage(APPLICATION).and(not(resideInAPackage(APP_PORT))))
+            .optionalLayer("Application").definedBy(APPLICATION)
             .optionalLayer("Inbound").definedBy(CONTROLLER, LISTENER, SCHEDULER)
             .optionalLayer("Infrastructure").definedBy(INFRASTRUCTURE)
             .optionalLayer("Config").definedBy(CONFIG)
@@ -100,8 +98,6 @@ public final class ModulePackageRules {
             .whereLayer("Inbound").mayNotBeAccessedByAnyLayer()
             .whereLayer("Infrastructure").mayOnlyBeAccessedByLayers("Config")
             .whereLayer("Application").mayOnlyBeAccessedByLayers("Inbound", "Config")
-            .whereLayer("AppPort").mayOnlyBeAccessedByLayers(
-                    "Application", "Inbound", "Infrastructure", "Config")
             .whereLayer("CoreService").mayOnlyBeAccessedByLayers("Inbound", "Application", "Config")
             .whereLayer("CorePort").mayOnlyBeAccessedByLayers(
                     "CoreService", "Application", "Infrastructure", "Config");
@@ -129,14 +125,29 @@ public final class ModulePackageRules {
             .allowEmptyShould(true);
 
     /**
-     * 포트 패키지는 계약만 담는다 — 인터페이스와 그 인터페이스가 주고받는 값 타입.
-     * 구현 클래스가 여기 들어오면 어댑터가 계약 안으로 새어 들어온 것이다.
+     * 아웃바운드 포트는 모듈당 {@code core.port} 한 곳에만 정의한다.
+     *
+     * <p>DDD 에서 리포지토리 인터페이스를 도메인 계층에 두는 것과 같은 자리다 —
+     * "무엇이 필요한가"는 안쪽이 선언하고, "어떻게 하는가"만 바깥이 가진다.
+     * 조율에만 쓰이는 외부 도메인 포트라고 해서 따로 두지 않는다. 포트를 찾을 곳이 하나여야 한다.
      */
     @ArchTest
-    public static final ArchRule 포트_패키지는_계약만_담는다 = classes()
-            .that().resideInAnyPackage(CORE_PORT, APP_PORT)
+    public static final ArchRule 포트는_core_port_에만_정의한다 = noClasses()
+            .that().resideOutsideOfPackage(CORE_PORT)
+            .should().resideInAPackage("..port..")
+            .allowEmptyShould(true);
+
+    /**
+     * 포트 패키지는 인터페이스만 담는다.
+     *
+     * <p>포트가 주고받는 값은 {@code core.domain} 의 모델이다 — 리포지토리가 도메인 객체를
+     * 반환하는 것과 같다. 레코드를 포트 옆에 두기 시작하면 외부 시스템의 응답 형식이
+     * 계약 안에 눌러앉는다.
+     */
+    @ArchTest
+    public static final ArchRule 포트_패키지는_인터페이스만_담는다 = classes()
+            .that().resideInAPackage(CORE_PORT)
             .should().beInterfaces()
-            .orShould().beRecords()
             .allowEmptyShould(true);
 
     /** 포트 구현체는 언제나 같은 모듈의 아웃바운드 어댑터다(결정 1). */

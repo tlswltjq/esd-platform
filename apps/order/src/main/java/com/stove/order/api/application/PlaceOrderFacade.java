@@ -2,10 +2,10 @@ package com.stove.order.api.application;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
-import com.stove.order.api.application.port.CatalogPort;
-import com.stove.order.api.application.port.CatalogQuote;
-import com.stove.order.api.application.port.QuoteItem;
 import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.Quote;
+import com.stove.order.core.domain.QuoteItem;
+import com.stove.order.core.port.CatalogPort;
 import com.stove.order.core.service.OrderCommandService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +32,7 @@ public class PlaceOrderFacade {
     private final OrderCommandService orderCommandService;
 
     public Order place(Long memberId, List<QuoteItem> items, Long expectedAmount) {
-        CatalogQuote quote = catalogPort.quote(items);
+        Quote quote = catalogPort.quote(items);
 
         if (expectedAmount != null && expectedAmount != quote.totalAmount()) {
             log.warn("주문 금액 불일치 expected={} actual={}", expectedAmount, quote.totalAmount());
