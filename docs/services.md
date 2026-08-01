@@ -362,3 +362,7 @@ catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 �
 교체 대상이 이미 둘인 `BuildStorage` 와 `DownloadUrlSigner` 는 `@ConditionalOnProperty` 로
 한쪽만 활성화된다. 같은 포트에 빈이 둘이 되면 기동이 실패하므로, 새 어댑터를 붙일 때는
 반드시 조건을 함께 건다.
+
+이 "반드시" 는 사람에게 거는 기대가 아니다 — ArchUnit 이 검사한다.
+`Mock*`/`Stub*`/`Fake*` 로 시작하는 어댑터에 `@Profile` 이나 `@ConditionalOnProperty` 가
+없으면 테스트가 깨진다(`스텁_어댑터는_격리한다`). 조건을 거는 것이 관례가 아니라 통과 조건이다.
