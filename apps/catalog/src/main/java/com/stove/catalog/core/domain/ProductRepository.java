@@ -1,4 +1,4 @@
-package com.stove.catalog.domain;
+package com.stove.catalog.core.domain;
 
 import java.util.List;
 import java.util.Optional;

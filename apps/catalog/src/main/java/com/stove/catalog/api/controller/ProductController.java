@@ -1,10 +1,10 @@
-package com.stove.catalog.api;
+package com.stove.catalog.api.controller;
 
-import com.stove.catalog.api.dto.ProductResponse;
-import com.stove.catalog.api.dto.QuoteRequest;
-import com.stove.catalog.api.dto.QuoteResponse;
-import com.stove.catalog.application.ProductCommandService;
-import com.stove.catalog.application.ProductQueryService;
+import com.stove.catalog.api.controller.dto.ProductResponse;
+import com.stove.catalog.api.controller.dto.QuoteRequest;
+import com.stove.catalog.api.controller.dto.QuoteResponse;
+import com.stove.catalog.core.service.ProductCommandService;
+import com.stove.catalog.core.service.ProductQueryService;
 import com.stove.common.core.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -28,12 +28,14 @@ public class ProductController {
 
     @GetMapping
     public ApiResponse<List<ProductResponse>> list(@PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(productQueryService.getOnSaleProducts(pageable).getContent());
+        return ApiResponse.ok(productQueryService.getOnSaleProducts(pageable)
+                .map(ProductResponse::from)
+                .getContent());
     }
 
     @GetMapping("/{productId}")
     public ApiResponse<ProductResponse> detail(@PathVariable Long productId) {
-        return ApiResponse.ok(productQueryService.getProduct(productId));
+        return ApiResponse.ok(ProductResponse.from(productQueryService.getProduct(productId)));
     }
 
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */
@@ -58,6 +60,6 @@ public class ProductController {
     /** 내부 전용: 주문 금액 서버 재계산 (게이트웨이에서 외부 노출 차단) */
     @PostMapping("/quote")
     public ApiResponse<QuoteResponse> quote(@Valid @RequestBody QuoteRequest request) {
-        return ApiResponse.ok(productQueryService.quote(request));
+        return ApiResponse.ok(QuoteResponse.from(productQueryService.quote(request.toItems())));
     }
 }

@@ -1,4 +1,4 @@
-package com.stove.catalog.domain;
+package com.stove.catalog.core.domain;
 
 /**
  * 상품 노출 상태.

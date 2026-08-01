@@ -1,11 +1,11 @@
-package com.stove.catalog.application;
+package com.stove.catalog.core.service;
 
-import com.stove.catalog.api.dto.ProductResponse;
-import com.stove.catalog.api.dto.QuoteRequest;
-import com.stove.catalog.api.dto.QuoteResponse;
-import com.stove.catalog.domain.Product;
-import com.stove.catalog.domain.ProductRepository;
-import com.stove.catalog.domain.ProductStatus;
+import com.stove.catalog.core.domain.Product;
+import com.stove.catalog.core.domain.ProductRepository;
+import com.stove.catalog.core.domain.ProductStatus;
+import com.stove.catalog.core.domain.ProductView;
+import com.stove.catalog.core.domain.Quote;
+import com.stove.catalog.core.domain.QuoteItem;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.OrderLine;
@@ -33,30 +33,30 @@ public class ProductQueryService {
     private final ProductRepository productRepository;
 
     @Cacheable(cacheNames = "catalog:product", key = "#productId")
-    public ProductResponse getProduct(Long productId) {
+    public ProductView getProduct(Long productId) {
         return productRepository.findById(productId)
-                .map(ProductResponse::from)
+                .map(ProductView::from)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 
-    public Page<ProductResponse> getOnSaleProducts(Pageable pageable) {
+    public Page<ProductView> getOnSaleProducts(Pageable pageable) {
         return productRepository.findByStatus(ProductStatus.ON_SALE, pageable)
-                .map(ProductResponse::from);
+                .map(ProductView::from);
     }
 
     /**
      * 검증 게이트 1단계: 주문 금액을 서버 가격으로 재계산한다.
      * 판매 불가 상품이 섞여 있으면 여기서 주문 자체가 성립하지 않는다.
      */
-    public QuoteResponse quote(QuoteRequest request) {
-        List<Long> productIds = request.items().stream().map(QuoteRequest.Item::productId).distinct().toList();
+    public Quote quote(List<QuoteItem> items) {
+        List<Long> productIds = items.stream().map(QuoteItem::productId).distinct().toList();
         Map<Long, Product> products = productRepository.findByIdIn(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
 
         List<OrderLine> lines = new ArrayList<>();
         long total = 0;
         String currency = null;
-        for (QuoteRequest.Item item : request.items()) {
+        for (QuoteItem item : items) {
             Product product = products.get(item.productId());
             if (product == null) {
                 throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "productId=" + item.productId());
@@ -71,6 +71,6 @@ public class ProductQueryService {
             lines.add(line);
             total += line.lineAmount();
         }
-        return new QuoteResponse(lines, total, currency);
+        return new Quote(lines, total, currency);
     }
 }
