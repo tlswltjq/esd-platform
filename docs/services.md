@@ -302,3 +302,63 @@ Spring Cloud Gateway. 라우팅과 함께 **내부 전용 API 를 외부에 노�
 catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 재계산하는
 `POST /api/v1/products/quote` 는 게이트웨이를 통해 호출할 수 없다.
 **서비스 간 내부 호출로만 도달 가능하다.**
+
+---
+
+## 외부 연동 대역
+
+외부 시스템은 전부 `core/port` 뒤에 있고, 구현체는 `infrastructure/` 에 있다.
+**어느 것이 실제 동작이고 어느 것이 흉내인지** 여기서 구분한다.
+
+| 포트 | 스텁 | 실제 어댑터 | 선택 방법 |
+|---|---|---|---|
+| `BuildStorage` (studio) | `MockBuildStorage` | **`S3BuildStorage`** | `stove.storage.provider` = `mock`(기본) / `s3` |
+| `DownloadUrlSigner` (download) | — | **`CdnUrlSigner`**, **`S3PresignedUrlSigner`** | `stove.download.url-strategy` = `cdn`(기본) / `s3` |
+| `PgClient` (payment) | `MockPgClient` | 없음 | — |
+| `RatingBoardClient` (review) | `MockRatingBoardClient` | 없음 | — |
+| `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 | — |
+
+### 실제로 동작하는 것
+
+**`S3BuildStorage` / `S3PresignedUrlSigner`** — AWS SDK v2 로 presigned URL 을 발급한다.
+로컬은 MinIO, 운영은 S3 를 가정하며 둘 다 S3 API 라서 `endpoint` 만 다르다.
+서버는 바이너리를 직접 받지 않는다 — 수 GB 짜리 빌드가 애플리케이션을 통과하지 않게
+클라이언트가 스토리지로 바로 올리고 바로 받는다.
+`MinIOContainer` 테스트가 발급한 URL 로 실제 업로드·다운로드까지 확인하고,
+서명 없는 접근이 403 인 것도 함께 검증한다.
+
+**`CdnUrlSigner`** — HMAC-SHA256 서명을 실제로 계산한다. 경로·회원·만료시각을 묶어
+서명하는 구조는 CloudFront 서명 URL 과 같다. 다만 **검증하는 CDN 엣지가 없어 반쪽**이다.
+서명 키 기본값 `local-dev-signing-key` 는 운영에서 반드시 교체해야 한다.
+
+`DownloadUrlSigner` 에 어댑터가 둘인 것은 실제 운영 형태를 반영한 것이다 —
+**S3 에 저장하고 CDN 으로 배포**하므로 저장 위치와 배포 경로는 독립적으로 고른다.
+
+### 흉내만 내는 것
+
+| 스텁 | 하는 일 | 빠진 것 |
+|---|---|---|
+| `MockBuildStorage` | `s3://stove-builds/{code}/{ver}/game.pak` 경로 문자열 조립 | 서명 없음. 파일이 실존하지 않는다 |
+| `MockPgClient` | 거래 ID = UUID 앞 12자, 결제창 URL 문자열 조립 | **`cancel()` 이 로그만 찍는다 — 환불이 절대 실패하지 않는다.** 금액·통화를 받지만 검증하지 않는다 |
+| `MockRatingBoardClient` | 접수번호 `GRAC-2026-00001` | 인메모리 카운터라 재기동하면 1부터. 실제 심의는 며칠 걸리는 비동기 프로세스이고 반려도 나온다 |
+| `MockTaxInvoiceIssuer` | 발행번호 `TI-202607-001001` | 결정적이라 재실행 검증엔 유리하다. 실제 세금계산서는 전송·역발행 상태를 갖는 객체다 |
+
+`MockPgClient` 의 금액 미검증은 설계상 문제가 아니다.
+**검증 게이트 3단계(콜백 금액 대조)는 PG 가 아니라 `Payment.approve()` 가 자기 필드와 비교해 수행**하므로,
+그 방어선은 스텁과 무관하게 실제로 동작한다.
+
+### 스텁 공통의 한계
+
+**예외를 던지지 않는다.** 타임아웃도, 거부도, 부분 실패도 없다.
+그래서 license 의 Saga 보상 경로(`LicenseIssueFailed` → 자동 환불)는
+지급 실패를 인위적으로 주입해야만 테스트할 수 있다.
+
+### 교체 안전장치
+
+스텁은 모두 `@Profile("!prod")` 가 걸려 있다.
+`prod` 로 띄우면 스텁이 빠지고, 실제 어댑터가 없으면 **"no qualifying bean" 으로 기동이 실패한다.**
+운영에서 스텁이 조용히 도는 것만은 일어나지 않게 하려는 의도다.
+
+교체 대상이 이미 둘인 `BuildStorage` 와 `DownloadUrlSigner` 는 `@ConditionalOnProperty` 로
+한쪽만 활성화된다. 같은 포트에 빈이 둘이 되면 기동이 실패하므로, 새 어댑터를 붙일 때는
+반드시 조건을 함께 건다.
