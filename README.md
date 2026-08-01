@@ -14,19 +14,19 @@ stove/
 │   ├── gateway/            :8080  Spring Cloud Gateway (라우팅 + 내부 API 차단)
 │   │
 │   │   # 트랙 A. 크리에이터 (입점~노출)
-│   ├── studio-service/     :8085  게임 프로젝트·빌드 등록, 심의 신청          MySQL
-│   ├── review-service/     :8086  등급분류 심의 상태머신, 자체등급분류 분기    MySQL
-│   ├── catalog-service/    :8081  상품 마스터, 노출 제어, 서버 측 가격 재계산  MySQL + Redis
+│   ├── studio/             :8085  게임 프로젝트·빌드 등록, 심의 신청          MySQL
+│   ├── review/             :8086  등급분류 심의 상태머신, 자체등급분류 분기    MySQL
+│   ├── catalog/            :8081  상품 마스터, 노출 제어, 서버 측 가격 재계산  MySQL + Redis
 │   │
 │   │   # 트랙 B. 커머스 (구매~결제)
 │   ├── store/              :8087  진열·검색·프로모션 (읽기 전용 CQRS)        Elasticsearch + Redis
-│   ├── order-service/      :8082  주문 생성/취소, 금액 검증                  MySQL
-│   ├── payment-service/    :8083  PG 연동, 콜백 금액 대조, 환불              MySQL
+│   ├── order/              :8082  주문 생성/취소, 금액 검증                  MySQL
+│   ├── payment/            :8083  PG 연동, 콜백 금액 대조, 환불              MySQL
 │   │
 │   │   # 트랙 C. 이용/정산 (지급~배분)
-│   ├── license-service/    :8084  라이선스/CD키 발급·회수 (멱등)             MySQL
-│   ├── download-service/   :8088  패치 매니페스트, CDN 서명 URL              MongoDB
-│   └── settlement-service/ :8089  매출 배분·수수료·세금계산서·환불 역산       MySQL + 배치
+│   ├── license/            :8084  라이선스/CD키 발급·회수 (멱등)             MySQL
+│   ├── download/           :8088  패치 매니페스트, CDN 서명 URL              MongoDB
+│   └── settlement/         :8089  매출 배분·수수료·세금계산서·환불 역산       MySQL + 배치
 │
 ├── libs/
 │   ├── common-core         ApiResponse / ErrorCode / BusinessException
@@ -99,6 +99,51 @@ stove/
 
 ## 4. 실행
 
+### 개발 환경 준비
+
+작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
+준비 부담이 적은 순서대로 두 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
+
+#### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
+
+`.devcontainer/devcontainer.json` 이 JDK·Gradle·Docker 를 모두 정의한다.
+VS Code 의 *Reopen in Container*, IntelliJ, `devcontainer` CLI 가 같은 파일을 읽는다.
+
+```bash
+devcontainer up --workspace-folder .
+```
+
+`docker-in-docker` 를 쓰므로 컨테이너가 자기 Docker 데몬을 갖는다 — Testcontainers 테스트와
+`docker compose up` 이 호스트 환경을 가정하지 않고 그대로 돈다.
+GitHub Codespaces 도 이 파일을 그대로 사용하므로, 브라우저만으로도 열린다.
+
+#### B. 로컬 직접 실행
+
+머신에 도구 두 개를 깔 수 있다면 이쪽이 가장 빠르다.
+
+| 필요한 것 | 조달 방법 |
+|---|---|
+| JDK 21 (Gradle 런처용) | `.mise.toml` — `mise install` (또는 SDKMAN `.sdkmanrc`) |
+| JDK 21 (컴파일 툴체인) | `settings.gradle` 의 foojay 리졸버가 자동으로 내려받음 |
+| Docker 엔드포인트 | `.envrc` 가 활성 docker 컨텍스트에서 소켓 주소를 뽑아 `DOCKER_HOST` 로 export |
+
+```bash
+mise install      # JDK 조달
+direnv allow      # .envrc 승인 (내용 확인했다는 서명)
+./gradlew build
+```
+
+direnv 를 쓰지 않는다면 `DOCKER_HOST` 만 직접 잡아주면 된다.
+
+```bash
+export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+```
+
+> `~/.testcontainers.properties` 에 `docker.host` 를 적어두는 방식은 쓰지 않는다.
+> 절대경로라 다른 머신에서 없는 소켓을 가리키며 실패한다 — 설정하지 않은 것보다 나쁘다.
+
+### 실행
+
 ```bash
 # 1) 인프라
 docker compose up -d
@@ -107,7 +152,7 @@ docker compose up -d
 ./gradlew build
 
 # 3-a) 로컬 실행 (서비스별 터미널)
-./gradlew :apps:catalog-service:bootRun     # 8081, 이하 동일
+./gradlew :apps:catalog:bootRun     # 8081, 이하 동일
 
 # 3-b) 컨테이너 실행 (Dockerfile 사용)
 ./gradlew build -x test

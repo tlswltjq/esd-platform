@@ -32,34 +32,34 @@ services:
     image: stove/gateway
     ports: ["8080:8080"]
     environment:
-      CATALOG_URI: http://catalog-service:8081
-      ORDER_URI: http://order-service:8082
-      PAYMENT_URI: http://payment-service:8083
-      LICENSE_URI: http://license-service:8084
-      STUDIO_URI: http://studio-service:8085
-      REVIEW_URI: http://review-service:8086
+      CATALOG_URI: http://catalog:8081
+      ORDER_URI: http://order:8082
+      PAYMENT_URI: http://payment:8083
+      LICENSE_URI: http://license:8084
+      STUDIO_URI: http://studio:8085
+      REVIEW_URI: http://review:8086
       STORE_URI: http://store:8087
-      DOWNLOAD_URI: http://download-service:8088
-      SETTLEMENT_URI: http://settlement-service:8089
+      DOWNLOAD_URI: http://download:8088
+      SETTLEMENT_URI: http://settlement:8089
 
-  studio-service:
+  studio:
     <<: *app
-    build: { context: ., dockerfile: apps/studio-service/Dockerfile }
-    image: stove/studio-service
+    build: { context: ., dockerfile: apps/studio/Dockerfile }
+    image: stove/studio
     ports: ["8085:8085"]
     environment: *common-env
 
-  review-service:
+  review:
     <<: *app
-    build: { context: ., dockerfile: apps/review-service/Dockerfile }
-    image: stove/review-service
+    build: { context: ., dockerfile: apps/review/Dockerfile }
+    image: stove/review
     ports: ["8086:8086"]
     environment: *common-env
 
-  catalog-service:
+  catalog:
     <<: *app
-    build: { context: ., dockerfile: apps/catalog-service/Dockerfile }
-    image: stove/catalog-service
+    build: { context: ., dockerfile: apps/catalog/Dockerfile }
+    image: stove/catalog
     ports: ["8081:8081"]
     environment: *common-env
 
@@ -70,40 +70,40 @@ services:
     ports: ["8087:8087"]
     environment: *common-env
 
-  order-service:
+  order:
     <<: *app
-    build: { context: ., dockerfile: apps/order-service/Dockerfile }
-    image: stove/order-service
+    build: { context: ., dockerfile: apps/order/Dockerfile }
+    image: stove/order
     ports: ["8082:8082"]
     environment:
       <<: *common-env
-      CATALOG_BASE_URL: http://catalog-service:8081
+      CATALOG_BASE_URL: http://catalog:8081
 
-  payment-service:
+  payment:
     <<: *app
-    build: { context: ., dockerfile: apps/payment-service/Dockerfile }
-    image: stove/payment-service
+    build: { context: ., dockerfile: apps/payment/Dockerfile }
+    image: stove/payment
     ports: ["8083:8083"]
     environment: *common-env
 
-  license-service:
+  license:
     <<: *app
-    build: { context: ., dockerfile: apps/license-service/Dockerfile }
-    image: stove/license-service
+    build: { context: ., dockerfile: apps/license/Dockerfile }
+    image: stove/license
     ports: ["8084:8084"]
     environment: *common-env
 
-  download-service:
+  download:
     <<: *app
-    build: { context: ., dockerfile: apps/download-service/Dockerfile }
-    image: stove/download-service
+    build: { context: ., dockerfile: apps/download/Dockerfile }
+    image: stove/download
     ports: ["8088:8088"]
     environment: *common-env
 
-  settlement-service:
+  settlement:
     <<: *app
-    build: { context: ., dockerfile: apps/settlement-service/Dockerfile }
-    image: stove/settlement-service
+    build: { context: ., dockerfile: apps/settlement/Dockerfile }
+    image: stove/settlement
     ports: ["8089:8089"]
     environment: *common-env
 

@@ -1,6 +1,6 @@
 package com.stove.store.config;
 
-import com.stove.store.domain.ProductDocument;
+import com.stove.store.core.domain.ProductDocument;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
