@@ -18,11 +18,14 @@ import org.springframework.web.client.RestClientException;
 /**
  * {@link CatalogPort} 의 HTTP 어댑터. 주문 생성 경로의 유일한 동기 의존이며,
  * 실패 시 주문을 만들지 않는다(가격 미확정 상태로 결제로 넘기지 않는다).
+ *
+ * <p>클래스명이 {@code CatalogRestClient} 가 아닌 이유: 그 이름은
+ * {@code RestClientConfig} 가 만드는 {@link RestClient} 빈 이름과 충돌한다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CatalogRestClient implements CatalogPort {
+public class CatalogRestAdapter implements CatalogPort {
 
     private static final ParameterizedTypeReference<ApiResponse<CatalogQuote>> QUOTE_TYPE =
             new ParameterizedTypeReference<>() {
