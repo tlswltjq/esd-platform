@@ -1,9 +1,9 @@
-package com.stove.download.api;
+package com.stove.download.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.download.api.dto.DownloadTicketResponse;
-import com.stove.download.api.dto.ManifestResponse;
-import com.stove.download.application.DownloadService;
+import com.stove.download.api.controller.dto.DownloadTicketResponse;
+import com.stove.download.api.controller.dto.ManifestResponse;
+import com.stove.download.core.service.DownloadService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +23,7 @@ public class DownloadController {
     @GetMapping("/{productCode}/ticket")
     public ApiResponse<DownloadTicketResponse> ticket(@PathVariable String productCode,
                                                       @RequestHeader("X-Member-Id") Long memberId) {
-        return ApiResponse.ok(downloadService.issueTicket(productCode, memberId));
+        return ApiResponse.ok(DownloadTicketResponse.from(downloadService.issueTicket(productCode, memberId)));
     }
 
     /** 버전 목록(패치 이력) */

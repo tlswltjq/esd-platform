@@ -1,4 +1,4 @@
-package com.stove.download.domain;
+package com.stove.download.core.domain;
 
 import com.stove.common.event.payload.BuildUploadedEvent;
 import java.time.Instant;

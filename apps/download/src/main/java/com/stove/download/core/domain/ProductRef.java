@@ -1,4 +1,4 @@
-package com.stove.download.domain;
+package com.stove.download.core.domain;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

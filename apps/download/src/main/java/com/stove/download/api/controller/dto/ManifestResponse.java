@@ -1,6 +1,6 @@
-package com.stove.download.api.dto;
+package com.stove.download.api.controller.dto;
 
-import com.stove.download.domain.PatchManifest;
+import com.stove.download.core.domain.PatchManifest;
 import java.time.Instant;
 
 public record ManifestResponse(

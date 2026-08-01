@@ -1,17 +1,18 @@
-package com.stove.download.application;
+package com.stove.download.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.download.api.dto.DownloadTicketResponse;
-import com.stove.download.domain.Entitlement;
-import com.stove.download.domain.EntitlementRepository;
-import com.stove.download.domain.PatchManifest;
-import com.stove.download.domain.PatchManifestRepository;
-import com.stove.download.domain.ProductRef;
-import com.stove.download.domain.ProductRefRepository;
-import com.stove.download.infrastructure.cdn.CdnUrlSigner;
+import com.stove.download.core.domain.DownloadTicket;
+import com.stove.download.core.domain.Entitlement;
+import com.stove.download.core.domain.EntitlementRepository;
+import com.stove.download.core.domain.PatchManifest;
+import com.stove.download.core.domain.PatchManifestRepository;
+import com.stove.download.core.domain.ProductRef;
+import com.stove.download.core.domain.ProductRefRepository;
+import com.stove.download.core.domain.SignedUrl;
+import com.stove.download.core.port.DownloadUrlSigner;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,7 @@ public class DownloadService {
     private final PatchManifestRepository manifestRepository;
     private final EntitlementRepository entitlementRepository;
     private final ProductRefRepository productRefRepository;
-    private final CdnUrlSigner cdnUrlSigner;
+    private final DownloadUrlSigner downloadUrlSigner;
 
     /** studio → BuildUploaded : 패치 매니페스트 등록 */
     public void registerManifest(BuildUploadedEvent event) {
@@ -66,7 +67,7 @@ public class DownloadService {
      * 다운로드 인증 → 서명 URL 발급.
      * 권한 사본으로 소유 여부를 판정하므로 license 장애와 무관하게 동작한다.
      */
-    public DownloadTicketResponse issueTicket(String productCode, Long memberId) {
+    public DownloadTicket issueTicket(String productCode, Long memberId) {
         ProductRef ref = productRefRepository.findById(productCode)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "productCode=" + productCode));
 
@@ -81,9 +82,8 @@ public class DownloadService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "배포된 빌드가 없습니다."));
 
-        CdnUrlSigner.SignedUrl signed = cdnUrlSigner.sign(latest.getStoragePath(), memberId);
-        return new DownloadTicketResponse(productCode, latest.getVersion(), latest.getFileSize(),
-                latest.getChecksum(), signed.url(), signed.expiresAt());
+        SignedUrl signed = downloadUrlSigner.sign(latest.getStoragePath(), memberId);
+        return DownloadTicket.of(latest, signed);
     }
 
     public List<PatchManifest> getManifests(String productCode) {

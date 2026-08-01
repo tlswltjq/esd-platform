@@ -1,4 +1,4 @@
-package com.stove.download.infrastructure.kafka;
+package com.stove.download.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventType;
@@ -8,7 +8,7 @@ import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
 import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.download.application.DownloadService;
+import com.stove.download.core.service.DownloadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
