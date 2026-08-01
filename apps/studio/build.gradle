@@ -1,4 +1,8 @@
 dependencies {
+    // 오브젝트 스토리지(MinIO / S3) 어댑터
+    implementation 'software.amazon.awssdk:s3'
+    testImplementation 'org.testcontainers:minio'
+
     implementation project(':libs:common-web')
     implementation project(':libs:common-messaging')
 }

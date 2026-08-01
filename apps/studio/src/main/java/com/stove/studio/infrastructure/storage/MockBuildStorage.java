@@ -3,11 +3,15 @@ package com.stove.studio.infrastructure.storage;
 import com.stove.studio.core.domain.UploadTicket;
 import com.stove.studio.core.port.BuildStorage;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /** 로컬용 스텁. 운영에서는 S3 presigned URL 발급 구현으로 교체된다. */
 @Slf4j
+@Profile("!prod")
 @Component
+@ConditionalOnProperty(name = "stove.storage.provider", havingValue = "mock", matchIfMissing = true)
 public class MockBuildStorage implements BuildStorage {
 
     private static final String BUCKET = "s3://stove-builds";

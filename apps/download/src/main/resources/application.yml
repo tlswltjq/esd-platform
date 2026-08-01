@@ -23,6 +23,16 @@ spring:
       ack-mode: record
 
 stove:
+  # 다운로드 URL 발급 전략. cdn = 자체 HMAC 토큰, s3 = 스토리지 presigned GET
+  download:
+    url-strategy: ${DOWNLOAD_URL_STRATEGY:cdn}
+
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY:stove}
+    secret-key: ${STORAGE_SECRET_KEY:stove1234}
+    presign-ttl: 10m
+
   cdn:
     base-url: https://cdn.stove.local
     signing-key: ${CDN_SIGNING_KEY:local-dev-signing-key}
