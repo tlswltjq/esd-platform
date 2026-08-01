@@ -30,6 +30,8 @@ public final class ModuleHygieneRules {
     private static final String SPRING_DATA_REPOSITORY = "org.springframework.data.repository.Repository";
     private static final String PROCESSED_EVENT_GUARD = "com.stove.common.messaging.inbox.ProcessedEventGuard";
     private static final String PROFILE = "org.springframework.context.annotation.Profile";
+    private static final String CONFIGURATION_PROPERTIES =
+            "org.springframework.boot.context.properties.ConfigurationProperties";
     private static final String CONDITIONAL_ON_PROPERTY =
             "org.springframework.boot.autoconfigure.condition.ConditionalOnProperty";
 
@@ -118,6 +120,26 @@ public final class ModuleHygieneRules {
     public static final ArchRule 리스너_네이밍 = classes()
             .that().resideInAPackage(LISTENER)
             .should().haveSimpleNameEndingWith("Listener")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 설정값_네이밍 = classes()
+            .that().areAnnotatedWith(CONFIGURATION_PROPERTIES)
+            .should().haveSimpleNameEndingWith("Properties")
+            .allowEmptyShould(true);
+
+    /**
+     * 설정값은 불변이다.
+     *
+     * <p>setter 가 있는 설정 클래스는 사실상 전역 가변 상태다. 아무나 런타임에 바꿀 수 있고,
+     * 바뀐 시점이 로그에도 안 남는다. record 로 두면 바인딩 시점 이후로 값이 고정되고
+     * 기본값 처리도 생성자 한 곳에 모인다 — 지금 7개가 전부 그렇게 되어 있다.
+     */
+    @ArchTest
+    public static final ArchRule 설정값은_불변이다 = classes()
+            .that().areAnnotatedWith(CONFIGURATION_PROPERTIES)
+            .should().beRecords()
+            .because("setter 가 달린 설정은 런타임에 조용히 바뀌는 전역 가변 상태다")
             .allowEmptyShould(true);
 
     @ArchTest
