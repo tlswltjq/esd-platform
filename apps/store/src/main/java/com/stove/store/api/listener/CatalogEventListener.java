@@ -1,11 +1,11 @@
-package com.stove.store.infrastructure.kafka;
+package com.stove.store.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.store.application.StoreService;
+import com.stove.store.core.service.StoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

@@ -1,4 +1,4 @@
-package com.stove.store.domain;
+package com.stove.store.core.domain;
 
 import java.util.List;
 import org.springframework.data.domain.Pageable;

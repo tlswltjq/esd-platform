@@ -1,9 +1,9 @@
-package com.stove.store.application;
+package com.stove.store.core.service;
 
 import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.store.api.dto.StoreProductResponse;
-import com.stove.store.domain.ProductDocument;
-import com.stove.store.domain.ProductSearchRepository;
+import com.stove.store.core.domain.ProductDocument;
+import com.stove.store.core.domain.ProductSearchRepository;
+import com.stove.store.core.domain.StoreProductView;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +33,13 @@ public class StoreService {
         log.info("색인 동기화 productCode={} status={}", event.productCode(), event.status());
     }
 
-    public List<StoreProductResponse> search(String keyword, int page, int size) {
+    public List<StoreProductView> search(String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         List<ProductDocument> documents = (keyword == null || keyword.isBlank())
                 ? searchRepository.findByStatusOrderByPriceAsc(ON_SALE, pageable)
                 : searchRepository.findByStatusAndNameContaining(ON_SALE, keyword, pageable);
 
-        return documents.stream().map(StoreProductResponse::from).toList();
+        return documents.stream().map(StoreProductView::from).toList();
     }
 
     /**
@@ -47,9 +47,9 @@ public class StoreService {
      * 색인이 갱신되면 통째로 무효화한다.
      */
     @Cacheable(cacheNames = "store:featured", key = "'main'")
-    public List<StoreProductResponse> featured() {
+    public List<StoreProductView> featured() {
         return searchRepository.findByStatusOrderByPriceAsc(ON_SALE, PageRequest.of(0, 10)).stream()
-                .map(StoreProductResponse::from)
+                .map(StoreProductView::from)
                 .toList();
     }
 }

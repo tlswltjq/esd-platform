@@ -1,4 +1,4 @@
-package com.stove.store.domain;
+package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.ProductChangedEvent;
 import java.time.Instant;
