@@ -1,8 +1,8 @@
-package com.stove.order.api.dto;
+package com.stove.order.api.controller.dto;
 
-import com.stove.order.domain.Order;
-import com.stove.order.domain.OrderItem;
-import com.stove.order.domain.OrderStatus;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderItem;
+import com.stove.order.core.domain.OrderStatus;
 import java.time.Instant;
 import java.util.List;
 

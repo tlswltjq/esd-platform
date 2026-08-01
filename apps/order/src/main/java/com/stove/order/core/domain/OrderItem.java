@@ -1,4 +1,4 @@
-package com.stove.order.domain;
+package com.stove.order.core.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

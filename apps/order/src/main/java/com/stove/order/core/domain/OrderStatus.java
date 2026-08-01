@@ -1,4 +1,4 @@
-package com.stove.order.domain;
+package com.stove.order.core.domain;
 
 /** 주문 상태. 결제 결과 이벤트로만 CREATED 이후 상태가 바뀐다. */
 public enum OrderStatus {

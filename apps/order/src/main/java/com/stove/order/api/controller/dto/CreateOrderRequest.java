@@ -1,5 +1,6 @@
-package com.stove.order.api.dto;
+package com.stove.order.api.controller.dto;
 
+import com.stove.order.api.application.port.QuoteItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
@@ -17,5 +18,9 @@ public record CreateOrderRequest(
         Long expectedAmount
 ) {
     public record Item(@NotNull Long productId, @Min(1) int quantity) {
+    }
+
+    public List<QuoteItem> toQuoteItems() {
+        return items.stream().map(item -> new QuoteItem(item.productId(), item.quantity())).toList();
     }
 }

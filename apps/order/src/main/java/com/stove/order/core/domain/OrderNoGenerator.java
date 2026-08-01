@@ -1,4 +1,4 @@
-package com.stove.order.application;
+package com.stove.order.core.domain;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;

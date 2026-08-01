@@ -1,4 +1,4 @@
-package com.stove.order.domain;
+package com.stove.order.core.domain;
 
 import java.util.List;
 import java.util.Optional;

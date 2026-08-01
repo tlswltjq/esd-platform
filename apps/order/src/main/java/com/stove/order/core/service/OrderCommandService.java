@@ -1,13 +1,15 @@
-package com.stove.order.application;
+package com.stove.order.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.OrderCanceledEvent;
 import com.stove.common.event.payload.OrderCreatedEvent;
 import com.stove.common.event.payload.OrderLine;
+import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.order.domain.Order;
-import com.stove.order.domain.OrderRepository;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderNoGenerator;
+import com.stove.order.core.domain.OrderRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderCommandService {
 
     private static final String AGGREGATE = "Order";
+    private static final String CONSUMER_GROUP = "order";
 
     private final OrderRepository orderRepository;
     private final OutboxRecorder outboxRecorder;
+    private final ProcessedEventGuard processedEventGuard;
     private final OrderNoGenerator orderNoGenerator;
 
     public Order createOrder(Long memberId, String currency, List<OrderLine> lines) {
@@ -51,13 +55,21 @@ public class OrderCommandService {
     }
 
     /** payment.PaymentCompleted 수신 처리 */
-    public void confirmPaid(String orderNo) {
+    public void confirmPaid(String eventId, String eventType, String orderNo) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         findOrder(orderNo).markPaid();
+        log.info("주문 결제 확정 orderNo={}", orderNo);
     }
 
     /** payment.PaymentCancelled 수신 처리(환불/보상 트랜잭션 결과 반영) */
-    public void confirmCanceled(String orderNo, String reason) {
+    public void confirmCanceled(String eventId, String eventType, String orderNo, String reason) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         findOrder(orderNo).cancel(reason);
+        log.info("주문 취소 반영 orderNo={} reason={}", orderNo, reason);
     }
 
     private Order findOrder(String orderNo) {

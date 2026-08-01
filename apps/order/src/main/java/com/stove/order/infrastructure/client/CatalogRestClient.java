@@ -3,7 +3,9 @@ package com.stove.order.infrastructure.client;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.core.response.ApiResponse;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.order.api.application.port.CatalogPort;
+import com.stove.order.api.application.port.CatalogQuote;
+import com.stove.order.api.application.port.QuoteItem;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,23 +16,24 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * catalog 동기 호출. 주문 생성 경로의 유일한 동기 의존이며,
+ * {@link CatalogPort} 의 HTTP 어댑터. 주문 생성 경로의 유일한 동기 의존이며,
  * 실패 시 주문을 만들지 않는다(가격 미확정 상태로 결제로 넘기지 않는다).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CatalogClient {
+public class CatalogRestClient implements CatalogPort {
 
-    private static final ParameterizedTypeReference<ApiResponse<QuoteResult>> QUOTE_TYPE =
+    private static final ParameterizedTypeReference<ApiResponse<CatalogQuote>> QUOTE_TYPE =
             new ParameterizedTypeReference<>() {
             };
 
     private final RestClient catalogRestClient;
 
-    public QuoteResult quote(List<QuoteItem> items) {
+    @Override
+    public CatalogQuote quote(List<QuoteItem> items) {
         try {
-            ApiResponse<QuoteResult> response = catalogRestClient.post()
+            ApiResponse<CatalogQuote> response = catalogRestClient.post()
                     .uri("/api/v1/products/quote")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new QuoteCommand(items))
@@ -47,12 +50,7 @@ public class CatalogClient {
         }
     }
 
-    public record QuoteCommand(List<QuoteItem> items) {
-    }
-
-    public record QuoteItem(Long productId, int quantity) {
-    }
-
-    public record QuoteResult(List<OrderLine> lines, long totalAmount, String currency) {
+    /** catalog 의 요청 바디 형식. 전송 형식이라 어댑터 안에 둔다. */
+    private record QuoteCommand(List<QuoteItem> items) {
     }
 }

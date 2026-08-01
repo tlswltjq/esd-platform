@@ -1,9 +1,9 @@
-package com.stove.order.application;
+package com.stove.order.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
-import com.stove.order.api.dto.OrderResponse;
-import com.stove.order.domain.OrderRepository;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,18 +16,16 @@ public class OrderQueryService {
 
     private final OrderRepository orderRepository;
 
-    public OrderResponse getOrder(String orderNo, Long memberId) {
+    public Order getOrder(String orderNo, Long memberId) {
         return orderRepository.findByOrderNo(orderNo)
                 .map(order -> {
                     order.requireOwner(memberId);
-                    return OrderResponse.from(order);
+                    return order;
                 })
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
     }
 
-    public List<OrderResponse> getMyOrders(Long memberId) {
-        return orderRepository.findByMemberIdOrderByIdDesc(memberId).stream()
-                .map(OrderResponse::from)
-                .toList();
+    public List<Order> getMyOrders(Long memberId) {
+        return orderRepository.findByMemberIdOrderByIdDesc(memberId);
     }
 }
