@@ -24,9 +24,14 @@ public final class ModuleHygieneRules {
     private static final String CONTROLLER = "..api.controller..";
     private static final String LISTENER = "..api.listener..";
     private static final String SCHEDULER = "..api.scheduler..";
+    private static final String INFRASTRUCTURE = "..infrastructure..";
 
     private static final String TRANSACTIONAL = "org.springframework.transaction.annotation.Transactional";
     private static final String SPRING_DATA_REPOSITORY = "org.springframework.data.repository.Repository";
+    private static final String PROCESSED_EVENT_GUARD = "com.stove.common.messaging.inbox.ProcessedEventGuard";
+    private static final String PROFILE = "org.springframework.context.annotation.Profile";
+    private static final String CONDITIONAL_ON_PROPERTY =
+            "org.springframework.boot.autoconfigure.condition.ConditionalOnProperty";
 
     private ModuleHygieneRules() {
     }
@@ -54,6 +59,38 @@ public final class ModuleHygieneRules {
     public static final ArchRule 인바운드는_리포지토리를_직접_쓰지_않는다 = noClasses()
             .that().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
             .should().dependOnClassesThat().areAssignableTo(SPRING_DATA_REPOSITORY)
+            .allowEmptyShould(true);
+
+    /**
+     * 멱등 가드는 서비스가 소유한다(결정 6).
+     *
+     * <p>트랜잭션 위치만 막아서는 부족하다. 리스너가 가드를 직접 부르면 트랜잭션은 서비스에 있어도
+     * "이 메시지를 이미 처리했는가"의 판정만 어댑터로 새어 나온다. 그러면 어댑터를 갈아끼울 때
+     * (Kafka → SQS, 운영툴 재처리) 멱등성이 따라오지 않고, Kafka 없이 서비스만으로 멱등성을
+     * 테스트할 수도 없다. 리스너는 역직렬화와 위임만 한다.
+     */
+    @ArchTest
+    public static final ArchRule 멱등_가드는_서비스가_소유한다 = noClasses()
+            .that().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
+            .should().dependOnClassesThat().haveFullyQualifiedName(PROCESSED_EVENT_GUARD)
+            .because("리스너가 가드를 부르면 어댑터를 갈아끼울 때 멱등성이 따라오지 않는다")
+            .allowEmptyShould(true);
+
+    /**
+     * 스텁 어댑터는 프로파일이나 조건으로 격리한다(결정 9).
+     *
+     * <p>무조건적인 {@code @Component} 인 스텁은 실제 어댑터를 붙이는 순간 같은 포트에 빈이 둘이 되어
+     * 기동을 깨뜨린다. 더 나쁜 경우는 운영에서 스텁이 조용히 도는 것이다.
+     * {@code prod} 에서 구현이 없으면 "no qualifying bean" 으로 즉시 실패하는 편이 낫다.
+     */
+    @ArchTest
+    public static final ArchRule 스텁_어댑터는_격리한다 = classes()
+            .that().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Mock")
+            .or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Stub")
+            .or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Fake")
+            .should().beAnnotatedWith(PROFILE)
+            .orShould().beAnnotatedWith(CONDITIONAL_ON_PROPERTY)
+            .because("스텁이 조건 없이 빈으로 뜨면 운영에서 조용히 돌거나 실제 어댑터와 충돌한다")
             .allowEmptyShould(true);
 
     /** {@code core.service} 와 {@code api.application} 을 이름으로 구분한다. */
