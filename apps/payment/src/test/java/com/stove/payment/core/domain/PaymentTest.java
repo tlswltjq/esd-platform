@@ -1,4 +1,4 @@
-package com.stove.payment.domain;
+package com.stove.payment.core.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

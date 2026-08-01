@@ -1,7 +1,7 @@
-package com.stove.payment.api.dto;
+package com.stove.payment.api.controller.dto;
 
-import com.stove.payment.domain.Payment;
-import com.stove.payment.domain.PaymentStatus;
+import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentStatus;
 import java.time.Instant;
 
 public record PaymentResponse(

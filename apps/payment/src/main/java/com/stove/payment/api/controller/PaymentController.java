@@ -1,11 +1,11 @@
-package com.stove.payment.api;
+package com.stove.payment.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.payment.api.dto.PaymentResponse;
-import com.stove.payment.api.dto.PgCallbackRequest;
-import com.stove.payment.api.dto.PreparePaymentRequest;
-import com.stove.payment.api.dto.PreparePaymentResponse;
-import com.stove.payment.application.PaymentService;
+import com.stove.payment.api.controller.dto.PaymentResponse;
+import com.stove.payment.api.controller.dto.PgCallbackRequest;
+import com.stove.payment.api.controller.dto.PreparePaymentRequest;
+import com.stove.payment.api.controller.dto.PreparePaymentResponse;
+import com.stove.payment.core.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,13 +31,13 @@ public class PaymentController {
     @PostMapping("/{orderNo}/prepare")
     public ApiResponse<PreparePaymentResponse> prepare(@PathVariable String orderNo,
                                                        @Valid @RequestBody PreparePaymentRequest request) {
-        return ApiResponse.ok(paymentService.prepare(orderNo, request.method()));
+        return ApiResponse.ok(PreparePaymentResponse.from(paymentService.prepare(orderNo, request.method())));
     }
 
     /** PG 승인 콜백 수신 엔드포인트 (실제 운영에서는 서명 검증·IP 화이트리스트가 앞단에 붙는다) */
     @PostMapping("/callback")
     public ApiResponse<Void> callback(@Valid @RequestBody PgCallbackRequest request) {
-        paymentService.handleCallback(request);
+        paymentService.handleApproval(request.toApproval());
         return ApiResponse.ok();
     }
 

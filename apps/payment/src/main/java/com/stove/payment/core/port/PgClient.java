@@ -1,4 +1,4 @@
-package com.stove.payment.infrastructure.pg;
+package com.stove.payment.core.port;
 
 /**
  * 외부 PG / 스토브캐시 연동 포트.

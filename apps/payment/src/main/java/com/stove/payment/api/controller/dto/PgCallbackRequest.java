@@ -1,5 +1,6 @@
-package com.stove.payment.api.dto;
+package com.stove.payment.api.controller.dto;
 
+import com.stove.payment.core.domain.PgApproval;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -16,4 +17,7 @@ public record PgCallbackRequest(
         @NotBlank String idempotencyKey,
         String method
 ) {
+    public PgApproval toApproval() {
+        return new PgApproval(orderNo, pgTxId, paidAmount, idempotencyKey);
+    }
 }

@@ -1,6 +1,7 @@
 package com.stove.payment.infrastructure.pg;
 
 import java.util.UUID;
+import com.stove.payment.core.port.PgClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package com.stove.payment.domain;
+package com.stove.payment.core.domain;
 
 public enum PaymentStatus {
     /** 주문 생성 이벤트 수신, 결제 대기 */

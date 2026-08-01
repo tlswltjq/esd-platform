@@ -1,4 +1,4 @@
-package com.stove.payment.domain;
+package com.stove.payment.core.domain;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

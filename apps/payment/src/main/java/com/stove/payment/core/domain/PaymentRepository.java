@@ -1,4 +1,4 @@
-package com.stove.payment.domain;
+package com.stove.payment.core.domain;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

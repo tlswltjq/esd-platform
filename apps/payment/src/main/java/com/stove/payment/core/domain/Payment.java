@@ -1,4 +1,4 @@
-package com.stove.payment.domain;
+package com.stove.payment.core.domain;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
