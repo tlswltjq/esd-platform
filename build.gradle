@@ -57,6 +57,9 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
     dependencies {
         implementation 'org.springframework.boot:spring-boot-starter-actuator'
         runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+        // 모듈 패키지 구조 검증 규칙 (ArchUnit)
+        testImplementation project(':libs:common-archunit')
     }
 
     // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다

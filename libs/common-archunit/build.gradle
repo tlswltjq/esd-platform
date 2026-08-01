@@ -1,0 +1,7 @@
+apply plugin: 'java-library'
+
+dependencies {
+    // 규칙 세트는 각 앱의 testImplementation 으로만 쓰이지만,
+    // 규칙 자체를 한 곳에 모아두기 위해 main 소스셋에 둔다.
+    api 'com.tngtech.archunit:archunit-junit5:1.3.0'
+}

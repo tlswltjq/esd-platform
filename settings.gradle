@@ -13,6 +13,7 @@ include 'libs:common-web'
 include 'libs:common-event'
 include 'libs:common-jpa'
 include 'libs:common-messaging'
+include 'libs:common-archunit'
 
 // ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
 include 'apps:gateway'
