@@ -42,6 +42,15 @@ spring:
       ack-mode: record
 
 stove:
+  # 빌드 바이너리 저장소. mock = 경로만 발급, s3 = MinIO/S3 presigned PUT
+  storage:
+    provider: ${STORAGE_PROVIDER:mock}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY:stove}
+    secret-key: ${STORAGE_SECRET_KEY:stove1234}
+    bucket: ${STORAGE_BUCKET:stove-builds}
+    presign-ttl: 15m
+
   outbox:
     relay-enabled: true
     batch-size: 200

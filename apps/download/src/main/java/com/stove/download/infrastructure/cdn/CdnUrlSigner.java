@@ -8,6 +8,7 @@ import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * (원본 서버가 매 요청을 인증하지 않아도 되게 하는 것이 핵심).
  */
 @Component
+@ConditionalOnProperty(name = "stove.download.url-strategy", havingValue = "cdn", matchIfMissing = true)
 @RequiredArgsConstructor
 public class CdnUrlSigner implements DownloadUrlSigner {
 

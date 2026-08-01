@@ -79,6 +79,25 @@ services:
       timeout: 5s
       retries: 20
 
+  # 빌드 바이너리 저장소 (S3 호환). 운영의 S3 자리를 로컬에서 대신한다.
+  minio:
+    image: minio/minio:latest
+    container_name: stove-minio
+    ports:
+      - "9000:9000"     # S3 API
+      - "9001:9001"     # 콘솔
+    environment:
+      MINIO_ROOT_USER: stove
+      MINIO_ROOT_PASSWORD: stove1234
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   # download 패치 매니페스트/권한 사본
   mongodb:
     image: mongo:7
@@ -110,3 +129,4 @@ services:
 volumes:
   mysql-data:
   mongo-data:
+  minio-data:
