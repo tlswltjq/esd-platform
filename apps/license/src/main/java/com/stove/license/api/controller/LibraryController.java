@@ -1,8 +1,8 @@
-package com.stove.license.api;
+package com.stove.license.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.license.api.dto.LicenseResponse;
-import com.stove.license.application.LicenseService;
+import com.stove.license.api.controller.dto.LicenseResponse;
+import com.stove.license.core.service.LicenseService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;

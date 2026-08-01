@@ -1,4 +1,4 @@
-package com.stove.license.domain;
+package com.stove.license.core.domain;
 
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;

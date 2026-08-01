@@ -1,4 +1,4 @@
-package com.stove.license.domain;
+package com.stove.license.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;

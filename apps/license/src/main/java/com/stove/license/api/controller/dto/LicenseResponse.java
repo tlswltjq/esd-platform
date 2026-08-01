@@ -1,7 +1,7 @@
-package com.stove.license.api.dto;
+package com.stove.license.api.controller.dto;
 
-import com.stove.license.domain.License;
-import com.stove.license.domain.LicenseStatus;
+import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseStatus;
 import java.time.Instant;
 
 public record LicenseResponse(

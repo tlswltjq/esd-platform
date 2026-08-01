@@ -1,4 +1,4 @@
-package com.stove.license.application;
+package com.stove.license.core.service;
 
 import com.stove.common.event.payload.LicenseIssueFailedEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
@@ -6,9 +6,9 @@ import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.license.domain.License;
-import com.stove.license.domain.LicenseRepository;
-import com.stove.license.domain.LicenseStatus;
+import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRepository;
+import com.stove.license.core.domain.LicenseStatus;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
