@@ -1,10 +1,10 @@
-package com.stove.review.api;
+package com.stove.review.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.review.api.dto.RejectRequest;
-import com.stove.review.api.dto.ReviewResponse;
-import com.stove.review.application.ReviewService;
-import com.stove.review.domain.ReviewStatus;
+import com.stove.review.api.controller.dto.RejectRequest;
+import com.stove.review.api.controller.dto.ReviewResponse;
+import com.stove.review.core.domain.ReviewStatus;
+import com.stove.review.core.service.ReviewService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

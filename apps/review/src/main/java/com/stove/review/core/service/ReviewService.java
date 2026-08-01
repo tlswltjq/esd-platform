@@ -1,15 +1,17 @@
-package com.stove.review.application;
+package com.stove.review.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.GameRegisteredEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
+import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.review.domain.ReviewRequest;
-import com.stove.review.domain.ReviewRequestRepository;
-import com.stove.review.domain.ReviewStatus;
-import com.stove.review.infrastructure.board.RatingBoardClient;
+import com.stove.review.core.domain.ReviewProperties;
+import com.stove.review.core.domain.ReviewRequest;
+import com.stove.review.core.domain.ReviewRequestRepository;
+import com.stove.review.core.domain.ReviewStatus;
+import com.stove.review.core.port.RatingBoardClient;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,14 +29,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReviewService {
 
     private static final String AGGREGATE = "ReviewRequest";
+    private static final String CONSUMER_GROUP = "review";
 
     private final ReviewRequestRepository reviewRepository;
     private final RatingBoardClient ratingBoardClient;
     private final OutboxRecorder outboxRecorder;
+    private final ProcessedEventGuard processedEventGuard;
     private final ReviewProperties properties;
 
-    /** [등록] studio → GameRegistered → review (접수) */
-    public void receive(GameRegisteredEvent event) {
+    /**
+     * [등록] studio → GameRegistered → review (접수)
+     *
+     * <p>중복 수신 마킹을 접수 트랜잭션 안에서 함께 처리한다.
+     */
+    public void receive(String eventId, String eventType, GameRegisteredEvent event) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
+
         ReviewRequest request = reviewRepository.findByProductCode(event.productCode())
                 .map(existing -> {
                     existing.reopen(event.title(), event.price()); // 반려 후 재신청

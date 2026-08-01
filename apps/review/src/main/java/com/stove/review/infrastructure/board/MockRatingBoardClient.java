@@ -1,5 +1,6 @@
 package com.stove.review.infrastructure.board;
 
+import com.stove.review.core.port.RatingBoardClient;
 import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;

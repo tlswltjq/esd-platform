@@ -1,4 +1,4 @@
-package com.stove.review.api.dto;
+package com.stove.review.api.controller.dto;
 
 import jakarta.validation.constraints.NotBlank;
 

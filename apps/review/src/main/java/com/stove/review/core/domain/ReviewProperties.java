@@ -1,4 +1,4 @@
-package com.stove.review.application;
+package com.stove.review.core.domain;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

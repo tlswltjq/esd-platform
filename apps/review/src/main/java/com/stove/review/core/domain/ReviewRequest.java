@@ -1,4 +1,4 @@
-package com.stove.review.domain;
+package com.stove.review.core.domain;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;

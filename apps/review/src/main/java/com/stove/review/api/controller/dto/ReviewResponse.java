@@ -1,7 +1,7 @@
-package com.stove.review.api.dto;
+package com.stove.review.api.controller.dto;
 
-import com.stove.review.domain.ReviewRequest;
-import com.stove.review.domain.ReviewStatus;
+import com.stove.review.core.domain.ReviewRequest;
+import com.stove.review.core.domain.ReviewStatus;
 
 public record ReviewResponse(
         Long reviewId,

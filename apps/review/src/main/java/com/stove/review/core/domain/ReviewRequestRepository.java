@@ -1,4 +1,4 @@
-package com.stove.review.domain;
+package com.stove.review.core.domain;
 
 import java.util.List;
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package com.stove.review.infrastructure.board;
+package com.stove.review.core.port;
 
 /** 게임물관리위원회 접수 연동 포트. */
 public interface RatingBoardClient {
