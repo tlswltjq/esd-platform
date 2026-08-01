@@ -23,6 +23,9 @@ subprojects {
         }
     }
 
+    // Spring Boot BOM 의 testcontainers.version 을 덮어쓴다 (gradle.properties 참고)
+    ext['testcontainers.version'] = testcontainersVersion
+
     dependencyManagement {
         imports {
             mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
