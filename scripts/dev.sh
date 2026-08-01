@@ -5,7 +5,7 @@
 #   ./scripts/dev.sh                  대화형 셸
 #   ./scripts/dev.sh ./gradlew build  명령 실행 후 종료
 #
-# JDK 도 mise 도 direnv 도 node 도 필요 없다. devcontainer 와 같은 베이스 이미지를 쓰되,
+# 호스트에 JDK 도 node 도 필요 없다. devcontainer 와 같은 베이스 이미지를 쓰되,
 # 안쪽에 Docker 데몬을 또 띄우지 않고 호스트 소켓을 빌린다 — 호스트 이미지 캐시를 그대로
 # 쓰므로 처음 실행이 훨씬 빠르다. 대신 호스트가 Docker Desktop 이나 OrbStack 이라고 가정한다.
 # 그 가정을 하고 싶지 않으면 .devcontainer 쪽(docker-in-docker)을 쓴다.

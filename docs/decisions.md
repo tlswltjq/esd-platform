@@ -157,10 +157,13 @@ exactly-once 전달보다 싸고, 이 선택의 대가가 곧 멱등성이다.
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 ```
 
-JDK 는 foojay 리졸버가 조달하고, Gradle 런처용 JVM 만 `.mise.toml` 로 고정한다.
+JDK 는 foojay 리졸버가 조달한다.
 
 **검증** — `~/.testcontainers.properties` 를 비우고 파생된 `DOCKER_HOST` 만으로 테스트가 통과했다.
 CI 는 이 머신의 흔적이 없는 환경에서 매번 같은 것을 증명한다.
+
+> 이 계산식은 처음에 `.envrc`(direnv)로 커밋했다가 12번에서 뺐다.
+> 계산식이 틀려서가 아니라, 그것을 실어 나르는 도구가 리포의 요구사항이 되기 때문이다.
 
 ---
 
@@ -174,7 +177,7 @@ CI 는 이 머신의 흔적이 없는 환경에서 매번 같은 것을 증명�
 |---|---|---|
 | devcontainer (docker-in-docker) | 없음 | 아무것도 못 믿을 때 |
 | `scripts/dev.sh` (호스트 소켓) | Docker Desktop / OrbStack | 빌린 머신, 빠름 |
-| 로컬 직접 (mise + direnv) | 설치 가능 | 주 랩탑 |
+| 로컬 직접 (`./gradlew`) | JDK + Docker 있음 | 주 랩탑 |
 
 **근거** — docker-outside-of-docker 로 통일하는 안은 버렸다.
 그 방식은 호스트의 `/var/run/docker.sock` 을 마운트하는데, macOS + OrbStack 에서는
@@ -184,6 +187,41 @@ CI 는 이 머신의 흔적이 없는 환경에서 매번 같은 것을 증명�
 
 **중첩의 비용** — 격리 자체가 아니라 호스트 이미지 캐시를 못 쓴다는 점이다.
 `/var/lib/docker` 를 이름 붙은 볼륨에 두어 머신당 한 번만 내게 했다.
+
+---
+
+## 12. 로컬 경로에서 mise 와 direnv 를 뺀다
+
+**배경** — 11번의 "로컬 직접" 경로는 `.mise.toml`(JDK 조달)과 `.envrc`(DOCKER_HOST 계산)를
+전제로 했다. 정작 주 랩탑을 확인하니 **둘 다 설치되어 있지 않았다.**
+그런데도 빌드는 멀쩡히 돌고 있었다.
+
+**결정** — `.mise.toml` 과 `.envrc` 를 지운다. 리포가 요구하는 설치 도구를 0개로 만든다.
+
+**근거** — 측정이 `.mise.toml` 의 전제를 깼다.
+
+```
+$ env -u JAVA_HOME ./gradlew --version
+Launcher JVM:  17.0.18 (Homebrew)          # 21 아니어도 돈다
+
+$ env -u JAVA_HOME ./gradlew -q javaToolchains
+Microsoft JDK 21.0.10  ...  Detected by: IntelliJ    # mise 아닌 IDE 가 조달했다
+```
+
+주석에 적어둔 "Gradle 런처 JVM 이 미리 있어야 한다"는 닭과 달걀은 맞다.
+틀린 것은 **그 JVM 이 21 이어야 한다**는 부분이다 — Gradle 8.14 는 17 이상이면 뜨고,
+컴파일은 toolchain 이 따로 잡는다. JDK 가 0개인 머신은 이미 A·B 경로가 덮는다.
+
+`.envrc` 는 계산식 자체는 옳지만(10번), 그 세 줄을 위해 direnv 설치를 요구한다.
+`DOCKER_HOST` 는 README 에 한 줄로 적으면 되고, 자동화하고 싶은 사람은 `~/.zshrc` 에 둔다.
+
+**대가** — macOS 사용자는 셸마다 `DOCKER_HOST` 를 직접 export 해야 한다.
+자동화를 리포에서 개인 환경으로 옮긴 것이고, 그 대신 리포의 설치 요구가 사라진다.
+
+**더 큰 교훈** — 10번은 *검증되지 않은 머신별 값* 이 없느니만 못하다고 했다.
+같은 것이 **검증되지 않은 조달 경로**에도 성립한다.
+`.mise.toml` 은 커밋된 그날부터 한 번도 실행되지 않은 채 "이 리포는 mise 를 쓴다"고 말하고 있었다.
+설정은 자기가 도는지 스스로 증명하지 않는다. 실행되는 것만이 증명한다 — CI 가 그 자리다.
 
 ---
 

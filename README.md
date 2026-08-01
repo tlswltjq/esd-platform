@@ -136,25 +136,22 @@ devcontainer 와 같은 베이스 이미지를 쓰되 **안쪽에 Docker 를 또
 
 #### C. 로컬 직접 실행
 
-머신에 도구 두 개를 깔 수 있다면 이쪽이 가장 빠르다.
+머신에 JDK 와 Docker 가 있다면 이쪽이 가장 빠르다. 리포가 요구하는 설치 도구는 없다.
 
 | 필요한 것 | 조달 방법 |
 |---|---|
-| JDK 21 (Gradle 런처용) | `.mise.toml` — `mise install` (또는 SDKMAN `.sdkmanrc`) |
-| JDK 21 (컴파일 툴체인) | `settings.gradle` 의 foojay 리졸버가 자동으로 내려받음 |
-| Docker 엔드포인트 | `.envrc` 가 활성 docker 컨텍스트에서 소켓 주소를 뽑아 `DOCKER_HOST` 로 export |
-
-```bash
-mise install      # JDK 조달
-direnv allow      # .envrc 승인 (내용 확인했다는 서명)
-./gradlew build
-```
-
-direnv 를 쓰지 않는다면 `DOCKER_HOST` 만 직접 잡아주면 된다.
+| 컴파일 툴체인 JDK 21 | `settings.gradle` 의 foojay 리졸버. 없으면 내려받는다 |
+| Gradle 런처 JVM | 아무 JDK 나. Gradle 8.14 는 17 이상이면 돈다 |
+| Docker 엔드포인트 | macOS 는 아래 한 줄. Linux 는 기본 소켓이라 불필요 |
 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+./gradlew build
 ```
+
+`DOCKER_HOST` 는 Testcontainers 가 소켓을 찾는 경로다. macOS + OrbStack 에는
+`/var/run/docker.sock` 이 없으므로 활성 컨텍스트에서 뽑아 넘긴다. 셸을 새로 열 때마다
+치기 싫으면 `~/.zshrc` 나 direnv 같은 개인 도구에 둔다 — 머신 사정이므로 리포에 두지 않는다.
 
 > `~/.testcontainers.properties` 에 `docker.host` 를 적어두는 방식은 쓰지 않는다.
 > 절대경로라 다른 머신에서 없는 소켓을 가리키며 실패한다 — 설정하지 않은 것보다 나쁘다.

@@ -14,6 +14,3 @@ bin/
 *.log
 logs/
 .env
-
-# direnv 머신 고유 오버라이드
-.envrc.local
