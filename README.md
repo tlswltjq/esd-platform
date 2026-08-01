@@ -33,7 +33,9 @@ stove/
 │   ├── web                 GlobalExceptionHandler, CorrelationIdFilter (자동 구성)
 │   ├── event               서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
 │   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
-│   └── messaging           Outbox(발행) + Inbox(멱등 수신) 인프라 (자동 구성)
+│   ├── messaging           Outbox(발행) + Inbox(멱등 수신) 인프라 (자동 구성)
+│   ├── archunit            패키지 구조·경계 규칙 (앱당 29개, 12개 모듈에 적용)
+│   └── test                Testcontainers 공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB)
 │
 ├── infra/                  mysql init(스키마 7종), prometheus
 ├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Grafana
@@ -85,6 +87,7 @@ stove/
 | license 장애가 다운로드 장애로 전이 | 동기 호출 대신 **권한 사본**을 이벤트로 유지 | `download/Entitlement` |
 | 정산 중복 집계(금전 사고) | Inbox + `(order_no, product_id, record_type)` 유니크 이중 방어 | `settlement_record` |
 | 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementService#recordRefund` |
+| 경계가 시간이 지나며 흐려짐 | **ArchUnit 으로 계층·의존 방향을 테스트로 강제** — 규칙을 처음 돌렸을 때 위반이 166건이었다 | `common/archunit` |
 
 ### 검증 게이트 4단계
 
@@ -244,7 +247,7 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 ## 7. 다음 단계 후보
 
 - Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람
-- Testcontainers 기반 통합 테스트(등록→심의→구매→지급→정산 전 구간)
+- 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
 - 분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격
 - 정산 배치 다중 인스턴스 대비 ShedLock, 대량 재색인 페이징/스로틀링
 - 다국가·다통화(174개국 서비스) 대응: 통화별 반올림 규칙과 환율 스냅샷
