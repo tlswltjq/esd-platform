@@ -6,4 +6,7 @@ dependencies {
     api project(':libs:common-jpa')
     api 'org.springframework.kafka:spring-kafka'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 공용 라이브러리 방향 검증 (ArchUnit)
+    testImplementation project(':libs:common-archunit')
 }

@@ -16,7 +16,7 @@ import com.tngtech.archunit.lang.ArchRule;
  * <pre>
  * com.stove.&lt;app&gt;
  * ├── &lt;App&gt;Application
- * ├── config/                 스프링 설정, @ConfigurationProperties
+ * ├── config/                 스프링 설정(빈 정의, 초기화)
  * ├── core/                   단일 도메인. 이 모듈의 존재 이유.
  * │   ├── domain/             엔티티(JPA 허용), VO, enum, 정책, Repository 인터페이스,
  * │   │                       포트가 주고받는 값 타입
@@ -37,6 +37,10 @@ import com.tngtech.archunit.lang.ArchRule;
  *   <li>도메인 객체와 엔티티를 분리하지 않는다 — {@code core.domain} 의 JPA 의존을 허용한다.</li>
  *   <li>포트는 DDD 의 리포지토리 인터페이스와 같은 자리, 즉 안쪽({@code core.port})에 둔다.
  *       외부 시스템이든 외부 도메인이든 구분하지 않는다.</li>
+ *   <li>{@code @ConfigurationProperties} 의 자리는 따로 정하지 않는다 — 그 값을 쓰는 계층 안이다.
+ *       어댑터 설정은 어댑터 옆({@code infrastructure}), 수수료율처럼 도메인 정책인 값은
+ *       {@code core.domain} 이다. 정책 값을 {@code config} 로 빼면 {@code core → config} 가 되어
+ *       위 3번 규칙과 정면으로 부딪힌다. 계층 규칙이 이미 답을 정하므로 위치 규칙을 겹쳐 두지 않는다.</li>
  * </ol>
  *
  * <p>각 앱의 테스트에서 {@code ArchTests.in(ModulePackageRules.class)} 로 가져다 쓴다.
@@ -52,6 +56,9 @@ public final class ModulePackageRules {
     private static final String SCHEDULER = "..api.scheduler..";
     private static final String INFRASTRUCTURE = "..infrastructure..";
     private static final String CONFIG = "..config..";
+
+    private static final String CONFIGURATION_PROPERTIES =
+            "org.springframework.boot.context.properties.ConfigurationProperties";
 
     /** 아웃바운드 포트 인터페이스. 구현체가 어디에 있어야 하는지를 판정하는 기준이 된다. */
     private static final DescribedPredicate<JavaClass> PORT_INTERFACE =
@@ -176,6 +183,20 @@ public final class ModulePackageRules {
     public static final ArchRule 스케줄러는_api_scheduler_에_둔다 = methods()
             .that().areAnnotatedWith("org.springframework.scheduling.annotation.Scheduled")
             .should().beDeclaredInClassesThat().resideInAPackage(SCHEDULER)
+            .allowEmptyShould(true);
+
+    /**
+     * 설정값은 인바운드 어댑터에 두지 않는다.
+     *
+     * <p>자리를 하나로 못 박지는 않지만(클래스 주석 참고) {@code api} 만은 아니다.
+     * 컨트롤러·리스너는 요청 하나를 처리하는 곳이지 애플리케이션 전체의 설정을 소유하는 곳이 아니다.
+     * 여기에 설정이 들어오면 같은 값을 다른 진입점이 다시 읽거나, 진입점마다 값이 갈린다.
+     */
+    @ArchTest
+    public static final ArchRule 설정값은_인바운드에_두지_않는다 = noClasses()
+            .that().areAnnotatedWith(CONFIGURATION_PROPERTIES)
+            .should().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
+            .because("설정은 진입점이 아니라 그 값을 쓰는 계층이 소유한다")
             .allowEmptyShould(true);
 
     @ArchTest
