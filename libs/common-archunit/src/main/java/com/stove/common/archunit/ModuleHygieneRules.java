@@ -90,18 +90,25 @@ public final class ModuleHygieneRules {
             .should().haveSimpleNameEndingWith("Repository")
             .allowEmptyShould(true);
 
-    /** core / api / infrastructure / config 사이에 순환이 없어야 한다. */
+    /**
+     * core / api / infrastructure / config 사이에 순환이 없어야 한다.
+     *
+     * <p>슬라이스가 하나도 없는 모듈(gateway 처럼 클래스가 애플리케이션 하나뿐인 경우)에서도
+     * 규칙 세트를 그대로 쓸 수 있도록 빈 평가를 허용한다. 다른 규칙들과 같은 이유다.
+     */
     @ArchTest
     public static final ArchRule 최상위_패키지_순환_없음 = slices()
             .matching("com.stove.*.(*)..")
-            .should().beFreeOfCycles();
+            .should().beFreeOfCycles()
+            .allowEmptyShould(true);
+
+    /** 필드가 하나도 없는 모듈에서도 평가할 수 있어야 한다 — {@code noFields()} 는 빈 입력에서 실패한다. */
+    @ArchTest
+    public static final ArchRule 필드_주입_금지 = NO_CLASSES_SHOULD_USE_FIELD_INJECTION.allowEmptyShould(true);
 
     @ArchTest
-    public static final ArchRule 필드_주입_금지 = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
+    public static final ArchRule 표준_출력_금지 = NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS.allowEmptyShould(true);
 
     @ArchTest
-    public static final ArchRule 표준_출력_금지 = NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
-
-    @ArchTest
-    public static final ArchRule 제네릭_예외_금지 = NO_CLASSES_SHOULD_THROW_GENERIC_EXCEPTIONS;
+    public static final ArchRule 제네릭_예외_금지 = NO_CLASSES_SHOULD_THROW_GENERIC_EXCEPTIONS.allowEmptyShould(true);
 }

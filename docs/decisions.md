@@ -233,6 +233,7 @@ Microsoft JDK 21.0.10  ...  Detected by: IntelliJ    # mise 아닌 IDE 가 조�
 |---|---|---|
 | `api ↔ application` 순환 12건 | ArchUnit 순환 검사 | import 를 눈으로 읽어서는 안 보인다 |
 | 어댑터가 자기 포트를 못 보는 규칙 결함 | 실제 적용 | 규칙을 쓸 때는 몰랐다 |
+| 빈 모듈에서 터지는 규칙 2건 | **규칙을 안 쓰던 모듈에 적용** | 9개 앱이 전부 비지 않아서 가려져 있었다 |
 | `catalogRestClient` 빈 이름 충돌 | **애플리케이션 기동** | 컴파일·규칙 23개 모두 통과했다 |
 | Docker 29 가 Testcontainers 를 거부 | **devcontainer 빌드** | 업스트림이 바뀐 것이라 코드에 흔적이 없다 |
 | 컨테이너 재사용이 Flyway 검증을 깨뜨림 | 통합 테스트 | 모듈 간 상태 누수라 한 모듈만 보면 안 보인다 |
