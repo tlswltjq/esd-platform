@@ -104,7 +104,7 @@ stove/
 ### 개발 환경 준비
 
 작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
-준비 부담이 적은 순서대로 두 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
+준비 부담이 적은 순서대로 세 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
 
 #### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
 
@@ -119,7 +119,21 @@ devcontainer up --workspace-folder .
 `docker compose up` 이 호스트 환경을 가정하지 않고 그대로 돈다.
 GitHub Codespaces 도 이 파일을 그대로 사용하므로, 브라우저만으로도 열린다.
 
-#### B. 로컬 직접 실행
+#### B. `scripts/dev.sh` — Docker 만 있고 아무것도 설치할 수 없을 때
+
+빌려 쓰는 머신처럼 brew·node·JDK 설치가 여의치 않은 환경을 위한 진입점.
+devcontainer 와 같은 베이스 이미지를 쓰되 **안쪽에 Docker 를 또 띄우지 않고 호스트 소켓을 빌린다** —
+호스트 이미지 캐시를 그대로 쓰므로 첫 실행이 빠르다.
+
+```bash
+./scripts/dev.sh                  # 대화형 셸
+./scripts/dev.sh ./gradlew build  # 명령 실행 후 종료
+```
+
+호스트가 Docker Desktop 이나 OrbStack 이라고 가정한다(활성 docker 컨텍스트에서 소켓을 찾는다).
+그 가정을 피하고 싶으면 A 를 쓴다. 애플리케이션 스택 실행은 호스트에서 `docker compose` 로 한다.
+
+#### C. 로컬 직접 실행
 
 머신에 도구 두 개를 깔 수 있다면 이쪽이 가장 빠르다.
 
