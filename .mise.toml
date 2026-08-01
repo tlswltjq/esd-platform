@@ -1,0 +1,10 @@
+# Gradle 런처를 띄울 JVM 을 고정한다.
+#
+# 컴파일에 쓰이는 툴체인은 settings.gradle 의 foojay 리졸버가 알아서 내려받지만,
+# Gradle 자체를 실행할 JVM 하나는 미리 있어야 한다(닭과 달걀). 그 한 개를 여기서 맞춘다.
+#
+#   mise install     # 새 머신에서 한 번
+#
+# SDKMAN 을 쓴다면 같은 역할을 .sdkmanrc 가 한다.
+[tools]
+java = "temurin-21"

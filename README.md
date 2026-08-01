@@ -99,6 +99,33 @@ stove/
 
 ## 4. 실행
 
+### 개발 환경 준비
+
+작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
+
+| 필요한 것 | 조달 방법 |
+|---|---|
+| JDK 21 (Gradle 런처용) | `.mise.toml` — `mise install` (또는 SDKMAN `.sdkmanrc`) |
+| JDK 21 (컴파일 툴체인) | `settings.gradle` 의 foojay 리졸버가 자동으로 내려받음 |
+| Docker 엔드포인트 | `.envrc` 가 활성 docker 컨텍스트에서 소켓 주소를 뽑아 `DOCKER_HOST` 로 export |
+
+```bash
+mise install      # JDK 조달
+direnv allow      # .envrc 승인 (내용 확인했다는 서명)
+./gradlew build
+```
+
+direnv 를 쓰지 않는다면 `DOCKER_HOST` 만 직접 잡아주면 된다.
+
+```bash
+export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+```
+
+> `~/.testcontainers.properties` 에 `docker.host` 를 적어두는 방식은 쓰지 않는다.
+> 절대경로라 다른 머신에서 없는 소켓을 가리키며 실패한다 — 설정하지 않은 것보다 나쁘다.
+
+### 실행
+
 ```bash
 # 1) 인프라
 docker compose up -d
