@@ -1,5 +1,7 @@
 package com.stove.studio.infrastructure.storage;
 
+import com.stove.studio.core.domain.UploadTicket;
+import com.stove.studio.core.port.BuildStorage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

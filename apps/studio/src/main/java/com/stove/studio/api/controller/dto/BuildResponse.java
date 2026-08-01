@@ -1,6 +1,6 @@
-package com.stove.studio.api.dto;
+package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.domain.GameBuild;
+import com.stove.studio.core.domain.GameBuild;
 import java.time.Instant;
 
 public record BuildResponse(

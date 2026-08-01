@@ -1,4 +1,6 @@
-package com.stove.studio.infrastructure.storage;
+package com.stove.studio.core.port;
+
+import com.stove.studio.core.domain.UploadTicket;
 
 /**
  * 빌드 바이너리 저장 포트(S3 대체).
@@ -8,7 +10,4 @@ public interface BuildStorage {
 
     /** 업로드 대상 경로와 presigned URL 발급 */
     UploadTicket issueUploadTicket(String productCode, String version);
-
-    record UploadTicket(String storagePath, String uploadUrl) {
-    }
 }

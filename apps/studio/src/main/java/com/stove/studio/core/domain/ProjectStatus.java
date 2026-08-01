@@ -1,4 +1,4 @@
-package com.stove.studio.domain;
+package com.stove.studio.core.domain;
 
 /** 게임 프로젝트 상태. 심의 결과 이벤트로만 SUBMITTED 이후 상태가 바뀐다. */
 public enum ProjectStatus {

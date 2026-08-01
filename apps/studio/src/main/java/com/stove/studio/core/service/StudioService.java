@@ -1,17 +1,19 @@
-package com.stove.studio.application;
+package com.stove.studio.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.GameRegisteredEvent;
+import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.studio.api.dto.CreateProjectRequest;
-import com.stove.studio.api.dto.UploadBuildRequest;
-import com.stove.studio.domain.GameBuild;
-import com.stove.studio.domain.GameBuildRepository;
-import com.stove.studio.domain.GameProject;
-import com.stove.studio.domain.GameProjectRepository;
-import com.stove.studio.infrastructure.storage.BuildStorage;
+import com.stove.studio.core.domain.GameBuild;
+import com.stove.studio.core.domain.GameBuildRepository;
+import com.stove.studio.core.domain.GameProject;
+import com.stove.studio.core.domain.GameProjectRepository;
+import com.stove.studio.core.domain.NewBuild;
+import com.stove.studio.core.domain.NewProject;
+import com.stove.studio.core.domain.UploadTicket;
+import com.stove.studio.core.port.BuildStorage;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudioService {
 
     private static final String AGGREGATE = "GameProject";
+    private static final String CONSUMER_GROUP = "studio";
 
     private final GameProjectRepository projectRepository;
     private final GameBuildRepository buildRepository;
     private final OutboxRecorder outboxRecorder;
+    private final ProcessedEventGuard processedEventGuard;
     private final BuildStorage buildStorage;
 
-    public GameProject createProject(CreateProjectRequest request) {
+    public GameProject createProject(NewProject request) {
         projectRepository.findByProductCode(request.productCode()).ifPresent(p -> {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 존재하는 상품코드입니다.");
         });
@@ -58,14 +62,14 @@ public class StudioService {
     }
 
     /** 빌드 메타데이터 등록 → download 가 패치 매니페스트를 만든다 */
-    public GameBuild uploadBuild(Long gameId, Long sellerId, UploadBuildRequest request) {
+    public GameBuild uploadBuild(Long gameId, Long sellerId, NewBuild request) {
         GameProject project = findProject(gameId);
         project.requireOwner(sellerId);
         if (buildRepository.existsByGameIdAndVersion(gameId, request.version())) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 등록된 버전입니다: " + request.version());
         }
 
-        BuildStorage.UploadTicket ticket =
+        UploadTicket ticket =
                 buildStorage.issueUploadTicket(project.getProductCode(), request.version());
         GameBuild build = buildRepository.save(GameBuild.of(gameId, request.version(),
                 request.fileSize(), request.checksum(), ticket.storagePath()));
@@ -79,13 +83,21 @@ public class StudioService {
     }
 
     /** review 승인 이벤트 반영 */
-    public void applyApproval(String productCode, String ratingCode) {
+    public void applyApproval(String eventId, String eventType, String productCode, String ratingCode) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         findByProductCode(productCode).approve(ratingCode);
+        log.info("심의 승인 반영 productCode={} rating={}", productCode, ratingCode);
     }
 
     /** review 반려 이벤트 반영 */
-    public void applyRejection(String productCode, String reason) {
+    public void applyRejection(String eventId, String eventType, String productCode, String reason) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         findByProductCode(productCode).reject(reason);
+        log.info("심의 반려 반영 productCode={} reason={}", productCode, reason);
     }
 
     @Transactional(readOnly = true)

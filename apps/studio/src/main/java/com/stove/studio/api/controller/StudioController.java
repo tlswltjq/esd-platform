@@ -1,11 +1,11 @@
-package com.stove.studio.api;
+package com.stove.studio.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.studio.api.dto.BuildResponse;
-import com.stove.studio.api.dto.CreateProjectRequest;
-import com.stove.studio.api.dto.ProjectResponse;
-import com.stove.studio.api.dto.UploadBuildRequest;
-import com.stove.studio.application.StudioService;
+import com.stove.studio.api.controller.dto.BuildResponse;
+import com.stove.studio.api.controller.dto.CreateProjectRequest;
+import com.stove.studio.api.controller.dto.ProjectResponse;
+import com.stove.studio.api.controller.dto.UploadBuildRequest;
+import com.stove.studio.core.service.StudioService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ public class StudioController {
 
     @PostMapping
     public ApiResponse<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request) {
-        return ApiResponse.ok(ProjectResponse.from(studioService.createProject(request)));
+        return ApiResponse.ok(ProjectResponse.from(studioService.createProject(request.toCommand())));
     }
 
     @GetMapping
@@ -48,7 +48,8 @@ public class StudioController {
     public ApiResponse<BuildResponse> uploadBuild(@PathVariable Long gameId,
                                                   @RequestHeader("X-Seller-Id") Long sellerId,
                                                   @Valid @RequestBody UploadBuildRequest request) {
-        return ApiResponse.ok(BuildResponse.from(studioService.uploadBuild(gameId, sellerId, request)));
+        return ApiResponse.ok(BuildResponse.from(
+                studioService.uploadBuild(gameId, sellerId, request.toCommand())));
     }
 
     @GetMapping("/{gameId}/builds")

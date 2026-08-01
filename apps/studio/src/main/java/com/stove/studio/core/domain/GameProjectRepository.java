@@ -1,4 +1,4 @@
-package com.stove.studio.domain;
+package com.stove.studio.core.domain;
 
 import java.util.List;
 import java.util.Optional;
