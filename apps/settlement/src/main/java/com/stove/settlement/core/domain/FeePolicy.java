@@ -1,6 +1,6 @@
-package com.stove.settlement.application;
+package com.stove.settlement.core.domain;
 
-import com.stove.settlement.domain.SaleType;
+import com.stove.settlement.core.domain.SaleType;
 import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

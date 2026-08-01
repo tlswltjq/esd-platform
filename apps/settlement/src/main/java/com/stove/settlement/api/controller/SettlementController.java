@@ -1,9 +1,9 @@
-package com.stove.settlement.api;
+package com.stove.settlement.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.settlement.api.dto.SellerSettlementResponse;
-import com.stove.settlement.api.dto.SettlementRecordResponse;
-import com.stove.settlement.application.SettlementService;
+import com.stove.settlement.api.controller.dto.SellerSettlementResponse;
+import com.stove.settlement.api.controller.dto.SettlementRecordResponse;
+import com.stove.settlement.core.service.SettlementService;
 import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

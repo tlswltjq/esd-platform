@@ -1,4 +1,4 @@
-package com.stove.settlement.domain;
+package com.stove.settlement.core.domain;
 
 public enum RecordType {
     /** 판매 (양수 금액) */

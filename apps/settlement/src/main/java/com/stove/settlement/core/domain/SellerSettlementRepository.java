@@ -1,4 +1,4 @@
-package com.stove.settlement.domain;
+package com.stove.settlement.core.domain;
 
 import java.util.List;
 import java.util.Optional;

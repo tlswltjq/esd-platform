@@ -1,4 +1,4 @@
-package com.stove.settlement.domain;
+package com.stove.settlement.core.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

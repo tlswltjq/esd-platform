@@ -1,8 +1,8 @@
-package com.stove.settlement.api.dto;
+package com.stove.settlement.api.controller.dto;
 
-import com.stove.settlement.domain.RecordType;
-import com.stove.settlement.domain.SaleType;
-import com.stove.settlement.domain.SettlementRecord;
+import com.stove.settlement.core.domain.RecordType;
+import com.stove.settlement.core.domain.SaleType;
+import com.stove.settlement.core.domain.SettlementRecord;
 import java.math.BigDecimal;
 
 public record SettlementRecordResponse(

@@ -1,13 +1,15 @@
-package com.stove.settlement.application;
+package com.stove.settlement.core.service;
 
 import com.stove.common.event.payload.OrderLine;
-import com.stove.settlement.domain.RecordType;
-import com.stove.settlement.domain.SaleType;
-import com.stove.settlement.domain.SellerSettlement;
-import com.stove.settlement.domain.SellerSettlementRepository;
-import com.stove.settlement.domain.SettlementRecord;
-import com.stove.settlement.domain.SettlementRecordRepository;
-import com.stove.settlement.infrastructure.tax.TaxInvoiceIssuer;
+import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.settlement.core.domain.FeePolicy;
+import com.stove.settlement.core.domain.RecordType;
+import com.stove.settlement.core.domain.SaleType;
+import com.stove.settlement.core.domain.SellerSettlement;
+import com.stove.settlement.core.domain.SellerSettlementRepository;
+import com.stove.settlement.core.domain.SettlementRecord;
+import com.stove.settlement.core.domain.SettlementRecordRepository;
+import com.stove.settlement.core.port.TaxInvoiceIssuer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -33,13 +35,24 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class SettlementService {
 
+    private static final String CONSUMER_GROUP = "settlement";
+
     private final SettlementRecordRepository recordRepository;
     private final SellerSettlementRepository sellerSettlementRepository;
     private final FeePolicy feePolicy;
     private final TaxInvoiceIssuer taxInvoiceIssuer;
+    private final ProcessedEventGuard processedEventGuard;
 
-    /** [결제] payment → PaymentCompleted → settlement (매출 집계) */
-    public void recordSale(String orderNo, List<OrderLine> lines) {
+    /**
+     * [결제] payment → PaymentCompleted → settlement (매출 집계)
+     *
+     * <p>금전 원장이므로 Inbox 멱등 가드와 원장 유니크 제약을 <b>둘 다</b> 건다.
+     * 가드 마킹은 원장 적재와 같은 커밋이어야 한다.
+     */
+    public void recordSale(String eventId, String eventType, String orderNo, List<OrderLine> lines) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         YearMonth month = YearMonth.from(LocalDate.now());
 
         for (OrderLine line : lines) {
@@ -62,7 +75,10 @@ public class SettlementService {
      * <p>환불 이벤트에는 항목 정보가 없다. 자기 원장의 SALE 레코드를 근거로 부호를 뒤집어 상계하므로
      * 다른 서비스에 되묻지 않고도 정확한 역산이 가능하다.
      */
-    public void recordRefund(String orderNo) {
+    public void recordRefund(String eventId, String eventType, String orderNo) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
         List<SettlementRecord> sales = recordRepository.findByOrderNoAndRecordType(orderNo, RecordType.SALE);
         if (sales.isEmpty()) {
             log.warn("역산할 매출 원장이 없음 orderNo={}", orderNo);

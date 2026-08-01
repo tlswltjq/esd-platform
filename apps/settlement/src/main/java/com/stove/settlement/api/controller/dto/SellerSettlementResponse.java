@@ -1,6 +1,6 @@
-package com.stove.settlement.api.dto;
+package com.stove.settlement.api.controller.dto;
 
-import com.stove.settlement.domain.SellerSettlement;
+import com.stove.settlement.core.domain.SellerSettlement;
 import java.time.Instant;
 
 public record SellerSettlementResponse(

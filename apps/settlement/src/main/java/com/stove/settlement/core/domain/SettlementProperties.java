@@ -1,4 +1,4 @@
-package com.stove.settlement.application;
+package com.stove.settlement.core.domain;
 
 import java.math.BigDecimal;
 import org.springframework.boot.context.properties.ConfigurationProperties;

@@ -1,5 +1,6 @@
 package com.stove.settlement.infrastructure.tax;
 
+import com.stove.settlement.core.port.TaxInvoiceIssuer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
