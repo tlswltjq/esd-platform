@@ -18,16 +18,16 @@ include 'libs:common-messaging'
 include 'apps:gateway'
 
 // 트랙 A. 크리에이터 (입점~노출)
-include 'apps:studio-service'
-include 'apps:review-service'
-include 'apps:catalog-service'
+include 'apps:studio'
+include 'apps:review'
+include 'apps:catalog'
 
 // 트랙 B. 커머스 (구매~결제)
 include 'apps:store'
-include 'apps:order-service'
-include 'apps:payment-service'
+include 'apps:order'
+include 'apps:payment'
 
 // 트랙 C. 이용/정산 (지급~배분)
-include 'apps:license-service'
-include 'apps:download-service'
-include 'apps:settlement-service'
+include 'apps:license'
+include 'apps:download'
+include 'apps:settlement'

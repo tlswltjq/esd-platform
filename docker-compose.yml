@@ -79,7 +79,7 @@ services:
       timeout: 5s
       retries: 20
 
-  # download-service 패치 매니페스트/권한 사본
+  # download 패치 매니페스트/권한 사본
   mongodb:
     image: mongo:7
     container_name: stove-mongodb

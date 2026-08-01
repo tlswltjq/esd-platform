@@ -14,19 +14,19 @@ stove/
 │   ├── gateway/            :8080  Spring Cloud Gateway (라우팅 + 내부 API 차단)
 │   │
 │   │   # 트랙 A. 크리에이터 (입점~노출)
-│   ├── studio-service/     :8085  게임 프로젝트·빌드 등록, 심의 신청          MySQL
-│   ├── review-service/     :8086  등급분류 심의 상태머신, 자체등급분류 분기    MySQL
-│   ├── catalog-service/    :8081  상품 마스터, 노출 제어, 서버 측 가격 재계산  MySQL + Redis
+│   ├── studio/             :8085  게임 프로젝트·빌드 등록, 심의 신청          MySQL
+│   ├── review/             :8086  등급분류 심의 상태머신, 자체등급분류 분기    MySQL
+│   ├── catalog/            :8081  상품 마스터, 노출 제어, 서버 측 가격 재계산  MySQL + Redis
 │   │
 │   │   # 트랙 B. 커머스 (구매~결제)
 │   ├── store/              :8087  진열·검색·프로모션 (읽기 전용 CQRS)        Elasticsearch + Redis
-│   ├── order-service/      :8082  주문 생성/취소, 금액 검증                  MySQL
-│   ├── payment-service/    :8083  PG 연동, 콜백 금액 대조, 환불              MySQL
+│   ├── order/              :8082  주문 생성/취소, 금액 검증                  MySQL
+│   ├── payment/            :8083  PG 연동, 콜백 금액 대조, 환불              MySQL
 │   │
 │   │   # 트랙 C. 이용/정산 (지급~배분)
-│   ├── license-service/    :8084  라이선스/CD키 발급·회수 (멱등)             MySQL
-│   ├── download-service/   :8088  패치 매니페스트, CDN 서명 URL              MongoDB
-│   └── settlement-service/ :8089  매출 배분·수수료·세금계산서·환불 역산       MySQL + 배치
+│   ├── license/            :8084  라이선스/CD키 발급·회수 (멱등)             MySQL
+│   ├── download/           :8088  패치 매니페스트, CDN 서명 URL              MongoDB
+│   └── settlement/         :8089  매출 배분·수수료·세금계산서·환불 역산       MySQL + 배치
 │
 ├── libs/
 │   ├── common-core         ApiResponse / ErrorCode / BusinessException
@@ -107,7 +107,7 @@ docker compose up -d
 ./gradlew build
 
 # 3-a) 로컬 실행 (서비스별 터미널)
-./gradlew :apps:catalog-service:bootRun     # 8081, 이하 동일
+./gradlew :apps:catalog:bootRun     # 8081, 이하 동일
 
 # 3-b) 컨테이너 실행 (Dockerfile 사용)
 ./gradlew build -x test
