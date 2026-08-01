@@ -1,0 +1,12 @@
+apply plugin: 'java-library'
+
+// 테스트 지원 코드지만 여러 앱의 test 소스셋에서 가져다 쓰므로 main 에 둔다.
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-test'
+    api 'org.springframework.boot:spring-boot-testcontainers'
+    api 'org.testcontainers:junit-jupiter'
+    api 'org.testcontainers:mysql'
+    api 'org.testcontainers:kafka'
+    api 'org.testcontainers:elasticsearch'
+    api 'org.testcontainers:mongodb'
+}

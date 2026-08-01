@@ -60,6 +60,8 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
 
         // 모듈 패키지 구조 검증 규칙 (ArchUnit)
         testImplementation project(':libs:common-archunit')
+        // 컨텍스트 로딩 검증용 인프라 컨테이너
+        testImplementation project(':libs:common-test')
     }
 
     // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다
