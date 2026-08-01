@@ -28,12 +28,12 @@ stove/
 │   ├── download/           :8088  패치 매니페스트, CDN 서명 URL              MongoDB
 │   └── settlement/         :8089  매출 배분·수수료·세금계산서·환불 역산       MySQL + 배치
 │
-├── libs/
-│   ├── common-core         ApiResponse / ErrorCode / BusinessException
-│   ├── common-web          GlobalExceptionHandler, CorrelationIdFilter (자동 구성)
-│   ├── common-event        서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
-│   ├── common-jpa          BaseTimeEntity, JPA Auditing, Flyway
-│   └── common-messaging    Outbox(발행) + Inbox(멱등 수신) 인프라 (자동 구성)
+├── common/                 경로가 곧 패키지다 — common/core → com.stove.common.core
+│   ├── core                ApiResponse / ErrorCode / BusinessException
+│   ├── web                 GlobalExceptionHandler, CorrelationIdFilter (자동 구성)
+│   ├── event               서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
+│   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
+│   └── messaging           Outbox(발행) + Inbox(멱등 수신) 인프라 (자동 구성)
 │
 ├── infra/                  mysql init(스키마 7종), prometheus
 ├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Grafana
@@ -75,8 +75,8 @@ stove/
 
 | 과제 | 해법 | 코드 |
 |---|---|---|
-| 이벤트 유실 (DB 커밋 ↔ Kafka 발행 원자성) | **Transactional Outbox** — 비즈니스 변경과 같은 트랜잭션에 이벤트 적재 후 폴링 릴레이가 발행 | `common-messaging/outbox` |
-| 중복 수신 (재전송·리밸런싱) | **Inbox 멱등 가드** — `(event_id, consumer_group)` 유니크를 처리와 같은 트랜잭션에서 마킹 | `common-messaging/inbox` |
+| 이벤트 유실 (DB 커밋 ↔ Kafka 발행 원자성) | **Transactional Outbox** — 비즈니스 변경과 같은 트랜잭션에 이벤트 적재 후 폴링 릴레이가 발행 | `common/messaging/outbox` |
+| 중복 수신 (재전송·리밸런싱) | **Inbox 멱등 가드** — `(event_id, consumer_group)` 유니크를 처리와 같은 트랜잭션에서 마킹 | `common/messaging/inbox` |
 | 결제 성공 후 지급 실패 | **Saga 보상 트랜잭션** — `LicenseIssueFailed` → payment 자동 환불 | `license/…/PaymentEventListener` |
 | 금액 위·변조 | **검증 게이트 4단계 분산 배치** (아래) | |
 | 릴레이 다중화 시 중복 발행 | `SELECT … FOR UPDATE SKIP LOCKED` 로 배치 선점 | `OutboxEventRepository` |

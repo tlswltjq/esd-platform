@@ -1,6 +1,6 @@
 dependencies {
-    implementation project(':libs:common-web')
-    implementation project(':libs:common-messaging')
+    implementation project(':common:web')
+    implementation project(':common:messaging')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 

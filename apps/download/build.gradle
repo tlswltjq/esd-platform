@@ -3,9 +3,9 @@ dependencies {
     implementation 'software.amazon.awssdk:s3'
     testImplementation 'org.testcontainers:minio'
 
-    implementation project(':libs:common-web')
+    implementation project(':common:web')
     // 패치 매니페스트/권한 사본만 다루므로 RDB 대신 MongoDB 를 쓴다(Outbox 불필요).
-    implementation project(':libs:common-event')
+    implementation project(':common:event')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
     implementation 'org.springframework.kafka:spring-kafka'
