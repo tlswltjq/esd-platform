@@ -1,0 +1,11 @@
+apply plugin: 'java-library'
+
+dependencies {
+    api project(':common:core')
+    api 'org.springframework.boot:spring-boot-starter-web'
+    api 'org.springframework.boot:spring-boot-starter-validation'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 공용 라이브러리 방향 검증 (ArchUnit)
+    testImplementation project(':common:archunit')
+}

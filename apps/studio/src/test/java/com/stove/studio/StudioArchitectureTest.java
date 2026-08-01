@@ -7,7 +7,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.junit.ArchTests;
 
-/** studio 모듈 패키지 구조 검증. 규칙 본체는 libs:common-archunit 에 한 벌만 둔다. */
+/** studio 모듈 패키지 구조 검증. 규칙 본체는 common:archunit 에 한 벌만 둔다. */
 @AnalyzeClasses(packages = "com.stove.studio", importOptions = ImportOption.DoNotIncludeTests.class)
 class StudioArchitectureTest {
 

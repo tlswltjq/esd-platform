@@ -1,6 +1,6 @@
 dependencies {
-    implementation project(':libs:common-web')
-    implementation project(':libs:common-messaging')
+    implementation project(':common:web')
+    implementation project(':common:messaging')
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }

@@ -12,13 +12,13 @@ plugins {
 rootProject.name = 'stove'
 
 // ── 공용 라이브러리 ────────────────────────────────────────────────
-include 'libs:common-core'
-include 'libs:common-web'
-include 'libs:common-event'
-include 'libs:common-jpa'
-include 'libs:common-messaging'
-include 'libs:common-archunit'
-include 'libs:common-test'
+include 'common:core'
+include 'common:web'
+include 'common:event'
+include 'common:jpa'
+include 'common:messaging'
+include 'common:archunit'
+include 'common:test'
 
 // ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
 include 'apps:gateway'

@@ -54,7 +54,7 @@ subprojects {
     }
 }
 
-// apps/* 는 실행 가능한 부트 애플리케이션, libs/* 는 일반 라이브러리 jar
+// apps/* 는 실행 가능한 부트 애플리케이션, common/* 는 일반 라이브러리 jar
 configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
     apply plugin: 'org.springframework.boot'
 
@@ -63,16 +63,27 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
         runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
         // 모듈 패키지 구조 검증 규칙 (ArchUnit)
-        testImplementation project(':libs:common-archunit')
+        testImplementation project(':common:archunit')
         // 컨텍스트 로딩 검증용 인프라 컨테이너
-        testImplementation project(':libs:common-test')
+        testImplementation project(':common:test')
     }
 
     // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다
     tasks.named('jar') { enabled = false }
 }
 
-configure(subprojects.findAll { it.path.startsWith(':libs:') }) {
+configure(subprojects.findAll { it.path.startsWith(':common:') }) {
     // 라이브러리는 bootJar 대신 plain jar 를 산출한다
     tasks.named('jar') { enabled = true }
+
+    // 디렉터리에서 뺀 common- 접두사를 산출물에서는 되살린다.
+    // 경로는 패키지와 1:1 로 두되(common/core → com.stove.common.core),
+    // 클래스패스에 core.jar / web.jar / test.jar 로 뜨는 것은 피한다.
+    base { archivesName = "common-${project.name}" }
+}
+
+// apps 와 common 은 자식을 담는 껍데기라 소스가 없다.
+// 빈 jar 를 만들어 두면 common-*.jar 목록에 모듈이 아닌 것이 섞인다.
+configure([project(':apps'), project(':common')]) {
+    tasks.named('jar') { enabled = false }
 }
