@@ -55,12 +55,29 @@ public class DownloadService {
         log.info("다운로드 권한 부여 memberId={} products={}", memberId, productIds);
     }
 
-    /** license → LicenseRevoked : 환불 시 권한 회수 */
-    public void revoke(Long memberId, List<Long> productIds) {
+    /**
+     * license → LicenseRevoked : 환불 시 권한 회수.
+     *
+     * <p>회수 대상이 <b>그 주문에서 온 권한인지</b> 확인한다. 권한 문서 키는 {@code memberId:productId}
+     * 뿐이라, 환불 후 재구매한 사용자에게 옛 주문의 회수 이벤트가 지각 도착하면
+     * 정상 구매한 권한을 거둬가기 때문이다.
+     */
+    public void revoke(String orderNo, Long memberId, List<Long> productIds) {
         productIds.forEach(productId -> entitlementRepository
                 .findById(Entitlement.documentId(memberId, productId))
-                .ifPresent(entitlement -> entitlementRepository.save(entitlement.revoke())));
-        log.info("다운로드 권한 회수 memberId={} products={}", memberId, productIds);
+                .ifPresentOrElse(
+                        entitlement -> revokeIfSameOrder(entitlement, orderNo, memberId, productId),
+                        () -> log.info("회수할 권한이 없다 memberId={} productId={}", memberId, productId)));
+    }
+
+    private void revokeIfSameOrder(Entitlement entitlement, String orderNo, Long memberId, Long productId) {
+        if (!entitlement.belongsTo(orderNo)) {
+            log.info("다른 주문의 권한이라 회수하지 않는다 memberId={} productId={} 보유주문={} 회수요청={}",
+                    memberId, productId, entitlement.getOrderNo(), orderNo);
+            return;
+        }
+        entitlementRepository.save(entitlement.revoke());
+        log.info("다운로드 권한 회수 orderNo={} memberId={} productId={}", orderNo, memberId, productId);
     }
 
     /**

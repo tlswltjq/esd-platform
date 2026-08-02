@@ -9,14 +9,16 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.event.EventType;
 import com.stove.common.event.payload.OrderLine;
+import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.test.InfraContainers;
-import com.stove.payment.core.domain.Payment;
+import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
@@ -26,7 +28,6 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,11 +36,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 
 /**
- * 환불 경로의 실패 시나리오.
+ * 환불 경로. <b>되돌릴 수 없는 외부 호출</b>(PG 취소)과 <b>되돌릴 수 있는 로컬 변경</b>(DB·Outbox)이
+ * 만나는 지점이라, 정상 경로보다 중간에 끊겼을 때의 상태가 중요하다.
  *
- * <p>환불은 <b>되돌릴 수 없는 외부 호출</b>(PG 취소)과 <b>되돌릴 수 있는 로컬 변경</b>(DB·Outbox)이
- * 한 트랜잭션에 섞이는 지점이다. 정상 경로만 보면 문제가 없어 보이므로,
- * 여기서는 로컬 변경이 실패했을 때 외부 세계가 어떤 상태로 남는지를 관찰한다.
+ * <p>취소는 세 걸음으로 나뉜다 — 의도 기록 커밋 → PG 환불 → 확정 커밋.
+ * 어느 걸음에서 멈추든 남는 상태가 관측 가능해야 한다는 것이 여기서 검증할 성질이다.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
@@ -48,7 +49,11 @@ class PaymentCancelTest {
     @Autowired
     PaymentService paymentService;
     @Autowired
+    RefundFacade refundFacade;
+    @Autowired
     PaymentRepository paymentRepository;
+    @Autowired
+    OutboxEventRepository outboxEventRepository;
 
     @MockitoSpyBean
     PgClient pgClient;
@@ -82,6 +87,15 @@ class PaymentCancelTest {
         return orderNo;
     }
 
+    private String preparedOrder(long amount) {
+        String orderNo = "ORD-" + UUID.randomUUID();
+        paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
+                orderNo, 42L, amount, "KRW",
+                List.of(new OrderLine(1L, "게임 A", 1001L, amount, 1)));
+        paymentService.prepare(orderNo, "CARD");
+        return orderNo;
+    }
+
     private PaymentStatus statusOf(String orderNo) {
         return paymentRepository.findByOrderNo(orderNo).orElseThrow().getStatus();
     }
@@ -91,20 +105,31 @@ class PaymentCancelTest {
     void cancelRefundsAndMarksCanceled() {
         String orderNo = paidOrder(30_000L);
 
-        paymentService.cancel(orderNo, "USER_REFUND");
+        refundFacade.refund(orderNo, "USER_REFUND");
 
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
         verify(pgClient).cancel(anyString(), anyLong(), anyString());
     }
 
     @Test
+    @DisplayName("환불 확정과 함께 PaymentCancelled 가 적재된다")
+    void cancelRecordsEvent() {
+        String orderNo = paidOrder(30_000L);
+        long before = outboxEventRepository.count();
+
+        refundFacade.refund(orderNo, "USER_REFUND");
+
+        assertThat(outboxEventRepository.count() - before).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("이미 취소된 결제는 PG 를 다시 호출하지 않는다 — 이중 환불 방지")
     void secondCancelDoesNotCallPgAgain() {
         String orderNo = paidOrder(30_000L);
-        paymentService.cancel(orderNo, "USER_REFUND");
+        refundFacade.refund(orderNo, "USER_REFUND");
         reset(pgClient);
 
-        paymentService.cancel(orderNo, "USER_REFUND");
+        refundFacade.refund(orderNo, "USER_REFUND");
 
         verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
@@ -113,14 +138,12 @@ class PaymentCancelTest {
     @Test
     @DisplayName("승인 전 결제는 취소할 수 없다")
     void cannotCancelBeforeApproval() {
-        String orderNo = "ORD-" + UUID.randomUUID();
-        paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
-                orderNo, 42L, 30_000L, "KRW",
-                List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 1)));
+        String orderNo = preparedOrder(30_000L);
 
-        assertThatThrownBy(() -> paymentService.cancel(orderNo, "USER_REFUND"))
+        assertThatThrownBy(() -> refundFacade.refund(orderNo, "USER_REFUND"))
                 .isInstanceOf(BusinessException.class);
-        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.READY);
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PENDING);
+        verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
     }
 
     @Test
@@ -128,69 +151,84 @@ class PaymentCancelTest {
     void compensationRefundsLikeUserRequest() {
         String orderNo = paidOrder(30_000L);
 
-        paymentService.compensate(UUID.randomUUID().toString(), EventType.LICENSE_ISSUE_FAILED,
+        refundFacade.compensate(UUID.randomUUID().toString(), EventType.LICENSE_ISSUE_FAILED,
                 orderNo, "라이선스 지급 실패");
 
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-006] 로컬 트랜잭션이 롤백되면 PG 환불도 실행되지 않아야 한다")
-    void shouldNotRefundWhenTransactionRollsBack() {
+    @DisplayName("같은 보상 이벤트가 두 번 와도 PG 는 한 번만 호출된다")
+    void compensationIsIdempotent() {
         String orderNo = paidOrder(30_000L);
+        String eventId = UUID.randomUUID().toString();
 
-        // 환불 이벤트 적재가 실패하는 상황. 커넥션 끊김·제약 위반·직렬화 실패 어느 쪽이든
-        // 결과는 같다 — 트랜잭션 전체가 롤백된다.
-        doThrow(new IllegalStateException("outbox insert failed"))
-                .when(recorderSpy()).record(anyString(), anyString(), any());
+        refundFacade.compensate(eventId, EventType.LICENSE_ISSUE_FAILED, orderNo, "라이선스 지급 실패");
+        refundFacade.compensate(eventId, EventType.LICENSE_ISSUE_FAILED, orderNo, "라이선스 지급 실패");
 
-        assertThatThrownBy(() -> paymentService.cancel(orderNo, "USER_REFUND"))
-                .isInstanceOf(IllegalStateException.class);
-
-        // 로컬 상태는 정상적으로 되돌아간다
-        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PAID);
-
-        // 기대: 되돌릴 수 없는 외부 호출은 커밋이 보장된 뒤에 실행한다.
-        // 실제: PG 취소가 트랜잭션 안에서 이미 나갔다. 돈은 나갔는데 장부는 PAID —
-        //       재시도하면 같은 결제를 두 번 환불한다.
-        verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
+        verify(pgClient, times(1)).cancel(anyString(), anyLong(), anyString());
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-007] 결제 상태와 어긋난 보상 요청은 무한 재시도가 아니라 관측 가능하게 끝나야 한다")
-    void compensationOnInconsistentStateShouldNotLoop() {
-        // 결제가 아직 PENDING 인데 라이선스 지급 실패 이벤트가 도착한 상황.
-        // 정상 흐름이라면 생길 수 없지만, 이벤트 순서 역전이나 수동 재처리로 실제로 발생한다.
-        String orderNo = "ORD-" + UUID.randomUUID();
-        paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
-                orderNo, 42L, 30_000L, "KRW",
-                List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 1)));
-        paymentService.prepare(orderNo, "CARD");
+    @DisplayName("[D-006] 확정 트랜잭션이 깨져도 결제가 PAID 로 되돌아가지 않는다")
+    void brokenFinalizationLeavesObservableState() {
+        String orderNo = paidOrder(30_000L);
 
-        // 기대: 상태 불일치를 기록하고 끝난다(멱등 가드 마킹이 커밋되어 재전송이 멈춘다).
-        // 실제: BusinessException(CONFLICT) 이 나면서 가드 마킹까지 함께 롤백된다.
-        //       → 오프셋도 커밋되지 않아 같은 이벤트가 계속 재전송되고 파티션이 멈춘다.
-        assertThatCode(() -> paymentService.compensate(UUID.randomUUID().toString(),
+        // 확정 단계의 이벤트 적재가 실패하는 상황.
+        doThrow(new IllegalStateException("outbox insert failed"))
+                .when(recorderSpy()).record(anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> refundFacade.refund(orderNo, "USER_REFUND"))
+                .isInstanceOf(IllegalStateException.class);
+
+        // 수정 전에는 PG 환불이 트랜잭션 안에서 나간 뒤 롤백되어 PAID 로 되돌아갔다 —
+        // 돈은 나갔는데 장부는 아무 일도 없던 것처럼 보이는 상태였다.
+        // 이제 의도가 먼저 커밋되므로 '환불 진행 중'이 남아 재시도 대상이 된다.
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELING);
+    }
+
+    @Test
+    @DisplayName("[D-006] 확정이 깨진 건은 재시도로 취소가 완결된다")
+    void interruptedCancelCompletesOnRetry() {
+        String orderNo = paidOrder(30_000L);
+        doThrow(new IllegalStateException("outbox insert failed"))
+                .when(recorderSpy()).record(anyString(), anyString(), any());
+        assertThatThrownBy(() -> refundFacade.refund(orderNo, "USER_REFUND"))
+                .isInstanceOf(IllegalStateException.class);
+
+        reset(recorderSpy());
+        refundFacade.refund(orderNo, "USER_REFUND");
+
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
+        // PG 취소는 pgTxId 기준 멱등이라는 포트 계약에 기대어 재요청한다.
+        verify(pgClient, times(2)).cancel(anyString(), anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("[D-007] 결제 상태와 어긋난 보상 요청은 예외 없이 끝난다")
+    void compensationOnInconsistentStateDoesNotThrow() {
+        // 결제가 아직 PENDING 인데 라이선스 지급 실패 이벤트가 도착한 상황.
+        // 정상 흐름이라면 생길 수 없지만 이벤트 순서 역전이나 수동 재처리로 실제로 발생한다.
+        String orderNo = preparedOrder(30_000L);
+
+        // 예외를 던지면 멱등 가드 마킹까지 롤백되어 같은 이벤트가 무한 재전송되고 파티션이 멈춘다.
+        // 결제가 스스로 PAID 가 될 수는 없으므로 재시도로는 절대 풀리지 않는다.
+        assertThatCode(() -> refundFacade.compensate(UUID.randomUUID().toString(),
                 EventType.LICENSE_ISSUE_FAILED, orderNo, "라이선스 지급 실패"))
                 .doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("현재 동작: PENDING 결제에 대한 보상 요청은 예외로 끝난다")
-    void currentBehaviourCompensationThrowsOnPending() {
-        String orderNo = "ORD-" + UUID.randomUUID();
-        paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
-                orderNo, 42L, 30_000L, "KRW",
-                List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 1)));
-        paymentService.prepare(orderNo, "CARD");
+    @DisplayName("[D-007] 상태가 어긋난 보상은 결제를 건드리지 않고 PG 도 부르지 않는다")
+    void compensationOnInconsistentStateChangesNothing() {
+        String orderNo = preparedOrder(30_000L);
+        long before = outboxEventRepository.count();
 
-        assertThatThrownBy(() -> paymentService.compensate(UUID.randomUUID().toString(),
-                EventType.LICENSE_ISSUE_FAILED, orderNo, "라이선스 지급 실패"))
-                .isInstanceOf(BusinessException.class);
+        refundFacade.compensate(UUID.randomUUID().toString(), EventType.LICENSE_ISSUE_FAILED,
+                orderNo, "라이선스 지급 실패");
 
-        Payment payment = paymentRepository.findByOrderNo(orderNo).orElseThrow();
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PENDING);
+        verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
+        assertThat(outboxEventRepository.count() - before).isZero();
     }
 }

@@ -72,13 +72,23 @@ public class License extends BaseTimeEntity {
         return new License(orderNo, memberId, productId);
     }
 
-    public void revoke(String reason) {
+    /**
+     * @return 이번 호출로 실제 상태가 바뀌었으면 true.
+     *         호출측은 이 값으로 <b>변화가 있을 때만</b> 회수 이벤트를 발행한다 —
+     *         상태가 그대로인데 이벤트를 내보내면 하위 서비스가 헛일을 한다.
+     */
+    public boolean revoke(String reason) {
         if (status == LicenseStatus.REVOKED) {
-            return;
+            return false;
         }
         this.status = LicenseStatus.REVOKED;
         this.revokedAt = Instant.now();
         this.revokeReason = reason;
+        return true;
+    }
+
+    public boolean isActive() {
+        return status == LicenseStatus.ACTIVE;
     }
 
     private static String generateKey() {

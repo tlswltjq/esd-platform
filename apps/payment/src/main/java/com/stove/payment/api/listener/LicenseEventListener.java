@@ -5,7 +5,7 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.payload.LicenseIssueFailedEvent;
 import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.payment.core.service.PaymentService;
+import com.stove.payment.api.application.RefundFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,7 +24,7 @@ public class LicenseEventListener {
 
     private static final String GROUP = "payment";
 
-    private final PaymentService paymentService;
+    private final RefundFacade refundFacade;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = Topics.LICENSE, groupId = GROUP)
@@ -34,7 +34,7 @@ public class LicenseEventListener {
             return;
         }
         LicenseIssueFailedEvent event = envelope.payloadAs(objectMapper, LicenseIssueFailedEvent.class);
-        paymentService.compensate(envelope.eventId(), envelope.eventType(), event.orderNo(),
+        refundFacade.compensate(envelope.eventId(), envelope.eventType(), event.orderNo(),
                 "LICENSE_ISSUE_FAILED:" + event.reason());
     }
 }

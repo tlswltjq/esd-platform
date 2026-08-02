@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -153,8 +152,7 @@ class SettlementCloseTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-001] 마감 후 도착한 원장은 다음 마감에서 확정본에 반영되어야 한다")
+    @DisplayName("[D-001] 마감 후 도착한 원장은 다음 마감에서 확정본에 반영된다")
     void lateRecordShouldBeSettledOnNextClose() {
         YearMonth month = uniqueMonth();
         Long seller = uniqueSeller();
@@ -172,30 +170,78 @@ class SettlementCloseTest {
                 .filter(s -> s.getSellerId().equals(seller))
                 .mapToLong(SellerSettlement::getNetAmount).sum();
 
-        // 기대: 원장 합계(105,000) == 확정본 합계
-        // 실제: 확정본은 첫 마감분(70,000)에 머문다. 차액 35,000 은 어디에도 없다.
+        // 원장 합계(105,000)와 확정본 합계가 같아야 한다.
+        // 수정 전에는 확정본이 첫 마감분(70,000)에 머물러 차액 35,000 이 사라졌다.
         assertThat(settledNet).as("판매자에게 지급될 금액").isEqualTo(ledgerNet);
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-001] 확정본에 반영되지 않은 원장은 closed 로 표시하면 안 된다")
-    void unsettledRecordShouldStayOpen() {
+    @DisplayName("[D-001] 마감된 원장은 반드시 어떤 확정본에 반영되어 있다")
+    void everyClosedRecordIsReflectedInSettlement() {
         YearMonth month = uniqueMonth();
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
         settlementService.closeMonth(month);
 
-        SettlementRecord late = sale(seller, 50_000L, month);
+        // 지각 원장 + 지각 환불이 섞여 들어오는 상황
+        sale(seller, 50_000L, month);
+        refund(seller, 20_000L, month);
         settlementService.closeMonth(month);
 
-        SettlementRecord reloaded = recordRepository.findById(late.getId()).orElseThrow();
+        List<SettlementRecord> ledger = recordRepository.findBySellerIdAndSettlementMonth(seller, month.toString());
+        long closedNet = ledger.stream()
+                .filter(SettlementRecord::isClosed)
+                .mapToLong(SettlementRecord::getNetAmount).sum();
+        long settledNet = sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(seller, month.toString())
+                .orElseThrow().getNetAmount();
 
-        // closeMonth 는 이미 확정본이 있는 판매자를 집계에서 제외하면서도
-        // 조회된 원장 전체에 close() 를 찍는다. 그래서 이 원장은
-        // '처리 완료'로 표시된 채 어떤 확정본에도 속하지 않는다 — 재실행으로도 복구 불가.
-        assertThat(reloaded.isClosed())
-                .as("집계되지 않은 원장의 마감 표시")
-                .isFalse();
+        // 이것이 정산의 핵심 불변식이다 — close 도장은 확정본에 들어갔다는 뜻이어야 한다.
+        assertThat(ledger).allMatch(SettlementRecord::isClosed);
+        assertThat(closedNet).as("마감된 원장 합계").isEqualTo(settledNet);
+    }
+
+    @Test
+    @DisplayName("[D-001] 이미 계산서가 나간 확정본이 바뀌면 다시 발행하지 않는다")
+    void revisionDoesNotReissueTaxInvoice() {
+        YearMonth month = uniqueMonth();
+        Long seller = uniqueSeller();
+        sale(seller, 100_000L, month);
+        settlementService.closeMonth(month);
+
+        String firstInvoice = sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(seller, month.toString()).orElseThrow().getTaxInvoiceNo();
+        assertThat(firstInvoice).isNotBlank();
+
+        sale(seller, 50_000L, month);
+        settlementService.closeMonth(month);
+
+        // 금액은 반영하되 계산서 번호는 그대로 둔다(수정세금계산서는 별도 업무).
+        SellerSettlement revised = sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(seller, month.toString()).orElseThrow();
+        assertThat(revised.getTaxInvoiceNo()).isEqualTo(firstInvoice);
+        assertThat(revised.getNetAmount()).isEqualTo(105_000L);
+        assertThat(revised.getRecordCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("[D-001] 순액이 음수라 미발행이던 판매자는 지각 매출로 양수가 되면 계산서를 받는다")
+    void invoiceIssuedWhenRevisionTurnsNetPositive() {
+        YearMonth month = uniqueMonth();
+        Long seller = uniqueSeller();
+        sale(seller, 50_000L, month);
+        refund(seller, 100_000L, month);
+        settlementService.closeMonth(month);
+
+        assertThat(sellerSettlementRepository.findBySellerIdAndSettlementMonth(seller, month.toString())
+                .orElseThrow().getTaxInvoiceNo()).isNull();
+
+        sale(seller, 200_000L, month);
+        settlementService.closeMonth(month);
+
+        SellerSettlement revised = sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(seller, month.toString()).orElseThrow();
+        assertThat(revised.getNetAmount()).isPositive();
+        assertThat(revised.getTaxInvoiceNo()).isNotBlank();
     }
 }

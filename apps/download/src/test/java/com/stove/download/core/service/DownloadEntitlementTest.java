@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -82,7 +81,7 @@ class DownloadEntitlementTest {
     void rejectsRevokedEntitlement() {
         productIsPublished();
         downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
 
         assertThatThrownBy(() -> downloadService.issueTicket(productCode, memberId))
                 .isInstanceOf(BusinessException.class);
@@ -107,8 +106,8 @@ class DownloadEntitlementTest {
         productIsPublished();
         downloadService.grant("ORD-1", memberId, List.of(productId));
 
-        downloadService.revoke(memberId, List.of(productId));
-        assertThatCode(() -> downloadService.revoke(memberId, List.of(productId)))
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
+        assertThatCode(() -> downloadService.revoke("ORD-1", memberId, List.of(productId)))
                 .doesNotThrowAnyException();
 
         assertThat(isActive()).isFalse();
@@ -119,7 +118,7 @@ class DownloadEntitlementTest {
     void repurchaseRestoresEntitlement() {
         productIsPublished();
         downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
 
         downloadService.grant("ORD-2", memberId, List.of(productId));
 
@@ -127,42 +126,39 @@ class DownloadEntitlementTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-012] 옛 주문의 회수 이벤트가 새 주문으로 얻은 권한을 거둬가면 안 된다")
+    @DisplayName("[D-012] 옛 주문의 회수 이벤트가 새 주문으로 얻은 권한을 거둬가지 않는다")
     void staleRevokeMustNotAffectNewEntitlement() {
         productIsPublished();
 
         // 주문1 구매 → 환불
         downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
 
         // 주문2 로 같은 게임을 다시 구매
         downloadService.grant("ORD-2", memberId, List.of(productId));
         assertThat(isActive()).isTrue();
 
         // 주문1 의 LicenseRevoked 가 지각 도착하거나 재전송된다.
-        // 권한 문서 키가 memberId:productId 뿐이라 어느 주문의 회수인지 구분할 수 없다.
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
 
-        // 기대: 주문2 로 얻은 권한은 유지된다.
-        // 실제: 회수된다. 사용자는 정상 구매한 게임을 다운로드할 수 없게 되고,
-        //       라이선스 서비스에는 ACTIVE 로 남아 있어 원인 추적이 어렵다.
+        // 수정 전에는 회수됐다. 사용자는 정상 구매한 게임을 다운로드할 수 없게 되고,
+        // 라이선스 서비스에는 ACTIVE 로 남아 있어 원인 추적이 어려웠다.
         assertThat(isActive()).as("주문2 로 얻은 권한").isTrue();
+        assertThat(entitlementRepository.findById(Entitlement.documentId(memberId, productId))
+                .orElseThrow().getOrderNo()).isEqualTo("ORD-2");
     }
 
     @Test
-    @DisplayName("현재 동작: 회수는 주문을 구분하지 않는다")
-    void currentBehaviourRevokeIgnoresOrder() {
+    @DisplayName("[D-012] 해당 주문의 회수 이벤트는 정상적으로 권한을 거둔다")
+    void revokeOfOwningOrderStillWorks() {
         productIsPublished();
         downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-1", memberId, List.of(productId));
         downloadService.grant("ORD-2", memberId, List.of(productId));
 
-        downloadService.revoke(memberId, List.of(productId));
+        downloadService.revoke("ORD-2", memberId, List.of(productId));
 
         assertThat(isActive()).isFalse();
-        assertThat(entitlementRepository.findById(Entitlement.documentId(memberId, productId))
-                .orElseThrow().getOrderNo()).isEqualTo("ORD-2");
     }
 
     @Test

@@ -17,8 +17,13 @@ import org.springframework.stereotype.Component;
  * Saga 참여자.
  * 지급이 재시도 후에도 실패하면 보상 이벤트(LicenseIssueFailed)를 발행해 결제 환불을 유도한다.
  *
- * <p>이 메서드는 트랜잭션을 열지 않는다 — 성공 경로와 실패 경로가 서로 다른 트랜잭션 경계를
- * 가져야 하기 때문이다(성공: 지급+이벤트 원자적 커밋, 실패: 롤백 후 별도 트랜잭션으로 보상 이벤트).
+ * <p><b>여기서 예외를 잡지 않는다.</b> 스프링 카프카의 재시도는 예외가 리스너 밖으로 나올 때만
+ * 작동한다 — 컨테이너는 리턴값을 보지 않고 정상 리턴을 처리 성공으로 간주해 오프셋을 커밋하며,
+ * 커밋되고 나면 되감을 대상이 사라진다. 잡는 순간 재시도 횟수가 0이 된다.
+ *
+ * <p>보상 트리거는 재시도가 전부 소진된 뒤에만 불려야 하므로
+ * {@link com.stove.license.config.KafkaErrorHandlerConfig} 의 recoverer 가 갖는다.
+ * 상세는 {@code docs/kafka-consumer-retry.md}.
  */
 @Slf4j
 @Component
@@ -34,14 +39,8 @@ public class PaymentEventListener {
 
         if (envelope.isType(EventType.PAYMENT_COMPLETED)) {
             PaymentCompletedEvent event = envelope.payloadAs(objectMapper, PaymentCompletedEvent.class);
-            try {
-                licenseService.issue(envelope.eventId(), envelope.eventType(),
-                        event.orderNo(), event.memberId(), event.lines());
-            } catch (Exception e) {
-                // DefaultErrorHandler 의 재시도까지 소진된 뒤 도달하는 경로로 운영한다.
-                log.error("라이선스 지급 실패 orderNo={}", event.orderNo(), e);
-                licenseService.recordIssueFailure(event.orderNo(), event.memberId(), e.getMessage());
-            }
+            licenseService.issue(envelope.eventId(), envelope.eventType(),
+                    event.orderNo(), event.memberId(), event.lines());
 
         } else if (envelope.isType(EventType.PAYMENT_CANCELLED)) {
             PaymentCancelledEvent event = envelope.payloadAs(objectMapper, PaymentCancelledEvent.class);

@@ -1,7 +1,9 @@
 package com.stove.payment.core.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.stove.common.core.error.BusinessException;
 import com.stove.common.event.EventType;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -14,7 +16,6 @@ import com.stove.payment.core.domain.PgApproval;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,8 +25,9 @@ import org.springframework.context.annotation.Import;
  * 콜백이 <b>어느 결제 건에 매칭되는가</b>. 금액 대조보다 한 단계 앞선 질문이다 —
  * 매칭이 틀리면 그 다음의 모든 검증이 엉뚱한 대상 위에서 통과한다.
  *
- * <p>{@code handleApproval} 은 멱등키로 먼저 찾고, 없으면 주문번호로 찾는다.
- * 멱등키는 PG 가 만들어 주는 값이라 우리가 유일성을 보장할 수 없다는 점이 핵심이다.
+ * <p>{@code handleApproval} 은 <b>주문번호</b>로 결제를 찾는다. 주문번호는 우리가 만든 값이라 신뢰할 수 있다.
+ * 멱등키는 PG 가 만들어 주는 값이라 유일성을 우리 쪽에서 보장할 수 없으므로,
+ * 역할을 "이 결제에 이미 적용된 콜백인가" 하나로 좁혔다.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
@@ -79,8 +81,7 @@ class PaymentCallbackLookupTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-008] 다른 주문의 멱등키가 재사용돼도 해당 주문의 결제가 승인되어야 한다")
+    @DisplayName("[D-008] 다른 주문의 멱등키가 재사용돼도 해당 주문의 결제가 승인된다")
     void reusedIdempotencyKeyMustNotHijackAnotherOrder() {
         String sharedKey = "PGKEY-" + UUID.randomUUID();
 
@@ -97,33 +98,55 @@ class PaymentCallbackLookupTest {
         paymentService.handleApproval(
                 new PgApproval(secondOrder, pgTxIdOf(secondOrder), 50_000L, sharedKey));
 
-        // 실제로 벌어지는 일: 멱등키 조회가 첫 번째 결제를 물어오고,
-        // 그 결제는 이미 PAID 라 '중복 콜백'으로 판정되어 조용히 무시된다.
-        // 두 번째 주문은 PG 에서 승인됐는데 우리 장부에는 PENDING 으로 남는다 —
-        // 라이선스 미지급, 주문 미확정, 정산 누락이 한꺼번에 발생한다.
+        // 수정 전에는 멱등키 조회가 첫 번째 결제를 물어왔고, 그 결제가 이미 PAID 라
+        // '중복 콜백'으로 판정되어 두 번째 주문이 조용히 PENDING 에 머물렀다 —
+        // 라이선스 미지급, 주문 미확정, 정산 누락이 한꺼번에 발생하는 상태였다.
         assertThat(reload(secondOrder).getStatus())
                 .as("두 번째 주문의 결제 상태")
                 .isEqualTo(PaymentStatus.PAID);
         assertThat(outboxEventRepository.count() - outboxBefore)
                 .as("PaymentCompleted 발행 건수")
                 .isEqualTo(1);
+        assertThat(reload(firstOrder).getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
     @Test
-    @DisplayName("현재 동작: 재사용된 멱등키는 두 번째 주문을 조용히 미승인 상태로 남긴다")
-    void currentBehaviourLeavesSecondOrderPending() {
-        String sharedKey = "PGKEY-" + UUID.randomUUID();
+    @DisplayName("[D-008] 같은 콜백이 재전송되면 승인은 한 번이고 이벤트도 한 번이다")
+    void resentCallbackIsAbsorbed() {
+        String orderNo = preparedOrder(30_000L);
+        PgApproval approval = new PgApproval(orderNo, pgTxIdOf(orderNo), 30_000L,
+                "PGKEY-" + UUID.randomUUID());
+        long before = outboxEventRepository.count();
 
-        String firstOrder = preparedOrder(30_000L);
-        paymentService.handleApproval(
-                new PgApproval(firstOrder, pgTxIdOf(firstOrder), 30_000L, sharedKey));
+        paymentService.handleApproval(approval);
+        paymentService.handleApproval(approval);
 
-        String secondOrder = preparedOrder(50_000L);
-        paymentService.handleApproval(
-                new PgApproval(secondOrder, pgTxIdOf(secondOrder), 50_000L, sharedKey));
+        assertThat(reload(orderNo).getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(outboxEventRepository.count() - before).isEqualTo(1);
+    }
 
-        // 예외도 로그 경고도 없이 PENDING 에 머문다. 관측되지 않는 것이 더 나쁘다.
-        assertThat(reload(secondOrder).getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(reload(firstOrder).getStatus()).isEqualTo(PaymentStatus.PAID);
+    @Test
+    @DisplayName("[D-008] 승인된 주문에 다른 키의 승인이 또 오면 조용히 넘기지 않는다")
+    void secondDistinctApprovalIsRejectedLoudly() {
+        String orderNo = preparedOrder(30_000L);
+        String pgTxId = pgTxIdOf(orderNo);
+        paymentService.handleApproval(new PgApproval(orderNo, pgTxId, 30_000L, "PGKEY-" + UUID.randomUUID()));
+        long before = outboxEventRepository.count();
+
+        // PG 연동 오류이거나 위·변조다. 무시하면 사고가 관측되지 않는다.
+        assertThatThrownBy(() -> paymentService.handleApproval(
+                new PgApproval(orderNo, pgTxId, 30_000L, "PGKEY-" + UUID.randomUUID())))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(reload(orderNo).getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(outboxEventRepository.count() - before).isZero();
+    }
+
+    @Test
+    @DisplayName("[D-008] 존재하지 않는 주문의 콜백은 거부된다")
+    void unknownOrderIsRejected() {
+        assertThatThrownBy(() -> paymentService.handleApproval(
+                new PgApproval("ORD-" + UUID.randomUUID(), "PG-X", 30_000L, "PGKEY-" + UUID.randomUUID())))
+                .isInstanceOf(BusinessException.class);
     }
 }

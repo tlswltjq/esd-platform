@@ -8,6 +8,7 @@ import com.stove.common.event.payload.PaymentCompletedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentCancellation;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgApproval;
@@ -68,8 +69,11 @@ public class PaymentService {
      * 중복 콜백은 상태/멱등키로 흡수하고 이벤트를 재발행하지 않는다.
      */
     public void handleApproval(PgApproval approval) {
-        Payment payment = paymentRepository.findByIdempotencyKey(approval.idempotencyKey())
-                .orElseGet(() -> findPayment(approval.orderNo()));
+        // 주문번호로 찾는다. 멱등키는 PG 가 만드는 값이라 재사용되면 다른 주문의 결제를 물어온다(D-008).
+        // 행을 잠그고 읽어 동시에 들어온 중복 콜백이 둘 다 승인되는 창을 닫는다.
+        Payment payment = paymentRepository.findByOrderNoForUpdate(approval.orderNo())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
+                        "orderNo=" + approval.orderNo()));
 
         boolean approved = payment.approve(approval.pgTxId(), approval.paidAmount(), approval.idempotencyKey());
         if (!approved) {
@@ -85,35 +89,58 @@ public class PaymentService {
     }
 
     /**
-     * Saga 보상 환불 진입점. license 지급 최종 실패 이벤트로만 들어온다.
+     * 취소 1단계: 의도를 커밋한다.
      *
-     * <p>사용자 환불과 로직은 같지만 진입점을 나눈 이유는 멱등키의 출처가 다르기 때문이다 —
-     * 이벤트 경로만 중복 수신 마킹이 필요하고, HTTP 경로에는 넘길 eventId 가 없다.
+     * <p>PG 환불은 되돌릴 수 없으므로 이 트랜잭션 안에서 부르지 않는다. 부르면 뒤이은 적재나 커밋이
+     * 실패했을 때 "돈은 나갔는데 장부는 PAID" 가 된다. 실제 호출은
+     * {@link com.stove.payment.api.application.RefundFacade} 가 커밋 뒤에 한다.
+     *
+     * @return PG 환불이 필요 없으면 {@link PaymentCancellation#none()}
      */
-    public void compensate(String eventId, String eventType, String orderNo, String reason) {
-        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
-            return;
+    public PaymentCancellation beginCancel(String orderNo, String reason) {
+        Payment payment = findPayment(orderNo);
+        if (!payment.beginCancel(reason)) {
+            log.info("이미 취소된 결제 orderNo={}", orderNo);
+            return PaymentCancellation.none();
         }
-        log.warn("라이선스 지급 실패 → 보상 환불 실행 orderNo={} reason={}", orderNo, reason);
-        cancel(orderNo, reason);
+        log.info("결제 취소 착수 orderNo={} reason={}", orderNo, reason);
+        return PaymentCancellation.of(payment.getPgTxId(), payment.getAmount());
     }
 
-    /**
-     * 환불. 사용자 요청 환불과 Saga 보상 트랜잭션(LicenseIssueFailed)이 같은 규칙을 쓴다.
-     */
-    public void cancel(String orderNo, String reason) {
+    /** 취소 2단계: PG 환불이 끝난 뒤 확정하고 이벤트를 적재한다. */
+    public void completeCancel(String orderNo, String reason) {
         Payment payment = findPayment(orderNo);
-        if (!payment.cancel(reason)) {
-            log.info("이미 취소된 결제 orderNo={}", orderNo);
-            return;
-        }
-        pgClient.cancel(payment.getPgTxId(), payment.getAmount(), reason);
+        payment.completeCancel();
 
         outboxRecorder.record(AGGREGATE, orderNo,
                 PaymentCancelledEvent.of(payment.getId(), orderNo, payment.getMemberId(),
                         payment.getAmount(), reason));
 
         log.info("결제 취소 orderNo={} reason={}", orderNo, reason);
+    }
+
+    /**
+     * Saga 보상 환불 진입점. license 지급 최종 실패 이벤트로만 들어온다.
+     *
+     * <p>사용자 환불과 규칙은 같지만 진입점을 나눈 이유는 멱등키의 출처가 다르기 때문이다 —
+     * 이벤트 경로만 중복 수신 마킹이 필요하고, HTTP 경로에는 넘길 eventId 가 없다.
+     */
+    public PaymentCancellation beginCompensation(String eventId, String eventType,
+                                                 String orderNo, String reason) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return PaymentCancellation.none();
+        }
+        Payment payment = findPayment(orderNo);
+        if (!payment.cancelable()) {
+            // 정상 흐름에서는 나올 수 없는 조합이다. 결제가 스스로 PAID 가 될 수는 없으므로
+            // 예외를 던지면 가드 마킹까지 롤백되어 같은 이벤트가 영원히 재전송된다(파티션 정지).
+            // 소비는 진행시키되 사람이 볼 수 있게 남긴다.
+            log.error("보상 대상 결제 상태 불일치 — 수동 확인 필요 orderNo={} status={} reason={}",
+                    orderNo, payment.getStatus(), reason);
+            return PaymentCancellation.none();
+        }
+        log.warn("라이선스 지급 실패 → 보상 환불 실행 orderNo={} reason={}", orderNo, reason);
+        return beginCancel(orderNo, reason);
     }
 
     @Transactional(readOnly = true)

@@ -111,9 +111,9 @@ public class SettlementService {
         Map<Long, List<SettlementRecord>> bySeller = targets.stream()
                 .collect(Collectors.groupingBy(SettlementRecord::getSellerId));
 
+        // 미마감 원장은 예외 없이 전부 확정본에 반영한다.
+        // 반영 대상과 close 대상이 어긋나면 "마감됐는데 어디에도 없는 금액"이 생긴다.
         List<SellerSettlement> closed = bySeller.entrySet().stream()
-                .filter(entry -> sellerSettlementRepository
-                        .findBySellerIdAndSettlementMonth(entry.getKey(), monthKey).isEmpty())
                 .map(entry -> closeSeller(entry.getKey(), monthKey, entry.getValue()))
                 .toList();
 
@@ -122,16 +122,42 @@ public class SettlementService {
         return closed;
     }
 
+    /**
+     * 판매자 한 명의 확정본을 만들거나, 이미 있으면 지각 원장을 더한다.
+     *
+     * <p>이미 마감된 판매자를 건너뛰지 않는 이유는 {@link #closeMonth} 주석대로다 —
+     * 건너뛰면서 원장은 close 해 버리면 그 금액이 영구 유실된다.
+     */
     private SellerSettlement closeSeller(Long sellerId, String monthKey, List<SettlementRecord> records) {
         long gross = records.stream().mapToLong(SettlementRecord::getGrossAmount).sum();
         long fee = records.stream().mapToLong(SettlementRecord::getFeeAmount).sum();
         long net = records.stream().mapToLong(SettlementRecord::getNetAmount).sum();
 
-        // 환불이 매출을 초과해 음수가 된 판매자는 세금계산서를 발행하지 않고 이월한다
-        String invoiceNo = net > 0 ? taxInvoiceIssuer.issue(sellerId, monthKey, net) : null;
+        SellerSettlement settlement = sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(sellerId, monthKey)
+                .map(existing -> revise(existing, gross, fee, net, records.size(), sellerId, monthKey))
+                .orElseGet(() -> SellerSettlement.close(
+                        sellerId, monthKey, gross, fee, net, records.size(),
+                        // 환불이 매출을 초과해 음수가 된 판매자는 세금계산서를 발행하지 않고 이월한다
+                        net > 0 ? taxInvoiceIssuer.issue(sellerId, monthKey, net) : null));
 
-        return sellerSettlementRepository.save(SellerSettlement.close(
-                sellerId, monthKey, gross, fee, net, records.size(), invoiceNo));
+        return sellerSettlementRepository.save(settlement);
+    }
+
+    private SellerSettlement revise(SellerSettlement existing, long gross, long fee, long net,
+                                    int recordCount, Long sellerId, String monthKey) {
+        existing.accumulate(gross, fee, net, recordCount);
+
+        if (!existing.hasTaxInvoice() && existing.getNetAmount() > 0) {
+            // 이전 마감에서 순액이 0 이하라 발행을 미뤘던 판매자. 지각 매출로 양수가 되면 이제 발행한다.
+            existing.assignTaxInvoice(taxInvoiceIssuer.issue(sellerId, monthKey, existing.getNetAmount()));
+        } else if (existing.hasTaxInvoice()) {
+            // 이미 발행된 계산서의 금액이 바뀌었다. 실제 운영에서는 수정세금계산서가 필요한 건이라
+            // 조용히 넘기지 않고 남긴다.
+            log.warn("마감 확정본 금액 변경 — 수정세금계산서 검토 필요 sellerId={} month={} 추가액={} 계산서={}",
+                    sellerId, monthKey, net, existing.getTaxInvoiceNo());
+        }
+        return existing;
     }
 
     @Transactional(readOnly = true)
