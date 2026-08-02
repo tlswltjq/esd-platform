@@ -5,6 +5,8 @@ dependencies {
     api project(':common:event')
     api project(':common:jpa')
     api 'org.springframework.kafka:spring-kafka'
+    // 릴레이는 배경 스레드라 지표 없이는 관측 수단이 없다
+    api 'io.micrometer:micrometer-core'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 공용 라이브러리 방향 검증 (ArchUnit)

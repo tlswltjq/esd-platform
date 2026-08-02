@@ -45,7 +45,8 @@ stove/
 서비스별 API·상태머신·이벤트 목록은 [docs/services.md](docs/services.md),
 구조를 이렇게 잡은 근거는 [docs/decisions.md](docs/decisions.md) 에 정리했다.
 테스트를 어느 층에서 무엇으로 검증하는지는 [docs/testing.md](docs/testing.md),
-그 테스트로 재현한 결함은 [docs/defects.md](docs/defects.md) 에 있다.
+그 테스트로 재현한 결함은 [docs/defects.md](docs/defects.md),
+Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/performance.md) 에 있다.
 
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
 스키마가 유동적인 패치 매니페스트는 MongoDB, 검색 트래픽은 Elasticsearch.

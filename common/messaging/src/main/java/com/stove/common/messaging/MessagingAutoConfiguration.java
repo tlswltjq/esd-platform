@@ -5,19 +5,25 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.kafka.ConsumerRetryPolicy;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
+import com.stove.common.messaging.outbox.OutboxMetrics;
 import com.stove.common.messaging.outbox.OutboxProperties;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.messaging.outbox.OutboxRelay;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Outbox/Inbox 인프라 자동 구성.
@@ -36,13 +42,27 @@ public class MessagingAutoConfiguration {
         return new OutboxRecorder(repository, objectMapper);
     }
 
+    /**
+     * 릴레이 계측. 액추에이터가 없는 구성에서도 뜨도록 레지스트리가 없으면 로컬 것을 만든다 —
+     * 지표 수집 여부가 이벤트 발행 가능 여부를 좌우해서는 안 된다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public OutboxMetrics outboxMetrics(ObjectProvider<MeterRegistry> meterRegistry,
+                                       OutboxEventRepository repository) {
+        return new OutboxMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new), repository);
+    }
+
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "stove.outbox", name = "relay-enabled", havingValue = "true", matchIfMissing = true)
     public OutboxRelay outboxRelay(OutboxEventRepository repository,
                                    KafkaTemplate<String, String> kafkaTemplate,
-                                   OutboxProperties properties) {
-        return new OutboxRelay(repository, kafkaTemplate, properties);
+                                   OutboxProperties properties,
+                                   OutboxMetrics metrics,
+                                   PlatformTransactionManager transactionManager) {
+        return new OutboxRelay(repository, kafkaTemplate, properties, metrics,
+                new TransactionTemplate(transactionManager));
     }
 
     @Bean
