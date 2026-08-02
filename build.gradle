@@ -52,6 +52,33 @@ subprojects {
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
     }
+
+    // 결함 재현 테스트(@Tag("known-defect"))는 기본 빌드에서 뺀다.
+    // "실패하는 것이 정상"인 테스트라 CI 를 빨갛게 두면 신호가 아니라 소음이 된다.
+    // 제외는 test 태스크에만 건다 — withType 으로 걸면 아래 defectTest 까지 같이 걸러진다.
+    tasks.named('test') {
+        useJUnitPlatform {
+            excludeTags 'known-defect'
+        }
+    }
+
+    // 결함 재현 테스트만 돌린다. 실패 = 결함이 아직 살아 있다는 증거.
+    // 고쳐서 통과하기 시작하면 태그를 떼고 회귀 방어선으로 승격한다.
+    tasks.register('defectTest', Test) {
+        group = 'verification'
+        description = '알려진 결함을 재현하는 테스트만 실행한다 (docs/defects.md 참고)'
+        testClassesDirs = sourceSets.test.output.classesDirs
+        classpath = sourceSets.test.runtimeClasspath
+        useJUnitPlatform {
+            includeTags 'known-defect'
+        }
+        // 결함이 여러 모듈에 걸쳐 있으므로 첫 실패에서 멈추지 않고 전부 돌린다
+        ignoreFailures = true
+        testLogging {
+            events 'passed', 'failed'
+            exceptionFormat = 'short'
+        }
+    }
 }
 
 // apps/* 는 실행 가능한 부트 애플리케이션, common/* 는 일반 라이브러리 jar
