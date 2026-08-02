@@ -10,7 +10,6 @@ import static org.mockito.Mockito.when;
 
 import com.stove.common.event.EventType;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -67,27 +66,22 @@ class ProcessedEventGuardTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-004] eventId 가 없으면 가드가 처리를 거부해야 한다")
-    void shouldRejectNullEventId() {
+    @DisplayName("[D-004] eventId 가 없으면 가드가 처리를 거부한다")
+    void rejectsNullEventId() {
         // eventId 가 null 이면 '이미 처리했는지' 판단 자체가 불가능하다.
-        // 그런데 현재 가드는 조회 결과가 false 라는 이유로 처리를 허용하고,
-        // 실패는 event_id NOT NULL 제약에 걸리는 커밋 시점까지 미뤄진다.
-        //
-        // 그 결과 (1) 비즈니스 로직이 이미 실행된 뒤 롤백되고,
-        //        (2) 오프셋이 커밋되지 않아 같은 레코드가 무한 재전송되며,
-        //        (3) 파티션 전체가 그 자리에서 멈춘다.
-        // 판단 불가능한 입력은 부수효과 이전에 끊어야 한다.
+        // 수정 전에는 조회 결과가 false 라는 이유로 처리를 허용했고,
+        // 실패는 event_id NOT NULL 제약에 걸리는 커밋 시점까지 미뤄졌다 —
+        // 비즈니스 로직이 이미 실행된 뒤 롤백되는 구조였다.
         assertThatThrownBy(() -> guard.firstDelivery(null, GROUP, EventType.PAYMENT_COMPLETED))
                 .isInstanceOf(IllegalArgumentException.class);
+        verify(repository, never()).save(any());
     }
 
     @Test
-    @DisplayName("현재 동작: eventId 가 null 이어도 가드는 처리를 허용한다")
-    void nullEventIdCurrentlyPassesGuard() {
-        when(repository.existsByEventIdAndConsumerGroup(null, GROUP)).thenReturn(false);
-
-        assertThat(guard.firstDelivery(null, GROUP, EventType.PAYMENT_COMPLETED)).isTrue();
-        verify(repository).save(any(ProcessedEvent.class));
+    @DisplayName("[D-004] 빈 문자열 eventId 도 거부한다")
+    void rejectsBlankEventId() {
+        assertThatThrownBy(() -> guard.firstDelivery("  ", GROUP, EventType.PAYMENT_COMPLETED))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(repository, never()).save(any());
     }
 }

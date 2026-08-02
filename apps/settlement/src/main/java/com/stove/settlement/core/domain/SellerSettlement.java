@@ -67,4 +67,27 @@ public class SellerSettlement extends BaseTimeEntity {
         return new SellerSettlement(sellerId, settlementMonth, grossAmount, feeAmount,
                 netAmount, recordCount, taxInvoiceNo);
     }
+
+    /**
+     * 마감 후 도착한 원장을 확정본에 더한다.
+     *
+     * <p>지각 원장은 예외가 아니라 상시 발생한다 — 이벤트 재전송, 월경계 지연, 수동 보정.
+     * 이 경로가 없으면 그 금액이 어떤 확정본에도 속하지 못한 채 마감 처리되어 영구히 사라진다.
+     *
+     * <p>{@code closedAt} 은 최초 마감 시각으로 둔다. 갱신하면 "언제 마감했는가"를 잃는다.
+     */
+    public void accumulate(long grossAmount, long feeAmount, long netAmount, int recordCount) {
+        this.grossAmount += grossAmount;
+        this.feeAmount += feeAmount;
+        this.netAmount += netAmount;
+        this.recordCount += recordCount;
+    }
+
+    public boolean hasTaxInvoice() {
+        return taxInvoiceNo != null;
+    }
+
+    public void assignTaxInvoice(String taxInvoiceNo) {
+        this.taxInvoiceNo = taxInvoiceNo;
+    }
 }

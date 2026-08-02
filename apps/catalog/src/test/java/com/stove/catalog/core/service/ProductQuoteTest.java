@@ -13,7 +13,6 @@ import com.stove.common.test.InfraContainers;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -123,27 +122,24 @@ class ProductQuoteTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-009] 수량이 0 이하인 주문은 거부되어야 한다")
-    void nonPositiveQuantityShouldBeRejected() {
-        Product product = onSale(30_000L, "KRW");
-
-        // 수량 검증은 HTTP DTO(QuoteRequest.Item @Min(1))에만 있다.
-        // core 진입점에는 없으므로 컨트롤러를 거치지 않는 호출 경로에서는 무방비다.
-        // 도메인 규칙은 도메인이 지켜야 한다 — 어댑터는 여러 개가 될 수 있다.
-        assertThatThrownBy(() -> productQueryService.quote(List.of(new QuoteItem(product.getId(), 0))))
-                .isInstanceOf(BusinessException.class);
+    @DisplayName("[D-009] 수량이 0 이하면 주문 항목 자체가 만들어지지 않는다")
+    void nonPositiveQuantityIsRejected() {
+        // 검증을 값 객체에 두었으므로 잘못된 항목은 존재할 수 없다.
+        // HTTP DTO 의 @Min(1) 은 어댑터의 몫이고, 어댑터는 늘어날 수 있다.
+        assertThatThrownBy(() -> new QuoteItem(1L, 0)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new QuoteItem(1L, -9)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new QuoteItem(null, 1)).isInstanceOf(BusinessException.class);
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-009] 음수 수량으로 총액을 깎을 수 없어야 한다")
-    void negativeQuantityShouldNotReduceTotal() {
+    @DisplayName("[D-009] 음수 수량으로 총액을 깎을 수 없다")
+    void negativeQuantityCannotReduceTotal() {
         Product expensive = onSale(100_000L, "KRW");
         Product cheap = onSale(10_000L, "KRW");
 
-        // 음수 수량이 통과하면 lineAmount 가 음수가 되어 총액을 임의로 낮출 수 있다.
-        // 결제 금액 대조(게이트 3)는 이 조작된 총액을 기준값으로 삼으므로 전부 통과한다.
+        // 수정 전에는 10만원짜리 게임이 1만원이 됐다 —
+        // 음수 lineAmount 가 총액을 깎고, 그 총액이 PG 사전등록·콜백 대조의 기준값이 되어
+        // 뒤따르는 검증 게이트가 전부 조작된 금액 위에서 통과했다.
         assertThatThrownBy(() -> productQueryService.quote(List.of(
                 new QuoteItem(expensive.getId(), 1),
                 new QuoteItem(cheap.getId(), -9))))
@@ -151,16 +147,12 @@ class ProductQuoteTest {
     }
 
     @Test
-    @DisplayName("현재 동작: 음수 수량이 총액을 깎는다")
-    void currentBehaviourNegativeQuantityLowersTotal() {
-        Product expensive = onSale(100_000L, "KRW");
-        Product cheap = onSale(10_000L, "KRW");
+    @DisplayName("[D-009] 정상 수량은 그대로 계산된다 — 검증이 정상 경로를 막지 않는다")
+    void validQuantityStillPricedNormally() {
+        Product product = onSale(100_000L, "KRW");
 
-        Quote quote = productQueryService.quote(List.of(
-                new QuoteItem(expensive.getId(), 1),
-                new QuoteItem(cheap.getId(), -9)));
+        Quote quote = productQueryService.quote(List.of(new QuoteItem(product.getId(), 3)));
 
-        // 10만원짜리 게임을 1만원에 살 수 있게 된다.
-        assertThat(quote.totalAmount()).isEqualTo(10_000L);
+        assertThat(quote.totalAmount()).isEqualTo(300_000L);
     }
 }

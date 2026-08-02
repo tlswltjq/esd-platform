@@ -1,6 +1,5 @@
 package com.stove.license.api.listener;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -25,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
@@ -100,59 +98,49 @@ class PaymentEventListenerTest {
     }
 
     @Test
-    @DisplayName("회수 경로의 예외는 그대로 전파된다 — 지급 경로와 정책이 다르다")
+    @DisplayName("회수 경로의 예외도 그대로 전파된다 — 두 분기의 정책이 같다")
     void revokeFailurePropagates() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
                 .when(licenseService).revoke(anyString(), anyString(), anyString(), anyString());
 
-        // 같은 리스너 안에서 한쪽 분기만 예외를 삼킨다. 이 비대칭이 결함의 실마리였다.
+        // 한쪽 분기만 예외를 삼키던 비대칭이 D-002 의 실마리였다. 이제 둘 다 밖으로 내보낸다.
         assertThatThrownBy(() -> listener.onPaymentEvent(recordOf(
                 PaymentCancelledEvent.of(1L, "ORD-1", 42L, 30_000L, "USER_REFUND"))))
                 .isInstanceOf(DataAccessResourceFailureException.class);
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-002] 지급 중 일시 장애는 예외로 전파되어 컨테이너 재시도를 유발해야 한다")
-    void shouldPropagateTransientFailureForRetry() {
+    @DisplayName("[D-002] 지급 중 일시 장애는 예외로 전파된다 — 컨테이너 재시도의 전제조건")
+    void propagatesTransientFailureForRetry() {
         doThrow(new DataAccessResourceFailureException("connection pool exhausted"))
                 .when(licenseService).issue(anyString(), anyString(), anyString(), anyLong(), any());
 
-        // 기대: 예외가 컨테이너까지 올라가 오프셋이 커밋되지 않고 레코드가 재전송된다.
-        // 실제: 리스너가 try/catch 로 삼켜 정상 리턴 → 오프셋 커밋 → 재시도 0회.
+        // 예외가 컨테이너까지 올라가야 오프셋이 커밋되지 않고 레코드가 재전송된다.
+        // 여기서 잡으면 재시도 횟수가 0이 된다.
         assertThatThrownBy(() -> listener.onPaymentEvent(paymentCompleted()))
                 .isInstanceOf(DataAccessResourceFailureException.class);
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-002] 일시 장애 한 번으로 보상 환불이 발동하면 안 된다")
-    void shouldNotCompensateOnTransientFailure() {
+    @DisplayName("[D-002] 일시 장애 한 번으로 보상 환불이 발동하지 않는다")
+    void doesNotCompensateOnTransientFailure() {
         doThrow(new DataAccessResourceFailureException("connection pool exhausted"))
                 .when(licenseService).issue(anyString(), anyString(), anyString(), anyLong(), any());
 
-        try {
-            listener.onPaymentEvent(paymentCompleted());
-        } catch (RuntimeException expectedOnceFixed) {
-            // 고쳐진 뒤에는 예외가 올라온다. 그때도 이 검증은 유효하다.
-        }
+        assertThatThrownBy(() -> listener.onPaymentEvent(paymentCompleted()))
+                .isInstanceOf(DataAccessResourceFailureException.class);
 
-        // 기대: 재시도가 전부 소진된 뒤에만 보상한다(= ErrorHandler 의 recoverer 자리).
-        // 실제: 첫 실패에서 즉시 보상 → 정상 결제가 환불된다.
+        // 보상은 재시도가 전부 소진된 뒤에만 일어난다 — 그 자리는 ErrorHandler 의 recoverer 다.
         verify(licenseService, never()).recordIssueFailure(anyString(), anyLong(), any());
     }
 
     @Test
-    @DisplayName("현재 동작: 지급이 한 번 실패하면 곧바로 보상 이벤트를 발행한다")
-    void currentBehaviourCompensatesImmediately() {
-        doThrow(new DataAccessResourceFailureException("connection pool exhausted"))
-                .when(licenseService).issue(anyString(), anyString(), anyString(), anyLong(), any());
-
+    @DisplayName("[D-002] 리스너는 보상 진입점을 갖지 않는다")
+    void listenerNeverTriggersCompensation() {
         listener.onPaymentEvent(paymentCompleted());
+        listener.onPaymentEvent(recordOf(
+                PaymentCancelledEvent.of(1L, "ORD-1", 42L, 30_000L, "USER_REFUND")));
 
-        // 예외가 밖으로 나오지 않는다는 사실 자체를 고정해 둔다.
-        // 이 테스트가 깨지는 날이 곧 D-002 가 수정된 날이다.
-        verify(licenseService).recordIssueFailure(eq("ORD-1"), eq(42L), anyString());
-        assertThat(true).as("리스너가 예외를 던지지 않고 정상 리턴했다").isTrue();
+        verify(licenseService, never()).recordIssueFailure(anyString(), anyLong(), any());
     }
 }

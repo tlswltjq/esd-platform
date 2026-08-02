@@ -15,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -27,7 +28,7 @@ import lombok.NoArgsConstructor;
  *   <li>주문 시점: catalog 가격으로 금액 재계산 (order)</li>
  *   <li>PG 사전등록: 승인 전에 서버가 결제 금액을 PG 에 먼저 등록</li>
  *   <li>콜백 대조: PG 가 알려준 승인 금액 == 사전등록 금액 (여기)</li>
- *   <li>멱등키: 같은 콜백이 여러 번 와도 승인은 한 번 (여기 + 유니크 제약)</li>
+ *   <li>멱등키: 같은 콜백이 여러 번 와도 승인은 한 번 (여기 + 행 잠금)</li>
  * </ol>
  */
 @Entity
@@ -64,8 +65,14 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 100)
     private String pgTxId;
 
-    /** 콜백 멱등 키. 유니크 제약이 중복 승인의 마지막 방어선. */
-    @Column(length = 100, unique = true)
+    /**
+     * 콜백 멱등 키. PG 가 만들어 주는 값이라 <b>전역 유일성을 우리가 보장할 수 없다.</b>
+     *
+     * <p>그래서 역할을 "이 결제에 이미 적용된 콜백인가" 하나로 좁혔다. 전역 유니크를 걸어 두면
+     * PG 가 키를 재사용했을 때 다른 주문의 결제가 조회되어 엉뚱한 건이 중복으로 처리된다(D-008).
+     * 동시 중복 콜백은 결제 행을 잠그고 읽어 막는다.
+     */
+    @Column(length = 100)
     private String idempotencyKey;
 
     @Convert(converter = OrderLinesConverter.class)
@@ -108,7 +115,13 @@ public class Payment extends BaseTimeEntity {
      */
     public boolean approve(String pgTxId, long paidAmount, String idempotencyKey) {
         if (status == PaymentStatus.PAID) {
-            return false;
+            if (Objects.equals(this.idempotencyKey, idempotencyKey)) {
+                return false;   // 같은 콜백의 재전송
+            }
+            // 같은 주문에 다른 승인이 또 왔다. PG 연동 오류이거나 위·변조다.
+            // 조용히 무시하면 사고가 관측되지 않으므로 알람 대상으로 남긴다.
+            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+                    "이미 다른 승인으로 확정된 결제: orderNo=%s".formatted(orderNo));
         }
         if (status != PaymentStatus.PENDING) {
             throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "승인 불가 상태: " + status);
@@ -125,18 +138,49 @@ public class Payment extends BaseTimeEntity {
         return true;
     }
 
-    /** @return 이미 취소된 건이면 false */
-    public boolean cancel(String reason) {
+    /**
+     * 취소 1단계: PG 환불을 요청하겠다는 의도를 기록한다.
+     *
+     * <p>{@code CANCELING} 에서 다시 불릴 수 있다 — 확정 단계가 깨져 재시도하는 경우다.
+     * PG 취소는 {@code pgTxId} 기준 멱등이므로 재요청이 이중 환불이 되지 않는다
+     * ({@link com.stove.payment.core.port.PgClient#cancel} 계약).
+     *
+     * @return 이미 취소가 끝난 건이면 false
+     */
+    public boolean beginCancel(String reason) {
         if (status == PaymentStatus.CANCELED) {
             return false;
         }
-        if (status != PaymentStatus.PAID) {
+        if (status != PaymentStatus.PAID && status != PaymentStatus.CANCELING) {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 불가 상태: " + status);
+        }
+        this.status = PaymentStatus.CANCELING;
+        this.cancelReason = reason;
+        return true;
+    }
+
+    /** 취소 2단계: PG 환불이 실제로 끝난 뒤 확정한다. */
+    public void completeCancel() {
+        if (status == PaymentStatus.CANCELED) {
+            return;
+        }
+        if (status != PaymentStatus.CANCELING) {
+            throw new BusinessException(ErrorCode.CONFLICT, "취소 확정 불가 상태: " + status);
         }
         this.status = PaymentStatus.CANCELED;
         this.canceledAt = Instant.now();
-        this.cancelReason = reason;
-        return true;
+    }
+
+    /**
+     * 취소 절차를 밟을 수 있는 상태인가.
+     *
+     * <p>Saga 보상 경로가 <b>예외 대신 값으로</b> 판단하기 위해 필요하다. 보상은 이벤트로 들어오므로
+     * 예외를 던지면 멱등 가드 마킹까지 롤백되어 같은 이벤트가 무한 재전송된다.
+     */
+    public boolean cancelable() {
+        return status == PaymentStatus.PAID
+                || status == PaymentStatus.CANCELING
+                || status == PaymentStatus.CANCELED;
     }
 
     public void fail() {

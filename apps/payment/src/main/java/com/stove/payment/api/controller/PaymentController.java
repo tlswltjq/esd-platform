@@ -5,6 +5,7 @@ import com.stove.payment.api.controller.dto.PaymentResponse;
 import com.stove.payment.api.controller.dto.PgCallbackRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentResponse;
+import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final RefundFacade refundFacade;
 
     @GetMapping("/{orderNo}")
     public ApiResponse<PaymentResponse> get(@PathVariable String orderNo) {
@@ -44,7 +46,7 @@ public class PaymentController {
     @PostMapping("/{orderNo}/cancel")
     public ApiResponse<Void> cancel(@PathVariable String orderNo,
                                     @RequestParam(defaultValue = "USER_REFUND") String reason) {
-        paymentService.cancel(orderNo, reason);
+        refundFacade.refund(orderNo, reason);
         return ApiResponse.ok();
     }
 }

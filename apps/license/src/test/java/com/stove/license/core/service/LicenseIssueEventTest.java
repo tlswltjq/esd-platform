@@ -12,7 +12,6 @@ import com.stove.license.core.domain.LicenseStatus;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -87,8 +86,7 @@ class LicenseIssueEventTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-010] 이미 지급된 주문을 재처리하면 현재 소유 상태를 다시 알려야 한다")
+    @DisplayName("[D-010] 이미 지급된 주문을 재처리하면 현재 소유 상태를 다시 알린다")
     void replayShouldRepublishOwnershipEvent() {
         String orderNo = newOrder();
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
@@ -100,23 +98,39 @@ class LicenseIssueEventTest {
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, 42L, lines(1L));
 
-        // 기대: 소유 상태를 다시 알려 하위 서비스가 복구할 수 있어야 한다.
-        // 실제: 새로 지급된 것이 없으면(issued.isEmpty) 이벤트를 발행하지 않는다.
-        //       download 가 최초 LicenseIssued 를 놓쳤다면 재처리로도 복구할 방법이 없고,
-        //       사용자는 라이브러리에 게임이 보이는데 다운로드만 안 되는 상태에 갇힌다.
+        // 수정 전에는 새로 지급된 것이 없으면 이벤트를 발행하지 않았다.
+        // download 가 최초 LicenseIssued 를 놓쳤다면 재처리로도 복구할 방법이 없었고,
+        // 사용자는 라이브러리에 게임이 보이는데 다운로드만 안 되는 상태에 갇혔다.
         assertThat(outboxEventRepository.count() - before)
                 .as("재처리 시 LicenseIssued 재발행 건수")
                 .isEqualTo(1);
     }
 
     @Test
-    @DisplayName("현재 동작: 재처리는 이벤트를 발행하지 않는다")
-    void currentBehaviourReplayPublishesNothing() {
+    @DisplayName("[D-010] 재발행되는 이벤트는 '변화'가 아니라 '현재 소유 상태'를 싣는다")
+    void republishedEventCarriesFullOwnership() {
+        String orderNo = newOrder();
+        licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
+                orderNo, 42L, lines(1L, 2L));
+
+        // 재처리 시점의 소유 상태는 두 상품 모두다. 하위 서비스가 이 한 건으로 복구할 수 있어야 한다.
+        licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
+                orderNo, 42L, lines(1L, 2L));
+
+        assertThat(licenseRepository.findByOrderNo(orderNo)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("[D-010] 이미 전부 회수된 주문에는 지급 이벤트를 발행하지 않는다")
+    void revokedOrderDoesNotRepublishOwnership() {
         String orderNo = newOrder();
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, 42L, lines(1L));
+        licenseService.revoke(UUID.randomUUID().toString(), EventType.PAYMENT_CANCELLED,
+                orderNo, "USER_REFUND");
         long before = outboxEventRepository.count();
 
+        // 지각 도착한 결제 완료 이벤트. 소유하지 않은 상태를 '지급'으로 알릴 수는 없다.
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, 42L, lines(1L));
 
@@ -124,8 +138,7 @@ class LicenseIssueEventTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-011] 이미 회수된 주문의 회수 재수신은 이벤트를 다시 발행하지 않아야 한다")
+    @DisplayName("[D-011] 이미 회수된 주문의 회수 재수신은 이벤트를 다시 발행하지 않는다")
     void repeatedRevokeShouldNotRepublish() {
         String orderNo = newOrder();
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
@@ -139,9 +152,8 @@ class LicenseIssueEventTest {
         licenseService.revoke(UUID.randomUUID().toString(), EventType.PAYMENT_CANCELLED,
                 orderNo, "USER_REFUND");
 
-        // 기대: 상태 변화가 없으면 이벤트도 없다.
-        // 실제: 라이선스 목록이 비어 있지 않다는 이유만으로 무조건 재발행한다.
-        //       지급 경로는 변화 여부를 따지는데(issued.isEmpty) 회수 경로는 따지지 않는 비대칭.
+        // 상태 변화가 없으면 이벤트도 없다.
+        // 수정 전에는 라이선스 목록이 비어 있지 않다는 이유만으로 무조건 재발행했다.
         assertThat(outboxEventRepository.count() - before)
                 .as("변화 없는 회수의 이벤트 발행 건수")
                 .isZero();

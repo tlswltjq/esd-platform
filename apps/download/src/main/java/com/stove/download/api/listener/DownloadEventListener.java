@@ -60,7 +60,7 @@ public class DownloadEventListener {
 
         } else if (envelope.isType(EventType.LICENSE_REVOKED)) {
             LicenseRevokedEvent event = envelope.payloadAs(objectMapper, LicenseRevokedEvent.class);
-            downloadService.revoke(event.memberId(), event.productIds());
+            downloadService.revoke(event.orderNo(), event.memberId(), event.productIds());
         }
     }
 }
