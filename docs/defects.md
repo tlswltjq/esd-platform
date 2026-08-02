@@ -4,8 +4,8 @@
 모든 항목에 실패하는 테스트가 하나씩 붙어 있고, 그 테스트가 통과하면 항목을 닫는다.
 
 ```bash
-./gradlew build         # 결함 테스트 제외. 항상 초록이어야 한다
-./gradlew defectTest    # 남아 있는 결함만 재현. 실패 = 아직 살아 있음
+./gradlew build         # 503건 통과 (결함 테스트 제외)
+./gradlew defectTest    # 남아 있는 결함만 재현. 현재 1건(D-013)
 ```
 
 수정이 끝난 항목은 재현 테스트에서 `known-defect` 태그를 떼어
@@ -21,8 +21,8 @@
 |---|---|---|---|
 | [D-001](#d-001) | 마감 후 도착한 정산 원장이 지급 대상에서 누락 | 금전 손실 | **수정됨** |
 | [D-002](#d-002) | 일시 장애 한 번에 Saga 보상 환불 발동 | 금전 손실 | **수정됨** |
-| [D-003](#d-003) | 브로커 장애가 길어지면 Outbox 이벤트 영구 유실 | 데이터 유실 | 미수정 |
-| [D-004](#d-004) | 계약 헤더 없는 메시지가 파티션을 정지시킴 | 가용성 | 미수정 |
+| [D-003](#d-003) | 브로커 장애가 길어지면 Outbox 이벤트 영구 유실 | 데이터 유실 | **수정됨** |
+| [D-004](#d-004) | 계약 헤더 없는 메시지의 실패가 트랜잭션 한복판으로 미뤄짐 | 가용성 | **수정됨** |
 | [D-006](#d-006) | 롤백된 환불 트랜잭션이 PG 환불은 실행 | 금전 불일치 | **수정됨** |
 | [D-007](#d-007) | 상태 불일치 보상 요청이 무한 재시도 | 가용성 | **수정됨** |
 | [D-008](#d-008) | 재사용된 PG 멱등키가 다른 주문의 승인을 삼킴 | 금전 손실 | **수정됨** |
@@ -30,6 +30,7 @@
 | [D-010](#d-010) | 재처리해도 소유 이벤트가 재발행되지 않음 | 복구 불가 | **수정됨** |
 | [D-011](#d-011) | 변화 없는 회수가 이벤트를 재발행 | 잡음 | **수정됨** |
 | [D-012](#d-012) | 지각 회수 이벤트가 새 구매 권한을 거둠 | 사용자 영향 | **수정됨** |
+| [D-013](#d-013) | 발행 실패한 이벤트를 같은 애그리거트의 뒤 이벤트가 추월 | 순서 역전 | 미수정 |
 
 ---
 
@@ -154,9 +155,11 @@ recoverer 안에서 예외가 나가면 레코드가 되감겨 무한 재전송�
 <a id="d-003"></a>
 ## D-003 브로커 장애가 길어지면 Outbox 이벤트 영구 유실
 
+**상태** 수정됨
 **영향** 데이터 유실 · 자동 복구 불가
-**위치** `common/messaging/.../outbox/OutboxRelay.java`, `OutboxEvent#markFailed`
-**재현** `OutboxRelayTest#shouldSurviveProlongedOutage`
+**위치** `common/messaging/.../outbox/OutboxEvent.java`, `OutboxEventRepository`
+**재현** `OutboxEventTest#toleranceCoversRealisticOutage`, `#deadCanBeRequeued`,
+`OutboxBackOffQueryTest#backedOffEventIsSkippedUntilItsTime`
 
 ### 무슨 일이
 
@@ -176,38 +179,68 @@ recoverer 안에서 예외가 나가면 레코드가 되감겨 무한 재전송�
 `relay()` 는 `@Transactional` 안에서 배치 전체를 `send().get()` 으로 순차 대기한다.
 브로커가 느려지면 트랜잭션과 `FOR UPDATE SKIP LOCKED` 락이 `batchSize × 타임아웃` 만큼 유지된다.
 
-### 수정 방향
+### 수정
 
-지수 백오프(다음 시도 시각 컬럼 + 조회 조건 추가), DEAD 회수 경로,
-DEAD 전이 시 관측 가능한 신호(메트릭·알림).
+**재시도 예산을 횟수가 아니라 시간으로 잡는다.** `next_attempt_at` 컬럼을 두고
+실패할 때마다 1초 → 2초 → 4초 …(상한 5분)로 미룬다. 릴레이 조회에
+`next_attempt_at IS NULL OR next_attempt_at <= NOW(6)` 조건이 붙었다.
+기본 설정(max-retry 10)에서 감내 시간이 10초에서 **약 8분 30초**로 늘어난다.
+
+`OutboxEvent#requeue()` 로 DEAD 를 발행 대기로 되돌릴 수 있다.
+`findByStatusOrderByIdAsc(DEAD)` 로 대상을 조회한다.
+
+시간 조건은 네이티브 SQL 안에 있어 대역으로는 검증되지 않는다.
+실제 MySQL 을 띄우는 `OutboxBackOffQueryTest` 가 그 부분을 맡는다 —
+조건이 빠지면 백오프를 아무리 계산해도 릴레이가 곧바로 다시 집어간다.
+
+마이그레이션은 outbox 를 쓰는 7개 서비스에 동일하게 들어갔다
+(`V*__outbox_retry_backoff.sql`).
+
+### 남은 부분
+
+`relay()` 가 `@Transactional` 안에서 배치 전체를 `send().get()` 으로 순차 대기하는 구조는
+그대로다. 브로커가 느려지면 트랜잭션과 `FOR UPDATE SKIP LOCKED` 락이
+`batchSize × 타임아웃` 만큼 유지된다. 이건 처리량 문제라 부하 테스트로 정량화한 뒤 손대는 편이 낫다.
 
 ---
 
 <a id="d-004"></a>
-## D-004 계약 헤더 없는 메시지가 파티션을 정지시킴
+## D-004 계약 헤더 없는 메시지의 실패가 트랜잭션 한복판으로 미뤄짐
 
+**상태** 수정됨
 **영향** 가용성 (poison message)
 **위치** `common/event/.../kafka/EventEnvelope.java`, `common/messaging/.../inbox/ProcessedEventGuard.java`
-**재현** `EventEnvelopeTest#shouldRejectRecordWithoutEventId`, `#shouldRejectRecordWithoutEventType`, `ProcessedEventGuardTest#shouldRejectNullEventId`
+**재현** `EventEnvelopeTest#rejectsRecordWithoutEventId`, `#rejectsRecordWithoutEventType`, `ProcessedEventGuardTest#rejectsNullEventId`
 
 ### 무슨 일이
 
 `EventEnvelope.from()` 은 헤더가 없으면 `null` 을 그대로 반환한다.
 `ProcessedEventGuard` 도 `null` 을 걸러내지 않고 조회 결과가 없다는 이유로 처리를 **허용**한다.
 
-실패는 `event_id NOT NULL` 제약에 걸리는 커밋 시점까지 미뤄진다. 그 결과:
-
-1. 비즈니스 로직이 이미 실행된 뒤 롤백된다
-2. 오프셋이 커밋되지 않아 같은 레코드가 무한 재전송된다
-3. **파티션 전체가 그 자리에서 멈춘다** — 뒤의 정상 이벤트도 전부 막힌다
+실패는 `event_id NOT NULL` 제약에 걸리는 커밋 시점까지 미뤄진다. 그 결과
+**비즈니스 로직이 이미 실행된 뒤 롤백되고**, 오프셋이 커밋되지 않아 같은 레코드가 재전송된다.
+그 뒤 몇 번 재시도하고 어떻게 끝나는지는 컨슈머의 에러 핸들러 정책에 달렸는데,
+**어느 서비스에도 그 정책이 정의되어 있지 않았다** — 조용히 버려지든 계속 되돌아오든
+결제 경로 이벤트에는 둘 다 받아들일 수 없다.
 
 `eventType` 이 `null` 인 경우는 더 조용하다. 모든 `isType()` 이 false 라
 리스너가 아무 분기도 타지 않고 정상 리턴한다. **로그에도 흔적이 남지 않는다.**
 
-### 수정 방향
+### 수정
 
-봉투 생성 시점에 계약 위반을 거부한다. 판단 불가능한 입력은 부수효과 이전에 끊는다.
-운영에서는 DLQ 로 치워 파티션이 계속 흐르게 한다.
+봉투 생성 시점에 계약 위반을 거부한다(`IllegalStateException`).
+멱등 가드도 빈 `eventId` 를 거부한다 — 판단할 수 없는 입력에 "처음 본 이벤트"라고
+답하면 부수효과가 그대로 일어난다. 예외 메시지에 topic/partition/offset/key 를 실어
+어느 메시지인지 찾을 수 있게 했다.
+
+그리고 **재시도 정책을 명시했다.** `common:messaging` 이 지수 백오프
+(`ConsumerRetryPolicy`, 1→2→4초)를 단 기본 `DefaultErrorHandler` 를 자동 구성한다.
+재시도가 소진되면 ERROR 로 남기고 건너뛴다 — 계약 위반 메시지 한 건이 파티션을 막지 않되,
+유실이 아니라 **관측 가능한 포기**가 되도록. 도메인 처리가 필요한 서비스는
+자기 `CommonErrorHandler` 빈으로 대신한다(license 의 보상 recoverer).
+
+`download` 는 `common:messaging` 을 쓰지 않아 이 기본값이 적용되지 않는다.
+Outbox/Inbox 가 필요 없는 모듈이라 의존을 늘리지 않았고, 대신 여기 남긴다.
 
 ---
 
@@ -437,6 +470,38 @@ license 서비스에는 `ACTIVE` 로 남아 있어 사용자 문의가 들어와
 
 `revoke` 가 `orderNo` 를 받아 저장된 권한의 주문번호와 대조한다(`Entitlement#belongsTo`).
 다른 주문의 권한이면 건드리지 않고 로그만 남긴다 — 조용히 지나가면 나중에 추적할 수 없다.
+
+---
+
+<a id="d-013"></a>
+## D-013 발행 실패한 이벤트를 같은 애그리거트의 뒤 이벤트가 추월
+
+**상태** 미수정 (D-003 수정 중 발견)
+**영향** 순서 역전
+**위치** `common/messaging/.../outbox/OutboxRelay.java:34-47`
+**재현** `OutboxRelayTest#failureShouldHoldLaterEventsOfSameAggregate`
+
+### 무슨 일이
+
+릴레이는 배치를 id 순으로 돌면서 실패한 건을 건너뛰고 계속 발행한다.
+같은 `partitionKey` 의 뒤 이벤트가 앞 이벤트를 추월한다.
+
+```
+EVT-1 PaymentCompleted (ORD-1)  발행 실패 → 재시도 대기
+EVT-2 PaymentCancelled (ORD-1)  발행 성공 → 먼저 도착
+→ license 가 회수할 라이선스가 없는 상태에서 회수를 처리한다
+```
+
+README 는 "메시지 키는 주문번호/상품코드 — 같은 애그리거트의 순서가 보장된다"고 말한다.
+Kafka 파티션 안에서는 맞지만, **파티션에 넣는 순서**가 이미 어긋난다.
+
+D-003 의 백오프가 재시도 간격을 늘리면서 추월 창이 더 넓어졌다.
+백오프는 필요한 수정이었고, 이 결함은 그것과 별개로 원래 있었다.
+
+### 수정 방향
+
+배치를 `partitionKey` 로 묶어, 한 키에서 실패가 나면 그 키의 나머지를 이번 회차에서 건너뛴다.
+키가 다른 이벤트는 계속 나가므로 처리량은 유지된다.
 
 ---
 

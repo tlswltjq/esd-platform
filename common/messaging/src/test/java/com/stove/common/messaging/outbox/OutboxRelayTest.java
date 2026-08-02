@@ -13,6 +13,7 @@ import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -46,7 +47,9 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        // 실제 lockPendingBatch 처럼 PENDING 만, id 순으로 집어준다
+        // 실제 lockPendingBatch 처럼 PENDING 만, id 순으로 집어준다.
+        // next_attempt_at 시간 필터는 SQL 쪽 조건이라 여기서는 모사하지 않는다 —
+        // 그쪽은 실제 MySQL 을 띄우는 OutboxBackOffQueryTest 가 검증한다.
         when(repository.lockPendingBatch(anyInt())).thenAnswer(invocation -> store.stream()
                 .filter(event -> event.getStatus() == OutboxStatus.PENDING)
                 .limit(invocation.<Integer>getArgument(0))
@@ -191,28 +194,66 @@ class OutboxRelayTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-003] 브로커가 오래 끊겼다 복구되면 밀린 이벤트가 결국 발행되어야 한다")
-    void shouldSurviveProlongedOutage() {
-        OutboxEvent paymentCompleted = record("EVT-1");
+    @DisplayName("[D-003] 실패한 이벤트는 다음 시도 시각이 뒤로 밀린다")
+    void failureSchedulesLaterAttempt() {
+        OutboxEvent event = record("EVT-1");
         brokerDown();
 
-        // 장애가 (max-retry × poll-interval) 을 넘겨 지속되는 상황.
-        // 기본 설정(max-retry 10, poll 1초)에서는 겨우 10초다.
-        // 브로커 롤링 재시작이나 리더 선출은 그보다 오래 걸리는 일이 흔하다.
-        for (int pollCycle = 0; pollCycle < MAX_RETRY * 3; pollCycle++) {
+        relay.relay();
+        Instant first = event.getNextAttemptAt();
+
+        relay.relay();
+        Instant second = event.getNextAttemptAt();
+
+        assertThat(first).isNotNull().isAfter(Instant.now());
+        assertThat(second).isAfter(first);
+    }
+
+    @Test
+    @DisplayName("[D-003] DEAD 가 된 이벤트도 회수하면 다시 발행된다")
+    void deadEventCanBeRequeuedAndSent() {
+        OutboxEvent paymentCompleted = record("EVT-1");
+        brokerDown();
+        for (int pollCycle = 0; pollCycle < MAX_RETRY; pollCycle++) {
             relay.relay();
         }
+        assertThat(paymentCompleted.getStatus()).isEqualTo(OutboxStatus.DEAD);
 
+        // 원인을 제거한 뒤 운영이 되살린다. 회수 경로가 없으면
+        // 유실을 막으려고 만든 장치가 유실의 원인이 된다.
+        paymentCompleted.requeue();
         brokerHealthy();
         relay.relay();
 
-        // 기대: 복구되면 결국 나간다(Outbox 의 존재 이유).
-        // 실제: DEAD 로 굳어 영구 유실. 결제 완료 이벤트가 이렇게 되면
-        //       돈은 받고 라이선스·주문확정·정산이 전부 일어나지 않는다.
-        assertThat(paymentCompleted.getStatus())
-                .as("복구 후 발행 여부")
-                .isEqualTo(OutboxStatus.SENT);
+        assertThat(paymentCompleted.getStatus()).isEqualTo(OutboxStatus.SENT);
+    }
+
+    @Test
+    @Tag("known-defect")
+    @DisplayName("[D-013] 앞의 이벤트가 못 나갔으면 같은 애그리거트의 뒤 이벤트도 보류되어야 한다")
+    void failureShouldHoldLaterEventsOfSameAggregate() {
+        // 둘 다 partitionKey 가 ORD-1 이다. README 는 "같은 애그리거트의 순서가 보장된다"고 말한다.
+        OutboxEvent earlier = record("EVT-1");
+        OutboxEvent later = record("EVT-2");
+
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
+            ProducerRecord<String, String> sent = invocation.getArgument(0);
+            return "EVT-1".equals(header(sent, EventHeaders.EVENT_ID))
+                    ? CompletableFuture.failedFuture(new IllegalStateException("broker rejected"))
+                    : CompletableFuture.completedFuture(mock(SendResult.class));
+        });
+
+        relay.relay();
+
+        assertThat(earlier.getStatus()).isEqualTo(OutboxStatus.PENDING);
+
+        // 기대: 앞의 것이 밀렸으면 같은 키의 뒤 이벤트도 기다린다.
+        // 실제: 그냥 나간다. PaymentCompleted 가 재시도되는 동안 PaymentCancelled 가 먼저 도착해
+        //       회수할 라이선스가 없는 상태에서 회수가 실행되는 식의 역전이 가능하다.
+        //       백오프(D-003)로 재시도 간격이 길어지면서 창이 더 넓어졌다.
+        assertThat(later.getStatus())
+                .as("같은 애그리거트의 뒤 이벤트")
+                .isEqualTo(OutboxStatus.PENDING);
     }
 
     private static String header(ProducerRecord<String, String> record, String name) {

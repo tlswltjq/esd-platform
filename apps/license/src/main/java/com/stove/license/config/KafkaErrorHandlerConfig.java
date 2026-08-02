@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventType;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.messaging.kafka.ConsumerRetryPolicy;
 import com.stove.license.core.service.LicenseService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -11,7 +12,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.BackOff;
 
 /**
@@ -19,24 +19,18 @@ import org.springframework.util.backoff.BackOff;
  *
  * <p>두 가지를 명시적으로 정한다.
  * <ol>
- *   <li><b>얼마나 버틸 것인가</b> — 기본값은 {@code FixedBackOff(0ms, 9회)} 라
- *       10회가 수 밀리초 만에 소진된다. 커넥션풀 순간 고갈처럼 흔한 장애를 못 넘긴다.</li>
+ *   <li><b>얼마나 버틸 것인가</b> — {@link ConsumerRetryPolicy} 의 공용 기본값을 쓴다.
+ *       서비스마다 재시도 정책이 다르면 장애 시 무슨 일이 벌어질지 예측할 수 없다.</li>
  *   <li><b>포기한 뒤 무엇을 할 것인가</b> — 리스너 안에서 예외를 잡으면 재시도가 아예 돌지 않으므로
  *       보상 트리거는 여기(recoverer)에 둔다. recoverer 는 정의상 재시도가 전부 소진된 뒤에만 불린다.</li>
  * </ol>
  *
- * <p>블로킹 재시도라 대기 시간만큼 파티션이 멈춘다. 총 대기가 {@code max.poll.interval.ms}(기본 5분)를
- * 넘으면 컨슈머가 그룹에서 쫓겨나므로 여유를 크게 두고 잡았다(1+2+4 = 7초).
+ * <p>이 빈이 있으면 {@code common:messaging} 의 기본 에러 핸들러는 물러난다
+ * ({@code @ConditionalOnMissingBean}). 기본값은 기록하고 건너뛸 뿐 보상을 시작하지 않기 때문이다.
  */
 @Slf4j
 @Configuration
 public class KafkaErrorHandlerConfig {
-
-    /** 재시도 횟수. 최초 배달 1회 + 재시도 3회 = 총 4회 시도. */
-    private static final int MAX_RETRIES = 3;
-    private static final long INITIAL_INTERVAL_MS = 1_000L;
-    private static final long MAX_INTERVAL_MS = 8_000L;
-    private static final double MULTIPLIER = 2.0;
 
     /**
      * 재시도 소진 후의 최종 처리. Saga 보상은 <b>여기서만</b> 시작된다.
@@ -74,13 +68,9 @@ public class KafkaErrorHandlerConfig {
         return new DefaultErrorHandler(licenseIssueFailureRecoverer, backOff());
     }
 
-    /** 재시도 정책. 테스트가 정책 자체를 확인할 수 있도록 패키지 공개로 둔다. */
+    /** 재시도 정책은 공용 기본값을 그대로 쓴다 — 서비스마다 다르면 장애 대응이 예측 불가능해진다. */
     static BackOff backOff() {
-        ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(MAX_RETRIES);
-        backOff.setInitialInterval(INITIAL_INTERVAL_MS);
-        backOff.setMultiplier(MULTIPLIER);
-        backOff.setMaxInterval(MAX_INTERVAL_MS);
-        return backOff;
+        return ConsumerRetryPolicy.backOff();
     }
 
     /** 보상 사유는 결제 서비스 로그에 남으므로 원인 예외까지 드러낸다. */

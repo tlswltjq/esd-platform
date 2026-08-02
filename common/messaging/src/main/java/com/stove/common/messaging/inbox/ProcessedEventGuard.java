@@ -23,6 +23,12 @@ public class ProcessedEventGuard {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean firstDelivery(String eventId, String consumerGroup, String eventType) {
+        if (eventId == null || eventId.isBlank()) {
+            // 판단 근거가 없는데 '처음 본 이벤트'라고 답하면 부수효과가 그대로 일어난다.
+            // 실패를 event_id NOT NULL 제약까지 미루면 비즈니스 로직이 실행된 뒤 롤백된다.
+            throw new IllegalArgumentException(
+                    "eventId 없이는 중복 여부를 판단할 수 없다 group=%s type=%s".formatted(consumerGroup, eventType));
+        }
         if (repository.existsByEventIdAndConsumerGroup(eventId, consumerGroup)) {
             log.info("중복 이벤트 스킵 eventId={} type={} group={}", eventId, eventType, consumerGroup);
             return false;

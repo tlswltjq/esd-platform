@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -81,48 +80,48 @@ class EventEnvelopeTest {
     }
 
     @Test
-    @DisplayName("현재 동작: eventId 헤더가 없으면 null 을 그대로 돌려준다")
-    void missingEventIdBecomesNull() throws Exception {
-        EventEnvelope envelope = EventEnvelope.from(
-                record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED));
-
-        // 이 null 은 그대로 ProcessedEventGuard 로 흘러가 event_id NOT NULL 제약에 걸린다.
-        // 즉 실패 지점이 '봉투'가 아니라 '트랜잭션 한복판'이 된다.
-        assertThat(envelope.eventId()).isNull();
-    }
-
-    @Test
-    @Tag("known-defect")
-    @DisplayName("[D-004] eventId 없는 레코드는 봉투 단계에서 거부되어야 한다")
-    void shouldRejectRecordWithoutEventId() throws Exception {
+    @DisplayName("[D-004] eventId 없는 레코드는 봉투 단계에서 거부된다")
+    void rejectsRecordWithoutEventId() throws Exception {
         ConsumerRecord<String, String> broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
-        // 기대: 계약 위반을 입구에서 끊어 무엇이 잘못됐는지 즉시 드러낸다.
-        // 실제: null 을 반환해 통과시키므로 DB 제약 위반으로 뒤늦게 터지고,
-        //       그 레코드는 오프셋이 커밋되지 않아 파티션 전체를 막는다(poison message).
+        // 수정 전에는 null 을 반환해 통과시켰다. 그 null 이 멱등 가드까지 흘러가
+        // 비즈니스 로직이 실행된 뒤 event_id NOT NULL 제약에서 터졌다 —
+        // 실패 지점이 입구가 아니라 트랜잭션 한복판이었다.
         assertThatThrownBy(() -> EventEnvelope.from(broken))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("계약 위반");
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-004] eventType 없는 레코드도 봉투 단계에서 거부되어야 한다")
-    void shouldRejectRecordWithoutEventType() throws Exception {
+    @DisplayName("[D-004] eventType 없는 레코드도 봉투 단계에서 거부된다")
+    void rejectsRecordWithoutEventType() throws Exception {
         ConsumerRecord<String, String> broken = record(paymentCompletedJson(), "EVT-1", null);
 
         // eventType 이 null 이면 isType() 이 전부 false 라 리스너가 조용히 아무것도 안 한다.
-        // 이벤트가 유실됐는데 로그에도 흔적이 남지 않는 것이 더 나쁘다.
+        // 이벤트가 유실됐는데 로그에도 흔적이 남지 않는 쪽이 더 나쁘다.
         assertThatThrownBy(() -> EventEnvelope.from(broken))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("계약 위반");
     }
 
     @Test
-    @DisplayName("eventType 이 null 이면 어떤 분기도 타지 않는다 — 조용한 유실 경로")
-    void nullEventTypeMatchesNothing() throws Exception {
-        EventEnvelope envelope = EventEnvelope.from(record(paymentCompletedJson(), "EVT-1", null));
+    @DisplayName("[D-004] 거부 메시지에 레코드 위치가 담긴다 — 어느 메시지인지 찾을 수 있어야 한다")
+    void rejectionMessageLocatesTheRecord() throws Exception {
+        ConsumerRecord<String, String> broken =
+                record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
-        assertThat(envelope.isType(EventType.PAYMENT_COMPLETED)).isFalse();
-        assertThat(envelope.isType(EventType.PAYMENT_CANCELLED)).isFalse();
+        assertThatThrownBy(() -> EventEnvelope.from(broken))
+                .hasMessageContaining(Topics.PAYMENT)
+                .hasMessageContaining("offset=")
+                .hasMessageContaining("ORD-1");
+    }
+
+    @Test
+    @DisplayName("[D-004] 빈 문자열 헤더도 없는 것으로 본다")
+    void treatsBlankHeaderAsMissing() throws Exception {
+        assertThatThrownBy(() -> EventEnvelope.from(
+                record(paymentCompletedJson(), "  ", EventType.PAYMENT_COMPLETED)))
+                .isInstanceOf(IllegalStateException.class);
     }
 }

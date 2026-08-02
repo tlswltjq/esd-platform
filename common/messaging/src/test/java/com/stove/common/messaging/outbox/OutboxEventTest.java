@@ -5,16 +5,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
+import java.time.Duration;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
  * Outbox 레코드의 상태 전이. 인프라 없이 검증 가능한 순수 규칙만 다룬다.
  *
- * <p>여기서 중요한 것은 {@code DEAD} 의 의미다 — 이벤트 유실을 막으려고 도입한 장치가
- * 정작 자기 자신을 유실시키는 종착점을 갖고 있다.
+ * <p>핵심은 재시도 예산을 <b>시간</b>으로 잡는다는 것이다. 횟수만 세면
+ * 장애 감내 시간이 폴링 주기에 묶여 짧은 장애에도 이벤트가 DEAD 로 굳는다.
+ * 그리고 DEAD 는 종착점이 아니어야 한다 — 회수 경로가 없으면
+ * 유실을 막으려고 만든 장치가 유실의 원인이 된다.
  */
 class OutboxEventTest {
+
+    /** {@code OutboxProperties} 의 max-retry 기본값 */
+    private static final int DEFAULT_MAX_RETRY = 10;
 
     private static OutboxEvent pending() {
         return OutboxEvent.pending("EVT-1", "Payment", "ORD-1",
@@ -92,20 +99,75 @@ class OutboxEventTest {
     }
 
     @Test
-    @DisplayName("DEAD 는 종착점이다 — 상태를 되돌리는 전이가 존재하지 않는다")
-    void deadIsTerminal() {
+    @DisplayName("[D-003] 실패할수록 다음 시도가 뒤로 밀린다")
+    void retryDelayGrows() {
+        assertThat(OutboxEvent.backOffDelay(1)).isEqualTo(Duration.ofSeconds(1));
+        assertThat(OutboxEvent.backOffDelay(2)).isEqualTo(Duration.ofSeconds(2));
+        assertThat(OutboxEvent.backOffDelay(3)).isEqualTo(Duration.ofSeconds(4));
+        assertThat(OutboxEvent.backOffDelay(4)).isEqualTo(Duration.ofSeconds(8));
+    }
+
+    @Test
+    @DisplayName("[D-003] 재시도 간격에는 상한이 있다 — 시프트가 넘쳐 음수가 되면 안 된다")
+    void retryDelayIsCapped() {
+        assertThat(OutboxEvent.backOffDelay(20)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(OutboxEvent.backOffDelay(1000)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(OutboxEvent.backOffDelay(0)).isPositive();
+    }
+
+    @Test
+    @DisplayName("[D-003] 기본 설정의 장애 감내 시간이 현실적인 브로커 재시작을 넘긴다")
+    void toleranceCoversRealisticOutage() {
+        // 고정 간격이던 시절에는 max-retry(10) x poll-interval(1초) = 10초가 전부였다.
+        // 브로커 롤링 재시작이나 리더 선출은 그보다 오래 걸리는 일이 흔하다.
+        long toleranceSeconds = 0;
+        for (int attempt = 1; attempt < DEFAULT_MAX_RETRY; attempt++) {
+            toleranceSeconds += OutboxEvent.backOffDelay(attempt).toSeconds();
+        }
+
+        assertThat(toleranceSeconds).isGreaterThan(Duration.ofMinutes(5).toSeconds());
+    }
+
+    @Test
+    @DisplayName("[D-003] 실패는 다음 시도 시각을 미래로 잡고, 성공은 그것을 지운다")
+    void nextAttemptIsScheduledOnFailureAndClearedOnSuccess() {
+        OutboxEvent event = pending();
+        assertThat(event.getNextAttemptAt()).as("최초 적재는 즉시 대상").isNull();
+
+        event.markFailed("broker down", 10);
+        assertThat(event.getNextAttemptAt()).isNotNull().isAfter(Instant.now());
+
+        event.markSent();
+        assertThat(event.getNextAttemptAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("[D-003] DEAD 는 회수할 수 있다 — 유실 방지 장치가 유실을 만들면 안 된다")
+    void deadCanBeRequeued() {
         OutboxEvent event = pending();
         for (int i = 0; i < 3; i++) {
             event.markFailed("broker down", 3);
         }
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.DEAD);
+        assertThat(event.getNextAttemptAt()).as("DEAD 는 대기 대상이 아니다").isNull();
 
-        // DEAD 인데도 실패를 더 기록할 수는 있다. 반대로 PENDING 으로 되돌리는 수단은 없다.
-        // 이 비대칭이 곧 '유실 방지 장치가 유실을 만드는' 지점이다.
-        // 유일한 탈출구인 markSent 는 실제 발행에 성공해야만 불릴 수 있는데,
-        // lockPendingBatch 가 PENDING 만 집으므로 DEAD 는 다시 발행 시도조차 되지 않는다.
-        event.markFailed("여전히 실패", 3);
-        assertThat(event.getStatus()).isEqualTo(OutboxStatus.DEAD);
-        assertThat(event.getRetryCount()).isEqualTo(4);
+        event.requeue();
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(event.getRetryCount()).isZero();
+        assertThat(event.getNextAttemptAt()).as("회수 직후는 즉시 대상").isNull();
+        assertThat(event.getLastError()).isNull();
+    }
+
+    @Test
+    @DisplayName("DEAD 가 아닌 이벤트에 회수를 걸어도 상태가 흔들리지 않는다")
+    void requeueOnlyAffectsDead() {
+        OutboxEvent event = pending();
+        event.markFailed("broker down", 10);
+
+        event.requeue();
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(event.getRetryCount()).as("진행 중인 재시도 예산은 보존된다").isEqualTo(1);
     }
 }
