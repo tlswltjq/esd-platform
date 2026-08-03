@@ -1,5 +1,6 @@
 package com.stove.gateway;
 
+import com.stove.common.archunit.EventOrderingRules;
 import com.stove.common.archunit.ModuleHygieneRules;
 import com.stove.common.archunit.ModulePackageRules;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -16,4 +17,7 @@ class GatewayArchitectureTest {
 
     @ArchTest
     static final ArchTests 모듈_위생 = ArchTests.in(ModuleHygieneRules.class);
+
+    @ArchTest
+    static final ArchTests 이벤트_순서 = ArchTests.in(EventOrderingRules.class);
 }
