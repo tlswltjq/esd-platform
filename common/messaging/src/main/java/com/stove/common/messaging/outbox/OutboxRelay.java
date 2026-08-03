@@ -2,6 +2,7 @@ package com.stove.common.messaging.outbox;
 
 import com.stove.common.event.kafka.EventHeaders;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -117,11 +118,27 @@ public class OutboxRelay {
             for (Attempt attempt : attempts) {
                 if (awaitAck(attempt.event(), attempt.ack())) {
                     survivors.add(attempt.chain());
-                } else if (Thread.currentThread().isInterrupted()) {
-                    return;
+                } else {
+                    holdRemainder(attempt.chain(), wave, attempt.event().getNextAttemptAt());
+                    if (Thread.currentThread().isInterrupted()) {
+                        return;
+                    }
                 }
             }
             chains = survivors;
+        }
+    }
+
+    /**
+     * 실패한 이벤트 뒤에 남은 같은 키의 이벤트를 앞의 재시도 시각까지 함께 미룬다.
+     *
+     * <p>보류만으로는 <b>이번 회차</b> 밖에 못 지킨다. 다음 폴링에서 이들만 조회에 잡히면
+     * 그대로 추월이 일어난다(D-014). 발행 순서를 지키려면 <b>조회 대상에서 빠지는 시점</b>까지
+     * 같이 맞춰야 한다.
+     */
+    private void holdRemainder(List<OutboxEvent> chain, int failedWave, Instant until) {
+        for (int i = failedWave + 1; i < chain.size(); i++) {
+            chain.get(i).holdUntil(until);
         }
     }
 

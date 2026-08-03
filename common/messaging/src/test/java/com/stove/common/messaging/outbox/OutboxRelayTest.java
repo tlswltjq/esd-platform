@@ -14,6 +14,7 @@ import com.stove.common.event.kafka.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,22 +60,57 @@ class OutboxRelayTest {
     private final KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
 
     private final List<OutboxEvent> store = new ArrayList<>();
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private OutboxRelay relay;
+
+    /**
+     * 폴링 시각. 실제 쿼리의 {@code NOW(6)} 자리다.
+     *
+     * <p>테스트가 직접 쥐고 있어야 "백오프가 아직 안 풀린 회차"를 결정적으로 만들 수 있다.
+     * 시스템 시각에 기대면 1초짜리 백오프를 기다리는 테스트가 되어 느리고 불안정해진다.
+     */
+    private Instant pollingAt;
 
     @BeforeEach
     void setUp() {
-        // 실제 lockPendingBatch 처럼 PENDING 만, id 순으로 집어준다.
-        // next_attempt_at 시간 필터는 SQL 쪽 조건이라 여기서는 모사하지 않는다 —
-        // 그쪽은 실제 MySQL 을 띄우는 OutboxBackOffQueryTest 가 검증한다.
+        pollingAt = Instant.now();
+
+        // 실제 lockPendingBatch 와 같은 조건으로 집어준다 — PENDING 이고,
+        // next_attempt_at 이 없거나 이미 지난 것만. id 순은 store 의 삽입 순서다.
+        //
+        // 시간 필터를 모사하지 않으면 "앞 이벤트는 백오프로 안 잡히는데 뒤 이벤트는 잡히는"
+        // 회차 간 상태를 표현할 수 없다. 순서 보장(여기)과 시간 필터(OutboxBackOffQueryTest)를
+        // 서로 다른 층에 두면 정확히 그 교집합이 사각이 된다 — D-014 가 거기서 나왔다.
         when(repository.lockPendingBatch(anyInt())).thenAnswer(invocation -> store.stream()
                 .filter(event -> event.getStatus() == OutboxStatus.PENDING)
+                .filter(this::attemptDue)
                 .limit(invocation.<Integer>getArgument(0))
                 .toList());
 
         relay = new OutboxRelay(repository, kafkaTemplate,
                 new OutboxProperties(true, BATCH_SIZE, 1000L, MAX_RETRY, MAX_BATCHES_PER_CYCLE),
-                new OutboxMetrics(new SimpleMeterRegistry(), repository),
+                new OutboxMetrics(meterRegistry, repository),
                 directTransactionTemplate());
+    }
+
+    private double counter(String name) {
+        return meterRegistry.get(name).counter().count();
+    }
+
+    /** {@code next_attempt_at IS NULL OR next_attempt_at <= NOW(6)} 와 같은 판정. */
+    private boolean attemptDue(OutboxEvent event) {
+        return event.getNextAttemptAt() == null || !event.getNextAttemptAt().isAfter(pollingAt);
+    }
+
+    /**
+     * 백오프가 전부 풀린 뒤의 폴링 1회.
+     *
+     * <p>재시도 자체를 검증하는 테스트용이다. 백오프 상한(5분)을 넘겨 시계를 밀므로
+     * 실패했던 이벤트가 반드시 다시 잡힌다.
+     */
+    private void pollAfterBackOff() {
+        pollingAt = pollingAt.plus(Duration.ofMinutes(10));
+        relay.relay();
     }
 
     private OutboxEvent record(String eventId) {
@@ -166,11 +202,11 @@ class OutboxRelayTest {
 
         brokerDown();
         relay.relay();
-        relay.relay();
+        pollAfterBackOff();
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
 
         brokerHealthy();
-        relay.relay();
+        pollAfterBackOff();
 
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.SENT);
     }
@@ -205,13 +241,13 @@ class OutboxRelayTest {
         brokerDown();
 
         for (int i = 0; i < MAX_RETRY; i++) {
-            relay.relay();
+            pollAfterBackOff();
         }
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.DEAD);
 
         // DEAD 는 lockPendingBatch 대상이 아니므로 브로커가 살아나도 집히지 않는다
         brokerHealthy();
-        relay.relay();
+        pollAfterBackOff();
 
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.DEAD);
     }
@@ -225,7 +261,7 @@ class OutboxRelayTest {
         relay.relay();
         Instant first = event.getNextAttemptAt();
 
-        relay.relay();
+        pollAfterBackOff();
         Instant second = event.getNextAttemptAt();
 
         assertThat(first).isNotNull().isAfter(Instant.now());
@@ -238,7 +274,7 @@ class OutboxRelayTest {
         OutboxEvent paymentCompleted = record("EVT-1");
         brokerDown();
         for (int pollCycle = 0; pollCycle < MAX_RETRY; pollCycle++) {
-            relay.relay();
+            pollAfterBackOff();
         }
         assertThat(paymentCompleted.getStatus()).isEqualTo(OutboxStatus.DEAD);
 
@@ -274,6 +310,79 @@ class OutboxRelayTest {
         assertThat(later.getStatus())
                 .as("같은 애그리거트의 뒤 이벤트")
                 .isEqualTo(OutboxStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("[D-014] 앞 이벤트가 백오프 대기 중이면 같은 키의 뒤 이벤트는 다음 회차에도 보류된다")
+    void backOffDoesNotLetLaterEventOvertakeAcrossCycles() {
+        OutboxEvent paymentCompleted = record("EVT-1");
+        OutboxEvent paymentCancelled = record("EVT-2");
+
+        // 1회차 — 앞 이벤트가 발행에 실패한다. D-013 수정 덕분에 뒤 이벤트는 이번 회차에서 보류된다.
+        brokerDown();
+        relay.relay();
+        assertThat(paymentCompleted.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(paymentCancelled.getStatus()).isEqualTo(OutboxStatus.PENDING);
+
+        // 2회차 — 브로커는 살아났지만 앞 이벤트는 아직 백오프 대기 중이다(시계를 밀지 않는다).
+        //
+        // 앞 이벤트: next_attempt_at = 실패시각 + 1초  → 조회에서 빠진다
+        // 뒤 이벤트: next_attempt_at = NULL            → 조회에 잡힌다
+        //
+        // 두 건이 같은 배치에 오지 않으므로 웨이브 구조가 볼 수 있는 범위 밖이다.
+        // 재시도 간격은 1초 → 2초 → 4초 …(상한 5분)로 벌어지는데 뒤 이벤트는 계속 즉시 대상이라,
+        // 회차가 갈수록 창이 넓어진다. 브로커 복구 직후가 정확히 이 상태다.
+        brokerHealthy();
+        relay.relay();
+
+        // 기대: 앞의 것이 아직 안 나갔으므로 뒤의 것도 기다린다.
+        // 실제: 뒤의 것만 혼자 나간다. license 는 발급되지 않은 라이선스를 회수하려다 조용히 no-op 하고,
+        //       뒤늦게 도착한 PaymentCompleted 로 라이선스를 발급한다 — 환불했는데 게임이 남는다.
+        assertThat(paymentCancelled.getStatus())
+                .as("앞 이벤트가 백오프 대기 중인 동안의 뒤 이벤트")
+                .isEqualTo(OutboxStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("[D-014] 순서 때문에 보류된 이벤트는 재시도 예산을 쓰지 않는다")
+    void heldEventDoesNotBurnRetryBudget() {
+        OutboxEvent earlier = record("EVT-1");
+        OutboxEvent later = record("EVT-2");
+        brokerDown();
+
+        // 앞 이벤트가 MAX_RETRY 만큼 실패하는 동안 뒤 이벤트는 한 번도 시도되지 않았다.
+        for (int pollCycle = 0; pollCycle < MAX_RETRY; pollCycle++) {
+            pollAfterBackOff();
+        }
+
+        assertThat(earlier.getStatus()).isEqualTo(OutboxStatus.DEAD);
+        assertThat(later.getRetryCount())
+                .as("보류는 실패가 아니다 — 시도해 보지도 않고 DEAD 가 되면 안 된다")
+                .isZero();
+        assertThat(later.getStatus()).isEqualTo(OutboxStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("[D-014] 앞 이벤트가 DEAD 가 되면 막힌 키가 풀린다 — 영구 정지를 막는 탈출구")
+    void deadBlockerReleasesTheKey() {
+        OutboxEvent blocker = record("EVT-1");
+        OutboxEvent held = record("EVT-2");
+
+        brokerDown();
+        for (int pollCycle = 0; pollCycle < MAX_RETRY; pollCycle++) {
+            pollAfterBackOff();
+        }
+        assertThat(blocker.getStatus()).isEqualTo(OutboxStatus.DEAD);
+
+        brokerHealthy();
+        pollAfterBackOff();
+
+        // 순서 보장을 포기하는 유일한 지점이다. 대안은 그 키의 영구 정지인데,
+        // 영원히 나가지 않을 이벤트 뒤에 키 전체를 묶어두는 쪽이 더 나쁘다.
+        // 그래서 DEAD 알람이 이 설계의 짝이다(docs/event-ordering.md 6절 A-2).
+        assertThat(held.getStatus())
+                .as("DEAD 뒤에 묶여 있던 이벤트")
+                .isEqualTo(OutboxStatus.SENT);
     }
 
     @Test
@@ -340,6 +449,48 @@ class OutboxRelayTest {
         long sent = store.stream().filter(e -> e.getStatus() == OutboxStatus.SENT).count();
         assertThat(sent).isEqualTo((long) BATCH_SIZE * MAX_BATCHES_PER_CYCLE);
         assertThat(store).anyMatch(e -> e.getStatus() == OutboxStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("릴레이가 발행 성공을 지표로 보고한다 — 적체를 사고 전에 보려면 필요하다")
+    void reportsPublishedToMetrics() {
+        recordWithKey("EVT-1", "ORD-1");
+        recordWithKey("EVT-2", "ORD-2");
+        brokerHealthy();
+
+        relay.relay();
+
+        assertThat(counter("stove.outbox.published")).isEqualTo(2.0);
+        assertThat(meterRegistry.get("stove.outbox.relay").timer().count())
+                .as("회차 소요시간도 남아야 p95 를 볼 수 있다")
+                .isEqualTo(1);
+        assertThat(meterRegistry.get("stove.outbox.batch.size").summary().totalAmount())
+                .isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("릴레이가 발행 실패도 지표로 보고한다")
+    void reportsFailureToMetrics() {
+        record("EVT-1");
+        brokerDown();
+
+        relay.relay();
+
+        assertThat(counter("stove.outbox.failed")).isEqualTo(1.0);
+        assertThat(counter("stove.outbox.dead")).as("아직 재시도가 남아 있다").isZero();
+    }
+
+    @Test
+    @DisplayName("DEAD 전이는 별도 지표로 잡힌다 — 알람 대상이다")
+    void reportsDeadToMetrics() {
+        record("EVT-1");
+        brokerDown();
+
+        for (int pollCycle = 0; pollCycle < MAX_RETRY; pollCycle++) {
+            pollAfterBackOff();
+        }
+
+        assertThat(counter("stove.outbox.dead")).isEqualTo(1.0);
     }
 
     private static String header(ProducerRecord<String, String> record, String name) {
