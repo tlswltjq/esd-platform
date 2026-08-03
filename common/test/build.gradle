@@ -2,6 +2,12 @@ apply plugin: 'java-library'
 
 // 테스트 지원 코드지만 여러 앱의 test 소스셋에서 가져다 쓰므로 main 에 둔다.
 dependencies {
+    // 리스너 테스트가 이벤트 계약대로 레코드를 조립할 수 있어야 한다 (EventRecords)
+    api project(':common:event')
+    api 'org.springframework.kafka:spring-kafka'
+    // Jackson2ObjectMapperBuilder — 운영에서 주입되는 매퍼와 같은 설정을 쓰기 위해
+    api 'org.springframework:spring-web'
+
     api 'org.springframework.boot:spring-boot-starter-test'
     api 'org.springframework.boot:spring-boot-testcontainers'
     api 'org.testcontainers:junit-jupiter'

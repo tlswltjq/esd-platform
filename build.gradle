@@ -2,6 +2,8 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version "${springBootVersion}" apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
+    // 뮤테이션 테스트. 기본 빌드에 얹지 않고 필요할 때만 돌린다 (아래 pitest 블록 참고)
+    id 'info.solidsoft.pitest' version '1.15.0' apply false
 }
 
 allprojects {
@@ -78,6 +80,30 @@ subprojects {
             events 'passed', 'failed'
             exceptionFormat = 'short'
         }
+    }
+
+    // ── 뮤테이션 테스트 ────────────────────────────────────────────────
+    // 커버리지는 "거쳐 갔는가"를 재고, 뮤테이션은 "잡아내는가"를 잰다.
+    // 통과하지만 결함을 못 잡는 테스트를 색출하는 것이 목적이다.
+    //
+    // CI 에 넣지 않는다 — 전 모듈 기준 수십 분이 걸려 피드백 루프를 망가뜨린다.
+    // 테스트를 새로 붙인 모듈에 대해 수동으로 돌리고 결과를 판단한다.
+    //   ./gradlew :apps:payment:pitest
+    apply plugin: 'info.solidsoft.pitest'
+
+    pitest {
+        junit5PluginVersion = '1.2.1'
+        // 앱은 도메인·서비스 계층만 본다. 어댑터는 대부분 위임이라 살아남은 뮤턴트가
+        // 대개 "검증할 가치가 없는 위임"이어서 신호 대 잡음비가 나쁘다.
+        // common 은 계층이 아니라 모듈 자체가 로직이므로 전체를 본다.
+        targetClasses = project.path.startsWith(':apps:')
+                ? ['com.stove.*.core.*']
+                : ['com.stove.common.*']
+        // 결함 재현 테스트는 실패하는 것이 정상이라 뮤테이션 판정에 쓸 수 없다
+        excludedTestClasses = ['*DefectTest']
+        threads = 4
+        timestampedReports = false
+        outputFormats = ['HTML', 'XML']
     }
 }
 

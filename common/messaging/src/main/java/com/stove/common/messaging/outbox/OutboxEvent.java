@@ -122,6 +122,31 @@ public class OutboxEvent {
     }
 
     /**
+     * 같은 키의 앞 이벤트가 재시도 대기에 들어가서 함께 보류된다.
+     *
+     * <p>이게 없으면 <b>회차를 넘길 때 순서가 뒤집힌다</b>(D-014). 앞 이벤트는 백오프로
+     * {@code next_attempt_at} 이 미래로 밀려 조회에서 빠지는데, 뒤 이벤트는 NULL 이라 계속 잡힌다.
+     * 그러면 다음 폴링에서 뒤 이벤트만 혼자 배치에 들어와 먼저 발행된다 —
+     * 한 배치 안의 순서를 아무리 지켜도 배치에 같이 오지 않으면 소용이 없다.
+     *
+     * <p><b>{@code retryCount} 는 늘리지 않는다.</b> 이 이벤트가 실패한 것이 아니라
+     * 순서 때문에 양보한 것이다. 시도해 보지도 않고 재시도 예산을 소진해 DEAD 가 되면 안 된다.
+     *
+     * <p>앞 이벤트가 DEAD 로 떨어지면({@code until} 이 null) 보류하지 않는다.
+     * 영원히 나가지 않을 이벤트 뒤에 키 전체를 묶어두면 그 키가 영구 정지하기 때문이다.
+     * DEAD 는 설계상 탈출구이고, 그 대가로 순서 보장을 포기하는 지점이다({@code docs/event-ordering.md} 6절 A-2).
+     */
+    public void holdUntil(Instant until) {
+        if (this.status != OutboxStatus.PENDING || until == null) {
+            return;
+        }
+        // 이미 더 뒤로 밀려 있으면 그대로 둔다 — 앞 이벤트보다 먼저 나가지만 않으면 된다.
+        if (this.nextAttemptAt == null || this.nextAttemptAt.isBefore(until)) {
+            this.nextAttemptAt = until;
+        }
+    }
+
+    /**
      * DEAD 이벤트를 발행 대기로 되돌린다.
      *
      * <p>Outbox 의 존재 이유는 이벤트를 잃지 않는 것이다. 회수 경로가 없으면

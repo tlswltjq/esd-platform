@@ -13,7 +13,11 @@ import org.springframework.context.annotation.Import;
  * 누락된 빈, {@code @ConfigurationProperties} 바인딩 실패, Flyway 마이그레이션과
  * 엔티티 매핑의 불일치({@code ddl-auto: validate}).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        // 캐시된 컨텍스트의 릴레이 스레드가 다른 테스트의 Outbox 이벤트를 집어가지 않도록
+        // 폴링을 재운다. 빈은 그대로 둬서 구성 검증은 유지한다.
+        properties = "stove.outbox.poll-interval-ms=3600000")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class StudioContextTest {
 

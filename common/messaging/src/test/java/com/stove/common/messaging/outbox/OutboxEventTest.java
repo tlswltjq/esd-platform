@@ -170,4 +170,90 @@ class OutboxEventTest {
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
         assertThat(event.getRetryCount()).as("진행 중인 재시도 예산은 보존된다").isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("에러 메시지는 정확히 500자까지 그대로 남는다 — 자르는 경계")
+    void errorIsTruncatedOnlyBeyondLimit() {
+        OutboxEvent atLimit = pending();
+        atLimit.markFailed("x".repeat(500), 10);
+        assertThat(atLimit.getLastError()).hasSize(500);
+
+        OutboxEvent overLimit = pending();
+        overLimit.markFailed("x".repeat(501), 10);
+        assertThat(overLimit.getLastError()).hasSize(500);
+    }
+
+    @Test
+    @DisplayName("백오프는 상한(5분)에서 멈추고 더 늘지 않는다")
+    void backOffStopsAtCeiling() {
+        // 1초에서 두 배씩 → 9회차에 256초, 10회차에 512초로 상한(300초)을 넘는다.
+        assertThat(OutboxEvent.backOffDelay(9)).isEqualTo(Duration.ofSeconds(256));
+        assertThat(OutboxEvent.backOffDelay(10)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(OutboxEvent.backOffDelay(30))
+                .as("한참 뒤에도 상한을 넘지 않는다")
+                .isEqualTo(Duration.ofMinutes(5));
+    }
+
+    @Test
+    @DisplayName("한계 직전까지는 DEAD 가 아니다 — 재시도 예산의 경계")
+    void oneAttemptBeforeLimitIsStillPending() {
+        OutboxEvent event = pending();
+
+        // 뮤테이션 테스트가 짚은 자리다. "3회에 DEAD" 만 검증하면
+        // 조건이 >= 에서 > 로 바뀌어도(= 4회에 DEAD) 통과한다.
+        for (int attempt = 0; attempt < 2; attempt++) {
+            event.markFailed("broker down", 3);
+        }
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(event.getNextAttemptAt()).as("아직 재시도 대기 대상이다").isNotNull();
+    }
+
+    @Test
+    @DisplayName("[D-014] 보류는 앞 이벤트의 재시도 시각까지 미룬다")
+    void holdUntilDefersToBlockersTime() {
+        OutboxEvent event = pending();
+        Instant blockerRetriesAt = Instant.now().plusSeconds(60);
+
+        event.holdUntil(blockerRetriesAt);
+
+        assertThat(event.getNextAttemptAt()).isEqualTo(blockerRetriesAt);
+        assertThat(event.getRetryCount()).as("보류는 실패가 아니다").isZero();
+    }
+
+    @Test
+    @DisplayName("[D-014] 이미 더 뒤로 밀려 있으면 앞당기지 않는다")
+    void holdUntilNeverPullsTheAttemptEarlier() {
+        OutboxEvent event = pending();
+        event.markFailed("broker down", 10);
+        Instant ownBackOff = event.getNextAttemptAt();
+
+        // 앞 이벤트가 이 이벤트보다 먼저 재시도되더라도, 자기 백오프를 무시하고
+        // 앞당기면 브로커에 몰아치는 것을 막으려던 D-003 이 무너진다.
+        event.holdUntil(ownBackOff.minusSeconds(30));
+
+        assertThat(event.getNextAttemptAt()).isEqualTo(ownBackOff);
+    }
+
+    @Test
+    @DisplayName("[D-014] 앞 이벤트가 DEAD 면(시각 없음) 보류하지 않는다 — 키의 영구 정지를 막는 탈출구")
+    void holdUntilIgnoresDeadBlocker() {
+        OutboxEvent event = pending();
+
+        event.holdUntil(null);
+
+        assertThat(event.getNextAttemptAt()).as("즉시 발행 대상으로 남는다").isNull();
+    }
+
+    @Test
+    @DisplayName("[D-014] 이미 발행된 이벤트는 보류 대상이 아니다")
+    void holdUntilDoesNotTouchSentEvent() {
+        OutboxEvent event = pending();
+        event.markSent();
+
+        event.holdUntil(Instant.now().plusSeconds(60));
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.SENT);
+        assertThat(event.getNextAttemptAt()).isNull();
+    }
 }
