@@ -23,6 +23,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>발행 단위는 <b>파티션 키</b>다 — 같은 애그리거트는 순서대로, 다른 애그리거트는 동시에.
  * 자세한 이유는 {@link #publishPreservingOrder}.
+ *
+ * <p><b>릴레이는 서비스당 1대여야 한다.</b> {@code lockPendingBatch} 의
+ * {@code FOR UPDATE SKIP LOCKED} 는 파티션 키를 모르므로, 릴레이가 여러 대면 같은 키의
+ * 이벤트가 서로 다른 릴레이로 갈라져 위의 순서 보장이 조용히 무효가 된다.
+ * 다중화하려면 키를 워커에 결정적으로 배정해야 한다({@code MOD(CRC32(partition_key), n)}).
+ * 배경은 {@code docs/event-ordering.md} 7절.
  */
 @Slf4j
 @RequiredArgsConstructor
