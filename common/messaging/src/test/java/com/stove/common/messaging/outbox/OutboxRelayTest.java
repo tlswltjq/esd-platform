@@ -12,6 +12,7 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,6 +26,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Outbox 릴레이의 실동작. 9개 서비스 전부가 이 배달원에 의존하는데
@@ -37,6 +41,18 @@ import org.springframework.kafka.support.SendResult;
 class OutboxRelayTest {
 
     private static final int MAX_RETRY = 3;
+    private static final int BATCH_SIZE = 100;
+    private static final int MAX_BATCHES_PER_CYCLE = 10;
+
+    /** 트랜잭션 매니저 없이 콜백만 실행한다 — 검증 대상은 발행 로직이지 트랜잭션이 아니다. */
+    private static TransactionTemplate directTransactionTemplate() {
+        return new TransactionTemplate() {
+            @Override
+            public <T> T execute(TransactionCallback<T> action) {
+                return action.doInTransaction(new SimpleTransactionStatus());
+            }
+        };
+    }
 
     private final OutboxEventRepository repository = mock(OutboxEventRepository.class);
     @SuppressWarnings("unchecked")
@@ -56,12 +72,19 @@ class OutboxRelayTest {
                 .toList());
 
         relay = new OutboxRelay(repository, kafkaTemplate,
-                new OutboxProperties(true, 100, 1000L, MAX_RETRY));
+                new OutboxProperties(true, BATCH_SIZE, 1000L, MAX_RETRY, MAX_BATCHES_PER_CYCLE),
+                new OutboxMetrics(new SimpleMeterRegistry(), repository),
+                directTransactionTemplate());
     }
 
     private OutboxEvent record(String eventId) {
-        OutboxEvent event = OutboxEvent.pending(eventId, "Payment", "ORD-1",
-                EventType.PAYMENT_COMPLETED, Topics.PAYMENT, "ORD-1", "{\"orderNo\":\"ORD-1\"}");
+        return recordWithKey(eventId, "ORD-1");
+    }
+
+    private OutboxEvent recordWithKey(String eventId, String partitionKey) {
+        OutboxEvent event = OutboxEvent.pending(eventId, "Payment", partitionKey,
+                EventType.PAYMENT_COMPLETED, Topics.PAYMENT, partitionKey,
+                "{\"orderNo\":\"" + partitionKey + "\"}");
         store.add(event);
         return event;
     }
@@ -153,17 +176,17 @@ class OutboxRelayTest {
     }
 
     @Test
-    @DisplayName("배치 중 한 건이 실패해도 나머지는 계속 발행한다")
+    @DisplayName("한 애그리거트의 실패가 배치 전체를 막지 않는다")
     void oneFailureDoesNotBlockBatch() {
-        OutboxEvent first = record("EVT-1");
-        OutboxEvent second = record("EVT-2");
-        OutboxEvent third = record("EVT-3");
+        // 서로 다른 주문이다. 순서 보장은 같은 키 안에서만 필요하므로
+        // 키가 다르면 실패 여부와 무관하게 계속 흘러야 한다.
+        OutboxEvent first = recordWithKey("EVT-1", "ORD-1");
+        OutboxEvent second = recordWithKey("EVT-2", "ORD-2");
+        OutboxEvent third = recordWithKey("EVT-3", "ORD-3");
 
-        // 2번만 실패하는 브로커
         when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
             ProducerRecord<String, String> sent = invocation.getArgument(0);
-            String eventId = header(sent, EventHeaders.EVENT_ID);
-            return "EVT-2".equals(eventId)
+            return "ORD-2".equals(sent.key())
                     ? CompletableFuture.failedFuture(new IllegalStateException("record too large"))
                     : CompletableFuture.completedFuture(mock(SendResult.class));
         });
@@ -172,7 +195,7 @@ class OutboxRelayTest {
 
         assertThat(first.getStatus()).isEqualTo(OutboxStatus.SENT);
         assertThat(second.getStatus()).isEqualTo(OutboxStatus.PENDING);
-        assertThat(third.getStatus()).as("실패 뒤 이벤트도 발행되어야 한다").isEqualTo(OutboxStatus.SENT);
+        assertThat(third.getStatus()).as("다른 주문은 계속 발행된다").isEqualTo(OutboxStatus.SENT);
     }
 
     @Test
@@ -229,9 +252,8 @@ class OutboxRelayTest {
     }
 
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-013] 앞의 이벤트가 못 나갔으면 같은 애그리거트의 뒤 이벤트도 보류되어야 한다")
-    void failureShouldHoldLaterEventsOfSameAggregate() {
+    @DisplayName("[D-013] 앞의 이벤트가 못 나갔으면 같은 애그리거트의 뒤 이벤트도 보류된다")
+    void failureHoldsLaterEventsOfSameAggregate() {
         // 둘 다 partitionKey 가 ORD-1 이다. README 는 "같은 애그리거트의 순서가 보장된다"고 말한다.
         OutboxEvent earlier = record("EVT-1");
         OutboxEvent later = record("EVT-2");
@@ -247,13 +269,77 @@ class OutboxRelayTest {
 
         assertThat(earlier.getStatus()).isEqualTo(OutboxStatus.PENDING);
 
-        // 기대: 앞의 것이 밀렸으면 같은 키의 뒤 이벤트도 기다린다.
-        // 실제: 그냥 나간다. PaymentCompleted 가 재시도되는 동안 PaymentCancelled 가 먼저 도착해
-        //       회수할 라이선스가 없는 상태에서 회수가 실행되는 식의 역전이 가능하다.
-        //       백오프(D-003)로 재시도 간격이 길어지면서 창이 더 넓어졌다.
+        // 수정 전에는 그냥 나갔다. PaymentCompleted 가 재시도되는 동안 PaymentCancelled 가 먼저 도착해
+        // 회수할 라이선스가 없는 상태에서 회수가 실행되는 식의 역전이 가능했다.
         assertThat(later.getStatus())
                 .as("같은 애그리거트의 뒤 이벤트")
                 .isEqualTo(OutboxStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("[D-013] 키가 다르면 앞의 실패에 영향받지 않는다 — 막히는 범위는 그 애그리거트뿐")
+    void failureOfOneKeyDoesNotBlockOtherKeys() {
+        OutboxEvent blocked = recordWithKey("EVT-1", "ORD-1");
+        OutboxEvent other = recordWithKey("EVT-2", "ORD-2");
+
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
+            ProducerRecord<String, String> sent = invocation.getArgument(0);
+            return "ORD-1".equals(sent.key())
+                    ? CompletableFuture.failedFuture(new IllegalStateException("broker rejected"))
+                    : CompletableFuture.completedFuture(mock(SendResult.class));
+        });
+
+        relay.relay();
+
+        assertThat(blocked.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(other.getStatus()).as("다른 주문은 계속 흐른다").isEqualTo(OutboxStatus.SENT);
+    }
+
+    @Test
+    @DisplayName("[D-013] 같은 키의 이벤트는 적재 순서대로 발행된다")
+    void sameKeyIsPublishedInOrder() {
+        recordWithKey("EVT-1", "ORD-1");
+        recordWithKey("EVT-2", "ORD-1");
+        recordWithKey("EVT-3", "ORD-1");
+        brokerHealthy();
+
+        relay.relay();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate, times(3)).send(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(sent -> header(sent, EventHeaders.EVENT_ID))
+                .containsExactly("EVT-1", "EVT-2", "EVT-3");
+    }
+
+    @Test
+    @DisplayName("배치가 가득 차면 다음 폴링을 기다리지 않고 이어서 비운다")
+    void drainsContinuouslyWhileBatchesAreFull() {
+        // 배치 크기의 2.5배를 쌓아두고 한 번만 호출한다.
+        // 고정 주기를 기다렸다면 100건에서 멈췄을 것이다.
+        for (int i = 0; i < BATCH_SIZE * 2 + 50; i++) {
+            recordWithKey("EVT-" + i, "ORD-" + i);
+        }
+        brokerHealthy();
+
+        relay.relay();
+
+        assertThat(store).allMatch(event -> event.getStatus() == OutboxStatus.SENT);
+    }
+
+    @Test
+    @DisplayName("한 회차가 스케줄러를 독점하지 않도록 배치 수에 상한이 있다")
+    void drainIsBoundedPerCycle() {
+        for (int i = 0; i < BATCH_SIZE * (MAX_BATCHES_PER_CYCLE + 3); i++) {
+            recordWithKey("EVT-" + i, "ORD-" + i);
+        }
+        brokerHealthy();
+
+        relay.relay();
+
+        long sent = store.stream().filter(e -> e.getStatus() == OutboxStatus.SENT).count();
+        assertThat(sent).isEqualTo((long) BATCH_SIZE * MAX_BATCHES_PER_CYCLE);
+        assertThat(store).anyMatch(e -> e.getStatus() == OutboxStatus.PENDING);
     }
 
     private static String header(ProducerRecord<String, String> record, String name) {
