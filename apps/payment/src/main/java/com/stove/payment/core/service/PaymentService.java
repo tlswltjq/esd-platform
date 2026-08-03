@@ -130,7 +130,14 @@ public class PaymentService {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return PaymentCancellation.none();
         }
-        Payment payment = findPayment(orderNo);
+        Payment payment = paymentRepository.findByOrderNo(orderNo).orElse(null);
+        if (payment == null) {
+            // 주문번호가 어긋났거나(연동 오류) 결제 생성 이벤트를 아직 못 받은 상태다.
+            // 아래 상태 불일치와 같은 이유로 예외를 던지지 않는다 — 결제는 재시도한다고 생기지 않으므로
+            // 던지면 가드 마킹이 롤백되어 같은 이벤트가 영원히 돌아온다.
+            log.error("보상 대상 결제 없음 — 수동 확인 필요 orderNo={} reason={}", orderNo, reason);
+            return PaymentCancellation.none();
+        }
         if (!payment.cancelable()) {
             // 정상 흐름에서는 나올 수 없는 조합이다. 결제가 스스로 PAID 가 될 수는 없으므로
             // 예외를 던지면 가드 마킹까지 롤백되어 같은 이벤트가 영원히 재전송된다(파티션 정지).

@@ -47,14 +47,28 @@ public class ReviewService {
             return;
         }
 
-        ReviewRequest request = reviewRepository.findByProductCode(event.productCode())
-                .map(existing -> {
-                    existing.reopen(event.title(), event.price()); // 반려 후 재신청
-                    return existing;
-                })
-                .orElseGet(() -> reviewRepository.save(ReviewRequest.received(
-                        event.gameId(), event.productCode(), event.title(), event.sellerId(),
-                        event.price(), event.currency(), event.selfRated())));
+        ReviewRequest existing = reviewRepository.findByProductCode(event.productCode()).orElse(null);
+        if (existing != null && existing.getStatus() != ReviewStatus.REJECTED) {
+            // 재신청은 반려된 건에만 의미가 있다. 진행 중이거나 이미 승인된 건에 접수가 또 들어오는 것은
+            // 순서 역전이거나 studio 쪽 중복 신청이다.
+            //
+            // 여기서 예외를 던지면 안 된다 — reopen() 은 금지 전이(IN_REVIEW→REQUESTED)라 예외가 나고,
+            // 그 예외는 리스너 밖으로 나가 studio 토픽의 해당 파티션을 멈춘다. 심의 상태는 재시도로
+            // 바뀌지 않으므로 그 파티션은 사람이 개입할 때까지 풀리지 않고, 뒤에 줄 선 다른 게임까지 막힌다.
+            log.warn("진행 중인 심의에 접수가 다시 들어옴 — 무시 productCode={} status={}",
+                    existing.getProductCode(), existing.getStatus());
+            return;
+        }
+
+        ReviewRequest request;
+        if (existing != null) {
+            existing.reopen(event.title(), event.price()); // 반려 후 재신청
+            request = existing;
+        } else {
+            request = reviewRepository.save(ReviewRequest.received(
+                    event.gameId(), event.productCode(), event.title(), event.sellerId(),
+                    event.price(), event.currency(), event.selfRated()));
+        }
 
         if (request.isSelfRated()) {
             // 자체등급분류: 게임위 접수 없이 내부 심사로 진행

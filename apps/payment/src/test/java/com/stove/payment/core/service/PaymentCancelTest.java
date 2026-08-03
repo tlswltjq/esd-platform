@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.event.EventType;
 import com.stove.common.event.payload.OrderLine;
+import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.test.InfraContainers;
@@ -54,6 +55,8 @@ class PaymentCancelTest {
     PaymentRepository paymentRepository;
     @Autowired
     OutboxEventRepository outboxEventRepository;
+    @Autowired
+    ProcessedEventRepository processedEventRepository;
 
     @MockitoSpyBean
     PgClient pgClient;
@@ -230,5 +233,38 @@ class PaymentCancelTest {
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PENDING);
         verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
         assertThat(outboxEventRepository.count() - before).isZero();
+    }
+
+    @Test
+    @DisplayName("[D-018] 결제가 없는 주문의 보상 요청도 예외 없이 끝난다")
+    void compensationForUnknownOrderMustNotStallTheConsumer() {
+        // license 가 지급에 실패했는데 payment 쪽에 그 주문의 결제가 없는 상황.
+        // 주문번호가 어긋났거나(연동 오류), 결제 생성 이벤트를 아직 못 받았거나, 수동 재처리다.
+        String unknownOrderNo = "ORD-" + UUID.randomUUID();
+
+        // 수정 전에는 가드를 마킹한 직후 findPayment 가 PAYMENT_NOT_FOUND 를 던졌다.
+        // 예외가 리스너 밖으로 나가면서 가드 마킹까지 함께 롤백되고, 결제는 재시도한다고
+        // 생기지 않으므로 같은 이벤트가 영원히 돌아왔다 — D-007 이 상태 불일치 분기에 대해
+        // 막아 둔 바로 그 모양인데, not-found 경로만 빠져 있었다.
+        // 이제 D-007 과 같이 소비는 진행하고 log.error 로 남긴다.
+        assertThatCode(() -> refundFacade.compensate(UUID.randomUUID().toString(),
+                EventType.LICENSE_ISSUE_FAILED, unknownOrderNo, "라이선스 지급 실패"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("[D-018] 결제가 없는 주문의 보상은 재수신되지 않도록 마킹이 남는다")
+    void compensationForUnknownOrderKeepsTheGuardMark() {
+        String unknownOrderNo = "ORD-" + UUID.randomUUID();
+        String eventId = UUID.randomUUID().toString();
+
+        assertThatCode(() -> refundFacade.compensate(eventId, EventType.LICENSE_ISSUE_FAILED,
+                unknownOrderNo, "라이선스 지급 실패"))
+                .doesNotThrowAnyException();
+
+        // 마킹이 남아야 재전송이 걸러진다. 예외로 롤백되면 이 행이 없어 무한 재시도가 된다.
+        assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(eventId, "payment"))
+                .as("멱등 가드 마킹이 롤백됐다 — 같은 이벤트가 계속 돌아온다")
+                .isTrue();
     }
 }
