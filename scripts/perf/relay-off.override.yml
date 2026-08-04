@@ -1,0 +1,22 @@
+# 릴레이를 끈 대조군. 측정이 유효한지 판정하는 데 쓴다.
+#
+#   docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
+#                  -f scripts/perf/relay-off.override.yml up -d --force-recreate order
+#
+# 왜 이게 필요한가 — 릴레이를 **완전히 끄면** 쓰기 경로에서 Outbox 발행 비용이 사라지므로
+# 숫자가 달라져야 한다. 달라지지 않으면 측정하고 있는 것이 릴레이가 아니다.
+#
+# 이전 측정(docs/performance.md)이 무효였던 근거가 정확히 이것이었다 —
+# 릴레이를 끈 구성이 개선 구성과 같은 44.9 RPS 를 냈다. 세 구성이 모두 포화 상태였고,
+# 포화 위에서 잰 값은 무엇을 바꾸든 "포화했다"만 알려준다.
+#
+# 이 파일은 대조군을 만드는 스위치이지 성능 개선 설정이 아니다. 운영에 쓰지 않는다.
+
+name: stove-apps
+
+services:
+  order:
+    environment:
+      # stove.outbox.relay-enabled — MessagingAutoConfiguration 의
+      # @ConditionalOnProperty 가 릴레이 빈 등록 자체를 막는다.
+      STOVE_OUTBOX_RELAYENABLED: "false"
