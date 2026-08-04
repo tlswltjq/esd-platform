@@ -1,0 +1,38 @@
+# CI 오버라이드 — 호스트로 포트를 열지 않는다.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+#
+# 이유는 편의가 아니라 보안이다. CI 호스트는 공개 IP 를 가진다.
+# 이 스택의 Elasticsearch(`xpack.security.enabled: false`), Grafana
+# (`GF_AUTH_ANONYMOUS_ENABLED: true`), MinIO 콘솔, MySQL, MongoDB 는
+# 인증이 없거나 기본 자격증명을 쓴다 — `0.0.0.0` 에 붙여서는 안 된다.
+#
+# CI 는 포트가 필요하지도 않다. Testcontainers 는 랜덤 포트를 쓰고,
+# compose 통합 테스트는 컨테이너 네트워크(`stove_default`) 안에서 끝난다.
+# 로컬 개발에서 고정 포트가 편했던 것이지, 그 가정이 여기서 성립하지 않는다.
+#
+# `!reset` 이 필요한 이유 — Compose 는 오버라이드에서 `ports` 를 **덮어쓰지 않고
+# 이어붙인다**. `ports: []` 로는 지워지지 않는다. reset 태그는 Compose 2.24+ 다
+# (CI 호스트 설치본 v2.35.1).
+
+name: stove
+
+services:
+  mysql:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  kafka:
+    ports: !reset []
+  kafka-ui:
+    ports: !reset []
+  elasticsearch:
+    ports: !reset []
+  minio:
+    ports: !reset []
+  mongodb:
+    ports: !reset []
+  prometheus:
+    ports: !reset []
+  grafana:
+    ports: !reset []
