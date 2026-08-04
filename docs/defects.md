@@ -33,6 +33,14 @@
 | [D-013](#d-013) | 발행 실패한 이벤트를 같은 애그리거트의 뒤 이벤트가 추월 | 순서 역전 | **수정됨** |
 | [D-014](#d-014) | 백오프로 빠진 앞 이벤트를 다음 회차에서 뒤 이벤트가 추월 | 순서 역전 | **수정됨** |
 | [D-015](#d-015) | 형식이 깨진 요청이 400 이 아니라 500 으로 응답 | 오분류·알람 잡음 | **수정됨** |
+| [D-016](#d-016) | 진행 중인 심의에 재신청이 오면 컨슈머가 멈춤 | 가용성 | **수정됨** |
+| [D-017](#d-017) | 지각 심의 결과가 승인된 프로젝트를 강등 | 사용자 영향 | **수정됨** |
+| [D-018](#d-018) | 결제 없는 주문의 보상 요청이 무한 재배달 | 가용성 | **수정됨** |
+| [D-019](#d-019) | order 의 수량 검증이 어댑터에만 존재 | 금액 조작 | **수정됨** |
+
+D-016 ~ D-019 는 **서비스 계층에 테스트가 없던 모듈에 테스트를 붙이면서** 나왔다.
+넷 중 셋이 컨슈머 경로의 예외 처리 문제이고, 하나는 이미 고친 결함(D-009)이
+같은 이름의 다른 값 객체에 그대로 남아 있던 경우다.
 
 ---
 
@@ -684,9 +692,182 @@ DEAD 알람이 이 설계의 짝이라는 점은 [event-ordering.md](event-order
 
 ---
 
+<a id="d-016"></a>
+## D-016 진행 중인 심의에 재신청이 오면 컨슈머가 멈춤
+
+**상태** 수정됨 (서비스 계층 테스트를 붙이다 발견)
+**영향** 가용성 · 자동 복구 불가
+**위치** `apps/review/.../core/service/ReviewService.java`
+**재현** `ReviewReceiveTest#resubmitOnLiveRequestMustNotStallTheConsumer`,
+`#resubmitOnApprovedRequestMustNotStallTheConsumer`
+
+### 무슨 일이
+
+`receive()` 는 같은 `productCode` 의 레코드가 있으면 **상태를 보지 않고** `reopen()` 을 불렀다.
+
+```java
+reviewRepository.findByProductCode(event.productCode())
+        .map(existing -> {
+            existing.reopen(event.title(), event.price()); // 반려 후 재신청
+            return existing;
+        })
+```
+
+주석이 말하는 "반려 후"가 코드에는 없다. `reopen()` 은 `transitTo(REQUESTED)` 인데
+`IN_REVIEW → REQUESTED` 와 `APPROVED → *` 는 둘 다 금지 전이다(`ReviewStatus`).
+그래서 `BusinessException` 이 리스너 밖으로 나가고, 오프셋이 커밋되지 않는다.
+
+→ studio 토픽의 해당 파티션이 무한 재시도에 빠진다.
+심의 상태는 재시도로 바뀌지 않으므로 **뒤에 줄 선 다른 게임의 심의까지 전부 멈춘다.**
+
+### 왜 멱등 가드가 못 막았나
+
+가드는 **같은 `eventId`** 만 거른다. 이건 중복 전달이 아니라
+새 `eventId` 를 단 **정상적인 두 번째 신청**이다 — studio 에서 재신청하거나,
+운영자가 이벤트를 수동 재발행하면 그대로 도달한다.
+
+### 수정
+
+재신청은 `REJECTED` 인 건에만 적용한다. 그 외 상태에서 접수가 또 들어오면
+`log.warn` 으로 남기고 넘어간다.
+
+**컨슈머 경로에서는 거절도 예외로 하지 않는다.** 이 선택 기준은 D-007·D-018 과 같다 —
+재시도로 풀리지 않는 상태에 예외를 던지면 파티션이 멈추는 것으로 끝난다.
+
+---
+
+<a id="d-017"></a>
+## D-017 지각 심의 결과가 승인된 프로젝트를 강등
+
+**상태** 수정됨 (도메인 테스트를 붙이다 발견)
+**영향** 사용자 영향 · 서비스 간 상태 불일치
+**위치** `apps/studio/.../core/domain/GameProject.java`
+**재현** `GameProjectTest#lateRejectionMustNotDemoteApprovedProject`,
+`#approvalWithoutSubmissionIsIgnored`
+
+### 무슨 일이
+
+`submit()` 에는 상태 가드가 있는데 `approve()` · `reject()` 에는 **하나도 없었다.**
+
+```java
+public void reject(String reason) {
+    this.status = ProjectStatus.REJECTED;   // 어느 상태에서 부르든 통과
+    this.rejectReason = reason;
+}
+```
+
+같은 엔티티 안에서 방어 수준이 갈린 이유는 호출자가 다르기 때문이다 —
+`submit()` 은 사람이, 나머지 둘은 컨슈머가 부른다. **이벤트 경로만 무방비였다.**
+
+지각 `ReviewRejected` 가 `APPROVED` 프로젝트에 도달하면 `REJECTED` 로 강등된다.
+catalog 는 상품을 계속 판매하는데 스튜디오 화면에만 반려로 보이고,
+`submit()` 이 `APPROVED` 를 막으므로 **창작자가 스스로 되돌릴 수도 없다.**
+
+### 수정
+
+`SUBMITTED` 에서만 전이하고, 아니면 `false` 를 반환한다.
+D-016 과 같은 이유로 예외를 던지지 않는다 — 서비스가 `log.warn` 으로 남기고 소비를 진행시킨다.
+
+반환값을 `boolean` 으로 둔 것은 "무시했다"를 호출자가 관측할 수 있게 하기 위함이다.
+`void` 로 조용히 넘기면 이벤트가 유실된 것과 구분되지 않는다.
+
+---
+
+<a id="d-018"></a>
+## D-018 결제 없는 주문의 보상 요청이 무한 재배달
+
+**상태** 수정됨
+**영향** 가용성 · 자동 복구 불가
+**위치** `apps/payment/.../core/service/PaymentService.java`
+**재현** `PaymentCancelTest#compensationForUnknownOrderMustNotStallTheConsumer`,
+`#compensationForUnknownOrderKeepsTheGuardMark`
+
+### 무슨 일이
+
+[D-007](#d-007) 과 **같은 결함이 같은 메서드의 한 줄 위에 남아 있었다.**
+
+```java
+if (!processedEventGuard.firstDelivery(...)) { return ...; }
+Payment payment = findPayment(orderNo);   // ← PAYMENT_NOT_FOUND 를 던진다
+if (!payment.cancelable()) {
+    // "예외를 던지면 가드 마킹까지 롤백되어 같은 이벤트가 영원히 재전송된다(파티션 정지)"
+```
+
+D-007 을 고치면서 **상태 불일치** 분기는 값 반환으로 바꿨지만,
+바로 위 **결제 자체가 없는** 경로는 그대로 예외였다.
+결제는 재시도한다고 생기지 않으므로 결과도 D-007 과 같다 — 파티션 정지.
+
+주문번호가 어긋났거나(연동 오류), 결제 생성 이벤트를 아직 못 받았거나, 수동 재처리일 때 나온다.
+
+### 왜 놓쳤나
+
+D-007 의 재현 테스트가 **`PENDING` 상태의 결제**로만 검증했다.
+"결제가 없다"는 경우는 같은 부류의 입력인데 테스트 입력에 없었고,
+수정 주석이 바로 아래 붙어 있어서 읽는 사람에게는 이미 방어된 것처럼 보였다.
+
+### 수정
+
+`findPayment` 대신 `findByOrderNo(...).orElse(null)` 로 받아
+없으면 `log.error` 후 `PaymentCancellation.none()` 을 반환한다. D-007 분기와 동일한 처리다.
+
+---
+
+<a id="d-019"></a>
+## D-019 order 의 수량 검증이 어댑터에만 존재
+
+**상태** 수정됨
+**영향** 금액 조작 (잠재)
+**위치** `apps/order/.../core/domain/QuoteItem.java`
+**재현** `QuoteItemTest#zeroQuantityIsRejectedByTheDomain`,
+`#negativeQuantityIsRejectedByTheDomain`, `#missingProductIdIsRejectedByTheDomain`
+
+### 무슨 일이
+
+[D-009](#d-009) 를 고치면서 `catalog` 의 `QuoteItem` 에 컴팩트 생성자 가드를 넣고,
+그 javadoc 에 근거까지 적었다 — *"어댑터는 늘어날 수 있고 도메인 규칙은 도메인이 지켜야 한다."*
+
+**`order` 에 같은 이름의 값 객체가 하나 더 있다는 것을 그때 보지 못했다.**
+
+```java
+/** catalog 에 가격 재계산을 요청할 항목. */
+public record QuoteItem(Long productId, int quantity) {
+}
+```
+
+order 쪽 방어선은 `CreateOrderRequest.Item` 의 `@Min(1)` 하나뿐이었다 —
+D-009 가 지적한 "어댑터에만 있는 검증" 바로 그 모양이다.
+
+### 왜 지금은 안 터졌나
+
+D-009 수정으로 catalog 가 잘못된 수량을 거절하므로 실제 금액 조작까지는 가지 않는다.
+다만 거절이 **HTTP 왕복 뒤에** 일어나고, `CatalogRestAdapter` 가 catalog 의 4xx 를
+`UPSTREAM_UNAVAILABLE`(503) 로 바꾸므로 **우리 입력 문제가 "업스트림 장애"로 보고된다.**
+
+### 수정
+
+catalog 와 같은 가드를 넣었다. 보내는 쪽에서 걸리면 왕복이 없고,
+실패도 요청 오류(400)로 남는다.
+
+> 같은 개념의 값 객체가 서비스마다 따로 있는 것은 이 구조의 의도된 대가다
+> (`common` 에 도메인 모델을 두지 않는다 — [decisions.md](decisions.md)).
+> 대신 **한쪽을 고칠 때 같은 이름의 다른 쪽을 함께 봐야 한다**는 부담이 생긴다.
+> D-019 는 그 부담을 실제로 놓친 첫 사례다.
+
+---
+
 ## 닫힌 항목
 
-없음.
+### 결함이 아니었던 것
+
+**게이트웨이 actuator 노출** — `apps/gateway` 의 `exposure.include` 에 `gateway` 가 들어 있어
+라우트 목록과 `refresh`(쓰기)가 인증 없이 열려 있다고 보고 재현 테스트를 먼저 썼는데, **통과했다.**
+
+Spring Cloud Gateway 4.x 부터 `management.endpoint.gateway.enabled` 기본값이 `false`,
+`management.endpoint.gateway.access` 기본값이 `none` 이라 노출 목록에 넣는 것만으로는 열리지 않는다.
+
+**설정이 막고 있는 것이 아니라 라이브러리 기본값이 막고 있다.** 그래서 항목은 닫되
+테스트는 `GatewayActuatorExposureTest` 로 남겼다 — 누군가 그 기본값을 켜면 그때 걸린다.
+이 모듈에는 security 의존성이 없다.
 
 ### 결번
 

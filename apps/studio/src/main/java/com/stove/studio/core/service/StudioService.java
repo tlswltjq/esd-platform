@@ -87,7 +87,12 @@ public class StudioService {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
         }
-        findByProductCode(productCode).approve(ratingCode);
+        GameProject project = findByProductCode(productCode);
+        if (!project.approve(ratingCode)) {
+            log.warn("심의 신청 상태가 아닌 프로젝트의 승인 이벤트 — 무시 productCode={} status={}",
+                    productCode, project.getStatus());
+            return;
+        }
         log.info("심의 승인 반영 productCode={} rating={}", productCode, ratingCode);
     }
 
@@ -96,7 +101,12 @@ public class StudioService {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
         }
-        findByProductCode(productCode).reject(reason);
+        GameProject project = findByProductCode(productCode);
+        if (!project.reject(reason)) {
+            log.warn("심의 신청 상태가 아닌 프로젝트의 반려 이벤트 — 무시 productCode={} status={}",
+                    productCode, project.getStatus());
+            return;
+        }
         log.info("심의 반려 반영 productCode={} reason={}", productCode, reason);
     }
 

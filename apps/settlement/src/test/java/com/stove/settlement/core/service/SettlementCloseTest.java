@@ -37,7 +37,7 @@ class SettlementCloseTest {
     private static final BigDecimal PARTNER_FEE_RATE = new BigDecimal("0.3000");
 
     /** 테스트마다 겹치지 않는 마감 월을 준다. 다른 테스트의 원장과 섞이지 않게 하기 위함이다. */
-    private static final AtomicInteger MONTH_SEQ = new AtomicInteger(1);
+    private static final AtomicInteger MONTH_SEQ = new AtomicInteger(0);
 
     @Autowired
     SettlementService settlementService;
@@ -46,8 +46,13 @@ class SettlementCloseTest {
     @Autowired
     SellerSettlementRepository sellerSettlementRepository;
 
+    /**
+     * 월이 12개뿐이라 순번을 그대로 월에 넣으면 테스트가 13개째부터 {@code DateTimeException} 으로 깨진다.
+     * 연도까지 굴려서 테스트를 몇 개를 붙이든 고유한 월이 나오게 한다.
+     */
     private static YearMonth uniqueMonth() {
-        return YearMonth.of(2999, MONTH_SEQ.getAndIncrement());
+        int seq = MONTH_SEQ.getAndIncrement();
+        return YearMonth.of(2900 + seq / 12, seq % 12 + 1);
     }
 
     private static Long uniqueSeller() {

@@ -100,6 +100,30 @@ void lateRecordShouldBeSettledOnNextClose() {
 
 수정이 끝나면 태그를 떼고 회귀 방어선으로 승격한다.
 
+### 재현 테스트는 "실패하는 것"까지 눈으로 확인한다
+
+**단언을 쓰는 것과 결함을 재현하는 것은 다르다.** 테스트가 빨간 것을 봤다고 결함이 증명되지 않는다 —
+빨간 이유가 결함이 아닐 수 있다.
+
+실제로 겪었다. D-016·D-018 의 재현 테스트가 실패하는 것을 보고 결함으로 확정했는데,
+사실은 `DOCKER_HOST` 가 없어(macOS + OrbStack) Testcontainers 가 컨테이너를 못 띄운 것이었다.
+**컨텍스트 로딩 실패도 테스트 실패로 보인다.** 실행 요건은 [README](../README.md) 4절에 있다.
+
+```bash
+export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+```
+
+그래서 재현을 확정하기 전에 **실패 원인이 단언인지** 확인한다.
+`build/test-results/**/TEST-*.xml` 에서 `AssertionFailedError` 인지
+`IllegalStateException: Failed to load ApplicationContext` 인지가 갈린다.
+
+반대 방향의 사고도 있었다. 게이트웨이 actuator 노출을 결함으로 보고 재현 테스트를 먼저 썼는데
+**통과했다** — Spring Cloud Gateway 4.x 의 엔드포인트 기본값이 이미 막고 있었다
+([defects.md](defects.md) 닫힌 항목). 코드를 읽고 세운 가설이 틀렸다는 것을 테스트가 알려준 경우다.
+
+**재현 테스트를 먼저 쓰는 이유의 절반은 여기에 있다.** 고치기 전에 쓰면 가설이 틀렸을 때
+아무것도 고치지 않고 끝난다. 고친 뒤에 쓰면 없는 결함을 고친 코드가 남는다.
+
 ### 짝 테스트
 
 결함 테스트 옆에 **현재 동작을 고정하는 테스트**를 둔 경우가 있다.
@@ -197,11 +221,84 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 
 ## 6. 앞으로 채울 것
 
-- **store 색인 ↔ Elasticsearch 통합** — 지금은 색인 의미론(덮어쓰기)만 대역으로 본다.
-  실제 ES 쿼리·매핑 검증은 아직 없다
-- **review 서비스 계층** — 상태머신(도메인)은 전수로 봤지만 `ReviewService` 는 아직 pitest 기준 미커버다
+전 모듈을 전수 대조해 정리한 목록이다. 위에서부터 위험도 순이며,
+**결함으로 이어질 수 있는 것**과 **단순 미커버**를 구분해 적는다.
+
+### 6.1 지금 메우는 중
+
+**서비스 계층(L1)은 5곳이 통째로 비어 있었다.** `OrderCommandService`·`OrderQueryService`·
+`StudioService`·`ReviewService`·`ProductCommandService` 가 테스트에서 `mock()` 으로만 등장해
+구현이 한 번도 실행되지 않았고, 그래서 `ProcessedEventGuard.firstDelivery` 호출 5개소가
+전부 미검증이었다. 이 층을 채우는 과정에서 [D-016 ~ D-019](defects.md) 가 나왔다.
+
+→ **메웠다.** 남은 것은 아래.
+
+### 6.2 남은 것 — 서비스별
+
+| 서비스 | 항목 | 성격 |
+|---|---|---|
+| **payment** | **게이트 2 미검증** — 저장소 전체에 `verify(pgClient).prepare(...)` 가 없다. "서버가 확정한 금액을 PG 에 등록한다"는 게이트 2의 핵심 주장이 단언된 적이 없다 | 위험 |
+| **payment** | **게이트 3 미검증** — `PAYMENT_AMOUNT_MISMATCH` 를 단언하는 테스트가 없다. 두 미스매치 테스트 모두 `isInstanceOf(BusinessException.class)` 뿐이라 `PAYMENT_ALREADY_PROCESSED` 가 나와도 통과한다. **과다결제(`paidAmount > amount`)도 미검증** | 위험 |
+| **payment** | `createReady` 의 두 번째 가드 `existsByOrderNo` — 기존 테스트는 같은 eventId 라 첫 가드에서 반환된다. **삭제해도 깨지는 테스트가 없다** | 미커버 |
+| **payment** | `RefundFacade.settle` 에서 `pgClient.cancel` 자체가 실패하는 경로 (지금은 그 다음 단계인 Outbox 실패만 본다) | 미커버 |
+| **settlement** | **`FeePolicy` 무테스트.** `recordSale` 경유로도 SELF 경로에 닿지 않는다(테스트가 sellerId 1001/1002 를 쓰는데 `self-seller-id: 1`). `selfSaleHasNoFee` 는 `SaleType.SELF` 와 `ZERO` 를 직접 넘겨 산술만 본다 — **`saleTypeOf`/`feeRateOf` 를 뒤집어도 깨지지 않는다** | 위험 |
+| **settlement** | `net == 0` 경계(매출이 환불로 정확히 상계 — 가장 흔한 이월 케이스), 환불 역산의 `sales.isEmpty()` 조기 반환, 월 경계 환불(원매출의 달이 아니라 **현재 달**로 역산한다) | 미커버 |
+| **settlement** | `SettlementBatch` 무테스트 — 연말 경계(1월 → 전년 12월), 다중 인스턴스 단일 실행(문서상 TODO) | 미커버 |
+| **store** | **`featured()` 본문이 어떤 테스트에서도 실행되지 않는다** (컨트롤러 테스트는 `StoreService` 를 mock) | 미커버 |
+| **store** | **Redis 캐시가 프록시 없이 테스트된다** — `StoreIndexTest` 는 `new StoreService(repository)` 라 `@Cacheable`/`@CacheEvict` 가 비활성이다. **`@CacheEvict` 를 지워도 깨지지 않는다** | 위험 |
+| **store** | 실 ES 쿼리·매핑 — `findByStatusAndNameContaining` 은 대역의 `String.contains` 와 의미가 다르다. `ElasticsearchIndexInitializer` 의 매핑 적용(`status` 가 `keyword` 인지)도 미검증 | 미커버 |
+| **store** | `?page=-1`, `?size=0` → `PageRequest.of` 가 `IllegalArgumentException` → 500 (D-015 계열) | 위험 |
+| **download** | **`CdnUrlSigner` 무테스트** — `matchIfMissing = true` 인 **기본(운영) 어댑터**다. HMAC 계산·`s3://` 접두사 제거·TTL 전부 미검증 | 위험 |
+| **download** | `DownloadControllerTest#validTicketRequestReachesTheService` 에 **`andExpect(status())` 가 없다.** mock 이 `null` 을 반환해 실제로는 500 인데 통과한다 | 즉시 교정 |
+| **download** | 403(미보유) vs 404(상품 미등록) 구분이 어느 테스트에도 없다. 매니페스트 최신본 선택(모든 테스트가 버전 1개만 등록), upsert 멱등 | 미커버 |
+| **license** | `recordIssueFailure` 가 **한 번도 실행되지 않는다** — 관련 테스트가 전부 `LicenseService` 를 mock 한다. `REQUIRES_NEW` 로 별도 커밋된다는 이 메서드의 존재 이유가 미검증 | 위험 |
+| **license** | `republishedEventCarriesFullOwnership` 은 이름과 달리 **저장소 크기만** 단언한다. 부분 회수에서 변경된 것만 이벤트에 실리는지도 미검증 | 즉시 교정 |
+| **catalog** | `Product` 의 `applyReviewApproval` `REVIEWING` 분기, `suspend` 무가드. `ProductView` 를 실제 Redis 직렬화기로 왕복(이 클래스의 존재 이유가 역직렬화 가능성이다) | 미커버 |
+| **review** | `approve`/`reject`/`getRequests` — 접수 경로는 덮었지만 결정 경로가 남았다 | 미커버 |
+| **review** | `ReviewControllerTest#approvalUsesGivenRating` 이 `approve(anyLong(), anyString())` 로 단언해 **`"ADULT"` 가 전달되는지 확인하지 않는다.** 등급이 뒤바뀌어도 통과한다 | 즉시 교정 |
+| **order** | `CatalogRestAdapterTest` 가 catalog 4xx → 503 을 고정한다. D-019 수정으로 잘못된 수량이 order 에서 걸리므로 재검토 대상 | 판단 필요 |
+| **gateway** | 라우트 `uri` 가 단언되지 않는다 — id 만 본다. store/catalog URI 가 뒤바뀌어도 전부 통과한다 | 미커버 |
+
+### 6.3 남은 것 — common
+
+- **`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
+  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약. **저장소 전체에 `jsonPath` 단언이 하나도 없어**
+  응답 형식이 통째로 바뀌어도 잡히지 않는다
+- **`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수),
+  `GlobalExceptionHandler` 는 D-015 계열만 검증
+- **`common/event`** — `EventContractTest.events()` 가 **손으로 유지하는 목록**이다.
+  새 페이로드는 누가 이 목록을 고치기 전까지 계약 검증을 전혀 받지 않는다.
+  패키지를 스캔해 모든 `DomainEvent` 구현이 목록에 있는지 단언해야 한다
+- **`common/messaging`** — `OutboxRecorder` 무테스트(`propagation = MANDATORY` 가 이 클래스의 존재 이유),
+  `lockPendingBatch` 네이티브 쿼리가 이 모듈에서는 대역으로만 검증된다
+  (실 SQL 은 `apps/payment` 의 `OutboxBackOffQueryTest` 에서만 — 9개 서비스가 의존하는 쿼리가 앱 모듈에 인질로 잡혀 있다)
+- **`common/archunit`** — 모든 규칙이 `.allowEmptyShould(true)` 다.
+  술어가 매칭을 멈추면 규칙이 **조용히 공허 통과**한다. 위반 픽스처로 규칙이 실제로 실패하는지 봐야 한다
+
+### 6.4 전 모듈 공통
+
+리스너 6곳이 전부 `verify(service).xxx(anyString(), ...)` 로 **eventId 를 `anyString()` 으로** 받는다.
+eventId 는 Inbox 가드의 유일한 입력이라, 상수나 `null` 을 넘기는 어댑터도 통과한다.
+
+store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테스트가 없다**
+(`apps/license` 만 `EventRecords.record(...)` 로 헤더를 빼는 경로를 쓴다).
+
+### 6.5 층으로 덮을 수 없는 것
+
 - **컨슈머 층 파티션 증설 시나리오** — ArchUnit 으로 막을 수 없는 유일한 항목이라
   운영 절차로 남아 있다 ([event-ordering.md](event-ordering.md) 5절)
 - **부하 테스트** — [scripts/perf/](../scripts/perf/) 에 k6 시나리오와 릴레이 배수 하네스가 있다.
   CI 에서는 돌리지 않는다(실행 환경 편차가 커서 판정 기준으로 쓸 수 없다).
   측정 결과는 [performance.md](performance.md)
+
+### 6.6 작업할 때
+
+- **테스트를 붙일 모듈은 `pitest` 로 확인한다.** 통과하는 테스트와 잡아내는 테스트는 다르다(5절).
+  위 표의 "위험"은 대부분 *통과하지만 못 잡는* 자리다
+- **단언은 값으로 한다.** `anyString()` 은 "무엇이 전달되는가"가 검증 대상일 때 쓰지 않는다
+- **Outbox 단언을 `count()` 차이로 끝내지 않는다.** 잘못된 이벤트를 발행해도 `count` 는 똑같이 1이다.
+  `eventType`·`aggregateId`·`partitionKey` 와 페이로드를 읽는다
+- **`@Cacheable`/`@CacheEvict` 는 프록시 위에서만 동작한다.** `new` 로 만든 인스턴스에 걸면
+  캐시를 안 지워도 통과하는 테스트가 된다
+- 데이터 격리는 삭제가 아니라 **키 공간 분리**다(4절). `SettlementCloseTest` 의 `uniqueMonth()` 처럼
+  순번을 쓰는 헬퍼는 **소진 한계**를 확인하고 늘린다

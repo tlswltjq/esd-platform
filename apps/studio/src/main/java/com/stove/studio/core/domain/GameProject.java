@@ -87,15 +87,33 @@ public class GameProject extends BaseTimeEntity {
         this.rejectReason = null;
     }
 
-    public void approve(String ratingCode) {
+    /**
+     * 심의 결과 반영. <b>신청한 건에 대해서만</b> 의미가 있다.
+     *
+     * <p>{@link #submit()} 과 달리 예외를 던지지 않는다 — 이 경로는 컨슈머가 부른다.
+     * 지각 이벤트에 예외를 던지면 리스너 밖으로 나가 그 파티션이 멈추는데,
+     * 상태는 재시도로 바뀌지 않으므로 영원히 풀리지 않는다.
+     *
+     * @return 상태가 실제로 바뀌었으면 true
+     */
+    public boolean approve(String ratingCode) {
+        if (status != ProjectStatus.SUBMITTED) {
+            return false;
+        }
         this.status = ProjectStatus.APPROVED;
         this.ratingCode = ratingCode;
         this.rejectReason = null;
+        return true;
     }
 
-    public void reject(String reason) {
+    /** @see #approve(String) 지각·중복 이벤트를 예외 없이 흘려보내는 이유는 같다. */
+    public boolean reject(String reason) {
+        if (status != ProjectStatus.SUBMITTED) {
+            return false;
+        }
         this.status = ProjectStatus.REJECTED;
         this.rejectReason = reason;
+        return true;
     }
 
     public void requireOwner(Long sellerId) {
