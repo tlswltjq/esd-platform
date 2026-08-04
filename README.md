@@ -115,6 +115,12 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
 작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
 준비 부담이 적은 순서대로 세 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
 
+> **인프라가 필요한 검증은 네 번째 경로(D)가 받는다.**
+> A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주라 같은 메모리 천장 아래 있다.
+> 전체 스택(인프라 9 + 앱 10)은 **6.1 GiB** 를 쓰므로 8GB 랩탑에서는 산술적으로 안 뜬다.
+> 통합 테스트·전체 스택 기동·성능 측정은 `main`/PR 로 push 하면 self-hosted 러너가 돈다
+> ([decisions.md](docs/decisions.md) 15번). 로컬에서는 단위 테스트와 ArchUnit 규칙만 돌리면 된다.
+
 #### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
 
 `.devcontainer/devcontainer.json` 이 JDK·Gradle·Docker 를 모두 정의한다.

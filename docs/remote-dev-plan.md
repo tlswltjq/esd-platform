@@ -127,9 +127,28 @@ named 볼륨에 DB 데이터가 있다 — `sng_server_auth_db_data`, `sng_serve
 
 ---
 
-## 3. 결정 — 기존 워크로드를 내리지 않는다
+## 3. 기존 워크로드 — 분석은 공존, 결정은 정지
 
-처음 구상은 "기존 컨테이너를 전부 내리고 CI 전용으로 쓴다"였다. **측정이 그 전제를 깼다.**
+처음 구상은 "기존 컨테이너를 전부 내리고 CI 전용으로 쓴다"였다.
+측정은 그 전제를 지지하지 않았다(아래 근거 셋). **자원만 놓고 보면 내릴 이유가 없었다.**
+
+다만 자원은 판단 근거의 일부일 뿐이다. **소유자가 정지를 선택했고**,
+sng 프로젝트를 계속 서비스할지는 자원 계산 밖의 문제다. 그 결정을 따랐다.
+
+**실제로 한 것** — `stop`(`down` 아님). 컨테이너·네트워크·볼륨이 전부 남는다.
+
+```sh
+# 복구 — 이 두 줄이면 원상복구된다 (리허설로 실증: 8개 healthy 복귀까지 약 2분)
+cd ~/SNG_server && docker compose -f docker-compose.app.yml -f docker-compose.infra.yml start
+cd ~/oci-infra  && docker compose start
+```
+
+정지 전에 백업을 두 겹으로 떴다 — `~/backups_pre_ci_20260804_141405`.
+mysqldump 4개(`sng_auth` 3테이블 / `sng_game` 108 / `sng_master` 83 / `sng_webshop` 17,
+컨테이너 가동 중 `--single-transaction`)와 정지 후 볼륨 tar 6개. 전부 무결성 검사를 통과했다.
+
+**분석을 지우지 않고 남긴다.** 되살릴 때 다시 필요한 계산이고,
+"내려야 자리가 난다"는 통념이 이 경우 틀렸다는 기록이기도 하다.
 
 ### 근거 1 — 내려서 얻는 게 2.5GB 뿐이다
 
@@ -168,11 +187,15 @@ Testcontainers 는 랜덤 포트를 쓰고, compose 통합 테스트는 컨테�
 한 번 섞이면 위 6개 볼륨의 DB 데이터는 복구할 수 없다. `~/db_backups` 의 최신 백업은
 **6월 21~22일** 것이다 — 6주 전이다.
 
-**결정 — 공존한다.** 대신 공존의 조건을 명시적으로 건다(4장).
+> 실제로는 `stop` 만 했고 `-v` 도 `prune` 도 쓰지 않았다.
+> **이 계획 전체에서 그 명령들은 한 번도 등장하지 않는다.**
 
 ---
 
-## 4. 공존의 조건
+## 4. 조건 — 공존하든 정지하든 걸어야 하는 것
+
+아래 넷은 기존 워크로드를 내리든 아니든 필요하다.
+정지했으므로 1·2 의 여유는 커졌지만, CI 스파이크에 상한이 없다는 사실은 그대로다.
 
 ### 조건 1 — swap 을 만든다
 
@@ -311,50 +334,66 @@ MCP 와 `scripts/remote.sh` 가 채우려던 자리는 그것과 다르다 —
 
 ---
 
-## 8. 단계와 수용 기준
+## 8. 단계와 결과
 
-각 단계는 **통과 조건이 있어야 다음으로 간다.**
+각 단계는 **통과 조건이 있어야 다음으로 갔다.** 아래는 실행 결과다.
 
-### Phase 0 — 인스턴스 확보 ✅ 완료
-이미 있다. 2장이 실측 기록이다.
+### Phase 0 — 인스턴스 확보 ✅
+이미 있었다. 2장이 실측 기록이다.
 
-### Phase 1 — 안전장치 *(무엇을 올리기 전에)*
-1. **백업** — 최신이 6주 전이다. sng DB 볼륨을 한 번 뜬다.
-2. **swap 8GB** (조건 1)
-3. **JDK 21 (arm64 Temurin)** 설치 — 지금 호스트에 java 가 없다
-4. 러너 전용 사용자 + 워크스페이스 위치 결정 (조건 3)
+### Phase 1 — 안전장치 ✅
+백업 두 겹(3장), swap 8GB + `swappiness=10`, Temurin **21.0.12** arm64,
+전용 사용자 `runner` + 워크스페이스 `/opt/actions-runner`(ubuntu 홈 밖).
 
-**통과 조건** — `free -h` 에 swap 8G, `java -version` 이 21, 백업 파일이 오늘 날짜.
-**기존 컨테이너 8개는 여전히 healthy.** 이 조건은 이후 모든 단계에 붙는다.
+**통과** — swap 8.0Gi, `java -version` 21.0.12, 백업 10개 파일 무결성 검사 통과.
+그리고 **복구 리허설** — `docker compose start` 로 sng 8개를 되살려 healthy 확인 후 다시 정지.
+백업이 있다는 것과 되돌릴 수 있다는 것은 다르다.
 
-### Phase 2 — 러너 등록
-`actions-runner-linux-arm64` 설치, systemd 서비스 + `MemoryMax` 드롭인(조건 2),
-`docker system prune` 타이머(조건 4).
+### Phase 2 — 러너 등록 ✅
+`actions-runner-linux-arm64` 2.336.0, systemd 서비스,
+`docker system prune` 타이머(daily, `--volumes` 없음).
 
-**통과 조건** — `gh api repos/tlswltjq/stove/actions/runners` 에 online 러너 1대.
-hello-world 워크플로가 통과.
+**통과** — `oci-ampere-a1` status=online, labels `self-hosted,Linux,ARM64,oci`.
 
-### Phase 3 — `ci.yml` 전환 *(이 계획의 1차 목적)*
-`runs-on` 교체, setup-java 제거, 러너 `~/.gradle/gradle.properties` 튜닝,
-`docker-compose.ci.yml`(ports 제거) 추가.
+### Phase 3 — `ci.yml` 전환 ✅
+`runs-on` 교체, setup-java 제거, setup-gradle 캐시 비활성,
+러너 `~/.gradle/gradle.properties` 에 `workers.max=4` / `-Xmx6g`,
+`docker-compose.ci.yml`(`ports: !reset []`).
 
-**통과 조건** — `./gradlew build` 가 러너에서 그린. 소요 시간을 `ubuntu-latest` 와 비교 기록.
-빌드 중 `free -h` 최저 available 을 측정해 조건 2 의 상한을 확정한다.
+**통과** — 전 스텝 success, **6분 19초**. 빌드 중 실측:
 
-### Phase 4 — 전체 스택 통합 테스트
-인프라 9 + 앱 10 을 러너에서 동시에 올린다. 로컬에서 한 번도 못 한 것.
+| | |
+|---|---|
+| 동시 컨테이너 최대 | **15** |
+| 최저 available | 16,127 MiB |
+| 러너 cgroup 피크 | 5,264 MiB |
+| swap 사용 | **0** |
 
-**통과 조건** — 컨테이너 19개 healthy, 게이트웨이를 통해
-`GameRegistered → ReviewApproved → ProductChanged` 가 한 번 관통.
-**0장의 메모리 추정을 실측으로 교체한다.**
+실측에 맞춰 `MemoryMax` 를 14G → **10G** 로 조였다. 14G 는 피크의 2.6배라 가드가 아니었다.
+
+### Phase 4 — 전체 스택 통합 테스트 ✅
+인프라 9 + 앱 10 을 동시에. **로컬에서 한 번도 못 한 것.**
+
+**통과** — 컨테이너 19개(healthy 13 / unhealthy 0, 나머지 6은 헬스체크 미정의),
+`scripts/smoke-stack.sh` **21/21**.
+`GameRegistered → ReviewApproved →`(catalog 상품 마스터 + studio 역전파)`→ ProductChanged →`
+store 색인까지 관통. 0장의 추정을 실측으로 교체했다.
+
+> **스모크 단정 둘이 틀려 처음에 18/21 이었다.** 흐름은 정상이었고 테스트가 틀렸다 —
+> 이벤트 전파가 Outbox **폴링** 릴레이를 거치는데 고정 8초로 쟀고,
+> `GET /products` 는 `getOnSaleProducts()` 라 `sale-open` 전에는 신규 상품이 뜨지 않는다.
+> 조건 폴링과 상세 조회로 바꿔 21/21. **틀린 단정은 통과해도 통과가 아니다.**
 
 ### Phase 5 — performance.md 재측정 *(이 계획이 갚는 빚)*
-`scripts/perf/` 를 전체 스택 위에서 다시 돌린다. 뺀 것 없이, 스와핑 없이.
-`pageouts` 와 여유 메모리를 측정 로그에 같이 남긴다.
+전체 스택 위에서 다시 잰다. 뺀 것 없이, 스와핑 없이.
 
 **통과 조건** — 릴레이 활성/비활성 두 구성이 **서로 다른 숫자**를 낸다.
 같은 숫자면 여전히 포화이고, 그때는 인스턴스가 아니라 부하 설계를 의심한다.
-performance.md 의 "재측정이 남아 있다"를 지운다.
+
+비교는 performance.md 8-1 이 스스로 정한 위생 규칙을 따른다 —
+**동일 초기 상태**, **포화 이전 구간**, **조건당 2회 반복**.
+계단식(400 RPS 까지)은 포화로 들어가므로 한계선 파악용으로만 쓰고,
+ON/OFF 비교는 `order-soak.js` 를 포화 이전 고정 부하로 돌린다.
 
 ### Phase 6 — (선택) `remote.sh` + MCP
 7장의 조건이 성립하면. 성립하지 않으면 만들지 않는다.
