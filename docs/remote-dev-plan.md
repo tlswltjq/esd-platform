@@ -1,10 +1,10 @@
-# 원격 실행 환경 계획 — OCI 인스턴스 + MCP
+# 원격 실행 환경 계획 — 기존 OCI 인스턴스를 CI 로
 
-로컬 머신이 이 스택을 돌릴 수 없다. 빌드·테스트·실행·측정을 원격으로 옮기고,
-그 원격을 개발 도구(Claude Code)에서 직접 다루기 위한 계획이다.
+로컬 머신이 이 스택을 돌릴 수 없다. 빌드·테스트·측정을 이미 보유한 OCI 인스턴스로 옮기고,
+프로젝트가 성숙하면 같은 인스턴스에 CD 를 얹는다.
 
 아직 실행하지 않은 계획이다. 실행이 끝나면 이 문서는 사라지고
-[decisions.md](decisions.md) 의 결정 항목 하나와 README 의 진입 경로 표로 접힌다.
+[decisions.md](decisions.md) 의 결정 항목과 README 의 진입 경로 표로 접힌다.
 **증명되지 않은 계획은 결정이 아니다**(12번의 교훈).
 
 ---
@@ -31,14 +31,10 @@
 **테스트 방향** — 워커 2개 × (MySQL + Kafka + Redis + ES + Mongo) 스택.
 ES 하나가 `-Xms512m -Xmx512m` 이므로 RSS 는 그 위다. 워커 2개가 상한인 이유.
 
-**실행 방향** — `docker-compose.yml` 의 인프라 9종을 띄운 뒤,
-`docker-compose.apps.yml` 의 앱 10개를 얹어야 전체 흐름이 돈다.
-앱 컨테이너는 `MaxRAMPercentage=75` 로 잡혀 있다. 인프라만으로 3.83GB 가 거의 찬다.
+**실행 방향** — `docker-compose.yml` 의 인프라 9종 위에 `docker-compose.apps.yml` 의 앱 10종을
+얹어야 전체 흐름이 돈다. 앱 컨테이너는 `MaxRAMPercentage=75` 로 잡혀 있다.
+인프라만으로 3.83GB 가 거의 찬다.
 **전체 스택을 로컬에서 한 번도 동시에 띄워본 적이 없다** — 그것이 지금 막혀 있는 일이다.
-
-> 위 두 문단의 컨테이너별 메모리는 이미지 기본값에서 온 추정이다.
-> 로컬에서 전체 스택을 띄울 수 없으므로 실측이 없다.
-> **Phase 1 의 첫 작업이 원격에서 이 값을 실측해 이 표를 채우는 것이다.**
 
 ### 이미 대가를 치른 곳
 
@@ -54,7 +50,6 @@ ES 하나가 `-Xms512m -Xmx512m` 이므로 RSS 는 그 위다. 워커 2개가 �
   얻지 못했고, **재측정이 남아 있다**."
 
 원격 환경은 편의가 아니라 **미결로 남은 재측정의 전제 조건**이다.
-24GB 에서는 전체 스택을 띄운 채, 스와핑 없이, 뺀 것 없이 잴 수 있다.
 
 ---
 
@@ -66,272 +61,314 @@ decisions.md 11번의 표에 한 줄이 붙는다.
 |---|---|---|
 | A. devcontainer (docker-in-docker) | 없음 | 아무것도 못 믿을 때 |
 | B. `scripts/dev.sh` (호스트 소켓) | Docker Desktop / OrbStack | 빌린 머신, 빠름 |
-| C. 로컬 직접 (`./gradlew`) | JDK + Docker 있음 | 주 랩탑 |
-| **D. 원격 (OCI)** | **ssh 만** | **전체 스택, 병렬 테스트, 성능 측정** |
+| C. 로컬 직접 (`./gradlew`) | JDK + Docker 있음 | 주 랩탑, 단위 테스트·ArchUnit |
+| **D. OCI self-hosted CI** | **없음 (push 하면 돈다)** | **전체 스택 통합 테스트, 성능 측정, 나중에 CD** |
 
 A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주였다.
 셋 다 3.83GB 라는 같은 천장 아래 있다. D 는 천장을 바꾼다.
 
-**A·B·C 를 지우지 않는다.** 단위 테스트와 ArchUnit 규칙은 로컬에서 그대로 빠르다.
-D 는 인프라가 필요한 일(Testcontainers 통합 테스트, 전체 스택 기동)만 가져간다.
-경계는 "무엇이 컨테이너를 요구하는가"다.
+**A·B·C 를 지우지 않는다.** 단위 테스트와 ArchUnit 규칙은 로컬이 빠르고 CI 를 기다릴 이유가 없다.
+D 는 **인프라가 필요한 것만** 가져간다. 경계는 "무엇이 컨테이너를 요구하는가"다.
 
 ---
 
-## 2. 인스턴스
+## 2. 인스턴스 — 이미 있다. 그리고 비어 있지 않다
 
-**OCI Always Free / Ampere A1** — 4 OCPU / 24GB RAM / 블록 볼륨 200GB, **aarch64**.
+`ssh sng` (Ampere A1, 2026-08-04 실측):
 
-RAM 이 로컬 Docker 대비 6배다. 이것 하나로 위 두 방향이 다 풀린다.
+| | 값 |
+|---|---|
+| 아키텍처 | **aarch64** |
+| OS | Ubuntu **20.04.6** LTS |
+| CPU / RAM | 4 코어 / **23GB** |
+| 디스크 | 194GB (9GB 사용, **185GB 여유**) |
+| Docker | 28.1.1 / Compose v2.35.1 |
+| swap | **0** |
+| JDK | **없음** |
 
-**아키텍처** — arm64 다. 그런데 **주 랩탑도 M1(arm64)** 이므로
-지금 로컬에서 도는 이미지 조합이 그대로 원격에서 돈다. 아키텍처 리스크는 낮다.
-x86 이 필요하면 무료 옵션은 E2.1.Micro(1 OCPU / 1GB)뿐인데, 그건 지금 로컬보다 나쁘다.
-arm64 로 간다.
+**아키텍처** — arm64 다. 주 랩탑도 M1(arm64)이므로 지금 로컬에서 도는 이미지 조합이
+그대로 여기서 돈다. 아키텍처 리스크는 낮다.
 
-**OS** — Ubuntu 24.04. Docker apt 저장소 경로가 가장 단순하다.
-
-**Docker 버전** — 최신(29)을 그대로 쓴다. 고정하지 않는다.
+**Docker 28** — 그대로 쓴다. `testcontainersVersion=1.21.4` 가 API 1.40 하한을 넘으므로 문제없다.
 
 > `.devcontainer/devcontainer.json` 은 Docker 를 28 로 고정하며
 > "Testcontainers 를 올릴 수 있게 되면 이 고정을 풀 수 있다"고 적어두었다.
-> **그 조건은 이미 충족됐다** — `gradle.properties` 가 `testcontainersVersion=1.21.4` 로
-> 올려두었고, 그것이 Docker 29 의 API 1.40 하한을 넘는 버전이다.
-> 원격에는 낡은 고정을 옮겨심지 않는다. (devcontainer 쪽 고정 해제는 별건으로 분리)
+> **그 조건은 이미 충족됐다.** devcontainer 쪽 고정 해제는 별건으로 분리한다.
 
-**네트워크 — 포트를 열지 않는다.**
-Grafana, Kafka UI, MinIO 콘솔, Elasticsearch 는 이 구성에서 전부 **인증이 없다**
-(`GF_AUTH_ANONYMOUS_ENABLED: "true"`, `xpack.security.enabled: "false"`).
-공개 IP 에 노출하면 안 되는 것들이다.
-OCI 시큐리티 리스트는 22 만 열고, 나머지는 전부 **SSH 로컬 포워딩**으로 본다.
-이 판단은 편의가 아니라 보안 요구사항이다 — 나중에 "잠깐만 열자"로 뒤집지 않는다.
+### 지금 무엇이 돌고 있나
 
-**디스크** — 부트 볼륨 기본 50GB 는 빠듯하다.
-인프라 이미지 9종 + 앱 이미지 10종 + Gradle 캐시 + Docker 레이어로 100GB 이상 잡는다.
-
----
-
-## 3. 소스 동기화
-
-| 후보 | 장점 | 버리는 이유 |
+| 프로젝트 | 컨테이너 | 상태 |
 |---|---|---|
-| git push/pull | 도구 0개, 이력 남음 | 저장할 때마다 커밋을 요구한다. 반복 루프에 안 맞는다 |
-| **rsync over ssh** | macOS 기본 탑재, `--delete`, 필터 | — |
-| mutagen / 파일 감시 | 자동, 빠름 | **설치 도구를 리포 요구사항으로 만든다**(12번이 direnv 를 뺀 이유) |
+| `sng_server` | api-gateway, auth, trickcal, webshop, auth-db(MySQL), game-db(MySQL), webshop-redis | 전부 healthy, 3주~5일 가동 |
+| `oci-infra` | traefik v3.0 — **0.0.0.0:80 / 0.0.0.0:443** | 6주 가동 |
 
-**결정 — rsync 를 기본으로, git 은 남길 것에만.**
-
-- 로컬 → 원격 단방향. 원격에서 소스를 고치지 않는다(고치면 다음 sync 에 지워진다).
-- 필터는 `.gitignore` 를 따르고, `build/`·`.gradle/`·`.git/` 은 추가로 제외한다.
-- **산출물은 역방향으로 자동 동기화하지 않는다.** `build/` 는 원격에만 존재한다.
-  테스트 리포트가 필요하면 그때 명시적으로 가져온다.
-- mutagen 을 쓰고 싶은 사람은 개인 설정으로 쓴다. 리포는 요구하지 않는다.
-
-**머신별 값은 리포에 적지 않는다**(10번).
-인스턴스 IP·사용자·키 경로는 커밋 대상이 아니다. `~/.ssh/config` 에 별칭을 두고,
-스크립트는 `${STOVE_REMOTE:-stove-oci}` 로 계산한다.
-
-```
-# ~/.ssh/config — 리포 밖
-Host stove-oci
-    HostName <instance-ip>
-    User ubuntu
-    IdentityFile ~/.ssh/oci_stove
-```
+**`api.trickcal.online` 을 서비스하는 라이브 시스템이다.**
+named 볼륨에 DB 데이터가 있다 — `sng_server_auth_db_data`, `sng_server_game_db_data`,
+`sng_server_mysql_data`, `sng_server_mysql_master_data`, `sng_server_postgres-data`,
+`sng_server_postgres-master-data`.
 
 ---
 
-## 4. 실행 계층 — 스크립트가 먼저, MCP 는 껍데기
+## 3. 결정 — 기존 워크로드를 내리지 않는다
 
-두 층으로 나눈다. 순서가 중요하다.
+처음 구상은 "기존 컨테이너를 전부 내리고 CI 전용으로 쓴다"였다. **측정이 그 전제를 깼다.**
 
-```
-scripts/remote.sh      ← 로직 전부. 사람이 터미널에서 그대로 돌린다.
-        ↑
-   MCP 서버            ← 로직 0. 스크립트를 부르고 출력을 정형화할 뿐.
-```
+### 근거 1 — 내려서 얻는 게 2.5GB 뿐이다
 
-**MCP 서버에 로직을 두지 않는다.** 이유는 12번의 교훈 그대로다 —
-MCP 만 아는 실행 경로를 만들면, 그 경로는 도구를 통해야만 증명된다.
-사람이 손으로 못 돌리는 경로는 고장난 줄도 모르게 고장난다.
-스크립트가 계약이고, MCP 는 그 계약의 어댑터다.
-
-`scripts/remote.sh` 서브커맨드:
-
-| 커맨드 | 하는 일 |
+| | |
 |---|---|
-| `sync` | 로컬 → 원격 rsync. 바뀐 파일 수 반환 |
-| `gradle <args…>` | 원격에서 `./gradlew` 실행 |
-| `test [모듈] [필터]` | gradle 래퍼 + JUnit XML 결과 요약 |
-| `stack up\|down\|status [infra\|apps\|all]` | compose 기동/정지, 헬스체크 대기 |
-| `logs <서비스> [-n] [-g 패턴]` | 컨테이너 로그 |
-| `http <메서드> <경로> [본문]` | **원격 안에서** 서비스 호출 (터널 불필요) |
-| `tunnel open\|close` | SSH 로컬 포워딩 (8080, 8090, 3000, 9090) |
-| `status` | CPU/메모리/디스크, `docker ps`, Gradle 데몬 |
-| `job <id>` | 비동기 작업 상태·로그 tail |
+| 컨테이너 8개 **실사용 합계** | **2.5GB** |
+| 컨테이너 8개 `mem_limit` 합계 | 11.9GB (상한이지 예약이 아니다) |
+| 시스템 available | **19GB** |
 
-요구 도구: bash, ssh, rsync — **macOS 기본 탑재. 리포의 설치 요구는 여전히 0개다.**
+stove 를 막고 있던 것은 로컬의 3.83GB 천장이다. 여기는 **안 내려도 19GB 가 놀고 있다.**
+라이브 서비스를 2.5GB 때문에 내리는 것은 수지가 맞지 않는다.
 
----
+메모리 상한은 컨테이너마다 이미 걸려 있다(webshop 1G, trickcal 3G, gateway 512M,
+auth 768M, redis 384M, auth-db 2G, game-db 4G, traefik 256M). 남의 스택이 폭주해
+CI 를 굶길 위험은 이미 막혀 있다.
 
-## 5. MCP 서버 설계
+### 근거 2 — 포트 충돌이 하나뿐이다
 
-### 도구 표
+호스트 LISTEN: `80`, `443`, `22`, `111`(rpcbind), `53`(resolved), `127.0.0.1:8080`(traefik 대시보드).
 
-| 도구 | 입력 | 반환 | 출력 상한 |
-|---|---|---|---|
-| `remote_status` | — | 인스턴스 자원, 컨테이너 목록 | 2KB |
-| `remote_sync` | `dry_run?` | 변경 파일 수, 목록 요약 | 2KB |
-| `remote_gradle` | `args`, `async?` | 종료코드 + tail, 또는 `job_id` | 4KB |
-| `remote_test` | `module?`, `filter?` | **구조화된 실패 목록** | 6KB |
-| `remote_job` | `job_id` | `running\|done`, tail | 4KB |
-| `remote_stack` | `action`, `target` | 서비스별 상태/헬스 | 2KB |
-| `remote_logs` | `service`, `lines?`, `grep?` | 로그 tail | 4KB |
-| `remote_http` | `method`, `path`, `body?` | 상태코드 + 본문 | 4KB |
-| `remote_tunnel` | `action` | 열린 포트 목록 | 1KB |
+sng 앱과 DB 는 호스트로 포트를 publish 하지 않는다 — 전부 traefik 뒤에 있다.
+**3306 · 6379 · 9092 · 9200 · 27017 · 9000 · 9001 · 9090 · 3000 · 8081~8089 전부 비어 있다.**
+stove 와 겹치는 것은 `8080` 하나다.
 
-### 설계를 강제하는 제약 두 개
+그리고 **CI 에서는 포트 publish 가 필요 없다.**
+Testcontainers 는 랜덤 포트를 쓰고, compose 통합 테스트는 컨테이너 네트워크 안에서 끝난다.
+`docker-compose.ci.yml` override 로 `ports:` 를 비우면 충돌은 0 이 된다.
 
-**(a) 빌드가 분 단위다 — 동기 툴콜로는 못 버틴다.**
-Testcontainers 가 붙은 전체 빌드는 수 분이 걸린다.
-`remote_gradle{async:true}` → `job_id` 즉시 반환, `remote_job` 으로 폴링한다.
-원격에서 `nohup … > /tmp/stove-jobs/<id>.log` 로 떼어 돌리므로
-ssh 세션이 끊겨도 빌드는 살아 있다.
+> 이건 편의가 아니라 보안이다. 이 호스트는 공개 IP 를 가진다.
+> MySQL·Elasticsearch·MinIO 를 `0.0.0.0` 에 publish 하는 구성을 여기 올려서는 안 된다.
+> 로컬 compose 의 고정 포트는 **로컬 개발 편의**였고, 그 가정은 여기서 성립하지 않는다.
 
-**(b) 출력 상한이 MCP 를 쓰는 진짜 이유다.**
-실패한 Gradle 빌드 로그는 수만 줄이다. 그대로 컨텍스트에 부으면 그 세션은 끝난다.
-`remote_test` 는 로그를 반환하지 않는다 —
-`{apps,common}/*/build/test-results/test/TEST-*.xml`(JUnit XML)을 파싱해서
-**실패 클래스 / 메서드 / 메시지 / 스택 상위 3줄**만 낸다.
-전문은 원격 파일로 남고, 반환값에는 경로만 실린다. 필요하면 그때 좁혀서 다시 묻는다.
+### 근거 3 — 되돌리기 어렵다
 
-### 배치
+`down` 자체는 되돌릴 수 있다. 그러나 정리 과정에서 `down -v` 나 `docker volume prune` 이
+한 번 섞이면 위 6개 볼륨의 DB 데이터는 복구할 수 없다. `~/db_backups` 의 최신 백업은
+**6월 21~22일** 것이다 — 6주 전이다.
 
-```
-tools/mcp-stove-remote/     MCP 서버 (얇다. 스크립트 호출 + 파싱)
-.mcp.json                   서버 등록 (리포 루트)
-.claude/skills/stove-remote/SKILL.md   언제 어느 도구를 쓰는지
-```
-
-**MCP 서버는 리포의 빌드 요구사항이 아니다.**
-`tools/` 는 Gradle `settings.gradle` 에 들어가지 않고, 없어도 `./gradlew build` 는 돈다.
-node(또는 python)를 요구하는 것은 이 개발 도구 하나뿐이고,
-그 요구는 빌드가 아니라 편의에 붙는다. 12번이 그은 선이 여기서도 유효하다.
-
-### MCP 와 Skill 의 경계
-
-- **MCP 서버 = 할 수 있는 일.** 도구 표면, 권한 범위, 출력 형태.
-- **Skill = 언제 그 일을 하는가.** 순서와 함정.
-  ("고치면 반드시 `remote_sync` 먼저", "ArchUnit·단위 테스트는 로컬이 빠르다 —
-  원격은 인프라가 필요한 것만", "`remote_http` 는 터널 없이 되고 `remote_tunnel` 은 브라우저용")
+**결정 — 공존한다.** 대신 공존의 조건을 명시적으로 건다(4장).
 
 ---
 
-## 6. MCP 가 정말 필요한가 — 대안 비교
+## 4. 공존의 조건
 
-| 대안 | 되는가 | 잃는 것 |
+### 조건 1 — swap 을 만든다
+
+지금 **swap 이 0** 이다. 이 상태에서 메모리 스파이크는 곧바로 커널 OOM killer 다.
+
+```sh
+sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo sysctl vm.swappiness=10   # 스파이크 흡수용, 상시 스왑 유도 아님
+```
+
+디스크가 185GB 남는다. 사실상 공짜다.
+
+### 조건 2 — CI 에 메모리 상한을 건다 *(핵심)*
+
+기존 컨테이너에는 상한이 있고 **CI 작업에는 없다.**
+Gradle 데몬과 Testcontainers 스택이 스파이크를 치면 OOM killer 가 발동하는데,
+**무엇이 죽을지는 `oom_score` 가 정한다 — 라이브 서비스가 뽑힐 수 있다.**
+
+상한은 CI 쪽에 건다. 사고가 CI 안에서 끝나야 한다.
+
+```ini
+# /etc/systemd/system/actions.runner.<...>.service.d/limit.conf
+[Service]
+MemoryMax=10G
+MemoryHigh=8G
+CPUQuota=300%
+```
+
+Testcontainers 가 띄우는 컨테이너는 러너 cgroup 밖에서 뜨므로
+`docker-compose.ci.yml` 과 Testcontainers 쪽에도 별도로 제한이 필요하다.
+Phase 3 에서 실측하며 정한다.
+
+### 조건 3 — 격리가 없다는 것을 기록한다
+
+self-hosted 러너는 docker 그룹 권한을 요구하고, **docker 그룹은 사실상 root 다.**
+CI 가 침해되면 같은 호스트의 라이브 DB 까지 간다.
+
+- 리포가 **PRIVATE** 이므로(확인함) fork PR 이 러너에서 임의 코드를 실행하는 경로는 없다.
+  **공개 리포였다면 이 구성은 금지다** — GitHub 이 명시적으로 경고하는 시나리오다.
+- 실용적으로 수용한다. 본인 리포, 본인 코드다.
+- **버린 선택지** — CI 전용 인스턴스 분리. 격리는 얻지만 Always Free 한도를 넘고,
+  용량 확보 싸움을 다시 해야 한다. 얻는 격리보다 비용이 크다.
+- 완화 — 러너를 `ubuntu` 가 아닌 전용 사용자로 돌리고, 워크스페이스를 홈 밖에 둔다.
+
+### 조건 4 — 남는 것을 치운다
+
+self-hosted 러너는 GitHub-hosted 와 달리 **매번 깨끗한 상태로 시작하지 않는다.**
+
+- 워크스페이스에 `build/` 가 누적된다
+- Testcontainers 가 남긴 컨테이너·이미지·볼륨이 쌓인다
+- 185GB 는 커 보이지만 이미지 레이어는 빠르게 는다
+
+주기적 `docker system prune` 과 워크스페이스 정리를 러너 설치와 **같은 단계에** 넣는다.
+나중에 붙이면 디스크가 찬 뒤에 붙이게 된다.
+
+---
+
+## 5. CI — self-hosted runner
+
+### 왜 러너인가
+
+목적이 "빌드가 도는 원격 머신"이 아니라 **CI 환경**이다. 그러면 답은 하나다.
+`ci.yml` 이 이미 있고, 바뀌는 것은 `runs-on` 한 줄이다.
+
+```yaml
+runs-on: [self-hosted, linux, ARM64]
+```
+
+이 한 줄이 `ubuntu-latest`(2코어 / 7GB, Testcontainers 병렬 불가)를
+4코어 / 23GB 로 바꾼다. Phase 2 의 전체 스택 통합 테스트가 여기서 가능해진다.
+
+### 손볼 곳
+
+| 항목 | 지금 | self-hosted 에서 |
 |---|---|---|
-| A. Bash 로 그냥 `ssh` | 된다 | 출력 상한 없음(컨텍스트 폭발), 권한이 Bash 전체로 열림, 비동기 핸들 없음 |
-| B. 원격에서 Claude Code 직접 실행 | 된다 | **동기화 문제 자체가 사라진다.** 대신 로컬 IDE 와 분리 |
-| C. GitHub Actions 를 빌드 팜으로 | 부분적 | 이미 `ci.yml` 이 있다. 피드백이 분 단위 + 커밋 강제. **성능 측정은 불가** — 공용 러너에서 잰 수치는 로컬 스와핑과 같은 종류의 무효다 |
-| **D. MCP 서버** | | 만들고 유지해야 한다 |
+| `actions/setup-java@v4` | 매번 JDK 21 설치 | 호스트에 미리 설치하고 뺀다 (arm64 Temurin) |
+| `gradle/actions/setup-gradle@v4` | GitHub 캐시 왕복 | `~/.gradle` 이 그냥 남는다. 캐시 업로드가 낭비 |
+| `org.gradle.workers.max` | 2 (로컬 값) | **4** — 러너의 `~/.gradle/gradle.properties` 에. 리포는 안 고친다 |
+| 정리 | 러너가 매번 새것 | 조건 4 |
+| 동시 실행 | 무제한 | 러너 1대 = 직렬. `concurrency` 가 이미 있다 |
 
-**결정 — D. 다만 B 와 C 를 폐기하지 않는다.**
-
-D 를 고르는 근거는 단 하나, **출력 상한**이다.
-A 도 명령은 똑같이 돈다. 차이는 실패한 빌드 로그 4만 줄이 컨텍스트에 들어오느냐다.
-권한이 `mcp__stove-remote__*` 로 좁혀지는 것과 비동기 핸들은 덤이다.
-
-B 는 폐기하지 않는다 — **큰 리팩터링은 B 가 낫다.**
-파일을 수십 개 고치는 작업에서는 동기화가 순수 비용이다. 그때는 ssh 로 들어가서 거기서 작업한다.
-C 는 유지한다. CI 는 "이 머신의 흔적이 없는 환경"에서의 교차검증이고(10번), 원격 인스턴스도 하나의 머신이다.
-
----
-
-## 7. 단계와 수용 기준
-
-각 단계는 **통과 조건이 있어야 다음으로 간다.** 조건 없는 단계는 넣지 않았다.
-
-### Phase 0 — 인스턴스 확보 *(사람이 해야 함)*
-OCI 콘솔에서 Ampere A1 4 OCPU / 24GB, Ubuntu 24.04, 부트 볼륨 100GB+.
-SSH 키 생성, 시큐리티 리스트는 22 만. `~/.ssh/config` 에 `stove-oci` 별칭.
-
-> **함정** — Always Free Ampere 는 "Out of host capacity" 가 흔하다.
-> 가용 도메인을 바꿔가며 재시도하는 것 말고 방법이 없다. 며칠 걸릴 수 있다.
-
-**통과 조건** — `ssh stove-oci uname -m` 이 `aarch64` 를 낸다.
-
-### Phase 1 — 원격 부트스트랩
-Docker + Compose 플러그인, Temurin 21, 리포 클론, 첫 전체 빌드.
-
-원격 전용 튜닝은 **원격의 `~/.gradle/gradle.properties`** 에 둔다(리포 아님):
-
-```properties
-org.gradle.workers.max=4
-org.gradle.jvmargs=-Xmx8g -Dfile.encoding=UTF-8
-```
+**러너는 1대로 시작한다.** 2대를 등록하면 병렬이 되지만 메모리 위험이 배가 된다.
+sng 리포의 워크플로와도 같은 호스트를 나눠 쓰게 되므로, 직렬이 안전한 출발점이다.
 
 리포의 `gradle.properties`(워커 2 / 힙 2g)는 **그대로 둔다.**
 그 값은 Docker 3.83GB 머신의 값이고, 그 머신은 여전히 존재한다. 머신별 값은 머신에(10번).
 
-**통과 조건** — `./gradlew build` 가 원격에서 통과. 소요 시간을 기록한다(로컬 대비 근거).
+---
 
-### Phase 2 — 전체 스택 기동 *(이 계획의 실제 목적)*
-인프라 9종 + 앱 10종을 동시에 올린다.
+## 6. CD — 이미 있는 패턴을 따라간다
 
-**통과 조건** — 컨테이너 19개가 healthy, `remote_http` 로 게이트웨이를 통해
-`GameRegistered → ReviewApproved → ProductChanged` 흐름이 한 번 관통한다.
-**0장의 메모리 추정표를 실측으로 교체한다.**
+같은 인스턴스에 `~/SNG_server/deploy-module.sh` 라는 **선례가 있다.**
+pull → `compose up --wait --force-recreate` → readiness 실패 시 직전 태그로 자동 롤백.
+바퀴를 다시 만들 이유가 없다.
 
-### Phase 2.5 — performance.md 재측정 *(이 계획이 갚는 빚)*
-`scripts/perf/` 를 전체 스택 위에서 다시 돌린다.
-뺀 컴포넌트 없이, 스와핑 없이. `pageouts` 와 여유 메모리를 측정 로그에 같이 남긴다.
+다만 sng 의 `deploy.yml` 은 GitHub-hosted 에서 빌드 → `scp-action` → `ssh-action` 이다.
+**self-hosted 로 옮기면 scp/ssh 단계가 통째로 사라진다** — 러너가 그 호스트다.
+빌드한 자리에서 바로 배포한다. 비밀(HOST/USERNAME/KEY)도 필요 없어진다.
+
+stove 쪽 형태:
+
+```
+push → self-hosted 러너에서 build + test
+     → bootJar → 이미지 빌드 → ghcr.io/tlswltjq/stove-<module>
+     → 같은 호스트에서 compose up --wait (traefik 라벨로 라우팅)
+```
+
+**CD 는 지금 결정하지 않는다.** 앱 10 + 인프라 9 를 상주시키면 메모리 계산이 완전히 달라진다.
+그 계산은 Phase 3 에서 실측이 나온 다음에 한다. 지금은 "경로가 있다"까지만 확인하고 둔다.
+
+---
+
+## 7. 그럼 MCP 는 — 뒤로 민다
+
+처음 계획은 MCP 서버를 앞에 뒀다. **순서가 틀렸다.**
+
+CI 가 self-hosted 로 서면 "push → 결과" 경로가 생긴다.
+MCP 와 `scripts/remote.sh` 가 채우려던 자리는 그것과 다르다 —
+**커밋하기 전의 반복 루프**다(고쳤다 → 5초 뒤 결과). CI 는 커밋을 요구하므로 그 루프에 못 쓴다.
+
+그런데 그 루프가 얼마나 답답한지는 **CI 를 써보기 전에는 모른다.**
+통합 테스트를 하루에 세 번 돌린다면 push 로 충분하다. 서른 번이면 MCP 가 필요하다.
+
+**결정 — CI 를 먼저 세우고, 답답해지면 그때 만든다.**
+만들게 되면 설계는 그대로 유효하다:
+
+- 로직은 `scripts/remote.sh` 에. MCP 서버는 로직 0 — 스크립트 호출 + 출력 정형화만.
+  사람이 손으로 못 돌리는 경로는 고장난 줄도 모르게 고장난다(12번).
+- MCP 를 쓰는 진짜 이유는 **출력 상한** 하나다. 그냥 `ssh` 로도 명령은 똑같이 돈다.
+  차이는 실패한 빌드 로그 4만 줄이 컨텍스트에 들어오느냐다.
+  `remote_test` 는 `{apps,common}/*/build/test-results/test/TEST-*.xml` 을 파싱해
+  실패 클래스·메서드·메시지·스택 3줄만 낸다.
+- 빌드가 분 단위이므로 `async → job_id → 폴링` 이 필수다.
+
+---
+
+## 8. 단계와 수용 기준
+
+각 단계는 **통과 조건이 있어야 다음으로 간다.**
+
+### Phase 0 — 인스턴스 확보 ✅ 완료
+이미 있다. 2장이 실측 기록이다.
+
+### Phase 1 — 안전장치 *(무엇을 올리기 전에)*
+1. **백업** — 최신이 6주 전이다. sng DB 볼륨을 한 번 뜬다.
+2. **swap 8GB** (조건 1)
+3. **JDK 21 (arm64 Temurin)** 설치 — 지금 호스트에 java 가 없다
+4. 러너 전용 사용자 + 워크스페이스 위치 결정 (조건 3)
+
+**통과 조건** — `free -h` 에 swap 8G, `java -version` 이 21, 백업 파일이 오늘 날짜.
+**기존 컨테이너 8개는 여전히 healthy.** 이 조건은 이후 모든 단계에 붙는다.
+
+### Phase 2 — 러너 등록
+`actions-runner-linux-arm64` 설치, systemd 서비스 + `MemoryMax` 드롭인(조건 2),
+`docker system prune` 타이머(조건 4).
+
+**통과 조건** — `gh api repos/tlswltjq/stove/actions/runners` 에 online 러너 1대.
+hello-world 워크플로가 통과.
+
+### Phase 3 — `ci.yml` 전환 *(이 계획의 1차 목적)*
+`runs-on` 교체, setup-java 제거, 러너 `~/.gradle/gradle.properties` 튜닝,
+`docker-compose.ci.yml`(ports 제거) 추가.
+
+**통과 조건** — `./gradlew build` 가 러너에서 그린. 소요 시간을 `ubuntu-latest` 와 비교 기록.
+빌드 중 `free -h` 최저 available 을 측정해 조건 2 의 상한을 확정한다.
+
+### Phase 4 — 전체 스택 통합 테스트
+인프라 9 + 앱 10 을 러너에서 동시에 올린다. 로컬에서 한 번도 못 한 것.
+
+**통과 조건** — 컨테이너 19개 healthy, 게이트웨이를 통해
+`GameRegistered → ReviewApproved → ProductChanged` 가 한 번 관통.
+**0장의 메모리 추정을 실측으로 교체한다.**
+
+### Phase 5 — performance.md 재측정 *(이 계획이 갚는 빚)*
+`scripts/perf/` 를 전체 스택 위에서 다시 돌린다. 뺀 것 없이, 스와핑 없이.
+`pageouts` 와 여유 메모리를 측정 로그에 같이 남긴다.
 
 **통과 조건** — 릴레이 활성/비활성 두 구성이 **서로 다른 숫자**를 낸다.
-같은 숫자가 나오면 여전히 포화 상태이고, 그때는 인스턴스가 아니라 부하 설계를 의심한다.
+같은 숫자면 여전히 포화이고, 그때는 인스턴스가 아니라 부하 설계를 의심한다.
 performance.md 의 "재측정이 남아 있다"를 지운다.
 
-### Phase 3 — `scripts/remote.sh`
-4장의 서브커맨드 구현. 터미널에서 손으로 검증.
+### Phase 6 — (선택) `remote.sh` + MCP
+7장의 조건이 성립하면. 성립하지 않으면 만들지 않는다.
 
-**통과 조건** — MCP 없이 모든 서브커맨드가 동작. 이 시점에서 이미 쓸 만하다.
+### Phase 7 — CD
+6장. Phase 4 의 실측이 나온 뒤에 설계한다.
 
-### Phase 4 — MCP 서버
-`tools/mcp-stove-remote/`, `.mcp.json` 등록. JUnit XML 파서 + 비동기 job.
-
-**통과 조건** — `/mcp` 에 도구가 뜨고, 실패하는 테스트 하나를 심었을 때
-`remote_test` 가 로그 전문이 아니라 **실패 요약만** 반환한다.
-
-### Phase 5 — Skill + 권한
-`.claude/skills/stove-remote/SKILL.md`, `.claude/settings.json` 에 `mcp__stove-remote__*` 허용.
-
-**통과 조건** — 새 세션이 안내 없이 "고침 → sync → test" 순서를 스스로 밟는다.
-
-### Phase 6 — 접기
-`docs/decisions.md` 에 결정 항목 추가(15번), README 진입 경로 표에 D 추가,
+### Phase 8 — 접기
+`docs/decisions.md` 에 결정 항목 추가, README 진입 경로 표에 D 추가,
 `.devcontainer` 의 낡은 Docker 28 고정 주석 정리. **이 문서는 지운다.**
 
 ---
 
-## 8. 위험
+## 9. 위험
 
 | 위험 | 정도 | 대응 |
 |---|---|---|
-| Ampere 무료 용량 부족 | **높음** | AD 바꿔가며 재시도. Phase 0 이 며칠 걸릴 수 있다 |
-| arm64 이미지 비호환 | 낮음 | 주 랩탑이 M1 이라 같은 조합이 이미 로컬에서 돈다 |
-| 부트 볼륨 부족 | 중간 | 처음부터 100GB+. 나중에 늘리는 것보다 싸다 |
-| 첫 빌드 네트워크 (의존성 + 이미지 수 GB) | 낮음 | 1회성. Gradle 캐시·이미지는 인스턴스에 남는다 |
-| 인증 없는 서비스 노출 | **높음** | 22 외 포트를 열지 않는다. 전부 SSH 터널 (2장) |
-| 인스턴스가 유일한 실행처가 됨 | 중간 | `ci.yml` 유지가 교차검증. A·B·C 경로도 유지 |
-| MCP 서버가 스크립트와 어긋남 | 중간 | 서버에 로직을 두지 않는 것이 대응 자체다 (4장) |
+| **OOM 이 라이브 서비스를 죽인다** | **높음** | swap + CI cgroup 상한 (조건 1·2). Phase 1 이 이것 때문에 있다 |
+| **CI 침해 → 라이브 DB** | 중간 | 격리 없음을 수용하되 기록(조건 3). PRIVATE 리포가 전제 |
+| 볼륨 오삭제 | **높음** | Phase 1 의 백업. `-v`·`prune` 은 이 계획에서 쓰지 않는다 |
+| 디스크 누적 | 중간 | 조건 4 를 러너 설치와 같은 단계에 |
+| **Ubuntu 20.04 EOL** | 중간 | 표준 지원 2025-04 종료. 공개 443 호스트다. **별건으로 판단 필요** |
+| 러너 직렬화로 대기 | 낮음 | 러너 1대로 시작. 느리면 그때 2대 |
+| arm64 비호환 | 낮음 | 주 랩탑이 M1 이라 같은 조합이 이미 돈다 |
+| 인스턴스가 유일한 실행처 | 중간 | 경로 A·B·C 유지. 로컬 단위 테스트는 계속 로컬에서 |
 
 ---
 
-## 9. 결정이 필요한 것
+## 10. 결정이 필요한 것
 
-1. **인스턴스** — 이미 있나, 새로 만드나. (Phase 0 을 건너뛸 수 있는지)
-2. **MCP 서버 언어** — TypeScript(node) / Python(uv). 로컬에 이미 있는 쪽이 낫다.
-3. **동기화** — rsync 로 확정해도 되나. (3장 권고)
-4. **착수 범위** — 문서까지 / Phase 3(스크립트)까지 / Phase 5(MCP+Skill) 전부.
-
-3번은 되돌리기 쉽다(스크립트 한 곳). 1·2·4 는 답이 있어야 다음이 갈린다.
+1. **기존 워크로드** — 3장의 "공존" 판단에 동의하는가.
+   내리는 쪽을 고수한다면 근거를 알아야 한다(자원이 아닌 다른 이유가 있는지).
+2. **Ubuntu 20.04** — EOL 상태로 계속 갈 것인가. 별건으로 다룰 것인가.
+3. **러너 실행 사용자** — `ubuntu` 재사용 / 전용 사용자 신설 (조건 3).
+4. **착수 범위** — Phase 1(안전장치)까지 / Phase 3(CI 그린)까지 / Phase 5(재측정)까지.
