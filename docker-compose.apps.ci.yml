@@ -1,0 +1,36 @@
+# CI 오버라이드 (앱) — docker-compose.ci.yml 과 같은 이유로 호스트에 포트를 열지 않는다.
+#
+#   docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml up -d
+#
+# 앱 10종은 `stove_default` 네트워크에 있으므로 서로를 이름으로 부른다.
+# 밖에서 두드릴 일이 있으면 같은 네트워크에 컨테이너를 하나 띄워서 두드린다:
+#
+#   docker run --rm --network stove_default curlimages/curl -s http://gateway:8080/...
+#
+# 호스트 포트를 쓰지 않는 편이 단순히 더 안전한 것만이 아니다 — 이 호스트에는
+# traefik(127.0.0.1:8080)이 돌던 자리가 있고, sng 스택을 되살리면 8080 이 다시 잡힌다.
+# 포트를 안 쓰면 그 충돌 자체가 생기지 않는다.
+
+name: stove-apps
+
+services:
+  gateway:
+    ports: !reset []
+  studio:
+    ports: !reset []
+  review:
+    ports: !reset []
+  catalog:
+    ports: !reset []
+  store:
+    ports: !reset []
+  order:
+    ports: !reset []
+  payment:
+    ports: !reset []
+  license:
+    ports: !reset []
+  download:
+    ports: !reset []
+  settlement:
+    ports: !reset []

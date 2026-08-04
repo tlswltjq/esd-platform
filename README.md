@@ -115,6 +115,39 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
 작업 머신이 바뀌어도 절차가 같도록, 머신마다 다른 값은 리포에 적지 않고 **매번 계산한다.**
 준비 부담이 적은 순서대로 세 가지 경로가 있고, 어느 쪽을 골라도 같은 빌드가 돈다.
 
+#### 어디서 돌릴지 고르는 기준 — **무엇이 컨테이너를 요구하는가**
+
+A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주라 같은 메모리 천장 아래 있다.
+전체 스택(인프라 9 + 앱 10)은 **6.1 GiB** 를 쓰므로 8GB 랩탑에서는 산술적으로 안 뜬다.
+그래서 네 번째 경로(D)가 있다 ([decisions.md](docs/decisions.md) 15번).
+
+| 무엇을 | 어디서 | 명령 |
+|---|---|---|
+| 단위 테스트 49개 · ArchUnit 12개 | **로컬** | `./gradlew test` |
+| 컨텍스트 로딩 9개 · 전체 스택 · 성능 | **원격** | `./scripts/remote.sh …` |
+| 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
+
+```bash
+./scripts/remote.sh test                      # 전체 테스트
+./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
+./scripts/remote.sh stack up                  # 전체 스택 19개
+./scripts/remote.sh smoke                     # 전 구간 관통 확인
+./scripts/remote.sh http GET catalog:8081/api/v1/products
+./scripts/remote.sh logs catalog -n 100 -g 승인
+./scripts/remote.sh status
+```
+
+**`remote.sh` 와 CI 는 역할이 다르다.** CI 는 push 해야 돌므로 "고쳤다 → 결과" 루프에
+커밋이 끼어든다. `remote.sh` 는 rsync 로 작업본을 밀어넣어 **커밋 없이** 원격에서 돌린다.
+
+첫 사용 전에 한 번만 (머신별 값이라 리포에 두지 않는다 — 10번):
+
+```bash
+git config stove.remote <ssh-별칭>     # ~/.ssh/config 의 Host 이름
+```
+
+요구 도구는 `bash`·`ssh`·`rsync` 뿐이다. 리포의 설치 요구는 여전히 0개다.
+
 #### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
 
 `.devcontainer/devcontainer.json` 이 JDK·Gradle·Docker 를 모두 정의한다.

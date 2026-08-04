@@ -326,6 +326,106 @@ public record SettlementProperties(Long selfSellerId, BigDecimal partnerFeeRate)
 
 ---
 
+## 15. 인프라가 필요한 검증은 원격 러너로 옮긴다
+
+**배경** — 주 랩탑은 RAM 8GB 이고 Docker 에 준 것은 **3.83GB** 다.
+`gradle.properties` 의 `workers.max=2` 는 성능 선택이 아니라 그 한계에 대한 항복이었고
+(주석이 "코어가 아니라 Docker 에 준 메모리가 한계선"이라고 적고 있다),
+**전체 스택을 한 번도 동시에 띄운 적이 없었다.**
+
+그 대가는 이미 치러져 있었다. `performance.md` 의 HTTP 경로 측정이 무효였다 —
+릴레이를 **완전히 끈** 구성이 개선 구성과 같은 숫자(44.9 RPS)를 냈다.
+`pageouts` 150만, 스와핑 중에 잰 값이었다. 코드가 아니라 환경을 측정하고 있었다.
+
+**결정** — 11번의 진입 경로 표에 D 를 더한다.
+
+| 경로 | 호스트 가정 | 용도 |
+|---|---|---|
+| A. devcontainer | 없음 | 아무것도 못 믿을 때 |
+| B. `scripts/dev.sh` | Docker Desktop / OrbStack | 빌린 머신 |
+| C. 로컬 직접 | JDK + Docker | 단위 테스트·ArchUnit |
+| **D. OCI self-hosted 러너** | **없음 (push 하면 돈다)** | **인프라가 필요한 전부** |
+
+A·B·C 는 "이 머신의 Docker 를 어떻게 빌리는가"의 변주였고 셋 다 같은 천장 아래 있었다.
+D 는 천장을 바꾼다. 경계는 **무엇이 컨테이너를 요구하는가**다 —
+단위 테스트는 로컬이 빠르고 CI 를 기다릴 이유가 없다.
+
+**측정** — 첫 self-hosted 빌드 (Ampere A1, 4코어 23GB, aarch64):
+
+| | |
+|---|---|
+| 동시 컨테이너 최대 | **15** |
+| 최저 available 메모리 | 16,127 MiB |
+| 러너 cgroup 피크 | 5,264 MiB |
+| swap 사용 | **0** |
+
+로컬 Docker 총량이 3,919 MiB 다. 15개가 동시에 뜨면서 스왑을 한 번도 건드리지 않았다.
+`workers.max` 를 4로 올린 것은 러너의 `~/.gradle/gradle.properties` 이고,
+**리포의 2/2g 는 그대로 두었다** — 그 값은 3.83GB 머신의 값이고 그 머신은 여전히 존재한다(10번).
+
+**대가 1 — 격리가 없다.** self-hosted 러너는 docker 그룹을 요구하고 docker 그룹은 사실상 root 다.
+리포가 PRIVATE 이라 fork PR 이 러너에서 도는 경로가 없다는 것이 전제다.
+**공개 리포였다면 이 구성은 금지다.** 전용 사용자(`runner`)와 홈 밖 워크스페이스로 완화했을 뿐,
+격리했다고 말할 수는 없다.
+
+**대가 2 — 잡 사이에 상태가 남는다. 그래서 CI 가 조용히 거짓말을 했다.**
+
+`ubuntu-latest` 는 매 잡이 새 머신이라 `~/.gradle` 이 남지 않는다.
+self-hosted 는 남는다. 그것이 `org.gradle.caching=true` 와 만나 이렇게 됐다.
+
+| 실행 | 소요 | 태스크 |
+|---|---|---|
+| 1회차 | 5분 57초 | **84 executed** |
+| 2회차 | 23초 | 41 executed, **43 from cache** |
+| 3회차 | 23초 | 41 executed, **43 from cache** |
+
+**2·3회차의 23초 동안 테스트는 한 줄도 돌지 않았다.** 그린이었다.
+14번이 기록한 것과 같은 함정인데, 이번에는 우연이 아니라 **구조가 되어 있었다** —
+입력이 같은 한 앞으로 영원히 그럴 것이었다.
+
+캐시 자체는 정직하다. 입력이 같으면 결과도 같다는 전제가 옳기 때문이다.
+**앱 테스트에서 그 전제가 성립하지 않는 것이 문제다.** Testcontainers 컨텍스트 로딩
+테스트의 결과는 소스 입력이 아니라 환경(Docker 버전·이미지·메모리·네트워크)에 달려 있고,
+그 환경을 검증하는 것이 이 테스트의 존재 이유다. compose 파일이나 러너 설정만 바꾼
+변경에서 CI 가 그린인데 Docker 를 한 번도 안 건드리는 상태가 만들어진다.
+
+**해법 — CI 에서만 테스트 결과를 캐시에서 꺼내지 않는다**(`build.gradle`).
+
+```groovy
+if (providers.environmentVariable('CI').isPresent()) {
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+```
+
+컴파일 캐싱은 유지한다 — 컴파일 결과는 입력만으로 결정되므로 전제가 성립한다.
+로컬도 건드리지 않는다. 반복 루프에서는 캐시가 맞고,
+**실제로 도는지 증명하는 자리는 CI 다**(12번). 느려지는 것은 테스트뿐이다.
+
+**버린 선택지** — `--no-build-cache`. 간단하지만 컴파일 캐시까지 버린다.
+전제가 성립하는 곳의 캐시까지 끌 이유가 없다.
+
+**대가 3 — 상한을 스스로 걸어야 한다.** GitHub-hosted 는 잡이 죽어도 남의 일이지만
+self-hosted 는 같은 커널을 공유한다. swap 이 0 인 채로 스파이크가 나면 OOM killer 가
+무엇을 죽일지 `oom_score` 가 정한다. swap 8GB 와 러너 cgroup `MemoryMax` 를 함께 건다.
+상한값은 추정이 아니라 위 실측(5.3GB)의 2배로 정했다.
+
+**버린 선택지**
+
+| 안 | 버린 이유 |
+|---|---|
+| `ubuntu-latest` 유지 | 2코어 7GB. Testcontainers 스택을 병렬로 못 띄운다. 애초의 문제가 그대로다 |
+| MCP 서버로 원격을 도구화 | 먼저 만들면 순서가 뒤집힌다 — CI 를 써보기 전에는 커밋 전 반복 루프가 얼마나 답답한지 모른다 |
+| CI 전용 인스턴스 분리 | 격리는 얻지만 Always Free 한도를 넘고 용량 확보 싸움을 다시 해야 한다 |
+| 포트를 publish 한 채로 | 이 호스트는 공개 IP 다. ES(`xpack.security.enabled: false`)·Grafana(익명 허용)·MinIO·MySQL 이 인증이 없거나 기본 자격증명이다 |
+
+**포트를 열지 않는다** — `docker-compose.ci.yml` / `docker-compose.apps.ci.yml` 가
+`ports` 를 지운다. Compose 는 오버라이드에서 `ports` 를 **덮어쓰지 않고 이어붙이므로**
+`ports: []` 로는 지워지지 않는다 — `!reset` 태그가 필요하다(Compose 2.24+).
+스모크 테스트는 호스트가 아니라 `stove_default` 네트워크 안에서 돈다.
+
+---
+
 ## 검증하며 드러난 것
 
 정적 검증이 잡는 것과 못 잡는 것이 뚜렷하게 갈렸다. 기록해 둔다.
@@ -338,6 +438,12 @@ public record SettlementProperties(Long selfSellerId, BigDecimal partnerFeeRate)
 | javadoc 이 코드와 어긋난 것 (13번) | **규칙으로 옮겨 적기** | 문서는 자기가 사실인지 확인하지 않는다 |
 | `catalogRestClient` 빈 이름 충돌 | **애플리케이션 기동** | 컴파일·규칙 23개 모두 통과했다 |
 | Docker 29 가 Testcontainers 를 거부 | **devcontainer 빌드** | 업스트림이 바뀐 것이라 코드에 흔적이 없다 |
+| self-hosted CI 가 테스트를 건너뛰고 그린 | **소요 시간이 5분 57초 → 23초** | 빌드는 성공했다. 로그를 열지 않으면 보이지 않는다 |
+
+> 마지막 줄은 **초록불이 신호가 아닐 수 있다**는 사례다.
+> 실패는 스스로 알리지만 "돌지 않음"은 알리지 않는다 —
+> 통과 개수도, 결과 파일도, 종료 코드도 전부 정상으로 보인다.
+> 이번에 그것을 드러낸 유일한 값이 **소요 시간**이었다.
 | 컨테이너 재사용이 Flyway 검증을 깨뜨림 | 통합 테스트 | 모듈 간 상태 누수라 한 모듈만 보면 안 보인다 |
 
 `catalogRestClient` 건이 컨텍스트 로딩 테스트를, Docker 29 건이 devcontainer 검증을 추가한 계기다.
