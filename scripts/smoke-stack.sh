@@ -36,6 +36,19 @@ unhealthy=$(docker ps --filter health=unhealthy --format '{{.Names}}' | tr '\n' 
 echo "  실행중 $total 개"
 [ -n "$unhealthy" ] && bad "healthcheck" "unhealthy: $unhealthy" || ok "unhealthy 없음"
 
+# 이벤트 전파는 Outbox 폴링 릴레이를 거친다 — 고정 sleep 이 아니라 조건을 기다린다.
+# await <이름> <제한초> <조건 명령…>
+await() {
+    local name=$1 limit=$2; shift 2
+    local waited=0
+    while [ "$waited" -lt "$limit" ]; do
+        if "$@" >/dev/null 2>&1; then ok "$name (${waited}s)"; return 0; fi
+        sleep 2; waited=$((waited+2))
+    done
+    bad "$name" "${limit}s 안에 조건 불성립"; return 1
+}
+has() { "${RUNNER[@]}" "$1" | grep -q "$2"; }
+
 echo
 echo "=== 1. 트랙 A — 등록 → 심의 → 노출 ==="
 CODE="GAME-SMOKE-$(date +%s)"
@@ -49,21 +62,43 @@ echo "    gameId=$GAME_ID productCode=$CODE"
 req "studio: 심의 신청 → GameRegistered" 200 \
     -X POST "http://studio:8085/api/v1/studio/games/$GAME_ID/submit" -H 'X-Seller-Id: 1001'
 
-echo "    이벤트 전파 대기 (studio → review → catalog)…"
-sleep 8
+# 자체등급분류는 review 가 자동 승인한다 → ReviewApproved
+await "review: 자동 승인 (GameRegistered 수신)" 60 \
+    bash -c "\"\$@\" http://review:8086/api/v1/reviews | grep -q '\"productCode\":\"$CODE\".*\"status\":\"APPROVED\"'" _ "${RUNNER[@]}"
 
-req "review: 심의 목록 조회" 200 http://review:8086/api/v1/reviews
-req "catalog: 상품 목록 조회"  200 http://catalog:8081/api/v1/products
-if printf '%s' "$BODY" | grep -q "$CODE"; then
-    ok "catalog 에 $CODE 반영 (ReviewApproved → ProductChanged 관통)"
+# review → studio 역전파
+await "studio: 상태 역전파 APPROVED" 60 \
+    bash -c "\"\$@\" -H 'X-Seller-Id: 1001' http://studio:8085/api/v1/studio/games | grep -q '\"productCode\":\"$CODE\".*\"status\":\"APPROVED\"'" _ "${RUNNER[@]}"
+
+# catalog 는 ReviewApproved 로 상품 마스터를 만든다. 다만 목록(GET /products)은
+# getOnSaleProducts() 라 판매 시작 전에는 뜨지 않는다 — 상세로 찾는다.
+PRODUCT_ID=""
+for _ in $(seq 1 30); do
+    for id in $(seq 1 12); do
+        if "${RUNNER[@]}" "http://catalog:8081/api/v1/products/$id" 2>/dev/null | grep -q "\"productCode\":\"$CODE\""; then
+            PRODUCT_ID=$id; break 2
+        fi
+    done
+    sleep 2
+done
+if [ -n "$PRODUCT_ID" ]; then
+    ok "catalog: 상품 마스터 생성 (ReviewApproved 수신, productId=$PRODUCT_ID)"
 else
-    bad "catalog 반영" "$CODE 가 상품 목록에 없다"
+    bad "catalog: 상품 마스터 생성" "$CODE 를 상세 조회로도 못 찾았다"
+fi
+
+if [ -n "$PRODUCT_ID" ]; then
+    req "catalog: 판매 시작 → ProductChanged" 200 \
+        -X POST "http://catalog:8081/api/v1/products/$PRODUCT_ID/sale-open"
+    await "catalog: ON_SALE 목록 노출" 30 \
+        bash -c "\"\$@\" http://catalog:8081/api/v1/products | grep -q '$CODE'" _ "${RUNNER[@]}"
+    await "store: 검색 색인 반영 (ProductChanged 관통)" 60 \
+        bash -c "\"\$@\" -G http://store:8087/api/v1/storefront/products --data-urlencode 'q=스모크' | grep -q '$CODE'" _ "${RUNNER[@]}"
 fi
 
 echo
 echo "=== 2. 인프라 도달성 ==="
 req "elasticsearch" 200 http://elasticsearch:9200/_cluster/health
-req "store 검색"     200 -G http://store:8087/api/v1/storefront/products --data-urlencode 'q=스모크'
 
 echo
 echo "=== 3. 게이트웨이 내부 API 차단 ==="
