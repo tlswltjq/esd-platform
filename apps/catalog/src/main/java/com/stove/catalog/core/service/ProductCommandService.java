@@ -2,6 +2,7 @@ package com.stove.catalog.core.service;
 
 import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
+import com.stove.catalog.core.domain.ReindexPage;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ProductChangedEvent;
@@ -12,6 +13,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,17 +75,37 @@ public class ProductCommandService {
     }
 
     /**
-     * 전체 재색인. 신규 색인 구축이나 store 색인 유실 시 운영툴에서 호출한다.
-     * 대량 데이터에서는 페이지 단위로 나눠 발행해야 한다(TODO: 페이징 + 스로틀링).
+     * 재색인 한 페이지를 <b>독립 트랜잭션</b>으로 발행한다.
      *
-     * @return 발행한 이벤트 수
+     * <p>예전에는 {@code findAll()} 로 상품 테이블 전체를 한 트랜잭션에서 발행했다.
+     * 세 가지가 겹쳐 있었다 — 전량이 메모리에 올라오고, 단일 커밋이라 막판 실패가 전량 롤백이며,
+     * 스로틀이 없어 Outbox 가 한꺼번에 채워졌다. 릴레이는 전 서비스 공유 자원이라
+     * 그동안 정상 상태 변경 이벤트가 재색인 뒤에 줄을 선다.
+     *
+     * <p>페이지마다 커밋되므로 중간에 실패하면 <b>부분 재색인</b>이 남는다. store 색인은
+     * 문서 ID 고정 upsert 라 자연 멱등이므로 재실행으로 수렴한다 — 전량 롤백보다 낫다.
+     *
+     * <p>{@code OutboxRecorder} 가 {@code MANDATORY} 라 페이지 단위 커밋을 만들려면
+     * 트랜잭션 경계가 여기여야 하고, 반복은 트랜잭션 밖(조율 계층)에 있어야 한다.
+     * 자기 호출은 프록시를 타지 않으므로 반복을 이 클래스 안에 둘 수 없다.
+     *
+     * @param afterId  이 id 보다 큰 상품부터 (커서)
+     * @param pageSize 한 번에 발행할 수
      */
-    public int republishAll() {
-        List<Product> products = productRepository.findAll();
+    public ReindexPage republishFrom(long afterId, int pageSize) {
+        List<Product> products = productRepository.findByIdGreaterThanOrderByIdAsc(
+                afterId, PageRequest.ofSize(pageSize));
+        if (products.isEmpty()) {
+            return ReindexPage.empty(afterId);
+        }
+
         products.forEach(this::publishChanged);
-        log.info("재색인 이벤트 발행 {}건", products.size());
-        return products.size();
+
+        long lastId = products.get(products.size() - 1).getId();
+        log.info("재색인 페이지 발행 {}건 (id {} ~ {})", products.size(), afterId, lastId);
+        return new ReindexPage(products.size(), lastId, products.size() == pageSize);
     }
+
 
     private void publishChanged(Product product) {
         outboxRecorder.record(AGGREGATE, product.getProductCode(),

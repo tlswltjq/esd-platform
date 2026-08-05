@@ -52,6 +52,10 @@ spring:
       ack-mode: record           # 처리 성공 레코드 단위 커밋
 
 stove:
+  catalog:
+    reindex:
+      page-size: 500          # 한 트랜잭션에서 발행할 상품 수
+      page-interval: 200ms    # 페이지 사이 대기 — 릴레이를 재색인이 독점하지 않게 한다
   outbox:
     relay-enabled: true
     batch-size: 200

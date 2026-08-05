@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.api.controller.dto.QuoteRequest;
+import com.stove.catalog.api.application.ProductReindexFacade;
 import com.stove.catalog.core.service.ProductCommandService;
 import com.stove.catalog.core.domain.Quote;
 import com.stove.catalog.core.service.ProductQueryService;
@@ -46,9 +47,11 @@ class ProductControllerTest {
     private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
     private final ProductQueryService productQueryService = mock(ProductQueryService.class);
     private final ProductCommandService productCommandService = mock(ProductCommandService.class);
+    private final ProductReindexFacade productReindexFacade = mock(ProductReindexFacade.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new ProductController(productQueryService, productCommandService))
+            .standaloneSetup(new ProductController(
+                    productQueryService, productCommandService, productReindexFacade))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

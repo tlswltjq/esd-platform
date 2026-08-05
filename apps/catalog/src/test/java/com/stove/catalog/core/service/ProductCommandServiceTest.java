@@ -7,6 +7,7 @@ import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
+import com.stove.catalog.core.domain.ReindexPage;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.EventType;
@@ -211,16 +212,63 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    @DisplayName("재색인은 상품 수만큼 이벤트를 낸다")
-    void republishAllEmitsOnePerProduct() {
+    @DisplayName("판매 중지도 새 상태를 실은 이벤트를 낸다 — store 가 진열에서 내려야 한다")
+    void suspendPublishesNewStatus() {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
+        Long productId = find(productCode).getId();
+        productCommandService.openSale(productId);
+
+        productCommandService.suspend(productId);
+
+        // 이벤트를 내지 않으면 store 색인은 ON_SALE 인 채로 남는다 —
+        // 판매를 중지했는데 검색에서는 계속 팔리는 상태가 된다.
+        List<OutboxEvent> published = outboxFor(productCode);
+        assertThat(published).hasSize(3);
+        assertThat(published.get(2).getPayload()).contains("SUSPENDED");
+    }
+
+    @Test
+    @DisplayName("재색인 한 페이지는 페이지 크기만큼만 발행한다")
+    void republishFromEmitsOnePerProductInPage() {
+        receive(approval(uniqueProductCode(), "ALL"));
+        receive(approval(uniqueProductCode(), "ALL"));
+        receive(approval(uniqueProductCode(), "ALL"));
         long before = outboxEventRepository.count();
-        long productCount = productRepository.count();
 
-        int published = productCommandService.republishAll();
+        ReindexPage page = productCommandService.republishFrom(0L, 2);
 
-        assertThat(published).isEqualTo((int) productCount);
-        assertThat(outboxEventRepository.count() - before).isEqualTo(productCount);
+        // 전량을 한 번에 발행하면 Outbox 가 한꺼번에 채워져 릴레이가 재색인에 독점된다.
+        assertThat(page.published()).isEqualTo(2);
+        assertThat(page.hasNext()).isTrue();
+        assertThat(outboxEventRepository.count() - before).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("커서는 마지막으로 발행한 id 다 — 다음 페이지가 이어진다")
+    void republishFromAdvancesTheCursor() {
+        receive(approval(uniqueProductCode(), "ALL"));
+        receive(approval(uniqueProductCode(), "ALL"));
+
+        ReindexPage first = productCommandService.republishFrom(0L, 1);
+        ReindexPage second =
+                productCommandService.republishFrom(first.lastId(), 1);
+
+        // offset 이 아니라 id 커서를 쓰는 이유는 재색인 도중 상품이 추가·삭제돼도
+        // 행을 건너뛰거나 두 번 읽지 않기 위해서다.
+        assertThat(second.lastId()).isGreaterThan(first.lastId());
+    }
+
+    @Test
+    @DisplayName("더 발행할 것이 없으면 빈 페이지로 끝난다")
+    void republishFromStopsWhenExhausted() {
+        long lastId = productRepository.findAll().stream()
+                .mapToLong(Product::getId).max().orElse(0L);
+
+        ReindexPage page = productCommandService.republishFrom(lastId, 100);
+
+        assertThat(page.published()).isZero();
+        assertThat(page.hasNext()).isFalse();
+        assertThat(page.lastId()).isEqualTo(lastId);
     }
 }

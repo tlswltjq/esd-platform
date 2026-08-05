@@ -1,5 +1,6 @@
 package com.stove.catalog.api.controller;
 
+import com.stove.catalog.api.application.ProductReindexFacade;
 import com.stove.catalog.api.controller.dto.ProductResponse;
 import com.stove.catalog.api.controller.dto.QuoteRequest;
 import com.stove.catalog.api.controller.dto.QuoteResponse;
@@ -25,6 +26,7 @@ public class ProductController {
 
     private final ProductQueryService productQueryService;
     private final ProductCommandService productCommandService;
+    private final ProductReindexFacade productReindexFacade;
 
     @GetMapping
     public ApiResponse<List<ProductResponse>> list(@PageableDefault(size = 20) Pageable pageable) {
@@ -51,10 +53,14 @@ public class ProductController {
         return ApiResponse.ok();
     }
 
-    /** 운영툴: store 검색 색인 재구축 트리거 */
+    /**
+     * 운영툴: store 검색 색인 재구축 트리거.
+     *
+     * <p>이미 재색인이 돌고 있으면 409 다 — 같은 일을 두 번 돌리면 릴레이 적체가 두 배가 된다.
+     */
     @PostMapping("/reindex")
     public ApiResponse<Integer> reindex() {
-        return ApiResponse.ok(productCommandService.republishAll());
+        return ApiResponse.ok(productReindexFacade.reindexAll());
     }
 
     /** 내부 전용: 주문 금액 서버 재계산 (게이트웨이에서 외부 노출 차단) */
