@@ -1,7 +1,5 @@
 package com.stove.review.api.controller;
 
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -83,9 +81,11 @@ class ReviewControllerTest {
     @Test
     @DisplayName("등급코드를 주면 그대로 쓴다")
     void approvalUsesGivenRating() throws Exception {
-        mockMvc.perform(post("/api/v1/reviews/1/approve").param("ratingCode", "ADULT"))
+        mockMvc.perform(post("/api/v1/reviews/2/approve").param("ratingCode", "ADULT"))
                 .andExpect(status().isOk());
 
-        verify(reviewService).approve(anyLong(), anyString());
+        // anyLong()/anyString() 으로 받으면 "전달됐는가"만 보고 "무엇이 전달됐는가"는 보지 않는다.
+        // 등급은 연령 제한의 근거이므로, ALL 과 ADULT 가 뒤바뀌어도 통과하는 단언은 위험하다.
+        verify(reviewService).approve(2L, "ADULT");
     }
 }
