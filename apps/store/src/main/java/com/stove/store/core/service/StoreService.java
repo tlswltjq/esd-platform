@@ -1,5 +1,7 @@
 package com.stove.store.core.service;
 
+import com.stove.common.core.error.BusinessException;
+import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
@@ -34,6 +36,16 @@ public class StoreService {
     }
 
     public List<StoreProductView> search(String keyword, int page, int size) {
+        // PageRequest.of 는 범위를 벗어난 값에 IllegalArgumentException 을 던진다. 그대로 두면
+        // GlobalExceptionHandler 의 마지막 분기로 흘러 500 이 나간다 — 클라이언트 잘못을
+        // 서버 장애로 표시하는 D-015 와 같은 부류다(D-020).
+        //
+        // 컨트롤러가 아니라 여기서 막는 이유는 D-019 와 같다. 어댑터에만 두면 그 경로 하나만
+        // 지켜지고, 어댑터는 늘어난다.
+        if (page < 0 || size < 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "page 는 0 이상, size 는 1 이상이어야 합니다: page=%d, size=%d".formatted(page, size));
+        }
         Pageable pageable = PageRequest.of(page, size);
         List<ProductDocument> documents = (keyword == null || keyword.isBlank())
                 ? searchRepository.findByStatusOrderByPriceAsc(ON_SALE, pageable)

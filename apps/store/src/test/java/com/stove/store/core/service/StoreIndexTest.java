@@ -1,11 +1,15 @@
 package com.stove.store.core.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.stove.common.core.error.BusinessException;
+import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
@@ -117,6 +121,42 @@ class StoreIndexTest {
         storeService.indexProduct(product(ON_SALE, 30_000L));
 
         assertThat(storeService.search(null, 0, 10)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("[D-020] 범위를 벗어난 페이지 파라미터는 INVALID_REQUEST 로 거절된다")
+    void outOfRangePagingIsRejected() {
+        assertThatThrownBy(() -> storeService.search(null, -1, 10))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        assertThatThrownBy(() -> storeService.search(null, 0, 0))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("[D-020] 경계값은 허용된다 — page=0, size=1")
+    void boundaryPagingIsAccepted() {
+        storeService.indexProduct(product(ON_SALE, 30_000L));
+
+        // 거절 쪽만 단언하면 가드가 한 칸 넘치게 조여져도(page <= 0) 통과한다.
+        // 허용되어야 하는 값을 함께 고정해야 경계가 고정된다.
+        assertThatCode(() -> storeService.search(null, 0, 1)).doesNotThrowAnyException();
+        assertThat(storeService.search(null, 0, 1)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("공백뿐인 키워드는 키워드 없음과 같다")
+    void blankKeywordBehavesLikeNoKeyword() {
+        storeService.indexProduct(product(ON_SALE, 30_000L));
+
+        // 공백 검색이 이름 매칭으로 넘어가면 아무것도 안 잡힌다.
+        assertThat(storeService.search("   ", 0, 10))
+                .extracting(StoreProductView::productCode)
+                .containsExactly("GAME-001");
     }
 
     @Test

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stove.common.web.GlobalExceptionHandler;
+import com.stove.store.core.domain.ProductSearchRepository;
 import com.stove.store.core.service.StoreService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,5 +67,29 @@ class StoreControllerTest {
                 .andExpect(status().isOk());
 
         verify(storeService).featured();
+    }
+
+    /**
+     * 위 테스트들은 서비스를 mock 으로 두므로 {@code PageRequest.of} 가 실행되지 않는다.
+     * 범위를 벗어난 페이지 파라미터가 어떻게 응답되는지는 <b>실제 서비스를 태워야</b> 드러난다.
+     */
+    private final MockMvc realServiceMockMvc = MockMvcBuilders
+            .standaloneSetup(new StoreController(
+                    new StoreService(mock(ProductSearchRepository.class))))
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+
+    @Test
+    @DisplayName("[D-015 계열] 음수 페이지는 400 이어야 한다")
+    void negativePageIsRejected() throws Exception {
+        realServiceMockMvc.perform(get("/api/v1/storefront/products").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("[D-015 계열] 크기 0 은 400 이어야 한다")
+    void zeroSizeIsRejected() throws Exception {
+        realServiceMockMvc.perform(get("/api/v1/storefront/products").param("size", "0"))
+                .andExpect(status().isBadRequest());
     }
 }
