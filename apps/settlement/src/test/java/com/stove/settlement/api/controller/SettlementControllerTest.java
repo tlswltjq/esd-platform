@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stove.common.web.GlobalExceptionHandler;
+import com.stove.settlement.api.application.SettlementCloseFacade;
 import com.stove.settlement.core.service.SettlementService;
 import java.time.YearMonth;
 import org.junit.jupiter.api.DisplayName;
@@ -28,9 +29,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class SettlementControllerTest {
 
     private final SettlementService settlementService = mock(SettlementService.class);
+    private final SettlementCloseFacade settlementCloseFacade = mock(SettlementCloseFacade.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new SettlementController(settlementService))
+            .standaloneSetup(new SettlementController(settlementService, settlementCloseFacade))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -40,7 +42,8 @@ class SettlementControllerTest {
         mockMvc.perform(post("/api/v1/settlements/close"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(settlementService);
+        // 마감은 파사드가 받는다. 서비스만 확인하면 이 단언은 대상이 없어 항상 통과한다.
+        verifyNoInteractions(settlementCloseFacade);
     }
 
     @Test
@@ -49,7 +52,7 @@ class SettlementControllerTest {
         mockMvc.perform(post("/api/v1/settlements/close").param("month", "2026-13-99"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(settlementService);
+        verifyNoInteractions(settlementCloseFacade);
     }
 
     @Test
@@ -58,7 +61,7 @@ class SettlementControllerTest {
         mockMvc.perform(post("/api/v1/settlements/close").param("month", "2026-08"))
                 .andExpect(status().isOk());
 
-        verify(settlementService).closeMonth(YearMonth.of(2026, 8));
+        verify(settlementCloseFacade).closeMonth(YearMonth.of(2026, 8));
     }
 
     @Test

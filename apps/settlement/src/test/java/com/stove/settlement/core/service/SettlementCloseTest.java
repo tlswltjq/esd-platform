@@ -3,6 +3,7 @@ package com.stove.settlement.core.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.test.InfraContainers;
+import com.stove.settlement.api.application.SettlementCloseFacade;
 import com.stove.settlement.core.domain.SaleType;
 import com.stove.settlement.core.domain.SellerSettlement;
 import com.stove.settlement.core.domain.SellerSettlementRepository;
@@ -39,6 +40,8 @@ class SettlementCloseTest {
     /** 테스트마다 겹치지 않는 마감 월을 준다. 다른 테스트의 원장과 섞이지 않게 하기 위함이다. */
     private static final AtomicInteger MONTH_SEQ = new AtomicInteger(0);
 
+    @Autowired
+    SettlementCloseFacade settlementCloseFacade;
     @Autowired
     SettlementService settlementService;
     @Autowired
@@ -80,7 +83,7 @@ class SettlementCloseTest {
         sale(seller, 100_000L, month);
         sale(seller, 50_000L, month);
 
-        List<SellerSettlement> closed = settlementService.closeMonth(month);
+        List<SellerSettlement> closed = settlementCloseFacade.closeMonth(month);
 
         assertThat(closed).hasSize(1);
         SellerSettlement settlement = closed.get(0);
@@ -99,10 +102,10 @@ class SettlementCloseTest {
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
 
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         assertThat(recordRepository.findBySettlementMonthAndClosedIsFalse(month.toString())).isEmpty();
-        assertThat(settlementService.closeMonth(month)).isEmpty();
+        assertThat(settlementCloseFacade.closeMonth(month)).isEmpty();
     }
 
     @Test
@@ -112,8 +115,8 @@ class SettlementCloseTest {
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
 
-        settlementService.closeMonth(month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         assertThat(sellerSettlementRepository.findBySellerIdAndSettlementMonth(seller, month.toString()))
                 .isPresent();
@@ -129,7 +132,7 @@ class SettlementCloseTest {
         sale(seller, 50_000L, month);
         refund(seller, 100_000L, month);
 
-        List<SellerSettlement> closed = settlementService.closeMonth(month);
+        List<SellerSettlement> closed = settlementCloseFacade.closeMonth(month);
 
         assertThat(closed).hasSize(1);
         assertThat(closed.get(0).getNetAmount()).isNegative();
@@ -145,7 +148,7 @@ class SettlementCloseTest {
         sale(seller, 30_000L, month);
         refund(seller, 30_000L, month);
 
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         long ledgerNet = recordRepository.findBySellerIdAndSettlementMonth(seller, month.toString())
                 .stream().mapToLong(SettlementRecord::getNetAmount).sum();
@@ -163,11 +166,11 @@ class SettlementCloseTest {
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
 
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         // 지각 도착한 매출. 이벤트 재전송·수동 보정·월경계 지연으로 실제로 흔하다.
         sale(seller, 50_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         long ledgerNet = recordRepository.findBySellerIdAndSettlementMonth(seller, month.toString())
                 .stream().mapToLong(SettlementRecord::getNetAmount).sum();
@@ -186,12 +189,12 @@ class SettlementCloseTest {
         YearMonth month = uniqueMonth();
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         // 지각 원장 + 지각 환불이 섞여 들어오는 상황
         sale(seller, 50_000L, month);
         refund(seller, 20_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         List<SettlementRecord> ledger = recordRepository.findBySellerIdAndSettlementMonth(seller, month.toString());
         long closedNet = ledger.stream()
@@ -212,14 +215,14 @@ class SettlementCloseTest {
         YearMonth month = uniqueMonth();
         Long seller = uniqueSeller();
         sale(seller, 100_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         String firstInvoice = sellerSettlementRepository
                 .findBySellerIdAndSettlementMonth(seller, month.toString()).orElseThrow().getTaxInvoiceNo();
         assertThat(firstInvoice).isNotBlank();
 
         sale(seller, 50_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         // 금액은 반영하되 계산서 번호는 그대로 둔다(수정세금계산서는 별도 업무).
         SellerSettlement revised = sellerSettlementRepository
@@ -236,13 +239,13 @@ class SettlementCloseTest {
         Long seller = uniqueSeller();
         sale(seller, 50_000L, month);
         refund(seller, 100_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         assertThat(sellerSettlementRepository.findBySellerIdAndSettlementMonth(seller, month.toString())
                 .orElseThrow().getTaxInvoiceNo()).isNull();
 
         sale(seller, 200_000L, month);
-        settlementService.closeMonth(month);
+        settlementCloseFacade.closeMonth(month);
 
         SellerSettlement revised = sellerSettlementRepository
                 .findBySellerIdAndSettlementMonth(seller, month.toString()).orElseThrow();

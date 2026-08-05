@@ -1,4 +1,9 @@
 dependencies {
     implementation project(':common:web')
     implementation project(':common:messaging')
+
+    // 월 마감 배치의 단일 실행 보장. 인스턴스가 여러 대면 같은 달 마감이 동시에 돈다
+    // (SettlementBatch 주석 참고). 잠금은 이미 있는 MySQL 로 잡는다 — 새 인프라를 늘리지 않는다.
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:6.9.0'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.0'
 }

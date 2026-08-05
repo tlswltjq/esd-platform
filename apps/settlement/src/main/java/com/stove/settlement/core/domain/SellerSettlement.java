@@ -87,6 +87,18 @@ public class SellerSettlement extends BaseTimeEntity {
         return taxInvoiceNo != null;
     }
 
+    /**
+     * 세금계산서를 발행해야 하는 상태인가.
+     *
+     * <p>발행은 되돌릴 수 없는 외부 호출이라 트랜잭션 밖에서 일어난다. 그 판단을 조율 계층이
+     * 필드를 조합해 내리게 두면 규칙이 도메인 밖으로 샌다 — 여기서 값으로 답한다.
+     *
+     * <p>환불이 매출을 초과해 순액이 0 이하가 된 판매자는 발행하지 않고 이월한다.
+     */
+    public boolean needsTaxInvoice() {
+        return !hasTaxInvoice() && netAmount > 0;
+    }
+
     public void assignTaxInvoice(String taxInvoiceNo) {
         this.taxInvoiceNo = taxInvoiceNo;
     }

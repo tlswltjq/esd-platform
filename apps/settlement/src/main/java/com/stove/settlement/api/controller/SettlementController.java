@@ -1,6 +1,7 @@
 package com.stove.settlement.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
+import com.stove.settlement.api.application.SettlementCloseFacade;
 import com.stove.settlement.api.controller.dto.SellerSettlementResponse;
 import com.stove.settlement.api.controller.dto.SettlementRecordResponse;
 import com.stove.settlement.core.service.SettlementService;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettlementController {
 
     private final SettlementService settlementService;
+    private final SettlementCloseFacade settlementCloseFacade;
 
     /** 주문 단위 원장(매출 + 환불 역산) */
     @GetMapping("/orders/{orderNo}")
@@ -54,7 +56,7 @@ public class SettlementController {
     @PostMapping("/close")
     public ApiResponse<List<SellerSettlementResponse>> close(
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(settlementService.closeMonth(month).stream()
+        return ApiResponse.ok(settlementCloseFacade.closeMonth(month).stream()
                 .map(SellerSettlementResponse::from)
                 .toList());
     }

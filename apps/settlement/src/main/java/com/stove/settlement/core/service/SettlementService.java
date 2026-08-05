@@ -14,8 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,7 +39,6 @@ public class SettlementService {
     private final SettlementRecordRepository recordRepository;
     private final SellerSettlementRepository sellerSettlementRepository;
     private final FeePolicy feePolicy;
-    private final TaxInvoiceIssuer taxInvoiceIssuer;
     private final ProcessedEventGuard processedEventGuard;
 
     /**
@@ -97,38 +95,61 @@ public class SettlementService {
     }
 
     /**
-     * 월 마감. 미마감 원장을 판매자별로 합산해 확정본을 만들고 세금계산서를 발행한다.
-     * 이미 마감된 월은 다시 마감하지 않는다(재실행 안전).
+     * 이번 달 마감 대상 판매자.
+     *
+     * <p>마감은 판매자 단위 트랜잭션으로 쪼개져 있으므로
+     * ({@link com.stove.settlement.api.application.SettlementCloseFacade} 참고)
+     * 오케스트레이터가 먼저 대상만 읽는다.
      */
-    public List<SellerSettlement> closeMonth(YearMonth month) {
+    @Transactional(readOnly = true)
+    public List<Long> sellersToClose(YearMonth month) {
         String monthKey = month.toString();
-        List<SettlementRecord> targets = recordRepository.findBySettlementMonthAndClosedIsFalse(monthKey);
-        if (targets.isEmpty()) {
-            log.info("마감 대상 없음 month={}", monthKey);
-            return List.of();
-        }
 
-        Map<Long, List<SettlementRecord>> bySeller = targets.stream()
-                .collect(Collectors.groupingBy(SettlementRecord::getSellerId));
+        // 두 부류를 합친다.
+        //  1. 미마감 원장이 있는 판매자 — 보통의 마감 대상
+        //  2. 마감은 끝났는데 계산서가 없는 판매자 — 발행이 실패했던 건
+        //
+        // 2번을 빼면 발행 실패가 영구 방치된다. 원장이 이미 close 되어 1번 기준으로는
+        // 잡히지 않기 때문이다. 발행이 트랜잭션 밖으로 나오면서 생긴 새 경로다.
+        Stream<Long> withOpenRecords = recordRepository.findSellerIdsToClose(monthKey).stream();
+        Stream<Long> awaitingInvoice = sellerSettlementRepository.findAwaitingTaxInvoice(monthKey)
+                .stream()
+                .map(SellerSettlement::getSellerId);
 
-        // 미마감 원장은 예외 없이 전부 확정본에 반영한다.
-        // 반영 대상과 close 대상이 어긋나면 "마감됐는데 어디에도 없는 금액"이 생긴다.
-        List<SellerSettlement> closed = bySeller.entrySet().stream()
-                .map(entry -> closeSeller(entry.getKey(), monthKey, entry.getValue()))
-                .toList();
+        return Stream.concat(withOpenRecords, awaitingInvoice).distinct().sorted().toList();
+    }
 
-        targets.forEach(SettlementRecord::close);
-        log.info("정산 마감 month={} sellers={} records={}", monthKey, closed.size(), targets.size());
-        return closed;
+    /** 이미 마감된 확정본. 발행만 남은 판매자를 조율 계층이 집어갈 때 쓴다. */
+    @Transactional(readOnly = true)
+    public SellerSettlement getSettlement(Long sellerId, YearMonth month) {
+        return sellerSettlementRepository
+                .findBySellerIdAndSettlementMonth(sellerId, month.toString())
+                .orElse(null);
     }
 
     /**
-     * 판매자 한 명의 확정본을 만들거나, 이미 있으면 지각 원장을 더한다.
+     * 판매자 한 명의 마감을 <b>독립 트랜잭션</b>으로 확정한다.
      *
-     * <p>이미 마감된 판매자를 건너뛰지 않는 이유는 {@link #closeMonth} 주석대로다 —
-     * 건너뛰면서 원장은 close 해 버리면 그 금액이 영구 유실된다.
+     * <p>세금계산서는 여기서 발행하지 않는다. 발행은 되돌릴 수 없는 외부 호출이라
+     * 트랜잭션 안에 들어오면 뒤가 깨졌을 때 <b>장부에는 없는 계산서</b>가 남는다 —
+     * 결제 쪽 [D-006] 과 같은 모양이고, 여기서는 [D-022] 였다.
+     *
+     * <p>확정본을 먼저 커밋하고, 발행은 조율 계층이 커밋 뒤에 한다. 중간에 멈추면
+     * "마감은 됐고 계산서는 아직"이라는 관측 가능한 상태가 남아 재시도 대상이 된다.
+     *
+     * <p>미마감 원장은 예외 없이 전부 확정본에 반영한다. 반영 대상과 close 대상이 어긋나면
+     * "마감됐는데 어디에도 없는 금액"이 생긴다.
+     *
+     * @return 확정본. 마감할 원장이 없으면 {@code null}
      */
-    private SellerSettlement closeSeller(Long sellerId, String monthKey, List<SettlementRecord> records) {
+    public SellerSettlement closeSeller(Long sellerId, YearMonth month) {
+        String monthKey = month.toString();
+        List<SettlementRecord> records =
+                recordRepository.findBySettlementMonthAndSellerIdAndClosedIsFalse(monthKey, sellerId);
+        if (records.isEmpty()) {
+            return null;
+        }
+
         long gross = records.stream().mapToLong(SettlementRecord::getGrossAmount).sum();
         long fee = records.stream().mapToLong(SettlementRecord::getFeeAmount).sum();
         long net = records.stream().mapToLong(SettlementRecord::getNetAmount).sum();
@@ -137,26 +158,36 @@ public class SettlementService {
                 .findBySellerIdAndSettlementMonth(sellerId, monthKey)
                 .map(existing -> revise(existing, gross, fee, net, records.size(), sellerId, monthKey))
                 .orElseGet(() -> SellerSettlement.close(
-                        sellerId, monthKey, gross, fee, net, records.size(),
-                        // 환불이 매출을 초과해 음수가 된 판매자는 세금계산서를 발행하지 않고 이월한다
-                        net > 0 ? taxInvoiceIssuer.issue(sellerId, monthKey, net) : null));
+                        sellerId, monthKey, gross, fee, net, records.size(), null));
 
+        records.forEach(SettlementRecord::close);
         return sellerSettlementRepository.save(settlement);
+    }
+
+    /**
+     * 발행이 끝난 계산서 번호를 확정본에 기록한다(마감 2단계).
+     *
+     * <p>이 커밋이 깨지면 계산서는 나갔는데 번호가 안 남는다. 그래서
+     * {@link TaxInvoiceIssuer#issue} 는 {@code (sellerId, month)} 기준 멱등이어야 하고,
+     * 재시도가 이중 발행이 되지 않는다.
+     */
+    public void assignTaxInvoice(Long sellerId, YearMonth month, String taxInvoiceNo) {
+        sellerSettlementRepository.findBySellerIdAndSettlementMonth(sellerId, month.toString())
+                .ifPresent(settlement -> settlement.assignTaxInvoice(taxInvoiceNo));
     }
 
     private SellerSettlement revise(SellerSettlement existing, long gross, long fee, long net,
                                     int recordCount, Long sellerId, String monthKey) {
         existing.accumulate(gross, fee, net, recordCount);
 
-        if (!existing.hasTaxInvoice() && existing.getNetAmount() > 0) {
-            // 이전 마감에서 순액이 0 이하라 발행을 미뤘던 판매자. 지각 매출로 양수가 되면 이제 발행한다.
-            existing.assignTaxInvoice(taxInvoiceIssuer.issue(sellerId, monthKey, existing.getNetAmount()));
-        } else if (existing.hasTaxInvoice()) {
+        if (existing.hasTaxInvoice()) {
             // 이미 발행된 계산서의 금액이 바뀌었다. 실제 운영에서는 수정세금계산서가 필요한 건이라
             // 조용히 넘기지 않고 남긴다.
             log.warn("마감 확정본 금액 변경 — 수정세금계산서 검토 필요 sellerId={} month={} 추가액={} 계산서={}",
                     sellerId, monthKey, net, existing.getTaxInvoiceNo());
         }
+        // 발행을 미뤘던 판매자(순액 0 이하)가 지각 매출로 양수가 되는 경우는
+        // needsTaxInvoice() 가 참이 되므로 조율 계층이 커밋 뒤에 발행한다.
         return existing;
     }
 
