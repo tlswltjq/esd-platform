@@ -56,8 +56,23 @@ jobs:
 
       # self-hosted 는 워크스페이스가 남는다. Testcontainers 가 흘린 컨테이너를
       # 잡 단위로 걷는다(이미지·레이어는 docker-prune.timer 가 날마다 정리).
+      #
+      # Testcontainers 는 자체 reaper(Ryuk)로 자기 컨테이너를 치우므로 이 단계는 그것과
+      # 경합한다. 이미 삭제 중인 컨테이너에 docker rm 이 실패하면 xargs 가 123 을 반환해
+      # **빌드가 통과했는데 잡이 빨개진다** — 실제로 그렇게 됐다:
+      #   "removal of container ... is already in progress" → exit 123
+      #
+      # 이 단계의 목적은 검증이 아니라 위생이다. 경합으로 진 것은 실패가 아니라
+      # 남이 대신 치운 것이므로 잡을 세우지 않는다. 대신 정리 뒤 남은 개수를 남긴다 —
+      # 조용히 삼키면 컨테이너가 쌓여도 알 수 없다.
       - name: Reap stray test containers
         if: always()
         run: |
           docker ps -aq --filter label=org.testcontainers=true \
-            | xargs -r docker rm -f
+            | while read -r id; do docker rm -f "$id" >/dev/null 2>&1 || true; done
+
+          remaining=$(docker ps -aq --filter label=org.testcontainers=true | wc -l | tr -d ' ')
+          echo "정리 후 남은 테스트 컨테이너: ${remaining}"
+          if [ "$remaining" -gt 0 ]; then
+            echo "::warning::테스트 컨테이너 ${remaining}개가 남았다 — 러너에 쌓이는지 확인이 필요하다"
+          fi
