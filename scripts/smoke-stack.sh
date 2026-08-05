@@ -47,20 +47,37 @@ await() {
     done
     bad "$name" "${limit}s 안에 조건 불성립"; return 1
 }
-has() { "${RUNNER[@]}" "$1" | grep -q "$2"; }
+# await 조건으로 쓰는 판정기들. 헤더 같은 추가 curl 인자를 URL 뒤에 붙일 수 있다.
+has()     { local url=$1 pat=$2; shift 2
+            "${RUNNER[@]}" "$@" "$url" | grep -q "$pat"; }
+is_code() { local want=$1 url=$2; shift 2
+            [ "$("${RUNNER[@]}" -o /dev/null -w '%{http_code}' "$@" "$url")" = "$want" ]; }
+# 부재 판정. 응답 자체가 실패한 것을 '없어졌다'로 착각하지 않도록 봉투를 먼저 본다.
+lacks()   { local url=$1 pat=$2; shift 2
+            local out; out=$("${RUNNER[@]}" "$@" "$url") || return 1
+            printf '%s' "$out" | grep -q '"success":true' || return 1
+            ! printf '%s' "$out" | grep -q "$pat"; }
 
 echo
 echo "=== 1. 트랙 A — 등록 → 심의 → 노출 ==="
-CODE="GAME-SMOKE-$(date +%s)"
+TS=$(date +%s)
+CODE="GAME-SMOKE-$TS"
+SELLER=1001               # settlement 의 self-seller-id(1) 가 아니므로 입점(PARTNER) 판매다
+PRICE=18000
+FEE=$((PRICE * 30 / 100)) # partner-fee-rate 기본값 0.3000
+NET=$((PRICE - FEE))
+MEMBER=$((TS % 1000000))  # 실행마다 다른 구매자 — 스택은 재사용되고 볼륨도 남는다
+OTHER=$((MEMBER + 1))     # 미보유 회원
+
 req "studio: 프로젝트 생성" 200 -X POST http://studio:8085/api/v1/studio/games \
     -H 'Content-Type: application/json' \
-    -d "{\"productCode\":\"$CODE\",\"title\":\"스모크 테스트 게임\",\"sellerId\":1001,\"price\":18000,\"selfRated\":true}"
+    -d "{\"productCode\":\"$CODE\",\"title\":\"스모크 테스트 게임\",\"sellerId\":$SELLER,\"price\":$PRICE,\"selfRated\":true}"
 GAME_ID=$(printf '%s' "$BODY" | grep -o '"gameId":[0-9]*' | head -1 | cut -d: -f2)
 GAME_ID=${GAME_ID:-1}
 echo "    gameId=$GAME_ID productCode=$CODE"
 
 req "studio: 심의 신청 → GameRegistered" 200 \
-    -X POST "http://studio:8085/api/v1/studio/games/$GAME_ID/submit" -H 'X-Seller-Id: 1001'
+    -X POST "http://studio:8085/api/v1/studio/games/$GAME_ID/submit" -H "X-Seller-Id: $SELLER"
 
 # 자체등급분류는 review 가 자동 승인한다 → ReviewApproved
 await "review: 자동 승인 (GameRegistered 수신)" 60 \
@@ -68,7 +85,7 @@ await "review: 자동 승인 (GameRegistered 수신)" 60 \
 
 # review → studio 역전파
 await "studio: 상태 역전파 APPROVED" 60 \
-    bash -c "\"\$@\" -H 'X-Seller-Id: 1001' http://studio:8085/api/v1/studio/games | grep -q '\"productCode\":\"$CODE\".*\"status\":\"APPROVED\"'" _ "${RUNNER[@]}"
+    bash -c "\"\$@\" -H 'X-Seller-Id: $SELLER' http://studio:8085/api/v1/studio/games | grep -q '\"productCode\":\"$CODE\".*\"status\":\"APPROVED\"'" _ "${RUNNER[@]}"
 
 # catalog 는 ReviewApproved 로 상품 마스터를 만든다. 다만 목록(GET /products)은
 # getOnSaleProducts() 라 판매 시작 전에는 뜨지 않는다 — 상세로 찾는다.
@@ -96,17 +113,145 @@ if [ -n "$PRODUCT_ID" ]; then
         bash -c "\"\$@\" -G http://store:8087/api/v1/storefront/products --data-urlencode 'q=스모크' | grep -q '$CODE'" _ "${RUNNER[@]}"
 fi
 
+# 빌드 등록은 심의와 독립이다. 트랙 C 의 다운로드 티켓이 이 매니페스트를 요구하므로
+# (issueTicket 은 ProductRef + PatchManifest 를 둘 다 찾는다) 여기서 올려 둔다.
+req "studio: 빌드 등록 → BuildUploaded" 200 \
+    -X POST "http://studio:8085/api/v1/studio/games/$GAME_ID/builds" \
+    -H "X-Seller-Id: $SELLER" -H 'Content-Type: application/json' \
+    -d '{"version":"1.0.0","fileSize":1073741824,"checksum":"a1b2c3"}'
+
+await "download: 패치 매니페스트 등록 (BuildUploaded 관통)" 60 \
+    has "http://download:8088/api/v1/downloads/$CODE/manifests" '"version":"1.0.0"'
+
 echo
-echo "=== 2. 인프라 도달성 ==="
+echo "=== 2. 트랙 B — 주문 → 결제 ==="
+ORDER_NO=""
+if [ -n "$PRODUCT_ID" ]; then
+    # 게이트 1 — 클라이언트 금액을 신뢰하지 않는다. catalog 재계산과 다르면 주문이 만들어지지 않는다.
+    req "order: 금액 위조 주문 거부 (PRICE_MISMATCH)" 409 \
+        -X POST http://order:8082/api/v1/orders -H 'Content-Type: application/json' \
+        -d "{\"memberId\":$MEMBER,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}],\"expectedAmount\":100}"
+
+    req "order: 주문 생성 → OrderCreated" 200 \
+        -X POST http://order:8082/api/v1/orders -H 'Content-Type: application/json' \
+        -d "{\"memberId\":$MEMBER,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}],\"expectedAmount\":$PRICE}"
+    ORDER_NO=$(printf '%s' "$BODY" | grep -o '"orderNo":"[^"]*"' | head -1 | cut -d'"' -f4)
+    echo "    orderNo=$ORDER_NO memberId=$MEMBER"
+fi
+
+if [ -n "$ORDER_NO" ]; then
+    await "payment: 결제 대기 생성 (OrderCreated 관통)" 60 \
+        has "http://payment:8083/api/v1/payments/$ORDER_NO" '"status":"READY"'
+
+    # 게이트 2 — 승인 전에 서버가 확정한 금액을 PG 에 먼저 등록한다
+    req "payment: PG 사전등록 → PENDING" 200 \
+        -X POST "http://payment:8083/api/v1/payments/$ORDER_NO/prepare" \
+        -H 'Content-Type: application/json' -d '{"method":"STOVE_CASH"}'
+
+    # 게이트 3 — 사전등록 금액과 다른 승인은 확정하지 않는다.
+    # prepare 뒤에 보내야 '승인 불가 상태'가 아니라 금액 대조에서 걸린다.
+    req "payment: 금액 불일치 콜백 거부 (PAYMENT_AMOUNT_MISMATCH)" 409 \
+        -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":1,\"idempotencyKey\":\"IDEM-BAD-$TS\"}"
+
+    req "payment: 승인 콜백 → PaymentCompleted" 200 \
+        -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
+
+    has "http://payment:8083/api/v1/payments/$ORDER_NO" '"status":"PAID"' \
+        && ok "payment: PAID 확정" \
+        || bad "payment: PAID 확정" "거부된 콜백 뒤에도 PENDING 이어야 하고 정상 콜백으로 PAID 여야 한다"
+fi
+
+echo
+echo "=== 3. 트랙 C — 지급 → 다운로드 → 정산 → 환불 ==="
+if [ -n "$ORDER_NO" ]; then
+    await "license: 라이선스 지급 (PaymentCompleted 관통)" 60 \
+        has http://license:8084/api/v1/library "\"orderNo\":\"$ORDER_NO\"" -H "X-Member-Id: $MEMBER"
+
+    await "order: 주문 확정 PAID (PaymentCompleted 관통)" 60 \
+        has "http://order:8082/api/v1/orders/$ORDER_NO" '"status":"PAID"' -H "X-Member-Id: $MEMBER"
+
+    # download 는 license 를 동기 호출하지 않는다 — 이벤트로 받아둔 권한 사본으로 판정한다
+    await "download: 다운로드 권한 부여 (LicenseIssued 관통)" 60 \
+        is_code 200 "http://download:8088/api/v1/downloads/$CODE/ticket" -H "X-Member-Id: $MEMBER"
+
+    req "download: 티켓 발급" 200 -H "X-Member-Id: $MEMBER" \
+        "http://download:8088/api/v1/downloads/$CODE/ticket"
+    printf '%s' "$BODY" | grep -q '"downloadUrl"' \
+        && ok "download: 서명 URL 포함" \
+        || bad "download: 서명 URL 포함" "downloadUrl 이 없다: ${BODY:0:120}"
+
+    req "download: 미보유 회원은 403" 403 -H "X-Member-Id: $OTHER" \
+        "http://download:8088/api/v1/downloads/$CODE/ticket"
+
+    await "settlement: 매출 원장 적립 (PaymentCompleted 관통)" 60 \
+        has "http://settlement:8089/api/v1/settlements/orders/$ORDER_NO" '"recordType":"SALE"'
+
+    req "settlement: 주문 원장 조회" 200 \
+        "http://settlement:8089/api/v1/settlements/orders/$ORDER_NO"
+    if printf '%s' "$BODY" | grep -q "\"saleType\":\"PARTNER\".*\"grossAmount\":$PRICE.*\"netAmount\":$NET,"; then
+        ok "settlement: 입점 수수료 30% (gross=$PRICE fee=$FEE net=$NET)"
+    else
+        bad "settlement: 입점 수수료 30%" "gross=$PRICE net=$NET 를 찾지 못했다: ${BODY:0:200}"
+    fi
+
+    # 멱등 — 같은 콜백이 다시 와도 이벤트를 재발행하지 않으므로 라이선스가 늘지 않는다.
+    # '아무 일도 일어나지 않음'은 await 로 기다릴 수 없다. 재발행이 있었다면 도착했을
+    # 시간만큼만 주고 센다 — 이 스크립트에서 고정 대기가 옳은 유일한 자리다.
+    # 릴레이 폴링이 1초(stove.outbox.poll-interval-ms)라 6초면 6주기다.
+    before=$("${RUNNER[@]}" -H "X-Member-Id: $MEMBER" http://license:8084/api/v1/library \
+        | grep -o '"licenseId"' | wc -l | tr -d ' ')
+    req "payment: 중복 콜백 흡수" 200 \
+        -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
+    sleep 6
+    after=$("${RUNNER[@]}" -H "X-Member-Id: $MEMBER" http://license:8084/api/v1/library \
+        | grep -o '"licenseId"' | wc -l | tr -d ' ')
+    [ "$before" = "$after" ] \
+        && ok "license: 중복 콜백에도 지급은 1회 (${after}건 유지)" \
+        || bad "license: 중복 지급" "$before건 → $after건"
+
+    # ── 환불: 하나의 이벤트가 세 방향으로 되감긴다 ──────────────────────
+    req "payment: 환불 → PaymentCancelled" 200 \
+        -X POST "http://payment:8083/api/v1/payments/$ORDER_NO/cancel?reason=SMOKE_REFUND"
+
+    await "order: 주문 취소 (PaymentCancelled 관통)" 60 \
+        has "http://order:8082/api/v1/orders/$ORDER_NO" '"status":"CANCELED"' -H "X-Member-Id: $MEMBER"
+
+    # 라이브러리는 ACTIVE 만 반환한다 — 회수되면 목록에서 사라지는 것이 정상이다
+    await "license: 라이선스 회수 (라이브러리에서 사라진다)" 60 \
+        lacks http://license:8084/api/v1/library "\"orderNo\":\"$ORDER_NO\"" -H "X-Member-Id: $MEMBER"
+
+    await "download: 권한 회수 → 403 (LicenseRevoked 관통)" 60 \
+        is_code 403 "http://download:8088/api/v1/downloads/$CODE/ticket" -H "X-Member-Id: $MEMBER"
+
+    # 환불 이벤트에는 항목 정보가 없다. settlement 는 자기 원장의 SALE 을 부호 반전해 상계한다.
+    await "settlement: 환불 역산 (부호 반전)" 60 \
+        has "http://settlement:8089/api/v1/settlements/orders/$ORDER_NO" \
+            "\"recordType\":\"REFUND\".*\"grossAmount\":-$PRICE"
+
+    req "settlement: 상계 후 원장 조회" 200 \
+        "http://settlement:8089/api/v1/settlements/orders/$ORDER_NO"
+    if printf '%s' "$BODY" | grep -q "\"netAmount\":$NET," \
+       && printf '%s' "$BODY" | grep -q "\"netAmount\":-$NET,"; then
+        ok "settlement: SALE(+$NET) + REFUND(-$NET) 순액 0"
+    else
+        bad "settlement: 상계" "+$NET 와 -$NET 가 함께 있어야 한다: ${BODY:0:200}"
+    fi
+fi
+
+echo
+echo "=== 4. 인프라 도달성 ==="
 req "elasticsearch" 200 http://elasticsearch:9200/_cluster/health
 
 echo
-echo "=== 3. 게이트웨이 내부 API 차단 ==="
+echo "=== 5. 게이트웨이 내부 API 차단 ==="
 req "quote 는 게이트웨이로 못 부른다" 404 -X POST http://gateway:8080/api/v1/products/quote \
     -H 'Content-Type: application/json' -d '{"items":[]}'
 
 echo
-echo "=== 4. 액추에이터 (앱 10종) ==="
+echo "=== 6. 액추에이터 (앱 10종) ==="
 for svc in gateway:8080 catalog:8081 order:8082 payment:8083 license:8084 \
            studio:8085 review:8086 store:8087 download:8088 settlement:8089; do
     name=${svc%%:*}
