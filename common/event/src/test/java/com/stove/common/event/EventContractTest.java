@@ -19,12 +19,17 @@ import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AssignableTypeFilter;
 
 /**
  * 이벤트는 서비스 간 <b>계약</b>이다. 여기서 깨지면 컴파일은 통과하고 운영에서 터진다 —
@@ -40,6 +45,8 @@ import org.junit.jupiter.params.provider.MethodSource;
  * </ol>
  */
 class EventContractTest {
+
+    private static final String PAYLOAD_PACKAGE = "com.stove.common.event.payload";
 
     /** 운영과 같은 관용 설정. 스프링 부트가 자동 구성하는 ObjectMapper 의 기본값을 흉내낸다. */
     private static final ObjectMapper MAPPER = new ObjectMapper()
@@ -152,5 +159,34 @@ class EventContractTest {
     @DisplayName("금액 계산은 단가 × 수량이다")
     void lineAmountIsUnitPriceTimesQuantity() {
         assertThat(new OrderLine(1L, "게임 A", 1001L, 30_000L, 3).lineAmount()).isEqualTo(90_000L);
+    }
+
+    /**
+     * 위 카탈로그는 <b>손으로 유지하는 목록</b>이다. 새 이벤트를 추가하고 여기 넣는 것을 잊으면
+     * 그 이벤트는 계약 검사를 <b>한 번도</b> 받지 않는다 — 그런데 빌드는 초록이다.
+     *
+     * <p>목록을 스캔으로 바꾸지 않고 스캔과 <b>대조</b>하는 이유는, 각 이벤트를 만들려면
+     * 의미 있는 인자가 필요해서다(리플렉션으로 만든 빈 껍데기는 왕복 검사의 값을 떨어뜨린다).
+     * 목록은 손으로 두되, 목록이 실제 패키지와 어긋나는 순간 이 테스트가 깨진다.
+     */
+    @Test
+    @DisplayName("payload 패키지의 모든 DomainEvent 가 카탈로그에 있다")
+    void catalogCoversEveryDeclaredEvent() {
+        ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AssignableTypeFilter(DomainEvent.class));
+
+        Set<String> declared = scanner.findCandidateComponents(PAYLOAD_PACKAGE).stream()
+                .map(BeanDefinition::getBeanClassName)
+                .collect(Collectors.toSet());
+
+        Set<String> covered = events()
+                .map(event -> event.getClass().getName())
+                .collect(Collectors.toSet());
+
+        assertThat(declared).as("스캔 대상이 비었다 — 패키지 이름이 바뀌었는지 확인하라").isNotEmpty();
+        assertThat(covered)
+                .as("카탈로그와 payload 패키지가 어긋났다. 새 이벤트를 events() 에 추가하라")
+                .containsExactlyInAnyOrderElementsOf(declared);
     }
 }
