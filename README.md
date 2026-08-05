@@ -287,5 +287,6 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 - Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람
 - 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
 - 분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격
-- 정산 배치 다중 인스턴스 대비 ShedLock, 대량 재색인 페이징/스로틀링
 - 다국가·다통화(174개국 서비스) 대응: 통화별 반올림 규칙과 환율 스냅샷
+- 대량 재색인의 비동기화 — 지금은 페이지 단위 커밋 + 스로틀로 동기 실행이라,
+  카탈로그가 10만 건을 넘으면 운영자의 HTTP 요청이 그만큼 오래 붙잡힌다

@@ -235,27 +235,31 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 
 ### 6.2 남은 것 — 서비스별
 
+> **2026-08-05 갱신.** "위험"과 "즉시 교정"으로 표시했던 항목을 메웠다.
+> 그 과정에서 [D-020](defects.md#d-020) 과 [D-021](defects.md#d-021) 이 나왔다.
+> 아래 표에서 ~~취소선~~ 은 닫힌 항목이고, 남은 것은 전부 "미커버" 등급이다.
+
 | 서비스 | 항목 | 성격 |
 |---|---|---|
-| **payment** | **게이트 2 미검증** — 저장소 전체에 `verify(pgClient).prepare(...)` 가 없다. "서버가 확정한 금액을 PG 에 등록한다"는 게이트 2의 핵심 주장이 단언된 적이 없다 | 위험 |
-| **payment** | **게이트 3 미검증** — `PAYMENT_AMOUNT_MISMATCH` 를 단언하는 테스트가 없다. 두 미스매치 테스트 모두 `isInstanceOf(BusinessException.class)` 뿐이라 `PAYMENT_ALREADY_PROCESSED` 가 나와도 통과한다. **과다결제(`paidAmount > amount`)도 미검증** | 위험 |
-| **payment** | `createReady` 의 두 번째 가드 `existsByOrderNo` — 기존 테스트는 같은 eventId 라 첫 가드에서 반환된다. **삭제해도 깨지는 테스트가 없다** | 미커버 |
-| **payment** | `RefundFacade.settle` 에서 `pgClient.cancel` 자체가 실패하는 경로 (지금은 그 다음 단계인 Outbox 실패만 본다) | 미커버 |
-| **settlement** | **`FeePolicy` 무테스트.** `recordSale` 경유로도 SELF 경로에 닿지 않는다(테스트가 sellerId 1001/1002 를 쓰는데 `self-seller-id: 1`). `selfSaleHasNoFee` 는 `SaleType.SELF` 와 `ZERO` 를 직접 넘겨 산술만 본다 — **`saleTypeOf`/`feeRateOf` 를 뒤집어도 깨지지 않는다** | 위험 |
+| **payment** | ~~게이트 2 미검증~~ → `PaymentGateTest#prepareRegistersTheServerHeldAmountWithPg` 가 PG 에 실린 금액을 captor 로 단언한다 | ✅ |
+| **payment** | ~~게이트 3 미검증~~ → 과소·과다결제 양쪽을 `errorCode == PAYMENT_AMOUNT_MISMATCH` 로 단언한다 | ✅ |
+| **payment** | ~~`createReady` 2차 가드~~ → 다른 eventId·같은 orderNo 로 2차 가드만 걸리는 경로를 덮었다 | ✅ |
+| **payment** | ~~`pgClient.cancel` 자체 실패 경로~~ → `CANCELING` 으로 남아 재시도로 완결되는 것까지 덮었다 | ✅ |
+| **settlement** | ~~`FeePolicy` 무테스트~~ → `saleTypeOf`/`feeRateOf` 를 직접 테스트하고, 요율·자체판매자 ID 가 **설정에서 온다**는 것까지 고정했다 | ✅ |
 | **settlement** | `net == 0` 경계(매출이 환불로 정확히 상계 — 가장 흔한 이월 케이스), 환불 역산의 `sales.isEmpty()` 조기 반환, 월 경계 환불(원매출의 달이 아니라 **현재 달**로 역산한다) | 미커버 |
-| **settlement** | `SettlementBatch` 무테스트 — 연말 경계(1월 → 전년 12월), 다중 인스턴스 단일 실행(문서상 TODO) | 미커버 |
+| **settlement** | ~~`SettlementBatch` 무테스트 — 다중 인스턴스 단일 실행(문서상 TODO)~~ → `@SchedulerLock` 선언과 락 테이블을 `SettlementBatchLockTest` 가 고정한다. 마감 자체는 [D-022](defects.md#d-022) 로 3단계 분리됐고 `SettlementCloseFacadeTest` 가 중간 실패 상태를 덮는다. **연말 경계(1월 → 전년 12월)는 아직 미커버** | 일부 ✅ |
 | **store** | **`featured()` 본문이 어떤 테스트에서도 실행되지 않는다** (컨트롤러 테스트는 `StoreService` 를 mock) | 미커버 |
-| **store** | **Redis 캐시가 프록시 없이 테스트된다** — `StoreIndexTest` 는 `new StoreService(repository)` 라 `@Cacheable`/`@CacheEvict` 가 비활성이다. **`@CacheEvict` 를 지워도 깨지지 않는다** | 위험 |
+| **store** | ~~Redis 캐시가 프록시 없이 테스트된다~~ → `StoreCacheProxyTest` 가 프록시를 태워 `@Cacheable`/`@CacheEvict` 가 실제로 붙는지 본다 | ✅ |
 | **store** | 실 ES 쿼리·매핑 — `findByStatusAndNameContaining` 은 대역의 `String.contains` 와 의미가 다르다. `ElasticsearchIndexInitializer` 의 매핑 적용(`status` 가 `keyword` 인지)도 미검증 | 미커버 |
-| **store** | `?page=-1`, `?size=0` → `PageRequest.of` 가 `IllegalArgumentException` → 500 (D-015 계열) | 위험 |
-| **download** | **`CdnUrlSigner` 무테스트** — `matchIfMissing = true` 인 **기본(운영) 어댑터**다. HMAC 계산·`s3://` 접두사 제거·TTL 전부 미검증 | 위험 |
-| **download** | `DownloadControllerTest#validTicketRequestReachesTheService` 에 **`andExpect(status())` 가 없다.** mock 이 `null` 을 반환해 실제로는 500 인데 통과한다 | 즉시 교정 |
+| **store** | ~~`?page=-1`, `?size=0` → 500~~ → **[D-020](defects.md#d-020) 으로 확인·수정.** 서비스에서 막고 400 으로 응답한다 | ✅ |
+| **download** | ~~`CdnUrlSigner` 무테스트~~ → HMAC 이 경로·회원·만료를 함께 덮는지, `s3://` 가 벗겨지는지, TTL 이 설정을 따르는지 덮었다 | ✅ |
+| **download** | ~~`validTicketRequestReachesTheService` 에 `status()` 가 없다~~ → 200 과 응답 본문을 `jsonPath` 로 단언한다 | ✅ |
 | **download** | 403(미보유) vs 404(상품 미등록) 구분이 어느 테스트에도 없다. 매니페스트 최신본 선택(모든 테스트가 버전 1개만 등록), upsert 멱등 | 미커버 |
-| **license** | `recordIssueFailure` 가 **한 번도 실행되지 않는다** — 관련 테스트가 전부 `LicenseService` 를 mock 한다. `REQUIRES_NEW` 로 별도 커밋된다는 이 메서드의 존재 이유가 미검증 | 위험 |
-| **license** | `republishedEventCarriesFullOwnership` 은 이름과 달리 **저장소 크기만** 단언한다. 부분 회수에서 변경된 것만 이벤트에 실리는지도 미검증 | 즉시 교정 |
+| **license** | ~~`recordIssueFailure` 가 한 번도 실행되지 않는다~~ → `LicenseIssueFailureTest` 가 **바깥 트랜잭션을 롤백시켜** `REQUIRES_NEW` 를 검증한다 | ✅ |
+| **license** | ~~`republishedEventCarriesFullOwnership` 이 저장소 크기만 단언~~ → 이벤트 페이로드를 파싱해 소유 상태 전체가 실리는지 본다. 회수 이벤트의 "변경된 것만" 도 덮었다 | ✅ |
 | **catalog** | `Product` 의 `applyReviewApproval` `REVIEWING` 분기, `suspend` 무가드. `ProductView` 를 실제 Redis 직렬화기로 왕복(이 클래스의 존재 이유가 역직렬화 가능성이다) | 미커버 |
 | **review** | `approve`/`reject`/`getRequests` — 접수 경로는 덮었지만 결정 경로가 남았다 | 미커버 |
-| **review** | `ReviewControllerTest#approvalUsesGivenRating` 이 `approve(anyLong(), anyString())` 로 단언해 **`"ADULT"` 가 전달되는지 확인하지 않는다.** 등급이 뒤바뀌어도 통과한다 | 즉시 교정 |
+| **review** | ~~`approvalUsesGivenRating` 이 `anyString()` 으로 단언~~ → `approve(2L, "ADULT")` 로 값을 고정했다 | ✅ |
 | **order** | `CatalogRestAdapterTest` 가 catalog 4xx → 503 을 고정한다. D-019 수정으로 잘못된 수량이 order 에서 걸리므로 재검토 대상 | 판단 필요 |
 | **gateway** | 라우트 `uri` 가 단언되지 않는다 — id 만 본다. store/catalog URI 가 뒤바뀌어도 전부 통과한다 | 미커버 |
 
@@ -266,14 +270,20 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
   응답 형식이 통째로 바뀌어도 잡히지 않는다
 - **`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수),
   `GlobalExceptionHandler` 는 D-015 계열만 검증
-- **`common/event`** — `EventContractTest.events()` 가 **손으로 유지하는 목록**이다.
-  새 페이로드는 누가 이 목록을 고치기 전까지 계약 검증을 전혀 받지 않는다.
-  패키지를 스캔해 모든 `DomainEvent` 구현이 목록에 있는지 단언해야 한다
-- **`common/messaging`** — `OutboxRecorder` 무테스트(`propagation = MANDATORY` 가 이 클래스의 존재 이유),
-  `lockPendingBatch` 네이티브 쿼리가 이 모듈에서는 대역으로만 검증된다
-  (실 SQL 은 `apps/payment` 의 `OutboxBackOffQueryTest` 에서만 — 9개 서비스가 의존하는 쿼리가 앱 모듈에 인질로 잡혀 있다)
-- **`common/archunit`** — 모든 규칙이 `.allowEmptyShould(true)` 다.
-  술어가 매칭을 멈추면 규칙이 **조용히 공허 통과**한다. 위반 픽스처로 규칙이 실제로 실패하는지 봐야 한다
+- ~~**`common/event`** — `EventContractTest.events()` 가 손으로 유지하는 목록이다~~
+  → **메웠다.** 목록은 손으로 두되(각 이벤트를 만들려면 의미 있는 인자가 필요하다),
+  `catalogCoversEveryDeclaredEvent` 가 `payload` 패키지를 스캔해 목록과 **대조**한다.
+  목록에서 한 건을 빼면 실제로 깨지는 것을 확인했다
+- **`common/messaging`** — `OutboxRecorder` 무테스트(`propagation = MANDATORY` 가 이 클래스의 존재 이유).
+  ~~`lockPendingBatch` 가 앱 모듈에 인질로 잡혀 있다~~ → **회수했다.**
+  `OutboxPendingQueryTest` 가 이 모듈에서 실 MySQL 로 쿼리 계약(상태·시간 조건·순서·배치 크기)을 검증한다.
+  앱 쪽 `OutboxBackOffQueryTest` 는 "이 서비스의 스키마에서도 도는가"를 보는 통합 검증으로 남긴다
+- ~~**`common/archunit`** — 모든 규칙이 `.allowEmptyShould(true)` 라 공허 통과한다~~
+  → **`ArchRuleEnforcementTest` 를 추가했다.** 위반 픽스처에 규칙이 실패하는지,
+  준수 픽스처에 통과하는지 양쪽을 본다. 이 테스트를 붙이자마자
+  [D-021](defects.md#d-021) 이 나왔다 — 스텁 격리 규칙이 술어 결합 순서 때문에
+  `Fake*` 만 검사하고 있었고, 리포의 스텁 4개는 전부 `Mock*` 이었다.
+  아직 전 규칙을 덮지는 않았다(네이밍 4·경계 3·위생 2). 나머지는 같은 방식으로 채운다
 
 ### 6.4 전 모듈 공통
 
@@ -295,6 +305,14 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 
 - **테스트를 붙일 모듈은 `pitest` 로 확인한다.** 통과하는 테스트와 잡아내는 테스트는 다르다(5절).
   위 표의 "위험"은 대부분 *통과하지만 못 잡는* 자리다
+- **`targetTests` 를 지정하지 않으면 pitest 가 `targetClasses` 패턴을 테스트 선택에도 쓴다.**
+  그래서 한동안 `api.*` 의 테스트(컨트롤러·리스너·파사드)가 뮤테이션 판정에
+  **한 번도 참여하지 못했다** — 전 모듈을 통틀어 뮤턴트를 죽인 테스트가
+  `core.service` 와 `core.domain` 두 패키지에서만 나왔다.
+  파사드가 지키는 규칙은 전부 "생존"으로 보고되고 있었고, 그건 테스트 공백이 아니라
+  **측정 도구의 사각지대**였다. 루트 `build.gradle` 에서 `targetTests = ['com.stove.*']` 로 고쳤다.
+  (settlement 기준 31/40 → 33/40, `api.application` 테스트가 11개를 죽인다)
+  뮤테이션 점수를 읽을 때는 **무엇이 측정에 포함됐는지**를 먼저 본다
 - **단언은 값으로 한다.** `anyString()` 은 "무엇이 전달되는가"가 검증 대상일 때 쓰지 않는다
 - **Outbox 단언을 `count()` 차이로 끝내지 않는다.** 잘못된 이벤트를 발행해도 `count` 는 똑같이 1이다.
   `eventType`·`aggregateId`·`partitionKey` 와 페이로드를 읽는다

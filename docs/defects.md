@@ -37,10 +37,19 @@
 | [D-017](#d-017) | 지각 심의 결과가 승인된 프로젝트를 강등 | 사용자 영향 | **수정됨** |
 | [D-018](#d-018) | 결제 없는 주문의 보상 요청이 무한 재배달 | 가용성 | **수정됨** |
 | [D-019](#d-019) | order 의 수량 검증이 어댑터에만 존재 | 금액 조작 | **수정됨** |
+| [D-020](#d-020) | 범위를 벗어난 페이지 파라미터가 400 이 아니라 500 | 오분류·알람 잡음 | **수정됨** |
+| [D-021](#d-021) | 스텁 격리 규칙이 실제 스텁을 한 번도 검사하지 않음 | 규칙의 공허 통과 | **수정됨** |
+| [D-022](#d-022) | 롤백된 마감 트랜잭션이 세금계산서는 발행 | 금전 불일치 | **수정됨** |
 
 D-016 ~ D-019 는 **서비스 계층에 테스트가 없던 모듈에 테스트를 붙이면서** 나왔다.
 넷 중 셋이 컨슈머 경로의 예외 처리 문제이고, 하나는 이미 고친 결함(D-009)이
 같은 이름의 다른 값 객체에 그대로 남아 있던 경우다.
+
+D-020 ~ D-021 은 [testing.md](testing.md) 6절이 "위험"으로 표시해 둔 공백을 메우면서 나왔다.
+**둘 다 이미 있던 방어선이 실제로는 작동하지 않고 있던 경우다** —
+D-015 가 닫았다고 본 부류에 경계값이 빠져 있었고, ArchUnit 규칙 하나는 술어 결합 순서 때문에
+대상 자체를 잘못 고르고 있었다. 통과하는 테스트와 잡아내는 테스트의 차이가
+결함 목록에 그대로 나타난 사례다.
 
 ---
 
@@ -852,6 +861,166 @@ catalog 와 같은 가드를 넣었다. 보내는 쪽에서 걸리면 왕복이 
 > (`common` 에 도메인 모델을 두지 않는다 — [decisions.md](decisions.md)).
 > 대신 **한쪽을 고칠 때 같은 이름의 다른 쪽을 함께 봐야 한다**는 부담이 생긴다.
 > D-019 는 그 부담을 실제로 놓친 첫 사례다.
+
+---
+
+<a id="d-020"></a>
+
+## D-020 범위를 벗어난 페이지 파라미터가 400 이 아니라 500 으로 응답
+
+**상태** 수정됨
+**영향** 오분류·알람 잡음 (D-015 계열)
+**위치** `apps/store/.../core/service/StoreService.java`
+**재현** `StoreControllerTest#negativePageIsRejected`, `#zeroSizeIsRejected`
+
+### 무슨 일이
+
+`store` 의 검색은 완전 공개 경로다. `?page=-1` 이나 `?size=0` 을 붙이면
+`PageRequest.of` 가 `IllegalArgumentException` 을 던지는데, 이 예외는
+`GlobalExceptionHandler` 의 malformed 목록에 없어서 마지막 분기로 흘렀다.
+
+```
+GET /api/v1/storefront/products?page=-1  →  500
+GET /api/v1/storefront/products?size=0   →  500
+```
+
+[D-015](#d-015) 가 정확히 이 부류를 닫으려던 것이었는데, 그때는 헤더·타입·본문만 봤고
+**범위를 벗어난 값**은 목록에 없었다. 인증이 없는 경로라 누구나 재현할 수 있고,
+5xx 알람이 서버 장애로 울린다.
+
+### 왜 기존 테스트가 못 잡았나
+
+`StoreControllerTest` 는 `StoreService` 를 mock 으로 두므로 `PageRequest.of` 가
+아예 실행되지 않는다. `[D-015] 페이지 번호가 숫자가 아니면 400` 테스트가 옆에 있었지만
+그건 타입 변환 단계라 서비스에 닿기 전에 걸린다 — **경계값은 서비스 안에서 터진다.**
+
+### 수정
+
+`StoreService.search` 에서 범위를 검사해 `INVALID_REQUEST` 로 바꾼다.
+컨트롤러가 아니라 서비스에 둔 이유는 [D-019](#d-019) 와 같다 —
+어댑터에만 두면 그 경로 하나만 지켜지고, 어댑터는 늘어난다.
+
+재현 테스트는 mock 이 아니라 **실제 서비스를 태운** MockMvc 로 돌린다.
+그러지 않으면 같은 공백이 다시 생긴다.
+
+---
+
+<a id="d-021"></a>
+
+## D-021 스텁 격리 규칙이 실제 스텁을 한 번도 검사하지 않음
+
+**상태** 수정됨
+**영향** 규칙의 공허 통과 (운영 사고 잠재)
+**위치** `common/archunit/.../ModuleHygieneRules.java`
+**재현** `ArchRuleEnforcementTest#everyStubPrefixIsChecked`
+
+### 무슨 일이
+
+`스텁_어댑터는_격리한다` 는 `infrastructure` 의 `Mock*`·`Stub*`·`Fake*` 클래스가
+`@Profile` 이나 `@ConditionalOnProperty` 로 격리돼 있는지 보는 규칙이다
+([결정 9](decisions.md)). 그런데 술어가 이렇게 쓰여 있었다.
+
+```java
+.that().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Mock")
+.or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Stub")
+.or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Fake")
+```
+
+**ArchUnit 의 유창한 `and()`/`or()` 에는 우선순위가 없다.** 왼쪽부터 결합하므로
+`A and Mock or A and Stub or A and Fake` 는
+`((((A and Mock) or A) and Stub) or A) and Fake` 가 되고,
+결국 **`Fake` 로 시작하는 클래스만** 검사한다.
+
+리포의 스텁은 네 개이고 전부 `Mock*` 이다 —
+`MockPgClient`, `MockRatingBoardClient`, `MockBuildStorage`, `MockTaxInvoiceIssuer`.
+**규칙이 도입된 이래 실제 스텁을 한 번도 평가한 적이 없었다.**
+
+넷 다 우연히 격리돼 있어 사고는 없었다. 하지만 누군가 `@Profile` 을 지웠어도
+빌드는 초록이었을 것이고, 그 결과는 운영에서 스텁 PG 가 조용히 도는 것이다.
+
+### 왜 아무도 몰랐나
+
+모든 규칙에 `allowEmptyShould(true)` 가 걸려 있다. 클래스가 하나뿐인 모듈(gateway)에서도
+같은 규칙 세트를 쓰기 위한 선택이지만, 대가로 **술어가 아무것도 매칭하지 못해도
+규칙이 조용히 통과한다.** 규칙은 코드를 검사하는데, 규칙 자신을 검사하는 것은 없었다.
+
+### 수정
+
+술어를 `DescribedPredicate` 로 명시적으로 묶었다. 그리고 규칙 자체를 대상으로 하는
+`ArchRuleEnforcementTest` 를 추가했다 — 위반 픽스처에 대해 규칙이 **실패하는지**,
+준수 픽스처에 대해 **통과하는지** 양쪽을 본다. 접두사 세 개는 각각 따로 확인한다.
+한꺼번에 검사하면 셋 중 하나만 잡혀도 규칙이 실패해 통과하기 때문이다 —
+실제로 그 때문에 `Fake` 하나로 가려져 있었다.
+
+> 다른 or-체인(`컨트롤러는_api_controller_에_둔다`)도 확인했다.
+> 그쪽은 `and` 가 섞이지 않은 순수 OR 라 좌결합이어도 의미가 같다.
+
+---
+
+<a id="d-022"></a>
+
+## D-022 롤백된 마감 트랜잭션이 세금계산서는 발행
+
+**상태** 수정됨
+**영향** 금전 불일치 (외부 시스템)
+**위치** `apps/settlement/.../core/service/SettlementService.java`
+**재현** `SettlementCloseFacadeTest#failedIssuanceKeepsTheClosing`,
+`#oneSellerFailureDoesNotBlockOthers`, `#failedIssuanceIsRetriedOnNextRun`
+
+### 무슨 일이
+
+`closeMonth` 는 클래스 레벨 `@Transactional` 이었고, 그 트랜잭션 **안에서**
+`taxInvoiceIssuer.issue(...)` 를 호출했다. 세금계산서 발행은 외부 시스템 호출이라
+DB 롤백이 되돌리지 못한다.
+
+**[D-006](#d-006) 과 정확히 같은 모양이다** — 결제에서는 "롤백된 환불 트랜잭션이 PG 환불은 실행"이었고,
+정산에서는 "롤백된 마감 트랜잭션이 세금계산서는 발행"이다. payment 에서 고친 패턴이
+settlement 에는 그대로 남아 있었다.
+
+### 다중 인스턴스만의 문제가 아니었다
+
+`SettlementBatch` 의 주석은 이것을 **ShedLock 이 필요한 다중 인스턴스 문제**로 적어 두었다.
+추적해 보니 그 진단이 문제를 한 칸 얕게 짚고 있었다.
+
+DB 는 이미 방어돼 있다. `uk_seller_settlement (seller_id, settlement_month)` 유니크가 있고,
+시차를 두고 돌면 뒤엣놈은 마감 대상이 비어 안전하게 끝난다. 동시에 돌면 한쪽이 유니크 위반으로 롤백된다.
+**그런데 롤백된 쪽도 계산서는 이미 발행했다.**
+
+그리고 이건 **단일 인스턴스에서도 터진다.** 마감이 그 달 전체를 한 트랜잭션으로 돌았기 때문이다 —
+판매자 100명 중 87번째에서 예외가 나면 앞의 86장이 이미 발행된 채 트랜잭션만 롤백된다.
+DB 에는 마감 기록이 없는데 국세청에는 계산서가 있는 상태가 된다.
+
+### 수정
+
+결제 환불이 쓰는 3단계 구조를 그대로 가져왔다. `SettlementCloseFacade`(트랜잭션 없음)가 조율한다.
+
+1. **확정본 커밋** — 판매자 한 명의 원장을 합산해 쓰고 그 판매자의 원장을 close
+2. **세금계산서 발행** (트랜잭션 밖)
+3. **발행 번호 커밋**
+
+판매자마다 독립 트랜잭션이라 한 명의 실패가 나머지를 롤백시키지 않는다.
+`TaxInvoiceIssuer#issue` 의 계약에 `(sellerId, month)` 기준 멱등을 명시했다 —
+`PgClient#cancel` 이 `pgTxId` 기준 멱등을 요구하는 것과 같은 이유다.
+
+### 고치면서 새로 생긴 경로 하나
+
+재현 테스트를 쓰다가 발견했다. 발행이 트랜잭션 밖으로 나오면
+**"확정본은 커밋됐고 발행은 실패한"** 상태가 생기는데, 그 판매자는 원장이 이미 close 되어
+*미마감 원장 기준*으로는 다음 실행에서 잡히지 않는다 — 계산서 없는 확정본이 영구히 방치된다.
+
+마감 대상을 두 부류의 합집합으로 바꿨다.
+
+- 미마감 원장이 있는 판매자
+- **마감은 끝났는데 계산서가 없는 판매자** (`findAwaitingTaxInvoice`)
+
+> 이 경로는 수정이 만들어낸 것이지 원래 있던 결함이 아니다.
+> 다만 테스트를 먼저 쓰지 않았다면 발견되지 않은 채 배포됐을 자리라 함께 적어 둔다.
+
+### ShedLock 은 그다음에
+
+근본 원인을 고친 뒤 `@SchedulerLock` 을 붙였다(`settlement-close-month`, MySQL 락).
+**순서가 반대였다면** 락을 걸어 두고도 단일 인스턴스 부분 실패로 같은 사고가 났을 것이다.
+락은 동시 실행 창만 닫는다.
 
 ---
 
