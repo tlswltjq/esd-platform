@@ -1,0 +1,12 @@
+# 접속 정보는 @ServiceConnection 이 컨테이너에서 밀어 넣는다(InfraContainers).
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate      # 스키마는 Flyway 만 바꾼다 — 앱과 같은 규칙
+    open-in-view: false
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
