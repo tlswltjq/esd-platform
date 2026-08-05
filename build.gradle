@@ -119,6 +119,11 @@ subprojects {
         targetClasses = project.path.startsWith(':apps:')
                 ? ['com.stove.*.core.*']
                 : ['com.stove.common.*']
+        // targetTests 를 지정하지 않으면 pitest 는 targetClasses 패턴을 **테스트 선택에도** 쓴다.
+        // 그러면 api.* 의 테스트(컨트롤러·리스너·파사드)가 판정에 전혀 참여하지 못한다.
+        // 실제로 그랬다 — 전 모듈을 통틀어 뮤턴트를 죽인 테스트가 core.service 와 core.domain
+        // 두 패키지에서만 나왔고, 파사드가 지키는 규칙은 전부 "생존"으로 보고되고 있었다.
+        targetTests = ['com.stove.*']
         // 결함 재현 테스트는 실패하는 것이 정상이라 뮤테이션 판정에 쓸 수 없다
         excludedTestClasses = ['*DefectTest']
         threads = 4
