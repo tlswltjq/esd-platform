@@ -1,5 +1,7 @@
 package com.stove.common.archunit;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleNameStartingWith;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -87,9 +89,14 @@ public final class ModuleHygieneRules {
      */
     @ArchTest
     public static final ArchRule 스텁_어댑터는_격리한다 = classes()
-            .that().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Mock")
-            .or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Stub")
-            .or().resideInAPackage(INFRASTRUCTURE).and().haveSimpleNameStartingWith("Fake")
+            // 술어를 명시적으로 묶는다. 유창한 .and()/.or() 체이닝은 우선순위 없이 왼쪽부터
+            // 결합하므로 `A and Mock or A and Stub or A and Fake` 가
+            // `((((A and Mock) or A) and Stub) or A) and Fake` 가 된다 —
+            // 결국 Fake 로 시작하는 클래스만 검사하고 Mock·Stub 은 한 번도 보지 않았다(D-021).
+            .that(resideInAPackage(INFRASTRUCTURE)
+                    .and(simpleNameStartingWith("Mock")
+                            .or(simpleNameStartingWith("Stub"))
+                            .or(simpleNameStartingWith("Fake"))))
             .should().beAnnotatedWith(PROFILE)
             .orShould().beAnnotatedWith(CONDITIONAL_ON_PROPERTY)
             .because("스텁이 조건 없이 빈으로 뜨면 운영에서 조용히 돌거나 실제 어댑터와 충돌한다")
