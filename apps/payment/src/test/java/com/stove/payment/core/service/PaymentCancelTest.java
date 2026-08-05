@@ -236,6 +236,44 @@ class PaymentCancelTest {
     }
 
     @Test
+    @DisplayName("PG 환불 호출 자체가 실패하면 CANCELING 으로 남아 재시도 대상이 된다")
+    void failedPgCancelLeavesTheIntentCommitted() {
+        String orderNo = paidOrder(30_000L);
+        long before = outboxEventRepository.count();
+
+        // 기존 테스트는 PG 환불이 성공한 다음 단계(Outbox 적재)가 깨지는 경우만 봤다.
+        // 그 앞 단계인 PG 호출 자체가 실패하는 쪽이 실제로는 더 흔하다 — 타임아웃·5xx·회선 장애.
+        doThrow(new IllegalStateException("PG timeout"))
+                .when(pgClient).cancel(anyString(), anyLong(), anyString());
+
+        assertThatThrownBy(() -> refundFacade.refund(orderNo, "USER_REFUND"))
+                .isInstanceOf(IllegalStateException.class);
+
+        // 1단계(의도 기록)는 이미 커밋됐으므로 남아야 한다. PAID 로 되돌아가면
+        // 환불 요청이 있었다는 사실 자체가 사라져 재시도 대상에서 빠진다.
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELING);
+        assertThat(outboxEventRepository.count() - before)
+                .as("환불이 실행되지 않았는데 PaymentCancelled 가 나가면 라이선스가 먼저 회수된다")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("PG 환불이 실패했던 건도 재시도로 완결된다")
+    void failedPgCancelCompletesOnRetry() {
+        String orderNo = paidOrder(30_000L);
+        doThrow(new IllegalStateException("PG timeout"))
+                .when(pgClient).cancel(anyString(), anyLong(), anyString());
+        assertThatThrownBy(() -> refundFacade.refund(orderNo, "USER_REFUND"))
+                .isInstanceOf(IllegalStateException.class);
+
+        reset(pgClient);
+        refundFacade.refund(orderNo, "USER_REFUND");
+
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
+        verify(pgClient, times(1)).cancel(anyString(), anyLong(), anyString());
+    }
+
+    @Test
     @DisplayName("[D-018] 결제가 없는 주문의 보상 요청도 예외 없이 끝난다")
     void compensationForUnknownOrderMustNotStallTheConsumer() {
         // license 가 지급에 실패했는데 payment 쪽에 그 주문의 결제가 없는 상황.
