@@ -22,12 +22,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StudioEventListener {
 
-    private static final String GROUP = "review";
-
     private final ReviewService reviewService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.STUDIO, groupId = GROUP)
+    @KafkaListener(topics = Topics.STUDIO, groupId = ReviewService.CONSUMER_GROUP)
     public void onStudioEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
         if (!envelope.isType(EventType.GAME_REGISTERED)) {

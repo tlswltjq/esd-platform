@@ -24,12 +24,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ReviewEventListener {
 
-    private static final String GROUP = "catalog";
-
     private final ProductCommandService productCommandService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.REVIEW, groupId = GROUP)
+    @KafkaListener(topics = Topics.REVIEW, groupId = ProductCommandService.CONSUMER_GROUP)
     public void onReviewEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
         if (!envelope.isType(EventType.REVIEW_APPROVED)) {

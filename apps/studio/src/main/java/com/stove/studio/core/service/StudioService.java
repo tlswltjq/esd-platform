@@ -31,7 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudioService {
 
     private static final String AGGREGATE = "GameProject";
-    private static final String CONSUMER_GROUP = "studio";
+
+    /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
+    public static final String CONSUMER_GROUP = "studio";
 
     private final GameProjectRepository projectRepository;
     private final GameBuildRepository buildRepository;

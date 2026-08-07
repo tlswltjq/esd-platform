@@ -1,5 +1,6 @@
 package com.stove.settlement;
 
+import com.stove.common.archunit.ConsumerGroupRules;
 import com.stove.common.archunit.EventOrderingRules;
 import com.stove.common.archunit.ModuleHygieneRules;
 import com.stove.common.archunit.ModulePackageRules;
@@ -20,4 +21,7 @@ class SettlementArchitectureTest {
 
     @ArchTest
     static final ArchTests 이벤트_순서 = ArchTests.in(EventOrderingRules.class);
+
+    @ArchTest
+    static final ArchTests 컨슈머_그룹 = ArchTests.in(ConsumerGroupRules.class);
 }

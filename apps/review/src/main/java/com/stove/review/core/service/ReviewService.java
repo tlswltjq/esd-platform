@@ -29,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReviewService {
 
     private static final String AGGREGATE = "ReviewRequest";
-    private static final String CONSUMER_GROUP = "review";
+
+    /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
+    public static final String CONSUMER_GROUP = "review";
 
     private final ReviewRequestRepository reviewRepository;
     private final RatingBoardClient ratingBoardClient;

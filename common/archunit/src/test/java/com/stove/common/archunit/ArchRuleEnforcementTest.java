@@ -157,4 +157,85 @@ class ArchRuleEnforcementTest {
             assertAcceptsCompliant(ModuleHygieneRules.필드_주입_금지, "필드_주입_금지");
         }
     }
+
+    /**
+     * 컨슈머 그룹 규칙.
+     *
+     * <p>이 규칙은 {@code ArchRule} 이 아니라 {@code JavaClasses} 를 받는 메서드다. 앱 하나의
+     * 클래스 <b>전체</b>를 모아 집합끼리 비교해야 하는데 {@code ArchRule} 은 클래스 단위로 돌기 때문이다.
+     * 그래서 위 헬퍼를 쓰지 못하고 픽스처를 앱 단위로 하나씩 만든다.
+     */
+    @Nested
+    @DisplayName("컨슈머 그룹 규칙")
+    class ConsumerGroup {
+
+        /** 앱 하나를 모사한 픽스처 패키지. 비어 있으면 그 아래 단언이 전부 무의미해진다. */
+        private JavaClasses app(String name) {
+            JavaClasses classes = new ClassFileImporter()
+                    .importPackages("com.stove.archfixture.consumergroup." + name);
+            assertThat(classes).as("픽스처 %s 가 비어 있다", name).isNotEmpty();
+            return classes;
+        }
+
+        @Test
+        @DisplayName("Kafka 그룹과 멱등 키가 갈라지면 잡는다")
+        void divergentGroupIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.컨슈머_그룹과_멱등키가_같다(app("divergent")))
+                    .as("갈라진 그룹을 잡지 못했다 — 규칙이 공허하게 통과하고 있다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("kafka-side")
+                    .hasMessageContaining("inbox-side");
+        }
+
+        @Test
+        @DisplayName("한 상수에서 나온 그룹은 통과시킨다")
+        void alignedGroupIsAccepted() {
+            assertThatCode(() -> ConsumerGroupRules.컨슈머_그룹과_멱등키가_같다(app("aligned")))
+                    .as("규칙을 지킨 앱을 거부했다")
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("Inbox 가드를 쓰지 않는 앱은 건너뛴다 — store·download")
+        void guardlessAppIsSkipped() {
+            assertThatCode(() -> ConsumerGroupRules.컨슈머_그룹과_멱등키가_같다(app("guardless")))
+                    .as("가드가 없어 대조할 것이 없는 앱을 거부했다")
+                    .doesNotThrowAnyException();
+        }
+
+        /**
+         * 제외 조건을 상수의 부재로 판정하면 이 앱이 조용히 통과한다.
+         *
+         * <p>가드를 쓰는데 멱등 키가 상수 밖으로 나간 상태다. {@code guardless} 와 겉모습이 같지만
+         * ({@code CONSUMER_GROUP} 이 없다) 성격은 정반대다 — 검사할 것이 없는 게 아니라
+         * <b>검사 대상이 사라진 것</b>이다. 둘을 가르는 것이 {@code ProcessedEventGuard} 주입 여부다.
+         *
+         * <p>이 테스트가 D-021 과 같은 부류의 공허 통과를 막는다.
+         */
+        @Test
+        @DisplayName("가드는 쓰는데 멱등 키 상수가 사라지면 잡는다")
+        void guardWithoutConstantIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.컨슈머_그룹과_멱등키가_같다(app("missing")))
+                    .as("상수가 사라진 앱이 '가드를 안 쓰는 앱' 과 같은 문으로 빠져나갔다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("CONSUMER_GROUP 상수가 없다");
+        }
+
+        @Test
+        @DisplayName("groupId 를 빠뜨린 리스너를 잡는다")
+        void missingGroupIdIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("nogroup")))
+                    .as("groupId 없는 리스너를 잡지 못했다 — yml 기본값을 지웠으므로 이 리스너는 그룹이 없다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("NoGroupListener");
+        }
+
+        @Test
+        @DisplayName("groupId 를 명시한 리스너는 통과시킨다")
+        void declaredGroupIdIsAccepted() {
+            assertThatCode(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("aligned")))
+                    .as("groupId 를 명시한 리스너를 거부했다")
+                    .doesNotThrowAnyException();
+        }
+    }
 }

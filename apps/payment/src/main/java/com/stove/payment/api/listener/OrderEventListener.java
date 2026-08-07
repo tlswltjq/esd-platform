@@ -18,12 +18,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OrderEventListener {
 
-    private static final String GROUP = "payment";
-
     private final PaymentService paymentService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.ORDER, groupId = GROUP)
+    @KafkaListener(topics = Topics.ORDER, groupId = PaymentService.CONSUMER_GROUP)
     public void onOrderEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
         if (!envelope.isType(EventType.ORDER_CREATED)) {
