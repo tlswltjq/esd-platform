@@ -12,4 +12,13 @@ dependencies {
     testImplementation 'org.springframework:spring-context'
     testImplementation 'org.springframework.boot:spring-boot'
     testImplementation 'org.springframework.data:spring-data-commons'
+    testImplementation 'org.springframework.kafka:spring-kafka'
+
+    // ConsumerGroupRules 는 "가드를 쓰는 앱인가" 를 ProcessedEventGuard 주입 여부로 판정한다.
+    // 픽스처가 그 타입을 실제로 주입받아야 규칙이 보는 것과 같은 바이트코드가 나온다.
+    //
+    // 방향이 거꾸로 보이지만(:common:messaging 도 이 모듈을 testImplementation 으로 쓴다)
+    // 양쪽 다 test → 상대 main 이라 태스크 그래프에 순환이 생기지 않는다.
+    // testImplementation 은 전이되지 않으므로 이 모듈을 쓰는 12개 모듈에도 새지 않는다.
+    testImplementation project(':common:messaging')
 }

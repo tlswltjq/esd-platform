@@ -24,12 +24,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PaymentEventListener {
 
-    private static final String GROUP = "settlement";
-
     private final SettlementService settlementService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.PAYMENT, groupId = GROUP)
+    @KafkaListener(topics = Topics.PAYMENT, groupId = SettlementService.CONSUMER_GROUP)
     public void onPaymentEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
 

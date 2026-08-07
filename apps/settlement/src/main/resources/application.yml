@@ -34,7 +34,6 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       acks: all
     consumer:
-      group-id: settlement
       auto-offset-reset: earliest
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer

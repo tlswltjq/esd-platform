@@ -33,7 +33,7 @@ public class PaymentEventListener {
     private final LicenseService licenseService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.PAYMENT, groupId = "license")
+    @KafkaListener(topics = Topics.PAYMENT, groupId = LicenseService.CONSUMER_GROUP)
     public void onPaymentEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
 

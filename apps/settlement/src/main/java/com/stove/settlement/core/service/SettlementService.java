@@ -34,7 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class SettlementService {
 
-    private static final String CONSUMER_GROUP = "settlement";
+    /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
+    public static final String CONSUMER_GROUP = "settlement";
 
     private final SettlementRecordRepository recordRepository;
     private final SellerSettlementRepository sellerSettlementRepository;

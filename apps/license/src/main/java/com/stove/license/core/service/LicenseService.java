@@ -28,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class LicenseService {
 
     private static final String AGGREGATE = "License";
-    private static final String CONSUMER_GROUP = "license";
+
+    /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
+    public static final String CONSUMER_GROUP = "license";
 
     private final LicenseRepository licenseRepository;
     private final OutboxRecorder outboxRecorder;
