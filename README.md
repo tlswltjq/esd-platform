@@ -49,6 +49,7 @@ stove/
 Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/performance.md) 에 있다.
 아래 "같은 애그리거트의 순서 보장"이 어느 층에서 어떻게 지켜지는지는
 [docs/event-ordering.md](docs/event-ordering.md) 에 정리했다.
+쓰이지 않는 코드를 전수 조사한 결과는 [docs/dead-code-audit.md](docs/dead-code-audit.md) 에 있다.
 
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
 스키마가 유동적인 패치 매니페스트는 MongoDB, 검색 트래픽은 Elasticsearch.
