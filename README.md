@@ -69,6 +69,7 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
                                      ├▶ order     주문 확정
                                      └▶ settlement 매출 집계(자체/입점 구분)
 [지급] license   ──LicenseIssued─────▶ download   다운로드 권한 부여
+[실패] payment   ──PaymentFailed─────▶ order      주문 실패 종료 (돈이 움직인 적 없음)
 [환불] payment   ──PaymentCancelled──▶ license    라이선스 회수
                                      ├▶ order     주문 취소
                                      └▶ settlement 환불 역산
@@ -244,8 +245,13 @@ ORDER=$(curl -s -X POST localhost:8082/api/v1/orders -H 'Content-Type: applicati
 
 curl -s -X POST localhost:8083/api/v1/payments/$ORDER/prepare \
   -H 'Content-Type: application/json' -d '{"method":"STOVE_CASH"}'
+# 콜백은 result 로 승인/거절이 갈린다. 기본값이 없으므로 빠뜨리면 400 이다.
 curl -s -X POST localhost:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
-  -d "{\"orderNo\":\"$ORDER\",\"pgTxId\":\"PG-TX-77\",\"paidAmount\":57000,\"idempotencyKey\":\"IDEM-77\"}"
+  -d "{\"result\":\"APPROVED\",\"orderNo\":\"$ORDER\",\"pgTxId\":\"PG-TX-77\",\"paidAmount\":57000,\"idempotencyKey\":\"IDEM-77\"}"
+
+# 승인 거절이면 결제가 FAILED 로 끝나고 PaymentFailed 가 주문을 실패 종료시킨다.
+# (pgTxId 는 사전등록이 돌려준 값이어야 한다 — 거절에는 멱등키가 없어 이 값이 유일한 거래 식별자다)
+# -d "{\"result\":\"DECLINED\",\"orderNo\":\"$ORDER\",\"pgTxId\":\"$PG_TX\",\"reasonCode\":\"REJECT_CARD_COMPANY\",\"reason\":\"카드사 거절\"}"
 
 # ── 트랙 C: 지급 → 다운로드 → 정산 ─────────────────────────────
 curl -s localhost:8084/api/v1/library -H 'X-Member-Id: 7'                     # 라이선스 지급 확인
@@ -287,6 +293,10 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 - Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람
 - 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
 - 분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격
+  — **지금 correlationId 는 Kafka 구간에서 끊긴다.** 적재·발행·수신 모두 헤더를 다루지 않아,
+  주문 하나를 order → payment → license → settlement 로 따라가면 order 이후 로그가 `[payment,]`
+  로 빈칸을 찍는다. 손으로 헤더를 만들면 Tracing 도입 시 중복이 되므로 여기에 함께 둔다
+  (`EventHeaders.CORRELATION_ID` javadoc 참고)
 - 다국가·다통화(174개국 서비스) 대응: 통화별 반올림 규칙과 환율 스냅샷
 - 대량 재색인의 비동기화 — 지금은 페이지 단위 커밋 + 스로틀로 동기 실행이라,
   카탈로그가 10만 건을 넘으면 운영자의 HTTP 요청이 그만큼 오래 붙잡힌다

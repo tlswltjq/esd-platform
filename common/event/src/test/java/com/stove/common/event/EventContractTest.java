@@ -15,6 +15,7 @@ import com.stove.common.event.payload.OrderCreatedEvent;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
@@ -73,6 +74,7 @@ class EventContractTest {
                 OrderCanceledEvent.of("ORD-1", 42L, "USER_CANCEL"),
                 PaymentCompletedEvent.of(1L, "ORD-1", 42L, 60_000L, "CARD", lines()),
                 PaymentCancelledEvent.of(1L, "ORD-1", 42L, 60_000L, "USER_REFUND"),
+                PaymentFailedEvent.of(1L, "ORD-1", 42L, "REJECT_CARD_COMPANY", "카드사 거절"),
                 LicenseIssuedEvent.of("ORD-1", 42L, List.of(1L, 2L)),
                 LicenseRevokedEvent.of("ORD-1", 42L, List.of(1L, 2L), "USER_REFUND"),
                 LicenseIssueFailedEvent.of("ORD-1", 42L, "재고 없음"));

@@ -59,6 +59,11 @@ public class Order extends BaseTimeEntity {
     @Column(length = 200)
     private String cancelReason;
 
+    private Instant failedAt;
+
+    @Column(length = 200)
+    private String failReason;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 
@@ -98,6 +103,24 @@ public class Order extends BaseTimeEntity {
         }
         this.status = OrderStatus.PAID;
         this.paidAt = Instant.now();
+    }
+
+    /**
+     * PG 승인 거절로 주문을 종료한다.
+     *
+     * <p>취소와 다르다 — 취소는 승인된 결제를 되돌리는 것이라 {@code PAID} 에서도 열려 있지만,
+     * 실패는 승인 자체가 없었던 경우라 {@code CREATED} 에서만 들어온다.
+     */
+    public void markFailed(String reason) {
+        if (status == OrderStatus.FAILED) {
+            return; // 이벤트 중복 수신 방어
+        }
+        if (status != OrderStatus.CREATED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "결제 실패 처리할 수 없는 주문 상태: " + status);
+        }
+        this.status = OrderStatus.FAILED;
+        this.failedAt = Instant.now();
+        this.failReason = reason;
     }
 
     public void cancel(String reason) {

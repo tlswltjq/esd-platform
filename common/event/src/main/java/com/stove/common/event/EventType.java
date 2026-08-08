@@ -24,6 +24,7 @@ public final class EventType {
     // payment
     public static final String PAYMENT_COMPLETED = "PaymentCompleted";
     public static final String PAYMENT_CANCELLED = "PaymentCancelled";
+    public static final String PAYMENT_FAILED = "PaymentFailed";
 
     // license
     public static final String LICENSE_ISSUED = "LicenseIssued";

@@ -1,6 +1,7 @@
 package com.stove.payment.api.controller;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,12 +11,14 @@ import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.api.controller.dto.PgCallbackRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentRequest;
+import com.stove.payment.core.domain.PgDecline;
 import com.stove.payment.core.service.PaymentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -40,7 +43,13 @@ class PaymentControllerTest {
     private String callback(String orderNo, String pgTxId, Long paidAmount, String idempotencyKey)
             throws Exception {
         return objectMapper.writeValueAsString(
-                new PgCallbackRequest(orderNo, pgTxId, paidAmount, idempotencyKey, "CARD"));
+                new PgCallbackRequest.Approved(orderNo, pgTxId, paidAmount, idempotencyKey, "CARD"));
+    }
+
+    private ResultActions postCallback(String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/payments/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     @Test
@@ -92,6 +101,64 @@ class PaymentControllerTest {
         mockMvc.perform(post("/api/v1/payments/callback")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(callback("ORD-1", "", 30_000L, "IDEM-1")))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    @DisplayName("result 가 없는 콜백은 400 이다 — 기본값을 승인으로 두지 않는다")
+    void callbackWithoutResultIsRejected() throws Exception {
+        postCallback("""
+                {"orderNo":"ORD-1","pgTxId":"PG-1","paidAmount":30000,"idempotencyKey":"IDEM-1"}
+                """)
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    @DisplayName("모르는 result 는 400 이다 — 판별할 수 없는 결과를 추측하지 않는다")
+    void callbackWithUnknownResultIsRejected() throws Exception {
+        postCallback("""
+                {"result":"MAYBE","orderNo":"ORD-1","pgTxId":"PG-1"}
+                """)
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    @DisplayName("거절 콜백은 거절 경로로 간다")
+    void declinedCallbackGoesToDeclineHandler() throws Exception {
+        postCallback("""
+                {"result":"DECLINED","orderNo":"ORD-1","pgTxId":"PG-1",
+                 "reasonCode":"REJECT_CARD_COMPANY","reason":"카드사 거절"}
+                """)
+                .andExpect(status().isOk());
+
+        verify(paymentService).handleDecline(
+                new PgDecline("ORD-1", "PG-1", "REJECT_CARD_COMPANY", "카드사 거절"));
+    }
+
+    @Test
+    @DisplayName("사유 코드 없는 거절은 400 이다 — 집계할 수 없는 실패는 운영에서 쓸 수 없다")
+    void declineWithoutReasonCodeIsRejected() throws Exception {
+        postCallback("""
+                {"result":"DECLINED","orderNo":"ORD-1","pgTxId":"PG-1","reason":"카드사 거절"}
+                """)
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    @DisplayName("거절 변형을 더해도 승인 쪽 금액 검증은 그대로다")
+    void approvalValidationSurvivesTheSplit() throws Exception {
+        postCallback("""
+                {"result":"APPROVED","orderNo":"ORD-1","pgTxId":"PG-1",
+                 "paidAmount":0,"idempotencyKey":"IDEM-1"}
+                """)
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(paymentService);
