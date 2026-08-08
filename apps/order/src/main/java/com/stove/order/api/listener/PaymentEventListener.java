@@ -5,6 +5,7 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.order.core.service.OrderCommandService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * [결제] payment → PaymentCompleted → order(확정)
  * [환불] payment → PaymentCancelled → order(취소)
+ * [실패] payment → PaymentFailed    → order(실패 종료)
  */
 @Slf4j
 @Component
@@ -37,6 +39,11 @@ public class PaymentEventListener {
             PaymentCancelledEvent event = envelope.payloadAs(objectMapper, PaymentCancelledEvent.class);
             orderCommandService.confirmCanceled(envelope.eventId(), envelope.eventType(),
                     event.orderNo(), event.reason());
+
+        } else if (envelope.isType(EventType.PAYMENT_FAILED)) {
+            PaymentFailedEvent event = envelope.payloadAs(objectMapper, PaymentFailedEvent.class);
+            orderCommandService.confirmFailed(envelope.eventId(), envelope.eventType(),
+                    event.orderNo(), event.reasonCode() + ":" + event.reason());
         }
     }
 }

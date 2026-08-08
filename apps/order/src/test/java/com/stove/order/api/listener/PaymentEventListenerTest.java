@@ -12,6 +12,7 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.order.core.service.OrderCommandService;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,8 @@ class PaymentEventListenerTest {
             PaymentCompletedEvent.of(1L, "ORD-1", 42L, 30_000L, "CARD", java.util.List.of());
     private static final PaymentCancelledEvent CANCELLED =
             PaymentCancelledEvent.of(1L, "ORD-1", 42L, 30_000L, "USER_REFUND");
+    private static final PaymentFailedEvent FAILED =
+            PaymentFailedEvent.of(1L, "ORD-1", 42L, "REJECT_CARD_COMPANY", "카드사 거절");
 
     @Test
     @DisplayName("결제 완료는 주문 확정으로 이어진다")
@@ -55,6 +58,16 @@ class PaymentEventListenerTest {
 
         verify(orderCommandService).confirmCanceled(
                 anyString(), eq(EventType.PAYMENT_CANCELLED), eq("ORD-1"), eq("USER_REFUND"));
+    }
+
+    @Test
+    @DisplayName("결제 실패는 주문 실패 종료로 이어지고 사유 코드가 함께 넘어간다")
+    void failedEndsOrder() {
+        listener.onPaymentEvent(EventRecords.of(Topics.PAYMENT, FAILED));
+
+        verify(orderCommandService).confirmFailed(
+                anyString(), eq(EventType.PAYMENT_FAILED), eq("ORD-1"),
+                eq("REJECT_CARD_COMPANY:카드사 거절"));
     }
 
     @Test

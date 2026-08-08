@@ -119,6 +119,88 @@ class PaymentTest {
         assertThat(paid.cancelable()).isTrue();
     }
 
+    @Test
+    @DisplayName("PG 승인 거절은 결제를 FAILED 로 끝내고 사유를 코드와 문구로 남긴다")
+    void declineEndsPayment() {
+        Payment payment = pendingPayment();
+
+        assertThat(payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절")).isTrue();
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.getFailedAt()).isNotNull();
+        assertThat(payment.getFailReasonCode()).isEqualTo("REJECT_CARD_COMPANY");
+        assertThat(payment.getFailReason()).isEqualTo("카드사 거절");
+    }
+
+    @Test
+    @DisplayName("같은 거절이 두 번 와도 이벤트는 한 번만 나간다 — FAILED 는 종단 상태다")
+    void declineIsIdempotent() {
+        Payment payment = pendingPayment();
+
+        assertThat(payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절")).isTrue();
+        assertThat(payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절")).isFalse();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("사전등록 전에는 거절이 올 수 없다 — 승인 요청 자체가 없었다")
+    void cannotDeclineBeforePrepare() {
+        Payment payment = readyPayment();
+
+        assertThatThrownBy(() -> payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
+    }
+
+    @Test
+    @DisplayName("승인된 결제에 오는 거절은 중복이 아니라 사고다 — 승인/거절이 엇갈렸다")
+    void declineAfterApprovalIsRejected() {
+        Payment payment = paidPayment();
+
+        assertThatThrownBy(() -> payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("취소된 결제에도 거절은 들어올 수 없다")
+    void declineAfterCancelIsRejected() {
+        Payment payment = paidPayment();
+        payment.beginCancel("USER_REFUND");
+        payment.completeCancel();
+
+        assertThatThrownBy(() -> payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("다른 거래의 거절 콜백은 걸러낸다 — 잘못 배달된 콜백이 결제를 끝내면 안 된다")
+    void declineWithForeignTxIsRejected() {
+        Payment payment = pendingPayment();
+
+        assertThatThrownBy(() -> payment.fail("PG-TX-OTHER", "REJECT_CARD_COMPANY", "카드사 거절"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("거절로 끝난 결제는 다시 사전등록할 수 없다 — 재시도는 새 주문으로 한다")
+    void failedIsTerminal() {
+        Payment payment = pendingPayment();
+        payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절");
+
+        assertThatThrownBy(() -> payment.prepare("PG-TX-2", "CARD"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    private Payment pendingPayment() {
+        Payment payment = readyPayment();
+        payment.prepare("PG-TX-1", "CARD");
+        return payment;
+    }
+
     private Payment paidPayment() {
         Payment payment = readyPayment();
         payment.prepare("PG-TX-1", "CARD");

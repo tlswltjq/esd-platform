@@ -150,13 +150,19 @@ if [ -n "$ORDER_NO" ]; then
 
     # 게이트 3 — 사전등록 금액과 다른 승인은 확정하지 않는다.
     # prepare 뒤에 보내야 '승인 불가 상태'가 아니라 금액 대조에서 걸린다.
+    # 콜백은 result 로 승인/거절이 갈린다. 기본값이 없으므로 빠뜨리면 400 이다 —
+    # "표현되지 않은 결과가 조용히 승인이 되는" 성질을 만들지 않으려는 의도적 선택이다.
+    req "payment: result 없는 콜백 거부 (400)" 400 \
+        -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-X-$TS\"}"
+
     req "payment: 금액 불일치 콜백 거부 (PAYMENT_AMOUNT_MISMATCH)" 409 \
         -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
-        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":1,\"idempotencyKey\":\"IDEM-BAD-$TS\"}"
+        -d "{\"result\":\"APPROVED\",\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":1,\"idempotencyKey\":\"IDEM-BAD-$TS\"}"
 
     req "payment: 승인 콜백 → PaymentCompleted" 200 \
         -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
-        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
+        -d "{\"result\":\"APPROVED\",\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
 
     has "http://payment:8083/api/v1/payments/$ORDER_NO" '"status":"PAID"' \
         && ok "payment: PAID 확정" \
@@ -204,7 +210,7 @@ if [ -n "$ORDER_NO" ]; then
         | grep -o '"licenseId"' | wc -l | tr -d ' ')
     req "payment: 중복 콜백 흡수" 200 \
         -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
-        -d "{\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
+        -d "{\"result\":\"APPROVED\",\"orderNo\":\"$ORDER_NO\",\"pgTxId\":\"PG-SMOKE-$TS\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-$TS\"}"
     sleep 6
     after=$("${RUNNER[@]}" -H "X-Member-Id: $MEMBER" http://license:8084/api/v1/library \
         | grep -o '"licenseId"' | wc -l | tr -d ' ')
@@ -238,6 +244,56 @@ if [ -n "$ORDER_NO" ]; then
         ok "settlement: SALE(+$NET) + REFUND(-$NET) 순액 0"
     else
         bad "settlement: 상계" "+$NET 와 -$NET 가 함께 있어야 한다: ${BODY:0:200}"
+    fi
+fi
+
+echo
+echo "=== 3-B. 결제 실패 경로 (PG 승인 거절) ==="
+# 승인과 대칭인 경로다. 승인 경로를 탄 주문은 재사용할 수 없으므로 주문을 새로 만든다 —
+# FAILED 는 종단 상태라 카드를 바꿔 재시도하려면 어차피 새 주문이어야 한다.
+if [ -n "$PRODUCT_ID" ]; then
+    req "order: 실패 검증용 주문 생성" 200 \
+        -X POST http://order:8082/api/v1/orders -H 'Content-Type: application/json' \
+        -d "{\"memberId\":$MEMBER,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}],\"expectedAmount\":$PRICE}"
+    FAIL_ORDER_NO=$(printf '%s' "$BODY" | grep -o '"orderNo":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+    if [ -n "$FAIL_ORDER_NO" ]; then
+        await "payment: 결제 대기 생성" 60 \
+            has "http://payment:8083/api/v1/payments/$FAIL_ORDER_NO" '"status":"READY"'
+
+        # 거절은 멱등키가 없다(돈이 움직이지 않아 PG 가 만들 승인 거래 키가 없다).
+        # 그래서 pgTxId 가 이 거절이 어느 거래의 것인지 가리키는 유일한 값이고,
+        # 사전등록이 돌려준 값을 그대로 써야 한다.
+        req "payment: PG 사전등록 → PENDING" 200 \
+            -X POST "http://payment:8083/api/v1/payments/$FAIL_ORDER_NO/prepare" \
+            -H 'Content-Type: application/json' -d '{"method":"CARD"}'
+        PG_TX=$(printf '%s' "$BODY" | grep -o '"pgTxId":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        req "payment: 다른 거래의 거절 콜백 거부 (PAYMENT_TX_MISMATCH)" 409 \
+            -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+            -d "{\"result\":\"DECLINED\",\"orderNo\":\"$FAIL_ORDER_NO\",\"pgTxId\":\"PG-NOPE-$TS\",\"reasonCode\":\"REJECT_CARD_COMPANY\",\"reason\":\"카드사 거절\"}"
+
+        req "payment: 거절 콜백 → PaymentFailed" 200 \
+            -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+            -d "{\"result\":\"DECLINED\",\"orderNo\":\"$FAIL_ORDER_NO\",\"pgTxId\":\"$PG_TX\",\"reasonCode\":\"REJECT_CARD_COMPANY\",\"reason\":\"카드사 거절\"}"
+
+        has "http://payment:8083/api/v1/payments/$FAIL_ORDER_NO" '"status":"FAILED"' \
+            && ok "payment: FAILED 확정" \
+            || bad "payment: FAILED 확정" "거절 콜백 뒤에는 FAILED 여야 한다"
+
+        # 이게 이 절의 핵심이다 — 예전에는 여기서 주문이 CREATED 에 영구히 머물렀다.
+        await "order: 주문 실패 종료 FAILED (PaymentFailed 관통)" 60 \
+            has "http://order:8082/api/v1/orders/$FAIL_ORDER_NO" '"status":"FAILED"' -H "X-Member-Id: $MEMBER"
+
+        # 중복 거절은 종단 상태로 흡수한다(승인이 멱등키로 흡수하는 것과 같은 자리).
+        req "payment: 중복 거절 콜백 흡수" 200 \
+            -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+            -d "{\"result\":\"DECLINED\",\"orderNo\":\"$FAIL_ORDER_NO\",\"pgTxId\":\"$PG_TX\",\"reasonCode\":\"REJECT_CARD_COMPANY\",\"reason\":\"카드사 거절\"}"
+
+        # 거절 뒤에 오는 승인은 엇갈린 콜백이다. 조용히 삼키면 사고가 관측되지 않는다.
+        req "payment: 거절 뒤 승인 콜백 거부 (409)" 409 \
+            -X POST http://payment:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
+            -d "{\"result\":\"APPROVED\",\"orderNo\":\"$FAIL_ORDER_NO\",\"pgTxId\":\"$PG_TX\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-LATE-$TS\"}"
     fi
 fi
 

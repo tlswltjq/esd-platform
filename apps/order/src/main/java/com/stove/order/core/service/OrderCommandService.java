@@ -65,6 +65,15 @@ public class OrderCommandService {
         log.info("주문 결제 확정 orderNo={}", orderNo);
     }
 
+    /** payment.PaymentFailed 수신 처리(PG 승인 거절 → 주문 실패 종료) */
+    public void confirmFailed(String eventId, String eventType, String orderNo, String reason) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
+        findOrder(orderNo).markFailed(reason);
+        log.info("주문 결제 실패 확정 orderNo={} reason={}", orderNo, reason);
+    }
+
     /** payment.PaymentCancelled 수신 처리(환불/보상 트랜잭션 결과 반영) */
     public void confirmCanceled(String eventId, String eventType, String orderNo, String reason) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {

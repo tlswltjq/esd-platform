@@ -5,6 +5,7 @@ import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
@@ -12,6 +13,7 @@ import com.stove.payment.core.domain.PaymentCancellation;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgApproval;
+import com.stove.payment.core.domain.PgDecline;
 import com.stove.payment.core.domain.PgPreparation;
 import com.stove.payment.core.port.PgClient;
 import java.util.List;
@@ -88,6 +90,34 @@ public class PaymentService {
                         payment.getAmount(), payment.getMethod(), payment.getLines()));
 
         log.info("결제 승인 orderNo={} amount={}", payment.getOrderNo(), payment.getAmount());
+    }
+
+    /**
+     * PG 승인 거절 콜백 처리.
+     *
+     * <p>승인과 <b>같은 행 잠금</b>을 쓴다. 승인 콜백과 거절 콜백이 동시에 도착하면 잠금이 순서를
+     * 강제하고, 뒤에 오는 쪽이 상태 가드에 걸려 예외로 뜬다 — 어느 순서든 엇갈린 콜백이
+     * 조용히 흡수되지 않는다.
+     *
+     * <p>중복 거절은 종단 상태로 흡수하고 이벤트를 재발행하지 않는다.
+     */
+    public void handleDecline(PgDecline decline) {
+        Payment payment = paymentRepository.findByOrderNoForUpdate(decline.orderNo())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
+                        "orderNo=" + decline.orderNo()));
+
+        boolean failed = payment.fail(decline.pgTxId(), decline.reasonCode(), decline.reason());
+        if (!failed) {
+            log.info("중복 거절 콜백 무시 orderNo={} code={}", decline.orderNo(), decline.reasonCode());
+            return;
+        }
+
+        outboxRecorder.record(AGGREGATE, payment.getOrderNo(),
+                PaymentFailedEvent.of(payment.getId(), payment.getOrderNo(), payment.getMemberId(),
+                        decline.reasonCode(), decline.reason()));
+
+        log.warn("결제 승인 거절 orderNo={} code={} reason={}",
+                payment.getOrderNo(), decline.reasonCode(), decline.reason());
     }
 
     /**

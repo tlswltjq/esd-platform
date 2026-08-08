@@ -86,6 +86,15 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 200)
     private String cancelReason;
 
+    private Instant failedAt;
+
+    /** PG 가 준 거절 코드. 사유별 집계의 기준이라 사람이 읽는 문구와 따로 둔다. */
+    @Column(length = 50)
+    private String failReasonCode;
+
+    @Column(length = 200)
+    private String failReason;
+
     private Payment(String orderNo, Long memberId, long amount, String currency, List<OrderLine> lines) {
         this.orderNo = orderNo;
         this.memberId = memberId;
@@ -183,7 +192,37 @@ public class Payment extends BaseTimeEntity {
                 || status == PaymentStatus.CANCELED;
     }
 
-    public void fail() {
+    /**
+     * PG 승인 거절로 결제를 종료한다.
+     *
+     * <p>{@code FAILED} 는 <b>종단 상태</b>다. {@link #prepare} 가 READY/PENDING 에서만 열리므로
+     * 카드를 바꿔 다시 시도하려면 새 주문을 만든다 — 주문 재사용 정책은 결제 실패 경로와 분리한다.
+     *
+     * <p>승인과 달리 멱등키를 쓰지 않는다. 돈이 움직이지 않아 PG 가 만들 승인 거래 키가 없고,
+     * 재전송은 종단 상태로 흡수하면 충분하다. 대신 {@code pgTxId} 를 대조해 <b>다른 결제의
+     * 콜백이 잘못 배달된 경우</b>를 걸러낸다.
+     *
+     * <p>{@code PAID} 에 거절이 오면 예외다. 승인과 거절이 엇갈린 PG 연동 오류이거나 위·변조이며,
+     * 조용히 무시하면 사고가 관측되지 않는다({@link #approve} 와 같은 정책).
+     *
+     * @return 이미 실패로 끝난 건이면 false(거절 콜백 재전송) — 호출측은 이벤트를 재발행하지 않는다
+     */
+    public boolean fail(String pgTxId, String reasonCode, String reason) {
+        if (status != PaymentStatus.PENDING && status != PaymentStatus.FAILED) {
+            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+                    "승인 거절 불가 상태: " + status);
+        }
+        if (!Objects.equals(this.pgTxId, pgTxId)) {
+            throw new BusinessException(ErrorCode.PAYMENT_TX_MISMATCH,
+                    "사전등록=%s, 콜백=%s, orderNo=%s".formatted(this.pgTxId, pgTxId, this.orderNo));
+        }
+        if (status == PaymentStatus.FAILED) {
+            return false;   // 같은 거절의 재전송
+        }
         this.status = PaymentStatus.FAILED;
+        this.failedAt = Instant.now();
+        this.failReasonCode = reasonCode;
+        this.failReason = reason;
+        return true;
     }
 }

@@ -36,10 +36,18 @@ public class PaymentController {
         return ApiResponse.ok(PreparePaymentResponse.from(paymentService.prepare(orderNo, request.method())));
     }
 
-    /** PG 승인 콜백 수신 엔드포인트 (실제 운영에서는 서명 검증·IP 화이트리스트가 앞단에 붙는다) */
+    /**
+     * PG 결제 결과 콜백 수신 엔드포인트 (실제 운영에서는 서명 검증·IP 화이트리스트가 앞단에 붙는다).
+     *
+     * <p>승인과 거절이 한 URL 로 들어와 {@code result} 로 갈린다. 판별할 수 없는 본문은
+     * 여기 오기 전에 역직렬화에서 400 으로 끊긴다 — {@link PgCallbackRequest} 참고.
+     */
     @PostMapping("/callback")
     public ApiResponse<Void> callback(@Valid @RequestBody PgCallbackRequest request) {
-        paymentService.handleApproval(request.toApproval());
+        switch (request) {
+            case PgCallbackRequest.Approved approved -> paymentService.handleApproval(approved.toApproval());
+            case PgCallbackRequest.Declined declined -> paymentService.handleDecline(declined.toDecline());
+        }
         return ApiResponse.ok();
     }
 
