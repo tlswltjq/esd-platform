@@ -11,7 +11,9 @@
 > **이 노트가 다루는 결함(D-002)은 수정되었다.**
 > 4절의 코드는 수정 전 모습이고, 5절이 지금 코드다
 > (`apps/license/.../config/KafkaErrorHandlerConfig.java`).
-> 6절의 백오프는 `common:messaging` 의 `ConsumerRetryPolicy` 로 옮겨 전 서비스가 공유한다.
+> **6절이 "커스텀 ErrorHandler 가 하나도 없다"고 말하는 것도 그때의 상태다.**
+> 지금은 `common/kafka/ConsumerRetryPolicy.java` 가 지수 백오프를 정의하고
+> **9개 서비스 전부**가 그것을 공유한다([decisions.md](decisions.md) 19번).
 > 노트를 남겨 두는 이유는 결론보다 **왜 그런가**가 재사용되는 지식이기 때문이다.
 
 ---

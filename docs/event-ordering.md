@@ -186,7 +186,9 @@ GC 한 번, 리더 선출 한 번에도 한 건이 실패할 수 있다.
 head-of-line blocking 의 범위를 키 하나로 좁힌다. A-1 의 안전성을 유지하면서 blast radius 를 줄인 것이고,
 Kafka 의 파티션, Pulsar 의 `Key_Shared` 구독, SQS FIFO 의 `MessageGroupId` 가 전부 같은 아이디어다.
 **대가**: 키 하나가 영구 실패하면 그 키는 계속 막힌다. 그래서 `maxRetry` 도달 시 DEAD 전이가
-탈출구로 반드시 필요하고, DEAD 알람이 그 짝이다(아직 없다 — README "남은 것").
+탈출구로 반드시 필요하고, **DEAD 알람이 그 짝이다.** `stove.outbox.dead` 에 Prometheus 알람 규칙이
+걸려 있고(`infra/prometheus/alerts.yml`), DEAD 로 떨어진 이벤트는 운영 API 로 되살린다
+(`/api/v1/ops/outbox/dead/{id}/requeue` — [decisions.md](decisions.md) 19번).
 
 **A-3. 애그리거트별 발행 큐 (single-writer)** — 키를 워커에 결정적으로 배정해 한 키는 언제나 같은 워커가 맡는다.
 릴레이를 다중화할 때 A-2 에 반드시 따라와야 하는 조건이다. 7절 참고.
@@ -280,7 +282,8 @@ WHERE status = 'PENDING'
 
 이러면 워커 수를 바꿀 때 재배치 창이 생기므로(같은 키가 잠시 두 워커에 걸침)
 무중단 스케일링에는 추가 설계가 필요하다. 지금 규모에서는 릴레이 1대로 충분하고,
-처리량은 [performance.md](performance.md) 기준 480 events/s 로 API 포화점(45~75 RPS)보다 훨씬 위에 있다.
+처리량은 [performance.md](performance.md) 기준 480 events/s 로
+전체 스택에서 관측된 API 한계선(132.5 RPS, 9-2 절)보다 훨씬 위에 있다.
 
 **즉 다중화는 지금 필요하지 않다.** 필요해지는 시점에 이 문서로 돌아오면 된다.
 

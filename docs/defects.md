@@ -261,6 +261,12 @@ recoverer 안에서 예외가 나가면 레코드가 되감겨 무한 재전송�
 `download` 는 `common:messaging` 을 쓰지 않아 이 기본값이 적용되지 않는다.
 Outbox/Inbox 가 필요 없는 모듈이라 의존을 늘리지 않았고, 대신 여기 남긴다.
 
+> **그 뒤** — 위 두 문단은 수정 당시의 모습이다. [decisions.md](decisions.md) 19번이
+> 수신 측 정책을 `common:kafka` 로 갈라내면서 둘 다 바뀌었다.
+> `ConsumerRetryPolicy` 는 `common/kafka/` 로 옮겼고 그 모듈이 JPA 를 모르게 되어
+> **store·download 를 포함한 9개 서비스 전부**가 같은 정책을 갖는다 — 여기 남겨 둔 예외는 닫혔다.
+> 재시도가 소진돼도 건너뛰지 않고 `<원본토픽>.DLT` 로 보낸다.
+
 ---
 
 <a id="d-006"></a>

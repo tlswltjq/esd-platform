@@ -86,7 +86,7 @@ ES 하나가 `-Xms512m -Xmx512m` 이므로 RSS 는 그 위다. 워커 2개가 �
 
 ## 1. 결정 — 진입 경로에 D 를 더한다
 
-decisions.md 11번의 표에 한 줄이 붙는다.
+decisions.md 11번의 표에 한 줄이 붙는다. (그 결정은 이후 **15번**으로 접혔다.)
 
 | 경로 | 호스트 가정 | 용도 |
 |---|---|---|
@@ -417,15 +417,35 @@ performance.md 8-1 이 스스로 정한 위생 규칙대로 —
 > 그 회차 p95 가 59.66ms 로 튀었다. 취소하고 그 회차를 버린 뒤 다시 쟀다(43.12ms).
 > **한 조건당 한 번만 쟀다면 오염된 값이 그대로 결론이 됐다.**
 
-### Phase 6 — (선택) `remote.sh` + MCP
-7장의 조건이 성립하면. 성립하지 않으면 만들지 않는다.
+### Phase 6 — `remote.sh` ✅ *(MCP 는 보류)*
+7장의 판단대로 CI 를 먼저 세우고 나니 **커밋 전 반복 루프가 실제로 답답했다.**
+그래서 만들었다. `scripts/remote.sh` 는 rsync 로 작업본을 밀어넣어 **커밋 없이** 원격에서 돌린다.
 
-### Phase 7 — CD
-6장. Phase 4 의 실측이 나온 뒤에 설계한다.
+```bash
+./scripts/remote.sh test :apps:order   # 실패하면 요약만 낸다
+./scripts/remote.sh stack up           # 전체 스택
+./scripts/remote.sh smoke              # 전 구간 관통
+./scripts/remote.sh logs catalog -n 100 -g 승인
+```
 
-### Phase 8 — 접기
-`docs/decisions.md` 에 결정 항목 추가, README 진입 경로 표에 D 추가,
-`.devcontainer` 의 낡은 Docker 28 고정 주석 정리. **이 문서는 지운다.**
+요구 도구는 `bash`·`ssh`·`rsync` 뿐이고, 머신별 값은 리포에 두지 않는다 —
+`git config stove.remote <ssh-별칭>` 한 번이 전부다(10번).
+
+**MCP 는 여전히 만들지 않았다.** 7장이 든 유일한 이유가 **출력 상한**이었는데,
+`remote.sh test` 가 이미 `TEST-*.xml` 을 파싱해 실패 요약만 낸다.
+그 이유가 약해진 만큼 미뤄 둔다 — 필요해지면 7장의 설계가 그대로 유효하다.
+
+### Phase 7 — CD ⏸
+6장. 앱 10 + 인프라 9 를 상주시키면 메모리 계산이 완전히 달라진다. 아직 하지 않았다.
+
+### Phase 8 — 접기 *(부분 완료)*
+`docs/decisions.md` **15번**으로 결정을 접었고, README 진입 경로 표에 D 를 올렸다.
+`.devcontainer` 의 Docker 28 고정 주석도 정리했다 — 고정을 풀 수 있는 조건은 해소됐지만
+**그 경로로 검증한 적이 없어 그대로 둔다**는 것까지 적었다(12번의 교훈).
+
+**이 문서는 아직 지우지 않는다.** Phase 7 이 남았고, 0·3 장의 실측
+(로컬 3.83GB 천장, 전체 스택 6.1 GiB, 백업 두 겹과 복구 리허설 절차)은
+decisions 15번에 다 접히지 않았다. 7 이 끝나면 그때 지운다.
 
 ---
 
