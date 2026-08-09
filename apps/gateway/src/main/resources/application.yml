@@ -9,9 +9,10 @@ spring:
     gateway:
       server:
         webflux:
-          # 상관관계 ID(X-Correlation-Id)는 각 서비스의 CorrelationIdFilter 가
-          # 없으면 생성하고 응답 헤더로 돌려준다. 게이트웨이에서 고정값을 심으면
-          # 모든 요청이 같은 ID를 갖게 되므로 여기서는 통과만 시킨다.
+          # 추적 컨텍스트(traceparent)는 게이트웨이가 트레이스를 열면서 자동으로 만들어
+          # 하류로 전달한다 — 라우팅 규칙에서 헤더를 손댈 일이 없다.
+          # 각 서비스는 그 값을 이어받고, 응답에는 traceId 를 X-Correlation-Id 로 돌려준다
+          # (common:web 의 TraceIdResponseFilter).
           routes:
             # ── 유저 대면 ─────────────────────────────────────────
             - id: store
@@ -60,7 +61,12 @@ spring:
 
 management:
   endpoints.web.exposure.include: health,info,prometheus,gateway
+  # 트레이스가 시작되는 자리. 하류 서비스와 샘플링 비율이 다르면 트레이스가 반쪽만 남는다.
+  tracing.sampling.probability: ${TRACING_SAMPLE_RATE:1.0}
+  otlp.tracing.endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     org.springframework.cloud.gateway: INFO

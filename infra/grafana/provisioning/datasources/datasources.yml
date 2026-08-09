@@ -1,0 +1,26 @@
+# Grafana 데이터소스를 코드로 심는다. 손으로 등록하면 컨테이너를 지울 때 같이 사라지고,
+# "내 화면에서는 되는데"가 시작된다.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # 트레이스 화면에서 스팬 하나를 골랐을 때 그 구간의 로그/지표로 건너뛰는 연결.
+      # 지금은 지표만 잇는다 — 로그 수집기(Loki)는 스택에 없다.
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true

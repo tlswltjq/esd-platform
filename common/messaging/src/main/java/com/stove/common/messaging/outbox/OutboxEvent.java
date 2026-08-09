@@ -54,6 +54,21 @@ public class OutboxEvent {
     @Column(nullable = false, columnDefinition = "json")
     private String payload;
 
+    /**
+     * 적재 시점의 W3C traceparent({@code 00-<traceId>-<spanId>-<flags>}). 추적이 꺼져 있으면 {@code null}.
+     *
+     * <p><b>이 컬럼이 이 표에서 유일하게 "이벤트에 관한 것이 아닌" 값이다.</b> 그런데도 여기 있는 이유는
+     * 추적 컨텍스트가 스레드 로컬이기 때문이다 — 적재는 요청 스레드에서, 발행은 릴레이 스케줄러에서
+     * 일어나므로 붙잡아 두지 않으면 발행 시점에는 이미 사라진 뒤다. 이벤트 본문을 지금 저장했다가
+     * 나중에 보내는 것과 같은 논리를 컨텍스트에도 적용한다.
+     *
+     * <p>{@code retryCount} 나 {@code nextAttemptAt} 과 달리 <b>재시도해도 바뀌지 않는다.</b>
+     * 이 이벤트를 낳은 요청은 하나뿐이고, 몇 번째 시도에 나갔는지는 그 사실을 바꾸지 않는다.
+     * 회수({@link #requeue()})도 이 값을 건드리지 않는다.
+     */
+    @Column(length = 64)
+    private String traceParent;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OutboxStatus status;
@@ -79,7 +94,7 @@ public class OutboxEvent {
     private Instant sentAt;
 
     private OutboxEvent(String eventId, String aggregateType, String aggregateId, String eventType,
-                        String topic, String partitionKey, String payload) {
+                        String topic, String partitionKey, String payload, String traceParent) {
         this.eventId = eventId;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;
@@ -87,14 +102,27 @@ public class OutboxEvent {
         this.topic = topic;
         this.partitionKey = partitionKey;
         this.payload = payload;
+        this.traceParent = traceParent;
         this.status = OutboxStatus.PENDING;
         this.retryCount = 0;
         this.createdAt = Instant.now();
     }
 
+    /** 추적 컨텍스트 없이 적재한다. 추적을 구성하지 않은 서비스와 테스트의 진입점이다. */
     public static OutboxEvent pending(String eventId, String aggregateType, String aggregateId, String eventType,
                                       String topic, String partitionKey, String payload) {
-        return new OutboxEvent(eventId, aggregateType, aggregateId, eventType, topic, partitionKey, payload);
+        return pending(eventId, aggregateType, aggregateId, eventType, topic, partitionKey, payload, null);
+    }
+
+    /**
+     * 적재 시점의 추적 컨텍스트를 함께 남긴다.
+     *
+     * @param traceParent 요청 스레드에서 붙잡은 W3C traceparent, 추적이 없으면 {@code null}
+     */
+    public static OutboxEvent pending(String eventId, String aggregateType, String aggregateId, String eventType,
+                                      String topic, String partitionKey, String payload, String traceParent) {
+        return new OutboxEvent(eventId, aggregateType, aggregateId, eventType, topic, partitionKey,
+                payload, traceParent);
     }
 
     public void markSent() {

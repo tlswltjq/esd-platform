@@ -30,15 +30,15 @@ stove/
 │
 ├── common/                 경로가 곧 패키지다 — common/core → com.stove.common.core
 │   ├── core                ApiResponse / ErrorCode / BusinessException
-│   ├── web                 GlobalExceptionHandler, CorrelationIdFilter (자동 구성)
+│   ├── web                 GlobalExceptionHandler, TraceIdResponseFilter (자동 구성)
 │   ├── event               서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
 │   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
-│   ├── messaging           Outbox(발행) + Inbox(멱등 수신) 인프라 (자동 구성)
+│   ├── messaging           Outbox(발행) + Inbox(멱등 수신) + 추적 컨텍스트 전파 (자동 구성)
 │   ├── archunit            패키지 구조·경계 규칙 (앱당 29개, 12개 모듈에 적용)
 │   └── test                Testcontainers 공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB)
 │
-├── infra/                  mysql init(스키마 7종), prometheus
-├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Grafana
+├── infra/                  mysql init(스키마 7종), prometheus, tempo, grafana 데이터소스
+├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Tempo · Grafana
 └── docker-compose.apps.yml 9개 서비스 + 게이트웨이 컨테이너 실행
 ```
 
@@ -94,6 +94,7 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
 | 정산 중복 집계(금전 사고) | Inbox + `(order_no, product_id, record_type)` 유니크 이중 방어 | `settlement_record` |
 | 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementService#recordRefund` |
 | 경계가 시간이 지나며 흐려짐 | **ArchUnit 으로 계층·의존 방향을 테스트로 강제** — 규칙을 처음 돌렸을 때 위반이 166건이었다 | `common/archunit` |
+| 비동기 발행이 분산 추적을 끊음 | **추적 컨텍스트를 이벤트와 같은 트랜잭션에 저장**했다가 발행 시점에 복원 — 자동 계측은 릴레이 스케줄러의 컨텍스트를 싣는다 | `common/messaging/trace` |
 
 ### 검증 게이트 4단계
 
@@ -119,7 +120,8 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
 #### 어디서 돌릴지 고르는 기준 — **무엇이 컨테이너를 요구하는가**
 
 A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주라 같은 메모리 천장 아래 있다.
-전체 스택(인프라 9 + 앱 10)은 **6.1 GiB** 를 쓰므로 8GB 랩탑에서는 산술적으로 안 뜬다.
+전체 스택(인프라 10 + 앱 10)은 **6.1 GiB 이상**을 쓰므로 8GB 랩탑에서는 산술적으로 안 뜬다.
+(6.1 GiB 는 Tempo 를 넣기 전 인프라 9종 기준의 실측치다 — 늘었을 뿐 줄지 않았으므로 결론은 같다.)
 그래서 네 번째 경로(D)가 있다 ([decisions.md](docs/decisions.md) 15번).
 
 | 무엇을 | 어디서 | 명령 |
@@ -131,7 +133,7 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 ```bash
 ./scripts/remote.sh test                      # 전체 테스트
 ./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
-./scripts/remote.sh stack up                  # 전체 스택 19개
+./scripts/remote.sh stack up                  # 전체 스택 20개
 ./scripts/remote.sh smoke                     # 전 구간 관통 확인
 ./scripts/remote.sh http GET catalog:8081/api/v1/products
 ./scripts/remote.sh logs catalog -n 100 -g 승인
@@ -220,8 +222,22 @@ docker compose -f docker-compose.apps.yml up -d --build
 | Kafka UI | http://localhost:8090 |
 | Elasticsearch | http://localhost:9200 |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (anonymous) |
+| Tempo (추적 수집) | OTLP/HTTP `localhost:4318`, 조회 API `localhost:3200` |
+| Grafana | http://localhost:3000 (anonymous) — Prometheus·Tempo 데이터소스가 미리 등록돼 있다 |
 | Actuator | `http://localhost:808X/actuator/health`, `/actuator/prometheus` |
+
+**주문 하나를 9개 서비스에 걸쳐 따라가려면** — Grafana → Explore → Tempo → Search.
+응답 헤더 `X-Correlation-Id` 가 그 요청의 traceId 이므로 값을 그대로 넣으면 해당 트레이스로 바로 간다.
+
+```bash
+curl -si -X POST localhost:8082/api/v1/orders -H 'Content-Type: application/json' \
+  -d '{"memberId":7,"items":[{"productId":1,"quantity":1}],"expectedAmount":39000}' \
+  | grep -i x-correlation-id
+```
+
+Kafka 를 건너는 구간까지 한 트레이스로 이어진다 — Outbox 가 발행을 다른 스레드로 미루므로
+자동 계측만으로는 끊기고, 적재 시점에 붙잡은 컨텍스트를 릴레이가 되살려서 잇는다
+([decisions.md](docs/decisions.md) 17번).
 
 ## 5. 전 구간 시나리오 (curl)
 
@@ -292,11 +308,11 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 
 - Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람
 - 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
-- 분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격
-  — **지금 correlationId 는 Kafka 구간에서 끊긴다.** 적재·발행·수신 모두 헤더를 다루지 않아,
-  주문 하나를 order → payment → license → settlement 로 따라가면 order 이후 로그가 `[payment,]`
-  로 빈칸을 찍는다. 손으로 헤더를 만들면 Tracing 도입 시 중복이 되므로 여기에 함께 둔다
-  (`EventHeaders.CORRELATION_ID` javadoc 참고)
+- ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**
+  Kafka 구간이 끊기던 원인은 헤더를 안 실어서만이 아니라 **Outbox 가 발행을 다른 스레드로 미루기
+  때문**이었다 — 자동 계측은 `send()` 를 부른 스레드(릴레이 스케줄러)의 컨텍스트를 싣는다.
+  적재 시점에 붙잡아 `outbox_event.trace_parent` 에 저장했다가 발행 때 되살린다
+  ([decisions.md](docs/decisions.md) 17번)
 - 다국가·다통화(174개국 서비스) 대응: 통화별 반올림 규칙과 환율 스냅샷
 - 대량 재색인의 비동기화 — 지금은 페이지 단위 커밋 + 스로틀로 동기 실행이라,
   카탈로그가 10만 건을 넘으면 운영자의 HTTP 요청이 그만큼 오래 붙잡힌다

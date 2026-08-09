@@ -117,9 +117,13 @@ class OutboxRelayTest {
     }
 
     private OutboxEvent recordWithKey(String eventId, String partitionKey) {
+        return recordWithTrace(eventId, partitionKey, null);
+    }
+
+    private OutboxEvent recordWithTrace(String eventId, String partitionKey, String traceParent) {
         OutboxEvent event = OutboxEvent.pending(eventId, "Payment", partitionKey,
                 EventType.PAYMENT_COMPLETED, Topics.PAYMENT, partitionKey,
-                "{\"orderNo\":\"" + partitionKey + "\"}");
+                "{\"orderNo\":\"" + partitionKey + "\"}", traceParent);
         store.add(event);
         return event;
     }
@@ -167,6 +171,70 @@ class OutboxRelayTest {
         assertThat(header(sent, EventHeaders.EVENT_ID)).isEqualTo("EVT-1");
         assertThat(header(sent, EventHeaders.EVENT_TYPE)).isEqualTo(EventType.PAYMENT_COMPLETED);
         assertThat(header(sent, EventHeaders.OCCURRED_AT)).isEqualTo(event.getCreatedAt().toString());
+    }
+
+    /**
+     * 이 릴레이가 도는 스레드는 스케줄러다. 자동 계측에 맡기면 여기서 만들어진 컨텍스트가 실려
+     * 컨슈머가 "폴링 회차"를 부모로 삼는다. 이어야 할 것은 이벤트를 낳은 요청이므로,
+     * <b>지금 스레드가 아니라 저장된 값</b>이 헤더에 나가는지를 본다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("적재 시점에 붙잡아 둔 traceparent 를 발행 헤더로 되살린다")
+    void restoresCapturedTraceParent() {
+        String captured = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        recordWithTrace("EVT-1", "ORD-1", captured);
+        brokerHealthy();
+
+        relay.relay();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate).send(captor.capture());
+
+        assertThat(header(captor.getValue(), EventHeaders.TRACE_PARENT)).isEqualTo(captured);
+    }
+
+    /**
+     * 빈 헤더를 실으면 수신 측 추출이 형식 오류로 다룬다. 없는 편이 낫다 —
+     * 그 경우 컨슈머는 이어붙일 부모가 없다고 보고 새 트레이스를 시작한다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("붙잡아 둔 컨텍스트가 없으면 traceparent 헤더를 아예 붙이지 않는다")
+    void omitsTraceParentHeaderWhenAbsent() {
+        recordWithTrace("EVT-1", "ORD-1", null);
+        brokerHealthy();
+
+        relay.relay();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate).send(captor.capture());
+
+        assertThat(captor.getValue().headers().lastHeader(EventHeaders.TRACE_PARENT)).isNull();
+    }
+
+    /**
+     * 재시도는 발행 사정이고, 이 이벤트를 낳은 요청은 하나뿐이다.
+     * 회차마다 컨텍스트가 바뀌면 같은 주문이 트레이스 여러 개로 흩어진다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("재시도해도 처음 붙잡은 traceparent 그대로 나간다")
+    void keepsTraceParentAcrossRetries() {
+        String captured = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        recordWithTrace("EVT-1", "ORD-1", captured);
+
+        brokerDown();
+        relay.relay();
+
+        brokerHealthy();
+        pollAfterBackOff();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate, times(2)).send(captor.capture());
+
+        assertThat(captor.getAllValues())
+                .allSatisfy(sent -> assertThat(header(sent, EventHeaders.TRACE_PARENT)).isEqualTo(captured));
     }
 
     @Test

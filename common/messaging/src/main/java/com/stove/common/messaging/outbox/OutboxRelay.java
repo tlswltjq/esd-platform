@@ -168,6 +168,20 @@ public class OutboxRelay {
                            CompletableFuture<SendResult<String, String>> ack) {
     }
 
+    /**
+     * 레코드를 만든다. 계약 헤더 셋에 더해, 적재 시점에 붙잡아 둔 추적 컨텍스트를 <b>되살린다.</b>
+     *
+     * <p>이 자리에서 헤더를 직접 넣는 것이 요점이다. Kafka 자동 계측에 맡기면 지금 이 스레드
+     * — 즉 <b>릴레이 스케줄러</b> — 의 컨텍스트가 실린다. 그러면 컨슈머가 "릴레이가 돈 폴링 회차"를
+     * 부모로 삼게 되고, 한 배치에 여러 애그리거트가 섞이면 무관한 주문들이 같은 traceId 를 공유한다.
+     * 이어야 할 것은 이벤트를 <b>낳은 요청</b>이므로 저장해 둔 값을 쓴다.
+     *
+     * <p>그래서 {@code spring.kafka.template.observation-enabled} 는 꺼 둔다(부트 기본값이기도 하다).
+     * 켜면 계측이 자기 컨텍스트로 같은 헤더를 덮어써 위의 복원이 무의미해진다.
+     *
+     * <p>{@code traceParent} 가 없으면 헤더를 붙이지 않는다. 빈 값을 실으면 수신 측 추출이
+     * 형식 오류로 다루므로, 없는 편이 낫다 — 그 경우 컨슈머가 <b>새 트레이스를 시작</b>한다.
+     */
     private ProducerRecord<String, String> toRecord(OutboxEvent event) {
         ProducerRecord<String, String> record =
                 new ProducerRecord<>(event.getTopic(), event.getPartitionKey(), event.getPayload());
@@ -175,6 +189,10 @@ public class OutboxRelay {
         record.headers().add(EventHeaders.EVENT_TYPE, event.getEventType().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.OCCURRED_AT,
                 event.getCreatedAt().toString().getBytes(StandardCharsets.UTF_8));
+        String traceParent = event.getTraceParent();
+        if (traceParent != null && !traceParent.isBlank()) {
+            record.headers().add(EventHeaders.TRACE_PARENT, traceParent.getBytes(StandardCharsets.UTF_8));
+        }
         return record;
     }
 }

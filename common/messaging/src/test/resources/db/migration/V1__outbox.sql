@@ -1,4 +1,4 @@
--- Outbox 스키마. 앱 마이그레이션(V1 + outbox_retry_backoff)의 최종 형태와 같다.
+-- Outbox 스키마. 앱 마이그레이션(V1 + outbox_retry_backoff + outbox_trace_context)의 최종 형태와 같다.
 --
 -- 이 파일이 여기 있는 이유는 lockPendingBatch 의 의미를 이 모듈에서 검증하기 위해서다.
 -- 실제 앱은 각자의 db/migration 으로 같은 표를 만든다 — 스키마가 7벌 복제돼 있다는 뜻이고,
@@ -13,6 +13,7 @@ CREATE TABLE outbox_event
     topic           VARCHAR(100) NOT NULL,
     partition_key   VARCHAR(100) NOT NULL,
     payload         JSON         NOT NULL,
+    trace_parent    VARCHAR(64)  NULL,
     status          VARCHAR(20)  NOT NULL,
     retry_count     INT          NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(6)  NULL,

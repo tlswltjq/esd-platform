@@ -4,6 +4,9 @@ dependencies {
     api project(':common:core')
     api 'org.springframework.boot:spring-boot-starter-web'
     api 'org.springframework.boot:spring-boot-starter-validation'
+    // TraceIdResponseFilter 가 현재 traceId 를 응답 헤더로 돌려주기 위한 추상.
+    // 추적이 꺼진 구성에서도 뜨도록 Tracer 는 선택 주입한다.
+    api 'io.micrometer:micrometer-tracing'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 공용 라이브러리 방향 검증 (ArchUnit)
