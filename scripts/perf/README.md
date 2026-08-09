@@ -11,18 +11,42 @@ Outbox 릴레이 처리량을 재고, 개선 전후를 같은 조건으로 비�
 그리고 개선 여지가 코드에 그대로 드러나 있다 —
 `OutboxRelay.relay()` 가 배치 전체를 `send().get()` 으로 순차 대기한다.
 
+## 어디서 재는가 — 랩탑에서 잰 숫자는 쓸 수 없었다
+
+> **이 절은 한 번 틀렸다.** 예전 절차는 인프라 3종만 띄우고 catalog·order 를 호스트에서
+> `bootRun` 하는 것이었다. 그렇게 잰 HTTP 숫자는 [performance.md](../../docs/performance.md)
+> **7장에서 스스로 무효 선언**됐다 — 호스트가 포화 상태였고,
+> **릴레이를 완전히 꺼도 같은 숫자가 나왔다.** 포화 위에서 잰 값은
+> 무엇을 바꾸든 "포화했다"만 알려준다.
+>
+> 유효한 비교를 얻은 것은 9장이고, 아래는 그 절차다. **7장 환경은 쓰지 않는다.**
+
+| | 7장 (무효) | 9장 (유효) |
+|---|---|---|
+| 호스트 | macOS 8GB / Docker 4GB | OCI Ampere A1 — 4코어 23GB |
+| 스택 | ES·Mongo·Grafana 제외, 서비스 2개 `bootRun` | 인프라 9 + 앱 10 **전부 컨테이너** |
+| 스와핑 | `pageouts` 150만 | swap 0~1 MiB |
+| k6 | 호스트 | 컨테이너(`stove_default` 네트워크) |
+
+전체 스택은 6.1 GiB 이상을 쓰므로 8GB 랩탑에서는 산술적으로 안 뜬다.
+그래서 측정은 원격에서 한다([decisions.md](../../docs/decisions.md) 15번).
+
 ## 준비
 
 ```bash
-brew install k6
+# 원격에 작업본을 밀어넣고 전체 스택을 띄운다
+./scripts/remote.sh stack up
+./scripts/remote.sh smoke        # 경로가 살아 있는지 먼저 — 여기서 깨지면 숫자는 의미 없다
+```
 
-# 인프라 (측정에 필요한 3종만)
-docker compose up -d mysql redis kafka
+이후 명령은 **원격에서** 돈다(`./scripts/remote.sh shell` 로 들어가거나 ssh).
+CI compose 는 호스트 포트를 열지 않으므로(공개 IP + 인증 없는 ES·Grafana)
+k6 와 수집기도 같은 네트워크의 컨테이너로 띄우고 **서비스 이름으로 부른다.**
 
-# 서비스 2종. 컨테이너 대신 호스트에서 띄운다 —
-# Docker 메모리를 아끼고 재기동이 빠르다.
-./gradlew :apps:catalog:bootRun    # 8081
-./gradlew :apps:order:bootRun      # 8082
+```bash
+export ORDER_URL=http://order:8082
+export CATALOG_URL=http://catalog:8081
+export ORDER_ACTUATOR=http://order:8082/actuator/prometheus
 ```
 
 `order` 는 주문 생성 시 `catalog` 에 동기 HTTP 로 견적을 요청한다(검증 게이트 1단계).
@@ -32,17 +56,46 @@ docker compose up -d mysql redis kafka
 
 ```bash
 # 1. 경로 확인. 여기서 실패하면 아래 숫자는 의미 없다
-k6 run scripts/perf/smoke.js
+docker run --rm --network stove_default -v "$PWD:/w" -w /w \
+  -e ORDER_URL -e CATALOG_URL grafana/k6 run scripts/perf/smoke.js
 
-# 2. 본 측정 — 릴레이 지표를 같은 타임라인으로 함께 수집한다
-./scripts/perf/collect-outbox.sh baseline-outbox.csv &
-k6 run --summary-export=baseline-k6.json scripts/perf/order-throughput.js
+# 2. 한계선 — 계단식 20→400 RPS. 포화 지점을 찾는 데만 쓴다
+./scripts/perf/collect-outbox.sh limit-outbox.csv &
+docker run --rm --network stove_default -v "$PWD:/w" -w /w \
+  -e ORDER_URL grafana/k6 run scripts/perf/order-throughput.js
 kill %1
 
-# 3. 지속 부하 — 적체가 해소되는지 확인
-./scripts/perf/collect-outbox.sh soak-outbox.csv &
-k6 run scripts/perf/order-soak.js
-kill %1
+# 3. 비교 — 관측된 한계선의 절반 이하 고정 부하에서만 판정한다
+RATE=60 DURATION=60s ...  # order-soak.js 는 RATE/DURATION 을 환경변수로 받는다
+```
+
+**한계선과 비교를 나누는 것이 핵심이다.** 계단식은 포화로 들어가므로 한계 파악에만 쓰고,
+구성 간 비교는 반드시 **포화 이전** 구간에서 한다. 9장은 한계선 132 RPS 를 확인한 뒤
+60 RPS 고정으로 비교했다.
+
+## 릴레이 유무 대조군
+
+**두 조건이 실제로 달랐다는 증거가 없으면 비교가 아니다.**
+7장이 무효였던 것을 알아챈 것도 대조군 덕분이었다.
+
+```bash
+docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
+               -f scripts/perf/relay-off.override.yml up -d --force-recreate order
+```
+
+판정은 `stove_outbox_pending` 으로 한다 — 릴레이를 끈 조건에서 이 값이
+**생성된 주문 수와 같아야** 한다(이벤트가 하나도 발행되지 않고 쌓였다는 뜻).
+9장에서 OFF 는 5,398, ON 은 0 이었다.
+
+## 측정 위생 — 지키지 않으면 숫자가 아니라 잡음이다
+
+7장이 남긴 규칙이고, 9장에서 **알면서 한 번 어겼다** — 비교 도중 같은 호스트에서 CI 를
+띄웠고 그 회차의 p95 가 42.6ms 대신 59.7ms 로 튀었다. 즉시 버리고 다시 쟀다.
+
+- 측정 전 `./gradlew --stop`, 잔여 JVM 정리, 데이터 초기화
+- 각 조건마다 **동일한 초기 상태**에서 시작 (회차마다 `orders`·`outbox_event` 를 비우고 order 재기동)
+- **한 조건당 최소 2회** 반복해 재현성 확인 — 회차 간 편차가 조건 간 차이보다 작아야 유효하다
+- **측정 중 호스트에 다른 부하를 올리지 않는다** (CI 포함)
 ```
 
 ## 시나리오
@@ -51,7 +104,7 @@ kill %1
 |---|---|---|
 | `smoke.js` | 1 VU, 20초 | 경로 생존 확인 |
 | `order-throughput.js` | 20 → 400 RPS 계단식 | 처리량 한계선 |
-| `order-soak.js` | 100 RPS 5분 | 적체 누적 여부 |
+| `order-soak.js` | `RATE` RPS `DURATION` 동안 (기본 100 / 5분) | 적체 누적 여부, **구성 간 비교** |
 
 **도착률(arrival-rate) 기반**을 쓴다. VU 기반이면 응답이 느려질 때 유입도 같이 줄어
 병목이 스스로 가려진다. 부하를 고정해야 적체가 드러난다.
@@ -82,7 +135,7 @@ k6 는 HTTP 만 본다. 릴레이는 배경 스레드라 `collect-outbox.sh` 가
 측정 전 데이터를 초기화한다.
 
 ```bash
-docker compose exec mysql mysql -ustove -pstove1234 -e \
+docker compose exec -T mysql mysql -ustove -pstove1234 -e \
   "TRUNCATE stove_order.outbox_event; DELETE FROM stove_order.order_item; DELETE FROM stove_order.orders;"
 ```
 
@@ -91,9 +144,13 @@ docker compose exec mysql mysql -ustove -pstove1234 -e \
 
 ## 환경 변수
 
-| 변수 | 기본값 |
-|---|---|
-| `ORDER_URL` | `http://localhost:8082` |
-| `CATALOG_URL` | `http://localhost:8081` |
-| `ORDER_ACTUATOR` | `http://localhost:8082/actuator/prometheus` |
-| `INTERVAL` | `1` (수집 주기, 초) |
+기본값은 **호스트에서 포트가 열린 경우**를 가정한다. 위 9장 절차(전체 스택 컨테이너)에서는
+호스트 포트를 열지 않으므로 서비스 이름으로 덮어야 한다.
+
+| 변수 | 기본값 | 9장 절차에서 |
+|---|---|---|
+| `ORDER_URL` | `http://localhost:8082` | `http://order:8082` |
+| `CATALOG_URL` | `http://localhost:8081` | `http://catalog:8081` |
+| `ORDER_ACTUATOR` | `http://localhost:8082/actuator/prometheus` | `http://order:8082/actuator/prometheus` |
+| `INTERVAL` | `1` (수집 주기, 초) | 그대로 |
+| `RATE` / `DURATION` | `100` / `5m` (`order-soak.js`) | 포화 이전 구간으로 (9장은 60 / 60s) |

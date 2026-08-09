@@ -259,3 +259,52 @@ configure(subprojects.findAll { it.path.startsWith(':common:') }) {
 configure([project(':apps'), project(':common')]) {
     tasks.named('jar') { enabled = false }
 }
+
+// ── 결함 재현 테스트 합산 보고 ────────────────────────────────────────
+//
+// **몇 건이 돌았는지 말하게 한다.**
+//
+// 모듈별 defectTest 는 ignoreFailures = true 라 실패해도 초록이고, 태그가 붙은 테스트가
+// 하나도 없으면 아무것도 출력하지 않는다. 그래서 "재현 대기 중인 결함이 없다" 와
+// "전부 통과했다" 와 "돌기는 했나?" 가 화면에서 구분되지 않았다 —
+// 실제로 지금 0건인데 명령은 조용히 성공한다.
+//
+// 스모크에서 고친 것과 같은 부류다. 거기서는 EXPECTED_CHECKS 와 종료 코드로 갈랐고
+// (docs/decisions.md 20번 옆 흐름), 여기서는 합산해서 말하는 것으로 갈랐다.
+// 판정을 바꾸지는 않는다 — 이 태스크의 실패는 "결함이 아직 살아 있다"는 정보이지
+// 빌드를 세울 사유가 아니라는 원래 판단은 그대로다.
+tasks.register('defectTest') {
+    group = 'verification'
+    description = '알려진 결함 재현 테스트를 전 모듈에서 돌리고 결과를 합산한다'
+    dependsOn subprojects.collect { "${it.path}:defectTest" }
+
+    def resultDirs = subprojects.collect { it.layout.buildDirectory.dir('test-results/defectTest') }
+
+    doLast {
+        int total = 0
+        int unresolved = 0
+        resultDirs.each { provider ->
+            def dir = provider.get().asFile
+            if (!dir.isDirectory()) {
+                return
+            }
+            dir.listFiles()?.findAll { it.name.startsWith('TEST-') && it.name.endsWith('.xml') }?.each { file ->
+                def suite = new groovy.xml.XmlSlurper().parse(file)
+                total += (suite.@tests.text() ?: '0') as int
+                unresolved += ((suite.@failures.text() ?: '0') as int) + ((suite.@errors.text() ?: '0') as int)
+            }
+        }
+
+        println '════════════════════════════════'
+        if (total == 0) {
+            println '  결함 재현 테스트 0건 — 재현 대기 중인 결함이 없다.'
+            println '  (통과가 아니라 미실행이다. 새 결함은 고치기 전에 @Tag("known-defect") 로 먼저 커밋한다)'
+        } else if (unresolved > 0) {
+            println "  결함 재현 ${total}건 중 ${unresolved}건이 아직 살아 있다 — docs/defects.md 참고"
+        } else {
+            println "  결함 재현 ${total}건이 전부 통과했다."
+            println '  (고쳐졌다는 뜻이다. 태그를 떼고 회귀 방어선으로 승격한다 — docs/testing.md 3절)'
+        }
+        println '════════════════════════════════'
+    }
+}
