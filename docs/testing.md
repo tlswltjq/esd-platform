@@ -287,14 +287,44 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 
 ### 6.3 남은 것 — common
 
-- **`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
-  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약.
+- ~~**`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
+  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약~~
   ~~**저장소 전체에 `jsonPath` 단언이 하나도 없어** 응답 형식이 통째로 바뀌어도 잡히지 않는다~~
-  → **메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
+  → **응답 형식은 메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
   OpenAPI 명세를 스냅샷으로 고정했다(decisions.md 18번). 각 앱의 `*ContextTest` 가
   `/v3/api-docs` 를 커밋된 스냅샷과 대조하므로, DTO 필드를 지우거나 응답 타입을 바꾸면 깨진다.
   **실제로 잡는지 확인했다** — `CreateOrderRequest.expectedAmount` 를 스냅샷에서 지우자 실패했다.
-  `ErrorCode` 의 상태 매핑은 명세에 안 나오므로 여전히 무테스트다
+  → **상태 매핑도 메웠다.** 아래 참고
+
+#### 오류 응답의 상태코드 — 셸에서 코드로 회수했다
+
+한동안 이 계약을 지키는 것이 **CI 가 돌리지 않는 셸 스크립트 하나**였다.
+저장소의 단언이 전부 `errorCode()` *열거값* 까지만 갔고
+(`assertThat(e.errorCode()).isEqualTo(CONFLICT)`), 그 CONFLICT 가 409 로 나가는지는
+`scripts/smoke-stack.sh` 만 봤다. 앱 9종의 컨트롤러 테스트도 `GlobalExceptionHandler` 를
+붙이지만 400 계열(D-015)만 단언한다. **그래서 상태 매핑을 잘못 바꿔도 빌드는 초록이었다.**
+
+세 자리로 나눠 막는다. 셋 다 컨테이너가 필요 없어 `test` 소스셋에 있다.
+
+| 테스트 | 무엇을 지키나 |
+|---|---|
+| `ErrorCodeTest` | 전수 성질 — 모두 4xx/5xx, `*NOT_FOUND`→404, `*MISMATCH`→409, 기본 메시지 존재 |
+| `BusinessExceptionStatusTest` | `@EnumSource` 로 **전 코드**를 실제 MockMvc 응답까지 태워 `code.status()` 와 대조 |
+| `ApiResponseTest` | 봉투 직렬화 — 코드 이름(ordinal 아님), `NON_NULL` 로 `data`/`error` 키 생략 |
+
+**개별 상수의 값을 하나씩 적지 않았다.** `CONFLICT 는 409 다` 같은 단언은 열거형 선언을
+옮겨 적은 것이라, 값이 틀리면 테스트도 같이 틀린 값을 들고 있게 된다.
+대신 이름↔상태 규칙을 전수로 걸어 **새 상수가 규칙을 어기는 순간** 깨지게 했다.
+
+**두 방향 모두 발화하는 것을 확인했다.**
+
+| 만든 상황 | 결과 |
+|---|---|
+| `PRICE_MISMATCH` 를 409 → 400 으로 | `ErrorCodeTest` 의 MISMATCH 규칙 + 스모크 계약 테스트 실패 |
+| 핸들러가 `code.status()` 대신 400 을 하드코딩 | 전수 테스트 21건 중 **20건 실패**(400 인 `INVALID_REQUEST` 만 우연히 통과) |
+
+두 번째가 이 분리의 이유다. 열거형만 보는 테스트는 열거형과 함께 틀리므로,
+**열거형과 응답을 잇는 자리를 따로 봐야** 한다.
 - ~~**`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수)~~
   → **메웠다.** 그 필터는 `TraceIdResponseFilter` 로 대체됐고(decisions.md 17번),
   `TraceIdResponseFilterTest` 가 세 가지를 본다 — traceId 반환, **응답 커밋 이후에도 헤더가 남는가**,
