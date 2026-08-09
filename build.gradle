@@ -54,6 +54,12 @@ subprojects {
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
 
+        // OpenAPI 스냅샷 갱신 플래그를 테스트 JVM 으로 넘긴다.
+        // 그레이들은 -D 를 자동으로 전달하지 않는다 — 여기서 넘기지 않으면
+        // OpenApiSnapshot 이 플래그를 영영 못 본다.
+        systemProperty 'stove.openapi.update',
+                providers.systemProperty('stove.openapi.update').getOrElse('false')
+
         // CI 에서는 테스트 결과를 캐시에서 꺼내지 않는다.
         //
         // self-hosted 러너는 ~/.gradle 이 잡 사이에 그대로 남는다. 이것이

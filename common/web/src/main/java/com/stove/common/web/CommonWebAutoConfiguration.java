@@ -2,6 +2,7 @@ package com.stove.common.web;
 
 import io.micrometer.tracing.Tracer;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
@@ -26,5 +27,15 @@ public class CommonWebAutoConfiguration {
     @Bean
     public TraceIdResponseFilter traceIdResponseFilter(ObjectProvider<Tracer> tracer) {
         return new TraceIdResponseFilter(tracer.getIfAvailable(() -> Tracer.NOOP));
+    }
+
+    /**
+     * 서비스 이름은 명세 제목에만 쓰이므로 없으면 빈 문자열로 둔다 —
+     * 이름을 못 읽었다고 문서 생성이 실패할 이유는 없다.
+     */
+    @Bean
+    public ApiDocumentationCustomizer apiDocumentationCustomizer(
+            @Value("${spring.application.name:}") String applicationName) {
+        return new ApiDocumentationCustomizer(applicationName);
     }
 }

@@ -1,0 +1,251 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseListSellerSettlementResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/SellerSettlementResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListSettlementRecordResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/SettlementRecordResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorBody" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SellerSettlementResponse" : {
+        "properties" : {
+          "closedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "feeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "grossAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "netAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "recordCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementMonth" : {
+            "type" : "string"
+          },
+          "taxInvoiceNo" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SettlementRecordResponse" : {
+        "properties" : {
+          "closed" : {
+            "type" : "boolean"
+          },
+          "feeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeRate" : {
+            "type" : "number"
+          },
+          "grossAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "netAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "recordType" : {
+            "enum" : [ "SALE", "REFUND" ],
+            "type" : "string"
+          },
+          "saleType" : {
+            "enum" : [ "SELF", "PARTNER" ],
+            "type" : "string"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementMonth" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
+    "title" : "STOVE settlement API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/settlements/close" : {
+      "post" : {
+        "operationId" : "close",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSellerSettlementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/closings" : {
+      "get" : {
+        "operationId" : "closings",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSellerSettlementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/orders/{orderNo}" : {
+      "get" : {
+        "operationId" : "byOrder",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSettlementRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/sellers/{sellerId}" : {
+      "get" : {
+        "operationId" : "bySeller",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "sellerId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSettlementRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    }
+  }
+}

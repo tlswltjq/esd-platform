@@ -30,7 +30,7 @@ stove/
 │
 ├── common/                 경로가 곧 패키지다 — common/core → com.stove.common.core
 │   ├── core                ApiResponse / ErrorCode / BusinessException
-│   ├── web                 GlobalExceptionHandler, TraceIdResponseFilter (자동 구성)
+│   ├── web                 GlobalExceptionHandler, TraceIdResponseFilter, API 문서화 (자동 구성)
 │   ├── event               서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
 │   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
 │   ├── messaging           Outbox(발행) + Inbox(멱등 수신) + 추적 컨텍스트 전파 (자동 구성)
@@ -219,6 +219,7 @@ docker compose -f docker-compose.apps.yml up -d --build
 
 | 도구 | 주소 |
 |---|---|
+| **Swagger UI** | http://localhost:8080/swagger-ui.html — 9개 서비스를 드롭다운으로 전환 |
 | Kafka UI | http://localhost:8090 |
 | Elasticsearch | http://localhost:9200 |
 | Prometheus | http://localhost:9090 |

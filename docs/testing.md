@@ -266,8 +266,13 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 ### 6.3 남은 것 — common
 
 - **`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
-  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약. **저장소 전체에 `jsonPath` 단언이 하나도 없어**
-  응답 형식이 통째로 바뀌어도 잡히지 않는다
+  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약.
+  ~~**저장소 전체에 `jsonPath` 단언이 하나도 없어** 응답 형식이 통째로 바뀌어도 잡히지 않는다~~
+  → **메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
+  OpenAPI 명세를 스냅샷으로 고정했다(decisions.md 18번). 각 앱의 `*ContextTest` 가
+  `/v3/api-docs` 를 커밋된 스냅샷과 대조하므로, DTO 필드를 지우거나 응답 타입을 바꾸면 깨진다.
+  **실제로 잡는지 확인했다** — `CreateOrderRequest.expectedAmount` 를 스냅샷에서 지우자 실패했다.
+  `ErrorCode` 의 상태 매핑은 명세에 안 나오므로 여전히 무테스트다
 - ~~**`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수)~~
   → **메웠다.** 그 필터는 `TraceIdResponseFilter` 로 대체됐고(decisions.md 17번),
   `TraceIdResponseFilterTest` 가 세 가지를 본다 — traceId 반환, **응답 커밋 이후에도 헤더가 남는가**,
