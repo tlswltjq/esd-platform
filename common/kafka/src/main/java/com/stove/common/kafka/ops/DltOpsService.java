@@ -1,5 +1,6 @@
 package com.stove.common.kafka.ops;
 
+import com.stove.common.kafka.DeadLetterTopics;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -139,10 +140,6 @@ public class DltOpsService {
         if (header != null) {
             return new String(header.value(), StandardCharsets.UTF_8);
         }
-        String topic = record.topic();
-        if (!topic.endsWith(".DLT")) {
-            throw new IllegalStateException("원본 토픽을 알 수 없다: " + topic);
-        }
-        return topic.substring(0, topic.length() - ".DLT".length());
+        return DeadLetterTopics.originalOf(record.topic());
     }
 }

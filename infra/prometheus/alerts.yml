@@ -32,8 +32,17 @@ groups:
 
       # 수신 측이 재시도를 소진해 DLT 로 넘긴 메시지.
       # topic 태그가 어느 흐름이 막혔는지 바로 알려준다.
+      #
+      # 뒤쪽 절이 필요한 이유 -- Micrometer 는 카운터를 **처음 증가할 때 등록**한다.
+      # 그래서 그 서비스의 첫 실패는 시계열이 값 1 로 갑자기 생기는 모습이고,
+      # increase() 는 구간에 이전 표본이 없으면 0 을 낸다. 원격에서 실제로 그랬다 --
+      # 반복 실패한 서비스만 뜨고 방금 처음 실패한 서비스는 조용했다.
+      # "지금 0 보다 큰데 5분 전에는 없던 시계열"이 곧 그 첫 건이다.
       - alert: MessagesDeadLettered
-        expr: increase(stove_kafka_dead_lettered_total[5m]) > 0
+        expr: >-
+          increase(stove_kafka_dead_lettered_total[5m]) > 0
+          or (stove_kafka_dead_lettered_total > 0
+              unless stove_kafka_dead_lettered_total offset 5m)
         labels:
           severity: critical
         annotations:

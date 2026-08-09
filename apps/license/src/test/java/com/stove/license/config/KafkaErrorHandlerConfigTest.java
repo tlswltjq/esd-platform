@@ -18,7 +18,9 @@ import com.stove.common.event.kafka.EventHeaders;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.DeadLetterMetrics;
 import com.stove.license.core.service.LicenseService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -217,13 +219,21 @@ class KafkaErrorHandlerConfigTest {
                 .doesNotThrowAnyException();
     }
 
+    /**
+     * 발행과 계측을 함께 묶은 공용 발행자를 쓰는지 본다.
+     *
+     * <p>이름을 고친 뒤에도 license 의 DLT 유입만 지표에 안 잡히던 시절이 있었다 —
+     * 카운터를 에러 핸들러 쪽에서 올려서, 자기 recoverer 로 직접 보내는 이 경로가 비껴갔다.
+     * 지금은 {@code DeadLetterPublisher.to(template, metrics)} 하나로만 만들 수 있다.
+     */
     @Test
-    @DisplayName("실제 빈은 KafkaTemplate 으로 DLT 발행자를 물고 조립된다")
+    @DisplayName("실제 빈은 발행자와 계측을 함께 물고 조립된다")
     void beanIsAssembledWithRealDeadLetterPublisher() {
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+        DeadLetterMetrics metrics = new DeadLetterMetrics(new SimpleMeterRegistry());
 
-        assertThat(config.licenseIssueFailureRecoverer(licenseService, objectMapper, kafkaTemplate))
-                .isNotNull();
+        assertThat(config.licenseIssueFailureRecoverer(
+                licenseService, objectMapper, kafkaTemplate, metrics)).isNotNull();
     }
 }

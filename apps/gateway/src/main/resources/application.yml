@@ -104,10 +104,11 @@ spring:
               filters: [SetPath=/v3/api-docs]
 
 # 9개 서비스의 명세를 한 화면에서 드롭다운으로 전환한다.
-# 게이트웨이 자신은 라우팅만 하므로 문서화할 API 가 없다 — 자기 명세는 끈다.
+#
+# `api-docs.enabled: false` 로 게이트웨이 자기 명세를 끄려다 **Swagger UI 까지 404 가 됐다** —
+# springdoc 에서 그 속성은 명세 엔드포인트 하나가 아니라 구성 전체의 스위치다.
+# 게이트웨이는 컨트롤러가 없어 자기 명세가 어차피 비어 있으므로 그냥 켜 둔다.
 springdoc:
-  api-docs:
-    enabled: false
   swagger-ui:
     path: /swagger-ui.html
     urls:

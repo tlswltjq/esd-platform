@@ -5,6 +5,8 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.common.event.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.ConsumerRetryPolicy;
+import com.stove.common.kafka.DeadLetterMetrics;
+import com.stove.common.kafka.DeadLetterPublisher;
 import com.stove.license.core.service.LicenseService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -12,7 +14,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
-import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.BackOff;
 
@@ -57,8 +58,10 @@ public class KafkaErrorHandlerConfig {
     @Bean
     public ConsumerRecordRecoverer licenseIssueFailureRecoverer(LicenseService licenseService,
                                                                 ObjectMapper objectMapper,
-                                                                KafkaTemplate<String, String> kafkaTemplate) {
-        return recoverer(licenseService, objectMapper, new DeadLetterPublishingRecoverer(kafkaTemplate));
+                                                                KafkaTemplate<String, String> kafkaTemplate,
+                                                                DeadLetterMetrics deadLetterMetrics) {
+        return recoverer(licenseService, objectMapper,
+                DeadLetterPublisher.to(kafkaTemplate, deadLetterMetrics));
     }
 
     /**

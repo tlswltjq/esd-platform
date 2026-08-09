@@ -36,9 +36,28 @@ public final class ModuleHygieneRules {
             "org.springframework.boot.context.properties.ConfigurationProperties";
     private static final String CONDITIONAL_ON_PROPERTY =
             "org.springframework.boot.autoconfigure.condition.ConditionalOnProperty";
+    private static final String DLT_RECOVERER =
+            "org.springframework.kafka.listener.DeadLetterPublishingRecoverer";
 
     private ModuleHygieneRules() {
     }
+
+    /**
+     * DLT 발행자는 {@code common:kafka} 의 {@code DeadLetterPublisher} 로만 만든다.
+     *
+     * <p><b>실제로 갈렸던 자리다.</b> 기본 에러 핸들러는 우리 이름 규칙({@code <원본토픽>.DLT})으로
+     * 보내는데, 자기 핸들러를 가진 서비스가 {@code new DeadLetterPublishingRecoverer(template)} 을
+     * 직접 만들어 <b>스프링 기본 접미사({@code -dlt})</b>로 보내고 있었다.
+     * 원격 스택에서 같은 흐름의 DLT 토픽이 두 개 생기는 것으로 드러났다.
+     *
+     * <p>이름이 갈리면 재투입이 "그런 토픽이 없다"로 조용히 실패하고 알람도 절반만 맞는다.
+     * 컴파일도 테스트도 통과하므로 규칙으로 막지 않으면 다음에 또 갈린다.
+     */
+    @ArchTest
+    public static final ArchRule 앱은_DLT_발행자를_직접_만들지_않는다 = noClasses()
+            .should().dependOnClassesThat().haveFullyQualifiedName(DLT_RECOVERER)
+            .because("DLT 이름 규칙이 갈리면 재투입이 조용히 실패한다 — DeadLetterPublisher 를 쓴다")
+            .allowEmptyShould(true);
 
     /**
      * 트랜잭션 경계는 {@code core.service} 한 곳이다.

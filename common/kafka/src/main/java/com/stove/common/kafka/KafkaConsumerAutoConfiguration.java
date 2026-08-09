@@ -33,8 +33,15 @@ public class KafkaConsumerAutoConfiguration {
      * <p>DLT 로 보내면 "관측 가능한 <b>포기</b>"가 "관측 가능한 <b>연기</b>"가 된다.
      * 파티션이 안 막힌다는 성질은 그대로 두고 유실만 없애므로 맞바꿈이 아니다.
      *
-     * <p>보내는 곳은 {@code <원본토픽>.DLT} 의 같은 파티션 번호다(기본 해석기).
-     * 실패 원인·원본 토픽/파티션/오프셋이 헤더로 보존되고, 계약 헤더와 {@code traceparent} 도
+     * <p>보내는 곳은 {@code <원본토픽>.DLT} 의 <b>같은 파티션 번호</b>다.
+     * 파티션을 유지하므로 같은 애그리거트의 순서가 DLT 안에서도 보존된다.
+     *
+     * <p>접미사를 직접 정한다. 스프링 기본값은 {@code -dlt} 라
+     * {@code stove.payment.v1-dlt} 처럼 <b>구분자가 섞인 이름</b>이 나온다 —
+     * 이 저장소의 토픽은 점으로 끊는 규칙이고(`stove.<애그리거트>.v1`), 그 규칙에서 벗어나면
+     * 운영 문서·알람·재투입 명령이 전부 예외를 하나씩 안게 된다. 원격에서 실제로 확인하고 고쳤다.
+     *
+     * <p>실패 원인·원본 토픽/파티션/오프셋이 헤더로 보존되고, 계약 헤더와 {@code traceparent} 도
      * 원본 그대로 따라간다 — DLT 레코드에서 그 요청의 전체 트레이스로 바로 갈 수 있다.
      *
      * <p>도메인 처리가 필요한 서비스는 자기 {@link CommonErrorHandler} 빈으로 이 기본값을 대신한다
@@ -44,13 +51,12 @@ public class KafkaConsumerAutoConfiguration {
     @ConditionalOnMissingBean(CommonErrorHandler.class)
     public DefaultErrorHandler stoveKafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
                                                       DeadLetterMetrics metrics) {
-        ConsumerRecordRecoverer toDeadLetterTopic = new DeadLetterPublishingRecoverer(kafkaTemplate);
+        ConsumerRecordRecoverer toDeadLetterTopic = DeadLetterPublisher.to(kafkaTemplate, metrics);
         return new DefaultErrorHandler(
                 (record, exception) -> {
                     log.error("재시도 소진 — DLT 로 보낸다 topic={} partition={} offset={} key={}",
                             record.topic(), record.partition(), record.offset(), record.key(), exception);
                     toDeadLetterTopic.accept(record, exception);
-                    metrics.recordDeadLettered(record.topic());
                 },
                 ConsumerRetryPolicy.backOff());
     }

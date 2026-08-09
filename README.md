@@ -242,6 +242,22 @@ Kafka 를 건너는 구간까지 한 트레이스로 이어진다 — Outbox 가
 자동 계측만으로는 끊기고, 적재 시점에 붙잡은 컨텍스트를 릴레이가 되살려서 잇는다
 ([decisions.md](docs/decisions.md) 17번).
 
+원격 전체 스택에서 확인한 결제 콜백 1건의 실제 스팬 트리 — **6개 서비스, Kafka 2회 통과**:
+
+```
+gateway   http post                                    ROOT
+ └ payment  http post /api/v1/payments/callback          18ms
+    ├ order       stove.payment.v1 receive              +527ms   ← Kafka 1홉
+    ├ license     stove.payment.v1 receive              +527ms
+    ├ settlement  stove.payment.v1 receive              +527ms
+    └ (license 가 발행)
+       ├ payment    stove.license.v1 receive            +759ms   ← Kafka 2홉
+       └ download   stove.license.v1 receive            +759ms
+```
+
+세 컨슈머의 부모가 **릴레이 스케줄러가 아니라 원래 HTTP 요청 스팬**이라는 점이 요점이다.
+`+527ms` 간격이 Outbox 폴링 지연이고, 그것이 그대로 눈에 보인다.
+
 ## 5. 전 구간 시나리오 (curl)
 
 ```bash
