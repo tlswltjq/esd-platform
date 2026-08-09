@@ -51,6 +51,7 @@ stove/
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
 | 테스트로 재현한 결함 21건 | [defects.md](docs/defects.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
+| 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
 | 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
 | Outbox 릴레이 처리량 측정과 개선 | [performance.md](docs/performance.md) |

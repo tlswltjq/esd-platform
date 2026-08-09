@@ -40,6 +40,7 @@
 | [kafka-consumer-retry.md](kafka-consumer-retry.md) | 학습 노트. **4·6절은 수정 전 상태**이고 상단 배너가 지금을 알린다 |
 | [handover.md](handover.md) | 학습 세션 인계노트(2026-08-06~07). 열린 질문 ① 하나가 아직 남아 있다 |
 | [remote-dev-plan.md](remote-dev-plan.md) | 원격 CI 구축 계획·실행 기록. **Phase 7(CD)이 끝나면 지운다** |
+| [test-audit.md](test-audit.md) | 테스트 점검(2026-08-10). 소견 F1~F6 과 채울 순서 5단계. **순서를 다 밟으면 지운다** |
 
 ---
 
