@@ -2,19 +2,40 @@ global:
   scrape_interval: 10s
   evaluation_interval: 10s
 
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# 앱은 `stove_default` 네트워크 안에 있으므로 서비스 이름으로 긁는다.
+#
+# 예전에는 `host.docker.internal:808X` 였다. 그 주소는 호스트에서 bootRun 으로 띄웠을 때만
+# 닿는데, 전체 스택은 앱도 컨테이너이고 CI 오버라이드가 호스트 포트를 아예 열지 않는다.
+# **원격에서 확인해 보니 10개 타깃이 전부 down 이었다** — 지표도 알람 규칙도 있는데
+# 긁히는 것이 없어 알람이 울릴 수 없는 상태였다. 규칙이 조용한 것과 대상이 없는 것은 다르다.
+#
+# 호스트에서 개별 서비스를 bootRun 으로 띄워 지표를 보고 싶으면 아래 주석을 쓴다.
+# 그 경우 컨테이너로 뜬 것과 겹치므로 둘을 같이 켜지는 않는다.
 scrape_configs:
   - job_name: stove-services
     metrics_path: /actuator/prometheus
     static_configs:
-      # 로컬 실행 기준(호스트에서 부트 앱 구동). 컨테이너로 띄우면 서비스명:포트로 교체
       - targets:
-          - host.docker.internal:8080   # gateway
-          - host.docker.internal:8081   # catalog
-          - host.docker.internal:8082   # order
-          - host.docker.internal:8083   # payment
-          - host.docker.internal:8084   # license
-          - host.docker.internal:8085   # studio
-          - host.docker.internal:8086   # review
-          - host.docker.internal:8087   # store
-          - host.docker.internal:8088   # download
-          - host.docker.internal:8089   # settlement
+          - gateway:8080
+          - catalog:8081
+          - order:8082
+          - payment:8083
+          - license:8084
+          - studio:8085
+          - review:8086
+          - store:8087
+          - download:8088
+          - settlement:8089
+
+  # 호스트 bootRun 용 (기본은 꺼 둔다 — 컨테이너 스택과 동시에 켜면 같은 앱이 두 번 잡힌다)
+  #
+  # - job_name: stove-services-host
+  #   metrics_path: /actuator/prometheus
+  #   static_configs:
+  #     - targets:
+  #         - host.docker.internal:8080
+  #         - host.docker.internal:8081
+  #         # ... 8089 까지

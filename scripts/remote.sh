@@ -4,7 +4,7 @@
 #
 #   ./scripts/remote.sh test                     전체 테스트
 #   ./scripts/remote.sh test :apps:order         모듈 하나
-#   ./scripts/remote.sh stack up                 전체 스택 19개
+#   ./scripts/remote.sh stack up                 전체 스택 20개
 #   ./scripts/remote.sh smoke                    전 구간 관통 확인
 #
 # **왜 있는가** — CI(경로 D)는 push 해야 돈다. "고쳤다 → 결과" 루프에는 커밋이 끼면 안 된다.
@@ -149,9 +149,9 @@ do_stack() {
         up)
             do_sync
             case "$target" in
-                infra) say "인프라 9종";        rexec "docker compose ${INFRA[*]} up -d" ;;
+                infra) say "인프라 10종";       rexec "docker compose ${INFRA[*]} up -d" ;;
                 apps)  say "앱 10종";           rexec "docker compose ${APPS[*]} up -d --build" ;;
-                all)   say "인프라 + 앱 19종"
+                all)   say "인프라 + 앱 20종"
                        rexec "docker compose ${INFRA[*]} up -d" || die "인프라 기동 실패"
                        rexec "docker compose ${APPS[*]} up -d --build" ;;
             esac

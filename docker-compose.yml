@@ -113,7 +113,29 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 파일이 아니라 **디렉터리**를 마운트한다. 파일 단위 바인드는 inode 를 잡으므로,
+      # rsync 처럼 파일을 새로 쓰는 도구가 갱신하면 컨테이너 안이 옛 내용에 묶인다 —
+      # 원격에서 실제로 겪었다. 호스트 파일은 바뀌었는데 컨테이너는 계속 옛 타깃을 긁고 있었다.
+      - ./infra/prometheus:/etc/prometheus:ro
+
+  # 분산 추적 수집/저장. 앱은 OTLP/HTTP(4318)로 보내고 Grafana 는 3200 으로 읽는다.
+  #
+  # 4318 을 호스트로 열어 두는 이유는 컨테이너 밖(./gradlew bootRun)에서 띄운 앱도
+  # 같은 수집기로 보내기 위해서다 — application.yml 의 OTLP_ENDPOINT 기본값이 localhost:4318 이다.
+  # 버전을 고정한다. `:latest` 로 뒀더니 원격에서 v3.0.0 이 받아졌고 곧바로 죽었다 —
+  # 3.x 에서 설정 스키마가 바뀌어 `ingester`·`compactor` 가 최상위 필드가 아니다:
+  #   failed parsing config: field ingester not found in type app.Config
+  # 설정 파일과 이미지는 같이 움직여야 하므로 mysql·kafka·mongo 처럼 태그를 박는다.
+  tempo:
+    image: grafana/tempo:2.9.4
+    container_name: stove-tempo
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"     # 조회 API (Grafana)
+      - "4318:4318"     # OTLP/HTTP 수신
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
 
   grafana:
     image: grafana/grafana:latest
@@ -123,10 +145,14 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+      - tempo
 
 volumes:
   mysql-data:
   mongo-data:
   minio-data:
+  tempo-data:

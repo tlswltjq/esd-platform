@@ -1,0 +1,658 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseBuildResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/BuildResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListBuildResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BuildResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListDeadEventResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DeadEventResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListDltRecordResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DltRecordResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListProjectResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseProjectResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProjectResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseReplayedCount" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ReplayedCount"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRequeuedCount" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RequeuedCount"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseVoid" : {
+        "properties" : {
+          "data" : { },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "BuildResponse" : {
+        "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "checksum" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fileSize" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "storagePath" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CreateProjectRequest" : {
+        "properties" : {
+          "currency" : {
+            "type" : "string"
+          },
+          "price" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "productCode" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "selfRated" : {
+            "type" : "boolean"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "title" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "productCode", "sellerId", "title" ],
+        "type" : "object"
+      },
+      "DeadEventResponse" : {
+        "properties" : {
+          "aggregateId" : {
+            "type" : "string"
+          },
+          "aggregateType" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "eventId" : {
+            "type" : "string"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "partitionKey" : {
+            "type" : "string"
+          },
+          "retryCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "traceParent" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DltRecordResponse" : {
+        "properties" : {
+          "eventId" : {
+            "type" : "string"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "exception" : {
+            "type" : "string"
+          },
+          "key" : {
+            "type" : "string"
+          },
+          "offset" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "originalTopic" : {
+            "type" : "string"
+          },
+          "partition" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "traceParent" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorBody" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ProjectResponse" : {
+        "properties" : {
+          "currency" : {
+            "type" : "string"
+          },
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "price" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "ratingCode" : {
+            "type" : "string"
+          },
+          "rejectReason" : {
+            "type" : "string"
+          },
+          "selfRated" : {
+            "type" : "boolean"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "DRAFT", "SUBMITTED", "APPROVED", "REJECTED" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ReplayedCount" : {
+        "properties" : {
+          "replayed" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RequeuedCount" : {
+        "properties" : {
+          "requeued" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "UploadBuildRequest" : {
+        "properties" : {
+          "checksum" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "fileSize" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "version" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "checksum", "version" ],
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
+    "title" : "STOVE studio API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/ops/dlt" : {
+      "get" : {
+        "operationId" : "peek",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "topic",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "max",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "dlt-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/dlt/replay" : {
+      "post" : {
+        "operationId" : "replay",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "topic",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "max",
+          "required" : false,
+          "schema" : {
+            "default" : 100,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "dlt-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead" : {
+      "get" : {
+        "operationId" : "deadEvents",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead/requeue-all" : {
+      "post" : {
+        "operationId" : "requeueAll",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
+      "post" : {
+        "operationId" : "requeue",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "eventId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    },
+    "/api/v1/studio/games" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "description" : "판매자(크리에이터) 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\nX-Member-Id 와 같은 자리이며, 스튜디오 API 의 소유권 판정에 그대로 쓰인다.",
+          "in" : "header",
+          "name" : "X-Seller-Id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListProjectResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "studio-controller" ]
+      },
+      "post" : {
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "studio-controller" ]
+      }
+    },
+    "/api/v1/studio/games/{gameId}/builds" : {
+      "get" : {
+        "operationId" : "builds",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListBuildResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "studio-controller" ]
+      },
+      "post" : {
+        "operationId" : "uploadBuild",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "판매자(크리에이터) 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\nX-Member-Id 와 같은 자리이며, 스튜디오 API 의 소유권 판정에 그대로 쓰인다.",
+          "in" : "header",
+          "name" : "X-Seller-Id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UploadBuildRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseBuildResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "studio-controller" ]
+      }
+    },
+    "/api/v1/studio/games/{gameId}/submit" : {
+      "post" : {
+        "operationId" : "submit",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "description" : "판매자(크리에이터) 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\nX-Member-Id 와 같은 자리이며, 스튜디오 API 의 소유권 판정에 그대로 쓰인다.",
+          "in" : "header",
+          "name" : "X-Seller-Id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "studio-controller" ]
+      }
+    }
+  }
+}

@@ -40,6 +40,9 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
       ack-mode: record
+      # 헤더의 traceparent 를 이어받아 리스너 처리를 발행 측과 같은 트레이스에 붙인다.
+      # 끄면 카프카를 건널 때마다 트레이스가 새로 시작돼 흐름이 조각난다.
+      observation-enabled: true
 
 stove:
   settlement:
@@ -54,9 +57,12 @@ management:
   endpoints.web.exposure.include: health,info,prometheus,metrics
   endpoint.health.probes.enabled: true
   metrics.tags.application: settlement
+  # 전량 샘플링 — 데모에서는 트레이스가 드문드문 있으면 확인 자체가 안 된다. 운영이라면 낮춰 잡는다.
+  tracing.sampling.probability: ${TRACING_SAMPLE_RATE:1.0}
+  otlp.tracing.endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
   pattern:
-    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     com.stove: DEBUG

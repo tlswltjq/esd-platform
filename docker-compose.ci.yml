@@ -34,5 +34,7 @@ services:
     ports: !reset []
   prometheus:
     ports: !reset []
+  tempo:
+    ports: !reset []
   grafana:
     ports: !reset []

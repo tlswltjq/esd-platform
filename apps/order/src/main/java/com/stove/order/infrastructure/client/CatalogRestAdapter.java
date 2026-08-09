@@ -20,9 +20,13 @@ import org.springframework.web.client.RestClientException;
  * {@link CatalogPort} 의 HTTP 어댑터. 주문 생성 경로의 유일한 동기 의존이며,
  * 실패 시 주문을 만들지 않는다(가격 미확정 상태로 결제로 넘기지 않는다).
  *
- * <p>대상 주소와 타임아웃은 이 어댑터가 직접 조립한다. 상관관계 ID 전파 같은 횡단 관심사는
- * {@code RestClientCustomizer} 로 이미 빌더에 적용되어 들어온다.
+ * <p>대상 주소와 타임아웃은 이 어댑터가 직접 조립한다. 자동 구성된 {@code RestClient.Builder} 는
+ * 프로토타입이라 주입 지점마다 새 빌더가 오므로, 이름 붙은 {@code RestClient} 빈을 따로 두지 않는다.
  * 타임아웃을 명시하는 이유는 상류 지연이 주문 스레드를 잠식하지 않게 하기 위함이다.
+ *
+ * <p>추적 컨텍스트 전파는 여기서 다루지 않는다 — 그 빌더에 옵저베이션이 이미 걸려 있어
+ * {@code traceparent} 가 자동으로 실린다. 예전에는 {@code RestClientCustomizer} 로
+ * {@code X-Correlation-Id} 를 손수 붙였는데, 표준 헤더가 같은 일을 하므로 걷어냈다.
  */
 @Slf4j
 @Component

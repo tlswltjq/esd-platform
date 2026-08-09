@@ -101,4 +101,31 @@ class GatewayRouteTest {
         assertThat(matchedRouteId(HttpMethod.GET, "/api/v1/unknown")).isNull();
         assertThat(matchedRouteId(HttpMethod.GET, "/actuator/env")).isNull();
     }
+
+    @ParameterizedTest(name = "GET /v3/api-docs/{0}")
+    @ValueSource(strings = {
+            "store", "catalog", "order", "payment", "license",
+            "download", "studio", "review", "settlement"
+    })
+    @DisplayName("9개 서비스의 명세가 게이트웨이를 통해 조회된다 — Swagger UI 가 같은 출처에서 받는다")
+    void apiDocsAreProxied(String service) {
+        assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/" + service))
+                .isEqualTo("docs-" + service);
+    }
+
+    @ParameterizedTest(name = "{0} /v3/api-docs/order")
+    @ValueSource(strings = {"POST", "PUT", "PATCH", "DELETE"})
+    @DisplayName("명세 프록시는 읽기 전용이다 — 하위 서비스로 가는 쓰기 통로가 되지 않는다")
+    void apiDocsRoutesAreReadOnly(String method) {
+        assertThat(matchedRouteId(HttpMethod.valueOf(method), "/v3/api-docs/order")).isNull();
+    }
+
+    @Test
+    @DisplayName("명세 프록시는 그 경로 하나씩만 연다 — 하위 경로로 넓어지지 않는다")
+    void apiDocsRoutesDoNotWiden() {
+        // Path 를 /v3/api-docs/order/** 로 넓히면 SetPath 가 붙기 전 경로가 그대로 하위로 흘러
+        // 명세 프록시가 임의 GET 통로가 된다. 아래 둘이 그 회귀를 잡는다.
+        assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/order/actuator/env")).isNull();
+        assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/unknown")).isNull();
+    }
 }

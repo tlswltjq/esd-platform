@@ -4,6 +4,13 @@ dependencies {
     api project(':common:core')
     api 'org.springframework.boot:spring-boot-starter-web'
     api 'org.springframework.boot:spring-boot-starter-validation'
+    // TraceIdResponseFilter 가 현재 traceId 를 응답 헤더로 돌려주기 위한 추상.
+    // 추적이 꺼진 구성에서도 뜨도록 Tracer 는 선택 주입한다.
+    api 'io.micrometer:micrometer-tracing'
+
+    // API 명세 생성. 서블릿 앱 9종이 전부 이 모듈을 의존하므로 여기 한 번만 적는다 —
+    // 문서화는 예외 처리·추적 ID 와 같은 성격의 HTTP 횡단 관심사다.
+    api "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 공용 라이브러리 방향 검증 (ArchUnit)

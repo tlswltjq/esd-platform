@@ -1,0 +1,36 @@
+# Tempo — 트레이스 수집/저장. 로컬 개발용 최소 구성이다.
+#
+# **이 파일은 Tempo 2.x 스키마다.** compose 에서 태그를 2.9.4 로 박아 둔 이유가 이것이다 —
+# 3.x 는 ingester/compactor 를 최상위에서 받지 않아 기동 즉시 죽는다.
+#
+# 앱이 OTLP/HTTP(4318)로 스팬을 보내고, Grafana 가 3200 으로 조회한다.
+# 수신 주소를 0.0.0.0 으로 못박는다 — 기본값(localhost)은 컨테이너 안에서
+# 자기 자신만 가리켜 다른 컨테이너의 스팬이 도달하지 못한다.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+# 블록을 자주 끊는다. 기본값이면 방금 보낸 트레이스가 조회에 뜨기까지 한참 걸려
+# "동작하는데 안 보이는" 상태가 된다 — 데모에서는 그게 곧 실패다.
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 1h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks

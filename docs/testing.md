@@ -266,15 +266,35 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 ### 6.3 남은 것 — common
 
 - **`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
-  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약. **저장소 전체에 `jsonPath` 단언이 하나도 없어**
-  응답 형식이 통째로 바뀌어도 잡히지 않는다
-- **`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수),
-  `GlobalExceptionHandler` 는 D-015 계열만 검증
+  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약.
+  ~~**저장소 전체에 `jsonPath` 단언이 하나도 없어** 응답 형식이 통째로 바뀌어도 잡히지 않는다~~
+  → **메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
+  OpenAPI 명세를 스냅샷으로 고정했다(decisions.md 18번). 각 앱의 `*ContextTest` 가
+  `/v3/api-docs` 를 커밋된 스냅샷과 대조하므로, DTO 필드를 지우거나 응답 타입을 바꾸면 깨진다.
+  **실제로 잡는지 확인했다** — `CreateOrderRequest.expectedAmount` 를 스냅샷에서 지우자 실패했다.
+  `ErrorCode` 의 상태 매핑은 명세에 안 나오므로 여전히 무테스트다
+- ~~**`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수)~~
+  → **메웠다.** 그 필터는 `TraceIdResponseFilter` 로 대체됐고(decisions.md 17번),
+  `TraceIdResponseFilterTest` 가 세 가지를 본다 — traceId 반환, **응답 커밋 이후에도 헤더가 남는가**,
+  추적이 없을 때 통과. 마지막 항목이 실제로 결함을 잡았다: `Tracer.NOOP` 은 null 이 아니라
+  **빈 문자열 traceId** 를 가진 스팬을 주므로 null 검사만으로는 빈 헤더가 나간다.
+  헤더 재사용·MDC 누수는 검증 대상에서 빠졌다 — 이제 라이브러리의 책임이다
+- **`common/web`** — `GlobalExceptionHandler` 는 D-015 계열만 검증
 - ~~**`common/event`** — `EventContractTest.events()` 가 손으로 유지하는 목록이다~~
   → **메웠다.** 목록은 손으로 두되(각 이벤트를 만들려면 의미 있는 인자가 필요하다),
   `catalogCoversEveryDeclaredEvent` 가 `payload` 패키지를 스캔해 목록과 **대조**한다.
   목록에서 한 건을 빼면 실제로 깨지는 것을 확인했다
-- **`common/messaging`** — `OutboxRecorder` 무테스트(`propagation = MANDATORY` 가 이 클래스의 존재 이유).
+- ~~**`common/messaging`** — `OutboxRecorder` 무테스트~~ → **메웠다.**
+  `OutboxRecorderTest` 가 적재 시점의 추적 컨텍스트가 이벤트와 같은 행에 남는지,
+  추적이 없어도 적재가 그대로 되는지를 본다(decisions.md 17번).
+  `propagation = MANDATORY` 자체는 여전히 무테스트다 — 검증하려면 실 트랜잭션 매니저가 필요하고,
+  그 자리는 앱 모듈의 통합 테스트다.
+- **`common/kafka`** (신설, decisions.md 19번) — 수신 실패 처리는 <b>브로커 없이</b> 검증한다.
+  `DltOpsServiceTest` 가 `MockConsumer` 로 재투입을 본다 — 원본 토픽으로 가는가,
+  진단 헤더(`kafka_dlt-*`)를 떼는가, 계약 헤더와 `traceparent` 를 남기는가,
+  **조회가 커밋하지 않는가**, 발행이 끝난 뒤에만 커밋하는가.
+  `ConsumerRetryPolicy` 의 백오프 총량은 license 의 `KafkaErrorHandlerConfigTest` 가 이미 본다
+- **`common/messaging`** — `OutboxOpsServiceTest` 가 DEAD 회수 경로를 본다(단건·일괄·오탐).
   ~~`lockPendingBatch` 가 앱 모듈에 인질로 잡혀 있다~~ → **회수했다.**
   `OutboxPendingQueryTest` 가 이 모듈에서 실 MySQL 로 쿼리 계약(상태·시간 조건·순서·배치 크기)을 검증한다.
   앱 쪽 `OutboxBackOffQueryTest` 는 "이 서비스의 스키마에서도 도는가"를 보는 통합 검증으로 남긴다

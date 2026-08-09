@@ -1,0 +1,392 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseListDeadEventResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DeadEventResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListDltRecordResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DltRecordResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListLicenseResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/LicenseResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseReplayedCount" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ReplayedCount"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRequeuedCount" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RequeuedCount"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseVoid" : {
+        "properties" : {
+          "data" : { },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "DeadEventResponse" : {
+        "properties" : {
+          "aggregateId" : {
+            "type" : "string"
+          },
+          "aggregateType" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "eventId" : {
+            "type" : "string"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "partitionKey" : {
+            "type" : "string"
+          },
+          "retryCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "traceParent" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DltRecordResponse" : {
+        "properties" : {
+          "eventId" : {
+            "type" : "string"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "exception" : {
+            "type" : "string"
+          },
+          "key" : {
+            "type" : "string"
+          },
+          "offset" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "originalTopic" : {
+            "type" : "string"
+          },
+          "partition" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "traceParent" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorBody" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LicenseResponse" : {
+        "properties" : {
+          "issuedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "licenseId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "licenseKey" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "REVOKED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ReplayedCount" : {
+        "properties" : {
+          "replayed" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RequeuedCount" : {
+        "properties" : {
+          "requeued" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
+    "title" : "STOVE license API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/library" : {
+      "get" : {
+        "operationId" : "myLibrary",
+        "parameters" : [ {
+          "description" : "구매자 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\n실제로는 게이트웨이가 토큰을 검증한 뒤 주입할 자리이고, 그때 이 파라미터는 명세에서 사라진다.\n지금은 값을 바꾸면 다른 회원의 자원이 조회되므로 내부망 밖에 열어서는 안 된다.",
+          "in" : "header",
+          "name" : "X-Member-Id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListLicenseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "library-controller" ]
+      }
+    },
+    "/api/v1/ops/dlt" : {
+      "get" : {
+        "operationId" : "peek",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "topic",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "max",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "dlt-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/dlt/replay" : {
+      "post" : {
+        "operationId" : "replay",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "topic",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "max",
+          "required" : false,
+          "schema" : {
+            "default" : 100,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "dlt-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead" : {
+      "get" : {
+        "operationId" : "deadEvents",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead/requeue-all" : {
+      "post" : {
+        "operationId" : "requeueAll",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    },
+    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
+      "post" : {
+        "operationId" : "requeue",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "eventId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "outbox-ops-controller" ]
+      }
+    }
+  }
+}
