@@ -43,13 +43,19 @@ stove/
 └── docker-compose.apps.yml 9개 서비스 + 게이트웨이 컨테이너 실행
 ```
 
-서비스별 API·상태머신·이벤트 목록은 [docs/services.md](docs/services.md),
-구조를 이렇게 잡은 근거는 [docs/decisions.md](docs/decisions.md) 에 정리했다.
-테스트를 어느 층에서 무엇으로 검증하는지는 [docs/testing.md](docs/testing.md),
-그 테스트로 재현한 결함은 [docs/defects.md](docs/defects.md),
-Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/performance.md) 에 있다.
-아래 "같은 애그리거트의 순서 보장"이 어느 층에서 어떻게 지켜지는지는
-[docs/event-ordering.md](docs/event-ordering.md) 에 정리했다.
+문서는 전부 [docs/](docs/) 에 있다. 읽는 순서와 각 문서의 성격은 [docs/README.md](docs/README.md).
+
+| 무엇이 궁금하면 | 문서 |
+|---|---|
+| 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
+| 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
+| 테스트로 재현한 결함 21건 | [defects.md](docs/defects.md) |
+| 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
+| 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
+| 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
+| Outbox 릴레이 처리량 측정과 개선 | [performance.md](docs/performance.md) |
+| 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
+| 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
 
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
 스키마가 유동적인 패치 매니페스트는 MongoDB, 검색 트래픽은 Elasticsearch.
@@ -335,22 +341,30 @@ curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT
 
 ## 6. 외부 연동은 포트로 분리
 
-실연동 대상은 인터페이스(포트)로 두고 로컬에서는 스텁을 쓴다 — 도메인 규칙이 외부 사정에 오염되지 않게.
+실연동 대상은 인터페이스(포트)로 두고, 구현이 없는 것만 스텁을 쓴다 — 도메인 규칙이 외부 사정에 오염되지 않게.
+**다섯 포트 중 둘은 실제 어댑터가 이미 있고, 설정으로 고른다.**
 
-| 포트 | 스텁 | 실제 대상 |
-|---|---|---|
-| `PgClient` | `MockPgClient` | PG사 / 스토브캐시 |
-| `RatingBoardClient` | `MockRatingBoardClient` | 게임물관리위원회 접수 |
-| `BuildStorage` | `MockBuildStorage` | S3 presigned upload |
-| `CdnUrlSigner` | HMAC 서명(실동작) | CDN 서명 URL |
-| `TaxInvoiceIssuer` | `MockTaxInvoiceIssuer` | 전자세금계산서 |
+| 포트 | 스텁 | 실제 어댑터 | 고르는 법 |
+|---|---|---|---|
+| `BuildStorage` (studio) | `MockBuildStorage` | **`S3BuildStorage`** | `stove.storage.provider` = `mock`(기본) / `s3` |
+| `DownloadUrlSigner` (download) | — | **`CdnUrlSigner`**(HMAC 실서명) · **`S3PresignedUrlSigner`** | `stove.download.url-strategy` = `cdn`(기본) / `s3` |
+| `PgClient` (payment) | `MockPgClient` | 없음 — PG사 / 스토브캐시 | — |
+| `RatingBoardClient` (review) | `MockRatingBoardClient` | 없음 — 게임물관리위원회 접수 | — |
+| `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 — 전자세금계산서 | — |
+
+스텁은 전부 `@Profile("!prod")` 라 운영에서 조용히 도는 일이 없고, **그 조건은 ArchUnit 이 검사한다**
+(`스텁_어댑터는_격리한다`). 어느 것이 실동작이고 어느 것이 흉내인지는
+[docs/services.md](docs/services.md) 의 "외부 연동 대역" 에 자세히 있다.
 
 ## 7. 다음 단계 후보
 
 - ~~Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람~~ → **했다.**
   적용하다 store·download 에는 재시도 정책조차 없었다는 것이 드러나 컨슈머 정책을 `common:kafka` 로
   분리했다 — 이제 9개 서비스가 같은 실패 처리를 갖는다 ([decisions.md](docs/decisions.md) 19번)
-- 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
+- ~~전 구간 시나리오 관통(등록→심의→구매→지급→정산)~~ → **셸 스모크로는 했다.**
+  `scripts/smoke-stack.sh` 가 원격 전체 스택에서 트랙 A~C·환불·결제 거절·게이트웨이 차단까지
+  21/21 로 확인한다. 다만 **빌드가 지키는 회귀 방어선은 아니다** —
+  자동화된 테스트는 여전히 앱별 컨텍스트 로딩까지이고, 이 관통을 CI 의 판정 조건으로 올리는 것이 남았다
 - ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**
   Kafka 구간이 끊기던 원인은 헤더를 안 실어서만이 아니라 **Outbox 가 발행을 다른 스레드로 미루기
   때문**이었다 — 자동 계측은 `send()` 를 부른 스레드(릴레이 스케줄러)의 컨텍스트를 싣는다.

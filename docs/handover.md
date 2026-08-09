@@ -8,6 +8,11 @@
 **2·3장은 이미 끝난 것**이므로 다시 설명하거나 다시 확인할 필요가 없고,
 **4장부터가 다음에 할 일**이다.
 
+> **2026-08-10 갱신.** 이 노트를 쓴 뒤 [decisions.md](decisions.md) 16~19 번이 들어가면서
+> 근거로 든 코드가 몇 군데 움직였다. 달라진 자리는 본문에 그때그때 표시했고,
+> **5장의 열린 질문 ②③ 은 닫혔다.** 3장의 "확인한 사실" 은 이 갱신에서 다시 대조한 값이다.
+> 결론(2장)은 하나도 바뀌지 않았다 — 움직인 것은 근거의 위치이지 사실이 아니다.
+
 ---
 
 ## 1. 이 세션의 대화 규칙
@@ -83,7 +88,11 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 - **"환불 토픽" 은 없다.** 토픽은 애그리거트 단위이고, 환불은 `stove.payment.v1` 의 `PaymentCancelled` 이벤트다.
 - **download 는 payment 토픽을 보지 않는다.** license 토픽 구독자다. 환불 경로는 동시 소비가 아니라 연쇄(`payment → license → download`).
 
-> 근거 — `@KafkaListener` 12개 전수, 각 `application.yml` 의 `group-id`, `Topics.java` 주석
+> 근거 — `@KafkaListener` 12개 전수, 각 서비스의 `CONSUMER_GROUP` 상수, `Topics.java` 주석
+>
+> *(갱신)* 이 노트를 쓸 때는 `application.yml` 의 `group-id` 도 근거였다.
+> [decisions.md](decisions.md) 16번이 **9개 앱 전부에서 한 번도 읽히지 않던 그 값을 지웠다** —
+> 리스너가 `groupId` 를 명시하므로 yml 값은 덮어써지고 있었다. 지금 그룹 이름의 출처는 상수 한 곳이다.
 
 ### 2.5 파티션 수 = 병렬 처리량의 **상한**
 
@@ -155,7 +164,7 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 
 ---
 
-## 3. 코드로 확인한 사실 (2026-08-07 기준)
+## 3. 코드로 확인한 사실 (2026-08-07 확인 · **2026-08-10 재대조: 전 항목 그대로**)
 
 새 세션에서 다시 확인하지 않아도 된다. 단, **코드가 바뀌면 무효**이므로 이상하면 재확인할 것.
 
@@ -187,7 +196,11 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 | 4 | Saga — D-002, D-006, `RefundFacade` | 보상 트랜잭션의 실전 함정. "무엇을 실패로 볼 것인가" 를 틀리면 정상 결제를 환불한다 |
 | 5 | `common/archunit/` (앱당 29규칙) | 설계 규칙을 테스트로 강제하는 법. `EventOrderingRules` 는 분산 동작 보장을 정적 규칙으로 옮긴 드문 사례 |
 
-이후 여유가 있으면: CQRS(catalog↔store), Database per Service + Flyway `ddl-auto: validate`, 권한 사본으로 결합 끊기(`download/Entitlement`), 뮤테이션 테스트(`docs/testing.md` 5절), `CorrelationIdFilter`, gateway 내부 API 차단.
+이후 여유가 있으면: CQRS(catalog↔store), Database per Service + Flyway `ddl-auto: validate`, 권한 사본으로 결합 끊기(`download/Entitlement`), 뮤테이션 테스트(`docs/testing.md` 5절), **추적 컨텍스트를 Outbox 에 실어 Kafka 구간을 잇는 법**(`common/messaging/trace`, [decisions.md](decisions.md) 17번), gateway 내부 API 차단.
+
+> *(갱신)* 원래 여기 `CorrelationIdFilter` 가 있었다. 17번이 그 필터를 `TraceIdResponseFilter` 로
+> 대체했다 — 식별자 생성과 MDC 적재는 Micrometer Tracing 이 더 잘 하므로 응답 헤더를 돌려주는 일만 남겼다.
+> 학습 대상으로 더 값이 큰 것은 그 자리를 대신한 **Outbox ↔ 분산 추적의 충돌**이라 그쪽으로 바꿨다.
 
 **1·2번은 Kafka 구조가 머릿속에 올라와 있는 지금 보는 게 효율이 가장 좋다.**
 
@@ -197,17 +210,29 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 
 단정하지 말 것. 확인 후 결론이 나면 이 절을 갱신한다.
 
-**① `DownloadService.grant` 에는 `belongsTo` 가드가 없다** (관찰)
+**남은 것은 ① 하나다.** ②③ 은 닫혔고, 무엇으로 닫혔는지를 아래에 남긴다.
+
+**① `DownloadService.grant` 에는 `belongsTo` 가드가 없다** (관찰 — **2026-08-10 재확인, 그대로다**)
 
 `revoke` 는 D-012 수정으로 주문번호를 대조하지만(`DownloadService.java:73-80`), `grant` 는 그냥 덮어쓴다(`:52-55`). 지각한 `ORD-1` 의 `LicenseIssued` 가 `ORD-2` 것보다 늦게 도착하면 문서의 `orderNo` 가 `ORD-1` 로 덮이고, 이후 정당한 `ORD-2` 회수가 `belongsTo` 에서 거부될 수 있다. 다만 D-010 이 *"이미 전부 회수된 주문에는 발행하지 않는다"* 로 재전송 경로를 막아둬서 창이 매우 좁다. **재현 테스트를 써 보기 전에는 결함이라 부르지 않는다.**
 
-**② DEAD 알람이 없다**
+**② DEAD 알람이 없다** — ✅ **닫힘**
 
-`docs/event-ordering.md` 6절 A-2 가 *"`maxRetry` 도달 시 DEAD 전이가 탈출구로 반드시 필요하고, DEAD 알람이 그 짝이다(아직 없다)"* 라고 적어뒀다. `OutboxMetrics` 에 `stove.outbox.dead` 카운터는 있으므로, 남은 것은 알람 규칙이다.
+`stove.outbox.dead` 에 Prometheus 알람 규칙이 붙었다(`infra/prometheus/alerts.yml`, `promtool` 검증).
+[decisions.md](decisions.md) 19번이 함께 넣었고, 같은 자리에서 `stove.kafka.dead-lettered` 도 생겼다 —
+DLT 도 아무도 안 보면 유실과 운영상 다르지 않기 때문이다.
 
-**③ 문서 참조가 어긋나 있다**
+**다만 더 큰 구멍은 알람이 아니라 회수 경로였다.** `OutboxEvent#requeue()` 는 처음부터 있었고
+주석도 정확했는데(*"회수 경로가 없으면 유실 방지 장치가 유실의 원인이 된다"*),
+**그 메서드를 부르는 프로덕션 코드가 하나도 없었다** — 호출처는 테스트 4곳뿐이었다.
+되살리려면 운영자가 프로덕션 DB 에 직접 UPDATE 를 쳐야 했다는 뜻이다.
+지금은 HTTP 로 되살린다(`/api/v1/ops/outbox/dead/{id}/requeue`).
 
-위 A-2 항목이 README 의 "남은 것" 절을 가리키는데, **README 에 그런 절이 없다.** 지운 뒤 참조를 안 고친 것으로 보인다. 사소하지만 문서를 근거로 삼을 때 걸린다.
+**③ 문서 참조가 어긋나 있다** — ✅ **닫힘**
+
+`event-ordering.md` 6절 A-2 가 README 의 "남은 것" 절을 가리키는데 README 에 그런 절이 없었다.
+②가 닫히면서 *"아직 없다"* 는 문장 자체도 낡았으므로, 깨진 참조를 지우고
+실제 알람 규칙 파일과 회수 API 를 가리키도록 고쳤다.
 
 ---
 
@@ -217,14 +242,21 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 |---|---|
 | `common/messaging/outbox/` | Outbox 적재·릴레이·재시도·메트릭 |
 | `common/messaging/inbox/` | 멱등 수신 가드 *(다음 학습 1순위)* |
-| `common/messaging/kafka/ConsumerRetryPolicy.java` | 컨슈머 재시도 정책 |
+| `common/messaging/trace/` | 적재 시점의 추적 컨텍스트를 붙잡아 발행 때 복원 (17번) |
+| `common/messaging/ops/` | Outbox `DEAD` 회수 API |
+| **`common/kafka/`** | 수신 측 정책 — `ConsumerRetryPolicy`, DLT, DLT 운영 API. **JPA 를 모른다** (19번) |
 | `common/event/` | 서비스 간 계약 — payload 12종, `Topics`, Kafka 헤더 |
 | `common/archunit/EventOrderingRules.java` | 순서 보장을 깨는 코드를 빌드에서 차단 |
 | `docs/event-ordering.md` | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |
 | `docs/defects.md` | 결함 21건, 각각 재현 테스트 명시 |
-| `docs/decisions.md` | 설계 결정 15건, 각각 근거와 **대가**까지 |
-| `docs/performance.md` | 릴레이 처리량 측정·개선 (138 → 480.5 events/s, ×3.48) |
+| `docs/decisions.md` | 설계 결정 19건, 각각 근거와 **대가**까지 |
+| `docs/performance.md` | 릴레이 처리량 (138 → 480.5 events/s, ×3.48) + HTTP 재측정 (9장) |
 | `docs/kafka-consumer-retry.md` | 컨슈머 재시도의 실제 동작 *(다음 학습 2순위)* |
 | `docs/testing.md` | 테스트 계층·격리·뮤테이션 테스트 |
 | `docs/services.md` | 서비스 9종의 API·상태머신·이벤트 |
+| `docs/remote-dev-plan.md` | 원격 CI 를 세운 기록 — 로컬이 전체 스택을 못 띄우던 이유 |
 | `scripts/perf/` | 릴레이 부하 측정 도구, 릴레이 off 대조군 |
+
+> *(갱신)* `ConsumerRetryPolicy` 는 이 노트를 쓸 때 `common/messaging/` 아래에 있었다.
+> 19번이 수신 측 정책만 `common/kafka/` 로 갈라낸 이유는, 정책만 쓰려는 store·download 에
+> Outbox 와 JPA 까지 딸려오는 것이 문제였기 때문이다. 그 분리 덕에 **9개 서비스가 같은 실패 처리를 갖는다.**
