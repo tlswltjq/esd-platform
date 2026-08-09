@@ -1,6 +1,10 @@
 apply plugin: 'java-library'
 
 // 테스트 지원 코드지만 여러 앱의 test 소스셋에서 가져다 쓰므로 main 에 둔다.
+//
+// **인프라가 필요 없는 것만 여기 둔다.** 컨테이너를 띄우는 것은 common:testcontainers 이고,
+// 그쪽은 통합 소스셋에만 걸린다. 이 모듈은 양쪽 소스셋에서 쓰이므로 여기에 컨테이너가
+// 섞이면 경계가 무너진다 — EventRecords 를 쓰는 리스너 테스트 9개는 브로커가 필요 없다.
 dependencies {
     // 리스너 테스트가 이벤트 계약대로 레코드를 조립할 수 있어야 한다 (EventRecords)
     api project(':common:event')
@@ -9,10 +13,4 @@ dependencies {
     api 'org.springframework:spring-web'
 
     api 'org.springframework.boot:spring-boot-starter-test'
-    api 'org.springframework.boot:spring-boot-testcontainers'
-    api 'org.testcontainers:junit-jupiter'
-    api 'org.testcontainers:mysql'
-    api 'org.testcontainers:kafka'
-    api 'org.testcontainers:elasticsearch'
-    api 'org.testcontainers:mongodb'
 }

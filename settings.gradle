@@ -20,6 +20,7 @@ include 'common:kafka'
 include 'common:messaging'
 include 'common:archunit'
 include 'common:test'
+include 'common:testcontainers'
 
 // ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
 include 'apps:gateway'

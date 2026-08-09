@@ -10,7 +10,7 @@
 | 순서 | 문서 | 왜 이 순서인가 |
 |---|---|---|
 | 1 | [services.md](services.md) | 서비스 9종이 무엇을 받고 무엇을 내보내는지. 나머지 문서가 쓰는 지명이 전부 여기서 나온다 |
-| 2 | [decisions.md](decisions.md) | 구조를 이렇게 잡은 근거 19건. **버린 선택지와 대가**까지 있어 결론만 읽는 것보다 값이 크다 |
+| 2 | [decisions.md](decisions.md) | 구조를 이렇게 잡은 근거 20건. **버린 선택지와 대가**까지 있어 결론만 읽는 것보다 값이 크다 |
 | 3 | [defects.md](defects.md) | 재현 테스트가 붙은 결함 21건. **패턴 학습보다 함정 학습이 빠르다** |
 | 4 | [event-ordering.md](event-ordering.md) | "같은 애그리거트의 순서 보장"이 세 층에 어떻게 나뉘는가 |
 | 5 | [kafka-consumer-retry.md](kafka-consumer-retry.md) | 컨슈머 재시도가 예외 전파에 기대는 이유. 4번의 컨슈머 층 후속편 |
@@ -23,7 +23,7 @@
 | 문서 | 무엇이 있나 |
 |---|---|
 | [services.md](services.md) | 서비스별 API·상태머신·이벤트·규칙, 외부 연동 대역(무엇이 실동작이고 무엇이 흉내인지) |
-| [decisions.md](decisions.md) | 설계 결정 19건 — 배경 → 결정 → 근거 → 버린 선택지. 끝에 "검증하며 드러난 것" |
+| [decisions.md](decisions.md) | 설계 결정 20건 — 배경 → 결정 → 근거 → 버린 선택지. 끝에 "검증하며 드러난 것" |
 | [defects.md](defects.md) | 결함 대장 21건. **추측은 넣지 않는다** — 전부 재현 테스트가 하나씩 붙어 있다 |
 | [testing.md](testing.md) | 테스트 계층 L0~L5, 격리, 뮤테이션 테스트, 아직 남은 공백 |
 | [event-ordering.md](event-ordering.md) | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |

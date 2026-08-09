@@ -1,0 +1,20 @@
+apply plugin: 'java-library'
+
+// Testcontainers 로 실 인프라를 띄우는 것만 여기 둔다.
+//
+// common:test 와 갈라 놓은 이유가 이 모듈의 존재 이유다. 이 모듈은 통합 테스트 소스셋
+// (integrationTestImplementation)에만 걸리므로, src/test 의 클래스는 InfraContainers 를
+// **임포트조차 할 수 없다.** 컨테이너를 띄우는 테스트가 빠른 소스셋에 섞이는 것을
+// 규약이나 태그가 아니라 컴파일이 막는다.
+//
+// 대역·픽스처처럼 인프라가 필요 없는 테스트 지원 코드는 common:test 에 남는다.
+dependencies {
+    // @TestConfiguration. starter-test 전체가 아니라 필요한 것만 — 이 모듈은 컨테이너만 안다.
+    api 'org.springframework.boot:spring-boot-test'
+    api 'org.springframework.boot:spring-boot-testcontainers'
+    api 'org.testcontainers:junit-jupiter'
+    api 'org.testcontainers:mysql'
+    api 'org.testcontainers:kafka'
+    api 'org.testcontainers:elasticsearch'
+    api 'org.testcontainers:mongodb'
+}

@@ -36,7 +36,8 @@ stove/
 │   ├── kafka               컨슈머 재시도 정책 + DLT + DLT 운영 API (자동 구성)
 │   ├── messaging           Outbox(발행) + Inbox(멱등 수신) + 추적 컨텍스트 전파 (자동 구성)
 │   ├── archunit            패키지 구조·경계 규칙 (앱당 29개, 12개 모듈에 적용)
-│   └── test                Testcontainers 공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB)
+│   ├── test                인프라가 필요 없는 테스트 지원 (EventRecords, OpenApiSnapshot)
+│   └── testcontainers      공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB) — 통합 소스셋 전용
 │
 ├── infra/                  mysql init(스키마 7종), prometheus, tempo, grafana 데이터소스
 ├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Tempo · Grafana
@@ -133,10 +134,15 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 (6.1 GiB 는 Tempo 를 넣기 전 인프라 9종 기준의 실측치다 — 늘었을 뿐 줄지 않았으므로 결론은 같다.)
 그래서 네 번째 경로(D)가 있다 ([decisions.md](docs/decisions.md) 15번).
 
+**무엇이 컨테이너를 요구하는지는 소스셋이 말한다.** `src/test` 는 인프라를 못 띄운다 —
+컨테이너 라이브러리가 클래스패스에 없어 임포트가 컴파일되지 않는다.
+그래서 `./gradlew test` 는 Docker 없이 어디서나 돈다.
+
 | 무엇을 | 어디서 | 명령 |
 |---|---|---|
-| 단위 테스트 49개 · ArchUnit 12개 | **로컬** | `./gradlew test` |
-| 컨텍스트 로딩 9개 · 전체 스택 · 성능 | **원격** | `./scripts/remote.sh …` |
+| 단위·어댑터·ArchUnit 816개 (Docker 불필요) | **로컬** | `./gradlew test` |
+| 실 인프라 통합 175개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
+| 전체 스택 · 스모크 · 성능 | **원격** | `./scripts/remote.sh …` |
 | 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
 
 ```bash

@@ -20,14 +20,36 @@
 
 ## 2. 테스트 계층
 
-| 층 | 검증 대상 | 인프라 | 위치 | 1건당 |
-|---|---|---|---|---|
-| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `apps/*/core/domain` | ms |
-| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `apps/*/core/service` | 초 |
-| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `apps/*/api/listener`, `common/event` | ms |
-| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `common/messaging` | ms |
-| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `*ArchitectureTest` | ms |
-| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `*ContextTest` | 십수 초 |
+| 층 | 검증 대상 | 인프라 | 소스셋 | 위치 | 1건당 |
+|---|---|---|---|---|---|
+| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms |
+| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 |
+| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/event` | ms |
+| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms |
+| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms |
+| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 |
+
+### 소스셋이 층을 강제한다
+
+**"인프라가 필요한가"는 규약이 아니라 클래스패스가 정한다.**
+컨테이너는 `common:testcontainers` 에 있고 이 모듈은 `integrationTestImplementation` 으로만
+걸린다 — `src/test` 의 클래스는 `InfraContainers` 를 **임포트조차 할 수 없다.**
+
+```
+./gradlew test              816건 · Docker 불필요 · 수 초
+./gradlew integrationTest   175건 · Testcontainers · 동시 스택 수는 따로 조인다
+./gradlew build             둘 다 (단위가 먼저 돈다)
+```
+
+태그로 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
+잊으면 컨테이너 테스트가 빠른 소스셋에 섞여 **예전 상태로 조용히 돌아간다.**
+실제로 분리 작업 중에 `InfraContainers` 를 쓰지 않고 Testcontainers 를 직접 쓰던
+테스트 2건(`S3PresignedUrlSignerTest`·`S3BuildStorageTest`)이 있었는데,
+찾아낸 것은 사람의 검토가 아니라 **컴파일 실패**였다.
+
+동시에 뜨는 컨테이너 스택 수는 공유 빌드 서비스(`InfraTestThrottle`)가 따로 센다.
+예전에는 `org.gradle.workers.max` 하나가 컴파일 병렬도와 컨테이너 수를 같이 정해서,
+컨테이너를 지키려고 2 로 낮추면 인프라가 필요 없는 테스트까지 함께 느려졌다.
 
 ### 경계 두 곳은 층이 아니라 부재로 지켜진다
 

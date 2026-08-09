@@ -1,3 +1,6 @@
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version "${springBootVersion}" apply false
@@ -13,6 +16,27 @@ allprojects {
     repositories {
         mavenCentral()
     }
+}
+
+/**
+ * 실 인프라를 띄우는 테스트 태스크가 동시에 몇 개까지 돌 수 있는지를 정하는 자리.
+ *
+ * <p>모듈마다 자기 컨테이너 스택을 띄우므로(common:testcontainers 참고) 동시 실행 수가
+ * 곧 동시 컨테이너 수다. 예전에는 이것을 {@code org.gradle.workers.max} 로 눌렀는데,
+ * 그 값은 <b>컴파일과 단위 테스트까지 같이</b> 묶는다 — 컨테이너를 지키려고 2 로 낮추면
+ * 인프라가 필요 없는 51개 클래스도 함께 느려졌다.
+ *
+ * <p>공유 빌드 서비스는 그것을 쓰겠다고 선언한 태스크만 센다. 그래서 이제
+ * {@code org.gradle.workers.max} 는 머신의 코어 수대로 올리고, 컨테이너 스택만 여기서 조인다.
+ */
+abstract class InfraTestThrottle implements BuildService<BuildServiceParameters.None> {
+}
+
+def infraTestThrottle = gradle.sharedServices.registerIfAbsent('infraTestThrottle', InfraTestThrottle) {
+    // Docker 에 준 메모리가 한계선이지 CPU 코어가 아니다(gradle.properties 참고).
+    // 머신마다 다르므로 -Pstove.infraTest.maxParallel=N 으로 덮을 수 있게 둔다.
+    maxParallelUsages = (providers.gradleProperty('stove.infraTest.maxParallel')
+            .getOrElse('2')) as Integer
 }
 
 subprojects {
@@ -49,6 +73,50 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
         options.compilerArgs << '-parameters'
+    }
+
+    // ── 테스트 실행 경계 ──────────────────────────────────────────────
+    //
+    // 실행 정책을 **모듈 경계가 아니라 필요 자원**으로 가른다.
+    //
+    // 예전에는 한 모듈의 test 태스크에 컨테이너가 필요 없는 도메인·어댑터 테스트와
+    // MySQL·Kafka 를 띄우는 통합 테스트가 섞여 있었다. 그래서 전체가 가장 느리고
+    // 가장 취약한 쪽의 실행 프로파일을 물려받았다 — 도메인 테스트 한 줄을 고쳐도
+    // Kafka 기동을 기다렸고, 병렬도를 올리면 컨테이너가 죽고 낮추면 단위까지 느려졌다.
+    //
+    // 경계는 규약이 아니라 **클래스패스**가 지킨다. common:testcontainers 가
+    // integrationTest 에만 걸리므로 src/test 의 클래스는 InfraContainers 를
+    // 임포트조차 할 수 없다 — 컨테이너 테스트를 빠른 소스셋에 잘못 두면 컴파일이 막는다.
+    sourceSets {
+        integrationTest {
+            compileClasspath += sourceSets.main.output + sourceSets.test.output
+            runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+        }
+    }
+
+    configurations {
+        integrationTestImplementation.extendsFrom testImplementation
+        integrationTestCompileOnly.extendsFrom testCompileOnly
+        integrationTestAnnotationProcessor.extendsFrom testAnnotationProcessor
+        integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+    }
+
+    tasks.register('integrationTest', Test) {
+        group = 'verification'
+        description = '실 인프라(Testcontainers)를 띄우는 테스트만 실행한다'
+        testClassesDirs = sourceSets.integrationTest.output.classesDirs
+        classpath = sourceSets.integrationTest.runtimeClasspath
+
+        // 동시 컨테이너 스택 수를 여기서 조인다. 루트의 InfraTestThrottle 주석 참고.
+        usesService(infraTestThrottle)
+
+        // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
+        shouldRunAfter tasks.named('test')
+    }
+
+    // 통합 테스트도 `./gradlew build` 로 돈다. 기본 빌드에서 빠지면 아무도 안 돌린다.
+    tasks.named('check') {
+        dependsOn tasks.named('integrationTest')
     }
 
     tasks.withType(Test).configureEach {
@@ -95,8 +163,12 @@ subprojects {
     tasks.register('defectTest', Test) {
         group = 'verification'
         description = '알려진 결함을 재현하는 테스트만 실행한다 (docs/defects.md 참고)'
-        testClassesDirs = sourceSets.test.output.classesDirs
-        classpath = sourceSets.test.runtimeClasspath
+        // 결함은 층을 가리지 않는다 — 양쪽 소스셋을 다 훑는다.
+        // 한쪽만 보면 통합 쪽 재현 테스트가 조용히 판정에서 빠진다.
+        testClassesDirs = sourceSets.test.output.classesDirs +
+                sourceSets.integrationTest.output.classesDirs
+        classpath = sourceSets.test.runtimeClasspath +
+                sourceSets.integrationTest.runtimeClasspath
         useJUnitPlatform {
             includeTags 'known-defect'
         }
@@ -119,6 +191,10 @@ subprojects {
 
     pitest {
         junit5PluginVersion = '1.2.1'
+        // 소스셋을 가른 뒤에도 뮤테이션 판정은 두 쪽을 다 쓴다.
+        // 기본값(test 만)으로 두면 L1 서비스 통합 테스트가 죽이던 뮤턴트가 전부 "생존"으로
+        // 보고돼, 코드가 그대로인데 점수만 떨어진다 — 측정 도구의 사각지대를 다시 만드는 셈이다.
+        testSourceSets = [sourceSets.test, sourceSets.integrationTest]
         // 앱은 도메인·서비스 계층만 본다. 어댑터는 대부분 위임이라 살아남은 뮤턴트가
         // 대개 "검증할 가치가 없는 위임"이어서 신호 대 잡음비가 나쁘다.
         // common 은 계층이 아니라 모듈 자체가 로직이므로 전체를 본다.
@@ -157,8 +233,11 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
 
         // 모듈 패키지 구조 검증 규칙 (ArchUnit)
         testImplementation project(':common:archunit')
-        // 컨텍스트 로딩 검증용 인프라 컨테이너
+        // 인프라가 필요 없는 테스트 지원 코드 (EventRecords, OpenApiSnapshot)
         testImplementation project(':common:test')
+        // 컨테이너는 통합 소스셋에만 건다. 이 한 줄이 경계다 —
+        // src/test 에서는 InfraContainers 가 클래스패스에 아예 없다.
+        integrationTestImplementation project(':common:testcontainers')
     }
 
     // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다
