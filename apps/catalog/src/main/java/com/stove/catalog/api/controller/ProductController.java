@@ -40,6 +40,20 @@ public class ProductController {
         return ApiResponse.ok(ProductResponse.from(productQueryService.getProduct(productId)));
     }
 
+    /**
+     * {@code productCode} 로 조회. 상품을 코드로만 아는 쪽(연동·운영)이 내부 id 를 얻는 통로다.
+     *
+     * <p><b>경로를 나눈 이유</b> — {@code GET /products} 에 질의 파라미터로 얹으면
+     * OpenAPI 연산이 충돌한다. 명세는 연산을 <b>경로 + 메서드</b>로 식별하므로
+     * 같은 자리에 목록과 단건이 겹치면 하나만 남고, 커밋된 스냅샷이 조용히 거짓말을 하게 된다.
+     *
+     * <p>{@code /{productId}} 와는 세그먼트 수가 달라 매칭이 겹치지 않는다.
+     */
+    @GetMapping("/by-code/{productCode}")
+    public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {
+        return ApiResponse.ok(ProductResponse.from(productQueryService.getProductByCode(productCode)));
+    }
+
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */
     @PostMapping("/{productId}/sale-open")
     public ApiResponse<Void> openSale(@PathVariable Long productId) {
