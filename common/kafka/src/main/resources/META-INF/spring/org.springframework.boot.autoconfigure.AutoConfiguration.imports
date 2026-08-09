@@ -1,0 +1,2 @@
+com.stove.common.kafka.KafkaConsumerAutoConfiguration
+com.stove.common.kafka.ops.DltOpsAutoConfiguration

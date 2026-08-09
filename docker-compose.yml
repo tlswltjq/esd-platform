@@ -114,6 +114,7 @@ services:
       - "9090:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
 
   # 분산 추적 수집/저장. 앱은 OTLP/HTTP(4318)로 보내고 Grafana 는 3200 으로 읽는다.
   #

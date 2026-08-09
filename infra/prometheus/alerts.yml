@@ -1,0 +1,53 @@
+# 메시지가 사라지고 있는지 사람에게 알리는 규칙.
+#
+# DLT 와 Outbox DEAD 는 유실을 막지만 **알려주지는 않는다.** 아무도 보지 않으면 조용히 쌓이기만
+# 하고, 그건 운영상 유실과 크게 다르지 않다. "포기했다"가 도달해야 복구가 시작된다.
+#
+# 지표 출처는 코드다 — common:messaging 의 OutboxMetrics, common:kafka 의 DeadLetterMetrics.
+groups:
+  - name: stove-messaging
+    rules:
+      # 발행을 영영 포기한 이벤트. 정상 운영에서는 0 이어야 하므로 한 건이라도 즉시 알린다.
+      # 되살리는 경로는 POST /api/v1/ops/outbox/dead/{eventId}/requeue 다.
+      - alert: OutboxEventsAbandoned
+        expr: increase(stove_outbox_dead_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }}: Outbox 이벤트 발행을 포기했다"
+          description: >-
+            최근 5분간 {{ $value }}건이 DEAD 로 떨어졌다.
+            GET /api/v1/ops/outbox/dead 로 사유를 보고, 원인을 제거한 뒤 requeue 한다.
+
+      # 적체. 릴레이가 못 따라가거나 브로커가 느린 상태이고, 방치하면 DEAD 로 넘어간다.
+      # 순간 폭주와 구분하려고 10분을 본다 -- 배치 한 번에 200건씩 나가므로 짧은 스파이크는 정상이다.
+      - alert: OutboxBacklogGrowing
+        expr: stove_outbox_pending > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: Outbox 적체가 10분째 해소되지 않는다"
+          description: "발행 대기 {{ $value }}건. 브로커 상태와 릴레이 로그를 먼저 본다."
+
+      # 수신 측이 재시도를 소진해 DLT 로 넘긴 메시지.
+      # topic 태그가 어느 흐름이 막혔는지 바로 알려준다.
+      - alert: MessagesDeadLettered
+        expr: increase(stove_kafka_dead_lettered_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }}: {{ $labels.topic }} 처리를 포기해 DLT 로 보냈다"
+          description: >-
+            최근 5분간 {{ $value }}건. GET /api/v1/ops/dlt?topic={{ $labels.topic }}.DLT 로 원인을 보고,
+            고친 뒤 POST /api/v1/ops/dlt/replay 로 되돌린다.
+
+      # 스크레이프가 끊긴 것도 신호다 -- 위 세 규칙이 전부 조용해지기 때문이다.
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} 지표 수집이 2분째 끊겼다"
+          description: "이 서비스의 다른 알람은 이 동안 울리지 않는다."

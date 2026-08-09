@@ -19,6 +19,12 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    # 이 서비스는 도메인 이벤트를 발행하지 않는다. 프로듀서 설정이 있는 이유는 **DLT 뿐이다** —
+    # 재시도를 소진한 메시지를 <원본토픽>.DLT 로 넘기는 것도 발행이라, 직렬화가 없으면 그 순간 터진다.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
     consumer:
       auto-offset-reset: earliest
       enable-auto-commit: false

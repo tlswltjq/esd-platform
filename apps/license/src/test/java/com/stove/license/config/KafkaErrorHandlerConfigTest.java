@@ -20,6 +20,7 @@ import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
 import com.stove.license.core.service.LicenseService;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.util.backoff.BackOffExecution;
 
@@ -45,8 +47,12 @@ class KafkaErrorHandlerConfigTest {
     private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
     private final LicenseService licenseService = mock(LicenseService.class);
     private final KafkaErrorHandlerConfig config = new KafkaErrorHandlerConfig();
-    private final ConsumerRecordRecoverer recoverer =
-            config.licenseIssueFailureRecoverer(licenseService, objectMapper);
+
+    /** DLT 로 보낸 레코드. 브로커를 세우지 않고 <b>어느 경로가 여기 담기는가</b>만 본다. */
+    private final List<ConsumerRecord<?, ?>> deadLettered = new ArrayList<>();
+
+    private final ConsumerRecordRecoverer recoverer = KafkaErrorHandlerConfig.recoverer(
+            licenseService, objectMapper, (record, exception) -> deadLettered.add(record));
 
     private ConsumerRecord<String, String> recordOf(DomainEvent event) {
         try {
@@ -148,5 +154,76 @@ class KafkaErrorHandlerConfigTest {
     @DisplayName("에러 핸들러는 재시도 정책과 보상 진입점을 함께 물고 있다")
     void errorHandlerIsWired() {
         assertThat(config.kafkaErrorHandler(recoverer)).isNotNull();
+    }
+
+    /**
+     * 다른 서비스는 재시도가 소진되면 무조건 DLT 로 보낸다. 여기만 예외다.
+     *
+     * <p>보상이 이미 최종 처리이기 때문이다 — 이 시점에 자동 환불이 걸린다.
+     * 그런데 리스너가 실패했으므로 Inbox 가드 행은 롤백돼 있어, 재투입하면 멱등 가드가
+     * 막아주지 않고 지급이 다시 시도된다. <b>이미 환불된 결제에 라이선스를 발급하게 된다.</b>
+     */
+    @Test
+    @DisplayName("보상으로 종결한 실패는 DLT 로 보내지 않는다 — 재투입되면 환불된 결제에 지급된다")
+    void compensatedFailureIsNotDeadLettered() {
+        ConsumerRecord<String, String> record = recordOf(
+                PaymentCompletedEvent.of(1L, "ORD-1", 42L, 30_000L, "CARD", LINES));
+
+        recoverer.accept(record, new DataAccessResourceFailureException("connection pool exhausted"));
+
+        assertThat(deadLettered).as("보상이 걸렸는데 DLT 로도 보냈다").isEmpty();
+    }
+
+    @Test
+    @DisplayName("보상 대상이 아닌 실패는 DLT 로 보낸다 — 여기서 버리면 그냥 유실이다")
+    void nonCompensatedFailureIsDeadLettered() {
+        ConsumerRecord<String, String> record = recordOf(
+                PaymentCancelledEvent.of(1L, "ORD-1", 42L, 30_000L, "USER_REFUND"));
+
+        recoverer.accept(record, new DataAccessResourceFailureException("connection lost"));
+
+        assertThat(deadLettered).containsExactly(record);
+    }
+
+    @Test
+    @DisplayName("봉투를 풀 수 없는 레코드도 DLT 로 보낸다 — 무슨 사건인지 모르므로 사람에게 넘긴다")
+    void brokenRecordIsDeadLettered() {
+        ConsumerRecord<String, String> broken =
+                new ConsumerRecord<>(Topics.PAYMENT, 0, 7L, "ORD-1", "{not json");
+        broken.headers().add(EventHeaders.EVENT_TYPE,
+                com.stove.common.event.EventType.PAYMENT_COMPLETED.getBytes(StandardCharsets.UTF_8));
+
+        recoverer.accept(broken, new IllegalStateException("boom"));
+
+        assertThat(deadLettered).containsExactly(broken);
+    }
+
+    /**
+     * 브로커가 죽어 있으면 DLT 발행에서도 예외가 난다. 그것이 밖으로 나가면
+     * 레코드가 되감겨 무한 재전송이 되므로, 마지막 방어선의 계약이 여기까지 이어져야 한다.
+     */
+    @Test
+    @DisplayName("DLT 발행이 실패해도 예외를 밖으로 내보내지 않는다")
+    void deadLetterFailureIsSwallowed() {
+        ConsumerRecordRecoverer withBrokenDlt = KafkaErrorHandlerConfig.recoverer(
+                licenseService, objectMapper,
+                (record, exception) -> {
+                    throw new IllegalStateException("broker down");
+                });
+        ConsumerRecord<String, String> record = recordOf(
+                PaymentCancelledEvent.of(1L, "ORD-1", 42L, 30_000L, "USER_REFUND"));
+
+        assertThatCode(() -> withBrokenDlt.accept(record, new IllegalStateException("boom")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("실제 빈은 KafkaTemplate 으로 DLT 발행자를 물고 조립된다")
+    void beanIsAssembledWithRealDeadLetterPublisher() {
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        assertThat(config.licenseIssueFailureRecoverer(licenseService, objectMapper, kafkaTemplate))
+                .isNotNull();
     }
 }

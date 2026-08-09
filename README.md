@@ -33,6 +33,7 @@ stove/
 │   ├── web                 GlobalExceptionHandler, TraceIdResponseFilter, API 문서화 (자동 구성)
 │   ├── event               서비스 간 계약: 이벤트 payload + 토픽 + Kafka 헤더 규약
 │   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
+│   ├── kafka               컨슈머 재시도 정책 + DLT + DLT 운영 API (자동 구성)
 │   ├── messaging           Outbox(발행) + Inbox(멱등 수신) + 추적 컨텍스트 전파 (자동 구성)
 │   ├── archunit            패키지 구조·경계 규칙 (앱당 29개, 12개 모듈에 적용)
 │   └── test                Testcontainers 공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB)
@@ -95,6 +96,7 @@ Outbox 릴레이 처리량 측정과 개선은 [docs/performance.md](docs/perfor
 | 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementService#recordRefund` |
 | 경계가 시간이 지나며 흐려짐 | **ArchUnit 으로 계층·의존 방향을 테스트로 강제** — 규칙을 처음 돌렸을 때 위반이 166건이었다 | `common/archunit` |
 | 비동기 발행이 분산 추적을 끊음 | **추적 컨텍스트를 이벤트와 같은 트랜잭션에 저장**했다가 발행 시점에 복원 — 자동 계측은 릴레이 스케줄러의 컨텍스트를 싣는다 | `common/messaging/trace` |
+| 재시도를 소진한 메시지가 사라짐 | **DLT + 재투입 API** — 파티션을 막지 않으면서 유실만 없앤다. Outbox `DEAD` 도 HTTP 로 회수한다 | `common/kafka`, `common/messaging/ops` |
 
 ### 검증 게이트 4단계
 
@@ -293,6 +295,28 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 # 심의 미승인 상품 판매 시작 → 409 CONFLICT
 ```
 
+**실패한 메시지 되살리기** — 유실이 아니라 연기다
+
+재시도를 소진한 메시지는 버려지지 않는다. 수신 실패는 `<원본토픽>.DLT` 로, 발행 실패는
+Outbox `DEAD` 로 남고, 둘 다 HTTP 로 되살린다. **게이트웨이가 라우팅하지 않으므로 서비스 포트로
+직접(내부망에서) 부른다.** 각 서비스의 Swagger UI 에도 그대로 뜬다.
+
+```bash
+# 발행을 포기한 이벤트 — 사유와 traceparent 가 같이 나온다
+curl -s localhost:8083/api/v1/ops/outbox/dead | jq
+curl -s -X POST localhost:8083/api/v1/ops/outbox/dead/EVT-77/requeue      # 한 건
+curl -s -X POST localhost:8083/api/v1/ops/outbox/dead/requeue-all         # 원인이 하나였을 때
+
+# 수신을 포기한 메시지 — 조회는 커밋하지 않으므로 몇 번을 봐도 대상이 그대로다
+curl -s -G localhost:8089/api/v1/ops/dlt --data-urlencode 'topic=stove.payment.v1.DLT' | jq
+curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT"
+```
+
+> **원인을 먼저 고친다.** 고치지 않고 재투입하면 같은 실패를 반복해 DLT 로 돌아온다.
+> 재투입은 중복 수신이지만 Inbox 멱등 가드가 흡수한다.
+> `stove.outbox.dead` · `stove.kafka.dead-lettered` 에 Prometheus 알람이 걸려 있다
+> (`infra/prometheus/alerts.yml`).
+
 ## 6. 외부 연동은 포트로 분리
 
 실연동 대상은 인터페이스(포트)로 두고 로컬에서는 스텁을 쓴다 — 도메인 규칙이 외부 사정에 오염되지 않게.
@@ -307,7 +331,9 @@ curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 9
 
 ## 7. 다음 단계 후보
 
-- Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람
+- ~~Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람~~ → **했다.**
+  적용하다 store·download 에는 재시도 정책조차 없었다는 것이 드러나 컨슈머 정책을 `common:kafka` 로
+  분리했다 — 이제 9개 서비스가 같은 실패 처리를 갖는다 ([decisions.md](docs/decisions.md) 19번)
 - 전 구간 시나리오 테스트(등록→심의→구매→지급→정산) — 지금은 앱별 컨텍스트 로딩까지다
 - ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**
   Kafka 구간이 끊기던 원인은 헤더를 안 실어서만이 아니라 **Outbox 가 발행을 다른 스레드로 미루기

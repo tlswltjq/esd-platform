@@ -4,6 +4,8 @@ dependencies {
     api project(':common:core')
     api project(':common:event')
     api project(':common:jpa')
+    // 컨슈머 재시도·DLT 정책. Outbox 를 쓰면 컨슈머도 쓰므로 함께 딸려가게 둔다.
+    api project(':common:kafka')
     api 'org.springframework.kafka:spring-kafka'
     // 릴레이는 배경 스레드라 지표 없이는 관측 수단이 없다
     api 'io.micrometer:micrometer-core'
@@ -11,6 +13,14 @@ dependencies {
     // 구현(브리지)과 수집기는 앱이 고른다 — 라이브러리는 OpenTelemetry 를 강제하지 않는다.
     // 없으면 추적 없이 그대로 돈다(TraceContextCapture.DISABLED).
     api 'io.micrometer:micrometer-tracing'
+
+    // 운영 API(ops)는 HTTP 어댑터라 spring-web 이 필요하다. 다만 이 모듈이 웹을 **요구**하지는 않는다 —
+    // 배치 전용 서비스가 생기면 컨트롤러 없이 Outbox 만 쓰면 된다.
+    // 그래서 compileOnly 로 두고 @ConditionalOnWebApplication 으로 켠다.
+    // 실제 런타임 제공자는 각 앱이 의존하는 common:web 이다.
+    compileOnly 'org.springframework:spring-web'
+    testImplementation 'org.springframework:spring-web'
+
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 공용 라이브러리 방향 검증 (ArchUnit)

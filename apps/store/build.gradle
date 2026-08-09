@@ -2,6 +2,9 @@ dependencies {
     implementation project(':common:web')
     // 진열 서비스는 읽기 전용 모델이라 RDB/Outbox 가 없다 — 이벤트 계약만 의존한다.
     implementation project(':common:event')
+    // 발행은 없어도 수신은 한다. 재시도 정책과 DLT 는 발행 여부와 무관하게 필요하다 —
+    // 이 의존이 없던 동안 색인 동기화 이벤트가 스프링 기본값(수 ms 재시도 후 폐기)으로 사라졌다.
+    implementation project(':common:kafka')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'

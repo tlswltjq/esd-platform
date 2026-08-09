@@ -95,9 +95,14 @@ DefaultErrorHandler.handleRemaining(exception, records, consumer, container)
        │           → 그것이 곧 '재시도'
        │
        └─ 여유 소진 → recoverer.accept(record, exception)
-                      → 기본 recoverer 는 ERROR 로그를 찍고 레코드를 건너뛴다
+                      → 스프링 기본 recoverer 는 ERROR 로그를 찍고 레코드를 버린다
                       → 오프셋 커밋 후 다음으로 진행
 ```
+
+> **이 저장소는 그 기본값을 쓰지 않는다.** `common:kafka` 가 recoverer 를 `DeadLetterPublishingRecoverer`
+> 로 갈아 끼워 `<원본토픽>.DLT` 로 넘긴다 — 로그만 남기면 되돌릴 대상이 없기 때문이다
+> ([decisions.md](decisions.md) 19번). 아래 설명의 "건너뛴다"는 **원리**를 말하는 것이고,
+> 실제 동작은 "DLT 로 옮기고 넘어간다"이다.
 
 여기서 두 가지가 따라온다.
 

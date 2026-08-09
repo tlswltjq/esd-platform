@@ -1,4 +1,4 @@
-package com.stove.common.messaging.kafka;
+package com.stove.common.kafka;
 
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.BackOff;

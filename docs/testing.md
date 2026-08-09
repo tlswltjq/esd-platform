@@ -289,7 +289,12 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
   추적이 없어도 적재가 그대로 되는지를 본다(decisions.md 17번).
   `propagation = MANDATORY` 자체는 여전히 무테스트다 — 검증하려면 실 트랜잭션 매니저가 필요하고,
   그 자리는 앱 모듈의 통합 테스트다.
-- **`common/messaging`** — 아래는 남아 있다.
+- **`common/kafka`** (신설, decisions.md 19번) — 수신 실패 처리는 <b>브로커 없이</b> 검증한다.
+  `DltOpsServiceTest` 가 `MockConsumer` 로 재투입을 본다 — 원본 토픽으로 가는가,
+  진단 헤더(`kafka_dlt-*`)를 떼는가, 계약 헤더와 `traceparent` 를 남기는가,
+  **조회가 커밋하지 않는가**, 발행이 끝난 뒤에만 커밋하는가.
+  `ConsumerRetryPolicy` 의 백오프 총량은 license 의 `KafkaErrorHandlerConfigTest` 가 이미 본다
+- **`common/messaging`** — `OutboxOpsServiceTest` 가 DEAD 회수 경로를 본다(단건·일괄·오탐).
   ~~`lockPendingBatch` 가 앱 모듈에 인질로 잡혀 있다~~ → **회수했다.**
   `OutboxPendingQueryTest` 가 이 모듈에서 실 MySQL 로 쿼리 계약(상태·시간 조건·순서·배치 크기)을 검증한다.
   앱 쪽 `OutboxBackOffQueryTest` 는 "이 서비스의 스키마에서도 도는가"를 보는 통합 검증으로 남긴다
