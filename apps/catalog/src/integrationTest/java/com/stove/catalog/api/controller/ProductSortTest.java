@@ -10,7 +10,6 @@ import com.stove.common.testcontainers.InfraContainers;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -21,16 +20,15 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * 목록의 {@code sort} 파라미터 계약. [D-024]
  *
- * <p><b>기대</b> — 응답에 보이는 이름({@code productId})으로 정렬할 수 있고,
- * 그 밖의 이름은 {@code INVALID_REQUEST} 400 이다.
+ * <p><b>계약</b> — 응답에 보이는 이름({@code productId})으로 정렬할 수 있고,
+ * 그 밖의 이름은 {@code INVALID_REQUEST} 400 이다. 엔티티 필드명은 계약이 아니다.
  *
- * <p><b>실제</b> — {@code productId} 와 모르는 이름이 둘 다 <b>500</b> 이고,
- * 응답 어디에도 없는 엔티티 필드명 {@code id} 만 200 이다. Spring Data 가 요청 문자열을
+ * <p><b>고치기 전</b>에는 {@code productId} 와 모르는 이름이 둘 다 <b>500</b> 이었고,
+ * 응답 어디에도 없는 엔티티 필드명 {@code id} 만 200 이었다. Spring Data 가 요청 문자열을
  * 엔티티 속성으로 그대로 해석하다 {@code PropertyReferenceException} 을 던지고,
- * 그 예외가 {@code GlobalExceptionHandler} 의 마지막 분기로 흘러간다.
- *
- * <p><b>영향</b> — 게이트웨이의 {@code catalog-public} 라우트가 이 경로를 인증 없이 열어 둔다.
- * 누구나 5xx 를 만들 수 있고, 클라이언트 잘못이 서버 장애로 집계된다(D-015·D-020 과 같은 부류).
+ * 그 예외가 {@code GlobalExceptionHandler} 의 마지막 분기로 흘렀다.
+ * 게이트웨이의 {@code catalog-public} 라우트가 이 경로를 인증 없이 열어 두므로
+ * 누구나 5xx 를 만들 수 있었다(D-015·D-020 과 같은 부류).
  *
  * <p><b>왜 통합 소스셋인가</b> — 이 결함은 저장소가 실제로 쿼리를 만들 때 터진다.
  * 서비스를 {@code mock()} 으로 둔 {@link ProductControllerTest} 같은 standalone 구성에서는
@@ -44,7 +42,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @AutoConfigureMockMvc
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
-@Tag("known-defect")
 class ProductSortTest {
 
     @Autowired
