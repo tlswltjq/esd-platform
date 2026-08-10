@@ -2,6 +2,7 @@ package com.stove.catalog.core.service;
 
 import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
+import com.stove.catalog.core.domain.ProductSort;
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
 import com.stove.catalog.core.domain.Quote;
@@ -57,8 +58,20 @@ public class ProductQueryService {
                         "productCode=" + productCode));
     }
 
+    /**
+     * 판매중 상품 목록.
+     *
+     * <p>정렬 키는 저장소에 닿기 전에 {@link ProductSort} 를 통과해야 한다. 그러지 않으면
+     * 클라이언트가 보낸 문자열을 Spring Data 가 엔티티 속성으로 해석하다
+     * {@code PropertyReferenceException} 을 던지고, 그 예외가 {@code GlobalExceptionHandler} 의
+     * 마지막 분기로 흘러 <b>500</b> 이 나간다 — 클라이언트 잘못을 서버 장애로 표시하는
+     * D-015·D-020 과 같은 부류다(D-024).
+     *
+     * <p>컨트롤러가 아니라 여기서 막는 이유는 D-019 와 같다. 어댑터에만 두면 그 경로 하나만
+     * 지켜지고, 어댑터는 늘어난다.
+     */
     public Page<ProductView> getOnSaleProducts(Pageable pageable) {
-        return productRepository.findByStatus(ProductStatus.ON_SALE, pageable)
+        return productRepository.findByStatus(ProductStatus.ON_SALE, ProductSort.apply(pageable))
                 .map(ProductView::from);
     }
 
