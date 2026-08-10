@@ -107,13 +107,17 @@ class TrackACreatorFlowTest {
      * <p>셸이 상품 마스터를 id 1~12 로 훑다가 {@code by-code} 로 바꾼 것과 <b>정확히 같은 함정</b>이고,
      * 그때 고치지 않고 남아 있던 자리다. 실제로 옮기고 나서 22번째 상품에서 터졌다.
      * 최신순으로 집으면 개수와 무관해진다.
+     *
+     * <p>정렬 키는 {@code productId} — <b>응답이 실제로 돌려주는 이름</b>이다. 이 줄이
+     * 한때 {@code id} 였고, 그것이 [D-024] 를 드러냈다. 엔티티 필드명은 계약이 아니므로
+     * 지금은 400 이다. 여정이 정식 이름으로 도는 것까지 여기서 지킨다.
      */
     @Test
     @Order(7)
     @DisplayName("catalog: ON_SALE 목록에 뜬다")
     void appearsInOnSaleList() {
         Await.untilResponse("catalog ON_SALE 목록 노출",
-                () -> Stove.gateway.get("/api/v1/products?sort=id,desc"),
+                () -> Stove.gateway.get("/api/v1/products?sort=productId,desc"),
                 r -> !r.itemWhere("productCode", PRODUCT_CODE).isMissingNode());
 
         // 목록에 떴다는 것과 상태가 바뀌었다는 것은 다르다. 후자를 직접 본다.

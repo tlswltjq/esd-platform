@@ -13,6 +13,13 @@ dependencies {
     api "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
+    // 존재하지 않는 속성 요청을 400 으로 돌리는 안전망이 이 예외 타입을 참조한다(D-024).
+    // 이 모듈이 스프링 데이터를 **요구**하지는 않으므로 compileOnly 로 둔다 —
+    // common:messaging 이 spring-web 을 다루는 방식과 같은 자리다.
+    // 클래스가 없는 실행에서는 UnknownPropertyExceptionHandler 가 아예 등록되지 않는다.
+    compileOnly 'org.springframework.data:spring-data-commons'
+    testImplementation 'org.springframework.data:spring-data-commons'
+
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')
 }
