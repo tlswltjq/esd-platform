@@ -3,6 +3,20 @@
 > **특정 시점의 산물이다.** 5절의 순서를 다 밟으면 이 문서는 지운다 —
 > 상시 사실은 [testing.md](testing.md) 로, 결함은 [defects.md](defects.md) 로,
 > 구조 결정은 [decisions.md](decisions.md) 로 각각 옮겨 간다.
+>
+> **진행 상황 — 5절이 다 끝났다.** 이 문서를 지울 조건이 충족됐다는 뜻이고,
+> 옮겨 갈 자리는 아래 표에 있다.
+>
+> | 절 | 무엇 | 어디로 옮겨 갔나 |
+> |---|---|---|
+> | 1·2·3 | 실행 경계 · 오류 응답 계약 · 문서-실물 정합 | [#23](https://github.com/tlswltjq/stove/pull/23) · [decisions.md](decisions.md) 20번 |
+> | 4 | `:e2e` 모듈 | [#24](https://github.com/tlswltjq/stove/issues/24) · [testing.md](testing.md) L6 · [decisions.md](decisions.md) 21번 |
+> | 5 | curl 이 못 보는 것 | [#25](https://github.com/tlswltjq/stove/issues/25) · [performance.md](performance.md) 11장 |
+> | 4.2 선행 | 게이트의 공허 통과 | [defects.md](defects.md#d-023) D-023 |
+>
+> **아직 지우지 않는다.** 각 절이 *왜* 그렇게 결정됐는지의 서술이 옮겨간 문서들보다 여기가 자세하고,
+> 특히 "무엇을 깨뜨려서 확인했는가" 는 상시 문서에 넣기 애매하다.
+> 지우는 것은 그 서술이 각자의 자리에서 자립한 뒤에 한다.
 
 무엇이 이미 좋고, 무엇이 비어 있고, 어느 순서로 채울지 적는다.
 층 설계의 근거는 [testing.md](testing.md), 부하 측정 결과는 [performance.md](performance.md) 에 있다.
@@ -394,7 +408,7 @@ N중M   "결함 재현 N건 중 M건이 아직 살아 있다 — docs/defects.md
 환경변수 표에 "9장 절차에서는 서비스 이름으로 덮는다" 열을 더했고,
 대조군(`relay-off.override.yml`)과 측정 위생 규칙도 README 로 끌어올렸다.
 
-### ~~4. `:e2e` 모듈 — 셸을 거치지 않고 바로~~ ✅ 완료
+### ~~4. `:e2e` 모듈 — 셸을 거치지 않고 바로~~ ✅ 완료 · [#24](https://github.com/tlswltjq/stove/issues/24)
 
 PR #22 의 2단계로 직행했다. 인수 45건이 `e2e/src/test` 로 옮겨졌고 `smoke-stack.sh` 는 사라졌다.
 
@@ -457,7 +471,7 @@ BUILD SUCCESSFUL in 1s
 | 트랙 C 만 따로 실행 | 9건 전부 **실패**(스킵 아님) — `선행 단계가 orderNo 를 만들지 못했다 (2장 트랙 B 의 주문 생성)` |
 | 두 번 연속 실행 | 위의 UP-TO-DATE 함정. 지금은 매번 돈다 |
 
-### ~~5. curl 이 못 보는 것 — F5 와 트레이스~~ ✅ 완료
+### ~~5. curl 이 못 보는 것 — F5 와 트레이스~~ ✅ 완료 · [#25](https://github.com/tlswltjq/stove/issues/25)
 
 같은 하네스에 넷을 얹었다. 인수 42건 + 관측 4건 = **46건**.
 
