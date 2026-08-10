@@ -72,11 +72,19 @@ kill %1
 # 3. 비교 — 관측된 한계선의 절반 이하 고정 부하에서만 판정한다
 RATE=60 DURATION=60s ...  # order-soak.js 는 RATE/DURATION 을 환경변수로 받는다
 
-# 4. 종단 지연 — 결제 승인에서 라이선스 지급까지. 3번과 **함께** 돌려야 의미가 크다
-#    (릴레이가 포화된 상태에서 사용자 체감이 어떻게 되는가)
+# 4. 종단 지연 + 받는 쪽 — 결제 승인에서 라이선스 지급까지.
+#    3번과 **함께** 돌려야 의미가 크다 (릴레이가 포화된 상태에서 사용자 체감이 어떻게 되는가)
+./scripts/perf/collect-consumer.sh fanout-consumer.csv &
 docker run --rm --network stove_default -v "$PWD:/w" -w /w \
   -e ORDER_URL -e PAYMENT_URL -e LICENSE_URL grafana/k6 run scripts/perf/payment-callback.js
+kill %1
 ```
+
+**수집기 둘은 보는 쪽이 다르다.** `collect-outbox.sh` 는 보내는 쪽,
+`collect-consumer.sh` 는 받는 쪽이다. 팬아웃 경로에서는 둘을 같이 켜는 것이 맞다 —
+발행이 초당 132건이어도 컨슈머가 60건씩 처리하면 랙이 쌓이는데,
+**그 랙은 `stove_outbox_pending` 에 전혀 나타나지 않는다.** 발행은 끝났으므로 0 이다.
+적체가 브로커로 옮겨간 것뿐인데 생산자 지표만 보면 해소된 것처럼 보인다.
 
 **한계선과 비교를 나누는 것이 핵심이다.** 계단식은 포화로 들어가므로 한계 파악에만 쓰고,
 구성 간 비교는 반드시 **포화 이전** 구간에서 한다. 9장은 한계선 132 RPS 를 확인한 뒤
@@ -136,7 +144,7 @@ docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
 
 ## 지표
 
-k6 는 HTTP 만 본다. 릴레이는 배경 스레드라 `collect-outbox.sh` 가 따로 수집한다.
+k6 는 HTTP 만 본다. 릴레이와 컨슈머는 배경 스레드라 수집기 둘이 따로 긁는다.
 
 | 지표 | 출처 | 의미 |
 |---|---|---|
@@ -147,9 +155,19 @@ k6 는 HTTP 만 본다. 릴레이는 배경 스레드라 `collect-outbox.sh` 가
 | `stove.outbox.failed` / `.dead` | actuator | 실패·포기 건수 |
 | `stove.outbox.pending` | actuator | **적체량. 우상향이면 유입 > 처리** |
 | `stove.outbox.relay` | actuator | 릴레이 1회 소요시간 (p50/p95/p99) |
+| `kafka.consumer.fetch.manager.records.lag` | actuator (컨슈머) | **랙 — 아직 안 읽은 건수.** `pending` 의 거울 |
+| `kafka.consumer.fetch.manager.records.consumed` | actuator (컨슈머) | 누적 소비 → 증분이 초당 소비량 |
+| `spring.kafka.listener` | actuator (컨슈머) | 리스너 처리 건수·총 시간 → 평균 처리시간 |
+| 위 지표의 `error` 태그 | actuator (컨슈머) | **예외를 던진 건수** |
 
 판정은 응답시간보다 **`pending` 의 기울기**를 먼저 본다.
 응답이 빨라도 적체가 쌓이고 있으면 시간 문제일 뿐 반드시 터진다.
+
+컨슈머 쪽에서는 `error` 태그가 특히 값이 크다. 리스너가 던진 예외는 재시도가 흡수하므로
+**HTTP 응답에도, 생산자 지표에도, k6 에도 나타나지 않는다.** 여기서만 보인다.
+그리고 이 지표들은 새로 계측한 것이 아니다 — `spring.kafka.listener.observation-enabled` 가
+트레이스를 이으려고 이미 켜져 있었고([decisions.md](../../docs/decisions.md) 17번),
+처리시간 타이머가 거기 딸려 왔다. **재는 자리만 없었다.**
 
 ## 비교의 전제
 
@@ -179,5 +197,6 @@ docker compose exec -T mysql mysql -ustove -pstove1234 -e \
 | `PAYMENT_URL` | `http://localhost:8083` | `http://payment:8083` (`payment-callback.js`) |
 | `LICENSE_URL` | `http://localhost:8084` | `http://license:8084` (`payment-callback.js`) |
 | `ORDER_ACTUATOR` | `http://localhost:8082/actuator/prometheus` | `http://order:8082/actuator/prometheus` |
+| `CONSUMERS` | `payment=… order=… license=… settlement=… download=…` (localhost) | 같은 목록을 서비스 이름으로 (`collect-consumer.sh`) |
 | `INTERVAL` | `1` (수집 주기, 초) | 그대로 |
 | `RATE` / `DURATION` | `100` / `5m` (`order-soak.js`) | 포화 이전 구간으로 (9장은 60 / 60s) |
