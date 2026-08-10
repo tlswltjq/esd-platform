@@ -50,7 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 21건 | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 22건 | [defects.md](docs/defects.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
@@ -142,14 +142,15 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 |---|---|---|
 | 단위·어댑터·ArchUnit 816개 (Docker 불필요) | **로컬** | `./gradlew test` |
 | 실 인프라 통합 175개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
-| 전체 스택 · 스모크 · 성능 | **원격** | `./scripts/remote.sh …` |
+| 전체 스택 · 게이트 · 인수 · 성능 | **원격** | `./scripts/remote.sh …` |
 | 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
 
 ```bash
 ./scripts/remote.sh test                      # 전체 테스트
 ./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
-./scripts/remote.sh stack up                  # 전체 스택 20개
-./scripts/remote.sh smoke                     # 전 구간 관통 확인
+./scripts/remote.sh stack up                  # 전체 스택 20개 (게이트까지 확인하고 끝난다)
+./scripts/remote.sh gate                      # 배포 게이트 14건만 다시
+./scripts/remote.sh e2e                       # 인수 42건 + 관측 4건 관통 확인
 ./scripts/remote.sh http GET catalog:8081/api/v1/products
 ./scripts/remote.sh logs catalog -n 100 -g 승인
 ./scripts/remote.sh status
@@ -368,10 +369,11 @@ curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT
 - ~~Kafka DLT + 재처리 운영툴, Outbox `DEAD` 레코드 알람~~ → **했다.**
   적용하다 store·download 에는 재시도 정책조차 없었다는 것이 드러나 컨슈머 정책을 `common:kafka` 로
   분리했다 — 이제 9개 서비스가 같은 실패 처리를 갖는다 ([decisions.md](docs/decisions.md) 19번)
-- ~~전 구간 시나리오 관통(등록→심의→구매→지급→정산)~~ → **셸 스모크로는 했다.**
-  `scripts/smoke-stack.sh` 가 원격 전체 스택에서 트랙 A~C·환불·결제 거절·게이트웨이 차단까지
-  21/21 로 확인한다. 다만 **빌드가 지키는 회귀 방어선은 아니다** —
-  자동화된 테스트는 여전히 앱별 컨텍스트 로딩까지이고, 이 관통을 CI 의 판정 조건으로 올리는 것이 남았다
+- ~~전 구간 시나리오 관통(등록→심의→구매→지급→정산)~~ → **했고, CI 의 판정 조건이 됐다.**
+  셸 스모크였던 것을 `:e2e` 모듈로 옮겼다 — 트랙 A~C·환불·결제 거절을 **게이트웨이 경유**로
+  42건 관통하고, 거기에 관측 4건(트레이스 연결·적체 수렴·DLT·종단 지연)이 얹혀 main push 에서 돈다. 배포 게이트(컨테이너·인프라·라우팅 차단)는 성질이 달라
+  `scripts/stack-wait.sh` 로 갈라져 `stack up` 에 붙었다
+  ([test-audit.md](docs/test-audit.md) 4절, [decisions.md](docs/decisions.md) 21번)
 - ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**
   Kafka 구간이 끊기던 원인은 헤더를 안 실어서만이 아니라 **Outbox 가 발행을 다른 스레드로 미루기
   때문**이었다 — 자동 계측은 `send()` 를 부른 스레드(릴레이 스케줄러)의 컨텍스트를 싣는다.

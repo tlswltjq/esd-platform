@@ -34,9 +34,13 @@ Outbox 릴레이 처리량을 재고, 개선 전후를 같은 조건으로 비�
 ## 준비
 
 ```bash
-# 원격에 작업본을 밀어넣고 전체 스택을 띄운다
+# 원격에 작업본을 밀어넣고 전체 스택을 띄운다.
+# `stack up` 이 배포 게이트 14건을 자동으로 돌고, 불통과면 여기서 멈춘다.
 ./scripts/remote.sh stack up
-./scripts/remote.sh smoke        # 경로가 살아 있는지 먼저 — 여기서 깨지면 숫자는 의미 없다
+
+# 경로가 살아 있는지 먼저 — 여기서 깨지면 아래 숫자는 의미 없다.
+# 게이트는 "스택이 서 있나"까지고, 이쪽이 "주문이 정산까지 가나"를 본다.
+./scripts/remote.sh e2e
 ```
 
 이후 명령은 **원격에서** 돈다(`./scripts/remote.sh shell` 로 들어가거나 ssh).
@@ -67,7 +71,20 @@ kill %1
 
 # 3. 비교 — 관측된 한계선의 절반 이하 고정 부하에서만 판정한다
 RATE=60 DURATION=60s ...  # order-soak.js 는 RATE/DURATION 을 환경변수로 받는다
+
+# 4. 종단 지연 + 받는 쪽 — 결제 승인에서 라이선스 지급까지.
+#    3번과 **함께** 돌려야 의미가 크다 (릴레이가 포화된 상태에서 사용자 체감이 어떻게 되는가)
+./scripts/perf/collect-consumer.sh fanout-consumer.csv &
+docker run --rm --network stove_default -v "$PWD:/w" -w /w \
+  -e ORDER_URL -e PAYMENT_URL -e LICENSE_URL grafana/k6 run scripts/perf/payment-callback.js
+kill %1
 ```
+
+**수집기 둘은 보는 쪽이 다르다.** `collect-outbox.sh` 는 보내는 쪽,
+`collect-consumer.sh` 는 받는 쪽이다. 팬아웃 경로에서는 둘을 같이 켜는 것이 맞다 —
+발행이 초당 132건이어도 컨슈머가 60건씩 처리하면 랙이 쌓이는데,
+**그 랙은 `stove_outbox_pending` 에 전혀 나타나지 않는다.** 발행은 끝났으므로 0 이다.
+적체가 브로커로 옮겨간 것뿐인데 생산자 지표만 보면 해소된 것처럼 보인다.
 
 **한계선과 비교를 나누는 것이 핵심이다.** 계단식은 포화로 들어가므로 한계 파악에만 쓰고,
 구성 간 비교는 반드시 **포화 이전** 구간에서 한다. 9장은 한계선 132 RPS 를 확인한 뒤
@@ -105,26 +122,52 @@ docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
 | `smoke.js` | 1 VU, 20초 | 경로 생존 확인 |
 | `order-throughput.js` | 20 → 400 RPS 계단식 | 처리량 한계선 |
 | `order-soak.js` | `RATE` RPS `DURATION` 동안 (기본 100 / 5분) | 적체 누적 여부, **구성 간 비교** |
+| `payment-callback.js` | 5 VU, 2분 | **종단 지연** — 결제 승인 → 라이선스 지급 |
 
-**도착률(arrival-rate) 기반**을 쓴다. VU 기반이면 응답이 느려질 때 유입도 같이 줄어
+앞의 셋은 **도착률(arrival-rate) 기반**이다. VU 기반이면 응답이 느려질 때 유입도 같이 줄어
 병목이 스스로 가려진다. 부하를 고정해야 적체가 드러난다.
 
 주문 1건 = Outbox 이벤트 1건(`OrderCreated`) 이므로 **k6 의 RPS 가 곧 릴레이 유입량**이다.
 
+### `payment-callback.js` 만 VU 기반인 이유
+
+이 시나리오가 재는 것은 처리량이 아니라 **한 건이 끝까지 가는 데 걸리는 시간**이다.
+한 반복이 주문 → 대기 → 사전등록 → 승인 → 지급 확인까지 가고 마지막 폴링이 최대 60초라,
+도착률 기반으로 두면 유입이 완료를 앞질러 VU 가 무한히 쌓인다.
+
+**부하를 올리며 `e2e_fulfillment_latency` 가 무너지는 지점을 보는 것**이 사용법이다.
+앞의 셋으로 릴레이를 포화시켜 두고 이것을 함께 돌리면, 포화가 사용자 체감으로 번지는 모습이 나온다.
+
+`http_req_duration` 은 주문 API 응답까지고 `stove.outbox.pending` 은 적체의 대리 지표다 —
+**둘 다 초록인데 종단 지연이 30초일 수 있다.** 결제 완료에서 지급까지 Kafka 홉이 두 번,
+릴레이 폴링이 두 번 끼기 때문이다. 그 구간을 재는 것이 이 시나리오뿐이다.
+
 ## 지표
 
-k6 는 HTTP 만 본다. 릴레이는 배경 스레드라 `collect-outbox.sh` 가 따로 수집한다.
+k6 는 HTTP 만 본다. 릴레이와 컨슈머는 배경 스레드라 수집기 둘이 따로 긁는다.
 
 | 지표 | 출처 | 의미 |
 |---|---|---|
 | `http_req_duration` | k6 | 주문 생성 응답시간 |
+| `e2e_fulfillment_latency` | k6 (`payment-callback.js`) | **종단 지연 — 결제 승인 → 라이브러리 반영** |
+| `e2e_fulfillment_ok` | k6 (`payment-callback.js`) | 60초 안에 지급이 확인된 비율. 지연 분포는 *도달한 것만* 말한다 |
 | `stove.outbox.published` | actuator | 발행 성공 누적 → 초당 처리량 |
 | `stove.outbox.failed` / `.dead` | actuator | 실패·포기 건수 |
 | `stove.outbox.pending` | actuator | **적체량. 우상향이면 유입 > 처리** |
 | `stove.outbox.relay` | actuator | 릴레이 1회 소요시간 (p50/p95/p99) |
+| `kafka.consumer.fetch.manager.records.lag` | actuator (컨슈머) | **랙 — 아직 안 읽은 건수.** `pending` 의 거울 |
+| `kafka.consumer.fetch.manager.records.consumed` | actuator (컨슈머) | 누적 소비 → 증분이 초당 소비량 |
+| `spring.kafka.listener` | actuator (컨슈머) | 리스너 처리 건수·총 시간 → 평균 처리시간 |
+| 위 지표의 `error` 태그 | actuator (컨슈머) | **예외를 던진 건수** |
 
 판정은 응답시간보다 **`pending` 의 기울기**를 먼저 본다.
 응답이 빨라도 적체가 쌓이고 있으면 시간 문제일 뿐 반드시 터진다.
+
+컨슈머 쪽에서는 `error` 태그가 특히 값이 크다. 리스너가 던진 예외는 재시도가 흡수하므로
+**HTTP 응답에도, 생산자 지표에도, k6 에도 나타나지 않는다.** 여기서만 보인다.
+그리고 이 지표들은 새로 계측한 것이 아니다 — `spring.kafka.listener.observation-enabled` 가
+트레이스를 이으려고 이미 켜져 있었고([decisions.md](../../docs/decisions.md) 17번),
+처리시간 타이머가 거기 딸려 왔다. **재는 자리만 없었다.**
 
 ## 비교의 전제
 
@@ -151,6 +194,9 @@ docker compose exec -T mysql mysql -ustove -pstove1234 -e \
 |---|---|---|
 | `ORDER_URL` | `http://localhost:8082` | `http://order:8082` |
 | `CATALOG_URL` | `http://localhost:8081` | `http://catalog:8081` |
+| `PAYMENT_URL` | `http://localhost:8083` | `http://payment:8083` (`payment-callback.js`) |
+| `LICENSE_URL` | `http://localhost:8084` | `http://license:8084` (`payment-callback.js`) |
 | `ORDER_ACTUATOR` | `http://localhost:8082/actuator/prometheus` | `http://order:8082/actuator/prometheus` |
+| `CONSUMERS` | `payment=… order=… license=… settlement=… download=…` (localhost) | 같은 목록을 서비스 이름으로 (`collect-consumer.sh`) |
 | `INTERVAL` | `1` (수집 주기, 초) | 그대로 |
 | `RATE` / `DURATION` | `100` / `5m` (`order-soak.js`) | 포화 이전 구간으로 (9장은 60 / 60s) |

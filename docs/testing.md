@@ -20,14 +20,24 @@
 
 ## 2. 테스트 계층
 
-| 층 | 검증 대상 | 인프라 | 소스셋 | 위치 | 1건당 |
-|---|---|---|---|---|---|
-| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms |
-| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 |
-| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/event` | ms |
-| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms |
-| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms |
-| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 |
+| 층 | 검증 대상 | 인프라 | 소스셋 | 위치 | 1건당 | 언제 도는가 |
+|---|---|---|---|---|---|---|
+| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms | 매 빌드 |
+| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 | 매 빌드 |
+| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/event` | ms | 매 빌드 |
+| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
+| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
+| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
+| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 20종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **main push** |
+
+L6 만 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
+컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.
+**러너가 1대라 PR 마다가 아니라 통합 시점에 붙는 것**도 같은 줄의 판단이다
+([test-audit.md](test-audit.md) 4.3).
+
+그 앞에 하나가 더 있는데, 테스트가 아니라 **배포의 일부**라 층으로 세지 않는다 —
+`scripts/stack-wait.sh` 의 게이트 14건이다. 데이터가 필요 없고 수 초에 끝나며
+`remote.sh stack up` 과 CI e2e 잡이 자동으로 부른다.
 
 ### 소스셋이 층을 강제한다
 
@@ -123,8 +133,13 @@ N중M   결함 재현 N건 중 M건이 아직 살아 있다
 전부   N건이 전부 통과했다. (태그를 떼고 회귀 방어선으로 승격한다)
 ```
 
-스모크가 `EXPECTED_CHECKS` 와 종료 코드로 미실행을 드러내는 것과 같은 자리다.
-**통과처럼 읽히는 미실행**은 이 저장소가 반복해서 막아 온 실패 방식이다.
+**통과처럼 읽히는 미실행**은 이 저장소가 반복해서 막아 온 실패 방식이고, 같은 장치가 세 군데 더 있다.
+
+| 어디 | 무엇으로 |
+|---|---|
+| 배포 게이트 (`stack-wait.sh`) | 기대 판정 수 대조 + 컨테이너 이름 대조. 빈 결과를 정상으로 읽지 않는다([D-023](defects.md#d-023)) |
+| 인수 (`:e2e`) | 실행 건수를 요약에 찍는다. 그리고 **`Assumptions` 를 쓰지 않는다** — 선행이 값을 못 만들면 스킵이 아니라 실패다 |
+| CI 의 모든 Test 태스크 | `UP-TO-DATE`·`FROM-CACHE` 로 건너뛰지 않는다([decisions.md](decisions.md) 12번 옆 흐름) |
 
 ### 왜 실패하는 테스트를 남겨두나
 
@@ -316,7 +331,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 한동안 이 계약을 지키는 것이 **CI 가 돌리지 않는 셸 스크립트 하나**였다.
 저장소의 단언이 전부 `errorCode()` *열거값* 까지만 갔고
 (`assertThat(e.errorCode()).isEqualTo(CONFLICT)`), 그 CONFLICT 가 409 로 나가는지는
-`scripts/smoke-stack.sh` 만 봤다. 앱 9종의 컨트롤러 테스트도 `GlobalExceptionHandler` 를
+셸 스모크(지금은 `:e2e`)만 봤다. 앱 9종의 컨트롤러 테스트도 `GlobalExceptionHandler` 를
 붙이지만 400 계열(D-015)만 단언한다. **그래서 상태 매핑을 잘못 바꿔도 빌드는 초록이었다.**
 
 세 자리로 나눠 막는다. 셋 다 컨테이너가 필요 없어 `test` 소스셋에 있다.
@@ -335,7 +350,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 
 | 만든 상황 | 결과 |
 |---|---|
-| `PRICE_MISMATCH` 를 409 → 400 으로 | `ErrorCodeTest` 의 MISMATCH 규칙 + 스모크 계약 테스트 실패 |
+| `PRICE_MISMATCH` 를 409 → 400 으로 | `ErrorCodeTest` 의 MISMATCH 규칙 + `:e2e` 의 금액 위조 판정 실패 |
 | 핸들러가 `code.status()` 대신 400 을 하드코딩 | 전수 테스트 21건 중 **20건 실패**(400 인 `INVALID_REQUEST` 만 우연히 통과) |
 
 두 번째가 이 분리의 이유다. 열거형만 보는 테스트는 열거형과 함께 틀리므로,
