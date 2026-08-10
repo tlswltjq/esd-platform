@@ -36,11 +36,15 @@ jobs:
         with:
           cache-disabled: true
 
-      # 아키텍처 규칙 + 도메인 단위 테스트 + 9개 앱 컨텍스트 로딩 테스트
+      # 단위 816건(test) + 실 인프라 통합 175건(integrationTest). build 가 둘 다 돈다.
       #
       # 워커 수와 힙은 러너의 ~/.gradle/gradle.properties 가 정한다(4 / 6g).
-      # 리포의 gradle.properties(2 / 2g)는 Docker 3.83GB 랩탑의 값이고 그대로 둔다 —
+      # 리포의 gradle.properties(4 / 2g)는 Docker 3.83GB 랩탑의 값이고 그대로 둔다 —
       # 머신별 값은 머신에.
+      #
+      # 워커 수를 올려도 컨테이너가 그만큼 뜨지는 않는다. 동시 스택 수는
+      # stove.infraTest.maxParallel 이 따로 세고(루트 build.gradle 의 InfraTestThrottle),
+      # 러너에서 덮고 싶으면 -Pstove.infraTest.maxParallel=N 을 붙인다.
       - name: Build
         run: ./gradlew build --console=plain
 

@@ -1,7 +1,8 @@
 dependencies {
     // 오브젝트 스토리지(MinIO / S3) 어댑터
     implementation 'software.amazon.awssdk:s3'
-    testImplementation 'org.testcontainers:minio'
+    // MinIO 컨테이너를 띄우므로 통합 소스셋에만 건다 — src/test 로는 새지 않는다
+    integrationTestImplementation 'org.testcontainers:minio'
 
     implementation project(':common:web')
     // 패치 매니페스트/권한 사본만 다루므로 RDB 대신 MongoDB 를 쓴다(Outbox 불필요).

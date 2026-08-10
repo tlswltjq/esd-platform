@@ -29,7 +29,7 @@ import org.springframework.web.client.RestClient;
  */
 public final class OpenApiSnapshot {
 
-    /** 의도한 변경일 때 스냅샷을 새로 쓴다: {@code ./gradlew test -Dstove.openapi.update=true} */
+    /** 의도한 변경일 때 스냅샷을 새로 쓴다: {@code ./gradlew integrationTest -Dstove.openapi.update=true} */
     private static final String UPDATE_FLAG = "stove.openapi.update";
 
     private static final ObjectMapper MAPPER = JsonMapper.builder()
@@ -42,11 +42,11 @@ public final class OpenApiSnapshot {
 
     /**
      * @param port    {@code @LocalServerPort} 로 받은 실제 포트
-     * @param service 스냅샷 파일 이름({@code src/test/resources/openapi/<service>.json})
+     * @param service 스냅샷 파일 이름({@code src/integrationTest/resources/openapi/<service>.json})
      */
     public static void verify(int port, String service) {
         String actual = normalize(fetch(port));
-        Path snapshot = Path.of("src", "test", "resources", "openapi", service + ".json");
+        Path snapshot = Path.of("src", "integrationTest", "resources", "openapi", service + ".json");
 
         if (Files.notExists(snapshot) || updateRequested()) {
             write(snapshot, actual);
@@ -62,7 +62,7 @@ public final class OpenApiSnapshot {
                 .as("""
                         %s 의 API 명세가 커밋된 스냅샷과 다르다.
                         의도한 변경이면 아래로 갱신하고, 그 diff 를 리뷰에 포함하라:
-                          ./gradlew :apps:%s:test -Dstove.openapi.update=true""", service, service)
+                          ./gradlew :apps:%s:integrationTest -Dstove.openapi.update=true""", service, service)
                 .isEqualTo(read(snapshot));
     }
 

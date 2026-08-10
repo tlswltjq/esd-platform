@@ -20,14 +20,36 @@
 
 ## 2. 테스트 계층
 
-| 층 | 검증 대상 | 인프라 | 위치 | 1건당 |
-|---|---|---|---|---|
-| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `apps/*/core/domain` | ms |
-| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `apps/*/core/service` | 초 |
-| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `apps/*/api/listener`, `common/event` | ms |
-| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `common/messaging` | ms |
-| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `*ArchitectureTest` | ms |
-| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `*ContextTest` | 십수 초 |
+| 층 | 검증 대상 | 인프라 | 소스셋 | 위치 | 1건당 |
+|---|---|---|---|---|---|
+| **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms |
+| **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 |
+| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/event` | ms |
+| **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms |
+| **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms |
+| **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 |
+
+### 소스셋이 층을 강제한다
+
+**"인프라가 필요한가"는 규약이 아니라 클래스패스가 정한다.**
+컨테이너는 `common:testcontainers` 에 있고 이 모듈은 `integrationTestImplementation` 으로만
+걸린다 — `src/test` 의 클래스는 `InfraContainers` 를 **임포트조차 할 수 없다.**
+
+```
+./gradlew test              816건 · Docker 불필요 · 수 초
+./gradlew integrationTest   175건 · Testcontainers · 동시 스택 수는 따로 조인다
+./gradlew build             둘 다 (단위가 먼저 돈다)
+```
+
+태그로 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
+잊으면 컨테이너 테스트가 빠른 소스셋에 섞여 **예전 상태로 조용히 돌아간다.**
+실제로 분리 작업 중에 `InfraContainers` 를 쓰지 않고 Testcontainers 를 직접 쓰던
+테스트 2건(`S3PresignedUrlSignerTest`·`S3BuildStorageTest`)이 있었는데,
+찾아낸 것은 사람의 검토가 아니라 **컴파일 실패**였다.
+
+동시에 뜨는 컨테이너 스택 수는 공유 빌드 서비스(`InfraTestThrottle`)가 따로 센다.
+예전에는 `org.gradle.workers.max` 하나가 컴파일 병렬도와 컨테이너 수를 같이 정해서,
+컨테이너를 지키려고 2 로 낮추면 인프라가 필요 없는 테스트까지 함께 느려졌다.
 
 ### 경계 두 곳은 층이 아니라 부재로 지켜진다
 
@@ -88,6 +110,21 @@ void lateRecordShouldBeSettledOnNextClose() {
 
 `test` 태스크만 `excludeTags 'known-defect'` 를 걸었다.
 `tasks.withType(Test)` 로 걸면 `defectTest` 까지 같이 걸러져 아무것도 돌지 않는다.
+
+**현재 태그가 붙은 테스트는 0건이다** — D-001~D-022 가 전부 수정돼 태그가 떨어졌다.
+
+그래서 `defectTest` 는 합산해서 말한다. 모듈별 태스크는 `ignoreFailures = true` 라
+실패해도 초록이고, 태그가 없으면 아무것도 출력하지 않는다 — 그대로 두면
+**"재현 대기 중인 결함이 없다" 와 "전부 통과했다" 와 "돌기는 했나" 가 구분되지 않는다.**
+
+```
+0건    재현 대기 중인 결함이 없다. (통과가 아니라 미실행이다)
+N중M   결함 재현 N건 중 M건이 아직 살아 있다
+전부   N건이 전부 통과했다. (태그를 떼고 회귀 방어선으로 승격한다)
+```
+
+스모크가 `EXPECTED_CHECKS` 와 종료 코드로 미실행을 드러내는 것과 같은 자리다.
+**통과처럼 읽히는 미실행**은 이 저장소가 반복해서 막아 온 실패 방식이다.
 
 ### 왜 실패하는 테스트를 남겨두나
 
@@ -265,14 +302,44 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 
 ### 6.3 남은 것 — common
 
-- **`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
-  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약.
+- ~~**`common/core` 전 모듈 무테스트.** `ErrorCode` 상수의 `HttpStatus` 매핑,
+  `ApiResponse` 의 `@JsonInclude(NON_NULL)` 계약~~
   ~~**저장소 전체에 `jsonPath` 단언이 하나도 없어** 응답 형식이 통째로 바뀌어도 잡히지 않는다~~
-  → **메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
+  → **응답 형식은 메웠다 — 다만 다른 수단으로.** 단언을 31개 엔드포인트에 손으로 붙이는 대신
   OpenAPI 명세를 스냅샷으로 고정했다(decisions.md 18번). 각 앱의 `*ContextTest` 가
   `/v3/api-docs` 를 커밋된 스냅샷과 대조하므로, DTO 필드를 지우거나 응답 타입을 바꾸면 깨진다.
   **실제로 잡는지 확인했다** — `CreateOrderRequest.expectedAmount` 를 스냅샷에서 지우자 실패했다.
-  `ErrorCode` 의 상태 매핑은 명세에 안 나오므로 여전히 무테스트다
+  → **상태 매핑도 메웠다.** 아래 참고
+
+#### 오류 응답의 상태코드 — 셸에서 코드로 회수했다
+
+한동안 이 계약을 지키는 것이 **CI 가 돌리지 않는 셸 스크립트 하나**였다.
+저장소의 단언이 전부 `errorCode()` *열거값* 까지만 갔고
+(`assertThat(e.errorCode()).isEqualTo(CONFLICT)`), 그 CONFLICT 가 409 로 나가는지는
+`scripts/smoke-stack.sh` 만 봤다. 앱 9종의 컨트롤러 테스트도 `GlobalExceptionHandler` 를
+붙이지만 400 계열(D-015)만 단언한다. **그래서 상태 매핑을 잘못 바꿔도 빌드는 초록이었다.**
+
+세 자리로 나눠 막는다. 셋 다 컨테이너가 필요 없어 `test` 소스셋에 있다.
+
+| 테스트 | 무엇을 지키나 |
+|---|---|
+| `ErrorCodeTest` | 전수 성질 — 모두 4xx/5xx, `*NOT_FOUND`→404, `*MISMATCH`→409, 기본 메시지 존재 |
+| `BusinessExceptionStatusTest` | `@EnumSource` 로 **전 코드**를 실제 MockMvc 응답까지 태워 `code.status()` 와 대조 |
+| `ApiResponseTest` | 봉투 직렬화 — 코드 이름(ordinal 아님), `NON_NULL` 로 `data`/`error` 키 생략 |
+
+**개별 상수의 값을 하나씩 적지 않았다.** `CONFLICT 는 409 다` 같은 단언은 열거형 선언을
+옮겨 적은 것이라, 값이 틀리면 테스트도 같이 틀린 값을 들고 있게 된다.
+대신 이름↔상태 규칙을 전수로 걸어 **새 상수가 규칙을 어기는 순간** 깨지게 했다.
+
+**두 방향 모두 발화하는 것을 확인했다.**
+
+| 만든 상황 | 결과 |
+|---|---|
+| `PRICE_MISMATCH` 를 409 → 400 으로 | `ErrorCodeTest` 의 MISMATCH 규칙 + 스모크 계약 테스트 실패 |
+| 핸들러가 `code.status()` 대신 400 을 하드코딩 | 전수 테스트 21건 중 **20건 실패**(400 인 `INVALID_REQUEST` 만 우연히 통과) |
+
+두 번째가 이 분리의 이유다. 열거형만 보는 테스트는 열거형과 함께 틀리므로,
+**열거형과 응답을 잇는 자리를 따로 봐야** 한다.
 - ~~**`common/web`** — `CorrelationIdFilter` 무테스트(헤더 재사용·생성·MDC 누수)~~
   → **메웠다.** 그 필터는 `TraceIdResponseFilter` 로 대체됐고(decisions.md 17번),
   `TraceIdResponseFilterTest` 가 세 가지를 본다 — traceId 반환, **응답 커밋 이후에도 헤더가 남는가**,
@@ -319,7 +386,13 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
   운영 절차로 남아 있다 ([event-ordering.md](event-ordering.md) 5절)
 - **부하 테스트** — [scripts/perf/](../scripts/perf/) 에 k6 시나리오와 릴레이 배수 하네스가 있다.
   CI 에서는 돌리지 않는다(실행 환경 편차가 커서 판정 기준으로 쓸 수 없다).
-  측정 결과는 [performance.md](performance.md)
+  측정 결과는 [performance.md](performance.md).
+  **원격 전체 스택에서만 유효한 숫자가 나온다** — 랩탑 환경으로 잰 7장은 스스로 무효 선언됐고,
+  절차는 9장 기준으로 README 에 적혀 있다
+- **종단 지연** — 부하 시나리오 셋이 전부 주문 생성 한 경로다. 읽기 경로, 결제 콜백
+  (팬아웃 최대), 컨슈머 측, 그리고 **"주문을 넣고 몇 초 뒤 게임을 받는가"** 가 측정 밖이다.
+  `pending` 기울기는 그 대리 지표일 뿐이라 둘 다 초록인데 종단 지연이 길 수 있다
+  ([test-audit.md](test-audit.md) F5)
 
 ### 6.6 작업할 때
 
