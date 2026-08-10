@@ -80,3 +80,67 @@ jobs:
           if [ "$remaining" -gt 0 ]; then
             echo "::warning::테스트 컨테이너 ${remaining}개가 남았다 — 러너에 쌓이는지 확인이 필요하다"
           fi
+
+  # 인수 시나리오 42건. 서비스 *사이* 의 결함을 잡는 층이라 PR 단위보다 통합 시점에 의미가 있다.
+  #
+  # **PR 마다 돌리지 않는다.** 러너가 1대인 것이 결정적이다 — 20컨테이너 스택을 올렸다 내리는
+  # 잡이 PR 수만큼 붙으면 큐가 생기고, 방어선이 인프라 경합으로 간헐 실패하기 시작하면
+  # 사람들이 빨간불을 무시하는 법을 배운다. 그건 방어선이 없는 것보다 나쁘다
+  # (docs/test-audit.md 4.3·4.4).
+  #
+  # 급할 때의 문은 둘이다 — workflow_dispatch, 그리고 PR 에 `e2e` 라벨.
+  e2e:
+    needs: build
+    if: >-
+      github.event_name != 'pull_request'
+      || contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: [self-hosted, Linux, ARM64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+
+      # compose 의 Dockerfile 은 build/libs/*.jar 하나를 집는다. 이미지 안에서 빌드하지 않는다.
+      - name: Build boot jars
+        run: ./gradlew bootJar --console=plain
+
+      # 오버라이드 순서가 의미를 가진다 — ci 가 ports 를 !reset 으로 지운 뒤에
+      # e2e 가 127.0.0.1:1808X 로 다시 연다(docs/decisions.md 21번).
+      - name: Start stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+          docker compose -f docker-compose.apps.yml \
+                         -f docker-compose.apps.ci.yml \
+                         -f docker-compose.apps.e2e.yml up -d --build
+
+      # 기다리고 판정한다. 여기서 막히면 e2e 를 돌릴 이유가 없다 — 시나리오가 실패한 것과
+      # 스택이 서 있지 않은 것은 대응이 다르고, 그것을 종료 코드 2 로 가른다.
+      - name: Gate
+        run: bash scripts/stack-wait.sh
+
+      - name: Acceptance
+        run: ./gradlew :e2e:e2eTest --console=plain
+
+      - name: Upload e2e report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: e2e/build/reports/tests/e2eTest
+          retention-days: 7
+
+      # **스택을 내리지 않는다.**
+      #
+      # 이 러너는 원격 개발 스택과 같은 호스트다(decisions.md 15번). 잡이 끝날 때마다 내리면
+      # 사람이 `remote.sh` 로 쓰던 스택이 사라지고, 다시 올릴 때 Elasticsearch·Kafka 콜드 스타트를
+      # 매번 문다. 20컨테이너가 상주하는 것은 이미 이 호스트의 정상 상태이고
+      # 그 위에서 build 잡이 통과해 왔다 — 이 잡이 새로 만드는 부하가 아니다.
+      #
+      # 대신 상태를 남긴다. 실패한 채 방치된 스택을 조용히 지나치지 않기 위해서다.
+      - name: Report stack state
+        if: always()
+        run: bash scripts/stack-wait.sh || echo "::warning::e2e 뒤 스택이 게이트를 통과하지 못한 상태로 남았다"
