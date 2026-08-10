@@ -1,0 +1,91 @@
+// 인수 시나리오 — 떠 있는 전체 스택(인프라 10 + 앱 10)을 **밖에서** 두드린다.
+//
+//   ./gradlew :e2e:e2eTest
+//
+// `scripts/smoke-stack.sh` 의 인수 45건이 여기로 왔다. 셸이 하던 일이라 옮긴 것이 아니라,
+// 셸로는 할 수 없던 것이 있어서 옮겼다 — 정규식 단언(`"grossAmount":18000.*"netAmount":12600,`)이
+// 필드 순서에 묶여 있었고, 깨져도 무엇이 틀렸는지 말하지 않았다.
+//
+// **스프링 컨텍스트를 띄우지 않는다.** 여기서 보는 것은 컨테이너로 배포된 앱 10종이 서로
+// 맞물려 도는지이고, 그걸 보려면 이 프로세스가 그 스택의 일부가 아니어야 한다.
+// 인프라를 띄워 한 서비스 안을 보는 것은 `integrationTest` 의 일이다(decisions.md 20번).
+
+dependencies {
+    // **기대값을 문자열로 적지 않는다.** `PRICE_MISMATCH` 를 지우거나 이름을 바꾸면 e2e 가
+    // 컴파일에서 막힌다. 이 저장소가 계약을 고정해 온 방식(OpenAPI 스냅샷·EventContractTest·
+    // ArchRuleEnforcementTest)을 인수 층에도 그대로 쓴다.
+    testImplementation project(':common:core')
+
+    testImplementation 'org.springframework:spring-web'                 // RestClient
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind'
+    testImplementation 'org.awaitility:awaitility'
+}
+
+// 소스가 없다. 빈 jar 를 만들면 산출물 목록에 모듈이 아닌 것이 섞인다
+// (루트가 apps·common 껍데기에 하는 것과 같은 이유).
+tasks.named('jar') { enabled = false }
+
+// **기본 빌드에서 뺀다.** `./gradlew build` 는 스택이 떠 있다고 가정할 수 없다.
+// 여기가 켜져 있으면 컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다.
+tasks.named('test') { enabled = false }
+
+// 그레이들은 `-D` 를 테스트 JVM 으로 자동 전달하지 않는다. 여기서 넘기지 않으면
+// StoveEndpoints 가 값을 영영 못 본다 — 루트의 `stove.openapi.update` 와 같은 자리다.
+def endpoints = ['gateway', 'catalog']
+
+tasks.register('e2eTest', Test) {
+    group = 'verification'
+    description = '떠 있는 전체 스택을 상대로 인수 시나리오를 관통한다 (스택이 먼저 떠 있어야 한다)'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    endpoints.each { name ->
+        systemProperty "stove.e2e.${name}",
+                providers.systemProperty("stove.e2e.${name}").getOrElse('')
+    }
+
+    // 네 장이 한 저니를 이어 간다 — 트랙 B 는 A 가 만든 상품을, C 는 B 가 만든 주문을 쓴다.
+    // 갈라서 돌리면 순서가 곧 깨진다.
+    maxParallelForks = 1
+
+    // **이 태스크는 절대 건너뛰지 않는다.**
+    //
+    // 처음 붙였을 때 실제로 당했다 — 원격에서 두 번째로 부르니 `:e2e:e2eTest UP-TO-DATE`,
+    // `BUILD SUCCESSFUL in 1s`. 42건 중 한 건도 돌지 않았는데 초록이었다.
+    //
+    // 루트가 같은 함정을 이미 막아 두었지만 그쪽은 `CI` 환경변수가 있을 때뿐이다.
+    // 로컬을 열어 둔 근거는 "반복 루프에서는 캐시가 맞다" 였고, 그 근거가 여기서는 성립하지 않는다 —
+    // **이 태스크의 진짜 입력은 소스가 아니라 떠 있는 스택이다.** 그레이들은 그것을 볼 수 없으므로,
+    // 소스가 그대로면 언제나 "같다" 고 판단한다. 앱을 재배포하고 다시 부르는 것이 이 층의 기본 사용법인데
+    // 그때마다 검증이 조용히 건너뛰어진다.
+    //
+    // 아래 실행 건수 보고도 이것만으로는 못 막는다. 건너뛴 태스크는 afterSuite 자체를 부르지 않아
+    // **아무 줄도 출력되지 않는다** — 요약이 없는 것과 0건인 것이 화면에서 같아 보인다.
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+
+    testLogging {
+        events 'passed', 'failed'
+        exceptionFormat = 'full'
+    }
+
+    // **몇 건이 돌았는지 말하게 한다.**
+    //
+    // 루트의 `defectTest` 합산 보고와 같은 이유다. "돌았는가" 와 "통과했는가" 가 화면에서
+    // 구분되지 않으면 필터 오타나 캐시 복원으로 0건이 돈 실행이 초록으로 읽힌다.
+    // 셸에서는 EXPECTED_CHECKS 가 그 자리를 지켰다.
+    //
+    // 캐시 쪽은 루트가 이미 막아 두었다 — CI 에서는 모든 Test 태스크가 UP-TO-DATE·FROM-CACHE 로
+    // 건너뛰어지지 않는다(decisions.md 12번 옆 흐름). 여기서는 세어서 말하는 것만 한다.
+    afterSuite { desc, result ->
+        if (desc.parent == null) {
+            println '════════════════════════════════'
+            println "  e2e ${result.testCount}건 실행 — 통과 ${result.successfulTestCount}" +
+                    " / 실패 ${result.failedTestCount} / 건너뜀 ${result.skippedTestCount}"
+            if (result.testCount == 0) {
+                println '  (0건이다. 통과가 아니라 미실행이다 — 클래스패스와 필터를 확인한다)'
+            }
+            println '════════════════════════════════'
+        }
+    }
+}

@@ -22,6 +22,10 @@ include 'common:archunit'
 include 'common:test'
 include 'common:testcontainers'
 
+// ── 인수 시나리오 ──────────────────────────────────────────────────
+// 떠 있는 전체 스택을 밖에서 두드린다. 기본 빌드에 들어가지 않는다 (e2e/build.gradle 참고).
+include 'e2e'
+
 // ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
 include 'apps:gateway'
 
