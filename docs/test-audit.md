@@ -3,6 +3,11 @@
 > **특정 시점의 산물이다.** 5절의 순서를 다 밟으면 이 문서는 지운다 —
 > 상시 사실은 [testing.md](testing.md) 로, 결함은 [defects.md](defects.md) 로,
 > 구조 결정은 [decisions.md](decisions.md) 로 각각 옮겨 간다.
+>
+> **진행 상황** — 1·2·3 번 완료([#23](https://github.com/tlswltjq/stove/pull/23)).
+> 남은 것은 [#24](https://github.com/tlswltjq/stove/issues/24)(`:e2e` 모듈)와
+> [#25](https://github.com/tlswltjq/stove/issues/25)(curl 이 못 보는 것)로 이슈에 옮겨 뒀다.
+> 착수할 때 그쪽을 먼저 읽으면 된다 — 배경과 완료 기준이 자립적으로 적혀 있다.
 
 무엇이 이미 좋고, 무엇이 비어 있고, 어느 순서로 채울지 적는다.
 층 설계의 근거는 [testing.md](testing.md), 부하 측정 결과는 [performance.md](performance.md) 에 있다.
@@ -377,7 +382,7 @@ N중M   "결함 재현 N건 중 M건이 아직 살아 있다 — docs/defects.md
 환경변수 표에 "9장 절차에서는 서비스 이름으로 덮는다" 열을 더했고,
 대조군(`relay-off.override.yml`)과 측정 위생 규칙도 README 로 끌어올렸다.
 
-### 4. `:e2e` 모듈 — 셸을 거치지 않고 바로
+### 4. `:e2e` 모듈 — 셸을 거치지 않고 바로 · [#24](https://github.com/tlswltjq/stove/issues/24)
 
 PR #22 의 2단계로 직행한다. 트랙을 JUnit + Awaitility 로 옮기면 정규식 단언
 (`"grossAmount":18000.*"netAmount":12600,` — 필드 순서에 묶여 있다)이 사라지고,
@@ -388,7 +393,7 @@ PR #22 의 2단계로 직행한다. 트랙을 JUnit + Awaitility 로 옮기면 �
 `127.0.0.1:1808X` 루프백 오프셋 오버라이드를 얹으면 원래 근거를 뒤집지 않고 풀리지만,
 명시적 결정을 건드리므로 [decisions.md](decisions.md) 에 근거를 남겨야 한다.
 
-### 5. curl 이 못 보는 것 — F5 와 트레이스
+### 5. curl 이 못 보는 것 — F5 와 트레이스 · [#25](https://github.com/tlswltjq/stove/issues/25)
 
 같은 하네스에서 종단 지연(주문 → 지급 벽시계 시간), Outbox 적체 수렴, DLT 유입 0,
 그리고 **Kafka 를 건너는 트레이스 연결** 을 검증한다.
