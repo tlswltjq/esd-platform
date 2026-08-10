@@ -4,8 +4,8 @@
 #
 #   ./scripts/remote.sh test                     전체 테스트
 #   ./scripts/remote.sh test :apps:order         모듈 하나
-#   ./scripts/remote.sh stack up                 전체 스택 20개
-#   ./scripts/remote.sh smoke                    전 구간 관통 확인
+#   ./scripts/remote.sh stack up                 전체 스택 20개 (게이트까지 확인한다)
+#   ./scripts/remote.sh smoke                    인수 시나리오 관통 확인
 #
 # **왜 있는가** — CI(경로 D)는 push 해야 돈다. "고쳤다 → 결과" 루프에는 커밋이 끼면 안 된다.
 # 이 스크립트는 그 사이를 메운다. rsync 로 작업본을 밀어넣고 원격에서 실행한다.
@@ -132,17 +132,10 @@ do_test() {
 }
 
 # ── stack ─────────────────────────────────────────────────────────────
-stack_wait() {
-    say "healthy 대기"
-    rexec "for i in \$(seq 1 40); do
-             st=\$(docker ps --filter health=starting -q | wc -l)
-             printf '  %ds  실행 %s / healthy %s / starting %s\n' \
-               \$((i*5)) \$(docker ps -q|wc -l) \$(docker ps --filter health=healthy -q|wc -l) \$st
-             [ \"\$st\" -eq 0 ] && [ \$i -gt 2 ] && break
-             sleep 5
-           done"
-}
-
+#
+# 대기와 게이트 판정은 scripts/stack-wait.sh 가 한다. 여기 함수로 있던 대기 루프를
+# 그쪽으로 옮긴 이유는 **CI 와 같은 것을 돌리기 위해서**다 — 예전에는 대기가 이 파일에,
+# 게이트 판정이 smoke-stack.sh 에 있어서 어느 쪽도 혼자서는 배포 가능 여부를 말하지 못했다.
 do_stack() {
     local action="${1:-status}" target="${2:-all}"
     case "$action" in
@@ -155,7 +148,8 @@ do_stack() {
                        rexec "docker compose ${INFRA[*]} up -d" || die "인프라 기동 실패"
                        rexec "docker compose ${APPS[*]} up -d --build" ;;
             esac
-            stack_wait
+            # 게이트가 막으면 `stack up` 도 실패다. 뜬 것과 서비스 가능한 것은 다르다.
+            rexec "bash scripts/stack-wait.sh" || die "게이트 불통과 — 스택이 서비스 가능한 상태가 아니다"
             ;;
         down)
             # -v 를 쓰지 않는다. 볼륨은 남긴다.
@@ -219,7 +213,8 @@ usage() {
   gradle <인자...>           원격에서 ./gradlew 실행 (sync 포함)
   test [모듈] [필터]         테스트 + 실패 요약   예: test :apps:order '*ServiceTest'
   stack up|down|status [infra|apps|all]
-  smoke                      전 구간 관통 확인 (스택이 떠 있어야 함)
+  gate                       배포 게이트만 다시 확인 (stack up 이 이미 부른다)
+  smoke                      인수 시나리오 관통 확인 (스택이 떠 있어야 함)
   logs <서비스> [-n N] [-g 패턴]
   http <메서드> <서비스:포트/경로> [본문]
   status                     원격 자원 상태
@@ -240,6 +235,7 @@ case "$cmd" in
     gradle) do_sync; say "gradle $*"; rexec "./gradlew $* --console=plain" ;;
     test)   do_test "${1:-}" "${2:-}" ;;
     stack)  do_stack "${1:-status}" "${2:-all}" ;;
+    gate)   do_sync; rexec "bash scripts/stack-wait.sh" ;;
     smoke)  do_sync; rexec "bash scripts/smoke-stack.sh" ;;
     logs)   do_logs "$@" ;;
     http)   do_http "${1:-GET}" "${2:-/}" "${3:-}" ;;

@@ -142,14 +142,15 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 |---|---|---|
 | 단위·어댑터·ArchUnit 816개 (Docker 불필요) | **로컬** | `./gradlew test` |
 | 실 인프라 통합 175개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
-| 전체 스택 · 스모크 · 성능 | **원격** | `./scripts/remote.sh …` |
+| 전체 스택 · 게이트 · 인수 · 성능 | **원격** | `./scripts/remote.sh …` |
 | 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
 
 ```bash
 ./scripts/remote.sh test                      # 전체 테스트
 ./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
-./scripts/remote.sh stack up                  # 전체 스택 20개
-./scripts/remote.sh smoke                     # 전 구간 관통 확인
+./scripts/remote.sh stack up                  # 전체 스택 20개 (게이트까지 확인하고 끝난다)
+./scripts/remote.sh gate                      # 배포 게이트 14건만 다시
+./scripts/remote.sh smoke                     # 인수 시나리오 45건 관통 확인
 ./scripts/remote.sh http GET catalog:8081/api/v1/products
 ./scripts/remote.sh logs catalog -n 100 -g 승인
 ./scripts/remote.sh status
