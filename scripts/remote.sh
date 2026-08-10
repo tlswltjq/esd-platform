@@ -44,7 +44,7 @@ EOF
 fi
 
 NET=stove_default
-INFRA=(-f docker-compose.yml      -f docker-compose.ci.yml)
+INFRA=(-f docker-compose.yml      -f docker-compose.ci.yml -f docker-compose.e2e.yml)
 # 앱 오버라이드가 셋이고 **순서가 의미를 가진다** — ci 가 ports 를 !reset 으로 지운 뒤에
 # e2e 가 127.0.0.1:1808X 로 다시 연다. 반대로 놓으면 조용히 닫힌다(decisions.md 21번).
 #

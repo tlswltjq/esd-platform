@@ -2,6 +2,8 @@ package com.stove.e2e;
 
 import static org.assertj.core.api.Assertions.fail;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -56,6 +58,8 @@ final class Journey {
     private static String orderNo;
     private static String failOrderNo;
     private static String failPgTxId;
+    private static String paymentTraceId;
+    private static Instant paidAt;
 
     private Journey() {
     }
@@ -98,6 +102,28 @@ final class Journey {
 
     static String failPgTxId() {
         return require(failPgTxId, "실패 검증용 pgTxId", "3-B 의 PG 사전등록");
+    }
+
+    /**
+     * 결제 승인이 확정된 순간과 그 요청의 traceId 를 함께 잡아 둔다.
+     *
+     * <p>둘 다 <b>같은 한 번의 콜백</b>에서 나와야 의미가 있다. 종단 지연은 이 시각부터
+     * 라이선스가 보이는 시각까지고, 트레이스 판정은 이 traceId 가 여섯 서비스에 걸치는지를 본다 —
+     * 팬아웃이 시작되는 지점이 하나이므로 기준점도 하나다.
+     */
+    static void paymentAccepted(String traceId) {
+        paymentTraceId = traceId;
+        paidAt = Instant.now();
+    }
+
+    static String paymentTraceId() {
+        return require(paymentTraceId, "결제 콜백의 traceId",
+                "2장 트랙 B 의 승인 콜백 (응답 헤더 X-Correlation-Id)");
+    }
+
+    /** 결제 승인부터 지금까지의 벽시계 시간. 사용자가 "샀는데 언제 받나" 로 느끼는 유일한 숫자다. */
+    static Duration sincePaid() {
+        return Duration.between(require(paidAt, "결제 승인 시각", "2장 트랙 B 의 승인 콜백"), Instant.now());
     }
 
     /** 회원 헤더. 게이트웨이는 요청 헤더를 그대로 하류로 넘긴다. */

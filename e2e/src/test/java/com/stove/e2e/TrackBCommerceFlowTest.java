@@ -110,6 +110,13 @@ class TrackBCommerceFlowTest {
         assertThat(response.errorCode()).isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH.name());
     }
 
+    /**
+     * 이 한 번의 콜백이 트랙 C 의 기준점이다.
+     *
+     * <p>팬아웃이 여기서 시작하므로 <b>종단 지연의 시작 시각</b>도, <b>트레이스 판정의 traceId</b> 도
+     * 같은 응답에서 잡아 둔다({@link Journey#paymentAccepted}). traceId 는 응답 헤더로 돌아온다 —
+     * {@code common:web} 의 {@code TraceIdResponseFilter} 가 붙이고, 게이트웨이는 그대로 통과시킨다.
+     */
     @Test
     @Order(7)
     @DisplayName("payment: 승인 콜백을 받으면 PaymentCompleted 가 나간다")
@@ -117,6 +124,12 @@ class TrackBCommerceFlowTest {
         Response response = Stove.gateway.post("/api/v1/payments/callback", approval(PRICE, "PAID"));
 
         assertThat(response.status()).as("%s", response).isEqualTo(200);
+
+        String traceId = response.headers().getFirst("X-Correlation-Id");
+        assertThat(traceId)
+                .as("장애 문의에 이 값을 달라고 말할 창구가 없어진다 — TraceIdResponseFilter 를 본다")
+                .isNotBlank();
+        Journey.paymentAccepted(traceId);
     }
 
     @Test

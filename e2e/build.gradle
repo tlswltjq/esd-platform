@@ -30,8 +30,10 @@ tasks.named('jar') { enabled = false }
 tasks.named('test') { enabled = false }
 
 // 그레이들은 `-D` 를 테스트 JVM 으로 자동 전달하지 않는다. 여기서 넘기지 않으면
-// StoveEndpoints 가 값을 영영 못 본다 — 루트의 `stove.openapi.update` 와 같은 자리다.
-def endpoints = ['gateway', 'catalog']
+// Stove 가 값을 영영 못 본다 — 루트의 `stove.openapi.update` 와 같은 자리다.
+//
+// 노브가 하나인 것은 포트가 오프셋 규칙이기 때문이다(Stove 클래스 주석).
+def endpoints = ['host']
 
 tasks.register('e2eTest', Test) {
     group = 'verification'
@@ -67,6 +69,9 @@ tasks.register('e2eTest', Test) {
     testLogging {
         events 'passed', 'failed'
         exceptionFormat = 'full'
+        // 이 층은 판정만이 아니라 **숫자를 기록한다** — 종단 지연, DLT 카운터의 유무.
+        // 기본값으로 두면 테스트가 찍은 것이 콘솔에 오지 않아, 기록하기로 한 값이 아무 데도 남지 않는다.
+        showStandardStreams = true
     }
 
     // **몇 건이 돌았는지 말하게 한다.**

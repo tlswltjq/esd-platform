@@ -99,13 +99,26 @@ class TrackACreatorFlowTest {
         assertThat(response.status()).as("%s", response).isEqualTo(200);
     }
 
+    /**
+     * 목록은 {@code @PageableDefault(size = 20)} 이다. 정렬을 주지 않고 첫 페이지에서 찾으면
+     * <b>ON_SALE 상품이 20개를 넘는 순간 조용히 못 찾게 된다</b> — 스택과 볼륨이 재사용되므로
+     * 실행할 때마다 한 건씩 쌓이고, 어느 날 갑자기 빨개진다.
+     *
+     * <p>셸이 상품 마스터를 id 1~12 로 훑다가 {@code by-code} 로 바꾼 것과 <b>정확히 같은 함정</b>이고,
+     * 그때 고치지 않고 남아 있던 자리다. 실제로 옮기고 나서 22번째 상품에서 터졌다.
+     * 최신순으로 집으면 개수와 무관해진다.
+     */
     @Test
     @Order(7)
     @DisplayName("catalog: ON_SALE 목록에 뜬다")
     void appearsInOnSaleList() {
         Await.untilResponse("catalog ON_SALE 목록 노출",
-                () -> Stove.gateway.get("/api/v1/products"),
+                () -> Stove.gateway.get("/api/v1/products?sort=id,desc"),
                 r -> !r.itemWhere("productCode", PRODUCT_CODE).isMissingNode());
+
+        // 목록에 떴다는 것과 상태가 바뀌었다는 것은 다르다. 후자를 직접 본다.
+        Response detail = Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE);
+        assertThat(detail.data().path("status").asText()).as("%s", detail).isEqualTo("ON_SALE");
     }
 
     @Test

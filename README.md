@@ -50,7 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 21건 | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 22건 | [defects.md](docs/defects.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
@@ -150,7 +150,7 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 ./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
 ./scripts/remote.sh stack up                  # 전체 스택 20개 (게이트까지 확인하고 끝난다)
 ./scripts/remote.sh gate                      # 배포 게이트 14건만 다시
-./scripts/remote.sh e2e                       # 인수 시나리오 42건 관통 확인
+./scripts/remote.sh e2e                       # 인수 42건 + 관측 4건 관통 확인
 ./scripts/remote.sh http GET catalog:8081/api/v1/products
 ./scripts/remote.sh logs catalog -n 100 -g 승인
 ./scripts/remote.sh status
@@ -371,7 +371,7 @@ curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT
   분리했다 — 이제 9개 서비스가 같은 실패 처리를 갖는다 ([decisions.md](docs/decisions.md) 19번)
 - ~~전 구간 시나리오 관통(등록→심의→구매→지급→정산)~~ → **했고, CI 의 판정 조건이 됐다.**
   셸 스모크였던 것을 `:e2e` 모듈로 옮겼다 — 트랙 A~C·환불·결제 거절을 **게이트웨이 경유**로
-  42건 관통하고 main push 에서 돈다. 배포 게이트(컨테이너·인프라·라우팅 차단)는 성질이 달라
+  42건 관통하고, 거기에 관측 4건(트레이스 연결·적체 수렴·DLT·종단 지연)이 얹혀 main push 에서 돈다. 배포 게이트(컨테이너·인프라·라우팅 차단)는 성질이 달라
   `scripts/stack-wait.sh` 로 갈라져 `stack up` 에 붙었다
   ([test-audit.md](docs/test-audit.md) 4절, [decisions.md](docs/decisions.md) 21번)
 - ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**

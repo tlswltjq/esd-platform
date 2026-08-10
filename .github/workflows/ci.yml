@@ -93,7 +93,7 @@ jobs:
             echo "::warning::테스트 컨테이너 ${remaining}개가 남았다 — 러너에 쌓이는지 확인이 필요하다"
           fi
 
-  # 인수 시나리오 42건. 서비스 *사이* 의 결함을 잡는 층이라 PR 단위보다 통합 시점에 의미가 있다.
+  # 인수 42건 + 관측 4건. 서비스 *사이* 의 결함을 잡는 층이라 PR 단위보다 통합 시점에 의미가 있다.
   #
   # **PR 마다 돌리지 않는다.** 러너가 1대인 것이 결정적이다 — 20컨테이너 스택을 올렸다 내리는
   # 잡이 PR 수만큼 붙으면 큐가 생기고, 방어선이 인프라 경합으로 간헐 실패하기 시작하면
@@ -124,7 +124,9 @@ jobs:
       # e2e 가 127.0.0.1:1808X 로 다시 연다(docs/decisions.md 21번).
       - name: Start stack
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+          docker compose -f docker-compose.yml \
+                         -f docker-compose.ci.yml \
+                         -f docker-compose.e2e.yml up -d
           docker compose -f docker-compose.apps.yml \
                          -f docker-compose.apps.ci.yml \
                          -f docker-compose.apps.e2e.yml up -d --build
