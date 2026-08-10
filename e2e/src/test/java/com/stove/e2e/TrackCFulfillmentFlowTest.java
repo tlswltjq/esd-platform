@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
+import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
@@ -40,6 +41,18 @@ class TrackCFulfillmentFlowTest {
         return Stove.gateway.get("/api/v1/settlements/orders/" + Journey.orderNo());
     }
 
+    /**
+     * <b>종단 지연을 재는 자리다.</b>
+     *
+     * <p>{@code http_req_duration} 은 주문 API 응답까지고 {@code stove_outbox_pending} 은 적체의
+     * 대리 지표다 — 둘 다 초록인데 사용자가 30초를 기다리고 있을 수 있다. 결제 완료에서 지급까지
+     * Kafka 홉이 두 번, 릴레이 폴링이 두 번 끼기 때문이다.
+     *
+     * <p><b>임계값을 세우지 않고 기록만 한다.</b> 러너 부하에 따라 흔들리는 숫자를 게이트로 세우면
+     * 간헐 실패가 나고, 그러면 사람들이 빨간불을 무시하는 법을 배운다. 상한은 전파가 <b>끊긴 것</b>을
+     * 잡는 선(Awaitility 의 60초)으로만 둔다. 추세를 보는 것은 k6 쪽이 한다
+     * ({@code scripts/perf/payment-callback.js} 의 {@code e2e_fulfillment_latency}).
+     */
     @Test
     @Order(1)
     @DisplayName("license: 라이선스를 지급한다 (PaymentCompleted 관통)")
@@ -47,6 +60,10 @@ class TrackCFulfillmentFlowTest {
         Await.untilResponse("license 라이선스 지급",
                 () -> library(MEMBER),
                 r -> !r.itemWhere("orderNo", Journey.orderNo()).isMissingNode());
+
+        Duration latency = Journey.sincePaid();
+        System.out.printf("  ▸ 종단 지연 (결제 승인 → 라이브러리 반영): %.1fs%n", latency.toMillis() / 1000.0);
+        assertThat(latency).isLessThan(Duration.ofSeconds(60));
     }
 
     @Test
