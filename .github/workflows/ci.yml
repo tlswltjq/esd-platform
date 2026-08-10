@@ -3,7 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # `labeled` 가 필요한 이유 — 기본 활성 타입은 opened·synchronize·reopened 뿐이다.
+  # 그것만으로는 아래 e2e 잡의 `e2e` 라벨 문이 **실제로는 열리지 않는다.**
+  # 이미 열려 있는 PR 에 라벨을 붙여도 워크플로가 다시 돌지 않아, 조건을 평가할 기회 자체가 없다.
+  # (실제로 그랬다 — 라벨을 붙였는데 아무 일도 일어나지 않았다)
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +17,13 @@ concurrency:
 
 jobs:
   build:
+    # 라벨만 붙은 회차는 소스가 그대로다 — 이미 돈 build 를 또 돌릴 이유가 없다.
+    # 다만 `e2e` 라벨일 때는 돌려야 한다. 아래 e2e 잡이 `needs: build` 라,
+    # 여기서 건너뛰면 그쪽도 같이 건너뛰어져 **라벨을 붙인 의미가 사라진다.**
+    if: >-
+      github.event.action != 'labeled'
+      || contains(github.event.pull_request.labels.*.name, 'e2e')
+
     # OCI Ampere A1 (4코어 / 23GB / aarch64). ubuntu-latest(2코어 / 7GB)로는
     # Testcontainers 스택을 병렬로 못 띄운다 — 워커 수를 올릴 수 있는 것이 이 러너의 이유다.
     #
