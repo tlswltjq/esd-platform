@@ -40,6 +40,7 @@
 | [D-020](#d-020) | 범위를 벗어난 페이지 파라미터가 400 이 아니라 500 | 오분류·알람 잡음 | **수정됨** |
 | [D-021](#d-021) | 스텁 격리 규칙이 실제 스텁을 한 번도 검사하지 않음 | 규칙의 공허 통과 | **수정됨** |
 | [D-022](#d-022) | 롤백된 마감 트랜잭션이 세금계산서는 발행 | 금전 불일치 | **수정됨** |
+| [D-023](#d-023) | 배포 게이트가 컨테이너 0개에도 통과 | 게이트의 공허 통과 | **수정됨** |
 
 D-016 ~ D-019 는 **서비스 계층에 테스트가 없던 모듈에 테스트를 붙이면서** 나왔다.
 넷 중 셋이 컨슈머 경로의 예외 처리 문제이고, 하나는 이미 고친 결함(D-009)이
@@ -1027,6 +1028,88 @@ DB 에는 마감 기록이 없는데 국세청에는 계산서가 있는 상태�
 근본 원인을 고친 뒤 `@SchedulerLock` 을 붙였다(`settlement-close-month`, MySQL 락).
 **순서가 반대였다면** 락을 걸어 두고도 단일 인스턴스 부분 실패로 같은 사고가 났을 것이다.
 락은 동시 실행 창만 닫는다.
+
+---
+
+<a id="d-023"></a>
+## D-023 배포 게이트가 컨테이너 0개에도 통과
+
+**상태** 수정됨
+**영향** 게이트의 공허 통과 — 스택이 통째로 내려가 있는 것이 가장 조용한 상태였다
+**위치** `scripts/smoke-stack.sh` 0장 → `scripts/stack-wait.sh` 로 옮기며 수정
+**재현** 아래 절차 (셸이라 `@Tag("known-defect")` 를 붙일 자리가 없다 — 대신 관측한 출력을 남긴다)
+
+### 무슨 일이
+
+컨테이너 상태 판정이 이랬다.
+
+```bash
+unhealthy=$(docker ps --filter health=unhealthy --format '{{.Names}}')
+[ -n "$unhealthy" ] && bad "healthcheck" "unhealthy: $unhealthy" || ok "unhealthy 없음"
+```
+
+**빈 결과를 "정상" 으로 읽는다.** `docker ps` 는 *실행 중인* 컨테이너만 보므로,
+죽은 컨테이너는 unhealthy 목록에 아예 나타나지 않는다. 스택이 20개 다 내려가 있어도
+목록은 비어 있고, 판정은 초록이다.
+
+여기에 두 번째 구멍이 겹친다. **compose 20종 중 7종이 헬스체크 미정의**이고
+(redis · kafka · kafka-ui · mongodb · prometheus · tempo · grafana)
+그중에 브로커가 있다. Kafka 가 죽으면 앱은 계속 뜬 채로 API 에 응답하고 이벤트만 멈추는데,
+부트에는 대응하는 헬스 지표가 없어 액추에이터 10종도 전부 UP 이다.
+**끊긴 것이 어디에도 나타나지 않는다.**
+
+[D-021](#d-021) 과 같은 부류다 — 거기서는 ArchUnit 규칙이 대상을 잘못 골라 아무것도 검사하지 않았고,
+여기서는 게이트가 빈 결과를 통과로 읽어 아무것도 막지 않았다.
+**둘 다 방어선이 없는 것이 아니라, 있는데 작동하지 않는 것이다.**
+
+### 재현 — 앱 10종을 내리고 옛 판정식을 그대로 돌린다
+
+```
+$ docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml stop
+$ docker ps --format '{{.Names}}' | grep -c stove-apps-
+0
+$ unhealthy=$(docker ps --filter health=unhealthy --format '{{.Names}}')
+$ [ -n "$unhealthy" ] && echo "  ✗ unhealthy: $unhealthy" || echo "  ✓ unhealthy 없음"
+  ✓ unhealthy 없음        ← 앱이 하나도 안 떠 있는데 초록이다
+```
+
+브로커만 내렸을 때도 같다. `docker stop stove-kafka` 뒤에 액추에이터 10종이 전부 UP 이고
+0장도 초록이라, 옛 스크립트에서는 **어느 장에서도 빨개지지 않았다.**
+
+### 수정
+
+판정을 `scripts/stack-wait.sh` 로 옮기면서 셋을 바꿨다.
+
+1. **없는 것을 세려면 있어야 할 것을 알아야 한다.** 기대 컨테이너 20종의 이름을 적고
+   `docker ps` 와 대조한다. 그리고 몇 개가 없다가 아니라 **무엇이 없는지를 이름으로 말한다.**
+2. **브로커를 직접 찌른다.** `kafka-broker-api-versions.sh --bootstrap-server kafka:19092` —
+   부트에 지표가 없는 자리를 게이트가 대신 본다.
+3. **액추에이터 10종을 맨 앞으로.** 부트의 health 가 DataSource·Redis·MongoDB·Elasticsearch 를
+   집계하므로, 헬스체크 미정의 7종 중 **redis·mongodb 는 여기서 간접적으로 덮인다.**
+   kafka 는 2번이 직접 찌르고, 남는 넷(kafka-ui · prometheus · tempo · grafana)은 1번이 본다.
+   셋을 합쳐야 20종이 빠짐없이 덮인다 — 어느 하나로도 충분하지 않은 것이 이 결함의 모양이었다.
+
+종료 코드는 `2` 로 세운다. 게이트가 막았다는 것과 시나리오가 실패했다는 것은 대응이 다르다.
+
+### 수정 뒤 같은 절차
+
+```
+--- 옛 판정식 ---
+  ✓ unhealthy 없음
+--- 새 게이트 ---
+  ✗ quote 는 게이트웨이로 못 부른다 — 기대 404, 실제 무응답
+  ✗ 컨테이너 20종 — 실행되지 않음: gateway(앱) catalog(앱) order(앱) payment(앱) license(앱)
+                                    studio(앱) review(앱) store(앱) download(앱) settlement(앱)
+  통과 2 / 실패 12
+EXIT=2
+```
+
+브로커만 내린 경우도 확인했다 — `docker stop stove-kafka` 에서 앱 10종은 여전히 전부 UP 이고,
+새 게이트는 2건(브로커 응답 · 컨테이너 집합)으로 빨개진다.
+
+> **초록 실행은 게이트가 동작한다는 증명이 아니다.** 이 항목이 그 자체로 증거다 —
+> 옛 판정은 통과한 적은 많고 막은 적은 없었다. 그래서 고친 뒤에도 통과를 확인하는 것으로 끝내지 않고,
+> 위 두 가지를 일부러 깨뜨려 빨개지는 것까지 봤다([testing.md](testing.md) 3절과 같은 규칙).
 
 ---
 

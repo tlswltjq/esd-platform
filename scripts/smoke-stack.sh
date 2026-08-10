@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 전체 스택(인프라 10 + 앱 10)이 실제로 관통하는지 확인한다.
+# 인수 시나리오 — 트랙 A~C 와 결제 실패 경로가 실제로 관통하는지 확인한다.
 #
 #   ./scripts/smoke-stack.sh
 #
@@ -8,9 +8,14 @@
 # CI 호스트는 공개 IP 를 가지므로 포트를 열지 않고(docker-compose.ci.yml),
 # 대신 같은 네트워크에 컨테이너를 띄워 서비스 이름으로 부른다.
 #
+# **게이트는 여기 없다.** 컨테이너 상태·인프라 도달성·게이트웨이 차단·액추에이터는
+# scripts/stack-wait.sh 로 옮겼다 — 데이터가 필요 없고 수 초에 끝나며 배포의 일부라
+# 이 파일과 도는 시점이 애초에 다르다(docs/test-audit.md 4.1).
+#
 # 사전 조건:
 #   docker compose -f docker-compose.yml      -f docker-compose.ci.yml      up -d
 #   docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml up -d
+#   bash scripts/stack-wait.sh        # 게이트가 통과해야 이 파일을 돌릴 의미가 있다
 set -uo pipefail
 
 NET=stove_default
@@ -21,7 +26,7 @@ RUNNER=(docker run --rm --network "$NET" curlimages/curl:latest -s)
 # 판정 지점을 늘렸으면 이 값도 같이 올린다. 손으로 유지해야 하는 것이 단점처럼 보이지만,
 # 그 브리틀함이 목적이다 — 늘어나는 것은 정상이고 **모르게 줄어드는 것이 사고**다.
 # 커밋된 OpenAPI 스냅샷을 의도적으로 갱신하는 것과 같은 성질이다(decisions.md 18번).
-EXPECTED_CHECKS=58
+EXPECTED_CHECKS=45
 
 pass=0; fail=0; incomplete=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
@@ -48,12 +53,6 @@ req() {
     BODY=$(printf '%s' "$out" | sed '$d')
     if [ "$code" = "$want" ]; then ok "$name ($code)"; else bad "$name" "기대 $want, 실제 $code: ${BODY:0:120}"; fi
 }
-
-echo "=== 0. 컨테이너 상태 ==="
-total=$(docker ps --format '{{.Names}}' | wc -l | tr -d ' ')
-unhealthy=$(docker ps --filter health=unhealthy --format '{{.Names}}' | tr '\n' ' ')
-echo "  실행중 $total 개"
-[ -n "$unhealthy" ] && bad "healthcheck" "unhealthy: $unhealthy" || ok "unhealthy 없음"
 
 # 이벤트 전파는 Outbox 폴링 릴레이를 거친다 — 고정 sleep 이 아니라 조건을 기다린다.
 # await <이름> <제한초> <조건 명령…>
@@ -310,24 +309,6 @@ if [ -n "$PRODUCT_ID" ]; then
             -d "{\"result\":\"APPROVED\",\"orderNo\":\"$FAIL_ORDER_NO\",\"pgTxId\":\"$PG_TX\",\"paidAmount\":$PRICE,\"idempotencyKey\":\"IDEM-LATE-$TS\"}"
     fi
 fi
-
-echo
-echo "=== 4. 인프라 도달성 ==="
-req "elasticsearch" 200 http://elasticsearch:9200/_cluster/health
-
-echo
-echo "=== 5. 게이트웨이 내부 API 차단 ==="
-req "quote 는 게이트웨이로 못 부른다" 404 -X POST http://gateway:8080/api/v1/products/quote \
-    -H 'Content-Type: application/json' -d '{"items":[]}'
-
-echo
-echo "=== 6. 액추에이터 (앱 10종) ==="
-for svc in gateway:8080 catalog:8081 order:8082 payment:8083 license:8084 \
-           studio:8085 review:8086 store:8087 download:8088 settlement:8089; do
-    name=${svc%%:*}
-    st=$("${RUNNER[@]}" -o /dev/null -w '%{http_code}' "http://$svc/actuator/health" 2>/dev/null)
-    [ "$st" = "200" ] && ok "$name health" || bad "$name health" "HTTP $st"
-done
 
 echo
 echo "════════════════════════════════"
