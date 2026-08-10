@@ -423,8 +423,8 @@ performance.md 8-1 이 스스로 정한 위생 규칙대로 —
 
 ```bash
 ./scripts/remote.sh test :apps:order   # 실패하면 요약만 낸다
-./scripts/remote.sh stack up           # 전체 스택
-./scripts/remote.sh smoke              # 전 구간 관통
+./scripts/remote.sh stack up           # 전체 스택 (게이트까지 확인하고 끝난다)
+./scripts/remote.sh e2e                # 전 구간 관통 (예전 `smoke` 자리)
 ./scripts/remote.sh logs catalog -n 100 -g 승인
 ```
 
