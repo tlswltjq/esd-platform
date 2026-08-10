@@ -530,6 +530,32 @@
         "tags" : [ "product-controller" ]
       }
     },
+    "/api/v1/products/by-code/{productCode}" : {
+      "get" : {
+        "operationId" : "detailByCode",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productCode",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProductResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "product-controller" ]
+      }
+    },
     "/api/v1/products/quote" : {
       "post" : {
         "operationId" : "quote",

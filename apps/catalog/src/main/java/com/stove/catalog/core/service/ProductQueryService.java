@@ -39,6 +39,24 @@ public class ProductQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 
+    /**
+     * {@code productCode} 로 상품을 찾는다.
+     *
+     * <p>서비스 사이의 자연 키는 내부 id 가 아니라 {@code productCode} 다 — 이벤트 payload,
+     * download 의 상품 참조, store 색인, studio 프로젝트가 모두 이 값으로 말한다.
+     * catalog 만 내부 id 로밖에 조회되지 않으면 <b>코드를 아는 쪽이 id 를 얻을 방법이 없다.</b>
+     *
+     * <p>캐시를 걸지 않는다. {@link #getProduct} 와 키 공간이 달라서, 여기에도 캐시를 두면
+     * {@link ProductCommandService} 의 무효화 지점이 둘로 늘어난다. 운영·연동 경로라
+     * 읽기 트래픽이 몰리지 않으므로 얻는 것보다 잃는 것이 크다.
+     */
+    public ProductView getProductByCode(String productCode) {
+        return productRepository.findByProductCode(productCode)
+                .map(ProductView::from)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND,
+                        "productCode=" + productCode));
+    }
+
     public Page<ProductView> getOnSaleProducts(Pageable pageable) {
         return productRepository.findByStatus(ProductStatus.ON_SALE, pageable)
                 .map(ProductView::from);

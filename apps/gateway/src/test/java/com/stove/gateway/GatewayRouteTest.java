@@ -70,6 +70,7 @@ class GatewayRouteTest {
     @DisplayName("catalog 는 조회 외의 메서드를 일절 받지 않는다")
     void catalogAcceptsReadsOnly(String method) {
         assertThat(matchedRouteId(HttpMethod.valueOf(method), "/api/v1/products/1")).isNull();
+        assertThat(matchedRouteId(HttpMethod.valueOf(method), "/api/v1/products/by-code/GAME-001")).isNull();
     }
 
     @Test
@@ -77,6 +78,11 @@ class GatewayRouteTest {
     void productLookupIsPublic() {
         assertThat(matchedRouteId(HttpMethod.GET, "/api/v1/products/1")).isEqualTo("catalog-public");
         assertThat(matchedRouteId(HttpMethod.GET, "/api/v1/products")).isEqualTo("catalog-public");
+        // code 로 찾는 경로도 같은 라우트가 덮는다. Path=/api/v1/products/** 라 새 라우트 없이
+        // 열리므로, 열린다는 사실 자체를 여기 적어 둔다 — 이 저장소는 도달 가능성을
+        // 라우팅 표로만 통제하고, 표의 변화는 이 테스트로만 보인다.
+        assertThat(matchedRouteId(HttpMethod.GET, "/api/v1/products/by-code/GAME-001"))
+                .isEqualTo("catalog-public");
     }
 
     @ParameterizedTest(name = "{0} {1} → {2}")

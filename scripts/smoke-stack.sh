@@ -16,9 +16,28 @@ set -uo pipefail
 NET=stove_default
 RUNNER=(docker run --rm --network "$NET" curlimages/curl:latest -s)
 
-pass=0; fail=0
+# 이 스크립트가 온전히 돌았을 때 내려야 하는 판정의 수.
+#
+# 판정 지점을 늘렸으면 이 값도 같이 올린다. 손으로 유지해야 하는 것이 단점처럼 보이지만,
+# 그 브리틀함이 목적이다 — 늘어나는 것은 정상이고 **모르게 줄어드는 것이 사고**다.
+# 커밋된 OpenAPI 스냅샷을 의도적으로 갱신하는 것과 같은 성질이다(decisions.md 18번).
+EXPECTED_CHECKS=58
+
+pass=0; fail=0; incomplete=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf '  \033[31m✗\033[0m %s — %s\n' "$1" "$2"; fail=$((fail+1)); }
+
+# require <설명> <값> — 값이 비면 이후 구간을 돌 수 없다.
+#
+# 건너뛴 구간은 pass 에도 fail 에도 잡히지 않으므로, 말하지 않으면 요약에서 사라진다.
+# 실제로 그랬다 — 상품을 못 찾으면 트랙 B·C·3-B 38건이 통째로 빠지는데 요약은
+# "실패 1건"만 보여줬다. 통과처럼 읽히는 미실행이 이 스크립트의 가장 조용한 실패였다.
+require() {
+    [ -n "$2" ] && return 0
+    printf '  \033[33m⊘\033[0m 전제 불충족: %s — 이후 구간을 검증하지 않았다\n' "$1"
+    incomplete=1
+    return 1
+}
 
 # req <이름> <기대 상태코드> <curl 인자...>
 req() {
@@ -87,24 +106,19 @@ await "review: 자동 승인 (GameRegistered 수신)" 60 \
 await "studio: 상태 역전파 APPROVED" 60 \
     bash -c "\"\$@\" -H 'X-Seller-Id: $SELLER' http://studio:8085/api/v1/studio/games | grep -q '\"productCode\":\"$CODE\".*\"status\":\"APPROVED\"'" _ "${RUNNER[@]}"
 
-# catalog 는 ReviewApproved 로 상품 마스터를 만든다. 다만 목록(GET /products)은
-# getOnSaleProducts() 라 판매 시작 전에는 뜨지 않는다 — 상세로 찾는다.
-PRODUCT_ID=""
-for _ in $(seq 1 30); do
-    for id in $(seq 1 12); do
-        if "${RUNNER[@]}" "http://catalog:8081/api/v1/products/$id" 2>/dev/null | grep -q "\"productCode\":\"$CODE\""; then
-            PRODUCT_ID=$id; break 2
-        fi
-    done
-    sleep 2
-done
-if [ -n "$PRODUCT_ID" ]; then
-    ok "catalog: 상품 마스터 생성 (ReviewApproved 수신, productId=$PRODUCT_ID)"
-else
-    bad "catalog: 상품 마스터 생성" "$CODE 를 상세 조회로도 못 찾았다"
-fi
+# catalog 는 ReviewApproved 로 상품 마스터를 만든다. 목록(GET /products)은
+# getOnSaleProducts() 라 판매 시작 전에는 뜨지 않으므로 productCode 로 직접 집는다.
+#
+# 예전에는 id 1~12 를 상세 조회로 훑었다. 스택이 재사용되고 볼륨이 남아 상품이 계속
+# 쌓이므로 **정해진 상한을 넘는 순간 조용히 못 찾게 되는** 구조였다 —
+# 실측 시점에 이미 10/12 였고 두 번 더 돌리면 깨질 참이었다.
+PRODUCT_URL="http://catalog:8081/api/v1/products/by-code/$CODE"
+await "catalog: 상품 마스터 생성 (ReviewApproved 관통)" 60 \
+    has "$PRODUCT_URL" "\"productCode\":\"$CODE\""
+PRODUCT_ID=$("${RUNNER[@]}" "$PRODUCT_URL" | grep -o '"productId":[0-9]*' | head -1 | cut -d: -f2)
+[ -n "$PRODUCT_ID" ] && echo "    productId=$PRODUCT_ID"
 
-if [ -n "$PRODUCT_ID" ]; then
+if require "상품 ID (트랙 A 노출 · B · C · 3-B)" "$PRODUCT_ID"; then
     req "catalog: 판매 시작 → ProductChanged" 200 \
         -X POST "http://catalog:8081/api/v1/products/$PRODUCT_ID/sale-open"
     await "catalog: ON_SALE 목록 노출" 30 \
@@ -139,7 +153,7 @@ if [ -n "$PRODUCT_ID" ]; then
     echo "    orderNo=$ORDER_NO memberId=$MEMBER"
 fi
 
-if [ -n "$ORDER_NO" ]; then
+if require "주문번호 (트랙 B 결제 · C)" "$ORDER_NO"; then
     await "payment: 결제 대기 생성 (OrderCreated 관통)" 60 \
         has "http://payment:8083/api/v1/payments/$ORDER_NO" '"status":"READY"'
 
@@ -257,7 +271,7 @@ if [ -n "$PRODUCT_ID" ]; then
         -d "{\"memberId\":$MEMBER,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}],\"expectedAmount\":$PRICE}"
     FAIL_ORDER_NO=$(printf '%s' "$BODY" | grep -o '"orderNo":"[^"]*"' | head -1 | cut -d'"' -f4)
 
-    if [ -n "$FAIL_ORDER_NO" ]; then
+    if require "실패 검증용 주문번호 (3-B)" "$FAIL_ORDER_NO"; then
         await "payment: 결제 대기 생성" 60 \
             has "http://payment:8083/api/v1/payments/$FAIL_ORDER_NO" '"status":"READY"'
 
@@ -317,6 +331,27 @@ done
 
 echo
 echo "════════════════════════════════"
-printf '  통과 %d / 실패 %d\n' "$pass" "$fail"
+
+# 판정이 기대보다 적다는 것은 어딘가가 돌지 않았다는 뜻이다. require 가 잡지 못한
+# 누락 — 새로 넣은 가드, 조기 return, 오타로 통째로 빠진 구간 — 을 여기서 센다.
+ran=$((pass + fail))
+missing=$((EXPECTED_CHECKS - ran))
+if [ "$missing" -gt 0 ]; then
+    printf '  통과 %d / 실패 %d / \033[33m미실행 %d\033[0m  (기대 %d)\n' \
+        "$pass" "$fail" "$missing" "$EXPECTED_CHECKS"
+    incomplete=1
+elif [ "$missing" -lt 0 ]; then
+    printf '  통과 %d / 실패 %d  (기대 %d — 판정이 늘었다. EXPECTED_CHECKS 를 올린다)\n' \
+        "$pass" "$fail" "$EXPECTED_CHECKS"
+    incomplete=1
+else
+    printf '  통과 %d / 실패 %d\n' "$pass" "$fail"
+fi
 echo "════════════════════════════════"
-[ "$fail" -eq 0 ]
+
+# 종료 코드를 가른다 — "코드가 깨졌다"와 "검증하지 못했다"는 대응이 다르다.
+#   0 전부 통과   1 검증 실패   3 불완전 실행(구간 누락)
+# 실패와 불완전이 겹치면 실패가 우선이다. 고칠 것이 이미 손에 있다.
+[ "$fail" -eq 0 ] || exit 1
+[ "$incomplete" -eq 0 ] || exit 3
+exit 0
