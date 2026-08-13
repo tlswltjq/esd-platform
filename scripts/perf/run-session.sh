@@ -305,16 +305,38 @@ if r:
     for g, t in keys:
         sel = [x for x in r if x["group"] == g and x["topic"] == t]
         lags = [num(x["lag"]) for x in sel if num(x["lag"]) is not None]
-        cons = [num(x["consumed_per_s"]) for x in sel if num(x["consumed_per_s"]) is not None]
         # **마지막 표본**의 값을 본다. 최대값으로 보면 스택을 막 띄운 직후의 "아직 커밋 없음"이
         # 세션 내내 경고로 남아, 정말 못 읽고 있는 그룹과 구분되지 않는다.
         unknown = num(sel[-1]["unknown_partitions"]) or 0
         moved = float(sel[-1]["current_offset"]) - float(sel[0]["current_offset"])
         if not lags:
             continue
+
+        # 소비율을 **둘로 가른다.** 하나로 내면 그 값이 어느 구간의 것인지 알 수 없고,
+        # 실제로 그것 때문에 14-5 가 존재하지 않는 "배수 속도 1.7배 차이" 를 만들었다 —
+        # 13장 표는 평균(건수÷창)이었고 14장 표는 이 줄의 최대값이었는데,
+        # **이 최대는 대개 부하가 끝난 뒤 드레인 구간에서 나온다**(유입이 없어 제일 빠르다).
+        # 양쪽 다 자기 회차 안에서는 정확한 값이었고, 비교하는 순간에만 거짓이 됐다.
+        #
+        #   정상      유입이 도는 구간의 중앙값  ← **조건 비교에 쓰는 값은 이것이다**
+        #   드레인    부하가 끝난 뒤의 최대      ← 배수 능력. 비교에 쓰지 않는다
+        #
+        # 중앙값인 이유는 폴 주기와 커밋 타이밍 때문에 초 단위 표본이 튀기 때문이다.
+        steady = sorted(num(x["consumed_per_s"]) for x in sel
+                        if num(x["consumed_per_s"]) is not None
+                        and (num(x["produced_per_s"]) or 0) > 1)
+        drain = [num(x["consumed_per_s"]) for x in sel
+                 if num(x["consumed_per_s"]) is not None
+                 and (num(x["produced_per_s"]) or 0) <= 1]
+        # 표본이 없으면 **0 이 아니라 `-` 다.** 유입이 없는 시나리오(스모크)나 유휴 토픽에서
+        # 0.0/s 를 적으면 "안 밀렸다"와 "잴 구간이 없었다"가 같은 그림이 된다 —
+        # D-026 을 만든 습관과 정확히 같은 것이라 여기서는 하지 않는다(규칙 3).
+        med = f"{steady[len(steady) // 2]:5.1f}" if steady else "    -"
+        dmax = f"{max(drain):5.1f}" if drain else "    -"
+
         note = f"  ⚠ 커밋 없는 파티션 {unknown:.0f}" if unknown else ""
         out.append(f"  {g:<11} {t:<18} 랙 최대 {max(lags):>7.0f} / 최종 {lags[-1]:>7.0f}   "
-                   f"소비 {moved:>6.0f}건, 최대 {max(cons) if cons else 0:>6.1f}/s{note}")
+                   f"소비 {moved:>6.0f}건  정상 {med}/s  드레인최대 {dmax}/s{note}")
     out.append("")
 
 # 리스너 처리시간·예외. 랙이 왜 쌓였는지는 이쪽이 말한다.

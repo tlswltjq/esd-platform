@@ -4,7 +4,7 @@ Outbox 릴레이 처리량을 재고, 개선 전후를 같은 조건으로 비�
 측정 결과와 분석은 [docs/performance.md](../../docs/performance.md) 에 있다.
 
 **이 문서는 "무엇으로 어떻게 돌리나"다. "왜 그렇게 돌려야 하나"는
-[docs/measuring.md](../../docs/measuring.md)** — 아래 절차의 근거가 되는 규칙 10개와
+[docs/measuring.md](../../docs/measuring.md)** — 아래 절차의 근거가 되는 규칙 11개와
 각 규칙을 만든 사건이 거기 있다. 여기 도구는 그 규칙을 코드로 옮긴 것이다.
 
 ## 왜 이걸 재는가
