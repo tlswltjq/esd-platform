@@ -29,6 +29,20 @@ const fulfillmentLatency = new Trend('e2e_fulfillment_latency', true);
 /** 제한 시간 안에 지급이 확인된 비율. 지연 분포는 도달한 것만 말해 주므로 이 값이 함께 필요하다. */
 const fulfilled = new Rate('e2e_fulfillment_ok');
 
+/**
+ * 엔드포인트별 응답시간.
+ *
+ * <p><b>`http_req_duration` 하나로는 이 시나리오를 읽을 수 없다.</b> 한 반복이 주문 생성 1회,
+ * 결제 조회 폴링 N회, 승인 1회, 라이브러리 폴링 M회를 보내는데 폴링이 건수를 압도한다 —
+ * 총계는 사실상 "폴링이 얼마나 빨랐나"가 되고, 정작 쓰기 경로인 승인은 묻힌다.
+ *
+ * <p>승인을 따로 떼는 이유가 하나 더 있다. payment 의 리스너 스레드와 HTTP 스레드는
+ * <b>같은 HikariCP 풀</b>을 쓴다. {@code listener.concurrency} 를 올렸을 때 그 대가가
+ * 나타난다면 여기다 — 풀을 놓고 다투는 쓰기 요청.
+ */
+const orderCreateLatency = new Trend('order_create_latency', true);
+const paymentCallbackLatency = new Trend('payment_callback_latency', true);
+
 const POLL_LIMIT_MS = 60_000;
 const POLL_INTERVAL_S = 0.5;
 
@@ -48,6 +62,11 @@ export const options = {
     fanout: { executor: 'constant-vus', vus: 5, duration: '2m' },
   },
   thresholds: {
+    // 1번(주문 생성) 실패는 fulfilled 에 아무것도 기록하지 않고 return 한다 —
+    // 그 회차는 e2e_fulfillment_ok 의 분모에서 통째로 빠지므로, 앞단이 무너져
+    // 표본이 몇 건만 남아도 지급률은 100% 로 보인다. 그 구멍을 이 줄이 막는다.
+    // (dropped_iterations 는 constant-vus 라 해당 없음)
+    checks: ['rate>0.99'],
     http_req_failed: ['rate<0.01'],
     // 임계값을 세우되 넉넉하게 둔다. 여기서 잡으려는 것은 "느리다" 가 아니라 **끊겼다** 이다.
     e2e_fulfillment_ok: ['rate>0.95'],
@@ -64,6 +83,7 @@ export default function () {
     JSON.stringify({ memberId, items: [{ productId, quantity: 1 }] }),
     { headers: JSON_HEADERS },
   );
+  orderCreateLatency.add(quote.timings.duration);
   if (!check(quote, { '주문 생성': (r) => r.status === 200 })) {
     return;
   }
@@ -92,6 +112,7 @@ export default function () {
     }),
     { headers: JSON_HEADERS },
   );
+  paymentCallbackLatency.add(callback.timings.duration);
   if (!check(callback, { '결제 승인': (r) => r.status === 200 })) {
     fulfilled.add(false);
     return;
