@@ -50,8 +50,37 @@ public class OutboxRelay {
      * <p>배치마다 트랜잭션을 따로 연다. 여러 배치를 한 트랜잭션으로 묶으면
      * {@code FOR UPDATE SKIP LOCKED} 락 보유 시간이 그만큼 길어져,
      * 같은 커넥션 풀을 쓰는 API 응답까지 끌어내린다.
+     *
+     * <p><b>{@code poll-interval-ms} 는 한산할 때의 지연을 혼자 정한다.</b> 적체가 있으면 위 루프가
+     * 안 쉬고 도니 이 값이 거의 안 걸리지만, 평상시에는 커밋된 이벤트가 다음 폴링까지 그냥 기다린다 —
+     * 평균 {@code interval/2}, 최악 {@code interval}. 아무도 릴레이를 깨워주지 않기 때문이고,
+     * 그래서 이 값이 <b>종단 지연의 바닥</b>이다.
+     *
+     * <p>1000 에서 200 으로 낮췄다. 대가인 빈 폴링은 트랜잭션 하나에 인덱스 조회 한 방이라 싸다 —
+     * 주기를 5분의 1로 줄였을 때 mysql CPU 가 7.3% → 8.8% 였고 종단 p95 는 1.30s → 0.56s 였다
+     * ({@code docs/perf-tuning.md}). 중앙값의 개선폭은 측정 도구가 0.5초마다 확인하는 구조라 못 쟀다.
+     *
+     * <p><b>여기서 더 낮추려면 상수로는 안 된다 — 적응형 폴링이 다음 수순이다.</b>
+     * 0건이면 지수 백오프, 한 건이라도 잡히면 최소 주기로 리셋. 여기에 <b>커밋 후</b> 깨우기를 얹으면
+     * 바닥값을 아예 안 낸다. 쓰는 쪽과 릴레이가 같은 JVM 이라 인프로세스 신호로 충분하다
+     * ({@code @TransactionalEventListener(AFTER_COMMIT)}). 세 가지를 틀리면 조용히 깨진다.
+     * <ul>
+     *   <li><b>커밋 전에 깨우면 안 된다</b> — 릴레이가 조회해도 그 행이 아직 안 보인다.
+     *       0건 보고 다시 자면서 신호만 소모한다.</li>
+     *   <li><b>신호는 큐가 아니라 플래그다</b> — "다시 봐라" 한 번이면 된다.
+     *       신호를 쌓으면 그것이 또 하나의 아웃박스가 된다.</li>
+     *   <li><b>폴링을 지우면 안 된다</b> — 신호는 지연을 줄이는 최적화고, 정확성을 보증하는 것은 폴링이다.
+     *       커밋과 신호 사이에 죽거나 PENDING 이 남은 채로 재기동하면 신호는 오지 않는다.</li>
+     * </ul>
+     * {@code fixedDelayString} 은 기동 시 한 번 바인딩되어 런타임에 못 바꾸므로,
+     * {@code SchedulingConfigurer} + 커스텀 {@code Trigger} 로 갈아야 한다.
+     *
+     * <p>지금 하지 않는 이유는 200ms 의 실측 대가가 1.5%p 뿐이어서다. 100ms 밑을 노려
+     * 한산할 때도 그 비용을 계속 내기 시작하면 그때 값이 생긴다. 판단 근거가 될
+     * <b>"0건으로 끝난 회차 수"는 지금 아무도 재지 않는다</b> — {@link OutboxMetrics} 에 한 줄이면 된다.
+     * 폴링 자체를 없애는 길은 binlog CDC 이고, 그쪽은 위 클래스 주석의 "릴레이 1대" 제약도 같이 푼다.
      */
-    @Scheduled(fixedDelayString = "${stove.outbox.poll-interval-ms:1000}")
+    @Scheduled(fixedDelayString = "${stove.outbox.poll-interval-ms:200}")
     public void relay() {
         for (int cycle = 0; cycle < properties.maxBatchesPerCycle(); cycle++) {
             int processed = relayOneBatch();

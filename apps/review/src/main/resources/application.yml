@@ -51,7 +51,7 @@ stove:
   outbox:
     relay-enabled: true
     batch-size: 200
-    poll-interval-ms: 1000
+    poll-interval-ms: 200   # 한산할 때 종단 지연의 바닥 — 근거와 적응형 폴링 검토는 OutboxRelay 주석
     max-retry: 10
 
 management:
