@@ -30,6 +30,18 @@ scrape_configs:
           - download:8088
           - settlement:8089
 
+  # 컨슈머 랙. **앱에서 긁을 수 없어 따로 있는 잡이다.**
+  #
+  # 앱의 `kafka_consumer_fetch_manager_records_lag` 는 stove-services 로 이미 긁히지만
+  # 그 값을 믿을 수 없다 — 실제 랙 113,517건 동안 0 을 보고했다(D-026).
+  # 컨슈머 클라이언트가 직전 fetch 에서 본 값이라 fetch 가 멈추면 갱신되지 않는다.
+  #
+  # 익스포터는 브로커의 커밋 오프셋을 직접 읽으므로 컨슈머가 죽어 있어도 참이다.
+  # 알람이 걸린 쪽(alerts.yml 의 stove-consumer 그룹)은 전부 이쪽 지표다.
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: [kafka-exporter:9308]
+
   # 호스트 bootRun 용 (기본은 꺼 둔다 — 컨테이너 스택과 동시에 켜면 같은 앱이 두 번 잡힌다)
   #
   # - job_name: stove-services-host

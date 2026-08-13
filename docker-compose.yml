@@ -63,6 +63,33 @@ services:
     depends_on:
       - kafka
 
+  # 컨슈머 랙을 Prometheus 시계열로 올린다.
+  #
+  # **왜 앱 지표로는 안 되나** — 앱이 노출하는
+  # `kafka_consumer_fetch_manager_records_lag` 는 컨슈머 클라이언트가 직전 fetch 응답에서
+  # 본 값이다. 그래서 fetch 가 돌지 않는 동안(컨슈머 정지·리밸런싱·유휴 파티션)에는 갱신되지
+  # 않는다 — **실제 랙 113,517건 동안 0 을 보고했다**(docs/perf-tuning.md 4절, D-026).
+  # 랙이 가장 큰 순간이 그 지표가 가장 못 미더운 순간이다.
+  #
+  # 이 익스포터는 브로커에게 커밋 오프셋과 로그 끝 오프셋을 직접 물어 차이를 낸다.
+  # 컨슈머가 죽어 있어도 참인 값이고, **컨슈머가 죽었을 때야말로 랙을 알아야 한다.**
+  #
+  # `stove_outbox_pending` 으로는 대신할 수 없다. 그쪽은 발행이 끝나면 0 이다 —
+  # 적체가 브로커로 옮겨간 것뿐인데 생산자 지표만 보면 해소된 것처럼 보인다.
+  # 이 익스포터가 그 사각을 메운다.
+  #
+  # 태그를 박는다(mysql·kafka·mongo·tempo 와 같은 이유). v1.9.0 은 amd64·arm64 둘 다 있어
+  # 로컬 x86 과 CI 의 aarch64 에서 같은 이미지가 뜬다.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: stove-kafka-exporter
+    command: ["--kafka.server=kafka:19092", "--web.listen-address=:9308"]
+    ports:
+      - "9308:9308"
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
   # store 검색 색인
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.18.6
