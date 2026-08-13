@@ -62,6 +62,12 @@ esac
 INTERVAL="${INTERVAL:-1}"
 NET="${PERF_NETWORK:-stove_default}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
+# **리포 안의 상대경로여야 한다.** k6 는 컨테이너로 돌고 리포를 `/w` 에 마운트하므로
+# 요약 파일 경로를 `/w/$OUT_DIR` 로 넘긴다 — 절대경로를 주면 `/w//abs/...` 가 되어
+# **k6 요약만 조용히 사라지고 CSV 는 정상으로 쌓인다.** 부분적으로만 실패해서 알아채기 어렵다.
+case "${OUT_DIR:-perf-results}" in
+    /*) echo "OUT_DIR 는 리포 기준 상대경로여야 한다 (k6 가 컨테이너에서 쓴다): ${OUT_DIR}" >&2; exit 1 ;;
+esac
 OUT_DIR="${OUT_DIR:-perf-results}/${STAMP}-${SCENARIO}${LABEL:+-$LABEL}"
 mkdir -p "$OUT_DIR"
 

@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -23,6 +24,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -58,10 +60,29 @@ class ConsumerLagMetricTest {
 
     private static String bootstrap;
 
+    /**
+     * 판정이 끝날 때까지 열어 둔 컨슈머들. {@link Fixture} 가 왜 열린 채로 반환되는지는 그쪽에 적었다.
+     *
+     * <p>여기 모아 두는 이유 — <b>JUnit 은 필드를 닫아 주지 않는다.</b> {@code KafkaConsumer} 는
+     * 자체 스레드를 들고 있어 참조가 끊겨도 JVM 이 끝날 때까지 남는다. 컨테이너를 공유하는
+     * 통합 테스트라 실해는 작지만, 이 리포에서 주석은 근거로 인용되므로 틀린 설명을 남기는 값이 더 크다.
+     */
+    private static final List<Fixture> open = new ArrayList<>();
+
     @BeforeAll
     static void startBroker() {
         SharedContainers.KAFKA.start();
         bootstrap = SharedContainers.KAFKA.getBootstrapServers();
+    }
+
+    /** 판정이 다 끝난 뒤에 닫는다 — 테스트 도중에 닫으면 지표가 사라져 판정 자체가 성립하지 않는다. */
+    @AfterAll
+    static void closeConsumers() {
+        for (Fixture fixture : open) {
+            fixture.metrics().close();
+            fixture.consumer().close();
+        }
+        open.clear();
     }
 
     @Test
@@ -126,12 +147,14 @@ class ConsumerLagMetricTest {
         //    죽었거나, 리밸런싱에 묶였거나, 리스너가 한 건에서 재시도를 돌고 있는 상태다.
         send(name, BACKLOG);
 
-        return new Fixture(name, partition, registry, consumer, metrics);
+        Fixture fixture = new Fixture(name, partition, registry, consumer, metrics);
+        open.add(fixture);
+        return fixture;
     }
 
     /**
      * 컨슈머를 열어 둔 채로 판정한다 — 닫으면 지표도 같이 사라져 "0 을 보고한다"와
-     * "지표가 없다"를 구분할 수 없다. JUnit 이 인스턴스를 버릴 때 함께 정리된다.
+     * "지표가 없다"를 구분할 수 없다. 정리는 {@link #closeConsumers()} 가 판정 뒤에 한다.
      */
     private record Fixture(String group, TopicPartition partition, SimpleMeterRegistry registry,
                            KafkaConsumer<String, String> consumer, KafkaClientMetrics metrics) {

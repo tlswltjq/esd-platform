@@ -98,11 +98,16 @@ groups:
       # 컨슈머가 죽어도 브로커의 커밋 오프셋은 남아 있으므로 이 식은 그때도 참을 말한다.
       #
       # delta 를 쓰는 것은 이 값이 카운터가 아니라 게이지이기 때문이다.
+      #
+      # **`for` 를 두지 않는다.** 지속 조건은 이미 `[5m]` 안에 들어 있다 —
+      # 5분 창의 delta 가 0 이라는 것 자체가 "5분간 안 움직였다" 이다.
+      # 여기에 `for: 5m` 을 더하면 그 상태가 다시 5분 유지되어야 울려 실제 발화가 10분이 되는데,
+      # 정작 description 은 5분이라고 말한다. **critical 알람에서 시계가 두 배로 어긋난다.**
+      # 위 ConsumerLagGrowing 의 `for: 10m` 은 창 없는 순간값에 붙은 것이라 사정이 다르다.
       - alert: ConsumerStalled
         expr: >-
           kafka_consumergroup_lag_sum > 0
           and delta(kafka_consumergroup_current_offset_sum[5m]) == 0
-        for: 5m
         labels:
           severity: critical
         annotations:
