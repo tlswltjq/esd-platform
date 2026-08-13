@@ -74,7 +74,22 @@ RESET=1 RATE=60 DURATION=60s ./scripts/perf/run-session.sh soak relay-on
 
 # 4. 종단 지연 + 받는 쪽 — 결제 승인에서 라이선스 지급까지
 ./scripts/perf/run-session.sh fanout
+
+# 5. 컨슈머 조건 비교 — 배경 부하로 포화시킨 위에서 잰다. 조건당 2회 + 대조군
+./scripts/perf/run-condition.sh 1 c1-r1
+./scripts/perf/run-condition.sh 3 c3-r1
+./scripts/perf/run-condition.sh 3 c3-r2
+./scripts/perf/run-condition.sh 1 c1-recheck   # A → B → A
 ```
+
+**5번이 4번과 다른 점은 부하가 둘이라는 것이다.** `fanout` 단독으로 `concurrency` 를 재면
+차이가 안 나는데, 그건 영향이 없어서가 아니라 **압박이 없어서다** — 5 VU 는 초당 2.3건이라
+풀 20개 중 3개를 쓰고 랙이 최대 3이다(13-2). 그 위에서 스레드를 늘려 봐야 나눌 일이 없다.
+`run-condition.sh` 는 order 를 60 RPS 로 밀어 컨슈머를 포화시켜 두고 그 위에 `fanout` 을 얹는다.
+
+그리고 **회차마다 되돌리고, 되돌아갔는지 센다.** DB 만이 아니라 오프셋까지다 —
+`--reset-offsets` 는 두 가지 이유로 조용히 실패한 적이 있고(13-8 경합, 14-6 변수 이름)
+둘 다 성공률 0% 회차를 만들었다. 리셋 직후와 부하 직전에 랙을 세고, 넘으면 회차를 시작하지 않는다.
 
 `run-session.sh` 가 **수집기 넷을 k6 보다 먼저 켜고 나중에 끈다.** 손으로 `&` 와 `kill %1` 을
 쓰던 절차를 대신하는데, 편의가 목적이 아니다 — 수집기가 넷이 되면 그 손절차가
