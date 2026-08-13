@@ -121,7 +121,7 @@ void lateRecordShouldBeSettledOnNextClose() {
 `test` 태스크만 `excludeTags 'known-defect'` 를 걸었다.
 `tasks.withType(Test)` 로 걸면 `defectTest` 까지 같이 걸러져 아무것도 돌지 않는다.
 
-**현재 태그가 붙은 테스트는 0건이다** — D-001~D-024 가 전부 수정돼 태그가 떨어졌다.
+**현재 태그가 붙은 테스트는 0건이다** — D-001~D-025 가 전부 수정돼 태그가 떨어졌다.
 
 그래서 `defectTest` 는 합산해서 말한다. 모듈별 태스크는 `ignoreFailures = true` 라
 실패해도 초록이고, 태그가 없으면 아무것도 출력하지 않는다 — 그대로 두면
@@ -310,7 +310,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 | **license** | ~~`recordIssueFailure` 가 한 번도 실행되지 않는다~~ → `LicenseIssueFailureTest` 가 **바깥 트랜잭션을 롤백시켜** `REQUIRES_NEW` 를 검증한다 | ✅ |
 | **license** | ~~`republishedEventCarriesFullOwnership` 이 저장소 크기만 단언~~ → 이벤트 페이로드를 파싱해 소유 상태 전체가 실리는지 본다. 회수 이벤트의 "변경된 것만" 도 덮었다 | ✅ |
 | **catalog** | `Product` 의 `applyReviewApproval` `REVIEWING` 분기, `suspend` 무가드. `ProductView` 를 실제 Redis 직렬화기로 왕복(이 클래스의 존재 이유가 역직렬화 가능성이다) | 미커버 |
-| **catalog** | ~~`?sort=<모르는 속성>` → 500~~ → **[D-024](defects.md#d-024) 로 확인·수정.** 서비스가 허용 키를 명시하고 400 으로 응답한다. 저장소에서 `Pageable` 을 직접 받는 유일한 컨트롤러였다 | ✅ |
+| **catalog** | ~~`?sort=<모르는 속성>` → 500~~ → **[D-024](defects.md#d-024) 로 확인·수정.** 서비스가 허용 키를 명시하고 400 으로 응답한다. 저장소에서 `Pageable` 을 직접 받는 유일한 컨트롤러였다. 이어서 **[D-025](defects.md#d-025)** 가 열어 준 키의 결정성까지 닫았다 — 꼬리표(`id desc`)가 붙고, 통합 테스트가 상태 코드가 아니라 **순서**를 단언한다 | ✅ |
 | **review** | `approve`/`reject`/`getRequests` — 접수 경로는 덮었지만 결정 경로가 남았다 | 미커버 |
 | **review** | ~~`approvalUsesGivenRating` 이 `anyString()` 으로 단언~~ → `approve(2L, "ADULT")` 로 값을 고정했다 | ✅ |
 | **order** | `CatalogRestAdapterTest` 가 catalog 4xx → 503 을 고정한다. D-019 수정으로 잘못된 수량이 order 에서 걸리므로 재검토 대상 | 판단 필요 |

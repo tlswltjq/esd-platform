@@ -69,6 +69,11 @@ public class ProductQueryService {
      *
      * <p>컨트롤러가 아니라 여기서 막는 이유는 D-019 와 같다. 어댑터에만 두면 그 경로 하나만
      * 지켜지고, 어댑터는 늘어난다.
+     *
+     * <p>같은 이유로 <b>정렬을 주지 않은 요청도</b> {@link ProductSort} 를 통과한다 —
+     * 거기서 {@code id desc} 를 받는다. {@code ORDER BY} 없는 {@code LIMIT/OFFSET} 은
+     * 페이지 사이의 순서를 보장하지 않아, 페이지를 넘기는 클라이언트가 같은 상품을 두 번 받고
+     * 어떤 상품은 한 번도 못 받는다(D-025).
      */
     public Page<ProductView> getOnSaleProducts(Pageable pageable) {
         return productRepository.findByStatus(ProductStatus.ON_SALE, ProductSort.apply(pageable))

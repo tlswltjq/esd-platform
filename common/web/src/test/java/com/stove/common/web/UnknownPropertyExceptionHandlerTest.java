@@ -5,9 +5,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.data.util.TypeInformation;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +40,13 @@ class UnknownPropertyExceptionHandlerTest {
         String list() {
             // Spring Data 가 정렬 키를 엔티티 속성으로 해석하다 던지는 것과 같은 예외다.
             throw new PropertyReferenceException("productId", TypeInformation.of(Product.class), List.of());
+        }
+
+        /** 속성 이름은 요청이 정한다 — 여기 오는 값에는 무엇이든 들어 있을 수 있다. */
+        @GetMapping("/forged")
+        String forged() {
+            throw new PropertyReferenceException(
+                    "price\n2026-08-13 ERROR 가짜 줄", TypeInformation.of(Product.class), List.of());
         }
     }
 
@@ -75,5 +86,32 @@ class UnknownPropertyExceptionHandlerTest {
         // 내부 구조는 알려 주지 않는다. 원본 메시지를 그대로 실으면 둘 다 나간다.
         // 타입명은 대문자 P 로 시작하므로 위의 productId 와 겹치지 않는다.
         assertThat(body).doesNotContain("Product", "No property", "found for type");
+    }
+
+    /**
+     * <b>로그를 붙잡아서 본다</b> [D-025] — 응답으로는 이 성질을 확인할 수 없다.
+     * JSON 직렬화가 개행을 이스케이프하므로 <b>막지 않아도 응답 본문에는 날 개행이 없다.</b>
+     * 위조가 실제로 일어나는 곳은 로그 스트림이고, 그래서 어펜더를 붙여 그 줄을 직접 읽는다.
+     */
+    @Test
+    @DisplayName("[D-025] 요청이 보낸 속성 이름이 로그 줄을 위조하지 못한다")
+    void echoedPropertyCannotForgeALogLine() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(UnknownPropertyExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            mockMvc.perform(get("/forged")).andExpect(status().isBadRequest());
+
+            assertThat(appender.list).isNotEmpty();
+            assertThat(appender.list).allSatisfy(event -> {
+                assertThat(event.getFormattedMessage()).doesNotContain("\n", "\r");
+                // 진단은 남아야 한다 — 클라이언트 오타와 서버가 만든 잘못된 Sort 를 가르는 것이 타입명이다.
+                assertThat(event.getFormattedMessage()).contains(Product.class.getName());
+            });
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 }

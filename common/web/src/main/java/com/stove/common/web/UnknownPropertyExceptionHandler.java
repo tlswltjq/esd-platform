@@ -1,5 +1,6 @@
 package com.stove.common.web;
 
+import com.stove.common.core.error.EchoedInput;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.core.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <p>두 번째 이유는 클래스패스다. 스프링 데이터가 없는 실행에서 이 타입을 참조하는 메서드가
  * {@code GlobalExceptionHandler} 안에 있으면 어드바이스를 훑는 순간 기동이 깨진다.
  * 클래스를 나눠 두면 {@link CommonWebAutoConfiguration} 이 조건부로 등록을 건너뛸 수 있다.
+ *
+ * <p><b>맞바꾼 것</b> [D-025] — 이 예외는 클라이언트 오타로도 나지만 <b>서버가 만든</b>
+ * 잘못된 {@code Sort.by("...")} 로도 난다. 후자까지 400 이 되므로 5xx 알람은 울리지 않는다.
+ * 그래서 <b>타입명은 로그에 남긴다</b> — 그 둘을 구분해 주는 유일한 단서다.
+ * 나가면 안 되는 것은 응답이지 로그가 아니다. 반대로 <b>요청이 보낸 속성 이름은 양쪽 다</b>
+ * {@code EchoedInput} 을 통과한다 — 응답은 인용하기 때문이고, 로그는 개행 한 글자로
+ * 줄이 위조되기 때문이다.
  */
 /*
  * @Order 가 반드시 있어야 한다.
@@ -53,9 +61,15 @@ public class UnknownPropertyExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnknownProperty(PropertyReferenceException e) {
         // 스택 트레이스를 남기지 않는다. 잘못된 요청 하나마다 한 건씩 쌓여
         // 5xx 로그의 신호 대 잡음비를 떨어뜨린다(D-015 와 같은 이유).
-        log.warn("unknown property: {}", e.getPropertyName());
+        //
+        // 타입명은 로그에만 남긴다 — 어느 타입에서 못 찾았는지가 있어야 클라이언트 오타와
+        // 서버가 만든 잘못된 Sort 를 구분할 수 있다(D-025). 원본 메시지를 통째로 싣지 않는 이유는
+        // 그 안에 요청 문자열이 들어 있기 때문이다. 타입은 서버가 정한 값이라 그대로 안전하다.
+        log.warn("unknown property: {} (type: {})",
+                EchoedInput.safe(e.getPropertyName()), e.getType().getType().getName());
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.status())
                 .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
-                        "알 수 없는 속성입니다: " + e.getPropertyName()));
+                        // 응답에는 속성 이름만, 그것도 되싣기 안전한 형태로만 나간다.
+                        "알 수 없는 속성입니다: " + EchoedInput.safe(e.getPropertyName())));
     }
 }
