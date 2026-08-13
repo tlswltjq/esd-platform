@@ -29,8 +29,11 @@
 | [testing.md](testing.md) | 테스트 계층 L0~L5, 격리, 뮤테이션 테스트, 아직 남은 공백 |
 | [event-ordering.md](event-ordering.md) | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |
 | [performance.md](performance.md) | 릴레이 처리량 138 → 480.5 events/s, HTTP 경로 재측정(9장), **받는 쪽 측정(12·13장)** |
+| [measuring.md](measuring.md) | **측정을 어떻게 하는가.** 규칙 10개와 각 규칙을 만든 사건. 새 측정을 시작하기 전에 읽는다 |
 
 측정 도구 자체는 [scripts/perf/](../scripts/perf/) 에 있다 — k6 시나리오와 릴레이 배수 하네스.
+**결과가 performance.md 라면 방법은 measuring.md 다** — 7장이 통째로 무효였던 것 같은 일을
+다시 겪지 않으려고 규칙을 한자리에 모았다.
 
 ## 노트·기록 — 특정 시점의 산물이다
 

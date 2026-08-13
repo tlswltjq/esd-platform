@@ -57,6 +57,7 @@ stove/
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
 | 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
+| 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
 | 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
 | 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
 

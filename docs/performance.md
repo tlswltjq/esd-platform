@@ -20,6 +20,8 @@
 > `listener.concurrency` 는 **올리지 않기로 했다**(파티션 3개는 확장 여지, 스레드는 1 유지).
 
 측정 도구는 [scripts/perf/](../scripts/perf/), 관련 결함은 [defects.md](defects.md) 참고.
+**여기 숫자를 어떤 규칙으로 얻었는지는 [measuring.md](measuring.md)** — 아래 7·9·10·13장이
+저지른 실수에서 나온 규칙 10개를 한자리에 모았다. 새 측정을 시작하기 전에 그쪽을 먼저 본다.
 
 ---
 
