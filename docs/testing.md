@@ -400,6 +400,10 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 
 - **컨슈머 층 파티션 증설 시나리오** — ArchUnit 으로 막을 수 없는 유일한 항목이라
   운영 절차로 남아 있다 ([event-ordering.md](event-ordering.md) 5절)
+- **장애 주입** — [scripts/chaos/](../scripts/chaos/) 가 부하 중에 장애를 넣고 주문별 결말을 센다.
+  CI 에서는 돌리지 않는다(전체 스택과 수 분의 벽시계가 필요하다). 측정은 [chaos.md](chaos.md).
+  **여기서 나온 결함은 계층 테스트로는 안 나온다** — Saga 보상·컨슈머 재시도·멱등 가드·DLT 는
+  평상시에 아무 일도 하지 않아서, 경로가 성립하는 테스트로는 실행 자체가 되지 않는다
 - **부하 테스트** — [scripts/perf/](../scripts/perf/) 에 k6 시나리오와 릴레이 배수 하네스가 있다.
   CI 에서는 돌리지 않는다(실행 환경 편차가 커서 판정 기준으로 쓸 수 없다).
   측정 결과는 [performance.md](performance.md).

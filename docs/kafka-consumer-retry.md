@@ -15,6 +15,13 @@
 > 지금은 `common/kafka/ConsumerRetryPolicy.java` 가 지수 백오프를 정의하고
 > **9개 서비스 전부**가 그것을 공유한다([decisions.md](decisions.md) 19번).
 > 노트를 남겨 두는 이유는 결론보다 **왜 그런가**가 재사용되는 지식이기 때문이다.
+>
+> **그리고 이 노트가 닫았다고 본 문제에 절반이 남아 있었다.** 여기서 정리한 것은
+> 보상을 **언제** 하는가(재시도가 소진된 뒤)이고, **무엇을 보고** 하는가는 다루지 않았다.
+> recoverer 는 "재시도가 소진됐다" 하나만 보고 환불했고, 그건 *지급할 수 없다* 가 아니라
+> *네 번 물어봤는데 답을 못 받았다* 라는 뜻이다. 부하 중에 DB 를 끊어 재니
+> **60초 장애에 정상 결제 8건이 환불됐다** — D-027·D-028, 측정은 [chaos.md](chaos.md).
+> 지금 recoverer 는 관문 둘(원인이 저장소 장애인가 · 실제로 지급되지 않았는가)을 더 통과해야 보상한다.
 
 ---
 
@@ -276,6 +283,7 @@ void 지급_중_예외는_리스너_밖으로_전파되어야_한다() {
 | 왜 커밋이 중요한가 | 재시도 = `consumer.seek()` 되감기. 커밋 후엔 되감을 대상이 없음 |
 | 현재 코드의 결과 | 예외를 삼킴 → 정상 리턴 → 오프셋 커밋 → ErrorHandler 미호출 → 재시도 0회 |
 | 보상 트리거의 올바른 위치 | 리스너가 아니라 `ErrorHandler` 의 recoverer |
+| 그것만으로 충분한가 | **아니다.** 언제 보상할지를 정했을 뿐이고, 무엇을 보고 보상할지는 D-027·D-028 이 닫았다 |
 | 숨은 2차 결함 | 커스텀 ErrorHandler 없음 → 기본 `FixedBackOff(0ms, 9회)` → 예외를 빼도 5ms 만에 소진 |
 | 제약 | 블로킹 재시도 총합 < `max.poll.interval.ms`(5분). 넘으면 리밸런싱 |
 
@@ -295,4 +303,4 @@ void 지급_중_예외는_리스너_밖으로_전파되어야_한다() {
 - Spring for Apache Kafka Reference — *Handling Exceptions* / `DefaultErrorHandler`
 - `org.springframework.kafka.listener.SeekUtils` — 되감기 로직 원본
 - `org.springframework.kafka.listener.DefaultErrorHandler` — 기본 백오프 상수
-- 이 저장소: `docs/defects.md` (D-002 항목), `docs/testing.md` (테스트 계층 설계)
+- 이 저장소: `docs/defects.md` (D-002·D-027·D-028 항목), `docs/chaos.md` (장애 주입 측정), `docs/testing.md` (테스트 계층 설계)
