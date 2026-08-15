@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.web.GlobalExceptionHandler;
+import com.stove.payment.api.application.PaymentCallbackFacade;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.api.controller.dto.PgCallbackRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentRequest;
@@ -34,9 +35,10 @@ class PaymentControllerTest {
     private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
     private final PaymentService paymentService = mock(PaymentService.class);
     private final RefundFacade refundFacade = mock(RefundFacade.class);
+    private final PaymentCallbackFacade paymentCallbackFacade = mock(PaymentCallbackFacade.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new PaymentController(paymentService, refundFacade))
+            .standaloneSetup(new PaymentController(paymentService, refundFacade, paymentCallbackFacade))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -60,7 +62,7 @@ class PaymentControllerTest {
                         .content(callback("ORD-1", "PG-1", 30_000L, "")))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -71,7 +73,7 @@ class PaymentControllerTest {
                         .content(callback("ORD-1", "PG-1", null, "IDEM-1")))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -87,7 +89,7 @@ class PaymentControllerTest {
                         .content(callback("ORD-1", "PG-1", -1L, "IDEM-1")))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -103,7 +105,7 @@ class PaymentControllerTest {
                         .content(callback("ORD-1", "", 30_000L, "IDEM-1")))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -114,7 +116,7 @@ class PaymentControllerTest {
                 """)
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -125,7 +127,7 @@ class PaymentControllerTest {
                 """)
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -149,7 +151,7 @@ class PaymentControllerTest {
                 """)
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -161,7 +163,7 @@ class PaymentControllerTest {
                 """)
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 
     @Test
@@ -172,6 +174,6 @@ class PaymentControllerTest {
                         .content(objectMapper.writeValueAsString(new PreparePaymentRequest(""))))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(paymentService);
+        verifyNoInteractions(paymentService, paymentCallbackFacade);
     }
 }
