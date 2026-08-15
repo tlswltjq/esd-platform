@@ -151,10 +151,19 @@ subprojects {
 
     // 결함 재현 테스트(@Tag("known-defect"))는 기본 빌드에서 뺀다.
     // "실패하는 것이 정상"인 테스트라 CI 를 빨갛게 두면 신호가 아니라 소음이 된다.
-    // 제외는 test 태스크에만 건다 — withType 으로 걸면 아래 defectTest 까지 같이 걸러진다.
-    tasks.named('test') {
-        useJUnitPlatform {
-            excludeTags 'known-defect'
+    //
+    // **두 태스크에 각각 건다.** withType 으로 걸면 아래 defectTest 까지 같이 걸러져
+    // 결함 재현 태스크가 0건을 돌고도 초록으로 끝난다.
+    //
+    // integrationTest 가 빠져 있었다. defectTest 는 "결함은 층을 가리지 않는다"며
+    // 통합 소스셋까지 훑는데, 정작 그 소스셋에 결함 테스트를 두면 `./gradlew build` 가
+    // 빨개졌다 — 결함 재현 테스트가 0건인 동안에는 드러나지 않던 구멍이다.
+    // D-026 이 통합 계층(실 브로커가 있어야 재현된다)에 들어오면서 처음 걸렸다.
+    ['test', 'integrationTest'].each { name ->
+        tasks.named(name) {
+            useJUnitPlatform {
+                excludeTags 'known-defect'
+            }
         }
     }
 

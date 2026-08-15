@@ -4,6 +4,8 @@
 # 하고, 그건 운영상 유실과 크게 다르지 않다. "포기했다"가 도달해야 복구가 시작된다.
 #
 # 지표 출처는 코드다 — common:messaging 의 OutboxMetrics, common:kafka 의 DeadLetterMetrics.
+# 예외가 하나 있다: stove-consumer 그룹은 kafka-exporter 가 브로커에서 읽어 온 값을 쓴다.
+# 앱이 같은 이름의 지표를 내지만 믿을 수 없기 때문이고, 그 사연은 그 그룹의 주석에 있다.
 groups:
   - name: stove-messaging
     rules:
@@ -60,3 +62,56 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} 지표 수집이 2분째 끊겼다"
           description: "이 서비스의 다른 알람은 이 동안 울리지 않는다."
+
+  # 받는 쪽. 위 그룹이 못 보는 자리를 본다.
+  #
+  # **`stove_outbox_pending` 으로는 컨슈머 적체를 볼 수 없다.** 발행이 끝나면 그 값은 0 이다 —
+  # 적체가 브로커로 옮겨간 것뿐인데 생산자 지표만 보면 해소된 것처럼 보인다.
+  # 측정으로 확인된 격차가 릴레이 948.7 : 컨슈머 141.1 events/s(6.7배)이므로,
+  # 밀리는 쪽은 구조적으로 항상 컨슈머다(docs/perf-tuning.md 4절).
+  #
+  # 지표 출처가 앱이 아니라 kafka-exporter 인 이유 — 앱의
+  # `kafka_consumer_fetch_manager_records_lag` 는 **실제 랙 113,517건 동안 0 을 보고했다**(D-026).
+  # 컨슈머가 멈추면 그 지표도 같이 멈춘다. 알람이 가장 필요한 상태에서 침묵하는 지표로는
+  # 알람을 걸 수 없다.
+  - name: stove-consumer
+    rules:
+      # 적체. OutboxBacklogGrowing 의 컨슈머 쪽 짝이고 임계도 같게 뒀다 —
+      # 발행 배치가 200건이라 짧은 스파이크는 정상이고, 10분을 못 비우면 그건 추세다.
+      - alert: ConsumerLagGrowing
+        expr: kafka_consumergroup_lag_sum > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.consumergroup }}: {{ $labels.topic }} 랙이 10분째 해소되지 않는다"
+          description: >-
+            미소비 {{ $value }}건. 리스너 처리시간(spring_kafka_listener_seconds)을 먼저 보고,
+            느린 것이 아니라 멈춘 것이면 ConsumerStalled 가 같이 울린다.
+            처리량이 필요하면 listener.concurrency 를 파티션 수(3)까지 올릴 수 있다.
+
+      # **멈춘 것과 느린 것을 가른다.** 랙이 있는데 커밋 오프셋이 5분간 한 칸도 안 움직이면
+      # 밀리는 게 아니라 서 있는 것이다 — 리밸런싱이 끝나지 않았거나, 리스너가 같은 메시지에서
+      # 계속 예외를 던지며 재시도를 돌고 있거나, 컨슈머가 죽었다.
+      #
+      # 위 규칙만으로는 이 상태가 "랙 501건" 으로만 보이고, 500 을 못 넘기면 아예 안 보인다.
+      # 컨슈머가 죽어도 브로커의 커밋 오프셋은 남아 있으므로 이 식은 그때도 참을 말한다.
+      #
+      # delta 를 쓰는 것은 이 값이 카운터가 아니라 게이지이기 때문이다.
+      #
+      # **`for` 를 두지 않는다.** 지속 조건은 이미 `[5m]` 안에 들어 있다 —
+      # 5분 창의 delta 가 0 이라는 것 자체가 "5분간 안 움직였다" 이다.
+      # 여기에 `for: 5m` 을 더하면 그 상태가 다시 5분 유지되어야 울려 실제 발화가 10분이 되는데,
+      # 정작 description 은 5분이라고 말한다. **critical 알람에서 시계가 두 배로 어긋난다.**
+      # 위 ConsumerLagGrowing 의 `for: 10m` 은 창 없는 순간값에 붙은 것이라 사정이 다르다.
+      - alert: ConsumerStalled
+        expr: >-
+          kafka_consumergroup_lag_sum > 0
+          and delta(kafka_consumergroup_current_offset_sum[5m]) == 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.consumergroup }}: {{ $labels.topic }} 소비가 멈췄다"
+          description: >-
+            미소비 {{ $value }}건이 남았는데 커밋 오프셋이 5분간 움직이지 않았다.
+            리스너 예외(spring_kafka_listener_seconds_count{error!="none"})와 DLT 를 본다.

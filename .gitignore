@@ -15,3 +15,7 @@ bin/
 *.log
 logs/
 .env
+
+# 측정 결과. 회차마다 CSV 가 수천 줄씩 쌓이고, 값이 있는 것은 원본이 아니라
+# 그걸 읽고 문서에 남긴 판정이다 — docs/performance.md · docs/perf-tuning.md.
+perf-results/

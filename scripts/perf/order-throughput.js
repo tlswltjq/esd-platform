@@ -37,6 +37,14 @@ export const options = {
     },
   },
   thresholds: {
+    // check 는 세기만 할 뿐 종료 코드를 바꾸지 않는다. 이 줄이 있어야 아래 isOrderCreated 가
+    // 게이트가 된다 — 200 OK + 봉투 success:false 는 http_req_failed 에 잡히지 않으므로,
+    // 이 줄이 없으면 전 주문이 거절돼도 지연 지표는 오히려 좋아지며 초록으로 통과한다.
+    checks: ['rate>0.99'],
+    // 도착률 기반에서는 필수다. maxVUs 가 모자라면 k6 는 요청을 보내지 않고 버린다.
+    // 목표 400 RPS 인데 실제로 120 만 나가도 http_req_duration 은 예쁘게 나온다 —
+    // 즉 이 줄이 없으면 "그 부하가 실제로 걸렸다"를 스크립트가 보장하지 못한다.
+    dropped_iterations: ['count<1'],
     // 기준선 측정 전이라 근거가 없는 값이다. 1차 측정 후 확정한다.
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<300', 'p(99)<800'],
