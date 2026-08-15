@@ -137,6 +137,23 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: stove-prometheus
+    # 기본 인자를 그대로 적고 `--web.enable-lifecycle` 만 더한다.
+    # command 를 주는 순간 이미지 기본값이 통째로 대체되므로, 한 줄을 더하려면 네 줄을 옮겨 와야 한다.
+    #
+    # **왜 필요한가** — 이게 없으면 `POST /-/reload` 가 403 이고 규칙을 바꾸려면 재시작해야 한다.
+    # 재시작은 알람 상태(`pending`/`firing` 경과 시간)와 TSDB 의 최근 구간을 함께 흔들어서,
+    # **알람이 언제 울리는지를 재는 회차에서 재는 대상 자체를 리셋한다.**
+    # 14-7 이 "이번 변경과 무관한 원래 성질"로 넘겼던 것인데, 보상 대신 보류(D-027)를 택하면서
+    # **알람이 울린다는 것이 안전의 전제**가 되어 더 이상 넘길 수 없게 됐다.
+    #
+    # 되돌리는 쪽 위험은 없다 — lifecycle 은 reload/quit 만 열고 쓰기 API 는 열지 않는다.
+    # (열리는 것이 부담이면 `--web.enable-admin-api` 와 혼동하지 않는지부터 본다. 그쪽은 안 켠다.)
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
     ports:
       - "9090:9090"
     volumes:
