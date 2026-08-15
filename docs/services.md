@@ -198,8 +198,15 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 **규칙**
 
 - **게이트 2** — 승인 전에 서버가 확정한 금액을 PG 에 먼저 등록한다.
+  **주문이 `stove.payment.window`(30분)를 넘겼으면 여기서 막는다**(`PAYMENT_WINDOW_EXPIRED`).
+  금액은 주문 시각에 한 번 굳으므로 이 창이 곧 "옛 가격이 유효한 기간" 이다(D-029).
 - **게이트 3** — 콜백의 승인 금액이 사전등록 금액과 다르면 승인을 확정하지 않고 `PAYMENT_AMOUNT_MISMATCH`.
   위·변조 또는 연동 오류이므로 운영 알람 대상으로 남긴다.
+- **결제창 만료** — 사전등록 뒤 `stove.payment.checkout-window`(15분)를 넘겨 도착한 승인은
+  **거절하지 않고 받아 적은 뒤 자동 환불한다.** 그 시점엔 PG 에서 이미 돈이 움직였으므로
+  거절하면 우리 장부에만 없는 상태가 되어 대사가 깨진다. 이때 `PaymentCompleted` 는
+  **내보내지 않는다** — 일어나지 않을 판매를 하위 서비스에 알리지 않기 위해서다.
+  지표 `stove.payment.auto-refunded`, 알람 `AutoRefundsRising`.
 - **게이트 4** — 중복 콜백은 상태와 `idempotency_key` 유니크로 흡수하고 **이벤트를 재발행하지 않는다.**
 - **Saga 보상.** `LicenseIssueFailed` 를 받으면 자동 환불한다("돈은 빠졌는데 게임은 없는" 상태 해소).
   사용자 환불과 규칙은 같지만 진입점(`compensate`)이 분리돼 있다 — 이벤트 경로만 멱등 마킹이 필요하기 때문.
