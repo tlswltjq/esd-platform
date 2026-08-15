@@ -127,7 +127,13 @@ class LicenseIssueEventTest {
 
         long before = outboxEventRepository.count();
 
-        // 다른 eventId 로 재처리 — 운영에서 이벤트 유실을 복구하는 표준 수단이다.
+        // 다른 eventId 로 재처리 — payment 가 같은 주문의 결제 완료를 새 이벤트로 다시 알린 경우다.
+        //
+        // 예전 주석은 이것을 "운영에서 이벤트 유실을 복구하는 표준 수단" 이라고 적었는데 **틀렸다.**
+        // 운영의 재처리 수단(오프셋 리셋 · DLT 재투입 · Outbox 재적재)은 셋 다 eventId 를 보존하고,
+        // 그러면 아래 로직에 닿기 전에 Inbox 가드가 먼저 막는다. 즉 이 테스트가 지키는 재발행 동작은
+        // **실제 복구 경로에서는 도달하지 않는다** — 그 사실을 재현한 것이 D-030 이고,
+        // 같은 eventId 쪽은 LicenseReplayRecoveryTest 가 맡는다.
         licenseService.issue(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, 42L, lines(1L));
 
