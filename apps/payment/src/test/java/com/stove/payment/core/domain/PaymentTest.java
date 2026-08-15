@@ -5,11 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.event.payload.OrderLine;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PaymentTest {
+
+    /** 결제 가능 창. 저장 전 엔티티는 createdAt 이 null 이라 만료 판정에 걸리지 않는다. */
+    private static final Duration WINDOW = Duration.ofMinutes(30);
 
     private Payment readyPayment() {
         return Payment.ready("ORD20260101ABCDE12345", 1L, 39000L, "KRW",
@@ -20,7 +24,7 @@ class PaymentTest {
     @DisplayName("승인 금액이 사전등록 금액과 다르면 승인되지 않는다")
     void rejectAmountMismatch() {
         Payment payment = readyPayment();
-        payment.prepare("PG-TX-1", "CARD");
+        payment.prepare("PG-TX-1", "CARD", WINDOW);
 
         assertThatThrownBy(() -> payment.approve("PG-TX-1", 1000L, "KEY-1"))
                 .isInstanceOf(BusinessException.class);
@@ -31,7 +35,7 @@ class PaymentTest {
     @DisplayName("같은 콜백이 두 번 와도 승인은 한 번만 확정된다")
     void idempotentCallback() {
         Payment payment = readyPayment();
-        payment.prepare("PG-TX-1", "CARD");
+        payment.prepare("PG-TX-1", "CARD", WINDOW);
 
         assertThat(payment.approve("PG-TX-1", 39000L, "KEY-1")).isTrue();
         assertThat(payment.approve("PG-TX-1", 39000L, "KEY-1")).isFalse();
@@ -75,7 +79,7 @@ class PaymentTest {
     @DisplayName("승인 전에는 취소를 착수할 수 없다")
     void cannotCancelBeforeApproval() {
         Payment payment = readyPayment();
-        payment.prepare("PG-TX-1", "CARD");
+        payment.prepare("PG-TX-1", "CARD", WINDOW);
 
         assertThatThrownBy(() -> payment.beginCancel("USER_REFUND"))
                 .isInstanceOf(BusinessException.class);
@@ -106,7 +110,7 @@ class PaymentTest {
         Payment ready = readyPayment();
         assertThat(ready.cancelable()).isFalse();
 
-        ready.prepare("PG-TX-1", "CARD");
+        ready.prepare("PG-TX-1", "CARD", WINDOW);
         assertThat(ready.cancelable()).isFalse();
 
         Payment paid = paidPayment();
@@ -190,20 +194,20 @@ class PaymentTest {
         Payment payment = pendingPayment();
         payment.fail("PG-TX-1", "REJECT_CARD_COMPANY", "카드사 거절");
 
-        assertThatThrownBy(() -> payment.prepare("PG-TX-2", "CARD"))
+        assertThatThrownBy(() -> payment.prepare("PG-TX-2", "CARD", WINDOW))
                 .isInstanceOf(BusinessException.class);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
     }
 
     private Payment pendingPayment() {
         Payment payment = readyPayment();
-        payment.prepare("PG-TX-1", "CARD");
+        payment.prepare("PG-TX-1", "CARD", WINDOW);
         return payment;
     }
 
     private Payment paidPayment() {
         Payment payment = readyPayment();
-        payment.prepare("PG-TX-1", "CARD");
+        payment.prepare("PG-TX-1", "CARD", WINDOW);
         payment.approve("PG-TX-1", 39000L, "KEY-1");
         return payment;
     }

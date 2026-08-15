@@ -44,6 +44,10 @@ spring:
       observation-enabled: true
 
 stove:
+  payment:
+    # 주문이 만들어진 뒤 결제를 시작할 수 있는 시간. 금액은 주문 시각의 서버 가격으로 굳으므로,
+    # 이 창이 곧 "옛 가격이 유효한 기간" 이다 — 없으면 무한이다(D-029, 실측 30일 뒤에도 승인).
+    window: ${PAYMENT_WINDOW:30m}
   outbox:
     relay-enabled: true
     batch-size: 200

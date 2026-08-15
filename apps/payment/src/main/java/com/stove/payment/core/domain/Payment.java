@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -108,8 +109,37 @@ public class Payment extends BaseTimeEntity {
         return new Payment(orderNo, memberId, amount, currency, lines);
     }
 
-    /** 게이트 2: PG 사전등록. 승인 요청 금액을 서버가 먼저 확정해 둔다. */
-    public void prepare(String pgTxId, String method) {
+    /**
+     * 결제 가능 시간이 지났는가.
+     *
+     * <p><b>이 시스템에서 금액이 서버 가격으로 확정되는 것은 주문을 만드는 순간 한 번뿐이다.</b>
+     * 그 뒤 단계는 전부 "아까 정한 금액과 같은가"만 본다. 그래서 만료가 없으면 어제 가격,
+     * 지난달 가격이 영원히 유효하다 — 실측에서 <b>30일 지난 미결제 주문이 옛 가격으로 승인됐다</b>(D-029).
+     *
+     * <p>기준 시각은 {@code createdAt} 이다. 이 행은 {@code OrderCreated} 를 받아 만들어지므로
+     * 주문 생성 시각의 대리값이고, 금액이 확정된 시각이 바로 그때다.
+     */
+    public void requireWithinWindow(Duration window) {
+        Instant createdAt = getCreatedAt();
+        if (createdAt != null && createdAt.plus(window).isBefore(Instant.now())) {
+            throw new BusinessException(ErrorCode.PAYMENT_WINDOW_EXPIRED,
+                    "주문 생성 %s 경과: orderNo=%s".formatted(window, orderNo));
+        }
+    }
+
+    /**
+     * 게이트 2: PG 사전등록. 승인 요청 금액을 서버가 먼저 확정해 둔다.
+     *
+     * <p><b>만료를 여기서 막는다.</b> 승인 콜백 시점에 막으면 이미 PG 에서 돈이 움직인 뒤라
+     * 되돌리는 데 환불이 필요해진다 — 문제를 막는 대신 문제를 하나 더 만드는 셈이다.
+     * 사전등록은 사용자를 결제창으로 보내기 <b>직전</b>이고 아직 아무 돈도 움직이지 않았다.
+     * 그리고 승인은 {@code PENDING} 에서만 열리므로, 여기를 닫으면 승인 경로도 함께 닫힌다.
+     *
+     * <p>{@code PaymentService} 가 PG 를 부르기 전에 같은 검사를 한 번 더 한다. 규칙이 두 벌인 것이
+     * 아니라 <b>규칙은 여기 하나</b>이고, 저쪽은 만료된 주문으로 PG 거래를 만들지 않으려는 조기 종료다.
+     */
+    public void prepare(String pgTxId, String method, Duration window) {
+        requireWithinWindow(window);
         if (status != PaymentStatus.READY && status != PaymentStatus.PENDING) {
             throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "결제 준비 불가 상태: " + status);
         }

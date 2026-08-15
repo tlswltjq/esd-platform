@@ -50,7 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 25건 | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 29건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
@@ -58,6 +58,8 @@ stove/
 | 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
 | 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
+| **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
+| 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |
 | 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
 | 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
 
@@ -101,7 +103,7 @@ stove/
 | 릴레이 다중화 시 중복 발행 | `SELECT … FOR UPDATE SKIP LOCKED` 로 배치 선점 | `OutboxEventRepository` |
 | 상품 등록 우회 | 심의 승인 이벤트 없이는 상품이 생성되지 않는 파이프라인 | `review` 상태머신 → `catalog` |
 | 읽기 트래픽 집중 | catalog(쓰기) / store(읽기) 분리 + Redis 캐시 2단 | `store`, `catalog/CacheConfig` |
-| license 장애가 다운로드 장애로 전이 | 동기 호출 대신 **권한 사본**을 이벤트로 유지 | `download/Entitlement` |
+| license 장애가 다운로드 장애로 전이 | 동기 호출 대신 **권한 사본**을 이벤트로 유지 — license 를 정지시키고 확인했다(다운로드 20/20, 9.3ms) | `download/Entitlement` |
 | 정산 중복 집계(금전 사고) | Inbox + `(order_no, product_id, record_type)` 유니크 이중 방어 | `settlement_record` |
 | 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementService#recordRefund` |
 | 경계가 시간이 지나며 흐려짐 | **ArchUnit 으로 계층·의존 방향을 테스트로 강제** — 규칙을 처음 돌렸을 때 위반이 166건이었다 | `common/archunit` |

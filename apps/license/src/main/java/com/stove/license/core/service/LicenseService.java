@@ -111,6 +111,22 @@ public class LicenseService {
         log.error("라이선스 지급 최종 실패 → 보상 요청 orderNo={} reason={}", orderNo, reason);
     }
 
+    /**
+     * 이 주문에 라이선스가 발급된 이력이 있는가.
+     *
+     * <p>보상 환불을 시작하기 <b>직전에</b> 부른다. 보상의 전제는 "지급되지 않았다"인데,
+     * 그때까지 그 전제를 확인하는 자리가 한 군데도 없었다 — 컨슈머가 실패했다는 사실만 보고
+     * 환불했다. 지급이 커밋된 뒤 오프셋 커밋 전에 컨슈머가 실패하면 <b>같은 레코드가 다시 오고,
+     * 그 재처리가 실패하면 이미 물건을 받은 주문이 환불된다</b>(D-028).
+     *
+     * <p>회수된 라이선스도 '있음'으로 센다. 지급 자체는 일어났으므로 "지급 실패" 라는 보고가
+     * 사실이 아닌 것은 마찬가지이고, 회수됐다면 환불은 이미 그쪽 경로로 처리됐다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isIssued(String orderNo) {
+        return !licenseRepository.findByOrderNo(orderNo).isEmpty();
+    }
+
     @Transactional(readOnly = true)
     public List<License> getLibrary(Long memberId) {
         return licenseRepository.findByMemberIdAndStatus(memberId, LicenseStatus.ACTIVE);
