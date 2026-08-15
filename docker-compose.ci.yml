@@ -26,6 +26,8 @@ services:
     ports: !reset []
   kafka-ui:
     ports: !reset []
+  kafka-exporter:
+    ports: !reset []
   elasticsearch:
     ports: !reset []
   minio:

@@ -213,7 +213,8 @@ k6 시나리오 셋이 전부 **주문 생성 한 경로** 를 민다.
 | Outbox 릴레이 | ✅ `relay-drain.sh` | HTTP 와 분리해 측정 |
 | 검색·읽기 (store + Redis) | **없음** | 8-4 가 미측정으로 인정 |
 | 결제 콜백 (팬아웃 최대) | ✅ `payment-callback.js` | `PaymentCompleted` → 4개 서비스 |
-| 컨슈머 측 처리 | ✅ `collect-consumer.sh` | 랙·소비율·처리시간·리스너 예외 |
+| 컨슈머 측 처리 | ✅ `collect-consumer.sh` | 처리시간·리스너 예외 |
+| 컨슈머 측 적체 | ✅ `collect-lag.sh` | **랙·소비율·유입률. 브로커 오프셋 기준** — 앱 지표는 못 쓴다([D-026](defects.md#d-026)) |
 | 종단 지연 | ✅ `e2e_fulfillment_latency` | 아래 참고 |
 
 가장 아픈 것이 마지막 줄이다. **"주문을 넣고 몇 초 뒤에 게임을 받는가" 를 재는 지표가 없다.**

@@ -66,11 +66,31 @@ listener_errors() {
     ' <<<"$1"
 }
 
-echo "elapsed_s,app,lag,consumed_total,consumed_per_s,handled_total,avg_handle_ms,listener_errors" > "$OUT"
+# macOS 기본 bash 는 3.2 라 연관 배열(`declare -A`)이 없다 — 예전에는 여기서 그걸 썼고,
+# 그래서 이 스크립트는 **맥에서 첫 줄만 쓰고 죽었다.** 원격(bash 5)에서만 돌려 몰랐다.
+# 리포가 도구 설치를 요구하지 않기로 했으므로(decisions.md 12번) 키를 변수 이름으로 만든다.
+kv_name() { printf 'kv_%s' "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"; }
+kv_get()  { eval "printf '%s' \"\${$1:-}\""; }
+kv_set()  { eval "$1=\$2"; }
+
+# `lag` 가 아니라 `lag_reported` 인 이유 — 이 값은 랙의 판정 근거가 되지 못한다.
+# 컨슈머 클라이언트가 직전 fetch 에서 본 값이라 fetch 가 멈추면 갱신되지 않고,
+# **실제 랙 113,517건 동안 0 을 보고했다**(D-026). 판정은 `collect-lag.sh` 로 한다.
+# 그래도 계속 긁는 이유는 두 값을 나란히 놓는 것이 그 결함의 재현 증거이기 때문이다.
+# **커넥션 풀도 여기서 본다.** 리스너 스레드와 HTTP 스레드는 같은 앱의 같은 HikariCP 풀을 쓴다 —
+# `listener.concurrency` 를 올리면 그 앱의 API 가 함께 느려질 수 있고, 여태 그 인과를
+# 지연 숫자로 추정만 했다([performance.md](../../docs/performance.md) 8-2 가 계속 열려 있던 항목).
+#
+#   pool_active    지금 빌려 나간 커넥션
+#   pool_pending   커넥션을 **기다리는 스레드 수**  ← 이게 0 보다 크면 풀이 병목이다
+#
+# 뒤엣것이 판정값이다. active 가 최대치라도 pending 이 0 이면 풀은 충분한 것이고,
+# pending 이 서면 그때부터 대기가 응답시간에 그대로 실린다.
+echo "elapsed_s,app,lag_reported,consumed_total,consumed_per_s,handled_total,avg_handle_ms,listener_errors,pool_active,pool_idle,pool_pending,pool_max" > "$OUT"
 echo "수집 시작 → $OUT  (대상: ${CONSUMERS}, 주기: ${INTERVAL}s)" >&2
+echo "  랙 판정은 collect-lag.sh 로 한다 — 여기 lag_reported 는 믿을 수 없다(D-026)" >&2
 
 started=$(date +%s)
-declare -A prev_consumed
 
 while true; do
     elapsed=$(( $(date +%s) - started ))
@@ -95,11 +115,19 @@ while true; do
         avg_ms=$(awk -v s="$handled_s" -v n="$handled" \
             'BEGIN { if (n > 0) printf "%.2f", s * 1000 / n }')
 
-        rate=$(awk -v a="$consumed" -v b="${prev_consumed[$app]:-}" -v i="$INTERVAL" \
+        n_consumed=$(kv_name "consumed/${app}")
+        rate=$(awk -v a="$consumed" -v b="$(kv_get "$n_consumed")" -v i="$INTERVAL" \
             'BEGIN { if (b != "") printf "%.1f", (a - b) / i }')
-        prev_consumed[$app]="$consumed"
+        kv_set "$n_consumed" "$consumed"
 
-        echo "${elapsed},${app},${lag},${consumed},${rate},${handled},${avg_ms},${errors}" >> "$OUT"
+        # 풀 지표는 라벨이 pool="HikariPool-1" 하나뿐이라 sum 이 곧 그 값이다.
+        # 앱이 풀을 안 쓰면(예: Mongo 만 쓰는 download) 지표가 없어 0 이 나온다.
+        pool_active=$(sum hikaricp_connections_active '%.0f' "$body")
+        pool_idle=$(sum hikaricp_connections_idle '%.0f' "$body")
+        pool_pending=$(sum hikaricp_connections_pending '%.0f' "$body")
+        pool_max=$(sum hikaricp_connections_max '%.0f' "$body")
+
+        echo "${elapsed},${app},${lag},${consumed},${rate},${handled},${avg_ms},${errors},${pool_active},${pool_idle},${pool_pending},${pool_max}" >> "$OUT"
     done
 
     sleep "$INTERVAL"

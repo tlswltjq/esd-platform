@@ -40,7 +40,7 @@ stove/
 │   └── testcontainers      공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB) — 통합 소스셋 전용
 │
 ├── infra/                  mysql init(스키마 7종), prometheus, tempo, grafana 데이터소스
-├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · Prometheus · Tempo · Grafana
+├── docker-compose.yml      MySQL · Redis · Kafka(KRaft) · Elasticsearch · MongoDB · Kafka UI · kafka-exporter · Prometheus · Tempo · Grafana
 └── docker-compose.apps.yml 9개 서비스 + 게이트웨이 컨테이너 실행
 ```
 
@@ -50,13 +50,14 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 28건 | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 29건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
 | 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
-| Outbox 릴레이 처리량 측정과 개선 | [performance.md](docs/performance.md) |
+| Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
+| 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
 | **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
 | 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |
 | 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
@@ -242,6 +243,7 @@ docker compose -f docker-compose.apps.yml up -d --build
 | Kafka UI | http://localhost:8090 |
 | Elasticsearch | http://localhost:9200 |
 | Prometheus | http://localhost:9090 |
+| kafka-exporter | http://localhost:9308/metrics — **컨슈머 랙.** 앱 지표로는 판정할 수 없다([D-026](docs/defects.md#d-026)) |
 | Tempo (추적 수집) | OTLP/HTTP `localhost:4318`, 조회 API `localhost:3200` |
 | Grafana | http://localhost:3000 (anonymous) — Prometheus·Tempo 데이터소스가 미리 등록돼 있다 |
 | Actuator | `http://localhost:808X/actuator/health`, `/actuator/prometheus` |
@@ -353,6 +355,10 @@ curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT
 > 재투입은 중복 수신이지만 Inbox 멱등 가드가 흡수한다.
 > `stove.outbox.dead` · `stove.kafka.dead-lettered` 에 Prometheus 알람이 걸려 있다
 > (`infra/prometheus/alerts.yml`).
+>
+> **받는 쪽 적체에도 알람이 있다** — `ConsumerLagGrowing` · `ConsumerStalled`.
+> 이쪽 지표만 출처가 앱이 아니라 `kafka-exporter` 다. 앱이 내는 랙 지표는
+> 컨슈머가 멈추면 같이 멈춰서, 알람이 가장 필요한 상태에서 침묵한다([D-026](docs/defects.md#d-026)).
 
 ## 6. 외부 연동은 포트로 분리
 

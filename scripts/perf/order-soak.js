@@ -33,6 +33,12 @@ export const options = {
     },
   },
   thresholds: {
+    // 응답이 200 이어도 봉투가 실패면 적체가 안 쌓이는 게 당연하다.
+    // 논리 실패를 걸러야 stove.outbox.pending 의 기울기 판정이 성립한다.
+    checks: ['rate>0.99'],
+    // RATE 가 실제로 걸렸는지 보장한다. VU 가 모자라 버려진 유입은
+    // 적체를 만들지 않으므로, 이 줄이 없으면 "안정적이다"와 구분되지 않는다.
+    dropped_iterations: ['count<1'],
     http_req_failed: ['rate<0.01'],
     // 지속 부하에서는 꼬리 지연이 더 중요하다. 평균은 문제를 숨긴다.
     http_req_duration: ['p(99)<1000'],

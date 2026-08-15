@@ -3,6 +3,10 @@
 Outbox 릴레이 처리량을 재고, 개선 전후를 같은 조건으로 비교하기 위한 스크립트다.
 측정 결과와 분석은 [docs/performance.md](../../docs/performance.md) 에 있다.
 
+**이 문서는 "무엇으로 어떻게 돌리나"다. "왜 그렇게 돌려야 하나"는
+[docs/measuring.md](../../docs/measuring.md)** — 아래 절차의 근거가 되는 규칙 11개와
+각 규칙을 만든 사건이 거기 있다. 여기 도구는 그 규칙을 코드로 옮긴 것이다.
+
 ## 왜 이걸 재는가
 
 릴레이는 **9개 서비스가 공유하는 단일 병목**이다. 여기가 밀리면
@@ -60,31 +64,89 @@ export ORDER_ACTUATOR=http://order:8082/actuator/prometheus
 
 ```bash
 # 1. 경로 확인. 여기서 실패하면 아래 숫자는 의미 없다
-docker run --rm --network stove_default -v "$PWD:/w" -w /w \
-  -e ORDER_URL -e CATALOG_URL grafana/k6 run scripts/perf/smoke.js
+./scripts/perf/run-session.sh smoke
 
 # 2. 한계선 — 계단식 20→400 RPS. 포화 지점을 찾는 데만 쓴다
-./scripts/perf/collect-outbox.sh limit-outbox.csv &
-docker run --rm --network stove_default -v "$PWD:/w" -w /w \
-  -e ORDER_URL grafana/k6 run scripts/perf/order-throughput.js
-kill %1
+./scripts/perf/run-session.sh throughput limit
 
 # 3. 비교 — 관측된 한계선의 절반 이하 고정 부하에서만 판정한다
-RATE=60 DURATION=60s ...  # order-soak.js 는 RATE/DURATION 을 환경변수로 받는다
+RESET=1 RATE=60 DURATION=60s ./scripts/perf/run-session.sh soak relay-on
 
-# 4. 종단 지연 + 받는 쪽 — 결제 승인에서 라이선스 지급까지.
-#    3번과 **함께** 돌려야 의미가 크다 (릴레이가 포화된 상태에서 사용자 체감이 어떻게 되는가)
-./scripts/perf/collect-consumer.sh fanout-consumer.csv &
-docker run --rm --network stove_default -v "$PWD:/w" -w /w \
-  -e ORDER_URL -e PAYMENT_URL -e LICENSE_URL grafana/k6 run scripts/perf/payment-callback.js
-kill %1
+# 4. 종단 지연 + 받는 쪽 — 결제 승인에서 라이선스 지급까지
+./scripts/perf/run-session.sh fanout
+
+# 5. 컨슈머 조건 비교 — 배경 부하로 포화시킨 위에서 잰다. 조건당 2회 + 대조군
+./scripts/perf/run-condition.sh 1 c1-r1
+./scripts/perf/run-condition.sh 3 c3-r1
+./scripts/perf/run-condition.sh 3 c3-r2
+./scripts/perf/run-condition.sh 1 c1-recheck   # A → B → A
 ```
 
-**수집기 둘은 보는 쪽이 다르다.** `collect-outbox.sh` 는 보내는 쪽,
-`collect-consumer.sh` 는 받는 쪽이다. 팬아웃 경로에서는 둘을 같이 켜는 것이 맞다 —
+**5번이 4번과 다른 점은 부하가 둘이라는 것이다.** `fanout` 단독으로 `concurrency` 를 재면
+차이가 안 나는데, 그건 영향이 없어서가 아니라 **압박이 없어서다** — 5 VU 는 초당 2.3건이라
+풀 20개 중 3개를 쓰고 랙이 최대 3이다(13-2). 그 위에서 스레드를 늘려 봐야 나눌 일이 없다.
+`run-condition.sh` 는 order 를 60 RPS 로 밀어 컨슈머를 포화시켜 두고 그 위에 `fanout` 을 얹는다.
+
+그리고 **회차마다 되돌리고, 되돌아갔는지 센다.** DB 만이 아니라 오프셋까지다 —
+`--reset-offsets` 는 두 가지 이유로 조용히 실패한 적이 있고(13-8 경합, 14-6 변수 이름)
+둘 다 성공률 0% 회차를 만들었다. 리셋 직후와 부하 직전에 랙을 세고, 넘으면 회차를 시작하지 않는다.
+
+`run-session.sh` 가 **수집기 넷을 k6 보다 먼저 켜고 나중에 끈다.** 손으로 `&` 와 `kill %1` 을
+쓰던 절차를 대신하는데, 편의가 목적이 아니다 — 수집기가 넷이 되면 그 손절차가
+**측정을 망치는 자리**가 된다. 하나를 늦게 켜면 그 지표만 다른 구간을 보고,
+그러면 나란히 놓을 수 없다. 비교의 전제가 "같은 조건"인데 수집 구간부터 어긋난다.
+
+그리고 **환경을 같이 남긴다**(`env.txt`). 10장의 결론이 "측정 환경이 변하면 그 전후 숫자는
+비교가 아니라 무관한 값 두 개다" 였는데, 그때 환경은 사람이 기억해서 문서에 적는 것이었다.
+기억은 회차를 못 버틴다. 조건 오버라이드가 **컨테이너에 실제로 걸렸는지**도 여기 찍힌다 —
+세 조건이 조용히 같은 값으로 돌면 비교가 통째로 거짓이 된다.
+
+한 회차가 남기는 것:
+
+```
+perf-results/20260814-023329-soak-local-60rps/
+├── env.txt          호스트·컨테이너·조건 오버라이드·시작 상태(랙 포함)
+├── k6-summary.json  k6 원본
+├── outbox.csv       보내는 쪽
+├── consumer.csv     받는 쪽 리스너 (처리시간·예외)
+├── lag.csv          받는 쪽 랙 — **브로커 기준**
+├── stats.csv        컨테이너 CPU·메모리
+└── summary.txt      읽을 수 있는 요약
+```
+
+**수집기 셋은 보는 쪽이 다르다.** `collect-outbox.sh` 는 보내는 쪽,
+`collect-consumer.sh` 는 받는 쪽의 처리시간과 예외, `collect-lag.sh` 는 받는 쪽의 적체다.
 발행이 초당 132건이어도 컨슈머가 60건씩 처리하면 랙이 쌓이는데,
 **그 랙은 `stove_outbox_pending` 에 전혀 나타나지 않는다.** 발행은 끝났으므로 0 이다.
 적체가 브로커로 옮겨간 것뿐인데 생산자 지표만 보면 해소된 것처럼 보인다.
+
+### 랙은 브로커에게 묻는다 — 앱 지표로는 판정하지 않는다
+
+`collect-lag.sh` 가 따로 있는 이유다. 앱이 노출하는
+`kafka_consumer_fetch_manager_records_lag` 는 **실제 랙 113,517건 동안 0 을 보고했다**
+([D-026](../../docs/defects.md#d-026)). 컨슈머 클라이언트가 직전 fetch 응답에서 본 값이라
+fetch 가 멈추면 값도 멈춘다 — **랙이 위험한 상황은 대개 컨슈머가 멈춘 상황이므로,
+지표가 가장 필요한 순간에 침묵한다.**
+
+`collect-consumer.sh` 는 그 값을 계속 긁되 컬럼 이름이 `lag_reported` 다. 판정에는 쓰지 않고,
+두 값을 나란히 놓는 것이 결함의 재현 증거라 남겨 둔다.
+
+상시 관측은 `kafka-exporter`(compose)가 Prometheus 로 올린다. 알람 둘이 거기 걸려 있다 —
+`ConsumerLagGrowing`(10분째 안 빠짐)과 `ConsumerStalled`(랙이 있는데 커밋 오프셋이 안 움직임).
+뒤엣것이 D-026 이 직접 낳은 규칙이고, 앱 지표로는 볼 수 없는 상태다.
+
+### 손으로 돌려야 할 때
+
+수집기와 k6 는 그대로 따로 쓸 수 있다. 조건을 특이하게 갈아 끼울 때는 이쪽이 편하다.
+
+```bash
+./scripts/perf/collect-outbox.sh   outbox.csv   &
+./scripts/perf/collect-consumer.sh consumer.csv &
+./scripts/perf/collect-lag.sh      lag.csv      &
+docker run --rm --network stove_default -v "$PWD:/w" -w /w \
+  -e ORDER_URL -e PAYMENT_URL -e LICENSE_URL grafana/k6 run scripts/perf/payment-callback.js
+kill %1 %2 %3
+```
 
 **한계선과 비교를 나누는 것이 핵심이다.** 계단식은 포화로 들어가므로 한계 파악에만 쓰고,
 구성 간 비교는 반드시 **포화 이전** 구간에서 한다. 9장은 한계선 132 RPS 를 확인한 뒤
@@ -155,13 +217,34 @@ k6 는 HTTP 만 본다. 릴레이와 컨슈머는 배경 스레드라 수집기 
 | `stove.outbox.failed` / `.dead` | actuator | 실패·포기 건수 |
 | `stove.outbox.pending` | actuator | **적체량. 우상향이면 유입 > 처리** |
 | `stove.outbox.relay` | actuator | 릴레이 1회 소요시간 (p50/p95/p99) |
-| `kafka.consumer.fetch.manager.records.lag` | actuator (컨슈머) | **랙 — 아직 안 읽은 건수.** `pending` 의 거울 |
-| `kafka.consumer.fetch.manager.records.consumed` | actuator (컨슈머) | 누적 소비 → 증분이 초당 소비량 |
+| 커밋 오프셋 ↔ 로그 끝 오프셋 | **브로커** (`collect-lag.sh`) | **랙 — 아직 안 읽은 건수.** `pending` 의 거울 |
+| 커밋 오프셋 증분 | **브로커** (`collect-lag.sh`) | 실제 소비 속도 |
+| 로그 끝 오프셋 증분 | **브로커** (`collect-lag.sh`) | 실제 유입 속도. **랙 0 과 유입 0 을 가른다** |
+| `kafka_consumergroup_lag_sum` | kafka-exporter → Prometheus | 같은 값의 상시 시계열. 알람이 여기 걸린다 |
 | `spring.kafka.listener` | actuator (컨슈머) | 리스너 처리 건수·총 시간 → 평균 처리시간 |
 | 위 지표의 `error` 태그 | actuator (컨슈머) | **예외를 던진 건수** |
+| `hikaricp.connections.active` | actuator | 빌려 나간 커넥션 |
+| `hikaricp.connections.pending` | actuator | **커넥션을 기다리는 스레드 수 — 풀 병목의 판정값** |
+| `kafka.consumer.fetch.manager.records.lag` | actuator (컨슈머) | ~~랙~~ — **판정에 쓰지 않는다.** [D-026](../../docs/defects.md#d-026) |
 
-판정은 응답시간보다 **`pending` 의 기울기**를 먼저 본다.
+**풀은 `active` 가 아니라 `pending` 으로 판정한다.** `active` 가 최대치라도 `pending` 이 0이면
+풀은 충분한 것이고, `pending` 이 서야 대기가 응답시간에 실린다. 이 구분이 없으면
+"풀이 꽉 찼다"와 "풀이 병목이다"를 못 가른다 — 실제로 그 둘을 가르지 못한 채
+[performance.md](../../docs/performance.md) 8-2 가 오래 열려 있었고, `pending` 을 찍자
+**컨슈머를 포화시킨 5회차 전부 0** 이라 한 번에 닫혔다(13-5).
+
+그리고 **압박 증거가 없으면 음성 결과를 해석할 수 없다.** 조건을 바꿨는데 차이가 안 나면
+그게 "영향 없음"인지 "부하가 그 자원을 안 건드림"인지 알아야 하는데, 그걸 말해 주는 것이
+`pending`·랙·CPU 같은 지표다. 13-2 가 그 사례다 — 차이가 없었고, 이유는
+풀 `active` 3/20 에 랙 최대 3, 즉 **아무것도 압박하지 않아서**였다.
+
+판정은 응답시간보다 **적체의 기울기**를 먼저 본다.
 응답이 빨라도 적체가 쌓이고 있으면 시간 문제일 뿐 반드시 터진다.
+
+**그리고 적체는 두 군데에 쌓인다.** `pending` 은 보내는 쪽만 본다 —
+릴레이가 다 발행하고 나면 0 이지만, 그것이 "다 처리됐다"는 뜻은 아니다.
+실측에서 `pending` 최대 44 / 최종 0 인 회차의 브로커 랙이 **2,479** 였다
+([performance.md](../../docs/performance.md) 12장). 둘을 같이 보지 않으면 이 상태가 초록으로 보인다.
 
 컨슈머 쪽에서는 `error` 태그가 특히 값이 크다. 리스너가 던진 예외는 재시도가 흡수하므로
 **HTTP 응답에도, 생산자 지표에도, k6 에도 나타나지 않는다.** 여기서만 보인다.

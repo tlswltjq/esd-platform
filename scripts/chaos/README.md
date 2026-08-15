@@ -4,6 +4,7 @@
 측정 결과와 분석은 [docs/chaos.md](../../docs/chaos.md) 에 있다.
 
 `scripts/perf/` 가 "얼마나 빠른가"를 잰다면 여기는 **"틀렸을 때 어떻게 틀리는가"**를 잰다.
+측정 규칙은 공통이다 — [docs/measuring.md](../../docs/measuring.md) 를 먼저 읽는다.
 
 ## 왜 이걸 재는가
 
