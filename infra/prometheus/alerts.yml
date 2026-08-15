@@ -53,6 +53,25 @@ groups:
             최근 5분간 {{ $value }}건. GET /api/v1/ops/dlt?topic={{ $labels.topic }}.DLT 로 원인을 보고,
             고친 뒤 POST /api/v1/ops/dlt/replay 로 되돌린다.
 
+      # 사람이 지시하지 않은 환불. 결제창 만료 자동 환불은 사용자 요청도 운영자 조작도 아닌,
+      # **시스템이 스스로 돈을 되돌리는** 유일한 HTTP 경로다.
+      #
+      # 정상 운영에서 0 은 아니다 -- 결제창을 열어 두고 자리를 뜬 사용자가 늘 조금은 있다.
+      # 그래서 한 건에 울리지 않고 **추세**로 본다. 갑자기 늘었다면 우리 창(checkout-window)이
+      # PG 세션보다 짧아졌다는 뜻이고, 그건 우리가 멀쩡한 결제를 되돌리고 있다는 뜻이다.
+      #
+      # 사용자에게는 "결제했는데 취소됐다" 로 보인다 -- **당사자만 알고 우리는 모르는 상태**가
+      # 이 규칙이 막으려는 것이다.
+      - alert: AutoRefundsRising
+        expr: increase(stove_payment_auto_refunded_total[15m]) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 시스템 자동 환불이 늘고 있다 (사유 {{ $labels.reason }})"
+          description: >-
+            최근 15분간 {{ $value }}건. stove.payment.checkout-window 가 PG 결제창 세션보다
+            짧으면 정상 결제가 되돌려진다 -- 두 값을 먼저 대조한다.
+
       # 스크레이프가 끊긴 것도 신호다 -- 위 세 규칙이 전부 조용해지기 때문이다.
       - alert: ServiceDown
         expr: up == 0
@@ -78,9 +97,21 @@ groups:
     rules:
       # 적체. OutboxBacklogGrowing 의 컨슈머 쪽 짝이고 임계도 같게 뒀다 —
       # 발행 배치가 200건이라 짧은 스파이크는 정상이고, 10분을 못 비우면 그건 추세다.
+      #
+      # **`for: 10m` 이 아니라 `min_over_time(...[10m])` 인 이유** — 이 시계열은 끊긴다.
+      # 실측에서 스크레이프 133회 중 랙 표본이 126개였다(결측 5.3%). `up` 은 내내 1이었으므로
+      # **스크레이프는 성공하는데 익스포터가 그 컨슈머그룹만 빼고 응답한 것**이다.
+      # 앱 지표(stove_outbox_pending)는 같은 구간에 180/180 으로 한 번도 안 빠졌다 — 익스포터 쪽 성질이다.
+      #
+      # `for` 는 조건이 **한 번이라도** 거짓이면 시계를 0으로 되돌린다. 그래서 결측 하나에 리셋된다.
+      # 표본당 5.3% 로 60표본을 연속으로 채울 확률은 0.947^60 ≈ 4% — **사실상 울리지 않는다.**
+      # 실제로 랙이 592 로 10분 넘게 고정이었는데 pending 이 네 번 리셋되고 끝내 발화하지 않았다(D-031).
+      #
+      # `min_over_time` 은 창 안의 **있는 표본만** 본다. "10분 내내 500 을 넘었다"를 결측에 무너지지
+      # 않게 말하는 형태이고, 지속 조건이 창 안에 들어 있으므로 `for` 는 필요 없다 —
+      # 아래 ConsumerStalled 가 `[5m]` 에 `for` 를 붙이지 않는 것과 같은 이유다.
       - alert: ConsumerLagGrowing
-        expr: kafka_consumergroup_lag_sum > 500
-        for: 10m
+        expr: min_over_time(kafka_consumergroup_lag_sum[10m]) > 500
         labels:
           severity: warning
         annotations:
@@ -103,7 +134,8 @@ groups:
       # 5분 창의 delta 가 0 이라는 것 자체가 "5분간 안 움직였다" 이다.
       # 여기에 `for: 5m` 을 더하면 그 상태가 다시 5분 유지되어야 울려 실제 발화가 10분이 되는데,
       # 정작 description 은 5분이라고 말한다. **critical 알람에서 시계가 두 배로 어긋난다.**
-      # 위 ConsumerLagGrowing 의 `for: 10m` 은 창 없는 순간값에 붙은 것이라 사정이 다르다.
+      # 위 ConsumerLagGrowing 도 같은 이유로 `for` 를 뗐다 — 그쪽은 결측이 시계를 리셋해서
+      # **아예 울리지 않았다**(D-031). 두 규칙 모두 지속 조건을 창 안에 넣어 표현한다.
       - alert: ConsumerStalled
         expr: >-
           kafka_consumergroup_lag_sum > 0
