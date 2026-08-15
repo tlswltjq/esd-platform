@@ -10,6 +10,7 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentCancellation;
+import com.stove.payment.core.domain.PaymentMetrics;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentProperties;
 import com.stove.payment.core.domain.PaymentRepository;
@@ -43,6 +44,7 @@ public class PaymentService {
     private final ProcessedEventGuard processedEventGuard;
     private final PgClient pgClient;
     private final PaymentProperties paymentProperties;
+    private final PaymentMetrics paymentMetrics;
 
     /** OrderCreated 수신 시 결제 대기 레코드 생성 (주문번호 유니크로 중복 생성 차단) */
     public void createReady(String eventId, String eventType, String orderNo, Long memberId,
@@ -76,12 +78,30 @@ public class PaymentService {
                 payment.getAmount(), payment.getCurrency(), result.redirectUrl());
     }
 
+    /** 결제창이 만료된 뒤 도착한 승인을 자동으로 되돌릴 때 남기는 사유. 지표 태그이자 이벤트 사유다. */
+    public static final String CHECKOUT_EXPIRED = "CHECKOUT_WINDOW_EXPIRED";
+
     /**
      * 게이트 3+4: PG 콜백 처리.
      * 금액 대조 실패 시 승인 확정하지 않고 예외 → 운영 알람 대상.
      * 중복 콜백은 상태/멱등키로 흡수하고 이벤트를 재발행하지 않는다.
+     *
+     * <p><b>결제창이 만료된 뒤 온 승인은 거절하지 않는다.</b> 거절하려면 예외를 던져야 하는데,
+     * 그 시점에는 PG 에서 이미 돈이 움직였다 — 우리 장부에만 없는 상태가 되어
+     * <b>대사에서 원인을 알 수 없는 잔여</b>로 남는다. 그래서 승인을 적고 곧바로 되돌린다.
+     *
+     * <p>이때 {@code PaymentCompleted} 를 <b>내보내지 않는다.</b> 내보내면 license 가 지급하고
+     * settlement 가 매출을 적은 뒤 곧이어 둘 다 되돌리게 된다 — 사용자에게는 게임이 잠깐 생겼다
+     * 사라지고, 원장에는 매출과 상계가 한 쌍 남는다. <b>일어나지 않을 판매를 알리지 않는다.</b>
+     * 하위 서비스는 뒤이은 {@code PaymentCancelled} 만 받고, 셋 다 "되돌릴 것이 없다"로 정상 종료한다
+     * (order 는 {@code CREATED} 에서 취소, license 는 라이선스 없음, settlement 는 매출 원장 없음).
+     *
+     * <p>PG 환불 호출은 여기 없다 — 되돌릴 수 없는 외부 호출이라 트랜잭션 밖이어야 한다.
+     * 순서는 {@link com.stove.payment.api.application.PaymentCallbackFacade} 가 잡는다.
+     *
+     * @return PG 환불이 필요하면 그 값, 아니면 {@link PaymentCancellation#none()}
      */
-    public void handleApproval(PgApproval approval) {
+    public PaymentCancellation handleApproval(PgApproval approval) {
         // 주문번호로 찾는다. 멱등키는 PG 가 만드는 값이라 재사용되면 다른 주문의 결제를 물어온다(D-008).
         // 행을 잠그고 읽어 동시에 들어온 중복 콜백이 둘 다 승인되는 창을 닫는다.
         Payment payment = paymentRepository.findByOrderNoForUpdate(approval.orderNo())
@@ -91,7 +111,15 @@ public class PaymentService {
         boolean approved = payment.approve(approval.pgTxId(), approval.paidAmount(), approval.idempotencyKey());
         if (!approved) {
             log.info("중복 결제 콜백 무시 orderNo={} key={}", approval.orderNo(), approval.idempotencyKey());
-            return;
+            return PaymentCancellation.none();
+        }
+
+        if (payment.checkoutExpired(paymentProperties.checkoutWindow())) {
+            payment.beginCancel(CHECKOUT_EXPIRED);
+            paymentMetrics.recordAutoRefund(CHECKOUT_EXPIRED);
+            log.warn("결제창 만료 후 도착한 승인 — 받아 적고 자동 환불한다 orderNo={} amount={} 창={}",
+                    payment.getOrderNo(), payment.getAmount(), paymentProperties.checkoutWindow());
+            return PaymentCancellation.of(payment.getPgTxId(), payment.getAmount());
         }
 
         outboxRecorder.record(AGGREGATE, payment.getOrderNo(),
@@ -99,6 +127,7 @@ public class PaymentService {
                         payment.getAmount(), payment.getMethod(), payment.getLines()));
 
         log.info("결제 승인 orderNo={} amount={}", payment.getOrderNo(), payment.getAmount());
+        return PaymentCancellation.none();
     }
 
     /**

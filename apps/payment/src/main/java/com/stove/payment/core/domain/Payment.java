@@ -63,6 +63,15 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 30)
     private String method;
 
+    /**
+     * 결제창을 연 시각(사전등록 시각).
+     *
+     * <p>{@code createdAt} 과 나눠 두는 이유는 <b>둘이 서로 다른 것을 지키기 때문</b>이다.
+     * {@code createdAt} 은 <i>가격이 굳은 시점</i>이고 여기는 <i>사용자가 카드번호를 넣기 시작한 시점</i>이다.
+     * 하나로 재면 주문 창이 30분일 때 29분째에 결제창을 연 사용자에게 1분만 주게 된다.
+     */
+    private Instant preparedAt;
+
     @Column(length = 100)
     private String pgTxId;
 
@@ -145,7 +154,24 @@ public class Payment extends BaseTimeEntity {
         }
         this.pgTxId = pgTxId;
         this.method = method;
+        this.preparedAt = Instant.now();
         this.status = PaymentStatus.PENDING;
+    }
+
+    /**
+     * 결제창이 너무 오래 열려 있었는가.
+     *
+     * <p>참이어도 <b>승인을 거절하지 않는다.</b> 이 판정이 나오는 시점에는 PG 에서 이미 돈이
+     * 움직였고, 거절은 그 돈을 없는 셈 치는 것이라 우리 장부와 PG 대사가 어긋난다.
+     * 대신 승인을 장부에 적고 <b>곧바로 되돌린다</b> — 판단은
+     * {@link com.stove.payment.core.service.PaymentService#handleApproval} 에 있다.
+     *
+     * <p>{@code preparedAt} 이 없으면 <b>만료가 아니라고 답한다.</b> 판단 근거가 없는데
+     * '만료됨'이라고 답하면 정상 결제가 자동 환불된다 — 모를 때는 돈을 움직이지 않는 쪽이다.
+     * (같은 규칙이 license 의 보상 판정에도 있다: D-027 "모르면 환불하지 않는다".)
+     */
+    public boolean checkoutExpired(Duration window) {
+        return preparedAt != null && preparedAt.plus(window).isBefore(Instant.now());
     }
 
     /**

@@ -5,6 +5,7 @@ import com.stove.payment.api.controller.dto.PaymentResponse;
 import com.stove.payment.api.controller.dto.PgCallbackRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentRequest;
 import com.stove.payment.api.controller.dto.PreparePaymentResponse;
+import com.stove.payment.api.application.PaymentCallbackFacade;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.service.PaymentService;
 import jakarta.validation.Valid;
@@ -24,6 +25,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final RefundFacade refundFacade;
+    private final PaymentCallbackFacade paymentCallbackFacade;
 
     @GetMapping("/{orderNo}")
     public ApiResponse<PaymentResponse> get(@PathVariable String orderNo) {
@@ -45,7 +47,7 @@ public class PaymentController {
     @PostMapping("/callback")
     public ApiResponse<Void> callback(@Valid @RequestBody PgCallbackRequest request) {
         switch (request) {
-            case PgCallbackRequest.Approved approved -> paymentService.handleApproval(approved.toApproval());
+            case PgCallbackRequest.Approved approved -> paymentCallbackFacade.approve(approved.toApproval());
             case PgCallbackRequest.Declined declined -> paymentService.handleDecline(declined.toDecline());
         }
         return ApiResponse.ok();
