@@ -15,3 +15,6 @@ bin/
 *.log
 logs/
 .env
+
+# 장애 회차 산출물 — scripts/chaos/run-scenario.sh 의 기본 --out 자리
+runs/
