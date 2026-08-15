@@ -52,6 +52,11 @@ stove:
     # 자동 환불한다 — 그 시점엔 PG 에서 이미 돈이 움직였으므로 거절은 대사를 깨뜨린다.
     # 실 PG 결제창 세션(보통 10~30분) 안쪽에 두어 대개는 PG 가 먼저 만료시키게 한다.
     checkout-window: ${PAYMENT_CHECKOUT_WINDOW:15m}
+    # 취소 착수(CANCELING)가 이만큼 지나도 확정되지 않으면 중단된 것으로 보고 재개한다.
+    # CANCELING 은 "돈이 나갔는지 불확실" 이라는 뜻이고, 이 값이 그 불확실을 끝내는 시한이다.
+    refund-resume-after: ${PAYMENT_REFUND_RESUME_AFTER:2m}
+    # 스윕 주기. 재개 자체가 PG 왕복이라 촘촘히 돌 이유가 없다.
+    refund-sweep-interval-ms: ${PAYMENT_REFUND_SWEEP_MS:60000}
   outbox:
     relay-enabled: true
     batch-size: 200

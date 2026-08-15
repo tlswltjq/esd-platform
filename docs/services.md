@@ -208,6 +208,10 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
   **내보내지 않는다** — 일어나지 않을 판매를 하위 서비스에 알리지 않기 위해서다.
   지표 `stove.payment.auto-refunded`, 알람 `AutoRefundsRising`.
 - **게이트 4** — 중복 콜백은 상태와 `idempotency_key` 유니크로 흡수하고 **이벤트를 재발행하지 않는다.**
+- **중단된 취소 재개.** `CANCELING` 은 "PG 환불을 요청하기로 커밋했는데 확정까지 못 갔다",
+  즉 **돈이 나갔는지 불확실한 상태**다. `RefundSweeper` 가 1분마다 `refund-resume-after`(2분)를
+  넘긴 건을 집어 재개한다 — 안전한 근거는 PG 취소의 `pgTxId` 멱등 계약 하나다.
+  지표 `stove.payment.canceling`(게이지), 알람 `RefundsStuckInCanceling`.
 - **Saga 보상.** `LicenseIssueFailed` 를 받으면 자동 환불한다("돈은 빠졌는데 게임은 없는" 상태 해소).
   사용자 환불과 규칙은 같지만 진입점(`compensate`)이 분리돼 있다 — 이벤트 경로만 멱등 마킹이 필요하기 때문.
 
