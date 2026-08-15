@@ -50,7 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 31건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 30건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
