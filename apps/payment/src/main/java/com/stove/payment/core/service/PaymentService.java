@@ -11,6 +11,7 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentCancellation;
 import com.stove.payment.core.domain.PaymentPreparation;
+import com.stove.payment.core.domain.PaymentProperties;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.domain.PgDecline;
@@ -41,6 +42,7 @@ public class PaymentService {
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
     private final PgClient pgClient;
+    private final PaymentProperties paymentProperties;
 
     /** OrderCreated 수신 시 결제 대기 레코드 생성 (주문번호 유니크로 중복 생성 차단) */
     public void createReady(String eventId, String eventType, String orderNo, Long memberId,
@@ -56,12 +58,19 @@ public class PaymentService {
         log.info("결제 대기 생성 orderNo={} amount={}", orderNo, amount);
     }
 
-    /** 게이트 2: PG 사전등록 */
+    /**
+     * 게이트 2: PG 사전등록.
+     *
+     * <p>만료 검사를 <b>PG 를 부르기 전에</b> 한다. 뒤에 두면 만료된 주문에도 PG 거래가 하나 생기고,
+     * 그건 우리 장부에는 없는데 PG 에는 있는 상태다 — 대사에서 원인을 알 수 없는 잔여로 남는다.
+     */
     public PaymentPreparation prepare(String orderNo, String method) {
         Payment payment = findPayment(orderNo);
+        payment.requireWithinWindow(paymentProperties.window());
+
         PgPreparation result =
                 pgClient.prepare(orderNo, payment.getAmount(), payment.getCurrency(), method);
-        payment.prepare(result.pgTxId(), method);
+        payment.prepare(result.pgTxId(), method, paymentProperties.window());
 
         return new PaymentPreparation(orderNo, result.pgTxId(),
                 payment.getAmount(), payment.getCurrency(), result.redirectUrl());

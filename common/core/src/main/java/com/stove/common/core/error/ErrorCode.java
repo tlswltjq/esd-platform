@@ -31,6 +31,7 @@ public enum ErrorCode {
     PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "결제 요청 금액과 승인 금액이 일치하지 않습니다."),
     PAYMENT_TX_MISMATCH(HttpStatus.CONFLICT, "PG 거래번호가 일치하지 않습니다."),
     PAYMENT_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 결제입니다."),
+    PAYMENT_WINDOW_EXPIRED(HttpStatus.CONFLICT, "주문의 결제 가능 시간이 지났습니다. 다시 주문해 주세요."),
 
     // license
     LICENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "라이선스를 찾을 수 없습니다.");
