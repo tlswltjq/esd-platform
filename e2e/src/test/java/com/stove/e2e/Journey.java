@@ -34,9 +34,17 @@ final class Journey {
      * 실행마다 다른 값. <b>스택과 볼륨이 재사용된다</b> — 원격 스택은 계속 떠 있고 `down` 도 볼륨을
      * 남기므로, 고정 코드를 쓰면 두 번째 실행부터 이전 실행의 데이터와 섞인다.
      */
-    private static final long STAMP = System.currentTimeMillis() / 1000;
+    static final long STAMP = System.currentTimeMillis() / 1000;
 
     static final String PRODUCT_CODE = "GAME-E2E-" + STAMP;
+    /**
+     * 제목에도 스탬프를 박는다. <b>검색은 이름만 본다</b> —
+     * {@code ProductSearchRepository.findByStatusAndNameContaining} 이고 {@code productCode} 는
+     * 대상이 아니다. 그래서 제목이 고정이면 회차마다 같은 이름의 상품이 쌓이고,
+     * 검색 결과 첫 장(20건)이 차는 순간부터 <b>이번 회차의 상품은 구조적으로 결과에 없다.</b>
+     * 실제로 2026-08-13 에 첫 장이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
+     */
+    static final String PRODUCT_TITLE = "인수 시나리오 게임 " + STAMP;
     static final long MEMBER = STAMP % 1_000_000;
     /** 미보유 회원. 다운로드 권한이 소유 검사에 걸리는지 보려면 사지 않은 사람이 하나 필요하다. */
     static final long OTHER_MEMBER = MEMBER + 1;
