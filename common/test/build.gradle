@@ -14,3 +14,22 @@ dependencies {
 
     api 'org.springframework.boot:spring-boot-starter-test'
 }
+
+// ── 이 모듈의 테스트는 소스가 아니라 **설정 파일**을 읽는다 ──────────────
+//
+// `DeploymentShutdownContractTest` 가 보는 것은 앱 10종의 `application.yml` 과
+// `docker-compose.apps.yml` 이다. 그레이들은 그것을 입력으로 알지 못하므로,
+// 선언하지 않으면 **계약을 깨는 변경이 UP-TO-DATE 로 조용히 통과한다** —
+// 누가 gateway 의 `shutdown: graceful` 을 지워도 이 모듈의 소스가 그대로면 테스트가 안 돈다.
+//
+// CI 는 루트가 이미 캐시를 막아 두어(`outputs.upToDateWhen { false }`) 항상 돌지만,
+// **깨진 것을 CI 에서 처음 아는 것과 커밋 전에 아는 것은 다르다.**
+// e2e 쪽이 "이 태스크의 진짜 입력은 소스가 아니라 떠 있는 스택" 이라며 캐시를 끈 것과 같은 자리다.
+tasks.named('test') {
+    inputs.files(rootProject.fileTree('apps') { include '*/src/main/resources/application.yml' })
+            .withPropertyName('appConfigs')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(rootProject.file('docker-compose.apps.yml'))
+            .withPropertyName('appsCompose')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+}

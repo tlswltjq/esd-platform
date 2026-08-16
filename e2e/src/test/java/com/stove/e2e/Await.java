@@ -46,6 +46,27 @@ public final class Await {
     }
 
     /**
+     * 응답이 아닌 조건을 기다린다 — 제한 시간도 호출자가 정한다.
+     *
+     * <p>{@link #untilResponse} 는 "요청을 보낼 수 있다" 를 전제로 한다. 장애 주입 회차에서는
+     * 그 전제가 깨지는 것 자체가 재려는 값이라(무응답도 결과다), 응답을 들고 다니지 않는 형태가 필요하다.
+     * 제한 시간을 받는 이유도 같다 — 컨테이너 기동은 60초로는 모자라고,
+     * 정지 확인은 60초를 다 쓸 이유가 없다.
+     */
+    public static void until(String what, Duration limit, java.util.concurrent.Callable<Boolean> condition) {
+        try {
+            Awaitility.await(what)
+                    .atMost(limit)
+                    .pollInterval(Duration.ofSeconds(1))
+                    .pollDelay(Duration.ZERO)
+                    .until(condition);
+        } catch (ConditionTimeoutException e) {
+            throw new AssertionError(
+                    "%s — %d초 안에 성립하지 않았다".formatted(what, limit.toSeconds()), e);
+        }
+    }
+
+    /**
      * {@code pollDelay} 를 0 으로 둔다 — 기본값(100ms)이면 이미 도착해 있는 것도 한 번 쉬고 본다.
      * 판정이 40건 넘게 쌓이면 그 쉬는 시간이 그대로 실행 시간이 된다.
      */
