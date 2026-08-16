@@ -24,6 +24,12 @@ x-app: &app
   restart: unless-stopped
   networks:
     - stove
+  # SIGTERM 뒤 SIGKILL 까지의 유예. **스프링의 종료 단계 타임아웃(30초)보다 길어야 한다** —
+  # 짧으면 요청을 마치려고 기다리는 중에 프로세스가 죽어 graceful shutdown 이 그대로 잘린다(D-035).
+  # 도커 기본값은 10초라 **양쪽을 명시하지 않으면 이 부등호는 항상 거짓이다.**
+  # 여유 10초는 종료 단계가 끝난 뒤 JVM 이 실제로 내려가는 데 쓴다.
+  # 부등호는 DeploymentShutdownContractTest 가 지킨다.
+  stop_grace_period: 40s
 
 services:
   gateway:

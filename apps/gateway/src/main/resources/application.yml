@@ -1,9 +1,18 @@
 server:
   port: 8080
+  # 모든 트래픽이 이 문을 지난다 — PG 콜백도 클라이언트 요청도 창작자 호출도(D-034).
+  # 여기가 빠지면 하류 아홉이 켜 둔 graceful 이 전부 무의미해진다.
+  # 요청을 마치고 닫아도 그 응답을 내보낼 문이 이미 없기 때문이다.
+  shutdown: graceful
 
 spring:
   application:
     name: gateway
+
+  # 진행 중인 요청을 기다리는 상한. 컨테이너 종료 유예(40초)보다 짧아야 한다 —
+  # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035).
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
   cloud:
     gateway:

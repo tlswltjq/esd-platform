@@ -6,6 +6,11 @@ spring:
   application:
     name: order
 
+  # 진행 중인 요청을 기다리는 상한. compose 의 stop_grace_period(40s)보다 짧아야 한다 —
+  # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035). 부등호는 테스트가 지킨다.
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/stove_order?serverTimezone=UTC&characterEncoding=UTF-8&rewriteBatchedStatements=true
     username: ${DB_USER:stove}
