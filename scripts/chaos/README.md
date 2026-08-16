@@ -39,6 +39,13 @@ scripts/chaos/fault.sh status
 # 대조군 — 장애 없이 같은 부하. 이걸 먼저 돌린다
 scripts/chaos/run-scenario.sh --fault none --orders 40 --rate 2 --hold 0 --out runs/control
 
+# 판정을 남길 회차는 이렇게 돈다 — measuring.md 의 "조건당 2회 + 대조군" 을 스크립트가 지킨다.
+# --control 은 대조군을 **회차마다 바로 앞에** 붙인다. 전체에 한 번 붙이면 그사이 스택 상태가
+# 흘러가(DLT 누적·리밸런싱) 두 회차의 차이를 장애 탓이라고 말할 수 없다.
+scripts/chaos/run-scenario.sh --fault license-db-denied --orders 40 --rate 2 \
+  --inject-after 5 --hold 60 --repeat 2 --control --out runs/db-denied
+# → runs/db-denied/rounds.txt 에 회차별 결말이 나란히 남는다
+
 # 원장 테이블만 끊는다 (보상 경로가 살아 있는 조건)
 scripts/chaos/run-scenario.sh --fault license-table-denied --orders 40 --rate 2 \
   --inject-after 5 --hold 60 --out runs/table-denied
