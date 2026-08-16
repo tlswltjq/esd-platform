@@ -18,6 +18,7 @@ import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.domain.PgDecline;
 import com.stove.payment.core.domain.PgPreparation;
+import com.stove.payment.core.domain.RefundRetryPolicy;
 import com.stove.payment.core.domain.StrandedCancellation;
 import com.stove.payment.core.port.PgClient;
 import java.time.Duration;
@@ -173,9 +174,16 @@ public class PaymentService {
      */
     public PaymentCancellation beginCancel(String orderNo, String reason) {
         Payment payment = findPayment(orderNo);
+        boolean firstEntry = payment.getStatus() != PaymentStatus.CANCELING;
         if (!payment.beginCancel(reason)) {
             log.info("이미 취소된 결제 orderNo={}", orderNo);
             return PaymentCancellation.none();
+        }
+        // 착수 직후에는 스윕이 집지 않게 유예를 준다. 정상 환불은 PG 왕복 한 번이라 초 단위로
+        // 끝나므로, 이 유예 안에 확정되면 스윕은 이 건을 한 번도 보지 않는다.
+        // **재개 경로에서는 예약하지 않는다** — 그쪽은 스윕이 이미 백오프를 걸어 두었다.
+        if (firstEntry) {
+            payment.scheduleFirstCancelRetry(paymentProperties.refundResumeAfter());
         }
         log.info("결제 취소 착수 orderNo={} reason={}", orderNo, reason);
         return PaymentCancellation.of(payment.getPgTxId(), payment.getAmount());
@@ -232,12 +240,29 @@ public class PaymentService {
      * ({@link PaymentCancellation} 과 같은 판단).
      */
     @Transactional(readOnly = true)
-    public List<StrandedCancellation> findStrandedCancellations(Duration olderThan) {
+    public List<StrandedCancellation> findStrandedCancellations() {
         return paymentRepository
-                .findByStatusAndUpdatedAtBefore(PaymentStatus.CANCELING, Instant.now().minus(olderThan))
+                .findDueForCancelRetry(PaymentStatus.CANCELING, Instant.now())
                 .stream()
-                .map(payment -> new StrandedCancellation(payment.getOrderNo(), payment.getCancelReason()))
+                .map(payment -> new StrandedCancellation(
+                        payment.getOrderNo(), payment.getCancelReason(), payment.getCancelAttempts()))
                 .toList();
+    }
+
+    /**
+     * 다음 재개 시도를 예약한다. <b>성공하든 실패하든</b> 부른다.
+     *
+     * <p>실패했을 때만 미루면 성공 직후 확정 커밋이 깨진 건이 곧바로 다시 잡히고,
+     * 성공했을 때만 미루면 실패한 건이 백오프 없이 계속 돈다 — <b>막으려던 것이 후자다.</b>
+     * 확정된 건은 {@link Payment#completeCancel()} 이 예약을 지우므로 다시 잡히지 않는다.
+     */
+    @Transactional
+    public void scheduleCancelRetry(String orderNo) {
+        paymentRepository.findByOrderNo(orderNo).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.CANCELING) {
+                payment.scheduleCancelRetry(RefundRetryPolicy.backoffAfter(payment.getCancelAttempts()));
+            }
+        });
     }
 
     @Transactional(readOnly = true)

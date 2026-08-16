@@ -53,6 +53,17 @@ spring:
       observation-enabled: true
 
 stove:
+  order:
+    # 결제를 시작하지 않은 주문을 이만큼 지나면 만료시킨다.
+    # **payment 의 window(30분)보다 길어야 한다** — 짧으면 아직 결제할 수 있는 주문을 order 가
+    # 먼저 닫아, 사용자는 결제창을 열 수 있는데 주문이 없는 상태를 본다. 두 배로 잡아
+    # 두 서비스의 시계가 조금 어긋나도 순서가 뒤집히지 않게 한다.
+    expire-after: ${ORDER_EXPIRE_AFTER:1h}
+    # 한 회차에 만료시킬 최대 건수. 밀린 것을 한 번에 없애는 것이 목적이 아니라 늘지 않게 하는 것이
+    # 목적이다 — 실측으로 밀린 것이 98,750건이었고 한 트랜잭션에 넣으면 락과 언두가 그만큼 커진다.
+    expire-batch-size: ${ORDER_EXPIRE_BATCH:500}
+    # 주기 × 배치 = 처리량이다. 500 × 60분 = 시간당 3만 건으로 실측 유입(하루 1~3건)의 몇 자릿수 위다.
+    expire-sweep-interval-ms: ${ORDER_EXPIRE_SWEEP_MS:60000}
   catalog:
     base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     connect-timeout: 1s

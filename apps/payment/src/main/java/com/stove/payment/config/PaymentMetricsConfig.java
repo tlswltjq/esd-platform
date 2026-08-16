@@ -1,6 +1,7 @@
 package com.stove.payment.config;
 
 import com.stove.payment.core.domain.PaymentMetrics;
+import com.stove.payment.core.domain.PaymentProperties;
 import com.stove.payment.core.domain.PaymentRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -20,7 +21,9 @@ public class PaymentMetricsConfig {
 
     @Bean
     public PaymentMetrics paymentMetrics(ObjectProvider<MeterRegistry> meterRegistry,
-                                        PaymentRepository paymentRepository) {
-        return new PaymentMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new), paymentRepository);
+                                        PaymentRepository paymentRepository,
+                                        PaymentProperties paymentProperties) {
+        return new PaymentMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new),
+                paymentRepository, paymentProperties);
     }
 }

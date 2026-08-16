@@ -4,6 +4,11 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // 만료 스윕의 분산 락. 인스턴스가 여러 대면 배치 크기가 인스턴스 수만큼 곱해져
+    // 상한이 상한이 아니게 된다 — SchedulerLockConfig 주석 참고.
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:6.9.0'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.0'
+
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     // catalog 동기 호출은 이 모듈의 유일한 외부 HTTP 의존이다.
     // 타임아웃·5xx 같은 실패는 실제 소켓 없이는 재현할 수 없어 스텁 서버를 띄운다.

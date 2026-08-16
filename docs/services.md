@@ -142,15 +142,22 @@ DRAFT/REVIEWING ──ReviewApproved──▶ APPROVED ──sale-open──▶ 
 
 ## order
 
-주문 생성과 취소. **결제 결과 이벤트로만 `CREATED` 이후 상태가 바뀐다.**
+주문 생성과 취소. **결제 결과 이벤트로만 `CREATED` 이후 상태가 바뀐다 — `EXPIRED` 만 예외다.**
 
 **상태머신**
 
 ```
 CREATED ──PaymentCompleted──▶ PAID
         ├─cancel / PaymentCancelled──▶ CANCELED
-        └──▶ FAILED
+        ├──▶ FAILED
+        └─시간(스윕)──▶ EXPIRED
 ```
+
+**만료** — 결제를 시작조차 하지 않은 주문은 아무 이벤트도 낳지 않아 영원히 `CREATED` 로 남았다
+(실측 전체의 96%). `OrderExpirySweeper` 가 1분마다 `stove.order.expire-after`(1시간)를 넘긴 건을
+**배치 크기만큼만** 집어 닫는다. `CANCELED` 와 나눠 두는 이유는 **되돌릴 것이 있었는가**가 다르기
+때문이고, **이벤트를 내지 않는** 이유는 아무도 반응하지 않는 메시지를 밀린 건수만큼 내지 않기 위해서다.
+지표 `stove.order.pending`·`stove.order.expirable`(게이지), 알람 `OrderExpirySweepFalling`.
 
 **HTTP API**
 
@@ -209,11 +216,22 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
   지표 `stove.payment.auto-refunded`, 알람 `AutoRefundsRising`.
 - **게이트 4** — 중복 콜백은 상태와 `idempotency_key` 유니크로 흡수하고 **이벤트를 재발행하지 않는다.**
 - **중단된 취소 재개.** `CANCELING` 은 "PG 환불을 요청하기로 커밋했는데 확정까지 못 갔다",
-  즉 **돈이 나갔는지 불확실한 상태**다. `RefundSweeper` 가 1분마다 `refund-resume-after`(2분)를
-  넘긴 건을 집어 재개한다 — 안전한 근거는 PG 취소의 `pgTxId` 멱등 계약 하나다.
-  지표 `stove.payment.canceling`(게이지), 알람 `RefundsStuckInCanceling`.
+  즉 **돈이 나갔는지 불확실한 상태**다. `RefundSweeper` 가 1분마다 깨어나 **다음 시도 시각이 된**
+  건을 집어 재개한다 — 안전한 근거는 PG 취소의 `pgTxId` 멱등 계약 하나다.
+- **재시도 예산.** 각 건의 다음 시도는 `RefundRetryPolicy` 가 미룬다(2→4→8→16→30분 상한).
+  **주기와 간격은 다른 값이다** — 예전에는 그 구분이 없어 PG 가 죽어 있으면 같은 건에 1분마다
+  요청이 나갔고, 그건 복구 중인 PG 를 계속 두드리는 것이었다.
+  **포기 상태는 없다.** Outbox 는 예산이 소진되면 `DEAD` 로 보내지만(D-003), 여기서 그렇게 하면
+  **불확실이 해소된 것처럼 보이고 아무도 다시 보지 않는다.** 예산(`refund-budget`, 1시간)은
+  재시도를 멈추는 값이 아니라 **사람을 부르는 값**이다.
+  지표 `stove.payment.canceling`·`stove.payment.canceling.stale`(게이지),
+  `stove.payment.refund-resume-failed`(카운터),
+  알람 `RefundsStuckInCanceling`·`RefundsStuckBeyondBudget`.
 - **Saga 보상.** `LicenseIssueFailed` 를 받으면 자동 환불한다("돈은 빠졌는데 게임은 없는" 상태 해소).
   사용자 환불과 규칙은 같지만 진입점(`compensate`)이 분리돼 있다 — 이벤트 경로만 멱등 마킹이 필요하기 때문.
+  **이 경로는 운영에서 한 번도 지나가지 않았다**(실측 0건) — D-027 이 조건을 좁혔기 때문이다.
+  그래도 지우지 않는다: 0 은 "필요 없다" 가 아니라 **"그 실패가 아직 안 났다"** 는 뜻이다.
+  대신 `stove.payment.compensated` 로 세고, `PaymentCompensationTest` 가 실 인프라에서 그 경로를 지난다.
 
 ---
 

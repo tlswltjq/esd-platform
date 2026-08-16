@@ -13,6 +13,9 @@ package com.stove.payment.core.domain;
  *
  * @param reason 착수할 때 적힌 사유를 그대로 이어 쓴다. 새로 지어내면 이력이 끊긴다 —
  *               "사용자 환불" 로 시작한 건이 재개 뒤에 "시스템 재시도" 로 남으면 안 된다.
+ * @param attempts 지금까지 몇 번 시도했는가. <b>로그에 남기기 위해서만 있는 값이 아니다</b> —
+ *               "계속 실패하는 중" 과 "이제 막 시작" 이 로그에서 같은 모습이면
+ *               PG 연동이 나빠지는 것을 사람이 알아챌 수 없다.
  */
-public record StrandedCancellation(String orderNo, String reason) {
+public record StrandedCancellation(String orderNo, String reason, int attempts) {
 }
