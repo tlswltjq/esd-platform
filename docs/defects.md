@@ -49,6 +49,7 @@
 | [D-029](#d-029) | 미결제 주문에 만료가 없어 옛 가격으로 영구히 결제 | 금액 조작 | **수정됨** |
 | [D-030](#d-030) | 이벤트 재처리로 유실을 복구할 수 없다 — Inbox 가드가 먼저 막음 | 복구 불가 | **절차로 닫음** |
 | [D-031](#d-031) | 랙 알람이 조건이 참인 내내 한 번도 울리지 않음 | 관측 불가 | **수정됨** |
+| [D-032](#d-032) | 익스포터가 스크레이프마다 지표를 정확히 한 줄씩 흘림 | 관측 불가 | **수정됨** |
 
 D-016 ~ D-019 는 **서비스 계층에 테스트가 없던 모듈에 테스트를 붙이면서** 나왔다.
 넷 중 셋이 컨슈머 경로의 예외 처리 문제이고, 하나는 이미 고친 결함(D-009)이
@@ -1886,6 +1887,129 @@ min_over_time(kafka_consumergroup_lag_sum[10m]) > 500
 우리 규칙이 결측에 견디게 만든 것으로 증상은 닫혔지만, **결측률이 올라가면
 `min_over_time` 도 창 안에 표본이 없어 무응답이 된다.** 결측률 자체를 지켜보는 편이 낫다 —
 `count_over_time(...[10m]) < N` 형태의 규칙이 다음 후보다.
+
+> **원인은 [D-032](#d-032) 가 규명했다.** 브로커의 그룹 조회 실패가 아니었다 —
+> 익스포터가 응답을 조립하는 경로에서 지표 한 줄을 흘리고 있었다.
+> 위 추측("그룹을 통째로 생략")은 **틀렸다**: 통째로 빠지는 것이 아니라 집계값만 빠진다.
+
+---
+
+## D-032 익스포터가 스크레이프마다 지표를 정확히 한 줄씩 흘린다
+
+**상태** 수정됨
+**영향** 관측 불가 — [D-031](#d-031) 의 원인
+**위치** `docker-compose.yml` 의 `kafka-exporter` (원인은 `danielqsj/kafka-exporter:v1.9.0` 안)
+**재현** 익스포터를 1초 간격으로 직접 긁는다 — 60회 중 25회가 그룹 12개가 아니라 11개
+**실측** 정상 응답 635줄 / 결측 응답 **634줄** (차이 정확히 1줄, 30회 관측)
+
+### 무슨 일이
+
+D-031 이 "익스포터가 왜 빠뜨리는지는 안 봤다" 로 남긴 자리다. 넷을 차례로 잘랐다.
+
+**1. Prometheus 가 아니다.** 익스포터를 직접 긁어도 재현된다.
+
+```
+60회 스크레이프 중  12개 그룹 35회 · 11개 그룹 25회
+```
+
+**2. 응답 전체가 빠지는 것이 아니다.** 30분(10초 격자 181점)에서
+
+```
+12개 시리즈 : 115회
+11개 시리즈 :  66회
+10개 이하   :   0회      ← 두 그룹이 동시에 빠진 적이 없다
+```
+
+그룹마다 독립적으로 빠진다면 두 개가 겹치는 회차가 나와야 한다(12그룹 × 결측률 3%면
+181회 중 9회쯤). **한 번도 없다.** 결측이 그룹의 성질이 아니라는 뜻이다.
+
+**3. 그룹 조회는 성공한다.** 빠진 그룹의 다른 지표를 보면
+
+```
+kafka_consumergroup_current_offset{consumergroup="order",partition="0",topic="stove.payment.v1"} 461
+kafka_consumergroup_current_offset{consumergroup="order",partition="1",...} 467
+kafka_consumergroup_current_offset{consumergroup="order",partition="2",...} 488
+kafka_consumergroup_current_offset_sum{consumergroup="order",topic="stove.payment.v1"} 1416
+kafka_consumergroup_lag{consumergroup="order",partition="0",...} 0
+kafka_consumergroup_lag{consumergroup="order",partition="1",...} 0
+kafka_consumergroup_lag{consumergroup="order",partition="2",...} 0
+                                                    ← lag_sum 만 없다
+```
+
+**커밋 오프셋도, 파티션별 랙도, 오프셋 합계도 전부 있다.** 빠지는 것은 `lag_sum` 하나다.
+
+**4. 실패가 아니다.** `--verbosity=3 --log.enable-sarama` 로 올려도 결측 회차의 로그가
+정상 회차와 **한 글자도 다르지 않다.** 응답은 `200` 이고 `promhttp_metric_handler_requests_total{code="500"}`
+은 0이다 — 수집기가 오류를 만난 것도, 레지스트리가 떨어뜨린 것도 아니다.
+
+### 원인
+
+익스포터 소스에서 토픽 하나의 전송 순서는 이렇다.
+
+```go
+ch <- consumergroupCurrentOffset      // 파티션마다
+ch <- consumergroupLag                // 파티션마다
+ch <- consumergroupCurrentOffsetSum   // 토픽당
+ch <- consumergroupLagSum             // 토픽당 ← 마지막
+```
+
+`lag_sum` 은 **토픽 블록의 마지막 전송**이고, 흘리는 것은 언제나 그 한 줄이다.
+전송 자체에는 조건이 없다 — 바로 윗줄 `current_offset_sum` 이 나갔으면 `lag_sum` 도 나가야 한다.
+**나가지 않았다는 것은 채널에서 사라졌다는 뜻이다.**
+
+사라지는 자리는 `--concurrent.enable` 이 가른다. 기본값(꺼짐)은 여러 스크레이프가
+수집 결과를 **공유**하는데, 그 공유 경로가 중간 채널을 비우는 끝에서 마지막 것을 놓친다.
+
+### 수정
+
+```yaml
+command:
+  - --kafka.server=kafka:19092
+  - --web.listen-address=:9308
+  - --concurrent.enable        # 추가
+```
+
+| | 수정 전 | 수정 후 |
+|---|---|---|
+| 그룹 12개가 온전한 스크레이프 | 35 / 60 | **40 / 40** |
+| 응답 줄 수 | 635 또는 634 | 635 고정 |
+
+실환경(Prometheus 10분 창, 스크레이프 60회)에서도 확인했다. **12개 그룹 전부 60/60 이다.**
+
+```
+up 스크레이프: 60
+  catalog/stove.review.v1     60      payment/stove.license.v1    60
+  download/stove.catalog.v1   60      payment/stove.order.v1      60
+  download/stove.license.v1   60      review/stove.studio.v1      60
+  download/stove.studio.v1    60      settlement/stove.payment.v1 60
+  license/stove.payment.v1    60      store/stove.catalog.v1      60
+  order/stove.payment.v1      60      studio/stove.review.v1      60
+```
+
+수정 전 같은 창의 보존율은 **0.750 ~ 0.983** 이었다(8-4 의 표). 전부 **1.000** 이 됐다 —
+`ConsumerLagMetricGaps` 의 임계 0.5 가 이제 정상 상태에서 아주 멀어졌다.
+
+> **대조군이 하나 우연히 생겼다.** 측정 도중 CI 가 `main` 의 compose 로 익스포터를 재생성해
+> 플래그가 되돌아갔고, 같은 스택에서 **즉시 29/60 으로 돌아왔다.** 붙였다 뗐다 한 셈이다.
+
+플래그 설명은 "큰 클러스터에서는 끄라" 고 경고한다 — 스크레이프마다 브로커를 실제로 부르기
+때문이다. **브로커 1대에 컨슈머그룹 12개인 여기서는 그 경고가 적용되지 않는다.**
+클러스터가 커지면 이 판단을 다시 봐야 한다.
+
+### D-031 의 규칙은 그대로 둔다
+
+원인을 고쳤다고 `min_over_time` 을 되돌리지 않는다. **결측에 견디는 것과 결측이 없는 것은
+다른 보장이고, 둘 중 하나만 남기면 다음 익스포터 판올림에 다시 밟는다.**
+`#39` 가 넣은 `ConsumerLagMetricGaps` 도 남긴다 — 그것이 이 수정이 풀리는 것을 잡는 장치다.
+
+### 무엇이 틀렸었나
+
+D-031 은 원인을 "브로커의 그룹 조회가 순간 실패하면 익스포터가 그 그룹을 통째로 생략" 으로
+추측하고 "우리가 고칠 수 있는 자리가 아니다" 로 닫았다. **둘 다 틀렸다.**
+그룹은 통째로 빠지지 않았고(집계값 한 줄만 빠졌다), 고칠 수 있는 자리였다(플래그 하나).
+
+대장의 규칙이 여기서 값을 했다 — **추측은 넣지 않는다.**
+그때 추측을 "원인" 으로 적었다면 이 항목은 열리지 않았을 것이다.
 
 ---
 
