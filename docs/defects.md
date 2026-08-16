@@ -1974,6 +1974,24 @@ command:
 | 그룹 12개가 온전한 스크레이프 | 35 / 60 | **40 / 40** |
 | 응답 줄 수 | 635 또는 634 | 635 고정 |
 
+실환경(Prometheus 10분 창, 스크레이프 60회)에서도 확인했다. **12개 그룹 전부 60/60 이다.**
+
+```
+up 스크레이프: 60
+  catalog/stove.review.v1     60      payment/stove.license.v1    60
+  download/stove.catalog.v1   60      payment/stove.order.v1      60
+  download/stove.license.v1   60      review/stove.studio.v1      60
+  download/stove.studio.v1    60      settlement/stove.payment.v1 60
+  license/stove.payment.v1    60      store/stove.catalog.v1      60
+  order/stove.payment.v1      60      studio/stove.review.v1      60
+```
+
+수정 전 같은 창의 보존율은 **0.750 ~ 0.983** 이었다(8-4 의 표). 전부 **1.000** 이 됐다 —
+`ConsumerLagMetricGaps` 의 임계 0.5 가 이제 정상 상태에서 아주 멀어졌다.
+
+> **대조군이 하나 우연히 생겼다.** 측정 도중 CI 가 `main` 의 compose 로 익스포터를 재생성해
+> 플래그가 되돌아갔고, 같은 스택에서 **즉시 29/60 으로 돌아왔다.** 붙였다 뗐다 한 셈이다.
+
 플래그 설명은 "큰 클러스터에서는 끄라" 고 경고한다 — 스크레이프마다 브로커를 실제로 부르기
 때문이다. **브로커 1대에 컨슈머그룹 12개인 여기서는 그 경고가 적용되지 않는다.**
 클러스터가 커지면 이 판단을 다시 봐야 한다.
