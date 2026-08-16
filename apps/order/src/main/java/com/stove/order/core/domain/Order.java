@@ -64,6 +64,15 @@ public class Order extends BaseTimeEntity {
     @Column(length = 200)
     private String failReason;
 
+    /**
+     * 만료 처리된 시각.
+     *
+     * <p>{@code createdAt} 으로 대신할 수 없다 — 그건 <b>만료 대상이 된 시각</b>이지
+     * <b>실제로 만료시킨 시각</b>이 아니다. 밀린 주문을 나눠서 처리하므로 둘이 크게 벌어질 수 있고,
+     * 그 차이가 곧 "스윕이 얼마나 밀렸나" 다.
+     */
+    private Instant expiredAt;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 
@@ -133,6 +142,27 @@ public class Order extends BaseTimeEntity {
         this.status = OrderStatus.CANCELED;
         this.canceledAt = Instant.now();
         this.cancelReason = reason;
+    }
+
+    /**
+     * 결제 창이 지나 만료시킨다.
+     *
+     * <p><b>{@code CREATED} 에서만 열린다.</b> 결제가 한 걸음이라도 진행된 주문은 결과 이벤트가
+     * 상태를 바꾸므로 시간이 끼어들 자리가 아니다 — 만약 그런 주문이 여기 들어온다면
+     * 스윕의 조회 조건이 틀린 것이고, <b>조용히 넘기면 그 사실이 묻힌다.</b>
+     *
+     * <p>{@code cancel} 과 나눠 쓴다. 사유를 남기지 않는 이유는 사유가 하나뿐이기 때문이다 —
+     * 상태 자체가 사유다.
+     */
+    public void expire() {
+        if (status == OrderStatus.EXPIRED) {
+            return;
+        }
+        if (status != OrderStatus.CREATED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "만료할 수 없는 주문 상태: " + status);
+        }
+        this.status = OrderStatus.EXPIRED;
+        this.expiredAt = Instant.now();
     }
 
     public void requireOwner(Long memberId) {

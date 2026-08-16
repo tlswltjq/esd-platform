@@ -19,7 +19,6 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.port.PgClient;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -54,8 +53,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 class StrandedRefundResumeTest {
 
     private static final long AMOUNT = 39_000L;
-    /** 0초를 그대로 쓰면 "방금 착수한 건" 까지 집는지가 검증되지 않는다. 그 경계는 별도 테스트가 본다. */
-    private static final Duration IMMEDIATELY = Duration.ZERO;
 
     @Autowired
     PaymentService paymentService;
@@ -145,7 +142,7 @@ class StrandedRefundResumeTest {
     void resumeFinishesStrandedCancellation() {
         String orderNo = strandedByPgFailure();
 
-        int resumed = refundFacade.resumeStranded(IMMEDIATELY);
+        int resumed = refundFacade.resumeStranded();
 
         assertThat(resumed).isEqualTo(1);
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
@@ -162,7 +159,7 @@ class StrandedRefundResumeTest {
     void resumeKeepsTheOriginalReason() {
         String orderNo = strandedByPgFailure();
 
-        refundFacade.resumeStranded(IMMEDIATELY);
+        refundFacade.resumeStranded();
 
         verify(pgClient).cancel(anyString(), anyLong(), eq("USER_REFUND"));
         assertThat(paymentRepository.findByOrderNo(orderNo).orElseThrow().getCancelReason())
@@ -176,7 +173,7 @@ class StrandedRefundResumeTest {
         refundFacade.refund(orderNo, "USER_REFUND");
         reset(pgClient);
 
-        int resumed = refundFacade.resumeStranded(IMMEDIATELY);
+        int resumed = refundFacade.resumeStranded();
 
         assertThat(resumed).isZero();
         verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
@@ -195,26 +192,11 @@ class StrandedRefundResumeTest {
         doThrow(new IllegalStateException("PG 여전히 응답 없음"))
                 .when(pgClient).cancel(eq("PG-TX-" + failing), anyLong(), anyString());
 
-        int resumed = refundFacade.resumeStranded(IMMEDIATELY);
+        int resumed = refundFacade.resumeStranded();
 
         assertThat(resumed).as("실패한 한 건을 뺀 나머지").isEqualTo(1);
         assertThat(statusOf(failing)).isEqualTo(PaymentStatus.CANCELING);
         assertThat(statusOf(recoverable)).isEqualTo(PaymentStatus.CANCELED);
     }
 
-    /**
-     * 방금 착수한 건까지 집으면 <b>정상 진행 중인 환불을 옆에서 한 번 더 부른다.</b>
-     * 멱등이라 사고는 아니지만, PG 호출이 두 배가 되고 "몇 번 시도했나" 가 흐려진다.
-     */
-    @Test
-    @DisplayName("착수한 지 얼마 안 된 건은 집지 않는다 — 진행 중인 환불을 옆에서 부르지 않는다")
-    void freshCancellationIsLeftAlone() {
-        String orderNo = strandedByPgFailure();
-
-        int resumed = refundFacade.resumeStranded(Duration.ofMinutes(10));
-
-        assertThat(resumed).isZero();
-        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELING);
-        verify(pgClient, never()).cancel(anyString(), anyLong(), anyString());
-    }
 }

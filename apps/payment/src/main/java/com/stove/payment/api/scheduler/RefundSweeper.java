@@ -1,7 +1,6 @@
 package com.stove.payment.api.scheduler;
 
 import com.stove.payment.api.application.RefundFacade;
-import com.stove.payment.core.domain.PaymentProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -27,6 +26,10 @@ import org.springframework.stereotype.Component;
  * 재개 로그와 이벤트가 겹쳐 <b>"몇 번 시도했나" 를 알 수 없게 된다</b> — 그 값이 곧
  * PG 연동이 정상인지 보는 창이다.
  *
+ * <p><b>주기와 예산은 다른 값이다.</b> 이 스케줄러는 1분마다 깨어나지만 <b>깨어난다고
+ * 전부 다시 거는 것은 아니다</b> — 각 건의 다음 시도 시각은 {@code RefundRetryPolicy} 가 정한다.
+ * 예전에는 그 구분이 없어서 PG 가 죽어 있으면 같은 건에 1분마다 요청이 나갔다.
+ *
  * <p>{@code lockAtMostFor} 를 폴링 주기보다 넉넉히 잡는다. 락을 쥔 인스턴스가 죽어도 이 시간이
  * 지나면 풀리고, 그 전에는 다른 인스턴스가 들어오지 않는다. {@code lockAtLeastFor} 는
  * 대상이 0건이라 순식간에 끝났을 때 시계 오차로 두 번째 인스턴스가 곧바로 다시 도는 것을 막는다.
@@ -37,12 +40,11 @@ import org.springframework.stereotype.Component;
 public class RefundSweeper {
 
     private final RefundFacade refundFacade;
-    private final PaymentProperties paymentProperties;
 
     @Scheduled(fixedDelayString = "${stove.payment.refund-sweep-interval-ms:60000}")
     @SchedulerLock(name = "payment-resume-stranded-refunds", lockAtMostFor = "PT5M", lockAtLeastFor = "PT30S")
     public void resumeStrandedRefunds() {
-        int resumed = refundFacade.resumeStranded(paymentProperties.refundResumeAfter());
+        int resumed = refundFacade.resumeStranded();
         if (resumed > 0) {
             log.warn("중단된 취소 {}건을 확정까지 보냈다", resumed);
         }

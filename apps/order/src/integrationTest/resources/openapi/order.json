@@ -267,7 +267,7 @@
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "CREATED", "PAID", "CANCELED", "FAILED" ],
+            "enum" : [ "CREATED", "PAID", "CANCELED", "FAILED", "EXPIRED" ],
             "type" : "string"
           },
           "totalAmount" : {

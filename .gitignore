@@ -22,3 +22,6 @@ perf-results/
 
 # 장애 회차 산출물 — scripts/chaos/run-scenario.sh 의 기본 --out 자리
 runs/
+
+# 에이전트 작업 공간 — 워크트리와 세션 설정. 리포에 담을 것이 아니다.
+.claude/

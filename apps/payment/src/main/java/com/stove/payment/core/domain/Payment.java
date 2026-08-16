@@ -96,6 +96,27 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 200)
     private String cancelReason;
 
+    /**
+     * 재개를 몇 번 시도했는가.
+     *
+     * <p>{@code stove.payment.refund-resumed} 는 <b>성공만</b> 센다. 그래서 "계속 실패하는 중"과
+     * "애초에 대상이 없었다"가 지표에서 같은 모습이었다. 이 값은 행에 남으므로
+     * <b>지금 몇 번째 시도인지를 데이터로 물을 수 있다</b> — 그것이 PG 연동 품질을 보는 창이다.
+     */
+    @Column(nullable = false)
+    private int cancelAttempts;
+
+    /** 다음 재개를 시도해도 되는 시각. {@code null} 이면 아직 예약된 적이 없다. */
+    private Instant nextCancelAttemptAt;
+
+    /**
+     * {@code CANCELING} 에 들어간 시각.
+     *
+     * <p>{@code updatedAt} 으로 대신할 수 없다 — 재시도마다 갱신되므로
+     * <b>"얼마나 오래 불확실했는가" 를 잃는다.</b> 예산 초과 판정의 기준이다.
+     */
+    private Instant cancelingSince;
+
     private Instant failedAt;
 
     /** PG 가 준 거절 코드. 사유별 집계의 기준이라 사람이 읽는 문구와 따로 둔다. */
@@ -219,9 +240,46 @@ public class Payment extends BaseTimeEntity {
         if (status != PaymentStatus.PAID && status != PaymentStatus.CANCELING) {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 불가 상태: " + status);
         }
+        // 처음 CANCELING 에 들어가는 순간만 기준 시각을 잡는다. 재개 경로도 이 메서드를 지나므로
+        // 조건 없이 덮으면 **재시도할 때마다 "방금 시작한 것" 이 되어 예산이 영원히 안 찬다.**
+        if (status != PaymentStatus.CANCELING) {
+            this.cancelingSince = Instant.now();
+        }
         this.status = PaymentStatus.CANCELING;
         this.cancelReason = reason;
         return true;
+    }
+
+    /**
+     * 다음 재개 시도를 예약한다.
+     *
+     * <p>백오프가 없으면 PG 가 죽어 있는 동안 <b>복구 중인 PG 를 같은 간격으로 계속 두드린다.</b>
+     * 시도 횟수를 함께 올려 두는 이유는 그 값이 행에 남아야 "몇 번째인지" 를 물을 수 있어서다.
+     */
+    public void scheduleCancelRetry(Duration backoff) {
+        this.cancelAttempts++;
+        this.nextCancelAttemptAt = Instant.now().plus(backoff);
+    }
+
+    /**
+     * 착수 직후의 첫 유예. <b>시도 횟수를 올리지 않는다</b> — 아직 아무것도 시도하지 않았기 때문이다.
+     * 여기서 함께 올리면 첫 재개가 "2회차" 로 기록되어 그 값이 PG 품질을 말해 주지 못한다.
+     */
+    public void scheduleFirstCancelRetry(Duration initialDelay) {
+        this.nextCancelAttemptAt = Instant.now().plus(initialDelay);
+    }
+
+    /**
+     * 취소 착수 뒤 이만큼 지나도 확정되지 않았는가.
+     *
+     * <p><b>포기하라는 뜻이 아니다.</b> {@code CANCELING} 은 돈이 나갔는지 불확실하다는 뜻이라
+     * 포기할 대상이 아니다 — 이 판정은 <b>사람을 불러야 하는 시점</b>을 가리킨다.
+     * 재시도는 그 뒤로도 계속된다.
+     */
+    public boolean cancelBudgetExceeded(Duration budget, Instant now) {
+        return status == PaymentStatus.CANCELING
+                && cancelingSince != null
+                && cancelingSince.plus(budget).isBefore(now);
     }
 
     /** 취소 2단계: PG 환불이 실제로 끝난 뒤 확정한다. */
@@ -234,6 +292,8 @@ public class Payment extends BaseTimeEntity {
         }
         this.status = PaymentStatus.CANCELED;
         this.canceledAt = Instant.now();
+        // 확정된 행은 더 이상 스윕 대상이 아니다. 예약을 남겨 두면 인덱스에 죽은 값이 쌓인다.
+        this.nextCancelAttemptAt = null;
     }
 
     /**

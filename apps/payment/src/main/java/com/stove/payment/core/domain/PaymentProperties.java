@@ -26,13 +26,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *               중단된 것으로 보고 재개한다. <b>돈이 나갔는지 불확실한 상태를 시간으로 끝내는 값</b>이다.
  *               정상 환불은 PG 왕복 한 번이라 초 단위로 끝나므로, 진행 중인 건을 옆에서 다시 부르지
  *               않을 만큼만 여유를 둔다(기본 2분).
+ * @param refundBudget 취소 착수 뒤 이만큼 지나도 확정되지 않으면 <b>사람을 부른다.</b>
+ *               <b>포기하는 시각이 아니다</b> — {@code CANCELING} 은 돈이 나갔는지 불확실하다는
+ *               뜻이라 포기할 대상이 아니고, 재시도는 그 뒤로도 계속된다. Outbox 의 예산(D-003)이
+ *               {@code DEAD} 로 보내는 시각인 것과 여기가 다른 지점이다.
+ *               기본 1시간은 백오프가 상한(30분)에 닿는 데 걸리는 시간의 두 배로 잡은 값이다 —
+ *               <b>정상적인 재시도가 아직 몇 번 남았는데 사람을 부르면 그 알람은 잡음이 된다.</b>
  */
 @ConfigurationProperties(prefix = "stove.payment")
-public record PaymentProperties(Duration window, Duration checkoutWindow, Duration refundResumeAfter) {
+public record PaymentProperties(Duration window, Duration checkoutWindow,
+                                Duration refundResumeAfter, Duration refundBudget) {
 
     public PaymentProperties {
         window = window == null ? Duration.ofMinutes(30) : window;
         checkoutWindow = checkoutWindow == null ? Duration.ofMinutes(15) : checkoutWindow;
         refundResumeAfter = refundResumeAfter == null ? Duration.ofMinutes(2) : refundResumeAfter;
+        refundBudget = refundBudget == null ? Duration.ofHours(1) : refundBudget;
     }
 }

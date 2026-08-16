@@ -55,7 +55,13 @@ stove:
     # 취소 착수(CANCELING)가 이만큼 지나도 확정되지 않으면 중단된 것으로 보고 재개한다.
     # CANCELING 은 "돈이 나갔는지 불확실" 이라는 뜻이고, 이 값이 그 불확실을 끝내는 시한이다.
     refund-resume-after: ${PAYMENT_REFUND_RESUME_AFTER:2m}
+    # 이만큼 지나도 확정되지 않으면 사람을 부른다. **포기하는 시각이 아니다** —
+    # CANCELING 은 돈이 나갔는지 불확실하다는 뜻이라 포기할 대상이 아니고 재시도는 계속된다.
+    # 백오프가 상한(30분)에 닿는 데 걸리는 시간의 두 배로 잡았다 — 정상 재시도가 아직 남아 있는데
+    # 부르면 그 알람은 잡음이 된다.
+    refund-budget: ${PAYMENT_REFUND_BUDGET:1h}
     # 스윕 주기. 재개 자체가 PG 왕복이라 촘촘히 돌 이유가 없다.
+    # **주기 ≠ 재시도 간격이다** — 깨어나는 주기이고, 각 건의 다음 시도 시각은 RefundRetryPolicy 가 정한다.
     refund-sweep-interval-ms: ${PAYMENT_REFUND_SWEEP_MS:60000}
   outbox:
     relay-enabled: true
