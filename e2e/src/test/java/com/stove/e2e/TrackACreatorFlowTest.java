@@ -31,7 +31,7 @@ class TrackACreatorFlowTest {
     void createsProject() {
         Response response = Stove.gateway.post("/api/v1/studio/games", Map.of(
                 "productCode", PRODUCT_CODE,
-                "title", "인수 시나리오 게임",
+                "title", Journey.PRODUCT_TITLE,
                 "sellerId", SELLER,
                 "price", PRICE,
                 "selfRated", true));
@@ -125,12 +125,25 @@ class TrackACreatorFlowTest {
         assertThat(detail.data().path("status").asText()).as("%s", detail).isEqualTo("ON_SALE");
     }
 
+    /**
+     * <b>이번 회차의 스탬프로 묻는다.</b> 예전에는 {@code q=인수} 로 물었는데, 그러면
+     * 지난 회차들이 남긴 같은 이름의 상품이 전부 걸린다. 응답은 한 장(20건)이 상한이고
+     * 정렬은 오름차순이라, 첫 장이 차는 순간부터 <b>이번 회차의 상품은 영원히 결과 밖</b>이다.
+     * 실제로 그렇게 됐다 — 2026-08-13 에 20건이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
+     *
+     * <p>이 테스트가 물어야 하는 것은 "무언가 검색된다" 가 아니라
+     * <b>"방금 만든 그것이 색인에 갔는가"</b> 다. 스탬프로 물으면 결과가 한 건으로 좁혀져
+     * 그 질문에 정확히 답하고, 쌓인 데이터에 영향받지 않는다.
+     *
+     * <p>{@link Journey#STAMP} 를 쓰는 이유는 {@code PRODUCT_CODE} 로는 안 되기 때문이다 —
+     * 검색은 이름만 본다({@code findByStatusAndNameContaining}).
+     */
     @Test
     @Order(8)
     @DisplayName("store: 검색 색인에 반영된다 (ProductChanged 관통)")
     void appearsInSearchIndex() {
         Await.untilResponse("store 검색 색인 반영",
-                () -> Stove.gateway.get("/api/v1/storefront/products?q=인수"),
+                () -> Stove.gateway.get("/api/v1/storefront/products?q=" + Journey.STAMP),
                 r -> !r.itemWhere("productCode", PRODUCT_CODE).isMissingNode());
     }
 
