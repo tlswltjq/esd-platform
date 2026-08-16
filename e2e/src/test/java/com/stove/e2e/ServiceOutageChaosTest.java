@@ -3,6 +3,7 @@ package com.stove.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
+import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -171,21 +172,49 @@ class ServiceOutageChaosTest {
     }
 
     /**
-     * 이 장의 가설.
+     * 이 장의 가설 — <b>download 는 license 없이도 판정을 끝낸다.</b>
      *
      * <p>download 는 {@code LicenseIssued} 로 만든 <b>권한 사본</b>을 자기 DB(MongoDB)에 들고 있다.
-     * 그래서 이미 산 게임은 license 가 죽어 있어도 받을 수 있어야 한다.
-     * <b>여기가 빨개지면 download 가 어딘가에서 license 를 동기로 부르기 시작한 것이다.</b>
+     * 그래서 이미 산 게임은 license 가 죽어 있어도 받을 수 있어야 한다({@code chaos.md} 7장).
+     *
+     * <p><b>헬스 프로브로는 이걸 물을 수 없다.</b> 프로세스가 살아 있는 것과 요청 경로가
+     * 자기 저장소만으로 끝나는 것은 다르다 — 헬스가 200 이어도 티켓 경로가 license 를
+     * 동기로 부르면 그 요청은 장애 중에 5xx 나 타임아웃이 된다. 그래서 실제 API 를 두드린다.
+     *
+     * <p>두 경로를 본다.
+     * <ul>
+     *   <li>{@code manifests} — 소유 검사가 없는 순수 조회. Mongo 만으로 200 이어야 한다</li>
+     *   <li>{@code ticket} — 판정 경로. 없는 상품이므로 <b>404 라는 도메인 응답</b>이 나와야 한다.
+     *       여기서 5xx 나 무응답이 나오면 판정이 자기 저장소 밖에 의존하고 있는 것이다</li>
+     * </ul>
+     *
+     * <p><b>이 판정이 chaos.md 7장을 대체하지는 않는다.</b> 그쪽은 <i>실제로 보유한</i> 회원에게
+     * 티켓 20건을 발급해 봤고(20/20, 평균 9.3ms), 여기는 구매 픽스처 없이 도는 대신
+     * 권한 <i>사본을 읽는</i> 자리까지는 못 간다. 무엇이 확인되고 무엇이 안 되는지를 적어 둔다 —
+     * 부하가 필요한 판정은 인수 회차에 넣을 것이 아니다.
      */
     @Test
     @Order(4)
-    @DisplayName("license 가 죽어도 download 는 자기 사본으로 계속 답한다")
+    @DisplayName("license 가 죽어도 download 는 자기 저장소만으로 판정을 끝낸다")
     void downloadServesFromItsOwnCopy() {
-        Response manifest = Stove.consumers.get("download").get("/actuator/health");
+        String unknownProduct = "GAME-CHAOS-" + System.currentTimeMillis();
 
-        assertThat(manifest.status())
-                .as("권한 사본이 있다는 설계 의도가 실제로 성립하는지를 죽여 놓고 본다 (chaos.md 7장)")
+        Response manifests = Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(unknownProduct));
+        assertThat(manifests.status())
+                .as("소유 검사가 없는 조회가 막히면 Mongo 경로 자체가 장애에 딸려간 것이다 — %s", manifests)
                 .isEqualTo(200);
+
+        Response ticket = Stove.gateway.get("/api/v1/downloads/%s/ticket".formatted(unknownProduct),
+                Map.of("X-Member-Id", "999999"));
+        assertThat(ticket.status())
+                .as("""
+                        없는 상품에는 404 가 정답이다. 5xx 나 무응답이면 판정 경로가
+                        license 에 매여 있다는 뜻이고, 그때는 "권한 사본을 들고 있다" 가
+                        설계 의도로만 남는다 — %s""", ticket)
+                .isEqualTo(404);
+        assertThat(ticket.errorCode())
+                .as("상태코드만 보면 '차단됐다' 와 '부르지도 못했다' 가 같아 보인다 — %s", ticket)
+                .isEqualTo(ErrorCode.NOT_FOUND.name());
     }
 
     // ── 4. 복구 ──────────────────────────────────────────────────────

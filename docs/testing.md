@@ -29,9 +29,15 @@
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
 | **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 20종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **main push** |
+| **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로 |
 
-L6 만 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
+L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
 컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.
+
+**L7 을 L6 에서 뗀 이유는 자원이 다르기 때문이다.** L6 은 떠 있는 스택이면 되지만
+L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 서비스가 사라져 관계없는 판정이
+무더기로 빨개지고, 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 리포트에서 같은 모양이 된다.
+시나리오와 판정 근거는 [resilience-scenarios.md](resilience-scenarios.md).
 **러너가 1대라 PR 마다가 아니라 통합 시점에 붙는 것**도 같은 줄의 판단이다
 ([test-audit.md](test-audit.md) 4.3).
 
@@ -46,9 +52,11 @@ L6 만 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조�
 걸린다 — `src/test` 의 클래스는 `InfraContainers` 를 **임포트조차 할 수 없다.**
 
 ```
-./gradlew test              816건 · Docker 불필요 · 수 초
-./gradlew integrationTest   175건 · Testcontainers · 동시 스택 수는 따로 조인다
+./gradlew test              944건 · Docker 불필요 · 수 초
+./gradlew integrationTest   226건 · Testcontainers · 동시 스택 수는 따로 조인다
 ./gradlew build             둘 다 (단위가 먼저 돈다)
+./gradlew :e2e:e2eTest      46건 · 떠 있는 스택이 필요하다
+./gradlew :e2e:chaosTest    5건 · 스택을 실제로 정지시킨다 (L7)
 ```
 
 태그로 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
@@ -228,6 +236,33 @@ private static YearMonth uniqueMonth() {
 >
 > **경합을 피하려고 단언을 느슨하게 하면, 막으려던 결함까지 같이 놓친다.**
 > 단언은 검증하려는 사실 그대로 두고 경합 쪽을 없애는 편이 낫다.
+
+### 캐시된 컨텍스트가 쥐는 것은 스레드만이 아니다 — 커넥션도 쥔다
+
+같은 자리에서 한 번 더 밟았다([D-036](defects.md#d-036)). 위가 **배경 스레드**의 문제라면
+이번은 **커넥션 풀**이다.
+
+컨텍스트는 `@SpringBootTest(properties = ...)` 조합마다 한 벌씩 만들어져 JVM 이 끝날 때까지
+캐시에 남는다. 그 컨텍스트마다 HikariCP 가 하나씩 붙고, 앱 설정의 `maximum-pool-size: 20` 은
+**운영 인스턴스 한 대**를 위한 값이다. Hikari 의 `minimumIdle` 기본값이 `maximumPoolSize` 라
+**그 20개는 놀아도 열려 있다.**
+
+MySQL 기본 `max_connections` 는 151 이므로 **여덟 벌이면 벽이다.** payment 는 이미 그 언저리였고,
+통합 테스트 클래스를 **하나** 더하자 `Too many connections` 로 컨텍스트 로딩이 실패했다.
+빨개진 것은 새로 넣은 클래스가 아니라 **기존 클래스**였고, 어느 것이 빨개질지는
+실행 순서에 달려 회차마다 달랐다.
+
+```groovy
+// 루트 build.gradle 의 integrationTest 태스크
+systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
+```
+
+**시스템 프로퍼티여야 한다.** `@SpringBootTest(properties = ...)` 로 덮으면 그 자체가
+컨텍스트 캐시 키가 되어 **컨텍스트를 한 벌 더 만든다** — 줄이려던 것을 늘리는 셈이다.
+
+> 이 수정은 **한계선을 미룬 것이지 없앤 것이 아니다.** 컨텍스트가 서른 벌을 넘기면 다시 닿는다.
+> 그때는 프로퍼티 조합을 줄이는 쪽이 답이지 풀을 더 줄이는 쪽이 아니다 —
+> 풀이 작아지면 이번에는 **풀 고갈이 간헐 실패로** 나타난다.
 
 ---
 
