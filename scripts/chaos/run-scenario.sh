@@ -41,6 +41,8 @@ INJECT_AFTER=5
 HOLD=60
 DRAIN=90
 OUT_DIR=""
+REPEAT=1
+CONTROL=no
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -55,6 +57,8 @@ scripts/chaos/run-scenario.sh --fault <이름> [옵션]
   --hold <초>           장애를 유지하는 시간 (기본 60)
   --drain <초>          복구 후 종단 상태가 굳기를 기다리는 시간 (기본 90)
   --out <디렉터리>      결과를 남길 곳
+  --repeat <n>          같은 조건을 n 회 반복한다 (기본 1)
+  --control             회차마다 바로 앞에 --fault none 대조군을 하나씩 붙인다
 EOF
 }
 
@@ -67,6 +71,8 @@ while [ $# -gt 0 ]; do
         --hold) HOLD=$2; shift 2 ;;
         --drain) DRAIN=$2; shift 2 ;;
         --out) OUT_DIR=$2; shift 2 ;;
+        --repeat) REPEAT=$2; shift 2 ;;
+        --control) CONTROL=yes; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "모르는 옵션: $1" >&2; usage; exit 1 ;;
     esac
@@ -75,6 +81,48 @@ done
 [ -n "$FAULT" ] || { echo "--fault 는 필수다 (장애 없이 재려면 --fault none)" >&2; exit 1; }
 OUT_DIR=${OUT_DIR:-runs/$(date +%Y%m%d-%H%M%S)-$FAULT}
 mkdir -p "$OUT_DIR"
+
+# ── 회차 반복 ───────────────────────────────────────────────────────
+#
+# **왜 스크립트가 반복하는가** — measuring.md 는 "조건당 2회 + 대조군" 을 규칙으로 두는데,
+# chaos 쪽은 손으로 돌리는 동안 그걸 못 지켰다(조건당 1회, 대조군은 전체에 한 번).
+# 규칙을 지키는 데 사람의 성실함이 필요하면 그 규칙은 지켜지지 않는다.
+#
+# **대조군을 회차마다 붙이는 이유** — 전체에 한 번 붙이면 대조군과 장애 회차 사이에
+# 스택 상태가 흘러간다(DLT 누적, 컨슈머 리밸런싱, 캐시). 바로 앞에 붙여야 그 둘의 차이가
+# 장애 때문이라고 말할 수 있다.
+#
+# 자기 자신을 다시 부른다. 한 회차의 절차(사전 확인 → 부하 → 주입 → 판정)를 함수로 접으면
+# 회차 사이에 상태가 새는데, **프로세스를 갈면 시작 상태를 다시 세는 것이 강제된다** —
+# 이 스크립트가 사전 확인을 본체로 삼는 이유와 같다.
+if [ "$REPEAT" -gt 1 ] || [ "$CONTROL" = yes ]; then
+    pass_through=(--orders "$ORDERS" --rate "$RATE" --inject-after "$INJECT_AFTER" --drain "$DRAIN")
+    rc=0
+    for k in $(seq 1 "$REPEAT"); do
+        if [ "$CONTROL" = yes ]; then
+            echo "══ 회차 $k / $REPEAT — 대조군(장애 없음) ══"
+            # 대조군은 유지 시간이 없다. 뺄 장애가 없으므로 --hold 는 그냥 기다리는 시간이 된다.
+            bash "$0" --fault none "${pass_through[@]}" --hold 0 --out "$OUT_DIR/round-$k-control" || rc=$?
+        fi
+        echo "══ 회차 $k / $REPEAT — $FAULT ══"
+        bash "$0" --fault "$FAULT" "${pass_through[@]}" --hold "$HOLD" --out "$OUT_DIR/round-$k" || rc=$?
+    done
+
+    # 회차별 결말을 나란히 놓는다. **편차를 눈으로 맞추지 않게 하는 것이 이 표의 목적이다** —
+    # 1회차와 2회차가 다르면 그 차이가 잡음인지 조건인지부터 물어야 한다.
+    {
+        echo "조건   $FAULT · $ORDERS 건 @ $RATE/s · 유지 ${HOLD}s · 드레인 ${DRAIN}s"
+        echo "회차   $REPEAT 회$([ "$CONTROL" = yes ] && echo " (각 회차 앞에 대조군)")"
+        echo
+        printf "%-22s %s\n" "회차" "결말"
+        for d in "$OUT_DIR"/round-*; do
+            [ -f "$d/summary.csv" ] || { printf "%-22s %s\n" "$(basename "$d")" "(무효 — summary.csv 없음)"; continue; }
+            printf "%-22s %s\n" "$(basename "$d")" "$(tr '\n' ' ' < "$d/summary.csv")"
+        done
+    } | tee "$OUT_DIR/rounds.txt"
+    echo "회차 종합: $OUT_DIR/rounds.txt"
+    exit $rc
+fi
 
 sql() { docker exec "$MYSQL_CONTAINER" mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B -e "$1" 2>/dev/null; }
 
