@@ -14,10 +14,14 @@ import com.stove.payment.core.domain.PaymentMetrics;
 import com.stove.payment.core.domain.PaymentPreparation;
 import com.stove.payment.core.domain.PaymentProperties;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.domain.PgDecline;
 import com.stove.payment.core.domain.PgPreparation;
+import com.stove.payment.core.domain.StrandedCancellation;
 import com.stove.payment.core.port.PgClient;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -218,6 +222,22 @@ public class PaymentService {
         }
         log.warn("라이선스 지급 실패 → 보상 환불 실행 orderNo={} reason={}", orderNo, reason);
         return beginCancel(orderNo, reason);
+    }
+
+    /**
+     * 취소 착수는 커밋됐는데 확정까지 못 간 건들.
+     *
+     * <p>엔티티가 아니라 <b>재개에 필요한 값만</b> 돌려준다 — 실제 재개는 PG 호출을 끼고 돌므로
+     * 트랜잭션 밖에서 일어나고, 닫힌 트랜잭션의 엔티티를 만지면 지연 로딩 문제가 따라붙는다
+     * ({@link PaymentCancellation} 과 같은 판단).
+     */
+    @Transactional(readOnly = true)
+    public List<StrandedCancellation> findStrandedCancellations(Duration olderThan) {
+        return paymentRepository
+                .findByStatusAndUpdatedAtBefore(PaymentStatus.CANCELING, Instant.now().minus(olderThan))
+                .stream()
+                .map(payment -> new StrandedCancellation(payment.getOrderNo(), payment.getCancelReason()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

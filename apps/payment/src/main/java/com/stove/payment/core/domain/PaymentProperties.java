@@ -22,12 +22,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *               <b>거절하지 않고 받아 적은 뒤 자동 환불한다</b> — 그 시점엔 PG 에서 이미 돈이
  *               움직였으므로 거절은 대사를 깨뜨린다. 기본 15분은 실 PG 결제창 세션(보통 10~30분)
  *               안쪽에 두어, <b>대개는 PG 가 먼저 만료시키고 우리 검사는 그물의 두 번째 겹</b>이 되게 한 값이다.
+ * @param refundResumeAfter 취소 착수({@code CANCELING})가 이만큼 지나도 확정되지 않으면
+ *               중단된 것으로 보고 재개한다. <b>돈이 나갔는지 불확실한 상태를 시간으로 끝내는 값</b>이다.
+ *               정상 환불은 PG 왕복 한 번이라 초 단위로 끝나므로, 진행 중인 건을 옆에서 다시 부르지
+ *               않을 만큼만 여유를 둔다(기본 2분).
  */
 @ConfigurationProperties(prefix = "stove.payment")
-public record PaymentProperties(Duration window, Duration checkoutWindow) {
+public record PaymentProperties(Duration window, Duration checkoutWindow, Duration refundResumeAfter) {
 
     public PaymentProperties {
         window = window == null ? Duration.ofMinutes(30) : window;
         checkoutWindow = checkoutWindow == null ? Duration.ofMinutes(15) : checkoutWindow;
+        refundResumeAfter = refundResumeAfter == null ? Duration.ofMinutes(2) : refundResumeAfter;
     }
 }

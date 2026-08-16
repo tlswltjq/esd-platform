@@ -1,6 +1,7 @@
 package com.stove.payment.config;
 
 import com.stove.payment.core.domain.PaymentMetrics;
+import com.stove.payment.core.domain.PaymentRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,7 +19,8 @@ import org.springframework.context.annotation.Configuration;
 public class PaymentMetricsConfig {
 
     @Bean
-    public PaymentMetrics paymentMetrics(ObjectProvider<MeterRegistry> meterRegistry) {
-        return new PaymentMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
+    public PaymentMetrics paymentMetrics(ObjectProvider<MeterRegistry> meterRegistry,
+                                        PaymentRepository paymentRepository) {
+        return new PaymentMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new), paymentRepository);
     }
 }

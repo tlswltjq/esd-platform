@@ -14,15 +14,32 @@ import io.micrometer.core.instrument.MeterRegistry;
  * <p>{@code common:kafka} 의 {@code DeadLetterMetrics} 와 같은 판단이다 —
  * 되돌릴 수 있게 만드는 것과 되돌려야 한다고 알리는 것은 별개의 일이다.
  *
- * <p>노출 지표: {@code stove.payment.auto-refunded}
- * (Prometheus 에서는 {@code stove_payment_auto_refunded_total})
+ * <p>노출 지표
+ * <ul>
+ *   <li>{@code stove.payment.auto-refunded} — 시스템이 스스로 되돌린 결제 수(사유 태그)</li>
+ *   <li>{@code stove.payment.refund-resumed} — 중단된 취소를 재개한 수</li>
+ *   <li>{@code stove.payment.canceling} — <b>지금 몇 건이 "돈이 나갔는지 모르는" 상태인가</b>.
+ *       카운터가 아니라 게이지여야 하는 이유는, 재개가 계속 실패하면 카운터는 늘어나는데
+ *       실제로 해소된 것은 하나도 없기 때문이다 — 알람은 이쪽에 건다</li>
+ * </ul>
  */
 public class PaymentMetrics {
 
     private final MeterRegistry registry;
 
-    public PaymentMetrics(MeterRegistry registry) {
+    public PaymentMetrics(MeterRegistry registry, PaymentRepository repository) {
         this.registry = registry;
+        // 스크레이프 시점에 센다. idx_payment_status (status, id) 를 그대로 탄다.
+        registry.gauge("stove.payment.canceling", repository,
+                repo -> repo.countByStatus(PaymentStatus.CANCELING));
+    }
+
+    /** 중단됐던 취소를 재개해 확정까지 보낸 수. 게이지가 줄어드는 이유를 설명하는 값이다. */
+    public void recordRefundResumed() {
+        Counter.builder("stove.payment.refund-resumed")
+                .description("중단된 취소(CANCELING)를 재개해 확정한 수")
+                .register(registry)
+                .increment();
     }
 
     /** @param reason 왜 시스템이 스스로 환불했는가. 카디널리티는 사유 종류만큼(고정)이다. */
