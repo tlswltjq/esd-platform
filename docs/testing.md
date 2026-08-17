@@ -52,8 +52,8 @@ L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 
 걸린다 — `src/test` 의 클래스는 `InfraContainers` 를 **임포트조차 할 수 없다.**
 
 ```
-./gradlew test              944건 · Docker 불필요 · 수 초
-./gradlew integrationTest   226건 · Testcontainers · 동시 스택 수는 따로 조인다
+./gradlew test              945건 · Docker 불필요 · 수 초
+./gradlew integrationTest   230건 · Testcontainers · 동시 스택 수는 따로 조인다
 ./gradlew build             둘 다 (단위가 먼저 돈다)
 ./gradlew :e2e:e2eTest      46건 · 떠 있는 스택이 필요하다
 ./gradlew :e2e:chaosTest    5건 · 스택을 실제로 정지시킨다 (L7)
@@ -293,6 +293,43 @@ systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 > 셋 다 원인은 하나다. **컨텍스트 캐시는 "쓰고 버리는 것" 이 아니라 "계속 살아 있는 것" 이다.**
 > `*ContextTest` 는 구성을 전부 켜는 것이 목적이라 이 함정에 가장 자주 걸린다 —
 > 그러면서 정작 자기 판정은 켜진 것들이 **도는지**를 묻지 않으므로, 재워도 잃는 것이 없다.
+
+#### 멤버를 늘리는 두 번째 길 — 빈 오버라이드
+
+`*ContextTest` 를 재운 것으로 끝이 아니다. **`@MockitoSpyBean` · `@MockitoBean` 도 캐시 키를 바꾼다.**
+그것을 쓰는 클래스는 자기 컨텍스트를 한 벌 더 만들고, 그 컨텍스트의 리스너도 같은 그룹에 붙는다.
+즉 **장애를 주입하려고 목을 쓰는 순간 그룹 멤버가 하나 늘어난다** — 하필 컨슈머 정지를
+전제로 하는 판정 옆에서.
+
+실제로 `DeadLetterReplayRecoveryTest`(R-07)의 첫 판이 그랬다. 저장소 장애를 만들려고
+`@MockitoSpyBean LicenseRepository` 를 썼더니 R-03 이 다시 깨졌다.
+
+> **규칙** — 컨슈머 정지를 전제로 하는 테스트가 있는 모듈에서는
+> **장애 주입에 빈 오버라이드를 쓰지 않는다.** 컨텍스트 키를 건드리지 않는 방법을 찾는다.
+> R-07 은 목 대신 **원장 테이블을 다른 이름으로 옮긴다** —
+> `scripts/chaos/fault.sh` 의 `license-table-denied` 와 같은 경계이고, 되돌리는 것도 `RENAME` 한 줄이다.
+> 목보다 실물에 가깝기도 하다: **예외 클래스를 우리가 고르지 않는다.**
+
+### ShedLock 의 락 행을 지우면 락이 꺼진다
+
+락을 풀려고 `delete from shedlock` 을 했더니 **그 뒤의 모든 획득이 조용히 실패했다.**
+대조군이 "0회 실행 · 락 행 없음" 으로 빨개져서 잡혔다.
+
+ShedLock 의 저장소 기반 공급자는 **"이 이름의 행이 있다" 를 메모리에 캐시한다.**
+있다고 믿는 동안은 INSERT 대신 `UPDATE ... WHERE lock_until <= now()` 로 획득하는데,
+행이 사라졌으면 그 UPDATE 가 0건이라 **"이미 잠겨 있다" 와 구분되지 않는다.**
+결과는 조용한 스킵이고, **락을 끈 것과 같은 상태**가 된다.
+
+```sql
+-- 지우지 않는다. 만료시킨다.
+update shedlock set lock_until = locked_at where name = ?
+```
+
+행이 아예 없는 첫 회차에는 0건이 갱신되고, 그때는 공급자가 INSERT 경로로 정상 획득한다.
+
+> **대조군이 있어서 잡혔다.** 동시성 판정만 두었으면
+> "0회 실행" 을 보고 <b>락이 잘 막았다</b>고 읽었을 것이다 —
+> 그래서 `RefundSweeperSingleExecutionTest` 는 "한 번 부르면 한 번 돈다" 를 먼저 묻는다.
 
 ---
 
