@@ -196,6 +196,8 @@ class ConsumerRestartCatchUpTest {
                     .toList();
             throw new AssertionError("""
                     컨슈머를 멈췄는데 지급이 일어났다 — 멈춘 것이 지급 경로가 아니었다는 뜻이다.
+                    리스너가 전부 멈춘 것으로 나온다면 이 JVM 의 다른 컨텍스트가 같은 그룹(license)에
+                    멤버로 남아 있는지 보라 — 여기서 멈추면 파티션이 그쪽으로 넘어가 소비가 이어진다.
                     지급된 주문: %s (전체 %d건 중)
                     리스너 상태: %s""".formatted(issued, orderNos.size(), listenerStates()), e);
         }
