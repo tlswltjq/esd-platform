@@ -31,6 +31,7 @@
 | [performance.md](performance.md) | 릴레이 처리량 138 → 480.5 events/s, HTTP 경로 재측정(9장), **받는 쪽 측정(12·13장)** |
 | [measuring.md](measuring.md) | **측정을 어떻게 하는가.** 규칙 11개와 각 규칙을 만든 사건. 새 측정을 시작하기 전에 읽는다 |
 | [chaos.md](chaos.md) | **장애를 넣고 재는 것은 무엇이 다른가.** 부하 중에 DB 를 끊고 보상·재시도·가드·DLT 가 버티는지 |
+| [resilience-scenarios.md](resilience-scenarios.md) | **서버가 중단됐을 때 무엇이 보장되는가** — 시나리오 R-01~R-06 과 각각을 지키는 테스트. chaos.md 가 "이번 회차에 이랬다" 라면 여기는 "다음에도 그래야 한다" 다 |
 | [runbooks/](runbooks/) | 복구 절차. 각 줄이 무엇을 막는지 숫자로 확인된 것만 적는다 |
 
 측정 도구는 [scripts/perf/](../scripts/perf/)(k6 시나리오·랙 수집·회차 러너)와

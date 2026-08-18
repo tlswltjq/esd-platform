@@ -110,6 +110,28 @@ subprojects {
         // 동시 컨테이너 스택 수를 여기서 조인다. 루트의 InfraTestThrottle 주석 참고.
         usesService(infraTestThrottle)
 
+        // ── 통합 테스트는 운영 풀 크기를 쓰지 않는다 ────────────────────
+        //
+        // 앱의 `maximum-pool-size: 20` 은 **운영 부하를 받는 인스턴스 한 대**를 위한 값이다.
+        // 그런데 테스트 JVM 하나에는 컨텍스트가 여러 벌 뜬다 — 스프링은 `@SpringBootTest` 의
+        // 프로퍼티 조합마다 컨텍스트를 따로 만들어 **JVM 이 끝날 때까지 캐시에 들고 있고**,
+        // 각 컨텍스트가 자기 HikariCP 를 하나씩 붙든다. Hikari 의 `minimumIdle` 기본값은
+        // `maximumPoolSize` 라 그 20개는 **놀아도 열려 있다.**
+        //
+        // MySQL 기본 `max_connections` 는 151 이므로 컨텍스트 여덟 벌이면 벽에 닿는다.
+        // 실제로 닿았다 — payment 의 통합 테스트에 클래스를 **하나** 더한 회차에서
+        // `Flyway ... Unable to obtain connection from database: Too many connections` 로
+        // 컨텍스트 로딩이 실패했고, 빨개진 것은 새로 넣은 클래스가 아니라 **기존 클래스**였다.
+        // 원인과 증상이 다른 파일에 있어 읽는 사람이 원인을 찾을 방법이 없는 실패다.
+        //
+        // 시스템 프로퍼티로 덮는다. `@SpringBootTest(properties = ...)` 로 덮으면
+        // **그 자체가 컨텍스트 키가 되어** 컨텍스트를 한 벌 더 만든다 — 고치려던 것을 늘리는 셈이다.
+        // 시스템 프로퍼티는 키에 들어가지 않으므로 캐시 재사용을 그대로 두고 풀만 줄인다.
+        //
+        // 5 인 이유: 이 소스셋의 테스트는 단일 스레드이고, 동시에 커넥션을 쥐는 것은
+        // 리스너 컨테이너(concurrency 1)와 릴레이 정도다. 풀 고갈이 재현되면 이 값을 올린다.
+        systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
+
         // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
         shouldRunAfter tasks.named('test')
     }

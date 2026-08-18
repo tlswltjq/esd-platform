@@ -59,6 +59,7 @@ stove/
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
 | 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
 | **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
+| **서버가 중단됐다 재기동하면** 밀린 일이 이어지는가 — 시나리오와 그것을 지키는 테스트 | [resilience-scenarios.md](docs/resilience-scenarios.md) |
 | 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |
 | 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
 | 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
