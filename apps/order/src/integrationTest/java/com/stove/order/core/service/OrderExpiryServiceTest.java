@@ -10,8 +10,6 @@ import com.stove.common.testcontainers.InfraContainers;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderStatus;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -77,11 +75,17 @@ class OrderExpiryServiceTest {
      * <p>{@code createdAt} 은 감사(auditing)가 채우므로 엔티티로는 뒤로 못 민다.
      * 그래서 생성은 실제 경로로 하고 <b>시각만</b> SQL 로 당긴다 — 상태를 손으로 심으면
      * "그 상태가 실제로 만들어지는가" 가 검증에서 빠진다.
+     *
+     * <p>당기는 계산은 <b>DB 안에서</b> 한다. JVM 의 {@code Instant} 를 바인딩하면 JVM 시간대와
+     * 컨테이너 시간대(UTC)의 차이만큼 어긋나, KST 머신에서는 3시간 전이 아니라 6시간 뒤가 된다 —
+     * 스윕이 아무것도 못 찾아 CI(UTC)에서만 초록불인 테스트가 된다.
+     * {@code PaymentWindowTest} · {@code PaymentCheckoutWindowTest} 가 쓰는 방식과 같게 맞춘다.
      */
     private Order staleOrder() {
         Order order = orderCommandService.createOrder(MEMBER, "KRW", lines());
-        jdbcTemplate.update("update orders set created_at = ? where order_no = ?",
-                Instant.now().minus(3, ChronoUnit.HOURS), order.getOrderNo());
+        jdbcTemplate.update(
+                "update orders set created_at = created_at - interval 3 hour where order_no = ?",
+                order.getOrderNo());
         return order;
     }
 

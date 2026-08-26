@@ -28,7 +28,7 @@
 | **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
-| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 20종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **main push** |
+| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **main push** |
 | **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로 |
 
 L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
@@ -53,7 +53,7 @@ L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 
 
 ```
 ./gradlew test              945건 · Docker 불필요 · 수 초
-./gradlew integrationTest   230건 · Testcontainers · 동시 스택 수는 따로 조인다
+./gradlew integrationTest   241건 · Testcontainers · 동시 스택 수는 따로 조인다
 ./gradlew build             둘 다 (단위가 먼저 돈다)
 ./gradlew :e2e:e2eTest      46건 · 떠 있는 스택이 필요하다
 ./gradlew :e2e:chaosTest    5건 · 스택을 실제로 정지시킨다 (L7)
