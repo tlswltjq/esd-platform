@@ -248,8 +248,8 @@ DLT 도 아무도 안 보면 유실과 운영상 다르지 않기 때문이다.
 | `common/event/` | 서비스 간 계약 — payload 12종, `Topics`, Kafka 헤더 |
 | `common/archunit/EventOrderingRules.java` | 순서 보장을 깨는 코드를 빌드에서 차단 |
 | `docs/event-ordering.md` | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |
-| `docs/defects.md` | 결함 21건, 각각 재현 테스트 명시 |
-| `docs/decisions.md` | 설계 결정 19건, 각각 근거와 **대가**까지 |
+| `docs/defects.md` | 결함 36건, 각각 재현 테스트 명시 |
+| `docs/decisions.md` | 설계 결정 22건, 각각 근거와 **대가**까지 |
 | `docs/performance.md` | 릴레이 처리량 (138 → 480.5 events/s, ×3.48) + HTTP 재측정 (9장) |
 | `docs/kafka-consumer-retry.md` | 컨슈머 재시도의 실제 동작 *(다음 학습 2순위)* |
 | `docs/testing.md` | 테스트 계층·격리·뮤테이션 테스트 |

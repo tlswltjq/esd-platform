@@ -35,7 +35,7 @@ stove/
 │   ├── jpa                 BaseTimeEntity, JPA Auditing, Flyway
 │   ├── kafka               컨슈머 재시도 정책 + DLT + DLT 운영 API (자동 구성)
 │   ├── messaging           Outbox(발행) + Inbox(멱등 수신) + 추적 컨텍스트 전파 (자동 구성)
-│   ├── archunit            패키지 구조·경계 규칙 (앱당 29개, 12개 모듈에 적용)
+│   ├── archunit            패키지 구조·경계 규칙 (앱당 36개, 12개 모듈에 적용)
 │   ├── test                인프라가 필요 없는 테스트 지원 (EventRecords, OpenApiSnapshot)
 │   └── testcontainers      공용 컨테이너 (MySQL·Kafka·Redis·ES·MongoDB) — 통합 소스셋 전용
 │
@@ -50,7 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 테스트로 재현한 결함 32건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
+| 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
 | 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
@@ -145,15 +145,15 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 
 | 무엇을 | 어디서 | 명령 |
 |---|---|---|
-| 단위·어댑터·ArchUnit 816개 (Docker 불필요) | **로컬** | `./gradlew test` |
-| 실 인프라 통합 175개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
+| 단위·어댑터·ArchUnit 945개 (Docker 불필요) | **로컬** | `./gradlew test` |
+| 실 인프라 통합 241개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
 | 전체 스택 · 게이트 · 인수 · 성능 | **원격** | `./scripts/remote.sh …` |
 | 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
 
 ```bash
 ./scripts/remote.sh test                      # 전체 테스트
 ./scripts/remote.sh test :apps:order          # 모듈 하나 — 실패하면 요약만 낸다
-./scripts/remote.sh stack up                  # 전체 스택 20개 (게이트까지 확인하고 끝난다)
+./scripts/remote.sh stack up                  # 전체 스택 21개 (게이트까지 확인하고 끝난다)
 ./scripts/remote.sh gate                      # 배포 게이트 14건만 다시
 ./scripts/remote.sh e2e                       # 인수 42건 + 관측 4건 관통 확인
 ./scripts/remote.sh http GET catalog:8081/api/v1/products

@@ -69,7 +69,7 @@ jobs:
         with:
           cache-disabled: true
 
-      # 단위 816건(test) + 실 인프라 통합 175건(integrationTest). build 가 둘 다 돈다.
+      # 단위 945건(test) + 실 인프라 통합 241건(integrationTest). build 가 둘 다 돈다.
       #
       # 워커 수와 힙은 러너의 ~/.gradle/gradle.properties 가 정한다(4 / 6g).
       # 리포의 gradle.properties(4 / 2g)는 Docker 3.83GB 랩탑의 값이고 그대로 둔다 —
