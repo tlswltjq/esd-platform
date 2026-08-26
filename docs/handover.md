@@ -194,7 +194,7 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 | 2 | `docs/kafka-consumer-retry.md` (8절) | 지금 대화의 직속 후속편. *"재시도의 정체는 seek 되감기다"*, `@RetryableTopic` 을 안 쓰는 이유 |
 | 3 | `docs/defects.md` 전체 (21건) | 재현 테스트 이름까지 달려 있다. **패턴 학습보다 함정 학습이 빠르다** |
 | 4 | Saga — D-002, D-006, `RefundFacade` | 보상 트랜잭션의 실전 함정. "무엇을 실패로 볼 것인가" 를 틀리면 정상 결제를 환불한다 |
-| 5 | `common/archunit/` (앱당 29규칙) | 설계 규칙을 테스트로 강제하는 법. `EventOrderingRules` 는 분산 동작 보장을 정적 규칙으로 옮긴 드문 사례 |
+| 5 | `common/archunit/` (앱당 36규칙) | 설계 규칙을 테스트로 강제하는 법. `EventOrderingRules` 는 분산 동작 보장을 정적 규칙으로 옮긴 드문 사례 |
 
 이후 여유가 있으면: CQRS(catalog↔store), Database per Service + Flyway `ddl-auto: validate`, 권한 사본으로 결합 끊기(`download/Entitlement`), 뮤테이션 테스트(`docs/testing.md` 5절), **추적 컨텍스트를 Outbox 에 실어 Kafka 구간을 잇는 법**(`common/messaging/trace`, [decisions.md](decisions.md) 17번), gateway 내부 API 차단.
 
