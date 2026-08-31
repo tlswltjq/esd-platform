@@ -2,7 +2,7 @@ package com.stove.settlement.api.application;
 
 import com.stove.settlement.core.domain.SellerSettlement;
 import com.stove.settlement.core.port.TaxInvoiceIssuer;
-import com.stove.settlement.core.service.SettlementService;
+import com.stove.settlement.core.service.SellerSettlementService;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +42,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SettlementCloseFacade {
 
-    private final SettlementService settlementService;
+    private final SellerSettlementService sellerSettlementService;
     private final TaxInvoiceIssuer taxInvoiceIssuer;
 
     /**
@@ -51,7 +51,7 @@ public class SettlementCloseFacade {
      * @return 이번 실행에서 확정된 판매자별 확정본
      */
     public List<SellerSettlement> closeMonth(YearMonth month) {
-        List<Long> sellerIds = settlementService.sellersToClose(month);
+        List<Long> sellerIds = sellerSettlementService.sellersToClose(month);
         if (sellerIds.isEmpty()) {
             log.info("마감 대상 없음 month={}", month);
             return List.of();
@@ -83,17 +83,17 @@ public class SettlementCloseFacade {
     }
 
     private SellerSettlement closeOne(Long sellerId, YearMonth month) {
-        SellerSettlement settlement = settlementService.closeSeller(sellerId, month);   // 커밋 1
+        SellerSettlement settlement = sellerSettlementService.closeSeller(sellerId, month);   // 커밋 1
 
         if (settlement == null) {
             // 마감할 원장이 없는데 대상에 들어온 판매자 = 발행만 남은 건이다.
-            settlement = settlementService.getSettlement(sellerId, month);
+            settlement = sellerSettlementService.find(sellerId, month);
         }
 
         if (settlement != null && settlement.needsTaxInvoice()) {
             String invoiceNo = taxInvoiceIssuer.issue(                                  // 트랜잭션 밖
                     sellerId, month.toString(), settlement.getNetAmount());
-            settlementService.assignTaxInvoice(sellerId, month, invoiceNo);             // 커밋 2
+            sellerSettlementService.assignTaxInvoice(sellerId, month, invoiceNo);             // 커밋 2
             settlement.assignTaxInvoice(invoiceNo);
         }
         return settlement;

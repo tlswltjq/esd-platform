@@ -381,7 +381,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
 ### 6.1 지금 메우는 중
 
 **서비스 계층(L1)은 5곳이 통째로 비어 있었다.** `OrderCommandService`·`OrderQueryService`·
-`StudioService`·`ReviewService`·`ProductCommandService` 가 테스트에서 `mock()` 으로만 등장해
+`StudioService`(지금은 `GameProjectService`·`GameBuildService`)·`ReviewService`·`ProductCommandService` 가 테스트에서 `mock()` 으로만 등장해
 구현이 한 번도 실행되지 않았고, 그래서 `ProcessedEventGuard.firstDelivery` 호출 5개소가
 전부 미검증이었다. 이 층을 채우는 과정에서 [D-016 ~ D-019](defects.md) 가 나왔다.
 

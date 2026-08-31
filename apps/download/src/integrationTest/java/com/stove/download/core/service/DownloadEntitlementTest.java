@@ -34,7 +34,13 @@ class DownloadEntitlementTest {
     private static final AtomicLong SEQ = new AtomicLong(1);
 
     @Autowired
-    DownloadService downloadService;
+    ProductRefService productRefService;
+    @Autowired
+    ManifestService manifestService;
+    @Autowired
+    EntitlementService entitlementService;
+    @Autowired
+    DownloadTicketService downloadTicketService;
     @Autowired
     EntitlementRepository entitlementRepository;
 
@@ -44,9 +50,9 @@ class DownloadEntitlementTest {
 
     /** catalog → ProductChanged, studio → BuildUploaded 가 도착한 상태를 만든다. */
     private void productIsPublished() {
-        downloadService.upsertProductRef(ProductChangedEvent.of(
+        productRefService.upsert(ProductChangedEvent.of(
                 productId, productCode, "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"));
-        downloadService.registerManifest(BuildUploadedEvent.of(
+        manifestService.register(BuildUploadedEvent.of(
                 1L, productCode, "1.0.0", 1024L, "abc123", "s3://bucket/" + productCode));
     }
 
@@ -60,9 +66,9 @@ class DownloadEntitlementTest {
     @DisplayName("권한이 있으면 서명된 다운로드 티켓을 발급한다")
     void issuesTicketForOwnedProduct() {
         productIsPublished();
-        downloadService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
 
-        DownloadTicket ticket = downloadService.issueTicket(productCode, memberId);
+        DownloadTicket ticket = downloadTicketService.issue(productCode, memberId);
 
         assertThat(ticket).isNotNull();
     }
@@ -72,7 +78,7 @@ class DownloadEntitlementTest {
     void rejectsUnownedProduct() {
         productIsPublished();
 
-        assertThatThrownBy(() -> downloadService.issueTicket(productCode, memberId))
+        assertThatThrownBy(() -> downloadTicketService.issue(productCode, memberId))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -80,10 +86,10 @@ class DownloadEntitlementTest {
     @DisplayName("회수된 권한으로는 티켓을 발급하지 않는다")
     void rejectsRevokedEntitlement() {
         productIsPublished();
-        downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
 
-        assertThatThrownBy(() -> downloadService.issueTicket(productCode, memberId))
+        assertThatThrownBy(() -> downloadTicketService.issue(productCode, memberId))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -92,8 +98,8 @@ class DownloadEntitlementTest {
     void grantIsIdempotent() {
         productIsPublished();
 
-        downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
 
         assertThat(entitlementRepository.findById(Entitlement.documentId(memberId, productId)))
                 .isPresent();
@@ -104,10 +110,10 @@ class DownloadEntitlementTest {
     @DisplayName("회수 이벤트가 중복 도착해도 상태는 그대로다")
     void revokeIsIdempotent() {
         productIsPublished();
-        downloadService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
 
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
-        assertThatCode(() -> downloadService.revoke("ORD-1", memberId, List.of(productId)))
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
+        assertThatCode(() -> entitlementService.revoke("ORD-1", memberId, List.of(productId)))
                 .doesNotThrowAnyException();
 
         assertThat(isActive()).isFalse();
@@ -117,10 +123,10 @@ class DownloadEntitlementTest {
     @DisplayName("환불 후 재구매하면 권한이 되살아난다")
     void repurchaseRestoresEntitlement() {
         productIsPublished();
-        downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
 
-        downloadService.grant("ORD-2", memberId, List.of(productId));
+        entitlementService.grant("ORD-2", memberId, List.of(productId));
 
         assertThat(isActive()).isTrue();
     }
@@ -131,15 +137,15 @@ class DownloadEntitlementTest {
         productIsPublished();
 
         // 주문1 구매 → 환불
-        downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
 
         // 주문2 로 같은 게임을 다시 구매
-        downloadService.grant("ORD-2", memberId, List.of(productId));
+        entitlementService.grant("ORD-2", memberId, List.of(productId));
         assertThat(isActive()).isTrue();
 
         // 주문1 의 LicenseRevoked 가 지각 도착하거나 재전송된다.
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
 
         // 수정 전에는 회수됐다. 사용자는 정상 구매한 게임을 다운로드할 수 없게 되고,
         // 라이선스 서비스에는 ACTIVE 로 남아 있어 원인 추적이 어려웠다.
@@ -152,11 +158,11 @@ class DownloadEntitlementTest {
     @DisplayName("[D-012] 해당 주문의 회수 이벤트는 정상적으로 권한을 거둔다")
     void revokeOfOwningOrderStillWorks() {
         productIsPublished();
-        downloadService.grant("ORD-1", memberId, List.of(productId));
-        downloadService.revoke("ORD-1", memberId, List.of(productId));
-        downloadService.grant("ORD-2", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.revoke("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-2", memberId, List.of(productId));
 
-        downloadService.revoke("ORD-2", memberId, List.of(productId));
+        entitlementService.revoke("ORD-2", memberId, List.of(productId));
 
         assertThat(isActive()).isFalse();
     }
@@ -166,9 +172,9 @@ class DownloadEntitlementTest {
     void ticketNeedsProductReference() {
         // 권한은 있는데 catalog 의 ProductChanged 가 아직 도착하지 않은 구간.
         // 구매 직후 짧게 존재할 수 있는 상태이며, 이 경로에는 재시도 안내가 없다.
-        downloadService.grant("ORD-1", memberId, List.of(productId));
+        entitlementService.grant("ORD-1", memberId, List.of(productId));
 
-        assertThatThrownBy(() -> downloadService.issueTicket(productCode, memberId))
+        assertThatThrownBy(() -> downloadTicketService.issue(productCode, memberId))
                 .isInstanceOf(BusinessException.class);
     }
 }

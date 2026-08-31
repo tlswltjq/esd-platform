@@ -9,7 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.studio.api.controller.dto.CreateProjectRequest;
 import com.stove.studio.api.controller.dto.UploadBuildRequest;
-import com.stove.studio.core.service.StudioService;
+import com.stove.studio.core.service.GameBuildService;
+import com.stove.studio.core.service.GameProjectService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -28,10 +29,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class StudioControllerTest {
 
     private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
-    private final StudioService studioService = mock(StudioService.class);
+    private final GameProjectService gameProjectService = mock(GameProjectService.class);
+    private final GameBuildService gameBuildService = mock(GameBuildService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new StudioController(studioService))
+            .standaloneSetup(new StudioController(gameProjectService, gameBuildService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -49,7 +51,7 @@ class StudioControllerTest {
                         .content(project("", "게임 A", 1001L, 30_000L)))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
     @Test
@@ -60,7 +62,7 @@ class StudioControllerTest {
                         .content(project("GAME-001", "", 1001L, 30_000L)))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
     @Test
@@ -71,7 +73,7 @@ class StudioControllerTest {
                         .content(project("GAME-001", "게임 A", 1001L, -1L)))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
     @Test
@@ -84,7 +86,7 @@ class StudioControllerTest {
                                 new UploadBuildRequest("1.0.0", 0L, "sha256:abc"))))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
     @Test
@@ -97,7 +99,7 @@ class StudioControllerTest {
                                 new UploadBuildRequest("1.0.0", 1024L, ""))))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
     @Test
@@ -113,6 +115,6 @@ class StudioControllerTest {
                                 new UploadBuildRequest("1.0.0", 1024L, "sha256:abc"))))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService, gameBuildService);
     }
 }

@@ -5,7 +5,8 @@ import com.stove.studio.api.controller.dto.BuildResponse;
 import com.stove.studio.api.controller.dto.CreateProjectRequest;
 import com.stove.studio.api.controller.dto.ProjectResponse;
 import com.stove.studio.api.controller.dto.UploadBuildRequest;
-import com.stove.studio.core.service.StudioService;
+import com.stove.studio.core.service.GameBuildService;
+import com.stove.studio.core.service.GameProjectService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -23,16 +24,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/studio/games")
 public class StudioController {
 
-    private final StudioService studioService;
+    private final GameProjectService gameProjectService;
+    private final GameBuildService gameBuildService;
 
     @PostMapping
     public ApiResponse<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request) {
-        return ApiResponse.ok(ProjectResponse.from(studioService.createProject(request.toCommand())));
+        return ApiResponse.ok(ProjectResponse.from(gameProjectService.create(request.toCommand())));
     }
 
     @GetMapping
     public ApiResponse<List<ProjectResponse>> list(@RequestHeader("X-Seller-Id") Long sellerId) {
-        return ApiResponse.ok(studioService.getProjects(sellerId).stream()
+        return ApiResponse.ok(gameProjectService.findBySeller(sellerId).stream()
                 .map(ProjectResponse::from)
                 .toList());
     }
@@ -40,7 +42,7 @@ public class StudioController {
     /** 등급분류 심의 신청 */
     @PostMapping("/{gameId}/submit")
     public ApiResponse<Void> submit(@PathVariable Long gameId, @RequestHeader("X-Seller-Id") Long sellerId) {
-        studioService.submitForReview(gameId, sellerId);
+        gameProjectService.submitForReview(gameId, sellerId);
         return ApiResponse.ok();
     }
 
@@ -49,12 +51,12 @@ public class StudioController {
                                                   @RequestHeader("X-Seller-Id") Long sellerId,
                                                   @Valid @RequestBody UploadBuildRequest request) {
         return ApiResponse.ok(BuildResponse.from(
-                studioService.uploadBuild(gameId, sellerId, request.toCommand())));
+                gameBuildService.upload(gameId, sellerId, request.toCommand())));
     }
 
     @GetMapping("/{gameId}/builds")
     public ApiResponse<List<BuildResponse>> builds(@PathVariable Long gameId) {
-        return ApiResponse.ok(studioService.getBuilds(gameId).stream()
+        return ApiResponse.ok(gameBuildService.findByGame(gameId).stream()
                 .map(BuildResponse::from)
                 .toList());
     }

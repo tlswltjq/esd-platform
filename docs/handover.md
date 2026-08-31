@@ -58,7 +58,7 @@ Outbox 의 본질은 발행이 아니라 **"아직 발행되지 않았다"는 �
 
 서비스 **간** 순서(payment → license)는 따로 지킬 필요가 없다. `PaymentCancelled` 를 소비해야 `LicenseRevoked` 가 태어나므로 **인과관계로 자연히 잡힌다.** 위험한 건 언제나 한 outbox 안의 "생성/소멸" 짝이다.
 
-> 근거 — `docs/event-ordering.md` 2·4·6절, `docs/defects.md` D-010~D-014, `DownloadService.java:73-80`, `Entitlement.java:39-62`
+> 근거 — `docs/event-ordering.md` 2·4·6절, `docs/defects.md` D-010~D-014, `EntitlementService.java:52-60`, `Entitlement.java:39-62`
 
 ### 2.3 파티션 = 토픽을 쪼갠 append-only 로그
 
@@ -212,9 +212,9 @@ stove.payment.v1 을 소비하는 그룹 셋:  license · order · settlement
 
 **남은 것은 ① 하나다.** ②③ 은 닫혔고, 무엇으로 닫혔는지를 아래에 남긴다.
 
-**① `DownloadService.grant` 에는 `belongsTo` 가드가 없다** (관찰 — **2026-08-10 재확인, 그대로다**)
+**① `EntitlementService.grant` 에는 `belongsTo` 가드가 없다** (관찰 — **2026-08-10 재확인, 그대로다**)
 
-`revoke` 는 D-012 수정으로 주문번호를 대조하지만(`DownloadService.java:73-80`), `grant` 는 그냥 덮어쓴다(`:52-55`). 지각한 `ORD-1` 의 `LicenseIssued` 가 `ORD-2` 것보다 늦게 도착하면 문서의 `orderNo` 가 `ORD-1` 로 덮이고, 이후 정당한 `ORD-2` 회수가 `belongsTo` 에서 거부될 수 있다. 다만 D-010 이 *"이미 전부 회수된 주문에는 발행하지 않는다"* 로 재전송 경로를 막아둬서 창이 매우 좁다. **재현 테스트를 써 보기 전에는 결함이라 부르지 않는다.**
+`revoke` 는 D-012 수정으로 주문번호를 대조하지만(`EntitlementService.java:52-60`), `grant` 는 그냥 덮어쓴다(`:24-28`). 지각한 `ORD-1` 의 `LicenseIssued` 가 `ORD-2` 것보다 늦게 도착하면 문서의 `orderNo` 가 `ORD-1` 로 덮이고, 이후 정당한 `ORD-2` 회수가 `belongsTo` 에서 거부될 수 있다. 다만 D-010 이 *"이미 전부 회수된 주문에는 발행하지 않는다"* 로 재전송 경로를 막아둬서 창이 매우 좁다. **재현 테스트를 써 보기 전에는 결함이라 부르지 않는다.**
 
 **② DEAD 알람이 없다** — ✅ **닫힘**
 
@@ -249,7 +249,7 @@ DLT 도 아무도 안 보면 유실과 운영상 다르지 않기 때문이다.
 | `common/archunit/EventOrderingRules.java` | 순서 보장을 깨는 코드를 빌드에서 차단 |
 | `docs/event-ordering.md` | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |
 | `docs/defects.md` | 결함 36건, 각각 재현 테스트 명시 |
-| `docs/decisions.md` | 설계 결정 22건, 각각 근거와 **대가**까지 |
+| `docs/decisions.md` | 설계 결정 23건, 각각 근거와 **대가**까지 |
 | `docs/performance.md` | 릴레이 처리량 (138 → 480.5 events/s, ×3.48) + HTTP 재측정 (9장) |
 | `docs/kafka-consumer-retry.md` | 컨슈머 재시도의 실제 동작 *(다음 학습 2순위)* |
 | `docs/testing.md` | 테스트 계층·격리·뮤테이션 테스트 |

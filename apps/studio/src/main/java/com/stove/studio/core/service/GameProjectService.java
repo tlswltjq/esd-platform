@@ -2,18 +2,12 @@ package com.stove.studio.core.service;
 
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.GameRegisteredEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.studio.core.domain.GameBuild;
-import com.stove.studio.core.domain.GameBuildRepository;
 import com.stove.studio.core.domain.GameProject;
 import com.stove.studio.core.domain.GameProjectRepository;
-import com.stove.studio.core.domain.NewBuild;
 import com.stove.studio.core.domain.NewProject;
-import com.stove.studio.core.domain.UploadTicket;
-import com.stove.studio.core.port.BuildStorage;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,27 +15,39 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 크리에이터 셀프 퍼블리싱 유스케이스.
- * 심의 신청·빌드 업로드가 각각 다운스트림(review, download)의 시작점이 된다.
+ * 게임 프로젝트 — 등록부터 심의 결과 반영까지의 상태머신.
+ *
+ * <pre>
+ * DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
+ *                             └─ReviewRejected──▶ REJECTED ──submit──▶ SUBMITTED
+ * </pre>
+ *
+ * <p>전이를 일으키는 경로가 넷(생성·신청·승인·반려)인데 전부 이 애그리거트 하나를 만지므로
+ * 한 클래스에 둔다. 나누면 상태 규칙이 클래스마다 흩어지고, 전이마다 트랜잭션이 하나씩이라
+ * 나눠서 얻는 것도 없다.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class StudioService {
+public class GameProjectService {
 
-    private static final String AGGREGATE = "GameProject";
+    /**
+     * Outbox 애그리거트 이름.
+     *
+     * <p>빌드 등록 이벤트도 이 스트림에 적재된다 — 한 상품의 사건은 한 줄로 늘어서야 한다
+     * ({@link GameBuildService} 참고).
+     */
+    static final String AGGREGATE = "GameProject";
 
     /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
     public static final String CONSUMER_GROUP = "studio";
 
     private final GameProjectRepository projectRepository;
-    private final GameBuildRepository buildRepository;
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
-    private final BuildStorage buildStorage;
 
-    public GameProject createProject(NewProject request) {
+    public GameProject create(NewProject request) {
         projectRepository.findByProductCode(request.productCode()).ifPresent(p -> {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 존재하는 상품코드입니다.");
         });
@@ -51,8 +57,7 @@ public class StudioService {
 
     /** [등록] studio → GameRegistered → review */
     public void submitForReview(Long gameId, Long sellerId) {
-        GameProject project = findProject(gameId);
-        project.requireOwner(sellerId);
+        GameProject project = requireOwned(gameId, sellerId);
         project.submit();
 
         outboxRecorder.record(AGGREGATE, project.getProductCode(),
@@ -63,33 +68,12 @@ public class StudioService {
                 gameId, project.getProductCode(), project.isSelfRated());
     }
 
-    /** 빌드 메타데이터 등록 → download 가 패치 매니페스트를 만든다 */
-    public GameBuild uploadBuild(Long gameId, Long sellerId, NewBuild request) {
-        GameProject project = findProject(gameId);
-        project.requireOwner(sellerId);
-        if (buildRepository.existsByGameIdAndVersion(gameId, request.version())) {
-            throw new BusinessException(ErrorCode.CONFLICT, "이미 등록된 버전입니다: " + request.version());
-        }
-
-        UploadTicket ticket =
-                buildStorage.issueUploadTicket(project.getProductCode(), request.version());
-        GameBuild build = buildRepository.save(GameBuild.of(gameId, request.version(),
-                request.fileSize(), request.checksum(), ticket.storagePath()));
-
-        outboxRecorder.record(AGGREGATE, project.getProductCode(),
-                BuildUploadedEvent.of(gameId, project.getProductCode(), request.version(),
-                        request.fileSize(), request.checksum(), ticket.storagePath()));
-
-        log.info("빌드 등록 gameId={} version={} size={}", gameId, request.version(), request.fileSize());
-        return build;
-    }
-
     /** review 승인 이벤트 반영 */
     public void applyApproval(String eventId, String eventType, String productCode, String ratingCode) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
         }
-        GameProject project = findByProductCode(productCode);
+        GameProject project = requireByProductCode(productCode);
         if (!project.approve(ratingCode)) {
             log.warn("심의 신청 상태가 아닌 프로젝트의 승인 이벤트 — 무시 productCode={} status={}",
                     productCode, project.getStatus());
@@ -103,7 +87,7 @@ public class StudioService {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
         }
-        GameProject project = findByProductCode(productCode);
+        GameProject project = requireByProductCode(productCode);
         if (!project.reject(reason)) {
             log.warn("심의 신청 상태가 아닌 프로젝트의 반려 이벤트 — 무시 productCode={} status={}",
                     productCode, project.getStatus());
@@ -113,21 +97,25 @@ public class StudioService {
     }
 
     @Transactional(readOnly = true)
-    public List<GameProject> getProjects(Long sellerId) {
+    public List<GameProject> findBySeller(Long sellerId) {
         return projectRepository.findBySellerIdOrderByIdDesc(sellerId);
     }
 
-    @Transactional(readOnly = true)
-    public List<GameBuild> getBuilds(Long gameId) {
-        return buildRepository.findByGameIdOrderByIdDesc(gameId);
-    }
-
-    private GameProject findProject(Long gameId) {
-        return projectRepository.findById(gameId)
+    /**
+     * 소유자 확인까지 끝난 프로젝트.
+     *
+     * <p>빌드 등록도 같은 확인을 거쳐야 해서 밖으로 연다. 트랜잭션을 새로 열지 않고
+     * <b>부르는 쪽의 트랜잭션에 참여</b>하므로, 빌드 저장과 소유 확인이 한 경계 안에 남는다.
+     * 프로젝트 조회를 빌드 쪽에서 리포지토리로 직접 하면 같은 애그리거트를 만지는 클래스가 둘이 된다.
+     */
+    public GameProject requireOwned(Long gameId, Long sellerId) {
+        GameProject project = projectRepository.findById(gameId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "gameId=" + gameId));
+        project.requireOwner(sellerId);
+        return project;
     }
 
-    private GameProject findByProductCode(String productCode) {
+    private GameProject requireByProductCode(String productCode) {
         return projectRepository.findByProductCode(productCode)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "productCode=" + productCode));
     }

@@ -43,7 +43,7 @@ class SettlementCloseTest {
     @Autowired
     SettlementCloseFacade settlementCloseFacade;
     @Autowired
-    SettlementService settlementService;
+    SellerSettlementService sellerSettlementService;
     @Autowired
     SettlementRecordRepository recordRepository;
     @Autowired
@@ -120,7 +120,7 @@ class SettlementCloseTest {
 
         assertThat(sellerSettlementRepository.findBySellerIdAndSettlementMonth(seller, month.toString()))
                 .isPresent();
-        assertThat(settlementService.getClosedSettlements(month)
+        assertThat(sellerSettlementService.findClosed(month)
                 .stream().filter(s -> s.getSellerId().equals(seller)).toList()).hasSize(1);
     }
 
@@ -174,7 +174,7 @@ class SettlementCloseTest {
 
         long ledgerNet = recordRepository.findBySellerIdAndSettlementMonth(seller, month.toString())
                 .stream().mapToLong(SettlementRecord::getNetAmount).sum();
-        long settledNet = settlementService.getClosedSettlements(month).stream()
+        long settledNet = sellerSettlementService.findClosed(month).stream()
                 .filter(s -> s.getSellerId().equals(seller))
                 .mapToLong(SellerSettlement::getNetAmount).sum();
 

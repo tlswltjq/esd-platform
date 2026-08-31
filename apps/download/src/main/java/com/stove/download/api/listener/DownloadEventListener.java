@@ -8,7 +8,9 @@ import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
 import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.download.core.service.DownloadService;
+import com.stove.download.core.service.EntitlementService;
+import com.stove.download.core.service.ManifestService;
+import com.stove.download.core.service.ProductRefService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,6 +25,9 @@ import org.springframework.stereotype.Component;
  *   <li>license.LicenseIssued/Revoked → 다운로드 권한</li>
  * </ul>
  * 모두 문서 ID 고정 upsert 라 Inbox 테이블 없이 멱등하다.
+ *
+ * <p>토픽 셋이 곧 애그리거트 셋이라 서비스도 셋을 주입받는다 — 이 리스너가 하는 일은
+ * 여전히 역직렬화와 위임뿐이다(결정 6).
  */
 @Slf4j
 @Component
@@ -31,14 +36,16 @@ public class DownloadEventListener {
 
     private static final String GROUP = "download";
 
-    private final DownloadService downloadService;
+    private final ManifestService manifestService;
+    private final ProductRefService productRefService;
+    private final EntitlementService entitlementService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = Topics.STUDIO, groupId = GROUP)
     public void onStudioEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.BUILD_UPLOADED)) {
-            downloadService.registerManifest(envelope.payloadAs(objectMapper, BuildUploadedEvent.class));
+            manifestService.register(envelope.payloadAs(objectMapper, BuildUploadedEvent.class));
         }
     }
 
@@ -46,7 +53,7 @@ public class DownloadEventListener {
     public void onCatalogEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.PRODUCT_CHANGED)) {
-            downloadService.upsertProductRef(envelope.payloadAs(objectMapper, ProductChangedEvent.class));
+            productRefService.upsert(envelope.payloadAs(objectMapper, ProductChangedEvent.class));
         }
     }
 
@@ -56,11 +63,11 @@ public class DownloadEventListener {
 
         if (envelope.isType(EventType.LICENSE_ISSUED)) {
             LicenseIssuedEvent event = envelope.payloadAs(objectMapper, LicenseIssuedEvent.class);
-            downloadService.grant(event.orderNo(), event.memberId(), event.productIds());
+            entitlementService.grant(event.orderNo(), event.memberId(), event.productIds());
 
         } else if (envelope.isType(EventType.LICENSE_REVOKED)) {
             LicenseRevokedEvent event = envelope.payloadAs(objectMapper, LicenseRevokedEvent.class);
-            downloadService.revoke(event.orderNo(), event.memberId(), event.productIds());
+            entitlementService.revoke(event.orderNo(), event.memberId(), event.productIds());
         }
     }
 }

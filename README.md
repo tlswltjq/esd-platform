@@ -106,7 +106,7 @@ stove/
 | 읽기 트래픽 집중 | catalog(쓰기) / store(읽기) 분리 + Redis 캐시 2단 | `store`, `catalog/CacheConfig` |
 | license 장애가 다운로드 장애로 전이 | 동기 호출 대신 **권한 사본**을 이벤트로 유지 — license 를 정지시키고 확인했다(다운로드 20/20, 9.3ms) | `download/Entitlement` |
 | 정산 중복 집계(금전 사고) | Inbox + `(order_no, product_id, record_type)` 유니크 이중 방어 | `settlement_record` |
-| 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementService#recordRefund` |
+| 환불 시 정산 역산 | 자기 원장의 SALE 레코드를 부호 반전해 상계 — 다른 서비스에 되묻지 않음 | `SettlementRecordService#recordRefund` |
 | 경계가 시간이 지나며 흐려짐 | **ArchUnit 으로 계층·의존 방향을 테스트로 강제** — 규칙을 처음 돌렸을 때 위반이 166건이었다 | `common/archunit` |
 | 비동기 발행이 분산 추적을 끊음 | **추적 컨텍스트를 이벤트와 같은 트랜잭션에 저장**했다가 발행 시점에 복원 — 자동 계측은 릴레이 스케줄러의 컨텍스트를 싣는다 | `common/messaging/trace` |
 | 재시도를 소진한 메시지가 사라짐 | **DLT + 재투입 API** — 파티션을 막지 않으면서 유실만 없앤다. Outbox `DEAD` 도 HTTP 로 회수한다 | `common/kafka`, `common/messaging/ops` |

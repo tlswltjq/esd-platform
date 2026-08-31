@@ -9,7 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.settlement.api.application.SettlementCloseFacade;
-import com.stove.settlement.core.service.SettlementService;
+import com.stove.settlement.core.service.SellerSettlementService;
+import com.stove.settlement.core.service.SettlementRecordService;
 import java.time.YearMonth;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,11 +29,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  */
 class SettlementControllerTest {
 
-    private final SettlementService settlementService = mock(SettlementService.class);
+    private final SettlementRecordService settlementRecordService = mock(SettlementRecordService.class);
+    private final SellerSettlementService sellerSettlementService = mock(SellerSettlementService.class);
     private final SettlementCloseFacade settlementCloseFacade = mock(SettlementCloseFacade.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new SettlementController(settlementService, settlementCloseFacade))
+            .standaloneSetup(new SettlementController(
+                    settlementRecordService, sellerSettlementService, settlementCloseFacade))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -70,7 +73,7 @@ class SettlementControllerTest {
         mockMvc.perform(get("/api/v1/settlements/closings").param("month", "not-a-month"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(settlementService);
+        verifyNoInteractions(settlementRecordService, sellerSettlementService);
     }
 
     @Test
@@ -79,6 +82,6 @@ class SettlementControllerTest {
         mockMvc.perform(get("/api/v1/settlements/sellers/abc").param("month", "2026-08"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(settlementService);
+        verifyNoInteractions(settlementRecordService, sellerSettlementService);
     }
 }

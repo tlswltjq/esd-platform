@@ -15,7 +15,7 @@ import com.stove.common.event.payload.OrderLine;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
 import com.stove.common.test.EventRecords;
-import com.stove.settlement.core.service.SettlementService;
+import com.stove.settlement.core.service.SettlementRecordService;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,9 +30,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
  */
 class PaymentEventListenerTest {
 
-    private final SettlementService settlementService = mock(SettlementService.class);
+    private final SettlementRecordService settlementRecordService = mock(SettlementRecordService.class);
     private final PaymentEventListener listener =
-            new PaymentEventListener(settlementService, EventRecords.OBJECT_MAPPER);
+            new PaymentEventListener(settlementRecordService, EventRecords.OBJECT_MAPPER);
 
     private static final List<OrderLine> LINES =
             List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 1));
@@ -46,7 +46,7 @@ class PaymentEventListenerTest {
     void completedRecordsSale() {
         listener.onPaymentEvent(EventRecords.of(Topics.PAYMENT, COMPLETED));
 
-        verify(settlementService).recordSale(
+        verify(settlementRecordService).recordSale(
                 anyString(), eq(EventType.PAYMENT_COMPLETED), eq("ORD-1"), eq(LINES));
     }
 
@@ -55,7 +55,7 @@ class PaymentEventListenerTest {
     void cancelledRecordsRefund() {
         listener.onPaymentEvent(EventRecords.of(Topics.PAYMENT, CANCELLED));
 
-        verify(settlementService).recordRefund(
+        verify(settlementRecordService).recordRefund(
                 anyString(), eq(EventType.PAYMENT_CANCELLED), eq("ORD-1"));
     }
 
@@ -64,14 +64,14 @@ class PaymentEventListenerTest {
     void unrelatedEventTypeIsIgnored() {
         listener.onPaymentEvent(EventRecords.ofUnrelatedType(Topics.PAYMENT));
 
-        verifyNoInteractions(settlementService);
+        verifyNoInteractions(settlementRecordService);
     }
 
     @Test
     @DisplayName("매출 집계 중 일시 장애는 예외로 전파된다 — 삼키면 매출이 원장에서 사라진다")
     void propagatesFailureOnSale() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
-                .when(settlementService).recordSale(anyString(), anyString(), anyString(), any());
+                .when(settlementRecordService).recordSale(anyString(), anyString(), anyString(), any());
 
         assertThatThrownBy(() -> listener.onPaymentEvent(EventRecords.of(Topics.PAYMENT, COMPLETED)))
                 .isInstanceOf(DataAccessResourceFailureException.class);
@@ -81,7 +81,7 @@ class PaymentEventListenerTest {
     @DisplayName("환불 역산의 예외도 그대로 전파된다 — 두 분기의 정책이 같다")
     void propagatesFailureOnRefund() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
-                .when(settlementService).recordRefund(anyString(), anyString(), anyString());
+                .when(settlementRecordService).recordRefund(anyString(), anyString(), anyString());
 
         assertThatThrownBy(() -> listener.onPaymentEvent(EventRecords.of(Topics.PAYMENT, CANCELLED)))
                 .isInstanceOf(DataAccessResourceFailureException.class);
