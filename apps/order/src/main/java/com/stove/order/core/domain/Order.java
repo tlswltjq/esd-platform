@@ -65,10 +65,7 @@ public class Order extends BaseTimeEntity {
     private String failReason;
 
     /**
-     * 만료 처리된 시각.
-     *
-     * <p>{@code createdAt} 으로 대신할 수 없다 — 그건 <b>만료 대상이 된 시각</b>이지
-     * <b>실제로 만료시킨 시각</b>이 아니다. 밀린 주문을 나눠서 처리하므로 둘이 크게 벌어질 수 있고,
+     * 만료 처리된 시각. {@code createdAt} 으로 대신할 수 없다 —
      * 그 차이가 곧 "스윕이 얼마나 밀렸나" 다.
      */
     private Instant expiredAt;

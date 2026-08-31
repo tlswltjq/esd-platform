@@ -17,10 +17,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 라이선스 지급/회수.
- *
- * <p>지급은 결제 완료 이벤트로만 발생하며, 같은 주문·상품에 대해 몇 번 호출되어도
- * 결과가 같도록(멱등) 존재 여부 확인 + DB 유니크 제약을 이중으로 건다.
+ * 라이선스 지급/회수. 멱등을 존재 확인과 DB 유니크 제약으로 이중으로 건다.
+ * docs/code-notes.md
  */
 @Slf4j
 @Service
@@ -50,18 +48,14 @@ public class LicenseService {
             licenseRepository.save(License.issue(orderNo, memberId, productId));
         }
 
-        // 새로 지급된 것이 없어도 현재 소유 상태를 알린다.
-        // download 는 자기 DB 없이 이 이벤트만으로 권한 사본을 만들기 때문에,
-        // '변화'만 실으면 이벤트를 한 번 놓친 하위 서비스를 재처리로 복구할 방법이 없다.
-        // 수신 측은 문서 ID 고정 upsert 라 같은 상태를 여러 번 받아도 안전하다.
+        // 새로 지급된 것이 없어도 현재 소유 상태를 알린다 — docs/code-notes.md
         List<Long> owned = licenseRepository.findByOrderNo(orderNo).stream()
                 .filter(License::isActive)
                 .map(License::getProductId)
                 .toList();
 
         if (owned.isEmpty()) {
-            // 이미 전부 회수된 주문에 지급 이벤트가 뒤늦게 들어온 경우.
-            // 소유하지 않은 상태를 '지급'으로 알릴 수는 없다.
+            // 소유하지 않은 상태를 '지급' 으로 알릴 수는 없다.
             log.warn("보유 중인 라이선스가 없어 지급 이벤트를 발행하지 않는다 orderNo={}", orderNo);
             return;
         }
@@ -87,7 +81,7 @@ public class LicenseService {
                 .toList();
 
         if (revoked.isEmpty()) {
-            // 이미 전부 회수된 상태다. 변화가 없는데 이벤트를 내보내면 하위 서비스가 헛일을 한다.
+            // 변화가 없는데 이벤트를 내보내면 하위 서비스가 헛일을 한다.
             log.info("이미 회수된 주문 orderNo={}", orderNo);
             return;
         }
@@ -100,10 +94,8 @@ public class LicenseService {
     }
 
     /**
-     * 지급 최종 실패 기록 + 보상 트랜잭션 트리거.
-     *
-     * <p>{@code REQUIRES_NEW} 인 이유: 지급 트랜잭션이 롤백된 뒤에 호출되므로
-     * 실패 이벤트만큼은 반드시 별도 트랜잭션에서 커밋되어야 payment 가 환불을 시작할 수 있다.
+     * 지급 최종 실패 기록 + 보상 트리거. <b>{@code REQUIRES_NEW} 여야 한다</b> —
+     * 지급 트랜잭션이 롤백된 뒤에 불리므로 별도 트랜잭션에서 커밋되어야 한다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordIssueFailure(String orderNo, Long memberId, String reason) {
@@ -112,15 +104,8 @@ public class LicenseService {
     }
 
     /**
-     * 이 주문에 라이선스가 발급된 이력이 있는가.
-     *
-     * <p>보상 환불을 시작하기 <b>직전에</b> 부른다. 보상의 전제는 "지급되지 않았다"인데,
-     * 그때까지 그 전제를 확인하는 자리가 한 군데도 없었다 — 컨슈머가 실패했다는 사실만 보고
-     * 환불했다. 지급이 커밋된 뒤 오프셋 커밋 전에 컨슈머가 실패하면 <b>같은 레코드가 다시 오고,
-     * 그 재처리가 실패하면 이미 물건을 받은 주문이 환불된다</b>(D-028).
-     *
-     * <p>회수된 라이선스도 '있음'으로 센다. 지급 자체는 일어났으므로 "지급 실패" 라는 보고가
-     * 사실이 아닌 것은 마찬가지이고, 회수됐다면 환불은 이미 그쪽 경로로 처리됐다.
+     * 이 주문에 라이선스가 발급된 이력이 있는가. 보상 환불 <b>직전에</b> 부른다. [D-028]
+     * 회수된 것도 '있음' 으로 센다. docs/code-notes.md
      */
     @Transactional(readOnly = true)
     public boolean isIssued(String orderNo) {

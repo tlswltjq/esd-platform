@@ -22,9 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  *                             └─ReviewRejected──▶ REJECTED ──submit──▶ SUBMITTED
  * </pre>
  *
- * <p>전이를 일으키는 경로가 넷(생성·신청·승인·반려)인데 전부 이 애그리거트 하나를 만지므로
- * 한 클래스에 둔다. 나누면 상태 규칙이 클래스마다 흩어지고, 전이마다 트랜잭션이 하나씩이라
- * 나눠서 얻는 것도 없다.
+ * <p>전이 네 경로가 전부 이 애그리거트 하나를 만지므로 한 클래스에 둔다. docs/code-notes.md
  */
 @Slf4j
 @Service
@@ -32,12 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class GameProjectService {
 
-    /**
-     * Outbox 애그리거트 이름.
-     *
-     * <p>빌드 등록 이벤트도 이 스트림에 적재된다 — 한 상품의 사건은 한 줄로 늘어서야 한다
-     * ({@link GameBuildService} 참고).
-     */
+    /** Outbox 애그리거트 이름. 빌드 등록도 이 스트림이다 — 한 상품의 사건은 한 줄로 늘어선다. */
     static final String AGGREGATE = "GameProject";
 
     /** Kafka 컨슈머 그룹이자 Inbox 멱등 키. 리스너도 이 상수를 참조한다 — {@code ConsumerGroupRules} 참고. */
