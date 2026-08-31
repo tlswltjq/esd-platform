@@ -41,13 +41,8 @@ public class ProductController {
     }
 
     /**
-     * {@code productCode} 로 조회. 상품을 코드로만 아는 쪽(연동·운영)이 내부 id 를 얻는 통로다.
-     *
-     * <p><b>경로를 나눈 이유</b> — {@code GET /products} 에 질의 파라미터로 얹으면
-     * OpenAPI 연산이 충돌한다. 명세는 연산을 <b>경로 + 메서드</b>로 식별하므로
-     * 같은 자리에 목록과 단건이 겹치면 하나만 남고, 커밋된 스냅샷이 조용히 거짓말을 하게 된다.
-     *
-     * <p>{@code /{productId}} 와는 세그먼트 수가 달라 매칭이 겹치지 않는다.
+     * {@code productCode} 로 조회. <b>질의 파라미터로 얹으면 OpenAPI 연산이 충돌한다</b> —
+     * 그래서 경로를 나눴다. docs/code-notes.md
      */
     @GetMapping("/by-code/{productCode}")
     public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {
@@ -67,11 +62,7 @@ public class ProductController {
         return ApiResponse.ok();
     }
 
-    /**
-     * 운영툴: store 검색 색인 재구축 트리거.
-     *
-     * <p>이미 재색인이 돌고 있으면 409 다 — 같은 일을 두 번 돌리면 릴레이 적체가 두 배가 된다.
-     */
+    /** 운영툴: store 검색 색인 재구축. 이미 돌고 있으면 409 — 적체가 두 배가 된다. */
     @PostMapping("/reindex")
     public ApiResponse<Integer> reindex() {
         return ApiResponse.ok(productReindexFacade.reindexAll());
