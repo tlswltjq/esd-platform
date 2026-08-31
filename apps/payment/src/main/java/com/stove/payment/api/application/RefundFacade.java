@@ -38,7 +38,6 @@ public class RefundFacade {
     private final PgClient pgClient;
     private final PaymentMetrics paymentMetrics;
 
-    /** 사용자 요청 환불 */
     public void refund(String orderNo, String reason) {
         settle(paymentService.beginCancel(orderNo, reason), orderNo, reason);
     }

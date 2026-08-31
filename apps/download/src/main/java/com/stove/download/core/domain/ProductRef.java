@@ -20,7 +20,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "product_ref")
 public class ProductRef {
 
-    /** productCode */
     @Id
     private String id;
 

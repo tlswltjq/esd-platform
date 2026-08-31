@@ -198,7 +198,6 @@ public class OutboxEvent {
     }
 
     public enum OutboxStatus {
-        /** 발행 대기 */
         PENDING,
         /** 브로커 ack 완료 */
         SENT,

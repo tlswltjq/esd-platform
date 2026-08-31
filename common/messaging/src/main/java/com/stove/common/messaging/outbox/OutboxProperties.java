@@ -2,7 +2,6 @@ package com.stove.common.messaging.outbox;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/** stove.outbox.* 설정 */
 @ConfigurationProperties(prefix = "stove.outbox")
 public record OutboxProperties(
         Boolean relayEnabled,

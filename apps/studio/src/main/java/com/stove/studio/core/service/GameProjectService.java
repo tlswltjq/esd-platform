@@ -68,7 +68,6 @@ public class GameProjectService {
                 gameId, project.getProductCode(), project.isSelfRated());
     }
 
-    /** review 승인 이벤트 반영 */
     public void applyApproval(String eventId, String eventType, String productCode, String ratingCode) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
@@ -82,7 +81,6 @@ public class GameProjectService {
         log.info("심의 승인 반영 productCode={} rating={}", productCode, ratingCode);
     }
 
-    /** review 반려 이벤트 반영 */
     public void applyRejection(String eventId, String eventType, String productCode, String reason) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;

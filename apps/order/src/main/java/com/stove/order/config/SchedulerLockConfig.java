@@ -31,8 +31,7 @@ public class SchedulerLockConfig {
         return new JdbcTemplateLockProvider(
                 JdbcTemplateLockProvider.Configuration.builder()
                         .withJdbcTemplate(new org.springframework.jdbc.core.JdbcTemplate(dataSource))
-                        // 락 시각을 DB 시계로 잡는다. 인스턴스 시계가 어긋나면 락이
-                        // 일찍 풀리거나 늦게 풀린다 — 분산 락에서 시계 동기화를 가정하지 않는다.
+                        // DB 시계로 잡는다 — 인스턴스 시계 동기화를 가정하지 않는다.
                         .usingDbTime()
                         .build());
     }

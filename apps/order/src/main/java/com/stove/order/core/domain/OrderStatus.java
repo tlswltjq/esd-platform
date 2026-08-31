@@ -10,11 +10,8 @@ package com.stove.order.core.domain;
 public enum OrderStatus {
     /** 생성됨, 결제 대기 */
     CREATED,
-    /** 결제 완료 */
     PAID,
-    /** 사용자/시스템 취소 */
     CANCELED,
-    /** 결제 실패로 종료 */
     FAILED,
     /**
      * 결제 창이 지나 만료됨.

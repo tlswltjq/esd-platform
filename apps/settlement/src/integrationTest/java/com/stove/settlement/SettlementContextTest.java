@@ -8,17 +8,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 
-/**
- * 실제 인프라를 띄우고 애플리케이션 컨텍스트를 끝까지 올린다.
- *
- * <p>정적 검증이 놓치는 부류를 잡는 것이 목적이다 — 빈 이름 충돌, 순환 의존,
- * 누락된 빈, {@code @ConfigurationProperties} 바인딩 실패, Flyway 마이그레이션과
- * 엔티티 매핑의 불일치({@code ddl-auto: validate}).
- */
+/** 기동 검증(L5) — 빈 구성과 Flyway↔엔티티 정합. docs/testing.md */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        // 캐시된 컨텍스트의 릴레이 스레드가 다른 테스트의 Outbox 이벤트를 집어가지 않도록
-        // 폴링을 재운다. 빈은 그대로 둬서 구성 검증은 유지한다.
+        // 폴링을 재운다 — 캐시된 컨텍스트의 릴레이 경합(docs/testing.md).
         properties = "stove.outbox.poll-interval-ms=3600000")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class SettlementContextTest {

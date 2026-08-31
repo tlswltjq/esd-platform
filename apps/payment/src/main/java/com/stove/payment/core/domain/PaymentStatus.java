@@ -5,7 +5,6 @@ public enum PaymentStatus {
     READY,
     /** PG 사전등록 완료(결제창 호출 가능) */
     PENDING,
-    /** 승인 완료 */
     PAID,
     /**
      * 취소 착수 — PG 환불을 요청하기로 커밋한 상태.
@@ -15,8 +14,6 @@ public enum PaymentStatus {
      * 여기서 멈춘 건은 돈이 나갔는지 불확실하다는 뜻이며, 재시도 대상으로 눈에 띈다.
      */
     CANCELING,
-    /** 취소/환불 완료 */
     CANCELED,
-    /** 승인 실패 */
     FAILED
 }

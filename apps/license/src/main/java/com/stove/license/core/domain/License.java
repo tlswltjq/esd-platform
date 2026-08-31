@@ -43,7 +43,6 @@ public class License extends BaseTimeEntity {
     @Column(nullable = false)
     private Long productId;
 
-    /** CD키/라이선스 키 */
     @Column(nullable = false, unique = true, length = 40)
     private String licenseKey;
 
