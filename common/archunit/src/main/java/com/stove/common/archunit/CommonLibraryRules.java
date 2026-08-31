@@ -13,14 +13,8 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
 /**
- * {@code common/*} 에 적용하는 규칙.
- *
- * <p>{@link ModulePackageRules} 는 서비스 모듈의 core/api/infrastructure 배치를 다루므로
- * 라이브러리에는 맞지 않는다. 라이브러리에서 지켜야 하는 것은 배치가 아니라 <b>방향</b>이다 —
- * 공용 코드가 앱을 알기 시작하면 공용이 아니게 된다.
- *
- * <p>지금은 Gradle 의존 그래프가 이 방향을 우연히 지키고 있을 뿐이고,
- * 규칙으로 적어두지 않으면 프로젝트 의존 한 줄로 조용히 뒤집힌다.
+ * {@code common/*} 에 적용하는 규칙. 라이브러리에서 지켜야 하는 것은 배치가 아니라 <b>방향</b>이다.
+ * docs/code-notes.md
  */
 public final class CommonLibraryRules {
 
