@@ -949,6 +949,69 @@ common/kafka/.../KafkaConsumerAutoConfiguration.java  ← 기본 핸들러
 
 ---
 
+## 23. 서비스 분해의 단위는 메서드가 아니라 트랜잭션이다
+
+**배경** — `core/service` 를 "한 클래스 한 기능" 으로 쪼개고 조율은 전부 `api/application` 에 두자는
+계획이 있었다. 구조 자체(`core/domain`·`core/port`·`infrastructure`·`api/application`)는
+1~5번이 이미 정한 것이라 계획에서 실제로 새로 정해지는 것은 그 둘이었다.
+
+**결정** — 분해는 하되 **단위를 트랜잭션 하나로** 정한다. 조율의 자리는 3번을 그대로 둔다 —
+트랜잭션 밖에 두어야 할 것이 있을 때만 파사드다.
+
+**근거** — 하한선이 이미 코드에 박혀 있다. `OutboxRecorder` 와 `ProcessedEventGuard` 가
+`Propagation.MANDATORY` 다. 이벤트를 적재하거나 멱등 마킹을 하는 유스케이스는 `core.service` 가
+연 트랜잭션 안에서 끝나야 한다. 그보다 잘게 쪼개면 조각을 다시 묶을 자리가 파사드밖에 없는데,
+파사드는 트랜잭션을 열 수 없다(`트랜잭션_경계는_core_service_다`).
+**더 쪼개는 순간 규칙을 어기지 않고는 원자성을 되찾을 수 없다.**
+
+**적용** — 애그리거트를 둘 이상 만지던 세 곳만 갈랐다.
+
+| 모듈 | 전 | 후 |
+|---|---|---|
+| download | `DownloadService` — 애그리거트 3, 트랜잭션 없음(Mongo) | `ManifestService` · `EntitlementService` · `ProductRefService` · `DownloadTicketService` |
+| studio | `StudioService` — 애그리거트 2 | `GameProjectService` · `GameBuildService` |
+| settlement | `SettlementService` — 애그리거트 2 | `SettlementRecordService` · `SellerSettlementService` |
+
+payment 는 손대지 않았다. 공개 메서드가 12개지만 전부 `Payment` 하나의 상태기계다 —
+쪼개면 전이 규칙이 클래스마다 흩어지고 얻는 것은 파일 수뿐이다.
+나머지 여섯 서비스는 애그리거트가 하나고 100줄 안팎이라 대상이 아니다.
+
+**드러난 것 — 규칙은 이 계획의 반대편을 막지 않는다.**
+`계층_접근_방향` 은 같은 레이어 안의 의존을 검사 대상에서 뺀다
+(ArchUnit 1.3.0 `Architectures.originMatchesIfDependencyIsRelevant` 가 `ownLayer` 를 허용에 더한다).
+그래서 `core.service → core.service` 는 통과한다 — 이번 분해가 셋 다 그 형태인데 규칙 36개가 그대로 초록이다.
+**"조율은 파사드에서" 를 규약으로 적어도 강제되지 않는다**는 뜻이고,
+강제되지 않는 경계가 어떻게 되는지는 1번이 이미 답했다.
+그래서 규약을 늘리지 않고 **트랜잭션이라는 강제되는 선**만 남겼다.
+
+**포트를 여는 기준도 같이 좁힌다** — 도메인 간 협업의 기본값은 이벤트다.
+포트 6개 중 다른 도메인은 `CatalogPort` 하나뿐이고 나머지 다섯은 외부 시스템(PG·CDN·S3·등급위·세금계산서)이다.
+"다른 도메인이 필요하면 포트를 판다" 로 읽으면 동기 호출이 기본이 되어 Saga·Outbox 설계와 반대로 간다.
+**상태 변경 전파는 이벤트, 포트는 이 트랜잭션 전에 확정된 값이 필요할 때만**
+(order → catalog 가격 확정이 그 예이자 유일한 사례다).
+
+**대가** — 애그리거트를 가로지르는 유스케이스는 서비스가 서비스를 부른다
+(`GameBuildService → GameProjectService`, `SellerSettlementService → SettlementRecordService`,
+`DownloadTicketService → 셋`). 부르는 쪽 트랜잭션에 참여하므로 경계는 그대로지만
+**한 클래스만 읽어서는 트랜잭션 범위가 안 보인다.** 대신 애그리거트마다 접근 소유자가 하나로 정해졌다 —
+settlement 의 마감이 원장을 "집으면서 닫는" 한 호출이 된 것이 그 결과다.
+
+**버린 선택지**
+
+| | 왜 버렸나 |
+|---|---|
+| 공개 메서드마다 클래스 하나 (68개) | 트랜잭션 하한선 아래로 내려간다. 원자성을 되찾을 자리가 없다 |
+| 조율을 전부 `api/application` 으로 | 3번이 이미 기각했다. 현행 파사드 5개는 전부 "트랜잭션 밖에 둘 것" 이 있어서 존재하고, 나머지는 위임 껍데기가 된다 |
+| 규칙으로 못 박기 (예: 서비스당 리포지토리 1개) | 정당한 예외가 규칙보다 먼저 나온다 — 마감 한 건이 원장과 확정본을 함께 만진다. 사례가 하나 더 쌓일 때까지 두는 편이 낫다(22번과 같은 판단) |
+
+**따라온 것** — studio 의 통합 테스트가 둘로 갈렸다(`GameProjectServiceTest`·`GameBuildServiceTest`).
+애노테이션 조합이 같아 **컨텍스트는 한 벌 그대로**이며, 실행 로그에서 Hikari 풀이 늘지 않은 것으로 확인했다
+(testing.md 의 커넥션 한계선). 테스트 수는 그대로 15개다.
+`docs/test-audit.md` 의 실측표는 CI 실행 하나에 못 박혀 있다 — 클래스가 하나 늘었으니 다음 측정에서 그만큼 올라간다.
+지금 값을 손으로 고치지는 않는다. 그 표의 근거는 실행이지 추정이 아니다.
+
+---
+
 ## 검증하며 드러난 것
 
 정적 검증이 잡는 것과 못 잡는 것이 뚜렷하게 갈렸다. 기록해 둔다.

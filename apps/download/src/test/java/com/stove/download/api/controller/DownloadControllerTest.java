@@ -12,7 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.download.core.domain.DownloadTicket;
-import com.stove.download.core.service.DownloadService;
+import com.stove.download.core.service.DownloadTicketService;
+import com.stove.download.core.service.ManifestService;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,10 +33,11 @@ class DownloadControllerTest {
             "GAME-001", "1.0.0", 1_073_741_824L, "a1b2c3",
             "https://cdn.stove.test/games/1/1.0.0.pak", Instant.parse("2026-01-01T00:00:00Z"));
 
-    private final DownloadService downloadService = mock(DownloadService.class);
+    private final DownloadTicketService downloadTicketService = mock(DownloadTicketService.class);
+    private final ManifestService manifestService = mock(ManifestService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new DownloadController(downloadService))
+            .standaloneSetup(new DownloadController(downloadTicketService, manifestService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
@@ -45,7 +47,7 @@ class DownloadControllerTest {
         mockMvc.perform(get("/api/v1/downloads/GAME-001/ticket"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(downloadService);
+        verifyNoInteractions(downloadTicketService, manifestService);
     }
 
     @Test
@@ -55,7 +57,7 @@ class DownloadControllerTest {
                         .header("X-Member-Id", "not-a-number"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(downloadService);
+        verifyNoInteractions(downloadTicketService, manifestService);
     }
 
     @Test
@@ -63,7 +65,7 @@ class DownloadControllerTest {
     void validTicketRequestReachesTheService() throws Exception {
         // 대역이 null 을 돌려주면 DownloadTicketResponse.from 에서 NPE 가 나 실제로는 500 이다.
         // 상태 단언이 없던 동안 이 테스트는 그 500 을 통과로 세고 있었다.
-        when(downloadService.issueTicket("GAME-001", 42L)).thenReturn(TICKET);
+        when(downloadTicketService.issue("GAME-001", 42L)).thenReturn(TICKET);
 
         mockMvc.perform(get("/api/v1/downloads/GAME-001/ticket")
                         .header("X-Member-Id", 42L))
@@ -72,7 +74,7 @@ class DownloadControllerTest {
                 .andExpect(jsonPath("$.data.version").value("1.0.0"))
                 .andExpect(jsonPath("$.data.downloadUrl").value("https://cdn.stove.test/games/1/1.0.0.pak"));
 
-        verify(downloadService).issueTicket("GAME-001", 42L);
+        verify(downloadTicketService).issue("GAME-001", 42L);
     }
 
     @Test
@@ -81,7 +83,7 @@ class DownloadControllerTest {
         mockMvc.perform(get("/api/v1/downloads/GAME-001/manifests"))
                 .andExpect(status().isOk());
 
-        verify(downloadService).getManifests(anyString());
-        verify(downloadService, org.mockito.Mockito.never()).issueTicket(anyString(), anyLong());
+        verify(manifestService).history(anyString());
+        verify(downloadTicketService, org.mockito.Mockito.never()).issue(anyString(), anyLong());
     }
 }

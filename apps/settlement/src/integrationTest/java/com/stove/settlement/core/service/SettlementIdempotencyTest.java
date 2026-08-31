@@ -30,7 +30,7 @@ class SettlementIdempotencyTest {
     private static final String GROUP = "settlement";
 
     @Autowired
-    SettlementService settlementService;
+    SettlementRecordService settlementRecordService;
     @Autowired
     SettlementRecordRepository recordRepository;
     @Autowired
@@ -48,8 +48,8 @@ class SettlementIdempotencyTest {
         String eventId = UUID.randomUUID().toString();
         String orderNo = "ORD-" + UUID.randomUUID();
 
-        settlementService.recordSale(eventId, EventType.PAYMENT_COMPLETED, orderNo, lines());
-        settlementService.recordSale(eventId, EventType.PAYMENT_COMPLETED, orderNo, lines());
+        settlementRecordService.recordSale(eventId, EventType.PAYMENT_COMPLETED, orderNo, lines());
+        settlementRecordService.recordSale(eventId, EventType.PAYMENT_COMPLETED, orderNo, lines());
 
         assertThat(recordRepository.findByOrderNoAndRecordType(orderNo, RecordType.SALE)).hasSize(2);
         assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(eventId, GROUP)).isTrue();
@@ -60,9 +60,9 @@ class SettlementIdempotencyTest {
     void differentEventForSameOrderDoesNotDoubleCount() {
         String orderNo = "ORD-" + UUID.randomUUID();
 
-        settlementService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
+        settlementRecordService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, lines());
-        settlementService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
+        settlementRecordService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, lines());
 
         List<SettlementRecord> sales = recordRepository.findByOrderNoAndRecordType(orderNo, RecordType.SALE);
@@ -74,12 +74,12 @@ class SettlementIdempotencyTest {
     @DisplayName("환불 역산도 중복 수신에 안전하다")
     void refundIsIdempotent() {
         String orderNo = "ORD-" + UUID.randomUUID();
-        settlementService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
+        settlementRecordService.recordSale(UUID.randomUUID().toString(), EventType.PAYMENT_COMPLETED,
                 orderNo, lines());
 
         String refundEventId = UUID.randomUUID().toString();
-        settlementService.recordRefund(refundEventId, EventType.PAYMENT_CANCELLED, orderNo);
-        settlementService.recordRefund(refundEventId, EventType.PAYMENT_CANCELLED, orderNo);
+        settlementRecordService.recordRefund(refundEventId, EventType.PAYMENT_CANCELLED, orderNo);
+        settlementRecordService.recordRefund(refundEventId, EventType.PAYMENT_CANCELLED, orderNo);
 
         List<SettlementRecord> refunds = recordRepository.findByOrderNoAndRecordType(orderNo, RecordType.REFUND);
         assertThat(refunds).hasSize(2);

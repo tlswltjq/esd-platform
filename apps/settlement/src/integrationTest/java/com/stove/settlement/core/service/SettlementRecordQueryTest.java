@@ -43,7 +43,7 @@ class SettlementRecordQueryTest {
     private static final AtomicInteger MONTH_SEQ = new AtomicInteger(0);
 
     @Autowired
-    SettlementService settlementService;
+    SettlementRecordService settlementRecordService;
     @Autowired
     SettlementRecordRepository recordRepository;
 
@@ -77,7 +77,7 @@ class SettlementRecordQueryTest {
         SettlementRecord origin = sale(orderNo, uniqueSeller(), 39_000L, month);
         refund(origin, month);
 
-        List<SettlementRecord> records = settlementService.getRecords(orderNo);
+        List<SettlementRecord> records = settlementRecordService.findByOrder(orderNo);
 
         assertThat(records).hasSize(2);
         assertThat(records).allMatch(r -> orderNo.equals(r.getOrderNo()));
@@ -88,7 +88,7 @@ class SettlementRecordQueryTest {
     @Test
     @DisplayName("원장에 없는 주문번호는 빈 목록이다 — 조회는 예외를 쓰지 않는다")
     void unknownOrderNoReturnsEmpty() {
-        assertThat(settlementService.getRecords(uniqueOrderNo())).isEmpty();
+        assertThat(settlementRecordService.findByOrder(uniqueOrderNo())).isEmpty();
     }
 
     @Test
@@ -100,7 +100,7 @@ class SettlementRecordQueryTest {
         sale(uniqueOrderNo(), mine, 39_000L, month);
         sale(uniqueOrderNo(), other, 12_000L, month);
 
-        List<SettlementRecord> records = settlementService.getSellerRecords(mine, month);
+        List<SettlementRecord> records = settlementRecordService.findBySeller(mine, month);
 
         assertThat(records).hasSize(1);
         assertThat(records).allMatch(r -> mine.equals(r.getSellerId()));
@@ -116,7 +116,7 @@ class SettlementRecordQueryTest {
         sale(uniqueOrderNo(), sellerId, 39_000L, asked);
         sale(uniqueOrderNo(), sellerId, 12_000L, neighbour);
 
-        List<SettlementRecord> records = settlementService.getSellerRecords(sellerId, asked);
+        List<SettlementRecord> records = settlementRecordService.findBySeller(sellerId, asked);
 
         assertThat(records).hasSize(1);
         assertThat(records.get(0).getSettlementMonth()).isEqualTo(asked.toString());
@@ -130,7 +130,7 @@ class SettlementRecordQueryTest {
         SettlementRecord origin = sale(uniqueOrderNo(), sellerId, 39_000L, month);
         refund(origin, month);
 
-        List<SettlementRecord> records = settlementService.getSellerRecords(sellerId, month);
+        List<SettlementRecord> records = settlementRecordService.findBySeller(sellerId, month);
 
         assertThat(records).extracting(SettlementRecord::getRecordType)
                 .containsExactlyInAnyOrder(RecordType.SALE, RecordType.REFUND);

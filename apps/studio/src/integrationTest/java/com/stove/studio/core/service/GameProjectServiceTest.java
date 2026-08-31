@@ -10,10 +10,8 @@ import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;
-import com.stove.studio.core.domain.GameBuild;
 import com.stove.studio.core.domain.GameProject;
 import com.stove.studio.core.domain.GameProjectRepository;
-import com.stove.studio.core.domain.NewBuild;
 import com.stove.studio.core.domain.NewProject;
 import com.stove.studio.core.domain.ProjectStatus;
 import java.util.List;
@@ -25,24 +23,24 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
 /**
- * 크리에이터 유스케이스.
+ * 프로젝트 상태머신 — 생성 · 심의 신청 · 심의 결과 반영.
  *
  * <p>이 서비스에는 테스트가 없었다. 컨트롤러 테스트 6건이 <b>전부 400 으로 끝나는 경로</b>라
- * 핸들러 본문에 닿지 않았고({@code verifyNoInteractions(studioService)}),
- * 리스너 테스트는 이 클래스를 mock 으로 세웠다.
+ * 핸들러 본문에 닿지 않았고, 리스너 테스트는 서비스를 mock 으로 세웠다.
  *
  * <p>여기서 지킬 성질은 <b>가드를 통과한 뒤에만 부수효과가 일어나는가</b>이다 —
- * 소유권·중복 검사에서 걸린 요청이 이벤트를 남기거나 업로드 URL 을 발급하면 안 된다.
+ * 소유권·상태 검사에서 걸린 요청이 이벤트를 남기면 안 된다.
+ * 빌드 쪽 성질은 {@link GameBuildServiceTest} 가 본다.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
-class StudioServiceTest {
+class GameProjectServiceTest {
 
     private static final Long SELLER = 1001L;
     private static final Long OTHER_SELLER = 2002L;
 
     @Autowired
-    StudioService studioService;
+    GameProjectService gameProjectService;
     @Autowired
     GameProjectRepository projectRepository;
     @Autowired
@@ -55,7 +53,7 @@ class StudioServiceTest {
     }
 
     private GameProject project(String productCode) {
-        return studioService.createProject(
+        return gameProjectService.create(
                 new NewProject(productCode, "로스트아크", SELLER, 39_000L, "KRW", false));
     }
 
@@ -100,7 +98,7 @@ class StudioServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        studioService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), SELLER);
 
         assertThat(statusOf(productCode)).isEqualTo(ProjectStatus.SUBMITTED);
 
@@ -118,7 +116,7 @@ class StudioServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        assertThatThrownBy(() -> studioService.submitForReview(created.getId(), OTHER_SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), OTHER_SELLER))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.FORBIDDEN);
@@ -132,9 +130,9 @@ class StudioServiceTest {
     void resubmitDoesNotDuplicateEvent() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        studioService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), SELLER);
 
-        assertThatThrownBy(() -> studioService.submitForReview(created.getId(), SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), SELLER))
                 .isInstanceOf(BusinessException.class);
 
         // 상태 가드가 outboxRecorder.record 앞에 있다는 것이 여기서 지킬 순서다
@@ -144,61 +142,10 @@ class StudioServiceTest {
     @Test
     @DisplayName("없는 프로젝트를 신청하면 NOT_FOUND")
     void submitUnknownProject() {
-        assertThatThrownBy(() -> studioService.submitForReview(999_999_999L, SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(999_999_999L, SELLER))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.NOT_FOUND);
-    }
-
-    @Test
-    @DisplayName("빌드 등록은 저장 경로를 이벤트와 레코드에 같이 싣는다")
-    void uploadBuildRecordsEvent() {
-        String productCode = uniqueProductCode();
-        GameProject created = project(productCode);
-
-        GameBuild build = studioService.uploadBuild(created.getId(), SELLER,
-                new NewBuild("1.0.0", 1_024L, "sha256:abc"));
-
-        // download 가 이 경로로 매니페스트를 만든다. 레코드와 이벤트가 어긋나면
-        // 다운로드가 존재하지 않는 파일을 가리킨다.
-        assertThat(build.getStoragePath()).contains(productCode).contains("1.0.0");
-
-        List<OutboxEvent> published = outboxFor(productCode);
-        assertThat(published).hasSize(1);
-        assertThat(published.get(0).getEventType()).isEqualTo(EventType.BUILD_UPLOADED);
-        assertThat(published.get(0).getPayload()).contains(build.getStoragePath());
-    }
-
-    @Test
-    @DisplayName("같은 버전은 두 번 등록되지 않는다")
-    void duplicateVersionIsRejected() {
-        String productCode = uniqueProductCode();
-        GameProject created = project(productCode);
-        studioService.uploadBuild(created.getId(), SELLER, new NewBuild("1.0.0", 1_024L, "sha256:abc"));
-
-        assertThatThrownBy(() -> studioService.uploadBuild(created.getId(), SELLER,
-                new NewBuild("1.0.0", 2_048L, "sha256:def")))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.CONFLICT);
-
-        assertThat(outboxFor(productCode)).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("남의 프로젝트에는 빌드를 올릴 수 없다")
-    void uploadBuildRequiresOwnership() {
-        String productCode = uniqueProductCode();
-        GameProject created = project(productCode);
-
-        assertThatThrownBy(() -> studioService.uploadBuild(created.getId(), OTHER_SELLER,
-                new NewBuild("1.0.0", 1_024L, "sha256:abc")))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.FORBIDDEN);
-
-        assertThat(studioService.getBuilds(created.getId())).isEmpty();
-        assertThat(outboxFor(productCode)).isEmpty();
     }
 
     @Test
@@ -206,9 +153,9 @@ class StudioServiceTest {
     void applyApproval() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        studioService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), SELLER);
 
-        studioService.applyApproval(UUID.randomUUID().toString(),
+        gameProjectService.applyApproval(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, productCode, "ALL");
 
         GameProject updated = projectRepository.findByProductCode(productCode).orElseThrow();
@@ -221,11 +168,11 @@ class StudioServiceTest {
     void applyApprovalIsGuardedByInbox() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        studioService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), SELLER);
         String eventId = UUID.randomUUID().toString();
 
-        studioService.applyApproval(eventId, EventType.REVIEW_APPROVED, productCode, "ALL");
-        studioService.applyApproval(eventId, EventType.REVIEW_APPROVED, productCode, "ADULT");
+        gameProjectService.applyApproval(eventId, EventType.REVIEW_APPROVED, productCode, "ALL");
+        gameProjectService.applyApproval(eventId, EventType.REVIEW_APPROVED, productCode, "ADULT");
 
         // 두 번째 호출이 통과했다면 등급이 ADULT 로 덮였을 것이다
         assertThat(projectRepository.findByProductCode(productCode).orElseThrow().getRatingCode())
@@ -238,9 +185,9 @@ class StudioServiceTest {
     void applyRejection() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        studioService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), SELLER);
 
-        studioService.applyRejection(UUID.randomUUID().toString(),
+        gameProjectService.applyRejection(UUID.randomUUID().toString(),
                 EventType.REVIEW_REJECTED, productCode, "자료 미비");
 
         GameProject updated = projectRepository.findByProductCode(productCode).orElseThrow();
@@ -253,11 +200,11 @@ class StudioServiceTest {
     void lateRejectionIsIgnoredWithoutThrowing() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        studioService.submitForReview(created.getId(), SELLER);
-        studioService.applyApproval(UUID.randomUUID().toString(),
+        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.applyApproval(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, productCode, "ALL");
 
-        studioService.applyRejection(UUID.randomUUID().toString(),
+        gameProjectService.applyRejection(UUID.randomUUID().toString(),
                 EventType.REVIEW_REJECTED, productCode, "자료 미비");
 
         assertThat(statusOf(productCode)).isEqualTo(ProjectStatus.APPROVED);
@@ -268,7 +215,7 @@ class StudioServiceTest {
     void approvalForUnknownProductCode() {
         // 이 경로는 예외가 리스너 밖으로 나가 재시도된다. 프로젝트가 뒤늦게 보일 수 있는
         // 상황(복제 지연)이라 재시도가 의미를 갖는다 — D-016/D-018 과 판단이 갈리는 지점이다.
-        assertThatThrownBy(() -> studioService.applyApproval(UUID.randomUUID().toString(),
+        assertThatThrownBy(() -> gameProjectService.applyApproval(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, uniqueProductCode(), "ALL"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
@@ -277,14 +224,14 @@ class StudioServiceTest {
 
     @Test
     @DisplayName("내 프로젝트 목록은 최신순이다")
-    void getProjectsIsNewestFirst() {
+    void findBySellerIsNewestFirst() {
         Long seller = Math.abs(UUID.randomUUID().getLeastSignificantBits() % 100_000) + 500_000;
-        GameProject first = studioService.createProject(
+        GameProject first = gameProjectService.create(
                 new NewProject(uniqueProductCode(), "게임 1", seller, 1_000L, "KRW", false));
-        GameProject second = studioService.createProject(
+        GameProject second = gameProjectService.create(
                 new NewProject(uniqueProductCode(), "게임 2", seller, 2_000L, "KRW", false));
 
-        assertThat(studioService.getProjects(seller))
+        assertThat(gameProjectService.findBySeller(seller))
                 .extracting(GameProject::getId)
                 .containsExactly(second.getId(), first.getId());
     }

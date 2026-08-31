@@ -149,7 +149,7 @@ class TrackACreatorFlowTest {
 
     /**
      * 빌드 등록은 심의와 독립이다. 트랙 C 의 다운로드 티켓이 이 매니페스트를 요구하므로
-     * ({@code issueTicket} 은 ProductRef 와 PatchManifest 를 둘 다 찾는다) 여기서 올려 둔다.
+     * ({@code DownloadTicketService#issue} 는 ProductRef 와 PatchManifest 를 둘 다 찾는다) 여기서 올려 둔다.
      */
     @Test
     @Order(9)

@@ -13,7 +13,7 @@ import com.stove.common.event.Topics;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import com.stove.common.test.EventRecords;
-import com.stove.studio.core.service.StudioService;
+import com.stove.studio.core.service.GameProjectService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -26,9 +26,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
  */
 class ReviewEventListenerTest {
 
-    private final StudioService studioService = mock(StudioService.class);
+    private final GameProjectService gameProjectService = mock(GameProjectService.class);
     private final ReviewEventListener listener =
-            new ReviewEventListener(studioService, EventRecords.OBJECT_MAPPER);
+            new ReviewEventListener(gameProjectService, EventRecords.OBJECT_MAPPER);
 
     private static final ReviewApprovedEvent APPROVED = ReviewApprovedEvent.of(
             1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ALL", false);
@@ -40,7 +40,7 @@ class ReviewEventListenerTest {
     void approvalIsApplied() {
         listener.onReviewEvent(EventRecords.of(Topics.REVIEW, APPROVED));
 
-        verify(studioService).applyApproval(
+        verify(gameProjectService).applyApproval(
                 anyString(), eq(EventType.REVIEW_APPROVED), eq("GAME-001"), eq("ALL"));
     }
 
@@ -49,7 +49,7 @@ class ReviewEventListenerTest {
     void rejectionIsApplied() {
         listener.onReviewEvent(EventRecords.of(Topics.REVIEW, REJECTED));
 
-        verify(studioService).applyRejection(
+        verify(gameProjectService).applyRejection(
                 anyString(), eq(EventType.REVIEW_REJECTED), eq("GAME-001"), eq("등급 부적합"));
     }
 
@@ -58,14 +58,14 @@ class ReviewEventListenerTest {
     void unrelatedEventTypeIsIgnored() {
         listener.onReviewEvent(EventRecords.ofUnrelatedType(Topics.REVIEW));
 
-        verifyNoInteractions(studioService);
+        verifyNoInteractions(gameProjectService);
     }
 
     @Test
     @DisplayName("승인 반영 중 일시 장애는 예외로 전파된다")
     void propagatesFailureOnApproval() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
-                .when(studioService).applyApproval(anyString(), anyString(), anyString(), anyString());
+                .when(gameProjectService).applyApproval(anyString(), anyString(), anyString(), anyString());
 
         assertThatThrownBy(() -> listener.onReviewEvent(EventRecords.of(Topics.REVIEW, APPROVED)))
                 .isInstanceOf(DataAccessResourceFailureException.class);
@@ -75,7 +75,7 @@ class ReviewEventListenerTest {
     @DisplayName("반려 반영의 예외도 그대로 전파된다 — 두 분기의 정책이 같다")
     void propagatesFailureOnRejection() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
-                .when(studioService).applyRejection(anyString(), anyString(), anyString(), anyString());
+                .when(gameProjectService).applyRejection(anyString(), anyString(), anyString(), anyString());
 
         assertThatThrownBy(() -> listener.onReviewEvent(EventRecords.of(Topics.REVIEW, REJECTED)))
                 .isInstanceOf(DataAccessResourceFailureException.class);

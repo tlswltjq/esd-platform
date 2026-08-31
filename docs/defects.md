@@ -101,7 +101,7 @@ D-021·D-023 과 같은 공허 통과의 세 번째·네 번째 사례다.
 
 **상태** 수정됨
 **영향** 금전 손실 · 자동 복구 불가
-**위치** `apps/settlement/.../SettlementService.java`
+**위치** `apps/settlement/.../core/service/SellerSettlementService.java`
 **재현** `SettlementCloseTest#lateRecordShouldBeSettledOnNextClose`, `#everyClosedRecordIsReflectedInSettlement`
 
 ```
@@ -519,7 +519,7 @@ download 가 최초 이벤트를 놓쳤다면([D-003](#d-003) 이나 컨슈머 �
 
 **상태** 수정됨
 **영향** 사용자 영향 · 원인 추적 어려움
-**위치** `apps/download/.../core/service/DownloadService.java`
+**위치** `apps/download/.../core/service/EntitlementService.java`
 **재현** `DownloadEntitlementTest#staleRevokeMustNotAffectNewEntitlement`, `#revokeOfOwningOrderStillWorks`
 
 ### 무슨 일이
@@ -571,7 +571,7 @@ Kafka 파티션 안에서는 맞지만 **파티션에 넣는 순서**가 이미 
 순서가 보장된다는 전제 아래에서는 "이미 회수됐거나 지급 대상이 아니었다"는 뜻이라 맞는 코드다.
 
 순서가 깨지면 **이 방어 코드가 사고를 조용히 삼킨다.** 예외도 경고 로그도 남지 않는다.
-`SettlementService.recordRefund()` 도 같다 — 경고 한 줄 남기고 멱등 가드에 '처리 완료'를 찍는다.
+`SettlementRecordService.recordRefund()` 도 같다 — 경고 한 줄 남기고 멱등 가드에 '처리 완료'를 찍는다.
 
 ### 언제 터지나
 
@@ -1017,7 +1017,7 @@ GET /api/v1/storefront/products?size=0   →  500
 
 **상태** 수정됨
 **영향** 금전 불일치 (외부 시스템)
-**위치** `apps/settlement/.../core/service/SettlementService.java`
+**위치** `apps/settlement/.../core/service/SellerSettlementService.java`
 **재현** `SettlementCloseFacadeTest#failedIssuanceKeepsTheClosing`,
 `#oneSellerFailureDoesNotBlockOthers`, `#failedIssuanceIsRetriedOnNextRun`
 

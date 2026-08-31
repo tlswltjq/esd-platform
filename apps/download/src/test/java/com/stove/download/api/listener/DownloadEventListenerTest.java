@@ -17,7 +17,9 @@ import com.stove.common.event.payload.LicenseIssuedEvent;
 import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.common.test.EventRecords;
-import com.stove.download.core.service.DownloadService;
+import com.stove.download.core.service.EntitlementService;
+import com.stove.download.core.service.ManifestService;
+import com.stove.download.core.service.ProductRefService;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,9 +35,11 @@ import org.springframework.dao.DataAccessResourceFailureException;
  */
 class DownloadEventListenerTest {
 
-    private final DownloadService downloadService = mock(DownloadService.class);
-    private final DownloadEventListener listener =
-            new DownloadEventListener(downloadService, EventRecords.OBJECT_MAPPER);
+    private final ManifestService manifestService = mock(ManifestService.class);
+    private final ProductRefService productRefService = mock(ProductRefService.class);
+    private final EntitlementService entitlementService = mock(EntitlementService.class);
+    private final DownloadEventListener listener = new DownloadEventListener(
+            manifestService, productRefService, entitlementService, EventRecords.OBJECT_MAPPER);
 
     private static final List<Long> PRODUCT_IDS = List.of(1L, 2L);
     private static final LicenseIssuedEvent ISSUED =
@@ -48,7 +52,7 @@ class DownloadEventListenerTest {
     void buildUploadedRegistersManifest() {
         listener.onStudioEvent(EventRecords.of(Topics.STUDIO, BUILD));
 
-        verify(downloadService).registerManifest(any(BuildUploadedEvent.class));
+        verify(manifestService).register(any(BuildUploadedEvent.class));
     }
 
     @Test
@@ -57,7 +61,7 @@ class DownloadEventListenerTest {
         listener.onStudioEvent(EventRecords.of(Topics.STUDIO, GameRegisteredEvent.of(
                 1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false)));
 
-        verifyNoInteractions(downloadService);
+        verifyNoInteractions(manifestService, productRefService, entitlementService);
     }
 
     @Test
@@ -66,7 +70,7 @@ class DownloadEventListenerTest {
         listener.onCatalogEvent(EventRecords.of(Topics.CATALOG, ProductChangedEvent.of(
                 1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL")));
 
-        verify(downloadService).upsertProductRef(any(ProductChangedEvent.class));
+        verify(productRefService).upsert(any(ProductChangedEvent.class));
     }
 
     @Test
@@ -74,7 +78,7 @@ class DownloadEventListenerTest {
     void licenseIssuedGrantsAccess() {
         listener.onLicenseEvent(EventRecords.of(Topics.LICENSE, ISSUED));
 
-        verify(downloadService).grant(eq("ORD-1"), eq(42L), eq(PRODUCT_IDS));
+        verify(entitlementService).grant(eq("ORD-1"), eq(42L), eq(PRODUCT_IDS));
     }
 
     @Test
@@ -83,7 +87,7 @@ class DownloadEventListenerTest {
         listener.onLicenseEvent(EventRecords.of(Topics.LICENSE,
                 LicenseRevokedEvent.of("ORD-1", 42L, PRODUCT_IDS, "USER_REFUND")));
 
-        verify(downloadService).revoke(eq("ORD-1"), eq(42L), eq(PRODUCT_IDS));
+        verify(entitlementService).revoke(eq("ORD-1"), eq(42L), eq(PRODUCT_IDS));
     }
 
     @Test
@@ -93,14 +97,14 @@ class DownloadEventListenerTest {
         listener.onCatalogEvent(EventRecords.ofUnrelatedType(Topics.CATALOG));
         listener.onLicenseEvent(EventRecords.ofUnrelatedType(Topics.LICENSE));
 
-        verifyNoInteractions(downloadService);
+        verifyNoInteractions(manifestService, productRefService, entitlementService);
     }
 
     @Test
     @DisplayName("권한 부여 중 일시 장애는 예외로 전파된다 — 삼키면 산 게임을 못 받는다")
     void propagatesTransientFailure() {
         doThrow(new DataAccessResourceFailureException("connection lost"))
-                .when(downloadService).grant(anyString(), anyLong(), any());
+                .when(entitlementService).grant(anyString(), anyLong(), any());
 
         assertThatThrownBy(() -> listener.onLicenseEvent(EventRecords.of(Topics.LICENSE, ISSUED)))
                 .isInstanceOf(DataAccessResourceFailureException.class);

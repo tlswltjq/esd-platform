@@ -6,7 +6,7 @@ import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
-import com.stove.settlement.core.service.SettlementService;
+import com.stove.settlement.core.service.SettlementRecordService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,21 +24,21 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PaymentEventListener {
 
-    private final SettlementService settlementService;
+    private final SettlementRecordService settlementRecordService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = Topics.PAYMENT, groupId = SettlementService.CONSUMER_GROUP)
+    @KafkaListener(topics = Topics.PAYMENT, groupId = SettlementRecordService.CONSUMER_GROUP)
     public void onPaymentEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
 
         if (envelope.isType(EventType.PAYMENT_COMPLETED)) {
             PaymentCompletedEvent event = envelope.payloadAs(objectMapper, PaymentCompletedEvent.class);
-            settlementService.recordSale(envelope.eventId(), envelope.eventType(),
+            settlementRecordService.recordSale(envelope.eventId(), envelope.eventType(),
                     event.orderNo(), event.lines());
 
         } else if (envelope.isType(EventType.PAYMENT_CANCELLED)) {
             PaymentCancelledEvent event = envelope.payloadAs(objectMapper, PaymentCancelledEvent.class);
-            settlementService.recordRefund(envelope.eventId(), envelope.eventType(), event.orderNo());
+            settlementRecordService.recordRefund(envelope.eventId(), envelope.eventType(), event.orderNo());
         }
     }
 }

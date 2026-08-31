@@ -4,7 +4,8 @@ import com.stove.common.core.response.ApiResponse;
 import com.stove.settlement.api.application.SettlementCloseFacade;
 import com.stove.settlement.api.controller.dto.SellerSettlementResponse;
 import com.stove.settlement.api.controller.dto.SettlementRecordResponse;
-import com.stove.settlement.core.service.SettlementService;
+import com.stove.settlement.core.service.SellerSettlementService;
+import com.stove.settlement.core.service.SettlementRecordService;
 import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -22,13 +23,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/settlements")
 public class SettlementController {
 
-    private final SettlementService settlementService;
+    private final SettlementRecordService settlementRecordService;
+    private final SellerSettlementService sellerSettlementService;
     private final SettlementCloseFacade settlementCloseFacade;
 
     /** 주문 단위 원장(매출 + 환불 역산) */
     @GetMapping("/orders/{orderNo}")
     public ApiResponse<List<SettlementRecordResponse>> byOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(settlementService.getRecords(orderNo).stream()
+        return ApiResponse.ok(settlementRecordService.findByOrder(orderNo).stream()
                 .map(SettlementRecordResponse::from)
                 .toList());
     }
@@ -38,7 +40,7 @@ public class SettlementController {
     public ApiResponse<List<SettlementRecordResponse>> bySeller(
             @PathVariable Long sellerId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(settlementService.getSellerRecords(sellerId, month).stream()
+        return ApiResponse.ok(settlementRecordService.findBySeller(sellerId, month).stream()
                 .map(SettlementRecordResponse::from)
                 .toList());
     }
@@ -47,7 +49,7 @@ public class SettlementController {
     @GetMapping("/closings")
     public ApiResponse<List<SellerSettlementResponse>> closings(
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(settlementService.getClosedSettlements(month).stream()
+        return ApiResponse.ok(sellerSettlementService.findClosed(month).stream()
                 .map(SellerSettlementResponse::from)
                 .toList());
     }
