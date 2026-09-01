@@ -25,6 +25,7 @@
 | [services.md](services.md) | 서비스별 API·상태머신·이벤트·규칙, 외부 연동 대역(무엇이 실동작이고 무엇이 흉내인지) |
 | [decisions.md](decisions.md) | 설계 결정 23건 — 배경 → 결정 → 근거 → 버린 선택지. 끝에 "검증하며 드러난 것" |
 | [defects.md](defects.md) | 결함 대장 36건 (살아 있는 것 1건 — [D-026](defects.md#d-026)). **추측은 넣지 않는다** — 전부 재현 테스트가 하나씩 붙어 있다 |
+| [code-notes.md](code-notes.md) | **클래스 수준 근거** — 이 클래스가 왜 이 모양인가. 코드에는 한 줄 요약과 `D-0XX` 마커만 두고 서술은 여기로 모았다 |
 | [review-log.md](review-log.md) | 코드 리뷰 지적의 전수 판정. 고친 것·넘긴 것·**틀린 지적**과 다시 볼 조건 |
 | [testing.md](testing.md) | 테스트 계층 L0~L7, 격리, 뮤테이션 테스트, 아직 남은 공백 |
 | [event-ordering.md](event-ordering.md) | 순서가 깨지는 3층위 + 해법 카탈로그 6종 + 릴레이 1대 제약 |

@@ -15,9 +15,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 /**
  * 패키지 배치 다음 단계의 규칙 — 트랜잭션 경계, 네이밍, 순환, 일반 위생.
- *
- * <p>{@link ModulePackageRules} 가 "어디에 두는가"라면 이쪽은 "무엇을 두는가"를 다룬다.
- * 배치가 정리된 모듈부터 순차적으로 붙여 나간다.
+ * {@link ModulePackageRules} 가 "어디에 두는가"라면 이쪽은 "무엇을 두는가"다. docs/code-notes.md
  */
 public final class ModuleHygieneRules {
 
@@ -42,29 +40,14 @@ public final class ModuleHygieneRules {
     private ModuleHygieneRules() {
     }
 
-    /**
-     * DLT 발행자는 {@code common:kafka} 의 {@code DeadLetterPublisher} 로만 만든다.
-     *
-     * <p><b>실제로 갈렸던 자리다.</b> 기본 에러 핸들러는 우리 이름 규칙({@code <원본토픽>.DLT})으로
-     * 보내는데, 자기 핸들러를 가진 서비스가 {@code new DeadLetterPublishingRecoverer(template)} 을
-     * 직접 만들어 <b>스프링 기본 접미사({@code -dlt})</b>로 보내고 있었다.
-     * 원격 스택에서 같은 흐름의 DLT 토픽이 두 개 생기는 것으로 드러났다.
-     *
-     * <p>이름이 갈리면 재투입이 "그런 토픽이 없다"로 조용히 실패하고 알람도 절반만 맞는다.
-     * 컴파일도 테스트도 통과하므로 규칙으로 막지 않으면 다음에 또 갈린다.
-     */
+    /** DLT 발행자는 {@code DeadLetterPublisher} 로만. <b>실제로 갈렸던 자리다.</b> docs/code-notes.md */
     @ArchTest
     public static final ArchRule 앱은_DLT_발행자를_직접_만들지_않는다 = noClasses()
             .should().dependOnClassesThat().haveFullyQualifiedName(DLT_RECOVERER)
             .because("DLT 이름 규칙이 갈리면 재투입이 조용히 실패한다 — DeadLetterPublisher 를 쓴다")
             .allowEmptyShould(true);
 
-    /**
-     * 트랜잭션 경계는 {@code core.service} 한 곳이다.
-     *
-     * <p>인바운드 어댑터가 트랜잭션을 열면 외부 호출이 트랜잭션 안으로 들어오고,
-     * 파사드가 열면 단일 도메인 서비스가 자기 경계를 잃는다.
-     */
+    /** 트랜잭션 경계는 {@code core.service} 한 곳이다. docs/code-notes.md */
     @ArchTest
     public static final ArchRule 트랜잭션_경계는_core_service_다 = methods()
             .that().areAnnotatedWith(TRANSACTIONAL)
@@ -84,14 +67,7 @@ public final class ModuleHygieneRules {
             .should().dependOnClassesThat().areAssignableTo(SPRING_DATA_REPOSITORY)
             .allowEmptyShould(true);
 
-    /**
-     * 멱등 가드는 서비스가 소유한다(결정 6).
-     *
-     * <p>트랜잭션 위치만 막아서는 부족하다. 리스너가 가드를 직접 부르면 트랜잭션은 서비스에 있어도
-     * "이 메시지를 이미 처리했는가"의 판정만 어댑터로 새어 나온다. 그러면 어댑터를 갈아끼울 때
-     * (Kafka → SQS, 운영툴 재처리) 멱등성이 따라오지 않고, Kafka 없이 서비스만으로 멱등성을
-     * 테스트할 수도 없다. 리스너는 역직렬화와 위임만 한다.
-     */
+    /** 멱등 가드는 서비스가 소유한다(결정 6). 리스너는 역직렬화와 위임만 한다. */
     @ArchTest
     public static final ArchRule 멱등_가드는_서비스가_소유한다 = noClasses()
             .that().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
@@ -99,19 +75,11 @@ public final class ModuleHygieneRules {
             .because("리스너가 가드를 부르면 어댑터를 갈아끼울 때 멱등성이 따라오지 않는다")
             .allowEmptyShould(true);
 
-    /**
-     * 스텁 어댑터는 프로파일이나 조건으로 격리한다(결정 9).
-     *
-     * <p>무조건적인 {@code @Component} 인 스텁은 실제 어댑터를 붙이는 순간 같은 포트에 빈이 둘이 되어
-     * 기동을 깨뜨린다. 더 나쁜 경우는 운영에서 스텁이 조용히 도는 것이다.
-     * {@code prod} 에서 구현이 없으면 "no qualifying bean" 으로 즉시 실패하는 편이 낫다.
-     */
+    /** 스텁 어댑터는 프로파일이나 조건으로 격리한다(결정 9). docs/code-notes.md */
     @ArchTest
     public static final ArchRule 스텁_어댑터는_격리한다 = classes()
-            // 술어를 명시적으로 묶는다. 유창한 .and()/.or() 체이닝은 우선순위 없이 왼쪽부터
-            // 결합하므로 `A and Mock or A and Stub or A and Fake` 가
-            // `((((A and Mock) or A) and Stub) or A) and Fake` 가 된다 —
-            // 결국 Fake 로 시작하는 클래스만 검사하고 Mock·Stub 은 한 번도 보지 않았다(D-021).
+            // 술어를 명시적으로 묶는다 — 유창한 .and()/.or() 는 우선순위 없이 왼쪽부터
+            // 결합해 검사 대상이 조용히 줄어든다. [D-021]
             .that(resideInAPackage(INFRASTRUCTURE)
                     .and(simpleNameStartingWith("Mock")
                             .or(simpleNameStartingWith("Stub"))
@@ -154,13 +122,7 @@ public final class ModuleHygieneRules {
             .should().haveSimpleNameEndingWith("Properties")
             .allowEmptyShould(true);
 
-    /**
-     * 설정값은 불변이다.
-     *
-     * <p>setter 가 있는 설정 클래스는 사실상 전역 가변 상태다. 아무나 런타임에 바꿀 수 있고,
-     * 바뀐 시점이 로그에도 안 남는다. record 로 두면 바인딩 시점 이후로 값이 고정되고
-     * 기본값 처리도 생성자 한 곳에 모인다 — 지금 7개가 전부 그렇게 되어 있다.
-     */
+    /** 설정값은 불변이다. setter 가 달린 설정은 런타임에 조용히 바뀌는 전역 가변 상태다. */
     @ArchTest
     public static final ArchRule 설정값은_불변이다 = classes()
             .that().areAnnotatedWith(CONFIGURATION_PROPERTIES)
@@ -175,19 +137,14 @@ public final class ModuleHygieneRules {
             .should().haveSimpleNameEndingWith("Repository")
             .allowEmptyShould(true);
 
-    /**
-     * core / api / infrastructure / config 사이에 순환이 없어야 한다.
-     *
-     * <p>슬라이스가 하나도 없는 모듈(gateway 처럼 클래스가 애플리케이션 하나뿐인 경우)에서도
-     * 규칙 세트를 그대로 쓸 수 있도록 빈 평가를 허용한다. 다른 규칙들과 같은 이유다.
-     */
+    /** core / api / infrastructure / config 사이에 순환이 없어야 한다. */
     @ArchTest
     public static final ArchRule 최상위_패키지_순환_없음 = slices()
             .matching("com.stove.*.(*)..")
             .should().beFreeOfCycles()
             .allowEmptyShould(true);
 
-    /** 필드가 하나도 없는 모듈에서도 평가할 수 있어야 한다 — {@code noFields()} 는 빈 입력에서 실패한다. */
+    /** {@code noFields()} 는 빈 입력에서 실패하므로 빈 평가를 허용한다. */
     @ArchTest
     public static final ArchRule 필드_주입_금지 = NO_CLASSES_SHOULD_USE_FIELD_INJECTION.allowEmptyShould(true);
 

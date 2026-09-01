@@ -14,18 +14,8 @@ import java.nio.file.Path;
 import org.springframework.web.client.RestClient;
 
 /**
- * 생성된 OpenAPI 명세를 리포에 커밋된 스냅샷과 대조한다.
- *
- * <p><b>왜 필요한가</b> — 이 저장소에는 응답 형식을 검증하는 단언이 거의 없다(testing.md 6.3).
- * 컨트롤러 시그니처를 바꾸거나 DTO 필드를 지워도 컴파일과 테스트가 전부 통과한다.
- * 소비자는 있는데 계약을 지키는 장치가 없는 상태다.
- *
- * <p>명세는 컨트롤러·DTO·Bean Validation 에서 <b>생성</b>되므로, 그 diff 가 곧 API 변경 목록이다.
- * ArchUnit 이 구조를 테스트로 강제하는 것과 같은 방식으로 계약을 강제한다.
- *
- * <p><b>이미 떠 있는 컨텍스트에 얹는다.</b> 각 앱의 {@code *ContextTest} 가 컨테이너를 띄우고
- * 서버를 올리므로 거기에 검사 하나를 더하는 비용은 HTTP 요청 한 번이다.
- * 전용 테스트 클래스를 만들면 컨텍스트를 한 벌 더 띄우게 되고, 그것이 CI 시간의 대부분이다.
+ * 생성된 OpenAPI 명세를 리포에 커밋된 스냅샷과 대조한다 — 그 diff 가 곧 API 변경 목록이다.
+ * 전용 테스트 클래스를 만들지 않고 {@code *ContextTest} 에 얹는다. docs/code-notes.md
  */
 public final class OpenApiSnapshot {
 
@@ -83,14 +73,8 @@ public final class OpenApiSnapshot {
     }
 
     /**
-     * 비교 가능한 형태로 고른다.
-     *
-     * <p>{@code servers} 를 지우는 이유는 거기에 <b>임의 포트</b>가 들어가기 때문이다
-     * ({@code webEnvironment = RANDOM_PORT}). 지우지 않으면 스냅샷이 매 실행 달라져
-     * 검사가 아니라 소음이 된다.
-     *
-     * <p>키를 정렬하는 이유는 생성 순서가 계약이 아니기 때문이다.
-     * 필드 순서가 바뀌었다고 리뷰를 부르면 진짜 변경이 묻힌다.
+     * 비교 가능한 형태로 고른다 — {@code servers}(임의 포트)를 지우고 키를 정렬한다.
+     * docs/code-notes.md
      */
     private static String normalize(String rawJson) {
         try {

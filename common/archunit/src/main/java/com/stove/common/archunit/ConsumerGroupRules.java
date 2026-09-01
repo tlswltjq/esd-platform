@@ -12,23 +12,11 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * 컨슈머 그룹 이름이 앱 안에서 한 값으로만 존재하는지 검사한다.
+ * 컨슈머 그룹 이름이 앱 안에서 한 값으로만 존재하는지 검사한다(결정 16).
+ * 참조 형태가 아니라 <b>값</b>을 검사한다 — 애노테이션 속성은 컴파일 타임 상수라
+ * 바이트코드에 "무엇을 참조했는가"가 남지 않는다.
  *
- * <p>같은 이름이 두 곳에 산다. Kafka 쪽 {@code @KafkaListener(groupId=…)} 와
- * Inbox 멱등 키인 서비스의 {@code CONSUMER_GROUP} 상수다
- * ({@code ProcessedEventGuard}, 결정 6·8). 지금은 리스너가 서비스 상수를 참조하므로 출처가 하나지만,
- * <b>리터럴로 되돌리면 아무도 막지 않는다</b> — 애노테이션 속성은 컴파일 타임 상수라
- * 바이트코드에는 값만 남고 "무엇을 참조했는가"가 지워진다. 그래서 참조 형태가 아니라 <b>값</b>을 검사한다.
- *
- * <p><b>갈라져도 당장 깨지는 것은 없다.</b> 가드는 자기가 쓴 값과 자기가 읽는 값만 비교하므로,
- * 이름이 Kafka 그룹과 달라도 일관되기만 하면 멱등은 그대로 동작한다.
- * 이 규칙이 지키는 것은 동작이 아니라 <b>한 값으로 두기로 한 결정</b>이다(결정 16).
- * 그러니 여기서 실패하면 "고장났다"가 아니라 "한 곳으로 되돌려라"로 읽으면 된다.
- *
- * <p>Inbox 가드를 쓰지 않는 서비스(store·download — 문서 ID 고정 upsert 라 연산 자체가 멱등, 결정 8)는
- * 대조할 두 번째 출처가 없으므로 건너뛴다. 다만 <b>건너뛸 대상은 {@code ProcessedEventGuard} 주입
- * 여부로 판정한다</b> — 상수의 부재로 판정하면 "가드를 안 쓰는 앱" 과 "상수가 사라진 앱" 이 같은 문으로
- * 빠져나가, 규칙이 검사할 것을 잃고도 초록으로 보인다(D-021 과 같은 부류).
+ * <p>여기서 실패하면 "고장났다"가 아니라 "한 곳으로 되돌려라"로 읽는다. docs/code-notes.md
  */
 public final class ConsumerGroupRules {
 
@@ -40,18 +28,12 @@ public final class ConsumerGroupRules {
     private ConsumerGroupRules() {
     }
 
-    /**
-     * Kafka 컨슈머 그룹과 Inbox 멱등 키는 같은 값이다.
-     *
-     * <p>집합끼리 비교한다. 앱이 컨슈머 그룹을 둘 이상 쓴다면 멱등 키도 그만큼 있어야 한다 —
-     * 그룹이 둘인데 키가 하나면 먼저 처리한 그룹이 나머지를 굶긴다.
-     */
+    /** Kafka 컨슈머 그룹과 Inbox 멱등 키는 같은 값이다. 집합끼리 비교한다. */
     @ArchTest
     static void 컨슈머_그룹과_멱등키가_같다(JavaClasses classes) {
         Set<String> kafkaGroups = kafkaGroups(classes);
 
-        // 제외 대상은 "상수가 없는 앱" 이 아니라 "가드를 쓰지 않는 앱" 이다. 상수의 부재로 판정하면
-        // 검사 대상이 사라진 것과 검사할 것이 없는 것을 구별하지 못한다 — D-021 과 같은 공허 통과다.
+        // 제외 대상은 "상수가 없는 앱" 이 아니라 "가드를 쓰지 않는 앱" 이다 — 공허 통과 방지. [D-021]
         if (kafkaGroups.isEmpty() || !usesInboxGuard(classes)) {
             return;
         }

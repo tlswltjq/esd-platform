@@ -65,12 +65,7 @@ public class PaymentService {
         log.info("결제 대기 생성 orderNo={} amount={}", orderNo, amount);
     }
 
-    /**
-     * 게이트 2: PG 사전등록.
-     *
-     * <p>만료 검사를 <b>PG 를 부르기 전에</b> 한다. 뒤에 두면 만료된 주문에도 PG 거래가 하나 생기고,
-     * 그건 우리 장부에는 없는데 PG 에는 있는 상태다 — 대사에서 원인을 알 수 없는 잔여로 남는다.
-     */
+    /** 게이트 2: PG 사전등록. <b>만료 검사가 PG 호출보다 먼저여야 한다</b> — docs/code-notes.md */
     public PaymentPreparation prepare(String orderNo, String method) {
         Payment payment = findPayment(orderNo);
         payment.requireWithinWindow(paymentProperties.window());
@@ -87,28 +82,13 @@ public class PaymentService {
     public static final String CHECKOUT_EXPIRED = "CHECKOUT_WINDOW_EXPIRED";
 
     /**
-     * 게이트 3+4: PG 콜백 처리.
-     * 금액 대조 실패 시 승인 확정하지 않고 예외 → 운영 알람 대상.
-     * 중복 콜백은 상태/멱등키로 흡수하고 이벤트를 재발행하지 않는다.
-     *
-     * <p><b>결제창이 만료된 뒤 온 승인은 거절하지 않는다.</b> 거절하려면 예외를 던져야 하는데,
-     * 그 시점에는 PG 에서 이미 돈이 움직였다 — 우리 장부에만 없는 상태가 되어
-     * <b>대사에서 원인을 알 수 없는 잔여</b>로 남는다. 그래서 승인을 적고 곧바로 되돌린다.
-     *
-     * <p>이때 {@code PaymentCompleted} 를 <b>내보내지 않는다.</b> 내보내면 license 가 지급하고
-     * settlement 가 매출을 적은 뒤 곧이어 둘 다 되돌리게 된다 — 사용자에게는 게임이 잠깐 생겼다
-     * 사라지고, 원장에는 매출과 상계가 한 쌍 남는다. <b>일어나지 않을 판매를 알리지 않는다.</b>
-     * 하위 서비스는 뒤이은 {@code PaymentCancelled} 만 받고, 셋 다 "되돌릴 것이 없다"로 정상 종료한다
-     * (order 는 {@code CREATED} 에서 취소, license 는 라이선스 없음, settlement 는 매출 원장 없음).
-     *
-     * <p>PG 환불 호출은 여기 없다 — 되돌릴 수 없는 외부 호출이라 트랜잭션 밖이어야 한다.
-     * 순서는 {@link com.stove.payment.api.application.PaymentCallbackFacade} 가 잡는다.
+     * 게이트 3+4: PG 콜백 처리. 만료 뒤 승인은 거절하지 않고 받아 적은 뒤 되돌리며,
+     * 이때 {@code PaymentCompleted} 를 <b>내보내지 않는다.</b> 근거는 docs/code-notes.md
      *
      * @return PG 환불이 필요하면 그 값, 아니면 {@link PaymentCancellation#none()}
      */
     public PaymentCancellation handleApproval(PgApproval approval) {
-        // 주문번호로 찾는다. 멱등키는 PG 가 만드는 값이라 재사용되면 다른 주문의 결제를 물어온다(D-008).
-        // 행을 잠그고 읽어 동시에 들어온 중복 콜백이 둘 다 승인되는 창을 닫는다.
+        // 멱등키가 아니라 주문번호로 찾고, 행을 잠그고 읽는다. [D-008]
         Payment payment = paymentRepository.findByOrderNoForUpdate(approval.orderNo())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
                         "orderNo=" + approval.orderNo()));
@@ -135,15 +115,7 @@ public class PaymentService {
         return PaymentCancellation.none();
     }
 
-    /**
-     * PG 승인 거절 콜백 처리.
-     *
-     * <p>승인과 <b>같은 행 잠금</b>을 쓴다. 승인 콜백과 거절 콜백이 동시에 도착하면 잠금이 순서를
-     * 강제하고, 뒤에 오는 쪽이 상태 가드에 걸려 예외로 뜬다 — 어느 순서든 엇갈린 콜백이
-     * 조용히 흡수되지 않는다.
-     *
-     * <p>중복 거절은 종단 상태로 흡수하고 이벤트를 재발행하지 않는다.
-     */
+    /** PG 승인 거절 콜백 처리. 승인과 <b>같은 행 잠금</b>을 쓴다 — docs/code-notes.md */
     public void handleDecline(PgDecline decline) {
         Payment payment = paymentRepository.findByOrderNoForUpdate(decline.orderNo())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
@@ -164,11 +136,7 @@ public class PaymentService {
     }
 
     /**
-     * 취소 1단계: 의도를 커밋한다.
-     *
-     * <p>PG 환불은 되돌릴 수 없으므로 이 트랜잭션 안에서 부르지 않는다. 부르면 뒤이은 적재나 커밋이
-     * 실패했을 때 "돈은 나갔는데 장부는 PAID" 가 된다. 실제 호출은
-     * {@link com.stove.payment.api.application.RefundFacade} 가 커밋 뒤에 한다.
+     * 취소 1단계: 의도를 커밋한다. <b>PG 환불을 이 트랜잭션 안에서 부르면 안 된다.</b>
      *
      * @return PG 환불이 필요 없으면 {@link PaymentCancellation#none()}
      */
@@ -179,9 +147,7 @@ public class PaymentService {
             log.info("이미 취소된 결제 orderNo={}", orderNo);
             return PaymentCancellation.none();
         }
-        // 착수 직후에는 스윕이 집지 않게 유예를 준다. 정상 환불은 PG 왕복 한 번이라 초 단위로
-        // 끝나므로, 이 유예 안에 확정되면 스윕은 이 건을 한 번도 보지 않는다.
-        // **재개 경로에서는 예약하지 않는다** — 그쪽은 스윕이 이미 백오프를 걸어 두었다.
+        // 최초 진입에서만 유예를 준다 — 재개 경로는 스윕이 이미 백오프를 걸어 두었다.
         if (firstEntry) {
             payment.scheduleFirstCancelRetry(paymentProperties.refundResumeAfter());
         }
@@ -201,12 +167,7 @@ public class PaymentService {
         log.info("결제 취소 orderNo={} reason={}", orderNo, reason);
     }
 
-    /**
-     * Saga 보상 환불 진입점. license 지급 최종 실패 이벤트로만 들어온다.
-     *
-     * <p>사용자 환불과 규칙은 같지만 진입점을 나눈 이유는 멱등키의 출처가 다르기 때문이다 —
-     * 이벤트 경로만 중복 수신 마킹이 필요하고, HTTP 경로에는 넘길 eventId 가 없다.
-     */
+    /** Saga 보상 환불 진입점. 사용자 환불과 나눈 이유는 docs/code-notes.md */
     public PaymentCancellation beginCompensation(String eventId, String eventType,
                                                  String orderNo, String reason) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
@@ -214,16 +175,12 @@ public class PaymentService {
         }
         Payment payment = paymentRepository.findByOrderNo(orderNo).orElse(null);
         if (payment == null) {
-            // 주문번호가 어긋났거나(연동 오류) 결제 생성 이벤트를 아직 못 받은 상태다.
-            // 아래 상태 불일치와 같은 이유로 예외를 던지지 않는다 — 결제는 재시도한다고 생기지 않으므로
-            // 던지면 가드 마킹이 롤백되어 같은 이벤트가 영원히 돌아온다.
+            // 예외를 던지면 가드 마킹이 롤백되어 같은 이벤트가 영원히 돌아온다.
             log.error("보상 대상 결제 없음 — 수동 확인 필요 orderNo={} reason={}", orderNo, reason);
             return PaymentCancellation.none();
         }
         if (!payment.cancelable()) {
-            // 정상 흐름에서는 나올 수 없는 조합이다. 결제가 스스로 PAID 가 될 수는 없으므로
-            // 예외를 던지면 가드 마킹까지 롤백되어 같은 이벤트가 영원히 재전송된다(파티션 정지).
-            // 소비는 진행시키되 사람이 볼 수 있게 남긴다.
+            // 같은 이유로 던지지 않는다 — 소비는 진행시키되 사람이 볼 수 있게 남긴다.
             log.error("보상 대상 결제 상태 불일치 — 수동 확인 필요 orderNo={} status={} reason={}",
                     orderNo, payment.getStatus(), reason);
             return PaymentCancellation.none();
@@ -232,13 +189,7 @@ public class PaymentService {
         return beginCancel(orderNo, reason);
     }
 
-    /**
-     * 취소 착수는 커밋됐는데 확정까지 못 간 건들.
-     *
-     * <p>엔티티가 아니라 <b>재개에 필요한 값만</b> 돌려준다 — 실제 재개는 PG 호출을 끼고 돌므로
-     * 트랜잭션 밖에서 일어나고, 닫힌 트랜잭션의 엔티티를 만지면 지연 로딩 문제가 따라붙는다
-     * ({@link PaymentCancellation} 과 같은 판단).
-     */
+    /** 취소 착수는 커밋됐는데 확정까지 못 간 건들. 엔티티가 아니라 값으로 돌려준다. */
     @Transactional(readOnly = true)
     public List<StrandedCancellation> findStrandedCancellations() {
         return paymentRepository
@@ -249,13 +200,7 @@ public class PaymentService {
                 .toList();
     }
 
-    /**
-     * 다음 재개 시도를 예약한다. <b>성공하든 실패하든</b> 부른다.
-     *
-     * <p>실패했을 때만 미루면 성공 직후 확정 커밋이 깨진 건이 곧바로 다시 잡히고,
-     * 성공했을 때만 미루면 실패한 건이 백오프 없이 계속 돈다 — <b>막으려던 것이 후자다.</b>
-     * 확정된 건은 {@link Payment#completeCancel()} 이 예약을 지우므로 다시 잡히지 않는다.
-     */
+    /** 다음 재개 시도를 예약한다. <b>성공하든 실패하든</b> 부른다 — docs/code-notes.md */
     @Transactional
     public void scheduleCancelRetry(String orderNo) {
         paymentRepository.findByOrderNo(orderNo).ifPresent(payment -> {

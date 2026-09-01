@@ -8,13 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 
-/**
- * 실제 인프라를 띄우고 애플리케이션 컨텍스트를 끝까지 올린다.
- *
- * <p>정적 검증이 놓치는 부류를 잡는 것이 목적이다 — 빈 이름 충돌, 순환 의존,
- * 누락된 빈, {@code @ConfigurationProperties} 바인딩 실패, Flyway 마이그레이션과
- * 엔티티 매핑의 불일치({@code ddl-auto: validate}).
- */
+/** 기동 검증(L5) — 빈 구성과 Flyway↔엔티티 정합. docs/testing.md */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {

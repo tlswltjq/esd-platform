@@ -5,7 +5,6 @@ package com.stove.catalog.core.domain;
  * studio 등록 → review 심의 → catalog 노출 전환 파이프라인의 종착점.
  */
 public enum ProductStatus {
-    /** 스튜디오에서 작성 중 */
     DRAFT,
     /** 등급분류 심의 진행 중 */
     REVIEWING,
@@ -15,7 +14,6 @@ public enum ProductStatus {
     ON_SALE,
     /** 운영 사유로 판매 중지 */
     SUSPENDED,
-    /** 판매 종료 */
     CLOSED;
 
     public boolean purchasable() {

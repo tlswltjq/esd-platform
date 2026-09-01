@@ -10,9 +10,8 @@ import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.stereotype.Component;
 
 /**
- * 기동 시 색인/매핑을 보장한다.
- * 동적 매핑에 맡기면 status·productCode 가 text 로 잡혀 정확 매칭 검색이 어긋나므로
- * {@link ProductDocument} 의 선언적 매핑을 명시적으로 적용한다.
+ * 기동 시 색인/매핑을 보장한다. <b>동적 매핑에 맡기면 정확 매칭 검색이 어긋난다</b> —
+ * 매핑은 한 번 정해지면 못 바꾸므로 첫 문서 전에 걸어야 한다. docs/code-notes.md
  */
 @Slf4j
 @Component

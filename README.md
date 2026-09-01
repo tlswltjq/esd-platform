@@ -50,6 +50,7 @@ stove/
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
+| 이 클래스가 왜 이 모양인가 (클래스 수준 근거) | [code-notes.md](docs/code-notes.md) |
 | 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |

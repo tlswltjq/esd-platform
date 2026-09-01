@@ -19,16 +19,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 
 /**
- * DLT 를 들여다보고 원본 토픽으로 되돌린다.
- *
- * <p><b>왜 {@code @KafkaListener} 가 아니라 매번 컨슈머를 만드는가</b> —
- * 재투입은 상시 도는 작업이 아니라 <b>사람이 한 번 누르는 작업</b>이다. 상주 리스너로 두면
- * "언제 멈추는가"(유휴 감지)와 "왜 지금 돌고 있는가"를 계속 관리해야 하고,
- * 원인을 고치기 전에 자동으로 재투입되는 사고가 가능해진다.
- * 요청 하나에 컨슈머 하나를 열고 닫으면 <b>몇 건을 되돌렸는지 응답으로 돌려줄 수 있다.</b>
- *
- * <p>조회({@link #peek})와 재투입({@link #replay})은 같은 컨슈머 그룹을 쓰되
- * 조회는 커밋하지 않는다. 그래서 조회가 보여주는 것은 곧 <b>재투입이 다음에 처리할 것</b>이다.
+ * DLT 를 들여다보고 원본 토픽으로 되돌린다. 조회는 커밋하지 않으므로
+ * 조회가 보여주는 것이 곧 <b>재투입이 다음에 처리할 것</b>이다. docs/code-notes.md
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -54,14 +46,8 @@ public class DltOpsService {
     }
 
     /**
-     * DLT 의 레코드를 원본 토픽으로 되돌린다.
-     *
-     * <p><b>원인을 먼저 고쳐야 한다.</b> 고치지 않고 재투입하면 같은 실패를 반복해 DLT 로 돌아온다.
-     * 그 판단은 도구가 대신할 수 없으므로 {@link #peek} 로 원인을 보고 사람이 정한다.
-     *
-     * <p>재투입은 <b>중복 수신</b>이다. 그래도 안전한 이유는 Inbox 멱등 가드가
-     * {@code (event_id, consumer_group)} 로 막기 때문이다 — 이미 처리에 성공한 이벤트라면
-     * 재투입돼도 두 번 반영되지 않는다.
+     * DLT 의 레코드를 원본 토픽으로 되돌린다. <b>원인을 먼저 고쳐야 한다.</b>
+     * 중복 수신이 되지만 Inbox 멱등 가드가 막는다. docs/code-notes.md
      *
      * @return 되돌린 건수
      */
@@ -70,7 +56,7 @@ public class DltOpsService {
             List<ConsumerRecord<String, String>> records = drain(consumer, max);
             records.forEach(this::republish);
             if (!records.isEmpty()) {
-                // 발행이 끝난 뒤에만 커밋한다. 순서가 뒤집히면 재투입에 실패한 레코드가 사라진다.
+                // 발행이 끝난 뒤에만 커밋한다 — 뒤집히면 실패한 레코드가 사라진다.
                 kafkaTemplate.flush();
                 consumer.commitSync();
                 log.warn("운영 재투입 — DLT {}건을 원본 토픽으로 되돌렸다 topic={}", records.size(), topic);
@@ -87,7 +73,6 @@ public class DltOpsService {
             throw new IllegalArgumentException("그런 토픽이 없다: " + topic);
         }
         // subscribe 가 아니라 assign 이다 — 리밸런스를 기다리지 않고 바로 읽는다.
-        // 커밋된 오프셋이 있으면 거기서, 없으면 auto-offset-reset(earliest)에서 시작한다.
         consumer.assign(partitions.stream()
                 .map(partition -> new TopicPartition(partition.topic(), partition.partition()))
                 .toList());
@@ -113,14 +98,8 @@ public class DltOpsService {
     }
 
     /**
-     * 원본 토픽으로 되돌린다.
-     *
-     * <p>{@code kafka_dlt-*} 헤더는 떼고 보낸다. 붙여서 보내면 같은 레코드가 다시 실패했을 때
-     * 이력이 겹쳐 쌓여 <b>어느 것이 이번 실패인지 알 수 없게 된다.</b>
-     * 계약 헤더와 {@code traceparent} 는 그대로 따라가므로 멱등 판정과 추적은 유지된다.
-     *
-     * <p>파티션은 지정하지 않는다. 키가 그대로이므로 원래 있던 파티션으로 다시 간다 —
-     * 같은 애그리거트의 순서 보장이 재투입에서도 유지된다.
+     * 원본 토픽으로 되돌린다. {@code kafka_dlt-*} 헤더는 <b>떼고</b> 보내고,
+     * 파티션은 지정하지 않는다(키가 그대로라 원래 파티션으로 간다). docs/code-notes.md
      */
     private void republish(ConsumerRecord<String, String> record) {
         String originalTopic = originalTopicOf(record);

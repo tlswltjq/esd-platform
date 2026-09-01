@@ -46,7 +46,6 @@ public class GameProject extends BaseTimeEntity {
     @Column(nullable = false, length = 3)
     private String currency;
 
-    /** 자체등급분류 대상 여부 */
     @Column(nullable = false)
     private boolean selfRated;
 

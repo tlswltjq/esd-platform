@@ -17,10 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 매출 원장 — 무엇을 팔았고 무엇을 물러줬는가.
- *
- * <p>결제 이벤트로만 늘어나고, 마감이 그 줄을 닫는다. 수수료 계산은 {@link FeePolicy} 가,
- * 판매자별 확정본은 {@link SellerSettlementService} 가 맡는다.
+ * 매출 원장 — 무엇을 팔았고 무엇을 물러줬는가. 결제 이벤트로만 늘어나고 마감이 그 줄을 닫는다.
+ * docs/code-notes.md
  */
 @Slf4j
 @Service
@@ -36,10 +34,8 @@ public class SettlementRecordService {
     private final ProcessedEventGuard processedEventGuard;
 
     /**
-     * [결제] payment → PaymentCompleted → settlement (매출 집계)
-     *
-     * <p>금전 원장이므로 Inbox 멱등 가드와 원장 유니크 제약을 <b>둘 다</b> 건다.
-     * 가드 마킹은 원장 적재와 같은 커밋이어야 한다.
+     * [결제] payment → PaymentCompleted → settlement (매출 집계).
+     * 금전 원장이라 멱등 가드와 유니크 제약을 <b>둘 다</b> 걸고, 마킹은 같은 커밋이어야 한다.
      */
     public void recordSale(String eventId, String eventType, String orderNo, List<OrderLine> lines) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
@@ -63,9 +59,7 @@ public class SettlementRecordService {
 
     /**
      * [환불] payment → PaymentCancelled → settlement (역산).
-     *
-     * <p>환불 이벤트에는 항목 정보가 없다. 자기 원장의 SALE 레코드를 근거로 부호를 뒤집어 상계하므로
-     * 다른 서비스에 되묻지 않고도 정확한 역산이 가능하다.
+     * 이벤트에 항목이 없으므로 자기 원장의 SALE 을 근거로 부호를 뒤집는다.
      */
     public void recordRefund(String eventId, String eventType, String orderNo) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
@@ -95,12 +89,8 @@ public class SettlementRecordService {
     }
 
     /**
-     * 판매자 한 명의 미마감 원장을 마감 처리하고 그 목록을 돌려준다.
-     *
-     * <p><b>읽기와 close 를 한 호출로 묶는다.</b> 합산은 이 목록으로
-     * {@link SellerSettlementService} 가 하는데, 부르는 쪽 트랜잭션에 그대로 참여하므로
-     * "합산에 들어간 원장" 과 "close 된 원장" 이 어긋날 수 없다. 둘로 나눠 열어 두면
-     * 그 사이에 새 원장이 끼어들어 <b>마감됐는데 어디에도 없는 금액</b>이 생긴다.
+     * 미마감 원장을 마감 처리하고 그 목록을 돌려준다.
+     * <b>읽기와 close 를 나누면 안 된다</b> — 마감됐는데 어디에도 없는 금액이 생긴다.
      */
     public List<SettlementRecord> closeUnclosed(Long sellerId, YearMonth month) {
         List<SettlementRecord> records = recordRepository

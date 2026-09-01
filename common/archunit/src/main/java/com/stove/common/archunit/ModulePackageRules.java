@@ -11,39 +11,10 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
 /**
- * 서비스 모듈의 패키지 구조 규약.
+ * 서비스 모듈의 패키지 구조 규약. 각 앱의 테스트에서
+ * {@code ArchTests.in(ModulePackageRules.class)} 로 가져다 쓴다.
  *
- * <pre>
- * com.stove.&lt;app&gt;
- * ├── &lt;App&gt;Application
- * ├── config/                 스프링 설정(빈 정의, 초기화)
- * ├── core/                   단일 도메인. 이 모듈의 존재 이유.
- * │   ├── domain/             엔티티(JPA 허용), VO, enum, 정책, Repository 인터페이스,
- * │   │                       포트가 주고받는 값 타입
- * │   ├── port/               아웃바운드 포트 인터페이스 — PG, CDN, 스토리지, 외부 도메인까지 전부
- * │   └── service/            단일 애그리거트 동작 + 트랜잭션 경계
- * ├── api/                    바깥 세계와의 접점
- * │   ├── controller/         HTTP 인바운드 — 엔드포인트, 요청/응답 DTO
- * │   ├── listener/           Kafka 인바운드
- * │   ├── scheduler/          배치/스케줄 인바운드
- * │   └── application/        조율이 필요한 경우의 파사드
- * └── infrastructure/         모든 아웃바운드 포트 구현체
- * </pre>
- *
- * <p>확정된 설계 결정이 규칙에 반영되어 있다.
- * <ol>
- *   <li>포트 구현체는 같은 모듈의 {@code infrastructure} 어댑터다. 앱 간 컴파일 의존은 없다.</li>
- *   <li>파사드는 강제하지 않는다 — 인바운드가 {@code core.service} 를 직접 호출해도 된다.</li>
- *   <li>도메인 객체와 엔티티를 분리하지 않는다 — {@code core.domain} 의 JPA 의존을 허용한다.</li>
- *   <li>포트는 DDD 의 리포지토리 인터페이스와 같은 자리, 즉 안쪽({@code core.port})에 둔다.
- *       외부 시스템이든 외부 도메인이든 구분하지 않는다.</li>
- *   <li>{@code @ConfigurationProperties} 의 자리는 따로 정하지 않는다 — 그 값을 쓰는 계층 안이다.
- *       어댑터 설정은 어댑터 옆({@code infrastructure}), 수수료율처럼 도메인 정책인 값은
- *       {@code core.domain} 이다. 정책 값을 {@code config} 로 빼면 {@code core → config} 가 되어
- *       위 3번 규칙과 정면으로 부딪힌다. 계층 규칙이 이미 답을 정하므로 위치 규칙을 겹쳐 두지 않는다.</li>
- * </ol>
- *
- * <p>각 앱의 테스트에서 {@code ArchTests.in(ModulePackageRules.class)} 로 가져다 쓴다.
+ * <p>구조도와 근거는 {@code docs/decisions.md} 1·3·4·5·13번, docs/code-notes.md
  */
 public final class ModulePackageRules {
 
@@ -80,16 +51,7 @@ public final class ModulePackageRules {
             .because("core/api/infrastructure/config 규약 밖의 패키지는 만들지 않는다")
             .allowEmptyShould(true);
 
-    /**
-     * 계층 간 접근 방향.
-     *
-     * <p>파사드를 강제하지 않으므로 인바운드는 {@code application} 과 {@code core.service} 를 모두 호출할 수 있다.
-     * 반대로 {@code infrastructure}(포트 구현체)는 DI 로만 주입되어야 하므로 아무도 직접 참조하지 못한다.
-     *
-     * <p>아웃바운드 포트는 모듈당 {@code core.port} 한 곳에만 둔다(DDD 의 리포지토리 인터페이스와 같은 자리).
-     * 어댑터는 자신이 구현하는 포트를 반드시 참조해야 하므로 {@code Infrastructure → CorePort} 는 허용하되,
-     * 서비스 본체나 파사드까지 볼 수는 없다.
-     */
+    /** 계층 간 접근 방향. 각 화살표의 근거는 docs/code-notes.md */
     @ArchTest
     public static final ArchRule 계층_접근_방향 = layeredArchitecture()
             .consideringOnlyDependenciesInLayers()
@@ -131,26 +93,14 @@ public final class ModulePackageRules {
             .because("HTTP/Kafka 는 어댑터의 관심사다")
             .allowEmptyShould(true);
 
-    /**
-     * 아웃바운드 포트는 모듈당 {@code core.port} 한 곳에만 정의한다.
-     *
-     * <p>DDD 에서 리포지토리 인터페이스를 도메인 계층에 두는 것과 같은 자리다 —
-     * "무엇이 필요한가"는 안쪽이 선언하고, "어떻게 하는가"만 바깥이 가진다.
-     * 조율에만 쓰이는 외부 도메인 포트라고 해서 따로 두지 않는다. 포트를 찾을 곳이 하나여야 한다.
-     */
+    /** 아웃바운드 포트는 모듈당 {@code core.port} 한 곳에만 — 포트를 찾을 곳이 하나여야 한다. */
     @ArchTest
     public static final ArchRule 포트는_core_port_에만_정의한다 = noClasses()
             .that().resideOutsideOfPackage(CORE_PORT)
             .should().resideInAPackage("..port..")
             .allowEmptyShould(true);
 
-    /**
-     * 포트 패키지는 인터페이스만 담는다.
-     *
-     * <p>포트가 주고받는 값은 {@code core.domain} 의 모델이다 — 리포지토리가 도메인 객체를
-     * 반환하는 것과 같다. 레코드를 포트 옆에 두기 시작하면 외부 시스템의 응답 형식이
-     * 계약 안에 눌러앉는다.
-     */
+    /** 포트 패키지는 인터페이스만. 값을 옆에 두면 외부 응답 형식이 계약에 눌러앉는다. */
     @ArchTest
     public static final ArchRule 포트_패키지는_인터페이스만_담는다 = classes()
             .that().resideInAPackage(CORE_PORT)
@@ -186,11 +136,8 @@ public final class ModulePackageRules {
             .allowEmptyShould(true);
 
     /**
-     * 설정값은 인바운드 어댑터에 두지 않는다.
-     *
-     * <p>자리를 하나로 못 박지는 않지만(클래스 주석 참고) {@code api} 만은 아니다.
-     * 컨트롤러·리스너는 요청 하나를 처리하는 곳이지 애플리케이션 전체의 설정을 소유하는 곳이 아니다.
-     * 여기에 설정이 들어오면 같은 값을 다른 진입점이 다시 읽거나, 진입점마다 값이 갈린다.
+     * 설정값은 인바운드에 두지 않는다. 자리를 하나로 못 박지는 않지만({@code decisions.md} 13번)
+     * {@code api} 만은 아니다 — 진입점마다 값이 갈린다.
      */
     @ArchTest
     public static final ArchRule 설정값은_인바운드에_두지_않는다 = noClasses()
