@@ -21,7 +21,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 결제 애그리거트. 금액 검증 규칙이 전부 여기 있다 — 게이트 배치는 docs/code-notes.md */
+/** 결제 애그리거트. 금액 검증 규칙이 전부 여기 있다. 게이트 배치는 docs/code-notes.md 참고. */
 @Entity
 @Getter
 @Table(name = "payment")
@@ -53,13 +53,13 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 30)
     private String method;
 
-    /** 결제창을 연 시각. createdAt 과 합칠 수 없다 — docs/code-notes.md */
+    /** 결제창을 연 시각. createdAt 과 합칠 수 없다. 이유는 docs/code-notes.md */
     private Instant preparedAt;
 
     @Column(length = 100)
     private String pgTxId;
 
-    /** 콜백 멱등 키. <b>전역 유니크를 걸면 안 된다</b> — PG 가 만드는 값이다. [D-008] */
+    /** 콜백 멱등 키. 전역 유니크를 걸면 안 된다. PG 가 만드는 값이다. [D-008] */
     @Column(length = 100)
     private String idempotencyKey;
 
@@ -81,7 +81,7 @@ public class Payment extends BaseTimeEntity {
     /** 다음 재개를 시도해도 되는 시각. {@code null} 이면 아직 예약된 적이 없다. */
     private Instant nextCancelAttemptAt;
 
-    /** CANCELING 진입 시각. updatedAt 으로 대신할 수 없다 — 예산 판정의 기준. */
+    /** CANCELING 진입 시각. 예산 판정의 기준이라 updatedAt 으로 대신할 수 없다. */
     private Instant cancelingSince;
 
     private Instant failedAt;
@@ -128,8 +128,8 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
-     * 결제창이 너무 오래 열려 있었는가. <b>참이어도 승인을 거절하지 않는다.</b>
-     * {@code preparedAt} 이 없으면 만료가 아니라고 답한다 — 모를 때는 돈을 움직이지 않는다.
+     * 결제창이 너무 오래 열려 있었는가. 참이어도 승인을 거절하지 않는다.
+     * {@code preparedAt} 이 없으면 만료가 아니라고 답한다. 모를 때는 돈을 움직이지 않는다.
      * 근거는 docs/code-notes.md
      */
     public boolean checkoutExpired(Duration window) {
@@ -138,14 +138,14 @@ public class Payment extends BaseTimeEntity {
 
     /**
      * 게이트 3+4: 승인 확정.
-     * @return 이미 승인된 건이면 false(중복 콜백) — 호출측은 이벤트를 재발행하지 않는다.
+     * @return 이미 승인된 건이면 false(중복 콜백). 호출측은 이벤트를 재발행하지 않는다.
      */
     public boolean approve(String pgTxId, long paidAmount, String idempotencyKey) {
         if (status == PaymentStatus.PAID) {
             if (Objects.equals(this.idempotencyKey, idempotencyKey)) {
                 return false;   // 같은 콜백의 재전송
             }
-            // 다른 승인이 또 왔다 — 연동 오류이거나 위·변조. 조용히 무시하지 않는다.
+            // 다른 승인이 또 왔다. 연동 오류이거나 위·변조다. 조용히 무시하지 않는다.
             throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
                     "이미 다른 승인으로 확정된 결제: orderNo=%s".formatted(orderNo));
         }
@@ -176,7 +176,7 @@ public class Payment extends BaseTimeEntity {
         if (status != PaymentStatus.PAID && status != PaymentStatus.CANCELING) {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 불가 상태: " + status);
         }
-        // 처음 진입에서만 잡는다 — 조건 없이 덮으면 예산이 영원히 안 찬다.
+        // 처음 진입에서만 잡는다. 조건 없이 덮으면 예산이 영원히 안 찬다.
         if (status != PaymentStatus.CANCELING) {
             this.cancelingSince = Instant.now();
         }
@@ -191,12 +191,12 @@ public class Payment extends BaseTimeEntity {
         this.nextCancelAttemptAt = Instant.now().plus(backoff);
     }
 
-    /** 착수 직후의 첫 유예. <b>시도 횟수를 올리지 않는다</b> — 아직 시도한 적이 없다. */
+    /** 착수 직후의 첫 유예. 아직 시도한 적이 없으므로 시도 횟수를 올리지 않는다. */
     public void scheduleFirstCancelRetry(Duration initialDelay) {
         this.nextCancelAttemptAt = Instant.now().plus(initialDelay);
     }
 
-    /** 예산을 넘겼는가. <b>포기 신호가 아니라 사람을 부르는 신호다.</b> docs/code-notes.md */
+    /** 예산을 넘겼는가. 포기 신호가 아니라 사람을 부르는 신호다. docs/code-notes.md */
     public boolean cancelBudgetExceeded(Duration budget, Instant now) {
         return status == PaymentStatus.CANCELING
                 && cancelingSince != null
@@ -225,9 +225,9 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
-     * PG 승인 거절로 결제를 종료한다. {@code FAILED} 는 <b>종단 상태</b>다. docs/code-notes.md
+     * PG 승인 거절로 결제를 종료한다. {@code FAILED} 는 종단 상태다. docs/code-notes.md
      *
-     * @return 이미 실패로 끝난 건이면 false(거절 콜백 재전송) — 호출측은 이벤트를 재발행하지 않는다
+     * @return 이미 실패로 끝난 건이면 false(거절 콜백 재전송). 호출측은 이벤트를 재발행하지 않는다
      */
     public boolean fail(String pgTxId, String reasonCode, String reason) {
         if (status != PaymentStatus.PENDING && status != PaymentStatus.FAILED) {

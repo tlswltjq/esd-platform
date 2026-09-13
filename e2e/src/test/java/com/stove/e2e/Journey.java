@@ -7,22 +7,22 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * 한 저니가 네 장을 이어 간다 — 트랙 A 가 만든 상품을 B 가 사고, B 가 만든 주문을 C 가 지급·환불한다.
- * 장 사이를 건너는 값은 인스턴스가 아니라 <b>시나리오</b>의 것이라 여기 static 으로 둔다
+ * 한 저니가 네 장을 이어 간다. 트랙 A 가 만든 상품을 B 가 사고, B 가 만든 주문을 C 가 지급하고 환불한다.
+ * 장 사이를 건너는 값은 인스턴스가 아니라 시나리오의 것이라 여기 static 으로 둔다
  * (테스트 JVM 하나, {@code maxParallelForks = 1}).
  *
  * <h2>건너뛴 것을 통과로 읽지 않는다</h2>
  *
- * <p>셸이 {@code require} 와 {@code EXPECTED_CHECKS} 로 막던 것이 <b>"통과처럼 읽히는 미실행"</b>
+ * <p>셸이 {@code require} 와 {@code EXPECTED_CHECKS} 로 막던 것이 "통과처럼 읽히는 미실행"
  * 이었다. 상품을 못 찾으면 트랙 B·C·3-B 38건이 통째로 빠지는데 요약은 "실패 1건" 만 보여줬다.
  *
- * <p>JUnit 으로 옮기면서 그 함정을 새 언어로 다시 파지 않는다 — <b>{@code Assumptions} 를 쓰지 않는다.</b>
- * 선행 단계가 값을 만들지 못했으면 뒤 장은 <i>건너뛴 것(skipped)</i> 이 아니라 <b>실패</b>다.
- * 스킵은 리포트에서 초록 옆에 조용히 앉지만, 실패는 이유를 말하며 빨개진다.
+ * <p>JUnit 으로 옮기면서 그 함정을 새 언어로 다시 파지 않는다. {@code Assumptions} 를 쓰지 않는다.
+ * 선행 단계가 값을 만들지 못했으면 뒤 장은 <i>건너뛴 것(skipped)</i> 이 아니라 실패다.
+ * 스킵은 리포트에서 초록 옆에 조용히 앉지만 실패는 이유를 말하며 빨개진다.
  */
 final class Journey {
 
-    /** settlement 의 {@code self-seller-id}(1) 가 아니므로 입점(PARTNER) 판매다 — 수수료 30% 가 붙는다. */
+    /** settlement 의 {@code self-seller-id}(1) 가 아니므로 입점(PARTNER) 판매다. 수수료 30% 가 붙는다. */
     static final long SELLER = 1001L;
 
     static final int PRICE = 18_000;
@@ -31,17 +31,17 @@ final class Journey {
     static final int NET = PRICE - FEE;
 
     /**
-     * 실행마다 다른 값. <b>스택과 볼륨이 재사용된다</b> — 원격 스택은 계속 떠 있고 `down` 도 볼륨을
-     * 남기므로, 고정 코드를 쓰면 두 번째 실행부터 이전 실행의 데이터와 섞인다.
+     * 실행마다 다른 값. 스택과 볼륨이 재사용된다. 원격 스택은 계속 떠 있고 `down` 도 볼륨을
+     * 남기므로 고정 코드를 쓰면 두 번째 실행부터 이전 실행의 데이터와 섞인다.
      */
     static final long STAMP = System.currentTimeMillis() / 1000;
 
     static final String PRODUCT_CODE = "GAME-E2E-" + STAMP;
     /**
-     * 제목에도 스탬프를 박는다. <b>검색은 이름만 본다</b> —
+     * 제목에도 스탬프를 박는다. 검색은 이름만 보기 때문이다.
      * {@code ProductSearchRepository.findByStatusAndNameContaining} 이고 {@code productCode} 는
-     * 대상이 아니다. 그래서 제목이 고정이면 회차마다 같은 이름의 상품이 쌓이고,
-     * 검색 결과 첫 장(20건)이 차는 순간부터 <b>이번 회차의 상품은 구조적으로 결과에 없다.</b>
+     * 대상이 아니다. 그래서 제목이 고정이면 회차마다 같은 이름의 상품이 쌓이고
+     * 검색 결과 첫 장(20건)이 차는 순간부터 이번 회차의 상품은 구조적으로 결과에 없다.
      * 실제로 2026-08-13 에 첫 장이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
      */
     static final String PRODUCT_TITLE = "인수 시나리오 게임 " + STAMP;
@@ -49,11 +49,11 @@ final class Journey {
     /** 미보유 회원. 다운로드 권한이 소유 검사에 걸리는지 보려면 사지 않은 사람이 하나 필요하다. */
     static final long OTHER_MEMBER = MEMBER + 1;
 
-    /** 승인 경로의 PG 거래번호. 거절 경로는 사전등록이 돌려준 값을 써야 한다 — {@link #failPgTxId()}. */
+    /** 승인 경로의 PG 거래번호. 거절 경로는 사전등록이 돌려준 값을 써야 한다({@link #failPgTxId()}). */
     static final String PG_TX = "PG-E2E-" + STAMP;
 
     /**
-     * PG 멱등키. <b>같은 접미사면 같은 키가 나온다</b> — 중복 콜백 흡수를 확인하려면
+     * PG 멱등키. 같은 접미사면 같은 키가 나온다. 중복 콜백 흡수를 확인하려면
      * 트랙 C 가 트랙 B 와 똑같은 키로 다시 보낼 수 있어야 한다.
      */
     static String idempotencyKey(String suffix) {
@@ -115,8 +115,8 @@ final class Journey {
     /**
      * 결제 승인이 확정된 순간과 그 요청의 traceId 를 함께 잡아 둔다.
      *
-     * <p>둘 다 <b>같은 한 번의 콜백</b>에서 나와야 의미가 있다. 종단 지연은 이 시각부터
-     * 라이선스가 보이는 시각까지고, 트레이스 판정은 이 traceId 가 여섯 서비스에 걸치는지를 본다 —
+     * <p>둘 다 같은 한 번의 콜백에서 나와야 의미가 있다. 종단 지연은 이 시각부터
+     * 라이선스가 보이는 시각까지다. 트레이스 판정은 이 traceId 가 여섯 서비스에 걸치는지를 본다.
      * 팬아웃이 시작되는 지점이 하나이므로 기준점도 하나다.
      */
     static void paymentAccepted(String traceId) {
@@ -144,7 +144,7 @@ final class Journey {
     }
 
     /**
-     * 값이 없으면 <b>이 장을 실패시킨다.</b> 스킵이 아니다 — 위 클래스 주석 참고.
+     * 값이 없으면 이 장을 실패시킨다. 스킵이 아니다. 위 클래스 주석을 참고한다.
      * 메시지에 "누가 만들었어야 하는지" 를 적는다. 실패를 본 사람이 다음에 볼 곳이 그것이다.
      */
     private static <T> T require(T value, String what, String producedBy) {
