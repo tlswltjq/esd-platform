@@ -51,6 +51,7 @@
 | [remote-dev-plan.md](remote-dev-plan.md) | 원격 CI 구축 계획·실행 기록. **Phase 7(CD)이 끝나면 지운다** |
 | [test-audit.md](test-audit.md) | 테스트 점검(2026-08-10). 소견 F1~F6 과 채울 순서 5단계. **순서를 다 밟으면 지운다** |
 | [perf-tuning.md](perf-tuning.md) | 설정 튜닝 측정(2026-08-10). performance.md 8-3·8-4·11-2 를 숫자로 닫는다. **코드 변경 없음** |
+| [technical-interview-guide.md](technical-interview-guide.md) | 기술면접 대비 학습 노트(2026-09-14). 트랜잭션·격리 수준·락·Kafka 전달 보장을 이 코드에 붙여 설명하고, 새로 찾은 위험 R1~R15 를 적었다. DB 주장은 [scripts/db-lab](../scripts/db-lab/) 로 재현한다. **줄 번호 인용은 코드가 바뀌면 먼저 낡는다** |
 
 ---
 

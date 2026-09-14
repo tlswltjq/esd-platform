@@ -305,6 +305,14 @@ for (int cycle = 0; cycle < properties.maxBatchesPerCycle(); cycle++) {
 > 개선 전 코드로 되돌려 같은 절차를 반복하면 개선이 API 지연에 준 영향까지 나오는데,
 > 그건 아직 하지 않았다.
 
+> **후속 — 원인 하나를 쟀다 (2026-09-14).** 위의 "같은 커넥션 풀"(8-2 의 가설)은 13-5 가 60 RPS 에서 기각했다(풀 `pending` 0).
+> 그 뒤 비어 있던 원인 후보로 **갭 락 경합**을 재 봤다. 릴레이의 `FOR UPDATE SKIP LOCKED` 는 REPEATABLE READ 에서
+> `idx_outbox_pending` 에 넥스트키 락을 잡고, 그 트랜잭션 안에서 Kafka ack 를 기다린다 — 그동안 주문의 outbox INSERT 가 기다린다.
+> order 커넥션만 READ COMMITTED 로 바꾸는 A/B 를 OCI 에서 60 RPS × 90초, `rr → rc → rc → rr` 로 돌리니
+> **InnoDB 행 락 대기가 회차당 400회 → 0회, 쓰기 p95 가 26.2 → 21.5ms** 였다(`scripts/perf/run-isolation-ab.sh`).
+> 이 절의 19ms 는 `poll-interval-ms: 1000` 시절 값이라 크기를 그대로 맞대지 않는다 — 지금 설정(200ms)에서 락 경합의 몫이 p95 약 4.7ms 라는 것까지가 확인한 범위다.
+> 해석과 개선안은 [technical-interview-guide.md R1](technical-interview-guide.md#r1-릴레이가-갭-락을-쥔-채-kafka-ack-를-기다린다).
+
 ---
 
 ## 10. 이번에 배운 것
