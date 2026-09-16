@@ -23,7 +23,6 @@ import org.springframework.stereotype.Component;
  *
  * <p>보상 트리거는 재시도가 전부 소진된 뒤에만 불려야 하므로
  * {@link com.stove.license.config.KafkaErrorHandlerConfig} 의 recoverer 가 갖는다.
- * 상세는 {@code docs/kafka-consumer-retry.md}.
  */
 @Slf4j
 @Component

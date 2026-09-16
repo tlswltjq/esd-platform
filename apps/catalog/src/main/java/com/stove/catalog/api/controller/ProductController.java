@@ -42,7 +42,7 @@ public class ProductController {
 
     /**
      * {@code productCode} 로 조회. <b>질의 파라미터로 얹으면 OpenAPI 연산이 충돌한다</b> —
-     * 그래서 경로를 나눴다. docs/code-notes.md
+     * 그래서 경로를 나눴다.
      */
     @GetMapping("/by-code/{productCode}")
     public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {

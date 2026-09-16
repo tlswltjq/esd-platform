@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 매출 원장 — 무엇을 팔았고 무엇을 물러줬는가. 결제 이벤트로만 늘어나고 마감이 그 줄을 닫는다.
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Service

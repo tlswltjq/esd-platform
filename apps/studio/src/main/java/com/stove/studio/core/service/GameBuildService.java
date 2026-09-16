@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 게임 빌드 — 바이너리는 받지 않고 메타데이터와 업로드 자리만 관리한다.
- * <b>저장과 발행이 한 트랜잭션이어야 한다</b>(이 클래스의 분해 하한선). docs/code-notes.md
+ * <b>저장과 발행이 한 트랜잭션이어야 한다</b>(이 클래스의 분해 하한선).
  */
 @Slf4j
 @Service

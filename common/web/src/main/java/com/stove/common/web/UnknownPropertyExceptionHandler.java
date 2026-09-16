@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <p><b>{@code @Order} 를 지우면 이 클래스는 한 번도 실행되지 않는다</b> —
  * 어드바이스는 가장 구체적인 핸들러가 아니라 먼저 오는 쪽이 이긴다.
  *
- * <p>클래스를 나눈 이유, 로그와 응답에 각각 무엇을 싣는지(D-025)는 docs/code-notes.md
  */
 @Slf4j
 @Order(Ordered.HIGHEST_PRECEDENCE)

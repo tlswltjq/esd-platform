@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 컨슈머 멱등 가드. <b>비즈니스 처리와 같은 트랜잭션에서 마킹해야 한다</b> —
- * 갈리면 "마킹은 됐는데 처리는 롤백" 된 이벤트가 영구 유실된다. docs/code-notes.md
+ * 갈리면 "마킹은 됐는데 처리는 롤백" 된 이벤트가 영구 유실된다.
  */
 @Slf4j
 @RequiredArgsConstructor

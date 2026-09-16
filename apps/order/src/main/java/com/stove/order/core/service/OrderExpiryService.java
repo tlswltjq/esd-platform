@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <b>"미결제 주문 수" 가 지표로 못 쓰게 되는 것</b>이 이유다.
  *
  * <p><b>이벤트를 내지 않는다</b> — 하위 서비스 셋이 전부 "되돌릴 것이 없다" 로 끝나는 메시지를
- * 밀린 건수만큼 받게 된다. docs/code-notes.md
+ * 밀린 건수만큼 받게 된다.
  */
 @Slf4j
 @Service

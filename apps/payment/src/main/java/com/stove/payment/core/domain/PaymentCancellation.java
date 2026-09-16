@@ -1,7 +1,7 @@
 package com.stove.payment.core.domain;
 
 /**
- * 취소 1단계의 결과. 엔티티가 아니라 값인 이유는 docs/code-notes.md
+ * 취소 1단계의 결과. 엔티티가 아니라 값이다.
  *
  * @param pgRefundRequired PG 환불 요청이 필요한가. 이미 취소된 건이거나 중복 이벤트면 false
  */

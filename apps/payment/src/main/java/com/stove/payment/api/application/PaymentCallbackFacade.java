@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 승인 콜백 오케스트레이션. 파사드가 필요한 것은 <b>결제창 만료 뒤 도착한 승인</b> 하나 때문이고,
- * 순서와 이유는 {@link RefundFacade} 와 같다. docs/code-notes.md
+ * 순서와 이유는 {@link RefundFacade} 와 같다.
  */
 @Slf4j
 @Service

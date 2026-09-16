@@ -210,8 +210,6 @@ recoverer 는 정의상 재시도가 전부 소진된 뒤에만 호출되므로 
 recoverer 안에서 예외가 나가면 레코드가 되감겨 무한 재전송이 되므로,
 마지막 방어선답게 무엇이 터지든 로그로 끝낸다.
 
-메커니즘 상세는 [kafka-consumer-retry.md](kafka-consumer-retry.md).
-
 ---
 
 <a id="d-003"></a>
@@ -1398,7 +1396,7 @@ expected: 5000L
 
 | 환경 | 실제 랙 (브로커) | 지표가 보고한 값 |
 |---|---:|---:|
-| OCI — payment 를 내려 둔 동안 ([perf-tuning.md](perf-tuning.md) 4절) | **113,517** | **0** |
+| OCI — payment 를 내려 둔 동안 | **113,517** | **0** |
 | 로컬 60 RPS soak ([performance.md](performance.md) 12장) | **2,479** | **209** (최대) |
 
 두 번째 줄이 첫 줄보다 나쁘다. **0 이면 "이 지표는 안 붙었나" 라도 의심하는데,

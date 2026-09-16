@@ -4,7 +4,7 @@ import com.stove.payment.core.domain.PgPreparation;
 
 /**
  * 외부 PG 연동 포트. 우리가 <i>거는</i> 호출만 있다 —
- * 승인/거절은 웹훅으로 받으므로 {@code approve} 가 없다. docs/code-notes.md
+ * 승인/거절은 웹훅으로 받으므로 {@code approve} 가 없다.
  */
 public interface PgClient {
 
@@ -13,7 +13,7 @@ public interface PgClient {
 
     /**
      * 승인 취소/환불. <b>{@code pgTxId} 기준 멱등이어야 한다</b> —
-     * 이 계약이 깨지면 재시도가 곧 이중 환불이 된다. docs/code-notes.md
+     * 이 계약이 깨지면 재시도가 곧 이중 환불이 된다.
      */
     void cancel(String pgTxId, long amount, String reason);
 }

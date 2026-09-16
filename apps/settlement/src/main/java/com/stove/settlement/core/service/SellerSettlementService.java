@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 판매자별 월 확정본 — 원장을 합산해 닫고, 계산서 번호를 받아 적는다.
  * 마감 한 건이 두 애그리거트를 가로지르지만 <b>한 트랜잭션이어야 하므로</b> 쪼개지 않는다.
- * 세금계산서 발행은 여기 없다. docs/code-notes.md
+ * 세금계산서 발행은 여기 없다.
  */
 @Slf4j
 @Service
@@ -30,7 +30,7 @@ public class SellerSettlementService {
     @Transactional(readOnly = true)
     public List<Long> sellersToClose(YearMonth month) {
         // 미마감 원장 + 마감됐으나 계산서가 없는 판매자.
-        // 후자를 빼면 발행 실패가 영구 방치된다. docs/code-notes.md
+        // 후자를 빼면 발행 실패가 영구 방치된다.
         Stream<Long> withOpenRecords = settlementRecordService.sellerIdsWithUnclosed(month).stream();
         Stream<Long> awaitingInvoice = sellerSettlementRepository.findAwaitingTaxInvoice(month.toString())
                 .stream()
@@ -50,7 +50,7 @@ public class SellerSettlementService {
     /**
      * 판매자 한 명의 마감을 <b>독립 트랜잭션</b>으로 확정한다.
      * <b>세금계산서를 여기서 발행하면 안 된다</b> [D-022] — 장부에 없는 계산서가 남는다.
-     * docs/code-notes.md
+     *
      *
      * @return 확정본. 마감할 원장이 없으면 {@code null}
      */

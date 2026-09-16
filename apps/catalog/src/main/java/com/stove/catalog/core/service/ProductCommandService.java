@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 상태 변경 = 캐시 무효화 + store 색인 동기화 이벤트 발행 지점.
- * <b>상품 마스터를 쓰는 경로를 이 클래스로 한정한다</b> — docs/code-notes.md
+ * <b>상품 마스터를 쓰는 경로를 이 클래스로 한정한다.</b>
  */
 @Slf4j
 @Service
@@ -75,7 +75,7 @@ public class ProductCommandService {
 
     /**
      * 재색인 한 페이지를 <b>독립 트랜잭션</b>으로 발행한다.
-     * 트랜잭션 경계가 여기여야 하고 반복은 밖(조율 계층)에 있어야 한다 — docs/code-notes.md
+     * 트랜잭션 경계가 여기여야 하고 반복은 밖(조율 계층)에 있어야 한다.
      *
      * @param afterId  이 id 보다 큰 상품부터 (커서)
      * @param pageSize 한 번에 발행할 수

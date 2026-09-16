@@ -44,26 +44,20 @@ stove/
 └── docker-compose.apps.yml 9개 서비스 + 게이트웨이 컨테이너 실행
 ```
 
-문서는 전부 [docs/](docs/) 에 있다. 읽는 순서와 각 문서의 성격은 [docs/README.md](docs/README.md).
+문서는 [docs/](docs/) 에 있다.
 
 | 무엇이 궁금하면 | 문서 |
 |---|---|
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
-| 이 클래스가 왜 이 모양인가 (클래스 수준 근거) | [code-notes.md](docs/code-notes.md) |
 | 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
-| 리뷰 지적을 어떻게 판정했나 | [review-log.md](docs/review-log.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
-| 그 층·부하·스모크·e2e 를 점검하고 채울 순서 | [test-audit.md](docs/test-audit.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
-| 컨슈머 재시도가 예외 전파에 기대는 이유 | [kafka-consumer-retry.md](docs/kafka-consumer-retry.md) |
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
 | 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
 | **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
 | **서버가 중단됐다 재기동하면** 밀린 일이 이어지는가 — 시나리오와 그것을 지키는 테스트 | [resilience-scenarios.md](docs/resilience-scenarios.md) |
 | 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |
-| 원격 실행 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
-| 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
 
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
 스키마가 유동적인 패치 매니페스트는 MongoDB, 검색 트래픽은 Elasticsearch.
@@ -173,34 +167,7 @@ git config stove.remote <ssh-별칭>     # ~/.ssh/config 의 Host 이름
 
 요구 도구는 `bash`·`ssh`·`rsync` 뿐이다. 리포의 설치 요구는 여전히 0개다.
 
-#### A. Devcontainer (권장) — 머신에 Docker 만 있으면 된다
-
-`.devcontainer/devcontainer.json` 이 JDK·Gradle·Docker 를 모두 정의한다.
-VS Code 의 *Reopen in Container*, IntelliJ, `devcontainer` CLI 가 같은 파일을 읽는다.
-
-```bash
-devcontainer up --workspace-folder .
-```
-
-`docker-in-docker` 를 쓰므로 컨테이너가 자기 Docker 데몬을 갖는다 — Testcontainers 테스트와
-`docker compose up` 이 호스트 환경을 가정하지 않고 그대로 돈다.
-GitHub Codespaces 도 이 파일을 그대로 사용하므로, 브라우저만으로도 열린다.
-
-#### B. `scripts/dev.sh` — Docker 만 있고 아무것도 설치할 수 없을 때
-
-빌려 쓰는 머신처럼 brew·node·JDK 설치가 여의치 않은 환경을 위한 진입점.
-devcontainer 와 같은 베이스 이미지를 쓰되 **안쪽에 Docker 를 또 띄우지 않고 호스트 소켓을 빌린다** —
-호스트 이미지 캐시를 그대로 쓰므로 첫 실행이 빠르다.
-
-```bash
-./scripts/dev.sh                  # 대화형 셸
-./scripts/dev.sh ./gradlew build  # 명령 실행 후 종료
-```
-
-호스트가 Docker Desktop 이나 OrbStack 이라고 가정한다(활성 docker 컨텍스트에서 소켓을 찾는다).
-그 가정을 피하고 싶으면 A 를 쓴다. 애플리케이션 스택 실행은 호스트에서 `docker compose` 로 한다.
-
-#### C. 로컬 직접 실행
+#### 로컬 직접 실행
 
 머신에 JDK 와 Docker 가 있다면 이쪽이 가장 빠르다. 리포가 요구하는 설치 도구는 없다.
 
@@ -280,7 +247,7 @@ gateway   http post                                    ROOT
 `+527ms` 간격이 Outbox 폴링 지연이고, 그것이 그대로 눈에 보인다.
 
 > 이 트레이스는 `poll-interval-ms: 1000` 이던 시절에 잡은 것이다. 2026-08-13 에 **200 으로 낮췄으므로**
-> 지금 같은 경로를 잡으면 저 간격이 그만큼 줄어든다([perf-tuning.md](docs/perf-tuning.md) 3절).
+> 지금 같은 경로를 잡으면 저 간격이 그만큼 줄어든다.
 > 요점인 스팬 트리의 **모양** — 부모가 릴레이가 아니라 HTTP 요청 스팬이라는 것 — 은 그대로다.
 
 ## 5. 전 구간 시나리오 (curl)
@@ -388,7 +355,7 @@ curl -s -X POST "localhost:8089/api/v1/ops/dlt/replay?topic=stove.payment.v1.DLT
   셸 스모크였던 것을 `:e2e` 모듈로 옮겼다 — 트랙 A~C·환불·결제 거절을 **게이트웨이 경유**로
   42건 관통하고, 거기에 관측 4건(트레이스 연결·적체 수렴·DLT·종단 지연)이 얹혀 main push 에서 돈다. 배포 게이트(컨테이너·인프라·라우팅 차단)는 성질이 달라
   `scripts/stack-wait.sh` 로 갈라져 `stack up` 에 붙었다
-  ([test-audit.md](docs/test-audit.md) 4절, [decisions.md](docs/decisions.md) 21번)
+  ([decisions.md](docs/decisions.md) 21번)
 - ~~분산 추적(Micrometer Tracing + OTLP)으로 correlationId 를 traceId 로 승격~~ → **했다.**
   Kafka 구간이 끊기던 원인은 헤더를 안 실어서만이 아니라 **Outbox 가 발행을 다른 스레드로 미루기
   때문**이었다 — 자동 계측은 `send()` 를 부른 스레드(릴레이 스케줄러)의 컨텍스트를 싣는다.

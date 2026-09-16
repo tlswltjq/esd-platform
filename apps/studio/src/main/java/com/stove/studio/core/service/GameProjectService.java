@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  *                             └─ReviewRejected──▶ REJECTED ──submit──▶ SUBMITTED
  * </pre>
  *
- * <p>전이 네 경로가 전부 이 애그리거트 하나를 만지므로 한 클래스에 둔다. docs/code-notes.md
+ * <p>전이 네 경로가 전부 이 애그리거트 하나를 만지므로 한 클래스에 둔다.
  */
 @Slf4j
 @Service

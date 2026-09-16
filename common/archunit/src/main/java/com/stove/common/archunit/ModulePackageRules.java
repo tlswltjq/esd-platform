@@ -14,7 +14,7 @@ import com.tngtech.archunit.lang.ArchRule;
  * 서비스 모듈의 패키지 구조 규약. 각 앱의 테스트에서
  * {@code ArchTests.in(ModulePackageRules.class)} 로 가져다 쓴다.
  *
- * <p>구조도와 근거는 {@code docs/decisions.md} 1·3·4·5·13번, docs/code-notes.md
+ * <p>구조도와 근거는 {@code docs/decisions.md} 1·3·4·5·13번에 정리했다.
  */
 public final class ModulePackageRules {
 
@@ -51,7 +51,7 @@ public final class ModulePackageRules {
             .because("core/api/infrastructure/config 규약 밖의 패키지는 만들지 않는다")
             .allowEmptyShould(true);
 
-    /** 계층 간 접근 방향. 각 화살표의 근거는 docs/code-notes.md */
+    /** 계층 간 접근 방향. */
     @ArchTest
     public static final ArchRule 계층_접근_방향 = layeredArchitecture()
             .consideringOnlyDependenciesInLayers()

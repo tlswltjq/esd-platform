@@ -14,7 +14,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 /**
  * 검색 색인 문서. <b>문서 ID = productId 라 자연 멱등</b>이므로 별도 Inbox 테이블이 없다.
- * docs/code-notes.md
+ *
  */
 @Getter
 @Builder

@@ -6,7 +6,7 @@ import java.time.Instant;
 
 /**
  * 만료 스윕이 실제로 일하고 있는가. <b>스윕이 안 도는 상태는 정상 상태와 모습이 같다</b> —
- * D-021·D-023·D-031 로 세 번 밟은 자리다. 알람은 {@code expirable} 에 건다. docs/code-notes.md
+ * D-021·D-023·D-031 로 세 번 밟은 자리다. 알람은 {@code expirable} 에 건다.
  */
 public class OrderMetrics {
 

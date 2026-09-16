@@ -15,7 +15,7 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
 
 /**
  * 컨슈머가 실패했을 때 <b>얼마나 버티고, 포기한 뒤 무엇을 하는가.</b>
- * 이 모듈을 의존하는 것만으로 두 기본값이 깔린다. docs/code-notes.md
+ * 이 모듈을 의존하는 것만으로 두 기본값이 깔린다.
  */
 @Slf4j
 @AutoConfiguration
@@ -24,7 +24,7 @@ public class KafkaConsumerAutoConfiguration {
     /**
      * 재시도가 소진된 레코드를 {@code <원본토픽>.DLT} 의 <b>같은 파티션</b>으로 보낸다.
      * 도메인 처리가 필요한 서비스는 자기 {@link CommonErrorHandler} 빈으로 대신한다.
-     * docs/code-notes.md
+     *
      */
     @Bean
     @ConditionalOnMissingBean(CommonErrorHandler.class)

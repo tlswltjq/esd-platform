@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 주문 생성 오케스트레이션. <b>트랜잭션을 열지 않는다</b>(동기 HTTP 호출이 들어오면 안 된다).
- * 검증 게이트 1단계 — 금액은 catalog 가 확정한 값만 쓴다. docs/code-notes.md
+ * 검증 게이트 1단계 — 금액은 catalog 가 확정한 값만 쓴다.
  */
 @Slf4j
 @Service

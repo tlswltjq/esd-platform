@@ -5,7 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * DLT 로 넘어간 메시지 수({@code stove.kafka.dead-lettered}).
- * <b>DLT 는 유실을 막지만 알려주지는 않는다</b> — 알람을 걸 자리다. docs/code-notes.md
+ * <b>DLT 는 유실을 막지만 알려주지는 않는다</b> — 알람을 걸 자리다.
  */
 public class DeadLetterMetrics {
 

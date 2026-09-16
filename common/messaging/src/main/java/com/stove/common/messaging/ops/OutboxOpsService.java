@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 
-/** DEAD 로 떨어진 Outbox 이벤트를 조회하고 되살린다. docs/code-notes.md */
+/** DEAD 로 떨어진 Outbox 이벤트를 조회하고 되살린다. */
 @Slf4j
 @RequiredArgsConstructor
 public class OutboxOpsService {

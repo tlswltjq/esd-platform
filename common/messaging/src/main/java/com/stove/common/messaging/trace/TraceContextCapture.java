@@ -2,7 +2,7 @@ package com.stove.common.messaging.trace;
 
 /**
  * 지금 실행 중인 흐름의 추적 컨텍스트를 <b>문자열로</b> 붙잡는다.
- * Transactional Outbox 와 분산 추적이 구조적으로 충돌하기 때문에 있다 — docs/code-notes.md
+ * Transactional Outbox 와 분산 추적이 구조적으로 충돌하기 때문에 있다.
  *
  * @see com.stove.common.messaging.outbox.OutboxRecorder 붙잡는 자리(요청 스레드)
  * @see com.stove.common.messaging.outbox.OutboxRelay 되살리는 자리(스케줄러 스레드)

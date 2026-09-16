@@ -17,7 +17,7 @@ import org.springframework.data.domain.Sort;
  * <b>여기 적히지 않은 이름은 전부 400 이다</b> — 목록에 적어야 열리는 것이 이 방식의 값이다.
  *
  * <p>표를 통과한 뒤 마지막 절로 항상 {@code id desc} 가 붙는다 [D-025] —
- * 없으면 같은 상품이 두 페이지에 나온다. docs/code-notes.md
+ * 없으면 같은 상품이 두 페이지에 나온다.
  */
 public final class ProductSort {
 

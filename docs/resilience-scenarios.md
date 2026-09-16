@@ -188,7 +188,7 @@ MySQL 기본 `max_connections` 는 151 — **여덟 벌이면 벽이다.**
 
 ## 4. 실행 결과 (2026-08-17, OCI 원격)
 
-로컬 Docker 는 3.83GB 라 전체 스택 20종을 띄울 수 없다([remote-dev-plan.md](remote-dev-plan.md) 0장).
+로컬 Docker 는 3.83GB 라 전체 스택 20종을 띄울 수 없다.
 그래서 통합 이상은 전부 원격에서 돌렸다 — 4코어 aarch64 / 24GB.
 
 | 태스크 | 결과 | 비고 |

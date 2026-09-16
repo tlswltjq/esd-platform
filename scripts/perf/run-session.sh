@@ -107,7 +107,7 @@ fi
 
 # ── 환경 기록 ────────────────────────────────────────────────────────
 #
-# **세 조건이 조용히 같은 값으로 돌면 비교가 통째로 거짓이 된다**(perf-tuning.md 9절).
+# **세 조건이 조용히 같은 값으로 돌면 비교가 통째로 거짓이 된다.**
 # 그래서 릴레이 설정을 앱에게 직접 물어 남긴다 — compose 에 적은 값이 아니라 실제로 바인딩된 값이다.
 {
     echo "# 측정 세션 ${STAMP}  시나리오=${SCENARIO} 라벨=${LABEL:-없음}"
@@ -179,7 +179,7 @@ trap cleanup EXIT INT TERM
 "$REPO/scripts/perf/collect-consumer.sh" "$OUT_DIR/consumer.csv" 2>>"$OUT_DIR/collectors.log" & pids+=($!)
 "$REPO/scripts/perf/collect-lag.sh"      "$OUT_DIR/lag.csv"      2>>"$OUT_DIR/collectors.log" & pids+=($!)
 
-# 컨테이너 자원. perf-tuning.md 3절이 "대가는 mysql CPU +1.5%p" 라고 적을 수 있었던 근거인데,
+# 컨테이너 자원. 대가를 함께 판정하기 위한 근거인데,
 # 그때는 사람이 `docker stats` 를 눈으로 봤다. 회차마다 남으면 그게 표가 된다.
 (
     echo "elapsed_s,name,cpu_pct,mem_usage"
@@ -256,7 +256,7 @@ if os.path.exists(p):
     if e2e:
         # 완료 건수는 Trend 에서 못 꺼낸다 — k6 는 summary-export 에 Trend 의 count 를 싣지 않는다.
         # 같은 수를 세는 것이 Rate 의 passes 다. 이 값이 지연 분포만큼 중요하다:
-        # 같은 5 VU · 2분에 몇 건이 끝났는가가 폴링 주기 개선을 드러낸 지표였다(perf-tuning.md 3절).
+        # 같은 5 VU · 2분에 몇 건이 끝났는가가 폴링 주기 개선을 드러낸 지표다.
         done = (ok or {}).get("passes", 0)
         out.append(f"  종단 지연   avg {e2e.get('avg', 0):.0f}ms  med {e2e.get('med', 0):.0f}ms  "
                    f"p95 {e2e.get('p(95)', 0):.0f}ms  max {e2e.get('max', 0):.0f}ms  "

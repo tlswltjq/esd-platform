@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 /**
  * 다운로드 인증 → 서명 URL 발급. 애그리거트 셋을 가로지르는 유일한 유스케이스이고,
  * 권한 사본으로 판정하므로 license 장애와 무관하게 동작한다.
- * 파사드가 아니라 {@code core.service} 인 이유는 docs/code-notes.md
  */
 @Slf4j
 @Service

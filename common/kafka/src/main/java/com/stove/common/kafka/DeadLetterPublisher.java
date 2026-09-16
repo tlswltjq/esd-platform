@@ -6,7 +6,7 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 
 /**
  * DLT 발행자를 만드는 유일한 자리. <b>보내는 것과 세는 것을 함께 묶는다</b> —
- * 실제로 이름과 계측이 각각 한 번씩 갈렸다. docs/code-notes.md
+ * 실제로 이름과 계측이 각각 한 번씩 갈렸다.
  */
 public final class DeadLetterPublisher {
 

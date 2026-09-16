@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
 
 /**
  * 생성된 OpenAPI 명세를 리포에 커밋된 스냅샷과 대조한다 — 그 diff 가 곧 API 변경 목록이다.
- * 전용 테스트 클래스를 만들지 않고 {@code *ContextTest} 에 얹는다. docs/code-notes.md
+ * 전용 테스트 클래스를 만들지 않고 {@code *ContextTest} 에 얹는다.
  */
 public final class OpenApiSnapshot {
 
@@ -74,7 +74,7 @@ public final class OpenApiSnapshot {
 
     /**
      * 비교 가능한 형태로 고른다 — {@code servers}(임의 포트)를 지우고 키를 정렬한다.
-     * docs/code-notes.md
+     *
      */
     private static String normalize(String rawJson) {
         try {

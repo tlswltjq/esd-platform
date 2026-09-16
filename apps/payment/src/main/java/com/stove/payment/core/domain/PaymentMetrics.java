@@ -4,7 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 
-/** 결제 지표. 각 값이 무엇을 말하는지와 알람을 어디에 거는지는 docs/code-notes.md */
+/** 결제 지표. 각 값이 무엇을 말하는지와 알람을 어디에 거는지는 */
 public class PaymentMetrics {
 
     private final MeterRegistry registry;
@@ -36,7 +36,7 @@ public class PaymentMetrics {
                 .increment();
     }
 
-    /** Saga 보상 환불이 실제로 일어난 수. <b>0 도 값이다</b> — docs/code-notes.md */
+    /** Saga 보상 환불이 실제로 일어난 수. <b>0 도 값이다</b>.*/
     public void recordCompensation() {
         Counter.builder("stove.payment.compensated")
                 .description("license 지급 실패로 되돌린 결제 수 — 0 이 계속되면 보상 경로를 다시 본다")

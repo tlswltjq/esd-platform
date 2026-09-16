@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * 스케줄 배치의 분산 락. <b>이것만으로는 부족하다</b> —
- * 트랜잭션 안의 비보상 외부 호출은 단일 인스턴스에서도 사고가 된다. docs/code-notes.md
+ * 트랜잭션 안의 비보상 외부 호출은 단일 인스턴스에서도 사고가 된다.
  */
 @Configuration
 @EnableSchedulerLock(defaultLockAtMostFor = "PT30M")

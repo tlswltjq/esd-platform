@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 결제를 시작조차 하지 않은 주문을 닫는다. <b>주기 × 배치 크기가 곧 처리량</b>이라
- * 1분은 급해서 정한 값이 아니다. docs/code-notes.md
+ * 1분은 급해서 정한 값이 아니다.
  */
 @Slf4j
 @Component

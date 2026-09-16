@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 /**
  * 전체 재색인 오케스트레이션. 조율이 별도 클래스인 이유는 <b>트랜잭션 경계</b>와 <b>스로틀</b>
  * 둘이다. <b>트랜잭션을 열지 않는다</b> — 스로틀 대기가 들어오면 커넥션을 쥔 채 잠든다.
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Service
@@ -25,7 +25,7 @@ public class ProductReindexFacade {
 
     /**
      * 중복 기동 가드. <b>인스턴스 안에서만 유효하다</b> — 여러 대면 분산 락이 필요하다.
-     * docs/code-notes.md
+     *
      */
     private final AtomicBoolean running = new AtomicBoolean(false);
 
