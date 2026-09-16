@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "stove.storage")
 public record ObjectStorageProperties(
         String endpoint,
+        String presignEndpoint,
         String region,
         String accessKey,
         String secretKey,

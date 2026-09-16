@@ -48,6 +48,15 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String ratingCode;
 
+    @Field(type = FieldType.Long)
+    private Long releaseId;
+
+    @Field(type = FieldType.Long)
+    private Long buildId;
+
+    @Field(type = FieldType.Long)
+    private Long metadataRevision;
+
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
     private Instant indexedAt;
 
@@ -61,6 +70,9 @@ public class ProductDocument {
                 .currency(event.currency())
                 .status(event.status())
                 .ratingCode(event.ratingCode())
+                .releaseId(event.releaseId())
+                .buildId(event.buildId())
+                .metadataRevision(event.metadataRevision())
                 .indexedAt(Instant.now())
                 .build();
     }

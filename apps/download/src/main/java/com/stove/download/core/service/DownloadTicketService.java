@@ -32,7 +32,11 @@ public class DownloadTicketService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "보유하지 않은 상품입니다: " + productCode);
         }
 
-        PatchManifest latest = manifestService.latest(productCode);
+        if (ref.getReleaseId() == null) {
+            throw new BusinessException(ErrorCode.UPSTREAM_UNAVAILABLE,
+                    "릴리스 투영 동기화 중입니다. productCode=" + productCode);
+        }
+        PatchManifest latest = manifestService.requireRelease(productCode, ref.getReleaseId());
         SignedUrl signed = downloadUrlSigner.sign(latest.getStoragePath(), memberId);
         return DownloadTicket.of(latest, signed);
     }

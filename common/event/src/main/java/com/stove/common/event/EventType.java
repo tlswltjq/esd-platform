@@ -6,13 +6,24 @@ package com.stove.common.event;
  */
 public final class EventType {
 
+    // auth
+    public static final String USER_REGISTERED = "UserRegistered";
+
     // studio
     public static final String GAME_REGISTERED = "GameRegistered";
     public static final String BUILD_UPLOADED = "BuildUploaded";
+    public static final String BUILD_VALIDATED = "BuildValidated";
+    public static final String BUILD_VALIDATION_FAILED = "BuildValidationFailed";
+    public static final String SUBMISSION_CREATED = "SubmissionCreated";
+    public static final String RELEASE_SCHEDULED = "ReleaseScheduled";
+    public static final String RELEASE_PUBLISHED = "ReleasePublished";
+    public static final String RELEASE_ROLLED_BACK = "ReleaseRolledBack";
 
     // review
     public static final String REVIEW_APPROVED = "ReviewApproved";
     public static final String REVIEW_REJECTED = "ReviewRejected";
+    public static final String SUBMISSION_REVIEW_APPROVED = "SubmissionReviewApproved";
+    public static final String REVIEW_CHANGES_REQUESTED = "ReviewChangesRequested";
 
     // catalog
     public static final String PRODUCT_CHANGED = "ProductChanged";

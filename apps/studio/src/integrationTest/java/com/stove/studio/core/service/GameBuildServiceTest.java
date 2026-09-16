@@ -15,6 +15,7 @@ import com.stove.studio.core.domain.NewBuild;
 import com.stove.studio.core.domain.NewProject;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,8 +36,8 @@ import org.springframework.context.annotation.Import;
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class GameBuildServiceTest {
 
-    private static final Long SELLER = 1001L;
-    private static final Long OTHER_SELLER = 2002L;
+    private Long seller;
+    private Long otherSeller;
 
     @Autowired
     GameBuildService gameBuildService;
@@ -44,6 +45,14 @@ class GameBuildServiceTest {
     GameProjectService gameProjectService;
     @Autowired
     OutboxEventRepository outboxEventRepository;
+    @Autowired
+    WorkspaceService workspaceService;
+
+    @BeforeEach
+    void setUpWorkspaces() {
+        seller = workspaceService.getOrCreatePersonal("studio-build-test-owner").getId();
+        otherSeller = workspaceService.getOrCreatePersonal("studio-build-test-other").getId();
+    }
 
     private static String uniqueProductCode() {
         return "GAME-" + UUID.randomUUID();
@@ -51,7 +60,7 @@ class GameBuildServiceTest {
 
     private GameProject project(String productCode) {
         return gameProjectService.create(
-                new NewProject(productCode, "로스트아크", SELLER, 39_000L, "KRW", false));
+                new NewProject(productCode, "로스트아크", seller, 39_000L, "KRW", false));
     }
 
     private List<OutboxEvent> outboxFor(String productCode) {
@@ -66,7 +75,7 @@ class GameBuildServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        GameBuild build = gameBuildService.upload(created.getId(), SELLER,
+        GameBuild build = gameBuildService.upload(created.getId(), seller,
                 new NewBuild("1.0.0", 1_024L, "sha256:abc"));
 
         // download 가 이 경로로 매니페스트를 만든다. 레코드와 이벤트가 어긋나면
@@ -86,9 +95,9 @@ class GameBuildServiceTest {
     void duplicateVersionIsRejected() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameBuildService.upload(created.getId(), SELLER, new NewBuild("1.0.0", 1_024L, "sha256:abc"));
+        gameBuildService.upload(created.getId(), seller, new NewBuild("1.0.0", 1_024L, "sha256:abc"));
 
-        assertThatThrownBy(() -> gameBuildService.upload(created.getId(), SELLER,
+        assertThatThrownBy(() -> gameBuildService.upload(created.getId(), seller,
                 new NewBuild("1.0.0", 2_048L, "sha256:def")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
@@ -103,13 +112,13 @@ class GameBuildServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        assertThatThrownBy(() -> gameBuildService.upload(created.getId(), OTHER_SELLER,
+        assertThatThrownBy(() -> gameBuildService.upload(created.getId(), otherSeller,
                 new NewBuild("1.0.0", 1_024L, "sha256:abc")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.FORBIDDEN);
 
-        assertThat(gameBuildService.findByGame(created.getId())).isEmpty();
+        assertThat(gameBuildService.findByGame(created.getId(), seller)).isEmpty();
         assertThat(outboxFor(productCode)).isEmpty();
     }
 }

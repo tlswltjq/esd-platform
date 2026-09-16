@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.common.event.payload.BuildUploadedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
 import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 /**
  * download 는 세 방향의 이벤트를 받는다.
  * <ul>
- *   <li>studio.BuildUploaded → 패치 매니페스트</li>
+ *   <li>studio.ReleasePublished → 패치 매니페스트</li>
  *   <li>catalog.ProductChanged → productCode ↔ productId 참조</li>
  *   <li>license.LicenseIssued/Revoked → 다운로드 권한</li>
  * </ul>
@@ -44,8 +44,8 @@ public class DownloadEventListener {
     @KafkaListener(topics = Topics.STUDIO, groupId = GROUP)
     public void onStudioEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.BUILD_UPLOADED)) {
-            manifestService.register(envelope.payloadAs(objectMapper, BuildUploadedEvent.class));
+        if (envelope.isType(EventType.RELEASE_PUBLISHED)) {
+            manifestService.register(envelope.payloadAs(objectMapper, ReleasePublishedEvent.class));
         }
     }
 

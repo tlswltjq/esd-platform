@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.core.error.BusinessException;
-import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.domain.Entitlement;
@@ -48,12 +48,15 @@ class DownloadEntitlementTest {
     private final Long productId = SEQ.incrementAndGet();
     private final String productCode = "GAME-" + UUID.randomUUID();
 
-    /** catalog → ProductChanged, studio → BuildUploaded 가 도착한 상태를 만든다. */
+    /** catalog → ProductChanged, studio → ReleasePublished 가 도착한 상태를 만든다. */
     private void productIsPublished() {
-        productRefService.upsert(ProductChangedEvent.of(
-                productId, productCode, "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"));
-        manifestService.register(BuildUploadedEvent.of(
-                1L, productCode, "1.0.0", 1024L, "abc123", "s3://bucket/" + productCode));
+        productRefService.upsert(ProductChangedEvent.ofRelease(
+                productId, productCode, "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL",
+                10L, 20L, 1L));
+        manifestService.register(ReleasePublishedEvent.of(
+                10L, null, 30L, 1L, productCode, 1001L, 20L, 1L, 1L, 1L,
+                "게임 A", "설명", 30_000L, "KRW", "ALL", "1.0.0",
+                1024L, "abc123", "s3://bucket/" + productCode));
     }
 
     private boolean isActive() {

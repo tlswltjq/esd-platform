@@ -1,6 +1,6 @@
 package com.stove.download.core.domain;
 
-import com.stove.common.event.payload.BuildUploadedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,8 +11,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * 버전별 패치 매니페스트. 문서 ID를 {@code productCode:version} 으로 고정해
- * BuildUploaded 이벤트를 몇 번 받아도 같은 문서를 덮어쓰도록(멱등) 만든다.
+ * 공개 릴리스별 패치 매니페스트. 업로드 완료가 아니라 ReleasePublished만 소비한다.
  */
 @Getter
 @Builder
@@ -29,6 +28,12 @@ public class PatchManifest {
 
     private Long gameId;
 
+    private Long releaseId;
+
+    private Long buildId;
+
+    private Long metadataRevision;
+
     private String version;
 
     private long fileSize;
@@ -39,16 +44,19 @@ public class PatchManifest {
 
     private Instant releasedAt;
 
-    public static String documentId(String productCode, String version) {
-        return productCode + ":" + version;
+    public static String documentId(String productCode, Long releaseId) {
+        return productCode + ":release:" + releaseId;
     }
 
-    public static PatchManifest from(BuildUploadedEvent event) {
+    public static PatchManifest from(ReleasePublishedEvent event) {
         return PatchManifest.builder()
-                .id(documentId(event.productCode(), event.version()))
+                .id(documentId(event.productCode(), event.releaseId()))
                 .productCode(event.productCode())
                 .gameId(event.gameId())
-                .version(event.version())
+                .releaseId(event.releaseId())
+                .buildId(event.buildId())
+                .metadataRevision(event.metadataRevision())
+                .version(event.productVersion())
                 .fileSize(event.fileSize())
                 .checksum(event.checksum())
                 .storagePath(event.storagePath())

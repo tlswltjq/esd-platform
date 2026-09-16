@@ -15,7 +15,10 @@ public record StoreProductView(
         Long sellerId,
         Long price,
         String currency,
-        String ratingCode
+        String ratingCode,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision
 ) implements Serializable {
 
     public static StoreProductView from(ProductDocument document) {
@@ -26,6 +29,9 @@ public record StoreProductView(
                 document.getSellerId(),
                 document.getPrice(),
                 document.getCurrency(),
-                document.getRatingCode());
+                document.getRatingCode(),
+                document.getReleaseId(),
+                document.getBuildId(),
+                document.getMetadataRevision());
     }
 }

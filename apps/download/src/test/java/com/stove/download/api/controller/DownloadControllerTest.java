@@ -30,7 +30,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class DownloadControllerTest {
 
     private static final DownloadTicket TICKET = new DownloadTicket(
-            "GAME-001", "1.0.0", 1_073_741_824L, "a1b2c3",
+            "GAME-001", 10L, 20L, "1.0.0", 1_073_741_824L, "a1b2c3",
             "https://cdn.stove.test/games/1/1.0.0.pak", Instant.parse("2026-01-01T00:00:00Z"));
 
     private final DownloadTicketService downloadTicketService = mock(DownloadTicketService.class);

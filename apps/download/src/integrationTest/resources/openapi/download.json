@@ -99,6 +99,10 @@
       },
       "DownloadTicketResponse" : {
         "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "checksum" : {
             "type" : "string"
           },
@@ -115,6 +119,10 @@
           },
           "productCode" : {
             "type" : "string"
+          },
+          "releaseId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "version" : {
             "type" : "string"
@@ -135,6 +143,10 @@
       },
       "ManifestResponse" : {
         "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "checksum" : {
             "type" : "string"
           },
@@ -142,8 +154,16 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "metadataRevision" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "productCode" : {
             "type" : "string"
+          },
+          "releaseId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "releasedAt" : {
             "format" : "date-time",

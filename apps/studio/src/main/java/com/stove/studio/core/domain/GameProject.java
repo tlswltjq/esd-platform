@@ -36,8 +36,8 @@ public class GameProject extends BaseTimeEntity {
     @Column(nullable = false, length = 200)
     private String title;
 
-    /** 스튜디오 판매자 ID (자체 게임은 1, 입점사는 1001~) */
-    @Column(nullable = false)
+    /** 개인 워크스페이스 ID. 하위 commerce 이벤트에서는 서버가 정한 sellerId 로 투영한다. */
+    @Column(name = "workspace_id", nullable = false)
     private Long sellerId;
 
     @Column(nullable = false)

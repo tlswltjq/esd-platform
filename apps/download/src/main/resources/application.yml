@@ -42,6 +42,7 @@ stove:
 
   storage:
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:${STORAGE_ENDPOINT:http://localhost:9000}}
     access-key: ${STORAGE_ACCESS_KEY:stove}
     secret-key: ${STORAGE_SECRET_KEY:stove1234}
     presign-ttl: 10m

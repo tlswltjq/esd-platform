@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.stove.common.event.payload.BuildUploadedEvent;
+import com.stove.common.event.payload.BuildValidatedEvent;
+import com.stove.common.event.payload.BuildValidationFailedEvent;
 import com.stove.common.event.payload.GameRegisteredEvent;
 import com.stove.common.event.payload.LicenseIssueFailedEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
@@ -17,8 +19,16 @@ import com.stove.common.event.payload.PaymentCancelledEvent;
 import com.stove.common.event.payload.PaymentCompletedEvent;
 import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
+import com.stove.common.event.payload.ReleaseRolledBackEvent;
+import com.stove.common.event.payload.ReleaseScheduledEvent;
+import com.stove.common.event.payload.ReviewChangesRequestedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
+import com.stove.common.event.payload.SubmissionCreatedEvent;
+import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.event.payload.UserRegisteredEvent;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -65,10 +75,28 @@ class EventContractTest {
 
     private static Stream<DomainEvent> events() {
         return Stream.of(
+                UserRegisteredEvent.of("usr_001", "creator@example.com"),
                 GameRegisteredEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false),
                 BuildUploadedEvent.of(1L, "GAME-001", "1.0.0", 1024L, "abc123", "s3://bucket/key"),
+                BuildValidatedEvent.of(2L, 1L, "GAME-001", "abc123", "WINDOWS",
+                        "1.0.0", "100", "deadbeef"),
+                BuildValidationFailedEvent.of(3L, 1L, "GAME-001", "MALWARE_DETECTED"),
+                SubmissionCreatedEvent.of(10L, 1L, "GAME-001", 1001L,
+                        1L, 1L, 1L, 2L, "게임 A", "설명", 30_000L, "KRW",
+                        "SELF_CLASSIFICATION", "KR-SELF-2026-01", "1.0.0"),
                 ReviewApprovedEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ALL", false),
                 ReviewRejectedEvent.of(1L, "GAME-001", "VIOLENCE", "선정성 기준 초과"),
+                SubmissionReviewApprovedEvent.of(20L, 10L, 2L, 1L, 1L, 1L,
+                        "RATING", "GAME-001", "ALL", "CERT-1", "ESD",
+                        Instant.parse("2026-01-01T00:00:00Z"), "KR"),
+                ReviewChangesRequestedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001",
+                        "METADATA", "설명을 수정해 주세요."),
+                ReleaseScheduledEvent.of(30L, 10L, "GAME-001",
+                        Instant.parse("2026-01-02T00:00:00Z")),
+                ReleasePublishedEvent.of(30L, null, 10L, 1L, "GAME-001", 1001L,
+                        2L, 1L, 1L, 1L, "게임 A", "설명", 30_000L, "KRW", "ALL",
+                        "1.0.0", 1024L, "abc123", "s3://bucket/key"),
+                ReleaseRolledBackEvent.of(31L, 30L, 2L, "GAME-001"),
                 ProductChangedEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"),
                 OrderCreatedEvent.of("ORD-1", 42L, 60_000L, lines()),
                 OrderCanceledEvent.of("ORD-1", 42L, "USER_CANCEL"),
@@ -119,7 +147,7 @@ class EventContractTest {
     @DisplayName("토픽은 Topics 상수 중 하나다 — 오타 토픽으로 발행하면 아무도 못 받는다")
     void topicIsDeclaredConstant(DomainEvent event) {
         assertThat(event.topic()).isIn(
-                Topics.STUDIO, Topics.REVIEW, Topics.CATALOG,
+                Topics.AUTH, Topics.STUDIO, Topics.REVIEW, Topics.CATALOG,
                 Topics.ORDER, Topics.PAYMENT, Topics.LICENSE);
     }
 

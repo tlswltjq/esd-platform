@@ -28,6 +28,7 @@ include 'e2e'
 
 // ── 마이크로서비스 9종 + 게이트웨이 ─────────────────────────────────
 include 'apps:gateway'
+include 'apps:auth'
 
 // 트랙 A. 크리에이터 (입점~노출)
 include 'apps:studio'

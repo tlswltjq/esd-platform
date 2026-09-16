@@ -11,6 +11,7 @@ import com.stove.catalog.core.domain.ReindexPage;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.EventType;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEvent;
@@ -18,6 +19,7 @@ import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,8 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
 class ProductCommandServiceTest {
+
+    private static final AtomicLong RELEASE_IDS = new AtomicLong(1_000L);
 
     @Autowired
     ProductCommandService productCommandService;
@@ -61,6 +65,16 @@ class ProductCommandServiceTest {
     private void receive(ReviewApprovedEvent event) {
         productCommandService.upsertFromReview(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, event);
+    }
+
+    private void publishRelease(String productCode) {
+        long releaseId = RELEASE_IDS.incrementAndGet();
+        productCommandService.upsertFromRelease(UUID.randomUUID().toString(),
+                EventType.RELEASE_PUBLISHED, ReleasePublishedEvent.of(
+                        releaseId, null, releaseId, 1L, productCode, 1001L,
+                        releaseId, 1L, 1L, 1L, "로스트아크", "테스트 릴리스",
+                        39_000L, "KRW", "ALL", "1.0.0", 1_024L,
+                        "sha256:test", "s3://stove-builds/" + productCode + "/game.zip"));
     }
 
     private Product find(String productCode) {
@@ -123,8 +137,7 @@ class ProductCommandServiceTest {
     void reReviewDoesNotResetLiveProduct() {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
-        Long productId = find(productCode).getId();
-        productCommandService.openSale(productId);
+        publishRelease(productCode);
 
         receive(approval(productCode, "ADULT"));
 
@@ -157,6 +170,8 @@ class ProductCommandServiceTest {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
         Long productId = find(productCode).getId();
+        publishRelease(productCode);
+        productCommandService.suspend(productId);
 
         productCommandService.openSale(productId);
 
@@ -164,8 +179,8 @@ class ProductCommandServiceTest {
         List<OutboxEvent> published = outboxFor(productCode);
         // 이벤트가 상태 변경 뒤에 적재되어야 ON_SALE 이 실린다. 순서가 뒤바뀌면
         // store 는 APPROVED 를 받아 상품을 계속 숨긴다.
-        assertThat(published).hasSize(2);
-        assertThat(published.get(1).getPayload()).contains("ON_SALE");
+        assertThat(published).hasSize(4);
+        assertThat(published.get(3).getPayload()).contains("ON_SALE");
     }
 
     @Test
@@ -174,7 +189,7 @@ class ProductCommandServiceTest {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
         Long productId = find(productCode).getId();
-        productCommandService.openSale(productId);
+        publishRelease(productCode);
 
         productCommandService.suspend(productId);
         assertThat(find(productCode).getStatus()).isEqualTo(ProductStatus.SUSPENDED);
@@ -198,10 +213,12 @@ class ProductCommandServiceTest {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
         Long productId = find(productCode).getId();
+        publishRelease(productCode);
+        productCommandService.suspend(productId);
 
         // 캐시를 채운다
         ProductView cached = productQueryService.getProduct(productId);
-        assertThat(cached.status()).isEqualTo(ProductStatus.APPROVED);
+        assertThat(cached.status()).isEqualTo(ProductStatus.SUSPENDED);
 
         productCommandService.openSale(productId);
 
@@ -217,7 +234,7 @@ class ProductCommandServiceTest {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
         Long productId = find(productCode).getId();
-        productCommandService.openSale(productId);
+        publishRelease(productCode);
 
         productCommandService.suspend(productId);
 

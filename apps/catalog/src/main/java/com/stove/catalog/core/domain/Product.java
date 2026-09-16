@@ -35,6 +35,13 @@ public class Product extends BaseTimeEntity {
     /** studio 의 게임 프로젝트 ID. 크리에이터 트랙과의 연결 고리. */
     private Long gameId;
 
+    /** Store와 Download가 함께 바라보는 현재 공개 릴리스 스냅샷. */
+    private Long currentReleaseId;
+
+    private Long currentBuildId;
+
+    private Long metadataRevision;
+
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -79,6 +86,30 @@ public class Product extends BaseTimeEntity {
         return product;
     }
 
+    public static Product fromRelease(Long gameId, String productCode, String name, Long sellerId,
+                                      long price, String currency, String ratingCode,
+                                      Long releaseId, Long buildId, Long metadataRevision) {
+        Product product = new Product(productCode, name, sellerId, price, currency);
+        product.applyRelease(gameId, name, sellerId, price, currency, ratingCode,
+                releaseId, buildId, metadataRevision);
+        return product;
+    }
+
+    /** 공개된 불변 릴리스 스냅샷만 상품 마스터에 원자적으로 반영한다. */
+    public void applyRelease(Long gameId, String name, Long sellerId, long price, String currency,
+                             String ratingCode, Long releaseId, Long buildId, Long metadataRevision) {
+        this.gameId = gameId;
+        this.name = name;
+        this.sellerId = sellerId;
+        this.price = price;
+        this.currency = currency;
+        this.ratingCode = ratingCode;
+        this.currentReleaseId = releaseId;
+        this.currentBuildId = buildId;
+        this.metadataRevision = metadataRevision;
+        this.status = ProductStatus.ON_SALE;
+    }
+
     /** review 승인 이벤트 수신 시 호출. 심의 결과를 반영하고 판매 가능 상태로 올린다. */
     public void applyReviewApproval(String ratingCode) {
         this.ratingCode = ratingCode;
@@ -88,6 +119,9 @@ public class Product extends BaseTimeEntity {
     }
 
     public void openSale() {
+        if (currentReleaseId == null) {
+            throw new BusinessException(ErrorCode.CONFLICT, "공개된 릴리스가 없는 상품은 판매할 수 없습니다.");
+        }
         if (this.status != ProductStatus.APPROVED && this.status != ProductStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.CONFLICT, "심의 승인 상태에서만 판매를 시작할 수 있습니다.");
         }

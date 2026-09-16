@@ -26,19 +26,20 @@ set -uo pipefail
 NET=stove_default
 RUNNER=(docker run --rm --network "$NET" curlimages/curl:latest -s)
 
-APPS=(gateway:8080 catalog:8081 order:8082 payment:8083 license:8084
+APPS=(gateway:8080 auth:8091 catalog:8081 order:8082 payment:8083 license:8084
       studio:8085 review:8086 store:8087 download:8088 settlement:8089)
 
-# 인프라 10종. 이름이 고정이라 대조할 수 있다(docker-compose.yml 의 container_name).
+# 인프라 12종. 이름이 고정이라 대조할 수 있다(docker-compose.yml 의 container_name).
 INFRA=(stove-mysql stove-redis stove-kafka stove-kafka-ui stove-elasticsearch
-       stove-minio stove-mongodb stove-prometheus stove-tempo stove-grafana)
+       stove-minio stove-mongodb stove-prometheus stove-tempo stove-grafana
+       stove-kafka-exporter stove-clamav)
 
 # 이 스크립트가 온전히 돌았을 때 내려야 하는 판정의 수.
 #
 # smoke-stack.sh 에서 가져온 장치다(decisions.md 18번 옆 흐름). 판정 지점을 늘렸으면 이 값도
 # 같이 올린다 — 손으로 유지하는 브리틀함이 목적이다. **늘어나는 것은 정상이고 모르게 줄어드는 것이 사고다.**
 # 게이트에서는 한 걸음 더 간다: 판정이 모자라면 통과시키지 않는다. 세지 못한 게이트는 게이트가 아니다.
-EXPECTED_CHECKS=14
+EXPECTED_CHECKS=15
 
 pass=0; fail=0
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
@@ -79,7 +80,7 @@ done
 #   kafka                                 2장이 직접 찌른다 (부트에 대응 지표가 없다)
 #   kafka-ui · prometheus · tempo · grafana   5장의 컨테이너 집합 대조만이 본다
 echo
-echo "=== 1. 앱 10종 액추에이터 ==="
+echo "=== 1. 앱 11종 액추에이터 ==="
 for svc in "${APPS[@]}"; do
     name=${svc%%:*}
     st=$(status "http://$svc/actuator/health")
@@ -138,11 +139,11 @@ done
 unhealthy=$(docker ps --filter health=unhealthy --format '{{.Names}}' | tr '\n' ' ')
 
 if [ ${#missing[@]} -gt 0 ]; then
-    bad "컨테이너 20종" "실행되지 않음: ${missing[*]}"
+    bad "컨테이너 23종" "실행되지 않음: ${missing[*]}"
 elif [ -n "$unhealthy" ]; then
-    bad "컨테이너 20종" "unhealthy: $unhealthy"
+    bad "컨테이너 23종" "unhealthy: $unhealthy"
 else
-    ok "컨테이너 20종 전부 실행 · unhealthy 없음"
+    ok "컨테이너 23종 전부 실행 · unhealthy 없음"
 fi
 
 echo

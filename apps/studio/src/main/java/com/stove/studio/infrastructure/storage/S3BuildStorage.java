@@ -1,9 +1,16 @@
 package com.stove.studio.infrastructure.storage;
 
+import com.stove.studio.core.domain.MultipartUploadTicket;
+import com.stove.studio.core.domain.StoredObjectInfo;
+import com.stove.studio.core.domain.UploadPartUrl;
 import com.stove.studio.core.domain.UploadTicket;
+import com.stove.studio.core.domain.UploadedPart;
 import com.stove.studio.core.port.BuildStorage;
 import jakarta.annotation.PostConstruct;
 import java.net.URI;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.IntStream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -12,11 +19,22 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.UploadPartRequest;
+import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 /**
  * {@link BuildStorage} 의 S3 호환 어댑터(로컬 MinIO / 운영 S3).
@@ -29,6 +47,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @Component
 @ConditionalOnProperty(name = "stove.storage.provider", havingValue = "s3")
 public class S3BuildStorage implements BuildStorage {
+
+    private static final long PART_SIZE = 64L * 1024L * 1024L;
 
     private final ObjectStorageProperties properties;
     private final S3Client s3;
@@ -54,7 +74,10 @@ public class S3BuildStorage implements BuildStorage {
         if (properties.pathStyleRequired()) {
             URI endpoint = URI.create(properties.endpoint());
             clientBuilder.endpointOverride(endpoint);
-            presignerBuilder.endpointOverride(endpoint);
+            String publicEndpoint = properties.presignEndpoint() == null
+                    || properties.presignEndpoint().isBlank()
+                    ? properties.endpoint() : properties.presignEndpoint();
+            presignerBuilder.endpointOverride(URI.create(publicEndpoint));
         }
         this.s3 = clientBuilder.build();
         this.presigner = presignerBuilder.build();
@@ -89,5 +112,111 @@ public class S3BuildStorage implements BuildStorage {
 
         log.info("빌드 업로드 경로 발급 {} (ttl={})", storagePath, properties.presignTtl());
         return new UploadTicket(storagePath, uploadUrl);
+    }
+
+    @Override
+    public MultipartUploadTicket beginMultipart(String productCode, String artifactKey,
+                                                String fileName, long fileSize) {
+        String safeName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String key = "%s/artifacts/%s/%s".formatted(productCode, artifactKey, safeName);
+        CreateMultipartUploadRequest.Builder create = CreateMultipartUploadRequest.builder()
+                .bucket(properties.bucket())
+                .key(key);
+        if (properties.encryptionEnabled()) {
+            create.serverSideEncryption(ServerSideEncryption.AES256);
+        }
+        String uploadId = s3.createMultipartUpload(create.build())
+                .uploadId();
+        int partCount = Math.toIntExact(Math.max(1, (fileSize + PART_SIZE - 1) / PART_SIZE));
+        if (partCount > 10_000) {
+            throw new IllegalArgumentException("multipart part limit exceeded");
+        }
+        List<UploadPartUrl> parts = presignParts(storagePath(key), uploadId, partCount);
+        return new MultipartUploadTicket(storagePath(key), uploadId, PART_SIZE, parts);
+    }
+
+    @Override
+    public List<UploadPartUrl> presignParts(String storagePath, String storageUploadId, int partCount) {
+        String key = key(storagePath);
+        return IntStream.rangeClosed(1, partCount)
+                .mapToObj(partNumber -> new UploadPartUrl(partNumber,
+                        presignPart(key, storageUploadId, partNumber)))
+                .toList();
+    }
+
+    @Override
+    public void completeMultipart(String storagePath, String storageUploadId, List<UploadedPart> parts) {
+        List<CompletedPart> completed = parts.stream()
+                .map(part -> CompletedPart.builder()
+                        .partNumber(part.partNumber())
+                        .eTag(part.etag())
+                        .build())
+                .toList();
+        s3.completeMultipartUpload(CompleteMultipartUploadRequest.builder()
+                .bucket(properties.bucket())
+                .key(key(storagePath))
+                .uploadId(storageUploadId)
+                .multipartUpload(CompletedMultipartUpload.builder().parts(completed).build())
+                .build());
+    }
+
+    @Override
+    public StoredObjectInfo head(String storagePath) {
+        var response = s3.headObject(HeadObjectRequest.builder()
+                .bucket(properties.bucket())
+                .key(key(storagePath))
+                .build());
+        return new StoredObjectInfo(response.contentLength(), response.eTag());
+    }
+
+    @Override
+    public void downloadTo(String storagePath, Path destination) {
+        s3.getObject(GetObjectRequest.builder()
+                .bucket(properties.bucket())
+                .key(key(storagePath))
+                .build(), destination);
+    }
+
+    @Override
+    public void abortMultipart(String storagePath, String storageUploadId) {
+        s3.abortMultipartUpload(AbortMultipartUploadRequest.builder()
+                .bucket(properties.bucket())
+                .key(key(storagePath))
+                .uploadId(storageUploadId)
+                .build());
+    }
+
+    @Override
+    public void delete(String storagePath) {
+        s3.deleteObject(DeleteObjectRequest.builder()
+                .bucket(properties.bucket())
+                .key(key(storagePath))
+                .build());
+    }
+
+    private String presignPart(String key, String uploadId, int partNumber) {
+        UploadPartRequest request = UploadPartRequest.builder()
+                .bucket(properties.bucket())
+                .key(key)
+                .uploadId(uploadId)
+                .partNumber(partNumber)
+                .build();
+        return presigner.presignUploadPart(UploadPartPresignRequest.builder()
+                        .signatureDuration(properties.presignTtl())
+                        .uploadPartRequest(request)
+                        .build())
+                .url().toString();
+    }
+
+    private String storagePath(String key) {
+        return "s3://%s/%s".formatted(properties.bucket(), key);
+    }
+
+    private String key(String storagePath) {
+        String prefix = "s3://" + properties.bucket() + "/";
+        if (!storagePath.startsWith(prefix)) {
+            throw new IllegalArgumentException("unexpected storage path");
+        }
+        return storagePath.substring(prefix.length());
     }
 }

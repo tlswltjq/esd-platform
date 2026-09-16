@@ -33,6 +33,8 @@ name: stove-apps
 services:
   gateway:
     ports: ["127.0.0.1:18080:8080"]
+  auth:
+    ports: ["127.0.0.1:18091:8091"]
   catalog:
     ports: ["127.0.0.1:18081:8081"]
   order:
@@ -43,11 +45,15 @@ services:
     ports: ["127.0.0.1:18084:8084"]
   studio:
     ports: ["127.0.0.1:18085:8085"]
+    environment:
+      STORAGE_PRESIGN_ENDPOINT: http://127.0.0.1:19000
   review:
     ports: ["127.0.0.1:18086:8086"]
   store:
     ports: ["127.0.0.1:18087:8087"]
   download:
     ports: ["127.0.0.1:18088:8088"]
+    environment:
+      STORAGE_PRESIGN_ENDPOINT: http://127.0.0.1:19000
   settlement:
     ports: ["127.0.0.1:18089:8089"]

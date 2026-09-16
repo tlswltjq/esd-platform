@@ -14,6 +14,7 @@ import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.studio.core.service.GameProjectService;
+import com.stove.studio.core.service.SubmissionReviewProjectionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -27,8 +28,11 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class ReviewEventListenerTest {
 
     private final GameProjectService gameProjectService = mock(GameProjectService.class);
+    private final SubmissionReviewProjectionService submissionReviewProjectionService =
+            mock(SubmissionReviewProjectionService.class);
     private final ReviewEventListener listener =
-            new ReviewEventListener(gameProjectService, EventRecords.OBJECT_MAPPER);
+            new ReviewEventListener(gameProjectService, submissionReviewProjectionService,
+                    EventRecords.OBJECT_MAPPER);
 
     private static final ReviewApprovedEvent APPROVED = ReviewApprovedEvent.of(
             1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ALL", false);
@@ -58,7 +62,7 @@ class ReviewEventListenerTest {
     void unrelatedEventTypeIsIgnored() {
         listener.onReviewEvent(EventRecords.ofUnrelatedType(Topics.REVIEW));
 
-        verifyNoInteractions(gameProjectService);
+        verifyNoInteractions(gameProjectService, submissionReviewProjectionService);
     }
 
     @Test

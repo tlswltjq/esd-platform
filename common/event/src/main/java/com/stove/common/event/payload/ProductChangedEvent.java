@@ -20,13 +20,26 @@ public record ProductChangedEvent(
         long price,
         String currency,
         String status,
-        String ratingCode
+        String ratingCode,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision
 ) implements DomainEvent {
 
     public static ProductChangedEvent of(Long productId, String productCode, String name, Long sellerId,
                                          long price, String currency, String status, String ratingCode) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
-                productId, productCode, name, sellerId, price, currency, status, ratingCode);
+                productId, productCode, name, sellerId, price, currency, status, ratingCode,
+                null, null, null);
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision) {
+        return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
+                productId, productCode, name, sellerId, price, currency, status, ratingCode,
+                releaseId, buildId, metadataRevision);
     }
 
     @Override

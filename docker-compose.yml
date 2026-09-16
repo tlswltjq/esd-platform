@@ -1,6 +1,12 @@
 name: stove
 
 services:
+  clamav:
+    image: clamav/clamav:stable
+    container_name: stove-clamav
+    expose:
+      - "3310"
+
   mysql:
     image: mysql:8.0
     container_name: stove-mysql
@@ -120,7 +126,7 @@ services:
 
   # 빌드 바이너리 저장소 (S3 호환). 운영의 S3 자리를 로컬에서 대신한다.
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: stove-minio
     ports:
       - "9000:9000"     # S3 API

@@ -68,6 +68,8 @@ final class Journey {
     private static String failPgTxId;
     private static String paymentTraceId;
     private static Instant paidAt;
+    private static String creatorToken;
+    private static String reviewerToken;
 
     private Journey() {
     }
@@ -140,7 +142,25 @@ final class Journey {
     }
 
     static Map<String, String> asSeller() {
-        return Map.of("X-Seller-Id", String.valueOf(SELLER));
+        return asCreator();
+    }
+
+    static void creatorToken(String token) {
+        creatorToken = token;
+    }
+
+    static void reviewerToken(String token) {
+        reviewerToken = token;
+    }
+
+    static Map<String, String> asCreator() {
+        return Map.of("Authorization", "Bearer " + require(
+                creatorToken, "creator access token", "트랙 A OIDC 로그인"));
+    }
+
+    static Map<String, String> asReviewer() {
+        return Map.of("Authorization", "Bearer " + require(
+                reviewerToken, "reviewer access token", "트랙 A 운영자 OIDC 로그인"));
     }
 
     /**

@@ -6,6 +6,13 @@ spring:
   application:
     name: review
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
+
   # 진행 중인 요청을 기다리는 상한. compose 의 stop_grace_period(40s)보다 짧아야 한다 —
   # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035). 부등호는 테스트가 지킨다.
   lifecycle:
@@ -51,7 +58,8 @@ spring:
 stove:
   review:
     # 자체등급분류 건은 접수 즉시 자동 승인(로컬 데모용). 운영에서는 false + 담당자 승인 API.
-    auto-approve-self-rated: true
+    # 등급 경로는 rating questionnaire + policy version으로 결정하며 ALL 자동 승인은 금지한다.
+    auto-approve-self-rated: false
     default-self-rating-code: ALL
   outbox:
     relay-enabled: true

@@ -6,6 +6,7 @@ import com.stove.catalog.core.domain.ReindexPage;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
@@ -35,6 +36,7 @@ public class ProductCommandService {
     private final ProductRepository productRepository;
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
+    private final AuditLogService auditLogService;
 
     /**
      * [승인] review → ReviewApproved → catalog. 멱등한 upsert 다.
@@ -59,18 +61,54 @@ public class ProductCommandService {
                 product.getProductCode(), event.ratingCode(), product.getStatus());
     }
 
+    public void upsertFromRelease(String eventId, String eventType, ReleasePublishedEvent event) {
+        if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
+            return;
+        }
+
+        Product product = productRepository.findByProductCode(event.productCode())
+                .map(existing -> {
+                    existing.applyRelease(event.gameId(), event.title(), event.sellerId(),
+                            event.price(), event.currency(), event.ratingCode(), event.releaseId(),
+                            event.buildId(), event.metadataRevision());
+                    return existing;
+                })
+                .orElseGet(() -> productRepository.save(Product.fromRelease(
+                        event.gameId(), event.productCode(), event.title(), event.sellerId(),
+                        event.price(), event.currency(), event.ratingCode(), event.releaseId(),
+                        event.buildId(), event.metadataRevision())));
+
+        publishChanged(product);
+        log.info("릴리스 공개 반영 productCode={} releaseId={} buildId={}",
+                event.productCode(), event.releaseId(), event.buildId());
+    }
+
     @CacheEvict(cacheNames = "catalog:product", key = "#productId")
     public void openSale(Long productId) {
+        openSale(productId, "system:legacy");
+    }
+
+    @CacheEvict(cacheNames = "catalog:product", key = "#productId")
+    public void openSale(Long productId, String actor) {
         Product product = findProduct(productId);
         product.openSale();
         publishChanged(product);
+        auditLogService.record(actor, "EMERGENCY_SALE_OPEN", productId,
+                "releaseId=" + product.getCurrentReleaseId());
     }
 
     @CacheEvict(cacheNames = "catalog:product", key = "#productId")
     public void suspend(Long productId) {
+        suspend(productId, "system:legacy");
+    }
+
+    @CacheEvict(cacheNames = "catalog:product", key = "#productId")
+    public void suspend(Long productId, String actor) {
         Product product = findProduct(productId);
         product.suspend();
         publishChanged(product);
+        auditLogService.record(actor, "EMERGENCY_SUSPEND", productId,
+                "releaseId=" + product.getCurrentReleaseId());
     }
 
     /**
@@ -97,9 +135,10 @@ public class ProductCommandService {
 
     private void publishChanged(Product product) {
         outboxRecorder.record(AGGREGATE, product.getProductCode(),
-                ProductChangedEvent.of(product.getId(), product.getProductCode(), product.getName(),
+                ProductChangedEvent.ofRelease(product.getId(), product.getProductCode(), product.getName(),
                         product.getSellerId(), product.getPrice(), product.getCurrency(),
-                        product.getStatus().name(), product.getRatingCode()));
+                        product.getStatus().name(), product.getRatingCode(), product.getCurrentReleaseId(),
+                        product.getCurrentBuildId(), product.getMetadataRevision()));
     }
 
     private Product findProduct(Long productId) {

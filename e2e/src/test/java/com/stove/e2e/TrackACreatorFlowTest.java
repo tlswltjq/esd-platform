@@ -2,173 +2,282 @@ package com.stove.e2e;
 
 import static com.stove.e2e.Journey.PRICE;
 import static com.stove.e2e.Journey.PRODUCT_CODE;
-import static com.stove.e2e.Journey.SELLER;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.e2e.E2eClient.Response;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
-/**
- * 트랙 A — 등록 → 심의 → 노출.
- *
- * <p>여기서 보는 것은 <b>이벤트 하나가 서비스 넷을 건너는가</b>다.
- * {@code GameRegistered} 가 review 를 깨우고, {@code ReviewApproved} 가 studio 로 되돌아오면서
- * catalog 에 상품 마스터를 만들고, {@code ProductChanged} 가 store 의 검색 색인에 닿는다.
- * 각 서비스 안쪽은 {@code integrationTest} 가 이미 본다 — 이 층은 <b>사이</b>만 본다.
- *
- * <p>이 장이 실패하면 뒤의 세 장이 전부 실패한다. 건너뛰는 것이 아니라 실패다({@link Journey} 참고).
- */
+/** P0 전체 경로: OIDC → CI 업로드 → 검증 → 수정 재제출 → 출시 → rollback. */
 @Order(1)
-@DisplayName("트랙 A — 등록 → 심의 → 노출")
+@DisplayName("트랙 A — 셀프 퍼블리싱 P0")
 class TrackACreatorFlowTest {
+
+    private static final String CREATOR_EMAIL = "creator-" + Journey.STAMP + "@e2e.local";
+    private static final String CREATOR_PASSWORD = "creator-password-" + Journey.STAMP;
+    private static String machineCredential;
+    private static long build1;
+    private static long build2;
+    private static long metadataRevision;
+    private static long pricingRevision;
+    private static long ratingRevision;
+    private static long release1;
 
     @Test
     @Order(1)
-    @DisplayName("studio: 프로젝트를 생성한다")
-    void createsProject() {
-        Response response = Stove.gateway.post("/api/v1/studio/games", Map.of(
+    @DisplayName("OIDC 가입·PKCE 로그인 후 개인 Workspace의 프로젝트를 만든다")
+    void authenticatesAndCreatesProject() {
+        Response signup = Stove.auth.post("/api/v1/auth/signup", Map.of(
+                "email", CREATOR_EMAIL, "password", CREATOR_PASSWORD));
+        assertThat(signup.status()).as("%s", signup).isEqualTo(200);
+
+        Journey.creatorToken(OidcLogin.token(CREATOR_EMAIL, CREATOR_PASSWORD));
+        String reviewerPassword = System.getenv().getOrDefault(
+                "AUTH_REVIEWER_PASSWORD", "reviewer-local-only");
+        Journey.reviewerToken(OidcLogin.token("reviewer@esd.local", reviewerPassword));
+
+        Response created = Stove.gateway.post("/api/v1/studio/games", Map.of(
                 "productCode", PRODUCT_CODE,
                 "title", Journey.PRODUCT_TITLE,
-                "sellerId", SELLER,
                 "price", PRICE,
-                "selfRated", true));
+                "currency", "KRW"), Journey.asCreator());
+        assertThat(created.status()).as("%s", created).isEqualTo(200);
+        Journey.gameId(created.data().path("gameId").asLong());
 
-        assertThat(response.status()).as("%s", response).isEqualTo(200);
-        assertThat(response.data().path("gameId").isNumber()).as("%s", response).isTrue();
-        Journey.gameId(response.data().path("gameId").asLong());
+        Response credential = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/credentials".formatted(Journey.gameId()),
+                Map.of("name", "e2e-ci"), Journey.asCreator());
+        assertThat(credential.status()).as("%s", credential).isEqualTo(200);
+        machineCredential = credential.data().path("token").asText();
+        assertThat(machineCredential).startsWith("esd_ci_");
     }
 
     @Test
     @Order(2)
-    @DisplayName("studio: 심의를 신청하면 GameRegistered 가 나간다")
-    void submitsForReview() {
-        Response response = Stove.gateway.post(
-                "/api/v1/studio/games/%d/submit".formatted(Journey.gameId()), null, Journey.asSeller());
-
-        assertThat(response.status()).as("%s", response).isEqualTo(200);
+    @DisplayName("외부 CI credential로 패키지를 multipart 업로드하고 VALIDATED를 기다린다")
+    void uploadsAndValidatesBuild() throws Exception {
+        build1 = uploadBuild("1.0.0", "100");
     }
 
     @Test
     @Order(3)
-    @DisplayName("review: 자체등급분류를 자동 승인한다 (GameRegistered 관통)")
-    void reviewAutoApproves() {
-        Await.untilResponse("review 자동 승인",
-                () -> Stove.gateway.get("/api/v1/reviews"),
-                r -> "APPROVED".equals(r.itemWhere("productCode", PRODUCT_CODE).path("status").asText()));
+    @DisplayName("불변 revision을 제출하고 변경 요청 뒤 새 revision으로 재제출한다")
+    void requestsChangesAndResubmits() {
+        metadataRevision = revision("store-page-revisions", Map.of(
+                "title", Journey.PRODUCT_TITLE,
+                "shortDescription", "첫 심사용 소개",
+                "platform", "WINDOWS",
+                "minimumRequirements", "Windows 10"));
+        pricingRevision = revision("pricing-revisions", Map.of("price", PRICE));
+        ratingRevision = revision("rating-revisions", Map.of(
+                "questionnaire", Map.of("adultContent", false, "cashGambling", false)));
+
+        long firstSubmission = submit(build1, metadataRevision);
+        long storeCase = reviewCase(firstSubmission, "STORE_PAGE");
+        Response changes = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/changes-requested".formatted(storeCase),
+                Map.of("reasonCode", "METADATA", "feedback", "소개를 구체화해 주세요."),
+                Journey.asReviewer());
+        assertThat(changes.status()).as("%s", changes).isEqualTo(200);
+
+        metadataRevision = revision("store-page-revisions", Map.of(
+                "title", Journey.PRODUCT_TITLE,
+                "shortDescription", "수정 완료된 게임 소개",
+                "platform", "WINDOWS",
+                "minimumRequirements", "Windows 10, 8GB RAM"));
+        long secondSubmission = submit(build1, metadataRevision);
+        approveAll(secondSubmission);
+        awaitReady(secondSubmission);
+
+        Response release = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(secondSubmission),
+                null, Journey.asCreator());
+        assertThat(release.status()).as("%s", release).isEqualTo(200);
+        release1 = release.data().path("releaseId").asLong();
     }
 
     @Test
     @Order(4)
-    @DisplayName("studio: 심의 결과가 역전파된다 (ReviewApproved 관통)")
-    void studioReflectsApproval() {
-        Await.untilResponse("studio 상태 역전파 APPROVED",
-                () -> Stove.gateway.get("/api/v1/studio/games", Journey.asSeller()),
-                r -> "APPROVED".equals(r.itemWhere("productCode", PRODUCT_CODE).path("status").asText()));
+    @DisplayName("ReleasePublished 이후에만 catalog/store/download가 같은 release를 노출한다")
+    void projectsPublishedRelease() {
+        Await.untilResponse("catalog release projection",
+                () -> Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE),
+                response -> response.status() == 200
+                        && response.data().path("releaseId").asLong() == release1);
+        Response catalog = Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE);
+        Journey.productId(catalog.data().path("productId").asLong());
+        assertThat(catalog.data().path("buildId").asLong()).isEqualTo(build1);
+
+        Await.untilResponse("store release projection",
+                () -> Stove.gateway.get("/api/v1/storefront/products?q=" + Journey.STAMP),
+                response -> response.itemWhere("productCode", PRODUCT_CODE)
+                        .path("releaseId").asLong() == release1);
+        Await.untilResponse("download release projection",
+                () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE)),
+                response -> itemByLong(response.data(), "releaseId", release1) != null);
     }
 
-    /**
-     * 목록({@code GET /products})은 {@code getOnSaleProducts()} 라 판매 시작 전에는 뜨지 않는다.
-     * 그래서 {@code by-code} 로 직접 집는다 — 예전 셸은 id 1~12 를 훑다가
-     * <b>정해진 상한을 넘는 순간 조용히 못 찾는</b> 구조였고, 실측 시점에 이미 10/12 였다.
-     */
     @Test
     @Order(5)
-    @DisplayName("catalog: 상품 마스터를 만든다 (ReviewApproved 관통)")
-    void catalogCreatesProduct() {
-        Await.untilResponse("catalog 상품 마스터 생성",
+    @DisplayName("새 빌드 출시 후 이전 검증 빌드로 새 Release를 만들어 rollback한다")
+    void publishesPatchAndRollsBack() throws Exception {
+        build2 = uploadBuild("1.1.0", "200");
+        long patchSubmission = submit(build2, metadataRevision);
+        approveAll(patchSubmission);
+        awaitReady(patchSubmission);
+        Response patch = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(patchSubmission),
+                null, Journey.asCreator());
+        assertThat(patch.status()).as("%s", patch).isEqualTo(200);
+        long release2 = patch.data().path("releaseId").asLong();
+        Await.untilResponse("patch published",
                 () -> Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE),
-                r -> r.status() == 200 && PRODUCT_CODE.equals(r.data().path("productCode").asText()));
+                response -> response.data().path("releaseId").asLong() == release2);
 
-        Response response = Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE);
-        assertThat(response.data().path("price").asInt()).as("%s", response).isEqualTo(PRICE);
-        Journey.productId(response.data().path("productId").asLong());
-    }
+        Response rollback = Stove.gateway.post(
+                "/api/v1/studio/projects/releases/%d/rollback".formatted(release1),
+                null, Journey.asCreator());
+        assertThat(rollback.status()).as("%s", rollback).isEqualTo(200);
+        long rollbackRelease = rollback.data().path("releaseId").asLong();
+        assertThat(rollbackRelease).isNotEqualTo(release1).isNotEqualTo(release2);
 
-    @Test
-    @Order(6)
-    @DisplayName("catalog: 판매를 시작하면 ProductChanged 가 나간다")
-    void opensSale() {
-        // 게이트웨이의 catalog 라우트는 GET 전용이다. 운영 호출이라 밖에서 닿지 않는 것이 정상이고,
-        // 그래서 이 한 건만 catalog 를 직접 부른다(Stove 클래스 주석).
-        Response response = Stove.catalog.post(
-                "/api/v1/products/%d/sale-open".formatted(Journey.productId()), null);
-
-        assertThat(response.status()).as("%s", response).isEqualTo(200);
-    }
-
-    /**
-     * 목록은 {@code @PageableDefault(size = 20)} 이다. 정렬을 주지 않고 첫 페이지에서 찾으면
-     * <b>ON_SALE 상품이 20개를 넘는 순간 조용히 못 찾게 된다</b> — 스택과 볼륨이 재사용되므로
-     * 실행할 때마다 한 건씩 쌓이고, 어느 날 갑자기 빨개진다.
-     *
-     * <p>셸이 상품 마스터를 id 1~12 로 훑다가 {@code by-code} 로 바꾼 것과 <b>정확히 같은 함정</b>이고,
-     * 그때 고치지 않고 남아 있던 자리다. 실제로 옮기고 나서 22번째 상품에서 터졌다.
-     * 최신순으로 집으면 개수와 무관해진다.
-     *
-     * <p>정렬 키는 {@code productId} — <b>응답이 실제로 돌려주는 이름</b>이다. 이 줄이
-     * 한때 {@code id} 였고, 그것이 [D-024] 를 드러냈다. 엔티티 필드명은 계약이 아니므로
-     * 지금은 400 이다. 여정이 정식 이름으로 도는 것까지 여기서 지킨다.
-     */
-    @Test
-    @Order(7)
-    @DisplayName("catalog: ON_SALE 목록에 뜬다")
-    void appearsInOnSaleList() {
-        Await.untilResponse("catalog ON_SALE 목록 노출",
-                () -> Stove.gateway.get("/api/v1/products?sort=productId,desc"),
-                r -> !r.itemWhere("productCode", PRODUCT_CODE).isMissingNode());
-
-        // 목록에 떴다는 것과 상태가 바뀌었다는 것은 다르다. 후자를 직접 본다.
-        Response detail = Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE);
-        assertThat(detail.data().path("status").asText()).as("%s", detail).isEqualTo("ON_SALE");
-    }
-
-    /**
-     * <b>이번 회차의 스탬프로 묻는다.</b> 예전에는 {@code q=인수} 로 물었는데, 그러면
-     * 지난 회차들이 남긴 같은 이름의 상품이 전부 걸린다. 응답은 한 장(20건)이 상한이고
-     * 정렬은 오름차순이라, 첫 장이 차는 순간부터 <b>이번 회차의 상품은 영원히 결과 밖</b>이다.
-     * 실제로 그렇게 됐다 — 2026-08-13 에 20건이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
-     *
-     * <p>이 테스트가 물어야 하는 것은 "무언가 검색된다" 가 아니라
-     * <b>"방금 만든 그것이 색인에 갔는가"</b> 다. 스탬프로 물으면 결과가 한 건으로 좁혀져
-     * 그 질문에 정확히 답하고, 쌓인 데이터에 영향받지 않는다.
-     *
-     * <p>{@link Journey#STAMP} 를 쓰는 이유는 {@code PRODUCT_CODE} 로는 안 되기 때문이다 —
-     * 검색은 이름만 본다({@code findByStatusAndNameContaining}).
-     */
-    @Test
-    @Order(8)
-    @DisplayName("store: 검색 색인에 반영된다 (ProductChanged 관통)")
-    void appearsInSearchIndex() {
-        Await.untilResponse("store 검색 색인 반영",
-                () -> Stove.gateway.get("/api/v1/storefront/products?q=" + Journey.STAMP),
-                r -> !r.itemWhere("productCode", PRODUCT_CODE).isMissingNode());
-    }
-
-    /**
-     * 빌드 등록은 심의와 독립이다. 트랙 C 의 다운로드 티켓이 이 매니페스트를 요구하므로
-     * ({@code DownloadTicketService#issue} 는 ProductRef 와 PatchManifest 를 둘 다 찾는다) 여기서 올려 둔다.
-     */
-    @Test
-    @Order(9)
-    @DisplayName("studio: 빌드를 등록하면 BuildUploaded 가 나간다")
-    void uploadsBuild() {
-        Response response = Stove.gateway.post(
-                "/api/v1/studio/games/%d/builds".formatted(Journey.gameId()),
-                Map.of("version", "1.0.0", "fileSize", 1_073_741_824L, "checksum", "a1b2c3"),
-                Journey.asSeller());
-
-        assertThat(response.status()).as("%s", response).isEqualTo(200);
-    }
-
-    @Test
-    @Order(10)
-    @DisplayName("download: 패치 매니페스트가 등록된다 (BuildUploaded 관통)")
-    void registersPatchManifest() {
-        Await.untilResponse("download 패치 매니페스트 등록",
+        Await.untilResponse("rollback projection",
+                () -> Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE),
+                response -> response.data().path("releaseId").asLong() == rollbackRelease
+                        && response.data().path("buildId").asLong() == build1);
+        Await.untilResponse("rollback manifest",
                 () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE)),
-                r -> !r.itemWhere("version", "1.0.0").isMissingNode());
+                response -> {
+                    JsonNode item = itemByLong(response.data(), "releaseId", rollbackRelease);
+                    return item != null && item.path("buildId").asLong() == build1;
+                });
+    }
+
+    private long uploadBuild(String version, String buildNumber) throws Exception {
+        byte[] artifact = artifact(version);
+        String checksum = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(artifact));
+        Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
+        Response session = Stove.gateway.post(
+                "/api/v1/studio/ci/projects/%d/upload-sessions".formatted(Journey.gameId()), Map.ofEntries(
+                        Map.entry("productVersion", version),
+                        Map.entry("buildNumber", buildNumber),
+                        Map.entry("platform", "WINDOWS"),
+                        Map.entry("architecture", "X86_64"),
+                        Map.entry("fileName", "game-" + version + ".zip"),
+                        Map.entry("fileSize", artifact.length),
+                        Map.entry("sha256", checksum),
+                        Map.entry("commitSha", "deadbeef" + buildNumber),
+                        Map.entry("repository", "https://github.com/example/game"),
+                        Map.entry("ciProvider", "GITHUB"),
+                        Map.entry("ciRunId", buildNumber),
+                        Map.entry("idempotencyKey", "e2e-" + Journey.STAMP + "-" + buildNumber)), ci);
+        assertThat(session.status()).as("%s", session).isEqualTo(200);
+        long sessionId = session.data().path("uploadSessionId").asLong();
+        long buildId = session.data().path("buildId").asLong();
+        String uploadUrl = session.data().path("parts").get(0).path("uploadUrl").asText()
+                .replace("http://minio:9000", "http://127.0.0.1:19000");
+        Response uploaded = Stove.gateway.putBytes(uploadUrl, artifact);
+        assertThat(uploaded.status()).as("%s", uploaded).isIn(200, 201);
+        String etag = uploaded.headers().getETag();
+
+        Response completed = Stove.gateway.post(
+                "/api/v1/studio/ci/projects/%d/upload-sessions/%d/complete"
+                        .formatted(Journey.gameId(), sessionId),
+                Map.of("parts", List.of(Map.of("partNumber", 1, "etag", etag))), ci);
+        assertThat(completed.status()).as("%s", completed).isEqualTo(200);
+        Await.untilResponse("build validation " + buildId,
+                () -> Stove.gateway.get(
+                        "/api/v1/studio/ci/projects/%d/builds/%d".formatted(Journey.gameId(), buildId), ci),
+                response -> "VALIDATED".equals(response.data().path("status").asText()));
+        return buildId;
+    }
+
+    private long revision(String path, Map<String, ?> body) {
+        Response response = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/%s".formatted(Journey.gameId(), path),
+                body, Journey.asCreator());
+        assertThat(response.status()).as("%s", response).isEqualTo(200);
+        return response.data().path("revisionId").asLong();
+    }
+
+    private long submit(long buildId, long metadataId) {
+        Response response = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
+                        "metadataRevisionId", metadataId,
+                        "pricingRevisionId", pricingRevision,
+                        "ratingRevisionId", ratingRevision,
+                        "buildId", buildId), Journey.asCreator());
+        assertThat(response.status()).as("%s", response).isEqualTo(200);
+        return response.data().path("submissionId").asLong();
+    }
+
+    private long reviewCase(long submissionId, String type) {
+        final long[] id = {0};
+        Await.untilResponse("review cases " + submissionId,
+                () -> Stove.gateway.get("/api/v1/reviews/cases?submissionId=" + submissionId,
+                        Journey.asReviewer()), response -> {
+                    JsonNode item = itemByText(response.data(), "reviewType", type);
+                    if (item == null) return false;
+                    id[0] = item.path("reviewCaseId").asLong();
+                    return id[0] > 0;
+                });
+        return id[0];
+    }
+
+    private void approveAll(long submissionId) {
+        for (String type : List.of("RATING", "STORE_PAGE", "BUILD_QA")) {
+            long caseId = reviewCase(submissionId, type);
+            Map<String, ?> body = "RATING".equals(type) ? Map.of(
+                    "ratingCode", "ALL",
+                    "certificationNumber", "SELF-" + submissionId,
+                    "issuer", "ESD SELF CLASSIFICATION",
+                    "issuedAt", Instant.now().toString(),
+                    "country", "KR") : Map.of();
+            Response approved = Stove.gateway.post(
+                    "/api/v1/reviews/cases/%d/approve".formatted(caseId), body, Journey.asReviewer());
+            assertThat(approved.status()).as("%s", approved).isEqualTo(200);
+        }
+    }
+
+    private void awaitReady(long submissionId) {
+        Await.untilResponse("submission ready " + submissionId,
+                () -> Stove.gateway.get(
+                        "/api/v1/studio/projects/submissions/" + submissionId, Journey.asCreator()),
+                response -> "READY_FOR_RELEASE".equals(response.data().path("status").asText()));
+    }
+
+    private static byte[] artifact(String version) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            zip.putNextEntry(new ZipEntry("manifest.json"));
+            zip.write(("{\"productVersion\":\"" + version
+                    + "\",\"entrypoint\":\"game.exe\"}").getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("game.exe"));
+            zip.write("MZ-e2e-executable".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return output.toByteArray();
+    }
+
+    private static JsonNode itemByText(JsonNode values, String field, String expected) {
+        for (JsonNode value : values) if (expected.equals(value.path(field).asText())) return value;
+        return null;
+    }
+
+    private static JsonNode itemByLong(JsonNode values, String field, long expected) {
+        for (JsonNode value : values) if (expected == value.path(field).asLong()) return value;
+        return null;
     }
 }

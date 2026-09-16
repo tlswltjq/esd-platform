@@ -11,11 +11,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.stove.common.event.Topics;
-import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.GameRegisteredEvent;
 import com.stove.common.event.payload.LicenseIssuedEvent;
 import com.stove.common.event.payload.LicenseRevokedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.download.core.service.EntitlementService;
 import com.stove.download.core.service.ManifestService;
@@ -44,15 +44,17 @@ class DownloadEventListenerTest {
     private static final List<Long> PRODUCT_IDS = List.of(1L, 2L);
     private static final LicenseIssuedEvent ISSUED =
             LicenseIssuedEvent.of("ORD-1", 42L, PRODUCT_IDS);
-    private static final BuildUploadedEvent BUILD = BuildUploadedEvent.of(
-            1L, "GAME-001", "1.0.0", 1024L, "sha256:abc", "s3://bucket/build");
+    private static final ReleasePublishedEvent RELEASE = ReleasePublishedEvent.of(
+            10L, null, 20L, 1L, "GAME-001", 1001L, 30L, 1L, 1L, 1L,
+            "게임 A", "설명", 30_000L, "KRW", "ALL", "1.0.0",
+            1024L, "sha256:abc", "s3://bucket/build");
 
     @Test
-    @DisplayName("빌드 업로드는 패치 매니페스트로 등록된다")
-    void buildUploadedRegistersManifest() {
-        listener.onStudioEvent(EventRecords.of(Topics.STUDIO, BUILD));
+    @DisplayName("공개된 릴리스만 패치 매니페스트로 등록된다")
+    void releasePublishedRegistersManifest() {
+        listener.onStudioEvent(EventRecords.of(Topics.STUDIO, RELEASE));
 
-        verify(manifestService).register(any(BuildUploadedEvent.class));
+        verify(manifestService).register(any(ReleasePublishedEvent.class));
     }
 
     @Test

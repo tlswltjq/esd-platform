@@ -12,6 +12,7 @@ import com.stove.common.testcontainers.InfraContainers;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +56,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
 class ProductSortTest {
 
+    private static final AtomicLong RELEASE_IDS = new AtomicLong(10_000L);
+
     @Autowired
     MockMvc mockMvc;
     @Autowired
@@ -65,10 +68,10 @@ class ProductSortTest {
         // 정렬이 실제로 실행되도록 목록에 상품이 있어야 한다. 빈 결과는 정렬 없이도 200 이다.
         // 값을 같게 둔다 — 동값이라야 꼬리표(id)가 하는 일이 순서에 드러난다.
         for (int i = 0; i < 3; i++) {
-            Product product = Product.draft(
-                    "GAME-" + UUID.randomUUID(), "게임 " + UUID.randomUUID(), 1001L, 18_000L, "KRW");
-            product.applyReviewApproval("ALL");
-            product.openSale();
+            long releaseId = RELEASE_IDS.incrementAndGet();
+            Product product = Product.fromRelease(1L,
+                    "GAME-" + UUID.randomUUID(), "게임 " + UUID.randomUUID(), 1001L,
+                    18_000L, "KRW", "ALL", releaseId, releaseId, 1L);
             productRepository.save(product);
         }
     }

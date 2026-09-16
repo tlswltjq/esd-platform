@@ -16,6 +16,7 @@ import com.stove.studio.core.domain.NewProject;
 import com.stove.studio.core.domain.ProjectStatus;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,8 +37,8 @@ import org.springframework.context.annotation.Import;
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class GameProjectServiceTest {
 
-    private static final Long SELLER = 1001L;
-    private static final Long OTHER_SELLER = 2002L;
+    private Long seller;
+    private Long otherSeller;
 
     @Autowired
     GameProjectService gameProjectService;
@@ -47,6 +48,14 @@ class GameProjectServiceTest {
     OutboxEventRepository outboxEventRepository;
     @Autowired
     ProcessedEventRepository processedEventRepository;
+    @Autowired
+    WorkspaceService workspaceService;
+
+    @BeforeEach
+    void setUpWorkspaces() {
+        seller = workspaceService.getOrCreatePersonal("studio-project-test-owner").getId();
+        otherSeller = workspaceService.getOrCreatePersonal("studio-project-test-other").getId();
+    }
 
     private static String uniqueProductCode() {
         return "GAME-" + UUID.randomUUID();
@@ -54,7 +63,7 @@ class GameProjectServiceTest {
 
     private GameProject project(String productCode) {
         return gameProjectService.create(
-                new NewProject(productCode, "로스트아크", SELLER, 39_000L, "KRW", false));
+                new NewProject(productCode, "로스트아크", seller, 39_000L, "KRW", false));
     }
 
     private List<OutboxEvent> outboxFor(String productCode) {
@@ -98,7 +107,7 @@ class GameProjectServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
 
         assertThat(statusOf(productCode)).isEqualTo(ProjectStatus.SUBMITTED);
 
@@ -116,7 +125,7 @@ class GameProjectServiceTest {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
 
-        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), OTHER_SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), otherSeller))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.FORBIDDEN);
@@ -130,9 +139,9 @@ class GameProjectServiceTest {
     void resubmitDoesNotDuplicateEvent() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
 
-        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(created.getId(), seller))
                 .isInstanceOf(BusinessException.class);
 
         // 상태 가드가 outboxRecorder.record 앞에 있다는 것이 여기서 지킬 순서다
@@ -142,7 +151,7 @@ class GameProjectServiceTest {
     @Test
     @DisplayName("없는 프로젝트를 신청하면 NOT_FOUND")
     void submitUnknownProject() {
-        assertThatThrownBy(() -> gameProjectService.submitForReview(999_999_999L, SELLER))
+        assertThatThrownBy(() -> gameProjectService.submitForReview(999_999_999L, seller))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.NOT_FOUND);
@@ -153,7 +162,7 @@ class GameProjectServiceTest {
     void applyApproval() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
 
         gameProjectService.applyApproval(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, productCode, "ALL");
@@ -168,7 +177,7 @@ class GameProjectServiceTest {
     void applyApprovalIsGuardedByInbox() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
         String eventId = UUID.randomUUID().toString();
 
         gameProjectService.applyApproval(eventId, EventType.REVIEW_APPROVED, productCode, "ALL");
@@ -185,7 +194,7 @@ class GameProjectServiceTest {
     void applyRejection() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
 
         gameProjectService.applyRejection(UUID.randomUUID().toString(),
                 EventType.REVIEW_REJECTED, productCode, "자료 미비");
@@ -200,7 +209,7 @@ class GameProjectServiceTest {
     void lateRejectionIsIgnoredWithoutThrowing() {
         String productCode = uniqueProductCode();
         GameProject created = project(productCode);
-        gameProjectService.submitForReview(created.getId(), SELLER);
+        gameProjectService.submitForReview(created.getId(), seller);
         gameProjectService.applyApproval(UUID.randomUUID().toString(),
                 EventType.REVIEW_APPROVED, productCode, "ALL");
 
@@ -225,13 +234,13 @@ class GameProjectServiceTest {
     @Test
     @DisplayName("내 프로젝트 목록은 최신순이다")
     void findBySellerIsNewestFirst() {
-        Long seller = Math.abs(UUID.randomUUID().getLeastSignificantBits() % 100_000) + 500_000;
+        Long listOwner = workspaceService.getOrCreatePersonal("studio-list-test-" + UUID.randomUUID()).getId();
         GameProject first = gameProjectService.create(
-                new NewProject(uniqueProductCode(), "게임 1", seller, 1_000L, "KRW", false));
+                new NewProject(uniqueProductCode(), "게임 1", listOwner, 1_000L, "KRW", false));
         GameProject second = gameProjectService.create(
-                new NewProject(uniqueProductCode(), "게임 2", seller, 2_000L, "KRW", false));
+                new NewProject(uniqueProductCode(), "게임 2", listOwner, 2_000L, "KRW", false));
 
-        assertThat(gameProjectService.findBySeller(seller))
+        assertThat(gameProjectService.findBySeller(listOwner))
                 .extracting(GameProject::getId)
                 .containsExactly(second.getId(), first.getId());
     }

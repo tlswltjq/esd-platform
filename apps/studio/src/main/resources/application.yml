@@ -6,6 +6,13 @@ spring:
   application:
     name: studio
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
+
   # 진행 중인 요청을 기다리는 상한. compose 의 stop_grace_period(40s)보다 짧아야 한다 —
   # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035). 부등호는 테스트가 지킨다.
   lifecycle:
@@ -53,10 +60,26 @@ stove:
   storage:
     provider: ${STORAGE_PROVIDER:mock}
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:${STORAGE_ENDPOINT:http://localhost:9000}}
     access-key: ${STORAGE_ACCESS_KEY:stove}
     secret-key: ${STORAGE_SECRET_KEY:stove1234}
     bucket: ${STORAGE_BUCKET:stove-builds}
     presign-ttl: 15m
+    encryption-enabled: ${STORAGE_ENCRYPTION_ENABLED:true}
+  malware:
+    provider: ${MALWARE_PROVIDER:mock}
+    host: ${MALWARE_HOST:localhost}
+    port: ${MALWARE_PORT:3310}
+    timeout-millis: ${MALWARE_TIMEOUT_MILLIS:120000}
+  upload:
+    workspace-quota-bytes: ${WORKSPACE_QUOTA_BYTES:53687091200}
+    max-artifact-bytes: ${MAX_ARTIFACT_BYTES:21474836480}
+    max-active-builds: ${MAX_ACTIVE_BUILDS:20}
+    cleanup-interval-ms: ${UPLOAD_CLEANUP_INTERVAL_MS:60000}
+    failed-retention: ${FAILED_BUILD_RETENTION:7d}
+    unsubmitted-retention: ${UNSUBMITTED_BUILD_RETENTION:30d}
+    retention-cron: ${BUILD_RETENTION_CRON:0 15 3 * * *}
+    validation-recovery-interval-ms: ${VALIDATION_RECOVERY_INTERVAL_MS:60000}
 
   outbox:
     relay-enabled: true

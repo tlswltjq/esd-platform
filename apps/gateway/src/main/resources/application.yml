@@ -9,6 +9,13 @@ spring:
   application:
     name: gateway
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
+
   # 진행 중인 요청을 기다리는 상한. 컨테이너 종료 유예(40초)보다 짧아야 한다 —
   # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035).
   lifecycle:

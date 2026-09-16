@@ -55,7 +55,8 @@ public class GameBuildService {
     }
 
     @Transactional(readOnly = true)
-    public List<GameBuild> findByGame(Long gameId) {
+    public List<GameBuild> findByGame(Long gameId, Long workspaceId) {
+        gameProjectService.requireOwned(gameId, workspaceId);
         return buildRepository.findByGameIdOrderByIdDesc(gameId);
     }
 }

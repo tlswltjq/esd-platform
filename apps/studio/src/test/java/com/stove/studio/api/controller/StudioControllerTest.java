@@ -11,12 +11,20 @@ import com.stove.studio.api.controller.dto.CreateProjectRequest;
 import com.stove.studio.api.controller.dto.UploadBuildRequest;
 import com.stove.studio.core.service.GameBuildService;
 import com.stove.studio.core.service.GameProjectService;
+import com.stove.studio.core.service.WorkspaceService;
+import com.stove.studio.core.service.UploadSessionService;
+import com.stove.studio.core.service.BuildValidationDispatcherService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.core.MethodParameter;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 
 /**
  * 창작자 입점의 입구 검증.
@@ -31,16 +39,37 @@ class StudioControllerTest {
     private final ObjectMapper objectMapper = Jackson2ObjectMapperBuilder.json().build();
     private final GameProjectService gameProjectService = mock(GameProjectService.class);
     private final GameBuildService gameBuildService = mock(GameBuildService.class);
+    private final WorkspaceService workspaceService = mock(WorkspaceService.class);
+    private final UploadSessionService uploadSessionService = mock(UploadSessionService.class);
+    private final BuildValidationDispatcherService buildValidationService =
+            mock(BuildValidationDispatcherService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new StudioController(gameProjectService, gameBuildService))
+            .standaloneSetup(new StudioController(gameProjectService, gameBuildService,
+                    workspaceService, uploadSessionService, buildValidationService))
+            .setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
+                @Override
+                public boolean supportsParameter(MethodParameter parameter) {
+                    return parameter.getParameterType().equals(Jwt.class);
+                }
+
+                @Override
+                public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                              NativeWebRequest webRequest,
+                                              org.springframework.web.bind.support.WebDataBinderFactory binderFactory) {
+                    return Jwt.withTokenValue("test-token")
+                            .header("alg", "none")
+                            .subject("test-creator")
+                            .build();
+                }
+            })
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
-    private String project(String productCode, String title, Long sellerId, long price)
+    private String project(String productCode, String title, long price)
             throws Exception {
         return objectMapper.writeValueAsString(
-                new CreateProjectRequest(productCode, title, sellerId, price, "KRW", false));
+                new CreateProjectRequest(productCode, title, price, "KRW"));
     }
 
     @Test
@@ -48,7 +77,7 @@ class StudioControllerTest {
     void blankProductCodeIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/studio/games")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(project("", "게임 A", 1001L, 30_000L)))
+                        .content(project("", "게임 A", 30_000L)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(gameProjectService, gameBuildService);
@@ -59,7 +88,7 @@ class StudioControllerTest {
     void blankTitleIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/studio/games")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(project("GAME-001", "", 1001L, 30_000L)))
+                        .content(project("GAME-001", "", 30_000L)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(gameProjectService, gameBuildService);
@@ -70,7 +99,7 @@ class StudioControllerTest {
     void negativePriceIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/studio/games")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(project("GAME-001", "게임 A", 1001L, -1L)))
+                        .content(project("GAME-001", "게임 A", -1L)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(gameProjectService, gameBuildService);
@@ -102,19 +131,4 @@ class StudioControllerTest {
         verifyNoInteractions(gameProjectService, gameBuildService);
     }
 
-    @Test
-    @DisplayName("[D-015] 필수 헤더가 없으면 400 이다 — 클라이언트 잘못이 5xx 로 나가면 안 된다")
-    void missingRequiredHeaderIsClientError() throws Exception {
-        // X-Seller-Id 는 게이트웨이 뒤에서 주입되는 값이라 빠질 일이 드물지만,
-        // 빠졌을 때 500 이 나가면 두 가지가 망가진다.
-        // (1) 클라이언트가 재시도해도 소용없는 요청을 재시도한다
-        // (2) 5xx 알람이 울려 서버 장애로 분류된다 — 실제로는 요청이 잘못된 것이다
-        mockMvc.perform(post("/api/v1/studio/games/1/builds")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new UploadBuildRequest("1.0.0", 1024L, "sha256:abc"))))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(gameProjectService, gameBuildService);
-    }
 }

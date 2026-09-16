@@ -279,10 +279,18 @@
       },
       "ProductResponse" : {
         "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "currency" : {
             "type" : "string"
           },
           "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "metadataRevision" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -302,6 +310,10 @@
           },
           "ratingCode" : {
             "type" : "string"
+          },
+          "releaseId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "sellerId" : {
             "format" : "int64",

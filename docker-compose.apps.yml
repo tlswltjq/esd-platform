@@ -19,6 +19,8 @@ x-common-env: &common-env
   MONGO_URI: mongodb://mongodb:27017/stove_download
   # 컨테이너 안에서는 localhost 기본값이 자기 자신을 가리키므로 수집기 주소를 명시한다.
   OTLP_ENDPOINT: http://tempo:4318/v1/traces
+  JWT_ISSUER_URI: http://localhost:8091
+  JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
 
 x-app: &app
   restart: unless-stopped
@@ -43,6 +45,8 @@ services:
       # 게이트웨이는 인프라 접속이 없어 *common-env 를 쓰지 않는다. 추적만 따로 붙인다 —
       # 트레이스가 시작되는 자리라 여기가 빠지면 하류 스팬에 부모가 없다.
       OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      JWT_ISSUER_URI: http://localhost:8091
+      JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
       CATALOG_URI: http://catalog:8081
       ORDER_URI: http://order:8082
       PAYMENT_URI: http://payment:8083
@@ -53,39 +57,62 @@ services:
       DOWNLOAD_URI: http://download:8088
       SETTLEMENT_URI: http://settlement:8089
 
+  auth:
+    <<: *app
+    build: { context: ., dockerfile: apps/auth/Dockerfile }
+    image: stove/auth
+    ports: ["8091:8091"]
+    environment:
+      <<: *common-env
+      AUTH_ISSUER: http://localhost:8091
+      AUTH_REVIEWER_EMAIL: reviewer@esd.local
+      AUTH_REVIEWER_PASSWORD: ${AUTH_REVIEWER_PASSWORD:-reviewer-local-only}
+      AUTH_ADMIN_EMAIL: admin@esd.local
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-admin-local-only}
+
   studio:
     <<: *app
     build: { context: ., dockerfile: apps/studio/Dockerfile }
     image: stove/studio
-    ports: ["8085:8085"]
-    environment: *common-env
+    expose: ["8085"]
+    environment:
+      <<: *common-env
+      STORAGE_PROVIDER: s3
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PRESIGN_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: stove
+      STORAGE_SECRET_KEY: stove1234
+      # 로컬 MinIO에는 KMS가 없으므로 개발 스택만 SSE를 끈다. 운영 기본값은 true다.
+      STORAGE_ENCRYPTION_ENABLED: "false"
+      MALWARE_PROVIDER: clamav
+      MALWARE_HOST: clamav
 
   review:
     <<: *app
     build: { context: ., dockerfile: apps/review/Dockerfile }
     image: stove/review
-    ports: ["8086:8086"]
+    expose: ["8086"]
     environment: *common-env
 
   catalog:
     <<: *app
     build: { context: ., dockerfile: apps/catalog/Dockerfile }
     image: stove/catalog
-    ports: ["8081:8081"]
+    expose: ["8081"]
     environment: *common-env
 
   store:
     <<: *app
     build: { context: ., dockerfile: apps/store/Dockerfile }
     image: stove/store
-    ports: ["8087:8087"]
+    expose: ["8087"]
     environment: *common-env
 
   order:
     <<: *app
     build: { context: ., dockerfile: apps/order/Dockerfile }
     image: stove/order
-    ports: ["8082:8082"]
+    expose: ["8082"]
     environment:
       <<: *common-env
       CATALOG_BASE_URL: http://catalog:8081
@@ -94,28 +121,34 @@ services:
     <<: *app
     build: { context: ., dockerfile: apps/payment/Dockerfile }
     image: stove/payment
-    ports: ["8083:8083"]
+    expose: ["8083"]
     environment: *common-env
 
   license:
     <<: *app
     build: { context: ., dockerfile: apps/license/Dockerfile }
     image: stove/license
-    ports: ["8084:8084"]
+    expose: ["8084"]
     environment: *common-env
 
   download:
     <<: *app
     build: { context: ., dockerfile: apps/download/Dockerfile }
     image: stove/download
-    ports: ["8088:8088"]
-    environment: *common-env
+    expose: ["8088"]
+    environment:
+      <<: *common-env
+      DOWNLOAD_URL_STRATEGY: s3
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PRESIGN_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: stove
+      STORAGE_SECRET_KEY: stove1234
 
   settlement:
     <<: *app
     build: { context: ., dockerfile: apps/settlement/Dockerfile }
     image: stove/settlement
-    ports: ["8089:8089"]
+    expose: ["8089"]
     environment: *common-env
 
 networks:

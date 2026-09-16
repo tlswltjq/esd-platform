@@ -9,7 +9,10 @@ public record StoreProductResponse(
         Long sellerId,
         Long price,
         String currency,
-        String ratingCode
+        String ratingCode,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision
 ) {
     public static StoreProductResponse from(StoreProductView product) {
         return new StoreProductResponse(
@@ -19,6 +22,9 @@ public record StoreProductResponse(
                 product.sellerId(),
                 product.price(),
                 product.currency(),
-                product.ratingCode());
+                product.ratingCode(),
+                product.releaseId(),
+                product.buildId(),
+                product.metadataRevision());
     }
 }

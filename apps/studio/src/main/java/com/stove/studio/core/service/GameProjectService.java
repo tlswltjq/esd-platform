@@ -100,10 +100,14 @@ public class GameProjectService {
      * 프로젝트 조회를 빌드 쪽에서 리포지토리로 직접 하면 같은 애그리거트를 만지는 클래스가 둘이 된다.
      */
     public GameProject requireOwned(Long gameId, Long sellerId) {
-        GameProject project = projectRepository.findById(gameId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "gameId=" + gameId));
+        GameProject project = requireById(gameId);
         project.requireOwner(sellerId);
         return project;
+    }
+
+    public GameProject requireById(Long gameId) {
+        return projectRepository.findById(gameId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "gameId=" + gameId));
     }
 
     private GameProject requireByProductCode(String productCode) {

@@ -5,8 +5,11 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
+import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.event.payload.ReviewChangesRequestedEvent;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.studio.core.service.GameProjectService;
+import com.stove.studio.core.service.SubmissionReviewProjectionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,13 +27,20 @@ import org.springframework.stereotype.Component;
 public class ReviewEventListener {
 
     private final GameProjectService gameProjectService;
+    private final SubmissionReviewProjectionService submissionReviewProjectionService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = Topics.REVIEW, groupId = GameProjectService.CONSUMER_GROUP)
     public void onReviewEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
 
-        if (envelope.isType(EventType.REVIEW_APPROVED)) {
+        if (envelope.isType(EventType.SUBMISSION_REVIEW_APPROVED)) {
+            submissionReviewProjectionService.approve(envelope.eventId(), envelope.eventType(),
+                    envelope.payloadAs(objectMapper, SubmissionReviewApprovedEvent.class));
+        } else if (envelope.isType(EventType.REVIEW_CHANGES_REQUESTED)) {
+            submissionReviewProjectionService.changesRequested(envelope.eventId(), envelope.eventType(),
+                    envelope.payloadAs(objectMapper, ReviewChangesRequestedEvent.class));
+        } else if (envelope.isType(EventType.REVIEW_APPROVED)) {
             ReviewApprovedEvent event = envelope.payloadAs(objectMapper, ReviewApprovedEvent.class);
             gameProjectService.applyApproval(envelope.eventId(), envelope.eventType(),
                     event.productCode(), event.ratingCode());
