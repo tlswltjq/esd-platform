@@ -62,7 +62,7 @@ stove/
 | **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
 | **서버가 중단됐다 재기동하면** 밀린 일이 이어지는가 — 시나리오와 그것을 지키는 테스트 | [resilience-scenarios.md](docs/resilience-scenarios.md) |
 | 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |
-| 원격 CI 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
+| 원격 실행 환경을 세운 기록 | [remote-dev-plan.md](docs/remote-dev-plan.md) |
 | 이벤트 인프라 학습 인계노트 | [handover.md](docs/handover.md) |
 
 **저장소 선택 근거** — 트랜잭션·정합성이 중요한 도메인은 MySQL,
@@ -149,7 +149,7 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 | 단위·어댑터·ArchUnit 945개 (Docker 불필요) | **로컬** | `./gradlew test` |
 | 실 인프라 통합 241개 (Testcontainers) | 로컬 또는 **원격** | `./gradlew integrationTest` |
 | 전체 스택 · 게이트 · 인수 · 성능 | **원격** | `./scripts/remote.sh …` |
-| 커밋한 것의 최종 검증 | **원격 CI** | `git push` (또는 `gh workflow run ci.yml`) |
+| 커밋한 것의 최종 검증 | **원격** | `./scripts/remote.sh test` 및 필요한 `stack`·`e2e` 명령 |
 
 ```bash
 ./scripts/remote.sh test                      # 전체 테스트
@@ -162,8 +162,8 @@ A·B·C 는 전부 "이 머신의 Docker 를 어떻게 빌리는가"의 변주�
 ./scripts/remote.sh status
 ```
 
-**`remote.sh` 와 CI 는 역할이 다르다.** CI 는 push 해야 돌므로 "고쳤다 → 결과" 루프에
-커밋이 끼어든다. `remote.sh` 는 rsync 로 작업본을 밀어넣어 **커밋 없이** 원격에서 돌린다.
+GitHub Actions CI는 사용하지 않는다. `remote.sh` 는 rsync 로 작업본을 밀어넣어
+**커밋 없이** 원격에서 검증을 돌린다.
 
 첫 사용 전에 한 번만 (머신별 값이라 리포에 두지 않는다 — 10번):
 
