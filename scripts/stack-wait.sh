@@ -39,7 +39,7 @@ INFRA=(stove-mysql stove-redis stove-kafka stove-kafka-ui stove-elasticsearch
 # smoke-stack.sh 에서 가져온 장치다(decisions.md 18번 옆 흐름). 판정 지점을 늘렸으면 이 값도
 # 같이 올린다 — 손으로 유지하는 브리틀함이 목적이다. **늘어나는 것은 정상이고 모르게 줄어드는 것이 사고다.**
 # 게이트에서는 한 걸음 더 간다: 판정이 모자라면 통과시키지 않는다. 세지 못한 게이트는 게이트가 아니다.
-EXPECTED_CHECKS=15
+EXPECTED_CHECKS=16
 
 pass=0; fail=0
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
@@ -103,6 +103,11 @@ echo
 echo "=== 3. 인프라 도달성 ==="
 st=$(status http://elasticsearch:9200/_cluster/health)
 [ "$st" = "200" ] && ok "elasticsearch" || bad "elasticsearch" "$(describe "$st")"
+
+schemas=$(docker exec stove-mysql mysql -ustove -pstove1234 -N -e \
+    "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'stove_auth'" 2>/dev/null)
+[ "$schemas" = "stove_auth" ] && ok "auth 스키마 부트스트랩" \
+                              || bad "auth 스키마 부트스트랩" "stove_auth가 없다"
 
 echo
 echo "=== 4. 게이트웨이 내부 API 차단 ==="

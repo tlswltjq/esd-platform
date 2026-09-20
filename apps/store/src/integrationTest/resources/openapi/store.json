@@ -105,8 +105,16 @@
       },
       "StoreProductResponse" : {
         "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "currency" : {
             "type" : "string"
+          },
+          "metadataRevision" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "name" : {
             "type" : "string"
@@ -124,6 +132,10 @@
           },
           "ratingCode" : {
             "type" : "string"
+          },
+          "releaseId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "sellerId" : {
             "format" : "int64",

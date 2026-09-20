@@ -56,11 +56,6 @@ spring:
       observation-enabled: true
 
 stove:
-  review:
-    # 자체등급분류 건은 접수 즉시 자동 승인(로컬 데모용). 운영에서는 false + 담당자 승인 API.
-    # 등급 경로는 rating questionnaire + policy version으로 결정하며 ALL 자동 승인은 금지한다.
-    auto-approve-self-rated: false
-    default-self-rating-code: ALL
   outbox:
     relay-enabled: true
     batch-size: 200

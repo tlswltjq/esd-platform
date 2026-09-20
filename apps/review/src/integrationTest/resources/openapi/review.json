@@ -35,6 +35,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListReviewCaseResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewCaseResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListReviewResponse" : {
         "properties" : {
           "data" : {
@@ -88,6 +105,35 @@
           },
           "success" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApproveCaseRequest" : {
+        "properties" : {
+          "certificationNumber" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "country" : {
+            "maxLength" : 2,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "issuedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "issuer" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "ratingCode" : {
+            "maxLength" : 10,
+            "minLength" : 0,
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -197,10 +243,56 @@
         },
         "type" : "object"
       },
+      "RequestChangesRequest" : {
+        "properties" : {
+          "feedback" : {
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "reasonCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "feedback", "reasonCode" ],
+        "type" : "object"
+      },
       "RequeuedCount" : {
         "properties" : {
           "requeued" : {
             "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ReviewCaseResponse" : {
+        "properties" : {
+          "externalFeedback" : {
+            "type" : "string"
+          },
+          "ratingCode" : {
+            "type" : "string"
+          },
+          "reasonCode" : {
+            "type" : "string"
+          },
+          "reviewCaseId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reviewType" : {
+            "enum" : [ "RATING", "STORE_PAGE", "BUILD_QA" ],
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "APPROVED", "CHANGES_REQUESTED" ],
+            "type" : "string"
+          },
+          "submissionId" : {
+            "format" : "int64",
             "type" : "integer"
           }
         },
@@ -414,6 +506,107 @@
           }
         },
         "tags" : [ "review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases" : {
+      "get" : {
+        "operationId" : "cases",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "submissionId",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListReviewCaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/approve" : {
+      "post" : {
+        "operationId" : "approve_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApproveCaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/changes-requested" : {
+      "post" : {
+        "operationId" : "changes",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RequestChangesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "submission-review-controller" ]
       }
     },
     "/api/v1/reviews/{reviewId}/approve" : {

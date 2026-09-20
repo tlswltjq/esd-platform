@@ -7,7 +7,6 @@ import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.review.core.domain.ReviewProperties;
 import com.stove.review.core.domain.ReviewRequest;
 import com.stove.review.core.domain.ReviewRequestRepository;
 import com.stove.review.core.domain.ReviewStatus;
@@ -37,7 +36,6 @@ public class ReviewService {
     private final RatingBoardClient ratingBoardClient;
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
-    private final ReviewProperties properties;
 
     /**
      * [등록] studio → GameRegistered → review (접수)
@@ -73,11 +71,9 @@ public class ReviewService {
         }
 
         if (request.isSelfRated()) {
-            // 자체등급분류: 게임위 접수 없이 내부 심사로 진행
+            // 자체등급분류: 게임위 접수 없이 내부 심사로 진행한다.
+            // 등급 설문과 정책 버전을 검토하지 않은 채 ALL로 자동 승인하는 우회로는 두지 않는다.
             request.startReview(null);
-            if (properties.autoApproveSelfRated()) {
-                approveInternal(request, properties.defaultSelfRatingCode());
-            }
         } else {
             request.startReview(ratingBoardClient.submit(
                     request.getProductCode(), request.getTitle(), request.getSellerId()));

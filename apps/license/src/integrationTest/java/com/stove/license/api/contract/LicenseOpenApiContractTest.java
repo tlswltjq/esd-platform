@@ -1,4 +1,4 @@
-package com.stove.license;
+package com.stove.license.api.contract;
 
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.test.OpenApiSnapshot;
@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 
-/** 기동 검증(L5) — 빈 구성과 Flyway↔엔티티 정합. docs/testing.md */
+/** 기동 가능한 실제 구성에서 공개 API가 커밋된 OpenAPI 계약과 일치하는지 검증한다. */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -22,7 +22,7 @@ import org.springframework.context.annotation.Import;
                 // 빈과 엔드포인트 등록은 그대로라 배선 검증은 유지된다.
                 "spring.kafka.listener.auto-startup=false"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
-class LicenseContextTest {
+class LicenseOpenApiContractTest {
 
     @LocalServerPort
     private int port;

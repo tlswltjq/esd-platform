@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Import;
  * <p>결제 모듈에서 검증하는 이유는 단순하다. Outbox 스키마가 7개 서비스에 동일하게 있고,
  * 여기가 이미 MySQL 컨테이너를 띄우는 모듈이다.
  *
- * <p>한때 {@code PaymentContextTest} 의 캐시된 컨텍스트에서 살아 있는 릴레이 스레드가
+ * <p>한때 {@code PaymentOpenApiContractTest} 의 캐시된 컨텍스트에서 살아 있는 릴레이 스레드가
  * 여기서 만든 이벤트를 집어가는 경합이 있었다. 단언을 "이미 발행됐어도 통과"로 푸는 대신
  * 그쪽 폴링 주기를 1시간으로 재워 경합 자체를 없앴다 — 단언이 느슨해지면
  * 조회 조건이 깨져도 통과하므로 D-003 의 회귀 방어선이 사라진다.

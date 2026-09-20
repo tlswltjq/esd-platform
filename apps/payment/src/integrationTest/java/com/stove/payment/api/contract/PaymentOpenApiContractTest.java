@@ -1,4 +1,4 @@
-package com.stove.payment;
+package com.stove.payment.api.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -13,12 +13,12 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 
-/** 기동 검증(L5) — 빈 구성과 Flyway↔엔티티 정합. docs/testing.md */
+/** 기동 가능한 실제 구성에서 공개 API가 커밋된 OpenAPI 계약과 일치하는지 검증한다. */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "stove.outbox.poll-interval-ms=3600000")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
-class PaymentContextTest {
+class PaymentOpenApiContractTest {
 
     @Autowired
     private ApplicationContext context;

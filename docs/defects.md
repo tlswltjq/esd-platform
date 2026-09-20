@@ -2316,7 +2316,7 @@ systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 
 **상태** 수정됨
 **영향** 장애 주입 무효화 — "멈췄다" 가 성립하지 않는다
-**위치** `apps/license/src/integrationTest/.../LicenseContextTest`
+**위치** `apps/license/src/integrationTest/.../LicenseOpenApiContractTest`
 **재현** license 통합 회차에서 `ConsumerRestartCatchUpTest` 의 중단 판정을 돌린다
 **실측** 리스너는 전부 `isRunning=false` 인데 **중단 중에 지급이 일어났다**
 
@@ -2338,7 +2338,7 @@ license 통합 소스셋에는 컨텍스트가 두 벌 있다.
 | 컨텍스트 | 캐시 키 | 리스너 |
 |---|---|---|
 | 통합 테스트 5종 공용 | `relay-enabled=false` | R-03 이 멈추는 대상 |
-| `LicenseContextTest` | `poll-interval-ms=3600000` + `RANDOM_PORT` | **아무도 안 멈춘다** |
+| `LicenseOpenApiContractTest` | `poll-interval-ms=3600000` + `RANDOM_PORT` | **아무도 안 멈춘다** |
 
 둘 다 그룹 `license` 의 멤버다. 그래서 한쪽을 멈추면 소비가 멈추는 것이 아니라
 **파티션이 다른 쪽으로 넘어간다** — 카프카에게 이것은 장애가 아니라 리밸런싱이다.
@@ -2374,7 +2374,7 @@ R-03 의 컨텍스트가 파티션을 계속 쥐고 있으면 옆 컨텍스트�
 ### 수정
 
 ```java
-// LicenseContextTest
+// LicenseOpenApiContractTest
 properties = {
         "stove.outbox.poll-interval-ms=3600000",
         "spring.kafka.listener.auto-startup=false"}

@@ -4,7 +4,7 @@
 #
 #   ./scripts/remote.sh test                     전체 테스트
 #   ./scripts/remote.sh test :apps:order         모듈 하나
-#   ./scripts/remote.sh stack up                 전체 스택 20개 (게이트까지 확인한다)
+#   ./scripts/remote.sh stack up                 전체 스택 23개 (게이트까지 확인한다)
 #   ./scripts/remote.sh e2e                      인수 시나리오 관통 확인
 #
 # **왜 있는가** — CI(경로 D)는 push 해야 돈다. "고쳤다 → 결과" 루프에는 커밋이 끼면 안 된다.
@@ -180,6 +180,21 @@ build_jars() {
     rexec "./gradlew bootJar --console=plain" || die "bootJar 실패 — 이미지를 만들지 않는다"
 }
 
+wait_for_mysql_bootstrap() {
+    say "MySQL 스키마 부트스트랩"
+    local state attempt
+    for attempt in $(seq 1 60); do
+        state=$(rexec "docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' stove-mysql-bootstrap" \
+            2>/dev/null || true)
+        case "$state" in
+            "exited 0") return 0 ;;
+            exited\ *) die "MySQL 스키마 부트스트랩 실패 ($state) — 앱을 기동하지 않는다" ;;
+        esac
+        sleep 1
+    done
+    die "MySQL 스키마 부트스트랩이 60초 안에 끝나지 않았다 — 앱을 기동하지 않는다"
+}
+
 # 지금 이 스택을 누가 쓰고 있는가. 있으면 멈춘다 — 조용히 갈아엎는 것이 최악이다.
 # CI(자체 호스트 러너)가 e2e 잡에서 같은 컨테이너를 쓰므로 특히 겹친다.
 #
@@ -210,10 +225,11 @@ do_stack() {
             [ "${STOVE_FORCE_STACK:-0}" = 1 ] || assert_stack_free
             do_sync
             case "$target" in
-                infra) say "인프라 10종";       rexec "docker compose ${INFRA[*]} up -d" ;;
-                apps)  build_jars; say "앱 10종"; rexec "docker compose ${APPS[*]} up -d --build" ;;
-                all)   say "인프라 + 앱 20종"
+                infra) say "인프라 12종";       rexec "docker compose ${INFRA[*]} up -d"; wait_for_mysql_bootstrap ;;
+                apps)  build_jars; say "앱 11종"; rexec "docker compose ${APPS[*]} up -d --build" ;;
+                all)   say "인프라 + 앱 23종"
                        rexec "docker compose ${INFRA[*]} up -d" || die "인프라 기동 실패"
+                       wait_for_mysql_bootstrap
                        build_jars
                        rexec "docker compose ${APPS[*]} up -d --build" ;;
             esac

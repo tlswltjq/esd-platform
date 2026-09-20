@@ -272,7 +272,7 @@ systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 
 `ConsumerRestartCatchUpTest`(R-03)는 "지급 서비스가 중단됐다" 를 재현하려고
 `KafkaListenerEndpointRegistry` 로 리스너를 멈춘다. 그런데 그 레지스트리는
-**자기 컨텍스트의 것**이다. `LicenseContextTest` 는 프로퍼티가 달라 캐시 키가 갈리므로
+**자기 컨텍스트의 것**이다. `LicenseOpenApiContractTest` 는 프로퍼티가 달라 캐시 키가 갈리므로
 같은 JVM 에 **두 번째 컨텍스트**로 살아 있고, 그쪽 리스너도 같은 그룹 `license` 의 멤버다.
 
 그래서 한쪽을 멈추면 서비스가 멈추는 것이 아니라 **파티션이 다른 쪽으로 넘어간다.**

@@ -72,6 +72,21 @@ class TrackACreatorFlowTest {
 
     @Test
     @Order(3)
+    @DisplayName("ClamAV가 악성코드 테스트 패턴을 탐지하면 빌드를 거부한다")
+    void rejectsMalwareBuild() throws Exception {
+        byte[] artifact = malwareArtifact("0.0.1-malware-test");
+        long buildId = uploadArtifact("0.0.1-malware-test", "malware", artifact);
+        Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
+
+        Await.untilResponse("malware rejection " + buildId,
+                () -> Stove.gateway.get(
+                        "/api/v1/studio/ci/projects/%d/builds/%d".formatted(Journey.gameId(), buildId), ci),
+                response -> "FAILED".equals(response.data().path("status").asText())
+                        && "MALWARE_DETECTED".equals(response.data().path("failureCode").asText()));
+    }
+
+    @Test
+    @Order(4)
     @DisplayName("불변 revision을 제출하고 변경 요청 뒤 새 revision으로 재제출한다")
     void requestsChangesAndResubmits() {
         metadataRevision = revision("store-page-revisions", Map.of(
@@ -108,7 +123,7 @@ class TrackACreatorFlowTest {
     }
 
     @Test
-    @Order(4)
+    @Order(5)
     @DisplayName("ReleasePublished 이후에만 catalog/store/download가 같은 release를 노출한다")
     void projectsPublishedRelease() {
         Await.untilResponse("catalog release projection",
@@ -129,7 +144,7 @@ class TrackACreatorFlowTest {
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     @DisplayName("새 빌드 출시 후 이전 검증 빌드로 새 Release를 만들어 rollback한다")
     void publishesPatchAndRollsBack() throws Exception {
         build2 = uploadBuild("1.1.0", "200");
@@ -166,6 +181,16 @@ class TrackACreatorFlowTest {
 
     private long uploadBuild(String version, String buildNumber) throws Exception {
         byte[] artifact = artifact(version);
+        long buildId = uploadArtifact(version, buildNumber, artifact);
+        Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
+        Await.untilResponse("build validation " + buildId,
+                () -> Stove.gateway.get(
+                        "/api/v1/studio/ci/projects/%d/builds/%d".formatted(Journey.gameId(), buildId), ci),
+                response -> "VALIDATED".equals(response.data().path("status").asText()));
+        return buildId;
+    }
+
+    private long uploadArtifact(String version, String buildNumber, byte[] artifact) throws Exception {
         String checksum = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(artifact));
         Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
         Response session = Stove.gateway.post(
@@ -196,10 +221,6 @@ class TrackACreatorFlowTest {
                         .formatted(Journey.gameId(), sessionId),
                 Map.of("parts", List.of(Map.of("partNumber", 1, "etag", etag))), ci);
         assertThat(completed.status()).as("%s", completed).isEqualTo(200);
-        Await.untilResponse("build validation " + buildId,
-                () -> Stove.gateway.get(
-                        "/api/v1/studio/ci/projects/%d/builds/%d".formatted(Journey.gameId(), buildId), ci),
-                response -> "VALIDATED".equals(response.data().path("status").asText()));
         return buildId;
     }
 
@@ -266,6 +287,27 @@ class TrackACreatorFlowTest {
             zip.closeEntry();
             zip.putNextEntry(new ZipEntry("game.exe"));
             zip.write("MZ-e2e-executable".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return output.toByteArray();
+    }
+
+    private static byte[] malwareArtifact(String version) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            zip.putNextEntry(new ZipEntry("manifest.json"));
+            zip.write(("{\"productVersion\":\"" + version
+                    + "\",\"entrypoint\":\"game.exe\"}").getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("game.exe"));
+            zip.write("MZ-e2e-executable".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("eicar.com"));
+            // 표준 EICAR 문자열은 실행 가능한 악성코드가 아니라 백신 연결을 검증하는 테스트 패턴이다.
+            // 소스 파일 자체가 로컬 백신에 잡히지 않도록 런타임에 두 조각을 합친다.
+            String eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$"
+                    + "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+            zip.write(eicar.getBytes(StandardCharsets.US_ASCII));
             zip.closeEntry();
         }
         return output.toByteArray();

@@ -1,4 +1,4 @@
-# 9개 서비스 + 게이트웨이를 컨테이너로 띄운다.
+# 10개 도메인 서비스 + 게이트웨이를 컨테이너로 띄운다.
 #
 #   ./gradlew build -x test                     # bootJar 생성
 #   docker compose up -d                        # 인프라
