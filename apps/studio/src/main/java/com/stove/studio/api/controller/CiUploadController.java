@@ -11,6 +11,7 @@ import com.stove.studio.config.ProjectCredentialPrincipal;
 import com.stove.studio.core.service.BuildValidationDispatcherService;
 import com.stove.studio.core.service.UploadSessionService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/studio/ci/projects/{gameId}")
+@SecurityRequirement(name = "projectCredential")
 public class CiUploadController {
 
     private final UploadSessionService uploadSessionService;

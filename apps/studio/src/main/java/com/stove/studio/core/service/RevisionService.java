@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.studio.core.domain.PricingRevision;
 import com.stove.studio.core.domain.PricingRevisionRepository;
-import com.stove.studio.core.domain.RatingPath;
+import com.stove.studio.core.domain.KoreanRatingPolicy;
 import com.stove.studio.core.domain.RatingRevision;
 import com.stove.studio.core.domain.RatingRevisionRepository;
 import com.stove.studio.core.domain.StorePageRevision;
@@ -19,13 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class RevisionService {
 
-    private static final String RATING_POLICY_VERSION = "KR-SELF-2026-01";
-
     private final GameProjectService projectService;
     private final StorePageRevisionRepository storeRepository;
     private final PricingRevisionRepository pricingRepository;
     private final RatingRevisionRepository ratingRepository;
     private final ObjectMapper objectMapper;
+    private final KoreanRatingPolicy ratingPolicy;
 
     public StorePageRevision createStorePage(Long gameId, Long workspaceId, String title,
                                              String shortDescription, String platform,
@@ -44,22 +43,20 @@ public class RevisionService {
         return pricingRepository.save(PricingRevision.create(gameId, revision, "KR", "KRW", price));
     }
 
-    public RatingRevision createRating(Long gameId, Long workspaceId, Map<String, Object> questionnaire) {
+    public RatingRevision createRating(Long gameId, Long workspaceId, String country,
+                                       String targetRatingCode, String policyVersion,
+                                       Map<String, Object> questionnaire) {
         projectService.requireOwned(gameId, workspaceId);
         int revision = ratingRepository.findTopByGameIdOrderByRevisionNoDesc(gameId)
                 .map(value -> value.getRevisionNo() + 1).orElse(1);
-        RatingPath path = resolveRatingPath(questionnaire);
+        KoreanRatingPolicy.RatingClassification classification =
+                ratingPolicy.classify(country, targetRatingCode, policyVersion, questionnaire);
         try {
-            return ratingRepository.save(RatingRevision.create(gameId, revision, RATING_POLICY_VERSION,
-                    objectMapper.writeValueAsString(questionnaire), path));
+            return ratingRepository.save(RatingRevision.create(gameId, revision,
+                    classification.policyVersion(), classification.country(), classification.targetRatingCode(),
+                    objectMapper.writeValueAsString(questionnaire), classification.path()));
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("등급 설문을 저장할 수 없습니다.", e);
         }
-    }
-
-    private RatingPath resolveRatingPath(Map<String, Object> questionnaire) {
-        boolean adultContent = Boolean.TRUE.equals(questionnaire.get("adultContent"));
-        boolean cashGambling = Boolean.TRUE.equals(questionnaire.get("cashGambling"));
-        return adultContent || cashGambling ? RatingPath.GRAC : RatingPath.SELF_CLASSIFICATION;
     }
 }

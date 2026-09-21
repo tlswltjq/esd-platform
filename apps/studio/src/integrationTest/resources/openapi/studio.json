@@ -334,12 +334,28 @@
       },
       "CreateRatingRevisionRequest" : {
         "properties" : {
+          "country" : {
+            "minLength" : 1,
+            "pattern" : "[A-Z]{2}",
+            "type" : "string"
+          },
+          "policyVersion" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
           "questionnaire" : {
             "additionalProperties" : { },
+            "minProperties" : 1,
             "type" : "object"
+          },
+          "targetRatingCode" : {
+            "minLength" : 1,
+            "pattern" : "ALL|12|15|18",
+            "type" : "string"
           }
         },
-        "required" : [ "questionnaire" ],
+        "required" : [ "country", "policyVersion", "questionnaire", "targetRatingCode" ],
         "type" : "object"
       },
       "CreateReleaseRequest" : {
@@ -712,6 +728,12 @@
       },
       "RevisionResponse" : {
         "properties" : {
+          "country" : {
+            "type" : "string"
+          },
+          "policyVersion" : {
+            "type" : "string"
+          },
           "resolvedPath" : {
             "type" : "string"
           },
@@ -722,6 +744,9 @@
           "revisionNo" : {
             "format" : "int32",
             "type" : "integer"
+          },
+          "targetRatingCode" : {
+            "type" : "string"
           },
           "type" : {
             "type" : "string"
@@ -822,6 +847,29 @@
           }
         },
         "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
+      },
+      "projectCredential" : {
+        "description" : "프로젝트 범위 CI credential입니다. 빌드 업로드와 상태 조회에만 사용합니다.",
+        "in" : "header",
+        "name" : "X-Project-Credential",
+        "type" : "apiKey"
       }
     }
   },
@@ -996,6 +1044,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "projectCredential" : [ ]
+        } ],
         "tags" : [ "ci-upload-controller" ]
       }
     },
@@ -1033,6 +1084,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "projectCredential" : [ ]
+        } ],
         "tags" : [ "ci-upload-controller" ]
       }
     },
@@ -1078,6 +1132,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "projectCredential" : [ ]
+        } ],
         "tags" : [ "ci-upload-controller" ]
       }
     },
@@ -1096,6 +1153,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       },
       "post" : {
@@ -1122,6 +1182,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       }
     },
@@ -1159,6 +1222,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       }
     },
@@ -1186,6 +1252,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       },
       "post" : {
@@ -1221,6 +1290,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       }
     },
@@ -1248,6 +1320,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       }
     },
@@ -1285,6 +1360,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "studio-controller" ]
       }
     },
@@ -1312,6 +1390,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1339,6 +1420,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1366,6 +1450,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1402,6 +1489,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1429,6 +1519,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "project-credential-controller" ]
       },
       "post" : {
@@ -1464,6 +1557,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "project-credential-controller" ]
       }
     },
@@ -1499,6 +1595,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "project-credential-controller" ]
       }
     },
@@ -1536,6 +1635,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1573,6 +1675,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1610,6 +1715,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     },
@@ -1647,6 +1755,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "publishing-controller" ]
       }
     }

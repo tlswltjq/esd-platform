@@ -25,11 +25,42 @@ spring:
     gateway:
       server:
         webflux:
+          # API와 OAuth token 교환만 CORS 대상이다. 로그인은 같은 출처의 폼/팝업 이동이라
+          # CORS가 필요하지 않으며, chrome-error 프레임의 Origin을 여기서 거부하면
+          # 브라우저가 /login을 403으로 표시한다.
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/api/**]': &local-cors
+                allowedOrigins:
+                  - http://127.0.0.1:18080
+                  - http://localhost:18080
+                  - http://127.0.0.1:8080
+                  - http://localhost:8080
+                allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowedHeaders: ['*']
+                allowCredentials: true
+              '[/oauth2/token]': *local-cors
           # 추적 컨텍스트(traceparent)는 게이트웨이가 트레이스를 열면서 자동으로 만들어
           # 하류로 전달한다 — 라우팅 규칙에서 헤더를 손댈 일이 없다.
           # 각 서비스는 그 값을 이어받고, 응답에는 traceId 를 X-Correlation-Id 로 돌려준다
           # (common:web 의 TraceIdResponseFilter).
           routes:
+            # ── 회원가입·OIDC ───────────────────────────────────────
+            # 브라우저는 인증 서버 포트를 직접 조합하지 않고 게이트웨이 한 출처에서
+            # 회원가입과 Swagger PKCE 로그인을 수행한다.
+            - id: auth-api
+              uri: ${AUTH_URI:http://localhost:8091}
+              predicates:
+                - Path=/api/v1/auth/**
+            - id: auth-browser
+              uri: ${AUTH_URI:http://localhost:8091}
+              predicates:
+                - Path=/oauth2/**,/login,/logout,/error,/.well-known/**,/default-ui.css
+              filters:
+                # Spring Authorization Server가 로그인 Location을 브라우저 출처로 만든다.
+                - PreserveHostHeader
+
             # ── 유저 대면 ─────────────────────────────────────────
             - id: store
               uri: ${STORE_URI:http://localhost:8087}
@@ -86,6 +117,10 @@ spring:
               uri: ${CATALOG_URI:http://localhost:8081}
               predicates: [Path=/v3/api-docs/catalog, Method=GET]
               filters: [SetPath=/v3/api-docs]
+            - id: docs-auth
+              uri: ${AUTH_URI:http://localhost:8091}
+              predicates: [Path=/v3/api-docs/auth, Method=GET]
+              filters: [SetPath=/v3/api-docs]
             - id: docs-order
               uri: ${ORDER_URI:http://localhost:8082}
               predicates: [Path=/v3/api-docs/order, Method=GET]
@@ -119,7 +154,7 @@ spring:
               predicates: [Path=/v3/api-docs/settlement, Method=GET]
               filters: [SetPath=/v3/api-docs]
 
-# 9개 서비스의 명세를 한 화면에서 드롭다운으로 전환한다.
+# 10개 서비스의 명세를 한 화면에서 드롭다운으로 전환한다.
 #
 # `api-docs.enabled: false` 로 게이트웨이 자기 명세를 끄려다 **Swagger UI 까지 404 가 됐다** —
 # springdoc 에서 그 속성은 명세 엔드포인트 하나가 아니라 구성 전체의 스위치다.
@@ -128,6 +163,7 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     urls:
+      - { name: 0. auth (회원가입·OIDC),    url: /v3/api-docs/auth }
       - { name: 1. store (진열·검색),      url: /v3/api-docs/store }
       - { name: 2. catalog (상품),         url: /v3/api-docs/catalog }
       - { name: 3. order (주문),           url: /v3/api-docs/order }
@@ -137,6 +173,9 @@ springdoc:
       - { name: 7. studio (크리에이터),     url: /v3/api-docs/studio }
       - { name: 8. review (심의·운영),      url: /v3/api-docs/review }
       - { name: 9. settlement (정산·운영),  url: /v3/api-docs/settlement }
+    oauth:
+      client-id: swagger-ui
+      use-pkce-with-authorization-code-grant: true
 
 management:
   endpoints.web.exposure.include: health,info,prometheus,gateway

@@ -75,7 +75,7 @@ public class ReviewService {
             // 등급 설문과 정책 버전을 검토하지 않은 채 ALL로 자동 승인하는 우회로는 두지 않는다.
             request.startReview(null);
         } else {
-            request.startReview(ratingBoardClient.submit(
+            request.startReview(ratingBoardClient.submitLegacy(
                     request.getProductCode(), request.getTitle(), request.getSellerId()));
         }
         log.info("심의 접수 productCode={} selfRated={} status={}",

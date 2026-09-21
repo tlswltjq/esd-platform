@@ -4,11 +4,11 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.header.XFrameOptionsServerHttpHeadersWriter;
 import reactor.core.publisher.Flux;
 
 @Configuration
@@ -20,6 +20,9 @@ public class SecurityConfig {
                 .authorizeExchange(authorize -> authorize
                         .pathMatchers("/actuator/health", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
+                        .pathMatchers("/p0-lab/**", "/api/v1/auth/signup", "/oauth2/**", "/login", "/logout",
+                                "/error", "/.well-known/**")
+                        .permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/storefront/**")
                         .permitAll()
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
@@ -30,7 +33,11 @@ public class SecurityConfig {
                         .anyExchange().permitAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .headers(headers -> headers.frameOptions(Customizer.withDefaults()))
+                // Swagger OAuth 승인 화면이 같은 게이트웨이 출처의 프레임에서 로그인한다.
+                // DENY이면 로그인 프레임이 chrome-error://chromewebdata 로 바뀌어
+                // 이후 /login POST가 403으로 끝난다.
+                .headers(headers -> headers.frameOptions(frame ->
+                        frame.mode(XFrameOptionsServerHttpHeadersWriter.Mode.SAMEORIGIN)))
                 .build();
     }
 

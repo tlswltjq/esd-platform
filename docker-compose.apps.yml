@@ -47,6 +47,7 @@ services:
       OTLP_ENDPOINT: http://tempo:4318/v1/traces
       JWT_ISSUER_URI: http://localhost:8091
       JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
+      AUTH_URI: http://auth:8091
       CATALOG_URI: http://catalog:8081
       ORDER_URI: http://order:8082
       PAYMENT_URI: http://payment:8083

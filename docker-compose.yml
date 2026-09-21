@@ -152,6 +152,8 @@ services:
     environment:
       MINIO_ROOT_USER: stove
       MINIO_ROOT_PASSWORD: stove1234
+      # Gateway Swagger와 P0 Lab이 presigned PUT의 ETag를 읽어 multipart complete에 넘긴다.
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:8080,http://127.0.0.1:18080,http://localhost:18080"
     command: ["server", "/data", "--console-address", ":9001"]
     volumes:
       - minio-data:/data

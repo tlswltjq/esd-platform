@@ -270,10 +270,29 @@
       },
       "ReviewCaseResponse" : {
         "properties" : {
+          "certificationNumber" : {
+            "type" : "string"
+          },
+          "country" : {
+            "type" : "string"
+          },
           "externalFeedback" : {
             "type" : "string"
           },
+          "externalSubmissionId" : {
+            "type" : "string"
+          },
+          "issuedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "issuer" : {
+            "type" : "string"
+          },
           "ratingCode" : {
+            "type" : "string"
+          },
+          "ratingPath" : {
             "type" : "string"
           },
           "reasonCode" : {
@@ -288,12 +307,15 @@
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "REQUESTED", "APPROVED", "CHANGES_REQUESTED" ],
+            "enum" : [ "REQUESTED", "EXTERNAL_SUBMITTED", "APPROVED", "CHANGES_REQUESTED" ],
             "type" : "string"
           },
           "submissionId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "targetRatingCode" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -339,6 +361,23 @@
           }
         },
         "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
       }
     }
   },
@@ -505,6 +544,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "review-controller" ]
       }
     },
@@ -532,6 +574,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "submission-review-controller" ]
       }
     },
@@ -569,6 +614,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "submission-review-controller" ]
       }
     },
@@ -606,6 +654,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "submission-review-controller" ]
       }
     },
@@ -641,6 +692,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "review-controller" ]
       }
     },
@@ -678,6 +732,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
         "tags" : [ "review-controller" ]
       }
     }

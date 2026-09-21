@@ -1,6 +1,9 @@
 server:
   port: 8091
   shutdown: graceful
+  # OAuth 리다이렉트는 게이트웨이가 전달한 원래 브라우저 호스트를 사용해야 한다.
+  # 이 설정이 없으면 컨테이너 내부 주소(auth:8091)가 Location 헤더에 노출된다.
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -34,6 +37,7 @@ stove:
     issuer: ${AUTH_ISSUER:http://localhost:8091}
     redirect-uri: ${STUDIO_REDIRECT_URI:http://localhost:3000/callback}
     app-origin: ${STUDIO_APP_ORIGIN:http://localhost:3000}
+    swagger-redirect-uris: ${AUTH_SWAGGER_REDIRECT_URIS:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}
     bootstrap:
       reviewer-email: ${AUTH_REVIEWER_EMAIL:}
       reviewer-password: ${AUTH_REVIEWER_PASSWORD:}

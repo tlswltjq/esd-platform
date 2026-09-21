@@ -14,6 +14,7 @@ import com.stove.studio.core.service.GameBuildService;
 import com.stove.studio.core.service.GameProjectService;
 import com.stove.studio.core.service.WorkspaceService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/studio/games")
+@SecurityRequirement(name = "oauth2", scopes = "studio")
 public class StudioController {
 
     private final GameProjectService gameProjectService;

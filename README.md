@@ -191,6 +191,22 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 
 ### 실행
 
+브라우저로 Swagger를 실습할 때는 인프라와 앱을 따로 기동하지 말고 아래 단일 진입점을
+사용한다. 내부 Compose 파일은 CI 격리를 위해 나뉘어 있지만 개발자는 하나의 스택처럼
+관리할 수 있다.
+
+```bash
+./scripts/local-stack.sh up       # 빌드하고 전체 로컬 스택 시작
+./scripts/local-stack.sh ps       # 상태 확인
+./scripts/local-stack.sh logs auth
+./scripts/local-stack.sh down     # 전체 종료
+```
+
+Swagger는 `http://127.0.0.1:18080/swagger-ui.html` 로 연다. `localhost`와
+`127.0.0.1`을 섞지 않아 OAuth 세션과 CSRF 쿠키가 같은 출처에 남는다.
+
+수동으로 나눠 실행해야 하는 경우의 기존 절차는 아래와 같다.
+
 ```bash
 # 1) 인프라
 docker compose up -d
@@ -208,7 +224,8 @@ docker compose -f docker-compose.apps.yml up -d --build
 
 | 도구 | 주소 |
 |---|---|
-| **Swagger UI** | http://localhost:8080/swagger-ui.html — 9개 서비스를 드롭다운으로 전환 |
+| **Swagger UI** | http://localhost:8080/swagger-ui.html — Auth 포함 10개 서비스를 전환하고 OAuth2 PKCE 로그인 |
+| **P0 빌드 업로드 Lab** | http://localhost:8080/p0-lab/ — CI credential로 presigned multipart 업로드·검증 |
 | Kafka UI | http://localhost:8090 |
 | Elasticsearch | http://localhost:9200 |
 | Prometheus | http://localhost:9090 |

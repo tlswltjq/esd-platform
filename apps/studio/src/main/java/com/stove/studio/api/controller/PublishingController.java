@@ -14,6 +14,7 @@ import com.stove.studio.core.service.RevisionService;
 import com.stove.studio.core.service.SubmissionService;
 import com.stove.studio.core.service.WorkspaceService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/studio/projects")
+@SecurityRequirement(name = "oauth2", scopes = "studio")
 public class PublishingController {
 
     private final WorkspaceService workspaceService;
@@ -57,7 +59,8 @@ public class PublishingController {
                                                 @Valid @RequestBody CreateRatingRevisionRequest request) {
         Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
         return ApiResponse.ok(RevisionResponse.from(
-                revisionService.createRating(gameId, workspaceId, request.questionnaire())));
+                revisionService.createRating(gameId, workspaceId, request.country(), request.targetRatingCode(),
+                        request.policyVersion(), request.questionnaire())));
     }
 
     @PostMapping("/{gameId}/submissions")

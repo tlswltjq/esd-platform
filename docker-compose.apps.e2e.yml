@@ -47,8 +47,13 @@ services:
     ports: ["127.0.0.1:18085:8085"]
     environment:
       STORAGE_PRESIGN_ENDPOINT: http://127.0.0.1:19000
+      STOVE_DOCS_OAUTH_AUTHORIZATION_URL: /oauth2/authorize
+      STOVE_DOCS_OAUTH_TOKEN_URL: /oauth2/token
   review:
     ports: ["127.0.0.1:18086:8086"]
+    environment:
+      STOVE_DOCS_OAUTH_AUTHORIZATION_URL: /oauth2/authorize
+      STOVE_DOCS_OAUTH_TOKEN_URL: /oauth2/token
   store:
     ports: ["127.0.0.1:18087:8087"]
   download:
