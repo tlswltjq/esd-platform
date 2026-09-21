@@ -8,6 +8,7 @@ import com.stove.studio.core.domain.BuildStatus;
 import com.stove.studio.core.domain.GameBuild;
 import com.stove.studio.core.domain.GameBuildRepository;
 import com.stove.studio.core.domain.GameProject;
+import com.stove.studio.core.domain.KoreanRatingPolicy;
 import com.stove.studio.core.domain.PricingRevision;
 import com.stove.studio.core.domain.PricingRevisionRepository;
 import com.stove.studio.core.domain.RatingRevision;
@@ -36,6 +37,7 @@ public class SubmissionService {
     private final GameProjectService projectService;
     private final OutboxRecorder outboxRecorder;
     private final SubmissionGateRepository gateRepository;
+    private final KoreanRatingPolicy ratingPolicy;
 
     public Submission submit(Long gameId, Long workspaceId, Long metadataRevisionId,
                              Long pricingRevisionId, Long ratingRevisionId, Long buildId) {
@@ -49,6 +51,7 @@ public class SubmissionService {
         RatingRevision rating = ratingRepository.findById(ratingRevisionId)
                 .filter(value -> value.getGameId().equals(gameId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "등급 revision이 프로젝트와 다릅니다."));
+        ratingPolicy.requireActive(rating.getCountry(), rating.getPolicyVersion());
         GameBuild build = buildRepository.findById(buildId)
                 .filter(value -> value.getGameId().equals(gameId))
                 .filter(value -> value.getStatus() == BuildStatus.VALIDATED)
@@ -65,7 +68,8 @@ public class SubmissionService {
                 submission.getId(), gameId, project.getProductCode(), workspaceId,
                 metadataRevisionId, pricingRevisionId, ratingRevisionId, buildId,
                 metadata.getTitle(), metadata.getShortDescription(), pricing.getPrice(), pricing.getCurrency(),
-                rating.getResolvedPath().name(), rating.getPolicyVersion(), build.getVersion()));
+                rating.getResolvedPath().name(), rating.getPolicyVersion(), rating.getCountry(),
+                rating.getTargetRatingCode(), rating.getQuestionnaire(), build.getVersion()));
         return submission;
     }
 

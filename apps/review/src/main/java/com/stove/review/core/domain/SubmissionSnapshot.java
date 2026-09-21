@@ -30,6 +30,9 @@ public class SubmissionSnapshot extends BaseTimeEntity {
     @Column(nullable = false, length = 3) private String currency;
     @Column(nullable = false, length = 30) private String ratingPath;
     @Column(nullable = false, length = 30) private String ratingPolicyVersion;
+    @Column(nullable = false, length = 2) private String ratingCountry;
+    @Column(nullable = false, length = 10) private String targetRatingCode;
+    @Lob @Column(nullable = false, columnDefinition = "TEXT") private String ratingQuestionnaire;
     @Column(nullable = false, length = 30) private String productVersion;
 
     public static SubmissionSnapshot from(SubmissionCreatedEvent event) {
@@ -48,6 +51,9 @@ public class SubmissionSnapshot extends BaseTimeEntity {
         snapshot.currency = event.currency();
         snapshot.ratingPath = event.ratingPath();
         snapshot.ratingPolicyVersion = event.ratingPolicyVersion();
+        snapshot.ratingCountry = event.ratingCountry();
+        snapshot.targetRatingCode = event.targetRatingCode();
+        snapshot.ratingQuestionnaire = event.ratingQuestionnaire();
         snapshot.productVersion = event.productVersion();
         return snapshot;
     }

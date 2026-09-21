@@ -4,15 +4,19 @@ import com.stove.studio.core.domain.PricingRevision;
 import com.stove.studio.core.domain.RatingRevision;
 import com.stove.studio.core.domain.StorePageRevision;
 
-public record RevisionResponse(Long revisionId, int revisionNo, String type, String resolvedPath) {
+public record RevisionResponse(Long revisionId, int revisionNo, String type, String resolvedPath,
+                               String country, String targetRatingCode, String policyVersion) {
     public static RevisionResponse from(StorePageRevision revision) {
-        return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "STORE_PAGE", null);
+        return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "STORE_PAGE",
+                null, null, null, null);
     }
     public static RevisionResponse from(PricingRevision revision) {
-        return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "PRICING", null);
+        return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "PRICING",
+                null, null, null, null);
     }
     public static RevisionResponse from(RatingRevision revision) {
         return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "RATING",
-                revision.getResolvedPath().name());
+                revision.getResolvedPath().name(), revision.getCountry(), revision.getTargetRatingCode(),
+                revision.getPolicyVersion());
     }
 }

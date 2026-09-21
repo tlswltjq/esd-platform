@@ -9,7 +9,6 @@ import com.stove.e2e.E2eClient.Response;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +95,9 @@ class TrackACreatorFlowTest {
                 "minimumRequirements", "Windows 10"));
         pricingRevision = revision("pricing-revisions", Map.of("price", PRICE));
         ratingRevision = revision("rating-revisions", Map.of(
+                "country", "KR",
+                "targetRatingCode", "ALL",
+                "policyVersion", "KR-2026-01",
                 "questionnaire", Map.of("adultContent", false, "cashGambling", false)));
 
         long firstSubmission = submit(build1, metadataRevision);
@@ -124,6 +126,29 @@ class TrackACreatorFlowTest {
 
     @Test
     @Order(5)
+    @DisplayName("18세 대상 revision은 GRAC 외부 접수로 분리하고 접수 번호를 기록한다")
+    void submitsAdultRatingToGrac() {
+        long gracRatingRevision = revision("rating-revisions", Map.of(
+                "country", "KR",
+                "targetRatingCode", "18",
+                "policyVersion", "KR-2026-01",
+                "questionnaire", Map.of("adultContent", true, "cashGambling", false)));
+        long submissionId = submit(build1, metadataRevision, gracRatingRevision);
+
+        Await.untilResponse("GRAC external submission " + submissionId,
+                () -> Stove.gateway.get("/api/v1/reviews/cases?submissionId=" + submissionId,
+                        Journey.asReviewer()), response -> {
+                    JsonNode ratingCase = itemByText(response.data(), "reviewType", "RATING");
+                    return ratingCase != null
+                            && "EXTERNAL_SUBMITTED".equals(ratingCase.path("status").asText())
+                            && "GRAC".equals(ratingCase.path("ratingPath").asText())
+                            && "18".equals(ratingCase.path("targetRatingCode").asText())
+                            && ratingCase.path("externalSubmissionId").asText().startsWith("GRAC-");
+                });
+    }
+
+    @Test
+    @Order(6)
     @DisplayName("ReleasePublished 이후에만 catalog/store/download가 같은 release를 노출한다")
     void projectsPublishedRelease() {
         Await.untilResponse("catalog release projection",
@@ -144,7 +169,7 @@ class TrackACreatorFlowTest {
     }
 
     @Test
-    @Order(6)
+    @Order(7)
     @DisplayName("새 빌드 출시 후 이전 검증 빌드로 새 Release를 만들어 rollback한다")
     void publishesPatchAndRollsBack() throws Exception {
         build2 = uploadBuild("1.1.0", "200");
@@ -233,11 +258,15 @@ class TrackACreatorFlowTest {
     }
 
     private long submit(long buildId, long metadataId) {
+        return submit(buildId, metadataId, ratingRevision);
+    }
+
+    private long submit(long buildId, long metadataId, long ratingId) {
         Response response = Stove.gateway.post(
                 "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
                         "metadataRevisionId", metadataId,
                         "pricingRevisionId", pricingRevision,
-                        "ratingRevisionId", ratingRevision,
+                        "ratingRevisionId", ratingId,
                         "buildId", buildId), Journey.asCreator());
         assertThat(response.status()).as("%s", response).isEqualTo(200);
         return response.data().path("submissionId").asLong();
@@ -260,11 +289,7 @@ class TrackACreatorFlowTest {
         for (String type : List.of("RATING", "STORE_PAGE", "BUILD_QA")) {
             long caseId = reviewCase(submissionId, type);
             Map<String, ?> body = "RATING".equals(type) ? Map.of(
-                    "ratingCode", "ALL",
-                    "certificationNumber", "SELF-" + submissionId,
-                    "issuer", "ESD SELF CLASSIFICATION",
-                    "issuedAt", Instant.now().toString(),
-                    "country", "KR") : Map.of();
+                    "ratingCode", "ALL") : Map.of();
             Response approved = Stove.gateway.post(
                     "/api/v1/reviews/cases/%d/approve".formatted(caseId), body, Journey.asReviewer());
             assertThat(approved.status()).as("%s", approved).isEqualTo(200);

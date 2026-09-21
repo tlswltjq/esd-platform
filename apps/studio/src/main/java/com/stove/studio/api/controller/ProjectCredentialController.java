@@ -7,6 +7,7 @@ import com.stove.studio.api.controller.dto.ProjectCredentialResponse;
 import com.stove.studio.core.service.ProjectCredentialService;
 import com.stove.studio.core.service.WorkspaceService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/studio/projects/{gameId}/credentials")
+@SecurityRequirement(name = "oauth2", scopes = "studio")
 public class ProjectCredentialController {
 
     private final ProjectCredentialService credentialService;

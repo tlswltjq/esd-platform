@@ -31,7 +31,20 @@ DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
                             └─ReviewRejected──▶ REJECTED ──submit──▶ SUBMITTED
 ```
 
-**HTTP API** — `sellerId` 는 실제로는 스튜디오 계정 토큰에서 주입된다(현재는 `X-Seller-Id` 헤더).
+**HTTP API** — 크리에이터와 Workspace는 OIDC principal에서 식별한다. 빌드 업로드 전용 API는
+프로젝트 범위 machine credential을 사용한다.
+
+로컬 실습에서는 Gateway Swagger의 `auth` 명세에서 가입한 뒤 `Authorize`를 누르면 Authorization
+Code + PKCE 로그인이 자동으로 완료된다. 프로젝트 credential을 발급한 다음 `/p0-lab/`에서 ZIP을
+선택하면 presigned multipart 업로드와 `VALIDATED` 상태 확인까지 수행할 수 있다.
+
+Swagger와 OAuth 엔드포인트는 모두 Gateway의 같은 출처를 사용한다. OpenAPI에는
+`/oauth2/authorize`, `/oauth2/token` 상대 경로만 노출하고 CORS는 Gateway 한 곳에서 처리한다.
+브라우저에서 Auth 컨테이너 포트(`8091`/`18091`)를 직접 호출하지 않는다.
+
+로그인 폼을 오래 열어 두었거나 같은 요청을 다시 전송해 CSRF 토큰이 만료되면 `/login`이 새 로그인
+화면으로 이동한다. 이 화면에서 다시 입력하면 된다. `username`, `password`, `_csrf`는 Request
+Headers가 아니라 폼의 Form Data여야 한다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -40,6 +53,9 @@ DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
 | POST | `/api/v1/studio/games/{gameId}/submit` | 심의 신청 → `GameRegistered` |
 | POST | `/api/v1/studio/games/{gameId}/builds` | 빌드 메타데이터 등록 → `BuildUploaded` |
 | GET | `/api/v1/studio/games/{gameId}/builds` | 빌드 이력 |
+| POST | `/api/v1/studio/projects/{gameId}/rating-revisions` | 지역·목표 연령·정책 버전·콘텐츠 설문을 고정하고 등급 경로 결정 |
+| POST | `/api/v1/studio/projects/{gameId}/submissions` | 검증 빌드와 revision의 불변 심사 스냅샷 제출 |
+| POST | `/api/v1/studio/projects/submissions/{submissionId}/releases` | 승인된 제출물을 수동·예약 출시 |
 
 **이벤트** — 수신 `ReviewApproved`·`ReviewRejected` / 발행 `GameRegistered`·`BuildUploaded`
 
@@ -49,6 +65,11 @@ DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
 - 이미 신청했거나 승인된 프로젝트는 다시 신청할 수 없다. 반려된 건만 재신청 가능.
 - 같은 게임의 같은 버전은 한 번만 등록된다.
 - 바이너리는 직접 받지 않는다. `BuildStorage` 포트로 업로드 경로와 presigned URL 만 발급한다.
+- 현재 활성 등급 정책은 `KR-2026-01`이다. `country=KR`, 목표 등급 `ALL|12|15|18`,
+  `adultContent`·`cashGambling` boolean 응답이 모두 있어야 revision을 만든다.
+- 전체·12·15세는 `SELF_CLASSIFICATION`, 18세는 `GRAC` 경로다. 성인 콘텐츠나 현금성
+  사행 요소를 18세보다 낮은 목표 등급으로 제출하면 거부한다.
+- 정책 버전은 제출 시에도 다시 검사하므로, 정책이 바뀐 뒤 과거 revision을 새 Submission에 재사용할 수 없다.
 
 ---
 
@@ -70,15 +91,21 @@ REQUESTED ──▶ IN_REVIEW ──▶ APPROVED
 | GET | `/api/v1/reviews?status=` | 심의 목록(상태 필터) |
 | POST | `/api/v1/reviews/{reviewId}/approve?ratingCode=ALL` | 승인 → `ReviewApproved` |
 | POST | `/api/v1/reviews/{reviewId}/reject` | 반려 → `ReviewRejected` |
+| GET | `/api/v1/reviews/cases?submissionId=` | 불변 Submission의 등급·상점·빌드 QA 심사 조회 |
+| POST | `/api/v1/reviews/cases/{caseId}/approve` | 경로별 증빙 검증 후 승인 |
+| POST | `/api/v1/reviews/cases/{caseId}/changes-requested` | 수정 요청 |
 
 **이벤트** — 수신 `GameRegistered` / 발행 `ReviewApproved`·`ReviewRejected`
 
 **규칙**
 
-- **자체등급분류 분기.** `selfRated` 면 게임물관리위원회 접수를 건너뛰고 내부 심사로 간다.
-  `stove.review.auto-approve-self-rated`(기본 `true`)면 접수 즉시 승인된다.
-- 자체등급분류가 아니면 `RatingBoardClient` 포트로 접수번호를 받아 `IN_REVIEW` 로 전이한다.
-- 반려 후 재신청은 같은 레코드를 `REQUESTED` 로 되돌린다(이력 유지).
+- P0 Submission 경로는 studio가 확정한 지역·목표 연령·정책 버전·설문을 다시 검증한다.
+- 전체·12·15세 자체등급은 외부 기관에 접수하지 않는다. 담당자는 등급 코드만 결정하고,
+  플랫폼이 인증번호·발급기관·발급일·대상 국가를 기록한다.
+- 18세 GRAC 건은 `buildId`, 제품 버전, 정책 버전과 설문 스냅샷 전체를 `RatingBoardClient`에
+  제출한다. 외부 접수번호를 저장한 `EXTERNAL_SUBMITTED` 상태에서만 완전한 외부 인증 증빙으로 승인한다.
+- `GameRegistered` 기반 프로젝트 단위 심의 API는 기존 이벤트 호환 경로다. 새 출시 흐름은
+  `SubmissionCreated`와 유형별 `ReviewCase`를 사용한다.
 
 ---
 

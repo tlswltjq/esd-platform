@@ -7,6 +7,7 @@ import com.stove.review.api.controller.dto.ReviewCaseResponse;
 import com.stove.review.core.domain.ReviewCase;
 import com.stove.review.core.service.SubmissionReviewService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/reviews/cases")
+@SecurityRequirement(name = "oauth2", scopes = "studio")
 public class SubmissionReviewController {
 
     private final SubmissionReviewService reviewService;
