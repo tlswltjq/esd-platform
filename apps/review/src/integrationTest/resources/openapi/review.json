@@ -276,10 +276,17 @@
           "country" : {
             "type" : "string"
           },
+          "externalApplicationNumber" : {
+            "type" : "string"
+          },
+          "externalEvidenceUrl" : {
+            "type" : "string"
+          },
           "externalFeedback" : {
             "type" : "string"
           },
-          "externalSubmissionId" : {
+          "externalSubmittedAt" : {
+            "format" : "date-time",
             "type" : "string"
           },
           "issuedAt" : {
@@ -298,6 +305,9 @@
           "reasonCode" : {
             "type" : "string"
           },
+          "recommendedRatingCode" : {
+            "type" : "string"
+          },
           "reviewCaseId" : {
             "format" : "int64",
             "type" : "integer"
@@ -313,9 +323,6 @@
           "submissionId" : {
             "format" : "int64",
             "type" : "integer"
-          },
-          "targetRatingCode" : {
-            "type" : "string"
           }
         },
         "type" : "object"
@@ -360,6 +367,27 @@
             "type" : "string"
           }
         },
+        "type" : "object"
+      },
+      "SubmitExternalRatingRequest" : {
+        "properties" : {
+          "applicationNumber" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "evidenceUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "pattern" : "^https://[^\\s]+$",
+            "type" : "string"
+          },
+          "submittedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "applicationNumber", "evidenceUrl", "submittedAt" ],
         "type" : "object"
       }
     },
@@ -637,6 +665,46 @@
             "application/json" : {
               "schema" : {
                 "$ref" : "#/components/schemas/RequestChangesRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/external-submission" : {
+      "post" : {
+        "operationId" : "externalSubmission",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitExternalRatingRequest"
               }
             }
           },

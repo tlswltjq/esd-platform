@@ -59,8 +59,7 @@ public class PublishingController {
                                                 @Valid @RequestBody CreateRatingRevisionRequest request) {
         Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
         return ApiResponse.ok(RevisionResponse.from(
-                revisionService.createRating(gameId, workspaceId, request.country(), request.targetRatingCode(),
-                        request.policyVersion(), request.questionnaire())));
+                revisionService.createRating(gameId, workspaceId, request.questionnaire().toDomain())));
     }
 
     @PostMapping("/{gameId}/submissions")

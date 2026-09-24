@@ -4,6 +4,7 @@ import com.stove.common.core.response.ApiResponse;
 import com.stove.review.api.controller.dto.ApproveCaseRequest;
 import com.stove.review.api.controller.dto.RequestChangesRequest;
 import com.stove.review.api.controller.dto.ReviewCaseResponse;
+import com.stove.review.api.controller.dto.SubmitExternalRatingRequest;
 import com.stove.review.core.domain.ReviewCase;
 import com.stove.review.core.service.SubmissionReviewService;
 import jakarta.validation.Valid;
@@ -40,6 +41,15 @@ public class SubmissionReviewController {
                 : new ReviewCase.RatingDecision(request.ratingCode(), request.certificationNumber(),
                 request.issuer(), request.issuedAt(), request.country());
         reviewService.approve(caseId, jwt.getSubject(), rating);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{caseId}/external-submission")
+    public ApiResponse<Void> externalSubmission(
+            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody SubmitExternalRatingRequest request) {
+        reviewService.submitExternal(caseId, jwt.getSubject(), request.applicationNumber(),
+                request.submittedAt(), request.evidenceUrl());
         return ApiResponse.ok();
     }
 

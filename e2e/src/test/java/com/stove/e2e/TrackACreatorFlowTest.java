@@ -9,6 +9,7 @@ import com.stove.e2e.E2eClient.Response;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -94,11 +95,12 @@ class TrackACreatorFlowTest {
                 "platform", "WINDOWS",
                 "minimumRequirements", "Windows 10"));
         pricingRevision = revision("pricing-revisions", Map.of("price", PRICE));
-        ratingRevision = revision("rating-revisions", Map.of(
-                "country", "KR",
-                "targetRatingCode", "ALL",
-                "policyVersion", "KR-2026-01",
-                "questionnaire", Map.of("adultContent", false, "cashGambling", false)));
+        ratingRevision = ratingRevision(Map.of(
+                "violence", "NONE",
+                "sexualContent", "NONE",
+                "language", "NONE",
+                "drugUse", false,
+                "cashGambling", false), "SELF_CLASSIFICATION", "ALL");
 
         long firstSubmission = submit(build1, metadataRevision);
         long storeCase = reviewCase(firstSubmission, "STORE_PAGE");
@@ -126,29 +128,6 @@ class TrackACreatorFlowTest {
 
     @Test
     @Order(5)
-    @DisplayName("18세 대상 revision은 GRAC 외부 접수로 분리하고 접수 번호를 기록한다")
-    void submitsAdultRatingToGrac() {
-        long gracRatingRevision = revision("rating-revisions", Map.of(
-                "country", "KR",
-                "targetRatingCode", "18",
-                "policyVersion", "KR-2026-01",
-                "questionnaire", Map.of("adultContent", true, "cashGambling", false)));
-        long submissionId = submit(build1, metadataRevision, gracRatingRevision);
-
-        Await.untilResponse("GRAC external submission " + submissionId,
-                () -> Stove.gateway.get("/api/v1/reviews/cases?submissionId=" + submissionId,
-                        Journey.asReviewer()), response -> {
-                    JsonNode ratingCase = itemByText(response.data(), "reviewType", "RATING");
-                    return ratingCase != null
-                            && "EXTERNAL_SUBMITTED".equals(ratingCase.path("status").asText())
-                            && "GRAC".equals(ratingCase.path("ratingPath").asText())
-                            && "18".equals(ratingCase.path("targetRatingCode").asText())
-                            && ratingCase.path("externalSubmissionId").asText().startsWith("GRAC-");
-                });
-    }
-
-    @Test
-    @Order(6)
     @DisplayName("ReleasePublished 이후에만 catalog/store/download가 같은 release를 노출한다")
     void projectsPublishedRelease() {
         Await.untilResponse("catalog release projection",
@@ -169,7 +148,7 @@ class TrackACreatorFlowTest {
     }
 
     @Test
-    @Order(7)
+    @Order(6)
     @DisplayName("새 빌드 출시 후 이전 검증 빌드로 새 Release를 만들어 rollback한다")
     void publishesPatchAndRollsBack() throws Exception {
         build2 = uploadBuild("1.1.0", "200");
@@ -202,6 +181,62 @@ class TrackACreatorFlowTest {
                     JsonNode item = itemByLong(response.data(), "releaseId", rollbackRelease);
                     return item != null && item.path("buildId").asLong() == build1;
                 });
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("18세 GRAC 경로는 외부 접수 증빙 전 승인·출시를 막는다")
+    void requiresGracExternalSubmission() {
+        long gracRatingRevision = ratingRevision(Map.of(
+                "violence", "STRONG",
+                "sexualContent", "NONE",
+                "language", "NONE",
+                "drugUse", false,
+                "cashGambling", false), "GRAC", "18");
+        long submissionId = submit(build1, metadataRevision, gracRatingRevision);
+
+        for (String type : List.of("STORE_PAGE", "BUILD_QA")) {
+            Response approved = Stove.gateway.post(
+                    "/api/v1/reviews/cases/%d/approve".formatted(reviewCase(submissionId, type)),
+                    Map.of(), Journey.asReviewer());
+            assertThat(approved.status()).as("%s", approved).isEqualTo(200);
+        }
+
+        long ratingCase = reviewCase(submissionId, "RATING");
+        Map<String, ?> ratingEvidence = Map.of(
+                "ratingCode", "18",
+                "certificationNumber", "GRAC-CERT-" + submissionId,
+                "issuer", "GRAC",
+                "issuedAt", Instant.now().toString(),
+                "country", "KR");
+        Response prematureApproval = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/approve".formatted(ratingCase),
+                ratingEvidence, Journey.asReviewer());
+        assertThat(prematureApproval.status()).as("%s", prematureApproval).isEqualTo(409);
+
+        Response prematureRelease = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(submissionId),
+                null, Journey.asCreator());
+        assertThat(prematureRelease.status()).as("%s", prematureRelease).isEqualTo(409);
+
+        Response externalSubmission = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/external-submission".formatted(ratingCase), Map.of(
+                        "applicationNumber", "GRAC-APPLICATION-" + submissionId,
+                        "submittedAt", Instant.now().toString(),
+                        "evidenceUrl", "https://evidence.example/grac/" + submissionId),
+                Journey.asReviewer());
+        assertThat(externalSubmission.status()).as("%s", externalSubmission).isEqualTo(200);
+
+        Response approved = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/approve".formatted(ratingCase),
+                ratingEvidence, Journey.asReviewer());
+        assertThat(approved.status()).as("%s", approved).isEqualTo(200);
+        awaitReady(submissionId);
+
+        Response release = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(submissionId),
+                null, Journey.asCreator());
+        assertThat(release.status()).as("%s", release).isEqualTo(200);
     }
 
     private long uploadBuild(String version, String buildNumber) throws Exception {
@@ -257,16 +292,29 @@ class TrackACreatorFlowTest {
         return response.data().path("revisionId").asLong();
     }
 
+    private long ratingRevision(Map<String, ?> questionnaire, String expectedPath,
+                                String expectedRatingCode) {
+        Response response = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/rating-revisions".formatted(Journey.gameId()),
+                Map.of("questionnaire", questionnaire), Journey.asCreator());
+        assertThat(response.status()).as("%s", response).isEqualTo(200);
+        assertThat(response.data().path("country").asText()).isEqualTo("KR");
+        assertThat(response.data().path("policyVersion").asText()).isEqualTo("KR-2026-01");
+        assertThat(response.data().path("resolvedPath").asText()).isEqualTo(expectedPath);
+        assertThat(response.data().path("recommendedRatingCode").asText()).isEqualTo(expectedRatingCode);
+        return response.data().path("revisionId").asLong();
+    }
+
     private long submit(long buildId, long metadataId) {
         return submit(buildId, metadataId, ratingRevision);
     }
 
-    private long submit(long buildId, long metadataId, long ratingId) {
+    private long submit(long buildId, long metadataId, long selectedRatingRevision) {
         Response response = Stove.gateway.post(
                 "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
                         "metadataRevisionId", metadataId,
                         "pricingRevisionId", pricingRevision,
-                        "ratingRevisionId", ratingId,
+                        "ratingRevisionId", selectedRatingRevision,
                         "buildId", buildId), Journey.asCreator());
         assertThat(response.status()).as("%s", response).isEqualTo(200);
         return response.data().path("submissionId").asLong();

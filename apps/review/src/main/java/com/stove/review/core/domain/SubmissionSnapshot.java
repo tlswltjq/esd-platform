@@ -31,7 +31,8 @@ public class SubmissionSnapshot extends BaseTimeEntity {
     @Column(nullable = false, length = 30) private String ratingPath;
     @Column(nullable = false, length = 30) private String ratingPolicyVersion;
     @Column(nullable = false, length = 2) private String ratingCountry;
-    @Column(nullable = false, length = 10) private String targetRatingCode;
+    @Column(name = "target_rating_code", nullable = false, length = 10)
+    private String recommendedRatingCode;
     @Lob @Column(nullable = false, columnDefinition = "TEXT") private String ratingQuestionnaire;
     @Column(nullable = false, length = 30) private String productVersion;
 
@@ -52,7 +53,7 @@ public class SubmissionSnapshot extends BaseTimeEntity {
         snapshot.ratingPath = event.ratingPath();
         snapshot.ratingPolicyVersion = event.ratingPolicyVersion();
         snapshot.ratingCountry = event.ratingCountry();
-        snapshot.targetRatingCode = event.targetRatingCode();
+        snapshot.recommendedRatingCode = event.recommendedRatingCode();
         snapshot.ratingQuestionnaire = event.ratingQuestionnaire();
         snapshot.productVersion = event.productVersion();
         return snapshot;

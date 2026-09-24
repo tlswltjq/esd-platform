@@ -334,28 +334,11 @@
       },
       "CreateRatingRevisionRequest" : {
         "properties" : {
-          "country" : {
-            "minLength" : 1,
-            "pattern" : "[A-Z]{2}",
-            "type" : "string"
-          },
-          "policyVersion" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
           "questionnaire" : {
-            "additionalProperties" : { },
-            "minProperties" : 1,
-            "type" : "object"
-          },
-          "targetRatingCode" : {
-            "minLength" : 1,
-            "pattern" : "ALL|12|15|18",
-            "type" : "string"
+            "$ref" : "#/components/schemas/RatingQuestionnaireRequest"
           }
         },
-        "required" : [ "country", "policyVersion", "questionnaire", "targetRatingCode" ],
+        "required" : [ "questionnaire" ],
         "type" : "object"
       },
       "CreateReleaseRequest" : {
@@ -671,6 +654,30 @@
         },
         "type" : "object"
       },
+      "RatingQuestionnaireRequest" : {
+        "properties" : {
+          "cashGambling" : {
+            "type" : "boolean"
+          },
+          "drugUse" : {
+            "type" : "boolean"
+          },
+          "language" : {
+            "enum" : [ "NONE", "MILD", "STRONG" ],
+            "type" : "string"
+          },
+          "sexualContent" : {
+            "enum" : [ "NONE", "MILD", "STRONG" ],
+            "type" : "string"
+          },
+          "violence" : {
+            "enum" : [ "NONE", "MILD", "STRONG" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "cashGambling", "drugUse", "language", "sexualContent", "violence" ],
+        "type" : "object"
+      },
       "ReleaseResponse" : {
         "properties" : {
           "buildId" : {
@@ -734,6 +741,9 @@
           "policyVersion" : {
             "type" : "string"
           },
+          "recommendedRatingCode" : {
+            "type" : "string"
+          },
           "resolvedPath" : {
             "type" : "string"
           },
@@ -744,9 +754,6 @@
           "revisionNo" : {
             "format" : "int32",
             "type" : "integer"
-          },
-          "targetRatingCode" : {
-            "type" : "string"
           },
           "type" : {
             "type" : "string"

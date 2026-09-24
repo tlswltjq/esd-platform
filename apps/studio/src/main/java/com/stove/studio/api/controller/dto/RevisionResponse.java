@@ -5,7 +5,7 @@ import com.stove.studio.core.domain.RatingRevision;
 import com.stove.studio.core.domain.StorePageRevision;
 
 public record RevisionResponse(Long revisionId, int revisionNo, String type, String resolvedPath,
-                               String country, String targetRatingCode, String policyVersion) {
+                               String country, String policyVersion, String recommendedRatingCode) {
     public static RevisionResponse from(StorePageRevision revision) {
         return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "STORE_PAGE",
                 null, null, null, null);
@@ -16,7 +16,7 @@ public record RevisionResponse(Long revisionId, int revisionNo, String type, Str
     }
     public static RevisionResponse from(RatingRevision revision) {
         return new RevisionResponse(revision.getId(), revision.getRevisionNo(), "RATING",
-                revision.getResolvedPath().name(), revision.getCountry(), revision.getTargetRatingCode(),
-                revision.getPolicyVersion());
+                revision.getResolvedPath().name(), revision.getCountry(), revision.getPolicyVersion(),
+                revision.getRecommendedRatingCode());
     }
 }

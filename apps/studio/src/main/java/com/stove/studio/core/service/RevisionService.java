@@ -2,14 +2,14 @@ package com.stove.studio.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.studio.core.domain.KoreanRatingPolicy;
 import com.stove.studio.core.domain.PricingRevision;
 import com.stove.studio.core.domain.PricingRevisionRepository;
-import com.stove.studio.core.domain.KoreanRatingPolicy;
+import com.stove.studio.core.domain.RatingQuestionnaire;
 import com.stove.studio.core.domain.RatingRevision;
 import com.stove.studio.core.domain.RatingRevisionRepository;
 import com.stove.studio.core.domain.StorePageRevision;
 import com.stove.studio.core.domain.StorePageRevisionRepository;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,18 +43,15 @@ public class RevisionService {
         return pricingRepository.save(PricingRevision.create(gameId, revision, "KR", "KRW", price));
     }
 
-    public RatingRevision createRating(Long gameId, Long workspaceId, String country,
-                                       String targetRatingCode, String policyVersion,
-                                       Map<String, Object> questionnaire) {
+    public RatingRevision createRating(Long gameId, Long workspaceId, RatingQuestionnaire questionnaire) {
         projectService.requireOwned(gameId, workspaceId);
         int revision = ratingRepository.findTopByGameIdOrderByRevisionNoDesc(gameId)
                 .map(value -> value.getRevisionNo() + 1).orElse(1);
-        KoreanRatingPolicy.RatingClassification classification =
-                ratingPolicy.classify(country, targetRatingCode, policyVersion, questionnaire);
+        KoreanRatingPolicy.Decision decision = ratingPolicy.evaluate(questionnaire);
         try {
-            return ratingRepository.save(RatingRevision.create(gameId, revision,
-                    classification.policyVersion(), classification.country(), classification.targetRatingCode(),
-                    objectMapper.writeValueAsString(questionnaire), classification.path()));
+            return ratingRepository.save(RatingRevision.create(gameId, revision, decision.policyVersion(),
+                    objectMapper.writeValueAsString(questionnaire), decision.path(), decision.country(),
+                    decision.recommendedRatingCode()));
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("등급 설문을 저장할 수 없습니다.", e);
         }

@@ -31,7 +31,8 @@ public class SubmissionReviewProjectionService {
         gate.approve();
         if ("RATING".equals(event.reviewType())) {
             submission.applyRating(event.ratingCode(), event.certificationNumber(), event.issuer(),
-                    event.issuedAt(), event.country());
+                    event.issuedAt(), event.country(), event.ratingPath(), event.ratingPolicyVersion(),
+                    event.externalApplicationNumber(), event.externalEvidenceUrl());
         }
         boolean allApproved = gateRepository.findBySubmissionId(event.submissionId()).stream()
                 .allMatch(value -> value.getStatus() == SubmissionGateStatus.APPROVED);

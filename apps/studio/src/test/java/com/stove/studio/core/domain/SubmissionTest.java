@@ -29,7 +29,8 @@ class SubmissionTest {
         Submission submission = submitted();
         Instant issuedAt = Instant.parse("2026-01-01T00:00:00Z");
 
-        submission.applyRating("15", "SELF-1", "ESD", issuedAt, "KR");
+        submission.applyRating("15", "SELF-1", "ESD", issuedAt, "KR",
+                "SELF_CLASSIFICATION", "KR-2026-01", null, null);
         submission.readyForRelease();
         submission.released();
 
@@ -39,6 +40,8 @@ class SubmissionTest {
         assertThat(submission.getRatingIssuer()).isEqualTo("ESD");
         assertThat(submission.getRatingIssuedAt()).isEqualTo(issuedAt);
         assertThat(submission.getRatingCountry()).isEqualTo("KR");
+        assertThat(submission.getRatingPath()).isEqualTo("SELF_CLASSIFICATION");
+        assertThat(submission.getRatingPolicyVersion()).isEqualTo("KR-2026-01");
     }
 
     @Test

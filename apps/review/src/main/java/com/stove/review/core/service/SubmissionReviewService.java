@@ -10,12 +10,12 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.review.core.domain.ReviewCase;
 import com.stove.review.core.domain.ReviewCaseRepository;
 import com.stove.review.core.domain.ReviewType;
-import com.stove.review.core.domain.RatingBoardSubmission;
 import com.stove.review.core.domain.SubmissionSnapshot;
 import com.stove.review.core.domain.SubmissionSnapshotRepository;
-import com.stove.review.core.port.RatingBoardClient;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,17 +26,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class SubmissionReviewService {
 
     private static final String AGGREGATE = "SubmissionReview";
+    private static final String ACTIVE_COUNTRY = "KR";
+    private static final String ACTIVE_POLICY_VERSION = "KR-2026-01";
 
     private final SubmissionSnapshotRepository snapshotRepository;
     private final ReviewCaseRepository caseRepository;
     private final ProcessedEventGuard processedEventGuard;
     private final OutboxRecorder outboxRecorder;
     private final AuditLogService auditLogService;
-    private final RatingBoardClient ratingBoardClient;
 
     public void receive(String eventId, String eventType, SubmissionCreatedEvent event) {
         if (!processedEventGuard.firstDelivery(eventId, ReviewService.CONSUMER_GROUP, eventType)) return;
         if (snapshotRepository.existsById(event.submissionId())) return;
+        validateRatingPolicyContext(event);
         snapshotRepository.save(SubmissionSnapshot.from(event));
         Arrays.stream(ReviewType.values())
                 .map(type -> createCase(event, type))
@@ -52,9 +54,23 @@ public class SubmissionReviewService {
                 snapshot.getMetadataRevision(), snapshot.getPricingRevision(), snapshot.getRatingRevision(),
                 reviewCase.getReviewType().name(), snapshot.getProductCode(), reviewCase.getRatingCode(),
                 reviewCase.getCertificationNumber(), reviewCase.getIssuer(), reviewCase.getIssuedAt(),
-                reviewCase.getCountry()));
+                reviewCase.getCountry(), snapshot.getRatingPath(), snapshot.getRatingPolicyVersion(),
+                reviewCase.getExternalApplicationNumber(), reviewCase.getExternalEvidenceUrl()));
         auditLogService.record(actor, "REVIEW_APPROVED", reviewCase.getId(),
                 "submissionId=" + snapshot.getSubmissionId() + ",type=" + reviewCase.getReviewType());
+    }
+
+    public void submitExternal(Long caseId, String actor, String applicationNumber,
+                               Instant submittedAt, String evidenceUrl) {
+        ReviewCase reviewCase = requireCase(caseId);
+        SubmissionSnapshot snapshot = requireSnapshot(reviewCase.getSubmissionId());
+        if (reviewCase.getReviewType() != ReviewType.RATING || !"GRAC".equals(snapshot.getRatingPath())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "GRAC 경로의 등급 심사만 외부 접수할 수 있습니다.");
+        }
+        reviewCase.submitExternal(applicationNumber, submittedAt, evidenceUrl);
+        auditLogService.record(actor, "RATING_EXTERNAL_SUBMITTED", reviewCase.getId(),
+                "submissionId=" + snapshot.getSubmissionId() + ",applicationNumber=" + applicationNumber);
     }
 
     public void requestChanges(Long caseId, String actor, String reasonCode, String feedback) {
@@ -88,29 +104,23 @@ public class SubmissionReviewService {
         if (type != ReviewType.RATING) {
             return ReviewCase.requested(event.submissionId(), type);
         }
-        validateRatingPolicyContext(event);
-        if ("SELF_CLASSIFICATION".equals(event.ratingPath())) {
-            return ReviewCase.selfClassification(event.submissionId(), event.targetRatingCode());
-        }
-        if (!"GRAC".equals(event.ratingPath())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 등급 경로입니다: " + event.ratingPath());
-        }
-        String ticket = ratingBoardClient.submit(new RatingBoardSubmission(
-                event.submissionId(), event.productCode(), event.title(), event.sellerId(), event.buildId(),
-                event.productVersion(), event.ratingPolicyVersion(), event.ratingCountry(),
-                event.targetRatingCode(), event.ratingQuestionnaire()));
-        return ReviewCase.externalSubmitted(event.submissionId(), event.targetRatingCode(), ticket);
+        return ReviewCase.ratingRequested(event.submissionId(), event.ratingPath(),
+                event.recommendedRatingCode());
     }
 
     private void validateRatingPolicyContext(SubmissionCreatedEvent event) {
-        if (!"KR".equals(event.ratingCountry()) || !"KR-2026-01".equals(event.ratingPolicyVersion())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 등급 지역 또는 정책 버전입니다.");
+        if (!ACTIVE_COUNTRY.equals(event.ratingCountry())
+                || !ACTIVE_POLICY_VERSION.equals(event.ratingPolicyVersion())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "지원하지 않는 등급 지역 또는 정책 버전입니다.");
         }
         boolean selfRating = "SELF_CLASSIFICATION".equals(event.ratingPath())
-                && java.util.Set.of("ALL", "12", "15").contains(event.targetRatingCode());
-        boolean gracRating = "GRAC".equals(event.ratingPath()) && "18".equals(event.targetRatingCode());
+                && Set.of("ALL", "12", "15").contains(event.recommendedRatingCode());
+        boolean gracRating = "GRAC".equals(event.ratingPath())
+                && "18".equals(event.recommendedRatingCode());
         if (!selfRating && !gracRating) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "등급 경로와 목표 등급이 일치하지 않습니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "등급 경로와 정책 결정 등급이 일치하지 않습니다.");
         }
         if (event.ratingQuestionnaire() == null || event.ratingQuestionnaire().isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "등급 설문 스냅샷이 필요합니다.");
@@ -121,18 +131,22 @@ public class SubmissionReviewService {
                                 ReviewCase.RatingDecision rating, String actor) {
         if (reviewCase.getReviewType() != ReviewType.RATING) {
             if (rating != null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "등급 증빙은 등급 심사에만 입력할 수 있습니다.");
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "등급 증빙은 등급 심사에만 입력할 수 있습니다.");
             }
             reviewCase.approve(actor);
             return;
         }
         if (rating == null || rating.ratingCode() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "등급 코드가 필요합니다.");
+        }
+        if (!snapshot.getRecommendedRatingCode().equals(rating.ratingCode())) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "등급 코드가 필요합니다.");
+                    "정책 결정 등급과 승인 등급이 일치하지 않습니다.");
         }
         if ("SELF_CLASSIFICATION".equals(snapshot.getRatingPath())) {
-            if (rating.certificationNumber() != null || rating.issuer() != null || rating.issuedAt() != null
-                    || rating.country() != null) {
+            if (rating.certificationNumber() != null || rating.issuer() != null
+                    || rating.issuedAt() != null || rating.country() != null) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST,
                         "자체등급 인증 증빙은 플랫폼이 발급하므로 등급 코드만 입력해야 합니다.");
             }
@@ -140,7 +154,8 @@ public class SubmissionReviewService {
             return;
         }
         if (!snapshot.getRatingCountry().equals(rating.country())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "등급 증빙의 대상 국가가 제출물과 다릅니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "등급 증빙의 대상 국가가 제출물과 다릅니다.");
         }
         reviewCase.approveExternalRating(actor, rating);
     }

@@ -4,59 +4,56 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.core.error.BusinessException;
-import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 
 class KoreanRatingPolicyTest {
 
     private final KoreanRatingPolicy policy = new KoreanRatingPolicy();
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ALL", "12", "15"})
-    @DisplayName("한국의 전체·12·15세 목표 등급은 자체등급분류 경로로 결정한다")
-    void classifiesSelfRating(String targetRatingCode) {
-        KoreanRatingPolicy.RatingClassification result = policy.classify(
-                "KR", targetRatingCode, KoreanRatingPolicy.VERSION, questionnaire(false, false));
-
-        assertThat(result.path()).isEqualTo(RatingPath.SELF_CLASSIFICATION);
-        assertThat(result.targetRatingCode()).isEqualTo(targetRatingCode);
+    @Test
+    @DisplayName("내용 강도에 따라 ALL, 12, 15 자체등급을 결정한다")
+    void resolvesSelfClassificationAge() {
+        assertDecision(questionnaire(ContentSeverity.NONE, ContentSeverity.NONE,
+                ContentSeverity.NONE, false, false), "ALL", RatingPath.SELF_CLASSIFICATION);
+        assertDecision(questionnaire(ContentSeverity.MILD, ContentSeverity.NONE,
+                ContentSeverity.NONE, false, false), "12", RatingPath.SELF_CLASSIFICATION);
+        assertDecision(questionnaire(ContentSeverity.NONE, ContentSeverity.NONE,
+                ContentSeverity.STRONG, false, false), "15", RatingPath.SELF_CLASSIFICATION);
     }
 
     @Test
-    @DisplayName("한국의 18세 목표 등급은 콘텐츠 응답과 함께 GRAC 경로로 결정한다")
-    void classifiesGracRating() {
-        KoreanRatingPolicy.RatingClassification result = policy.classify(
-                "KR", "18", KoreanRatingPolicy.VERSION, questionnaire(true, false));
-
-        assertThat(result.path()).isEqualTo(RatingPath.GRAC);
+    @DisplayName("강한 폭력성·선정성 또는 현금성 사행 요소는 18세 GRAC 경로로 보낸다")
+    void resolvesGracPath() {
+        assertDecision(questionnaire(ContentSeverity.STRONG, ContentSeverity.NONE,
+                ContentSeverity.NONE, false, false), "18", RatingPath.GRAC);
+        assertDecision(questionnaire(ContentSeverity.NONE, ContentSeverity.NONE,
+                ContentSeverity.NONE, false, true), "18", RatingPath.GRAC);
     }
 
     @Test
-    @DisplayName("성인 콘텐츠를 낮은 목표 등급으로 제출할 수 없다")
-    void rejectsContradictingQuestionnaire() {
-        assertThatThrownBy(() -> policy.classify(
-                "KR", "15", KoreanRatingPolicy.VERSION, questionnaire(false, true)))
+    @DisplayName("활성 정책은 한국과 현재 정책 버전만 허용한다")
+    void validatesActivePolicy() {
+        policy.requireActive("KR", KoreanRatingPolicy.VERSION);
+
+        assertThatThrownBy(() -> policy.requireActive("US", KoreanRatingPolicy.VERSION))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> policy.requireActive("KR", "KR-OLD"))
                 .isInstanceOf(BusinessException.class);
     }
 
-    @Test
-    @DisplayName("지역, 정책 버전, 필수 설문 응답을 모두 검증한다")
-    void rejectsUnsupportedPolicyContext() {
-        assertThatThrownBy(() -> policy.classify(
-                "US", "ALL", KoreanRatingPolicy.VERSION, questionnaire(false, false)))
-                .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> policy.classify(
-                "KR", "ALL", "KR-OLD", questionnaire(false, false)))
-                .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> policy.classify(
-                "KR", "ALL", KoreanRatingPolicy.VERSION, Map.of("adultContent", false)))
-                .isInstanceOf(BusinessException.class);
+    private void assertDecision(RatingQuestionnaire questionnaire, String ratingCode, RatingPath path) {
+        KoreanRatingPolicy.Decision decision = policy.evaluate(questionnaire);
+
+        assertThat(decision.country()).isEqualTo("KR");
+        assertThat(decision.policyVersion()).isEqualTo("KR-2026-01");
+        assertThat(decision.recommendedRatingCode()).isEqualTo(ratingCode);
+        assertThat(decision.path()).isEqualTo(path);
     }
 
-    private Map<String, Object> questionnaire(boolean adultContent, boolean cashGambling) {
-        return Map.of("adultContent", adultContent, "cashGambling", cashGambling);
+    private RatingQuestionnaire questionnaire(ContentSeverity violence, ContentSeverity sexualContent,
+                                                ContentSeverity language, boolean drugUse,
+                                                boolean cashGambling) {
+        return new RatingQuestionnaire(violence, sexualContent, language, drugUse, cashGambling);
     }
 }

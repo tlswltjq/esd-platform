@@ -36,6 +36,10 @@ public class Submission extends BaseTimeEntity {
     @Column(length = 100) private String ratingIssuer;
     private java.time.Instant ratingIssuedAt;
     @Column(length = 2) private String ratingCountry;
+    @Column(length = 30) private String ratingPath;
+    @Column(length = 30) private String ratingPolicyVersion;
+    @Column(length = 100) private String ratingExternalApplicationNumber;
+    @Column(length = 500) private String ratingExternalEvidenceUrl;
 
     private Submission(Long gameId, Long workspaceId, int sequenceNo, Long metadataRevisionId,
                        Long pricingRevisionId, Long ratingRevisionId, Long buildId) {
@@ -65,12 +69,18 @@ public class Submission extends BaseTimeEntity {
     }
 
     public void applyRating(String ratingCode, String certificationNumber, String issuer,
-                            java.time.Instant issuedAt, String country) {
+                            java.time.Instant issuedAt, String country, String ratingPath,
+                            String ratingPolicyVersion, String externalApplicationNumber,
+                            String externalEvidenceUrl) {
         this.ratingCode = ratingCode;
         this.ratingCertificationNumber = certificationNumber;
         this.ratingIssuer = issuer;
         this.ratingIssuedAt = issuedAt;
         this.ratingCountry = country;
+        this.ratingPath = ratingPath;
+        this.ratingPolicyVersion = ratingPolicyVersion;
+        this.ratingExternalApplicationNumber = externalApplicationNumber;
+        this.ratingExternalEvidenceUrl = externalEvidenceUrl;
     }
 
     public void released() {

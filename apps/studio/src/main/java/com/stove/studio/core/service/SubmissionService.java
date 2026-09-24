@@ -69,7 +69,7 @@ public class SubmissionService {
                 metadataRevisionId, pricingRevisionId, ratingRevisionId, buildId,
                 metadata.getTitle(), metadata.getShortDescription(), pricing.getPrice(), pricing.getCurrency(),
                 rating.getResolvedPath().name(), rating.getPolicyVersion(), rating.getCountry(),
-                rating.getTargetRatingCode(), rating.getQuestionnaire(), build.getVersion()));
+                rating.getRecommendedRatingCode(), rating.getQuestionnaire(), build.getVersion()));
         return submission;
     }
 

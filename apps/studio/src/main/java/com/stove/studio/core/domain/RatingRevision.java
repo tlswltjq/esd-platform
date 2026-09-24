@@ -26,26 +26,27 @@ public class RatingRevision extends BaseTimeEntity {
     @Column(nullable = false) private int revisionNo;
     @Column(nullable = false, length = 30) private String policyVersion;
     @Column(nullable = false, length = 2) private String country;
-    @Column(nullable = false, length = 10) private String targetRatingCode;
+    @Column(name = "target_rating_code", nullable = false, length = 10)
+    private String recommendedRatingCode;
     @Lob @Column(nullable = false, columnDefinition = "TEXT") private String questionnaire;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) private RatingPath resolvedPath;
 
-    private RatingRevision(Long gameId, int revisionNo, String policyVersion, String country,
-                           String targetRatingCode,
-                           String questionnaire, RatingPath resolvedPath) {
+    private RatingRevision(Long gameId, int revisionNo, String policyVersion,
+                           String questionnaire, RatingPath resolvedPath, String country,
+                           String recommendedRatingCode) {
         this.gameId = gameId;
         this.revisionNo = revisionNo;
         this.policyVersion = policyVersion;
-        this.country = country;
-        this.targetRatingCode = targetRatingCode;
         this.questionnaire = questionnaire;
         this.resolvedPath = resolvedPath;
+        this.country = country;
+        this.recommendedRatingCode = recommendedRatingCode;
     }
 
-    public static RatingRevision create(Long gameId, int revisionNo, String policyVersion, String country,
-                                        String targetRatingCode,
-                                        String questionnaire, RatingPath resolvedPath) {
-        return new RatingRevision(gameId, revisionNo, policyVersion, country, targetRatingCode,
-                questionnaire, resolvedPath);
+    public static RatingRevision create(Long gameId, int revisionNo, String policyVersion,
+                                        String questionnaire, RatingPath resolvedPath, String country,
+                                        String recommendedRatingCode) {
+        return new RatingRevision(gameId, revisionNo, policyVersion, questionnaire, resolvedPath,
+                country, recommendedRatingCode);
     }
 }
