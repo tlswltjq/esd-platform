@@ -14,6 +14,8 @@ import com.stove.review.core.domain.ReviewCase;
 import com.stove.review.core.domain.ReviewCaseRepository;
 import com.stove.review.core.domain.ReviewCaseStatus;
 import com.stove.review.core.domain.ReviewType;
+import com.stove.review.core.domain.ReviewDecisionHistoryRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.review.core.domain.SubmissionSnapshot;
 import com.stove.review.core.domain.SubmissionSnapshotRepository;
 import java.time.Instant;
@@ -28,8 +30,10 @@ class SubmissionReviewServiceTest {
     private final ProcessedEventGuard processedEventGuard = mock(ProcessedEventGuard.class);
     private final OutboxRecorder outboxRecorder = mock(OutboxRecorder.class);
     private final AuditLogService auditLogService = mock(AuditLogService.class);
+    private final ReviewDecisionHistoryRepository historyRepository = mock(ReviewDecisionHistoryRepository.class);
     private final SubmissionReviewService service = new SubmissionReviewService(
-            snapshotRepository, caseRepository, processedEventGuard, outboxRecorder, auditLogService);
+            snapshotRepository, caseRepository, processedEventGuard, outboxRecorder, auditLogService,
+            historyRepository, new ObjectMapper());
 
     @Test
     @DisplayName("자체등급은 정책 결정 코드만 받으며 플랫폼 인증 증빙을 발급한다")

@@ -42,6 +42,29 @@ public class ProjectCredentialService {
         return new IssuedProjectCredential(credential, token);
     }
 
+    public IssuedProjectCredential issueTrusted(Long gameId, Long workspaceId, String name,
+                                                 Instant expiresAt, String allowedRepository,
+                                                 String allowedRef, String allowedPlatform,
+                                                 boolean releaseAllowed, String provider,
+                                                 String environment, String oidcTokenId) {
+        projectService.requireOwned(gameId, workspaceId);
+        if (expiresAt == null || !expiresAt.isAfter(Instant.now())) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "OIDC 토큰이 이미 만료되었습니다.");
+        }
+        if (oidcTokenId == null || oidcTokenId.isBlank() || repository.existsByOidcTokenId(oidcTokenId)) {
+            throw new BusinessException(ErrorCode.CONFLICT, "이미 교환했거나 식별할 수 없는 OIDC 토큰입니다.");
+        }
+        byte[] secret = new byte[32];
+        RANDOM.nextBytes(secret);
+        String token = TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+        String displayPrefix = token.substring(0, Math.min(15, token.length()));
+        ProjectCredential credential = repository.save(ProjectCredential.issueTrusted(
+                gameId, workspaceId, name, hash(token), displayPrefix, expiresAt,
+                allowedRepository, allowedRef, allowedPlatform, releaseAllowed, provider,
+                environment, oidcTokenId));
+        return new IssuedProjectCredential(credential, token);
+    }
+
     @Transactional(readOnly = true)
     public List<ProjectCredential> list(Long gameId, Long workspaceId) {
         projectService.requireOwned(gameId, workspaceId);

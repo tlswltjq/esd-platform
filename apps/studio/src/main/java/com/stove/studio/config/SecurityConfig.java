@@ -22,7 +22,9 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/v1/studio/ci/oidc/exchange").permitAll()
                         .requestMatchers("/api/v1/studio/ci/**").hasRole("CI")
+                        .requestMatchers("/api/v1/studio/tester/**").hasAnyRole("TESTER", "CREATOR")
                         .requestMatchers("/api/v1/studio/**").hasRole("CREATOR")
                         .anyRequest().denyAll())
                 .addFilterBefore(credentialFilter, BearerTokenAuthenticationFilter.class)

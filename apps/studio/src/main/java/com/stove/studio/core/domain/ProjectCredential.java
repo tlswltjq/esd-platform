@@ -46,6 +46,13 @@ public class ProjectCredential extends BaseTimeEntity {
     private Instant expiresAt;
 
     private Instant lastUsedAt;
+    @Column(length = 300) private String allowedRepository;
+    @Column(length = 300) private String allowedRef;
+    @Column(length = 30) private String allowedPlatform;
+    @Column(nullable = false) private boolean releaseAllowed;
+    @Column(length = 30) private String sourceProvider;
+    @Column(length = 100) private String sourceEnvironment;
+    @Column(unique = true, length = 200) private String oidcTokenId;
 
     public static ProjectCredential issue(Long gameId, Long workspaceId, String name,
                                           String secretHash, String tokenPrefix, Instant expiresAt) {
@@ -57,6 +64,22 @@ public class ProjectCredential extends BaseTimeEntity {
         credential.tokenPrefix = tokenPrefix;
         credential.status = ProjectCredentialStatus.ACTIVE;
         credential.expiresAt = expiresAt;
+        return credential;
+    }
+
+    public static ProjectCredential issueTrusted(Long gameId, Long workspaceId, String name,
+                                                  String secretHash, String tokenPrefix, Instant expiresAt,
+                                                  String repository, String sourceRef, String platform,
+                                                  boolean releaseAllowed, String provider,
+                                                  String environment, String oidcTokenId) {
+        ProjectCredential credential = issue(gameId, workspaceId, name, secretHash, tokenPrefix, expiresAt);
+        credential.allowedRepository = repository;
+        credential.allowedRef = sourceRef;
+        credential.allowedPlatform = platform;
+        credential.releaseAllowed = releaseAllowed;
+        credential.sourceProvider = provider;
+        credential.sourceEnvironment = environment;
+        credential.oidcTokenId = oidcTokenId;
         return credential;
     }
 

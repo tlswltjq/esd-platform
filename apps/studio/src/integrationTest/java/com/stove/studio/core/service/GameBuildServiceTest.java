@@ -32,7 +32,10 @@ import org.springframework.context.annotation.Import;
  * <p>{@link GameProjectServiceTest} 와 같은 컨텍스트를 쓴다 — 프로젝트 없이 빌드가 존재할 수 없어
  * 준비 과정에서 {@link GameProjectService} 를 그대로 부른다.
  */
-@SpringBootTest(properties = "stove.outbox.relay-enabled=false")
+@SpringBootTest(properties = {
+        "stove.outbox.relay-enabled=false",
+        "stove.ci.webhook.dispatch-enabled=false"
+})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class GameBuildServiceTest {
 

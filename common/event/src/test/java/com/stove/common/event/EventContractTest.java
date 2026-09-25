@@ -23,6 +23,7 @@ import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.ReleaseRolledBackEvent;
 import com.stove.common.event.payload.ReleaseScheduledEvent;
 import com.stove.common.event.payload.ReviewChangesRequestedEvent;
+import com.stove.common.event.payload.ReviewAppealedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import com.stove.common.event.payload.SubmissionCreatedEvent;
@@ -93,6 +94,7 @@ class EventContractTest {
                         "SELF_CLASSIFICATION", "KR-2026-01", null, null),
                 ReviewChangesRequestedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001",
                         "METADATA", "설명을 수정해 주세요."),
+                ReviewAppealedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001", "수정 완료"),
                 ReleaseScheduledEvent.of(30L, 10L, "GAME-001",
                         Instant.parse("2026-01-02T00:00:00Z")),
                 ReleasePublishedEvent.of(30L, null, 10L, 1L, "GAME-001", 1001L,

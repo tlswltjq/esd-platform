@@ -15,6 +15,48 @@
         },
         "type" : "object"
       },
+      "ApiResponseBuildWebhookResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/BuildWebhookResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseCiOidcExchangeResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CiOidcExchangeResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseCiTrustPolicyResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CiTrustPolicyResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseIssuedProjectCredentialResponse" : {
         "properties" : {
           "data" : {
@@ -34,6 +76,40 @@
           "data" : {
             "items" : {
               "$ref" : "#/components/schemas/BuildResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListBuildWebhookResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BuildWebhookResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListCiTrustPolicyResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CiTrustPolicyResponse"
             },
             "type" : "array"
           },
@@ -102,6 +178,23 @@
           "data" : {
             "items" : {
               "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListTesterGrantResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TesterGrantResponse"
             },
             "type" : "array"
           },
@@ -184,10 +277,52 @@
         },
         "type" : "object"
       },
+      "ApiResponseStorePagePreviewResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StorePagePreviewResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseSubmissionResponse" : {
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/SubmissionResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseTesterGrantResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/TesterGrantResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseTesterInstallationResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/TesterInstallationResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -274,6 +409,127 @@
         },
         "type" : "object"
       },
+      "BuildWebhookResponse" : {
+        "properties" : {
+          "active" : {
+            "type" : "boolean"
+          },
+          "endpointUrl" : {
+            "type" : "string"
+          },
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "signingSecret" : {
+            "type" : "string"
+          },
+          "subscriptionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "CiOidcExchangeRequest" : {
+        "properties" : {
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "oidcToken" : {
+            "maxLength" : 10000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "platform" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "provider" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "gameId", "oidcToken", "platform", "provider" ],
+        "type" : "object"
+      },
+      "CiOidcExchangeResponse" : {
+        "properties" : {
+          "credential" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "platform" : {
+            "type" : "string"
+          },
+          "releaseAllowed" : {
+            "type" : "boolean"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "sourceRef" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CiScheduleReleaseRequest" : {
+        "properties" : {
+          "publishAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "submissionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "timeZone" : {
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "publishAt", "submissionId" ],
+        "type" : "object"
+      },
+      "CiTrustPolicyResponse" : {
+        "properties" : {
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "platform" : {
+            "type" : "string"
+          },
+          "policyId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "protectedRefPattern" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "refPattern" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "requiredEnvironment" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "CompleteUploadRequest" : {
         "properties" : {
           "parts" : {
@@ -285,6 +541,42 @@
           }
         },
         "required" : [ "parts" ],
+        "type" : "object"
+      },
+      "CreateCiTrustPolicyRequest" : {
+        "properties" : {
+          "platform" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "protectedRefPattern" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "provider" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "refPattern" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "repository" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "requiredEnvironment" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "platform", "provider", "refPattern", "repository" ],
         "type" : "object"
       },
       "CreatePricingRevisionRequest" : {
@@ -343,8 +635,21 @@
       },
       "CreateReleaseRequest" : {
         "properties" : {
+          "changeType" : {
+            "enum" : [ "INITIAL", "NORMAL_PATCH", "MATERIAL_CHANGE", "ROLLBACK" ],
+            "type" : "string"
+          },
+          "channel" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          },
           "publishAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "timeZone" : {
+            "maxLength" : 50,
+            "minLength" : 0,
             "type" : "string"
           }
         },
@@ -352,6 +657,60 @@
       },
       "CreateStorePageRevisionRequest" : {
         "properties" : {
+          "coverUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "detailedDescription" : {
+            "maxLength" : 10000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "developer" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "draft" : {
+            "type" : "boolean"
+          },
+          "eulaUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "features" : {
+            "items" : {
+              "maxLength" : 50,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 30,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "genres" : {
+            "items" : {
+              "maxLength" : 50,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 10,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "iconUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "localizations" : {
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/LocalizedContentRequest"
+            },
+            "type" : "object"
+          },
           "minimumRequirements" : {
             "maxLength" : 1000,
             "minLength" : 0,
@@ -362,15 +721,92 @@
             "minLength" : 0,
             "type" : "string"
           },
+          "prices" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "privacyPolicyUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "publisher" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "recommendedRequirements" : {
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "salesCountries" : {
+            "items" : {
+              "maxLength" : 2,
+              "minLength" : 2,
+              "type" : "string"
+            },
+            "maxItems" : 250,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "screenshots" : {
+            "items" : {
+              "maxLength" : 500,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 20,
+            "minItems" : 0,
+            "type" : "array"
+          },
           "shortDescription" : {
             "maxLength" : 500,
             "minLength" : 0,
             "type" : "string"
           },
+          "supportUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "supportedLanguages" : {
+            "items" : {
+              "maxLength" : 10,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 30,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "tags" : {
+            "items" : {
+              "maxLength" : 50,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 30,
+            "minItems" : 0,
+            "type" : "array"
+          },
           "title" : {
             "maxLength" : 200,
             "minLength" : 0,
             "type" : "string"
+          },
+          "trailers" : {
+            "items" : {
+              "maxLength" : 500,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 5,
+            "minItems" : 0,
+            "type" : "array"
           }
         },
         "required" : [ "minimumRequirements", "platform", "shortDescription", "title" ],
@@ -457,6 +893,11 @@
           "sha256" : {
             "minLength" : 1,
             "pattern" : "(?i)(sha256:)?[a-f0-9]{64}",
+            "type" : "string"
+          },
+          "sourceRef" : {
+            "maxLength" : 300,
+            "minLength" : 0,
             "type" : "string"
           }
         },
@@ -571,6 +1012,41 @@
         },
         "type" : "object"
       },
+      "LocalizedContent" : {
+        "properties" : {
+          "detailedDescription" : {
+            "type" : "string"
+          },
+          "shortDescription" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LocalizedContentRequest" : {
+        "properties" : {
+          "detailedDescription" : {
+            "maxLength" : 10000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "shortDescription" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "detailedDescription", "shortDescription", "title" ],
+        "type" : "object"
+      },
       "Part" : {
         "properties" : {
           "etag" : {
@@ -654,6 +1130,25 @@
         },
         "type" : "object"
       },
+      "PromoteReleaseRequest" : {
+        "properties" : {
+          "publishAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "targetChannel" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          },
+          "timeZone" : {
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "targetChannel" ],
+        "type" : "object"
+      },
       "RatingQuestionnaireRequest" : {
         "properties" : {
           "cashGambling" : {
@@ -678,14 +1173,29 @@
         "required" : [ "cashGambling", "drugUse", "language", "sexualContent", "violence" ],
         "type" : "object"
       },
+      "RegisterBuildWebhookRequest" : {
+        "properties" : {
+          "endpointUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "endpointUrl" ],
+        "type" : "object"
+      },
       "ReleaseResponse" : {
         "properties" : {
           "buildId" : {
             "format" : "int64",
             "type" : "integer"
           },
+          "changeType" : {
+            "enum" : [ "INITIAL", "NORMAL_PATCH", "MATERIAL_CHANGE", "ROLLBACK" ],
+            "type" : "string"
+          },
           "channel" : {
-            "enum" : [ "LIVE" ],
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
             "type" : "string"
           },
           "previousReleaseId" : {
@@ -696,6 +1206,9 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "publishTimeZone" : {
+            "type" : "string"
+          },
           "publishedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -704,8 +1217,19 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "smokeTestFailure" : {
+            "type" : "string"
+          },
+          "smokeTestStatus" : {
+            "enum" : [ "PENDING", "PASSED", "FAILED" ],
+            "type" : "string"
+          },
+          "smokeTestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "status" : {
-            "enum" : [ "SCHEDULED", "PUBLISHED", "CANCELLED" ],
+            "enum" : [ "SCHEDULED", "PUBLISHED", "CANCELLED", "SMOKE_TEST_FAILED" ],
             "type" : "string"
           },
           "submissionId" : {
@@ -733,6 +1257,21 @@
         },
         "type" : "object"
       },
+      "RescheduleReleaseRequest" : {
+        "properties" : {
+          "publishAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "timeZone" : {
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "publishAt" ],
+        "type" : "object"
+      },
       "RevisionResponse" : {
         "properties" : {
           "country" : {
@@ -755,8 +1294,131 @@
             "format" : "int32",
             "type" : "integer"
           },
+          "storePageStatus" : {
+            "enum" : [ "DRAFT", "PUBLISHED" ],
+            "type" : "string"
+          },
           "type" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "StorePagePreviewResponse" : {
+        "properties" : {
+          "coverUrl" : {
+            "type" : "string"
+          },
+          "detailedDescription" : {
+            "type" : "string"
+          },
+          "developer" : {
+            "type" : "string"
+          },
+          "entityVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "eulaUrl" : {
+            "type" : "string"
+          },
+          "features" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "iconUrl" : {
+            "type" : "string"
+          },
+          "localizations" : {
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/LocalizedContent"
+            },
+            "type" : "object"
+          },
+          "minimumRequirements" : {
+            "type" : "string"
+          },
+          "platform" : {
+            "type" : "string"
+          },
+          "prices" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "privacyPolicyUrl" : {
+            "type" : "string"
+          },
+          "publishedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "publisher" : {
+            "type" : "string"
+          },
+          "recommendedRequirements" : {
+            "type" : "string"
+          },
+          "revisionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "revisionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "salesCountries" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "screenshots" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "shortDescription" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "DRAFT", "PUBLISHED" ],
+            "type" : "string"
+          },
+          "supportUrl" : {
+            "type" : "string"
+          },
+          "supportedLanguages" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "tags" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "trailers" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         },
         "type" : "object"
@@ -794,6 +1456,64 @@
           "submissionId" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "TesterGrantRequest" : {
+        "properties" : {
+          "channel" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          },
+          "testerSubject" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "channel", "testerSubject" ],
+        "type" : "object"
+      },
+      "TesterGrantResponse" : {
+        "properties" : {
+          "active" : {
+            "type" : "boolean"
+          },
+          "channel" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          },
+          "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "grantId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "testerSubject" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "TesterInstallationResponse" : {
+        "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "channel" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          },
+          "downloadUrl" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1019,6 +1739,34 @@
         "tags" : [ "outbox-ops-controller" ]
       }
     },
+    "/api/v1/studio/ci/oidc/exchange" : {
+      "post" : {
+        "operationId" : "exchange",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CiOidcExchangeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCiOidcExchangeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ci-oidc-controller" ]
+      }
+    },
     "/api/v1/studio/ci/projects/{gameId}/builds/{buildId}" : {
       "get" : {
         "operationId" : "status",
@@ -1057,9 +1805,46 @@
         "tags" : [ "ci-upload-controller" ]
       }
     },
+    "/api/v1/studio/ci/projects/{gameId}/releases" : {
+      "post" : {
+        "operationId" : "schedule",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CiScheduleReleaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "ci-oidc-controller" ]
+      }
+    },
     "/api/v1/studio/ci/projects/{gameId}/upload-sessions" : {
       "post" : {
-        "operationId" : "create_1",
+        "operationId" : "create_2",
         "parameters" : [ {
           "in" : "path",
           "name" : "gameId",
@@ -1147,7 +1932,7 @@
     },
     "/api/v1/studio/games" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "list_3",
         "responses" : {
           "200" : {
             "content" : {
@@ -1166,7 +1951,7 @@
         "tags" : [ "studio-controller" ]
       },
       "post" : {
-        "operationId" : "create",
+        "operationId" : "create_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1403,6 +2188,86 @@
         "tags" : [ "publishing-controller" ]
       }
     },
+    "/api/v1/studio/projects/releases/{releaseId}/promote" : {
+      "post" : {
+        "operationId" : "promote",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "releaseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PromoteReleaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/releases/{releaseId}/reschedule" : {
+      "post" : {
+        "operationId" : "reschedule",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "releaseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RescheduleReleaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
     "/api/v1/studio/projects/releases/{releaseId}/rollback" : {
       "post" : {
         "operationId" : "rollback",
@@ -1500,6 +2365,218 @@
           "oauth2" : [ "studio" ]
         } ],
         "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/build-webhooks" : {
+      "get" : {
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListBuildWebhookResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "build-webhook-controller" ]
+      },
+      "post" : {
+        "operationId" : "register",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterBuildWebhookRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseBuildWebhookResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "build-webhook-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/build-webhooks/{subscriptionId}/disable" : {
+      "post" : {
+        "operationId" : "disable",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "subscriptionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "build-webhook-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/ci-trust-policies" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListCiTrustPolicyResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "ci-trust-policy-controller" ]
+      },
+      "post" : {
+        "operationId" : "create",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateCiTrustPolicyRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCiTrustPolicyResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "ci-trust-policy-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/ci-trust-policies/{policyId}" : {
+      "delete" : {
+        "operationId" : "delete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "policyId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "ci-trust-policy-controller" ]
       }
     },
     "/api/v1/studio/projects/{gameId}/credentials" : {
@@ -1728,6 +2805,130 @@
         "tags" : [ "publishing-controller" ]
       }
     },
+    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}" : {
+      "put" : {
+        "operationId" : "updateStorePageDraft",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "revisionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateStorePageRevisionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/preview" : {
+      "get" : {
+        "operationId" : "previewStorePage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "revisionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseStorePagePreviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/publish" : {
+      "post" : {
+        "operationId" : "publishStorePageDraft",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "revisionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
     "/api/v1/studio/projects/{gameId}/submissions" : {
       "post" : {
         "operationId" : "submit",
@@ -1766,6 +2967,150 @@
           "oauth2" : [ "studio" ]
         } ],
         "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/testers" : {
+      "get" : {
+        "operationId" : "testers",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListTesterGrantResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      },
+      "post" : {
+        "operationId" : "grantTester",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TesterGrantRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseTesterGrantResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{gameId}/testers/{grantId}/revoke" : {
+      "post" : {
+        "operationId" : "revokeTester",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "grantId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
+    "/api/v1/studio/tester/builds/{buildId}/installation" : {
+      "get" : {
+        "operationId" : "installation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "buildId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "channel",
+          "required" : true,
+          "schema" : {
+            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseTesterInstallationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "tester-controller" ]
       }
     }
   }

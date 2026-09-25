@@ -4,6 +4,7 @@ import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ReviewChangesRequestedEvent;
 import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.event.payload.ReviewAppealedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.studio.core.domain.Submission;
 import com.stove.studio.core.domain.SubmissionGate;
@@ -44,6 +45,13 @@ public class SubmissionReviewProjectionService {
         Submission submission = requireSubmission(event.submissionId());
         requireGate(event.submissionId(), event.reviewType()).changesRequested(event.reasonCode(), event.feedback());
         submission.changesRequested();
+    }
+
+    public void appealed(String eventId, String eventType, ReviewAppealedEvent event) {
+        if (!processedEventGuard.firstDelivery(eventId, GameProjectService.CONSUMER_GROUP, eventType)) return;
+        Submission submission = requireSubmission(event.submissionId());
+        requireGate(event.submissionId(), event.reviewType()).reopen();
+        submission.reopenReview();
     }
 
     private Submission requireSubmission(Long id) {
