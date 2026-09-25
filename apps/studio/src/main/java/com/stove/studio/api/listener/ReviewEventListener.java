@@ -7,6 +7,7 @@ import com.stove.common.event.payload.ReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewRejectedEvent;
 import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.event.payload.ReviewChangesRequestedEvent;
+import com.stove.common.event.payload.ReviewAppealedEvent;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.studio.core.service.GameProjectService;
 import com.stove.studio.core.service.SubmissionReviewProjectionService;
@@ -40,6 +41,9 @@ public class ReviewEventListener {
         } else if (envelope.isType(EventType.REVIEW_CHANGES_REQUESTED)) {
             submissionReviewProjectionService.changesRequested(envelope.eventId(), envelope.eventType(),
                     envelope.payloadAs(objectMapper, ReviewChangesRequestedEvent.class));
+        } else if (envelope.isType(EventType.REVIEW_APPEALED)) {
+            submissionReviewProjectionService.appealed(envelope.eventId(), envelope.eventType(),
+                    envelope.payloadAs(objectMapper, ReviewAppealedEvent.class));
         } else if (envelope.isType(EventType.REVIEW_APPROVED)) {
             ReviewApprovedEvent event = envelope.payloadAs(objectMapper, ReviewApprovedEvent.class);
             gameProjectService.applyApproval(envelope.eventId(), envelope.eventType(),

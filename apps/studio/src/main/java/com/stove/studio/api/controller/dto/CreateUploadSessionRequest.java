@@ -16,6 +16,7 @@ public record CreateUploadSessionRequest(
         @NotBlank @Pattern(regexp = "(?i)(sha256:)?[a-f0-9]{64}") String sha256,
         @Size(max = 64) String commitSha,
         @Size(max = 300) String repository,
+        @Size(max = 300) String sourceRef,
         @Size(max = 30) String ciProvider,
         @Size(max = 100) String ciRunId,
         @NotBlank @Size(max = 100) String idempotencyKey
@@ -23,6 +24,6 @@ public record CreateUploadSessionRequest(
     public NewUploadSession toCommand() {
         return new NewUploadSession(productVersion, buildNumber, platform, architecture, fileName,
                 fileSize, sha256.replaceFirst("(?i)^sha256:", "").toLowerCase(), commitSha,
-                repository, ciProvider, ciRunId, idempotencyKey);
+                repository, sourceRef, ciProvider, ciRunId, idempotencyKey);
     }
 }

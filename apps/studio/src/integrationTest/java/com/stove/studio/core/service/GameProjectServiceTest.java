@@ -33,7 +33,10 @@ import org.springframework.context.annotation.Import;
  * 소유권·상태 검사에서 걸린 요청이 이벤트를 남기면 안 된다.
  * 빌드 쪽 성질은 {@link GameBuildServiceTest} 가 본다.
  */
-@SpringBootTest(properties = "stove.outbox.relay-enabled=false")
+@SpringBootTest(properties = {
+        "stove.outbox.relay-enabled=false",
+        "stove.ci.webhook.dispatch-enabled=false"
+})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class GameProjectServiceTest {
 

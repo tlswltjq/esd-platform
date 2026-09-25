@@ -61,6 +61,10 @@ public final class E2eClient {
         return send(HttpMethod.POST, path, body, headers);
     }
 
+    public Response put(String path, Object body, Map<String, String> headers) {
+        return send(HttpMethod.PUT, path, body, headers);
+    }
+
     public Response putBytes(String absoluteUrl, byte[] body) {
         try {
             HttpResponse<byte[]> response = RAW_HTTP.send(

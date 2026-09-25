@@ -80,6 +80,33 @@ stove:
     unsubmitted-retention: ${UNSUBMITTED_BUILD_RETENTION:30d}
     retention-cron: ${BUILD_RETENTION_CRON:0 15 3 * * *}
     validation-recovery-interval-ms: ${VALIDATION_RECOVERY_INTERVAL_MS:60000}
+  ci:
+    webhook:
+      master-key: ${WEBHOOK_MASTER_KEY:dev-only-change-webhook-master-key}
+      dispatch-enabled: ${WEBHOOK_DISPATCH_ENABLED:true}
+      dispatch-interval-ms: ${WEBHOOK_DISPATCH_INTERVAL_MS:1000}
+    status:
+      github-token: ${GITHUB_STATUS_TOKEN:}
+      gitlab-token: ${GITLAB_STATUS_TOKEN:}
+      github-api: ${GITHUB_API_URL:https://api.github.com}
+      gitlab-api: ${GITLAB_API_URL:https://gitlab.com/api/v4}
+    oidc:
+      credential-ttl: ${CI_OIDC_CREDENTIAL_TTL:15m}
+      providers:
+        github:
+          issuer: https://token.actions.githubusercontent.com
+          jwk-set-uri: https://token.actions.githubusercontent.com/.well-known/jwks
+          audience: ${CI_OIDC_AUDIENCE:esd-platform}
+          repository-claim: repository
+          ref-claim: ref
+          environment-claim: environment
+        gitlab:
+          issuer: ${GITLAB_OIDC_ISSUER:https://gitlab.com}
+          jwk-set-uri: ${GITLAB_OIDC_JWK_SET_URI:https://gitlab.com/oauth/discovery/keys}
+          audience: ${CI_OIDC_AUDIENCE:esd-platform}
+          repository-claim: project_path
+          ref-claim: ref_path
+          environment-claim: environment
 
   outbox:
     relay-enabled: true

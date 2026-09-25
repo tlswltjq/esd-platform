@@ -27,6 +27,8 @@ public interface BuildStorage {
 
     void downloadTo(String storagePath, Path destination);
 
+    String presignDownload(String storagePath);
+
     void abortMultipart(String storagePath, String storageUploadId);
 
     void delete(String storagePath);

@@ -24,6 +24,7 @@ public final class EventType {
     public static final String REVIEW_REJECTED = "ReviewRejected";
     public static final String SUBMISSION_REVIEW_APPROVED = "SubmissionReviewApproved";
     public static final String REVIEW_CHANGES_REQUESTED = "ReviewChangesRequested";
+    public static final String REVIEW_APPEALED = "ReviewAppealed";
 
     // catalog
     public static final String PRODUCT_CHANGED = "ProductChanged";
