@@ -82,6 +82,36 @@ class ReviewCaseTest {
         assertThat(reviewCase.getStatus()).isEqualTo(ReviewCaseStatus.APPROVED);
     }
 
+    @Test
+    @DisplayName("차단된 심사는 이의 제기로 새 SLA와 심사 회차를 열 수 있다")
+    void appealReopensBlockedReview() {
+        ReviewCase reviewCase = ReviewCase.requested(1L, ReviewType.LEGAL);
+        Instant firstDueAt = reviewCase.getDueAt();
+
+        reviewCase.block("reviewer", "LEGAL_DOCUMENT", "계약서 확인 필요",
+                "https://evidence.example/legal/1");
+        reviewCase.appeal("계약서를 보완했습니다.");
+
+        assertThat(reviewCase.getStatus()).isEqualTo(ReviewCaseStatus.REQUESTED);
+        assertThat(reviewCase.getReviewRound()).isEqualTo(2);
+        assertThat(reviewCase.getAppealReason()).isEqualTo("계약서를 보완했습니다.");
+        assertThat(reviewCase.getDueAt()).isAfterOrEqualTo(firstDueAt);
+    }
+
+    @Test
+    @DisplayName("심사 체크리스트와 내부 메모는 외부 피드백과 분리해 보존한다")
+    void checklistKeepsInternalMemoSeparate() {
+        ReviewCase reviewCase = ReviewCase.requested(1L, ReviewType.SDK_COMPLIANCE);
+
+        reviewCase.assign("reviewer-1");
+        reviewCase.updateChecklist("{\"sdkLogin\":true}", "내부에서만 볼 메모");
+
+        assertThat(reviewCase.getAssignedTo()).isEqualTo("reviewer-1");
+        assertThat(reviewCase.getChecklistJson()).contains("sdkLogin");
+        assertThat(reviewCase.getInternalMemo()).isEqualTo("내부에서만 볼 메모");
+        assertThat(reviewCase.getExternalFeedback()).isNull();
+    }
+
     private ReviewCase.RatingDecision rating(String code) {
         return new ReviewCase.RatingDecision(code, "GRAC-CERT-1", "GRAC",
                 Instant.parse("2026-01-01T00:00:00Z"), "KR");

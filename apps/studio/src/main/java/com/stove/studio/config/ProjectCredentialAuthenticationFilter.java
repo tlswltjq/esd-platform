@@ -28,7 +28,8 @@ public class ProjectCredentialAuthenticationFilter extends OncePerRequestFilter 
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/v1/studio/ci/");
+        return !request.getRequestURI().startsWith("/api/v1/studio/ci/")
+                || request.getRequestURI().equals("/api/v1/studio/ci/oidc/exchange");
     }
 
     @Override
@@ -42,7 +43,10 @@ public class ProjectCredentialAuthenticationFilter extends OncePerRequestFilter 
         try {
             ProjectCredential credential = credentialService.authenticate(token);
             ProjectCredentialPrincipal principal = new ProjectCredentialPrincipal(
-                    credential.getId(), credential.getGameId(), credential.getWorkspaceId());
+                    credential.getId(), credential.getGameId(), credential.getWorkspaceId(),
+                    credential.getAllowedRepository(), credential.getAllowedRef(),
+                    credential.getAllowedPlatform(), credential.isReleaseAllowed(),
+                    credential.getSourceProvider(), credential.getSourceEnvironment());
             SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                     principal, null, List.of(new SimpleGrantedAuthority("ROLE_CI"))));
             filterChain.doFilter(request, response);

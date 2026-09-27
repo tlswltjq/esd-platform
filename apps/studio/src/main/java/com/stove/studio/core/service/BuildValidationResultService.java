@@ -20,6 +20,8 @@ public class BuildValidationResultService {
     private final GameBuildRepository buildRepository;
     private final GameProjectService projectService;
     private final OutboxRecorder outboxRecorder;
+    private final BuildWebhookService webhookService;
+    private final CiStatusPublisherService ciStatusPublisher;
 
     public void validated(Long buildId, String checksum) {
         GameBuild build = requireBuild(buildId);
@@ -34,6 +36,8 @@ public class BuildValidationResultService {
                 BuildValidatedEvent.of(build.getId(), build.getGameId(), project.getProductCode(),
                         checksum, build.getPlatform(), build.getVersion(), build.getBuildNumber(),
                         build.getCommitSha()));
+        webhookService.enqueue(build, "BuildValidated", null);
+        ciStatusPublisher.publish(build, true, "Build validation succeeded");
     }
 
     public void failed(Long buildId, String failureCode) {
@@ -42,6 +46,8 @@ public class BuildValidationResultService {
         build.fail(failureCode);
         outboxRecorder.record(GameProjectService.AGGREGATE, project.getProductCode(),
                 BuildValidationFailedEvent.of(build.getId(), build.getGameId(), project.getProductCode(), failureCode));
+        webhookService.enqueue(build, "BuildValidationFailed", failureCode);
+        ciStatusPublisher.publish(build, false, "Build validation failed: " + failureCode);
     }
 
     private GameBuild requireBuild(Long buildId) {

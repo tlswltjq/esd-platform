@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 
 public record RequestChangesRequest(
         @NotBlank @Size(max = 30) String reasonCode,
-        @NotBlank @Size(max = 1000) String feedback
+        @NotBlank @Size(max = 1000) String feedback,
+        @Size(max = 500) String evidenceUrl
 ) {
 }

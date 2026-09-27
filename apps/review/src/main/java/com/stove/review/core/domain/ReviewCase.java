@@ -15,6 +15,7 @@ import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.Set;
+import java.time.temporal.ChronoUnit;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,6 +33,14 @@ public class ReviewCase extends BaseTimeEntity {
     @Column(length = 100) private String decidedBy;
     @Column(length = 30) private String reasonCode;
     @Column(length = 1000) private String externalFeedback;
+    @Column(length = 2000) private String internalMemo;
+    @Column(length = 500) private String evidenceUrl;
+    @Column(length = 100) private String assignedTo;
+    private Instant assignedAt;
+    @Column(nullable = false) private Instant dueAt;
+    @Column(nullable = false, columnDefinition = "TEXT") private String checklistJson;
+    @Column(nullable = false) private int reviewRound;
+    @Column(length = 1000) private String appealReason;
     @Column(length = 30) private String ratingPath;
     @Column(name = "target_rating_code", length = 10) private String recommendedRatingCode;
     @Column(length = 10) private String ratingCode;
@@ -49,6 +58,9 @@ public class ReviewCase extends BaseTimeEntity {
         this.submissionId = submissionId;
         this.reviewType = reviewType;
         this.status = ReviewCaseStatus.REQUESTED;
+        this.dueAt = Instant.now().plus(slaDays(reviewType), ChronoUnit.DAYS);
+        this.checklistJson = "{}";
+        this.reviewRound = 1;
     }
 
     public static ReviewCase requested(Long submissionId, ReviewType reviewType) {
@@ -150,12 +162,110 @@ public class ReviewCase extends BaseTimeEntity {
     }
 
     public void requestChanges(String actor, String reasonCode, String feedback) {
+        requestChanges(actor, reasonCode, feedback, null);
+    }
+
+    public void requestChanges(String actor, String reasonCode, String feedback, String evidenceUrl) {
         requireOpen();
+        ReviewReasonCode.requireValid(reasonCode);
+        requireHttpsEvidence(evidenceUrl);
         status = ReviewCaseStatus.CHANGES_REQUESTED;
         decidedBy = actor;
         this.reasonCode = reasonCode;
         this.externalFeedback = feedback;
+        this.evidenceUrl = evidenceUrl;
         decidedAt = Instant.now();
+    }
+
+    public void assign(String actor) {
+        requireOperational();
+        if (actor == null || actor.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "담당자 식별자가 필요합니다.");
+        }
+        assignedTo = actor;
+        assignedAt = Instant.now();
+    }
+
+    public void updateChecklist(String checklistJson, String internalMemo) {
+        requireOperational();
+        if (checklistJson == null || checklistJson.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "체크리스트가 필요합니다.");
+        }
+        this.checklistJson = checklistJson;
+        this.internalMemo = internalMemo;
+    }
+
+    public void block(String actor, String reasonCode, String internalMemo, String evidenceUrl) {
+        requireOpen();
+        ReviewReasonCode.requireValid(reasonCode);
+        requireHttpsEvidence(evidenceUrl);
+        status = ReviewCaseStatus.BLOCKED;
+        decidedBy = actor;
+        this.reasonCode = reasonCode;
+        this.internalMemo = internalMemo;
+        this.evidenceUrl = evidenceUrl;
+        decidedAt = Instant.now();
+    }
+
+    public void cancel(String actor, String reasonCode, String internalMemo) {
+        requireOpen();
+        ReviewReasonCode.requireValid(reasonCode);
+        status = ReviewCaseStatus.CANCELLED;
+        decidedBy = actor;
+        this.reasonCode = reasonCode;
+        this.internalMemo = internalMemo;
+        decidedAt = Instant.now();
+    }
+
+    public void expire() {
+        requireOpen();
+        status = ReviewCaseStatus.EXPIRED;
+        decidedBy = "system:sla";
+        reasonCode = ReviewReasonCode.SLA_EXPIRED.name();
+        decidedAt = Instant.now();
+    }
+
+    public void appeal(String reason) {
+        if (status != ReviewCaseStatus.CHANGES_REQUESTED && status != ReviewCaseStatus.BLOCKED
+                && status != ReviewCaseStatus.EXPIRED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "수정 요청·차단·만료된 심사만 재검토할 수 있습니다.");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이의 제기 사유가 필요합니다.");
+        }
+        status = ReviewCaseStatus.REQUESTED;
+        appealReason = reason;
+        reasonCode = null;
+        externalFeedback = null;
+        decidedBy = null;
+        decidedAt = null;
+        dueAt = Instant.now().plus(slaDays(reviewType), ChronoUnit.DAYS);
+        reviewRound++;
+    }
+
+    public boolean isOverdue(Instant now) {
+        return (status == ReviewCaseStatus.REQUESTED || status == ReviewCaseStatus.EXTERNAL_SUBMITTED)
+                && dueAt.isBefore(now);
+    }
+
+    private void requireOperational() {
+        if (status == ReviewCaseStatus.CANCELLED || status == ReviewCaseStatus.EXPIRED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "종료된 심사는 변경할 수 없습니다.");
+        }
+    }
+
+    private void requireHttpsEvidence(String value) {
+        if (value != null && !value.isBlank() && !value.matches("^https://\\S+$")) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "첨부 증빙은 HTTPS URL이어야 합니다.");
+        }
+    }
+
+    private static long slaDays(ReviewType type) {
+        return switch (type) {
+            case BUILD_QA -> 2;
+            case STORE_PAGE, SDK_COMPLIANCE -> 3;
+            case RATING, LEGAL, COMMERCIAL -> 5;
+        };
     }
 
     private void requireOpen() {

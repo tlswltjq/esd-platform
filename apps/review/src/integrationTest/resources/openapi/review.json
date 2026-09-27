@@ -52,6 +52,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListReviewHistoryResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewHistoryResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListReviewResponse" : {
         "properties" : {
           "data" : {
@@ -97,6 +114,34 @@
         },
         "type" : "object"
       },
+      "ApiResponseReviewCasePageResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ReviewCasePageResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseReviewCaseResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ReviewCaseResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseVoid" : {
         "properties" : {
           "data" : { },
@@ -107,6 +152,21 @@
             "type" : "boolean"
           }
         },
+        "type" : "object"
+      },
+      "AppealReviewRequest" : {
+        "properties" : {
+          "expectedVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reason" : {
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
         "type" : "object"
       },
       "ApproveCaseRequest" : {
@@ -136,6 +196,21 @@
             "type" : "string"
           }
         },
+        "type" : "object"
+      },
+      "AssignReviewRequest" : {
+        "properties" : {
+          "assignee" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "expectedVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "assignee" ],
         "type" : "object"
       },
       "DeadEventResponse" : {
@@ -245,6 +320,11 @@
       },
       "RequestChangesRequest" : {
         "properties" : {
+          "evidenceUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
           "feedback" : {
             "maxLength" : 1000,
             "minLength" : 0,
@@ -268,12 +348,63 @@
         },
         "type" : "object"
       },
+      "ReviewCasePageResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewCaseResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "ReviewCaseResponse" : {
         "properties" : {
+          "appealReason" : {
+            "type" : "string"
+          },
+          "assignedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "assignedTo" : {
+            "type" : "string"
+          },
           "certificationNumber" : {
             "type" : "string"
           },
+          "checklistJson" : {
+            "type" : "string"
+          },
           "country" : {
+            "type" : "string"
+          },
+          "dueAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "entityVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "evidenceUrl" : {
             "type" : "string"
           },
           "externalApplicationNumber" : {
@@ -287,6 +418,9 @@
           },
           "externalSubmittedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "internalMemo" : {
             "type" : "string"
           },
           "issuedAt" : {
@@ -312,17 +446,49 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "reviewRound" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
           "reviewType" : {
-            "enum" : [ "RATING", "STORE_PAGE", "BUILD_QA" ],
+            "enum" : [ "RATING", "STORE_PAGE", "BUILD_QA", "LEGAL", "SDK_COMPLIANCE", "COMMERCIAL" ],
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "REQUESTED", "EXTERNAL_SUBMITTED", "APPROVED", "CHANGES_REQUESTED" ],
+            "enum" : [ "REQUESTED", "EXTERNAL_SUBMITTED", "APPROVED", "CHANGES_REQUESTED", "BLOCKED", "CANCELLED", "EXPIRED" ],
             "type" : "string"
           },
           "submissionId" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ReviewHistoryResponse" : {
+        "properties" : {
+          "action" : {
+            "type" : "string"
+          },
+          "actor" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "details" : {
+            "type" : "string"
+          },
+          "fromStatus" : {
+            "type" : "string"
+          },
+          "historyId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "toStatus" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -369,6 +535,31 @@
         },
         "type" : "object"
       },
+      "ReviewTransitionRequest" : {
+        "properties" : {
+          "evidenceUrl" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "expectedVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "internalMemo" : {
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "reasonCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reasonCode" ],
+        "type" : "object"
+      },
       "SubmitExternalRatingRequest" : {
         "properties" : {
           "applicationNumber" : {
@@ -388,6 +579,28 @@
           }
         },
         "required" : [ "applicationNumber", "evidenceUrl", "submittedAt" ],
+        "type" : "object"
+      },
+      "UpdateChecklistRequest" : {
+        "properties" : {
+          "checklist" : {
+            "additionalProperties" : {
+              "type" : "boolean"
+            },
+            "minProperties" : 1,
+            "type" : "object"
+          },
+          "expectedVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "internalMemo" : {
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "checklist" ],
         "type" : "object"
       }
     },
@@ -608,6 +821,124 @@
         "tags" : [ "submission-review-controller" ]
       }
     },
+    "/api/v1/reviews/cases/search" : {
+      "get" : {
+        "operationId" : "search",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "submissionId",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "reviewType",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "RATING", "STORE_PAGE", "BUILD_QA", "LEGAL", "SDK_COMPLIANCE", "COMMERCIAL" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "REQUESTED", "EXTERNAL_SUBMITTED", "APPROVED", "CHANGES_REQUESTED", "BLOCKED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "assignee",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "overdue",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCasePageResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/appeal" : {
+      "post" : {
+        "operationId" : "appeal",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AppealReviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
     "/api/v1/reviews/cases/{caseId}/approve" : {
       "post" : {
         "operationId" : "approve_1",
@@ -636,6 +967,126 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/assignment" : {
+      "post" : {
+        "operationId" : "assign",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AssignReviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/block" : {
+      "post" : {
+        "operationId" : "block",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/cancel" : {
+      "post" : {
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCaseResponse"
                 }
               }
             },
@@ -688,6 +1139,46 @@
         "tags" : [ "submission-review-controller" ]
       }
     },
+    "/api/v1/reviews/cases/{caseId}/checklist" : {
+      "post" : {
+        "operationId" : "checklist",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateChecklistRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReviewCaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
     "/api/v1/reviews/cases/{caseId}/external-submission" : {
       "post" : {
         "operationId" : "externalSubmission",
@@ -716,6 +1207,36 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "submission-review-controller" ]
+      }
+    },
+    "/api/v1/reviews/cases/{caseId}/history" : {
+      "get" : {
+        "operationId" : "history",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "caseId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListReviewHistoryResponse"
                 }
               }
             },

@@ -4,5 +4,8 @@ public enum ReviewCaseStatus {
     REQUESTED,
     EXTERNAL_SUBMITTED,
     APPROVED,
-    CHANGES_REQUESTED
+    CHANGES_REQUESTED,
+    BLOCKED,
+    CANCELLED,
+    EXPIRED
 }

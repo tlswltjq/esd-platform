@@ -10,6 +10,7 @@ public record NewUploadSession(
         String sha256,
         String commitSha,
         String repository,
+        String sourceRef,
         String ciProvider,
         String ciRunId,
         String idempotencyKey

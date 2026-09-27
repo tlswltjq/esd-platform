@@ -68,6 +68,10 @@ public class Submission extends BaseTimeEntity {
         if (status == SubmissionStatus.SUBMITTED) status = SubmissionStatus.READY_FOR_RELEASE;
     }
 
+    public void reopenReview() {
+        if (status == SubmissionStatus.CHANGES_REQUESTED) status = SubmissionStatus.SUBMITTED;
+    }
+
     public void applyRating(String ratingCode, String certificationNumber, String issuer,
                             java.time.Instant issuedAt, String country, String ratingPath,
                             String ratingPolicyVersion, String externalApplicationNumber,

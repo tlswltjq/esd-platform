@@ -61,6 +61,11 @@ public class MockBuildStorage implements BuildStorage {
     }
 
     @Override
+    public String presignDownload(String storagePath) {
+        return "https://mock-s3.local/download?path=" + storagePath;
+    }
+
+    @Override
     public void abortMultipart(String storagePath, String storageUploadId) {
         log.info("[MOCK S3] multipart 중단 {}", storagePath);
     }

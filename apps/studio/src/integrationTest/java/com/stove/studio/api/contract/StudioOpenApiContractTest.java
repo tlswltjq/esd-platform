@@ -12,7 +12,10 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         // 폴링을 재운다 — 캐시된 컨텍스트의 릴레이 경합(docs/testing.md).
-        properties = "stove.outbox.poll-interval-ms=3600000")
+        properties = {
+                "stove.outbox.poll-interval-ms=3600000",
+                "stove.ci.webhook.dispatch-enabled=false"
+        })
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class StudioOpenApiContractTest {
 

@@ -19,13 +19,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
-/** P0 전체 경로: OIDC → CI 업로드 → 검증 → 수정 재제출 → 출시 → rollback. */
+/** P0·P1 전체 경로: OIDC → CI 업로드 → 심사 → 채널별 출시 → rollback. */
 @Order(1)
-@DisplayName("트랙 A — 셀프 퍼블리싱 P0")
+@DisplayName("트랙 A — 셀프 퍼블리싱 P0·P1")
 class TrackACreatorFlowTest {
 
     private static final String CREATOR_EMAIL = "creator-" + Journey.STAMP + "@e2e.local";
     private static final String CREATOR_PASSWORD = "creator-password-" + Journey.STAMP;
+    private static String creatorSubject;
     private static String machineCredential;
     private static long build1;
     private static long build2;
@@ -33,6 +34,8 @@ class TrackACreatorFlowTest {
     private static long pricingRevision;
     private static long ratingRevision;
     private static long release1;
+    private static long p1MetadataRevision;
+    private static long p1Submission;
 
     @Test
     @Order(1)
@@ -41,6 +44,8 @@ class TrackACreatorFlowTest {
         Response signup = Stove.auth.post("/api/v1/auth/signup", Map.of(
                 "email", CREATOR_EMAIL, "password", CREATOR_PASSWORD));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
+        creatorSubject = signup.data().path("subject").asText();
+        assertThat(creatorSubject).isNotBlank();
 
         Journey.creatorToken(OidcLogin.token(CREATOR_EMAIL, CREATOR_PASSWORD));
         String reviewerPassword = System.getenv().getOrDefault(
@@ -195,7 +200,7 @@ class TrackACreatorFlowTest {
                 "cashGambling", false), "GRAC", "18");
         long submissionId = submit(build1, metadataRevision, gracRatingRevision);
 
-        for (String type : List.of("STORE_PAGE", "BUILD_QA")) {
+        for (String type : List.of("STORE_PAGE", "BUILD_QA", "LEGAL", "SDK_COMPLIANCE", "COMMERCIAL")) {
             Response approved = Stove.gateway.post(
                     "/api/v1/reviews/cases/%d/approve".formatted(reviewCase(submissionId, type)),
                     Map.of(), Journey.asReviewer());
@@ -239,6 +244,179 @@ class TrackACreatorFlowTest {
         assertThat(release.status()).as("%s", release).isEqualTo(200);
     }
 
+    @Test
+    @Order(8)
+    @DisplayName("상점 상세 초안을 미리보고·수정·발행하고 발행 전 제출은 거절한다")
+    void managesRichStorePageDraft() {
+        Response created = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/store-page-revisions".formatted(Journey.gameId()),
+                richStorePage("초안 상세 소개", true), Journey.asCreator());
+        assertThat(created.status()).as("%s", created).isEqualTo(200);
+        assertThat(created.data().path("storePageStatus").asText()).isEqualTo("DRAFT");
+        p1MetadataRevision = created.data().path("revisionId").asLong();
+
+        Response prematureSubmission = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
+                        "metadataRevisionId", p1MetadataRevision,
+                        "pricingRevisionId", pricingRevision,
+                        "ratingRevisionId", ratingRevision,
+                        "buildId", build1), Journey.asCreator());
+        assertThat(prematureSubmission.status()).as("%s", prematureSubmission).isEqualTo(409);
+
+        Response preview = Stove.gateway.get(
+                "/api/v1/studio/projects/%d/store-page-revisions/%d/preview"
+                        .formatted(Journey.gameId(), p1MetadataRevision), Journey.asCreator());
+        assertThat(preview.status()).as("%s", preview).isEqualTo(200);
+        assertThat(preview.data().path("status").asText()).isEqualTo("DRAFT");
+        assertThat(preview.data().path("localizations").path("en-US").path("title").asText())
+                .isEqualTo(Journey.PRODUCT_TITLE + " EN");
+        assertThat(preview.data().path("prices").path("KRW").asLong()).isEqualTo(PRICE);
+
+        Response updated = Stove.gateway.put(
+                "/api/v1/studio/projects/%d/store-page-revisions/%d"
+                        .formatted(Journey.gameId(), p1MetadataRevision),
+                richStorePage("수정한 출시용 상세 소개", true), Journey.asCreator());
+        assertThat(updated.status()).as("%s", updated).isEqualTo(200);
+        assertThat(updated.data().path("revisionId").asLong()).isEqualTo(p1MetadataRevision);
+
+        Response published = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/store-page-revisions/%d/publish"
+                        .formatted(Journey.gameId(), p1MetadataRevision), null, Journey.asCreator());
+        assertThat(published.status()).as("%s", published).isEqualTo(200);
+        assertThat(published.data().path("storePageStatus").asText()).isEqualTo("PUBLISHED");
+
+        Response immutable = Stove.gateway.put(
+                "/api/v1/studio/projects/%d/store-page-revisions/%d"
+                        .formatted(Journey.gameId(), p1MetadataRevision),
+                richStorePage("발행 후 변조", true), Journey.asCreator());
+        assertThat(immutable.status()).as("%s", immutable).isEqualTo(409);
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("심사 배정·체크리스트·차단·이의제기·이력과 검색을 하나의 안건에서 검증한다")
+    void operatesAndAppealsReview() {
+        p1Submission = submit(build1, p1MetadataRevision);
+        JsonNode review = reviewCaseNode(p1Submission, "STORE_PAGE");
+        long caseId = review.path("reviewCaseId").asLong();
+
+        Response assigned = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/assignment".formatted(caseId), Map.of(
+                        "assignee", "reviewer:p1-store",
+                        "expectedVersion", review.path("entityVersion").asLong()), Journey.asReviewer());
+        assertThat(assigned.status()).as("%s", assigned).isEqualTo(200);
+        assertThat(assigned.data().path("assignedTo").asText()).isEqualTo("reviewer:p1-store");
+
+        Response checklist = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/checklist".formatted(caseId), Map.of(
+                        "checklist", Map.of("copy", true, "assets", true, "localization", true),
+                        "internalMemo", "P1 운영 메모",
+                        "expectedVersion", assigned.data().path("entityVersion").asLong()), Journey.asReviewer());
+        assertThat(checklist.status()).as("%s", checklist).isEqualTo(200);
+        assertThat(checklist.data().path("internalMemo").asText()).isEqualTo("P1 운영 메모");
+
+        Response blocked = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/block".formatted(caseId), Map.of(
+                        "reasonCode", "ASSET_QUALITY",
+                        "internalMemo", "원본 자산 확인 필요",
+                        "evidenceUrl", "https://evidence.example/store/" + caseId,
+                        "expectedVersion", checklist.data().path("entityVersion").asLong()), Journey.asReviewer());
+        assertThat(blocked.status()).as("%s", blocked).isEqualTo(200);
+        assertThat(blocked.data().path("status").asText()).isEqualTo("BLOCKED");
+
+        Response appealed = Stove.gateway.post(
+                "/api/v1/reviews/cases/%d/appeal".formatted(caseId), Map.of(
+                        "reason", "원본 자산을 교체했습니다.",
+                        "expectedVersion", blocked.data().path("entityVersion").asLong()), Journey.asReviewer());
+        assertThat(appealed.status()).as("%s", appealed).isEqualTo(200);
+        assertThat(appealed.data().path("status").asText()).isEqualTo("REQUESTED");
+        assertThat(appealed.data().path("reviewRound").asInt()).isEqualTo(2);
+
+        Response history = Stove.gateway.get(
+                "/api/v1/reviews/cases/%d/history".formatted(caseId), Journey.asReviewer());
+        assertThat(history.status()).as("%s", history).isEqualTo(200);
+        assertThat(itemByText(history.data(), "action", "ASSIGNED")).isNotNull();
+        assertThat(itemByText(history.data(), "action", "CHECKLIST_UPDATED")).isNotNull();
+        assertThat(itemByText(history.data(), "action", "BLOCKED")).isNotNull();
+        assertThat(itemByText(history.data(), "action", "APPEALED")).isNotNull();
+
+        Response search = Stove.gateway.get(
+                "/api/v1/reviews/cases/search?submissionId=%d&reviewType=STORE_PAGE&assignee=reviewer:p1-store&page=0&size=5"
+                        .formatted(p1Submission), Journey.asReviewer());
+        assertThat(search.status()).as("%s", search).isEqualTo(200);
+        assertThat(search.data().path("totalElements").asLong()).isEqualTo(1);
+        assertThat(search.data().path("items").get(0).path("reviewCaseId").asLong()).isEqualTo(caseId);
+
+        approveAll(p1Submission);
+        awaitReady(p1Submission);
+    }
+
+    @Test
+    @Order(10)
+    @DisplayName("DEV→TEST→STAGE→LIVE 승격, 테스터 설치, 예약 변경·취소를 검증한다")
+    void promotesChannelsAndManagesSchedule() {
+        Response dev = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(p1Submission),
+                Map.of("channel", "DEV", "timeZone", "Asia/Seoul"), Journey.asCreator());
+        assertPublishedRelease(dev, "DEV");
+
+        Response tester = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/testers".formatted(Journey.gameId()), Map.of(
+                        "testerSubject", creatorSubject,
+                        "channel", "DEV"), Journey.asCreator());
+        assertThat(tester.status()).as("%s", tester).isEqualTo(200);
+        long grantId = tester.data().path("grantId").asLong();
+
+        Response installation = Stove.gateway.get(
+                "/api/v1/studio/tester/builds/%d/installation?channel=DEV".formatted(build1),
+                Journey.asCreator());
+        assertThat(installation.status()).as("%s", installation).isEqualTo(200);
+        assertThat(installation.data().path("downloadUrl").asText()).startsWith("http");
+
+        Response test = promote(dev.data().path("releaseId").asLong(), "TEST");
+        Response stage = promote(test.data().path("releaseId").asLong(), "STAGE");
+        Response live = promote(stage.data().path("releaseId").asLong(), "LIVE");
+        assertThat(live.data().path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(live.data().path("changeType").asText()).isEqualTo("MATERIAL_CHANGE");
+
+        Response revoked = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/testers/%d/revoke".formatted(Journey.gameId(), grantId),
+                null, Journey.asCreator());
+        assertThat(revoked.status()).as("%s", revoked).isEqualTo(200);
+        Response grants = Stove.gateway.get(
+                "/api/v1/studio/projects/%d/testers".formatted(Journey.gameId()), Journey.asCreator());
+        assertThat(grants.status()).as("%s", grants).isEqualTo(200);
+        assertThat(itemByLong(grants.data(), "grantId", grantId).path("active").asBoolean()).isFalse();
+
+        long changedPricingRevision = revision("pricing-revisions", Map.of("price", PRICE + 1_000));
+        long scheduledSubmission = submit(build1, p1MetadataRevision, changedPricingRevision, ratingRevision);
+        approveAll(scheduledSubmission);
+        awaitReady(scheduledSubmission);
+        Instant initialPublishAt = Instant.now().plusSeconds(3_600);
+        Response scheduled = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(scheduledSubmission), Map.of(
+                        "channel", "DEV",
+                        "publishAt", initialPublishAt.toString(),
+                        "timeZone", "Asia/Seoul"), Journey.asCreator());
+        assertThat(scheduled.status()).as("%s", scheduled).isEqualTo(200);
+        assertThat(scheduled.data().path("status").asText()).isEqualTo("SCHEDULED");
+        assertThat(scheduled.data().path("changeType").asText()).isEqualTo("MATERIAL_CHANGE");
+        long scheduledRelease = scheduled.data().path("releaseId").asLong();
+
+        Instant rescheduledAt = Instant.now().plusSeconds(7_200);
+        Response rescheduled = Stove.gateway.post(
+                "/api/v1/studio/projects/releases/%d/reschedule".formatted(scheduledRelease), Map.of(
+                        "publishAt", rescheduledAt.toString(),
+                        "timeZone", "UTC"), Journey.asCreator());
+        assertThat(rescheduled.status()).as("%s", rescheduled).isEqualTo(200);
+        assertThat(rescheduled.data().path("publishTimeZone").asText()).isEqualTo("UTC");
+
+        Response cancelled = Stove.gateway.post(
+                "/api/v1/studio/projects/releases/%d/cancel".formatted(scheduledRelease),
+                null, Journey.asCreator());
+        assertThat(cancelled.status()).as("%s", cancelled).isEqualTo(200);
+    }
+
     private long uploadBuild(String version, String buildNumber) throws Exception {
         byte[] artifact = artifact(version);
         long buildId = uploadArtifact(version, buildNumber, artifact);
@@ -264,6 +442,7 @@ class TrackACreatorFlowTest {
                         Map.entry("sha256", checksum),
                         Map.entry("commitSha", "deadbeef" + buildNumber),
                         Map.entry("repository", "https://github.com/example/game"),
+                        Map.entry("sourceRef", "refs/heads/main"),
                         Map.entry("ciProvider", "GITHUB"),
                         Map.entry("ciRunId", buildNumber),
                         Map.entry("idempotencyKey", "e2e-" + Journey.STAMP + "-" + buildNumber)), ci);
@@ -310,10 +489,15 @@ class TrackACreatorFlowTest {
     }
 
     private long submit(long buildId, long metadataId, long selectedRatingRevision) {
+        return submit(buildId, metadataId, pricingRevision, selectedRatingRevision);
+    }
+
+    private long submit(long buildId, long metadataId, long selectedPricingRevision,
+                        long selectedRatingRevision) {
         Response response = Stove.gateway.post(
                 "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
                         "metadataRevisionId", metadataId,
-                        "pricingRevisionId", pricingRevision,
+                        "pricingRevisionId", selectedPricingRevision,
                         "ratingRevisionId", selectedRatingRevision,
                         "buildId", buildId), Journey.asCreator());
         assertThat(response.status()).as("%s", response).isEqualTo(200);
@@ -321,6 +505,11 @@ class TrackACreatorFlowTest {
     }
 
     private long reviewCase(long submissionId, String type) {
+        return reviewCaseNode(submissionId, type).path("reviewCaseId").asLong();
+    }
+
+    private JsonNode reviewCaseNode(long submissionId, String type) {
+        final JsonNode[] found = {null};
         final long[] id = {0};
         Await.untilResponse("review cases " + submissionId,
                 () -> Stove.gateway.get("/api/v1/reviews/cases?submissionId=" + submissionId,
@@ -328,13 +517,59 @@ class TrackACreatorFlowTest {
                     JsonNode item = itemByText(response.data(), "reviewType", type);
                     if (item == null) return false;
                     id[0] = item.path("reviewCaseId").asLong();
+                    found[0] = item;
                     return id[0] > 0;
                 });
-        return id[0];
+        return found[0];
+    }
+
+    private Response promote(long sourceReleaseId, String targetChannel) {
+        Response response = Stove.gateway.post(
+                "/api/v1/studio/projects/releases/%d/promote".formatted(sourceReleaseId),
+                Map.of("targetChannel", targetChannel, "timeZone", "Asia/Seoul"), Journey.asCreator());
+        assertPublishedRelease(response, targetChannel);
+        return response;
+    }
+
+    private void assertPublishedRelease(Response response, String channel) {
+        assertThat(response.status()).as("%s", response).isEqualTo(200);
+        assertThat(response.data().path("channel").asText()).isEqualTo(channel);
+        assertThat(response.data().path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(response.data().path("smokeTestStatus").asText()).isEqualTo("PASSED");
+    }
+
+    private Map<String, Object> richStorePage(String detailedDescription, boolean draft) {
+        return Map.ofEntries(
+                Map.entry("title", Journey.PRODUCT_TITLE),
+                Map.entry("shortDescription", "P1 기능을 모두 갖춘 게임 소개"),
+                Map.entry("detailedDescription", detailedDescription),
+                Map.entry("localizations", Map.of("en-US", Map.of(
+                        "title", Journey.PRODUCT_TITLE + " EN",
+                        "shortDescription", "A complete P1 store page",
+                        "detailedDescription", "Localized launch description"))),
+                Map.entry("genres", List.of("ACTION", "INDIE")),
+                Map.entry("tags", List.of("CO_OP", "CONTROLLER")),
+                Map.entry("developer", "ESD Studio"),
+                Map.entry("publisher", "ESD Publishing"),
+                Map.entry("screenshots", List.of("https://cdn.example/screenshots/1.png")),
+                Map.entry("trailers", List.of("https://cdn.example/trailers/1.mp4")),
+                Map.entry("iconUrl", "https://cdn.example/icons/game.png"),
+                Map.entry("coverUrl", "https://cdn.example/covers/game.png"),
+                Map.entry("supportedLanguages", List.of("ko-KR", "en-US")),
+                Map.entry("platform", "WINDOWS"),
+                Map.entry("minimumRequirements", "Windows 10, 8GB RAM"),
+                Map.entry("recommendedRequirements", "Windows 11, 16GB RAM"),
+                Map.entry("features", List.of("ACHIEVEMENTS", "CLOUD_SAVE")),
+                Map.entry("supportUrl", "https://support.example/game"),
+                Map.entry("privacyPolicyUrl", "https://legal.example/privacy"),
+                Map.entry("eulaUrl", "https://legal.example/eula"),
+                Map.entry("salesCountries", List.of("KR", "US")),
+                Map.entry("prices", Map.of("KRW", PRICE, "USD", 1499)),
+                Map.entry("draft", draft));
     }
 
     private void approveAll(long submissionId) {
-        for (String type : List.of("RATING", "STORE_PAGE", "BUILD_QA")) {
+        for (String type : List.of("RATING", "STORE_PAGE", "BUILD_QA", "LEGAL", "SDK_COMPLIANCE", "COMMERCIAL")) {
             long caseId = reviewCase(submissionId, type);
             Map<String, ?> body = "RATING".equals(type) ? Map.of(
                     "ratingCode", "ALL") : Map.of();

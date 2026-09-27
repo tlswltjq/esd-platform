@@ -36,6 +36,7 @@ public class CiUploadController {
             @AuthenticationPrincipal ProjectCredentialPrincipal principal,
             @Valid @RequestBody CreateUploadSessionRequest request) {
         requireScope(gameId, principal);
+        requireTrustConstraints(principal, request);
         return ApiResponse.ok(UploadSessionResponse.from(
                 uploadSessionService.create(gameId, principal.workspaceId(), request.toCommand())));
     }
@@ -68,6 +69,21 @@ public class CiUploadController {
     private void requireScope(Long gameId, ProjectCredentialPrincipal principal) {
         if (principal == null || !gameId.equals(principal.gameId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "다른 프로젝트에는 사용할 수 없습니다.");
+        }
+    }
+
+    private void requireTrustConstraints(ProjectCredentialPrincipal principal,
+                                         CreateUploadSessionRequest request) {
+        if (principal.allowedRepository() != null
+                && !principal.allowedRepository().equals(request.repository())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "OIDC가 허용한 repository와 다릅니다.");
+        }
+        if (principal.allowedRef() != null && !principal.allowedRef().equals(request.sourceRef())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "OIDC가 허용한 branch/tag와 다릅니다.");
+        }
+        if (principal.allowedPlatform() != null
+                && !principal.allowedPlatform().equalsIgnoreCase(request.platform())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "OIDC가 허용한 platform과 다릅니다.");
         }
     }
 }

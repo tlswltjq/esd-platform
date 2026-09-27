@@ -64,6 +64,9 @@ public class GameBuild extends BaseTimeEntity {
     @Column(length = 300)
     private String repository;
 
+    @Column(length = 300)
+    private String sourceRef;
+
     @Column(length = 30)
     private String ciProvider;
 
@@ -118,6 +121,7 @@ public class GameBuild extends BaseTimeEntity {
         build.storagePath = storagePath;
         build.commitSha = request.commitSha();
         build.repository = request.repository();
+        build.sourceRef = request.sourceRef();
         build.ciProvider = request.ciProvider();
         build.ciRunId = request.ciRunId();
         build.idempotencyKey = request.idempotencyKey();

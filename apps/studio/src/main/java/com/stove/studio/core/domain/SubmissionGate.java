@@ -42,6 +42,14 @@ public class SubmissionGate {
         if (status == SubmissionGateStatus.PENDING) status = SubmissionGateStatus.APPROVED;
     }
 
+    public void reopen() {
+        if (status == SubmissionGateStatus.CHANGES_REQUESTED) {
+            status = SubmissionGateStatus.PENDING;
+            reasonCode = null;
+            feedback = null;
+        }
+    }
+
     public void changesRequested(String reasonCode, String feedback) {
         if (status == SubmissionGateStatus.PENDING) {
             status = SubmissionGateStatus.CHANGES_REQUESTED;

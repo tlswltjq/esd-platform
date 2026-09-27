@@ -15,6 +15,7 @@ import com.stove.studio.core.domain.RatingRevision;
 import com.stove.studio.core.domain.RatingRevisionRepository;
 import com.stove.studio.core.domain.StorePageRevision;
 import com.stove.studio.core.domain.StorePageRevisionRepository;
+import com.stove.studio.core.domain.StorePageRevisionStatus;
 import com.stove.studio.core.domain.Submission;
 import com.stove.studio.core.domain.SubmissionRepository;
 import com.stove.studio.core.domain.SubmissionGate;
@@ -45,6 +46,9 @@ public class SubmissionService {
         StorePageRevision metadata = storeRepository.findById(metadataRevisionId)
                 .filter(value -> value.getGameId().equals(gameId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "상점 revision이 프로젝트와 다릅니다."));
+        if (metadata.getStatus() != StorePageRevisionStatus.PUBLISHED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "발행된 상점 revision만 심의에 제출할 수 있습니다.");
+        }
         PricingRevision pricing = pricingRepository.findById(pricingRevisionId)
                 .filter(value -> value.getGameId().equals(gameId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "가격 revision이 프로젝트와 다릅니다."));
@@ -61,7 +65,7 @@ public class SubmissionService {
                 .map(value -> value.getSequenceNo() + 1).orElse(1);
         Submission submission = submissionRepository.save(Submission.create(gameId, workspaceId, sequence,
                 metadataRevisionId, pricingRevisionId, ratingRevisionId, buildId));
-        List.of("RATING", "STORE_PAGE", "BUILD_QA")
+        List.of("RATING", "STORE_PAGE", "BUILD_QA", "LEGAL", "SDK_COMPLIANCE", "COMMERCIAL")
                 .forEach(type -> gateRepository.save(SubmissionGate.pending(submission.getId(), type)));
 
         outboxRecorder.record("Submission", submission.getId().toString(), SubmissionCreatedEvent.of(

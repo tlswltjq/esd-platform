@@ -35,6 +35,7 @@ import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 /**
  * {@link BuildStorage} 의 S3 호환 어댑터(로컬 MinIO / 운영 S3).
@@ -175,6 +176,16 @@ public class S3BuildStorage implements BuildStorage {
                 .bucket(properties.bucket())
                 .key(key(storagePath))
                 .build(), destination);
+    }
+
+    @Override
+    public String presignDownload(String storagePath) {
+        return presigner.presignGetObject(GetObjectPresignRequest.builder()
+                        .signatureDuration(properties.presignTtl())
+                        .getObjectRequest(GetObjectRequest.builder()
+                                .bucket(properties.bucket()).key(key(storagePath)).build())
+                        .build())
+                .url().toString();
     }
 
     @Override
