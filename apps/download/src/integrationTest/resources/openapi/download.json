@@ -63,6 +63,34 @@
         },
         "type" : "object"
       },
+      "ArtifactResponse" : {
+        "properties" : {
+          "architecture" : {
+            "type" : "string"
+          },
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "checksum" : {
+            "type" : "string"
+          },
+          "deltaFromVersion" : {
+            "type" : "string"
+          },
+          "fileSize" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "platform" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DltRecordResponse" : {
         "properties" : {
           "eventId" : {
@@ -99,11 +127,17 @@
       },
       "DownloadTicketResponse" : {
         "properties" : {
+          "architecture" : {
+            "type" : "string"
+          },
           "buildId" : {
             "format" : "int64",
             "type" : "integer"
           },
           "checksum" : {
+            "type" : "string"
+          },
+          "deltaFromVersion" : {
             "type" : "string"
           },
           "downloadUrl" : {
@@ -116,6 +150,9 @@
           "fileSize" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "platform" : {
+            "type" : "string"
           },
           "productCode" : {
             "type" : "string"
@@ -146,6 +183,12 @@
           "buildId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "buildVariants" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ArtifactResponse"
+            },
+            "type" : "array"
           },
           "checksum" : {
             "type" : "string"
@@ -237,6 +280,27 @@
           "schema" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "platform",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "architecture",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "fromVersion",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
         } ],
         "responses" : {

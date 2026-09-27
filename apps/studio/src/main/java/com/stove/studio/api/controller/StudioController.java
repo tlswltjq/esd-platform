@@ -4,6 +4,7 @@ import com.stove.common.core.response.ApiResponse;
 import com.stove.studio.api.controller.dto.BuildResponse;
 import com.stove.studio.api.controller.dto.CreateProjectRequest;
 import com.stove.studio.api.controller.dto.ProjectResponse;
+import com.stove.studio.api.controller.dto.ProductFamilyResponse;
 import com.stove.studio.api.controller.dto.UploadBuildRequest;
 import com.stove.studio.api.controller.dto.CreateUploadSessionRequest;
 import com.stove.studio.api.controller.dto.CompleteUploadRequest;
@@ -51,6 +52,15 @@ public class StudioController {
         return ApiResponse.ok(gameProjectService.findBySeller(workspaceId).stream()
                 .map(ProjectResponse::from)
                 .toList());
+    }
+
+    @GetMapping("/{gameId}/family")
+    public ApiResponse<ProductFamilyResponse> family(@PathVariable Long gameId,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        var family = gameProjectService.family(gameId, workspaceId);
+        return ApiResponse.ok(ProductFamilyResponse.from(family.product(), family.parent(),
+                family.children(), family.components(), family.bundles()));
     }
 
     /** 등급분류 심의 신청 */

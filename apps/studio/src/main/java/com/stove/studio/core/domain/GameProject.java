@@ -59,6 +59,15 @@ public class GameProject extends BaseTimeEntity {
     @Column(length = 200)
     private String rejectReason;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ProductKind productKind;
+
+    private Long parentGameId;
+
+    @Column(length = 100)
+    private String editionName;
+
     private GameProject(String productCode, String title, Long sellerId, long price, String currency,
                         boolean selfRated) {
         this.productCode = productCode;
@@ -68,11 +77,21 @@ public class GameProject extends BaseTimeEntity {
         this.currency = currency;
         this.selfRated = selfRated;
         this.status = ProjectStatus.DRAFT;
+        this.productKind = ProductKind.BASIC;
     }
 
     public static GameProject create(String productCode, String title, Long sellerId, long price,
                                      String currency, boolean selfRated) {
         return new GameProject(productCode, title, sellerId, price, currency, selfRated);
+    }
+
+    public static GameProject create(NewProject request) {
+        GameProject project = new GameProject(request.productCode(), request.title(), request.sellerId(),
+                request.price(), request.currency(), request.selfRated());
+        project.productKind = request.productKind() == null ? ProductKind.BASIC : request.productKind();
+        project.parentGameId = request.parentGameId();
+        project.editionName = request.editionName();
+        return project;
     }
 
     public void submit() {

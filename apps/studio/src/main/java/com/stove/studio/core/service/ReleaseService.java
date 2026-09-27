@@ -3,12 +3,14 @@ package com.stove.studio.core.service;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ReleasePublishedEvent;
+import com.stove.common.event.payload.BuildVariant;
 import com.stove.common.event.payload.ReleaseRolledBackEvent;
 import com.stove.common.event.payload.ReleaseScheduledEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.studio.core.domain.GameBuild;
 import com.stove.studio.core.domain.GameBuildRepository;
 import com.stove.studio.core.domain.GameProject;
+import com.stove.studio.core.domain.ProductFamily;
 import com.stove.studio.core.domain.PricingRevision;
 import com.stove.studio.core.domain.PricingRevisionRepository;
 import com.stove.studio.core.domain.Release;
@@ -19,6 +21,7 @@ import com.stove.studio.core.domain.ReleaseStatus;
 import com.stove.studio.core.domain.StorePageRevision;
 import com.stove.studio.core.domain.StorePageRevisionRepository;
 import com.stove.studio.core.domain.Submission;
+import com.stove.studio.core.domain.SubmissionBuildRepository;
 import com.stove.studio.core.domain.SubmissionRepository;
 import com.stove.studio.core.domain.SubmissionStatus;
 import java.time.Instant;
@@ -36,6 +39,7 @@ public class ReleaseService {
 
     private final ReleaseRepository releaseRepository;
     private final SubmissionRepository submissionRepository;
+    private final SubmissionBuildRepository submissionBuildRepository;
     private final GameProjectService projectService;
     private final GameBuildRepository buildRepository;
     private final StorePageRevisionRepository storeRepository;
@@ -155,9 +159,10 @@ public class ReleaseService {
     }
 
     private void publish(Release release, Submission submission, GameProject project, String actor) {
-        GameBuild build = buildRepository.findById(release.getBuildId()).orElseThrow();
+        List<GameBuild> builds = buildsFor(submission);
+        GameBuild build = builds.get(0);
         try {
-            smokeTestService.verify(build);
+            builds.forEach(smokeTestService::verify);
             release.smokePassed(Instant.now());
         } catch (RuntimeException exception) {
             release.smokeFailed(Instant.now(), safeMessage(exception));
@@ -174,14 +179,33 @@ public class ReleaseService {
         submission.released();
         StorePageRevision metadata = storeRepository.findById(release.getMetadataRevisionId()).orElseThrow();
         PricingRevision pricing = pricingRepository.findById(release.getPricingRevisionId()).orElseThrow();
+        ProductFamily family = projectService.family(project.getId(), project.getSellerId());
         outboxRecorder.record("Release", project.getProductCode(), ReleasePublishedEvent.of(
                 release.getId(), release.getPreviousReleaseId(), submission.getId(), project.getId(),
                 project.getProductCode(), project.getSellerId(), build.getId(), metadata.getId(), pricing.getId(),
                 release.getRatingRevisionId(), metadata.getTitle(), metadata.getShortDescription(),
                 pricing.getPrice(), pricing.getCurrency(), submission.getRatingCode(), build.getVersion(),
-                build.getFileSize(), build.getActualChecksum(), build.getStoragePath()));
+                build.getFileSize(), build.getActualChecksum(), build.getStoragePath(),
+                project.getProductKind().name(),
+                family.parent() == null ? null : family.parent().getProductCode(),
+                project.getEditionName(),
+                family.components().stream().map(GameProject::getProductCode).toList(),
+                builds.stream().map(ReleaseService::variant).toList()));
         auditLogService.record(actor, "RELEASE_PUBLISHED", "Release", release.getId(),
                 "buildId=" + build.getId() + ",submissionId=" + submission.getId());
+    }
+
+    private List<GameBuild> buildsFor(Submission submission) {
+        List<Long> ids = submissionBuildRepository.findBySubmissionIdOrderById(submission.getId())
+                .stream().map(value -> value.getBuildId()).toList();
+        if (ids.isEmpty()) ids = List.of(submission.getBuildId());
+        return ids.stream().map(id -> buildRepository.findById(id).orElseThrow()).toList();
+    }
+
+    private static BuildVariant variant(GameBuild build) {
+        return new BuildVariant(build.getId(), build.getPlatform(), build.getArchitecture(),
+                build.getVersion(), build.getFileSize(), build.getActualChecksum(),
+                build.getStoragePath(), build.getDeltaFromVersion());
     }
 
     private ReleaseChangeType classify(Submission submission, Release previous) {

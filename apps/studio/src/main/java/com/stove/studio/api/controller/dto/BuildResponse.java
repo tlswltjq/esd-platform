@@ -17,12 +17,13 @@ public record BuildResponse(
         BuildStatus status,
         String failureCode,
         Instant createdAt,
-        Long duplicateOfBuildId
+        Long duplicateOfBuildId,
+        String deltaFromVersion
 ) {
     public static BuildResponse from(GameBuild build) {
         return new BuildResponse(build.getId(), build.getGameId(), build.getVersion(),
                 build.getFileSize(), build.getChecksum(), build.getStoragePath(), build.getBuildNumber(),
                 build.getPlatform(), build.getArchitecture(), build.getStatus(), build.getFailureCode(),
-                build.getCreatedAt(), build.getDuplicateOfBuildId());
+                build.getCreatedAt(), build.getDuplicateOfBuildId(), build.getDeltaFromVersion());
     }
 }

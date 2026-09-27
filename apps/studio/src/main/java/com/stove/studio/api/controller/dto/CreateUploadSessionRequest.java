@@ -19,11 +19,20 @@ public record CreateUploadSessionRequest(
         @Size(max = 300) String sourceRef,
         @Size(max = 30) String ciProvider,
         @Size(max = 100) String ciRunId,
-        @NotBlank @Size(max = 100) String idempotencyKey
+        @NotBlank @Size(max = 100) String idempotencyKey,
+        @Size(max = 30) String deltaFromVersion
 ) {
+    public CreateUploadSessionRequest(String productVersion, String buildNumber, String platform,
+                                      String architecture, String fileName, long fileSize, String sha256,
+                                      String commitSha, String repository, String sourceRef,
+                                      String ciProvider, String ciRunId, String idempotencyKey) {
+        this(productVersion, buildNumber, platform, architecture, fileName, fileSize, sha256,
+                commitSha, repository, sourceRef, ciProvider, ciRunId, idempotencyKey, null);
+    }
+
     public NewUploadSession toCommand() {
         return new NewUploadSession(productVersion, buildNumber, platform, architecture, fileName,
                 fileSize, sha256.replaceFirst("(?i)^sha256:", "").toLowerCase(), commitSha,
-                repository, sourceRef, ciProvider, ciRunId, idempotencyKey);
+                repository, sourceRef, ciProvider, ciRunId, idempotencyKey, deltaFromVersion);
     }
 }

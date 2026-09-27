@@ -35,8 +35,13 @@ public class SubmissionSnapshot extends BaseTimeEntity {
     private String recommendedRatingCode;
     @Lob @Column(nullable = false, columnDefinition = "TEXT") private String ratingQuestionnaire;
     @Column(nullable = false, length = 30) private String productVersion;
+    @Lob @Column(nullable = false, columnDefinition = "TEXT") private String buildVariantsJson;
 
     public static SubmissionSnapshot from(SubmissionCreatedEvent event) {
+        return from(event, "[]");
+    }
+
+    public static SubmissionSnapshot from(SubmissionCreatedEvent event, String buildVariantsJson) {
         SubmissionSnapshot snapshot = new SubmissionSnapshot();
         snapshot.submissionId = event.submissionId();
         snapshot.gameId = event.gameId();
@@ -56,6 +61,7 @@ public class SubmissionSnapshot extends BaseTimeEntity {
         snapshot.recommendedRatingCode = event.recommendedRatingCode();
         snapshot.ratingQuestionnaire = event.ratingQuestionnaire();
         snapshot.productVersion = event.productVersion();
+        snapshot.buildVariantsJson = buildVariantsJson;
         return snapshot;
     }
 }

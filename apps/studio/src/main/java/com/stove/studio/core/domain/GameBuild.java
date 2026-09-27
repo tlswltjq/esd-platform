@@ -44,6 +44,9 @@ public class GameBuild extends BaseTimeEntity {
     @Column(nullable = false, length = 30)
     private String architecture;
 
+    @Column(length = 30)
+    private String deltaFromVersion;
+
     @Column(nullable = false)
     private long fileSize;
 
@@ -116,6 +119,7 @@ public class GameBuild extends BaseTimeEntity {
         build.buildNumber = request.buildNumber();
         build.platform = request.platform();
         build.architecture = request.architecture();
+        build.deltaFromVersion = request.deltaFromVersion();
         build.fileSize = request.fileSize();
         build.checksum = request.sha256();
         build.storagePath = storagePath;

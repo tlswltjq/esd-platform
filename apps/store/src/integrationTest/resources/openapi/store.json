@@ -109,7 +109,16 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "bundleProductCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
           "currency" : {
+            "type" : "string"
+          },
+          "editionName" : {
             "type" : "string"
           },
           "metadataRevision" : {
@@ -117,6 +126,9 @@
             "type" : "integer"
           },
           "name" : {
+            "type" : "string"
+          },
+          "parentProductCode" : {
             "type" : "string"
           },
           "price" : {
@@ -129,6 +141,9 @@
           "productId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "productKind" : {
+            "type" : "string"
           },
           "ratingCode" : {
             "type" : "string"

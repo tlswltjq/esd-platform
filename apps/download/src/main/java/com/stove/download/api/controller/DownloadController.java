@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -24,8 +25,14 @@ public class DownloadController {
     /** 다운로드 인증 → CDN 서명 URL 발급 (미보유 시 403) */
     @GetMapping("/{productCode}/ticket")
     public ApiResponse<DownloadTicketResponse> ticket(@PathVariable String productCode,
-                                                      @RequestHeader("X-Member-Id") Long memberId) {
-        return ApiResponse.ok(DownloadTicketResponse.from(downloadTicketService.issue(productCode, memberId)));
+                                                      @RequestHeader("X-Member-Id") Long memberId,
+                                                      @RequestParam(required = false) String platform,
+                                                      @RequestParam(required = false) String architecture,
+                                                      @RequestParam(required = false) String fromVersion) {
+        var ticket = platform == null && architecture == null && fromVersion == null
+                ? downloadTicketService.issue(productCode, memberId)
+                : downloadTicketService.issue(productCode, memberId, platform, architecture, fromVersion);
+        return ApiResponse.ok(DownloadTicketResponse.from(ticket));
     }
 
     /** 버전 목록(패치 이력) */

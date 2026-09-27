@@ -77,6 +77,47 @@ class ProductCommandServiceTest {
                         "sha256:test", "s3://stove-builds/" + productCode + "/game.zip"));
     }
 
+    @Test
+    @DisplayName("공개 릴리스의 에디션·묶음 관계가 상품 조회와 Store 이벤트에 반영된다")
+    void releaseProjectsProductFamily() {
+        String productCode = uniqueProductCode();
+        receive(approval(productCode, "ALL"));
+        Long productId = find(productCode).getId();
+        productQueryService.getProduct(productId); // 기존 캐시를 채운 뒤 릴리스한다.
+
+        productCommandService.upsertFromRelease(UUID.randomUUID().toString(),
+                EventType.RELEASE_PUBLISHED, ReleasePublishedEvent.of(
+                        RELEASE_IDS.incrementAndGet(), null, 1L, 1L, productCode, 1001L,
+                        2L, 1L, 1L, 1L, "합본", "두 게임 합본", 59_000L, "KRW", "ALL",
+                        "1.0.0", 1_024L, "sha256:test", "s3://stove-builds/bundle.zip",
+                        "BUNDLE", null, null, List.of("GAME-A", "GAME-B")));
+
+        ProductView projected = productQueryService.getProduct(productId);
+        assertThat(projected.productKind()).isEqualTo("BUNDLE");
+        assertThat(projected.bundleProductCodes()).containsExactly("GAME-A", "GAME-B");
+        assertThat(projected.status()).isEqualTo(ProductStatus.APPROVED);
+        assertThatThrownBy(() -> productCommandService.openSale(productId))
+                .isInstanceOf(BusinessException.class);
+        assertThat(outboxFor(productCode).get(1).getPayload())
+                .contains("BUNDLE", "GAME-A", "GAME-B");
+    }
+
+    @Test
+    void editionIsPurchasableAndKeepsItsParent() {
+        String productCode = uniqueProductCode();
+        productCommandService.upsertFromRelease(UUID.randomUUID().toString(),
+                EventType.RELEASE_PUBLISHED, ReleasePublishedEvent.of(
+                        RELEASE_IDS.incrementAndGet(), null, 1L, 1L, productCode, 1001L,
+                        2L, 1L, 1L, 1L, "Deluxe", "에디션", 49_000L, "KRW", "ALL",
+                        "1.0.0", 1_024L, "sha256:test", "s3://stove-builds/edition.zip",
+                        "EDITION", "BASIC-001", "Deluxe", List.of()));
+
+        ProductView view = productQueryService.getProductByCode(productCode);
+        assertThat(view.status()).isEqualTo(ProductStatus.ON_SALE);
+        assertThat(view.parentProductCode()).isEqualTo("BASIC-001");
+        assertThat(view.editionName()).isEqualTo("Deluxe");
+    }
+
     private Product find(String productCode) {
         return productRepository.findByProductCode(productCode).orElseThrow();
     }

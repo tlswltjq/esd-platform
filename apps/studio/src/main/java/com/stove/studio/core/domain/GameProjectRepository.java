@@ -9,4 +9,6 @@ public interface GameProjectRepository extends JpaRepository<GameProject, Long> 
     Optional<GameProject> findByProductCode(String productCode);
 
     List<GameProject> findBySellerIdOrderByIdDesc(Long sellerId);
+
+    List<GameProject> findByParentGameIdOrderById(Long parentGameId);
 }

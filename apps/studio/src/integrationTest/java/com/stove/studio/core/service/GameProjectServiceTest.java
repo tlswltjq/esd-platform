@@ -14,6 +14,7 @@ import com.stove.studio.core.domain.GameProject;
 import com.stove.studio.core.domain.GameProjectRepository;
 import com.stove.studio.core.domain.NewProject;
 import com.stove.studio.core.domain.ProjectStatus;
+import com.stove.studio.core.domain.ProductKind;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,6 +68,43 @@ class GameProjectServiceTest {
     private GameProject project(String productCode) {
         return gameProjectService.create(
                 new NewProject(productCode, "로스트아크", seller, 39_000L, "KRW", false));
+    }
+
+    @Test
+    @DisplayName("DEMO/DLC/EDITION은 소유한 BASIC에 연결하고 BUNDLE은 둘 이상의 상품을 묶는다")
+    void productFamilyRequiresOwnedRelations() {
+        GameProject basic = project(uniqueProductCode());
+        GameProject second = project(uniqueProductCode());
+
+        GameProject demo = gameProjectService.create(new NewProject(uniqueProductCode(),
+                "무료 체험판", seller, 0, "KRW", false,
+                ProductKind.DEMO, basic.getId(), null, List.of()));
+        GameProject edition = gameProjectService.create(new NewProject(uniqueProductCode(),
+                "디럭스", seller, 50_000, "KRW", false,
+                ProductKind.EDITION, basic.getId(), "Deluxe", List.of()));
+        GameProject bundle = gameProjectService.create(new NewProject(uniqueProductCode(),
+                "합본", seller, 60_000, "KRW", false,
+                ProductKind.BUNDLE, null, null, List.of(basic.getId(), second.getId())));
+
+        assertThat(gameProjectService.family(basic.getId(), seller).children())
+                .extracting(GameProject::getId).containsExactly(demo.getId(), edition.getId());
+        assertThat(gameProjectService.family(bundle.getId(), seller).components())
+                .extracting(GameProject::getId).containsExactly(basic.getId(), second.getId());
+        assertThat(gameProjectService.family(basic.getId(), seller).bundles())
+                .extracting(GameProject::getId).containsExactly(bundle.getId());
+        assertThatThrownBy(() -> gameProjectService.create(new NewProject(uniqueProductCode(),
+                "타인 DLC", seller, 1000, "KRW", false,
+                ProductKind.DLC, gameProjectService.create(new NewProject(uniqueProductCode(),
+                        "타인", otherSeller, 1000, "KRW", false)).getId(), null, List.of())))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> gameProjectService.create(new NewProject(uniqueProductCode(),
+                "유료 체험판", seller, 1000, "KRW", false,
+                ProductKind.DEMO, basic.getId(), null, List.of())))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> gameProjectService.create(new NewProject(uniqueProductCode(),
+                "중복 합본", seller, 1000, "KRW", false,
+                ProductKind.BUNDLE, null, null, List.of(basic.getId(), basic.getId()))))
+                .isInstanceOf(BusinessException.class);
     }
 
     private List<OutboxEvent> outboxFor(String productCode) {

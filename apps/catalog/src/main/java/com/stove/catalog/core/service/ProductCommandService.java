@@ -42,6 +42,7 @@ public class ProductCommandService {
      * [승인] review → ReviewApproved → catalog. 멱등한 upsert 다.
      * <b>중복 수신 마킹과 반드시 같은 커밋이어야 한다</b> — 갈리면 이벤트가 영구 유실된다.
      */
+    @CacheEvict(cacheNames = "catalog:product", allEntries = true)
     public void upsertFromReview(String eventId, String eventType, ReviewApprovedEvent event) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
@@ -61,6 +62,7 @@ public class ProductCommandService {
                 product.getProductCode(), event.ratingCode(), product.getStatus());
     }
 
+    @CacheEvict(cacheNames = "catalog:product", allEntries = true)
     public void upsertFromRelease(String eventId, String eventType, ReleasePublishedEvent event) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
             return;
@@ -71,12 +73,18 @@ public class ProductCommandService {
                     existing.applyRelease(event.gameId(), event.title(), event.sellerId(),
                             event.price(), event.currency(), event.ratingCode(), event.releaseId(),
                             event.buildId(), event.metadataRevision());
+                    existing.applyFamily(event.productKind(), event.parentProductCode(),
+                            event.editionName(), event.bundleProductCodes());
                     return existing;
                 })
-                .orElseGet(() -> productRepository.save(Product.fromRelease(
-                        event.gameId(), event.productCode(), event.title(), event.sellerId(),
-                        event.price(), event.currency(), event.ratingCode(), event.releaseId(),
-                        event.buildId(), event.metadataRevision())));
+                .orElseGet(() -> {
+                    Product created = Product.fromRelease(event.gameId(), event.productCode(),
+                            event.title(), event.sellerId(), event.price(), event.currency(),
+                            event.ratingCode(), event.releaseId(), event.buildId(), event.metadataRevision());
+                    created.applyFamily(event.productKind(), event.parentProductCode(),
+                            event.editionName(), event.bundleProductCodes());
+                    return productRepository.save(created);
+                });
 
         publishChanged(product);
         log.info("릴리스 공개 반영 productCode={} releaseId={} buildId={}",
@@ -138,7 +146,9 @@ public class ProductCommandService {
                 ProductChangedEvent.ofRelease(product.getId(), product.getProductCode(), product.getName(),
                         product.getSellerId(), product.getPrice(), product.getCurrency(),
                         product.getStatus().name(), product.getRatingCode(), product.getCurrentReleaseId(),
-                        product.getCurrentBuildId(), product.getMetadataRevision()));
+                        product.getCurrentBuildId(), product.getMetadataRevision(),
+                        product.getProductKind(), product.getParentProductCode(),
+                        product.getEditionName(), product.getBundleProductCodes()));
     }
 
     private Product findProduct(Long productId) {

@@ -2,6 +2,7 @@ package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.ProductChangedEvent;
 import java.time.Instant;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -57,6 +58,18 @@ public class ProductDocument {
     @Field(type = FieldType.Long)
     private Long metadataRevision;
 
+    @Field(type = FieldType.Keyword)
+    private String productKind;
+
+    @Field(type = FieldType.Keyword)
+    private String parentProductCode;
+
+    @Field(type = FieldType.Keyword)
+    private String editionName;
+
+    @Field(type = FieldType.Keyword)
+    private List<String> bundleProductCodes;
+
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
     private Instant indexedAt;
 
@@ -73,6 +86,10 @@ public class ProductDocument {
                 .releaseId(event.releaseId())
                 .buildId(event.buildId())
                 .metadataRevision(event.metadataRevision())
+                .productKind(event.productKind())
+                .parentProductCode(event.parentProductCode())
+                .editionName(event.editionName())
+                .bundleProductCodes(event.bundleProductCodes())
                 .indexedAt(Instant.now())
                 .build();
     }

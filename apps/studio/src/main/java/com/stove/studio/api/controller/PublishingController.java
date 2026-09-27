@@ -108,7 +108,7 @@ public class PublishingController {
         Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
         return ApiResponse.ok(SubmissionResponse.from(submissionService.submit(gameId, workspaceId,
                 request.metadataRevisionId(), request.pricingRevisionId(), request.ratingRevisionId(),
-                request.buildId())));
+                request.buildId(), request.additionalBuildIds())));
     }
 
     @GetMapping("/submissions/{submissionId}")
