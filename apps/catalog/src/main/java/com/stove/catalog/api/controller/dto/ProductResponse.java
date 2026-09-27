@@ -2,6 +2,7 @@ package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
+import java.util.List;
 
 public record ProductResponse(
         Long productId,
@@ -15,7 +16,11 @@ public record ProductResponse(
         long price,
         String currency,
         ProductStatus status,
-        String ratingCode
+        String ratingCode,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        List<String> bundleProductCodes
 ) {
     public static ProductResponse from(ProductView product) {
         return new ProductResponse(
@@ -30,6 +35,10 @@ public record ProductResponse(
                 product.price(),
                 product.currency(),
                 product.status(),
-                product.ratingCode());
+                product.ratingCode(),
+                product.productKind(),
+                product.parentProductCode(),
+                product.editionName(),
+                product.bundleProductCodes());
     }
 }

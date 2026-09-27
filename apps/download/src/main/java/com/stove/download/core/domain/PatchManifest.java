@@ -1,7 +1,9 @@
 package com.stove.download.core.domain;
 
 import com.stove.common.event.payload.ReleasePublishedEvent;
+import com.stove.common.event.payload.BuildVariant;
 import java.time.Instant;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -42,6 +44,8 @@ public class PatchManifest {
 
     private String storagePath;
 
+    private List<BuildVariant> buildVariants;
+
     private Instant releasedAt;
 
     public static String documentId(String productCode, Long releaseId) {
@@ -60,6 +64,7 @@ public class PatchManifest {
                 .fileSize(event.fileSize())
                 .checksum(event.checksum())
                 .storagePath(event.storagePath())
+                .buildVariants(event.buildVariants() == null ? List.of() : List.copyOf(event.buildVariants()))
                 .releasedAt(event.occurredAt())
                 .build();
     }

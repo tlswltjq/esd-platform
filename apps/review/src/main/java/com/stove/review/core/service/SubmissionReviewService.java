@@ -53,7 +53,13 @@ public class SubmissionReviewService {
         if (!processedEventGuard.firstDelivery(eventId, ReviewService.CONSUMER_GROUP, eventType)) return;
         if (snapshotRepository.existsById(event.submissionId())) return;
         validateRatingPolicyContext(event);
-        snapshotRepository.save(SubmissionSnapshot.from(event));
+        try {
+            snapshotRepository.save(SubmissionSnapshot.from(event,
+                    objectMapper.writeValueAsString(event.buildVariants() == null
+                            ? List.of() : event.buildVariants())));
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "빌드 변형 스냅샷을 저장할 수 없습니다.");
+        }
         Arrays.stream(ReviewType.values()).forEach(type -> {
             ReviewCase reviewCase = caseRepository.save(createCase(event, type));
             history(reviewCase, "CREATED", "system:submission", null,

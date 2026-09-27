@@ -207,6 +207,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseProductFamilyResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProductFamilyResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProjectResponse" : {
         "properties" : {
           "data" : {
@@ -376,6 +390,9 @@
           },
           "createdAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "deltaFromVersion" : {
             "type" : "string"
           },
           "duplicateOfBuildId" : {
@@ -605,8 +622,26 @@
       },
       "CreateProjectRequest" : {
         "properties" : {
+          "bundleGameIds" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "maxItems" : 50,
+            "minItems" : 0,
+            "type" : "array"
+          },
           "currency" : {
             "type" : "string"
+          },
+          "editionName" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "parentGameId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "price" : {
             "format" : "int64",
@@ -614,6 +649,10 @@
           },
           "productCode" : {
             "minLength" : 1,
+            "type" : "string"
+          },
+          "productKind" : {
+            "enum" : [ "BASIC", "DEMO", "DLC", "EDITION", "BUNDLE" ],
             "type" : "string"
           },
           "title" : {
@@ -814,6 +853,15 @@
       },
       "CreateSubmissionRequest" : {
         "properties" : {
+          "additionalBuildIds" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "maxItems" : 19,
+            "minItems" : 0,
+            "type" : "array"
+          },
           "buildId" : {
             "format" : "int64",
             "type" : "integer"
@@ -858,6 +906,11 @@
           },
           "commitSha" : {
             "maxLength" : 64,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "deltaFromVersion" : {
+            "maxLength" : 30,
             "minLength" : 0,
             "type" : "string"
           },
@@ -1061,6 +1114,35 @@
         "required" : [ "etag" ],
         "type" : "object"
       },
+      "ProductFamilyResponse" : {
+        "properties" : {
+          "bundleComponents" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "bundles" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "children" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "parent" : {
+            "$ref" : "#/components/schemas/ProjectResponse"
+          },
+          "product" : {
+            "$ref" : "#/components/schemas/ProjectResponse"
+          }
+        },
+        "type" : "object"
+      },
       "ProjectCredentialResponse" : {
         "properties" : {
           "expiresAt" : {
@@ -1096,7 +1178,14 @@
           "currency" : {
             "type" : "string"
           },
+          "editionName" : {
+            "type" : "string"
+          },
           "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "parentGameId" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -1105,6 +1194,10 @@
             "type" : "integer"
           },
           "productCode" : {
+            "type" : "string"
+          },
+          "productKind" : {
+            "enum" : [ "BASIC", "DEMO", "DLC", "EDITION", "BUNDLE" ],
             "type" : "string"
           },
           "ratingCode" : {
@@ -2076,6 +2169,36 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseBuildResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "studio-controller" ]
+      }
+    },
+    "/api/v1/studio/games/{gameId}/family" : {
+      "get" : {
+        "operationId" : "family",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProductFamilyResponse"
                 }
               }
             },

@@ -1,5 +1,7 @@
 package com.stove.catalog.core.domain;
 
+import java.util.List;
+
 /**
  * 상품 읽기 모델.
  *
@@ -22,7 +24,11 @@ public record ProductView(
         long price,
         String currency,
         ProductStatus status,
-        String ratingCode
+        String ratingCode,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        List<String> bundleProductCodes
 ) {
     public static ProductView from(Product product) {
         return new ProductView(
@@ -37,6 +43,10 @@ public record ProductView(
                 product.getPrice(),
                 product.getCurrency(),
                 product.getStatus(),
-                product.getRatingCode());
+                product.getRatingCode(),
+                product.getProductKind(),
+                product.getParentProductCode(),
+                product.getEditionName(),
+                List.copyOf(product.getBundleProductCodes()));
     }
 }

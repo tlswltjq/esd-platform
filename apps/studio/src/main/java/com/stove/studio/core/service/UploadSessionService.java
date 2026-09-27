@@ -38,6 +38,16 @@ public class UploadSessionService {
 
     public CreatedUploadSession create(Long gameId, Long workspaceId, NewUploadSession request) {
         GameProject project = projectService.requireOwned(gameId, workspaceId);
+        if (!List.of("WINDOWS", "MACOS", "LINUX").contains(request.platform())
+                || !List.of("X86_64", "ARM64").contains(request.architecture())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 OS 또는 아키텍처입니다.");
+        }
+        if (request.deltaFromVersion() != null
+                && (request.deltaFromVersion().isBlank()
+                || request.deltaFromVersion().equals(request.productVersion()))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "델타 패치의 기준 버전은 대상 버전과 달라야 합니다.");
+        }
         GameBuild existing = buildRepository.findByGameIdAndIdempotencyKey(gameId, request.idempotencyKey())
                 .orElse(null);
         if (existing != null) {

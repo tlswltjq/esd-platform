@@ -1,6 +1,7 @@
 package com.stove.store.api.controller.dto;
 
 import com.stove.store.core.domain.StoreProductView;
+import java.util.List;
 
 public record StoreProductResponse(
         Long productId,
@@ -12,7 +13,11 @@ public record StoreProductResponse(
         String ratingCode,
         Long releaseId,
         Long buildId,
-        Long metadataRevision
+        Long metadataRevision,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        List<String> bundleProductCodes
 ) {
     public static StoreProductResponse from(StoreProductView product) {
         return new StoreProductResponse(
@@ -25,6 +30,10 @@ public record StoreProductResponse(
                 product.ratingCode(),
                 product.releaseId(),
                 product.buildId(),
-                product.metadataRevision());
+                product.metadataRevision(),
+                product.productKind(),
+                product.parentProductCode(),
+                product.editionName(),
+                product.bundleProductCodes());
     }
 }

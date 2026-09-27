@@ -7,6 +7,20 @@ public record NewProject(
         Long sellerId,
         long price,
         String currency,
-        boolean selfRated
+        boolean selfRated,
+        ProductKind productKind,
+        Long parentGameId,
+        String editionName,
+        java.util.List<Long> bundleGameIds
 ) {
+    public NewProject(String productCode, String title, Long sellerId, long price,
+                      String currency, boolean selfRated) {
+        this(productCode, title, sellerId, price, currency, selfRated,
+                ProductKind.BASIC, null, null, java.util.List.of());
+    }
+
+    public NewProject {
+        productKind = productKind == null ? ProductKind.BASIC : productKind;
+        bundleGameIds = bundleGameIds == null ? java.util.List.of() : java.util.List.copyOf(bundleGameIds);
+    }
 }

@@ -2,6 +2,7 @@ package com.stove.studio.api.controller.dto;
 
 import com.stove.studio.core.domain.GameProject;
 import com.stove.studio.core.domain.ProjectStatus;
+import com.stove.studio.core.domain.ProductKind;
 
 public record ProjectResponse(
         Long gameId,
@@ -13,7 +14,10 @@ public record ProjectResponse(
         boolean selfRated,
         ProjectStatus status,
         String ratingCode,
-        String rejectReason
+        String rejectReason,
+        ProductKind productKind,
+        Long parentGameId,
+        String editionName
 ) {
     public static ProjectResponse from(GameProject project) {
         return new ProjectResponse(
@@ -26,6 +30,9 @@ public record ProjectResponse(
                 project.isSelfRated(),
                 project.getStatus(),
                 project.getRatingCode(),
-                project.getRejectReason());
+                project.getRejectReason(),
+                project.getProductKind(),
+                project.getParentGameId(),
+                project.getEditionName());
     }
 }
