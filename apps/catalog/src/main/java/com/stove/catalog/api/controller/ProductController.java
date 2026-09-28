@@ -39,7 +39,7 @@ public class ProductController {
 
     @GetMapping("/{productId}")
     public ApiResponse<ProductResponse> detail(@PathVariable Long productId) {
-        return ApiResponse.ok(ProductResponse.from(productQueryService.getProduct(productId)));
+        return ApiResponse.ok(ProductResponse.from(productQueryService.getPublishedProduct(productId)));
     }
 
     /**
@@ -48,7 +48,7 @@ public class ProductController {
      */
     @GetMapping("/by-code/{productCode}")
     public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {
-        return ApiResponse.ok(ProductResponse.from(productQueryService.getProductByCode(productCode)));
+        return ApiResponse.ok(ProductResponse.from(productQueryService.getPublishedProductByCode(productCode)));
     }
 
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */

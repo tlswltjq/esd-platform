@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.stove.auth.core.domain.PlatformRole;
 import com.stove.auth.core.domain.UserAccount;
 import com.stove.auth.core.domain.UserAccountRepository;
+import com.stove.auth.core.domain.RoleAuditLogRepository;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.event.DomainEvent;
 import com.stove.common.event.payload.UserRegisteredEvent;
@@ -27,11 +28,12 @@ class UserAccountServiceTest {
     private final UserAccountRepository repository = org.mockito.Mockito.mock(UserAccountRepository.class);
     private final PasswordEncoder passwordEncoder = org.mockito.Mockito.mock(PasswordEncoder.class);
     private final OutboxRecorder outboxRecorder = org.mockito.Mockito.mock(OutboxRecorder.class);
+    private final RoleAuditLogRepository roleAuditLogRepository = org.mockito.Mockito.mock(RoleAuditLogRepository.class);
     private UserAccountService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserAccountService(repository, passwordEncoder, outboxRecorder);
+        service = new UserAccountService(repository, passwordEncoder, outboxRecorder, roleAuditLogRepository);
     }
 
     @Test
@@ -44,10 +46,11 @@ class UserAccountServiceTest {
 
         assertThat(account.getEmail()).isEqualTo("creator@example.com");
         assertThat(account.getPasswordHash()).isEqualTo("{bcrypt}hash");
-        assertThat(account.getRoles()).containsExactly(PlatformRole.CREATOR);
+        assertThat(account.getRoles()).containsExactlyInAnyOrder(PlatformRole.CREATOR, PlatformRole.MEMBER);
         ArgumentCaptor<DomainEvent> event = ArgumentCaptor.forClass(DomainEvent.class);
         verify(outboxRecorder).record(eq("UserAccount"), eq(account.getSubject()), event.capture());
         assertThat(event.getValue()).isInstanceOf(UserRegisteredEvent.class);
+        verify(roleAuditLogRepository).save(any());
     }
 
     @Test

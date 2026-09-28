@@ -17,7 +17,12 @@ import com.stove.download.core.service.ManifestService;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -38,24 +43,25 @@ class DownloadControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new DownloadController(downloadTicketService, manifestService))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
     @Test
-    @DisplayName("[D-015] 회원 헤더 없는 티켓 요청은 400 이다 — 소유 판정의 입력이 없다")
-    void ticketWithoutMemberHeaderIsRejected() throws Exception {
+    @DisplayName("인증 주체 없는 티켓 요청은 거부한다")
+    void ticketWithoutPrincipalIsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/downloads/GAME-001/ticket"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(downloadTicketService, manifestService);
     }
 
     @Test
-    @DisplayName("[D-015] 회원 ID 가 숫자가 아니면 400 이다")
-    void nonNumericMemberIdIsRejected() throws Exception {
+    @DisplayName("회원 헤더로 소유자를 지정할 수 없다")
+    void forgedMemberIdIsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/downloads/GAME-001/ticket")
                         .header("X-Member-Id", "not-a-number"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(downloadTicketService, manifestService);
     }
@@ -66,9 +72,10 @@ class DownloadControllerTest {
         // 대역이 null 을 돌려주면 DownloadTicketResponse.from 에서 NPE 가 나 실제로는 500 이다.
         // 상태 단언이 없던 동안 이 테스트는 그 500 을 통과로 세고 있었다.
         when(downloadTicketService.issue("GAME-001", 42L)).thenReturn(TICKET);
+        authenticate();
 
         mockMvc.perform(get("/api/v1/downloads/GAME-001/ticket")
-                        .header("X-Member-Id", 42L))
+                        .header("X-Member-Id", 999L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.productCode").value("GAME-001"))
                 .andExpect(jsonPath("$.data.version").value("1.0.0"))
@@ -78,12 +85,21 @@ class DownloadControllerTest {
     }
 
     @Test
-    @DisplayName("매니페스트 조회는 인증 헤더 없이도 열려 있다 — 패치 이력은 보유와 무관하다")
-    void manifestLookupNeedsNoMemberHeader() throws Exception {
+    @DisplayName("인증된 회원은 매니페스트를 조회할 수 있다")
+    void manifestLookupWorksForMember() throws Exception {
+        authenticate();
         mockMvc.perform(get("/api/v1/downloads/GAME-001/manifests"))
                 .andExpect(status().isOk());
 
         verify(manifestService).history(anyString());
         verify(downloadTicketService, org.mockito.Mockito.never()).issue(anyString(), anyLong());
     }
+
+    private void authenticate() {
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(Jwt.withTokenValue("test")
+                .header("alg", "none").claim("sub", "user").claim("member_id", 42L).build()));
+    }
+
+    @AfterEach
+    void clearSecurityContext() { SecurityContextHolder.clearContext(); }
 }

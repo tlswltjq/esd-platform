@@ -21,6 +21,7 @@ import com.stove.studio.core.domain.Submission;
 import com.stove.studio.core.domain.SubmissionBuild;
 import com.stove.studio.core.domain.SubmissionBuildRepository;
 import com.stove.studio.core.domain.SubmissionRepository;
+import com.stove.studio.core.domain.SubmissionReviewStatus;
 import com.stove.studio.core.domain.SubmissionGate;
 import com.stove.studio.core.domain.SubmissionGateRepository;
 import java.util.List;
@@ -151,5 +152,18 @@ public class SubmissionService {
         return submissionRepository.findById(submissionId)
                 .filter(value -> value.getWorkspaceId().equals(workspaceId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "submissionId=" + submissionId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Submission> findByGame(Long gameId, Long workspaceId) {
+        projectService.requireOwned(gameId, workspaceId);
+        return submissionRepository.findByGameIdAndWorkspaceIdOrderBySequenceNoDesc(gameId, workspaceId);
+    }
+
+    @Transactional(readOnly = true)
+    public SubmissionReviewStatus reviewStatus(Long submissionId, Long workspaceId) {
+        Submission submission = requireOwned(submissionId, workspaceId);
+        return new SubmissionReviewStatus(submission,
+                gateRepository.findBySubmissionId(submissionId));
     }
 }

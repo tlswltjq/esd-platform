@@ -14,6 +14,7 @@
 # 그래서 이 스크립트는 그 단계를 **뺄 수 있게** 만들었다. 한 번 빼고 돌려 보면
 # 절차서의 그 줄이 무엇을 막고 있는지가 숫자로 남는다.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/commerce-auth.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8082}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8083}
@@ -45,24 +46,36 @@ license_count() { sql "select count(distinct order_no) from stove_license.licens
 # ── 유실 상황 만들기 (선택) ─────────────────────────────────────────
 
 if [ "$SEED" -gt 0 ]; then
+    require_member_token
+    : "${PG_CALLBACK_SECRET:?PG_CALLBACK_SECRET이 필요합니다}"
     log "── 시드 $SEED 건 구매 ──"
     for i in $(seq 1 "$SEED"); do
         (
-            member=$((900000 + i))
             order=$(curl -s -m 10 -X POST "$ORDER_URL/api/v1/orders" -H 'Content-Type: application/json' \
-                -d "{\"memberId\":$member,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}]}")
+                -H "Authorization: Bearer $MEMBER_TOKEN" \
+                -d "{\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}]}")
             no=$(echo "$order" | sed -n 's/.*"orderNo":"\([^"]*\)".*/\1/p')
             amt=$(echo "$order" | sed -n 's/.*"totalAmount":\([0-9]*\).*/\1/p')
             [ -n "$no" ] || exit 0
             deadline=$((SECONDS + 30))
             while [ $SECONDS -lt $deadline ]; do
-                curl -s -m 5 "$PAYMENT_URL/api/v1/payments/$no" | grep -q '"status":"READY"' && break
+                curl -s -m 5 "$PAYMENT_URL/api/v1/payments/$no" \
+                    -H "Authorization: Bearer $MEMBER_TOKEN" | grep -q '"status":"READY"' && break
                 sleep 0.3
             done
-            curl -s -m 10 -X POST "$PAYMENT_URL/api/v1/payments/$no/prepare" \
-                -H 'Content-Type: application/json' -d '{"method":"CARD"}' >/dev/null
+            prepare=$(curl -s -m 10 -X POST "$PAYMENT_URL/api/v1/payments/$no/prepare" \
+                -H "Authorization: Bearer $MEMBER_TOKEN" \
+                -H 'Content-Type: application/json' -d '{"method":"CARD"}')
+            tx=$(printf '%s' "$prepare" | jq -r '.data.pgTxId // empty')
+            [ -n "$tx" ] || exit 0
+            body=$(jq -nc --arg order "$no" --arg tx "$tx" --argjson amount "$amt" \
+                --arg idem "IDEM-REC-$no" \
+                '{result:"APPROVED",orderNo:$order,pgTxId:$tx,paidAmount:$amount,idempotencyKey:$idem}')
+            timestamp=$(date +%s)
+            signature=$(pg_signature "$timestamp" "$body")
             curl -s -m 10 -X POST "$PAYMENT_URL/api/v1/payments/callback" -H 'Content-Type: application/json' \
-                -d "{\"result\":\"APPROVED\",\"orderNo\":\"$no\",\"pgTxId\":\"PG-REC-$no\",\"paidAmount\":$amt,\"idempotencyKey\":\"IDEM-REC-$no\"}" >/dev/null
+                -H "X-Pg-Timestamp: $timestamp" -H "X-Pg-Signature: $signature" \
+                -d "$body" >/dev/null
         ) &
         [ $((i % 10)) -eq 0 ] && wait
     done

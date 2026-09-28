@@ -190,6 +190,57 @@
         },
         "type" : "object"
       },
+      "ApiResponseListReleaseResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ReleaseResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListRevisionResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RevisionResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListSubmissionResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/SubmissionResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListTesterGrantResponse" : {
         "properties" : {
           "data" : {
@@ -309,6 +360,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/SubmissionResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseSubmissionReviewStatusResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SubmissionReviewStatusResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -1039,6 +1104,24 @@
         },
         "type" : "object"
       },
+      "Gate" : {
+        "properties" : {
+          "feedback" : {
+            "type" : "string"
+          },
+          "reasonCode" : {
+            "type" : "string"
+          },
+          "reviewType" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "APPROVED", "CHANGES_REQUESTED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "IssuedProjectCredentialResponse" : {
         "properties" : {
           "expiresAt" : {
@@ -1553,6 +1636,28 @@
         },
         "type" : "object"
       },
+      "SubmissionReviewStatusResponse" : {
+        "properties" : {
+          "gates" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Gate"
+            },
+            "type" : "array"
+          },
+          "nextAction" : {
+            "type" : "string"
+          },
+          "submissionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "submissionStatus" : {
+            "enum" : [ "SUBMITTED", "CHANGES_REQUESTED", "READY_FOR_RELEASE", "RELEASED", "CANCELLED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "TesterGrantRequest" : {
         "properties" : {
           "channel" : {
@@ -1676,6 +1781,7 @@
           "authorizationCode" : {
             "authorizationUrl" : "/oauth2/authorize",
             "scopes" : {
+              "commerce" : "구매·정산 API",
               "openid" : "사용자 식별",
               "profile" : "기본 프로필",
               "studio" : "크리에이터·심사 API"
@@ -2490,6 +2596,36 @@
         "tags" : [ "publishing-controller" ]
       }
     },
+    "/api/v1/studio/projects/submissions/{submissionId}/review-status" : {
+      "get" : {
+        "operationId" : "reviewStatus",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "submissionId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSubmissionReviewStatusResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
     "/api/v1/studio/projects/{gameId}/build-webhooks" : {
       "get" : {
         "operationId" : "list_2",
@@ -2809,6 +2945,34 @@
       }
     },
     "/api/v1/studio/projects/{gameId}/pricing-revisions" : {
+      "get" : {
+        "operationId" : "pricings",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      },
       "post" : {
         "operationId" : "pricing",
         "parameters" : [ {
@@ -2849,6 +3013,34 @@
       }
     },
     "/api/v1/studio/projects/{gameId}/rating-revisions" : {
+      "get" : {
+        "operationId" : "ratings",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      },
       "post" : {
         "operationId" : "rating",
         "parameters" : [ {
@@ -2888,7 +3080,65 @@
         "tags" : [ "publishing-controller" ]
       }
     },
+    "/api/v1/studio/projects/{gameId}/releases" : {
+      "get" : {
+        "operationId" : "releases",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListReleaseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      }
+    },
     "/api/v1/studio/projects/{gameId}/store-page-revisions" : {
+      "get" : {
+        "operationId" : "storePages",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      },
       "post" : {
         "operationId" : "storePage",
         "parameters" : [ {
@@ -3053,6 +3303,34 @@
       }
     },
     "/api/v1/studio/projects/{gameId}/submissions" : {
+      "get" : {
+        "operationId" : "submissions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "gameId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSubmissionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "studio" ]
+        } ],
+        "tags" : [ "publishing-controller" ]
+      },
       "post" : {
         "operationId" : "submit",
         "parameters" : [ {

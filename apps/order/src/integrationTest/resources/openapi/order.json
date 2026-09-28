@@ -118,13 +118,9 @@
             },
             "minItems" : 1,
             "type" : "array"
-          },
-          "memberId" : {
-            "format" : "int64",
-            "type" : "integer"
           }
         },
-        "required" : [ "items", "memberId" ],
+        "required" : [ "items" ],
         "type" : "object"
       },
       "DeadEventResponse" : {
@@ -295,6 +291,24 @@
         },
         "type" : "object"
       }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "commerce" : "구매·정산 API",
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
+      }
     }
   },
   "info" : {
@@ -439,16 +453,6 @@
     "/api/v1/orders" : {
       "get" : {
         "operationId" : "myOrders",
-        "parameters" : [ {
-          "description" : "구매자 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\n실제로는 게이트웨이가 토큰을 검증한 뒤 주입할 자리이고, 그때 이 파라미터는 명세에서 사라진다.\n지금은 값을 바꾸면 다른 회원의 자원이 조회되므로 내부망 밖에 열어서는 안 된다.",
-          "in" : "header",
-          "name" : "X-Member-Id",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
         "responses" : {
           "200" : {
             "content" : {
@@ -461,6 +465,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "order-controller" ]
       },
       "post" : {
@@ -487,6 +494,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "order-controller" ]
       }
     },
@@ -499,15 +509,6 @@
           "required" : true,
           "schema" : {
             "type" : "string"
-          }
-        }, {
-          "description" : "구매자 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\n실제로는 게이트웨이가 토큰을 검증한 뒤 주입할 자리이고, 그때 이 파라미터는 명세에서 사라진다.\n지금은 값을 바꾸면 다른 회원의 자원이 조회되므로 내부망 밖에 열어서는 안 된다.",
-          "in" : "header",
-          "name" : "X-Member-Id",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
           }
         } ],
         "responses" : {
@@ -522,6 +523,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "order-controller" ]
       }
     },
@@ -534,15 +538,6 @@
           "required" : true,
           "schema" : {
             "type" : "string"
-          }
-        }, {
-          "description" : "구매자 식별자. **스켈레톤 한정 — 서버가 검증하지 않는다.**\n실제로는 게이트웨이가 토큰을 검증한 뒤 주입할 자리이고, 그때 이 파라미터는 명세에서 사라진다.\n지금은 값을 바꾸면 다른 회원의 자원이 조회되므로 내부망 밖에 열어서는 안 된다.",
-          "in" : "header",
-          "name" : "X-Member-Id",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
           }
         }, {
           "in" : "query",
@@ -565,6 +560,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "order-controller" ]
       }
     }

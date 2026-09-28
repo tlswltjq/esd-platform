@@ -62,6 +62,10 @@ class ProductLookupTest {
         ProductView found = productQueryService.getProductByCode(saved.getProductCode());
 
         assertThat(found.status()).isEqualTo(ProductStatus.DRAFT);
+        assertThatThrownBy(() -> productQueryService.getPublishedProductByCode(saved.getProductCode()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
     }
 
     @Test

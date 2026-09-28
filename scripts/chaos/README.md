@@ -1,5 +1,9 @@
 # 장애 주입
 
+커머스 API를 호출하는 실험에는 구매자 OAuth2 access token을 `MEMBER_TOKEN`에,
+로컬 PG 서명 비밀을 `PG_CALLBACK_SECRET`에 설정한다. 실험 주문은 모두 이 토큰의
+`member_id`에 귀속된다. 토큰 만료 시각이 실험 종료보다 늦어야 한다.
+
 부하를 건 채로 장애를 넣고, **주문 하나하나가 어떻게 끝났는지** 센다.
 측정 결과와 분석은 [docs/chaos.md](../../docs/chaos.md) 에 있다.
 

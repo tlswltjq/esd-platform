@@ -1,0 +1,7 @@
+apply plugin: 'java-library'
+
+dependencies {
+    api project(':common:core')
+    api 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    testImplementation project(':common:archunit')
+}

@@ -150,6 +150,7 @@ say "[$LABEL] 배경 soak ${BG_RATE} RPS ${BG_DURATION}"
 bg_log="$(mktemp -t stove-soak)"
 docker run --rm --network "${PERF_NETWORK:-stove_default}" -v "$REPO:/w" -w /w \
     -e ORDER_URL=http://order:8082 -e CATALOG_URL=http://catalog:8081 \
+    -e MEMBER_TOKEN \
     -e "RATE=${BG_RATE}" -e "DURATION=${BG_DURATION}" \
     grafana/k6 run --quiet scripts/perf/order-soak.js > "$bg_log" 2>&1 &
 bg_pid=$!

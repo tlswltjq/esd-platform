@@ -9,6 +9,8 @@ import com.stove.common.event.payload.PaymentFailedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentAuditLog;
+import com.stove.payment.core.domain.PaymentAuditLogRepository;
 import com.stove.payment.core.domain.PaymentCancellation;
 import com.stove.payment.core.domain.PaymentMetrics;
 import com.stove.payment.core.domain.PaymentPreparation;
@@ -45,6 +47,7 @@ public class PaymentService {
     public static final String CONSUMER_GROUP = "payment";
 
     private final PaymentRepository paymentRepository;
+    private final PaymentAuditLogRepository paymentAuditLogRepository;
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
     private final PgClient pgClient;
@@ -76,6 +79,11 @@ public class PaymentService {
 
         return new PaymentPreparation(orderNo, result.pgTxId(),
                 payment.getAmount(), payment.getCurrency(), result.redirectUrl());
+    }
+
+    public PaymentPreparation prepareForMember(String orderNo, Long memberId, String method) {
+        findPayment(orderNo).requireOwner(memberId);
+        return prepare(orderNo, method);
     }
 
     /** 결제창이 만료된 뒤 도착한 승인을 자동으로 되돌릴 때 남기는 사유. 지표 태그이자 이벤트 사유다. */
@@ -155,10 +163,20 @@ public class PaymentService {
         return PaymentCancellation.of(payment.getPgTxId(), payment.getAmount());
     }
 
+    public PaymentCancellation beginCancelForMember(String orderNo, Long memberId, String reason) {
+        findPayment(orderNo).requireOwner(memberId);
+        PaymentCancellation cancellation = beginCancel(orderNo, reason);
+        paymentAuditLogRepository.save(PaymentAuditLog.of(orderNo, "member:" + memberId,
+                "REFUND_REQUESTED", reason));
+        return cancellation;
+    }
+
     /** 취소 2단계: PG 환불이 끝난 뒤 확정하고 이벤트를 적재한다. */
     public void completeCancel(String orderNo, String reason) {
         Payment payment = findPayment(orderNo);
         payment.completeCancel();
+        paymentAuditLogRepository.save(PaymentAuditLog.of(orderNo, "system:pg",
+                "REFUND_COMPLETED", reason));
 
         outboxRecorder.record(AGGREGATE, orderNo,
                 PaymentCancelledEvent.of(payment.getId(), orderNo, payment.getMemberId(),
@@ -213,6 +231,13 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public Payment getPayment(String orderNo) {
         return findPayment(orderNo);
+    }
+
+    @Transactional(readOnly = true)
+    public Payment getPaymentForMember(String orderNo, Long memberId) {
+        Payment payment = findPayment(orderNo);
+        payment.requireOwner(memberId);
+        return payment;
     }
 
     private Payment findPayment(String orderNo) {

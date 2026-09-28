@@ -238,8 +238,9 @@ docker compose -f docker-compose.apps.yml up -d --build
 응답 헤더 `X-Correlation-Id` 가 그 요청의 traceId 이므로 값을 그대로 넣으면 해당 트레이스로 바로 간다.
 
 ```bash
-curl -si -X POST localhost:8082/api/v1/orders -H 'Content-Type: application/json' \
-  -d '{"memberId":7,"items":[{"productId":1,"quantity":1}],"expectedAmount":39000}' \
+curl -si -X POST localhost:8080/api/v1/orders -H "Authorization: Bearer $MEMBER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[{"productId":1,"quantity":1}],"expectedAmount":39000}' \
   | grep -i x-correlation-id
 ```
 
@@ -267,57 +268,47 @@ gateway   http post                                    ROOT
 > 지금 같은 경로를 잡으면 저 간격이 그만큼 줄어든다.
 > 요점인 스팬 트리의 **모양** — 부모가 릴레이가 아니라 HTTP 요청 스팬이라는 것 — 은 그대로다.
 
-## 5. 전 구간 시나리오 (curl)
+## 5. 전 구간 시나리오
+
+`/api/v1/auth/signup/member`로 구매자 계정을 만든 뒤 Swagger UI의 OAuth2 PKCE 로그인에서
+`commerce` 범위를 선택한다. 아래 `MEMBER_TOKEN`은 그 **access token**이다. 창작자·심의자·운영자는
+각자의 토큰을 사용한다. 주문·결제·라이브러리·다운로드는 토큰의 `member_id`로 구매자를 식별하며,
+정산은 `ADMIN`만 호출할 수 있다. 전체 역할별 실행 순서는 [E2E 테스트](e2e/src/test/java/com/stove/e2e/)와
+[커머스 보안 계약](docs/p3-commerce-security.md)에 있다.
 
 ```bash
-# ── 트랙 A: 등록 → 심의 → 노출 ────────────────────────────────
-curl -s -X POST localhost:8085/api/v1/studio/games -H 'Content-Type: application/json' \
-  -d '{"productCode":"GAME-INDIE-003","title":"픽셀 던전 크롤러","sellerId":1001,"price":18000,"selfRated":true}'
-curl -s -X POST localhost:8085/api/v1/studio/games/1/submit -H 'X-Seller-Id: 1001'   # → GameRegistered
-curl -s localhost:8086/api/v1/reviews                                                # 자체등급분류 자동 승인
-curl -s -X POST localhost:8081/api/v1/products/4/sale-open                           # 판매 시작 → ProductChanged
-curl -s -G localhost:8087/api/v1/storefront/products --data-urlencode 'q=던전'        # 검색 색인 반영 확인
+# 판매 중인 상품의 가격과 ID를 사용한다. 아래 값은 로컬 시드 상품 예시다.
+ORDER=$(curl -s -X POST localhost:8080/api/v1/orders \
+  -H "Authorization: Bearer $MEMBER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"items":[{"productId":1,"quantity":1}],"expectedAmount":39000}' | jq -r '.data.orderNo')
 
-# 빌드 업로드 → 패치 매니페스트
-curl -s -X POST localhost:8085/api/v1/studio/games/1/builds -H 'X-Seller-Id: 1001' \
-  -H 'Content-Type: application/json' -d '{"version":"1.0.0","fileSize":1073741824,"checksum":"a1b2c3"}'
+# OrderCreated 이벤트가 결제 서비스에 반영된 뒤 사전등록한다.
+for attempt in {1..30}; do
+  STATUS=$(curl -s "localhost:8080/api/v1/payments/$ORDER" \
+    -H "Authorization: Bearer $MEMBER_TOKEN" | jq -r '.data.status // empty')
+  [ "$STATUS" = READY ] && break
+  sleep 1
+done
+[ "$STATUS" = READY ] || exit 1
+PG_TX=$(curl -s -X POST "localhost:8080/api/v1/payments/$ORDER/prepare" \
+  -H "Authorization: Bearer $MEMBER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"method":"STOVE_CASH"}' | jq -r '.data.pgTxId')
 
-# ── 트랙 B: 주문 → 결제 ───────────────────────────────────────
-ORDER=$(curl -s -X POST localhost:8082/api/v1/orders -H 'Content-Type: application/json' \
-  -d '{"memberId":7,"items":[{"productId":1,"quantity":1},{"productId":4,"quantity":1}],"expectedAmount":57000}' \
-  | jq -r '.data.orderNo')
+# 로컬 PG 모의 호출: 실제 요청 본문의 바이트에 타임스탬프와 HMAC 서명을 붙인다.
+: "${PG_CALLBACK_SECRET:=local-only-pg-callback-secret}"
+BODY=$(jq -nc --arg order "$ORDER" --arg tx "$PG_TX" \
+  '{result:"APPROVED",orderNo:$order,pgTxId:$tx,paidAmount:39000,idempotencyKey:("README-LOCAL-" + $order)}')
+TS=$(date +%s)
+SIGNATURE=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 \
+  -hmac "$PG_CALLBACK_SECRET" -binary | xxd -p -c 256)
+curl -s -X POST localhost:8080/api/v1/payments/callback -H 'Content-Type: application/json' \
+  -H "X-Pg-Timestamp: $TS" -H "X-Pg-Signature: $SIGNATURE" -d "$BODY"
 
-curl -s -X POST localhost:8083/api/v1/payments/$ORDER/prepare \
-  -H 'Content-Type: application/json' -d '{"method":"STOVE_CASH"}'
-# 콜백은 result 로 승인/거절이 갈린다. 기본값이 없으므로 빠뜨리면 400 이다.
-curl -s -X POST localhost:8083/api/v1/payments/callback -H 'Content-Type: application/json' \
-  -d "{\"result\":\"APPROVED\",\"orderNo\":\"$ORDER\",\"pgTxId\":\"PG-TX-77\",\"paidAmount\":57000,\"idempotencyKey\":\"IDEM-77\"}"
-
-# 승인 거절이면 결제가 FAILED 로 끝나고 PaymentFailed 가 주문을 실패 종료시킨다.
-# (pgTxId 는 사전등록이 돌려준 값이어야 한다 — 거절에는 멱등키가 없어 이 값이 유일한 거래 식별자다)
-# -d "{\"result\":\"DECLINED\",\"orderNo\":\"$ORDER\",\"pgTxId\":\"$PG_TX\",\"reasonCode\":\"REJECT_CARD_COMPANY\",\"reason\":\"카드사 거절\"}"
-
-# ── 트랙 C: 지급 → 다운로드 → 정산 ─────────────────────────────
-curl -s localhost:8084/api/v1/library -H 'X-Member-Id: 7'                     # 라이선스 지급 확인
-curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 7'   # CDN 서명 URL
-curl -s localhost:8089/api/v1/settlements/orders/$ORDER                        # 자체 0% / 입점 30%
-curl -s -X POST "localhost:8089/api/v1/settlements/close?month=2026-07"        # 월 마감 + 세금계산서
-
-# ── 환불: 회수 + 역산 ─────────────────────────────────────────
-curl -s -X POST "localhost:8083/api/v1/payments/$ORDER/cancel?reason=USER_REFUND"
-```
-
-**의도적으로 거절되는 요청** — 스켈레톤이 방어하는 지점
-
-```bash
-# 금액 위·변조 → 409 PRICE_MISMATCH
-curl -s -X POST localhost:8082/api/v1/orders -H 'Content-Type: application/json' \
-  -d '{"memberId":7,"items":[{"productId":1,"quantity":1}],"expectedAmount":100}'
-
-# 콜백 금액 불일치 → 409 PAYMENT_AMOUNT_MISMATCH / 중복 콜백 → 무시(이벤트 재발행 없음)
-# 미보유 상품 다운로드 → 403 FORBIDDEN
-curl -s localhost:8088/api/v1/downloads/GAME-INDIE-003/ticket -H 'X-Member-Id: 99'
-# 심의 미승인 상품 판매 시작 → 409 CONFLICT
+curl -s localhost:8080/api/v1/library -H "Authorization: Bearer $MEMBER_TOKEN"
+curl -s "localhost:8080/api/v1/settlements/orders/$ORDER" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -s -X POST "localhost:8080/api/v1/payments/$ORDER/cancel?reason=USER_REFUND" \
+  -H "Authorization: Bearer $MEMBER_TOKEN"
 ```
 
 **실패한 메시지 되살리기** — 유실이 아니라 연기다

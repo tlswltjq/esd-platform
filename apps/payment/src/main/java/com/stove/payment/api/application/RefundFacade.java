@@ -27,6 +27,10 @@ public class RefundFacade {
         settle(paymentService.beginCancel(orderNo, reason), orderNo, reason);
     }
 
+    public void refundForMember(String orderNo, Long memberId, String reason) {
+        settle(paymentService.beginCancelForMember(orderNo, memberId, reason), orderNo, reason);
+    }
+
     /**
      * Saga 보상 환불 — license 지급 최종 실패로 들어온다.
      * <b>운영 실측 0건이지만 지우지 않는다</b>(#46, D-027).

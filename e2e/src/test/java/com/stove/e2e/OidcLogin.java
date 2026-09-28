@@ -34,7 +34,7 @@ final class OidcLogin {
                     .build();
             String verifier = verifier();
             String authorize = AUTH + "/oauth2/authorize?response_type=code&client_id=studio-web"
-                    + "&scope=" + enc("openid profile studio")
+                    + "&scope=" + enc("openid profile studio commerce")
                     + "&redirect_uri=" + enc(REDIRECT_URI)
                     + "&code_challenge=" + enc(challenge(verifier))
                     + "&code_challenge_method=S256";

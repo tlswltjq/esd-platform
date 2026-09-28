@@ -23,4 +23,10 @@ public class AccountController {
         return ApiResponse.ok(SignupResponse.from(
                 userAccountService.signup(request.email(), request.password())));
     }
+
+    @PostMapping("/signup/member")
+    public ApiResponse<SignupResponse> signupMember(@Valid @RequestBody SignupRequest request) {
+        return ApiResponse.ok(SignupResponse.from(
+                userAccountService.signupMember(request.email(), request.password())));
+    }
 }

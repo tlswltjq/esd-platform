@@ -51,6 +51,26 @@ public class ProductQueryService {
                         "productCode=" + productCode));
     }
 
+    /** Public detail must never reveal a review-approved product before a release is published. */
+    public ProductView getPublishedProduct(Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        return publishedView(product);
+    }
+
+    public ProductView getPublishedProductByCode(String productCode) {
+        Product product = productRepository.findByProductCode(productCode)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        return publishedView(product);
+    }
+
+    private ProductView publishedView(Product product) {
+        if (product.getCurrentReleaseId() == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return ProductView.from(product);
+    }
+
     /**
      * 판매중 상품 목록. <b>정렬을 주지 않은 요청도 {@link ProductSort} 를 통과해야 한다</b> —
      * 거기서 {@code id desc} 를 받는다. [D-024] [D-025]

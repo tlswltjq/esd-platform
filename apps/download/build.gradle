@@ -5,6 +5,7 @@ dependencies {
     integrationTestImplementation 'org.testcontainers:minio'
 
     implementation project(':common:web')
+    implementation project(':common:security')
     // 패치 매니페스트/권한 사본만 다루므로 RDB 대신 MongoDB 를 쓴다(Outbox 불필요).
     implementation project(':common:event')
     // 발행은 없어도 수신은 한다. 재시도 정책과 DLT 는 발행 여부와 무관하게 필요하다 —

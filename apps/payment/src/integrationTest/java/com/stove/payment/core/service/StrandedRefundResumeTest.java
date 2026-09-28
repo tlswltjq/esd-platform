@@ -91,8 +91,8 @@ class StrandedRefundResumeTest {
         paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
                 orderNo, 42L, AMOUNT, "KRW",
                 List.of(new OrderLine(1L, "로스트아크 디럭스 패키지", 1L, AMOUNT, 1)));
-        paymentService.prepare(orderNo, "CARD");
-        paymentService.handleApproval(new PgApproval(orderNo, "PG-TX-" + orderNo, AMOUNT, "IDEM-" + orderNo));
+        var prepared = paymentService.prepare(orderNo, "CARD");
+        paymentService.handleApproval(new PgApproval(orderNo, prepared.pgTxId(), AMOUNT, "IDEM-" + orderNo));
         return orderNo;
     }
 
@@ -147,7 +147,8 @@ class StrandedRefundResumeTest {
         assertThat(resumed).isEqualTo(1);
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
         assertThat(eventTypesOf(orderNo)).contains(EventType.PAYMENT_CANCELLED);
-        verify(pgClient).cancel(eq("PG-TX-" + orderNo), eq(AMOUNT), eq("USER_REFUND"));
+        String pgTxId = paymentRepository.findByOrderNo(orderNo).orElseThrow().getPgTxId();
+        verify(pgClient).cancel(eq(pgTxId), eq(AMOUNT), eq("USER_REFUND"));
     }
 
     /**
@@ -189,8 +190,9 @@ class StrandedRefundResumeTest {
     void oneFailureDoesNotBlockTheRest() {
         String failing = strandedByPgFailure();
         String recoverable = strandedByPgFailure();
+        String failingPgTxId = paymentRepository.findByOrderNo(failing).orElseThrow().getPgTxId();
         doThrow(new IllegalStateException("PG 여전히 응답 없음"))
-                .when(pgClient).cancel(eq("PG-TX-" + failing), anyLong(), anyString());
+                .when(pgClient).cancel(eq(failingPgTxId), anyLong(), anyString());
 
         int resumed = refundFacade.resumeStranded();
 

@@ -123,7 +123,10 @@ services:
     build: { context: ., dockerfile: apps/payment/Dockerfile }
     image: stove/payment
     expose: ["8083"]
-    environment: *common-env
+    environment:
+      <<: *common-env
+      # 개발·E2E 스택 전용. 운영은 PG와 공유한 별도 secret을 주입한다.
+      PG_CALLBACK_SECRET: ${PG_CALLBACK_SECRET:-local-only-pg-callback-secret}
 
   license:
     <<: *app

@@ -45,12 +45,12 @@ final class Journey {
      * 실제로 2026-08-13 에 첫 장이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
      */
     static final String PRODUCT_TITLE = "인수 시나리오 게임 " + STAMP;
-    static final long MEMBER = STAMP % 1_000_000;
+    static long MEMBER;
     /** 미보유 회원. 다운로드 권한이 소유 검사에 걸리는지 보려면 사지 않은 사람이 하나 필요하다. */
-    static final long OTHER_MEMBER = MEMBER + 1;
+    static long OTHER_MEMBER;
 
     /** 승인 경로의 PG 거래번호. 거절 경로는 사전등록이 돌려준 값을 써야 한다 — {@link #failPgTxId()}. */
-    static final String PG_TX = "PG-E2E-" + STAMP;
+    static String PG_TX;
 
     /**
      * PG 멱등키. <b>같은 접미사면 같은 키가 나온다</b> — 중복 콜백 흡수를 확인하려면
@@ -70,6 +70,9 @@ final class Journey {
     private static Instant paidAt;
     private static String creatorToken;
     private static String reviewerToken;
+    private static String memberToken;
+    private static String otherMemberToken;
+    private static String adminToken;
 
     private Journey() {
     }
@@ -136,9 +139,21 @@ final class Journey {
         return Duration.between(require(paidAt, "결제 승인 시각", "2장 트랙 B 의 승인 콜백"), Instant.now());
     }
 
-    /** 회원 헤더. 게이트웨이는 요청 헤더를 그대로 하류로 넘긴다. */
+    /** The bearer token determines ownership; a caller-supplied member header has no authority. */
     static Map<String, String> asMember(long memberId) {
-        return Map.of("X-Member-Id", String.valueOf(memberId));
+        String token = memberId == MEMBER ? memberToken
+                : memberId == OTHER_MEMBER ? otherMemberToken : null;
+        return Map.of("Authorization", "Bearer " + require(token, "member access token", "트랙 A 회원 로그인"));
+    }
+
+    static void member(long id, String token) { MEMBER = id; memberToken = token; }
+
+    static void otherMember(long id, String token) { OTHER_MEMBER = id; otherMemberToken = token; }
+
+    static void adminToken(String token) { adminToken = token; }
+
+    static Map<String, String> asAdmin() {
+        return Map.of("Authorization", "Bearer " + require(adminToken, "admin access token", "트랙 A 운영자 로그인"));
     }
 
     static Map<String, String> asSeller() {

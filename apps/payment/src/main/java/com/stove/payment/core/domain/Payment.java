@@ -106,6 +106,12 @@ public class Payment extends BaseTimeEntity {
         return new Payment(orderNo, memberId, amount, currency, lines);
     }
 
+    public void requireOwner(Long requestingMemberId) {
+        if (!memberId.equals(requestingMemberId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
     /** 결제 가능 시간이 지났는가. 만료가 없으면 옛 가격이 영원히 유효하다. [D-029] */
     public void requireWithinWindow(Duration window) {
         Instant createdAt = getCreatedAt();
@@ -150,6 +156,10 @@ public class Payment extends BaseTimeEntity {
         }
         if (status != PaymentStatus.PENDING) {
             throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "승인 불가 상태: " + status);
+        }
+        if (!Objects.equals(this.pgTxId, pgTxId)) {
+            throw new BusinessException(ErrorCode.PAYMENT_TX_MISMATCH,
+                    "사전등록=%s, 콜백=%s, orderNo=%s".formatted(this.pgTxId, pgTxId, orderNo));
         }
         if (paidAmount != this.amount) {
             // 위·변조 또는 PG 연동 오류. 승인 확정하지 않고 운영 알람 대상으로 남긴다.

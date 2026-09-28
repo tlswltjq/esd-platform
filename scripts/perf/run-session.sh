@@ -59,6 +59,11 @@ EOF
         ;;
 esac
 
+: "${MEMBER_TOKEN:?MEMBER_TOKEN OAuth2 access token이 필요합니다}"
+if [ "$SCENARIO" = fanout ]; then
+    : "${PG_CALLBACK_SECRET:?PG_CALLBACK_SECRET이 필요합니다}"
+fi
+
 INTERVAL="${INTERVAL:-1}"
 NET="${PERF_NETWORK:-stove_default}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -200,6 +205,7 @@ say "k6 ${K6_FILE} 시작"
 docker run --rm --network "$NET" -v "$REPO:/w" -w /w \
     -e "ORDER_URL=$K6_ORDER_URL" -e "CATALOG_URL=$K6_CATALOG_URL" \
     -e "PAYMENT_URL=$K6_PAYMENT_URL" -e "LICENSE_URL=$K6_LICENSE_URL" \
+    -e MEMBER_TOKEN -e PG_CALLBACK_SECRET \
     -e "RATE=${RATE:-100}" -e "DURATION=${DURATION:-5m}" \
     grafana/k6 run --summary-export="/w/$OUT_DIR/k6-summary.json" \
     "scripts/perf/$K6_FILE" 2>&1 | tee "$OUT_DIR/k6.log"

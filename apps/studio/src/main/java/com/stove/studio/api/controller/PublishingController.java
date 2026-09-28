@@ -7,6 +7,7 @@ import com.stove.studio.api.controller.dto.CreateStorePageRevisionRequest;
 import com.stove.studio.api.controller.dto.CreateSubmissionRequest;
 import com.stove.studio.api.controller.dto.RevisionResponse;
 import com.stove.studio.api.controller.dto.SubmissionResponse;
+import com.stove.studio.api.controller.dto.SubmissionReviewStatusResponse;
 import com.stove.studio.api.controller.dto.StorePagePreviewResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.studio.api.controller.dto.CreateReleaseRequest;
@@ -84,12 +85,28 @@ public class PublishingController {
                 revisionService.previewStorePage(gameId, revisionId, workspaceId), objectMapper));
     }
 
+    @GetMapping("/{gameId}/store-page-revisions")
+    public ApiResponse<List<RevisionResponse>> storePages(@PathVariable Long gameId,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        return ApiResponse.ok(revisionService.storePages(gameId, workspaceId).stream()
+                .map(RevisionResponse::from).toList());
+    }
+
     @PostMapping("/{gameId}/pricing-revisions")
     public ApiResponse<RevisionResponse> pricing(@PathVariable Long gameId,
                                                  @AuthenticationPrincipal Jwt jwt,
                                                  @Valid @RequestBody CreatePricingRevisionRequest request) {
         Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
         return ApiResponse.ok(RevisionResponse.from(revisionService.createPricing(gameId, workspaceId, request.price())));
+    }
+
+    @GetMapping("/{gameId}/pricing-revisions")
+    public ApiResponse<List<RevisionResponse>> pricings(@PathVariable Long gameId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        return ApiResponse.ok(revisionService.pricings(gameId, workspaceId).stream()
+                .map(RevisionResponse::from).toList());
     }
 
     @PostMapping("/{gameId}/rating-revisions")
@@ -99,6 +116,14 @@ public class PublishingController {
         Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
         return ApiResponse.ok(RevisionResponse.from(
                 revisionService.createRating(gameId, workspaceId, request.questionnaire().toDomain())));
+    }
+
+    @GetMapping("/{gameId}/rating-revisions")
+    public ApiResponse<List<RevisionResponse>> ratings(@PathVariable Long gameId,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        return ApiResponse.ok(revisionService.ratings(gameId, workspaceId).stream()
+                .map(RevisionResponse::from).toList());
     }
 
     @PostMapping("/{gameId}/submissions")
@@ -118,6 +143,22 @@ public class PublishingController {
         return ApiResponse.ok(SubmissionResponse.from(submissionService.requireOwned(submissionId, workspaceId)));
     }
 
+    @GetMapping("/{gameId}/submissions")
+    public ApiResponse<List<SubmissionResponse>> submissions(@PathVariable Long gameId,
+                                                             @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        return ApiResponse.ok(submissionService.findByGame(gameId, workspaceId).stream()
+                .map(SubmissionResponse::from).toList());
+    }
+
+    @GetMapping("/submissions/{submissionId}/review-status")
+    public ApiResponse<SubmissionReviewStatusResponse> reviewStatus(@PathVariable Long submissionId,
+                                                                     @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        var review = submissionService.reviewStatus(submissionId, workspaceId);
+        return ApiResponse.ok(SubmissionReviewStatusResponse.from(review.submission(), review.gates()));
+    }
+
     @PostMapping("/submissions/{submissionId}/releases")
     public ApiResponse<ReleaseResponse> release(@PathVariable Long submissionId,
                                                 @AuthenticationPrincipal Jwt jwt,
@@ -127,6 +168,14 @@ public class PublishingController {
                 request == null ? null : request.publishAt(), request == null ? null : request.timeZone(),
                 request == null ? null : request.channel(), request == null ? null : request.changeType(),
                 jwt.getSubject())));
+    }
+
+    @GetMapping("/{gameId}/releases")
+    public ApiResponse<List<ReleaseResponse>> releases(@PathVariable Long gameId,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        return ApiResponse.ok(releaseService.findByGame(gameId, workspaceId).stream()
+                .map(ReleaseResponse::from).toList());
     }
 
     @PostMapping("/releases/{releaseId}/promote")

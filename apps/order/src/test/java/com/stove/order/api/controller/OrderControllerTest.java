@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -39,12 +40,13 @@ class OrderControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new OrderController(placeOrderFacade, orderQueryService, orderCommandService))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
-    private String body(Long memberId, Long productId, int quantity) throws Exception {
+    private String body(Long productId, int quantity) throws Exception {
         return objectMapper.writeValueAsString(new CreateOrderRequest(
-                memberId, List.of(new CreateOrderRequest.Item(productId, quantity)), 30_000L));
+                List.of(new CreateOrderRequest.Item(productId, quantity)), 30_000L));
     }
 
     @Test
@@ -52,7 +54,7 @@ class OrderControllerTest {
     void negativeQuantityIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(42L, 1L, -1)))
+                        .content(body(1L, -1)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(placeOrderFacade);
@@ -63,19 +65,19 @@ class OrderControllerTest {
     void zeroQuantityIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(42L, 1L, 0)))
+                        .content(body(1L, 0)))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(placeOrderFacade);
     }
 
     @Test
-    @DisplayName("회원 없는 주문은 400 이다")
-    void missingMemberIsRejected() throws Exception {
+    @DisplayName("인증 주체 없는 주문은 거부한다")
+    void missingPrincipalIsRejected() throws Exception {
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(null, 1L, 1)))
-                .andExpect(status().isBadRequest());
+                        .content(body(1L, 1)))
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(placeOrderFacade);
     }
@@ -86,7 +88,7 @@ class OrderControllerTest {
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new CreateOrderRequest(42L, List.of(), 0L))))
+                                new CreateOrderRequest(List.of(), 0L))))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(placeOrderFacade);

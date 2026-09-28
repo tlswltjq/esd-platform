@@ -1,4 +1,5 @@
 package com.stove.settlement.api.controller;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import com.stove.common.core.response.ApiResponse;
 import com.stove.settlement.api.application.SettlementCloseFacade;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** 정산 담당자/판매자용 조회 + 수동 마감 API. */
 @RestController
+@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/settlements")
 public class SettlementController {

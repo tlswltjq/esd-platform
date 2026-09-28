@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STOVE Creator Studio</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Pretendard, system-ui, sans-serif;
+      --bg:#0b0e14; --panel:#131925; --panel2:#1a2231; --line:#2a3548; --ink:#eef3ff;
+      --muted:#9ca9bf; --accent:#91a9ff; --good:#6fe0b1; --warn:#ffd479; --bad:#ff9da7; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 75% -10%,#1e2b55 0,#0b0e14 42rem); color:var(--ink); }
+    header { position:sticky; top:0; z-index:2; display:flex; justify-content:space-between; align-items:center;
+      padding:17px max(20px,calc((100% - 1220px)/2)); background:#0b0e14dd; backdrop-filter:blur(16px); border-bottom:1px solid #202a3c; }
+    .brand { display:flex; align-items:center; gap:12px; font-weight:850; letter-spacing:.04em; }
+    .mark { display:grid; place-items:center; width:31px; height:31px; border-radius:9px; background:linear-gradient(135deg,#8fa9ff,#b98cff); color:#11182c; font-size:13px; }
+    header small { color:var(--muted); font-weight:500; letter-spacing:0; }
+    main { width:min(1220px,calc(100% - 32px)); margin:42px auto 80px; }
+    .hero { display:flex; justify-content:space-between; gap:28px; align-items:end; margin-bottom:28px; }
+    h1 { margin:7px 0 10px; font-size:clamp(31px,5vw,58px); line-height:1.04; letter-spacing:-.05em; }
+    h2 { margin:0 0 18px; font-size:20px; letter-spacing:-.02em; }
+    h3 { margin:0 0 8px; font-size:15px; }
+    p { line-height:1.65; color:var(--muted); }
+    .eyebrow { color:var(--accent); font-weight:800; letter-spacing:.13em; font-size:11px; }
+    .hero p { max-width:640px; margin:0; }
+    .hero-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+    button, .button { border:0; border-radius:10px; padding:10px 14px; background:var(--accent); color:#0d1427; font:inherit; font-weight:800; cursor:pointer; text-decoration:none; }
+    button.secondary, .button.secondary { background:#263248; color:#dbe4ff; }
+    button.ghost { background:transparent; color:var(--accent); border:1px solid #435377; }
+    button.danger { background:#542a37; color:#ffb6bf; }
+    button:disabled { opacity:.5; cursor:wait; }
+    .notice { display:none; margin:15px 0 22px; padding:12px 15px; border:1px solid #405276; border-radius:10px; background:#18233b; color:#cad7f4; white-space:pre-wrap; }
+    .notice[data-kind="error"] { display:block; border-color:#683641; background:#301b26; color:var(--bad); }
+    .notice[data-kind="ok"] { display:block; border-color:#2e6654; background:#122e29; color:var(--good); }
+    .grid { display:grid; grid-template-columns:320px 1fr; gap:18px; align-items:start; }
+    .panel { background:linear-gradient(180deg,#151d2b,#111722); border:1px solid var(--line); border-radius:16px; padding:20px; box-shadow:0 15px 42px #0002; }
+    .panel + .panel { margin-top:18px; }
+    .project-list { display:grid; gap:9px; }
+    .project { width:100%; text-align:left; padding:13px; border-radius:11px; border:1px solid #2c3850; background:#121a27; color:var(--ink); cursor:pointer; }
+    .project.active { border-color:var(--accent); background:#1d2b4b; }
+    .project strong { display:block; margin-bottom:6px; }
+    .project small { color:var(--muted); }
+    .empty { color:var(--muted); font-size:14px; line-height:1.6; }
+    .toolbar { display:flex; gap:9px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:15px; }
+    .toolbar .meta { color:var(--muted); font-size:13px; }
+    .tabs { display:flex; flex-wrap:wrap; gap:7px; border-bottom:1px solid var(--line); margin:0 -20px 20px; padding:0 20px; }
+    .tab { padding:10px 6px; border:0; border-bottom:2px solid transparent; background:none; color:var(--muted); border-radius:0; }
+    .tab.active { color:var(--ink); border-color:var(--accent); }
+    .tab-page { display:none; }
+    .tab-page.active { display:block; }
+    form.fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    label { display:grid; gap:6px; color:#c8d2e7; font-size:13px; }
+    label.wide, form.fields > .wide { grid-column:1 / -1; }
+    input, textarea, select { width:100%; border:1px solid #35435c; border-radius:9px; padding:10px 11px; background:#0d131e; color:var(--ink); font:inherit; }
+    textarea { min-height:90px; resize:vertical; }
+    input:focus, textarea:focus, select:focus { outline:2px solid #718af5; border-color:transparent; }
+    .form-actions { grid-column:1 / -1; display:flex; gap:9px; flex-wrap:wrap; padding-top:5px; }
+    .hint { color:var(--muted); font-size:12px; line-height:1.55; margin:8px 0 16px; }
+    .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px; }
+    .metric { padding:14px; border:1px solid #2b3850; border-radius:11px; background:#111925; }
+    .metric b { display:block; font-size:21px; margin-top:6px; }
+    .metric span { color:var(--muted); font-size:12px; }
+    .rows { display:grid; gap:8px; }
+    .row { display:flex; justify-content:space-between; gap:13px; align-items:start; padding:12px; border-radius:10px; background:#111925; border:1px solid #28344a; }
+    .row small { display:block; margin-top:5px; color:var(--muted); line-height:1.55; }
+    .pill { display:inline-flex; flex:none; padding:4px 8px; border-radius:999px; background:#293449; color:#ccd7ee; font-size:11px; font-weight:800; }
+    .pill.good { background:#173f35; color:var(--good); } .pill.warn { background:#4a3b1f; color:var(--warn); } .pill.bad { background:#4b2530; color:var(--bad); }
+    .asset-preview { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
+    .asset-preview img { width:86px; height:54px; object-fit:cover; border-radius:7px; border:1px solid #3a4964; background:#0a0e15; }
+    pre.log { max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-word; margin:14px 0 0; padding:12px; border-radius:9px; background:#0a0e15; color:#aebbd3; font:12px/1.55 ui-monospace,monospace; }
+    footer { color:#66738b; font-size:12px; text-align:center; margin-top:32px; }
+    @media (max-width:900px) { .grid { grid-template-columns:1fr; } .hero { align-items:start; flex-direction:column; } .hero-actions { justify-content:flex-start; } }
+    @media (max-width:620px) { main { width:min(100% - 22px,1220px); margin-top:28px; } header { padding:14px 12px; } form.fields { grid-template-columns:1fr; } label.wide, form.fields > .wide, .form-actions { grid-column:1; } .cards { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">S</span><span>CREATOR STUDIO <small>· BASIC / KR / KRW</small></span></div>
+  <div class="hero-actions"><span id="auth-label" class="pill">로그인 필요</span><button id="signup" class="ghost" type="button">창작자 가입</button><button id="login" type="button">창작자 로그인</button><button id="logout" class="secondary" type="button" hidden>로그아웃</button></div>
+</header>
+<main>
+  <section class="hero">
+    <div><div class="eyebrow">P3-2 · CREATOR OPERATIONS</div><h1>게임 등록부터 출시까지<br>한 곳에서 관리하세요.</h1><p>상점 페이지, 자산 URL, KRW 가격, 한국 등급 설문, Windows 검증 빌드, 심사 피드백과 출시 상태를 프로젝트별로 확인합니다.</p></div>
+    <div class="hero-actions"><a class="button secondary" href="/swagger-ui.html" target="_blank" rel="noreferrer">API 문서</a></div>
+  </section>
+  <div id="notice" class="notice"></div>
+  <section class="grid">
+    <aside>
+      <div class="panel">
+        <div class="toolbar"><h2>내 프로젝트</h2><button id="refresh-projects" class="ghost" type="button">새로고침</button></div>
+        <div id="projects" class="project-list"><div class="empty">로그인하면 내 workspace의 프로젝트만 표시됩니다.</div></div>
+      </div>
+      <div class="panel">
+        <h2>새 BASIC 게임</h2>
+        <p class="hint">첫 범위는 Windows · 한국 · 원화입니다. 상품 코드는 workspace 안에서 유일해야 합니다.</p>
+        <form id="create-form" class="fields">
+          <label>상품 코드<input id="create-code" required maxlength="80" placeholder="MY-GAME-001"></label>
+          <label>표시 제목<input id="create-title" required maxlength="200" placeholder="새 게임"></label>
+          <label>시작 가격 (KRW)<input id="create-price" type="number" min="0" step="1" value="19900" required></label>
+          <div class="form-actions"><button type="submit">프로젝트 만들기</button></div>
+        </form>
+      </div>
+    </aside>
+    <section id="workspace" class="panel">
+      <div class="empty">왼쪽에서 프로젝트를 선택하면 등록 체크리스트와 관리 도구가 열립니다.</div>
+    </section>
+  </section>
+  <footer>소유권 검사는 Studio API가 JWT의 creator workspace를 기준으로 수행합니다. 다른 workspace의 초안·빌드·출시는 조회되지 않습니다.</footer>
+</main>
+<script>
+  const $ = selector => document.querySelector(selector);
+  const state = { token: sessionStorage.getItem("studio_access_token"), projects: [], project: null, detail: {} };
+  const origin = location.origin;
+  const redirectUri = `${origin}/studio/`;
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  function notice(message, kind = "") { const box = $("#notice"); box.textContent = message || ""; box.dataset.kind = kind; box.style.display = message ? "block" : "none"; }
+  function esc(value) { return String(value ?? "").replace(/[&<>\"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch])); }
+  function statusClass(value) { const v = String(value || ""); return /APPROVED|VALIDATED|READY|PUBLISHED|PASSED|RELEASED/.test(v) ? "good" : /FAILED|REJECTED|CHANGES|CANCELLED/.test(v) ? "bad" : "warn"; }
+  function pill(value) { return `<span class="pill ${statusClass(value)}">${esc(value || "-" )}</span>`; }
+  function log(message, value) { const node = $("#event-log"); if (!node) return; node.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}${value === undefined ? "" : "\n" + JSON.stringify(value, null, 2)}`; node.scrollTop = node.scrollHeight; }
+
+  async function api(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+    if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
+    const response = await fetch(path, {...options, headers});
+    const body = await response.json().catch(() => null);
+    if (response.status === 401) { state.token = null; sessionStorage.removeItem("studio_access_token"); updateAuth(); throw new Error("로그인이 필요합니다."); }
+    if (!response.ok || body?.success === false) throw new Error(`${response.status} ${body?.error?.message || path}`);
+    return body?.data;
+  }
+  function randomString(length = 64) { const bytes = crypto.getRandomValues(new Uint8Array(length)); return [...bytes].map(v => (v % 36).toString(36)).join(""); }
+  async function challenge(verifier) { const data = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)); return btoa(String.fromCharCode(...new Uint8Array(data))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+  async function login() { const verifier = randomString(); sessionStorage.setItem("studio_pkce_verifier", verifier); const codeChallenge = await challenge(verifier); const params = new URLSearchParams({response_type:"code", client_id:"studio-web", scope:"openid profile studio", redirect_uri:redirectUri, code_challenge:codeChallenge, code_challenge_method:"S256"}); location.href = `${origin}/oauth2/authorize?${params}`; }
+  async function exchangeCode() {
+    const code = new URLSearchParams(location.search).get("code"); if (!code) return;
+    const verifier = sessionStorage.getItem("studio_pkce_verifier"); if (!verifier) throw new Error("PKCE verifier를 찾을 수 없습니다.");
+    const body = new URLSearchParams({grant_type:"authorization_code", client_id:"studio-web", code, redirect_uri:redirectUri, code_verifier:verifier});
+    const response = await fetch(`${origin}/oauth2/token`, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body});
+    const token = await response.json(); if (!response.ok || !token.access_token) throw new Error(token.error_description || "토큰 발급에 실패했습니다.");
+    state.token = token.access_token; sessionStorage.setItem("studio_access_token", state.token); sessionStorage.removeItem("studio_pkce_verifier"); history.replaceState({}, "", "/studio/");
+  }
+  function updateAuth() { const signed = Boolean(state.token); $("#auth-label").textContent = signed ? "CREATOR 세션" : "로그인 필요"; $("#login").hidden = signed; $("#logout").hidden = !signed; }
+  function projectStatus(project) { return project?.status || "DRAFT"; }
+  async function loadProjects(selectId) {
+    if (!state.token) return;
+    state.projects = await api("/api/v1/studio/games");
+    const list = $("#projects"); list.innerHTML = state.projects.length ? state.projects.map(project => `<button class="project ${project.gameId === (selectId || state.project?.gameId) ? "active" : ""}" data-id="${project.gameId}" type="button"><strong>${esc(project.title)}</strong><small>${esc(project.productCode)} · ${pill(projectStatus(project))} · ₩${Number(project.price || 0).toLocaleString()}</small></button>`).join("") : `<div class="empty">아직 프로젝트가 없습니다. BASIC 게임을 만들어 보세요.</div>`;
+    list.querySelectorAll(".project").forEach(node => node.addEventListener("click", () => selectProject(Number(node.dataset.id))));
+    const target = selectId || state.project?.gameId || state.projects[0]?.gameId; if (target) await selectProject(target); else renderEmptyWorkspace();
+  }
+  function renderEmptyWorkspace() { $("#workspace").innerHTML = `<div class="empty">프로젝트를 선택하면 등록 체크리스트와 관리 도구가 열립니다.</div>`; }
+  async function selectProject(id) {
+    const project = state.projects.find(item => item.gameId === id); if (!project) return;
+    state.project = project; $("#projects").querySelectorAll(".project").forEach(node => node.classList.toggle("active", Number(node.dataset.id) === id));
+    await loadDetail(); renderWorkspace();
+  }
+  async function loadDetail() {
+    const id = state.project.gameId;
+    const [store, pricing, rating, builds, submissions, releases] = await Promise.all([
+      api(`/api/v1/studio/projects/${id}/store-page-revisions`), api(`/api/v1/studio/projects/${id}/pricing-revisions`), api(`/api/v1/studio/projects/${id}/rating-revisions`), api(`/api/v1/studio/games/${id}/builds`), api(`/api/v1/studio/projects/${id}/submissions`), api(`/api/v1/studio/projects/${id}/releases`)
+    ]);
+    let storePreview = null;
+    if (store[0]) { try { storePreview = await api(`/api/v1/studio/projects/${id}/store-page-revisions/${store[0].revisionId}/preview`); } catch (error) { log("상점 preview 조회 실패", error.message); } }
+    state.detail = {store, storePreview, pricing, rating, builds, submissions, releases};
+    for (const submission of submissions) { try { submission.review = await api(`/api/v1/studio/projects/submissions/${submission.submissionId}/review-status`); } catch (error) { submission.reviewError = error.message; } }
+  }
+  function latest(type, status) { return (state.detail[type] || []).find(item => !status || item.storePageStatus === status); }
+  function renderWorkspace() {
+    const p = state.project, d = state.detail, store = latest("store", "PUBLISHED"), pricing = d.pricing[0], rating = d.rating[0], build = d.builds[0], submission = d.submissions[0], release = d.releases[0];
+    $("#workspace").innerHTML = `<div class="toolbar"><div><div class="eyebrow">PROJECT #${p.gameId}</div><h2>${esc(p.title)}</h2><div class="meta">${esc(p.productCode)} · BASIC · ${esc(p.currency)} · ${pill(projectStatus(p))}</div></div><button id="reload-detail" class="ghost" type="button">상태 새로고침</button></div>
+      <div class="cards"><div class="metric"><span>상점 발행</span><b>${store ? "완료" : "필요"}</b></div><div class="metric"><span>Windows 빌드</span><b>${build ? esc(build.status) : "필요"}</b></div><div class="metric"><span>최근 제출</span><b>${submission ? esc(submission.status) : "없음"}</b></div></div>
+      <div class="tabs"><button class="tab active" data-tab="overview">체크리스트</button><button class="tab" data-tab="store">상점·자산</button><button class="tab" data-tab="build">빌드</button><button class="tab" data-tab="review">심사·제출</button><button class="tab" data-tab="release">출시</button></div>
+      <div class="tab-page active" data-page="overview">${overviewHtml(p,d,store,pricing,rating,build,submission,release)}</div>
+      <div class="tab-page" data-page="store">${storeHtml(store)}</div>
+      <div class="tab-page" data-page="build">${buildHtml(d.builds)}</div>
+      <div class="tab-page" data-page="review">${reviewHtml(d,store,pricing,rating,build,submission)}</div>
+      <div class="tab-page" data-page="release">${releaseHtml(d.releases,submission)}</div>`;
+    $("#reload-detail").addEventListener("click", async () => { await loadDetail(); renderWorkspace(); });
+    $("#workspace").querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => { $("#workspace").querySelectorAll(".tab").forEach(item => item.classList.toggle("active", item === tab)); $("#workspace").querySelectorAll(".tab-page").forEach(page => page.classList.toggle("active", page.dataset.page === tab.dataset.tab)); }));
+    bindForms();
+  }
+  function overviewHtml(p,d,store,pricing,rating,build,submission,release) { const checks = [["상점 페이지",store,"상점 초안 작성 후 publish"],["KRW 가격",pricing, "가격 revision 생성"],["한국 등급 설문",rating,"설문 저장"],["Windows 빌드",build?.status === "VALIDATED","ZIP 업로드 및 검증"],["심사 제출",submission,"검증된 모든 스냅샷 제출"],["출시",release?.status === "PUBLISHED","READY_FOR_RELEASE 이후 출시"]]; return `<div class="rows">${checks.map(([name,done,next]) => `<div class="row"><div><strong>${name}</strong><small>${done ? "완료" : `다음 작업: ${next}`}</small></div>${done === true || done ? pill("완료") : pill("필요")}</div>`).join("")}</div><pre id="event-log" class="log">프로젝트 ${esc(p.title)} 상태를 불러왔습니다.</pre>`; }
+  function storeHtml(store) { const preview=state.detail.storePreview || {}; const local=preview.localizations?.["ko-KR"] || {}; const text=(name,fallback="") => esc(preview[name] ?? fallback); const list=name => esc((preview[name] || []).join(",")); return `<p class="hint">초안은 저장 후 미리보기할 수 있고, 게시 버튼을 눌러야 제출 가능한 PUBLISHED revision이 됩니다. 이미지와 정책 URL은 HTTPS만 허용됩니다.</p><form id="store-form" class="fields"><label>제목<input id="store-title" required maxlength="200" value="${text("title",state.project.title)}"></label><label>플랫폼<input id="store-platform" required value="${text("platform","WINDOWS")}"></label><label class="wide">짧은 설명<input id="store-short" required maxlength="500" value="${text("shortDescription")}" placeholder="스토어 카드에 표시될 설명"></label><label class="wide">상세 설명<textarea id="store-detail" required>${text("detailedDescription","게임 소개와 이용 방법을 입력하세요.")}</textarea></label><label>개발사<input id="store-developer" value="${text("developer",state.project.title)}"></label><label>배급사<input id="store-publisher" value="${text("publisher","STOVE Creator")}"></label><label>커버 URL (HTTPS)<input id="store-cover" type="url" value="${text("coverUrl")}" placeholder="https://cdn.example/cover.png"></label><label>아이콘 URL (HTTPS)<input id="store-icon" type="url" value="${text("iconUrl")}" placeholder="https://cdn.example/icon.png"></label><label>스크린샷 URL 목록 (쉼표)<input id="store-shots" value="${list("screenshots")}" placeholder="https://cdn.example/shot-1.png"></label><label>트레일러 URL 목록 (쉼표)<input id="store-trailers" value="${list("trailers")}" placeholder="https://cdn.example/trailer.mp4"></label><label>최소 요구사항<input id="store-min" required value="${text("minimumRequirements","Windows 10 64-bit")}"></label><label>권장 요구사항<input id="store-rec" value="${text("recommendedRequirements","Windows 11 64-bit")}"></label><label class="wide">지원 언어 (쉼표)<input id="store-languages" value="${list("supportedLanguages") || "ko-KR"}"></label><label>지원 국가<input id="store-countries" value="${list("salesCountries") || "KR"}"></label><label>장르 (쉼표)<input id="store-genres" value="${list("genres") || "Adventure"}"></label><label>태그 (쉼표)<input id="store-tags" value="${list("tags") || "Windows"}"></label><label class="wide">개인정보처리방침 URL (HTTPS)<input id="store-privacy" type="url" value="${text("privacyPolicyUrl")}" placeholder="https://example.com/privacy"></label><label>지원 URL (HTTPS)<input id="store-support" type="url" value="${text("supportUrl")}" placeholder="https://example.com/support"></label><label>EULA URL (HTTPS)<input id="store-eula" type="url" value="${text("eulaUrl")}" placeholder="https://example.com/eula"></label><div class="form-actions"><button type="submit">초안 저장</button>${store ? `<button id="preview-store" type="button" class="secondary">최신 preview</button>` : ""}${store?.storePageStatus === "DRAFT" ? `<button id="publish-store" type="button">초안 게시</button>` : ""}</div></form><div class="asset-preview">${store ? `<span>최신 revision #${store.revisionNo} ${pill(store.storePageStatus)}</span>` : ""}</div>`; }
+  function buildHtml(builds) { return `<p class="hint">Windows ZIP을 multipart presigned URL로 업로드합니다. 완료 후 서버 검증 결과가 VALIDATED가 될 때까지 제출할 수 없습니다.</p><form id="build-form" class="fields"><label>제품 버전<input id="build-version" required value="1.0.0"></label><label>빌드 번호<input id="build-number" required value="1"></label><label>아키텍처<select id="build-arch"><option>X86_64</option><option>ARM64</option></select></label><label class="wide">Windows ZIP<input id="build-file" type="file" required accept=".zip,application/zip"></label><div class="form-actions"><button type="submit">업로드·검증 시작</button></div></form><div class="rows" style="margin-top:18px">${builds.length ? builds.map(build => `<div class="row"><div><strong>build #${build.buildId} · ${esc(build.version)}</strong><small>${esc(build.platform)} / ${esc(build.architecture)} · ${Number(build.fileSize || 0).toLocaleString()} bytes${build.failureCode ? ` · ${esc(build.failureCode)}` : ""}</small></div>${pill(build.status)}</div>`).join("") : `<div class="empty">등록된 빌드가 없습니다.</div>`}</div>`; }
+  function reviewHtml(d,store,pricing,rating,build,submission) { const review = submission?.review; return `<p class="hint">제출은 PUBLISHED 상점 revision, KRW 가격, 등급 revision, VALIDATED Windows build의 변경 불가능한 조합을 snapshot으로 남깁니다. 변경 요청을 받으면 새 revision을 만들어 다시 제출하세요.</p><form id="submit-form" class="fields"><label>상점 revision<select id="submit-store">${d.store.map(item => `<option value="${item.revisionId}" ${item.storePageStatus === "PUBLISHED" ? "selected" : ""}>#${item.revisionNo} · ${item.storePageStatus}</option>`).join("")}</select></label><label>가격 revision<select id="submit-pricing">${d.pricing.map(item => `<option value="${item.revisionId}">#${item.revisionNo} · KRW</option>`).join("")}</select></label><label>등급 revision<select id="submit-rating">${d.rating.map(item => `<option value="${item.revisionId}">#${item.revisionNo} · ${esc(item.recommendedRatingCode || item.resolvedPath)}</option>`).join("")}</select></label><label>검증된 build<select id="submit-build">${d.builds.filter(item => item.status === "VALIDATED").map(item => `<option value="${item.buildId}">#${item.buildId} · ${esc(item.version)}</option>`).join("")}</select></label><div class="form-actions"><button type="submit" ${d.builds.some(item => item.status === "VALIDATED") ? "" : "disabled"}>snapshot 제출</button></div></form><div style="margin-top:20px"><h3>최근 제출 ${submission ? `#${submission.submissionId} ${pill(submission.status)}` : ""}</h3>${review ? `<p><strong>다음 작업:</strong> ${esc(review.nextAction)}</p><div class="rows">${review.gates.map(gate => `<div class="row"><div><strong>${esc(gate.reviewType)}</strong><small>${esc(gate.feedback || gate.reasonCode || "피드백 없음")}</small></div>${pill(gate.status)}</div>`).join("")}</div>` : `<div class="empty">제출 후 심사 게이트별 상태와 외부 피드백이 여기에 표시됩니다.</div>`}</div>`; }
+  function releaseHtml(releases,submission) { return `<p class="hint">모든 심사 게이트가 승인되어 READY_FOR_RELEASE가 된 snapshot만 출시할 수 있습니다. publishAt을 비우면 즉시 출시를 시도하고, 미래 시각이면 예약합니다.</p><form id="release-form" class="fields"><label>제출물 ID<input id="release-submission" required value="${submission?.submissionId || ""}"></label><label>채널<select id="release-channel"><option>LIVE</option><option>STAGE</option><option>TEST</option><option>DEV</option></select></label><label>예약 시각<input id="release-at" type="datetime-local"></label><label>시간대<input id="release-zone" value="Asia/Seoul"></label><div class="form-actions"><button type="submit">출시 생성</button></div></form><div class="rows" style="margin-top:18px">${releases.length ? releases.map(release => `<div class="row"><div><strong>release #${release.releaseId} · ${esc(release.channel)}</strong><small>submission #${release.submissionId} · ${esc(release.publishAt || "즉시")} · smoke ${esc(release.smokeTestStatus || "-")}</small></div><div>${pill(release.status)}${release.status === "PUBLISHED" ? `<button class="danger rollback" data-id="${release.releaseId}" type="button">롤백</button>` : ""}</div></div>`).join("") : `<div class="empty">등록된 출시가 없습니다.</div>`}</div>`; }
+  function csv(id) { return $(id).value.split(",").map(value => value.trim()).filter(Boolean); }
+  function storePayload() { return {title:$("#store-title").value, shortDescription:$("#store-short").value, detailedDescription:$("#store-detail").value, localizations:{"ko-KR":{title:$("#store-title").value,shortDescription:$("#store-short").value,detailedDescription:$("#store-detail").value}}, genres:csv("#store-genres"), tags:csv("#store-tags"), developer:$("#store-developer").value, publisher:$("#store-publisher").value, screenshots:csv("#store-shots"), trailers:csv("#store-trailers"), iconUrl:$("#store-icon").value || null, coverUrl:$("#store-cover").value || null, supportedLanguages:csv("#store-languages"), platform:$("#store-platform").value, minimumRequirements:$("#store-min").value, recommendedRequirements:$("#store-rec").value, features:["Achievements"], supportUrl:$("#store-support").value || null, privacyPolicyUrl:$("#store-privacy").value || null, eulaUrl:$("#store-eula").value || null, salesCountries:csv("#store-countries"), prices:{KRW:Number(state.project.price)}, draft:true}; }
+  async function sha256(file) { const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer()); return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2,"0")).join(""); }
+  async function uploadBuild(file, version, buildNumber, arch) { const id = state.project.gameId; const checksum = await sha256(file); log("SHA-256 계산 완료", {fileName:file.name,fileSize:file.size,sha256:checksum}); const session = await api(`/api/v1/studio/games/${id}/upload-sessions`, {method:"POST",body:JSON.stringify({productVersion:version,buildNumber,platform:"WINDOWS",architecture:arch,fileName:file.name,fileSize:file.size,sha256:checksum,idempotencyKey:`studio-${id}-${crypto.randomUUID()}`})}); log("업로드 세션 생성",session); const parts=[]; for (let i=0;i<session.parts.length;i++) { const part=session.parts[i], start=(part.partNumber-1)*session.partSize, response=await fetch(part.uploadUrl,{method:"PUT",body:file.slice(start,Math.min(start+session.partSize,file.size))}); if (!response.ok) throw new Error(`part ${part.partNumber} 업로드 실패`); const etag=response.headers.get("etag"); if (!etag) throw new Error("Object Storage ETag를 읽을 수 없습니다. CORS를 확인하세요."); parts.push({partNumber:part.partNumber,etag}); log(`part ${i+1}/${session.parts.length} 업로드 완료`); } await api(`/api/v1/studio/games/upload-sessions/${session.uploadSessionId}/complete`,{method:"POST",body:JSON.stringify({parts})}); for(let attempt=0;attempt<90;attempt++){ const builds=await api(`/api/v1/studio/games/${id}/builds`); const current=builds.find(item=>item.buildId===session.buildId); if(current?.status === "VALIDATED" || current?.status === "FAILED") return current; await wait(1000); } throw new Error("빌드 검증 시간 초과"); }
+  function bindForms() {
+    const id=state.project.gameId;
+    $("#store-form")?.addEventListener("submit", async event => { event.preventDefault(); try { const draft=state.detail.store[0]?.storePageStatus === "DRAFT" ? await api(`/api/v1/studio/projects/${id}/store-page-revisions/${state.detail.store[0].revisionId}`,{method:"PUT",body:JSON.stringify(storePayload())}) : await api(`/api/v1/studio/projects/${id}/store-page-revisions`,{method:"POST",body:JSON.stringify(storePayload())}); log("상점 draft 저장",draft); notice(`상점 draft revision #${draft.revisionId}을 저장했습니다. 미리보기 후 게시할 수 있습니다.`,"ok"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } });
+    $("#publish-store")?.addEventListener("click", async () => { try { const published=await api(`/api/v1/studio/projects/${id}/store-page-revisions/${state.detail.store[0].revisionId}/publish`,{method:"POST"}); notice(`상점 revision #${published.revisionId}을 게시했습니다.`,"ok"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } });
+    $("#preview-store")?.addEventListener("click", async () => { try { const revision=latest("store"); const preview=await api(`/api/v1/studio/projects/${id}/store-page-revisions/${revision.revisionId}/preview`); log("스토어 preview",preview); notice("미리보기 결과를 아래 로그에서 확인하세요.","ok"); } catch(error){ notice(error.message,"error"); } });
+    $("#build-form")?.addEventListener("submit", async event => { event.preventDefault(); const file=$("#build-file").files[0]; if(!file) return; try { const build=await uploadBuild(file,$("#build-version").value,$("#build-number").value,$("#build-arch").value); notice(`build #${build.buildId}: ${build.status}${build.failureCode ? ` (${build.failureCode})` : ""}`,build.status === "VALIDATED" ? "ok" : "error"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } });
+    $("#submit-form")?.addEventListener("submit", async event => { event.preventDefault(); try { const submission=await api(`/api/v1/studio/projects/${id}/submissions`,{method:"POST",body:JSON.stringify({metadataRevisionId:Number($("#submit-store").value),pricingRevisionId:Number($("#submit-pricing").value),ratingRevisionId:Number($("#submit-rating").value),buildId:Number($("#submit-build").value),additionalBuildIds:[]})}); notice(`submission #${submission.submissionId}을 제출했습니다.`,"ok"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } });
+    $("#release-form")?.addEventListener("submit", async event => { event.preventDefault(); try { const at=$("#release-at").value; const release=await api(`/api/v1/studio/projects/submissions/${Number($("#release-submission").value)}/releases`,{method:"POST",body:JSON.stringify({publishAt:at ? new Date(at).toISOString() : null,timeZone:$("#release-zone").value,channel:$("#release-channel").value})}); notice(`release #${release.releaseId}를 생성했습니다: ${release.status}`,"ok"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } });
+    $("#workspace").querySelectorAll(".rollback").forEach(button => button.addEventListener("click", async () => { if(!confirm("이 출시를 기준으로 rollback release를 만들까요?")) return; try { await api(`/api/v1/studio/projects/releases/${button.dataset.id}/rollback`,{method:"POST"}); notice("rollback release를 생성했습니다.","ok"); await loadDetail(); renderWorkspace(); } catch(error){ notice(error.message,"error"); } }));
+  }
+  $("#signup").addEventListener("click", async () => { const email=prompt("창작자 이메일"); const password=prompt("비밀번호 (12자 이상)"); if(!email || !password) return; try { await api("/api/v1/auth/signup",{method:"POST",body:JSON.stringify({email,password})}); notice("창작자 계정을 만들었습니다. 로그인하세요.","ok"); } catch(error){ notice(error.message,"error"); } });
+  $("#login").addEventListener("click", login); $("#logout").addEventListener("click", () => { state.token=null; sessionStorage.removeItem("studio_access_token"); updateAuth(); state.projects=[]; $("#projects").innerHTML=`<div class="empty">로그인하면 내 workspace의 프로젝트만 표시됩니다.</div>`; renderEmptyWorkspace(); }); $("#refresh-projects").addEventListener("click", () => loadProjects());
+  $("#create-form").addEventListener("submit", async event => { event.preventDefault(); try { const project=await api("/api/v1/studio/games",{method:"POST",body:JSON.stringify({productCode:$("#create-code").value,title:$("#create-title").value,price:Number($("#create-price").value),currency:"KRW",productKind:"BASIC"})}); notice(`프로젝트 #${project.gameId}를 만들었습니다.`,"ok"); $("#create-form").reset(); await loadProjects(project.gameId); } catch(error){ notice(error.message,"error"); } });
+  (async () => { try { await exchangeCode(); updateAuth(); if(state.token) await loadProjects(); } catch(error){ notice(error.message,"error"); updateAuth(); } })();
+</script>
+</body>
+</html>

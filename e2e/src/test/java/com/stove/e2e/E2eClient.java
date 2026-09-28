@@ -11,7 +11,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.util.Map;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -61,6 +66,10 @@ public final class E2eClient {
         return send(HttpMethod.POST, path, body, headers);
     }
 
+    public Response postUnsigned(String path, Object body) {
+        return send(HttpMethod.POST, path, body, Map.of("X-E2E-Unsigned", "true"));
+    }
+
     public Response put(String path, Object body, Map<String, String> headers) {
         return send(HttpMethod.PUT, path, body, headers);
     }
@@ -83,9 +92,28 @@ public final class E2eClient {
 
     private Response send(HttpMethod method, String path, Object body, Map<String, String> headers) {
         RestClient.RequestBodySpec spec = http.method(method).uri(path);
-        headers.forEach(spec::header);
+        headers.forEach((name, value) -> {
+            if (!"X-E2E-Unsigned".equals(name)) spec.header(name, value);
+        });
         if (body != null) {
-            spec.contentType(MediaType.APPLICATION_JSON).body(body);
+            if (method == HttpMethod.POST && "/api/v1/payments/callback".equals(path)
+                    && !headers.containsKey("X-E2E-Unsigned")) {
+                try {
+                    String json = MAPPER.writeValueAsString(body);
+                    String timestamp = Long.toString(Instant.now().getEpochSecond());
+                    Mac mac = Mac.getInstance("HmacSHA256");
+                    String key = System.getenv().getOrDefault("PG_CALLBACK_SECRET", "local-only-pg-callback-secret");
+                    mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+                    String signature = HexFormat.of().formatHex(mac.doFinal(
+                            (timestamp + "." + json).getBytes(StandardCharsets.UTF_8)));
+                    spec.header("X-Pg-Timestamp", timestamp).header("X-Pg-Signature", signature);
+                    spec.contentType(MediaType.APPLICATION_JSON).body(json);
+                } catch (Exception exception) {
+                    throw new IllegalStateException("PG callback signing failed", exception);
+                }
+            } else {
+                spec.contentType(MediaType.APPLICATION_JSON).body(body);
+            }
         }
         return spec.exchange((request, response) ->
                 new Response(response.getStatusCode().value(), read(response.getBody()), response.getHeaders()));

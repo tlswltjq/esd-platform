@@ -45,6 +45,7 @@ REPEAT=1
 CONTROL=no
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$HERE/commerce-auth.sh"
 
 usage() {
     cat <<'EOF'
@@ -79,6 +80,9 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$FAULT" ] || { echo "--fault 는 필수다 (장애 없이 재려면 --fault none)" >&2; exit 1; }
+require_member_token
+MEMBER_ID=$(member_id_from_token) || { echo "토큰의 member_id를 읽을 수 없습니다" >&2; exit 1; }
+: "${PG_CALLBACK_SECRET:?PG_CALLBACK_SECRET이 필요합니다}"
 OUT_DIR=${OUT_DIR:-runs/$(date +%Y%m%d-%H%M%S)-$FAULT}
 mkdir -p "$OUT_DIR"
 
@@ -146,7 +150,7 @@ done
 log "  ✓ order · payment · license 건강"
 
 # 장애가 이미 걸려 있으면 '주입 전' 이라는 기준선 자체가 없다.
-if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$LICENSE_URL/api/v1/library" -H 'X-Member-Id: 1')" != 200 ]; then
+if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$LICENSE_URL/api/v1/library" -H "Authorization: Bearer $MEMBER_TOKEN")" != 200 ]; then
     log "  ✗ license 가 이미 장애 상태다. 지난 회차가 복구되지 않았다 — fault.sh heal 을 먼저 돌린다."
     exit 2
 fi
@@ -175,15 +179,13 @@ log "  시작 상태 license=$BASE_LICENSE PAID=$BASE_PAID CANCELED=$BASE_CANCEL
 # 그 뒤는 시스템의 몫이라 드라이버는 기다리지 않는다 — 판정은 끝나고 DB 에서 한다.
 
 purchase() {
-    # 한 줄로 `local seq=$1 member=$((800000 + seq))` 이라고 쓰면 안 된다 — 워드 확장이
-    # 대입보다 먼저 끝나므로 오른쪽의 seq 는 아직 없는 변수다. set -u 아래에서는 그 자리에서
-    # 죽고, 없으면 전원 memberId=800000 으로 조용히 뭉친다. (첫 회차를 이걸로 통째로 버렸다.)
     local seq=$1
-    local member=$((800000 + seq))
-    local order no amt
+    local member=$MEMBER_ID
+    local order no amt prepare tx body timestamp signature
 
     order=$(curl -s -m 10 -X POST "$ORDER_URL/api/v1/orders" -H 'Content-Type: application/json' \
-        -d "{\"memberId\":$member,\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}]}")
+        -H "Authorization: Bearer $MEMBER_TOKEN" \
+        -d "{\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}]}")
     no=$(echo "$order" | sed -n 's/.*"orderNo":"\([^"]*\)".*/\1/p')
     amt=$(echo "$order" | sed -n 's/.*"totalAmount":\([0-9]*\).*/\1/p')
     [ -n "$no" ] || { echo "$seq,,$member,ORDER_FAILED" >> "$OUT_DIR/orders.csv"; return; }
@@ -191,18 +193,27 @@ purchase() {
     # 결제 대기 레코드는 OrderCreated 가 Kafka 를 건너야 생긴다.
     local deadline=$((SECONDS + 30)) ready=no
     while [ $SECONDS -lt $deadline ]; do
-        if curl -s -m 5 "$PAYMENT_URL/api/v1/payments/$no" | grep -q '"status":"READY"'; then ready=yes; break; fi
+        if curl -s -m 5 "$PAYMENT_URL/api/v1/payments/$no" \
+            -H "Authorization: Bearer $MEMBER_TOKEN" | grep -q '"status":"READY"'; then ready=yes; break; fi
         sleep 0.3
     done
     [ "$ready" = yes ] || { echo "$seq,$no,$member,NO_PAYMENT_READY" >> "$OUT_DIR/orders.csv"; return; }
 
-    curl -s -m 10 -X POST "$PAYMENT_URL/api/v1/payments/$no/prepare" \
-        -H 'Content-Type: application/json' -d '{"method":"CARD"}' > /dev/null
+    prepare=$(curl -s -m 10 -X POST "$PAYMENT_URL/api/v1/payments/$no/prepare" \
+        -H "Authorization: Bearer $MEMBER_TOKEN" \
+        -H 'Content-Type: application/json' -d '{"method":"CARD"}')
+    tx=$(printf '%s' "$prepare" | jq -r '.data.pgTxId // empty')
+    [ -n "$tx" ] || { echo "$seq,$no,$member,PREPARE_FAILED" >> "$OUT_DIR/orders.csv"; return; }
 
     local paid_at; paid_at=$(date +%s)
+    body=$(jq -nc --arg order "$no" --arg tx "$tx" --argjson amount "$amt" \
+        --arg idem "IDEM-CHAOS-$no" \
+        '{result:"APPROVED",orderNo:$order,pgTxId:$tx,paidAmount:$amount,idempotencyKey:$idem}')
+    timestamp=$(date +%s)
+    signature=$(pg_signature "$timestamp" "$body")
     local cb; cb=$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST "$PAYMENT_URL/api/v1/payments/callback" \
-        -H 'Content-Type: application/json' \
-        -d "{\"result\":\"APPROVED\",\"orderNo\":\"$no\",\"pgTxId\":\"PG-CHAOS-$no\",\"paidAmount\":$amt,\"idempotencyKey\":\"IDEM-CHAOS-$no\"}")
+        -H 'Content-Type: application/json' -H "X-Pg-Timestamp: $timestamp" \
+        -H "X-Pg-Signature: $signature" -d "$body")
     echo "$seq,$no,$member,$([ "$cb" = 200 ] && echo APPROVED || echo "CALLBACK_$cb"),$paid_at" >> "$OUT_DIR/orders.csv"
 }
 

@@ -336,6 +336,24 @@
         },
         "type" : "object"
       }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "commerce" : "구매·정산 API",
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
+      }
     }
   },
   "info" : {
@@ -480,6 +498,17 @@
     "/api/v1/payments/callback" : {
       "post" : {
         "operationId" : "callback",
+        "parameters" : [ {
+          "description" : "Unix epoch seconds; at most five minutes old",
+          "in" : "header",
+          "name" : "X-Pg-Timestamp",
+          "required" : true
+        }, {
+          "description" : "Hex HMAC-SHA256 of timestamp + '.' + raw request body",
+          "in" : "header",
+          "name" : "X-Pg-Signature",
+          "required" : true
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -532,6 +561,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "payment-controller" ]
       }
     },
@@ -566,6 +598,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "payment-controller" ]
       }
     },
@@ -602,6 +637,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "payment-controller" ]
       }
     }
