@@ -13,7 +13,11 @@ public record PaymentResponse(
         PaymentStatus status,
         String method,
         String pgTxId,
-        Instant paidAt
+        Instant paidAt,
+        String failReasonCode,
+        String failReason,
+        String cancelReason,
+        boolean retryable
 ) {
     public static PaymentResponse from(Payment payment) {
         return new PaymentResponse(
@@ -25,6 +29,12 @@ public record PaymentResponse(
                 payment.getStatus(),
                 payment.getMethod(),
                 payment.getPgTxId(),
-                payment.getPaidAt());
+                payment.getPaidAt(),
+                payment.getFailReasonCode(),
+                payment.getFailReason(),
+                payment.getCancelReason(),
+                payment.getStatus() == PaymentStatus.READY
+                        || payment.getStatus() == PaymentStatus.PENDING
+                        || payment.getStatus() == PaymentStatus.CANCELING);
     }
 }

@@ -275,7 +275,8 @@ gateway   http post                                    ROOT
 `commerce` 범위를 선택한다. 아래 `MEMBER_TOKEN`은 그 **access token**이다. 창작자·심의자·운영자는
 각자의 토큰을 사용한다. 주문·결제·라이브러리·다운로드는 토큰의 `member_id`로 구매자를 식별하며,
 정산은 `ADMIN`만 호출할 수 있다. 전체 역할별 실행 순서는 [E2E 테스트](e2e/src/test/java/com/stove/e2e/)와
-[커머스 보안 계약](docs/p3-commerce-security.md)에 있다.
+[커머스 보안 계약](docs/p3-commerce-security.md)에 있다. 실제 결제 없이 승인·거절·환불을 재현하는
+[시뮬레이터 절차](docs/p3-payment-simulator.md)도 제공한다.
 
 ```bash
 # 판매 중인 상품의 가격과 ID를 사용한다. 아래 값은 로컬 시드 상품 예시다.

@@ -13,11 +13,13 @@ public record OrderResponse(
         long totalAmount,
         String currency,
         List<Line> lines,
-        Instant paidAt
+        Instant paidAt,
+        boolean retryable
 ) {
-    public record Line(Long productId, String productName, long unitPrice, int quantity) {
+    public record Line(Long productId, String productName, Long sellerId, long unitPrice, int quantity) {
         static Line from(OrderItem item) {
-            return new Line(item.getProductId(), item.getProductName(), item.getUnitPrice(), item.getQuantity());
+            return new Line(item.getProductId(), item.getProductName(), item.getSellerId(),
+                    item.getUnitPrice(), item.getQuantity());
         }
     }
 
@@ -29,6 +31,7 @@ public record OrderResponse(
                 order.getTotalAmount(),
                 order.getCurrency(),
                 order.getItems().stream().map(Line::from).toList(),
-                order.getPaidAt());
+                order.getPaidAt(),
+                order.getStatus() == OrderStatus.CREATED);
     }
 }

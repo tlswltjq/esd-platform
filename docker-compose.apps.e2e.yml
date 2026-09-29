@@ -41,6 +41,9 @@ services:
     ports: ["127.0.0.1:18082:8082"]
   payment:
     ports: ["127.0.0.1:18083:8083"]
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      STOVE_PAYMENT_SIMULATOR_BASE_URL: http://127.0.0.1:18080
   license:
     ports: ["127.0.0.1:18084:8084"]
   studio:

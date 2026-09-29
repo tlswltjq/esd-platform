@@ -25,6 +25,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/prometheus", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/v1/ops/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/callback").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/payments/simulator/checkout/**").hasRole("MEMBER")
+                        .requestMatchers("/api/v1/payments/simulator/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/payments/**").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
