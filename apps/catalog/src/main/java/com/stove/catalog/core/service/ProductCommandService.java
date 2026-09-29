@@ -2,6 +2,7 @@ package com.stove.catalog.core.service;
 
 import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
+import com.stove.catalog.core.domain.PromotionRepository;
 import com.stove.catalog.core.domain.ReindexPage;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
@@ -36,6 +37,7 @@ public class ProductCommandService {
     public static final String CONSUMER_GROUP = "catalog";
 
     private final ProductRepository productRepository;
+    private final PromotionRepository promotionRepository;
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
     private final AuditLogService auditLogService;
@@ -71,15 +73,17 @@ public class ProductCommandService {
             return;
         }
 
+        // 행사 생성과 가격 변경은 같은 상품 행을 잠가 최종 청구액 1원 규칙을 직렬화한다.
+        var existingProduct = productRepository.lockByProductCode(event.productCode());
         // 롤백도 새 releaseId를 발급하므로 이전 발행 이벤트의 지연 도착은 안전하게 무시한다.
-        if (productRepository.findByProductCode(event.productCode())
+        if (existingProduct
                 .map(existing -> existing.getCurrentReleaseId() != null
                         && existing.getCurrentReleaseId() >= event.releaseId())
                 .orElse(false)) {
             return;
         }
 
-        Product product = productRepository.findByProductCode(event.productCode())
+        Product product = existingProduct
                 .map(existing -> {
                     existing.applyRelease(event.gameId(), event.title(), event.sellerId(),
                             event.price(), event.currency(), event.ratingCode(), event.releaseId(),
@@ -98,6 +102,12 @@ public class ProductCommandService {
                     created.applyStorefront(serializeStorefront(event.storefront()));
                     return productRepository.save(created);
                 });
+
+        if (promotionRepository.findByProductIdAndStoppedAtIsNull(product.getId()).stream()
+                .anyMatch(p -> p.getEndsAt().isAfter(java.time.Instant.now())
+                        && p.getDiscountPerUnit() >= product.getPrice())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "활성 할인보다 낮은 가격으로 변경할 수 없습니다.");
+        }
 
         publishChanged(product);
         log.info("릴리스 공개 반영 productCode={} releaseId={} buildId={}",
@@ -163,7 +173,14 @@ public class ProductCommandService {
                         product.getCurrentBuildId(), product.getMetadataRevision(),
                         product.getProductKind(), product.getParentProductCode(),
                         product.getEditionName(), product.getBundleProductCodes(),
-                        com.stove.catalog.core.domain.ProductView.from(product).storefront(), version));
+                        com.stove.catalog.core.domain.ProductView.from(product).storefront(), version,
+                        promotionRepository.findByProductIdAndStoppedAtIsNull(product.getId()).stream()
+                                .map(com.stove.catalog.core.domain.Promotion::window).toList()));
+    }
+
+    @CacheEvict(cacheNames = "catalog:product", key = "#product.id")
+    public void promotionChanged(Product product) {
+        publishChanged(product);
     }
 
     private String serializeStorefront(com.stove.common.event.payload.StorefrontSnapshot storefront) {

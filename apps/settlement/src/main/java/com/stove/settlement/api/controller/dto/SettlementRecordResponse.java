@@ -12,6 +12,13 @@ public record SettlementRecordResponse(
         SaleType saleType,
         RecordType recordType,
         long grossAmount,
+        long paidAmount,
+        long listAmount,
+        long discountAmount,
+        long platformExpense,
+        Long promotionId,
+        String discountBearer,
+        String adjustmentForMonth,
         BigDecimal feeRate,
         long feeAmount,
         long netAmount,
@@ -22,6 +29,9 @@ public record SettlementRecordResponse(
         return new SettlementRecordResponse(
                 record.getOrderNo(), record.getProductId(), record.getSellerId(),
                 record.getSaleType(), record.getRecordType(), record.getGrossAmount(),
+                record.getPaidAmount(), record.getListAmount(), record.getDiscountAmount(),
+                record.getPlatformExpense(), record.getPromotionId(), record.getDiscountBearer(),
+                record.getAdjustmentForMonth(),
                 record.getFeeRate(), record.getFeeAmount(), record.getNetAmount(),
                 record.getSettlementMonth(), record.isClosed());
     }

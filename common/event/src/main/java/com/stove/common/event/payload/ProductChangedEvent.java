@@ -30,14 +30,15 @@ public record ProductChangedEvent(
         String editionName,
         List<String> bundleProductCodes,
         StorefrontSnapshot storefront,
-        long projectionVersion
+        long projectionVersion,
+        List<PromotionWindow> promotions
 ) implements DomainEvent {
 
     public static ProductChangedEvent of(Long productId, String productCode, String name, Long sellerId,
                                          long price, String currency, String status, String ratingCode) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
                 productId, productCode, name, sellerId, price, currency, status, ratingCode,
-                null, null, null, "BASIC", null, null, List.of(), null, 0);
+                null, null, null, "BASIC", null, null, List.of(), null, 0, List.of());
     }
 
     public static ProductChangedEvent ofRelease(
@@ -76,10 +77,23 @@ public record ProductChangedEvent(
             Long releaseId, Long buildId, Long metadataRevision,
             String productKind, String parentProductCode, String editionName,
             List<String> bundleProductCodes, StorefrontSnapshot storefront, long projectionVersion) {
+        return ofRelease(productId, productCode, name, sellerId, price, currency, status,
+                ratingCode, releaseId, buildId, metadataRevision, productKind, parentProductCode,
+                editionName, bundleProductCodes, storefront, projectionVersion, List.of());
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision,
+            String productKind, String parentProductCode, String editionName,
+            List<String> bundleProductCodes, StorefrontSnapshot storefront, long projectionVersion,
+            List<PromotionWindow> promotions) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
                 productId, productCode, name, sellerId, price, currency, status, ratingCode,
                 releaseId, buildId, metadataRevision, productKind, parentProductCode,
-                editionName, List.copyOf(bundleProductCodes), storefront, projectionVersion);
+                editionName, List.copyOf(bundleProductCodes), storefront, projectionVersion,
+                List.copyOf(promotions));
     }
 
     @Override

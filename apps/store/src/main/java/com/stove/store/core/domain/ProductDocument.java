@@ -1,6 +1,10 @@
 package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.PromotionWindow;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.payload.StorefrontSnapshot;
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +29,9 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 @Document(indexName = "stove-products")
 public class ProductDocument {
 
+    private static final ObjectMapper PROMOTION_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final TypeReference<List<PromotionWindow>> PROMOTION_TYPE = new TypeReference<>() {};
+
     @Id
     private String id;
 
@@ -40,6 +47,9 @@ public class ProductDocument {
 
     @Field(type = FieldType.Long)
     private Long price;
+
+    @Field(type = FieldType.Text, index = false)
+    private String promotionScheduleJson;
 
     @Field(type = FieldType.Keyword)
     private String currency;
@@ -90,6 +100,7 @@ public class ProductDocument {
                 .name(event.name())
                 .sellerId(event.sellerId())
                 .price(event.price())
+                .promotionScheduleJson(writePromotions(event.promotions()))
                 .currency(event.currency())
                 .status(event.status())
                 .visible(event.releaseId() != null && ("ON_SALE".equals(event.status())
@@ -106,6 +117,27 @@ public class ProductDocument {
                 .projectionVersion(event.projectionVersion())
                 .indexedAt(Instant.now())
                 .build();
+    }
+
+    public List<PromotionWindow> promotions() {
+        return parsePromotions(promotionScheduleJson);
+    }
+
+    public static List<PromotionWindow> parsePromotions(String json) {
+        if (json == null) return List.of();
+        try {
+            return PROMOTION_MAPPER.readValue(json, PROMOTION_TYPE);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("색인된 행사 일정을 읽을 수 없습니다.", e);
+        }
+    }
+
+    private static String writePromotions(List<PromotionWindow> promotions) {
+        try {
+            return PROMOTION_MAPPER.writeValueAsString(promotions == null ? List.of() : promotions);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("행사 일정을 색인할 수 없습니다.", e);
+        }
     }
 
     public boolean onSale() {

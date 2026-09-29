@@ -9,6 +9,8 @@ public interface SettlementRecordRepository extends JpaRepository<SettlementReco
 
     List<SettlementRecord> findByOrderNo(String orderNo);
 
+    List<SettlementRecord> findBySettlementMonth(String settlementMonth);
+
     List<SettlementRecord> findByOrderNoAndRecordType(String orderNo, RecordType recordType);
 
     List<SettlementRecord> findBySettlementMonthAndClosedIsFalse(String settlementMonth);

@@ -48,10 +48,12 @@ class ProductControllerTest {
     private final ProductQueryService productQueryService = mock(ProductQueryService.class);
     private final ProductCommandService productCommandService = mock(ProductCommandService.class);
     private final ProductReindexFacade productReindexFacade = mock(ProductReindexFacade.class);
+    private final com.stove.catalog.core.service.PromotionService promotionService =
+            mock(com.stove.catalog.core.service.PromotionService.class);
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new ProductController(
-                    productQueryService, productCommandService, productReindexFacade))
+                    productQueryService, productCommandService, productReindexFacade, promotionService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

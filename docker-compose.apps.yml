@@ -100,7 +100,9 @@ services:
     build: { context: ., dockerfile: apps/catalog/Dockerfile }
     image: stove/catalog
     expose: ["8081"]
-    environment: *common-env
+    environment:
+      <<: *common-env
+      STUDIO_URI: http://studio:8085
 
   store:
     <<: *app
@@ -153,7 +155,9 @@ services:
     build: { context: ., dockerfile: apps/settlement/Dockerfile }
     image: stove/settlement
     expose: ["8089"]
-    environment: *common-env
+    environment:
+      <<: *common-env
+      STUDIO_URI: http://studio:8085
 
 networks:
   stove:

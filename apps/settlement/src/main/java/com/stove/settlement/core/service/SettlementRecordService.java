@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.LinkedHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,7 +44,31 @@ public class SettlementRecordService {
         }
         YearMonth month = YearMonth.from(LocalDate.now());
 
+        LinkedHashMap<Long, OrderLine> consolidated = new LinkedHashMap<>();
         for (OrderLine line : lines) {
+            consolidated.merge(line.productId(), line, (left, right) -> {
+                if (!left.sellerId().equals(right.sellerId()) || left.unitPrice() != right.unitPrice()
+                        || left.listUnitPrice() != right.listUnitPrice()
+                        || left.discountPerUnit() != right.discountPerUnit()
+                        || !java.util.Objects.equals(left.promotionId(), right.promotionId())
+                        || !java.util.Objects.equals(left.discountBearer(), right.discountBearer())
+                        || (left.feeRate() == null) != (right.feeRate() == null)
+                        || (left.feeRate() != null && left.feeRate().compareTo(right.feeRate()) != 0)) {
+                    throw new IllegalArgumentException("A product has conflicting order price snapshots");
+                }
+                return new OrderLine(left.productId(), left.productName(), left.sellerId(),
+                        left.unitPrice(), Math.addExact(left.quantity(), right.quantity()),
+                        left.listUnitPrice(), left.discountPerUnit(), left.promotionId(),
+                        left.discountBearer(),
+                        left.settlementBasis() == null ? null
+                                : Math.addExact(left.settlementBasis(), right.settlementBasis()),
+                        left.feeRate(),
+                        left.feeAmount() == null ? null : Math.addExact(left.feeAmount(), right.feeAmount()),
+                        left.sellerPayout() == null ? null
+                                : Math.addExact(left.sellerPayout(), right.sellerPayout()));
+            });
+        }
+        for (OrderLine line : consolidated.values()) {
             if (recordRepository.existsByOrderNoAndProductIdAndRecordType(
                     orderNo, line.productId(), RecordType.SALE)) {
                 continue; // 이벤트 중복 수신
@@ -51,8 +76,7 @@ public class SettlementRecordService {
             SaleType saleType = feePolicy.saleTypeOf(line.sellerId());
             BigDecimal feeRate = feePolicy.feeRateOf(saleType);
 
-            recordRepository.save(SettlementRecord.sale(orderNo, line.productId(), line.sellerId(),
-                    saleType, line.lineAmount(), feeRate, month));
+            recordRepository.save(SettlementRecord.sale(orderNo, line, saleType, feeRate, month));
         }
         log.info("매출 집계 orderNo={} lines={}", orderNo, lines.size());
     }

@@ -1,6 +1,7 @@
 package com.stove.settlement.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
+import com.stove.common.event.payload.OrderLine;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -56,6 +57,27 @@ public class SettlementRecord extends BaseTimeEntity {
     @Column(nullable = false)
     private long grossAmount;
 
+    /** 고객 실결제액과 할인 부담의 불변 사본. REFUND에서는 모두 음수다. */
+    @Column(nullable = false)
+    private long paidAmount;
+
+    @Column(nullable = false)
+    private long listAmount;
+
+    @Column(nullable = false)
+    private long discountAmount;
+
+    @Column(nullable = false)
+    private long platformExpense;
+
+    private Long promotionId;
+
+    @Column(length = 20)
+    private String discountBearer;
+
+    @Column(length = 7)
+    private String adjustmentForMonth;
+
     @Column(nullable = false, precision = 5, scale = 4)
     private BigDecimal feeRate;
 
@@ -82,6 +104,8 @@ public class SettlementRecord extends BaseTimeEntity {
         this.saleType = saleType;
         this.recordType = recordType;
         this.grossAmount = grossAmount;
+        this.paidAmount = grossAmount;
+        this.listAmount = grossAmount;
         this.feeRate = feeRate;
         this.feeAmount = calculateFee(grossAmount, feeRate);
         this.netAmount = grossAmount - this.feeAmount;
@@ -95,10 +119,38 @@ public class SettlementRecord extends BaseTimeEntity {
                 grossAmount, feeRate, month.toString());
     }
 
+    public static SettlementRecord sale(String orderNo, OrderLine line, SaleType saleType,
+                                        BigDecimal feeRate, YearMonth month) {
+        boolean platform = "PLATFORM".equals(line.discountBearer());
+        long basis = line.settlementBasis() == null
+                ? (platform ? line.listAmount() : line.lineAmount()) : line.settlementBasis();
+        SettlementRecord record = sale(orderNo, line.productId(), line.sellerId(), saleType,
+                basis, line.feeRate() == null ? feeRate : line.feeRate(), month);
+        if (line.feeAmount() != null) {
+            record.feeAmount = line.feeAmount();
+            record.netAmount = line.sellerPayout();
+        }
+        record.paidAmount = line.lineAmount();
+        record.listAmount = line.listAmount();
+        record.discountAmount = line.discountAmount();
+        record.platformExpense = platform ? line.discountAmount() : 0;
+        record.promotionId = line.promotionId();
+        record.discountBearer = line.discountBearer();
+        return record;
+    }
+
     /** 환불 역산: 원 매출 레코드를 부호만 뒤집어 상계 처리한다. */
     public static SettlementRecord refundOf(SettlementRecord sale, YearMonth month) {
-        return new SettlementRecord(sale.orderNo, sale.productId, sale.sellerId, sale.saleType,
+        SettlementRecord record = new SettlementRecord(sale.orderNo, sale.productId, sale.sellerId, sale.saleType,
                 RecordType.REFUND, -sale.grossAmount, sale.feeRate, month.toString());
+        record.paidAmount = -sale.paidAmount;
+        record.listAmount = -sale.listAmount;
+        record.discountAmount = -sale.discountAmount;
+        record.platformExpense = -sale.platformExpense;
+        record.promotionId = sale.promotionId;
+        record.discountBearer = sale.discountBearer;
+        record.adjustmentForMonth = sale.closed ? sale.settlementMonth : null;
+        return record;
     }
 
     public void close() {

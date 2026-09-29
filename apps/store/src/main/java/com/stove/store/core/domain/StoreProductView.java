@@ -1,6 +1,7 @@
 package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.StorefrontSnapshot;
+import com.stove.common.event.payload.PromotionWindow;
 import java.io.Serializable;
 
 /**
@@ -14,7 +15,7 @@ public record StoreProductView(
         String productCode,
         String name,
         Long sellerId,
-        Long price,
+        Long listPrice,
         String currency,
         String status,
         boolean visible,
@@ -27,7 +28,8 @@ public record StoreProductView(
         String parentProductCode,
         String editionName,
         java.util.List<String> bundleProductCodes,
-        StorefrontSnapshot storefront
+        StorefrontSnapshot storefront,
+        String promotionScheduleJson
 ) implements Serializable {
 
     public static StoreProductView from(ProductDocument document) {
@@ -50,6 +52,30 @@ public record StoreProductView(
                 document.getEditionName(),
                 document.getBundleProductCodes() == null ? java.util.List.of()
                         : java.util.List.copyOf(document.getBundleProductCodes()),
-                document.getStorefront());
+                document.getStorefront(), document.getPromotionScheduleJson());
+    }
+
+    private PromotionWindow activePromotion() {
+        return ProductDocument.parsePromotions(promotionScheduleJson).stream()
+                .filter(p -> p.activeAt(java.time.Instant.now()))
+                .findFirst().orElse(null);
+    }
+
+    public Long price() {
+        PromotionWindow active = activePromotion();
+        return listPrice - (active == null ? 0 : active.discountPerUnit());
+    }
+
+    public Long discountAmount() {
+        PromotionWindow active = activePromotion();
+        return active == null ? 0L : active.discountPerUnit();
+    }
+    public Long promotionId() {
+        PromotionWindow active = activePromotion();
+        return active == null ? null : active.id();
+    }
+    public String discountBearer() {
+        PromotionWindow active = activePromotion();
+        return active == null ? null : active.bearer();
     }
 }

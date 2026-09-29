@@ -41,6 +41,25 @@ public class SellerSettlement extends BaseTimeEntity {
     @Column(nullable = false)
     private long netAmount;
 
+    /** 첫 마감 확정값과 후속 조정을 분리해 원 마감액을 보존한다. */
+    @Column(nullable = false)
+    private long baseGrossAmount;
+
+    @Column(nullable = false)
+    private long baseFeeAmount;
+
+    @Column(nullable = false)
+    private long baseNetAmount;
+
+    @Column(nullable = false)
+    private long adjustmentGrossAmount;
+
+    @Column(nullable = false)
+    private long adjustmentFeeAmount;
+
+    @Column(nullable = false)
+    private long adjustmentNetAmount;
+
     @Column(nullable = false)
     private int recordCount;
 
@@ -57,6 +76,9 @@ public class SellerSettlement extends BaseTimeEntity {
         this.grossAmount = grossAmount;
         this.feeAmount = feeAmount;
         this.netAmount = netAmount;
+        this.baseGrossAmount = grossAmount;
+        this.baseFeeAmount = feeAmount;
+        this.baseNetAmount = netAmount;
         this.recordCount = recordCount;
         this.taxInvoiceNo = taxInvoiceNo;
         this.closedAt = Instant.now();
@@ -80,6 +102,9 @@ public class SellerSettlement extends BaseTimeEntity {
         this.grossAmount += grossAmount;
         this.feeAmount += feeAmount;
         this.netAmount += netAmount;
+        this.adjustmentGrossAmount += grossAmount;
+        this.adjustmentFeeAmount += feeAmount;
+        this.adjustmentNetAmount += netAmount;
         this.recordCount += recordCount;
     }
 

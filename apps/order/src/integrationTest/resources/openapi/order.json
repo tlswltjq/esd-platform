@@ -222,6 +222,24 @@
       },
       "Line" : {
         "properties" : {
+          "discountBearer" : {
+            "type" : "string"
+          },
+          "discountPerUnit" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeRate" : {
+            "type" : "number"
+          },
+          "listUnitPrice" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "productId" : {
             "format" : "int64",
             "type" : "integer"
@@ -229,11 +247,23 @@
           "productName" : {
             "type" : "string"
           },
+          "promotionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "quantity" : {
             "format" : "int32",
             "type" : "integer"
           },
           "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sellerPayout" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementBasis" : {
             "format" : "int64",
             "type" : "integer"
           },

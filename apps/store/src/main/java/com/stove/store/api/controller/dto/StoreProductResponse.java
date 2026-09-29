@@ -22,7 +22,11 @@ public record StoreProductResponse(
         String parentProductCode,
         String editionName,
         List<String> bundleProductCodes,
-        StorefrontSnapshot storefront
+        StorefrontSnapshot storefront,
+        Long listPrice,
+        Long discountAmount,
+        Long promotionId,
+        String discountBearer
 ) {
     public static StoreProductResponse from(StoreProductView product) {
         return new StoreProductResponse(
@@ -42,6 +46,7 @@ public record StoreProductResponse(
                 product.productKind(),
                 product.parentProductCode(),
                 product.editionName(),
-                product.bundleProductCodes(), product.storefront());
+                product.bundleProductCodes(), product.storefront(), product.listPrice(),
+                product.discountAmount(), product.promotionId(), product.discountBearer());
     }
 }

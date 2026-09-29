@@ -54,6 +54,9 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/studio/ci/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/studio/assets/**").permitAll()
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")
+                        .pathMatchers("/api/v1/promotions/seller/**", "/api/v1/settlements/me/**")
+                        .hasRole("CREATOR")
+                        .pathMatchers("/api/v1/promotions/platform/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
                                 "/api/v1/downloads/**").hasRole("MEMBER")

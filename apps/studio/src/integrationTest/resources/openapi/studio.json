@@ -258,6 +258,21 @@
         },
         "type" : "object"
       },
+      "ApiResponseLong" : {
+        "properties" : {
+          "data" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProductFamilyResponse" : {
         "properties" : {
           "data" : {
@@ -3617,6 +3632,24 @@
           "oauth2" : [ "studio" ]
         } ],
         "tags" : [ "tester-controller" ]
+      }
+    },
+    "/api/v1/studio/workspace" : {
+      "get" : {
+        "operationId" : "own",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseLong"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "workspace-controller" ]
       }
     }
   }

@@ -94,6 +94,10 @@ class GatewayRouteTest {
             "GET,  /api/v1/library,             license",
             "POST, /api/v1/downloads/1,         download",
             "POST, /api/v1/studio/games,        studio",
+            "POST, /api/v1/promotions/seller/products/1, promotions",
+            "POST, /api/v1/promotions/platform/products/1, promotions",
+            "GET,  /api/v1/promotions/seller/products/1, promotions",
+            "GET,  /api/v1/settlements/me/ledger, settlement-admin",
             "POST, /api/v1/reviews/1/approve,   review-admin",
             "POST, /api/v1/settlements/close,   settlement-admin"
     })

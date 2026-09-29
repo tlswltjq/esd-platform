@@ -73,6 +73,10 @@ spring:
               predicates:
                 - Path=/api/v1/products/**
                 - Method=GET
+            - id: promotions
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/promotions/**
             - id: order
               uri: ${ORDER_URI:http://localhost:8082}
               predicates:

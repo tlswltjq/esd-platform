@@ -1,5 +1,7 @@
 package com.stove.order.core.domain;
 
+import com.stove.common.event.payload.OrderLine;
+import java.math.BigDecimal;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -42,15 +44,49 @@ public class OrderItem {
     private long unitPrice;
 
     @Column(nullable = false)
+    private long listUnitPrice;
+
+    @Column(nullable = false)
+    private long discountPerUnit;
+
+    private Long promotionId;
+
+    @Column(length = 20)
+    private String discountBearer;
+
+    private Long settlementBasis;
+
+    @Column(precision = 5, scale = 4)
+    private BigDecimal feeRate;
+
+    private Long feeAmount;
+
+    private Long sellerPayout;
+
+    @Column(nullable = false)
     private int quantity;
 
-    OrderItem(Order order, Long productId, String productName, Long sellerId, long unitPrice, int quantity) {
+    OrderItem(Order order, OrderLine line) {
         this.order = order;
-        this.productId = productId;
-        this.productName = productName;
-        this.sellerId = sellerId;
-        this.unitPrice = unitPrice;
-        this.quantity = quantity;
+        this.productId = line.productId();
+        this.productName = line.productName();
+        this.sellerId = line.sellerId();
+        this.unitPrice = line.unitPrice();
+        this.quantity = line.quantity();
+        this.listUnitPrice = line.listUnitPrice();
+        this.discountPerUnit = line.discountPerUnit();
+        this.promotionId = line.promotionId();
+        this.discountBearer = line.discountBearer();
+        this.settlementBasis = line.settlementBasis();
+        this.feeRate = line.feeRate();
+        this.feeAmount = line.feeAmount();
+        this.sellerPayout = line.sellerPayout();
+    }
+
+    public OrderLine toOrderLine() {
+        return new OrderLine(productId, productName, sellerId, unitPrice, quantity,
+                listUnitPrice, discountPerUnit, promotionId, discountBearer,
+                settlementBasis, feeRate, feeAmount, sellerPayout);
     }
 
     public long lineAmount() {
