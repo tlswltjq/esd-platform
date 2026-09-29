@@ -6,7 +6,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.e2e.E2eClient.Response;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -15,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -30,12 +36,15 @@ class TrackACreatorFlowTest {
     private static String machineCredential;
     private static long build1;
     private static long build2;
+    private static long malwareBuild;
     private static long metadataRevision;
     private static long pricingRevision;
     private static long ratingRevision;
     private static long release1;
     private static long p1MetadataRevision;
     private static long p1Submission;
+    private static String screenshotUrl;
+    private static String coverUrl;
 
     @Test
     @Order(1)
@@ -77,6 +86,9 @@ class TrackACreatorFlowTest {
         assertThat(credential.status()).as("%s", credential).isEqualTo(200);
         machineCredential = credential.data().path("token").asText();
         assertThat(machineCredential).startsWith("esd_ci_");
+
+        screenshotUrl = uploadImage("screenshot.png");
+        coverUrl = uploadImage("cover.png");
     }
 
     @Test
@@ -92,6 +104,7 @@ class TrackACreatorFlowTest {
     void rejectsMalwareBuild() throws Exception {
         byte[] artifact = malwareArtifact("0.0.1-malware-test");
         long buildId = uploadArtifact("0.0.1-malware-test", "malware", artifact);
+        malwareBuild = buildId;
         Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
 
         Await.untilResponse("malware rejection " + buildId,
@@ -105,11 +118,24 @@ class TrackACreatorFlowTest {
     @Order(4)
     @DisplayName("불변 revision을 제출하고 변경 요청 뒤 새 revision으로 재제출한다")
     void requestsChangesAndResubmits() {
+        Response missingAssets = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/store-page-revisions".formatted(Journey.gameId()), Map.of(
+                        "title", Journey.PRODUCT_TITLE, "shortDescription", "누락된 이미지",
+                        "platform", "WINDOWS", "minimumRequirements", "Windows 10"), Journey.asCreator());
+        assertThat(missingAssets.status()).as("%s", missingAssets).isEqualTo(400);
+        Response fakeAsset = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/store-page-revisions".formatted(Journey.gameId()), Map.of(
+                        "title", Journey.PRODUCT_TITLE, "shortDescription", "업로드하지 않은 이미지",
+                        "platform", "WINDOWS", "minimumRequirements", "Windows 10",
+                        "screenshots", List.of("https://cdn.example/missing.png"),
+                        "coverUrl", coverUrl), Journey.asCreator());
+        assertThat(fakeAsset.status()).as("%s", fakeAsset).isEqualTo(400);
         metadataRevision = revision("store-page-revisions", Map.of(
                 "title", Journey.PRODUCT_TITLE,
                 "shortDescription", "첫 심사용 소개",
                 "platform", "WINDOWS",
-                "minimumRequirements", "Windows 10"));
+                "minimumRequirements", "Windows 10",
+                "screenshots", List.of(screenshotUrl), "coverUrl", coverUrl));
         pricingRevision = revision("pricing-revisions", Map.of("price", PRICE));
         ratingRevision = ratingRevision(Map.of(
                 "violence", "NONE",
@@ -118,19 +144,44 @@ class TrackACreatorFlowTest {
                 "drugUse", false,
                 "cashGambling", false), "SELF_CLASSIFICATION", "ALL");
 
+        Response failedBuildSubmission = Stove.gateway.post(
+                "/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()), Map.of(
+                        "metadataRevisionId", metadataRevision,
+                        "pricingRevisionId", pricingRevision,
+                        "ratingRevisionId", ratingRevision,
+                        "buildId", malwareBuild), Journey.asCreator());
+        assertThat(failedBuildSubmission.status()).as("%s", failedBuildSubmission).isEqualTo(409);
+
         long firstSubmission = submit(build1, metadataRevision);
+        Response unapprovedRelease = Stove.gateway.post(
+                "/api/v1/studio/projects/submissions/%d/releases".formatted(firstSubmission),
+                null, Journey.asCreator());
+        assertThat(unapprovedRelease.status()).as("%s", unapprovedRelease).isEqualTo(409);
         long storeCase = reviewCase(firstSubmission, "STORE_PAGE");
         Response changes = Stove.gateway.post(
                 "/api/v1/reviews/cases/%d/changes-requested".formatted(storeCase),
                 Map.of("reasonCode", "METADATA", "feedback", "소개를 구체화해 주세요."),
                 Journey.asReviewer());
         assertThat(changes.status()).as("%s", changes).isEqualTo(200);
+        Await.untilResponse("creator review feedback " + firstSubmission,
+                () -> Stove.gateway.get(
+                        "/api/v1/studio/projects/submissions/%d/review-status".formatted(firstSubmission),
+                        Journey.asCreator()), response -> {
+                    JsonNode gate = itemByText(response.data().path("gates"), "reviewType", "STORE_PAGE");
+                    return gate != null && "CHANGES_REQUESTED".equals(gate.path("status").asText());
+                });
+        Response feedback = Stove.gateway.get(
+                "/api/v1/studio/projects/submissions/%d/review-status".formatted(firstSubmission),
+                Journey.asCreator());
+        assertThat(itemByText(feedback.data().path("gates"), "reviewType", "STORE_PAGE")
+                .path("feedback").asText()).isEqualTo("소개를 구체화해 주세요.");
 
         metadataRevision = revision("store-page-revisions", Map.of(
                 "title", Journey.PRODUCT_TITLE,
                 "shortDescription", "수정 완료된 게임 소개",
                 "platform", "WINDOWS",
-                "minimumRequirements", "Windows 10, 8GB RAM"));
+                "minimumRequirements", "Windows 10, 8GB RAM",
+                "screenshots", List.of(screenshotUrl), "coverUrl", coverUrl));
         long secondSubmission = submit(build1, metadataRevision);
         approveAll(secondSubmission);
         awaitReady(secondSubmission);
@@ -140,6 +191,18 @@ class TrackACreatorFlowTest {
                 null, Journey.asCreator());
         assertThat(release.status()).as("%s", release).isEqualTo(200);
         release1 = release.data().path("releaseId").asLong();
+        assertThat(Stove.gateway.get("/api/v1/studio/games", Journey.asCreator())
+                .itemWhere("productCode", PRODUCT_CODE).path("gameId").asLong()).isEqualTo(Journey.gameId());
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/store-page-revisions".formatted(Journey.gameId()),
+                Journey.asCreator()).data().size()).isGreaterThanOrEqualTo(2);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/pricing-revisions".formatted(Journey.gameId()),
+                Journey.asCreator()).data().size()).isGreaterThanOrEqualTo(1);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/rating-revisions".formatted(Journey.gameId()),
+                Journey.asCreator()).data().size()).isGreaterThanOrEqualTo(1);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/submissions".formatted(Journey.gameId()),
+                Journey.asCreator()).data().size()).isGreaterThanOrEqualTo(2);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/releases".formatted(Journey.gameId()),
+                Journey.asCreator()).data().size()).isGreaterThanOrEqualTo(1);
     }
 
     @Test
@@ -428,6 +491,58 @@ class TrackACreatorFlowTest {
         assertThat(cancelled.status()).as("%s", cancelled).isEqualTo(200);
     }
 
+    @Test
+    @Order(11)
+    @DisplayName("다른 창작자는 프로젝트 목록·이미지 업로드·심사 상태·출시 이력에 접근할 수 없다")
+    void rejectsOtherCreatorWorkspace() {
+        String email = "other-creator-" + Journey.STAMP + "@e2e.local";
+        String password = "other-creator-password-" + Journey.STAMP;
+        Response signup = Stove.auth.post("/api/v1/auth/signup", Map.of(
+                "email", email, "password", password));
+        assertThat(signup.status()).as("%s", signup).isEqualTo(200);
+        Map<String, String> other = Map.of("Authorization", "Bearer " + OidcLogin.token(email, password));
+        assertThat(Stove.gateway.get("/api/v1/studio/games", other).data()).isEmpty();
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/store-page-revisions"
+                .formatted(Journey.gameId()), other).status()).isEqualTo(403);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/releases"
+                .formatted(Journey.gameId()), other).status()).isEqualTo(403);
+        assertThat(Stove.gateway.get("/api/v1/studio/projects/submissions/%d/review-status"
+                .formatted(p1Submission), other).status()).isEqualTo(404);
+        assertThat(Stove.gateway.postFile("/api/v1/studio/projects/%d/assets".formatted(Journey.gameId()),
+                "foreign.png", "image/png", png(), other).status()).isEqualTo(403);
+    }
+
+    private String uploadImage(String filename) {
+        byte[] image = png();
+        Response upload = Stove.gateway.postFile(
+                "/api/v1/studio/projects/%d/assets".formatted(Journey.gameId()),
+                filename, "image/png", image, Journey.asCreator());
+        assertThat(upload.status()).as("%s", upload).isEqualTo(200);
+        String url = upload.data().path("url").asText();
+        assertThat(url).contains("/api/v1/studio/assets/" + Journey.gameId() + "/");
+        try {
+            HttpResponse<byte[]> downloaded = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NORMAL).build().send(
+                            HttpRequest.newBuilder(URI.create(url)).GET().build(),
+                            HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(downloaded.statusCode()).isEqualTo(200);
+            assertThat(downloaded.body()).isEqualTo(image);
+        } catch (Exception exception) {
+            throw new IllegalStateException("상점 공개 이미지 다운로드 실패", exception);
+        }
+        return url;
+    }
+
+    private static byte[] png() {
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB), "png", output);
+            return output.toByteArray();
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
     private long uploadBuild(String version, String buildNumber) throws Exception {
         byte[] artifact = artifact(version);
         long buildId = uploadArtifact(version, buildNumber, artifact);
@@ -562,10 +677,10 @@ class TrackACreatorFlowTest {
                 Map.entry("tags", List.of("CO_OP", "CONTROLLER")),
                 Map.entry("developer", "ESD Studio"),
                 Map.entry("publisher", "ESD Publishing"),
-                Map.entry("screenshots", List.of("https://cdn.example/screenshots/1.png")),
+                Map.entry("screenshots", List.of(screenshotUrl)),
                 Map.entry("trailers", List.of("https://cdn.example/trailers/1.mp4")),
-                Map.entry("iconUrl", "https://cdn.example/icons/game.png"),
-                Map.entry("coverUrl", "https://cdn.example/covers/game.png"),
+                Map.entry("iconUrl", coverUrl),
+                Map.entry("coverUrl", coverUrl),
                 Map.entry("supportedLanguages", List.of("ko-KR", "en-US")),
                 Map.entry("platform", "WINDOWS"),
                 Map.entry("minimumRequirements", "Windows 10, 8GB RAM"),

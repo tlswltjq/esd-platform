@@ -1,0 +1,9 @@
+{
+  "questionnaire": {
+    "violence": "NONE",
+    "sexualContent": "NONE",
+    "language": "NONE",
+    "drugUse": false,
+    "cashGambling": false
+  }
+}

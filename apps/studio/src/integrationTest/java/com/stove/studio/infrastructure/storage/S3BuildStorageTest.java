@@ -81,6 +81,22 @@ class S3BuildStorageTest {
         assertThat(ticket.uploadUrl()).contains("GAME-TEST-002/2.0.0/game.pak");
     }
 
+    @Test
+    @DisplayName("상점 이미지를 MinIO에 저장하고 공개 GET용 서명 URL로 읽는다")
+    void storesAndReadsStoreAsset() throws Exception {
+        byte[] image = "image bytes".getBytes(StandardCharsets.UTF_8);
+        String path = "s3://" + BUCKET + "/store-assets/17/asset.png";
+
+        storage.putAsset(path, image, "image/png");
+
+        assertThat(storage.head(path).size()).isEqualTo(image.length);
+        HttpResponse<byte[]> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create(storage.presignDownload(path))).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo(image);
+    }
+
     private byte[] readObject(String key) {
         try (S3Client client = S3Client.builder()
                 .endpointOverride(URI.create(MINIO.getS3URL()))

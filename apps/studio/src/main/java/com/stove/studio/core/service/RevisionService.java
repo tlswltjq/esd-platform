@@ -14,6 +14,7 @@ import com.stove.studio.core.domain.StorePageContent;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,11 +31,14 @@ public class RevisionService {
     private final RatingRevisionRepository ratingRepository;
     private final ObjectMapper objectMapper;
     private final KoreanRatingPolicy ratingPolicy;
+    private final StoreAssetService assetService;
 
     public StorePageRevision createStorePage(Long gameId, Long workspaceId, StorePageContent content,
                                              boolean draft) {
         projectService.requireOwned(gameId, workspaceId);
         validateStorePage(content);
+        if (!draft) assetService.validatePublished(gameId, content.screenshots(),
+                content.coverUrl(), content.iconUrl());
         int revision = storeRepository.findTopByGameIdOrderByRevisionNoDesc(gameId)
                 .map(value -> value.getRevisionNo() + 1).orElse(1);
         return storeRepository.save(StorePageRevision.create(gameId, revision, content,
@@ -53,6 +57,7 @@ public class RevisionService {
     public StorePageRevision publishStorePageDraft(Long gameId, Long revisionId, Long workspaceId) {
         projectService.requireOwned(gameId, workspaceId);
         StorePageRevision revision = requireOwnedRevision(gameId, revisionId);
+        validateSubmittedAssets(revision);
         revision.publish();
         return revision;
     }
@@ -61,6 +66,24 @@ public class RevisionService {
     public StorePageRevision previewStorePage(Long gameId, Long revisionId, Long workspaceId) {
         projectService.requireOwned(gameId, workspaceId);
         return requireOwnedRevision(gameId, revisionId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StorePageRevision> storePages(Long gameId, Long workspaceId) {
+        projectService.requireOwned(gameId, workspaceId);
+        return storeRepository.findByGameIdOrderByRevisionNoDesc(gameId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PricingRevision> pricings(Long gameId, Long workspaceId) {
+        projectService.requireOwned(gameId, workspaceId);
+        return pricingRepository.findByGameIdOrderByRevisionNoDesc(gameId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RatingRevision> ratings(Long gameId, Long workspaceId) {
+        projectService.requireOwned(gameId, workspaceId);
+        return ratingRepository.findByGameIdOrderByRevisionNoDesc(gameId);
     }
 
     public PricingRevision createPricing(Long gameId, Long workspaceId, long price) {
@@ -91,6 +114,17 @@ public class RevisionService {
                         "storePageRevisionId=" + revisionId));
     }
 
+    public void validateSubmittedAssets(StorePageRevision revision) {
+        try {
+            List<String> screenshots = objectMapper.readValue(revision.getScreenshotsJson(),
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            assetService.validatePublished(revision.getGameId(), screenshots,
+                    revision.getCoverUrl(), revision.getIconUrl());
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "상점 이미지 목록이 올바르지 않습니다.");
+        }
+    }
+
     private StorePageRevision.SerializedContent serialize(StorePageContent content) {
         try {
             return new StorePageRevision.SerializedContent(
@@ -109,9 +143,8 @@ public class RevisionService {
     }
 
     private void validateStorePage(StorePageContent content) {
-        requireHttps(content.screenshots());
         requireHttps(content.trailers());
-        requireHttps(java.util.Arrays.asList(content.iconUrl(), content.coverUrl(), content.supportUrl(),
+        requireHttps(java.util.Arrays.asList(content.supportUrl(),
                 content.privacyPolicyUrl(), content.eulaUrl()));
         boolean invalidCountry = content.salesCountries().stream()
                 .anyMatch(value -> value == null || !value.matches("[A-Z]{2}"));
