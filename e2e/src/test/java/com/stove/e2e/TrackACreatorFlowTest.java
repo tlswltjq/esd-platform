@@ -23,6 +23,7 @@ import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /** P0·P1 전체 경로: OIDC → CI 업로드 → 심사 → 채널별 출시 → rollback. */
@@ -50,7 +51,7 @@ class TrackACreatorFlowTest {
     @Order(1)
     @DisplayName("OIDC 가입·PKCE 로그인 후 개인 Workspace의 프로젝트를 만든다")
     void authenticatesAndCreatesProject() {
-        Response signup = Stove.auth.post("/api/v1/auth/signup", Map.of(
+        Response signup = Stove.gateway.post("/api/v1/auth/signup", Map.of(
                 "email", CREATOR_EMAIL, "password", CREATOR_PASSWORD));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
         creatorSubject = signup.data().path("subject").asText();
@@ -61,7 +62,7 @@ class TrackACreatorFlowTest {
         Journey.otherMember(signup.data().path("memberId").asLong(), creatorToken);
         String otherEmail = "customer-" + Journey.STAMP + "@e2e.local";
         String otherPassword = "customer-password-" + Journey.STAMP;
-        Response other = Stove.auth.post("/api/v1/auth/signup/member", Map.of(
+        Response other = Stove.gateway.post("/api/v1/auth/signup/member", Map.of(
                 "email", otherEmail, "password", otherPassword));
         assertThat(other.status()).as("%s", other).isEqualTo(200);
         Journey.member(other.data().path("memberId").asLong(),
@@ -446,6 +447,7 @@ class TrackACreatorFlowTest {
 
     @Test
     @Order(10)
+    @Tag("extended")
     @DisplayName("DEV→TEST→STAGE→LIVE 승격, 테스터 설치, 예약 변경·취소를 검증한다")
     void promotesChannelsAndManagesSchedule() {
         Response dev = Stove.gateway.post(
@@ -550,7 +552,7 @@ class TrackACreatorFlowTest {
     void rejectsOtherCreatorWorkspace() {
         String email = "other-creator-" + Journey.STAMP + "@e2e.local";
         String password = "other-creator-password-" + Journey.STAMP;
-        Response signup = Stove.auth.post("/api/v1/auth/signup", Map.of(
+        Response signup = Stove.gateway.post("/api/v1/auth/signup", Map.of(
                 "email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
         Map<String, String> other = Map.of("Authorization", "Bearer " + OidcLogin.token(email, password));
@@ -598,6 +600,10 @@ class TrackACreatorFlowTest {
 
     private long uploadBuild(String version, String buildNumber) throws Exception {
         byte[] artifact = artifact(version);
+        if ("1.0.0".equals(version)) {
+            Journey.buildChecksum(HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(artifact)));
+        }
         long buildId = uploadArtifact(version, buildNumber, artifact);
         Map<String, String> ci = Map.of("X-Project-Credential", machineCredential);
         Await.untilResponse("build validation " + buildId,

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.e2e.E2eClient.Response;
 import java.time.Instant;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -98,6 +97,7 @@ class PromotionOperationsE2eTest {
         displayedPrice(CHARGE);
 
         String orderNo = pay();
+        Journey.sellerPromotion(id, orderNo);
         var sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);
         assertThat(sale.path("grossAmount").asInt()).isEqualTo(CHARGE);
@@ -106,7 +106,8 @@ class PromotionOperationsE2eTest {
         assertThat(sale.path("feeAmount").asInt()).isEqualTo(CHARGE * PARTNER_FEE_RATE / 100);
         assertThat(sale.path("promotionId").asLong()).isEqualTo(id);
 
-        Response own = Stove.gateway.get("/api/v1/settlements/me/ledger?month=" + YearMonth.now(),
+        Response own = Stove.gateway.get("/api/v1/settlements/me/ledger?month="
+                        + sale.path("settlementMonth").asText(),
                 Journey.asCreator());
         assertThat(own.status()).as("%s", own).isEqualTo(200);
         assertThat(own.data().toString()).contains(orderNo);
@@ -123,6 +124,7 @@ class PromotionOperationsE2eTest {
         long id = created.data().path("id").asLong();
         displayedPrice(CHARGE);
         String orderNo = pay();
+        Journey.platformPromotion(id, orderNo);
         var sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);
         assertThat(sale.path("grossAmount").asInt()).isEqualTo(Journey.PRICE);
@@ -131,7 +133,7 @@ class PromotionOperationsE2eTest {
         assertThat(sale.path("promotionId").asLong()).isEqualTo(id);
         String sellerId = sale.path("sellerId").asText();
 
-        String month = YearMonth.now().toString();
+        String month = sale.path("settlementMonth").asText();
         Response closed = Stove.gateway.post("/api/v1/settlements/close?month=" + month,
                 null, Journey.asAdmin());
         assertThat(closed.status()).as("%s", closed).isEqualTo(200);

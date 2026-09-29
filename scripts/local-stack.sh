@@ -9,6 +9,8 @@ cd "$ROOT_DIR"
 
 INFRA=(docker compose -p stove -f docker-compose.yml)
 APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.e2e.yml)
+DEMO_INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml)
+DEMO_APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.ci.yml -f docker-compose.apps.e2e.yml)
 
 case "${1:-up}" in
   up)
@@ -18,6 +20,20 @@ case "${1:-up}" in
     ./gradlew bootJar -x test -x integrationTest --no-daemon
     "${APPS[@]}" up -d --build
     echo "로컬 스택이 시작되었습니다: http://127.0.0.1:18080/swagger-ui.html"
+    ;;
+  demo-up)
+    "${DEMO_INFRA[@]}" up -d
+    ./gradlew bootJar -x test -x integrationTest --no-daemon
+    "${DEMO_APPS[@]}" up -d --build
+    bash scripts/stack-wait.sh
+    ;;
+  demo-down)
+    "${DEMO_APPS[@]}" down
+    "${DEMO_INFRA[@]}" down
+    ;;
+  demo-status)
+    "${DEMO_INFRA[@]}" ps
+    "${DEMO_APPS[@]}" ps
     ;;
   down)
     "${APPS[@]}" down
@@ -35,7 +51,7 @@ case "${1:-up}" in
     "${APPS[@]}" logs -f "${2:-gateway}"
     ;;
   *)
-    echo "사용법: $0 {up|down|restart|ps|logs [서비스]}" >&2
+    echo "사용법: $0 {up|down|restart|ps|logs [서비스]|demo-up|demo-down|demo-status}" >&2
     exit 2
     ;;
 esac

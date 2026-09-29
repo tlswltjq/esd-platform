@@ -46,7 +46,7 @@ tasks.register('e2eTest', Test) {
     // 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 같은 리포트에 같은 모양으로 남는다.
     // 실행 정책을 필요 자원으로 가르는 이 저장소의 규칙 그대로다(루트 build.gradle) —
     // 저 장이 요구하는 자원은 '망가뜨려도 되는 스택' 이라 e2e 와도 다르다.
-    useJUnitPlatform { excludeTags 'chaos' }
+    useJUnitPlatform { excludeTags 'chaos', 'api-demo' }
 
     endpoints.each { name ->
         systemProperty "stove.e2e.${name}",
@@ -98,6 +98,39 @@ tasks.register('e2eTest', Test) {
                 println '  (0건이다. 통과가 아니라 미실행이다 — 클래스패스와 필터를 확인한다)'
             }
             println '════════════════════════════════'
+        }
+    }
+}
+
+// Issue #81: public API journey plus one sanitized evidence record per run.
+// The extended release-operations test calls catalog's internal-only endpoints,
+// so it remains in e2eTest and is excluded from this public API demo.
+tasks.register('apiDemoTest', Test) {
+    group = 'verification'
+    description = '공개 API 전체 데모를 실행하고 실행별 식별자·금액 증거를 남긴다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { excludeTags 'chaos', 'extended' }
+    endpoints.each { name ->
+        systemProperty "stove.e2e.${name}",
+                providers.systemProperty("stove.e2e.${name}").getOrElse('')
+    }
+    systemProperty 'stove.e2e.report', providers.systemProperty('stove.e2e.report').getOrElse('')
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging {
+        events 'passed', 'failed'
+        exceptionFormat = 'full'
+        showStandardStreams = true
+    }
+    afterSuite { desc, result ->
+        if (desc.parent == null) {
+            println "  API demo ${result.testCount}건 — 통과 ${result.successfulTestCount}" +
+                    " / 실패 ${result.failedTestCount} / 건너뜀 ${result.skippedTestCount}"
+            if (result.testCount != 57 || result.skippedTestCount != 0) {
+                throw new GradleException("API demo expected 57 executed checks with no skips")
+            }
         }
     }
 }

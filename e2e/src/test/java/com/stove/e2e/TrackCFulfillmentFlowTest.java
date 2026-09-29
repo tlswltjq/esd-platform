@@ -10,7 +10,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
@@ -98,12 +104,20 @@ class TrackCFulfillmentFlowTest {
     @Test
     @Order(5)
     @DisplayName("download: 티켓에 서명 URL 이 들어 있다")
-    void ticketCarriesSignedUrl() {
+    void ticketCarriesSignedUrl() throws Exception {
         Response response = Stove.gateway.get(TICKET, Journey.asMember(MEMBER));
 
-        assertThat(response.data().path("downloadUrl").asText())
+        String signedUrl = response.data().path("downloadUrl").asText();
+        assertThat(signedUrl)
                 .as("서명 URL 이 없으면 티켓은 발급됐어도 받을 수가 없다 — %s", response)
                 .isNotBlank();
+        HttpResponse<byte[]> downloaded = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create(signedUrl)).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(downloaded.statusCode()).isEqualTo(200);
+        assertThat(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(downloaded.body()))).isEqualTo(Journey.buildChecksum());
+        Journey.downloadVerified();
     }
 
     @Test
