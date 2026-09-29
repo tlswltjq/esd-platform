@@ -1,5 +1,6 @@
 package com.stove.store.core.domain;
 
+import com.stove.common.event.payload.StorefrontSnapshot;
 import java.io.Serializable;
 
 /**
@@ -15,6 +16,9 @@ public record StoreProductView(
         Long sellerId,
         Long price,
         String currency,
+        String status,
+        boolean visible,
+        boolean purchasable,
         String ratingCode,
         Long releaseId,
         Long buildId,
@@ -22,7 +26,8 @@ public record StoreProductView(
         String productKind,
         String parentProductCode,
         String editionName,
-        java.util.List<String> bundleProductCodes
+        java.util.List<String> bundleProductCodes,
+        StorefrontSnapshot storefront
 ) implements Serializable {
 
     public static StoreProductView from(ProductDocument document) {
@@ -33,6 +38,9 @@ public record StoreProductView(
                 document.getSellerId(),
                 document.getPrice(),
                 document.getCurrency(),
+                document.getStatus(),
+                Boolean.TRUE.equals(document.getVisible()),
+                document.getReleaseId() != null && "ON_SALE".equals(document.getStatus()),
                 document.getRatingCode(),
                 document.getReleaseId(),
                 document.getBuildId(),
@@ -41,6 +49,7 @@ public record StoreProductView(
                 document.getParentProductCode(),
                 document.getEditionName(),
                 document.getBundleProductCodes() == null ? java.util.List.of()
-                        : java.util.List.copyOf(document.getBundleProductCodes()));
+                        : java.util.List.copyOf(document.getBundleProductCodes()),
+                document.getStorefront());
     }
 }

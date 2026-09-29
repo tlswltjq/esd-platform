@@ -185,6 +185,10 @@ class TrackACreatorFlowTest {
         long secondSubmission = submit(build1, metadataRevision);
         approveAll(secondSubmission);
         awaitReady(secondSubmission);
+        assertThat(Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE).status())
+                .isEqualTo(404);
+        assertThat(Stove.gateway.get("/api/v1/storefront/products?q=" + Journey.STAMP)
+                .itemWhere("productCode", PRODUCT_CODE).isMissingNode()).isTrue();
 
         Response release = Stove.gateway.post(
                 "/api/v1/studio/projects/submissions/%d/releases".formatted(secondSubmission),
@@ -221,6 +225,17 @@ class TrackACreatorFlowTest {
                 () -> Stove.gateway.get("/api/v1/storefront/products?q=" + Journey.STAMP),
                 response -> response.itemWhere("productCode", PRODUCT_CODE)
                         .path("releaseId").asLong() == release1);
+        Response publicDetail = Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE);
+        assertThat(publicDetail.status()).as("%s", publicDetail).isEqualTo(200);
+        assertThat(publicDetail.data().path("visible").asBoolean()).isTrue();
+        assertThat(publicDetail.data().path("purchasable").asBoolean()).isTrue();
+        assertThat(publicDetail.data().path("price").asLong()).isEqualTo(PRICE);
+        assertThat(publicDetail.data().path("currency").asText()).isEqualTo("KRW");
+        assertThat(publicDetail.data().path("ratingCode").asText()).isEqualTo("ALL");
+        assertThat(publicDetail.data().path("storefront").path("shortDescription").asText())
+                .isEqualTo("수정 완료된 게임 소개");
+        assertThat(publicDetail.data().path("storefront").path("screenshots").get(0).asText())
+                .isEqualTo(screenshotUrl);
         Await.untilResponse("download release projection",
                 () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE), Journey.asMember(Journey.MEMBER)),
                 response -> itemByLong(response.data(), "releaseId", release1) != null);
@@ -252,6 +267,10 @@ class TrackACreatorFlowTest {
 
         Await.untilResponse("rollback projection",
                 () -> Stove.gateway.get("/api/v1/products/by-code/" + PRODUCT_CODE),
+                response -> response.data().path("releaseId").asLong() == rollbackRelease
+                        && response.data().path("buildId").asLong() == build1);
+        Await.untilResponse("rollback storefront projection",
+                () -> Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE),
                 response -> response.data().path("releaseId").asLong() == rollbackRelease
                         && response.data().path("buildId").asLong() == build1);
         Await.untilResponse("rollback manifest",
@@ -452,6 +471,40 @@ class TrackACreatorFlowTest {
         Response live = promote(stage.data().path("releaseId").asLong(), "LIVE");
         assertThat(live.data().path("status").asText()).isEqualTo("PUBLISHED");
         assertThat(live.data().path("changeType").asText()).isEqualTo("MATERIAL_CHANGE");
+        long liveReleaseId = live.data().path("releaseId").asLong();
+        Await.untilResponse("rich storefront projection",
+                () -> Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE),
+                response -> response.status() == 200
+                        && response.data().path("releaseId").asLong() == liveReleaseId
+                        && "수정한 출시용 상세 소개".equals(response.data().path("storefront")
+                                .path("detailedDescription").asText()));
+        Response detail = Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE);
+        assertThat(detail.data().path("storefront").path("localizations").path("en-US")
+                .path("title").asText()).isEqualTo(Journey.PRODUCT_TITLE + " EN");
+        assertThat(detail.data().path("storefront").path("coverUrl").asText()).isEqualTo(coverUrl);
+        assertThat(detail.data().path("storefront").path("supportedLanguages").get(1).asText())
+                .isEqualTo("en-US");
+        assertThat(detail.data().path("storefront").path("minimumRequirements").asText())
+                .isEqualTo("Windows 10, 8GB RAM");
+
+        Response suspended = Stove.catalog.post(
+                "/api/v1/products/%d/suspend".formatted(Journey.productId()), null, Journey.asAdmin());
+        assertThat(suspended.status()).as("%s", suspended).isEqualTo(200);
+        Await.untilResponse("suspended storefront remains visible",
+                () -> Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE),
+                response -> "SUSPENDED".equals(response.data().path("status").asText())
+                        && !response.data().path("purchasable").asBoolean());
+        Map<String, Object> quoteBody = Map.of("items", List.of(Map.of(
+                "productId", Journey.productId(), "quantity", 1)));
+        assertThat(Stove.catalog.post("/api/v1/products/quote", quoteBody).errorCode())
+                .isEqualTo("PRODUCT_NOT_ON_SALE");
+        Response resumed = Stove.catalog.post(
+                "/api/v1/products/%d/sale-open".formatted(Journey.productId()), null, Journey.asAdmin());
+        assertThat(resumed.status()).as("%s", resumed).isEqualTo(200);
+        Await.untilResponse("resumed storefront is purchasable",
+                () -> Stove.gateway.get("/api/v1/storefront/products/" + PRODUCT_CODE),
+                response -> response.data().path("purchasable").asBoolean());
+        assertThat(Stove.catalog.post("/api/v1/products/quote", quoteBody).status()).isEqualTo(200);
 
         Response revoked = Stove.gateway.post(
                 "/api/v1/studio/projects/%d/testers/%d/revoke".formatted(Journey.gameId(), grantId),

@@ -1,5 +1,8 @@
 package com.stove.catalog.core.domain;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.payload.StorefrontSnapshot;
 import java.util.List;
 
 /**
@@ -28,8 +31,11 @@ public record ProductView(
         String productKind,
         String parentProductCode,
         String editionName,
-        List<String> bundleProductCodes
+        List<String> bundleProductCodes,
+        StorefrontSnapshot storefront
 ) {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     public static ProductView from(Product product) {
         return new ProductView(
                 product.getId(),
@@ -47,6 +53,24 @@ public record ProductView(
                 product.getProductKind(),
                 product.getParentProductCode(),
                 product.getEditionName(),
-                List.copyOf(product.getBundleProductCodes()));
+                List.copyOf(product.getBundleProductCodes()), readStorefront(product.getStorefrontSnapshotJson()));
+    }
+
+    public boolean purchasable() {
+        return releaseId != null && status.purchasable();
+    }
+
+    public boolean visible() {
+        return releaseId != null && (status == ProductStatus.ON_SALE
+                || status == ProductStatus.APPROVED || status == ProductStatus.SUSPENDED);
+    }
+
+    private static StorefrontSnapshot readStorefront(String json) {
+        if (json == null) return null;
+        try {
+            return MAPPER.readValue(json, StorefrontSnapshot.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("저장된 상점 스냅샷이 올바르지 않습니다.", exception);
+        }
     }
 }

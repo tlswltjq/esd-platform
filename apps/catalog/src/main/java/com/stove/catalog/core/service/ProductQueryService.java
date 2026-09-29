@@ -65,10 +65,11 @@ public class ProductQueryService {
     }
 
     private ProductView publishedView(Product product) {
-        if (product.getCurrentReleaseId() == null) {
+        ProductView view = ProductView.from(product);
+        if (!view.visible()) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        return ProductView.from(product);
+        return view;
     }
 
     /**

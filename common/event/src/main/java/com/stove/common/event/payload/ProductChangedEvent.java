@@ -28,14 +28,16 @@ public record ProductChangedEvent(
         String productKind,
         String parentProductCode,
         String editionName,
-        List<String> bundleProductCodes
+        List<String> bundleProductCodes,
+        StorefrontSnapshot storefront,
+        long projectionVersion
 ) implements DomainEvent {
 
     public static ProductChangedEvent of(Long productId, String productCode, String name, Long sellerId,
                                          long price, String currency, String status, String ratingCode) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
                 productId, productCode, name, sellerId, price, currency, status, ratingCode,
-                null, null, null, "BASIC", null, null, List.of());
+                null, null, null, "BASIC", null, null, List.of(), null, 0);
     }
 
     public static ProductChangedEvent ofRelease(
@@ -52,10 +54,32 @@ public record ProductChangedEvent(
             Long releaseId, Long buildId, Long metadataRevision,
             String productKind, String parentProductCode, String editionName,
             List<String> bundleProductCodes) {
+        return ofRelease(productId, productCode, name, sellerId, price, currency, status,
+                ratingCode, releaseId, buildId, metadataRevision, productKind,
+                parentProductCode, editionName, bundleProductCodes, null);
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision,
+            String productKind, String parentProductCode, String editionName,
+            List<String> bundleProductCodes, StorefrontSnapshot storefront) {
+        return ofRelease(productId, productCode, name, sellerId, price, currency, status,
+                ratingCode, releaseId, buildId, metadataRevision, productKind,
+                parentProductCode, editionName, bundleProductCodes, storefront, 0);
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision,
+            String productKind, String parentProductCode, String editionName,
+            List<String> bundleProductCodes, StorefrontSnapshot storefront, long projectionVersion) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
                 productId, productCode, name, sellerId, price, currency, status, ratingCode,
                 releaseId, buildId, metadataRevision, productKind, parentProductCode,
-                editionName, List.copyOf(bundleProductCodes));
+                editionName, List.copyOf(bundleProductCodes), storefront, projectionVersion);
     }
 
     @Override

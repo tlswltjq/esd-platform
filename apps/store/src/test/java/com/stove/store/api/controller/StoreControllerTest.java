@@ -36,7 +36,7 @@ class StoreControllerTest {
         mockMvc.perform(get("/api/v1/storefront/products"))
                 .andExpect(status().isOk());
 
-        verify(storeService).search(null, 0, 20);
+        verify(storeService).search(null, 0, 20, "PRICE_ASC");
     }
 
     @Test
@@ -48,7 +48,16 @@ class StoreControllerTest {
                         .param("size", "50"))
                 .andExpect(status().isOk());
 
-        verify(storeService).search("게임", 2, 50);
+        verify(storeService).search("게임", 2, 50, "PRICE_ASC");
+    }
+
+    @Test
+    void searchPassesSort() throws Exception {
+        mockMvc.perform(get("/api/v1/storefront/products")
+                        .param("sort", "NEWEST"))
+                .andExpect(status().isOk());
+
+        verify(storeService).search(null, 0, 20, "NEWEST");
     }
 
     @Test

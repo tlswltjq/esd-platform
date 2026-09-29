@@ -1,6 +1,7 @@
 package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.StorefrontSnapshot;
 import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -46,6 +47,9 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String status;
 
+    @Field(type = FieldType.Boolean)
+    private Boolean visible;
+
     @Field(type = FieldType.Keyword)
     private String ratingCode;
 
@@ -70,6 +74,12 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private List<String> bundleProductCodes;
 
+    @Field(type = FieldType.Object)
+    private StorefrontSnapshot storefront;
+
+    @Field(type = FieldType.Long)
+    private long projectionVersion;
+
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
     private Instant indexedAt;
 
@@ -82,6 +92,8 @@ public class ProductDocument {
                 .price(event.price())
                 .currency(event.currency())
                 .status(event.status())
+                .visible(event.releaseId() != null && ("ON_SALE".equals(event.status())
+                        || "APPROVED".equals(event.status()) || "SUSPENDED".equals(event.status())))
                 .ratingCode(event.ratingCode())
                 .releaseId(event.releaseId())
                 .buildId(event.buildId())
@@ -90,6 +102,8 @@ public class ProductDocument {
                 .parentProductCode(event.parentProductCode())
                 .editionName(event.editionName())
                 .bundleProductCodes(event.bundleProductCodes())
+                .storefront(event.storefront())
+                .projectionVersion(event.projectionVersion())
                 .indexedAt(Instant.now())
                 .build();
     }

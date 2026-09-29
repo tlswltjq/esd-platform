@@ -6,6 +6,9 @@ import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.BuildVariant;
 import com.stove.common.event.payload.ReleaseRolledBackEvent;
 import com.stove.common.event.payload.ReleaseScheduledEvent;
+import com.stove.common.event.payload.StorefrontSnapshot;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.studio.core.domain.GameBuild;
 import com.stove.studio.core.domain.GameBuildRepository;
@@ -47,6 +50,7 @@ public class ReleaseService {
     private final OutboxRecorder outboxRecorder;
     private final AuditLogService auditLogService;
     private final ReleaseSmokeTestService smokeTestService;
+    private final ObjectMapper objectMapper;
 
     public Release create(Long submissionId, Long workspaceId, Instant publishAt) {
         return create(submissionId, workspaceId, publishAt, "system:legacy");
@@ -196,7 +200,7 @@ public class ReleaseService {
                 family.parent() == null ? null : family.parent().getProductCode(),
                 project.getEditionName(),
                 family.components().stream().map(GameProject::getProductCode).toList(),
-                builds.stream().map(ReleaseService::variant).toList()));
+                builds.stream().map(ReleaseService::variant).toList(), storefront(metadata)));
         auditLogService.record(actor, "RELEASE_PUBLISHED", "Release", release.getId(),
                 "buildId=" + build.getId() + ",submissionId=" + submission.getId());
     }
@@ -212,6 +216,27 @@ public class ReleaseService {
         return new BuildVariant(build.getId(), build.getPlatform(), build.getArchitecture(),
                 build.getVersion(), build.getFileSize(), build.getActualChecksum(),
                 build.getStoragePath(), build.getDeltaFromVersion());
+    }
+
+    private StorefrontSnapshot storefront(StorePageRevision page) {
+        try {
+            var localizedType = objectMapper.getTypeFactory().constructMapType(
+                    java.util.Map.class, String.class, StorefrontSnapshot.LocalizedContent.class);
+            var stringsType = objectMapper.getTypeFactory().constructCollectionType(List.class, String.class);
+            return new StorefrontSnapshot(page.getTitle(), page.getShortDescription(),
+                    page.getDetailedDescription(), objectMapper.readValue(page.getLocalizationsJson(), localizedType),
+                    objectMapper.readValue(page.getGenresJson(), stringsType),
+                    objectMapper.readValue(page.getTagsJson(), stringsType), page.getDeveloper(),
+                    page.getPublisher(), objectMapper.readValue(page.getScreenshotsJson(), stringsType),
+                    objectMapper.readValue(page.getTrailersJson(), stringsType), page.getIconUrl(),
+                    page.getCoverUrl(), objectMapper.readValue(page.getSupportedLanguagesJson(), stringsType),
+                    page.getPlatform(), page.getMinimumRequirements(), page.getRecommendedRequirements(),
+                    objectMapper.readValue(page.getFeaturesJson(), stringsType), page.getSupportUrl(),
+                    page.getPrivacyPolicyUrl(), page.getEulaUrl(),
+                    objectMapper.readValue(page.getSalesCountriesJson(), stringsType));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("승인된 상점 revision을 읽을 수 없습니다.", exception);
+        }
     }
 
     private ReleaseChangeType classify(Submission submission, Release previous) {

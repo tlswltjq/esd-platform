@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +78,13 @@ public class Product extends BaseTimeEntity {
 
     @Column(length = 100)
     private String editionName;
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String storefrontSnapshotJson;
+
+    @Column(nullable = false)
+    private long projectionVersion;
 
     @ElementCollection
     @CollectionTable(name = "product_bundle_component", joinColumns = @JoinColumn(name = "product_id"))
@@ -143,8 +151,18 @@ public class Product extends BaseTimeEntity {
         }
     }
 
+    public void applyStorefront(String snapshotJson) {
+        storefrontSnapshotJson = snapshotJson;
+    }
+
+    public long advanceProjectionVersion() {
+        return ++projectionVersion;
+    }
+
     /** review 승인 이벤트 수신 시 호출. 심의 결과를 반영하고 판매 가능 상태로 올린다. */
     public void applyReviewApproval(String ratingCode) {
+        // 새 심사 결과는 다음 ReleasePublished 전까지 현재 공개 스냅샷을 바꾸지 않는다.
+        if (currentReleaseId != null) return;
         this.ratingCode = ratingCode;
         if (this.status == ProductStatus.DRAFT || this.status == ProductStatus.REVIEWING) {
             this.status = ProductStatus.APPROVED;

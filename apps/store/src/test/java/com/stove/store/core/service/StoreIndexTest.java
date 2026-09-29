@@ -18,23 +18,17 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 
 /**
- * 색인 동기화의 의미론. <b>마지막에 쓴 것이 이긴다(last-writer-wins).</b>
+ * 색인 동기화의 의미론. 버전이 있는 이벤트는 늦게 도착한 옛 상태를 건너뛴다.
  *
- * <p>{@code indexProduct} 는 버전 검사 없는 통짜 upsert 다. 문서 ID 가 productId 로 고정이라
- * 중복 수신에는 강하지만, <b>순서가 뒤집힌 수신에는 무방비</b>다 —
- * 나중에 도착한 옛 상태가 최신 상태를 덮어쓴다.
- *
- * <p>{@code ProductChangedEvent} 에는 버전도 시퀀스도 없어서 서비스 단독으로는 판별할 수 없다.
- * 즉 <b>이 코드의 정확성은 전적으로 상류의 순서 보장에 기대고 있다</b> —
- * 프로듀서 멱등성, 릴레이의 키 웨이브(D-013 · D-014), 컨슈머 단일 스레드.
- * 그 의존을 테스트로 고정해 둔다. 상류가 무너지면 여기서 무슨 일이 벌어지는지가
- * 검색 결과에서 상품이 사라지는 형태로 나타난다(docs/event-ordering.md 4절 시나리오 A).
+ * <p>기존 버전 0 이벤트에는 호환을 위해 통짜 upsert를 적용한다. 새 이벤트에는
+ * catalog가 증가시키는 projectionVersion이 있어 중복과 순서 역전을 막는다.
  *
  * <p>ES 를 띄우지 않는다. 확인하려는 것은 검색 엔진 동작이 아니라
  * <b>문서 ID 가 고정이라 덮어쓰기가 된다</b>는 색인 의미론이다.
@@ -55,25 +49,32 @@ class StoreIndexTest {
             index.put(document.getId(), document);
             return document;
         });
-        when(repository.findByStatusOrderByPriceAsc(anyString(), any(Pageable.class)))
-                .thenAnswer(invocation -> byStatus(invocation.getArgument(0)));
-        when(repository.findByStatusAndNameContaining(anyString(), anyString(), any(Pageable.class)))
-                .thenAnswer(invocation -> byStatus(invocation.<String>getArgument(0)).stream()
-                        .filter(document -> document.getName().contains(invocation.<String>getArgument(1)))
+        when(repository.findById(anyString()))
+                .thenAnswer(invocation -> Optional.ofNullable(index.get(invocation.getArgument(0))));
+        when(repository.findByProductCode(anyString()))
+                .thenAnswer(invocation -> index.values().stream()
+                        .filter(document -> document.getProductCode().equals(invocation.getArgument(0)))
+                        .findFirst());
+        when(repository.findByVisibleTrue(any(Pageable.class)))
+                .thenAnswer(invocation -> visible());
+        when(repository.findByVisibleTrueAndNameContaining(anyString(), any(Pageable.class)))
+                .thenAnswer(invocation -> visible().stream()
+                        .filter(document -> document.getName().contains(invocation.<String>getArgument(0)))
                         .toList());
 
         storeService = new StoreService(repository);
     }
 
-    private List<ProductDocument> byStatus(String status) {
+    private List<ProductDocument> visible() {
         return index.values().stream()
-                .filter(document -> status.equals(document.getStatus()))
+                .filter(document -> Boolean.TRUE.equals(document.getVisible()))
                 .sorted(Comparator.comparingLong(ProductDocument::getPrice))
                 .toList();
     }
 
     private static ProductChangedEvent product(String status, long price) {
-        return ProductChangedEvent.of(1L, "GAME-001", "게임 A", 1001L, price, "KRW", status, "ALL");
+        return ProductChangedEvent.ofRelease(1L, "GAME-001", "게임 A", 1001L, price, "KRW",
+                status, "ALL", "APPROVED".equals(status) ? null : 10L, 20L, 1L);
     }
 
     @Test
@@ -100,11 +101,34 @@ class StoreIndexTest {
     }
 
     @Test
+    void releasedDemoIsVisibleButNotPurchasable() {
+        storeService.indexProduct(ProductChangedEvent.ofRelease(
+                3L, "DEMO-001", "게임 A 체험판", 1001L, 0L, "KRW",
+                "APPROVED", "ALL", 11L, 20L, 1L,
+                "DEMO", "GAME-001", null, List.of()));
+
+        StoreProductView view = storeService.detail("DEMO-001");
+        assertThat(view.visible()).isTrue();
+        assertThat(view.purchasable()).isFalse();
+        assertThat(storeService.search("체험판", 0, 10)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("판매중이 아닌 상품은 검색에서 빠진다")
     void nonSaleProductIsNotSearchable() {
         storeService.indexProduct(product("APPROVED", 30_000L));
 
         assertThat(storeService.search(null, 0, 10)).isEmpty();
+    }
+
+    @Test
+    void suspendedReleaseRemainsVisibleButCannotBePurchased() {
+        storeService.indexProduct(product("SUSPENDED", 30_000L));
+
+        StoreProductView detail = storeService.detail("GAME-001");
+        assertThat(detail.status()).isEqualTo("SUSPENDED");
+        assertThat(detail.purchasable()).isFalse();
+        assertThat(storeService.search(null, 0, 10)).hasSize(1);
     }
 
     @Test
@@ -145,6 +169,11 @@ class StoreIndexTest {
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
 
         assertThatThrownBy(() -> storeService.search(null, 0, 0))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+
+        assertThatThrownBy(() -> storeService.search(null, 0, 10, "INVALID"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -189,5 +218,24 @@ class StoreIndexTest {
         assertThat(storeService.search(null, 0, 10))
                 .as("옛 상태가 최신 상태를 덮어쓴다")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("버전이 있는 색인 이벤트는 중복과 이전 상태의 지연 도착을 무시한다")
+    void versionedEventRejectsDuplicateAndStaleProjection() {
+        storeService.indexProduct(versioned("APPROVED", 0L, 1));
+        storeService.indexProduct(versioned(ON_SALE, 30_000L, 2));
+        storeService.indexProduct(versioned("APPROVED", 0L, 1));
+        storeService.indexProduct(versioned(ON_SALE, 99_000L, 2));
+
+        assertThat(index).hasSize(1);
+        assertThat(storeService.detail("GAME-001").price()).isEqualTo(30_000L);
+        assertThat(storeService.search(null, 0, 10)).hasSize(1);
+    }
+
+    private static ProductChangedEvent versioned(String status, long price, long version) {
+        return ProductChangedEvent.ofRelease(1L, "GAME-001", "게임 A", 1001L, price, "KRW",
+                status, "ALL", "APPROVED".equals(status) ? null : 10L, 20L, 1L,
+                "BASIC", null, null, List.of(), null, version);
     }
 }
