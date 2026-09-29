@@ -66,6 +66,11 @@ public class MockBuildStorage implements BuildStorage {
     }
 
     @Override
+    public void putAsset(String storagePath, byte[] content, String contentType) {
+        log.info("[MOCK S3] 상점 이미지 저장 {} bytes={}", storagePath, content.length);
+    }
+
+    @Override
     public void abortMultipart(String storagePath, String storageUploadId) {
         log.info("[MOCK S3] multipart 중단 {}", storagePath);
     }

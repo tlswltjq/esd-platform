@@ -158,6 +158,12 @@ public class ReleaseService {
         return release;
     }
 
+    @Transactional(readOnly = true)
+    public List<Release> findByGame(Long gameId, Long workspaceId) {
+        projectService.requireOwned(gameId, workspaceId);
+        return releaseRepository.findByGameIdAndWorkspaceIdOrderByIdDesc(gameId, workspaceId);
+    }
+
     private void publish(Release release, Submission submission, GameProject project, String actor) {
         List<GameBuild> builds = buildsFor(submission);
         GameBuild build = builds.get(0);

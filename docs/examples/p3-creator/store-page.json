@@ -1,0 +1,11 @@
+{
+  "title": "P3 Creator Demo",
+  "shortDescription": "창작자 API로 등록한 Windows 게임",
+  "detailedDescription": "실제 이미지와 검증된 ZIP 빌드를 사용한 데모입니다.",
+  "platform": "WINDOWS",
+  "minimumRequirements": "Windows 10, 8GB RAM",
+  "screenshots": ["__SCREENSHOT_URL__"],
+  "coverUrl": "__COVER_URL__",
+  "salesCountries": ["KR"],
+  "prices": {"KRW": 14900}
+}

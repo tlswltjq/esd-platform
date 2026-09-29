@@ -6,6 +6,11 @@ spring:
   application:
     name: studio
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
   security:
     oauth2:
       resourceserver:
@@ -56,6 +61,8 @@ spring:
       observation-enabled: true
 
 stove:
+  asset:
+    public-base-url: ${STUDIO_ASSET_PUBLIC_BASE_URL:http://localhost:8080}
   # 빌드 바이너리 저장소. mock = 경로만 발급, s3 = MinIO/S3 presigned PUT
   storage:
     provider: ${STORAGE_PROVIDER:mock}

@@ -29,6 +29,9 @@ public interface BuildStorage {
 
     String presignDownload(String storagePath);
 
+    /** 검증된 작은 상점 이미지의 원본을 저장한다. */
+    void putAsset(String storagePath, byte[] content, String contentType);
+
     void abortMultipart(String storagePath, String storageUploadId);
 
     void delete(String storagePath);

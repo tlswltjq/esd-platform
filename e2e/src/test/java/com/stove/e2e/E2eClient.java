@@ -41,8 +41,10 @@ public final class E2eClient {
     private static final HttpClient RAW_HTTP = HttpClient.newHttpClient();
 
     private final RestClient http;
+    private final String baseUrl;
 
     public E2eClient(String baseUrl) {
+        this.baseUrl = baseUrl;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
         // 스택이 응답하지 않는 것을 영원히 기다리지 않는다. 전파 대기는 Await 가 폴링으로 하고,
         // 한 번의 호출이 오래 걸리는 것은 그 자체로 신호다.
@@ -87,6 +89,31 @@ public final class E2eClient {
             return new Response(response.statusCode(), read(response.body()), headers);
         } catch (Exception exception) {
             throw new IllegalStateException("PUT 요청을 보내지 못했다", exception);
+        }
+    }
+
+    public Response postFile(String path, String filename, String contentType, byte[] body,
+                             Map<String, String> headers) {
+        String boundary = "esd-" + java.util.UUID.randomUUID();
+        byte[] prefix = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
+                + "Content-Type: " + contentType + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] suffix = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] multipart = new byte[prefix.length + body.length + suffix.length];
+        System.arraycopy(prefix, 0, multipart, 0, prefix.length);
+        System.arraycopy(body, 0, multipart, prefix.length, body.length);
+        System.arraycopy(suffix, 0, multipart, prefix.length + body.length, suffix.length);
+        try {
+            var builder = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipart));
+            headers.forEach(builder::header);
+            HttpResponse<byte[]> response = RAW_HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpHeaders responseHeaders = new HttpHeaders();
+            response.headers().map().forEach(responseHeaders::put);
+            return new Response(response.statusCode(), read(response.body()), responseHeaders);
+        } catch (Exception exception) {
+            throw new IllegalStateException("파일 업로드 요청을 보내지 못했다", exception);
         }
     }
 

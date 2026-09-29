@@ -46,6 +46,7 @@ services:
   studio:
     ports: ["127.0.0.1:18085:8085"]
     environment:
+      STUDIO_ASSET_PUBLIC_BASE_URL: http://127.0.0.1:18080
       STORAGE_PRESIGN_ENDPOINT: http://127.0.0.1:19000
       STOVE_DOCS_OAUTH_AUTHORIZATION_URL: /oauth2/authorize
       STOVE_DOCS_OAUTH_TOKEN_URL: /oauth2/token

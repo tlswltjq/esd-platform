@@ -1,6 +1,7 @@
 package com.stove.studio.config;
 
 import java.util.List;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -23,6 +24,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/v1/studio/ci/oidc/exchange").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/studio/assets/**").permitAll()
                         .requestMatchers("/api/v1/studio/ci/**").hasRole("CI")
                         .requestMatchers("/api/v1/studio/tester/**").hasAnyRole("TESTER", "CREATOR")
                         .requestMatchers("/api/v1/studio/**").hasRole("CREATOR")

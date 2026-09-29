@@ -50,6 +50,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
                         // 프로젝트 자격증명은 Studio가 해시 조회·범위 검증한다.
                         .pathMatchers("/api/v1/studio/ci/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/studio/assets/**").permitAll()
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")
                         .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
