@@ -13,7 +13,6 @@ import java.util.List;
  * 서버가 catalog 에서 재계산한 금액과 다르면 409(PRICE_MISMATCH)로 거절한다.
  */
 public record CreateOrderRequest(
-        @NotNull Long memberId,
         @NotEmpty @Valid List<Item> items,
         Long expectedAmount
 ) {

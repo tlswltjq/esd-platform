@@ -7,20 +7,20 @@ export const CATALOG_URL = __ENV.CATALOG_URL || 'http://localhost:8081';
 /** V2__seed_products.sql 의 ON_SALE 상품. APPROVED 인 3번은 주문이 거절되므로 뺀다. */
 export const ON_SALE_PRODUCT_IDS = [1, 2];
 
-export const JSON_HEADERS = { 'Content-Type': 'application/json' };
+export const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${__ENV.MEMBER_TOKEN || ''}`,
+};
 
 /**
  * 주문 페이로드.
  *
- * <p>memberId 를 VU 마다 흩뿌리는 이유는 두 가지다.
- * 한 회원에 주문이 몰리면 조회 인덱스가 한쪽으로 쏠려 현실과 달라지고,
- * 무엇보다 Outbox 파티션 키(주문번호)의 분산을 실제와 비슷하게 유지해야
- * 릴레이 처리량 측정이 의미를 갖는다.
+ * <p>소유자는 요청 본문이 아니라 MEMBER_TOKEN의 서명된 member_id다.
+ * 여러 회원의 분포가 필요한 측정은 서로 다른 토큰으로 별도 회차를 돌린다.
  */
 export function orderPayload() {
   const productId = ON_SALE_PRODUCT_IDS[Math.floor(Math.random() * ON_SALE_PRODUCT_IDS.length)];
   return JSON.stringify({
-    memberId: 1000 + Math.floor(Math.random() * 100000),
     items: [{ productId, quantity: 1 }],
   });
 }

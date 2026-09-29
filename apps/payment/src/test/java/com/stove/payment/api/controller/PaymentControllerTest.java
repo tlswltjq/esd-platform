@@ -18,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -39,6 +40,7 @@ class PaymentControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new PaymentController(paymentService, refundFacade, paymentCallbackFacade))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

@@ -32,6 +32,7 @@
 # (이걸 모르고 REVOKE 만 걸었다가 프로브가 200 을 내는 걸 보고 알았다. 프로브가 없었으면
 #  "장애를 견뎠다"고 적을 뻔했다.)
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/commerce-auth.sh"
 
 MYSQL_CONTAINER=${MYSQL_CONTAINER:-stove-mysql}
 MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root1234}
@@ -57,14 +58,17 @@ kill_license_connections() {
 
 # 프로브: license 가 자기 원장을 읽을 수 있는가. 200 이면 살아 있고 500 이면 끊겨 있다.
 probe_license() {
-    curl -s -o /dev/null -w '%{http_code}' -m 5 "$LICENSE_URL/api/v1/library" -H 'X-Member-Id: 1' 2>/dev/null
+    require_member_token
+    curl -s -o /dev/null -w '%{http_code}' -m 5 "$LICENSE_URL/api/v1/library" \
+        -H "Authorization: Bearer $MEMBER_TOKEN" 2>/dev/null
 }
 
 # 대조 프로브: 장애가 다른 서비스로 번지지 않았는가. 번졌으면 그 회차의 숫자는 못 쓴다.
 probe_order() {
+    require_member_token
     curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST "${ORDER_URL:-http://localhost:8082}/api/v1/orders" \
-        -H 'Content-Type: application/json' \
-        -d '{"memberId":999999,"items":[{"productId":1,"quantity":1}]}' 2>/dev/null
+        -H 'Content-Type: application/json' -H "Authorization: Bearer $MEMBER_TOKEN" \
+        -d '{"items":[{"productId":1,"quantity":1}]}' 2>/dev/null
 }
 
 # 커넥션이 새로 서고 권한이 반영될 때까지 기다린다. 고정 sleep 은 짧으면 거짓 판정이고 길면 낭비다.

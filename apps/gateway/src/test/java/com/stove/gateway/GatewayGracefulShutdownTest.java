@@ -16,6 +16,10 @@ import org.springframework.boot.web.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+import static org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers.pathMatchers;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.server.RequestPredicates;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -98,6 +102,13 @@ class GatewayGracefulShutdownTest {
     /** 이 라우트는 테스트 컨텍스트에만 있다. "진행 중" 을 만들려고 운영 코드를 늘리지 않는다. */
     @Configuration(proxyBeanMethods = false)
     static class SlowEndpoint {
+
+        @Bean
+        @Order(0)
+        SecurityWebFilterChain probeSecurity(ServerHttpSecurity http) {
+            return http.securityMatcher(pathMatchers(PROBE)).authorizeExchange(exchanges -> exchanges
+                    .anyExchange().permitAll()).build();
+        }
 
         @Bean
         RouterFunction<ServerResponse> shutdownProbe() {

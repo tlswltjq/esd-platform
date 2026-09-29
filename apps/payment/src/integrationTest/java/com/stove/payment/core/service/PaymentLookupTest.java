@@ -67,6 +67,17 @@ class PaymentLookupTest {
     }
 
     @Test
+    @DisplayName("다른 회원은 주문번호를 알아도 결제를 조회할 수 없다")
+    void anotherMemberCannotReadPayment() {
+        String orderNo = readyPayment(10_000L);
+        assertThatThrownBy(() -> paymentService.getPaymentForMember(orderNo, 43L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.FORBIDDEN);
+        assertThat(paymentService.getPaymentForMember(orderNo, 42L).getOrderNo()).isEqualTo(orderNo);
+    }
+
+    @Test
     @DisplayName("없는 주문번호는 빈 값이 아니라 예외다 — 미결제와 구분되어야 한다")
     void unknownOrderNoThrows() {
         String never = "ORD-" + UUID.randomUUID();

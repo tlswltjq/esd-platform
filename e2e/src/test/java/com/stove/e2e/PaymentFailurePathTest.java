@@ -40,9 +40,8 @@ class PaymentFailurePathTest {
     @DisplayName("order: 실패 검증용 주문을 새로 만든다")
     void createsOrderForFailure() {
         Response response = Stove.gateway.post("/api/v1/orders", Map.of(
-                "memberId", MEMBER,
                 "items", List.of(Map.of("productId", Journey.productId(), "quantity", 1)),
-                "expectedAmount", PRICE));
+                "expectedAmount", PRICE), Journey.asMember(MEMBER));
 
         assertThat(response.status()).as("%s", response).isEqualTo(200);
         Journey.failOrderNo(response.data().path("orderNo").asText());
@@ -53,7 +52,7 @@ class PaymentFailurePathTest {
     @DisplayName("payment: 결제 대기를 만든다 (OrderCreated 관통)")
     void createsPendingPayment() {
         Await.untilResponse("payment 결제 대기 생성(3-B)",
-                () -> Stove.gateway.get("/api/v1/payments/" + Journey.failOrderNo()),
+                () -> Stove.gateway.get("/api/v1/payments/" + Journey.failOrderNo(), Journey.asMember(MEMBER)),
                 r -> "READY".equals(r.data().path("status").asText()));
     }
 
@@ -67,7 +66,8 @@ class PaymentFailurePathTest {
     @DisplayName("payment: PG 에 사전등록하고 거래번호를 받는다")
     void preparesPayment() {
         Response response = Stove.gateway.post(
-                "/api/v1/payments/%s/prepare".formatted(Journey.failOrderNo()), Map.of("method", "CARD"));
+                "/api/v1/payments/%s/prepare".formatted(Journey.failOrderNo()), Map.of("method", "CARD"),
+                Journey.asMember(MEMBER));
 
         assertThat(response.status()).as("%s", response).isEqualTo(200);
         assertThat(response.data().path("pgTxId").asText()).isNotBlank();
@@ -98,7 +98,7 @@ class PaymentFailurePathTest {
     @Order(6)
     @DisplayName("payment: 상태가 FAILED 로 확정된다")
     void settlesAsFailed() {
-        Response response = Stove.gateway.get("/api/v1/payments/" + Journey.failOrderNo());
+        Response response = Stove.gateway.get("/api/v1/payments/" + Journey.failOrderNo(), Journey.asMember(MEMBER));
 
         assertThat(response.data().path("status").asText()).as("%s", response).isEqualTo("FAILED");
     }

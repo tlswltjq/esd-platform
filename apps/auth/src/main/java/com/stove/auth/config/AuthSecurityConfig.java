@@ -5,8 +5,11 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.stove.auth.core.domain.UserAccountRepository;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -63,9 +66,9 @@ public class AuthSecurityConfig {
     @Bean
     @Order(2)
     SecurityFilterChain applicationSecurityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup"))
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member"))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/auth/signup", "/actuator/health", "/actuator/metrics/**",
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member", "/actuator/health", "/actuator/metrics/**",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(Customizer.withDefaults())
@@ -96,7 +99,7 @@ public class AuthSecurityConfig {
             @Value("${stove.auth.swagger-redirect-uris:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}")
             List<String> swaggerRedirectUris) {
         JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcOperations);
-        RegisteredClient studioWeb = RegisteredClient.withId("studio-web")
+        RegisteredClient.Builder studioWeb = RegisteredClient.withId("studio-web")
                 .clientId("studio-web")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
@@ -105,6 +108,7 @@ public class AuthSecurityConfig {
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope("studio")
+                .scope("commerce")
                 .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
@@ -113,9 +117,8 @@ public class AuthSecurityConfig {
                         .accessTokenTimeToLive(Duration.ofMinutes(15))
                         .refreshTokenTimeToLive(Duration.ofDays(7))
                         .reuseRefreshTokens(false)
-                        .build())
-                .build();
-        saveIfAbsent(repository, studioWeb);
+                        .build());
+        saveOrUpgrade(repository, jdbcOperations, studioWeb.build());
 
         RegisteredClient.Builder swagger = RegisteredClient.withId("swagger-ui")
                 .clientId("swagger-ui")
@@ -124,6 +127,7 @@ public class AuthSecurityConfig {
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope("studio")
+                .scope("commerce")
                 .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
@@ -133,12 +137,24 @@ public class AuthSecurityConfig {
                         .build());
         swaggerRedirectUris.stream().map(String::trim).filter(value -> !value.isBlank())
                 .forEach(swagger::redirectUri);
-        saveIfAbsent(repository, swagger.build());
+        saveOrUpgrade(repository, jdbcOperations, swagger.build());
         return repository;
     }
 
-    private void saveIfAbsent(JdbcRegisteredClientRepository repository, RegisteredClient client) {
-        if (repository.findByClientId(client.getClientId()) != null) {
+    private void saveOrUpgrade(JdbcRegisteredClientRepository repository, JdbcOperations jdbcOperations,
+                               RegisteredClient client) {
+        RegisteredClient existing = repository.findByClientId(client.getClientId());
+        if (existing != null) {
+            Set<String> scopes = new LinkedHashSet<>(existing.getScopes());
+            scopes.addAll(client.getScopes());
+            Set<String> redirects = new LinkedHashSet<>(existing.getRedirectUris());
+            redirects.addAll(client.getRedirectUris());
+            if (!scopes.equals(existing.getScopes()) || !redirects.equals(existing.getRedirectUris())) {
+                jdbcOperations.update("UPDATE oauth2_registered_client SET scopes = ? WHERE client_id = ?",
+                        String.join(",", scopes), client.getClientId());
+                jdbcOperations.update("UPDATE oauth2_registered_client SET redirect_uris = ? WHERE client_id = ?",
+                        String.join(",", redirects), client.getClientId());
+            }
             return;
         }
         try {
@@ -180,10 +196,14 @@ public class AuthSecurityConfig {
     }
 
     @Bean
-    OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+    OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserAccountRepository accounts) {
         return context -> {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 context.getClaims().audience(java.util.List.of("esd-api"));
+                Long memberId = accounts.findBySubject(context.getPrincipal().getName())
+                        .orElseThrow(() -> new IllegalStateException("Unknown token subject"))
+                        .getId();
+                context.getClaims().claim("member_id", memberId);
                 context.getClaims().claim("roles", context.getPrincipal().getAuthorities().stream()
                         .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
                         .filter(role -> !role.startsWith("SCOPE_"))

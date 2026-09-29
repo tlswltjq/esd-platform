@@ -1676,6 +1676,7 @@
           "authorizationCode" : {
             "authorizationUrl" : "/oauth2/authorize",
             "scopes" : {
+              "commerce" : "구매·정산 API",
               "openid" : "사용자 식별",
               "profile" : "기본 프로필",
               "studio" : "크리에이터·심사 API"

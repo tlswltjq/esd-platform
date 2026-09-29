@@ -1,5 +1,6 @@
 dependencies {
     implementation project(':common:web')
+    implementation project(':common:security')
     implementation project(':common:messaging')
 
     // 월 마감 배치의 단일 실행 보장. 인스턴스가 여러 대면 같은 달 마감이 동시에 돈다

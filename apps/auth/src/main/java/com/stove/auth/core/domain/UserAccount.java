@@ -58,7 +58,11 @@ public class UserAccount extends BaseTimeEntity {
     }
 
     public static UserAccount creator(String email, String passwordHash) {
-        return new UserAccount(email, passwordHash, Set.of(PlatformRole.CREATOR));
+        return new UserAccount(email, passwordHash, Set.of(PlatformRole.MEMBER, PlatformRole.CREATOR));
+    }
+
+    public static UserAccount member(String email, String passwordHash) {
+        return new UserAccount(email, passwordHash, Set.of(PlatformRole.MEMBER));
     }
 
     public static UserAccount withRoles(String email, String passwordHash, Set<PlatformRole> roles) {

@@ -91,7 +91,8 @@ class PaymentCheckoutWindowTest {
     }
 
     private void approve(String orderNo) {
-        paymentCallbackFacade.approve(new PgApproval(orderNo, "PG-TX-" + orderNo, AMOUNT, "IDEM-" + orderNo));
+        String pgTxId = paymentRepository.findByOrderNo(orderNo).orElseThrow().getPgTxId();
+        paymentCallbackFacade.approve(new PgApproval(orderNo, pgTxId, AMOUNT, "IDEM-" + orderNo));
     }
 
     private List<String> eventTypesOf(String orderNo) {
@@ -125,7 +126,8 @@ class PaymentCheckoutWindowTest {
         // 거절(예외)이 아니라 취소로 끝난다. 승인이 없었던 것처럼 두면 PG 에만 거래가 남는다.
         assertThat(paymentRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.CANCELED);
-        verify(pgClient).cancel(eq("PG-TX-" + orderNo), eq(AMOUNT), eq(PaymentService.CHECKOUT_EXPIRED));
+        String pgTxId = paymentRepository.findByOrderNo(orderNo).orElseThrow().getPgTxId();
+        verify(pgClient).cancel(eq(pgTxId), eq(AMOUNT), eq(PaymentService.CHECKOUT_EXPIRED));
     }
 
     /**

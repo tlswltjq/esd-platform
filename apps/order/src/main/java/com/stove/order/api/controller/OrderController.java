@@ -1,6 +1,8 @@
 package com.stove.order.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
+import com.stove.common.security.CommerceIdentity;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import com.stove.order.api.application.PlaceOrderFacade;
 import com.stove.order.api.controller.dto.CreateOrderRequest;
 import com.stove.order.api.controller.dto.OrderResponse;
@@ -13,16 +15,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * memberId 는 실제로는 게이트웨이가 검증한 토큰에서 주입된다.
- * 스켈레톤에서는 헤더/파라미터로 대체한다.
- */
 @RestController
+@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/orders")
 public class OrderController {
@@ -32,29 +32,31 @@ public class OrderController {
     private final OrderCommandService orderCommandService;
 
     @PostMapping
-    public ApiResponse<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
+    public ApiResponse<OrderResponse> create(@AuthenticationPrincipal Jwt jwt,
+                                              @Valid @RequestBody CreateOrderRequest request) {
         return ApiResponse.ok(OrderResponse.from(placeOrderFacade.place(
-                request.memberId(), request.toQuoteItems(), request.expectedAmount())));
+                CommerceIdentity.memberId(jwt), request.toQuoteItems(), request.expectedAmount())));
     }
 
     @GetMapping("/{orderNo}")
     public ApiResponse<OrderResponse> get(@PathVariable String orderNo,
-                                          @RequestHeader("X-Member-Id") Long memberId) {
-        return ApiResponse.ok(OrderResponse.from(orderQueryService.getOrder(orderNo, memberId)));
+                                          @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(OrderResponse.from(orderQueryService.getOrder(
+                orderNo, CommerceIdentity.memberId(jwt))));
     }
 
     @GetMapping
-    public ApiResponse<List<OrderResponse>> myOrders(@RequestHeader("X-Member-Id") Long memberId) {
-        return ApiResponse.ok(orderQueryService.getMyOrders(memberId).stream()
+    public ApiResponse<List<OrderResponse>> myOrders(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(orderQueryService.getMyOrders(CommerceIdentity.memberId(jwt)).stream()
                 .map(OrderResponse::from)
                 .toList());
     }
 
     @PostMapping("/{orderNo}/cancel")
     public ApiResponse<Void> cancel(@PathVariable String orderNo,
-                                    @RequestHeader("X-Member-Id") Long memberId,
+                                    @AuthenticationPrincipal Jwt jwt,
                                     @RequestParam(defaultValue = "USER_CANCEL") String reason) {
-        orderCommandService.cancelOrder(orderNo, memberId, reason);
+        orderCommandService.cancelOrder(orderNo, CommerceIdentity.memberId(jwt), reason);
         return ApiResponse.ok();
     }
 }

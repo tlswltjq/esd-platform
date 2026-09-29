@@ -21,6 +21,7 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.domain.PaymentPreparation;
+import com.stove.payment.core.domain.PaymentAuditLogRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgApproval;
@@ -53,6 +54,8 @@ class PaymentCancelTest {
     RefundFacade refundFacade;
     @Autowired
     PaymentRepository paymentRepository;
+    @Autowired
+    PaymentAuditLogRepository auditLogs;
     @Autowired
     OutboxEventRepository outboxEventRepository;
     @Autowired
@@ -112,6 +115,21 @@ class PaymentCancelTest {
 
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
         verify(pgClient).cancel(anyString(), anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("다른 회원의 환불은 거부하고 소유자의 요청과 완료는 감사 로그에 남긴다")
+    void onlyOwnerCanRefundAndActionsAreAudited() {
+        String orderNo = paidOrder(30_000L);
+        assertThatThrownBy(() -> refundFacade.refundForMember(orderNo, 43L, "USER_REFUND"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PAID);
+        assertThat(auditLogs.countByOrderNoAndAction(orderNo, "REFUND_REQUESTED")).isZero();
+
+        refundFacade.refundForMember(orderNo, 42L, "USER_REFUND");
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.CANCELED);
+        assertThat(auditLogs.countByOrderNoAndAction(orderNo, "REFUND_REQUESTED")).isEqualTo(1);
+        assertThat(auditLogs.countByOrderNoAndAction(orderNo, "REFUND_COMPLETED")).isEqualTo(1);
     }
 
     @Test

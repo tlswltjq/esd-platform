@@ -199,13 +199,14 @@ class ServiceOutageChaosTest {
     void downloadServesFromItsOwnCopy() {
         String unknownProduct = "GAME-CHAOS-" + System.currentTimeMillis();
 
-        Response manifests = Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(unknownProduct));
+        Response manifests = Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(unknownProduct),
+                Journey.asMember(Journey.MEMBER));
         assertThat(manifests.status())
                 .as("소유 검사가 없는 조회가 막히면 Mongo 경로 자체가 장애에 딸려간 것이다 — %s", manifests)
                 .isEqualTo(200);
 
         Response ticket = Stove.gateway.get("/api/v1/downloads/%s/ticket".formatted(unknownProduct),
-                Map.of("X-Member-Id", "999999"));
+                Journey.asMember(Journey.MEMBER));
         assertThat(ticket.status())
                 .as("""
                         없는 상품에는 404 가 정답이다. 5xx 나 무응답이면 판정 경로가

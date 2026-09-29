@@ -195,6 +195,9 @@ CREATED ──PaymentCompleted──▶ PAID
 | GET | `/api/v1/orders` | 내 주문 목록 |
 | POST | `/api/v1/orders/{orderNo}/cancel` | 결제 전 취소 |
 
+모든 주문 API는 Bearer access token을 요구한다. 회원 ID는 토큰의 `member_id`에서 읽고,
+주문번호의 소유권을 서비스에서 확인한다. 주문 생성 본문에 `memberId`를 넣지 않는다.
+
 **이벤트** — 수신 `PaymentCompleted`·`PaymentCancelled` / 발행 `OrderCreated`·`OrderCanceled`
 
 **규칙**
@@ -226,6 +229,9 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 | POST | `/api/v1/payments/{orderNo}/prepare` | PG 사전등록 → 결제창 URL |
 | POST | `/api/v1/payments/callback` | PG 승인 콜백 수신 |
 | POST | `/api/v1/payments/{orderNo}/cancel` | 환불 |
+
+결제 조회·사전등록·환불은 Bearer access token과 주문 소유권 검사가 필요하다. PG 콜백은
+사용자 토큰 대신 원문 HMAC 서명을 검증한다. 자세한 계약은 [커머스 보안](p3-commerce-security.md)에 있다.
 
 **이벤트** — 수신 `OrderCreated`·`LicenseIssueFailed` / 발행 `PaymentCompleted`·`PaymentCancelled`
 

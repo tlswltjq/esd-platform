@@ -119,6 +119,20 @@ class PaymentGateTest {
     }
 
     @Test
+    @DisplayName("사전등록한 거래와 다른 승인 콜백을 거부한다")
+    void approvalForAnotherPgTransactionIsRejected() {
+        String orderNo = readyPayment(30_000L);
+        PaymentPreparation prepared = paymentService.prepare(orderNo, "CARD");
+
+        assertThatThrownBy(() -> paymentService.handleApproval(new PgApproval(
+                orderNo, prepared.pgTxId() + "-other", 30_000L, "PGKEY-" + UUID.randomUUID())))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).errorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TX_MISMATCH);
+        assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
     @DisplayName("[게이트 3] 과다결제도 거부된다 — 더 낸 돈은 정산이 설명할 수 없다")
     void overpaymentIsRejectedWithMismatchCode() {
         String orderNo = readyPayment(30_000L);

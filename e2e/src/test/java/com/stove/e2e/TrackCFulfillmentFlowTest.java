@@ -38,7 +38,7 @@ class TrackCFulfillmentFlowTest {
     }
 
     private static Response ledger() {
-        return Stove.gateway.get("/api/v1/settlements/orders/" + Journey.orderNo());
+        return Stove.gateway.get("/api/v1/settlements/orders/" + Journey.orderNo(), Journey.asAdmin());
     }
 
     /**
@@ -178,7 +178,8 @@ class TrackCFulfillmentFlowTest {
     @DisplayName("payment: 환불하면 PaymentCancelled 가 나간다")
     void cancelsPayment() {
         Response response = Stove.gateway.post(
-                "/api/v1/payments/%s/cancel?reason=E2E_REFUND".formatted(Journey.orderNo()), null);
+                "/api/v1/payments/%s/cancel?reason=E2E_REFUND".formatted(Journey.orderNo()), null,
+                Journey.asMember(MEMBER));
 
         assertThat(response.status()).as("%s", response).isEqualTo(200);
     }

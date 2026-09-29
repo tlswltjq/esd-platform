@@ -1,5 +1,6 @@
 dependencies {
     implementation project(':common:web')
+    implementation project(':common:security')
     implementation project(':common:messaging')
 
     // 중단된 환불 재개의 단일 실행 보장. 인스턴스가 여러 대면 같은 CANCELING 행을 동시에 집어
@@ -9,4 +10,8 @@ dependencies {
     implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.0'
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
+}
+
+tasks.withType(Test).configureEach {
+    systemProperty 'stove.payment.callback-secret', 'test-only-pg-callback-secret'
 }

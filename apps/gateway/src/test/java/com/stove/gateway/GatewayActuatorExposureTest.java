@@ -44,7 +44,7 @@ class GatewayActuatorExposureTest {
         // (catalog 의 Method=GET 술어)가 그대로 읽힌다.
         webTestClient.get().uri("/actuator/gateway/routes")
                 .exchange()
-                .expectStatus().isNotFound();
+                .expectStatus().isUnauthorized();
     }
 
     @Test
@@ -52,7 +52,7 @@ class GatewayActuatorExposureTest {
     void gatewayRefreshIsNotExposed() {
         webTestClient.post().uri("/actuator/gateway/refresh")
                 .exchange()
-                .expectStatus().isNotFound();
+                .expectStatus().isUnauthorized();
     }
 
     @Test
@@ -60,7 +60,7 @@ class GatewayActuatorExposureTest {
     void otherManagementEndpointsAreNotExposed() {
         // exposure.include 가 실제로 통제로 동작하는지 확인한다.
         // 위 gateway 엔드포인트는 라이브러리 기본값 덕에 닫혀 있어서, 이 성질을 따로 봐야 한다.
-        webTestClient.get().uri("/actuator/env").exchange().expectStatus().isNotFound();
-        webTestClient.get().uri("/actuator/beans").exchange().expectStatus().isNotFound();
+        webTestClient.get().uri("/actuator/env").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/actuator/beans").exchange().expectStatus().isUnauthorized();
     }
 }

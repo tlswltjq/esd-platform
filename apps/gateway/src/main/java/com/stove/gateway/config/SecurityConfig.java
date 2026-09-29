@@ -1,12 +1,18 @@
 package com.stove.gateway.config;
 
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverter;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.header.XFrameOptionsServerHttpHeadersWriter;
 import reactor.core.publisher.Flux;
@@ -15,22 +21,40 @@ import reactor.core.publisher.Flux;
 public class SecurityConfig {
 
     @Bean
+    ReactiveJwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
+                                  @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+        NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(issuer),
+                new JwtClaimValidator<List<String>>("aud",
+                        audience -> audience != null && audience.contains("esd-api"))));
+        return decoder;
+    }
+
+    @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(authorize -> authorize
-                        .pathMatchers("/actuator/health", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
+                        .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
-                        .pathMatchers("/p0-lab/**", "/api/v1/auth/signup", "/oauth2/**", "/login", "/logout",
+                        .pathMatchers("/p0-lab/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                                "/oauth2/**", "/login", "/logout",
                                 "/error", "/.well-known/**")
                         .permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/storefront/**")
                         .permitAll()
+                        // catalog의 내부 가격 재계산 경로는 외부 라우트가 없다. 보안 필터가
+                        // 먼저 401을 반환하면 라우트 부재(404)라는 경계가 흐려진다.
+                        .pathMatchers(HttpMethod.POST, "/api/v1/products/quote").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/payments/callback").permitAll()
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
                         // 프로젝트 자격증명은 Studio가 해시 조회·범위 검증한다.
                         .pathMatchers("/api/v1/studio/ci/**").permitAll()
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")
-                        // 커머스 트랙 인증은 별도 에픽이다. P0는 크리에이터·심사 경계를 닫는다.
-                        .anyExchange().permitAll())
+                        .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
+                        .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
+                                "/api/v1/downloads/**").hasRole("MEMBER")
+                        .anyExchange().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
                 // Swagger OAuth 승인 화면이 같은 게이트웨이 출처의 프레임에서 로그인한다.

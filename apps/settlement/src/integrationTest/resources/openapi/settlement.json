@@ -289,6 +289,24 @@
         },
         "type" : "object"
       }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "commerce" : "구매·정산 API",
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
+      }
     }
   },
   "info" : {
@@ -453,6 +471,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "settlement-controller" ]
       }
     },
@@ -479,6 +500,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "settlement-controller" ]
       }
     },
@@ -505,6 +529,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "settlement-controller" ]
       }
     },
@@ -539,6 +566,9 @@
             "description" : "OK"
           }
         },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
         "tags" : [ "settlement-controller" ]
       }
     }

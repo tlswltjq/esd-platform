@@ -5,6 +5,12 @@ server:
 spring:
   application:
     name: payment
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
 
   # 진행 중인 요청을 기다리는 상한. compose 의 stop_grace_period(40s)보다 짧아야 한다 —
   # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035). 부등호는 테스트가 지킨다.
@@ -50,6 +56,7 @@ spring:
 
 stove:
   payment:
+    callback-secret: ${PG_CALLBACK_SECRET:}
     # 주문이 만들어진 뒤 결제를 시작할 수 있는 시간. 금액은 주문 시각의 서버 가격으로 굳으므로,
     # 이 창이 곧 "옛 가격이 유효한 기간" 이다 — 없으면 무한이다(D-029, 실측 30일 뒤에도 승인).
     window: ${PAYMENT_WINDOW:30m}

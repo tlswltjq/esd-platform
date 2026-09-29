@@ -47,10 +47,21 @@ class TrackACreatorFlowTest {
         creatorSubject = signup.data().path("subject").asText();
         assertThat(creatorSubject).isNotBlank();
 
-        Journey.creatorToken(OidcLogin.token(CREATOR_EMAIL, CREATOR_PASSWORD));
+        String creatorToken = OidcLogin.token(CREATOR_EMAIL, CREATOR_PASSWORD);
+        Journey.creatorToken(creatorToken);
+        Journey.otherMember(signup.data().path("memberId").asLong(), creatorToken);
+        String otherEmail = "customer-" + Journey.STAMP + "@e2e.local";
+        String otherPassword = "customer-password-" + Journey.STAMP;
+        Response other = Stove.auth.post("/api/v1/auth/signup/member", Map.of(
+                "email", otherEmail, "password", otherPassword));
+        assertThat(other.status()).as("%s", other).isEqualTo(200);
+        Journey.member(other.data().path("memberId").asLong(),
+                OidcLogin.token(otherEmail, otherPassword));
         String reviewerPassword = System.getenv().getOrDefault(
                 "AUTH_REVIEWER_PASSWORD", "reviewer-local-only");
         Journey.reviewerToken(OidcLogin.token("reviewer@esd.local", reviewerPassword));
+        String adminPassword = System.getenv().getOrDefault("AUTH_ADMIN_PASSWORD", "admin-local-only");
+        Journey.adminToken(OidcLogin.token("admin@esd.local", adminPassword));
 
         Response created = Stove.gateway.post("/api/v1/studio/games", Map.of(
                 "productCode", PRODUCT_CODE,
@@ -148,7 +159,7 @@ class TrackACreatorFlowTest {
                 response -> response.itemWhere("productCode", PRODUCT_CODE)
                         .path("releaseId").asLong() == release1);
         Await.untilResponse("download release projection",
-                () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE)),
+                () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE), Journey.asMember(Journey.MEMBER)),
                 response -> itemByLong(response.data(), "releaseId", release1) != null);
     }
 
@@ -181,7 +192,7 @@ class TrackACreatorFlowTest {
                 response -> response.data().path("releaseId").asLong() == rollbackRelease
                         && response.data().path("buildId").asLong() == build1);
         Await.untilResponse("rollback manifest",
-                () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE)),
+                () -> Stove.gateway.get("/api/v1/downloads/%s/manifests".formatted(PRODUCT_CODE), Journey.asMember(Journey.MEMBER)),
                 response -> {
                     JsonNode item = itemByLong(response.data(), "releaseId", rollbackRelease);
                     return item != null && item.path("buildId").asLong() == build1;

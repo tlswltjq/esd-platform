@@ -17,6 +17,7 @@
 // download 까지 간다. 릴레이가 포화되면 이 경로가 가장 먼저, 가장 크게 밀린다.
 
 import http from 'k6/http';
+import crypto from 'k6/crypto';
 import { check, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 import { ORDER_URL, JSON_HEADERS, ON_SALE_PRODUCT_IDS } from './lib/config.js';
@@ -53,7 +54,7 @@ const POLL_INTERVAL_S = 0.5;
  * **아직 도착하지 않은 것**과 **시스템이 틀린 것**이 한 숫자에 섞인다.
  * 실측에서 18.6% 가 나왔는데 전부 정상 대기였다. 폴링 요청에만 기대 상태를 넓혀 준다.
  */
-const POLLING = { responseCallback: http.expectedStatuses(200, 404) };
+const POLLING = { responseCallback: http.expectedStatuses(200, 404), headers: JSON_HEADERS };
 
 export const options = {
   scenarios: {
@@ -75,12 +76,10 @@ export const options = {
 
 export default function () {
   const productId = ON_SALE_PRODUCT_IDS[Math.floor(Math.random() * ON_SALE_PRODUCT_IDS.length)];
-  const memberId = 1000 + Math.floor(Math.random() * 100000);
-
   // 1. 주문 — 서버가 금액을 확정하므로 expectedAmount 는 그 값을 되받아 쓴다
   const quote = http.post(
     `${ORDER_URL}/api/v1/orders`,
-    JSON.stringify({ memberId, items: [{ productId, quantity: 1 }] }),
+    JSON.stringify({ items: [{ productId, quantity: 1 }] }),
     { headers: JSON_HEADERS },
   );
   orderCreateLatency.add(quote.timings.duration);
@@ -97,20 +96,27 @@ export default function () {
   }
 
   // 3. 사전등록 → 승인 콜백
-  http.post(`${PAYMENT_URL}/api/v1/payments/${orderNo}/prepare`,
+  const prepare = http.post(`${PAYMENT_URL}/api/v1/payments/${orderNo}/prepare`,
     JSON.stringify({ method: 'CARD' }), { headers: JSON_HEADERS });
+  if (!check(prepare, { 'PG 사전등록': (r) => r.status === 200 })) {
+    fulfilled.add(false);
+    return;
+  }
 
   const approvedAt = Date.now();
+  const body = JSON.stringify({
+    result: 'APPROVED',
+    orderNo,
+    pgTxId: prepare.json('data.pgTxId'),
+    paidAmount: amount,
+    idempotencyKey: `IDEM-PERF-${orderNo}`,
+  });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = crypto.hmac('sha256', __ENV.PG_CALLBACK_SECRET || '', `${timestamp}.${body}`, 'hex');
   const callback = http.post(
     `${PAYMENT_URL}/api/v1/payments/callback`,
-    JSON.stringify({
-      result: 'APPROVED',
-      orderNo,
-      pgTxId: `PG-PERF-${orderNo}`,
-      paidAmount: amount,
-      idempotencyKey: `IDEM-PERF-${orderNo}`,
-    }),
-    { headers: JSON_HEADERS },
+    body,
+    { headers: { ...JSON_HEADERS, 'X-Pg-Timestamp': timestamp, 'X-Pg-Signature': signature } },
   );
   paymentCallbackLatency.add(callback.timings.duration);
   if (!check(callback, { '결제 승인': (r) => r.status === 200 })) {
@@ -119,7 +125,7 @@ export default function () {
   }
 
   // 4. **여기가 재는 구간이다** — 승인이 끝난 시점부터 라이브러리에 보이기까지
-  const ok = waitFor(() => hasLicense(memberId, orderNo));
+  const ok = waitFor(() => hasLicense(orderNo));
   fulfilled.add(ok);
   if (ok) {
     fulfillmentLatency.add(Date.now() - approvedAt);
@@ -128,9 +134,9 @@ export default function () {
   sleep(1);
 }
 
-function hasLicense(memberId, orderNo) {
+function hasLicense(orderNo) {
   const library = http.get(`${LICENSE_URL}/api/v1/library`,
-    { headers: { 'X-Member-Id': String(memberId) }, ...POLLING });
+    POLLING);
   if (library.status !== 200) {
     return false;
   }
