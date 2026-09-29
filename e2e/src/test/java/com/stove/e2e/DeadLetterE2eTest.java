@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
  * <p>정상 저니에서 기대값은 0 이다. 재시도를 소진할 실패 자체가 없어야 한다 —
  * 3-B 가 만드는 실패는 <b>HTTP 거절</b>이지 컨슈머 예외가 아니다.
  */
-@Order(8)
+@Order(9)
 @DisplayName("관측 — DLT 유입")
 class DeadLetterE2eTest {
 

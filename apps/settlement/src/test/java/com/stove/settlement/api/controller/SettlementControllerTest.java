@@ -35,7 +35,9 @@ class SettlementControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new SettlementController(
-                    settlementRecordService, sellerSettlementService, settlementCloseFacade))
+                    settlementRecordService, sellerSettlementService, settlementCloseFacade,
+                    mock(com.stove.settlement.core.service.ReconciliationService.class),
+                    mock(com.stove.settlement.api.application.CreatorWorkspaceClient.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

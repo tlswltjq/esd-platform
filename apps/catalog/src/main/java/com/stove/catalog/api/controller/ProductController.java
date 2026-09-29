@@ -6,6 +6,7 @@ import com.stove.catalog.api.controller.dto.QuoteRequest;
 import com.stove.catalog.api.controller.dto.QuoteResponse;
 import com.stove.catalog.core.service.ProductCommandService;
 import com.stove.catalog.core.service.ProductQueryService;
+import com.stove.catalog.core.service.PromotionService;
 import com.stove.common.core.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -29,17 +30,20 @@ public class ProductController {
     private final ProductQueryService productQueryService;
     private final ProductCommandService productCommandService;
     private final ProductReindexFacade productReindexFacade;
+    private final PromotionService promotionService;
 
     @GetMapping
     public ApiResponse<List<ProductResponse>> list(@PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(productQueryService.getOnSaleProducts(pageable)
-                .map(ProductResponse::from)
+                .map(product -> ProductResponse.from(product,
+                        promotionService.active(product.productId(), java.time.Instant.now())))
                 .getContent());
     }
 
     @GetMapping("/{productId}")
     public ApiResponse<ProductResponse> detail(@PathVariable Long productId) {
-        return ApiResponse.ok(ProductResponse.from(productQueryService.getPublishedProduct(productId)));
+        return ApiResponse.ok(ProductResponse.from(productQueryService.getPublishedProduct(productId),
+                promotionService.active(productId, java.time.Instant.now())));
     }
 
     /**
@@ -48,7 +52,9 @@ public class ProductController {
      */
     @GetMapping("/by-code/{productCode}")
     public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {
-        return ApiResponse.ok(ProductResponse.from(productQueryService.getPublishedProductByCode(productCode)));
+        var product = productQueryService.getPublishedProductByCode(productCode);
+        return ApiResponse.ok(ProductResponse.from(product,
+                promotionService.active(product.productId(), java.time.Instant.now())));
     }
 
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */

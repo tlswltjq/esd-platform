@@ -67,6 +67,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Response"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProductResponse" : {
         "properties" : {
           "data" : {
@@ -123,6 +140,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/Response"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseVoid" : {
         "properties" : {
           "data" : { },
@@ -133,6 +164,25 @@
             "type" : "boolean"
           }
         },
+        "type" : "object"
+      },
+      "CreateRequest" : {
+        "properties" : {
+          "discountPerUnit" : {
+            "format" : "int64",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "endsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "endsAt", "startsAt" ],
         "type" : "object"
       },
       "DeadEventResponse" : {
@@ -248,6 +298,24 @@
       },
       "OrderLine" : {
         "properties" : {
+          "discountBearer" : {
+            "type" : "string"
+          },
+          "discountPerUnit" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeRate" : {
+            "type" : "number"
+          },
+          "listUnitPrice" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "productId" : {
             "format" : "int64",
             "type" : "integer"
@@ -255,11 +323,23 @@
           "productName" : {
             "type" : "string"
           },
+          "promotionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "quantity" : {
             "format" : "int32",
             "type" : "integer"
           },
           "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sellerPayout" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementBasis" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -306,10 +386,21 @@
           "currency" : {
             "type" : "string"
           },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "discountBearer" : {
+            "type" : "string"
+          },
           "editionName" : {
             "type" : "string"
           },
           "gameId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "listPrice" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -336,6 +427,10 @@
           },
           "productKind" : {
             "type" : "string"
+          },
+          "promotionId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "purchasable" : {
             "type" : "boolean"
@@ -409,6 +504,43 @@
           "requeued" : {
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "Response" : {
+        "properties" : {
+          "bearer" : {
+            "enum" : [ "SELLER", "PLATFORM" ],
+            "type" : "string"
+          },
+          "discountPerUnit" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "endsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "startsAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "stoppedAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -823,6 +955,202 @@
           }
         },
         "tags" : [ "product-controller" ]
+      }
+    },
+    "/api/v1/promotions/platform/products/{productId}" : {
+      "get" : {
+        "operationId" : "platformList",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
+      },
+      "post" : {
+        "operationId" : "platformCreate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
+      }
+    },
+    "/api/v1/promotions/platform/{id}/stop" : {
+      "post" : {
+        "operationId" : "platformStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
+      }
+    },
+    "/api/v1/promotions/seller/products/{productId}" : {
+      "get" : {
+        "operationId" : "sellerList",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
+      },
+      "post" : {
+        "operationId" : "sellerCreate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
+      }
+    },
+    "/api/v1/promotions/seller/{id}/stop" : {
+      "post" : {
+        "operationId" : "sellerStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "promotion-controller" ]
       }
     }
   }

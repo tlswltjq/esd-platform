@@ -10,12 +10,14 @@ import com.stove.catalog.core.domain.QuoteItem;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.OrderLine;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,11 +29,22 @@ import org.springframework.transaction.annotation.Transactional;
  *
  */
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProductQueryService {
 
     private final ProductRepository productRepository;
+    private final PromotionService promotionService;
+    private final Long selfSellerId;
+    private final BigDecimal partnerFeeRate;
+
+    public ProductQueryService(ProductRepository productRepository, PromotionService promotionService,
+            @Value("${stove.settlement.self-seller-id:1}") Long selfSellerId,
+            @Value("${stove.settlement.partner-fee-rate:0.3000}") BigDecimal partnerFeeRate) {
+        this.productRepository = productRepository;
+        this.promotionService = promotionService;
+        this.selfSellerId = selfSellerId;
+        this.partnerFeeRate = partnerFeeRate;
+    }
 
     @Cacheable(cacheNames = "catalog:product", key = "#productId")
     public ProductView getProduct(Long productId) {
@@ -86,6 +99,7 @@ public class ProductQueryService {
      * 판매 불가 상품이 섞여 있으면 여기서 주문 자체가 성립하지 않는다.
      */
     public Quote quote(List<QuoteItem> items) {
+        java.time.Instant quotedAt = java.time.Instant.now();
         List<Long> productIds = items.stream().map(QuoteItem::productId).distinct().toList();
         Map<Long, Product> products = productRepository.findByIdIn(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
@@ -103,10 +117,24 @@ public class ProductQueryService {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "통화가 다른 상품은 함께 주문할 수 없습니다.");
             }
             currency = product.getCurrency();
+            var promotion = promotionService.active(product.getId(), quotedAt);
+            long discount = promotion == null ? 0 : promotion.discountPerUnit();
+            if (discount >= product.getPrice()) {
+                throw new BusinessException(ErrorCode.CONFLICT, "현재 가격과 충돌하는 행사입니다.");
+            }
+            long charge = product.getPrice() - discount;
+            boolean platformFunded = promotion != null && "PLATFORM".equals(promotion.bearer());
+            long basis = Math.multiplyExact(platformFunded ? product.getPrice() : charge, item.quantity());
+            BigDecimal feeRate = product.getSellerId().equals(selfSellerId)
+                    ? BigDecimal.ZERO : partnerFeeRate;
+            long fee = BigDecimal.valueOf(basis).multiply(feeRate)
+                    .setScale(0, RoundingMode.HALF_UP).longValueExact();
             OrderLine line = new OrderLine(product.getId(), product.getName(), product.getSellerId(),
-                    product.getPrice(), item.quantity());
+                    charge, item.quantity(), product.getPrice(), discount,
+                    promotion == null ? null : promotion.id(), promotion == null ? null : promotion.bearer(),
+                    basis, feeRate, fee, basis - fee);
             lines.add(line);
-            total += line.lineAmount();
+            total = Math.addExact(total, line.lineAmount());
         }
         return new Quote(lines, total, currency);
     }

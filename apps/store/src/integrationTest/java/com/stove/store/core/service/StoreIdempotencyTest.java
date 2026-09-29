@@ -3,15 +3,18 @@ package com.stove.store.core.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.PromotionWindow;
 import com.stove.common.event.payload.StorefrontSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
 import java.util.List;
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -33,10 +36,37 @@ class StoreIdempotencyTest {
     ProductSearchRepository searchRepository;
     @Autowired
     ElasticsearchOperations elasticsearchOperations;
+    @Autowired
+    CacheManager cacheManager;
 
     private static ProductChangedEvent event(long productId, String name) {
         return ProductChangedEvent.of(productId, "GAME-IDEM-" + productId, name,
                 1001L, 12_000L, "KRW", "ON_SALE", "ALL");
+    }
+
+    @Test
+    void indexedPromotionShowsCurrentChargeAndListPrice() {
+        long productId = 90_011L;
+        String code = "GAME-PROMO-" + productId;
+        var window = new PromotionWindow(7L, 2_000L, "PLATFORM",
+                Instant.now().minusSeconds(10), Instant.now().plusSeconds(600));
+        storeService.indexProduct(ProductChangedEvent.ofRelease(productId, code,
+                "Promotion game", 1001L, 10_000L, "KRW", "ON_SALE", "ALL",
+                11L, 22L, 33L, "BASIC", null, null, List.of(), null, 10L, List.of(window)));
+        elasticsearchOperations.indexOps(ProductDocument.class).refresh();
+
+        var view = storeService.detail(code);
+        assertThat(view.price()).isEqualTo(8_000L);
+        assertThat(view.listPrice()).isEqualTo(10_000L);
+        assertThat(view.promotionId()).isEqualTo(7L);
+        assertThat(view.discountBearer()).isEqualTo("PLATFORM");
+        var cache = cacheManager.getCache("store:featured");
+        String key = "promotion-" + productId;
+        cache.put(key, List.of(view));
+        @SuppressWarnings("unchecked")
+        List<com.stove.store.core.domain.StoreProductView> restored =
+                (List<com.stove.store.core.domain.StoreProductView>) cache.get(key).get();
+        assertThat(restored.getFirst().price()).isEqualTo(8_000L);
     }
 
     @Test

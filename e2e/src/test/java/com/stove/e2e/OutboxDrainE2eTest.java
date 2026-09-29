@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
  * 릴레이가 따라잡을 시간만 주면 반드시 0 이 된다. <b>0 이 되지 않는 것은 느린 것이 아니라
  * 막힌 것이다</b>(브로커 장애, DEAD 로 떨어진 레코드, 릴레이 정지).
  */
-@Order(7)
+@Order(8)
 @DisplayName("관측 — Outbox 적체 수렴")
 class OutboxDrainE2eTest {
 

@@ -326,8 +326,34 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 |---|---|---|
 | GET | `/api/v1/settlements/orders/{orderNo}` | 주문 단위 원장(매출 + 환불 역산) |
 | GET | `/api/v1/settlements/sellers/{sellerId}` | 판매자 월별 원장 |
+| GET | `/api/v1/settlements/me/ledger?month=yyyy-MM` | CREATOR 자신의 원장 |
+| GET | `/api/v1/settlements/me/closings?month=yyyy-MM` | CREATOR 자신의 월 마감 |
 | GET | `/api/v1/settlements/closings` | 월 마감 확정본 |
 | POST | `/api/v1/settlements/close` | 수동 마감(배치 재실행용) |
+| GET | `/api/v1/settlements/reconciliation?month=yyyy-MM` | ADMIN 월별 판매자 대사·차이 경고 |
+| GET | `/api/v1/settlements/export.csv?month=yyyy-MM` | ADMIN 원장 CSV |
+
+**할인 행사 API** — catalog가 가격과 행사 기간을 소유한다. CREATOR는 본인 워크스페이스 상품만
+`POST /api/v1/promotions/seller/products/{productId}`로 판매자 부담 행사를 만들고,
+ADMIN은 `/platform/products/{productId}`로 플랫폼 부담 행사를 만든다. 본문은
+`{"discountPerUnit":2000,"startsAt":"2026-10-01T00:00:00Z","endsAt":"2026-10-08T00:00:00Z"}`다.
+`GET`으로 같은 경로의 이력을 조회하고, `POST /api/v1/promotions/{seller|platform}/{id}/stop`으로 중지한다.
+한 상품의 기간은 겹칠 수 없고 시작은 포함, 끝은 제외한다. 할인가 1원 이상만 허용한다.
+상점·상품의 표시 가격과 catalog 견적은 행사 기간을 현재 시각에 대조해 계산한다.
+Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 새 가격을 계산한다.
+
+**금액 사본** — 주문은 통화를, 각 항목은 정가, 할인액, 최종 결제 단가, 행사 ID·부담 주체,
+정산 기준액, 수수료율·수수료, 판매자 지급액을 보존한다. 정산 원장은 주문의 이 값을 사용한다.
+결제 공급자는 주문 최종 금액을 쓰고, 정산은 결제 완료 이벤트의 같은 사본을 사용한다.
+정가 10,000원과 할인 2,000원인 입점 상품에서 고객은 두 행사 모두 8,000원을 낸다.
+판매자 부담이면 정산 기준 8,000원·수수료 2,400원·지급액 5,600원이다.
+플랫폼 부담이면 정산 기준 10,000원·수수료 3,000원·지급액 7,000원이며
+플랫폼 판촉비 2,000원을 별도로 기록한다(기본 입점 수수료율 30%).
+환불은 원 매출 사본의 모든 금액을 부호 반전한다. 첫 월 마감 금액은 `base*` 필드에 남기고,
+이후 닫힌 원장은 `adjustment*`에 별도로 합산한다. 닫힌 매출의 지각 환불 원장에는
+`adjustmentForMonth`가 찍힌다. 대사는 고객 결제액, 판매자 할인, 플랫폼 판촉비,
+정산 기준액, 수수료, 지급액과 마감액 차이를 반환한다.
+`taxInvoiceStatus=SIMULATED`는 MockTaxInvoiceIssuer 결과이며 실제 발행이 아니다.
 
 **이벤트** — 수신 `PaymentCompleted`·`PaymentCancelled` / 발행 없음
 

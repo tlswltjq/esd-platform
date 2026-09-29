@@ -88,16 +88,12 @@ public class Order extends BaseTimeEntity {
     }
 
     private void addLine(OrderLine line) {
-        items.add(new OrderItem(this, line.productId(), line.productName(), line.sellerId(),
-                line.unitPrice(), line.quantity()));
-        this.totalAmount += line.lineAmount();
+        items.add(new OrderItem(this, line));
+        this.totalAmount = Math.addExact(this.totalAmount, line.lineAmount());
     }
 
     public List<OrderLine> toOrderLines() {
-        return items.stream()
-                .map(i -> new OrderLine(i.getProductId(), i.getProductName(), i.getSellerId(),
-                        i.getUnitPrice(), i.getQuantity()))
-                .toList();
+        return items.stream().map(OrderItem::toOrderLine).toList();
     }
 
     public void markPaid() {

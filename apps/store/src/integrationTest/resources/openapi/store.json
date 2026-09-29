@@ -146,8 +146,19 @@
           "currency" : {
             "type" : "string"
           },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "discountBearer" : {
+            "type" : "string"
+          },
           "editionName" : {
             "type" : "string"
+          },
+          "listPrice" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "metadataRevision" : {
             "format" : "int64",
@@ -172,6 +183,10 @@
           },
           "productKind" : {
             "type" : "string"
+          },
+          "promotionId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "purchasable" : {
             "type" : "boolean"

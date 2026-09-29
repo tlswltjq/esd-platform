@@ -35,6 +35,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListReconciliationResult" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ReconciliationResult"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListSellerSettlementResponse" : {
         "properties" : {
           "data" : {
@@ -191,6 +208,75 @@
         },
         "type" : "object"
       },
+      "ReconciliationResult" : {
+        "properties" : {
+          "adjustmentCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "balanced" : {
+            "type" : "boolean"
+          },
+          "closingBasisVariance" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "closingFeeVariance" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "closingPayoutVariance" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "customerPaid" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "fee" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "month" : {
+            "type" : "string"
+          },
+          "platformExpense" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "recordCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sellerDiscount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sellerId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sellerPayout" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementBasis" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "unclosedCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "warnings" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
       "ReplayedCount" : {
         "properties" : {
           "replayed" : {
@@ -211,6 +297,30 @@
       },
       "SellerSettlementResponse" : {
         "properties" : {
+          "adjustmentFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "adjustmentGrossAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "adjustmentNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "baseFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "baseGrossAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "baseNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "closedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -240,14 +350,27 @@
           },
           "taxInvoiceNo" : {
             "type" : "string"
+          },
+          "taxInvoiceStatus" : {
+            "type" : "string"
           }
         },
         "type" : "object"
       },
       "SettlementRecordResponse" : {
         "properties" : {
+          "adjustmentForMonth" : {
+            "type" : "string"
+          },
           "closed" : {
             "type" : "boolean"
+          },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "discountBearer" : {
+            "type" : "string"
           },
           "feeAmount" : {
             "format" : "int64",
@@ -260,6 +383,10 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "listAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "netAmount" : {
             "format" : "int64",
             "type" : "integer"
@@ -267,7 +394,19 @@
           "orderNo" : {
             "type" : "string"
           },
+          "paidAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "platformExpense" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "promotionId" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -506,6 +645,93 @@
         "tags" : [ "settlement-controller" ]
       }
     },
+    "/api/v1/settlements/export.csv" : {
+      "get" : {
+        "operationId" : "csv",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/me/closings" : {
+      "get" : {
+        "operationId" : "myClosings",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSellerSettlementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/me/ledger" : {
+      "get" : {
+        "operationId" : "myLedger",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListSettlementRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "settlement-controller" ]
+      }
+    },
     "/api/v1/settlements/orders/{orderNo}" : {
       "get" : {
         "operationId" : "byOrder",
@@ -523,6 +749,35 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseListSettlementRecordResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/reconciliation" : {
+      "get" : {
+        "operationId" : "reconciliation",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListReconciliationResult"
                 }
               }
             },

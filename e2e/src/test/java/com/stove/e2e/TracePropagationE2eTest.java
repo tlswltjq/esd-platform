@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
  * <p>연결이 끊기면 컨슈머가 <b>새 트레이스를 시작</b>하므로, 이 traceId 로 조회했을 때
  * 남는 것은 gateway 와 payment 둘뿐이다. 그것이 이 판정이 잡는 그림이다.
  */
-@Order(6)
+@Order(7)
 @DisplayName("관측 — Kafka 를 건너는 트레이스 연결")
 class TracePropagationE2eTest {
 
