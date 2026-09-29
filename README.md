@@ -55,6 +55,7 @@ stove/
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
 | 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |
+| 트랜잭션·Kafka 설계와 재현 가능한 DB 락 실험 | [technical-interview-guide.md](docs/technical-interview-guide.md) |
 | **부하 중에 DB 를 끊었을 때** 보상·재시도·가드·DLT 가 버티는가 | [chaos.md](docs/chaos.md) |
 | **서버가 중단됐다 재기동하면** 밀린 일이 이어지는가 — 시나리오와 그것을 지키는 테스트 | [resilience-scenarios.md](docs/resilience-scenarios.md) |
 | 원장이 유실됐을 때의 복구 절차 | [runbooks/](docs/runbooks/) |

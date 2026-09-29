@@ -166,6 +166,23 @@ docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
 **생성된 주문 수와 같아야** 한다(이벤트가 하나도 발행되지 않고 쌓였다는 뜻).
 9장에서 OFF 는 5,398, ON 은 0 이었다.
 
+## 릴레이가 얹는 지연 중 락 경합의 몫 — 격리 수준 A/B
+
+릴레이를 끄지 않고 **갭 락만 없애는** 조건이다. order 커넥션의 기본 격리 수준만 READ COMMITTED 로 바꾼다.
+
+```bash
+./scripts/perf/run-isolation-ab.sh rr rr-1
+./scripts/perf/run-isolation-ab.sh rc rc-1
+./scripts/perf/run-isolation-ab.sh rc rc-2
+./scripts/perf/run-isolation-ab.sh rr rr-2     # A → B → B → A
+```
+
+조건이 걸렸는지는 MySQL 에 **커넥션별 격리 수준**을 물어 확인하고(다르면 멈춘다), 판정 지표는
+k6 p95 와 `Innodb_row_lock_waits` 증분 — 후자는 DB 가 센 값이라 SUT 밖에서 온다.
+9장과 달리 **테이블을 비우지 않는다**(공용 스택의 데이터를 지우지 않으려고). 대신 A-B-B-A 순서와 회차별 초기 행 수로 누적 효과를 대조한다.
+2026-09-14 결과(락 대기 400회 → 0회, p95 26.2 → 21.5ms)와 해석은
+[technical-interview-guide.md R1](../../docs/technical-interview-guide.md#r1-릴레이가-갭-락을-쥔-채-kafka-ack-를-기다린다).
+
 ## 측정 위생 — 지키지 않으면 숫자가 아니라 잡음이다
 
 7장이 남긴 규칙이고, 9장에서 **알면서 한 번 어겼다** — 비교 도중 같은 호스트에서 CI 를
