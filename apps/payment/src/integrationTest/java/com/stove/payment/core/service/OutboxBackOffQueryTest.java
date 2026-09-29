@@ -7,6 +7,8 @@ import com.stove.common.event.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -63,8 +65,10 @@ class OutboxBackOffQueryTest {
     void backedOffEventIsSkippedUntilItsTime() {
         OutboxEvent event = pendingEvent();
 
-        // 실패 처리하면 next_attempt_at 이 미래로 잡힌다
+        // 첫 실패의 백오프는 1초라 컨테이너가 바쁠 때 DB 조회 전에 만료될 수 있다.
+        // 이 테스트의 대상은 SQL의 미래 시각 필터이므로 조회 동안 유지될 시각으로 고정한다.
         event.markFailed("broker down", 10);
+        event.holdUntil(Instant.now().plus(Duration.ofMinutes(2)));
         outboxEventRepository.save(event);
 
         assertThat(event.getStatus()).isEqualTo(OutboxEvent.OutboxStatus.PENDING);
