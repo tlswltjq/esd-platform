@@ -37,7 +37,7 @@ public class SecurityConfig {
                 .authorizeExchange(authorize -> authorize
                         .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
-                        .pathMatchers("/p0-lab/**", "/studio/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                        .pathMatchers("/p0-lab/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
                                 "/oauth2/**", "/login", "/logout",
                                 "/error", "/.well-known/**")
                         .permitAll()
@@ -53,7 +53,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")
                         .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
-                                "/api/v1/downloads/**").authenticated()
+                                "/api/v1/downloads/**").hasRole("MEMBER")
                         .anyExchange().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))

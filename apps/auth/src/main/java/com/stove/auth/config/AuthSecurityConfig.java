@@ -1,11 +1,11 @@
 package com.stove.auth.config;
 
 import com.nimbusds.jose.jwk.JWKSet;
-import com.stove.auth.core.domain.UserAccountRepository;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.stove.auth.core.domain.UserAccountRepository;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -96,8 +96,6 @@ public class AuthSecurityConfig {
     RegisteredClientRepository registeredClientRepository(
             JdbcOperations jdbcOperations,
             @Value("${stove.auth.redirect-uri:http://localhost:3000/callback}") String redirectUri,
-            @Value("${stove.auth.studio-redirect-uris:http://localhost:8080/studio/,http://127.0.0.1:8080/studio/,http://localhost:18080/studio/,http://127.0.0.1:18080/studio/}")
-            List<String> studioRedirectUris,
             @Value("${stove.auth.swagger-redirect-uris:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}")
             List<String> swaggerRedirectUris) {
         JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcOperations);
@@ -120,8 +118,6 @@ public class AuthSecurityConfig {
                         .refreshTokenTimeToLive(Duration.ofDays(7))
                         .reuseRefreshTokens(false)
                         .build());
-        studioRedirectUris.stream().map(String::trim).filter(value -> !value.isBlank())
-                .forEach(studioWeb::redirectUri);
         saveOrUpgrade(repository, jdbcOperations, studioWeb.build());
 
         RegisteredClient.Builder swagger = RegisteredClient.withId("swagger-ui")

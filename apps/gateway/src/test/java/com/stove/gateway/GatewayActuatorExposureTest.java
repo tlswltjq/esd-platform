@@ -38,20 +38,6 @@ class GatewayActuatorExposureTest {
     }
 
     @Test
-    @DisplayName("창작자 포털 셸은 로그인 전에도 열리고 API는 별도 권한 경계를 유지한다")
-    void creatorPortalShellIsPublic() {
-        webTestClient.get().uri("/studio")
-                .exchange()
-                .expectStatus().isTemporaryRedirect()
-                .expectHeader().valueEquals("Location", "/studio/index.html");
-        webTestClient.get().uri("/studio/index.html")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class).value(body -> org.assertj.core.api.Assertions.assertThat(body)
-                        .contains("CREATOR STUDIO", "studio_access_token"));
-    }
-
-    @Test
     @DisplayName("라우트 목록은 외부 포트에 노출되지 않는다")
     void gatewayRouteListingIsNotExposed() {
         // 열리면 내부 서비스 호스트·포트와, 게이트웨이가 무엇을 막고 있는지

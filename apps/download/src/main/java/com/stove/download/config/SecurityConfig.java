@@ -23,7 +23,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/prometheus", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/v1/ops/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/downloads/**").authenticated()
+                        .requestMatchers("/api/v1/downloads/**").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(CommerceIdentity.rolesConverter())))

@@ -162,6 +162,20 @@ class TrackBCommerceFlowTest {
 
     @Test
     @Order(10)
+    @DisplayName("심사자와 운영자 토큰에는 구매자 역할이 없다")
+    void nonMemberRolesCannotUseCustomerApis() {
+        assertThat(Stove.gateway.get("/api/v1/orders/" + Journey.orderNo(), Journey.asReviewer()).status())
+                .isEqualTo(403);
+        assertThat(Stove.gateway.get("/api/v1/payments/" + Journey.orderNo(), Journey.asAdmin()).status())
+                .isEqualTo(403);
+        assertThat(Stove.gateway.get("/api/v1/library", Journey.asReviewer()).status())
+                .isEqualTo(403);
+        assertThat(Stove.gateway.get("/api/v1/downloads/" + Journey.PRODUCT_CODE + "/ticket",
+                Journey.asAdmin()).status()).isEqualTo(403);
+    }
+
+    @Test
+    @Order(11)
     @DisplayName("다른 회원의 토큰에 X-Member-Id를 붙여도 주문과 결제에 접근할 수 없다")
     void forgedMemberHeaderCannotSelectAnotherOwner() {
         Map<String, String> forged = Map.of(
@@ -176,7 +190,7 @@ class TrackBCommerceFlowTest {
     }
 
     @Test
-    @Order(12)
+    @Order(13)
     @DisplayName("주문 본문의 memberId는 인증된 구매자를 바꾸지 못한다")
     void forgedOrderBodyCannotSelectAnotherOwner() {
         Response response = Stove.gateway.post("/api/v1/orders", Map.of(
@@ -188,7 +202,7 @@ class TrackBCommerceFlowTest {
     }
 
     @Test
-    @Order(11)
+    @Order(12)
     @DisplayName("서명 없는 PG 승인 요청은 결제 상태를 바꿀 수 없다")
     void unsignedCallbackIsRejected() {
         assertThat(Stove.gateway.postUnsigned("/api/v1/payments/callback", approval(PRICE, "UNSIGNED"))

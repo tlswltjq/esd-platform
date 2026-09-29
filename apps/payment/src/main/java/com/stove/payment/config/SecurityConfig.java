@@ -25,7 +25,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/prometheus", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/v1/ops/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/callback").permitAll()
-                        .requestMatchers("/api/v1/payments/**").authenticated()
+                        .requestMatchers("/api/v1/payments/**").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(CommerceIdentity.rolesConverter())))

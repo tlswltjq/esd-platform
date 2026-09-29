@@ -14,7 +14,6 @@ import com.stove.studio.core.domain.StorePageContent;
 import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,24 +61,6 @@ public class RevisionService {
     public StorePageRevision previewStorePage(Long gameId, Long revisionId, Long workspaceId) {
         projectService.requireOwned(gameId, workspaceId);
         return requireOwnedRevision(gameId, revisionId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<StorePageRevision> storePages(Long gameId, Long workspaceId) {
-        projectService.requireOwned(gameId, workspaceId);
-        return storeRepository.findByGameIdOrderByRevisionNoDesc(gameId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PricingRevision> pricings(Long gameId, Long workspaceId) {
-        projectService.requireOwned(gameId, workspaceId);
-        return pricingRepository.findByGameIdOrderByRevisionNoDesc(gameId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<RatingRevision> ratings(Long gameId, Long workspaceId) {
-        projectService.requireOwned(gameId, workspaceId);
-        return ratingRepository.findByGameIdOrderByRevisionNoDesc(gameId);
     }
 
     public PricingRevision createPricing(Long gameId, Long workspaceId, long price) {
