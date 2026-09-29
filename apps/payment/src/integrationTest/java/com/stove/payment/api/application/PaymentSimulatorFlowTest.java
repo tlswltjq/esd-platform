@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.core.error.BusinessException;
+import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.EventType;
 import com.stove.common.event.payload.OrderLine;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -15,6 +16,7 @@ import com.stove.payment.core.service.SimulatedPgService;
 import com.stove.payment.core.domain.SimulatedPgTransaction;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,6 +42,7 @@ class PaymentSimulatorFlowTest {
     }
 
     @Test
+    @DisplayName("승인과 환불은 결제 상태를 전이하고 중복 요청에도 이벤트를 한 번씩만 적재한다")
     void approvalAndRefundUsePaymentTransitionsAndEmitOneEventEach() {
         PaymentPreparation preparation = prepared();
         assertThat(preparation.redirectUrl()).contains("/api/v1/payments/simulator/checkout/");
@@ -62,6 +65,7 @@ class PaymentSimulatorFlowTest {
     }
 
     @Test
+    @DisplayName("거절과 시간 초과는 각각 실패 사유를 남기고 이후 승인을 막는다")
     void declineAndTimeoutEndSeparateOrdersAndRejectLateApproval() {
         PaymentPreparation declined = prepared();
         assertThat(simulator.decline(declined.orderNo(), "CARD_DECLINED", "카드 거절").getStatus())
@@ -78,9 +82,13 @@ class PaymentSimulatorFlowTest {
                 .isEqualTo("PG_TIMEOUT");
         assertThat(pgClient.get(timedOut.pgTxId()).getStatus())
                 .isEqualTo(SimulatedPgTransaction.Status.TIMED_OUT);
+        assertThatThrownBy(() -> simulator.approve(timedOut.orderNo()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT));
     }
 
     @Test
+    @DisplayName("재사전등록한 결제의 예전 체크아웃은 거부하고 현재 거래만 승인한다")
     void oldCheckoutCannotApproveAfterPaymentIsPreparedAgain() {
         PaymentPreparation first = prepared();
         PaymentPreparation second = paymentService.prepare(first.orderNo(), "CARD");
@@ -93,5 +101,28 @@ class PaymentSimulatorFlowTest {
         assertThat(simulator.approve(second.orderNo()).getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(pgClient.get(first.pgTxId()).getStatus())
                 .isEqualTo(SimulatedPgTransaction.Status.PREPARED);
+    }
+
+    @Test
+    @DisplayName("사전등록하지 않은 결제는 시뮬레이터 승인·거절·시간 초과·환불을 모두 거부한다")
+    void controlsRequirePreparedPayment() {
+        String orderNo = "ORD-" + UUID.randomUUID();
+        paymentService.createReady(UUID.randomUUID().toString(), EventType.ORDER_CREATED,
+                orderNo, 42L, 18_000, "KRW",
+                List.of(new OrderLine(1L, "게임 A", 1001L, 18_000, 1)));
+
+        assertThatThrownBy(() -> simulator.approve(orderNo))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+        assertThatThrownBy(() -> simulator.decline(orderNo, "CARD_DECLINED", "카드 거절"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+        assertThatThrownBy(() -> simulator.timeout(orderNo))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+        assertThatThrownBy(() -> simulator.refund(orderNo))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+        assertThat(paymentService.getPayment(orderNo).getStatus()).isEqualTo(PaymentStatus.READY);
     }
 }

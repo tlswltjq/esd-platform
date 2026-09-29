@@ -8,6 +8,7 @@ import com.stove.studio.core.domain.GameBuild;
 import com.stove.studio.core.domain.NewUploadSession;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class SubmissionBuildSetTest {
@@ -24,6 +25,7 @@ class SubmissionBuildSetTest {
     }
 
     @Test
+    @DisplayName("여러 운영체제의 전체 빌드와 같은 대상의 델타 빌드를 함께 제출할 수 있다")
     void acceptsMultipleOsAndDeltaWithFullFallback() {
         assertThatCode(() -> SubmissionService.validateBuildSet(List.of(
                 build("2.0", "WINDOWS", "X86_64", null),
@@ -33,6 +35,7 @@ class SubmissionBuildSetTest {
     }
 
     @Test
+    @DisplayName("같은 대상의 전체 빌드가 중복되거나 델타의 전체 빌드가 없으면 거부한다")
     void rejectsDuplicateTargetAndUnbackedDelta() {
         assertThatThrownBy(() -> SubmissionService.validateBuildSet(List.of(
                 build("2.0", "WINDOWS", "X86_64", null),
@@ -45,6 +48,7 @@ class SubmissionBuildSetTest {
     }
 
     @Test
+    @DisplayName("버전이 섞이거나 델타 빌드만 있으면 제출을 거부한다")
     void rejectsMixedVersionsAndDeltaPrimary() {
         assertThatThrownBy(() -> SubmissionService.validateBuildSet(List.of(
                 build("2.0", "WINDOWS", "X86_64", null),

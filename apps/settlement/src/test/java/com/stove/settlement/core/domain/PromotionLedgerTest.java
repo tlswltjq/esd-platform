@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.stove.common.event.payload.OrderLine;
 import java.math.BigDecimal;
 import java.time.YearMonth;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PromotionLedgerTest {
@@ -12,6 +13,7 @@ class PromotionLedgerTest {
     private final BigDecimal fee = new BigDecimal("0.3000");
 
     @Test
+    @DisplayName("같은 할인 청구액도 부담 주체에 따라 판매자 정산액과 플랫폼 비용이 달라진다")
     void sellerAndPlatformPayTheSameCheckoutButDifferentSettlement() {
         OrderLine sellerLine = new OrderLine(1L, "game", 1001L, 8_000, 1,
                 10_000, 2_000, 11L, "SELLER");
@@ -36,6 +38,7 @@ class PromotionLedgerTest {
     }
 
     @Test
+    @DisplayName("환불은 확정된 판매 스냅샷의 금액을 반전하고 원래 마감 월을 조정 대상으로 남긴다")
     void refundReversesFrozenSnapshotAndMarksClosedMonth() {
         OrderLine line = new OrderLine(1L, "game", 1001L, 8_000, 1,
                 10_000, 2_000, 12L, "PLATFORM");

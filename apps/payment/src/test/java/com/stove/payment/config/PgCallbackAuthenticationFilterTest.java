@@ -1,6 +1,5 @@
 package com.stove.payment.config;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -19,6 +18,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.env.MockEnvironment;
@@ -41,6 +41,7 @@ class PgCallbackAuthenticationFilterTest {
             .build();
 
     @Test
+    @DisplayName("서명 누락 또는 본문 변조 콜백은 결제 처리에 도달하지 못한다")
     void unsignedAndTamperedCallbacksNeverReachPayment() throws Exception {
         mvc.perform(post("/api/v1/payments/callback").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isUnauthorized());
@@ -54,6 +55,7 @@ class PgCallbackAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("허용 시간을 지난 서명은 거부한다")
     void staleSignatureIsRejected() throws Exception {
         String timestamp = Long.toString(Instant.now().minusSeconds(600).getEpochSecond());
         mvc.perform(post("/api/v1/payments/callback").contentType(MediaType.APPLICATION_JSON)
@@ -64,13 +66,14 @@ class PgCallbackAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("유효한 서명은 원본 승인 본문을 결제 처리에 전달한다")
     void validSignatureLetsTheOriginalBodyReachPayment() throws Exception {
         String timestamp = Long.toString(Instant.now().getEpochSecond());
         mvc.perform(post("/api/v1/payments/callback").contentType(MediaType.APPLICATION_JSON)
                         .header("X-Pg-Timestamp", timestamp)
                         .header("X-Pg-Signature", sign(timestamp, BODY)).content(BODY))
                 .andExpect(status().isOk());
-        verify(callbackFacade).approve(any(PgApproval.class));
+        verify(callbackFacade).approve(new PgApproval("ORD-1", "PG-1", 30_000, "IDEM-1"));
     }
 
     private static String sign(String timestamp, String body) throws Exception {

@@ -45,6 +45,7 @@ class StoreIdempotencyTest {
     }
 
     @Test
+    @DisplayName("색인된 할인은 현재 청구액과 정가를 상세·캐시에 반영한다")
     void indexedPromotionShowsCurrentChargeAndListPrice() {
         long productId = 90_011L;
         String code = "GAME-PROMO-" + productId;
@@ -124,6 +125,7 @@ class StoreIdempotencyTest {
     }
 
     @Test
+    @DisplayName("공개 상품 검색은 가격과 최신순 정렬을 페이지에 반영한다")
     void searchPaginatesAndSortsReleasedProducts() {
         storeService.indexProduct(ProductChangedEvent.ofRelease(90_004L, "GAME-SORT-A",
                 "정렬테스트 A", 1001L, 1_000L, "KRW", "ON_SALE", "ALL", 21L, 1L, 1L));

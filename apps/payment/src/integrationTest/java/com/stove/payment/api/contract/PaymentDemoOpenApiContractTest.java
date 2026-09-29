@@ -2,6 +2,7 @@ package com.stove.payment.api.contract;
 
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -18,6 +19,7 @@ class PaymentDemoOpenApiContractTest {
     @LocalServerPort private int port;
 
     @Test
+    @DisplayName("데모 프로필의 결제 API 명세는 커밋된 계약과 일치한다")
     void demoOpenApiMatchesSnapshot() {
         OpenApiSnapshot.verify(port, "payment-demo");
     }

@@ -103,6 +103,7 @@ class ProductCommandServiceTest {
     }
 
     @Test
+    @DisplayName("공개된 에디션은 판매 상태가 되고 상위 상품 정보를 유지한다")
     void editionIsPurchasableAndKeepsItsParent() {
         String productCode = uniqueProductCode();
         productCommandService.upsertFromRelease(UUID.randomUUID().toString(),

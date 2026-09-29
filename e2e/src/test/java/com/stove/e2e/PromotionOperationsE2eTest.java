@@ -26,7 +26,7 @@ class PromotionOperationsE2eTest {
                 "seller".equals(owner) ? Journey.asCreator() : Journey.asAdmin());
     }
 
-    private static String pay() {
+    private static String pay(String expectedBearer) {
         Response order = Stove.gateway.post("/api/v1/orders", Map.of(
                 "items", List.of(Map.of("productId", Journey.productId(), "quantity", 1)),
                 "expectedAmount", CHARGE), Journey.asMember(Journey.MEMBER));
@@ -34,8 +34,9 @@ class PromotionOperationsE2eTest {
         assertThat(order.data().path("totalAmount").asInt()).isEqualTo(CHARGE);
         assertThat(order.data().path("lines").get(0).path("listUnitPrice").asInt()).isEqualTo(Journey.PRICE);
         assertThat(order.data().path("lines").get(0).path("discountPerUnit").asInt()).isEqualTo(DISCOUNT);
-        int basis = "PLATFORM".equals(order.data().path("lines").get(0)
-                .path("discountBearer").asText()) ? Journey.PRICE : CHARGE;
+        assertThat(order.data().path("lines").get(0).path("discountBearer").asText())
+                .isEqualTo(expectedBearer);
+        int basis = "PLATFORM".equals(expectedBearer) ? Journey.PRICE : CHARGE;
         assertThat(order.data().path("lines").get(0).path("settlementBasis").asInt()).isEqualTo(basis);
         assertThat(order.data().path("lines").get(0).path("feeAmount").asInt())
                 .isEqualTo(basis * PARTNER_FEE_RATE / 100);
@@ -87,6 +88,7 @@ class PromotionOperationsE2eTest {
 
     @Test
     @Order(1)
+    @DisplayName("판매자 부담 할인은 할인 후 금액으로 정산하고 환불 뒤 가격을 복원한다")
     void sellerFundedPromotionUsesNetChargeAsSettlementBasis() {
         assertThat(Stove.gateway.post("/api/v1/promotions/seller/products/" + Journey.productId(),
                 Map.of(), Journey.asMember(Journey.MEMBER)).status()).isEqualTo(403);
@@ -96,7 +98,7 @@ class PromotionOperationsE2eTest {
         assertThat(create("platform").status()).isEqualTo(409);
         displayedPrice(CHARGE);
 
-        String orderNo = pay();
+        String orderNo = pay("SELLER");
         Journey.sellerPromotion(id, orderNo);
         var sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);
@@ -118,12 +120,13 @@ class PromotionOperationsE2eTest {
 
     @Test
     @Order(2)
+    @DisplayName("플랫폼 부담 할인은 정가 기준으로 정산하고 마감 후 환불을 조정 내역으로 대사한다")
     void platformFundedPromotionPreservesSellerBasisAndReconcilesLateRefund() {
         Response created = create("platform");
         assertThat(created.status()).as("%s", created).isEqualTo(200);
         long id = created.data().path("id").asLong();
         displayedPrice(CHARGE);
-        String orderNo = pay();
+        String orderNo = pay("PLATFORM");
         Journey.platformPromotion(id, orderNo);
         var sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);

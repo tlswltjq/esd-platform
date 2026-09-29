@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +25,7 @@ class PromotionReconciliationTest {
     @Autowired ReconciliationService reconciliation;
 
     @Test
+    @DisplayName("주문에 고정한 수수료율과 정산액이 현재 정산 정책보다 우선한다")
     void orderFeeSnapshotWinsOverCurrentSettlementPolicy() {
         String orderNo = "P-" + UUID.randomUUID();
         OrderLine line = new OrderLine(10L, "Game", 1001L, 8_000, 1,
@@ -39,6 +41,7 @@ class PromotionReconciliationTest {
     }
 
     @Test
+    @DisplayName("같은 상품의 반복 주문 항목은 매출 원장 한 건으로 합산한다")
     void repeatedProductLinesAreConsolidatedBeforeTheUniqueLedgerWrite() {
         String orderNo = "P-" + UUID.randomUUID();
         Long sellerId = 8_000_000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1_000_000L);
@@ -53,14 +56,15 @@ class PromotionReconciliationTest {
     }
 
     @Test
+    @DisplayName("마감 뒤 환불은 원래 마감액을 보존하고 조정액으로 대사한다")
     void closedSaleAndLateRefundKeepOriginalClosingAndReconcileAdjustment() {
         String orderNo = "P-" + UUID.randomUUID();
         Long sellerId = 9_000_000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1_000_000L);
-        YearMonth month = YearMonth.now();
         OrderLine line = new OrderLine(10L, "Game", sellerId, 8_000, 1,
                 10_000, 2_000, 7L, "PLATFORM");
 
         records.recordSale(UUID.randomUUID().toString(), "PaymentCompleted", orderNo, List.of(line));
+        YearMonth month = YearMonth.parse(records.findByOrder(orderNo).getFirst().getSettlementMonth());
         SellerSettlement first = closings.closeSeller(sellerId, month);
         assertThat(first.getBaseGrossAmount()).isEqualTo(10_000);
         assertThat(first.getBaseNetAmount()).isEqualTo(7_000);

@@ -128,7 +128,8 @@ class ArchRuleEnforcementTest {
          */
         @ParameterizedTest(name = "{0} 접두사 스텁도 잡는다")
         @ValueSource(strings = {"MockUnguardedClient", "StubUnguardedClient", "FakeUnguardedClient"})
-        void everyStubPrefixIsChecked(String simpleName) {
+        @DisplayName("Mock·Stub·Fake 접두사를 각각 격리 규칙으로 검사한다")
+    void everyStubPrefixIsChecked(String simpleName) {
             JavaClasses onlyThisOne = new ClassFileImporter()
                     .withImportOption(location -> location.contains(simpleName + ".class"))
                     .importPackages("com.stove.archfixture.violating");

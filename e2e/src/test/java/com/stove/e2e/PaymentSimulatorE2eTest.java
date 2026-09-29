@@ -57,6 +57,7 @@ class PaymentSimulatorE2eTest {
 
     @Test
     @Order(1)
+    @DisplayName("체크아웃은 주문자만 보고 결제 제어는 관리자만 실행한다")
     void checkoutRequiresOwnerAndControlsRequireAdmin() {
         Response product = Stove.gateway.get("/api/v1/products/by-code/" + Journey.PRODUCT_CODE);
         assertThat(product.status()).as("%s", product).isEqualTo(200);
@@ -78,6 +79,7 @@ class PaymentSimulatorE2eTest {
 
     @Test
     @Order(2)
+    @DisplayName("승인은 구매 권한을 지급하고 환불은 주문·라이선스·다운로드를 회수한다")
     void approvalDeliversThenRefundRevokes() {
         String approve = "/api/v1/payments/simulator/" + approvedOrder + "/approve";
         Response response = Stove.gateway.post(approve, null, Journey.asAdmin());
@@ -111,6 +113,7 @@ class PaymentSimulatorE2eTest {
 
     @Test
     @Order(3)
+    @DisplayName("승인 거절과 시간 초과는 각각 실패 사유를 남기고 늦은 승인을 막는다")
     void declineAndTimeoutHaveTerminalReasons() {
         String declined = newOrder();
         prepare(declined);
@@ -138,5 +141,9 @@ class PaymentSimulatorE2eTest {
         Await.untilResponse("시뮬레이터 시간 초과 주문", () ->
                         Stove.gateway.get("/api/v1/orders/" + timedOut, Journey.asMember(MEMBER)),
                 r -> "FAILED".equals(r.data().path("status").asText()));
+        Response lateAfterTimeout = Stove.gateway.post(
+                "/api/v1/payments/simulator/" + timedOut + "/approve", null, Journey.asAdmin());
+        assertThat(lateAfterTimeout.status()).as("%s", lateAfterTimeout).isEqualTo(409);
+        assertThat(lateAfterTimeout.errorCode()).isEqualTo(ErrorCode.CONFLICT.name());
     }
 }

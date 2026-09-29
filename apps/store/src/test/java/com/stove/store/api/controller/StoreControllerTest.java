@@ -52,6 +52,7 @@ class StoreControllerTest {
     }
 
     @Test
+    @DisplayName("검색 정렬 조건을 서비스에 전달한다")
     void searchPassesSort() throws Exception {
         mockMvc.perform(get("/api/v1/storefront/products")
                         .param("sort", "NEWEST"))

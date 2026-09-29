@@ -88,6 +88,7 @@ class StoreIndexTest {
     }
 
     @Test
+    @DisplayName("에디션 종류와 상위 상품 정보가 검색 결과에 반영된다")
     void productFamilyAppearsInSearchProjection() {
         storeService.indexProduct(ProductChangedEvent.ofRelease(
                 2L, "EDITION-001", "게임 A Deluxe", 1001L, 40_000L, "KRW",
@@ -101,6 +102,7 @@ class StoreIndexTest {
     }
 
     @Test
+    @DisplayName("공개된 체험판은 검색되지만 구매할 수 없다")
     void releasedDemoIsVisibleButNotPurchasable() {
         storeService.indexProduct(ProductChangedEvent.ofRelease(
                 3L, "DEMO-001", "게임 A 체험판", 1001L, 0L, "KRW",
@@ -122,6 +124,7 @@ class StoreIndexTest {
     }
 
     @Test
+    @DisplayName("판매 중단된 릴리스는 상세와 검색에 남지만 구매할 수 없다")
     void suspendedReleaseRemainsVisibleButCannotBePurchased() {
         storeService.indexProduct(product("SUSPENDED", 30_000L));
 

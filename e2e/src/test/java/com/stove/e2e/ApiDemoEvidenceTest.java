@@ -22,6 +22,7 @@ class ApiDemoEvidenceTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
+    @DisplayName("API 데모 보고서에 검증한 여정 식별자와 금액을 기록한다")
     void writesVerifiedJourneyIdentifiersAndAmounts() throws Exception {
         String report = System.getProperty("stove.e2e.report", "");
         assertThat(report).as("-Dstove.e2e.report 에 실행별 결과 경로를 지정한다").isNotBlank();
