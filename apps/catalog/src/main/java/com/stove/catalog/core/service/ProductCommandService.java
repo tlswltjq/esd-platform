@@ -8,6 +8,8 @@ import com.stove.common.core.error.ErrorCode;
 import com.stove.common.event.payload.ProductChangedEvent;
 import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.event.payload.ReviewApprovedEvent;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import java.util.List;
@@ -37,6 +39,7 @@ public class ProductCommandService {
     private final OutboxRecorder outboxRecorder;
     private final ProcessedEventGuard processedEventGuard;
     private final AuditLogService auditLogService;
+    private final ObjectMapper objectMapper;
 
     /**
      * [승인] review → ReviewApproved → catalog. 멱등한 upsert 다.
@@ -68,6 +71,14 @@ public class ProductCommandService {
             return;
         }
 
+        // 롤백도 새 releaseId를 발급하므로 이전 발행 이벤트의 지연 도착은 안전하게 무시한다.
+        if (productRepository.findByProductCode(event.productCode())
+                .map(existing -> existing.getCurrentReleaseId() != null
+                        && existing.getCurrentReleaseId() >= event.releaseId())
+                .orElse(false)) {
+            return;
+        }
+
         Product product = productRepository.findByProductCode(event.productCode())
                 .map(existing -> {
                     existing.applyRelease(event.gameId(), event.title(), event.sellerId(),
@@ -75,6 +86,7 @@ public class ProductCommandService {
                             event.buildId(), event.metadataRevision());
                     existing.applyFamily(event.productKind(), event.parentProductCode(),
                             event.editionName(), event.bundleProductCodes());
+                    existing.applyStorefront(serializeStorefront(event.storefront()));
                     return existing;
                 })
                 .orElseGet(() -> {
@@ -83,6 +95,7 @@ public class ProductCommandService {
                             event.ratingCode(), event.releaseId(), event.buildId(), event.metadataRevision());
                     created.applyFamily(event.productKind(), event.parentProductCode(),
                             event.editionName(), event.bundleProductCodes());
+                    created.applyStorefront(serializeStorefront(event.storefront()));
                     return productRepository.save(created);
                 });
 
@@ -142,13 +155,24 @@ public class ProductCommandService {
 
 
     private void publishChanged(Product product) {
+        long version = product.advanceProjectionVersion();
         outboxRecorder.record(AGGREGATE, product.getProductCode(),
                 ProductChangedEvent.ofRelease(product.getId(), product.getProductCode(), product.getName(),
                         product.getSellerId(), product.getPrice(), product.getCurrency(),
                         product.getStatus().name(), product.getRatingCode(), product.getCurrentReleaseId(),
                         product.getCurrentBuildId(), product.getMetadataRevision(),
                         product.getProductKind(), product.getParentProductCode(),
-                        product.getEditionName(), product.getBundleProductCodes()));
+                        product.getEditionName(), product.getBundleProductCodes(),
+                        com.stove.catalog.core.domain.ProductView.from(product).storefront(), version));
+    }
+
+    private String serializeStorefront(com.stove.common.event.payload.StorefrontSnapshot storefront) {
+        if (storefront == null) return null;
+        try {
+            return objectMapper.writeValueAsString(storefront);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("상점 스냅샷을 저장할 수 없습니다.", exception);
+        }
     }
 
     private Product findProduct(Long productId) {

@@ -1729,7 +1729,7 @@ store 는 여기에 Elasticsearch 의 준실시간 색인(새로고침 주기 �
 | DLT 로 넘기고 진행 | 계약 위반 한 건이 뒤를 막지 않는다 | 그 키의 순서(R2) | decisions.md 19번 |
 | 폴링 200ms | 앱 안에서 전부 해결, 관측 가능 | 종단 지연의 바닥, 잠금 조회 비용(R1) | 1000 → 200ms 에 MySQL CPU 7.3% → 8.8%, 두 회차 평균 (perf-tuning.md 3절) |
 | 권한 **사본** (download) | license 장애와 다운로드 분리 | 사본이 늦거나 순서가 틀릴 수 있다 | README 3절, D-012 |
-| catalog(쓰기) / store(읽기) 분리 | 검색 트래픽을 원본에서 떼어냄 | 색인 지연, 순서 역전 시 옛 상태 | code-notes `StoreService` |
+| catalog(쓰기) / store(읽기) 분리 | 검색 트래픽을 원본에서 떼어냄 | 색인 지연. 새 ProductChanged는 버전으로 순서 역전을 거르며 버전 0 레거시 이벤트에는 옛 상태 위험이 남음 | code-notes `StoreService` |
 | 분산 락을 **DB 테이블**(ShedLock)로 | 새 인프라 없음, DB 시계 사용 | DB 에 의존, 락 보유 시간 추정 필요 | `V7__shedlock.sql` |
 | 환불에 **포기 상태 없음** | 불확실한 돈을 방치하지 않는다 | 영원히 재시도할 수 있다 → 예산 알람으로 사람 호출 | code-notes `RefundFacade` |
 

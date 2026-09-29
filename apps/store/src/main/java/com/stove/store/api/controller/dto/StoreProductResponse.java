@@ -1,6 +1,7 @@
 package com.stove.store.api.controller.dto;
 
 import com.stove.store.core.domain.StoreProductView;
+import com.stove.common.event.payload.StorefrontSnapshot;
 import java.util.List;
 
 public record StoreProductResponse(
@@ -10,6 +11,9 @@ public record StoreProductResponse(
         Long sellerId,
         Long price,
         String currency,
+        String status,
+        boolean visible,
+        boolean purchasable,
         String ratingCode,
         Long releaseId,
         Long buildId,
@@ -17,7 +21,8 @@ public record StoreProductResponse(
         String productKind,
         String parentProductCode,
         String editionName,
-        List<String> bundleProductCodes
+        List<String> bundleProductCodes,
+        StorefrontSnapshot storefront
 ) {
     public static StoreProductResponse from(StoreProductView product) {
         return new StoreProductResponse(
@@ -27,6 +32,9 @@ public record StoreProductResponse(
                 product.sellerId(),
                 product.price(),
                 product.currency(),
+                product.status(),
+                product.visible(),
+                product.purchasable(),
                 product.ratingCode(),
                 product.releaseId(),
                 product.buildId(),
@@ -34,6 +42,6 @@ public record StoreProductResponse(
                 product.productKind(),
                 product.parentProductCode(),
                 product.editionName(),
-                product.bundleProductCodes());
+                product.bundleProductCodes(), product.storefront());
     }
 }

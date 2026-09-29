@@ -2,6 +2,7 @@ package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
+import com.stove.common.event.payload.StorefrontSnapshot;
 import java.util.List;
 
 public record ProductResponse(
@@ -20,7 +21,10 @@ public record ProductResponse(
         String productKind,
         String parentProductCode,
         String editionName,
-        List<String> bundleProductCodes
+        List<String> bundleProductCodes,
+        boolean visible,
+        boolean purchasable,
+        StorefrontSnapshot storefront
 ) {
     public static ProductResponse from(ProductView product) {
         return new ProductResponse(
@@ -39,6 +43,6 @@ public record ProductResponse(
                 product.productKind(),
                 product.parentProductCode(),
                 product.editionName(),
-                product.bundleProductCodes());
+                product.bundleProductCodes(), product.visible(), product.purchasable(), product.storefront());
     }
 }

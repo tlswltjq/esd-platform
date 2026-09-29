@@ -49,6 +49,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseStoreProductResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StoreProductResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "DltRecordResponse" : {
         "properties" : {
           "eventId" : {
@@ -89,6 +103,20 @@
             "type" : "string"
           },
           "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LocalizedContent" : {
+        "properties" : {
+          "detailedDescription" : {
+            "type" : "string"
+          },
+          "shortDescription" : {
+            "type" : "string"
+          },
+          "title" : {
             "type" : "string"
           }
         },
@@ -145,6 +173,9 @@
           "productKind" : {
             "type" : "string"
           },
+          "purchasable" : {
+            "type" : "boolean"
+          },
           "ratingCode" : {
             "type" : "string"
           },
@@ -155,6 +186,107 @@
           "sellerId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "storefront" : {
+            "$ref" : "#/components/schemas/StorefrontSnapshot"
+          },
+          "visible" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "StorefrontSnapshot" : {
+        "properties" : {
+          "coverUrl" : {
+            "type" : "string"
+          },
+          "detailedDescription" : {
+            "type" : "string"
+          },
+          "developer" : {
+            "type" : "string"
+          },
+          "eulaUrl" : {
+            "type" : "string"
+          },
+          "features" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "iconUrl" : {
+            "type" : "string"
+          },
+          "localizations" : {
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/LocalizedContent"
+            },
+            "type" : "object"
+          },
+          "minimumRequirements" : {
+            "type" : "string"
+          },
+          "platform" : {
+            "type" : "string"
+          },
+          "privacyPolicyUrl" : {
+            "type" : "string"
+          },
+          "publisher" : {
+            "type" : "string"
+          },
+          "recommendedRequirements" : {
+            "type" : "string"
+          },
+          "salesCountries" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "screenshots" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "shortDescription" : {
+            "type" : "string"
+          },
+          "supportUrl" : {
+            "type" : "string"
+          },
+          "supportedLanguages" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "tags" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "trailers" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         },
         "type" : "object"
@@ -284,6 +416,14 @@
             "format" : "int32",
             "type" : "integer"
           }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "PRICE_ASC",
+            "type" : "string"
+          }
         } ],
         "responses" : {
           "200" : {
@@ -291,6 +431,32 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseListStoreProductResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "store-controller" ]
+      }
+    },
+    "/api/v1/storefront/products/{productCode}" : {
+      "get" : {
+        "operationId" : "detail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "productCode",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseStoreProductResponse"
                 }
               }
             },

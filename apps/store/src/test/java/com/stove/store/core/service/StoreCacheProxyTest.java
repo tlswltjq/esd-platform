@@ -1,7 +1,6 @@
 package com.stove.store.core.service;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -52,7 +51,7 @@ class StoreCacheProxyTest {
         @Bean
         ProductSearchRepository productSearchRepository() {
             ProductSearchRepository repository = mock(ProductSearchRepository.class);
-            when(repository.findByStatusOrderByPriceAsc(anyString(), any(Pageable.class)))
+            when(repository.findByVisibleTrue(any(Pageable.class)))
                     .thenReturn(List.of());
             return repository;
         }
@@ -80,7 +79,7 @@ class StoreCacheProxyTest {
 
         // @Cacheable 이 걸려 있지 않으면 조회가 두 번 나간다.
         verify(repository, times(1))
-                .findByStatusOrderByPriceAsc(anyString(), any(Pageable.class));
+                .findByVisibleTrue(any(Pageable.class));
     }
 
     @Test
@@ -95,6 +94,6 @@ class StoreCacheProxyTest {
         // @CacheEvict 가 없으면 두 번째 featured() 도 캐시에서 나와 조회가 한 번뿐이다 —
         // 판매 상태가 바뀐 상품이 진열에서 그대로 살아 있다는 뜻이다.
         verify(repository, times(2))
-                .findByStatusOrderByPriceAsc(anyString(), any(Pageable.class));
+                .findByVisibleTrue(any(Pageable.class));
     }
 }

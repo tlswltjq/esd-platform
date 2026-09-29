@@ -174,7 +174,7 @@ class ProductCommandServiceTest {
     }
 
     @Test
-    @DisplayName("판매 중인 상품의 재심의가 판매를 중단시키지 않는다")
+    @DisplayName("판매 중인 상품의 재심의는 다음 릴리스 전까지 공개 등급을 바꾸지 않는다")
     void reReviewDoesNotResetLiveProduct() {
         String productCode = uniqueProductCode();
         receive(approval(productCode, "ALL"));
@@ -185,7 +185,33 @@ class ProductCommandServiceTest {
         // applyReviewApproval 은 DRAFT/REVIEWING 에서만 상태를 올린다.
         // 이 조건이 없어지면 재심의 한 번에 판매 중이던 상품이 전부 내려간다.
         assertThat(find(productCode).getStatus()).isEqualTo(ProductStatus.ON_SALE);
-        assertThat(find(productCode).getRatingCode()).isEqualTo("ADULT");
+        assertThat(find(productCode).getRatingCode()).isEqualTo("ALL");
+    }
+
+    @Test
+    @DisplayName("늦게 도착한 이전 릴리스는 최신 공개 스냅샷을 덮어쓰지 않는다")
+    void delayedReleaseCannotOverwriteCurrentSnapshot() {
+        String productCode = uniqueProductCode();
+        long newer = RELEASE_IDS.addAndGet(2);
+        ReleasePublishedEvent latest = release(productCode, newer, "최신 게임", 49_000L);
+        ReleasePublishedEvent stale = release(productCode, newer - 1, "이전 게임", 19_000L);
+
+        productCommandService.upsertFromRelease(UUID.randomUUID().toString(),
+                EventType.RELEASE_PUBLISHED, latest);
+        productCommandService.upsertFromRelease(UUID.randomUUID().toString(),
+                EventType.RELEASE_PUBLISHED, stale);
+
+        assertThat(find(productCode).getCurrentReleaseId()).isEqualTo(newer);
+        assertThat(find(productCode).getName()).isEqualTo("최신 게임");
+        assertThat(find(productCode).getPrice()).isEqualTo(49_000L);
+        assertThat(outboxFor(productCode)).hasSize(1);
+    }
+
+    private static ReleasePublishedEvent release(String productCode, long releaseId,
+                                                 String title, long price) {
+        return ReleasePublishedEvent.of(releaseId, null, releaseId, 1L, productCode, 1001L,
+                releaseId, 1L, 1L, 1L, title, "릴리스 소개", price, "KRW", "ALL",
+                "1.0.0", 1_024L, "sha256:test", "s3://stove-builds/" + productCode + "/game.zip");
     }
 
     @Test
