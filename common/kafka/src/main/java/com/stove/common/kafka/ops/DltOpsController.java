@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * DLT 를 들여다보고 되돌리는 운영 API. 게이트웨이가 라우팅하지 않는다.
- * JPA 를 요구하지 않는 {@code common:kafka} 에 있는 이유는 docs/code-notes.md
+ * JPA 를 요구하지 않는 {@code common:kafka} 에 둔다.
  */
 @RestController
 @RequestMapping("/api/v1/ops/dlt")

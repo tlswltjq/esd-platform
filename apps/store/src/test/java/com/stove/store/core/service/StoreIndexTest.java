@@ -87,6 +87,19 @@ class StoreIndexTest {
     }
 
     @Test
+    void productFamilyAppearsInSearchProjection() {
+        storeService.indexProduct(ProductChangedEvent.ofRelease(
+                2L, "EDITION-001", "게임 A Deluxe", 1001L, 40_000L, "KRW",
+                ON_SALE, "ALL", 10L, 20L, 1L,
+                "EDITION", "GAME-001", "Deluxe", List.of()));
+
+        StoreProductView view = storeService.search(null, 0, 10).get(0);
+        assertThat(view.productKind()).isEqualTo("EDITION");
+        assertThat(view.parentProductCode()).isEqualTo("GAME-001");
+        assertThat(view.editionName()).isEqualTo("Deluxe");
+    }
+
+    @Test
     @DisplayName("판매중이 아닌 상품은 검색에서 빠진다")
     void nonSaleProductIsNotSearchable() {
         storeService.indexProduct(product("APPROVED", 30_000L));

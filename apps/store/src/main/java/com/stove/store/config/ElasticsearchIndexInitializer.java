@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 기동 시 색인/매핑을 보장한다. <b>동적 매핑에 맡기면 정확 매칭 검색이 어긋난다</b> —
- * 매핑은 한 번 정해지면 못 바꾸므로 첫 문서 전에 걸어야 한다. docs/code-notes.md
+ * 매핑은 한 번 정해지면 못 바꾸므로 첫 문서 전에 걸어야 한다.
  */
 @Slf4j
 @Component

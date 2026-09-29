@@ -4,6 +4,7 @@ import com.stove.common.event.DomainEvent;
 import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -20,13 +21,41 @@ public record ProductChangedEvent(
         long price,
         String currency,
         String status,
-        String ratingCode
+        String ratingCode,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        List<String> bundleProductCodes
 ) implements DomainEvent {
 
     public static ProductChangedEvent of(Long productId, String productCode, String name, Long sellerId,
                                          long price, String currency, String status, String ratingCode) {
         return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
-                productId, productCode, name, sellerId, price, currency, status, ratingCode);
+                productId, productCode, name, sellerId, price, currency, status, ratingCode,
+                null, null, null, "BASIC", null, null, List.of());
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision) {
+        return ofRelease(productId, productCode, name, sellerId, price, currency, status,
+                ratingCode, releaseId, buildId, metadataRevision, "BASIC", null, null, List.of());
+    }
+
+    public static ProductChangedEvent ofRelease(
+            Long productId, String productCode, String name, Long sellerId,
+            long price, String currency, String status, String ratingCode,
+            Long releaseId, Long buildId, Long metadataRevision,
+            String productKind, String parentProductCode, String editionName,
+            List<String> bundleProductCodes) {
+        return new ProductChangedEvent(UUID.randomUUID().toString(), Instant.now(),
+                productId, productCode, name, sellerId, price, currency, status, ratingCode,
+                releaseId, buildId, metadataRevision, productKind, parentProductCode,
+                editionName, List.copyOf(bundleProductCodes));
     }
 
     @Override

@@ -18,14 +18,22 @@ class ProductTest {
     }
 
     @Test
-    @DisplayName("심의 승인 → 판매 시작 → 구매 가능")
-    void reviewThenOpenSale() {
+    @DisplayName("심의 승인만으로는 판매를 시작할 수 없다")
+    void reviewAloneCannotOpenSale() {
         Product product = Product.draft("GAME-001", "테스트 게임", 1001L, 10000L, "KRW");
 
         product.applyReviewApproval("15");
         assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
 
-        product.openSale();
+        assertThatThrownBy(product::openSale).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("공개 릴리스가 반영되면 구매 가능하다")
+    void releaseMakesProductPurchasable() {
+        Product product = Product.fromRelease(1L, "GAME-001", "테스트 게임", 1001L,
+                10000L, "KRW", "15", 10L, 20L, 1L);
+
         assertThat(product.getStatus()).isEqualTo(ProductStatus.ON_SALE);
         product.requirePurchasable();
     }
@@ -33,9 +41,8 @@ class ProductTest {
     @Test
     @DisplayName("판매 중지 상품은 주문 단계에서 걸러진다")
     void suspendedProductIsNotPurchasable() {
-        Product product = Product.draft("GAME-001", "테스트 게임", 1001L, 10000L, "KRW");
-        product.applyReviewApproval("15");
-        product.openSale();
+        Product product = Product.fromRelease(1L, "GAME-001", "테스트 게임", 1001L,
+                10000L, "KRW", "15", 10L, 20L, 1L);
         product.suspend();
 
         assertThatThrownBy(product::requirePurchasable).isInstanceOf(BusinessException.class);

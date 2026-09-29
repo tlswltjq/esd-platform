@@ -15,7 +15,14 @@ public record StoreProductView(
         Long sellerId,
         Long price,
         String currency,
-        String ratingCode
+        String ratingCode,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        java.util.List<String> bundleProductCodes
 ) implements Serializable {
 
     public static StoreProductView from(ProductDocument document) {
@@ -26,6 +33,14 @@ public record StoreProductView(
                 document.getSellerId(),
                 document.getPrice(),
                 document.getCurrency(),
-                document.getRatingCode());
+                document.getRatingCode(),
+                document.getReleaseId(),
+                document.getBuildId(),
+                document.getMetadataRevision(),
+                document.getProductKind(),
+                document.getParentProductCode(),
+                document.getEditionName(),
+                document.getBundleProductCodes() == null ? java.util.List.of()
+                        : java.util.List.copyOf(document.getBundleProductCodes()));
     }
 }

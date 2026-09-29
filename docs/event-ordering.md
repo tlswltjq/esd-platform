@@ -163,7 +163,7 @@ GC 한 번, 리더 선출 한 번에도 한 건이 실패할 수 있다.
 |---|---|---|
 | 리스너 안에서 비동기 오프로드 | 스레드풀에 넘기는 순간 처리 순서가 도착 순서와 무관해진다 | 하지 않는다. 처리량이 필요하면 `concurrency` 를 올린다 |
 | **파티션 수 증설** | `hash(key) % partitions` 가 바뀌어 같은 주문이 옛/새 파티션으로 갈라진다 | 증설 전에 해당 토픽을 완전히 배수하거나, 새 토픽 + 마이그레이션 |
-| 논블로킹 재시도(`@RetryableTopic`) | 실패한 메시지가 재시도 토픽으로 빠져 뒤로 밀린다 | 쓰지 않는다. 이유는 [kafka-consumer-retry.md 6절](kafka-consumer-retry.md) |
+| 논블로킹 재시도(`@RetryableTopic`) | 실패한 메시지가 재시도 토픽으로 빠져 뒤로 밀린다 | 쓰지 않는다. 순서 보장을 약화한다 |
 
 `concurrency` 를 파티션 수까지 올리는 것은 **안전하다** — 스레드마다 파티션을 하나씩 맡으므로
 같은 키는 여전히 한 스레드가 순서대로 처리한다. 파티션 수를 넘겨 올리면 노는 스레드만 생긴다.
@@ -323,8 +323,7 @@ WHERE status = 'PENDING'
 ## 참고
 
 - 이 저장소: [defects.md](defects.md) (D-003 / D-010 / D-011 / D-012 / D-013),
-  [performance.md](performance.md) (릴레이 처리량 측정),
-  [kafka-consumer-retry.md](kafka-consumer-retry.md) (블로킹 재시도와 순서의 관계)
+  [performance.md](performance.md) (릴레이 처리량 측정)
 - 코드: `common/messaging/.../outbox/OutboxRelay.java` — 키 웨이브 발행
 - Kafka — *Idempotent Producer* (`enable.idempotence`, 시퀀스 번호 기반 순서 보장)
 - Debezium — *Outbox Event Router* (B 안의 표준 구현)

@@ -2,6 +2,7 @@ package com.stove.store.core.domain;
 
 import com.stove.common.event.payload.ProductChangedEvent;
 import java.time.Instant;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,7 +15,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 /**
  * 검색 색인 문서. <b>문서 ID = productId 라 자연 멱등</b>이므로 별도 Inbox 테이블이 없다.
- * docs/code-notes.md
+ *
  */
 @Getter
 @Builder
@@ -48,6 +49,27 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String ratingCode;
 
+    @Field(type = FieldType.Long)
+    private Long releaseId;
+
+    @Field(type = FieldType.Long)
+    private Long buildId;
+
+    @Field(type = FieldType.Long)
+    private Long metadataRevision;
+
+    @Field(type = FieldType.Keyword)
+    private String productKind;
+
+    @Field(type = FieldType.Keyword)
+    private String parentProductCode;
+
+    @Field(type = FieldType.Keyword)
+    private String editionName;
+
+    @Field(type = FieldType.Keyword)
+    private List<String> bundleProductCodes;
+
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
     private Instant indexedAt;
 
@@ -61,6 +83,13 @@ public class ProductDocument {
                 .currency(event.currency())
                 .status(event.status())
                 .ratingCode(event.ratingCode())
+                .releaseId(event.releaseId())
+                .buildId(event.buildId())
+                .metadataRevision(event.metadataRevision())
+                .productKind(event.productKind())
+                .parentProductCode(event.parentProductCode())
+                .editionName(event.editionName())
+                .bundleProductCodes(event.bundleProductCodes())
                 .indexedAt(Instant.now())
                 .build();
     }

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESD P0 빌드 업로드</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Pretendard, system-ui, sans-serif; }
+    body { margin: 0; background: #10131a; color: #eef2ff; }
+    main { width: min(760px, calc(100% - 32px)); margin: 48px auto; }
+    .eyebrow { color: #8da2fb; font-weight: 700; letter-spacing: .08em; font-size: 12px; }
+    h1 { margin: 8px 0 10px; font-size: clamp(28px, 5vw, 44px); }
+    .intro { color: #aab2c5; line-height: 1.65; margin-bottom: 28px; }
+    a { color: #9bb0ff; }
+    form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 24px;
+      background: #181d28; border: 1px solid #2a3345; border-radius: 18px; }
+    label { display: grid; gap: 7px; color: #c8d0e2; font-size: 14px; }
+    label.wide { grid-column: 1 / -1; }
+    input { box-sizing: border-box; width: 100%; border: 1px solid #364157; border-radius: 10px;
+      background: #0f141d; color: #fff; padding: 12px 13px; font: inherit; }
+    input:focus { outline: 2px solid #718af5; border-color: transparent; }
+    button { grid-column: 1 / -1; border: 0; border-radius: 11px; padding: 13px 16px;
+      background: #718af5; color: #081020; font: inherit; font-weight: 800; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .55; }
+    .result { margin-top: 18px; padding: 20px; min-height: 96px; white-space: pre-wrap; overflow-wrap: anywhere;
+      background: #0b0f16; border: 1px solid #293246; border-radius: 14px; color: #b9c6df;
+      font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .status { display: inline-flex; margin-top: 18px; padding: 6px 10px; border-radius: 999px;
+      background: #252d3d; color: #c5cee0; font-size: 13px; }
+    .status[data-kind="ok"] { background: #123c30; color: #7ce3b9; }
+    .status[data-kind="error"] { background: #4a2028; color: #ff9ca8; }
+    @media (max-width: 620px) { form { grid-template-columns: 1fr; } label.wide, button { grid-column: 1; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">STOVE BASIC · P0 LAB</div>
+  <h1>검증 빌드 업로드</h1>
+  <p class="intro">
+    <a href="/swagger-ui.html" target="_blank" rel="noreferrer">Swagger UI</a>에서 프로젝트와
+    CI credential을 만든 뒤 입력하세요. 이 페이지는 ZIP의 SHA-256 계산, presigned multipart 업로드,
+    완료 확정과 <code>VALIDATED</code> 상태 확인을 수행합니다.
+  </p>
+
+  <form id="upload-form">
+    <label>프로젝트 gameId
+      <input id="game-id" inputmode="numeric" required placeholder="예: 1">
+    </label>
+    <label>제품 버전
+      <input id="version" required value="1.0.0" maxlength="30">
+    </label>
+    <label>CI build number
+      <input id="build-number" required value="100" maxlength="100">
+    </label>
+    <label>아키텍처
+      <input id="architecture" required value="X86_64" maxlength="30">
+    </label>
+    <label class="wide">프로젝트 CI credential
+      <input id="credential" type="password" required autocomplete="off" placeholder="esd_ci_...">
+    </label>
+    <label class="wide">Windows 배포 패키지 ZIP
+      <input id="artifact" type="file" required accept=".zip,application/zip">
+    </label>
+    <button id="submit" type="submit">업로드하고 검증하기</button>
+  </form>
+
+  <div id="status" class="status">입력 대기</div>
+  <pre id="result" class="result">진행 로그가 여기에 표시됩니다.</pre>
+</main>
+
+<script>
+  const form = document.querySelector("#upload-form");
+  const submit = document.querySelector("#submit");
+  const status = document.querySelector("#status");
+  const result = document.querySelector("#result");
+
+  function show(message, kind = "") {
+    status.textContent = message;
+    status.dataset.kind = kind;
+  }
+
+  function log(message, value) {
+    const suffix = value === undefined ? "" : "\n" + JSON.stringify(value, null, 2);
+    result.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}${suffix}`;
+    result.scrollTop = result.scrollHeight;
+  }
+
+  async function jsonRequest(path, options) {
+    const response = await fetch(path, options);
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.success === false) {
+      throw new Error(`${response.status} ${body?.error?.code ?? "HTTP_ERROR"}: ${body?.error?.message ?? path}`);
+    }
+    return body.data;
+  }
+
+  async function sha256(file) {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    submit.disabled = true;
+    result.textContent = "";
+    try {
+      const gameId = document.querySelector("#game-id").value.trim();
+      const version = document.querySelector("#version").value.trim();
+      const buildNumber = document.querySelector("#build-number").value.trim();
+      const architecture = document.querySelector("#architecture").value.trim();
+      const credential = document.querySelector("#credential").value.trim();
+      const file = document.querySelector("#artifact").files[0];
+      const ciHeaders = {"Content-Type": "application/json", "X-Project-Credential": credential};
+
+      show("SHA-256 계산 중");
+      const checksum = await sha256(file);
+      log("SHA-256 계산 완료", {fileName: file.name, fileSize: file.size, sha256: checksum});
+
+      show("업로드 세션 생성 중");
+      const session = await jsonRequest(`/api/v1/studio/ci/projects/${gameId}/upload-sessions`, {
+        method: "POST",
+        headers: ciHeaders,
+        body: JSON.stringify({
+          productVersion: version,
+          buildNumber,
+          platform: "WINDOWS",
+          architecture,
+          fileName: file.name,
+          fileSize: file.size,
+          sha256: checksum,
+          commitSha: null,
+          repository: null,
+          ciProvider: "P0_LAB",
+          ciRunId: crypto.randomUUID(),
+          idempotencyKey: `p0-lab-${gameId}-${crypto.randomUUID()}`
+        })
+      });
+      log("업로드 세션 생성", session);
+
+      show(`패키지 업로드 중 (0/${session.parts.length})`);
+      const parts = [];
+      for (let index = 0; index < session.parts.length; index++) {
+        const part = session.parts[index];
+        const start = (part.partNumber - 1) * session.partSize;
+        const end = Math.min(start + session.partSize, file.size);
+        const response = await fetch(part.uploadUrl, {method: "PUT", body: file.slice(start, end)});
+        if (!response.ok) throw new Error(`part ${part.partNumber} 업로드 실패: HTTP ${response.status}`);
+        const etag = response.headers.get("etag");
+        if (!etag) throw new Error("Object Storage 응답에서 ETag를 읽을 수 없습니다. CORS 설정을 확인하세요.");
+        parts.push({partNumber: part.partNumber, etag});
+        show(`패키지 업로드 중 (${index + 1}/${session.parts.length})`);
+      }
+
+      show("업로드 완료 확정 중");
+      await jsonRequest(
+        `/api/v1/studio/ci/projects/${gameId}/upload-sessions/${session.uploadSessionId}/complete`,
+        {method: "POST", headers: ciHeaders, body: JSON.stringify({parts})}
+      );
+      log("multipart 업로드 완료", {buildId: session.buildId, parts});
+
+      show("빌드 검증 중");
+      let build;
+      for (let attempt = 0; attempt < 90; attempt++) {
+        build = await jsonRequest(`/api/v1/studio/ci/projects/${gameId}/builds/${session.buildId}`, {
+          headers: {"X-Project-Credential": credential}
+        });
+        if (build.status === "VALIDATED" || build.status === "FAILED") break;
+        await wait(1000);
+      }
+      log("최종 빌드 상태", build);
+      if (build?.status !== "VALIDATED") {
+        throw new Error(`빌드 검증 실패: ${build?.failureCode ?? build?.status ?? "TIMEOUT"}`);
+      }
+      show(`VALIDATED · buildId ${build.buildId}`, "ok");
+    } catch (error) {
+      console.error(error);
+      log("실패", {message: error.message});
+      show("실패", "error");
+    } finally {
+      submit.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

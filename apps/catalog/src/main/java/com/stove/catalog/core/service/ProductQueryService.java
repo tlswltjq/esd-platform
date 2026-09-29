@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 읽기 트래픽이 집중되는 경로. 캐시 무효화는 {@link ProductCommandService} 에서만 한다.
- * docs/code-notes.md
+ *
  */
 @Service
 @RequiredArgsConstructor
@@ -42,7 +42,7 @@ public class ProductQueryService {
 
     /**
      * {@code productCode} 로 상품을 찾는다 — 서비스 사이의 자연 키는 내부 id 가 아니다.
-     * <b>캐시를 걸지 않는다</b>(무효화 지점이 둘로 늘어난다). docs/code-notes.md
+     * <b>캐시를 걸지 않는다</b>(무효화 지점이 둘로 늘어난다).
      */
     public ProductView getProductByCode(String productCode) {
         return productRepository.findByProductCode(productCode)
@@ -53,7 +53,7 @@ public class ProductQueryService {
 
     /**
      * 판매중 상품 목록. <b>정렬을 주지 않은 요청도 {@link ProductSort} 를 통과해야 한다</b> —
-     * 거기서 {@code id desc} 를 받는다. [D-024] [D-025] docs/code-notes.md
+     * 거기서 {@code id desc} 를 받는다. [D-024] [D-025]
      */
     public Page<ProductView> getOnSaleProducts(Pageable pageable) {
         return productRepository.findByStatus(ProductStatus.ON_SALE, ProductSort.apply(pageable))

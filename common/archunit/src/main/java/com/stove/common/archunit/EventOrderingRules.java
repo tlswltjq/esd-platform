@@ -10,7 +10,7 @@ import com.tngtech.archunit.lang.ArchRule;
 /**
  * 컨슈머 층의 순서 보장을 떠받치는 전제를 코드로 고정한다.
  * 여기서 막는 둘은 <b>도입하는 순간 순서가 깨지지만 깨진 티가 안 난다.</b>
- * docs/code-notes.md, {@code docs/event-ordering.md} 5절.
+ * {@code docs/event-ordering.md} 5절.
  */
 public final class EventOrderingRules {
 
@@ -48,13 +48,11 @@ public final class EventOrderingRules {
 
     /**
      * 논블로킹 재시도를 쓰지 않는다 — 발행 측에서 D-013/D-014 로 막은 추월을 수신 측에서 다시 연다.
-     * {@code docs/kafka-consumer-retry.md} 6절.
      */
     @ArchTest
     public static final ArchRule 논블로킹_재시도를_쓰지_않는다 = noMethods()
             .should().beAnnotatedWith(RETRYABLE_TOPIC)
-            .because("@RetryableTopic 은 실패 메시지를 뒤로 미뤄 같은 키의 순서를 깬다 "
-                    + "(docs/kafka-consumer-retry.md 6절)")
+            .because("@RetryableTopic 은 실패 메시지를 뒤로 미뤄 같은 키의 순서를 깬다")
             .allowEmptyShould(true);
 
     @ArchTest

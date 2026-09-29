@@ -27,7 +27,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
  *
  * <p>검증의 핵심은 다른 리스너와 같다 — <b>예외를 밖으로 내보내는가.</b>
  * 스프링 카프카는 정상 리턴을 처리 성공으로 보고 오프셋을 커밋하므로,
- * 여기서 예외를 삼키면 재시도 대상 자체가 사라진다(docs/kafka-consumer-retry.md).
+ * 여기서 예외를 삼키면 재시도 대상 자체가 사라진다.
  */
 class PaymentEventListenerTest {
 

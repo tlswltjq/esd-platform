@@ -1,5 +1,7 @@
 package com.stove.catalog.core.domain;
 
+import java.util.List;
+
 /**
  * 상품 읽기 모델.
  *
@@ -14,23 +16,37 @@ public record ProductView(
         Long productId,
         String productCode,
         Long gameId,
+        Long releaseId,
+        Long buildId,
+        Long metadataRevision,
         String name,
         Long sellerId,
         long price,
         String currency,
         ProductStatus status,
-        String ratingCode
+        String ratingCode,
+        String productKind,
+        String parentProductCode,
+        String editionName,
+        List<String> bundleProductCodes
 ) {
     public static ProductView from(Product product) {
         return new ProductView(
                 product.getId(),
                 product.getProductCode(),
                 product.getGameId(),
+                product.getCurrentReleaseId(),
+                product.getCurrentBuildId(),
+                product.getMetadataRevision(),
                 product.getName(),
                 product.getSellerId(),
                 product.getPrice(),
                 product.getCurrency(),
                 product.getStatus(),
-                product.getRatingCode());
+                product.getRatingCode(),
+                product.getProductKind(),
+                product.getParentProductCode(),
+                product.getEditionName(),
+                List.copyOf(product.getBundleProductCodes()));
     }
 }

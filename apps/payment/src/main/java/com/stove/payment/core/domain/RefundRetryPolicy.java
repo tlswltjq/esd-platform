@@ -4,7 +4,7 @@ import java.time.Duration;
 
 /**
  * 중단된 취소를 다시 걸기까지의 백오프(2→4→8→16→30분).
- * 계수가 {@code ConsumerRetryPolicy} 와 다른 이유와 상한의 근거는 docs/code-notes.md
+ * 서비스 특성에 맞는 재시도 간격과 상한을 둔다.
  */
 public final class RefundRetryPolicy {
 

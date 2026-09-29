@@ -279,14 +279,34 @@
       },
       "ProductResponse" : {
         "properties" : {
+          "buildId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "bundleProductCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
           "currency" : {
+            "type" : "string"
+          },
+          "editionName" : {
             "type" : "string"
           },
           "gameId" : {
             "format" : "int64",
             "type" : "integer"
           },
+          "metadataRevision" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "name" : {
+            "type" : "string"
+          },
+          "parentProductCode" : {
             "type" : "string"
           },
           "price" : {
@@ -300,8 +320,15 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "productKind" : {
+            "type" : "string"
+          },
           "ratingCode" : {
             "type" : "string"
+          },
+          "releaseId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "sellerId" : {
             "format" : "int64",

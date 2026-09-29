@@ -12,6 +12,7 @@ import com.stove.common.event.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,16 +30,18 @@ import org.springframework.context.annotation.Import;
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
 class ProductQuoteTest {
 
+    private static final AtomicLong RELEASE_IDS = new AtomicLong(20_000L);
+
     @Autowired
     ProductQueryService productQueryService;
     @Autowired
     ProductRepository productRepository;
 
     private Product onSale(long price, String currency) {
-        Product product = Product.draft("GAME-" + UUID.randomUUID(), "게임 " + UUID.randomUUID(),
-                1001L, price, currency);
-        product.applyReviewApproval("ALL");
-        product.openSale();
+        long releaseId = RELEASE_IDS.incrementAndGet();
+        Product product = Product.fromRelease(1L, "GAME-" + UUID.randomUUID(),
+                "게임 " + UUID.randomUUID(), 1001L, price, currency, "ALL",
+                releaseId, releaseId, 1L);
         return productRepository.save(product);
     }
 

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -40,7 +41,9 @@ class S3PresignedUrlSignerTest {
     private static final byte[] BUILD = "fake game binary".getBytes(StandardCharsets.UTF_8);
 
     @Container
-    static final MinIOContainer MINIO = new MinIOContainer("minio/minio:latest")
+    static final MinIOContainer MINIO = new MinIOContainer(DockerImageName
+            .parse("quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z")
+            .asCompatibleSubstituteFor("minio/minio"))
             .withUserName(USER)
             .withPassword(PASSWORD);
 
@@ -61,7 +64,7 @@ class S3PresignedUrlSignerTest {
 
     private S3PresignedUrlSigner signer(Duration ttl) {
         return new S3PresignedUrlSigner(new ObjectStorageProperties(
-                MINIO.getS3URL(), "us-east-1", USER, PASSWORD, ttl));
+                MINIO.getS3URL(), null, "us-east-1", USER, PASSWORD, ttl));
     }
 
     @Test

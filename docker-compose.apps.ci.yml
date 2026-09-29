@@ -16,6 +16,8 @@ name: stove-apps
 services:
   gateway:
     ports: !reset []
+  auth:
+    ports: !reset []
   studio:
     ports: !reset []
   review:

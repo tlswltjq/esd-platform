@@ -8,7 +8,7 @@
 |---|---|
 | 기준 | `main` @ `1a182b8`, 분석일 2026-09-14 |
 | 요구사항의 출처 | 저장소에 `/goal` 문서가 없다. [README](../README.md) 1행의 목표와 3절 "설계 과제와 해법" 표를 요구사항으로 삼았다 |
-| 기존 문서와의 관계 | [decisions](decisions.md)·[defects](defects.md)·[code-notes](code-notes.md)·[event-ordering](event-ordering.md) 가 "왜 이렇게 했나"의 원본이다. 이 문서는 그것을 원리와 면접 질문으로 다시 엮고, **그 문서들이 다루지 않은 위험**을 더한다. 같은 설명은 링크로 대신한다 |
+| 기존 문서와의 관계 | [decisions](decisions.md)·[defects](defects.md)·[code-notes (분석 기준 커밋)](https://github.com/tlswltjq/esd-platform/blob/1a182b8/docs/code-notes.md)·[event-ordering](event-ordering.md) 가 "왜 이렇게 했나"의 원본이다. 이 문서는 그것을 원리와 면접 질문으로 다시 엮고, **그 문서들이 다루지 않은 위험**을 더한다. 같은 설명은 링크로 대신한다 |
 | 버전 | Spring Boot 3.5.6(`gradle.properties`)과 그 BOM 이 정하는 Spring Kafka 3.3.10 · kafka-clients 3.9.1 · Hibernate 6.6.29 · HikariCP 6.3.3 · Connector/J 9.4.0. 인프라는 MySQL 8.0 · Kafka 3.9.0 KRaft 단일 브로커(`docker-compose.yml`) |
 
 ## 읽기 전에
@@ -1054,7 +1054,7 @@ while (running) {
 ```
 
 Spring Kafka 는 `@KafkaListener` 마다 리스너 컨테이너를 만들고, 전용 스레드가 위 루프를 돌며 레코드마다 우리 메서드를 부른다.
-**정상 리턴이면 성공, 예외면 실패**로 판정하고 — 리턴값은 보지 않는다 — 실패는 에러 핸들러로 넘긴다([kafka-consumer-retry.md](kafka-consumer-retry.md) 1절).
+**정상 리턴이면 성공, 예외면 실패**로 판정하고 — 리턴값은 보지 않는다 — 실패는 에러 핸들러로 넘긴다([kafka-consumer-retry.md (분석 기준 커밋)](https://github.com/tlswltjq/esd-platform/blob/1a182b8/docs/kafka-consumer-retry.md) 1절).
 
 **내 프로젝트에서는** [확인됨 — `application.yml`, spring-kafka 3.3.10 소스, kafka-clients 3.9.1 jar, 원격 스택에서 실행 중인 order 앱의 기동 로그(`ConsumerConfig values`·`ProducerConfig values`)]
 
@@ -2612,7 +2612,7 @@ PostgreSQL 의 REPEATABLE READ 는 동시에 갱신된 행을 쓰려 하면 직�
 | 순서 | 문서 | 이 문서를 읽은 뒤 무엇을 얻나 |
 |---|---|---|
 | 1 | [event-ordering.md](event-ordering.md) | 순서 세 층과 해법 카탈로그 — 5.9 와 R2 의 원본 |
-| 2 | [kafka-consumer-retry.md](kafka-consumer-retry.md) | 재시도가 예외 전파에 기대는 이유를 스프링 내부 코드로 |
+| 2 | [kafka-consumer-retry.md (분석 기준 커밋)](https://github.com/tlswltjq/esd-platform/blob/1a182b8/docs/kafka-consumer-retry.md) | 재시도가 예외 전파에 기대는 이유를 스프링 내부 코드로 |
 | 3 | [defects.md](defects.md) D-002 · D-013 · D-014 · D-027 · D-028 · D-030 · D-037 | 이 문서가 인용한 실제 사고와 재현 테스트 |
-| 4 | [code-notes.md](code-notes.md) payment · common 절 | 클래스마다 "왜 이 모양인가" |
+| 4 | [code-notes.md (분석 기준 커밋)](https://github.com/tlswltjq/esd-platform/blob/1a182b8/docs/code-notes.md) payment · common 절 | 클래스마다 "왜 이 모양인가" |
 | 5 | [measuring.md](measuring.md) | 측정 규칙 — R1 A/B 가 따른 절차의 출처 |

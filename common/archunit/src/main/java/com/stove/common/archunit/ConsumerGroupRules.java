@@ -16,7 +16,7 @@ import java.util.TreeSet;
  * 참조 형태가 아니라 <b>값</b>을 검사한다 — 애노테이션 속성은 컴파일 타임 상수라
  * 바이트코드에 "무엇을 참조했는가"가 남지 않는다.
  *
- * <p>여기서 실패하면 "고장났다"가 아니라 "한 곳으로 되돌려라"로 읽는다. docs/code-notes.md
+ * <p>여기서 실패하면 "고장났다"가 아니라 "한 곳으로 되돌려라"로 읽는다.
  */
 public final class ConsumerGroupRules {
 

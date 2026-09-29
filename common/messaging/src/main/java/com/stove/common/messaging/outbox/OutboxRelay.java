@@ -20,8 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Outbox 폴링 릴레이. at-least-once 이고, 발행 단위는 <b>파티션 키</b>다.
  *
  * <p><b>릴레이는 서비스당 1대여야 한다</b> — {@code FOR UPDATE SKIP LOCKED} 가 파티션 키를
- * 모르므로 여러 대면 순서 보장이 조용히 무효가 된다.
- * docs/code-notes.md, {@code docs/event-ordering.md} 7절.
+ * 모르므로 여러 대면 순서 보장이 조용히 무효가 된다. {@code docs/event-ordering.md} 7절.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -37,8 +36,7 @@ public class OutboxRelay {
      * 폴링 진입점. <b>비울 게 남아 있는 동안은 다음 폴링을 기다리지 않는다.</b>
      * 배치마다 트랜잭션을 따로 연다 — 묶으면 락 보유 시간이 API 응답을 끌어내린다.
      *
-     * <p>{@code poll-interval-ms} 는 <b>종단 지연의 바닥</b>이다. 200 으로 정한 근거와
-     * 적응형 폴링을 아직 하지 않는 이유는 docs/code-notes.md
+     * <p>{@code poll-interval-ms} 는 <b>종단 지연의 바닥</b>이다. 기본값은 200ms다.
      */
     @Scheduled(fixedDelayString = "${stove.outbox.poll-interval-ms:200}")
     public void relay() {
@@ -68,7 +66,7 @@ public class OutboxRelay {
 
     /**
      * 같은 {@code partitionKey} 는 순서대로, 다른 키끼리는 동시에. 웨이브 하나를 통째로 걸어두고
-     * 한 번에 기다린 뒤 <b>성공한 키만</b> 다음 웨이브로 넘긴다. [D-013] docs/code-notes.md
+     * 한 번에 기다린 뒤 <b>성공한 키만</b> 다음 웨이브로 넘긴다. [D-013]
      */
     private void publishPreservingOrder(List<OutboxEvent> batch) {
         List<List<OutboxEvent>> chains = new ArrayList<>(batch.stream()
@@ -141,8 +139,7 @@ public class OutboxRelay {
 
     /**
      * 계약 헤더 셋에 더해 적재 시점의 추적 컨텍스트를 <b>되살린다.</b>
-     * 자동 계측에 맡기면 안 되고 {@code spring.kafka.template.observation-enabled} 도 꺼야 한다 —
-     * 근거는 docs/code-notes.md
+     * 자동 계측에 맡기면 안 되고 {@code spring.kafka.template.observation-enabled} 도 꺼야 한다.
      */
     private ProducerRecord<String, String> toRecord(OutboxEvent event) {
         ProducerRecord<String, String> record =

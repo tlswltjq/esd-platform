@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @RestController
 @RequiredArgsConstructor
@@ -42,7 +44,7 @@ public class ProductController {
 
     /**
      * {@code productCode} 로 조회. <b>질의 파라미터로 얹으면 OpenAPI 연산이 충돌한다</b> —
-     * 그래서 경로를 나눴다. docs/code-notes.md
+     * 그래서 경로를 나눴다.
      */
     @GetMapping("/by-code/{productCode}")
     public ApiResponse<ProductResponse> detailByCode(@PathVariable String productCode) {
@@ -51,14 +53,14 @@ public class ProductController {
 
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */
     @PostMapping("/{productId}/sale-open")
-    public ApiResponse<Void> openSale(@PathVariable Long productId) {
-        productCommandService.openSale(productId);
+    public ApiResponse<Void> openSale(@PathVariable Long productId, @AuthenticationPrincipal Jwt jwt) {
+        productCommandService.openSale(productId, jwt.getSubject());
         return ApiResponse.ok();
     }
 
     @PostMapping("/{productId}/suspend")
-    public ApiResponse<Void> suspend(@PathVariable Long productId) {
-        productCommandService.suspend(productId);
+    public ApiResponse<Void> suspend(@PathVariable Long productId, @AuthenticationPrincipal Jwt jwt) {
+        productCommandService.suspend(productId, jwt.getSubject());
         return ApiResponse.ok();
     }
 

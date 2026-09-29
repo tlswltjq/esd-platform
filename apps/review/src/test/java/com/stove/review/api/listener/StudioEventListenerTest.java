@@ -16,6 +16,7 @@ import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.GameRegisteredEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.review.core.service.ReviewService;
+import com.stove.review.core.service.SubmissionReviewService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,8 +32,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class StudioEventListenerTest {
 
     private final ReviewService reviewService = mock(ReviewService.class);
+    private final SubmissionReviewService submissionReviewService = mock(SubmissionReviewService.class);
     private final StudioEventListener listener =
-            new StudioEventListener(reviewService, EventRecords.OBJECT_MAPPER);
+            new StudioEventListener(reviewService, submissionReviewService, EventRecords.OBJECT_MAPPER);
 
     private static final GameRegisteredEvent REGISTERED = GameRegisteredEvent.of(
             1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false);
@@ -55,7 +57,7 @@ class StudioEventListenerTest {
         listener.onStudioEvent(EventRecords.of(Topics.STUDIO, BuildUploadedEvent.of(
                 1L, "GAME-001", "1.0.0", 1024L, "sha256:abc", "s3://bucket/build")));
 
-        verifyNoInteractions(reviewService);
+        verifyNoInteractions(reviewService, submissionReviewService);
     }
 
     @Test
@@ -63,7 +65,7 @@ class StudioEventListenerTest {
     void unrelatedEventTypeIsIgnored() {
         listener.onStudioEvent(EventRecords.ofUnrelatedType(Topics.STUDIO));
 
-        verifyNoInteractions(reviewService);
+        verifyNoInteractions(reviewService, submissionReviewService);
     }
 
     @Test

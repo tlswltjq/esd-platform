@@ -14,7 +14,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 /**
  * {@code common/*} 에 적용하는 규칙. 라이브러리에서 지켜야 하는 것은 배치가 아니라 <b>방향</b>이다.
- * docs/code-notes.md
+ *
  */
 public final class CommonLibraryRules {
 

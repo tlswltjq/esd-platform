@@ -9,7 +9,7 @@ public final class EventHeaders {
 
     /**
      * W3C Trace Context. <b>이름을 우리가 정하지 않는다</b> — 표준이라 바꾸면 추적이 조용히 끊긴다.
-     * 자동 계측만으로는 채워지지 않는다(Outbox 의 발행자는 요청 스레드가 아니다). docs/code-notes.md
+     * 자동 계측만으로는 채워지지 않는다(Outbox 의 발행자는 요청 스레드가 아니다).
      */
     public static final String TRACE_PARENT = "traceparent";
 

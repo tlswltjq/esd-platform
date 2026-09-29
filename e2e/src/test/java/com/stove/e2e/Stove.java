@@ -44,6 +44,8 @@ final class Stove {
     /** 유저·창작자·PG 가 두드리는 문. */
     static final E2eClient gateway = at(8080);
 
+    static final E2eClient auth = at(8091);
+
     /** 게이트웨이에 라우팅되지 않는 운영 호출 전용. */
     static final E2eClient catalog = at(8081);
 
@@ -75,7 +77,14 @@ final class Stove {
     }
 
     private static Map<String, E2eClient> consumers() {
-        Map<String, E2eClient> apps = new LinkedHashMap<>(publishers());
+        Map<String, E2eClient> apps = new LinkedHashMap<>();
+        apps.put("catalog", at(8081));
+        apps.put("order", at(8082));
+        apps.put("payment", at(8083));
+        apps.put("license", at(8084));
+        apps.put("studio", at(8085));
+        apps.put("review", at(8086));
+        apps.put("settlement", at(8089));
         apps.put("store", at(8087));
         apps.put("download", at(8088));
         return Collections.unmodifiableMap(apps);
@@ -83,6 +92,7 @@ final class Stove {
 
     private static Map<String, E2eClient> publishers() {
         Map<String, E2eClient> apps = new LinkedHashMap<>();
+        apps.put("auth", at(8091));
         apps.put("catalog", at(8081));
         apps.put("order", at(8082));
         apps.put("payment", at(8083));

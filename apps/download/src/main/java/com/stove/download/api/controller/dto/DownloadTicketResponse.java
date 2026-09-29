@@ -5,14 +5,21 @@ import java.time.Instant;
 
 public record DownloadTicketResponse(
         String productCode,
+        Long releaseId,
+        Long buildId,
         String version,
         long fileSize,
         String checksum,
         String downloadUrl,
-        Instant expiresAt
+        Instant expiresAt,
+        String platform,
+        String architecture,
+        String deltaFromVersion
 ) {
     public static DownloadTicketResponse from(DownloadTicket ticket) {
-        return new DownloadTicketResponse(ticket.productCode(), ticket.version(), ticket.fileSize(),
-                ticket.checksum(), ticket.downloadUrl(), ticket.expiresAt());
+        return new DownloadTicketResponse(ticket.productCode(), ticket.releaseId(), ticket.buildId(),
+                ticket.version(), ticket.fileSize(),
+                ticket.checksum(), ticket.downloadUrl(), ticket.expiresAt(),
+                ticket.platform(), ticket.architecture(), ticket.deltaFromVersion());
     }
 }

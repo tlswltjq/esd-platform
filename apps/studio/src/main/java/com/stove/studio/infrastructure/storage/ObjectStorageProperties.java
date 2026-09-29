@@ -14,16 +14,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "stove.storage")
 public record ObjectStorageProperties(
         String endpoint,
+        String presignEndpoint,
         String region,
         String accessKey,
         String secretKey,
         String bucket,
-        Duration presignTtl
+        Duration presignTtl,
+        Boolean encryptionEnabled
 ) {
     public ObjectStorageProperties {
         region = region == null ? "us-east-1" : region;
         bucket = bucket == null ? "stove-builds" : bucket;
         presignTtl = presignTtl == null ? Duration.ofMinutes(15) : presignTtl;
+        encryptionEnabled = encryptionEnabled == null || encryptionEnabled;
     }
 
     /** MinIO 처럼 가상 호스트 스타일을 지원하지 않는 엔드포인트를 쓸 때 경로 스타일이 필요하다. */

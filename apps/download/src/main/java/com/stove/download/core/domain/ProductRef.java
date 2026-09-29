@@ -29,4 +29,7 @@ public class ProductRef {
     private String name;
 
     private String status;
+
+    /** Catalog가 현재 노출하는 공개 릴리스. 매니페스트와 일치해야 티켓을 발급한다. */
+    private Long releaseId;
 }

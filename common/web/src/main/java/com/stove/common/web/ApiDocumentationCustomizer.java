@@ -1,8 +1,15 @@
 package com.stove.common.web;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.parameters.Parameter;
+import io.swagger.v3.oas.models.security.OAuthFlow;
+import io.swagger.v3.oas.models.security.OAuthFlows;
+import io.swagger.v3.oas.models.security.Scopes;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.customizers.OpenApiCustomizer;
@@ -19,6 +26,9 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
  */
 @RequiredArgsConstructor
 public class ApiDocumentationCustomizer implements OpenApiCustomizer {
+
+    public static final String OAUTH2 = "oauth2";
+    public static final String PROJECT_CREDENTIAL = "projectCredential";
 
     /**
      * 스켈레톤에서 신원을 대신하는 헤더들.
@@ -37,11 +47,42 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
                     X-Member-Id 와 같은 자리이며, 스튜디오 API 의 소유권 판정에 그대로 쓰인다.""");
 
     private final String applicationName;
+    private final String authorizationUrl;
+    private final String tokenUrl;
 
     @Override
     public void customise(OpenAPI openApi) {
         openApi.info(info());
+        // Gateway Swagger가 하위 컨테이너 주소(studio:8085 등)를 브라우저에 노출하지 않도록
+        // 현재 문서가 제공된 출처를 기준으로 API를 호출하게 한다.
+        openApi.setServers(List.of(new Server().url("/")));
         describeIdentityHeaders(openApi);
+        addSecuritySchemes(openApi);
+    }
+
+    private void addSecuritySchemes(OpenAPI openApi) {
+        if (!"studio".equals(applicationName) && !"review".equals(applicationName)) {
+            return;
+        }
+        Components components = openApi.getComponents() == null ? new Components() : openApi.getComponents();
+        components.addSecuritySchemes(OAUTH2, new SecurityScheme()
+                .type(SecurityScheme.Type.OAUTH2)
+                .description("Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.")
+                .flows(new OAuthFlows().authorizationCode(new OAuthFlow()
+                        .authorizationUrl(authorizationUrl)
+                        .tokenUrl(tokenUrl)
+                        .scopes(new Scopes()
+                                .addString("openid", "사용자 식별")
+                                .addString("profile", "기본 프로필")
+                                .addString("studio", "크리에이터·심사 API")))));
+        if ("studio".equals(applicationName)) {
+            components.addSecuritySchemes(PROJECT_CREDENTIAL, new SecurityScheme()
+                    .type(SecurityScheme.Type.APIKEY)
+                    .in(SecurityScheme.In.HEADER)
+                    .name("X-Project-Credential")
+                    .description("프로젝트 범위 CI credential입니다. 빌드 업로드와 상태 조회에만 사용합니다."));
+        }
+        openApi.setComponents(components);
     }
 
     private Info info() {

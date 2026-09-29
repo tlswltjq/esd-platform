@@ -6,6 +6,8 @@ package com.stove.common.event;
  */
 public final class Topics {
 
+    public static final String AUTH = "stove.auth.v1";
+
     /** studio: 게임 등록/빌드 업로드 */
     public static final String STUDIO = "stove.studio.v1";
     /** review: 등급분류 심의 결과 */

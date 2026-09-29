@@ -87,6 +87,7 @@ class GatewayRouteTest {
 
     @ParameterizedTest(name = "{0} {1} → {2}")
     @CsvSource({
+            "POST, /api/v1/auth/signup,          auth-api",
             "GET,  /api/v1/storefront/main,     store",
             "POST, /api/v1/orders,              order",
             "POST, /api/v1/payments/callback,   payment",
@@ -101,6 +102,14 @@ class GatewayRouteTest {
         assertThat(matchedRouteId(HttpMethod.valueOf(method), path)).isEqualTo(expectedRouteId);
     }
 
+    @ParameterizedTest(name = "GET {0}")
+    @ValueSource(strings = {"/oauth2/authorize", "/oauth2/token", "/login", "/logout",
+            "/default-ui.css", "/.well-known/openid-configuration"})
+    @DisplayName("Swagger PKCE에 필요한 브라우저 인증 경로만 auth로 프록시한다")
+    void browserAuthenticationRoutesReachAuth(String path) {
+        assertThat(matchedRouteId(HttpMethod.GET, path)).isEqualTo("auth-browser");
+    }
+
     @Test
     @DisplayName("정의되지 않은 경로는 어디에도 매칭되지 않는다")
     void unknownPathMatchesNothing() {
@@ -110,10 +119,10 @@ class GatewayRouteTest {
 
     @ParameterizedTest(name = "GET /v3/api-docs/{0}")
     @ValueSource(strings = {
-            "store", "catalog", "order", "payment", "license",
+            "auth", "store", "catalog", "order", "payment", "license",
             "download", "studio", "review", "settlement"
     })
-    @DisplayName("9개 서비스의 명세가 게이트웨이를 통해 조회된다 — Swagger UI 가 같은 출처에서 받는다")
+    @DisplayName("10개 서비스의 명세가 게이트웨이를 통해 조회된다 — Swagger UI 가 같은 출처에서 받는다")
     void apiDocsAreProxied(String service) {
         assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/" + service))
                 .isEqualTo("docs-" + service);

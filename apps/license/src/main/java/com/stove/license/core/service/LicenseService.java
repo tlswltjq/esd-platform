@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 라이선스 지급/회수. 멱등을 존재 확인과 DB 유니크 제약으로 이중으로 건다.
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Service
@@ -48,7 +48,7 @@ public class LicenseService {
             licenseRepository.save(License.issue(orderNo, memberId, productId));
         }
 
-        // 새로 지급된 것이 없어도 현재 소유 상태를 알린다 — docs/code-notes.md
+        // 새로 지급된 것이 없어도 현재 소유 상태를 알린다 —
         List<Long> owned = licenseRepository.findByOrderNo(orderNo).stream()
                 .filter(License::isActive)
                 .map(License::getProductId)
@@ -105,7 +105,7 @@ public class LicenseService {
 
     /**
      * 이 주문에 라이선스가 발급된 이력이 있는가. 보상 환불 <b>직전에</b> 부른다. [D-028]
-     * 회수된 것도 '있음' 으로 센다. docs/code-notes.md
+     * 회수된 것도 '있음' 으로 센다.
      */
     @Transactional(readOnly = true)
     public boolean isIssued(String orderNo) {

@@ -29,7 +29,7 @@ class OutboxDrainE2eTest {
 
     @Test
     @Order(1)
-    @DisplayName("발행하는 앱 7종의 stove.outbox.pending 이 0 으로 수렴한다")
+    @DisplayName("발행하는 앱 8종의 stove.outbox.pending 이 0 으로 수렴한다")
     void outboxDrainsToZero() {
         Map<String, String> stuck = new LinkedHashMap<>();
 

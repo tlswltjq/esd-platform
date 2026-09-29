@@ -4,13 +4,18 @@ import com.stove.common.core.error.BusinessException;
 import com.stove.common.core.error.ErrorCode;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,6 +40,13 @@ public class Product extends BaseTimeEntity {
     /** studio 의 게임 프로젝트 ID. 크리에이터 트랙과의 연결 고리. */
     private Long gameId;
 
+    /** Store와 Download가 함께 바라보는 현재 공개 릴리스 스냅샷. */
+    private Long currentReleaseId;
+
+    private Long currentBuildId;
+
+    private Long metadataRevision;
+
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -56,6 +68,20 @@ public class Product extends BaseTimeEntity {
     /** 게임물관리위원회 등급 코드(ALL/12/15/18) */
     @Column(length = 10)
     private String ratingCode;
+
+    @Column(nullable = false, length = 20)
+    private String productKind = "BASIC";
+
+    @Column(length = 50)
+    private String parentProductCode;
+
+    @Column(length = 100)
+    private String editionName;
+
+    @ElementCollection
+    @CollectionTable(name = "product_bundle_component", joinColumns = @JoinColumn(name = "product_id"))
+    @Column(name = "component_product_code", nullable = false, length = 50)
+    private List<String> bundleProductCodes = new ArrayList<>();
 
     private Product(String productCode, String name, Long sellerId, long price, String currency) {
         this.productCode = productCode;
@@ -79,6 +105,44 @@ public class Product extends BaseTimeEntity {
         return product;
     }
 
+    public static Product fromRelease(Long gameId, String productCode, String name, Long sellerId,
+                                      long price, String currency, String ratingCode,
+                                      Long releaseId, Long buildId, Long metadataRevision) {
+        Product product = new Product(productCode, name, sellerId, price, currency);
+        product.applyRelease(gameId, name, sellerId, price, currency, ratingCode,
+                releaseId, buildId, metadataRevision);
+        return product;
+    }
+
+    /** 공개된 불변 릴리스 스냅샷만 상품 마스터에 원자적으로 반영한다. */
+    public void applyRelease(Long gameId, String name, Long sellerId, long price, String currency,
+                             String ratingCode, Long releaseId, Long buildId, Long metadataRevision) {
+        this.gameId = gameId;
+        this.name = name;
+        this.sellerId = sellerId;
+        this.price = price;
+        this.currency = currency;
+        this.ratingCode = ratingCode;
+        this.currentReleaseId = releaseId;
+        this.currentBuildId = buildId;
+        this.metadataRevision = metadataRevision;
+        this.status = ProductStatus.ON_SALE;
+    }
+
+    public void applyFamily(String productKind, String parentProductCode, String editionName,
+                            List<String> bundleProductCodes) {
+        this.productKind = productKind == null ? "BASIC" : productKind;
+        this.parentProductCode = parentProductCode;
+        this.editionName = editionName;
+        this.bundleProductCodes.clear();
+        if (bundleProductCodes != null) this.bundleProductCodes.addAll(bundleProductCodes);
+        // Free claims and bundle component entitlements need their own commerce flow.
+        // Until then these authored products must not be purchasable as ordinary items.
+        if ("DEMO".equals(this.productKind) || "BUNDLE".equals(this.productKind)) {
+            this.status = ProductStatus.APPROVED;
+        }
+    }
+
     /** review 승인 이벤트 수신 시 호출. 심의 결과를 반영하고 판매 가능 상태로 올린다. */
     public void applyReviewApproval(String ratingCode) {
         this.ratingCode = ratingCode;
@@ -88,6 +152,13 @@ public class Product extends BaseTimeEntity {
     }
 
     public void openSale() {
+        if ("DEMO".equals(productKind) || "BUNDLE".equals(productKind)) {
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    "DEMO와 BUNDLE은 전용 권한 지급 경로가 준비되기 전에는 판매할 수 없습니다.");
+        }
+        if (currentReleaseId == null) {
+            throw new BusinessException(ErrorCode.CONFLICT, "공개된 릴리스가 없는 상품은 판매할 수 없습니다.");
+        }
         if (this.status != ProductStatus.APPROVED && this.status != ProductStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.CONFLICT, "심의 승인 상태에서만 판매를 시작할 수 있습니다.");
         }

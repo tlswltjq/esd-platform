@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 /**
  * 월 마감 오케스트레이션. 순서는 "확정본 커밋 → 계산서 발행(트랜잭션 밖) → 번호 커밋" 이고
  * <b>판매자마다 독립 트랜잭션</b>이다. 이 클래스는 트랜잭션을 열지 않는다. [D-022]
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Service

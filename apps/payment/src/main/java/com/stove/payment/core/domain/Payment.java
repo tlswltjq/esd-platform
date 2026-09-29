@@ -21,7 +21,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 결제 애그리거트. 금액 검증 규칙이 전부 여기 있다 — 게이트 배치는 docs/code-notes.md */
+/** 결제 애그리거트. 금액 검증 규칙이 전부 여기 있다 — 게이트 배치는 */
 @Entity
 @Getter
 @Table(name = "payment")
@@ -53,7 +53,7 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 30)
     private String method;
 
-    /** 결제창을 연 시각. createdAt 과 합칠 수 없다 — docs/code-notes.md */
+    /** 결제창을 연 시각. createdAt 과 합칠 수 없다.*/
     private Instant preparedAt;
 
     @Column(length = 100)
@@ -74,7 +74,7 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 200)
     private String cancelReason;
 
-    /** 재개 시도 횟수. 지표가 아니라 행에 남겨야 하는 이유는 docs/code-notes.md */
+    /** 재개 시도 횟수. 지표가 아니라 행에 남겨야 하는. */
     @Column(nullable = false)
     private int cancelAttempts;
 
@@ -115,7 +115,7 @@ public class Payment extends BaseTimeEntity {
         }
     }
 
-    /** 게이트 2: PG 사전등록. 만료를 여기서 막는 이유는 docs/code-notes.md */
+    /** 게이트 2: PG 사전등록. 만료를 여기서 막는. */
     public void prepare(String pgTxId, String method, Duration window) {
         requireWithinWindow(window);
         if (status != PaymentStatus.READY && status != PaymentStatus.PENDING) {
@@ -130,7 +130,6 @@ public class Payment extends BaseTimeEntity {
     /**
      * 결제창이 너무 오래 열려 있었는가. <b>참이어도 승인을 거절하지 않는다.</b>
      * {@code preparedAt} 이 없으면 만료가 아니라고 답한다 — 모를 때는 돈을 움직이지 않는다.
-     * 근거는 docs/code-notes.md
      */
     public boolean checkoutExpired(Duration window) {
         return preparedAt != null && preparedAt.plus(window).isBefore(Instant.now());
@@ -165,7 +164,7 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
-     * 취소 1단계: PG 환불을 요청하겠다는 의도를 기록한다. docs/code-notes.md
+     * 취소 1단계: PG 환불을 요청하겠다는 의도를 기록한다.
      *
      * @return 이미 취소가 끝난 건이면 false
      */
@@ -196,7 +195,7 @@ public class Payment extends BaseTimeEntity {
         this.nextCancelAttemptAt = Instant.now().plus(initialDelay);
     }
 
-    /** 예산을 넘겼는가. <b>포기 신호가 아니라 사람을 부르는 신호다.</b> docs/code-notes.md */
+    /** 예산을 넘겼는가. <b>포기 신호가 아니라 사람을 부르는 신호다.</b> */
     public boolean cancelBudgetExceeded(Duration budget, Instant now) {
         return status == PaymentStatus.CANCELING
                 && cancelingSince != null
@@ -225,7 +224,7 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
-     * PG 승인 거절로 결제를 종료한다. {@code FAILED} 는 <b>종단 상태</b>다. docs/code-notes.md
+     * PG 승인 거절로 결제를 종료한다. {@code FAILED} 는 <b>종단 상태</b>다.
      *
      * @return 이미 실패로 끝난 건이면 false(거절 콜백 재전송) — 호출측은 이벤트를 재발행하지 않는다
      */

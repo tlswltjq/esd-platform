@@ -16,5 +16,7 @@
 name: stove
 
 services:
+  minio:
+    ports: ["127.0.0.1:19000:9000"]
   tempo:
     ports: ["127.0.0.1:13200:3200"]

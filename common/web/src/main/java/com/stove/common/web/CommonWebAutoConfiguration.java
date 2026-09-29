@@ -50,7 +50,10 @@ public class CommonWebAutoConfiguration {
      */
     @Bean
     public ApiDocumentationCustomizer apiDocumentationCustomizer(
-            @Value("${spring.application.name:}") String applicationName) {
-        return new ApiDocumentationCustomizer(applicationName);
+            @Value("${spring.application.name:}") String applicationName,
+            @Value("${stove.docs.oauth.authorization-url:/oauth2/authorize}")
+            String authorizationUrl,
+            @Value("${stove.docs.oauth.token-url:/oauth2/token}") String tokenUrl) {
+        return new ApiDocumentationCustomizer(applicationName, authorizationUrl, tokenUrl);
     }
 }

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 /**
  * 중단된 취소({@code CANCELING})를 이어서 끝낸다. <b>주기와 예산은 다른 값이다</b> —
  * 1분마다 깨어나지만 각 건의 다음 시도 시각은 {@code RefundRetryPolicy} 가 정한다.
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Component

@@ -22,7 +22,7 @@ import org.springframework.util.backoff.BackOff;
 
 /**
  * 컨슈머 재시도 정책과 <b>Saga 보상 진입점.</b> 보상 트리거가 리스너가 아니라 recoverer 에
- * 있어야 하는 이유(리스너에서 잡으면 재시도가 아예 안 돈다)는 docs/code-notes.md
+ * 있어야 하는 이유(리스너에서 잡으면 재시도가 아예 안 돈다)는
  */
 @Slf4j
 @Configuration
@@ -34,7 +34,7 @@ public class KafkaErrorHandlerConfig {
      * <p><b>이 안에서 예외가 나가면 무한 재전송이 된다</b> — 무엇이 터지든 로그로 끝낸다.
      *
      * <p><b>지급 실패만 DLT 로 보내지 않는다</b>(보상이 이미 최종 처리다). 그리고 보상은
-     * 두 관문(원인·결과)을 통과해야 시작된다 [D-027] [D-028]. 근거는 docs/code-notes.md
+     * 두 관문(원인·결과)을 통과해야 시작된다 [D-027] [D-028].
      */
     @Bean
     public ConsumerRecordRecoverer licenseIssueFailureRecoverer(LicenseService licenseService,
@@ -45,7 +45,7 @@ public class KafkaErrorHandlerConfig {
                 DeadLetterPublisher.to(kafkaTemplate, deadLetterMetrics));
     }
 
-    /** DLT 단계를 인자로 받는다 — 테스트가 대역으로 갈아끼울 수 있게. docs/code-notes.md */
+    /** DLT 단계를 인자로 받는다 — 테스트가 대역으로 갈아끼울 수 있게. */
     static ConsumerRecordRecoverer recoverer(LicenseService licenseService,
                                              ObjectMapper objectMapper,
                                              ConsumerRecordRecoverer toDeadLetterTopic) {
@@ -115,7 +115,7 @@ public class KafkaErrorHandlerConfig {
     /**
      * 이 실패가 <b>저장소가 답을 못 준 것</b>인가.
      * <b>원인 사슬 전체를 훑어야 한다</b> — 맨 바깥만 보면 거의 항상 놓친다.
-     * 넓게 잡은 것은 의도다(틀렸을 때의 비용이 대칭이 아니다). docs/code-notes.md
+     * 넓게 잡은 것은 의도다(틀렸을 때의 비용이 대칭이 아니다).
      */
     static boolean isStorageFailure(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {

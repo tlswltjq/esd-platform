@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.payload.GameRegisteredEvent;
+import com.stove.common.event.payload.SubmissionCreatedEvent;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.review.core.service.ReviewService;
+import com.stove.review.core.service.SubmissionReviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,15 +25,18 @@ import org.springframework.stereotype.Component;
 public class StudioEventListener {
 
     private final ReviewService reviewService;
+    private final SubmissionReviewService submissionReviewService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = Topics.STUDIO, groupId = ReviewService.CONSUMER_GROUP)
     public void onStudioEvent(ConsumerRecord<String, String> record) {
         EventEnvelope envelope = EventEnvelope.from(record);
-        if (!envelope.isType(EventType.GAME_REGISTERED)) {
-            return; // BuildUploaded 는 download 담당
+        if (envelope.isType(EventType.SUBMISSION_CREATED)) {
+            submissionReviewService.receive(envelope.eventId(), envelope.eventType(),
+                    envelope.payloadAs(objectMapper, SubmissionCreatedEvent.class));
+        } else if (envelope.isType(EventType.GAME_REGISTERED)) {
+            reviewService.receive(envelope.eventId(), envelope.eventType(),
+                    envelope.payloadAs(objectMapper, GameRegisteredEvent.class));
         }
-        reviewService.receive(envelope.eventId(), envelope.eventType(),
-                envelope.payloadAs(objectMapper, GameRegisteredEvent.class));
     }
 }

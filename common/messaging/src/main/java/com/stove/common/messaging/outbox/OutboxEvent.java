@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Transactional Outbox 레코드. 비즈니스 데이터와 <b>같은 트랜잭션/같은 DB</b> 에 저장된다.
- * docs/code-notes.md
+ *
  */
 @Entity
 @Getter
@@ -55,7 +55,7 @@ public class OutboxEvent {
 
     /**
      * 적재 시점의 W3C traceparent. 추적이 꺼져 있으면 {@code null}.
-     * <b>재시도해도, 회수해도 바뀌지 않는다.</b> 왜 이 표에 있는지는 docs/code-notes.md
+     * <b>재시도해도, 회수해도 바뀌지 않는다.</b>
      */
     @Column(length = 64)
     private String traceParent;
@@ -133,7 +133,7 @@ public class OutboxEvent {
      * 같은 키의 앞 이벤트가 재시도 대기에 들어가서 함께 보류된다. [D-014]
      * <b>{@code retryCount} 를 늘리지 않는다</b> — 실패한 것이 아니라 양보한 것이다.
      * 앞이 DEAD 면({@code until} 이 null) 보류하지 않는다 — 그 키가 영구 정지한다.
-     * docs/code-notes.md
+     *
      */
     public void holdUntil(Instant until) {
         if (this.status != OutboxStatus.PENDING || until == null) {

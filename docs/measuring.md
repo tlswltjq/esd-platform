@@ -10,7 +10,7 @@
 **근거 없는 규칙은 다음 사람이 안 지키기 때문이다.**
 
 측정 도구는 [scripts/perf/](../scripts/perf/), 결과와 판정은
-[performance.md](performance.md) · [perf-tuning.md](perf-tuning.md) 에 있다.
+[performance.md](performance.md) 에 있다.
 
 ---
 
@@ -193,8 +193,8 @@ D-026 을 만든 습관이 이것이다. `collect-lag.sh` 는 커밋 이력이 �
 릴레이 노브는 order 에, 컨슈머 노브는 payment 에 걸리므로 **하나만 보면 놓친다.**
 
 환경변수 이름 규칙으로 표현할 수 없는 설정(`hibernate.jdbc.batch_size` 처럼 밑줄이 든 키)은
-`SPRING_APPLICATION_JSON` 으로 주고 `/actuator/env` 로 **바인딩 소스까지** 확인한다
-(perf-tuning.md 9절). 실제로 그렇게 확인했더니 **바인딩은 됐는데 효과가 없는** 경우가 나왔다 —
+`SPRING_APPLICATION_JSON` 으로 주고 `/actuator/env` 로 **바인딩 소스까지** 확인한다.
+실제로 그렇게 확인했더니 **바인딩은 됐는데 효과가 없는** 경우가 나왔다 —
 그 구분은 확인해야만 할 수 있다.
 
 ## 8. 환경을 **결과와 같은 폴더에** 남긴다

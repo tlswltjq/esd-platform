@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 진열/검색 유스케이스. catalog(쓰기)와 분리된 <b>읽기 모델</b>이며 자체 원본을 갖지 않는다.
- * docs/code-notes.md
+ *
  */
 @Slf4j
 @Service

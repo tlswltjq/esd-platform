@@ -29,6 +29,7 @@ public class ProductRefService {
                 .productId(event.productId())
                 .name(event.name())
                 .status(event.status())
+                .releaseId(event.releaseId())
                 .build());
     }
 

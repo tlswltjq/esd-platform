@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * 결제 정책 값. 어댑터 설정이 아니라 <b>도메인 규칙의 계수</b>라 {@code core.domain} 에 둔다.
- * 네 값이 각각 무엇을 지키는지, 왜 합칠 수 없는지는 docs/code-notes.md
+ * 네 값이 각각 무엇을 지키는지, 왜 합칠 수 없는지는
  */
 @ConfigurationProperties(prefix = "stove.payment")
 public record PaymentProperties(Duration window, Duration checkoutWindow,

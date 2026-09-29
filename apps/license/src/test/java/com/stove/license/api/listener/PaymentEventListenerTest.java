@@ -36,8 +36,7 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
  * 보지 않고, 정상 리턴을 곧 처리 성공으로 간주해 오프셋을 커밋한다.
  * 오프셋이 커밋되면 {@code DefaultErrorHandler} 가 되감을 대상 자체가 사라진다.
  *
- * <p>자세한 메커니즘은 {@code docs/kafka-consumer-retry.md} 참고.
- * 그래서 Kafka 를 띄우지 않고도 재시도 가능 여부를 리스너 단위에서 판정할 수 있다.
+ * <p>그래서 Kafka 를 띄우지 않고도 재시도 가능 여부를 리스너 단위에서 판정할 수 있다.
  */
 class PaymentEventListenerTest {
 

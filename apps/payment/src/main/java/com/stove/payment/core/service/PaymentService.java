@@ -65,7 +65,7 @@ public class PaymentService {
         log.info("결제 대기 생성 orderNo={} amount={}", orderNo, amount);
     }
 
-    /** 게이트 2: PG 사전등록. <b>만료 검사가 PG 호출보다 먼저여야 한다</b> — docs/code-notes.md */
+    /** 게이트 2: PG 사전등록. <b>만료 검사가 PG 호출보다 먼저여야 한다</b>.*/
     public PaymentPreparation prepare(String orderNo, String method) {
         Payment payment = findPayment(orderNo);
         payment.requireWithinWindow(paymentProperties.window());
@@ -83,7 +83,7 @@ public class PaymentService {
 
     /**
      * 게이트 3+4: PG 콜백 처리. 만료 뒤 승인은 거절하지 않고 받아 적은 뒤 되돌리며,
-     * 이때 {@code PaymentCompleted} 를 <b>내보내지 않는다.</b> 근거는 docs/code-notes.md
+     * 이때 {@code PaymentCompleted} 를 <b>내보내지 않는다.</b>
      *
      * @return PG 환불이 필요하면 그 값, 아니면 {@link PaymentCancellation#none()}
      */
@@ -115,7 +115,7 @@ public class PaymentService {
         return PaymentCancellation.none();
     }
 
-    /** PG 승인 거절 콜백 처리. 승인과 <b>같은 행 잠금</b>을 쓴다 — docs/code-notes.md */
+    /** PG 승인 거절 콜백 처리. 승인과 <b>같은 행 잠금</b>을 쓴다.*/
     public void handleDecline(PgDecline decline) {
         Payment payment = paymentRepository.findByOrderNoForUpdate(decline.orderNo())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
@@ -167,7 +167,7 @@ public class PaymentService {
         log.info("결제 취소 orderNo={} reason={}", orderNo, reason);
     }
 
-    /** Saga 보상 환불 진입점. 사용자 환불과 나눈 이유는 docs/code-notes.md */
+    /** Saga 보상 환불 진입점. 사용자 환불과 나눈. */
     public PaymentCancellation beginCompensation(String eventId, String eventType,
                                                  String orderNo, String reason) {
         if (!processedEventGuard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) {
@@ -200,7 +200,7 @@ public class PaymentService {
                 .toList();
     }
 
-    /** 다음 재개 시도를 예약한다. <b>성공하든 실패하든</b> 부른다 — docs/code-notes.md */
+    /** 다음 재개 시도를 예약한다. <b>성공하든 실패하든</b> 부른다.*/
     @Transactional
     public void scheduleCancelRetry(String orderNo) {
         paymentRepository.findByOrderNo(orderNo).ifPresent(payment -> {

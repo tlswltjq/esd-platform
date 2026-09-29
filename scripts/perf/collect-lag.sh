@@ -9,7 +9,7 @@
 #
 # `collect-consumer.sh` 와 performance.md 11장이 랙의 주 판정 수단으로 쓰던
 # `kafka_consumer_fetch_manager_records_lag` 는 **실제 랙 113,517건 동안 0 을 보고했다**
-# (perf-tuning.md 4절, [D-026](../../docs/defects.md#d-026)).
+# ([D-026](../../docs/defects.md#d-026)).
 #
 # 그 지표는 컨슈머 클라이언트가 **직전 fetch 응답에서 본 것**을 그대로 노출한다.
 # 그래서 fetch 가 돌지 않는 동안 — 컨슈머가 죽었거나, 리밸런싱 중이거나,

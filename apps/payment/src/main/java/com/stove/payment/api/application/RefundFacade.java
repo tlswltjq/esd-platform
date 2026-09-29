@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * 환불 오케스트레이션. 순서는 "의도 기록 커밋 → PG 환불(트랜잭션 밖) → 확정 커밋" 이고
- * <b>이 클래스는 트랜잭션을 열지 않는다.</b> 근거는 docs/code-notes.md
+ * <b>이 클래스는 트랜잭션을 열지 않는다.</b>
  */
 @Slf4j
 @Service
@@ -29,7 +29,7 @@ public class RefundFacade {
 
     /**
      * Saga 보상 환불 — license 지급 최종 실패로 들어온다.
-     * <b>운영 실측 0건이지만 지우지 않는다</b>(#46, D-027). 근거는 docs/code-notes.md
+     * <b>운영 실측 0건이지만 지우지 않는다</b>(#46, D-027).
      */
     public void compensate(String eventId, String eventType, String orderNo, String reason) {
         PaymentCancellation cancellation = paymentService.beginCompensation(eventId, eventType, orderNo, reason);
@@ -42,7 +42,7 @@ public class RefundFacade {
 
     /**
      * 중단된 취소를 재개한다. 안전한 근거는 {@code PgClient#cancel} 의 멱등 계약 하나이고,
-     * <b>포기 상태는 만들지 않는다.</b> docs/code-notes.md
+     * <b>포기 상태는 만들지 않는다.</b>
      *
      * @return 확정까지 보낸 건수
      */

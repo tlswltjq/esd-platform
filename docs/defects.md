@@ -210,8 +210,6 @@ recoverer 는 정의상 재시도가 전부 소진된 뒤에만 호출되므로 
 recoverer 안에서 예외가 나가면 레코드가 되감겨 무한 재전송이 되므로,
 마지막 방어선답게 무엇이 터지든 로그로 끝낸다.
 
-메커니즘 상세는 [kafka-consumer-retry.md](kafka-consumer-retry.md).
-
 ---
 
 <a id="d-003"></a>
@@ -1398,7 +1396,7 @@ expected: 5000L
 
 | 환경 | 실제 랙 (브로커) | 지표가 보고한 값 |
 |---|---:|---:|
-| OCI — payment 를 내려 둔 동안 ([perf-tuning.md](perf-tuning.md) 4절) | **113,517** | **0** |
+| OCI — payment 를 내려 둔 동안 | **113,517** | **0** |
 | 로컬 60 RPS soak ([performance.md](performance.md) 12장) | **2,479** | **209** (최대) |
 
 두 번째 줄이 첫 줄보다 나쁘다. **0 이면 "이 지표는 안 붙었나" 라도 의심하는데,
@@ -2318,7 +2316,7 @@ systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 
 **상태** 수정됨
 **영향** 장애 주입 무효화 — "멈췄다" 가 성립하지 않는다
-**위치** `apps/license/src/integrationTest/.../LicenseContextTest`
+**위치** `apps/license/src/integrationTest/.../LicenseOpenApiContractTest`
 **재현** license 통합 회차에서 `ConsumerRestartCatchUpTest` 의 중단 판정을 돌린다
 **실측** 리스너는 전부 `isRunning=false` 인데 **중단 중에 지급이 일어났다**
 
@@ -2340,7 +2338,7 @@ license 통합 소스셋에는 컨텍스트가 두 벌 있다.
 | 컨텍스트 | 캐시 키 | 리스너 |
 |---|---|---|
 | 통합 테스트 5종 공용 | `relay-enabled=false` | R-03 이 멈추는 대상 |
-| `LicenseContextTest` | `poll-interval-ms=3600000` + `RANDOM_PORT` | **아무도 안 멈춘다** |
+| `LicenseOpenApiContractTest` | `poll-interval-ms=3600000` + `RANDOM_PORT` | **아무도 안 멈춘다** |
 
 둘 다 그룹 `license` 의 멤버다. 그래서 한쪽을 멈추면 소비가 멈추는 것이 아니라
 **파티션이 다른 쪽으로 넘어간다** — 카프카에게 이것은 장애가 아니라 리밸런싱이다.
@@ -2376,7 +2374,7 @@ R-03 의 컨텍스트가 파티션을 계속 쥐고 있으면 옆 컨텍스트�
 ### 수정
 
 ```java
-// LicenseContextTest
+// LicenseOpenApiContractTest
 properties = {
         "stove.outbox.poll-interval-ms=3600000",
         "spring.kafka.listener.auto-startup=false"}

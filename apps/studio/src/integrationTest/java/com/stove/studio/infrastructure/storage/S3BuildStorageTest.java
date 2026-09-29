@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
@@ -35,7 +36,9 @@ class S3BuildStorageTest {
     private static final String BUCKET = "stove-builds";
 
     @Container
-    static final MinIOContainer MINIO = new MinIOContainer("minio/minio:latest")
+    static final MinIOContainer MINIO = new MinIOContainer(DockerImageName
+            .parse("quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z")
+            .asCompatibleSubstituteFor("minio/minio"))
             .withUserName(USER)
             .withPassword(PASSWORD);
 
@@ -44,7 +47,8 @@ class S3BuildStorageTest {
     @BeforeEach
     void setUp() {
         storage = new S3BuildStorage(new ObjectStorageProperties(
-                MINIO.getS3URL(), "us-east-1", USER, PASSWORD, BUCKET, Duration.ofMinutes(5)));
+                MINIO.getS3URL(), null, "us-east-1", USER, PASSWORD, BUCKET,
+                Duration.ofMinutes(5), false));
         storage.createBucketIfAbsent();
     }
 

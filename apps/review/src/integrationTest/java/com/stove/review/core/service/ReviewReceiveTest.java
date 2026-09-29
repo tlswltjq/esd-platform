@@ -62,21 +62,19 @@ class ReviewReceiveTest {
     }
 
     @Test
-    @DisplayName("자체등급분류는 게임위를 거치지 않고 접수 즉시 승인된다")
-    void selfRatedIsApprovedOnArrival() {
+    @DisplayName("자체등급분류도 자동 승인하지 않고 내부 심사를 기다린다")
+    void selfRatedWaitsForInternalReview() {
         String productCode = uniqueProductCode();
 
         receive(registration(productCode, true));
 
         ReviewRequest request = find(productCode);
-        assertThat(request.getStatus()).isEqualTo(ReviewStatus.APPROVED);
-        assertThat(request.getRatingCode()).isEqualTo("ALL");
+        assertThat(request.getStatus()).isEqualTo(ReviewStatus.IN_REVIEW);
+        assertThat(request.getRatingCode()).isNull();
         // 게임위 접수번호가 없다는 것이 자체등급분류 건의 표식이다
         assertThat(request.getBoardTicketId()).isNull();
 
-        List<OutboxEvent> published = outboxFor(productCode);
-        assertThat(published).hasSize(1);
-        assertThat(published.get(0).getEventType()).isEqualTo(EventType.REVIEW_APPROVED);
+        assertThat(outboxFor(productCode)).isEmpty();
     }
 
     @Test
@@ -104,8 +102,8 @@ class ReviewReceiveTest {
         reviewService.receive(eventId, EventType.GAME_REGISTERED, event);
 
         assertThat(reviewRepository.findByProductCode(productCode)).isPresent();
-        // 두 번 발행되면 catalog 가 상품을 두 번 만들고 studio 상태도 두 번 바뀐다
-        assertThat(outboxFor(productCode)).hasSize(1);
+        // 자동 승인도, 승인 이벤트 중복 발행도 없어야 한다.
+        assertThat(outboxFor(productCode)).isEmpty();
     }
 
     @Test
@@ -147,6 +145,7 @@ class ReviewReceiveTest {
     void resubmitOnApprovedRequestMustNotStallTheConsumer() {
         String productCode = uniqueProductCode();
         receive(registration(productCode, true));
+        reviewService.approve(find(productCode).getId(), "ALL");
         assertThat(find(productCode).getStatus()).isEqualTo(ReviewStatus.APPROVED);
 
         // APPROVED 는 종착 상태라 어떤 전이도 허용하지 않는다 — 위와 같은 이유로 파티션이 멈춘다.

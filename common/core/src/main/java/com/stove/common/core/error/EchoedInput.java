@@ -3,7 +3,7 @@ package com.stove.common.core.error;
 /**
  * 요청이 보낸 문자열을 오류 메시지나 로그에 <b>되실을 때</b> 통과시키는 자리. [D-025]
  * 값을 인용하는 쪽이 아니라 여기 한 곳에서 막는다 — 되싣는 자리는 앞으로도 늘어난다.
- * docs/code-notes.md
+ *
  */
 public final class EchoedInput {
 
@@ -17,7 +17,7 @@ public final class EchoedInput {
 
     /**
      * 되싣기 안전한 형태로 만든다 — 제어문자를 지우고 상한에서 자른다.
-     * <b>치환이 아니라 삭제다</b> — 이유는 docs/code-notes.md
+     * <b>치환이 아니라 삭제다.</b>
      */
     public static String safe(String raw) {
         if (raw == null) {

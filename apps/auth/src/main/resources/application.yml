@@ -1,0 +1,61 @@
+server:
+  port: 8091
+  shutdown: graceful
+  # OAuth 리다이렉트는 게이트웨이가 전달한 원래 브라우저 호스트를 사용해야 한다.
+  # 이 설정이 없으면 컨테이너 내부 주소(auth:8091)가 Location 헤더에 노출된다.
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: auth
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/stove_auth?serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${DB_USER:stove}
+    password: ${DB_PASSWORD:stove1234}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties.enable.idempotence: true
+
+stove:
+  auth:
+    issuer: ${AUTH_ISSUER:http://localhost:8091}
+    redirect-uri: ${STUDIO_REDIRECT_URI:http://localhost:3000/callback}
+    app-origin: ${STUDIO_APP_ORIGIN:http://localhost:3000}
+    swagger-redirect-uris: ${AUTH_SWAGGER_REDIRECT_URIS:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}
+    bootstrap:
+      reviewer-email: ${AUTH_REVIEWER_EMAIL:}
+      reviewer-password: ${AUTH_REVIEWER_PASSWORD:}
+      admin-email: ${AUTH_ADMIN_EMAIL:}
+      admin-password: ${AUTH_ADMIN_PASSWORD:}
+  outbox:
+    relay-enabled: true
+    batch-size: 200
+    poll-interval-ms: 200
+    max-retry: 10
+
+management:
+  endpoints.web.exposure.include: health,info,prometheus,metrics
+  endpoint.health.probes.enabled: true
+  metrics.tags.application: auth
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+  level:
+    com.stove: DEBUG

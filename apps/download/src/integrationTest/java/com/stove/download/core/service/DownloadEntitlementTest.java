@@ -5,8 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.core.error.BusinessException;
-import com.stove.common.event.payload.BuildUploadedEvent;
 import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.event.payload.BuildVariant;
+import com.stove.common.event.payload.ReleasePublishedEvent;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.domain.Entitlement;
@@ -48,12 +49,15 @@ class DownloadEntitlementTest {
     private final Long productId = SEQ.incrementAndGet();
     private final String productCode = "GAME-" + UUID.randomUUID();
 
-    /** catalog → ProductChanged, studio → BuildUploaded 가 도착한 상태를 만든다. */
+    /** catalog → ProductChanged, studio → ReleasePublished 가 도착한 상태를 만든다. */
     private void productIsPublished() {
-        productRefService.upsert(ProductChangedEvent.of(
-                productId, productCode, "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"));
-        manifestService.register(BuildUploadedEvent.of(
-                1L, productCode, "1.0.0", 1024L, "abc123", "s3://bucket/" + productCode));
+        productRefService.upsert(ProductChangedEvent.ofRelease(
+                productId, productCode, "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL",
+                10L, 20L, 1L));
+        manifestService.register(ReleasePublishedEvent.of(
+                10L, null, 30L, 1L, productCode, 1001L, 20L, 1L, 1L, 1L,
+                "게임 A", "설명", 30_000L, "KRW", "ALL", "1.0.0",
+                1024L, "abc123", "s3://bucket/" + productCode));
     }
 
     private boolean isActive() {
@@ -71,6 +75,35 @@ class DownloadEntitlementTest {
         DownloadTicket ticket = downloadTicketService.issue(productCode, memberId);
 
         assertThat(ticket).isNotNull();
+    }
+
+    @Test
+    @DisplayName("OS·아키텍처에 맞는 전체 빌드와 기준 버전 델타를 선택하고 나머지는 전체 빌드로 대체한다")
+    void selectsPlatformAndDeltaWithFullFallback() {
+        productIsPublished();
+        manifestService.register(ReleasePublishedEvent.of(
+                10L, null, 30L, 1L, productCode, 1001L, 20L, 1L, 1L, 1L,
+                "게임 A", "설명", 30_000L, "KRW", "ALL", "2.0.0", 2048L,
+                "full-windows", "s3://bucket/windows-full", "BASIC", null, null, List.of(),
+                List.of(
+                        new BuildVariant(20L, "WINDOWS", "X86_64", "2.0.0", 2048L,
+                                "full-windows", "s3://bucket/windows-full", null),
+                        new BuildVariant(21L, "MACOS", "ARM64", "2.0.0", 2200L,
+                                "full-macos", "s3://bucket/macos-full", null),
+                        new BuildVariant(22L, "WINDOWS", "X86_64", "2.0.0", 500L,
+                                "delta-windows", "s3://bucket/windows-delta", "1.0.0"))));
+        entitlementService.grant("ORD-variant", memberId, List.of(productId));
+
+        assertThat(downloadTicketService.issue(productCode, memberId,
+                "MACOS", "ARM64", null).buildId()).isEqualTo(21L);
+        DownloadTicket delta = downloadTicketService.issue(productCode, memberId,
+                "WINDOWS", "X86_64", "1.0.0");
+        assertThat(delta.buildId()).isEqualTo(22L);
+        assertThat(delta.deltaFromVersion()).isEqualTo("1.0.0");
+        assertThat(downloadTicketService.issue(productCode, memberId,
+                "WINDOWS", "X86_64", "0.9.0").buildId()).isEqualTo(20L);
+        assertThatThrownBy(() -> downloadTicketService.issue(productCode, memberId,
+                "LINUX", "X86_64", null)).isInstanceOf(BusinessException.class);
     }
 
     @Test

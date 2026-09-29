@@ -20,7 +20,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 
 /**
  * DLT 를 들여다보고 원본 토픽으로 되돌린다. 조회는 커밋하지 않으므로
- * 조회가 보여주는 것이 곧 <b>재투입이 다음에 처리할 것</b>이다. docs/code-notes.md
+ * 조회가 보여주는 것이 곧 <b>재투입이 다음에 처리할 것</b>이다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -47,7 +47,7 @@ public class DltOpsService {
 
     /**
      * DLT 의 레코드를 원본 토픽으로 되돌린다. <b>원인을 먼저 고쳐야 한다.</b>
-     * 중복 수신이 되지만 Inbox 멱등 가드가 막는다. docs/code-notes.md
+     * 중복 수신이 되지만 Inbox 멱등 가드가 막는다.
      *
      * @return 되돌린 건수
      */
@@ -99,7 +99,7 @@ public class DltOpsService {
 
     /**
      * 원본 토픽으로 되돌린다. {@code kafka_dlt-*} 헤더는 <b>떼고</b> 보내고,
-     * 파티션은 지정하지 않는다(키가 그대로라 원래 파티션으로 간다). docs/code-notes.md
+     * 파티션은 지정하지 않는다(키가 그대로라 원래 파티션으로 간다).
      */
     private void republish(ConsumerRecord<String, String> record) {
         String originalTopic = originalTopicOf(record);

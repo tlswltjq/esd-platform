@@ -43,7 +43,10 @@ public class S3PresignedUrlSigner implements DownloadUrlSigner {
                         .pathStyleAccessEnabled(properties.pathStyleRequired())
                         .build());
         if (properties.pathStyleRequired()) {
-            builder.endpointOverride(URI.create(properties.endpoint()));
+            String publicEndpoint = properties.presignEndpoint() == null
+                    || properties.presignEndpoint().isBlank()
+                    ? properties.endpoint() : properties.presignEndpoint();
+            builder.endpointOverride(URI.create(publicEndpoint));
         }
         this.presigner = builder.build();
     }

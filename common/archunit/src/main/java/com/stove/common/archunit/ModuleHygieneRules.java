@@ -15,7 +15,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 /**
  * 패키지 배치 다음 단계의 규칙 — 트랜잭션 경계, 네이밍, 순환, 일반 위생.
- * {@link ModulePackageRules} 가 "어디에 두는가"라면 이쪽은 "무엇을 두는가"다. docs/code-notes.md
+ * {@link ModulePackageRules} 가 "어디에 두는가"라면 이쪽은 "무엇을 두는가"다.
  */
 public final class ModuleHygieneRules {
 
@@ -40,14 +40,14 @@ public final class ModuleHygieneRules {
     private ModuleHygieneRules() {
     }
 
-    /** DLT 발행자는 {@code DeadLetterPublisher} 로만. <b>실제로 갈렸던 자리다.</b> docs/code-notes.md */
+    /** DLT 발행자는 {@code DeadLetterPublisher} 로만. <b>실제로 갈렸던 자리다.</b> */
     @ArchTest
     public static final ArchRule 앱은_DLT_발행자를_직접_만들지_않는다 = noClasses()
             .should().dependOnClassesThat().haveFullyQualifiedName(DLT_RECOVERER)
             .because("DLT 이름 규칙이 갈리면 재투입이 조용히 실패한다 — DeadLetterPublisher 를 쓴다")
             .allowEmptyShould(true);
 
-    /** 트랜잭션 경계는 {@code core.service} 한 곳이다. docs/code-notes.md */
+    /** 트랜잭션 경계는 {@code core.service} 한 곳이다. */
     @ArchTest
     public static final ArchRule 트랜잭션_경계는_core_service_다 = methods()
             .that().areAnnotatedWith(TRANSACTIONAL)
@@ -75,7 +75,7 @@ public final class ModuleHygieneRules {
             .because("리스너가 가드를 부르면 어댑터를 갈아끼울 때 멱등성이 따라오지 않는다")
             .allowEmptyShould(true);
 
-    /** 스텁 어댑터는 프로파일이나 조건으로 격리한다(결정 9). docs/code-notes.md */
+    /** 스텁 어댑터는 프로파일이나 조건으로 격리한다(결정 9). */
     @ArchTest
     public static final ArchRule 스텁_어댑터는_격리한다 = classes()
             // 술어를 명시적으로 묶는다 — 유창한 .and()/.or() 는 우선순위 없이 왼쪽부터

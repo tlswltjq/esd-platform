@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p><b>{@code @RestController} 를 다른 형태로 바꾸지 말 것</b> — 스캔되지 않는 형태로 두면
  * springdoc 이 문서화하지 않아 Swagger UI 로 쓰는 목적이 무너진다. 대신 이 패키지를 스캔하는
- * 컨텍스트에서는 {@code enabled=false} 스위치가 무력해진다. docs/code-notes.md
+ * 컨텍스트에서는 {@code enabled=false} 스위치가 무력해진다.
  */
 @RestController
 @RequestMapping("/api/v1/ops/outbox")

@@ -1,6 +1,9 @@
 dependencies {
     // 오브젝트 스토리지(MinIO / S3) 어댑터
     implementation 'software.amazon.awssdk:s3'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:6.9.0'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.9.0'
     // MinIO 컨테이너를 띄우므로 통합 소스셋에만 건다 — src/test 로는 새지 않는다
     integrationTestImplementation 'org.testcontainers:minio'
 
