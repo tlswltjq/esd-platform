@@ -48,6 +48,7 @@ stove/
 
 | 무엇이 궁금하면 | 문서 |
 |---|---|
+| 리비전·제출물·델타 빌드 등 도메인 용어와 객체의 관계 | [domain-glossary.md](docs/domain-glossary.md) |
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
 | 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
