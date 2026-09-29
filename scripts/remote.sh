@@ -93,7 +93,7 @@ do_sync() {
     # 머신별 기본 경로라 첫 실행에는 없다. rsync 는 상위 디렉터리를 만들지 않는다.
     ssh -o ConnectTimeout=10 "$REMOTE" "mkdir -p '$RDIR'" || die "원격 디렉터리를 만들 수 없습니다: $RDIR"
     rsync -az --delete \
-        --exclude '.git/' --exclude 'build/' --exclude '.gradle/' \
+        --exclude '.git/' --exclude 'build/' --exclude '.gradle/' --exclude '.env' \
         --exclude '.idea/' --exclude '.claude/' --exclude 'perf-results/' \
         --exclude 'runs/' \
         --exclude '*.log' \
@@ -302,6 +302,7 @@ usage() {
   stack up|down|status [infra|apps|all]
   gate                       배포 게이트만 다시 확인 (stack up 이 이미 부른다)
   e2e                        인수 시나리오 관통 확인 (스택이 떠 있어야 함)
+  demo                       서비스 검증 + 공개 API 여정 2회와 실행별 증거 (스택이 떠 있어야 함)
   logs <서비스> [-n N] [-g 패턴]
   http <메서드> <서비스:포트/경로> [본문]
   status                     원격 자원 상태
@@ -333,6 +334,7 @@ case "$cmd" in
     stack)  do_stack "${1:-status}" "${2:-all}" ;;
     gate)   do_sync; rexec "bash scripts/stack-wait.sh" ;;
     e2e)    do_sync; rexec "./gradlew :e2e:e2eTest --console=plain" ;;
+    demo)   do_sync; rexec "bash scripts/api-demo.sh run" ;;
     logs)   do_logs "$@" ;;
     http)   do_http "${1:-GET}" "${2:-/}" "${3:-}" ;;
     status) do_status ;;

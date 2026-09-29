@@ -52,6 +52,7 @@ stove/
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
 | 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
 | 무엇을 어느 층에서 검증하는가 | [testing.md](docs/testing.md) |
+| 새 환경에서 전체 API 여정을 두 번 재현하는 방법 | [p3-api-demo.md](docs/p3-api-demo.md) |
 | 아래 "같은 애그리거트의 순서 보장"이 어디서 지켜지나 | [event-ordering.md](docs/event-ordering.md) |
 | Outbox 릴레이 처리량 측정과 개선, 받는 쪽 랙 측정 | [performance.md](docs/performance.md) |
 | 그 숫자를 믿어도 되는지 어떻게 정했나 | [measuring.md](docs/measuring.md) |

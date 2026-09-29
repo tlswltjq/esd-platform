@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.fail;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 한 저니가 네 장을 이어 간다 — 트랙 A 가 만든 상품을 B 가 사고, B 가 만든 주문을 C 가 지급·환불한다.
@@ -34,7 +35,7 @@ final class Journey {
      * 실행마다 다른 값. <b>스택과 볼륨이 재사용된다</b> — 원격 스택은 계속 떠 있고 `down` 도 볼륨을
      * 남기므로, 고정 코드를 쓰면 두 번째 실행부터 이전 실행의 데이터와 섞인다.
      */
-    static final long STAMP = System.currentTimeMillis() / 1000;
+    static final String STAMP = System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6);
 
     static final String PRODUCT_CODE = "GAME-E2E-" + STAMP;
     /**
@@ -57,13 +58,17 @@ final class Journey {
      * 트랙 C 가 트랙 B 와 똑같은 키로 다시 보낼 수 있어야 한다.
      */
     static String idempotencyKey(String suffix) {
-        return "IDEM-%s-%d".formatted(suffix, STAMP);
+        return "IDEM-%s-%s".formatted(suffix, STAMP);
     }
 
     // ── 장 사이를 건너는 값 ────────────────────────────────────────
     private static Long gameId;
     private static Long productId;
     private static String orderNo;
+    private static String buildChecksum;
+    private static boolean downloadVerified;
+    private static PromotionEvidence sellerPromotion;
+    private static PromotionEvidence platformPromotion;
     private static String failOrderNo;
     private static String failPgTxId;
     private static String paymentTraceId;
@@ -99,6 +104,34 @@ final class Journey {
 
     static String orderNo() {
         return require(orderNo, "orderNo", "2장 트랙 B 의 주문 생성");
+    }
+
+    static void buildChecksum(String value) { buildChecksum = value; }
+
+    static String buildChecksum() {
+        return require(buildChecksum, "빌드 SHA-256", "1장 트랙 A 의 실제 ZIP 업로드");
+    }
+
+    static void downloadVerified() { downloadVerified = true; }
+
+    static boolean isDownloadVerified() { return downloadVerified; }
+
+    record PromotionEvidence(long promotionId, String orderNo) {}
+
+    static void sellerPromotion(long id, String orderNo) {
+        sellerPromotion = new PromotionEvidence(id, orderNo);
+    }
+
+    static PromotionEvidence sellerPromotion() {
+        return require(sellerPromotion, "판매자 행사 주문", "운영 할인 판매자 부담 시나리오");
+    }
+
+    static void platformPromotion(long id, String orderNo) {
+        platformPromotion = new PromotionEvidence(id, orderNo);
+    }
+
+    static PromotionEvidence platformPromotion() {
+        return require(platformPromotion, "플랫폼 행사 주문", "운영 할인 플랫폼 부담 시나리오");
     }
 
     static void failOrderNo(String value) {
