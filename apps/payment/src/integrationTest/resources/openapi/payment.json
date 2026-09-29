@@ -245,7 +245,16 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "cancelReason" : {
+            "type" : "string"
+          },
           "currency" : {
+            "type" : "string"
+          },
+          "failReason" : {
+            "type" : "string"
+          },
+          "failReasonCode" : {
             "type" : "string"
           },
           "memberId" : {
@@ -268,6 +277,9 @@
           },
           "pgTxId" : {
             "type" : "string"
+          },
+          "retryable" : {
+            "type" : "boolean"
           },
           "status" : {
             "enum" : [ "READY", "PENDING", "PAID", "CANCELING", "CANCELED", "FAILED" ],

@@ -47,6 +47,8 @@ public class SecurityConfig {
                         // 먼저 401을 반환하면 라우트 부재(404)라는 경계가 흐려진다.
                         .pathMatchers(HttpMethod.POST, "/api/v1/products/quote").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/payments/callback").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/payments/simulator/checkout/**").hasRole("MEMBER")
+                        .pathMatchers("/api/v1/payments/simulator/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
                         // 프로젝트 자격증명은 Studio가 해시 조회·범위 검증한다.
                         .pathMatchers("/api/v1/studio/ci/**").permitAll()

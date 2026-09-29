@@ -35,13 +35,10 @@
         },
         "type" : "object"
       },
-      "ApiResponseListOrderResponse" : {
+      "ApiResponsePaymentResponse" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/OrderResponse"
-            },
-            "type" : "array"
+            "$ref" : "#/components/schemas/PaymentResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -52,10 +49,10 @@
         },
         "type" : "object"
       },
-      "ApiResponseOrderResponse" : {
+      "ApiResponsePreparePaymentResponse" : {
         "properties" : {
           "data" : {
-            "$ref" : "#/components/schemas/OrderResponse"
+            "$ref" : "#/components/schemas/PreparePaymentResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -94,6 +91,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseSimulatorCheckoutResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SimulatorCheckoutResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseVoid" : {
         "properties" : {
           "data" : { },
@@ -106,22 +117,34 @@
         },
         "type" : "object"
       },
-      "CreateOrderRequest" : {
-        "properties" : {
-          "expectedAmount" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "items" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Item"
+      "Approved" : {
+        "allOf" : [ {
+          "$ref" : "#/components/schemas/PgCallbackRequest"
+        }, {
+          "properties" : {
+            "idempotencyKey" : {
+              "minLength" : 1,
+              "type" : "string"
             },
-            "minItems" : 1,
-            "type" : "array"
-          }
-        },
-        "required" : [ "items" ],
-        "type" : "object"
+            "method" : {
+              "type" : "string"
+            },
+            "orderNo" : {
+              "minLength" : 1,
+              "type" : "string"
+            },
+            "paidAmount" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "pgTxId" : {
+              "minLength" : 1,
+              "type" : "string"
+            }
+          },
+          "type" : "object"
+        } ],
+        "required" : [ "idempotencyKey", "orderNo", "paidAmount", "pgTxId" ]
       },
       "DeadEventResponse" : {
         "properties" : {
@@ -159,6 +182,31 @@
           }
         },
         "type" : "object"
+      },
+      "Declined" : {
+        "allOf" : [ {
+          "$ref" : "#/components/schemas/PgCallbackRequest"
+        }, {
+          "properties" : {
+            "orderNo" : {
+              "minLength" : 1,
+              "type" : "string"
+            },
+            "pgTxId" : {
+              "minLength" : 1,
+              "type" : "string"
+            },
+            "reason" : {
+              "type" : "string"
+            },
+            "reasonCode" : {
+              "minLength" : 1,
+              "type" : "string"
+            }
+          },
+          "type" : "object"
+        } ],
+        "required" : [ "orderNo", "pgTxId", "reasonCode" ]
       },
       "DltRecordResponse" : {
         "properties" : {
@@ -205,59 +253,30 @@
         },
         "type" : "object"
       },
-      "Item" : {
+      "PaymentResponse" : {
         "properties" : {
-          "productId" : {
+          "amount" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "quantity" : {
-            "format" : "int32",
-            "minimum" : 1,
-            "type" : "integer"
-          }
-        },
-        "required" : [ "productId" ],
-        "type" : "object"
-      },
-      "Line" : {
-        "properties" : {
-          "productId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "productName" : {
+          "cancelReason" : {
             "type" : "string"
           },
-          "quantity" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "sellerId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "unitPrice" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "OrderResponse" : {
-        "properties" : {
           "currency" : {
             "type" : "string"
           },
-          "lines" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Line"
-            },
-            "type" : "array"
+          "failReason" : {
+            "type" : "string"
+          },
+          "failReasonCode" : {
+            "type" : "string"
           },
           "memberId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "method" : {
+            "type" : "string"
           },
           "orderNo" : {
             "type" : "string"
@@ -266,16 +285,61 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "paymentId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgTxId" : {
+            "type" : "string"
+          },
           "retryable" : {
             "type" : "boolean"
           },
           "status" : {
-            "enum" : [ "CREATED", "PAID", "CANCELED", "FAILED", "EXPIRED" ],
+            "enum" : [ "READY", "PENDING", "PAID", "CANCELING", "CANCELED", "FAILED" ],
             "type" : "string"
-          },
-          "totalAmount" : {
+          }
+        },
+        "type" : "object"
+      },
+      "PgCallbackRequest" : {
+        "discriminator" : {
+          "propertyName" : "result"
+        },
+        "properties" : {
+          "result" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "result" ]
+      },
+      "PreparePaymentRequest" : {
+        "properties" : {
+          "method" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "method" ],
+        "type" : "object"
+      },
+      "PreparePaymentResponse" : {
+        "properties" : {
+          "amount" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "pgTxId" : {
+            "type" : "string"
+          },
+          "redirectUrl" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -296,6 +360,44 @@
             "type" : "integer"
           }
         },
+        "type" : "object"
+      },
+      "SimulatorCheckoutResponse" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "pgTxId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PREPARED", "APPROVED", "DECLINED", "TIMED_OUT", "CANCELED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SimulatorDeclineRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "reasonCode" : {
+            "maxLength" : 50,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reasonCode" ],
         "type" : "object"
       }
     },
@@ -320,7 +422,7 @@
   },
   "info" : {
     "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
-    "title" : "STOVE order API",
+    "title" : "STOVE payment API",
     "version" : "v1"
   },
   "openapi" : "3.1.0",
@@ -457,33 +559,29 @@
         "tags" : [ "outbox-ops-controller" ]
       }
     },
-    "/api/v1/orders" : {
-      "get" : {
-        "operationId" : "myOrders",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListOrderResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "order-controller" ]
-      },
+    "/api/v1/payments/callback" : {
       "post" : {
-        "operationId" : "create",
+        "operationId" : "callback",
+        "parameters" : [ {
+          "description" : "Unix epoch seconds; at most five minutes old",
+          "in" : "header",
+          "name" : "X-Pg-Timestamp",
+          "required" : true
+        }, {
+          "description" : "Hex HMAC-SHA256 of timestamp + '.' + raw request body",
+          "in" : "header",
+          "name" : "X-Pg-Signature",
+          "required" : true
+        } ],
         "requestBody" : {
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/CreateOrderRequest"
+                "oneOf" : [ {
+                  "$ref" : "#/components/schemas/Approved"
+                }, {
+                  "$ref" : "#/components/schemas/Declined"
+                } ]
               }
             }
           },
@@ -494,7 +592,33 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseOrderResponse"
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/payments/simulator/checkout/{pgTxId}" : {
+      "get" : {
+        "operationId" : "checkout",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "pgTxId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSimulatorCheckoutResponse"
                 }
               }
             },
@@ -504,10 +628,136 @@
         "security" : [ {
           "oauth2" : [ "commerce" ]
         } ],
-        "tags" : [ "order-controller" ]
+        "tags" : [ "payment-simulator-controller" ]
       }
     },
-    "/api/v1/orders/{orderNo}" : {
+    "/api/v1/payments/simulator/{orderNo}/approve" : {
+      "post" : {
+        "operationId" : "approve",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-simulator-controller" ]
+      }
+    },
+    "/api/v1/payments/simulator/{orderNo}/decline" : {
+      "post" : {
+        "operationId" : "decline",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SimulatorDeclineRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-simulator-controller" ]
+      }
+    },
+    "/api/v1/payments/simulator/{orderNo}/refund" : {
+      "post" : {
+        "operationId" : "refund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-simulator-controller" ]
+      }
+    },
+    "/api/v1/payments/simulator/{orderNo}/timeout" : {
+      "post" : {
+        "operationId" : "timeout",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-simulator-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}" : {
       "get" : {
         "operationId" : "get",
         "parameters" : [ {
@@ -523,7 +773,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseOrderResponse"
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
                 }
               }
             },
@@ -533,10 +783,10 @@
         "security" : [ {
           "oauth2" : [ "commerce" ]
         } ],
-        "tags" : [ "order-controller" ]
+        "tags" : [ "payment-controller" ]
       }
     },
-    "/api/v1/orders/{orderNo}/cancel" : {
+    "/api/v1/payments/{orderNo}/cancel" : {
       "post" : {
         "operationId" : "cancel",
         "parameters" : [ {
@@ -551,7 +801,7 @@
           "name" : "reason",
           "required" : false,
           "schema" : {
-            "default" : "USER_CANCEL",
+            "default" : "USER_REFUND",
             "type" : "string"
           }
         } ],
@@ -570,7 +820,46 @@
         "security" : [ {
           "oauth2" : [ "commerce" ]
         } ],
-        "tags" : [ "order-controller" ]
+        "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/prepare" : {
+      "post" : {
+        "operationId" : "prepare",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreparePaymentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePreparePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-controller" ]
       }
     }
   }
