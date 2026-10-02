@@ -2,18 +2,19 @@
 
 각 서비스가 **무엇을 책임지고, 어떤 요청과 이벤트를 받고, 무엇을 내보내는지** 정리한다.
 시스템 전체의 이벤트 흐름과 설계 근거는 [README](../README.md) 를 본다.
+업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
 | | 서비스 | 포트 | 한 줄 책임 | 저장소 |
 |---|---|---|---|---|
-| A | [studio](#studio) | 8085 | 게임 프로젝트·빌드 등록, 심의 신청 | MySQL |
-| A | [review](#review) | 8086 | 등급분류 심의 상태머신 | MySQL |
+| A | [studio](#studio) | 8085 | 프로젝트·자료·빌드·심사 제출·릴리스 | MySQL |
+| A | [review](#review) | 8086 | 유형별 심사 사건·등급 증빙·재검토 | MySQL |
 | A | [catalog](#catalog) | 8081 | 상품 마스터, 노출 제어, 가격 확정 | MySQL + Redis |
 | B | [store](#store) | 8087 | 진열·검색 (읽기 전용) | Elasticsearch + Redis |
 | B | [order](#order) | 8082 | 주문 생성/취소, 금액 검증 | MySQL |
 | B | [payment](#payment) | 8083 | PG 연동, 승인 대조, 환불 | MySQL |
-| C | [license](#license) | 8084 | 소유권 발급·회수 | MySQL |
+| C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
 | C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
 | — | [gateway](#gateway) | 8080 | 라우팅, 내부 API 차단 | — |
@@ -22,9 +23,18 @@
 
 ## studio
 
-크리에이터가 게임을 올리는 입구. 심의 신청과 빌드 업로드가 각각 다운스트림(review, download)의 시작점이 된다.
+창작자가 프로젝트·자료·빌드를 준비하고 심사 제출물과 릴리스를 만드는 서비스다.
+`SubmissionCreated`가 Review의 심사를 시작하고, LIVE `ReleasePublished`가 Catalog·Download의 공개 반영을 시작한다.
 
-**상태머신**
+**현재 제출·출시 상태** — [전이 조건과 사례](domain/publishing.md#submission)
+
+```
+Submission: SUBMITTED → READY_FOR_RELEASE → RELEASED (LIVE 공개)
+                └→ CHANGES_REQUESTED → SUBMITTED (같은 자료 재검토)
+Release:    SCHEDULED → PUBLISHED / CANCELLED / SMOKE_TEST_FAILED
+```
+
+**기존 프로젝트 단위 심사 상태** — 새 Submission의 상태와 별개다.
 
 ```
 DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
@@ -50,20 +60,25 @@ Headers가 아니라 폼의 Form Data여야 한다.
 |---|---|---|
 | POST | `/api/v1/studio/games` | 프로젝트 생성. `productCode` 중복이면 409 |
 | GET | `/api/v1/studio/games` | 내 프로젝트 목록 |
-| POST | `/api/v1/studio/games/{gameId}/submit` | 심의 신청 → `GameRegistered` |
-| POST | `/api/v1/studio/games/{gameId}/builds` | 빌드 메타데이터 등록 → `BuildUploaded` |
+| POST | `/api/v1/studio/games/{gameId}/submit` | 기존 프로젝트 단위 심사 → `GameRegistered` |
+| POST | `/api/v1/studio/games/{gameId}/builds` | 기존 빌드 메타데이터 등록 → `BuildUploaded` (현재 공개 경로에는 사용하지 않음) |
 | GET | `/api/v1/studio/games/{gameId}/builds` | 빌드 이력 |
+| POST | `/api/v1/studio/projects/{gameId}/store-page-revisions` | 상점 자료 초안 또는 확정 이력 생성 |
+| POST | `/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/publish` | 상점 자료 확정. 릴리스 공개와 별개 |
 | POST | `/api/v1/studio/projects/{gameId}/rating-revisions` | 지역·목표 연령·정책 버전·콘텐츠 설문을 고정하고 등급 경로 결정 |
 | POST | `/api/v1/studio/projects/{gameId}/submissions` | 검증 빌드와 revision의 불변 심사 스냅샷 제출 |
 | POST | `/api/v1/studio/projects/submissions/{submissionId}/releases` | 승인된 제출물을 수동·예약 출시 |
 
-**이벤트** — 수신 `ReviewApproved`·`ReviewRejected` / 발행 `GameRegistered`·`BuildUploaded`
+**주요 이벤트** — 수신 `SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed` /
+발행 `SubmissionCreated`·`ReleaseScheduled`·`ReleasePublished`·`ReleaseRolledBack`·`BuildValidated`·`BuildValidationFailed`.
+기존 경로는 `ReviewApproved`·`ReviewRejected` 수신, `GameRegistered`·`BuildUploaded` 발행을 유지한다.
 
 **규칙**
 
-- 모든 변경은 `requireOwner(sellerId)` 를 통과해야 한다.
-- 이미 신청했거나 승인된 프로젝트는 다시 신청할 수 없다. 반려된 건만 재신청 가능.
-- 같은 게임의 같은 버전은 한 번만 등록된다.
+- 창작자의 프로젝트 변경은 인증된 워크스페이스의 소유 범위를 확인한다. CI 업로드는 프로젝트 범위 자격을 검사한다.
+- 기존 프로젝트 단위 심사는 이미 신청했거나 승인된 프로젝트의 재신청을 거절한다. 새 Submission은 선택한 자료·빌드 묶음으로 별도 생성한다.
+- 현재 업로드는 프로젝트·멱등키로 중복을 관리하며 같은 제품 버전에 여러 플랫폼 빌드가 가능하다.
+- 확정한 상점 자료와 검증된 동일 프로젝트 빌드만 제출하고, 모든 심사 관문 승인 후 릴리스를 만든다. 자료 확정·제출 시 같은 프로젝트에 업로드한 스크린샷과 커버를 확인한다.
 - 바이너리는 직접 받지 않는다. `BuildStorage` 포트로 업로드 경로와 presigned URL 만 발급한다.
 - 현재 활성 등급 정책은 `KR-2026-01`이다. `country=KR`, 목표 등급 `ALL|12|15|18`,
   `adultContent`·`cashGambling` boolean 응답이 모두 있어야 revision을 만든다.
@@ -75,9 +90,14 @@ Headers가 아니라 폼의 Form Data여야 한다.
 
 ## review
 
-등급분류 심의. **상품 등록 파이프라인이 이 상태머신에 물려 있어, 승인 이벤트 없이는 상품이 만들어지지 않는다.**
+제출물별 등급·상점 자료·빌드 QA·법무·SDK·상업성 심사 사건을 관리한다.
+유형별 승인은 Studio의 출시 관문에 반영되며, 새 출시 경로의 상품 공개는 LIVE 릴리스를 통해 이루어진다.
 
-**상태머신** — `APPROVED` 는 종착 상태다.
+**현재 심사 사건 상태** — `REQUESTED`에서 승인·수정 요청·차단·취소·만료로 전이한다.
+GRAC은 외부 접수를 기록하며, 수정 요청·차단·만료 사건은 이의 제기로 다시 열 수 있다.
+정확한 조건과 Studio 관문과의 차이는 [심사 사건 정의](domain/publishing.md#review-case)를 참고한다.
+
+**기존 프로젝트 단위 심사 상태** — `ReviewRequest` 경로다.
 
 ```
 REQUESTED ──▶ IN_REVIEW ──▶ APPROVED
@@ -91,19 +111,21 @@ REQUESTED ──▶ IN_REVIEW ──▶ APPROVED
 | GET | `/api/v1/reviews?status=` | 심의 목록(상태 필터) |
 | POST | `/api/v1/reviews/{reviewId}/approve?ratingCode=ALL` | 승인 → `ReviewApproved` |
 | POST | `/api/v1/reviews/{reviewId}/reject` | 반려 → `ReviewRejected` |
-| GET | `/api/v1/reviews/cases?submissionId=` | 불변 Submission의 등급·상점·빌드 QA 심사 조회 |
+| GET | `/api/v1/reviews/cases?submissionId=` | Submission 스냅샷의 여섯 유형 심사 조회 |
 | POST | `/api/v1/reviews/cases/{caseId}/approve` | 경로별 증빙 검증 후 승인 |
 | POST | `/api/v1/reviews/cases/{caseId}/changes-requested` | 수정 요청 |
 
-**이벤트** — 수신 `GameRegistered` / 발행 `ReviewApproved`·`ReviewRejected`
+**이벤트** — 현재 경로는 `SubmissionCreated` 수신, `SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed` 발행.
+기존 경로는 `GameRegistered` 수신, `ReviewApproved`·`ReviewRejected` 발행.
 
 **규칙**
 
 - P0 Submission 경로는 studio가 확정한 지역·목표 연령·정책 버전·설문을 다시 검증한다.
 - 전체·12·15세 자체등급은 외부 기관에 접수하지 않는다. 담당자는 등급 코드만 결정하고,
   플랫폼이 인증번호·발급기관·발급일·대상 국가를 기록한다.
-- 18세 GRAC 건은 `buildId`, 제품 버전, 정책 버전과 설문 스냅샷 전체를 `RatingBoardClient`에
-  제출한다. 외부 접수번호를 저장한 `EXTERNAL_SUBMITTED` 상태에서만 완전한 외부 인증 증빙으로 승인한다.
+- 현재 Submission의 GRAC 경로는 외부 접수번호·시각·증빙 URL을 API로 기록한 뒤 정책에 맞는
+  인증 결과로 승인한다. 이 서비스 경로에서 `RatingBoardClient`로 자동 접수하지는 않는다.
+  이의 제기 후 기존 접수 증빙의 재사용 여부는 [미결 질문 Q4](domain/open-questions.md#q4)다.
 - `GameRegistered` 기반 프로젝트 단위 심의 API는 기존 이벤트 호환 경로다. 새 출시 흐름은
   `SubmissionCreated`와 유형별 `ReviewCase`를 사용한다.
 
@@ -116,12 +138,14 @@ REQUESTED ──▶ IN_REVIEW ──▶ APPROVED
 **상태머신**
 
 ```
-DRAFT/REVIEWING ──ReviewApproved──▶ APPROVED ──sale-open──▶ ON_SALE
-                                                  ▲            │ suspend
-                                                  └────────────┴──▶ SUSPENDED ──▶ CLOSED
+기존 심사 승인: DRAFT/REVIEWING → APPROVED
+LIVE 릴리스 반영: 일반 상품 → ON_SALE / DEMO·BUNDLE → APPROVED
+운영 판매 시작: APPROVED/SUSPENDED → ON_SALE (공개 릴리스·종류 조건 확인)
+판매 중지: SUSPENDED
 ```
 
 구매 가능한 상태는 `ON_SALE` **하나뿐**이다.
+`CLOSED`는 상태 값으로 존재하지만 현재 Product에 종료 전이 메서드는 없다.
 
 **HTTP API**
 
@@ -134,12 +158,13 @@ DRAFT/REVIEWING ──ReviewApproved──▶ APPROVED ──sale-open──▶ 
 | POST | `/api/v1/products/reindex` | store 색인 재구축 트리거 |
 | POST | `/api/v1/products/quote` | **내부 전용** — 주문 금액 서버 재계산 |
 
-**이벤트** — 수신 `ReviewApproved` / 발행 `ProductChanged`
+**이벤트** — 수신 `ReleasePublished`·기존 `ReviewApproved` / 발행 `ProductChanged`
 
 **규칙**
 
-- 상품은 `ReviewApproved` 수신으로만 생성된다. 재심의는 같은 `productCode` 에 멱등하게 반영된다.
-- 판매 시작은 `APPROVED` 또는 `SUSPENDED` 에서만 가능하다 — 심의를 건너뛴 판매가 성립하지 않는다.
+- 상품은 LIVE `ReleasePublished` 또는 기존 `ReviewApproved` 수신으로 생성된다. 같은 `productCode`의 상품에 반영한다.
+- 운영 판매 시작은 공개 릴리스가 있는 `APPROVED` 또는 `SUSPENDED` 상품만 가능하며 DEMO·BUNDLE은 거절한다.
+- 일반 상품은 LIVE 릴리스 반영으로 자동 판매된다. 판매 중지 유지 정책은 [Q3](domain/open-questions.md#q3)에 기록했다.
 - `quote` 는 상품마다 `requirePurchasable()` 을 확인하고, **통화가 다른 상품을 한 주문에 섞는 것을 거부**한다.
 - 캐시 무효화는 상태 변경 지점(`ProductCommandService`)에서만 일어난다.
 
@@ -169,7 +194,9 @@ DRAFT/REVIEWING ──ReviewApproved──▶ APPROVED ──sale-open──▶ 
 
 ## order
 
-주문 생성과 취소. **결제 결과 이벤트로만 `CREATED` 이후 상태가 바뀐다 — `EXPIRED` 만 예외다.**
+주문 생성과 취소. 결제 결과 이벤트, 사용자 주문 취소, 만료 처리로 상태가 바뀐다.
+현재 사용자 주문 취소는 결제된 주문도 취소하지만 PG 환불로 이어지지 않는다.
+이 구현 차이와 후속 결정은 [Q9](domain/open-questions.md#q9)에 기록했다.
 
 **상태머신**
 
@@ -178,6 +205,7 @@ CREATED ──PaymentCompleted──▶ PAID
         ├─cancel / PaymentCancelled──▶ CANCELED
         ├──▶ FAILED
         └─시간(스윕)──▶ EXPIRED
+PAID ──cancel / PaymentCancelled──▶ CANCELED
 ```
 
 **만료** — 결제를 시작조차 하지 않은 주문은 아무 이벤트도 낳지 않아 영원히 `CREATED` 로 남았다
@@ -193,12 +221,12 @@ CREATED ──PaymentCompleted──▶ PAID
 | POST | `/api/v1/orders` | 주문 생성 (catalog 가격 재계산 경유) |
 | GET | `/api/v1/orders/{orderNo}` | 주문 조회 |
 | GET | `/api/v1/orders` | 내 주문 목록 |
-| POST | `/api/v1/orders/{orderNo}/cancel` | 결제 전 취소 |
+| POST | `/api/v1/orders/{orderNo}/cancel` | 주문 상태 취소. 환불 완료와 별개이며 Q9 확인 필요 |
 
 모든 주문 API는 Bearer access token을 요구한다. 회원 ID는 토큰의 `member_id`에서 읽고,
 주문번호의 소유권을 서비스에서 확인한다. 주문 생성 본문에 `memberId`를 넣지 않는다.
 
-**이벤트** — 수신 `PaymentCompleted`·`PaymentCancelled` / 발행 `OrderCreated`·`OrderCanceled`
+**이벤트** — 수신 `PaymentCompleted`·`PaymentFailed`·`PaymentCancelled` / 발행 `OrderCreated`·`OrderCanceled`
 
 **규칙**
 
@@ -217,7 +245,7 @@ PG 연동. **검증 게이트 4단계 중 3개가 여기 있다.**
 **상태머신**
 
 ```
-READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel──▶ CANCELED
+READY ──prepare──▶ PENDING ──callback──▶ PAID ──환불 착수──▶ CANCELING ──PG 완료──▶ CANCELED
                                      └──▶ FAILED
 ```
 
@@ -233,7 +261,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 결제 조회·사전등록·환불은 Bearer access token과 주문 소유권 검사가 필요하다. PG 콜백은
 사용자 토큰 대신 원문 HMAC 서명을 검증한다. 자세한 계약은 [커머스 보안](p3-commerce-security.md)에 있다.
 
-**이벤트** — 수신 `OrderCreated`·`LicenseIssueFailed` / 발행 `PaymentCompleted`·`PaymentCancelled`
+**이벤트** — 수신 `OrderCreated`·`LicenseIssueFailed` / 발행 `PaymentCompleted`·`PaymentFailed`·`PaymentCancelled`
 
 **규칙**
 
@@ -247,7 +275,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
   거절하면 우리 장부에만 없는 상태가 되어 대사가 깨진다. 이때 `PaymentCompleted` 는
   **내보내지 않는다** — 일어나지 않을 판매를 하위 서비스에 알리지 않기 위해서다.
   지표 `stove.payment.auto-refunded`, 알람 `AutoRefundsRising`.
-- **게이트 4** — 중복 콜백은 상태와 `idempotency_key` 유니크로 흡수하고 **이벤트를 재발행하지 않는다.**
+- **게이트 4** — 주문번호로 결제를 잠그고 상태·콜백 멱등키를 비교한다. 같은 승인 재전송은 이벤트를 재발행하지 않으며 멱등키는 전역 유니크가 아니다.
 - **중단된 취소 재개.** `CANCELING` 은 "PG 환불을 요청하기로 커밋했는데 확정까지 못 갔다",
   즉 **돈이 나갔는지 불확실한 상태**다. `RefundSweeper` 가 1분마다 깨어나 **다음 시도 시각이 된**
   건을 집어 재개한다 — 안전한 근거는 PG 취소의 `pgTxId` 멱등 계약 하나다.
@@ -270,7 +298,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 
 ## license
 
-소유권(라이선스/CD키). **멱등성이 이 도메인의 핵심**이다.
+이용권 원본(라이선스)의 지급·회수. 현재 `licenseKey`는 내부 생성 문자열이며 외부 CD키 연동을 뜻하지 않는다.
 
 **상태머신** — `ACTIVE ──revoke──▶ REVOKED`
 
@@ -303,7 +331,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 | GET | `/api/v1/downloads/{productCode}/ticket` | 다운로드 인증 → CDN 서명 URL |
 | GET | `/api/v1/downloads/{productCode}/manifests` | 버전 목록(패치 이력) |
 
-**이벤트** — 수신 `BuildUploaded`·`ProductChanged`·`LicenseIssued`·`LicenseRevoked` / 발행 없음
+**이벤트** — 수신 `ReleasePublished`·`ProductChanged`·`LicenseIssued`·`LicenseRevoked` / 발행 없음
 
 **규칙**
 
@@ -312,7 +340,8 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 - 미보유 상품 요청은 403.
 - 서명 URL 은 `DownloadUrlSigner` 포트로 발급한다. 짧은 수명의 토큰을 만들어
   **인증을 CDN 엣지에서 끝내고** 원본 서버가 매 요청을 인증하지 않게 한다.
-- 모든 쓰기 경로가 문서 ID 고정 upsert 라 자연 멱등이다.
+- 문서 ID를 고정해 중복 반영 시 문서가 늘어나지 않는다. 보유권 회수는 출처 주문번호도 대조한다.
+  이 방식이 모든 순서 역전을 해결하는 것은 아니며, 반복 구매·늦은 지급의 의미는 [Q5](domain/open-questions.md#q5)를 참고한다.
 
 ---
 
@@ -328,7 +357,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──cancel�
 | GET | `/api/v1/settlements/sellers/{sellerId}` | 판매자 월별 원장 |
 | GET | `/api/v1/settlements/me/ledger?month=yyyy-MM` | CREATOR 자신의 원장 |
 | GET | `/api/v1/settlements/me/closings?month=yyyy-MM` | CREATOR 자신의 월 마감 |
-| GET | `/api/v1/settlements/closings` | 월 마감 확정본 |
+| GET | `/api/v1/settlements/closings` | 판매자 월 마감 결과 |
 | POST | `/api/v1/settlements/close` | 수동 마감(배치 재실행용) |
 | GET | `/api/v1/settlements/reconciliation?month=yyyy-MM` | ADMIN 월별 판매자 대사·차이 경고 |
 | GET | `/api/v1/settlements/export.csv?month=yyyy-MM` | ADMIN 원장 CSV |
@@ -368,7 +397,8 @@ Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 
 - **월 마감**은 재실행 안전하다. 이미 확정본이 있는 판매자는 건너뛰지 않고 **거기에 더한다**
   (`SellerSettlement#accumulate`). 건너뛰면 마감 후 도착한 지각 원장이 close 도장만 찍힌 채
   어느 확정본에도 안 들어간다 — [D-001](defects.md#d-001) 이 그 결함이다.
-  순액이 0 이하인 판매자(환불이 매출 초과)는 세금계산서를 발행하지 않고 이월한다.
+  순액이 0 이하인 판매자(환불이 매출 초과)는 세금계산서를 발행하지 않는다.
+  다음 달 이월 원장과 실제 송금 정책은 [Q6](domain/open-questions.md#q6)의 미결 항목이다.
 - **마감은 판매자마다 독립 트랜잭션 3단계**다(`SettlementCloseFacade`) —
   확정본 커밋 → 세금계산서 발행(**트랜잭션 밖**) → 발행번호 커밋.
   발행은 되돌릴 수 없는 외부 호출이라 트랜잭션 안에 두면 롤백돼도 계산서는 이미 나간다

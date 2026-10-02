@@ -1,125 +1,156 @@
-# 도메인 용어 위키
+# 도메인 용어집
 
-코드나 테스트에서 처음 만나는 말을 빠르게 찾기 위한 문서다. **도메인 용어의 뜻과 서로 다른 객체의 경계**를 설명한다. API 호출 순서는 [창작자 API 예시](p3-creator-api.md), 서비스별 책임과 엔드포인트는 [서비스 명세](services.md)를 본다.
+창작자가 게임을 등록해 출시하고, 구매자가 결제해 이용하며, 운영자가 판매자별 금액을 마감하는 업무의 언어를 정리한다. 같은 단어라도 어느 업무에서 쓰이는지 함께 읽는다.
+요구사항·문서·코드·테스트에서 같은 의미로 사용할 유비쿼터스 언어의 초안이다.
 
-## 빠른 찾기
+검토 기준: 2026-10-02, 코드 `a525243` (`main`). [이슈 #89](https://github.com/tlswltjq/esd-platform/issues/89)의 기존 용어 위키와 상세 정의를 함께 정리했다. 식별자·리비전·빌드·읽기 모델 설명을 유지하고, 할인·정산과 창작자 API의 현재 구현을 대조했다.
 
-| 궁금한 말 | 읽을 곳 |
+## 읽는 순서와 합의 상태
+
+1. [대표 업무 흐름](domain/workflows.md)에서 행위자와 업무 순서를 읽는다.
+2. 아래 색인에서 용어를 찾아 [창작·심사·출시](domain/publishing.md), [구매·이용·정산](domain/commerce.md)의 상세 정의로 이동한다.
+3. [미결 질문과 검토 기록](domain/open-questions.md)에서 정책 결정이 필요한 부분을 확인한다.
+
+각 정의의 **업무 규칙 제안**은 담당자가 검토할 문장이고, **현재 구현**은 코드에서 확인한 동작이다. 기존 테스트 링크는 그 동작을 검증하는 근거이며 업무 합의의 증거를 대신하지 않는다.
+
+| 합의 상태 | 의미 |
 |---|---|
-| `workspaceId`, `gameId`, `productCode`, `productId` | [식별자와 주체](#식별자와-주체) |
-| `Revision`, `revisionNo`, `entityVersion`, `productVersion` | [리비전과 여러 버전](#리비전과-여러-버전) |
-| `GameBuild`, 전체 빌드, 델타, 빌드 변형 | [빌드와 업로드](#빌드와-업로드) |
-| `Submission`, `ReviewCase`, `SubmissionGate` | [심사 제출과 심사](#심사-제출과-심사) |
-| `Release`, `Product`, `PatchManifest`, 다운로드 티켓 | [출시와 노출](#출시와-노출) |
-| `Order`, `Payment`, `License`, `Entitlement`, 정산 원장 | [구매와 이용](#구매와-이용) |
+| 초안 | 용어·규칙을 제안했으며 담당자의 검토를 기다림 |
+| 합의됨 | 검토자·검토일·결정 근거를 기록하고 관련 정의에 반영함 |
+| 재검토 필요 | 구현·기존 설명·제안 규칙 사이에 차이가 있어 후속 결정이 필요함 |
 
-## 한눈에 보는 흐름
+이번 작성에서 새로 합의됨으로 표시한 업무 규칙은 없다. [검토 기록](domain/open-questions.md#review-log)에 실제 검토 결과를 추가한 뒤 상태를 바꾼다.
 
-```text
-Workspace → GameProject ─┬→ StorePageRevision · PricingRevision · RatingRevision
-                         └→ GameBuild(전체/델타)
-               선택한 리비전과 검증된 빌드 → Submission
-               SubmissionCreated → ReviewCase → SubmissionGate → Release
-               ReleasePublished → Catalog Product · Download PatchManifest
-               Product → Order → Payment → License → Download Entitlement
-                                          └→ SettlementRecord
-```
+## 핵심 용어 색인
 
-화살표는 업무 흐름이다. 각 서비스는 자기 모델을 저장하며, 다른 서비스의 객체를 그대로 공유하지 않는다. 예를 들어 `studio`의 `Submission`과 `review`의 `SubmissionSnapshot`은 같은 제출 건을 서로 다른 서비스에서 표현한다.
+상세 정의 15개다. 영어명은 코드와 대화에서 대상을 찾기 위한 표준명 제안이다.
 
-## 식별자와 주체
+| 표준 한국어명 | 영어명 / 코드 | 핵심 정의 | 상세 |
+|---|---|---|---|
+| 게임 프로젝트 | Game Project / `GameProject` | 창작자가 자료·빌드·상품 관계를 관리하는 제작·출시 단위 | [정의](domain/publishing.md#game-project) |
+| 상품 | Product / `Product` | 가격과 판매 가능 여부를 책임지는 구매 대상 | [정의](domain/publishing.md#product) |
+| 상점 자료 이력 | Store Page Revision / `StorePageRevision` | 특정 시점의 소개·이미지·정책 등 상점 자료 묶음 | [정의](domain/publishing.md#store-page-revision) |
+| 게임 빌드 | Game Build / `GameBuild` | 특정 버전·실행 환경에 제공할 파일 산출물과 검증 기록 | [정의](domain/publishing.md#game-build) |
+| 심사 제출물 | Submission / `Submission` | 창작자가 특정 자료와 빌드 묶음에 대해 심사를 요청한 단위 | [정의](domain/publishing.md#submission) |
+| 심사 사건 | Review Case / `ReviewCase` | 한 제출물의 한 심사 유형에 대한 판단·증빙·처리 이력 | [정의](domain/publishing.md#review-case) |
+| 출시 관문 | Submission Gate / `SubmissionGate` | 제출물의 유형별 승인 여부를 Studio에서 확인하는 기록 | [정의](domain/publishing.md#submission-gate) |
+| 릴리스 | Release / `Release` | 승인된 자료·빌드 묶음을 특정 채널에 공개하는 단위 | [정의](domain/publishing.md#release) |
+| 상품 판매 상태 | Product Status / `ProductStatus` | 상품에 대한 신규 주문을 허용하는지 나타내는 상태 | [정의](domain/publishing.md#product-status) |
+| 주문 | Order / `Order` | 구매자·상품 항목·구매 금액을 고정한 구매 요청 | [정의](domain/commerce.md#order) |
+| 결제 | Payment / `Payment` | 주문 대금의 사전등록·승인·거절·환불 처리 기록 | [정의](domain/commerce.md#payment) |
+| 이용권 | License / `License` | 회원에게 상품 이용 권한을 지급·회수한 원본 기록 | [정의](domain/commerce.md#license) |
+| 다운로드 보유권 사본 | Entitlement / `Entitlement` | 다운로드 접근 판정을 위해 이용권 이벤트를 반영한 사본 | [정의](domain/commerce.md#entitlement) |
+| 정산 원장 항목 | Settlement Record / `SettlementRecord` | 주문 상품별 매출 또는 환불과 수수료를 기록한 한 줄 | [정의](domain/commerce.md#settlement-record) |
+| 판매자 월 마감 | Seller Settlement / `SellerSettlement` | 판매자와 귀속 월별 원장 합계를 모은 마감 결과 | [정의](domain/commerce.md#seller-settlement) |
 
-| 용어 | 뜻과 구별할 점 | 코드 |
+## 의미가 유지되는 업무 범위
+
+아래는 바운디드 컨텍스트 **후보**다. 배포 서비스 목록을 그대로 컨텍스트로 확정하지 않는다. 한 서비스 안에도 서로 다른 업무가 있고, 한 업무의 읽기 모델은 다른 서비스에 있을 수 있다. 경계 확정은 [Q1](domain/open-questions.md#q1)의 검토 대상이다.
+
+| 업무 범위 후보 | 책임지는 의미 | 현재 담당 서비스 | 경계를 넘을 때의 관계 |
+|---|---|---|---|
+| 창작·출시 관리 | 프로젝트, 자료 확정, 제출물, 빌드, 릴리스 | studio | 심사에는 제출 스냅샷을 전달하고, 판매·배포에는 LIVE 릴리스 스냅샷을 전달 |
+| 심사 운영 | 유형별 심사 사건, 판단, 증빙, 재검토 | review | 심사 결과를 Studio의 출시 관문에 반영. 사건의 전체 운영 상태를 복제하지는 않음 |
+| 상품·진열 | 상품 가격·판매 상태, 구매자에게 보이는 상품 정보 | catalog, store | Catalog가 원본을 소유하고 Store가 검색·진열 사본을 유지. 창작 프로젝트와는 `productCode`로 연결 |
+| 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 견적을 주문에 고정하고 Payment에 결제를 요청 |
+| 대금 처리 | 결제 승인·거절·환불 | payment | 결제 완료 사실을 주문·이용권·정산이 각자의 의미로 반영 |
+| 이용 권한 | 상품 이용권 원본과 회수 이력 | license | Download가 이용권 이벤트로 보유권 사본을 유지 |
+| 파일 배포 | 공개 파일·변형 선택, 접근 판정, 다운로드 티켓 | download | 릴리스·상품 참조·보유권 사본을 조합해 접근 판정 |
+| 판매자 정산 | 매출·환불 원장, 수수료, 월 마감 | settlement | 결제 항목을 원장으로 번역. 상품의 현재 가격으로 과거 매출을 다시 계산하지 않음 |
+
+Auth는 회원·역할의 출처이고, Studio의 워크스페이스는 프로젝트 소유 범위다. 회원·판매자·워크스페이스는 이름만 바꾼 하나의 개념으로 취급하지 않는다. 현재 개인 워크스페이스 ID가 커머스의 `sellerId`로 전달되는 관계는 [Q8](domain/open-questions.md#q8)에 남긴다. 인증 계약은 [커머스 인증 문서](p3-commerce-security.md)를 참고한다.
+
+## 혼동하기 쉬운 표현
+
+<a id="publication-boundaries"></a>
+### 확정·공개·판매 시작
+
+| 권장 표현 | 코드 상태 / 행위 | 업무상 결과 |
 |---|---|---|
-| **Workspace** | 창작자 계정에 연결된 작업 공간. `studio`의 프로젝트·제출·출시 접근 범위다. 구매자의 `memberId`와 다르다. | [Workspace](../apps/studio/src/main/java/com/stove/studio/core/domain/Workspace.java) |
-| **GameProject** | 창작자가 등록하고 관리하는 게임 프로젝트. 하나의 프로젝트에서 여러 리비전, 빌드, 제출물, 릴리스가 생길 수 있다. | [GameProject](../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java) |
-| **`gameId`** | `studio`의 `GameProject` DB ID. 프로젝트 관련 API 경로에 쓰인다. | [GameProject](../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java) |
-| **`productCode`** | 창작자가 정하는 상품 코드. 서비스 경계를 넘을 때 같은 게임을 가리키는 자연 키다. `gameId`나 `productId`와 값이 같다는 뜻은 아니다. | [GameProject](../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java) |
-| **`productId`** | `catalog`의 `Product` DB ID. 주문 항목과 라이선스는 이 ID로 상품을 참조한다. | [Product](../apps/catalog/src/main/java/com/stove/catalog/core/domain/Product.java) |
-| **`sellerId` / `memberId`** | 각각 판매자와 구매자 식별자다. `studio`의 `GameProject.sellerId`는 개인 Workspace를 가리키는 기존 필드명이다. | [GameProject](../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java), [Order](../apps/order/src/main/java/com/stove/order/core/domain/Order.java) |
-| **상품 종류 (`ProductKind`)** | `BASIC`, `DEMO`, `DLC`, `EDITION`, `BUNDLE`로 프로젝트의 상품 관계를 나타낸다. 번들 구성이나 상위 게임 관계는 [상품 관계 문서](p2-product-family-and-builds.md#상품-관계)를 본다. | [ProductKind](../apps/studio/src/main/java/com/stove/studio/core/domain/ProductKind.java) |
+| 상점 자료를 **확정한다** | `StorePageRevision.PUBLISHED` / `publish()` | 자료 내용을 고정해 심사 제출에 사용할 수 있음. 상점 노출 시점은 아님 |
+| 릴리스를 **공개한다** | `Release.PUBLISHED` / `publish()` | 해당 채널의 자료·빌드 묶음 공개. LIVE일 때 Catalog·Download로 공개 이벤트 전달 |
+| 상품의 **판매를 시작한다** | `Product.ON_SALE` / `openSale()` 또는 릴리스 반영 | 신규 주문 허용. 현재 일반 상품은 LIVE 릴리스 반영으로 자동 판매 시작 |
 
-## 리비전과 여러 버전
+“발행했다”만으로는 어떤 결과인지 알 수 없다. 코드/API의 `publish`나 기존 문서의 “발행”을 인용할 때도 대상과 채널을 쓴다. 예: “상점 자료 3차를 확정했지만 릴리스는 아직 예약 상태다.” DEMO·BUNDLE의 공개와 판매 제한은 [상품 판매 상태](domain/publishing.md#product-status)를 참고한다.
 
-**리비전(Revision)**은 프로젝트의 심사 대상 자료를 종류별로 기록한 이력이다. `studio`에는 상점 페이지, 가격, 등급 리비전이 따로 있다. 제출할 때 세 리비전의 **ID를 각각 선택**하므로, 상점 문구만 고치면 새 상점 리비전을 선택해 새 제출물을 만들 수 있다. 기존 제출물이 가리키는 ID는 바뀌지 않는다.
+<a id="versions"></a>
+### 여러 버전과 이력 번호
 
-제출 API의 `metadataRevisionId`는 `StorePageRevision.id`, `pricingRevisionId`는 `PricingRevision.id`, `ratingRevisionId`는 `RatingRevision.id`를 가리킨다. 이벤트의 `metadataRevision`·`pricingRevision`·`ratingRevision`도 이 ID를 뜻한다. 셋 모두 `revisionNo`가 아닌 **DB ID**다. 상점 리비전에도 `pricesJson` 필드가 있지만, 출시 이벤트의 대표 `price`·`currency`는 가격 리비전에서 읽는다.
-
-| 용어 | 뜻과 구별할 점 | 코드 |
+| 표기 | 식별하는 것 | 혼동하면 생기는 문제 |
 |---|---|---|
-| **StorePageRevision** | 제목·설명·이미지 등 상점 페이지 자료. `DRAFT`는 수정·미리보기가 가능하고, `PUBLISHED`가 되면 내용을 수정할 수 없으며 심사 제출에 사용할 수 있다. 여기서의 발행은 **상점 공개가 아니라 리비전 확정**이다. | [StorePageRevision](../apps/studio/src/main/java/com/stove/studio/core/domain/StorePageRevision.java) |
-| **PricingRevision** | 국가·통화·가격의 한 이력. 출시 이벤트의 대표 가격·통화는 이 리비전에서 가져온다. 생성된 리비전을 직접 수정하는 메서드는 없다. | [PricingRevision](../apps/studio/src/main/java/com/stove/studio/core/domain/PricingRevision.java) |
-| **RatingRevision** | 등급 설문, 대상 국가, 정책 버전, 정책이 결정한 권장 등급과 등급 경로의 한 이력. 실제 심사 승인 결과인 `ratingCode`와 구별한다. | [RatingRevision](../apps/studio/src/main/java/com/stove/studio/core/domain/RatingRevision.java) |
-| **`revisionId` / `revisionNo`** | `id`는 특정 리비전 행을 가리키며 제출 API가 받는 값이다. `revisionNo`는 **같은 프로젝트·같은 종류 안에서** 증가하는 이력 번호다. | [RevisionService](../apps/studio/src/main/java/com/stove/studio/core/service/RevisionService.java) |
-| **`policyVersion`** | 등급 분류 규칙의 버전. 리비전 생성 때 기록하고 제출 시 현재 유효한 정책인지 다시 검사한다. 게임 파일 버전과 무관하다. | [KoreanRatingPolicy](../apps/studio/src/main/java/com/stove/studio/core/domain/KoreanRatingPolicy.java) |
-| **`productVersion` / `GameBuild.version`** | 이용자에게 제공할 게임 빌드의 **대상 버전**. 한 제출물의 모든 빌드는 이 값이 같아야 한다. | [GameBuild](../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java) |
-| **`buildNumber`** | 업로드된 빌드에 붙이는 별도 식별 문자열. 대상 버전이나 리비전 번호와 같은 개념이 아니다. | [GameBuild](../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java) |
-| **`entityVersion`** | JPA 낙관적 잠금용 행 버전(`@Version`). 업무 이력인 `revisionNo`, 게임 버전인 `productVersion`과 무관하다. | [Submission](../apps/studio/src/main/java/com/stove/studio/core/domain/Submission.java) |
-| **`projectionVersion`** | `catalog` 상품 변경을 `store` 검색 문서에 반영할 때 오래된 이벤트를 거르는 순서 번호. 리비전 번호나 게임 버전이 아니다. | [Product](../apps/catalog/src/main/java/com/stove/catalog/core/domain/Product.java), [StoreService](../apps/store/src/main/java/com/stove/store/core/service/StoreService.java) |
+| `StorePageRevision.revisionNo` 등 | 프로젝트 안에서 해당 자료 종류의 이력 순번 | 상점 3차와 가격 3차는 각각 별도 이력 |
+| `metadataRevisionId`, `pricingRevisionId`, `ratingRevisionId` | 저장된 자료 이력의 ID | `revisionNo` 대신 ID를 제출 API에 전달해야 함 |
+| 이벤트·Catalog의 `metadataRevision` | 현재 구현에서는 상점 자료의 **ID** | 이름에 `Id`가 없어 순번으로 오해할 수 있음. [Q7](domain/open-questions.md#q7) |
+| `GameBuild.version` / 업로드 요청 `productVersion` | 게임 제품 버전 문자열, 예: `1.2.0` | 자료 이력 순번이나 빌드 ID가 아님 |
+| `buildNumber` | 빌드 실행·산출물 추적 번호 | 같은 제품 버전의 여러 OS·아키텍처 빌드를 구별할 추가 정보 |
+| `deltaFromVersion` | 델타 파일 적용의 출발 제품 버전 | 대상 버전은 해당 빌드의 `version` |
+| `Submission.sequenceNo`, `ReviewCase.reviewRound` | 프로젝트의 제출 차수 / 같은 심사 사건의 재검토 회차 | 새 자료로 재제출하는 것과 같은 자료를 재검토하는 것은 다름 |
+| `entityVersion` (`@Version`) | 동시 수정 충돌 감지용 값 | 사용자가 출시할 게임 버전으로 지정하는 값이 아님 |
+| `projectionVersion` | Catalog 상품 변경을 Store 읽기 모델에 반영할 순서 번호 | 오래된 이벤트가 새 진열을 덮어쓰지 않도록 비교하며 자료 이력·게임 버전과 별개 |
+| `ratingPolicyVersion` | 등급 판정 규칙의 판본 | 게임 버전과 별개이며 현재 활성 정책과 맞아야 제출 가능 |
 
-예를 들어 `StorePageRevision.revisionNo=3`, `PricingRevision.revisionNo=2`, `GameBuild.version="2.0"`은 한 제출물에 함께 들어갈 수 있다. 세 숫자는 서로 맞출 필요가 없다.
+근거: [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java), [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
 
-## 빌드와 업로드
+<a id="identifiers"></a>
+### 주요 식별자
 
-| 용어 | 뜻과 구별할 점 | 코드 |
+| 식별자 | 식별 대상·발급/관리 주체 | 사용하는 범위 |
 |---|---|---|
-| **GameBuild** | 업로드한 게임 파일의 메타데이터와 검증 상태. 실제 파일은 오브젝트 스토리지에 있다. `VALIDATED`는 업로드 파일 검증 완료이며 심사 승인이나 출시를 뜻하지 않는다. | [GameBuild](../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java) |
-| **UploadSession** | 큰 파일을 여러 부분으로 업로드하기 위해 연 세션. `GameBuild`와 연결되지만 출시 단위는 아니다. | [UploadSession](../apps/studio/src/main/java/com/stove/studio/core/domain/UploadSession.java) |
-| **전체 빌드** | 특정 `platform`(OS)·`architecture`(아키텍처)에서 새로 설치할 수 있는 파일. `deltaFromVersion == null`이다. | [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java) |
-| **델타 빌드** | `deltaFromVersion`에 적힌 이전 버전에서 `GameBuild.version`의 대상 버전으로 갱신하기 위한 파일. 이 서비스는 델타 파일을 생성하거나 클라이언트에 적용하지 않는다. 내용상 호환성은 빌드 QA에서 확인해야 한다. | [GameBuild](../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java), [상품·빌드 문서](p2-product-family-and-builds.md#빌드-변형과-델타) |
-| **빌드 변형 (`BuildVariant`)** | 출시에서 선택 가능한 OS·아키텍처별 전체/델타 파일의 정보. 다운로드 요청의 `platform`, `architecture`, `fromVersion`으로 고른다. | [BuildVariant](../common/event/src/main/java/com/stove/common/event/payload/BuildVariant.java) |
-| **기본 빌드 (`buildId`)** | 제출 요청의 첫 빌드이며 반드시 전체 빌드다. `additionalBuildIds`에 다른 대상의 전체 빌드와 델타 빌드를 더한다. | [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java) |
+| `gameId` | Studio의 게임 프로젝트 ID | 자료·빌드·제출물·프로젝트 관계. Catalog에도 연결 참조로 보관 |
+| `productCode` | 창작자가 지정하고 Studio에서 중복 검사하는 상품 코드 | Studio→Catalog→Store/Download의 공통 연결 값. Download URL에서도 사용 |
+| `productId` | Catalog의 상품 ID | 주문 항목·이용권·정산 원장, Download 보유권 조회 |
+| `submissionId` | Studio의 심사 제출물 ID | Review 스냅샷·사건과 Studio 관문의 연결 |
+| `releaseId`, `buildId` | Studio의 공개 단위 / 파일 산출물 ID | 상품의 현재 릴리스와 Download 매니페스트 일치 확인 |
+| `orderNo` | Order가 발급하는 주문번호 | 결제·이용권·정산을 연결. 각 서비스의 DB 기본 키와 별개 |
+| `memberId` | Auth 회원 ID | 구매자와 이용권 수혜자. 사용자 입력 대신 인증 정보에서 결정 |
+| `workspaceId` → `sellerId` | 현재 Studio 개인 워크스페이스 → 판매 주체 참조 | 프로젝트 소유권과 커머스·정산 연결. [Q8](domain/open-questions.md#q8) |
 
-**예시 — Windows `X86_64`용 2.0 제출:**
+예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. [ProductRef](../apps/download/src/main/java/com/stove/download/core/domain/ProductRef.java)가 코드와 상품 ID·릴리스 ID의 관계를 보관한다.
 
-| 파일 | OS·아키텍처 | `version` | `deltaFromVersion` | 역할 |
-|---|---|---|---|---|
-| Windows 전체 파일 | `WINDOWS`·`X86_64` | `2.0` | `null` | 기본 파일과 델타의 폴백 |
-| Windows 델타 파일 | `WINDOWS`·`X86_64` | `2.0` | `1.0` | 1.0 이용자의 2.0 갱신 파일 |
-| macOS 전체 파일 | `MACOS`·`ARM64` | `2.0` | `null` | 다른 OS용 전체 파일 |
+<a id="source-and-copy"></a>
+### 이용권 원본과 보유권 사본
 
-한 제출물은 **같은 프로젝트의 검증된 빌드**만 담고, 대상 버전도 모두 같아야 한다. 같은 OS·아키텍처·패치 기준을 중복할 수 없으며, 델타가 있다면 같은 OS·아키텍처의 전체 빌드가 함께 있어야 한다. 다운로드 시 일치하는 `fromVersion`의 델타가 없으면 해당 전체 빌드를 고른다. [SubmissionBuildSetTest](../apps/studio/src/test/java/com/stove/studio/core/service/SubmissionBuildSetTest.java)는 `Submission` 객체를 만들지 않고, 제출 전 `validateBuildSet` 규칙을 검증한다.
+License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는 `(memberId, productId)`별 다운로드 판정 사본이다. “라이선스 지급 완료” 직후라도 사본 반영 전에는 다운로드가 거절될 수 있다. Download는 요청마다 License에 동기 조회하지 않는다. 환불 후 재구매, 이벤트 지연의 경계는 [Entitlement](domain/commerce.md#entitlement)와 [Q5](domain/open-questions.md#q5)를 참고한다.
 
-## 심사 제출과 심사
+## 짧은 용어와 권장 동사
 
-| 용어 | 뜻과 구별할 점 | 코드 |
-|---|---|---|
-| **Submission(심사 제출물)** | 상점·가격·등급 리비전 ID와 기본 빌드 ID를 고정한 **심사 신청 단위**. 선택한 자료는 바꾸지 않고, 심사 결과에 따라 제출물의 상태와 확정 등급 정보는 바뀔 수 있다. | [Submission](../apps/studio/src/main/java/com/stove/studio/core/domain/Submission.java) |
-| **SubmissionBuild** | 제출물에 포함된 모든 빌드와 제출물의 연결. 빌드 묶음은 제출 후 변경하지 않는다. | [SubmissionBuild](../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionBuild.java) |
-| **SubmissionSnapshot** | `SubmissionCreated` 이벤트를 받아 `review`가 보관하는 심사용 사본. `studio`의 `Submission` 행 자체가 아니다. | [SubmissionSnapshot](../apps/review/src/main/java/com/stove/review/core/domain/SubmissionSnapshot.java) |
-| **ReviewCase(심사 안건)** | 제출물의 심사 유형별 안건. `RATING`, `STORE_PAGE`, `BUILD_QA`, `LEGAL`, `SDK_COMPLIANCE`, `COMMERCIAL` 각각을 심사한다. | [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java), [ReviewType](../apps/review/src/main/java/com/stove/review/core/domain/ReviewType.java) |
-| **SubmissionGate(승인 관문)** | `studio`가 제출물마다 보관하는 심사 유형별 상태. `review`의 결정 이벤트를 반영하며 모든 관문이 승인되면 제출물이 `READY_FOR_RELEASE`가 된다. `ReviewCase`와는 별도 서비스의 객체다. | [SubmissionGate](../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionGate.java), [SubmissionReviewProjectionService](../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java) |
-| **등급 경로 (`RatingPath`)** | 정책이 고른 자체등급분류 또는 외부 심사 경로. 권장 등급과 별도로 실제 승인 결과 및 증빙을 심사에서 확정한다. | [RatingPath](../apps/studio/src/main/java/com/stove/studio/core/domain/RatingPath.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java) |
+| 용어·표현 | 뜻과 사용 예 |
+|---|---|
+| 워크스페이스 / Workspace | 창작자 계정의 작업 공간이며 프로젝트·제출·출시 접근 범위. 구매자의 회원 ID와 구별. [Workspace](../apps/studio/src/main/java/com/stove/studio/core/domain/Workspace.java) |
+| 상품 종류 / Product Kind | BASIC·DEMO·DLC·EDITION·BUNDLE의 상품 관계. [종류별 조건](domain/publishing.md#game-project) |
+| 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. [UploadSession](../apps/studio/src/main/java/com/stove/studio/core/domain/UploadSession.java) |
+| 가격 이력 / Pricing Revision | 심사·출시에 사용할 가격의 특정 판본. 현재 신규 생성은 KR/KRW |
+| 등급 자료 이력 / Rating Revision | 설문·지역·정책 버전·판정 경로를 고정한 자료 |
+| 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/event/src/main/java/com/stove/common/event/payload/BuildVariant.java) |
+| 기본 빌드 / `buildId` | 제출 요청의 첫 빌드이며 전체 파일이어야 함. `additionalBuildIds`로 다른 대상의 전체·델타 파일을 추가 |
+| 심사 스냅샷 / Submission Snapshot | Review가 SubmissionCreated를 받아 보관하는 심사용 사본. Studio의 제출물 행과 별개. [SubmissionSnapshot](../apps/review/src/main/java/com/stove/review/core/domain/SubmissionSnapshot.java) |
+| 상점 공개 사본 / Storefront Snapshot | LIVE 릴리스의 소개·이미지·요구 사양을 전달하는 사본. [StorefrontSnapshot](../common/event/src/main/java/com/stove/common/event/payload/StorefrontSnapshot.java) |
+| 검색 문서 / Product Document | Store의 검색·진열용 읽기 모델. 상품 마스터와 별도 저장소에 있고 `projectionVersion`으로 오래된 변경을 걸러냄. [ProductDocument](../apps/store/src/main/java/com/stove/store/core/domain/ProductDocument.java) |
+| 패치 매니페스트 / Patch Manifest | Download가 릴리스에서 투영한 배포 파일 정보 |
+| 다운로드 티켓 / Download Ticket | 권한 확인 뒤 발급하는 만료 시각이 있는 서명 URL과 파일 정보 |
+| 등록한다 / register | “프로젝트를 등록한다”, “빌드를 등록한다”처럼 대상 명시 |
+| 확정한다 / finalize | “상점 자료를 확정한다.” 이후 변경은 새 이력으로 작성 |
+| 제출한다 / submit | “확정 자료와 검증된 빌드를 묶어 심사를 요청한다.” |
+| 승인한다 / approve | “BUILD_QA 심사 사건을 승인한다.” 모든 심사 완료와 구별 |
+| 재제출한다 / resubmit | 수정한 자료·빌드로 새로운 Submission을 만든다 |
+| 재검토한다 / appeal | 기존 제출 스냅샷에 대한 사건을 다시 연다 |
+| 공개한다 / publish | “LIVE 릴리스를 공개한다.” 채널 명시 |
+| 지급한다·회수한다 / issue·revoke | 이용권 원본의 생성·효력 종료. 보유권 사본에는 “반영한다” 사용 |
+| 환불한다 / refund | 승인된 대금을 되돌린다. 승인 거절은 “결제 실패”, 주문 종료는 “주문 취소” |
+| 마감한다 / close | 판매자·귀속 월의 미마감 원장을 합산한다. 실제 송금 완료를 뜻하지 않음 |
 
-수정 요청을 받으면 새 리비전으로 **새 Submission을 제출**하는 흐름이 기본이다. `Submission.sequenceNo`는 프로젝트 안에서 몇 번째 제출인지를 나타내며 리비전 번호와 별개다. `Submission.status`의 `SUBMITTED`, `CHANGES_REQUESTED`, `READY_FOR_RELEASE`, `RELEASED`는 제출물 전체의 상태이고, `ReviewCase.status`와 `SubmissionGate.status`는 각 심사 유형의 상태다. [창작자 API 예시](p3-creator-api.md#revision-심사-출시)에 실제 순서가 있다.
+### 빌드 변형을 선택하는 예
 
-기존 `GameProject.submit()` → `GameRegistered` 경로도 남아 있다. 여기서 `GameProject.status=SUBMITTED`는 프로젝트 단위의 이전 심의 흐름이고, 위의 **리비전 기반 `SubmissionCreated` 흐름**과 다른 상태다. 코드를 읽을 때 두 `submit`을 같은 객체의 전이로 해석하지 않는다.
+Windows `X86_64`용 2.0 전체 파일(`deltaFromVersion=null`), 같은 환경의 1.0→2.0 델타 파일, macOS `ARM64`용 2.0 전체 파일을 한 제출물에 담을 수 있다. 제품 버전은 모두 같고, 델타마다 같은 OS·아키텍처의 전체 파일이 있어야 한다. 리비전 순번은 서로 맞출 필요가 없으므로 상점 자료 3차·가격 2차·제품 버전 2.0을 함께 선택할 수 있다.
 
-## 출시와 노출
+다운로드 요청에 맞는 델타가 없으면 같은 OS·아키텍처의 전체 파일을 선택한다. 서비스가 델타를 생성하거나 클라이언트에 적용하는 것은 아니다. [빌드 정의와 검증 범위](domain/publishing.md#game-build), [빌드 변형·델타 명세](p2-product-family-and-builds.md#빌드-변형과-델타)를 참고한다.
 
-| 용어 | 뜻과 구별할 점 | 코드 |
-|---|---|---|
-| **Release(릴리스)** | 승인된 Submission을 채널에 공개하거나 예약하는 출시 이력. 공개 직전에 제출물의 모든 빌드를 smoke test한다. `DEV`·`TEST`·`STAGE`·`LIVE` 채널이 있으며 `LIVE` 공개 때 상품·다운로드 쪽에 릴리스 이벤트가 전달된다. | [Release](../apps/studio/src/main/java/com/stove/studio/core/domain/Release.java), [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java) |
-| **릴리스 변경 유형** | 이전 릴리스가 없으면 `INITIAL`, 상점·가격·등급 리비전 중 하나라도 바뀌면 `MATERIAL_CHANGE`, 그렇지 않으면 `NORMAL_PATCH`로 분류한다. `NORMAL_PATCH`는 **델타 파일을 썼다는 뜻이 아니다**. `ROLLBACK`은 이전 공개 릴리스로 되돌리는 새 릴리스다. | [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ReleaseChangeType](../apps/studio/src/main/java/com/stove/studio/core/domain/ReleaseChangeType.java) |
-| **Product(상품 마스터)** | `catalog`가 관리하는 판매 상품. 현재 공개 릴리스의 정보와 가격·판매 상태를 담는다. 릴리스 `PUBLISHED`와 상품 `ON_SALE`은 다른 상태다. | [Product](../apps/catalog/src/main/java/com/stove/catalog/core/domain/Product.java) |
-| **ProductDocument(검색 문서)** | `store`가 상품 변경 이벤트로 갱신하는 검색·진열용 읽기 모델. 상품 마스터와 별도의 저장소에 있다. | [ProductDocument](../apps/store/src/main/java/com/stove/store/core/domain/ProductDocument.java) |
-| **PatchManifest(패치 매니페스트)** | `download`가 공개 릴리스마다 보관하는 빌드 목록. 업로드 완료만으로 생기지 않고 `ReleasePublished`를 받아 만든다. | [PatchManifest](../apps/download/src/main/java/com/stove/download/core/domain/PatchManifest.java) |
-| **DownloadTicket(다운로드 티켓)** | 보유권 확인 후 발급하는 특정 빌드의 다운로드 정보와 만료되는 서명 URL. 델타를 찾지 못하면 같은 OS·아키텍처의 전체 빌드를 선택한다. | [DownloadTicketService](../apps/download/src/main/java/com/stove/download/core/service/DownloadTicketService.java) |
+## 유지 관리
 
-`StorePageRevision.PUBLISHED`는 심사에 사용할 **상점 자료 확정**, `Release.PUBLISHED`는 **릴리스 공개**, `Product.ON_SALE`은 **구매 가능**을 뜻한다. 같은 단어 `PUBLISHED`라도 객체가 다르면 단계가 다르다.
+개념·정책·상태 전이를 바꾸는 PR에서는 다음을 함께 확인한다.
 
-## 구매와 이용
-
-| 용어 | 뜻과 구별할 점 | 코드 |
-|---|---|---|
-| **Order / OrderItem** | 구매 요청과 항목. 서버가 상품 가격을 확인해 주문 금액을 계산하고 `orderNo`로 이후 결제·지급·정산을 연결한다. | [Order](../apps/order/src/main/java/com/stove/order/core/domain/Order.java), [OrderItem](../apps/order/src/main/java/com/stove/order/core/domain/OrderItem.java) |
-| **Payment** | 주문번호에 연결된 결제. 주문 금액을 사전등록하고 PG 승인 금액과 대조한다. 결제 실패와 승인 뒤 취소·환불은 다른 전이다. | [Payment](../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java) |
-| **License(라이선스)** | 결제 완료 후 회원에게 지급한 상품 소유권의 원본 기록. 한 주문·상품당 한 건을 보장한다. | [License](../apps/license/src/main/java/com/stove/license/core/domain/License.java) |
-| **Entitlement(보유권 사본)** | `download`가 라이선스 이벤트로 유지하는 접근 판정용 사본. 다운로드 요청은 이를 조회하므로 `license`에 동기 호출하지 않는다. | [Entitlement](../apps/download/src/main/java/com/stove/download/core/domain/Entitlement.java) |
-| **SettlementRecord(정산 원장)** | 주문 항목별 매출 `SALE` 또는 환불 `REFUND` 기록. 환불은 원 매출의 금액을 반대 부호로 기록한다. `settlementMonth`는 정산 귀속 월이다. | [SettlementRecord](../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementRecord.java) |
-
-이 구간의 가격은 주문 시점에 확인한 값을 이후 이벤트와 원장에 전달한다. 현재 상품 가격이 바뀌어도 기존 결제·정산의 기준 금액을 소급해 바꾸지 않는다. 자세한 금액 계산과 할인 부담 규칙은 [서비스 명세의 주문·정산 절](services.md#order)을 본다.
-
-## 용어를 추가할 때
-
-새 용어에는 **뜻, 소유 서비스, 비슷한 용어와의 차이, 코드 위치**를 함께 적는다. 상태나 숫자 규칙은 코드가 바뀔 수 있으므로 해당 클래스·서비스·테스트 링크를 갱신한다. HTTP 예제나 운영 절차는 이 문서에 복제하지 않고 기존 상세 문서로 연결한다.
+- 바뀐 표준명·정의·정상/거절 사례와 관련 업무 흐름을 갱신한다. 명사뿐 아니라 허용 행위와 전이 조건도 확인한다.
+- 코드와 기존 테스트 링크를 갱신한다. 테스트가 없는 규칙은 근거 범위를 밝히고 미결 질문에 검증 공백을 기록한다.
+- 의도와 구현이 다르면 [미결 질문](domain/open-questions.md)에 현상·결정할 내용·후속 작업을 남긴다. 문서만으로 구현이 완료되었다고 표시하지 않는다.
+- 담당자 결정 후 검토자·날짜·근거를 남기고 용어 상태를 갱신한다. 설계 선택의 이유는 [설계 결정](decisions.md)에 기록하고 질문은 해결 상태로 보존한다.
+- API 예제·보안 계약·상품 변형 명세는 [서비스 명세](services.md), [인증 경계](p3-commerce-security.md), [상품 관계와 빌드](p2-product-family-and-builds.md)를 연결한다.

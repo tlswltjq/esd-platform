@@ -48,7 +48,8 @@ stove/
 
 | 무엇이 궁금하면 | 문서 |
 |---|---|
-| 리비전·제출물·델타 빌드 등 도메인 용어와 객체의 관계 | [domain-glossary.md](docs/domain-glossary.md) |
+| 업무 흐름과 표준 용어, 코드·테스트 근거 | [도메인 용어집](docs/domain-glossary.md) → [대표 업무 흐름](docs/domain/workflows.md) |
+| 아직 합의되지 않은 용어·정책과 구현 차이 | [미결 질문·검토 기록](docs/domain/open-questions.md) |
 | 서비스별 API·상태머신·이벤트 목록 | [services.md](docs/services.md) |
 | 구조를 이렇게 잡은 근거와 **버린 선택지** | [decisions.md](docs/decisions.md) |
 | 테스트로 재현한 결함 36건 (살아 있는 것 1건) | [defects.md](docs/defects.md) |
@@ -69,13 +70,13 @@ stove/
 ## 2. 이벤트 흐름
 
 ```
-[등록] studio    ──GameRegistered────▶ review     심의 접수(자체등급분류는 내부 심사 분기)
-[승인] review    ──ReviewApproved────▶ catalog    상품 마스터 생성 + 노출 전환
-                                     └▶ studio    프로젝트 상태 역전파
-[반려] review    ──ReviewRejected────▶ studio     반려 사유 전달
+[제출] studio    ──SubmissionCreated────────▶ review   유형별 심사 사건 생성
+[승인] review    ──SubmissionReviewApproved─▶ studio   출시 관문 반영, 모두 승인되면 출시 준비
+[보완] review    ──ReviewChangesRequested───▶ studio   수정 요청 반영
+[공개] studio    ──ReleasePublished─────────▶ catalog  LIVE 자료·빌드 반영과 판매 상태 결정
+                                           └▶ download 공개 릴리스 매니페스트 등록
 [색인] catalog   ──ProductChanged────▶ store      검색 색인 동기화
-                                     └▶ download  productCode ↔ productId 참조
-[빌드] studio    ──BuildUploaded─────▶ download   패치 매니페스트 등록
+                                     └▶ download  productCode ↔ productId·releaseId 참조
 [구매] order     ──OrderCreated──────▶ payment    결제 대기 생성
 [결제] payment   ──PaymentCompleted──▶ license    라이선스 발급
                                      ├▶ order     주문 확정
@@ -89,6 +90,11 @@ stove/
 [보상] license   ──LicenseIssueFailed▶ payment    자동 환불 (Saga 보상 트랜잭션)
 ```
 
+상점 자료의 `PUBLISHED`는 **자료 확정**, 릴리스의 `PUBLISHED`는 **채널 공개**,
+상품의 `ON_SALE`은 **신규 주문 허용**을 뜻한다. 현재 일반 상품은 LIVE 릴리스 반영으로 판매를 시작하고,
+DEMO·BUNDLE은 일반 판매가 제한된다. 프로젝트 단위 `GameRegistered`·`ReviewApproved` 경로는
+기존 호환 경로로 남아 있다. 자세한 조건과 합의 상태는 [도메인 문서](docs/domain-glossary.md)에 있다.
+
 토픽은 애그리거트 단위(`stove.order.v1` 등), 메시지 키는 **주문번호/상품코드** — 같은 애그리거트의 순서가 보장된다.
 
 ## 3. 설계 과제와 해법
@@ -100,7 +106,7 @@ stove/
 | 결제 성공 후 지급 실패 | **Saga 보상 트랜잭션** — `LicenseIssueFailed` → payment 자동 환불 | `license/…/PaymentEventListener` |
 | 금액 위·변조 | **검증 게이트 4단계 분산 배치** (아래) | |
 | 릴레이 다중화 시 중복 발행 | `SELECT … FOR UPDATE SKIP LOCKED` 로 배치 선점 | `OutboxEventRepository` |
-| 상품 등록 우회 | 심의 승인 이벤트 없이는 상품이 생성되지 않는 파이프라인 | `review` 상태머신 → `catalog` |
+| 출시 전 판매 우회 | 새 출시 경로는 모든 심사 관문 승인·검증을 거친 LIVE 릴리스를 상품에 반영한다. 기존 승인만 받은 상품은 릴리스 없이 판매할 수 없다 | `studio/ReleaseService` → `catalog/Product` |
 | 읽기 트래픽 집중 | catalog(쓰기) / store(읽기) 분리 + Redis 캐시 2단 | `store`, `catalog/CacheConfig` |
 | license 장애가 다운로드 장애로 전이 | 동기 호출 대신 **권한 사본**을 이벤트로 유지 — license 를 정지시키고 확인했다(다운로드 20/20, 9.3ms) | `download/Entitlement` |
 | 정산 중복 집계(금전 사고) | Inbox + `(order_no, product_id, record_type)` 유니크 이중 방어 | `settlement_record` |
@@ -111,10 +117,10 @@ stove/
 
 ### 검증 게이트 4단계
 
-1. **주문 시점** — 클라이언트 금액을 신뢰하지 않고 catalog 가격으로 재계산 (`PlaceOrderService`)
+1. **주문 시점** — 클라이언트 금액을 신뢰하지 않고 catalog 가격으로 재계산 (`PlaceOrderFacade`)
 2. **PG 사전등록** — 승인 전에 서버가 결제 금액을 PG 에 먼저 등록 (`Payment#prepare`)
 3. **콜백 대조** — PG 승인 금액 ≠ 사전등록 금액이면 승인 거부 (`Payment#approve`)
-4. **멱등키** — 중복 콜백은 상태 + `idempotency_key` 유니크 제약으로 흡수
+4. **멱등키** — 주문번호로 결제를 잠그고 상태와 콜백 멱등키를 비교해 같은 승인 재전송을 흡수
 
 ### 멱등성 전략 (서비스 성격에 맞춰 다르게)
 
