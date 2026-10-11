@@ -35,6 +35,8 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 
 `up`은 인프라를 띄우고 `bootJar -x test -x integrationTest`로 앱을 빌드한 뒤 앱 컨테이너를 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다. 일괄 상태 검사와 가입부터 정산까지 자동 검증하려면 [API 데모](api-demo.md#full-demo)를 사용한다.
 
+로컬 스크립트는 `docker-compose.local.yml`을 적용해 MinIO의 지정 버전 공식 소스로 이미지를 빌드한다. 공개 이미지 저장소 접근 오류를 피하기 위한 설정이며, 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
+
 브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다. 빌드 업로드 실습 화면은 같은 Gateway의 `/p0-lab/`에 있다.
 
 ### Swagger OAuth 문제 해결

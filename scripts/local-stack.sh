@@ -7,9 +7,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-INFRA=(docker compose -p stove -f docker-compose.yml)
+INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.local.yml)
 APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.e2e.yml)
-DEMO_INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml)
+DEMO_INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml)
 DEMO_APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.ci.yml -f docker-compose.apps.e2e.yml)
 
 case "${1:-up}" in

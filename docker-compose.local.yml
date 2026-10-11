@@ -1,0 +1,9 @@
+# Local source build: the original public MinIO image may no longer be available.
+services:
+  minio:
+    image: stove/minio:RELEASE.2025-04-22T22-12-26Z-local
+    pull_policy: build
+    build:
+      context: ./infra/minio
+    # Match STORAGE_PRESIGN_ENDPOINT in docker-compose.apps.e2e.yml.
+    ports: ["127.0.0.1:19000:9000"]
