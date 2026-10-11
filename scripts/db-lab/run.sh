@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# DB 동시성 실험 여섯 개 — docs/technical-interview-guide.md 의 "[확인됨]" 근거를 재현한다.
+# DB 동시성 실험 여섯 개 — docs/architecture.md 의 "[확인됨]" 근거를 재현한다.
 #
 #   ./scripts/db-lab/run.sh            # 전부 (약 2분)
 #   ./scripts/db-lab/run.sh 1 4        # 골라서

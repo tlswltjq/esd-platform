@@ -187,7 +187,7 @@ docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
 k6 p95 와 `Innodb_row_lock_waits` 증분 — 후자는 DB 가 센 값이라 SUT 밖에서 온다.
 9장과 달리 **테이블을 비우지 않는다**(공용 스택의 데이터를 지우지 않으려고). 대신 A-B-B-A 순서와 회차별 초기 행 수로 누적 효과를 대조한다.
 2026-09-14 결과(락 대기 400회 → 0회, p95 26.2 → 21.5ms)와 해석은
-[technical-interview-guide.md R1](../../docs/technical-interview-guide.md#r1-릴레이가-갭-락을-쥔-채-kafka-ack-를-기다린다).
+[격리 수준 A/B 결과](../../docs/performance.md#isolation-ab)와 [아키텍처 R1](../../docs/architecture.md#r1).
 
 ## 측정 위생 — 지키지 않으면 숫자가 아니라 잡음이다
 
@@ -198,7 +198,6 @@ k6 p95 와 `Innodb_row_lock_waits` 증분 — 후자는 DB 가 센 값이라 SUT
 - 각 조건마다 **동일한 초기 상태**에서 시작 (회차마다 `orders`·`outbox_event` 를 비우고 order 재기동)
 - **한 조건당 최소 2회** 반복해 재현성 확인 — 회차 간 편차가 조건 간 차이보다 작아야 유효하다
 - **측정 중 호스트에 다른 부하를 올리지 않는다** (CI 포함)
-```
 
 ## 시나리오
 

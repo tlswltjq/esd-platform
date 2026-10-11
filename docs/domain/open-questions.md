@@ -1,8 +1,10 @@
 # 미결 질문과 검토 기록
 
-[용어집](../domain-glossary.md) · [업무 흐름](workflows.md) · [창작·출시](publishing.md) · [구매·정산](commerce.md)
+[용어집](../domain-glossary.md) · [업무 흐름](workflows.md) · [창작·출시](models/studio.md) · [구매·정산](models/order-payment.md)
 
 2026-10-02, 코드 `a525243` (`main`)에서 확인한 내용이다. **관찰한 구현**, **결정이 필요한 업무 의도**, **후속 작업**을 구분한다. 아래 Q 번호가 이번 문서 작업의 후속 관리 단위이며, 외부 이슈로 등록한 것으로 표시하지 않는다. 결정 후 담당자·날짜·근거와 구현 이슈/PR을 연결하고 질문을 해결 상태로 보존한다.
+
+2026-10-10, 로컬 코드 `076efb1`의 [도메인별 모델 조사](model-guide.md)를 통해 Q12를 추가했다. 기존 Q1~Q11의 정책 합의 상태를 변경하지 않는다.
 
 ## 검토 순서
 
@@ -19,6 +21,7 @@
 | [Q9](#q9) | 주문 취소·환불·통화의 연결 | 구현 차이 검토 필요 | 주문·결제 담당 |
 | [Q10](#q10) | 플랫폼 검증·smoke test·롤백 성공 의미 | 구현 차이 검토 필요 | 빌드·출시 담당 |
 | [Q11](#q11) | 규칙 근거의 테스트 공백 | 후속 검증 필요 | 개발·테스트 담당 |
+| [Q12](#q12) | 반복 항목의 수수료 반올림과 전액 환불 상계 | 구현 차이 검토 필요 | 주문·정산·테스트 담당 |
 
 역할은 필요한 책임 범위를 나타낸다. 실제 담당자 배정이나 검토가 완료되었다는 뜻은 아니다.
 
@@ -47,7 +50,7 @@
 
 **결정할 내용:** 릴리스 공개와 판매 시작을 항상 묶을지, 운영 판매 중지 사유를 새 공개 후에도 유지할지 정해야 한다. 판매 종료(`CLOSED`)가 필요하다면 재개 가능 여부와 기존 구매자의 다운로드 정책도 정의한다.
 
-**후속:** 판매 운영 정책을 합의한 뒤 상태 전이·테스트·운영 API를 별도 변경한다. 근거: [Product](../../apps/catalog/src/main/java/com/stove/catalog/core/domain/Product.java), [ProductCommandService](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductCommandService.java), [DownloadTicketService](../../apps/download/src/main/java/com/stove/download/core/service/DownloadTicketService.java). 정의: [상품 판매 상태](publishing.md#product-status).
+**후속:** 판매 운영 정책을 합의한 뒤 상태 전이·테스트·운영 API를 별도 변경한다. 근거: [Product](../../apps/catalog/src/main/java/com/stove/catalog/core/domain/Product.java), [ProductCommandService](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductCommandService.java), [DownloadTicketService](../../apps/download/src/main/java/com/stove/download/core/service/DownloadTicketService.java). 정의: [상품 판매 상태](models/catalog-store.md#product-status).
 
 <a id="q4"></a>
 ## Q4. 심사 사건의 운영 상태와 출시 관문은 어떻게 연결되는가?
@@ -56,12 +59,12 @@
 
 **결정할 내용:** Studio가 단순 대기와 차단·만료·취소를 구별해야 하는가? 재검토에서 어느 관문과 외부 증빙을 유지할 것인가? 승인에 담당자·체크리스트 조건이 필요한가? 자료 변경을 새 제출로 처리하는 제안에 합의할 수 있는가?
 
-**후속:** 사건·관문 전이 표와 재검토 규칙을 결정하고 필요한 이벤트·테스트를 추가하는 별도 작업으로 연결한다. 근거: [ReviewCase](../../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java), [SubmissionReviewService](../../apps/review/src/main/java/com/stove/review/core/service/SubmissionReviewService.java), [SubmissionReviewProjectionService](../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java). 정의: [심사 사건](publishing.md#review-case), [출시 관문](publishing.md#submission-gate).
+**후속:** 사건·관문 전이 표와 재검토 규칙을 결정하고 필요한 이벤트·테스트를 추가하는 별도 작업으로 연결한다. 근거: [ReviewCase](../../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java), [SubmissionReviewService](../../apps/review/src/main/java/com/stove/review/core/service/SubmissionReviewService.java), [SubmissionReviewProjectionService](../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java). 정의: [심사 사건](models/review.md#review-case), [출시 관문](models/studio.md#submission-gate).
 
 <a id="q5"></a>
 ## Q5. 상품 한 개를 산다는 것은 어떤 이용 권한을 얻는가?
 
-**관찰:** DEMO 무료 청구와 BUNDLE 구성품 지급은 미지원이라 일반 판매가 막혀 있다([P2 명세](../p2-product-family-and-builds.md)). 주문 수량은 1 이상을 허용하고 같은 상품 항목의 반복도 견적에서 합산한다. License는 주문·상품별 한 건, Settlement는 주문·상품·기록 종류별 한 건을 저장한다. 정산은 가격·할인·수수료 사본이 같은 반복 항목의 수량·금액을 합산한다. Download는 회원·상품별 하나의 활성 문서와 한 주문번호를 보관한다. 회수 시 주문번호를 비교하지만 지급은 문서를 덮어쓴다.
+**관찰:** DEMO 무료 청구와 BUNDLE 구성품 지급은 미지원이라 일반 판매가 막혀 있다([P2 명세](models/studio.md#game-project)). 주문 수량은 1 이상을 허용하고 같은 상품 항목의 반복도 견적에서 합산한다. License는 주문·상품별 한 건, Settlement는 주문·상품·기록 종류별 한 건을 저장한다. 정산은 가격·할인·수수료 사본이 같은 반복 항목의 수량·금액을 합산한다. Download는 회원·상품별 하나의 활성 문서와 한 주문번호를 보관한다. 회수 시 주문번호를 비교하지만 지급은 문서를 덮어쓴다.
 
 **결정할 내용:** 수량은 좌석 수인가, 개인 보유형 상품에서는 1로 제한할 것인가? 이미 보유한 상품의 재구매·선물·여러 주문의 활성 이용권은 어떻게 취급하는가? DEMO는 무료 이용권이 필요한가? BUNDLE·EDITION·DLC가 부모·구성품에 어떤 권한을 주며 환불 시 무엇을 회수하는가? 늦은 지급 이벤트를 포함한 순서 역전에서 사본의 권한을 어떻게 보존하는가?
 
@@ -74,7 +77,7 @@
 
 **결정할 내용:** 귀속 시각은 결제 발생일인가 수신일인가, 시간대는 무엇인가? 구현된 조정 원장·최초 마감액 보존을 업무 정책으로 수용할 것인가? 부분 환불·실제 수정계산서·이월은 어떻게 기록할 것인가? 월 마감과 송금 완료는 어떤 별도 단계인가?
 
-**후속:** 월 경계 지연과 마감 후 환불의 예시를 합의하고 미지원 정책 및 어댑터 구현을 별도 작업으로 만든다. 근거: [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [SellerSettlementService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SellerSettlementService.java), [SettlementCloseFacade](../../apps/settlement/src/main/java/com/stove/settlement/api/application/SettlementCloseFacade.java), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java), [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java). 정의: [원장](commerce.md#settlement-record), [월 마감](commerce.md#seller-settlement).
+**후속:** 월 경계 지연과 마감 후 환불의 예시를 합의하고 미지원 정책 및 어댑터 구현을 별도 작업으로 만든다. 근거: [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [SellerSettlementService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SellerSettlementService.java), [SettlementCloseFacade](../../apps/settlement/src/main/java/com/stove/settlement/api/application/SettlementCloseFacade.java), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java), [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java). 정의: [원장](models/settlement.md#settlement-record), [월 마감](models/settlement.md#seller-settlement).
 
 <a id="q7"></a>
 ## Q7. 자료 이력과 가격의 출처를 어떻게 명명할 것인가?
@@ -123,6 +126,17 @@
 
 **후속:** Q4·Q10의 의도를 결정한 뒤 해당 정상·거절·지연 시나리오의 테스트를 별도 구현 작업에 포함한다. 문서 근거 표시는 코드 관찰과 테스트 검증 범위를 계속 구별한다.
 
+<a id="q12"></a>
+## Q12. 환불은 원매출의 수수료·판매자 몫까지 정확히 상계하는가?
+
+**2026-10-10 코드 관찰:** Catalog는 주문 항목마다 수수료를 정수 HALF_UP으로 반올림한다. SettlementRecordService는 같은 상품의 반복 항목을 합칠 때 이미 반올림한 `feeAmount`·`sellerPayout`을 더하고, SALE은 그 사본을 보존한다. 그러나 `SettlementRecord.refundOf()`는 원매출의 수수료·판매자 몫을 그대로 부호 반전하지 않고 생성자에서 `-grossAmount × feeRate`로 다시 계산한다.
+
+**정적 추적 반례:** 같은 입점 상품 단가 5원, 수량 1인 항목 두 줄, 할인 없음, 요율 30%를 가정한다. 각각의 수수료는 `round(5 × 0.3)=2`원이므로 합친 SALE은 기준액 10원·수수료 4원·판매자 몫 6원이다. 현재 REFUND 계산은 기준액 −10원·수수료 −3원·판매자 몫 −7원이다. 고객 결제액은 0으로 상계되지만 수수료 1원·판매자 몫 −1원이 남는다. 이는 코드와 반올림 식을 추적한 반례이며 이번 문서 작업에서 애플리케이션으로 재현한 테스트 결과는 아니다.
+
+**결정·후속:** 전액 환불은 구매 당시 확정한 모든 금액을 정확히 되돌려야 하는지 확인하고, 원매출의 수수료·지급액 보존 방식과 반복 항목의 반올림 단위를 명시한다. 해당 경계값으로 매출→환불→마감 회귀 검증이 필요하다. 현재 대사의 금액 식과 마감 차이 검사는 이 반례에서도 맞을 수 있으므로 `balanced=true`를 주문별 전액 환불 상계의 증거로 사용하지 않는다.
+
+**근거:** [견적 수수료 계산](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductQueryService.java), [반복 항목 합산](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [환불 생성](../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementRecord.java), [대사식](../../apps/settlement/src/main/java/com/stove/settlement/core/service/ReconciliationService.java). 기존 [PromotionLedgerTest](../../apps/settlement/src/test/java/com/stove/settlement/core/domain/PromotionLedgerTest.java)는 단일 항목 환불, [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java)는 반복 항목 합산 등을 확인하지만 이 반올림 후 환불 조합을 직접 다루지는 않는다.
+
 <a id="review-log"></a>
 ## 검토 기록과 이슈 완료 조건
 
@@ -130,6 +144,7 @@
 |---|---|---|---|
 | 2026-10-01 | Codex, 구현 근거 조사·초안 작성 | 기존 문서, 15개 핵심 용어의 코드·테스트, 문서 간 연결 | 현재 동작과 규칙 제안을 구별하고 Q1~Q11 작성. 업무 합의로 처리하지 않음 |
 | 2026-10-02 | Codex, 최신 main 근거 대조 | 코드 `a525243`, 기존 용어 위키, 할인·정산 사본, 이미지 업로드·창작자 E2E | 기존 용어 설명을 통합하고 구현·테스트 범위를 갱신. 업무 합의나 애플리케이션 테스트 재실행으로 처리하지 않음 |
+| 2026-10-10 | Codex, 모델·필드·사용 흐름 조사 | 로컬 코드 `076efb1`, 앱 저장 모델 40개, 공통 전달 기록·주요 값 모델 | 입문 안내와 도메인별 모델 사전 추가, Q12의 정적 추적 반례 기록. 정책 합의·코드 수정·애플리케이션 테스트 재실행으로 처리하지 않음 |
 | 미정 | 프로젝트 담당자, 검토 대기 | 표준 용어·사례·업무 경계·미결 질문 | 담당자 검토 결과 미수신. 합의 여부를 초안/재검토 필요로 유지 |
 
 담당자는 검토한 용어·질문 번호별로 **수용 / 수정 후 수용 / 보류**, 검토자, 날짜, 근거를 남긴다. 일부만 합의되면 해당 정의만 상태를 변경하고 나머지는 후속 결정으로 남긴다. 설계 이유가 생기면 [decisions.md](../decisions.md)에 연결한다.
@@ -140,7 +155,7 @@
 | 대표 흐름과 용어 연결 | [창작·심사·출시](workflows.md#publishing-flow), [구매·권한](workflows.md#purchase-flow), [환불·정산](workflows.md#operations-flow) 작성 |
 | 핵심 10~15개 정의 | 15개에 표준명·정의·맥락·관계·행위·규칙·사례·근거·합의 상태 기록 |
 | 혼동·행위·상태 조건 | 확정/공개/판매, 버전, 식별자, 원본/사본 비교와 상세 전이 조건 작성 |
-| 규칙·구현·미결 질문 구분 | 규칙 제안과 관찰을 구분하고 Q1~Q11에 후속 결정 기록 |
+| 규칙·구현·미결 질문 구분 | 규칙 제안과 관찰을 구분하고 Q1~Q12에 후속 결정 기록 |
 | 코드·기존 테스트 대조·링크 | 최신 main의 정의별 근거 연결, 직접 검증되지 않은 범위는 Q11에 기록. 2026-10-02 변경 Markdown 8개의 로컬 링크·앵커 338개와 15개 정의의 필수 항목 정적 검사 통과 |
 | 담당자 검토와 합의 결과 | **검토 대기. 이 조건을 완료로 표시하지 않음** |
 | 유지 관리 | [용어집 유지 관리 규칙](../domain-glossary.md#유지-관리) 작성 |

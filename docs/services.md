@@ -1,13 +1,15 @@
 # 서비스별 기능 명세
 
 각 서비스가 **무엇을 책임지고, 어떤 요청과 이벤트를 받고, 무엇을 내보내는지** 정리한다.
-시스템 전체의 이벤트 흐름과 설계 근거는 [README](../README.md) 를 본다.
+시스템 전체의 이벤트 흐름은 [업무 흐름](domain/workflows.md), 설계 근거는 [아키텍처](architecture.md)를 본다.
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
+도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
 | | 서비스 | 포트 | 한 줄 책임 | 저장소 |
 |---|---|---|---|---|
+| — | [auth](#auth) | 8091 | 계정·역할·OAuth2/OIDC 토큰 | MySQL |
 | A | [studio](#studio) | 8085 | 프로젝트·자료·빌드·심사 제출·릴리스 | MySQL |
 | A | [review](#review) | 8086 | 유형별 심사 사건·등급 증빙·재검토 | MySQL |
 | A | [catalog](#catalog) | 8081 | 상품 마스터, 노출 제어, 가격 확정 | MySQL + Redis |
@@ -19,6 +21,22 @@
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
 | — | [gateway](#gateway) | 8080 | 라우팅, 내부 API 차단 | — |
 
+표의 포트는 서비스 내부 포트다. 로컬 E2E 구성의 호스트 포트는 10000을 더한 값이며, 외부 요청은 보통 Gateway `18080`을 사용한다. [개발 환경과 실행](getting-started.md)을 참고한다.
+
+---
+
+## auth
+
+회원과 역할의 원본을 관리하고 OAuth2/OIDC 토큰을 발행한다. 모델의 속성은 [계정·역할 모델](domain/models/identity.md), 토큰 검증과 권한 조건은 [인증·권한 계약](security.md)에 있다.
+
+| HTTP API | 역할 |
+|---|---|
+| `POST /api/v1/auth/signup` | 창작자 가입, `MEMBER`·`CREATOR` 역할 부여 |
+| `POST /api/v1/auth/signup/member` | 구매자 가입, `MEMBER` 역할 부여 |
+| `/login`, `/logout`, `/oauth2/**`, `/.well-known/**` | 로그인·승인·토큰·공개 키와 OIDC 메타데이터 |
+
+**이벤트** — 회원·창작자 가입 시 `UserRegistered` 발행. Studio는 개인 워크스페이스 생성에 사용한다. 근거는 [AccountController](../apps/auth/src/main/java/com/stove/auth/api/controller/AccountController.java), [UserAccountService](../apps/auth/src/main/java/com/stove/auth/core/service/UserAccountService.java)다.
+
 ---
 
 ## studio
@@ -26,7 +44,7 @@
 창작자가 프로젝트·자료·빌드를 준비하고 심사 제출물과 릴리스를 만드는 서비스다.
 `SubmissionCreated`가 Review의 심사를 시작하고, LIVE `ReleasePublished`가 Catalog·Download의 공개 반영을 시작한다.
 
-**현재 제출·출시 상태** — [전이 조건과 사례](domain/publishing.md#submission)
+**현재 제출·출시 상태** — [전이 조건과 사례](domain/models/studio.md#submission)
 
 ```
 Submission: SUBMITTED → READY_FOR_RELEASE → RELEASED (LIVE 공개)
@@ -95,7 +113,7 @@ Headers가 아니라 폼의 Form Data여야 한다.
 
 **현재 심사 사건 상태** — `REQUESTED`에서 승인·수정 요청·차단·취소·만료로 전이한다.
 GRAC은 외부 접수를 기록하며, 수정 요청·차단·만료 사건은 이의 제기로 다시 열 수 있다.
-정확한 조건과 Studio 관문과의 차이는 [심사 사건 정의](domain/publishing.md#review-case)를 참고한다.
+정확한 조건과 Studio 관문과의 차이는 [심사 사건 정의](domain/models/review.md#review-case)를 참고한다.
 
 **기존 프로젝트 단위 심사 상태** — `ReviewRequest` 경로다.
 
@@ -259,7 +277,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──환불 �
 | POST | `/api/v1/payments/{orderNo}/cancel` | 환불 |
 
 결제 조회·사전등록·환불은 Bearer access token과 주문 소유권 검사가 필요하다. PG 콜백은
-사용자 토큰 대신 원문 HMAC 서명을 검증한다. 자세한 계약은 [커머스 보안](p3-commerce-security.md)에 있다.
+사용자 토큰 대신 원문 HMAC 서명을 검증한다. 자세한 계약은 [커머스 보안](security.md)에 있다.
 
 **이벤트** — 수신 `OrderCreated`·`LicenseIssueFailed` / 발행 `PaymentCompleted`·`PaymentFailed`·`PaymentCancelled`
 
@@ -378,7 +396,9 @@ Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 
 판매자 부담이면 정산 기준 8,000원·수수료 2,400원·지급액 5,600원이다.
 플랫폼 부담이면 정산 기준 10,000원·수수료 3,000원·지급액 7,000원이며
 플랫폼 판촉비 2,000원을 별도로 기록한다(기본 입점 수수료율 30%).
-환불은 원 매출 사본의 모든 금액을 부호 반전한다. 첫 월 마감 금액은 `base*` 필드에 남기고,
+환불은 원 매출의 결제·정가·할인·기준액·플랫폼 비용을 부호 반전한다. 현재 수수료·지급액은
+음수 기준액과 요율로 다시 계산하므로 반복 항목의 반올림 차이는 [Q12](domain/open-questions.md#q12)의 검토 대상이다.
+첫 월 마감 금액은 `base*` 필드에 남기고,
 이후 닫힌 원장은 `adjustment*`에 별도로 합산한다. 닫힌 매출의 지각 환불 원장에는
 `adjustmentForMonth`가 찍힌다. 대사는 고객 결제액, 판매자 할인, 플랫폼 판촉비,
 정산 기준액, 수수료, 지급액과 마감액 차이를 반환한다.
@@ -391,7 +411,7 @@ Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 
 - **수수료 정책** — 자체 판매(`SELF`)는 0%, 입점 판매(`PARTNER`)는 설정된 요율(기본 30%).
   판매자 ID 로 구분하며, 정책이 늘어나면 `FeePolicy` 만 확장한다.
 - **환불 역산** — 환불 이벤트에는 항목 정보가 없다. 자기 원장의 `SALE` 레코드를 근거로
-  부호를 뒤집어 상계하므로 **다른 서비스에 되묻지 않는다.**
+  환불 원장을 만들므로 **다른 서비스에 되묻지 않는다.** 현재 수수료는 재계산하므로 동일 상품의 반복 항목에서 반올림 잔액이 남을 수 있다. [구현 차이 Q12](domain/open-questions.md#q12)를 참고한다.
 - **금전 원장이므로 방어가 두 겹이다** — Inbox 가드 `(event_id, consumer_group)` 와
   도메인 유니크 `(order_no, product_id, record_type)`.
 - **월 마감**은 재실행 안전하다. 이미 확정본이 있는 판매자는 건너뛰지 않고 **거기에 더한다**
@@ -419,19 +439,37 @@ Spring Cloud Gateway. 라우팅과 함께 **내부 전용 API 를 외부에 노�
 
 | 경로 | 대상 | 비고 |
 |---|---|---|
+| `/api/v1/auth/**`, `/oauth2/**`, `/login`, `/logout`, `/.well-known/**` | auth | 가입·로그인·토큰, 브라우저 경로의 Host 유지 |
 | `/api/v1/storefront/**` | store | |
 | `/api/v1/products/**` | catalog | **GET 만 허용** |
+| `/api/v1/promotions/**` | catalog | 판매자 `CREATOR`, 플랫폼 `ADMIN` |
 | `/api/v1/orders/**` | order | |
 | `/api/v1/payments/**` | payment | |
 | `/api/v1/library/**` | license | |
 | `/api/v1/downloads/**` | download | |
 | `/api/v1/studio/**` | studio | |
 | `/api/v1/reviews/**` | review | 운영 |
-| `/api/v1/settlements/**` | settlement | 운영 |
+| `/api/v1/settlements/**` | settlement | `/me/**`는 `CREATOR`, 나머지는 `ADMIN` |
 
 catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 재계산하는
 `POST /api/v1/products/quote` 는 게이트웨이를 통해 호출할 수 없다.
 **서비스 간 내부 호출로만 도달 가능하다.**
+
+---
+
+## 운영 API
+
+Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며, Payment·Settlement 등 해당 운영 API를 허용한 서비스에서도 `ADMIN` 토큰이 필요하다.
+
+| HTTP API | 동작 |
+|---|---|
+| `GET /api/v1/ops/outbox/dead` | 발행을 포기한 Outbox 행과 사유 조회 |
+| `POST /api/v1/ops/outbox/dead/{eventId}/requeue` | 지정한 DEAD 이벤트 회수 |
+| `POST /api/v1/ops/outbox/dead/requeue-all` | DEAD 이벤트 일괄 회수 |
+| `GET /api/v1/ops/dlt?topic={원본토픽}.DLT&max=20` | 재투입 그룹의 미처리 레코드 조회. 오프셋을 커밋하지 않음 |
+| `POST /api/v1/ops/dlt/replay?topic={원본토픽}.DLT&max=100` | 원본 토픽에 재발행하고 재투입 그룹의 오프셋 커밋 |
+
+실패 원인과 현재 주문·환불 상태를 확인한 뒤 재처리한다. 재투입이 원래 업무 순서를 복원하지 않는 이유는 [이벤트 순서](event-ordering.md)를 참고한다. 요청 계약은 [OutboxOpsController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxOpsController.java), [DltOpsController](../common/kafka/src/main/java/com/stove/common/kafka/ops/DltOpsController.java)에 있다.
 
 ---
 

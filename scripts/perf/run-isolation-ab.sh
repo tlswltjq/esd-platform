@@ -9,7 +9,7 @@
 # ── 무엇을 묻는가 ────────────────────────────────────────────────────
 #
 # performance.md 9-3 은 릴레이 ON 이 쓰기 p95 에 약 19ms 를 얹는 것을 쟀고, 9-4 가 원인으로 짚은
-# "같은 커넥션 풀" 은 13-5 의 측정(풀 pending 0)이 기각했다. technical-interview-guide.md R1 의 가설은
+# "같은 커넥션 풀" 은 13-5 의 측정(풀 pending 0)이 기각했다. architecture.md R1 의 가설은
 # **릴레이의 `FOR UPDATE SKIP LOCKED` 가 REPEATABLE READ 에서 넥스트키 락을 잡고, 그 트랜잭션이
 # Kafka ack 를 기다리는 동안 주문 트랜잭션의 outbox INSERT 가 기다린다** 는 것이다
 # (락 모양은 scripts/db-lab 실험 1 로 확인했다).
