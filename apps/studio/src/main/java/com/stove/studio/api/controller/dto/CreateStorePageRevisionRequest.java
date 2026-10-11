@@ -1,10 +1,10 @@
 package com.stove.studio.api.controller.dto;
 
+import com.stove.studio.core.domain.revision.StorePageContent;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import jakarta.validation.Valid;
-import com.stove.studio.core.domain.StorePageContent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

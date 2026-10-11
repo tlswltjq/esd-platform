@@ -1,6 +1,6 @@
 package com.stove.studio.api.scheduler;
 
-import com.stove.studio.core.service.ReleaseService;
+import com.stove.studio.core.service.release.ReleaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;

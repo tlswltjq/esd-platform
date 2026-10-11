@@ -24,9 +24,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OutboxEvent {
 
+    /** 이벤트 발행 재시도의 최초 대기 시간. */
     private static final Duration BASE_RETRY_DELAY = Duration.ofSeconds(1);
+    /** 이벤트 발행 재시도 대기 시간의 상한. */
     private static final Duration MAX_RETRY_DELAY = Duration.ofMinutes(5);
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -35,21 +38,27 @@ public class OutboxEvent {
     @Column(nullable = false, unique = true, length = 64)
     private String eventId;
 
+    /** 이벤트를 발생시킨 업무 대상 종류. */
     @Column(nullable = false, length = 50)
     private String aggregateType;
 
+    /** 이벤트를 발생시킨 업무 대상 식별자. */
     @Column(nullable = false, length = 100)
     private String aggregateId;
 
+    /** 전달하거나 처리한 업무 이벤트 종류. */
     @Column(nullable = false, length = 60)
     private String eventType;
 
+    /** 이벤트를 발행할 Kafka 토픽. */
     @Column(nullable = false, length = 100)
     private String topic;
 
+    /** 동일 업무 대상의 이벤트 순서를 묶는 Kafka 키. */
     @Column(nullable = false, length = 100)
     private String partitionKey;
 
+    /** 전달할 이벤트 본문. */
     @Column(nullable = false, columnDefinition = "json")
     private String payload;
 
@@ -60,22 +69,27 @@ public class OutboxEvent {
     @Column(length = 64)
     private String traceParent;
 
+    /** 발행 대기·브로커 수신 확인·재시도 소진 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OutboxStatus status;
 
+    /** 이벤트 발행 실패 후 재시도 횟수. */
     @Column(nullable = false)
     private int retryCount;
 
     /** 다음 발행 시도 시각. {@code null} 이면 즉시 대상(최초 적재 또는 회수 직후). */
     private Instant nextAttemptAt;
 
+    /** 마지막 처리 실패의 설명. */
     @Column(length = 500)
     private String lastError;
 
+    /** 기록이 생성된 시각. */
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** Kafka 브로커가 이벤트 수신을 확인한 시각. */
     private Instant sentAt;
 
     private OutboxEvent(String eventId, String aggregateType, String aggregateId, String eventType,
@@ -163,7 +177,11 @@ public class OutboxEvent {
         return seconds >= MAX_RETRY_DELAY.toSeconds() ? MAX_RETRY_DELAY : Duration.ofSeconds(seconds);
     }
 
+    /**
+     * 이벤트 발행 대기·브로커 확인·재시도 소진 상태.
+     */
     public enum OutboxStatus {
+        /** Kafka로 발행할 차례 또는 재시도를 기다리는 상태. */
         PENDING,
         /** 브로커 ack 완료 */
         SENT,

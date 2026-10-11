@@ -15,6 +15,14 @@ import java.util.UUID;
  *
  * <p>{@code reasonCode} 는 PG 가 준 거절 코드를 그대로 옮긴다. 사람이 읽는 {@code reason}
  * 과 나눠 둬야 "한도초과가 몇 건인지" 같은 집계가 가능하다.
+ *
+ * @param eventId 서비스 간 전달 시 유지하는 이벤트 고유 식별자.
+ * @param occurredAt 업무 행동을 기록한 시각.
+ * @param paymentId 결제 처리 기록 식별자.
+ * @param orderNo 주문·결제·이용권·정산을 연결하는 주문번호.
+ * @param memberId 구매자를 식별하는 계정 ID.
+ * @param reasonCode 처리 결과 또는 요청 사유를 구분하는 코드.
+ * @param reason 처리 결과 또는 요청 사유에 대한 설명.
  */
 public record PaymentFailedEvent(
         String eventId,

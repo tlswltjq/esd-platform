@@ -22,22 +22,28 @@ import lombok.NoArgsConstructor;
                 columnNames = {"sellerId", "settlementMonth"}))
 public class SellerSettlement extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 판매자를 나타내는 워크스페이스 식별자. */
     @Column(nullable = false)
     private Long sellerId;
 
+    /** 정산 금액이 귀속되는 월(yyyy-MM). */
     @Column(nullable = false, length = 7)
     private String settlementMonth;
 
+    /** 수수료와 판매자 몫을 계산하는 정산 기준액. */
     @Column(nullable = false)
     private long grossAmount;
 
+    /** 정산 기준액에서 차감할 수수료. */
     @Column(nullable = false)
     private long feeAmount;
 
+    /** 수수료를 차감한 판매자 배분액. */
     @Column(nullable = false)
     private long netAmount;
 
@@ -45,27 +51,35 @@ public class SellerSettlement extends BaseTimeEntity {
     @Column(nullable = false)
     private long baseGrossAmount;
 
+    /** 최초 월 마감 당시의 수수료. */
     @Column(nullable = false)
     private long baseFeeAmount;
 
+    /** 최초 월 마감 당시의 판매자 배분액. */
     @Column(nullable = false)
     private long baseNetAmount;
 
+    /** 최초 마감 이후 추가로 반영한 정산 기준액. */
     @Column(nullable = false)
     private long adjustmentGrossAmount;
 
+    /** 최초 마감 이후 추가로 반영한 수수료. */
     @Column(nullable = false)
     private long adjustmentFeeAmount;
 
+    /** 최초 마감 이후 추가로 반영한 판매자 배분액. */
     @Column(nullable = false)
     private long adjustmentNetAmount;
 
+    /** 집계에 포함한 정산 원장 행 수. */
     @Column(nullable = false)
     private int recordCount;
 
+    /** 계산서 발행 어댑터가 반환한 발행 번호. */
     @Column(length = 30)
     private String taxInvoiceNo;
 
+    /** 최초 월 마감 시각으로, 재마감 시에도 보존. */
     @Column(nullable = false)
     private Instant closedAt;
 

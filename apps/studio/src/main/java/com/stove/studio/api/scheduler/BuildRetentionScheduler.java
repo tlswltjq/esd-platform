@@ -1,6 +1,6 @@
 package com.stove.studio.api.scheduler;
 
-import com.stove.studio.core.service.BuildRetentionService;
+import com.stove.studio.core.service.build.BuildRetentionService;
 import lombok.RequiredArgsConstructor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;

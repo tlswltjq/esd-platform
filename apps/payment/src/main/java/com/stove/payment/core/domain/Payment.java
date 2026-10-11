@@ -28,6 +28,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Payment extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -36,6 +37,7 @@ public class Payment extends BaseTimeEntity {
     @Column(nullable = false, unique = true, length = 40)
     private String orderNo;
 
+    /** 구매자를 식별하는 계정 ID. */
     @Column(nullable = false)
     private Long memberId;
 
@@ -43,19 +45,23 @@ public class Payment extends BaseTimeEntity {
     @Column(nullable = false)
     private long amount;
 
+    /** 금액의 통화 코드. */
     @Column(nullable = false, length = 3)
     private String currency;
 
+    /** 주문 대금의 사전등록·승인·실패·환불 진행 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PaymentStatus status;
 
+    /** 결제 준비에 사용한 결제 수단. */
     @Column(length = 30)
     private String method;
 
     /** 결제창을 연 시각. createdAt 과 합칠 수 없다.*/
     private Instant preparedAt;
 
+    /** PG에 사전등록한 거래 식별자. */
     @Column(length = 100)
     private String pgTxId;
 
@@ -63,14 +69,18 @@ public class Payment extends BaseTimeEntity {
     @Column(length = 100)
     private String idempotencyKey;
 
+    /** 구매 시점의 상품·가격·정산 조건을 담은 항목 목록. */
     @Convert(converter = OrderLinesConverter.class)
     @Column(name = "lines_json", columnDefinition = "json")
     private List<OrderLine> lines;
 
+    /** 결제 완료를 확정한 시각. */
     private Instant paidAt;
 
+    /** 취소 처리를 확정한 시각. */
     private Instant canceledAt;
 
+    /** 주문 또는 결제를 취소한 사유. */
     @Column(length = 200)
     private String cancelReason;
 
@@ -84,12 +94,14 @@ public class Payment extends BaseTimeEntity {
     /** CANCELING 진입 시각. updatedAt 으로 대신할 수 없다 — 예산 판정의 기준. */
     private Instant cancelingSince;
 
+    /** 결제 실패를 반영한 시각. */
     private Instant failedAt;
 
     /** PG 가 준 거절 코드. 사유별 집계의 기준이라 사람이 읽는 문구와 따로 둔다. */
     @Column(length = 50)
     private String failReasonCode;
 
+    /** 결제 실패에 대한 설명. */
     @Column(length = 200)
     private String failReason;
 

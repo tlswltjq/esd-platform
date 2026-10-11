@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.Submission;
-import com.stove.studio.core.domain.SubmissionStatus;
+import com.stove.studio.core.domain.submission.Submission;
+import com.stove.studio.core.domain.submission.SubmissionStatus;
 
 public record SubmissionResponse(
         Long submissionId,

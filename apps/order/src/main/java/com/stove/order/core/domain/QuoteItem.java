@@ -10,6 +10,9 @@ import com.stove.common.core.error.ErrorCode;
  * 어댑터의 {@code @Min(1)} 은 HTTP 경로 하나만 지키고, 어댑터는 늘어난다.
  * 이쪽은 <b>보내는 쪽</b>이라 한 겹 더 앞선다: 잘못된 수량이 여기서 걸리면
  * catalog 왕복 없이 끝나고, 실패 지점도 "업스트림 장애"가 아니라 요청 오류로 남는다.
+ *
+ * @param productId Catalog 판매 상품 식별자.
+ * @param quantity 구매할 상품 수량.
  */
 public record QuoteItem(Long productId, int quantity) {
 

@@ -10,6 +10,7 @@ import java.time.Instant;
  */
 public class OrderMetrics {
 
+    /** 주문·결제 처리 지표를 등록하는 저장소. */
     private final MeterRegistry registry;
 
     public OrderMetrics(MeterRegistry registry, OrderRepository repository, OrderProperties properties) {

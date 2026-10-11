@@ -1,8 +1,8 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.GameProject;
-import com.stove.studio.core.domain.ProjectStatus;
-import com.stove.studio.core.domain.ProductKind;
+import com.stove.studio.core.domain.project.GameProject;
+import com.stove.studio.core.domain.project.ProductKind;
+import com.stove.studio.core.domain.project.ProjectStatus;
 
 public record ProjectResponse(
         Long gameId,

@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.studio.core.service.WorkspaceService;
+import com.stove.studio.core.service.project.WorkspaceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;

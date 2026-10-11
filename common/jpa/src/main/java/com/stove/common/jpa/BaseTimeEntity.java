@@ -15,10 +15,12 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @EntityListeners(AuditingEntityListener.class)
 public abstract class BaseTimeEntity {
 
+    /** 기록이 생성된 시각. */
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** 저장된 기록을 마지막으로 수정한 시각. */
     @LastModifiedDate
     @Column(nullable = false)
     private Instant updatedAt;

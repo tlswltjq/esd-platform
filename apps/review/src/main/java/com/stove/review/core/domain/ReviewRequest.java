@@ -29,10 +29,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ReviewRequest extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Studio 게임 프로젝트 식별자. */
     @Column(nullable = false)
     private Long gameId;
 
@@ -40,21 +42,27 @@ public class ReviewRequest extends BaseTimeEntity {
     @Column(nullable = false, unique = true, length = 50)
     private String productCode;
 
+    /** 게임 또는 상점 페이지에 표시할 제목. */
     @Column(nullable = false, length = 200)
     private String title;
 
+    /** 판매자를 나타내는 워크스페이스 식별자. */
     @Column(nullable = false)
     private Long sellerId;
 
+    /** 상품 한 개의 가격으로, 최소 화폐 단위의 정수. */
     @Column(nullable = false)
     private long price;
 
+    /** 금액의 통화 코드. */
     @Column(nullable = false, length = 3)
     private String currency;
 
+    /** 자체등급분류 경로로 신청하는지 여부. */
     @Column(nullable = false)
     private boolean selfRated;
 
+    /** 기존 프로젝트 단위 심사의 접수·진행·승인·반려 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ReviewStatus status;
@@ -63,15 +71,19 @@ public class ReviewRequest extends BaseTimeEntity {
     @Column(length = 50)
     private String boardTicketId;
 
+    /** 확정된 이용 등급 코드. */
     @Column(length = 10)
     private String ratingCode;
 
+    /** 심사 반려 사유를 구분하는 코드. */
     @Column(length = 30)
     private String rejectReasonCode;
 
+    /** 심사 반려 사유에 대한 설명. */
     @Column(length = 200)
     private String rejectReason;
 
+    /** 승인 또는 반려로 심사를 종료한 시각. */
     private Instant closedAt;
 
     private ReviewRequest(Long gameId, String productCode, String title, Long sellerId,

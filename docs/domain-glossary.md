@@ -91,7 +91,7 @@ Auth는 회원·역할의 출처이고, Studio의 워크스페이스는 프로�
 | `projectionVersion` | Catalog 상품 변경을 Store 읽기 모델에 반영할 순서 번호 | 오래된 이벤트가 새 진열을 덮어쓰지 않도록 비교하며 자료 이력·게임 버전과 별개 |
 | `ratingPolicyVersion` | 등급 판정 규칙의 판본 | 게임 버전과 별개이며 현재 활성 정책과 맞아야 제출 가능 |
 
-근거: [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java), [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
+근거: [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
 
 <a id="identifiers"></a>
 ### 주요 식별자
@@ -118,9 +118,9 @@ License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는
 
 | 용어·표현 | 뜻과 사용 예 |
 |---|---|
-| 워크스페이스 / Workspace | 창작자 계정의 작업 공간이며 프로젝트·제출·출시 접근 범위. 구매자의 회원 ID와 구별. [Workspace](../apps/studio/src/main/java/com/stove/studio/core/domain/Workspace.java) |
+| 워크스페이스 / Workspace | 창작자 계정의 작업 공간이며 프로젝트·제출·출시 접근 범위. 구매자의 회원 ID와 구별. [Workspace](../apps/studio/src/main/java/com/stove/studio/core/domain/project/Workspace.java) |
 | 상품 종류 / Product Kind | BASIC·DEMO·DLC·EDITION·BUNDLE의 상품 관계. [종류별 조건](domain/models/studio.md#game-project) |
-| 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. [UploadSession](../apps/studio/src/main/java/com/stove/studio/core/domain/UploadSession.java) |
+| 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. [UploadSession](../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadSession.java) |
 | 가격 이력 / Pricing Revision | 심사·출시에 사용할 가격의 특정 판본. 현재 신규 생성은 KR/KRW |
 | 등급 자료 이력 / Rating Revision | 설문·지역·정책 버전·판정 경로를 고정한 자료 |
 | 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/event/src/main/java/com/stove/common/event/payload/BuildVariant.java) |

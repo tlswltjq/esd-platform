@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.ReleaseChannel;
-import com.stove.studio.core.domain.TesterInstallation;
+import com.stove.studio.core.domain.access.TesterInstallation;
+import com.stove.studio.core.domain.release.ReleaseChannel;
 import java.time.Instant;
 
 public record TesterInstallationResponse(Long buildId, ReleaseChannel channel,

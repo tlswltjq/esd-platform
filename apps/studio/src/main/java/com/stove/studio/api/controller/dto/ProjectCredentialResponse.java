@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.ProjectCredential;
+import com.stove.studio.core.domain.access.ProjectCredential;
 import java.time.Instant;
 
 public record ProjectCredentialResponse(

@@ -24,34 +24,57 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SimulatedPgTransaction {
 
-    public enum Status { PREPARED, APPROVED, DECLINED, TIMED_OUT, CANCELED }
+    /**
+     * 개발용 PG 거래의 처리 상태.
+     */
+    public enum Status {
+        /** 시뮬레이터 거래를 사전등록한 상태. */
+        PREPARED,
+        /** 시뮬레이터 거래의 결제가 승인된 상태. */
+        APPROVED,
+        /** 시뮬레이터 결제가 거절된 상태. */
+        DECLINED,
+        /** 시뮬레이터 결제의 응답 시간을 초과한 상태. */
+        TIMED_OUT,
+        /** 취소 처리가 완료된 상태. */
+        CANCELED
+    }
 
+    /** PG에 사전등록한 거래 식별자. */
     @Id
     @Column(length = 100)
     private String pgTxId;
 
+    /** 주문·결제·이용권·정산을 연결하는 주문번호. */
     @Column(nullable = false, length = 40)
     private String orderNo;
 
+    /** 결제 또는 환불 대상 금액(최소 화폐 단위). */
     @Column(nullable = false)
     private long amount;
 
+    /** 금액의 통화 코드. */
     @Column(nullable = false, length = 3)
     private String currency;
 
+    /** 개발용 PG 거래의 사전등록·승인·거절·취소 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status;
 
+    /** 처리 결과 또는 요청 사유를 구분하는 코드. */
     @Column(length = 50)
     private String reasonCode;
 
+    /** 처리 결과 또는 요청 사유에 대한 설명. */
     @Column(length = 200)
     private String reason;
 
+    /** 기록이 생성된 시각. */
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** 동시 거래 수정 충돌을 감지하는 낙관적 잠금 버전. */
     @Version
     @Column(nullable = false)
     private long version;

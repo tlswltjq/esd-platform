@@ -1,10 +1,10 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.Release;
-import com.stove.studio.core.domain.ReleaseStatus;
-import com.stove.studio.core.domain.ReleaseChannel;
-import com.stove.studio.core.domain.ReleaseChangeType;
-import com.stove.studio.core.domain.SmokeTestStatus;
+import com.stove.studio.core.domain.release.Release;
+import com.stove.studio.core.domain.release.ReleaseChangeType;
+import com.stove.studio.core.domain.release.ReleaseChannel;
+import com.stove.studio.core.domain.release.ReleaseStatus;
+import com.stove.studio.core.domain.release.SmokeTestStatus;
 import java.time.Instant;
 
 public record ReleaseResponse(Long releaseId, Long submissionId, Long buildId,

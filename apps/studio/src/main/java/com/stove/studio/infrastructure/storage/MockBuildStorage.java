@@ -1,10 +1,10 @@
 package com.stove.studio.infrastructure.storage;
 
-import com.stove.studio.core.domain.MultipartUploadTicket;
-import com.stove.studio.core.domain.StoredObjectInfo;
-import com.stove.studio.core.domain.UploadPartUrl;
-import com.stove.studio.core.domain.UploadTicket;
-import com.stove.studio.core.domain.UploadedPart;
+import com.stove.studio.core.domain.build.MultipartUploadTicket;
+import com.stove.studio.core.domain.build.StoredObjectInfo;
+import com.stove.studio.core.domain.build.UploadPartUrl;
+import com.stove.studio.core.domain.build.UploadTicket;
+import com.stove.studio.core.domain.build.UploadedPart;
 import com.stove.studio.core.port.BuildStorage;
 import java.nio.file.Path;
 import java.util.List;

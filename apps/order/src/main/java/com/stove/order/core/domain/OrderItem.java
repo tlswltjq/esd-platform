@@ -22,17 +22,21 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItem {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 이 항목이 속한 주문. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
+    /** Catalog 판매 상품 식별자. */
     @Column(nullable = false)
     private Long productId;
 
+    /** 주문 시점에 고정한 상품명. */
     @Column(nullable = false, length = 200)
     private String productName;
 
@@ -40,29 +44,39 @@ public class OrderItem {
     @Column(nullable = false)
     private Long sellerId;
 
+    /** 할인을 반영한 상품 한 개의 실결제 단가. */
     @Column(nullable = false)
     private long unitPrice;
 
+    /** 할인 전 상품 한 개의 정가. */
     @Column(nullable = false)
     private long listUnitPrice;
 
+    /** 상품 한 개에 적용하는 할인액. */
     @Column(nullable = false)
     private long discountPerUnit;
 
+    /** 구매 가격에 적용한 할인 행사 식별자. */
     private Long promotionId;
 
+    /** 할인 비용 부담 주체(SELLER 또는 PLATFORM). */
     @Column(length = 20)
     private String discountBearer;
 
+    /** 수수료와 판매자 몫을 계산하는 정산 기준액. */
     private Long settlementBasis;
 
+    /** 정산 기준액에 적용할 수수료율. */
     @Column(precision = 5, scale = 4)
     private BigDecimal feeRate;
 
+    /** 정산 기준액에서 차감할 수수료. */
     private Long feeAmount;
 
+    /** 수수료 차감 후 판매자에게 배분할 금액. */
     private Long sellerPayout;
 
+    /** 구매할 상품 수량. */
     @Column(nullable = false)
     private int quantity;
 

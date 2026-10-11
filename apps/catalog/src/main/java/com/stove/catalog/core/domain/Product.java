@@ -31,10 +31,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Product extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 서비스 간 상품을 연결하는 고유 코드. */
     @Column(nullable = false, unique = true, length = 50)
     private String productCode;
 
@@ -44,10 +46,13 @@ public class Product extends BaseTimeEntity {
     /** Store와 Download가 함께 바라보는 현재 공개 릴리스 스냅샷. */
     private Long currentReleaseId;
 
+    /** 상품에 현재 반영된 기본 빌드 식별자. */
     private Long currentBuildId;
 
+    /** 상점 소개 자료 판본의 식별자. */
     private Long metadataRevision;
 
+    /** 조회 화면에 표시할 이름. */
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -59,9 +64,11 @@ public class Product extends BaseTimeEntity {
     @Column(nullable = false)
     private long price;
 
+    /** 금액의 통화 코드. */
     @Column(nullable = false, length = 3)
     private String currency;
 
+    /** 상품의 심사 및 판매 진행 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductStatus status;
@@ -70,22 +77,28 @@ public class Product extends BaseTimeEntity {
     @Column(length = 10)
     private String ratingCode;
 
+    /** 기본 게임·체험판·DLC·에디션·번들 구분. */
     @Column(nullable = false, length = 20)
     private String productKind = "BASIC";
 
+    /** 파생 상품이 연결되는 원본 상품 코드. */
     @Column(length = 50)
     private String parentProductCode;
 
+    /** 에디션 구분을 위해 표시하는 이름. */
     @Column(length = 100)
     private String editionName;
 
+    /** 공개된 상점 소개 자료를 보관하는 JSON. */
     @Lob
     @Column(columnDefinition = "LONGTEXT")
     private String storefrontSnapshotJson;
 
+    /** 상품 사본에 전달하는 변경 순번. */
     @Column(nullable = false)
     private long projectionVersion;
 
+    /** 번들에 포함된 상품 코드 목록. */
     @ElementCollection
     @CollectionTable(name = "product_bundle_component", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "component_product_code", nullable = false, length = 50)

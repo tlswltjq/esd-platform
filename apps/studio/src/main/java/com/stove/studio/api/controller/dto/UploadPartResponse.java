@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.UploadPartUrl;
+import com.stove.studio.core.domain.build.UploadPartUrl;
 
 public record UploadPartResponse(int partNumber, String uploadUrl) {
     public static UploadPartResponse from(UploadPartUrl part) {

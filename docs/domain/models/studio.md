@@ -4,6 +4,19 @@
 
 Studio는 “출시할 내용을 준비하고 어느 판본을 공개할지 정하는 곳”이다. 아래 모델은 모두 MySQL에 저장한다. `GameProject` 하나에 자료·파일·심사·출시를 모두 덮어쓰지 않고, 자료 이력과 제출·공개 기록을 분리한다.
 
+코드의 `core.domain`과 `core.service`는 같은 업무 이름의 하위 패키지로 묶는다. 엔티티·값 객체·저장소는 `core.domain.<업무>`, 처리 서비스는 `core.service.<업무>`에서 찾는다. 테스트도 대상 코드의 패키지에 맞춰 배치한다.
+
+| 하위 패키지 | 담당 업무 |
+|---|---|
+| `project` | 작업 공간, 게임 프로젝트, 파생 상품과 번들 관계 |
+| `revision` | 상점 소개·가격·등급 자료의 판본과 상점 자료 업로드 |
+| `build` | 빌드 파일 업로드, 검증, 저장 용량과 보관 기간 관리 |
+| `submission` | 심사 제출 묶음, 유형별 관문과 심사 결과 반영 |
+| `release` | 공개 예약, 채널 승격, 롤백과 공개 전 점검 |
+| `access` | 프로젝트 인증 정보, CI 신뢰 정책과 내부 테스터 권한 |
+| `notification` | 빌드 웹훅 구독·발송, 서명 비밀값과 CI 결과 통보 |
+| `audit` | 업무 행동의 감사 기록 |
+
 ```mermaid
 flowchart TD
     W[Workspace 작업 공간] --> G[GameProject 프로젝트]
@@ -26,7 +39,7 @@ flowchart TD
 <a id="workspace"></a>
 ## Workspace — 창작 작업 공간
 
-저장: `workspace`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/Workspace.java)
+저장: `workspace`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/Workspace.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -34,12 +47,12 @@ flowchart TD
 | `ownerSubject` (`String`) | Auth 계정의 `subject`. 개인 공간 소유자를 찾는 기준 |
 | `status` (`WorkspaceStatus`) | `ACTIVE`로 생성. `SUSPENDED`도 정의되지만 모델에 변경 메서드는 없음 |
 
-**만들고 쓰는 때:** 가입 이벤트 수신 또는 개인 공간 조회 시 없으면 생성한다. 프로젝트·자료·출시 요청에서 이 공간에 속한 것인지 확인한다. 현재 팀 구성원 목록이나 정산 계좌를 표현하는 모델은 아니다. [WorkspaceService](../../../apps/studio/src/main/java/com/stove/studio/core/service/WorkspaceService.java), [판매자 관계 Q8](../open-questions.md#q8).
+**만들고 쓰는 때:** 가입 이벤트 수신 또는 개인 공간 조회 시 없으면 생성한다. 프로젝트·자료·출시 요청에서 이 공간에 속한 것인지 확인한다. 현재 팀 구성원 목록이나 정산 계좌를 표현하는 모델은 아니다. [WorkspaceService](../../../apps/studio/src/main/java/com/stove/studio/core/service/project/WorkspaceService.java), [판매자 관계 Q8](../open-questions.md#q8).
 
 <a id="game-project"></a>
 ## GameProject — 제작·출시 대상
 
-저장: `game_project`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java)
+저장: `game_project`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/GameProject.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -57,9 +70,9 @@ flowchart TD
 
 **만들고 쓰는 때:** 창작자가 프로젝트를 등록할 때 생성한다. 소유권 확인과 자료·빌드 묶음의 기준점으로 쓴다. DEMO·DLC·EDITION의 부모는 같은 소유자의 BASIC이어야 한다. DEMO 등록 가격은 0이며 제출 가격도 0이어야 한다. EDITION에만 에디션 이름을 지정한다.
 
-새 제출 경로의 상태는 `Submission.status`에서 읽는다. 프로젝트가 `APPROVED`라는 것만으로 현재 빌드의 심사·공개·판매가 완료되었다고 판단할 수 없다. 근거: [GameProjectService](../../../apps/studio/src/main/java/com/stove/studio/core/service/GameProjectService.java).
+새 제출 경로의 상태는 `Submission.status`에서 읽는다. 프로젝트가 `APPROVED`라는 것만으로 현재 빌드의 심사·공개·판매가 완료되었다고 판단할 수 없다. 근거: [GameProjectService](../../../apps/studio/src/main/java/com/stove/studio/core/service/project/GameProjectService.java).
 
-생성 입력 [NewProject](../../../apps/studio/src/main/java/com/stove/studio/core/domain/NewProject.java)는 `productCode`, `title`, `sellerId`, `price`, `currency`, `selfRated`, `productKind`, `parentGameId`, `editionName`, `bundleGameIds`를 담는다. `bundleGameIds`는 구성 관계 행을 만드는 데 사용하고 GameProject의 단일 필드로 저장하지 않는다.
+생성 입력 [NewProject](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/NewProject.java)는 `productCode`, `title`, `sellerId`, `price`, `currency`, `selfRated`, `productKind`, `parentGameId`, `editionName`, `bundleGameIds`를 담는다. `bundleGameIds`는 구성 관계 행을 만드는 데 사용하고 GameProject의 단일 필드로 저장하지 않는다.
 
 **업무 규칙 제안:** 창작자는 자신의 워크스페이스에서 중복되지 않는 코드로 등록하고, 관련 프로젝트를 지정한다. 제출·출시 여부는 해당 Submission·Release로 설명한다.
 
@@ -67,13 +80,13 @@ flowchart TD
 
 **합의 상태:** 초안. 기존 프로젝트 상태의 역할과 판매자 명칭은 [Q2](../open-questions.md#q2), [Q8](../open-questions.md#q8).
 
-**검증 근거:** [GameProject](../../../apps/studio/src/main/java/com/stove/studio/core/domain/GameProject.java), [GameProjectService](../../../apps/studio/src/main/java/com/stove/studio/core/service/GameProjectService.java). [GameProjectServiceTest](../../../apps/studio/src/integrationTest/java/com/stove/studio/core/service/GameProjectServiceTest.java)의 `productFamilyRequiresOwnedRelations`, `duplicateProductCodeIsRejected`가 관계·중복 규칙을 확인한다.
+**검증 근거:** [GameProject](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/GameProject.java), [GameProjectService](../../../apps/studio/src/main/java/com/stove/studio/core/service/project/GameProjectService.java). [GameProjectServiceTest](../../../apps/studio/src/integrationTest/java/com/stove/studio/core/service/project/GameProjectServiceTest.java)의 `productFamilyRequiresOwnedRelations`, `duplicateProductCodeIsRejected`가 관계·중복 규칙을 확인한다.
 
 **API에서 찾기:** `POST /api/v1/studio/games`로 등록하고, `GET /api/v1/studio/games/{gameId}/family`로 부모·자식·구성품·자신을 포함한 묶음을 조회한다. 공개된 관계는 Catalog·Store에 사본으로 전달된다.
 
 ## BundleComponent — 묶음의 구성 관계
 
-저장: `bundle_component`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/BundleComponent.java)
+저장: `bundle_component`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/BundleComponent.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -83,12 +96,12 @@ flowchart TD
 
 **만들고 쓰는 때:** BUNDLE 등록 시 구성 상품마다 한 행을 만든다. 같은 소유자의 중복 없는 두 개 이상이어야 하고 다른 BUNDLE을 포함할 수 없다. 구성 관계를 공개 이벤트에 상품 코드 목록으로 담는다. 현재 일반 구매에서 묶음을 구성품 이용권으로 풀어 지급하는 기능은 없다.
 
-관련 조회 값 [ProductFamily](../../../apps/studio/src/main/java/com/stove/studio/core/domain/ProductFamily.java)는 `product`, `parent`, `children`, `components`, `bundles`를 모은 결과다. 별도 상품 원본이 아니라 “이 프로젝트의 부모·자식·구성품·자신을 포함한 묶음” 조회용이다.
+관련 조회 값 [ProductFamily](../../../apps/studio/src/main/java/com/stove/studio/core/domain/project/ProductFamily.java)는 `product`, `parent`, `children`, `components`, `bundles`를 모은 결과다. 별도 상품 원본이 아니라 “이 프로젝트의 부모·자식·구성품·자신을 포함한 묶음” 조회용이다.
 
 <a id="store-page-revision"></a>
 ## StorePageRevision — 상점 소개 자료의 판본
 
-저장: `store_page_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/StorePageRevision.java)
+저장: `store_page_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/StorePageRevision.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -108,9 +121,9 @@ flowchart TD
 
 타입을 생략한 내용 필드는 모두 `String`이다. `Json` 접미사는 목록·맵을 문자열 형태로 저장했다는 뜻이다.
 
-**만들고 쓰는 때:** 창작자가 상점 설명을 작성한다. 초안은 수정할 수 있지만 확정 후에는 새 판본을 만들어야 한다. 생성 요청에서 `draft=false`이면 곧바로 확정한다. 확정·제출 시 같은 프로젝트에 업로드된 스크린샷·커버 등을 확인한다. 제출과 릴리스는 해당 판본의 ID를 가리켜 과거 자료를 보존한다. [RevisionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/RevisionService.java)
+**만들고 쓰는 때:** 창작자가 상점 설명을 작성한다. 초안은 수정할 수 있지만 확정 후에는 새 판본을 만들어야 한다. 생성 요청에서 `draft=false`이면 곧바로 확정한다. 확정·제출 시 같은 프로젝트에 업로드된 스크린샷·커버 등을 확인한다. 제출과 릴리스는 해당 판본의 ID를 가리켜 과거 자료를 보존한다. [RevisionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/revision/RevisionService.java)
 
-입력 값 [StorePageContent](../../../apps/studio/src/main/java/com/stove/studio/core/domain/StorePageContent.java)는 위 내용 필드를 목록·맵으로 받는 record다. `localizations`, `genres`, `tags`, `screenshots`, `trailers`, `supportedLanguages`, `features`, `salesCountries`, `prices`를 저장할 때 각각 `*Json`으로 바꾼다. 내부 `SerializedContent`는 그 변환 결과다. [StoreAsset](../../../apps/studio/src/main/java/com/stove/studio/core/domain/StoreAsset.java)의 `assetId`, `url`, `contentType`, `size`는 업로드한 이미지 결과이며 별도 JPA 엔티티는 아니다.
+입력 값 [StorePageContent](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/StorePageContent.java)는 위 내용 필드를 목록·맵으로 받는 record다. `localizations`, `genres`, `tags`, `screenshots`, `trailers`, `supportedLanguages`, `features`, `salesCountries`, `prices`를 저장할 때 각각 `*Json`으로 바꾼다. 내부 `SerializedContent`는 그 변환 결과다. [StoreAsset](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/StoreAsset.java)의 `assetId`, `url`, `contentType`, `size`는 업로드한 이미지 결과이며 별도 JPA 엔티티는 아니다.
 
 **업무 규칙 제안:** 초안은 편집하고, 확정 후 수정은 새 이력으로 작성한다. 심사는 확정된 내용을 기준으로 진행한다.
 
@@ -118,11 +131,11 @@ flowchart TD
 
 **합의 상태:** 초안. 표준 동사와 필드 명명은 [Q1](../open-questions.md#q1), [Q7](../open-questions.md#q7).
 
-**검증 근거:** [StorePageRevision](../../../apps/studio/src/main/java/com/stove/studio/core/domain/StorePageRevision.java), [RevisionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/RevisionService.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java). [StorePageRevisionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/StorePageRevisionTest.java)의 `draftBecomesImmutableRevision`.
+**검증 근거:** [StorePageRevision](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/StorePageRevision.java), [RevisionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/revision/RevisionService.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java). [StorePageRevisionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/revision/StorePageRevisionTest.java)의 `draftBecomesImmutableRevision`.
 
 ## PricingRevision — 출시 가격의 판본
 
-저장: `pricing_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/PricingRevision.java)
+저장: `pricing_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/PricingRevision.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -134,7 +147,7 @@ flowchart TD
 
 ## RatingRevision — 등급 설문과 판정 경로의 판본
 
-저장: `rating_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/RatingRevision.java)
+저장: `rating_revision`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/RatingRevision.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -144,14 +157,14 @@ flowchart TD
 | `recommendedRatingCode` (`String`) | 정책의 추천 등급. DB 컬럼명 `target_rating_code` |
 | `resolvedPath` (`RatingPath`) | `SELF_CLASSIFICATION` 자체등급 또는 `GRAC` 외부 심사 경로 |
 
-**만들고 쓰는 때:** [RatingQuestionnaire](../../../apps/studio/src/main/java/com/stove/studio/core/domain/RatingQuestionnaire.java)의 폭력 `violence`, 선정성 `sexualContent`, 언어 `language` 수준(`NONE/MILD/STRONG`), 약물 `drugUse`, 현금 도박 `cashGambling` 답변을 받아 정책을 평가한다. 제출 시 현재 활성 정책인지 확인한다. 최종 승인 등급·인증 증빙은 심사 결과로 Submission에 별도로 반영한다.
+**만들고 쓰는 때:** [RatingQuestionnaire](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/RatingQuestionnaire.java)의 폭력 `violence`, 선정성 `sexualContent`, 언어 `language` 수준(`NONE/MILD/STRONG`), 약물 `drugUse`, 현금 도박 `cashGambling` 답변을 받아 정책을 평가한다. 제출 시 현재 활성 정책인지 확인한다. 최종 승인 등급·인증 증빙은 심사 결과로 Submission에 별도로 반영한다.
 
-[KoreanRatingPolicy](../../../apps/studio/src/main/java/com/stove/studio/core/domain/KoreanRatingPolicy.java)는 현재 `KR-2026-01` 규칙을 사용한다. 강한 폭력·선정성 또는 현금 도박이면 18/GRAC, 약물 또는 강한 언어이면 15, 경미한 폭력·선정성·언어이면 12, 나머지는 ALL 경로를 반환한다. **프로젝트에 구현된 규칙 설명**이며 실제 등급 기관의 법적 기준을 설명하는 문서가 아니다.
+[KoreanRatingPolicy](../../../apps/studio/src/main/java/com/stove/studio/core/domain/revision/KoreanRatingPolicy.java)는 현재 `KR-2026-01` 규칙을 사용한다. 강한 폭력·선정성 또는 현금 도박이면 18/GRAC, 약물 또는 강한 언어이면 15, 경미한 폭력·선정성·언어이면 12, 나머지는 ALL 경로를 반환한다. **프로젝트에 구현된 규칙 설명**이며 실제 등급 기관의 법적 기준을 설명하는 문서가 아니다.
 
 <a id="game-build"></a>
 ## GameBuild — 배포할 파일 산출물
 
-저장: `game_build`. 실제 파일은 오브젝트 저장소에 있고 이 행은 파일의 위치·검증·출처를 보관한다. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java)
+저장: `game_build`. 실제 파일은 오브젝트 저장소에 있고 이 행은 파일의 위치·검증·출처를 보관한다. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/GameBuild.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -172,9 +185,9 @@ flowchart TD
 
 **만들고 쓰는 때:** 업로드 세션 생성과 함께 `UPLOADING` 빌드를 만든다. 업로드 완료 후 검증을 거쳐 `VALIDATED`가 되어야 제출할 수 있다. 한 제출물은 같은 제품 버전의 여러 OS·아키텍처 파일을 묶을 수 있다. 기본 빌드는 전체 파일이고, 델타마다 같은 환경의 전체 파일이 있어야 한다.
 
-기존 [GameBuildService.upload()](../../../apps/studio/src/main/java/com/stove/studio/core/service/GameBuildService.java)는 `GameBuild.of()`로 RETIRED 상태의 메타데이터를 만든다. 이 경로에서 등록했다는 사실을 현재 제출에 사용할 검증 완료 빌드로 해석하지 않는다.
+기존 [GameBuildService.upload()](../../../apps/studio/src/main/java/com/stove/studio/core/service/build/GameBuildService.java)는 `GameBuild.of()`로 RETIRED 상태의 메타데이터를 만든다. 이 경로에서 등록했다는 사실을 현재 제출에 사용할 검증 완료 빌드로 해석하지 않는다.
 
-SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 체크섬·파일 구조 등을 다루며, `BUILD_QA` 심사나 실제 게임 실행과 동일하지 않다. 현재 ZIP 검사의 `.exe` 조건은 다중 OS 지원 설명과 차이가 있다. [검증 서비스](../../../apps/studio/src/main/java/com/stove/studio/core/service/BuildValidationService.java), [Q10](../open-questions.md#q10).
+SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 체크섬·파일 구조 등을 다루며, `BUILD_QA` 심사나 실제 게임 실행과 동일하지 않다. 현재 ZIP 검사의 `.exe` 조건은 다중 OS 지원 설명과 차이가 있다. [검증 서비스](../../../apps/studio/src/main/java/com/stove/studio/core/service/build/BuildValidationService.java), [Q10](../open-questions.md#q10).
 
 **업무 규칙 제안:** 창작자 또는 프로젝트 범위 CI가 업로드하고, 검증을 통과한 동일 프로젝트 빌드만 제출한다. 델타에는 같은 대상 환경의 전체 빌드를 함께 제공한다.
 
@@ -182,13 +195,13 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 
 **합의 상태:** 재검토 필요. 플랫폼 검증의 의도와 범위는 [Q10](../open-questions.md#q10).
 
-**검증 근거:** [GameBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/GameBuild.java), [BuildValidationService](../../../apps/studio/src/main/java/com/stove/studio/core/service/BuildValidationService.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java), [업로드 스키마](../../../apps/studio/src/main/resources/db/migration/V5__build_upload_lifecycle.sql). [SubmissionBuildSetTest](../../../apps/studio/src/test/java/com/stove/studio/core/service/SubmissionBuildSetTest.java)의 `acceptsMultipleOsAndDeltaWithFullFallback`, `rejectsMixedVersionsAndDeltaPrimary`는 제출 묶음의 규칙을 검증하며 실제 OS 실행 검증은 하지 않는다.
+**검증 근거:** [GameBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/GameBuild.java), [BuildValidationService](../../../apps/studio/src/main/java/com/stove/studio/core/service/build/BuildValidationService.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [업로드 스키마](../../../apps/studio/src/main/resources/db/migration/V5__build_upload_lifecycle.sql). [SubmissionBuildSetTest](../../../apps/studio/src/test/java/com/stove/studio/core/service/submission/SubmissionBuildSetTest.java)의 `acceptsMultipleOsAndDeltaWithFullFallback`, `rejectsMixedVersionsAndDeltaPrimary`는 제출 묶음의 규칙을 검증하며 실제 OS 실행 검증은 하지 않는다.
 
 **실행 환경과 델타:** 업로드의 `platform`은 `WINDOWS`·`MACOS`·`LINUX`, `architecture`는 `X86_64`·`ARM64`다. 선택적인 `deltaFromVersion`은 대상 제품 버전과 달라야 한다. 델타 생성·클라이언트 적용은 이 서비스 밖의 책임이며, 내용상 호환성은 빌드 QA에서 확인한다.
 
 ## UploadSession — 큰 파일의 분할 업로드 진행
 
-저장: `upload_session`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/UploadSession.java)
+저장: `upload_session`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadSession.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -199,22 +212,22 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 | `status` (`UploadSessionStatus`) | `OPEN → COMPLETED/EXPIRED`. `ABORTED`도 enum에 있지만 현재 모델의 전환 메서드는 없음 |
 | `expiresAt`, `completedAt` (`Instant`) | 만료 시각·완료 시각 |
 
-**만들고 쓰는 때:** [UploadSessionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/UploadSessionService.java)가 저장소에서 조각별 업로드 URL을 받아 세션을 만든다. 클라이언트가 저장소에 직접 올리고 조각 목록으로 완료를 요청한다. 세션 완료는 파일 전송 완료이며 빌드 검증 통과를 뜻하지 않는다.
+**만들고 쓰는 때:** [UploadSessionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/build/UploadSessionService.java)가 저장소에서 조각별 업로드 URL을 받아 세션을 만든다. 클라이언트가 저장소에 직접 올리고 조각 목록으로 완료를 요청한다. 세션 완료는 파일 전송 완료이며 빌드 검증 통과를 뜻하지 않는다.
 
 | 관련 값 모델 | 담는 속성과 용도 |
 |---|---|
-| [NewUploadSession](../../../apps/studio/src/main/java/com/stove/studio/core/domain/NewUploadSession.java) | `productVersion`, `buildNumber`, `platform`, `architecture`, `fileName`, `fileSize`, `sha256`, `commitSha`, `repository`, `sourceRef`, `ciProvider`, `ciRunId`, `idempotencyKey`, `deltaFromVersion`: 업로드 생성 입력 |
-| [CreatedUploadSession](../../../apps/studio/src/main/java/com/stove/studio/core/domain/CreatedUploadSession.java) | `sessionId`, `buildId`, `partSize`, `parts`, `expiresAt`: 사용자에게 반환하는 업로드 안내 |
-| [MultipartUploadTicket](../../../apps/studio/src/main/java/com/stove/studio/core/domain/MultipartUploadTicket.java) | `storagePath`, `storageUploadId`, `partSize`, `parts`: 저장소 어댑터의 생성 결과 |
-| [UploadPartUrl](../../../apps/studio/src/main/java/com/stove/studio/core/domain/UploadPartUrl.java) / [UploadedPart](../../../apps/studio/src/main/java/com/stove/studio/core/domain/UploadedPart.java) | `partNumber`와 각각 `uploadUrl`/`etag`: 올릴 위치와 완료한 조각의 저장소 확인값 |
-| [StoredObjectInfo](../../../apps/studio/src/main/java/com/stove/studio/core/domain/StoredObjectInfo.java) | `size`, `eTag`: 저장된 객체를 조회한 결과 |
-| [BuildValidationSnapshot](../../../apps/studio/src/main/java/com/stove/studio/core/domain/BuildValidationSnapshot.java) | `status`, `storagePath`, `expectedChecksum`, `expectedSize`, `productVersion`: 검증 작업에 전달할 값 |
-| [NewBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/NewBuild.java) / [UploadTicket](../../../apps/studio/src/main/java/com/stove/studio/core/domain/UploadTicket.java) | 기존 단일 업로드 경로의 `version`, `fileSize`, `checksum` 입력 / `storagePath`, `uploadUrl` 결과 |
+| [NewUploadSession](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/NewUploadSession.java) | `productVersion`, `buildNumber`, `platform`, `architecture`, `fileName`, `fileSize`, `sha256`, `commitSha`, `repository`, `sourceRef`, `ciProvider`, `ciRunId`, `idempotencyKey`, `deltaFromVersion`: 업로드 생성 입력 |
+| [CreatedUploadSession](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/CreatedUploadSession.java) | `sessionId`, `buildId`, `partSize`, `parts`, `expiresAt`: 사용자에게 반환하는 업로드 안내 |
+| [MultipartUploadTicket](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/MultipartUploadTicket.java) | `storagePath`, `storageUploadId`, `partSize`, `parts`: 저장소 어댑터의 생성 결과 |
+| [UploadPartUrl](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadPartUrl.java) / [UploadedPart](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadedPart.java) | `partNumber`와 각각 `uploadUrl`/`etag`: 올릴 위치와 완료한 조각의 저장소 확인값 |
+| [StoredObjectInfo](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/StoredObjectInfo.java) | `size`, `eTag`: 저장된 객체를 조회한 결과 |
+| [BuildValidationSnapshot](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/BuildValidationSnapshot.java) | `status`, `storagePath`, `expectedChecksum`, `expectedSize`, `productVersion`: 검증 작업에 전달할 값 |
+| [NewBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/NewBuild.java) / [UploadTicket](../../../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadTicket.java) | 기존 단일 업로드 경로의 `version`, `fileSize`, `checksum` 입력 / `storagePath`, `uploadUrl` 결과 |
 
 <a id="submission"></a>
 ## Submission — 심사받을 자료·파일 묶음
 
-저장: `submission`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/Submission.java)
+저장: `submission`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/Submission.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -228,7 +241,7 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 | `ratingExternalApplicationNumber`, `ratingExternalEvidenceUrl` (`String`) | 외부 등급 심사의 접수번호·증빙 |
 | `entityVersion` (`long`) | 심사 결과·출시 상태의 동시 변경 충돌 감지 |
 
-**만들고 쓰는 때:** 확정 자료와 검증된 빌드를 골라 제출하면 생성한다. 프로젝트 일치·이미지 저장·활성 등급 정책·빌드 집합을 검사하고, 여섯 관문과 `SubmissionCreated` 이벤트를 함께 저장한다. 기본 빌드 1개에 추가 빌드 최대 19개다. [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java)
+**만들고 쓰는 때:** 확정 자료와 검증된 빌드를 골라 제출하면 생성한다. 프로젝트 일치·이미지 저장·활성 등급 정책·빌드 집합을 검사하고, 여섯 관문과 `SubmissionCreated` 이벤트를 함께 저장한다. 기본 빌드 1개에 추가 빌드 최대 19개다. [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java)
 
 수정 요청이면 `CHANGES_REQUESTED`, 모든 관문 승인이면 `READY_FOR_RELEASE`, LIVE 공개 시 `RELEASED`다. 새 자료로 제출하면 새 Submission을 만들고, 같은 자료의 판단에 이의를 제기하면 기존 사건을 재검토한다. `SubmissionReviewStatus(submission, gates)`는 제출물과 관문을 함께 보여주는 조회 값이다.
 
@@ -238,11 +251,11 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 
 **합의 상태:** 초안. 재검토와 새 제출의 구분 및 관문 동기화는 [Q4](../open-questions.md#q4).
 
-**검증 근거:** [Submission](../../../apps/studio/src/main/java/com/stove/studio/core/domain/Submission.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java), [SubmissionBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionBuild.java). [SubmissionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/SubmissionTest.java)의 `changesRequestedIsTerminalForTheSnapshot`, `submittedCannotBeReleasedDirectly`; 빌드 집합은 [SubmissionBuildSetTest](../../../apps/studio/src/test/java/com/stove/studio/core/service/SubmissionBuildSetTest.java). 테스트 이름의 “terminal”은 재검토 이벤트 경로까지 금지한다는 의미로 읽지 않는다.
+**검증 근거:** [Submission](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/Submission.java), [SubmissionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [SubmissionBuild](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/SubmissionBuild.java). [SubmissionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/submission/SubmissionTest.java)의 `changesRequestedIsTerminalForTheSnapshot`, `submittedCannotBeReleasedDirectly`; 빌드 집합은 [SubmissionBuildSetTest](../../../apps/studio/src/test/java/com/stove/studio/core/service/submission/SubmissionBuildSetTest.java). 테스트 이름의 “terminal”은 재검토 이벤트 경로까지 금지한다는 의미로 읽지 않는다.
 
 ## SubmissionBuild — 제출물의 빌드 구성
 
-저장: `submission_build`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionBuild.java)
+저장: `submission_build`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/SubmissionBuild.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -254,7 +267,7 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 <a id="submission-gate"></a>
 ## SubmissionGate — 유형별 출시 관문
 
-저장: `submission_gate`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionGate.java)
+저장: `submission_gate`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/SubmissionGate.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -264,7 +277,7 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 | `reasonCode`, `feedback` (`String`) | 수정 요청의 분류와 외부 피드백 |
 | `entityVersion` (`long`) | 동시 결과 반영 충돌 감지 |
 
-**만들고 쓰는 때:** 제출 시 유형별 한 개씩 만든다. Review에서 보낸 승인·수정 요청·재검토 결과를 Studio가 반영하고 모든 관문이 승인됐는지 판단한다. 심사자 배정·체크리스트는 여기로 복제하지 않는다. Review의 차단·취소·만료에는 현재 대응 상태·이벤트가 없다. [SubmissionReviewProjectionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java), [Q4](../open-questions.md#q4).
+**만들고 쓰는 때:** 제출 시 유형별 한 개씩 만든다. Review에서 보낸 승인·수정 요청·재검토 결과를 Studio가 반영하고 모든 관문이 승인됐는지 판단한다. 심사자 배정·체크리스트는 여기로 복제하지 않는다. Review의 차단·취소·만료에는 현재 대응 상태·이벤트가 없다. [SubmissionReviewProjectionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionReviewProjectionService.java), [Q4](../open-questions.md#q4).
 
 **업무 규칙 제안:** 승인된 자료·빌드가 제출물과 일치할 때 해당 관문에 반영하고 모든 필수 유형 승인 후 출시를 허용한다.
 
@@ -272,12 +285,12 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 
 **합의 상태:** 재검토 필요. [Q4](../open-questions.md#q4), [Q11](../open-questions.md#q11).
 
-**검증 근거:** [SubmissionGate](../../../apps/studio/src/main/java/com/stove/studio/core/domain/SubmissionGate.java), [SubmissionReviewProjectionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java). [SubmissionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/SubmissionTest.java)는 제출 상태의 일부 전이만 검증한다. [TrackACreatorFlowTest](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 미승인 출시 거절·수정 요청 반영·전체 승인 후 출시를 검증한다. 잘못된 승인 스냅샷 대조의 직접 검증 공백은 [Q11](../open-questions.md#q11)에 기록한다.
+**검증 근거:** [SubmissionGate](../../../apps/studio/src/main/java/com/stove/studio/core/domain/submission/SubmissionGate.java), [SubmissionReviewProjectionService](../../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionReviewProjectionService.java). [SubmissionTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/submission/SubmissionTest.java)는 제출 상태의 일부 전이만 검증한다. [TrackACreatorFlowTest](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 미승인 출시 거절·수정 요청 반영·전체 승인 후 출시를 검증한다. 잘못된 승인 스냅샷 대조의 직접 검증 공백은 [Q11](../open-questions.md#q11)에 기록한다.
 
 <a id="release"></a>
 ## Release — 승인된 묶음의 채널 공개
 
-저장: `game_release`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/Release.java)
+저장: `game_release`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/release/Release.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -295,9 +308,9 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 
 **만들고 쓰는 때:** 출시 준비가 완료된 Submission에서 생성한다. 즉시 또는 예약 시각에 빌드·저장 객체를 점검한 뒤 공개한다. 채널 승격은 DEV→TEST→STAGE→LIVE 순서이며 LIVE 생성 자체가 이 모든 채널을 반드시 거쳐야 한다는 뜻은 아니다. LIVE일 때만 `ReleasePublished`를 발행하고 제출물을 `RELEASED`로 바꾼다. Catalog와 Download는 이 이벤트의 공개 내용을 받는다.
 
-롤백은 과거 릴리스 내용을 사용한 새 `ROLLBACK` 기록을 만들어 공개하는 방식이다. 실패 롤백 이벤트의 의미는 [Q10](../open-questions.md#q10)의 미결 사항이다. 근거: [ReleaseService](../../../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ReleaseSmokeTestService](../../../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseSmokeTestService.java).
+롤백은 과거 릴리스 내용을 사용한 새 `ROLLBACK` 기록을 만들어 공개하는 방식이다. 실패 롤백 이벤트의 의미는 [Q10](../open-questions.md#q10)의 미결 사항이다. 근거: [ReleaseService](../../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ReleaseSmokeTestService](../../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseSmokeTestService.java).
 
-기존 테스트에서 확인할 사례: [자료 확정 후 변경 거절](../../../apps/studio/src/test/java/com/stove/studio/core/domain/StorePageRevisionTest.java), [빌드 묶음 조건](../../../apps/studio/src/test/java/com/stove/studio/core/service/SubmissionBuildSetTest.java), [제출 상태](../../../apps/studio/src/test/java/com/stove/studio/core/domain/SubmissionTest.java), [공개 조건](../../../apps/studio/src/test/java/com/stove/studio/core/domain/ReleaseTest.java), [창작자 전체 여정](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java). 이 링크는 기존 테스트 소스이며 이번 작업의 실행 결과는 아니다.
+기존 테스트에서 확인할 사례: [자료 확정 후 변경 거절](../../../apps/studio/src/test/java/com/stove/studio/core/domain/revision/StorePageRevisionTest.java), [빌드 묶음 조건](../../../apps/studio/src/test/java/com/stove/studio/core/service/submission/SubmissionBuildSetTest.java), [제출 상태](../../../apps/studio/src/test/java/com/stove/studio/core/domain/submission/SubmissionTest.java), [공개 조건](../../../apps/studio/src/test/java/com/stove/studio/core/domain/release/ReleaseTest.java), [창작자 전체 여정](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java). 이 링크는 기존 테스트 소스이며 이번 작업의 실행 결과는 아니다.
 
 **업무 규칙 제안:** 출시 준비된 제출물을 즉시 또는 지정 시각에 공개한다. 공개 직전 파일을 확인하고, 이전 공개 내용을 복원해도 새로운 공개 이력을 남긴다.
 
@@ -305,4 +318,4 @@ SHA-256은 파일 내용이 같은지 확인할 지문이다. 파일 검증은 �
 
 **합의 상태:** 재검토 필요. 공개·판매 연동 [Q3](../open-questions.md#q3), 검증·롤백 의미 [Q10](../open-questions.md#q10).
 
-**검증 근거:** [Release](../../../apps/studio/src/main/java/com/stove/studio/core/domain/Release.java), [ReleaseService](../../../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ReleaseSmokeTestService](../../../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseSmokeTestService.java). [ReleaseTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/ReleaseTest.java)의 `smokeTestGatesPublication`은 공개 전 검사 통과 조건을 검증한다. [TrackACreatorFlowTest](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)의 `publishesPatchAndRollsBack`, `promotesChannelsAndManagesSchedule`은 정상 롤백·채널 승격·예약 변경·취소를 검증한다. 실패 롤백 검증 공백은 [Q11](../open-questions.md#q11)에 남긴다.
+**검증 근거:** [Release](../../../apps/studio/src/main/java/com/stove/studio/core/domain/release/Release.java), [ReleaseService](../../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ReleaseSmokeTestService](../../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseSmokeTestService.java). [ReleaseTest](../../../apps/studio/src/test/java/com/stove/studio/core/domain/release/ReleaseTest.java)의 `smokeTestGatesPublication`은 공개 전 검사 통과 조건을 검증한다. [TrackACreatorFlowTest](../../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)의 `publishesPatchAndRollsBack`, `promotesChannelsAndManagesSchedule`은 정상 롤백·채널 승격·예약 변경·취소를 검증한다. 실패 롤백 검증 공백은 [Q11](../open-questions.md#q11)에 남긴다.

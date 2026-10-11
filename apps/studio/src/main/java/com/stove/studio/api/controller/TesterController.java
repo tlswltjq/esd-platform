@@ -2,8 +2,8 @@ package com.stove.studio.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
 import com.stove.studio.api.controller.dto.TesterInstallationResponse;
-import com.stove.studio.core.domain.ReleaseChannel;
-import com.stove.studio.core.service.InternalTesterService;
+import com.stove.studio.core.domain.release.ReleaseChannel;
+import com.stove.studio.core.service.access.InternalTesterService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

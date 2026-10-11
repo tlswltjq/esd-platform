@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.GameBuild;
-import com.stove.studio.core.domain.BuildStatus;
+import com.stove.studio.core.domain.build.BuildStatus;
+import com.stove.studio.core.domain.build.GameBuild;
 import java.time.Instant;
 
 public record BuildResponse(

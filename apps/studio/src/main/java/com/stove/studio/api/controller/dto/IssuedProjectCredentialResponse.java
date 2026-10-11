@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.IssuedProjectCredential;
+import com.stove.studio.core.domain.access.IssuedProjectCredential;
 import java.time.Instant;
 
 /** token은 생성 응답에서 한 번만 노출한다. */

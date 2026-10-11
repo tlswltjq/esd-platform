@@ -82,7 +82,8 @@ rcurl() { ssh -o ConnectTimeout=10 "$REMOTE" \
 
 # ── sync ──────────────────────────────────────────────────────────────
 # 로컬 → 원격 단방향. 원격에서 소스를 고치지 않는다(다음 sync 에 지워진다).
-# build/ 와 .gradle/ 은 제외한다 — 제외한 경로는 --delete 대상도 아니므로
+# 소스의 build 패키지는 포함하고, build/ 산출물과 .gradle/ 은 제외한다.
+# 제외한 경로는 --delete 대상도 아니므로
 # 원격의 산출물과 캐시가 살아남는다. 그것이 두 번째 실행이 빠른 이유다.
 #
 # `runs/` 도 같은 이유로 제외한다. **측정 산출물은 로컬에 없다** — 원격에서만 생기므로
@@ -93,6 +94,8 @@ do_sync() {
     # 머신별 기본 경로라 첫 실행에는 없다. rsync 는 상위 디렉터리를 만들지 않는다.
     ssh -o ConnectTimeout=10 "$REMOTE" "mkdir -p '$RDIR'" || die "원격 디렉터리를 만들 수 없습니다: $RDIR"
     rsync -az --delete \
+        --include '/apps/studio/src/**/core/domain/build/***' \
+        --include '/apps/studio/src/**/core/service/build/***' \
         --exclude '.git/' --exclude 'build/' --exclude '.gradle/' --exclude '.env' \
         --exclude '.idea/' --exclude '.claude/' --exclude 'perf-results/' \
         --exclude 'runs/' \

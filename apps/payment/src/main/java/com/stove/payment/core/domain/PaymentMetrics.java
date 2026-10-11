@@ -7,6 +7,7 @@ import java.time.Instant;
 /** 결제 지표. 각 값이 무엇을 말하는지와 알람을 어디에 거는지는 */
 public class PaymentMetrics {
 
+    /** 주문·결제 처리 지표를 등록하는 저장소. */
     private final MeterRegistry registry;
 
     public PaymentMetrics(MeterRegistry registry, PaymentRepository repository, PaymentProperties properties) {

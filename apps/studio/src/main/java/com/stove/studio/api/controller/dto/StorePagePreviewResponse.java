@@ -2,9 +2,9 @@ package com.stove.studio.api.controller.dto;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.studio.core.domain.StorePageContent;
-import com.stove.studio.core.domain.StorePageRevision;
-import com.stove.studio.core.domain.StorePageRevisionStatus;
+import com.stove.studio.core.domain.revision.StorePageContent;
+import com.stove.studio.core.domain.revision.StorePageRevision;
+import com.stove.studio.core.domain.revision.StorePageRevisionStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

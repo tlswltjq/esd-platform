@@ -8,6 +8,11 @@ import org.apache.kafka.common.header.Header;
 /**
  * 컨슈머가 다루기 쉬운 형태로 정규화한 Kafka 레코드.
  * 헤더에서 eventId/eventType 을 꺼내 멱등 판단과 라우팅을 body 파싱 없이 수행한다.
+ *
+ * @param eventId 서비스 간 전달 시 유지하는 이벤트 고유 식별자.
+ * @param eventType 전달하거나 처리한 업무 이벤트 종류.
+ * @param key 이벤트의 Kafka 메시지 키.
+ * @param payload 전달할 이벤트 본문.
  */
 public record EventEnvelope(String eventId, String eventType, String key, String payload) {
 

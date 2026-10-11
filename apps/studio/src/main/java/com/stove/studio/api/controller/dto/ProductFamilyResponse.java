@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.GameProject;
+import com.stove.studio.core.domain.project.GameProject;
 import java.util.List;
 
 public record ProductFamilyResponse(ProjectResponse product, ProjectResponse parent,

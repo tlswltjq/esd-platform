@@ -2,8 +2,8 @@ package com.stove.studio.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.core.error.BusinessException;
-import com.stove.studio.core.domain.ProjectCredential;
-import com.stove.studio.core.service.ProjectCredentialService;
+import com.stove.studio.core.domain.access.ProjectCredential;
+import com.stove.studio.core.service.access.ProjectCredentialService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

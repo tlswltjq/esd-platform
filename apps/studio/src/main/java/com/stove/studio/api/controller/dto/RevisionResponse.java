@@ -1,9 +1,9 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.PricingRevision;
-import com.stove.studio.core.domain.RatingRevision;
-import com.stove.studio.core.domain.StorePageRevision;
-import com.stove.studio.core.domain.StorePageRevisionStatus;
+import com.stove.studio.core.domain.revision.PricingRevision;
+import com.stove.studio.core.domain.revision.RatingRevision;
+import com.stove.studio.core.domain.revision.StorePageRevision;
+import com.stove.studio.core.domain.revision.StorePageRevisionStatus;
 
 public record RevisionResponse(Long revisionId, int revisionNo, String type, String resolvedPath,
                                String country, String policyVersion, String recommendedRatingCode,

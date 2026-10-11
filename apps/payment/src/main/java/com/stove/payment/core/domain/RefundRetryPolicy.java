@@ -10,7 +10,9 @@ public final class RefundRetryPolicy {
 
     /** 최초 유예. 진행 중인 건을 옆에서 다시 부르지 않을 만큼만 둔다. */
     private static final Duration INITIAL = Duration.ofMinutes(2);
+    /** 환불 재시도 사이 대기 시간의 상한. */
     private static final Duration MAX = Duration.ofMinutes(30);
+    /** 환불 재시도 대기 시간을 늘리는 배수. */
     private static final int MULTIPLIER = 2;
 
     private RefundRetryPolicy() {

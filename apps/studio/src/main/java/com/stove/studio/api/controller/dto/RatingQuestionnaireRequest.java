@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.ContentSeverity;
-import com.stove.studio.core.domain.RatingQuestionnaire;
+import com.stove.studio.core.domain.revision.ContentSeverity;
+import com.stove.studio.core.domain.revision.RatingQuestionnaire;
 import jakarta.validation.constraints.NotNull;
 
 public record RatingQuestionnaireRequest(

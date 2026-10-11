@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.IssuedProjectCredential;
+import com.stove.studio.core.domain.access.IssuedProjectCredential;
 import java.time.Instant;
 
 public record CiOidcExchangeResponse(String credential, Instant expiresAt,

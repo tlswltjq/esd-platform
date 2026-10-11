@@ -32,23 +32,29 @@ import lombok.NoArgsConstructor;
                 columnNames = {"orderNo", "productId", "recordType"}))
 public class SettlementRecord extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 주문·결제·이용권·정산을 연결하는 주문번호. */
     @Column(nullable = false, length = 40)
     private String orderNo;
 
+    /** Catalog 판매 상품 식별자. */
     @Column(nullable = false)
     private Long productId;
 
+    /** 판매자를 나타내는 워크스페이스 식별자. */
     @Column(nullable = false)
     private Long sellerId;
 
+    /** 자체 판매와 입점 판매를 구분하는 정산 유형. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private SaleType saleType;
 
+    /** 매출 원장과 환불 원장을 구분하는 유형. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private RecordType recordType;
@@ -61,23 +67,30 @@ public class SettlementRecord extends BaseTimeEntity {
     @Column(nullable = false)
     private long paidAmount;
 
+    /** 할인 전 정가에 수량을 곱한 금액. */
     @Column(nullable = false)
     private long listAmount;
 
+    /** 할인으로 차감한 금액. */
     @Column(nullable = false)
     private long discountAmount;
 
+    /** 플랫폼이 부담한 할인 비용. */
     @Column(nullable = false)
     private long platformExpense;
 
+    /** 구매 가격에 적용한 할인 행사 식별자. */
     private Long promotionId;
 
+    /** 할인 비용 부담 주체(SELLER 또는 PLATFORM). */
     @Column(length = 20)
     private String discountBearer;
 
+    /** 마감 후 환불로 조정할 원매출의 귀속 월. */
     @Column(length = 7)
     private String adjustmentForMonth;
 
+    /** 정산 기준액에 적용할 수수료율. */
     @Column(nullable = false, precision = 5, scale = 4)
     private BigDecimal feeRate;
 
@@ -93,6 +106,7 @@ public class SettlementRecord extends BaseTimeEntity {
     @Column(nullable = false, length = 7)
     private String settlementMonth;
 
+    /** 이 원장이 월 마감 합계에 반영되었는지 여부. */
     @Column(nullable = false)
     private boolean closed;
 

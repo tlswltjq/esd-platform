@@ -1,9 +1,9 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.Submission;
-import com.stove.studio.core.domain.SubmissionGate;
-import com.stove.studio.core.domain.SubmissionGateStatus;
-import com.stove.studio.core.domain.SubmissionStatus;
+import com.stove.studio.core.domain.submission.Submission;
+import com.stove.studio.core.domain.submission.SubmissionGate;
+import com.stove.studio.core.domain.submission.SubmissionGateStatus;
+import com.stove.studio.core.domain.submission.SubmissionStatus;
 import java.util.List;
 
 /** 창작자에게 보여 주는 심사 진행 상황. 운영용 심사 API의 권한을 우회하지 않는다. */

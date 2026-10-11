@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.InternalTesterGrant;
-import com.stove.studio.core.domain.ReleaseChannel;
+import com.stove.studio.core.domain.access.InternalTesterGrant;
+import com.stove.studio.core.domain.release.ReleaseChannel;
 
 public record TesterGrantResponse(Long grantId, Long gameId, String testerSubject,
                                   ReleaseChannel channel, boolean active) {

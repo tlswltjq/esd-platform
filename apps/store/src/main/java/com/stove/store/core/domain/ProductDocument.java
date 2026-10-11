@@ -29,12 +29,16 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 @Document(indexName = "stove-products")
 public class ProductDocument {
 
+    /** 할인 일정 JSON을 변환하는 매퍼. */
     private static final ObjectMapper PROMOTION_MAPPER = new ObjectMapper().findAndRegisterModules();
+    /** 할인 일정 JSON을 복원할 목록 타입. */
     private static final TypeReference<List<PromotionWindow>> PROMOTION_TYPE = new TypeReference<>() {};
 
+    /** Catalog 상품 ID를 문자열로 저장한 검색 문서 키. */
     @Id
     private String id;
 
+    /** 서비스 간 상품을 연결하는 고유 코드. */
     @Field(type = FieldType.Keyword)
     private String productCode;
 
@@ -42,54 +46,71 @@ public class ProductDocument {
     @Field(type = FieldType.Text)
     private String name;
 
+    /** 판매자를 나타내는 워크스페이스 식별자. */
     @Field(type = FieldType.Long)
     private Long sellerId;
 
+    /** 상품 한 개의 가격으로, 최소 화폐 단위의 정수. */
     @Field(type = FieldType.Long)
     private Long price;
 
+    /** 가격 계산에 사용할 할인 행사 일정 JSON. */
     @Field(type = FieldType.Text, index = false)
     private String promotionScheduleJson;
 
+    /** 금액의 통화 코드. */
     @Field(type = FieldType.Keyword)
     private String currency;
 
+    /** Catalog에서 전달받은 상품 판매 상태. */
     @Field(type = FieldType.Keyword)
     private String status;
 
+    /** 상점 조회 결과에 노출할 수 있는지 여부. */
     @Field(type = FieldType.Boolean)
     private Boolean visible;
 
+    /** 확정된 이용 등급 코드. */
     @Field(type = FieldType.Keyword)
     private String ratingCode;
 
+    /** 대상 릴리스 식별자. */
     @Field(type = FieldType.Long)
     private Long releaseId;
 
+    /** 배포 파일을 나타내는 빌드 식별자. */
     @Field(type = FieldType.Long)
     private Long buildId;
 
+    /** 상점 소개 자료 판본의 식별자. */
     @Field(type = FieldType.Long)
     private Long metadataRevision;
 
+    /** 기본 게임·체험판·DLC·에디션·번들 구분. */
     @Field(type = FieldType.Keyword)
     private String productKind;
 
+    /** 파생 상품이 연결되는 원본 상품 코드. */
     @Field(type = FieldType.Keyword)
     private String parentProductCode;
 
+    /** 에디션 구분을 위해 표시하는 이름. */
     @Field(type = FieldType.Keyword)
     private String editionName;
 
+    /** 번들에 포함된 상품 코드 목록. */
     @Field(type = FieldType.Keyword)
     private List<String> bundleProductCodes;
 
+    /** 공개된 상점 소개 자료의 스냅샷. */
     @Field(type = FieldType.Object)
     private StorefrontSnapshot storefront;
 
+    /** 상품 사본에 전달하는 변경 순번. */
     @Field(type = FieldType.Long)
     private long projectionVersion;
 
+    /** 검색용 상품 사본을 갱신한 시각. */
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
     private Instant indexedAt;
 

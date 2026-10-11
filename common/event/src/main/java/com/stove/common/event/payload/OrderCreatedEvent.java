@@ -7,7 +7,16 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** order → payment : 결제 대기 주문이 생성됨 */
+/**
+ *  order → payment : 결제 대기 주문이 생성됨
+ *
+ * @param eventId 서비스 간 전달 시 유지하는 이벤트 고유 식별자.
+ * @param occurredAt 업무 행동을 기록한 시각.
+ * @param orderNo 주문·결제·이용권·정산을 연결하는 주문번호.
+ * @param memberId 구매자를 식별하는 계정 ID.
+ * @param totalAmount 각 주문 항목의 실결제액을 합산한 총액.
+ * @param lines 구매 시점의 상품·가격·정산 조건을 담은 항목 목록.
+ */
 public record OrderCreatedEvent(
         String eventId,
         Instant occurredAt,

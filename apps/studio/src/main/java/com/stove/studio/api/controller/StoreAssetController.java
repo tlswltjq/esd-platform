@@ -1,12 +1,12 @@
 package com.stove.studio.api.controller;
 
 import com.stove.common.core.response.ApiResponse;
-import com.stove.studio.core.service.StoreAssetService;
-import com.stove.studio.core.domain.StoreAsset;
-import com.stove.studio.core.service.WorkspaceService;
+import com.stove.studio.core.domain.revision.StoreAsset;
+import com.stove.studio.core.service.project.WorkspaceService;
+import com.stove.studio.core.service.revision.StoreAssetService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import java.net.URI;
 import java.io.IOException;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;

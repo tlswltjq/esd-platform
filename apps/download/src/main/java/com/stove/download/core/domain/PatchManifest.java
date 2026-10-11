@@ -22,30 +22,42 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "patch_manifest")
 public class PatchManifest {
 
+    /** 상품 코드와 릴리스 ID를 결합한 배포 문서 키. */
     @Id
     private String id;
 
+    /** 서비스 간 상품을 연결하는 고유 코드. */
     @Indexed
     private String productCode;
 
+    /** Studio 게임 프로젝트 식별자. */
     private Long gameId;
 
+    /** 대상 릴리스 식별자. */
     private Long releaseId;
 
+    /** 배포 파일을 나타내는 빌드 식별자. */
     private Long buildId;
 
+    /** 상점 소개 자료 판본의 식별자. */
     private Long metadataRevision;
 
+    /** 배포 파일의 제품 버전 문자열. */
     private String version;
 
+    /** 배포 파일의 크기(바이트). */
     private long fileSize;
 
+    /** 파일 무결성 검증에 사용하는 체크섬. */
     private String checksum;
 
+    /** 파일이 보관된 객체 저장소 경로. */
     private String storagePath;
 
+    /** 플랫폼·아키텍처별 배포 파일 목록. */
     private List<BuildVariant> buildVariants;
 
+    /** 릴리스가 공개된 시각. */
     private Instant releasedAt;
 
     public static String documentId(String productCode, Long releaseId) {

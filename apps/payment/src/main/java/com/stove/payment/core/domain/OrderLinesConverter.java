@@ -14,7 +14,9 @@ import java.util.List;
 @Converter
 public class OrderLinesConverter implements AttributeConverter<List<OrderLine>, String> {
 
+    /** 도메인 자료를 JSON으로 변환하거나 복원하는 매퍼. */
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    /** 주문 항목 목록을 JSON에서 복원할 대상 타입. */
     private static final TypeReference<List<OrderLine>> TYPE = new TypeReference<>() {
     };
 

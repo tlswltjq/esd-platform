@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.CreatedUploadSession;
+import com.stove.studio.core.domain.build.CreatedUploadSession;
 import java.time.Instant;
 import java.util.List;
 

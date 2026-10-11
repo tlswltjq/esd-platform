@@ -5,7 +5,7 @@ import com.stove.common.event.EventType;
 import com.stove.common.event.Topics;
 import com.stove.common.event.kafka.EventEnvelope;
 import com.stove.common.event.payload.UserRegisteredEvent;
-import com.stove.studio.core.service.WorkspaceService;
+import com.stove.studio.core.service.project.WorkspaceService;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;

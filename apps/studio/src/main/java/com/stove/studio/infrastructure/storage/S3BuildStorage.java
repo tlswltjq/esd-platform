@@ -1,10 +1,10 @@
 package com.stove.studio.infrastructure.storage;
 
-import com.stove.studio.core.domain.MultipartUploadTicket;
-import com.stove.studio.core.domain.StoredObjectInfo;
-import com.stove.studio.core.domain.UploadPartUrl;
-import com.stove.studio.core.domain.UploadTicket;
-import com.stove.studio.core.domain.UploadedPart;
+import com.stove.studio.core.domain.build.MultipartUploadTicket;
+import com.stove.studio.core.domain.build.StoredObjectInfo;
+import com.stove.studio.core.domain.build.UploadPartUrl;
+import com.stove.studio.core.domain.build.UploadTicket;
+import com.stove.studio.core.domain.build.UploadedPart;
 import com.stove.studio.core.port.BuildStorage;
 import jakarta.annotation.PostConstruct;
 import java.net.URI;
@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -30,13 +31,12 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
+import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.core.sync.RequestBody;
 
 /**
  * {@link BuildStorage} 의 S3 호환 어댑터(로컬 MinIO / 운영 S3).

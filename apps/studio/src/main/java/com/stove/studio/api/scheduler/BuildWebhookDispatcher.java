@@ -1,6 +1,6 @@
 package com.stove.studio.api.scheduler;
 
-import com.stove.studio.core.service.BuildWebhookService;
+import com.stove.studio.core.service.notification.BuildWebhookService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;

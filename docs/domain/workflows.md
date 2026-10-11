@@ -31,7 +31,7 @@ flowchart LR
 
 **중단·예외:** 초안 상점 자료, 다른 프로젝트 자료, 검증 중인 빌드로 제출할 수 없다. 한 유형의 승인이 전체 승인으로 대체되지 않는다. smoke test 실패는 `SMOKE_TEST_FAILED`로 남고 공개되지 않는다. Catalog·Store·Download는 비동기로 반영하므로 한 화면의 성공 응답만으로 모든 사본 반영을 확인하지 않는다.
 
-근거: [SubmissionService](../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionService.java), [ReleaseService](../../apps/studio/src/main/java/com/stove/studio/core/service/ReleaseService.java), [ProductCommandService](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductCommandService.java). [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 이미지·빌드 업로드, 제출·수정 요청·재제출, 전체 승인, LIVE 반영, 정상 롤백과 채널 승격을 검증한다. 잘못된 승인 스냅샷·실패 롤백 등 남은 테스트 공백은 [Q11](open-questions.md#q11)에 기록한다.
+근거: [SubmissionService](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ReleaseService](../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ProductCommandService](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductCommandService.java). [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 이미지·빌드 업로드, 제출·수정 요청·재제출, 전체 승인, LIVE 반영, 정상 롤백과 채널 승격을 검증한다. 잘못된 승인 스냅샷·실패 롤백 등 남은 테스트 공백은 [Q11](open-questions.md#q11)에 기록한다.
 
 ## 심사자: 제출된 자료를 유형별로 판단한다
 
@@ -102,6 +102,6 @@ flowchart LR
 | `PaymentCancelled` | PG 환불 완료를 기록함 | Order 취소, License 회수, Settlement 환불 원장 기록 |
 | `LicenseIssueFailed` | 이용권 지급이 최종 실패함 | Payment 보상 환불 경로의 시작점 |
 
-구현 계약: [이벤트 payload](../../common/event/src/main/java/com/stove/common/event/payload/), [Studio의 심사 결과 반영](../../apps/studio/src/main/java/com/stove/studio/core/service/SubmissionReviewProjectionService.java), [Download 리스너](../../apps/download/src/main/java/com/stove/download/api/listener/DownloadEventListener.java).
+구현 계약: [이벤트 payload](../../common/event/src/main/java/com/stove/common/event/payload/), [Studio의 심사 결과 반영](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionReviewProjectionService.java), [Download 리스너](../../apps/download/src/main/java/com/stove/download/api/listener/DownloadEventListener.java).
 
 `GameRegistered → ReviewApproved/ReviewRejected`, `BuildUploaded`는 프로젝트 단위의 기존 호환 경로다. 새 자료·빌드 묶음의 심사·LIVE 공개를 설명할 때 이 이벤트만으로 대체하지 않는다. 경로 유지·폐기 결정은 [Q2](open-questions.md#q2), `ReleaseRolledBack`의 성공 의미는 [Q10](open-questions.md#q10)에 남긴다.

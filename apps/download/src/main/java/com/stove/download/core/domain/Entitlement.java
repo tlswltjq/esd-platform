@@ -20,20 +20,27 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "entitlement")
 public class Entitlement {
 
+    /** 회원 ID와 상품 ID를 결합한 이용권 사본의 문서 키. */
     @Id
     private String id;
 
+    /** 구매자를 식별하는 계정 ID. */
     @Indexed
     private Long memberId;
 
+    /** Catalog 판매 상품 식별자. */
     private Long productId;
 
+    /** 주문·결제·이용권·정산을 연결하는 주문번호. */
     private String orderNo;
 
+    /** 현재 유효하여 사용할 수 있는지 여부. */
     private boolean active;
 
+    /** 이용 권한을 부여한 시각. */
     private Instant grantedAt;
 
+    /** 이용 권한 또는 인증 정보를 회수한 시각. */
     private Instant revokedAt;
 
     public static String documentId(Long memberId, Long productId) {

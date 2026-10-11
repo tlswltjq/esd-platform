@@ -2,7 +2,7 @@ package com.stove.studio.infrastructure.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.studio.core.domain.UploadTicket;
+import com.stove.studio.core.domain.build.UploadTicket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

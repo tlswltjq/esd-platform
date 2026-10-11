@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.NewBuild;
+import com.stove.studio.core.domain.build.NewBuild;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 

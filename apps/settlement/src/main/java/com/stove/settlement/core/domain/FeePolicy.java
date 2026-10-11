@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class FeePolicy {
 
+    /** 자체 판매자 구분과 입점 수수료율 설정. */
     private final SettlementProperties properties;
 
     public SaleType saleTypeOf(Long sellerId) {

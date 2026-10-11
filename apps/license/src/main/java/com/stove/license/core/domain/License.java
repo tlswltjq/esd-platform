@@ -30,31 +30,40 @@ import lombok.NoArgsConstructor;
                 columnNames = {"orderNo", "productId"}))
 public class License extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 주문·결제·이용권·정산을 연결하는 주문번호. */
     @Column(nullable = false, length = 40)
     private String orderNo;
 
+    /** 구매자를 식별하는 계정 ID. */
     @Column(nullable = false)
     private Long memberId;
 
+    /** Catalog 판매 상품 식별자. */
     @Column(nullable = false)
     private Long productId;
 
+    /** 발급한 이용권을 구별하는 고유 키. */
     @Column(nullable = false, unique = true, length = 40)
     private String licenseKey;
 
+    /** 이용권을 보유 중인지 회수되었는지의 구분. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private LicenseStatus status;
 
+    /** 구매에 따른 이용권을 발급한 시각. */
     @Column(nullable = false)
     private Instant issuedAt;
 
+    /** 이용 권한 또는 인증 정보를 회수한 시각. */
     private Instant revokedAt;
 
+    /** 이용권을 회수한 사유. */
     @Column(length = 200)
     private String revokeReason;
 

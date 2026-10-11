@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.NewProject;
-import com.stove.studio.core.domain.ProductKind;
+import com.stove.studio.core.domain.project.NewProject;
+import com.stove.studio.core.domain.project.ProductKind;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;

@@ -6,7 +6,7 @@
 
 ## ProjectCredential — 프로젝트 작업용 인증 정보
 
-저장: `project_credential`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/ProjectCredential.java)
+저장: `project_credential`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/access/ProjectCredential.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -22,11 +22,11 @@
 
 **만들고 쓰는 때:** 창작자가 프로젝트용 인증 정보를 발급하거나, CI의 OIDC 토큰을 검증해 제한된 인증 정보로 교환한다. OIDC는 “외부 CI가 이 실행의 신원을 증명하는 방식”으로 읽으면 된다. 요청 시 프로젝트 범위·폐기·만료 등을 확인하고 사용 시각을 갱신한다. 기본 발급과 신뢰 정책을 통한 발급의 권한이 동일하다고 가정하지 않는다.
 
-[IssuedProjectCredential](../../../apps/studio/src/main/java/com/stove/studio/core/domain/IssuedProjectCredential.java)은 `credential`과 원문 `token`을 함께 돌려주는 발급 결과다. 저장 모델과 발급 응답을 분리해 둔다. 근거: [ProjectCredentialService](../../../apps/studio/src/main/java/com/stove/studio/core/service/ProjectCredentialService.java), [CiOidcExchangeService](../../../apps/studio/src/main/java/com/stove/studio/core/service/CiOidcExchangeService.java).
+[IssuedProjectCredential](../../../apps/studio/src/main/java/com/stove/studio/core/domain/access/IssuedProjectCredential.java)은 `credential`과 원문 `token`을 함께 돌려주는 발급 결과다. 저장 모델과 발급 응답을 분리해 둔다. 근거: [ProjectCredentialService](../../../apps/studio/src/main/java/com/stove/studio/core/service/access/ProjectCredentialService.java), [CiOidcExchangeService](../../../apps/studio/src/main/java/com/stove/studio/core/service/access/CiOidcExchangeService.java).
 
 ## CiTrustPolicy — 신뢰할 CI 실행의 조건
 
-저장: `ci_trust_policy`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/CiTrustPolicy.java)
+저장: `ci_trust_policy`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/access/CiTrustPolicy.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -35,11 +35,11 @@
 | `refPattern`, `platform` (`String`) | 허용할 소스 참조 패턴과 대상 플랫폼 |
 | `protectedRefPattern`, `requiredEnvironment` (`String`) | 출시 권한 부여에 추가로 필요한 보호된 소스 참조·실행 환경 |
 
-**만들고 쓰는 때:** 창작자가 신뢰 정책을 등록하고, CI 인증 교환 시 해당 정책을 대조한다. 일치한 실행에만 `ProjectCredential`을 발급하며 출시 권한은 추가 조건으로 결정한다. [CiTrustPolicyService](../../../apps/studio/src/main/java/com/stove/studio/core/service/CiTrustPolicyService.java)
+**만들고 쓰는 때:** 창작자가 신뢰 정책을 등록하고, CI 인증 교환 시 해당 정책을 대조한다. 일치한 실행에만 `ProjectCredential`을 발급하며 출시 권한은 추가 조건으로 결정한다. [CiTrustPolicyService](../../../apps/studio/src/main/java/com/stove/studio/core/service/access/CiTrustPolicyService.java)
 
 ## InternalTesterGrant — 내부 채널 설치 권한
 
-저장: `internal_tester_grant`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/InternalTesterGrant.java)
+저장: `internal_tester_grant`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/access/InternalTesterGrant.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -48,11 +48,11 @@
 | `channel` (`ReleaseChannel`) | 접근할 `DEV`, `TEST`, `STAGE` 채널. LIVE는 허용하지 않음 |
 | `active` (`boolean`) | 현재 유효한지. 재활성화·회수 가능 |
 
-**만들고 쓰는 때:** 창작자가 테스터·프로젝트·채널별 권한을 부여한다. 설치 요청은 해당 빌드가 채널에 공개됐는지와 유효한 권한이 있는지를 확인한다. 결과 [TesterInstallation](../../../apps/studio/src/main/java/com/stove/studio/core/domain/TesterInstallation.java)은 `buildId`, `channel`, `downloadUrl`, `expiresAt`을 담는다. 고객의 `License` 구매 흐름과 별도다. [InternalTesterService](../../../apps/studio/src/main/java/com/stove/studio/core/service/InternalTesterService.java)
+**만들고 쓰는 때:** 창작자가 테스터·프로젝트·채널별 권한을 부여한다. 설치 요청은 해당 빌드가 채널에 공개됐는지와 유효한 권한이 있는지를 확인한다. 결과 [TesterInstallation](../../../apps/studio/src/main/java/com/stove/studio/core/domain/access/TesterInstallation.java)은 `buildId`, `channel`, `downloadUrl`, `expiresAt`을 담는다. 고객의 `License` 구매 흐름과 별도다. [InternalTesterService](../../../apps/studio/src/main/java/com/stove/studio/core/service/access/InternalTesterService.java)
 
 ## BuildWebhookSubscription — 빌드 결과를 받을 주소
 
-저장: `build_webhook_subscription`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/BuildWebhookSubscription.java)
+저장: `build_webhook_subscription`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/notification/BuildWebhookSubscription.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -61,11 +61,11 @@
 | `encryptedSecret` (`String`) | 통보 서명에 사용할 비밀값의 암호문 |
 | `active` (`boolean`) | 새 결과를 통보할 유효한 구독인지 |
 
-**만들고 쓰는 때:** 창작자가 외부 수신 주소를 등록한다. Webhook은 상태 변경 시 지정된 주소로 서버가 HTTP 요청을 보내는 알림 방식이다. 등록 결과 [RegisteredBuildWebhook](../../../apps/studio/src/main/java/com/stove/studio/core/domain/RegisteredBuildWebhook.java)은 `subscription`, `signingSecret`을 반환한다. 구독 설정과 개별 발송 기록은 분리한다.
+**만들고 쓰는 때:** 창작자가 외부 수신 주소를 등록한다. Webhook은 상태 변경 시 지정된 주소로 서버가 HTTP 요청을 보내는 알림 방식이다. 등록 결과 [RegisteredBuildWebhook](../../../apps/studio/src/main/java/com/stove/studio/core/domain/notification/RegisteredBuildWebhook.java)은 `subscription`, `signingSecret`을 반환한다. 구독 설정과 개별 발송 기록은 분리한다.
 
 ## BuildWebhookDelivery — 알림 한 건의 발송 진행
 
-저장: `build_webhook_delivery`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/BuildWebhookDelivery.java)
+저장: `build_webhook_delivery`. [모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/notification/BuildWebhookDelivery.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -76,6 +76,6 @@
 | `nextAttemptAt`, `deliveredAt` (`Instant`) | 다음 시도 예약·성공 시각 |
 | `lastError` (`String`) | 마지막 실패 설명 |
 
-**만들고 쓰는 때:** 빌드 결과가 생기면 활성 구독별로 발송할 행을 만든다. 예약된 발송을 실행하고 HTTP 성공/실패를 기록한다. 실패는 간격을 두고 재시도하며 현재 8회 시도부터 최종 실패다. 빌드 검증 성공과 알림 전송 성공은 별개 상태다. [BuildWebhookService](../../../apps/studio/src/main/java/com/stove/studio/core/service/BuildWebhookService.java)
+**만들고 쓰는 때:** 빌드 결과가 생기면 활성 구독별로 발송할 행을 만든다. 예약된 발송을 실행하고 HTTP 성공/실패를 기록한다. 실패는 간격을 두고 재시도하며 현재 8회 시도부터 최종 실패다. 빌드 검증 성공과 알림 전송 성공은 별개 상태다. [BuildWebhookService](../../../apps/studio/src/main/java/com/stove/studio/core/service/notification/BuildWebhookService.java)
 
 Studio의 `AuditLog`는 공개·예약·권한 변경 같은 업무 행동을 남긴다. 필드와 용도는 [공통 감사 기록](shared.md#audit-log)을 참고한다.

@@ -20,38 +20,68 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/**
+ * 제출물의 한 심사 유형에 대한 배정·판단·재검토 기록.
+ */
 @Entity
 @Getter
 @Table(name = "review_case", uniqueConstraints =
         @UniqueConstraint(name = "uk_review_case_submission_type", columnNames = {"submissionId", "reviewType"}))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ReviewCase extends BaseTimeEntity {
+    /** 저장된 대상을 구별하는 식별자. */
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    /** 심사할 자료와 빌드를 묶은 제출물 식별자. */
     @Column(nullable = false) private Long submissionId;
+    /** 등급·상점·빌드 등 심사할 업무 유형. */
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) private ReviewType reviewType;
+    /** 해당 심사 유형의 접수·승인·보완 등 진행 상태. */
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) private ReviewCaseStatus status;
+    /** 심사 결과를 확정한 담당자. */
     @Column(length = 100) private String decidedBy;
+    /** 처리 결과 또는 요청 사유를 구분하는 코드. */
     @Column(length = 30) private String reasonCode;
+    /** 창작자에게 공개하는 심사 피드백. */
     @Column(length = 1000) private String externalFeedback;
+    /** 심사 담당자만 사용하는 내부 메모. */
     @Column(length = 2000) private String internalMemo;
+    /** 심사 판단의 근거 자료 URL. */
     @Column(length = 500) private String evidenceUrl;
+    /** 심사 사건을 배정받은 담당자. */
     @Column(length = 100) private String assignedTo;
+    /** 심사 담당자를 배정한 시각. */
     private Instant assignedAt;
+    /** 심사를 완료해야 하는 기한. */
     @Column(nullable = false) private Instant dueAt;
+    /** 심사 점검 항목과 확인 결과를 담은 JSON. */
     @Column(nullable = false, columnDefinition = "TEXT") private String checklistJson;
+    /** 재검토를 포함한 심사 차수. */
     @Column(nullable = false) private int reviewRound;
+    /** 창작자가 재검토를 요청한 사유. */
     @Column(length = 1000) private String appealReason;
+    /** 자체등급분류 또는 외부 등급분류 경로. */
     @Column(length = 30) private String ratingPath;
+    /** 설문과 정책으로 산출한 권장 이용 등급. */
     @Column(name = "target_rating_code", length = 10) private String recommendedRatingCode;
+    /** 확정된 이용 등급 코드. */
     @Column(length = 10) private String ratingCode;
+    /** 등급분류 결정의 증명 번호. */
     @Column(length = 100) private String certificationNumber;
+    /** 등급분류 결과를 발급한 기관. */
     @Column(length = 100) private String issuer;
+    /** 증명 또는 이용권을 발급한 시각. */
     private Instant issuedAt;
+    /** 자료 또는 정책이 적용되는 국가 코드. */
     @Column(length = 2) private String country;
+    /** 외부 등급분류 기관에 접수한 신청 번호. */
     @Column(name = "external_submission_id", length = 100) private String externalApplicationNumber;
+    /** 외부 등급분류 기관에 신청한 시각. */
     private Instant externalSubmittedAt;
+    /** 외부 등급분류 결과의 증빙 URL. */
     @Column(length = 500) private String externalEvidenceUrl;
+    /** 심사 결정을 확정한 시각. */
     private Instant decidedAt;
+    /** 동시 수정 충돌을 감지하는 낙관적 잠금 버전. */
     @Version @Column(nullable = false) private long entityVersion;
 
     private ReviewCase(Long submissionId, ReviewType reviewType) {
@@ -274,6 +304,15 @@ public class ReviewCase extends BaseTimeEntity {
         }
     }
 
+    /**
+     * 등급 심사 승인 시 확정하는 등급과 발급 증명.
+     *
+     * @param ratingCode 확정된 이용 등급 코드.
+     * @param certificationNumber 등급분류 결정의 증명 번호.
+     * @param issuer 등급분류 결과를 발급한 기관.
+     * @param issuedAt 증명 또는 이용권을 발급한 시각.
+     * @param country 자료 또는 정책이 적용되는 국가 코드.
+     */
     public record RatingDecision(String ratingCode, String certificationNumber,
                                  String issuer, Instant issuedAt, String country) {
     }

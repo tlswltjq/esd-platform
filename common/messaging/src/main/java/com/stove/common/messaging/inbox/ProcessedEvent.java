@@ -23,19 +23,24 @@ import lombok.NoArgsConstructor;
         uniqueConstraints = @UniqueConstraint(name = "uk_processed_event", columnNames = {"eventId", "consumerGroup"}))
 public class ProcessedEvent {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 서비스 간 전달 시 유지하는 이벤트 고유 식별자. */
     @Column(nullable = false, length = 64)
     private String eventId;
 
+    /** 이벤트를 처리한 소비자 그룹 이름. */
     @Column(nullable = false, length = 100)
     private String consumerGroup;
 
+    /** 전달하거나 처리한 업무 이벤트 종류. */
     @Column(nullable = false, length = 60)
     private String eventType;
 
+    /** 이벤트의 업무 처리를 기록한 시각. */
     @Column(nullable = false)
     private Instant processedAt;
 

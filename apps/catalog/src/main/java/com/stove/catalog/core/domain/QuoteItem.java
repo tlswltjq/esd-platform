@@ -14,6 +14,9 @@ import com.stove.common.core.error.ErrorCode;
  * <p>같은 검증이 {@code QuoteRequest.Item} 에도 {@code @Min(1)} 로 있지만 그것은 HTTP 어댑터의 몫이다.
  * 어댑터는 늘어날 수 있고 도메인 규칙은 도메인이 지켜야 한다 —
  * 값 객체가 애초에 잘못된 상태로 존재하지 못하게 막는다.
+ *
+ * @param productId Catalog 판매 상품 식별자.
+ * @param quantity 구매할 상품 수량.
  */
 public record QuoteItem(Long productId, int quantity) {
 

@@ -10,13 +10,20 @@ import java.util.Set;
  * </pre>
  */
 public enum ReviewStatus {
+    /** 심사 요청을 접수한 상태. */
     REQUESTED,
+    /** 담당자가 심사를 진행 중인 상태. */
     IN_REVIEW,
+    /** 심사 또는 승인 처리가 완료된 상태. */
     APPROVED,
+    /** 심사에서 반려된 상태. */
     REJECTED;
 
+    /** 접수 상태에서 전이할 수 있는 심사 상태 집합. */
     private static final Set<ReviewStatus> FROM_REQUESTED = Set.of(IN_REVIEW);
+    /** 심사 중 상태에서 전이할 수 있는 심사 상태 집합. */
     private static final Set<ReviewStatus> FROM_IN_REVIEW = Set.of(APPROVED, REJECTED);
+    /** 반려 상태에서 전이할 수 있는 심사 상태 집합. */
     private static final Set<ReviewStatus> FROM_REJECTED = Set.of(REQUESTED);
 
     public boolean canTransitTo(ReviewStatus next) {

@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.CiTrustPolicy;
+import com.stove.studio.core.domain.access.CiTrustPolicy;
 
 public record CiTrustPolicyResponse(Long policyId, Long gameId, String provider, String repository,
                                     String refPattern, String platform, String protectedRefPattern,

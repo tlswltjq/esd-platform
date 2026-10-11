@@ -1,7 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.BuildWebhookSubscription;
-import com.stove.studio.core.domain.RegisteredBuildWebhook;
+import com.stove.studio.core.domain.notification.BuildWebhookSubscription;
+import com.stove.studio.core.domain.notification.RegisteredBuildWebhook;
 
 public record BuildWebhookResponse(Long subscriptionId, Long gameId, String endpointUrl,
                                    boolean active, String signingSecret) {

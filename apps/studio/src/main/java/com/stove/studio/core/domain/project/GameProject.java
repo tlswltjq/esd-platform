@@ -1,0 +1,153 @@
+package com.stove.studio.core.domain.project;
+
+import com.stove.common.core.error.BusinessException;
+import com.stove.common.core.error.ErrorCode;
+import com.stove.common.jpa.BaseTimeEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+/**
+ * 창작자의 게임 프로젝트(셀프 퍼블리싱 단위).
+ * 상품 메타데이터의 원본이며, 심의를 통과하면 catalog 가 이 값으로 상품 마스터를 만든다.
+ */
+@Entity
+@Getter
+@Table(name = "game_project")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class GameProject extends BaseTimeEntity {
+
+    /** 저장된 대상을 구별하는 식별자. */
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    /** 창작자가 정하는 상품 코드. 서비스 경계를 넘는 자연 키로 쓰인다. */
+    @Column(nullable = false, unique = true, length = 50)
+    private String productCode;
+
+    /** 게임 또는 상점 페이지에 표시할 제목. */
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    /** 개인 워크스페이스 ID. 하위 commerce 이벤트에서는 서버가 정한 sellerId 로 투영한다. */
+    @Column(name = "workspace_id", nullable = false)
+    private Long sellerId;
+
+    /** 상품 한 개의 가격으로, 최소 화폐 단위의 정수. */
+    @Column(nullable = false)
+    private long price;
+
+    /** 금액의 통화 코드. */
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    /** 자체등급분류 경로로 신청하는지 여부. */
+    @Column(nullable = false)
+    private boolean selfRated;
+
+    /** 기존 프로젝트 단위 심사의 진행 상태. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ProjectStatus status;
+
+    /** 확정된 이용 등급 코드. */
+    @Column(length = 10)
+    private String ratingCode;
+
+    /** 심사 반려 사유에 대한 설명. */
+    @Column(length = 200)
+    private String rejectReason;
+
+    /** 기본 게임·체험판·DLC·에디션·번들 구분. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ProductKind productKind;
+
+    /** 파생 프로젝트가 참조하는 원본 게임 프로젝트 식별자. */
+    private Long parentGameId;
+
+    /** 에디션 구분을 위해 표시하는 이름. */
+    @Column(length = 100)
+    private String editionName;
+
+    private GameProject(String productCode, String title, Long sellerId, long price, String currency,
+                        boolean selfRated) {
+        this.productCode = productCode;
+        this.title = title;
+        this.sellerId = sellerId;
+        this.price = price;
+        this.currency = currency;
+        this.selfRated = selfRated;
+        this.status = ProjectStatus.DRAFT;
+        this.productKind = ProductKind.BASIC;
+    }
+
+    public static GameProject create(String productCode, String title, Long sellerId, long price,
+                                     String currency, boolean selfRated) {
+        return new GameProject(productCode, title, sellerId, price, currency, selfRated);
+    }
+
+    public static GameProject create(NewProject request) {
+        GameProject project = new GameProject(request.productCode(), request.title(), request.sellerId(),
+                request.price(), request.currency(), request.selfRated());
+        project.productKind = request.productKind() == null ? ProductKind.BASIC : request.productKind();
+        project.parentGameId = request.parentGameId();
+        project.editionName = request.editionName();
+        return project;
+    }
+
+    public void submit() {
+        if (status == ProjectStatus.SUBMITTED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "이미 심의 신청된 프로젝트입니다.");
+        }
+        if (status == ProjectStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.CONFLICT, "이미 승인된 프로젝트입니다.");
+        }
+        this.status = ProjectStatus.SUBMITTED;
+        this.rejectReason = null;
+    }
+
+    /**
+     * 심의 결과 반영. <b>신청한 건에 대해서만</b> 의미가 있다.
+     *
+     * <p>{@link #submit()} 과 달리 예외를 던지지 않는다 — 이 경로는 컨슈머가 부른다.
+     * 지각 이벤트에 예외를 던지면 리스너 밖으로 나가 그 파티션이 멈추는데,
+     * 상태는 재시도로 바뀌지 않으므로 영원히 풀리지 않는다.
+     *
+     * @return 상태가 실제로 바뀌었으면 true
+     */
+    public boolean approve(String ratingCode) {
+        if (status != ProjectStatus.SUBMITTED) {
+            return false;
+        }
+        this.status = ProjectStatus.APPROVED;
+        this.ratingCode = ratingCode;
+        this.rejectReason = null;
+        return true;
+    }
+
+    /** @see #approve(String) 지각·중복 이벤트를 예외 없이 흘려보내는 이유는 같다. */
+    public boolean reject(String reason) {
+        if (status != ProjectStatus.SUBMITTED) {
+            return false;
+        }
+        this.status = ProjectStatus.REJECTED;
+        this.rejectReason = reason;
+        return true;
+    }
+
+    public void requireOwner(Long sellerId) {
+        if (!this.sellerId.equals(sellerId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+}

@@ -4,9 +4,13 @@ package com.stove.payment.core.domain;
  * 취소 1단계의 결과. 엔티티가 아니라 값이다.
  *
  * @param pgRefundRequired PG 환불 요청이 필요한가. 이미 취소된 건이거나 중복 이벤트면 false
+ *
+ * @param pgTxId PG에 사전등록한 거래 식별자.
+ * @param amount 결제 또는 환불 대상 금액(최소 화폐 단위).
  */
 public record PaymentCancellation(boolean pgRefundRequired, String pgTxId, long amount) {
 
+    /** 외부 PG 환불 호출이 필요 없는 처리 결과. */
     private static final PaymentCancellation NONE = new PaymentCancellation(false, null, 0L);
 
     /** 할 일이 없다 — 이미 취소됐거나, 중복 이벤트거나, 상태가 어긋나 보상을 건너뛴 경우 */

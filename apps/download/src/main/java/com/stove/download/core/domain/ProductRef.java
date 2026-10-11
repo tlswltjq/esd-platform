@@ -20,14 +20,18 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "product_ref")
 public class ProductRef {
 
+    /** 문서 키로 사용하는 상품 코드. */
     @Id
     private String id;
 
+    /** Catalog 판매 상품 식별자. */
     @Indexed
     private Long productId;
 
+    /** 조회 화면에 표시할 이름. */
     private String name;
 
+    /** Catalog에서 전달받은 상품 판매 상태. */
     private String status;
 
     /** Catalog가 현재 노출하는 공개 릴리스. 매니페스트와 일치해야 티켓을 발급한다. */

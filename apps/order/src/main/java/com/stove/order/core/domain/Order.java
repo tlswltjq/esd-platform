@@ -31,6 +31,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends BaseTimeEntity {
 
+    /** 저장된 대상을 구별하는 식별자. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -39,28 +40,37 @@ public class Order extends BaseTimeEntity {
     @Column(nullable = false, unique = true, length = 40)
     private String orderNo;
 
+    /** 구매자를 식별하는 계정 ID. */
     @Column(nullable = false)
     private Long memberId;
 
+    /** 주문의 결제 대기·완료·취소·실패·만료 상태. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OrderStatus status;
 
+    /** 각 주문 항목의 실결제액을 합산한 총액. */
     @Column(nullable = false)
     private long totalAmount;
 
+    /** 금액의 통화 코드. */
     @Column(nullable = false, length = 3)
     private String currency;
 
+    /** 결제 완료를 확정한 시각. */
     private Instant paidAt;
 
+    /** 취소 처리를 확정한 시각. */
     private Instant canceledAt;
 
+    /** 주문 또는 결제를 취소한 사유. */
     @Column(length = 200)
     private String cancelReason;
 
+    /** 결제 실패를 반영한 시각. */
     private Instant failedAt;
 
+    /** 결제 실패에 대한 설명. */
     @Column(length = 200)
     private String failReason;
 
@@ -70,6 +80,7 @@ public class Order extends BaseTimeEntity {
      */
     private Instant expiredAt;
 
+    /** 주문과 함께 저장하는 구매 항목 목록. */
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 

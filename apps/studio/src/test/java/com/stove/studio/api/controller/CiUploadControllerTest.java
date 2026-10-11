@@ -7,8 +7,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.stove.common.core.error.BusinessException;
 import com.stove.studio.api.controller.dto.CreateUploadSessionRequest;
 import com.stove.studio.config.ProjectCredentialPrincipal;
-import com.stove.studio.core.service.BuildValidationDispatcherService;
-import com.stove.studio.core.service.UploadSessionService;
+import com.stove.studio.core.service.build.BuildValidationDispatcherService;
+import com.stove.studio.core.service.build.UploadSessionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
