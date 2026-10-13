@@ -1,11 +1,11 @@
 package com.stove.review.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.GameRegisteredEvent;
-import com.stove.common.event.payload.SubmissionCreatedEvent;
-import com.stove.common.event.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
+import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
+import com.stove.common.kafka.EventEnvelope;
 import com.stove.review.core.service.ReviewService;
 import com.stove.review.core.service.SubmissionReviewService;
 import lombok.RequiredArgsConstructor;

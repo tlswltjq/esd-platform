@@ -1,5 +1,8 @@
 package com.stove.license.api.controller;
 
+import com.stove.common.security.CurrentIdentityArgumentResolver;
+import com.stove.common.web.SecurityExceptionHandler;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,8 +34,8 @@ class LibraryControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new LibraryController(licenseService))
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new CurrentIdentityArgumentResolver(), new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new SecurityExceptionHandler(), new GlobalExceptionHandler())
             .build();
 
     @Test
@@ -57,7 +60,7 @@ class LibraryControllerTest {
     @DisplayName("정상 요청은 그 회원의 라이브러리를 조회한다")
     void validRequestReachesTheService() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(Jwt.withTokenValue("test")
-                .header("alg", "none").claim("sub", "user").claim("member_id", 42L).build()));
+                .header("alg", "none").claim("sub", "user").claim("member_id", 42L).build(), java.util.List.of()));
         mockMvc.perform(get("/api/v1/library").header("X-Member-Id", 999L))
                 .andExpect(status().isOk());
 

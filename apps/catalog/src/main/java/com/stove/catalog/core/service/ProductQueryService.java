@@ -7,9 +7,10 @@ import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
 import com.stove.catalog.core.domain.Quote;
 import com.stove.catalog.core.domain.QuoteItem;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.catalog.core.domain.CatalogErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -50,7 +51,7 @@ public class ProductQueryService {
     public ProductView getProduct(Long productId) {
         return productRepository.findById(productId)
                 .map(ProductView::from)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND));
     }
 
     /**
@@ -60,27 +61,27 @@ public class ProductQueryService {
     public ProductView getProductByCode(String productCode) {
         return productRepository.findByProductCode(productCode)
                 .map(ProductView::from)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND,
                         "productCode=" + productCode));
     }
 
     /** Public detail must never reveal a review-approved product before a release is published. */
     public ProductView getPublishedProduct(Long productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND));
         return publishedView(product);
     }
 
     public ProductView getPublishedProductByCode(String productCode) {
         Product product = productRepository.findByProductCode(productCode)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND));
         return publishedView(product);
     }
 
     private ProductView publishedView(Product product) {
         ProductView view = ProductView.from(product);
         if (!view.visible()) {
-            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+            throw new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND);
         }
         return view;
     }
@@ -110,7 +111,7 @@ public class ProductQueryService {
         for (QuoteItem item : items) {
             Product product = products.get(item.productId());
             if (product == null) {
-                throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "productId=" + item.productId());
+                throw new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND, "productId=" + item.productId());
             }
             product.requirePurchasable();
             if (currency != null && !currency.equals(product.getCurrency())) {

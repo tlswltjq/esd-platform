@@ -1,7 +1,7 @@
 package com.stove.studio.core.domain.revision;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import org.springframework.stereotype.Component;
 
 /** STOVE BASIC 한국 출시의 설문 기반 등급 경로를 결정하는 버전 고정 정책. */

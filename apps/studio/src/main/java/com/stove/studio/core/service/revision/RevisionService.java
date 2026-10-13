@@ -2,8 +2,8 @@ package com.stove.studio.core.service.revision;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.revision.KoreanRatingPolicy;
 import com.stove.studio.core.domain.revision.PricingRevision;
 import com.stove.studio.core.domain.revision.PricingRevisionRepository;

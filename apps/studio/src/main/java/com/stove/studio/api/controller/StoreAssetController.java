@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.core.domain.revision.StoreAsset;
 import com.stove.studio.core.service.project.WorkspaceService;
 import com.stove.studio.core.service.revision.StoreAssetService;
@@ -11,8 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,14 +31,14 @@ public class StoreAssetController {
     @PostMapping(value = "/projects/{gameId}/assets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @SecurityRequirement(name = "oauth2", scopes = "studio")
     public ApiResponse<StoreAsset> upload(@PathVariable Long gameId,
-                                                        @AuthenticationPrincipal Jwt jwt,
+                                                        @CurrentSubject String subject,
                                                         @RequestPart("file") MultipartFile file) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         try {
             return ApiResponse.ok(assetService.upload(gameId, workspaceId, file.getBytes()));
         } catch (IOException exception) {
-            throw new com.stove.common.core.error.BusinessException(
-                    com.stove.common.core.error.ErrorCode.INVALID_REQUEST, "이미지를 읽을 수 없습니다.");
+            throw new com.stove.common.web.error.BusinessException(
+                    com.stove.common.web.error.ErrorCode.INVALID_REQUEST, "이미지를 읽을 수 없습니다.");
         }
     }
 

@@ -1,6 +1,6 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.event.payload.PromotionWindow;
+import com.stove.common.kafka.contract.payload.PromotionWindow;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

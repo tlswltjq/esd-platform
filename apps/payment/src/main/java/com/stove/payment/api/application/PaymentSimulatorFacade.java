@@ -1,7 +1,7 @@
 package com.stove.payment.api.application;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.service.PaymentService;
 import com.stove.payment.core.service.SimulatedPgService;

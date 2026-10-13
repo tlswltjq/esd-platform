@@ -1,6 +1,6 @@
 package com.stove.download.core.domain;
 
-import com.stove.common.event.payload.BuildVariant;
+import com.stove.common.kafka.contract.payload.BuildVariant;
 import java.time.Instant;
 
 /**

@@ -1,7 +1,7 @@
 package com.stove.download.core.domain;
 
-import com.stove.common.event.payload.ReleasePublishedEvent;
-import com.stove.common.event.payload.BuildVariant;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
+import com.stove.common.kafka.contract.payload.BuildVariant;
 import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;

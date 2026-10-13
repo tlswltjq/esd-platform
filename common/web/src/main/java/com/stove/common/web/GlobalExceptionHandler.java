@@ -1,8 +1,9 @@
 package com.stove.common.web;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ApiErrorCode;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -30,13 +31,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
-        ErrorCode code = e.errorCode();
-        if (code.status().is5xxServerError()) {
+        ApiErrorCode code = e.errorCode();
+        if (code.statusCode() >= 500) {
             log.error("business error: {}", code, e);
         } else {
             log.warn("business error: {} - {}", code, e.getMessage());
         }
-        return ResponseEntity.status(code.status()).body(ApiResponse.fail(code, e.getMessage()));
+        return ResponseEntity.status(code.statusCode()).body(ApiResponse.fail(code, e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

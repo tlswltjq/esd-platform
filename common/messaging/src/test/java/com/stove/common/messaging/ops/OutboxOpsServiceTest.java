@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import com.stove.common.messaging.outbox.OutboxEventRepository;

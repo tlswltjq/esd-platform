@@ -1,7 +1,7 @@
 package com.stove.studio.core.service.release;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.build.BuildStatus;
 import com.stove.studio.core.domain.build.GameBuild;
 import com.stove.studio.core.domain.build.StoredObjectInfo;

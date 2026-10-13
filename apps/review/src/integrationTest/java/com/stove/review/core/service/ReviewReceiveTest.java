@@ -3,8 +3,8 @@ package com.stove.review.core.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.GameRegisteredEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;

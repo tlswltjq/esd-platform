@@ -1,8 +1,8 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.GameRegisteredEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.studio.core.domain.project.BundleComponent;

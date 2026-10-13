@@ -1,7 +1,7 @@
 package com.stove.auth.api.controller;
 
 import com.stove.auth.core.service.PasswordService;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

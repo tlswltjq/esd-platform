@@ -1,7 +1,11 @@
 apply plugin: 'java-library'
 
 dependencies {
-    api project(':common:core')
     api 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    compileOnly 'org.springframework:spring-webmvc'
+    compileOnly "org.springdoc:springdoc-openapi-starter-common:${springdocVersion}"
     testImplementation project(':common:archunit')
+    testImplementation project(':common:web')
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation "org.springdoc:springdoc-openapi-starter-common:${springdocVersion}"
 }

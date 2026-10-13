@@ -110,8 +110,8 @@ public class StorePageRevision extends BaseTimeEntity {
 
     private void requireDraft() {
         if (status != StorePageRevisionStatus.DRAFT) {
-            throw new com.stove.common.core.error.BusinessException(
-                    com.stove.common.core.error.ErrorCode.CONFLICT, "발행된 상점 revision은 수정할 수 없습니다.");
+            throw new com.stove.common.web.error.BusinessException(
+                    com.stove.common.web.error.ErrorCode.CONFLICT, "발행된 상점 revision은 수정할 수 없습니다.");
         }
     }
 

@@ -1,16 +1,20 @@
 apply plugin: 'java-library'
 
 dependencies {
-    api project(':common:core')
-    api 'org.springframework.boot:spring-boot-starter-web'
-    api 'org.springframework.boot:spring-boot-starter-validation'
+    api 'org.springframework:spring-web'
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'jakarta.validation:jakarta.validation-api'
+    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+    implementation 'org.slf4j:slf4j-api'
+    compileOnly 'org.springframework:spring-webmvc'
+    compileOnly 'jakarta.servlet:jakarta.servlet-api'
+    compileOnly 'org.springframework.security:spring-security-core'
     // TraceIdResponseFilter 가 현재 traceId 를 응답 헤더로 돌려주기 위한 추상.
     // 추적이 꺼진 구성에서도 뜨도록 Tracer 는 선택 주입한다.
     api 'io.micrometer:micrometer-tracing'
 
-    // API 명세 생성. 서블릿 앱 9종이 전부 이 모듈을 의존하므로 여기 한 번만 적는다 —
-    // 문서화는 예외 처리·추적 ID 와 같은 성격의 HTTP 횡단 관심사다.
-    api "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+    // 문서 지원 코드는 여기 두고, 실제 OpenAPI starter는 각 Servlet 앱이 선택한다.
+    compileOnly "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 존재하지 않는 속성 요청을 400 으로 돌리는 안전망이 이 예외 타입을 참조한다(D-024).
@@ -19,6 +23,10 @@ dependencies {
     // 클래스가 없는 실행에서는 UnknownPropertyExceptionHandler 가 아예 등록되지 않는다.
     compileOnly 'org.springframework.data:spring-data-commons'
     testImplementation 'org.springframework.data:spring-data-commons'
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-validation'
+    testImplementation 'org.springframework.security:spring-security-core'
+    testImplementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')

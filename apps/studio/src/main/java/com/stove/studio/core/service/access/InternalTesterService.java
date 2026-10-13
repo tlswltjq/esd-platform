@@ -1,7 +1,7 @@
 package com.stove.studio.core.service.access;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.access.InternalTesterGrant;
 import com.stove.studio.core.domain.access.InternalTesterGrantRepository;
 import com.stove.studio.core.domain.access.TesterInstallation;

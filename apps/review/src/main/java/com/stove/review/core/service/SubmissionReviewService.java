@@ -2,12 +2,12 @@ package com.stove.review.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.ReviewChangesRequestedEvent;
-import com.stove.common.event.payload.ReviewAppealedEvent;
-import com.stove.common.event.payload.SubmissionCreatedEvent;
-import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
+import com.stove.common.kafka.contract.payload.ReviewAppealedEvent;
+import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
+import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.review.core.domain.ReviewCase;

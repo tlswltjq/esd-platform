@@ -1,8 +1,8 @@
 package com.stove.download.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.ReleasePublishedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.download.core.domain.PatchManifest;
 import com.stove.download.core.domain.PatchManifestRepository;
 import java.util.List;

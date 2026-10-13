@@ -7,7 +7,7 @@ import com.stove.catalog.api.controller.dto.QuoteResponse;
 import com.stove.catalog.core.service.ProductCommandService;
 import com.stove.catalog.core.service.ProductQueryService;
 import com.stove.catalog.core.service.PromotionService;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -19,8 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 
 @RestController
 @RequiredArgsConstructor
@@ -59,14 +58,14 @@ public class ProductController {
 
     /** 운영툴용 판매 시작/중지 (실제로는 인증·권한 필터 뒤에 위치) */
     @PostMapping("/{productId}/sale-open")
-    public ApiResponse<Void> openSale(@PathVariable Long productId, @AuthenticationPrincipal Jwt jwt) {
-        productCommandService.openSale(productId, jwt.getSubject());
+    public ApiResponse<Void> openSale(@PathVariable Long productId, @CurrentSubject String subject) {
+        productCommandService.openSale(productId, subject);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{productId}/suspend")
-    public ApiResponse<Void> suspend(@PathVariable Long productId, @AuthenticationPrincipal Jwt jwt) {
-        productCommandService.suspend(productId, jwt.getSubject());
+    public ApiResponse<Void> suspend(@PathVariable Long productId, @CurrentSubject String subject) {
+        productCommandService.suspend(productId, subject);
         return ApiResponse.ok();
     }
 

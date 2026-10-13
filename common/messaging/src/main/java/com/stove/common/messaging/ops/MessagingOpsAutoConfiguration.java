@@ -2,6 +2,8 @@ package com.stove.common.messaging.ops;
 
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -19,7 +21,9 @@ import org.springframework.context.annotation.Bean;
  * 로만 걸어 두므로, 웹이 아닌 실행에서 이 클래스가 없어도 Outbox 는 그대로 돈다.
  */
 @AutoConfiguration
-@ConditionalOnWebApplication
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnClass(name = "com.stove.common.web.response.ApiResponse")
+@ConditionalOnBean(OutboxEventRepository.class)
 @ConditionalOnProperty(prefix = "stove.messaging.ops", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class MessagingOpsAutoConfiguration {

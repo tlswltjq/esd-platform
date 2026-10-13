@@ -1,6 +1,6 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.util.List;
 
 /**

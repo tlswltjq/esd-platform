@@ -1,6 +1,6 @@
 package com.stove.review.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.review.api.controller.dto.ApproveCaseRequest;
 import com.stove.review.api.controller.dto.RequestChangesRequest;
 import com.stove.review.api.controller.dto.ReviewCaseResponse;
@@ -19,8 +19,7 @@ import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,69 +59,69 @@ public class SubmissionReviewController {
     }
 
     @PostMapping("/{caseId}/approve")
-    public ApiResponse<Void> approve(@PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<Void> approve(@PathVariable Long caseId, @CurrentSubject String subject,
                                      @Valid @RequestBody ApproveCaseRequest request) {
         ReviewCase.RatingDecision rating = request.ratingCode() == null ? null
                 : new ReviewCase.RatingDecision(request.ratingCode(), request.certificationNumber(),
                 request.issuer(), request.issuedAt(), request.country());
-        reviewService.approve(caseId, jwt.getSubject(), rating);
+        reviewService.approve(caseId, subject, rating);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{caseId}/external-submission")
     public ApiResponse<Void> externalSubmission(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody SubmitExternalRatingRequest request) {
-        reviewService.submitExternal(caseId, jwt.getSubject(), request.applicationNumber(),
+        reviewService.submitExternal(caseId, subject, request.applicationNumber(),
                 request.submittedAt(), request.evidenceUrl());
         return ApiResponse.ok();
     }
 
     @PostMapping("/{caseId}/changes-requested")
-    public ApiResponse<Void> changes(@PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<Void> changes(@PathVariable Long caseId, @CurrentSubject String subject,
                                      @Valid @RequestBody RequestChangesRequest request) {
-        reviewService.requestChanges(caseId, jwt.getSubject(), request.reasonCode(), request.feedback(),
+        reviewService.requestChanges(caseId, subject, request.reasonCode(), request.feedback(),
                 request.evidenceUrl());
         return ApiResponse.ok();
     }
 
     @PostMapping("/{caseId}/assignment")
     public ApiResponse<ReviewCaseResponse> assign(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody AssignReviewRequest request) {
-        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.assign(caseId, jwt.getSubject(),
+        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.assign(caseId, subject,
                 request.assignee(), request.expectedVersion())));
     }
 
     @PostMapping("/{caseId}/checklist")
     public ApiResponse<ReviewCaseResponse> checklist(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody UpdateChecklistRequest request) {
-        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.updateChecklist(caseId, jwt.getSubject(),
+        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.updateChecklist(caseId, subject,
                 request.checklist(), request.internalMemo(), request.expectedVersion())));
     }
 
     @PostMapping("/{caseId}/block")
     public ApiResponse<ReviewCaseResponse> block(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody ReviewTransitionRequest request) {
-        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.block(caseId, jwt.getSubject(),
+        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.block(caseId, subject,
                 request.reasonCode(), request.internalMemo(), request.evidenceUrl(), request.expectedVersion())));
     }
 
     @PostMapping("/{caseId}/cancel")
     public ApiResponse<ReviewCaseResponse> cancel(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody ReviewTransitionRequest request) {
-        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.cancel(caseId, jwt.getSubject(),
+        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.cancel(caseId, subject,
                 request.reasonCode(), request.internalMemo(), request.expectedVersion())));
     }
 
     @PostMapping("/{caseId}/appeal")
     public ApiResponse<ReviewCaseResponse> appeal(
-            @PathVariable Long caseId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId, @CurrentSubject String subject,
             @Valid @RequestBody AppealReviewRequest request) {
-        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.appeal(caseId, jwt.getSubject(),
+        return ApiResponse.ok(ReviewCaseResponse.from(reviewService.appeal(caseId, subject,
                 request.reason(), request.expectedVersion())));
     }
 

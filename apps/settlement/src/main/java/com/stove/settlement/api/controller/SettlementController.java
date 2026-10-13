@@ -1,7 +1,7 @@
 package com.stove.settlement.api.controller;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.settlement.api.application.SettlementCloseFacade;
 import com.stove.settlement.core.service.ReconciliationService;
 import com.stove.settlement.core.domain.ReconciliationResult;

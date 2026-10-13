@@ -2,8 +2,8 @@ package com.stove.common.messaging.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import java.time.Duration;
 import java.time.Instant;

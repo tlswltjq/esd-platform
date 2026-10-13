@@ -1,4 +1,8 @@
 dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
     // 오브젝트 스토리지(MinIO / S3) 어댑터
     implementation 'software.amazon.awssdk:s3'
     // MinIO 컨테이너를 띄우므로 통합 소스셋에만 건다 — src/test 로는 새지 않는다
@@ -7,10 +11,9 @@ dependencies {
     implementation project(':common:web')
     implementation project(':common:security')
     // 패치 매니페스트/권한 사본만 다루므로 RDB 대신 MongoDB 를 쓴다(Outbox 불필요).
-    implementation project(':common:event')
+    implementation project(':common:kafka')
     // 발행은 없어도 수신은 한다. 재시도 정책과 DLT 는 발행 여부와 무관하게 필요하다 —
     // 이 의존이 없던 동안 권한 사본 갱신 이벤트가 스프링 기본값(수 ms 재시도 후 폐기)으로 사라졌다.
-    implementation project(':common:kafka')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
     implementation 'org.springframework.kafka:spring-kafka'

@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.api.controller.dto.BuildResponse;
 import com.stove.studio.api.controller.dto.CompleteUploadRequest;
 import com.stove.studio.api.controller.dto.CreateProjectRequest;
@@ -18,8 +18,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,15 +39,15 @@ public class StudioController {
     private final BuildValidationDispatcherService buildValidationService;
 
     @PostMapping
-    public ApiResponse<ProjectResponse> create(@AuthenticationPrincipal Jwt jwt,
+    public ApiResponse<ProjectResponse> create(@CurrentSubject String subject,
                                                @Valid @RequestBody CreateProjectRequest request) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(ProjectResponse.from(gameProjectService.create(request.toCommand(workspaceId))));
     }
 
     @GetMapping
-    public ApiResponse<List<ProjectResponse>> list(@AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+    public ApiResponse<List<ProjectResponse>> list(@CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(gameProjectService.findBySeller(workspaceId).stream()
                 .map(ProjectResponse::from)
                 .toList());
@@ -56,8 +55,8 @@ public class StudioController {
 
     @GetMapping("/{gameId}/family")
     public ApiResponse<ProductFamilyResponse> family(@PathVariable Long gameId,
-                                                    @AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+                                                    @CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         var family = gameProjectService.family(gameId, workspaceId);
         return ApiResponse.ok(ProductFamilyResponse.from(family.product(), family.parent(),
                 family.children(), family.components(), family.bundles()));
@@ -65,25 +64,25 @@ public class StudioController {
 
     /** 등급분류 심의 신청 */
     @PostMapping("/{gameId}/submit")
-    public ApiResponse<Void> submit(@PathVariable Long gameId, @AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+    public ApiResponse<Void> submit(@PathVariable Long gameId, @CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         gameProjectService.submitForReview(gameId, workspaceId);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{gameId}/builds")
     public ApiResponse<BuildResponse> uploadBuild(@PathVariable Long gameId,
-                                                  @AuthenticationPrincipal Jwt jwt,
+                                                  @CurrentSubject String subject,
                                                   @Valid @RequestBody UploadBuildRequest request) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(BuildResponse.from(
                 gameBuildService.upload(gameId, workspaceId, request.toCommand())));
     }
 
     @GetMapping("/{gameId}/builds")
     public ApiResponse<List<BuildResponse>> builds(@PathVariable Long gameId,
-                                                   @AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+                                                   @CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(gameBuildService.findByGame(gameId, workspaceId).stream()
                 .map(BuildResponse::from)
                 .toList());
@@ -92,9 +91,9 @@ public class StudioController {
     @PostMapping("/{gameId}/upload-sessions")
     public ApiResponse<UploadSessionResponse> createUploadSession(
             @PathVariable Long gameId,
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentSubject String subject,
             @Valid @RequestBody CreateUploadSessionRequest request) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(UploadSessionResponse.from(
                 uploadSessionService.create(gameId, workspaceId, request.toCommand())));
     }
@@ -102,9 +101,9 @@ public class StudioController {
     @PostMapping("/upload-sessions/{sessionId}/complete")
     public ApiResponse<BuildResponse> completeUpload(
             @PathVariable Long sessionId,
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentSubject String subject,
             @Valid @RequestBody CompleteUploadRequest request) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         Long buildId = uploadSessionService.complete(sessionId, workspaceId, request.toParts());
         buildValidationService.dispatch(buildId);
         return ApiResponse.ok(BuildResponse.from(uploadSessionService.requireOwnedBuild(buildId, workspaceId)));

@@ -2,7 +2,7 @@ package com.stove.payment.core.domain;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import java.util.List;

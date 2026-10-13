@@ -1,15 +1,13 @@
 package com.stove.license.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
-import com.stove.common.security.CommerceIdentity;
+import com.stove.common.web.response.ApiResponse;
+import com.stove.common.security.CurrentMemberId;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import com.stove.license.api.controller.dto.LicenseResponse;
 import com.stove.license.core.service.LicenseService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,8 +21,8 @@ public class LibraryController {
 
     /** 내 보유 라이브러리 (download 가 다운로드 인증에 사용) */
     @GetMapping
-    public ApiResponse<List<LicenseResponse>> myLibrary(@AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.ok(licenseService.getLibrary(CommerceIdentity.memberId(jwt)).stream()
+    public ApiResponse<List<LicenseResponse>> myLibrary(@CurrentMemberId Long memberId) {
+        return ApiResponse.ok(licenseService.getLibrary(memberId).stream()
                 .map(LicenseResponse::from)
                 .toList());
     }

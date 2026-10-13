@@ -2,7 +2,7 @@ package com.stove.catalog.core.domain;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.payload.StorefrontSnapshot;
+import com.stove.common.kafka.contract.payload.StorefrontSnapshot;
 import java.util.List;
 
 /**

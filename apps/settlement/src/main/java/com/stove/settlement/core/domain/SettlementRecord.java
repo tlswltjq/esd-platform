@@ -1,7 +1,7 @@
 package com.stove.settlement.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

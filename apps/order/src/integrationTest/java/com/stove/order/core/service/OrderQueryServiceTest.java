@@ -3,9 +3,10 @@ package com.stove.order.core.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.order.core.domain.Order;
 import java.util.List;
@@ -74,7 +75,7 @@ class OrderQueryServiceTest {
                 orderQueryService.getOrder("ORD-" + UUID.randomUUID(), uniqueMember()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+                .isEqualTo(OrderErrorCode.ORDER_NOT_FOUND);
     }
 
     @Test

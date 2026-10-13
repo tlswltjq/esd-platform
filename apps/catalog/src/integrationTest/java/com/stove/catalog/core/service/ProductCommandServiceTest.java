@@ -8,11 +8,11 @@ import com.stove.catalog.core.domain.ProductRepository;
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
 import com.stove.catalog.core.domain.ReindexPage;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.ReleasePublishedEvent;
-import com.stove.common.event.payload.ReviewApprovedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.catalog.core.domain.CatalogErrorCode;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -272,7 +272,7 @@ class ProductCommandServiceTest {
         assertThatThrownBy(() -> productCommandService.openSale(999_999_999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+                .isEqualTo(CatalogErrorCode.PRODUCT_NOT_FOUND);
     }
 
     @Test

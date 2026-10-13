@@ -1,8 +1,8 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.EchoedInput;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.EchoedInput;
+import com.stove.common.web.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
+import com.stove.common.web.error.BusinessException;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;

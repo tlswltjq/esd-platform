@@ -1,7 +1,7 @@
 package com.stove.order.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 
 /**
  * catalog 에 가격 재계산을 요청할 항목.

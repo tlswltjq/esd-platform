@@ -2,8 +2,8 @@ package com.stove.license.core.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;

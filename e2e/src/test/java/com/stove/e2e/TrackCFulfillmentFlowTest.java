@@ -8,7 +8,6 @@ import static com.stove.e2e.Journey.PRODUCT_CODE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -127,7 +126,7 @@ class TrackCFulfillmentFlowTest {
         Response response = Stove.gateway.get(TICKET, Journey.asMember(OTHER_MEMBER));
 
         assertThat(response.status()).as("%s", response).isEqualTo(403);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.FORBIDDEN.name());
+        assertThat(response.errorCode()).isEqualTo("FORBIDDEN");
     }
 
     @Test

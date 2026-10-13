@@ -2,7 +2,7 @@ package com.stove.common.messaging.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.DomainEvent;
+import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.trace.TraceContextCapture;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Propagation;

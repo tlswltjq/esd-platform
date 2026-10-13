@@ -8,9 +8,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventHeaders;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;

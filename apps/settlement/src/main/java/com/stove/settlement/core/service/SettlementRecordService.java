@@ -1,6 +1,6 @@
 package com.stove.settlement.core.service;
 
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.settlement.core.domain.FeePolicy;
 import com.stove.settlement.core.domain.RecordType;

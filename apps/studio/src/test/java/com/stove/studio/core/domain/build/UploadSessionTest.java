@@ -3,7 +3,7 @@ package com.stove.studio.core.domain.build;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
+import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

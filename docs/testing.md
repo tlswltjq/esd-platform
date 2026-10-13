@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|
 | **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms | 매 빌드 |
 | **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 | 매 빌드 |
-| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/event` | ms | 매 빌드 |
+| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/kafka` | ms | 매 빌드 |
 | **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |

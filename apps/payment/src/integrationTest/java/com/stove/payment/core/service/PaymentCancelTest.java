@@ -12,9 +12,9 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;

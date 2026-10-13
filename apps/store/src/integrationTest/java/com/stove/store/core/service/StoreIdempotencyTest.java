@@ -2,9 +2,9 @@ package com.stove.store.core.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.common.event.payload.PromotionWindow;
-import com.stove.common.event.payload.StorefrontSnapshot;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.payload.PromotionWindow;
+import com.stove.common.kafka.contract.payload.StorefrontSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;

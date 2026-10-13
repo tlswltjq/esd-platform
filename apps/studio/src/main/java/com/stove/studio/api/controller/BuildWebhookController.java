@@ -1,6 +1,6 @@
 package com.stove.studio.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.api.controller.dto.BuildWebhookResponse;
 import com.stove.studio.api.controller.dto.RegisterBuildWebhookRequest;
 import com.stove.studio.core.service.notification.BuildWebhookService;
@@ -9,8 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,17 +27,17 @@ public class BuildWebhookController {
 
     @PostMapping
     public ApiResponse<BuildWebhookResponse> register(
-            @PathVariable Long gameId, @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long gameId, @CurrentSubject String subject,
             @Valid @RequestBody RegisterBuildWebhookRequest request) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(BuildWebhookResponse.from(
                 webhookService.register(gameId, workspaceId, request.endpointUrl())));
     }
 
     @GetMapping
     public ApiResponse<List<BuildWebhookResponse>> list(
-            @PathVariable Long gameId, @AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+            @PathVariable Long gameId, @CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         return ApiResponse.ok(webhookService.list(gameId, workspaceId).stream()
                 .map(BuildWebhookResponse::from).toList());
     }
@@ -46,8 +45,8 @@ public class BuildWebhookController {
     @PostMapping("/{subscriptionId}/disable")
     public ApiResponse<Void> disable(
             @PathVariable Long gameId, @PathVariable Long subscriptionId,
-            @AuthenticationPrincipal Jwt jwt) {
-        Long workspaceId = workspaceService.getOrCreatePersonal(jwt.getSubject()).getId();
+            @CurrentSubject String subject) {
+        Long workspaceId = workspaceService.getOrCreatePersonal(subject).getId();
         webhookService.disable(gameId, subscriptionId, workspaceId);
         return ApiResponse.ok();
     }

@@ -7,10 +7,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PaymentErrorCode;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.payment.core.domain.PaymentPreparation;
@@ -115,7 +115,7 @@ class PaymentGateTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
                 .as("어떤 BusinessException 이든 통과하면 게이트 3이 사라져도 초록이다")
-                .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+                .isEqualTo(PaymentErrorCode.PAYMENT_AMOUNT_MISMATCH);
     }
 
     @Test
@@ -128,7 +128,7 @@ class PaymentGateTest {
                 orderNo, prepared.pgTxId() + "-other", 30_000L, "PGKEY-" + UUID.randomUUID())))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PAYMENT_TX_MISMATCH);
+                .isEqualTo(PaymentErrorCode.PAYMENT_TX_MISMATCH);
         assertThat(statusOf(orderNo)).isEqualTo(PaymentStatus.PENDING);
     }
 
@@ -144,7 +144,7 @@ class PaymentGateTest {
                 new PgApproval(orderNo, prepared.pgTxId(), 300_000L, "PGKEY-" + UUID.randomUUID())))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+                .isEqualTo(PaymentErrorCode.PAYMENT_AMOUNT_MISMATCH);
     }
 
     @Test

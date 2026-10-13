@@ -1,11 +1,11 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
-import com.stove.common.event.payload.PaymentCancelledEvent;
-import com.stove.common.event.payload.PaymentCompletedEvent;
-import com.stove.common.event.payload.PaymentFailedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PaymentErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.PaymentFailedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
@@ -98,7 +98,7 @@ public class PaymentService {
     public PaymentCancellation handleApproval(PgApproval approval) {
         // 멱등키가 아니라 주문번호로 찾고, 행을 잠그고 읽는다. [D-008]
         Payment payment = paymentRepository.findByOrderNoForUpdate(approval.orderNo())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND,
                         "orderNo=" + approval.orderNo()));
 
         boolean approved = payment.approve(approval.pgTxId(), approval.paidAmount(), approval.idempotencyKey());
@@ -126,7 +126,7 @@ public class PaymentService {
     /** PG 승인 거절 콜백 처리. 승인과 <b>같은 행 잠금</b>을 쓴다.*/
     public void handleDecline(PgDecline decline) {
         Payment payment = paymentRepository.findByOrderNoForUpdate(decline.orderNo())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND,
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND,
                         "orderNo=" + decline.orderNo()));
 
         boolean failed = payment.fail(decline.pgTxId(), decline.reasonCode(), decline.reason());
@@ -242,6 +242,6 @@ public class PaymentService {
 
     private Payment findPayment(String orderNo) {
         return paymentRepository.findByOrderNo(orderNo)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND, "orderNo=" + orderNo));
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND, "orderNo=" + orderNo));
     }
 }

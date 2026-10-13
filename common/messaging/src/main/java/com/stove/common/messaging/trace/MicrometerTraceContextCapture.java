@@ -1,6 +1,6 @@
 package com.stove.common.messaging.trace;
 
-import com.stove.common.event.kafka.EventHeaders;
+import com.stove.common.kafka.EventHeaders;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;

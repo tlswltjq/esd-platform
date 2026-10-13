@@ -1,7 +1,7 @@
 package com.stove.payment.infrastructure.pg;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PaymentErrorCode;
 import com.stove.payment.core.domain.PgPreparation;
 import com.stove.payment.core.domain.SimulatedPgTransaction;
 import com.stove.payment.core.domain.SimulatedPgTransactionRepository;
@@ -49,7 +49,7 @@ public class MockPgClient implements PgClient {
     @Override
     public void cancel(String pgTxId, long amount, String reason) {
         SimulatedPgTransaction transaction = transactions.findById(pgTxId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND));
         transaction.cancel(amount);
         transactions.save(transaction);
         log.info("[MOCK PG] 취소 pgTxId={} amount={} reason={}", pgTxId, amount, reason);

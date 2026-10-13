@@ -123,7 +123,7 @@ flowchart LR
 | 누가 요청하나? | `api/controller`, `api/listener`, 스케줄러 | 사용자 요청인지, 다른 서비스 이벤트인지, 예약 실행인지 |
 | 외부 호출은 어떻게 엮나? | `api/application/*Facade.java` | 여러 단계를 조율하고 외부 호출·DB 변경을 구분 |
 | 실제로 어디에 저장하나? | `@Table`, `@Document`, `resources/db/migration` | Java 필드명과 DB 컬럼명이 다를 수 있음 |
-| 어떤 데이터를 전달하나? | `common/event/.../payload` | 저장 엔티티 전체가 아니라 이벤트에 담은 필드만 전달 |
+| 어떤 데이터를 전달하나? | `common/kafka/.../payload` | 저장 엔티티 전체가 아니라 이벤트에 담은 필드만 전달 |
 | 어떤 사례를 검증했나? | `src/test`, `src/integrationTest`, `e2e/src/test` | 테스트가 다루는 입력·결과까지만 보장 범위를 해석 |
 
 예를 들어 `GameProject.sellerId`는 DB에서 `workspace_id`에 저장된다. `Submission.metadataRevisionId`가 이벤트를 건너면 `metadataRevision`이라는 이름으로 등장해도 값은 여전히 이력 **ID**다. [식별자·버전 비교](../domain-glossary.md#identifiers)를 함께 읽는다.

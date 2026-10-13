@@ -5,7 +5,6 @@ import static com.stove.e2e.Journey.OTHER_MEMBER;
 import static com.stove.e2e.Journey.PRICE;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.util.List;
 import java.util.Map;
@@ -129,7 +128,7 @@ class PaymentSimulatorE2eTest {
         Response late = Stove.gateway.post("/api/v1/payments/simulator/" + declined + "/approve",
                 null, Journey.asAdmin());
         assertThat(late.status()).as("%s", late).isEqualTo(409);
-        assertThat(late.errorCode()).isEqualTo(ErrorCode.CONFLICT.name());
+        assertThat(late.errorCode()).isEqualTo("CONFLICT");
 
         String timedOut = newOrder();
         prepare(timedOut);
@@ -144,6 +143,6 @@ class PaymentSimulatorE2eTest {
         Response lateAfterTimeout = Stove.gateway.post(
                 "/api/v1/payments/simulator/" + timedOut + "/approve", null, Journey.asAdmin());
         assertThat(lateAfterTimeout.status()).as("%s", lateAfterTimeout).isEqualTo(409);
-        assertThat(lateAfterTimeout.errorCode()).isEqualTo(ErrorCode.CONFLICT.name());
+        assertThat(lateAfterTimeout.errorCode()).isEqualTo("CONFLICT");
     }
 }

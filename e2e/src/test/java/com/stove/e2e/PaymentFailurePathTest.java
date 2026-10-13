@@ -4,7 +4,6 @@ import static com.stove.e2e.Journey.MEMBER;
 import static com.stove.e2e.Journey.PRICE;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +81,7 @@ class PaymentFailurePathTest {
                 "/api/v1/payments/callback", decline("PG-NOPE-" + Journey.failOrderNo()));
 
         assertThat(response.status()).as("%s", response).isEqualTo(409);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.PAYMENT_TX_MISMATCH.name());
+        assertThat(response.errorCode()).isEqualTo("PAYMENT_TX_MISMATCH");
     }
 
     @Test
@@ -135,6 +134,6 @@ class PaymentFailurePathTest {
                 "idempotencyKey", Journey.idempotencyKey("LATE")));
 
         assertThat(response.status()).as("%s", response).isEqualTo(409);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.PAYMENT_ALREADY_PROCESSED.name());
+        assertThat(response.errorCode()).isEqualTo("PAYMENT_ALREADY_PROCESSED");
     }
 }

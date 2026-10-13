@@ -1,7 +1,7 @@
 package com.stove.order.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.order.core.domain.OrderErrorCode;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import java.util.List;
@@ -22,7 +22,7 @@ public class OrderQueryService {
                     order.requireOwner(memberId);
                     return order;
                 })
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(OrderErrorCode.ORDER_NOT_FOUND));
     }
 
     public List<Order> getMyOrders(Long memberId) {

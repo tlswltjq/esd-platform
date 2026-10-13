@@ -1,7 +1,7 @@
 package com.stove.store.api.controller.dto;
 
 import com.stove.store.core.domain.StoreProductView;
-import com.stove.common.event.payload.StorefrontSnapshot;
+import com.stove.common.kafka.contract.payload.StorefrontSnapshot;
 import java.util.List;
 
 public record StoreProductResponse(

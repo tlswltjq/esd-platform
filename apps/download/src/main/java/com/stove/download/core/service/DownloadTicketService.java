@@ -1,12 +1,12 @@
 package com.stove.download.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.domain.PatchManifest;
 import com.stove.download.core.domain.ProductRef;
 import com.stove.download.core.domain.SignedUrl;
-import com.stove.common.event.payload.BuildVariant;
+import com.stove.common.kafka.contract.payload.BuildVariant;
 import java.util.List;
 import com.stove.download.core.port.DownloadUrlSigner;
 import lombok.RequiredArgsConstructor;

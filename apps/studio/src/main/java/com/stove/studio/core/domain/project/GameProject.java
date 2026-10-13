@@ -1,7 +1,7 @@
 package com.stove.studio.core.domain.project;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

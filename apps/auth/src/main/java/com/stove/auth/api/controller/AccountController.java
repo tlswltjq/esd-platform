@@ -3,7 +3,7 @@ package com.stove.auth.api.controller;
 import com.stove.auth.api.controller.dto.SignupRequest;
 import com.stove.auth.api.controller.dto.SignupResponse;
 import com.stove.auth.core.service.UserAccountService;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -37,6 +37,8 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 
 로컬 스크립트는 `docker-compose.local.yml`을 적용해 MinIO의 지정 버전 공식 소스로 이미지를 빌드한다. 공개 이미지 저장소 접근 오류를 피하기 위한 설정이며, 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
 
+저장소 통합 테스트에서도 이 이미지를 쓰려면 `STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local`을 설정한다. 환경변수가 없으면 기존 공개 이미지 릴리즈를 사용한다.
+
 브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다. 빌드 업로드 실습 화면은 같은 Gateway의 `/p0-lab/`에 있다.
 
 ### Swagger OAuth 문제 해결

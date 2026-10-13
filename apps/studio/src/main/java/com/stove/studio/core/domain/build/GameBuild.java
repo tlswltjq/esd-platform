@@ -157,8 +157,8 @@ public class GameBuild extends BaseTimeEntity {
 
     public void processing(long actualFileSize) {
         if (status != BuildStatus.UPLOADING) {
-            throw new com.stove.common.core.error.BusinessException(
-                    com.stove.common.core.error.ErrorCode.CONFLICT, "업로드 중인 빌드만 완료할 수 있습니다.");
+            throw new com.stove.common.web.error.BusinessException(
+                    com.stove.common.web.error.ErrorCode.CONFLICT, "업로드 중인 빌드만 완료할 수 있습니다.");
         }
         this.actualFileSize = actualFileSize;
         this.status = BuildStatus.PROCESSING;
@@ -170,8 +170,8 @@ public class GameBuild extends BaseTimeEntity {
 
     public void validated(String actualChecksum, Long duplicateOfBuildId) {
         if (status != BuildStatus.PROCESSING) {
-            throw new com.stove.common.core.error.BusinessException(
-                    com.stove.common.core.error.ErrorCode.CONFLICT, "검증 처리 중인 빌드가 아닙니다.");
+            throw new com.stove.common.web.error.BusinessException(
+                    com.stove.common.web.error.ErrorCode.CONFLICT, "검증 처리 중인 빌드가 아닙니다.");
         }
         this.actualChecksum = actualChecksum;
         this.status = BuildStatus.VALIDATED;

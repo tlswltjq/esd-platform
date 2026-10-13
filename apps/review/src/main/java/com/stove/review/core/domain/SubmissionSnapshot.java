@@ -1,6 +1,6 @@
 package com.stove.review.core.domain;
 
-import com.stove.common.event.payload.SubmissionCreatedEvent;
+import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

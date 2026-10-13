@@ -4,11 +4,12 @@ import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
 import com.stove.catalog.core.domain.PromotionRepository;
 import com.stove.catalog.core.domain.ReindexPage;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.common.event.payload.ReleasePublishedEvent;
-import com.stove.common.event.payload.ReviewApprovedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.catalog.core.domain.CatalogErrorCode;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
@@ -183,7 +184,7 @@ public class ProductCommandService {
         publishChanged(product);
     }
 
-    private String serializeStorefront(com.stove.common.event.payload.StorefrontSnapshot storefront) {
+    private String serializeStorefront(com.stove.common.kafka.contract.payload.StorefrontSnapshot storefront) {
         if (storefront == null) return null;
         try {
             return objectMapper.writeValueAsString(storefront);
@@ -194,6 +195,6 @@ public class ProductCommandService {
 
     private Product findProduct(Long productId) {
         return productRepository.findById(productId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(CatalogErrorCode.PRODUCT_NOT_FOUND));
     }
 }

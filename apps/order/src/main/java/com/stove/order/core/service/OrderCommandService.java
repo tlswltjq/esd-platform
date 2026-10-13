@@ -1,10 +1,10 @@
 package com.stove.order.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderCanceledEvent;
-import com.stove.common.event.payload.OrderCreatedEvent;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.common.kafka.contract.payload.OrderCanceledEvent;
+import com.stove.common.kafka.contract.payload.OrderCreatedEvent;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.order.core.domain.Order;
@@ -85,6 +85,6 @@ public class OrderCommandService {
 
     private Order findOrder(String orderNo) {
         return orderRepository.findByOrderNo(orderNo)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "orderNo=" + orderNo));
+                .orElseThrow(() -> new BusinessException(OrderErrorCode.ORDER_NOT_FOUND, "orderNo=" + orderNo));
     }
 }

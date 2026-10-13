@@ -59,7 +59,7 @@ Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “그 돈을
 
 **만들고 쓰는 때:** 견적을 주문에 고정하고 결제·정산에 전달할 때 사용한다. 상품명·정가·행사가 나중에 바뀌어도 이 항목을 현재 상품으로 다시 계산하지 않는다. 항목의 `lineAmount()`는 실결제액을 계산하며 별도 저장 필드는 아니다.
 
-[OrderLine](../../../common/event/src/main/java/com/stove/common/event/payload/OrderLine.java)은 같은 정보를 서비스 사이에 전달하는 record다. `id`·`order`를 제외한 위 상품·금액·수량 속성을 담는다. Catalog Quote→OrderItem→Payment.lines→PaymentCompleted→정산 원장으로 이어진다. `settlementBasis`·`feeAmount`를 단가로 오해해 다시 수량을 곱하면 금액이 부풀려진다.
+[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 같은 정보를 서비스 사이에 전달하는 record다. `id`·`order`를 제외한 위 상품·금액·수량 속성을 담는다. Catalog Quote→OrderItem→Payment.lines→PaymentCompleted→정산 원장으로 이어진다. `settlementBasis`·`feeAmount`를 단가로 오해해 다시 수량을 곱하면 금액이 부풀려진다.
 
 관련 [Order의 Quote](../../../apps/order/src/main/java/com/stove/order/core/domain/Quote.java)는 `lines`, `totalAmount`, `currency`, [QuoteItem](../../../apps/order/src/main/java/com/stove/order/core/domain/QuoteItem.java)은 `productId`, `quantity`다. [OrderNoGenerator](../../../apps/order/src/main/java/com/stove/order/core/domain/OrderNoGenerator.java)는 주문번호를 생성하는 도구이며 저장 모델은 아니다.
 

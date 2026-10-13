@@ -1,8 +1,6 @@
 apply plugin: 'java-library'
 
 dependencies {
-    api project(':common:core')
-    api project(':common:event')
     api project(':common:jpa')
     // 컨슈머 재시도·DLT 정책. Outbox 를 쓰면 컨슈머도 쓰므로 함께 딸려가게 둔다.
     api project(':common:kafka')
@@ -20,6 +18,8 @@ dependencies {
     // 실제 런타임 제공자는 각 앱이 의존하는 common:web 이다.
     compileOnly 'org.springframework:spring-web'
     testImplementation 'org.springframework:spring-web'
+    compileOnly project(':common:web')
+    testImplementation project(':common:web')
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 

@@ -3,9 +3,9 @@ package com.stove.studio.core.service.build;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.EventType;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.EventType;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.testcontainers.InfraContainers;

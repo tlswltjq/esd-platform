@@ -2,7 +2,7 @@ package com.stove.settlement.core.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import org.junit.jupiter.api.DisplayName;

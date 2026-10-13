@@ -9,10 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PaymentErrorCode;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
@@ -94,7 +94,7 @@ class PaymentWindowTest {
         assertThatThrownBy(() -> paymentService.prepare(orderNo, "CARD"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PAYMENT_WINDOW_EXPIRED);
+                .isEqualTo(PaymentErrorCode.PAYMENT_WINDOW_EXPIRED);
     }
 
     /**

@@ -1,8 +1,9 @@
 package com.stove.payment.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.payment.core.domain.PaymentErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -128,7 +129,7 @@ public class Payment extends BaseTimeEntity {
     public void requireWithinWindow(Duration window) {
         Instant createdAt = getCreatedAt();
         if (createdAt != null && createdAt.plus(window).isBefore(Instant.now())) {
-            throw new BusinessException(ErrorCode.PAYMENT_WINDOW_EXPIRED,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_WINDOW_EXPIRED,
                     "주문 생성 %s 경과: orderNo=%s".formatted(window, orderNo));
         }
     }
@@ -137,7 +138,7 @@ public class Payment extends BaseTimeEntity {
     public void prepare(String pgTxId, String method, Duration window) {
         requireWithinWindow(window);
         if (status != PaymentStatus.READY && status != PaymentStatus.PENDING) {
-            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "결제 준비 불가 상태: " + status);
+            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_PROCESSED, "결제 준비 불가 상태: " + status);
         }
         this.pgTxId = pgTxId;
         this.method = method;
@@ -163,19 +164,19 @@ public class Payment extends BaseTimeEntity {
                 return false;   // 같은 콜백의 재전송
             }
             // 다른 승인이 또 왔다 — 연동 오류이거나 위·변조. 조용히 무시하지 않는다.
-            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_PROCESSED,
                     "이미 다른 승인으로 확정된 결제: orderNo=%s".formatted(orderNo));
         }
         if (status != PaymentStatus.PENDING) {
-            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "승인 불가 상태: " + status);
+            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_PROCESSED, "승인 불가 상태: " + status);
         }
         if (!Objects.equals(this.pgTxId, pgTxId)) {
-            throw new BusinessException(ErrorCode.PAYMENT_TX_MISMATCH,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_TX_MISMATCH,
                     "사전등록=%s, 콜백=%s, orderNo=%s".formatted(this.pgTxId, pgTxId, orderNo));
         }
         if (paidAmount != this.amount) {
             // 위·변조 또는 PG 연동 오류. 승인 확정하지 않고 운영 알람 대상으로 남긴다.
-            throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_AMOUNT_MISMATCH,
                     "요청=%d, 승인=%d, orderNo=%s".formatted(this.amount, paidAmount, this.orderNo));
         }
         this.pgTxId = pgTxId;
@@ -252,11 +253,11 @@ public class Payment extends BaseTimeEntity {
      */
     public boolean fail(String pgTxId, String reasonCode, String reason) {
         if (status != PaymentStatus.PENDING && status != PaymentStatus.FAILED) {
-            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_PROCESSED,
                     "승인 거절 불가 상태: " + status);
         }
         if (!Objects.equals(this.pgTxId, pgTxId)) {
-            throw new BusinessException(ErrorCode.PAYMENT_TX_MISMATCH,
+            throw new BusinessException(PaymentErrorCode.PAYMENT_TX_MISMATCH,
                     "사전등록=%s, 콜백=%s, orderNo=%s".formatted(this.pgTxId, pgTxId, this.orderNo));
         }
         if (status == PaymentStatus.FAILED) {

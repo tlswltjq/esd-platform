@@ -2,8 +2,8 @@ package com.stove.auth.core.service;
 
 import com.stove.auth.core.domain.UserAccountRepository;
 import com.stove.auth.core.port.TokenRevocationPort;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;

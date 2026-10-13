@@ -1,8 +1,8 @@
 package com.stove.common.test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.DomainEvent;
-import com.stove.common.event.kafka.EventHeaders;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.EventHeaders;
 import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;

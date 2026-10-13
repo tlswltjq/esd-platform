@@ -1,5 +1,11 @@
 package com.stove.studio.api.controller;
 
+import com.stove.common.security.CurrentIdentityArgumentResolver;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,15 +22,11 @@ import com.stove.studio.core.service.project.GameProjectService;
 import com.stove.studio.core.service.project.WorkspaceService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.request.NativeWebRequest;
-import org.springframework.web.method.support.HandlerMethodArgumentResolver;
-import org.springframework.web.method.support.ModelAndViewContainer;
 
 /**
  * 창작자 입점의 입구 검증.
@@ -47,24 +49,22 @@ class StudioControllerTest {
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new StudioController(gameProjectService, gameBuildService,
                     workspaceService, uploadSessionService, buildValidationService))
-            .setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
-                @Override
-                public boolean supportsParameter(MethodParameter parameter) {
-                    return parameter.getParameterType().equals(Jwt.class);
-                }
-
-                @Override
-                public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
-                                              NativeWebRequest webRequest,
-                                              org.springframework.web.bind.support.WebDataBinderFactory binderFactory) {
-                    return Jwt.withTokenValue("test-token")
-                            .header("alg", "none")
-                            .subject("test-creator")
-                            .build();
-                }
-            })
+            .setCustomArgumentResolvers(new CurrentIdentityArgumentResolver())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
+
+    @BeforeEach
+    void authenticate() {
+        var jwt = Jwt.withTokenValue("test-token").header("alg", "none")
+                .subject("test-creator").build();
+        SecurityContextHolder.getContext()
+                .setAuthentication(new JwtAuthenticationToken(jwt, java.util.List.of()));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
 
     private String project(String productCode, String title, long price)
             throws Exception {

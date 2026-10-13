@@ -1,8 +1,8 @@
 package com.stove.order.infrastructure.client;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.order.core.domain.Quote;
 import com.stove.order.core.domain.QuoteItem;
 import com.stove.order.core.port.CatalogPort;

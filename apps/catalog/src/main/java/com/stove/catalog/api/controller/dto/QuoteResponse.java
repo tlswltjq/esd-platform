@@ -1,7 +1,7 @@
 package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.Quote;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.util.List;
 
 /**

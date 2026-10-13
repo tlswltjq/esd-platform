@@ -1,14 +1,14 @@
 package com.stove.studio.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.common.event.payload.ReviewAppealedEvent;
-import com.stove.common.event.payload.ReviewApprovedEvent;
-import com.stove.common.event.payload.ReviewChangesRequestedEvent;
-import com.stove.common.event.payload.ReviewRejectedEvent;
-import com.stove.common.event.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.payload.ReviewAppealedEvent;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
+import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
+import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
+import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.studio.core.service.project.GameProjectService;
 import com.stove.studio.core.service.submission.SubmissionReviewProjectionService;
 import lombok.RequiredArgsConstructor;

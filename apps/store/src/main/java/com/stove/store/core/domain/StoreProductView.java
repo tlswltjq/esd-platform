@@ -1,7 +1,7 @@
 package com.stove.store.core.domain;
 
-import com.stove.common.event.payload.StorefrontSnapshot;
-import com.stove.common.event.payload.PromotionWindow;
+import com.stove.common.kafka.contract.payload.StorefrontSnapshot;
+import com.stove.common.kafka.contract.payload.PromotionWindow;
 import java.io.Serializable;
 
 /**

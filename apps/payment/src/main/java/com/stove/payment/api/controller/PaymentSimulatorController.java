@@ -1,7 +1,7 @@
 package com.stove.payment.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
-import com.stove.common.security.CommerceIdentity;
+import com.stove.common.web.response.ApiResponse;
+import com.stove.common.security.CurrentMemberId;
 import com.stove.payment.api.application.PaymentSimulatorFacade;
 import com.stove.payment.api.controller.dto.PaymentResponse;
 import com.stove.payment.api.controller.dto.SimulatorCheckoutResponse;
@@ -10,8 +10,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,9 +29,9 @@ public class PaymentSimulatorController {
     @GetMapping("/checkout/{pgTxId}")
     @SecurityRequirement(name = "oauth2", scopes = "commerce")
     public ApiResponse<SimulatorCheckoutResponse> checkout(@PathVariable String pgTxId,
-                                                            @AuthenticationPrincipal Jwt jwt) {
+                                                            @CurrentMemberId Long memberId) {
         return ApiResponse.ok(SimulatorCheckoutResponse.from(
-                simulator.checkout(pgTxId, CommerceIdentity.memberId(jwt))));
+                simulator.checkout(pgTxId, memberId)));
     }
 
     @PostMapping("/{orderNo}/approve")

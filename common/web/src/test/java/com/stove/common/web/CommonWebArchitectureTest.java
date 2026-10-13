@@ -6,7 +6,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.junit.ArchTests;
 
-/** 공용 라이브러리 검증. common:web 과 그 아래 common:core 를 본다. */
+/** 공용 라이브러리 검증. common:web 를 본다. */
 @AnalyzeClasses(packages = "com.stove.common", importOptions = ImportOption.DoNotIncludeTests.class)
 class CommonWebArchitectureTest {
 

@@ -1,8 +1,8 @@
 package com.stove.common.web;
 
-import com.stove.common.core.error.EchoedInput;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.error.EchoedInput;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.web.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;

@@ -1,7 +1,7 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PaymentErrorCode;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.domain.PgDecline;
 import com.stove.payment.core.domain.SimulatedPgTransaction;
@@ -22,7 +22,7 @@ public class SimulatedPgService {
     @Transactional(readOnly = true)
     public SimulatedPgTransaction get(String pgTxId) {
         return transactions.findById(pgTxId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND));
     }
 
     @Transactional
@@ -42,6 +42,6 @@ public class SimulatedPgService {
 
     private SimulatedPgTransaction require(String pgTxId) {
         return transactions.findForUpdate(pgTxId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND));
     }
 }

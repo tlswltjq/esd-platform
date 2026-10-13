@@ -1,8 +1,8 @@
 package com.stove.studio.core.service.build;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.build.BuildStatus;
 import com.stove.studio.core.domain.build.BuildValidationSnapshot;
 import com.stove.studio.core.domain.build.GameBuild;

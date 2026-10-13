@@ -1,8 +1,9 @@
 package com.stove.store.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.store.core.domain.StoreErrorCode;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
 import com.stove.store.core.domain.StoreProductView;
@@ -68,7 +69,7 @@ public class StoreService {
         return searchRepository.findByProductCode(productCode)
                 .filter(document -> Boolean.TRUE.equals(document.getVisible()))
                 .map(StoreProductView::from)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(StoreErrorCode.PRODUCT_NOT_FOUND));
     }
 
     /** 메인 진열. 전 유저 공통이라 적중률이 높고, 색인이 갱신되면 통째로 무효화한다. */

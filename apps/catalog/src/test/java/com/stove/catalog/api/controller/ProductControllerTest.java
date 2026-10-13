@@ -15,7 +15,7 @@ import com.stove.catalog.api.application.ProductReindexFacade;
 import com.stove.catalog.core.service.ProductCommandService;
 import com.stove.catalog.core.domain.Quote;
 import com.stove.catalog.core.service.ProductQueryService;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.web.GlobalExceptionHandler;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;

@@ -5,9 +5,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.DomainEvent;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.messaging.trace.TraceContextCapture;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;

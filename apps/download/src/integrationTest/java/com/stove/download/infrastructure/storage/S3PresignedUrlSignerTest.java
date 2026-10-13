@@ -41,9 +41,8 @@ class S3PresignedUrlSignerTest {
     private static final byte[] BUILD = "fake game binary".getBytes(StandardCharsets.UTF_8);
 
     @Container
-    static final MinIOContainer MINIO = new MinIOContainer(DockerImageName
-            .parse("quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z")
-            .asCompatibleSubstituteFor("minio/minio"))
+    static final MinIOContainer MINIO = new MinIOContainer(
+            com.stove.common.testcontainers.InfraContainers.minioImage())
             .withUserName(USER)
             .withPassword(PASSWORD);
 

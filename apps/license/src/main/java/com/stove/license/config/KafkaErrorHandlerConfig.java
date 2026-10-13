@@ -1,9 +1,9 @@
 package com.stove.license.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.ConsumerRetryPolicy;
 import com.stove.common.kafka.DeadLetterMetrics;
 import com.stove.common.kafka.DeadLetterPublisher;

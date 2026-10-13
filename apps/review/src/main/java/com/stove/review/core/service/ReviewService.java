@@ -1,10 +1,10 @@
 package com.stove.review.core.service;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.GameRegisteredEvent;
-import com.stove.common.event.payload.ReviewApprovedEvent;
-import com.stove.common.event.payload.ReviewRejectedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
+import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.review.core.domain.ReviewRequest;

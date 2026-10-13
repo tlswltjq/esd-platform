@@ -36,9 +36,8 @@ class S3BuildStorageTest {
     private static final String BUCKET = "stove-builds";
 
     @Container
-    static final MinIOContainer MINIO = new MinIOContainer(DockerImageName
-            .parse("quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z")
-            .asCompatibleSubstituteFor("minio/minio"))
+    static final MinIOContainer MINIO = new MinIOContainer(
+            com.stove.common.testcontainers.InfraContainers.minioImage())
             .withUserName(USER)
             .withPassword(PASSWORD);
 

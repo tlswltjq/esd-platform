@@ -1,9 +1,9 @@
 package com.stove.studio.core.service.build;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.BuildValidatedEvent;
-import com.stove.common.event.payload.BuildValidationFailedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.BuildValidatedEvent;
+import com.stove.common.kafka.contract.payload.BuildValidationFailedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.studio.core.domain.build.GameBuild;
 import com.stove.studio.core.domain.build.GameBuildRepository;

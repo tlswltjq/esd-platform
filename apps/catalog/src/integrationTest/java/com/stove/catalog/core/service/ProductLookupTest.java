@@ -7,8 +7,8 @@ import com.stove.catalog.core.domain.Product;
 import com.stove.catalog.core.domain.ProductRepository;
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.catalog.core.domain.CatalogErrorCode;
 import com.stove.common.testcontainers.InfraContainers;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -65,7 +65,7 @@ class ProductLookupTest {
         assertThatThrownBy(() -> productQueryService.getPublishedProductByCode(saved.getProductCode()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+                .isEqualTo(CatalogErrorCode.PRODUCT_NOT_FOUND);
     }
 
     @Test
@@ -74,6 +74,6 @@ class ProductLookupTest {
         assertThatThrownBy(() -> productQueryService.getProductByCode("GAME-NO-SUCH-CODE"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).errorCode())
-                .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+                .isEqualTo(CatalogErrorCode.PRODUCT_NOT_FOUND);
     }
 }

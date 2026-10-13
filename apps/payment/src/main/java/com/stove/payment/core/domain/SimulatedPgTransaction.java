@@ -1,7 +1,8 @@
 package com.stove.payment.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.payment.core.domain.PaymentErrorCode;
 import com.stove.payment.core.domain.PgApproval;
 import com.stove.payment.core.domain.PgDecline;
 import jakarta.persistence.Column;
@@ -114,7 +115,7 @@ public class SimulatedPgTransaction {
 
     public void cancel(long requestedAmount) {
         if (amount != requestedAmount) {
-            throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+            throw new BusinessException(PaymentErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
         if (status == Status.CANCELED) return;
         // 기존 서명 콜백도 데모 PG의 승인 사실로 취급하므로 PREPARED 취소를 허용한다.

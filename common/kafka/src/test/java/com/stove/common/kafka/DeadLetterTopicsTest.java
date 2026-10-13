@@ -3,7 +3,7 @@ package com.stove.common.kafka;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.event.Topics;
+import com.stove.common.kafka.contract.Topics;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

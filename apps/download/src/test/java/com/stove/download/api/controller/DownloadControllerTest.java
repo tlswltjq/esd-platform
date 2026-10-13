@@ -1,5 +1,8 @@
 package com.stove.download.api.controller;
 
+import com.stove.common.security.CurrentIdentityArgumentResolver;
+import com.stove.common.web.SecurityExceptionHandler;
+
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -43,8 +46,8 @@ class DownloadControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new DownloadController(downloadTicketService, manifestService))
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new CurrentIdentityArgumentResolver(), new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new SecurityExceptionHandler(), new GlobalExceptionHandler())
             .build();
 
     @Test
@@ -97,7 +100,7 @@ class DownloadControllerTest {
 
     private void authenticate() {
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(Jwt.withTokenValue("test")
-                .header("alg", "none").claim("sub", "user").claim("member_id", 42L).build()));
+                .header("alg", "none").claim("sub", "user").claim("member_id", 42L).build(), java.util.List.of()));
     }
 
     @AfterEach

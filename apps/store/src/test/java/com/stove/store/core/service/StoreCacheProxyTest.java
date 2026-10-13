@@ -6,7 +6,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
 import java.util.List;

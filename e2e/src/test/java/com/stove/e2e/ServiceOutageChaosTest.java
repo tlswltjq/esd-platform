@@ -3,7 +3,6 @@ package com.stove.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -215,7 +214,7 @@ class ServiceOutageChaosTest {
                 .isEqualTo(404);
         assertThat(ticket.errorCode())
                 .as("상태코드만 보면 '차단됐다' 와 '부르지도 못했다' 가 같아 보인다 — %s", ticket)
-                .isEqualTo(ErrorCode.NOT_FOUND.name());
+                .isEqualTo("NOT_FOUND");
     }
 
     // ── 4. 복구 ──────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ package com.stove.order.api.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;

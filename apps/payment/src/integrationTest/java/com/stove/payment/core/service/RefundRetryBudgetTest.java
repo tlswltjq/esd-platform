@@ -8,8 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.domain.Payment;

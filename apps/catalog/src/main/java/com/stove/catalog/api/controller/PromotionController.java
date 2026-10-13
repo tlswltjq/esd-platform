@@ -2,7 +2,7 @@ package com.stove.catalog.api.controller;
 
 import com.stove.catalog.core.domain.Promotion;
 import com.stove.catalog.api.application.PromotionFacade;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;

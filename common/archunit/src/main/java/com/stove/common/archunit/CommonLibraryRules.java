@@ -40,17 +40,32 @@ public final class CommonLibraryRules {
     /**
      * 이벤트 계약은 영속성을 모른다.
      *
-     * <p>{@code common/event} 의 의존은 Jackson 과 Kafka 까지다 —
+     * <p>{@code common/kafka/contract} 의 의존은 Jackson 과 Kafka 까지다 —
      * 봉투 규약은 포함하되 JPA 는 포함하지 않는다(build.gradle 에 적어둔 그 결정이다).
      * 페이로드에 엔티티가 섞이면 이벤트가 발행 측 스키마에 묶인다.
      */
     @ArchTest
     public static final ArchRule 이벤트_계약은_영속성을_모른다 = noClasses()
-            .that().resideInAPackage("com.stove.common.event..")
+            .that().resideInAPackage("com.stove.common.kafka.contract..")
             .should().dependOnClassesThat().resideInAnyPackage(
                     "jakarta.persistence..",
                     "org.springframework.data..")
             .because("이벤트 페이로드는 저장 방식과 독립이다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 인증과_영속성_지원은_공통_웹을_모른다 = noClasses()
+            .that().resideInAnyPackage("com.stove.common.security..", "com.stove.common.jpa..")
+            .should().dependOnClassesThat().resideInAPackage("com.stove.common.web..")
+            .because("인증·영속성 지원은 HTTP 응답 계약을 실행 의존성으로 요구하지 않는다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 카프카는_JPA와_Outbox를_모른다 = noClasses()
+            .that().resideInAPackage("com.stove.common.kafka..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "com.stove.common.jpa..", "com.stove.common.messaging..", "jakarta.persistence..")
+            .because("Kafka 소비만 필요한 앱에는 DB 트랜잭션 인프라를 요구하지 않는다")
             .allowEmptyShould(true);
 
     @ArchTest

@@ -5,7 +5,6 @@ import static com.stove.e2e.Journey.OTHER_MEMBER;
 import static com.stove.e2e.Journey.PRICE;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.core.error.ErrorCode;
 import com.stove.e2e.E2eClient.Response;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +42,7 @@ class TrackBCommerceFlowTest {
         Response response = Stove.gateway.post("/api/v1/orders", orderRequest(100), Journey.asMember(MEMBER));
 
         assertThat(response.status()).as("%s", response).isEqualTo(409);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.PRICE_MISMATCH.name());
+        assertThat(response.errorCode()).isEqualTo("PRICE_MISMATCH");
     }
 
     @Test
@@ -99,7 +98,7 @@ class TrackBCommerceFlowTest {
                 "idempotencyKey", Journey.idempotencyKey("NO-RESULT")));
 
         assertThat(response.status()).as("%s", response).isEqualTo(400);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST.name());
+        assertThat(response.errorCode()).isEqualTo("INVALID_REQUEST");
     }
 
     /** 게이트 3 — 사전등록 금액과 다른 승인은 확정하지 않는다. */
@@ -110,7 +109,7 @@ class TrackBCommerceFlowTest {
         Response response = Stove.gateway.post("/api/v1/payments/callback", approval(1, "BAD-AMOUNT"));
 
         assertThat(response.status()).as("%s", response).isEqualTo(409);
-        assertThat(response.errorCode()).isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH.name());
+        assertThat(response.errorCode()).isEqualTo("PAYMENT_AMOUNT_MISMATCH");
     }
 
     /**

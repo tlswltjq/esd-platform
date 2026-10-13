@@ -1,7 +1,7 @@
 package com.stove.payment.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
-import com.stove.common.security.CommerceIdentity;
+import com.stove.common.web.response.ApiResponse;
+import com.stove.common.security.CurrentMemberId;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
@@ -22,8 +22,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 
 @RestController
 @RequiredArgsConstructor
@@ -37,18 +35,18 @@ public class PaymentController {
     @GetMapping("/{orderNo}")
     @SecurityRequirement(name = "oauth2", scopes = "commerce")
     public ApiResponse<PaymentResponse> get(@PathVariable String orderNo,
-                                            @AuthenticationPrincipal Jwt jwt) {
+                                            @CurrentMemberId Long memberId) {
         return ApiResponse.ok(PaymentResponse.from(paymentService.getPaymentForMember(
-                orderNo, CommerceIdentity.memberId(jwt))));
+                orderNo, memberId)));
     }
 
     @PostMapping("/{orderNo}/prepare")
     @SecurityRequirement(name = "oauth2", scopes = "commerce")
     public ApiResponse<PreparePaymentResponse> prepare(@PathVariable String orderNo,
-                                                       @AuthenticationPrincipal Jwt jwt,
+                                                       @CurrentMemberId Long memberId,
                                                        @Valid @RequestBody PreparePaymentRequest request) {
         return ApiResponse.ok(PreparePaymentResponse.from(paymentService.prepareForMember(
-                orderNo, CommerceIdentity.memberId(jwt), request.method())));
+                orderNo, memberId, request.method())));
     }
 
     /**
@@ -75,9 +73,9 @@ public class PaymentController {
     @PostMapping("/{orderNo}/cancel")
     @SecurityRequirement(name = "oauth2", scopes = "commerce")
     public ApiResponse<Void> cancel(@PathVariable String orderNo,
-                                    @AuthenticationPrincipal Jwt jwt,
+                                    @CurrentMemberId Long memberId,
                                     @RequestParam(defaultValue = "USER_REFUND") String reason) {
-        refundFacade.refundForMember(orderNo, CommerceIdentity.memberId(jwt), reason);
+        refundFacade.refundForMember(orderNo, memberId, reason);
         return ApiResponse.ok();
     }
 }

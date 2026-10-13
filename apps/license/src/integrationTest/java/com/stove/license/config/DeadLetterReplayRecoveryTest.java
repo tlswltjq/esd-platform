@@ -3,11 +3,11 @@ package com.stove.license.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventHeaders;
-import com.stove.common.event.payload.OrderLine;
-import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventHeaders;
+import com.stove.common.kafka.contract.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.DeadLetterTopics;
 import com.stove.common.kafka.ops.DltOpsService;
 import com.stove.common.kafka.ops.DltRecordResponse;

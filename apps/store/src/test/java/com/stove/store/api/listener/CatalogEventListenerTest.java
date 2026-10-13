@@ -8,8 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.store.core.service.StoreService;
 import org.junit.jupiter.api.DisplayName;

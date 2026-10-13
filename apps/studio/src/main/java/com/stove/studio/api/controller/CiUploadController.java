@@ -1,8 +1,8 @@
 package com.stove.studio.api.controller;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.api.controller.dto.BuildResponse;
 import com.stove.studio.api.controller.dto.CompleteUploadRequest;
 import com.stove.studio.api.controller.dto.CreateUploadSessionRequest;

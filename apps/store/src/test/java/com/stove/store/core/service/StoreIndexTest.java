@@ -8,9 +8,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.store.core.domain.ProductDocument;
 import com.stove.store.core.domain.ProductSearchRepository;
 import com.stove.store.core.domain.StoreProductView;

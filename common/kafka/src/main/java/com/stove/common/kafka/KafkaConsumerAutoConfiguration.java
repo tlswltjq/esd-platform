@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -18,7 +20,8 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
  * 이 모듈을 의존하는 것만으로 두 기본값이 깔린다.
  */
 @Slf4j
-@AutoConfiguration
+@AutoConfiguration(after = KafkaAutoConfiguration.class)
+@ConditionalOnBean(KafkaTemplate.class)
 public class KafkaConsumerAutoConfiguration {
 
     /**

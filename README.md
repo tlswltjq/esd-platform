@@ -15,7 +15,6 @@
 | 가입부터 출시·구매·환불·월 마감까지 실습 | [API 데모](docs/api-demo.md) |
 | 서비스 API와 인증·권한 | [서비스 명세](docs/services.md) · [인증·권한 계약](docs/security.md) |
 | 구조와 설계 이유, 실험·운영 기록 | [아키텍처](docs/architecture.md) · [전체 문서 목록](docs/README.md) |
-| 복잡성을 줄이고 최소 기반부터 재구축하는 계획 | [단순화 및 재구축 계획](docs/simplification-plan.md) |
 
 ## 구성
 

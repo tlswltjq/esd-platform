@@ -8,11 +8,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.PaymentCancelledEvent;
-import com.stove.common.event.payload.PaymentCompletedEvent;
-import com.stove.common.event.payload.PaymentFailedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.PaymentFailedEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.order.core.service.OrderCommandService;
 import org.junit.jupiter.api.DisplayName;

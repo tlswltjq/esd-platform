@@ -10,10 +10,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.BuildUploadedEvent;
-import com.stove.common.event.payload.GameRegisteredEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.BuildUploadedEvent;
+import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
 import com.stove.common.test.EventRecords;
 import com.stove.review.core.service.ReviewService;
 import com.stove.review.core.service.SubmissionReviewService;

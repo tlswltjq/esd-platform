@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.core.error.BusinessException;
+import com.stove.common.web.error.BusinessException;
 import com.stove.studio.api.controller.dto.CreateUploadSessionRequest;
 import com.stove.studio.config.ProjectCredentialPrincipal;
 import com.stove.studio.core.service.build.BuildValidationDispatcherService;

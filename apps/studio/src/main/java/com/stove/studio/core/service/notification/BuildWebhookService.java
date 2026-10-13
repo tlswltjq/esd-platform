@@ -2,8 +2,8 @@ package com.stove.studio.core.service.notification;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.build.GameBuild;
 import com.stove.studio.core.domain.notification.BuildWebhookDelivery;
 import com.stove.studio.core.domain.notification.BuildWebhookDeliveryRepository;

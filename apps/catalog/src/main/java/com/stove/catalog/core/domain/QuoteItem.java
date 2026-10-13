@@ -1,7 +1,7 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 
 /**
  * 가격 재계산 대상 한 줄. HTTP 요청 형식과 무관한 core 입력 모델이다.

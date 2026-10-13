@@ -2,6 +2,9 @@ package com.stove.common.kafka.ops;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -18,8 +21,10 @@ import org.springframework.kafka.core.KafkaTemplate;
  * <p>노출을 좁히고 싶은 배포에서는 {@code stove.messaging.ops.enabled=false} 로 끈다.
  * Outbox 운영 API 와 같은 스위치를 쓴다 — 운영자 입장에서 둘은 한 도구다.
  */
-@AutoConfiguration
-@ConditionalOnWebApplication
+@AutoConfiguration(after = KafkaAutoConfiguration.class)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnClass(name = "com.stove.common.web.response.ApiResponse")
+@ConditionalOnBean({KafkaTemplate.class, ConsumerFactory.class})
 @ConditionalOnProperty(prefix = "stove.messaging.ops", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class DltOpsAutoConfiguration {

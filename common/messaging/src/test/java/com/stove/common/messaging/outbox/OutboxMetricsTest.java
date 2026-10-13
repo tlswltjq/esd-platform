@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.concurrent.TimeUnit;

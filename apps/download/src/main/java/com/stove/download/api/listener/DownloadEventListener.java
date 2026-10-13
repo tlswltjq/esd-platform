@@ -1,13 +1,13 @@
 package com.stove.download.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.common.event.payload.ReleasePublishedEvent;
-import com.stove.common.event.payload.LicenseIssuedEvent;
-import com.stove.common.event.payload.LicenseRevokedEvent;
-import com.stove.common.event.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
+import com.stove.common.kafka.contract.payload.LicenseIssuedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRevokedEvent;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.download.core.service.EntitlementService;
 import com.stove.download.core.service.ManifestService;
 import com.stove.download.core.service.ProductRefService;

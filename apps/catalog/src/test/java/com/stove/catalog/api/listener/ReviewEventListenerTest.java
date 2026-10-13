@@ -11,10 +11,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.stove.catalog.core.service.ProductCommandService;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.ReviewApprovedEvent;
-import com.stove.common.event.payload.ReviewRejectedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
+import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.test.EventRecords;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

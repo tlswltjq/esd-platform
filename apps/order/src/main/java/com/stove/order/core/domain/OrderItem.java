@@ -1,6 +1,6 @@
 package com.stove.order.core.domain;
 
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.math.BigDecimal;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

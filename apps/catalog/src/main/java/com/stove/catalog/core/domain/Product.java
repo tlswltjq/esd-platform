@@ -1,7 +1,8 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.catalog.core.domain.CatalogErrorCode;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.CollectionTable;
@@ -202,7 +203,7 @@ public class Product extends BaseTimeEntity {
 
     public void requirePurchasable() {
         if (!status.purchasable()) {
-            throw new BusinessException(ErrorCode.PRODUCT_NOT_ON_SALE,
+            throw new BusinessException(CatalogErrorCode.PRODUCT_NOT_ON_SALE,
                     "판매 중이 아닌 상품입니다. productId=" + id);
         }
     }

@@ -7,12 +7,14 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 /**
  * common:web 을 의존하면 예외 핸들러/추적 ID 응답 필터가 자동 등록된다.
  * (각 서비스가 @ComponentScan 범위를 넓히지 않아도 되도록 자동 구성으로 제공)
  */
 @AutoConfiguration
+@ConditionalOnClass(name = "org.springframework.web.servlet.DispatcherServlet")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class CommonWebAutoConfiguration {
 
@@ -48,12 +50,26 @@ public class CommonWebAutoConfiguration {
      * 서비스 이름은 명세 제목에만 쓰이므로 없으면 빈 문자열로 둔다 —
      * 이름을 못 읽었다고 문서 생성이 실패할 이유는 없다.
      */
-    @Bean
-    public ApiDocumentationCustomizer apiDocumentationCustomizer(
-            @Value("${spring.application.name:}") String applicationName,
-            @Value("${stove.docs.oauth.authorization-url:/oauth2/authorize}")
-            String authorizationUrl,
-            @Value("${stove.docs.oauth.token-url:/oauth2/token}") String tokenUrl) {
-        return new ApiDocumentationCustomizer(applicationName, authorizationUrl, tokenUrl);
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springdoc.core.customizers.OpenApiCustomizer")
+    static class DocumentationConfiguration {
+
+        @Bean
+        ApiDocumentationCustomizer apiDocumentationCustomizer(
+                @Value("${spring.application.name:}") String applicationName,
+                @Value("${stove.docs.oauth.authorization-url:/oauth2/authorize}") String authorizationUrl,
+                @Value("${stove.docs.oauth.token-url:/oauth2/token}") String tokenUrl) {
+            return new ApiDocumentationCustomizer(applicationName, authorizationUrl, tokenUrl);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.security.access.AccessDeniedException")
+    static class SecurityConfiguration {
+
+        @Bean
+        SecurityExceptionHandler securityExceptionHandler() {
+            return new SecurityExceptionHandler();
+        }
     }
 }

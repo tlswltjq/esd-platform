@@ -1,6 +1,6 @@
 package com.stove.payment.config;
 
-import com.stove.common.security.CommerceIdentity;
+import com.stove.common.security.ApiJwtSecurity;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +15,7 @@ public class SecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
                           @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
-        return CommerceIdentity.decoder(issuer, jwkSetUri);
+        return ApiJwtSecurity.decoder(issuer, jwkSetUri);
     }
 
     @Bean
@@ -30,7 +30,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/payments/**").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(CommerceIdentity.rolesConverter())))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))
                 .build();
     }
 }

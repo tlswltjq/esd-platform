@@ -3,7 +3,7 @@ package com.stove.studio.core.service.submission;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
+import com.stove.common.web.error.BusinessException;
 import com.stove.studio.core.domain.build.GameBuild;
 import com.stove.studio.core.domain.build.NewUploadSession;
 import java.util.List;

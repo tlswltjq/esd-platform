@@ -1,10 +1,10 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.LicenseIssueFailedEvent;
-import com.stove.common.event.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.LicenseIssueFailedEvent;
+import com.stove.common.kafka.EventEnvelope;
 import com.stove.payment.api.application.RefundFacade;
 import com.stove.payment.core.service.PaymentService;
 import lombok.RequiredArgsConstructor;

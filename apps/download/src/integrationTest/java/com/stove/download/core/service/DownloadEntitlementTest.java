@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.event.payload.ProductChangedEvent;
-import com.stove.common.event.payload.BuildVariant;
-import com.stove.common.event.payload.ReleasePublishedEvent;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.kafka.contract.payload.ProductChangedEvent;
+import com.stove.common.kafka.contract.payload.BuildVariant;
+import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.domain.Entitlement;

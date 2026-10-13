@@ -1,5 +1,12 @@
 package com.stove.payment.api.controller;
 
+import com.stove.common.security.CurrentIdentityArgumentResolver;
+import com.stove.common.web.SecurityExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -40,9 +47,14 @@ class PaymentControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new PaymentController(paymentService, refundFacade, paymentCallbackFacade))
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new CurrentIdentityArgumentResolver(), new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new SecurityExceptionHandler(), new GlobalExceptionHandler())
             .build();
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
 
     private String callback(String orderNo, String pgTxId, Long paidAmount, String idempotencyKey)
             throws Exception {
@@ -171,6 +183,10 @@ class PaymentControllerTest {
     @Test
     @DisplayName("결제 수단 없는 준비 요청은 400 이다")
     void blankMethodIsRejected() throws Exception {
+        var jwt = Jwt.withTokenValue("test")
+                .header("alg", "RS256").claim("member_id", 42L).build();
+        SecurityContextHolder.getContext()
+                .setAuthentication(new JwtAuthenticationToken(jwt, java.util.List.of()));
         mockMvc.perform(post("/api/v1/payments/ORD-1/prepare")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new PreparePaymentRequest(""))))

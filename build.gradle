@@ -280,7 +280,7 @@ configure(subprojects.findAll { it.path.startsWith(':common:') }) {
     tasks.named('jar') { enabled = true }
 
     // 디렉터리에서 뺀 common- 접두사를 산출물에서는 되살린다.
-    // 경로는 패키지와 1:1 로 두되(common/core → com.stove.common.core),
+    // 경로는 패키지와 1:1 로 두되(common/web → com.stove.common.web),
     // 클래스패스에 core.jar / web.jar / test.jar 로 뜨는 것은 피한다.
     base { archivesName = "common-${project.name}" }
 }
@@ -289,6 +289,42 @@ configure(subprojects.findAll { it.path.startsWith(':common:') }) {
 // 빈 jar 를 만들어 두면 common-*.jar 목록에 모듈이 아닌 것이 섞인다.
 configure([project(':apps'), project(':common')]) {
     tasks.named('jar') { enabled = false }
+}
+
+// 클래스의 의존성뿐 아니라 실제 런타임에 웹 서버가 전파되는지도 검증한다.
+tasks.register('verifyCommonRuntimeDependencies') {
+    group = 'verification'
+    description = '공통 라이브러리의 실행 환경과 의존성 방향을 검증한다'
+
+    doLast {
+        def modules = ['web', 'jpa', 'security', 'kafka', 'messaging']
+        modules.each { moduleName ->
+            def components = project(":common:${moduleName}").configurations.runtimeClasspath
+                    .incoming.resolutionResult.allComponents
+            components.each { component ->
+                def id = component.id
+                if (id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
+                    if (id.module in ['spring-webmvc', 'jakarta.servlet-api', 'spring-boot-starter-web',
+                                      'spring-boot-starter-tomcat'] || id.group == 'org.apache.tomcat.embed') {
+                        throw new GradleException("common:${moduleName} must not provide Servlet runtime: ${id}")
+                    }
+                }
+                if (id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier) {
+                    if (moduleName != 'web' && id.projectPath == ':common:web') {
+                        throw new GradleException("common:${moduleName} must not require common:web at runtime")
+                    }
+                    if (moduleName == 'kafka' && id.projectPath in [':common:jpa', ':common:messaging']) {
+                        throw new GradleException("common:kafka must not require database messaging: ${id}")
+                    }
+                }
+            }
+        }
+        logger.lifecycle('Common runtime dependencies verified: ' + modules.join(', '))
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyCommonRuntimeDependencies')
 }
 
 // ── 결함 재현 테스트 합산 보고 ────────────────────────────────────────

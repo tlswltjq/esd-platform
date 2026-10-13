@@ -4,8 +4,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.common.web.error.ApiErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,6 +44,15 @@ class BusinessExceptionStatusTest {
             throw new BusinessException(ErrorCode.valueOf(code), "테스트");
         }
 
+        @GetMapping("/application-error")
+        String applicationError() {
+            throw new BusinessException(new ApiErrorCode() {
+                public String code() { return "LOCAL_CONFLICT"; }
+                public int statusCode() { return 409; }
+                public String defaultMessage() { return "업무 충돌"; }
+            });
+        }
+
         @GetMapping("/unexpected")
         String unexpected() {
             throw new IllegalStateException("아무도 처리하지 않는 예외");
@@ -65,17 +75,12 @@ class BusinessExceptionStatusTest {
     }
 
     @Test
-    @DisplayName("스모크가 상태코드로 판정하던 계약 — 대조 실패는 409 다")
-    void mismatchesAreConflict() throws Exception {
-        // smoke-stack.sh 의 기대-실패 판정 중 상태코드에 기대던 것들이다.
-        // 그 스크립트는 CI 밖에 있으므로, 계약 자체는 여기서 지킨다.
-        for (ErrorCode code : new ErrorCode[]{
-                ErrorCode.PRICE_MISMATCH,
-                ErrorCode.PAYMENT_AMOUNT_MISMATCH,
-                ErrorCode.PAYMENT_TX_MISMATCH}) {
-            mvc.perform(get("/boom/{code}", code.name()))
-                    .andExpect(status().isConflict());
-        }
+    @DisplayName("앱이 정의한 오류 코드와 상태도 공통 응답으로 전달된다")
+    void applicationErrorIsPreserved() throws Exception {
+        mvc.perform(get("/application-error"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("LOCAL_CONFLICT"))
+                .andExpect(jsonPath("$.error.message").value("업무 충돌"));
     }
 
     @Test

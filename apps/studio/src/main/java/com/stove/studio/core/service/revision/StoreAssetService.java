@@ -1,7 +1,7 @@
 package com.stove.studio.core.service.revision;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.revision.StoreAsset;
 import com.stove.studio.core.port.BuildStorage;
 import com.stove.studio.core.service.project.GameProjectService;

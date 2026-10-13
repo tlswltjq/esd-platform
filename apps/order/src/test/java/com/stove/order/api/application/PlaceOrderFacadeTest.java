@@ -9,9 +9,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.order.core.domain.Quote;
 import com.stove.order.core.domain.QuoteItem;
 import com.stove.order.core.port.CatalogPort;
@@ -63,7 +64,7 @@ class PlaceOrderFacadeTest {
         // 어느 쪽이 맞든 사용자가 동의한 금액이 아니므로 진행하지 않는다.
         assertThatThrownBy(() -> facade.place(42L, ITEMS, 30_000L))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PRICE_MISMATCH);
+                .hasFieldOrPropertyWithValue("errorCode", OrderErrorCode.PRICE_MISMATCH);
 
         verifyNoInteractions(orderCommandService);
     }

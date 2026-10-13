@@ -1,5 +1,12 @@
 package com.stove.order.api.controller;
 
+import com.stove.common.security.CurrentIdentityArgumentResolver;
+import com.stove.common.web.SecurityExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,9 +47,21 @@ class OrderControllerTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new OrderController(placeOrderFacade, orderQueryService, orderCommandService))
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new CurrentIdentityArgumentResolver(), new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new SecurityExceptionHandler(), new GlobalExceptionHandler())
             .build();
+
+    private void authenticate() {
+        var jwt = Jwt.withTokenValue("test")
+                .header("alg", "RS256").claim("member_id", 42L).build();
+        SecurityContextHolder.getContext()
+                .setAuthentication(new JwtAuthenticationToken(jwt, java.util.List.of()));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
 
     private String body(Long productId, int quantity) throws Exception {
         return objectMapper.writeValueAsString(new CreateOrderRequest(
@@ -52,6 +71,7 @@ class OrderControllerTest {
     @Test
     @DisplayName("음수 수량 주문은 400 으로 막힌다")
     void negativeQuantityIsRejected() throws Exception {
+        authenticate();
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(1L, -1)))
@@ -63,6 +83,7 @@ class OrderControllerTest {
     @Test
     @DisplayName("수량 0 주문도 400 이다")
     void zeroQuantityIsRejected() throws Exception {
+        authenticate();
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(1L, 0)))
@@ -85,6 +106,7 @@ class OrderControllerTest {
     @Test
     @DisplayName("품목 없는 주문은 400 이다")
     void emptyItemsIsRejected() throws Exception {
+        authenticate();
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(

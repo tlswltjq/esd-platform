@@ -3,8 +3,8 @@ package com.stove.payment.core.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;

@@ -25,8 +25,8 @@
 
 | 문서 | 다루는 내용 |
 |---|---|
-| [단순화 및 재구축 계획](simplification-plan.md) | 최소 서비스·기능 범위, 인증·저장소 축소, 전환 순서와 고도화 조건 |
 | [아키텍처](architecture.md) | 서비스 경계, 트랜잭션·이벤트 처리, DB 실험과 설계 위험 |
+| [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |

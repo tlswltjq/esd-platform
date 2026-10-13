@@ -1,8 +1,9 @@
 package com.stove.order.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
-import com.stove.common.event.payload.OrderLine;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.jpa.BaseTimeEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -141,7 +142,7 @@ public class Order extends BaseTimeEntity {
             return;
         }
         if (status != OrderStatus.CREATED && status != OrderStatus.PAID) {
-            throw new BusinessException(ErrorCode.ORDER_NOT_CANCELABLE, "취소 불가 상태: " + status);
+            throw new BusinessException(OrderErrorCode.ORDER_NOT_CANCELABLE, "취소 불가 상태: " + status);
         }
         this.status = OrderStatus.CANCELED;
         this.canceledAt = Instant.now();

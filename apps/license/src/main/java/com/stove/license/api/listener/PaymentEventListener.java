@@ -1,11 +1,11 @@
 package com.stove.license.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.payload.PaymentCancelledEvent;
-import com.stove.common.event.payload.PaymentCompletedEvent;
-import com.stove.common.event.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.EventEnvelope;
 import com.stove.license.core.service.LicenseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

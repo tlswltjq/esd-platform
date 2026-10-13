@@ -1,6 +1,6 @@
 package com.stove.store.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.store.api.controller.dto.StoreProductResponse;
 import com.stove.store.core.service.StoreService;
 import java.util.List;

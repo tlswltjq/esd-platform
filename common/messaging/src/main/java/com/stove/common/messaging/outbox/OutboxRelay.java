@@ -1,6 +1,6 @@
 package com.stove.common.messaging.outbox;
 
-import com.stove.common.event.kafka.EventHeaders;
+import com.stove.common.kafka.EventHeaders;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;

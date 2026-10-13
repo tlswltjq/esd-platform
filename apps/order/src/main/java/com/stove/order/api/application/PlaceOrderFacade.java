@@ -1,7 +1,7 @@
 package com.stove.order.api.application;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.order.core.domain.OrderErrorCode;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.Quote;
 import com.stove.order.core.domain.QuoteItem;
@@ -29,7 +29,7 @@ public class PlaceOrderFacade {
 
         if (expectedAmount != null && expectedAmount != quote.totalAmount()) {
             log.warn("주문 금액 불일치 expected={} actual={}", expectedAmount, quote.totalAmount());
-            throw new BusinessException(ErrorCode.PRICE_MISMATCH);
+            throw new BusinessException(OrderErrorCode.PRICE_MISMATCH);
         }
 
         return orderCommandService.createOrder(memberId, quote.currency(), quote.lines());

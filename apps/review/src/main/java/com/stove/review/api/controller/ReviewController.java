@@ -1,6 +1,6 @@
 package com.stove.review.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.review.api.controller.dto.RejectRequest;
 import com.stove.review.api.controller.dto.ReviewResponse;
 import com.stove.review.core.domain.ReviewStatus;

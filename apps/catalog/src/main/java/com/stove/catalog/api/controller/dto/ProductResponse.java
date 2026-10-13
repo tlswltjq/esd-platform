@@ -2,8 +2,8 @@ package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.ProductStatus;
 import com.stove.catalog.core.domain.ProductView;
-import com.stove.common.event.payload.PromotionWindow;
-import com.stove.common.event.payload.StorefrontSnapshot;
+import com.stove.common.kafka.contract.payload.PromotionWindow;
+import com.stove.common.kafka.contract.payload.StorefrontSnapshot;
 import java.util.List;
 
 public record ProductResponse(

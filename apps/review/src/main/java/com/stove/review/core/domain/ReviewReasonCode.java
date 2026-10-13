@@ -1,7 +1,7 @@
 package com.stove.review.core.domain;
 
-import com.stove.common.core.error.BusinessException;
-import com.stove.common.core.error.ErrorCode;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import java.util.Arrays;
 
 /**

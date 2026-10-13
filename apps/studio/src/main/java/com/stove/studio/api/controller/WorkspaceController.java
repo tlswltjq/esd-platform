@@ -1,10 +1,9 @@
 package com.stove.studio.api.controller;
 
-import com.stove.common.core.response.ApiResponse;
+import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.core.service.project.WorkspaceService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.stove.common.security.CurrentSubject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +16,7 @@ public class WorkspaceController {
 
     /** Resolve the seller from the authenticated subject, never a caller supplied seller ID. */
     @GetMapping
-    public ApiResponse<Long> own(@AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.ok(workspaceService.getOrCreatePersonal(jwt.getSubject()).getId());
+    public ApiResponse<Long> own(@CurrentSubject String subject) {
+        return ApiResponse.ok(workspaceService.getOrCreatePersonal(subject).getId());
     }
 }

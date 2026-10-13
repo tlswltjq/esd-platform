@@ -11,11 +11,7 @@
 // 인프라를 띄워 한 서비스 안을 보는 것은 `integrationTest` 의 일이다(decisions.md 20번).
 
 dependencies {
-    // **기대값을 문자열로 적지 않는다.** `PRICE_MISMATCH` 를 지우거나 이름을 바꾸면 e2e 가
-    // 컴파일에서 막힌다. 이 저장소가 계약을 고정해 온 방식(OpenAPI 스냅샷·EventContractTest·
-    // ArchRuleEnforcementTest)을 인수 층에도 그대로 쓴다.
-    testImplementation project(':common:core')
-
+    // 배포된 API의 오류 문자열을 검증하며 앱의 구현 클래스에는 의존하지 않는다.
     testImplementation 'org.springframework:spring-web'                 // RestClient
     testImplementation 'com.fasterxml.jackson.core:jackson-databind'
     testImplementation 'org.awaitility:awaitility'

@@ -2,10 +2,10 @@ package com.stove.catalog.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.core.service.ProductCommandService;
-import com.stove.common.event.EventType;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventEnvelope;
-import com.stove.common.event.payload.ReviewApprovedEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

@@ -13,12 +13,12 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.DomainEvent;
-import com.stove.common.event.Topics;
-import com.stove.common.event.kafka.EventHeaders;
-import com.stove.common.event.payload.OrderLine;
-import com.stove.common.event.payload.PaymentCancelledEvent;
-import com.stove.common.event.payload.PaymentCompletedEvent;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.EventHeaders;
+import com.stove.common.kafka.contract.payload.OrderLine;
+import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
+import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.DeadLetterMetrics;
 import com.stove.license.core.service.LicenseService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -190,7 +190,7 @@ class KafkaErrorHandlerConfigTest {
         ConsumerRecord<String, String> broken =
                 new ConsumerRecord<>(Topics.PAYMENT, 0, 7L, "ORD-1", "{not json");
         broken.headers().add(EventHeaders.EVENT_TYPE,
-                com.stove.common.event.EventType.PAYMENT_COMPLETED.getBytes(StandardCharsets.UTF_8));
+                com.stove.common.kafka.contract.EventType.PAYMENT_COMPLETED.getBytes(StandardCharsets.UTF_8));
 
         assertThatCode(() -> recoverer.accept(broken, new IllegalStateException("boom")))
                 .doesNotThrowAnyException();
@@ -269,7 +269,7 @@ class KafkaErrorHandlerConfigTest {
         ConsumerRecord<String, String> broken =
                 new ConsumerRecord<>(Topics.PAYMENT, 0, 7L, "ORD-1", "{not json");
         broken.headers().add(EventHeaders.EVENT_TYPE,
-                com.stove.common.event.EventType.PAYMENT_COMPLETED.getBytes(StandardCharsets.UTF_8));
+                com.stove.common.kafka.contract.EventType.PAYMENT_COMPLETED.getBytes(StandardCharsets.UTF_8));
 
         recoverer.accept(broken, new IllegalStateException("boom"));
 
