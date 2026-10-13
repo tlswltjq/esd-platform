@@ -34,6 +34,9 @@ spring:
 
 stove:
   auth:
+    bff-client-secret: ${BFF_CLIENT_SECRET}
+    bff-redirect-uri: ${BFF_REDIRECT_URI:http://localhost:8080/login/oauth2/code/gateway-bff}
+    bff-access-token-seconds: ${BFF_ACCESS_TOKEN_SECONDS:900}
     issuer: ${AUTH_ISSUER:http://localhost:8091}
     redirect-uri: ${STUDIO_REDIRECT_URI:http://localhost:3000/callback}
     app-origin: ${STUDIO_APP_ORIGIN:http://localhost:3000}

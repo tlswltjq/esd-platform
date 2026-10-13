@@ -18,6 +18,11 @@ public class AccountController {
 
     private final UserAccountService userAccountService;
 
+    @org.springframework.web.bind.annotation.GetMapping("/session")
+    public ApiResponse<java.util.Map<String, String>> session(java.security.Principal principal) {
+        return ApiResponse.ok(java.util.Map.of("subject", principal.getName()));
+    }
+
     @PostMapping("/signup")
     public ApiResponse<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         return ApiResponse.ok(SignupResponse.from(

@@ -81,4 +81,8 @@ public class UserAccount extends BaseTimeEntity {
     public boolean enabled() {
         return status == AccountStatus.ACTIVE;
     }
+
+    public void changePasswordHash(String hash) {
+        this.passwordHash = hash;
+    }
 }

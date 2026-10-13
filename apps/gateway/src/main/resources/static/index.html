@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><title>플랫폼 로그인</title>
+<body><h1>플랫폼 로그인</h1><a href="/oauth2/authorization/gateway-bff">로그인</a>
+<p id="status"></p><button id="logout" hidden>로그아웃</button>
+<script>
+fetch('/bff/session').then(async response => {
+  if (response.ok) {
+    const user = await response.json();
+    document.querySelector('#status').textContent = '로그인: ' + user.subject + ' (' + user.roles.join(', ') + ')';
+    document.querySelector('#logout').hidden = false;
+  } else document.querySelector('#status').textContent = '로그인이 필요합니다.';
+});
+document.querySelector('#logout').onclick = async () => {
+  const csrf = await fetch('/bff/csrf').then(response => response.json());
+  const form = document.createElement('form');
+  form.method = 'POST'; form.action = '/bff/logout';
+  const field = document.createElement('input');
+  field.type = 'hidden'; field.name = '_csrf'; field.value = csrf.token;
+  form.append(field); document.body.append(form); form.submit();
+};
+</script></body></html>

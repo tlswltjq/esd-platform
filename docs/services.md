@@ -5,6 +5,11 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
+**모듈 재작업 현황 (2026-10-13): `auth`, `gateway` 재작업 완료.**
+auth의 오류 수정·Refresh Token/RTR과 Gateway/BFF의 자동 로그인·공유 세션·토큰 갱신을 구현했다.
+관련 테스트 132개와 실제 스택의 다중 Gateway, 로그아웃, 재시작 유지, Redis 장애 응답을 검증했다.
+다른 서비스 모듈은 이번 재작업 완료 대상에 포함하지 않는다. 실행 방법과 정책은 [auth·Gateway/BFF](auth-bff.md)를 본다.
+
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
 | | 서비스 | 포트 | 한 줄 책임 | 저장소 |
@@ -19,7 +24,7 @@
 | C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
 | C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
-| — | [gateway](#gateway) | 8080 | 라우팅, 내부 API 차단 | — |
+| — | [gateway](#gateway) | 8080 | 라우팅·BFF 로그인·세션·토큰 관리, 내부 API 차단 | Redis |
 
 표의 포트는 서비스 내부 포트다. 로컬 E2E 구성의 호스트 포트는 10000을 더한 값이며, 외부 요청은 보통 Gateway `18080`을 사용한다. [개발 환경과 실행](getting-started.md)을 참고한다.
 
@@ -436,6 +441,8 @@ Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 
 ## gateway
 
 Spring Cloud Gateway. 라우팅과 함께 **내부 전용 API 를 외부에 노출하지 않는 역할**을 한다.
+재작업 후 BFF를 겸하며 OAuth 기밀 클라이언트로 로그인·토큰 교환·갱신을 수행한다.
+브라우저는 세션 쿠키를 사용하고 세션과 토큰은 Redis에 공유한다. [상세 구성과 검증](auth-bff.md)을 참고한다.
 
 | 경로 | 대상 | 비고 |
 |---|---|---|

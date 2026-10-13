@@ -19,6 +19,7 @@
 | [개발 환경과 실행](getting-started.md) | 로컬·원격 실행, Swagger OAuth, 문제 해결 |
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
 | [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 PG 콜백 |
+| [auth·Gateway/BFF](auth-bff.md) | 재작업 완료 모듈의 자동 로그인·RTR·공유 세션, 실행과 검증 |
 
 ## 설계·검증·운영 근거
 

@@ -32,15 +32,51 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
+            com.stove.gateway.config.bff.RedisAuthorizedClients clients, com.stove.gateway.config.bff.BffTokens tokens,
+            ReactiveJwtDecoder decoder,
+            org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver resolver,
+            org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository registrations) {
+        var logoutSuccess = new org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler(registrations);
+        logoutSuccess.setPostLogoutRedirectUri("{baseUrl}/");
+        var csrfMatcher = (org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher) exchange -> {
+            String path = exchange.getRequest().getPath().value();
+            boolean apiBearer = exchange.getRequest().getHeaders().getFirst("Authorization") != null
+                    && exchange.getRequest().getHeaders().getFirst("Authorization").startsWith("Bearer ");
+            boolean delegated = path.equals("/login") || path.equals("/logout") || path.startsWith("/oauth2/")
+                    || path.startsWith("/connect/") || path.equals("/userinfo")
+                    || path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/signup/member")
+                    || path.equals("/api/v1/payments/callback") || path.startsWith("/api/v1/studio/ci/")
+                    || path.startsWith("/actuator/");
+            if (apiBearer || delegated) return org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult.notMatch();
+            return org.springframework.security.web.server.csrf.CsrfWebFilter.DEFAULT_CSRF_MATCHER.matches(exchange);
+        };
+        return http.csrf(csrf -> csrf.requireCsrfProtectionMatcher(csrfMatcher))
+                .oauth2Login(login -> login.authorizationRequestResolver(resolver)
+                        .authorizedClientRepository(clients)
+                        .authenticationFailureHandler((exchange, exception) -> {
+                            org.slf4j.LoggerFactory.getLogger(SecurityConfig.class).warn("BFF login failed", exception);
+                            exchange.getExchange().getResponse().setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
+                            return exchange.getExchange().getResponse().setComplete();
+                        })
+                        .authenticationSuccessHandler(new org.springframework.security.web.server.authentication.RedirectServerAuthenticationSuccessHandler("/")))
+                .logout(logout -> logout.requiresLogout(org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/bff/logout"))
+                        .logoutHandler((exchange, authentication) -> clients.key(exchange.getExchange()).flatMap(tokens::revoke))
+                        // Spring adds a concurrent CSRF cleanup handler. Invalidate only after all handlers finish.
+                        .logoutSuccessHandler((exchange, authentication) -> exchange.getExchange().getSession()
+                                .flatMap(org.springframework.web.server.WebSession::invalidate)
+                                .then(reactor.core.publisher.Mono.defer(() -> logoutSuccess.onLogoutSuccess(exchange, authentication)))))
+                .addFilterAfter(new com.stove.gateway.config.bff.BffAuthenticationFilter(clients, tokens, decoder),
+                        org.springframework.security.config.web.server.SecurityWebFiltersOrder.AUTHENTICATION)
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(new org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 .authorizeExchange(authorize -> authorize
                         .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
-                        .pathMatchers("/p0-lab/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                        .pathMatchers("/", "/index.html", "/bff/csrf", "/oauth2/authorization/**", "/login/oauth2/code/**", "/p0-lab/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
                                 "/oauth2/**", "/login", "/logout",
-                                "/error", "/.well-known/**")
+                                "/error", "/.well-known/**", "/connect/**", "/userinfo")
                         .permitAll()
+                        .pathMatchers("/bff/session", "/bff/logout", "/api/v1/auth/password", "/api/v1/auth/session").authenticated()
                         .pathMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/storefront/**")
                         .permitAll()
                         // catalog의 내부 가격 재계산 경로는 외부 라우트가 없다. 보안 필터가

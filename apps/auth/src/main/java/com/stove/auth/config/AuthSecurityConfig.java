@@ -6,10 +6,22 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.stove.auth.core.domain.UserAccountRepository;
+import com.stove.auth.infrastructure.oauth.RotatingAuthorizationService;
+import com.stove.auth.infrastructure.oauth.RotatingRefreshProvider;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.jackson2.SecurityJackson2Modules;
+import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.security.oauth2.server.authorization.token.*;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
+import java.time.Instant;
 import java.time.Duration;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,11 +58,20 @@ public class AuthSecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http, RotatingAuthorizationService authorizations,
+            UserAccountRepository accounts, PlatformTransactionManager transactionManager) throws Exception {
         OAuth2AuthorizationServerConfigurer authorizationServer =
                 OAuth2AuthorizationServerConfigurer.authorizationServer();
         http.securityMatcher(authorizationServer.getEndpointsMatcher())
-                .with(authorizationServer, server -> server.oidc(Customizer.withDefaults()))
+                .with(authorizationServer, server -> server.oidc(Customizer.withDefaults())
+                        .tokenEndpoint(endpoint -> endpoint.authenticationProviders(providers -> {
+                            for (int i = 0; i < providers.size(); i++) {
+                                if (providers.get(i) instanceof OAuth2RefreshTokenAuthenticationProvider) {
+                                    providers.set(i, new RotatingRefreshProvider(providers.get(i), authorizations,
+                                            accounts, rotationTransactions(transactionManager)));
+                                }
+                            }
+                        })))
                 .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
                         new org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint("/login"),
@@ -65,13 +86,25 @@ public class AuthSecurityConfig {
 
     @Bean
     @Order(2)
-    SecurityFilterChain applicationSecurityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member"))
+    SecurityFilterChain applicationSecurityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member")
+                        .ignoringRequestMatchers(request -> {
+                            String header = request.getHeader("Authorization");
+                            return header != null && header.startsWith("Bearer ");
+                        }))
+                .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.decoder(token -> {
+                    var decoded = jwtDecoder.decode(token);
+                    if (!decoded.getAudience().contains("esd-api")) {
+                        throw new org.springframework.security.oauth2.jwt.BadJwtException("Invalid API audience");
+                    }
+                    return decoded;
+                })))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member", "/actuator/health", "/actuator/metrics/**",
-                                "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                                "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error", "/favicon.ico",
+                                "/.well-known/appspecific/**").permitAll()
                         .anyRequest().authenticated())
-                .formLogin(Customizer.withDefaults())
+                .formLogin(login -> login.defaultSuccessUrl("/api/v1/auth/session"))
                 .exceptionHandling(exceptions -> exceptions.accessDeniedHandler((request, response, denied) -> {
                     // OAuth 로그인 화면을 오래 열어 둔 뒤 제출하면 세션 고정 방지로 CSRF 토큰이
                     // 바뀌어 403이 된다. 로그인 POST만 새 폼으로 복구하고, 다른 API의 CSRF
@@ -97,7 +130,11 @@ public class AuthSecurityConfig {
             JdbcOperations jdbcOperations,
             @Value("${stove.auth.redirect-uri:http://localhost:3000/callback}") String redirectUri,
             @Value("${stove.auth.swagger-redirect-uris:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}")
-            List<String> swaggerRedirectUris) {
+            List<String> swaggerRedirectUris,
+            @Value("${stove.auth.bff-client-secret}") String bffSecret,
+            @Value("${stove.auth.bff-redirect-uri:http://localhost:8080/login/oauth2/code/gateway-bff}") String bffRedirect,
+            @Value("${stove.auth.bff-access-token-seconds:900}") long accessTokenSeconds,
+            PasswordEncoder passwordEncoder) {
         JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcOperations);
         RegisteredClient.Builder studioWeb = RegisteredClient.withId("studio-web")
                 .clientId("studio-web")
@@ -138,6 +175,23 @@ public class AuthSecurityConfig {
         swaggerRedirectUris.stream().map(String::trim).filter(value -> !value.isBlank())
                 .forEach(swagger::redirectUri);
         saveOrUpgrade(repository, jdbcOperations, swagger.build());
+        RegisteredClient bff = RegisteredClient.withId("gateway-bff")
+                .clientId("gateway-bff")
+                .clientSecret(passwordEncoder.encode(bffSecret))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .redirectUri(bffRedirect)
+                .postLogoutRedirectUri(bffRedirect.substring(0, bffRedirect.indexOf("/login/oauth2/code/")) + "/")
+                .scope("openid").scope("profile").scope("studio").scope("commerce")
+                .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
+                        .requireProofKey(true).requireAuthorizationConsent(false).build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofSeconds(accessTokenSeconds))
+                        .refreshTokenTimeToLive(Duration.ofDays(7)).reuseRefreshTokens(false).build())
+                .build();
+        RegisteredClient existingBff = repository.findByClientId("gateway-bff");
+        repository.save(existingBff == null ? bff : RegisteredClient.from(bff).id(existingBff.getId()).build());
         return repository;
     }
 
@@ -145,16 +199,7 @@ public class AuthSecurityConfig {
                                RegisteredClient client) {
         RegisteredClient existing = repository.findByClientId(client.getClientId());
         if (existing != null) {
-            Set<String> scopes = new LinkedHashSet<>(existing.getScopes());
-            scopes.addAll(client.getScopes());
-            Set<String> redirects = new LinkedHashSet<>(existing.getRedirectUris());
-            redirects.addAll(client.getRedirectUris());
-            if (!scopes.equals(existing.getScopes()) || !redirects.equals(existing.getRedirectUris())) {
-                jdbcOperations.update("UPDATE oauth2_registered_client SET scopes = ? WHERE client_id = ?",
-                        String.join(",", scopes), client.getClientId());
-                jdbcOperations.update("UPDATE oauth2_registered_client SET redirect_uris = ? WHERE client_id = ?",
-                        String.join(",", redirects), client.getClientId());
-            }
+            repository.save(RegisteredClient.from(client).id(existing.getId()).build());
             return;
         }
         try {
@@ -167,9 +212,49 @@ public class AuthSecurityConfig {
     }
 
     @Bean
-    OAuth2AuthorizationService authorizationService(
-            JdbcOperations jdbcOperations, RegisteredClientRepository registeredClients) {
-        return new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClients);
+    RotatingAuthorizationService authorizationService(
+            JdbcOperations jdbcOperations, RegisteredClientRepository registeredClients,
+            PlatformTransactionManager transactionManager) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModules(SecurityJackson2Modules.getModules(getClass().getClassLoader()));
+        mapper.registerModule(new OAuth2AuthorizationServerJackson2Module());
+        mapper.addMixIn(Long.class, PersistedValueMixin.class);
+        mapper.addMixIn(java.util.List.of("value").getClass(), PersistedValueMixin.class);
+        mapper.addMixIn(java.util.List.of().getClass(), PersistedValueMixin.class);
+        JdbcOAuth2AuthorizationService jdbc = new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClients);
+        var rows = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClients);
+        rows.setObjectMapper(mapper);
+        jdbc.setAuthorizationRowMapper(rows);
+        var parameters = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
+        parameters.setObjectMapper(mapper);
+        jdbc.setAuthorizationParametersMapper(parameters);
+        return new RotatingAuthorizationService(jdbc, jdbcOperations, rotationTransactions(transactionManager));
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS)
+    abstract static class PersistedValueMixin {}
+
+    private static TransactionTemplate rotationTransactions(PlatformTransactionManager manager) {
+        TransactionTemplate template = new TransactionTemplate(manager);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return template;
+    }
+
+    @Bean
+    OAuth2TokenGenerator<?> tokenGenerator(JWKSource<SecurityContext> keys,
+            OAuth2TokenCustomizer<JwtEncodingContext> customizer, RotatingAuthorizationService authorizations) {
+        JwtGenerator jwt = new JwtGenerator(new NimbusJwtEncoder(keys));
+        jwt.setJwtCustomizer(customizer);
+        OAuth2RefreshTokenGenerator refresh = new OAuth2RefreshTokenGenerator();
+        OAuth2TokenGenerator<OAuth2RefreshToken> cappedRefresh = context -> {
+            OAuth2RefreshToken generated = refresh.generate(context);
+            if (generated == null) return null;
+            Instant expiry = context.getAuthorization() == null ? null
+                    : authorizations.expiresAt(context.getAuthorization().getId());
+            return expiry == null ? generated : new OAuth2RefreshToken(generated.getTokenValue(),
+                    generated.getIssuedAt(), expiry);
+        };
+        return new DelegatingOAuth2TokenGenerator(jwt, new OAuth2AccessTokenGenerator(), cappedRefresh);
     }
 
     @Bean
@@ -185,8 +270,12 @@ public class AuthSecurityConfig {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
-        return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+    JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource,
+            @Value("${stove.auth.issuer:http://localhost:8091}") String issuer) {
+        var decoder = (org.springframework.security.oauth2.jwt.NimbusJwtDecoder)
+                OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+        decoder.setJwtValidator(org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(issuer));
+        return decoder;
     }
 
     @Bean
@@ -199,15 +288,13 @@ public class AuthSecurityConfig {
     OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserAccountRepository accounts) {
         return context -> {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                context.getClaims().audience(java.util.List.of("esd-api"));
-                Long memberId = accounts.findBySubject(context.getPrincipal().getName())
-                        .orElseThrow(() -> new IllegalStateException("Unknown token subject"))
-                        .getId();
-                context.getClaims().claim("member_id", memberId);
-                context.getClaims().claim("roles", context.getPrincipal().getAuthorities().stream()
-                        .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
-                        .filter(role -> !role.startsWith("SCOPE_"))
-                        .toList());
+                context.getClaims().audience(new java.util.ArrayList<>(java.util.List.of("esd-api")));
+                var account = accounts.findBySubject(context.getPrincipal().getName())
+                        .filter(value -> value.enabled())
+                        .orElseThrow(() -> new org.springframework.security.oauth2.core.OAuth2AuthenticationException("invalid_grant"));
+                context.getClaims().claim("member_id", account.getId());
+                context.getClaims().claim("roles", new java.util.ArrayList<>(account.getRoles().stream()
+                        .map(Enum::name).sorted().toList()));
             }
         };
     }
