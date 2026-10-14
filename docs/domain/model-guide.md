@@ -1,6 +1,6 @@
 # 코드로 이해하는 도메인과 모델
 
-현재 완료된 기준 모듈은 Auth·Gateway다. Studio의 설계·검증은 이 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
+현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review다. 신규 구현과 검증은 이 네 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
 
 이 프로젝트는 **창작자가 게임을 준비하고 심사를 거쳐 판매하면, 구매자에게 이용 권한을 주고 판매자의 몫을 계산하는 시스템**이다. 먼저 이 흐름을 이해한 뒤 각 단계가 보관하는 정보를 읽으면 된다.
 
@@ -45,7 +45,7 @@
 | 계정·역할 / `auth` | 누가 요청했고 어떤 역할인가? | `UserAccount`, `RoleAuditLog` | [계정](models/identity.md) |
 | 창작·출시 / `studio` | 출시 자료·파일과 심사·출시 요청을 어떻게 관리하는가? | `Project`, `Build`, `ProjectReviewRequest`, `ProjectReleaseRequest` | [창작·출시](models/studio.md) |
 | 창작 자동화·운영 / `studio` | 어떤 CI·테스터가 접근하고 어디에 결과를 알리는가? | `ProjectCredential`, `CiTrustPolicy`, `InternalTesterGrant`, `BuildWebhookSubscription`, `BuildWebhookDelivery`, `AuditLog` | [창작 운영](models/studio-operations.md) |
-| 심사 / `review` | 어떤 제출 내용에 대해 무엇을 판단했는가? | `SubmissionSnapshot`, `ReviewCase`, `ReviewDecisionHistory`, 기존 `ReviewRequest`, `AuditLog` | [심사](models/review.md) |
+| 심사 / `review` | 어떤 요청의 불변 자료·빌드에 대해 누가 판정했는가? | `ProjectReview` | [심사](models/review.md) |
 | 상품·가격 / `catalog` | 무엇을 얼마에 팔 수 있는가? | `Product`, `Promotion`, `AuditLog` | [상품·진열](models/catalog-store.md) |
 | 검색·진열 / `store` | 구매 화면에 무엇을 보여주는가? | `ProductDocument` | [상품·진열](models/catalog-store.md) |
 | 주문 / `order` | 누가 무엇을 얼마에 사기로 했는가? | `Order`, `OrderItem` | [주문·결제](models/order-payment.md) |

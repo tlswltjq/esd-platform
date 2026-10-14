@@ -1,48 +1,75 @@
 package com.stove.review.api.controller;
 
+import com.stove.common.security.CurrentSubject;
 import com.stove.common.web.response.ApiResponse;
-import com.stove.review.api.controller.dto.RejectRequest;
-import com.stove.review.api.controller.dto.ReviewResponse;
-import com.stove.review.core.domain.ReviewStatus;
-import com.stove.review.core.service.ReviewService;
-import jakarta.validation.Valid;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import java.util.List;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import com.stove.review.api.controller.dto.*;
+import com.stove.review.core.domain.*;
+import com.stove.review.core.service.*;
 
-/** 심의 담당자용 운영 API. */
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
+import jakarta.validation.Valid;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/reviews")
 @SecurityRequirement(name = "oauth2", scopes = "studio")
 public class ReviewController {
-
-    private final ReviewService reviewService;
+    private final ReadProjectReviews read;
+    private final ReadReviewBuildDownload download;
+    private final DecideProjectReview decide;
 
     @GetMapping
-    public ApiResponse<List<ReviewResponse>> list(@RequestParam(required = false) ReviewStatus status) {
-        return ApiResponse.ok(reviewService.getRequests(status).stream()
-                .map(ReviewResponse::from)
-                .toList());
+    public ApiResponse<ProjectReviewPageResponse> list(
+            @RequestParam(required = false) ReviewStatus status,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(
+                ProjectReviewPageResponse.from(
+                        read.list(status, projectId, page, size)
+                                .map(r -> ProjectReviewSummary.from(r, read.snapshot(r)))));
     }
 
-    @PostMapping("/{reviewId}/approve")
-    public ApiResponse<Void> approve(@PathVariable Long reviewId,
-                                     @RequestParam(defaultValue = "ALL") String ratingCode) {
-        reviewService.approve(reviewId, ratingCode);
-        return ApiResponse.ok();
+    @GetMapping("/{reviewRequestId}")
+    public ApiResponse<ProjectReviewResponse> get(@PathVariable Long reviewRequestId) {
+        return ApiResponse.ok(response(read.get(reviewRequestId)));
     }
 
-    @PostMapping("/{reviewId}/reject")
-    public ApiResponse<Void> reject(@PathVariable Long reviewId, @Valid @RequestBody RejectRequest request) {
-        reviewService.reject(reviewId, request.reasonCode(), request.reason());
-        return ApiResponse.ok();
+    @GetMapping("/{reviewRequestId}/build-download")
+    public ResponseEntity<ApiResponse<BuildDownload>> download(@PathVariable Long reviewRequestId) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.ok(download.execute(reviewRequestId)));
+    }
+
+    @PostMapping("/{reviewRequestId}/approve")
+    public ApiResponse<ProjectReviewResponse> approve(
+            @PathVariable Long reviewRequestId, @CurrentSubject String subject) {
+        return ApiResponse.ok(
+                response(decide.execute(reviewRequestId, subject, ReviewStatus.APPROVED, null)));
+    }
+
+    @PostMapping("/{reviewRequestId}/reject")
+    public ApiResponse<ProjectReviewResponse> reject(
+            @PathVariable Long reviewRequestId,
+            @CurrentSubject String subject,
+            @Valid @RequestBody RejectProjectReviewRequest request) {
+        return ApiResponse.ok(
+                response(
+                        decide.execute(
+                                reviewRequestId,
+                                subject,
+                                ReviewStatus.REJECTED,
+                                request.feedback())));
+    }
+
+    private ProjectReviewResponse response(ProjectReview review) {
+        return ProjectReviewResponse.from(review, read.snapshot(review));
     }
 }

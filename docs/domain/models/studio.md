@@ -20,7 +20,7 @@ flowchart LR
 <a id="workspace"></a>
 ## 소유자
 
-완료된 기준 모듈은 Auth·Gateway다. Project 소유자는 Auth JWT sub로 직접 식별한다.
+완료된 기준 모듈은 Auth·Gateway·Studio·Review다. Project 소유자는 Auth JWT sub로 직접 식별한다.
 Workspace와 sellerId 매핑은 제거했다. 미완료 모듈은 설계·검증 기준에 포함하지 않는다.
 
 <a id="game-project"></a>

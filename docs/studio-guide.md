@@ -8,7 +8,8 @@ CREATOR 가입 후 Project를 만들고 상점 내용·썸네일·전체 ZIP을 
 
 ## 실행
 
-현재 완료 기준은 Auth·Gateway다. Studio 검증에는 Auth·Gateway·Studio와
+현재 완료 기준은 Auth·Gateway·Studio·Review다. [Studio 재작성 완료 기록](studio-simplification-plan.md#재작성-완료-기록)을 참고한다.
+Studio 검증에는 Auth·Gateway·Studio와
 MySQL·Redis·Kafka·MinIO만 사용한다. 실제 심사·상점 처리 결과는 Kafka 이벤트 픽스처로 제공한다.
 
 전체 검증은 다음 명령으로 실행한다. JDK 21, Python 3, Docker와 프로젝트 Gradle 의존성이 필요하다.

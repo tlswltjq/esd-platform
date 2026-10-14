@@ -1,42 +1,28 @@
 package com.stove.review.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
-import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.review.core.service.ReviewService;
-import com.stove.review.core.service.SubmissionReviewService;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.review.core.service.ReceiveProjectReview;
+
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-/**
- * [등록] studio → GameRegistered → review
- *
- * <p>트랜잭션과 멱등 마킹은 {@link ReviewService} 가 소유한다. 이 어댑터는 봉투만 푼다.
- */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class StudioEventListener {
+    private final ObjectMapper mapper;
+    private final ReceiveProjectReview receiveProjectReview;
 
-    private final ReviewService reviewService;
-    private final SubmissionReviewService submissionReviewService;
-    private final ObjectMapper objectMapper;
-
-    @KafkaListener(topics = Topics.STUDIO, groupId = ReviewService.CONSUMER_GROUP)
-    public void onStudioEvent(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.SUBMISSION_CREATED)) {
-            submissionReviewService.receive(envelope.eventId(), envelope.eventType(),
-                    envelope.payloadAs(objectMapper, SubmissionCreatedEvent.class));
-        } else if (envelope.isType(EventType.GAME_REGISTERED)) {
-            reviewService.receive(envelope.eventId(), envelope.eventType(),
-                    envelope.payloadAs(objectMapper, GameRegisteredEvent.class));
-        }
+    @KafkaListener(topics = Topics.STUDIO, groupId = ReceiveProjectReview.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        var envelope = EventEnvelope.from(record);
+        if (envelope.isType("ProjectReviewRequested"))
+            receiveProjectReview.execute(
+                    envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class));
     }
 }

@@ -95,7 +95,14 @@ services:
     build: { context: ., dockerfile: apps/review/Dockerfile }
     image: stove/review
     expose: ["8086"]
-    environment: *common-env
+    environment:
+      <<: *common-env
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PRESIGN_ENDPOINT: ${STORAGE_PRESIGN_ENDPOINT:-http://127.0.0.1:19000}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-stove-builds}
+      REVIEW_STORAGE_ACCESS_KEY: ${REVIEW_STORAGE_ACCESS_KEY:-}
+      REVIEW_STORAGE_SECRET_KEY: ${REVIEW_STORAGE_SECRET_KEY:-}
+      REVIEW_BUILD_URL_TTL: ${REVIEW_BUILD_URL_TTL:-PT5M}
 
   catalog:
     <<: *app

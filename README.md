@@ -4,6 +4,8 @@
 
 프로젝트가 처음이라면 **[도메인·모델 안내](docs/domain/model-guide.md)**부터 읽는다. 도메인별 모델의 속성, 생성·사용 시점과 게임 한 개가 출시되어 판매되는 흐름을 설명한다.
 
+현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review**다. 신규 구현과 검증은 이 네 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
+
 ## 문서 찾기
 
 | 궁금한 내용 | 읽을 문서 |
@@ -23,7 +25,8 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 트랜잭션 데이�
 | 위치 | 책임 |
 |---|---|
 | `apps/auth` | 회원 가입, 역할, OAuth2/OIDC 토큰 |
-| `apps/studio`, `apps/review` | 창작 자료·빌드·출시와 심사 |
+| `apps/studio` | 출시 상세정보·전체 빌드 관리, 심사·출시 요청과 재요청 |
+| `apps/review` | 불변 Project 스냅샷·빌드 열람, 수동 승인·반려와 결과 발행 |
 | `apps/catalog`, `apps/store` | 상품·가격·할인 원본과 검색·진열 |
 | `apps/order`, `apps/payment` | 주문과 결제·환불 |
 | `apps/license`, `apps/download` | 이용권과 파일 접근·배포 |

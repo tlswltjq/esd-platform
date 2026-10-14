@@ -43,7 +43,7 @@ tasks.register('e2eTest', Test) {
     // 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 같은 리포트에 같은 모양으로 남는다.
     // 실행 정책을 필요 자원으로 가르는 이 저장소의 규칙 그대로다(루트 build.gradle) —
     // 저 장이 요구하는 자원은 '망가뜨려도 되는 스택' 이라 e2e 와도 다르다.
-    useJUnitPlatform { excludeTags 'chaos', 'api-demo', 'studio' }
+    useJUnitPlatform { excludeTags 'chaos', 'api-demo', 'studio', 'review', 'review-restart' }
 
     endpoints.each { name ->
         systemProperty "stove.e2e.${name}",
@@ -107,7 +107,7 @@ tasks.register('apiDemoTest', Test) {
     description = '공개 API 전체 데모를 실행하고 실행별 식별자·금액 증거를 남긴다'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { excludeTags 'chaos', 'extended', 'studio' }
+    useJUnitPlatform { excludeTags 'chaos', 'extended', 'studio', 'review', 'review-restart' }
     endpoints.each { name ->
         systemProperty "stove.e2e.${name}",
                 providers.systemProperty("stove.e2e.${name}").getOrElse('')
@@ -201,6 +201,46 @@ tasks.register('chaosTest', Test) {
             }
             println '  회차 뒤 스택이 주입 전 상태인지 확인한다: bash scripts/stack-wait.sh'
             println '════════════════════════════════'
+        }
+    }
+}
+
+// Auth·Gateway·Studio·Review only; incomplete publishing/commerce modules are excluded.
+tasks.register('reviewE2eTest', Test) {
+    group = 'verification'
+    description = '실제 로그인·심사·빌드 열람·재심사·출시 요청을 네 모듈로 검증한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'review' }
+    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
+    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
+    afterSuite { desc, result ->
+        if (desc.parent == null && (result.testCount != 10 || result.skippedTestCount != 0)) {
+            throw new GradleException('Review E2E requires 10 executed checks without skips')
+        }
+    }
+}
+
+tasks.register('reviewRestartE2eTest', Test) {
+    group = 'verification'
+    description = 'Review 재시작 전후 저장된 판정·미발행 Outbox의 복구를 검증한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'review-restart' }
+    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
+    systemProperty 'stove.e2e.review-evidence', providers.systemProperty('stove.e2e.review-evidence').getOrElse('')
+    filter { includeTestsMatching "com.stove.e2e.ReviewRestartFlowTest.${providers.systemProperty('stove.e2e.review-restart-phase').getOrElse('preparePendingResult')}" }
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
+    afterSuite { desc, result ->
+        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0)) {
+            throw new GradleException('Review restart verification requires one executed check without skips')
         }
     }
 }

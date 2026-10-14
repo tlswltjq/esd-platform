@@ -5,18 +5,19 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작업 현황 (2026-10-13): `auth`, `gateway` 재작업 완료.**
-auth의 오류 수정·Refresh Token/RTR과 Gateway/BFF의 자동 로그인·공유 세션·토큰 갱신을 구현했다.
-관련 테스트 132개와 실제 스택의 다중 Gateway, 로그아웃, 재시작 유지, Redis 장애 응답을 검증했다.
-다른 서비스 모듈은 이번 재작업 완료 대상에 포함하지 않는다. 실행 방법과 정책은 [auth·Gateway/BFF](auth-bff.md)를 본다.
+**모듈 재작업 현황 (2026-10-14): `auth`, `gateway`, `studio`, `review` 재작업 완료.**
+Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
+Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
+신규 구현과 검증은 완료된 네 모듈의 계약을 기준으로 한다.
+나머지 서비스 명세는 기존 구현의 참고 기록이며 현재 설계·검증 기준에서 제외한다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
 | | 서비스 | 포트 | 한 줄 책임 | 저장소 |
 |---|---|---|---|---|
 | — | [auth](#auth) | 8091 | 계정·역할·OAuth2/OIDC 토큰 | MySQL |
-| A | [studio](#studio) | 8085 | Project·전체 빌드·단일 심사·상점 등록 | MySQL |
-| A | [review](#review) | 8086 | 유형별 심사 사건·등급 증빙·재검토 | MySQL |
+| A | [studio](#studio) | 8085 | 출시 상세정보·전체 빌드·심사 및 출시 요청 | MySQL |
+| A | [review](#review) | 8086 | 불변 스냅샷·빌드 열람, 수동 승인·반려 | MySQL |
 | A | [catalog](#catalog) | 8081 | 상품 마스터, 노출 제어, 가격 확정 | MySQL + Redis |
 | B | [store](#store) | 8087 | 진열·검색 (읽기 전용) | Elasticsearch + Redis |
 | B | [order](#order) | 8082 | 주문 생성/취소, 금액 검증 | MySQL |
@@ -40,7 +41,7 @@ auth의 오류 수정·Refresh Token/RTR과 Gateway/BFF의 자동 로그인·공
 | `POST /api/v1/auth/signup/member` | 구매자 가입, `MEMBER` 역할 부여 |
 | `/login`, `/logout`, `/oauth2/**`, `/.well-known/**` | 로그인·승인·토큰·공개 키와 OIDC 메타데이터 |
 
-**이벤트** — 회원·창작자 가입 시 `UserRegistered` 발행. Studio의 판매자 연결은 Project 생성·조회 시 필요하면 생성한다. 근거는 [AccountController](../apps/auth/src/main/java/com/stove/auth/api/controller/AccountController.java), [RegisterAccount](../apps/auth/src/main/java/com/stove/auth/core/service/RegisterAccount.java)다.
+**이벤트** — 회원·창작자 가입 시 `UserRegistered` 발행. Studio는 Auth JWT sub로 소유자를 직접 식별하며 별도 판매자 연결을 생성하지 않는다. 근거는 [AccountController](../apps/auth/src/main/java/com/stove/auth/api/controller/AccountController.java), [RegisterAccount](../apps/auth/src/main/java/com/stove/auth/core/service/RegisterAccount.java)다.
 
 ---
 
@@ -50,7 +51,7 @@ Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요
 심사 판정과 실제 출시·공개 상품 관리는 외부 업무이며 결과는 요청 기록에만 표시한다.
 [모델](domain/models/studio.md) · [실행·요청 예제](studio-guide.md)
 
-완료된 기준은 Auth·Gateway다. 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다.
+완료된 기준은 Auth·Gateway·Studio·Review다. 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -76,46 +77,31 @@ ProjectReviewApproved/Rejected·ProjectReleaseCompleted/Rejected는 외부 요�
 
 ## review
 
-Review는 미완료 모듈이며 아래 내용은 기존 구현의 참고 기록이다. 새 Studio 검증은 요청·결과 이벤트 경계에서 수행한다.
+Review는 Studio의 요청 당시 상세정보·전체 ZIP 스냅샷을 접수하고 수동 승인·반려의 원본을 관리한다.
+[모델](domain/models/review.md) · [실행·검증](review-guide.md) · [개선 계획·완료 기록](review-simplification-plan.md)
 
-제출물별 등급·상점 자료·빌드 QA·법무·SDK·상업성 심사 사건을 관리한다.
-유형별 승인은 Studio의 출시 관문에 반영되며, 새 출시 경로의 상품 공개는 LIVE 릴리스를 통해 이루어진다.
-
-**현재 심사 사건 상태** — `REQUESTED`에서 승인·수정 요청·차단·취소·만료로 전이한다.
-GRAC은 외부 접수를 기록하며, 수정 요청·차단·만료 사건은 이의 제기로 다시 열 수 있다.
-정확한 조건과 Studio 관문과의 차이는 [심사 사건 정의](domain/models/review.md#review-case)를 참고한다.
-
-**기존 프로젝트 단위 심사 상태** — `ReviewRequest` 경로다.
-
-```
-REQUESTED ──▶ IN_REVIEW ──▶ APPROVED
-                       └──▶ REJECTED ──(재신청)──▶ REQUESTED
-```
-
-**HTTP API** — 심의 담당자용 운영 API.
+REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
+요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED 또는 REJECTED로 한 번 전이한다.
+재심사는 새 요청이며 과거 판정·스냅샷을 유지한다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/reviews?status=` | 심의 목록(상태 필터) |
-| POST | `/api/v1/reviews/{reviewId}/approve?ratingCode=ALL` | 승인 → `ReviewApproved` |
-| POST | `/api/v1/reviews/{reviewId}/reject` | 반려 → `ReviewRejected` |
-| GET | `/api/v1/reviews/cases?submissionId=` | Submission 스냅샷의 여섯 유형 심사 조회 |
-| POST | `/api/v1/reviews/cases/{caseId}/approve` | 경로별 증빙 검증 후 승인 |
-| POST | `/api/v1/reviews/cases/{caseId}/changes-requested` | 수정 요청 |
+| GET | /api/v1/reviews | 상태·Project 필터, 페이지 조회 |
+| GET | /api/v1/reviews/{reviewRequestId} | 제출 스냅샷·판정 조회 |
+| GET | /api/v1/reviews/{reviewRequestId}/build-download | 읽기 전용 S3/MinIO 다운로드 URL |
+| POST | /api/v1/reviews/{reviewRequestId}/approve | 승인 |
+| POST | /api/v1/reviews/{reviewRequestId}/reject | 필수 feedback으로 반려 |
 
-**이벤트** — 현재 경로는 `SubmissionCreated` 수신, `SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed` 발행.
-기존 경로는 `GameRegistered` 수신, `ReviewApproved`·`ReviewRejected` 발행.
+동일 판정·사유의 재시도는 최초 결과를 반환하며 새 이벤트를 만들지 않는다.
+확정 판정·반려 사유 변경은 409다. 동시 판정은 행 잠금으로 직렬화하고 판정·Outbox를 함께 저장한다.
+목록·상세·판정 응답에는 내부 저장 경로가 없다. URL은 기본 5분이며 캐시하지 않는다.
 
-**규칙**
+ProjectReviewRequested를 새 그룹 review-project로 수신하고 ProjectReviewApproved/Rejected를 발행한다.
+Studio가 원래 요청 ID·버전에 결과를 기록하고 현재 버전의 출시 요청 조건을 계산한다.
+Review는 실제 출시·상품 공개를 수행하지 않는다.
 
-- P0 Submission 경로는 studio가 확정한 지역·목표 연령·정책 버전·설문을 다시 검증한다.
-- 전체·12·15세 자체등급은 외부 기관에 접수하지 않는다. 담당자는 등급 코드만 결정하고,
-  플랫폼이 인증번호·발급기관·발급일·대상 국가를 기록한다.
-- 현재 Submission의 GRAC 경로는 외부 접수번호·시각·증빙 URL을 API로 기록한 뒤 정책에 맞는
-  인증 결과로 승인한다. 이 서비스 경로에서 `RatingBoardClient`로 자동 접수하지는 않는다.
-  이의 제기 후 기존 접수 증빙의 재사용 여부는 [미결 질문 Q4](domain/open-questions.md#q4)다.
-- `GameRegistered` 기반 프로젝트 단위 심의 API는 기존 이벤트 호환 경로다. 새 출시 흐름은
-  `SubmissionCreated`와 유형별 `ReviewCase`를 사용한다.
+구 심사 흐름·여섯 유형·등급 연동·배정·체크리스트·SLA·이의 제기는 제거했다.
+V1~V9 SQL·역사 자료를 보존하고 V10의 project_review만 새 업무에 사용한다.
 
 ---
 
@@ -452,20 +438,18 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 
 | 포트 | 스텁 | 실제 어댑터 | 선택 방법 |
 |---|---|---|---|
-| `BuildStorage` (studio) | `MockBuildStorage` | **`S3BuildStorage`** | `stove.storage.provider` = `mock`(기본) / `s3` |
+| `BuildStorage` (studio) | — | **`S3BuildStorage`** | `stove.storage.provider` = `s3` |
+| `ReviewBuildStorage` (review) | — | **`S3ReviewBuildStorage`** | 읽기 전용 S3/MinIO 계정 |
 | `DownloadUrlSigner` (download) | — | **`CdnUrlSigner`**, **`S3PresignedUrlSigner`** | `stove.download.url-strategy` = `cdn`(기본) / `s3` |
 | `PgClient` (payment) | `MockPgClient` | 없음 | — |
-| `RatingBoardClient` (review) | `MockRatingBoardClient` | 없음 | — |
 | `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 | — |
 
 ### 실제로 동작하는 것
 
-**`S3BuildStorage` / `S3PresignedUrlSigner`** — AWS SDK v2 로 presigned URL 을 발급한다.
-로컬은 MinIO, 운영은 S3 를 가정하며 둘 다 S3 API 라서 `endpoint` 만 다르다.
-서버는 바이너리를 직접 받지 않는다 — 수 GB 짜리 빌드가 애플리케이션을 통과하지 않게
-클라이언트가 스토리지로 바로 올리고 바로 받는다.
-`MinIOContainer` 테스트가 발급한 URL 로 실제 업로드·다운로드까지 확인하고,
-서명 없는 접근이 403 인 것도 함께 검증한다.
+**`S3BuildStorage` / `S3ReviewBuildStorage`** — Studio가 전체 ZIP·썸네일을 임시 디스크에서 검사한 뒤 S3/MinIO에 저장한다.
+Review는 제출 스냅샷의 객체 존재·크기를 확인하고 심사자에게 GET 서명 URL을 발급한다.
+실제 MinIO 다운로드·SHA-256·만료와 읽기 전용 계정의 업로드·삭제 거절을 검증했다.
+Download의 `S3PresignedUrlSigner`는 미완료 모듈의 기존 구현 참고다.
 
 **`CdnUrlSigner`** — HMAC-SHA256 서명을 실제로 계산한다. 경로·회원·만료시각을 묶어
 서명하는 구조는 CloudFront 서명 URL 과 같다. 다만 **검증하는 CDN 엣지가 없어 반쪽**이다.
@@ -478,9 +462,7 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 
 | 스텁 | 하는 일 | 빠진 것 |
 |---|---|---|
-| `MockBuildStorage` | `s3://stove-builds/{code}/{ver}/game.pak` 경로 문자열 조립 | 서명 없음. 파일이 실존하지 않는다 |
 | `MockPgClient` | 거래 ID = UUID 앞 12자, 결제창 URL 문자열 조립 | **`cancel()` 이 로그만 찍는다 — 환불이 절대 실패하지 않는다.** 금액·통화를 받지만 검증하지 않는다 |
-| `MockRatingBoardClient` | 접수번호 `GRAC-2026-00001` | 인메모리 카운터라 재기동하면 1부터. 실제 심의는 며칠 걸리는 비동기 프로세스이고 반려도 나온다 |
 | `MockTaxInvoiceIssuer` | 발행번호 `TI-202607-001001` | 결정적이라 재실행 검증엔 유리하다. 실제 세금계산서는 전송·역발행 상태를 갖는 객체다 |
 
 `MockPgClient` 의 금액 미검증은 설계상 문제가 아니다.

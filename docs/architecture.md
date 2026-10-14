@@ -6,7 +6,9 @@
 
 ## 서비스 경계와 저장소
 
-Auth는 계정·역할, Studio는 창작·출시, Review는 심사, Catalog는 상품·가격, Order는 주문, Payment는 결제, License는 이용권, Settlement는 정산의 원본을 관리한다. Store는 검색·진열 사본, Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. Gateway는 외부 요청의 진입점이다.
+재작성 완료 모듈은 Auth·Gateway·Studio·Review다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
+
+나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Catalog는 상품·가격, Order는 주문, Payment는 결제, License는 이용권, Settlement는 정산의 원본을 관리한다. Store는 검색·진열 사본, Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store의 Elasticsearch·Redis와 Download의 MongoDB 등은 조회 목적에 맞춘 저장소다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 

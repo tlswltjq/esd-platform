@@ -1,6 +1,6 @@
 # API 데모
 
-현재 완료 기준은 Auth·Gateway다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
+현재 완료 기준은 Auth·Gateway·Studio·Review다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
 
 [문서 목록](README.md) · [개발 환경과 실행](getting-started.md) · [인증·권한 계약](security.md)
 

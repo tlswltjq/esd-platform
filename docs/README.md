@@ -21,6 +21,7 @@
 | [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 PG 콜백 |
 | [auth·Gateway/BFF](auth-bff.md) | 재작업 완료 모듈의 자동 로그인·RTR·공유 세션, 실행과 검증 |
 | [Studio 실행·심사·출시 요청](studio-guide.md) | Auth·Gateway 기준의 전체 업로드·심사·출시 요청과 세 모듈 검증 |
+| [Review 실행·수동 심사](review-guide.md) | 심사자 로그인·ZIP 열람·승인 및 반려·네 모듈 검증과 재시작 확인 |
 
 ## 설계·검증·운영 근거
 
@@ -29,7 +30,8 @@
 | [아키텍처](architecture.md) | 서비스 경계, 트랜잭션·이벤트 처리, DB 실험과 설계 위험 |
 | [유스케이스 작성 규칙](use-case-conventions.md) | SRP에 따른 책임 분리, 동사형 클래스·메서드 이름, 트랜잭션 유지 기준 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
-| [Studio 단순화 계획](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 요청·출시 요청·재요청 전환 계획 |
+| [Studio 단순화 계획·완료 기록](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 및 출시 요청·재요청 범위와 완료·검증 기록 |
+| [Review 개선 계획·완료 기록](review-simplification-plan.md) | 단일 스냅샷 심사·빌드 열람·승인 및 반려·결과 이벤트의 범위와 완료·검증 기록 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |

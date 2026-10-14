@@ -1,6 +1,8 @@
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'software.amazon.awssdk:s3'
+    integrationTestImplementation 'org.testcontainers:minio'
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 
     implementation project(':common:security')
