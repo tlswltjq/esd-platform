@@ -55,7 +55,7 @@ public final class RotatingAuthorizationService implements OAuth2AuthorizationSe
         // Locking read avoids a repeatable-read snapshot hiding another request's rotation.
         boolean consumed = jdbc.query("SELECT consumed FROM refresh_token_history WHERE token_hash = ? FOR UPDATE",
                 (rs, row) -> rs.getBoolean(1), hash(token)).getFirst();
-        return new Family(family.id(), family.clientId(), family.subject(), family.expiresAt(), family.revoked(), consumed);
+        return family.withConsumed(consumed);
     }
 
     private Family lock(String id) {
@@ -108,5 +108,9 @@ public final class RotatingAuthorizationService implements OAuth2AuthorizationSe
     }
 
     public record Family(String id, String clientId, String subject, Instant expiresAt,
-                         boolean revoked, boolean consumed) {}
+                         boolean revoked, boolean consumed) {
+        public Family withConsumed(boolean consumed) {
+            return new Family(id, clientId, subject, expiresAt, revoked, consumed);
+        }
+    }
 }

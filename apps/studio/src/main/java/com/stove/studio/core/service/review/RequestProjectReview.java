@@ -39,24 +39,7 @@ public class RequestProjectReview {
                         .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT));
         if (storage.size(b.getStoragePath()) != b.getFileSize())
             throw new BusinessException(ErrorCode.CONFLICT, "빌드 파일을 확인할 수 없습니다.");
-        ProjectSnapshot snapshot =
-                new ProjectSnapshot(
-                        id,
-                        p.getProductCode(),
-                        p.getOwnerSubject(),
-                        p.getContentVersion(),
-                        p.getTitle(),
-                        p.getShortDescription(),
-                        p.getThumbnailUrl(),
-                        p.getVideoUrl(),
-                        p.getContent(),
-                        p.getPrice(),
-                        "KRW",
-                        b.getId(),
-                        b.getVersion(),
-                        b.getFileSize(),
-                        b.getChecksum(),
-                        b.getStoragePath());
+        ProjectSnapshot snapshot = snapshotFrom(p, b);
         ProjectReviewRequest review =
                 reviews.saveAndFlush(
                         ProjectReviewRequest.create(
@@ -67,6 +50,26 @@ public class RequestProjectReview {
                 p.getProductCode(),
                 ProjectReviewRequestedEvent.of(review.getId(), snapshot));
         return review;
+    }
+
+    private static ProjectSnapshot snapshotFrom(Project project, Build build) {
+        return new ProjectSnapshot(
+                project.getId(),
+                project.getProductCode(),
+                project.getOwnerSubject(),
+                project.getContentVersion(),
+                project.getTitle(),
+                project.getShortDescription(),
+                project.getThumbnailUrl(),
+                project.getVideoUrl(),
+                project.getContent(),
+                project.getPrice(),
+                "KRW",
+                build.getId(),
+                build.getVersion(),
+                build.getFileSize(),
+                build.getChecksum(),
+                build.getStoragePath());
     }
 
     private String json(ProjectSnapshot value) {

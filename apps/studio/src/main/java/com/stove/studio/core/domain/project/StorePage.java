@@ -6,4 +6,8 @@ public record StorePage(
         String thumbnailUrl,
         String videoUrl,
         String content,
-        long price) {}
+        long price) {
+    public StorePage withThumbnail(String url) {
+        return new StorePage(title, shortDescription, url, videoUrl, content, price);
+    }
+}

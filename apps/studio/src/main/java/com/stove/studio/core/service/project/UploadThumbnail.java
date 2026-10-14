@@ -66,16 +66,7 @@ public class UploadThumbnail {
                                                                 new BusinessException(
                                                                         ErrorCode.NOT_FOUND));
                                 p.requireOwner(subject);
-                                StorePage page = p.storePage();
-                                p.update(
-                                        new StorePage(
-                                                page.title(),
-                                                page.shortDescription(),
-                                                url,
-                                                page.videoUrl(),
-                                                page.content(),
-                                                page.price()),
-                                        version);
+                                p.update(p.storePage().withThumbnail(url), version);
                             });
             return new ThumbnailAsset(assetId, url, fileSize, type);
         } catch (RuntimeException | IOException failure) {

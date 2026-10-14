@@ -7,6 +7,7 @@ import java.util.Set;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
@@ -35,21 +36,12 @@ public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepos
         return redis.opsForValue().get(key).flatMap(value -> {
             try {
                 Stored stored = mapper.readValue(value, Stored.class);
-                return registrations.findByRegistrationId("gateway-bff").map(registration ->
-                        new OAuth2AuthorizedClient(registration, stored.subject(),
-                                new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, stored.access(),
-                                        Instant.ofEpochSecond(stored.issued()), Instant.ofEpochSecond(stored.expires()), stored.scopes()),
-                                stored.refresh() == null ? null : new OAuth2RefreshToken(stored.refresh(),
-                                        Instant.ofEpochSecond(stored.refreshIssued()))));
+                return registrations.findByRegistrationId("gateway-bff").map(stored::toAuthorizedClient);
             } catch (Exception exception) { return Mono.error(exception); }
         });
     }
     public Mono<Void> write(String key, OAuth2AuthorizedClient client) {
-        var access = client.getAccessToken();
-        var refresh = client.getRefreshToken();
-        Stored stored = new Stored(client.getPrincipalName(), access.getTokenValue(),
-                access.getIssuedAt().getEpochSecond(), access.getExpiresAt().getEpochSecond(), access.getScopes(),
-                refresh == null ? null : refresh.getTokenValue(), refresh == null ? 0 : refresh.getIssuedAt().getEpochSecond());
+        Stored stored = Stored.from(client);
         try {
             return redis.opsForValue().set(key, mapper.writeValueAsString(stored), Duration.ofDays(7)).then();
         } catch (Exception exception) { return Mono.error(exception); }
@@ -69,5 +61,20 @@ public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepos
         return key(exchange).flatMap(this::delete);
     }
     private record Stored(String subject, String access, long issued, long expires, Set<String> scopes,
-                          String refresh, long refreshIssued) {}
+                          String refresh, long refreshIssued) {
+        private static Stored from(OAuth2AuthorizedClient client) {
+            var access = client.getAccessToken();
+            var refresh = client.getRefreshToken();
+            return new Stored(client.getPrincipalName(), access.getTokenValue(),
+                    access.getIssuedAt().getEpochSecond(), access.getExpiresAt().getEpochSecond(), access.getScopes(),
+                    refresh == null ? null : refresh.getTokenValue(), refresh == null ? 0 : refresh.getIssuedAt().getEpochSecond());
+        }
+
+        private OAuth2AuthorizedClient toAuthorizedClient(ClientRegistration registration) {
+            return new OAuth2AuthorizedClient(registration, subject,
+                    new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, access,
+                            Instant.ofEpochSecond(issued), Instant.ofEpochSecond(expires), scopes),
+                    refresh == null ? null : new OAuth2RefreshToken(refresh, Instant.ofEpochSecond(refreshIssued)));
+        }
+    }
 }
