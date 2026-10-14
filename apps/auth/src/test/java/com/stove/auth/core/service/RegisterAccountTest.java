@@ -23,17 +23,17 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-class UserAccountServiceTest {
+class RegisterAccountTest {
 
     private final UserAccountRepository repository = org.mockito.Mockito.mock(UserAccountRepository.class);
     private final PasswordEncoder passwordEncoder = org.mockito.Mockito.mock(PasswordEncoder.class);
     private final OutboxRecorder outboxRecorder = org.mockito.Mockito.mock(OutboxRecorder.class);
     private final RoleAuditLogRepository roleAuditLogRepository = org.mockito.Mockito.mock(RoleAuditLogRepository.class);
-    private UserAccountService service;
+    private RegisterAccount service;
 
     @BeforeEach
     void setUp() {
-        service = new UserAccountService(repository, passwordEncoder, outboxRecorder, roleAuditLogRepository);
+        service = new RegisterAccount(repository, passwordEncoder, outboxRecorder, roleAuditLogRepository);
     }
 
     @Test
@@ -42,7 +42,7 @@ class UserAccountServiceTest {
         when(passwordEncoder.encode("very-secret-password")).thenReturn("{bcrypt}hash");
         when(repository.saveAndFlush(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UserAccount account = service.signup("Creator@Example.com", "very-secret-password");
+        UserAccount account = service.registerCreator("Creator@Example.com", "very-secret-password");
 
         assertThat(account.getEmail()).isEqualTo("creator@example.com");
         assertThat(account.getPasswordHash()).isEqualTo("{bcrypt}hash");
@@ -58,7 +58,7 @@ class UserAccountServiceTest {
     void knownDuplicateIsRejected() {
         when(repository.existsByEmailIgnoreCase("creator@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.signup("creator@example.com", "very-secret-password"))
+        assertThatThrownBy(() -> service.registerCreator("creator@example.com", "very-secret-password"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미 가입된");
         verify(repository, never()).saveAndFlush(any());
@@ -72,7 +72,7 @@ class UserAccountServiceTest {
         when(repository.saveAndFlush(any(UserAccount.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
 
-        assertThatThrownBy(() -> service.signup("creator@example.com", "very-secret-password"))
+        assertThatThrownBy(() -> service.registerCreator("creator@example.com", "very-secret-password"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미 가입된");
         verify(outboxRecorder, never()).record(any(), any(), any());

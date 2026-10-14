@@ -2,7 +2,7 @@ package com.stove.auth.api.controller;
 
 import com.stove.auth.api.controller.dto.SignupRequest;
 import com.stove.auth.api.controller.dto.SignupResponse;
-import com.stove.auth.core.service.UserAccountService;
+import com.stove.auth.core.service.RegisterAccount;
 import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AccountController {
 
-    private final UserAccountService userAccountService;
+    private final RegisterAccount registerAccount;
 
     @org.springframework.web.bind.annotation.GetMapping("/session")
     public ApiResponse<java.util.Map<String, String>> session(java.security.Principal principal) {
@@ -26,12 +26,12 @@ public class AccountController {
     @PostMapping("/signup")
     public ApiResponse<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         return ApiResponse.ok(SignupResponse.from(
-                userAccountService.signup(request.email(), request.password())));
+                registerAccount.registerCreator(request.email(), request.password())));
     }
 
     @PostMapping("/signup/member")
     public ApiResponse<SignupResponse> signupMember(@Valid @RequestBody SignupRequest request) {
         return ApiResponse.ok(SignupResponse.from(
-                userAccountService.signupMember(request.email(), request.password())));
+                registerAccount.registerMember(request.email(), request.password())));
     }
 }

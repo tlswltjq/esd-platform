@@ -17,22 +17,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class UserAccountService {
+public class RegisterAccount {
 
     private final UserAccountRepository repository;
     private final PasswordEncoder passwordEncoder;
     private final OutboxRecorder outboxRecorder;
     private final RoleAuditLogRepository roleAuditLogRepository;
 
-    public UserAccount signup(String email, String password) {
-        return signup(email, password, true);
+    public UserAccount registerCreator(String email, String password) {
+        return register(email, password, true);
     }
 
-    public UserAccount signupMember(String email, String password) {
-        return signup(email, password, false);
+    public UserAccount registerMember(String email, String password) {
+        return register(email, password, false);
     }
 
-    private UserAccount signup(String email, String password, boolean creator) {
+    private UserAccount register(String email, String password, boolean creator) {
         if (repository.existsByEmailIgnoreCase(email)) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 가입된 이메일입니다.");
         }

@@ -11,13 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class PasswordService {
+public class ChangePassword {
     private final UserAccountRepository accounts;
     private final PasswordEncoder passwords;
     private final TokenRevocationPort tokens;
 
     @Transactional
-    public void change(String subject, String currentPassword, String newPassword) {
+    public void execute(String subject, String currentPassword, String newPassword) {
         var account = accounts.findBySubject(subject).filter(value -> value.enabled())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
         if (!passwords.matches(currentPassword, account.getPasswordHash())) {

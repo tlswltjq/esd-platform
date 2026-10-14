@@ -1,6 +1,6 @@
 package com.stove.auth.api.controller;
 
-import com.stove.auth.core.service.PasswordService;
+import com.stove.auth.core.service.ChangePassword;
 import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -13,14 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class PasswordController {
-    private final PasswordService passwords;
+    private final ChangePassword changePassword;
 
     @PostMapping("/api/v1/auth/password")
     public ApiResponse<java.util.Map<String, Boolean>> change(java.security.Principal principal,
-            @Valid @RequestBody ChangePassword request) {
-        passwords.change(principal.getName(), request.currentPassword(), request.newPassword());
+            @Valid @RequestBody ChangePasswordRequest request) {
+        changePassword.execute(principal.getName(), request.currentPassword(), request.newPassword());
         return ApiResponse.ok(java.util.Map.of("changed", true));
     }
-    public record ChangePassword(@NotBlank String currentPassword,
+    public record ChangePasswordRequest(@NotBlank String currentPassword,
                                  @NotBlank @Size(min = 12, max = 100) String newPassword) {}
 }

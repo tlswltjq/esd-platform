@@ -26,6 +26,7 @@
 | 문서 | 다루는 내용 |
 |---|---|
 | [아키텍처](architecture.md) | 서비스 경계, 트랜잭션·이벤트 처리, DB 실험과 설계 위험 |
+| [유스케이스 작성 규칙](use-case-conventions.md) | SRP에 따른 책임 분리, 동사형 클래스·메서드 이름, 트랜잭션 유지 기준 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
