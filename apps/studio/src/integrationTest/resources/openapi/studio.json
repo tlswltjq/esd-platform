@@ -1,10 +1,10 @@
 {
   "components" : {
     "schemas" : {
-      "ApiResponseBuildResponse" : {
+      "ApiResponseBuild" : {
         "properties" : {
           "data" : {
-            "$ref" : "#/components/schemas/BuildResponse"
+            "$ref" : "#/components/schemas/Build"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -15,101 +15,11 @@
         },
         "type" : "object"
       },
-      "ApiResponseBuildWebhookResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/BuildWebhookResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseCiOidcExchangeResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/CiOidcExchangeResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseCiTrustPolicyResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/CiTrustPolicyResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseIssuedProjectCredentialResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/IssuedProjectCredentialResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListBuildResponse" : {
+      "ApiResponseListBuild" : {
         "properties" : {
           "data" : {
             "items" : {
-              "$ref" : "#/components/schemas/BuildResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListBuildWebhookResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/BuildWebhookResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListCiTrustPolicyResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/CiTrustPolicyResponse"
+              "$ref" : "#/components/schemas/Build"
             },
             "type" : "array"
           },
@@ -156,11 +66,11 @@
         },
         "type" : "object"
       },
-      "ApiResponseListProjectCredentialResponse" : {
+      "ApiResponseListProjectReleaseRequest" : {
         "properties" : {
           "data" : {
             "items" : {
-              "$ref" : "#/components/schemas/ProjectCredentialResponse"
+              "$ref" : "#/components/schemas/ProjectReleaseRequest"
             },
             "type" : "array"
           },
@@ -190,11 +100,11 @@
         },
         "type" : "object"
       },
-      "ApiResponseListReleaseResponse" : {
+      "ApiResponseListProjectReviewRequest" : {
         "properties" : {
           "data" : {
             "items" : {
-              "$ref" : "#/components/schemas/ReleaseResponse"
+              "$ref" : "#/components/schemas/ProjectReviewRequest"
             },
             "type" : "array"
           },
@@ -207,76 +117,10 @@
         },
         "type" : "object"
       },
-      "ApiResponseListRevisionResponse" : {
+      "ApiResponseProjectReleaseRequest" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/RevisionResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListSubmissionResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/SubmissionResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListTesterGrantResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/TesterGrantResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseLong" : {
-        "properties" : {
-          "data" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseProductFamilyResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ProductFamilyResponse"
+            "$ref" : "#/components/schemas/ProjectReleaseRequest"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -301,10 +145,10 @@
         },
         "type" : "object"
       },
-      "ApiResponseReleaseResponse" : {
+      "ApiResponseProjectReviewRequest" : {
         "properties" : {
           "data" : {
-            "$ref" : "#/components/schemas/ReleaseResponse"
+            "$ref" : "#/components/schemas/ProjectReviewRequest"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -343,108 +187,10 @@
         },
         "type" : "object"
       },
-      "ApiResponseRevisionResponse" : {
+      "ApiResponseThumbnailAsset" : {
         "properties" : {
           "data" : {
-            "$ref" : "#/components/schemas/RevisionResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseStoreAsset" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/StoreAsset"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseStorePagePreviewResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/StorePagePreviewResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseSubmissionResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/SubmissionResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseSubmissionReviewStatusResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/SubmissionReviewStatusResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseTesterGrantResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/TesterGrantResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseTesterInstallationResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/TesterInstallationResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseUploadSessionResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/UploadSessionResponse"
+            "$ref" : "#/components/schemas/ThumbnailAsset"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -467,18 +213,8 @@
         },
         "type" : "object"
       },
-      "BuildResponse" : {
+      "Build" : {
         "properties" : {
-          "architecture" : {
-            "type" : "string"
-          },
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "buildNumber" : {
-            "type" : "string"
-          },
           "checksum" : {
             "type" : "string"
           },
@@ -486,32 +222,26 @@
             "format" : "date-time",
             "type" : "string"
           },
-          "deltaFromVersion" : {
-            "type" : "string"
-          },
-          "duplicateOfBuildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "failureCode" : {
+          "fileName" : {
             "type" : "string"
           },
           "fileSize" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "gameId" : {
+          "id" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "platform" : {
-            "type" : "string"
-          },
-          "status" : {
-            "enum" : [ "UPLOADING", "PROCESSING", "VALIDATED", "FAILED", "RETIRED" ],
-            "type" : "string"
+          "projectId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "storagePath" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
             "type" : "string"
           },
           "version" : {
@@ -520,535 +250,20 @@
         },
         "type" : "object"
       },
-      "BuildWebhookResponse" : {
-        "properties" : {
-          "active" : {
-            "type" : "boolean"
-          },
-          "endpointUrl" : {
-            "type" : "string"
-          },
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "signingSecret" : {
-            "type" : "string"
-          },
-          "subscriptionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "CiOidcExchangeRequest" : {
-        "properties" : {
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "oidcToken" : {
-            "maxLength" : 10000,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "platform" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "provider" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "gameId", "oidcToken", "platform", "provider" ],
-        "type" : "object"
-      },
-      "CiOidcExchangeResponse" : {
-        "properties" : {
-          "credential" : {
-            "type" : "string"
-          },
-          "expiresAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "platform" : {
-            "type" : "string"
-          },
-          "releaseAllowed" : {
-            "type" : "boolean"
-          },
-          "repository" : {
-            "type" : "string"
-          },
-          "sourceRef" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "CiScheduleReleaseRequest" : {
-        "properties" : {
-          "publishAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "submissionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "timeZone" : {
-            "maxLength" : 50,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "publishAt", "submissionId" ],
-        "type" : "object"
-      },
-      "CiTrustPolicyResponse" : {
-        "properties" : {
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "platform" : {
-            "type" : "string"
-          },
-          "policyId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "protectedRefPattern" : {
-            "type" : "string"
-          },
-          "provider" : {
-            "type" : "string"
-          },
-          "refPattern" : {
-            "type" : "string"
-          },
-          "repository" : {
-            "type" : "string"
-          },
-          "requiredEnvironment" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "CompleteUploadRequest" : {
-        "properties" : {
-          "parts" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Part"
-            },
-            "minItems" : 1,
-            "type" : "array"
-          }
-        },
-        "required" : [ "parts" ],
-        "type" : "object"
-      },
-      "CreateCiTrustPolicyRequest" : {
-        "properties" : {
-          "platform" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "protectedRefPattern" : {
-            "maxLength" : 300,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "provider" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "refPattern" : {
-            "maxLength" : 300,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "repository" : {
-            "maxLength" : 300,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "requiredEnvironment" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "platform", "provider", "refPattern", "repository" ],
-        "type" : "object"
-      },
-      "CreatePricingRevisionRequest" : {
-        "properties" : {
-          "price" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "CreateProjectCredentialRequest" : {
-        "properties" : {
-          "expiresAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "name" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "name" ],
-        "type" : "object"
-      },
       "CreateProjectRequest" : {
         "properties" : {
-          "bundleGameIds" : {
-            "items" : {
-              "format" : "int64",
-              "type" : "integer"
-            },
-            "maxItems" : 50,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "currency" : {
-            "type" : "string"
-          },
-          "editionName" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "parentGameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "price" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
           "productCode" : {
             "minLength" : 1,
-            "type" : "string"
-          },
-          "productKind" : {
-            "enum" : [ "BASIC", "DEMO", "DLC", "EDITION", "BUNDLE" ],
+            "pattern" : "[A-Za-z0-9][A-Za-z0-9._-]{0,49}",
             "type" : "string"
           },
           "title" : {
-            "minLength" : 1,
+            "maxLength" : 200,
+            "minLength" : 0,
             "type" : "string"
           }
         },
         "required" : [ "productCode", "title" ],
-        "type" : "object"
-      },
-      "CreateRatingRevisionRequest" : {
-        "properties" : {
-          "questionnaire" : {
-            "$ref" : "#/components/schemas/RatingQuestionnaireRequest"
-          }
-        },
-        "required" : [ "questionnaire" ],
-        "type" : "object"
-      },
-      "CreateReleaseRequest" : {
-        "properties" : {
-          "changeType" : {
-            "enum" : [ "INITIAL", "NORMAL_PATCH", "MATERIAL_CHANGE", "ROLLBACK" ],
-            "type" : "string"
-          },
-          "channel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "publishAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "timeZone" : {
-            "maxLength" : 50,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "CreateStorePageRevisionRequest" : {
-        "properties" : {
-          "coverUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "detailedDescription" : {
-            "maxLength" : 10000,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "developer" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "draft" : {
-            "type" : "boolean"
-          },
-          "eulaUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "features" : {
-            "items" : {
-              "maxLength" : 50,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 30,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "genres" : {
-            "items" : {
-              "maxLength" : 50,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 10,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "iconUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "localizations" : {
-            "additionalProperties" : {
-              "$ref" : "#/components/schemas/LocalizedContentRequest"
-            },
-            "type" : "object"
-          },
-          "minimumRequirements" : {
-            "maxLength" : 1000,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "platform" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "prices" : {
-            "additionalProperties" : {
-              "format" : "int64",
-              "type" : "integer"
-            },
-            "type" : "object"
-          },
-          "privacyPolicyUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "publisher" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "recommendedRequirements" : {
-            "maxLength" : 1000,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "salesCountries" : {
-            "items" : {
-              "maxLength" : 2,
-              "minLength" : 2,
-              "type" : "string"
-            },
-            "maxItems" : 250,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "screenshots" : {
-            "items" : {
-              "maxLength" : 500,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 20,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "shortDescription" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "supportUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "supportedLanguages" : {
-            "items" : {
-              "maxLength" : 10,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 30,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "tags" : {
-            "items" : {
-              "maxLength" : 50,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 30,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "title" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "trailers" : {
-            "items" : {
-              "maxLength" : 500,
-              "minLength" : 0,
-              "type" : "string"
-            },
-            "maxItems" : 5,
-            "minItems" : 0,
-            "type" : "array"
-          }
-        },
-        "required" : [ "minimumRequirements", "platform", "shortDescription", "title" ],
-        "type" : "object"
-      },
-      "CreateSubmissionRequest" : {
-        "properties" : {
-          "additionalBuildIds" : {
-            "items" : {
-              "format" : "int64",
-              "type" : "integer"
-            },
-            "maxItems" : 19,
-            "minItems" : 0,
-            "type" : "array"
-          },
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "metadataRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "pricingRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "ratingRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "required" : [ "buildId", "metadataRevisionId", "pricingRevisionId", "ratingRevisionId" ],
-        "type" : "object"
-      },
-      "CreateUploadSessionRequest" : {
-        "properties" : {
-          "architecture" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "buildNumber" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "ciProvider" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "ciRunId" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "commitSha" : {
-            "maxLength" : 64,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "deltaFromVersion" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "fileName" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "fileSize" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "idempotencyKey" : {
-            "maxLength" : 100,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "platform" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "productVersion" : {
-            "maxLength" : 30,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "repository" : {
-            "maxLength" : 300,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "sha256" : {
-            "minLength" : 1,
-            "pattern" : "(?i)(sha256:)?[a-f0-9]{64}",
-            "type" : "string"
-          },
-          "sourceRef" : {
-            "maxLength" : 300,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "architecture", "buildNumber", "fileName", "idempotencyKey", "platform", "productVersion", "sha256" ],
         "type" : "object"
       },
       "DeadEventResponse" : {
@@ -1133,153 +348,43 @@
         },
         "type" : "object"
       },
-      "Gate" : {
+      "ProjectReleaseRequest" : {
         "properties" : {
-          "feedback" : {
-            "type" : "string"
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
           },
-          "reasonCode" : {
-            "type" : "string"
-          },
-          "reviewType" : {
-            "type" : "string"
-          },
-          "status" : {
-            "enum" : [ "PENDING", "APPROVED", "CHANGES_REQUESTED" ],
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "IssuedProjectCredentialResponse" : {
-        "properties" : {
-          "expiresAt" : {
+          "createdAt" : {
             "format" : "date-time",
             "type" : "string"
           },
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
+          "failureReason" : {
+            "type" : "string"
           },
           "id" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "name" : {
-            "type" : "string"
-          },
-          "token" : {
-            "type" : "string"
-          },
-          "tokenPrefix" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "LocalizedContent" : {
-        "properties" : {
-          "detailedDescription" : {
-            "type" : "string"
-          },
-          "shortDescription" : {
-            "type" : "string"
-          },
-          "title" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "LocalizedContentRequest" : {
-        "properties" : {
-          "detailedDescription" : {
-            "maxLength" : 10000,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "shortDescription" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          },
-          "title" : {
-            "maxLength" : 200,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "detailedDescription", "shortDescription", "title" ],
-        "type" : "object"
-      },
-      "Part" : {
-        "properties" : {
-          "etag" : {
-            "minLength" : 1,
-            "type" : "string"
-          },
-          "partNumber" : {
-            "format" : "int32",
-            "type" : "integer"
-          }
-        },
-        "required" : [ "etag" ],
-        "type" : "object"
-      },
-      "ProductFamilyResponse" : {
-        "properties" : {
-          "bundleComponents" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ProjectResponse"
-            },
-            "type" : "array"
-          },
-          "bundles" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ProjectResponse"
-            },
-            "type" : "array"
-          },
-          "children" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ProjectResponse"
-            },
-            "type" : "array"
-          },
-          "parent" : {
-            "$ref" : "#/components/schemas/ProjectResponse"
-          },
-          "product" : {
-            "$ref" : "#/components/schemas/ProjectResponse"
-          }
-        },
-        "type" : "object"
-      },
-      "ProjectCredentialResponse" : {
-        "properties" : {
-          "expiresAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "gameId" : {
+          "projectId" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "id" : {
-            "format" : "int64",
-            "type" : "integer"
+          "requestEventId" : {
+            "type" : "string"
           },
-          "lastUsedAt" : {
+          "resultReceivedAt" : {
             "format" : "date-time",
             "type" : "string"
           },
-          "name" : {
-            "type" : "string"
+          "reviewRequestId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "status" : {
             "type" : "string"
           },
-          "tokenPrefix" : {
+          "updatedAt" : {
+            "format" : "date-time",
             "type" : "string"
           }
         },
@@ -1287,159 +392,77 @@
       },
       "ProjectResponse" : {
         "properties" : {
-          "currency" : {
-            "type" : "string"
-          },
-          "editionName" : {
-            "type" : "string"
-          },
-          "gameId" : {
+          "contentVersion" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "parentGameId" : {
+          "currentBuildId" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "price" : {
+          "currentReleaseRequest" : {
+            "$ref" : "#/components/schemas/ProjectReleaseRequest"
+          },
+          "currentReviewRequest" : {
+            "$ref" : "#/components/schemas/ProjectReviewRequest"
+          },
+          "id" : {
             "format" : "int64",
             "type" : "integer"
           },
           "productCode" : {
             "type" : "string"
           },
-          "productKind" : {
-            "enum" : [ "BASIC", "DEMO", "DLC", "EDITION", "BUNDLE" ],
-            "type" : "string"
-          },
-          "ratingCode" : {
-            "type" : "string"
-          },
-          "rejectReason" : {
-            "type" : "string"
-          },
-          "selfRated" : {
+          "releaseEligible" : {
             "type" : "boolean"
           },
-          "sellerId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "status" : {
-            "enum" : [ "DRAFT", "SUBMITTED", "APPROVED", "REJECTED" ],
-            "type" : "string"
-          },
-          "title" : {
-            "type" : "string"
+          "storePage" : {
+            "$ref" : "#/components/schemas/StorePage"
           }
         },
         "type" : "object"
       },
-      "PromoteReleaseRequest" : {
+      "ProjectReviewRequest" : {
         "properties" : {
-          "publishAt" : {
-            "format" : "date-time",
+          "actor" : {
             "type" : "string"
           },
-          "targetChannel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "timeZone" : {
-            "maxLength" : 50,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "targetChannel" ],
-        "type" : "object"
-      },
-      "RatingQuestionnaireRequest" : {
-        "properties" : {
-          "cashGambling" : {
-            "type" : "boolean"
-          },
-          "drugUse" : {
-            "type" : "boolean"
-          },
-          "language" : {
-            "enum" : [ "NONE", "MILD", "STRONG" ],
-            "type" : "string"
-          },
-          "sexualContent" : {
-            "enum" : [ "NONE", "MILD", "STRONG" ],
-            "type" : "string"
-          },
-          "violence" : {
-            "enum" : [ "NONE", "MILD", "STRONG" ],
-            "type" : "string"
-          }
-        },
-        "required" : [ "cashGambling", "drugUse", "language", "sexualContent", "violence" ],
-        "type" : "object"
-      },
-      "RegisterBuildWebhookRequest" : {
-        "properties" : {
-          "endpointUrl" : {
-            "maxLength" : 500,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "endpointUrl" ],
-        "type" : "object"
-      },
-      "ReleaseResponse" : {
-        "properties" : {
           "buildId" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "changeType" : {
-            "enum" : [ "INITIAL", "NORMAL_PATCH", "MATERIAL_CHANGE", "ROLLBACK" ],
-            "type" : "string"
-          },
-          "channel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "previousReleaseId" : {
+          "contentVersion" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "publishAt" : {
+          "createdAt" : {
             "format" : "date-time",
             "type" : "string"
           },
-          "publishTimeZone" : {
+          "feedback" : {
             "type" : "string"
           },
-          "publishedAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "releaseId" : {
+          "id" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "smokeTestFailure" : {
-            "type" : "string"
+          "projectId" : {
+            "format" : "int64",
+            "type" : "integer"
           },
-          "smokeTestStatus" : {
-            "enum" : [ "PENDING", "PASSED", "FAILED" ],
-            "type" : "string"
-          },
-          "smokeTestedAt" : {
+          "resultReceivedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "snapshot" : {
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "SCHEDULED", "PUBLISHED", "CANCELLED", "SMOKE_TEST_FAILED" ],
             "type" : "string"
           },
-          "submissionId" : {
-            "format" : "int64",
-            "type" : "integer"
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1462,54 +485,31 @@
         },
         "type" : "object"
       },
-      "RescheduleReleaseRequest" : {
+      "StorePage" : {
         "properties" : {
-          "publishAt" : {
-            "format" : "date-time",
+          "content" : {
             "type" : "string"
           },
-          "timeZone" : {
-            "maxLength" : 50,
-            "minLength" : 0,
-            "type" : "string"
-          }
-        },
-        "required" : [ "publishAt" ],
-        "type" : "object"
-      },
-      "RevisionResponse" : {
-        "properties" : {
-          "country" : {
-            "type" : "string"
-          },
-          "policyVersion" : {
-            "type" : "string"
-          },
-          "recommendedRatingCode" : {
-            "type" : "string"
-          },
-          "resolvedPath" : {
-            "type" : "string"
-          },
-          "revisionId" : {
+          "price" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "revisionNo" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "storePageStatus" : {
-            "enum" : [ "DRAFT", "PUBLISHED" ],
+          "shortDescription" : {
             "type" : "string"
           },
-          "type" : {
+          "thumbnailUrl" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "videoUrl" : {
             "type" : "string"
           }
         },
         "type" : "object"
       },
-      "StoreAsset" : {
+      "ThumbnailAsset" : {
         "properties" : {
           "assetId" : {
             "type" : "string"
@@ -1527,297 +527,43 @@
         },
         "type" : "object"
       },
-      "StorePagePreviewResponse" : {
+      "UpdateStorePageRequest" : {
         "properties" : {
-          "coverUrl" : {
+          "content" : {
+            "maxLength" : 100000,
+            "minLength" : 0,
             "type" : "string"
           },
-          "detailedDescription" : {
-            "type" : "string"
-          },
-          "developer" : {
-            "type" : "string"
-          },
-          "entityVersion" : {
+          "contentVersion" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "eulaUrl" : {
-            "type" : "string"
-          },
-          "features" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "genres" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "iconUrl" : {
-            "type" : "string"
-          },
-          "localizations" : {
-            "additionalProperties" : {
-              "$ref" : "#/components/schemas/LocalizedContent"
-            },
-            "type" : "object"
-          },
-          "minimumRequirements" : {
-            "type" : "string"
-          },
-          "platform" : {
-            "type" : "string"
-          },
-          "prices" : {
-            "additionalProperties" : {
-              "format" : "int64",
-              "type" : "integer"
-            },
-            "type" : "object"
-          },
-          "privacyPolicyUrl" : {
-            "type" : "string"
-          },
-          "publishedAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "publisher" : {
-            "type" : "string"
-          },
-          "recommendedRequirements" : {
-            "type" : "string"
-          },
-          "revisionId" : {
+          "price" : {
             "format" : "int64",
             "type" : "integer"
-          },
-          "revisionNo" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "salesCountries" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "screenshots" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
           },
           "shortDescription" : {
+            "maxLength" : 500,
+            "minLength" : 0,
             "type" : "string"
           },
-          "status" : {
-            "enum" : [ "DRAFT", "PUBLISHED" ],
+          "thumbnailUrl" : {
+            "maxLength" : 1000,
+            "minLength" : 0,
             "type" : "string"
-          },
-          "supportUrl" : {
-            "type" : "string"
-          },
-          "supportedLanguages" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "tags" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
           },
           "title" : {
+            "maxLength" : 200,
+            "minLength" : 0,
             "type" : "string"
           },
-          "trailers" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          }
-        },
-        "type" : "object"
-      },
-      "SubmissionResponse" : {
-        "properties" : {
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "metadataRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "pricingRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "ratingRevisionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "sequenceNo" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "status" : {
-            "enum" : [ "SUBMITTED", "CHANGES_REQUESTED", "READY_FOR_RELEASE", "RELEASED", "CANCELLED" ],
-            "type" : "string"
-          },
-          "submissionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "SubmissionReviewStatusResponse" : {
-        "properties" : {
-          "gates" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Gate"
-            },
-            "type" : "array"
-          },
-          "nextAction" : {
-            "type" : "string"
-          },
-          "submissionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "submissionStatus" : {
-            "enum" : [ "SUBMITTED", "CHANGES_REQUESTED", "READY_FOR_RELEASE", "RELEASED", "CANCELLED" ],
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "TesterGrantRequest" : {
-        "properties" : {
-          "channel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "testerSubject" : {
-            "maxLength" : 100,
+          "videoUrl" : {
+            "maxLength" : 1000,
             "minLength" : 0,
             "type" : "string"
           }
         },
-        "required" : [ "channel", "testerSubject" ],
-        "type" : "object"
-      },
-      "TesterGrantResponse" : {
-        "properties" : {
-          "active" : {
-            "type" : "boolean"
-          },
-          "channel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "gameId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "grantId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "testerSubject" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "TesterInstallationResponse" : {
-        "properties" : {
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "channel" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          },
-          "downloadUrl" : {
-            "type" : "string"
-          },
-          "expiresAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "UploadBuildRequest" : {
-        "properties" : {
-          "checksum" : {
-            "minLength" : 1,
-            "type" : "string"
-          },
-          "fileSize" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "version" : {
-            "minLength" : 1,
-            "type" : "string"
-          }
-        },
-        "required" : [ "checksum", "version" ],
-        "type" : "object"
-      },
-      "UploadPartResponse" : {
-        "properties" : {
-          "partNumber" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "uploadUrl" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "UploadSessionResponse" : {
-        "properties" : {
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "expiresAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "partSize" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "parts" : {
-            "items" : {
-              "$ref" : "#/components/schemas/UploadPartResponse"
-            },
-            "type" : "array"
-          },
-          "uploadSessionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
+        "required" : [ "content", "shortDescription", "title" ],
         "type" : "object"
       }
     },
@@ -1985,12 +731,12 @@
         "tags" : [ "outbox-ops-controller" ]
       }
     },
-    "/api/v1/studio/assets/{gameId}/{assetId}" : {
+    "/api/v1/studio/assets/{id}/{assetId}" : {
       "get" : {
-        "operationId" : "download",
+        "operationId" : "get_1",
         "parameters" : [ {
           "in" : "path",
-          "name" : "gameId",
+          "name" : "id",
           "required" : true,
           "schema" : {
             "format" : "int64",
@@ -2009,203 +755,12 @@
             "description" : "OK"
           }
         },
-        "tags" : [ "store-asset-controller" ]
+        "tags" : [ "asset-controller" ]
       }
     },
-    "/api/v1/studio/ci/oidc/exchange" : {
-      "post" : {
-        "operationId" : "exchange",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CiOidcExchangeRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCiOidcExchangeResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "ci-oidc-controller" ]
-      }
-    },
-    "/api/v1/studio/ci/projects/{gameId}/builds/{buildId}" : {
+    "/api/v1/studio/projects" : {
       "get" : {
-        "operationId" : "status",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "buildId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseBuildResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "projectCredential" : [ ]
-        } ],
-        "tags" : [ "ci-upload-controller" ]
-      }
-    },
-    "/api/v1/studio/ci/projects/{gameId}/releases" : {
-      "post" : {
-        "operationId" : "schedule",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CiScheduleReleaseRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "ci-oidc-controller" ]
-      }
-    },
-    "/api/v1/studio/ci/projects/{gameId}/upload-sessions" : {
-      "post" : {
-        "operationId" : "create_2",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateUploadSessionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseUploadSessionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "projectCredential" : [ ]
-        } ],
-        "tags" : [ "ci-upload-controller" ]
-      }
-    },
-    "/api/v1/studio/ci/projects/{gameId}/upload-sessions/{sessionId}/complete" : {
-      "post" : {
-        "operationId" : "complete",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "sessionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CompleteUploadRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseBuildResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "projectCredential" : [ ]
-        } ],
-        "tags" : [ "ci-upload-controller" ]
-      }
-    },
-    "/api/v1/studio/games" : {
-      "get" : {
-        "operationId" : "list_3",
+        "operationId" : "list",
         "responses" : {
           "200" : {
             "content" : {
@@ -2218,18 +773,260 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
+        "tags" : [ "project-controller" ]
       },
       "post" : {
-        "operationId" : "create_1",
+        "operationId" : "create",
         "requestBody" : {
           "content" : {
             "application/json" : {
               "schema" : {
                 "$ref" : "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/builds" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListBuild"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "build-controller" ]
+      },
+      "post" : {
+        "operationId" : "upload_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "version",
+          "required" : true,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "file" : {
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "file" ],
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseBuild"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "build-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/release-requests" : {
+      "get" : {
+        "operationId" : "releaseRequests",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListProjectReleaseRequest"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      },
+      "post" : {
+        "operationId" : "requestRelease",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectReleaseRequest"
+                }
+              }
+            },
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/review-requests" : {
+      "get" : {
+        "operationId" : "reviewRequests",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListProjectReviewRequest"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      },
+      "post" : {
+        "operationId" : "requestReview",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectReviewRequest"
+                }
+              }
+            },
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "project-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/store-page" : {
+      "put" : {
+        "operationId" : "update",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateStorePageRequest"
               }
             }
           },
@@ -2247,465 +1044,15 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
+        "tags" : [ "project-controller" ]
       }
     },
-    "/api/v1/studio/games/upload-sessions/{sessionId}/complete" : {
-      "post" : {
-        "operationId" : "completeUpload",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "sessionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CompleteUploadRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseBuildResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      }
-    },
-    "/api/v1/studio/games/{gameId}/builds" : {
-      "get" : {
-        "operationId" : "builds",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListBuildResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      },
-      "post" : {
-        "operationId" : "uploadBuild",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/UploadBuildRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseBuildResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      }
-    },
-    "/api/v1/studio/games/{gameId}/family" : {
-      "get" : {
-        "operationId" : "family",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseProductFamilyResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      }
-    },
-    "/api/v1/studio/games/{gameId}/submit" : {
-      "post" : {
-        "operationId" : "submit_1",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      }
-    },
-    "/api/v1/studio/games/{gameId}/upload-sessions" : {
-      "post" : {
-        "operationId" : "createUploadSession",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateUploadSessionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseUploadSessionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "studio-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/releases/{releaseId}/cancel" : {
-      "post" : {
-        "operationId" : "cancel",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "releaseId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/releases/{releaseId}/promote" : {
-      "post" : {
-        "operationId" : "promote",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "releaseId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/PromoteReleaseRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/releases/{releaseId}/reschedule" : {
-      "post" : {
-        "operationId" : "reschedule",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "releaseId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RescheduleReleaseRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/releases/{releaseId}/rollback" : {
-      "post" : {
-        "operationId" : "rollback",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "releaseId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/submissions/{submissionId}" : {
-      "get" : {
-        "operationId" : "submission",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "submissionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseSubmissionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/submissions/{submissionId}/releases" : {
-      "post" : {
-        "operationId" : "release",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "submissionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateReleaseRequest"
-              }
-            }
-          }
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/submissions/{submissionId}/review-status" : {
-      "get" : {
-        "operationId" : "reviewStatus",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "submissionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseSubmissionReviewStatusResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/assets" : {
+    "/api/v1/studio/projects/{id}/thumbnail" : {
       "post" : {
         "operationId" : "upload",
         "parameters" : [ {
           "in" : "path",
-          "name" : "gameId",
+          "name" : "id",
           "required" : true,
           "schema" : {
             "format" : "int64",
@@ -2729,927 +1076,18 @@
           }
         },
         "responses" : {
-          "200" : {
+          "201" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseStoreAsset"
+                  "$ref" : "#/components/schemas/ApiResponseThumbnailAsset"
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Created"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "store-asset-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/build-webhooks" : {
-      "get" : {
-        "operationId" : "list_2",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListBuildWebhookResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "build-webhook-controller" ]
-      },
-      "post" : {
-        "operationId" : "register",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RegisterBuildWebhookRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseBuildWebhookResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "build-webhook-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/build-webhooks/{subscriptionId}/disable" : {
-      "post" : {
-        "operationId" : "disable",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "subscriptionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "build-webhook-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/ci-trust-policies" : {
-      "get" : {
-        "operationId" : "list_1",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListCiTrustPolicyResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "ci-trust-policy-controller" ]
-      },
-      "post" : {
-        "operationId" : "create",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateCiTrustPolicyRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseCiTrustPolicyResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "ci-trust-policy-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/ci-trust-policies/{policyId}" : {
-      "delete" : {
-        "operationId" : "delete",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "policyId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "ci-trust-policy-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/credentials" : {
-      "get" : {
-        "operationId" : "list",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListProjectCredentialResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "project-credential-controller" ]
-      },
-      "post" : {
-        "operationId" : "issue",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateProjectCredentialRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseIssuedProjectCredentialResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "project-credential-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/credentials/{credentialId}" : {
-      "delete" : {
-        "operationId" : "revoke",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "credentialId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "project-credential-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/pricing-revisions" : {
-      "get" : {
-        "operationId" : "pricings",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      },
-      "post" : {
-        "operationId" : "pricing",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreatePricingRevisionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/rating-revisions" : {
-      "get" : {
-        "operationId" : "ratings",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      },
-      "post" : {
-        "operationId" : "rating",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateRatingRevisionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/releases" : {
-      "get" : {
-        "operationId" : "releases",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListReleaseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/store-page-revisions" : {
-      "get" : {
-        "operationId" : "storePages",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      },
-      "post" : {
-        "operationId" : "storePage",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateStorePageRevisionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}" : {
-      "put" : {
-        "operationId" : "updateStorePageDraft",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "revisionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateStorePageRevisionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/preview" : {
-      "get" : {
-        "operationId" : "previewStorePage",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "revisionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseStorePagePreviewResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/publish" : {
-      "post" : {
-        "operationId" : "publishStorePageDraft",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "revisionId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRevisionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/submissions" : {
-      "get" : {
-        "operationId" : "submissions",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListSubmissionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      },
-      "post" : {
-        "operationId" : "submit",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateSubmissionRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseSubmissionResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/testers" : {
-      "get" : {
-        "operationId" : "testers",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListTesterGrantResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      },
-      "post" : {
-        "operationId" : "grantTester",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/TesterGrantRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseTesterGrantResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/projects/{gameId}/testers/{grantId}/revoke" : {
-      "post" : {
-        "operationId" : "revokeTester",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "gameId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "path",
-          "name" : "grantId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "publishing-controller" ]
-      }
-    },
-    "/api/v1/studio/tester/builds/{buildId}/installation" : {
-      "get" : {
-        "operationId" : "installation",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "buildId",
-          "required" : true,
-          "schema" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        }, {
-          "in" : "query",
-          "name" : "channel",
-          "required" : true,
-          "schema" : {
-            "enum" : [ "DEV", "TEST", "STAGE", "LIVE" ],
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseTesterInstallationResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "studio" ]
-        } ],
-        "tags" : [ "tester-controller" ]
-      }
-    },
-    "/api/v1/studio/workspace" : {
-      "get" : {
-        "operationId" : "own",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseLong"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "workspace-controller" ]
+        "tags" : [ "asset-controller" ]
       }
     }
   }

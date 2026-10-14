@@ -17,11 +17,13 @@ Auth는 요청한 사람과 역할의 출처다. “구매자”, “창작자�
 | `status` (`AccountStatus`) | `ACTIVE`만 `enabled()=true`. `LOCKED`, `DISABLED`도 정의되어 있으나 모델에 전환 메서드는 없음 |
 | `roles` (`Set<PlatformRole>`) | `MEMBER` 구매자, `CREATOR` 창작자, `REVIEWER` 심사자, `ADMIN` 운영자. 역할 목록을 토큰에 전달 |
 
-**만들고 쓰는 때:** `UserAccountService.signupMember()`는 MEMBER 계정을, `signup()`은 MEMBER+CREATOR 계정을 만든다. 가입과 함께 역할 감사 기록과 `UserRegistered` 이벤트를 저장한다. Studio는 가입 이벤트를 받아 개인 작업 공간을 준비하고, 작업 공간 조회에서도 없으면 생성할 수 있다. 가입 이벤트에는 역할 구분이 없으므로 “CREATOR 가입에서만 워크스페이스가 만들어진다”고 단정하지 않는다.
+**만들고 쓰는 때:** RegisterAccount.registerMember()는 MEMBER 계정을, registerCreator()는 MEMBER+CREATOR 계정을 만든다.
+가입과 함께 역할 감사 기록과 UserRegistered 이벤트를 저장한다. Studio는 로그인 JWT의 CREATOR 역할과 sub로 Project 소유자를 확인한다.
+가입 이벤트로 Workspace를 생성하거나 별도 판매자 ID를 조회하지 않는다.
 
-**예:** 동일 인물이 구매할 때는 숫자 `memberId=11`, 자신의 프로젝트를 다룰 때는 `subject=usr_...`에서 찾아낸 `workspaceId=3`을 사용한다. 이 세 값을 서로 대입하면 안 된다.
+**예:** Auth가 발급한 member_id는 숫자 계정 ID이며 sub는 인증 주체다. 현재 Studio의 ownerSubject에는 sub를 직접 저장한다.
 
-근거: [UserAccountService](../../../apps/auth/src/main/java/com/stove/auth/core/service/UserAccountService.java), [토큰 생성](../../../apps/auth/src/main/java/com/stove/auth/config/AuthSecurityConfig.java), [가입 이벤트 수신](../../../apps/studio/src/main/java/com/stove/studio/api/listener/AuthEventListener.java). 기존 검증: [UserAccountServiceTest](../../../apps/auth/src/test/java/com/stove/auth/core/service/UserAccountServiceTest.java).
+근거: [RegisterAccount](../../../apps/auth/src/main/java/com/stove/auth/core/service/RegisterAccount.java), [토큰 생성](../../../apps/auth/src/main/java/com/stove/auth/config/AuthSecurityConfig.java), [JWT 소유자로 Project 생성](../../../apps/studio/src/main/java/com/stove/studio/core/service/project/CreateProject.java). 기존 검증: [RegisterAccountTest](../../../apps/auth/src/test/java/com/stove/auth/core/service/RegisterAccountTest.java).
 
 ## RoleAuditLog — 역할 부여 기록
 

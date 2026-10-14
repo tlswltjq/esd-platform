@@ -1,5 +1,7 @@
 # 코드로 이해하는 도메인과 모델
 
+현재 완료된 기준 모듈은 Auth·Gateway다. Studio의 설계·검증은 이 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
+
 이 프로젝트는 **창작자가 게임을 준비하고 심사를 거쳐 판매하면, 구매자에게 이용 권한을 주고 판매자의 몫을 계산하는 시스템**이다. 먼저 이 흐름을 이해한 뒤 각 단계가 보관하는 정보를 읽으면 된다.
 
 이 문서는 2026-10-10, 로컬 `docs/domain-language`의 코드 `076efb1`을 기준으로 작성했다. [용어집](../domain-glossary.md)은 용어를 찾고 혼동을 푸는 색인이다. 이 안내와 모델 사전은 **어떤 객체가 어떤 속성을 가지고, 누가 언제 만들고 바꾸며, 다음 단계에서 무엇에 쓰이는지** 설명한다. 현재 구현에 대한 설명이며 업무 정책에 합의했다는 뜻은 아니다. 기존 상세 정의의 규칙 제안·사례·합의 상태도 각 모델에 모았다. 실행·설계·검증 문서는 [전체 문서 목록](../README.md)에서 찾는다.
@@ -41,7 +43,7 @@
 | 영역 / 코드 | 답하는 질문 | 저장 모델 | 사전 |
 |---|---|---|---|
 | 계정·역할 / `auth` | 누가 요청했고 어떤 역할인가? | `UserAccount`, `RoleAuditLog` | [계정](models/identity.md) |
-| 창작·출시 / `studio` | 누구의 어떤 자료·파일을 심사받아 공개하는가? | `Workspace`, `GameProject`, `BundleComponent`, `StorePageRevision`, `PricingRevision`, `RatingRevision`, `GameBuild`, `UploadSession`, `Submission`, `SubmissionBuild`, `SubmissionGate`, `Release` | [창작·출시](models/studio.md) |
+| 창작·출시 / `studio` | 출시 자료·파일과 심사·출시 요청을 어떻게 관리하는가? | `Project`, `Build`, `ProjectReviewRequest`, `ProjectReleaseRequest` | [창작·출시](models/studio.md) |
 | 창작 자동화·운영 / `studio` | 어떤 CI·테스터가 접근하고 어디에 결과를 알리는가? | `ProjectCredential`, `CiTrustPolicy`, `InternalTesterGrant`, `BuildWebhookSubscription`, `BuildWebhookDelivery`, `AuditLog` | [창작 운영](models/studio-operations.md) |
 | 심사 / `review` | 어떤 제출 내용에 대해 무엇을 판단했는가? | `SubmissionSnapshot`, `ReviewCase`, `ReviewDecisionHistory`, 기존 `ReviewRequest`, `AuditLog` | [심사](models/review.md) |
 | 상품·가격 / `catalog` | 무엇을 얼마에 팔 수 있는가? | `Product`, `Promotion`, `AuditLog` | [상품·진열](models/catalog-store.md) |
@@ -58,61 +60,22 @@
 
 ## 게임 한 개를 처음부터 따라가기
 
-아래 숫자는 관계를 설명하기 위한 예시다. 실제 저장 ID나 실행 결과가 아니다. 게임 이름은 “별숲”, 상품 코드는 `STAR-FOREST`로 가정한다.
-
-```mermaid
-flowchart LR
-    A[계정 UserAccount] --> W[작업 공간 Workspace]
-    W --> G[제작 단위 GameProject]
-    G --> D[자료 이력과 GameBuild]
-    D --> S[제출 Submission]
-    S --> R[심사 ReviewCase]
-    R --> T[출시 관문 SubmissionGate]
-    T --> L[공개 Release]
-    L --> P[판매 상품 Product]
-    P --> O[구매 Order]
-    O --> M[대금 Payment]
-    M --> I[이용권 License]
-    I --> E[보유권 사본 Entitlement]
-    L --> F[파일 목록 PatchManifest]
-    E --> K[다운로드 티켓]
-    F --> K
-    M --> Z[매출 원장 SettlementRecord]
-    Z --> C[월 마감 SellerSettlement]
-```
-
-화살표는 업무상 연결이다. 모두 직접 HTTP 호출한다는 뜻은 아니다. 서비스 사이 상당수 연결은 [이벤트](workflows.md#이벤트를-업무-사실로-읽기)로 이어진다.
-
-| 시점 | 생기거나 바뀌는 모델과 예시 | 다음 단계가 사용하는 것 |
-|---|---|---|
-| 창작자 가입 | Auth `UserAccount.id=11`, `subject=usr_creator`; Studio `Workspace.id=3`, `ownerSubject=usr_creator` | 프로젝트 소유자는 워크스페이스 `3`. 구매자 ID `11`과 구별 |
-| 프로젝트 등록 | `GameProject.id=7`, `productCode=STAR-FOREST`, `sellerId=3` | 자료·빌드가 `gameId=7`에 속함 |
-| 자료 준비 | 상점 자료 `id=101, revisionNo=2`, 가격 `id=201, price=10000`, 등급 자료 `id=301` | 제출할 때는 순번 `2`가 아니라 각각의 ID를 지정 |
-| 파일 업로드 | `GameBuild.id=401, version=1.0.0`, `UploadSession` 생성·완료 후 빌드 검증 | 제출에는 `VALIDATED` 빌드가 필요 |
-| 심사 제출 | `Submission.id=501`에 자료 `101/201/301`과 빌드 `401` 고정; 여섯 `SubmissionGate` 생성 | Review가 스냅샷 한 건과 유형별 사건 여섯 건 생성 |
-| 전체 승인·공개 | 승인 결과 반영 후 `Submission=READY_FOR_RELEASE`; LIVE `Release.id=601` 공개 | `ReleasePublished`로 상품·배포 정보 전달 |
-| 상점 반영 | Catalog `Product.id=42`, `currentReleaseId=601`; Store 검색 문서 갱신 | 주문은 `productId=42`, 다운로드는 `STAR-FOREST` 사용 |
-| 구매 | 다른 구매자 `memberId=25`가 주문. `Order`·`OrderItem`에 견적 확정 | `orderNo`와 `OrderLine` 사본을 Payment로 전달 |
-| 결제 완료 | `Payment=PAID` | Order는 `PAID`, License는 지급, Settlement는 매출 원장 생성. 각 서비스 반영 시점은 다를 수 있음 |
-| 다운로드 | `ProductRef`로 코드→상품 `42`·릴리스 `601` 연결, `Entitlement`로 회원 `25`의 보유 확인 | 정확히 릴리스 `601`의 `PatchManifest`에서 파일을 골라 티켓 발급 |
-| 환불 | Payment 환불 완료 이벤트 | 주문 취소, 이용권 회수, 보유권 회수, 음수 환불 원장 추가 |
-| 월 마감 | 판매자 `3`·귀속 월별 `SellerSettlement` 생성/누적 | 원장 합계와 비교. 실제 송금 완료를 의미하지 않음 |
-
-자료를 고치는 것과 새 버전을 배포하는 것은 별개다. 상점 설명 3차를 작성해도 기존 릴리스가 참조하는 2차 설명은 유지된다. 새 제출·심사·LIVE 공개를 거쳐야 현재 상품과 배포 파일에 반영된다.
-
-## 비슷해 보이는 모델을 나눈 이유
-
-| 구별할 대상 | 나누지 않으면 생기는 문제 |
+| 단계 | 저장·전달되는 내용 |
 |---|---|
-| `GameProject` / `Product` | 작성 중인 초안이 구매 가능한 상품처럼 취급될 수 있음 |
-| `GameBuild` / `Release` | 파일 업로드 완료를 고객 공개로 오해함. 검증·심사·공개 채널을 구분할 수 없음 |
-| `Submission` / `ReviewCase` / `SubmissionGate` | 제출 묶음, 심사자의 판단, 출시 준비 상태가 한 상태값에 섞임 |
-| `PricingRevision` / `Product.price` / `OrderItem.unitPrice` | 심사할 가격, 현재 정가, 구매 당시 실제 단가를 구별하지 못함 |
-| `Order` / `Payment` | 구매 요청과 실제 대금 처리가 같은 순간에 끝난다고 가정하게 됨 |
-| `License` / `Entitlement` | 다운로드 요청마다 이용권 서비스가 살아 있어야 함 |
-| `SettlementRecord` / `SellerSettlement` | 개별 매출·환불 근거를 잃고 월 합계만 남음 |
+| CREATOR 가입·Project 생성 | Auth subject가 Project.ownerSubject가 되며 기존 sellerId 연결을 유지 |
+| 상점 내용·파일 준비 | Project 작업본에 제목·썸네일·소개·영상·내용·가격과 대표 전체 ZIP Build 지정 |
+| 단일 심사 | ProjectReviewRequest가 자료 스냅샷을 첨부한 요청과 외부 결과를 기록 |
+| 출시 요청 | 현재 상세정보 버전의 외부 심사 결과로 ProjectReleaseRequest를 발행 |
+| 공개 반영 | 외부 처리 결과를 ProjectReleaseRequest에 기록. 실제 출시·공개는 외부 업무 |
+| 출시 후 수정 | 상세정보를 변경하고 새 버전의 심사·출시 요청을 발행. 공개본 관리 책임은 외부 업무 |
+| 구매·결제 | 기존 Order·Payment가 Catalog의 상품 ID와 견적을 사용 |
+| 지급·다운로드 | License·Entitlement가 보유권을 확인하고 정확한 공개 기록의 파일 선택 |
+| 환불·월 마감 | 기존 결제 환불·권한 회수·판매자 정산 원장과 월 마감 흐름 유지 |
 
-“같은 값이 여러 곳에 저장됨” 자체가 모두 중복 설계 오류는 아니다. 현재 상태를 보여주는 사본도 있고, 과거 구매 조건을 보존해야 하는 기록도 있다. **언제의 사실이며 누가 원본을 바꾸는가**를 먼저 확인한다.
+Project는 편집 중인 내용이고 Product는 현재 등록된 상품이다.
+Build는 요청에 첨부할 파일이며 ProjectReleaseRequest는 외부로 발행한 출시 요청이다.
+심사 시점의 스냅샷 가격·현재 상품 가격·주문 당시 가격을 구별한다.
+[현재 Studio 모델](models/studio.md)에서 필드와 상태 전이를 확인한다.
 
 ## 코드에서 답을 찾는 순서
 
@@ -130,7 +93,7 @@ flowchart LR
 
 ## 현재 구현을 이해할 때 남겨둘 경계
 
-- 기존 프로젝트 단위 심사(`ReviewRequest`)와 현재 제출물 단위 심사(`ReviewCase`)가 함께 있다. 새 흐름의 진행 여부를 `GameProject.status`만으로 판단하지 않는다.
+- 기존 프로젝트 단위 심사(`ReviewRequest`)와 현재 제출물 단위 심사(`ReviewCase`)가 함께 있다. 새 Studio는 상세정보·파일과 심사 요청·출시 요청만 관리한다. Project 승인·출시 상태와 공개본은 관리하지 않는다.
 - `PUBLISHED`는 상점 자료에서는 “확정됨”, 릴리스에서는 “해당 채널에 공개됨”이다. 일반 상품의 판매는 LIVE 릴리스 반영으로 시작한다. DEMO·BUNDLE의 일반 구매는 제한된다.
 - 주문 취소 API와 결제 환불 API는 현재 연결이 완성되어 있지 않다. 환불 흐름은 Payment에서 시작한다. [Q9](open-questions.md#q9)
 - 파일 검증·공개 전 점검은 게임을 실제 플레이해 검증하는 것과 다르다. [Q10](open-questions.md#q10)

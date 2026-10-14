@@ -1,5 +1,8 @@
 # 도메인 용어집
 
+
+Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했다. 아래 Submission·판본·채널 용어는 과거 자료와 다른 모듈의 호환 계약을 설명하며, 현재 작업 흐름은 [Studio 모델](domain/models/studio.md)을 따른다.
+
 창작자가 게임을 등록해 출시하고, 구매자가 결제해 이용하며, 운영자가 판매자별 금액을 마감하는 업무의 언어를 정리한다. 같은 단어라도 어느 업무에서 쓰이는지 함께 읽는다.
 요구사항·문서·코드·테스트에서 같은 의미로 사용할 유비쿼터스 언어의 초안이다.
 
@@ -29,7 +32,7 @@
 
 | 표준 한국어명 | 영어명 / 코드 | 핵심 정의 | 상세 |
 |---|---|---|---|
-| 게임 프로젝트 | Game Project / `GameProject` | 창작자가 자료·빌드·상품 관계를 관리하는 제작·출시 단위 | [정의](domain/models/studio.md#game-project) |
+| 게임 프로젝트 | Project / `Project` | 창작자가 자료·빌드·상품 관계를 관리하는 제작·출시 단위 | [정의](domain/models/studio.md#game-project) |
 | 상품 | Product / `Product` | 가격과 판매 가능 여부를 책임지는 구매 대상 | [정의](domain/models/catalog-store.md#product) |
 | 상점 자료 이력 | Store Page Revision / `StorePageRevision` | 특정 시점의 소개·이미지·정책 등 상점 자료 묶음 | [정의](domain/models/studio.md#store-page-revision) |
 | 게임 빌드 | Game Build / `GameBuild` | 특정 버전·실행 환경에 제공할 파일 산출물과 검증 기록 | [정의](domain/models/studio.md#game-build) |
@@ -60,7 +63,7 @@
 | 파일 배포 | 공개 파일·변형 선택, 접근 판정, 다운로드 티켓 | download | 릴리스·상품 참조·보유권 사본을 조합해 접근 판정 |
 | 판매자 정산 | 매출·환불 원장, 수수료, 월 마감 | settlement | 결제 항목을 원장으로 번역. 상품의 현재 가격으로 과거 매출을 다시 계산하지 않음 |
 
-Auth는 회원·역할의 출처이고, Studio의 워크스페이스는 프로젝트 소유 범위다. 회원·판매자·워크스페이스는 이름만 바꾼 하나의 개념으로 취급하지 않는다. 현재 개인 워크스페이스 ID가 커머스의 `sellerId`로 전달되는 관계는 [Q8](domain/open-questions.md#q8)에 남긴다. 인증 계약은 [커머스 인증 문서](security.md)를 참고한다.
+Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소유자로 직접 저장한다. Workspace와 sellerId 연결은 제거했다. 다른 모듈의 판매자 관계는 미완료 구현의 참고 기록이다. 인증 계약은 [커머스 인증 문서](security.md)를 참고한다.
 
 ## 혼동하기 쉬운 표현
 
@@ -91,7 +94,7 @@ Auth는 회원·역할의 출처이고, Studio의 워크스페이스는 프로�
 | `projectionVersion` | Catalog 상품 변경을 Store 읽기 모델에 반영할 순서 번호 | 오래된 이벤트가 새 진열을 덮어쓰지 않도록 비교하며 자료 이력·게임 버전과 별개 |
 | `ratingPolicyVersion` | 등급 판정 규칙의 판본 | 게임 버전과 별개이며 현재 활성 정책과 맞아야 제출 가능 |
 
-근거: [SubmissionService](../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ReleaseService](../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
+근거: [Project 심사 요청](../apps/studio/src/main/java/com/stove/studio/core/service/review/RequestProjectReview.java), [Project 상점 등록](../apps/studio/src/main/java/com/stove/studio/core/service/release/RequestProjectRelease.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
 
 <a id="identifiers"></a>
 ### 주요 식별자
@@ -105,7 +108,7 @@ Auth는 회원·역할의 출처이고, Studio의 워크스페이스는 프로�
 | `releaseId`, `buildId` | Studio의 공개 단위 / 파일 산출물 ID | 상품의 현재 릴리스와 Download 매니페스트 일치 확인 |
 | `orderNo` | Order가 발급하는 주문번호 | 결제·이용권·정산을 연결. 각 서비스의 DB 기본 키와 별개 |
 | `memberId` | Auth 회원 ID | 구매자와 이용권 수혜자. 사용자 입력 대신 인증 정보에서 결정 |
-| `workspaceId` → `sellerId` | 현재 Studio 개인 워크스페이스 → 판매 주체 참조 | 프로젝트 소유권과 커머스·정산 연결. [Q8](domain/open-questions.md#q8) |
+| `ownerSubject` | 현재 Studio Project 소유자 | 완료된 Auth가 발급한 JWT sub. Workspace·sellerId와 별도 매핑하지 않음 |
 
 예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. [ProductRef](../apps/download/src/main/java/com/stove/download/core/domain/ProductRef.java)가 코드와 상품 ID·릴리스 ID의 관계를 보관한다.
 
@@ -118,9 +121,9 @@ License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는
 
 | 용어·표현 | 뜻과 사용 예 |
 |---|---|
-| 워크스페이스 / Workspace | 창작자 계정의 작업 공간이며 프로젝트·제출·출시 접근 범위. 구매자의 회원 ID와 구별. [Workspace](../apps/studio/src/main/java/com/stove/studio/core/domain/project/Workspace.java) |
+| 워크스페이스 / Workspace | 제거된 구 Studio의 작업 공간 모델. 현재 Project는 Auth JWT sub로 직접 소유권을 확인 |
 | 상품 종류 / Product Kind | BASIC·DEMO·DLC·EDITION·BUNDLE의 상품 관계. [종류별 조건](domain/models/studio.md#game-project) |
-| 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. [UploadSession](../apps/studio/src/main/java/com/stove/studio/core/domain/build/UploadSession.java) |
+| 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. 현재 Studio에서는 전체 ZIP 한 요청 업로드로 교체됨 |
 | 가격 이력 / Pricing Revision | 심사·출시에 사용할 가격의 특정 판본. 현재 신규 생성은 KR/KRW |
 | 등급 자료 이력 / Rating Revision | 설문·지역·정책 버전·판정 경로를 고정한 자료 |
 | 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/BuildVariant.java) |

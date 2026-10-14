@@ -128,6 +128,8 @@ spring:
             # ── 창작자 대면(스튜디오) ──────────────────────────────
             - id: studio
               uri: ${STUDIO_URI:http://localhost:8085}
+              metadata:
+                response-timeout: 300000
               predicates:
                 - Path=/api/v1/studio/**
 

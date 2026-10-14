@@ -15,7 +15,7 @@ auth의 오류 수정·Refresh Token/RTR과 Gateway/BFF의 자동 로그인·공
 | | 서비스 | 포트 | 한 줄 책임 | 저장소 |
 |---|---|---|---|---|
 | — | [auth](#auth) | 8091 | 계정·역할·OAuth2/OIDC 토큰 | MySQL |
-| A | [studio](#studio) | 8085 | 프로젝트·자료·빌드·심사 제출·릴리스 | MySQL |
+| A | [studio](#studio) | 8085 | Project·전체 빌드·단일 심사·상점 등록 | MySQL |
 | A | [review](#review) | 8086 | 유형별 심사 사건·등급 증빙·재검토 | MySQL |
 | A | [catalog](#catalog) | 8081 | 상품 마스터, 노출 제어, 가격 확정 | MySQL + Redis |
 | B | [store](#store) | 8087 | 진열·검색 (읽기 전용) | Elasticsearch + Redis |
@@ -40,78 +40,43 @@ auth의 오류 수정·Refresh Token/RTR과 Gateway/BFF의 자동 로그인·공
 | `POST /api/v1/auth/signup/member` | 구매자 가입, `MEMBER` 역할 부여 |
 | `/login`, `/logout`, `/oauth2/**`, `/.well-known/**` | 로그인·승인·토큰·공개 키와 OIDC 메타데이터 |
 
-**이벤트** — 회원·창작자 가입 시 `UserRegistered` 발행. Studio는 개인 워크스페이스 생성에 사용한다. 근거는 [AccountController](../apps/auth/src/main/java/com/stove/auth/api/controller/AccountController.java), [UserAccountService](../apps/auth/src/main/java/com/stove/auth/core/service/UserAccountService.java)다.
+**이벤트** — 회원·창작자 가입 시 `UserRegistered` 발행. Studio의 판매자 연결은 Project 생성·조회 시 필요하면 생성한다. 근거는 [AccountController](../apps/auth/src/main/java/com/stove/auth/api/controller/AccountController.java), [RegisterAccount](../apps/auth/src/main/java/com/stove/auth/core/service/RegisterAccount.java)다.
 
 ---
 
 ## studio
 
-창작자가 프로젝트·자료·빌드를 준비하고 심사 제출물과 릴리스를 만드는 서비스다.
-`SubmissionCreated`가 Review의 심사를 시작하고, LIVE `ReleasePublished`가 Catalog·Download의 공개 반영을 시작한다.
+Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요청, 출시 요청·재요청이다.
+심사 판정과 실제 출시·공개 상품 관리는 외부 업무이며 결과는 요청 기록에만 표시한다.
+[모델](domain/models/studio.md) · [실행·요청 예제](studio-guide.md)
 
-**현재 제출·출시 상태** — [전이 조건과 사례](domain/models/studio.md#submission)
-
-```
-Submission: SUBMITTED → READY_FOR_RELEASE → RELEASED (LIVE 공개)
-                └→ CHANGES_REQUESTED → SUBMITTED (같은 자료 재검토)
-Release:    SCHEDULED → PUBLISHED / CANCELLED / SMOKE_TEST_FAILED
-```
-
-**기존 프로젝트 단위 심사 상태** — 새 Submission의 상태와 별개다.
-
-```
-DRAFT ──submit──▶ SUBMITTED ──ReviewApproved──▶ APPROVED
-                            └─ReviewRejected──▶ REJECTED ──submit──▶ SUBMITTED
-```
-
-**HTTP API** — 크리에이터와 Workspace는 OIDC principal에서 식별한다. 빌드 업로드 전용 API는
-프로젝트 범위 machine credential을 사용한다.
-
-로컬 실습에서는 Gateway Swagger의 `auth` 명세에서 가입한 뒤 `Authorize`를 누르면 Authorization
-Code + PKCE 로그인이 자동으로 완료된다. 프로젝트 credential을 발급한 다음 `/p0-lab/`에서 ZIP을
-선택하면 presigned multipart 업로드와 `VALIDATED` 상태 확인까지 수행할 수 있다.
-
-Swagger와 OAuth 엔드포인트는 모두 Gateway의 같은 출처를 사용한다. OpenAPI에는
-`/oauth2/authorize`, `/oauth2/token` 상대 경로만 노출하고 CORS는 Gateway 한 곳에서 처리한다.
-브라우저에서 Auth 컨테이너 포트(`8091`/`18091`)를 직접 호출하지 않는다.
-
-로그인 폼을 오래 열어 두었거나 같은 요청을 다시 전송해 CSRF 토큰이 만료되면 `/login`이 새 로그인
-화면으로 이동한다. 이 화면에서 다시 입력하면 된다. `username`, `password`, `_csrf`는 Request
-Headers가 아니라 폼의 Form Data여야 한다.
+완료된 기준은 Auth·Gateway다. 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/api/v1/studio/games` | 프로젝트 생성. `productCode` 중복이면 409 |
-| GET | `/api/v1/studio/games` | 내 프로젝트 목록 |
-| POST | `/api/v1/studio/games/{gameId}/submit` | 기존 프로젝트 단위 심사 → `GameRegistered` |
-| POST | `/api/v1/studio/games/{gameId}/builds` | 기존 빌드 메타데이터 등록 → `BuildUploaded` (현재 공개 경로에는 사용하지 않음) |
-| GET | `/api/v1/studio/games/{gameId}/builds` | 빌드 이력 |
-| POST | `/api/v1/studio/projects/{gameId}/store-page-revisions` | 상점 자료 초안 또는 확정 이력 생성 |
-| POST | `/api/v1/studio/projects/{gameId}/store-page-revisions/{revisionId}/publish` | 상점 자료 확정. 릴리스 공개와 별개 |
-| POST | `/api/v1/studio/projects/{gameId}/rating-revisions` | 지역·목표 연령·정책 버전·콘텐츠 설문을 고정하고 등급 경로 결정 |
-| POST | `/api/v1/studio/projects/{gameId}/submissions` | 검증 빌드와 revision의 불변 심사 스냅샷 제출 |
-| POST | `/api/v1/studio/projects/submissions/{submissionId}/releases` | 승인된 제출물을 수동·예약 출시 |
+| POST / GET | /api/v1/studio/projects | 생성(201)·내 목록 |
+| GET | /api/v1/studio/projects/{id} | 상세정보·현재 버전의 요청·releaseEligible |
+| PUT | /api/v1/studio/projects/{id}/store-page | contentVersion으로 상세정보 수정 |
+| POST / GET | /api/v1/studio/projects/{id}/builds | 전체 ZIP 등록(201)·이력 |
+| POST | /api/v1/studio/projects/{id}/thumbnail | PNG/JPEG 등록(201) |
+| GET | /api/v1/studio/assets/{id}/{assetId} | 공개 썸네일 |
+| POST / GET | /api/v1/studio/projects/{id}/review-requests | 심사 요청·재요청(202)·이력 |
+| POST / GET | /api/v1/studio/projects/{id}/release-requests | 출시 요청·재요청(202)·이력 |
 
-**주요 이벤트** — 수신 `SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed` /
-발행 `SubmissionCreated`·`ReleaseScheduled`·`ReleasePublished`·`ReleaseRolledBack`·`BuildValidated`·`BuildValidationFailed`.
-기존 경로는 `ReviewApproved`·`ReviewRejected` 수신, `GameRegistered`·`BuildUploaded` 발행을 유지한다.
+외부 결과는 해당 요청 ID·버전에 기록한다. 현재 버전의 승인 결과만 출시 요청 조건으로 인정한다.
+변경된 상세정보를 과거 승인이 승인하지 않으며, 요청에 첨부한 과거 스냅샷은 보존한다.
+동일한 처리 중 요청은 중복 발행하지 않는다. 거절 후 재요청은 새 ID를 사용한다.
+Project의 APPROVED·PUBLISHED 상태와 공개본 참조, /publish API는 없다.
 
-**규칙**
-
-- 창작자의 프로젝트 변경은 인증된 워크스페이스의 소유 범위를 확인한다. CI 업로드는 프로젝트 범위 자격을 검사한다.
-- 기존 프로젝트 단위 심사는 이미 신청했거나 승인된 프로젝트의 재신청을 거절한다. 새 Submission은 선택한 자료·빌드 묶음으로 별도 생성한다.
-- 현재 업로드는 프로젝트·멱등키로 중복을 관리하며 같은 제품 버전에 여러 플랫폼 빌드가 가능하다.
-- 확정한 상점 자료와 검증된 동일 프로젝트 빌드만 제출하고, 모든 심사 관문 승인 후 릴리스를 만든다. 자료 확정·제출 시 같은 프로젝트에 업로드한 스크린샷과 커버를 확인한다.
-- 바이너리는 직접 받지 않는다. `BuildStorage` 포트로 업로드 경로와 presigned URL 만 발급한다.
-- 현재 활성 등급 정책은 `KR-2026-01`이다. `country=KR`, 목표 등급 `ALL|12|15|18`,
-  `adultContent`·`cashGambling` boolean 응답이 모두 있어야 revision을 만든다.
-- 전체·12·15세는 `SELF_CLASSIFICATION`, 18세는 `GRAC` 경로다. 성인 콘텐츠나 현금성
-  사행 요소를 18세보다 낮은 목표 등급으로 제출하면 거부한다.
-- 정책 버전은 제출 시에도 다시 검사하므로, 정책이 바뀐 뒤 과거 revision을 새 Submission에 재사용할 수 없다.
+Studio는 ProjectReviewRequested·ProjectReleaseRequested를 발행한다.
+ProjectReviewApproved/Rejected·ProjectReleaseCompleted/Rejected는 외부 요청 결과로 수신한다.
+예약·채널·공개본 관리·CI·테스터·웹훅·분할 업로드 세션은 제공하지 않는다.
 
 ---
 
 ## review
+
+Review는 미완료 모듈이며 아래 내용은 기존 구현의 참고 기록이다. 새 Studio 검증은 요청·결과 이벤트 경계에서 수행한다.
 
 제출물별 등급·상점 자료·빌드 QA·법무·SDK·상업성 심사 사건을 관리한다.
 유형별 승인은 Studio의 출시 관문에 반영되며, 새 출시 경로의 상품 공개는 LIVE 릴리스를 통해 이루어진다.

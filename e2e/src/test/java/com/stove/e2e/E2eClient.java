@@ -4,36 +4,38 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.time.Instant;
-import java.nio.charset.StandardCharsets;
-import java.util.HexFormat;
-import java.util.Map;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.Map;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 /**
  * 스택을 두드리는 HTTP 클라이언트.
  *
- * <p><b>4xx 를 예외로 만들지 않는다.</b> 인수 45건 중 7건이 실패를 기대하는 판정이고
- * ({@code PRICE_MISMATCH} 409, {@code PAYMENT_TX_MISMATCH} 409, 미보유 403, result 누락 400 …),
- * 그 7건이 이 층에서 가장 값이 큰 부분이다 — 성공 경로는 대부분 아래 층에도 방어선이 있지만
- * 서비스 <i>사이</i> 의 거절은 여기서만 확인된다. {@link RestClient} 의 기본 동작(4xx/5xx 에 예외)을
- * 그대로 쓰면 <b>기대한 실패와 진짜 실패가 같은 모양</b>이 되므로 {@code exchange} 로 받는다.
+ * <p><b>4xx 를 예외로 만들지 않는다.</b> 인수 45건 중 7건이 실패를 기대하는 판정이고 ({@code PRICE_MISMATCH} 409, {@code
+ * PAYMENT_TX_MISMATCH} 409, 미보유 403, result 누락 400 …), 그 7건이 이 층에서 가장 값이 큰 부분이다 — 성공 경로는 대부분 아래 층에도
+ * 방어선이 있지만 서비스 <i>사이</i> 의 거절은 여기서만 확인된다. {@link RestClient} 의 기본 동작(4xx/5xx 에 예외)을 그대로 쓰면 <b>기대한
+ * 실패와 진짜 실패가 같은 모양</b>이 되므로 {@code exchange} 로 받는다.
  *
- * <p>응답은 봉투째 들고 다닌다({@code success}/{@code data}/{@code error}). 상태코드만 보던
- * 셸과 달리 {@code error.code} 까지 대조할 수 있고, 그래야 "409 이긴 한데 다른 이유로 409" 를 가른다.
+ * <p>응답은 봉투째 들고 다닌다({@code success}/{@code data}/{@code error}). 상태코드만 보던 셸과 달리 {@code error.code}
+ * 까지 대조할 수 있고, 그래야 "409 이긴 한데 다른 이유로 409" 를 가른다.
  */
 public final class E2eClient {
 
@@ -78,13 +80,17 @@ public final class E2eClient {
 
     public Response putBytes(String absoluteUrl, byte[] body) {
         try {
-            HttpResponse<byte[]> response = RAW_HTTP.send(
-                    HttpRequest.newBuilder(URI.create(absoluteUrl))
-                            .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE)
-                            .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
-                            .build(),
-                    HttpResponse.BodyHandlers.ofByteArray());
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            HttpResponse<byte[]> response =
+                    RAW_HTTP.send(
+                            HttpRequest.newBuilder(URI.create(absoluteUrl))
+                                    .header(
+                                            "Content-Type",
+                                            MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                                    .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
+                                    .build(),
+                            HttpResponse.BodyHandlers.ofByteArray());
+            org.springframework.http.HttpHeaders headers =
+                    new org.springframework.http.HttpHeaders();
             response.headers().map().forEach(headers::put);
             return new Response(response.statusCode(), read(response.body()), headers);
         } catch (Exception exception) {
@@ -92,23 +98,59 @@ public final class E2eClient {
         }
     }
 
-    public Response postFile(String path, String filename, String contentType, byte[] body,
-                             Map<String, String> headers) {
+    public Response postFile(
+            String path,
+            String filename,
+            String contentType,
+            byte[] body,
+            Map<String, String> headers) {
+        return postMultipart(path, Map.of(), body, filename, contentType, headers);
+    }
+
+    public Response postMultipart(
+            String path,
+            Map<String, String> fields,
+            byte[] body,
+            String filename,
+            String contentType,
+            Map<String, String> headers) {
         String boundary = "esd-" + java.util.UUID.randomUUID();
-        byte[] prefix = ("--" + boundary + "\r\n"
-                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
-                + "Content-Type: " + contentType + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        StringBuilder form = new StringBuilder();
+        fields.forEach(
+                (name, value) ->
+                        form.append("--")
+                                .append(boundary)
+                                .append("\r\n")
+                                .append("Content-Disposition: form-data; name=\"")
+                                .append(name)
+                                .append("\"\r\n\r\n")
+                                .append(value)
+                                .append("\r\n"));
+        byte[] prefix =
+                (form
+                                + "--"
+                                + boundary
+                                + "\r\n"
+                                + "Content-Disposition: form-data; name=\"file\"; filename=\""
+                                + filename
+                                + "\"\r\n"
+                                + "Content-Type: "
+                                + contentType
+                                + "\r\n\r\n")
+                        .getBytes(StandardCharsets.UTF_8);
         byte[] suffix = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
         byte[] multipart = new byte[prefix.length + body.length + suffix.length];
         System.arraycopy(prefix, 0, multipart, 0, prefix.length);
         System.arraycopy(body, 0, multipart, prefix.length, body.length);
         System.arraycopy(suffix, 0, multipart, prefix.length + body.length, suffix.length);
         try {
-            var builder = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipart));
+            var builder =
+                    HttpRequest.newBuilder(URI.create(baseUrl + path))
+                            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                            .POST(HttpRequest.BodyPublishers.ofByteArray(multipart));
             headers.forEach(builder::header);
-            HttpResponse<byte[]> response = RAW_HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response =
+                    RAW_HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
             HttpHeaders responseHeaders = new HttpHeaders();
             response.headers().map().forEach(responseHeaders::put);
             return new Response(response.statusCode(), read(response.body()), responseHeaders);
@@ -117,22 +159,32 @@ public final class E2eClient {
         }
     }
 
-    private Response send(HttpMethod method, String path, Object body, Map<String, String> headers) {
+    private Response send(
+            HttpMethod method, String path, Object body, Map<String, String> headers) {
         RestClient.RequestBodySpec spec = http.method(method).uri(path);
-        headers.forEach((name, value) -> {
-            if (!"X-E2E-Unsigned".equals(name)) spec.header(name, value);
-        });
+        headers.forEach(
+                (name, value) -> {
+                    if (!"X-E2E-Unsigned".equals(name)) spec.header(name, value);
+                });
         if (body != null) {
-            if (method == HttpMethod.POST && "/api/v1/payments/callback".equals(path)
+            if (method == HttpMethod.POST
+                    && "/api/v1/payments/callback".equals(path)
                     && !headers.containsKey("X-E2E-Unsigned")) {
                 try {
                     String json = MAPPER.writeValueAsString(body);
                     String timestamp = Long.toString(Instant.now().getEpochSecond());
                     Mac mac = Mac.getInstance("HmacSHA256");
-                    String key = System.getenv().getOrDefault("PG_CALLBACK_SECRET", "local-only-pg-callback-secret");
+                    String key =
+                            System.getenv()
+                                    .getOrDefault(
+                                            "PG_CALLBACK_SECRET", "local-only-pg-callback-secret");
                     mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-                    String signature = HexFormat.of().formatHex(mac.doFinal(
-                            (timestamp + "." + json).getBytes(StandardCharsets.UTF_8)));
+                    String signature =
+                            HexFormat.of()
+                                    .formatHex(
+                                            mac.doFinal(
+                                                    (timestamp + "." + json)
+                                                            .getBytes(StandardCharsets.UTF_8)));
                     spec.header("X-Pg-Timestamp", timestamp).header("X-Pg-Signature", signature);
                     spec.contentType(MediaType.APPLICATION_JSON).body(json);
                 } catch (Exception exception) {
@@ -142,8 +194,12 @@ public final class E2eClient {
                 spec.contentType(MediaType.APPLICATION_JSON).body(body);
             }
         }
-        return spec.exchange((request, response) ->
-                new Response(response.getStatusCode().value(), read(response.getBody()), response.getHeaders()));
+        return spec.exchange(
+                (request, response) ->
+                        new Response(
+                                response.getStatusCode().value(),
+                                read(response.getBody()),
+                                response.getHeaders()));
     }
 
     /** 본문이 비어 있어도 단언이 NPE 로 죽지 않게 빈 노드를 돌려준다 — 상태코드 판정은 본문과 무관하다. */
@@ -175,8 +231,8 @@ public final class E2eClient {
     /**
      * 응답 하나.
      *
-     * @param status  HTTP 상태코드
-     * @param body    봉투 전체 ({@code success}/{@code data}/{@code error})
+     * @param status HTTP 상태코드
+     * @param body 봉투 전체 ({@code success}/{@code data}/{@code error})
      * @param headers 응답 헤더 — {@code X-Correlation-Id} 로 traceId 가 돌아온다
      */
     public record Response(int status, JsonNode body, HttpHeaders headers) {
@@ -192,8 +248,8 @@ public final class E2eClient {
         }
 
         /**
-         * {@code data} 배열에서 필드 값이 일치하는 첫 원소. 없으면 {@link MissingNode} 라
-         * 뒤따르는 {@code path()} 체인이 NPE 없이 이어진다 — <b>"없다" 도 단언할 수 있는 값</b>이다.
+         * {@code data} 배열에서 필드 값이 일치하는 첫 원소. 없으면 {@link MissingNode} 라 뒤따르는 {@code path()} 체인이 NPE
+         * 없이 이어진다 — <b>"없다" 도 단언할 수 있는 값</b>이다.
          *
          * <p>목록 응답이 전부 평평한 배열이라 이 하나로 충분하다(페이지 봉투가 아니다).
          */
@@ -210,7 +266,10 @@ public final class E2eClient {
         @Override
         public String toString() {
             String raw = body.toString();
-            return "HTTP " + status + " " + (raw.length() > 300 ? raw.substring(0, 300) + "…" : raw);
+            return "HTTP "
+                    + status
+                    + " "
+                    + (raw.length() > 300 ? raw.substring(0, 300) + "…" : raw);
         }
     }
 }

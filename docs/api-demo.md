@@ -1,5 +1,7 @@
 # API 데모
 
+현재 완료 기준은 Auth·Gateway다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
+
 [문서 목록](README.md) · [개발 환경과 실행](getting-started.md) · [인증·권한 계약](security.md)
 
 전체 흐름을 재현하려면 [자동 검증](#full-demo)을 실행한다. 각 모델을 직접 만들어 보려면 [창작·출시](#creator-demo) → [구매·환불](#payment-simulator) 순서로 수동 실습한다. 업무 의미와 필드는 [도메인·모델 안내](domain/model-guide.md)를 참고한다.
@@ -7,7 +9,7 @@
 <a id="full-demo"></a>
 ## 전체 여정 자동 검증
 
-첫 범위는 BASIC / Windows / 한국 / KRW다. 이 절차는 새 스택에서 가입부터 월 마감까지 두 번 연속 실행하고, 각 실행의 식별자와 금액을 JSON으로 남긴다. 결제 승인은 인증된 로컬 시뮬레이터로 재현한다.
+첫 범위는 일반 Project / 전체 ZIP / KRW다. 이 절차는 새 스택에서 가입부터 월 마감까지 두 번 연속 실행하고, 각 실행의 식별자와 금액을 JSON으로 남긴다. 결제 승인은 인증된 로컬 시뮬레이터로 재현한다.
 
 ### 실행
 
@@ -61,7 +63,7 @@ bash scripts/api-demo.sh down
 
 `run-N.json`은 한 실행의 `gameId`, `productId`, `buildId`, `releaseId`, ZIP SHA-256, 일반 구매와 두 할인 주문번호, 행사 ID, 판매자 ID, 월, 원장 금액, 마감 원본과 조정액, 대사 경고를 담는다. `downloadedObjectMatchesSha256: true`, `reconciliation.balanced: true`, `csvContainsBothPromotionOrders: true`가 자동 판정이다. `taxInvoiceStatus: SIMULATED`는 MockTaxInvoiceIssuer 결과이며 실제 세금계산서 발행을 뜻하지 않는다.
 
-데모는 공개 게이트웨이 API와 인증된 시뮬레이터 제어 API만 사용한다. Tempo·actuator는 상태 진단에만 사용한다. 데이터베이스 수정, Kafka 수동 발행, 내부 견적 API 호출은 이 데모 태스크에 없다. 기존 `:e2e:e2eTest`의 확장 릴리스 운영 테스트는 catalog 내부 비상 API를 검증하므로 데모 태스크에서 제외하고 전체 E2E에는 남겨뒀다.
+데모는 공개 게이트웨이 API와 인증된 시뮬레이터 제어 API만 사용한다. Tempo·actuator는 상태 진단에만 사용한다. 데이터베이스 수정, Kafka 수동 발행, 내부 견적 API 호출은 이 데모 태스크에 없다. 새 창작자 인수 테스트는 단일 심사·전체 업로드·재출시와 소유권 경계를 검증한다.
 
 ### 다시 실행하고 결과 검토하기
 
@@ -83,57 +85,12 @@ bash scripts/api-demo.sh down
 <a id="creator-demo"></a>
 ## 창작·심사·출시 수동 실습
 
-이 문서는 새 창작자와 별도 심사자가 공개 Gateway API만 호출하는 순서다. 브라우저 화면은 필요 없다. OpenAPI는 Gateway의 `/swagger-ui.html`에서 Studio와 Review를 선택한다. CLI 예시는 `jq`, `curl`, `zip`, `shasum`(Linux에서는 `sha256sum`)을 사용한다. 요청 본문은 [`examples/p3-creator`](examples/p3-creator)에 있다.
-
-### 준비와 계정
-
-1. `POST /api/v1/auth/signup`에 `{"email":"creator@example.test","password":"..."}`를 보내 새 창작자를 만든다. Auth가 `MEMBER`·`CREATOR` 역할을 발급하고 Studio가 첫 호출에 개인 Workspace를 만든다.
-2. Swagger OAuth2 Authorization Code + PKCE로 `studio` 범위의 창작자 access token을 받는다. 별도 `REVIEWER` 계정도 `studio` 범위로 로그인한다. CLI에서는 `BASE=http://127.0.0.1:18080`, `CREATOR_TOKEN`, `REVIEWER_TOKEN` 환경 변수로 두 토큰을 전달한다.
-3. 아래 예시의 `productCode`를 매번 고유하게 바꾼다. 모든 창작자 호출에는 `Authorization: Bearer $CREATOR_TOKEN`을 붙인다. 타 Workspace의 프로젝트·revision·출시 목록은 `403`, 제출 심사 상태는 `404`다.
-
-### 프로젝트와 이미지
-
-```sh
-jq --arg code "P3-DEMO-$(date +%s)" '.productCode=$code' docs/examples/p3-creator/project.json > /tmp/p3-project.json
-GAME_ID=$(curl -fsS -H "Authorization: Bearer $CREATOR_TOKEN" -H 'Content-Type: application/json' -d @/tmp/p3-project.json "$BASE/api/v1/studio/games" | jq -r '.data.gameId')
-curl -fsS -H "Authorization: Bearer $CREATOR_TOKEN" "$BASE/api/v1/studio/games"
-SCREENSHOT_URL=$(curl -fsS -H "Authorization: Bearer $CREATOR_TOKEN" -F 'file=@screenshot.png;type=image/png' "$BASE/api/v1/studio/projects/$GAME_ID/assets" | jq -r '.data.url')
-COVER_URL=$(curl -fsS -H "Authorization: Bearer $CREATOR_TOKEN" -F 'file=@cover.png;type=image/png' "$BASE/api/v1/studio/projects/$GAME_ID/assets" | jq -r '.data.url')
-curl -L -fsS "$SCREENSHOT_URL" -o /tmp/p3-screenshot.png
-jq --arg screenshot "$SCREENSHOT_URL" --arg cover "$COVER_URL" '.screenshots=[$screenshot] | .coverUrl=$cover' docs/examples/p3-creator/store-page.json > /tmp/p3-store-page.json
-```
-
-이미지는 PNG/JPEG, 최대 5MB다. Studio가 형식과 크기를 검사해 MinIO/S3에 저장하고 실제 객체 크기를 확인한다. 반환한 URL은 고정된 공개 경로이며 요청할 때마다 비공개 객체의 짧은 다운로드 URL로 연결된다. 발행과 제출은 같은 프로젝트에 업로드된 스크린샷·커버가 없으면 `400`이다. `STUDIO_ASSET_PUBLIC_BASE_URL`을 외부에서 접근 가능한 Gateway 주소로 설정한다. 로컬 E2E 구성은 `http://127.0.0.1:18080`을 사용한다.
-
-### Windows ZIP 빌드
-
-프로젝트 자격증명을 `POST /api/v1/studio/projects/{gameId}/credentials` (`{"name":"demo-ci"}`)로 발급받고 응답 `data.token`을 `CI_TOKEN`에 넣는다. 자격증명은 이 프로젝트 범위로만 업로드할 수 있다. 다음 ZIP의 `game.exe`는 실제 배포용 바이너리로 교체한다.
-
-```sh
-mkdir -p /tmp/p3-game
-printf '%s' '{"productVersion":"1.0.0","entrypoint":"game.exe"}' > /tmp/p3-game/manifest.json
-cp ./game.exe /tmp/p3-game/game.exe
-(cd /tmp/p3-game && zip -q /tmp/p3-game.zip manifest.json game.exe)
-SIZE=$(wc -c < /tmp/p3-game.zip | tr -d ' ')
-SHA=$(shasum -a 256 /tmp/p3-game.zip | cut -d ' ' -f 1)
-```
-
-`POST /api/v1/studio/ci/projects/{gameId}/upload-sessions`에 `X-Project-Credential: $CI_TOKEN`을 넣고 다음 값을 제출한다. `fileSize`, `sha256`은 위 ZIP에서 구한 값이다.
-
-```json
-{"productVersion":"1.0.0","buildNumber":"1","platform":"WINDOWS","architecture":"X86_64","fileName":"p3-game.zip","fileSize":1234,"sha256":"64자리 SHA256","commitSha":"deadbeef","repository":"https://github.com/example/game","sourceRef":"refs/heads/main","ciProvider":"GITHUB","ciRunId":"1","idempotencyKey":"p3-demo-고유값"}
-```
-
-아래는 ZIP이 한 파트에 들어가는 경우다. 큰 파일은 응답의 파트 크기에 맞춰 나누고 모든 파트의 ETag를 완료 요청에 보낸다. 응답의 `data.parts[0].uploadUrl`에 ZIP을 `PUT`하고 응답의 `ETag`를 `POST /api/v1/studio/ci/projects/{gameId}/upload-sessions/{sessionId}/complete`의 `{"parts":[{"partNumber":1,"etag":"..."}]}`에 넘긴다. `GET /api/v1/studio/ci/projects/{gameId}/builds/{buildId}`를 폴링해 `VALIDATED`를 확인한다. 악성코드·해시·패키지 검사 실패는 `FAILED`이며 제출할 수 없다. 창작자는 `GET /api/v1/studio/games/{gameId}/builds`로 빌드 이력을 볼 수 있다.
-
-### Revision, 심사, 출시
-
-1. `POST /api/v1/studio/projects/{gameId}/store-page-revisions`에 `/tmp/p3-store-page.json`을 제출한다. `draft:true`면 `PUT` 수정과 `GET .../{revisionId}/preview` 후 `POST .../{revisionId}/publish`한다. 발행 후 revision은 수정할 수 없다. 가격은 `pricing.json`, 국내 등급 설문은 `rating.json`을 각각 `POST .../pricing-revisions`, `POST .../rating-revisions`에 제출한다.
-2. `POST /api/v1/studio/projects/{gameId}/submissions`에 `metadataRevisionId`, `pricingRevisionId`, `ratingRevisionId`, `buildId`를 넣는다. 제출은 불변 스냅샷이다. 창작자는 `GET .../{gameId}/submissions`와 `GET /api/v1/studio/projects/submissions/{submissionId}/review-status`에서 게이트·외부 피드백을 확인한다.
-3. 심사자는 `GET /api/v1/reviews/cases?submissionId={submissionId}`에서 안건을 찾고 `POST /api/v1/reviews/cases/{caseId}/changes-requested`에 `{"reasonCode":"METADATA","feedback":"소개를 구체화해 주세요."}`를 제출한다. 창작자는 수정된 **새** 상점 revision으로 재제출한다. 심사자는 새 제출의 `RATING`, `STORE_PAGE`, `BUILD_QA`, `LEGAL`, `SDK_COMPLIANCE`, `COMMERCIAL` 안건을 `POST .../approve`로 처리한다. 국내 자체등급의 `RATING` 승인에는 `{"ratingCode":"ALL"}`이 필요하다.
-4. 심사 상태가 `READY_FOR_RELEASE`가 되면 `POST /api/v1/studio/projects/submissions/{submissionId}/releases`로 즉시 출시한다. `{"publishAt":"미래 UTC ISO 시각","timeZone":"Asia/Seoul"}`을 보내면 예약한다. `GET /api/v1/studio/projects/{gameId}/releases`에서 이력을 확인한다. `POST /api/v1/studio/projects/releases/{이전 releaseId}/rollback`은 이전 검증 빌드를 가리키는 새 release를 만든다.
-
-누락되거나 미업로드된 이미지, `FAILED` 빌드, 미승인 제출은 거절된다. 실제 HTTP 판정은 [`TrackACreatorFlowTest`](../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)에 있고, `./gradlew :e2e:e2eTest`로 가입·업로드·심사·출시·롤백과 다른 Workspace 접근 차단을 재실행할 수 있다.
+[Studio 실행·API 예제](studio-guide.md)를 따른다.
+CREATOR 가입·Project 생성 → 썸네일·전체 ZIP 업로드 → 상점 내용 편집 →
+단일 심사 승인 → 명시적 상점 등록 → 수정·재심사·재등록을 수행한다.
+ZIP은 manifest나 특정 플랫폼 실행 파일을 요구하지 않는다.
+종류별 revision ID·업로드 part·CI 자격증명·출시 채널을 조합하지 않는다.
+심사 중과 등록 처리 중에는 수정할 수 없고, 새 작업본의 등록 완료까지 이전 공개 내용은 유지된다.
 
 <a id="payment-simulator"></a>
 ## 구매·결제·환불 수동 실습
@@ -142,7 +99,7 @@ SHA=$(shasum -a 256 /tmp/p3-game.zip | cut -d ' ' -f 1)
 
 `docker-compose.apps.yml`, `docker-compose.apps.ci.yml`, `docker-compose.apps.e2e.yml` 순으로 적용한 로컬 스택은 Payment를 `demo` 프로필로 실행하고 Gateway를 `http://127.0.0.1:18080`에 연다. `STOVE_PAYMENT_SIMULATOR_BASE_URL`은 구매자 브라우저에서 접근 가능한 Gateway 주소다. `demo` 또는 `test` 프로필에서만 시뮬레이터 제어 API가 생성되고, `prod` 프로필이 함께 켜져도 생성되지 않는다. 프로필 없이 실행하면 기존 mock 결제창 URL만 반환한다.
 
-먼저 [창작자 출시 절차](api-demo.md#creator-demo)로 BASIC/KRW 상품 한 개를 출시한다. `POST /api/v1/auth/signup/member`로 구매자를 만들고 [OAuth2 Authorization Code + PKCE](security.md)로 `commerce` 범위의 회원 access token을 받는다. 운영자 토큰은 시뮬레이터 제어에만 쓴다. 아래 변수는 `BASE=http://127.0.0.1:18080`, `PRODUCT_CODE`, `MEMBER_TOKEN`, `ADMIN_TOKEN`이다. 각 응답은 `success/data/error` 봉투이며, 명령은 `jq`와 `curl`을 사용한다.
+먼저 [창작자 출시 절차](api-demo.md#creator-demo)로 KRW 상품 한 개를 출시한다. `POST /api/v1/auth/signup/member`로 구매자를 만들고 [OAuth2 Authorization Code + PKCE](security.md)로 `commerce` 범위의 회원 access token을 받는다. 운영자 토큰은 시뮬레이터 제어에만 쓴다. 아래 변수는 `BASE=http://127.0.0.1:18080`, `PRODUCT_CODE`, `MEMBER_TOKEN`, `ADMIN_TOKEN`이다. 각 응답은 `success/data/error` 봉투이며, 명령은 `jq`와 `curl`을 사용한다.
 
 ### 구매와 지급
 

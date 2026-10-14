@@ -6,6 +6,8 @@
 
 2026-10-10, 로컬 코드 `076efb1`의 [도메인별 모델 조사](model-guide.md)를 통해 Q12를 추가했다. 기존 Q1~Q11의 정책 합의 상태를 변경하지 않는다.
 
+Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구현 기록이다. 현재 단일 심사·전체 ZIP·상점 등록·재출시와 검증 범위는 [Studio 모델](models/studio.md), [전환 계획](../studio-simplification-plan.md)을 따른다.
+
 ## 검토 순서
 
 | 질문 | 검토 대상 | 상태 | 필요한 검토 주체 |
@@ -41,7 +43,7 @@
 
 **결정할 내용:** 기존 경로를 호환 전용으로 계속 제공할지, 사용 중단 후 제거할지 정해야 한다. 화면에서 “프로젝트 승인”을 표시할 때 어떤 제출물·릴리스의 상태를 뜻하는지도 필요하다.
 
-**후속:** 사용처를 확인하고 API·화면의 상태 표현 및 이전 계획을 별도 작업으로 정한다. 근거: [GameProjectService](../../apps/studio/src/main/java/com/stove/studio/core/service/project/GameProjectService.java), [SubmissionService](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ProductTest](../../apps/catalog/src/test/java/com/stove/catalog/core/domain/ProductTest.java). 현재 대표 업무는 [새 제출 흐름](workflows.md#publishing-flow)으로 기술했다.
+**후속:** 사용처를 확인하고 API·화면의 상태 표현 및 이전 계획을 별도 작업으로 정한다. 근거: GameProjectService(제거된 구 Studio 구현), SubmissionService(제거된 구 Studio 구현), [ProductTest](../../apps/catalog/src/test/java/com/stove/catalog/core/domain/ProductTest.java). 현재 대표 업무는 [새 제출 흐름](workflows.md#publishing-flow)으로 기술했다.
 
 <a id="q3"></a>
 ## Q3. 공개하면 자동으로 판매를 시작해야 하는가?
@@ -59,7 +61,7 @@
 
 **결정할 내용:** Studio가 단순 대기와 차단·만료·취소를 구별해야 하는가? 재검토에서 어느 관문과 외부 증빙을 유지할 것인가? 승인에 담당자·체크리스트 조건이 필요한가? 자료 변경을 새 제출로 처리하는 제안에 합의할 수 있는가?
 
-**후속:** 사건·관문 전이 표와 재검토 규칙을 결정하고 필요한 이벤트·테스트를 추가하는 별도 작업으로 연결한다. 근거: [ReviewCase](../../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java), [SubmissionReviewService](../../apps/review/src/main/java/com/stove/review/core/service/SubmissionReviewService.java), [SubmissionReviewProjectionService](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionReviewProjectionService.java). 정의: [심사 사건](models/review.md#review-case), [출시 관문](models/studio.md#submission-gate).
+**후속:** 사건·관문 전이 표와 재검토 규칙을 결정하고 필요한 이벤트·테스트를 추가하는 별도 작업으로 연결한다. 근거: [ReviewCase](../../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java), [SubmissionReviewService](../../apps/review/src/main/java/com/stove/review/core/service/SubmissionReviewService.java), SubmissionReviewProjectionService(제거된 구 Studio 구현). 정의: [심사 사건](models/review.md#review-case), [출시 관문](models/studio.md#submission-gate).
 
 <a id="q5"></a>
 ## Q5. 상품 한 개를 산다는 것은 어떤 이용 권한을 얻는가?
@@ -86,7 +88,7 @@
 
 **결정할 내용:** 이벤트 필드의 ID 의미를 명칭에 반영할지, 자료에 포함된 통화별 가격과 주문 가격의 책임을 어떻게 나눌지 정해야 한다.
 
-**후속:** 문서에서는 [ID와 순번](../domain-glossary.md#versions)을 명시했다. 필드 변경은 이벤트 호환성을 검토한 별도 작업으로 처리하고 가격 편집·심사·공개 규칙을 연결한다. 근거: [RevisionService](../../apps/studio/src/main/java/com/stove/studio/core/service/revision/RevisionService.java), [SubmissionService](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ReleaseService](../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java).
+**후속:** 문서에서는 [ID와 순번](../domain-glossary.md#versions)을 명시했다. 필드 변경은 이벤트 호환성을 검토한 별도 작업으로 처리하고 가격 편집·심사·공개 규칙을 연결한다. 근거: RevisionService(제거된 구 Studio 구현), SubmissionService(제거된 구 Studio 구현), ReleaseService(제거된 구 Studio 구현).
 
 <a id="q8"></a>
 ## Q8. 판매자·워크스페이스·회원은 어떤 관계인가?
@@ -95,7 +97,7 @@
 
 **결정할 내용:** 개인 워크스페이스가 계속 판매 주체와 일치하는가? 조직·공동 창작·판매 계약·정산 계좌를 도입하면 판매자 식별자를 별도로 두어야 하는가? 자체 판매자 ID는 어떤 업무 주체를 뜻하는가?
 
-**후속:** 현재 식별자 매핑을 유지해 설명하되 판매자 모델 변경은 계정·정산 정책과 함께 결정한다. 근거: [GameProject](../../apps/studio/src/main/java/com/stove/studio/core/domain/project/GameProject.java), [Workspace](../../apps/studio/src/main/java/com/stove/studio/core/domain/project/Workspace.java), [FeePolicy](../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). 표준 표기: [식별자](../domain-glossary.md#identifiers).
+**후속:** 현재 Studio는 Workspace·sellerId를 제거하고 Auth JWT sub로 직접 소유권을 확인한다. 미완료 커머스·정산 모듈의 판매자 구조는 현재 Studio의 설계·검증 제약으로 사용하지 않는다. 근거: GameProject(제거된 구 Studio 구현), Workspace(제거된 구 Studio 구현), [FeePolicy](../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). 표준 표기: [식별자](../domain-glossary.md#identifiers).
 
 <a id="q9"></a>
 ## Q9. 주문 취소가 환불을 보장하는가? 통화는 끝까지 전달되는가?
@@ -113,7 +115,7 @@
 
 **결정할 내용:** 플랫폼별 유효 산출물과 델타 검증 기준은 무엇인가? “smoke test 통과”를 파일 접근 점검으로 명명할지 실행 검사를 추가할지 정한다. 롤백 완료 사실은 공개 성공 후에만 발생해야 하는지 확인하고 실패·요청·완료를 구별한다.
 
-**후속:** 플랫폼 검증 조건, 공개 직전 검사 범위, 실패한 롤백의 이벤트 발행을 별도 수정·검증 대상으로 정한다. 근거: [BuildValidationService](../../apps/studio/src/main/java/com/stove/studio/core/service/build/BuildValidationService.java), [ReleaseSmokeTestService](../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseSmokeTestService.java), [ReleaseService](../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java). [SubmissionBuildSetTest](../../apps/studio/src/test/java/com/stove/studio/core/service/submission/SubmissionBuildSetTest.java)는 검증 완료 상태의 객체로 묶음 규칙을 확인하므로 실제 Mac/Linux 파일 검증을 보장하지 않는다.
+**후속:** 플랫폼 검증 조건, 공개 직전 검사 범위, 실패한 롤백의 이벤트 발행을 별도 수정·검증 대상으로 정한다. 근거: BuildValidationService(제거된 구 Studio 구현), ReleaseSmokeTestService(제거된 구 Studio 구현), ReleaseService(제거된 구 Studio 구현). SubmissionBuildSetTest(제거된 구 Studio 구현)는 검증 완료 상태의 객체로 묶음 규칙을 확인하므로 실제 Mac/Linux 파일 검증을 보장하지 않는다.
 
 <a id="q11"></a>
 ## Q11. 어느 규칙은 테스트 근거가 부족한가?
@@ -122,7 +124,7 @@
 
 **최신 근거:** [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 업로드 이미지 누락·가짜 URL 거절, 검증 실패 빌드·미승인 출시 거절, 수정 요청·재제출·전체 승인, LIVE의 Catalog·Store·Download 반영, 정상 롤백, 채널 승격·예약 변경·취소를 검증한다. [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java)는 주문 사본 우선·반복 항목 합산·마감 후 환불 조정을 검증한다.
 
-**공백:** 현재 조사 범위(`apps/*/src/test`, `apps/*/src/integrationTest`, `e2e/src/test`)에서 잘못된 승인 스냅샷 대조와 smoke 실패 시 롤백 이벤트·감사 기록을 직접 검증하는 테스트를 찾지 못했다. [SubmissionTest](../../apps/studio/src/test/java/com/stove/studio/core/domain/submission/SubmissionTest.java)는 상태 전이만, [ReleaseTest](../../apps/studio/src/test/java/com/stove/studio/core/domain/release/ReleaseTest.java)는 엔티티 수준 smoke 통과 전 공개 차단을 검증한다. 정상 E2E 통과를 모든 순서 역전·실패 경로의 보장으로 확대하지 않는다.
+**공백:** 현재 조사 범위(`apps/*/src/test`, `apps/*/src/integrationTest`, `e2e/src/test`)에서 잘못된 승인 스냅샷 대조와 smoke 실패 시 롤백 이벤트·감사 기록을 직접 검증하는 테스트를 찾지 못했다. SubmissionTest(제거된 구 Studio 구현)는 상태 전이만, ReleaseTest(제거된 구 Studio 구현)는 엔티티 수준 smoke 통과 전 공개 차단을 검증한다. 정상 E2E 통과를 모든 순서 역전·실패 경로의 보장으로 확대하지 않는다.
 
 **후속:** Q4·Q10의 의도를 결정한 뒤 해당 정상·거절·지연 시나리오의 테스트를 별도 구현 작업에 포함한다. 문서 근거 표시는 코드 관찰과 테스트 검증 범위를 계속 구별한다.
 

@@ -89,8 +89,6 @@ services:
       STORAGE_SECRET_KEY: stove1234
       # 로컬 MinIO에는 KMS가 없으므로 개발 스택만 SSE를 끈다. 운영 기본값은 true다.
       STORAGE_ENCRYPTION_ENABLED: "false"
-      MALWARE_PROVIDER: clamav
-      MALWARE_HOST: clamav
 
   review:
     <<: *app

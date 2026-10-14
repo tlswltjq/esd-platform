@@ -39,7 +39,9 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 
 저장소 통합 테스트에서도 이 이미지를 쓰려면 `STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local`을 설정한다. 환경변수가 없으면 기존 공개 이미지 릴리즈를 사용한다.
 
-브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다. 빌드 업로드 실습 화면은 같은 Gateway의 `/p0-lab/`에 있다.
+브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다.
+
+Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실행·출시](studio-guide.md)를 따른다.
 
 ### Swagger OAuth 문제 해결
 

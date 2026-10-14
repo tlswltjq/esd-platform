@@ -1,241 +1,148 @@
 package com.stove.studio.infrastructure.storage;
 
-import com.stove.studio.core.domain.build.MultipartUploadTicket;
-import com.stove.studio.core.domain.build.StoredObjectInfo;
-import com.stove.studio.core.domain.build.UploadPartUrl;
-import com.stove.studio.core.domain.build.UploadTicket;
-import com.stove.studio.core.domain.build.UploadedPart;
+import com.stove.common.web.error.*;
 import com.stove.studio.core.port.BuildStorage;
-import jakarta.annotation.PostConstruct;
-import java.net.URI;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.stream.IntStream;
-import lombok.extern.slf4j.Slf4j;
+
+import jakarta.annotation.*;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+
+import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
-import software.amazon.awssdk.services.s3.model.CompletedPart;
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
-import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
-import software.amazon.awssdk.services.s3.model.UploadPartRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.*;
+import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.*;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
-/**
- * {@link BuildStorage} 의 S3 호환 어댑터(로컬 MinIO / 운영 S3).
- *
- * <p>서버는 바이너리를 직접 받지 않는다. presigned PUT URL 만 발급하고
- * 실제 업로드는 클라이언트가 스토리지로 바로 보낸다 — 수 GB 짜리 게임 빌드가
- * 애플리케이션 서버를 통과하지 않게 하는 것이 핵심이다.
- */
-@Slf4j
+import java.net.URI;
+import java.nio.file.*;
+import java.util.UUID;
+
 @Component
-@ConditionalOnProperty(name = "stove.storage.provider", havingValue = "s3")
+@ConditionalOnProperty(name = "stove.storage.provider", havingValue = "s3", matchIfMissing = true)
 public class S3BuildStorage implements BuildStorage {
-
-    private static final long PART_SIZE = 64L * 1024L * 1024L;
-
     private final ObjectStorageProperties properties;
     private final S3Client s3;
     private final S3Presigner presigner;
 
-    public S3BuildStorage(ObjectStorageProperties properties) {
-        this.properties = properties;
-        StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(properties.accessKey(), properties.secretKey()));
-        S3Configuration serviceConfig = S3Configuration.builder()
-                .pathStyleAccessEnabled(properties.pathStyleRequired())
-                .build();
-
-        var clientBuilder = S3Client.builder()
-                .region(Region.of(properties.region()))
-                .credentialsProvider(credentials)
-                .serviceConfiguration(serviceConfig);
-        var presignerBuilder = S3Presigner.builder()
-                .region(Region.of(properties.region()))
-                .credentialsProvider(credentials)
-                .serviceConfiguration(serviceConfig);
-
-        if (properties.pathStyleRequired()) {
-            URI endpoint = URI.create(properties.endpoint());
-            clientBuilder.endpointOverride(endpoint);
-            String publicEndpoint = properties.presignEndpoint() == null
-                    || properties.presignEndpoint().isBlank()
-                    ? properties.endpoint() : properties.presignEndpoint();
-            presignerBuilder.endpointOverride(URI.create(publicEndpoint));
+    public S3BuildStorage(ObjectStorageProperties p) {
+        properties = p;
+        var credentials =
+                StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(p.accessKey(), p.secretKey()));
+        var config =
+                S3Configuration.builder().pathStyleAccessEnabled(p.pathStyleRequired()).build();
+        var client =
+                S3Client.builder()
+                        .region(Region.of(p.region()))
+                        .credentialsProvider(credentials)
+                        .serviceConfiguration(config);
+        var signer =
+                S3Presigner.builder()
+                        .region(Region.of(p.region()))
+                        .credentialsProvider(credentials)
+                        .serviceConfiguration(config);
+        if (p.pathStyleRequired()) {
+            client.endpointOverride(URI.create(p.endpoint()));
+            signer.endpointOverride(
+                    URI.create(
+                            p.presignEndpoint() == null || p.presignEndpoint().isBlank()
+                                    ? p.endpoint()
+                                    : p.presignEndpoint()));
         }
-        this.s3 = clientBuilder.build();
-        this.presigner = presignerBuilder.build();
+        s3 = client.build();
+        presigner = signer.build();
     }
 
-    /** 버킷이 없으면 만든다. compose 사이드카 대신 여기서 해야 테스트·CI 에서도 같게 동작한다. */
     @PostConstruct
-    void createBucketIfAbsent() {
+    void ensureBucket() {
         try {
+            s3.headBucket(HeadBucketRequest.builder().bucket(properties.bucket()).build());
+        } catch (S3Exception failure) {
+            if (failure.statusCode() != 404) throw failure;
             s3.createBucket(CreateBucketRequest.builder().bucket(properties.bucket()).build());
-            log.info("빌드 버킷 생성 {}", properties.bucket());
-        } catch (S3Exception e) {
-            // BucketAlreadyOwnedByYou / BucketAlreadyExists — 정상 경로다
-            log.debug("빌드 버킷 이미 존재 {}", properties.bucket());
         }
     }
 
-    @Override
-    public UploadTicket issueUploadTicket(String productCode, String version) {
-        String key = "%s/%s/game.pak".formatted(productCode, version);
-
-        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(properties.presignTtl())
-                .putObjectRequest(PutObjectRequest.builder()
-                        .bucket(properties.bucket())
-                        .key(key)
-                        .build())
-                .build();
-
-        String uploadUrl = presigner.presignPutObject(presignRequest).url().toString();
-        String storagePath = "s3://%s/%s".formatted(properties.bucket(), key);
-
-        log.info("빌드 업로드 경로 발급 {} (ttl={})", storagePath, properties.presignTtl());
-        return new UploadTicket(storagePath, uploadUrl);
+    @PreDestroy
+    void close() {
+        presigner.close();
+        s3.close();
     }
 
     @Override
-    public MultipartUploadTicket beginMultipart(String productCode, String artifactKey,
-                                                String fileName, long fileSize) {
-        String safeName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        String key = "%s/artifacts/%s/%s".formatted(productCode, artifactKey, safeName);
-        CreateMultipartUploadRequest.Builder create = CreateMultipartUploadRequest.builder()
-                .bucket(properties.bucket())
-                .key(key);
-        if (properties.encryptionEnabled()) {
-            create.serverSideEncryption(ServerSideEncryption.AES256);
+    public String put(Long projectId, Path file, String extension, String type) {
+        String key = "projects/" + projectId + "/" + UUID.randomUUID() + "." + extension;
+        var request =
+                PutObjectRequest.builder().bucket(properties.bucket()).key(key).contentType(type);
+        if (properties.encryptionEnabled())
+            request.serverSideEncryption(ServerSideEncryption.AES256);
+        try {
+            s3.putObject(request.build(), RequestBody.fromFile(file));
+        } catch (RuntimeException failure) {
+            try {
+                s3.deleteObject(
+                        DeleteObjectRequest.builder().bucket(properties.bucket()).key(key).build());
+            } catch (RuntimeException cleanup) {
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
         }
-        String uploadId = s3.createMultipartUpload(create.build())
-                .uploadId();
-        int partCount = Math.toIntExact(Math.max(1, (fileSize + PART_SIZE - 1) / PART_SIZE));
-        if (partCount > 10_000) {
-            throw new IllegalArgumentException("multipart part limit exceeded");
+        return "s3://" + properties.bucket() + "/" + key;
+    }
+
+    @Override
+    public long size(String path) {
+        return s3.headObject(
+                        HeadObjectRequest.builder()
+                                .bucket(properties.bucket())
+                                .key(key(path))
+                                .build())
+                .contentLength();
+    }
+
+    @Override
+    public void delete(String path) {
+        s3.deleteObject(
+                DeleteObjectRequest.builder().bucket(properties.bucket()).key(key(path)).build());
+    }
+
+    @Override
+    public String thumbnailDownload(Long projectId, String assetId) {
+        if (assetId == null || !assetId.matches("[0-9a-f-]{36}\\.(png|jpg)"))
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "썸네일 ID가 올바르지 않습니다.");
+        String key = "projects/" + projectId + "/" + assetId;
+        try {
+            size("s3://" + properties.bucket() + "/" + key);
+        } catch (S3Exception missing) {
+            if (missing.statusCode() != 404) throw missing;
+            key = "store-assets/" + projectId + "/" + assetId;
         }
-        List<UploadPartUrl> parts = presignParts(storagePath(key), uploadId, partCount);
-        return new MultipartUploadTicket(storagePath(key), uploadId, PART_SIZE, parts);
+        try {
+            size("s3://" + properties.bucket() + "/" + key);
+        } catch (S3Exception missing) {
+            if (missing.statusCode() != 404) throw missing;
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return presigner
+                .presignGetObject(
+                        GetObjectPresignRequest.builder()
+                                .signatureDuration(properties.presignTtl())
+                                .getObjectRequest(
+                                        GetObjectRequest.builder()
+                                                .bucket(properties.bucket())
+                                                .key(key)
+                                                .build())
+                                .build())
+                .url()
+                .toString();
     }
 
-    @Override
-    public List<UploadPartUrl> presignParts(String storagePath, String storageUploadId, int partCount) {
-        String key = key(storagePath);
-        return IntStream.rangeClosed(1, partCount)
-                .mapToObj(partNumber -> new UploadPartUrl(partNumber,
-                        presignPart(key, storageUploadId, partNumber)))
-                .toList();
-    }
-
-    @Override
-    public void completeMultipart(String storagePath, String storageUploadId, List<UploadedPart> parts) {
-        List<CompletedPart> completed = parts.stream()
-                .map(part -> CompletedPart.builder()
-                        .partNumber(part.partNumber())
-                        .eTag(part.etag())
-                        .build())
-                .toList();
-        s3.completeMultipartUpload(CompleteMultipartUploadRequest.builder()
-                .bucket(properties.bucket())
-                .key(key(storagePath))
-                .uploadId(storageUploadId)
-                .multipartUpload(CompletedMultipartUpload.builder().parts(completed).build())
-                .build());
-    }
-
-    @Override
-    public StoredObjectInfo head(String storagePath) {
-        var response = s3.headObject(HeadObjectRequest.builder()
-                .bucket(properties.bucket())
-                .key(key(storagePath))
-                .build());
-        return new StoredObjectInfo(response.contentLength(), response.eTag());
-    }
-
-    @Override
-    public void downloadTo(String storagePath, Path destination) {
-        s3.getObject(GetObjectRequest.builder()
-                .bucket(properties.bucket())
-                .key(key(storagePath))
-                .build(), destination);
-    }
-
-    @Override
-    public String presignDownload(String storagePath) {
-        return presigner.presignGetObject(GetObjectPresignRequest.builder()
-                        .signatureDuration(properties.presignTtl())
-                        .getObjectRequest(GetObjectRequest.builder()
-                                .bucket(properties.bucket()).key(key(storagePath)).build())
-                        .build())
-                .url().toString();
-    }
-
-    @Override
-    public void putAsset(String storagePath, byte[] content, String contentType) {
-        s3.putObject(PutObjectRequest.builder()
-                .bucket(properties.bucket()).key(key(storagePath))
-                .contentType(contentType).build(), RequestBody.fromBytes(content));
-    }
-
-    @Override
-    public void abortMultipart(String storagePath, String storageUploadId) {
-        s3.abortMultipartUpload(AbortMultipartUploadRequest.builder()
-                .bucket(properties.bucket())
-                .key(key(storagePath))
-                .uploadId(storageUploadId)
-                .build());
-    }
-
-    @Override
-    public void delete(String storagePath) {
-        s3.deleteObject(DeleteObjectRequest.builder()
-                .bucket(properties.bucket())
-                .key(key(storagePath))
-                .build());
-    }
-
-    private String presignPart(String key, String uploadId, int partNumber) {
-        UploadPartRequest request = UploadPartRequest.builder()
-                .bucket(properties.bucket())
-                .key(key)
-                .uploadId(uploadId)
-                .partNumber(partNumber)
-                .build();
-        return presigner.presignUploadPart(UploadPartPresignRequest.builder()
-                        .signatureDuration(properties.presignTtl())
-                        .uploadPartRequest(request)
-                        .build())
-                .url().toString();
-    }
-
-    private String storagePath(String key) {
-        return "s3://%s/%s".formatted(properties.bucket(), key);
-    }
-
-    private String key(String storagePath) {
+    private String key(String path) {
         String prefix = "s3://" + properties.bucket() + "/";
-        if (!storagePath.startsWith(prefix)) {
-            throw new IllegalArgumentException("unexpected storage path");
-        }
-        return storagePath.substring(prefix.length());
+        if (!path.startsWith(prefix)) throw new IllegalArgumentException("Unexpected storage path");
+        return path.substring(prefix.length());
     }
 }

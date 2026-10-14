@@ -1,38 +1,28 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.project.GameProject;
-import com.stove.studio.core.domain.project.ProductKind;
-import com.stove.studio.core.domain.project.ProjectStatus;
+import com.stove.studio.core.domain.project.*;
+import com.stove.studio.core.domain.release.ProjectReleaseRequest;
+import com.stove.studio.core.domain.review.ProjectReviewRequest;
 
 public record ProjectResponse(
-        Long gameId,
+        Long id,
         String productCode,
-        String title,
-        Long sellerId,
-        long price,
-        String currency,
-        boolean selfRated,
-        ProjectStatus status,
-        String ratingCode,
-        String rejectReason,
-        ProductKind productKind,
-        Long parentGameId,
-        String editionName
-) {
-    public static ProjectResponse from(GameProject project) {
+        StorePage storePage,
+        Long currentBuildId,
+        long contentVersion,
+        ProjectReviewRequest currentReviewRequest,
+        ProjectReleaseRequest currentReleaseRequest,
+        boolean releaseEligible) {
+    public static ProjectResponse from(
+            Project p, ProjectReviewRequest review, ProjectReleaseRequest release) {
         return new ProjectResponse(
-                project.getId(),
-                project.getProductCode(),
-                project.getTitle(),
-                project.getSellerId(),
-                project.getPrice(),
-                project.getCurrency(),
-                project.isSelfRated(),
-                project.getStatus(),
-                project.getRatingCode(),
-                project.getRejectReason(),
-                project.getProductKind(),
-                project.getParentGameId(),
-                project.getEditionName());
+                p.getId(),
+                p.getProductCode(),
+                p.storePage(),
+                p.getCurrentBuildId(),
+                p.getContentVersion(),
+                review,
+                release,
+                review != null && review.approvedFor(p.getContentVersion()));
     }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stove.common.kafka.contract.payload.*;
 import com.stove.common.kafka.contract.payload.BuildUploadedEvent;
 import com.stove.common.kafka.contract.payload.BuildValidatedEvent;
 import com.stove.common.kafka.contract.payload.BuildValidationFailedEvent;
@@ -22,18 +23,14 @@ import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.common.kafka.contract.payload.ReleaseRolledBackEvent;
 import com.stove.common.kafka.contract.payload.ReleaseScheduledEvent;
-import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewAppealedEvent;
 import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
+import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
-import java.time.Instant;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
@@ -43,17 +40,21 @@ import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AssignableTypeFilter;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 /**
- * 이벤트는 서비스 간 <b>계약</b>이다. 여기서 깨지면 컴파일은 통과하고 운영에서 터진다 —
- * 발행 측과 수신 측이 다른 모듈이라 컴파일러가 불일치를 못 잡기 때문이다.
+ * 이벤트는 서비스 간 <b>계약</b>이다. 여기서 깨지면 컴파일은 통과하고 운영에서 터진다 — 발행 측과 수신 측이 다른 모듈이라 컴파일러가 불일치를 못 잡기 때문이다.
  *
  * <p>그래서 계약의 세 성질을 전수 검사한다.
+ *
  * <ol>
- *   <li><b>왕복 가능성</b> — 직렬화 후 역직렬화하면 같은 값이어야 한다</li>
- *   <li><b>메타데이터 완결성</b> — eventId/eventType/topic/partitionKey 가 비어 있으면
- *       멱등 처리와 순서 보장이 동시에 무너진다</li>
- *   <li><b>전방 호환</b> — 발행 측이 필드를 추가해도 아직 배포되지 않은 수신 측이 죽지 않아야 한다.
- *       무중단 배포가 성립하는 전제다</li>
+ *   <li><b>왕복 가능성</b> — 직렬화 후 역직렬화하면 같은 값이어야 한다
+ *   <li><b>메타데이터 완결성</b> — eventId/eventType/topic/partitionKey 가 비어 있으면 멱등 처리와 순서 보장이 동시에 무너진다
+ *   <li><b>전방 호환</b> — 발행 측이 필드를 추가해도 아직 배포되지 않은 수신 측이 죽지 않아야 한다. 무중단 배포가 성립하는 전제다
  * </ol>
  */
 class EventContractTest {
@@ -61,9 +62,10 @@ class EventContractTest {
     private static final String PAYLOAD_PACKAGE = "com.stove.common.kafka.contract.payload";
 
     /** 운영과 같은 관용 설정. 스프링 부트가 자동 구성하는 ObjectMapper 의 기본값을 흉내낸다. */
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    private static final ObjectMapper MAPPER =
+            new ObjectMapper()
+                    .registerModule(new JavaTimeModule())
+                    .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     private static List<OrderLine> lines() {
         return List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 2));
@@ -75,33 +77,104 @@ class EventContractTest {
     }
 
     private static Stream<DomainEvent> events() {
+        ProjectSnapshot snapshot =
+                new ProjectSnapshot(
+                        1L,
+                        "PROJECT-1",
+                        "usr_creator",
+                        1,
+                        "Game",
+                        "Description",
+                        "https://example.com/image.png",
+                        null,
+                        "Content",
+                        1000,
+                        "KRW",
+                        1L,
+                        "1.0",
+                        1024,
+                        "abc",
+                        "s3://bucket/key");
         return Stream.of(
+                ProjectReviewRequestedEvent.of(1L, snapshot),
+                ProjectReviewApprovedEvent.of(1L, 1L, 1, "PROJECT-1", "reviewer"),
+                ProjectReviewRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "feedback", "reviewer"),
+                ProjectReleaseRequestedEvent.of(1L, 1L, snapshot),
+                ProjectReleaseCompletedEvent.of(1L, 1L, 1, "PROJECT-1", "request-1"),
+                ProjectReleaseRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "reason", "request-1"),
                 UserRegisteredEvent.of("usr_001", "creator@example.com"),
                 GameRegisteredEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false),
                 BuildUploadedEvent.of(1L, "GAME-001", "1.0.0", 1024L, "abc123", "s3://bucket/key"),
-                BuildValidatedEvent.of(2L, 1L, "GAME-001", "abc123", "WINDOWS",
-                        "1.0.0", "100", "deadbeef"),
+                BuildValidatedEvent.of(
+                        2L, 1L, "GAME-001", "abc123", "WINDOWS", "1.0.0", "100", "deadbeef"),
                 BuildValidationFailedEvent.of(3L, 1L, "GAME-001", "MALWARE_DETECTED"),
-                SubmissionCreatedEvent.of(10L, 1L, "GAME-001", 1001L,
-                        1L, 1L, 1L, 2L, "게임 A", "설명", 30_000L, "KRW",
-                        "SELF_CLASSIFICATION", "KR-2026-01", "KR", "ALL",
-                        "{\"adultContent\":false,\"cashGambling\":false}", "1.0.0"),
+                SubmissionCreatedEvent.of(
+                        10L,
+                        1L,
+                        "GAME-001",
+                        1001L,
+                        1L,
+                        1L,
+                        1L,
+                        2L,
+                        "게임 A",
+                        "설명",
+                        30_000L,
+                        "KRW",
+                        "SELF_CLASSIFICATION",
+                        "KR-2026-01",
+                        "KR",
+                        "ALL",
+                        "{\"adultContent\":false,\"cashGambling\":false}",
+                        "1.0.0"),
                 ReviewApprovedEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ALL", false),
                 ReviewRejectedEvent.of(1L, "GAME-001", "VIOLENCE", "선정성 기준 초과"),
-                SubmissionReviewApprovedEvent.of(20L, 10L, 2L, 1L, 1L, 1L,
-                        "RATING", "GAME-001", "ALL", "CERT-1", "ESD",
-                        Instant.parse("2026-01-01T00:00:00Z"), "KR",
-                        "SELF_CLASSIFICATION", "KR-2026-01", null, null),
-                ReviewChangesRequestedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001",
-                        "METADATA", "설명을 수정해 주세요."),
+                SubmissionReviewApprovedEvent.of(
+                        20L,
+                        10L,
+                        2L,
+                        1L,
+                        1L,
+                        1L,
+                        "RATING",
+                        "GAME-001",
+                        "ALL",
+                        "CERT-1",
+                        "ESD",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "KR",
+                        "SELF_CLASSIFICATION",
+                        "KR-2026-01",
+                        null,
+                        null),
+                ReviewChangesRequestedEvent.of(
+                        20L, 10L, "STORE_PAGE", "GAME-001", "METADATA", "설명을 수정해 주세요."),
                 ReviewAppealedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001", "수정 완료"),
-                ReleaseScheduledEvent.of(30L, 10L, "GAME-001",
-                        Instant.parse("2026-01-02T00:00:00Z")),
-                ReleasePublishedEvent.of(30L, null, 10L, 1L, "GAME-001", 1001L,
-                        2L, 1L, 1L, 1L, "게임 A", "설명", 30_000L, "KRW", "ALL",
-                        "1.0.0", 1024L, "abc123", "s3://bucket/key"),
+                ReleaseScheduledEvent.of(
+                        30L, 10L, "GAME-001", Instant.parse("2026-01-02T00:00:00Z")),
+                ReleasePublishedEvent.of(
+                        30L,
+                        null,
+                        10L,
+                        1L,
+                        "GAME-001",
+                        1001L,
+                        2L,
+                        1L,
+                        1L,
+                        1L,
+                        "게임 A",
+                        "설명",
+                        30_000L,
+                        "KRW",
+                        "ALL",
+                        "1.0.0",
+                        1024L,
+                        "abc123",
+                        "s3://bucket/key"),
                 ReleaseRolledBackEvent.of(31L, 30L, 2L, "GAME-001"),
-                ProductChangedEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"),
+                ProductChangedEvent.of(
+                        1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"),
                 OrderCreatedEvent.of("ORD-1", 42L, 60_000L, lines()),
                 OrderCanceledEvent.of("ORD-1", 42L, "USER_CANCEL"),
                 PaymentCompletedEvent.of(1L, "ORD-1", 42L, 60_000L, "CARD", lines()),
@@ -150,9 +223,16 @@ class EventContractTest {
     @MethodSource("allEvents")
     @DisplayName("토픽은 Topics 상수 중 하나다 — 오타 토픽으로 발행하면 아무도 못 받는다")
     void topicIsDeclaredConstant(DomainEvent event) {
-        assertThat(event.topic()).isIn(
-                Topics.AUTH, Topics.STUDIO, Topics.REVIEW, Topics.CATALOG,
-                Topics.ORDER, Topics.PAYMENT, Topics.LICENSE);
+        assertThat(event.topic())
+                .isIn(
+                        Topics.AUTH,
+                        Topics.STUDIO,
+                        Topics.REVIEW,
+                        Topics.RELEASE,
+                        Topics.CATALOG,
+                        Topics.ORDER,
+                        Topics.PAYMENT,
+                        Topics.LICENSE);
     }
 
     @Test
@@ -171,12 +251,19 @@ class EventContractTest {
     void sameOrderSharesPartitionKey() {
         String orderNo = "ORD-20260802-0001";
 
-        assertThat(Stream.of(
-                        OrderCreatedEvent.of(orderNo, 42L, 1L, lines()).partitionKey(),
-                        PaymentCompletedEvent.of(1L, orderNo, 42L, 1L, "CARD", lines()).partitionKey(),
-                        PaymentCancelledEvent.of(1L, orderNo, 42L, 1L, "R").partitionKey(),
-                        LicenseIssuedEvent.of(orderNo, 42L, List.of(1L)).partitionKey())
-                .distinct().toList())
+        assertThat(
+                        Stream.of(
+                                        OrderCreatedEvent.of(orderNo, 42L, 1L, lines())
+                                                .partitionKey(),
+                                        PaymentCompletedEvent.of(
+                                                        1L, orderNo, 42L, 1L, "CARD", lines())
+                                                .partitionKey(),
+                                        PaymentCancelledEvent.of(1L, orderNo, 42L, 1L, "R")
+                                                .partitionKey(),
+                                        LicenseIssuedEvent.of(orderNo, 42L, List.of(1L))
+                                                .partitionKey())
+                                .distinct()
+                                .toList())
                 .containsExactly(orderNo);
     }
 
@@ -196,12 +283,11 @@ class EventContractTest {
     }
 
     /**
-     * 위 카탈로그는 <b>손으로 유지하는 목록</b>이다. 새 이벤트를 추가하고 여기 넣는 것을 잊으면
-     * 그 이벤트는 계약 검사를 <b>한 번도</b> 받지 않는다 — 그런데 빌드는 초록이다.
+     * 위 카탈로그는 <b>손으로 유지하는 목록</b>이다. 새 이벤트를 추가하고 여기 넣는 것을 잊으면 그 이벤트는 계약 검사를 <b>한 번도</b> 받지 않는다 — 그런데
+     * 빌드는 초록이다.
      *
-     * <p>목록을 스캔으로 바꾸지 않고 스캔과 <b>대조</b>하는 이유는, 각 이벤트를 만들려면
-     * 의미 있는 인자가 필요해서다(리플렉션으로 만든 빈 껍데기는 왕복 검사의 값을 떨어뜨린다).
-     * 목록은 손으로 두되, 목록이 실제 패키지와 어긋나는 순간 이 테스트가 깨진다.
+     * <p>목록을 스캔으로 바꾸지 않고 스캔과 <b>대조</b>하는 이유는, 각 이벤트를 만들려면 의미 있는 인자가 필요해서다(리플렉션으로 만든 빈 껍데기는 왕복 검사의
+     * 값을 떨어뜨린다). 목록은 손으로 두되, 목록이 실제 패키지와 어긋나는 순간 이 테스트가 깨진다.
      */
     @Test
     @DisplayName("payload 패키지의 모든 DomainEvent 가 카탈로그에 있다")
@@ -210,13 +296,13 @@ class EventContractTest {
                 new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AssignableTypeFilter(DomainEvent.class));
 
-        Set<String> declared = scanner.findCandidateComponents(PAYLOAD_PACKAGE).stream()
-                .map(BeanDefinition::getBeanClassName)
-                .collect(Collectors.toSet());
+        Set<String> declared =
+                scanner.findCandidateComponents(PAYLOAD_PACKAGE).stream()
+                        .map(BeanDefinition::getBeanClassName)
+                        .collect(Collectors.toSet());
 
-        Set<String> covered = events()
-                .map(event -> event.getClass().getName())
-                .collect(Collectors.toSet());
+        Set<String> covered =
+                events().map(event -> event.getClass().getName()).collect(Collectors.toSet());
 
         assertThat(declared).as("스캔 대상이 비었다 — 패키지 이름이 바뀌었는지 확인하라").isNotEmpty();
         assertThat(covered)

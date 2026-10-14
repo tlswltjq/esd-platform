@@ -1,28 +1,22 @@
 server:
   port: 8085
   shutdown: graceful
-
 spring:
   application:
     name: studio
-
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
-
+      max-file-size: ${STUDIO_MAX_FILE_SIZE:1GB}
+      max-request-size: ${STUDIO_MAX_REQUEST_SIZE:1025MB}
+      file-size-threshold: 0
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
           jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
-
-  # 진행 중인 요청을 기다리는 상한. compose 의 stop_grace_period(40s)보다 짧아야 한다 —
-  # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035). 부등호는 테스트가 지킨다.
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/stove_studio?serverTimezone=UTC&characterEncoding=UTF-8
     username: ${DB_USER:stove}
@@ -30,16 +24,13 @@ spring:
     hikari:
       maximum-pool-size: 10
       connection-timeout: 3000
-
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-
   flyway:
     enabled: true
     baseline-on-migrate: true
-
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:
@@ -56,81 +47,32 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
       ack-mode: record
-      # 헤더의 traceparent 를 이어받아 리스너 처리를 발행 측과 같은 트레이스에 붙인다.
-      # 끄면 카프카를 건널 때마다 트레이스가 새로 시작돼 흐름이 조각난다.
       observation-enabled: true
-
 stove:
   asset:
     public-base-url: ${STUDIO_ASSET_PUBLIC_BASE_URL:http://localhost:8080}
-  # 빌드 바이너리 저장소. mock = 경로만 발급, s3 = MinIO/S3 presigned PUT
+    max-thumbnail-bytes: ${MAX_THUMBNAIL_BYTES:5242880}
   storage:
-    provider: ${STORAGE_PROVIDER:mock}
+    provider: s3
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
     presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:${STORAGE_ENDPOINT:http://localhost:9000}}
     access-key: ${STORAGE_ACCESS_KEY:stove}
     secret-key: ${STORAGE_SECRET_KEY:stove1234}
     bucket: ${STORAGE_BUCKET:stove-builds}
-    presign-ttl: 15m
     encryption-enabled: ${STORAGE_ENCRYPTION_ENABLED:true}
-  malware:
-    provider: ${MALWARE_PROVIDER:mock}
-    host: ${MALWARE_HOST:localhost}
-    port: ${MALWARE_PORT:3310}
-    timeout-millis: ${MALWARE_TIMEOUT_MILLIS:120000}
   upload:
-    workspace-quota-bytes: ${WORKSPACE_QUOTA_BYTES:53687091200}
-    max-artifact-bytes: ${MAX_ARTIFACT_BYTES:21474836480}
-    max-active-builds: ${MAX_ACTIVE_BUILDS:20}
-    cleanup-interval-ms: ${UPLOAD_CLEANUP_INTERVAL_MS:60000}
-    failed-retention: ${FAILED_BUILD_RETENTION:7d}
-    unsubmitted-retention: ${UNSUBMITTED_BUILD_RETENTION:30d}
-    retention-cron: ${BUILD_RETENTION_CRON:0 15 3 * * *}
-    validation-recovery-interval-ms: ${VALIDATION_RECOVERY_INTERVAL_MS:60000}
-  ci:
-    webhook:
-      master-key: ${WEBHOOK_MASTER_KEY:dev-only-change-webhook-master-key}
-      dispatch-enabled: ${WEBHOOK_DISPATCH_ENABLED:true}
-      dispatch-interval-ms: ${WEBHOOK_DISPATCH_INTERVAL_MS:1000}
-    status:
-      github-token: ${GITHUB_STATUS_TOKEN:}
-      gitlab-token: ${GITLAB_STATUS_TOKEN:}
-      github-api: ${GITHUB_API_URL:https://api.github.com}
-      gitlab-api: ${GITLAB_API_URL:https://gitlab.com/api/v4}
-    oidc:
-      credential-ttl: ${CI_OIDC_CREDENTIAL_TTL:15m}
-      providers:
-        github:
-          issuer: https://token.actions.githubusercontent.com
-          jwk-set-uri: https://token.actions.githubusercontent.com/.well-known/jwks
-          audience: ${CI_OIDC_AUDIENCE:esd-platform}
-          repository-claim: repository
-          ref-claim: ref
-          environment-claim: environment
-        gitlab:
-          issuer: ${GITLAB_OIDC_ISSUER:https://gitlab.com}
-          jwk-set-uri: ${GITLAB_OIDC_JWK_SET_URI:https://gitlab.com/oauth/discovery/keys}
-          audience: ${CI_OIDC_AUDIENCE:esd-platform}
-          repository-claim: project_path
-          ref-claim: ref_path
-          environment-claim: environment
-
+    max-artifact-bytes: ${MAX_ARTIFACT_BYTES:1073741824}
   outbox:
     relay-enabled: true
     batch-size: 200
-    poll-interval-ms: 200   # 한산할 때 종단 지연의 바닥 — 근거와 적응형 폴링 검토는 OutboxRelay 주석
+    poll-interval-ms: 200
     max-retry: 10
-
 management:
   endpoints.web.exposure.include: health,info,prometheus,metrics
   endpoint.health.probes.enabled: true
   metrics.tags.application: studio
-  # 전량 샘플링 — 데모에서는 트레이스가 드문드문 있으면 확인 자체가 안 된다. 운영이라면 낮춰 잡는다.
   tracing.sampling.probability: ${TRACING_SAMPLE_RATE:1.0}
   otlp.tracing.endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
-
 logging:
   pattern:
     level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
-  level:
-    com.stove: DEBUG

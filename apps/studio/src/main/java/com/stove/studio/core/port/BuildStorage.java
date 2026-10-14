@@ -1,38 +1,13 @@
 package com.stove.studio.core.port;
 
-import com.stove.studio.core.domain.build.MultipartUploadTicket;
-import com.stove.studio.core.domain.build.StoredObjectInfo;
-import com.stove.studio.core.domain.build.UploadPartUrl;
-import com.stove.studio.core.domain.build.UploadTicket;
-import com.stove.studio.core.domain.build.UploadedPart;
 import java.nio.file.Path;
-import java.util.List;
 
-/**
- * 빌드 바이너리 저장 포트(S3 대체).
- * 스켈레톤에서는 경로만 발급하고, 실제 업로드는 클라이언트가 presigned URL 로 수행하는 형태를 가정한다.
- */
 public interface BuildStorage {
+    String put(Long projectId, Path file, String extension, String contentType);
 
-    /** 업로드 대상 경로와 presigned URL 발급 */
-    UploadTicket issueUploadTicket(String productCode, String version);
+    long size(String path);
 
-    MultipartUploadTicket beginMultipart(String productCode, String artifactKey, String fileName, long fileSize);
+    void delete(String path);
 
-    List<UploadPartUrl> presignParts(String storagePath, String storageUploadId, int partCount);
-
-    void completeMultipart(String storagePath, String storageUploadId, List<UploadedPart> parts);
-
-    StoredObjectInfo head(String storagePath);
-
-    void downloadTo(String storagePath, Path destination);
-
-    String presignDownload(String storagePath);
-
-    /** 검증된 작은 상점 이미지의 원본을 저장한다. */
-    void putAsset(String storagePath, byte[] content, String contentType);
-
-    void abortMultipart(String storagePath, String storageUploadId);
-
-    void delete(String storagePath);
+    String thumbnailDownload(Long projectId, String assetId);
 }

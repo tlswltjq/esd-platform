@@ -39,7 +39,7 @@ Studio·Review·Catalog는 각자 MySQL DB에 `audit_log` 테이블과 같은 �
 | `details` (`String`) | 당시 추가 정보 |
 | `occurredAt` (`Instant`) | 기록 시각 |
 
-**만들고 쓰는 때:** 공개·예약·심사·판매 상태 변경 등의 서비스가 업무 처리와 함께 기록한다. 현재 상태를 조회하는 원본 엔티티나 다른 서비스에 보내는 이벤트를 대신하지 않는다. 각 서비스의 [Studio 모델](../../../apps/studio/src/main/java/com/stove/studio/core/domain/audit/AuditLog.java), [Review 모델](../../../apps/review/src/main/java/com/stove/review/core/domain/AuditLog.java), [Catalog 모델](../../../apps/catalog/src/main/java/com/stove/catalog/core/domain/AuditLog.java)을 참고한다. 역할 부여는 RoleAuditLog, 결제 행동은 PaymentAuditLog, 사건별 전이는 ReviewDecisionHistory로 별도 설명했다.
+**만들고 쓰는 때:** 공개·예약·심사·판매 상태 변경 등의 서비스가 업무 처리와 함께 기록한다. 현재 상태를 조회하는 원본 엔티티나 다른 서비스에 보내는 이벤트를 대신하지 않는다. 각 서비스의 [Studio 심사·등록 기록](studio.md), [Review 모델](../../../apps/review/src/main/java/com/stove/review/core/domain/AuditLog.java), [Catalog 모델](../../../apps/catalog/src/main/java/com/stove/catalog/core/domain/AuditLog.java)을 참고한다. 역할 부여는 RoleAuditLog, 결제 행동은 PaymentAuditLog, 사건별 전이는 ReviewDecisionHistory로 별도 설명했다.
 
 ## OutboxEvent — 발송할 이벤트의 보관함
 

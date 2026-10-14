@@ -1,48 +1,40 @@
 # 대표 업무 흐름
 
+현재 완료 기준은 Auth·Gateway이며, Studio는 출시 자료 관리와 심사·출시 요청·재요청 및 외부 요청 결과 기록을 담당한다. 다른 모듈의 흐름은 기존 구현의 참고이며 현재 검증 기준에서 제외한다.
+
 [용어집](../domain-glossary.md) · [전체 모델 안내](model-guide.md) · [미결 질문](open-questions.md)
 
 아래는 현재 코드에 근거한 대표 시나리오다. 정책 합의 여부는 각 정의에서 별도로 확인한다. API 요청 예제는 [API 데모](../api-demo.md), 세부 계약은 [서비스 명세](../services.md)와 각 앱의 OpenAPI 스냅샷을 사용한다.
 
 <a id="publishing-flow"></a>
-## 창작자: 준비한 내용을 심사받아 공개한다
+## 창작자: 출시 자료를 관리하고 심사·출시를 요청한다
 
-예시: 창작자 민수는 BASIC 프로젝트 `GAME-A`의 제품 버전 `1.2.0`을 공개하려 한다.
+1. CREATOR 계정으로 Project를 만들고 상품 코드를 정한다.
+2. 썸네일과 완성된 ZIP 하나를 업로드하고 제목·소개·영상·내용·KRW 가격을 편집한다.
+3. 심사 요청에서 현재 내용과 대표 빌드를 불변 스냅샷으로 고정한다.
+4. Studio는 전체 요청의 승인·반려 결과 이벤트를 반영한다. 반려 뒤 수정·재심사가 가능하다.
+5. 승인된 현재 작업본의 출시를 요청한다. Studio가 출시 요청 이벤트를 발행한다.
+6. 현재 등록 성공 결과에 맞춰 해당 출시 요청의 처리 결과를 기록한다. 실제 공개·공개본 관리에는 관여하지 않는다.
+7. 상세정보를 변경하면 새 버전으로 심사 요청·출시 요청을 보낸다.
 
-1. 창작자 계정의 워크스페이스에 [게임 프로젝트](models/studio.md#game-project)를 등록한다. 프로젝트 ID와 상품 코드를 확보한다. 구매용 상품 ID는 이 시점에 아직 없을 수 있다.
-2. 같은 프로젝트에 스크린샷과 커버를 업로드하고, 해당 URL로 [상점 자료](models/studio.md#store-page-revision)를 작성·미리보기한 뒤 **확정**한다. 가격 이력과 등급 설문 이력도 준비한다. 자료 이력 순번·ID·게임 버전은 [서로 다른 값](../domain-glossary.md#versions)이다.
-3. 프로젝트 범위 업로드 자격으로 [빌드](models/studio.md#game-build)를 올리고 `VALIDATED`를 확인한다. 파일 검증 통과는 심사 승인이 아니다.
-4. 같은 프로젝트의 확정 자료 ID들과 검증 빌드 묶음을 선택해 [심사 제출물](models/studio.md#submission)을 만든다. `SubmissionCreated`가 Review에 전달되면 여섯 유형의 사건이 만들어진다.
-5. 심사 결과가 [출시 관문](models/studio.md#submission-gate)에 반영되어 모두 승인되면 제출물이 `READY_FOR_RELEASE`가 된다. 수정할 내용이 생기면 새 자료·빌드와 새 제출물을 만들고, 같은 자료의 판단에 이의가 있으면 재검토한다.
-6. [릴리스](models/studio.md#release)를 즉시 공개하거나 예약한다. 공개 직전 모든 빌드의 상태·저장 객체 크기를 확인한다. DEV·TEST·STAGE 공개는 내부 채널이며 LIVE 공개에서만 구매자 대상 이벤트를 보낸다.
-7. Catalog가 LIVE 릴리스를 [상품](models/catalog-store.md#product)에 반영한다. 현재 BASIC은 자동 `ON_SALE`이 되고 Store가 진열 사본을 갱신한다. Download도 같은 릴리스의 파일 정보를 반영한다. DEMO·BUNDLE은 일반 판매가 제한된다.
-
-```mermaid
+~~~mermaid
 flowchart LR
-    P[게임 프로젝트] --> M[확정 자료와 검증 빌드]
-    M --> S[심사 제출물]
-    S --> R[유형별 심사 사건]
-    R --> G[모든 출시 관문 승인]
-    G --> L[LIVE 릴리스 공개]
-    L --> C[상품 반영과 판매 상태 결정]
-    C --> V[상점 진열]
-    L --> D[공개 파일 정보]
-```
+ P[Project 작업본·전체 빌드] --> R[불변 심사 스냅샷]
+ R --> A[외부 심사 결과]
+ A --> U[상점 등록 요청]
+ U --> S[등록 결과 이벤트]
+ S --> P
+~~~
 
-**중단·예외:** 초안 상점 자료, 다른 프로젝트 자료, 검증 중인 빌드로 제출할 수 없다. 한 유형의 승인이 전체 승인으로 대체되지 않는다. smoke test 실패는 `SMOKE_TEST_FAILED`로 남고 공개되지 않는다. Catalog·Store·Download는 비동기로 반영하므로 한 화면의 성공 응답만으로 모든 사본 반영을 확인하지 않는다.
+[모델](models/studio.md) · [실행 예제](../studio-guide.md) ·
+[인수 테스트](../../e2e/src/test/java/com/stove/e2e/StudioCreatorFlowTest.java)
 
-근거: [SubmissionService](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionService.java), [ReleaseService](../../apps/studio/src/main/java/com/stove/studio/core/service/release/ReleaseService.java), [ProductCommandService](../../apps/catalog/src/main/java/com/stove/catalog/core/service/ProductCommandService.java). [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 이미지·빌드 업로드, 제출·수정 요청·재제출, 전체 승인, LIVE 반영, 정상 롤백과 채널 승격을 검증한다. 잘못된 승인 스냅샷·실패 롤백 등 남은 테스트 공백은 [Q11](open-questions.md#q11)에 기록한다.
+## 심사자: Project 스냅샷을 판단한다
 
-## 심사자: 제출된 자료를 유형별로 판단한다
-
-1. [심사 사건](models/review.md#review-case)을 찾아 담당자를 배정하고 체크리스트·내부 메모를 기록한다. 대상은 제출 때 고정한 자료와 빌드다.
-2. 등급 사건은 해당 설문·지역·정책 버전에 따른 경로를 확인한다. 현재 자체등급 경로는 ALL/12/15, GRAC 경로는 외부 접수 증빙이 있는 18세 판단을 처리한다. 나머지 유형은 각 심사의 승인 또는 수정 요청을 기록한다.
-3. 승인하면 해당 유형의 업무 사실이 Studio에 반영된다. 수정 요청은 사유 코드·외부 피드백으로 창작자에게 보완 사항을 전달한다.
-4. 차단·만료·수정 요청 사건의 판단을 다시 검토할 때는 사유를 남겨 사건을 다시 열고 회차를 늘린다. 자료 자체를 바꾸려면 창작자의 새 제출물이 필요하다.
-
-**중단·예외:** 외부 접수 없는 GRAC 승인, 정책 결정과 다른 등급 승인, 이미 승인된 사건의 재승인은 거절된다. 현재 체크리스트 완료·배정자 일치는 승인 필수 조건으로 구현되어 있지 않다. 차단·취소·만료는 Studio 관문에 같은 상태로 전파되지 않는다([Q4](open-questions.md#q4)).
-
-근거: [SubmissionReviewService](../../apps/review/src/main/java/com/stove/review/core/service/SubmissionReviewService.java), [ReviewCaseTest](../../apps/review/src/test/java/com/stove/review/core/domain/ReviewCaseTest.java), [SubmissionReviewServiceTest](../../apps/review/src/test/java/com/stove/review/core/service/SubmissionReviewServiceTest.java).
+현재 Studio는 심사 요청 스냅샷을 발행하고 승인·반려 결과 이벤트를 반영한다.
+결과에는 요청 ID·Project·작업본 버전과 처리자·피드백을 포함한다.
+실제 심사 서비스는 미완료 모듈이며 해당 HTTP API는 현재 구현·검증 기준에 포함하지 않는다.
+테스트는 실제 Kafka의 결과 픽스처로 현재 요청·버전 확인과 지연·중복 응답 처리를 검증한다.
 
 <a id="purchase-flow"></a>
 ## 구매자: 주문·결제 후 이용한다
@@ -53,7 +45,7 @@ flowchart LR
 2. `OrderCreated`가 전달되면 [결제](models/order-payment.md#payment) 대기가 생성된다. 결제를 준비해 PG 사전등록 거래와 금액을 정한다.
 3. 인증된 승인 콜백의 거래·금액이 일치하면 정상 결제 완료 사실을 발행한다. 주문은 `PAID`, [이용권](models/fulfillment.md#license)은 `ACTIVE`, [정산 원장](models/settlement.md#settlement-record)은 `SALE`로 각각 반영된다.
 4. 라이브러리에서 이용권을 확인한다. `LicenseIssued`가 전달되면 Download의 [보유권 사본](models/fulfillment.md#entitlement)이 활성화된다.
-5. 상품 코드로 다운로드 티켓을 요청한다. 보유권과 공개 릴리스가 준비되어 있으면 선택한 OS·아키텍처의 파일 URL을 받는다. 출발 버전에 맞는 델타가 없으면 전체 파일로 돌아간다.
+5. 상품 코드로 다운로드 티켓을 요청한다. 보유권과 공개 릴리스가 준비되어 있으면 등록된 전체 빌드의 파일 URL을 받는다. 기존 플랫폼 변형 다운로드는 과거 공개 자료의 호환 경로다.
 
 ```mermaid
 flowchart LR
@@ -102,6 +94,6 @@ flowchart LR
 | `PaymentCancelled` | PG 환불 완료를 기록함 | Order 취소, License 회수, Settlement 환불 원장 기록 |
 | `LicenseIssueFailed` | 이용권 지급이 최종 실패함 | Payment 보상 환불 경로의 시작점 |
 
-구현 계약: [이벤트 payload](../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/), [Studio의 심사 결과 반영](../../apps/studio/src/main/java/com/stove/studio/core/service/submission/SubmissionReviewProjectionService.java), [Download 리스너](../../apps/download/src/main/java/com/stove/download/api/listener/DownloadEventListener.java).
+구현 계약: [이벤트 payload](../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/), [Studio의 심사 결과 반영](../../apps/studio/src/main/java/com/stove/studio/core/service/review/RecordProjectReviewResult.java), [Download 리스너](../../apps/download/src/main/java/com/stove/download/api/listener/DownloadEventListener.java).
 
 `GameRegistered → ReviewApproved/ReviewRejected`, `BuildUploaded`는 프로젝트 단위의 기존 호환 경로다. 새 자료·빌드 묶음의 심사·LIVE 공개를 설명할 때 이 이벤트만으로 대체하지 않는다. 경로 유지·폐기 결정은 [Q2](open-questions.md#q2), `ReleaseRolledBack`의 성공 의미는 [Q10](open-questions.md#q10)에 남긴다.

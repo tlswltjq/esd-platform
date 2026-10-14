@@ -46,7 +46,7 @@ public class SecurityConfig {
             boolean delegated = path.equals("/login") || path.equals("/logout") || path.startsWith("/oauth2/")
                     || path.startsWith("/connect/") || path.equals("/userinfo")
                     || path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/signup/member")
-                    || path.equals("/api/v1/payments/callback") || path.startsWith("/api/v1/studio/ci/")
+                    || path.equals("/api/v1/payments/callback")
                     || path.startsWith("/actuator/");
             if (apiBearer || delegated) return org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult.notMatch();
             return org.springframework.security.web.server.csrf.CsrfWebFilter.DEFAULT_CSRF_MATCHER.matches(exchange);
@@ -72,7 +72,7 @@ public class SecurityConfig {
                 .authorizeExchange(authorize -> authorize
                         .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
-                        .pathMatchers("/", "/index.html", "/bff/csrf", "/oauth2/authorization/**", "/login/oauth2/code/**", "/p0-lab/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                        .pathMatchers("/", "/index.html", "/bff/csrf", "/oauth2/authorization/**", "/login/oauth2/code/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
                                 "/oauth2/**", "/login", "/logout",
                                 "/error", "/.well-known/**", "/connect/**", "/userinfo")
                         .permitAll()
@@ -86,8 +86,6 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/v1/payments/simulator/checkout/**").hasRole("MEMBER")
                         .pathMatchers("/api/v1/payments/simulator/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
-                        // 프로젝트 자격증명은 Studio가 해시 조회·범위 검증한다.
-                        .pathMatchers("/api/v1/studio/ci/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/studio/assets/**").permitAll()
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")
                         .pathMatchers("/api/v1/promotions/seller/**", "/api/v1/settlements/me/**")
