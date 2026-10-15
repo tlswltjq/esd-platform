@@ -22,6 +22,7 @@
 | [auth·Gateway/BFF](auth-bff.md) | 재작업 완료 모듈의 자동 로그인·RTR·공유 세션, 실행과 검증 |
 | [Studio 실행·심사·출시 요청](studio-guide.md) | Auth·Gateway 기준의 전체 업로드·심사·출시 요청과 세 모듈 검증 |
 | [Review 실행·수동 심사](review-guide.md) | 심사자 로그인·ZIP 열람·승인 및 반려·네 모듈 검증과 재시작 확인 |
+| [Catalog 실행·출시 검증](catalog-guide.md) | 공개 API, 다섯 모듈 독립 검증, 기존 DB·Outbox 전환 절차 |
 
 ## 설계·검증·운영 근거
 
@@ -32,6 +33,7 @@
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [Studio 단순화 계획·완료 기록](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 및 출시 요청·재요청 범위와 완료·검증 기록 |
 | [Review 개선 계획·완료 기록](review-simplification-plan.md) | 단일 스냅샷 심사·빌드 열람·승인 및 반려·결과 이벤트의 범위와 완료·검증 기록 |
+| [Catalog MVP 계획·완료 기록](catalog-mvp-plan.md) | 출시 처리·공개본·공개 조회의 범위, 버전·중복 정책과 실제 검증 결과 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |

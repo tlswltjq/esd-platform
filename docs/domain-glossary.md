@@ -33,14 +33,14 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 표준 한국어명 | 영어명 / 코드 | 핵심 정의 | 상세 |
 |---|---|---|---|
 | 게임 프로젝트 | Project / `Project` | 창작자가 자료·빌드·상품 관계를 관리하는 제작·출시 단위 | [정의](domain/models/studio.md#game-project) |
-| 상품 | Product / `Product` | 가격과 판매 가능 여부를 책임지는 구매 대상 | [정의](domain/models/catalog-store.md#product) |
+| 공개 상품 | CatalogProduct / `CatalogProduct` | 공개 스냅샷의 현재 참조를 관리하는 상품 정본 | [정의](domain/models/catalog-store.md#product) |
 | 상점 자료 이력 | Store Page Revision / `StorePageRevision` | 특정 시점의 소개·이미지·정책 등 상점 자료 묶음 | [정의](domain/models/studio.md#store-page-revision) |
 | 게임 빌드 | Game Build / `GameBuild` | 특정 버전·실행 환경에 제공할 파일 산출물과 검증 기록 | [정의](domain/models/studio.md#game-build) |
 | 심사 제출물 | Submission / `Submission` | 창작자가 특정 자료와 빌드 묶음에 대해 심사를 요청한 단위 | [정의](domain/models/studio.md#submission) |
 | 심사 사건 | Review Case / `ReviewCase` | 한 제출물의 한 심사 유형에 대한 판단·증빙·처리 이력 | [정의](domain/models/review.md#review-case) |
 | 출시 관문 | Submission Gate / `SubmissionGate` | 제출물의 유형별 승인 여부를 Studio에서 확인하는 기록 | [정의](domain/models/studio.md#submission-gate) |
 | 릴리스 | Release / `Release` | 승인된 자료·빌드 묶음을 특정 채널에 공개하는 단위 | [정의](domain/models/studio.md#release) |
-| 상품 판매 상태 | Product Status / `ProductStatus` | 상품에 대한 신규 주문을 허용하는지 나타내는 상태 | [정의](domain/models/catalog-store.md#product-status) |
+| 구 상품 판매 상태 | Product Status / `ProductStatus` | 재작성 전 용어. Catalog MVP는 판매 상태를 관리하지 않음 | [정의](domain/models/catalog-store.md#product-status) |
 | 주문 | Order / `Order` | 구매자·상품 항목·구매 금액을 고정한 구매 요청 | [정의](domain/models/order-payment.md#order) |
 | 결제 | Payment / `Payment` | 주문 대금의 사전등록·승인·거절·환불 처리 기록 | [정의](domain/models/order-payment.md#payment) |
 | 이용권 | License / `License` | 회원에게 상품 이용 권한을 지급·회수한 원본 기록 | [정의](domain/models/fulfillment.md#license) |
@@ -76,7 +76,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 | 릴리스를 **공개한다** | `Release.PUBLISHED` / `publish()` | 해당 채널의 자료·빌드 묶음 공개. LIVE일 때 Catalog·Download로 공개 이벤트 전달 |
 | 상품의 **판매를 시작한다** | `Product.ON_SALE` / `openSale()` 또는 릴리스 반영 | 신규 주문 허용. 현재 일반 상품은 LIVE 릴리스 반영으로 자동 판매 시작 |
 
-“발행했다”만으로는 어떤 결과인지 알 수 없다. 코드/API의 `publish`나 기존 문서의 “발행”을 인용할 때도 대상과 채널을 쓴다. 예: “상점 자료 3차를 확정했지만 릴리스는 아직 예약 상태다.” DEMO·BUNDLE의 공개와 판매 제한은 [상품 판매 상태](domain/models/catalog-store.md#product-status)를 참고한다.
+“발행했다”만으로는 어떤 결과인지 알 수 없다. 코드/API의 `publish`나 기존 문서의 “발행”을 인용할 때도 대상과 채널을 쓴다. 예: “상점 자료 3차를 확정했지만 릴리스는 아직 예약 상태다.” DEMO·BUNDLE의 구 판매 제한은 재작성 전 정책이며 현재 Catalog MVP 범위에 포함하지 않는다.
 
 <a id="versions"></a>
 ### 여러 버전과 이력 번호

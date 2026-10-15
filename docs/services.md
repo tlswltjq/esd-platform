@@ -18,7 +18,7 @@ Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#
 | — | [auth](#auth) | 8091 | 계정·역할·OAuth2/OIDC 토큰 | MySQL |
 | A | [studio](#studio) | 8085 | 출시 상세정보·전체 빌드·심사 및 출시 요청 | MySQL |
 | A | [review](#review) | 8086 | 불변 스냅샷·빌드 열람, 수동 승인·반려 | MySQL |
-| A | [catalog](#catalog) | 8081 | 상품 마스터, 노출 제어, 가격 확정 | MySQL + Redis |
+| A | [catalog](#catalog) | 8081 | 출시 처리, 공개 상품·공개본과 조회 | MySQL |
 | B | [store](#store) | 8087 | 진열·검색 (읽기 전용) | Elasticsearch + Redis |
 | B | [order](#order) | 8082 | 주문 생성/취소, 금액 검증 | MySQL |
 | B | [payment](#payment) | 8083 | PG 연동, 승인 대조, 환불 | MySQL |
@@ -107,40 +107,24 @@ V1~V9 SQL·역사 자료를 보존하고 V10의 project_review만 새 업무에 
 
 ## catalog
 
-상품 마스터. 커머스 트랙 전체가 참조하는 최대 접점이라 **가격·상태 변경 규칙을 엔티티 안에 가둔다.**
-
-**상태머신**
-
-```
-기존 심사 승인: DRAFT/REVIEWING → APPROVED
-LIVE 릴리스 반영: 일반 상품 → ON_SALE / DEMO·BUNDLE → APPROVED
-운영 판매 시작: APPROVED/SUSPENDED → ON_SALE (공개 릴리스·종류 조건 확인)
-판매 중지: SUSPENDED
-```
-
-구매 가능한 상태는 `ON_SALE` **하나뿐**이다.
-`CLOSED`는 상태 값으로 존재하지만 현재 Product에 종료 전이 메서드는 없다.
-
-**HTTP API**
+Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 관리한다.
+상세 범위·버전 정책·검증 기준은 [Catalog MVP 계획](catalog-mvp-plan.md)을 따른다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/products` | 판매 중 상품 목록 |
-| GET | `/api/v1/products/{productId}` | 상품 단건 (Redis 캐시 5분) |
-| POST | `/api/v1/products/{productId}/sale-open` | 판매 시작 |
-| POST | `/api/v1/products/{productId}/suspend` | 판매 중지 |
-| POST | `/api/v1/products/reindex` | store 색인 재구축 트리거 |
-| POST | `/api/v1/products/quote` | **내부 전용** — 주문 금액 서버 재계산 |
+| GET | `/api/v1/products` | 공개 상품 페이지 목록. page=0, size=20, 최대 100 |
+| GET | `/api/v1/products/by-code/{productCode}` | 현재 공개본 상세 |
 
-**이벤트** — 수신 `ReleasePublished`·기존 `ReviewApproved` / 발행 `ProductChanged`
+두 API는 익명 조회를 허용한다. 목록은 최초 공개 시각·상품 ID 내림차순이다.
+상세에는 공개 자료·가격·자료 버전·빌드 버전을 제공하고 저장 경로·소유자 subject·내부 요청 ID는 노출하지 않는다.
 
-**규칙**
+수신은 `ProjectReleaseRequested`(stove.studio.v1), 발행은
+`ProjectReleaseCompleted/Rejected`(stove.release.v1)다. 결과의 requestEventId로 Studio 원본 요청을 연결한다.
+최초 공개와 더 높은 버전 공개를 처리하며, 낮은 버전의 새 요청은 거절한다.
+공개 데이터·요청 결과·Inbox·Outbox는 같은 트랜잭션으로 확정한다.
 
-- 상품은 LIVE `ReleasePublished` 또는 기존 `ReviewApproved` 수신으로 생성된다. 같은 `productCode`의 상품에 반영한다.
-- 운영 판매 시작은 공개 릴리스가 있는 `APPROVED` 또는 `SUSPENDED` 상품만 가능하며 DEMO·BUNDLE은 거절한다.
-- 일반 상품은 LIVE 릴리스 반영으로 자동 판매된다. 판매 중지 유지 정책은 [Q3](domain/open-questions.md#q3)에 기록했다.
-- `quote` 는 상품마다 `requirePurchasable()` 을 확인하고, **통화가 다른 상품을 한 주문에 섞는 것을 거부**한다.
-- 캐시 무효화는 상태 변경 지점(`ProductCommandService`)에서만 일어난다.
+기존 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다.
+이 문서의 미완료 Order·Store 등에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
 
 ---
 
@@ -336,7 +320,7 @@ READY ──prepare──▶ PENDING ──callback──▶ PAID ──환불 �
 | GET | `/api/v1/settlements/reconciliation?month=yyyy-MM` | ADMIN 월별 판매자 대사·차이 경고 |
 | GET | `/api/v1/settlements/export.csv?month=yyyy-MM` | ADMIN 원장 CSV |
 
-**할인 행사 API** — catalog가 가격과 행사 기간을 소유한다. CREATOR는 본인 워크스페이스 상품만
+**재작성 전 할인 행사 API 기록(현재 Catalog에서 제거)** — 기존 catalog가 가격과 행사 기간을 소유했다. CREATOR는 본인 워크스페이스 상품만
 `POST /api/v1/promotions/seller/products/{productId}`로 판매자 부담 행사를 만들고,
 ADMIN은 `/platform/products/{productId}`로 플랫폼 부담 행사를 만든다. 본문은
 `{"discountPerUnit":2000,"startsAt":"2026-10-01T00:00:00Z","endsAt":"2026-10-08T00:00:00Z"}`다.

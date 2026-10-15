@@ -10,18 +10,16 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.junit.ArchTests;
 
 /** catalog 모듈 패키지 구조 검증. 규칙 본체는 common:archunit 에 한 벌만 둔다. */
-@AnalyzeClasses(packages = "com.stove.catalog", importOptions = ImportOption.DoNotIncludeTests.class)
+@AnalyzeClasses(
+        packages = "com.stove.catalog",
+        importOptions = ImportOption.DoNotIncludeTests.class)
 class CatalogArchitectureTest {
 
-    @ArchTest
-    static final ArchTests 패키지_구조 = ArchTests.in(ModulePackageRules.class);
+    @ArchTest static final ArchTests 패키지_구조 = ArchTests.in(ModulePackageRules.class);
 
-    @ArchTest
-    static final ArchTests 모듈_위생 = ArchTests.in(ModuleHygieneRules.class);
+    @ArchTest static final ArchTests 모듈_위생 = ArchTests.in(ModuleHygieneRules.class);
 
-    @ArchTest
-    static final ArchTests 이벤트_순서 = ArchTests.in(EventOrderingRules.class);
+    @ArchTest static final ArchTests 이벤트_순서 = ArchTests.in(EventOrderingRules.class);
 
-    @ArchTest
-    static final ArchTests 컨슈머_그룹 = ArchTests.in(ConsumerGroupRules.class);
+    @ArchTest static final ArchTests 컨슈머_그룹 = ArchTests.in(ConsumerGroupRules.class);
 }

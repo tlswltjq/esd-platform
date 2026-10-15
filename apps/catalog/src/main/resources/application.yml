@@ -40,11 +40,6 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:
@@ -66,11 +61,6 @@ spring:
       observation-enabled: true           # 처리 성공 레코드 단위 커밋
 
 stove:
-  catalog:
-    studio-url: ${STUDIO_URI:http://localhost:8085}
-    reindex:
-      page-size: 500          # 한 트랜잭션에서 발행할 상품 수
-      page-interval: 200ms    # 페이지 사이 대기 — 릴레이를 재색인이 독점하지 않게 한다
   outbox:
     relay-enabled: true
     batch-size: 200

@@ -1,6 +1,6 @@
 # 코드로 이해하는 도메인과 모델
 
-현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review다. 신규 구현과 검증은 이 네 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
+현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review·Catalog다. 신규 구현과 검증은 이 다섯 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
 
 이 프로젝트는 **창작자가 게임을 준비하고 심사를 거쳐 판매하면, 구매자에게 이용 권한을 주고 판매자의 몫을 계산하는 시스템**이다. 먼저 이 흐름을 이해한 뒤 각 단계가 보관하는 정보를 읽으면 된다.
 
@@ -46,7 +46,7 @@
 | 창작·출시 / `studio` | 출시 자료·파일과 심사·출시 요청을 어떻게 관리하는가? | `Project`, `Build`, `ProjectReviewRequest`, `ProjectReleaseRequest` | [창작·출시](models/studio.md) |
 | 창작 자동화·운영 / `studio` | 어떤 CI·테스터가 접근하고 어디에 결과를 알리는가? | `ProjectCredential`, `CiTrustPolicy`, `InternalTesterGrant`, `BuildWebhookSubscription`, `BuildWebhookDelivery`, `AuditLog` | [창작 운영](models/studio-operations.md) |
 | 심사 / `review` | 어떤 요청의 불변 자료·빌드에 대해 누가 판정했는가? | `ProjectReview` | [심사](models/review.md) |
-| 상품·가격 / `catalog` | 무엇을 얼마에 팔 수 있는가? | `Product`, `Promotion`, `AuditLog` | [상품·진열](models/catalog-store.md) |
+| 공개 상품 / `catalog` | 어떤 승인 스냅샷을 현재 공개하는가? | `CatalogProduct`, `CatalogRelease` | [상품·진열](models/catalog-store.md) |
 | 검색·진열 / `store` | 구매 화면에 무엇을 보여주는가? | `ProductDocument` | [상품·진열](models/catalog-store.md) |
 | 주문 / `order` | 누가 무엇을 얼마에 사기로 했는가? | `Order`, `OrderItem` | [주문·결제](models/order-payment.md) |
 | 결제 / `payment` | 돈의 승인·거절·환불이 어디까지 진행됐는가? | `Payment`, `SimulatedPgTransaction`, `PaymentAuditLog` | [주문·결제](models/order-payment.md) |
@@ -56,7 +56,7 @@
 | 요청 입구 / `gateway` | 요청을 어느 서비스로 보낼 것인가? | 자체 업무 엔티티 없음 | [서비스 명세](../services.md#gateway) |
 | 전달·기록 / `common` | 변경 사실을 잃거나 중복 처리하지 않았는가? | `OutboxEvent`, `ProcessedEvent` 및 공유 이벤트 값 | [공통 모델](models/shared.md) |
 
-`catalog`의 MySQL 상품은 판매 판단의 원본, `store`의 Elasticsearch 문서는 검색 사본이다. `license`의 MySQL 이용권은 지급 원본, `download`의 MongoDB 문서는 배포에 필요한 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
+`catalog`의 MySQL 상품은 공개본의 원본, `store`의 Elasticsearch 문서는 검색 사본이다. `license`의 MySQL 이용권은 지급 원본, `download`의 MongoDB 문서는 배포에 필요한 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
 
 ## 게임 한 개를 처음부터 따라가기
 
@@ -68,7 +68,7 @@
 | 출시 요청 | 현재 상세정보 버전의 외부 심사 결과로 ProjectReleaseRequest를 발행 |
 | 공개 반영 | 외부 처리 결과를 ProjectReleaseRequest에 기록. 실제 출시·공개는 외부 업무 |
 | 출시 후 수정 | 상세정보를 변경하고 새 버전의 심사·출시 요청을 발행. 공개본 관리 책임은 외부 업무 |
-| 구매·결제 | 기존 Order·Payment가 Catalog의 상품 ID와 견적을 사용 |
+| 구매·결제 | 재작성 전 Order·Payment의 구 견적 연동 기록. Catalog MVP와 연결되지 않음 |
 | 지급·다운로드 | License·Entitlement가 보유권을 확인하고 정확한 공개 기록의 파일 선택 |
 | 환불·월 마감 | 기존 결제 환불·권한 회수·판매자 정산 원장과 월 마감 흐름 유지 |
 

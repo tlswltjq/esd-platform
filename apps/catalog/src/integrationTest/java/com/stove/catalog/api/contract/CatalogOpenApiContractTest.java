@@ -1,32 +1,76 @@
 package com.stove.catalog.api.contract;
 
-import com.stove.common.testcontainers.InfraContainers;
+import static com.stove.catalog.CatalogFixtures.*;
+
+import static org.assertj.core.api.Assertions.*;
+
+import com.stove.catalog.CatalogIntegrationTestBase;
+import com.stove.catalog.core.service.PublishProjectRelease;
 import com.stove.common.test.OpenApiSnapshot;
-import org.junit.jupiter.api.DisplayName;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
+import org.springframework.http.*;
 
-/** 기동 가능한 실제 구성에서 공개 API가 커밋된 OpenAPI 계약과 일치하는지 검증한다. */
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        // 폴링을 재운다 — 캐시된 컨텍스트의 릴레이 경합(docs/testing.md).
-        properties = "stove.outbox.poll-interval-ms=3600000")
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
-class CatalogOpenApiContractTest {
-
-    @LocalServerPort
-    private int port;
+class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
+    @LocalServerPort int port;
+    @Autowired TestRestTemplate http;
+    @Autowired PublishProjectRelease publish;
 
     @Test
-    @DisplayName("애플리케이션 컨텍스트가 로드된다")
-    void contextLoads() {
+    void openApiMatchesSnapshot() {
+        OpenApiSnapshot.verify(port, "catalog");
     }
 
     @Test
-    @DisplayName("API 명세가 커밋된 계약과 일치한다")
-    void openApiMatchesSnapshot() {
-        OpenApiSnapshot.verify(port, "catalog");
+    void publicApiExposesOnlyPublishedFieldsAndRejectsInvalidPagingAndWrites() {
+        var e = event(id(), 1);
+        publish.execute(envelope(e), e);
+        var detail =
+                http.getForEntity("/api/v1/products/by-code/" + e.partitionKey(), String.class);
+        assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(detail.getBody())
+                .contains(e.partitionKey(), "buildVersion")
+                .doesNotContain(
+                        "storagePath", "ownerSubject", "releaseRequestId", "reviewRequestId");
+        assertThat(http.getForEntity("/api/v1/products?size=100", String.class).getBody())
+                .contains("totalElements", "totalPages");
+        for (String query : new String[] {"page=-1", "size=0", "size=101", "page=no"})
+            assertThat(http.getForEntity("/api/v1/products?" + query, String.class).getStatusCode())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(
+                        http.getForEntity("/api/v1/products/by-code/missing-" + id(), String.class)
+                                .getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(
+                        http.postForEntity("/api/v1/products/quote", null, String.class)
+                                .getStatusCode()
+                                .is4xxClientError())
+                .isTrue();
+    }
+
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    void paginationUsesProductIdAsTieBreakerForEqualPublicationTimes() {
+        var first = event(id(), 1);
+        var second = event(id(), 1);
+        publish.execute(envelope(first), first);
+        publish.execute(envelope(second), second);
+        jdbc.update(
+                "UPDATE catalog_product SET published_at='2100-01-01 00:00:00' WHERE product_code"
+                    + " IN (?,?)",
+                first.partitionKey(),
+                second.partitionKey());
+        var page0 = http.getForEntity("/api/v1/products?size=1&page=0", String.class);
+        var page1 = http.getForEntity("/api/v1/products?size=1&page=1", String.class);
+        assertThat(page0.getBody())
+                .contains(second.partitionKey())
+                .doesNotContain(first.partitionKey());
+        assertThat(page1.getBody())
+                .contains(first.partitionKey())
+                .doesNotContain(second.partitionKey());
     }
 }

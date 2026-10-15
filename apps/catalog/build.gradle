@@ -7,8 +7,5 @@ dependencies {
     implementation project(':common:web')
     implementation project(':common:messaging')
 
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    implementation 'org.springframework.boot:spring-boot-starter-cache'
-
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
