@@ -41,6 +41,7 @@ public final class EventType {
     public static final String REVIEW_APPEALED = "ReviewAppealed";
 
     // catalog
+    public static final String CATALOG_PRODUCT_PUBLISHED = "CatalogProductPublished";
     /** 판매 상품 정보 변경를 나타내는 이벤트 타입. */
     public static final String PRODUCT_CHANGED = "ProductChanged";
 

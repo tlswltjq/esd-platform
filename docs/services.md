@@ -19,7 +19,7 @@ Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#
 | A | [studio](#studio) | 8085 | 출시 상세정보·전체 빌드·심사 및 출시 요청 | MySQL |
 | A | [review](#review) | 8086 | 불변 스냅샷·빌드 열람, 수동 승인·반려 | MySQL |
 | A | [catalog](#catalog) | 8081 | 출시 처리, 공개 상품·공개본과 조회 | MySQL |
-| B | [store](#store) | 8087 | 진열·검색 (읽기 전용) | Elasticsearch + Redis |
+| B | [store](#store) | 8087 | 공개 상품 검색·조회 사본 | MySQL |
 | B | [order](#order) | 8082 | 주문 생성/취소, 금액 검증 | MySQL |
 | B | [payment](#payment) | 8083 | PG 연동, 승인 대조, 환불 | MySQL |
 | C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
@@ -120,33 +120,31 @@ Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 �
 
 수신은 `ProjectReleaseRequested`(stove.studio.v1), 발행은
 `ProjectReleaseCompleted/Rejected`(stove.release.v1)다. 결과의 requestEventId로 Studio 원본 요청을 연결한다.
+실제 공개본 변경 시 `CatalogProductPublished`(stove.catalog.v1)를 같은 트랜잭션의 Outbox에 추가한다.
 최초 공개와 더 높은 버전 공개를 처리하며, 낮은 버전의 새 요청은 거절한다.
 공개 데이터·요청 결과·Inbox·Outbox는 같은 트랜잭션으로 확정한다.
 
 기존 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다.
-이 문서의 미완료 Order·Store 등에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
+이 문서의 미완료 Order 등에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
 
 ---
 
 ## store
 
-진열·검색 전용. catalog(쓰기)와 분리된 **읽기 모델**이며 자체 원본을 갖지 않는다.
-
-**HTTP API**
+Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP 범위](store-mvp-plan.md) · [실행·수동 확인](store-guide.md).
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/storefront/products?q=&page=&size=` | 검색/목록 |
-| GET | `/api/v1/storefront/featured` | 메인 진열 (Redis 캐시) |
+| GET | `/api/v1/storefront/products?q=&sort=NEWEST&page=0&size=20` | 제목 부분 검색·정렬·페이지 |
+| GET | `/api/v1/storefront/products/{productCode}` | 현재 반영된 공개 상품 상세 |
 
-**이벤트** — 수신 `ProductChanged` / 발행 없음
-
-**규칙**
-
-- `ON_SALE` 상품만 노출한다.
-- 색인 문서 ID = `productId` 로 고정된 upsert 라 **같은 이벤트를 몇 번 받아도 결과가 같다**(자연 멱등).
-  그래서 Inbox 테이블을 두지 않는다.
-- 메인 진열은 전 사용자 공통 응답이라 캐시 적중률이 가장 높고, 색인이 갱신되면 통째로 무효화한다.
+목록·상세는 익명 GET이다. NEWEST·PRICE_ASC·PRICE_DESC를 지원하며 size 상한은 100이다.
+초기 동기화 전 503, 잘못된 입력 400, 없는 상품 코드 404를 반환한다.
+수신은 `CatalogProductPublished`(stove.catalog.v1), 업무 이벤트 발행은 없다.
+시작 시 Catalog 기존 목록·상세 API로 초기 사본을 만들고 재시작하면 처음부터 다시 읽는다.
+더 높은 contentVersion만 교체하고 중복·역순은 현재 사본을 유지한다. 동일 버전의 다른 데이터·식별 충돌은 실패한다.
+업무 테이블은 store_product 하나이며 Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다.
+가격은 공개 KRW 정가이며 구매·할인·판매 가능 여부는 다루지 않는다.
 
 ---
 

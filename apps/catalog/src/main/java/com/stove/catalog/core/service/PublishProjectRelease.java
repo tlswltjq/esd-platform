@@ -71,15 +71,23 @@ public class PublishProjectRelease {
                                 .orElseThrow()
                                 .getContentVersion();
         boolean stale = s.contentVersion() < currentVersion;
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         var release = CatalogRelease.decided(event, json(s), stale, now);
         // Assigned request IDs must INSERT, never merge over a concurrently committed decision.
         entityManager.persist(release);
         entityManager.flush();
+        boolean publicationChanged = product == null || s.contentVersion() > currentVersion;
         if (product == null)
-            products.saveAndFlush(CatalogProduct.publish(s, event.releaseRequestId(), now));
+            product = products.saveAndFlush(CatalogProduct.publish(s, event.releaseRequestId(), now));
         else if (s.contentVersion() > currentVersion)
             product.replace(event.releaseRequestId(), now);
+        if (publicationChanged)
+            outbox.record(
+                    "CatalogProduct", s.productCode(),
+                    CatalogProductPublishedEvent.of(new CatalogProductSnapshot(
+                            product.getId(), s.productCode(), s.title(), s.shortDescription(),
+                            s.thumbnailUrl(), s.price(), s.currency(), product.getPublishedAt(),
+                            s.content(), s.videoUrl(), s.contentVersion(), s.version(), product.getUpdatedAt())));
         if (stale)
             outbox.record(
                     "CatalogProduct",

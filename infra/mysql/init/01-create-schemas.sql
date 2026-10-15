@@ -7,7 +7,8 @@ CREATE DATABASE IF NOT EXISTS stove_order DEFAULT CHARACTER SET utf8mb4 COLLATE 
 CREATE DATABASE IF NOT EXISTS stove_payment DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS stove_license DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS stove_settlement DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
--- store: Elasticsearch, download: MongoDB → RDB 스키마 없음
+CREATE DATABASE IF NOT EXISTS stove_store DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- download: MongoDB → RDB 스키마 없음
 
 GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%';
 GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%';
@@ -17,4 +18,5 @@ GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%';
 GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%';
 GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';
 GRANT ALL PRIVILEGES ON stove_settlement.* TO 'stove'@'%';
+GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%';
 FLUSH PRIVILEGES;

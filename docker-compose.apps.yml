@@ -118,7 +118,9 @@ services:
     build: { context: ., dockerfile: apps/store/Dockerfile }
     image: stove/store
     expose: ["8087"]
-    environment: *common-env
+    environment:
+      <<: *common-env
+      CATALOG_BASE_URL: http://catalog:8081
 
   order:
     <<: *app

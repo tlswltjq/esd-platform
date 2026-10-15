@@ -1,37 +1,24 @@
 package com.stove.store.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProductChangedEvent;
-import com.stove.store.core.service.StoreService;
+import com.stove.common.kafka.contract.*;
+import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.store.core.service.ApplyCatalogProduct;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-/**
- * catalog → ProductChanged → 검색 색인 동기화.
- *
- * <p>여기에는 Inbox 테이블이 없다. 색인 연산이 문서 ID 기준 upsert 라
- * 중복 수신해도 결과가 동일하기 때문이다(자연 멱등).
- */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class CatalogEventListener {
-
-    private final StoreService storeService;
-    private final ObjectMapper objectMapper;
-
-    @KafkaListener(topics = Topics.CATALOG, groupId = "store")
-    public void onCatalogEvent(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (!envelope.isType(EventType.PRODUCT_CHANGED)) {
-            return;
-        }
-        storeService.indexProduct(envelope.payloadAs(objectMapper, ProductChangedEvent.class));
+    private final ObjectMapper mapper;
+    private final ApplyCatalogProduct applyCatalogProduct;
+    @KafkaListener(topics = Topics.CATALOG, groupId = ApplyCatalogProduct.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        var envelope = EventEnvelope.from(record);
+        if (envelope.isType(EventType.CATALOG_PRODUCT_PUBLISHED))
+            applyCatalogProduct.execute(envelope, envelope.payloadAs(mapper, CatalogProductPublishedEvent.class));
     }
 }

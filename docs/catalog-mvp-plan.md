@@ -263,3 +263,9 @@ V10 자료 보존·V11 적용과 구 Outbox 격리 스크립트의 반복 실행
 실행 명령은 [Catalog 실행·출시 검증](catalog-guide.md)에 정리했다.
 이번 실행은 독립 스택·테스트 DB에서 수행했으며 기존 운영 DB의 전환 SQL 실행·배포는 포함하지 않는다.
 Store 연동 이벤트·검색·구매·파일 배포는 이 완료 범위에 포함하지 않는다.
+
+## Store MVP 연동 확장
+
+위 최초 완료 기록 이후 2026-10-15 Store 재작성에서 CatalogProductPublished 공개 변경 이벤트를 추가했다.
+기존 공개 HTTP API와 Studio 완료·거절 계약을 유지하고 같은 트랜잭션의 Outbox만 확장했다.
+현재 공개 변경·두 Outbox의 원자성과 기존 회귀 검증 결과는 [Store 완료 기록](store-mvp-plan.md#재작성-완료-기록)을 따른다.

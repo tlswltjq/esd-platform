@@ -62,3 +62,11 @@ Catalog 재시작 전 미발행 결과 저장과 재시작 후 결과 전달을 
 구 자료의 자동 공개 이관이나 물리 삭제는 수행하지 않는다.
 격리한 구 Outbox를 공통 DEAD 일괄 재큐잉으로 되살리지 않는다.
 실제 운영 DB 전환 실행은 이 코드 작업의 독립 검증과 별개다.
+
+## Store 연동 확장
+
+2026-10-15 Store MVP에서 최초 공개·상위 버전 공개본 교체 시 CatalogProductPublished를 추가했다.
+공개 데이터와 Studio 결과·Store 변경 Outbox는 같은 트랜잭션으로 저장한다.
+중복 요청·동일 버전·거절에는 새 Store 변경 이벤트를 만들지 않는다. 기존 HTTP API·Studio 결과 필드는 유지한다.
+Store는 기존 공개 목록·상세 API로 초기 사본을 읽으므로 export API는 추가하지 않았다.
+[Store 실행·검증](store-guide.md)과 [완료 기록](store-mvp-plan.md#재작성-완료-기록)을 따른다.

@@ -43,7 +43,50 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     private int count(String table, String column, Object value) {
         return jdbc.queryForObject(
-                "SELECT COUNT(*) FROM " + table + " WHERE " + column + "=?", Integer.class, value);
+                "SELECT COUNT(*) FROM " + table + " WHERE " + column + "=?"
+                        + (table.equals("outbox_event") ? " AND topic='stove.release.v1'" : ""), Integer.class, value);
+    }
+
+    @Test
+    void publishesPublicSnapshotOnlyWhenCurrentPublicationChanges() throws Exception {
+        var first = event(id(), 1);
+        send(first);
+        send(first);
+        send(ProjectReleaseRequestedEvent.of(id(), first.reviewRequestId(), first.snapshot()));
+        var second = event(first.snapshot().projectId(), 2);
+        send(second);
+        send(event(first.snapshot().projectId(), 1));
+        var payloads = jdbc.queryForList(
+                "SELECT payload FROM outbox_event WHERE aggregate_id=? AND event_type='CatalogProductPublished' ORDER BY id",
+                String.class, first.partitionKey());
+        assertThat(payloads).hasSize(2);
+        var latest = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                .readValue(payloads.getLast(), CatalogProductPublishedEvent.class).product();
+        var detail = read.detail(first.partitionKey());
+        assertThat(latest.productId()).isEqualTo(detail.productId());
+        assertThat(latest.contentVersion()).isEqualTo(2);
+        assertThat(latest.publishedAt()).isEqualTo(detail.publishedAt());
+        assertThat(latest.updatedAt()).isEqualTo(detail.updatedAt());
+        assertThat(latest.title()).isEqualTo(second.snapshot().title());
+        assertThat(payloads.toString()).doesNotContain("ownerSubject", "storagePath", "releaseRequestId", "checksum");
+    }
+
+    @Test
+    void storeEventFailureAlsoRollsBackPublicationAndStudioResult() {
+        var e = event(id(), 1);
+        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
+                doThrow(new IllegalStateException("Store event failed")).when(outbox)
+                        .record(eq("CatalogProduct"), eq(e.partitionKey()), any(CatalogProductPublishedEvent.class)));
+        try {
+            assertThatThrownBy(() -> send(e)).isInstanceOf(IllegalStateException.class);
+            assertThat(products.findByProductCode(e.partitionKey())).isEmpty();
+            assertThat(releases.findById(e.releaseRequestId())).isEmpty();
+            assertThat(count("processed_event", "event_id", e.eventId())).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=?", Integer.class,
+                    e.partitionKey())).isZero();
+        } finally { reset(outbox); }
+        send(e);
+        assertThat(read.detail(e.partitionKey()).snapshot()).isEqualTo(e.snapshot());
     }
 
     @Test
@@ -149,7 +192,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
                         tx ->
                                 doThrow(new IllegalStateException("outbox unavailable"))
                                         .when(outbox)
-                                        .record(eq("CatalogProduct"), eq(e.partitionKey()), any()));
+                                        .record(eq("CatalogProduct"), eq(e.partitionKey()), any(ProjectReleaseCompletedEvent.class)));
         assertThatThrownBy(() -> send(e)).isInstanceOf(IllegalStateException.class);
         assertThat(releases.findById(e.releaseRequestId())).isEmpty();
         assertThat(products.findByProductCode(e.partitionKey())).isEmpty();

@@ -130,7 +130,7 @@ public final class ModuleHygieneRules {
                                         com.tngtech.archunit.lang.ConditionEvents events) {
                                     if (!type.getSimpleName()
                                             .matches(
-                                                    "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap)[A-Z][A-Za-z0-9]*)")) {
+                                                    "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap|Search|Synchronize)[A-Z][A-Za-z0-9]*)")) {
                                         events.add(
                                                 com.tngtech.archunit.lang.SimpleConditionEvent
                                                         .violated(

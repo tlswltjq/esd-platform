@@ -96,6 +96,9 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                CatalogProductPublishedEvent.of(new CatalogProductSnapshot(1L, "PROJECT-1", "Game", "Summary",
+                        "https://example.com/thumb.png", 1000, "KRW", Instant.parse("2026-01-01T00:00:00Z"),
+                        "Content", null, 1, "1.0", Instant.parse("2026-01-01T00:00:00Z"))),
                 ProjectReviewRequestedEvent.of(1L, snapshot),
                 ProjectReviewApprovedEvent.of(1L, 1L, 1, "PROJECT-1", "reviewer"),
                 ProjectReviewRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "feedback", "reviewer"),

@@ -26,7 +26,7 @@
 | 애그리거트 | 함께 규칙을 지키며 변경하는 객체 묶음 | `Order`가 `OrderItem` 목록과 총액을 함께 관리 |
 | 리비전 / revision | 수정 전 자료를 보존하기 위한 판본 | 상점 설명 1차와 2차를 각각 저장 |
 | 스냅샷 / snapshot | 특정 순간의 내용을 고정한 기록 | 주문 당시 가격. 상품 가격이 바뀌어도 과거 주문은 유지 |
-| 읽기 모델·투영 / projection | 원본의 변경을 받아 조회 목적에 맞게 만든 사본 | 검색용 `ProductDocument`, 다운로드용 `Entitlement` |
+| 읽기 모델·투영 / projection | 원본의 변경을 받아 조회 목적에 맞게 만든 사본 | 검색용 `StoreProduct`, 다운로드용 `Entitlement` |
 | 이벤트 | 다른 서비스에 전달하는 “이미 일어난 사실” | `PaymentCompleted`: 결제 승인이 확정됨 |
 | 멱등성 | 같은 요청·이벤트가 반복돼도 결과가 중복되지 않는 성질 | 같은 결제 이벤트로 이용권을 두 번 만들지 않음 |
 | 트랜잭션 | 한 DB에서 함께 성공하거나 함께 취소할 변경 범위 | 주문 저장과 발송할 이벤트 저장을 함께 처리 |
@@ -47,7 +47,7 @@
 | 창작 자동화·운영 / `studio` | 어떤 CI·테스터가 접근하고 어디에 결과를 알리는가? | `ProjectCredential`, `CiTrustPolicy`, `InternalTesterGrant`, `BuildWebhookSubscription`, `BuildWebhookDelivery`, `AuditLog` | [창작 운영](models/studio-operations.md) |
 | 심사 / `review` | 어떤 요청의 불변 자료·빌드에 대해 누가 판정했는가? | `ProjectReview` | [심사](models/review.md) |
 | 공개 상품 / `catalog` | 어떤 승인 스냅샷을 현재 공개하는가? | `CatalogProduct`, `CatalogRelease` | [상품·진열](models/catalog-store.md) |
-| 검색·진열 / `store` | 구매 화면에 무엇을 보여주는가? | `ProductDocument` | [상품·진열](models/catalog-store.md) |
+| 검색·조회 / `store` | 현재 공개된 게임을 어떻게 찾고 확인하는가? | `StoreProduct` | [상품·진열](models/catalog-store.md) |
 | 주문 / `order` | 누가 무엇을 얼마에 사기로 했는가? | `Order`, `OrderItem` | [주문·결제](models/order-payment.md) |
 | 결제 / `payment` | 돈의 승인·거절·환불이 어디까지 진행됐는가? | `Payment`, `SimulatedPgTransaction`, `PaymentAuditLog` | [주문·결제](models/order-payment.md) |
 | 이용권 / `license` | 어떤 주문으로 이용 권한을 받았는가? | `License` | [이용·다운로드](models/fulfillment.md) |
@@ -56,7 +56,7 @@
 | 요청 입구 / `gateway` | 요청을 어느 서비스로 보낼 것인가? | 자체 업무 엔티티 없음 | [서비스 명세](../services.md#gateway) |
 | 전달·기록 / `common` | 변경 사실을 잃거나 중복 처리하지 않았는가? | `OutboxEvent`, `ProcessedEvent` 및 공유 이벤트 값 | [공통 모델](models/shared.md) |
 
-`catalog`의 MySQL 상품은 공개본의 원본, `store`의 Elasticsearch 문서는 검색 사본이다. `license`의 MySQL 이용권은 지급 원본, `download`의 MongoDB 문서는 배포에 필요한 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
+`catalog`의 MySQL 상품은 공개본의 원본, `store`의 MySQL 상품은 검색·조회 사본이다. `license`의 MySQL 이용권은 지급 원본, `download`의 MongoDB 문서는 배포에 필요한 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
 
 ## 게임 한 개를 처음부터 따라가기
 

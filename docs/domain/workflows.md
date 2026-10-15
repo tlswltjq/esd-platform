@@ -1,6 +1,6 @@
 # 대표 업무 흐름
 
-현재 완료 기준은 Auth·Gateway·Studio·Review이며, Studio는 출시 자료 관리와 심사·출시 요청·재요청 및 외부 요청 결과 기록을 담당한다. 다른 모듈의 흐름은 기존 구현의 참고이며 현재 검증 기준에서 제외한다.
+현재 완료 기준은 Auth·Gateway·Studio·Review·Catalog·Store이며, Studio는 출시 자료 관리와 심사·출시 요청·재요청 및 외부 요청 결과 기록을 담당한다. Catalog는 공개본 정본을, Store는 검색·조회 사본을 관리한다. 나머지 미완료 모듈의 흐름은 기존 구현의 참고이며 현재 검증 기준에서 제외한다.
 
 [용어집](../domain-glossary.md) · [전체 모델 안내](model-guide.md) · [미결 질문](open-questions.md)
 
@@ -14,7 +14,7 @@
 3. 심사 요청에서 현재 내용과 대표 빌드를 불변 스냅샷으로 고정한다.
 4. Studio는 전체 요청의 승인·반려 결과 이벤트를 반영한다. 반려 뒤 수정·재심사가 가능하다.
 5. 승인된 현재 작업본의 출시를 요청한다. Studio가 출시 요청 이벤트를 발행한다.
-6. 현재 등록 성공 결과에 맞춰 해당 출시 요청의 처리 결과를 기록한다. 실제 공개·공개본 관리에는 관여하지 않는다.
+6. Catalog의 완료·거절 결과에 맞춰 해당 출시 요청의 처리 결과를 기록한다. 실제 공개·공개본 관리에는 관여하지 않는다.
 7. 상세정보를 변경하면 새 버전으로 심사 요청·출시 요청을 보낸다.
 
 ~~~mermaid
@@ -38,6 +38,21 @@ Studio는 같은 요청 ID·Project·버전의 승인·반려 결과를 자신�
 반려 후 재심사는 Studio가 새 요청 ID로 시작한다. 확정 판정은 변경하지 않으며 과거 자료·판정을 보존한다.
 심사 중 작업본이 수정되면 과거 승인 결과는 과거 요청에만 기록되고 현재 버전의 출시 요청 조건을 충족하지 않는다.
 [Review 실행·검증](../review-guide.md)은 실제 네 모듈과 Kafka로 이 흐름과 재시작 후 결과 전달을 확인한다.
+
+## 방문자: 공개된 게임을 찾고 확인한다
+
+Catalog는 Studio의 출시 요청 스냅샷을 공개본으로 확정하고 Studio에 결과를 보낸다.
+처음 공개하거나 더 높은 버전으로 교체할 때 CatalogProductPublished도 Outbox에 함께 기록한다.
+Store는 이 이벤트의 공개 데이터로 MySQL 조회 사본을 갱신한다.
+
+방문자는 Store 목록에서 제목 검색·최신 공개순·가격순으로 찾고 코드별 상세를 확인한다.
+Studio 작업본만 수정하면 Catalog와 Store는 기존 공개본을 유지하며 새 심사·출시가 끝나야 바뀐다.
+Store 시작 전 공개 상품은 Catalog의 기존 목록·상세 HTTP API로 읽는다.
+두 입력 경로 모두 contentVersion으로 신구를 비교하며 낮은 버전으로 되돌리지 않는다.
+
+초기 동기화 실패는 503으로 나타나고 원인 해결 후 Store를 재시작한다.
+준비된 Store는 Catalog가 잠시 중단돼도 자기 사본으로 조회한다. 구매·결제 가능 여부는 이 흐름의 범위가 아니다.
+[실행·수동 확인](../store-guide.md) · [독립 인수 테스트](../../e2e/src/test/java/com/stove/e2e/StorePublicationFlowTest.java)
 
 <a id="purchase-flow"></a>
 ## 구매자: 주문·결제 후 이용한다
@@ -89,7 +104,8 @@ flowchart LR
 | `BuildValidated` | 업로드 파일 검증을 통과함 | 검증 완료 알림에 사용. 이 사실만으로 구매자 공개·이용권 지급이 되지 않음 |
 | `ReleaseScheduled` | 릴리스 공개 시각을 예약함 | 예약 사실을 알림. 공개·판매 완료가 아님 |
 | `ReleasePublished` | LIVE에 자료·빌드 묶음을 공개함 | Catalog가 상품·판매 상태 반영, Download가 릴리스 매니페스트 반영 |
-| `ProductChanged` | 상품의 가격·상태·릴리스 참조 등이 바뀜 | Store가 진열 사본, Download가 상품 코드↔ID·릴리스 참조 갱신 |
+| `CatalogProductPublished` | Catalog 최초 공개·현재 공개본 교체 | Store가 공개 상품 사본 갱신 |
+| `ProductChanged` (구 계약) | 재작성 전 상품 마스터 변경 | 미완료 Download 등에 남은 기존 계약. 현재 Catalog·Store에서는 사용하지 않음 |
 | `OrderCreated` | 주문 항목·금액이 고정됨 | Payment가 결제 대기 생성 |
 | `PaymentCompleted` | 정상 승인 금액을 결제 완료로 기록함 | Order 결제 확정, License 이용권 지급, Settlement 매출 기록 |
 | `PaymentFailed` | PG 승인 거절을 기록함 | Order가 실패로 종료 |
