@@ -195,6 +195,7 @@ ApplyCatalogProduct는 사본 반영, SearchStoreProducts는 검색·목록, Rea
 SynchronizeCatalogProducts는 시작 시 Catalog 순회를 맡는다.
 HTTP 연동은 core.port와 infrastructure에 목록·상세 조회 포트와 어댑터를 둔다.
 컨트롤러·이벤트 리스너·시작 실행 클래스는 해당 유스케이스를 호출한다.
+런타임 이벤트는 api.listener의 CatalogProductMapper.from(...)으로 봉투·본문·키를 검증한 뒤 스냅샷만 전달한다. 시작 시 HTTP 초기화와 런타임 반영 모두 ApplyCatalogProduct.execute(CatalogProductSnapshot)의 같은 경로를 사용한다.
 
 1. **계약·Catalog 변경:** 공개 스냅샷·이벤트를 정의하고 실제 공개 변경에 Outbox 기록을 추가한다.
 2. **Store 사본:** 단일 테이블·Flyway와 버전 비교·중복·경합 처리를 구현한다.

@@ -1,47 +1,10 @@
 {
   "components" : {
     "schemas" : {
-      "ApiResponseListDeadEventResponse" : {
+      "ApiResponseOrderPage" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DeadEventResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListDltRecordResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DltRecordResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListOrderResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/OrderResponse"
-            },
-            "type" : "array"
+            "$ref" : "#/components/schemas/OrderPage"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -66,132 +29,26 @@
         },
         "type" : "object"
       },
-      "ApiResponseReplayedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ReplayedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseRequeuedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/RequeuedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseVoid" : {
-        "properties" : {
-          "data" : { },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "CreateOrderRequest" : {
         "properties" : {
           "expectedAmount" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "items" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Item"
-            },
-            "minItems" : 1,
-            "type" : "array"
-          }
-        },
-        "required" : [ "items" ],
-        "type" : "object"
-      },
-      "DeadEventResponse" : {
-        "properties" : {
-          "aggregateId" : {
-            "type" : "string"
-          },
-          "aggregateType" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "lastError" : {
-            "type" : "string"
-          },
-          "partitionKey" : {
-            "type" : "string"
-          },
-          "retryCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "DltRecordResponse" : {
-        "properties" : {
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "exception" : {
-            "type" : "string"
-          },
-          "key" : {
-            "type" : "string"
-          },
-          "offset" : {
+          "expectedContentVersion" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "originalTopic" : {
+          "productCode" : {
+            "pattern" : "[A-Za-z0-9][A-Za-z0-9._-]{0,49}",
             "type" : "string"
           },
-          "partition" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
+          "requestId" : {
+            "pattern" : "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
             "type" : "string"
           }
         },
+        "required" : [ "expectedAmount", "expectedContentVersion", "productCode", "requestId" ],
         "type" : "object"
       },
       "ErrorBody" : {
@@ -205,70 +62,28 @@
         },
         "type" : "object"
       },
-      "Item" : {
+      "OrderPage" : {
         "properties" : {
-          "productId" : {
-            "format" : "int64",
-            "type" : "integer"
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/OrderResponse"
+            },
+            "type" : "array"
           },
-          "quantity" : {
-            "format" : "int32",
-            "minimum" : 1,
-            "type" : "integer"
-          }
-        },
-        "required" : [ "productId" ],
-        "type" : "object"
-      },
-      "Line" : {
-        "properties" : {
-          "discountBearer" : {
-            "type" : "string"
-          },
-          "discountPerUnit" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "feeAmount" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "feeRate" : {
-            "type" : "number"
-          },
-          "listUnitPrice" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "productId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "productName" : {
-            "type" : "string"
-          },
-          "promotionId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "quantity" : {
+          "page" : {
             "format" : "int32",
             "type" : "integer"
           },
-          "sellerId" : {
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "sellerPayout" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "settlementBasis" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "unitPrice" : {
-            "format" : "int64",
+          "totalPages" : {
+            "format" : "int32",
             "type" : "integer"
           }
         },
@@ -276,54 +91,59 @@
       },
       "OrderResponse" : {
         "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "currency" : {
             "type" : "string"
           },
-          "lines" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Line"
-            },
-            "type" : "array"
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
           },
-          "memberId" : {
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureReasonCode" : {
+            "type" : "string"
+          },
+          "listAmount" : {
             "format" : "int64",
             "type" : "integer"
           },
           "orderNo" : {
             "type" : "string"
           },
-          "paidAt" : {
+          "productCode" : {
+            "type" : "string"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "resultOccurredAt" : {
             "format" : "date-time",
             "type" : "string"
           },
-          "retryable" : {
-            "type" : "boolean"
-          },
           "status" : {
-            "enum" : [ "CREATED", "PAID", "CANCELED", "FAILED", "EXPIRED" ],
+            "enum" : [ "PENDING", "PAID", "FAILED" ],
             "type" : "string"
           },
-          "totalAmount" : {
-            "format" : "int64",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "ReplayedCount" : {
-        "properties" : {
-          "replayed" : {
-            "format" : "int32",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "RequeuedCount" : {
-        "properties" : {
-          "requeued" : {
-            "format" : "int32",
-            "type" : "integer"
+          "title" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -355,19 +175,21 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
-    "/api/v1/ops/dlt" : {
+    "/api/v1/orders" : {
       "get" : {
-        "operationId" : "peek",
+        "operationId" : "list",
         "parameters" : [ {
           "in" : "query",
-          "name" : "topic",
-          "required" : true,
+          "name" : "page",
+          "required" : false,
           "schema" : {
-            "type" : "string"
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
           }
         }, {
           "in" : "query",
-          "name" : "max",
+          "name" : "size",
           "required" : false,
           "schema" : {
             "default" : 20,
@@ -380,122 +202,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt/replay" : {
-      "post" : {
-        "operationId" : "replay",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 100,
-            "format" : "int32",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead" : {
-      "get" : {
-        "operationId" : "deadEvents",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/requeue-all" : {
-      "post" : {
-        "operationId" : "requeueAll",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
-      "post" : {
-        "operationId" : "requeue",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "eventId",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/orders" : {
-      "get" : {
-        "operationId" : "myOrders",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListOrderResponse"
+                  "$ref" : "#/components/schemas/ApiResponseOrderPage"
                 }
               }
             },
@@ -539,7 +246,7 @@
     },
     "/api/v1/orders/{orderNo}" : {
       "get" : {
-        "operationId" : "get",
+        "operationId" : "detail",
         "parameters" : [ {
           "in" : "path",
           "name" : "orderNo",
@@ -554,43 +261,6 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseOrderResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "order-controller" ]
-      }
-    },
-    "/api/v1/orders/{orderNo}/cancel" : {
-      "post" : {
-        "operationId" : "cancel",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "orderNo",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "reason",
-          "required" : false,
-          "schema" : {
-            "default" : "USER_CANCEL",
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
                 }
               }
             },

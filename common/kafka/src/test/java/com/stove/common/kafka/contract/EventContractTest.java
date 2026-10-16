@@ -96,6 +96,10 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                new OrderPlacedEvent("placed-1", Instant.parse("2026-10-16T00:00:00Z"), "order-1", "usr_buyer",
+                        1L, "PROJECT-1", "Game", 1, 1000, 0, 1000, "KRW"),
+                OrderPaymentCompletedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW"),
+                OrderPaymentFailedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW", "DECLINED", "Declined"),
                 CatalogProductPublishedEvent.of(new CatalogProductSnapshot(1L, "PROJECT-1", "Game", "Summary",
                         "https://example.com/thumb.png", 1000, "KRW", Instant.parse("2026-01-01T00:00:00Z"),
                         "Content", null, 1, "1.0", Instant.parse("2026-01-01T00:00:00Z"))),

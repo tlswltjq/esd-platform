@@ -1,5 +1,6 @@
 package com.stove.store;
 
+import com.stove.store.api.listener.CatalogProductMapper;
 import static com.stove.store.StoreFixtures.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -88,7 +89,7 @@ class StoreIntegrationTest {
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
         var p = product(1, 1, "Title", 1000);
         var event = CatalogProductPublishedEvent.of(p);
-        assertThatThrownBy(() -> apply.execute(new EventEnvelope(event.eventId(), event.eventType(), "wrong", ""), event))
+        assertThatThrownBy(() -> apply.execute(CatalogProductMapper.from(new EventEnvelope(event.eventId(), event.eventType(), "wrong", ""), event)))
                 .isInstanceOf(BusinessException.class);
         assertThat(products.count()).isZero();
         apply.execute(p);

@@ -1,5 +1,7 @@
 package com.stove.studio.core.service;
 
+import com.stove.studio.core.domain.release.ProjectReleaseResult;
+import com.stove.studio.core.domain.review.ProjectReviewResult;
 import static org.assertj.core.api.Assertions.*;
 
 import com.stove.common.web.error.BusinessException;
@@ -59,26 +61,10 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         assertThat(read.snapshot(request).ownerSubject()).isEqualTo(owner);
         assertThat(review.execute(id, owner).getId()).isEqualTo(request.getId());
         assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
-        decision.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReviewApproved",
-                request.getId(),
-                id,
-                request.getContentVersion(),
-                true,
-                null,
-                "external-reviewer");
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "external-reviewer"));
         var first = release.execute(id, owner);
         assertThat(release.execute(id, owner).getId()).isEqualTo(first.getId());
-        result.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReleaseCompleted",
-                first.getId(),
-                id,
-                first.getContentVersion(),
-                true,
-                null,
-                first.getRequestEventId());
+        result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", first.getId(), id, first.getContentVersion(), true, null, first.getRequestEventId()));
         assertThat(read.releaseRequests(id, owner).get(0).getStatus()).isEqualTo("COMPLETED");
         p = read.requireOwned(id, owner);
         update.execute(
@@ -92,58 +78,18 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         assertThat(read.reviewRequest(read.requireOwned(id, owner))).isNull();
         assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
         var next = review.execute(id, owner);
-        decision.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReviewApproved",
-                request.getId(),
-                id,
-                request.getContentVersion(),
-                true,
-                null,
-                "old-result");
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "old-result"));
         assertThat(read.reviewRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
-        decision.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReviewApproved",
-                next.getId(),
-                id,
-                next.getContentVersion(),
-                true,
-                null,
-                "external-reviewer");
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", next.getId(), id, next.getContentVersion(), true, null, "external-reviewer"));
         var failed = release.execute(id, owner);
-        result.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReleaseRejected",
-                failed.getId(),
-                id,
-                failed.getContentVersion(),
-                false,
-                "External rejection",
-                failed.getRequestEventId());
+        result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseRejected", failed.getId(), id, failed.getContentVersion(), false, "External rejection", failed.getRequestEventId()));
         var retry = release.execute(id, owner);
         assertThat(retry.getId()).isNotEqualTo(failed.getId());
-        result.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReleaseCompleted",
-                failed.getId(),
-                id,
-                failed.getContentVersion(),
-                true,
-                null,
-                failed.getRequestEventId());
+        result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", failed.getId(), id, failed.getContentVersion(), true, null, failed.getRequestEventId()));
         assertThat(read.releaseRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
-        result.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReleaseCompleted",
-                retry.getId(),
-                id,
-                retry.getContentVersion(),
-                true,
-                null,
-                retry.getRequestEventId());
+        result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", retry.getId(), id, retry.getContentVersion(), true, null, retry.getRequestEventId()));
         var history = read.releaseRequests(id, owner);
         assertThat(history)
                 .extracting(r -> r.getStatus())
@@ -179,15 +125,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 owner,
                 p.getContentVersion(),
                 new StorePage("Second", "Summary", p.getThumbnailUrl(), null, "Changed", 2000));
-        decision.execute(
-                UUID.randomUUID().toString(),
-                "ProjectReviewApproved",
-                old.getId(),
-                id,
-                old.getContentVersion(),
-                true,
-                null,
-                "external-reviewer");
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", old.getId(), id, old.getContentVersion(), true, null, "external-reviewer"));
         var current = read.requireOwned(id, owner);
         assertThat(current.getTitle()).isEqualTo("Second");
         assertThat(read.reviewRequest(current)).isNull();

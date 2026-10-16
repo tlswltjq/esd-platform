@@ -1,85 +1,90 @@
 package com.stove.order.core.domain;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
+import static com.stove.order.OrderFixtures.*;
+import static org.assertj.core.api.Assertions.*;
 import com.stove.common.web.error.BusinessException;
-import com.stove.common.kafka.contract.payload.OrderLine;
-import java.util.List;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.*;
+import java.util.stream.Stream;
 
 class OrderTest {
-
-    private Order sampleOrder() {
-        return Order.create("ORD20260101ABCDE12345", 1L, "KRW", List.of(
-                new OrderLine(1L, "로스트아크 디럭스 패키지", 1L, 39000L, 1),
-                new OrderLine(2L, "인디 플랫포머 데모+", 1001L, 12000L, 2)));
-    }
-
-    @Test
-    @DisplayName("주문 금액은 항목 합계로만 계산된다")
-    void totalAmountFromLines() {
-        assertThat(sampleOrder().getTotalAmount()).isEqualTo(39000L + 12000L * 2);
-    }
-
-    @Test
-    @DisplayName("결제 완료 이벤트가 중복 수신돼도 상태는 한 번만 전이된다")
-    void markPaidIsIdempotent() {
-        Order order = sampleOrder();
-        order.markPaid();
-        order.markPaid();
-
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-        assertThat(order.getPaidAt()).isNotNull();
-    }
-
-    @Test
-    @DisplayName("결제 실패는 주문을 FAILED 로 끝내고 사유를 남긴다")
-    void markFailedEndsOrder() {
-        Order order = sampleOrder();
-        order.markFailed("REJECT_CARD_COMPANY:카드사 거절");
-
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.FAILED);
-        assertThat(order.getFailedAt()).isNotNull();
-        assertThat(order.getFailReason()).isEqualTo("REJECT_CARD_COMPANY:카드사 거절");
-    }
-
-    @Test
-    @DisplayName("결제 실패 이벤트가 중복 수신돼도 상태는 한 번만 전이된다")
-    void markFailedIsIdempotent() {
-        Order order = sampleOrder();
-        order.markFailed("REJECT_CARD_COMPANY:카드사 거절");
-        order.markFailed("REJECT_CARD_COMPANY:카드사 거절");
-
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.FAILED);
-    }
-
-    @Test
-    @DisplayName("이미 결제된 주문은 실패로 뒤집을 수 없다")
-    void cannotFailPaidOrder() {
-        Order order = sampleOrder();
-        order.markPaid();
-
-        assertThatThrownBy(() -> order.markFailed("REJECT_CARD_COMPANY:카드사 거절"))
+    @Test void resultIdentityIsRequiredEvenWithoutAnEventListener() {
+        var o = order(); var r = result(completed(o));
+        assertThatThrownBy(() -> new PaymentResult(null, r.occurredAt(), r.orderNo(), r.requestEventId(),
+                r.paymentId(), r.buyerSubject(), r.amount(), r.currency(), OrderStatus.PAID, null, null))
                 .isInstanceOf(BusinessException.class);
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(o.paymentResult()).isNull();
     }
 
-    @Test
-    @DisplayName("실패로 끝난 주문은 취소할 수 없다 — 되돌릴 돈이 없다")
-    void cannotCancelFailedOrder() {
-        Order order = sampleOrder();
-        order.markFailed("REJECT_CARD_COMPANY:카드사 거절");
-
-        assertThatThrownBy(() -> order.cancel("USER_REFUND"))
-                .isInstanceOf(BusinessException.class);
+    @Test void resultMustBeFinalAndFailureMustExplainItsReason() {
+        var r = result(completed(order()));
+        for (var status : new OrderStatus[]{null, OrderStatus.PENDING, OrderStatus.FAILED})
+            assertThatThrownBy(() -> new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(),
+                    r.paymentId(), r.buyerSubject(), r.amount(), r.currency(), status, null, null))
+                    .isInstanceOf(BusinessException.class);
     }
 
-    @Test
-    @DisplayName("본인 주문이 아니면 조회할 수 없다")
-    void requireOwner() {
-        assertThatThrownBy(() -> sampleOrder().requireOwner(999L))
+    @Test void storesOriginalProductAndSeparateCustomerAmounts() {
+        var o = order();
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(o.getTitle()).isEqualTo("한글 게임");
+        assertThat(o.getListAmount()).isEqualTo(10000);
+        assertThat(o.getDiscountAmount()).isZero();
+        assertThat(o.getAmount()).isEqualTo(o.getListAmount());
+        assertThat(o.getCreatedAt().getNano() % 1000).isZero();
+        assertThat(o.paymentResult()).isNull();
+    }
+    @Test void rejectsFreeProductsAndChangedPublicTerms() {
+        assertThatThrownBy(() -> Order.create("usr_buyer", request(), new PublishedProduct(1L, "Game-1", "Free", 3, 0, "KRW"), id()))
                 .isInstanceOf(BusinessException.class);
+        for (var p : new PublishedProduct[]{new PublishedProduct(1L, "Game-1", "Changed", 4, 10000, "KRW"),
+                new PublishedProduct(1L, "Game-1", "Changed", 3, 11000, "KRW")})
+            assertThatThrownBy(() -> Order.create("usr_buyer", request(), p, id())).isInstanceOf(BusinessException.class);
+    }
+    @Test void sameRequestMustKeepCodeVersionAndAmount() {
+        var r = request(); var o = Order.create("usr_buyer", r, product(), id());
+        o.requireSameRequest(r);
+        for (var other : new OrderRequest[]{new OrderRequest(r.requestId(), "game-1", 3, 10000),
+                new OrderRequest(r.requestId(), r.productCode(), 4, 10000),
+                new OrderRequest(r.requestId(), r.productCode(), 3, 9999)})
+            assertThatThrownBy(() -> o.requireSameRequest(other)).isInstanceOf(BusinessException.class);
+    }
+    @Test void finalResultIsImmutableAndRepeatedDeliveryDoesNotChangeTimestamp() {
+        var o = order(); var e = completed(o); var r = result(e);
+        o.apply(r); var updated = o.getUpdatedAt();
+        o.apply(r);
+        assertThat(o.getUpdatedAt()).isEqualTo(updated);
+        assertThat(o.paymentResult()).isEqualTo(r);
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThatThrownBy(() -> o.apply(result(completed(o)))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> o.apply(new PaymentResult(id(), r.occurredAt(), r.orderNo(), r.requestEventId(),
+                r.paymentId(), r.buyerSubject(), r.amount(), r.currency(), OrderStatus.FAILED, "DECLINED", "Failed")))
+                .isInstanceOf(BusinessException.class);
+        assertThat(o.getAmount()).isEqualTo(10000);
+    }
+    @Test void rejectsFeeDeductedAmountAndWrongPaymentConnection() {
+        var o = order(); var r = result(completed(o));
+        for (var wrong : new PaymentResult[]{
+                new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), "another-request", r.paymentId(), r.buyerSubject(), r.amount(), "KRW", OrderStatus.PAID, null, null),
+                new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(), r.paymentId(), "other-buyer", r.amount(), "KRW", OrderStatus.PAID, null, null),
+                new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(), r.paymentId(), r.buyerSubject(), 9800, "KRW", OrderStatus.PAID, null, null)})
+            assertThatThrownBy(() -> o.apply(wrong)).isInstanceOf(BusinessException.class);
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.PENDING);
+    }
+    static Stream<Arguments> invalidRequests() {
+        return Stream.of(Arguments.of(null, "Game-1", 3, 10000), Arguments.of("bad", "Game-1", 3, 10000),
+                Arguments.of(id(), "bad/code", 3, 10000), Arguments.of(id(), "Game-1", 0, 10000),
+                Arguments.of(id(), "Game-1", 3, -1));
+    }
+    @ParameterizedTest @MethodSource("invalidRequests")
+    void rejectsInvalidRequest(String requestId, String code, long version, long amount) {
+        assertThatThrownBy(() -> new OrderRequest(requestId, code, version, amount)).isInstanceOf(BusinessException.class);
+    }
+    @Test void priceCompositionCannotHideFeesOrNegativeDiscounts() {
+        assertThatThrownBy(() -> new OrderPrice(10000, -1, 10001, "KRW")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OrderPrice(10000, 0, 9800, "KRW")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OrderPrice(10000, 0, 10000, "USD")).isInstanceOf(IllegalArgumentException.class);
     }
 }

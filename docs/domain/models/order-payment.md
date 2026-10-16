@@ -5,66 +5,52 @@
 Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “그 돈을 실제로 승인·환불했는가”를 보관한다. 두 서비스는 각자 MySQL DB를 사용하고 `orderNo`로 연결한다. 같은 순간에 같은 상태가 된다고 가정하지 않는다.
 
 <a id="order"></a>
-## Order — 구매 요청과 확정 금액
 
-저장: Order의 `orders`. [모델](../../../apps/order/src/main/java/com/stove/order/core/domain/Order.java)
+## Order — 단일 상품의 주문 스냅샷과 결제 결과
+
+저장: Order의 purchase_order. [모델](../../../apps/order/src/main/java/com/stove/order/core/domain/Order.java) · [MVP 계획](../../order-mvp-plan.md) · [실행 안내](../../order-guide.md)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
-| `id` (`Long`), `orderNo` (`String`) | DB ID와 서비스 사이에서 쓰는 주문번호 |
-| `memberId` (`Long`) | 인증 정보에서 얻은 구매자 ID |
-| `status` (`OrderStatus`) | `CREATED`, `PAID`, `CANCELED`, `FAILED`, `EXPIRED` |
-| `totalAmount` (`long`), `currency` (`String`) | 주문 항목 실결제액 합계·통화 |
-| `items` (`List<OrderItem>`) | 함께 저장하는 주문 항목 목록 |
-| `paidAt` (`Instant`) | 결제 완료 이벤트로 확정한 시각 |
-| `canceledAt` (`Instant`), `cancelReason` (`String`) | 취소 시각·사유 |
-| `failedAt` (`Instant`), `failReason` (`String`) | 결제 실패를 반영한 시각·사유 |
-| `expiredAt` (`Instant`) | 결제 대기 주문을 만료 처리한 시각 |
+| id·orderNo | DB 키와 외부 연결용 UUID 주문번호 |
+| buyerSubject·requestId | JWT sub 구매자와 클라이언트 UUID. 조합 유일 제약으로 요청 중복 방지 |
+| productId·productCode·title·contentVersion | Catalog 공개 상세에서 확인한 당시 상품 |
+| listAmount·discountAmount·amount·currency | 정가·할인액 0·고객 청구액과 KRW. PG 비용·판매자 지급액과 구분 |
+| status | PENDING, PAID, FAILED |
+| requestEventId | 주문 생성과 함께 저장한 OrderPlaced 이벤트 ID |
+| paymentResultEventId·paymentId·resultOccurredAt | 최초 수락한 결제 결과 이벤트·결제 식별자·결과 시각 |
+| failureReasonCode·failureReason | 최종 실패의 분류·설명. 성공이면 없음 |
+| createdAt·updatedAt | UTC 마이크로초 저장 시각 |
 
-**만들고 쓰는 때:** 구매 요청을 받으면 Catalog 견적을 동기 호출한다. 요청자가 전달한 `expectedAmount`가 있다면 서버 견적과 비교하고, 검증한 항목으로 Order와 OrderItem을 저장한다. `OrderCreated` 이벤트를 받은 Payment가 결제 대기 기록을 만든다. [PlaceOrderFacade](../../../apps/order/src/main/java/com/stove/order/api/application/PlaceOrderFacade.java), [OrderCommandService](../../../apps/order/src/main/java/com/stove/order/core/service/OrderCommandService.java)
+**만들고 쓰는 때:** CreateOrder가 Catalog 공개 상세를 HTTP로 읽고 기대 버전·금액을 확인한다.
+주문 스냅샷과 OrderPlaced Outbox를 같이 저장한다. 이미 저장된 requestId의 같은 입력은 Catalog를 호출하지 않고 기존 주문을 반환한다.
+본인 조회는 SearchOrders·ReadOrder, 결제 결과는 ApplyPaymentResult가 담당한다.
 
-| 계기 | 상태 변경 |
-|---|---|
-| 결제 완료 | `CREATED → PAID` |
-| 결제 승인 거절 | `CREATED → FAILED` |
-| 취소 처리 | `CREATED/PAID → CANCELED` |
-| 만료 처리 | `CREATED → EXPIRED` |
+결제 결과는 원래 requestEventId·orderNo·buyerSubject·amount·currency가 일치해야 한다.
+PENDING에서 PAID 또는 FAILED로 한 번 확정하며 같은 eventId·결과는 반복해도 바뀌지 않는다.
+주문 행 잠금과 Inbox를 같은 트랜잭션으로 처리한다. 자동 만료·취소·환불은 이번 범위에 없다.
 
-현재 주문 취소만으로 Payment 환불이 실행되지는 않는다. `OrderCanceled`를 Payment의 주문 리스너가 처리하지 않기 때문이다. 환불은 별도 Payment 경로를 사용한다. [Q9](../open-questions.md#q9)
+**사례:** 10,000원·버전 3을 주문하면 이후 Catalog가 20,000원·버전 4로 바뀌어도 기존 청구액은 10,000원이다.
+새 요청이 예전 값을 보내면 409다. PG 비용을 공제한 9,800원을 승인액으로 통보해도 금액 불일치로 거절한다.
 
-**업무 규칙 제안:** 인증된 구매자의 주문을 서버 가격으로 계산하고, 기대 금액이 있으면 비교한다. 주문 시 고정된 항목을 결제와 정산에 사용한다. 취소·승인 거절·시간 만료를 서로 다른 업무 결과로 기록한다.
-
-**사례:** 10,000원 상품 1개의 기대 금액을 10,000원으로 보내면 주문할 수 있다. 1,000원으로 보내거나 판매 중지 상품을 주문하면 거절된다. 같은 상품 수량·반복 구매의 이용권 의미는 [Q5](../open-questions.md#q5)에 남긴다.
-
-**합의 상태:** 재검토 필요. 수량·지급 정책 [Q5](../open-questions.md#q5), 취소와 환불 [Q9](../open-questions.md#q9).
-
-**검증 근거:** [Order](../../../apps/order/src/main/java/com/stove/order/core/domain/Order.java), [PlaceOrderFacade](../../../apps/order/src/main/java/com/stove/order/api/application/PlaceOrderFacade.java), [OrderCommandService](../../../apps/order/src/main/java/com/stove/order/core/service/OrderCommandService.java). [PlaceOrderFacadeTest](../../../apps/order/src/test/java/com/stove/order/api/application/PlaceOrderFacadeTest.java), [OrderTest](../../../apps/order/src/test/java/com/stove/order/core/domain/OrderTest.java), [ProductQuoteTest](../../../apps/catalog/src/integrationTest/java/com/stove/catalog/core/service/ProductQuoteTest.java)가 금액·상태·견적 조건을 검증한다. 인증은 [TrackBCommerceFlowTest](../../../e2e/src/test/java/com/stove/e2e/TrackBCommerceFlowTest.java)의 `forgedOrderBodyCannotSelectAnotherOwner`.
+검증 근거: [도메인 테스트](../../../apps/order/src/test/java/com/stove/order/core/domain/OrderTest.java),
+[실제 MySQL·Kafka·JWT 검사](../../../apps/order/src/integrationTest/java/com/stove/order/OrderIntegrationTest.java),
+[독립 사용자 흐름](../../../e2e/src/test/java/com/stove/e2e/OrderPurchaseFlowTest.java).
+Payment는 아직 재작성 전이며 결과 이벤트 픽스처로 경계를 검증한다.
 
 <a id="order-item"></a>
-## OrderItem — 구매 당시 상품·가격·배분 조건
 
-저장: Order의 `order_item`. Order에 속하며 주문 생성 때 함께 저장한다. [모델](../../../apps/order/src/main/java/com/stove/order/core/domain/OrderItem.java)
+## 구 OrderItem·OrderLine의 위치
 
-| 속성 | 뜻과 사용처 |
-|---|---|
-| `id` (`Long`), `order` (`Order`) | 항목 ID·부모 주문 |
-| `productId` (`Long`), `productName` (`String`), `sellerId` (`Long`) | 당시 상품 ID·이름·판매자 |
-| `unitPrice` (`long`) | 할인 후 한 개의 실결제 단가 |
-| `listUnitPrice`, `discountPerUnit` (`long`) | 할인 전 한 개의 정가·한 개의 할인액 |
-| `quantity` (`int`) | 구매 수량. 항목 결제액은 `unitPrice × quantity` |
-| `promotionId` (`Long`), `discountBearer` (`String`) | 적용 행사와 `SELLER/PLATFORM` 부담자. 행사 없으면 null |
-| `settlementBasis` (`Long`) | **수량을 포함한 항목 전체**의 정산 기준액 |
-| `feeRate` (`BigDecimal`) | 구매 시 확정한 수수료율. `0.3000`은 30% |
-| `feeAmount`, `sellerPayout` (`Long`) | 항목 전체의 수수료와 판매자 지급액. 이전 형식의 자료에는 없을 수 있음 |
-
-**만들고 쓰는 때:** 견적을 주문에 고정하고 결제·정산에 전달할 때 사용한다. 상품명·정가·행사가 나중에 바뀌어도 이 항목을 현재 상품으로 다시 계산하지 않는다. 항목의 `lineAmount()`는 실결제액을 계산하며 별도 저장 필드는 아니다.
-
-[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 같은 정보를 서비스 사이에 전달하는 record다. `id`·`order`를 제외한 위 상품·금액·수량 속성을 담는다. Catalog Quote→OrderItem→Payment.lines→PaymentCompleted→정산 원장으로 이어진다. `settlementBasis`·`feeAmount`를 단가로 오해해 다시 수량을 곱하면 금액이 부풀려진다.
-
-관련 [Order의 Quote](../../../apps/order/src/main/java/com/stove/order/core/domain/Quote.java)는 `lines`, `totalAmount`, `currency`, [QuoteItem](../../../apps/order/src/main/java/com/stove/order/core/domain/QuoteItem.java)은 `productId`, `quantity`다. [OrderNoGenerator](../../../apps/order/src/main/java/com/stove/order/core/domain/OrderNoGenerator.java)는 주문번호를 생성하는 도구이며 저장 모델은 아니다.
+새 Order는 상품 하나의 스냅샷을 직접 보존하고 OrderItem·Quote를 사용하지 않는다.
+[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 미완료 Payment·Settlement의 구 계약에 남아 있는 상품·할인·정산 조건이다.
+해당 타입의 존재를 새 주문·정산 연동 완료의 근거로 삼지 않는다. 할인 부담·판매자 계약은 기능을 추가할 때 별도 정의한다.
 
 <a id="payment"></a>
+
 ## Payment — 주문 대금의 처리 기록
+
+아래는 미완료 Payment의 기존 구현 설명이다. 새 Order 계약과 연결되지 않으며 후속 재작성 기준으로 삼지 않는다.
 
 저장: Payment의 `payment`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java)
 

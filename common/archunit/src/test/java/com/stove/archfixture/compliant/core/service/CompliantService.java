@@ -9,4 +9,10 @@ public class CompliantService {
     @Transactional
     public void doWork() {
     }
+
+    public com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent publish(
+            com.stove.archfixture.compliant.core.domain.InternalInput input) {
+        return com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent.of(
+                1L, 1L, 1, "game-1", "reviewer");
+    }
 }

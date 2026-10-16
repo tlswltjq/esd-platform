@@ -164,9 +164,9 @@ Gateway와 Catalog의 공개 GET 접근을 검증하고, 나머지 업무 경로
 
 | 위치 | 구성 |
 |---|---|
-| core.domain | CatalogProduct·CatalogRelease·리포지토리, 불변 스냅샷·버전·식별 연결 규칙 |
+| core.domain | CatalogProduct·CatalogRelease·ReleaseSubmission·리포지토리, 불변 스냅샷·버전·식별 연결 규칙 |
 | core.service | PublishProjectRelease, ReadPublishedProducts |
-| api.listener | ProjectReleaseRequested 입력 해석·검증·유스케이스 호출 |
+| api.listener | ProjectReleaseRequested 입력 해석·ReleaseSubmissionMapper.from 검증·내부 입력 변환·유스케이스 호출 |
 | api.controller | 공개 목록·상세 DTO와 요청 파라미터 해석 |
 | config | 최소 보안·Kafka·DB 설정 |
 

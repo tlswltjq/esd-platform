@@ -3,7 +3,6 @@ package com.stove.catalog.core.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.core.domain.*;
-import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.payload.*;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
@@ -18,7 +17,6 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -32,26 +30,25 @@ public class PublishProjectRelease {
     private final ObjectMapper mapper;
     private final EntityManager entityManager;
 
-    public void execute(EventEnvelope envelope, ProjectReleaseRequestedEvent event) {
-        validate(envelope, event);
+    public void execute(ReleaseSubmission submission) {
         // Check an existing request even when the Inbox already knows the event ID.
-        var existing = releases.findById(event.releaseRequestId()).orElse(null);
+        var existing = releases.findById(submission.releaseRequestId()).orElse(null);
         if (existing != null) {
-            if (!existing.getRequestEventId().equals(event.eventId())
-                    || !existing.getReviewRequestId().equals(event.reviewRequestId())
-                    || !snapshot(existing).equals(event.snapshot()))
+            if (!existing.getRequestEventId().equals(submission.eventId())
+                    || !existing.getReviewRequestId().equals(submission.reviewRequestId())
+                    || !snapshot(existing).equals(submission.snapshot()))
                 throw new BusinessException(ErrorCode.CONFLICT, "동일 출시 요청의 내용이 다릅니다.");
             return;
         }
-        releases.findByRequestEventId(event.eventId())
+        releases.findByRequestEventId(submission.eventId())
                 .ifPresent(
                         previous -> {
-                            if (!previous.getReleaseRequestId().equals(event.releaseRequestId()))
+                            if (!previous.getReleaseRequestId().equals(submission.releaseRequestId()))
                                 throw new BusinessException(
                                         ErrorCode.CONFLICT, "이벤트 ID가 다른 출시 요청에 사용되었습니다.");
                         });
-        if (!guard.firstDelivery(event.eventId(), CONSUMER_GROUP, event.eventType())) return;
-        var s = event.snapshot();
+        if (!guard.firstDelivery(submission.eventId(), CONSUMER_GROUP, submission.eventType())) return;
+        var s = submission.snapshot();
         var product = products.lockByProjectId(s.projectId()).orElse(null);
         if (product != null) product.requireIdentity(s);
         else if (products.findByProductCode(s.productCode()).isPresent())
@@ -72,15 +69,15 @@ public class PublishProjectRelease {
                                 .getContentVersion();
         boolean stale = s.contentVersion() < currentVersion;
         Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        var release = CatalogRelease.decided(event, json(s), stale, now);
+        var release = CatalogRelease.decided(submission, json(s), stale, now);
         // Assigned request IDs must INSERT, never merge over a concurrently committed decision.
         entityManager.persist(release);
         entityManager.flush();
         boolean publicationChanged = product == null || s.contentVersion() > currentVersion;
         if (product == null)
-            product = products.saveAndFlush(CatalogProduct.publish(s, event.releaseRequestId(), now));
+            product = products.saveAndFlush(CatalogProduct.publish(s, submission.releaseRequestId(), now));
         else if (s.contentVersion() > currentVersion)
-            product.replace(event.releaseRequestId(), now);
+            product.replace(submission.releaseRequestId(), now);
         if (publicationChanged)
             outbox.record(
                     "CatalogProduct", s.productCode(),
@@ -125,47 +122,5 @@ public class PublishProjectRelease {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("공개 스냅샷 직렬화 실패", e);
         }
-    }
-
-    private static void validate(EventEnvelope envelope, ProjectReleaseRequestedEvent event) {
-        var s = event == null ? null : event.snapshot();
-        if (envelope == null
-                || event == null
-                || s == null
-                || !text(envelope.eventId(), 64)
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || !Objects.equals(envelope.key(), s.productCode())
-                || event.occurredAt() == null
-                || event.releaseRequestId() == null
-                || event.releaseRequestId() <= 0
-                || event.reviewRequestId() == null
-                || event.reviewRequestId() <= 0
-                || s.projectId() == null
-                || s.projectId() <= 0
-                || s.contentVersion() <= 0
-                || !text(s.productCode(), 50)
-                || !s.productCode().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,49}")
-                || !text(s.ownerSubject(), 100)
-                || !text(s.title(), 200)
-                || !text(s.shortDescription(), 500)
-                || !text(s.content(), 100000)
-                || !text(s.thumbnailUrl(), 1000)
-                || (s.videoUrl() != null && s.videoUrl().length() > 1000)
-                || s.price() < 0
-                || !"KRW".equals(s.currency())
-                || s.buildId() == null
-                || s.buildId() <= 0
-                || !text(s.version(), 100)
-                || s.fileSize() <= 0
-                || s.checksum() == null
-                || !s.checksum().matches("[a-fA-F0-9]{64}")
-                || !text(s.storagePath(), 2000)
-                || !s.storagePath().startsWith("s3://"))
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "출시 요청 이벤트 계약이 올바르지 않습니다.");
-    }
-
-    private static boolean text(String value, int max) {
-        return value != null && !value.isBlank() && value.length() <= max;
     }
 }

@@ -3,7 +3,7 @@ package com.stove.review;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.payload.*;
-import com.stove.review.core.domain.ProjectReview;
+import com.stove.review.core.domain.*;
 
 public final class ReviewFixtures {
     public static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
@@ -54,6 +54,6 @@ public final class ReviewFixtures {
 
     public static ProjectReview review(long id) {
         var event = event(id, id);
-        return ProjectReview.requested(event, json(event.snapshot()));
+        return ProjectReview.requested(new ReviewSubmission(event.eventId(), event.eventType(), event.occurredAt(), event.reviewRequestId(), event.snapshot()), json(event.snapshot()));
     }
 }

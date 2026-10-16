@@ -10,7 +10,7 @@ Auth가 회원·역할과 서명된 access token을 발행한다. Gateway와 각
 - OAuth2 Authorization Code + PKCE에서 창작·심사는 `studio`, 커머스는 `commerce` 범위를 요청한다. access token의 `member_id`는 Auth 회원 ID, `roles`는 계정 역할이다. ID token은 API 자격증명이 아니다.
 - Gateway와 서비스는 서명·발행자·`esd-api` audience를 검증하고 기본 거부 정책을 적용한다. 주문·결제·라이브러리·다운로드에는 `MEMBER`, 운영자 정산·`/api/v1/ops/**`에는 `ADMIN`이 필요하다. 창작자 자신의 정산을 보는 `/api/v1/settlements/me/**`는 `CREATOR`와 소유권을 확인한다. 공개 상품·스토어 읽기는 로그인 없이 제공한다.
 - Catalog MVP는 공개 상품 목록·상세 GET만 제공하며 쓰기 API를 제공하지 않는다. 기존 할인·프로모션 업무는 제거했다. Gateway에 남은 관련 권한 규칙은 이 업무를 다시 활성화하지 않는다.
-- 주문 생성 본문에는 회원 ID가 없다. 타 회원의 주문·결제를 조회·취소·사전등록·환불하면 `403`이다. Gateway는 `X-Member-Id`를 제거하며, 회원 식별은 토큰만 사용한다. 라이브러리·티켓도 토큰 회원을 기준으로 조회하고 다운로드에는 해당 권한이 필요하다.
+- Order의 구매자는 JWT sub이며 MEMBER 역할이 필요하다. 본문·X-Member-Id로 선택하지 않는다. 타인의 주문 상세는 404이고 목록은 본인 주문만 반환한다. 취소·결과 주입 API는 제공하지 않는다. 미완료 Payment·License·Download의 기존 member_id·403·환불 계약은 새 Order의 기준이 아니다. Gateway의 X-Member-Id 제거는 유지한다.
 - 공개 상품 상세는 출시된 상품만 반환한다. Catalog MVP에는 출시 전 상품 조회 API가 없으며 공통 `/api/v1/ops/**`도 HTTP로 개방하지 않는다.
 
 ## PG 콜백

@@ -1,7 +1,5 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
-
 import jakarta.persistence.*;
 
 import lombok.*;
@@ -47,18 +45,18 @@ public class CatalogRelease {
     private Instant processedAt;
 
     public static CatalogRelease decided(
-            ProjectReleaseRequestedEvent event, String json, boolean stale, Instant now) {
+            ReleaseSubmission submission, String json, boolean stale, Instant now) {
         var release = new CatalogRelease();
-        release.releaseRequestId = event.releaseRequestId();
-        release.requestEventId = event.eventId();
-        release.reviewRequestId = event.reviewRequestId();
-        release.projectId = event.snapshot().projectId();
-        release.productCode = event.snapshot().productCode();
-        release.contentVersion = event.snapshot().contentVersion();
+        release.releaseRequestId = submission.releaseRequestId();
+        release.requestEventId = submission.eventId();
+        release.reviewRequestId = submission.reviewRequestId();
+        release.projectId = submission.snapshot().projectId();
+        release.productCode = submission.snapshot().productCode();
+        release.contentVersion = submission.snapshot().contentVersion();
         release.snapshot = json;
         release.status = stale ? "REJECTED" : "COMPLETED";
         release.reason = stale ? "STALE_CONTENT_VERSION" : null;
-        release.requestedAt = event.occurredAt();
+        release.requestedAt = submission.occurredAt();
         release.processedAt = now;
         return release;
     }

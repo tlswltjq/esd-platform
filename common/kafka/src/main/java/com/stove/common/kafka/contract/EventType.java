@@ -46,6 +46,9 @@ public final class EventType {
     public static final String PRODUCT_CHANGED = "ProductChanged";
 
     // order
+    public static final String ORDER_PLACED = "OrderPlaced";
+    public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";
+    public static final String ORDER_PAYMENT_FAILED = "OrderPaymentFailed";
     /** 주문 생성를 나타내는 이벤트 타입. */
     public static final String ORDER_CREATED = "OrderCreated";
     /** 주문 취소를 나타내는 이벤트 타입. */

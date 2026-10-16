@@ -23,7 +23,7 @@ class StudioEventListenerTest {
         var e = ReviewFixtures.event(1, 1);
         var record = record(e.eventId(), e.eventType(), ReviewFixtures.json(e));
         listener.receive(record);
-        verify(receive).execute(ReviewFixtures.envelope(e), e);
+        verify(receive).execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
     }
 
     @Test

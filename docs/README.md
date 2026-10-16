@@ -24,6 +24,7 @@
 | [Review 실행·수동 심사](review-guide.md) | 심사자 로그인·ZIP 열람·승인 및 반려·네 모듈 검증과 재시작 확인 |
 | [Catalog 실행·출시 검증](catalog-guide.md) | 공개 API, 다섯 모듈 독립 검증, 기존 DB·Outbox 전환 절차 |
 | [Store 실행·검색·사본 확인](store-guide.md) | OCI 검증, 제목 검색·상세, HTTP 초기화와 재시작 복구 |
+| [Order 실행·주문·결제 결과 확인](order-guide.md) | 단일 상품 주문, 금액 스냅샷·중복 요청·결과 픽스처·OCI 장애와 재시작 검증 |
 
 ## 설계·검증·운영 근거
 
@@ -31,11 +32,13 @@
 |---|---|
 | [아키텍처](architecture.md) | 서비스 경계, 트랜잭션·이벤트 처리, DB 실험과 설계 위험 |
 | [유스케이스 작성 규칙](use-case-conventions.md) | SRP에 따른 책임 분리, 동사형 클래스·메서드 이름, 트랜잭션 유지 기준 |
+| [업무 코드 경계 점검](core-boundary-audit.md) | 완료된 일곱 모듈의 Inbox·이벤트 입력·JSON·파일·트랜잭션 책임 분석과 개선 순서 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [Studio 단순화 계획·완료 기록](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 및 출시 요청·재요청 범위와 완료·검증 기록 |
 | [Review 개선 계획·완료 기록](review-simplification-plan.md) | 단일 스냅샷 심사·빌드 열람·승인 및 반려·결과 이벤트의 범위와 완료·검증 기록 |
 | [Catalog MVP 계획·완료 기록](catalog-mvp-plan.md) | 출시 처리·공개본·공개 조회의 범위, 버전·중복 정책과 실제 검증 결과 |
 | [Store MVP 계획·완료 기록](store-mvp-plan.md) | 학습용 최소 검색·조회 사본, Catalog 연동과 OCI 실제 검증 결과 |
+| [Order MVP 계획·완료 기록](order-mvp-plan.md) | 단일 상품 주문 스냅샷·내 주문·결제 결과 계약과 OCI 실제 검증 결과 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |

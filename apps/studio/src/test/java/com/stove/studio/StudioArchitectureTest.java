@@ -1,5 +1,6 @@
 package com.stove.studio;
 
+import com.stove.common.archunit.EventInputRules;
 import com.stove.common.archunit.ConsumerGroupRules;
 import com.stove.common.archunit.EventOrderingRules;
 import com.stove.common.archunit.ModuleHygieneRules;
@@ -12,6 +13,9 @@ import com.tngtech.archunit.junit.ArchTests;
 /** studio 모듈 패키지 구조 검증. 규칙 본체는 common:archunit 에 한 벌만 둔다. */
 @AnalyzeClasses(packages = "com.stove.studio", importOptions = ImportOption.DoNotIncludeTests.class)
 class StudioArchitectureTest {
+
+    @ArchTest
+    static final ArchTests 이벤트_입력 = ArchTests.in(EventInputRules.class);
 
     @ArchTest
     static final ArchTests 패키지_구조 = ArchTests.in(ModulePackageRules.class);

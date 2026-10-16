@@ -27,9 +27,10 @@
 모든 저장 모델이 이 클래스를 상속하지는 않는다. 예를 들어 OrderItem·Promotion·SubmissionGate에 생성 시각이 자동으로 있다고 가정하면 안 된다.
 
 <a id="audit-log"></a>
+
 ## AuditLog — 누가 무엇을 했는지 남기는 기록
 
-Studio·Review·Catalog는 각자 MySQL DB에 `audit_log` 테이블과 같은 이름의 클래스를 둔다. 같은 필드 구조여도 세 서비스가 한 테이블을 공유하지 않는다.
+아래는 재작성 전 감사 모델 설명이다. 현재 Review·Catalog의 해당 업무 모델은 제거됐으며 구 DB 자료는 보존한다. 당시 Studio·Review·Catalog는 각자 MySQL DB에 audit_log를 뒀다. 같은 필드 구조여도 세 서비스가 한 테이블을 공유하지 않는다.
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -39,7 +40,7 @@ Studio·Review·Catalog는 각자 MySQL DB에 `audit_log` 테이블과 같은 �
 | `details` (`String`) | 당시 추가 정보 |
 | `occurredAt` (`Instant`) | 기록 시각 |
 
-**만들고 쓰는 때:** 공개·예약·심사·판매 상태 변경 등의 서비스가 업무 처리와 함께 기록한다. 현재 상태를 조회하는 원본 엔티티나 다른 서비스에 보내는 이벤트를 대신하지 않는다. 각 서비스의 [Studio 심사·등록 기록](studio.md), [Review 모델](../../../apps/review/src/main/java/com/stove/review/core/domain/AuditLog.java), [Catalog 모델](../../../apps/catalog/src/main/java/com/stove/catalog/core/domain/AuditLog.java)을 참고한다. 역할 부여는 RoleAuditLog, 결제 행동은 PaymentAuditLog, 사건별 전이는 ReviewDecisionHistory로 별도 설명했다.
+**만들고 쓰는 때:** 공개·예약·심사·판매 상태 변경 등의 서비스가 업무 처리와 함께 기록한다. 현재 상태를 조회하는 원본 엔티티나 다른 서비스에 보내는 이벤트를 대신하지 않는다. 각 서비스의 [Studio 심사·등록 기록](studio.md), Review AuditLog(제거된 구 구현), Catalog AuditLog(제거된 구 구현)을 참고한다. 역할 부여는 RoleAuditLog, 결제 행동은 PaymentAuditLog, 사건별 전이는 ReviewDecisionHistory로 별도 설명했다.
 
 ## OutboxEvent — 발송할 이벤트의 보관함
 
@@ -77,6 +78,8 @@ Studio·Review·Catalog는 각자 MySQL DB에 `audit_log` 테이블과 같은 �
 
 [EventEnvelope](../../../common/kafka/src/main/java/com/stove/common/kafka/EventEnvelope.java)는 `eventId`, `eventType`, `key`, `payload`를 묶은 수신 값이다. 메시지 종류를 판별하고 JSON 본문을 해당 이벤트 record로 읽는다. 개별 업무 이벤트는 [payload 소스](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload)에 있다. 모든 엔티티 필드를 자동으로 직렬화해 전달하는 구조가 아니다.
 
+재작성 완료 모듈의 수신 경계에서는 `api.listener`의 `*Mapper.from(...)`가 봉투·본문·키를 검증하고 내부 입력으로 바꾼다. 업무 서비스와 도메인 모델은 봉투나 외부 이벤트 전체를 입력받지 않는다. 이벤트 ID·종류·발생 시각은 필요한 내부 값으로 전달하며 Inbox와 업무 변경은 서비스의 같은 트랜잭션에 둔다. [작성 규칙](../../use-case-conventions.md#진입점과-설정의-역할)을 따른다.
+
 | 사건 | 대표 연결·전달 값 | 받는 쪽의 용도 |
 |---|---|---|
 | `UserRegistered` | `subject`, `email` | Studio 개인 작업 공간 생성 |
@@ -85,16 +88,19 @@ Studio·Review·Catalog는 각자 MySQL DB에 `audit_log` 테이블과 같은 �
 | `ReviewChangesRequested`, `ReviewAppealed` | 제출·심사 유형·사유 등 | Studio 수정 요청·재검토 반영 |
 | `ReleasePublished` | 릴리스·상품 코드·자료·가격·파일·공개 소개 | Catalog 상품, Download 배포 파일 반영 |
 | `ProductChanged` | 상품 ID·코드·릴리스·판매 상태·정가·행사 일정·변경 순번 | Store 검색, Download 상품 참조 갱신 |
-| `OrderCreated` | 주문번호·회원·총액·주문 항목 | Payment 결제 대기 생성 |
-| `PaymentCompleted` | 주문번호·회원·결제 정보·주문 항목 | 주문 확정·이용권 지급·매출 원장 생성 |
-| `PaymentFailed` | 주문번호·거절 사유 | 주문 실패 종료 |
-| `PaymentCancelled` | 주문번호·환불 사유 등 | 주문 취소·이용권 회수·환불 원장. 정산은 자기 SALE을 찾아 사용 |
+| `OrderPlaced` | 주문번호·buyerSubject·상품·정가·할인액·청구액 | 후속 Payment의 결제 근거 |
+| `OrderPaymentCompleted` / `OrderPaymentFailed` | 원래 주문 이벤트·주문번호·구매자·결제·금액·통화 | Order 최종 상태 반영 |
+| `OrderCreated` (구 계약) | 주문번호·회원·총액·주문 항목 | 미완료 Payment의 기존 입력 |
+| `PaymentCompleted` | 주문번호·회원·결제 정보·주문 항목 | 미완료 License·Settlement의 기존 입력. 새 Order에서는 사용하지 않음 |
+| `PaymentFailed` | 주문번호·거절 사유 | 구 주문 결과 계약. 새 Order에서는 사용하지 않음 |
+| `PaymentCancelled` | 주문번호·환불 사유 등 | 미완료 이용권 회수·환불 원장의 구 계약 |
 | `LicenseIssued`, `LicenseRevoked` | 주문번호·회원·상품 ID 목록 | Download 보유권 사본 갱신 |
 | `LicenseIssueFailed` | 주문번호·회원·실패 사유 | 보상 환불 검토·처리 |
 
 이 표는 대표 흐름이며 모든 이벤트 목록은 [EventType](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/EventType.java)에 있다. 이벤트 타입이 정의됐다는 사실만으로 모든 관련 서비스가 소비한다고 가정하지 않는다. 예를 들어 현재 `OrderCanceled`는 Payment의 주문 리스너에서 처리하지 않는다.
 
 <a id="build-variant"></a>
+
 ## BuildVariant — 공개·제출 묶음의 파일 한 개
 
 [모델](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/BuildVariant.java). `buildId`, `platform`, `architecture`, `version`, `fileSize`, `checksum`, `storagePath`, `deltaFromVersion`을 담는다. GameBuild에서 필요한 값만 복사해 심사·공개 이벤트와 PatchManifest에 넣는다. `deltaFromVersion=null`이면 전체 파일이고, 값이 있으면 그 버전에서 적용할 델타다. 빌드 검증 상태·CI 비밀정보·업로드 세션 전체를 전달하지 않는다.

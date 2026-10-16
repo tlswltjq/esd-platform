@@ -172,6 +172,9 @@ public final class ModuleHygieneRules {
                     .resideInAPackage(LISTENER)
                     .should()
                     .haveSimpleNameEndingWith("Listener")
+                    .orShould()
+                    .haveSimpleNameEndingWith("Mapper")
+                    .because("api.listener 에는 수신 리스너와 입력 변환기를 둔다")
                     .allowEmptyShould(true);
 
     @ArchTest

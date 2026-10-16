@@ -19,6 +19,7 @@ public class CatalogEventListener {
     public void receive(ConsumerRecord<String, String> record) {
         var envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.CATALOG_PRODUCT_PUBLISHED))
-            applyCatalogProduct.execute(envelope, envelope.payloadAs(mapper, CatalogProductPublishedEvent.class));
+            applyCatalogProduct.execute(CatalogProductMapper.from(
+                    envelope, envelope.payloadAs(mapper, CatalogProductPublishedEvent.class)));
     }
 }

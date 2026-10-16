@@ -1,25 +1,10 @@
 package com.stove.order.api.controller.dto;
 
-import com.stove.order.core.domain.QuoteItem;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
-import java.util.List;
+import com.stove.order.core.domain.OrderRequest;
+import jakarta.validation.constraints.*;
 
-/**
- * 주문 생성 요청.
- * {@code expectedAmount} 는 <b>검증용</b>일 뿐이며 주문 금액으로 사용되지 않는다.
- * 서버가 catalog 에서 재계산한 금액과 다르면 409(PRICE_MISMATCH)로 거절한다.
- */
-public record CreateOrderRequest(
-        @NotEmpty @Valid List<Item> items,
-        Long expectedAmount
-) {
-    public record Item(@NotNull Long productId, @Min(1) int quantity) {
-    }
-
-    public List<QuoteItem> toQuoteItems() {
-        return items.stream().map(item -> new QuoteItem(item.productId(), item.quantity())).toList();
-    }
+public record CreateOrderRequest(@NotNull @Pattern(regexp = OrderRequest.UUID_PATTERN) String requestId,
+        @NotNull @Pattern(regexp = OrderRequest.PRODUCT_CODE_PATTERN) String productCode,
+        @NotNull @Positive Long expectedContentVersion, @NotNull @PositiveOrZero Long expectedAmount) {
+    public OrderRequest toInput() { return new OrderRequest(requestId, productCode, expectedContentVersion, expectedAmount); }
 }

@@ -1,5 +1,6 @@
 package com.stove.catalog.core.service;
 
+import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import static com.stove.catalog.CatalogFixtures.*;
 
 import static org.assertj.core.api.Assertions.*;
@@ -38,7 +39,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
 
     private void send(ProjectReleaseRequestedEvent e) {
-        publish.execute(envelope(e), e);
+        publish.execute(ReleaseSubmissionMapper.from(envelope(e), e));
     }
 
     private int count(String table, String column, Object value) {
@@ -176,10 +177,8 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
         var e = event(id(), 1);
         assertThatThrownBy(
                         () ->
-                                publish.execute(
-                                        new EventEnvelope(
-                                                e.eventId(), e.eventType(), "wrong", json(e)),
-                                        e))
+                                publish.execute(ReleaseSubmissionMapper.from(new EventEnvelope(
+                                                e.eventId(), e.eventType(), "wrong", json(e)), e)))
                 .isInstanceOf(BusinessException.class);
         assertThat(count("processed_event", "event_id", e.eventId())).isZero();
     }

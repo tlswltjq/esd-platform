@@ -31,7 +31,7 @@
 | **R-02** | 발행 커밋 직후 릴레이가 중단됐다 재기동 | 적재를 목격하지 않은 인스턴스가 폴링으로 회수한다 | 통합 | `RelayRestartRecoveryTest` |
 | **R-03** | license 가 중단된 사이 결제가 완료된다 | 재기동 후 따라잡고, 이중 지급하지 않는다 | 통합 | `ConsumerRestartCatchUpTest` |
 | **R-04** | 취소 도중 payment 가 중단된다 | 스케줄러가 스스로 확정까지 보낸다 | 통합 | `RefundSweeperWiringTest` |
-| **R-05** | order 가 중단된 사이 만료 시각이 지난다 | 스케줄러가 스스로 닫는다 | 통합 | `OrderExpirySweeperWiringTest` |
+| **R-05** | 구 Order 만료 시나리오 | 2026-10-16 MVP에서 만료 스케줄러 제거. 현재는 결과 없이 PENDING 유지 | 범위 변경 | [Order 실행·재시작](order-guide.md) |
 | **R-06** | license 컨테이너를 실제로 정지시킨다 | 장애가 번지지 않고, 복구된다 | e2e | `ServiceOutageChaosTest` |
 | **R-07** | 저장소 장애로 지급이 보류된다 | **재투입하면 지급까지 끝난다** | 통합 | `DeadLetterReplayRecoveryTest` |
 | **R-08** | 스윕 인스턴스가 여러 대다 | 본문이 한 번만 돈다 | 통합 | `RefundSweeperSingleExecutionTest` |

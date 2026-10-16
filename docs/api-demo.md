@@ -1,12 +1,15 @@
 # API 데모
 
-현재 완료 기준은 Auth·Gateway·Studio·Review다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
+현재 Order 사용자 흐름은 [Order 실행·독립 검증](order-guide.md)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 미완료 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
+
+현재 완료 기준은 Auth·Gateway·Studio·Review·Catalog·Store·Order다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
 
 [문서 목록](README.md) · [개발 환경과 실행](getting-started.md) · [인증·권한 계약](security.md)
 
 전체 흐름을 재현하려면 [자동 검증](#full-demo)을 실행한다. 각 모델을 직접 만들어 보려면 [창작·출시](#creator-demo) → [구매·환불](#payment-simulator) 순서로 수동 실습한다. 업무 의미와 필드는 [도메인·모델 안내](domain/model-guide.md)를 참고한다.
 
 <a id="full-demo"></a>
+
 ## 전체 여정 자동 검증
 
 첫 범위는 일반 Project / 전체 ZIP / KRW다. 이 절차는 새 스택에서 가입부터 월 마감까지 두 번 연속 실행하고, 각 실행의 식별자와 금액을 JSON으로 남긴다. 결제 승인은 인증된 로컬 시뮬레이터로 재현한다.
@@ -83,6 +86,7 @@ bash scripts/api-demo.sh down
 로컬 원본 로그와 비밀값을 제외한 JSON은 Git 제외 경로 `build/api-demo/issue81-fresh-20260929T194605Z/`에 있다. 검증 뒤 원래 볼륨으로 스택을 복구했고 상태 게이트 16/16을 다시 통과했다. 새 환경 검증 첫 시도에서는 1초 백오프 경계에 의존하던 서비스 통합 테스트가 시간 경과로 실패하여, SQL의 미래 시각 필터 테스트를 안정화한 뒤 **다른 새 볼륨**에서 위 결과를 얻었다.
 
 <a id="creator-demo"></a>
+
 ## 창작·심사·출시 수동 실습
 
 [Studio 실행·API 예제](studio-guide.md)를 따른다.
@@ -93,6 +97,7 @@ ZIP은 manifest나 특정 플랫폼 실행 파일을 요구하지 않는다.
 심사 중과 등록 처리 중에는 수정할 수 없고, 새 작업본의 등록 완료까지 이전 공개 내용은 유지된다.
 
 <a id="payment-simulator"></a>
+
 ## 구매·결제·환불 수동 실습
 
 ### 준비

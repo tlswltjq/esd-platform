@@ -1,178 +1,90 @@
 package com.stove.order.core.domain;
 
-import com.stove.common.web.error.BusinessException;
-import com.stove.common.web.error.ErrorCode;
-import com.stove.order.core.domain.OrderErrorCode;
-import com.stove.common.kafka.contract.payload.OrderLine;
-import com.stove.common.jpa.BaseTimeEntity;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+import com.stove.common.web.error.*;
+import jakarta.persistence.*;
+import lombok.*;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
-/**
- * 주문 애그리거트.
- * 금액은 항상 항목 합계로 계산되며, 클라이언트가 보낸 금액을 신뢰하지 않는다.
- */
 @Entity
+@Table(name = "purchase_order")
 @Getter
-@Table(name = "orders")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Order extends BaseTimeEntity {
+public class Order {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(nullable = false, unique = true, length = 36) private String orderNo;
+    @Column(nullable = false, length = 100) private String buyerSubject;
+    @Column(nullable = false, length = 36) private String requestId;
+    @Column(nullable = false) private Long productId;
+    @Column(nullable = false, length = 50) private String productCode;
+    @Column(nullable = false, length = 200) private String title;
+    @Column(nullable = false) private long contentVersion;
+    @Column(nullable = false) private long listAmount;
+    @Column(nullable = false) private long discountAmount;
+    @Column(nullable = false) private long amount;
+    @Column(nullable = false, length = 3) private String currency;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private OrderStatus status;
+    @Column(nullable = false, unique = true, length = 64) private String requestEventId;
+    @Column(unique = true, length = 64) private String paymentResultEventId;
+    @Column(length = 64) private String paymentId;
+    private Instant resultOccurredAt;
+    @Column(length = 100) private String failureReasonCode;
+    @Column(length = 500) private String failureReason;
+    @Column(nullable = false) private Instant createdAt;
+    @Column(nullable = false) private Instant updatedAt;
 
-    /** 저장된 대상을 구별하는 식별자. */
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    /** 서비스 간 상관관계 키. 결제·라이선스·정산이 이 값으로 멱등성을 보장한다. */
-    @Column(nullable = false, unique = true, length = 40)
-    private String orderNo;
-
-    /** 구매자를 식별하는 계정 ID. */
-    @Column(nullable = false)
-    private Long memberId;
-
-    /** 주문의 결제 대기·완료·취소·실패·만료 상태. */
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private OrderStatus status;
-
-    /** 각 주문 항목의 실결제액을 합산한 총액. */
-    @Column(nullable = false)
-    private long totalAmount;
-
-    /** 금액의 통화 코드. */
-    @Column(nullable = false, length = 3)
-    private String currency;
-
-    /** 결제 완료를 확정한 시각. */
-    private Instant paidAt;
-
-    /** 취소 처리를 확정한 시각. */
-    private Instant canceledAt;
-
-    /** 주문 또는 결제를 취소한 사유. */
-    @Column(length = 200)
-    private String cancelReason;
-
-    /** 결제 실패를 반영한 시각. */
-    private Instant failedAt;
-
-    /** 결제 실패에 대한 설명. */
-    @Column(length = 200)
-    private String failReason;
-
-    /**
-     * 만료 처리된 시각. {@code createdAt} 으로 대신할 수 없다 —
-     * 그 차이가 곧 "스윕이 얼마나 밀렸나" 다.
-     */
-    private Instant expiredAt;
-
-    /** 주문과 함께 저장하는 구매 항목 목록. */
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-    private final List<OrderItem> items = new ArrayList<>();
-
-    private Order(String orderNo, Long memberId, String currency) {
-        this.orderNo = orderNo;
-        this.memberId = memberId;
-        this.currency = currency;
-        this.status = OrderStatus.CREATED;
-        this.totalAmount = 0L;
-    }
-
-    public static Order create(String orderNo, Long memberId, String currency, List<OrderLine> lines) {
-        Order order = new Order(orderNo, memberId, currency);
-        lines.forEach(order::addLine);
+    public static Order create(String buyer, OrderRequest request, PublishedProduct product, String eventId) {
+        if (buyer == null || buyer.isBlank() || buyer.length() > 100)
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "구매자 식별자가 올바르지 않습니다.");
+        if (eventId == null || eventId.isBlank() || eventId.length() > 64)
+            throw new IllegalArgumentException("주문 이벤트 ID가 필요합니다.");
+        if (product.price() == 0)
+            throw new BusinessException(ErrorCode.CONFLICT, "무료 상품 지급은 이번 주문 범위에 포함되지 않습니다.");
+        if (!request.productCode().equals(product.productCode())
+                || request.expectedContentVersion() != product.contentVersion()
+                || request.expectedAmount() != product.price())
+            throw new BusinessException(ErrorCode.CONFLICT, "공개 상품 버전 또는 금액이 변경되었습니다.");
+        var price = OrderPrice.atListPrice(product);
+        var order = new Order();
+        order.orderNo = UUID.randomUUID().toString();
+        order.buyerSubject = buyer; order.requestId = request.requestId();
+        order.productId = product.productId(); order.productCode = product.productCode();
+        order.title = product.title(); order.contentVersion = product.contentVersion();
+        order.listAmount = price.listAmount(); order.discountAmount = price.discountAmount();
+        order.amount = price.amount(); order.currency = price.currency();
+        order.status = OrderStatus.PENDING; order.requestEventId = eventId;
+        order.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS); order.updatedAt = order.createdAt;
         return order;
     }
 
-    private void addLine(OrderLine line) {
-        items.add(new OrderItem(this, line));
-        this.totalAmount = Math.addExact(this.totalAmount, line.lineAmount());
+    public void requireSameRequest(OrderRequest request) {
+        if (!requestId.equals(request.requestId()) || !productCode.equals(request.productCode())
+                || contentVersion != request.expectedContentVersion() || amount != request.expectedAmount())
+            throw new BusinessException(ErrorCode.CONFLICT, "동일 요청 ID의 주문 내용이 다릅니다.");
     }
 
-    public List<OrderLine> toOrderLines() {
-        return items.stream().map(OrderItem::toOrderLine).toList();
+    public PaymentResult paymentResult() {
+        return paymentResultEventId == null ? null : new PaymentResult(paymentResultEventId, resultOccurredAt,
+                orderNo, requestEventId, paymentId, buyerSubject, amount, currency, status,
+                failureReasonCode, failureReason);
     }
 
-    public void markPaid() {
-        if (status == OrderStatus.PAID) {
-            return; // 이벤트 중복 수신 방어
-        }
-        if (status != OrderStatus.CREATED) {
-            throw new BusinessException(ErrorCode.CONFLICT, "결제 확정할 수 없는 주문 상태: " + status);
-        }
-        this.status = OrderStatus.PAID;
-        this.paidAt = Instant.now();
-    }
-
-    /**
-     * PG 승인 거절로 주문을 종료한다.
-     *
-     * <p>취소와 다르다 — 취소는 승인된 결제를 되돌리는 것이라 {@code PAID} 에서도 열려 있지만,
-     * 실패는 승인 자체가 없었던 경우라 {@code CREATED} 에서만 들어온다.
-     */
-    public void markFailed(String reason) {
-        if (status == OrderStatus.FAILED) {
-            return; // 이벤트 중복 수신 방어
-        }
-        if (status != OrderStatus.CREATED) {
-            throw new BusinessException(ErrorCode.CONFLICT, "결제 실패 처리할 수 없는 주문 상태: " + status);
-        }
-        this.status = OrderStatus.FAILED;
-        this.failedAt = Instant.now();
-        this.failReason = reason;
-    }
-
-    public void cancel(String reason) {
-        if (status == OrderStatus.CANCELED) {
+    public void apply(PaymentResult result) {
+        if (!orderNo.equals(result.orderNo()) || !requestEventId.equals(result.requestEventId())
+                || !buyerSubject.equals(result.buyerSubject()) || amount != result.amount()
+                || !currency.equals(result.currency()))
+            throw new BusinessException(ErrorCode.CONFLICT, "결제 결과가 주문과 일치하지 않습니다.");
+        if (paymentResultEventId != null) {
+            if (!paymentResult().equals(result))
+                throw new BusinessException(ErrorCode.CONFLICT, "이미 확정한 결제 결과와 다릅니다.");
             return;
         }
-        if (status != OrderStatus.CREATED && status != OrderStatus.PAID) {
-            throw new BusinessException(OrderErrorCode.ORDER_NOT_CANCELABLE, "취소 불가 상태: " + status);
-        }
-        this.status = OrderStatus.CANCELED;
-        this.canceledAt = Instant.now();
-        this.cancelReason = reason;
-    }
-
-    /**
-     * 결제 창이 지나 만료시킨다.
-     *
-     * <p><b>{@code CREATED} 에서만 열린다.</b> 결제가 한 걸음이라도 진행된 주문은 결과 이벤트가
-     * 상태를 바꾸므로 시간이 끼어들 자리가 아니다 — 만약 그런 주문이 여기 들어온다면
-     * 스윕의 조회 조건이 틀린 것이고, <b>조용히 넘기면 그 사실이 묻힌다.</b>
-     *
-     * <p>{@code cancel} 과 나눠 쓴다. 사유를 남기지 않는 이유는 사유가 하나뿐이기 때문이다 —
-     * 상태 자체가 사유다.
-     */
-    public void expire() {
-        if (status == OrderStatus.EXPIRED) {
-            return;
-        }
-        if (status != OrderStatus.CREATED) {
-            throw new BusinessException(ErrorCode.CONFLICT, "만료할 수 없는 주문 상태: " + status);
-        }
-        this.status = OrderStatus.EXPIRED;
-        this.expiredAt = Instant.now();
-    }
-
-    public void requireOwner(Long memberId) {
-        if (!this.memberId.equals(memberId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
+        if (result.status() != OrderStatus.PAID && result.status() != OrderStatus.FAILED)
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "최종 결제 결과가 필요합니다.");
+        paymentResultEventId = result.eventId(); paymentId = result.paymentId();
+        resultOccurredAt = result.occurredAt(); status = result.status();
+        failureReasonCode = result.reasonCode(); failureReason = result.reason();
+        updatedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }

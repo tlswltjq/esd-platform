@@ -1,5 +1,6 @@
 package com.stove.review.core.service;
 
+import com.stove.review.api.listener.ReviewSubmissionMapper;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -41,7 +42,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
 
     private ProjectReviewRequestedEvent submit(long id, long project) {
         var e = ReviewFixtures.event(id, project);
-        receive.execute(ReviewFixtures.envelope(e), e);
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
         return e;
     }
 
@@ -49,10 +50,10 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     void duplicateReceptionPreservesTheSnapshotAndIndependentRerequests() {
         long id = id(), project = id();
         var event = submit(id, project);
-        receive.execute(ReviewFixtures.envelope(event), event);
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(event), event));
         decide.execute(id, "reviewer", ReviewStatus.REJECTED, "Fix");
         var duplicate = ProjectReviewRequestedEvent.of(id, event.snapshot());
-        receive.execute(ReviewFixtures.envelope(duplicate), duplicate);
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(duplicate), duplicate));
         assertThat(read.get(id).getStatus()).isEqualTo(ReviewStatus.REJECTED);
         var newRequest = submit(id(), project);
         assertThat(read.list(null, project, 0, 20).getTotalElements()).isEqualTo(2);
@@ -77,7 +78,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                         "a".repeat(64),
                         "s3://stove-builds/build.zip");
         var conflict = ProjectReviewRequestedEvent.of(id, changed);
-        assertThatThrownBy(() -> receive.execute(ReviewFixtures.envelope(conflict), conflict))
+        assertThatThrownBy(() -> receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(conflict), conflict)))
                 .isInstanceOf(BusinessException.class);
         assertThat(
                         jdbc.queryForObject(
@@ -93,13 +94,11 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
         var e = ReviewFixtures.event(id(), id());
         assertThatThrownBy(
                         () ->
-                                receive.execute(
-                                        new EventEnvelope(
+                                receive.execute(ReviewSubmissionMapper.from(new EventEnvelope(
                                                 e.eventId(),
                                                 e.eventType(),
                                                 "wrong",
-                                                ReviewFixtures.json(e)),
-                                        e))
+                                                ReviewFixtures.json(e)), e)))
                 .isInstanceOf(BusinessException.class);
         assertThat(
                         jdbc.queryForObject(
@@ -188,7 +187,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                     start.await();
                     for (int attempt = 0; ; attempt++) {
                         try {
-                            receive.execute(ReviewFixtures.envelope(e), e);
+                            receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
                             return null;
                         } catch (org.springframework.dao.DataAccessException conflict) {
                             if (attempt == 3) throw conflict;

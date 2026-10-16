@@ -23,6 +23,6 @@ public class StudioReleaseEventListener {
         var envelope = EventEnvelope.from(record);
         if (envelope.isType("ProjectReleaseRequested"))
             publishProjectRelease.execute(
-                    envelope, envelope.payloadAs(mapper, ProjectReleaseRequestedEvent.class));
+                    ReleaseSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReleaseRequestedEvent.class)));
     }
 }

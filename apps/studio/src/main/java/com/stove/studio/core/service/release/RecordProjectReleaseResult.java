@@ -18,23 +18,16 @@ public class RecordProjectReleaseResult {
     private final ProjectReleaseRequestRepository requests;
     private final ProcessedEventGuard guard;
 
-    public void execute(
-            String eventId,
-            String eventType,
-            Long releaseRequestId,
-            Long projectId,
-            long version,
-            boolean success,
-            String reason,
-            String requestEventId) {
-        if (!guard.firstDelivery(eventId, RecordProjectReviewResult.CONSUMER_GROUP, eventType))
+    public void execute(ProjectReleaseResult result) {
+        if (!guard.firstDelivery(result.eventId(), RecordProjectReviewResult.CONSUMER_GROUP, result.eventType()))
             return;
         var request =
-                requests.lock(releaseRequestId)
+                requests.lock(result.releaseRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!request.getProjectId().equals(projectId) || request.getContentVersion() != version)
+        if (!request.getProjectId().equals(result.projectId())
+                || request.getContentVersion() != result.contentVersion())
             throw new BusinessException(ErrorCode.CONFLICT, "출시 요청이 일치하지 않습니다.");
-        if (!java.util.Objects.equals(request.getRequestEventId(), requestEventId)) return;
-        request.recordResult(success, reason);
+        if (!java.util.Objects.equals(request.getRequestEventId(), result.requestEventId())) return;
+        request.recordResult(result.success(), result.reason());
     }
 }

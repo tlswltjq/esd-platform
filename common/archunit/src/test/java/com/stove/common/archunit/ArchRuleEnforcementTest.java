@@ -97,6 +97,24 @@ class ArchRuleEnforcementTest {
     class BoundaryRules {
 
         @Test
+        void eventEnvelopeStaysOutsideCore() {
+            assertCatchesViolation(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");
+            assertAcceptsCompliant(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");
+        }
+
+        @Test
+        void domainModelsCannotAcceptExternalEvents() {
+            assertCatchesViolation(EventInputRules.도메인_모델은_외부_이벤트를_모른다, "도메인_모델은_외부_이벤트를_모른다");
+            assertAcceptsCompliant(EventInputRules.도메인_모델은_외부_이벤트를_모른다, "도메인_모델은_외부_이벤트를_모른다");
+        }
+
+        @Test
+        void useCasesCannotAcceptExternalEvents() {
+            assertCatchesViolation(EventInputRules.업무_서비스는_외부_이벤트를_입력받지_않는다, "업무_서비스는_외부_이벤트를_입력받지_않는다");
+            assertAcceptsCompliant(EventInputRules.업무_서비스는_외부_이벤트를_입력받지_않는다, "업무_서비스는_외부_이벤트를_입력받지_않는다");
+        }
+
+        @Test
         @DisplayName("트랜잭션 경계 규칙(메서드)은 어댑터의 트랜잭션을 잡는다")
         void methodLevelTransactionBoundary() {
             assertCatchesViolation(

@@ -1,49 +1,27 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
-import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.PaymentFailedEvent;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.order.core.service.OrderCommandService;
+import com.stove.common.kafka.contract.*;
+import com.stove.common.kafka.contract.payload.*;
+import com.stove.order.core.service.ApplyPaymentResult;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-/**
- * [결제] payment → PaymentCompleted → order(확정)
- * [환불] payment → PaymentCancelled → order(취소)
- * [실패] payment → PaymentFailed    → order(실패 종료)
- */
-@Slf4j
-@Component
-@RequiredArgsConstructor
+@Component @RequiredArgsConstructor
 public class PaymentEventListener {
-
-    private final OrderCommandService orderCommandService;
-    private final ObjectMapper objectMapper;
-
-    @KafkaListener(topics = Topics.PAYMENT, groupId = OrderCommandService.CONSUMER_GROUP)
-    public void onPaymentEvent(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-
-        if (envelope.isType(EventType.PAYMENT_COMPLETED)) {
-            PaymentCompletedEvent event = envelope.payloadAs(objectMapper, PaymentCompletedEvent.class);
-            orderCommandService.confirmPaid(envelope.eventId(), envelope.eventType(), event.orderNo());
-
-        } else if (envelope.isType(EventType.PAYMENT_CANCELLED)) {
-            PaymentCancelledEvent event = envelope.payloadAs(objectMapper, PaymentCancelledEvent.class);
-            orderCommandService.confirmCanceled(envelope.eventId(), envelope.eventType(),
-                    event.orderNo(), event.reason());
-
-        } else if (envelope.isType(EventType.PAYMENT_FAILED)) {
-            PaymentFailedEvent event = envelope.payloadAs(objectMapper, PaymentFailedEvent.class);
-            orderCommandService.confirmFailed(envelope.eventId(), envelope.eventType(),
-                    event.orderNo(), event.reasonCode() + ":" + event.reason());
-        }
+    private final ObjectMapper mapper;
+    private final ApplyPaymentResult applyPaymentResult;
+    @KafkaListener(topics = Topics.PAYMENT, groupId = ApplyPaymentResult.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        var envelope = EventEnvelope.from(record);
+        if (envelope.isType(EventType.ORDER_PAYMENT_COMPLETED))
+            applyPaymentResult.execute(envelope.eventType(), PaymentResultMapper.from(
+                    envelope, envelope.payloadAs(mapper, OrderPaymentCompletedEvent.class)));
+        else if (envelope.isType(EventType.ORDER_PAYMENT_FAILED))
+            applyPaymentResult.execute(envelope.eventType(), PaymentResultMapper.from(
+                    envelope, envelope.payloadAs(mapper, OrderPaymentFailedEvent.class)));
     }
 }

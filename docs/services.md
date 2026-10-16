@@ -5,10 +5,10 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작업 현황 (2026-10-14): `auth`, `gateway`, `studio`, `review` 재작업 완료.**
+**모듈 재작성 현황 (2026-10-16): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
-신규 구현과 검증은 완료된 네 모듈의 계약을 기준으로 한다.
+Catalog·Store·Order의 범위와 OCI 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 일곱 모듈의 계약을 기준으로 한다.
 나머지 서비스 명세는 기존 구현의 참고 기록이며 현재 설계·검증 기준에서 제외한다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
@@ -20,7 +20,7 @@ Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#
 | A | [review](#review) | 8086 | 불변 스냅샷·빌드 열람, 수동 승인·반려 | MySQL |
 | A | [catalog](#catalog) | 8081 | 출시 처리, 공개 상품·공개본과 조회 | MySQL |
 | B | [store](#store) | 8087 | 공개 상품 검색·조회 사본 | MySQL |
-| B | [order](#order) | 8082 | 주문 생성/취소, 금액 검증 | MySQL |
+| B | [order](#order) | 8082 | 주문 스냅샷·청구액·내 주문·결제 결과 | MySQL |
 | B | [payment](#payment) | 8083 | PG 연동, 승인 대조, 환불 | MySQL |
 | C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
 | C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
@@ -125,7 +125,7 @@ Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 �
 공개 데이터·요청 결과·Inbox·Outbox는 같은 트랜잭션으로 확정한다.
 
 기존 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다.
-이 문서의 미완료 Order 등에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
+이 문서의 미완료 모듈에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
 
 ---
 
@@ -150,51 +150,34 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 
 ## order
 
-주문 생성과 취소. 결제 결과 이벤트, 사용자 주문 취소, 만료 처리로 상태가 바뀐다.
-현재 사용자 주문 취소는 결제된 주문도 취소하지만 PG 환불로 이어지지 않는다.
-이 구현 차이와 후속 결정은 [Q9](domain/open-questions.md#q9)에 기록했다.
-
-**상태머신**
-
-```
-CREATED ──PaymentCompleted──▶ PAID
-        ├─cancel / PaymentCancelled──▶ CANCELED
-        ├──▶ FAILED
-        └─시간(스윕)──▶ EXPIRED
-PAID ──cancel / PaymentCancelled──▶ CANCELED
-```
-
-**만료** — 결제를 시작조차 하지 않은 주문은 아무 이벤트도 낳지 않아 영원히 `CREATED` 로 남았다
-(실측 전체의 96%). `OrderExpirySweeper` 가 1분마다 `stove.order.expire-after`(1시간)를 넘긴 건을
-**배치 크기만큼만** 집어 닫는다. `CANCELED` 와 나눠 두는 이유는 **되돌릴 것이 있었는가**가 다르기
-때문이고, **이벤트를 내지 않는** 이유는 아무도 반응하지 않는 메시지를 밀린 건수만큼 내지 않기 위해서다.
-지표 `stove.order.pending`·`stove.order.expirable`(게이지), 알람 `OrderExpirySweepFalling`.
-
-**HTTP API**
+공개 상품 하나의 주문 스냅샷·청구액을 고정하고 내 주문 조회·최종 결제 결과 반영을 담당한다.
+[MVP 범위](order-mvp-plan.md) · [실행·결과 확인](order-guide.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/api/v1/orders` | 주문 생성 (catalog 가격 재계산 경유) |
-| GET | `/api/v1/orders/{orderNo}` | 주문 조회 |
-| GET | `/api/v1/orders` | 내 주문 목록 |
-| POST | `/api/v1/orders/{orderNo}/cancel` | 주문 상태 취소. 환불 완료와 별개이며 Q9 확인 필요 |
+| POST | /api/v1/orders | requestId·productCode·expectedContentVersion·expectedAmount로 생성 또는 동일 요청 재조회 |
+| GET | /api/v1/orders | 내 주문 페이지. page=0·size=20, 최대 100 |
+| GET | /api/v1/orders/{orderNo} | 본인 상세, 타인·없는 주문 404 |
 
-모든 주문 API는 Bearer access token을 요구한다. 회원 ID는 토큰의 `member_id`에서 읽고,
-주문번호의 소유권을 서비스에서 확인한다. 주문 생성 본문에 `memberId`를 넣지 않는다.
+MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문·임의 헤더로 구매자를 선택하지 않는다.
+Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 버전·정가를 비교한다. 차이는 409이며 무료 상품도 409다.
+정가 listAmount·할인액 discountAmount=0·청구액 amount를 고정하고 구매자별 requestId 유일 제약으로 중복 생성을 막는다.
+같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다.
 
-**이벤트** — 수신 `PaymentCompleted`·`PaymentFailed`·`PaymentCancelled` / 발행 `OrderCreated`·`OrderCanceled`
+발행은 OrderPlaced(stove.order.v1), 수신은 OrderPaymentCompleted/OrderPaymentFailed(stove.payment.v1)다.
+결과의 requestEventId·주문번호·구매자·금액·통화가 일치해야 PENDING → PAID/FAILED로 전이한다.
+원래 eventId·내용의 재전달은 무효과이며 확정 결과를 새 결과로 덮어쓰지 않는다.
+주문·Outbox와 결과·상태·Inbox는 각각 같은 트랜잭션으로 저장한다.
 
-**규칙**
-
-- **검증 게이트 1단계.** 클라이언트가 보낸 `expectedAmount` 는 화면-서버 불일치 감지용일 뿐이고,
-  주문 금액은 catalog 가 확정한 값만 쓴다. 다르면 `PRICE_MISMATCH`.
-- catalog 호출이 실패하면 주문을 만들지 않는다 — 가격 미확정 상태로 결제에 넘기지 않는다.
-- 이 동기 호출은 트랜잭션 밖(`PlaceOrderFacade`)에서 일어나고, DB 변경과 이벤트 적재만 트랜잭션 안에 있다.
-- 주문번호는 `ORD + yyyyMMdd + 난수 10자리` — 날짜는 운영 조회용, 난수는 추측 방지용.
+업무 테이블은 purchase_order 하나다. 기존 V1~V9와 구 자료는 보존하고 V10을 추가한다.
+구 견적·다중 항목·Redis·만료·취소·정산 계산을 사용하지 않는다.
+실제 Payment는 후속 재작성 대상이며 현재 검증은 결과 이벤트 픽스처다.
 
 ---
 
 ## payment
+
+아래는 재작성 전 구현 기록이다. 새 OrderPlaced·OrderPaymentCompleted/Failed 계약과 아직 연결되지 않는다.
 
 PG 연동. **검증 게이트 4단계 중 3개가 여기 있다.**
 

@@ -26,49 +26,17 @@ public class ProjectResultListener {
     public void receive(ConsumerRecord<String, String> record) {
         EventEnvelope e = EventEnvelope.from(record);
         if (e.isType("ProjectReviewApproved")) {
-            var v = e.payloadAs(mapper, ProjectReviewApprovedEvent.class);
-            recordProjectReviewResult.execute(
-                    e.eventId(),
-                    e.eventType(),
-                    v.reviewRequestId(),
-                    v.projectId(),
-                    v.contentVersion(),
-                    true,
-                    null,
-                    v.actor());
+            recordProjectReviewResult.execute(ProjectResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReviewApprovedEvent.class)));
         } else if (e.isType("ProjectReviewRejected")) {
-            var v = e.payloadAs(mapper, ProjectReviewRejectedEvent.class);
-            recordProjectReviewResult.execute(
-                    e.eventId(),
-                    e.eventType(),
-                    v.reviewRequestId(),
-                    v.projectId(),
-                    v.contentVersion(),
-                    false,
-                    v.feedback(),
-                    v.actor());
+            recordProjectReviewResult.execute(ProjectResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReviewRejectedEvent.class)));
         } else if (e.isType("ProjectReleaseCompleted")) {
-            var v = e.payloadAs(mapper, ProjectReleaseCompletedEvent.class);
-            recordProjectReleaseResult.execute(
-                    e.eventId(),
-                    e.eventType(),
-                    v.releaseRequestId(),
-                    v.projectId(),
-                    v.contentVersion(),
-                    true,
-                    null,
-                    v.requestEventId());
+            recordProjectReleaseResult.execute(ProjectResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReleaseCompletedEvent.class)));
         } else if (e.isType("ProjectReleaseRejected")) {
-            var v = e.payloadAs(mapper, ProjectReleaseRejectedEvent.class);
-            recordProjectReleaseResult.execute(
-                    e.eventId(),
-                    e.eventType(),
-                    v.releaseRequestId(),
-                    v.projectId(),
-                    v.contentVersion(),
-                    false,
-                    v.reason(),
-                    v.requestEventId());
+            recordProjectReleaseResult.execute(ProjectResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReleaseRejectedEvent.class)));
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.stove.store.core.service;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.*;
 import com.stove.store.core.domain.*;
 import jakarta.persistence.EntityManager;
@@ -9,7 +8,6 @@ import org.springframework.dao.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
 import org.springframework.transaction.support.TransactionTemplate;
-import java.util.Objects;
 
 @Service
 public class ApplyCatalogProduct {
@@ -23,16 +21,6 @@ public class ApplyCatalogProduct {
         this.products = products; this.entityManager = entityManager;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-    }
-
-    public void execute(EventEnvelope envelope, CatalogProductPublishedEvent event) {
-        if (envelope == null || event == null || !text(event.eventId(), 64)
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || event.occurredAt() == null || event.product() == null
-                || !Objects.equals(envelope.key(), event.product().productCode()))
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "공개 상품 이벤트 계약이 올바르지 않습니다.");
-        execute(event.product());
     }
 
     public void execute(CatalogProductSnapshot snapshot) {

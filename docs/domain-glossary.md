@@ -57,7 +57,7 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 창작·출시 관리 | 프로젝트, 자료 확정, 제출물, 빌드, 릴리스 | studio | 심사에는 제출 스냅샷을 전달하고, 판매·배포에는 LIVE 릴리스 스냅샷을 전달 |
 | 심사 운영 | 유형별 심사 사건, 판단, 증빙, 재검토 | review | 심사 결과를 Studio의 출시 관문에 반영. 사건의 전체 운영 상태를 복제하지는 않음 |
 | 상품·진열 | 상품 가격·판매 상태, 구매자에게 보이는 상품 정보 | catalog, store | Catalog가 원본을 소유하고 Store가 검색·진열 사본을 유지. 창작 프로젝트와는 `productCode`로 연결 |
-| 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 견적을 주문에 고정하고 Payment에 결제를 요청 |
+| 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 공개 상세의 상품·정가를 주문에 고정하고 OrderPlaced 발행 |
 | 대금 처리 | 결제 승인·거절·환불 | payment | 결제 완료 사실을 주문·이용권·정산이 각자의 의미로 반영 |
 | 이용 권한 | 상품 이용권 원본과 회수 이력 | license | Download가 이용권 이벤트로 보유권 사본을 유지 |
 | 파일 배포 | 공개 파일·변형 선택, 접근 판정, 다운로드 티켓 | download | 릴리스·상품 참조·보유권 사본을 조합해 접근 판정 |
@@ -68,6 +68,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 ## 혼동하기 쉬운 표현
 
 <a id="publication-boundaries"></a>
+
 ### 확정·공개·판매 시작
 
 | 권장 표현 | 코드 상태 / 행위 | 업무상 결과 |
@@ -79,6 +80,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 “발행했다”만으로는 어떤 결과인지 알 수 없다. 코드/API의 `publish`나 기존 문서의 “발행”을 인용할 때도 대상과 채널을 쓴다. 예: “상점 자료 3차를 확정했지만 릴리스는 아직 예약 상태다.” DEMO·BUNDLE의 구 판매 제한은 재작성 전 정책이며 현재 Catalog MVP 범위에 포함하지 않는다.
 
 <a id="versions"></a>
+
 ### 여러 버전과 이력 번호
 
 | 표기 | 식별하는 것 | 혼동하면 생기는 문제 |
@@ -94,9 +96,10 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 | `projectionVersion` | Catalog 상품 변경을 Store 읽기 모델에 반영할 순서 번호 | 오래된 이벤트가 새 진열을 덮어쓰지 않도록 비교하며 자료 이력·게임 버전과 별개 |
 | `ratingPolicyVersion` | 등급 판정 규칙의 판본 | 게임 버전과 별개이며 현재 활성 정책과 맞아야 제출 가능 |
 
-근거: [Project 심사 요청](../apps/studio/src/main/java/com/stove/studio/core/service/review/RequestProjectReview.java), [Project 상점 등록](../apps/studio/src/main/java/com/stove/studio/core/service/release/RequestProjectRelease.java), [ReviewCase](../apps/review/src/main/java/com/stove/review/core/domain/ReviewCase.java).
+근거: [Project 심사 요청](../apps/studio/src/main/java/com/stove/studio/core/service/review/RequestProjectReview.java), [Project 상점 등록](../apps/studio/src/main/java/com/stove/studio/core/service/release/RequestProjectRelease.java), ReviewCase(제거된 구 Review 구현).
 
 <a id="identifiers"></a>
+
 ### 주요 식별자
 
 | 식별자 | 식별 대상·발급/관리 주체 | 사용하는 범위 |
@@ -113,6 +116,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. [ProductRef](../apps/download/src/main/java/com/stove/download/core/domain/ProductRef.java)가 코드와 상품 ID·릴리스 ID의 관계를 보관한다.
 
 <a id="source-and-copy"></a>
+
 ### 이용권 원본과 보유권 사본
 
 License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는 `(memberId, productId)`별 다운로드 판정 사본이다. “라이선스 지급 완료” 직후라도 사본 반영 전에는 다운로드가 거절될 수 있다. Download는 요청마다 License에 동기 조회하지 않는다. 환불 후 재구매, 이벤트 지연의 경계는 [Entitlement](domain/models/fulfillment.md#entitlement)와 [Q5](domain/open-questions.md#q5)를 참고한다.
@@ -128,9 +132,9 @@ License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는
 | 등급 자료 이력 / Rating Revision | 설문·지역·정책 버전·판정 경로를 고정한 자료 |
 | 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/BuildVariant.java) |
 | 기본 빌드 / `buildId` | 제출 요청의 첫 빌드이며 전체 파일이어야 함. `additionalBuildIds`로 다른 대상의 전체·델타 파일을 추가 |
-| 심사 스냅샷 / Submission Snapshot | Review가 SubmissionCreated를 받아 보관하는 심사용 사본. Studio의 제출물 행과 별개. [SubmissionSnapshot](../apps/review/src/main/java/com/stove/review/core/domain/SubmissionSnapshot.java) |
+| 심사 스냅샷 / Submission Snapshot | 구 SubmissionSnapshot은 제거됐다. 현재 Review는 ProjectReviewRequested의 불변 ProjectSnapshot을 ProjectReview에 보존한다. [현재 모델](domain/models/review.md) |
 | 상점 공개 사본 / Storefront Snapshot | LIVE 릴리스의 소개·이미지·요구 사양을 전달하는 사본. [StorefrontSnapshot](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/StorefrontSnapshot.java) |
-| 검색 문서 / Product Document | Store의 검색·진열용 읽기 모델. 상품 마스터와 별도 저장소에 있고 `projectionVersion`으로 오래된 변경을 걸러냄. [ProductDocument](../apps/store/src/main/java/com/stove/store/core/domain/ProductDocument.java) |
+| 검색 문서 / Product Document | 현재 Store의 MySQL 조회 사본은 StoreProduct이며 contentVersion으로 신구를 판단한다. [StoreProduct](../apps/store/src/main/java/com/stove/store/core/domain/StoreProduct.java) |
 | 패치 매니페스트 / Patch Manifest | Download가 릴리스에서 투영한 배포 파일 정보 |
 | 다운로드 티켓 / Download Ticket | 권한 확인 뒤 발급하는 만료 시각이 있는 서명 URL과 파일 정보 |
 | 등록한다 / register | “프로젝트를 등록한다”, “빌드를 등록한다”처럼 대상 명시 |

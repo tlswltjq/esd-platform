@@ -18,21 +18,14 @@ public class RecordProjectReviewResult {
     private final ProjectReviewRequestRepository requests;
     private final ProcessedEventGuard guard;
 
-    public void execute(
-            String eventId,
-            String eventType,
-            Long reviewRequestId,
-            Long projectId,
-            long version,
-            boolean approved,
-            String feedback,
-            String actor) {
-        if (!guard.firstDelivery(eventId, CONSUMER_GROUP, eventType)) return;
+    public void execute(ProjectReviewResult result) {
+        if (!guard.firstDelivery(result.eventId(), CONSUMER_GROUP, result.eventType())) return;
         var request =
-                requests.lock(reviewRequestId)
+                requests.lock(result.reviewRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!request.getProjectId().equals(projectId) || request.getContentVersion() != version)
+        if (!request.getProjectId().equals(result.projectId())
+                || request.getContentVersion() != result.contentVersion())
             throw new BusinessException(ErrorCode.CONFLICT, "심사 요청이 일치하지 않습니다.");
-        request.recordResult(approved, feedback, actor);
+        request.recordResult(result.approved(), result.feedback(), result.actor());
     }
 }

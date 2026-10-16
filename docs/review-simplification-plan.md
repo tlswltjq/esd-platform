@@ -196,10 +196,10 @@ Review는 ZIP을 실행하거나 자동 품질 검사·등급 판정을 수행�
 
 | 위치 | 구성 |
 |---|---|
-| core.domain | ProjectReview·상태·리포지토리, 불변 스냅샷·최종 판정 규칙 |
+| core.domain | ProjectReview·ReviewSubmission·상태·리포지토리, 불변 스냅샷·최종 판정 규칙 |
 | core.service | ReceiveProjectReview, ReadProjectReviews, ReadReviewBuildDownload, DecideProjectReview |
 | core.port | ReviewBuildStorage 인터페이스 |
-| api.controller / api.listener | 5개 API와 ProjectReviewRequested 이벤트 입력 해석·유스케이스 호출 |
+| api.controller / api.listener | 5개 API와 ProjectReviewRequested 입력 해석·ReviewSubmissionMapper.from 검증·내부 입력 변환·유스케이스 호출 |
 | infrastructure | 읽기 전용 S3/MinIO 어댑터 |
 | config | JWT·스토리지 설정 |
 

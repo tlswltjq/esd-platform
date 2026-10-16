@@ -1,7 +1,6 @@
 package com.stove.review.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.web.error.*;
 
 import jakarta.persistence.*;
@@ -55,18 +54,18 @@ public class ProjectReview extends BaseTimeEntity {
 
     @Version private Long entityVersion;
 
-    public static ProjectReview requested(ProjectReviewRequestedEvent event, String snapshot) {
+    public static ProjectReview requested(ReviewSubmission submission, String snapshot) {
         var r = new ProjectReview();
-        var s = event.snapshot();
-        r.reviewRequestId = event.reviewRequestId();
-        r.requestEventId = event.eventId();
+        var s = submission.snapshot();
+        r.reviewRequestId = submission.reviewRequestId();
+        r.requestEventId = submission.eventId();
         r.projectId = s.projectId();
         r.productCode = s.productCode();
         r.ownerSubject = s.ownerSubject();
         r.contentVersion = s.contentVersion();
         r.snapshot = snapshot;
         r.status = ReviewStatus.REQUESTED;
-        r.requestedAt = event.occurredAt();
+        r.requestedAt = submission.occurredAt();
         return r;
     }
 

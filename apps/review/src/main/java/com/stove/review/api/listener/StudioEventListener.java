@@ -23,6 +23,6 @@ public class StudioEventListener {
         var envelope = EventEnvelope.from(record);
         if (envelope.isType("ProjectReviewRequested"))
             receiveProjectReview.execute(
-                    envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class));
+                    ReviewSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class)));
     }
 }

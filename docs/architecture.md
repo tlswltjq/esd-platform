@@ -6,10 +6,11 @@
 
 ## 서비스 경계와 저장소
 
-재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
+재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
 
 Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 관리하고 Store는 공개 상품의 검색·조회 사본을 관리한다.
-나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Order는 주문, Payment는 결제, License는 이용권, Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
+Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다.
+나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Payment는 결제, License는 이용권, Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 MongoDB 등은 미완료 모듈의 기존 조회 저장소다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
@@ -32,11 +33,15 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 
 ## 결제·지급·환불의 경계
 
-주문은 Catalog 견적을 고정하고, Payment는 검증된 공급자 승인으로 결제 완료를 기록한다. 이용권 지급·주문 확정·정산 기록은 결제 이벤트를 각각 처리한다. 따라서 결제 성공 응답 직후 이용권이나 다운로드 사본이 아직 없을 수 있다. 실제 흐름은 [구매·이용 시나리오](domain/workflows.md#purchase-flow)를 참고한다.
+Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.
+HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다.
+현재 실제 Payment·이용권·정산 연동은 후속 대상이며 Order는 이벤트 픽스처로 경계를 검증한다. [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
 
-지급이 최종 실패하면 보상 이벤트로 환불을 요청한다. 환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 상태와 검증 근거가 있다.
+후속 결제·이용권·정산에서는 실제 승인·지급·환불·비용을 각각 보존하는 계약이 필요하다. 아래 보상·환불과 위험 기록은 미완료 모듈들의 기존 설계·분석 자료다.
+환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 당시 상태와 검증 근거가 있다.
 
 <a id="tracing"></a>
+
 ## 요청과 비동기 처리 추적
 
 HTTP 응답의 `X-Correlation-Id`는 trace ID다. Outbox에 추적 컨텍스트를 보존하고 Kafka 헤더로 전달해 HTTP 요청과 후속 소비를 Tempo에서 연결한다. 결제 승인 → `PaymentCompleted` 소비 → `LicenseIssued` 소비가 여러 서비스에 걸친 한 흐름으로 보인다.
@@ -76,6 +81,7 @@ HTTP 응답의 `X-Correlation-Id`는 trace ID다. Outbox에 추적 컨텍스트�
 ---
 
 <a id="r1"></a>
+
 ### R1. 릴레이가 갭 락을 쥔 채 Kafka ack 를 기다린다
 
 **[분석 당시 구현의 잠재적 문제]**
@@ -123,6 +129,7 @@ Outbox 를 고른 이유 중 하나가 **"브로커 장애가 쓰기 API 장애�
 ---
 
 <a id="r2"></a>
+
 ### R2. DLT 재투입과 DEAD 회수가 같은 키의 순서를 뒤집는다
 
 **[분석 당시 구현의 잠재적 문제]**
@@ -173,6 +180,7 @@ decisions.md 19번은 DLT 를 "맞바꿈이 아니라 순수 개선"이라고 �
 ---
 
 <a id="r3"></a>
+
 ### R3. 주문 만료 스윕과 결제 확정의 Lost Update
 
 **[분석 당시 구현의 잠재적 문제]**
@@ -210,6 +218,7 @@ decisions.md 19번은 DLT 를 "맞바꿈이 아니라 순수 개선"이라고 �
 ---
 
 <a id="r4"></a>
+
 ### R4. 외부 호출이 트랜잭션 안에 남은 두 자리
 
 **[분석 당시 구현의 잠재적 문제]** — 지금은 둘 다 스텁이라 영향이 없다. **실제 PG·게임위를 붙이는 날 드러난다.**
@@ -238,6 +247,7 @@ decisions.md 19번은 DLT 를 "맞바꿈이 아니라 순수 개선"이라고 �
 ---
 
 <a id="r5"></a>
+
 ### R5. PaymentCancelled 가 다른 eventId 로 두 번 나갈 수 있다
 
 **[분석 당시 구현의 잠재적 문제]** — 영향은 작지만 **"Inbox 가 있는데 도메인 유니크가 왜 필요한가"** 의 실례라 알아 둘 가치가 크다.
@@ -256,6 +266,7 @@ decisions.md 19번은 DLT 를 "맞바꿈이 아니라 순수 개선"이라고 �
 ---
 
 <a id="r6"></a>
+
 ### R6. license 는 DLT 발행이 실패하면 레코드를 버린다
 
 **[분석 당시 구현의 잠재적 문제]**
@@ -273,6 +284,7 @@ DLT 발행이 실패하는 가장 흔한 원인은 브로커 장애인데, 브�
 ---
 
 <a id="r7"></a>
+
 ### R7. 브로커 1대, 복제 계수 1, 토픽 자동 생성
 
 **[확인됨]** `docker-compose.yml` — `KAFKA_NODE_ID: 1` 한 대, `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1`, `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`, `KAFKA_NUM_PARTITIONS: 3`.
@@ -284,6 +296,7 @@ DLT 발행이 실패하는 가장 흔한 원인은 브로커 장애인데, 브�
 ---
 
 <a id="r8"></a>
+
 ### R8. outbox 와 inbox 테이블이 줄지 않는다
 
 **[확인됨]** `outbox_event` 의 SENT 행과 `processed_event` 행을 지우는 코드가 없다(삭제 쿼리·스케줄러 전수 검색).
@@ -297,6 +310,7 @@ DLT 발행이 실패하는 가장 흔한 원인은 브로커 장애인데, 브�
 ---
 
 <a id="r9"></a>
+
 ### R9. DLT 보존 기간이 재투입 기한이다
 
 **[확인됨 — OCI 브로커]** DLT 토픽의 보존 기간을 정한 곳이 없어 브로커 기본값을 따른다 — `stove.payment.v1.DLT` 의 `retention.ms=604800000`(7일). 재투입하지 않은 DLT 레코드는 7일 뒤 **DLT 에서도 사라진다.**
@@ -307,6 +321,7 @@ DLT 발행이 실패하는 가장 흔한 원인은 브로커 장애인데, 브�
 ---
 
 <a id="r10"></a>
+
 ### R10. 커넥션 총량이 스케일아웃을 막는다
 
 **[확인됨]** MySQL 인스턴스 하나에 일곱 서비스의 풀 합계 110, `max_connections` 기본 151. 원격 스택에서 요청이 없을 때 `stove` 커넥션을 세면 **110개**다.
@@ -317,6 +332,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 ---
 
 <a id="r11"></a>
+
 ### R11. 재시도해도 성공할 수 없는 실패도 네 번 시도한다
 
 **[확인됨]** 에러 핸들러에 비재시도 예외를 추가하지 않았다. 스프링 기본 비재시도 목록(역직렬화·변환 계열 여섯)에 이 프로젝트의 계약 위반(`EventEnvelope` 의 `IllegalStateException`)과 도메인 거절(`BusinessException`)은 없다.
@@ -327,6 +343,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 ---
 
 <a id="r12"></a>
+
 ### R12. 정산 귀속 월이 이벤트 시각이 아니라 소비 시각이다
 
 **[확인됨]** `SettlementRecordService` 는 원장의 귀속 월을 `YearMonth.from(LocalDate.now())` 로 정한다(`:44`, `:73`). 이벤트에는 `occurredAt` 이 있지만 쓰지 않는다.
@@ -338,6 +355,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 ---
 
 <a id="r13"></a>
+
 ### R13. 릴레이 1대 제약이 강제되지 않는다
 
 **[확인됨]** 릴레이 빈은 `stove.outbox.relay-enabled`(기본 true)만 보고 **모든 인스턴스에** 뜬다(`MessagingAutoConfiguration.java:82-92`). 리더 선출도, 락도 없다.
@@ -355,6 +373,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 ---
 
 <a id="r14"></a>
+
 ### R14. Eager 리밸런싱과 한 그룹의 여러 리스너
 
 **[확인됨 — kafka-clients 기본값, OCI 브로커]** 배정 전략을 정하지 않아 `RangeAssignor` 가 선택되고(원격 브로커에서 조회한 그룹이 모두 `range`), static membership 도 없다(`group.instance.id = null`, 실행 중인 앱 로그).
@@ -366,6 +385,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 ---
 
 <a id="r15"></a>
+
 ### R15. 주문 생성 API 에 멱등키가 없다
 
 **[확인됨]** `CreateOrderRequest` 에 멱등키가 없고 서버도 요청을 식별하지 않는다. 응답을 받지 못한 클라이언트가 재시도하면 주문이 하나 더 생긴다.

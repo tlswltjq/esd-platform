@@ -1,5 +1,6 @@
 package com.stove.catalog;
 
+import com.stove.common.archunit.EventInputRules;
 import com.stove.common.archunit.ConsumerGroupRules;
 import com.stove.common.archunit.EventOrderingRules;
 import com.stove.common.archunit.ModuleHygieneRules;
@@ -14,6 +15,8 @@ import com.tngtech.archunit.junit.ArchTests;
         packages = "com.stove.catalog",
         importOptions = ImportOption.DoNotIncludeTests.class)
 class CatalogArchitectureTest {
+
+    @ArchTest static final ArchTests 이벤트_입력 = ArchTests.in(EventInputRules.class);
 
     @ArchTest static final ArchTests 패키지_구조 = ArchTests.in(ModulePackageRules.class);
 
