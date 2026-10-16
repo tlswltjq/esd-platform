@@ -6,24 +6,22 @@ import com.stove.studio.core.port.BuildStorage;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 
-@Service
 @RequiredArgsConstructor
 @Transactional
 public class UpdateStorePage {
     private final ProjectRepository projects;
     private final BuildStorage storage;
-    private final StudioAssetProperties properties;
+    private final String publicBaseUrl;
 
     public Project execute(Long id, String subject, long version, StorePage page) {
         Project p = projects.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         p.requireOwner(subject);
         if (page.thumbnailUrl() != null && !page.thumbnailUrl().isBlank()) {
-            String prefix = properties.publicBaseUrl() + "/api/v1/studio/assets/" + id + "/";
+            String prefix = publicBaseUrl + "/api/v1/studio/assets/" + id + "/";
             if (!page.thumbnailUrl().startsWith(prefix))
                 throw new BusinessException(
                         ErrorCode.INVALID_REQUEST, "이 프로젝트에 업로드한 썸네일을 사용해 주세요.");

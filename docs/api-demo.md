@@ -1,8 +1,8 @@
 # API 데모
 
-현재 Order 사용자 흐름은 [Order 실행·독립 검증](order-guide.md)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 미완료 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
+현재 주문·모의 결제 사용자 흐름은 [Payment 실행·독립 검증](payment-guide.md)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
 
-현재 완료 기준은 Auth·Gateway·Studio·Review·Catalog·Store·Order다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
+현재 완료 기준은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다.
 
 [문서 목록](README.md) · [개발 환경과 실행](getting-started.md) · [인증·권한 계약](security.md)
 

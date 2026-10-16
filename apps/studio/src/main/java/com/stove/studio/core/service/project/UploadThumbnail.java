@@ -7,7 +7,6 @@ import com.stove.studio.core.service.build.UploadFiles;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -16,19 +15,19 @@ import java.nio.file.*;
 
 import javax.imageio.ImageIO;
 
-@Service
 @RequiredArgsConstructor
 public class UploadThumbnail {
     private final ReadProjects readProjects;
     private final ProjectRepository projects;
     private final BuildStorage storage;
     private final PlatformTransactionManager transactions;
-    private final StudioAssetProperties properties;
+    private final String publicBaseUrl;
+    private final long maxThumbnailBytes;
 
     public ThumbnailAsset execute(Long id, String subject, InputStream input) throws IOException {
         Project initial = readProjects.requireOwned(id, subject);
         long version = initial.getContentVersion();
-        Path file = UploadFiles.stage(input, properties.maxThumbnailBytes());
+        Path file = UploadFiles.stage(input, maxThumbnailBytes);
         String path = null;
         try {
             String format;
@@ -55,7 +54,7 @@ public class UploadThumbnail {
             long fileSize = Files.size(file);
             path = storage.put(id, file, extension, type);
             String assetId = path.substring(path.lastIndexOf('/') + 1);
-            String url = properties.publicBaseUrl() + "/api/v1/studio/assets/" + id + "/" + assetId;
+            String url = publicBaseUrl + "/api/v1/studio/assets/" + id + "/" + assetId;
             new TransactionTemplate(transactions)
                     .executeWithoutResult(
                             tx -> {

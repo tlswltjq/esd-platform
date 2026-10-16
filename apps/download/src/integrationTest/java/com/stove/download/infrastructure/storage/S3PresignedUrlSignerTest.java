@@ -1,5 +1,7 @@
 package com.stove.download.infrastructure.storage;
 
+import com.stove.download.config.ObjectStorageProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -62,7 +64,7 @@ class S3PresignedUrlSignerTest {
     }
 
     private S3PresignedUrlSigner signer(Duration ttl) {
-        return new S3PresignedUrlSigner(new ObjectStorageProperties(
+        return new com.stove.download.config.DownloadUrlConfiguration().s3UrlSigner(new ObjectStorageProperties(
                 MINIO.getS3URL(), null, "us-east-1", USER, PASSWORD, ttl));
     }
 

@@ -1,5 +1,7 @@
 package com.stove.review.infrastructure.storage;
 
+import com.stove.review.config.ReviewStorageProperties;
+
 import static org.assertj.core.api.Assertions.*;
 
 import com.stove.common.web.error.BusinessException;
@@ -24,7 +26,7 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
                 HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         var snapshot = ReviewFixtures.snapshot(1, object(bytes), bytes.length, checksum);
         var shortLived =
-                new S3ReviewBuildStorage(
+                new com.stove.review.config.StorageConfiguration().buildStorage(
                         new ReviewStorageProperties(
                                 MINIO.getS3URL(),
                                 MINIO.getS3URL(),

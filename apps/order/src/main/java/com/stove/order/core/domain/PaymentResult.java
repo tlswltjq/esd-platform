@@ -8,7 +8,7 @@ public record PaymentResult(String eventId, Instant occurredAt, String orderNo, 
                             OrderStatus status, String reasonCode, String reason) {
     public PaymentResult {
         if (!text(eventId, 64) || occurredAt == null || occurredAt.getNano() % 1000 != 0
-                || orderNo == null || !orderNo.matches(OrderRequest.UUID_PATTERN)
+                || orderNo == null || !orderNo.matches(OrderValues.UUID_PATTERN)
                 || !text(requestEventId, 64) || !text(paymentId, 64) || !text(buyerSubject, 100)
                 || amount <= 0 || !"KRW".equals(currency)
                 || (status != OrderStatus.PAID && status != OrderStatus.FAILED)

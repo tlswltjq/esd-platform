@@ -1,5 +1,7 @@
 package com.stove.settlement.core.domain;
 
+import com.stove.settlement.config.SettlementProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
@@ -23,7 +25,7 @@ class FeePolicyTest {
     private static final BigDecimal PARTNER_FEE_RATE = new BigDecimal("0.3000");
 
     private final FeePolicy feePolicy =
-            new FeePolicy(new SettlementProperties(SELF_SELLER_ID, PARTNER_FEE_RATE));
+            new FeePolicy(SELF_SELLER_ID, PARTNER_FEE_RATE);
 
     @Test
     @DisplayName("자체 판매자 ID 는 SELF 로 분류된다")
@@ -60,7 +62,7 @@ class FeePolicyTest {
         // 요율을 바꾼 정책은 바꾼 값을 그대로 써야 한다. 이 단언이 없으면
         // feeRateOf 가 0.3000 을 상수로 박아도 위 테스트가 통과한다.
         FeePolicy tenPercent =
-                new FeePolicy(new SettlementProperties(SELF_SELLER_ID, new BigDecimal("0.1000")));
+                new FeePolicy(SELF_SELLER_ID, new BigDecimal("0.1000"));
 
         assertThat(tenPercent.feeRateOf(SaleType.PARTNER))
                 .isEqualByComparingTo(new BigDecimal("0.1000"));
@@ -70,7 +72,7 @@ class FeePolicyTest {
     @DisplayName("자체 판매자 기준도 설정에서 온다")
     void selfSellerIdFollowsConfiguration() {
         FeePolicy otherSelf =
-                new FeePolicy(new SettlementProperties(99L, PARTNER_FEE_RATE));
+                new FeePolicy(99L, PARTNER_FEE_RATE);
 
         assertThat(otherSelf.saleTypeOf(99L)).isEqualTo(SaleType.SELF);
         assertThat(otherSelf.saleTypeOf(SELF_SELLER_ID)).isEqualTo(SaleType.PARTNER);

@@ -5,10 +5,10 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작성 현황 (2026-10-16): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order` 완료.**
+**모듈 재작성 현황 (2026-10-16): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
-Catalog·Store·Order의 범위와 OCI 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 일곱 모듈의 계약을 기준으로 한다.
+Catalog·Store·Order·Payment의 범위와 OCI 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 여덟 모듈의 계약을 기준으로 한다.
 나머지 서비스 명세는 기존 구현의 참고 기록이며 현재 설계·검증 기준에서 제외한다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
@@ -21,7 +21,7 @@ Catalog·Store·Order의 범위와 OCI 결과는 각 MVP 완료 기록을 따른
 | A | [catalog](#catalog) | 8081 | 출시 처리, 공개 상품·공개본과 조회 | MySQL |
 | B | [store](#store) | 8087 | 공개 상품 검색·조회 사본 | MySQL |
 | B | [order](#order) | 8082 | 주문 스냅샷·청구액·내 주문·결제 결과 | MySQL |
-| B | [payment](#payment) | 8083 | PG 연동, 승인 대조, 환불 | MySQL |
+| B | [payment](#payment) | 8083 | 확정 주문 결제·미확정 재개·결과 발행 | MySQL |
 | C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
 | C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
@@ -171,67 +171,33 @@ Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 �
 
 업무 테이블은 purchase_order 하나다. 기존 V1~V9와 구 자료는 보존하고 V10을 추가한다.
 구 견적·다중 항목·Redis·만료·취소·정산 계산을 사용하지 않는다.
-실제 Payment는 후속 재작성 대상이며 현재 검증은 결과 이벤트 픽스처다.
+Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guide.md)은 실제 Payment 앱을 사용한다.
 
 ---
 
 ## payment
 
-아래는 재작성 전 구현 기록이다. 새 OrderPlaced·OrderPaymentCompleted/Failed 계약과 아직 연결되지 않는다.
-
-PG 연동. **검증 게이트 4단계 중 3개가 여기 있다.**
-
-**상태머신**
-
-```
-READY ──prepare──▶ PENDING ──callback──▶ PAID ──환불 착수──▶ CANCELING ──PG 완료──▶ CANCELED
-                                     └──▶ FAILED
-```
-
-**HTTP API**
+확정된 주문의 결제 접수, 모의 PG 자동 처리, 미확정 건 재개와 내 결제 조회를 담당한다.
+[모델](domain/models/order-payment.md#payment) · [실행](payment-guide.md) · [MVP 범위·검증](payment-mvp-plan.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/payments/{orderNo}` | 결제 조회 |
-| POST | `/api/v1/payments/{orderNo}/prepare` | PG 사전등록 → 결제창 URL |
-| POST | `/api/v1/payments/callback` | PG 승인 콜백 수신 |
-| POST | `/api/v1/payments/{orderNo}/cancel` | 환불 |
+| GET | /api/v1/payments?page=0&size=20 | JWT sub 기준 본인 목록 |
+| GET | /api/v1/payments/{orderNo} | 본인 상세, 타인·없는 결제 404 |
 
-결제 조회·사전등록·환불은 Bearer access token과 주문 소유권 검사가 필요하다. PG 콜백은
-사용자 토큰 대신 원문 HMAC 서명을 검증한다. 자세한 계약은 [커머스 보안](security.md)에 있다.
+MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
+공개 provider는 SIMULATED다. prepare·콜백·승인 주입·환불·운영 HTTP API는 제공하지 않는다.
 
-**이벤트** — 수신 `OrderCreated`·`LicenseIssueFailed` / 발행 `PaymentCompleted`·`PaymentFailed`·`PaymentCancelled`
+수신은 OrderPlaced, 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
+입력은 api.listener의 Mapper에서 내부 값으로 변환한다. ReceiveOrderPayment가 원래 요청 전체를 비교하고 PENDING·Inbox를 함께 저장한다.
+주기 실행이 처리 시각에 도달한 PENDING을 ResolvePayment로 재개한다. 기본 주기 1초·20건·오류 재시도 간격 5초다.
+PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId를 멱등 키로 사용한다.
+확인된 승인·거절만 결과와 Outbox를 함께 확정한다. 응답 유실·결과 저장 실패는 PENDING을 유지한다.
+최종 상태·이벤트 ID·시각은 고정하며 Order 상태는 Order가 결과 검증 뒤 변경한다.
 
-**규칙**
-
-- **게이트 2** — 승인 전에 서버가 확정한 금액을 PG 에 먼저 등록한다.
-  **주문이 `stove.payment.window`(30분)를 넘겼으면 여기서 막는다**(`PAYMENT_WINDOW_EXPIRED`).
-  금액은 주문 시각에 한 번 굳으므로 이 창이 곧 "옛 가격이 유효한 기간" 이다(D-029).
-- **게이트 3** — 콜백의 승인 금액이 사전등록 금액과 다르면 승인을 확정하지 않고 `PAYMENT_AMOUNT_MISMATCH`.
-  위·변조 또는 연동 오류이므로 운영 알람 대상으로 남긴다.
-- **결제창 만료** — 사전등록 뒤 `stove.payment.checkout-window`(15분)를 넘겨 도착한 승인은
-  **거절하지 않고 받아 적은 뒤 자동 환불한다.** 그 시점엔 PG 에서 이미 돈이 움직였으므로
-  거절하면 우리 장부에만 없는 상태가 되어 대사가 깨진다. 이때 `PaymentCompleted` 는
-  **내보내지 않는다** — 일어나지 않을 판매를 하위 서비스에 알리지 않기 위해서다.
-  지표 `stove.payment.auto-refunded`, 알람 `AutoRefundsRising`.
-- **게이트 4** — 주문번호로 결제를 잠그고 상태·콜백 멱등키를 비교한다. 같은 승인 재전송은 이벤트를 재발행하지 않으며 멱등키는 전역 유니크가 아니다.
-- **중단된 취소 재개.** `CANCELING` 은 "PG 환불을 요청하기로 커밋했는데 확정까지 못 갔다",
-  즉 **돈이 나갔는지 불확실한 상태**다. `RefundSweeper` 가 1분마다 깨어나 **다음 시도 시각이 된**
-  건을 집어 재개한다 — 안전한 근거는 PG 취소의 `pgTxId` 멱등 계약 하나다.
-- **재시도 예산.** 각 건의 다음 시도는 `RefundRetryPolicy` 가 미룬다(2→4→8→16→30분 상한).
-  **주기와 간격은 다른 값이다** — 예전에는 그 구분이 없어 PG 가 죽어 있으면 같은 건에 1분마다
-  요청이 나갔고, 그건 복구 중인 PG 를 계속 두드리는 것이었다.
-  **포기 상태는 없다.** Outbox 는 예산이 소진되면 `DEAD` 로 보내지만(D-003), 여기서 그렇게 하면
-  **불확실이 해소된 것처럼 보이고 아무도 다시 보지 않는다.** 예산(`refund-budget`, 1시간)은
-  재시도를 멈추는 값이 아니라 **사람을 부르는 값**이다.
-  지표 `stove.payment.canceling`·`stove.payment.canceling.stale`(게이지),
-  `stove.payment.refund-resume-failed`(카운터),
-  알람 `RefundsStuckInCanceling`·`RefundsStuckBeyondBudget`.
-- **Saga 보상.** `LicenseIssueFailed` 를 받으면 자동 환불한다("돈은 빠졌는데 게임은 없는" 상태 해소).
-  사용자 환불과 규칙은 같지만 진입점(`compensate`)이 분리돼 있다 — 이벤트 경로만 멱등 마킹이 필요하기 때문.
-  **이 경로는 운영에서 한 번도 지나가지 않았다**(실측 0건) — D-027 이 조건을 좁혔기 때문이다.
-  그래도 지우지 않는다: 0 은 "필요 없다" 가 아니라 **"그 실패가 아직 안 났다"** 는 뜻이다.
-  대신 `stove.payment.compensated` 로 세고, `PaymentCompensationTest` 가 실 인프라에서 그 경로를 지난다.
+업무 테이블은 purchase_payment, 공급자 기술 원장은 simulated_payment_charge다.
+구 V1~V10·자료를 보존하고 V11로 새 테이블만 추가한다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.
+실제 PG·결제창·수수료·환불·이용권·정산은 후속 범위다.
 
 ---
 
@@ -382,7 +348,7 @@ catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 �
 
 ## 운영 API
 
-Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며, Payment·Settlement 등 해당 운영 API를 허용한 서비스에서도 `ADMIN` 토큰이 필요하다.
+Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며, Settlement 등 해당 운영 API를 허용한 서비스에서도 `ADMIN` 토큰이 필요하다.
 
 | HTTP API | 동작 |
 |---|---|
@@ -406,7 +372,7 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 | `BuildStorage` (studio) | — | **`S3BuildStorage`** | `stove.storage.provider` = `s3` |
 | `ReviewBuildStorage` (review) | — | **`S3ReviewBuildStorage`** | 읽기 전용 S3/MinIO 계정 |
 | `DownloadUrlSigner` (download) | — | **`CdnUrlSigner`**, **`S3PresignedUrlSigner`** | `stove.download.url-strategy` = `cdn`(기본) / `s3` |
-| `PgClient` (payment) | `MockPgClient` | 없음 | — |
+| `PgGateway` (payment) | `SimulatedPgGateway` | 없음 | `stove.payment.pg-provider=simulated` |
 | `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 | — |
 
 ### 실제로 동작하는 것
@@ -427,22 +393,21 @@ Download의 `S3PresignedUrlSigner`는 미완료 모듈의 기존 구현 참고�
 
 | 스텁 | 하는 일 | 빠진 것 |
 |---|---|---|
-| `MockPgClient` | 거래 ID = UUID 앞 12자, 결제창 URL 문자열 조립 | **`cancel()` 이 로그만 찍는다 — 환불이 절대 실패하지 않는다.** 금액·통화를 받지만 검증하지 않는다 |
-| `MockTaxInvoiceIssuer` | 발행번호 `TI-202607-001001` | 결정적이라 재실행 검증엔 유리하다. 실제 세금계산서는 전송·역발행 상태를 갖는 객체다 |
+| `SimulatedPgGateway` | 키별 승인·거절을 JDBC 원장에 독립 커밋, 같은 입력의 최초 결과 재조회 | 실제 PG·자금 이동, 별도 외부 DB·네트워크 장애 |
+| `MockTaxInvoiceIssuer` | 발행번호 `TI-202607-001001` | 실제 세금계산서 전송·역발행 상태 |
 
-`MockPgClient` 의 금액 미검증은 설계상 문제가 아니다.
-**검증 게이트 3단계(콜백 금액 대조)는 PG 가 아니라 `Payment.approve()` 가 자기 필드와 비교해 수행**하므로,
-그 방어선은 스텁과 무관하게 실제로 동작한다.
+Payment의 공급자 응답 유실과 결과 저장 실패는 테스트 전용 픽스처로 검증한다.
+실제 PG 교체 시 같은 키의 재확인·멱등 결제와 확인된 결과 반환 계약이 필요하다. [Payment 범위](payment-mvp-plan.md)를 따른다.
 
 ### 스텁 공통의 한계
 
-**예외를 던지지 않는다.** 타임아웃도, 거부도, 부분 실패도 없다.
+아래는 미완료 License·Settlement의 기존 스텁에 관한 기록이다.
 그래서 license 의 Saga 보상 경로(`LicenseIssueFailed` → 자동 환불)는
 지급 실패를 인위적으로 주입해야만 테스트할 수 있다.
 
 ### 교체 안전장치
 
-스텁은 모두 `@Profile("!prod")` 가 걸려 있다.
+미완료 모듈의 기존 스텁은 `@Profile("!prod")` 조건을 사용한다. Payment의 SimulatedPgGateway는 `stove.payment.pg-provider=simulated`로 선택한다.
 `prod` 로 띄우면 스텁이 빠지고, 실제 어댑터가 없으면 **"no qualifying bean" 으로 기동이 실패한다.**
 운영에서 스텁이 조용히 도는 것만은 일어나지 않게 하려는 의도다.
 

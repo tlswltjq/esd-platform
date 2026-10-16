@@ -1,5 +1,7 @@
 package com.stove.common.messaging.outbox;
 
+import com.stove.common.messaging.config.OutboxProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.kafka.contract.EventType;

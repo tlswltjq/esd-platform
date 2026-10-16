@@ -8,14 +8,12 @@ import com.stove.studio.core.service.project.ReadProjects;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.*;
 import java.nio.file.*;
 
-@Service
 @RequiredArgsConstructor
 public class RegisterBuild {
     private final ReadProjects readProjects;
@@ -23,14 +21,14 @@ public class RegisterBuild {
     private final BuildRepository builds;
     private final BuildStorage storage;
     private final PlatformTransactionManager transactions;
-    private final StudioUploadProperties properties;
+    private final long maxArtifactBytes;
 
     public Build execute(
             Long id, String subject, String version, String fileName, InputStream input)
             throws IOException {
         Project initial = readProjects.requireOwned(id, subject);
         long expected = initial.getContentVersion();
-        Path file = UploadFiles.stage(input, properties.maxArtifactBytes());
+        Path file = UploadFiles.stage(input, maxArtifactBytes);
         String path = null;
         try {
             UploadFiles.requireZip(file);

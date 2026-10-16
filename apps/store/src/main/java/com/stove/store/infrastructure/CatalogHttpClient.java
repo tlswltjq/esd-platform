@@ -3,22 +3,14 @@ package com.stove.store.infrastructure;
 import com.fasterxml.jackson.databind.*;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.store.core.port.CatalogProducts;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import java.time.Duration;
 import java.util.*;
 
-@Component
 public class CatalogHttpClient implements CatalogProducts {
     private final RestClient client;
     private final ObjectMapper mapper;
-    public CatalogHttpClient(@Value("${stove.store.catalog-base-url}") String baseUrl, ObjectMapper mapper) {
-        var factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(3));
-        factory.setReadTimeout(Duration.ofSeconds(10));
-        client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+    public CatalogHttpClient(RestClient client, ObjectMapper mapper) {
+        this.client = client;
         this.mapper = mapper;
     }
     @Override public List<String> codes(int page) {

@@ -1,68 +1,44 @@
 package com.stove.studio.infrastructure.storage;
 
+import java.time.Duration;
+
 import com.stove.common.web.error.*;
 import com.stove.studio.core.port.BuildStorage;
 
 import jakarta.annotation.*;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
-import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.*;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.*;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
-import java.net.URI;
 import java.nio.file.*;
 import java.util.UUID;
 
-@Component
-@ConditionalOnProperty(name = "stove.storage.provider", havingValue = "s3", matchIfMissing = true)
 public class S3BuildStorage implements BuildStorage {
-    private final ObjectStorageProperties properties;
+    private final String bucket;
+    private final Duration presignTtl;
+    private final boolean encryptionEnabled;
     private final S3Client s3;
     private final S3Presigner presigner;
 
-    public S3BuildStorage(ObjectStorageProperties p) {
-        properties = p;
-        var credentials =
-                StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(p.accessKey(), p.secretKey()));
-        var config =
-                S3Configuration.builder().pathStyleAccessEnabled(p.pathStyleRequired()).build();
-        var client =
-                S3Client.builder()
-                        .region(Region.of(p.region()))
-                        .credentialsProvider(credentials)
-                        .serviceConfiguration(config);
-        var signer =
-                S3Presigner.builder()
-                        .region(Region.of(p.region()))
-                        .credentialsProvider(credentials)
-                        .serviceConfiguration(config);
-        if (p.pathStyleRequired()) {
-            client.endpointOverride(URI.create(p.endpoint()));
-            signer.endpointOverride(
-                    URI.create(
-                            p.presignEndpoint() == null || p.presignEndpoint().isBlank()
-                                    ? p.endpoint()
-                                    : p.presignEndpoint()));
-        }
-        s3 = client.build();
-        presigner = signer.build();
+    public S3BuildStorage(S3Client s3, S3Presigner presigner, String bucket, Duration presignTtl, boolean encryptionEnabled) {
+        this.s3 = s3;
+        this.presigner = presigner;
+        this.bucket = bucket;
+        this.presignTtl = presignTtl;
+        this.encryptionEnabled = encryptionEnabled;
     }
 
     @PostConstruct
     void ensureBucket() {
         try {
-            s3.headBucket(HeadBucketRequest.builder().bucket(properties.bucket()).build());
+            s3.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
         } catch (S3Exception failure) {
             if (failure.statusCode() != 404) throw failure;
-            s3.createBucket(CreateBucketRequest.builder().bucket(properties.bucket()).build());
+            s3.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
         }
     }
 
@@ -76,28 +52,28 @@ public class S3BuildStorage implements BuildStorage {
     public String put(Long projectId, Path file, String extension, String type) {
         String key = "projects/" + projectId + "/" + UUID.randomUUID() + "." + extension;
         var request =
-                PutObjectRequest.builder().bucket(properties.bucket()).key(key).contentType(type);
-        if (properties.encryptionEnabled())
+                PutObjectRequest.builder().bucket(bucket).key(key).contentType(type);
+        if (encryptionEnabled)
             request.serverSideEncryption(ServerSideEncryption.AES256);
         try {
             s3.putObject(request.build(), RequestBody.fromFile(file));
         } catch (RuntimeException failure) {
             try {
                 s3.deleteObject(
-                        DeleteObjectRequest.builder().bucket(properties.bucket()).key(key).build());
+                        DeleteObjectRequest.builder().bucket(bucket).key(key).build());
             } catch (RuntimeException cleanup) {
                 failure.addSuppressed(cleanup);
             }
             throw failure;
         }
-        return "s3://" + properties.bucket() + "/" + key;
+        return "s3://" + bucket + "/" + key;
     }
 
     @Override
     public long size(String path) {
         return s3.headObject(
                         HeadObjectRequest.builder()
-                                .bucket(properties.bucket())
+                                .bucket(bucket)
                                 .key(key(path))
                                 .build())
                 .contentLength();
@@ -106,7 +82,7 @@ public class S3BuildStorage implements BuildStorage {
     @Override
     public void delete(String path) {
         s3.deleteObject(
-                DeleteObjectRequest.builder().bucket(properties.bucket()).key(key(path)).build());
+                DeleteObjectRequest.builder().bucket(bucket).key(key(path)).build());
     }
 
     @Override
@@ -115,13 +91,13 @@ public class S3BuildStorage implements BuildStorage {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "썸네일 ID가 올바르지 않습니다.");
         String key = "projects/" + projectId + "/" + assetId;
         try {
-            size("s3://" + properties.bucket() + "/" + key);
+            size("s3://" + bucket + "/" + key);
         } catch (S3Exception missing) {
             if (missing.statusCode() != 404) throw missing;
             key = "store-assets/" + projectId + "/" + assetId;
         }
         try {
-            size("s3://" + properties.bucket() + "/" + key);
+            size("s3://" + bucket + "/" + key);
         } catch (S3Exception missing) {
             if (missing.statusCode() != 404) throw missing;
             throw new BusinessException(ErrorCode.NOT_FOUND);
@@ -129,10 +105,10 @@ public class S3BuildStorage implements BuildStorage {
         return presigner
                 .presignGetObject(
                         GetObjectPresignRequest.builder()
-                                .signatureDuration(properties.presignTtl())
+                                .signatureDuration(presignTtl)
                                 .getObjectRequest(
                                         GetObjectRequest.builder()
-                                                .bucket(properties.bucket())
+                                                .bucket(bucket)
                                                 .key(key)
                                                 .build())
                                 .build())
@@ -141,7 +117,7 @@ public class S3BuildStorage implements BuildStorage {
     }
 
     private String key(String path) {
-        String prefix = "s3://" + properties.bucket() + "/";
+        String prefix = "s3://" + bucket + "/";
         if (!path.startsWith(prefix)) throw new IllegalArgumentException("Unexpected storage path");
         return path.substring(prefix.length());
     }

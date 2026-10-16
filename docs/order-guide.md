@@ -4,7 +4,7 @@
 
 Order는 **누가 어떤 공개 상품을 얼마에 주문했는가**를 보존한다.
 상품 하나·수량 하나·양수 KRW 정가만 주문하며 결제 결과에 따라 PENDING → PAID/FAILED로 전이한다.
-실제 PG·결제창·환불·이용권·정산은 후속 모듈의 책임이다. 현재 Payment 연동 검증은 이벤트 픽스처다.
+실제 PG·결제창·환불·이용권·정산은 후속 모듈의 책임이다. Order 독립 검증은 이벤트 픽스처를 사용하며, 실제 모의 PG 연계는 [Payment 안내](payment-guide.md)를 따른다.
 
 ## 코드와 데이터 흐름
 
@@ -27,7 +27,7 @@ sequenceDiagram
     Note over Order: purchase_order와 Outbox 같은 트랜잭션
     Order-->>Buyer: PENDING 주문
     Order-->>Kafka: OrderPlaced
-    Note over Kafka: 후속 Payment 결과, 현재는 테스트 픽스처
+    Note over Kafka: Payment가 모의 PG 결과 확정
     Kafka-->>Order: OrderPaymentCompleted / OrderPaymentFailed
     Note over Order: 주문 잠금·결과·Inbox 같은 트랜잭션
     Buyer->>Order: GET /api/v1/orders/{orderNo}
@@ -71,7 +71,7 @@ PG 공제 후 입금액이나 판매자 지급액을 결제 승인액으로 보�
 - 무료 상품은 409, 없는 공개 상품은 404, Catalog 중단·타임아웃은 503, 잘못된 Catalog 응답은 502다.
 - page < 0, size가 1~100 밖, 필수 값 누락·잘못된 형식·소수 금액은 400이다.
 - 목록·상세는 내부 이벤트 ID·구매자 식별자·Inbox/Outbox를 노출하지 않는다.
-- 주문 취소·결과 주입·공통 운영 HTTP API는 제공하지 않는다. 결과는 테스트 또는 후속 Payment가 Kafka로 전달한다.
+- 주문 취소·결과 주입·공통 운영 HTTP API는 제공하지 않는다. 결과는 Payment가 Kafka로 전달한다.
 
 Catalog 중단 중에도 기존 주문 조회·동일 요청 재조회는 가능하다. 신규 주문은 정가 확인이 필요하므로 503이다.
 결과가 없으면 PENDING을 유지하며 자동 만료하지 않는다.

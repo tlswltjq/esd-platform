@@ -9,6 +9,9 @@ import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ArchCondition;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
  * 서비스 모듈의 패키지 구조 규약. 각 앱의 테스트에서
@@ -135,15 +138,45 @@ public final class ModulePackageRules {
             .should().beDeclaredInClassesThat().resideInAPackage(SCHEDULER)
             .allowEmptyShould(true);
 
-    /**
-     * 설정값은 인바운드에 두지 않는다. 자리를 하나로 못 박지는 않지만({@code decisions.md} 13번)
-     * {@code api} 만은 아니다 — 진입점마다 값이 갈린다.
-     */
+    /** External configuration is bound and assembled at the configuration boundary. */
     @ArchTest
-    public static final ArchRule 설정값은_인바운드에_두지_않는다 = noClasses()
+    public static final ArchRule 설정_바인딩은_config_에_둔다 = classes()
             .that().areAnnotatedWith(CONFIGURATION_PROPERTIES)
-            .should().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
-            .because("설정은 진입점이 아니라 그 값을 쓰는 계층이 소유한다")
+            .should().resideInAPackage(CONFIG)
+            .because("환경 설정 해석은 config가 담당하고 실행 객체에는 필요한 값만 전달한다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 설정_객체는_config_밖으로_전달하지_않는다 = noClasses()
+            .that().resideOutsideOfPackage(CONFIG)
+            .should().dependOnClassesThat().areAnnotatedWith(CONFIGURATION_PROPERTIES)
+            .because("서비스·모델·어댑터는 바인딩 객체 대신 필요한 값과 클라이언트를 받는다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 설정_환경은_config_에서만_읽는다 = noClasses()
+            .that().resideOutsideOfPackage(CONFIG)
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "org.springframework.core.env..", "org.springframework.boot.context.properties.bind..")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule Value_바인딩은_config_에서만_한다 = classes()
+            .that().resideOutsideOfPackage(CONFIG)
+            .should(new ArchCondition<JavaClass>("not bind external values") {
+                @Override
+                public void check(JavaClass type, ConditionEvents events) {
+                    String annotation = "org.springframework.beans.factory.annotation.Value";
+                    boolean fieldBinding = type.getFields().stream().anyMatch(f -> f.isAnnotatedWith(annotation));
+                    boolean parameterBinding = type.getCodeUnits().stream()
+                            .flatMap(unit -> unit.getParameters().stream())
+                            .anyMatch(parameter -> parameter.isAnnotatedWith(annotation));
+                    boolean methodBinding = type.getMethods().stream().anyMatch(m -> m.isAnnotatedWith(annotation));
+                    if (fieldBinding || parameterBinding || methodBinding) {
+                        events.add(SimpleConditionEvent.violated(type, type.getName() + " binds external configuration outside config"));
+                    }
+                }
+            })
             .allowEmptyShould(true);
 
     @ArchTest

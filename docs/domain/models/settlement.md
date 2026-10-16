@@ -85,7 +85,7 @@
 
 ## FeePolicy — 수수료 판단 규칙
 
-[모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). 설정 `properties`를 사용해 자체 판매자 ID이면 SELF·0%, 그 외이면 PARTNER·설정된 요율(기본 30%)로 판단한다. 별도 수수료 계약 테이블은 아니다. 현재 주문에 들어가는 배분 조건은 Catalog 견적에서도 계산하며, Settlement에서는 과거 사본이 없는 자료의 보완 기준으로 이 정책을 사용한다.
+[모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). config가 전달한 자체 판매자 ID·수수료율을 사용해 자체 판매자 ID이면 SELF·0%, 그 외이면 PARTNER·설정된 요율(기본 30%)로 판단한다. 별도 수수료 계약 테이블은 아니다. 현재 주문에 들어가는 배분 조건은 Catalog 견적에서도 계산하며, Settlement에서는 과거 사본이 없는 자료의 보완 기준으로 이 정책을 사용한다.
 
 ## ReconciliationResult — 원장과 마감의 대사 결과
 

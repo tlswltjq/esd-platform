@@ -2,7 +2,7 @@
 
 [전체 안내](../model-guide.md) · [상품 가격](catalog-store.md) · [이용권](fulfillment.md) · [정산](settlement.md)
 
-Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “그 돈을 실제로 승인·환불했는가”를 보관한다. 두 서비스는 각자 MySQL DB를 사용하고 `orderNo`로 연결한다. 같은 순간에 같은 상태가 된다고 가정하지 않는다.
+Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “확정된 주문 금액의 결제 결과가 무엇인가”를 보관한다. 두 서비스는 각자 MySQL DB를 사용하고 `orderNo`로 연결한다. 같은 순간에 같은 상태가 된다고 가정하지 않는다.
 
 <a id="order"></a>
 
@@ -36,103 +36,78 @@ PENDING에서 PAID 또는 FAILED로 한 번 확정하며 같은 eventId·결과�
 검증 근거: [도메인 테스트](../../../apps/order/src/test/java/com/stove/order/core/domain/OrderTest.java),
 [실제 MySQL·Kafka·JWT 검사](../../../apps/order/src/integrationTest/java/com/stove/order/OrderIntegrationTest.java),
 [독립 사용자 흐름](../../../e2e/src/test/java/com/stove/e2e/OrderPurchaseFlowTest.java).
-Payment는 아직 재작성 전이며 결과 이벤트 픽스처로 경계를 검증한다.
+Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연계·복구는 [Payment 검증](../../payment-mvp-plan.md)을 따른다.
 
 <a id="order-item"></a>
 
 ## 구 OrderItem·OrderLine의 위치
 
 새 Order는 상품 하나의 스냅샷을 직접 보존하고 OrderItem·Quote를 사용하지 않는다.
-[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 미완료 Payment·Settlement의 구 계약에 남아 있는 상품·할인·정산 조건이다.
+[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 미완료 Settlement 등의 구 계약에 남아 있는 상품·할인·정산 조건이다.
 해당 타입의 존재를 새 주문·정산 연동 완료의 근거로 삼지 않는다. 할인 부담·판매자 계약은 기능을 추가할 때 별도 정의한다.
 
 <a id="payment"></a>
 
-## Payment — 주문 대금의 처리 기록
+## Payment — 확정된 주문의 결제와 결과
 
-아래는 미완료 Payment의 기존 구현 설명이다. 새 Order 계약과 연결되지 않으며 후속 재작성 기준으로 삼지 않는다.
-
-저장: Payment의 `payment`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java)
+저장: Payment의 `purchase_payment`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java) · [MVP 범위](../../payment-mvp-plan.md) · [실행 안내](../../payment-guide.md)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
-| `id` (`Long`), `orderNo` (`String`), `memberId` (`Long`) | 결제 기록·연결 주문·구매자 |
-| `amount` (`long`), `currency` (`String`) | 승인받을 주문 총액·통화 |
-| `lines` (`List<OrderLine>`) | 주문 항목 사본. JSON으로 저장하고 완료 이벤트로 전달 |
-| `status` (`PaymentStatus`) | `READY`, `PENDING`, `PAID`, `CANCELING`, `CANCELED`, `FAILED` |
-| `method` (`String`), `preparedAt` (`Instant`) | 결제 수단·사전등록 시각 |
-| `pgTxId` (`String`) | PG가 구분하는 거래 ID. PG는 결제 대행 시스템을 뜻함 |
-| `idempotencyKey` (`String`) | 승인 콜백의 중복을 구별하는 키. 주문번호와 별도 |
-| `paidAt` (`Instant`) | 승인 완료 시각 |
-| `canceledAt` (`Instant`), `cancelReason` (`String`) | 환불 완료 시각·사유 |
-| `cancelingSince` (`Instant`) | 최초 환불 착수 시각. 오래 미완료된 환불 탐지에 사용 |
-| `cancelAttempts` (`int`), `nextCancelAttemptAt` (`Instant`) | 환불 재시도 횟수·다음 시도 예약 |
-| `failedAt` (`Instant`), `failReasonCode`, `failReason` (`String`) | 승인 거절 시각·분류·설명 |
+| id·paymentId | DB 정렬용 PK와 생성 이후 고정된 결제 UUID. PG 멱등 키로도 사용 |
+| orderNo·requestEventId·orderOccurredAt | 원래 주문번호와 OrderPlaced의 ID·시각 |
+| buyerSubject | 주문이 확정한 구매자. JWT sub 기준 내 결제 조회 |
+| productId·productCode·title·contentVersion | 주문 당시 상품 스냅샷 |
+| listAmount·discountAmount·amount·currency | 정가·할인액·고객 청구액·KRW. 공급자 수수료와 구분 |
+| provider·status | SIMULATED와 PENDING/PAID/FAILED |
+| providerTransactionId·providerOccurredAt | 확인된 PG 거래와 원래 결정 시각 |
+| resultEventId·resultOccurredAt | 최초 확정 결과의 이벤트 ID·시각 |
+| failureReasonCode·failureReason | 명시적 최종 거절 사유. 성공에는 없음 |
+| nextAttemptAt·lastErrorCode | 미확정 건 재개 시각·오류 분류. 최종 상태에는 없음 |
+| createdAt·updatedAt | UTC 마이크로초 시각 |
 
-**만들고 쓰는 때:** OrderCreated 수신 시 READY를 만든다. 결제를 준비하면 PG 사전등록 거래를 보관하고 PENDING이 된다. 승인 통보를 받으면 등록 거래 ID·금액을 비교해 PAID로 확정한다. 같은 멱등키의 승인 재전송은 중복 완료 이벤트를 만들지 않는다. 현재 주문 리스너는 통화를 KRW로 지정하므로 다중 통화 지원 완료로 해석하지 않는다.
+**만들고 쓰는 때:** `OrderPaymentMapper.from(...)`이 외부 이벤트를 내부 `PaymentOrderRequest`로 바꾼다.
+`ReceiveOrderPayment`는 전체 스냅샷을 비교하고 새 PENDING과 Inbox를 함께 저장한다. 접수는 PG 완료를 의미하지 않는다.
+`ResolvePayment`는 DB 트랜잭션 밖에서 `PgGateway`를 호출한 다음, 짧은 트랜잭션으로 행 잠금·최종 결과·Outbox를 함께 저장한다.
+목록·상세는 `SearchPayments`·`ReadPayment`가 JWT sub로 제한한다.
 
 ```mermaid
 stateDiagram-v2
-    READY --> PENDING: 결제 사전등록
-    PENDING --> PAID: 거래와 금액을 확인한 정상 승인
-    PENDING --> FAILED: 승인 거절
-    PAID --> CANCELING: 환불 착수 기록
-    CANCELING --> CANCELING: 외부 환불 재시도
-    CANCELING --> CANCELED: 환불 완료 확인
+    [*] --> PENDING: 요청·Inbox 접수
+    PENDING --> PENDING: 응답 유실·오류·결과 저장 실패
+    PENDING --> PAID: 승인 확인
+    PENDING --> FAILED: 최종 거절 확인
 ```
 
-환불은 착수 기록→외부 호출→완료 기록으로 나뉜다. `CANCELING`은 환불 완료가 확인되지 않은 상태여서 CANCELED처럼 처리하면 안 된다. 실패해도 원 결제를 지우지 않고 재시도 정보를 남긴다. 이용권 지급 실패에 대한 보상도 이 환불 경로로 연결된다.
+**규칙:** PG 키·주문·청구액·통화·공급자가 일치하는 확인된 결과만 확정한다. 결과와 이벤트 ID·시각은 이후 바꾸지 않는다.
+통신 오류를 결제 거절로 해석하지 않는다. 같은 paymentId로 재확인하고 한 주문에 새 결제를 만들지 않는다.
+Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 자기 상태를 변경한다.
 
-결제창 유효 시간을 넘긴 뒤 승인이 도착하면 승인 사실을 기록한 후 곧바로 환불에 착수한다. 이 경로는 `PaymentCompleted`를 보내지 않아 정상 이용권 지급·매출 기록을 시작하지 않는다. 위 그림의 정상 승인 여정과 구별한다.
+**사례:** PG 결정은 저장됐지만 응답을 잃으면 Payment는 PENDING이다. 재시작 후 같은 키로 원래 결정을 받아 PAID를 확정한다.
+결과와 Outbox 저장이 실패해도 공급자 결정은 남는다. 재시도 후 최종 결과 이벤트는 한 건만 저장한다.
+할인액이 포함된 주문은 `정가 - 할인액 = 청구액`을 확인하고 청구액 그대로 결제한다. 할인 자격은 다시 판정하지 않는다.
 
-근거: [PaymentService](../../../apps/payment/src/main/java/com/stove/payment/core/service/PaymentService.java), [PaymentCallbackFacade](../../../apps/payment/src/main/java/com/stove/payment/api/application/PaymentCallbackFacade.java), [RefundFacade](../../../apps/payment/src/main/java/com/stove/payment/api/application/RefundFacade.java), [OrderEventListener](../../../apps/payment/src/main/java/com/stove/payment/api/listener/OrderEventListener.java).
+## SimulatedPgGateway — 공급자 결정 대역
 
-**업무 규칙 제안:** 사전등록한 거래·금액과 일치하는 인증된 콜백만 반영한다. 승인 거절은 실패로 끝내고, 승인된 대금의 취소는 환불 완료를 확인한 뒤 확정한다. 같은 승인 재전송으로 이용권·매출을 추가 지급하지 않는다.
+[어댑터](../../../apps/payment/src/main/java/com/stove/payment/infrastructure/pg/SimulatedPgGateway.java)는 JDBC로 `simulated_payment_charge`에 결정 한 건을 독립 커밋한다.
+Payment 업무 엔티티·저장소를 사용하지 않는다. 키·주문·청구액·통화·거래 ID·결정 시각·APPROVED/DECLINED·거절 사유를 보존한다.
+같은 키와 입력이면 최초 결정을 반환하고 다른 주문·금액이면 거부한다. 설정을 바꿔도 기존 결정을 바꾸지 않는다.
 
-**사례:** 사전등록 10,000원·거래 A에 대한 10,000원 승인은 처리한다. 거래 B 또는 9,000원 콜백은 거절한다. PG가 거절한 건은 `FAILED`이며 매출·권한 지급의 근거가 되지 않는다. 환불 중 PG 오류가 나면 완료로 표시하지 않고 `CANCELING`에서 재개한다.
+기본 결과는 APPROVED이며 `PAYMENT_SIMULATED_RESULT=DECLINED`로 새 결제의 거절을 재현한다.
+실제 외부 PG·자금 이동은 없다. 업무 테이블과 같은 MySQL을 쓰므로 외부 PG와 DB의 독립 장애까지 보장하지 않는다.
+구 payment·simulated_pg_transaction·payment_audit_log는 마이그레이션으로 보존하지만 새 코드에서 사용하지 않는다.
+환불·결제창·콜백·자동 만료·이용권·정산은 후속 범위다.
 
-**합의 상태:** 초안. 실제 PG 연동은 [기존 #82](https://github.com/tlswltjq/esd-platform/issues/82), 취소 정책·통화 전달은 [Q9](../open-questions.md#q9)의 후속 대상이다.
+## 결제 입력과 결과 값
 
-개발 환경에서는 [결제 시뮬레이터](../../api-demo.md#payment-simulator)로 실제 결제 없이 승인·거절·환불 흐름을 재현한다. 시뮬레이터 결과는 실제 PG 연동 완료의 근거가 아니다.
-
-**검증 근거:** [Payment](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java), [PaymentService](../../../apps/payment/src/main/java/com/stove/payment/core/service/PaymentService.java), [RefundFacade](../../../apps/payment/src/main/java/com/stove/payment/api/application/RefundFacade.java). [PaymentTest](../../../apps/payment/src/test/java/com/stove/payment/core/domain/PaymentTest.java), [PaymentGateTest](../../../apps/payment/src/integrationTest/java/com/stove/payment/core/service/PaymentGateTest.java), [PaymentCheckoutWindowTest](../../../apps/payment/src/integrationTest/java/com/stove/payment/core/service/PaymentCheckoutWindowTest.java), [StrandedRefundResumeTest](../../../apps/payment/src/integrationTest/java/com/stove/payment/core/service/StrandedRefundResumeTest.java).
-
-## SimulatedPgTransaction — 결제 시뮬레이터의 거래
-
-저장: Payment의 `simulated_pg_transaction`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/SimulatedPgTransaction.java)
-
-| 속성 | 뜻과 사용처 |
+| 값 | 용도 |
 |---|---|
-| `pgTxId` (`String`) | 시뮬레이터 거래 ID이자 저장 키 |
-| `orderNo` (`String`), `amount` (`long`), `currency` (`String`) | 대역 PG에 등록한 주문·금액·통화 |
-| `status` (`Status`) | `PREPARED`, `APPROVED`, `DECLINED`, `TIMED_OUT`, `CANCELED` |
-| `reasonCode`, `reason` (`String`) | 거절·타임아웃의 분류·설명 |
-| `createdAt` (`Instant`), `version` (`long`) | 거래 생성 시각·동시 변경 충돌 감지 번호 |
+| [PaymentOrderRequest](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PaymentOrderRequest.java) | 외부 이벤트와 분리된 원래 주문·상품·가격 입력 |
+| [PgChargeRequest](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgChargeRequest.java) | 고정 paymentId·orderNo·amount·currency |
+| [PgResult](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgResult.java) | 공급자·키·주문·금액·거래·시각·확정 결정 |
+| [PgUnavailable](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgUnavailable.java) | 결과를 확정하지 못한 공급자 호출 오류 |
 
-**만들고 쓰는 때:** 시뮬레이터로 결제를 준비하고 승인·거절·타임아웃·취소 결과를 재현한다. Payment가 상점 측 기록이라면 이 모델은 대역 결제 공급자 측 기록이다. 실제 외부 PG의 승인 내역은 아니다. [SimulatedPgService](../../../apps/payment/src/main/java/com/stove/payment/core/service/SimulatedPgService.java), [PaymentSimulatorFacade](../../../apps/payment/src/main/java/com/stove/payment/api/application/PaymentSimulatorFacade.java).
-
-## PaymentAuditLog — 결제 행동의 감사 기록
-
-저장: `payment_audit_log`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PaymentAuditLog.java)
-
-| 속성 | 뜻과 사용처 |
-|---|---|
-| `id` (`Long`), `orderNo` (`String`) | 로그 ID·대상 주문 |
-| `actor`, `action`, `detail` (`String`) | 행동 주체·행동명·상세 내용 |
-| `occurredAt` (`Instant`) | 기록 시각 |
-
-**만들고 쓰는 때:** 회원의 환불 요청(`REFUND_REQUESTED`)과 PG 환불 완료 반영(`REFUND_COMPLETED`) 때 근거를 남긴다. 실제 현재 결제 상태는 Payment에서 판단한다.
-
-## 결제 처리에 쓰는 값 모델
-
-| 모델 | 속성과 용도 |
-|---|---|
-| [PgPreparation](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgPreparation.java) | `pgTxId`, `redirectUrl`: PG 사전등록 결과 |
-| [PaymentPreparation](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PaymentPreparation.java) | `orderNo`, `pgTxId`, `amount`, `currency`, `redirectUrl`: 고객에게 줄 결제창 안내 |
-| [PgApproval](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgApproval.java) | `orderNo`, `pgTxId`, `paidAmount`, `idempotencyKey`: 승인 통보 |
-| [PgDecline](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PgDecline.java) | `orderNo`, `pgTxId`, `reasonCode`, `reason`: 거절 통보 |
-| [PaymentCancellation](../../../apps/payment/src/main/java/com/stove/payment/core/domain/PaymentCancellation.java) | `pgRefundRequired`, `pgTxId`, `amount`: DB 처리 후 외부 환불이 필요한지 전달 |
-| [StrandedCancellation](../../../apps/payment/src/main/java/com/stove/payment/core/domain/StrandedCancellation.java) | `orderNo`, `reason`, `attempts`: 오래 미완료된 환불을 운영에 알릴 값 |
-| [RefundRetryPolicy](../../../apps/payment/src/main/java/com/stove/payment/core/domain/RefundRetryPolicy.java) | 초기 지연·횟수별 재시도 간격을 계산하는 정책. 결제·환불 행을 추가로 저장하는 모델은 아님 |
-
-기존 검증: [OrderTest](../../../apps/order/src/test/java/com/stove/order/core/domain/OrderTest.java), [PaymentTest](../../../apps/payment/src/test/java/com/stove/payment/core/domain/PaymentTest.java), [PaymentSimulatorFlowTest](../../../apps/payment/src/integrationTest/java/com/stove/payment/api/application/PaymentSimulatorFlowTest.java), [구매 여정](../../../e2e/src/test/java/com/stove/e2e/TrackBCommerceFlowTest.java).
+검증: [단위 테스트](../../../apps/payment/src/test/java/com/stove/payment/core/domain/PaymentTest.java),
+[MySQL·Kafka·JWT 통합 테스트](../../../apps/payment/src/integrationTest/java/com/stove/payment/PaymentIntegrationTest.java),
+[기존 DB 보존](../../../apps/payment/src/integrationTest/java/com/stove/payment/PaymentMigrationIntegrationTest.java),
+[8개 앱 사용자 흐름](../../../e2e/src/test/java/com/stove/e2e/PaymentPurchaseFlowTest.java).

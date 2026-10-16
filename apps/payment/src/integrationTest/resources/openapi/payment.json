@@ -1,30 +1,10 @@
 {
   "components" : {
     "schemas" : {
-      "ApiResponseListDeadEventResponse" : {
+      "ApiResponsePaymentPage" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DeadEventResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListDltRecordResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DltRecordResponse"
-            },
-            "type" : "array"
+            "$ref" : "#/components/schemas/PaymentPage"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -49,185 +29,6 @@
         },
         "type" : "object"
       },
-      "ApiResponsePreparePaymentResponse" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/PreparePaymentResponse"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseReplayedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ReplayedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseRequeuedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/RequeuedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseVoid" : {
-        "properties" : {
-          "data" : { },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "Approved" : {
-        "allOf" : [ {
-          "$ref" : "#/components/schemas/PgCallbackRequest"
-        }, {
-          "properties" : {
-            "idempotencyKey" : {
-              "minLength" : 1,
-              "type" : "string"
-            },
-            "method" : {
-              "type" : "string"
-            },
-            "orderNo" : {
-              "minLength" : 1,
-              "type" : "string"
-            },
-            "paidAmount" : {
-              "format" : "int64",
-              "type" : "integer"
-            },
-            "pgTxId" : {
-              "minLength" : 1,
-              "type" : "string"
-            }
-          },
-          "type" : "object"
-        } ],
-        "required" : [ "idempotencyKey", "orderNo", "paidAmount", "pgTxId" ]
-      },
-      "DeadEventResponse" : {
-        "properties" : {
-          "aggregateId" : {
-            "type" : "string"
-          },
-          "aggregateType" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "lastError" : {
-            "type" : "string"
-          },
-          "partitionKey" : {
-            "type" : "string"
-          },
-          "retryCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "Declined" : {
-        "allOf" : [ {
-          "$ref" : "#/components/schemas/PgCallbackRequest"
-        }, {
-          "properties" : {
-            "orderNo" : {
-              "minLength" : 1,
-              "type" : "string"
-            },
-            "pgTxId" : {
-              "minLength" : 1,
-              "type" : "string"
-            },
-            "reason" : {
-              "type" : "string"
-            },
-            "reasonCode" : {
-              "minLength" : 1,
-              "type" : "string"
-            }
-          },
-          "type" : "object"
-        } ],
-        "required" : [ "orderNo", "pgTxId", "reasonCode" ]
-      },
-      "DltRecordResponse" : {
-        "properties" : {
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "exception" : {
-            "type" : "string"
-          },
-          "key" : {
-            "type" : "string"
-          },
-          "offset" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "originalTopic" : {
-            "type" : "string"
-          },
-          "partition" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "ErrorBody" : {
         "properties" : {
           "code" : {
@@ -239,111 +40,94 @@
         },
         "type" : "object"
       },
+      "PaymentPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PaymentResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PaymentResponse" : {
         "properties" : {
           "amount" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "cancelReason" : {
-            "type" : "string"
-          },
-          "currency" : {
-            "type" : "string"
-          },
-          "failReason" : {
-            "type" : "string"
-          },
-          "failReasonCode" : {
-            "type" : "string"
-          },
-          "memberId" : {
+          "contentVersion" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "method" : {
-            "type" : "string"
-          },
-          "orderNo" : {
-            "type" : "string"
-          },
-          "paidAt" : {
+          "createdAt" : {
             "format" : "date-time",
             "type" : "string"
           },
-          "paymentId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "pgTxId" : {
-            "type" : "string"
-          },
-          "retryable" : {
-            "type" : "boolean"
-          },
-          "status" : {
-            "enum" : [ "READY", "PENDING", "PAID", "CANCELING", "CANCELED", "FAILED" ],
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "PgCallbackRequest" : {
-        "discriminator" : {
-          "propertyName" : "result"
-        },
-        "properties" : {
-          "result" : {
-            "type" : "string"
-          }
-        },
-        "required" : [ "result" ]
-      },
-      "PreparePaymentRequest" : {
-        "properties" : {
-          "method" : {
-            "minLength" : 1,
-            "type" : "string"
-          }
-        },
-        "required" : [ "method" ],
-        "type" : "object"
-      },
-      "PreparePaymentResponse" : {
-        "properties" : {
-          "amount" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
           "currency" : {
             "type" : "string"
+          },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureReasonCode" : {
+            "type" : "string"
+          },
+          "listAmount" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "orderNo" : {
             "type" : "string"
           },
-          "pgTxId" : {
+          "paymentId" : {
             "type" : "string"
           },
-          "redirectUrl" : {
+          "productCode" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "ReplayedCount" : {
-        "properties" : {
-          "replayed" : {
-            "format" : "int32",
+          },
+          "productId" : {
+            "format" : "int64",
             "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "RequeuedCount" : {
-        "properties" : {
-          "requeued" : {
-            "format" : "int32",
-            "type" : "integer"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "resultOccurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "PAID", "FAILED" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -375,19 +159,21 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
-    "/api/v1/ops/dlt" : {
+    "/api/v1/payments" : {
       "get" : {
-        "operationId" : "peek",
+        "operationId" : "list",
         "parameters" : [ {
           "in" : "query",
-          "name" : "topic",
-          "required" : true,
+          "name" : "page",
+          "required" : false,
           "schema" : {
-            "type" : "string"
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
           }
         }, {
           "in" : "query",
-          "name" : "max",
+          "name" : "size",
           "required" : false,
           "schema" : {
             "default" : 20,
@@ -400,159 +186,22 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
+                  "$ref" : "#/components/schemas/ApiResponsePaymentPage"
                 }
               }
             },
             "description" : "OK"
           }
         },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt/replay" : {
-      "post" : {
-        "operationId" : "replay",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 100,
-            "format" : "int32",
-            "type" : "integer"
-          }
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
         } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead" : {
-      "get" : {
-        "operationId" : "deadEvents",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/requeue-all" : {
-      "post" : {
-        "operationId" : "requeueAll",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
-      "post" : {
-        "operationId" : "requeue",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "eventId",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/payments/callback" : {
-      "post" : {
-        "operationId" : "callback",
-        "parameters" : [ {
-          "description" : "Unix epoch seconds; at most five minutes old",
-          "in" : "header",
-          "name" : "X-Pg-Timestamp",
-          "required" : true
-        }, {
-          "description" : "Hex HMAC-SHA256 of timestamp + '.' + raw request body",
-          "in" : "header",
-          "name" : "X-Pg-Signature",
-          "required" : true
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "oneOf" : [ {
-                  "$ref" : "#/components/schemas/Approved"
-                }, {
-                  "$ref" : "#/components/schemas/Declined"
-                } ]
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
         "tags" : [ "payment-controller" ]
       }
     },
     "/api/v1/payments/{orderNo}" : {
       "get" : {
-        "operationId" : "get",
+        "operationId" : "detail",
         "parameters" : [ {
           "in" : "path",
           "name" : "orderNo",
@@ -567,82 +216,6 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "payment-controller" ]
-      }
-    },
-    "/api/v1/payments/{orderNo}/cancel" : {
-      "post" : {
-        "operationId" : "cancel",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "orderNo",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "reason",
-          "required" : false,
-          "schema" : {
-            "default" : "USER_REFUND",
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "payment-controller" ]
-      }
-    },
-    "/api/v1/payments/{orderNo}/prepare" : {
-      "post" : {
-        "operationId" : "prepare",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "orderNo",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/PreparePaymentRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponsePreparePaymentResponse"
                 }
               }
             },

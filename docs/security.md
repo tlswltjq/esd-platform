@@ -10,26 +10,27 @@ Auth가 회원·역할과 서명된 access token을 발행한다. Gateway와 각
 - OAuth2 Authorization Code + PKCE에서 창작·심사는 `studio`, 커머스는 `commerce` 범위를 요청한다. access token의 `member_id`는 Auth 회원 ID, `roles`는 계정 역할이다. ID token은 API 자격증명이 아니다.
 - Gateway와 서비스는 서명·발행자·`esd-api` audience를 검증하고 기본 거부 정책을 적용한다. 주문·결제·라이브러리·다운로드에는 `MEMBER`, 운영자 정산·`/api/v1/ops/**`에는 `ADMIN`이 필요하다. 창작자 자신의 정산을 보는 `/api/v1/settlements/me/**`는 `CREATOR`와 소유권을 확인한다. 공개 상품·스토어 읽기는 로그인 없이 제공한다.
 - Catalog MVP는 공개 상품 목록·상세 GET만 제공하며 쓰기 API를 제공하지 않는다. 기존 할인·프로모션 업무는 제거했다. Gateway에 남은 관련 권한 규칙은 이 업무를 다시 활성화하지 않는다.
-- Order의 구매자는 JWT sub이며 MEMBER 역할이 필요하다. 본문·X-Member-Id로 선택하지 않는다. 타인의 주문 상세는 404이고 목록은 본인 주문만 반환한다. 취소·결과 주입 API는 제공하지 않는다. 미완료 Payment·License·Download의 기존 member_id·403·환불 계약은 새 Order의 기준이 아니다. Gateway의 X-Member-Id 제거는 유지한다.
+- Order의 구매자는 JWT sub이며 MEMBER 역할이 필요하다. 본문·X-Member-Id로 선택하지 않는다. 타인의 주문 상세는 404이고 목록은 본인 주문만 반환한다. 취소·결과 주입 API는 제공하지 않는다. 미완료 License·Download의 기존 member_id·403·환불 계약은 새 Order의 기준이 아니다. Gateway의 X-Member-Id 제거는 유지한다.
 - 공개 상품 상세는 출시된 상품만 반환한다. Catalog MVP에는 출시 전 상품 조회 API가 없으며 공통 `/api/v1/ops/**`도 HTTP로 개방하지 않는다.
 
-## PG 콜백
+## Payment MVP 경계
 
-`POST /api/v1/payments/callback`은 사용자 JWT 대신 PG 서명을 검증한다. `PgCallbackVerifier` 포트로 사업자별 구현을 교체할 수 있다. 현재 로컬 어댑터의 계약은 다음과 같다.
+Payment 목록·상세는 MEMBER와 서명·issuer·audience가 검증된 JWT sub로 제한한다. 타인·없는 결제는 404다.
+목록의 임의 buyerSubject·memberId와 X-Member-Id는 조회 소유자를 바꾸지 않는다.
+콜백·prepare·승인 주입·환불 API는 없으며 Gateway의 구 콜백 익명·CSRF 예외도 제거했다.
 
-| 항목 | 값 |
-|---|---|
-| `X-Pg-Timestamp` | Unix epoch 초, 서버 시각과 5분 이내 |
-| `X-Pg-Signature` | `HMAC-SHA256(secret, ASCII(timestamp) + "." + raw_body)`의 소문자 16진수 |
-| 본문 | 최대 64 KiB의 원본 JSON 바이트 |
-| 비밀 | `PG_CALLBACK_SECRET`; 운영 프로필에서 로컬 기본값 사용 금지 |
+OrderPlaced의 봉투·본문 ID·종류·키, 가격 일관성과 상품·구매자 필드를 저장 전에 검증한다.
+중복 수신에서도 전체 입력을 비교하고 Inbox는 결제 접수와 함께 저장한다.
+PG 키·주문·청구액·통화·공급자가 일치하는 확정 결과만 반영하고 결과·Outbox는 함께 커밋한다.
+결제 기록과 공급자 원장의 권한 분리는 이번 대역의 외부 PG 격리를 의미하지 않는다.
 
-서명 누락·변조·만료는 `401`이다. 검증된 콜백도 사전등록 `pgTxId`와 승인 금액이 일치해야 한다. 브라우저의 성공 화면은 결제 승인 근거가 아니다. [공급자 어댑터 계약](api-demo.md#공급자-어댑터-계약)을 함께 따른다.
-
-실제 PG 연동은 [후속 요구사항 #82](https://github.com/tlswltjq/esd-platform/issues/82)에 정의돼 있다. 공급자 테스트 채널·결제창, 거래 조회·웹훅 검증, 취소 연동과 스모크 결과가 필요하다. 현재 저장소의 로컬 mock·시뮬레이터는 실거래 연동을 대신하지 않는다.
+실제 PG·결제창·웹훅 서명·카드 정보·환불은 [후속 범위](payment-mvp-plan.md)다.
+과거 HMAC 콜백과 PG_CALLBACK_SECRET은 현재 Payment의 실행 계약이 아니다.
 
 ## 감사와 검증
 
-Auth의 `role_audit_log`는 가입·부트스트랩 권한 부여를, Payment의 `payment_audit_log`는 환불 요청·완료와 주문·회원·사유를 남긴다.
+Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
+Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-`./gradlew test`, Docker가 있는 환경의 `./gradlew integrationTest`, 전체 스택의 `./scripts/remote.sh e2e`로 검증한다. E2E는 타 회원 토큰, 위조 헤더·본문, 무서명 콜백, 일반 회원의 정산 접근을 확인한다. API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
+빌드·테스트는 OCI에서 실행한다. [Payment 검증](payment-guide.md#oci-검증)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.

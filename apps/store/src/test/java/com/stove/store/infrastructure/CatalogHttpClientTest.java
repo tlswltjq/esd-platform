@@ -24,7 +24,7 @@ class CatalogHttpClientTest {
         });
         server.start();
         try {
-            var client = new CatalogHttpClient("http://127.0.0.1:" + server.getAddress().getPort(), mapper);
+            var client = new com.stove.store.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), mapper);
             assertThat(client.codes(0)).containsExactly(product.productCode());
             assertThat(client.detail(product.productCode())).isEqualTo(product);
             assertThatThrownBy(() -> client.detail("wrong-code")).isInstanceOf(IllegalStateException.class);

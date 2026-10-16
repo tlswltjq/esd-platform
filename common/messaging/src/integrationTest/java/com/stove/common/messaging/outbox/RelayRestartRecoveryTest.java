@@ -1,5 +1,7 @@
 package com.stove.common.messaging.outbox;
 
+import com.stove.common.messaging.config.OutboxProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
@@ -72,7 +74,7 @@ class RelayRestartRecoveryTest {
      * 여기서 다른 것을 주면 재기동을 재는 것이 아니라 이 테스트만의 배선을 재게 된다.
      */
     private OutboxRelay restartedRelay() {
-        return new OutboxRelay(repository, kafkaTemplate, properties, metrics,
+        return new OutboxRelay(repository, kafkaTemplate, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
                 new TransactionTemplate(transactionManager));
     }
 

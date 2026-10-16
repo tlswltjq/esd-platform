@@ -119,7 +119,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **제안과 질문:** 결제 전 주문 종료와 결제 후 환불을 구별하되, 결제된 주문 취소를 거절할지 환불 요청으로 연결할지 결정해야 한다. 결제 중인 주문과 취소의 경합도 포함한다. 다중 통화를 지원할 계획이면 현재 이벤트·정산의 KRW 전제를 어떻게 바꿀 것인가?
 
-**후속:** 취소와 환불 연결을 우선 확인할 별도 코드 수정 대상으로 남긴다. 이 문서의 환불 시나리오는 Payment의 환불 API를 사용한다. 실제 PG 계약은 기존 [#82](https://github.com/tlswltjq/esd-platform/issues/82)와 함께 검토한다. 근거: OrderCommandService(제거된 구 Order 구현), [Order](../../apps/order/src/main/java/com/stove/order/core/domain/Order.java), [OrderEventListener](../../apps/payment/src/main/java/com/stove/payment/api/listener/OrderEventListener.java), [RefundFacade](../../apps/payment/src/main/java/com/stove/payment/api/application/RefundFacade.java).
+**후속:** 취소와 환불 연결을 우선 확인할 별도 코드 수정 대상으로 남긴다. 이 문서의 환불 시나리오는 구 Payment 구현의 참고 기록이다. 현재 MVP에는 환불 API가 없으며 후속 계약을 새로 정의한다. 실제 PG 계약은 기존 [#82](https://github.com/tlswltjq/esd-platform/issues/82)와 함께 검토한다. 근거: OrderCommandService(제거된 구 Order 구현), [Order](../../apps/order/src/main/java/com/stove/order/core/domain/Order.java), [OrderEventListener](../../apps/payment/src/main/java/com/stove/payment/api/listener/OrderEventListener.java), RefundFacade(제거된 구 Payment 구현).
 
 <a id="q10"></a>
 

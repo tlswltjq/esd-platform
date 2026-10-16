@@ -32,7 +32,7 @@ class CatalogHttpClientTest {
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
         });
         server.start();
-        client = new CatalogHttpClient("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000);
+        client = new com.stove.order.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000);
     }
     @AfterEach void stop() { server.stop(0); executor.shutdownNow(); }
     @Test void readsOnlyThePublicFieldsAndAllowsFutureFields() {
@@ -64,7 +64,7 @@ class CatalogHttpClientTest {
     }
     @Test void finiteReadTimeoutAndConnectionFailureReturnUnavailable() {
         delay = 500;
-        client = new CatalogHttpClient("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100);
+        client = new com.stove.order.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100);
         assertThatThrownBy(() -> client.detail("Game-1")).isInstanceOfSatisfying(BusinessException.class,
                 e -> assertThat(e.errorCode().statusCode()).isEqualTo(503));
         server.stop(0);

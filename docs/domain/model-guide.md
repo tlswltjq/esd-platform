@@ -1,6 +1,6 @@
 # 코드로 이해하는 도메인과 모델
 
-현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order다. 신규 구현과 검증은 이 일곱 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
+현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment다. 신규 구현과 검증은 이 여덟 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
 
 이 프로젝트는 **창작자가 게임을 준비하고 심사를 거쳐 판매하면, 구매자에게 이용 권한을 주고 판매자의 몫을 계산하는 시스템**이다. 먼저 이 흐름을 이해한 뒤 각 단계가 보관하는 정보를 읽으면 된다.
 
@@ -27,7 +27,7 @@
 | 리비전 / revision | 수정 전 자료를 보존하기 위한 판본 | 상점 설명 1차와 2차를 각각 저장 |
 | 스냅샷 / snapshot | 특정 순간의 내용을 고정한 기록 | 주문 당시 가격. 상품 가격이 바뀌어도 과거 주문은 유지 |
 | 읽기 모델·투영 / projection | 원본의 변경을 받아 조회 목적에 맞게 만든 사본 | 검색용 `StoreProduct`, 다운로드용 `Entitlement` |
-| 이벤트 | 다른 서비스에 전달하는 “이미 일어난 사실” | `PaymentCompleted`: 결제 승인이 확정됨 |
+| 이벤트 | 다른 서비스에 전달하는 “이미 일어난 사실” | `OrderPaymentCompleted`: 결제 승인이 확정됨 |
 | 멱등성 | 같은 요청·이벤트가 반복돼도 결과가 중복되지 않는 성질 | 같은 결제 이벤트로 이용권을 두 번 만들지 않음 |
 | 트랜잭션 | 한 DB에서 함께 성공하거나 함께 취소할 변경 범위 | 주문 저장과 발송할 이벤트 저장을 함께 처리 |
 | 비동기 | 요청 시점과 다른 서비스의 반영 시점이 분리됨 | 결제 완료 직후에는 다운로드 사본 반영이 아직 안 됐을 수 있음 |
@@ -49,7 +49,7 @@
 | 공개 상품 / `catalog` | 어떤 승인 스냅샷을 현재 공개하는가? | `CatalogProduct`, `CatalogRelease` | [상품·진열](models/catalog-store.md) |
 | 검색·조회 / `store` | 현재 공개된 게임을 어떻게 찾고 확인하는가? | `StoreProduct` | [상품·진열](models/catalog-store.md) |
 | 주문 / `order` | 누가 무엇을 얼마에 사기로 했는가? | `Order`, `OrderPrice`, `PaymentResult` | [주문·결제](models/order-payment.md) |
-| 결제 / `payment` | 돈의 승인·거절·환불이 어디까지 진행됐는가? | `Payment`, `SimulatedPgTransaction`, `PaymentAuditLog` | [주문·결제](models/order-payment.md) |
+| 결제 / `payment` | 확정된 주문의 결제 결과가 무엇인가? | `Payment`, `PaymentOrderRequest`, `PgChargeRequest`, `PgResult` | [주문·결제](models/order-payment.md) |
 | 이용권 / `license` | 어떤 주문으로 이용 권한을 받았는가? | `License` | [이용·다운로드](models/fulfillment.md) |
 | 파일 배포 / `download` | 지금 받을 수 있는 정확한 파일은 무엇인가? | `ProductRef`, `Entitlement`, `PatchManifest` | [이용·다운로드](models/fulfillment.md) |
 | 정산 / `settlement` | 판매자에게 얼마를 배분해야 하는가? | `SettlementRecord`, `SellerSettlement` | [정산](models/settlement.md) |
@@ -68,7 +68,7 @@
 | 출시 요청 | 현재 상세정보 버전의 외부 심사 결과로 ProjectReleaseRequest를 발행 |
 | 공개 반영 | 외부 처리 결과를 ProjectReleaseRequest에 기록. 실제 출시·공개는 외부 업무 |
 | 출시 후 수정 | 상세정보를 변경하고 새 버전의 심사·출시 요청을 발행. 공개본 관리 책임은 외부 업무 |
-| 주문·결제 경계 | Catalog 공개 상세로 주문 스냅샷 고정, 결제 결과 픽스처 반영. 실제 Payment는 후속 대상 |
+| 주문·결제 경계 | Catalog 공개 상세로 주문 스냅샷 고정, 고정 결제 키로 모의 PG 호출·미확정 재개·결과 반영 |
 | 지급·다운로드 | License·Entitlement가 보유권을 확인하고 정확한 공개 기록의 파일 선택 |
 | 환불·월 마감 | 기존 결제 환불·권한 회수·판매자 정산 원장과 월 마감 흐름 유지 |
 

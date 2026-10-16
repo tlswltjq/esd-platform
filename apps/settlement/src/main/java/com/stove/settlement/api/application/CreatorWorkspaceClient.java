@@ -3,21 +3,17 @@ package com.stove.settlement.api.application;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.common.web.response.ApiResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-@Component
 public class CreatorWorkspaceClient {
     private static final ParameterizedTypeReference<ApiResponse<Long>> RESPONSE =
             new ParameterizedTypeReference<>() {};
     private final RestClient client;
 
-    public CreatorWorkspaceClient(RestClient.Builder builder,
-            @Value("${stove.settlement.studio-url:http://localhost:8085}") String url) {
-        client = builder.baseUrl(url).build();
+    public CreatorWorkspaceClient(RestClient client) {
+        this.client = client;
     }
 
     public Long ownWorkspace(String token) {

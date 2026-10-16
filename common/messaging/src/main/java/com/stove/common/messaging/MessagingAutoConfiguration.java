@@ -5,7 +5,7 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxMetrics;
-import com.stove.common.messaging.outbox.OutboxProperties;
+import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.messaging.outbox.OutboxRelay;
 import com.stove.common.messaging.trace.MicrometerTraceContextCapture;
@@ -87,7 +87,7 @@ public class MessagingAutoConfiguration {
                                    OutboxProperties properties,
                                    OutboxMetrics metrics,
                                    PlatformTransactionManager transactionManager) {
-        return new OutboxRelay(repository, kafkaTemplate, properties, metrics,
+        return new OutboxRelay(repository, kafkaTemplate, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
                 new TransactionTemplate(transactionManager));
     }
 

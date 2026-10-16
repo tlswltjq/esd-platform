@@ -93,7 +93,7 @@ class GatewayRouteTest {
         "POST, /api/v1/auth/signup,          auth-api",
         "GET,  /api/v1/storefront/main,     store",
         "POST, /api/v1/orders,              order",
-        "POST, /api/v1/payments/callback,   payment",
+        "GET,  /api/v1/payments,            payment",
         "GET,  /api/v1/library,             license",
         "POST, /api/v1/downloads/1,         download",
         "POST, /api/v1/studio/projects,        studio",

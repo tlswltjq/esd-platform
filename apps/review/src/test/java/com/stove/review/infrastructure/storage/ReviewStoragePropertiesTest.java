@@ -1,5 +1,7 @@
 package com.stove.review.infrastructure.storage;
 
+import com.stove.review.config.ReviewStorageProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;

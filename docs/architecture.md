@@ -6,15 +6,18 @@
 
 ## 서비스 경계와 저장소
 
-재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
+재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
 
 Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 관리하고 Store는 공개 상품의 검색·조회 사본을 관리한다.
-Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다.
-나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Payment는 결제, License는 이용권, Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
+Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다. Payment는 확정 주문의 결제 접수·PG 호출·미확정 재개·결과 발행을 담당한다.
+나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. License는 이용권, Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 MongoDB 등은 미완료 모듈의 기존 조회 저장소다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
 일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `infrastructure`는 외부 시스템 어댑터를 담는다. 외부 PG·저장소·심사·세금계산서 연동은 포트 구현을 교체한다. 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
+
+환경변수·YAML 바인딩과 객체 조립은 config에서 담당한다. 서비스·도메인·어댑터는 필요한 값과 구성된 클라이언트를 받으며 Properties를 참조하지 않는다.
+공통 라이브러리의 AutoConfiguration도 같은 조립 경계다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)과 [전역 적용 기록](core-boundary-audit.md#설정-바인딩과-내부-입력-경계-개선)을 따른다.
 
 ## 트랜잭션과 이벤트 전달
 
@@ -35,9 +38,9 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 
 Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.
 HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다.
-현재 실제 Payment·이용권·정산 연동은 후속 대상이며 Order는 이벤트 픽스처로 경계를 검증한다. [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
+Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. 실제 자금 이동·이용권·정산은 후속 대상이다. [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
 
-후속 결제·이용권·정산에서는 실제 승인·지급·환불·비용을 각각 보존하는 계약이 필요하다. 아래 보상·환불과 위험 기록은 미완료 모듈들의 기존 설계·분석 자료다.
+후속 결제·이용권·정산에서는 실제 승인·지급·환불·비용을 각각 보존하는 계약이 필요하다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
 환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 당시 상태와 검증 근거가 있다.
 
 <a id="tracing"></a>

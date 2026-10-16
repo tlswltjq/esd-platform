@@ -139,3 +139,68 @@ OCI에서 완료된 일곱 모듈의 단위·구조 검사 351건, 실제 DB·Ka
 이어서 OCI에서 `scripts/verify-order.py`로 Auth·Gateway·Studio·Review·Catalog·Store·Order의 실제 프로세스를 실행해 **E2E 6단계를 모두 통과**했다. 실제 출시·Store 반영·주문 생성, Kafka 중단과 미발행 주문 이벤트 복구, 결제 결과 픽스처·잘못된 결과의 DLT 처리, Catalog 중단 중 조회, Order 재시작 후 결과 보존, Catalog 복구 후 새 주문 생성을 확인했다. 실제 Payment 업무는 후속 대상이며 결과 이벤트는 계약 픽스처로 검증했다.
 
 증거는 OCI `/tmp/stove-order-check-g4enb3q8`의 앱 로그와 여섯 `junit-*` 디렉터리다. 각 XML에서 1건 실행·실패/오류/건너뜀 0건을 확인했다. 검증 종료 후 실행 중인 앱과 컨테이너는 0개이며 기존 데이터 볼륨은 보존했다.
+
+## 설정 바인딩과 내부 입력 경계 개선
+
+2026-10-16 전역 적용. 설정 키·환경변수·YAML 해석과 객체 조립은 config, 실행 조율은 service,
+업무 값과 불변식은 domain이 담당한다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)을 변경했다.
+미완료 모듈에는 같은 구조만 적용하며 업무 모델·계약을 재작성 완료 기준으로 사용하지 않는다.
+
+| 대상 | 변경 |
+|---|---|
+| 전체 Properties 10개 | Studio 3·Review 1·Payment 2·Download 2·Settlement 1·공통 Outbox 1을 config에 배치 |
+| Studio | 빌드 제한, 썸네일 제한·공개 URL을 필요한 서비스에 각각 주입 |
+| Payment | ResolvePayment에 batchSize·Duration, 모의 PG에 결정 값만 주입 |
+| Settlement | FeePolicy에 기준 판매자 ID·요율 주입. Workspace HTTP 클라이언트도 config에서 구성 |
+| Studio·Review·Download 스토리지 | config에서 SDK 생성, 어댑터에 클라이언트·버킷·TTL·암호화 값 전달 |
+| Order·Store | config에서 Catalog HTTP 클라이언트 주소·타임아웃을 적용해 어댑터에 전달 |
+| 공통 Outbox | config의 Properties에서 처리량·재시도·순회 수를 추출해 릴레이 구성 |
+| Payment·Order 입력 | 입력 객체에 있던 공유 검증·정규식을 모듈 내부 PaymentValues·OrderValues로 분리 |
+
+PaymentOrderRequest는 식별자·상품·가격별 검증 메서드와 시각 검증으로 풀어 썼다.
+입력 생성 시 필수 값·금액 불변식을 유지하며 Mapper의 외부 봉투·본문·키 검증과 구분한다.
+Payment·PG 요청/결과가 입력 DTO의 검증 메서드를 호출하는 의존을 제거했다.
+
+바인딩 객체를 사용하는 서비스·어댑터의 컴포넌트 자동 등록을 Bean 팩토리 조립으로 바꿨다.
+일반 값만 생성자에 전달하므로 core → config 의존은 없다. 설정 키·기본값·조건부 공급자 선택·트랜잭션과 API 계약은 유지한다.
+공통 AutoConfiguration은 기존 등록 경로를 유지하면서 같은 조립 역할을 수행한다.
+스케줄러의 Scheduled·ConditionalOnProperty는 실행 진입점에 유지하며 core로 전달하지 않는다.
+
+ModulePackageRules와 CommonLibraryRules로 배치와 바인딩 타입 유출을 검사한다.
+앱에서는 config 밖의 Value 주입·Environment/Binder 참조도 검사하고 규칙 자체를 위반·정상 픽스처로 검증한다.
+
+### OCI 검증 완료
+
+OCI에서 최종 JUnit XML 기준 **1,090건**, 별도 8개 앱 E2E **11단계**를 통과했다. 실패·오류·건너뜀은 모두 0이다.
+
+| 검증 범위 | 실행 건수 |
+|---|---:|
+| 11개 앱 단위·구조 | 618 |
+| 완료된 8개 앱의 MySQL·Kafka·JWT·OpenAPI·마이그레이션 통합 | 94 |
+| 공통 ArchUnit·Messaging·Kafka·Security·Web 단위·구조 | 354 |
+| 공통 Messaging의 실제 Outbox 조회·재시작 복구 통합 | 12 |
+| Download 실제 MinIO 서명 URL, Settlement Bean 구성·월 마감 보존 검사 | 12 |
+| 합계 | **1,090** |
+
+전체 회귀는 CI=true와 인프라 검사 동시 실행 수 1로 실행했다. 최초 전체 회귀는 1,074건이었다.
+최종 점검에서 Auth에 설정 경계 검사 4개를 추가하고 Auth 단위 7건을 재검증했다.
+위 표는 중복 실행을 더하지 않은 최종 합산이며 전체 회귀의 현재 합계는 1,078건, 별도 구성 검사는 12건이다.
+미완료 License·Download·Settlement는 설정 구조·기존 동작 보존만 확인했으며 재작성 완료 목록에 추가하지 않았다.
+
+```sh
+# OCI 원격 작업본에서 실행
+CI=true ./gradlew :apps:auth:test :apps:gateway:test :apps:studio:test :apps:review:test :apps:catalog:test :apps:store:test :apps:order:test :apps:payment:test :apps:license:test :apps:download:test :apps:settlement:test :apps:auth:integrationTest :apps:gateway:integrationTest :apps:studio:integrationTest :apps:review:integrationTest :apps:catalog:integrationTest :apps:store:integrationTest :apps:order:integrationTest :apps:payment:integrationTest :common:archunit:test :common:messaging:test :common:kafka:test :common:security:test :common:web:test :common:messaging:integrationTest -Pstove.infraTest.maxParallel=1 --no-daemon
+./gradlew :apps:download:integrationTest --tests com.stove.download.infrastructure.storage.S3PresignedUrlSignerTest :apps:settlement:integrationTest --tests com.stove.settlement.core.service.SettlementCloseTest -Pstove.infraTest.maxParallel=1 --no-daemon
+```
+
+Auth의 최종 설정 경계 검사는 로컬에서 `./scripts/remote.sh gradle :apps:auth:test --no-daemon`으로 OCI에 실행했다.
+
+`scripts/verify-payment.py`는 새 config 조립으로 8개 앱을 기동하고 11단계를 다시 통과했다.
+실제 로그인·빌드/썸네일 업로드·심사·출시·Store 초기 동기화·주문·승인/거절,
+PG 응답 유실·결과 롤백·Order/Catalog/Kafka 중단과 재시작·원래 이벤트 재전달을 확인했다.
+최종 주문·결제·PG 결정·결과 Outbox와 양쪽 Inbox는 각각 5건으로 유지됐다.
+
+증거는 OCI `/tmp/stove-payment-check-1ae958bh`의 앱 로그·payment.json·단계별 JUnit XML,
+boundary-regression.log·boundary-regression-counts.json·boundary-adapters.log·boundary-adapter-counts.json·boundary-junit.zip에 보존했다.
+기존 공유 스택·데이터 볼륨을 사용하지 않았고 검증 프로세스와 컨테이너·볼륨은 정리했다.
+설정 바인딩 위치·의존을 전역 검색하고 문서 링크·앵커, Payment V1~V10 원본 체크섬과 diff 공백 검사도 통과했다.

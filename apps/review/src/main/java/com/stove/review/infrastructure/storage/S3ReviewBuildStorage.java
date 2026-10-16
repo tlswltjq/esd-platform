@@ -1,5 +1,7 @@
 package com.stove.review.infrastructure.storage;
 
+import java.time.Duration;
+
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.*;
 import com.stove.review.core.domain.BuildDownload;
@@ -7,56 +9,30 @@ import com.stove.review.core.port.ReviewBuildStorage;
 
 import jakarta.annotation.PreDestroy;
 
-import org.springframework.stereotype.Component;
 
-import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.core.exception.SdkClientException;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.*;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.*;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
-import java.net.URI;
 
-@Component
 public class S3ReviewBuildStorage implements ReviewBuildStorage {
-    private final ReviewStorageProperties properties;
+    private final String bucket;
+    private final Duration presignTtl;
     private final S3Client s3;
     private final S3Presigner presigner;
 
-    public S3ReviewBuildStorage(ReviewStorageProperties p) {
-        properties = p;
-        var credentials =
-                StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(p.accessKey(), p.secretKey()));
-        var config =
-                S3Configuration.builder().pathStyleAccessEnabled(p.pathStyleRequired()).build();
-        var client =
-                S3Client.builder()
-                        .region(Region.of(p.region()))
-                        .credentialsProvider(credentials)
-                        .serviceConfiguration(config);
-        var signer =
-                S3Presigner.builder()
-                        .region(Region.of(p.region()))
-                        .credentialsProvider(credentials)
-                        .serviceConfiguration(config);
-        if (p.pathStyleRequired()) {
-            client.endpointOverride(URI.create(p.endpoint()));
-            signer.endpointOverride(
-                    URI.create(
-                            p.presignEndpoint() == null || p.presignEndpoint().isBlank()
-                                    ? p.endpoint()
-                                    : p.presignEndpoint()));
-        }
-        s3 = client.build();
-        presigner = signer.build();
+    public S3ReviewBuildStorage(S3Client s3, S3Presigner presigner, String bucket, Duration presignTtl) {
+        this.s3 = s3;
+        this.presigner = presigner;
+        this.bucket = bucket;
+        this.presignTtl = presignTtl;
     }
 
     @Override
     public BuildDownload download(ProjectSnapshot snapshot) {
-        String prefix = "s3://" + properties.bucket() + "/";
+        String prefix = "s3://" + bucket + "/";
         if (snapshot.storagePath() == null
                 || !snapshot.storagePath().startsWith(prefix)
                 || snapshot.storagePath().length() == prefix.length())
@@ -66,7 +42,7 @@ public class S3ReviewBuildStorage implements ReviewBuildStorage {
             long size =
                     s3.headObject(
                                     HeadObjectRequest.builder()
-                                            .bucket(properties.bucket())
+                                            .bucket(bucket)
                                             .key(key)
                                             .build())
                             .contentLength();
@@ -75,10 +51,10 @@ public class S3ReviewBuildStorage implements ReviewBuildStorage {
             var signed =
                     presigner.presignGetObject(
                             GetObjectPresignRequest.builder()
-                                    .signatureDuration(properties.presignTtl())
+                                    .signatureDuration(presignTtl)
                                     .getObjectRequest(
                                             GetObjectRequest.builder()
-                                                    .bucket(properties.bucket())
+                                                    .bucket(bucket)
                                                     .key(key)
                                                     .build())
                                     .build());

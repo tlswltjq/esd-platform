@@ -1,5 +1,7 @@
 package com.stove.download.infrastructure.cdn;
 
+import com.stove.download.config.CdnProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.download.core.domain.SignedUrl;
@@ -31,7 +33,7 @@ class CdnUrlSignerTest {
     private static final Duration TTL = Duration.ofMinutes(10);
 
     private final CdnUrlSigner signer =
-            new CdnUrlSigner(new CdnProperties(BASE_URL, SIGNING_KEY, TTL));
+            new CdnUrlSigner(BASE_URL, SIGNING_KEY, TTL);
 
     /** 프로덕션 구현과 독립적으로 계산한 기대 서명. 구현을 그대로 베끼면 검증이 되지 않는다. */
     private static String expectedToken(String path, long memberId, long expiresAtEpochSecond) {
@@ -98,7 +100,7 @@ class CdnUrlSignerTest {
     @DisplayName("TTL 설정을 바꾸면 만료도 따라 바뀐다")
     void ttlComesFromConfiguration() {
         CdnUrlSigner oneHour =
-                new CdnUrlSigner(new CdnProperties(BASE_URL, SIGNING_KEY, Duration.ofHours(1)));
+                new CdnUrlSigner(BASE_URL, SIGNING_KEY, Duration.ofHours(1));
         Instant before = Instant.now();
 
         SignedUrl signed = oneHour.sign("games/1/1.0.0.pak", 7L);
@@ -141,7 +143,7 @@ class CdnUrlSignerTest {
     @DisplayName("서명 키가 다르면 토큰도 다르다 — 키가 실제로 쓰인다")
     void tokenDependsOnTheSigningKey() {
         CdnUrlSigner otherKey =
-                new CdnUrlSigner(new CdnProperties(BASE_URL, "another-key", TTL));
+                new CdnUrlSigner(BASE_URL, "another-key", TTL);
 
         SignedUrl signed = otherKey.sign("games/1/1.0.0.pak", 7L);
 
@@ -155,7 +157,7 @@ class CdnUrlSignerTest {
     @Test
     @DisplayName("설정이 비어 있어도 기본값으로 서명한다")
     void defaultsAreUsable() {
-        CdnUrlSigner defaults = new CdnUrlSigner(new CdnProperties(null, null, null));
+        CdnUrlSigner defaults = new com.stove.download.config.DownloadUrlConfiguration().cdnUrlSigner(new CdnProperties(null, null, null));
 
         SignedUrl signed = defaults.sign("games/1/1.0.0.pak", 7L);
 

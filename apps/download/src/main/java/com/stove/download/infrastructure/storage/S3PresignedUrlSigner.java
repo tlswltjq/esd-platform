@@ -2,15 +2,8 @@ package com.stove.download.infrastructure.storage;
 
 import com.stove.download.core.domain.SignedUrl;
 import com.stove.download.core.port.DownloadUrlSigner;
-import java.net.URI;
 import java.time.Instant;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -26,29 +19,19 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
  * 실제 운영은 보통 S3 저장 + CDN 배포이므로 두 축은 독립적으로 고른다.
  */
 @Slf4j
-@Component
-@ConditionalOnProperty(name = "stove.download.url-strategy", havingValue = "s3")
 public class S3PresignedUrlSigner implements DownloadUrlSigner {
 
-    private final ObjectStorageProperties properties;
+    private final java.time.Duration presignTtl;
     private final S3Presigner presigner;
 
-    public S3PresignedUrlSigner(ObjectStorageProperties properties) {
-        this.properties = properties;
-        var builder = S3Presigner.builder()
-                .region(Region.of(properties.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())))
-                .serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(properties.pathStyleRequired())
-                        .build());
-        if (properties.pathStyleRequired()) {
-            String publicEndpoint = properties.presignEndpoint() == null
-                    || properties.presignEndpoint().isBlank()
-                    ? properties.endpoint() : properties.presignEndpoint();
-            builder.endpointOverride(URI.create(publicEndpoint));
-        }
-        this.presigner = builder.build();
+    public S3PresignedUrlSigner(S3Presigner presigner, java.time.Duration presignTtl) {
+        this.presigner = presigner;
+        this.presignTtl = presignTtl;
+    }
+
+    @jakarta.annotation.PreDestroy
+    public void close() {
+        presigner.close();
     }
 
     /**
@@ -66,14 +49,14 @@ public class S3PresignedUrlSigner implements DownloadUrlSigner {
         String key = withoutScheme.substring(slash + 1);
 
         GetObjectPresignRequest request = GetObjectPresignRequest.builder()
-                .signatureDuration(properties.presignTtl())
+                .signatureDuration(presignTtl)
                 .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
                 .build();
 
         String url = presigner.presignGetObject(request).url().toString();
-        Instant expiresAt = Instant.now().plus(properties.presignTtl());
+        Instant expiresAt = Instant.now().plus(presignTtl);
 
-        log.info("다운로드 서명 URL 발급 memberId={} key={} (ttl={})", memberId, key, properties.presignTtl());
+        log.info("다운로드 서명 URL 발급 memberId={} key={} (ttl={})", memberId, key, presignTtl);
         return new SignedUrl(url, expiresAt);
     }
 }

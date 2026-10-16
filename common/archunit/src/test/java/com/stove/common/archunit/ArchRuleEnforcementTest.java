@@ -97,6 +97,38 @@ class ArchRuleEnforcementTest {
     class BoundaryRules {
 
         @Test
+        void commonConfigurationUsesTheSameBoundary() {
+            assertCatchesViolation(CommonLibraryRules.공통_설정_바인딩은_config_에_둔다, "공통_설정_바인딩은_config_에_둔다");
+            assertAcceptsCompliant(CommonLibraryRules.공통_설정_바인딩은_config_에_둔다, "공통_설정_바인딩은_config_에_둔다");
+            assertCatchesViolation(CommonLibraryRules.공통_실행_객체는_바인딩_객체를_모른다, "공통_실행_객체는_바인딩_객체를_모른다");
+            assertAcceptsCompliant(CommonLibraryRules.공통_실행_객체는_바인딩_객체를_모른다, "공통_실행_객체는_바인딩_객체를_모른다");
+        }
+
+        @Test
+        void configurationBindingBelongsInConfig() {
+            assertCatchesViolation(ModulePackageRules.설정_바인딩은_config_에_둔다, "설정_바인딩은_config_에_둔다");
+            assertAcceptsCompliant(ModulePackageRules.설정_바인딩은_config_에_둔다, "설정_바인딩은_config_에_둔다");
+        }
+
+        @Test
+        void bindingObjectsDoNotLeakIntoUseCases() {
+            assertCatchesViolation(ModulePackageRules.설정_객체는_config_밖으로_전달하지_않는다, "설정_객체는_config_밖으로_전달하지_않는다");
+            assertAcceptsCompliant(ModulePackageRules.설정_객체는_config_밖으로_전달하지_않는다, "설정_객체는_config_밖으로_전달하지_않는다");
+        }
+
+        @Test
+        void externalEnvironmentStaysInConfig() {
+            assertCatchesViolation(ModulePackageRules.설정_환경은_config_에서만_읽는다, "설정_환경은_config_에서만_읽는다");
+            assertAcceptsCompliant(ModulePackageRules.설정_환경은_config_에서만_읽는다, "설정_환경은_config_에서만_읽는다");
+        }
+
+        @Test
+        void valueParametersCannotBindInsideUseCases() {
+            assertCatchesViolation(ModulePackageRules.Value_바인딩은_config_에서만_한다, "Value_바인딩은_config_에서만_한다");
+            assertAcceptsCompliant(ModulePackageRules.Value_바인딩은_config_에서만_한다, "Value_바인딩은_config_에서만_한다");
+        }
+
+        @Test
         void eventEnvelopeStaysOutsideCore() {
             assertCatchesViolation(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");
             assertAcceptsCompliant(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");

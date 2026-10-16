@@ -1,40 +1,14 @@
 package com.stove.payment.api.controller.dto;
 
-import com.stove.payment.core.domain.Payment;
-import com.stove.payment.core.domain.PaymentStatus;
+import com.stove.payment.core.domain.*;
 import java.time.Instant;
 
-public record PaymentResponse(
-        Long paymentId,
-        String orderNo,
-        Long memberId,
-        long amount,
-        String currency,
-        PaymentStatus status,
-        String method,
-        String pgTxId,
-        Instant paidAt,
-        String failReasonCode,
-        String failReason,
-        String cancelReason,
-        boolean retryable
-) {
-    public static PaymentResponse from(Payment payment) {
-        return new PaymentResponse(
-                payment.getId(),
-                payment.getOrderNo(),
-                payment.getMemberId(),
-                payment.getAmount(),
-                payment.getCurrency(),
-                payment.getStatus(),
-                payment.getMethod(),
-                payment.getPgTxId(),
-                payment.getPaidAt(),
-                payment.getFailReasonCode(),
-                payment.getFailReason(),
-                payment.getCancelReason(),
-                payment.getStatus() == PaymentStatus.READY
-                        || payment.getStatus() == PaymentStatus.PENDING
-                        || payment.getStatus() == PaymentStatus.CANCELING);
+public record PaymentResponse(String paymentId,String orderNo,Long productId,String productCode,String title,
+        long contentVersion,long listAmount,long discountAmount,long amount,String currency,String provider,PaymentStatus status,
+        Instant createdAt,Instant updatedAt,Instant resultOccurredAt,String failureReasonCode,String failureReason) {
+    public static PaymentResponse from(Payment p) {
+        return new PaymentResponse(p.getPaymentId(),p.getOrderNo(),p.getProductId(),p.getProductCode(),p.getTitle(),
+                p.getContentVersion(),p.getListAmount(),p.getDiscountAmount(),p.getAmount(),p.getCurrency(),p.getProvider(),p.getStatus(),
+                p.getCreatedAt(),p.getUpdatedAt(),p.getResultOccurredAt(),p.getFailureReasonCode(),p.getFailureReason());
     }
 }

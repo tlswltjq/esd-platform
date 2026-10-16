@@ -1,5 +1,6 @@
 package com.stove.common.messaging.outbox;
 
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -87,7 +88,7 @@ class OutboxRelayTest {
                 .toList());
 
         relay = new OutboxRelay(repository, kafkaTemplate,
-                new OutboxProperties(true, BATCH_SIZE, 1000L, MAX_RETRY, MAX_BATCHES_PER_CYCLE),
+                BATCH_SIZE, MAX_RETRY, MAX_BATCHES_PER_CYCLE,
                 new OutboxMetrics(meterRegistry, repository),
                 directTransactionTemplate());
     }

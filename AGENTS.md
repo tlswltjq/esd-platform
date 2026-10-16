@@ -1,8 +1,10 @@
 # 작업 기준
 
-- 현재 재작성 완료 모듈은 `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`다. Studio·Review 재작성 완료일은 2026-10-14, Catalog·Store는 2026-10-15, Order는 2026-10-16이다.
+- 현재 재작성 완료 모듈은 `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`다. Studio·Review 재작성 완료일은 2026-10-14, Catalog·Store는 2026-10-15, Order·Payment는 2026-10-16이다.
 - 신규 구현과 수정·검증은 완료된 모듈의 계약을 기준으로 한다.
 - 외부 이벤트는 해당 모듈 `api.listener`의 `*Mapper.from(...)`에서 봉투·본문·키를 검증하고 내부 입력으로 변환한다. 업무 서비스와 도메인 모델은 외부 이벤트 전체를 입력받지 않는다. Inbox·잠금·업무 변경·Outbox의 트랜잭션 조율은 서비스가 맡는다.
+- 환경 설정 바인딩(`@ConfigurationProperties`, `@Value`)과 객체 조립은 `config`에서 담당한다. 서비스·도메인·어댑터에는 필요한 값·클라이언트만 주입하고 바인딩 객체를 전달하지 않는다. 공통 라이브러리의 `*AutoConfiguration`도 설정 조립 경계다.
+- 내부 입력은 생성 시 값 자체의 유효성을 보장한다. 검증은 의미별 메서드로 표현하고, 다른 모델이 입력 객체의 공통 검증 함수·상수에 의존하게 하지 않는다. 공통 값 규칙은 모듈 내부의 작은 값 검증 객체에 둔다.
 - 미완료 모듈은 호환성 유지, 설계 제약, 구현 변경 또는 검증의 기준으로 삼지 않는다.
 - Studio의 소유자는 Auth JWT의 `sub`로 직접 식별한다.
 - 미완료 외부 업무의 요청·결과는 Studio의 이벤트 계약 경계에서 검증한다.
@@ -11,15 +13,16 @@
 - Review는 불변 Project 스냅샷의 수동 승인·반려와 결과 발행을 담당한다. 범위와 검증 기록은 `docs/review-simplification-plan.md`를 따른다.
 - Catalog는 Studio 출시 요청의 불변 스냅샷을 공개본으로 확정하고 공개 상품 조회·출시 결과 발행을 담당한다. 범위와 검증 기록은 `docs/catalog-mvp-plan.md`를 따른다.
 - Store는 Catalog 공개 상품의 조회 사본, 제목 검색·목록·상세와 시작 시 초기 동기화를 담당한다. 범위와 검증 기록은 `docs/store-mvp-plan.md`를 따른다.
-- Order는 공개 상품 하나의 주문 스냅샷·청구액 확정, JWT sub 기준 내 주문 조회와 결제 결과 반영을 담당한다. 범위와 검증 기록은 `docs/order-mvp-plan.md`를 따른다. 실제 Payment는 후속 대상이며 이벤트 계약·픽스처로 검증했다.
+- Order는 공개 상품 하나의 주문 스냅샷·청구액 확정, JWT sub 기준 내 주문 조회와 결제 결과 반영을 담당한다. 범위와 검증 기록은 `docs/order-mvp-plan.md`를 따른다. Order 독립 검증은 결과 픽스처를 사용하고 실제 Payment 연계는 `docs/payment-mvp-plan.md`를 따른다.
+- Payment는 OrderPlaced의 내구성 있는 접수, 고정 paymentId로 모의 PG 호출·미확정 건 재개, 최종 결과·Outbox 저장과 JWT sub 기준 내 결제 조회를 담당한다. 실제 PG·자금 이동·환불은 후속 범위다. 범위와 OCI 검증 기록은 `docs/payment-mvp-plan.md`를 따른다.
 
 ## 후속 작업 순서
 
 최소 MVP를 구현·실행하며 도메인의 책임, 데이터 흐름과 코드를 이해한 뒤 확장한다. 다음 순서로 모듈을 재작성한다.
-다음 진행 대상은 `payment`다.
+다음 진행 대상은 `license`다.
 
 1. `order` (2026-10-16 완료): 공개 상품의 주문 시점 스냅샷·금액 확정, 내 주문 조회와 결제 결과 반영. 계획·완료 기록은 `docs/order-mvp-plan.md`를 따른다.
-2. `payment`: 확정된 주문 금액에 대한 결제 처리와 결과 발행.
+2. `payment` (2026-10-16 완료): 확정된 주문 금액에 대한 모의 PG 자동 처리, 미확정 건 재개·결과 발행·본인 조회. 계획·완료 기록은 `docs/payment-mvp-plan.md`를 따른다.
 3. `license`: 구매 결과에 따른 상품 이용 권한 부여와 조회.
 4. `download`: 이용 권한을 확인한 빌드 다운로드 제공.
 5. `settlement`: 확정된 거래를 바탕으로 판매자 매출·정산 처리.

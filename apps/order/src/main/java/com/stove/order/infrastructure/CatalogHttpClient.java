@@ -4,20 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.web.error.*;
 import com.stove.order.core.domain.*;
 import com.stove.order.core.port.CatalogProducts;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.*;
 
-@Component
 public class CatalogHttpClient implements CatalogProducts {
     private final RestClient client;
-    public CatalogHttpClient(@Value("${stove.order.catalog-base-url}") String baseUrl,
-            @Value("${stove.order.catalog-connect-timeout-ms:3000}") int connectTimeout,
-            @Value("${stove.order.catalog-read-timeout-ms:10000}") int readTimeout) {
-        var factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(connectTimeout); factory.setReadTimeout(readTimeout);
-        client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+    public CatalogHttpClient(RestClient client) {
+        this.client = client;
     }
     public PublishedProduct detail(String code) {
         try {

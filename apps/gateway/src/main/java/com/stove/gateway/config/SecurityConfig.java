@@ -46,7 +46,6 @@ public class SecurityConfig {
             boolean delegated = path.equals("/login") || path.equals("/logout") || path.startsWith("/oauth2/")
                     || path.startsWith("/connect/") || path.equals("/userinfo")
                     || path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/signup/member")
-                    || path.equals("/api/v1/payments/callback")
                     || path.startsWith("/actuator/");
             if (apiBearer || delegated) return org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult.notMatch();
             return org.springframework.security.web.server.csrf.CsrfWebFilter.DEFAULT_CSRF_MATCHER.matches(exchange);
@@ -82,9 +81,6 @@ public class SecurityConfig {
                         // catalog의 내부 가격 재계산 경로는 외부 라우트가 없다. 보안 필터가
                         // 먼저 401을 반환하면 라우트 부재(404)라는 경계가 흐려진다.
                         .pathMatchers(HttpMethod.POST, "/api/v1/products/quote").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/api/v1/payments/callback").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/v1/payments/simulator/checkout/**").hasRole("MEMBER")
-                        .pathMatchers("/api/v1/payments/simulator/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/studio/assets/**").permitAll()
                         .pathMatchers("/api/v1/studio/**").hasRole("CREATOR")

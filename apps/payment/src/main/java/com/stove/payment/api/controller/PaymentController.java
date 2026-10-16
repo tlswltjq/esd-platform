@@ -1,81 +1,24 @@
 package com.stove.payment.api.controller;
 
+import com.stove.common.security.CurrentSubject;
 import com.stove.common.web.response.ApiResponse;
-import com.stove.common.security.CurrentMemberId;
+import com.stove.payment.api.controller.dto.*;
+import com.stove.payment.core.service.*;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.Parameters;
-import io.swagger.v3.oas.annotations.enums.ParameterIn;
-import com.stove.payment.api.controller.dto.PaymentResponse;
-import com.stove.payment.api.controller.dto.PgCallbackRequest;
-import com.stove.payment.api.controller.dto.PreparePaymentRequest;
-import com.stove.payment.api.controller.dto.PreparePaymentResponse;
-import com.stove.payment.api.application.PaymentCallbackFacade;
-import com.stove.payment.api.application.RefundFacade;
-import com.stove.payment.core.service.PaymentService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-@RestController
-@RequiredArgsConstructor
+@RestController @RequiredArgsConstructor
 @RequestMapping("/api/v1/payments")
+@SecurityRequirement(name="oauth2",scopes="commerce")
 public class PaymentController {
-
-    private final PaymentService paymentService;
-    private final RefundFacade refundFacade;
-    private final PaymentCallbackFacade paymentCallbackFacade;
-
-    @GetMapping("/{orderNo}")
-    @SecurityRequirement(name = "oauth2", scopes = "commerce")
-    public ApiResponse<PaymentResponse> get(@PathVariable String orderNo,
-                                            @CurrentMemberId Long memberId) {
-        return ApiResponse.ok(PaymentResponse.from(paymentService.getPaymentForMember(
-                orderNo, memberId)));
+    private final SearchPayments searchPayments;
+    private final ReadPayment readPayment;
+    @GetMapping public ApiResponse<PaymentPage> list(@CurrentSubject String buyer,
+            @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(PaymentPage.from(searchPayments.execute(buyer,page,size)));
     }
-
-    @PostMapping("/{orderNo}/prepare")
-    @SecurityRequirement(name = "oauth2", scopes = "commerce")
-    public ApiResponse<PreparePaymentResponse> prepare(@PathVariable String orderNo,
-                                                       @CurrentMemberId Long memberId,
-                                                       @Valid @RequestBody PreparePaymentRequest request) {
-        return ApiResponse.ok(PreparePaymentResponse.from(paymentService.prepareForMember(
-                orderNo, memberId, request.method())));
-    }
-
-    /**
-     * PG 결제 결과 콜백. PgCallbackAuthenticationFilter가 원본 본문 서명을 먼저 확인한다.
-     *
-     * <p>승인과 거절이 한 URL 로 들어와 {@code result} 로 갈린다. 판별할 수 없는 본문은
-     * 여기 오기 전에 역직렬화에서 400 으로 끊긴다 — {@link PgCallbackRequest} 참고.
-     */
-    @PostMapping("/callback")
-    @Parameters({
-            @Parameter(name = "X-Pg-Timestamp", in = ParameterIn.HEADER, required = true,
-                    description = "Unix epoch seconds; at most five minutes old"),
-            @Parameter(name = "X-Pg-Signature", in = ParameterIn.HEADER, required = true,
-                    description = "Hex HMAC-SHA256 of timestamp + '.' + raw request body")
-    })
-    public ApiResponse<Void> callback(@Valid @RequestBody PgCallbackRequest request) {
-        switch (request) {
-            case PgCallbackRequest.Approved approved -> paymentCallbackFacade.approve(approved.toApproval());
-            case PgCallbackRequest.Declined declined -> paymentService.handleDecline(declined.toDecline());
-        }
-        return ApiResponse.ok();
-    }
-
-    @PostMapping("/{orderNo}/cancel")
-    @SecurityRequirement(name = "oauth2", scopes = "commerce")
-    public ApiResponse<Void> cancel(@PathVariable String orderNo,
-                                    @CurrentMemberId Long memberId,
-                                    @RequestParam(defaultValue = "USER_REFUND") String reason) {
-        refundFacade.refundForMember(orderNo, memberId, reason);
-        return ApiResponse.ok();
+    @GetMapping("/{orderNo}") public ApiResponse<PaymentResponse> detail(@CurrentSubject String buyer,@PathVariable String orderNo) {
+        return ApiResponse.ok(PaymentResponse.from(readPayment.execute(orderNo,buyer)));
     }
 }

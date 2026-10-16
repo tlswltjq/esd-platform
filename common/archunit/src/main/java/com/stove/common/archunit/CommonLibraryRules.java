@@ -2,6 +2,7 @@ package com.stove.common.archunit;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_THROW_GENERIC_EXCEPTIONS;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
@@ -28,6 +29,20 @@ public final class CommonLibraryRules {
 
     private CommonLibraryRules() {
     }
+
+    @ArchTest
+    public static final ArchRule 공통_설정_바인딩은_config_에_둔다 = classes()
+            .that().areAnnotatedWith("org.springframework.boot.context.properties.ConfigurationProperties")
+            .should().resideInAPackage("..config..")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 공통_실행_객체는_바인딩_객체를_모른다 = noClasses()
+            .that(DescribedPredicate.describe("설정 조립 경계 밖의 클래스", type ->
+                    !type.getPackageName().contains(".config") && !type.getSimpleName().endsWith("AutoConfiguration")))
+            .should().dependOnClassesThat().areAnnotatedWith("org.springframework.boot.context.properties.ConfigurationProperties")
+            .because("자동 구성은 값을 추출해 전달하고 릴레이 등 실행 객체는 바인딩 타입을 모른다")
+            .allowEmptyShould(true);
 
     /** 공용 라이브러리는 자신을 쓰는 앱을 모른다. 방향이 뒤집히면 재사용 단위가 사라진다. */
     @ArchTest

@@ -28,7 +28,9 @@ public class OutboxRelay {
 
     private final OutboxEventRepository repository;
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final OutboxProperties properties;
+    private final int batchSize;
+    private final int maxRetry;
+    private final int maxBatchesPerCycle;
     private final OutboxMetrics metrics;
     private final TransactionTemplate transactionTemplate;
 
@@ -40,9 +42,9 @@ public class OutboxRelay {
      */
     @Scheduled(fixedDelayString = "${stove.outbox.poll-interval-ms:200}")
     public void relay() {
-        for (int cycle = 0; cycle < properties.maxBatchesPerCycle(); cycle++) {
+        for (int cycle = 0; cycle < maxBatchesPerCycle; cycle++) {
             int processed = relayOneBatch();
-            if (processed < properties.batchSize()) {
+            if (processed < batchSize) {
                 return;   // 배치를 다 못 채웠다 = 적체 해소
             }
         }
@@ -51,7 +53,7 @@ public class OutboxRelay {
     private int relayOneBatch() {
         Integer processed = transactionTemplate.execute(status -> {
             long startedAt = System.nanoTime();
-            List<OutboxEvent> batch = repository.lockPendingBatch(properties.batchSize());
+            List<OutboxEvent> batch = repository.lockPendingBatch(batchSize);
             if (batch.isEmpty()) {
                 return 0;
             }
@@ -120,11 +122,11 @@ public class OutboxRelay {
             return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            event.markFailed("relay interrupted", properties.maxRetry());
+            event.markFailed("relay interrupted", maxRetry);
             metrics.recordFailed(event);
             return false;
         } catch (Exception e) {
-            event.markFailed(e.getMessage(), properties.maxRetry());
+            event.markFailed(e.getMessage(), maxRetry);
             metrics.recordFailed(event);
             log.error("outbox 발행 실패 eventId={} type={} retry={}",
                     event.getEventId(), event.getEventType(), event.getRetryCount(), e);
