@@ -12,17 +12,17 @@ import java.net.URI;
 public class StorageConfiguration {
     @Bean
     public S3ReviewBuildStorage buildStorage(ReviewStorageProperties properties) {
-        var credentials =
+        StaticCredentialsProvider credentials =
                 StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(properties.accessKey(), properties.secretKey()));
-        var config =
+        S3Configuration config =
                 S3Configuration.builder().pathStyleAccessEnabled(properties.pathStyleRequired()).build();
-        var client =
+        S3ClientBuilder client =
                 S3Client.builder()
                         .region(Region.of(properties.region()))
                         .credentialsProvider(credentials)
                         .serviceConfiguration(config);
-        var signer =
+        S3Presigner.Builder signer =
                 S3Presigner.builder()
                         .region(Region.of(properties.region()))
                         .credentialsProvider(credentials)

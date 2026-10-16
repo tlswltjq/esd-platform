@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.stove.gateway.config.SecurityConfig;
@@ -19,12 +20,13 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 
 class GatewayJwtValidationTest {
     @Test
     void rejectsExpiredWrongIssuerWrongAudienceAndTamperedTokens() throws Exception {
-        var key = new RSAKeyGenerator(2048).keyID("test").generate();
-        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        RSAKey key = new RSAKeyGenerator(2048).keyID("test").generate();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/jwks", exchange -> {
             byte[] body = new JWKSet(key.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -34,17 +36,17 @@ class GatewayJwtValidationTest {
         });
         server.start();
         try {
-            var decoder = new SecurityConfig().jwtDecoder("https://auth.example",
+            ReactiveJwtDecoder decoder = new SecurityConfig().jwtDecoder("https://auth.example",
                     "http://127.0.0.1:" + server.getAddress().getPort() + "/jwks");
-            var encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
+            NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
             Instant now = Instant.now();
             java.util.function.Function<JwtClaimsSet, String> sign = claims -> encoder.encode(JwtEncoderParameters.from(
                     JwsHeader.with(SignatureAlgorithm.RS256).build(), claims)).getTokenValue();
-            var valid = JwtClaimsSet.builder().issuer("https://auth.example").subject("member")
+            JwtClaimsSet valid = JwtClaimsSet.builder().issuer("https://auth.example").subject("member")
                     .audience(List.of("esd-api")).issuedAt(now.minusSeconds(300)).expiresAt(now.plusSeconds(300)).build();
             String token = sign.apply(valid);
             assertThat(decoder.decode(token).block().getSubject()).isEqualTo("member");
-            for (var claims : List.of(
+            for (JwtClaimsSet claims : List.of(
                     JwtClaimsSet.from(valid).expiresAt(now.minusSeconds(120)).build(),
                     JwtClaimsSet.from(valid).issuer("https://other.example").build(),
                     JwtClaimsSet.from(valid).audience(List.of("other-api")).build())) {

@@ -67,22 +67,22 @@ class StudioCreatorFlowTest {
     void authClaimsAndGatewayPermissionsIdentifyTheProjectOwner() throws Exception {
         String email = "creator-" + UUID.randomUUID() + "@studio.local";
         String password = "creator-password-1234";
-        var signup =
+        E2eClient.Response signup =
                 Stove.gateway.post(
                         "/api/v1/auth/signup", Map.of("email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
         owner = signup.data().path("subject").asText();
         String token = OidcLogin.token(email, password);
-        var claims = JSON.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+        JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
         assertThat(claims.path("sub").asText()).isEqualTo(owner);
         assertThat(claims.path("aud").toString()).contains("esd-api");
         assertThat(claims.path("roles").toString()).contains("CREATOR");
         creator = Map.of("Authorization", "Bearer " + token);
-        var anonymous =
+        E2eClient.Response anonymous =
                 Stove.gateway.post(
                         "/api/v1/studio/projects", Map.of("productCode", CODE, "title", "Game"));
         assertThat(anonymous.status()).as("Gateway CSRF rejects an anonymous POST").isEqualTo(403);
-        var member = account("/api/v1/auth/signup/member");
+        Map<String, String> member = account("/api/v1/auth/signup/member");
         assertThat(
                         Stove.gateway
                                 .post(
@@ -91,7 +91,7 @@ class StudioCreatorFlowTest {
                                         member)
                                 .status())
                 .isEqualTo(403);
-        var created =
+        E2eClient.Response created =
                 Stove.gateway.post(
                         "/api/v1/studio/projects",
                         Map.of("productCode", CODE, "title", "Game"),
@@ -107,7 +107,7 @@ class StudioCreatorFlowTest {
                                         creator)
                                 .status())
                 .isEqualTo(409);
-        var docs = Stove.gateway.get("/v3/api-docs/studio");
+        E2eClient.Response docs = Stove.gateway.get("/v3/api-docs/studio");
         assertThat(docs.status()).as("%s", docs).isEqualTo(200);
         assertThat(docs.body().toString()).doesNotContain("/api/v1/studio/workspace");
     }
@@ -117,9 +117,9 @@ class StudioCreatorFlowTest {
     void entireZipThumbnailAndStorePageAreRegisteredThroughGateway() throws Exception {
         assertThat(Stove.gateway.post(project() + "/review-requests", null, creator).status())
                 .isEqualTo(409);
-        var image = new ByteArrayOutputStream();
+        ByteArrayOutputStream image = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "png", image);
-        var uploaded =
+        E2eClient.Response uploaded =
                 Stove.gateway.postMultipart(
                         project() + "/thumbnail",
                         Map.of(),
@@ -129,7 +129,7 @@ class StudioCreatorFlowTest {
                         creator);
         assertThat(uploaded.status()).as("%s", uploaded).isEqualTo(201);
         thumbnail = uploaded.data().path("url").asText();
-        var invalid =
+        E2eClient.Response invalid =
                 Stove.gateway.postMultipart(
                         project() + "/builds",
                         Map.of("version", "bad"),
@@ -138,7 +138,7 @@ class StudioCreatorFlowTest {
                         "application/zip",
                         creator);
         assertThat(invalid.status()).isEqualTo(400);
-        var build = upload("1");
+        JsonNode build = upload("1");
         firstBuild = build.path("id").asLong();
         assertThat(build.path("checksum").asText()).hasSize(64);
         assertThat(build.path("fileSize").asLong()).isPositive();
@@ -161,7 +161,7 @@ class StudioCreatorFlowTest {
     @Order(3)
     void reviewRequestFreezesTheAuthSubjectAndSupportsRejectionAndResubmission() throws Exception {
         currentReview = requestReview();
-        var snapshot = JSON.readTree(currentReview.path("snapshot").asText());
+        JsonNode snapshot = JSON.readTree(currentReview.path("snapshot").asText());
         assertThat(snapshot.path("ownerSubject").asText()).isEqualTo(owner);
         assertThat(snapshot.has("sellerId")).isFalse();
         assertThat(requestReview().path("id").asLong())
@@ -175,7 +175,7 @@ class StudioCreatorFlowTest {
                         "Fix description",
                         "fixture-reviewer"));
         awaitStatus("REJECTED");
-        var history = Stove.gateway.get(project() + "/review-requests", creator);
+        E2eClient.Response history = Stove.gateway.get(project() + "/review-requests", creator);
         assertThat(history.data().get(0).path("feedback").asText()).isEqualTo("Fix description");
         long previous = reviewRequestId();
         savePage("First title", 1000);
@@ -190,7 +190,7 @@ class StudioCreatorFlowTest {
                 .isEqualTo(409);
         reportReviewApproval();
         assertThat(data().path("releaseEligible").asBoolean()).isTrue();
-        var request = requestRelease();
+        JsonNode request = requestRelease();
         firstReleaseRequest = request.path("id").asLong();
         assertThat(requestRelease().path("id").asLong()).isEqualTo(firstReleaseRequest);
         assertThat(request.path("status").asText()).isEqualTo("REQUESTED");
@@ -198,14 +198,14 @@ class StudioCreatorFlowTest {
         awaitReleaseResult("COMPLETED");
         assertThat(data().has("published")).isFalse();
         assertThat(data().has("status")).isFalse();
-        var history = Stove.gateway.get(project() + "/release-requests", creator);
+        E2eClient.Response history = Stove.gateway.get(project() + "/release-requests", creator);
         assertThat(history.data().get(0).path("id").asLong()).isEqualTo(firstReleaseRequest);
     }
 
     @Test
     @Order(5)
     void changingDetailsAndBuildRequiresAReviewRequestForTheNewVersion() throws Exception {
-        var before = data();
+        JsonNode before = data();
         savePage("Second title", 2000);
         assertThat(
                         Stove.gateway
@@ -241,7 +241,7 @@ class StudioCreatorFlowTest {
     @Test
     @Order(6)
     void rejectionAndRerequestKeepSeparateRequestHistoryAndIgnoreLateOldResults() throws Exception {
-        var failed = requestRelease();
+        JsonNode failed = requestRelease();
         send(
                 ProjectReleaseRejectedEvent.of(
                         failed.path("id").asLong(),
@@ -251,12 +251,12 @@ class StudioCreatorFlowTest {
                         "External rejection",
                         failed.path("requestEventId").asText()));
         awaitReleaseResult("REJECTED");
-        var retry = requestRelease();
+        JsonNode retry = requestRelease();
         assertThat(retry.path("id").asLong()).isNotEqualTo(failed.path("id").asLong());
         reportReleaseCompletion(failed);
         reportReleaseCompletion(retry);
         awaitReleaseResult("COMPLETED");
-        var history = Stove.gateway.get(project() + "/release-requests", creator).data();
+        JsonNode history = Stove.gateway.get(project() + "/release-requests", creator).data();
         assertThat(history.size()).isEqualTo(3);
         assertThat(history.get(0).path("status").asText()).isEqualTo("COMPLETED");
         assertThat(history.get(1).path("status").asText()).isEqualTo("REJECTED");
@@ -266,7 +266,7 @@ class StudioCreatorFlowTest {
     @Test
     @Order(7)
     void anotherCreatorCannotReadOrChangeTheOwnedProject() {
-        var other = account("/api/v1/auth/signup");
+        Map<String, String> other = account("/api/v1/auth/signup");
         assertThat(Stove.gateway.get(project(), other).status()).isEqualTo(403);
         assertThat(
                         Stove.gateway
@@ -285,7 +285,7 @@ class StudioCreatorFlowTest {
     private static Map<String, String> account(String signupPath) {
         String email = "account-" + UUID.randomUUID() + "@studio.local",
                 password = "account-password-1234";
-        var signup = Stove.gateway.post(signupPath, Map.of("email", email, "password", password));
+        E2eClient.Response signup = Stove.gateway.post(signupPath, Map.of("email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
         return Map.of("Authorization", "Bearer " + OidcLogin.token(email, password));
     }
@@ -323,7 +323,7 @@ class StudioCreatorFlowTest {
     }
 
     private static void savePage(String title, long price) {
-        var updated =
+        E2eClient.Response updated =
                 Stove.gateway.put(
                         project() + "/store-page",
                         page(title, price, data().path("contentVersion").asLong()),
@@ -332,7 +332,7 @@ class StudioCreatorFlowTest {
     }
 
     private static JsonNode upload(String version) throws IOException {
-        var response =
+        E2eClient.Response response =
                 Stove.gateway.postMultipart(
                         project() + "/builds",
                         Map.of("version", version),
@@ -345,8 +345,8 @@ class StudioCreatorFlowTest {
     }
 
     private static byte[] zip(String version) throws IOException {
-        var bytes = new ByteArrayOutputStream();
-        try (var zip = new ZipOutputStream(bytes)) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
             zip.putNextEntry(new ZipEntry("game.bin"));
             zip.write(version.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
@@ -355,7 +355,7 @@ class StudioCreatorFlowTest {
     }
 
     private static JsonNode requestReview() {
-        var request = Stove.gateway.post(project() + "/review-requests", null, creator);
+        E2eClient.Response request = Stove.gateway.post(project() + "/review-requests", null, creator);
         assertThat(request.status()).as("%s", request).isEqualTo(202);
         return request.data();
     }
@@ -368,7 +368,7 @@ class StudioCreatorFlowTest {
     }
 
     private static JsonNode requestRelease() {
-        var response = Stove.gateway.post(project() + "/release-requests", null, creator);
+        E2eClient.Response response = Stove.gateway.post(project() + "/release-requests", null, creator);
         assertThat(response.status()).as("%s", response).isEqualTo(202);
         return response.data();
     }
@@ -398,7 +398,7 @@ class StudioCreatorFlowTest {
     }
 
     private static void send(DomainEvent event) throws Exception {
-        var record =
+        ProducerRecord<String, String> record =
                 new ProducerRecord<String, String>(
                         event.topic(), event.partitionKey(), JSON.writeValueAsString(event));
         record.headers()

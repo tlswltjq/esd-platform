@@ -4,6 +4,7 @@ import static com.stove.e2e.ReviewJourney.*;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.payload.*;
 
@@ -66,7 +67,7 @@ class ReviewCreatorFlowTest {
     @Order(2)
     void studioRequestsAreReceivedAsImmutableReviewSnapshots() {
         first = request(project.id(), creator, reviewer);
-        var response = Stove.gateway.get(reviewPath(first), reviewer.headers());
+        E2eClient.Response response = Stove.gateway.get(reviewPath(first), reviewer.headers());
         assertThat(response.data().path("snapshot").path("ownerSubject").asText())
                 .isEqualTo(creator.subject());
         assertThat(response.data().path("snapshot").path("title").asText())
@@ -90,10 +91,10 @@ class ReviewCreatorFlowTest {
                                 .get(reviewPath(first) + "/build-download", creator.headers())
                                 .status())
                 .isEqualTo(403);
-        var response = Stove.gateway.get(reviewPath(first) + "/build-download", reviewer.headers());
+        E2eClient.Response response = Stove.gateway.get(reviewPath(first) + "/build-download", reviewer.headers());
         assertThat(response.status()).isEqualTo(200);
         assertThat(response.headers().getFirst("Cache-Control")).contains("no-store");
-        var bytes =
+        HttpResponse<byte[]> bytes =
                 HttpClient.newHttpClient()
                         .send(
                                 HttpRequest.newBuilder(
@@ -113,7 +114,7 @@ class ReviewCreatorFlowTest {
     @Test
     @Order(4)
     void rejectionIsFinalAndItsFeedbackReturnsToStudio() {
-        var rejected =
+        E2eClient.Response rejected =
                 Stove.gateway.post(
                         reviewPath(first) + "/reject",
                         Map.of("feedback", "Fix the description"),
@@ -160,9 +161,9 @@ class ReviewCreatorFlowTest {
                                 .path("totalElements")
                                 .asLong())
                 .isEqualTo(2);
-        var approved = Stove.gateway.post(reviewPath(second) + "/approve", null, admin.headers());
+        E2eClient.Response approved = Stove.gateway.post(reviewPath(second) + "/approve", null, admin.headers());
         assertThat(approved.status()).isEqualTo(200);
-        var retry = Stove.gateway.post(reviewPath(second) + "/approve", null, reviewer.headers());
+        E2eClient.Response retry = Stove.gateway.post(reviewPath(second) + "/approve", null, reviewer.headers());
         assertThat(retry.data().path("actor")).isEqualTo(approved.data().path("actor"));
         assertThat(retry.data().path("decidedAt")).isEqualTo(approved.data().path("decidedAt"));
         waitForResult(project.id(), second, creator, "APPROVED");
@@ -172,7 +173,7 @@ class ReviewCreatorFlowTest {
     @Order(6)
     void realApprovalAllowsAnOutgoingReleaseRequest() {
         assertThat(data(project.id(), creator).path("releaseEligible").asBoolean()).isTrue();
-        var release =
+        E2eClient.Response release =
                 Stove.gateway.post(
                         path(project.id()) + "/release-requests", null, creator.headers());
         assertThat(release.status()).isEqualTo(202);
@@ -253,16 +254,16 @@ class ReviewCreatorFlowTest {
     @Test
     @Order(9)
     void duplicateRequestsAndLateOldResultsDoNotOverwriteFinalDecisions() throws Exception {
-        var history =
+        JsonNode history =
                 Stove.gateway
                         .get(path(project.id()) + "/review-requests", creator.headers())
                         .data();
         ProjectSnapshot snapshot = null;
-        for (var r : history)
+        for (JsonNode r : history)
             if (r.path("id").asLong() == current)
                 snapshot = JSON.readValue(r.path("snapshot").asText(), ProjectSnapshot.class);
         assertThat(snapshot).isNotNull();
-        var duplicate = ProjectReviewRequestedEvent.of(current, snapshot);
+        ProjectReviewRequestedEvent duplicate = ProjectReviewRequestedEvent.of(current, snapshot);
         send(duplicate);
         send(
                 ProjectReviewRejectedEvent.of(
@@ -306,9 +307,9 @@ class ReviewCreatorFlowTest {
     @Test
     @Order(10)
     void apiContractContainsOnlyTheFivePlannedOperations() {
-        var docs = Stove.gateway.get("/v3/api-docs/review");
+        E2eClient.Response docs = Stove.gateway.get("/v3/api-docs/review");
         assertThat(docs.status()).isEqualTo(200);
-        var businessPaths = new java.util.ArrayList<String>();
+        ArrayList<String> businessPaths = new java.util.ArrayList<String>();
         docs.body()
                 .path("paths")
                 .fieldNames()
@@ -329,7 +330,7 @@ class ReviewCreatorFlowTest {
     }
 
     static void send(com.stove.common.kafka.contract.DomainEvent e) throws Exception {
-        var record =
+        ProducerRecord<String, String> record =
                 new ProducerRecord<String, String>(
                         e.topic(), e.partitionKey(), JSON.writeValueAsString(e));
         record.headers()

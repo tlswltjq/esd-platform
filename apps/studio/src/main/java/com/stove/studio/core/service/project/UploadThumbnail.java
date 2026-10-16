@@ -12,8 +12,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.*;
 import java.nio.file.*;
+import java.util.Iterator;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 @RequiredArgsConstructor
 public class UploadThumbnail {
@@ -31,12 +34,12 @@ public class UploadThumbnail {
         String path = null;
         try {
             String format;
-            try (var image = ImageIO.createImageInputStream(file.toFile())) {
-                var readers = ImageIO.getImageReaders(image);
+            try (ImageInputStream image = ImageIO.createImageInputStream(file.toFile())) {
+                Iterator<ImageReader> readers = ImageIO.getImageReaders(image);
                 if (!readers.hasNext())
                     throw new BusinessException(
                             ErrorCode.INVALID_REQUEST, "PNG 또는 JPEG 이미지가 필요합니다.");
-                var reader = readers.next();
+                ImageReader reader = readers.next();
                 try {
                     format = reader.getFormatName().toLowerCase(java.util.Locale.ROOT);
                     reader.setInput(image);

@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.stereotype.Component;
@@ -58,7 +59,7 @@ public class BffTokens {
     private Mono<OAuth2AuthorizedClient> refresh(String key, OAuth2AuthorizedClient client) {
         if (client.getRefreshToken() == null) return clients.delete(key)
                 .then(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED)));
-        var registration = client.getClientRegistration();
+        ClientRegistration registration = client.getClientRegistration();
         return http.post().uri(registration.getProviderDetails().getTokenUri())
                 .headers(headers -> headers.setBasicAuth(registration.getClientId(), registration.getClientSecret()))
                 .body(BodyInserters.fromFormData("grant_type", "refresh_token")
@@ -92,7 +93,7 @@ public class BffTokens {
     public Mono<Void> revoke(String key) {
         return clients.read(key).flatMap(client -> {
             if (client.getRefreshToken() == null) return Mono.empty();
-            var registration = client.getClientRegistration();
+            ClientRegistration registration = client.getClientRegistration();
             String endpoint = registration.getProviderDetails().getTokenUri().replace("/token", "/revoke");
             return http.post().uri(endpoint)
                     .headers(headers -> headers.setBasicAuth(registration.getClientId(), registration.getClientSecret()))

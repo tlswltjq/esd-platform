@@ -3,6 +3,7 @@ package com.stove.catalog.core.domain;
 import static org.assertj.core.api.Assertions.*;
 
 import com.stove.catalog.CatalogFixtures;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 
 import org.junit.jupiter.api.Test;
 
@@ -11,9 +12,9 @@ import java.time.Instant;
 class CatalogProductTest {
     @Test
     void publicationPreservesIdentityAndFirstPublicationTime() {
-        var s = CatalogFixtures.event(1, 1).snapshot();
-        var first = Instant.parse("2026-10-15T00:00:00Z");
-        var p = CatalogProduct.publish(s, 10L, first);
+        ProjectSnapshot s = CatalogFixtures.event(1, 1).snapshot();
+        Instant first = Instant.parse("2026-10-15T00:00:00Z");
+        CatalogProduct p = CatalogProduct.publish(s, 10L, first);
         p.requireIdentity(CatalogFixtures.event(1, 2).snapshot());
         p.replace(20L, first.plusSeconds(10));
         assertThat(p.getPublishedAt()).isEqualTo(first);

@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -562,7 +563,7 @@ class OutboxRelayTest {
     }
 
     private static String header(ProducerRecord<String, String> record, String name) {
-        var header = record.headers().lastHeader(name);
+        Header header = record.headers().lastHeader(name);
         return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 }

@@ -15,7 +15,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 class PaymentResultMapperTest {
     static Stream<DomainEvent> outcomes() {
-        var order = order();
+        Order order = order();
         return Stream.of(completed(order), failed(order));
     }
 
@@ -29,7 +29,7 @@ class PaymentResultMapperTest {
 
     @ParameterizedTest @MethodSource("outcomes")
     void rejectsMismatchedEnvelopeForEitherOutcome(DomainEvent event) {
-        for (var envelope : new EventEnvelope[]{null,
+        for (EventEnvelope envelope : new EventEnvelope[]{null,
                 new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
@@ -38,11 +38,11 @@ class PaymentResultMapperTest {
 
     @Test
     void translatesBothOutcomesWithoutLosingFailureInformation() {
-        var order = order();
-        var success = completed(order);
+        Order order = order();
+        OrderPaymentCompletedEvent success = completed(order);
         assertThat(PaymentResultMapper.from(envelope(success), success).status()).isEqualTo(OrderStatus.PAID);
-        var failure = failed(order);
-        var result = PaymentResultMapper.from(envelope(failure), failure);
+        OrderPaymentFailedEvent failure = failed(order);
+        PaymentResult result = PaymentResultMapper.from(envelope(failure), failure);
         assertThat(result.status()).isEqualTo(OrderStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo("DECLINED");
         assertThat(result.reason()).isEqualTo(failure.reason());

@@ -8,7 +8,7 @@ import java.time.Instant;
 public record ReleaseSubmission(String eventId, String eventType, Instant occurredAt,
                                 Long releaseRequestId, Long reviewRequestId, ProjectSnapshot snapshot) {
     public ReleaseSubmission {
-        var s = snapshot;
+        ProjectSnapshot s = snapshot;
         if (!text(eventId, 64) || !text(eventType, 60) || occurredAt == null
                 || releaseRequestId == null || releaseRequestId <= 0
                 || reviewRequestId == null || reviewRequestId <= 0 || s == null

@@ -16,7 +16,7 @@ public class PaymentEventListener {
     private final ApplyPaymentResult applyPaymentResult;
     @KafkaListener(topics = Topics.PAYMENT, groupId = ApplyPaymentResult.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        var envelope = EventEnvelope.from(record);
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.ORDER_PAYMENT_COMPLETED))
             applyPaymentResult.execute(envelope.eventType(), PaymentResultMapper.from(
                     envelope, envelope.payloadAs(mapper, OrderPaymentCompletedEvent.class)));

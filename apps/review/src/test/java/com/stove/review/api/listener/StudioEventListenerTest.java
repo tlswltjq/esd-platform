@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.review.ReviewFixtures;
 import com.stove.review.core.service.ReceiveProjectReview;
 
@@ -20,8 +21,8 @@ class StudioEventListenerTest {
 
     @Test
     void forwardsTheCurrentProjectRequest() {
-        var e = ReviewFixtures.event(1, 1);
-        var record = record(e.eventId(), e.eventType(), ReviewFixtures.json(e));
+        ProjectReviewRequestedEvent e = ReviewFixtures.event(1, 1);
+        ConsumerRecord<String, String> record = record(e.eventId(), e.eventType(), ReviewFixtures.json(e));
         listener.receive(record);
         verify(receive).execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
     }
@@ -44,7 +45,7 @@ class StudioEventListenerTest {
     }
 
     private ConsumerRecord<String, String> record(String id, String type, String payload) {
-        var r = new ConsumerRecord<String, String>(Topics.STUDIO, 0, 0, "GAME-1", payload);
+        ConsumerRecord<String, String> r = new ConsumerRecord<String, String>(Topics.STUDIO, 0, 0, "GAME-1", payload);
         r.headers().add(EventHeaders.EVENT_ID, id.getBytes(StandardCharsets.UTF_8));
         r.headers().add(EventHeaders.EVENT_TYPE, type.getBytes(StandardCharsets.UTF_8));
         return r;

@@ -23,7 +23,7 @@ public class ReceiveProjectReview {
 
     public void execute(ReviewSubmission submission) {
         if (!guard.firstDelivery(submission.eventId(), CONSUMER_GROUP, submission.eventType())) return;
-        var existing = reviews.findById(submission.reviewRequestId()).orElse(null);
+        ProjectReview existing = reviews.findById(submission.reviewRequestId()).orElse(null);
         if (existing != null) {
             try {
                 if (!submission.snapshot()

@@ -29,7 +29,7 @@ public class ApplyCatalogProduct {
         for (int attempt = 0; ; attempt++) {
             try {
                 transaction.executeWithoutResult(tx -> {
-                    var product = products.lockById(snapshot.productId()).orElse(null);
+                    StoreProduct product = products.lockById(snapshot.productId()).orElse(null);
                     if (product == null) {
                         if (products.findByProductCode(snapshot.productCode()).isPresent())
                             throw new BusinessException(ErrorCode.CONFLICT, "상품 코드가 다른 상품에 연결되어 있습니다.");

@@ -23,25 +23,25 @@ class StorePublicationFlowTest {
     }
     private static void matchesCatalog(String code) {
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            var store = Stove.gateway.get("/api/v1/storefront/products/" + code);
-            var catalog = Stove.gateway.get("/api/v1/products/by-code/" + code);
+            E2eClient.Response store = Stove.gateway.get("/api/v1/storefront/products/" + code);
+            E2eClient.Response catalog = Stove.gateway.get("/api/v1/products/by-code/" + code);
             assertThat(store.status()).isEqualTo(200);
             assertThat(catalog.status()).isEqualTo(200);
             assertThat(store.data()).isEqualTo(catalog.data());
         });
     }
     @Test void publishesSearchesAndReplacesOnlyReleasedSnapshots() throws Exception {
-        var creator = account(true);
-        var reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
-        var project = project(creator);
+        ReviewJourney.Account creator = account(true);
+        ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
+        ReviewJourney.Project project = project(creator);
         String code = data(project.id(), creator).path("productCode").asText();
         String detail = "/api/v1/storefront/products/" + code;
         assertThat(Stove.gateway.get(detail).status()).isEqualTo(404);
         publish(project.id(), creator, reviewer);
         matchesCatalog(code);
-        var first = Stove.gateway.get(detail).data();
+        JsonNode first = Stove.gateway.get(detail).data();
         assertThat(first.path("title").asText()).isEqualTo("First title");
-        var search = Stove.gateway.get("/api/v1/storefront/products?q=First&sort=PRICE_ASC&size=1");
+        E2eClient.Response search = Stove.gateway.get("/api/v1/storefront/products?q=First&sort=PRICE_ASC&size=1");
         assertThat(search.status()).isEqualTo(200);
         assertThat(search.data().path("totalElements").asLong()).isPositive();
         page(project.id(), creator, "Store second title", 2000);
@@ -49,7 +49,7 @@ class StorePublicationFlowTest {
         publish(project.id(), creator, reviewer);
         matchesCatalog(code);
         page(project.id(), creator, "Unreleased draft", 3000);
-        var current = Stove.gateway.get(detail).data();
+        JsonNode current = Stove.gateway.get(detail).data();
         assertThat(current.path("title").asText()).isEqualTo("Store second title");
         assertThat(current.path("price").asLong()).isEqualTo(2000);
         assertThat(current.path("publishedAt")).isEqualTo(first.path("publishedAt"));
@@ -57,21 +57,21 @@ class StorePublicationFlowTest {
         Files.writeString(evidence(), JSON.writeValueAsString(Map.of("code", code, "product", current)));
     }
     @Test void verifiesHttpBootstrapWithKafkaListenerDisabled() throws Exception {
-        var saved = JSON.readTree(Files.readString(evidence()));
+        JsonNode saved = JSON.readTree(Files.readString(evidence()));
         String code = saved.path("code").asText();
         matchesCatalog(code);
         assertThat(Stove.gateway.get("/api/v1/storefront/products/" + code).data()).isEqualTo(saved.path("product"));
     }
     @Test void servesStoredSnapshotWithoutCatalog() throws Exception {
-        var saved = JSON.readTree(Files.readString(evidence()));
-        var detail = Stove.gateway.get("/api/v1/storefront/products/" + saved.path("code").asText());
+        JsonNode saved = JSON.readTree(Files.readString(evidence()));
+        E2eClient.Response detail = Stove.gateway.get("/api/v1/storefront/products/" + saved.path("code").asText());
         assertThat(detail.status()).isEqualTo(200);
         assertThat(detail.data()).isEqualTo(saved.path("product"));
         assertThat(Stove.gateway.get("/api/v1/storefront/products").status()).isEqualTo(200);
     }
     @Test void failedBootstrapRemainsUnavailable() {
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            var result = Stove.gateway.get("/api/v1/storefront/products");
+            E2eClient.Response result = Stove.gateway.get("/api/v1/storefront/products");
             assertThat(result.status()).isEqualTo(503);
             assertThat(result.body().path("error").path("code").asText()).isEqualTo("STORE_NOT_READY");
         });

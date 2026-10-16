@@ -63,8 +63,8 @@ public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepos
     private record Stored(String subject, String access, long issued, long expires, Set<String> scopes,
                           String refresh, long refreshIssued) {
         private static Stored from(OAuth2AuthorizedClient client) {
-            var access = client.getAccessToken();
-            var refresh = client.getRefreshToken();
+            OAuth2AccessToken access = client.getAccessToken();
+            OAuth2RefreshToken refresh = client.getRefreshToken();
             return new Stored(client.getPrincipalName(), access.getTokenValue(),
                     access.getIssuedAt().getEpochSecond(), access.getExpiresAt().getEpochSecond(), access.getScopes(),
                     refresh == null ? null : refresh.getTokenValue(), refresh == null ? 0 : refresh.getIssuedAt().getEpochSecond());

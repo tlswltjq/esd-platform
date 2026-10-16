@@ -9,6 +9,7 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.containers.MySQLContainer;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -16,10 +17,10 @@ import java.util.UUID;
 class LegacyMigrationIntegrationTest extends StudioIntegrationTestBase {
     @Test
     void migratesPublishedSnapshotAndReservesUnmigratedLegacyIds() {
-        var mysql = SharedContainers.MYSQL;
+        MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
         String schema = "studio_migration_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
-        var root =
+        JdbcTemplate root =
                 new JdbcTemplate(
                         new DriverManagerDataSource(
                                 server
@@ -29,7 +30,7 @@ class LegacyMigrationIntegrationTest extends StudioIntegrationTestBase {
                                 mysql.getPassword()));
         root.execute("CREATE DATABASE " + schema);
         try {
-            var data =
+            DriverManagerDataSource data =
                     new DriverManagerDataSource(
                             server + schema + "?useSSL=false&allowPublicKeyRetrieval=true",
                             "root",
@@ -37,7 +38,7 @@ class LegacyMigrationIntegrationTest extends StudioIntegrationTestBase {
             String migrations =
                     "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
             Flyway.configure().dataSource(data).locations(migrations).target("22").load().migrate();
-            var jdbc = new JdbcTemplate(data);
+            JdbcTemplate jdbc = new JdbcTemplate(data);
             jdbc.update(
                     "INSERT INTO workspace(id,owner_subject,status,created_at,updated_at) VALUES"
                             + " (100001,'legacy-owner','ACTIVE',NOW(),NOW())");

@@ -30,7 +30,7 @@ final class ReviewJourney {
     static Account account(boolean creator) throws Exception {
         String email = "review-" + UUID.randomUUID() + "@example.com",
                 password = "creator-password-1234";
-        var signup =
+        E2eClient.Response signup =
                 Stove.gateway.post(
                         creator ? "/api/v1/auth/signup" : "/api/v1/auth/signup/member",
                         Map.of("email", email, "password", password));
@@ -48,7 +48,7 @@ final class ReviewJourney {
     }
 
     static Project project(Account creator) throws Exception {
-        var created =
+        E2eClient.Response created =
                 Stove.gateway.post(
                         "/api/v1/studio/projects",
                         Map.of(
@@ -59,7 +59,7 @@ final class ReviewJourney {
                         creator.headers());
         assertThat(created.status()).isEqualTo(201);
         long id = created.data().path("id").asLong();
-        var png = new ByteArrayOutputStream();
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "png", png);
         assertThat(
                         Stove.gateway
@@ -79,8 +79,8 @@ final class ReviewJourney {
     }
 
     static byte[] zip(String content) throws Exception {
-        var bytes = new ByteArrayOutputStream();
-        try (var zip = new ZipOutputStream(bytes)) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
             zip.putNextEntry(new ZipEntry("game.bin"));
             zip.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zip.closeEntry();
@@ -103,8 +103,8 @@ final class ReviewJourney {
     }
 
     static void page(long id, Account creator, String title, long price) {
-        var p = data(id, creator);
-        var page =
+        JsonNode p = data(id, creator);
+        Map<String, Object> page =
                 Map.of(
                         "contentVersion",
                         p.path("contentVersion").asLong(),
@@ -125,7 +125,7 @@ final class ReviewJourney {
     }
 
     static long request(long id, Account creator, Account reviewer) {
-        var response = Stove.gateway.post(path(id) + "/review-requests", null, creator.headers());
+        E2eClient.Response response = Stove.gateway.post(path(id) + "/review-requests", null, creator.headers());
         assertThat(response.status()).isEqualTo(202);
         long request = response.data().path("id").asLong();
         Awaitility.await()
@@ -147,21 +147,21 @@ final class ReviewJourney {
                 .atMost(Duration.ofSeconds(30))
                 .untilAsserted(
                         () -> {
-                            var history =
+                            JsonNode history =
                                     Stove.gateway
                                             .get(
                                                     path(project) + "/review-requests",
                                                     creator.headers())
                                             .data();
                             JsonNode match = null;
-                            for (var r : history) if (r.path("id").asLong() == request) match = r;
+                            for (JsonNode r : history) if (r.path("id").asLong() == request) match = r;
                             assertThat(match).isNotNull();
                             assertThat(match.path("status").asText()).isEqualTo(state);
                         });
     }
 
     static JsonNode data(long id, Account creator) {
-        var r = Stove.gateway.get(path(id), creator.headers());
+        E2eClient.Response r = Stove.gateway.get(path(id), creator.headers());
         assertThat(r.status()).isEqualTo(200);
         return r.data();
     }

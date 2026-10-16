@@ -3,10 +3,12 @@ package com.stove.order.infrastructure;
 import static org.assertj.core.api.Assertions.*;
 import com.stove.common.web.error.BusinessException;
 import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.order.core.domain.PublishedProduct;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
@@ -28,7 +30,7 @@ class CatalogHttpClientTest {
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type", "application/json");
                 exchange.sendResponseHeaders(status, bytes.length);
-                try (var output = exchange.getResponseBody()) { output.write(bytes); }
+                try (OutputStream output = exchange.getResponseBody()) { output.write(bytes); }
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
         });
         server.start();
@@ -36,7 +38,7 @@ class CatalogHttpClientTest {
     }
     @AfterEach void stop() { server.stop(0); executor.shutdownNow(); }
     @Test void readsOnlyThePublicFieldsAndAllowsFutureFields() {
-        var p = client.detail("Game-1");
+        PublishedProduct p = client.detail("Game-1");
         assertThat(p.price()).isEqualTo(10000);
         assertThat(p.contentVersion()).isEqualTo(3);
     }

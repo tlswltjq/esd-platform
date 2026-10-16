@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.*;
 import org.springframework.transaction.support.*;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -35,7 +36,7 @@ public class ResolvePayment {
     }
 
     public void execute() {
-        var due = payments.due(PaymentStatus.PENDING, Payment.now(), PageRequest.of(0, batchSize));
+        List<String> due = payments.due(PaymentStatus.PENDING, Payment.now(), PageRequest.of(0, batchSize));
         for (String paymentId : due) {
             try {
                 execute(paymentId);
@@ -50,7 +51,7 @@ public class ResolvePayment {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("PG 호출은 Payment 트랜잭션 밖에서 실행해야 합니다.");
         }
-        var payment = payments.findByPaymentId(paymentId).orElse(null);
+        Payment payment = payments.findByPaymentId(paymentId).orElse(null);
         if (payment == null || payment.getStatus() != PaymentStatus.PENDING) return;
 
         PgResult result;
@@ -76,7 +77,7 @@ public class ResolvePayment {
     }
 
     private void confirm(String paymentId, PgResult result) {
-        var current = payments.lockByPaymentId(paymentId).orElseThrow();
+        Payment current = payments.lockByPaymentId(paymentId).orElseThrow();
         if (!current.confirm(result, UUID.randomUUID().toString(), Payment.now())) return;
 
         if (current.getStatus() == PaymentStatus.PAID) {

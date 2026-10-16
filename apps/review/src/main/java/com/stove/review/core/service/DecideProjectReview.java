@@ -1,5 +1,6 @@
 package com.stove.review.core.service;
 
+import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.payload.*;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.*;
@@ -18,9 +19,9 @@ public class DecideProjectReview {
     private final OutboxRecorder outbox;
 
     public ProjectReview execute(Long id, String subject, ReviewStatus decision, String feedback) {
-        var review = reviews.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        ProjectReview review = reviews.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (review.decide(decision, subject, feedback)) {
-            var event =
+            DomainEvent event =
                     decision == ReviewStatus.APPROVED
                             ? ProjectReviewApprovedEvent.of(
                                     id,

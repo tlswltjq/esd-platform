@@ -53,7 +53,7 @@ public final class ReviewFixtures {
     }
 
     public static ProjectReview review(long id) {
-        var event = event(id, id);
+        ProjectReviewRequestedEvent event = event(id, id);
         return ProjectReview.requested(new ReviewSubmission(event.eventId(), event.eventType(), event.occurredAt(), event.reviewRequestId(), event.snapshot()), json(event.snapshot()));
     }
 }

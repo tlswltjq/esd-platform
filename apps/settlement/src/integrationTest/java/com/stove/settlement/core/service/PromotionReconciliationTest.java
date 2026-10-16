@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.testcontainers.InfraContainers;
+import com.stove.settlement.core.domain.ReconciliationResult;
 import com.stove.settlement.core.domain.RecordType;
 import com.stove.settlement.core.domain.SellerSettlement;
 import com.stove.settlement.core.domain.SettlementRecord;
@@ -49,7 +50,7 @@ class PromotionReconciliationTest {
                 10_000, 2_000, 7L, "PLATFORM");
         records.recordSale(UUID.randomUUID().toString(), "PaymentCompleted", orderNo,
                 List.of(line, line));
-        var sale = records.findByOrder(orderNo);
+        List<SettlementRecord> sale = records.findByOrder(orderNo);
         assertThat(sale).hasSize(1);
         assertThat(sale.getFirst().getPaidAmount()).isEqualTo(16_000);
         assertThat(sale.getFirst().getGrossAmount()).isEqualTo(20_000);
@@ -80,7 +81,7 @@ class PromotionReconciliationTest {
         assertThat(after.getAdjustmentNetAmount()).isEqualTo(-7_000);
         assertThat(after.getNetAmount()).isZero();
 
-        var result = reconciliation.month(month).stream()
+        ReconciliationResult result = reconciliation.month(month).stream()
                 .filter(r -> r.sellerId().equals(sellerId)).findFirst().orElseThrow();
         assertThat(result.balanced()).isTrue();
         assertThat(result.customerPaid()).isZero();

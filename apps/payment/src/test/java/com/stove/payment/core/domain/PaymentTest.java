@@ -4,33 +4,34 @@ package com.stove.payment.core.domain;
 import static com.stove.payment.PaymentFixtures.*;
 import static org.assertj.core.api.Assertions.*;
 import com.stove.common.web.error.BusinessException;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentTest {
     @Test void requestIsFrozenIndependentlyOfLaterPrices() {
-        var r=request(); var p=Payment.receive(r);
+        PaymentOrderRequest r=request(); Payment p=Payment.receive(r);
         assertThat(p.orderRequest()).isEqualTo(r);
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(p.getProvider()).isEqualTo("SIMULATED");
         assertThat(p.getNextAttemptAt()).isNotNull();
         p.requireSameRequest(r);
-        for (var other:new PaymentOrderRequest[]{
+        for (PaymentOrderRequest other:new PaymentOrderRequest[]{
                 new PaymentOrderRequest(id(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,0,10000,"KRW"),
                 new PaymentOrderRequest(r.eventId(),r.occurredAt().plusSeconds(1),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,0,10000,"KRW"),
                 new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),"Changed",4,20000,0,20000,"KRW")})
             assertThatThrownBy(() -> p.requireSameRequest(other)).isInstanceOf(BusinessException.class);
     }
     @Test void preservesDiscountedCustomerChargeWithoutRecalculatingPolicyOrFees() {
-        var r=request();
-        var p=Payment.receive(new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,1000,9000,"KRW"));
+        PaymentOrderRequest r=request();
+        Payment p=Payment.receive(new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,1000,9000,"KRW"));
         assertThat(p.chargeRequest().amount()).isEqualTo(9000);
         assertThat(p.getListAmount()).isEqualTo(10000);
         assertThat(p.getDiscountAmount()).isEqualTo(1000);
     }
     @Test void confirmedResultIsImmutableAndDuplicateCannotChangeEventOrTimestamp() {
-        var p=Payment.receive(request()); var result=approved(p); var eventId=id(); var time=Payment.now();
+        Payment p=Payment.receive(request()); PgResult result=approved(p); String eventId=id(); Instant time=Payment.now();
         assertThat(p.confirm(result,eventId,time)).isTrue();
-        var updated=p.getUpdatedAt();
+        Instant updated=p.getUpdatedAt();
         assertThat(p.confirm(result,id(),Payment.now())).isFalse();
         assertThat(p.getResultEventId()).isEqualTo(eventId); assertThat(p.getResultOccurredAt()).isEqualTo(time);
         assertThat(p.getUpdatedAt()).isEqualTo(updated); assertThat(p.supplierResult()).isEqualTo(result);
@@ -39,23 +40,23 @@ class PaymentTest {
         assertThatThrownBy(() -> p.confirm(result(p,PgResult.Decision.DECLINED),id(),Payment.now())).isInstanceOf(BusinessException.class);
     }
     @Test void finalDeclinePreservesReasonAndCannotBeReopenedByAnError() {
-        var p=Payment.receive(request()); var r=result(p,PgResult.Decision.DECLINED);
-        p.confirm(r,id(),Payment.now()); var updated=p.getUpdatedAt();
+        Payment p=Payment.receive(request()); PgResult r=result(p,PgResult.Decision.DECLINED);
+        p.confirm(r,id(),Payment.now()); Instant updated=p.getUpdatedAt();
         p.defer(Payment.now().plusSeconds(5),"PG_UNAVAILABLE");
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(p.getFailureReasonCode()).isEqualTo("DECLINED"); assertThat(p.getFailureReason()).isEqualTo(r.reason());
         assertThat(p.getNextAttemptAt()).isNull(); assertThat(p.getUpdatedAt()).isEqualTo(updated);
     }
     @Test void unknownOutcomeOnlySchedulesAnotherCheck() {
-        var p=Payment.receive(request()); var next=Payment.now().plusSeconds(5);
+        Payment p=Payment.receive(request()); Instant next=Payment.now().plusSeconds(5);
         p.defer(next,"PG_UNAVAILABLE");
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(p.getNextAttemptAt()).isEqualTo(next);
         assertThat(p.getResultEventId()).isNull(); assertThat(p.supplierResult()).isNull();
         assertThat(p.getFailureReasonCode()).isNull();
     }
     @Test void wrongSupplierIdentityAndNetAmountCannotApprovePayment() {
-        var p=Payment.receive(request()); var r=approved(p);
-        for (var wrong:new PgResult[]{
+        Payment p=Payment.receive(request()); PgResult r=approved(p);
+        for (PgResult wrong:new PgResult[]{
                 new PgResult("OTHER",r.paymentId(),r.orderNo(),r.amount(),r.currency(),r.transactionId(),r.occurredAt(),r.decision(),null,null),
                 new PgResult("SIMULATED",id(),r.orderNo(),r.amount(),r.currency(),r.transactionId(),r.occurredAt(),r.decision(),null,null),
                 new PgResult("SIMULATED",r.paymentId(),id(),r.amount(),r.currency(),r.transactionId(),r.occurredAt(),r.decision(),null,null),
@@ -64,7 +65,7 @@ class PaymentTest {
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(p.getResultEventId()).isNull();
     }
     @Test void resultAndRequestValuesRejectIncompleteOrInconsistentFacts() {
-        var r=request(); var p=Payment.receive(r); var result=approved(p);
+        PaymentOrderRequest r=request(); Payment p=Payment.receive(r); PgResult result=approved(p);
         assertThatThrownBy(() -> new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,2000,10000,"KRW"))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new PgChargeRequest(p.getPaymentId(),p.getOrderNo(),0,"KRW")).isInstanceOf(IllegalArgumentException.class);

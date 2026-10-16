@@ -4,6 +4,7 @@ import static com.stove.e2e.ReviewJourney.*;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 
@@ -24,7 +25,7 @@ class CatalogPublicationFlowTest {
     }
 
     private static long release(long project, Account creator) {
-        var response =
+        E2eClient.Response response =
                 Stove.gateway.post(path(project) + "/release-requests", null, creator.headers());
         assertThat(response.status()).isEqualTo(202);
         return response.data().path("id").asLong();
@@ -35,14 +36,14 @@ class CatalogPublicationFlowTest {
                 .atMost(Duration.ofSeconds(30))
                 .untilAsserted(
                         () -> {
-                            var history =
+                            JsonNode history =
                                     Stove.gateway
                                             .get(
                                                     path(project) + "/release-requests",
                                                     creator.headers())
                                             .data();
-                            var found = false;
-                            for (var item : history)
+                            boolean found = false;
+                            for (JsonNode item : history)
                                 if (item.path("id").asLong() == release) {
                                     assertThat(item.path("status").asText()).isEqualTo("COMPLETED");
                                     found = true;
@@ -53,9 +54,9 @@ class CatalogPublicationFlowTest {
 
     @Test
     void publishesOnlyApprovedRequestedSnapshotsAndReplacesAfterNewReview() throws Exception {
-        var creator = account(true);
-        var reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
-        var p = project(creator);
+        ReviewJourney.Account creator = account(true);
+        ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
+        ReviewJourney.Project p = project(creator);
         String code = data(p.id(), creator).path("productCode").asText();
         String detail = "/api/v1/products/by-code/" + code;
         assertThat(Stove.gateway.get(detail).status()).isEqualTo(404);
@@ -68,7 +69,7 @@ class CatalogPublicationFlowTest {
         assertThat(Stove.gateway.get(detail).status()).isEqualTo(404);
         long first = release(p.id(), creator);
         completed(p.id(), first, creator);
-        var published = Stove.gateway.get(detail);
+        E2eClient.Response published = Stove.gateway.get(detail);
         assertThat(published.status()).isEqualTo(200);
         assertThat(published.data().path("title").asText()).isEqualTo("First title");
         assertThat(published.data().toString())
@@ -86,7 +87,7 @@ class CatalogPublicationFlowTest {
         long second = release(p.id(), creator);
         page(p.id(), creator, "Unreleased draft", 3000);
         completed(p.id(), second, creator);
-        var current = Stove.gateway.get(detail).data();
+        JsonNode current = Stove.gateway.get(detail).data();
         assertThat(current.path("title").asText()).isEqualTo("Second title");
         assertThat(current.path("price").asLong()).isEqualTo(2000);
         assertThat(current.path("productId")).isEqualTo(published.data().path("productId"));
@@ -99,9 +100,9 @@ class CatalogPublicationFlowTest {
 
     @Test
     void preparePendingResult() throws Exception {
-        var creator = account(true);
-        var reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
-        var p = project(creator);
+        ReviewJourney.Account creator = account(true);
+        ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
+        ReviewJourney.Project p = project(creator);
         approve(p.id(), creator, reviewer);
         long release = release(p.id(), creator);
         String code = data(p.id(), creator).path("productCode").asText();
@@ -132,11 +133,11 @@ class CatalogPublicationFlowTest {
 
     @Test
     void verifyPersistedResultAfterRestart() throws Exception {
-        var saved =
+        JsonNode saved =
                 JSON.readTree(
                         Files.readString(
                                 Path.of(System.getProperty("stove.e2e.catalog-evidence"))));
-        var creator = login(saved.path("email").asText(), "creator-password-1234");
+        ReviewJourney.Account creator = login(saved.path("email").asText(), "creator-password-1234");
         completed(
                 saved.path("projectId").asLong(), saved.path("releaseRequestId").asLong(), creator);
         assertThat(

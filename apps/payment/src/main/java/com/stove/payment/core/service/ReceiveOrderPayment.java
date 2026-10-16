@@ -20,7 +20,7 @@ public class ReceiveOrderPayment {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
 
         // Compare the complete input before treating an Inbox hit as a duplicate.
-        var existing = payments.findByOrderNo(request.orderNo()).orElse(null);
+        Payment existing = payments.findByOrderNo(request.orderNo()).orElse(null);
         if (existing != null) existing.requireSameRequest(request);
         payments.findByRequestEventId(request.eventId()).ifPresent(previous -> {
             if (!previous.getOrderNo().equals(request.orderNo())) {

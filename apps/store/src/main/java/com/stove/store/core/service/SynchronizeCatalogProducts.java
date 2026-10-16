@@ -3,6 +3,7 @@ package com.stove.store.core.service;
 import com.stove.common.web.error.BusinessException;
 import com.stove.store.core.domain.StoreErrorCode;
 import com.stove.store.core.port.CatalogProducts;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +17,7 @@ public class SynchronizeCatalogProducts {
     public void execute() {
         ready = false;
         for (int page = 0; ; page++) {
-            var codes = catalog.codes(page);
+            List<String> codes = catalog.codes(page);
             if (codes.isEmpty()) break;
             for (String code : codes) applyCatalogProduct.execute(catalog.detail(code));
         }

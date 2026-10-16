@@ -55,7 +55,7 @@ class ReviewAccessTest {
     @ParameterizedTest
     @ValueSource(strings = {"reviewer", "admin"})
     void authorizedDecisionUsesTheJwtSubject(String role) throws Exception {
-        var r = ReviewFixtures.review(1);
+        ProjectReview r = ReviewFixtures.review(1);
         r.decide(ReviewStatus.APPROVED, "subject-" + role, null);
         when(decide.execute(1L, "subject-" + role, ReviewStatus.APPROVED, null)).thenReturn(r);
         when(read.snapshot(r)).thenReturn(ReviewFixtures.event(1, 1).snapshot());

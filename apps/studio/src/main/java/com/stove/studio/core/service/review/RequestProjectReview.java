@@ -30,7 +30,7 @@ public class RequestProjectReview {
     public ProjectReviewRequest execute(Long id, String subject) {
         Project p = projects.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         p.requireOwner(subject);
-        var current = readProjects.reviewRequest(p);
+        ProjectReviewRequest current = readProjects.reviewRequest(p);
         if (current != null && !"REJECTED".equals(current.getStatus())) return current;
         p.requireReady();
         Build b =

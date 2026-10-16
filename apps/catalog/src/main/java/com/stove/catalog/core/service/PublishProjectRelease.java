@@ -32,7 +32,7 @@ public class PublishProjectRelease {
 
     public void execute(ReleaseSubmission submission) {
         // Check an existing request even when the Inbox already knows the event ID.
-        var existing = releases.findById(submission.releaseRequestId()).orElse(null);
+        CatalogRelease existing = releases.findById(submission.releaseRequestId()).orElse(null);
         if (existing != null) {
             if (!existing.getRequestEventId().equals(submission.eventId())
                     || !existing.getReviewRequestId().equals(submission.reviewRequestId())
@@ -48,8 +48,8 @@ public class PublishProjectRelease {
                                         ErrorCode.CONFLICT, "이벤트 ID가 다른 출시 요청에 사용되었습니다.");
                         });
         if (!guard.firstDelivery(submission.eventId(), CONSUMER_GROUP, submission.eventType())) return;
-        var s = submission.snapshot();
-        var product = products.lockByProjectId(s.projectId()).orElse(null);
+        ProjectSnapshot s = submission.snapshot();
+        CatalogProduct product = products.lockByProjectId(s.projectId()).orElse(null);
         if (product != null) product.requireIdentity(s);
         else if (products.findByProductCode(s.productCode()).isPresent())
             throw new BusinessException(ErrorCode.CONFLICT, "상품 코드가 다른 Project에 연결되어 있습니다.");
@@ -69,7 +69,7 @@ public class PublishProjectRelease {
                                 .getContentVersion();
         boolean stale = s.contentVersion() < currentVersion;
         Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        var release = CatalogRelease.decided(submission, json(s), stale, now);
+        CatalogRelease release = CatalogRelease.decided(submission, json(s), stale, now);
         // Assigned request IDs must INSERT, never merge over a concurrently committed decision.
         entityManager.persist(release);
         entityManager.flush();

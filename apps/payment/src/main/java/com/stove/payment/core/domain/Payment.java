@@ -41,7 +41,7 @@ public class Payment {
 
     public static Payment receive(PaymentOrderRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        var p = new Payment();
+        Payment p = new Payment();
         p.paymentId=UUID.randomUUID().toString(); p.orderNo=request.orderNo();
         p.requestEventId=request.eventId(); p.orderOccurredAt=request.occurredAt(); p.buyerSubject=request.buyerSubject();
         p.productId=request.productId(); p.productCode=request.productCode(); p.title=request.title();

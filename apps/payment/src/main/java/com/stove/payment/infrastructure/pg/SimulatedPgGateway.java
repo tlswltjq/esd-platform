@@ -24,10 +24,10 @@ public class SimulatedPgGateway implements PgGateway {
 
     @Override public PgResult charge(PgChargeRequest request) {
         try { return transaction.execute(tx -> {
-            var existing=find(request.paymentId());
+            PgResult existing=find(request.paymentId());
             if (existing!=null) { existing.requireRequest(request); return existing; }
             boolean approved=decision==PgResult.Decision.APPROVED;
-            var result=new PgResult("SIMULATED",request.paymentId(),request.orderNo(),request.amount(),request.currency(),
+            PgResult result=new PgResult("SIMULATED",request.paymentId(),request.orderNo(),request.amount(),request.currency(),
                     UUID.randomUUID().toString(),java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS),decision,
                     approved ? null : "DECLINED",approved ? null : "모의 PG가 결제를 거절했습니다.");
             jdbc.update("INSERT INTO simulated_payment_charge(payment_id,order_no,amount,currency,transaction_id,occurred_at,decision,reason_code,reason) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -36,7 +36,7 @@ public class SimulatedPgGateway implements PgGateway {
             return result;
         }); } catch (DuplicateKeyException collision) {
             return transaction.execute(tx -> {
-                var existing=find(request.paymentId());
+                PgResult existing=find(request.paymentId());
                 if (existing==null) throw collision;
                 existing.requireRequest(request); return existing;
             });
@@ -44,7 +44,7 @@ public class SimulatedPgGateway implements PgGateway {
     }
 
     private PgResult find(String paymentId) {
-        var rows=jdbc.query("SELECT * FROM simulated_payment_charge WHERE payment_id=?",(r,n) ->
+        List<PgResult> rows=jdbc.query("SELECT * FROM simulated_payment_charge WHERE payment_id=?",(r,n) ->
                 new PgResult("SIMULATED",r.getString("payment_id"),r.getString("order_no"),r.getLong("amount"),r.getString("currency"),
                         r.getString("transaction_id"),r.getTimestamp("occurred_at").toInstant(),
                         PgResult.Decision.valueOf(r.getString("decision")),r.getString("reason_code"),r.getString("reason")),paymentId);

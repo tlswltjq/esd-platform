@@ -5,6 +5,7 @@ import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.*;
 import com.stove.review.core.domain.*;
 
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.data.domain.*;
@@ -26,11 +27,11 @@ public class ReadProjectReviews {
     public Page<ProjectReview> list(ReviewStatus status, Long projectId, int page, int size) {
         Specification<ProjectReview> filter =
                 (root, query, cb) -> {
-                    var state =
+                    Predicate state =
                             status == null
                                     ? cb.conjunction()
                                     : cb.equal(root.get("status"), status);
-                    var project =
+                    Predicate project =
                             projectId == null
                                     ? cb.conjunction()
                                     : cb.equal(root.get("projectId"), projectId);

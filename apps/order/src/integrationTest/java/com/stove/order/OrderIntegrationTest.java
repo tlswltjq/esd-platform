@@ -15,6 +15,7 @@ import com.stove.common.web.error.*;
 import com.stove.order.core.domain.*;
 import com.stove.order.core.port.CatalogProducts;
 import com.stove.order.core.service.*;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.*;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -63,7 +65,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     private Order stored(Order o) { return orders.findById(o.getId()).orElseThrow(); }
     record Response(int status, JsonNode body) { JsonNode data() { return body.path("data"); } }
     private Response http(String method, String path, Object body, String bearer) {
-        var spec = RestClient.create("http://127.0.0.1:" + port).method(org.springframework.http.HttpMethod.valueOf(method)).uri(path);
+        RestClient.RequestBodySpec spec = RestClient.create("http://127.0.0.1:" + port).method(org.springframework.http.HttpMethod.valueOf(method)).uri(path);
         if (bearer != null) spec.header("Authorization", "Bearer " + bearer);
         if (body != null) spec.contentType(MediaType.APPLICATION_JSON).body(body);
         return spec.exchange((r, s) -> new Response(s.getStatusCode().value(), mapper.readTree(s.getBody())));
@@ -76,10 +78,10 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     private void accept(OrderPaymentFailedEvent e) { apply.execute(e.eventType(), PaymentResultMapper.from(envelope(e), e)); }
 
     @Test void savesSnapshotAndOneEventAndReusesRequestWithoutCatalog() throws Exception {
-        var input = request(); var o = create.execute("usr_buyer", input);
+        OrderRequest input = request(); Order o = create.execute("usr_buyer", input);
         assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
-        var payload = jdbc.queryForObject("SELECT payload FROM outbox_event", String.class);
-        var event = mapper.readValue(payload, OrderPlacedEvent.class);
+        String payload = jdbc.queryForObject("SELECT payload FROM outbox_event", String.class);
+        OrderPlacedEvent event = mapper.readValue(payload, OrderPlacedEvent.class);
         assertThat(event.eventId()).isEqualTo(o.getRequestEventId());
         assertThat(event.orderNo()).isEqualTo(o.getOrderNo());
         assertThat(event.listAmount()).isEqualTo(10000); assertThat(event.discountAmount()).isZero();
@@ -94,16 +96,16 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(read.execute(o.getOrderNo(), "usr_buyer").getTitle()).isEqualTo("한글 게임");
     }
     @Test void newPublicationDoesNotRewriteOrderTerms() {
-        var first = saved("usr_buyer");
+        Order first = saved("usr_buyer");
         when(catalog.detail(anyString())).thenReturn(new PublishedProduct(1L, "Game-1", "New title", 4, 20000, "KRW"));
         assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
-        var next = create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000));
+        Order next = create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000));
         assertThat(stored(first).getTitle()).isEqualTo("한글 게임");
         assertThat(stored(first).getAmount()).isEqualTo(10000);
         assertThat(next.getTitle()).isEqualTo("New title");
     }
     @Test void unavailableMalformedMissingAndFreeProductsLeaveNoOrderOrOutbox() {
-        for (var error : new BusinessException[]{new BusinessException(ErrorCode.NOT_FOUND),
+        for (BusinessException error : new BusinessException[]{new BusinessException(ErrorCode.NOT_FOUND),
                 new BusinessException(ErrorCode.UPSTREAM_UNAVAILABLE), new BusinessException(OrderErrorCode.CATALOG_INVALID_RESPONSE)}) {
             doThrow(error).when(catalog).detail(anyString());
             assertThatThrownBy(() -> saved("usr_buyer")).isSameAs(error);
@@ -125,21 +127,21 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         } finally { reset(outbox); }
     }
     @Test void sameRequestRaceCreatesExactlyOneOrderAndEvent() throws Exception {
-        var input = request(); var barrier = new CyclicBarrier(4);
+        OrderRequest input = request(); CyclicBarrier barrier = new CyclicBarrier(4);
         when(catalog.detail(anyString())).thenAnswer(inv -> { barrier.await(10, TimeUnit.SECONDS); return product(); });
-        var pool = Executors.newFixedThreadPool(4);
+        ExecutorService pool = Executors.newFixedThreadPool(4);
         try {
-            var futures = new ArrayList<Future<String>>();
+            ArrayList<Future<String>> futures = new ArrayList<Future<String>>();
             for (int i=0;i<4;i++) futures.add(pool.submit(() -> create.execute("usr_buyer", input).getOrderNo()));
-            var numbers = new HashSet<String>();
-            for (var f : futures) numbers.add(f.get(25, TimeUnit.SECONDS));
+            HashSet<String> numbers = new HashSet<String>();
+            for (Future<String> f : futures) numbers.add(f.get(25, TimeUnit.SECONDS));
             assertThat(numbers).hasSize(1);
             assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
     @Test void concurrentCommitIsRecoveredEvenWhenTheFirstCatalogCallFails() throws Exception {
-        var input = request(); var entered = new CountDownLatch(1); var committed = new CountDownLatch(1);
-        var calls = new AtomicInteger();
+        OrderRequest input = request(); CountDownLatch entered = new CountDownLatch(1); CountDownLatch committed = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
         when(catalog.detail(anyString())).thenAnswer(inv -> {
             if (calls.incrementAndGet() == 1) {
                 entered.countDown(); assertThat(committed.await(10, TimeUnit.SECONDS)).isTrue();
@@ -147,34 +149,34 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             }
             return product();
         });
-        var pool = Executors.newSingleThreadExecutor();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
-            var waiting = pool.submit(() -> create.execute("usr_buyer", input));
+            Future<Order> waiting = pool.submit(() -> create.execute("usr_buyer", input));
             assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
-            var winner = create.execute("usr_buyer", input); committed.countDown();
+            Order winner = create.execute("usr_buyer", input); committed.countDown();
             assertThat(waiting.get(15, TimeUnit.SECONDS).getOrderNo()).isEqualTo(winner.getOrderNo());
             assertThat(count("outbox_event")).isEqualTo(1);
         } finally { committed.countDown(); pool.shutdownNow(); }
     }
     @Test void requestKeysAndBuyerSubjectsUseExactCaseAndSeparateOwners() {
-        var request = new OrderRequest("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Game-1", 3, 10000);
+        OrderRequest request = new OrderRequest("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Game-1", 3, 10000);
         create.execute("usr_buyer", request); create.execute("USR_BUYER", request);
         create.execute("usr_buyer", new OrderRequest(request.requestId().toUpperCase(Locale.ROOT), "Game-1", 3, 10000));
         assertThat(count("purchase_order")).isEqualTo(3);
     }
     @Test void appliesSuccessAndFailureAndKeepsStableResultOnRedelivery() {
-        var a = saved("usr_buyer"); var event = completed(a); accept(event);
-        var updated = stored(a).getUpdatedAt(); accept(event);
+        Order a = saved("usr_buyer"); OrderPaymentCompletedEvent event = completed(a); accept(event);
+        Instant updated = stored(a).getUpdatedAt(); accept(event);
         assertThat(stored(a).getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(stored(a).getUpdatedAt()).isEqualTo(updated);
-        var b = saved("usr_buyer"); var failure = failed(b); accept(failure); accept(failure);
+        Order b = saved("usr_buyer"); OrderPaymentFailedEvent failure = failed(b); accept(failure); accept(failure);
         assertThat(stored(b).getStatus()).isEqualTo(OrderStatus.FAILED);
         assertThat(stored(b).getFailureReasonCode()).isEqualTo("DECLINED");
         assertThat(count("processed_event")).isEqualTo(2);
     }
     @Test void mismatchedConnectionsAndFeeDeductedAmountsRollBackInboxAndState() {
-        var o = saved("usr_buyer"); var good = completed(o);
-        for (var bad : new OrderPaymentCompletedEvent[]{
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent good = completed(o);
+        for (OrderPaymentCompletedEvent bad : new OrderPaymentCompletedEvent[]{
                 new OrderPaymentCompletedEvent(id(), good.occurredAt(), o.getOrderNo(), "wrong", good.paymentId(), o.getBuyerSubject(), 10000, "KRW"),
                 new OrderPaymentCompletedEvent(id(), good.occurredAt(), o.getOrderNo(), o.getRequestEventId(), good.paymentId(), "other", 10000, "KRW"),
                 new OrderPaymentCompletedEvent(id(), good.occurredAt(), o.getOrderNo(), o.getRequestEventId(), good.paymentId(), o.getBuyerSubject(), 9800, "KRW"),
@@ -184,7 +186,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         accept(good);
     }
     @Test void invalidEnvelopeMissingOrderAndIncompleteFailureAreNotMarkedProcessed() {
-        var o = saved("usr_buyer"); var e = completed(o);
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
         assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventEnvelope("wrong", e.eventType(), e.orderNo(), ""), e))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventEnvelope(e.eventId(), e.eventType(), "wrong", ""), e))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> accept(completed(order()))).isInstanceOf(BusinessException.class);
@@ -193,7 +195,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(count("processed_event")).isZero();
     }
     @Test void rejectsChangedBodyNewFinalEventAndEventIdReuseAcrossOrders() {
-        var a = saved("usr_buyer"); var b = saved("usr_buyer"); var e = completed(a); accept(e);
+        Order a = saved("usr_buyer"); Order b = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(a); accept(e);
         assertThatThrownBy(() -> accept(new OrderPaymentCompletedEvent(e.eventId(), e.occurredAt(), e.orderNo(), e.requestEventId(), "different-payment", e.buyerSubject(), e.amount(), e.currency())))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> accept(completed(a))).isInstanceOf(BusinessException.class);
@@ -203,7 +205,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(stored(b).getStatus()).isEqualTo(OrderStatus.PENDING); assertThat(count("processed_event")).isEqualTo(1);
     }
     @Test void failureAfterInboxInsertRollsBackAndOriginalEventCanBeDeliveredAgain() {
-        var o = saved("usr_buyer"); var e = completed(o);
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
         new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
                 doAnswer(inv -> { inv.callRealMethod(); throw new IllegalStateException("after inbox"); })
                         .when(guard).firstDelivery(eq(e.eventId()), anyString(), anyString()));
@@ -214,8 +216,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         accept(e); assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID);
     }
     @Test void rollbackAfterFlushingTheFinalStateAlsoRollsBackInbox() {
-        var o = saved("usr_buyer"); var e = completed(o);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(transactions);
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
+        TransactionTemplate tx = new org.springframework.transaction.support.TransactionTemplate(transactions);
         assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
             accept(e);
             assertThat(jdbc.queryForObject("SELECT status FROM purchase_order WHERE id=?", String.class, o.getId())).isEqualTo("PAID");
@@ -227,39 +229,39 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         accept(e); assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID);
     }
     @Test void simultaneousOppositeResultsAcceptExactlyOneTerminalFact() throws Exception {
-        var o = saved("usr_buyer"); var success = completed(o); var failure = failed(o);
-        var start = new CountDownLatch(1); var pool = Executors.newFixedThreadPool(2);
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent success = completed(o); OrderPaymentFailedEvent failure = failed(o);
+        CountDownLatch start = new CountDownLatch(1); ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            var tasks = List.of(pool.submit(() -> { start.await(); try { accept(success); return true; } catch (BusinessException ex) { return false; } }),
+            List<Future<Boolean>> tasks = List.of(pool.submit(() -> { start.await(); try { accept(success); return true; } catch (BusinessException ex) { return false; } }),
                     pool.submit(() -> { start.await(); try { accept(failure); return true; } catch (BusinessException ex) { return false; } }));
             start.countDown(); int accepted = 0;
-            for (var f : tasks) if (f.get(20, TimeUnit.SECONDS)) accepted++;
+            for (Future<Boolean> f : tasks) if (f.get(20, TimeUnit.SECONDS)) accepted++;
             assertThat(accepted).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(1);
             assertThat(stored(o).getStatus()).isIn(OrderStatus.PAID, OrderStatus.FAILED);
         } finally { pool.shutdownNow(); }
     }
     @Test void concurrentReuseOfOneResultEventIdCannotFinalizeTwoOrders() throws Exception {
-        var a = saved("usr_buyer"); var b = saved("usr_buyer"); var e = completed(a);
-        var other = new OrderPaymentCompletedEvent(e.eventId(), e.occurredAt(), b.getOrderNo(), b.getRequestEventId(), id(), b.getBuyerSubject(), b.getAmount(), b.getCurrency());
-        var start = new CountDownLatch(1); var pool = Executors.newFixedThreadPool(2);
+        Order a = saved("usr_buyer"); Order b = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(a);
+        OrderPaymentCompletedEvent other = new OrderPaymentCompletedEvent(e.eventId(), e.occurredAt(), b.getOrderNo(), b.getRequestEventId(), id(), b.getBuyerSubject(), b.getAmount(), b.getCurrency());
+        CountDownLatch start = new CountDownLatch(1); ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            var tasks = List.of(pool.submit(() -> { start.await(); try { accept(e); return true; } catch (RuntimeException ex) { return false; } }),
+            List<Future<Boolean>> tasks = List.of(pool.submit(() -> { start.await(); try { accept(e); return true; } catch (RuntimeException ex) { return false; } }),
                     pool.submit(() -> { start.await(); try { accept(other); return true; } catch (RuntimeException ex) { return false; } }));
             start.countDown(); int accepted = 0;
-            for (var f : tasks) if (f.get(25, TimeUnit.SECONDS)) accepted++;
+            for (Future<Boolean> f : tasks) if (f.get(25, TimeUnit.SECONDS)) accepted++;
             assertThat(accepted).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(1);
-            var loser = stored(a).getStatus() == OrderStatus.PENDING ? e : other;
+            OrderPaymentCompletedEvent loser = stored(a).getStatus() == OrderStatus.PENDING ? e : other;
             assertThatThrownBy(() -> accept(loser)).isInstanceOf(BusinessException.class);
             assertThat(List.of(stored(a), stored(b))).filteredOn(o -> o.getStatus() == OrderStatus.PAID).hasSize(1);
         } finally { pool.shutdownNow(); }
     }
     @Test void onlyOwnedOrdersAreReturnedWithStablePagesAndNoInternalFields() {
-        var own = saved("usr_buyer"); saved("usr_other"); var last = saved("usr_buyer");
+        Order own = saved("usr_buyer"); saved("usr_other"); Order last = saved("usr_buyer");
         jdbc.update("UPDATE purchase_order SET created_at='2026-10-16 00:00:00'");
         assertThat(search.execute("usr_buyer", 0, 1).getContent().getFirst().getOrderNo()).isEqualTo(last.getOrderNo());
         assertThat(search.execute("usr_buyer", 1, 1).getTotalElements()).isEqualTo(2);
         String bearer = token("usr_buyer", "MEMBER");
-        var detail = http("GET", "/api/v1/orders/" + own.getOrderNo(), null, bearer);
+        Response detail = http("GET", "/api/v1/orders/" + own.getOrderNo(), null, bearer);
         assertThat(detail.status()).isEqualTo(200);
         assertThat(detail.body().toString()).doesNotContain("buyerSubject", "requestEventId", "paymentResultEventId");
         assertThat(http("GET", "/api/v1/orders/" + own.getOrderNo(), null, token("usr_other", "MEMBER")).status()).isEqualTo(404);
@@ -268,9 +270,9 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             assertThat(http("GET", "/api/v1/orders?" + query, null, bearer).status()).isEqualTo(400);
     }
     @Test void authenticatesJwtAndIgnoresForgedOwnerAndStatus() {
-        String bearer = token("usr_buyer", "MEMBER"); var input = request();
-        var forged = new HashMap<String,Object>(body(input)); forged.put("buyerSubject", "usr_other"); forged.put("memberId", 999); forged.put("status", "PAID");
-        var created = http("POST", "/api/v1/orders", forged, bearer);
+        String bearer = token("usr_buyer", "MEMBER"); OrderRequest input = request();
+        HashMap<String, Object> forged = new HashMap<String,Object>(body(input)); forged.put("buyerSubject", "usr_other"); forged.put("memberId", 999); forged.put("status", "PAID");
+        Response created = http("POST", "/api/v1/orders", forged, bearer);
         assertThat(created.status()).isEqualTo(200); assertThat(created.data().path("status").asText()).isEqualTo("PENDING");
         assertThat(orders.findAll().getFirst().getBuyerSubject()).isEqualTo("usr_buyer");
         assertThat(http("GET", "/api/v1/orders", null, null).status()).isEqualTo(401);
@@ -284,33 +286,33 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     }
     @Test void validatesRequiredIntegralNumbersAndInputLimits() {
         String bearer = token("usr_buyer", "MEMBER");
-        for (var field : List.of("requestId", "productCode", "expectedContentVersion", "expectedAmount")) {
-            var invalid = new HashMap<String,Object>(body(request())); invalid.remove(field);
+        for (String field : List.of("requestId", "productCode", "expectedContentVersion", "expectedAmount")) {
+            HashMap<String, Object> invalid = new HashMap<String,Object>(body(request())); invalid.remove(field);
             assertThat(http("POST", "/api/v1/orders", invalid, bearer).status()).isEqualTo(400);
         }
         for (String field : List.of("expectedContentVersion", "expectedAmount")) {
-            var invalid = new HashMap<String,Object>(body(request())); invalid.put(field, 1.5);
+            HashMap<String, Object> invalid = new HashMap<String,Object>(body(request())); invalid.put(field, 1.5);
             assertThat(http("POST", "/api/v1/orders", invalid, bearer).status()).isEqualTo(400);
         }
-        var invalid = new HashMap<String,Object>(body(request())); invalid.put("expectedAmount", -1);
+        HashMap<String, Object> invalid = new HashMap<String,Object>(body(request())); invalid.put("expectedAmount", -1);
         assertThat(http("POST", "/api/v1/orders", invalid, bearer).status()).isEqualTo(400);
         assertThat(count("purchase_order")).isZero();
     }
     @Test void kafkaRetriesInvalidResultToDltAndReplaysOriginalAfterOrderRecovery() throws Exception {
-        var o = saved("usr_buyer"); var e = completed(o);
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
         // A missing request is recoverable by restoring its original Order row.
         jdbc.update("UPDATE purchase_order SET order_no=? WHERE id=?", id(), o.getId());
-        var config = new HashMap<String,Object>();
+        HashMap<String, Object> config = new HashMap<String,Object>();
         config.put("bootstrap.servers", kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
         config.put("group.id", "order-dlt-" + id()); config.put("auto.offset.reset", "earliest");
         config.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         config.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (var consumer = new KafkaConsumer<String,String>(config)) {
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<String,String>(config)) {
             consumer.subscribe(List.of(Topics.PAYMENT + ".DLT")); listeners.start();
             send(e);
             boolean found = false; long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
             while (!found && System.nanoTime() < deadline)
-                for (var record : consumer.poll(Duration.ofMillis(500))) if (record.value().contains(e.eventId())) found = true;
+                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) if (record.value().contains(e.eventId())) found = true;
             assertThat(found).isTrue(); assertThat(count("processed_event")).isZero();
             jdbc.update("UPDATE purchase_order SET order_no=? WHERE id=?", o.getOrderNo(), o.getId());
             send(e); send(e);
@@ -320,14 +322,14 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         } finally { listeners.stop(); }
     }
     private void send(DomainEvent e) throws Exception {
-        var record = new ProducerRecord<String,String>(e.topic(), e.partitionKey(), mapper.writeValueAsString(e));
+        ProducerRecord<String, String> record = new ProducerRecord<String,String>(e.topic(), e.partitionKey(), mapper.writeValueAsString(e));
         record.headers().add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
         kafka.send(record).get(10, TimeUnit.SECONDS);
     }
     @Test void openApiMatchesSnapshotAndContainsOnlyThreeBusinessOperations() throws Exception {
         OpenApiSnapshot.verify(port, "order");
-        var paths = http("GET", "/v3/api-docs", null, null).body().path("paths");
+        JsonNode paths = http("GET", "/v3/api-docs", null, null).body().path("paths");
         assertThat(paths.size()).isEqualTo(2);
         assertThat(paths.path("/api/v1/orders").has("post")).isTrue();
         assertThat(paths.path("/api/v1/orders").has("get")).isTrue();

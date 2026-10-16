@@ -12,10 +12,10 @@ public class CatalogClientConfiguration {
     public CatalogHttpClient catalogProducts(@Value("${stove.order.catalog-base-url}") String baseUrl,
             @Value("${stove.order.catalog-connect-timeout-ms:3000}") int connectTimeout,
             @Value("${stove.order.catalog-read-timeout-ms:10000}") int readTimeout) {
-        var factory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
         factory.setReadTimeout(readTimeout);
-        var client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        RestClient client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
         return new CatalogHttpClient(client);
     }
 }

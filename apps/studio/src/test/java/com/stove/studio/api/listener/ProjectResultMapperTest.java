@@ -39,14 +39,14 @@ class ProjectResultMapperTest {
 
     @ParameterizedTest @MethodSource("results")
     void listenerDeliversInternalInputForEveryResult(DomainEvent event) throws Exception {
-        var review = mock(RecordProjectReviewResult.class);
-        var release = mock(RecordProjectReleaseResult.class);
-        var json = new ObjectMapper().findAndRegisterModules();
-        var listener = new ProjectResultListener(json, review, release);
-        var record = new ConsumerRecord<String, String>(event.topic(), 0, 0, event.partitionKey(), json.writeValueAsString(event));
+        RecordProjectReviewResult review = mock(RecordProjectReviewResult.class);
+        RecordProjectReleaseResult release = mock(RecordProjectReleaseResult.class);
+        ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+        ProjectResultListener listener = new ProjectResultListener(json, review, release);
+        ConsumerRecord<String, String> record = new ConsumerRecord<String, String>(event.topic(), 0, 0, event.partitionKey(), json.writeValueAsString(event));
         record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));
-        var input = convert(new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), ""), event);
+        Object input = convert(new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), ""), event);
         listener.receive(record);
         if (input instanceof ProjectReviewResult result) {
             verify(review).execute(result);
@@ -64,7 +64,7 @@ class ProjectResultMapperTest {
 
     @ParameterizedTest @MethodSource("results")
     void requiresMatchingIdTypeAndProductKey(DomainEvent event) {
-        for (var envelope : new EventEnvelope[]{null,
+        for (EventEnvelope envelope : new EventEnvelope[]{null,
                 new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
@@ -73,15 +73,15 @@ class ProjectResultMapperTest {
 
     @Test
     void incompleteResultsCannotBecomeInternalInput() {
-        var event = ProjectReviewApprovedEvent.of(1L, 2L, 3, "game-2", "reviewer");
-        var envelope = new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), "");
+        ProjectReviewApprovedEvent event = ProjectReviewApprovedEvent.of(1L, 2L, 3, "game-2", "reviewer");
+        EventEnvelope envelope = new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), "");
         assertThatThrownBy(() -> ProjectResultMapper.from(envelope,
                 new ProjectReviewApprovedEvent(event.eventId(), null, 1L, 2L, 3, "game-2", "reviewer")))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> ProjectResultMapper.from(envelope,
                 new ProjectReviewApprovedEvent(event.eventId(), event.occurredAt(), 1L, 2L, 3, "game-2", "")))
                 .isInstanceOf(BusinessException.class);
-        var rejected = ProjectReleaseRejectedEvent.of(1L, 2L, 3, "game-2", "", "request");
+        ProjectReleaseRejectedEvent rejected = ProjectReleaseRejectedEvent.of(1L, 2L, 3, "game-2", "", "request");
         assertThatThrownBy(() -> convert(new EventEnvelope(rejected.eventId(), rejected.eventType(), rejected.partitionKey(), ""), rejected))
                 .isInstanceOf(BusinessException.class);
     }

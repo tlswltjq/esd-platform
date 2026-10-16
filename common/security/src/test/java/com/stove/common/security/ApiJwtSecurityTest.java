@@ -7,6 +7,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.sun.net.httpserver.HttpServer;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -40,7 +41,7 @@ class ApiJwtSecurityTest {
         jwksServer.createContext("/jwks", exchange -> {
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, jwks.length);
-            try (var body = exchange.getResponseBody()) {
+            try (OutputStream body = exchange.getResponseBody()) {
                 body.write(jwks);
             }
         });

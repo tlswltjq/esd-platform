@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ProjectTest {
     @Test
     void projectOwnerAndEditVersionProtectMetadata() {
-        var p = Project.create("GAME", "Game", "creator");
+        Project p = Project.create("GAME", "Game", "creator");
         assertThatThrownBy(() -> p.requireOwner("other")).isInstanceOf(BusinessException.class);
         p.update(new StorePage("Updated", "Summary", null, null, "Content", 1000), 1);
         assertThatThrownBy(() -> p.update(new StorePage("Old", "", null, null, "", 0), 1))
@@ -19,7 +19,7 @@ class ProjectTest {
 
     @Test
     void outgoingRequestsDoNotFreezeMetadataOrCreateAnApprovalOrPublicationState() {
-        var p = Project.create("GAME", "Game", "creator");
+        Project p = Project.create("GAME", "Game", "creator");
         p.linkReviewRequest(10L);
         p.linkReleaseRequest(20L);
         p.update(new StorePage("Updated", "Summary", null, null, "Content", 1000), 1);

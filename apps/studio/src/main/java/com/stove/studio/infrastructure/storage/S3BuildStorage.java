@@ -51,7 +51,7 @@ public class S3BuildStorage implements BuildStorage {
     @Override
     public String put(Long projectId, Path file, String extension, String type) {
         String key = "projects/" + projectId + "/" + UUID.randomUUID() + "." + extension;
-        var request =
+        PutObjectRequest.Builder request =
                 PutObjectRequest.builder().bucket(bucket).key(key).contentType(type);
         if (encryptionEnabled)
             request.serverSideEncryption(ServerSideEncryption.AES256);

@@ -1,9 +1,11 @@
 package com.stove.gateway.config.bff;
 
+import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 
@@ -15,9 +17,9 @@ public class BffClientConfig {
             org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientProperties properties,
             @org.springframework.beans.factory.annotation.Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
             @org.springframework.beans.factory.annotation.Value("${BFF_PUBLIC_AUTH_BASE:http://localhost:8080}") String publicBase) {
-        var registrations = new org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientPropertiesMapper(properties)
+        Map<String, ClientRegistration> registrations = new org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientPropertiesMapper(properties)
                 .asClientRegistrations();
-        var bff = org.springframework.security.oauth2.client.registration.ClientRegistration
+        ClientRegistration bff = org.springframework.security.oauth2.client.registration.ClientRegistration
                 .withClientRegistration(registrations.get("gateway-bff"))
                 .issuerUri(issuer)
                 .providerConfigurationMetadata(java.util.Map.of("issuer", issuer,
@@ -27,7 +29,7 @@ public class BffClientConfig {
     }
     @Bean
     ServerOAuth2AuthorizationRequestResolver bffAuthorizationRequestResolver(ReactiveClientRegistrationRepository clients) {
-        var resolver = new DefaultServerOAuth2AuthorizationRequestResolver(clients);
+        DefaultServerOAuth2AuthorizationRequestResolver resolver = new DefaultServerOAuth2AuthorizationRequestResolver(clients);
         resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
         return resolver;
     }

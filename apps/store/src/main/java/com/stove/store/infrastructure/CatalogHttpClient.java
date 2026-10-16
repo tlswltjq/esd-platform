@@ -14,11 +14,11 @@ public class CatalogHttpClient implements CatalogProducts {
         this.mapper = mapper;
     }
     @Override public List<String> codes(int page) {
-        var body = client.get().uri(uri -> uri.path("/api/v1/products").queryParam("page", page)
+        JsonNode body = client.get().uri(uri -> uri.path("/api/v1/products").queryParam("page", page)
                 .queryParam("size", 100).build()).retrieve().body(JsonNode.class);
-        var content = data(body).path("content");
+        JsonNode content = data(body).path("content");
         if (!content.isArray()) throw new IllegalStateException("Catalog 상품 목록 형식이 올바르지 않습니다.");
-        var codes = new ArrayList<String>();
+        ArrayList<String> codes = new ArrayList<String>();
         content.forEach(item -> {
             String code = item.path("productCode").asText();
             if (code.isBlank()) throw new IllegalStateException("Catalog 상품 코드가 없습니다.");
@@ -27,9 +27,9 @@ public class CatalogHttpClient implements CatalogProducts {
         return List.copyOf(codes);
     }
     @Override public CatalogProductSnapshot detail(String code) {
-        var body = client.get().uri("/api/v1/products/by-code/{code}", code).retrieve().body(JsonNode.class);
+        JsonNode body = client.get().uri("/api/v1/products/by-code/{code}", code).retrieve().body(JsonNode.class);
         try {
-            var product = mapper.treeToValue(data(body), CatalogProductSnapshot.class);
+            CatalogProductSnapshot product = mapper.treeToValue(data(body), CatalogProductSnapshot.class);
             if (!code.equals(product.productCode())) throw new IllegalStateException("Catalog 상품 코드가 다릅니다.");
             return product;
         } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {

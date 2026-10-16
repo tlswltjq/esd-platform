@@ -16,7 +16,7 @@ class ReviewStoragePropertiesTest {
 
     @Test
     void genericWriterCredentialsCannotSubstituteForTheReviewAccount() {
-        var context =
+        ApplicationContextRunner context =
                 new ApplicationContextRunner()
                         .withUserConfiguration(PropertiesConfig.class)
                         .withPropertyValues(

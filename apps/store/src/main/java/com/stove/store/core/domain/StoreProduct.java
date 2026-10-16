@@ -27,7 +27,7 @@ public class StoreProduct {
     @Column(nullable = false) private Instant updatedAt;
 
     public static StoreProduct create(CatalogProductSnapshot s) {
-        var product = new StoreProduct();
+        StoreProduct product = new StoreProduct();
         product.productId = s.productId();
         product.productCode = s.productCode();
         product.publishedAt = s.publishedAt();

@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -28,7 +29,7 @@ public final class RotatingAuthorizationService implements OAuth2AuthorizationSe
     @Override
     public void save(OAuth2Authorization authorization) {
         transactions.executeWithoutResult(status -> {
-            var refresh = authorization.getRefreshToken();
+            OAuth2Authorization.Token<OAuth2RefreshToken> refresh = authorization.getRefreshToken();
             if (refresh != null) {
                 jdbc.update("""
                         INSERT IGNORE INTO refresh_token_family

@@ -144,7 +144,7 @@ public final class E2eClient {
         System.arraycopy(body, 0, multipart, prefix.length, body.length);
         System.arraycopy(suffix, 0, multipart, prefix.length + body.length, suffix.length);
         try {
-            var builder =
+            HttpRequest.Builder builder =
                     HttpRequest.newBuilder(URI.create(baseUrl + path))
                             .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                             .POST(HttpRequest.BodyPublishers.ofByteArray(multipart));

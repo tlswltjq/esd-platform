@@ -41,7 +41,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     }
 
     private ProjectReviewRequestedEvent submit(long id, long project) {
-        var e = ReviewFixtures.event(id, project);
+        ProjectReviewRequestedEvent e = ReviewFixtures.event(id, project);
         receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
         return e;
     }
@@ -49,17 +49,17 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Test
     void duplicateReceptionPreservesTheSnapshotAndIndependentRerequests() {
         long id = id(), project = id();
-        var event = submit(id, project);
+        ProjectReviewRequestedEvent event = submit(id, project);
         receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(event), event));
         decide.execute(id, "reviewer", ReviewStatus.REJECTED, "Fix");
-        var duplicate = ProjectReviewRequestedEvent.of(id, event.snapshot());
+        ProjectReviewRequestedEvent duplicate = ProjectReviewRequestedEvent.of(id, event.snapshot());
         receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(duplicate), duplicate));
         assertThat(read.get(id).getStatus()).isEqualTo(ReviewStatus.REJECTED);
-        var newRequest = submit(id(), project);
+        ProjectReviewRequestedEvent newRequest = submit(id(), project);
         assertThat(read.list(null, project, 0, 20).getTotalElements()).isEqualTo(2);
         assertThat(read.get(newRequest.reviewRequestId()).getStatus())
                 .isEqualTo(ReviewStatus.REQUESTED);
-        var changed =
+        ProjectSnapshot changed =
                 new ProjectSnapshot(
                         project,
                         event.snapshot().productCode(),
@@ -77,7 +77,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                         10,
                         "a".repeat(64),
                         "s3://stove-builds/build.zip");
-        var conflict = ProjectReviewRequestedEvent.of(id, changed);
+        ProjectReviewRequestedEvent conflict = ProjectReviewRequestedEvent.of(id, changed);
         assertThatThrownBy(() -> receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(conflict), conflict)))
                 .isInstanceOf(BusinessException.class);
         assertThat(
@@ -91,7 +91,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
 
     @Test
     void malformedEnvelopeDoesNotCreateAnInboxMarker() {
-        var e = ReviewFixtures.event(id(), id());
+        ProjectReviewRequestedEvent e = ReviewFixtures.event(id(), id());
         assertThatThrownBy(
                         () ->
                                 receive.execute(ReviewSubmissionMapper.from(new EventEnvelope(
@@ -113,15 +113,15 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Test
     void decisionRetriesPublishOnceAndRetainTheFirstActor() {
         long id = id();
-        var e = submit(id, id());
-        var first = decide.execute(id, "first-reviewer", ReviewStatus.APPROVED, null);
-        var retry = decide.execute(id, "second-reviewer", ReviewStatus.APPROVED, null);
+        ProjectReviewRequestedEvent e = submit(id, id());
+        ProjectReview first = decide.execute(id, "first-reviewer", ReviewStatus.APPROVED, null);
+        ProjectReview retry = decide.execute(id, "second-reviewer", ReviewStatus.APPROVED, null);
         assertThat(retry.getActor()).isEqualTo(first.getActor());
         assertThat(retry.getDecidedAt()).isEqualTo(first.getDecidedAt());
         assertThatThrownBy(() -> decide.execute(id, "other", ReviewStatus.REJECTED, "Change"))
                 .isInstanceOf(BusinessException.class);
         assertThat(outboxCount(e.partitionKey())).isEqualTo(1);
-        var result =
+        Map<String, Object> result =
                 jdbc.queryForMap(
                         "SELECT aggregate_id,partition_key,payload FROM outbox_event WHERE"
                                 + " aggregate_id=?",
@@ -133,7 +133,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Test
     void outboxFailureRollsBackTheDecision() {
         long id = id();
-        var e = submit(id, id());
+        ProjectReviewRequestedEvent e = submit(id, id());
         new org.springframework.transaction.support.TransactionTemplate(transactions)
                 .executeWithoutResult(
                         tx ->
@@ -150,12 +150,12 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Test
     void simultaneousOppositeDecisionsCommitExactlyOneResult() throws Exception {
         long id = id();
-        var e = submit(id, id());
-        var pool = Executors.newFixedThreadPool(2);
-        var start = new CountDownLatch(1);
+        ProjectReviewRequestedEvent e = submit(id, id());
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
         try {
-            var a = pool.submit(() -> decision(start, id, ReviewStatus.APPROVED, null));
-            var b = pool.submit(() -> decision(start, id, ReviewStatus.REJECTED, "Fix"));
+            Future<Boolean> a = pool.submit(() -> decision(start, id, ReviewStatus.APPROVED, null));
+            Future<Boolean> b = pool.submit(() -> decision(start, id, ReviewStatus.REJECTED, "Fix"));
             start.countDown();
             assertThat(List.of(a.get(15, TimeUnit.SECONDS), b.get(15, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder(true, false);
@@ -179,9 +179,9 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
 
     @Test
     void simultaneousDuplicateIntakeCanRetryAfterTheFailedTransaction() throws Exception {
-        var e = ReviewFixtures.event(id(), id());
-        var pool = Executors.newFixedThreadPool(2);
-        var start = new CountDownLatch(1);
+        ProjectReviewRequestedEvent e = ReviewFixtures.event(id(), id());
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
         Callable<Void> task =
                 () -> {
                     start.await();
@@ -195,8 +195,8 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                     }
                 };
         try {
-            var a = pool.submit(task);
-            var b = pool.submit(task);
+            Future<Void> a = pool.submit(task);
+            Future<Void> b = pool.submit(task);
             start.countDown();
             a.get(15, TimeUnit.SECONDS);
             b.get(15, TimeUnit.SECONDS);
@@ -219,10 +219,10 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
 
     @Test
     void realKafkaDeliveryUsesTheNewGroupAndIgnoresOtherStudioEvents() throws Exception {
-        var e = ReviewFixtures.event(id(), id());
+        ProjectReviewRequestedEvent e = ReviewFixtures.event(id(), id());
         listeners.start();
         try {
-            var record =
+            ProducerRecord<String, String> record =
                     new ProducerRecord<String, String>(
                             Topics.STUDIO, e.partitionKey(), ReviewFixtures.json(e));
             record.headers()

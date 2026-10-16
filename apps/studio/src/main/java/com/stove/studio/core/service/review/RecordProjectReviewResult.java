@@ -20,7 +20,7 @@ public class RecordProjectReviewResult {
 
     public void execute(ProjectReviewResult result) {
         if (!guard.firstDelivery(result.eventId(), CONSUMER_GROUP, result.eventType())) return;
-        var request =
+        ProjectReviewRequest request =
                 requests.lock(result.reviewRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!request.getProjectId().equals(result.projectId())

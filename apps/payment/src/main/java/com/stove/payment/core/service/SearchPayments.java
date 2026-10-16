@@ -17,7 +17,7 @@ public class SearchPayments {
         if (page < 0 || size < 1 || size > 100) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
-        var order = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+        Sort order = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
         return payments.findByBuyerSubject(buyer, PageRequest.of(page, size, order));
     }
 }

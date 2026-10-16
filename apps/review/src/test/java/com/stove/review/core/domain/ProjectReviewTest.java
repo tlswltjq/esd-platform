@@ -5,14 +5,15 @@ import static org.assertj.core.api.Assertions.*;
 import com.stove.common.web.error.BusinessException;
 import com.stove.review.ReviewFixtures;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class ProjectReviewTest {
     @Test
     void identicalDecisionRetryKeepsOriginalActorAndTime() {
-        var r = ReviewFixtures.review(1);
+        ProjectReview r = ReviewFixtures.review(1);
         assertThat(r.decide(ReviewStatus.APPROVED, "first", null)).isTrue();
-        var time = r.getDecidedAt();
+        Instant time = r.getDecidedAt();
         assertThat(r.decide(ReviewStatus.APPROVED, "second", null)).isFalse();
         assertThat(r.getActor()).isEqualTo("first");
         assertThat(r.getDecidedAt()).isEqualTo(time);
@@ -23,7 +24,7 @@ class ProjectReviewTest {
 
     @Test
     void rejectionCannotBeReopenedOrHaveItsReasonChanged() {
-        var r = ReviewFixtures.review(1);
+        ProjectReview r = ReviewFixtures.review(1);
         r.decide(ReviewStatus.REJECTED, "reviewer", "Fix description");
         assertThat(r.decide(ReviewStatus.REJECTED, "retry", "Fix description")).isFalse();
         assertThatThrownBy(() -> r.decide(ReviewStatus.REJECTED, "retry", "Different"))
@@ -35,7 +36,7 @@ class ProjectReviewTest {
 
     @Test
     void invalidDecisionDoesNotMutateTheRequest() {
-        var r = ReviewFixtures.review(1);
+        ProjectReview r = ReviewFixtures.review(1);
         for (String feedback : new String[] {"", " ", "x".repeat(2001)})
             assertThatThrownBy(() -> r.decide(ReviewStatus.REJECTED, "reviewer", feedback))
                     .isInstanceOf(BusinessException.class);

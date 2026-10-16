@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.test.context.*;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -24,14 +25,14 @@ public abstract class PaymentIntegrationTestBase {
     static final JwtEncoder ENCODER;
     static {
         try {
-            var key = new RSAKeyGenerator(2048).keyID("payment-test").generate();
+            RSAKey key = new RSAKeyGenerator(2048).keyID("payment-test").generate();
             ENCODER = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
-            var bytes = new JWKSet(key.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = new JWKSet(key.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
             JWKS = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             JWKS.createContext("/jwks", e -> {
                 e.getResponseHeaders().add("Content-Type", "application/json");
                 e.sendResponseHeaders(200, bytes.length);
-                try (var out = e.getResponseBody()) { out.write(bytes); }
+                try (OutputStream out = e.getResponseBody()) { out.write(bytes); }
             });
             JWKS.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> JWKS.stop(0)));
@@ -43,7 +44,7 @@ public abstract class PaymentIntegrationTestBase {
     }
     static String token(String subject, String role) { return token(subject, role, ISSUER, "esd-api", Instant.now().plusSeconds(300)); }
     static String token(String subject, String role, String issuer, String audience, Instant expires) {
-        var claims = JwtClaimsSet.builder().issuer(issuer).subject(subject).audience(List.of(audience))
+        JwtClaimsSet claims = JwtClaimsSet.builder().issuer(issuer).subject(subject).audience(List.of(audience))
                 .issuedAt(Instant.now().minusSeconds(600)).expiresAt(expires).claim("roles", List.of(role)).build();
         return ENCODER.encode(JwtEncoderParameters.from(JwsHeader.with(SignatureAlgorithm.RS256).keyId("payment-test").build(), claims)).getTokenValue();
     }

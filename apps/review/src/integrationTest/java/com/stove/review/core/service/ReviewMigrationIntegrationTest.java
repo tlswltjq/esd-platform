@@ -9,6 +9,7 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.containers.MySQLContainer;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -16,10 +17,10 @@ import java.util.UUID;
 class ReviewMigrationIntegrationTest extends ReviewIntegrationTestBase {
     @Test
     void v10KeepsHistoricalApprovalsSeparateFromNewStudioRequestIds() {
-        var mysql = SharedContainers.MYSQL;
+        MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
         String schema = "review_migration_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
-        var root =
+        JdbcTemplate root =
                 new JdbcTemplate(
                         new DriverManagerDataSource(
                                 server
@@ -29,7 +30,7 @@ class ReviewMigrationIntegrationTest extends ReviewIntegrationTestBase {
                                 mysql.getPassword()));
         root.execute("CREATE DATABASE " + schema);
         try {
-            var source =
+            DriverManagerDataSource source =
                     new DriverManagerDataSource(
                             server + schema + "?useSSL=false&allowPublicKeyRetrieval=true",
                             "root",
@@ -37,7 +38,7 @@ class ReviewMigrationIntegrationTest extends ReviewIntegrationTestBase {
             String location =
                     "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
             Flyway.configure().dataSource(source).locations(location).target("9").load().migrate();
-            var jdbc = new JdbcTemplate(source);
+            JdbcTemplate jdbc = new JdbcTemplate(source);
             jdbc.update(
                     "INSERT INTO"
                         + " review_request(id,game_id,product_code,title,seller_id,price,self_rated,status,created_at,updated_at)"

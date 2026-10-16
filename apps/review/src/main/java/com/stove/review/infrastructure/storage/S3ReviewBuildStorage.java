@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.s3.*;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.*;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 
 public class S3ReviewBuildStorage implements ReviewBuildStorage {
@@ -48,7 +49,7 @@ public class S3ReviewBuildStorage implements ReviewBuildStorage {
                             .contentLength();
             if (size != snapshot.fileSize())
                 throw new BusinessException(ErrorCode.CONFLICT, "심사 빌드의 크기가 스냅샷과 다릅니다.");
-            var signed =
+            PresignedGetObjectRequest signed =
                     presigner.presignGetObject(
                             GetObjectPresignRequest.builder()
                                     .signatureDuration(presignTtl)

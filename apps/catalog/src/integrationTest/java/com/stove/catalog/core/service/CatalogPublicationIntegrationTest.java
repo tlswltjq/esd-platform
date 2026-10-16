@@ -15,6 +15,8 @@ import com.stove.common.kafka.contract.payload.*;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.*;
 
 class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
@@ -50,20 +54,20 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void publishesPublicSnapshotOnlyWhenCurrentPublicationChanges() throws Exception {
-        var first = event(id(), 1);
+        ProjectReleaseRequestedEvent first = event(id(), 1);
         send(first);
         send(first);
         send(ProjectReleaseRequestedEvent.of(id(), first.reviewRequestId(), first.snapshot()));
-        var second = event(first.snapshot().projectId(), 2);
+        ProjectReleaseRequestedEvent second = event(first.snapshot().projectId(), 2);
         send(second);
         send(event(first.snapshot().projectId(), 1));
-        var payloads = jdbc.queryForList(
+        List<String> payloads = jdbc.queryForList(
                 "SELECT payload FROM outbox_event WHERE aggregate_id=? AND event_type='CatalogProductPublished' ORDER BY id",
                 String.class, first.partitionKey());
         assertThat(payloads).hasSize(2);
-        var latest = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+        CatalogProductSnapshot latest = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
                 .readValue(payloads.getLast(), CatalogProductPublishedEvent.class).product();
-        var detail = read.detail(first.partitionKey());
+        PublishedProduct detail = read.detail(first.partitionKey());
         assertThat(latest.productId()).isEqualTo(detail.productId());
         assertThat(latest.contentVersion()).isEqualTo(2);
         assertThat(latest.publishedAt()).isEqualTo(detail.publishedAt());
@@ -74,7 +78,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void storeEventFailureAlsoRollsBackPublicationAndStudioResult() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
                 doThrow(new IllegalStateException("Store event failed")).when(outbox)
                         .record(eq("CatalogProduct"), eq(e.partitionKey()), any(CatalogProductPublishedEvent.class)));
@@ -93,12 +97,12 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
     void publishesReplacesRejectsStaleAndKeepsOriginalResults() {
         long project = id();
-        var first = event(project, 1);
+        ProjectReleaseRequestedEvent first = event(project, 1);
         send(first);
-        var second = event(project, 2);
+        ProjectReleaseRequestedEvent second = event(project, 2);
         send(second);
         send(first);
-        var stale = event(project, 1);
+        ProjectReleaseRequestedEvent stale = event(project, 1);
         send(stale);
         assertThat(read.detail(first.partitionKey()).snapshot()).isEqualTo(second.snapshot());
         assertThat(releases.findById(first.releaseRequestId()).orElseThrow().getStatus())
@@ -117,12 +121,12 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void sameVersionNewRequestCompletesWithoutMovingPublicReference() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         send(e);
-        var before = products.findByProductCode(e.partitionKey()).orElseThrow();
-        var retry = ProjectReleaseRequestedEvent.of(id(), e.reviewRequestId(), e.snapshot());
+        CatalogProduct before = products.findByProductCode(e.partitionKey()).orElseThrow();
+        ProjectReleaseRequestedEvent retry = ProjectReleaseRequestedEvent.of(id(), e.reviewRequestId(), e.snapshot());
         send(retry);
-        var after = products.findByProductCode(e.partitionKey()).orElseThrow();
+        CatalogProduct after = products.findByProductCode(e.partitionKey()).orElseThrow();
         assertThat(after.getCurrentReleaseRequestId()).isEqualTo(e.releaseRequestId());
         assertThat(after.getUpdatedAt()).isEqualTo(before.getUpdatedAt());
         assertThat(releases.findById(retry.releaseRequestId()).orElseThrow().getStatus())
@@ -132,15 +136,15 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void requestAndVersionConflictsDoNotOverwriteOrMarkInbox() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         send(e);
-        var conflict =
+        ProjectReleaseRequestedEvent conflict =
                 ProjectReleaseRequestedEvent.of(
                         e.releaseRequestId(), e.reviewRequestId(), e.snapshot());
         assertThatThrownBy(() -> send(conflict)).isInstanceOf(BusinessException.class);
         assertThat(count("processed_event", "event_id", conflict.eventId())).isZero();
-        var s = e.snapshot();
-        var changed =
+        ProjectSnapshot s = e.snapshot();
+        ProjectSnapshot changed =
                 new ProjectSnapshot(
                         s.projectId(),
                         s.productCode(),
@@ -158,9 +162,9 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
                         s.fileSize(),
                         s.checksum(),
                         s.storagePath());
-        var sameVersion = ProjectReleaseRequestedEvent.of(id(), id(), changed);
+        ProjectReleaseRequestedEvent sameVersion = ProjectReleaseRequestedEvent.of(id(), id(), changed);
         assertThatThrownBy(() -> send(sameVersion)).isInstanceOf(BusinessException.class);
-        var sameEvent =
+        ProjectReleaseRequestedEvent sameEvent =
                 new ProjectReleaseRequestedEvent(
                         e.eventId(),
                         e.occurredAt(),
@@ -174,7 +178,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void invalidEnvelopeNeverMarksInbox() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         assertThatThrownBy(
                         () ->
                                 publish.execute(ReleaseSubmissionMapper.from(new EventEnvelope(
@@ -185,7 +189,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void outboxFailureRollsBackAllPublicationWritesAndRetrySucceeds() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         new org.springframework.transaction.support.TransactionTemplate(transactions)
                 .executeWithoutResult(
                         tx ->
@@ -205,14 +209,14 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     void concurrentFirstPublicationAndDuplicateDeliveriesConvergeToHighestVersion()
             throws Exception {
         long project = id();
-        var low = event(project, 1);
-        var high = event(project, 2);
-        var pool = Executors.newFixedThreadPool(3);
-        var start = new CountDownLatch(1);
+        ProjectReleaseRequestedEvent low = event(project, 1);
+        ProjectReleaseRequestedEvent high = event(project, 2);
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        CountDownLatch start = new CountDownLatch(1);
         try {
-            var a = pool.submit(() -> retry(start, low));
-            var b = pool.submit(() -> retry(start, high));
-            var c = pool.submit(() -> retry(start, high));
+            Future<Void> a = pool.submit(() -> retry(start, low));
+            Future<Void> b = pool.submit(() -> retry(start, high));
+            Future<Void> c = pool.submit(() -> retry(start, high));
             start.countDown();
             a.get(30, TimeUnit.SECONDS);
             b.get(30, TimeUnit.SECONDS);
@@ -240,10 +244,10 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void kafkaConsumesWithNewGroupAndDeduplicates() throws Exception {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         listeners.start();
         try {
-            var record =
+            ProducerRecord<String, String> record =
                     new ProducerRecord<String, String>(Topics.STUDIO, e.partitionKey(), json(e));
             record.headers()
                     .add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
@@ -271,8 +275,8 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
 
     @Test
     void invalidKafkaContractGoesToDltAndOriginalEventCanBeReplayedAfterRepair() throws Exception {
-        var e = event(id(), 1);
-        var config = new java.util.HashMap<String, Object>();
+        ProjectReleaseRequestedEvent e = event(id(), 1);
+        HashMap<String, Object> config = new java.util.HashMap<String, Object>();
         config.put(
                 "bootstrap.servers",
                 kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
@@ -281,11 +285,11 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
         config.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         config.put(
                 "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (var consumer =
+        try (KafkaConsumer<String, String> consumer =
                 new org.apache.kafka.clients.consumer.KafkaConsumer<String, String>(config)) {
             consumer.subscribe(java.util.List.of(Topics.STUDIO + ".DLT"));
             listeners.start();
-            var bad = new ProducerRecord<String, String>(Topics.STUDIO, "wrong-key", json(e));
+            ProducerRecord<String, String> bad = new ProducerRecord<String, String>(Topics.STUDIO, "wrong-key", json(e));
             bad.headers().add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
             bad.headers()
                     .add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
@@ -293,12 +297,12 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
             boolean received = false;
             long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
             while (!received && System.nanoTime() < deadline)
-                for (var record : consumer.poll(Duration.ofMillis(500)))
+                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500)))
                     if (record.value().contains(e.eventId())) received = true;
             assertThat(received).isTrue();
             assertThat(releases.findById(e.releaseRequestId())).isEmpty();
             assertThat(count("processed_event", "event_id", e.eventId())).isZero();
-            var repaired =
+            ProducerRecord<String, String> repaired =
                     new ProducerRecord<String, String>(Topics.STUDIO, e.partitionKey(), json(e));
             repaired.headers()
                     .add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));

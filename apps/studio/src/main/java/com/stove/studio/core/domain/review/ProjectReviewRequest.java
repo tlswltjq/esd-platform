@@ -44,7 +44,7 @@ public class ProjectReviewRequest extends BaseTimeEntity {
 
     public static ProjectReviewRequest create(
             Long projectId, long version, Long buildId, String snapshot) {
-        var r = new ProjectReviewRequest();
+        ProjectReviewRequest r = new ProjectReviewRequest();
         r.projectId = projectId;
         r.contentVersion = version;
         r.buildId = buildId;

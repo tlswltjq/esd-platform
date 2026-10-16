@@ -19,7 +19,7 @@ public class ApplyPaymentResult {
     public void execute(String eventType, PaymentResult result) {
         if (eventType == null || eventType.isBlank() || eventType.length() > 60 || result == null)
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "결제 결과 입력이 올바르지 않습니다.");
-        var order = orders.lockByOrderNo(result.orderNo())
+        Order order = orders.lockByOrderNo(result.orderNo())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "결제 결과의 주문이 없습니다."));
         orders.findByPaymentResultEventId(result.eventId()).ifPresent(previous -> {
             if (!previous.getOrderNo().equals(order.getOrderNo()))

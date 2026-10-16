@@ -32,7 +32,7 @@ public final class RotatingRefreshProvider implements AuthenticationProvider {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_CLIENT);
         }
         Authentication result = transactions.execute(status -> {
-            var family = authorizations.familyForToken(request.getRefreshToken());
+            RotatingAuthorizationService.Family family = authorizations.familyForToken(request.getRefreshToken());
             if (family == null || !family.clientId().equals(client.getRegisteredClient().getId())) return null;
             if (family.revoked()) return null;
             if (family.consumed() || !Instant.now().isBefore(family.expiresAt())

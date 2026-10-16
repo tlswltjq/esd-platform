@@ -20,7 +20,7 @@ public class StudioReleaseEventListener {
 
     @KafkaListener(topics = Topics.STUDIO, groupId = PublishProjectRelease.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        var envelope = EventEnvelope.from(record);
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType("ProjectReleaseRequested"))
             publishProjectRelease.execute(
                     ReleaseSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReleaseRequestedEvent.class)));

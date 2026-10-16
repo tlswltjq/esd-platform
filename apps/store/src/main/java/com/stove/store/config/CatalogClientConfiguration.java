@@ -12,10 +12,10 @@ public class CatalogClientConfiguration {
     @Bean
     public CatalogHttpClient catalogProducts(@Value("${stove.store.catalog-base-url}") String baseUrl,
             ObjectMapper mapper) {
-        var factory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(10000);
-        var client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        RestClient client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
         return new CatalogHttpClient(client, mapper);
     }
 }

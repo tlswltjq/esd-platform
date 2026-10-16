@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.stove.auth.core.domain.UserAccount;
 import com.stove.auth.core.domain.UserAccountRepository;
 import com.stove.auth.infrastructure.oauth.RotatingAuthorizationService;
 import com.stove.auth.infrastructure.oauth.RotatingRefreshProvider;
@@ -16,6 +17,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.security.oauth2.server.authorization.token.*;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
@@ -93,7 +96,7 @@ public class AuthSecurityConfig {
                             return header != null && header.startsWith("Bearer ");
                         }))
                 .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.decoder(token -> {
-                    var decoded = jwtDecoder.decode(token);
+                    Jwt decoded = jwtDecoder.decode(token);
                     if (!decoded.getAudience().contains("esd-api")) {
                         throw new org.springframework.security.oauth2.jwt.BadJwtException("Invalid API audience");
                     }
@@ -222,10 +225,10 @@ public class AuthSecurityConfig {
         mapper.addMixIn(java.util.List.of("value").getClass(), PersistedValueMixin.class);
         mapper.addMixIn(java.util.List.of().getClass(), PersistedValueMixin.class);
         JdbcOAuth2AuthorizationService jdbc = new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClients);
-        var rows = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClients);
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rows = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClients);
         rows.setObjectMapper(mapper);
         jdbc.setAuthorizationRowMapper(rows);
-        var parameters = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper parameters = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
         parameters.setObjectMapper(mapper);
         jdbc.setAuthorizationParametersMapper(parameters);
         return new RotatingAuthorizationService(jdbc, jdbcOperations, rotationTransactions(transactionManager));
@@ -272,7 +275,7 @@ public class AuthSecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource,
             @Value("${stove.auth.issuer:http://localhost:8091}") String issuer) {
-        var decoder = (org.springframework.security.oauth2.jwt.NimbusJwtDecoder)
+        NimbusJwtDecoder decoder = (org.springframework.security.oauth2.jwt.NimbusJwtDecoder)
                 OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
         decoder.setJwtValidator(org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(issuer));
         return decoder;
@@ -289,7 +292,7 @@ public class AuthSecurityConfig {
         return context -> {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 context.getClaims().audience(new java.util.ArrayList<>(java.util.List.of("esd-api")));
-                var account = accounts.findBySubject(context.getPrincipal().getName())
+                UserAccount account = accounts.findBySubject(context.getPrincipal().getName())
                         .filter(value -> value.enabled())
                         .orElseThrow(() -> new org.springframework.security.oauth2.core.OAuth2AuthenticationException("invalid_grant"));
                 context.getClaims().claim("member_id", account.getId());

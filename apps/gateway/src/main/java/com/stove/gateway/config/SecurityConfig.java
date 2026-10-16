@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverter;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -15,6 +16,7 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.header.XFrameOptionsServerHttpHeadersWriter;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import reactor.core.publisher.Flux;
 
 @Configuration
@@ -37,9 +39,9 @@ public class SecurityConfig {
             ReactiveJwtDecoder decoder,
             org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver resolver,
             org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository registrations) {
-        var logoutSuccess = new org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler(registrations);
+        OidcClientInitiatedServerLogoutSuccessHandler logoutSuccess = new org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler(registrations);
         logoutSuccess.setPostLogoutRedirectUri("{baseUrl}/");
-        var csrfMatcher = (org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher) exchange -> {
+        ServerWebExchangeMatcher csrfMatcher = (org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher) exchange -> {
             String path = exchange.getRequest().getPath().value();
             boolean apiBearer = exchange.getRequest().getHeaders().getFirst("Authorization") != null
                     && exchange.getRequest().getHeaders().getFirst("Authorization").startsWith("Bearer ");

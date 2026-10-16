@@ -2,15 +2,17 @@ package com.stove.order.core.domain;
 
 import static com.stove.order.OrderFixtures.*;
 import static org.assertj.core.api.Assertions.*;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
+import java.time.Instant;
 import java.util.stream.Stream;
 
 class OrderTest {
     @Test void resultIdentityIsRequiredEvenWithoutAnEventListener() {
-        var o = order(); var r = result(completed(o));
+        Order o = order(); PaymentResult r = result(completed(o));
         assertThatThrownBy(() -> new PaymentResult(null, r.occurredAt(), r.orderNo(), r.requestEventId(),
                 r.paymentId(), r.buyerSubject(), r.amount(), r.currency(), OrderStatus.PAID, null, null))
                 .isInstanceOf(BusinessException.class);
@@ -19,15 +21,15 @@ class OrderTest {
     }
 
     @Test void resultMustBeFinalAndFailureMustExplainItsReason() {
-        var r = result(completed(order()));
-        for (var status : new OrderStatus[]{null, OrderStatus.PENDING, OrderStatus.FAILED})
+        PaymentResult r = result(completed(order()));
+        for (OrderStatus status : new OrderStatus[]{null, OrderStatus.PENDING, OrderStatus.FAILED})
             assertThatThrownBy(() -> new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(),
                     r.paymentId(), r.buyerSubject(), r.amount(), r.currency(), status, null, null))
                     .isInstanceOf(BusinessException.class);
     }
 
     @Test void storesOriginalProductAndSeparateCustomerAmounts() {
-        var o = order();
+        Order o = order();
         assertThat(o.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(o.getTitle()).isEqualTo("한글 게임");
         assertThat(o.getListAmount()).isEqualTo(10000);
@@ -39,21 +41,21 @@ class OrderTest {
     @Test void rejectsFreeProductsAndChangedPublicTerms() {
         assertThatThrownBy(() -> Order.create("usr_buyer", request(), new PublishedProduct(1L, "Game-1", "Free", 3, 0, "KRW"), id()))
                 .isInstanceOf(BusinessException.class);
-        for (var p : new PublishedProduct[]{new PublishedProduct(1L, "Game-1", "Changed", 4, 10000, "KRW"),
+        for (PublishedProduct p : new PublishedProduct[]{new PublishedProduct(1L, "Game-1", "Changed", 4, 10000, "KRW"),
                 new PublishedProduct(1L, "Game-1", "Changed", 3, 11000, "KRW")})
             assertThatThrownBy(() -> Order.create("usr_buyer", request(), p, id())).isInstanceOf(BusinessException.class);
     }
     @Test void sameRequestMustKeepCodeVersionAndAmount() {
-        var r = request(); var o = Order.create("usr_buyer", r, product(), id());
+        OrderRequest r = request(); Order o = Order.create("usr_buyer", r, product(), id());
         o.requireSameRequest(r);
-        for (var other : new OrderRequest[]{new OrderRequest(r.requestId(), "game-1", 3, 10000),
+        for (OrderRequest other : new OrderRequest[]{new OrderRequest(r.requestId(), "game-1", 3, 10000),
                 new OrderRequest(r.requestId(), r.productCode(), 4, 10000),
                 new OrderRequest(r.requestId(), r.productCode(), 3, 9999)})
             assertThatThrownBy(() -> o.requireSameRequest(other)).isInstanceOf(BusinessException.class);
     }
     @Test void finalResultIsImmutableAndRepeatedDeliveryDoesNotChangeTimestamp() {
-        var o = order(); var e = completed(o); var r = result(e);
-        o.apply(r); var updated = o.getUpdatedAt();
+        Order o = order(); OrderPaymentCompletedEvent e = completed(o); PaymentResult r = result(e);
+        o.apply(r); Instant updated = o.getUpdatedAt();
         o.apply(r);
         assertThat(o.getUpdatedAt()).isEqualTo(updated);
         assertThat(o.paymentResult()).isEqualTo(r);
@@ -65,8 +67,8 @@ class OrderTest {
         assertThat(o.getAmount()).isEqualTo(10000);
     }
     @Test void rejectsFeeDeductedAmountAndWrongPaymentConnection() {
-        var o = order(); var r = result(completed(o));
-        for (var wrong : new PaymentResult[]{
+        Order o = order(); PaymentResult r = result(completed(o));
+        for (PaymentResult wrong : new PaymentResult[]{
                 new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), "another-request", r.paymentId(), r.buyerSubject(), r.amount(), "KRW", OrderStatus.PAID, null, null),
                 new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(), r.paymentId(), "other-buyer", r.amount(), "KRW", OrderStatus.PAID, null, null),
                 new PaymentResult(r.eventId(), r.occurredAt(), r.orderNo(), r.requestEventId(), r.paymentId(), r.buyerSubject(), 9800, "KRW", OrderStatus.PAID, null, null)})

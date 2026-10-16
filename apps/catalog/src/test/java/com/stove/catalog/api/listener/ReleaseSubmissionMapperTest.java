@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 class ReleaseSubmissionMapperTest {
     @Test
     void rejectsUnrelatedEnvelopeMetadataAndMissingSnapshotBeforePublication() {
-        var event = event(1, 1);
-        for (var envelope : new EventEnvelope[]{null,
+        ProjectReleaseRequestedEvent event = event(1, 1);
+        for (EventEnvelope envelope : new EventEnvelope[]{null,
                 new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
@@ -20,7 +20,7 @@ class ReleaseSubmissionMapperTest {
                     .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> ReleaseSubmissionMapper.from(envelope(event), null))
                 .isInstanceOf(BusinessException.class);
-        var missing = new ProjectReleaseRequestedEvent(event.eventId(), event.occurredAt(), 1L, 1L, null);
+        ProjectReleaseRequestedEvent missing = new ProjectReleaseRequestedEvent(event.eventId(), event.occurredAt(), 1L, 1L, null);
         assertThatThrownBy(() -> ReleaseSubmissionMapper.from(
                 new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), ""), missing))
                 .isInstanceOf(BusinessException.class);

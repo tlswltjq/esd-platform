@@ -12,6 +12,7 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,11 +27,11 @@ public class ReadPublishedProducts {
         if (page < 0 || size < 1 || size > 100)
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST, "page >= 0, 1 <= size <= 100이어야 합니다.");
-        var result =
+        Page<CatalogProduct> result =
                 products.findAll(
                         PageRequest.of(
                                 page, size, Sort.by(Sort.Direction.DESC, "publishedAt", "id")));
-        var snapshots =
+        Map<Long, CatalogRelease> snapshots =
                 releases
                         .findAllById(
                                 result.stream()
@@ -42,7 +43,7 @@ public class ReadPublishedProducts {
     }
 
     public PublishedProduct detail(String code) {
-        var product =
+        CatalogProduct product =
                 products.findByProductCode(code)
                         .filter(p -> p.getProductCode().equals(code))
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));

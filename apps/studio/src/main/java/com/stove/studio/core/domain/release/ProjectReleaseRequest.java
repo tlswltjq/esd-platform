@@ -39,7 +39,7 @@ public class ProjectReleaseRequest extends BaseTimeEntity {
     private Instant resultReceivedAt;
 
     public static ProjectReleaseRequest create(Long projectId, Long reviewRequestId, long version) {
-        var r = new ProjectReleaseRequest();
+        ProjectReleaseRequest r = new ProjectReleaseRequest();
         r.projectId = projectId;
         r.reviewRequestId = reviewRequestId;
         r.contentVersion = version;

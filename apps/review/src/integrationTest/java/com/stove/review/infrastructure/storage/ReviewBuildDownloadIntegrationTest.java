@@ -4,8 +4,10 @@ import com.stove.review.config.ReviewStorageProperties;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.review.*;
+import com.stove.review.core.domain.BuildDownload;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +26,8 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
         byte[] bytes = "Immutable uploaded ZIP".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         String checksum =
                 HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        var snapshot = ReviewFixtures.snapshot(1, object(bytes), bytes.length, checksum);
-        var shortLived =
+        ProjectSnapshot snapshot = ReviewFixtures.snapshot(1, object(bytes), bytes.length, checksum);
+        S3ReviewBuildStorage shortLived =
                 new com.stove.review.config.StorageConfiguration().buildStorage(
                         new ReviewStorageProperties(
                                 MINIO.getS3URL(),
@@ -36,10 +38,10 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
                                 "stove-builds",
                                 Duration.ofSeconds(1)));
         try {
-            var url = shortLived.download(snapshot);
-            var request = HttpRequest.newBuilder(URI.create(url.url())).GET().build();
-            var client = HttpClient.newHttpClient();
-            var response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            BuildDownload url = shortLived.download(snapshot);
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url.url())).GET().build();
+            HttpClient client = HttpClient.newHttpClient();
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).isEqualTo(bytes);
             assertThat(
@@ -64,7 +66,7 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
     void foreignBucketsMissingFilesAndChangedSizesCannotProduceUrls() {
         byte[] bytes = {1, 2, 3};
         String path = object(bytes);
-        for (var s :
+        for (ProjectSnapshot s :
                 new com.stove.common.kafka.contract.payload.ProjectSnapshot[] {
                     ReviewFixtures.snapshot(1, "s3://other-bucket/private.zip", 3),
                     ReviewFixtures.snapshot(

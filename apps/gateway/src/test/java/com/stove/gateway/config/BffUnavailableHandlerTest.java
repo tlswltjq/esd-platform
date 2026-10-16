@@ -11,7 +11,7 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 class BffUnavailableHandlerTest {
     @Test
     void mapsRawLettuceTimeoutFromTheSessionRepositoryToUnavailable() {
-        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/bff/session"));
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/bff/session"));
         new BffUnavailableHandler().handle(exchange,
                 new io.lettuce.core.RedisCommandTimeoutException("HGETALL timeout")).block();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);

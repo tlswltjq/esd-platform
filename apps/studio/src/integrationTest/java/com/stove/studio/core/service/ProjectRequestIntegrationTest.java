@@ -1,11 +1,14 @@
 package com.stove.studio.core.service;
 
+import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;
+import com.stove.studio.core.domain.review.ProjectReviewRequest;
 import com.stove.studio.core.domain.review.ProjectReviewResult;
 import static org.assertj.core.api.Assertions.*;
 
 import com.stove.common.web.error.BusinessException;
 import com.stove.studio.StudioIntegrationTestBase;
+import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.domain.build.BuildRepository;
 import com.stove.studio.core.domain.project.*;
 import com.stove.studio.core.port.BuildStorage;
@@ -49,20 +52,20 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workspace", Integer.class))
                 .isEqualTo(workspaceCount);
         thumbnail.execute(id, owner, new ByteArrayInputStream(png()));
-        var p = read.requireOwned(id, owner);
+        Project p = read.requireOwned(id, owner);
         update.execute(
                 id,
                 owner,
                 p.getContentVersion(),
                 new StorePage("Game", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
-        var build = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
+        Build build = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(storage.size(build.getStoragePath())).isEqualTo(build.getFileSize());
-        var request = review.execute(id, owner);
+        ProjectReviewRequest request = review.execute(id, owner);
         assertThat(read.snapshot(request).ownerSubject()).isEqualTo(owner);
         assertThat(review.execute(id, owner).getId()).isEqualTo(request.getId());
         assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "external-reviewer"));
-        var first = release.execute(id, owner);
+        ProjectReleaseRequest first = release.execute(id, owner);
         assertThat(release.execute(id, owner).getId()).isEqualTo(first.getId());
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", first.getId(), id, first.getContentVersion(), true, null, first.getRequestEventId()));
         assertThat(read.releaseRequests(id, owner).get(0).getStatus()).isEqualTo("COMPLETED");
@@ -73,24 +76,24 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 p.getContentVersion(),
                 new StorePage(
                         "Updated", "Summary", p.getThumbnailUrl(), null, "Updated content", 2000));
-        var nextBuild = upload.execute(id, owner, "2", "game.zip", new ByteArrayInputStream(zip()));
+        Build nextBuild = upload.execute(id, owner, "2", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(read.snapshot(request).title()).isEqualTo("Game");
         assertThat(read.reviewRequest(read.requireOwned(id, owner))).isNull();
         assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
-        var next = review.execute(id, owner);
+        ProjectReviewRequest next = review.execute(id, owner);
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "old-result"));
         assertThat(read.reviewRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", next.getId(), id, next.getContentVersion(), true, null, "external-reviewer"));
-        var failed = release.execute(id, owner);
+        ProjectReleaseRequest failed = release.execute(id, owner);
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseRejected", failed.getId(), id, failed.getContentVersion(), false, "External rejection", failed.getRequestEventId()));
-        var retry = release.execute(id, owner);
+        ProjectReleaseRequest retry = release.execute(id, owner);
         assertThat(retry.getId()).isNotEqualTo(failed.getId());
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", failed.getId(), id, failed.getContentVersion(), true, null, failed.getRequestEventId()));
         assertThat(read.releaseRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", retry.getId(), id, retry.getContentVersion(), true, null, retry.getRequestEventId()));
-        var history = read.releaseRequests(id, owner);
+        List<ProjectReleaseRequest> history = read.releaseRequests(id, owner);
         assertThat(history)
                 .extracting(r -> r.getStatus())
                 .containsExactly("COMPLETED", "REJECTED", "COMPLETED");
@@ -111,14 +114,14 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         String owner = "owner-" + UUID.randomUUID();
         Long id = create.execute(owner, "P-" + UUID.randomUUID(), "Game").getId();
         thumbnail.execute(id, owner, new ByteArrayInputStream(png()));
-        var p = read.requireOwned(id, owner);
+        Project p = read.requireOwned(id, owner);
         update.execute(
                 id,
                 owner,
                 p.getContentVersion(),
                 new StorePage("First", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
         upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
-        var old = review.execute(id, owner);
+        ProjectReviewRequest old = review.execute(id, owner);
         p = read.requireOwned(id, owner);
         update.execute(
                 id,
@@ -126,12 +129,12 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 p.getContentVersion(),
                 new StorePage("Second", "Summary", p.getThumbnailUrl(), null, "Changed", 2000));
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", old.getId(), id, old.getContentVersion(), true, null, "external-reviewer"));
-        var current = read.requireOwned(id, owner);
+        Project current = read.requireOwned(id, owner);
         assertThat(current.getTitle()).isEqualTo("Second");
         assertThat(read.reviewRequest(current)).isNull();
         assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
         assertThat(read.snapshot(old).title()).isEqualTo("First");
-        var next = review.execute(id, owner);
+        ProjectReviewRequest next = review.execute(id, owner);
         assertThat(next.getId()).isNotEqualTo(old.getId());
         assertThat(read.snapshot(next).title()).isEqualTo("Second");
     }
@@ -153,7 +156,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 .isInstanceOf(BusinessException.class);
         assertThat(builds.findByProjectIdOrderByIdDesc(id)).isEmpty();
         assertThat(read.requireOwned(id, owner).getCurrentBuildId()).isNull();
-        var first = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
+        Build first = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         assertThatThrownBy(
                         () ->
                                 upload.execute(
@@ -168,8 +171,8 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
     }
 
     private byte[] zip() throws IOException {
-        var output = new ByteArrayOutputStream();
-        try (var zip = new ZipOutputStream(output)) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
             zip.putNextEntry(new ZipEntry("game.bin"));
             zip.write(UUID.randomUUID().toString().getBytes());
             zip.closeEntry();
@@ -178,7 +181,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
     }
 
     private byte[] png() throws IOException {
-        var output = new ByteArrayOutputStream();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "png", output);
         return output.toByteArray();
     }

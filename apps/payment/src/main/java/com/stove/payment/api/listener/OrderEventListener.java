@@ -16,7 +16,7 @@ public class OrderEventListener {
     private final ReceiveOrderPayment receiveOrderPayment;
     @KafkaListener(topics=Topics.ORDER,groupId=ReceiveOrderPayment.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String,String> record) {
-        var envelope=EventEnvelope.from(record);
+        EventEnvelope envelope=EventEnvelope.from(record);
         if (envelope.isType(EventType.ORDER_PLACED))
             receiveOrderPayment.execute(OrderPaymentMapper.from(envelope,envelope.payloadAs(mapper,OrderPlacedEvent.class)));
     }

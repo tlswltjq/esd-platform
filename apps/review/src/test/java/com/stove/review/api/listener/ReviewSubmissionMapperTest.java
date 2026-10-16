@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 class ReviewSubmissionMapperTest {
     @Test
     void rejectsUnrelatedEnvelopeMetadataAndMissingSubmissionBeforeIntake() {
-        var event = event(1, 1);
-        for (var envelope : new EventEnvelope[]{null,
+        ProjectReviewRequestedEvent event = event(1, 1);
+        for (EventEnvelope envelope : new EventEnvelope[]{null,
                 new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
                 new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
@@ -20,7 +20,7 @@ class ReviewSubmissionMapperTest {
                     .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> ReviewSubmissionMapper.from(envelope(event), null))
                 .isInstanceOf(BusinessException.class);
-        var missing = new ProjectReviewRequestedEvent(event.eventId(), event.occurredAt(), 1L, null);
+        ProjectReviewRequestedEvent missing = new ProjectReviewRequestedEvent(event.eventId(), event.occurredAt(), 1L, null);
         assertThatThrownBy(() -> ReviewSubmissionMapper.from(envelope(event), missing))
                 .isInstanceOf(BusinessException.class);
     }

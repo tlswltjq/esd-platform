@@ -3,6 +3,7 @@ package com.stove.payment.verification;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.outbox.*;
+import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.infrastructure.pg.SimulatedPgGateway;
@@ -16,7 +17,7 @@ import org.springframework.transaction.annotation.*;
 public class PaymentFaultConfiguration {
     @Bean @Primary PgGateway verificationGateway(SimulatedPgGateway supplier,Environment env) {
         return request -> {
-            var result=supplier.charge(request);
+            PgResult result=supplier.charge(request);
             if(env.getProperty("stove.verification.fail-after-provider",Boolean.class,false))
                 throw new PgUnavailable("verification: response lost after supplier commit");
             return result;

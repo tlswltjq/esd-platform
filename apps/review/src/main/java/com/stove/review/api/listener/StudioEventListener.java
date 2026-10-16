@@ -20,7 +20,7 @@ public class StudioEventListener {
 
     @KafkaListener(topics = Topics.STUDIO, groupId = ReceiveProjectReview.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        var envelope = EventEnvelope.from(record);
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType("ProjectReviewRequested"))
             receiveProjectReview.execute(
                     ReviewSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class)));

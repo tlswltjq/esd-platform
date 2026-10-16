@@ -13,7 +13,7 @@ public class CatalogHttpClient implements CatalogProducts {
     }
     public PublishedProduct detail(String code) {
         try {
-            var body = client.get().uri("/api/v1/products/by-code/{code}", code).retrieve()
+            JsonNode body = client.get().uri("/api/v1/products/by-code/{code}", code).retrieve()
                     .onStatus(s -> s.isError(), (request, response) -> {
                         int status = response.getStatusCode().value();
                         if (status == 404) throw new BusinessException(ErrorCode.NOT_FOUND, "공개 상품이 없습니다.");
@@ -22,7 +22,7 @@ public class CatalogHttpClient implements CatalogProducts {
                     }).body(JsonNode.class);
             if (body == null || !body.path("success").isBoolean() || !body.path("success").asBoolean()
                     || !body.path("data").isObject()) throw invalid();
-            var p = body.path("data");
+            JsonNode p = body.path("data");
             for (String field : new String[]{"productId", "contentVersion", "price"})
                 if (!p.path(field).isIntegralNumber() || !p.path(field).canConvertToLong()) throw invalid();
             for (String field : new String[]{"productCode", "title", "currency"})

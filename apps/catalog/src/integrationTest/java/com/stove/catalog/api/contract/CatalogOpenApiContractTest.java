@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import com.stove.catalog.CatalogIntegrationTestBase;
 import com.stove.catalog.core.service.PublishProjectRelease;
+import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.test.OpenApiSnapshot;
 
 import org.junit.jupiter.api.Test;
@@ -27,9 +28,9 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
 
     @Test
     void publicApiExposesOnlyPublishedFieldsAndRejectsInvalidPagingAndWrites() {
-        var e = event(id(), 1);
+        ProjectReleaseRequestedEvent e = event(id(), 1);
         publish.execute(ReleaseSubmissionMapper.from(envelope(e), e));
-        var detail =
+        ResponseEntity<String> detail =
                 http.getForEntity("/api/v1/products/by-code/" + e.partitionKey(), String.class);
         assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(detail.getBody())
@@ -56,8 +57,8 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
 
     @Test
     void paginationUsesProductIdAsTieBreakerForEqualPublicationTimes() {
-        var first = event(id(), 1);
-        var second = event(id(), 1);
+        ProjectReleaseRequestedEvent first = event(id(), 1);
+        ProjectReleaseRequestedEvent second = event(id(), 1);
         publish.execute(ReleaseSubmissionMapper.from(envelope(first), first));
         publish.execute(ReleaseSubmissionMapper.from(envelope(second), second));
         jdbc.update(
@@ -65,8 +66,8 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
                     + " IN (?,?)",
                 first.partitionKey(),
                 second.partitionKey());
-        var page0 = http.getForEntity("/api/v1/products?size=1&page=0", String.class);
-        var page1 = http.getForEntity("/api/v1/products?size=1&page=1", String.class);
+        ResponseEntity<String> page0 = http.getForEntity("/api/v1/products?size=1&page=0", String.class);
+        ResponseEntity<String> page1 = http.getForEntity("/api/v1/products?size=1&page=1", String.class);
         assertThat(page0.getBody())
                 .contains(second.partitionKey())
                 .doesNotContain(first.partitionKey());

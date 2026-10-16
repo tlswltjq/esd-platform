@@ -21,7 +21,7 @@ public class RecordProjectReleaseResult {
     public void execute(ProjectReleaseResult result) {
         if (!guard.firstDelivery(result.eventId(), RecordProjectReviewResult.CONSUMER_GROUP, result.eventType()))
             return;
-        var request =
+        ProjectReleaseRequest request =
                 requests.lock(result.releaseRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!request.getProjectId().equals(result.projectId())

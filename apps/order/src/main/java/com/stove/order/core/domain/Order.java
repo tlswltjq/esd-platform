@@ -45,8 +45,8 @@ public class Order {
                 || request.expectedContentVersion() != product.contentVersion()
                 || request.expectedAmount() != product.price())
             throw new BusinessException(ErrorCode.CONFLICT, "공개 상품 버전 또는 금액이 변경되었습니다.");
-        var price = OrderPrice.atListPrice(product);
-        var order = new Order();
+        OrderPrice price = OrderPrice.atListPrice(product);
+        Order order = new Order();
         order.orderNo = UUID.randomUUID().toString();
         order.buyerSubject = buyer; order.requestId = request.requestId();
         order.productId = product.productId(); order.productCode = product.productCode();

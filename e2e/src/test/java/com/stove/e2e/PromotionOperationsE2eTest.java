@@ -2,6 +2,7 @@ package com.stove.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.e2e.E2eClient.Response;
 import java.time.Instant;
 import java.util.List;
@@ -100,7 +101,7 @@ class PromotionOperationsE2eTest {
 
         String orderNo = pay("SELLER");
         Journey.sellerPromotion(id, orderNo);
-        var sale = ledger(orderNo).itemWhere("recordType", "SALE");
+        JsonNode sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);
         assertThat(sale.path("grossAmount").asInt()).isEqualTo(CHARGE);
         assertThat(sale.path("discountAmount").asInt()).isEqualTo(DISCOUNT);
@@ -128,7 +129,7 @@ class PromotionOperationsE2eTest {
         displayedPrice(CHARGE);
         String orderNo = pay("PLATFORM");
         Journey.platformPromotion(id, orderNo);
-        var sale = ledger(orderNo).itemWhere("recordType", "SALE");
+        JsonNode sale = ledger(orderNo).itemWhere("recordType", "SALE");
         assertThat(sale.path("paidAmount").asInt()).isEqualTo(CHARGE);
         assertThat(sale.path("grossAmount").asInt()).isEqualTo(Journey.PRICE);
         assertThat(sale.path("platformExpense").asInt()).isEqualTo(DISCOUNT);
@@ -149,7 +150,7 @@ class PromotionOperationsE2eTest {
         Response reconciled = Stove.gateway.get("/api/v1/settlements/reconciliation?month=" + month,
                 Journey.asAdmin());
         assertThat(reconciled.status()).as("%s", reconciled).isEqualTo(200);
-        var seller = reconciled.itemWhere("sellerId", sellerId);
+        JsonNode seller = reconciled.itemWhere("sellerId", sellerId);
         assertThat(seller.isMissingNode()).isFalse();
         assertThat(seller.path("balanced").asBoolean()).isTrue();
         assertThat(seller.path("adjustmentCount").asInt()).isGreaterThanOrEqualTo(1);

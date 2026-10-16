@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** 실제 Authorization Code + PKCE 브라우저 흐름을 HTTP 수준에서 수행한다. */
@@ -48,7 +49,7 @@ final class OidcLogin {
             HttpResponse<String> first = get(client, authorize);
             HttpResponse<String> loginPage =
                     get(client, resolve(first.headers().firstValue("location").orElse("/login")));
-            var csrf = CSRF.matcher(loginPage.body());
+            Matcher csrf = CSRF.matcher(loginPage.body());
             if (!csrf.find()) throw new IllegalStateException("login CSRF token not found");
 
             HttpRequest login =

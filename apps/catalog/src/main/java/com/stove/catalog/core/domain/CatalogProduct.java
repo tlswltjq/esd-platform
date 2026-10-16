@@ -36,7 +36,7 @@ public class CatalogProduct {
     private Instant updatedAt;
 
     public static CatalogProduct publish(ProjectSnapshot snapshot, Long requestId, Instant now) {
-        var product = new CatalogProduct();
+        CatalogProduct product = new CatalogProduct();
         product.projectId = snapshot.projectId();
         product.productCode = snapshot.productCode();
         product.ownerSubject = snapshot.ownerSubject();

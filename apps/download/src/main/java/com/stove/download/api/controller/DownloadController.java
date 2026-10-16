@@ -5,6 +5,7 @@ import com.stove.common.security.CurrentMemberId;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import com.stove.download.api.controller.dto.DownloadTicketResponse;
 import com.stove.download.api.controller.dto.ManifestResponse;
+import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.service.DownloadTicketService;
 import com.stove.download.core.service.ManifestService;
 import java.util.List;
@@ -31,7 +32,7 @@ public class DownloadController {
                                                       @RequestParam(required = false) String platform,
                                                       @RequestParam(required = false) String architecture,
                                                       @RequestParam(required = false) String fromVersion) {
-        var ticket = platform == null && architecture == null && fromVersion == null
+        DownloadTicket ticket = platform == null && architecture == null && fromVersion == null
                 ? downloadTicketService.issue(productCode, memberId)
                 : downloadTicketService.issue(productCode, memberId, platform, architecture, fromVersion);
         return ApiResponse.ok(DownloadTicketResponse.from(ticket));

@@ -5,7 +5,9 @@ import com.stove.common.web.error.*;
 import java.io.*;
 import java.nio.file.*;
 import java.security.*;
+import java.util.Enumeration;
 import java.util.HexFormat;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /** Disk staging keeps whole build uploads out of heap memory. */
@@ -25,7 +27,7 @@ public final class UploadFiles {
 
     public static Path stage(InputStream input, long limit) throws IOException {
         Path file = Files.createTempFile("studio-upload-", ".tmp");
-        try (var output = Files.newOutputStream(file)) {
+        try (OutputStream output = Files.newOutputStream(file)) {
             byte[] buffer = new byte[64 * 1024];
             long size = 0;
             int read;
@@ -61,7 +63,7 @@ public final class UploadFiles {
     public static void requireZip(Path file) {
         try (ZipFile zip = new ZipFile(file.toFile())) {
             if (zip.size() == 0 || zip.size() > 100000) throw new IllegalArgumentException();
-            var entries = zip.entries();
+            Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 String name = entries.nextElement().getName().replace('\\', '/');
                 Path path = Path.of(name).normalize();

@@ -45,8 +45,8 @@ class UploadFilesTest {
     }
 
     private byte[] zip(String entry) throws IOException {
-        var output = new ByteArrayOutputStream();
-        try (var zip = new ZipOutputStream(output)) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
             zip.putNextEntry(new ZipEntry(entry));
             zip.write("game".getBytes());
             zip.closeEntry();

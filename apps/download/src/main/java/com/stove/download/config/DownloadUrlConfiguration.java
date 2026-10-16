@@ -21,7 +21,7 @@ public class DownloadUrlConfiguration {
     @Bean
     @ConditionalOnProperty(name = "stove.download.url-strategy", havingValue = "s3")
     public S3PresignedUrlSigner s3UrlSigner(ObjectStorageProperties properties) {
-        var builder = S3Presigner.builder()
+        S3Presigner.Builder builder = S3Presigner.builder()
                 .region(Region.of(properties.region()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())))

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 @RestController
@@ -34,7 +35,7 @@ public class BuildController {
             @RequestParam @NotBlank @Size(max = 100) String version,
             @RequestPart("file") MultipartFile file)
             throws IOException {
-        try (var input = file.getInputStream()) {
+        try (InputStream input = file.getInputStream()) {
             return ApiResponse.ok(
                     registerBuild.execute(id, subject, version, file.getOriginalFilename(), input));
         }

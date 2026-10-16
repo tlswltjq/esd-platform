@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 
 @RestController
@@ -28,7 +29,7 @@ public class AssetController {
             @CurrentSubject String subject,
             @RequestPart("file") MultipartFile file)
             throws IOException {
-        try (var input = file.getInputStream()) {
+        try (InputStream input = file.getInputStream()) {
             return ApiResponse.ok(uploadThumbnail.execute(id, subject, input));
         }
     }

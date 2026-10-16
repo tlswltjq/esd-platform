@@ -1,6 +1,7 @@
 package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.PublishedProduct;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 
 import java.time.Instant;
 
@@ -14,7 +15,7 @@ public record ProductSummary(
         String currency,
         Instant publishedAt) {
     public static ProductSummary from(PublishedProduct p) {
-        var s = p.snapshot();
+        ProjectSnapshot s = p.snapshot();
         return new ProductSummary(
                 p.productId(),
                 s.productCode(),

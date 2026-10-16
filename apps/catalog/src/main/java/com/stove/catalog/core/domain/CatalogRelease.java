@@ -46,7 +46,7 @@ public class CatalogRelease {
 
     public static CatalogRelease decided(
             ReleaseSubmission submission, String json, boolean stale, Instant now) {
-        var release = new CatalogRelease();
+        CatalogRelease release = new CatalogRelease();
         release.releaseRequestId = submission.releaseRequestId();
         release.requestEventId = submission.eventId();
         release.reviewRequestId = submission.reviewRequestId();
