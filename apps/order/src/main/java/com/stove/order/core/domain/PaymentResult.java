@@ -1,7 +1,8 @@
 package com.stove.order.core.domain;
 
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import java.time.Instant;
-import com.stove.common.web.error.*;
 
 public record PaymentResult(String eventId, Instant occurredAt, String orderNo, String requestEventId,
                             String paymentId, String buyerSubject, long amount, String currency,

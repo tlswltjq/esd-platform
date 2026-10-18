@@ -2,10 +2,16 @@ package com.stove.store.api.controller;
 
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.response.ApiResponse;
-import com.stove.store.api.controller.dto.*;
-import com.stove.store.core.service.*;
+import com.stove.store.api.controller.dto.StoreProductDetail;
+import com.stove.store.api.controller.dto.StoreProductPage;
+import com.stove.store.core.service.ReadStoreProduct;
+import com.stove.store.core.service.SearchStoreProducts;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor

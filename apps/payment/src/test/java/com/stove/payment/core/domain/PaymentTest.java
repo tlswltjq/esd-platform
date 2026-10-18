@@ -1,8 +1,13 @@
 package com.stove.payment.core.domain;
 
 
-import static com.stove.payment.PaymentFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.payment.PaymentFixtures.approved;
+import static com.stove.payment.PaymentFixtures.id;
+import static com.stove.payment.PaymentFixtures.request;
+import static com.stove.payment.PaymentFixtures.result;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;

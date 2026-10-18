@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stove.common.web.GlobalExceptionHandler;
+import com.stove.settlement.api.application.CreatorWorkspaceClient;
 import com.stove.settlement.api.application.SettlementCloseFacade;
+import com.stove.settlement.core.service.ReconciliationService;
 import com.stove.settlement.core.service.SellerSettlementService;
 import com.stove.settlement.core.service.SettlementRecordService;
 import java.time.YearMonth;
@@ -36,8 +38,8 @@ class SettlementControllerTest {
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new SettlementController(
                     settlementRecordService, sellerSettlementService, settlementCloseFacade,
-                    mock(com.stove.settlement.core.service.ReconciliationService.class),
-                    mock(com.stove.settlement.api.application.CreatorWorkspaceClient.class)))
+                    mock(ReconciliationService.class),
+                    mock(CreatorWorkspaceClient.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

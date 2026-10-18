@@ -1,6 +1,7 @@
 package com.stove.common.messaging.outbox;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +29,7 @@ public class OutboxMetrics {
     private final Counter failed;
     private final Counter dead;
     private final Timer relayDuration;
-    private final io.micrometer.core.instrument.DistributionSummary batchSize;
+    private final DistributionSummary batchSize;
 
     public OutboxMetrics(MeterRegistry registry, OutboxEventRepository repository) {
         this.published = Counter.builder("stove.outbox.published")
@@ -44,7 +45,7 @@ public class OutboxMetrics {
                 .description("릴레이 1회 소요시간")
                 .publishPercentiles(0.5, 0.95, 0.99)
                 .register(registry);
-        this.batchSize = io.micrometer.core.instrument.DistributionSummary
+        this.batchSize = DistributionSummary
                 .builder("stove.outbox.batch.size")
                 .description("릴레이 회차당 처리 건수")
                 .register(registry);

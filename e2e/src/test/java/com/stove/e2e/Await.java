@@ -2,6 +2,7 @@ package com.stove.e2e;
 
 import com.stove.e2e.E2eClient.Response;
 import java.time.Duration;
+import java.util.concurrent.Callable;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.awaitility.Awaitility;
@@ -53,7 +54,7 @@ public final class Await {
      * 제한 시간을 받는 이유도 같다 — 컨테이너 기동은 60초로는 모자라고,
      * 정지 확인은 60초를 다 쓸 이유가 없다.
      */
-    public static void until(String what, Duration limit, java.util.concurrent.Callable<Boolean> condition) {
+    public static void until(String what, Duration limit, Callable<Boolean> condition) {
         try {
             Awaitility.await(what)
                     .atMost(limit)

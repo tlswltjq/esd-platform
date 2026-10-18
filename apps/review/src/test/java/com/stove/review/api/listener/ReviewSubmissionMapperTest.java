@@ -1,7 +1,8 @@
 package com.stove.review.api.listener;
 
-import static com.stove.review.ReviewFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.review.ReviewFixtures.envelope;
+import static com.stove.review.ReviewFixtures.event;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;

@@ -1,6 +1,7 @@
 package com.stove.catalog.core.domain;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 

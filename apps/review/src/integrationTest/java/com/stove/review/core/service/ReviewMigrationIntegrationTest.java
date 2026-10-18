@@ -1,18 +1,16 @@
 package com.stove.review.core.service;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.testcontainers.SharedContainers;
 import com.stove.review.ReviewIntegrationTestBase;
-
+import java.nio.file.Path;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.MySQLContainer;
-
-import java.nio.file.Path;
-import java.util.UUID;
 
 class ReviewMigrationIntegrationTest extends ReviewIntegrationTestBase {
     @Test

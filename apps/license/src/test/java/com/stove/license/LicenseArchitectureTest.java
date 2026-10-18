@@ -1,6 +1,10 @@
 package com.stove.license;
 
-import com.stove.common.archunit.*;
+import com.stove.common.archunit.ConsumerGroupRules;
+import com.stove.common.archunit.EventInputRules;
+import com.stove.common.archunit.EventOrderingRules;
+import com.stove.common.archunit.ModuleHygieneRules;
+import com.stove.common.archunit.ModulePackageRules;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;

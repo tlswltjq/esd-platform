@@ -1,6 +1,7 @@
 package com.stove.order.core.domain;
 
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 
 public record OrderRequest(String requestId, String productCode, long expectedContentVersion, long expectedAmount) {
     public OrderRequest {

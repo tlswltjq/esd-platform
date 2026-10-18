@@ -2,7 +2,8 @@ package com.stove.store.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.*;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.store.core.service.ApplyCatalogProduct;
 import lombok.RequiredArgsConstructor;

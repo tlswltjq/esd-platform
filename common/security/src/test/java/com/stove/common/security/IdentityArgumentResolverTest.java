@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.common.web.SecurityExceptionHandler;
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -78,14 +80,14 @@ class IdentityArgumentResolverTest {
     @Test
     void rejectsAnAuthenticatedNonJwtPrincipal() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                        "usr_test", "ignored", java.util.List.of()));
+                new UsernamePasswordAuthenticationToken(
+                        "usr_test", "ignored", List.of()));
         mvc.perform(get("/identity")).andExpect(status().isForbidden());
         assertThat(controller.invocations).isZero();
     }
 
     private void authenticate(Jwt jwt) {
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, java.util.List.of()));
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
     }
 
     @RestController

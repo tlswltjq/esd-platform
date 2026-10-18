@@ -1,6 +1,19 @@
 package com.stove.license;
 
+import static com.stove.license.LicenseFixtures.paid;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.testcontainers.SharedContainers;
+import com.stove.license.core.domain.PaidOrder;
+import java.nio.file.Path;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -8,19 +21,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.MySQLContainer;
-
-import java.nio.file.Path;
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Consumer;
-import com.stove.license.core.domain.PaidOrder;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static com.stove.license.LicenseFixtures.paid;
 
 class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
@@ -61,8 +61,8 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
                 case "orphan" -> jdbc.update("INSERT INTO processed_event(event_id,consumer_group,event_type,processed_at) VALUES('orphan','license-paid-order','OrderPaid',NOW())");
                 case "type" -> jdbc.update("UPDATE processed_event SET event_type='OrderPlaced'");
             }
-            java.util.List<Map<String, Object>> rights = jdbc.queryForList("SELECT * FROM product_license");
-            java.util.List<Map<String, Object>> sources = jdbc.queryForList("SELECT * FROM license_purchase");
+            List<Map<String, Object>> rights = jdbc.queryForList("SELECT * FROM product_license");
+            List<Map<String, Object>> sources = jdbc.queryForList("SELECT * FROM license_purchase");
             assertThatThrownBy(() -> Flyway.configure().dataSource(source).locations(LOCATION).load().migrate())
                     .hasStackTraceContaining("chk_license_merge");
             assertThat(jdbc.queryForList("SELECT * FROM product_license")).isEqualTo(rights);

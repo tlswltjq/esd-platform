@@ -1,6 +1,7 @@
 package com.stove.payment.core.port;
 
-import com.stove.payment.core.domain.*;
+import com.stove.payment.core.domain.PgChargeRequest;
+import com.stove.payment.core.domain.PgResult;
 
 public interface PgGateway {
     /** Every retry must keep paymentId. An unconfirmed call throws, rather than returning a decline. */

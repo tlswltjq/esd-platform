@@ -1,5 +1,19 @@
 package com.stove.license;
 
+import static com.stove.license.LicenseFixtures.event;
+import static com.stove.license.LicenseFixtures.id;
+import static com.stove.license.LicenseFixtures.paid;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -8,21 +22,41 @@ import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.ops.OutboxOpsController;
+import com.stove.common.messaging.outbox.OutboxRelay;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
-import com.stove.license.core.domain.*;
+import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRepository;
+import com.stove.license.core.domain.PaidOrder;
 import com.stove.license.core.service.GrantLicense;
 import com.stove.license.core.service.ReadLicense;
 import com.stove.license.core.service.SearchLicenses;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -30,18 +64,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.concurrent.*;
-
-import static com.stove.license.LicenseFixtures.*;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.*;
 
 class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     @MockitoSpyBean
@@ -65,7 +87,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     @MockitoSpyBean
     ProcessedEventGuard inbox;
     @Autowired
-    org.springframework.context.ApplicationContext context;
+    ApplicationContext context;
     @LocalServerPort
     int port;
 
@@ -199,7 +221,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     void failureAfterEachWriteRollsBackTheWholeGrantAndFreshTransactionRecovers(String stage) {
         PaidOrder p = paid();
         TransactionTemplate tx = new TransactionTemplate(transactions);
-        java.util.concurrent.atomic.AtomicBoolean written = new java.util.concurrent.atomic.AtomicBoolean();
+        AtomicBoolean written = new AtomicBoolean();
         tx.executeWithoutResult(status -> {
             if (stage.equals("inbox")) doAnswer(inv -> {
                 inv.callRealMethod();
@@ -271,7 +293,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         try {
             grant.execute(p);
             return true;
-        } catch (org.springframework.dao.DataAccessException | BusinessException e) {
+        } catch (DataAccessException | BusinessException e) {
             return false;
         }
     }
@@ -319,7 +341,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     Response http(String method, String path, String bearer) {
-        return RestClient.create().method(org.springframework.http.HttpMethod.valueOf(method)).uri("http://localhost:" + port + path)
+        return RestClient.create().method(HttpMethod.valueOf(method)).uri("http://localhost:" + port + path)
                 .headers(h -> {
                     if (bearer != null) h.setBearerAuth(bearer);
                     h.set("X-Member-Id", "other");
@@ -360,8 +382,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
 
     @Test
     void legacyOutboxRelayAndOperationsAreDisabledByDefault() {
-        assertThat(context.getBeansOfType(com.stove.common.messaging.outbox.OutboxRelay.class)).isEmpty();
-        assertThat(context.getBeansOfType(com.stove.common.messaging.ops.OutboxOpsController.class)).isEmpty();
+        assertThat(context.getBeansOfType(OutboxRelay.class)).isEmpty();
+        assertThat(context.getBeansOfType(OutboxOpsController.class)).isEmpty();
         jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES('old','License','legacy','LicenseIssued','stove.license.v1','legacy','{}','PENDING',NOW())");
         assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id='old'", String.class)).isEqualTo("PENDING");
     }
@@ -409,7 +431,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
             send(event(p));
             send(event(p));
             verify(grant, timeout(20000).atLeast(2)).execute(p);
-            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> counts(1, 1));
+            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> counts(1, 1));
         } finally {
             listeners.stop();
         }

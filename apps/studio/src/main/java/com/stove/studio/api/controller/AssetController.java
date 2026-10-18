@@ -3,17 +3,23 @@ package com.stove.studio.api.controller;
 import com.stove.common.security.CurrentSubject;
 import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.core.domain.project.ThumbnailAsset;
-import com.stove.studio.core.service.project.*;
-
-import lombok.RequiredArgsConstructor;
-
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
+import com.stove.studio.core.service.project.GetThumbnail;
+import com.stove.studio.core.service.project.UploadThumbnail;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor

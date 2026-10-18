@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import com.stove.e2e.E2eClient.Response;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -248,7 +250,7 @@ class ServiceOutageChaosTest {
          * 정지시킨 뒤에는 이름을 찾지 못한다 — 즉 <b>되살리려는 순간에만 실패하는</b> 조회가 된다.
          * 복구가 실패하면 스택은 장애가 주입된 채로 남고, 다음 회차는 기준선을 잃는다.
          */
-        static java.util.Optional<String> resolveName(String service) {
+        static Optional<String> resolveName(String service) {
             return run("ps", "-a", "--format", "{{.Names}}").lines()
                     .map(String::trim)
                     .filter(name -> name.equals("stove-" + service)
@@ -280,7 +282,7 @@ class ServiceOutageChaosTest {
                             .formatted(String.join(" ", args), process.exitValue(), output));
                 }
                 return output;
-            } catch (java.io.IOException e) {
+            } catch (IOException e) {
                 return fail("docker 를 실행할 수 없다 — 이 장은 스택과 같은 호스트에서 돌아야 한다", e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

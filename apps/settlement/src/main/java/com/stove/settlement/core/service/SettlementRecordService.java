@@ -10,8 +10,9 @@ import com.stove.settlement.core.domain.SettlementRecordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,8 +51,8 @@ public class SettlementRecordService {
                 if (!left.sellerId().equals(right.sellerId()) || left.unitPrice() != right.unitPrice()
                         || left.listUnitPrice() != right.listUnitPrice()
                         || left.discountPerUnit() != right.discountPerUnit()
-                        || !java.util.Objects.equals(left.promotionId(), right.promotionId())
-                        || !java.util.Objects.equals(left.discountBearer(), right.discountBearer())
+                        || !Objects.equals(left.promotionId(), right.promotionId())
+                        || !Objects.equals(left.discountBearer(), right.discountBearer())
                         || (left.feeRate() == null) != (right.feeRate() == null)
                         || (left.feeRate() != null && left.feeRate().compareTo(right.feeRate()) != 0)) {
                     throw new IllegalArgumentException("A product has conflicting order price snapshots");

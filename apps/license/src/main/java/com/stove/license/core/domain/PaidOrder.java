@@ -1,8 +1,11 @@
 package com.stove.license.core.domain;
 
-import java.time.Instant;
+import static com.stove.license.core.domain.LicenseValues.microsecond;
+import static com.stove.license.core.domain.LicenseValues.require;
+import static com.stove.license.core.domain.LicenseValues.text;
+import static com.stove.license.core.domain.LicenseValues.uuid;
 
-import static com.stove.license.core.domain.LicenseValues.*;
+import java.time.Instant;
 
 public record PaidOrder(String eventId, Instant occurredAt, String orderNo, String requestEventId,
                         String paymentResultEventId, String paymentId, String buyerSubject, Long productId,

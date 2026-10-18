@@ -1,13 +1,12 @@
 package com.stove.catalog.core.domain;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.catalog.CatalogFixtures;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-
-import org.junit.jupiter.api.Test;
-
 import java.time.Instant;
+import org.junit.jupiter.api.Test;
 
 class CatalogProductTest {
     @Test

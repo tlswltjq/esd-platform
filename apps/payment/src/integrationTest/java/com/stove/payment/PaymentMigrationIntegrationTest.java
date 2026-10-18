@@ -1,17 +1,18 @@
 package com.stove.payment;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.stove.common.testcontainers.SharedContainers;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
-import org.testcontainers.containers.MySQLContainer;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
+import org.testcontainers.containers.MySQLContainer;
 
 class PaymentMigrationIntegrationTest extends PaymentIntegrationTestBase {
     @Test void v11PreservesLegacyRowsAndQuarantinesOnlyLegacyPendingOrDeadEvents() throws Exception {

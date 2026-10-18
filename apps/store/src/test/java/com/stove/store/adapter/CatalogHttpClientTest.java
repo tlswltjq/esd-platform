@@ -1,15 +1,19 @@
 package com.stove.store.adapter;
 
-import static org.assertj.core.api.Assertions.*;
-import static com.stove.store.StoreFixtures.*;
+import static com.stove.store.StoreFixtures.product;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.response.ApiResponse;
+import com.stove.store.config.CatalogClientConfiguration;
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.Test;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 class CatalogHttpClientTest {
     @Test void readsExistingPublicEnvelopesWithoutDependingOnCatalogClasses() throws Exception {
@@ -26,7 +30,7 @@ class CatalogHttpClientTest {
         });
         server.start();
         try {
-            CatalogHttpClient client = new com.stove.store.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), mapper);
+            CatalogHttpClient client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), mapper);
             assertThat(client.codes(0)).containsExactly(product.productCode());
             assertThat(client.detail(product.productCode())).isEqualTo(product);
             assertThatThrownBy(() -> client.detail("wrong-code")).isInstanceOf(IllegalStateException.class);

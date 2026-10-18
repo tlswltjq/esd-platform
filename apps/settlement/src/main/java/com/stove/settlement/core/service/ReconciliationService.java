@@ -7,9 +7,11 @@ import com.stove.settlement.core.domain.SettlementRecord;
 import com.stove.settlement.core.domain.SettlementRecordRepository;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +29,7 @@ public class ReconciliationService {
                 .collect(Collectors.groupingBy(SettlementRecord::getSellerId));
         Map<Long, SellerSettlement> byClosing = closings.findBySettlementMonth(month.toString()).stream()
                 .collect(Collectors.toMap(SellerSettlement::getSellerId, closing -> closing));
-        return java.util.stream.Stream.concat(bySeller.keySet().stream(), byClosing.keySet().stream())
+        return Stream.concat(bySeller.keySet().stream(), byClosing.keySet().stream())
                 .distinct().sorted().map(id -> result(id, month, bySeller.getOrDefault(id, List.of()),
                         byClosing.get(id))).toList();
     }
@@ -68,7 +70,7 @@ public class ReconciliationService {
     public String csv(YearMonth month) {
         StringBuilder csv = new StringBuilder("orderNo,productId,sellerId,recordType,customerPaid,sellerDiscount,platformExpense,settlementBasis,fee,sellerPayout,promotionId,adjustmentForMonth,closed\n");
         for (SettlementRecord r : records.findBySettlementMonth(month.toString()).stream()
-                .sorted(java.util.Comparator.comparing(SettlementRecord::getSellerId)
+                .sorted(Comparator.comparing(SettlementRecord::getSellerId)
                         .thenComparing(SettlementRecord::getOrderNo)
                         .thenComparing(SettlementRecord::getProductId)
                         .thenComparing(r -> r.getRecordType().name())).toList()) {

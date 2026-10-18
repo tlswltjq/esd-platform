@@ -1,7 +1,8 @@
 package com.stove.catalog.api.listener;
 
-import static com.stove.catalog.CatalogFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.event;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;

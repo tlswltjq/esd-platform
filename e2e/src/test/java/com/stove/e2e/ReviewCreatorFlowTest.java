@@ -1,23 +1,54 @@
 package com.stove.e2e;
 
-import static com.stove.e2e.ReviewJourney.*;
-
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.e2e.ReviewJourney.ADMIN_EMAIL;
+import static com.stove.e2e.ReviewJourney.ADMIN_PASSWORD;
+import static com.stove.e2e.ReviewJourney.Account;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.Project;
+import static com.stove.e2e.ReviewJourney.REVIEWER_EMAIL;
+import static com.stove.e2e.ReviewJourney.REVIEWER_PASSWORD;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.page;
+import static com.stove.e2e.ReviewJourney.path;
+import static com.stove.e2e.ReviewJourney.project;
+import static com.stove.e2e.ReviewJourney.request;
+import static com.stove.e2e.ReviewJourney.reviewPath;
+import static com.stove.e2e.ReviewJourney.upload;
+import static com.stove.e2e.ReviewJourney.waitForResult;
+import static com.stove.e2e.ReviewJourney.zip;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.payload.*;
-
-import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.junit.jupiter.api.*;
-
-import java.net.*;
-import java.net.http.*;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 @Tag("review")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -278,7 +309,7 @@ class ReviewCreatorFlowTest {
                         snapshot.productCode(),
                         "Late rejected result",
                         "late-reviewer"));
-        org.awaitility.Awaitility.await()
+        Awaitility.await()
                 .during(Duration.ofSeconds(1))
                 .atMost(Duration.ofSeconds(10))
                 .untilAsserted(
@@ -309,7 +340,7 @@ class ReviewCreatorFlowTest {
     void apiContractContainsOnlyTheFivePlannedOperations() {
         E2eClient.Response docs = Stove.gateway.get("/v3/api-docs/review");
         assertThat(docs.status()).isEqualTo(200);
-        ArrayList<String> businessPaths = new java.util.ArrayList<String>();
+        ArrayList<String> businessPaths = new ArrayList<String>();
         docs.body()
                 .path("paths")
                 .fieldNames()
@@ -329,18 +360,18 @@ class ReviewCreatorFlowTest {
                 .isEqualTo(400);
     }
 
-    static void send(com.stove.common.kafka.contract.DomainEvent e) throws Exception {
+    static void send(DomainEvent e) throws Exception {
         ProducerRecord<String, String> record =
                 new ProducerRecord<String, String>(
                         e.topic(), e.partitionKey(), JSON.writeValueAsString(e));
         record.headers()
                 .add(
                         EventHeaders.EVENT_ID,
-                        e.eventId().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        e.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers()
                 .add(
                         EventHeaders.EVENT_TYPE,
-                        e.eventType().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        e.eventType().getBytes(StandardCharsets.UTF_8));
         events.send(record).get(10, TimeUnit.SECONDS);
     }
 }

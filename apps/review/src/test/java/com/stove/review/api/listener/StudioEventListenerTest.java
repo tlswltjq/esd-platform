@@ -1,18 +1,18 @@
 package com.stove.review.api.listener;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.review.ReviewFixtures;
 import com.stove.review.core.service.ReceiveProjectReview;
-
+import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
-
-import java.nio.charset.StandardCharsets;
 
 class StudioEventListenerTest {
     private final ReceiveProjectReview receive = mock(ReceiveProjectReview.class);

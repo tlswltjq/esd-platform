@@ -1,13 +1,18 @@
 package com.stove.payment.adapter.pg;
 
-import com.stove.payment.core.domain.*;
+import com.stove.payment.core.domain.PgChargeRequest;
+import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.port.PgGateway;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.*;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-import java.sql.Timestamp;
-import java.util.*;
 
 /** Supplier-owned durable decisions, committed independently of Payment's result transaction. */
 public class SimulatedPgGateway implements PgGateway {
@@ -28,7 +33,7 @@ public class SimulatedPgGateway implements PgGateway {
             if (existing!=null) { existing.requireRequest(request); return existing; }
             boolean approved=decision==PgResult.Decision.APPROVED;
             PgResult result=new PgResult("SIMULATED",request.paymentId(),request.orderNo(),request.amount(),request.currency(),
-                    UUID.randomUUID().toString(),java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS),decision,
+                    UUID.randomUUID().toString(),Instant.now().truncatedTo(ChronoUnit.MICROS),decision,
                     approved ? null : "DECLINED",approved ? null : "모의 PG가 결제를 거절했습니다.");
             jdbc.update("INSERT INTO simulated_payment_charge(payment_id,order_no,amount,currency,transaction_id,occurred_at,decision,reason_code,reason) VALUES(?,?,?,?,?,?,?,?,?)",
                     result.paymentId(),result.orderNo(),result.amount(),result.currency(),result.transactionId(),

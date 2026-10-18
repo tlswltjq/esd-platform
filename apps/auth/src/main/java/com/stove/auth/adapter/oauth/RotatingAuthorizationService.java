@@ -1,7 +1,9 @@
 package com.stove.auth.adapter.oauth;
 
+import com.stove.auth.core.port.TokenRevocationPort;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -14,7 +16,7 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Keeps consumed token hashes so replay remains detectable after rotation. */
-public final class RotatingAuthorizationService implements OAuth2AuthorizationService, com.stove.auth.core.port.TokenRevocationPort {
+public final class RotatingAuthorizationService implements OAuth2AuthorizationService, TokenRevocationPort {
     private final OAuth2AuthorizationService delegate;
     private final JdbcOperations jdbc;
     private final TransactionTemplate transactions;
@@ -103,7 +105,7 @@ public final class RotatingAuthorizationService implements OAuth2AuthorizationSe
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(token.getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.NoSuchAlgorithmException impossible) {
+        } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException(impossible);
         }
     }

@@ -1,22 +1,43 @@
 package com.stove.e2e;
 
-import static com.stove.e2e.ReviewJourney.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.e2e.ReviewJourney.Account;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.REVIEWER_EMAIL;
+import static com.stove.e2e.ReviewJourney.REVIEWER_PASSWORD;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.path;
+import static com.stove.e2e.ReviewJourney.project;
+import static com.stove.e2e.ReviewJourney.request;
+import static com.stove.e2e.ReviewJourney.reviewPath;
+import static com.stove.e2e.ReviewJourney.waitForResult;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.*;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 /** Eight actual apps; process faults are supplied only by the OCI runner's test classpath. */
 @Tag("payment")

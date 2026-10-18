@@ -1,18 +1,43 @@
 package com.stove.e2e;
 
-import static com.stove.e2e.ReviewJourney.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.e2e.ReviewJourney.Account;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.Project;
+import static com.stove.e2e.ReviewJourney.REVIEWER_EMAIL;
+import static com.stove.e2e.ReviewJourney.REVIEWER_PASSWORD;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.page;
+import static com.stove.e2e.ReviewJourney.path;
+import static com.stove.e2e.ReviewJourney.project;
+import static com.stove.e2e.ReviewJourney.request;
+import static com.stove.e2e.ReviewJourney.reviewPath;
+import static com.stove.e2e.ReviewJourney.upload;
+import static com.stove.e2e.ReviewJourney.waitForResult;
+import static com.stove.e2e.ReviewJourney.zip;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.net.URI;
-import java.net.http.*;
-import java.nio.file.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
-import java.time.*;
-import java.util.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.UUID;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 @Tag("download")
 class DownloadPurchaseFlowTest {

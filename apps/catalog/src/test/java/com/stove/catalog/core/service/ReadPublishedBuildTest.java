@@ -1,14 +1,28 @@
 package com.stove.catalog.core.service;
 
-import static com.stove.catalog.CatalogFixtures.*;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.event;
+import static com.stove.catalog.CatalogFixtures.id;
+import static com.stove.catalog.CatalogFixtures.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
-import com.stove.catalog.core.domain.*;
+import com.stove.catalog.core.domain.CatalogProduct;
+import com.stove.catalog.core.domain.CatalogProductRepository;
+import com.stove.catalog.core.domain.CatalogRelease;
+import com.stove.catalog.core.domain.CatalogReleaseRepository;
+import com.stove.catalog.core.domain.PublishedBuild;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,7 +55,7 @@ class ReadPublishedBuildTest {
         CatalogProduct product = CatalogProduct.publish(event.snapshot(), event.releaseRequestId(), Instant.now());
         CatalogProductRepository products = mock(CatalogProductRepository.class);
         CatalogReleaseRepository releases = mock(CatalogReleaseRepository.class);
-        String upper = event.partitionKey().toUpperCase(java.util.Locale.ROOT);
+        String upper = event.partitionKey().toUpperCase(Locale.ROOT);
         when(products.findByProductCode(upper)).thenReturn(Optional.of(product));
         ReadPublishedBuild read = new ReadPublishedBuild(products, releases, new ObjectMapper());
         assertThatThrownBy(() -> read.execute(upper)).isInstanceOf(BusinessException.class);

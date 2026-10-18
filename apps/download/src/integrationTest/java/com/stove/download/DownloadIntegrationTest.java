@@ -1,38 +1,61 @@
 package com.stove.download;
 
-import static org.assertj.core.api.Assertions.*;
-import com.fasterxml.jackson.databind.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.nimbusds.jose.jwk.*;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
-import com.stove.common.web.error.*;
-import com.stove.download.core.domain.*;
 import com.stove.download.adapter.storage.S3BuildStorage;
+import com.stove.download.core.domain.PublishedBuild;
 import com.sun.net.httpserver.HttpServer;
-import java.net.*;
-import java.net.http.*;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.atomic.*;
-import org.junit.jupiter.api.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
-import org.springframework.security.oauth2.jwt.*;
-import org.springframework.test.context.*;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MinIOContainer;
-import org.testcontainers.junit.jupiter.*;
-import software.amazon.awssdk.auth.credentials.*;
+import org.testcontainers.images.builder.Transferable;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.*;
-import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -116,7 +139,7 @@ class DownloadIntegrationTest {
         try (S3Client admin = client("stove", "stove1234")) { admin.createBucket(CreateBucketRequest.builder().bucket(BUCKET).build()); }
         assertThat(MINIO.execInContainer("mc", "alias", "set", "admin", "http://localhost:9000", "stove", "stove1234").getExitCode()).isZero();
         String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::stove-builds/*\"]},{\"Effect\":\"Allow\",\"Action\":[\"s3:ListBucket\"],\"Resource\":[\"arn:aws:s3:::stove-builds\"]}]}";
-        MINIO.copyFileToContainer(org.testcontainers.images.builder.Transferable.of(policy), "/tmp/download-policy.json");
+        MINIO.copyFileToContainer(Transferable.of(policy), "/tmp/download-policy.json");
         assertThat(MINIO.execInContainer("mc", "admin", "policy", "create", "admin", "download-read", "/tmp/download-policy.json").getExitCode()).isZero();
         assertThat(MINIO.execInContainer("mc", "admin", "user", "add", "admin", READER, SECRET).getExitCode()).isZero();
         assertThat(MINIO.execInContainer("mc", "admin", "policy", "attach", "admin", "download-read", "--user", READER).getExitCode()).isZero();

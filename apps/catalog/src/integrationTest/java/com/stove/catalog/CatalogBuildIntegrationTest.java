@@ -1,15 +1,22 @@
 package com.stove.catalog;
 
-import static com.stove.catalog.CatalogFixtures.*;
-import static org.assertj.core.api.Assertions.*;
-import com.fasterxml.jackson.databind.*;
+import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.event;
+import static com.stove.catalog.CatalogFixtures.id;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.core.service.PublishProjectRelease;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 

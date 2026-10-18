@@ -5,8 +5,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
@@ -40,14 +42,14 @@ public class BffAuthenticationFilter implements WebFilter {
                         .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication)))
                 .switchIfEmpty(Mono.fromSupplier(() -> chain.filter(exchange)))
                 .flatMap(result -> result)
-                .onErrorResume(org.springframework.web.server.ResponseStatusException.class, error -> {
+                .onErrorResume(ResponseStatusException.class, error -> {
                     if (error.getStatusCode().value() != 401) return Mono.error(error);
                     return exchange.getSession().flatMap(session -> session.invalidate()).then(Mono.defer(() -> {
                         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                         return exchange.getResponse().setComplete();
                     }));
                 })
-                .onErrorResume(org.springframework.security.oauth2.jwt.JwtException.class, error ->
+                .onErrorResume(JwtException.class, error ->
                         exchange.getSession().flatMap(session -> session.invalidate()).then(Mono.defer(() -> {
                             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                             return exchange.getResponse().setComplete();

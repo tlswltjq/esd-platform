@@ -1,7 +1,8 @@
 package com.stove.download.adapter;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.download.core.domain.PublishedBuild;
 import com.stove.download.core.port.PublishedBuilds;
 import org.springframework.web.client.RestClient;

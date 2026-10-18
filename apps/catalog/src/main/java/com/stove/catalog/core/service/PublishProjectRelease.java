@@ -2,21 +2,27 @@ package com.stove.catalog.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.catalog.core.domain.*;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.catalog.core.domain.CatalogProduct;
+import com.stove.catalog.core.domain.CatalogProductRepository;
+import com.stove.catalog.core.domain.CatalogRelease;
+import com.stove.catalog.core.domain.CatalogReleaseRepository;
+import com.stove.catalog.core.domain.ReleaseSubmission;
+import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.common.web.error.*;
-
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.EntityManager;
-
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -68,7 +74,7 @@ public class PublishProjectRelease {
                                 .orElseThrow()
                                 .getContentVersion();
         boolean stale = s.contentVersion() < currentVersion;
-        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         CatalogRelease release = CatalogRelease.decided(submission, json(s), stale, now);
         // Assigned request IDs must INSERT, never merge over a concurrently committed decision.
         entityManager.persist(release);

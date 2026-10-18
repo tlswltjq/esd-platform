@@ -2,23 +2,37 @@ package com.stove.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.*;
-
-import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.junit.jupiter.api.*;
-
+import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Base64;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.*;
-
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 /** Real Auth/Gateway/Studio; unfinished external decisions enter only through event fixtures. */
 @Tag("studio")

@@ -1,7 +1,8 @@
 package com.stove.review.core.domain;
 
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import java.time.Instant;
 
 /** Review's input facts, independent of the event that delivered them. */

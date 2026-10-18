@@ -1,12 +1,21 @@
 package com.stove.gateway.config;
 
+import com.stove.gateway.config.bff.BffAuthenticationFilter;
+import com.stove.gateway.config.bff.BffTokens;
+import com.stove.gateway.config.bff.RedisAuthorizedClients;
+import java.util.List;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -14,11 +23,15 @@ import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
+import org.springframework.security.web.server.authentication.RedirectServerAuthenticationSuccessHandler;
+import org.springframework.security.web.server.csrf.CsrfWebFilter;
 import org.springframework.security.web.server.header.XFrameOptionsServerHttpHeadersWriter;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
+import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Flux;
-
-import java.util.List;
+import reactor.core.publisher.Mono;
 
 @Configuration
 public class SecurityConfig {
@@ -36,13 +49,13 @@ public class SecurityConfig {
 
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
-                                                  com.stove.gateway.config.bff.RedisAuthorizedClients clients, com.stove.gateway.config.bff.BffTokens tokens,
+                                                  RedisAuthorizedClients clients, BffTokens tokens,
                                                   ReactiveJwtDecoder decoder,
-                                                  org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver resolver,
-                                                  org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository registrations) {
-        OidcClientInitiatedServerLogoutSuccessHandler logoutSuccess = new org.springframework.security.oauth2.client.oidc.web.server.logout.OidcClientInitiatedServerLogoutSuccessHandler(registrations);
+                                                  ServerOAuth2AuthorizationRequestResolver resolver,
+                                                  ReactiveClientRegistrationRepository registrations) {
+        OidcClientInitiatedServerLogoutSuccessHandler logoutSuccess = new OidcClientInitiatedServerLogoutSuccessHandler(registrations);
         logoutSuccess.setPostLogoutRedirectUri("{baseUrl}/");
-        ServerWebExchangeMatcher csrfMatcher = (org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher) exchange -> {
+        ServerWebExchangeMatcher csrfMatcher = (ServerWebExchangeMatcher) exchange -> {
             String path = exchange.getRequest().getPath().value();
             boolean apiBearer = exchange.getRequest().getHeaders().getFirst("Authorization") != null
                     && exchange.getRequest().getHeaders().getFirst("Authorization").startsWith("Bearer ");
@@ -51,27 +64,27 @@ public class SecurityConfig {
                     || path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/signup/member")
                     || path.startsWith("/actuator/");
             if (apiBearer || delegated)
-                return org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult.notMatch();
-            return org.springframework.security.web.server.csrf.CsrfWebFilter.DEFAULT_CSRF_MATCHER.matches(exchange);
+                return ServerWebExchangeMatcher.MatchResult.notMatch();
+            return CsrfWebFilter.DEFAULT_CSRF_MATCHER.matches(exchange);
         };
         return http.csrf(csrf -> csrf.requireCsrfProtectionMatcher(csrfMatcher))
                 .oauth2Login(login -> login.authorizationRequestResolver(resolver)
                         .authorizedClientRepository(clients)
                         .authenticationFailureHandler((exchange, exception) -> {
-                            org.slf4j.LoggerFactory.getLogger(SecurityConfig.class).warn("BFF login failed", exception);
-                            exchange.getExchange().getResponse().setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
+                            LoggerFactory.getLogger(SecurityConfig.class).warn("BFF login failed", exception);
+                            exchange.getExchange().getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                             return exchange.getExchange().getResponse().setComplete();
                         })
-                        .authenticationSuccessHandler(new org.springframework.security.web.server.authentication.RedirectServerAuthenticationSuccessHandler("/")))
-                .logout(logout -> logout.requiresLogout(org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/bff/logout"))
+                        .authenticationSuccessHandler(new RedirectServerAuthenticationSuccessHandler("/")))
+                .logout(logout -> logout.requiresLogout(ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/bff/logout"))
                         .logoutHandler((exchange, authentication) -> clients.key(exchange.getExchange()).flatMap(tokens::revoke))
                         // Spring adds a concurrent CSRF cleanup handler. Invalidate only after all handlers finish.
                         .logoutSuccessHandler((exchange, authentication) -> exchange.getExchange().getSession()
-                                .flatMap(org.springframework.web.server.WebSession::invalidate)
-                                .then(reactor.core.publisher.Mono.defer(() -> logoutSuccess.onLogoutSuccess(exchange, authentication)))))
-                .addFilterAfter(new com.stove.gateway.config.bff.BffAuthenticationFilter(clients, tokens, decoder),
-                        org.springframework.security.config.web.server.SecurityWebFiltersOrder.AUTHENTICATION)
-                .exceptionHandling(errors -> errors.authenticationEntryPoint(new org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
+                                .flatMap(WebSession::invalidate)
+                                .then(Mono.defer(() -> logoutSuccess.onLogoutSuccess(exchange, authentication)))))
+                .addFilterAfter(new BffAuthenticationFilter(clients, tokens, decoder),
+                        SecurityWebFiltersOrder.AUTHENTICATION)
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeExchange(authorize -> authorize
                         .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()

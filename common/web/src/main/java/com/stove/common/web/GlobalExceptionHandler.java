@@ -1,7 +1,7 @@
 package com.stove.common.web;
 
-import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ApiErrorCode;
+import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 전 서비스 공통 예외 → ApiResponse 변환.
@@ -23,7 +24,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingResource(Exception e) {
         return ResponseEntity.status(ErrorCode.NOT_FOUND.status())
                 .body(ApiResponse.fail(ErrorCode.NOT_FOUND, ErrorCode.NOT_FOUND.defaultMessage()));

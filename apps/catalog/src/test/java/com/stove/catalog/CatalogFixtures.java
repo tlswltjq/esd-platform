@@ -2,8 +2,8 @@ package com.stove.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.*;
-
+import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import java.util.UUID;
 
 public final class CatalogFixtures {

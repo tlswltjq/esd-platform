@@ -1,10 +1,11 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.web.error.*;
-import com.stove.studio.core.domain.project.*;
-
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.ProjectRepository;
 import lombok.RequiredArgsConstructor;
-
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +20,7 @@ public class CreateProject {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 등록된 상품 코드입니다.");
         try {
             return projects.saveAndFlush(Project.create(code, title, subject));
-        } catch (org.springframework.dao.DataIntegrityViolationException duplicate) {
+        } catch (DataIntegrityViolationException duplicate) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 등록된 상품 코드입니다.");
         }
     }

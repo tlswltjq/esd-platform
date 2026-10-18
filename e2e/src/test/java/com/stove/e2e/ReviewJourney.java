@@ -1,18 +1,20 @@
 package com.stove.e2e;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.*;
-
-import org.awaitility.Awaitility;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
-import java.util.zip.*;
-
+import java.util.Base64;
+import java.util.Map;
+import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
+import org.awaitility.Awaitility;
 
 final class ReviewJourney {
     static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
@@ -82,7 +84,7 @@ final class ReviewJourney {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
             zip.putNextEntry(new ZipEntry("game.bin"));
-            zip.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.write(content.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }
         return bytes.toByteArray();

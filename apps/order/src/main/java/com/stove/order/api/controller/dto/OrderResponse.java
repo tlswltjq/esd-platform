@@ -1,6 +1,7 @@
 package com.stove.order.api.controller.dto;
 
-import com.stove.order.core.domain.*;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderStatus;
 import java.time.Instant;
 
 public record OrderResponse(String orderNo, Long productId, String productCode, String title,

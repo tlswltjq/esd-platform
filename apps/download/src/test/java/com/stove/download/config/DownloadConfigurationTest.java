@@ -1,10 +1,13 @@
 package com.stove.download.config;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DownloadConfigurationTest {
     @ParameterizedTest @NullAndEmptySource @ValueSource(strings={" ", "file:///etc/passwd", "http://user:pass@host", "http://host/path", "http://host?x=1", "http://host#fragment"})

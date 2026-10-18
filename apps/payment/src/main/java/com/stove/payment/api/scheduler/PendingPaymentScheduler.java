@@ -3,7 +3,8 @@ package com.stove.payment.api.scheduler;
 import com.stove.payment.core.service.ResolvePayment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.*;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor @EnableScheduling

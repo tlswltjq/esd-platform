@@ -2,14 +2,22 @@ package com.stove.review.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.web.error.*;
-
-import jakarta.persistence.*;
-
-import lombok.*;
-
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 /** One immutable Studio submission and its final human decision. */
 @Entity
@@ -88,7 +96,7 @@ public class ProjectReview extends BaseTimeEntity {
         this.status = decision;
         this.actor = actor;
         this.feedback = feedback;
-        this.decidedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        this.decidedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         return true;
     }
 }

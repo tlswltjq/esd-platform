@@ -2,8 +2,10 @@ package com.stove.gateway.config.bff;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.HttpStatus;
@@ -14,6 +16,7 @@ import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
@@ -54,7 +57,7 @@ public class BffTokens {
     private Mono<Void> unlock(String key, String owner) {
         return redis.execute(new DefaultRedisScript<Long>(
                 "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", Long.class),
-                java.util.List.of(key), java.util.List.of(owner)).then();
+                List.of(key), List.of(owner)).then();
     }
     private Mono<OAuth2AuthorizedClient> refresh(String key, OAuth2AuthorizedClient client) {
         if (client.getRefreshToken() == null) return clients.delete(key)
@@ -73,9 +76,9 @@ public class BffTokens {
                 }).timeout(Duration.ofSeconds(5))
                 // An ambiguous network failure may have consumed the old refresh token.
                 // Do not retry it and accidentally trigger replay revocation.
-                .onErrorResume(java.util.concurrent.TimeoutException.class, error -> clients.delete(key)
+                .onErrorResume(TimeoutException.class, error -> clients.delete(key)
                         .then(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required"))))
-                .onErrorResume(org.springframework.web.reactive.function.client.WebClientRequestException.class,
+                .onErrorResume(WebClientRequestException.class,
                         error -> clients.delete(key).then(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required"))))
                 .flatMap(body -> {
                     Instant now = Instant.now();

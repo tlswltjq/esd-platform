@@ -4,8 +4,11 @@ import com.stove.studio.core.domain.build.BuildRepository;
 import com.stove.studio.core.domain.project.ProjectRepository;
 import com.stove.studio.core.port.BuildStorage;
 import com.stove.studio.core.service.build.RegisterBuild;
-import com.stove.studio.core.service.project.*;
-import org.springframework.context.annotation.*;
+import com.stove.studio.core.service.project.ReadProjects;
+import com.stove.studio.core.service.project.UpdateStorePage;
+import com.stove.studio.core.service.project.UploadThumbnail;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)

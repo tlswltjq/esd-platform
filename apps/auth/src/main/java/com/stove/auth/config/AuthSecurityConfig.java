@@ -1,60 +1,74 @@
 package com.stove.auth.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.stove.auth.core.domain.UserAccount;
-import com.stove.auth.core.domain.UserAccountRepository;
 import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
 import com.stove.auth.adapter.oauth.RotatingRefreshProvider;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.security.jackson2.SecurityJackson2Modules;
-import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.security.oauth2.server.authorization.token.*;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import org.springframework.security.oauth2.core.OAuth2RefreshToken;
-import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
-import java.time.Instant;
+import com.stove.auth.core.domain.UserAccount;
+import com.stove.auth.core.domain.UserAccountRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.jackson2.SecurityJackson2Modules;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
-import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+import org.springframework.security.oauth2.server.authorization.token.JwtGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2RefreshTokenGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CsrfException;
-import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
+import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 public class AuthSecurityConfig {
@@ -77,9 +91,9 @@ public class AuthSecurityConfig {
                         })))
                 .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
-                        new org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint("/login"),
-                        new org.springframework.security.web.util.matcher.MediaTypeRequestMatcher(
-                                org.springframework.http.MediaType.TEXT_HTML)));
+                        new LoginUrlAuthenticationEntryPoint("/login"),
+                        new MediaTypeRequestMatcher(
+                                MediaType.TEXT_HTML)));
         // Swagger UI의 OAuth 승인 화면은 같은 출처의 프레임에서 로그인 폼을 연다.
         // 기본 DENY이면 프레임이 chrome-error://chromewebdata 로 바뀌고, 그 상태에서
         // 제출된 /login 요청이 Gateway CORS에 의해 403이 된다.
@@ -98,7 +112,7 @@ public class AuthSecurityConfig {
                 .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.decoder(token -> {
                     Jwt decoded = jwtDecoder.decode(token);
                     if (!decoded.getAudience().contains("esd-api")) {
-                        throw new org.springframework.security.oauth2.jwt.BadJwtException("Invalid API audience");
+                        throw new BadJwtException("Invalid API audience");
                     }
                     return decoded;
                 })))
@@ -116,7 +130,7 @@ public class AuthSecurityConfig {
                         response.sendRedirect("/login");
                         return;
                     }
-                    response.sendError(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN);
                 }))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
         return http.build();
@@ -149,7 +163,7 @@ public class AuthSecurityConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope("studio")
                 .scope("commerce")
-                .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
+                .clientSettings(ClientSettings.builder()
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
                         .build())
@@ -168,7 +182,7 @@ public class AuthSecurityConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope("studio")
                 .scope("commerce")
-                .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
+                .clientSettings(ClientSettings.builder()
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
                         .build())
@@ -187,7 +201,7 @@ public class AuthSecurityConfig {
                 .redirectUri(bffRedirect)
                 .postLogoutRedirectUri(bffRedirect.substring(0, bffRedirect.indexOf("/login/oauth2/code/")) + "/")
                 .scope("openid").scope("profile").scope("studio").scope("commerce")
-                .clientSettings(org.springframework.security.oauth2.server.authorization.settings.ClientSettings.builder()
+                .clientSettings(ClientSettings.builder()
                         .requireProofKey(true).requireAuthorizationConsent(false).build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(Duration.ofSeconds(accessTokenSeconds))
@@ -207,7 +221,7 @@ public class AuthSecurityConfig {
         }
         try {
             repository.save(client);
-        } catch (org.springframework.dao.DuplicateKeyException concurrentStartup) {
+        } catch (DuplicateKeyException concurrentStartup) {
             if (repository.findByClientId(client.getClientId()) == null) {
                 throw concurrentStartup;
             }
@@ -222,8 +236,8 @@ public class AuthSecurityConfig {
         mapper.registerModules(SecurityJackson2Modules.getModules(getClass().getClassLoader()));
         mapper.registerModule(new OAuth2AuthorizationServerJackson2Module());
         mapper.addMixIn(Long.class, PersistedValueMixin.class);
-        mapper.addMixIn(java.util.List.of("value").getClass(), PersistedValueMixin.class);
-        mapper.addMixIn(java.util.List.of().getClass(), PersistedValueMixin.class);
+        mapper.addMixIn(List.of("value").getClass(), PersistedValueMixin.class);
+        mapper.addMixIn(List.of().getClass(), PersistedValueMixin.class);
         JdbcOAuth2AuthorizationService jdbc = new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClients);
         JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rows = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClients);
         rows.setObjectMapper(mapper);
@@ -275,9 +289,9 @@ public class AuthSecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource,
             @Value("${stove.auth.issuer:http://localhost:8091}") String issuer) {
-        NimbusJwtDecoder decoder = (org.springframework.security.oauth2.jwt.NimbusJwtDecoder)
+        NimbusJwtDecoder decoder = (NimbusJwtDecoder)
                 OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
-        decoder.setJwtValidator(org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(issuer));
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
         return decoder;
     }
 
@@ -291,12 +305,12 @@ public class AuthSecurityConfig {
     OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserAccountRepository accounts) {
         return context -> {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                context.getClaims().audience(new java.util.ArrayList<>(java.util.List.of("esd-api")));
+                context.getClaims().audience(new ArrayList<>(List.of("esd-api")));
                 UserAccount account = accounts.findBySubject(context.getPrincipal().getName())
                         .filter(value -> value.enabled())
-                        .orElseThrow(() -> new org.springframework.security.oauth2.core.OAuth2AuthenticationException("invalid_grant"));
+                        .orElseThrow(() -> new OAuth2AuthenticationException("invalid_grant"));
                 context.getClaims().claim("member_id", account.getId());
-                context.getClaims().claim("roles", new java.util.ArrayList<>(account.getRoles().stream()
+                context.getClaims().claim("roles", new ArrayList<>(account.getRoles().stream()
                         .map(Enum::name).sorted().toList()));
             }
         };

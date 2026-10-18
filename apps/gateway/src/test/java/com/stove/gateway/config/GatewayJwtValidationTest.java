@@ -13,12 +13,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 
@@ -40,7 +41,7 @@ class GatewayJwtValidationTest {
                     "http://127.0.0.1:" + server.getAddress().getPort() + "/jwks");
             NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
             Instant now = Instant.now();
-            java.util.function.Function<JwtClaimsSet, String> sign = claims -> encoder.encode(JwtEncoderParameters.from(
+            Function<JwtClaimsSet, String> sign = claims -> encoder.encode(JwtEncoderParameters.from(
                     JwsHeader.with(SignatureAlgorithm.RS256).build(), claims)).getTokenValue();
             JwtClaimsSet valid = JwtClaimsSet.builder().issuer("https://auth.example").subject("member")
                     .audience(List.of("esd-api")).issuedAt(now.minusSeconds(300)).expiresAt(now.plusSeconds(300)).build();

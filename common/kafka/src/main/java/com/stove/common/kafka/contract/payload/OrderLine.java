@@ -1,5 +1,7 @@
 package com.stove.common.kafka.contract.payload;
 
+import java.math.BigDecimal;
+
 /**
  * 이벤트에 실리는 주문 항목 스냅샷. 금액은 최소 화폐 단위(KRW=원)의 정수.
  *
@@ -22,7 +24,7 @@ package com.stove.common.kafka.contract.payload;
  */
 public record OrderLine(Long productId, String productName, Long sellerId, long unitPrice, int quantity,
                         long listUnitPrice, long discountPerUnit, Long promotionId, String discountBearer,
-                        Long settlementBasis, java.math.BigDecimal feeRate, Long feeAmount, Long sellerPayout) {
+                        Long settlementBasis, BigDecimal feeRate, Long feeAmount, Long sellerPayout) {
 
     public OrderLine(Long productId, String productName, Long sellerId, long unitPrice, int quantity) {
         this(productId, productName, sellerId, unitPrice, quantity, unitPrice, 0, null, null,

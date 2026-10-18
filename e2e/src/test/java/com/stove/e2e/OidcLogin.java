@@ -2,10 +2,10 @@ package com.stove.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -131,7 +131,7 @@ final class OidcLogin {
         for (String pair : query.split("&")) {
             String[] parts = pair.split("=", 2);
             if (parts[0].equals(name))
-                return java.net.URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                return URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
         }
         throw new IllegalStateException("missing query parameter " + name);
     }

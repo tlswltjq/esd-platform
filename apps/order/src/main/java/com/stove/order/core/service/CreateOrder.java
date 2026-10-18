@@ -2,15 +2,25 @@ package com.stove.order.core.service;
 
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.common.web.error.*;
-import com.stove.order.core.domain.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.order.core.domain.OrderRepository;
+import com.stove.order.core.domain.OrderRequest;
+import com.stove.order.core.domain.OrderStatus;
+import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.port.CatalogProducts;
-import org.springframework.dao.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.*;
-import org.springframework.transaction.support.TransactionTemplate;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.LockAcquisitionException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class CreateOrder {
@@ -51,13 +61,13 @@ public class CreateOrder {
                         return order;
                     });
                 } catch (DataIntegrityViolationException | TransientDataAccessException
-                         | org.hibernate.exception.ConstraintViolationException
-                         | org.hibernate.exception.LockAcquisitionException collision) {
+                         | ConstraintViolationException
+                         | LockAcquisitionException collision) {
                     Order concurrent = existing(buyer, request);
                     if (concurrent != null) return concurrent;
                     if (purchaseCollision(collision)) requirePurchasable(buyer, product);
                     else if (!(collision instanceof TransientDataAccessException)
-                            && !(collision instanceof org.hibernate.exception.LockAcquisitionException)) throw collision;
+                            && !(collision instanceof LockAcquisitionException)) throw collision;
                     if (attempt == 2) throw collision;
                 }
             }
@@ -89,7 +99,7 @@ public class CreateOrder {
 
     private static boolean purchaseCollision(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof org.hibernate.exception.ConstraintViolationException constraint) {
+            if (cause instanceof ConstraintViolationException constraint) {
                 String name = constraint.getConstraintName();
                 return name != null && (name.contains("uk_purchase_order_buyer_product")
                         || name.contains("uk_purchase_order_buyer_code"));

@@ -1,40 +1,88 @@
 package com.stove.order;
 
-import com.stove.order.api.listener.PaymentResultMapper;
-import static com.stove.order.OrderFixtures.*;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import com.fasterxml.jackson.databind.*;
-import com.stove.common.kafka.*;
-import com.stove.common.kafka.contract.*;
-import com.stove.common.kafka.contract.payload.*;
+import static com.stove.order.OrderFixtures.completed;
+import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.failed;
+import static com.stove.order.OrderFixtures.id;
+import static com.stove.order.OrderFixtures.order;
+import static com.stove.order.OrderFixtures.product;
+import static com.stove.order.OrderFixtures.request;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.EventHeaders;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.test.OpenApiSnapshot;
-import com.stove.common.web.error.*;
-import com.stove.order.core.domain.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.order.api.listener.PaymentResultMapper;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderErrorCode;
+import com.stove.order.core.domain.OrderRepository;
+import com.stove.order.core.domain.OrderRequest;
+import com.stove.order.core.domain.OrderStatus;
+import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.port.CatalogProducts;
-import com.stove.order.core.service.*;
+import com.stove.order.core.service.ApplyPaymentResult;
+import com.stove.order.core.service.CreateOrder;
+import com.stove.order.core.service.ReadOrder;
+import com.stove.order.core.service.SearchOrders;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.test.context.bean.override.mockito.*;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
-import java.nio.charset.StandardCharsets;
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired CreateOrder create;
@@ -46,9 +94,9 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired ObjectMapper mapper;
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired PlatformTransactionManager transactions;
     @MockitoBean CatalogProducts catalog;
-    @Autowired com.stove.common.messaging.outbox.OutboxEventRepository outboxRows;
+    @Autowired OutboxEventRepository outboxRows;
     @MockitoSpyBean OutboxRecorder outbox;
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
@@ -66,7 +114,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     private Order stored(Order o) { return orders.findById(o.getId()).orElseThrow(); }
     record Response(int status, JsonNode body) { JsonNode data() { return body.path("data"); } }
     private Response http(String method, String path, Object body, String bearer) {
-        RestClient.RequestBodySpec spec = RestClient.create("http://127.0.0.1:" + port).method(org.springframework.http.HttpMethod.valueOf(method)).uri(path);
+        RestClient.RequestBodySpec spec = RestClient.create("http://127.0.0.1:" + port).method(HttpMethod.valueOf(method)).uri(path);
         if (bearer != null) spec.header("Authorization", "Bearer " + bearer);
         if (body != null) spec.contentType(MediaType.APPLICATION_JSON).body(body);
         return spec.exchange((r, s) -> new Response(s.getStatusCode().value(), mapper.readTree(s.getBody())));
@@ -179,7 +227,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(count("purchase_order")).isZero(); assertThat(count("outbox_event")).isZero();
     }
     @Test void outboxFailureRollsBackAnAlreadyInsertedOrderAndEvent() {
-        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
                 doAnswer(inv -> { inv.callRealMethod(); throw new IllegalStateException("relay record failed"); })
                         .when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
         try {
@@ -220,7 +268,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         } finally { reset(orders); pool.shutdownNow(); }
     }
     @Test void unrelatedIntegrityFailureIsNotReportedAsAnExistingPurchase() {
-        org.springframework.dao.DataIntegrityViolationException failure = new org.springframework.dao.DataIntegrityViolationException("unrelated constraint");
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("unrelated constraint");
         doThrow(failure).when(orders).saveAndFlush(any(Order.class));
         assertThatThrownBy(() -> saved("usr_buyer")).isSameAs(failure);
         assertThat(count("purchase_order")).isZero(); assertThat(count("outbox_event")).isZero();
@@ -347,7 +395,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     }
     @Test void failureAfterInboxInsertRollsBackAndOriginalEventCanBeDeliveredAgain() {
         Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
-        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
                 doAnswer(inv -> { inv.callRealMethod(); throw new IllegalStateException("after inbox"); })
                         .when(guard).firstDelivery(eq(e.eventId()), anyString(), anyString()));
         try {
@@ -358,7 +406,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     }
     @Test void rollbackAfterFlushingTheFinalStateAlsoRollsBackInbox() {
         Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
-        TransactionTemplate tx = new org.springframework.transaction.support.TransactionTemplate(transactions);
+        TransactionTemplate tx = new TransactionTemplate(transactions);
         assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
             accept(e);
             assertThat(jdbc.queryForObject("SELECT status FROM purchase_order WHERE id=?", String.class, o.getId())).isEqualTo("PAID");
@@ -460,7 +508,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             assertThat(found).isTrue(); assertThat(count("processed_event")).isZero();
             jdbc.update("UPDATE purchase_order SET order_no=? WHERE id=?", o.getOrderNo(), o.getId());
             send(e); send(e);
-            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                     assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID));
             assertThat(count("processed_event")).isEqualTo(1);
         } finally { listeners.stop(); }

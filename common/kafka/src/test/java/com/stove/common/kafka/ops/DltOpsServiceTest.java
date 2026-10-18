@@ -9,9 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.EventHeaders;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +21,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.Node;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -74,8 +76,8 @@ class DltOpsServiceTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         consumer.updatePartitions(DLT_TOPIC,
-                List.of(new PartitionInfo(DLT_TOPIC, 0, null, new org.apache.kafka.common.Node[0],
-                        new org.apache.kafka.common.Node[0])));
+                List.of(new PartitionInfo(DLT_TOPIC, 0, null, new Node[0],
+                        new Node[0])));
         consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
         when(consumerFactory.createConsumer(anyString(), anyString())).thenReturn(consumer);
         when(kafkaTemplate.send(any(ProducerRecord.class)))
@@ -197,7 +199,7 @@ class DltOpsServiceTest {
         verify(kafkaTemplate).send(captor.capture());
 
         assertThat(captor.getValue().headers())
-                .extracting(org.apache.kafka.common.header.Header::key)
+                .extracting(Header::key)
                 .noneMatch(key -> key.startsWith("kafka_dlt-"));
     }
 
@@ -209,7 +211,7 @@ class DltOpsServiceTest {
         deadLetter("EVT-3");
 
         assertThat(service.replay(DLT_TOPIC, 2)).isEqualTo(2);
-        verify(kafkaTemplate, org.mockito.Mockito.times(2)).send(any(ProducerRecord.class));
+        verify(kafkaTemplate, Mockito.times(2)).send(any(ProducerRecord.class));
     }
 
     @Test

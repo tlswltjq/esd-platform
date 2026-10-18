@@ -9,26 +9,27 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.stove.auth.core.domain.PlatformRole;
+import com.stove.auth.core.domain.RoleAuditLogRepository;
 import com.stove.auth.core.domain.UserAccount;
 import com.stove.auth.core.domain.UserAccountRepository;
-import com.stove.auth.core.domain.RoleAuditLogRepository;
-import com.stove.common.web.error.BusinessException;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 class RegisterAccountTest {
 
-    private final UserAccountRepository repository = org.mockito.Mockito.mock(UserAccountRepository.class);
-    private final PasswordEncoder passwordEncoder = org.mockito.Mockito.mock(PasswordEncoder.class);
-    private final OutboxRecorder outboxRecorder = org.mockito.Mockito.mock(OutboxRecorder.class);
-    private final RoleAuditLogRepository roleAuditLogRepository = org.mockito.Mockito.mock(RoleAuditLogRepository.class);
+    private final UserAccountRepository repository = Mockito.mock(UserAccountRepository.class);
+    private final PasswordEncoder passwordEncoder = Mockito.mock(PasswordEncoder.class);
+    private final OutboxRecorder outboxRecorder = Mockito.mock(OutboxRecorder.class);
+    private final RoleAuditLogRepository roleAuditLogRepository = Mockito.mock(RoleAuditLogRepository.class);
     private RegisterAccount service;
 
     @BeforeEach

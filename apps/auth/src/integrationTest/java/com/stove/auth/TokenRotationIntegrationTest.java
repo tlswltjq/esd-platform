@@ -1,16 +1,34 @@
 package com.stove.auth;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
 import com.stove.common.testcontainers.InfraContainers;
-import java.net.*;
-import java.net.http.*;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,7 +70,7 @@ class TokenRotationIntegrationTest {
                 +"&redirect_uri="+enc(CALLBACK)+"&code_challenge="+challenge+"&code_challenge_method=S256");
         assertThat(first.statusCode()).isEqualTo(302);
         HttpResponse<String> page = get(client, base()+"/login");
-        Matcher csrf = java.util.regex.Pattern.compile("name=\"_csrf\"[^>]*value=\"([^\"]+)\"").matcher(page.body());
+        Matcher csrf = Pattern.compile("name=\"_csrf\"[^>]*value=\"([^\"]+)\"").matcher(page.body());
         assertThat(csrf.find()).isTrue();
         HttpResponse<String> response = post(client,"/login","username="+enc(email)+"&password="+enc(password)+"&_csrf="+enc(csrf.group(1)),false);
         String location = response.headers().firstValue("Location").orElseThrow();
@@ -85,9 +103,9 @@ class TokenRotationIntegrationTest {
         String next = mapper.readTree(nextResponse.body()).path("refresh_token").asText();
         assertThat(next).isNotEqualTo(old);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM refresh_token_history WHERE consumed = TRUE AND token_hash = ?",Integer.class,
-                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(old))).isEqualTo(1);
+                RotatingAuthorizationService.hash(old))).isEqualTo(1);
         Map<String, Object> expires = jdbc.queryForMap("SELECT f.expires_at AS absolute_expiry, a.refresh_token_expires_at AS current_expiry FROM refresh_token_family f JOIN oauth2_authorization a ON a.id=f.authorization_id JOIN refresh_token_history h ON h.authorization_id=f.authorization_id WHERE h.token_hash=?",
-                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(next));
+                RotatingAuthorizationService.hash(next));
         assertThat(expires.get("absolute_expiry")).isEqualTo(expires.get("current_expiry"));
         assertThat(refresh(old).statusCode()).isEqualTo(400);
         assertThat(refresh(next).statusCode()).isEqualTo(400);
@@ -106,7 +124,7 @@ class TokenRotationIntegrationTest {
     @Test void expiredFamilyCannotRefresh() throws Exception {
         String token = login().path("refresh_token").asText();
         jdbc.update("UPDATE refresh_token_family SET expires_at=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE authorization_id=(SELECT authorization_id FROM refresh_token_history WHERE token_hash=?)",
-                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(token));
+                RotatingAuthorizationService.hash(token));
         assertThat(refresh(token).statusCode()).isEqualTo(400);
     }
     @Test void disabledAccountCannotRefresh() throws Exception {

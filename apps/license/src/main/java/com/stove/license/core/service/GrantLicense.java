@@ -4,14 +4,15 @@ import com.stove.common.kafka.contract.EventType;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
-import com.stove.license.core.domain.*;
+import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRepository;
+import com.stove.license.core.domain.PaidOrder;
 import jakarta.persistence.EntityManager;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor

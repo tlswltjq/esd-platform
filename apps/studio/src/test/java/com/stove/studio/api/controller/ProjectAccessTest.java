@@ -1,27 +1,33 @@
 package com.stove.studio.api.controller;
 
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stove.common.security.CommonSecurityAutoConfiguration;
 import com.stove.studio.config.RequestJsonConfig;
 import com.stove.studio.config.SecurityConfig;
 import com.stove.studio.core.domain.project.Project;
-import com.stove.studio.core.service.project.*;
+import com.stove.studio.core.service.project.CreateProject;
+import com.stove.studio.core.service.project.ReadProjects;
+import com.stove.studio.core.service.project.UpdateStorePage;
 import com.stove.studio.core.service.release.RequestProjectRelease;
 import com.stove.studio.core.service.review.RequestProjectReview;
-
-import org.junit.jupiter.api.*;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.List;
 
 @WebMvcTest(ProjectController.class)
 @ContextConfiguration(

@@ -1,7 +1,8 @@
 package com.stove.payment.config;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.*;
 
 class PaymentProcessingPropertiesTest {
     @Test void invalidPollingSettingsCannotStartUnlimitedOrTightLoops() {

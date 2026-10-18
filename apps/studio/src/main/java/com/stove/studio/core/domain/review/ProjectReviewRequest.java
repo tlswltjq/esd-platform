@@ -1,12 +1,17 @@
 package com.stove.studio.core.domain.review;
 
 import com.stove.common.jpa.BaseTimeEntity;
-
-import jakarta.persistence.*;
-
-import lombok.*;
-
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 /** Creator's outgoing review request and a copy of its externally reported result. */
 @Entity

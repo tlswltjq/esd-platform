@@ -1,15 +1,15 @@
 package com.stove.common.messaging.outbox;
 
-import com.stove.common.messaging.config.OutboxProperties;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import com.stove.common.testcontainers.InfraContainers;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -130,7 +130,7 @@ class RelayRestartRecoveryTest {
     @DisplayName("배치 크기를 넘겨 밀린 것도 재기동 첫 회차에 전부 나간다")
     void oneCycleDrainsMoreThanASingleBatch() {
         int overflowing = properties.batchSize() + 5;
-        List<OutboxEvent> backlog = java.util.stream.IntStream.range(0, overflowing)
+        List<OutboxEvent> backlog = IntStream.range(0, overflowing)
                 .mapToObj(i -> committedButUnpublished("ORD-%s-%d".formatted(UUID.randomUUID(), i)))
                 .toList();
 

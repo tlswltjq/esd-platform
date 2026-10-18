@@ -2,8 +2,10 @@ package com.stove.review;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.*;
-import com.stove.review.core.domain.*;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.review.core.domain.ProjectReview;
+import com.stove.review.core.domain.ReviewSubmission;
 
 public final class ReviewFixtures {
     public static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();

@@ -10,8 +10,12 @@ import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
  * 패키지 배치 다음 단계의 규칙 — 트랜잭션 경계, 네이밍, 순환, 일반 위생. {@link ModulePackageRules} 가 "어디에 두는가"라면 이쪽은 "무엇을
@@ -121,18 +125,18 @@ public final class ModuleHygieneRules {
                     .that()
                     .resideInAPackage(CORE_SERVICE)
                     .should(
-                            new com.tngtech.archunit.lang.ArchCondition<
-                                    com.tngtech.archunit.core.domain.JavaClass>(
+                            new ArchCondition<
+                                    JavaClass>(
                                     "use an action and subject name") {
                                 @Override
                                 public void check(
-                                        com.tngtech.archunit.core.domain.JavaClass type,
-                                        com.tngtech.archunit.lang.ConditionEvents events) {
+                                        JavaClass type,
+                                        ConditionEvents events) {
                                     if (!type.getSimpleName()
                                             .matches(
                                                     "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap|Search|Synchronize|Grant)[A-Z][A-Za-z0-9]*)")) {
                                         events.add(
-                                                com.tngtech.archunit.lang.SimpleConditionEvent
+                                                SimpleConditionEvent
                                                         .violated(
                                                                 type,
                                                                 type.getName()

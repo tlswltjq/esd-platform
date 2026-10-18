@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -52,7 +53,7 @@ public class RoleAuditLog {
 
     public static RoleAuditLog assigned(UserAccount account, String actor) {
         String roles = account.getRoles().stream().map(Enum::name).sorted()
-                .collect(java.util.stream.Collectors.joining(","));
+                .collect(Collectors.joining(","));
         return new RoleAuditLog(account.getSubject(), actor, "ROLE_ASSIGNED", roles);
     }
 }

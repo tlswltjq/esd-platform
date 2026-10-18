@@ -1,17 +1,24 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
-import com.stove.payment.core.domain.*;
+import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentStatus;
+import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.port.PgGateway;
 import jakarta.persistence.EntityManager;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.transaction.*;
-import org.springframework.transaction.support.*;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 public class ResolvePayment {
@@ -20,11 +27,11 @@ public class ResolvePayment {
     private final OutboxRecorder outbox;
     private final EntityManager entityManager;
     private final int batchSize;
-    private final java.time.Duration retryDelay;
+    private final Duration retryDelay;
     private final TransactionTemplate transaction;
 
     public ResolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
-            EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, java.time.Duration retryDelay) {
+            EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay) {
         this.payments = payments;
         this.gateway = gateway;
         this.outbox = outbox;

@@ -6,6 +6,7 @@ import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * 스케줄 배치의 분산 락. <b>이것만으로는 부족하다</b> —
@@ -19,7 +20,7 @@ public class SchedulerLockConfig {
     public LockProvider lockProvider(DataSource dataSource) {
         return new JdbcTemplateLockProvider(
                 JdbcTemplateLockProvider.Configuration.builder()
-                        .withJdbcTemplate(new org.springframework.jdbc.core.JdbcTemplate(dataSource))
+                        .withJdbcTemplate(new JdbcTemplate(dataSource))
                         // DB 시계로 잡는다 — 인스턴스 시계 동기화를 가정하지 않는다.
                         .usingDbTime()
                         .build());

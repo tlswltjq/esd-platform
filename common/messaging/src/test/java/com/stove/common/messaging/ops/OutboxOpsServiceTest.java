@@ -7,9 +7,10 @@ import static org.mockito.Mockito.when;
 
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
-import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
+import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
+import java.lang.reflect.RecordComponent;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,7 +62,7 @@ class OutboxOpsServiceTest {
         repositoryHas(deadEvent("EVT-1"));
 
         assertThat(DeadEventResponse.class.getRecordComponents())
-                .extracting(java.lang.reflect.RecordComponent::getName)
+                .extracting(RecordComponent::getName)
                 .doesNotContain("payload");
     }
 

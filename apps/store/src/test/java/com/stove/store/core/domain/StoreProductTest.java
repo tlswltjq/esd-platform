@@ -1,7 +1,9 @@
 package com.stove.store.core.domain;
 
-import static com.stove.store.StoreFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.store.StoreFixtures.product;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;

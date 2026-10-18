@@ -2,7 +2,8 @@ package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.*;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import lombok.RequiredArgsConstructor;

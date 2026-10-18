@@ -1,22 +1,25 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.web.error.*;
-import com.stove.studio.core.domain.project.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.ProjectRepository;
+import com.stove.studio.core.domain.project.ThumbnailAsset;
 import com.stove.studio.core.port.BuildStorage;
 import com.stove.studio.core.service.build.UploadFiles;
-
-import lombok.RequiredArgsConstructor;
-
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-
-import java.io.*;
-import java.nio.file.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Iterator;
-
+import java.util.List;
+import java.util.Locale;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @RequiredArgsConstructor
 public class UploadThumbnail {
@@ -41,9 +44,9 @@ public class UploadThumbnail {
                             ErrorCode.INVALID_REQUEST, "PNG 또는 JPEG 이미지가 필요합니다.");
                 ImageReader reader = readers.next();
                 try {
-                    format = reader.getFormatName().toLowerCase(java.util.Locale.ROOT);
+                    format = reader.getFormatName().toLowerCase(Locale.ROOT);
                     reader.setInput(image);
-                    if (!java.util.List.of("png", "jpeg").contains(format)
+                    if (!List.of("png", "jpeg").contains(format)
                             || reader.getWidth(0) > 8192
                             || reader.getHeight(0) > 8192)
                         throw new BusinessException(

@@ -1,20 +1,19 @@
 package com.stove.catalog.core.service;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.catalog.CatalogIntegrationTestBase;
 import com.stove.common.testcontainers.SharedContainers;
-
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
-
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.util.UUID;
 
 class CatalogMigrationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
@@ -49,11 +48,11 @@ class CatalogMigrationIntegrationTest extends CatalogIntegrationTestBase {
                         + " VALUES('legacy','Product','OLD','ProductChanged','stove.catalog.v1','OLD','{}','PENDING',NOW())");
             try (Connection connection = source.getConnection()) {
                 FileSystemResource script =
-                        new org.springframework.core.io.FileSystemResource(
+                        new FileSystemResource(
                                 Path.of("../../scripts/catalog-transition.sql"));
-                org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
+                ScriptUtils.executeSqlScript(
                         connection, script);
-                org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
+                ScriptUtils.executeSqlScript(
                         connection, script);
             }
             assertThat(

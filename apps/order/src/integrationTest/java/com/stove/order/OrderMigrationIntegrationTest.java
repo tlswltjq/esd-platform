@@ -1,22 +1,29 @@
 package com.stove.order;
 
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.order.OrderFixtures.id;
+import static com.stove.order.OrderFixtures.product;
+import static com.stove.order.OrderFixtures.request;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.testcontainers.SharedContainers;
+import com.stove.order.core.domain.Order;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.util.UUID;
-import java.util.function.Consumer;
-import com.stove.order.core.domain.Order;
-import static com.stove.order.OrderFixtures.*;
 
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
@@ -25,15 +32,15 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         withV10(source -> {
             JdbcTemplate jdbc = new JdbcTemplate(source);
             insert(jdbc, "FAILED"); insert(jdbc, "FAILED"); insert(jdbc, "PENDING");
-            java.util.List<java.util.Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            List<Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
             Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
             flyway.migrate(); flyway.validate();
-            java.util.List<java.util.Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            List<Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
             for (int i = 0; i < original.size(); i++) assertThat(migrated.get(i)).containsAllEntriesOf(original.get(i));
-            assertThatThrownBy(() -> insert(jdbc, "PAID")).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThatThrownBy(() -> insert(jdbc, "PAID")).isInstanceOf(DataIntegrityViolationException.class);
             jdbc.update("UPDATE purchase_order SET status='FAILED' WHERE status='PENDING'");
             insert(jdbc, "PAID");
-            assertThatThrownBy(() -> insert(jdbc, "PENDING")).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThatThrownBy(() -> insert(jdbc, "PENDING")).isInstanceOf(DataIntegrityViolationException.class);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_order WHERE status='FAILED'", Integer.class)).isEqualTo(3);
             jdbc.update("UPDATE purchase_order SET product_id=2 WHERE status='PAID'");
             assertThatThrownBy(() -> insert(jdbc, "PENDING")).hasStackTraceContaining("uk_purchase_order_buyer_code");
@@ -46,7 +53,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         withV10(source -> {
             JdbcTemplate jdbc = new JdbcTemplate(source);
             insert(jdbc, "PENDING"); insert(jdbc, status);
-            java.util.List<java.util.Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            List<Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
             assertThatThrownBy(() -> Flyway.configure().dataSource(source).locations(LOCATION).load().migrate())
                     .hasStackTraceContaining("uk_purchase_order_buyer_product");
             assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(original);

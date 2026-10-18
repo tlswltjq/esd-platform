@@ -1,38 +1,77 @@
 package com.stove.payment;
 
 
-import static com.stove.payment.PaymentFixtures.*;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import com.fasterxml.jackson.databind.*;
-import com.stove.common.kafka.*;
-import com.stove.common.kafka.contract.*;
+import static com.stove.payment.PaymentFixtures.approved;
+import static com.stove.payment.PaymentFixtures.event;
+import static com.stove.payment.PaymentFixtures.id;
+import static com.stove.payment.PaymentFixtures.request;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stove.common.kafka.EventHeaders;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
-import com.stove.common.messaging.outbox.*;
+import com.stove.common.messaging.outbox.OutboxEvent;
+import com.stove.common.messaging.outbox.OutboxEventRepository;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
-import com.stove.payment.core.domain.*;
-import com.stove.payment.core.service.*;
-import com.stove.payment.adapter.pg.*;
+import com.stove.payment.adapter.pg.SimulatedPgGateway;
+import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentOrderRequest;
+import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentStatus;
+import com.stove.payment.core.domain.PgChargeRequest;
+import com.stove.payment.core.domain.PgResult;
+import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.service.ReceiveOrderPayment;
+import com.stove.payment.core.service.ResolvePayment;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.junit.jupiter.api.*;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.*;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
-import java.nio.charset.StandardCharsets;
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired ReceiveOrderPayment receive;
@@ -216,7 +255,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     }
     @Test void lateUnavailableResponseCannotReopenAConcurrentlyConfirmedPayment() throws Exception {
         Payment p=receive.execute(request()); CountDownLatch entered=new CountDownLatch(1); CountDownLatch release=new CountDownLatch(1);
-        AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        AtomicInteger calls=new AtomicInteger();
         doAnswer(inv -> {
             Object result=inv.callRealMethod();
             if(calls.incrementAndGet()==1) {
@@ -256,7 +295,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     }
     record Response(int status,JsonNode body) { JsonNode data() { return body.path("data"); } }
     private Response http(String method,String path,String bearer) {
-        RestClient.RequestBodySpec spec=RestClient.create("http://127.0.0.1:"+port).method(org.springframework.http.HttpMethod.valueOf(method)).uri(path);
+        RestClient.RequestBodySpec spec=RestClient.create("http://127.0.0.1:"+port).method(HttpMethod.valueOf(method)).uri(path);
         if(bearer!=null) spec.header("Authorization","Bearer "+bearer);
         return spec.exchange((r,s) -> new Response(s.getStatusCode().value(),mapper.readTree(s.getBody())));
     }
@@ -287,7 +326,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
             assertThat(http("POST",path,good).status()).isEqualTo(403);
     }
     @Test void kafkaInvalidRequestReachesDltWithoutReceiptAndOriginalCanBeReplayed() throws Exception {
-        PaymentOrderRequest r=request(); OrderPlacedEvent event=event(r); JsonNode invalid=mapper.valueToTree(event); ((com.fasterxml.jackson.databind.node.ObjectNode)invalid).put("amount",9800);
+        PaymentOrderRequest r=request(); OrderPlacedEvent event=event(r); JsonNode invalid=mapper.valueToTree(event); ((ObjectNode)invalid).put("amount",9800);
         HashMap<String, Object> config=new HashMap<String,Object>();
         config.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
         config.put("group.id","payment-dlt-"+id()); config.put("auto.offset.reset","earliest");
@@ -298,7 +337,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
             while(!found && System.nanoTime()<deadline) for(ConsumerRecord<String, String> record:consumer.poll(Duration.ofMillis(500))) if(record.value().contains(r.eventId())) found=true;
             assertThat(found).isTrue(); assertThat(count("purchase_payment")).isZero(); assertThat(count("processed_event")).isZero();
             send(event,mapper.writeValueAsString(event)); send(event,mapper.writeValueAsString(event));
-            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("purchase_payment")).isEqualTo(1));
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("purchase_payment")).isEqualTo(1));
             assertThat(count("processed_event")).isEqualTo(1); assertThat(count("simulated_payment_charge")).isZero();
         } finally { listeners.stop(); }
     }

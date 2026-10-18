@@ -1,17 +1,21 @@
 package com.stove.studio.core.service.review;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.common.web.error.*;
-import com.stove.studio.core.domain.build.*;
-import com.stove.studio.core.domain.project.*;
-import com.stove.studio.core.domain.review.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.build.Build;
+import com.stove.studio.core.domain.build.BuildRepository;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.ProjectRepository;
+import com.stove.studio.core.domain.review.ProjectReviewRequest;
+import com.stove.studio.core.domain.review.ProjectReviewRequestRepository;
 import com.stove.studio.core.port.BuildStorage;
 import com.stove.studio.core.service.project.ReadProjects;
-
 import lombok.RequiredArgsConstructor;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,7 +79,7 @@ public class RequestProjectReview {
     private String json(ProjectSnapshot value) {
         try {
             return mapper.writeValueAsString(value);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
     }

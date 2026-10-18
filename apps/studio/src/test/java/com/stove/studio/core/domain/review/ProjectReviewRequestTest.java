@@ -1,6 +1,6 @@
 package com.stove.studio.core.domain.review;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 

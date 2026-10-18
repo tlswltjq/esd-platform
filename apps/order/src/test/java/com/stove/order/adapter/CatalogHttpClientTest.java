@@ -1,17 +1,23 @@
 package com.stove.order.adapter;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.web.error.BusinessException;
+import com.stove.order.config.CatalogClientConfiguration;
 import com.stove.order.core.domain.OrderErrorCode;
 import com.stove.order.core.domain.PublishedProduct;
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CatalogHttpClientTest {
     private HttpServer server;
@@ -19,7 +25,7 @@ class CatalogHttpClientTest {
     private int status = 200;
     private String response;
     private long delay;
-    private final java.util.concurrent.ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newCachedThreadPool();
     @BeforeEach void start() throws Exception {
         response = "{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"Game-1\",\"title\":\"Game\",\"contentVersion\":3,\"price\":10000,\"currency\":\"KRW\",\"futureField\":true}}";
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -34,7 +40,7 @@ class CatalogHttpClientTest {
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
         });
         server.start();
-        client = new com.stove.order.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000);
+        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000);
     }
     @AfterEach void stop() { server.stop(0); executor.shutdownNow(); }
     @Test void readsOnlyThePublicFieldsAndAllowsFutureFields() {
@@ -66,7 +72,7 @@ class CatalogHttpClientTest {
     }
     @Test void finiteReadTimeoutAndConnectionFailureReturnUnavailable() {
         delay = 500;
-        client = new com.stove.order.config.CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100);
+        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100);
         assertThatThrownBy(() -> client.detail("Game-1")).isInstanceOfSatisfying(BusinessException.class,
                 e -> assertThat(e.errorCode().statusCode()).isEqualTo(503));
         server.stop(0);

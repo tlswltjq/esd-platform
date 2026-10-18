@@ -1,5 +1,13 @@
 package com.stove.license.api.listener;
 
+import static com.stove.license.LicenseFixtures.envelope;
+import static com.stove.license.LicenseFixtures.event;
+import static com.stove.license.LicenseFixtures.paid;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -11,16 +19,11 @@ import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.PaidOrder;
 import com.stove.license.core.service.GrantLicense;
+import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
-import java.nio.charset.StandardCharsets;
-
-import static com.stove.license.LicenseFixtures.*;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.*;
 
 class OrderEventListenerTest {
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules().disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);

@@ -1,14 +1,22 @@
 package com.stove.order.core.domain;
 
-import static com.stove.order.OrderFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.order.OrderFixtures.completed;
+import static com.stove.order.OrderFixtures.id;
+import static com.stove.order.OrderFixtures.order;
+import static com.stove.order.OrderFixtures.product;
+import static com.stove.order.OrderFixtures.request;
+import static com.stove.order.OrderFixtures.result;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.web.error.BusinessException;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
 import java.time.Instant;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class OrderTest {
     @Test void resultIdentityIsRequiredEvenWithoutAnEventListener() {

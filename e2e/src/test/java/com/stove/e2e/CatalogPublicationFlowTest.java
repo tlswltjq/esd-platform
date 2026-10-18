@@ -1,16 +1,28 @@
 package com.stove.e2e;
 
-import static com.stove.e2e.ReviewJourney.*;
-
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.e2e.ReviewJourney.Account;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.REVIEWER_EMAIL;
+import static com.stove.e2e.ReviewJourney.REVIEWER_PASSWORD;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.page;
+import static com.stove.e2e.ReviewJourney.path;
+import static com.stove.e2e.ReviewJourney.project;
+import static com.stove.e2e.ReviewJourney.request;
+import static com.stove.e2e.ReviewJourney.reviewPath;
+import static com.stove.e2e.ReviewJourney.waitForResult;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.*;
-
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 @Tag("catalog")
 class CatalogPublicationFlowTest {

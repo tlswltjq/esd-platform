@@ -1,14 +1,15 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.web.error.*;
-import com.stove.studio.core.domain.project.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.ProjectRepository;
+import com.stove.studio.core.domain.project.StorePage;
 import com.stove.studio.core.port.BuildStorage;
-
-import lombok.RequiredArgsConstructor;
-
-import org.springframework.transaction.annotation.Transactional;
-
 import java.net.URI;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
 @Transactional
@@ -32,7 +33,7 @@ public class UpdateStorePage {
                 URI uri = URI.create(page.videoUrl());
                 if (uri.getHost() == null
                         || uri.getUserInfo() != null
-                        || !java.util.List.of("https", "http").contains(uri.getScheme()))
+                        || !List.of("https", "http").contains(uri.getScheme()))
                     throw new IllegalArgumentException();
             } catch (IllegalArgumentException e) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST, "영상 URL이 올바르지 않습니다.");

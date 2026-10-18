@@ -1,9 +1,10 @@
 package com.stove.settlement.config;
 
-import com.stove.settlement.core.domain.FeePolicy;
 import com.stove.settlement.api.application.CreatorWorkspaceClient;
+import com.stove.settlement.core.domain.FeePolicy;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)

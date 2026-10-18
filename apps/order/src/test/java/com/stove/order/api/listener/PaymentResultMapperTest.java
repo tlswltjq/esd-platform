@@ -1,13 +1,20 @@
 package com.stove.order.api.listener;
 
-import static com.stove.order.OrderFixtures.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.order.OrderFixtures.completed;
+import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.failed;
+import static com.stove.order.OrderFixtures.order;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.web.error.BusinessException;
-import com.stove.order.core.domain.*;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderStatus;
+import com.stove.order.core.domain.PaymentResult;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

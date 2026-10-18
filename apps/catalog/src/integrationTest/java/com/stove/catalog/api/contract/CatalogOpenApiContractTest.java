@@ -1,20 +1,25 @@
 package com.stove.catalog.api.contract;
 
-import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
-import static com.stove.catalog.CatalogFixtures.*;
-
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.event;
+import static com.stove.catalog.CatalogFixtures.id;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.catalog.CatalogIntegrationTestBase;
+import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.core.service.PublishProjectRelease;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.test.OpenApiSnapshot;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
     @LocalServerPort int port;
@@ -53,7 +58,7 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
                 .isTrue();
     }
 
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void paginationUsesProductIdAsTieBreakerForEqualPublicationTimes() {

@@ -1,6 +1,7 @@
 package com.stove.studio.core.domain.review;
 
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 
 public record ProjectReviewResult(String eventId, String eventType, Long reviewRequestId,
                                   Long projectId, long contentVersion, boolean approved,

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
@@ -30,7 +31,7 @@ public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepos
     }
     public Mono<String> key(ServerWebExchange exchange) {
         return exchange.getSession().map(session -> "stove:bff:tokens:" + session.getAttributes()
-                .computeIfAbsent("bff.client-key", ignored -> java.util.UUID.randomUUID().toString()));
+                .computeIfAbsent("bff.client-key", ignored -> UUID.randomUUID().toString()));
     }
     public Mono<OAuth2AuthorizedClient> read(String key) {
         return redis.opsForValue().get(key).flatMap(value -> {

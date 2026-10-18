@@ -1,7 +1,8 @@
 package com.stove.store.core.service;
 
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import com.stove.store.core.domain.StoreProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

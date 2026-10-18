@@ -1,16 +1,24 @@
 package com.stove.download.adapter;
 
-import static org.assertj.core.api.Assertions.*;
-import com.stove.common.web.error.*;
-import com.stove.download.config.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.download.config.DownloadClientConfiguration;
+import com.stove.download.config.DownloadClientProperties;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.concurrent.atomic.*;
-import org.junit.jupiter.api.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.assertj.core.api.ThrowableAssert;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DownloadHttpClientsTest {
     HttpServer server;
@@ -101,7 +109,7 @@ class DownloadHttpClientsTest {
         assertUnavailable(() -> bounded.require("game", "token"));
     }
     @Test void refusedConnectionIsUnavailable() { server.stop(0); assertUnavailable(() -> catalog.require("game")); }
-    static void assertUnavailable(org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {
+    static void assertUnavailable(ThrowableAssert.ThrowingCallable action) {
         assertThatThrownBy(action).isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.UPSTREAM_UNAVAILABLE));
     }
 }

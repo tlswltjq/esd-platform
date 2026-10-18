@@ -1,9 +1,14 @@
 package com.stove.order;
 
-import com.stove.common.kafka.*;
+import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.*;
-import com.stove.order.core.domain.*;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.order.core.domain.Order;
+import com.stove.order.core.domain.OrderRequest;
+import com.stove.order.core.domain.OrderStatus;
+import com.stove.order.core.domain.PaymentResult;
+import com.stove.order.core.domain.PublishedProduct;
 import java.util.UUID;
 
 public final class OrderFixtures {

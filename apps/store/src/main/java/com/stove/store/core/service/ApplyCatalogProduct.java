@@ -1,12 +1,18 @@
 package com.stove.store.core.service;
 
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
-import com.stove.common.web.error.*;
-import com.stove.store.core.domain.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.store.core.domain.StoreProduct;
+import com.stove.store.core.domain.StoreProductRepository;
 import jakarta.persistence.EntityManager;
-import org.springframework.dao.*;
+import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.LockAcquisitionException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.*;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
@@ -39,8 +45,8 @@ public class ApplyCatalogProduct {
                 });
                 return;
             } catch (DataIntegrityViolationException | TransientDataAccessException
-                     | org.hibernate.exception.ConstraintViolationException
-                     | org.hibernate.exception.LockAcquisitionException failure) {
+                     | ConstraintViolationException
+                     | LockAcquisitionException failure) {
                 if (attempt == 2) throw failure;
             }
         }

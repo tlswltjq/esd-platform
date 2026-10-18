@@ -2,18 +2,21 @@ package com.stove.studio.core.service.project;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.web.error.*;
-import com.stove.studio.core.domain.build.*;
-import com.stove.studio.core.domain.project.*;
-import com.stove.studio.core.domain.release.*;
-import com.stove.studio.core.domain.review.*;
-
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.build.Build;
+import com.stove.studio.core.domain.build.BuildRepository;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.ProjectRepository;
+import com.stove.studio.core.domain.release.ProjectReleaseRequest;
+import com.stove.studio.core.domain.release.ProjectReleaseRequestRepository;
+import com.stove.studio.core.domain.review.ProjectReviewRequest;
+import com.stove.studio.core.domain.review.ProjectReviewRequestRepository;
+import java.io.IOException;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -70,7 +73,7 @@ public class ReadProjects {
     public ProjectSnapshot snapshot(ProjectReviewRequest request) {
         try {
             return mapper.readValue(request.getSnapshot(), ProjectSnapshot.class);
-        } catch (java.io.IOException failure) {
+        } catch (IOException failure) {
             throw new IllegalStateException("요청 스냅샷을 읽을 수 없습니다.", failure);
         }
     }

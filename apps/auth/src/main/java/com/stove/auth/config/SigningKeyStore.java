@@ -5,12 +5,13 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.text.ParseException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 
 /** JWT 서명키를 DB에 보존해 재시작 후에도 기존 access token을 검증할 수 있게 한다. */
 @Component
@@ -52,7 +53,7 @@ public class SigningKeyStore {
     private RSAKey parse(String value) {
         try {
             return RSAKey.parse(value);
-        } catch (java.text.ParseException exception) {
+        } catch (ParseException exception) {
             throw new IllegalStateException("저장된 JWT 서명키가 올바르지 않습니다.", exception);
         }
     }

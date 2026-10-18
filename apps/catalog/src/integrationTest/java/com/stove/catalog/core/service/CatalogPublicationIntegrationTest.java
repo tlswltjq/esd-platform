@@ -1,35 +1,56 @@
 package com.stove.catalog.core.service;
 
+import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.event;
+import static com.stove.catalog.CatalogFixtures.id;
+import static com.stove.catalog.CatalogFixtures.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.catalog.CatalogIntegrationTestBase;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
-import static com.stove.catalog.CatalogFixtures.*;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
-import com.stove.catalog.*;
-import com.stove.catalog.core.domain.*;
-import com.stove.common.kafka.*;
+import com.stove.catalog.core.domain.CatalogProduct;
+import com.stove.catalog.core.domain.CatalogProductRepository;
+import com.stove.catalog.core.domain.CatalogReleaseRepository;
+import com.stove.catalog.core.domain.PublishedProduct;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
-
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired PublishProjectRelease publish;
@@ -40,7 +61,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
     @MockitoSpyBean OutboxRecorder outbox;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired PlatformTransactionManager transactions;
 
     private void send(ProjectReleaseRequestedEvent e) {
         publish.execute(ReleaseSubmissionMapper.from(envelope(e), e));
@@ -65,7 +86,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
                 "SELECT payload FROM outbox_event WHERE aggregate_id=? AND event_type='CatalogProductPublished' ORDER BY id",
                 String.class, first.partitionKey());
         assertThat(payloads).hasSize(2);
-        CatalogProductSnapshot latest = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+        CatalogProductSnapshot latest = new ObjectMapper().findAndRegisterModules()
                 .readValue(payloads.getLast(), CatalogProductPublishedEvent.class).product();
         PublishedProduct detail = read.detail(first.partitionKey());
         assertThat(latest.productId()).isEqualTo(detail.productId());
@@ -79,7 +100,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
     void storeEventFailureAlsoRollsBackPublicationAndStudioResult() {
         ProjectReleaseRequestedEvent e = event(id(), 1);
-        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
                 doThrow(new IllegalStateException("Store event failed")).when(outbox)
                         .record(eq("CatalogProduct"), eq(e.partitionKey()), any(CatalogProductPublishedEvent.class)));
         try {
@@ -190,7 +211,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
     void outboxFailureRollsBackAllPublicationWritesAndRetrySucceeds() {
         ProjectReleaseRequestedEvent e = event(id(), 1);
-        new org.springframework.transaction.support.TransactionTemplate(transactions)
+        new TransactionTemplate(transactions)
                 .executeWithoutResult(
                         tx ->
                                 doThrow(new IllegalStateException("outbox unavailable"))
@@ -235,8 +256,8 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
             try {
                 send(e);
                 return null;
-            } catch (org.springframework.dao.DataAccessException
-                    | java.util.NoSuchElementException failure) {
+            } catch (DataAccessException
+                    | NoSuchElementException failure) {
                 if (attempt == 5) throw failure;
             }
         }
@@ -255,7 +276,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
                     .add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
             kafka.send(record).get(10, TimeUnit.SECONDS);
             kafka.send(record).get(10, TimeUnit.SECONDS);
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(Duration.ofSeconds(30))
                     .untilAsserted(
                             () ->
@@ -276,7 +297,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
     void invalidKafkaContractGoesToDltAndOriginalEventCanBeReplayedAfterRepair() throws Exception {
         ProjectReleaseRequestedEvent e = event(id(), 1);
-        HashMap<String, Object> config = new java.util.HashMap<String, Object>();
+        HashMap<String, Object> config = new HashMap<String, Object>();
         config.put(
                 "bootstrap.servers",
                 kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
@@ -286,8 +307,8 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
         config.put(
                 "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         try (KafkaConsumer<String, String> consumer =
-                new org.apache.kafka.clients.consumer.KafkaConsumer<String, String>(config)) {
-            consumer.subscribe(java.util.List.of(Topics.STUDIO + ".DLT"));
+                new KafkaConsumer<String, String>(config)) {
+            consumer.subscribe(List.of(Topics.STUDIO + ".DLT"));
             listeners.start();
             ProducerRecord<String, String> bad = new ProducerRecord<String, String>(Topics.STUDIO, "wrong-key", json(e));
             bad.headers().add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
@@ -309,7 +330,7 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
             repaired.headers()
                     .add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
             kafka.send(repaired).get(10, TimeUnit.SECONDS);
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(Duration.ofSeconds(20))
                     .untilAsserted(
                             () ->

@@ -1,36 +1,58 @@
 package com.stove.store;
 
-import com.stove.store.api.listener.CatalogProductMapper;
-import static com.stove.store.StoreFixtures.*;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static com.stove.store.StoreFixtures.id;
+import static com.stove.store.StoreFixtures.product;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.*;
-import com.stove.common.kafka.contract.*;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.EventHeaders;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.web.error.BusinessException;
-import com.stove.store.core.domain.*;
+import com.stove.store.api.listener.CatalogProductMapper;
+import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.port.CatalogProducts;
-import com.stove.store.core.service.*;
+import com.stove.store.core.service.ApplyCatalogProduct;
+import com.stove.store.core.service.ReadStoreProduct;
+import com.stove.store.core.service.SearchStoreProducts;
+import com.stove.store.core.service.SynchronizeCatalogProducts;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.junit.jupiter.api.*;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.client.RestClient;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.store.sync.enabled=false", "spring.kafka.listener.auto-startup=false"})
@@ -44,7 +66,7 @@ class StoreIntegrationTest {
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
     @Autowired ObjectMapper mapper;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired JdbcTemplate jdbc;
     @MockitoBean CatalogProducts catalog;
     @LocalServerPort int port;
 
@@ -152,7 +174,7 @@ class StoreIntegrationTest {
             kafka.send(record(latest, latest.partitionKey())).get(10, TimeUnit.SECONDS);
             CatalogProductPublishedEvent old = CatalogProductPublishedEvent.of(product(10, 1, "Old", 1000));
             kafka.send(record(old, old.partitionKey())).get(10, TimeUnit.SECONDS);
-            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                     assertThat(products.findById(10L)).hasValueSatisfying(p ->
                             assertThat(p.snapshot()).isEqualTo(latest.product())));
         } finally { listeners.stop(); }

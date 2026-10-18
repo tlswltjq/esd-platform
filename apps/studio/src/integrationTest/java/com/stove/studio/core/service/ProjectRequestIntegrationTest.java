@@ -1,32 +1,40 @@
 package com.stove.studio.core.service;
 
-import com.stove.studio.core.domain.release.ProjectReleaseRequest;
-import com.stove.studio.core.domain.release.ProjectReleaseResult;
-import com.stove.studio.core.domain.review.ProjectReviewRequest;
-import com.stove.studio.core.domain.review.ProjectReviewResult;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.web.error.BusinessException;
 import com.stove.studio.StudioIntegrationTestBase;
 import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.domain.build.BuildRepository;
-import com.stove.studio.core.domain.project.*;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.StorePage;
+import com.stove.studio.core.domain.release.ProjectReleaseRequest;
+import com.stove.studio.core.domain.release.ProjectReleaseResult;
+import com.stove.studio.core.domain.review.ProjectReviewRequest;
+import com.stove.studio.core.domain.review.ProjectReviewResult;
 import com.stove.studio.core.port.BuildStorage;
 import com.stove.studio.core.service.build.RegisterBuild;
-import com.stove.studio.core.service.project.*;
-import com.stove.studio.core.service.release.*;
-import com.stove.studio.core.service.review.*;
-
+import com.stove.studio.core.service.project.CreateProject;
+import com.stove.studio.core.service.project.ReadProjects;
+import com.stove.studio.core.service.project.UpdateStorePage;
+import com.stove.studio.core.service.project.UploadThumbnail;
+import com.stove.studio.core.service.release.RecordProjectReleaseResult;
+import com.stove.studio.core.service.release.RequestProjectRelease;
+import com.stove.studio.core.service.review.RecordProjectReviewResult;
+import com.stove.studio.core.service.review.RequestProjectReview;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-
-import java.awt.image.BufferedImage;
-import java.io.*;
-import java.util.*;
-import java.util.zip.*;
-
-import javax.imageio.ImageIO;
 
 class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
     @Autowired CreateProject create;

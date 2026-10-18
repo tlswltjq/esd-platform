@@ -1,11 +1,13 @@
 package com.stove.download.core.domain;
 
 import static com.stove.download.DownloadFixtures.build;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DownloadValuesTest {
     @ParameterizedTest @NullAndEmptySource @ValueSource(strings={" ", "../game", "a/b", "a?b", "한글", "-game"})

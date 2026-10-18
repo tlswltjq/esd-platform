@@ -1,34 +1,39 @@
 package com.stove.review.adapter.storage;
 
-import com.stove.review.config.ReviewStorageProperties;
-
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
-import com.stove.review.*;
+import com.stove.review.ReviewFixtures;
+import com.stove.review.ReviewIntegrationTestBase;
+import com.stove.review.config.ReviewStorageProperties;
+import com.stove.review.config.StorageConfiguration;
 import com.stove.review.core.domain.BuildDownload;
-
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.HexFormat;
+import java.util.UUID;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import java.net.URI;
-import java.net.http.*;
-import java.security.MessageDigest;
-import java.time.*;
-import java.util.HexFormat;
 
 class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
     @Autowired S3ReviewBuildStorage storage;
 
     @Test
     void downloadedBytesMatchTheSubmittedBuildAndUrlExpires() throws Exception {
-        byte[] bytes = "Immutable uploaded ZIP".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bytes = "Immutable uploaded ZIP".getBytes(StandardCharsets.UTF_8);
         String checksum =
                 HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         ProjectSnapshot snapshot = ReviewFixtures.snapshot(1, object(bytes), bytes.length, checksum);
         S3ReviewBuildStorage shortLived =
-                new com.stove.review.config.StorageConfiguration().buildStorage(
+                new StorageConfiguration().buildStorage(
                         new ReviewStorageProperties(
                                 MINIO.getS3URL(),
                                 MINIO.getS3URL(),
@@ -50,7 +55,7 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
                                             MessageDigest.getInstance("SHA-256")
                                                     .digest(response.body())))
                     .isEqualTo(snapshot.checksum());
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(Duration.ofSeconds(5))
                     .until(
                             () ->
@@ -67,11 +72,11 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
         byte[] bytes = {1, 2, 3};
         String path = object(bytes);
         for (ProjectSnapshot s :
-                new com.stove.common.kafka.contract.payload.ProjectSnapshot[] {
+                new ProjectSnapshot[] {
                     ReviewFixtures.snapshot(1, "s3://other-bucket/private.zip", 3),
                     ReviewFixtures.snapshot(
                             1,
-                            "s3://stove-builds/missing-" + java.util.UUID.randomUUID() + ".zip",
+                            "s3://stove-builds/missing-" + UUID.randomUUID() + ".zip",
                             3),
                     ReviewFixtures.snapshot(1, path, 100)
                 }) {

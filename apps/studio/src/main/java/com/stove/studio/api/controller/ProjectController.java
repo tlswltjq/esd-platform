@@ -2,22 +2,29 @@ package com.stove.studio.api.controller;
 
 import com.stove.common.security.CurrentSubject;
 import com.stove.common.web.response.ApiResponse;
-import com.stove.studio.api.controller.dto.*;
+import com.stove.studio.api.controller.dto.CreateProjectRequest;
+import com.stove.studio.api.controller.dto.ProjectResponse;
+import com.stove.studio.api.controller.dto.UpdateStorePageRequest;
 import com.stove.studio.core.domain.project.Project;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
-import com.stove.studio.core.service.project.*;
+import com.stove.studio.core.service.project.CreateProject;
+import com.stove.studio.core.service.project.ReadProjects;
+import com.stove.studio.core.service.project.UpdateStorePage;
 import com.stove.studio.core.service.release.RequestProjectRelease;
 import com.stove.studio.core.service.review.RequestProjectReview;
-
 import jakarta.validation.Valid;
-
-import lombok.RequiredArgsConstructor;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor

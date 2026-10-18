@@ -1,30 +1,45 @@
 package com.stove.review.core.service;
 
-import com.stove.review.api.listener.ReviewSubmissionMapper;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 
-import com.stove.common.kafka.*;
+import com.stove.common.kafka.EventEnvelope;
+import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
-import com.stove.review.*;
-import com.stove.review.core.domain.*;
-
+import com.stove.review.ReviewFixtures;
+import com.stove.review.ReviewIntegrationTestBase;
+import com.stove.review.api.listener.ReviewSubmissionMapper;
+import com.stove.review.core.domain.ProjectReview;
+import com.stove.review.core.domain.ReviewStatus;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-
-import java.nio.charset.StandardCharsets;
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.*;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Autowired ReceiveProjectReview receive;
@@ -33,7 +48,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     @Autowired JdbcTemplate jdbc;
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired PlatformTransactionManager transactions;
     @MockitoSpyBean OutboxRecorder outbox;
 
     private long id() {
@@ -134,7 +149,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     void outboxFailureRollsBackTheDecision() {
         long id = id();
         ProjectReviewRequestedEvent e = submit(id, id());
-        new org.springframework.transaction.support.TransactionTemplate(transactions)
+        new TransactionTemplate(transactions)
                 .executeWithoutResult(
                         tx ->
                                 doThrow(new IllegalStateException("outbox unavailable"))
@@ -189,7 +204,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                         try {
                             receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
                             return null;
-                        } catch (org.springframework.dao.DataAccessException conflict) {
+                        } catch (DataAccessException conflict) {
                             if (attempt == 3) throw conflict;
                         }
                     }
@@ -231,7 +246,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                     .add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
             kafka.send(record).get(10, TimeUnit.SECONDS);
             kafka.send(record).get(10, TimeUnit.SECONDS);
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(Duration.ofSeconds(20))
                     .ignoreException(BusinessException.class)
                     .untilAsserted(

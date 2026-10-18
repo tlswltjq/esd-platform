@@ -5,7 +5,10 @@ import com.stove.auth.api.controller.dto.SignupResponse;
 import com.stove.auth.core.service.RegisterAccount;
 import com.stove.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,9 +21,9 @@ public class AccountController {
 
     private final RegisterAccount registerAccount;
 
-    @org.springframework.web.bind.annotation.GetMapping("/session")
-    public ApiResponse<java.util.Map<String, String>> session(java.security.Principal principal) {
-        return ApiResponse.ok(java.util.Map.of("subject", principal.getName()));
+    @GetMapping("/session")
+    public ApiResponse<Map<String, String>> session(Principal principal) {
+        return ApiResponse.ok(Map.of("subject", principal.getName()));
     }
 
     @PostMapping("/signup")

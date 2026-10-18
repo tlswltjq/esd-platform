@@ -1,6 +1,7 @@
 package com.stove.studio.api.controller.dto;
 
-import com.stove.studio.core.domain.project.*;
+import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.StorePage;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
 

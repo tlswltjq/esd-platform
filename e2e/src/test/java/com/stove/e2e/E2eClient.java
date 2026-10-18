@@ -1,16 +1,10 @@
 package com.stove.e2e;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -22,9 +16,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Map;
-
+import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 /**
  * 스택을 두드리는 HTTP 클라이언트.
@@ -89,8 +88,8 @@ public final class E2eClient {
                                     .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
                                     .build(),
                             HttpResponse.BodyHandlers.ofByteArray());
-            org.springframework.http.HttpHeaders headers =
-                    new org.springframework.http.HttpHeaders();
+            HttpHeaders headers =
+                    new HttpHeaders();
             response.headers().map().forEach(headers::put);
             return new Response(response.statusCode(), read(response.body()), headers);
         } catch (Exception exception) {
@@ -114,7 +113,7 @@ public final class E2eClient {
             String filename,
             String contentType,
             Map<String, String> headers) {
-        String boundary = "esd-" + java.util.UUID.randomUUID();
+        String boundary = "esd-" + UUID.randomUUID();
         StringBuilder form = new StringBuilder();
         fields.forEach(
                 (name, value) ->
@@ -209,10 +208,10 @@ public final class E2eClient {
             if (bytes.length == 0) return MAPPER.createObjectNode();
             try {
                 return MAPPER.readTree(bytes);
-            } catch (com.fasterxml.jackson.core.JsonProcessingException nonJsonBody) {
+            } catch (JsonProcessingException nonJsonBody) {
                 // S3 PUT/DELETE responses are often empty or XML/plain text. The
                 // caller still needs the HTTP status and headers for those adapters.
-                return TextNode.valueOf(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+                return TextNode.valueOf(new String(bytes, StandardCharsets.UTF_8));
             }
         } catch (IOException e) {
             throw new IllegalStateException("응답 본문을 읽지 못했다", e);
@@ -223,8 +222,8 @@ public final class E2eClient {
         if (bytes.length == 0) return MAPPER.createObjectNode();
         try {
             return MAPPER.readTree(bytes);
-        } catch (java.io.IOException nonJsonBody) {
-            return TextNode.valueOf(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException nonJsonBody) {
+            return TextNode.valueOf(new String(bytes, StandardCharsets.UTF_8));
         }
     }
 

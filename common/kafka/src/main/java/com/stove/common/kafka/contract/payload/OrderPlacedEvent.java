@@ -1,6 +1,8 @@
 package com.stove.common.kafka.contract.payload;
 
-import com.stove.common.kafka.contract.*;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
 import java.time.Instant;
 
 /** Immutable order terms. amount is the customer charge, before any provider fees. */

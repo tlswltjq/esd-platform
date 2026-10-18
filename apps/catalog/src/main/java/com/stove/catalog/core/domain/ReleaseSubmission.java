@@ -1,7 +1,8 @@
 package com.stove.catalog.core.domain;
 
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.web.error.*;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import java.time.Instant;
 
 /** Catalog's release input, independent of its delivery transport. */

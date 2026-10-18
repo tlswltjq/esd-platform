@@ -1,23 +1,47 @@
 package com.stove.e2e;
 
-import static com.stove.e2e.ReviewJourney.*;
-import static org.assertj.core.api.Assertions.*;
+import static com.stove.e2e.ReviewJourney.Account;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.REVIEWER_EMAIL;
+import static com.stove.e2e.ReviewJourney.REVIEWER_PASSWORD;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.page;
+import static com.stove.e2e.ReviewJourney.path;
+import static com.stove.e2e.ReviewJourney.project;
+import static com.stove.e2e.ReviewJourney.request;
+import static com.stove.e2e.ReviewJourney.reviewPath;
+import static com.stove.e2e.ReviewJourney.waitForResult;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.*;
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.time.Duration;
-import java.util.*;
+import org.junit.jupiter.api.Test;
 
 /** Completed publication services + Order; payment results are explicit test fixtures. */
 @Tag("order")
@@ -91,7 +115,7 @@ class OrderPurchaseFlowTest {
             ProducerRecord<String, String> record = new ProducerRecord<String,String>(event.topic(), event.partitionKey(), JSON.writeValueAsString(event));
             record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
             record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));
-            producer.send(record).get(15, java.util.concurrent.TimeUnit.SECONDS);
+            producer.send(record).get(15, TimeUnit.SECONDS);
         }
     }
 
@@ -113,10 +137,10 @@ class OrderPurchaseFlowTest {
         assertThat(Stove.gateway.get(detail(first.path("orderNo").asText()), other.headers()).status()).isEqualTo(404);
         assertThat(Stove.gateway.get("/api/v1/orders").status()).isEqualTo(401);
         assertThat(Stove.gateway.post("/api/v1/orders", requestFor(oldProduct), reviewer.headers()).status()).isEqualTo(403);
-        JsonNode forged = firstRequest.deepCopy(); ((com.fasterxml.jackson.databind.node.ObjectNode)forged)
+        JsonNode forged = firstRequest.deepCopy(); ((ObjectNode)forged)
                 .put("buyerSubject", other.subject()).put("memberId", 999).put("status", "PAID");
         assertThat(Stove.gateway.post("/api/v1/orders", forged, buyer.headers()).data()).isEqualTo(first);
-        JsonNode conflict = firstRequest.deepCopy(); ((com.fasterxml.jackson.databind.node.ObjectNode)conflict).put("expectedAmount", 1);
+        JsonNode conflict = firstRequest.deepCopy(); ((ObjectNode)conflict).put("expectedAmount", 1);
         assertThat(Stove.gateway.post("/api/v1/orders", conflict, buyer.headers()).status()).isEqualTo(409);
         page(project.id(), creator, "Second public title", 2000); publish(project.id(), creator, reviewer);
         JsonNode current = Stove.gateway.get("/api/v1/products/by-code/" + code).data();
@@ -158,7 +182,7 @@ class OrderPurchaseFlowTest {
         }
         state(first, buyer, "PAID"); state(failed, buyer(s, "failed"), "FAILED"); state(pending, buyer(s, "pending"), "PENDING");
         assertThat(order(first, buyer).path("amount").asLong()).isEqualTo(1000);
-        ObjectNode changed = (com.fasterxml.jackson.databind.node.ObjectNode)s;
+        ObjectNode changed = (ObjectNode)s;
         changed.set("completion", JSON.valueToTree(success)); changed.set("paid", order(first, buyer));
         changed.set("failedResult", order(failed, buyer(s, "failed"))); Files.writeString(evidence(), JSON.writeValueAsString(changed));
     }

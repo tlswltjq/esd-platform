@@ -1,10 +1,13 @@
 package com.stove.store.adapter;
 
-import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.store.core.port.CatalogProducts;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.web.client.RestClient;
-import java.util.*;
 
 public class CatalogHttpClient implements CatalogProducts {
     private final RestClient client;
@@ -32,7 +35,7 @@ public class CatalogHttpClient implements CatalogProducts {
             CatalogProductSnapshot product = mapper.treeToValue(data(body), CatalogProductSnapshot.class);
             if (!code.equals(product.productCode())) throw new IllegalStateException("Catalog 상품 코드가 다릅니다.");
             return product;
-        } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {
+        } catch (JsonProcessingException failure) {
             throw new IllegalStateException("Catalog 공개 상세를 읽을 수 없습니다.", failure);
         }
     }

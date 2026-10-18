@@ -1,6 +1,6 @@
 package com.stove.store;
 
-import com.stove.common.kafka.contract.payload.*;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import java.time.Instant;
 import java.util.UUID;
 
