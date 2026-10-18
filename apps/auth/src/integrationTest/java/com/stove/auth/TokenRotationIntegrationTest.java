@@ -85,9 +85,9 @@ class TokenRotationIntegrationTest {
         String next = mapper.readTree(nextResponse.body()).path("refresh_token").asText();
         assertThat(next).isNotEqualTo(old);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM refresh_token_history WHERE consumed = TRUE AND token_hash = ?",Integer.class,
-                com.stove.auth.infrastructure.oauth.RotatingAuthorizationService.hash(old))).isEqualTo(1);
+                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(old))).isEqualTo(1);
         Map<String, Object> expires = jdbc.queryForMap("SELECT f.expires_at AS absolute_expiry, a.refresh_token_expires_at AS current_expiry FROM refresh_token_family f JOIN oauth2_authorization a ON a.id=f.authorization_id JOIN refresh_token_history h ON h.authorization_id=f.authorization_id WHERE h.token_hash=?",
-                com.stove.auth.infrastructure.oauth.RotatingAuthorizationService.hash(next));
+                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(next));
         assertThat(expires.get("absolute_expiry")).isEqualTo(expires.get("current_expiry"));
         assertThat(refresh(old).statusCode()).isEqualTo(400);
         assertThat(refresh(next).statusCode()).isEqualTo(400);
@@ -106,7 +106,7 @@ class TokenRotationIntegrationTest {
     @Test void expiredFamilyCannotRefresh() throws Exception {
         String token = login().path("refresh_token").asText();
         jdbc.update("UPDATE refresh_token_family SET expires_at=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE authorization_id=(SELECT authorization_id FROM refresh_token_history WHERE token_hash=?)",
-                com.stove.auth.infrastructure.oauth.RotatingAuthorizationService.hash(token));
+                com.stove.auth.adapter.oauth.RotatingAuthorizationService.hash(token));
         assertThat(refresh(token).statusCode()).isEqualTo(400);
     }
     @Test void disabledAccountCannotRefresh() throws Exception {

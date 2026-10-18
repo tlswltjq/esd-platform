@@ -4,7 +4,7 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.service.ResolvePayment;
-import com.stove.payment.infrastructure.pg.SimulatedPgGateway;
+import com.stove.payment.adapter.pg.SimulatedPgGateway;
 import jakarta.persistence.EntityManager;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;

@@ -75,4 +75,11 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
                 .contains(first.partitionKey())
                 .doesNotContain(second.partitionKey());
     }
+    @Test
+    void unconfiguredInternalBuildKeyKeepsTheEndpointClosed() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Download-Service-Key", "any-key");
+        assertThat(http.exchange("/internal/v1/products/game/build", HttpMethod.GET,
+                new HttpEntity<>(headers), String.class).getStatusCode().value()).isEqualTo(401);
+    }
 }

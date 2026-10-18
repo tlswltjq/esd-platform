@@ -6,7 +6,7 @@ import com.stove.common.messaging.outbox.*;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.port.PgGateway;
-import com.stove.payment.infrastructure.pg.SimulatedPgGateway;
+import com.stove.payment.adapter.pg.SimulatedPgGateway;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;

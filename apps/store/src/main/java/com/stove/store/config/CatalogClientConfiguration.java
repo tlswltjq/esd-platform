@@ -1,6 +1,6 @@
 package com.stove.store.config;
 
-import com.stove.store.infrastructure.CatalogHttpClient;
+import com.stove.store.adapter.CatalogHttpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;

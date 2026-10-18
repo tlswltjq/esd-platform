@@ -1,6 +1,6 @@
 package com.stove.studio.config;
 
-import com.stove.studio.infrastructure.storage.S3BuildStorage;
+import com.stove.studio.adapter.storage.S3BuildStorage;
 import org.springframework.context.annotation.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import software.amazon.awssdk.auth.credentials.*;

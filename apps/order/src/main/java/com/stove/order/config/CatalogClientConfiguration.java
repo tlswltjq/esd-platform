@@ -1,6 +1,6 @@
 package com.stove.order.config;
 
-import com.stove.order.infrastructure.CatalogHttpClient;
+import com.stove.order.adapter.CatalogHttpClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;

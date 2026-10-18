@@ -55,7 +55,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **결정할 내용:** 릴리스 공개와 판매 시작을 항상 묶을지, 운영 판매 중지 사유를 새 공개 후에도 유지할지 정해야 한다. 판매 종료(`CLOSED`)가 필요하다면 재개 가능 여부와 기존 구매자의 다운로드 정책도 정의한다.
 
-**후속:** 판매 운영 정책을 합의한 뒤 상태 전이·테스트·운영 API를 별도 변경한다. 근거: Product(제거된 구 구현), ProductCommandService(제거된 구 구현), [DownloadTicketService](../../apps/download/src/main/java/com/stove/download/core/service/DownloadTicketService.java). 정의: [상품 판매 상태](models/catalog-store.md#product-status).
+**후속:** 판매 운영 정책을 합의한 뒤 상태 전이·테스트·운영 API를 별도 변경한다. 근거: Product(제거된 구 구현), ProductCommandService(제거된 구 구현), `DownloadTicketService`(제거된 구 Download 구현). 정의: [상품 판매 상태](models/catalog-store.md#product-status).
 
 <a id="q4"></a>
 
@@ -75,11 +75,13 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **2026-10-17 통합 정책:** 본인용 동일 상품은 한 번만 구매한다. Order가 같은 구매자·상품의 PENDING·PAID 추가 주문을 차단하고, 최종 FAILED 이후 새 요청만 허용한다. License는 완료 주문 하나의 출처와 상품별 영구 보유권을 한 엔티티에 보존한다. 선물·추가 수량·무료 지급·묶음·회수·다운로드 연계는 후속 범위다. [통합 범위](../license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획).
 
+**2026-10-18 Download MVP:** 별도 권한 사본을 두지 않고 사용자 JWT로 License 보유권을 조회한다. Catalog가 가리키는 현재 공개 전체 빌드를 같은 영구 보유권으로 제공하며 버전/플랫폼 선택·환불/회수는 후속 범위다. [범위·검증](../download-mvp-plan.md).
+
 **관찰(재작성 전):** DEMO 무료 청구와 BUNDLE 구성품 지급은 미지원이라 일반 판매가 막혀 있다([P2 명세](models/studio.md#game-project)). 주문 수량은 1 이상을 허용하고 같은 상품 항목의 반복도 견적에서 합산한다. License는 주문·상품별 한 건, Settlement는 주문·상품·기록 종류별 한 건을 저장한다. 정산은 가격·할인·수수료 사본이 같은 반복 항목의 수량·금액을 합산한다. Download는 회원·상품별 하나의 활성 문서와 한 주문번호를 보관한다. 회수 시 주문번호를 비교하지만 지급은 문서를 덮어쓴다.
 
 **결정할 내용:** 본인용 수량 1·동일 상품 추가 구매 차단은 결정했다. 후속 선물·좌석·양도에서는 구매자와 실제 수령인, 수량·권한의 관계를 어떻게 정의할 것인가? DEMO는 무료 이용권이 필요한가? BUNDLE·EDITION·DLC가 부모·구성품에 어떤 권한을 주며 환불 시 무엇을 회수하는가? 늦은 지급 이벤트를 포함한 순서 역전에서 사본의 권한을 어떻게 보존하는가?
 
-**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), `LicenseIssueEventTest`(재작성 전 테스트, 현재 제거됨)의 `duplicateProductLinesIssueSingleLicense`, [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [EntitlementService](../../apps/download/src/main/java/com/stove/download/core/service/EntitlementService.java), [DownloadEntitlementTest](../../apps/download/src/integrationTest/java/com/stove/download/core/service/DownloadEntitlementTest.java).
+**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), `LicenseIssueEventTest`(재작성 전 테스트, 현재 제거됨)의 `duplicateProductLinesIssueSingleLicense`, [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), `EntitlementService`(제거된 구 Download 구현), `DownloadEntitlementTest`(제거된 구 Download 구현).
 
 <a id="q6"></a>
 

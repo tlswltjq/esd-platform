@@ -4,6 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.stove.archfixture.adapterboundary.adapter.RemoteProductsClient;
+import com.stove.archfixture.adapterboundary.api.controller.DirectAdapterController;
+import com.stove.archfixture.adapterboundary.config.ProductsConfiguration;
+import com.stove.archfixture.adapterboundary.core.port.RemoteProducts;
+import com.stove.archfixture.adapterboundary.core.service.MisplacedProductsClient;
+import com.stove.archfixture.adapterboundary.core.service.ReadProduct;
+import com.stove.archfixture.adapterboundary.core.service.ReadProductViaAdapter;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
@@ -188,6 +195,60 @@ class ArchRuleEnforcementTest {
             assertThatThrownBy(() -> ModuleHygieneRules.스텁_어댑터는_격리한다.check(onlyThisOne))
                     .as("%s 는 규칙의 검사 대상에서 빠져 있다", simpleName)
                     .isInstanceOf(AssertionError.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("adapter 패키지 경계")
+    class AdapterBoundary {
+
+        private JavaClasses fixtures(Class<?>... types) {
+            JavaClasses classes = new ClassFileImporter().importClasses(types);
+            assertThat(classes).as("경계 검사 대상이 모두 있어야 한다").hasSize(types.length);
+            return classes;
+        }
+
+        @Test
+        void configAssemblesAdapterAndCoreUsesPort() {
+            JavaClasses classes = fixtures(RemoteProducts.class, RemoteProductsClient.class,
+                    ProductsConfiguration.class, ReadProduct.class);
+
+            ModulePackageRules.클래스는_규약_패키지에_위치한다.check(classes);
+            ModulePackageRules.포트_구현체는_adapter_에_둔다.check(classes);
+            ModulePackageRules.core_는_api_와_adapter_를_모른다.check(classes);
+            ModulePackageRules.계층_접근_방향.check(classes);
+        }
+
+        @Test
+        void portImplementationCannotLiveInCore() {
+            JavaClasses classes = fixtures(RemoteProducts.class, MisplacedProductsClient.class);
+
+            assertThatThrownBy(() -> ModulePackageRules.포트_구현체는_adapter_에_둔다.check(classes))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining(MisplacedProductsClient.class.getName());
+        }
+
+        @Test
+        void coreCannotDependOnAdapter() {
+            JavaClasses classes = fixtures(RemoteProducts.class, RemoteProductsClient.class,
+                    ReadProductViaAdapter.class);
+
+            assertThatThrownBy(() -> ModulePackageRules.core_는_api_와_adapter_를_모른다.check(classes))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining(ReadProductViaAdapter.class.getName());
+            assertThatThrownBy(() -> ModulePackageRules.계층_접근_방향.check(classes))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining(ReadProductViaAdapter.class.getName());
+        }
+
+        @Test
+        void controllerCannotBypassConfigAndPort() {
+            JavaClasses classes = fixtures(RemoteProducts.class, RemoteProductsClient.class,
+                    DirectAdapterController.class);
+
+            assertThatThrownBy(() -> ModulePackageRules.계층_접근_방향.check(classes))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining(DirectAdapterController.class.getName());
         }
     }
 

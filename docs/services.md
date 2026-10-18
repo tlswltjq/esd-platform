@@ -5,10 +5,10 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작성 현황 (2026-10-16): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment` 완료.**
+**모듈 재작성 현황 (2026-10-18): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
-Catalog·Store·Order·Payment의 범위와 OCI 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 여덟 모듈의 계약을 기준으로 한다.
+Catalog·Store·Order·Payment·License·Download의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열 모듈의 계약을 기준으로 한다.
 나머지 서비스 명세는 기존 구현의 참고 기록이며 현재 설계·검증 기준에서 제외한다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
@@ -23,7 +23,7 @@ Catalog·Store·Order·Payment의 범위와 OCI 결과는 각 MVP 완료 기록�
 | B | [order](#order) | 8082 | 주문 스냅샷·청구액·내 주문·결제 결과 | MySQL |
 | B | [payment](#payment) | 8083 | 확정 주문 결제·미확정 재개·결과 발행 | MySQL |
 | C | [license](#license) | 8084 | 상품 이용 권한·구매 근거·내 라이브러리 | MySQL |
-| C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
+| C | [download](#download) | 8088 | 보유권·현재 공개 빌드 확인, 전체 ZIP 서명 URL | 없음 |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
 | — | [gateway](#gateway) | 8080 | 라우팅·BFF 로그인·세션·토큰 관리, 내부 API 차단 | Redis |
 
@@ -222,32 +222,27 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 - MEMBER JWT가 필요하다. 본문·쿼리·헤더의 회원 ID로 소유자를 바꾸지 않는다.
 - 구 License Outbox 릴레이와 운영 HTTP는 비활성화한다. 지급 실패는 공통 재시도·DLT로 남기며 자동 환불을 요청하지 않는다.
 - 기존 마이그레이션과 구 자료를 보존하고 V5에서 출처를 권한에 통합한다. license_purchase는 과거 자료로만 남긴다. 기존 PAID 주문의 자동 소급 지급은 없다.
-- 환불·회수·Download 연계는 후속 범위다.
+- 환불·회수는 후속 범위다. Download는 기존 내 라이브러리 상세 API로 보유권을 확인한다.
 
 ---
 
 ## download
 
-배포와 다운로드. **license 를 동기 호출하지 않는다.**
+본인의 상품 보유권과 현재 공개 빌드를 조회해 전체 ZIP의 만료 URL을 발급한다.
+업무 DB·MongoDB·Kafka·보유권/공개본 사본은 사용하지 않는다. [범위·검증](download-mvp-plan.md) · [실행](download-guide.md)
 
-**HTTP API**
-
-| 메서드 | 경로 | 설명 |
+| 메서드 | 경로 | 응답 |
 |---|---|---|
-| GET | `/api/v1/downloads/{productCode}/ticket` | 다운로드 인증 → CDN 서명 URL |
-| GET | `/api/v1/downloads/{productCode}/manifests` | 버전 목록(패치 이력) |
+| GET | `/api/v1/downloads/{productCode}/ticket` | productCode·version·fileSize·checksum·downloadUrl·expiresAt |
 
-**이벤트** — 수신 `ReleasePublished`·`ProductChanged`·`LicenseIssued`·`LicenseRevoked` / 발행 없음
-
-**규칙**
-
-- 소유 여부는 이벤트로 받아둔 **권한 사본**(`Entitlement`)으로 판정한다.
-  다운로드는 트래픽이 가장 크고, license 장애가 다운로드 장애로 번지면 안 되기 때문.
-- 미보유 상품 요청은 403.
-- 서명 URL 은 `DownloadUrlSigner` 포트로 발급한다. 짧은 수명의 토큰을 만들어
-  **인증을 CDN 엣지에서 끝내고** 원본 서버가 매 요청을 인증하지 않게 한다.
-- 문서 ID를 고정해 중복 반영 시 문서가 늘어나지 않는다. 보유권 회수는 출처 주문번호도 대조한다.
-  이 방식이 모든 순서 역전을 해결하는 것은 아니며, 반복 구매·늦은 지급의 의미는 [Q5](domain/open-questions.md#q5)를 참고한다.
+- MEMBER·유효 JWT의 sub로 본인을 식별하고 같은 사용자 토큰으로 License 상세를 조회한다.
+- Catalog의 `/internal/v1/products/{productCode}/build`는 전용 서비스 키로만 조회한다. Gateway·공개 OpenAPI에는 노출하지 않는다.
+- License·Catalog의 상품 ID·코드를 대조하고, 현재 COMPLETED 공개본의 전체 빌드만 사용한다.
+- 저장소 HEAD로 객체·크기를 확인한 뒤 해당 파일의 GET URL을 발급한다. 기본 TTL 5분, 허용 범위 1초~15분이다.
+- 응답은 no-store다. 쿼리·과거 버전·플랫폼·델타 선택·manifests API는 제공하지 않는다.
+- 미보유/지급 전 403, 현재 공개 상품 없음 404, 파일 누락/크기 불일치 409, 연계 장애/응답 불일치 503이다.
+- URL은 만료 전 반복 사용·공유가 가능하다. License 보유권과 URL 유효기간을 구분한다.
+- 외부 이벤트 수신·발행은 없으며 발급·실패·재시작이 주문·보유권·공개본을 변경하지 않는다.
 
 ---
 
@@ -365,14 +360,14 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 
 ## 외부 연동 대역
 
-외부 시스템은 전부 `core/port` 뒤에 있고, 구현체는 `infrastructure/` 에 있다.
+업무용 외부 기능의 계약은 `core/port`에 있고, 다른 서비스의 HTTP 호출·S3·PG 구현체는 `adapter/`에 있다. Auth의 프레임워크 SPI 구현도 `adapter/`에 두며 객체 조립은 `config`가 담당한다.
 **어느 것이 실제 동작이고 어느 것이 흉내인지** 여기서 구분한다.
 
 | 포트 | 스텁 | 실제 어댑터 | 선택 방법 |
 |---|---|---|---|
 | `BuildStorage` (studio) | — | **`S3BuildStorage`** | `stove.storage.provider` = `s3` |
 | `ReviewBuildStorage` (review) | — | **`S3ReviewBuildStorage`** | 읽기 전용 S3/MinIO 계정 |
-| `DownloadUrlSigner` (download) | — | **`CdnUrlSigner`**, **`S3PresignedUrlSigner`** | `stove.download.url-strategy` = `cdn`(기본) / `s3` |
+| `BuildStorage` (download) | — | **`S3BuildStorage`** | 읽기 전용 S3/MinIO HEAD·presigned GET |
 | `PgGateway` (payment) | `SimulatedPgGateway` | 없음 | `stove.payment.pg-provider=simulated` |
 | `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 | — |
 
@@ -381,14 +376,8 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 **`S3BuildStorage` / `S3ReviewBuildStorage`** — Studio가 전체 ZIP·썸네일을 임시 디스크에서 검사한 뒤 S3/MinIO에 저장한다.
 Review는 제출 스냅샷의 객체 존재·크기를 확인하고 심사자에게 GET 서명 URL을 발급한다.
 실제 MinIO 다운로드·SHA-256·만료와 읽기 전용 계정의 업로드·삭제 거절을 검증했다.
-Download의 `S3PresignedUrlSigner`는 미완료 모듈의 기존 구현 참고다.
-
-**`CdnUrlSigner`** — HMAC-SHA256 서명을 실제로 계산한다. 경로·회원·만료시각을 묶어
-서명하는 구조는 CloudFront 서명 URL 과 같다. 다만 **검증하는 CDN 엣지가 없어 반쪽**이다.
-서명 키 기본값 `local-dev-signing-key` 는 운영에서 반드시 교체해야 한다.
-
-`DownloadUrlSigner` 에 어댑터가 둘인 것은 실제 운영 형태를 반영한 것이다 —
-**S3 에 저장하고 CDN 으로 배포**하므로 저장 위치와 배포 경로는 독립적으로 고른다.
+Download의 `S3BuildStorage`도 읽기 전용 계정으로 HEAD·presigned GET을 사용한다.
+CDN 전략·자체 HMAC 토큰·파일 중계는 제공하지 않는다.
 
 ### 흉내만 내는 것
 
@@ -412,9 +401,8 @@ Payment의 공급자 응답 유실과 결과 저장 실패는 테스트 전용 �
 `prod` 로 띄우면 스텁이 빠지고, 실제 어댑터가 없으면 **"no qualifying bean" 으로 기동이 실패한다.**
 운영에서 스텁이 조용히 도는 것만은 일어나지 않게 하려는 의도다.
 
-교체 대상이 이미 둘인 `BuildStorage` 와 `DownloadUrlSigner` 는 `@ConditionalOnProperty` 로
-한쪽만 활성화된다. 같은 포트에 빈이 둘이 되면 기동이 실패하므로, 새 어댑터를 붙일 때는
-반드시 조건을 함께 건다.
+Studio의 저장소 선택은 기존 설정을 사용한다. Review·Download는 읽기 전용 S3/MinIO 어댑터 한 개를 조립한다.
+Download의 구 CDN/S3 이중 전략은 제거했다. 향후 같은 포트에 다른 구현을 추가하면 활성 구현을 명시적으로 선택해야 한다.
 
 이 "반드시" 는 사람에게 거는 기대가 아니다 — ArchUnit 이 검사한다.
 `Mock*`/`Stub*`/`Fake*` 로 시작하는 어댑터에 `@Profile` 이나 `@ConditionalOnProperty` 가

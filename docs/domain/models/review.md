@@ -57,7 +57,7 @@ V1~V9의 SQL 이력은 유지하고 V10에서 새 테이블을 추가했다.
 [도메인 규칙](../../../apps/review/src/test/java/com/stove/review/core/domain/ProjectReviewTest.java),
 [권한·응답 계약](../../../apps/review/src/test/java/com/stove/review/api/controller/ReviewAccessTest.java),
 [실제 DB·Kafka 판정 흐름](../../../apps/review/src/integrationTest/java/com/stove/review/core/service/ProjectReviewIntegrationTest.java),
-[빌드 열람](../../../apps/review/src/integrationTest/java/com/stove/review/infrastructure/storage/ReviewBuildDownloadIntegrationTest.java),
+[빌드 열람](../../../apps/review/src/integrationTest/java/com/stove/review/adapter/storage/ReviewBuildDownloadIntegrationTest.java),
 [네 모듈 인수 검증](../../../e2e/src/test/java/com/stove/e2e/ReviewCreatorFlowTest.java)을 기준으로 한다.
 
 ## 보존된 구 자료

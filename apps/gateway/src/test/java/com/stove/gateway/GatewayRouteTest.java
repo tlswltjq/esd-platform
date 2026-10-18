@@ -166,4 +166,8 @@ class GatewayRouteTest {
         assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/order/actuator/env")).isNull();
         assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/unknown")).isNull();
     }
+    @Test
+    void catalogBuildMetadataCannotBeRoutedThroughTheGateway() {
+        assertThat(matchedRouteId(HttpMethod.GET, "/internal/v1/products/game/build")).isNull();
+    }
 }

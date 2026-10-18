@@ -90,7 +90,7 @@ Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 �
 
 ## SimulatedPgGateway — 공급자 결정 대역
 
-[어댑터](../../../apps/payment/src/main/java/com/stove/payment/infrastructure/pg/SimulatedPgGateway.java)는 JDBC로 `simulated_payment_charge`에 결정 한 건을 독립 커밋한다.
+[어댑터](../../../apps/payment/src/main/java/com/stove/payment/adapter/pg/SimulatedPgGateway.java)는 JDBC로 `simulated_payment_charge`에 결정 한 건을 독립 커밋한다.
 Payment 업무 엔티티·저장소를 사용하지 않는다. 키·주문·청구액·통화·거래 ID·결정 시각·APPROVED/DECLINED·거절 사유를 보존한다.
 같은 키와 입력이면 최초 결정을 반환하고 다른 주문·금액이면 거부한다. 설정을 바꿔도 기존 결정을 바꾸지 않는다.
 

@@ -15,129 +15,9 @@
         },
         "type" : "object"
       },
-      "ApiResponseListDltRecordResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DltRecordResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListManifestResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ManifestResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseReplayedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ReplayedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ArtifactResponse" : {
-        "properties" : {
-          "architecture" : {
-            "type" : "string"
-          },
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "checksum" : {
-            "type" : "string"
-          },
-          "deltaFromVersion" : {
-            "type" : "string"
-          },
-          "fileSize" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "platform" : {
-            "type" : "string"
-          },
-          "version" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "DltRecordResponse" : {
-        "properties" : {
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "exception" : {
-            "type" : "string"
-          },
-          "key" : {
-            "type" : "string"
-          },
-          "offset" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "originalTopic" : {
-            "type" : "string"
-          },
-          "partition" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "DownloadTicketResponse" : {
         "properties" : {
-          "architecture" : {
-            "type" : "string"
-          },
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
           "checksum" : {
-            "type" : "string"
-          },
-          "deltaFromVersion" : {
             "type" : "string"
           },
           "downloadUrl" : {
@@ -151,15 +31,8 @@
             "format" : "int64",
             "type" : "integer"
           },
-          "platform" : {
-            "type" : "string"
-          },
           "productCode" : {
             "type" : "string"
-          },
-          "releaseId" : {
-            "format" : "int64",
-            "type" : "integer"
           },
           "version" : {
             "type" : "string"
@@ -174,55 +47,6 @@
           },
           "message" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "ManifestResponse" : {
-        "properties" : {
-          "buildId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "buildVariants" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ArtifactResponse"
-            },
-            "type" : "array"
-          },
-          "checksum" : {
-            "type" : "string"
-          },
-          "fileSize" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "metadataRevision" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "productCode" : {
-            "type" : "string"
-          },
-          "releaseId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "releasedAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "version" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "ReplayedCount" : {
-        "properties" : {
-          "replayed" : {
-            "format" : "int32",
-            "type" : "integer"
           }
         },
         "type" : "object"
@@ -254,35 +78,6 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
-    "/api/v1/downloads/{productCode}/manifests" : {
-      "get" : {
-        "operationId" : "manifests",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "productCode",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListManifestResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "download-controller" ]
-      }
-    },
     "/api/v1/downloads/{productCode}/ticket" : {
       "get" : {
         "operationId" : "ticket",
@@ -290,27 +85,6 @@
           "in" : "path",
           "name" : "productCode",
           "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "platform",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "architecture",
-          "required" : false,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "fromVersion",
-          "required" : false,
           "schema" : {
             "type" : "string"
           }
@@ -331,76 +105,6 @@
           "oauth2" : [ "commerce" ]
         } ],
         "tags" : [ "download-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt" : {
-      "get" : {
-        "operationId" : "peek",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 20,
-            "format" : "int32",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt/replay" : {
-      "post" : {
-        "operationId" : "replay",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 100,
-            "format" : "int32",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
       }
     }
   }

@@ -1,48 +1,34 @@
 package com.stove.download.api.controller;
 
+import com.stove.common.security.CurrentSubject;
+import com.stove.common.web.error.*;
 import com.stove.common.web.response.ApiResponse;
-import com.stove.common.security.CurrentMemberId;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import com.stove.download.api.controller.dto.DownloadTicketResponse;
-import com.stove.download.api.controller.dto.ManifestResponse;
-import com.stove.download.core.domain.DownloadTicket;
-import com.stove.download.core.service.DownloadTicketService;
-import com.stove.download.core.service.ManifestService;
-import java.util.List;
+import com.stove.download.core.domain.DownloadRequest;
+import com.stove.download.core.service.ReadBuildDownload;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.Parameter;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/downloads")
+@SecurityRequirement(name = "oauth2", scopes = "commerce")
 public class DownloadController {
+    private final ReadBuildDownload readBuildDownload;
 
-    private final DownloadTicketService downloadTicketService;
-    private final ManifestService manifestService;
-
-    /** 다운로드 인증 → CDN 서명 URL 발급 (미보유 시 403) */
     @GetMapping("/{productCode}/ticket")
-    public ApiResponse<DownloadTicketResponse> ticket(@PathVariable String productCode,
-                                                      @CurrentMemberId Long memberId,
-                                                      @RequestParam(required = false) String platform,
-                                                      @RequestParam(required = false) String architecture,
-                                                      @RequestParam(required = false) String fromVersion) {
-        DownloadTicket ticket = platform == null && architecture == null && fromVersion == null
-                ? downloadTicketService.issue(productCode, memberId)
-                : downloadTicketService.issue(productCode, memberId, platform, architecture, fromVersion);
-        return ApiResponse.ok(DownloadTicketResponse.from(ticket));
-    }
-
-    /** 버전 목록(패치 이력) */
-    @GetMapping("/{productCode}/manifests")
-    public ApiResponse<List<ManifestResponse>> manifests(@PathVariable String productCode) {
-        return ApiResponse.ok(manifestService.history(productCode).stream()
-                .map(ManifestResponse::from)
-                .toList());
+    public ResponseEntity<ApiResponse<DownloadTicketResponse>> ticket(@PathVariable String productCode,
+            @CurrentSubject String buyer, @AuthenticationPrincipal Jwt jwt,
+            @Parameter(hidden = true) @RequestParam Map<String, String> parameters) {
+        if (!parameters.isEmpty()) throw new BusinessException(ErrorCode.INVALID_REQUEST, "쿼리 입력을 지원하지 않습니다.");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(
+                DownloadTicketResponse.from(readBuildDownload.execute(
+                        new DownloadRequest(buyer, productCode), jwt.getTokenValue()))));
     }
 }

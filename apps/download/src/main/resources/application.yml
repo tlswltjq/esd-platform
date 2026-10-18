@@ -17,46 +17,25 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
-  data:
-    mongodb:
-      uri: ${MONGO_URI:mongodb://localhost:27017/stove_download}
-      auto-index-creation: true
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
-    # 이 서비스는 도메인 이벤트를 발행하지 않는다. 프로듀서 설정이 있는 이유는 **DLT 뿐이다** —
-    # 재시도를 소진한 메시지를 <원본토픽>.DLT 로 넘기는 것도 발행이라, 직렬화가 없으면 그 순간 터진다.
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all
-    consumer:
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-    listener:
-      ack-mode: record
-      # 헤더의 traceparent 를 이어받아 리스너 처리를 발행 측과 같은 트레이스에 붙인다.
-      # 끄면 카프카를 건널 때마다 트레이스가 새로 시작돼 흐름이 조각난다.
-      observation-enabled: true
-
 stove:
-  # 다운로드 URL 발급 전략. cdn = 자체 HMAC 토큰, s3 = 스토리지 presigned GET
+  messaging:
+    ops:
+      enabled: false
   download:
-    url-strategy: ${DOWNLOAD_URL_STRATEGY:cdn}
-
-  storage:
-    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
-    presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:${STORAGE_ENDPOINT:http://localhost:9000}}
-    access-key: ${STORAGE_ACCESS_KEY:stove}
-    secret-key: ${STORAGE_SECRET_KEY:stove1234}
-    presign-ttl: 10m
-
-  cdn:
-    base-url: https://cdn.stove.local
-    signing-key: ${CDN_SIGNING_KEY:local-dev-signing-key}
-    ttl: 10m
+    license-base-url: ${LICENSE_BASE_URL:}
+    catalog-base-url: ${CATALOG_BASE_URL:}
+    catalog-service-key: ${CATALOG_DOWNLOAD_SERVICE_KEY:}
+    connect-timeout: 2s
+    read-timeout: 5s
+  download-storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:}
+    region: ${STORAGE_REGION:us-east-1}
+    bucket: ${STORAGE_BUCKET:}
+    access-key: ${DOWNLOAD_STORAGE_ACCESS_KEY:}
+    secret-key: ${DOWNLOAD_STORAGE_SECRET_KEY:}
+    presign-ttl: ${DOWNLOAD_BUILD_URL_TTL:PT5M}
+    call-timeout: 5s
 
 management:
   endpoints.web.exposure.include: health,info,prometheus,metrics

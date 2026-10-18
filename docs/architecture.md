@@ -6,16 +6,17 @@
 
 ## 서비스 경계와 저장소
 
-재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
+재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
 
 Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 관리하고 Store는 공개 상품의 검색·조회 사본을 관리한다.
 Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다. Payment는 확정 주문의 결제 접수·PG 호출·미확정 재개·결과 발행을 담당한다.
 License는 OrderPaid를 근거로 상품 보유권·주문별 구매 근거와 내 라이브러리를 관리한다.
-나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
+Download는 License 보유권·Catalog 현재 공개 빌드를 HTTP로 확인하고 전체 ZIP의 S3/MinIO 만료 URL을 발급한다. DB·보유권 사본·Kafka 없이 요청마다 조회하며 연계 장애 중 새 발급은 실패한다.
+Settlement는 재작성 미완료이며 기존 정산 원장 구현은 새 설계·검증의 기준으로 삼지 않는다.
 
-MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 MongoDB 등은 미완료 모듈의 기존 조회 저장소다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
+MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 구 MongoDB 자료는 보존하지만 새 업무에서는 읽거나 쓰지 않는다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
-일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `infrastructure`는 외부 시스템 어댑터를 담는다. 외부 PG·저장소·심사·세금계산서 연동은 포트 구현을 교체한다. 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
+일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `adapter`는 다른 업무 서비스의 HTTP 호출·S3·PG·프레임워크 연동 구현을 담는다. `core.service → core.port ← adapter`의 의존 방향을 유지하며 구현체의 외부 조립은 `config`가 맡는다. 기존 하위 패키지를 유지한 명칭 변경은 [변경 기록](adapter-package-rename-plan.md)을 따른다. 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
 
 환경변수·YAML 바인딩과 객체 조립은 config에서 담당한다. 서비스·도메인·어댑터는 필요한 값과 구성된 클라이언트를 받으며 Properties를 참조하지 않는다.
 공통 라이브러리의 AutoConfiguration도 같은 조립 경계다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)과 [전역 적용 기록](core-boundary-audit.md#설정-바인딩과-내부-입력-경계-개선)을 따른다.
@@ -384,6 +385,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 
 **[확인됨 — kafka-clients 기본값, OCI 브로커]** 배정 전략을 정하지 않아 `RangeAssignor` 가 선택되고(원격 브로커에서 조회한 그룹이 모두 `range`), static membership 도 없다(`group.instance.id = null`, 실행 중인 앱 로그).
 배포·재시작마다 그룹 전체가 파티션을 내려놓았다 다시 받는다. payment(리스너 2)와 download(리스너 3)는 리스너 하나의 재시작이 같은 그룹의 다른 토픽 소비까지 멈춘다.
+이 리스너 수는 당시 관측값이다. 2026-10-18 Download 재작업에서는 Kafka 소비를 제거했다.
 중복은 Inbox 가 흡수하므로 정확성 문제는 아니고, **정지 시간과 재처리량**의 문제다.
 
 **[권장 개선안]** `partition.assignment.strategy=CooperativeStickyAssignor`, 롤링 배포가 잦으면 `group.instance.id`.

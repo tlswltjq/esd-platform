@@ -28,7 +28,7 @@ public final class ModulePackageRules {
     private static final String CONTROLLER = "..api.controller..";
     private static final String LISTENER = "..api.listener..";
     private static final String SCHEDULER = "..api.scheduler..";
-    private static final String INFRASTRUCTURE = "..infrastructure..";
+    private static final String ADAPTER = "..adapter..";
     private static final String CONFIG = "..config..";
 
     private static final String CONFIGURATION_PROPERTIES =
@@ -49,9 +49,9 @@ public final class ModulePackageRules {
             .should().resideInAnyPackage(
                     DOMAIN, CORE_PORT, CORE_SERVICE,
                     APPLICATION, CONTROLLER, LISTENER, SCHEDULER,
-                    INFRASTRUCTURE, CONFIG)
+                    ADAPTER, CONFIG)
             .orShould().haveSimpleNameEndingWith("Application")
-            .because("core/api/infrastructure/config 규약 밖의 패키지는 만들지 않는다")
+            .because("core/api/adapter/config 규약 밖의 패키지는 만들지 않는다")
             .allowEmptyShould(true);
 
     /** 계층 간 접근 방향. */
@@ -64,22 +64,22 @@ public final class ModulePackageRules {
             .optionalLayer("CoreService").definedBy(CORE_SERVICE)
             .optionalLayer("Application").definedBy(APPLICATION)
             .optionalLayer("Inbound").definedBy(CONTROLLER, LISTENER, SCHEDULER)
-            .optionalLayer("Infrastructure").definedBy(INFRASTRUCTURE)
+            .optionalLayer("Adapter").definedBy(ADAPTER)
             .optionalLayer("Config").definedBy(CONFIG)
 
             .whereLayer("Inbound").mayNotBeAccessedByAnyLayer()
-            .whereLayer("Infrastructure").mayOnlyBeAccessedByLayers("Config")
+            .whereLayer("Adapter").mayOnlyBeAccessedByLayers("Config")
             .whereLayer("Application").mayOnlyBeAccessedByLayers("Inbound", "Config")
             .whereLayer("CoreService").mayOnlyBeAccessedByLayers("Inbound", "Application", "Config")
             .whereLayer("CorePort").mayOnlyBeAccessedByLayers(
-                    "CoreService", "Application", "Infrastructure", "Config");
+                    "CoreService", "Application", "Adapter", "Config");
 
     /** core 는 바깥을 모른다. 이 규칙 하나가 무너지면 나머지 구조는 의미가 없다. */
     @ArchTest
-    public static final ArchRule core_는_api_와_infrastructure_를_모른다 = noClasses()
+    public static final ArchRule core_는_api_와_adapter_를_모른다 = noClasses()
             .that().resideInAPackage("..core..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "com.stove..api..", "com.stove..infrastructure..", "com.stove..config..")
+                    "com.stove..api..", "com.stove..adapter..", "com.stove..config..")
             .because("core 는 단일 도메인의 지식만 가진다 — 응답 DTO 나 어댑터를 알면 재사용 단위가 깨진다")
             .allowEmptyShould(true);
 
@@ -112,10 +112,10 @@ public final class ModulePackageRules {
 
     /** 포트 구현체는 언제나 같은 모듈의 아웃바운드 어댑터다(결정 1). */
     @ArchTest
-    public static final ArchRule 포트_구현체는_infrastructure_에_둔다 = classes()
+    public static final ArchRule 포트_구현체는_adapter_에_둔다 = classes()
             .that().areNotInterfaces()
             .and().areAssignableTo(PORT_INTERFACE)
-            .should().resideInAPackage(INFRASTRUCTURE)
+            .should().resideInAPackage(ADAPTER)
             .allowEmptyShould(true);
 
     @ArchTest

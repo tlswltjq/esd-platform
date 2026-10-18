@@ -16,7 +16,6 @@ x-common-env: &common-env
   REDIS_PORT: "6379"
   KAFKA_BROKERS: kafka:19092
   ES_URIS: http://elasticsearch:9200
-  MONGO_URI: mongodb://mongodb:27017/stove_download
   # 컨테이너 안에서는 localhost 기본값이 자기 자신을 가리키므로 수집기 주소를 명시한다.
   OTLP_ENDPOINT: http://tempo:4318/v1/traces
   JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
@@ -112,6 +111,7 @@ services:
     environment:
       <<: *common-env
       STUDIO_URI: http://studio:8085
+      CATALOG_DOWNLOAD_SERVICE_KEY: ${CATALOG_DOWNLOAD_SERVICE_KEY:-}
 
   store:
     <<: *app
@@ -152,12 +152,18 @@ services:
     image: stove/download
     expose: ["8088"]
     environment:
-      <<: *common-env
-      DOWNLOAD_URL_STRATEGY: s3
+      JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
+      JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      LICENSE_BASE_URL: http://license:8084
+      CATALOG_BASE_URL: http://catalog:8081
+      CATALOG_DOWNLOAD_SERVICE_KEY: ${CATALOG_DOWNLOAD_SERVICE_KEY:-}
       STORAGE_ENDPOINT: http://minio:9000
-      STORAGE_PRESIGN_ENDPOINT: http://localhost:9000
-      STORAGE_ACCESS_KEY: stove
-      STORAGE_SECRET_KEY: stove1234
+      STORAGE_PRESIGN_ENDPOINT: ${STORAGE_PRESIGN_ENDPOINT:-http://127.0.0.1:19000}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-stove-builds}
+      DOWNLOAD_STORAGE_ACCESS_KEY: ${DOWNLOAD_STORAGE_ACCESS_KEY:-}
+      DOWNLOAD_STORAGE_SECRET_KEY: ${DOWNLOAD_STORAGE_SECRET_KEY:-}
+      DOWNLOAD_BUILD_URL_TTL: ${DOWNLOAD_BUILD_URL_TTL:-PT5M}
 
   settlement:
     <<: *app

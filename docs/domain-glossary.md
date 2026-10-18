@@ -59,8 +59,8 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 상품·진열 | 상품 가격·판매 상태, 구매자에게 보이는 상품 정보 | catalog, store | Catalog가 원본을 소유하고 Store가 검색·진열 사본을 유지. 창작 프로젝트와는 `productCode`로 연결 |
 | 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 공개 상세의 상품·정가를 주문에 고정하고 OrderPlaced 발행 |
 | 대금 처리 | 확정 주문의 결제·결과 발행 | payment | Order가 결과 반영·OrderPaid 발행, License가 권한 부여. 정산은 후속 |
-| 이용 권한 | 상품별 보유권과 주문별 구매 근거 | license | 내 라이브러리 조회. Download 연계는 후속 |
-| 파일 배포 | 공개 파일·변형 선택, 접근 판정, 다운로드 티켓 | download | 릴리스·상품 참조·보유권 사본을 조합해 접근 판정 |
+| 이용 권한 | 상품별 보유권과 주문별 구매 근거 | license | 내 라이브러리 조회와 Download의 보유권 확인 |
+| 파일 배포 | 보유 상품의 현재 공개 전체 빌드 접근 | download | License·Catalog 조회 후 저장소 파일 확인·만료 URL 발급 |
 | 판매자 정산 | 매출·환불 원장, 수수료, 월 마감 | settlement | 결제 항목을 원장으로 번역. 상품의 현재 가격으로 과거 매출을 다시 계산하지 않음 |
 
 Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소유자로 직접 저장한다. Workspace와 sellerId 연결은 제거했다. 다른 모듈의 판매자 관계는 미완료 구현의 참고 기록이다. 인증 계약은 [커머스 인증 문서](security.md)를 참고한다.
@@ -108,18 +108,18 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 | `productCode` | 창작자가 지정하고 Studio에서 중복 검사하는 상품 코드 | Studio→Catalog→Store/Download의 공통 연결 값. Download URL에서도 사용 |
 | `productId` | Catalog의 상품 ID | 주문 항목·이용권·정산 원장, Download 보유권 조회 |
 | `submissionId` | Studio의 심사 제출물 ID | Review 스냅샷·사건과 Studio 관문의 연결 |
-| `releaseId`, `buildId` | Studio의 공개 단위 / 파일 산출물 ID | 상품의 현재 릴리스와 Download 매니페스트 일치 확인 |
+| `releaseRequestId`, `buildId` | Studio 출시 요청을 재사용한 Catalog 공개본 ID / 전체 빌드 ID | Download가 Catalog 현재 공개 스냅샷에서 조회 |
 | `orderNo` | Order가 발급하는 주문번호 | 결제·이용권·정산을 연결. 각 서비스의 DB 기본 키와 별개 |
 | `memberId` | Auth 회원 ID | 구 외부 업무의 숫자 연결 값. 현재 Order·Payment·License의 구매자는 JWT sub |
 | `ownerSubject` | 현재 Studio Project 소유자 | 완료된 Auth가 발급한 JWT sub. Workspace·sellerId와 별도 매핑하지 않음 |
 
-예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. [ProductRef](../apps/download/src/main/java/com/stove/download/core/domain/ProductRef.java)가 코드와 상품 ID·릴리스 ID의 관계를 보관한다.
+예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. Download는 License·Catalog가 반환한 상품 코드·ID를 대조하며 현재 공개본은 Catalog가 결정한다.
 
 <a id="source-and-copy"></a>
 
 ### 이용권 원본과 보유권 사본
 
-License는 `(buyerSubject, productId)`별 보유권 한 개와 완료 주문 하나의 출처를 한 행에 보존한다. 같은 상품의 PENDING·PAID 중복 주문은 Order가 차단한다. Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. Entitlement는 미완료 Download의 구 사본 모델이며 새 연계 방식은 Download 단계에서 정한다. [현재 모델](domain/models/fulfillment.md#license) · [Q5](domain/open-questions.md#q5).
+License는 `(buyerSubject, productId)`별 보유권 한 개와 완료 주문 하나의 출처를 한 행에 보존한다. 같은 상품의 PENDING·PAID 중복 주문은 Order가 차단한다. Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. Entitlement 사본은 Download에서 제거했다. 현재는 사용자 JWT로 License를 동기 조회한다. [현재 모델](domain/models/fulfillment.md#license) · [Q5](domain/open-questions.md#q5).
 
 ## 짧은 용어와 권장 동사
 
@@ -135,7 +135,7 @@ License는 `(buyerSubject, productId)`별 보유권 한 개와 완료 주문 하
 | 심사 스냅샷 / Submission Snapshot | 구 SubmissionSnapshot은 제거됐다. 현재 Review는 ProjectReviewRequested의 불변 ProjectSnapshot을 ProjectReview에 보존한다. [현재 모델](domain/models/review.md) |
 | 상점 공개 사본 / Storefront Snapshot | LIVE 릴리스의 소개·이미지·요구 사양을 전달하는 사본. [StorefrontSnapshot](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/StorefrontSnapshot.java) |
 | 검색 문서 / Product Document | 현재 Store의 MySQL 조회 사본은 StoreProduct이며 contentVersion으로 신구를 판단한다. [StoreProduct](../apps/store/src/main/java/com/stove/store/core/domain/StoreProduct.java) |
-| 패치 매니페스트 / Patch Manifest | Download가 릴리스에서 투영한 배포 파일 정보 |
+| 패치 매니페스트 / Patch Manifest | 구 Download의 배포 파일 사본. 현재 MVP에서 제거하고 Catalog 현재 공개 빌드를 조회 |
 | 다운로드 티켓 / Download Ticket | 권한 확인 뒤 발급하는 만료 시각이 있는 서명 URL과 파일 정보 |
 | 등록한다 / register | “프로젝트를 등록한다”, “빌드를 등록한다”처럼 대상 명시 |
 | 확정한다 / finalize | “상점 자료를 확정한다.” 이후 변경은 새 이력으로 작성 |

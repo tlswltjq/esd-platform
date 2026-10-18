@@ -1,6 +1,6 @@
 package com.stove.review.config;
 
-import com.stove.review.infrastructure.storage.S3ReviewBuildStorage;
+import com.stove.review.adapter.storage.S3ReviewBuildStorage;
 import org.springframework.context.annotation.*;
 import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.regions.Region;

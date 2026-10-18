@@ -1,28 +1,32 @@
 package com.stove.download.config;
 
+import java.net.URI;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * 오브젝트 스토리지 접속 설정. studio 가 빌드를 올려둔 그 버킷을 읽는다.
- *
- * @param presignTtl 발급한 다운로드 URL 의 유효 시간. 짧게 유지해 링크 공유를 막는다.
- */
-@ConfigurationProperties(prefix = "stove.storage")
-public record ObjectStorageProperties(
-        String endpoint,
-        String presignEndpoint,
-        String region,
-        String accessKey,
-        String secretKey,
-        Duration presignTtl
-) {
+@ConfigurationProperties(prefix = "stove.download-storage")
+public record ObjectStorageProperties(String endpoint, String presignEndpoint, String region,
+        String accessKey, String secretKey, String bucket, Duration presignTtl, Duration callTimeout) {
     public ObjectStorageProperties {
         region = region == null ? "us-east-1" : region;
-        presignTtl = presignTtl == null ? Duration.ofMinutes(10) : presignTtl;
+        presignTtl = presignTtl == null ? Duration.ofMinutes(5) : presignTtl;
+        callTimeout = callTimeout == null ? Duration.ofSeconds(5) : callTimeout;
+        if (accessKey == null || accessKey.isBlank() || secretKey == null || secretKey.isBlank()
+                || bucket == null || bucket.isBlank() || region.isBlank())
+            throw new IllegalArgumentException("Download requires explicit read-only storage credentials and a bucket");
+        if (presignTtl.compareTo(Duration.ofSeconds(1)) < 0 || presignTtl.compareTo(Duration.ofMinutes(15)) > 0
+                || callTimeout.isNegative() || callTimeout.isZero())
+            throw new IllegalArgumentException("Invalid storage timeout or URL lifetime");
+        requireEndpoint(endpoint);
+        requireEndpoint(presignEndpoint);
     }
 
-    public boolean pathStyleRequired() {
-        return endpoint != null && !endpoint.isBlank();
+    private static void requireEndpoint(String value) {
+        if (value == null || value.isBlank()) return;
+        URI uri = URI.create(value);
+        if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) || uri.getHost() == null
+                || uri.getUserInfo() != null || uri.getRawQuery() != null || uri.getRawFragment() != null
+                || (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath())))
+            throw new IllegalArgumentException("Invalid storage endpoint");
     }
 }

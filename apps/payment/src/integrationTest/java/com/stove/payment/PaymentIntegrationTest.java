@@ -14,7 +14,7 @@ import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.*;
 import com.stove.payment.core.service.*;
-import com.stove.payment.infrastructure.pg.*;
+import com.stove.payment.adapter.pg.*;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;

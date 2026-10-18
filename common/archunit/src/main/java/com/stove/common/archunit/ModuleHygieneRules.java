@@ -24,7 +24,7 @@ public final class ModuleHygieneRules {
     private static final String CONTROLLER = "..api.controller..";
     private static final String LISTENER = "..api.listener..";
     private static final String SCHEDULER = "..api.scheduler..";
-    private static final String INFRASTRUCTURE = "..infrastructure..";
+    private static final String ADAPTER = "..adapter..";
 
     private static final String TRANSACTIONAL =
             "org.springframework.transaction.annotation.Transactional";
@@ -102,7 +102,7 @@ public final class ModuleHygieneRules {
                     // 술어를 명시적으로 묶는다 — 유창한 .and()/.or() 는 우선순위 없이 왼쪽부터
                     // 결합해 검사 대상이 조용히 줄어든다. [D-021]
                     .that(
-                            resideInAPackage(INFRASTRUCTURE)
+                            resideInAPackage(ADAPTER)
                                     .and(
                                             simpleNameStartingWith("Mock")
                                                     .or(simpleNameStartingWith("Stub"))
@@ -208,7 +208,7 @@ public final class ModuleHygieneRules {
                     .haveSimpleNameEndingWith("Repository")
                     .allowEmptyShould(true);
 
-    /** core / api / infrastructure / config 사이에 순환이 없어야 한다. */
+    /** core / api / adapter / config 사이에 순환이 없어야 한다. */
     @ArchTest
     public static final ArchRule 최상위_패키지_순환_없음 =
             slices().matching("com.stove.*.(*)..").should().beFreeOfCycles().allowEmptyShould(true);

@@ -61,6 +61,8 @@ spring:
       observation-enabled: true           # 처리 성공 레코드 단위 커밋
 
 stove:
+  catalog:
+    download-service-key: ${CATALOG_DOWNLOAD_SERVICE_KEY:}
   outbox:
     relay-enabled: true
     batch-size: 200

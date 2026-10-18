@@ -18,7 +18,7 @@
 |---|---|
 | [개발 환경과 실행](getting-started.md) | 로컬·원격 실행, Swagger OAuth, 문제 해결 |
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
-| [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 Payment·License MVP 경계 |
+| [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 Payment·License·Download MVP 경계 |
 | [auth·Gateway/BFF](auth-bff.md) | 재작업 완료 모듈의 자동 로그인·RTR·공유 세션, 실행과 검증 |
 | [Studio 실행·심사·출시 요청](studio-guide.md) | Auth·Gateway 기준의 전체 업로드·심사·출시 요청과 세 모듈 검증 |
 | [Review 실행·수동 심사](review-guide.md) | 심사자 로그인·ZIP 열람·승인 및 반려·네 모듈 검증과 재시작 확인 |
@@ -27,6 +27,7 @@
 | [Order 실행·주문·결제 결과 확인](order-guide.md) | 단일 상품 주문, 금액 스냅샷·중복 요청·결과 픽스처·OCI 장애와 재시작 검증 |
 | [Payment 실행·결제·복구 확인](payment-guide.md) | 모의 PG·내 결제 조회, 응답 유실·결과 롤백·8개 앱 장애와 재시작 검증 |
 | [License 실행·라이브러리·재전달 확인](license-guide.md) | 상품 보유권·구매 근거·내 라이브러리, 아홉 앱의 중단·재시작·원본 이벤트 복구 검증 |
+| [Download 실행·빌드 다운로드 확인](download-guide.md) | 로컬 OrbStack, 보유권·현재 공개 빌드·실제 ZIP·만료·장애·재시작 |
 
 ## 설계·검증·운영 근거
 
@@ -34,6 +35,7 @@
 |---|---|
 | [아키텍처](architecture.md) | 서비스 경계, 트랜잭션·이벤트 처리, DB 실험과 설계 위험 |
 | [유스케이스 작성 규칙](use-case-conventions.md) | SRP에 따른 책임 분리, 동사형 클래스·메서드 이름, 트랜잭션 유지 기준 |
+| [adapter 패키지 변경·완료 기록](adapter-package-rename-plan.md) | 기존 구조 유지·ArchUnit 경계 전환·단위 965건·통합 101건·실제 15단계 OrbStack 검증 |
 | [업무 코드 경계 점검](core-boundary-audit.md) | 이벤트 입력·Inbox·검증 책임 분석과 전역 설정 바인딩 경계 개선 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [Studio 단순화 계획·완료 기록](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 및 출시 요청·재요청 범위와 완료·검증 기록 |
@@ -43,6 +45,7 @@
 | [Order MVP 계획·완료 기록](order-mvp-plan.md) | 단일 상품 주문 스냅샷·내 주문·결제 결과 계약과 OCI 실제 검증 결과 |
 | [Payment MVP 계획·검증 기록](payment-mvp-plan.md) | 모의 PG 자동 처리, Inbox·미확정 재개·결과 Outbox·내 결제 조회와 OCI 완료 근거 |
 | [License MVP 계획·완료 기록](license-mvp-plan.md) | 상품별 단일 구매·출처 통합·Order 중복 구매 제한과 OCI 완료 근거 |
+| [Download MVP 계획·완료 기록](download-mvp-plan.md) | 무상태 빌드 다운로드·내부 조회 계약과 로컬 OrbStack의 단위·통합·열 앱 검증 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |
