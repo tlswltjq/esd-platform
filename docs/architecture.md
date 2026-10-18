@@ -6,11 +6,12 @@
 
 ## 서비스 경계와 저장소
 
-재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
+재작성 완료 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License다. Auth는 계정·역할, Studio는 출시용 상세정보·빌드와 심사·출시 요청 기록의 원본을 관리한다. Review는 제출 스냅샷과 수동 판정의 원본을 관리하고, Gateway는 외부 요청의 진입점이다. Studio의 책임에는 실제 심사 판정·출시·공개 상품 관리가 포함되지 않는다.
 
 Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 관리하고 Store는 공개 상품의 검색·조회 사본을 관리한다.
 Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다. Payment는 확정 주문의 결제 접수·PG 호출·미확정 재개·결과 발행을 담당한다.
-나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. License는 이용권, Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
+License는 OrderPaid를 근거로 상품 보유권·주문별 구매 근거와 내 라이브러리를 관리한다.
+나머지 모듈은 재작성 미완료이며 다음 구분은 기존 구현의 참고다. Settlement는 정산의 원본을 관리한다. Download는 공개 파일 목록과 이용권 사본으로 조회·접근을 처리한다. 미완료 모듈의 구현은 새 설계와 검증의 기준으로 삼지 않는다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 MongoDB 등은 미완료 모듈의 기존 조회 저장소다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
@@ -37,8 +38,10 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 ## 결제·지급·환불의 경계
 
 Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.
-HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다.
-Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. 실제 자금 이동·이용권·정산은 후속 대상이다. [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
+HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다. 최초 PAID이면 OrderPaid Outbox도 함께 저장한다.
+Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
+출처와 권한은 License 한 행에 저장한다. Order의 DB 유일 제약은 동일 상품의 PENDING·PAID 주문을 합쳐 한 건으로 제한하며 최종 FAILED에서만 새 구매를 허용한다. Order PAID와 라이브러리 반영 사이에는 전달 지연이 있다.
+실제 자금 이동·환불·권한 회수·다운로드·정산은 후속 대상이다. [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
 
 후속 결제·이용권·정산에서는 실제 승인·지급·환불·비용을 각각 보존하는 계약이 필요하다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
 환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 당시 상태와 검증 근거가 있다.
@@ -47,7 +50,7 @@ Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜�
 
 ## 요청과 비동기 처리 추적
 
-HTTP 응답의 `X-Correlation-Id`는 trace ID다. Outbox에 추적 컨텍스트를 보존하고 Kafka 헤더로 전달해 HTTP 요청과 후속 소비를 Tempo에서 연결한다. 결제 승인 → `PaymentCompleted` 소비 → `LicenseIssued` 소비가 여러 서비스에 걸친 한 흐름으로 보인다.
+HTTP 응답의 `X-Correlation-Id`는 trace ID다. Outbox에 추적 컨텍스트를 보존하고 Kafka 헤더로 전달해 HTTP 요청과 후속 소비를 Tempo에서 연결한다. `OrderPlaced` → Payment 결과 → Order의 `OrderPaid` → License 지급을 여러 서비스에 걸친 흐름으로 추적한다.
 
 기존 관측 예시에서 소비 시작까지 `+527ms`, 후속 전달까지 `+759ms`가 보였던 것은 DB 처리 시간만이 아니라 릴레이 폴링 대기가 포함된 결과다. 2026-08-13 폴링 주기를 1000ms에서 200ms로 줄인 측정에서는 종단 p95가 1.30초에서 0.56초로 줄었다. 원자료와 CPU 비용은 [성능 측정](performance.md)에 있고, 이 수치는 현재 스택을 새로 측정한 값이 아니다.
 

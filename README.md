@@ -4,11 +4,13 @@
 
 프로젝트가 처음이라면 **[도메인·모델 안내](docs/domain/model-guide.md)**부터 읽는다. 도메인별 모델의 속성, 생성·사용 시점과 게임 한 개가 출시되어 판매되는 흐름을 설명한다.
 
-현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment**다. 신규 구현과 검증은 이 여덟 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
+현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License**다. 신규 구현과 검증은 이 아홉 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
 
 Catalog의 완료 범위와 검증 결과는 [MVP 계획·완료 기록](docs/catalog-mvp-plan.md#재작성-완료-기록)에 정리했다.
 Store의 학습용 최소 범위와 OCI 검증 결과는 [Store 계획·완료 기록](docs/store-mvp-plan.md#재작성-완료-기록)을 따른다.
-Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완료 기록](docs/order-mvp-plan.md#재작성-완료-기록), 실행은 [Order 안내](docs/order-guide.md)를 따른다. Payment의 모의 PG 자동 처리·복구·조회와 8개 앱 OCI 검증은 [Payment 완료 기록](docs/payment-mvp-plan.md#재작성-완료-기록), 실행은 [Payment 안내](docs/payment-guide.md)를 따른다. 다음 재작성 대상은 License다.
+Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완료 기록](docs/order-mvp-plan.md#재작성-완료-기록), 실행은 [Order 안내](docs/order-guide.md)를 따른다. Payment의 모의 PG 자동 처리·복구·조회와 8개 앱 OCI 검증은 [Payment 완료 기록](docs/payment-mvp-plan.md#재작성-완료-기록), 실행은 [Payment 안내](docs/payment-guide.md)를 따른다.
+
+License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. 다음 재작성 대상은 Download다.
 
 ## 문서 찾기
 

@@ -9,6 +9,7 @@ import org.springframework.dao.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
 import org.springframework.transaction.support.TransactionTemplate;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -40,6 +41,7 @@ public class CreateOrder {
                     return transaction.execute(tx -> {
                         Order concurrent = existing(buyer, request);
                         if (concurrent != null) return concurrent;
+                        requirePurchasable(buyer, product);
                         Order order = orders.saveAndFlush(Order.create(buyer, request, product, UUID.randomUUID().toString()));
                         OrderPlacedEvent event = new OrderPlacedEvent(order.getRequestEventId(), order.getCreatedAt(),
                                 order.getOrderNo(), buyer, order.getProductId(), order.getProductCode(),
@@ -53,6 +55,9 @@ public class CreateOrder {
                          | org.hibernate.exception.LockAcquisitionException collision) {
                     Order concurrent = existing(buyer, request);
                     if (concurrent != null) return concurrent;
+                    if (purchaseCollision(collision)) requirePurchasable(buyer, product);
+                    else if (!(collision instanceof TransientDataAccessException)
+                            && !(collision instanceof org.hibernate.exception.LockAcquisitionException)) throw collision;
                     if (attempt == 2) throw collision;
                 }
             }
@@ -68,5 +73,28 @@ public class CreateOrder {
         Order order = orders.findByBuyerSubjectAndRequestId(buyer, request.requestId()).orElse(null);
         if (order != null) order.requireSameRequest(request);
         return order;
+    }
+
+    private void requirePurchasable(String buyer, PublishedProduct product) {
+        List<Order> conflicts = orders.findPurchaseConflicts(buyer, product.productId(), product.productCode(),
+                List.of(OrderStatus.PENDING, OrderStatus.PAID));
+        if (conflicts.isEmpty()) return;
+        if (conflicts.size() != 1) throw new BusinessException(ErrorCode.CONFLICT, "구매 제한 주문의 상품 연결이 다릅니다.");
+        Order previous = conflicts.getFirst();
+        if (!previous.getProductId().equals(product.productId()) || !previous.getProductCode().equals(product.productCode()))
+            throw new BusinessException(ErrorCode.CONFLICT, "기존 주문의 상품 ID와 코드가 일치하지 않습니다.");
+        throw new BusinessException(previous.getStatus() == OrderStatus.PAID
+                ? OrderErrorCode.PRODUCT_ALREADY_PURCHASED : OrderErrorCode.PURCHASE_IN_PROGRESS);
+    }
+
+    private static boolean purchaseCollision(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException constraint) {
+                String name = constraint.getConstraintName();
+                return name != null && (name.contains("uk_purchase_order_buyer_product")
+                        || name.contains("uk_purchase_order_buyer_code"));
+            }
+        }
+        return false;
     }
 }

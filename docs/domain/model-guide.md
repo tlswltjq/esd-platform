@@ -1,6 +1,6 @@
 # 코드로 이해하는 도메인과 모델
 
-현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment다. 신규 구현과 검증은 이 여덟 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
+현재 완료된 기준 모듈은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License다. 신규 구현과 검증은 이 아홉 모듈의 계약을 따르며, 나머지 모듈 설명은 기존 구현의 참고 기록이다.
 
 이 프로젝트는 **창작자가 게임을 준비하고 심사를 거쳐 판매하면, 구매자에게 이용 권한을 주고 판매자의 몫을 계산하는 시스템**이다. 먼저 이 흐름을 이해한 뒤 각 단계가 보관하는 정보를 읽으면 된다.
 
@@ -50,13 +50,13 @@
 | 검색·조회 / `store` | 현재 공개된 게임을 어떻게 찾고 확인하는가? | `StoreProduct` | [상품·진열](models/catalog-store.md) |
 | 주문 / `order` | 누가 무엇을 얼마에 사기로 했는가? | `Order`, `OrderPrice`, `PaymentResult` | [주문·결제](models/order-payment.md) |
 | 결제 / `payment` | 확정된 주문의 결제 결과가 무엇인가? | `Payment`, `PaymentOrderRequest`, `PgChargeRequest`, `PgResult` | [주문·결제](models/order-payment.md) |
-| 이용권 / `license` | 어떤 주문으로 이용 권한을 받았는가? | `License` | [이용·다운로드](models/fulfillment.md) |
+| 이용권 / `license` | 어떤 상품을 보유하고 어떤 주문이 근거인가? | `License`, `PaidOrder` | [이용·다운로드](models/fulfillment.md) |
 | 파일 배포 / `download` | 지금 받을 수 있는 정확한 파일은 무엇인가? | `ProductRef`, `Entitlement`, `PatchManifest` | [이용·다운로드](models/fulfillment.md) |
 | 정산 / `settlement` | 판매자에게 얼마를 배분해야 하는가? | `SettlementRecord`, `SellerSettlement` | [정산](models/settlement.md) |
 | 요청 입구 / `gateway` | 요청을 어느 서비스로 보낼 것인가? | 자체 업무 엔티티 없음 | [서비스 명세](../services.md#gateway) |
 | 전달·기록 / `common` | 변경 사실을 잃거나 중복 처리하지 않았는가? | `OutboxEvent`, `ProcessedEvent` 및 공유 이벤트 값 | [공통 모델](models/shared.md) |
 
-`catalog`의 MySQL 상품은 공개본의 원본, `store`의 MySQL 상품은 검색·조회 사본이다. `license`의 MySQL 이용권은 지급 원본, `download`의 MongoDB 문서는 배포에 필요한 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
+`catalog`의 MySQL 상품은 공개본의 원본, `store`의 MySQL 상품은 검색·조회 사본이다. `license`의 MySQL은 보유권과 구매 근거의 원본이다. `download`의 MongoDB 문서는 미완료 구 구현의 사본이다. 서비스 사이의 ID는 연결 참조이며, 여러 DB를 하나의 외래 키로 묶어 관리하는 구조는 아니다.
 
 ## 게임 한 개를 처음부터 따라가기
 
@@ -69,8 +69,9 @@
 | 공개 반영 | 외부 처리 결과를 ProjectReleaseRequest에 기록. 실제 출시·공개는 외부 업무 |
 | 출시 후 수정 | 상세정보를 변경하고 새 버전의 심사·출시 요청을 발행. 공개본 관리 책임은 외부 업무 |
 | 주문·결제 경계 | Catalog 공개 상세로 주문 스냅샷 고정, 고정 결제 키로 모의 PG 호출·미확정 재개·결과 반영 |
-| 지급·다운로드 | License·Entitlement가 보유권을 확인하고 정확한 공개 기록의 파일 선택 |
-| 환불·월 마감 | 기존 결제 환불·권한 회수·판매자 정산 원장과 월 마감 흐름 유지 |
+| 권한 부여 | OrderPaid로 출처를 포함한 상품별 License·Inbox 저장. 내 라이브러리 조회 |
+| 다운로드(후속) | 새 보유권을 확인한 빌드 제공. 기존 Entitlement는 미완료 구 구현 |
+| 환불·월 마감(후속) | 재작성 전 결제 환불·권한 회수·정산 원장·월 마감은 참고 기록 |
 
 Project는 편집 중인 내용이고 Product는 현재 등록된 상품이다.
 Build는 요청에 첨부할 파일이며 ProjectReleaseRequest는 외부로 발행한 출시 요청이다.

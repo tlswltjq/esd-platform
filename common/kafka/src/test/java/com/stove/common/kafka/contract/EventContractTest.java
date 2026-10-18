@@ -98,6 +98,9 @@ class EventContractTest {
         return Stream.of(
                 new OrderPlacedEvent("placed-1", Instant.parse("2026-10-16T00:00:00Z"), "order-1", "usr_buyer",
                         1L, "PROJECT-1", "Game", 1, 1000, 0, 1000, "KRW"),
+                new OrderPaidEvent("paid-1", Instant.parse("2026-10-17T00:00:00.123456Z"),
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "placed-1", "result-1", "payment-1", "usr_buyer",
+                        1L, "PROJECT-1", "Game", 1, 1000, "KRW"),
                 OrderPaymentCompletedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW"),
                 OrderPaymentFailedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW", "DECLINED", "Declined"),
                 CatalogProductPublishedEvent.of(new CatalogProductSnapshot(1L, "PROJECT-1", "Game", "Summary",

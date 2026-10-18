@@ -1,6 +1,6 @@
 # 대표 업무 흐름
 
-현재 완료 기준은 Auth·Gateway·Studio·Review·Catalog·Store이며, Studio는 출시 자료 관리와 심사·출시 요청·재요청 및 외부 요청 결과 기록을 담당한다. Catalog는 공개본 정본을, Store는 검색·조회 사본을 관리한다. 나머지 미완료 모듈의 흐름은 기존 구현의 참고이며 현재 검증 기준에서 제외한다.
+현재 완료 기준은 각 모듈의 MVP 완료 기록을 따르며, Studio는 출시 자료 관리와 심사·출시 요청·재요청 및 외부 요청 결과 기록을 담당한다. Catalog는 공개본 정본을, Store는 검색·조회 사본을 관리한다. 나머지 미완료 모듈의 흐름은 기존 구현의 참고이며 현재 검증 기준에서 제외한다.
 
 [용어집](../domain-glossary.md) · [전체 모델 안내](model-guide.md) · [미결 질문](open-questions.md)
 
@@ -61,10 +61,11 @@ Store 시작 전 공개 상품은 Catalog의 기존 목록·상세 HTTP API로 �
 
 1. Store에서 공개 상품을 찾고 코드·contentVersion·가격을 확인한다.
 2. MEMBER가 requestId·productCode·expectedContentVersion·expectedAmount로 주문한다. 구매자는 JWT sub다.
-3. Order가 Catalog 공개 상세를 읽어 버전·정가를 확인하고 상품·금액 스냅샷과 OrderPlaced Outbox를 함께 저장한다.
+3. Order가 Catalog 공개 상세와 기존 PENDING·PAID 주문을 확인한다. 동일 상품의 추가 구매를 차단하고, 가능하면 상품·금액 스냅샷과 OrderPlaced Outbox를 함께 저장한다. 최종 FAILED 이후 새 요청은 허용한다.
 4. Payment가 OrderPlaced를 내부 입력으로 바꾸고 PENDING·Inbox를 접수한다. 주기 실행이 고정 paymentId로 모의 PG를 호출하고 승인·거절 결과·Outbox를 함께 확정한다.
-5. Order가 원래 주문·요청·구매자·금액·통화가 맞는 결과를 PENDING → PAID/FAILED로 반영한다.
-6. 구매자는 내 주문·내 결제 목록·상세에서 상태를 확인한다. 재출시해도 기존 스냅샷은 유지하고 Catalog 중단 중에도 기존 조회·동일 요청 재조회가 가능하다.
+5. Order가 원래 주문·요청·구매자·금액·통화가 맞는 결과를 PENDING → PAID/FAILED로 반영하고 최초 PAID이면 OrderPaid Outbox를 함께 저장한다.
+6. License가 OrderPaid의 출처 전체를 포함한 상품 보유권 한 행과 Inbox를 함께 저장한다. 같은 원본 재전달은 변화가 없고 다른 주문의 동일 상품은 충돌이다.
+7. 구매자는 내 주문·내 결제와 내 라이브러리에서 상태·권한을 확인한다. 재출시해도 기존 스냅샷은 유지하고 Catalog 중단 중에도 기존 조회·동일 요청 재조회가 가능하다.
 
 ```mermaid
 flowchart LR
@@ -75,10 +76,13 @@ flowchart LR
     P --> T[Payment 모의 PG·결과 Outbox]
     T --> R[Order 결과 검증]
     R --> Q[내 주문 PAID/FAILED 조회]
+    R -->|최초 PAID·OrderPaid| L[License 권한·구매 근거·Inbox]
+    L --> B[내 라이브러리 조회]
 ```
 
-실제 PG·이용권·다운로드·정산은 후속 모듈이다. 새 주문 흐름에서 아직 실행하지 않는다.
-[실행·독립 검증](../order-guide.md) · [Payment 연계 검증](../payment-guide.md)
+Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추가 구매 확정 절차는 없다.
+실제 PG·환불·권한 회수·다운로드·정산은 후속 범위다.
+[주문 실행](../order-guide.md) · [Payment 검증](../payment-guide.md) · [License 조회·아홉 앱 검증](../license-guide.md)
 
 <a id="operations-flow"></a>
 
@@ -94,7 +98,7 @@ flowchart LR
 
 **중단·예외:** PG 오류 응답 뒤 환불 완료로 표시하지 않는다. 원장 합계가 음수라고 다음 달 원장으로 자동 이월된 것으로 표현하지 않는다. 판매 중지 자체는 기존 구매 이용권을 회수하지 않는다.
 
-근거: 구 Payment 환불 실험(현재 제거됨), [LicenseIdempotencyTest](../../apps/license/src/integrationTest/java/com/stove/license/core/service/LicenseIdempotencyTest.java), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java). 장애 운영은 [복원 시나리오](../resilience-scenarios.md), [이용권 복구 절차](../runbooks/license-db-loss.md)를 참고한다.
+근거: 구 Payment 환불 실험(현재 제거됨), `LicenseIdempotencyTest`(재작성 전 테스트, 현재 제거됨), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java). 장애 운영은 [복원 시나리오](../resilience-scenarios.md), [이용권 복구 절차](../runbooks/license-db-loss.md)를 참고한다.
 
 ## 이벤트를 업무 사실로 읽기
 
@@ -112,11 +116,12 @@ flowchart LR
 | `ProductChanged` (구 계약) | 재작성 전 상품 마스터 변경 | 미완료 Download 등에 남은 기존 계약. 현재 Catalog·Store에서는 사용하지 않음 |
 | `OrderPlaced` | 단일 상품 주문·정가·할인액·청구액 고정 | Payment의 결제 접수·공급자 호출 근거 |
 | `OrderPaymentCompleted` / `OrderPaymentFailed` | 원래 주문 요청에 대한 최종 결제 결과 계약 | Order가 연결·금액 검증 후 PAID/FAILED 반영 |
+| `OrderPaid` | Order가 최초 결제 완료 결과를 자기 주문과 대조해 PAID 반영 | License가 상품별 권한·주문별 구매 근거 저장 |
 | `OrderCreated` (구 계약) | 재작성 전 주문 항목·금액 고정 | 현재 Payment는 소비하지 않는 구 계약 |
-| `PaymentCompleted` | 정상 승인 금액을 결제 완료로 기록함 | 미완료 License·Settlement의 기존 입력. 새 Order에서는 사용하지 않음 |
+| `PaymentCompleted` | 정상 승인 금액을 결제 완료로 기록함 | 재작성 전 License·Settlement 입력. 현재 License·Order·Payment는 사용하지 않음 |
 | `PaymentFailed` | PG 승인 거절을 기록함 | 구 주문 결과 계약. 새 Order에서는 사용하지 않음 |
-| `LicenseIssued` / `LicenseRevoked` | 이용권 지급 / 회수를 기록함 | Download가 보유권 사본에 반영 |
-| `PaymentCancelled` | PG 환불 완료를 기록함 | 미완료 License 회수·Settlement 환불 원장 기록의 구 계약 |
+| `LicenseIssued` / `LicenseRevoked` (구 계약) | 이용권 지급 / 회수를 기록함 | 미완료 Download의 구 사본 계약. 현재 License는 발행하지 않음 |
+| `PaymentCancelled` | PG 환불 완료를 기록함 | 재작성 전 License 회수·Settlement 환불 원장 기록의 구 계약 |
 | `LicenseIssueFailed` | 이용권 지급이 최종 실패함 | 구 Payment 보상 입력. 현재 Payment는 소비하지 않음 |
 
 구현 계약: [이벤트 payload](../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/), [Studio의 심사 결과 반영](../../apps/studio/src/main/java/com/stove/studio/core/service/review/RecordProjectReviewResult.java), [Download 리스너](../../apps/download/src/main/java/com/stove/download/api/listener/DownloadEventListener.java).

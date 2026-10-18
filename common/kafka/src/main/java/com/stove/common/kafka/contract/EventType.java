@@ -46,6 +46,7 @@ public final class EventType {
     public static final String PRODUCT_CHANGED = "ProductChanged";
 
     // order
+    public static final String ORDER_PAID = "OrderPaid";
     public static final String ORDER_PLACED = "OrderPlaced";
     public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";
     public static final String ORDER_PAYMENT_FAILED = "OrderPaymentFailed";

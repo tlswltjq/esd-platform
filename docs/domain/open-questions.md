@@ -73,11 +73,13 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **2026-10-16 Order MVP:** 상품 하나·수량 하나·양수 KRW 정가로 제한한다. 반복 구매 차단·선물·무료 지급·이용권 정책은 후속 범위다. 아래 다중 항목·견적 관찰은 재작성 전 기록이다.
 
-**관찰:** DEMO 무료 청구와 BUNDLE 구성품 지급은 미지원이라 일반 판매가 막혀 있다([P2 명세](models/studio.md#game-project)). 주문 수량은 1 이상을 허용하고 같은 상품 항목의 반복도 견적에서 합산한다. License는 주문·상품별 한 건, Settlement는 주문·상품·기록 종류별 한 건을 저장한다. 정산은 가격·할인·수수료 사본이 같은 반복 항목의 수량·금액을 합산한다. Download는 회원·상품별 하나의 활성 문서와 한 주문번호를 보관한다. 회수 시 주문번호를 비교하지만 지급은 문서를 덮어쓴다.
+**2026-10-17 통합 정책:** 본인용 동일 상품은 한 번만 구매한다. Order가 같은 구매자·상품의 PENDING·PAID 추가 주문을 차단하고, 최종 FAILED 이후 새 요청만 허용한다. License는 완료 주문 하나의 출처와 상품별 영구 보유권을 한 엔티티에 보존한다. 선물·추가 수량·무료 지급·묶음·회수·다운로드 연계는 후속 범위다. [통합 범위](../license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획).
 
-**결정할 내용:** 수량은 좌석 수인가, 개인 보유형 상품에서는 1로 제한할 것인가? 이미 보유한 상품의 재구매·선물·여러 주문의 활성 이용권은 어떻게 취급하는가? DEMO는 무료 이용권이 필요한가? BUNDLE·EDITION·DLC가 부모·구성품에 어떤 권한을 주며 환불 시 무엇을 회수하는가? 늦은 지급 이벤트를 포함한 순서 역전에서 사본의 권한을 어떻게 보존하는가?
+**관찰(재작성 전):** DEMO 무료 청구와 BUNDLE 구성품 지급은 미지원이라 일반 판매가 막혀 있다([P2 명세](models/studio.md#game-project)). 주문 수량은 1 이상을 허용하고 같은 상품 항목의 반복도 견적에서 합산한다. License는 주문·상품별 한 건, Settlement는 주문·상품·기록 종류별 한 건을 저장한다. 정산은 가격·할인·수수료 사본이 같은 반복 항목의 수량·금액을 합산한다. Download는 회원·상품별 하나의 활성 문서와 한 주문번호를 보관한다. 회수 시 주문번호를 비교하지만 지급은 문서를 덮어쓴다.
 
-**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), [LicenseIssueEventTest](../../apps/license/src/integrationTest/java/com/stove/license/core/service/LicenseIssueEventTest.java)의 `duplicateProductLinesIssueSingleLicense`, [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [EntitlementService](../../apps/download/src/main/java/com/stove/download/core/service/EntitlementService.java), [DownloadEntitlementTest](../../apps/download/src/integrationTest/java/com/stove/download/core/service/DownloadEntitlementTest.java).
+**결정할 내용:** 본인용 수량 1·동일 상품 추가 구매 차단은 결정했다. 후속 선물·좌석·양도에서는 구매자와 실제 수령인, 수량·권한의 관계를 어떻게 정의할 것인가? DEMO는 무료 이용권이 필요한가? BUNDLE·EDITION·DLC가 부모·구성품에 어떤 권한을 주며 환불 시 무엇을 회수하는가? 늦은 지급 이벤트를 포함한 순서 역전에서 사본의 권한을 어떻게 보존하는가?
+
+**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), `LicenseIssueEventTest`(재작성 전 테스트, 현재 제거됨)의 `duplicateProductLinesIssueSingleLicense`, [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [EntitlementService](../../apps/download/src/main/java/com/stove/download/core/service/EntitlementService.java), [DownloadEntitlementTest](../../apps/download/src/integrationTest/java/com/stove/download/core/service/DownloadEntitlementTest.java).
 
 <a id="q6"></a>
 

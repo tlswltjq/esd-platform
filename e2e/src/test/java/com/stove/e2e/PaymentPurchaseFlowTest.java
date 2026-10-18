@@ -25,6 +25,12 @@ class PaymentPurchaseFlowTest {
     private static ObjectNode saved() throws Exception { return (ObjectNode)JSON.readTree(Files.readString(evidence())); }
     private static void save(ObjectNode s) throws Exception { Files.writeString(evidence(),JSON.writeValueAsString(s)); }
     private static Account buyer(JsonNode s) throws Exception { return login(s.path("buyerEmail").asText(),"creator-password-1234"); }
+    private static Account buyer(JsonNode s, String name) throws Exception {
+        return name.equals("approved") ? buyer(s) : login(s.path(name + "BuyerEmail").asText(), "creator-password-1234");
+    }
+    private static Account newBuyer(ObjectNode s, String name) throws Exception {
+        Account account = account(false); s.put(name + "BuyerEmail", account.email()); save(s); return account;
+    }
     private static JsonNode get(String resource,String no,Account buyer) {
         E2eClient.Response r=Stove.gateway.get("/api/v1/"+resource+"/"+no,buyer.headers());
         assertThat(r.status()).as(r.toString()).isEqualTo(200); return r.data();
@@ -79,42 +85,42 @@ class PaymentPurchaseFlowTest {
         assertThat(s.path("approvedPayment").path("paymentId")).isEqualTo(s.path("pendingPayment").path("paymentId"));
     }
     @Test void explicitDeclineUpdatesOrderAndPreservesEarlierApproval() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); create(s,"declined",buyer); finalState(s,"declined",buyer,"FAILED");
+        ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"declined"); create(s,"declined",buyer); finalState(s,"declined",buyer,"FAILED");
         assertThat(s.path("declinedPayment").path("failureReasonCode").asText()).isEqualTo("DECLINED");
-        assertThat(get("payments",number(s,"approved"),buyer)).isEqualTo(s.path("approvedPayment"));
+        assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
     }
     @Test void losesResponseAfterSupplierCommit() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); create(s,"lost",buyer);
+        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"declined"); s.put("lostBuyerEmail",s.path("declinedBuyerEmail").asText()); create(s,"lost",buyer);
         s.set("lostPending",state("payments",number(s,"lost"),buyer,"PENDING")); save(s);
         assertThat(get("orders",number(s,"lost"),buyer).path("status").asText()).isEqualTo("PENDING");
     }
     @Test void recoversLostResponseAfterProcessRestart() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); finalState(s,"lost",buyer,"PAID");
+        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"lost"); finalState(s,"lost",buyer,"PAID");
         assertThat(s.path("lostPayment").path("paymentId")).isEqualTo(s.path("lostPending").path("paymentId"));
     }
     @Test void rollsBackResultAfterOutboxInsertion() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); create(s,"rollback",buyer);
+        ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"rollback"); create(s,"rollback",buyer);
         s.set("rollbackPending",state("payments",number(s,"rollback"),buyer,"PENDING")); save(s);
         assertThat(get("orders",number(s,"rollback"),buyer).path("status").asText()).isEqualTo("PENDING");
     }
     @Test void recoversResultTransactionAfterProcessRestart() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); finalState(s,"rollback",buyer,"PAID");
+        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"rollback"); finalState(s,"rollback",buyer,"PAID");
         assertThat(s.path("rollbackPayment").path("paymentId")).isEqualTo(s.path("rollbackPending").path("paymentId"));
     }
     @Test void preparesReceiptBeforeOrderAndCatalogStop() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); create(s,"offline",buyer);
+        ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"offline"); create(s,"offline",buyer);
         state("payments",number(s,"offline"),buyer,"PENDING");
     }
     @Test void paysWithoutOrderOrCatalogAndReadsWhileBrokerDown() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s);
+        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"offline");
         JsonNode payment=state("payments",number(s,"offline"),buyer,"PAID");
         s.set("offlinePayment",payment); save(s);
-        assertThat(Stove.gateway.get("/api/v1/payments",buyer.headers()).data().path("totalElements").asInt()).isEqualTo(5);
-        assertThat(get("payments",number(s,"approved"),buyer)).isEqualTo(s.path("approvedPayment"));
+        assertThat(Stove.gateway.get("/api/v1/payments",buyer.headers()).data().path("totalElements").asInt()).isEqualTo(1);
+        assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
     }
     @Test void catchesUpOriginalResultAndReplaysOriginalEvents() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); finalState(s,"offline",buyer,"PAID");
-        assertThat(get("payments",number(s,"approved"),buyer)).isEqualTo(s.path("approvedPayment"));
+        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"offline"); finalState(s,"offline",buyer,"PAID");
+        assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
         HashMap<String, Object> config=new HashMap<String,Object>(); config.put("bootstrap.servers",System.getProperty("stove.e2e.kafka-brokers"));
         HashMap<String, Object> consumerConfig=new HashMap<>(config); consumerConfig.put("group.id","payment-evidence-"+UUID.randomUUID());
         consumerConfig.put("auto.offset.reset","earliest"); consumerConfig.put("enable.auto.commit",false);
@@ -144,8 +150,9 @@ class PaymentPurchaseFlowTest {
         s.put("replayedRequestEventId",placed.eventId()).put("replayedResultEventId",result.eventId()); save(s);
     }
     @Test void preservesAllResultsAfterReplayAndRestart() throws Exception {
-        ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s);
+        ObjectNode s=saved();
         for(String name:List.of("approved","declined","lost","rollback","offline")) {
+            Account buyer=buyer(s,name);
             assertThat(get("payments",number(s,name),buyer)).isEqualTo(s.path(name+"Payment"));
             assertThat(get("orders",number(s,name),buyer)).isEqualTo(s.path(name+"Order"));
         }

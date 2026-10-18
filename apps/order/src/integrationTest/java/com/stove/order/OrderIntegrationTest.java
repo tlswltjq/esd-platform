@@ -41,13 +41,14 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired ReadOrder read;
     @Autowired SearchOrders search;
     @Autowired ApplyPaymentResult apply;
-    @Autowired OrderRepository orders;
+    @MockitoSpyBean OrderRepository orders;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @MockitoBean CatalogProducts catalog;
+    @Autowired com.stove.common.messaging.outbox.OutboxEventRepository outboxRows;
     @MockitoSpyBean OutboxRecorder outbox;
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
@@ -91,7 +92,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(create.execute("usr_buyer", input).getStatus()).isEqualTo(OrderStatus.PAID);
         assertThatThrownBy(() -> create.execute("usr_buyer", new OrderRequest(input.requestId(), input.productCode(), 3, 1)))
                 .isInstanceOf(BusinessException.class);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
+        assertThat(paidEvents()).isEqualTo(1);
         assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
         assertThat(read.execute(o.getOrderNo(), "usr_buyer").getTitle()).isEqualTo("한글 게임");
     }
@@ -99,10 +101,69 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         Order first = saved("usr_buyer");
         when(catalog.detail(anyString())).thenReturn(new PublishedProduct(1L, "Game-1", "New title", 4, 20000, "KRW"));
         assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
-        Order next = create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000));
+        assertThatThrownBy(() -> create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000)))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+        Order next = create.execute("usr_other", new OrderRequest(id(), "Game-1", 4, 20000));
         assertThat(stored(first).getTitle()).isEqualTo("한글 게임");
         assertThat(stored(first).getAmount()).isEqualTo(10000);
         assertThat(next.getTitle()).isEqualTo("New title");
+    }
+    @Test void pendingAndPaidBlockNewRequestsWithoutCreatingAnotherPaymentRequest() {
+        OrderRequest input = request(); Order first = create.execute("usr_buyer", input);
+        Response pending = http("POST", "/api/v1/orders", body(request()), token("usr_buyer", "MEMBER"));
+        assertThat(pending.status()).isEqualTo(409);
+        assertThat(pending.body().toString()).contains("PURCHASE_IN_PROGRESS");
+        accept(completed(first));
+        Response paid = http("POST", "/api/v1/orders", body(request()), token("usr_buyer", "MEMBER"));
+        assertThat(paid.status()).isEqualTo(409);
+        assertThat(paid.body().toString()).contains("PRODUCT_ALREADY_PURCHASED");
+        assertThat(create.execute("usr_buyer", input).getOrderNo()).isEqualTo(first.getOrderNo());
+        assertThat(count("purchase_order")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
+    }
+    @Test void onlyCommittedDefinitiveFailureReleasesTheProductForANewRequest() {
+        OrderRequest input = request(); Order first = create.execute("usr_buyer", input);
+        OrderPaymentFailedEvent result = failed(first);
+        assertThatThrownBy(() -> new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            accept(result);
+            assertThat(stored(first).getStatus()).isEqualTo(OrderStatus.FAILED);
+            throw new IllegalStateException("abort after failure flush");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+        accept(result);
+        Order next = saved("usr_buyer");
+        assertThat(next.getOrderNo()).isNotEqualTo(first.getOrderNo());
+        assertThat(next.getRequestEventId()).isNotEqualTo(first.getRequestEventId());
+        assertThat(create.execute("usr_buyer", input).getStatus()).isEqualTo(OrderStatus.FAILED);
+        assertThat(count("purchase_order")).isEqualTo(2);
+        assertThat(count("outbox_event")).isEqualTo(2);
+    }
+    @Test void uncommittedFailureDoesNotPermitACompetingPurchase() throws Exception {
+        Order first = saved("usr_buyer");
+        CountDownLatch flushed = new CountDownLatch(1); CountDownLatch commit = new CountDownLatch(1);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> result = pool.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+                accept(failed(first)); flushed.countDown();
+                try { assertThat(commit.await(15, TimeUnit.SECONDS)).isTrue(); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+            }));
+            assertThat(flushed.await(15, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOfSatisfying(BusinessException.class,
+                    e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+            commit.countDown(); result.get(20, TimeUnit.SECONDS);
+            assertThat(saved("usr_buyer").getStatus()).isEqualTo(OrderStatus.PENDING);
+        } finally { commit.countDown(); pool.shutdownNow(); }
+    }
+    @Test void changedCatalogIdentityCannotBypassThePurchaseGuard() {
+        saved("usr_buyer");
+        when(catalog.detail("Game-1")).thenReturn(new PublishedProduct(2L, "Game-1", "Changed ID", 3, 10000, "KRW"));
+        assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOf(BusinessException.class);
+        when(catalog.detail("Game-2")).thenReturn(new PublishedProduct(1L, "Game-2", "Changed code", 3, 10000, "KRW"));
+        assertThatThrownBy(() -> create.execute("usr_buyer", new OrderRequest(id(), "Game-2", 3, 10000)))
+                .isInstanceOf(BusinessException.class);
+        assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
     }
     @Test void unavailableMalformedMissingAndFreeProductsLeaveNoOrderOrOutbox() {
         for (BusinessException error : new BusinessException[]{new BusinessException(ErrorCode.NOT_FOUND),
@@ -139,6 +200,31 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
+    @Test void differentRequestRaceHitsTheDatabaseGuardAndCreatesOneOrderAndEvent() throws Exception {
+        CyclicBarrier inserted = new CyclicBarrier(4);
+        doAnswer(inv -> {
+            inserted.await(15, TimeUnit.SECONDS);
+            return mockingDetails(orders).getMockCreationSettings().getDefaultAnswer().answer(inv);
+        }).when(orders).saveAndFlush(any(Order.class));
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<String>> futures = new ArrayList<>();
+            for (int i = 0; i < 4; i++) futures.add(pool.submit(() -> {
+                try { create.execute("usr_buyer", request()); return "created"; }
+                catch (BusinessException e) { return e.errorCode().code(); }
+            }));
+            List<String> outcomes = new ArrayList<>();
+            for (Future<String> future : futures) outcomes.add(future.get(30, TimeUnit.SECONDS));
+            assertThat(outcomes).containsExactlyInAnyOrder("created", "PURCHASE_IN_PROGRESS", "PURCHASE_IN_PROGRESS", "PURCHASE_IN_PROGRESS");
+            assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        } finally { reset(orders); pool.shutdownNow(); }
+    }
+    @Test void unrelatedIntegrityFailureIsNotReportedAsAnExistingPurchase() {
+        org.springframework.dao.DataIntegrityViolationException failure = new org.springframework.dao.DataIntegrityViolationException("unrelated constraint");
+        doThrow(failure).when(orders).saveAndFlush(any(Order.class));
+        assertThatThrownBy(() -> saved("usr_buyer")).isSameAs(failure);
+        assertThat(count("purchase_order")).isZero(); assertThat(count("outbox_event")).isZero();
+    }
     @Test void concurrentCommitIsRecoveredEvenWhenTheFirstCatalogCallFails() throws Exception {
         OrderRequest input = request(); CountDownLatch entered = new CountDownLatch(1); CountDownLatch committed = new CountDownLatch(1);
         AtomicInteger calls = new AtomicInteger();
@@ -160,7 +246,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     }
     @Test void requestKeysAndBuyerSubjectsUseExactCaseAndSeparateOwners() {
         OrderRequest request = new OrderRequest("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "Game-1", 3, 10000);
-        create.execute("usr_buyer", request); create.execute("USR_BUYER", request);
+        Order first = create.execute("usr_buyer", request); create.execute("USR_BUYER", request);
+        accept(failed(first));
         create.execute("usr_buyer", new OrderRequest(request.requestId().toUpperCase(Locale.ROOT), "Game-1", 3, 10000));
         assertThat(count("purchase_order")).isEqualTo(3);
     }
@@ -169,10 +256,64 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         Instant updated = stored(a).getUpdatedAt(); accept(event);
         assertThat(stored(a).getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(stored(a).getUpdatedAt()).isEqualTo(updated);
-        Order b = saved("usr_buyer"); OrderPaymentFailedEvent failure = failed(b); accept(failure); accept(failure);
+        Order b = saved("usr_other"); OrderPaymentFailedEvent failure = failed(b); accept(failure); accept(failure);
         assertThat(stored(b).getStatus()).isEqualTo(OrderStatus.FAILED);
         assertThat(stored(b).getFailureReasonCode()).isEqualTo("DECLINED");
         assertThat(count("processed_event")).isEqualTo(2);
+    }
+    private int paidEvents() { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='OrderPaid'", Integer.class); }
+    @Test void paidEventUsesStoredOrderFactsAndOnlyFirstSuccessfulApplicationPublishes() throws Exception {
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent result = completed(o); accept(result);
+        String original = jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type='OrderPaid'", String.class);
+        OrderPaidEvent event = mapper.readValue(original, OrderPaidEvent.class);
+        Order paid = stored(o);
+        assertThat(event.occurredAt()).isEqualTo(paid.getUpdatedAt());
+        assertThat(event.orderNo()).isEqualTo(o.getOrderNo()); assertThat(event.requestEventId()).isEqualTo(o.getRequestEventId());
+        assertThat(event.paymentResultEventId()).isEqualTo(result.eventId()); assertThat(event.paymentId()).isEqualTo(result.paymentId());
+        assertThat(event.buyerSubject()).isEqualTo(o.getBuyerSubject()); assertThat(event.productId()).isEqualTo(o.getProductId());
+        assertThat(event.productCode()).isEqualTo(o.getProductCode()); assertThat(event.title()).isEqualTo(o.getTitle());
+        assertThat(event.contentVersion()).isEqualTo(o.getContentVersion()); assertThat(event.amount()).isEqualTo(o.getAmount());
+        assertThat(event.currency()).isEqualTo(o.getCurrency()); assertThat(event.topic()).isEqualTo(Topics.ORDER);
+        accept(result); accept(result); assertThat(paidEvents()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type='OrderPaid'", String.class)).isEqualTo(original);
+        Order failed = saved("usr_failed"); accept(failed(failed)); assertThat(paidEvents()).isEqualTo(1);
+    }
+    @Test void paidOutboxFailureRollsBackOrderAndInboxAndFreshDeliveryRecovers() {
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
+                doAnswer(inv -> { inv.callRealMethod(); throw new IllegalStateException("after paid Outbox"); })
+                        .when(outbox).record(eq("Order"), eq(o.getOrderNo()), any(OrderPaidEvent.class)));
+        try {
+            assertThatThrownBy(() -> accept(e)).isInstanceOf(IllegalStateException.class);
+            assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PENDING); assertThat(count("processed_event")).isZero();
+            assertThat(paidEvents()).isZero();
+        } finally { reset(outbox); }
+        accept(e); assertThat(paidEvents()).isEqualTo(1);
+    }
+    @Test void historicalPaidOrderDoesNotBackfillOnReadOrDuplicateResult() {
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o); accept(e);
+        jdbc.update("DELETE FROM outbox_event WHERE event_type='OrderPaid'");
+        read.execute(o.getOrderNo(), o.getBuyerSubject()); accept(e); assertThat(paidEvents()).isZero();
+    }
+    @Test void concurrentSamePaymentResultPublishesOnePaidEvent() throws Exception {
+        Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
+        CountDownLatch start = new CountDownLatch(1); ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<?>> futures = List.of(pool.submit(() -> { start.await(); accept(e); return null; }),
+                    pool.submit(() -> { start.await(); accept(e); return null; }));
+            start.countDown(); for (Future<?> f : futures) f.get(25, TimeUnit.SECONDS);
+            assertThat(paidEvents()).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(1);
+        } finally { pool.shutdownNow(); }
+    }
+    @Test void deadPaidOutboxRequeuePreservesOriginalIdAndPayload() {
+        Order o = saved("usr_buyer"); accept(completed(o));
+        Map<String, Object> original = jdbc.queryForMap("SELECT event_id,payload FROM outbox_event WHERE event_type='OrderPaid'");
+        jdbc.update("UPDATE outbox_event SET status='DEAD',retry_count=10 WHERE event_type='OrderPaid'");
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
+                outboxRows.findAll().stream().filter(row -> row.getEventId().equals(original.get("event_id")))
+                        .findFirst().orElseThrow().requeue());
+        assertThat(jdbc.queryForMap("SELECT event_id,payload FROM outbox_event WHERE event_type='OrderPaid'")).isEqualTo(original);
+        assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_type='OrderPaid'", String.class)).isEqualTo("PENDING");
     }
     @Test void mismatchedConnectionsAndFeeDeductedAmountsRollBackInboxAndState() {
         Order o = saved("usr_buyer"); OrderPaymentCompletedEvent good = completed(o);
@@ -195,7 +336,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(count("processed_event")).isZero();
     }
     @Test void rejectsChangedBodyNewFinalEventAndEventIdReuseAcrossOrders() {
-        Order a = saved("usr_buyer"); Order b = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(a); accept(e);
+        Order a = saved("usr_buyer"); Order b = saved("usr_other"); OrderPaymentCompletedEvent e = completed(a); accept(e);
         assertThatThrownBy(() -> accept(new OrderPaymentCompletedEvent(e.eventId(), e.occurredAt(), e.orderNo(), e.requestEventId(), "different-payment", e.buyerSubject(), e.amount(), e.currency())))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> accept(completed(a))).isInstanceOf(BusinessException.class);
@@ -221,11 +362,12 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
             accept(e);
             assertThat(jdbc.queryForObject("SELECT status FROM purchase_order WHERE id=?", String.class, o.getId())).isEqualTo("PAID");
-            assertThat(count("processed_event")).isEqualTo(1);
+            assertThat(count("processed_event")).isEqualTo(1); assertThat(paidEvents()).isEqualTo(1);
             throw new IllegalStateException("commit aborted after state flush");
         })).isInstanceOf(IllegalStateException.class);
         assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(stored(o).paymentResult()).isNull(); assertThat(count("processed_event")).isZero();
+        assertThat(paidEvents()).isZero();
         accept(e); assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID);
     }
     @Test void simultaneousOppositeResultsAcceptExactlyOneTerminalFact() throws Exception {
@@ -241,7 +383,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         } finally { pool.shutdownNow(); }
     }
     @Test void concurrentReuseOfOneResultEventIdCannotFinalizeTwoOrders() throws Exception {
-        Order a = saved("usr_buyer"); Order b = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(a);
+        Order a = saved("usr_buyer"); Order b = saved("usr_other"); OrderPaymentCompletedEvent e = completed(a);
         OrderPaymentCompletedEvent other = new OrderPaymentCompletedEvent(e.eventId(), e.occurredAt(), b.getOrderNo(), b.getRequestEventId(), id(), b.getBuyerSubject(), b.getAmount(), b.getCurrency());
         CountDownLatch start = new CountDownLatch(1); ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -256,7 +398,9 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         } finally { pool.shutdownNow(); }
     }
     @Test void onlyOwnedOrdersAreReturnedWithStablePagesAndNoInternalFields() {
-        Order own = saved("usr_buyer"); saved("usr_other"); Order last = saved("usr_buyer");
+        Order own = saved("usr_buyer"); saved("usr_other");
+        when(catalog.detail("Game-2")).thenReturn(new PublishedProduct(2L, "Game-2", "Second game", 3, 10000, "KRW"));
+        Order last = create.execute("usr_buyer", new OrderRequest(id(), "Game-2", 3, 10000));
         jdbc.update("UPDATE purchase_order SET created_at='2026-10-16 00:00:00'");
         assertThat(search.execute("usr_buyer", 0, 1).getContent().getFirst().getOrderNo()).isEqualTo(last.getOrderNo());
         assertThat(search.execute("usr_buyer", 1, 1).getTotalElements()).isEqualTo(2);

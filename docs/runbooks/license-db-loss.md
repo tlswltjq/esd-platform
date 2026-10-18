@@ -1,5 +1,7 @@
 # 런북 — license 원장이 유실됐을 때
 
+이 문서는 재작성 전 `PaymentCompleted`·구 license 테이블을 대상으로 한 참고 기록이다. [License MVP 계획](../license-mvp-plan.md)의 새 권한·구매 근거에 적용하는 복구 절차가 아니며, 해당 자료에 아래 삭제·재처리 명령을 적용하지 않는다.
+
 **대상 상황** `stove_license.license` 의 행이 사라졌다. 결제는 정상이었고 카프카에는
 `PaymentCompleted` 가 남아 있다. 사용자는 **돈은 냈는데 라이브러리가 비어 있는** 상태다.
 

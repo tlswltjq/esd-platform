@@ -2,34 +2,46 @@
 
 [전체 안내](../model-guide.md) · [구매 흐름](../workflows.md#purchase-flow)
 
-License는 이용권 지급·회수의 원본이다. Download는 요청마다 License를 호출하는 대신 전달받은 사본으로 접근을 판단한다. 따라서 결제 완료, 이용권 지급, 다운로드 사본 반영은 서로 다른 시점이다.
+License는 완료 주문 하나의 출처와 구매자·상품별 영구 이용 권한을 한 엔티티에 보존한다.
+Order는 PENDING·PAID 주문이 있는 동일 상품의 추가 구매를 차단한다. 선물·추가 수량은 후속 범위다.
+Download는 다음 재작성 대상이다. 아래 Download 모델은 구 구현의 참고이며 새 License의 연계 요구가 아니다.
+[License 통합 범위](../../license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획) · [조회·실행 안내](../../license-guide.md)
 
 <a id="license"></a>
-## License — 주문으로 지급한 이용권 원본
+## License — 구매 출처를 보존하는 상품 이용 권한
 
-저장: License 서비스의 MySQL `license`. [모델](../../../apps/license/src/main/java/com/stove/license/core/domain/License.java)
+저장: License의 MySQL `product_license`. [모델](../../../apps/license/src/main/java/com/stove/license/core/domain/License.java)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
-| `id` (`Long`) | 이용권 ID |
-| `orderNo` (`String`) | 어느 주문으로 지급했는지. 환불 시 회수 범위 |
-| `memberId`, `productId` (`Long`) | 권한을 받은 구매자·상품 |
-| `licenseKey` (`String`) | 발급한 이용권 키. 다운로드 API는 이 키 대신 인증된 회원·보유 상품으로 판단 |
-| `status` (`LicenseStatus`) | `ACTIVE` 보유 중, `REVOKED` 회수됨 |
-| `issuedAt`, `revokedAt` (`Instant`) | 지급·회수 시각 |
-| `revokeReason` (`String`) | 회수 사유 |
+| `id` (`Long`) | 내부 저장 키 |
+| `licenseId` (`String`) | 공개 UUID. CD키·다운로드 토큰이 아님 |
+| `buyerSubject` (`String`) | Auth JWT sub에서 유래한 구매자 |
+| `productId`, `productCode`, `title` | 주문 당시 고정 상품 식별자와 제목 |
+| `eventId`, `occurredAt` | OrderPaid의 식별자와 Order의 최초 PAID 반영 시각 |
+| `orderNo`, `requestEventId` | 출처 주문 UUID와 원래 OrderPlaced 이벤트 ID |
+| `paymentResultEventId`, `paymentId` | 주문에 반영한 결제 결과 이벤트와 고정 결제 ID |
+| `contentVersion`, `amount`, `currency` | 주문 당시 버전·고객 청구액·통화 |
+| `acquiredAt`, `receivedAt` (`Instant`) | 최초 권한 부여·출처 접수 시각. 신규 지급은 같은 값, 전환 자료는 원래 두 시각 보존 |
 
-**만들고 쓰는 때:** `PaymentCompleted` 수신 시 주문에 등장하는 상품마다 지급하고 `LicenseIssued`를 보낸다. `(orderNo, productId)`별 한 건이므로 같은 주문에서 수량이 2이거나 같은 상품이 여러 항목에 있어도 이용권 두 개를 만들지 않는다. `PaymentCancelled`가 오면 해당 주문의 이용권을 회수하고 `LicenseRevoked`를 보낸다. 라이브러리는 회원의 ACTIVE 이용권을 조회한다.
+`OrderPaid`를 처음 처리할 때 출처와 권한을 한 행으로 생성한다.
+구매자·상품 ID와 구매자·상품 코드, 출처 주문·이벤트·요청 이벤트·결과 이벤트·결제 ID는 각각 유일하다.
+다른 주문의 같은 상품을 기존 권한에 추가하거나 출처를 교체하지 않는다. 예외 입력은 충돌로 남긴다.
+상품 후속 버전에도 같은 영구 보유권을 사용한다. 만료·회수 상태·좌석 수·빌드 제한은 이번 범위에 없다.
+조회 주체는 JWT sub이며 Catalog 조회 없이 내 목록·상품 코드별 상세를 반환한다.
 
-현재 모델에는 좌석 수·선물 수령자·DLC 본편 보유 요건·묶음 구성품 지급을 표현한 별도 필드가 없다. 주문의 수량과 지급 단위가 다른 문제는 [Q5](../open-questions.md#q5)에 남아 있다. [LicenseService](../../../apps/license/src/main/java/com/stove/license/core/service/LicenseService.java)
+[PaidOrder](../../../apps/license/src/main/java/com/stove/license/core/domain/PaidOrder.java)는 OrderPaid의 13개 값을 담고 생성 시 유효성을 보장하는 내부 입력이다.
+License.paidOrder()가 저장된 출처를 재구성하고 verify(...)가 전체 입력을 대조한다.
+같은 주문의 재전달은 원래 eventId·발생 시각·본문 모두 일치해야 한다. 다른 주문에서 출처 식별자를 재사용할 수 없다.
 
-**업무 규칙 제안:** 결제 완료를 근거로 지급하고 환불 완료를 근거로 회수한다. 같은 주문 상품을 중복 지급하지 않고 지급·회수 이력을 남긴다.
+[GrantLicense](../../../apps/license/src/main/java/com/stove/license/core/service/GrantLicense.java)는 출처·상품 충돌과 Inbox를 비교하고, 출처를 포함한 권한·Inbox를 같은 READ_COMMITTED 트랜잭션에서 저장한다.
+동시 최초 지급의 유일 제약 경합은 전체 롤백하고 Kafka 재전달의 새 트랜잭션에서 다시 판단한다.
+같은 원본이면 한 권한으로 수렴한다. 다른 주문의 같은 상품이면 충돌이다.
+외부 이벤트 변환은 [LicenseOrderMapper](../../../apps/license/src/main/java/com/stove/license/api/listener/LicenseOrderMapper.java)가 맡는다.
+[통합 검증](../../../apps/license/src/integrationTest/java/com/stove/license/LicenseIntegrationTest.java)과
+[실제 아홉 앱 검증](../../../e2e/src/test/java/com/stove/e2e/LicensePurchaseFlowTest.java)을 사용한다.
 
-**사례:** 같은 결제 이벤트가 다시 와도 이용권은 하나다. 환불로 회수된 같은 주문의 이용권을 결제 이벤트 재처리로 되살리는 것은 허용하지 않는다. 현재 수량 2개도 상품별 이용권은 한 건이므로 다중 좌석 구매 정책으로 해석할 수 없다.
-
-**합의 상태:** 초안. 번들·데모·수량·재구매 정책은 [Q5](../open-questions.md#q5).
-
-**검증 근거:** [License](../../../apps/license/src/main/java/com/stove/license/core/domain/License.java), [LicenseService](../../../apps/license/src/main/java/com/stove/license/core/service/LicenseService.java), [PaymentEventListener](../../../apps/license/src/main/java/com/stove/license/api/listener/PaymentEventListener.java). [LicenseIdempotencyTest](../../../apps/license/src/integrationTest/java/com/stove/license/core/service/LicenseIdempotencyTest.java), [LicenseIssueEventTest](../../../apps/license/src/integrationTest/java/com/stove/license/core/service/LicenseIssueEventTest.java), [LicenseIssueFailureTest](../../../apps/license/src/integrationTest/java/com/stove/license/core/service/LicenseIssueFailureTest.java). 실패 분류의 설계 근거는 [decisions.md 22번](../../decisions.md#22-실패-분류는-두-번째-사례가-나올-때까지-license-안에-둔다).
+V5에서 LicensePurchase·저장소를 제거했다. 기존 license_purchase 테이블은 전환 전 자료를 보존하며 런타임에서 읽거나 쓰지 않는다.
 
 <a id="entitlement"></a>
 ## Entitlement — 다운로드 판단용 보유권 사본

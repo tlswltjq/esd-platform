@@ -1,13 +1,10 @@
 {
   "components" : {
     "schemas" : {
-      "ApiResponseListDeadEventResponse" : {
+      "ApiResponseLicensePage" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DeadEventResponse"
-            },
-            "type" : "array"
+            "$ref" : "#/components/schemas/LicensePage"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -18,147 +15,16 @@
         },
         "type" : "object"
       },
-      "ApiResponseListDltRecordResponse" : {
+      "ApiResponseLicenseResponse" : {
         "properties" : {
           "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DltRecordResponse"
-            },
-            "type" : "array"
+            "$ref" : "#/components/schemas/LicenseResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
           },
           "success" : {
             "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListLicenseResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/LicenseResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseReplayedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ReplayedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseRequeuedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/RequeuedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseVoid" : {
-        "properties" : {
-          "data" : { },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "DeadEventResponse" : {
-        "properties" : {
-          "aggregateId" : {
-            "type" : "string"
-          },
-          "aggregateType" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "lastError" : {
-            "type" : "string"
-          },
-          "partitionKey" : {
-            "type" : "string"
-          },
-          "retryCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "DltRecordResponse" : {
-        "properties" : {
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "exception" : {
-            "type" : "string"
-          },
-          "key" : {
-            "type" : "string"
-          },
-          "offset" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "originalTopic" : {
-            "type" : "string"
-          },
-          "partition" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
           }
         },
         "type" : "object"
@@ -174,47 +40,51 @@
         },
         "type" : "object"
       },
+      "LicensePage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/LicenseResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LicenseResponse" : {
         "properties" : {
-          "issuedAt" : {
+          "acquiredAt" : {
             "format" : "date-time",
             "type" : "string"
           },
           "licenseId" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "licenseKey" : {
             "type" : "string"
           },
-          "orderNo" : {
+          "productCode" : {
             "type" : "string"
           },
           "productId" : {
             "format" : "int64",
             "type" : "integer"
           },
-          "status" : {
-            "enum" : [ "ACTIVE", "REVOKED" ],
+          "title" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "ReplayedCount" : {
-        "properties" : {
-          "replayed" : {
-            "format" : "int32",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "RequeuedCount" : {
-        "properties" : {
-          "requeued" : {
-            "format" : "int32",
-            "type" : "integer"
           }
         },
         "type" : "object"
@@ -248,38 +118,19 @@
   "paths" : {
     "/api/v1/library" : {
       "get" : {
-        "operationId" : "myLibrary",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListLicenseResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
-        "tags" : [ "library-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt" : {
-      "get" : {
-        "operationId" : "peek",
+        "operationId" : "list",
         "parameters" : [ {
           "in" : "query",
-          "name" : "topic",
-          "required" : true,
+          "name" : "page",
+          "required" : false,
           "schema" : {
-            "type" : "string"
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
           }
         }, {
           "in" : "query",
-          "name" : "max",
+          "name" : "size",
           "required" : false,
           "schema" : {
             "default" : 20,
@@ -292,93 +143,25 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
+                  "$ref" : "#/components/schemas/ApiResponseLicensePage"
                 }
               }
             },
             "description" : "OK"
           }
         },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt/replay" : {
-      "post" : {
-        "operationId" : "replay",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 100,
-            "format" : "int32",
-            "type" : "integer"
-          }
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
         } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
+        "tags" : [ "library-controller" ]
       }
     },
-    "/api/v1/ops/outbox/dead" : {
+    "/api/v1/library/{productCode}" : {
       "get" : {
-        "operationId" : "deadEvents",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/requeue-all" : {
-      "post" : {
-        "operationId" : "requeueAll",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
-      "post" : {
-        "operationId" : "requeue",
+        "operationId" : "detail",
         "parameters" : [ {
           "in" : "path",
-          "name" : "eventId",
+          "name" : "productCode",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -389,14 +172,17 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                  "$ref" : "#/components/schemas/ApiResponseLicenseResponse"
                 }
               }
             },
             "description" : "OK"
           }
         },
-        "tags" : [ "outbox-ops-controller" ]
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "library-controller" ]
       }
     }
   }

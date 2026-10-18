@@ -43,7 +43,7 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 구 상품 판매 상태 | Product Status / `ProductStatus` | 재작성 전 용어. Catalog MVP는 판매 상태를 관리하지 않음 | [정의](domain/models/catalog-store.md#product-status) |
 | 주문 | Order / `Order` | 구매자·상품 항목·구매 금액을 고정한 구매 요청 | [정의](domain/models/order-payment.md#order) |
 | 결제 | Payment / `Payment` | 확정된 주문 대금의 접수·승인·거절과 미확정 재개 기록 | [정의](domain/models/order-payment.md#payment) |
-| 이용권 | License / `License` | 회원에게 상품 이용 권한을 지급·회수한 원본 기록 | [정의](domain/models/fulfillment.md#license) |
+| 이용권 | License / `License` | 구매자·상품별 영구 이용 권한. 주문별 구매 근거와 구분 | [정의](domain/models/fulfillment.md#license) |
 | 다운로드 보유권 사본 | Entitlement / `Entitlement` | 다운로드 접근 판정을 위해 이용권 이벤트를 반영한 사본 | [정의](domain/models/fulfillment.md#entitlement) |
 | 정산 원장 항목 | Settlement Record / `SettlementRecord` | 주문 상품별 매출 또는 환불과 수수료를 기록한 한 줄 | [정의](domain/models/settlement.md#settlement-record) |
 | 판매자 월 마감 | Seller Settlement / `SellerSettlement` | 판매자와 귀속 월별 원장 합계를 모은 마감 결과 | [정의](domain/models/settlement.md#seller-settlement) |
@@ -58,8 +58,8 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 심사 운영 | 유형별 심사 사건, 판단, 증빙, 재검토 | review | 심사 결과를 Studio의 출시 관문에 반영. 사건의 전체 운영 상태를 복제하지는 않음 |
 | 상품·진열 | 상품 가격·판매 상태, 구매자에게 보이는 상품 정보 | catalog, store | Catalog가 원본을 소유하고 Store가 검색·진열 사본을 유지. 창작 프로젝트와는 `productCode`로 연결 |
 | 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 공개 상세의 상품·정가를 주문에 고정하고 OrderPlaced 발행 |
-| 대금 처리 | 확정 주문의 결제·결과 발행 | payment | 현재 Order가 결과 반영. 이용권·정산은 후속 연계 |
-| 이용 권한 | 상품 이용권 원본과 회수 이력 | license | Download가 이용권 이벤트로 보유권 사본을 유지 |
+| 대금 처리 | 확정 주문의 결제·결과 발행 | payment | Order가 결과 반영·OrderPaid 발행, License가 권한 부여. 정산은 후속 |
+| 이용 권한 | 상품별 보유권과 주문별 구매 근거 | license | 내 라이브러리 조회. Download 연계는 후속 |
 | 파일 배포 | 공개 파일·변형 선택, 접근 판정, 다운로드 티켓 | download | 릴리스·상품 참조·보유권 사본을 조합해 접근 판정 |
 | 판매자 정산 | 매출·환불 원장, 수수료, 월 마감 | settlement | 결제 항목을 원장으로 번역. 상품의 현재 가격으로 과거 매출을 다시 계산하지 않음 |
 
@@ -110,7 +110,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 | `submissionId` | Studio의 심사 제출물 ID | Review 스냅샷·사건과 Studio 관문의 연결 |
 | `releaseId`, `buildId` | Studio의 공개 단위 / 파일 산출물 ID | 상품의 현재 릴리스와 Download 매니페스트 일치 확인 |
 | `orderNo` | Order가 발급하는 주문번호 | 결제·이용권·정산을 연결. 각 서비스의 DB 기본 키와 별개 |
-| `memberId` | Auth 회원 ID | 구매자와 이용권 수혜자. 사용자 입력 대신 인증 정보에서 결정 |
+| `memberId` | Auth 회원 ID | 구 외부 업무의 숫자 연결 값. 현재 Order·Payment·License의 구매자는 JWT sub |
 | `ownerSubject` | 현재 Studio Project 소유자 | 완료된 Auth가 발급한 JWT sub. Workspace·sellerId와 별도 매핑하지 않음 |
 
 예: `gameId=7`, `productCode=GAME-A`, `productId=42`는 서로 다른 식별자다. 주문에는 `42`를, 다운로드 요청에는 `GAME-A`를 쓴다. [ProductRef](../apps/download/src/main/java/com/stove/download/core/domain/ProductRef.java)가 코드와 상품 ID·릴리스 ID의 관계를 보관한다.
@@ -119,7 +119,7 @@ Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소�
 
 ### 이용권 원본과 보유권 사본
 
-License는 `(orderNo, productId)`별 지급·회수 원본이고, Entitlement는 `(memberId, productId)`별 다운로드 판정 사본이다. “라이선스 지급 완료” 직후라도 사본 반영 전에는 다운로드가 거절될 수 있다. Download는 요청마다 License에 동기 조회하지 않는다. 환불 후 재구매, 이벤트 지연의 경계는 [Entitlement](domain/models/fulfillment.md#entitlement)와 [Q5](domain/open-questions.md#q5)를 참고한다.
+License는 `(buyerSubject, productId)`별 보유권 한 개와 완료 주문 하나의 출처를 한 행에 보존한다. 같은 상품의 PENDING·PAID 중복 주문은 Order가 차단한다. Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. Entitlement는 미완료 Download의 구 사본 모델이며 새 연계 방식은 Download 단계에서 정한다. [현재 모델](domain/models/fulfillment.md#license) · [Q5](domain/open-questions.md#q5).
 
 ## 짧은 용어와 권장 동사
 

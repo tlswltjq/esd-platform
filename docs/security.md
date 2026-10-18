@@ -10,8 +10,15 @@ Auth가 회원·역할과 서명된 access token을 발행한다. Gateway와 각
 - OAuth2 Authorization Code + PKCE에서 창작·심사는 `studio`, 커머스는 `commerce` 범위를 요청한다. access token의 `member_id`는 Auth 회원 ID, `roles`는 계정 역할이다. ID token은 API 자격증명이 아니다.
 - Gateway와 서비스는 서명·발행자·`esd-api` audience를 검증하고 기본 거부 정책을 적용한다. 주문·결제·라이브러리·다운로드에는 `MEMBER`, 운영자 정산·`/api/v1/ops/**`에는 `ADMIN`이 필요하다. 창작자 자신의 정산을 보는 `/api/v1/settlements/me/**`는 `CREATOR`와 소유권을 확인한다. 공개 상품·스토어 읽기는 로그인 없이 제공한다.
 - Catalog MVP는 공개 상품 목록·상세 GET만 제공하며 쓰기 API를 제공하지 않는다. 기존 할인·프로모션 업무는 제거했다. Gateway에 남은 관련 권한 규칙은 이 업무를 다시 활성화하지 않는다.
-- Order의 구매자는 JWT sub이며 MEMBER 역할이 필요하다. 본문·X-Member-Id로 선택하지 않는다. 타인의 주문 상세는 404이고 목록은 본인 주문만 반환한다. 취소·결과 주입 API는 제공하지 않는다. 미완료 License·Download의 기존 member_id·403·환불 계약은 새 Order의 기준이 아니다. Gateway의 X-Member-Id 제거는 유지한다.
+- Order의 구매자는 JWT sub이며 MEMBER 역할이 필요하다. 본문·X-Member-Id로 선택하지 않는다. 타인의 주문 상세는 404이고 목록은 본인 주문만 반환한다. 취소·결과 주입 API는 제공하지 않는다. 재작성 전 License·미완료 Download의 member_id·403·환불 계약은 새 Order의 기준이 아니다. Gateway의 X-Member-Id 제거는 유지한다.
 - 공개 상품 상세는 출시된 상품만 반환한다. Catalog MVP에는 출시 전 상품 조회 API가 없으며 공통 `/api/v1/ops/**`도 HTTP로 개방하지 않는다.
+
+## License MVP 경계
+
+내 라이브러리 두 GET은 MEMBER·검증된 JWT sub를 사용한다. 미보유·타인 404, 익명 401, 역할 없음 403이다.
+지급·회수·운영 HTTP API는 닫고 조회로 권한을 생성하지 않는다. 주문·결제 연결 ID와 구매 근거는 응답에 노출하지 않는다.
+OrderPaid의 봉투·본문·키·값을 mapper에서 검증한다. 내부 PaidOrder의 생성 검증과 기존 입력 전체 비교를 거쳐 출처를 포함한 License·Inbox를 함께 저장한다.
+오류는 공통 재시도·DLT에 남기며 자동 환불 이벤트를 만들지 않는다. 구 Outbox 릴레이는 비활성화한다.
 
 ## Payment MVP 경계
 

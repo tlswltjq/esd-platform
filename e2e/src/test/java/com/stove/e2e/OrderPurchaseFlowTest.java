@@ -25,6 +25,9 @@ class OrderPurchaseFlowTest {
     private static Path evidence() { return Path.of(System.getProperty("stove.e2e.order-evidence")); }
     private static JsonNode saved() throws Exception { return JSON.readTree(Files.readString(evidence())); }
     private static Account buyer(JsonNode s) throws Exception { return login(s.path("buyerEmail").asText(), "creator-password-1234"); }
+    private static Account buyer(JsonNode s, String name) throws Exception {
+        return login(s.path(name + "BuyerEmail").asText(), "creator-password-1234");
+    }
     private static String detail(String no) { return "/api/v1/orders/" + no; }
     private static void publish(long project, Account creator, Account reviewer) {
         long review = request(project, creator, reviewer);
@@ -120,12 +123,13 @@ class OrderPurchaseFlowTest {
         assertThat(current.path("price").asLong()).isEqualTo(2000);
         assertThat(Stove.gateway.post("/api/v1/orders", requestFor(oldProduct), buyer.headers()).status()).isEqualTo(409);
         assertThat(order(first.path("orderNo").asText(), buyer)).isEqualTo(first);
-        JsonNode pendingRequest = requestFor(current); JsonNode pending = create(pendingRequest, buyer);
-        JsonNode failedRequest = requestFor(current); JsonNode failed = create(failedRequest, buyer);
+        Account pendingBuyer = account(false); Account failedBuyer = account(false);
+        JsonNode pendingRequest = requestFor(current); JsonNode pending = create(pendingRequest, pendingBuyer);
+        JsonNode failedRequest = requestFor(current); JsonNode failed = create(failedRequest, failedBuyer);
         E2eClient.Response list = Stove.gateway.get("/api/v1/orders?size=1", buyer.headers());
-        assertThat(list.data().path("totalElements").asLong()).isEqualTo(3);
+        assertThat(list.data().path("totalElements").asLong()).isEqualTo(1);
         assertThat(list.data().path("content").size()).isEqualTo(1);
-        ObjectNode s = JSON.createObjectNode().put("buyerEmail", buyer.email()).put("code", code);
+        ObjectNode s = JSON.createObjectNode().put("buyerEmail", buyer.email()).put("pendingBuyerEmail", pendingBuyer.email()).put("failedBuyerEmail", failedBuyer.email()).put("code", code);
         s.set("first", first); s.set("firstRequest", firstRequest); s.set("pending", pending);
         s.set("pendingRequest", pendingRequest); s.set("failed", failed); s.set("currentProduct", current);
         Files.writeString(evidence(), JSON.writeValueAsString(s));
@@ -134,7 +138,7 @@ class OrderPurchaseFlowTest {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("first").path("orderNo").asText(), buyer)).isEqualTo(s.path("first"));
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("first"));
-        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(3);
+        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
     }
     @Test void verifiesPublishedEventsAndPaymentResults() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
@@ -144,32 +148,32 @@ class OrderPurchaseFlowTest {
         assertThat(b.amount()).isEqualTo(2000); assertThat(a.contentVersion()).isLessThan(b.contentVersion());
         OrderPaymentCompletedEvent success = OrderPaymentCompletedEvent.of(first, a.eventId(), "fixture-" + UUID.randomUUID(), buyer.subject(), a.amount(), a.currency());
         send(success); send(success);
-        send(OrderPaymentFailedEvent.of(failed, f.eventId(), "fixture-" + UUID.randomUUID(), buyer.subject(), f.amount(), f.currency(), "DECLINED", "Fixture final decline"));
-        OrderPaymentCompletedEvent bad = OrderPaymentCompletedEvent.of(pending, b.eventId(), "fixture-" + UUID.randomUUID(), buyer.subject(), b.amount()-200, b.currency());
+        send(OrderPaymentFailedEvent.of(failed, f.eventId(), "fixture-" + UUID.randomUUID(), f.buyerSubject(), f.amount(), f.currency(), "DECLINED", "Fixture final decline"));
+        OrderPaymentCompletedEvent bad = OrderPaymentCompletedEvent.of(pending, b.eventId(), "fixture-" + UUID.randomUUID(), b.buyerSubject(), b.amount()-200, b.currency());
         try (KafkaConsumer<String, String> dlt = consumer(Topics.PAYMENT + ".DLT")) {
             send(bad); boolean found = false; long end = System.nanoTime() + Duration.ofSeconds(45).toNanos();
             while (!found && System.nanoTime() < end)
                 for (ConsumerRecord<String, String> record : dlt.poll(Duration.ofMillis(500))) if (record.value().contains(bad.eventId())) found = true;
             assertThat(found).isTrue();
         }
-        state(first, buyer, "PAID"); state(failed, buyer, "FAILED"); state(pending, buyer, "PENDING");
+        state(first, buyer, "PAID"); state(failed, buyer(s, "failed"), "FAILED"); state(pending, buyer(s, "pending"), "PENDING");
         assertThat(order(first, buyer).path("amount").asLong()).isEqualTo(1000);
         ObjectNode changed = (com.fasterxml.jackson.databind.node.ObjectNode)s;
         changed.set("completion", JSON.valueToTree(success)); changed.set("paid", order(first, buyer));
-        changed.set("failedResult", order(failed, buyer)); Files.writeString(evidence(), JSON.writeValueAsString(changed));
+        changed.set("failedResult", order(failed, buyer(s, "failed"))); Files.writeString(evidence(), JSON.writeValueAsString(changed));
     }
     @Test void queriesOrdersWithoutCatalog() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(Stove.gateway.get("/api/v1/storefront/products/" + s.path("code").asText()).status()).isEqualTo(200);
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("paid"));
-        assertThat(Stove.gateway.post("/api/v1/orders", s.path("pendingRequest"), buyer.headers()).data()).isEqualTo(s.path("pending"));
+        assertThat(Stove.gateway.post("/api/v1/orders", s.path("pendingRequest"), buyer(s, "pending").headers()).data()).isEqualTo(s.path("pending"));
         assertThat(Stove.gateway.post("/api/v1/orders", requestFor(s.path("currentProduct")), buyer.headers()).status()).isEqualTo(503);
-        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(3);
+        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
     }
     @Test void verifiesPersistedResultsAfterOrderRestart() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("paid").path("orderNo").asText(), buyer)).isEqualTo(s.path("paid"));
-        assertThat(order(s.path("failedResult").path("orderNo").asText(), buyer)).isEqualTo(s.path("failedResult"));
+        assertThat(order(s.path("failedResult").path("orderNo").asText(), buyer(s, "failed"))).isEqualTo(s.path("failedResult"));
         send(JSON.treeToValue(s.path("completion"), OrderPaymentCompletedEvent.class));
         // The following phase also verifies the timestamp after the replay has been consumed.
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("paid"));
@@ -177,9 +181,9 @@ class OrderPurchaseFlowTest {
     @Test void createsAfterCatalogRecovery() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("paid").path("orderNo").asText(), buyer)).isEqualTo(s.path("paid"));
-        JsonNode recovered = create(requestFor(s.path("currentProduct")), buyer);
+        JsonNode recovered = create(requestFor(s.path("currentProduct")), buyer(s, "failed"));
         assertThat(recovered.path("amount").asLong()).isEqualTo(2000);
         placed(Set.of(recovered.path("orderNo").asText()));
-        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(4);
+        assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
     }
 }

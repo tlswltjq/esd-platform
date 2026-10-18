@@ -29,7 +29,7 @@ PendingPaymentScheduler가 매초 최대 20건을 재개한다. 공급자 호출
 | PG 결정 후 결과 저장 실패 | PG 원장은 보존, PENDING에서 같은 결정으로 결과 저장 재시도 |
 
 최종 결과와 Outbox는 같은 트랜잭션이다. 같은 요청·결과 재전달은 최초 상태·ID·시각을 바꾸지 않는다.
-PG 수수료 공제액을 청구액으로 대신 쓰지 않는다. 거절 뒤 재구매는 새 Order requestId로 시작한다.
+PG 수수료 공제액을 청구액으로 대신 쓰지 않는다. 거절 뒤 재구매는 새 Order requestId로 시작한다. 같은 상품의 PENDING·PAID 추가 주문은 Order가 차단하며 Payment가 License 보유 여부를 조회하지 않는다.
 
 ## API와 설정
 

@@ -9,3 +9,11 @@ dependencies {
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
+
+// Only the disposable OCI verifier uses this classpath; fault fixtures are not packaged.
+tasks.register('writeVerificationClasspath') {
+    dependsOn tasks.named('integrationTestClasses')
+    doLast {
+        layout.buildDirectory.file('verification-classpath.txt').get().asFile.text = sourceSets.integrationTest.runtimeClasspath.asPath
+    }
+}

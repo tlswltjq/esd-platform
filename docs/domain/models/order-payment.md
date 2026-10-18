@@ -24,6 +24,7 @@ Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “확정된 
 
 **만들고 쓰는 때:** CreateOrder가 Catalog 공개 상세를 HTTP로 읽고 기대 버전·금액을 확인한다.
 주문 스냅샷과 OrderPlaced Outbox를 같이 저장한다. 이미 저장된 requestId의 같은 입력은 Catalog를 호출하지 않고 기존 주문을 반환한다.
+같은 구매자·상품의 PENDING·PAID 주문은 DB 생성 컬럼·유일 제약으로 합쳐 한 건만 허용한다. 최종 FAILED 이후 새 requestId로 다시 주문할 수 있으며, 같은 requestId 재조회는 원래 주문을 반환한다.
 본인 조회는 SearchOrders·ReadOrder, 결제 결과는 ApplyPaymentResult가 담당한다.
 
 결제 결과는 원래 requestEventId·orderNo·buyerSubject·amount·currency가 일치해야 한다.

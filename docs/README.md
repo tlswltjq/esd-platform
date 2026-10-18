@@ -18,7 +18,7 @@
 |---|---|
 | [개발 환경과 실행](getting-started.md) | 로컬·원격 실행, Swagger OAuth, 문제 해결 |
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
-| [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 Payment MVP 경계 |
+| [인증·권한 계약](security.md) | 계정·역할·소유권, access token과 Payment·License MVP 경계 |
 | [auth·Gateway/BFF](auth-bff.md) | 재작업 완료 모듈의 자동 로그인·RTR·공유 세션, 실행과 검증 |
 | [Studio 실행·심사·출시 요청](studio-guide.md) | Auth·Gateway 기준의 전체 업로드·심사·출시 요청과 세 모듈 검증 |
 | [Review 실행·수동 심사](review-guide.md) | 심사자 로그인·ZIP 열람·승인 및 반려·네 모듈 검증과 재시작 확인 |
@@ -26,6 +26,7 @@
 | [Store 실행·검색·사본 확인](store-guide.md) | OCI 검증, 제목 검색·상세, HTTP 초기화와 재시작 복구 |
 | [Order 실행·주문·결제 결과 확인](order-guide.md) | 단일 상품 주문, 금액 스냅샷·중복 요청·결과 픽스처·OCI 장애와 재시작 검증 |
 | [Payment 실행·결제·복구 확인](payment-guide.md) | 모의 PG·내 결제 조회, 응답 유실·결과 롤백·8개 앱 장애와 재시작 검증 |
+| [License 실행·라이브러리·재전달 확인](license-guide.md) | 상품 보유권·구매 근거·내 라이브러리, 아홉 앱의 중단·재시작·원본 이벤트 복구 검증 |
 
 ## 설계·검증·운영 근거
 
@@ -41,13 +42,14 @@
 | [Store MVP 계획·완료 기록](store-mvp-plan.md) | 학습용 최소 검색·조회 사본, Catalog 연동과 OCI 실제 검증 결과 |
 | [Order MVP 계획·완료 기록](order-mvp-plan.md) | 단일 상품 주문 스냅샷·내 주문·결제 결과 계약과 OCI 실제 검증 결과 |
 | [Payment MVP 계획·검증 기록](payment-mvp-plan.md) | 모의 PG 자동 처리, Inbox·미확정 재개·결과 Outbox·내 결제 조회와 OCI 완료 근거 |
+| [License MVP 계획·완료 기록](license-mvp-plan.md) | 상품별 단일 구매·출처 통합·Order 중복 구매 제한과 OCI 완료 근거 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |
 | [결함 기록](defects.md) | 재현한 결함, 원인·수정·회귀 검증 |
 | [성능 측정](performance.md) · [측정 원칙](measuring.md) | 요약과 원자료, 유효·무효 판정 기준 |
 | [장애 실험](chaos.md) · [재시작 시나리오](resilience-scenarios.md) | 부하 중 장애와 중단 후 처리 재개 근거 |
-| [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 원장 유실 시 복구와 확인 순서 |
+| [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록. 새 License MVP에 적용하지 않음 |
 | [DB 락 실험](../scripts/db-lab/README.md) · [성능 도구](../scripts/perf/README.md) · [장애 도구](../scripts/chaos/README.md) | 실험 실행 방법과 결과 파일 |
 
 ## 문서를 갱신할 때

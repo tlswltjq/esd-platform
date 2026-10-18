@@ -22,7 +22,7 @@ Catalog·Store·Order·Payment의 범위와 OCI 결과는 각 MVP 완료 기록�
 | B | [store](#store) | 8087 | 공개 상품 검색·조회 사본 | MySQL |
 | B | [order](#order) | 8082 | 주문 스냅샷·청구액·내 주문·결제 결과 | MySQL |
 | B | [payment](#payment) | 8083 | 확정 주문 결제·미확정 재개·결과 발행 | MySQL |
-| C | [license](#license) | 8084 | 이용권 원본 지급·회수 | MySQL |
+| C | [license](#license) | 8084 | 상품 이용 권한·구매 근거·내 라이브러리 | MySQL |
 | C | [download](#download) | 8088 | 패치 매니페스트, 서명 URL | MongoDB |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
 | — | [gateway](#gateway) | 8080 | 라우팅·BFF 로그인·세션·토큰 관리, 내부 API 차단 | Redis |
@@ -163,6 +163,8 @@ MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문
 Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 버전·정가를 비교한다. 차이는 409이며 무료 상품도 409다.
 정가 listAmount·할인액 discountAmount=0·청구액 amount를 고정하고 구매자별 requestId 유일 제약으로 중복 생성을 막는다.
 같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다.
+새 requestId의 같은 상품 구매는 기존 PENDING이면 409 PURCHASE_IN_PROGRESS, PAID이면 409 PRODUCT_ALREADY_PURCHASED다.
+최종 FAILED만 새 주문을 허용한다. V11의 구매자·상품 ID/코드 유일 제약으로 동시 생성도 제한한다.
 
 발행은 OrderPlaced(stove.order.v1), 수신은 OrderPaymentCompleted/OrderPaymentFailed(stove.payment.v1)다.
 결과의 requestEventId·주문번호·구매자·금액·통화가 일치해야 PENDING → PAID/FAILED로 전이한다.
@@ -203,25 +205,24 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 
 ## license
 
-이용권 원본(라이선스)의 지급·회수. 현재 `licenseKey`는 내부 생성 문자열이며 외부 CD키 연동을 뜻하지 않는다.
-
-**상태머신** — `ACTIVE ──revoke──▶ REVOKED`
-
-**HTTP API**
+구매자·상품별 영구 이용 권한과 주문별 불변 구매 근거를 보존한다.
+[MVP 범위·검증 기록](license-mvp-plan.md) · [조회·실행 안내](license-guide.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/library` | 내 보유 라이브러리 |
+| GET | `/api/v1/library?page=0&size=20` | JWT sub 기준 내 보유 상품 페이지 |
+| GET | `/api/v1/library/{productCode}` | 본인이 보유한 상품 한 개. 타인·미보유 404 |
 
-**이벤트** — 수신 `PaymentCompleted`·`PaymentCancelled` / 발행 `LicenseIssued`·`LicenseRevoked`·`LicenseIssueFailed`
+**이벤트** — `stove.order.v1`의 `OrderPaid`만 수신. 소비 그룹 `license-paid-order`. 발행 이벤트 없음.
 
-**규칙**
-
-- 지급은 결제 완료 이벤트로만 발생한다.
-- `(order_no, product_id)` 유니크 제약으로 **한 주문의 한 상품은 한 번만 지급**된다.
-  존재 확인과 DB 제약을 이중으로 건다.
-- 재시도까지 소진된 지급 실패는 `LicenseIssueFailed` 를 발행해 결제 환불을 유도한다.
-  이 보상 이벤트는 `REQUIRES_NEW` 로 별도 커밋된다 — 지급 트랜잭션이 롤백된 뒤에도 반드시 나가야 하기 때문.
+- Order가 최초 PAID에 함께 저장한 상품·결제 스냅샷을 사용한다. 추가 결제 승인이나 구매 확정 절차는 없다.
+- 권한은 `(buyerSubject, productId)`별 한 개이며 출처 전체를 `product_license`에 함께 저장한다. 다른 주문의 같은 상품은 충돌이다.
+- 같은 주문의 입력 전체와 기존 권한·Inbox를 비교하고, 출처를 포함한 License·Inbox를 함께 커밋한다.
+- 최초 licenseId·제목·획득 시각은 유지한다. Catalog·Order·Payment HTTP 조회로 지급하거나 가격을 바꾸지 않는다.
+- MEMBER JWT가 필요하다. 본문·쿼리·헤더의 회원 ID로 소유자를 바꾸지 않는다.
+- 구 License Outbox 릴레이와 운영 HTTP는 비활성화한다. 지급 실패는 공통 재시도·DLT로 남기며 자동 환불을 요청하지 않는다.
+- 기존 마이그레이션과 구 자료를 보존하고 V5에서 출처를 권한에 통합한다. license_purchase는 과거 자료로만 남긴다. 기존 PAID 주문의 자동 소급 지급은 없다.
+- 환불·회수·Download 연계는 후속 범위다.
 
 ---
 
@@ -401,7 +402,7 @@ Payment의 공급자 응답 유실과 결과 저장 실패는 테스트 전용 �
 
 ### 스텁 공통의 한계
 
-아래는 미완료 License·Settlement의 기존 스텁에 관한 기록이다.
+아래는 재작성 전 License·Settlement의 기존 스텁에 관한 기록이다. 현재 License는 지급 실패 보상 이벤트를 발행하지 않는다.
 그래서 license 의 Saga 보상 경로(`LicenseIssueFailed` → 자동 환불)는
 지급 실패를 인위적으로 주입해야만 테스트할 수 있다.
 

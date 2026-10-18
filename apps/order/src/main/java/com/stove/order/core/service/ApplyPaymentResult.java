@@ -1,6 +1,9 @@
 package com.stove.order.core.service;
 
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import java.util.UUID;
 import com.stove.common.web.error.*;
 import com.stove.order.core.domain.*;
 import jakarta.persistence.EntityManager;
@@ -15,6 +18,7 @@ public class ApplyPaymentResult {
     private final OrderRepository orders;
     private final ProcessedEventGuard guard;
     private final EntityManager entityManager;
+    private final OutboxRecorder outbox;
 
     public void execute(String eventType, PaymentResult result) {
         if (eventType == null || eventType.isBlank() || eventType.length() > 60 || result == null)
@@ -29,6 +33,13 @@ public class ApplyPaymentResult {
         if (!guard.firstDelivery(result.eventId(), CONSUMER_GROUP, eventType))
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox와 주문의 결제 결과가 일치하지 않습니다.");
         order.apply(result);
+        if (order.getStatus() == OrderStatus.PAID) {
+            OrderPaidEvent event = new OrderPaidEvent(UUID.randomUUID().toString(), order.getUpdatedAt(),
+                    order.getOrderNo(), order.getRequestEventId(), order.getPaymentResultEventId(),
+                    order.getPaymentId(), order.getBuyerSubject(), order.getProductId(), order.getProductCode(),
+                    order.getTitle(), order.getContentVersion(), order.getAmount(), order.getCurrency());
+            outbox.record("Order", order.getOrderNo(), event);
+        }
         entityManager.flush();
     }
 }

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.*;
 import com.stove.common.testcontainers.SharedContainers;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.core.io.FileSystemResource;
@@ -12,8 +14,66 @@ import org.testcontainers.containers.MySQLContainer;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.util.UUID;
+import java.util.function.Consumer;
+import com.stove.order.core.domain.Order;
+import static com.stove.order.OrderFixtures.*;
 
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
+    private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
+
+    @Test void v11PreservesFailedHistoryAndProtectsThePendingAndPaidSlot() {
+        withV10(source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            insert(jdbc, "FAILED"); insert(jdbc, "FAILED"); insert(jdbc, "PENDING");
+            java.util.List<java.util.Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
+            flyway.migrate(); flyway.validate();
+            java.util.List<java.util.Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            for (int i = 0; i < original.size(); i++) assertThat(migrated.get(i)).containsAllEntriesOf(original.get(i));
+            assertThatThrownBy(() -> insert(jdbc, "PAID")).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            jdbc.update("UPDATE purchase_order SET status='FAILED' WHERE status='PENDING'");
+            insert(jdbc, "PAID");
+            assertThatThrownBy(() -> insert(jdbc, "PENDING")).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_order WHERE status='FAILED'", Integer.class)).isEqualTo(3);
+            jdbc.update("UPDATE purchase_order SET product_id=2 WHERE status='PAID'");
+            assertThatThrownBy(() -> insert(jdbc, "PENDING")).hasStackTraceContaining("uk_purchase_order_buyer_code");
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"PENDING", "PAID"})
+    void v11RefusesExistingDuplicatePurchasesWithoutRewritingThem(String status) {
+        withV10(source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            insert(jdbc, "PENDING"); insert(jdbc, status);
+            java.util.List<java.util.Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            assertThatThrownBy(() -> Flyway.configure().dataSource(source).locations(LOCATION).load().migrate())
+                    .hasStackTraceContaining("uk_purchase_order_buyer_product");
+            assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(original);
+        });
+    }
+
+    private void insert(JdbcTemplate jdbc, String status) {
+        Order order = Order.create("usr_buyer", request(), product(), id());
+        jdbc.update("INSERT INTO purchase_order(order_no,buyer_subject,request_id,product_id,product_code,title,content_version,list_amount,discount_amount,amount,currency,status,request_event_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(6),NOW(6))",
+                order.getOrderNo(), order.getBuyerSubject(), order.getRequestId(), order.getProductId(), order.getProductCode(), order.getTitle(),
+                order.getContentVersion(), order.getListAmount(), order.getDiscountAmount(), order.getAmount(), order.getCurrency(), status, order.getRequestEventId());
+    }
+
+    private void withV10(Consumer<DriverManagerDataSource> check) {
+        MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
+        String schema = "order_exclusive_" + UUID.randomUUID().toString().replace("-", "");
+        String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
+        JdbcTemplate root = new JdbcTemplate(new DriverManagerDataSource(server + mysql.getDatabaseName()
+                + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword()));
+        root.execute("CREATE DATABASE " + schema);
+        try {
+            DriverManagerDataSource source = new DriverManagerDataSource(server + schema + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword());
+            Flyway.configure().dataSource(source).locations(LOCATION).target("10").load().migrate();
+            check.accept(source);
+        } finally { root.execute("DROP DATABASE " + schema); }
+    }
+
     @Test void v10PreservesLegacyOrdersAndQuarantinesOnlyOldPendingEvents() throws Exception {
         MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
         String schema = "order_migration_" + UUID.randomUUID().toString().replace("-", "");

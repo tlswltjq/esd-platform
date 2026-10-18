@@ -4,13 +4,13 @@
 
 Order는 **누가 어떤 공개 상품을 얼마에 주문했는가**를 보존한다.
 상품 하나·수량 하나·양수 KRW 정가만 주문하며 결제 결과에 따라 PENDING → PAID/FAILED로 전이한다.
-실제 PG·결제창·환불·이용권·정산은 후속 모듈의 책임이다. Order 독립 검증은 이벤트 픽스처를 사용하며, 실제 모의 PG 연계는 [Payment 안내](payment-guide.md)를 따른다.
+실제 PG·결제창·환불·정산은 후속 범위다. 이용 권한은 [License](license-guide.md)가 담당한다. Order 독립 검증은 이벤트 픽스처를 사용하며, 실제 모의 PG 연계는 [Payment 안내](payment-guide.md)를 따른다.
 
 ## 코드와 데이터 흐름
 
 | 유스케이스 | 책임 |
 |---|---|
-| CreateOrder | 구매자별 중복 요청 확인 → Catalog 공개 상세 HTTP → 기대 값 비교 → 주문·Outbox 저장 |
+| CreateOrder | 구매자별 중복 요청 확인 → Catalog 공개 상세 HTTP → 동일 상품의 PENDING·PAID 확인 → 기대 값 비교 → 주문·Outbox 저장 |
 | SearchOrders | 구매자의 주문만 최신 생성순 페이지 조회 |
 | ReadOrder | 구매자·주문번호로 상세 조회, 타인·없는 주문은 404 |
 | ApplyPaymentResult | 결제 결과 연결·금액 검증, 행 잠금·Inbox·최종 상태 반영 |
@@ -108,7 +108,7 @@ python3 scripts/verify-order.py
 
 ## 기존 DB 전환과 재전달
 
-기존 Flyway V1~V9는 보존하고 V10에 purchase_order를 추가한다.
+기존 Flyway V1~V10과 자료는 보존한다. V10에 추가한 purchase_order는 V11에서 PENDING·PAID 구매 유일 제약을 적용한다.
 구 orders·order_item·shedlock 등은 남지만 새 업무에서는 사용하지 않으며 자동 이관하지 않는다.
 
 기존 DB 전환 시 모든 구 Order 쓰기·릴레이를 중지한 뒤 [전환 SQL](../scripts/order-transition.sql)을 명시적으로 실행한다.
@@ -120,3 +120,21 @@ Kafka 장애 중에도 주문·미발행 이벤트는 DB에 남고 공통 릴레
 격리된 구 이벤트는 새 흐름으로 재투입하지 않는다.
 결과 DLT는 원래 주문·요청과의 연결을 복구한 뒤 원본 이벤트로 재전달한다. 새 주문번호나 이벤트 ID를 임의로 발급해 맞추지 않는다.
 상충하는 최종 결제 결과는 먼저 확정한 결과를 보존하므로 원인을 조사하고 거래 기록을 대조해야 한다.
+
+## 2026-10-17 License 연계 확장
+
+최초 PAID 반영에서 Order의 상품·청구액·결제 연결 정보를 OrderPaid로 만들어 같은 트랜잭션의 Outbox에 저장한다.
+이 연계 확장에서는 기존 Order HTTP·OrderPlaced·Payment 결과 계약과 purchase_order 스키마를 유지했다. 이후 동일 상품 구매 제한은 아래 V11 범위를 따른다.
+동일 결과 재전달·조회는 새 이벤트를 만들지 않고 FAILED에는 OrderPaid가 없다.
+Outbox 삽입·flush·커밋 실패는 PAID 반영·결제 결과 Inbox도 함께 롤백한다.
+
+발행 도입 전에 이미 PAID였던 주문은 자동 소급 지급하지 않는다.
+공유 데이터의 전환과 과거 구매 소급 처리는 별도 판단이며 [License 범위·검증](license-mvp-plan.md)을 따른다.
+
+## 동일 상품 구매 제한
+
+본인용 동일 상품은 한 번만 구매한다. 선물·추가 수량은 후속 범위다.
+같은 requestId·같은 입력은 원래 주문을 반환하고, 새 requestId에 대해 같은 구매자·상품의 PENDING은 409 PURCHASE_IN_PROGRESS, PAID는 409 PRODUCT_ALREADY_PURCHASED다.
+최종 FAILED만 새 requestId의 새 주문을 허용한다. 미확정·시간 경과로 구매 제한을 풀지 않는다.
+판정은 Order 자기 상태와 V11의 유일 제약으로 수행하며, License 지급 지연·중단 중에도 PAID 추가 구매를 막는다.
+[범위·자료 전환·동시성 검증](license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획)을 따른다.

@@ -47,6 +47,7 @@ class OrderEventListenerTest {
     }
     @Test void ignoresLegacyContractsAndRejectsMissingHeaders() {
         OrderPlacedEvent e=event(request());listener.receive(record(e,e.eventId(),"OrderCreated",e.orderNo(),"{}"));
+        listener.receive(record(e,e.eventId(),"OrderPaid",e.orderNo(),"{}"));
         assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.ORDER,0,0,e.orderNo(),"{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
