@@ -10,6 +10,11 @@ dependencies {
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
 
+tasks.named('integrationTest') {
+    dependsOn ':simulators:mock-pg:bootJar'
+    systemProperty 'mock.pg.jar', rootProject.file('simulators/mock-pg/build/libs/mock-pg-0.0.1-SNAPSHOT.jar').absolutePath
+}
+
 // Test-only classpath for restarting the real OCI process with explicit fault fixtures.
 tasks.register('writeVerificationClasspath') {
     dependsOn tasks.named('integrationTestClasses')

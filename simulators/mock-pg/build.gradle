@@ -1,0 +1,14 @@
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    integrationTestImplementation 'org.testcontainers:mysql'
+    integrationTestImplementation 'org.testcontainers:junit-jupiter'
+}
+
+tasks.named('jar') { enabled = false }

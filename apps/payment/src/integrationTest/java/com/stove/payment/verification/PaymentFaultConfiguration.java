@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.payment.adapter.pg.SimulatedPgGateway;
+import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.port.PgGateway;
@@ -15,10 +15,10 @@ import org.springframework.core.env.Environment;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Explicit OCI verification source; absent from bootJar and production component scanning. */
+/** Explicit local verification source; absent from bootJar and production component scanning. */
 @TestConfiguration(proxyBeanMethods=false)
 public class PaymentFaultConfiguration {
-    @Bean @Primary PgGateway verificationGateway(SimulatedPgGateway supplier,Environment env) {
+    @Bean @Primary PgGateway verificationGateway(SimulatedPgHttpGateway supplier,Environment env) {
         return request -> {
             PgResult result=supplier.charge(request);
             if(env.getProperty("stove.verification.fail-after-provider",Boolean.class,false))

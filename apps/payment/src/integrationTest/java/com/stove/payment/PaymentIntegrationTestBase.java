@@ -45,6 +45,8 @@ public abstract class PaymentIntegrationTestBase {
         } catch (Exception e) { throw new ExceptionInInitializerError(e); }
     }
     @DynamicPropertySource static void jwt(DynamicPropertyRegistry p) {
+        p.add("stove.payment.pg.base-url",ExternalPgProcess::baseUrl);
+        p.add("stove.payment.pg.api-key",() -> ExternalPgProcess.PAYMENT_KEY);
         p.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> ISSUER);
         p.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", () -> "http://127.0.0.1:" + JWKS.getAddress().getPort() + "/jwks");
     }

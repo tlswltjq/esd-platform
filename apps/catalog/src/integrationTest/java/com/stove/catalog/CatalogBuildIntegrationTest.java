@@ -20,7 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-@TestPropertySource(properties="stove.catalog.download-service-key=internal-test-key")
+@TestPropertySource(properties={"stove.catalog.download-service-key=internal-test-key","stove.catalog.settlement-service-key=settlement-test-key"})
 class CatalogBuildIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired TestRestTemplate http;
     @Autowired PublishProjectRelease publish;
@@ -57,5 +57,19 @@ class CatalogBuildIntegrationTest extends CatalogIntegrationTestBase {
         ProjectReleaseRequestedEvent event = event(id(), 1); publish(event);
         jdbc.update("UPDATE catalog_release SET status='REJECTED' WHERE release_request_id=?", event.releaseRequestId());
         assertThat(build(event.partitionKey()).getStatusCode().is5xxServerError()).isTrue();
+    }
+
+    @Test void settlementOwnerKeyIsSeparateFromDownloadAndReturnsOnlyImmutableIdentity() throws Exception {
+        ProjectReleaseRequestedEvent event=event(id(),1);publish(event);
+        String path="/internal/v1/products/"+event.partitionKey()+"/owner";
+        assertThat(http.getForEntity(path,String.class).getStatusCode().value()).isEqualTo(401);
+        assertThat(http.exchange(path,HttpMethod.GET,key(),String.class).getStatusCode().value()).isEqualTo(401);
+        HttpHeaders headers=new HttpHeaders();headers.set("X-Settlement-Service-Key","settlement-test-key");
+        ResponseEntity<String> response=http.exchange(path,HttpMethod.GET,new HttpEntity<Void>(headers),String.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        JsonNode owner=json.readTree(response.getBody()).path("data");assertThat(owner.size()).isEqualTo(3);
+        assertThat(owner.path("ownerSubject").asText()).isEqualTo(event.snapshot().ownerSubject());
+        assertThat(http.exchange("/internal/v1/products/"+event.partitionKey()+"/build",HttpMethod.GET,new HttpEntity<Void>(headers),String.class).getStatusCode().value()).isEqualTo(401);
+        assertThat(http.getForEntity("/v3/api-docs",String.class).getBody()).doesNotContain("/owner","OwnerResponse");
     }
 }

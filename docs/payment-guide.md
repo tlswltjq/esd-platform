@@ -47,39 +47,36 @@ prepare·결제창·콜백·환불·승인 주입·운영 HTTP API는 없다.
 
 | 환경변수 | 기본값·범위 |
 |---|---|
-| PAYMENT_PG_PROVIDER | simulated |
+| PAYMENT_PG_PROVIDER | SIMULATED |
 | PAYMENT_PROCESSING_ENABLED | true. false이면 접수·조회만 수행 |
 | PAYMENT_POLL_MS | 1000, 허용 100~60000 |
 | PAYMENT_BATCH_SIZE | 20, 허용 1~200 |
 | PAYMENT_RETRY_MS | 5000, 허용 100~300000 |
-| PAYMENT_SIMULATED_RESULT | APPROVED 또는 DECLINED |
+| MOCK_PG_URI | http://localhost:8092, 외부 모의 PG 주소 |
+| MOCK_PG_PAYMENT_KEY | 필수. Payment 전용 승인·조회 키 |
 
-공급자 대역은 simulated_payment_charge에 결정을 독립 커밋한다. 설정 변경은 새 키의 결정에만 적용한다.
-업무 테이블과 같은 MySQL을 쓰므로 외부 PG의 독립 DB·네트워크 장애까지 재현하지 않는다.
-실제 PG 교체는 같은 키의 멱등 결제·원래 결과 재확인과 실제 공급자 인증 계약이 필요하다.
+외부 모의 PG는 `simulators/mock-pg`의 별도 프로세스·MySQL에서 결제 결정과 비용을 보존한다.
+Payment의 `PgGateway`는 `SimulatedPgHttpGateway`가 구현하며 HTTP 조회에서 404인 경우에만 같은 paymentId로 승인 요청한다.
+통신 실패·잘못된 응답은 PENDING을 유지한다. 로컬 승인 폴백은 없다.
+PG 비용은 `purchase_payment`의 불변 스냅샷이며 구매자 청구액·기존 결제 이벤트와 구분한다.
+Settlement는 PG 승인/비용·지급 명세를 자기 포트로 직접 조회하며 Payment에 정산 중계 API를 두지 않는다.
 
-## OCI 검증
-
-로컬은 편집·동기화만 수행한다.
-
-```sh
-./scripts/remote.sh gradle :apps:payment:test :apps:payment:integrationTest :apps:gateway:test --no-daemon
-./scripts/remote.sh sync
-```
-
-독립 흐름은 OCI의 원격 저장소 디렉터리에서 실행한다.
+## 로컬 OrbStack 검증
 
 ```sh
+export DOCKER_HOST="$(docker context inspect orbstack --format '{{.Endpoints.docker.Host}}')"
+./gradlew :apps:payment:test :apps:payment:integrationTest --no-daemon
 python3 scripts/verify-payment.py
 ```
 
-스크립트는 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment와 임시 인프라를 실행한다.
-기본 앱 포트 오프셋은 30000이며 PAYMENT_TEST_PORT_OFFSET으로 변경한다. 기존 데이터 볼륨을 사용하지 않는다.
-완료 후 해당 실행의 프로세스·컨테이너·볼륨만 정리하고 로그·payment.json·단계별 JUnit XML을 출력한 임시 경로에 남긴다.
+스크립트는 여덟 업무 앱과 외부 모의 PG, 전용 PG MySQL을 격리해 실행한다.
+키는 실행마다 생성하고 Payment에는 Payment 키만 제공한다. 공급자 정산 제어 키는 업무 앱에 전달하지 않는다.
+기본 앱 포트 오프셋은 30000이며 PAYMENT_TEST_PORT_OFFSET으로 변경한다. 기존 공유 데이터·볼륨을 사용하지 않는다.
+11단계로 접수 후 재시작, 승인·거절, PG 처리 뒤 응답 유실, 결과·Outbox 롤백,
+Order·Catalog·Kafka 중단과 원래 결과 발행·재전달을 검증한다. 장애 주입 클래스는 bootJar에 포함하지 않는다.
 
-11단계로 접수 후 재시작, 승인·거절, PG 원장 커밋 후 응답 유실, 결과·Outbox 롤백 후 재시작,
-Order·Catalog 중단 중 결제, Kafka 중단 중 조회·결과 보존, 원래 결과 발행 복구와 재전달을 검증한다.
-장애 주입 클래스는 integrationTest에만 있으며 bootJar에 포함하지 않는다. 공개 장애 주입 API는 없다.
+독립 PG의 기동·키·정산 회차와 전체 열한 업무 앱 검증은 [Settlement 실행 안내](settlement-guide.md)를 따른다.
+포트원 일반 인증 결제에는 결제창·서버 검증 등 해당 흐름을 위한 변경이 필요하며 현재 charge 구현 교체만으로 연동이 완성되지 않는다.
 
 ## 기존 DB와 Kafka 전환
 
@@ -96,3 +93,10 @@ Order·Catalog 중단 중 결제, Kafka 중단 중 조회·결과 보존, 원래
 
 결과 Outbox가 DEAD이면 장애 원인을 해소하고 원래 행의 eventId·본문을 유지해 공통 requeue 절차로 회수한다.
 새 결제나 결과 이벤트를 만들어 대신 보내지 않는다. 충돌 DLT는 원래 입력·결제·PG 결정을 대조한 뒤 처리한다.
+
+### 내장 모의 PG의 외부 전환
+
+V12는 purchase_payment에 nullable 비용 컬럼만 추가한다. 기존 미산정 비용을 0원으로 채우지 않는다.
+기존 V11의 simulated_payment_charge는 보존하지만 신규 결정을 기록하지 않는다.
+공유 스택의 처리기를 중지한 뒤 [외부 PG 이관 절차](settlement-guide.md#기존-내장-pg-이관)로 원래 결정을 이관·대조한 후 재개한다.
+이관 전 빈 PG로 기존 PENDING을 재개하면 같은 결제번호의 기존 결정을 잃으므로 공유 스택은 자동 전환하지 않는다.

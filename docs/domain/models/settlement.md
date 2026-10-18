@@ -1,105 +1,69 @@
-# 정산 원장과 월 마감 모델
+# 정산 매출·월 마감·PG 수령 모델
 
-[전체 안내](../model-guide.md) · [구매 당시 금액 사본](order-payment.md#order-item)
+[전체 안내](../model-guide.md) · [정산 실행](../../settlement-guide.md) · [범위·검증](../../settlement-mvp-plan.md) · [Order·Payment](order-payment.md)
 
-정산은 “고객이 얼마를 냈는가”에서 더 나아가 “누가 할인을 부담했고 판매자에게 얼마를 배분할 것인가”를 기록한다. 원장 한 줄과 판매자 월 합계를 분리하며 모두 MySQL에 저장한다.
+Settlement는 기존 OrderPaid의 불변 구매 근거를 매출로 기록한다. 판매자는 Catalog의 불변 ownerSubject,
+PG 거래·비용과 지급 명세는 외부 모의 PG에서 직접 확인한다. Payment HTTP나 다른 모듈 DB를 경유하지 않는다.
 
 <a id="money-example"></a>
-## 금액 필드부터 구별하기
+## 플랫폼 전액 부담 배분
 
-정가 10,000원, 할인 2,000원, 수량 1, 입점 수수료율 30%인 설명용 사례다. 기본 설정과 같은 요율을 사용했지만 실제 사업 계약을 의미하지 않는다.
+모의 정책은 플랫폼 수수료 10%, PG 비용 3%다. 실제 사업 계약을 의미하지 않는다.
 
-| 값 | 판매자 부담 할인 | 플랫폼 부담 할인 |
-|---|---:|---:|
-| 정가 합계 `listAmount` | 10,000 | 10,000 |
-| 할인액 `discountAmount` | 2,000 | 2,000 |
-| 고객 결제액 `paidAmount` | 8,000 | 8,000 |
-| 플랫폼 부담액 `platformExpense` | 0 | 2,000 |
-| **정산 기준액 `grossAmount`** | **8,000** | **10,000** |
-| 수수료 `feeAmount` | 2,400 | 3,000 |
-| 판매자 몫 `netAmount` | 5,600 | 7,000 |
+| 결제액 | 플랫폼 수수료 | 판매자 정산액 | 플랫폼 부담 PG 비용 | 플랫폼 잔여액 | PG 순지급액 |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 1,000 | 9,000 | 300 | 700 | 9,700 |
 
-`grossAmount`를 무조건 “고객 매출액”으로 읽으면 플랫폼 부담 할인에서 틀린다. 주문의 `settlementBasis`가 정산의 `grossAmount`, `sellerPayout`이 `netAmount`에 대응한다.
+판매자 몫은 결제액 − 플랫폼 수수료다. PG 비용은 플랫폼 수수료에서 부담하며 비용이 커져도 판매자 몫은 같다.
+플랫폼 잔여액은 음수가 될 수 있고 다른 비용·세금 차감 전 배분 잔액이다. 회계상 순이익이 아니다.
+금액은 long·KRW, 플랫폼 수수료는 BigDecimal·원 단위 HALF_UP이다. PG 비용은 공급자 확정 값을 보존하고 재계산하지 않는다.
 
 <a id="settlement-record"></a>
-## SettlementRecord — 매출 또는 환불 원장 한 줄
+## SettlementSale — 결제 완료 주문의 불변 매출
 
-저장: `settlement_record`. `(orderNo, productId, recordType)`별 한 건. [모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementRecord.java)
+저장: settlement_sale. [모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementSale.java)
 
-| 속성 | 뜻과 사용처 |
-|---|---|
-| `id` (`Long`), `orderNo` (`String`), `productId`, `sellerId` (`Long`) | 원장 ID·주문·상품·판매자 |
-| `saleType` (`SaleType`) | `SELF` 자체 판매 또는 `PARTNER` 입점 판매 |
-| `recordType` (`RecordType`) | `SALE` 매출 또는 `REFUND` 환불. 기존 매출을 삭제하지 않고 환불 행 추가 |
-| `grossAmount` (`long`) | 수수료·판매자 몫 계산의 기준액 |
-| `paidAmount`, `listAmount`, `discountAmount` (`long`) | 고객 실결제액·정가 합계·할인 합계 |
-| `platformExpense` (`long`) | 플랫폼이 부담한 할인액. 판매자 부담이면 0 |
-| `promotionId` (`Long`), `discountBearer` (`String`) | 행사 ID·할인 부담 주체 |
-| `feeRate` (`BigDecimal`), `feeAmount`, `netAmount` (`long`) | 수수료율·수수료·판매자 몫 |
-| `settlementMonth` (`String`) | 귀속 월 `yyyy-MM`. 현재 이벤트 처리 서버의 날짜에서 결정 |
-| `closed` (`boolean`) | 월 마감 합계에 이미 포함했는지 |
-| `adjustmentForMonth` (`String`) | 이미 마감한 매출을 환불했다면 그 매출의 원래 월. 환불 자신의 귀속 월과 다를 수 있음 |
+- OrderPaid의 13개 값 전체, sellerSubject, 플랫폼 정책·적용 요율·금액을 보존한다.
+- PgCost에 공급자·거래 ID·결정 시각·PG 정책·요율·비용을 보존한다.
+- orderNo·원본 eventId·requestEventId·paymentResultEventId·paymentId와 PG 거래 연결은 각각 재사용을 거부한다.
+- api.listener의 Mapper가 봉투·본문·키를 검증하고 PaidOrder로 변환한다. RecordPaidSale가 외부 조회 뒤 Inbox·매출·월 합계를 같은 트랜잭션으로 저장한다.
+- 같은 입력은 전체 내용 비교 후 최초 원장·금액·반영 월을 유지한다. PG·Catalog 장애 중에도 저장된 중복은 처리한다.
 
-**만들고 쓰는 때:** `PaymentCompleted`의 항목 사본으로 매출을 만든다. 같은 상품의 반복 항목은 가격·할인·요율 등의 일치를 확인한 뒤 합산해 한 줄로 저장한다. 주문 사본에 정산 기준·수수료·판매자 몫이 있으면 그 값을 우선하고, 없는 이전 형식에는 설정된 정책을 사용한다.
-
-`PaymentCancelled`가 오면 같은 주문의 SALE을 찾아 REFUND를 추가한다. 고객 금액·정가·할인·기준액·플랫폼 비용은 원장 금액의 부호를 뒤집는다. **현재 `feeAmount`·`netAmount`는 원 값을 그대로 뒤집지 않고 음수 기준액과 요율로 다시 계산한다.** 따라서 반복 항목의 반올림된 수수료를 합산했던 경우 완전 상계가 어긋날 수 있다. [Q12](../open-questions.md#q12)에 정적 추적 반례를 기록했다.
-
-부분 환불 횟수·수량을 표현하는 구조는 없다. 같은 상품의 REFUND는 하나이므로 현재 모델은 주문 상품별 전액 환불을 전제로 읽는다. [SettlementRecordService](../../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java)
-
-**업무 규칙 제안:** 결제 당시 주문 항목으로 매출을 기록하고 환불은 원매출의 금액·수수료율로 상계한다. 중복 이벤트로 원장을 중복 집계하지 않는다. 월 마감은 포함한 원장을 표시한다.
-
-**사례:** 설명용 수수료율 10%, 매출 10,000원이라면 수수료 1,000원·정산액 9,000원이다. 전액 환불 항목은 각각 −10,000/−1,000/−9,000원으로 상계된다. 같은 상품의 동일 SALE을 다시 넣어 이중 매출로 기록하는 것은 허용하지 않는다. 이 예의 요율은 서비스 계약이나 기본 설정의 확정값이 아니다.
-
-**합의 상태:** 재검토 필요. 귀속 월·부분 환불은 [Q6](../open-questions.md#q6), 중복 상품 항목의 의미는 [Q5](../open-questions.md#q5).
-
-**검증 근거:** [SettlementRecord](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementRecord.java), [SettlementRecordService](../../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [FeePolicy](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). [SettlementRecordTest](../../../apps/settlement/src/test/java/com/stove/settlement/core/domain/SettlementRecordTest.java)의 `refundOffsetsSale`, `feeRoundsToWon`; [SettlementIdempotencyTest](../../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementIdempotencyTest.java).
+saleMonth는 Order가 최초 PAID를 반영한 occurredAt의 KST 월이다. settlementMonth는 실제 월 합계에 반영한 월이다.
+receivedAt은 이벤트 접수 시각이고 PG 수령 시각이 아니다. PG 결정 시각은 별도로 보존한다.
 
 <a id="seller-settlement"></a>
-## SellerSettlement — 판매자 한 명의 한 달 마감
+## SellerMonthlySettlement — 판매자별 금액 합계와 마감
 
-저장: `seller_settlement`. `(sellerId, settlementMonth)`별 한 건. [모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SellerSettlement.java)
+저장: seller_monthly_settlement. [모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SellerMonthlySettlement.java)
 
-| 속성 | 뜻과 사용처 |
+업무 키는 sellerSubject·settlementMonth다. OPEN 상태에서 매출과 같은 트랜잭션으로 결제액·플랫폼 수수료·판매자 몫·PG 비용·플랫폼 잔여액·건수를 합산한다.
+현재 KST 월보다 이전 월만 ADMIN이 마감한다. 월 행을 잠근 뒤 원장 합계와 비교하고 CLOSED·최초 closedAt을 확정한다.
+마감 재요청은 최초 결과를 반환한다. 마감된 원래 월의 지연 매출은 접수 시점의 현재 월에 반영하고 원래 saleMonth를 보존한다.
+CLOSED는 금액 마감이며 실제 송금 완료가 아니다. PG 수령 확인 전에도 마감할 수 있다.
+
+## PgReceipt·PgReceiptItem — PG 명세와 모의 수령 대사
+
+저장: pg_receipt·pg_receipt_item. [헤더](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/PgReceipt.java) · [항목](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/PgReceiptItem.java)
+
+ADMIN이 기존 providerSettlementId로 수집하면 외부 PG의 불변 명세 전체를 저장한다. 플랫폼에서 PG 정산 회차를 생성하지 않는다.
+접수 뒤 별도 트랜잭션으로 헤더를 잠그고 각 항목의 주문·결제·거래·금액·비용을 SettlementSale과 대조한다.
+
+| 상태 | 의미 |
 |---|---|
-| `id`, `sellerId` (`Long`), `settlementMonth` (`String`) | 마감 ID·판매자·귀속 월 |
-| `grossAmount`, `feeAmount`, `netAmount` (`long`) | 현재까지 마감에 포함한 기준액·수수료·판매자 몫 합계 |
-| `baseGrossAmount`, `baseFeeAmount`, `baseNetAmount` (`long`) | 최초 마감 당시 세 금액. 이후 재마감에도 보존 |
-| `adjustmentGrossAmount`, `adjustmentFeeAmount`, `adjustmentNetAmount` (`long`) | 첫 마감 이후 추가로 포함한 금액 |
-| `recordCount` (`int`) | 포함한 원장 행 수. 상품 수·주문 수와 다름 |
-| `taxInvoiceNo` (`String`) | 계산서 발행 어댑터가 반환한 번호. 현재는 대역 발행 |
-| `closedAt` (`Instant`) | 최초 마감 시각. 재마감 시각으로 덮어쓰지 않음 |
+| REPORTED_PAID | 공급자가 지급했다고 보고했지만 내부 매출 미도착 등으로 대기 |
+| MISMATCH | 내부에 존재하는 거래와 PG 근거가 다름 |
+| SIMULATED_RECEIVED | 모든 항목이 일치하여 모의 수령 확정 |
 
-**만들고 쓰는 때:** 해당 판매자·월의 미마감 원장을 합산하고 `closed=true`로 표시한다. 기존 월 마감이 있으면 추가 금액을 합계와 `adjustment*`에 누적한다. 원장 합계 저장, 외부 계산서 발행, 번호 저장을 분리해 재실행할 수 있게 한다. [SellerSettlementService](../../../apps/settlement/src/main/java/com/stove/settlement/core/service/SellerSettlementService.java), [SettlementCloseFacade](../../../apps/settlement/src/main/java/com/stove/settlement/api/application/SettlementCloseFacade.java)
+공급자·정산번호와 항목의 공급자·결제번호/거래 ID에 유일 제약을 둔다. 같은 거래를 다른 명세에 접수하지 않는다.
+수령 합계는 SIMULATED_RECEIVED 명세의 payoutAmount 합계다. 일부만 일치한 명세의 금액을 부분 가산하지 않는다.
+재대사는 저장된 원장만 사용하고 최초 simulatedReceivedAt을 유지한다. 실제 은행 입금 증거는 후속 범위다.
 
-예를 들어 첫 마감의 `baseNetAmount=7000`이고 같은 월에 뒤늦게 −7000의 환불 원장을 추가로 마감하면 `adjustmentNetAmount=-7000`, `netAmount=0`이 된다. 다음 달 환불이면 환불은 다음 달 원장이고 `adjustmentForMonth`가 원래 월을 가리킨다. 모든 지각 환불이 과거 월의 합계를 직접 바꾼다는 뜻은 아니다.
+## 외부 모의 PG
 
-계산서 번호가 없고 순액이 양수일 때 발행을 시도한다. 응답의 `taxInvoiceStatus=SIMULATED`는 계산서 번호 유무로 만든 표시 값이며 이 엔티티의 저장 필드가 아니다. 실제 은행 송금·수정계산서·다음 달 이월 원장은 구현된 것으로 설명하지 않는다. [Q6](../open-questions.md#q6)
+[독립 앱](../../../simulators/mock-pg/src/main/java/com/stove/mockpg/MockPgApplication.java)은 pg_charge·pg_settlement·pg_settlement_item을 자기 MySQL에 보존한다.
+Payment는 승인·조회 키를, Settlement는 읽기 키를 사용한다. 검증용 정산 회차 제어 키는 업무 앱에 전달하지 않는다.
+기존 내장 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 기존 미산정 비용을 0원으로 채우지 않는다.
 
-**업무 규칙 제안:** 대상 월의 미마감 원장만 합산하고 같은 원장을 두 번 반영하지 않는다. 지각 원장과 계산서 정정의 처리 기준을 정한다.
-
-**사례:** 10월 원장 2건을 마감한 뒤 같은 10월 미마감 원장 1건이 추가되면 재마감에서 3건 합계가 된다. 기존 2건을 다시 더하지 않는다. 마감 완료를 근거로 판매자 계좌 송금도 끝났다고 표현할 수 없다.
-
-**합의 상태:** 재검토 필요. 마감의 확정성·귀속 월·이월·송금 경계는 [Q6](../open-questions.md#q6).
-
-**검증 근거:** [SellerSettlement](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SellerSettlement.java), [SellerSettlementService](../../../apps/settlement/src/main/java/com/stove/settlement/core/service/SellerSettlementService.java), [SettlementCloseFacade](../../../apps/settlement/src/main/java/com/stove/settlement/api/application/SettlementCloseFacade.java). [SettlementCloseTest](../../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java)의 `repeatedCloseDoesNotDuplicateSettlement`, `lateRecordShouldBeSettledOnNextClose`, `revisionDoesNotReissueTaxInvoice`.
-
-## FeePolicy — 수수료 판단 규칙
-
-[모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). config가 전달한 자체 판매자 ID·수수료율을 사용해 자체 판매자 ID이면 SELF·0%, 그 외이면 PARTNER·설정된 요율(기본 30%)로 판단한다. 별도 수수료 계약 테이블은 아니다. 현재 주문에 들어가는 배분 조건은 Catalog 견적에서도 계산하며, Settlement에서는 과거 사본이 없는 자료의 보완 기준으로 이 정책을 사용한다.
-
-## ReconciliationResult — 원장과 마감의 대사 결과
-
-“대사”는 두 기록의 금액·건수가 맞는지 비교하는 작업이다. [모델](../../../apps/settlement/src/main/java/com/stove/settlement/core/domain/ReconciliationResult.java)은 조회 때 계산하는 record이며 저장 엔티티가 아니다.
-
-| 속성 | 뜻과 사용처 |
-|---|---|
-| `sellerId`, `month` | 비교 대상 판매자·월 |
-| `customerPaid`, `sellerDiscount`, `platformExpense` | 고객 결제·판매자 할인 부담·플랫폼 비용 합계 |
-| `settlementBasis`, `fee`, `sellerPayout` | 정산 기준·수수료·판매자 몫 합계 |
-| `recordCount`, `unclosedCount`, `adjustmentCount` | 전체·미마감·원래 마감 월을 참조하는 조정 원장 수 |
-| `closingBasisVariance`, `closingFeeVariance`, `closingPayoutVariance` | 마감 결과와 마감된 원장 합계의 차이 |
-| `balanced`, `warnings` | 검사한 식·건수·마감 차이가 모두 맞는지와 경고 목록 |
-
-**만들고 쓰는 때:** 운영자가 월별 정산을 확인하거나 CSV로 내보낼 때 원장·마감 합계를 읽어 계산한다. `balanced=true`는 이 서비스 내부의 검사 결과다. 외부 PG 입금·은행 송금과 맞췄다는 뜻도, 모든 환불이 원 매출을 정확히 상계한다는 뜻도 아니다. [ReconciliationService](../../../apps/settlement/src/main/java/com/stove/settlement/core/service/ReconciliationService.java)
-
-기존 검증: [PromotionLedgerTest](../../../apps/settlement/src/test/java/com/stove/settlement/core/domain/PromotionLedgerTest.java), [PromotionReconciliationTest](../../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java), [SettlementCloseTest](../../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java). 반올림 합산 후 환불 반례는 이 테스트들의 현재 예시와 구별한다.
+구 settlement_record·seller_settlement·ShedLock 자료는 보존하지만 현재 업무에서는 사용하지 않는다.
+환불·할인 부담·재마감·세금계산서·판매자 송금·CSV는 이번 MVP에 없다.

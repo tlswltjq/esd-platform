@@ -41,7 +41,7 @@ Payment 목록·상세는 MEMBER와 서명·issuer·audience가 검증된 JWT su
 OrderPlaced의 봉투·본문 ID·종류·키, 가격 일관성과 상품·구매자 필드를 저장 전에 검증한다.
 중복 수신에서도 전체 입력을 비교하고 Inbox는 결제 접수와 함께 저장한다.
 PG 키·주문·청구액·통화·공급자가 일치하는 확정 결과만 반영하고 결과·Outbox는 함께 커밋한다.
-결제 기록과 공급자 원장의 권한 분리는 이번 대역의 외부 PG 격리를 의미하지 않는다.
+외부 모의 PG는 별도 프로세스·DB·키를 사용한다. Payment의 승인·조회 키와 Settlement의 조회 키를 분리하고 제어 키는 업무 앱에 제공하지 않는다.
 
 실제 PG·결제창·웹훅 서명·카드 정보·환불은 [후속 범위](payment-mvp-plan.md)다.
 과거 HMAC 콜백과 PG_CALLBACK_SECRET은 현재 Payment의 실행 계약이 아니다.
@@ -51,5 +51,13 @@ PG 키·주문·청구액·통화·공급자가 일치하는 확정 결과만 �
 Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
 Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-현재 빌드·테스트는 로컬 OrbStack에서 실행한다. 과거 OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](payment-guide.md#oci-검증)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+현재 빌드·테스트는 로컬 OrbStack에서 실행한다. 과거 OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](payment-guide.md#로컬-orbstack-검증)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
 API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
+
+## Settlement와 외부 모의 PG 경계
+
+Settlement는 sub가 없거나 공백·100자 초과인 JWT도 401로 거절한다. CREATOR의 내 매출·월 합계는 JWT sub로 제한하고 PG 비용·플랫폼 잔여액·다른 판매자 정보를 노출하지 않는다.
+ADMIN만 전체 조회·지난 월 마감·PG 명세 수집·재대사를 수행한다. 고객이 PG 금액·수령 상태를 입력할 수 없다.
+Catalog 소유자 GET에는 Download와 다른 전용 서비스 키를 사용하며 Gateway에 내부·PG 제어 경로를 추가하지 않는다.
+Payment에는 PG 정산 중계 API가 없고 Settlement는 PG 공급자 DB를 직접 읽지 않는다.
+PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동하지 않으며 HTTP 오류·PG 지급 보고를 실제 은행 입금 완료로 해석하지 않는다.

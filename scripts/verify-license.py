@@ -2,9 +2,12 @@
 """Verify License against completed Auth/Gateway/Studio/Review/Catalog/Store/Order/Payment in an isolated, disposable stack."""
 
 from pathlib import Path
+from mock_pg_runtime import MockPgRuntime
 import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[1]
-directory=Path(tempfile.mkdtemp(prefix="stove-license-check-"))
+output_root=repo/"runs"
+output_root.mkdir(exist_ok=True)
+directory=Path(tempfile.mkdtemp(prefix="stove-license-check-",dir=output_root))
 project=directory.name
 offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","31000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084}
@@ -20,12 +23,13 @@ ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=os.environ.get("STOVE_TEST_MINIO_IMAGE","stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
 if subprocess.run(["docker","image","inspect",minio_image],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
     subprocess.run(["docker","build","-t",minio_image,str(repo/"infra/minio")],check=True)
-subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:license:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",":simulators:mock-pg:bootJar",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:license:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; CREATE DATABASE stove_catalog; CREATE DATABASE stove_store; CREATE DATABASE stove_order; CREATE DATABASE stove_payment; CREATE DATABASE stove_license; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_catalog.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';\n")
+pg=MockPgRuntime(repo,directory)
 compose=directory/"compose.yml"
 compose.write_text(f"""services:
-  mysql:
+{pg.compose_service()}  mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -66,6 +70,8 @@ compose.write_text(f"""services:
     command: ["server", "/data"]
 """)
 docker=["docker","compose","-p",project,"-f",str(compose)]
+pg.docker=docker
+compose.chmod(0o600)
 processes=[]
 def ready(url):
     try:
@@ -101,6 +107,7 @@ try:
     if denied_delete.returncode==0: raise RuntimeError("Review storage account unexpectedly has delete access")
     subprocess.run(mc+["stat","admin/stove-builds/iam-check.bin"],check=True,stdout=subprocess.DEVNULL)
     print("PASS: Review storage account cannot upload or delete",flush=True)
+    pg.start()
     public=f"http://127.0.0.1:{8080+offset}"
     common=os.environ.copy()
     common.update(DB_HOST="127.0.0.1",DB_PORT=str(ports["mysql"]),DB_USER="stove",DB_PASSWORD="stove1234",
@@ -125,7 +132,7 @@ try:
             classpath=(repo/"apps/license/build/verification-classpath.txt").read_text()
             launch=["-cp",classpath,"com.stove.license.LicenseServiceApplication",
                 "--spring.main.sources=com.stove.license.verification.LicenseFaultConfiguration"]
-        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
+        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=pg.client_environment(app,common),cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))
     common["CATALOG_BASE_URL"]="http://127.0.0.1:"+str(apps["catalog"]+offset)
     def stop_app(name):
@@ -163,6 +170,7 @@ try:
     def check(query,expected,description):
         wait_for(lambda:sql(query)==str(expected),description,90)
     def restart_payment(arguments=(),fault=False):
+        if pg.decision != "APPROVED": pg.start()
         stop_app("payment"); start_app("payment",arguments,fault); wait_for(apps_ready,"Payment restarted",180)
     def restart_license(arguments=(),fault=False):
         stop_app("license"); start_app("license",arguments,fault); wait_for(apps_ready,"License restarted",180)
@@ -177,7 +185,7 @@ try:
     phase("approvedOrderGrantsOneProduct")
     evidence_counts(1,1)
     first=sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")
-    restart_payment(["--stove.payment.simulated.result=DECLINED"])
+    pg.start("DECLINED")
     phase("declinedOrderDoesNotAddAPurchase")
     evidence_counts(1,1)
     restart_payment()
@@ -238,8 +246,10 @@ try:
     phase("ownershipSecurityAndStableRightsAfterRestart")
     evidence_counts(6,6)
     assert sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")==first
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="7"
+    assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
     # Seven orders: six approved, one declined. New OrderPaid records never create another payment.
-    for table in ["purchase_payment","simulated_payment_charge","processed_event","outbox_event"]:
+    for table in ["purchase_payment","processed_event","outbox_event"]:
         assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="7",table
     assert sql("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid'")=="6"
     assert sql("SELECT COUNT(*) FROM stove_license.product_license l "
@@ -256,6 +266,7 @@ try:
     print("PASS: nine apps; approval/decline/pending; duplicate purchase rejection, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay (13 phases)",flush=True)
 
 finally:
+    pg.stop()
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:
         try: process.wait(timeout=40)

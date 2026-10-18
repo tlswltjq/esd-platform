@@ -1,0 +1,21 @@
+server:
+  port: ${MOCK_PG_PORT:8092}
+  shutdown: graceful
+spring:
+  application.name: mock-pg
+  datasource:
+    url: jdbc:mysql://${MOCK_PG_DB_HOST:localhost}:${MOCK_PG_DB_PORT:3307}/${MOCK_PG_DB_NAME:mock_pg}?serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${MOCK_PG_DB_USER:mock_pg}
+    password: ${MOCK_PG_DB_PASSWORD:}
+    hikari.maximum-pool-size: 5
+  flyway.enabled: true
+  lifecycle.timeout-per-shutdown-phase: 30s
+mock-pg:
+  payment-key: ${MOCK_PG_PAYMENT_KEY:}
+  settlement-key: ${MOCK_PG_SETTLEMENT_KEY:}
+  control-key: ${MOCK_PG_CONTROL_KEY:}
+  decision: ${MOCK_PG_DECISION:APPROVED}
+  fee-policy-id: ${MOCK_PG_FEE_POLICY_ID:SIMULATED_FEE_V1}
+  fee-rate-bps: ${MOCK_PG_FEE_RATE_BPS:300}
+management:
+  endpoints.web.exposure.include: health

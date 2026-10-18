@@ -375,3 +375,14 @@ OCI 증거 경로는 `/tmp/stove-payment-check-4x4i1vxc`다. payment.json, 앱 �
 실제 자금 이동·PG 인증·결제창·환불·이용권·다운로드·정산은 이번 완료 범위가 아니다.
 모의 PG 원장과 Payment 업무 테이블은 같은 MySQL이므로 서로 다른 외부 시스템의 장애 격리까지 입증하지 않는다.
 기존 공유 스택·데이터 볼륨은 사용하지 않았고 자동 전환하지 않았다. 공유 환경 적용은 과거 OrderPlaced·미발행 Outbox·기존 결과와 소비 시작 오프셋을 대조한 뒤 별도로 수행한다.
+
+
+## 외부 모의 PG 전환 완료 (2026-10-18)
+
+Settlement MVP에서 공급자를 독립한 simulators/mock-pg 프로세스·DB·HTTP로 분리했다.
+Payment의 PgGateway는 SimulatedPgHttpGateway로 승인·조회하며 V12로 확정 비용 스냅샷을 보존한다.
+기존 고객 청구액·결제 조회·OrderPaymentCompleted/Failed 계약은 유지한다. 정산 중계 API는 추가하지 않는다.
+기존 V11 결정은 오프라인 도구로 원래 키·결정·시각 그대로 이관하고 미산정 비용은 NULL로 유지한다.
+단위 59건·통합 23건과 실제 여덟 업무 앱 + 외부 PG의 응답 유실·결과 롤백·재시작 11단계를 로컬 OrbStack에서 검증했다.
+이 절의 후속 범위와 전체 증거는 [Settlement 완료 기록](settlement-mvp-plan.md#재작성-완료-기록), 실행과 이관은 [Payment 안내](payment-guide.md)를 따른다.
+앞의 OCI·내장 PG 기록은 2026-10-16 당시의 검증 근거로 보존한다.

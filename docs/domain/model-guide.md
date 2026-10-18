@@ -52,7 +52,7 @@
 | 결제 / `payment` | 확정된 주문의 결제 결과가 무엇인가? | `Payment`, `PaymentOrderRequest`, `PgChargeRequest`, `PgResult` | [주문·결제](models/order-payment.md) |
 | 이용권 / `license` | 어떤 상품을 보유하고 어떤 주문이 근거인가? | `License`, `PaidOrder` | [이용·다운로드](models/fulfillment.md) |
 | 파일 배포 / `download` | 본인 보유 상품의 현재 공개 빌드를 어떻게 받는가? | `DownloadRequest`, `OwnedProduct`, `PublishedBuild`, `DownloadTicket` | [이용·다운로드](models/fulfillment.md) |
-| 정산 / `settlement` | 판매자에게 얼마를 배분해야 하는가? | `SettlementRecord`, `SellerSettlement` | [정산](models/settlement.md) |
+| 정산 / `settlement` | 판매자에게 얼마를 배분해야 하는가? | `SettlementSale`, `SellerMonthlySettlement`, `PgReceipt` | [정산](models/settlement.md) |
 | 요청 입구 / `gateway` | 요청을 어느 서비스로 보낼 것인가? | 자체 업무 엔티티 없음 | [서비스 명세](../services.md#gateway) |
 | 전달·기록 / `common` | 변경 사실을 잃거나 중복 처리하지 않았는가? | `OutboxEvent`, `ProcessedEvent` 및 공유 이벤트 값 | [공통 모델](models/shared.md) |
 
@@ -71,7 +71,7 @@
 | 주문·결제 경계 | Catalog 공개 상세로 주문 스냅샷 고정, 고정 결제 키로 모의 PG 호출·미확정 재개·결과 반영 |
 | 권한 부여 | OrderPaid로 출처를 포함한 상품별 License·Inbox 저장. 내 라이브러리 조회 |
 | 다운로드 | License 보유권·Catalog 현재 공개 빌드 확인 → 저장소 HEAD·서명 URL → 전체 ZIP 다운로드 |
-| 환불·월 마감(후속) | 재작성 전 결제 환불·권한 회수·정산 원장·월 마감은 참고 기록 |
+| 정산 | OrderPaid 매출·플랫폼 부담 PG 비용·판매자 월 마감·공급자 지급 명세 대사. 실제 송금·환불은 후속 |
 
 Project는 편집 중인 내용이고 Product는 현재 등록된 상품이다.
 Build는 요청에 첨부할 파일이며 ProjectReleaseRequest는 외부로 발행한 출시 요청이다.
@@ -98,7 +98,7 @@ Build는 요청에 첨부할 파일이며 ProjectReleaseRequest는 외부로 발
 - `PUBLISHED`는 상점 자료에서는 “확정됨”, 릴리스에서는 “해당 채널에 공개됨”이다. 일반 상품의 판매는 LIVE 릴리스 반영으로 시작한다. DEMO·BUNDLE의 일반 구매는 제한된다.
 - 주문 취소 API와 결제 환불 API는 현재 연결이 완성되어 있지 않다. 환불 흐름은 Payment에서 시작한다. [Q9](open-questions.md#q9)
 - 파일 검증·공개 전 점검은 게임을 실제 플레이해 검증하는 것과 다르다. [Q10](open-questions.md#q10)
-- 정산의 `grossAmount`는 고객 결제액과 다를 수 있다. 환불 수수료를 다시 계산하는 구현에는 반올림 차이 가능성도 있다. [정산 예시](models/settlement.md#money-example), [Q12](open-questions.md#q12)
+- 현재 정산은 고객 결제액을 기준으로 플랫폼 수수료·판매자 몫을 계산하고 PG 비용은 플랫폼 잔여액에서 부담한다. 환불·할인 부담·재마감은 후속 범위다. [정산 예시](models/settlement.md#money-example), [Q12](open-questions.md#q12)
 - 외부 PG·등급 기관·세금계산서 연동에는 대역 구현이 있다. DB의 성공 상태가 실제 외부 기관의 처리 완료를 증명하는 것은 아니다. [외부 연동 범위](../services.md#외부-연동-대역)
 
 ## 조사 범위와 유지 방법

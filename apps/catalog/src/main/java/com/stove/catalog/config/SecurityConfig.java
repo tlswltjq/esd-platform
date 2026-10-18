@@ -16,11 +16,18 @@ public class SecurityConfig {
     @Bean
     @Order(1)
     SecurityFilterChain internalBuildSecurity(HttpSecurity http,
-            @Value("${stove.catalog.download-service-key:}") String key) throws Exception {
+            @Value("${stove.catalog.download-service-key:}") String key,
+            @Value("${stove.catalog.settlement-service-key:}") String settlementKey) throws Exception {
         byte[] expected = key.getBytes(StandardCharsets.UTF_8);
         return http.securityMatcher("/internal/**").csrf(csrf -> csrf.disable())
                 .exceptionHandling(e -> e.authenticationEntryPoint((request, response, failure) -> response.setStatus(401)))
                 .authorizeHttpRequests(a -> a
+                        .requestMatchers(HttpMethod.GET, "/internal/v1/products/*/owner")
+                        .access((authentication, context) -> {
+                            String provided=context.getRequest().getHeader("X-Settlement-Service-Key");
+                            return new AuthorizationDecision(!settlementKey.isBlank() && provided!=null
+                                    && MessageDigest.isEqual(settlementKey.getBytes(StandardCharsets.UTF_8),provided.getBytes(StandardCharsets.UTF_8)));
+                        })
                         .requestMatchers(HttpMethod.GET, "/internal/v1/products/*/build")
                         .access((authentication, context) -> {
                             String provided = context.getRequest().getHeader("X-Download-Service-Key");

@@ -26,6 +26,20 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 
 ## 로컬 스택과 Swagger
 
+신규 빈 스택은 외부 모의 PG의 세 역할 키와 전용 DB 비밀번호, Catalog 정산 조회 키를 먼저 설정한다.
+기존 V11 내장 PG 자료가 있으면 [이관 절차](settlement-guide.md#기존-내장-pg-이관)를 거쳐 연결한다.
+
+```bash
+export MOCK_PG_PAYMENT_KEY="$(openssl rand -hex 32)"
+export MOCK_PG_SETTLEMENT_KEY="$(openssl rand -hex 32)"
+export MOCK_PG_CONTROL_KEY="$(openssl rand -hex 32)"
+export MOCK_PG_DB_PASSWORD="$(openssl rand -hex 32)"
+export MOCK_PG_DB_ROOT_PASSWORD="$(openssl rand -hex 32)"
+export CATALOG_SETTLEMENT_SERVICE_KEY="$(openssl rand -hex 32)"
+```
+
+재기동할 때도 같은 DB 비밀번호·클라이언트 키 설정을 사용한다.
+
 ```bash
 ./scripts/local-stack.sh up
 ./scripts/local-stack.sh ps
@@ -33,7 +47,8 @@ export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}
 ./scripts/local-stack.sh down
 ```
 
-`up`은 인프라를 띄우고 `bootJar -x test -x integrationTest`로 앱을 빌드한 뒤 앱 컨테이너를 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다. 일괄 상태 검사와 가입부터 정산까지 자동 검증하려면 [API 데모](api-demo.md#full-demo)를 사용한다.
+`up`은 인프라를 띄우고 `bootJar -x test -x integrationTest`로 업무 앱과 외부 모의 PG를 빌드한 뒤 컨테이너를 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다.
+현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 scripts/verify-settlement.py`를 사용한다. [정산 실행 안내](settlement-guide.md)를 따른다.
 
 로컬 스크립트는 `docker-compose.local.yml`을 적용해 MinIO의 지정 버전 공식 소스로 이미지를 빌드한다. 공개 이미지 저장소 접근 오류를 피하기 위한 설정이며, 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
 

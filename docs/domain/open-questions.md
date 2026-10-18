@@ -8,6 +8,10 @@
 
 Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구현 기록이다. 현재 단일 심사·전체 ZIP·상점 등록·재출시와 검증 범위는 [Studio 모델](models/studio.md), [전환 계획](../studio-simplification-plan.md)을 따른다.
 
+2026-10-18 Settlement 재작성으로 Q5·Q6·Q8·Q12의 구 정산 관찰도 과거 구현 기록으로 보존한다.
+현재는 단일 상품·JWT sub 판매자·고정 플랫폼 수수료·플랫폼 부담 PG 비용·매출월/반영월 분리·한 번의 월 마감·PG 명세 대사를 사용한다.
+환불·재마감·이월·판매자 송금·세무 정책의 미결 사항은 남아 있다. 현재 계약은 [정산 모델](models/settlement.md)과 [실행 안내](../settlement-guide.md)를 따른다.
+
 ## 검토 순서
 
 | 질문 | 검토 대상 | 상태 | 필요한 검토 주체 |
@@ -81,7 +85,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **결정할 내용:** 본인용 수량 1·동일 상품 추가 구매 차단은 결정했다. 후속 선물·좌석·양도에서는 구매자와 실제 수령인, 수량·권한의 관계를 어떻게 정의할 것인가? DEMO는 무료 이용권이 필요한가? BUNDLE·EDITION·DLC가 부모·구성품에 어떤 권한을 주며 환불 시 무엇을 회수하는가? 늦은 지급 이벤트를 포함한 순서 역전에서 사본의 권한을 어떻게 보존하는가?
 
-**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), `LicenseIssueEventTest`(재작성 전 테스트, 현재 제거됨)의 `duplicateProductLinesIssueSingleLicense`, [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), `EntitlementService`(제거된 구 Download 구현), `DownloadEntitlementTest`(제거된 구 Download 구현).
+**후속:** 종류·수량·주문 항목 정규화·권한 지급/회수 표를 합의하고 구매·정산·사본 모델 변경을 별도 작업으로 정한다. 늦은 회수 방어 테스트만으로 모든 순서와 다중 주문을 보장한다고 설명하지 않는다. 근거: ProductQueryService(제거된 구 구현), `LicenseIssueEventTest`(재작성 전 테스트, 현재 제거됨)의 `duplicateProductLinesIssueSingleLicense`, `SettlementRecordService`(제거된 구 정산 구현), `EntitlementService`(제거된 구 Download 구현), `DownloadEntitlementTest`(제거된 구 Download 구현).
 
 <a id="q6"></a>
 
@@ -91,7 +95,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **결정할 내용:** 귀속 시각은 결제 발생일인가 수신일인가, 시간대는 무엇인가? 구현된 조정 원장·최초 마감액 보존을 업무 정책으로 수용할 것인가? 부분 환불·실제 수정계산서·이월은 어떻게 기록할 것인가? 월 마감과 송금 완료는 어떤 별도 단계인가?
 
-**후속:** 월 경계 지연과 마감 후 환불의 예시를 합의하고 미지원 정책 및 어댑터 구현을 별도 작업으로 만든다. 근거: [SettlementRecordService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [SellerSettlementService](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SellerSettlementService.java), [SettlementCloseFacade](../../apps/settlement/src/main/java/com/stove/settlement/api/application/SettlementCloseFacade.java), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java), [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java). 정의: [원장](models/settlement.md#settlement-record), [월 마감](models/settlement.md#seller-settlement).
+**후속:** 월 경계 지연과 마감 후 환불의 예시를 합의하고 미지원 정책 및 어댑터 구현을 별도 작업으로 만든다. 근거: `SettlementRecordService`(제거된 구 정산 구현), `SellerSettlementService`(제거된 구 정산 구현), `SettlementCloseFacade`(제거된 구 정산 구현), `SettlementCloseTest`(제거된 구 정산 구현), `PromotionReconciliationTest`(제거된 구 정산 구현). 정의: [원장](models/settlement.md#settlement-record), [월 마감](models/settlement.md#seller-settlement).
 
 <a id="q7"></a>
 
@@ -111,7 +115,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **결정할 내용:** 개인 워크스페이스가 계속 판매 주체와 일치하는가? 조직·공동 창작·판매 계약·정산 계좌를 도입하면 판매자 식별자를 별도로 두어야 하는가? 자체 판매자 ID는 어떤 업무 주체를 뜻하는가?
 
-**후속:** 현재 Studio는 Workspace·sellerId를 제거하고 Auth JWT sub로 직접 소유권을 확인한다. 미완료 커머스·정산 모듈의 판매자 구조는 현재 Studio의 설계·검증 제약으로 사용하지 않는다. 근거: GameProject(제거된 구 Studio 구현), Workspace(제거된 구 Studio 구현), [FeePolicy](../../apps/settlement/src/main/java/com/stove/settlement/core/domain/FeePolicy.java). 표준 표기: [식별자](../domain-glossary.md#identifiers).
+**후속:** 현재 Studio는 Workspace·sellerId를 제거하고 Auth JWT sub로 직접 소유권을 확인한다. 미완료 커머스·정산 모듈의 판매자 구조는 현재 Studio의 설계·검증 제약으로 사용하지 않는다. 근거: GameProject(제거된 구 Studio 구현), Workspace(제거된 구 Studio 구현), `FeePolicy`(제거된 구 정산 구현). 표준 표기: [식별자](../domain-glossary.md#identifiers).
 
 <a id="q9"></a>
 
@@ -141,7 +145,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **확인 범위:** 자료 확정 불변성, 제출 빌드 집합, 심사 등급 증빙, 엔티티 수준 공개 조건, 상품 판매 조건, 주문·결제 검증, 이용권 중복·회수, 사본의 늦은 회수 방어, 정산 상계·재마감은 각 정의의 기존 테스트로 대조했다. 이번 문서 변경에서 애플리케이션 테스트를 새로 실행한 결과로 표시하지 않는다.
 
-**최신 근거:** [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 업로드 이미지 누락·가짜 URL 거절, 검증 실패 빌드·미승인 출시 거절, 수정 요청·재제출·전체 승인, LIVE의 Catalog·Store·Download 반영, 정상 롤백, 채널 승격·예약 변경·취소를 검증한다. [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java)는 주문 사본 우선·반복 항목 합산·마감 후 환불 조정을 검증한다.
+**최신 근거:** [TrackACreatorFlowTest](../../e2e/src/test/java/com/stove/e2e/TrackACreatorFlowTest.java)는 업로드 이미지 누락·가짜 URL 거절, 검증 실패 빌드·미승인 출시 거절, 수정 요청·재제출·전체 승인, LIVE의 Catalog·Store·Download 반영, 정상 롤백, 채널 승격·예약 변경·취소를 검증한다. `PromotionReconciliationTest`(제거된 구 정산 구현)는 주문 사본 우선·반복 항목 합산·마감 후 환불 조정을 검증한다.
 
 **공백:** 현재 조사 범위(`apps/*/src/test`, `apps/*/src/integrationTest`, `e2e/src/test`)에서 잘못된 승인 스냅샷 대조와 smoke 실패 시 롤백 이벤트·감사 기록을 직접 검증하는 테스트를 찾지 못했다. SubmissionTest(제거된 구 Studio 구현)는 상태 전이만, ReleaseTest(제거된 구 Studio 구현)는 엔티티 수준 smoke 통과 전 공개 차단을 검증한다. 정상 E2E 통과를 모든 순서 역전·실패 경로의 보장으로 확대하지 않는다.
 
@@ -157,7 +161,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 **결정·후속:** 전액 환불은 구매 당시 확정한 모든 금액을 정확히 되돌려야 하는지 확인하고, 원매출의 수수료·지급액 보존 방식과 반복 항목의 반올림 단위를 명시한다. 해당 경계값으로 매출→환불→마감 회귀 검증이 필요하다. 현재 대사의 금액 식과 마감 차이 검사는 이 반례에서도 맞을 수 있으므로 `balanced=true`를 주문별 전액 환불 상계의 증거로 사용하지 않는다.
 
-**근거:** 견적 수수료 계산(제거된 구 구현), [반복 항목 합산](../../apps/settlement/src/main/java/com/stove/settlement/core/service/SettlementRecordService.java), [환불 생성](../../apps/settlement/src/main/java/com/stove/settlement/core/domain/SettlementRecord.java), [대사식](../../apps/settlement/src/main/java/com/stove/settlement/core/service/ReconciliationService.java). 기존 [PromotionLedgerTest](../../apps/settlement/src/test/java/com/stove/settlement/core/domain/PromotionLedgerTest.java)는 단일 항목 환불, [PromotionReconciliationTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/PromotionReconciliationTest.java)는 반복 항목 합산 등을 확인하지만 이 반올림 후 환불 조합을 직접 다루지는 않는다.
+**근거:** 견적 수수료 계산(제거된 구 구현), `반복 항목 합산`(제거된 구 정산 구현), `환불 생성`(제거된 구 정산 구현), `대사식`(제거된 구 정산 구현). 기존 `PromotionLedgerTest`(제거된 구 정산 구현)는 단일 항목 환불, `PromotionReconciliationTest`(제거된 구 정산 구현)는 반복 항목 합산 등을 확인하지만 이 반올림 후 환불 조합을 직접 다루지는 않는다.
 
 <a id="review-log"></a>
 

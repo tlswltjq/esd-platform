@@ -134,7 +134,7 @@ public final class ModuleHygieneRules {
                                         ConditionEvents events) {
                                     if (!type.getSimpleName()
                                             .matches(
-                                                    "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap|Search|Synchronize|Grant)[A-Z][A-Za-z0-9]*)")) {
+                                                    "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap|Search|Synchronize|Grant|Close|Reconcile)[A-Z][A-Za-z0-9]*)")) {
                                         events.add(
                                                 SimpleConditionEvent
                                                         .violated(

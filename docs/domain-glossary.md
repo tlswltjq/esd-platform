@@ -45,8 +45,8 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 결제 | Payment / `Payment` | 확정된 주문 대금의 접수·승인·거절과 미확정 재개 기록 | [정의](domain/models/order-payment.md#payment) |
 | 이용권 | License / `License` | 구매자·상품별 영구 이용 권한. 주문별 구매 근거와 구분 | [정의](domain/models/fulfillment.md#license) |
 | 다운로드 보유권 사본 | Entitlement / `Entitlement` | 다운로드 접근 판정을 위해 이용권 이벤트를 반영한 사본 | [정의](domain/models/fulfillment.md#entitlement) |
-| 정산 원장 항목 | Settlement Record / `SettlementRecord` | 주문 상품별 매출 또는 환불과 수수료를 기록한 한 줄 | [정의](domain/models/settlement.md#settlement-record) |
-| 판매자 월 마감 | Seller Settlement / `SellerSettlement` | 판매자와 귀속 월별 원장 합계를 모은 마감 결과 | [정의](domain/models/settlement.md#seller-settlement) |
+| 정산 원장 항목 | Settlement Sale / `SettlementSale` | 결제 완료 주문의 불변 매출·판매자 배분·PG 비용 한 줄 | [정의](domain/models/settlement.md#settlement-record) |
+| 판매자 월 마감 | Seller Monthly Settlement / `SellerMonthlySettlement` | 판매자와 반영 월별 매출 합계·OPEN/CLOSED 마감 | [정의](domain/models/settlement.md#seller-settlement) |
 
 ## 의미가 유지되는 업무 범위
 
@@ -58,10 +58,10 @@ Studio는 Project·Build·ProjectReview·ProjectPublication으로 단순화했�
 | 심사 운영 | 유형별 심사 사건, 판단, 증빙, 재검토 | review | 심사 결과를 Studio의 출시 관문에 반영. 사건의 전체 운영 상태를 복제하지는 않음 |
 | 상품·진열 | 상품 가격·판매 상태, 구매자에게 보이는 상품 정보 | catalog, store | Catalog가 원본을 소유하고 Store가 검색·진열 사본을 유지. 창작 프로젝트와는 `productCode`로 연결 |
 | 구매 계약 | 구매자와 주문 항목·금액·주문 상태 | order | Catalog 공개 상세의 상품·정가를 주문에 고정하고 OrderPlaced 발행 |
-| 대금 처리 | 확정 주문의 결제·결과 발행 | payment | Order가 결과 반영·OrderPaid 발행, License가 권한 부여. 정산은 후속 |
+| 대금 처리 | 확정 주문의 결제·결과 발행 | payment | Order가 결과 반영·OrderPaid 발행, License가 권한 부여, Settlement가 OrderPaid 매출·배분 기록 |
 | 이용 권한 | 상품별 보유권과 주문별 구매 근거 | license | 내 라이브러리 조회와 Download의 보유권 확인 |
 | 파일 배포 | 보유 상품의 현재 공개 전체 빌드 접근 | download | License·Catalog 조회 후 저장소 파일 확인·만료 URL 발급 |
-| 판매자 정산 | 매출·환불 원장, 수수료, 월 마감 | settlement | 결제 항목을 원장으로 번역. 상품의 현재 가격으로 과거 매출을 다시 계산하지 않음 |
+| 판매자 정산 | 확정 거래의 매출·배분, 월 마감, PG 수령 대사 | settlement | OrderPaid와 외부 PG·Catalog 근거를 대조. 과거 거래를 현재 가격·PG 요율로 다시 계산하지 않음 |
 
 Auth는 회원·역할의 출처이며 현재 Studio는 JWT sub를 Project 소유자로 직접 저장한다. Workspace와 sellerId 연결은 제거했다. 다른 모듈의 판매자 관계는 미완료 구현의 참고 기록이다. 인증 계약은 [커머스 인증 문서](security.md)를 참고한다.
 

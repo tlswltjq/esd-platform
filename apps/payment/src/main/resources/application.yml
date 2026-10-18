@@ -56,13 +56,16 @@ spring:
 
 stove:
   payment:
-    pg-provider: ${PAYMENT_PG_PROVIDER:simulated}
     processing-enabled: ${PAYMENT_PROCESSING_ENABLED:true}
     poll-interval-ms: ${PAYMENT_POLL_MS:1000}
     batch-size: ${PAYMENT_BATCH_SIZE:20}
     retry-delay-ms: ${PAYMENT_RETRY_MS:5000}
-    simulated:
-      result: ${PAYMENT_SIMULATED_RESULT:APPROVED}
+    pg:
+      provider: ${PAYMENT_PG_PROVIDER:SIMULATED}
+      base-url: ${MOCK_PG_URI:http://localhost:8092}
+      api-key: ${MOCK_PG_PAYMENT_KEY:}
+      connect-timeout: 2s
+      read-timeout: 5s
   messaging:
     ops:
       enabled: false

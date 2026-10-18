@@ -1,6 +1,6 @@
 # 작업 기준
 
-- 현재 재작성 완료 모듈은 `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`다. Studio·Review 재작성 완료일은 2026-10-14, Catalog·Store는 2026-10-15, Order·Payment는 2026-10-16, License는 2026-10-17, Download는 2026-10-18이다.
+- 현재 재작성 완료 모듈은 `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`, `settlement`다. Studio·Review 재작성 완료일은 2026-10-14, Catalog·Store는 2026-10-15, Order·Payment는 2026-10-16, License는 2026-10-17, Download·Settlement는 2026-10-18이다.
 - 신규 구현과 수정·검증은 완료된 모듈의 계약을 기준으로 한다.
 - 외부 연동 계약은 호출 모듈의 `core.port`에, HTTP·S3·PG·프레임워크 연동 구현은 `adapter`에 둔다. 기존 하위 패키지를 유지하고 구현체는 `config`에서 조립한다. 패키지 명칭 변경 범위·검증 기록은 `docs/adapter-package-rename-plan.md`를 따른다.
 - 외부 이벤트는 해당 모듈 `api.listener`의 `*Mapper.from(...)`에서 봉투·본문·키를 검증하고 내부 입력으로 변환한다. 업무 서비스와 도메인 모델은 외부 이벤트 전체를 입력받지 않는다. Inbox·잠금·업무 변경·Outbox의 트랜잭션 조율은 서비스가 맡는다.
@@ -17,20 +17,22 @@
 - Catalog는 Studio 출시 요청의 불변 스냅샷을 공개본으로 확정하고 공개 상품 조회·출시 결과 발행을 담당한다. 범위와 검증 기록은 `docs/catalog-mvp-plan.md`를 따른다.
 - Store는 Catalog 공개 상품의 조회 사본, 제목 검색·목록·상세와 시작 시 초기 동기화를 담당한다. 범위와 검증 기록은 `docs/store-mvp-plan.md`를 따른다.
 - Order는 공개 상품 하나의 주문 스냅샷·청구액 확정, JWT sub 기준 내 주문 조회와 결제 결과 반영을 담당한다. 범위와 검증 기록은 `docs/order-mvp-plan.md`를 따른다. Order 독립 검증은 결과 픽스처를 사용하고 실제 Payment 연계는 `docs/payment-mvp-plan.md`를 따른다.
-- Payment는 OrderPlaced의 내구성 있는 접수, 고정 paymentId로 모의 PG 호출·미확정 건 재개, 최종 결과·Outbox 저장과 JWT sub 기준 내 결제 조회를 담당한다. 실제 PG·자금 이동·환불은 후속 범위다. 범위와 OCI 검증 기록은 `docs/payment-mvp-plan.md`를 따른다.
+- Payment는 OrderPlaced의 내구성 있는 접수, 고정 paymentId로 외부 모의 PG HTTP 승인·조회와 미확정 건 재개, 최종 결과·비용 스냅샷·Outbox 저장과 JWT sub 기준 내 결제 조회를 담당한다. 실제 PG·자금 이동·환불은 후속 범위다. 원래 완료 기록은 `docs/payment-mvp-plan.md`, 2026-10-18 외부 PG 전환·로컬 검증은 `docs/settlement-mvp-plan.md`를 따른다.
 - License는 OrderPaid의 불변 구매 근거와 구매자·상품별 영구 보유권, JWT sub 기준 내 라이브러리 조회를 담당한다. 출처와 권한은 License 하나에 저장한다(통합 수정 OCI 검증: 2026-10-18). 본인용 동일 상품의 PENDING·PAID 중복 구매는 Order가 차단하며, 최종 FAILED 이후 새 주문만 허용한다. 환불·회수는 후속 범위다. Download는 기존 내 라이브러리 상세 API로 보유권을 확인한다. 범위와 OCI 검증 기록은 `docs/license-mvp-plan.md`를 따른다.
 - Download는 기존 License 내 라이브러리와 Catalog 내부 현재 공개 빌드를 조회해 상품 ID·코드를 대조하고 읽기 전용 S3/MinIO HEAD·presigned GET으로 전체 ZIP의 만료 URL을 제공한다. 업무 DB·MongoDB·Kafka·보유권 사본·패치/플랫폼 선택은 없다. 범위와 로컬 OrbStack 검증 기록은 `docs/download-mvp-plan.md`를 따른다.
+
+- Settlement는 OrderPaid·외부 PG 거래/비용·Catalog 불변 소유자를 대조한 매출·플랫폼 전액 부담 PG 비용·판매자 배분·월 마감과 PG 지급 명세 접수·거래별 대사·모의 수령 확인을 담당한다. Payment를 경유하지 않는다. 외부 모의 PG는 simulators/mock-pg의 독립 프로세스·DB·HTTP 공급자이며 업무 완료 모듈 수에 포함하지 않는다. 실제 은행 입금·판매자 송금·환불은 후속 범위다. 범위와 로컬 OrbStack 검증·완료 기록은 `docs/settlement-mvp-plan.md`를 따른다.
 
 ## 후속 작업 순서
 
 최소 MVP를 구현·실행하며 도메인의 책임, 데이터 흐름과 코드를 이해한 뒤 확장한다. 다음 순서로 모듈을 재작성한다.
-다음 진행 대상은 `settlement`다.
+아래 다섯 단계의 최소 MVP 재작성을 완료했다. 후속 확장은 별도 계획으로 정한다.
 
 1. `order` (2026-10-16 완료): 공개 상품의 주문 시점 스냅샷·금액 확정, 내 주문 조회와 결제 결과 반영. 계획·완료 기록은 `docs/order-mvp-plan.md`를 따른다.
 2. `payment` (2026-10-16 완료): 확정된 주문 금액에 대한 모의 PG 자동 처리, 미확정 건 재개·결과 발행·본인 조회. 계획·완료 기록은 `docs/payment-mvp-plan.md`를 따른다.
 3. `license` (2026-10-17 완료): 결제 완료 주문의 구매 근거·상품별 영구 보유권, 내 라이브러리 조회. 계획·완료 기록은 `docs/license-mvp-plan.md`를 따른다.
 4. `download` (2026-10-18 완료): JWT sub 기준 보유권·Catalog 현재 공개 빌드를 확인하고 전체 ZIP의 만료 URL 제공. 계획·OrbStack 검증·완료 기록은 `docs/download-mvp-plan.md`를 따른다.
-5. `settlement`: 확정된 거래를 바탕으로 판매자 매출·정산 처리.
+5. `settlement` (2026-10-18 완료): 외부 모의 PG 분리·Payment HTTP/비용 전환·매출 배분·월 마감·PG 명세 직접 조회·수령 대사. 계획·로컬 OrbStack 검증·완료 기록은 `docs/settlement-mvp-plan.md`를 따른다.
 
 - 각 단계는 최소 범위 계획 → 구현 → 로컬 OrbStack 검증 → 완료 기록 순으로 진행하며, 검증을 마친 모듈만 재작성 완료 목록에 추가한다.
 - 후속 모듈의 기존 구현을 선행 모듈의 요구로 가져오지 않는다. 필요한 계약은 해당 단계에서 완료된 모듈을 기준으로 정의한다.

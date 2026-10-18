@@ -63,6 +63,7 @@ spring:
 stove:
   catalog:
     download-service-key: ${CATALOG_DOWNLOAD_SERVICE_KEY:}
+    settlement-service-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
   outbox:
     relay-enabled: true
     batch-size: 200

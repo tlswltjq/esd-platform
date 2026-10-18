@@ -35,6 +35,9 @@ public class Payment {
     @Column(nullable=false,updatable=false) private long amount;
     @Column(nullable=false,length=3,updatable=false) private String currency;
     @Column(nullable=false,length=30,updatable=false) private String provider;
+    @Column(length=100) private String pgFeePolicyId;
+    private Integer pgFeeRateBps;
+    private Long pgFeeAmount;
     @Enumerated(EnumType.STRING) @Column(nullable=false,length=20) private PaymentStatus status;
     @Column(length=100) private String providerTransactionId;
     private Instant providerOccurredAt;
@@ -49,14 +52,14 @@ public class Payment {
 
     public static Instant now() { return Instant.now().truncatedTo(ChronoUnit.MICROS); }
 
-    public static Payment receive(PaymentOrderRequest request) {
-        if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
+    public static Payment receive(PaymentOrderRequest request, String provider) {
+        if (request == null || !PaymentValues.text(provider,30)) throw new BusinessException(ErrorCode.INVALID_REQUEST);
         Payment p = new Payment();
         p.paymentId=UUID.randomUUID().toString(); p.orderNo=request.orderNo();
         p.requestEventId=request.eventId(); p.orderOccurredAt=request.occurredAt(); p.buyerSubject=request.buyerSubject();
         p.productId=request.productId(); p.productCode=request.productCode(); p.title=request.title();
         p.contentVersion=request.contentVersion(); p.listAmount=request.listAmount(); p.discountAmount=request.discountAmount();
-        p.amount=request.amount(); p.currency=request.currency(); p.provider="SIMULATED";
+        p.amount=request.amount(); p.currency=request.currency(); p.provider=provider;
         p.status=PaymentStatus.PENDING; p.createdAt=now(); p.updatedAt=p.createdAt; p.nextAttemptAt=p.createdAt;
         return p;
     }
@@ -76,7 +79,7 @@ public class Payment {
     public PgResult supplierResult() {
         return status==PaymentStatus.PENDING ? null : new PgResult(provider,paymentId,orderNo,amount,currency,
                 providerTransactionId,providerOccurredAt,status==PaymentStatus.PAID ? PgResult.Decision.APPROVED : PgResult.Decision.DECLINED,
-                failureReasonCode,failureReason);
+                failureReasonCode,failureReason,pgFeePolicyId == null ? null : new PgFee(pgFeePolicyId,pgFeeRateBps,pgFeeAmount));
     }
 
     /** Final supplier decisions are immutable, including their original transaction and timestamp. */
@@ -91,6 +94,9 @@ public class Payment {
         if (!PaymentValues.text(eventId,64) || !PaymentValues.microsecond(occurredAt))
             throw new IllegalArgumentException("Result event identity is required");
         providerTransactionId=result.transactionId(); providerOccurredAt=result.occurredAt();
+        if (result.fee() != null) {
+            pgFeePolicyId=result.fee().policyId(); pgFeeRateBps=result.fee().rateBps(); pgFeeAmount=result.fee().amount();
+        }
         status=result.decision()==PgResult.Decision.APPROVED ? PaymentStatus.PAID : PaymentStatus.FAILED;
         failureReasonCode=result.reasonCode(); failureReason=result.reason();
         resultEventId=eventId; resultOccurredAt=occurredAt;

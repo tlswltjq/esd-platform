@@ -85,24 +85,21 @@ flowchart LR
 ```
 
 Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추가 구매 확정 절차는 없다.
-실제 PG·환불·권한 회수·정산은 후속 범위다. 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
+실제 PG·환불·권한 회수·판매자 송금은 후속 범위다. Settlement는 OrderPaid를 받아 PG·Catalog 근거를 대조하고 매출·월 합계를 기록한다. 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
 [주문 실행](../order-guide.md) · [Payment 검증](../payment-guide.md) · [License 조회·아홉 앱 검증](../license-guide.md) · [Download·열 앱 검증](../download-guide.md)
 
 <a id="operations-flow"></a>
 
-## 구매자·운영자: 환불하고 판매자 월 마감을 확인한다
+## 운영자: PG 명세를 대사하고 판매자 금액을 마감한다
 
-아래는 미완료 모듈들의 재작성 전 참고 흐름이다. 현재 Order·Payment MVP는 취소·환불 API나 구 PaymentCancelled 흐름을 제공하지 않는다.
+1. Settlement가 OrderPaid의 전체 입력과 외부 PG 승인·비용, Catalog 불변 소유자를 대조하고 매출·월 합계·Inbox를 함께 저장한다.
+2. 외부 모의 PG가 미정산 승인 거래의 지급 명세를 자기 DB에 확정한다. 검증 운영자가 PG 제어 API로 회차를 실행하며 Payment·Settlement가 생성하지 않는다.
+3. ADMIN이 기존 정산번호로 명세를 수집하면 Settlement가 공급자 원문 값 전체를 보존하고 매출과 대조한다.
+4. 내부 매출이 없으면 REPORTED_PAID로 기다리고 값이 다르면 MISMATCH로 남긴다. 모든 항목이 일치하면 SIMULATED_RECEIVED로 모의 수령을 한 번 확정한다.
+5. ADMIN은 현재 KST 월보다 이전 월을 판매자별로 마감한다. CLOSED 이후 지연 매출은 현재 월에 기록하고 원래 saleMonth를 보존한다.
 
-1. 구매자는 결제 서비스에 환불을 요청한다. `CANCELING`은 환불 진행 중이며 PG 완료 뒤 `CANCELED`가 된다. 사용자 주문 취소와 실제 환불 연결의 차이는 [Q9](open-questions.md#q9)를 확인한다.
-2. `PaymentCancelled`를 받아 주문을 취소하고, 이용권을 회수하고, 원매출에 대응하는 환불 원장을 추가한다. `LicenseRevoked`는 보유권 사본에 반영된다. 원장 매출 행은 환불로 삭제하지 않는다.
-3. 운영자는 PG 오류로 남은 `CANCELING`의 재시도 결과와 이벤트 반영 상태를 확인한다. 지급 최종 실패 보상도 같은 환불 경로를 사용한다. 결제창 만료 후 승인은 `PaymentCompleted` 없이 자동 환불하므로 정상 매출·지급 흐름과 다르다.
-4. 운영자는 판매자·귀속 월별 [월 마감](models/settlement.md#seller-settlement)을 수행한다. 미마감 원장만 합산하고, 양수 정산액에 계산서 번호가 없으면 별도 발행을 시도한다.
-5. 같은 월의 미마감 원장이 나중에 생기면 재마감 시 기존 합계에 더하고 `adjustment*`에 기록한다. 최초 `base*` 금액은 유지하며, 마감 매출의 환불에는 `adjustmentForMonth`로 원래 월을 연결한다. 대사 API로 원장·마감 차이를 확인한다. 실제 수정계산서, 월 경계 지연, 송금과 이월 정책은 [Q6](open-questions.md#q6)에서 결정한다.
-
-**중단·예외:** PG 오류 응답 뒤 환불 완료로 표시하지 않는다. 원장 합계가 음수라고 다음 달 원장으로 자동 이월된 것으로 표현하지 않는다. 판매 중지 자체는 기존 구매 이용권을 회수하지 않는다.
-
-근거: 구 Payment 환불 실험(현재 제거됨), `LicenseIdempotencyTest`(재작성 전 테스트, 현재 제거됨), [SettlementCloseTest](../../apps/settlement/src/integrationTest/java/com/stove/settlement/core/service/SettlementCloseTest.java). 장애 운영은 [복원 시나리오](../resilience-scenarios.md), [이용권 복구 절차](../runbooks/license-db-loss.md)를 참고한다.
+PG 회차·플랫폼 모의 수령·판매자 월 마감은 별개의 주기와 상태다. 실제 은행 입금·판매자 송금·환불·계산서·재마감은 후속 범위다.
+실행·복구는 [정산 안내](../settlement-guide.md), 모델은 [정산 모델](models/settlement.md)을 따른다.
 
 ## 이벤트를 업무 사실로 읽기
 
@@ -120,9 +117,9 @@ Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추
 | `ProductChanged` (구 계약) | 재작성 전 상품 마스터 변경 | 재작성 전 참고 계약. 현재 Catalog·Store·Download에서는 사용하지 않음 |
 | `OrderPlaced` | 단일 상품 주문·정가·할인액·청구액 고정 | Payment의 결제 접수·공급자 호출 근거 |
 | `OrderPaymentCompleted` / `OrderPaymentFailed` | 원래 주문 요청에 대한 최종 결제 결과 계약 | Order가 연결·금액 검증 후 PAID/FAILED 반영 |
-| `OrderPaid` | Order가 최초 결제 완료 결과를 자기 주문과 대조해 PAID 반영 | License가 상품별 권한·주문별 구매 근거 저장 |
+| `OrderPaid` | Order가 최초 결제 완료 결과를 자기 주문과 대조해 PAID 반영 | License가 상품별 권한·구매 근거 저장, Settlement가 매출·배분 기록 |
 | `OrderCreated` (구 계약) | 재작성 전 주문 항목·금액 고정 | 현재 Payment는 소비하지 않는 구 계약 |
-| `PaymentCompleted` | 정상 승인 금액을 결제 완료로 기록함 | 재작성 전 License·Settlement 입력. 현재 License·Order·Payment는 사용하지 않음 |
+| `PaymentCompleted` | 정상 승인 금액을 결제 완료로 기록함 | 재작성 전 License·Settlement 입력. 현재 License·Order·Payment·Settlement는 사용하지 않음 |
 | `PaymentFailed` | PG 승인 거절을 기록함 | 구 주문 결과 계약. 새 Order에서는 사용하지 않음 |
 | `LicenseIssued` / `LicenseRevoked` (구 계약) | 이용권 지급 / 회수를 기록함 | 제거된 Download 사본의 구 계약. 현재 License는 발행하지 않고 Download도 소비하지 않음 |
 | `PaymentCancelled` | PG 환불 완료를 기록함 | 재작성 전 License 회수·Settlement 환불 원장 기록의 구 계약 |

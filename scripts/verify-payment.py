@@ -2,9 +2,12 @@
 """Verify Payment against completed Auth/Gateway/Studio/Review/Catalog/Store/Order in an isolated, disposable stack."""
 
 from pathlib import Path
+from mock_pg_runtime import MockPgRuntime
 import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[1]
-directory=Path(tempfile.mkdtemp(prefix="stove-payment-check-"))
+output_root=repo/"runs"
+output_root.mkdir(exist_ok=True)
+directory=Path(tempfile.mkdtemp(prefix="stove-payment-check-",dir=output_root))
 project=directory.name
 offset=int(os.environ.get("PAYMENT_TEST_PORT_OFFSET","30000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083}
@@ -20,12 +23,13 @@ ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=os.environ.get("STOVE_TEST_MINIO_IMAGE","stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
 if subprocess.run(["docker","image","inspect",minio_image],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
     subprocess.run(["docker","build","-t",minio_image,str(repo/"infra/minio")],check=True)
-subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:payment:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",":simulators:mock-pg:bootJar",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:payment:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; CREATE DATABASE stove_catalog; CREATE DATABASE stove_store; CREATE DATABASE stove_order; CREATE DATABASE stove_payment; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_catalog.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%';\n")
+pg=MockPgRuntime(repo,directory)
 compose=directory/"compose.yml"
 compose.write_text(f"""services:
-  mysql:
+{pg.compose_service()}  mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -66,6 +70,8 @@ compose.write_text(f"""services:
     command: ["server", "/data"]
 """)
 docker=["docker","compose","-p",project,"-f",str(compose)]
+pg.docker=docker
+compose.chmod(0o600)
 processes=[]
 def ready(url):
     try:
@@ -101,6 +107,7 @@ try:
     if denied_delete.returncode==0: raise RuntimeError("Review storage account unexpectedly has delete access")
     subprocess.run(mc+["stat","admin/stove-builds/iam-check.bin"],check=True,stdout=subprocess.DEVNULL)
     print("PASS: Review storage account cannot upload or delete",flush=True)
+    pg.start()
     public=f"http://127.0.0.1:{8080+offset}"
     common=os.environ.copy()
     common.update(DB_HOST="127.0.0.1",DB_PORT=str(ports["mysql"]),DB_USER="stove",DB_PASSWORD="stove1234",
@@ -125,7 +132,7 @@ try:
             classpath=(repo/"apps/payment/build/verification-classpath.txt").read_text()
             launch=["-cp",classpath,"com.stove.payment.PaymentServiceApplication",
                 "--spring.main.sources=com.stove.payment.verification.PaymentFaultConfiguration"]
-        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
+        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=pg.client_environment(app,common),cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))
     common["CATALOG_BASE_URL"]="http://127.0.0.1:"+str(apps["catalog"]+offset)
     def stop_app(name):
@@ -162,24 +169,25 @@ try:
     def check(query,expected,description):
         wait_for(lambda:sql(query)==str(expected),description,90)
     def restart_payment(arguments=(),fault=False):
+        if pg.decision != "APPROVED": pg.start()
         stop_app("payment"); start_app("payment",arguments,fault); wait_for(apps_ready,"Payment restarted",180)
     phase("prepareReceiptWithoutProcessing")
-    assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="0"
     restart_payment()
     phase("approvesDurableReceiptAfterRestart")
-    restart_payment(["--stove.payment.simulated.result=DECLINED"])
+    pg.start("DECLINED")
     phase("explicitDeclineUpdatesOrderAndPreservesEarlierApproval")
     restart_payment(["--stove.verification.fail-after-provider=true"],True)
     phase("losesResponseAfterSupplierCommit")
     check("SELECT COUNT(*) FROM stove_payment.purchase_payment WHERE status='PENDING' AND last_error_code='PG_UNAVAILABLE'",1,"Supplier committed; response lost")
-    assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="3"
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="3"
     assert sql("SELECT COUNT(*) FROM stove_payment.outbox_event")=="2"
     restart_payment()
     phase("recoversLostResponseAfterProcessRestart")
     restart_payment(["--stove.verification.fail-after-outbox=true"],True)
     phase("rollsBackResultAfterOutboxInsertion")
     check("SELECT COUNT(*) FROM stove_payment.purchase_payment WHERE status='PENDING' AND last_error_code='RESULT_UNCONFIRMED'",1,"Result transaction rolled back")
-    assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="4"
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="4"
     assert sql("SELECT COUNT(*) FROM stove_payment.outbox_event")=="3"
     restart_payment()
     phase("recoversResultTransactionAfterProcessRestart")
@@ -208,11 +216,12 @@ try:
     phase("preservesAllResultsAfterReplayAndRestart")
     for schema,table in [("stove_order","purchase_order"),("stove_order","processed_event"),
             ("stove_payment","purchase_payment"),("stove_payment","processed_event"),
-            ("stove_payment","simulated_payment_charge"),("stove_payment","outbox_event")]:
+            ("stove_payment","outbox_event")]:
         assert sql("SELECT COUNT(*) FROM "+schema+"."+table)=="5",(schema,table)
     print("PASS: Payment receipt, approval/decline, supplier response loss, result rollback, real restarts, broker/Order/Catalog outage and replay (11 phases)",flush=True)
 
 finally:
+    pg.stop()
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:
         try: process.wait(timeout=40)

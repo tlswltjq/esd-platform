@@ -112,6 +112,7 @@ services:
       <<: *common-env
       STUDIO_URI: http://studio:8085
       CATALOG_DOWNLOAD_SERVICE_KEY: ${CATALOG_DOWNLOAD_SERVICE_KEY:-}
+      CATALOG_SETTLEMENT_SERVICE_KEY: ${CATALOG_SETTLEMENT_SERVICE_KEY:-}
 
   store:
     <<: *app
@@ -138,6 +139,8 @@ services:
     expose: ["8083"]
     environment:
       <<: *common-env
+      MOCK_PG_URI: http://mock-pg:8092
+      MOCK_PG_PAYMENT_KEY: ${MOCK_PG_PAYMENT_KEY:-}
 
   license:
     <<: *app
@@ -172,9 +175,52 @@ services:
     expose: ["8089"]
     environment:
       <<: *common-env
-      STUDIO_URI: http://studio:8085
+      MOCK_PG_URI: http://mock-pg:8092
+      MOCK_PG_SETTLEMENT_KEY: ${MOCK_PG_SETTLEMENT_KEY:-}
+      CATALOG_BASE_URL: http://catalog:8081
+      CATALOG_SETTLEMENT_SERVICE_KEY: ${CATALOG_SETTLEMENT_SERVICE_KEY:-}
+
+  mock-pg:
+    <<: *app
+    build: { context: ., dockerfile: simulators/mock-pg/Dockerfile }
+    image: stove/mock-pg
+    expose: ["8092"]
+    networks: [stove, mock-pg-private]
+    depends_on:
+      pg-mysql:
+        condition: service_healthy
+    environment:
+      MOCK_PG_DB_HOST: pg-mysql
+      MOCK_PG_DB_PORT: "3306"
+      MOCK_PG_DB_NAME: mock_pg
+      MOCK_PG_DB_USER: mock_pg
+      MOCK_PG_DB_PASSWORD: ${MOCK_PG_DB_PASSWORD:-}
+      MOCK_PG_PAYMENT_KEY: ${MOCK_PG_PAYMENT_KEY:-}
+      MOCK_PG_SETTLEMENT_KEY: ${MOCK_PG_SETTLEMENT_KEY:-}
+      MOCK_PG_CONTROL_KEY: ${MOCK_PG_CONTROL_KEY:-}
+
+  pg-mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    networks: [mock-pg-private]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MOCK_PG_DB_ROOT_PASSWORD:-}
+      MYSQL_DATABASE: mock_pg
+      MYSQL_USER: mock_pg
+      MYSQL_PASSWORD: ${MOCK_PG_DB_PASSWORD:-}
+    volumes: [mock_pg_mysql:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
 
 networks:
+  mock-pg-private:
+    internal: true
   stove:
     name: stove_default
     external: true
+
+volumes:
+  mock_pg_mysql:

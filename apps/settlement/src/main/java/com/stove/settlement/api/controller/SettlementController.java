@@ -1,108 +1,80 @@
 package com.stove.settlement.api.controller;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import com.stove.common.web.response.ApiResponse;
-import com.stove.settlement.api.application.SettlementCloseFacade;
-import com.stove.settlement.core.service.ReconciliationService;
-import com.stove.settlement.core.domain.ReconciliationResult;
-import com.stove.settlement.api.application.CreatorWorkspaceClient;
-import com.stove.settlement.api.controller.dto.SellerSettlementResponse;
-import com.stove.settlement.api.controller.dto.SettlementRecordResponse;
-import com.stove.settlement.core.service.SellerSettlementService;
-import com.stove.settlement.core.service.SettlementRecordService;
-import java.time.YearMonth;
-import java.util.List;
+import com.stove.settlement.api.controller.dto.AdminMonthResponse;
+import com.stove.settlement.api.controller.dto.AdminSaleResponse;
+import com.stove.settlement.api.controller.dto.MonthResponse;
+import com.stove.settlement.api.controller.dto.PgReceiptResponse;
+import com.stove.settlement.api.controller.dto.SaleResponse;
+import com.stove.settlement.api.controller.dto.SettlementPage;
+import com.stove.settlement.core.domain.SettlementQuery;
+import com.stove.settlement.core.service.CloseSellerMonth;
+import com.stove.settlement.core.service.ReadPgReceipts;
+import com.stove.settlement.core.service.ReceivePgSettlement;
+import com.stove.settlement.core.service.ReconcilePgReceipt;
+import com.stove.settlement.core.service.SearchSales;
+import com.stove.settlement.core.service.SearchSellerMonths;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 정산 담당자/판매자용 조회 + 수동 마감 API. */
-@RestController
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
-@RequiredArgsConstructor
+@RestController @RequiredArgsConstructor
 @RequestMapping("/api/v1/settlements")
 public class SettlementController {
+    private final SearchSales sales;
+    private final SearchSellerMonths months;
+    private final CloseSellerMonth close;
+    private final ReceivePgSettlement receive;
+    private final ReconcilePgReceipt reconcile;
+    private final ReadPgReceipts receipts;
 
-    private final SettlementRecordService settlementRecordService;
-    private final SellerSettlementService sellerSettlementService;
-    private final SettlementCloseFacade settlementCloseFacade;
-    private final ReconciliationService reconciliationService;
-    private final CreatorWorkspaceClient workspaces;
-
-    @GetMapping("/me/ledger")
-    public ApiResponse<List<SettlementRecordResponse>> myLedger(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
-            @AuthenticationPrincipal Jwt jwt) {
-        Long sellerId = workspaces.ownWorkspace(jwt.getTokenValue());
-        return ApiResponse.ok(settlementRecordService.findBySeller(sellerId, month).stream()
-                .map(SettlementRecordResponse::from).toList());
+    @GetMapping("/me/sales")
+    public ApiResponse<SettlementPage<SaleResponse>> mySales(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(sales.execute(new SettlementQuery(jwt.getSubject(),month,page,size)).map(SaleResponse::from)));
     }
-
-    @GetMapping("/me/closings")
-    public ApiResponse<List<SellerSettlementResponse>> myClosings(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
-            @AuthenticationPrincipal Jwt jwt) {
-        Long sellerId = workspaces.ownWorkspace(jwt.getTokenValue());
-        return ApiResponse.ok(sellerSettlementService.findClosed(month).stream()
-                .filter(s -> s.getSellerId().equals(sellerId))
-                .map(SellerSettlementResponse::from).toList());
+    @GetMapping("/me/months")
+    public ApiResponse<SettlementPage<MonthResponse>> myMonths(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(months.execute(new SettlementQuery(jwt.getSubject(),month,page,size)).map(MonthResponse::from)));
     }
-
-    @GetMapping("/reconciliation")
-    public ApiResponse<List<ReconciliationResult>> reconciliation(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(reconciliationService.month(month));
+    @GetMapping("/sales")
+    public ApiResponse<SettlementPage<AdminSaleResponse>> sales(@RequestParam(required=false) String sellerSubject,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(sales.execute(new SettlementQuery(sellerSubject,month,page,size)).map(AdminSaleResponse::from)));
     }
-
-    @GetMapping(value = "/export.csv", produces = "text/csv")
-    public ResponseEntity<String> csv(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
-                .header("Content-Disposition", "attachment; filename=settlement-" + month + ".csv")
-                .body(reconciliationService.csv(month));
+    @GetMapping("/months")
+    public ApiResponse<SettlementPage<AdminMonthResponse>> months(@RequestParam(required=false) String sellerSubject,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(months.execute(new SettlementQuery(sellerSubject,month,page,size)).map(AdminMonthResponse::from)));
     }
-
-    /** 주문 단위 원장(매출 + 환불 역산) */
-    @GetMapping("/orders/{orderNo}")
-    public ApiResponse<List<SettlementRecordResponse>> byOrder(@PathVariable String orderNo) {
-        return ApiResponse.ok(settlementRecordService.findByOrder(orderNo).stream()
-                .map(SettlementRecordResponse::from)
-                .toList());
+    @PostMapping("/sellers/{sellerSubject}/months/{month}/close")
+    public ApiResponse<AdminMonthResponse> close(@PathVariable String sellerSubject,@PathVariable String month) {
+        return ApiResponse.ok(AdminMonthResponse.from(close.execute(sellerSubject,month)));
     }
-
-    /** 판매자 월별 원장 */
-    @GetMapping("/sellers/{sellerId}")
-    public ApiResponse<List<SettlementRecordResponse>> bySeller(
-            @PathVariable Long sellerId,
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(settlementRecordService.findBySeller(sellerId, month).stream()
-                .map(SettlementRecordResponse::from)
-                .toList());
+    public record ReceiptRequest(String providerSettlementId) { }
+    @PostMapping("/pg-receipts")
+    public ApiResponse<PgReceiptResponse> receive(@RequestBody ReceiptRequest body,@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(PgReceiptResponse.from(receive.execute(body.providerSettlementId(),jwt.getSubject())));
     }
-
-    /** 월 마감 확정본 조회 */
-    @GetMapping("/closings")
-    public ApiResponse<List<SellerSettlementResponse>> closings(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(sellerSettlementService.findClosed(month).stream()
-                .map(SellerSettlementResponse::from)
-                .toList());
+    @GetMapping("/pg-receipts")
+    public ApiResponse<SettlementPage<PgReceiptResponse>> receipts(@RequestParam(required=false) String status,
+            @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(receipts.execute(status,page,size).map(PgReceiptResponse::from)));
     }
-
-    /** 수동 마감(배치 재실행용). 이미 마감된 판매자는 건너뛴다. */
-    @PostMapping("/close")
-    public ApiResponse<List<SellerSettlementResponse>> close(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        return ApiResponse.ok(settlementCloseFacade.closeMonth(month).stream()
-                .map(SellerSettlementResponse::from)
-                .toList());
+    @GetMapping("/pg-receipts/{providerSettlementId}")
+    public ApiResponse<PgReceiptResponse> receipt(@PathVariable String providerSettlementId) {
+        return ApiResponse.ok(PgReceiptResponse.from(receipts.execute(providerSettlementId)));
+    }
+    @PostMapping("/pg-receipts/{providerSettlementId}/reconcile")
+    public ApiResponse<PgReceiptResponse> reconcile(@PathVariable String providerSettlementId) {
+        return ApiResponse.ok(PgReceiptResponse.from(reconcile.execute(providerSettlementId)));
     }
 }

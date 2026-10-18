@@ -57,16 +57,21 @@ spring:
 
 stove:
   settlement:
-    studio-url: ${STUDIO_URI:http://localhost:8085}
-    self-seller-id: 1          # 자체 판매(수수료 0%)
-    partner-fee-rate: 0.3000   # 입점 판매 중개 수수료 30%
-    close-cron: "0 0 3 1 * *"  # 매월 1일 03:00 KST 전월 마감
+    pg-base-url: ${MOCK_PG_URI:http://localhost:8092}
+    pg-api-key: ${MOCK_PG_SETTLEMENT_KEY:}
+    catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
+    catalog-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
+    connect-timeout: 2s
+    read-timeout: 5s
+  messaging:
+    ops:
+      enabled: false
   outbox:
     # 정산은 이벤트를 발행하지 않는 종단 컨슈머 — 릴레이 비활성화
     relay-enabled: false
 
 management:
-  endpoints.web.exposure.include: health,info,prometheus,metrics
+  endpoints.web.exposure.include: health
   endpoint.health.probes.enabled: true
   metrics.tags.application: settlement
   # 전량 샘플링 — 데모에서는 트레이스가 드문드문 있으면 확인 자체가 안 된다. 운영이라면 낮춰 잡는다.

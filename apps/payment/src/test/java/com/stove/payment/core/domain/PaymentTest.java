@@ -13,8 +13,19 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentTest {
+    @Test void preservesSupplierFeeAndRejectsFeeOnlyChangesToFinalDecision() {
+        Payment p=Payment.receive(request(),"SIMULATED");PgResult original=approved(p);
+        PgResult withFee=new PgResult(original.provider(),original.paymentId(),original.orderNo(),original.amount(),original.currency(),
+                original.transactionId(),original.occurredAt(),original.decision(),null,null,new PgFee("fee-v1",300,300));
+        p.confirm(withFee,id(),Payment.now());
+        assertThat(p.getPgFeeAmount()).isEqualTo(300);assertThat(p.getAmount()).isEqualTo(10000);
+        PgResult changed=new PgResult(original.provider(),original.paymentId(),original.orderNo(),original.amount(),original.currency(),
+                original.transactionId(),original.occurredAt(),original.decision(),null,null,new PgFee("fee-v1",300,500));
+        assertThatThrownBy(() -> p.confirm(changed,id(),Payment.now())).isInstanceOf(BusinessException.class);
+        assertThat(p.supplierResult()).isEqualTo(withFee);
+    }
     @Test void requestIsFrozenIndependentlyOfLaterPrices() {
-        PaymentOrderRequest r=request(); Payment p=Payment.receive(r);
+        PaymentOrderRequest r=request(); Payment p=Payment.receive(r,"SIMULATED");
         assertThat(p.orderRequest()).isEqualTo(r);
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(p.getProvider()).isEqualTo("SIMULATED");
@@ -28,13 +39,13 @@ class PaymentTest {
     }
     @Test void preservesDiscountedCustomerChargeWithoutRecalculatingPolicyOrFees() {
         PaymentOrderRequest r=request();
-        Payment p=Payment.receive(new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,1000,9000,"KRW"));
+        Payment p=Payment.receive(new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,1000,9000,"KRW"),"SIMULATED");
         assertThat(p.chargeRequest().amount()).isEqualTo(9000);
         assertThat(p.getListAmount()).isEqualTo(10000);
         assertThat(p.getDiscountAmount()).isEqualTo(1000);
     }
     @Test void confirmedResultIsImmutableAndDuplicateCannotChangeEventOrTimestamp() {
-        Payment p=Payment.receive(request()); PgResult result=approved(p); String eventId=id(); Instant time=Payment.now();
+        Payment p=Payment.receive(request(),"SIMULATED"); PgResult result=approved(p); String eventId=id(); Instant time=Payment.now();
         assertThat(p.confirm(result,eventId,time)).isTrue();
         Instant updated=p.getUpdatedAt();
         assertThat(p.confirm(result,id(),Payment.now())).isFalse();
@@ -45,7 +56,7 @@ class PaymentTest {
         assertThatThrownBy(() -> p.confirm(result(p,PgResult.Decision.DECLINED),id(),Payment.now())).isInstanceOf(BusinessException.class);
     }
     @Test void finalDeclinePreservesReasonAndCannotBeReopenedByAnError() {
-        Payment p=Payment.receive(request()); PgResult r=result(p,PgResult.Decision.DECLINED);
+        Payment p=Payment.receive(request(),"SIMULATED"); PgResult r=result(p,PgResult.Decision.DECLINED);
         p.confirm(r,id(),Payment.now()); Instant updated=p.getUpdatedAt();
         p.defer(Payment.now().plusSeconds(5),"PG_UNAVAILABLE");
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.FAILED);
@@ -53,14 +64,14 @@ class PaymentTest {
         assertThat(p.getNextAttemptAt()).isNull(); assertThat(p.getUpdatedAt()).isEqualTo(updated);
     }
     @Test void unknownOutcomeOnlySchedulesAnotherCheck() {
-        Payment p=Payment.receive(request()); Instant next=Payment.now().plusSeconds(5);
+        Payment p=Payment.receive(request(),"SIMULATED"); Instant next=Payment.now().plusSeconds(5);
         p.defer(next,"PG_UNAVAILABLE");
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(p.getNextAttemptAt()).isEqualTo(next);
         assertThat(p.getResultEventId()).isNull(); assertThat(p.supplierResult()).isNull();
         assertThat(p.getFailureReasonCode()).isNull();
     }
     @Test void wrongSupplierIdentityAndNetAmountCannotApprovePayment() {
-        Payment p=Payment.receive(request()); PgResult r=approved(p);
+        Payment p=Payment.receive(request(),"SIMULATED"); PgResult r=approved(p);
         for (PgResult wrong:new PgResult[]{
                 new PgResult("OTHER",r.paymentId(),r.orderNo(),r.amount(),r.currency(),r.transactionId(),r.occurredAt(),r.decision(),null,null),
                 new PgResult("SIMULATED",id(),r.orderNo(),r.amount(),r.currency(),r.transactionId(),r.occurredAt(),r.decision(),null,null),
@@ -70,7 +81,7 @@ class PaymentTest {
         assertThat(p.getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(p.getResultEventId()).isNull();
     }
     @Test void resultAndRequestValuesRejectIncompleteOrInconsistentFacts() {
-        PaymentOrderRequest r=request(); Payment p=Payment.receive(r); PgResult result=approved(p);
+        PaymentOrderRequest r=request(); Payment p=Payment.receive(r,"SIMULATED"); PgResult result=approved(p);
         assertThatThrownBy(() -> new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),1L,r.productCode(),r.title(),3,10000,2000,10000,"KRW"))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new PgChargeRequest(p.getPaymentId(),p.getOrderNo(),0,"KRW")).isInstanceOf(IllegalArgumentException.class);

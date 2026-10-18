@@ -5,11 +5,11 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작성 현황 (2026-10-18): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download` 완료.**
+**모듈 재작성 현황 (2026-10-18): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`, `settlement` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
-Catalog·Store·Order·Payment·License·Download의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열 모듈의 계약을 기준으로 한다.
-나머지 서비스 명세는 기존 구현의 참고 기록이며 현재 설계·검증 기준에서 제외한다.
+Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열한 모듈의 계약을 기준으로 한다.
+외부 모의 PG는 업무 모듈과 분리된 검증용 공급자이며 완료 모듈 수에 포함하지 않는다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
@@ -197,9 +197,9 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 확인된 승인·거절만 결과와 Outbox를 함께 확정한다. 응답 유실·결과 저장 실패는 PENDING을 유지한다.
 최종 상태·이벤트 ID·시각은 고정하며 Order 상태는 Order가 결과 검증 뒤 변경한다.
 
-업무 테이블은 purchase_payment, 공급자 기술 원장은 simulated_payment_charge다.
-구 V1~V10·자료를 보존하고 V11로 새 테이블만 추가한다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.
-실제 PG·결제창·수수료·환불·이용권·정산은 후속 범위다.
+업무 테이블은 purchase_payment다. PG 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다.
+V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.
+실제 PG·결제창·환불은 후속 범위다. Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다.
 
 ---
 
@@ -248,71 +248,28 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 
 ## settlement
 
-매출 배분. 오픈마켓 구조상 가장 복잡한 영역이라 **집계 / 수수료 / 마감** 세 조각으로 나눴다.
+[실행](settlement-guide.md) · [모델](domain/models/settlement.md) · [범위·검증](settlement-mvp-plan.md)
 
-**HTTP API**
+기존 OrderPaid를 소비해 판매자 매출·배분·월 마감과 PG 지급 명세 수령 대사를 담당한다.
+PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·결제·이용권 계약은 유지한다.
 
-| 메서드 | 경로 | 설명 |
+| 메서드 | 경로 | 권한·동작 |
 |---|---|---|
-| GET | `/api/v1/settlements/orders/{orderNo}` | 주문 단위 원장(매출 + 환불 역산) |
-| GET | `/api/v1/settlements/sellers/{sellerId}` | 판매자 월별 원장 |
-| GET | `/api/v1/settlements/me/ledger?month=yyyy-MM` | CREATOR 자신의 원장 |
-| GET | `/api/v1/settlements/me/closings?month=yyyy-MM` | CREATOR 자신의 월 마감 |
-| GET | `/api/v1/settlements/closings` | 판매자 월 마감 결과 |
-| POST | `/api/v1/settlements/close` | 수동 마감(배치 재실행용) |
-| GET | `/api/v1/settlements/reconciliation?month=yyyy-MM` | ADMIN 월별 판매자 대사·차이 경고 |
-| GET | `/api/v1/settlements/export.csv?month=yyyy-MM` | ADMIN 원장 CSV |
+| GET | /api/v1/settlements/me/sales | CREATOR 본인 매출 |
+| GET | /api/v1/settlements/me/months | CREATOR 본인 월 합계 |
+| GET | /api/v1/settlements/sales | ADMIN 전체/판매자별 매출 |
+| GET | /api/v1/settlements/months | ADMIN 전체/판매자별 월 합계 |
+| POST | /api/v1/settlements/sellers/{sellerSubject}/months/{month}/close | ADMIN 지난 월 마감 |
+| POST | /api/v1/settlements/pg-receipts | ADMIN 기존 PG 명세 수집·접수·최초 대사 |
+| GET | /api/v1/settlements/pg-receipts | ADMIN 수령 명세 목록 |
+| GET | /api/v1/settlements/pg-receipts/{providerSettlementId} | ADMIN 명세·대사 사유 상세 |
+| POST | /api/v1/settlements/pg-receipts/{providerSettlementId}/reconcile | ADMIN 저장 명세 재대사 |
 
-**재작성 전 할인 행사 API 기록(현재 Catalog에서 제거)** — 기존 catalog가 가격과 행사 기간을 소유했다. CREATOR는 본인 워크스페이스 상품만
-`POST /api/v1/promotions/seller/products/{productId}`로 판매자 부담 행사를 만들고,
-ADMIN은 `/platform/products/{productId}`로 플랫폼 부담 행사를 만든다. 본문은
-`{"discountPerUnit":2000,"startsAt":"2026-10-01T00:00:00Z","endsAt":"2026-10-08T00:00:00Z"}`다.
-`GET`으로 같은 경로의 이력을 조회하고, `POST /api/v1/promotions/{seller|platform}/{id}/stop`으로 중지한다.
-한 상품의 기간은 겹칠 수 없고 시작은 포함, 끝은 제외한다. 할인가 1원 이상만 허용한다.
-상점·상품의 표시 가격과 catalog 견적은 행사 기간을 현재 시각에 대조해 계산한다.
-Store 색인은 행사 일정을 보관해 캐시된 진열도 경계 시각에 새 가격을 계산한다.
-
-**금액 사본** — 주문은 통화를, 각 항목은 정가, 할인액, 최종 결제 단가, 행사 ID·부담 주체,
-정산 기준액, 수수료율·수수료, 판매자 지급액을 보존한다. 정산 원장은 주문의 이 값을 사용한다.
-결제 공급자는 주문 최종 금액을 쓰고, 정산은 결제 완료 이벤트의 같은 사본을 사용한다.
-정가 10,000원과 할인 2,000원인 입점 상품에서 고객은 두 행사 모두 8,000원을 낸다.
-판매자 부담이면 정산 기준 8,000원·수수료 2,400원·지급액 5,600원이다.
-플랫폼 부담이면 정산 기준 10,000원·수수료 3,000원·지급액 7,000원이며
-플랫폼 판촉비 2,000원을 별도로 기록한다(기본 입점 수수료율 30%).
-환불은 원 매출의 결제·정가·할인·기준액·플랫폼 비용을 부호 반전한다. 현재 수수료·지급액은
-음수 기준액과 요율로 다시 계산하므로 반복 항목의 반올림 차이는 [Q12](domain/open-questions.md#q12)의 검토 대상이다.
-첫 월 마감 금액은 `base*` 필드에 남기고,
-이후 닫힌 원장은 `adjustment*`에 별도로 합산한다. 닫힌 매출의 지각 환불 원장에는
-`adjustmentForMonth`가 찍힌다. 대사는 고객 결제액, 판매자 할인, 플랫폼 판촉비,
-정산 기준액, 수수료, 지급액과 마감액 차이를 반환한다.
-`taxInvoiceStatus=SIMULATED`는 MockTaxInvoiceIssuer 결과이며 실제 발행이 아니다.
-
-**이벤트** — 수신 `PaymentCompleted`·`PaymentCancelled` / 발행 없음
-
-**규칙**
-
-- **수수료 정책** — 자체 판매(`SELF`)는 0%, 입점 판매(`PARTNER`)는 설정된 요율(기본 30%).
-  판매자 ID 로 구분하며, 정책이 늘어나면 `FeePolicy` 만 확장한다.
-- **환불 역산** — 환불 이벤트에는 항목 정보가 없다. 자기 원장의 `SALE` 레코드를 근거로
-  환불 원장을 만들므로 **다른 서비스에 되묻지 않는다.** 현재 수수료는 재계산하므로 동일 상품의 반복 항목에서 반올림 잔액이 남을 수 있다. [구현 차이 Q12](domain/open-questions.md#q12)를 참고한다.
-- **금전 원장이므로 방어가 두 겹이다** — Inbox 가드 `(event_id, consumer_group)` 와
-  도메인 유니크 `(order_no, product_id, record_type)`.
-- **월 마감**은 재실행 안전하다. 이미 확정본이 있는 판매자는 건너뛰지 않고 **거기에 더한다**
-  (`SellerSettlement#accumulate`). 건너뛰면 마감 후 도착한 지각 원장이 close 도장만 찍힌 채
-  어느 확정본에도 안 들어간다 — [D-001](defects.md#d-001) 이 그 결함이다.
-  순액이 0 이하인 판매자(환불이 매출 초과)는 세금계산서를 발행하지 않는다.
-  다음 달 이월 원장과 실제 송금 정책은 [Q6](domain/open-questions.md#q6)의 미결 항목이다.
-- **마감은 판매자마다 독립 트랜잭션 3단계**다(`SettlementCloseFacade`) —
-  확정본 커밋 → 세금계산서 발행(**트랜잭션 밖**) → 발행번호 커밋.
-  발행은 되돌릴 수 없는 외부 호출이라 트랜잭션 안에 두면 롤백돼도 계산서는 이미 나간다
-  ([D-022](defects.md#d-022), 결제의 [D-006](defects.md#d-006) 과 같은 모양).
-  한 판매자의 실패가 나머지를 롤백시키지 않는다.
-- 그래서 마감 대상은 **두 부류의 합집합**이다(`sellersToClose`) —
-  미마감 원장이 있는 판매자, 그리고 **마감은 끝났는데 계산서가 없는 판매자**.
-  뒤엣것을 빼면 발행 실패가 영구 방치된다.
-- 배치는 매월 1일 03시(Asia/Seoul). 다중 인스턴스 단일 실행은
-  `@SchedulerLock("settlement-close-month")`(MySQL 락)이 보장한다.
-  **락은 동시 실행 창만 닫는다** — 단일 인스턴스 부분 실패는 위의 3단계 분리가 막는다.
+본인 sellerSubject는 JWT sub다. PG 거래/비용·지급 명세는 Settlement 소유 포트와 HTTP 어댑터로 외부 PG에서 직접 조회한다.
+상품 소유자는 Catalog 내부 GET으로 확인한다. 업무 모듈 DB를 직접 읽지 않는다.
+매출·월 합계·Inbox를 함께 커밋하고 원본 13개 값 비교·업무 유일 제약으로 중복과 출처 재사용을 검증한다.
+월 마감은 OPEN→CLOSED이며 마감 후 지연 거래는 현재 월에 반영한다. PG 수령은 별도의 명세 접수·대사 상태다.
+공통 운영 API·Outbox 릴레이·자동 마감·환불·계산서·판매자 송금은 제공하지 않는다.
 
 ---
 
@@ -344,7 +301,7 @@ catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 �
 
 ## 운영 API
 
-Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며, Settlement 등 해당 운영 API를 허용한 서비스에서도 `ADMIN` 토큰이 필요하다.
+Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며 해당 운영 기능이 활성화된 서비스에만 ADMIN으로 직접 접근한다. 현재 Settlement는 공통 운영 API를 비활성화한다.
 
 | HTTP API | 동작 |
 |---|---|
@@ -368,8 +325,9 @@ Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. G
 | `BuildStorage` (studio) | — | **`S3BuildStorage`** | `stove.storage.provider` = `s3` |
 | `ReviewBuildStorage` (review) | — | **`S3ReviewBuildStorage`** | 읽기 전용 S3/MinIO 계정 |
 | `BuildStorage` (download) | — | **`S3BuildStorage`** | 읽기 전용 S3/MinIO HEAD·presigned GET |
-| `PgGateway` (payment) | `SimulatedPgGateway` | 없음 | `stove.payment.pg-provider=simulated` |
-| `TaxInvoiceIssuer` (settlement) | `MockTaxInvoiceIssuer` | 없음 | — |
+| `PgGateway` (payment) | 외부 모의 PG | `SimulatedPgHttpGateway` | PG 주소·Payment 전용 키 |
+| `PgPayments`·`PgSettlements` (settlement) | 외부 모의 PG | 각 HTTP 어댑터 | PG 주소·Settlement 읽기 키 |
+| `CatalogOwners` (settlement) | — | `CatalogOwnerHttpClient` | Catalog 주소·전용 내부 키 |
 
 ### 실제로 동작하는 것
 
@@ -379,31 +337,14 @@ Review는 제출 스냅샷의 객체 존재·크기를 확인하고 심사자에
 Download의 `S3BuildStorage`도 읽기 전용 계정으로 HEAD·presigned GET을 사용한다.
 CDN 전략·자체 HMAC 토큰·파일 중계는 제공하지 않는다.
 
-### 흉내만 내는 것
+### 외부 모의 PG의 범위
 
-| 스텁 | 하는 일 | 빠진 것 |
-|---|---|---|
-| `SimulatedPgGateway` | 키별 승인·거절을 JDBC 원장에 독립 커밋, 같은 입력의 최초 결과 재조회 | 실제 PG·자금 이동, 별도 외부 DB·네트워크 장애 |
-| `MockTaxInvoiceIssuer` | 발행번호 `TI-202607-001001` | 실제 세금계산서 전송·역발행 상태 |
+simulators/mock-pg는 실제 HTTP·독립 프로세스·전용 MySQL로 결제 결정·비용·지급 명세를 보존한다.
+승인·거절과 지급 결과는 모의 결과이며 실제 금융 거래·은행 입금·판매자 송금은 수행하지 않는다.
+Payment·Settlement는 각자의 포트와 어댑터를 사용하고 공급자 구현 JAR·DB를 공유하지 않는다.
+실제 PG 도입 시 공급자 계약에 따라 결제창·인증·서버 검증·웹훅·비용 확정·정산 자료 수집을 확장한다.
+현재 인터페이스나 URL 교체만으로 연동이 완성된다고 가정하지 않는다.
 
-Payment의 공급자 응답 유실과 결과 저장 실패는 테스트 전용 픽스처로 검증한다.
-실제 PG 교체 시 같은 키의 재확인·멱등 결제와 확인된 결과 반환 계약이 필요하다. [Payment 범위](payment-mvp-plan.md)를 따른다.
-
-### 스텁 공통의 한계
-
-아래는 재작성 전 License·Settlement의 기존 스텁에 관한 기록이다. 현재 License는 지급 실패 보상 이벤트를 발행하지 않는다.
-그래서 license 의 Saga 보상 경로(`LicenseIssueFailed` → 자동 환불)는
-지급 실패를 인위적으로 주입해야만 테스트할 수 있다.
-
-### 교체 안전장치
-
-미완료 모듈의 기존 스텁은 `@Profile("!prod")` 조건을 사용한다. Payment의 SimulatedPgGateway는 `stove.payment.pg-provider=simulated`로 선택한다.
-`prod` 로 띄우면 스텁이 빠지고, 실제 어댑터가 없으면 **"no qualifying bean" 으로 기동이 실패한다.**
-운영에서 스텁이 조용히 도는 것만은 일어나지 않게 하려는 의도다.
-
-Studio의 저장소 선택은 기존 설정을 사용한다. Review·Download는 읽기 전용 S3/MinIO 어댑터 한 개를 조립한다.
-Download의 구 CDN/S3 이중 전략은 제거했다. 향후 같은 포트에 다른 구현을 추가하면 활성 구현을 명시적으로 선택해야 한다.
-
-이 "반드시" 는 사람에게 거는 기대가 아니다 — ArchUnit 이 검사한다.
-`Mock*`/`Stub*`/`Fake*` 로 시작하는 어댑터에 `@Profile` 이나 `@ConditionalOnProperty` 가
-없으면 테스트가 깨진다(`스텁_어댑터는_격리한다`). 조건을 거는 것이 관례가 아니라 통과 조건이다.
+PG의 Payment·Settlement·제어 키는 서로 다르며 제어 키는 검증 운영자만 사용한다.
+잘못된 키는 401, 유효한 다른 역할 키의 접근은 403이다. 키 미설정·중복이면 PG는 기동하지 않는다.
+Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](settlement-guide.md#기존-내장-pg-이관)를 따른다.

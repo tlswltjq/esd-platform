@@ -4,13 +4,13 @@
 
 프로젝트가 처음이라면 **[도메인·모델 안내](docs/domain/model-guide.md)**부터 읽는다. 도메인별 모델의 속성, 생성·사용 시점과 게임 한 개가 출시되어 판매되는 흐름을 설명한다.
 
-현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download**다. 신규 구현과 검증은 이 열 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
+현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**다. 신규 구현과 검증은 이 열한 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
 
 Catalog의 완료 범위와 검증 결과는 [MVP 계획·완료 기록](docs/catalog-mvp-plan.md#재작성-완료-기록)에 정리했다.
 Store의 학습용 최소 범위와 OCI 검증 결과는 [Store 계획·완료 기록](docs/store-mvp-plan.md#재작성-완료-기록)을 따른다.
 Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완료 기록](docs/order-mvp-plan.md#재작성-완료-기록), 실행은 [Order 안내](docs/order-guide.md)를 따른다. Payment의 모의 PG 자동 처리·복구·조회와 8개 앱 OCI 검증은 [Payment 완료 기록](docs/payment-mvp-plan.md#재작성-완료-기록), 실행은 [Payment 안내](docs/payment-guide.md)를 따른다.
 
-License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. Download의 보유권·현재 공개 빌드 조회와 전체 ZIP 만료 URL 제공은 [완료 기록](docs/download-mvp-plan.md#재작업-완료-기록), 실행은 [Download 안내](docs/download-guide.md)를 따른다. 다음 재작성 대상은 Settlement다.
+License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. Download의 보유권·현재 공개 빌드 조회와 전체 ZIP 만료 URL 제공은 [완료 기록](docs/download-mvp-plan.md#재작업-완료-기록), 실행은 [Download 안내](docs/download-guide.md)를 따른다. Settlement의 외부 모의 PG·배분·월 마감·수령 대사는 [완료 기록](docs/settlement-mvp-plan.md#재작성-완료-기록), 전체 실행은 [Settlement 안내](docs/settlement-guide.md)를 따른다.
 
 ## 문서 찾기
 
@@ -20,7 +20,7 @@ License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 �
 | 업무 용어와 행위자별 처리 순서 | [용어집](docs/domain-glossary.md) · [업무 흐름](docs/domain/workflows.md) |
 | 아직 결정되지 않은 정책과 구현 차이 | [미결 질문](docs/domain/open-questions.md) |
 | 로컬·원격 실행과 Swagger 로그인 | [개발 환경과 실행](docs/getting-started.md) |
-| 가입부터 출시·구매·환불·월 마감까지 실습 | [API 데모](docs/api-demo.md) |
+| 출시·구매·다운로드·정산의 실제 흐름 검증 | [Settlement 전체 실행](docs/settlement-guide.md) |
 | 서비스 API와 인증·권한 | [서비스 명세](docs/services.md) · [인증·권한 계약](docs/security.md) |
 | 구조와 설계 이유, 실험·운영 기록 | [아키텍처](docs/architecture.md) · [전체 문서 목록](docs/README.md) |
 
@@ -39,7 +39,8 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 | `apps/payment` | 확정 주문의 모의 PG 결제·미확정 재개·결과 발행·내 결제 조회 |
 | `apps/license` | 구매 출처·상품별 영구 보유권·내 라이브러리 |
 | `apps/download` | 보유권·현재 공개 빌드 확인·전체 ZIP 만료 URL |
-| `apps/settlement` | 매출·환불 원장과 판매자 월 마감 |
+| `apps/settlement` | OrderPaid 매출·판매자 배분·월 마감·PG 지급 명세 수령 대사 |
+| `simulators/mock-pg` | 독립 프로세스·전용 DB·HTTP 결제 결정·비용·모의 지급 명세 |
 | `apps/gateway` | 외부 API와 로그인 진입점 |
 | `common/` | 이벤트 계약, Outbox·Inbox, 웹·JPA·테스트 지원 |
 | `infra/`, `docker-compose*.yml` | 저장소·메시징·관측 도구와 앱 실행 구성 |
@@ -52,7 +53,7 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 export STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local
-./gradlew :apps:download:test :apps:download:integrationTest -Pstove.infraTest.maxParallel=1
+python3 scripts/verify-settlement.py
 ```
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.

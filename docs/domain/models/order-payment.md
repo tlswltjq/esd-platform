@@ -44,7 +44,7 @@ Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연�
 ## 구 OrderItem·OrderLine의 위치
 
 새 Order는 상품 하나의 스냅샷을 직접 보존하고 OrderItem·Quote를 사용하지 않는다.
-[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 미완료 Settlement 등의 구 계약에 남아 있는 상품·할인·정산 조건이다.
+[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 재작성 전 커머스의 구 계약에 남아 있는 상품·할인·정산 조건이다.
 해당 타입의 존재를 새 주문·정산 연동 완료의 근거로 삼지 않는다. 할인 부담·판매자 계약은 기능을 추가할 때 별도 정의한다.
 
 <a id="payment"></a>
@@ -88,16 +88,16 @@ Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 �
 결과와 Outbox 저장이 실패해도 공급자 결정은 남는다. 재시도 후 최종 결과 이벤트는 한 건만 저장한다.
 할인액이 포함된 주문은 `정가 - 할인액 = 청구액`을 확인하고 청구액 그대로 결제한다. 할인 자격은 다시 판정하지 않는다.
 
-## SimulatedPgGateway — 공급자 결정 대역
+## 외부 모의 PG와 HTTP 어댑터
 
-[어댑터](../../../apps/payment/src/main/java/com/stove/payment/adapter/pg/SimulatedPgGateway.java)는 JDBC로 `simulated_payment_charge`에 결정 한 건을 독립 커밋한다.
-Payment 업무 엔티티·저장소를 사용하지 않는다. 키·주문·청구액·통화·거래 ID·결정 시각·APPROVED/DECLINED·거절 사유를 보존한다.
-같은 키와 입력이면 최초 결정을 반환하고 다른 주문·금액이면 거부한다. 설정을 바꿔도 기존 결정을 바꾸지 않는다.
+[SimulatedPgHttpGateway](../../../apps/payment/src/main/java/com/stove/payment/adapter/pg/SimulatedPgHttpGateway.java)가 Payment의 PgGateway를 구현한다.
+외부 공급자는 [독립 앱](../../../simulators/mock-pg/src/main/java/com/stove/mockpg/MockPgApplication.java)과 전용 MySQL에 결정·비용을 보존한다.
+동일 paymentId를 먼저 조회하고 404이면 같은 키로 승인한다. 같은 키의 다른 입력은 거부하고 통신 오류는 PENDING으로 남긴다.
+최종 Payment 결과는 pgFeePolicyId·pgFeeRateBps·pgFeeAmount를 함께 보존한다. 비용 없는 과거 결정은 미산정이며 0원으로 보충하지 않는다.
+기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다. [전환 절차](../../settlement-guide.md#기존-내장-pg-이관)를 따른다.
 
-기본 결과는 APPROVED이며 `PAYMENT_SIMULATED_RESULT=DECLINED`로 새 결제의 거절을 재현한다.
-실제 외부 PG·자금 이동은 없다. 업무 테이블과 같은 MySQL을 쓰므로 외부 PG와 DB의 독립 장애까지 보장하지 않는다.
-구 payment·simulated_pg_transaction·payment_audit_log는 마이그레이션으로 보존하지만 새 코드에서 사용하지 않는다.
-환불·결제창·콜백·자동 만료·이용권·정산은 후속 범위다.
+PG 비용·지급 명세는 Settlement가 자기 포트로 직접 조회한다. 주문·License 이벤트에 수수료를 중계하지 않는다.
+실제 PG·금융 거래·결제창·웹훅·환불은 후속 범위다.
 
 ## 결제 입력과 결과 값
 
