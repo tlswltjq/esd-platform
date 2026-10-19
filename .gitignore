@@ -1,4 +1,5 @@
 .gradle/
+__pycache__/
 build/
 # Studio의 빌드 업무 패키지는 Gradle 빌드 산출물이 아닌 소스다.
 !apps/studio/src/**/core/domain/build/

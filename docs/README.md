@@ -53,6 +53,7 @@
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |
 | [결함 기록](defects.md) | 재현한 결함, 원인·수정·회귀 검증 |
 | [성능 측정](performance.md) · [측정 원칙](measuring.md) | 요약과 원자료, 유효·무효 판정 기준 |
+| [Dockerfile·Jib OCI 비교](jib-oci-comparison.md) | 동일 이미지 기반의 빌드·배포·응답 지연·CPU·메모리 측정 |
 | [장애 실험](chaos.md) · [재시작 시나리오](resilience-scenarios.md) | 부하 중 장애와 중단 후 처리 재개 근거 |
 | [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록. 새 License MVP에 적용하지 않음 |
 | [DB 락 실험](../scripts/db-lab/README.md) · [성능 도구](../scripts/perf/README.md) · [장애 도구](../scripts/chaos/README.md) | 실험 실행 방법과 결과 파일 |

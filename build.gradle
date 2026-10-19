@@ -5,6 +5,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version "${springBootVersion}" apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
+    id 'com.google.cloud.tools.jib' version '3.5.4' apply false
     // 뮤테이션 테스트. 기본 빌드에 얹지 않고 필요할 때만 돌린다 (아래 pitest 블록 참고)
     id 'info.solidsoft.pitest' version '1.15.0' apply false
 }
@@ -273,6 +274,12 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
 
     // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다
     tasks.named('jar') { enabled = false }
+}
+
+// 실행 모듈만 이미지로 만든다. 라이브러리와 E2E 모듈에는 Jib을 적용하지 않는다.
+configure(subprojects.findAll { it.path.startsWith(':apps:') || it.path == ':simulators:mock-pg' }) {
+    apply plugin: 'com.google.cloud.tools.jib'
+    apply from: rootProject.file('gradle/jib.gradle')
 }
 
 configure(subprojects.findAll { it.path.startsWith(':common:') }) {

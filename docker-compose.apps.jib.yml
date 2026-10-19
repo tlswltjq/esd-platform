@@ -1,0 +1,83 @@
+# Jib 이미지를 사용하는 선택적 오버라이드. 이미지 생성은 별도의 Gradle 작업이다.
+# ./gradlew jibDockerBuild
+# docker compose -f docker-compose.apps.yml -f docker-compose.apps.jib.yml up -d --no-build
+# Jib은 Docker HEALTHCHECK를 생성하지 않으므로 기존 검사와 시간을 Compose에서 유지한다.
+x-jib-health: &jib-health
+  interval: 15s
+  timeout: 3s
+  start_period: 40s
+  retries: 5
+
+services:
+  auth:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/auth:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
+  gateway:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/gateway:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8080/actuator/health | grep -q UP || exit 1"]
+  studio:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/studio:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8085/actuator/health | grep -q UP || exit 1"]
+  review:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/review:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8086/actuator/health | grep -q UP || exit 1"]
+  catalog:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/catalog:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8081/actuator/health | grep -q UP || exit 1"]
+  store:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/store:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8087/actuator/health | grep -q UP || exit 1"]
+  order:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/order:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8082/actuator/health | grep -q UP || exit 1"]
+  payment:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/payment:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8083/actuator/health | grep -q UP || exit 1"]
+  license:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/license:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8084/actuator/health | grep -q UP || exit 1"]
+  download:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/download:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8088/actuator/health | grep -q UP || exit 1"]
+  settlement:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/settlement:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8089/actuator/health | grep -q UP || exit 1"]
+  mock-pg:
+    build: !reset null
+    image: ${STOVE_JIB_REGISTRY:-stove}/mock-pg:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *jib-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8092/actuator/health | grep -q UP || exit 1"]

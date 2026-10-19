@@ -1,0 +1,720 @@
+{
+  "session": "20261019T125630Z",
+  "builds": {
+    "baseline": {
+      "clean-output": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 91.6777178440243,
+          "min": 89.38099459558725,
+          "max": 93.35896985977888
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 195.6699999999255,
+          "min": 194.089999999851,
+          "max": 198.10999999986961
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 169540141,
+          "min": 169540140,
+          "max": 242950892
+        }
+      },
+      "no-change": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 21.729090433567762,
+          "min": 21.436830699443817,
+          "max": 21.816342247650027
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 64.85999999986961,
+          "min": 63.800000000046566,
+          "max": 65.03000000002794
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      },
+      "class-change": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 20.560072783380747,
+          "min": 19.858916414901614,
+          "max": 22.248009402304888
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 46.46999999997206,
+          "min": 44.10000000009313,
+          "max": 47.98999999999069
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 169540564,
+          "min": 169540562,
+          "max": 169540580
+        }
+      }
+    },
+    "jib": {
+      "clean-output": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 31.747880121693015,
+          "min": 31.134051989763975,
+          "max": 47.961761970072985
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 97.69999999995343,
+          "min": 97.29000000003725,
+          "max": 157.88000000012107
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 98117,
+          "min": 98100,
+          "max": 157941753
+        }
+      },
+      "no-change": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 19.473192412406206,
+          "min": 19.213064992800355,
+          "max": 20.207239555194974
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 56.04000000003725,
+          "min": 55.109999999869615,
+          "max": 58.0
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      },
+      "class-change": {
+        "publish_seconds": {
+          "n": 3,
+          "median": 14.41271192766726,
+          "min": 14.153666265308857,
+          "max": 14.68813837505877
+        },
+        "host_busy_cpu_seconds": {
+          "n": 3,
+          "median": 38.799999999813735,
+          "min": 38.48999999999069,
+          "max": 39.41000000014901
+        },
+        "changed_store_compressed_bytes": {
+          "n": 3,
+          "median": 18329,
+          "min": 18329,
+          "max": 18329
+        }
+      }
+    }
+  },
+  "images": {
+    "baseline": {
+      "logical_compressed_bytes_sum": 2739966949,
+      "unique_compressed_blob_bytes": 1932439346,
+      "per_module": {
+        "auth": {
+          "compressed_bytes": 246170025,
+          "layers": 9,
+          "digest": "sha256:36f144886fbbfd08a9cc40678fb251c8b2d48cf0701b698ac95f98dbd7e1444a"
+        },
+        "gateway": {
+          "compressed_bytes": 184296240,
+          "layers": 9,
+          "digest": "sha256:bd2ea5429185f1886a7528c19a40d03edc099a75cfbf74af5c243c4a72d1ec70"
+        },
+        "studio": {
+          "compressed_bytes": 272205635,
+          "layers": 9,
+          "digest": "sha256:b2cf790a357bfd906d5ca58a64014413cf3db3bffc5203d822d0e86bb92ff33d"
+        },
+        "review": {
+          "compressed_bytes": 272136770,
+          "layers": 9,
+          "digest": "sha256:a1531dd2ac26665d471f7a3cac5f58cb5ff5b18b36083df1d08bfdc7977a120f"
+        },
+        "catalog": {
+          "compressed_bytes": 245104996,
+          "layers": 9,
+          "digest": "sha256:016889b27edfe573f37803e0d99430749f68e87690d0a74b69cc1662106cbbe7"
+        },
+        "store": {
+          "compressed_bytes": 242950964,
+          "layers": 9,
+          "digest": "sha256:23a341cd4cacce59a6af6e81128a6047fbe8bc8fb7941ea94f853eada377a177"
+        },
+        "order": {
+          "compressed_bytes": 245110517,
+          "layers": 9,
+          "digest": "sha256:fd4028ca7d58d46f28a6e70e9427deb66f49b50596a0d7f11d5c6e065987d092"
+        },
+        "payment": {
+          "compressed_bytes": 245122637,
+          "layers": 9,
+          "digest": "sha256:f75ce5e0828618041dbdb448f8d39cf5cb13aa3b0405cf5320d2db087fd2eb42"
+        },
+        "license": {
+          "compressed_bytes": 245069786,
+          "layers": 9,
+          "digest": "sha256:6cb755ba7b3f53b73d9bbfd230f61c0240f2b38144407c14123caa1d83932f89"
+        },
+        "download": {
+          "compressed_bytes": 172855389,
+          "layers": 9,
+          "digest": "sha256:adab2712a14e02ba063209eeebc087c636a0a16f71241afd30a38c6b0882dc90"
+        },
+        "settlement": {
+          "compressed_bytes": 245177459,
+          "layers": 9,
+          "digest": "sha256:fc5fc13e08923b677cc910874461cab6491b3d5b9a09f1e042f3e8c05da71cd9"
+        },
+        "mock-pg": {
+          "compressed_bytes": 123766531,
+          "layers": 9,
+          "digest": "sha256:9a15f545ca4b8068eb4e6424da95e94af73449ba9b80c1ab0e976694789cdfbf"
+        }
+      },
+      "unchanged_store_unique_digests": 1
+    },
+    "jib": {
+      "logical_compressed_bytes_sum": 1807604304,
+      "unique_compressed_blob_bytes": 558558967,
+      "per_module": {
+        "auth": {
+          "compressed_bytes": 159550986,
+          "layers": 10,
+          "digest": "sha256:84f801b16b82f8f334a0e37cefc952b73d8b60e11366b9d93db63f992e0e04d2"
+        },
+        "gateway": {
+          "compressed_bytes": 128612701,
+          "layers": 9,
+          "digest": "sha256:31c91bcba6fa6dbea40848f9e394dcf240e95c2f6511830c91cdeaea65333e42"
+        },
+        "studio": {
+          "compressed_bytes": 172576106,
+          "layers": 10,
+          "digest": "sha256:6b0776ead50df4c9f74703576f5e939b86a4145f6b472468c707c599f11a4e0a"
+        },
+        "review": {
+          "compressed_bytes": 172552130,
+          "layers": 10,
+          "digest": "sha256:1866379e7664ef34d508f648018620c697570c3f72690ba30f74ee2aec6a37ba"
+        },
+        "catalog": {
+          "compressed_bytes": 159014240,
+          "layers": 10,
+          "digest": "sha256:7706689e0062588494c089796047dcb4f259603166c00803f5559d94e413c212"
+        },
+        "store": {
+          "compressed_bytes": 157941770,
+          "layers": 10,
+          "digest": "sha256:31bbc05d62acbbe0a20f5b36b0a4ab87baf139a97676cfd33f7a44218aaafbba"
+        },
+        "order": {
+          "compressed_bytes": 159016925,
+          "layers": 10,
+          "digest": "sha256:95fbcedabbbf724586779c4585aebdaaee0d3170cca8a3caf5c3575861787bd1"
+        },
+        "payment": {
+          "compressed_bytes": 159022001,
+          "layers": 10,
+          "digest": "sha256:d32292fcc44796ca8d1d7c4c1091bfd97f88cb5d2a5582cd69d463fc7a09f4f7"
+        },
+        "license": {
+          "compressed_bytes": 159003273,
+          "layers": 10,
+          "digest": "sha256:90849deb7279a284f68c7754dd5c94b592226754f5f64e0dea7442fe398dacd5"
+        },
+        "download": {
+          "compressed_bytes": 122916402,
+          "layers": 10,
+          "digest": "sha256:f1f06aada0ec034a95b689675c10523f3bf841876bc7c83eb381d053654b583e"
+        },
+        "settlement": {
+          "compressed_bytes": 159038361,
+          "layers": 10,
+          "digest": "sha256:0d55f88bd89099bbb3e3d8f493895efbdfe9006f23dd44ff3437222376621696"
+        },
+        "mock-pg": {
+          "compressed_bytes": 98359409,
+          "layers": 9,
+          "digest": "sha256:123c652e42dc70485500ff576920aa9850fb4481d2b18eb5ba7f307e5693bff8"
+        }
+      },
+      "unchanged_store_unique_digests": 1
+    }
+  },
+  "runtime": {
+    "baseline": {
+      "startup_all_seconds": {
+        "n": 2,
+        "median": 110.59812015574425,
+        "min": 110.52847346104681,
+        "max": 110.6677668504417
+      },
+      "p50_ms": {
+        "n": 2,
+        "median": 7.397648878395557,
+        "min": 7.378829643130302,
+        "max": 7.416468113660812
+      },
+      "p95_ms": {
+        "n": 2,
+        "median": 9.020955301821232,
+        "min": 8.903954178094864,
+        "max": 9.1379564255476
+      },
+      "p99_ms": {
+        "n": 2,
+        "median": 16.49458520114422,
+        "min": 16.3002647459507,
+        "max": 16.688905656337738
+      },
+      "app_cpu_seconds_60s": {
+        "n": 2,
+        "median": 25.3958059,
+        "min": 25.00168276,
+        "max": 25.78992904
+      },
+      "app_working_set_bytes": {
+        "n": 2,
+        "median": 4149011158.7096777,
+        "min": 4055448542.967742,
+        "max": 4242573774.451613
+      },
+      "requests": 2400,
+      "failures": 0,
+      "startup_process_running_seconds": [
+        {
+          "gateway": 15.805,
+          "license": 25.094,
+          "review": 27.688,
+          "settlement": 26.365,
+          "payment": 28.64,
+          "studio": 30.157,
+          "catalog": 23.775,
+          "mock-pg": 11.488,
+          "auth": 21.212,
+          "download": 17.036,
+          "store": 25.139,
+          "order": 27.738
+        },
+        {
+          "gateway": 16.023,
+          "license": 24.464,
+          "review": 28.031,
+          "settlement": 24.016,
+          "payment": 27.598,
+          "studio": 30.083,
+          "catalog": 25.011,
+          "mock-pg": 11.777,
+          "auth": 24.345,
+          "download": 14.811,
+          "store": 24.278,
+          "order": 27.047
+        }
+      ],
+      "per_module_cpu_seconds_60s": {
+        "auth": {
+          "n": 2,
+          "median": 1.36093752,
+          "min": 1.2946818,
+          "max": 1.42719324
+        },
+        "gateway": {
+          "n": 2,
+          "median": 6.51090718,
+          "min": 6.49493996,
+          "max": 6.5268744
+        },
+        "studio": {
+          "n": 2,
+          "median": 1.53866454,
+          "min": 1.49421524,
+          "max": 1.58311384
+        },
+        "review": {
+          "n": 2,
+          "median": 1.5997798799999998,
+          "min": 1.54904516,
+          "max": 1.6505146
+        },
+        "catalog": {
+          "n": 2,
+          "median": 1.87956278,
+          "min": 1.73943676,
+          "max": 2.0196888
+        },
+        "store": {
+          "n": 2,
+          "median": 7.83912022,
+          "min": 7.80538804,
+          "max": 7.8728524
+        },
+        "order": {
+          "n": 2,
+          "median": 1.66344044,
+          "min": 1.36503352,
+          "max": 1.96184736
+        },
+        "payment": {
+          "n": 2,
+          "median": 1.8299676200000001,
+          "min": 1.8268924,
+          "max": 1.83304284
+        },
+        "license": {
+          "n": 2,
+          "median": 0.43596480000000004,
+          "min": 0.41881928,
+          "max": 0.45311032
+        },
+        "download": {
+          "n": 2,
+          "median": 0.17149324,
+          "min": 0.16737952,
+          "max": 0.17560696
+        },
+        "settlement": {
+          "n": 2,
+          "median": 0.42720616,
+          "min": 0.4253832,
+          "max": 0.42902912
+        },
+        "mock-pg": {
+          "n": 2,
+          "median": 0.13876152,
+          "min": 0.13720044,
+          "max": 0.1403226
+        }
+      },
+      "per_module_working_set_bytes": {
+        "auth": {
+          "n": 2,
+          "median": 361080039.2258065,
+          "min": 353980812.38709676,
+          "max": 368179266.0645161
+        },
+        "gateway": {
+          "n": 2,
+          "median": 306859833.8064516,
+          "min": 297311991.7419355,
+          "max": 316407675.87096775
+        },
+        "studio": {
+          "n": 2,
+          "median": 414959946.32258064,
+          "min": 411201403.87096775,
+          "max": 418718488.7741935
+        },
+        "review": {
+          "n": 2,
+          "median": 400875982.4516129,
+          "min": 392131088.516129,
+          "max": 409620876.38709676
+        },
+        "catalog": {
+          "n": 2,
+          "median": 358805504.0,
+          "min": 349231302.1935484,
+          "max": 368379705.8064516
+        },
+        "store": {
+          "n": 2,
+          "median": 371962384.516129,
+          "min": 362510005.67741936,
+          "max": 381414763.3548387
+        },
+        "order": {
+          "n": 2,
+          "median": 390481920.0,
+          "min": 374318113.0322581,
+          "max": 406645726.9677419
+        },
+        "payment": {
+          "n": 2,
+          "median": 360340314.8387097,
+          "min": 352249129.2903226,
+          "max": 368431500.38709676
+        },
+        "license": {
+          "n": 2,
+          "median": 361899833.8064516,
+          "min": 356768074.32258064,
+          "max": 367031593.2903226
+        },
+        "download": {
+          "n": 2,
+          "median": 251012261.16129032,
+          "min": 244045229.41935483,
+          "max": 257979292.9032258
+        },
+        "settlement": {
+          "n": 2,
+          "median": 387750680.7741935,
+          "min": 385437299.61290324,
+          "max": 390064061.9354839
+        },
+        "mock-pg": {
+          "n": 2,
+          "median": 182982457.80645162,
+          "min": 176264092.9032258,
+          "max": 189700822.70967743
+        }
+      }
+    },
+    "jib": {
+      "startup_all_seconds": {
+        "n": 2,
+        "median": 94.80201287008822,
+        "min": 92.12496339529753,
+        "max": 97.47906234487891
+      },
+      "p50_ms": {
+        "n": 2,
+        "median": 7.387128658592701,
+        "min": 7.378788664937019,
+        "max": 7.395468652248383
+      },
+      "p95_ms": {
+        "n": 2,
+        "median": 8.893214166164398,
+        "min": 8.829992264509201,
+        "max": 8.956436067819595
+      },
+      "p99_ms": {
+        "n": 2,
+        "median": 11.206265538930893,
+        "min": 10.413922369480133,
+        "max": 11.998608708381653
+      },
+      "app_cpu_seconds_60s": {
+        "n": 2,
+        "median": 24.68823914,
+        "min": 24.27960632,
+        "max": 25.09687196
+      },
+      "app_working_set_bytes": {
+        "n": 2,
+        "median": 4057121692.903226,
+        "min": 4048786597.16129,
+        "max": 4065456788.6451616
+      },
+      "requests": 2400,
+      "failures": 0,
+      "startup_process_running_seconds": [
+        {
+          "gateway": 12.947,
+          "license": 21.002,
+          "review": 22.845,
+          "settlement": 22.506,
+          "payment": 22.82,
+          "studio": 25.119,
+          "catalog": 20.871,
+          "mock-pg": 9.696,
+          "auth": 18.401,
+          "download": 14.179,
+          "store": 19.683,
+          "order": 22.763
+        },
+        {
+          "gateway": 13.566,
+          "license": 19.521,
+          "review": 24.028,
+          "settlement": 20.56,
+          "payment": 23.172,
+          "studio": 26.094,
+          "catalog": 21.975,
+          "mock-pg": 9.754,
+          "auth": 17.877,
+          "download": 12.634,
+          "store": 20.654,
+          "order": 23.162
+        }
+      ],
+      "per_module_cpu_seconds_60s": {
+        "auth": {
+          "n": 2,
+          "median": 1.47334696,
+          "min": 1.33800028,
+          "max": 1.60869364
+        },
+        "gateway": {
+          "n": 2,
+          "median": 6.55115084,
+          "min": 6.4297936,
+          "max": 6.67250808
+        },
+        "studio": {
+          "n": 2,
+          "median": 1.5426179800000002,
+          "min": 1.51416228,
+          "max": 1.57107368
+        },
+        "review": {
+          "n": 2,
+          "median": 1.64425118,
+          "min": 1.6110684,
+          "max": 1.67743396
+        },
+        "catalog": {
+          "n": 2,
+          "median": 1.55975616,
+          "min": 1.46345296,
+          "max": 1.65605936
+        },
+        "store": {
+          "n": 2,
+          "median": 7.65721804,
+          "min": 7.60097644,
+          "max": 7.71345964
+        },
+        "order": {
+          "n": 2,
+          "median": 1.4141819,
+          "min": 1.39416232,
+          "max": 1.43420148
+        },
+        "payment": {
+          "n": 2,
+          "median": 1.6691777,
+          "min": 1.61595496,
+          "max": 1.72240044
+        },
+        "license": {
+          "n": 2,
+          "median": 0.43244716000000005,
+          "min": 0.42314336,
+          "max": 0.44175096
+        },
+        "download": {
+          "n": 2,
+          "median": 0.17790918,
+          "min": 0.17708392,
+          "max": 0.17873444
+        },
+        "settlement": {
+          "n": 2,
+          "median": 0.42189966,
+          "min": 0.41809608,
+          "max": 0.42570324
+        },
+        "mock-pg": {
+          "n": 2,
+          "median": 0.14428238,
+          "min": 0.14422,
+          "max": 0.14434476
+        }
+      },
+      "per_module_working_set_bytes": {
+        "auth": {
+          "n": 2,
+          "median": 348380523.3548387,
+          "min": 344913721.8064516,
+          "max": 351847324.9032258
+        },
+        "gateway": {
+          "n": 2,
+          "median": 302468261.1612903,
+          "min": 298231477.67741936,
+          "max": 306705044.6451613
+        },
+        "studio": {
+          "n": 2,
+          "median": 407978182.1935484,
+          "min": 406090652.9032258,
+          "max": 409865711.483871
+        },
+        "review": {
+          "n": 2,
+          "median": 384355096.7741935,
+          "min": 383515086.4516129,
+          "max": 385195107.0967742
+        },
+        "catalog": {
+          "n": 2,
+          "median": 358845142.70967746,
+          "min": 358735475.61290324,
+          "max": 358954809.8064516
+        },
+        "store": {
+          "n": 2,
+          "median": 367491996.9032258,
+          "min": 366538355.61290324,
+          "max": 368445638.1935484
+        },
+        "order": {
+          "n": 2,
+          "median": 383383023.483871,
+          "min": 382760761.8064516,
+          "max": 384005285.16129035
+        },
+        "payment": {
+          "n": 2,
+          "median": 360218954.32258064,
+          "min": 359397177.8064516,
+          "max": 361040730.83870965
+        },
+        "license": {
+          "n": 2,
+          "median": 368362727.2258065,
+          "min": 365868461.41935486,
+          "max": 370856993.0322581
+        },
+        "download": {
+          "n": 2,
+          "median": 229137969.5483871,
+          "min": 226898844.9032258,
+          "max": 231377094.19354838
+        },
+        "settlement": {
+          "n": 2,
+          "median": 372472997.16129035,
+          "min": 369034273.0322581,
+          "max": 375911721.2903226
+        },
+        "mock-pg": {
+          "n": 2,
+          "median": 174026818.06451613,
+          "min": 171735766.70967743,
+          "max": 176317869.41935483
+        }
+      }
+    }
+  },
+  "source": {
+    "revision": "2ccad87cc39e7ec655fc58f12aec4cf36ac3a335",
+    "baseline_archive_sha256": "782d6b795c80c22eb7af44c1913f91de5f0afaf133141915ea45853a0bd6f9dd",
+    "jib_configuration_sha256": {
+      "build.gradle": "10f381cdfa6109af6c01562a4e6f454919f1919415489171207647f71d82be21",
+      "gradle/jib.gradle": "dad4de5457d429d18c82c529b7d9baad26545cbdd74c59e2aa3c839678bcac1c",
+      "docker-compose.apps.jib.yml": "8a1a81ea0763c45ad759dd83a3b91710d6028ff586ae205ab33db70d6c15f875"
+    }
+  },
+  "environment": {
+    "architecture": "aarch64",
+    "cpu_count": 4,
+    "host_java": "openjdk version \"21.0.12\" 2026-07-21 LTS\nOpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)",
+    "image_java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)",
+    "base_image_id": "sha256:cbb8d91cde086a3c5f5fdc1b22e5c825db69771aa2c8c6e8429127e97dbaab3d"
+  },
+  "complete": true
+}

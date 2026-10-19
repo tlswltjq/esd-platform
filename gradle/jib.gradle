@@ -1,0 +1,39 @@
+// Dockerfile과 같은 Java 21 Alpine/JVM 옵션/비특권 UID로 이미지를 구성한다.
+// OCI 비교에서는 기반 이미지 다이제스트와 arm64를 명시해 양쪽 런타임을 고정한다.
+def imagePorts = [auth: 8091, gateway: 8080, studio: 8085, review: 8086,
+                  catalog: 8081, store: 8087, order: 8082, payment: 8083,
+                  license: 8084, download: 8088, settlement: 8089, 'mock-pg': 8092]
+def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
+        System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
+def targetRegistry = providers.gradleProperty('stove.jib.registry').getOrElse('stove')
+def targetTag = providers.gradleProperty('stove.jib.tag').getOrElse('latest')
+
+jib {
+    from {
+        image = providers.gradleProperty('stove.jib.baseImage')
+                .getOrElse('eclipse-temurin:21-jre-alpine')
+        platforms {
+            platform {
+                architecture = targetArchitecture
+                os = 'linux'
+            }
+        }
+    }
+    to {
+        image = "${targetRegistry}/${project.name}:${targetTag}"
+    }
+    container {
+        // Alpine adduser -S/addgroup -S가 기존 Dockerfile에서 생성하는 UID/GID다.
+        user = '100:101'
+        workingDirectory = '/app'
+        ports = [imagePorts[project.name].toString()]
+        environment = [JAVA_OPTS: '-XX:MaxRAMPercentage=75 -Duser.timezone=' +
+                (project.name == 'mock-pg' ? 'UTC' : 'Asia/Seoul')]
+        // 기존 JAVA_OPTS 환경변수의 실행 시점 확장과 exec에 의한 SIGTERM 전달을 유지한다.
+        entrypoint = ['sh', '-c', 'exec java $JAVA_OPTS -cp @/app/jib-classpath-file @/app/jib-main-class-file']
+        creationTime = 'EPOCH'
+    }
+    // 벤치마크의 루프백 전용 HTTP 레지스트리에서만 명시적으로 사용한다.
+    allowInsecureRegistries = providers.gradleProperty('stove.jib.insecure')
+            .map { it.toBoolean() }.getOrElse(false)
+}
