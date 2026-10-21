@@ -10,7 +10,7 @@ Review가 발행한 결과는 Studio의 같은 요청 ID·버전에 비동기로
 JDK 21, Python 3, Docker와 프로젝트 Gradle 의존성이 필요하다.
 
 ~~~bash
-python3 scripts/verify-review.py
+python3 tools/verification/verify-review.py
 ~~~
 
 Auth·Gateway·Studio·Review와 MySQL·Redis·Kafka·MinIO만 별도 포트·임시 DB에서 실행한다.
@@ -94,7 +94,7 @@ BFF 쿠키로 POST할 때는 기존 Gateway의 CSRF 계약을 따른다.
 ~~~bash
 ./gradlew :apps:auth:test :apps:gateway:test :apps:studio:test :apps:review:test :common:kafka:test :common:messaging:test
 ./gradlew :apps:review:integrationTest
-python3 scripts/verify-review.py
+python3 tools/verification/verify-review.py
 ~~~
 
 Testcontainers가 Docker 소켓을 자동으로 찾지 못하는 환경에서는 현재 Docker context의 소켓을 DOCKER_HOST로 지정한다.

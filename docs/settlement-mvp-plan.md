@@ -584,7 +584,7 @@ Payment를 실행하는 verify-payment.py·verify-license.py·verify-download.py
 
 ### 실제 서비스 간 여정
 
-기존 scripts/verify-download.py의 격리 방식을 참고해 scripts/verify-settlement.py와 정산 E2E 시나리오를 추가한다.
+기존 tools/verification/verify-download.py의 격리 방식을 참고해 tools/verification/verify-settlement.py와 정산 E2E 시나리오를 추가한다.
 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement 열한 업무 앱과 외부 모의 PG를 각각 로컬 프로세스로 실행한다.
 기존 인프라와 PG 전용 MySQL을 OrbStack 컨테이너로 구동하고 실행 자료는 runs/의 전용 경로에 보존한다.
 PG는 독립된 포트/DB 자격증명을 사용한다. 모의 PG의 기동·검증을 업무 모듈 재작성 완료 수에 더하지 않는다.
@@ -638,8 +638,8 @@ PG는 독립된 포트/DB 자격증명을 사용한다. 모의 PG의 기동·검
   verifyCommonRuntimeDependencies -Pstove.infraTest.maxParallel=1 --continue --offline --no-daemon
 
 ./gradlew :apps:settlement:integrationTest -Pstove.infraTest.maxParallel=1 --offline --no-daemon
-python3 scripts/verify-payment.py
-python3 scripts/verify-settlement.py
+python3 tools/verification/verify-payment.py
+python3 tools/verification/verify-settlement.py
 ```
 
 통합 검사에 OrbStack DOCKER_HOST와 기존 로컬 MinIO 이미지를 지정했다. OpenAPI는 한 번 생성한 뒤 갱신 옵션 없이 대조했다.

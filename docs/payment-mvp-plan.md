@@ -272,7 +272,7 @@ Compose의 구 callback-secret·simulator-base-url 설정도 정리하되 이번
 로컬은 코드·문서 편집과 동기화에 사용한다. 빌드·테스트·프로세스 실행은 기존 OCI 인스턴스에서 수행한다.
 
 ```sh
-./scripts/remote.sh gradle :apps:payment:test :apps:order:test :common:archunit:test :common:kafka:test :common:messaging:test :apps:payment:integrationTest :apps:order:integrationTest -Pstove.infraTest.maxParallel=1 --rerun-tasks --no-daemon
+./tools/remote/remote.sh gradle :apps:payment:test :apps:order:test :common:archunit:test :common:kafka:test :common:messaging:test :apps:payment:integrationTest :apps:order:integrationTest -Pstove.infraTest.maxParallel=1 --rerun-tasks --no-daemon
 ```
 
 위 모듈 검증 뒤 Gateway 변경을 포함한 완료 일곱 모듈의 단위·통합·계약 회귀를 OCI에서 실행한다. 기존 미완료 전체 앱 E2E를 검증 기준으로 삼지 않는다.
@@ -289,7 +289,7 @@ OpenAPI는 OCI에서 생성·회수하고 갱신 플래그 없이 두 조회 API
 | 조회·보안 | 실제 서명 JWT, 401/403·타인 404, 소유자 위조 차단, 페이지·동률 정렬, 조회의 결제 실행 없음 |
 | 전환·정리 | 빈 DB·V10→V11·구 자료 보존·구 Outbox 격리, 제거된 prepare/callback/cancel/simulator 경로 부재 |
 
-`scripts/verify-order.py`를 참고해 독립 Payment 검증 스크립트와 E2E 태그/태스크를 작성한다. 별도 임시 DB·Kafka·포트에서 다음 여정을 실제 프로세스로 확인한다.
+`tools/verification/verify-order.py`를 참고해 독립 Payment 검증 스크립트와 E2E 태그/태스크를 작성한다. 별도 임시 DB·Kafka·포트에서 다음 여정을 실제 프로세스로 확인한다.
 
 1. 실제 로그인·출시·Store 탐색·주문 → Payment 승인 → Order PAID. 양쪽 금액·연결·공급자 원장·결과 한 건 확인.
 2. 신규 주문의 모의 PG 거절 → Payment FAILED·Order FAILED, 사유 보존. 승인·거절 결정의 변경 없음 확인.
@@ -344,12 +344,12 @@ CI=true ./gradlew :apps:auth:test :apps:auth:integrationTest :apps:gateway:test 
 common:jpa:test는 소스가 없어 실행 건수에 포함하지 않았다. 최종 Payment 재검사는 다음 명령을 사용했다.
 
 ```sh
-./scripts/remote.sh gradle :apps:payment:test :apps:payment:integrationTest :apps:payment:bootJar :apps:payment:writeVerificationClasspath --no-daemon
+./tools/remote/remote.sh gradle :apps:payment:test :apps:payment:integrationTest :apps:payment:bootJar :apps:payment:writeVerificationClasspath --no-daemon
 ```
 
 ### 8개 앱 실제 연계·재시작
 
-[검증 스크립트](../scripts/verify-payment.py)와 [사용자 흐름](../e2e/src/test/java/com/stove/e2e/PaymentPurchaseFlowTest.java)의 **11단계를 모두 통과**했다.
+[검증 스크립트](../tools/verification/verify-payment.py)와 [사용자 흐름](../e2e/src/test/java/com/stove/e2e/PaymentPurchaseFlowTest.java)의 **11단계를 모두 통과**했다.
 실제 로그인·상품 심사/출시·Store 조회·Order 생성과 모의 PG·이벤트 릴레이·Order 결과 반영을 사용했다.
 
 | 단계 | 확인 결과 |

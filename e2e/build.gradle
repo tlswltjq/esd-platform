@@ -99,39 +99,6 @@ tasks.register('e2eTest', Test) {
     }
 }
 
-// Issue #81: public API journey plus one sanitized evidence record per run.
-// The extended release-operations test calls catalog's internal-only endpoints,
-// so it remains in e2eTest and is excluded from this public API demo.
-tasks.register('apiDemoTest', Test) {
-    group = 'verification'
-    description = '공개 API 전체 데모를 실행하고 실행별 식별자·금액 증거를 남긴다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { excludeTags 'chaos', 'extended', 'studio', 'review', 'review-restart', 'catalog', 'store', 'order', 'payment', 'license', 'download', 'settlement' }
-    endpoints.each { name ->
-        systemProperty "stove.e2e.${name}",
-                providers.systemProperty("stove.e2e.${name}").getOrElse('')
-    }
-    systemProperty 'stove.e2e.report', providers.systemProperty('stove.e2e.report').getOrElse('')
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging {
-        events 'passed', 'failed'
-        exceptionFormat = 'full'
-        showStandardStreams = true
-    }
-    afterSuite { desc, result ->
-        if (desc.parent == null) {
-            println "  API demo ${result.testCount}건 — 통과 ${result.successfulTestCount}" +
-                    " / 실패 ${result.failedTestCount} / 건너뜀 ${result.skippedTestCount}"
-            if (result.testCount != 57 || result.skippedTestCount != 0) {
-                throw new GradleException("API demo expected 57 executed checks with no skips")
-            }
-        }
-    }
-}
-
 // ── 장애 주입 ─────────────────────────────────────────────────────────
 tasks.register('studioE2eTest', Test) {
     group = 'verification'
@@ -164,7 +131,7 @@ tasks.register('studioE2eTest', Test) {
 //
 // **스택과 같은 호스트에서 돌아야 한다.** 컨테이너를 멈추는 것이 판정의 일부라
 // 이 JVM 이 그 도커 데몬에 닿아야 한다 — 원격 스택이면 원격에서 돈다
-// (`scripts/remote.sh gradle :e2e:chaosTest`).
+// (`tools/remote/remote.sh gradle :e2e:chaosTest`).
 tasks.register('chaosTest', Test) {
     group = 'verification'
     description = '떠 있는 스택에 장애를 주입하고 격리·복구를 확인한다 (스택을 실제로 정지시킨다)'
@@ -199,7 +166,7 @@ tasks.register('chaosTest', Test) {
             if (result.testCount == 0) {
                 println '  (0건이다. 통과가 아니라 미실행이다 — chaos 태그와 클래스패스를 확인한다)'
             }
-            println '  회차 뒤 스택이 주입 전 상태인지 확인한다: bash scripts/stack-wait.sh'
+            println '  회차 뒤 스택이 주입 전 상태인지 확인한다: python3 tools/verification/stack-status.py'
             println '════════════════════════════════'
         }
     }

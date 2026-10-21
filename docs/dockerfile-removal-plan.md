@@ -84,10 +84,10 @@
 ./scripts/local-stack.sh up
 
 # 전용 프로젝트·DB·포트를 생성하고 종료 후 해당 자원만 정리한다.
-python3 scripts/verify-jib.py
+python3 tools/verification/verify-jib.py
 
 # 이미 생성한 이미지의 재검증.
-python3 scripts/verify-jib.py --skip-build
+python3 tools/verification/verify-jib.py --skip-build
 ```
 
 `STOVE_JIB_REGISTRY`·`STOVE_IMAGE_TAG`는 앱 이미지의 생성과 Compose 실행에 함께 적용된다. MinIO는 같은 레지스트리와 고정 릴리즈 태그를 사용한다. `STOVE_MINIO_IMAGE`로 사전 공급 이미지를 지정하면 소스 빌드와 패키징을 생략하며, 테스트 전용 지정은 `STOVE_TEST_MINIO_IMAGE`가 우선한다.

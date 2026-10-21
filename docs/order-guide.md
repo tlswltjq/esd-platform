@@ -81,13 +81,13 @@ Catalog 중단 중에도 기존 주문 조회·동일 요청 재조회는 가능
 로컬에서 편집하고 원격 Gradle 경로로 검증한다.
 
 ```sh
-./scripts/remote.sh gradle :apps:order:test :apps:order:integrationTest :common:kafka:test :common:messaging:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --rerun-tasks
+./tools/remote/remote.sh gradle :apps:order:test :apps:order:integrationTest :common:kafka:test :common:messaging:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --rerun-tasks
 ```
 
-독립 사용자 흐름은 먼저 `./scripts/remote.sh sync`로 동기화한 뒤 **OCI의 원격 저장소 디렉터리에서** 실행한다.
+독립 사용자 흐름은 먼저 `./tools/remote/remote.sh sync`로 동기화한 뒤 **OCI의 원격 저장소 디렉터리에서** 실행한다.
 
 ```sh
-python3 scripts/verify-order.py
+python3 tools/verification/verify-order.py
 ```
 
 스크립트는 현재 소스로 일곱 앱을 빌드하고 임시 MySQL·Redis·Kafka·MinIO와 함께 실행한다.
@@ -111,7 +111,7 @@ python3 scripts/verify-order.py
 기존 Flyway V1~V10과 자료는 보존한다. V10에 추가한 purchase_order는 V11에서 PENDING·PAID 구매 유일 제약을 적용한다.
 구 orders·order_item·shedlock 등은 남지만 새 업무에서는 사용하지 않으며 자동 이관하지 않는다.
 
-기존 DB 전환 시 모든 구 Order 쓰기·릴레이를 중지한 뒤 [전환 SQL](../scripts/order-transition.sql)을 명시적으로 실행한다.
+기존 DB 전환 시 모든 구 Order 쓰기·릴레이를 중지한 뒤 [전환 SQL](../tools/migrations/order/order-transition.sql)을 명시적으로 실행한다.
 구 미발행 Outbox는 원본을 order_legacy_outbox_archive에 보존하고 DEAD로 격리한다. 새 OrderPlaced는 격리하지 않는다.
 스크립트 마지막의 unexpected_legacy_pending이 0인지 확인한 뒤 새 릴레이를 켠다. 기본 기동은 이 전환 SQL을 실행하지 않는다.
 

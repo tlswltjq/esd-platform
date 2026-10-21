@@ -29,7 +29,7 @@ JDK 21과 Docker가 필요하다. 기본 검증 포트가 사용 중이면 CATAL
 
 ```sh
 ./gradlew :apps:catalog:test :apps:catalog:integrationTest
-python3 scripts/verify-catalog.py
+python3 tools/verification/verify-catalog.py
 ```
 
 Testcontainers가 Docker 소켓을 찾지 못하면 현재 Docker context의 endpoint를 DOCKER_HOST로 지정한다.
@@ -45,7 +45,7 @@ Catalog 재시작 전 미발행 결과 저장과 재시작 후 결과 전달을 
 ## 기존 DB 전환
 
 1. 기존 Catalog의 모든 쓰기 프로세스·리스너·릴레이를 정지하고 DB를 백업한다.
-2. Catalog DB에 [전환 SQL](../scripts/catalog-transition.sql)을 실행한다.
+2. Catalog DB에 [전환 SQL](../tools/migrations/catalog/catalog-transition.sql)을 실행한다.
    구 미발행 Outbox 원본을 catalog_legacy_outbox_archive에 보존하고 기존 행을 DEAD로 격리한다.
    스크립트는 반복 실행 가능하며 마지막 unexpected_legacy_pending 값이 0이어야 한다.
 3. 새 Catalog를 기동하면 Flyway V11이 두 테이블을 추가한다. V1~V10과 구 업무 테이블은 유지한다.

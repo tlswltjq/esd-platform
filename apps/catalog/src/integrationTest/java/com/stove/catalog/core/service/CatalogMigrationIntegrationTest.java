@@ -49,7 +49,7 @@ class CatalogMigrationIntegrationTest extends CatalogIntegrationTestBase {
             try (Connection connection = source.getConnection()) {
                 FileSystemResource script =
                         new FileSystemResource(
-                                Path.of("../../scripts/catalog-transition.sql"));
+                                Path.of("../../tools/migrations/catalog/catalog-transition.sql"));
                 ScriptUtils.executeSqlScript(
                         connection, script);
                 ScriptUtils.executeSqlScript(

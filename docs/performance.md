@@ -1,5 +1,8 @@
 # 성능 측정 — Outbox 릴레이
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 <a id="summary"></a>
 ## 측정 결과 먼저 읽기
 
@@ -41,7 +44,7 @@
 > 다음 수순이다 — 설계와 함정은 `OutboxRelay#relay` 주석. 같은 측정에서 나온
 > `listener.concurrency` 는 **올리지 않기로 했다**(파티션 3개는 확장 여지, 스레드는 1 유지).
 
-측정 도구는 [scripts/perf/](../scripts/perf/), 관련 결함은 [defects.md](defects.md) 참고.
+측정 도구는 [scripts/perf/](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/), 관련 결함은 [defects.md](defects.md) 참고.
 **여기 숫자를 어떤 규칙으로 얻었는지는 [measuring.md](measuring.md)** — 아래 7·9·10·13·14장이
 저지른 실수에서 나온 규칙 11개를 한자리에 모았다. 새 측정을 시작하기 전에 그쪽을 먼저 본다.
 
@@ -370,7 +373,7 @@ Outbox 만 보면 해소된 것처럼 보인다.
 
 > **이 표의 첫 줄이 틀렸다 (2026-08-14, [D-026](defects.md#d-026)).** `records_lag` 는
 > "아직 안 읽은 건수" 가 아니라 **직전 fetch 응답에서 본 건수**다. fetch 가 멈추면 값도 멈춘다.
-> 랙 판정은 브로커 오프셋으로 옮겼다 — `scripts/perf/collect-lag.sh` 와 compose 의 `kafka-exporter`.
+> 랙 판정은 브로커 오프셋으로 옮겼다 — `tools/observability/collect-lag.sh` 와 compose 의 `kafka-exporter`.
 > 아래 11-2 의 "랙 0" 은 그래서 근거가 되지 못한다(다만 그 결론 자체는 12장에서 다시 확인됐다).
 
 | 지표 | 의미 | 생산자 쪽 대응 |
@@ -453,7 +456,7 @@ Outbox 만 보면 해소된 것처럼 보인다.
 
 ### 12-2. 도구가 먼저 바뀌었다
 
-- **`scripts/perf/collect-lag.sh`** — 랙을 브로커에게 직접 묻는다. 커밋 오프셋이 없는 파티션은
+- **`tools/observability/collect-lag.sh`** — 랙을 브로커에게 직접 묻는다. 커밋 오프셋이 없는 파티션은
   **0 이 아니라 `unknown` 으로 센다.** 모르는 것을 0 으로 적는 습관이 D-026 을 만들었다
 - **`scripts/perf/run-session.sh`** — 부하 + 수집기 넷을 한 타임라인으로 돌리고
   환경·조건 오버라이드·시작 상태(랙 포함)를 `env.txt` 에 남긴다
@@ -601,7 +604,7 @@ outbox pending 최종 0 ✓
 
 ### 13-3. 2차 — 컨슈머를 포화시킨 위에서 잰다
 
-[scripts/perf/README.md](../scripts/perf/README.md) 가 적어 둔 대로 겹쳐 돌렸다.
+[scripts/perf/README.md](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/README.md) 가 적어 둔 대로 겹쳐 돌렸다.
 order 를 60 RPS 로 밀어 payment 의 `stove.order.v1` 컨슈머를 포화시켜 두고,
 그 위에서 `fanout` 을 겹친다. **리스너 스레드와 HTTP 스레드가 실제로 풀을 놓고 다투는 구성이다.**
 
@@ -839,7 +842,7 @@ for g in $GROUPS; do ... done      # g = 1267601249 (현재 사용자의 gid)
 `GROUPS` 는 **bash 내장 변수**다. 대입이 무시되고 사용자의 gid 배열이 그대로 남아,
 오프셋 리셋이 **존재하지 않는 그룹에 대해 조용히 성공했다.** `rc=0` 이라 실패로 보이지도 않는다.
 
-이 함정은 이 리포에 이미 적혀 있다 — [`collect-lag.sh`](../scripts/perf/collect-lag.sh) 가
+이 함정은 이 리포에 이미 적혀 있다 — [`collect-lag.sh`](../tools/observability/collect-lag.sh) 가
 같은 이유로 `LAG_GROUPS` 를 쓰며 "실제로 그렇게 겪었다" 고 남겨 두었다.
 **적어 둔 덕에 원인을 빨리 찾았고, 적어 두었는데도 다시 밟았다.**
 
@@ -904,9 +907,9 @@ performance.md 9-3 과 같은 60 RPS 주문 생성 부하를 90초씩 **RR → R
 | rr-2 | REPEATABLE READ ×20 | 26.04ms | 21.01 | 15.48 | **400회**, 누적 3,571ms (건당 8.9ms) |
 
 - 네 회차 모두 5,400건 · 누락 0 · 실패 0 이고, 조건 안 p95 편차(0.38 · 0.56ms)가 조건 사이 차이(약 4.7ms)보다 작다 — 비교가 유효하다(measuring.md 규칙 9). 대조군으로 돌아온 rr-2 가 rr-1 을 재현했다.
-- **바꾼 것은 격리 수준 하나인데 락 대기가 400회에서 0회가 됐다.** READ COMMITTED 는 갭 락을 끄고, order 에서 범위를 잠그는 문장은 릴레이 조회뿐이므로, 그 400회는 릴레이의 넥스트키 락을 기다린 outbox INSERT 다 — [DB 락 실험 1](../scripts/db-lab/README.md)의 메커니즘이 부하에서 그대로 나타났다.
+- **바꾼 것은 격리 수준 하나인데 락 대기가 400회에서 0회가 됐다.** READ COMMITTED 는 갭 락을 끄고, order 에서 범위를 잠그는 문장은 릴레이 조회뿐이므로, 그 400회는 릴레이의 넥스트키 락을 기다린 outbox INSERT 다 — [DB 락 실험 1](../tools/db-lab/README.md)의 메커니즘이 부하에서 그대로 나타났다.
 - 락 대기는 주문 수의 약 7.4%(5,400건에 400회)였고 한 번에 평균 9ms 였다. 그만큼 **p95 가 약 4.7ms(×1.22) 올랐고** 평균은 1ms 안쪽으로만 움직였다 — 일부만 기다리는 경합의 전형적인 모양이다.
 - performance.md 9-3 의 +19ms 와 크기를 그대로 비교하지는 않는다. 9-3 은 `poll-interval-ms` 가 1000 이던 시절(200 적용은 그 뒤 `7574ea2`) 측정이라 배치가 다섯 배 크고 락을 쥐는 시간도 길었다. 그 설정에서 몫이 얼마였는지는 **[추가 확인 필요]**.
 - 측정 동안 CI 러너를 멈췄다(규칙 11). 공용 스택의 데이터를 지우지 않으려고 9-3 과 달리 테이블을 비우지 않았고, 대신 A-B-B-A 순서와 회차별 초기 행 수로 누적 효과를 대조했다.
 
-재현 도구는 [run-isolation-ab.sh](../scripts/perf/run-isolation-ab.sh)다. 브로커 장애 중의 주문·결제 실패 전파는 이 A/B에서 재현하지 않았으며 [R1](architecture.md#r1)의 코드상 추정으로 남긴다.
+재현 도구는 [run-isolation-ab.sh](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/run-isolation-ab.sh)다. 브로커 장애 중의 주문·결제 실패 전파는 이 A/B에서 재현하지 않았으며 [R1](architecture.md#r1)의 코드상 추정으로 남긴다.

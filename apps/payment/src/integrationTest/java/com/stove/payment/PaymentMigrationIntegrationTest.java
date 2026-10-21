@@ -49,7 +49,7 @@ class PaymentMigrationIntegrationTest extends PaymentIntegrationTestBase {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_payment WHERE pg_fee_amount IS NULL",Long.class)).isEqualTo(1);
             for(int attempt=0;attempt<3;attempt++) {
                 if(attempt==2) ExternalPgProcess.JDBC.update("UPDATE pg_charge SET pg_fee_policy_id='conflicting-fixture',pg_fee_rate_bps=300,pg_fee_amount=300 WHERE payment_id=?",pending.getPaymentId());
-                ProcessBuilder importer=new ProcessBuilder("python3",Path.of("../../scripts/migrate-mock-pg.py").toString(),
+                ProcessBuilder importer=new ProcessBuilder("python3",Path.of("../../tools/migrations/mock-pg/migrate.py").toString(),
                         "--source-container",mysql.getContainerId(),"--source-db",schema,"--source-user","root",
                         "--target-container",ExternalPgProcess.MYSQL.getContainerId());
                 importer.environment().put("SOURCE_MYSQL_PASSWORD",mysql.getPassword());
@@ -91,7 +91,7 @@ class PaymentMigrationIntegrationTest extends PaymentIntegrationTestBase {
                 jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES(?,'Payment','legacy',?,'stove.payment.v1','legacy','{}','PENDING',NOW())",type,type);
             jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES('old-dead','Payment','legacy','PaymentFailed','stove.payment.v1','legacy','{}','DEAD',NOW())");
             try(Connection connection=source.getConnection()) {
-                FileSystemResource script=new FileSystemResource(Path.of("../../scripts/payment-transition.sql"));
+                FileSystemResource script=new FileSystemResource(Path.of("../../tools/migrations/payment/payment-transition.sql"));
                 ScriptUtils.executeSqlScript(connection,script); ScriptUtils.executeSqlScript(connection,script);
             }
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_legacy_outbox_archive",Integer.class)).isEqualTo(2);

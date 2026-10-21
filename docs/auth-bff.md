@@ -78,6 +78,6 @@ auth 통합 테스트는 실제 MySQL에서 OIDC, RTR, 재사용, 동시 갱신,
 공유 세션 검증은 두 번째 Gateway를 `--args='--server.port=8081'`로 실행한다.
 테스트용 짧은 Access Token은 auth에 `BFF_ACCESS_TOKEN_SECONDS=30`을 설정한다.
 두 Gateway가 실행된 상태에서 같은 `BFF_CLIENT_SECRET`을 설정하고
-`python3 scripts/verification/auth-bff.py`를 실행하면 callback 인스턴스 변경,
+`python3 tools/verification/auth-bff.py`를 실행하면 callback 인스턴스 변경,
 토큰 릴레이, CSRF, 동시 갱신, 재사용 탐지 및 로그아웃을 실제 HTTP로 검증한다.
 이 검증은 테스트 회원을 생성하고 테스트 계열에 의도적으로 재사용을 발생시킨다.

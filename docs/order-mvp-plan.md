@@ -253,19 +253,19 @@ common:web·security·jpa·kafka·messaging을 필요한 범위로 사용하고 
 ## OCI 구현·검증 순서
 
 로컬은 편집·정적 점검·동기화에 사용하고 빌드·단위·아키텍처·통합 테스트·서비스 실행은 모두 OCI에서 수행한다.
-scripts/remote.sh와 기존 로컬 Git 설정으로 커밋 전 작업본을 동기화한다. 머신별 접속 값은 문서에 쓰지 않는다.
+tools/remote/remote.sh와 기존 로컬 Git 설정으로 커밋 전 작업본을 동기화한다. 머신별 접속 값은 문서에 쓰지 않는다.
 
 1. **계약·모델:** 요청 DTO·새 이벤트 세 개·상태 규칙·단일 주문 테이블과 중복 정책을 정의한다.
 2. **주문 생성:** 기존 Catalog 상세 어댑터·기대 값 비교·중복 재조회·주문과 Outbox 원자성을 구현한다.
 3. **조회·보안:** 본인 목록·상세·페이지·JWT·MEMBER와 Gateway 경유 접근을 구현한다.
 4. **결과 반영:** 이벤트 연결·금액 검증·행 잠금·결과 비교·Inbox·최종 상태를 구현한다.
 5. **정리·전환:** 구 코드·설정·테스트를 교체하고 V9→V10·구 Outbox 격리, OpenAPI와 안내 문서를 검증한다.
-6. **실제 흐름:** scripts/verify-store.py를 참고해 `scripts/verify-order.py`·독립 Order E2E 태스크를 작성하고 OCI에서 실행한다.
+6. **실제 흐름:** tools/verification/verify-store.py를 참고해 `tools/verification/verify-order.py`·독립 Order E2E 태스크를 작성하고 OCI에서 실행한다.
 
 모듈 검증은 다음 원격 명령으로 시작한다.
 
 ```sh
-./scripts/remote.sh gradle :apps:order:test :apps:order:integrationTest :common:kafka:test :common:messaging:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --rerun-tasks
+./tools/remote/remote.sh gradle :apps:order:test :apps:order:integrationTest :common:kafka:test :common:messaging:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --rerun-tasks
 ```
 
 완료된 여섯 모듈의 단위·통합 회귀 검사도 같은 원격 경로로 실행한다. 공통 계약 확장의 기존 계약 비침범을 확인한다.
@@ -340,7 +340,7 @@ Order 통합 검사는 실제 MySQL·Kafka에서 다음을 확인했다.
 - 서로 다른 주문에서 같은 결과 이벤트 ID의 동시 경합, Inbox 삽입 뒤 실패와 최종 상태 flush 뒤 실패의 전체 롤백.
 - 없는 주문의 결과 DLT 이동과 원래 주문 복구 후 같은 이벤트 ID 재전달, 빈 DB·V9→V10 전환과 구 자료 보존.
 
-[독립 검증 스크립트](../scripts/verify-order.py)는 일곱 앱과 임시 MySQL·Redis·Kafka·MinIO로 다음 **6단계를 모두 통과**했다.
+[독립 검증 스크립트](../tools/verification/verify-order.py)는 일곱 앱과 임시 MySQL·Redis·Kafka·MinIO로 다음 **6단계를 모두 통과**했다.
 
 1. 실제 가입·로그인·업로드·심사 승인·출시·Store 조회 → 주문, 본인 조회·중복 요청과 재출시 후 과거 주문 보존.
 2. Kafka 중단 중 Order 재시작 → 저장된 주문 조회·재요청과 원래 미발행 Outbox 세 건 보존.

@@ -309,7 +309,7 @@ Java 지역 변수·반복 변수·리소스 변수는 명시적 타입으로 �
 아래는 주요 변경 범위의 검증 명령이다. 전체 회귀와 실제 프로세스 검증의 실행 결과는 아래 완료 기록에 정리했다.
 
 ```sh
-./scripts/remote.sh gradle compileJava compileTestJava compileIntegrationTestJava :apps:license:test :apps:license:integrationTest :apps:order:test :apps:order:integrationTest :apps:payment:test :apps:payment:integrationTest :apps:gateway:test :common:kafka:test :common:messaging:test :common:security:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --no-daemon
+./tools/remote/remote.sh gradle compileJava compileTestJava compileIntegrationTestJava :apps:license:test :apps:license:integrationTest :apps:order:test :apps:order:integrationTest :apps:payment:test :apps:payment:integrationTest :apps:gateway:test :common:kafka:test :common:messaging:test :common:security:test :common:archunit:test -Pstove.infraTest.maxParallel=1 --no-daemon
 ```
 
 위 검증 뒤 완료된 여덟 앱과 공통 라이브러리의 기존 단위·통합·계약 회귀를 실행한다.
@@ -331,7 +331,7 @@ License OpenAPI는 OCI에서 생성·회수하고 갱신 플래그 없이 재검
 | 보안·조회 | 실제 서명 JWT·401/403·타인 404, 소유자 쿼리/헤더 위조 무효, 페이지 상한·동률 정렬·정확한 코드 비교 |
 | 전환·정리 | 빈 DB·V3→V4·구 자료 보존, 구 Outbox 무발행·숫자 memberId 경로와 구 보상 업무 제거 |
 
-`scripts/verify-payment.py`의 독립 실행 방식을 참고해 `scripts/verify-license.py`와 License 전용 E2E 태그·태스크를 작성한다.
+`tools/verification/verify-payment.py`의 독립 실행 방식을 참고해 `tools/verification/verify-license.py`와 License 전용 E2E 태그·태스크를 작성한다.
 실제 프로세스 검증의 최소 여정은 다음과 같다.
 
 1. 실제 로그인·심사·출시·Store 탐색·주문 → 모의 PG 승인 → Order PAID → OrderPaid → 내 라이브러리 한 개.
@@ -424,7 +424,7 @@ License OpenAPI는 OCI에서 생성·회수하고 갱신 옵션 없이 재검증
 ### 실제 아홉 앱의 13단계
 
 ```sh
-python3 scripts/verify-license.py
+python3 tools/verification/verify-license.py
 ```
 
 실행별 빈 DB·Kafka·앱 포트(기본 오프셋 31000)로 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License를 실행했다.
@@ -564,7 +564,7 @@ OrderPlaced·OrderPaid·결제 결과 이벤트의 필드·토픽·키는 유지
 이미 OCI에서 검증한 V4·V10을 수정하지 않고 **Order V11·License V5**로 전진한다. 기존 마이그레이션 체크섬은 유지한다.
 구 License V1~V3의 자료·Inbox·Outbox도 기존처럼 보존한다.
 
-공유 환경 적용 전 [읽기 전용 점검 SQL](../scripts/license-merge-preflight.sql)과 전달 대기 자료를 확인한다. SQL의 적용 대상은 전환 전 Order V10·License V4다.
+공유 환경 적용 전 [읽기 전용 점검 SQL](../tools/migrations/license/license-merge-preflight.sql)과 전달 대기 자료를 확인한다. SQL의 적용 대상은 전환 전 Order V10·License V4다.
 
 | 대상 | 통과 조건 |
 |---|---|
@@ -625,7 +625,7 @@ License에서 반드시 확인할 항목은 다음과 같다.
 
 - `apps/license`의 테스트·`LicenseFixtures`·`LicenseFaultConfiguration`: 삭제될 저장소 주입·두 단계 저장 실패 주입을 통합 저장에 맞춘다.
 - `OrderPurchaseFlowTest`·`PaymentPurchaseFlowTest`·`LicensePurchaseFlowTest`: 이미 PAID인 구매자에게 같은 상품을 주문시키던 픽스처를 서로 다른 구매자 또는 별도 공개 상품으로 바꾼다. FAILED 재시도는 같은 구매자·상품으로 확인한다.
-- `scripts/verify-order.py`·`scripts/verify-payment.py`·`scripts/verify-license.py`: 픽스처·SQL·건수·재시작 이후 검사를 갱신한다. 이전 13단계·권한 2개/근거 6개 수치를 새 정책의 목표로 재사용하지 않는다.
+- `tools/verification/verify-order.py`·`tools/verification/verify-payment.py`·`tools/verification/verify-license.py`: 픽스처·SQL·건수·재시작 이후 검사를 갱신한다. 이전 13단계·권한 2개/근거 6개 수치를 새 정책의 목표로 재사용하지 않는다.
 - 독립 아홉 앱 검증에서 전달이 끝난 최초 구매들의 PAID 주문 수 = License 수 = license-paid-order Inbox 수를 대조한다. PENDING·FAILED·중복 거절 요청은 지급을 만들지 않는다.
 
 실제 검증 후 `AGENTS.md`, README, Order·License 안내, 서비스/API 명세, 모델 사전·구매 흐름·미결 정책·테스트 문서를 새 동작으로 갱신한다.
@@ -666,7 +666,7 @@ V1~V3는 Git 원본과 바이트 단위로 같게 보존하고, 그 원본으로
 
 ### 실제 아홉 앱 13단계
 
-`python3 scripts/verify-license.py`가 독립 DB·Kafka·앱 포트에서 각 단계의 검사 한 건씩을 실제 실행했다. 실패·건너뜀은 0건이다.
+`python3 tools/verification/verify-license.py`가 독립 DB·Kafka·앱 포트에서 각 단계의 검사 한 건씩을 실제 실행했다. 실패·건너뜀은 0건이다.
 
 | 단계 | 확인 결과 |
 |---|---|
@@ -697,7 +697,7 @@ ACK 전 종료 이벤트는 `29a05302-aeff-4472-a39f-ccdc8afc69d5`, Outbox 복�
 | Payment·여덟 앱 | 11단계 통과. 승인/거절·고정 결제 ID·PG 응답 유실·결과/Outbox 롤백·Order/Catalog/브로커 중단·원본 요청/결과 재전달 |
 | 합계 | 30단계. 각 단계의 JUnit 검사 한 건, 실패·오류·건너뜀 0건 |
 
-실행 명령은 각각 `python3 scripts/verify-license.py`, `python3 scripts/verify-order.py`, `python3 scripts/verify-payment.py`다. 모두 OCI 원격 저장소에서 실행했다.
+실행 명령은 각각 `python3 tools/verification/verify-license.py`, `python3 tools/verification/verify-order.py`, `python3 tools/verification/verify-payment.py`다. 모두 OCI 원격 저장소에서 실행했다.
 Payment 독립 흐름은 주문·결제·PG 결정·결과 Inbox/Outbox 각각 5건을 보존했고, 재전달 뒤에도 새 결제를 만들지 않았다.
 
 운영 License bootJar에는 장애 주입 픽스처와 삭제한 LicensePurchase·저장소 클래스가 없고, Order V11·License V5가 해당 bootJar에 포함됨을 확인했다.
@@ -714,6 +714,6 @@ Payment 독립 흐름은 주문·결제·PG 결정·결과 Inbox/Outbox 각각 5
 - `immutable-migrations.log`, `immutable-migrations.json`, `immutable-migrations/`: V1~V3 원본 기준 마이그레이션 재검증 XML·SQL 해시·JAR 확인.
 - `artifact-checks.json`, `containers-before.txt`, `containers-after.txt`: JAR의 클래스/마이그레이션 포함 여부·실행 자원 정리·공유 컨테이너 보존 확인.
 
-공유 DB의 자료 전환·초기화는 수행하지 않았다. 적용 전 [읽기 전용 점검 SQL](../scripts/license-merge-preflight.sql)과 Kafka 대기·DLT·재투입 자료를 대조해야 한다.
+공유 DB의 자료 전환·초기화는 수행하지 않았다. 적용 전 [읽기 전용 점검 SQL](../tools/migrations/license/license-merge-preflight.sql)과 Kafka 대기·DLT·재투입 자료를 대조해야 한다.
 기존 복수 구매 근거를 한 출처로 임의 축약하거나 PAID 주문을 삭제/실패 처리하지 않는다.
 기존 PAID 자동 소급 지급·실제 PG·환불·권한 회수·선물·Download 연계·정산은 후속 범위다.

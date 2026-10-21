@@ -1,5 +1,7 @@
 # 문서 안내
 
+개발·검증 명령은 [tools 안내](../tools/README.md), 정리 범위는 [scripts 조사·실행 기록](scripts-tools-audit.md)을 따른다. 과거 성능·장애 실험 결과는 해당 기록 문서에 보존한다.
+
 처음 읽을 때는 [도메인·모델 안내](domain/model-guide.md) → [업무 흐름](domain/workflows.md) → 필요한 모델 사전 순서로 읽는다. 모델 사전에는 필드뿐 아니라 생성·사용 시점, 업무 규칙 제안과 코드·테스트 근거가 함께 있다.
 
 ## 업무와 코드 이해
@@ -58,7 +60,7 @@
 | [Compose 실행 구성](compose-layout.md) | 기본·로컬 4개 파일, 포트 바인딩과 단순화 검증 |
 | [장애 실험](chaos.md) · [재시작 시나리오](resilience-scenarios.md) | 부하 중 장애와 중단 후 처리 재개 근거 |
 | [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록. 새 License MVP에 적용하지 않음 |
-| [DB 락 실험](../scripts/db-lab/README.md) · [성능 도구](../scripts/perf/README.md) · [장애 도구](../scripts/chaos/README.md) | 실험 실행 방법과 결과 파일 |
+| [DB 락 실험](../tools/db-lab/README.md) · [성능 도구](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/README.md) · [장애 도구](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/chaos/README.md) | 실험 실행 방법과 결과 파일 |
 
 ## 문서를 갱신할 때
 

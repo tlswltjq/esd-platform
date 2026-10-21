@@ -97,7 +97,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             for (String type : new String[]{"OrderCreated", "OrderPlaced"})
                 jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES(?, 'Order', 'legacy', ?, 'stove.order.v1', 'legacy', '{}', 'PENDING', NOW())", type, type);
             try (Connection connection = source.getConnection()) {
-                FileSystemResource script = new FileSystemResource(Path.of("../../scripts/order-transition.sql"));
+                FileSystemResource script = new FileSystemResource(Path.of("../../tools/migrations/order/order-transition.sql"));
                 ScriptUtils.executeSqlScript(connection, script); ScriptUtils.executeSqlScript(connection, script);
             }
             assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id='OrderCreated'", String.class)).isEqualTo("DEAD");

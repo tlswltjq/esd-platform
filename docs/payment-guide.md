@@ -66,7 +66,7 @@ Settlement는 PG 승인/비용·지급 명세를 자기 포트로 직접 조회�
 ```sh
 export DOCKER_HOST="$(docker context inspect orbstack --format '{{.Endpoints.docker.Host}}')"
 ./gradlew :apps:payment:test :apps:payment:integrationTest --no-daemon
-python3 scripts/verify-payment.py
+python3 tools/verification/verify-payment.py
 ```
 
 스크립트는 여덟 업무 앱과 외부 모의 PG, 전용 PG MySQL을 격리해 실행한다.
@@ -83,7 +83,7 @@ Order·Catalog·Kafka 중단과 원래 결과 발행·재전달을 검증한다.
 이 독립 검증은 기존 공유 환경의 전환을 의미하지 않는다. 구 Flyway V1~V10과 데이터는 그대로 두고 V11로 두 새 테이블을 추가한다.
 구 payment·simulated_pg_transaction·payment_audit_log를 자동 변환하거나 과거 주문을 자동 결제하지 않는다.
 
-공유 환경에 적용할 때 구 Payment 쓰기·릴레이를 모두 중지하고 [전환 SQL](../scripts/payment-transition.sql)을 실행한다.
+공유 환경에 적용할 때 구 Payment 쓰기·릴레이를 모두 중지하고 [전환 SQL](../tools/migrations/payment/payment-transition.sql)을 실행한다.
 구 PENDING·DEAD Outbox의 원본을 payment_legacy_outbox_archive에 보존하고 구 PENDING을 DEAD로 격리한다.
 새 OrderPaymentCompleted/OrderPaymentFailed는 격리하지 않는다. SQL은 반복 실행할 수 있고 기본 기동에서는 실행하지 않는다.
 

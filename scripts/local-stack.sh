@@ -11,17 +11,15 @@ INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.local.yml
 APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.local.yml)
 
 case "${1:-up}" in
-  up|demo-up)
+  up)
     ./gradlew jibDockerBuild --no-daemon
     "${INFRA[@]}" up -d --no-build
     "${INFRA[@]}" wait mysql-bootstrap
     bash scripts/start-apps.sh "${APPS[@]:2}"
-    if [[ "${1:-up}" == demo-up ]]; then
-      bash scripts/stack-wait.sh
-    fi
+    python3 tools/verification/stack-status.py
     echo "로컬 스택이 시작되었습니다: http://127.0.0.1:18080/swagger-ui.html"
     ;;
-  down|demo-down)
+  down)
     "${APPS[@]}" down
     "${INFRA[@]}" down
     ;;
@@ -29,7 +27,7 @@ case "${1:-up}" in
     "$0" down
     "$0" up
     ;;
-  ps|status|demo-status)
+  ps|status)
     "${INFRA[@]}" ps
     "${APPS[@]}" ps
     ;;
@@ -37,7 +35,7 @@ case "${1:-up}" in
     "${APPS[@]}" logs -f "${2:-gateway}"
     ;;
   *)
-    echo "사용법: $0 {up|down|restart|ps|logs [서비스]|demo-up|demo-down|demo-status}" >&2
+    echo "사용법: $0 {up|down|restart|ps|logs [서비스]}" >&2
     exit 2
     ;;
 esac

@@ -1,5 +1,8 @@
 # API 데모
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 현재 주문·모의 결제 사용자 흐름은 [Payment 실행·독립 검증](payment-guide.md)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
 
 현재 완료 모듈과 실행 절차는 [개발 환경과 실행](getting-started.md)을 따른다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다. 아래 CI·E2E Compose 파일명은 당시 기록이고, 현재 파일 구성은 [Compose 실행 구성](compose-layout.md)을 따른다.
@@ -34,13 +37,13 @@ bash scripts/api-demo.sh down
 
 `up`은 리뷰어·운영자 테스트 계정 비밀번호와 PG 콜백 비밀을 생성해 Git이 무시하는 `build/api-demo/stack-secrets.env`에 소유자만 읽도록 저장한다. `run`이 같은 값을 읽어 로그인과 서명 검증에 쓴다. 파일을 지운 뒤 앱 컨테이너만 재사용하면 인증 값이 달라지므로 다시 `up`을 실행한다. 창작자·구매자 계정은 회차마다 생성하며 비밀번호나 토큰을 결과 JSON에 기록하지 않는다.
 
-원격 호스트는 기존 [remote.sh](../scripts/remote.sh)의 설정을 사용한다.
+원격 호스트는 기존 [remote.sh](../tools/remote/remote.sh)의 설정을 사용한다.
 
 ```bash
-./scripts/remote.sh stack up
-./scripts/remote.sh demo
-./scripts/remote.sh stack status
-./scripts/remote.sh stack down
+./tools/remote/remote.sh stack up
+./tools/remote/remote.sh demo
+./tools/remote/remote.sh stack status
+./tools/remote/remote.sh stack down
 ```
 
 원격 `demo`의 결과 디렉터리는 원격 작업본의 `build/api-demo/`에 있다. 원격 작업본의 Git 제외 파일 `.env`에 `AUTH_REVIEWER_PASSWORD`, `AUTH_ADMIN_PASSWORD`, `PG_CALLBACK_SECRET`을 설정하면 Compose와 데모 태스크가 같은 값을 읽는다. `remote.sh sync`는 이 파일을 보존한다. 로컬 `api-demo.sh up`은 테스트 비밀을 자동 생성한다.

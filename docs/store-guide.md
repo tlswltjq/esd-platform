@@ -8,21 +8,21 @@ Store는 Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다
 ## 실행 환경
 
 코드·문서는 로컬에서 수정하고 빌드·모든 테스트·서비스 실행은 OCI에서 한다.
-기존 scripts/remote.sh의 SSH·작업 디렉터리 설정을 사용한다. 실제 접속 값은 로컬 Git 설정에만 둔다.
+기존 tools/remote/remote.sh의 SSH·작업 디렉터리 설정을 사용한다. 실제 접속 값은 로컬 Git 설정에만 둔다.
 
 ```sh
-./scripts/remote.sh gradle :apps:store:test :apps:catalog:test :common:kafka:test
-./scripts/remote.sh gradle :apps:store:integrationTest :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1
-./scripts/remote.sh sync
+./tools/remote/remote.sh gradle :apps:store:test :apps:catalog:test :common:kafka:test
+./tools/remote/remote.sh gradle :apps:store:integrationTest :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1
+./tools/remote/remote.sh sync
 ```
 
-동기화한 원격 저장소 루트에서 `python3 scripts/verify-store.py`를 실행한다.
+동기화한 원격 저장소 루트에서 `python3 tools/verification/verify-store.py`를 실행한다.
 이 스크립트는 OCI에서 현재 소스로 여섯 앱을 빌드하고 임시 MySQL·Redis·Kafka·MinIO를 띄운다.
 기존 전체 스택을 올리지 않으며, 자신이 생성한 프로세스와 임시 데이터만 종료 시 정리한다.
 실행 로그·JSON 증거 경로는 출력되는 임시 디렉터리다. 포트가 겹치면 STORE_TEST_PORT_OFFSET을 지정한다.
 Gradle 의존성과 테스트 이미지를 처음 준비하는 경우 원격에서 네트워크 접근이 필요하다.
 
-기존 개발 MySQL에서는 [스키마 준비 SQL](../scripts/store-schema.sql)을 관리자 계정으로 적용한다.
+기존 개발 MySQL에서는 [스키마 준비 SQL](../tools/migrations/store/store-schema.sql)을 관리자 계정으로 적용한다.
 새 환경은 infra/mysql/init의 초기화 SQL에 포함돼 있다. 기존 볼륨은 삭제하지 않는다.
 Store는 DB_HOST·DB_PORT·DB_USER·DB_PASSWORD와 CATALOG_BASE_URL을 사용한다.
 기본 포트는 8087이며 Flyway V1은 store_product 한 테이블을 만든다.

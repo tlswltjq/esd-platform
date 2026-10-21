@@ -10,7 +10,7 @@ Settlement는 결제 완료 주문의 판매자 매출·배분·월 마감과 PG
 OrbStack을 시작하고 저장소 루트에서 실행한다. 기본 앱 포트 오프셋은 33000이다.
 
 ```sh
-python3 scripts/verify-settlement.py
+python3 tools/verification/verify-settlement.py
 ```
 
 스크립트가 열한 업무 앱과 외부 모의 PG를 로컬 JVM으로 실행하고 MySQL·Redis·Kafka·MinIO 및 별도 PG MySQL을 전용 Compose 프로젝트로 생성한다.
@@ -18,7 +18,7 @@ python3 scripts/verify-settlement.py
 완료·실패 시 해당 실행의 프로세스·컨테이너·볼륨을 정리한다. 공유 스택과 볼륨은 사용하지 않는다.
 `SETTLEMENT_TEST_PORT_OFFSET`으로 업무 앱 포트 범위를 변경할 수 있다. PG와 인프라 포트는 빈 포트를 선택한다.
 
-기본 Compose와 Jib 이미지의 컨테이너 배포를 확인하려면 `python3 scripts/verify-jib.py`를 실행한다.
+기본 Compose와 Jib 이미지의 컨테이너 배포를 확인하려면 `python3 tools/verification/verify-jib.py`를 실행한다.
 전용 네트워크·DB·포트에서 12개 앱의 health·사용자·JVM 옵션과 출시·구매·ZIP 다운로드·배분·PG 수령·정상 종료를 검증한다.
 완료 후 해당 스택만 정리하고 `runs/jib-validation-*`에 로그와 단계별 JUnit 결과를 보존한다.
 
@@ -90,7 +90,7 @@ Kafka 재시도 소진으로 DLT에 간 매출은 원인 해소 후 원래 키·
 ```sh
 export SOURCE_MYSQL_PASSWORD='source-password'
 export TARGET_MYSQL_PASSWORD='target-password'
-python3 scripts/migrate-mock-pg.py \
+python3 tools/migrations/mock-pg/migrate.py \
   --source-container OLD_PAYMENT_MYSQL --source-db stove_payment \
   --target-container NEW_PG_MYSQL --target-db mock_pg
 ```

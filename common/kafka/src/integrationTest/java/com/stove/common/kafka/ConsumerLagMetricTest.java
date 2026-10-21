@@ -39,7 +39,7 @@ import org.junit.jupiter.api.TestInfo;
  *
  * <ul>
  *   <li>{@link #brokerOffsetsSeeBacklog} — 브로커의 커밋 오프셋. <b>맞는다.</b>
- *       {@code scripts/perf/collect-lag.sh} 와 compose 의 {@code kafka-exporter} 가 쓰는 계산이고,
+ *       {@code tools/observability/collect-lag.sh} 와 compose 의 {@code kafka-exporter} 가 쓰는 계산이고,
  *       알람 규칙({@code infra/prometheus/alerts.yml} 의 {@code stove-consumer})이 여기 걸려 있다.
  *       이 테스트는 그 판정 근거의 회귀 방어선이다</li>
  *   <li>{@link #appMetricGoesSilent} — 앱이 노출하는 {@code kafka.consumer.fetch.manager.records.lag}.

@@ -169,18 +169,18 @@ Store의 공통 운영 HTTP API는 `stove.messaging.ops.enabled=false`로 끄되
 
 로컬은 코드·문서 편집과 작업본 동기화에 사용한다.
 빌드, 단위·아키텍처 테스트, 통합 테스트와 서비스 실행·E2E는 모두 기존 OCI 인스턴스에서 수행한다.
-SSH 대상과 원격 작업 경로는 기존 scripts/remote.sh 및 로컬 Git 설정을 사용하며 머신별 접속 값은 저장소에 기록하지 않는다.
+SSH 대상과 원격 작업 경로는 기존 tools/remote/remote.sh 및 로컬 Git 설정을 사용하며 머신별 접속 값은 저장소에 기록하지 않는다.
 remote.sh는 커밋 전 작업본도 rsync로 보내므로 테스트를 위해 커밋하거나 푸시할 필요가 없다.
 
 구현 후 모듈 검증은 다음과 같이 원격 Gradle 경로로 실행한다.
 
 ```sh
-./scripts/remote.sh gradle :apps:catalog:test :apps:store:test :apps:catalog:integrationTest :apps:store:integrationTest -Pstove.infraTest.maxParallel=1 --rerun-tasks
+./tools/remote/remote.sh gradle :apps:catalog:test :apps:store:test :apps:catalog:integrationTest :apps:store:integrationTest -Pstove.infraTest.maxParallel=1 --rerun-tasks
 ```
 
 변경한 공통 계약과 완료 모듈의 영향 범위 회귀 검사도 같은 원격 경로로 실행한다.
 통합 테스트는 Testcontainers의 임시 인프라·DB를 사용한다.
-서비스 간 여정은 scripts/verify-catalog.py를 참고해 Store와 stove_store를 추가한 독립 검증 스크립트를 작성하고 OCI에서 실행한다.
+서비스 간 여정은 tools/verification/verify-catalog.py를 참고해 Store와 stove_store를 추가한 독립 검증 스크립트를 작성하고 OCI에서 실행한다.
 Auth·Gateway·Studio·Review·Catalog·Store와 MySQL·Redis·Kafka·MinIO만 사용하며 기존 전체 앱 E2E를 실행하지 않는다.
 
 기존 전체 앱·인프라 스택은 중지해 둬도 되며 데이터 볼륨은 보존한다.
@@ -258,7 +258,7 @@ Store 통합 검사는 실제 MySQL·Kafka로 초기 삽입 경합·중복·역�
 OCI에서 Store OpenAPI 스냅샷을 생성해 가져온 뒤 갱신 플래그 없이 계약 일치를 재검증했다.
 Catalog의 기존 V1~V11 마이그레이션은 변경하지 않았고 Store에만 V1을 추가했다.
 
-[독립 검증 스크립트](../scripts/verify-store.py)는 OCI의 임시 MySQL·Redis·Kafka·MinIO와 여섯 앱으로 다음 **5단계를 모두 통과**했다.
+[독립 검증 스크립트](../tools/verification/verify-store.py)는 OCI의 임시 MySQL·Redis·Kafka·MinIO와 여섯 앱으로 다음 **5단계를 모두 통과**했다.
 
 1. 실제 로그인·업로드·Review 승인·Catalog 출시→Store 검색·상세, 작업본 격리와 재출시 반영.
 2. Store 사본을 비우고 Kafka 리스너를 끈 채 재시작해 기존 HTTP API만으로 공개 사본 복원.

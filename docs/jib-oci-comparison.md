@@ -47,20 +47,20 @@ clean-output은 소스 출력과 이미지 생성 캐시를 비운 조건이며,
 
 ## 실행과 원자료
 
-실행 도구: `scripts/image-benchmark.py`, `scripts/image-benchmark/worker.py`, `scripts/image-benchmark/runtime.py`.
+실행 도구: `tools/image-benchmark/run.py`, `tools/image-benchmark/worker.py`, `tools/image-benchmark/runtime.py`.
 
 ```bash
-python3 scripts/image-benchmark.py inventory
-python3 scripts/image-benchmark.py prepare
-python3 scripts/image-benchmark.py baseline
-python3 scripts/image-benchmark.py overlay
-python3 scripts/image-benchmark.py runtime-baseline
-python3 scripts/image-benchmark.py jib
-python3 scripts/image-benchmark.py runtime-jib
-python3 scripts/image-benchmark.py runtime-baseline
-python3 scripts/image-benchmark.py deploy-jib
-python3 scripts/image-benchmark.py verify-deployment
-python3 scripts/image-benchmark.py collect
+python3 tools/image-benchmark/run.py inventory
+python3 tools/image-benchmark/run.py prepare
+python3 tools/image-benchmark/run.py baseline
+python3 tools/image-benchmark/run.py overlay
+python3 tools/image-benchmark/run.py runtime-baseline
+python3 tools/image-benchmark/run.py jib
+python3 tools/image-benchmark/run.py runtime-jib
+python3 tools/image-benchmark/run.py runtime-baseline
+python3 tools/image-benchmark/run.py deploy-jib
+python3 tools/image-benchmark/run.py verify-deployment
+python3 tools/image-benchmark/run.py collect
 ```
 
 세션 ID: `20261019T125630Z`. OCI의 전용 세션 디렉터리와 로컬 Git 제외 경로 `runs/image-benchmark/20261019T125630Z/`에 JSON·로그·요청별 원자료를 보존한다. 생성 Compose 파일에는 검증용 키가 있으므로 파일 권한은 600으로 제한한다.
@@ -68,10 +68,10 @@ python3 scripts/image-benchmark.py collect
 요약을 다시 계산하려면 다음을 실행한다. 출력 JSON은 성공한 회차만 집계하고, 빌드 조건별 3회·실행 방식별 2회가 모였는지 `complete`로 표시한다.
 
 ```bash
-python3 scripts/image-benchmark/report.py runs/image-benchmark/20261019T125630Z
+python3 tools/image-benchmark/report.py runs/image-benchmark/20261019T125630Z
 ```
 
-마지막 `deploy-jib`는 기능·부하 검증을 마친 Jib 스택을 남긴다. 같은 세션을 종료할 때는 `python3 scripts/image-benchmark.py cleanup`을 사용한다. 이 명령은 세션의 Compose 프로젝트와 소유 라벨이 일치하는 레지스트리만 정리하며 소스·측정 자료·다른 프로젝트의 데이터는 보존한다. 다른 측정을 시작하기 전에는 기존 실험 세션의 포트를 해제한다.
+마지막 `deploy-jib`는 기능·부하 검증을 마친 Jib 스택을 남긴다. 같은 세션을 종료할 때는 `python3 tools/image-benchmark/run.py cleanup`을 사용한다. 이 명령은 세션의 Compose 프로젝트와 소유 라벨이 일치하는 레지스트리만 정리하며 소스·측정 자료·다른 프로젝트의 데이터는 보존한다. 다른 측정을 시작하기 전에는 기존 실험 세션의 포트를 해제한다.
 
 ## 당시 일반 실행에서 Jib 사용
 

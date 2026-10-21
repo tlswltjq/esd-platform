@@ -44,7 +44,9 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 | `apps/gateway` | 외부 API와 로그인 진입점 |
 | `common/` | 이벤트 계약, Outbox·Inbox, 웹·JPA·테스트 지원 |
 | `infra/`, `docker-compose*.yml` | 저장소·메시징·관측 도구와 앱 실행 구성 |
-| `e2e/`, `scripts/` | 인수 검증, 스택 관리, 성능·장애 실험 |
+| `e2e/`, `tools/verification/` | 인수 테스트, 격리 스택·이미지·인증 검증 도구 |
+| `tools/` | 검증·관측·DB 실험·전환·이미지 벤치마크·원격 도구 |
+| `scripts/` | 로컬 스택 관리와 앱 기동 |
 
 ## 빠른 시작
 
@@ -52,7 +54,7 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
-python3 scripts/verify-settlement.py
+python3 tools/verification/verify-settlement.py
 ```
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.

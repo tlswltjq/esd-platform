@@ -15,7 +15,7 @@ MySQL·Redis·Kafka·MinIO만 사용한다. 실제 심사·상점 처리 결과�
 전체 검증은 다음 명령으로 실행한다. JDK 21, Python 3, Docker와 프로젝트 Gradle 의존성이 필요하다.
 
 ~~~bash
-python3 scripts/verify-studio.py
+python3 tools/verification/verify-studio.py
 ~~~
 
 스크립트는 임시 DB와 별도 포트에서 세 앱을 실행하고 실제 CREATOR 가입·PKCE 로그인,
@@ -117,7 +117,7 @@ curl -sS "$BASE/api/v1/studio/projects/$PROJECT_ID/release-requests" -H "Authori
 ./gradlew :apps:auth:test :apps:gateway:test :apps:studio:test :common:kafka:test
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 ./gradlew :apps:studio:integrationTest
-python3 scripts/verify-studio.py
+python3 tools/verification/verify-studio.py
 ~~~
 
 단위 테스트는 Auth·Gateway 회귀와 Studio 역할·소유권·편집 충돌·상태 전이를 확인한다.

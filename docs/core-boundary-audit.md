@@ -136,7 +136,7 @@ Studio의 심사·출시 요청은 Project 잠금 뒤 `storage.size()`로 S3 HEA
 
 OCI에서 완료된 일곱 모듈의 단위·구조 검사 351건, 실제 DB·Kafka 통합 검사 72건, 공통 구조 규칙 검사 22건으로 **445건을 실행해 모두 통과**했다. 실패·오류·건너뜀은 0건이며 `--rerun-tasks`, `-Pstove.infraTest.maxParallel=1`, `--no-daemon`으로 실행했다. Studio의 네 결과 종류 변환과 잘못된 봉투의 서비스 호출 차단, 모델 값 검증, 기존 중복·지연·동시성·원자성·OpenAPI 회귀를 포함한다.
 
-이어서 OCI에서 `scripts/verify-order.py`로 Auth·Gateway·Studio·Review·Catalog·Store·Order의 실제 프로세스를 실행해 **E2E 6단계를 모두 통과**했다. 실제 출시·Store 반영·주문 생성, Kafka 중단과 미발행 주문 이벤트 복구, 결제 결과 픽스처·잘못된 결과의 DLT 처리, Catalog 중단 중 조회, Order 재시작 후 결과 보존, Catalog 복구 후 새 주문 생성을 확인했다. 실제 Payment 업무는 후속 대상이며 결과 이벤트는 계약 픽스처로 검증했다.
+이어서 OCI에서 `tools/verification/verify-order.py`로 Auth·Gateway·Studio·Review·Catalog·Store·Order의 실제 프로세스를 실행해 **E2E 6단계를 모두 통과**했다. 실제 출시·Store 반영·주문 생성, Kafka 중단과 미발행 주문 이벤트 복구, 결제 결과 픽스처·잘못된 결과의 DLT 처리, Catalog 중단 중 조회, Order 재시작 후 결과 보존, Catalog 복구 후 새 주문 생성을 확인했다. 실제 Payment 업무는 후속 대상이며 결과 이벤트는 계약 픽스처로 검증했다.
 
 증거는 OCI `/tmp/stove-order-check-g4enb3q8`의 앱 로그와 여섯 `junit-*` 디렉터리다. 각 XML에서 1건 실행·실패/오류/건너뜀 0건을 확인했다. 검증 종료 후 실행 중인 앱과 컨테이너는 0개이며 기존 데이터 볼륨은 보존했다.
 
@@ -193,9 +193,9 @@ CI=true ./gradlew :apps:auth:test :apps:gateway:test :apps:studio:test :apps:rev
 ./gradlew :apps:download:integrationTest --tests com.stove.download.infrastructure.storage.S3PresignedUrlSignerTest :apps:settlement:integrationTest --tests com.stove.settlement.core.service.SettlementCloseTest -Pstove.infraTest.maxParallel=1 --no-daemon
 ```
 
-Auth의 최종 설정 경계 검사는 로컬에서 `./scripts/remote.sh gradle :apps:auth:test --no-daemon`으로 OCI에 실행했다.
+Auth의 최종 설정 경계 검사는 로컬에서 `./tools/remote/remote.sh gradle :apps:auth:test --no-daemon`으로 OCI에 실행했다.
 
-`scripts/verify-payment.py`는 새 config 조립으로 8개 앱을 기동하고 11단계를 다시 통과했다.
+`tools/verification/verify-payment.py`는 새 config 조립으로 8개 앱을 기동하고 11단계를 다시 통과했다.
 실제 로그인·빌드/썸네일 업로드·심사·출시·Store 초기 동기화·주문·승인/거절,
 PG 응답 유실·결과 롤백·Order/Catalog/Kafka 중단과 재시작·원래 이벤트 재전달을 확인했다.
 최종 주문·결제·PG 결정·결과 Outbox와 양쪽 Inbox는 각각 5건으로 유지됐다.

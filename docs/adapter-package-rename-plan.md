@@ -138,7 +138,7 @@ export STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local
   :apps:order:integrationTest :apps:payment:integrationTest \
   :apps:download:integrationTest -Pstove.infraTest.maxParallel=1 --no-daemon
 
-python3 scripts/verify-download.py
+python3 tools/verification/verify-download.py
 ```
 
 검증은 기존 OrbStack을 사용하되 전용 포트·DB·컨테이너·버킷으로 격리하고 실행 전후 공유 자원을 대조한다.
@@ -170,7 +170,7 @@ Java 21·Gradle 8.14.3·OrbStack Docker를 사용했다. 테스트는 `CI=true`�
 | 공개 계약 | 관련 통합 검사의 기존 OpenAPI 대조 통과, 스냅샷 변경 없음 |
 | 운영 JAR | Auth·Studio·Review·Store·Order·Payment·Download·Settlement **8개** 재빌드. adapter 클래스 14개(중첩 클래스 포함), 구 infrastructure 클래스 0개 |
 | Download 의존성 | 운영 JAR에 Kafka·MongoDB·JPA 및 공통 Messaging 라이브러리 없음 |
-| 실제 열 앱 흐름 | `scripts/verify-download.py` **15단계 통과**. 실제 ZIP·체크섬, 기존 보유권의 공개 빌드 교체, 권한 차단, URL 만료·재발급, License/Catalog/저장소 장애, 파일 누락·변경·복구, Download 재시작 확인 |
+| 실제 열 앱 흐름 | `tools/verification/verify-download.py` **15단계 통과**. 실제 ZIP·체크섬, 기존 보유권의 공개 빌드 교체, 권한 차단, URL 만료·재발급, License/Catalog/저장소 장애, 파일 누락·변경·복구, Download 재시작 확인 |
 | 소스·작업본 보존 | 정규화 대조·리소스 동일성·기존 staged diff 동일성·`git diff --check` 통과 |
 | 실행 자원 정리 | 검증 전후 실행 중 컨테이너 목록 동일. 검증용 앱 10개의 포트 해제 확인 |
 

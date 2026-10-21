@@ -42,14 +42,14 @@ Order PAID 직후에는 이벤트 전달 중이므로 라이브러리에 없거�
 로컬은 편집·동기화만 수행한다.
 
 ```sh
-./scripts/remote.sh gradle :apps:license:test :apps:license:integrationTest :apps:order:integrationTest :apps:payment:test -Pstove.infraTest.maxParallel=1 --no-daemon
-./scripts/remote.sh sync
+./tools/remote/remote.sh gradle :apps:license:test :apps:license:integrationTest :apps:order:integrationTest :apps:payment:test -Pstove.infraTest.maxParallel=1 --no-daemon
+./tools/remote/remote.sh sync
 ```
 
 기존 OCI의 원격 저장소 디렉터리에서 다음을 실행한다.
 
 ```sh
-python3 scripts/verify-license.py
+python3 tools/verification/verify-license.py
 ```
 
 스크립트는 완료된 여덟 앱과 License·독립 MySQL·Kafka·Redis·MinIO를 실행한다.
@@ -75,7 +75,7 @@ License DB 유실 뒤 전량 재구축은 이번 범위가 아니다. 구 DB 유
 오류 재투입은 원래 eventId·키·헤더·본문을 유지하고 원인을 해결한 뒤 수행한다.
 지급 오류는 Payment FAILED나 자동 환불을 의미하지 않는다.
 
-전환 전에는 쓰기를 중지한 대상 DB에 [읽기 전용 점검 SQL](../scripts/license-merge-preflight.sql)을 실행한다.
+전환 전에는 쓰기를 중지한 대상 DB에 [읽기 전용 점검 SQL](../tools/migrations/license/license-merge-preflight.sql)을 실행한다.
 Order PENDING·PAID 중복, License 복수/누락/불일치 출처·Inbox가 있으면 자료 전환을 중단한다.
 이 SQL은 Order V10·License V4 자료용이다. 통합 후 새 지급 자료를 과거 license_purchase와 대조하는 도구가 아니다.
 미발행 OrderPaid Outbox와 Kafka 미소비·DLT·재투입 자료도 함께 확인한다.

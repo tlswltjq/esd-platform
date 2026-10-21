@@ -1,5 +1,8 @@
 # 중단·복구 시나리오 (R-01 ~ R-06)
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 **서버가 중단됐을 때 무엇이 보장되는가**를 시나리오로 고정하고, 각 시나리오에 테스트를 하나씩 붙였다.
 
 [chaos.md](chaos.md) 가 *"이번 회차에 이렇게 나왔다"* 라면 여기는 ***"다음에도 그래야 한다"*** 다.
@@ -277,7 +280,7 @@ $ docker inspect stove-apps-license-1 | grep -i stoptimeout
 ## 5. 남은 것
 
 - **R-06 은 CI 에 없다.** 스택을 정지시키는 태스크라 자체 호스트 러너에서 다른 잡과 겹치면
-  상대를 갈아엎는다. `scripts/remote.sh` 의 `assert_stack_free` 와 같은 보호가 먼저 필요하다.
+  상대를 갈아엎는다. `tools/remote/remote.sh` 의 `assert_stack_free` 와 같은 보호가 먼저 필요하다.
 - **결말 네 칸(`fulfilled`/`parked`/`refunded`/`inconsistent`)은 여전히 chaos.md 쪽에만 있다.**
   R-06 은 격리와 복구까지고, 주문 하나하나의 결말을 세는 것은 `run-scenario.sh` 의 일로 남겨 두었다 —
   그쪽은 부하가 필요하고, 부하가 필요한 판정은 인수 회차에 넣을 것이 아니다.

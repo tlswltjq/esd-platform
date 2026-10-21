@@ -1,5 +1,8 @@
 # 런북 — license 원장이 유실됐을 때
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../../tools/verification/README.md)를 사용한다.
+
+
 이 문서는 재작성 전 `PaymentCompleted`·구 license 테이블을 대상으로 한 참고 기록이다. [License MVP 계획](../license-mvp-plan.md)의 새 권한·구매 근거에 적용하는 복구 절차가 아니며, 해당 자료에 아래 삭제·재처리 명령을 적용하지 않는다.
 
 **대상 상황** `stove_license.license` 의 행이 사라졌다. 결제는 정상이었고 카프카에는

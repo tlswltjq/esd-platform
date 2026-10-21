@@ -1,5 +1,8 @@
 # 테스트 전략
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 무엇을 어느 층에서 검증하고, 왜 그 층인지 적는다.
 개별 결함 목록은 [defects.md](defects.md) 에 있다.
 
@@ -44,9 +47,10 @@ L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 
 시나리오와 판정 근거는 [resilience-scenarios.md](resilience-scenarios.md).
 **러너가 1대라 PR 마다가 아니라 통합 시점에 붙는 것**도 같은 줄의 판단이다.
 
-그 앞에 하나가 더 있는데, 테스트가 아니라 **배포의 일부**라 층으로 세지 않는다 —
-`scripts/stack-wait.sh` 의 게이트 14건이다. 데이터가 필요 없고 수 초에 끝나며
-`remote.sh stack up` 과 CI e2e 잡이 자동으로 부른다.
+현재 스택 상태 확인은 `python3 tools/verification/stack-status.py`로 수행한다.
+지정한 Compose 프로젝트의 필수 서비스와 초기화 작업만 검사하며 외부 PG·PG DB도 포함한다.
+헬스체크가 없는 서비스는 실행 여부만 확인하므로 기능 검증은
+`python3 tools/verification/verify-jib.py`의 격리 E2E로 별도 수행한다.
 
 ### 소스셋이 층을 강제한다
 
@@ -505,11 +509,11 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 
 - **컨슈머 층 파티션 증설 시나리오** — ArchUnit 으로 막을 수 없는 유일한 항목이라
   운영 절차로 남아 있다 ([event-ordering.md](event-ordering.md) 5절)
-- **장애 주입** — [scripts/chaos/](../scripts/chaos/) 가 부하 중에 장애를 넣고 주문별 결말을 센다.
+- **장애 주입** — [scripts/chaos/](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/chaos/) 가 부하 중에 장애를 넣고 주문별 결말을 센다.
   CI 에서는 돌리지 않는다(전체 스택과 수 분의 벽시계가 필요하다). 측정은 [chaos.md](chaos.md).
   **여기서 나온 결함은 계층 테스트로는 안 나온다** — Saga 보상·컨슈머 재시도·멱등 가드·DLT 는
   평상시에 아무 일도 하지 않아서, 경로가 성립하는 테스트로는 실행 자체가 되지 않는다
-- **부하 테스트** — [scripts/perf/](../scripts/perf/) 에 k6 시나리오와 릴레이 배수 하네스가 있다.
+- **부하 테스트** — [scripts/perf/](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/) 에 k6 시나리오와 릴레이 배수 하네스가 있다.
   CI 에서는 돌리지 않는다(실행 환경 편차가 커서 판정 기준으로 쓸 수 없다).
   측정 결과는 [performance.md](performance.md).
   **원격 전체 스택에서만 유효한 숫자가 나온다** — 랩탑 환경으로 잰 7장은 스스로 무효 선언됐고,

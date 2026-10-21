@@ -1,9 +1,12 @@
 # 장애 주입 측정 (2026-08-15)
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 부하를 건 채로 장애를 넣고 **복구 장치가 실제로 버티는지** 잰 기록이다.
 [performance.md](performance.md) 가 "얼마나 빠른가"라면 여기는 **"틀렸을 때 어떻게 틀리는가"**다.
 
-도구는 [scripts/chaos/](../scripts/chaos/), 결함은 [defects.md](defects.md) D-027 ~ D-030,
+도구는 [scripts/chaos/](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/chaos/), 결함은 [defects.md](defects.md) D-027 ~ D-030,
 복구 절차는 [runbooks/license-db-loss.md](runbooks/license-db-loss.md).
 
 **측정 규칙은 [measuring.md](measuring.md) 를 따른다** — 사전 확인, `env.txt`, 대조군,
@@ -334,7 +337,7 @@ scripts/chaos/fault.sh inject license-stopped   # 프로브: 응답 없음(000)
 
 ### 8-1. 도구 — 알람과 랙을 같은 타임라인에
 
-`scripts/chaos/watch-alerts.sh` 가 10초마다 `/api/v1/rules` 와 랙·커밋오프셋을 한 줄에 적는다.
+`tools/observability/watch-alerts.sh` 가 10초마다 `/api/v1/rules` 와 랙·커밋오프셋을 한 줄에 적는다.
 나눠 두면 "랙이 언제 올랐나"와 "알람이 언제 울렸나"를 눈으로 맞춰야 하고, **그 맞춤이 곧 재려던 값이다.**
 
 ### 8-2. 두 알람은 서로 다른 장애를 잡는다 — 그리고 어느 하나도 둘 다 잡지 못한다

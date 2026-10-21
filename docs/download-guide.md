@@ -13,7 +13,7 @@ Download는 본인의 상품 보유권과 현재 공개 빌드를 HTTP로 조회
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
 ./gradlew :apps:download:test :apps:download:integrationTest :apps:catalog:test :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1 --no-daemon
-python3 scripts/verify-download.py
+python3 tools/verification/verify-download.py
 ```
 
 MinIO 이미지는 Gradle 통합 테스트와 검증 스크립트가 자동 준비한다. `infra/minio`의 고정 소스를 Go 컨테이너에서 빌드하고 Jib으로 패키징한다.

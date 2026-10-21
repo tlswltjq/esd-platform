@@ -1,18 +1,18 @@
 # 개발 환경과 실행
 
-[문서 목록](README.md) · [전체 API 데모](api-demo.md) · [인증·권한 계약](security.md)
+[문서 목록](README.md) · [전체 흐름 검증](settlement-guide.md) · [인증·권한 계약](security.md)
 
-명령은 저장소 루트에서 실행한다. 전체 스택에는 여러 JVM과 저장소가 함께 올라가므로 Docker에 충분한 메모리를 할당한다. 자원이 부족하면 원격 실행 경로를 사용한다.
+명령은 저장소 루트에서 실행한다. 전체 스택에는 여러 JVM과 저장소가 함께 올라가므로 Docker에 충분한 메모리를 할당한다. 필요한 모듈별 격리 검증을 선택한다. 현재 개발·검증은 로컬 OrbStack에서 수행한다.
 
 ## 개발 환경과 테스트
 
-Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gradle`의 foojay 리졸버가 조달한다. Wrapper 실행용 JVM은 JDK 17 이상이 필요하다. 전체 스택·통합 테스트에는 Docker와 Compose가 필요하고, 자동 API 데모의 추가 조건은 [데모 준비](api-demo.md#full-demo)를 따른다.
+Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gradle`의 foojay 리졸버가 조달한다. Wrapper 실행용 JVM은 JDK 17 이상이 필요하다. 전체 스택·통합 테스트에는 Docker와 Compose가 필요하고, 전체 흐름 검증은 [Settlement 안내](settlement-guide.md)를 따른다.
 
 | 검증 | 명령 | 실행 조건 |
 |---|---|---|
 | 단위·어댑터·아키텍처 규칙 | `./gradlew test` | Docker 불필요 |
 | 실제 저장소·메시징 통합 | `./gradlew integrationTest` | Testcontainers용 Docker |
-| 전체 API 인수 검증 | `./gradlew :e2e:e2eTest` | 실행 중인 전체 스택과 테스트 인증 설정 |
+| 전체 구매·다운로드·정산 | `python3 tools/verification/verify-jib.py` | 로컬 OrbStack, 이미지 빌드 포함 |
 | 테스트 포함 빌드 | `./gradlew build` | Docker 필요 |
 
 macOS에서 Testcontainers가 Docker 소켓을 찾지 못하면 활성 컨텍스트의 값을 전달한다.
@@ -57,7 +57,7 @@ export CATALOG_SETTLEMENT_SERVICE_KEY="$(openssl rand -hex 32)"
 ```
 
 `up`은 `jibDockerBuild`로 업무 앱·외부 모의 PG·MinIO 이미지를 생성하고 인프라와 앱을 순서대로 시작한다. 앱은 health 성공을 확인하며 최대 세 개씩 시작하고 Store는 Catalog 다음에 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다.
-현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 scripts/verify-settlement.py`를 사용한다. [정산 실행 안내](settlement-guide.md)를 따른다.
+현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 tools/verification/verify-settlement.py`를 사용한다. [정산 실행 안내](settlement-guide.md)를 따른다.
 
 MinIO와 mc는 `:infra:minio:compileMinio`가 고정 커밋의 공식 소스를 Go 컨테이너에서 빌드하고 Jib이 Alpine 이미지에 패키징한다. 호스트에 Go를 설치할 필요는 없다. 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
 
@@ -81,23 +81,23 @@ Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실�
 
 설정을 바꾼 뒤에는 Gateway 라우트 테스트와 브라우저 인증을 확인한다. `/default-ui.css`의 응답 형식, 허용된 로컬 Origin에 대한 `OPTIONS /oauth2/token`, 로그인·승인 리다이렉트를 함께 본다. 관련 테스트는 `:apps:gateway:test --tests com.stove.gateway.GatewayRouteTest`다.
 
-## 원격 실행
+## 선택적 원격 관리 도구
 
 로컬에 `bash`, `ssh`, `rsync`가 필요하다. SSH 접속과 원격 실행 환경을 준비한 뒤 호스트 별칭을 로컬 Git 설정에 저장한다.
 
 ```bash
 git config stove.remote <ssh-별칭>
-./scripts/remote.sh test
-./scripts/remote.sh test :apps:order
-./scripts/remote.sh stack up
-./scripts/remote.sh gate
-./scripts/remote.sh e2e
-./scripts/remote.sh http GET catalog:8081/api/v1/products
-./scripts/remote.sh logs catalog -n 100 -g 승인
-./scripts/remote.sh status
+./tools/remote/remote.sh test
+./tools/remote/remote.sh test :apps:order
+./tools/remote/remote.sh stack up
+./tools/remote/remote.sh gate
+./tools/remote/remote.sh e2e
+./tools/remote/remote.sh http GET catalog:8081/api/v1/products
+./tools/remote/remote.sh logs catalog -n 100 -g 승인
+./tools/remote/remote.sh status
 ```
 
-[remote.sh](../scripts/remote.sh)는 rsync로 현재 작업본을 보내므로 커밋 전 변경도 검증한다. 원격 전체 데모와 인증 값 준비는 [API 데모](api-demo.md#full-demo)를 따른다. 테스트 개수·컨테이너 개수는 실행 결과와 현재 스크립트를 기준으로 확인한다.
+[remote.sh](../tools/remote/remote.sh)는 rsync로 현재 작업본을 보내므로 커밋 전 변경도 검증한다. 현재 작업 기준은 로컬 실행이다. 원격 도구는 기존 환경 관리용으로 보존한다. `e2e` 명령은 원격의 기존 이미지로 별도 격리 Jib 검증을 실행한다. 테스트 개수·컨테이너 개수는 실행 결과와 현재 스크립트를 기준으로 확인한다.
 
 ## 장애 확인과 재처리
 

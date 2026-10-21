@@ -1,5 +1,8 @@
 # 측정 방법론 — 숫자를 믿어도 되는지 먼저 정한다
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 **부하를 거는 것은 k6 열 줄이면 된다. 어려운 것은 나온 숫자가 틀렸을 때 그걸 알아채는 것이다.**
 
 이 리포는 그걸 비싸게 배웠다. [performance.md](performance.md) **7장은 통째로 무효 선언됐고**,
@@ -9,7 +12,7 @@
 아래 규칙은 전부 그런 사건에서 나왔다. 규칙마다 출처를 붙인다 —
 **근거 없는 규칙은 다음 사람이 안 지키기 때문이다.**
 
-측정 도구는 [scripts/perf/](../scripts/perf/), 결과와 판정은
+측정 도구는 [scripts/perf/](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/), 결과와 판정은
 [performance.md](performance.md) 에 있다.
 
 ---

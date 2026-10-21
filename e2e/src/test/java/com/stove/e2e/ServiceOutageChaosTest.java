@@ -105,7 +105,7 @@ class ServiceOutageChaosTest {
      * <p><b>예외로 두면 안 된다.</b> 이 장에서는 무응답이 오류가 아니라 <b>결과</b>다 —
      * 죽은 서비스는 응답하지 않는 것이 정상이고, 대조 서비스가 무응답이면 그건 장애가 번진 것이다.
      * 예외로 새어 나가면 그 둘이 같은 모양(스택트레이스)이 되어 판정문이 아무 말도 못 한다.
-     * 셸이 {@code 000} 과 {@code 404} 를 갈라 적던 자리와 같다({@code scripts/stack-wait.sh} 의 {@code describe}).
+     * 셸이 {@code 000} 과 {@code 404} 를 갈라 적던 자리와 같다({@code 과거 stack-wait.sh} 의 {@code describe}).
      */
     private static int status(E2eClient app) {
         try {

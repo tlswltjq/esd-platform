@@ -237,7 +237,7 @@ Download 전용 신규 마이그레이션은 없다. 공유 DB 전환·자료 �
 | 회귀·산출물 | 완료 모듈의 관련 단위/통합·아키텍처·공개 OpenAPI, 모든 앱/E2E 소스 컴파일, Download 운영 JAR의 구 구현·운영 의존성 제거 |
 
 Download 독립 검증은 License·Catalog HTTP 픽스처와 실제 MinIO를 사용한다. 사용자의 정상 경로는 픽스처 통과와 구분해
-`scripts/verify-download.py`·`DownloadPurchaseFlowTest`·`:e2e:downloadE2eTest`를 새로 작성한다.
+`tools/verification/verify-download.py`·`DownloadPurchaseFlowTest`·`:e2e:downloadE2eTest`를 새로 작성한다.
 실제 스택은 Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download **열 앱**과
 MySQL·Redis·Kafka·MinIO로 구성하며 MongoDB·Settlement를 실행하지 않는다.
 
@@ -261,7 +261,7 @@ MySQL·Redis·Kafka·MinIO로 구성하며 MongoDB·Settlement를 실행하지 �
 ```bash
 # 로컬 저장소에서 OrbStack을 사용해 실행
 ./gradlew :apps:download:test :apps:download:integrationTest :apps:catalog:test :apps:catalog:integrationTest :apps:gateway:test :apps:gateway:integrationTest :apps:license:test :apps:license:integrationTest verifyCommonRuntimeDependencies -Pstove.infraTest.maxParallel=1 --no-daemon
-python3 scripts/verify-download.py
+python3 tools/verification/verify-download.py
 ```
 
 OpenAPI 스냅샷은 OrbStack에서 생성·회수하고 갱신 옵션 없이 재검증한다.
@@ -304,7 +304,7 @@ Catalog 내부 API·DTO는 기존 공개 명세에 추가 노출되지 않는다
 
 ### 실제 열 앱 15단계
 
-`python3 scripts/verify-download.py`를 로컬 OrbStack에서 실행했다.
+`python3 tools/verification/verify-download.py`를 로컬 OrbStack에서 실행했다.
 각 단계는 JUnit 검사 한 건이며 **총 15건, 실패·오류·건너뜀 0건**이다.
 
 | 단계 | 확인 결과 |

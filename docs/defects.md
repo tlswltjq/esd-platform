@@ -1,5 +1,8 @@
 # 결함 대장
 
+> 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
+
+
 테스트로 재현에 성공한 결함만 적는다. **추측은 넣지 않는다** —
 모든 항목에 실패하는 테스트가 하나씩 붙어 있고, 그 테스트가 통과하면 항목을 닫는다.
 
@@ -1384,7 +1387,7 @@ expected: 5000L
 
 **틀린 것은 지표가 아니라 그 지표를 판정 근거로 고른 선택이다.** 그 선택이 세 군데 박혀 있었다.
 
-- `scripts/perf/collect-consumer.sh` 가 이 값을 `lag` 컬럼으로 뽑았다
+- `tools/observability/collect-consumer.sh` 가 이 값을 `lag` 컬럼으로 뽑았다
 - [performance.md](performance.md) 11-1 이 이 값을 **랙의 주 판정 수단**으로 명시했다
 - 11-2 는 그 값으로 "랙 0" 을 다섯 컨슈머에 대해 보고했다 — 그것이 근거가 되지 못한다
 
@@ -1409,7 +1412,7 @@ expected: 5000L
 
 | | |
 |---|---|
-| 측정 | `scripts/perf/collect-lag.sh` — `kafka-consumer-groups.sh --describe` 를 주기적으로 |
+| 측정 | `tools/observability/collect-lag.sh` — `kafka-consumer-groups.sh --describe` 를 주기적으로 |
 | 상시·알람 | `docker-compose.yml` 의 `kafka-exporter` → Prometheus `kafka-exporter` 잡 |
 | 알람 | `infra/prometheus/alerts.yml` 의 `stove-consumer` — `ConsumerLagGrowing` · `ConsumerStalled` |
 | 표기 | `collect-consumer.sh` 의 컬럼을 `lag` → `lag_reported` 로. 계속 긁되 판정에는 쓰지 않는다 |
