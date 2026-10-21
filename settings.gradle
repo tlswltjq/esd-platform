@@ -46,3 +46,6 @@ include 'apps:settlement'
 
 // 외부 공급자 검증용 독립 실행 앱
 include 'simulators:mock-pg'
+
+// 로컬 S3 검증용 MinIO/mc: 고정 Go 소스 빌드와 Jib 이미지 패키징.
+include 'infra:minio'

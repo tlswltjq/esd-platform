@@ -355,7 +355,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 
 **[확인됨]** `SettlementRecordService` 는 원장의 귀속 월을 `YearMonth.from(LocalDate.now())` 로 정한다(`:44`, `:73`). 이벤트에는 `occurredAt` 이 있지만 쓰지 않는다.
 8월 31일 23:59 에 승인된 결제가 소비 지연으로 9월 1일에 처리되면 9월 매출이 된다. 금액이 사라지지는 않지만(D-001 의 누적 반영) 귀속 월과 세금계산서의 월이 달라진다.
-`LocalDate.now()` 는 JVM 시간대를 따르고, 컨테이너 이미지가 `-Duser.timezone=Asia/Seoul` 로 고정한다 [확인됨 — Dockerfile]. 컨테이너 밖에서 띄우면 머신 시간대를 따른다.
+`LocalDate.now()` 는 JVM 시간대를 따르고, 컨테이너 이미지가 `-Duser.timezone=Asia/Seoul` 로 고정한다 [확인됨 — gradle/jib.gradle]. 컨테이너 밖에서 띄우면 머신 시간대를 따른다.
 
 **[추가 확인 필요]** 결제 시각과 처리 시각 중 무엇을 귀속 기준으로 할지는 회계 정책이다. 결제 시각이라면 `PaymentCompleted` 의 `occurredAt` 을 쓰고 시간대를 명시적으로 변환한다.
 

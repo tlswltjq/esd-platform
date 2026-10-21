@@ -26,6 +26,7 @@ Auth·Gateway를 직접 실행 중이라면 아래 인프라를 준비하고 Stu
 첫 MinIO 소스 빌드는 이미지 준비에 시간이 걸린다.
 
 ~~~bash
+./gradlew :infra:minio:jibDockerBuild
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d mysql mysql-bootstrap kafka redis minio
 
 export JWT_ISSUER_URI=http://localhost:8080
@@ -115,8 +116,6 @@ curl -sS "$BASE/api/v1/studio/projects/$PROJECT_ID/release-requests" -H "Authori
 ~~~bash
 ./gradlew :apps:auth:test :apps:gateway:test :apps:studio:test :common:kafka:test
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
-docker build -t stove/minio:RELEASE.2025-04-22T22-12-26Z-local infra/minio
-export STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local
 ./gradlew :apps:studio:integrationTest
 python3 scripts/verify-studio.py
 ~~~

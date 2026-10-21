@@ -164,7 +164,7 @@ kill %1 %2 %3
 7장이 무효였던 것을 알아챈 것도 대조군 덕분이었다.
 
 ```bash
-docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
+docker compose -f docker-compose.apps.yml -f docker-compose.apps.local.yml \
                -f scripts/perf/relay-off.override.yml up -d --force-recreate order
 ```
 

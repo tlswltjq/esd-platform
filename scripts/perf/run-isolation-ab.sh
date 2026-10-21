@@ -45,7 +45,7 @@ WARMUP="${WARMUP:-30s}"         # 재기동 직후 JIT·풀 확보 구간을 결
 NET="${PERF_NETWORK:-stove_default}"
 MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root1234}   # docker-compose.yml 의 개발용 기본값 (scripts/chaos 와 같은 규약)
 OUT="runs/r1-isolation/$(date -u +%Y%m%dT%H%M%SZ)-${LABEL}"
-COMPOSE=(-f docker-compose.apps.yml -f docker-compose.apps.ci.yml -f docker-compose.apps.e2e.yml)
+COMPOSE=(-f docker-compose.apps.yml -f docker-compose.apps.local.yml)
 
 say() { printf '\033[35m▪\033[0m [%s] %s\n' "$LABEL" "$*"; }
 die() { echo "[$LABEL] $* — 중단. 조건이 불확실한 회차의 숫자는 쓸 수 없다" >&2; exit 1; }

@@ -1,5 +1,7 @@
 # Dockerfile과 Jib의 OCI 비교
 
+2026-10-19의 과거 비교 기록이다. 2026-10-21부터 기본 실행은 Jib을 사용한다. 현재 실행 방법과 전환 검증은 [개발 환경](getting-started.md)과 [제거 기록](dockerfile-removal-plan.md)을 따른다. 비교 도구는 기준 `2ccad87`·Jib 설정 `bed7c6b`에 고정되어 현재 소스의 Dockerfile에 의존하지 않는다.
+
 ## 대상과 통제 조건
 
 - 기준 코드: `2ccad87cc39e7ec655fc58f12aec4cf36ac3a335`의 수정 없는 Git 스냅샷.
@@ -71,7 +73,7 @@ python3 scripts/image-benchmark/report.py runs/image-benchmark/20261019T125630Z
 
 마지막 `deploy-jib`는 기능·부하 검증을 마친 Jib 스택을 남긴다. 같은 세션을 종료할 때는 `python3 scripts/image-benchmark.py cleanup`을 사용한다. 이 명령은 세션의 Compose 프로젝트와 소유 라벨이 일치하는 레지스트리만 정리하며 소스·측정 자료·다른 프로젝트의 데이터는 보존한다. 다른 측정을 시작하기 전에는 기존 실험 세션의 포트를 해제한다.
 
-## 일반 실행에서 Jib 사용
+## 당시 일반 실행에서 Jib 사용
 
 기존 Dockerfile 경로와 별도로 사용할 수 있게 추가했다. 실행 모듈만 Jib을 적용하며 공통 라이브러리·E2E에는 적용하지 않는다.
 
@@ -138,7 +140,7 @@ compose=(docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml
 
 기계 판독용 결과는 [jib-oci-results.json](jib-oci-results.json), 회차별 JSON·요청 1건 단위 지연·2초 간격 cgroup 샘플·원문 로그는 위 세션의 Git 제외 원자료에 있다. `source.json`에 기준 Git 아카이브와 Jib 설정 세 파일의 SHA-256을 보존했다.
 
-## 현재 OCI 배포
+## 당시 OCI 배포
 
 - Jib 애플리케이션 컨테이너 **12개가 모두 healthy**, 재시작 0회다.
 - 실행 중인 각 컨테이너의 이미지 ID를 실제 registry manifest의 config digest와 대조했다. UID/GID `100:101`과 루프백 전용 포트 바인딩도 확인했다.

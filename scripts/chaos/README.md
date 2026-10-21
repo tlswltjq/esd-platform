@@ -29,8 +29,7 @@ Saga 보상, 컨슈머 재시도, 멱등 가드, DLT. 그 넷은 평상시에 �
 전체 스택이 떠 있어야 한다. 게이트가 통과해야 시작한다.
 
 ```bash
-docker compose up -d
-docker compose -f docker-compose.apps.yml up -d --build
+./scripts/local-stack.sh up
 bash scripts/stack-wait.sh      # 14건 전부 통과해야 한다
 ```
 

@@ -12,12 +12,11 @@ Download는 본인의 상품 보유권과 현재 공개 빌드를 HTTP로 조회
 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
-export STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local
 ./gradlew :apps:download:test :apps:download:integrationTest :apps:catalog:test :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1 --no-daemon
 python3 scripts/verify-download.py
 ```
 
-로컬 MinIO 이미지가 없으면 검증 스크립트가 기존 `infra/minio`의 지정 릴리즈 소스로 빌드한다.
+MinIO 이미지는 Gradle 통합 테스트와 검증 스크립트가 자동 준비한다. `infra/minio`의 고정 소스를 Go 컨테이너에서 빌드하고 Jib으로 패키징한다.
 단위 검사는 실제 HTTP 대역의 요청·응답·오류를, 통합 검사는 실제 JWT·MinIO 파일·읽기 전용 계정을 사용한다.
 통합 OpenAPI 생성은 최초 계약 갱신 때만 `-Dstove.openapi.update=true`를 사용하고 이후 갱신 옵션 없이 대조한다.
 

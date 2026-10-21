@@ -2,40 +2,26 @@
 set -euo pipefail
 
 # 로컬 브라우저 실습용 단일 진입점.
-# 인프라와 앱 compose 파일은 CI 격리를 위해 내부적으로 분리되어 있지만,
+# 인프라와 앱 compose 파일은 실행 수명과 데이터 볼륨을 구분하지만,
 # 개발자는 이 스크립트로 하나의 스택처럼 올리고 내린다.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.local.yml)
-APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.e2e.yml)
-DEMO_INFRA=(docker compose -p stove -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml)
-DEMO_APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.ci.yml -f docker-compose.apps.e2e.yml)
+APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.apps.local.yml)
 
 case "${1:-up}" in
-  up)
-    "${INFRA[@]}" up -d
-    # Dockerfile은 이미 생성된 bootJar를 COPY하므로 Compose의 --build만으로는
-    # 소스 변경이 이미지에 들어가지 않는다. 한 진입점에서 항상 JAR도 갱신한다.
-    ./gradlew bootJar -x test -x integrationTest --no-daemon
-    "${APPS[@]}" up -d --build
+  up|demo-up)
+    ./gradlew jibDockerBuild --no-daemon
+    "${INFRA[@]}" up -d --no-build
+    "${INFRA[@]}" wait mysql-bootstrap
+    bash scripts/start-apps.sh "${APPS[@]:2}"
+    if [[ "${1:-up}" == demo-up ]]; then
+      bash scripts/stack-wait.sh
+    fi
     echo "로컬 스택이 시작되었습니다: http://127.0.0.1:18080/swagger-ui.html"
     ;;
-  demo-up)
-    "${DEMO_INFRA[@]}" up -d
-    ./gradlew bootJar -x test -x integrationTest --no-daemon
-    "${DEMO_APPS[@]}" up -d --build
-    bash scripts/stack-wait.sh
-    ;;
-  demo-down)
-    "${DEMO_APPS[@]}" down
-    "${DEMO_INFRA[@]}" down
-    ;;
-  demo-status)
-    "${DEMO_INFRA[@]}" ps
-    "${DEMO_APPS[@]}" ps
-    ;;
-  down)
+  down|demo-down)
     "${APPS[@]}" down
     "${INFRA[@]}" down
     ;;
@@ -43,7 +29,7 @@ case "${1:-up}" in
     "$0" down
     "$0" up
     ;;
-  ps|status)
+  ps|status|demo-status)
     "${INFRA[@]}" ps
     "${APPS[@]}" ps
     ;;

@@ -1,8 +1,9 @@
 # 10개 도메인 서비스 + 게이트웨이를 컨테이너로 띄운다.
 #
-#   ./gradlew build -x test                     # bootJar 생성
-#   docker compose up -d                        # 인프라
-#   docker compose -f docker-compose.apps.yml up -d --build
+#   ./gradlew jibDockerBuild                    # 앱·MinIO 이미지 생성
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#   bash scripts/start-apps.sh -f docker-compose.apps.yml -f docker-compose.apps.local.yml
+# 기본 정의는 포트를 열지 않는다. 로컬·E2E의 호스트 접속은 local 오버라이드로 제공한다.
 #
 # 인프라(docker-compose.yml)가 만든 stove_default 네트워크에 합류한다.
 name: stove-apps
@@ -21,6 +22,12 @@ x-common-env: &common-env
   JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
   JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
 
+x-app-health: &app-health
+  interval: 15s
+  timeout: 3s
+  start_period: 40s
+  retries: 5
+
 x-app: &app
   restart: unless-stopped
   networks:
@@ -35,11 +42,10 @@ x-app: &app
 services:
   gateway:
     <<: *app
-    build:
-      context: .
-      dockerfile: apps/gateway/Dockerfile
-    image: stove/gateway
-    ports: ["8080:8080"]
+    image: ${STOVE_JIB_REGISTRY:-stove}/gateway:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8080/actuator/health | grep -q UP || exit 1"]
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -61,9 +67,10 @@ services:
 
   auth:
     <<: *app
-    build: { context: ., dockerfile: apps/auth/Dockerfile }
-    image: stove/auth
-    ports: ["8091:8091"]
+    image: ${STOVE_JIB_REGISTRY:-stove}/auth:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
     environment:
       <<: *common-env
       AUTH_ISSUER: ${AUTH_ISSUER:-http://localhost:8091}
@@ -76,8 +83,10 @@ services:
 
   studio:
     <<: *app
-    build: { context: ., dockerfile: apps/studio/Dockerfile }
-    image: stove/studio
+    image: ${STOVE_JIB_REGISTRY:-stove}/studio:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8085/actuator/health | grep -q UP || exit 1"]
     expose: ["8085"]
     environment:
       <<: *common-env
@@ -91,8 +100,10 @@ services:
 
   review:
     <<: *app
-    build: { context: ., dockerfile: apps/review/Dockerfile }
-    image: stove/review
+    image: ${STOVE_JIB_REGISTRY:-stove}/review:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8086/actuator/health | grep -q UP || exit 1"]
     expose: ["8086"]
     environment:
       <<: *common-env
@@ -105,8 +116,10 @@ services:
 
   catalog:
     <<: *app
-    build: { context: ., dockerfile: apps/catalog/Dockerfile }
-    image: stove/catalog
+    image: ${STOVE_JIB_REGISTRY:-stove}/catalog:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8081/actuator/health | grep -q UP || exit 1"]
     expose: ["8081"]
     environment:
       <<: *common-env
@@ -116,8 +129,10 @@ services:
 
   store:
     <<: *app
-    build: { context: ., dockerfile: apps/store/Dockerfile }
-    image: stove/store
+    image: ${STOVE_JIB_REGISTRY:-stove}/store:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8087/actuator/health | grep -q UP || exit 1"]
     expose: ["8087"]
     environment:
       <<: *common-env
@@ -125,8 +140,10 @@ services:
 
   order:
     <<: *app
-    build: { context: ., dockerfile: apps/order/Dockerfile }
-    image: stove/order
+    image: ${STOVE_JIB_REGISTRY:-stove}/order:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8082/actuator/health | grep -q UP || exit 1"]
     expose: ["8082"]
     environment:
       <<: *common-env
@@ -134,8 +151,10 @@ services:
 
   payment:
     <<: *app
-    build: { context: ., dockerfile: apps/payment/Dockerfile }
-    image: stove/payment
+    image: ${STOVE_JIB_REGISTRY:-stove}/payment:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8083/actuator/health | grep -q UP || exit 1"]
     expose: ["8083"]
     environment:
       <<: *common-env
@@ -144,15 +163,19 @@ services:
 
   license:
     <<: *app
-    build: { context: ., dockerfile: apps/license/Dockerfile }
-    image: stove/license
+    image: ${STOVE_JIB_REGISTRY:-stove}/license:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8084/actuator/health | grep -q UP || exit 1"]
     expose: ["8084"]
     environment: *common-env
 
   download:
     <<: *app
-    build: { context: ., dockerfile: apps/download/Dockerfile }
-    image: stove/download
+    image: ${STOVE_JIB_REGISTRY:-stove}/download:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8088/actuator/health | grep -q UP || exit 1"]
     expose: ["8088"]
     environment:
       JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
@@ -170,8 +193,10 @@ services:
 
   settlement:
     <<: *app
-    build: { context: ., dockerfile: apps/settlement/Dockerfile }
-    image: stove/settlement
+    image: ${STOVE_JIB_REGISTRY:-stove}/settlement:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8089/actuator/health | grep -q UP || exit 1"]
     expose: ["8089"]
     environment:
       <<: *common-env
@@ -182,8 +207,10 @@ services:
 
   mock-pg:
     <<: *app
-    build: { context: ., dockerfile: simulators/mock-pg/Dockerfile }
-    image: stove/mock-pg
+    image: ${STOVE_JIB_REGISTRY:-stove}/mock-pg:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8092/actuator/health | grep -q UP || exit 1"]
     expose: ["8092"]
     networks: [stove, mock-pg-private]
     depends_on:

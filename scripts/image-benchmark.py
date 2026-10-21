@@ -11,6 +11,9 @@ import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BASELINE_REVISION = "2ccad87cc39e7ec655fc58f12aec4cf36ac3a335"
+JIB_REVISION = "bed7c6b25799de1995ce2c25a910b36a377a5584"
+JIB_CONFIGURATION = ["build.gradle", "gradle/jib.gradle", "docker-compose.apps.jib.yml"]
 INVENTORY = r'''
 import json, os, platform, shutil, subprocess
 def capture(args):
@@ -48,7 +51,7 @@ def main():
     if args.command == "prepare":
         run_id = args.run or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         state = {"run_id": run_id, "remote": "stove/image-benchmark-" + run_id,
-                 "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()}
+                 "revision": BASELINE_REVISION, "jib_revision": JIB_REVISION}
         state_file.write_text(json.dumps(state, indent=2))
     else:
         state = json.loads(state_file.read_text())
@@ -66,14 +69,18 @@ def main():
         subprocess.run(["rsync", "-az", str(archive), str(worker), host + ":" + remote + "/"], check=True)
         remote_run(["python3", remote + "/worker.py", "prepare", remote])
     elif args.command == "overlay":
-        for relative in ["build.gradle", "gradle/jib.gradle", "docker-compose.apps.jib.yml"]:
-            path = ROOT / relative
-            if path.exists():
-                subprocess.run(["rsync", "-az", str(path), host + ":" + remote + "/jib/" + relative], check=True)
+        jib_revision = state.get("jib_revision", JIB_REVISION)
+        historical = local / "historical-jib"
+        for relative in JIB_CONFIGURATION:
+            path = historical / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(subprocess.check_output(["git", "show", jib_revision + ":" + relative], cwd=ROOT))
+            subprocess.run(["rsync", "-az", str(path), host + ":" + remote + "/jib/" + relative], check=True)
         subprocess.run(["rsync", "-az", str(worker), host + ":" + remote + "/worker.py"], check=True)
-        metadata = {"revision": state["revision"], "baseline_archive_sha256": hashlib.sha256((local / "baseline.tar").read_bytes()).hexdigest(),
-                    "jib_configuration_sha256": {relative: hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
-                        for relative in ["build.gradle", "gradle/jib.gradle", "docker-compose.apps.jib.yml"]}}
+        metadata = {"revision": state["revision"], "jib_revision": jib_revision,
+                    "baseline_archive_sha256": hashlib.sha256((local / "baseline.tar").read_bytes()).hexdigest(),
+                    "jib_configuration_sha256": {relative: hashlib.sha256((historical / relative).read_bytes()).hexdigest()
+                        for relative in JIB_CONFIGURATION}}
         metadata_file = local / "source.json"
         metadata_file.write_text(json.dumps(metadata, indent=2))
         subprocess.run(["rsync", "-az", str(metadata_file), host + ":" + remote + "/results/source.json"], check=True)

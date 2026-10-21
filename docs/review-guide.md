@@ -98,7 +98,7 @@ python3 scripts/verify-review.py
 ~~~
 
 Testcontainers가 Docker 소켓을 자동으로 찾지 못하는 환경에서는 현재 Docker context의 소켓을 DOCKER_HOST로 지정한다.
-공개 MinIO 이미지 대신 동일 릴리즈의 로컬 이미지를 사용하려면 STOVE_TEST_MINIO_IMAGE를 설정한다.
+MinIO는 기본적으로 고정 소스의 로컬 Jib 이미지를 자동 준비한다. 사전 공급 이미지는 STOVE_TEST_MINIO_IMAGE로 지정한다.
 
 새 접수 그룹은 review-project이며 Studio의 ProjectReviewRequested만 처리한다.
 구 이벤트와 구 심사 데이터는 새 요청에 자동 연결하지 않는다.

@@ -1,0 +1,71 @@
+plugins {
+    id 'com.google.cloud.tools.jib'
+}
+
+def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
+        System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
+def registry = providers.gradleProperty('stove.jib.registry')
+        .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
+def suppliedImage = providers.environmentVariable('STOVE_MINIO_IMAGE')
+        .map { !it.isBlank() }.getOrElse(false)
+def rootfs = layout.buildDirectory.dir('rootfs')
+def goModules = layout.buildDirectory.dir('go-modules')
+def goCache = layout.buildDirectory.dir('go-cache')
+def builderImage = providers.gradleProperty('stove.minio.builderImage').getOrElse('golang:1.24-alpine')
+
+tasks.register('compileMinio', Exec) {
+    group = 'build'
+    description = '고정 MinIO/mc 소스를 Go 컨테이너에서 Linux 바이너리로 빌드한다'
+    inputs.file('compile.sh')
+    inputs.property('architecture', targetArchitecture)
+    inputs.property('builderImage', builderImage)
+    outputs.dir(rootfs)
+    onlyIf { !suppliedImage }
+    doFirst {
+        [rootfs, goModules, goCache].each { it.get().asFile.mkdirs() }
+    }
+    commandLine 'docker', 'run', '--rm',
+            '--mount', "type=bind,source=${projectDir}/compile.sh,target=/compile.sh,readonly",
+            '--mount', "type=bind,source=${rootfs.get().asFile},target=/out",
+            '--mount', "type=bind,source=${goModules.get().asFile},target=/go/pkg/mod",
+            '--mount', "type=bind,source=${goCache.get().asFile},target=/root/.cache/go-build",
+            '--env', "GOARCH=${targetArchitecture}", builderImage, 'sh', '/compile.sh'
+}
+
+jib {
+    from {
+        image = providers.gradleProperty('stove.minio.baseImage').getOrElse('alpine:3.21')
+        platforms {
+            platform {
+                architecture = targetArchitecture
+                os = 'linux'
+            }
+        }
+    }
+    to {
+        image = providers.gradleProperty('stove.minio.image')
+                .getOrElse("${registry}/minio:RELEASE.2025-04-22T22-12-26Z-local")
+    }
+    container {
+        entrypoint = ['/usr/bin/minio']
+        ports = ['9000', '9001']
+        creationTime = 'EPOCH'
+    }
+    extraDirectories {
+        paths {
+            path {
+                from = rootfs
+                into = '/'
+            }
+        }
+        permissions = ['/usr/bin/minio': '755', '/usr/bin/mc': '755']
+    }
+}
+
+['jib', 'jibDockerBuild', 'jibBuildTar'].each { name ->
+    tasks.named(name) {
+        onlyIf { !suppliedImage }
+        dependsOn tasks.named('compileMinio')
+    }
+}
+tasks.named('jar') { enabled = false }

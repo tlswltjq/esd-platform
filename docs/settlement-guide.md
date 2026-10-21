@@ -18,6 +18,10 @@ python3 scripts/verify-settlement.py
 완료·실패 시 해당 실행의 프로세스·컨테이너·볼륨을 정리한다. 공유 스택과 볼륨은 사용하지 않는다.
 `SETTLEMENT_TEST_PORT_OFFSET`으로 업무 앱 포트 범위를 변경할 수 있다. PG와 인프라 포트는 빈 포트를 선택한다.
 
+기본 Compose와 Jib 이미지의 컨테이너 배포를 확인하려면 `python3 scripts/verify-jib.py`를 실행한다.
+전용 네트워크·DB·포트에서 12개 앱의 health·사용자·JVM 옵션과 출시·구매·ZIP 다운로드·배분·PG 수령·정상 종료를 검증한다.
+완료 후 해당 스택만 정리하고 `runs/jib-validation-*`에 로그와 단계별 JUnit 결과를 보존한다.
+
 직접 단위·통합 검사를 실행할 때는 Testcontainers에 OrbStack 주소를 전달한다.
 
 ```sh

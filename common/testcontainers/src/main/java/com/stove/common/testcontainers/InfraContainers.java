@@ -21,11 +21,18 @@ public final class InfraContainers {
     private InfraContainers() {
     }
 
-    /** 공개 레지스트리가 불가한 환경에서는 같은 릴리즈의 로컬 소스 빌드를 선택한다. */
+    /** 기본 이미지는 Gradle이 준비하는 고정 MinIO/mc 릴리즈의 Jib 이미지다. */
     public static DockerImageName minioImage() {
         String image = System.getenv("STOVE_TEST_MINIO_IMAGE");
         if (image == null || image.isBlank()) {
-            image = "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z";
+            image = System.getenv("STOVE_MINIO_IMAGE");
+        }
+        if (image == null || image.isBlank()) {
+            String registry = System.getenv("STOVE_JIB_REGISTRY");
+            if (registry == null || registry.isBlank()) {
+                registry = "stove";
+            }
+            image = registry + "/minio:RELEASE.2025-04-22T22-12-26Z-local";
         }
         return DockerImageName.parse(image).asCompatibleSubstituteFor("minio/minio");
     }

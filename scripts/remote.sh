@@ -61,13 +61,9 @@ EOF
 fi
 
 NET=stove_default
-INFRA=(-f docker-compose.yml      -f docker-compose.ci.yml -f docker-compose.e2e.yml)
-# 앱 오버라이드가 셋이고 **순서가 의미를 가진다** — ci 가 ports 를 !reset 으로 지운 뒤에
-# e2e 가 127.0.0.1:1808X 로 다시 연다. 반대로 놓으면 조용히 닫힌다(decisions.md 21번).
-#
-# 원격 스택은 항상 루프백 포트를 열어 둔다. `remote.sh e2e` 가 그 포트로 붙고,
-# 열려 있어도 호스트 밖에서는 닿지 않으므로 ci 오버라이드의 근거를 건드리지 않는다.
-APPS=( -f docker-compose.apps.yml -f docker-compose.apps.ci.yml -f docker-compose.apps.e2e.yml)
+INFRA=(-f docker-compose.yml -f docker-compose.local.yml)
+# 기본 정의는 포트를 열지 않는다. 호스트 JVM의 E2E를 위해 루프백 오버라이드를 적용한다.
+APPS=(-f docker-compose.apps.yml -f docker-compose.apps.local.yml)
 
 say()  { printf '\033[36m▸\033[0m %s\n' "$*"; }
 die()  { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
@@ -75,8 +71,7 @@ die()  { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 # 원격에서 명령을 돈다. 항상 원격 작업 디렉터리에서 시작한다.
 rexec() { ssh -o ConnectTimeout=10 "$REMOTE" "cd '$RDIR' && $*"; }
 
-# 컨테이너 네트워크 안에서 curl 을 돈다. 호스트 포트를 열지 않기 때문이다
-# (docker-compose.ci.yml 의 주석 참고).
+# 컨테이너 네트워크 안에서 서비스 이름과 내부 포트로 curl을 실행한다.
 rcurl() { ssh -o ConnectTimeout=10 "$REMOTE" \
     "docker run --rm --network $NET curlimages/curl:latest -s $*"; }
 
@@ -172,15 +167,14 @@ do_test() {
 # 이름을 고정하고 있어 두 벌이 공존할 수 없다. 그래서 `stack up` 은 남의 것을 갈아엎을 수
 # 있는 명령이고, 아래 두 검사가 그 자리를 지킨다.
 
-# 앱 이미지는 미리 만들어진 jar 를 복사할 뿐이다(apps/*/Dockerfile).
-# `docker compose --build` 는 `docker build` 만 부르므로 **Gradle 을 돌리지 않는다.**
-# do_sync 는 `build/` 를 제외하니(캐시 보존) 원격에는 지난번 jar 가 남아 있고,
-# 그것이 그대로 이미지가 된다 — **sync 한 코드가 아닌 것이 조용히 뜬다.**
-# 실제로 한 번 밟았다: V7 마이그레이션이 없는 8일 전 jar 가 떠서 스케줄러 검증이 무효였다.
-# Flyway 경고가 우연히 잡아 줬을 뿐, 마이그레이션 없는 변경이었으면 못 봤다.
-build_jars() {
-    say "bootJar (이미지에 들어갈 jar 를 먼저 만든다)"
-    rexec "./gradlew bootJar --console=plain" || die "bootJar 실패 — 이미지를 만들지 않는다"
+# 이미지 생성은 Jib이 담당하고 Compose는 생성된 이미지만 실행한다.
+build_images() {
+    say "Jib (앱 12개와 MinIO 이미지 생성)"
+    rexec "./gradlew jibDockerBuild --console=plain" || die "Jib 실패 — 앱을 기동하지 않는다"
+}
+
+prepare_minio() {
+    rexec "./gradlew :infra:minio:jibDockerBuild --console=plain" || die "MinIO 이미지 생성 실패"
 }
 
 wait_for_mysql_bootstrap() {
@@ -228,13 +222,13 @@ do_stack() {
             [ "${STOVE_FORCE_STACK:-0}" = 1 ] || assert_stack_free
             do_sync
             case "$target" in
-                infra) say "인프라 12종";       rexec "docker compose ${INFRA[*]} up -d"; wait_for_mysql_bootstrap ;;
-                apps)  build_jars; say "앱 11종"; rexec "docker compose ${APPS[*]} up -d --build" ;;
-                all)   say "인프라 + 앱 23종"
+                infra) prepare_minio; say "인프라 12종";       rexec "docker compose ${INFRA[*]} up -d"; wait_for_mysql_bootstrap ;;
+                apps)  build_images; say "앱 12종"; rexec "bash scripts/start-apps.sh ${APPS[*]}" ;;
+                all)   build_images
+                       say "인프라 + 앱 23종"
                        rexec "docker compose ${INFRA[*]} up -d" || die "인프라 기동 실패"
                        wait_for_mysql_bootstrap
-                       build_jars
-                       rexec "docker compose ${APPS[*]} up -d --build" ;;
+                       rexec "bash scripts/start-apps.sh ${APPS[*]}" ;;
             esac
             # 게이트가 막으면 `stack up` 도 실패다. 뜬 것과 서비스 가능한 것은 다르다.
             rexec "bash scripts/stack-wait.sh" || die "게이트 불통과 — 스택이 서비스 가능한 상태가 아니다"

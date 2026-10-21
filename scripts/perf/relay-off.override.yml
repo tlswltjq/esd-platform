@@ -1,6 +1,6 @@
 # 릴레이를 끈 대조군. 측정이 유효한지 판정하는 데 쓴다.
 #
-#   docker compose -f docker-compose.apps.yml -f docker-compose.apps.ci.yml \
+#   docker compose -f docker-compose.apps.yml -f docker-compose.apps.local.yml \
 #                  -f scripts/perf/relay-off.override.yml up -d --force-recreate order
 #
 # 왜 이게 필요한가 — 릴레이를 **완전히 끄면** 쓰기 경로에서 Outbox 발행 비용이 사라지므로

@@ -21,7 +21,7 @@ import org.yaml.snakeyaml.Yaml;
  * 시나리오 R-01 — <b>배포로 프로세스가 내려갈 때 진행 중이던 요청은 어떻게 되는가.</b>
  *
  * <p>이 저장소에서 서버가 중단되는 가장 흔한 사건은 장애가 아니라 <b>배포</b>다.
- * {@code docker compose -f docker-compose.apps.yml up -d --build} 한 줄이 앱 10종을 갈아끼우고,
+ * {@code docker compose -f docker-compose.apps.yml up -d --no-build} 한 줄이 앱을 갈아끼우고,
  * 그 순간 각 컨테이너는 SIGTERM 을 받는다. 그때 진행 중이던 요청이 끊기면
  * 사용자에게는 장애와 구분되지 않는다 — 그리고 결제 콜백이 그 요청일 수 있다.
  *
@@ -131,6 +131,47 @@ class DeploymentShutdownContractTest {
     }
 
     // ── 1. 앱 전부가 graceful 인가 ────────────────────────────────────
+
+    @Test
+    @DisplayName("기본 Compose는 사전 생성 이미지를 실행하고 앱 전체의 healthcheck를 제공한다")
+    void preparedImagesKeepHealthChecksWithoutImageBuilds() {
+        Map<String, Object> services = asMap(loadYaml(repoRoot().resolve(APPS_COMPOSE)).get("services"));
+        List<String> names = new ArrayList<>(appDirectories().stream()
+                .map(path -> path.getFileName().toString()).toList());
+        names.add("mock-pg");
+
+        for (String name : names) {
+            Map<String, Object> service = asMap(services.get(name));
+            assertThat(service).as("%s 실행 정의", name).containsKey("image").doesNotContainKey("build");
+            assertThat(asMap(service.get("healthcheck")))
+                    .as("%s 이미지 밖의 healthcheck", name).containsKeys("test", "interval", "timeout");
+        }
+    }
+
+    @Test
+    @DisplayName("기본 스택은 포트를 열지 않고 로컬 오버라이드만 루프백 접속을 제공한다")
+    void hostPortsAreExplicitAndLoopbackOnly() {
+        for (String filename : List.of("docker-compose.yml", APPS_COMPOSE)) {
+            Map<String, Object> services = asMap(loadYaml(repoRoot().resolve(filename)).get("services"));
+            assertThat(services).as("%s 검사 대상", filename).isNotEmpty();
+            for (Map.Entry<String, Object> entry : services.entrySet()) {
+                assertThat(asMap(entry.getValue()))
+                        .as("%s/%s 기본 포트 격리", filename, entry.getKey()).doesNotContainKey("ports");
+            }
+        }
+        for (String filename : List.of("docker-compose.local.yml", "docker-compose.apps.local.yml")) {
+            Map<String, Object> services = asMap(loadYaml(repoRoot().resolve(filename)).get("services"));
+            assertThat(services).as("%s 검사 대상", filename).isNotEmpty();
+            for (Map.Entry<String, Object> entry : services.entrySet()) {
+                Object ports = asMap(entry.getValue()).get("ports");
+                assertThat(ports).as("%s/%s 로컬 포트", filename, entry.getKey()).isInstanceOf(List.class);
+                for (Object port : (List<?>) ports) {
+                    assertThat(port.toString()).as("%s/%s 바인딩", filename, entry.getKey())
+                            .startsWith("127.0.0.1:");
+                }
+            }
+        }
+    }
 
     @Test
     @DisplayName("앱 전부가 graceful shutdown 을 켠다 — 배포는 이 시스템에서 가장 잦은 '서버 중단'이다")

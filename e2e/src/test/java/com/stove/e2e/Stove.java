@@ -9,8 +9,8 @@ import java.util.Map;
  *
  * <h2>왜 루프백인가</h2>
  *
- * <p>CI compose 는 호스트 포트를 열지 않는다. 편의가 아니라 보안 결정이고(공개 IP + 인증 없는 Elasticsearch·Grafana·MinIO), 근거는
- * {@code docker-compose.ci.yml} 에 적혀 있다. 그런데 e2e 는 스택 <b>밖의</b> JVM 이라 컨테이너 네트워크 이름({@code
+ * <p>기본 Compose는 호스트 포트를 열지 않는다. CI에서도 같은 정의를 사용한다.
+ * 로컬·E2E는 local 오버라이드로 루프백 포트를 연다. E2E는 스택 <b>밖의</b> JVM 이라 컨테이너 네트워크 이름({@code
  * http://gateway:8080})으로는 닿을 수 없다 — 셸은 같은 네트워크에 curl 컨테이너를 띄워 그 문제를 피했다.
  *
  * <p>위험한 것은 포트를 여는 행위가 아니라 {@code 0.0.0.0} 에 붙이는 것이었다. 그래서 {@code 127.0.0.1} + 오프셋 {@value
@@ -51,7 +51,7 @@ final class Stove {
     /** 게이트웨이에 라우팅되지 않는 운영 호출 전용. */
     static final E2eClient catalog = at(8081);
 
-    /** 트레이스 조회 API. {@code docker-compose.e2e.yml} 이 이것만 연다. */
+    /** 트레이스 조회 API. {@code docker-compose.local.yml} 이 루프백 포트를 연다. */
     static final E2eClient tempo = at(3200);
 
     /**

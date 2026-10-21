@@ -2,6 +2,7 @@
 """Verify Review against completed Auth/Gateway/Studio in an isolated, disposable stack."""
 
 from pathlib import Path
+from minio_image import ensure_minio_image
 import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[1]
 directory=Path(tempfile.mkdtemp(prefix="stove-review-check-"))
@@ -15,9 +16,7 @@ def free_port():
         sock.bind(("127.0.0.1",0))
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
-minio_image=os.environ.get("STOVE_TEST_MINIO_IMAGE","stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
-if subprocess.run(["docker","image","inspect",minio_image],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
-    subprocess.run(["docker","build","-t",minio_image,str(repo/"infra/minio")],check=True)
+minio_image=ensure_minio_image(repo)
 subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%';\n")

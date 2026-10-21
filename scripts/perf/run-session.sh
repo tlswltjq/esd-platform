@@ -102,7 +102,7 @@ if [ "${RESET:-0}" = "1" ]; then
     docker compose exec -T mysql mysql -ustove -pstove1234 -e \
         "TRUNCATE stove_order.outbox_event; DELETE FROM stove_order.order_item; DELETE FROM stove_order.orders;" \
         || { echo "초기화 실패 — 중단한다. 더러운 상태로 잰 숫자는 쓸 수 없다" >&2; exit 1; }
-    docker compose -f docker-compose.apps.yml restart order >/dev/null
+    docker compose -f docker-compose.apps.yml -f docker-compose.apps.local.yml restart order >/dev/null
     # 재기동 직후의 첫 스크레이프는 워밍업 전이라 의미가 없다. healthy 를 기다린다.
     for _ in $(seq 1 60); do
         curl -sf --max-time 2 "${ORDER_ACTUATOR%/prometheus}/health" 2>/dev/null | grep -q UP && break

@@ -52,7 +52,6 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
-export STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local
 python3 scripts/verify-settlement.py
 ```
 

@@ -77,7 +77,7 @@ group_lag() { kafka_groups --describe --group "$1" | awk '$3 ~ /^[0-9]+$/ && $4 
 # `--reset-offsets` 는 그룹에 활성 멤버가 없어야 한다. `stop` 직후 브로커는 멤버를
 # 아직 안 떨어냈고, **기다렸다고 가정한 것**이 13-8 이 버린 회차다. 여기서는 확인한다.
 say "[$LABEL] 앱 정지 — $APPS"
-docker compose -f docker-compose.apps.yml stop $APPS >/dev/null 2>&1
+docker compose -f docker-compose.apps.yml -f docker-compose.apps.local.yml stop $APPS >/dev/null 2>&1
 
 for g in $RESET_GROUPS; do
     state=""
@@ -124,11 +124,11 @@ EOF
 trap 'rm -f "$override"' EXIT
 
 say "[$LABEL] concurrency=${C} 로 재기동"
-docker compose -f docker-compose.apps.yml -f "$override" \
+docker compose -f docker-compose.apps.yml -f docker-compose.apps.local.yml -f "$override" \
     up -d --force-recreate $APPS >/dev/null 2>&1 || die "재기동 실패"
 
 for app in payment:8083 license:8084 order:8082; do
-    port=${app#*:}
+    port=$((${app#*:} + 10000))
     for _ in $(seq 1 90); do
         curl -sf --max-time 2 "http://localhost:${port}/actuator/health" 2>/dev/null | grep -q UP && break
         sleep 2

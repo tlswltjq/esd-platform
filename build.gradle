@@ -272,7 +272,7 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
         integrationTestImplementation project(':common:testcontainers')
     }
 
-    // Dockerfile 이 build/libs/*.jar 하나만 집도록 plain jar 는 만들지 않는다
+    // 실행 앱의 배포 산출물은 bootJar와 Jib 이미지이며 plain jar는 만들지 않는다.
     tasks.named('jar') { enabled = false }
 }
 
@@ -280,6 +280,20 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
 configure(subprojects.findAll { it.path.startsWith(':apps:') || it.path == ':simulators:mock-pg' }) {
     apply plugin: 'com.google.cloud.tools.jib'
     apply from: rootProject.file('gradle/jib.gradle')
+}
+
+// MinIO를 사용하는 통합 테스트는 빈 Docker 환경에서도 같은 로컬 이미지를 준비한다.
+// 별도 공급 이미지를 지정한 경우에는 Testcontainers의 일반 pull 경로를 사용한다.
+configure(subprojects.findAll { it.path in [':apps:studio', ':apps:review', ':apps:download'] }) {
+    def defaultMinioImage = providers.environmentVariable('STOVE_JIB_REGISTRY')
+            .filter { !it.isBlank() }.getOrElse('stove') +
+            '/minio:RELEASE.2025-04-22T22-12-26Z-local'
+    def minioImage = providers.environmentVariable('STOVE_TEST_MINIO_IMAGE').filter { !it.isBlank() }.orElse(
+            providers.environmentVariable('STOVE_MINIO_IMAGE').filter { !it.isBlank() })
+            .getOrElse(defaultMinioImage)
+    if (minioImage == defaultMinioImage) {
+        tasks.named('integrationTest') { dependsOn ':infra:minio:jibDockerBuild' }
+    }
 }
 
 configure(subprojects.findAll { it.path.startsWith(':common:') }) {
@@ -294,7 +308,7 @@ configure(subprojects.findAll { it.path.startsWith(':common:') }) {
 
 // apps 와 common 은 자식을 담는 껍데기라 소스가 없다.
 // 빈 jar 를 만들어 두면 common-*.jar 목록에 모듈이 아닌 것이 섞인다.
-configure([project(':apps'), project(':common'), project(':simulators')]) {
+configure([project(':apps'), project(':common'), project(':simulators'), project(':infra')]) {
     tasks.named('jar') { enabled = false }
 }
 

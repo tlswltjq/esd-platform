@@ -1,12 +1,14 @@
-// Dockerfile과 같은 Java 21 Alpine/JVM 옵션/비특권 UID로 이미지를 구성한다.
+// 실행 앱의 Java 21 Alpine/JVM 옵션/비특권 UID를 공통으로 구성한다.
 // OCI 비교에서는 기반 이미지 다이제스트와 arm64를 명시해 양쪽 런타임을 고정한다.
 def imagePorts = [auth: 8091, gateway: 8080, studio: 8085, review: 8086,
                   catalog: 8081, store: 8087, order: 8082, payment: 8083,
                   license: 8084, download: 8088, settlement: 8089, 'mock-pg': 8092]
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
         System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
-def targetRegistry = providers.gradleProperty('stove.jib.registry').getOrElse('stove')
-def targetTag = providers.gradleProperty('stove.jib.tag').getOrElse('latest')
+def targetRegistry = providers.gradleProperty('stove.jib.registry')
+        .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
+def targetTag = providers.gradleProperty('stove.jib.tag')
+        .orElse(providers.environmentVariable('STOVE_IMAGE_TAG').filter { !it.isBlank() }).getOrElse('latest')
 
 jib {
     from {
@@ -23,7 +25,7 @@ jib {
         image = "${targetRegistry}/${project.name}:${targetTag}"
     }
     container {
-        // Alpine adduser -S/addgroup -S가 기존 Dockerfile에서 생성하는 UID/GID다.
+        // 기존 실행 계약의 비특권 UID/GID를 유지한다.
         user = '100:101'
         workingDirectory = '/app'
         ports = [imagePorts[project.name].toString()]
