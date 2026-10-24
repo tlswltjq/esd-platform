@@ -54,6 +54,8 @@
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |
+| [Order 기능·권한 단위 테스트](testing.md#order-module-tests) | 주문 생성·멱등·본인 조회·결제 결과·역할 권한의 책임과 검증 범위 |
+| [Order 환불 RED 테스트](testing.md#order-full-refund-tdd) | 접수·심사·정지 확인·환불 결과·복구·추적의 시나리오와 TDD 작성 순서 |
 | [결함 기록](defects.md) | 재현한 결함, 원인·수정·회귀 검증 |
 | [성능 측정](performance.md) · [측정 원칙](measuring.md) | 요약과 원자료, 유효·무효 판정 기준 |
 | [Dockerfile·Jib OCI 비교](jib-oci-comparison.md) | 동일 이미지 기반의 빌드·배포·응답 지연·CPU·메모리 측정 |
