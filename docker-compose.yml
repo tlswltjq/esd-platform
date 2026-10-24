@@ -201,7 +201,7 @@ services:
       - tempo-data:/var/tempo
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.2.1
     container_name: stove-grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin

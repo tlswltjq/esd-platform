@@ -19,6 +19,7 @@ public class OrderEventListener {
     public void receive(ConsumerRecord<String,String> record) {
         EventEnvelope envelope=EventEnvelope.from(record);
         if (envelope.isType(EventType.ORDER_PLACED))
-            receiveOrderPayment.execute(OrderPaymentMapper.from(envelope,envelope.payloadAs(mapper,OrderPlacedEvent.class)));
+            receiveOrderPayment.execute(OrderPaymentMapper.from(envelope,envelope.payloadAs(mapper,OrderPlacedEvent.class)),
+                    PaymentTraceMapper.from(record.headers()));
     }
 }

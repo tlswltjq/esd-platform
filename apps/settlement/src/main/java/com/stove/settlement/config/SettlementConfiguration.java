@@ -30,19 +30,19 @@ import org.springframework.web.client.RestClient;
 public class SettlementConfiguration {
     @Bean Clock settlementClock() { return Clock.systemUTC(); }
     @Bean PlatformFeePolicy platformFeePolicy() { return new PlatformFeePolicy("PLATFORM_MVP_V1",1000); }
-    @Bean PgPayments pgPayments(SettlementHttpProperties p) {
-        return new SimulatedPgPaymentHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p));
+    @Bean PgPayments pgPayments(SettlementHttpProperties p, RestClient.Builder builder) {
+        return new SimulatedPgPaymentHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
     }
-    @Bean PgSettlements pgSettlements(SettlementHttpProperties p) {
-        return new SimulatedPgSettlementHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p));
+    @Bean PgSettlements pgSettlements(SettlementHttpProperties p, RestClient.Builder builder) {
+        return new SimulatedPgSettlementHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
     }
-    @Bean CatalogOwners catalogOwners(SettlementHttpProperties p) {
-        return new CatalogOwnerHttpClient(client(p.catalogBaseUrl(),"X-Settlement-Service-Key",p.catalogKey(),p));
+    @Bean CatalogOwners catalogOwners(SettlementHttpProperties p, RestClient.Builder builder) {
+        return new CatalogOwnerHttpClient(client(p.catalogBaseUrl(),"X-Settlement-Service-Key",p.catalogKey(),p,builder));
     }
-    private RestClient client(URI uri,String header,String key,SettlementHttpProperties p) {
+    private RestClient client(URI uri,String header,String key,SettlementHttpProperties p, RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(p.connectTimeout()); factory.setReadTimeout(p.readTimeout());
-        return RestClient.builder().baseUrl(uri.toString()).defaultHeader(header,key).requestFactory(factory).build();
+        return builder.clone().baseUrl(uri.toString()).defaultHeader(header,key).requestFactory(factory).build();
     }
     @Bean RecordPaidSale recordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
             PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions) {

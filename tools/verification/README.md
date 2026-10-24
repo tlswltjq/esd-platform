@@ -14,6 +14,7 @@ python3 tools/verification/verify-jib.py --help
 | 위치 | 책임 |
 |---|---|
 | `verify-*.py` | 모듈별 격리 스택 및 Jib 이미지 검증 |
+| `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
 | `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |

@@ -50,6 +50,7 @@
 | [License MVP 계획·완료 기록](license-mvp-plan.md) | 상품별 단일 구매·출처 통합·Order 중복 구매 제한과 OCI 완료 근거 |
 | [Download MVP 계획·완료 기록](download-mvp-plan.md) | 무상태 빌드 다운로드·내부 조회 계약과 로컬 OrbStack의 단위·통합·열 앱 검증 |
 | [Settlement MVP 계획·완료 기록](settlement-mvp-plan.md) | 외부 PG·Payment 전환·판매자 배분·월 마감·수령 대사. 단위 1,014건·관련 통합 152건·전체 프로세스 32단계 검증 |
+| [Tempo 분산 추적 도입·검증 계획](tempo-tracing-plan.md) | 기존 Tempo 활용, Payment 추적 메타데이터 저장·예약 처리 복원, HTTP 전파와 격리 검증 계획 |
 | [설계 결정](decisions.md) | 선택한 방식과 버린 대안, 결정 당시의 이유 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E에서 검증하는 범위 |

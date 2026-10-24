@@ -1,5 +1,7 @@
 package com.stove.order.adapter;
 
+import org.springframework.web.client.RestClient;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -40,7 +42,7 @@ class CatalogHttpClientTest {
             } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
         });
         server.start();
-        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000);
+        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 1000, RestClient.builder());
     }
     @AfterEach void stop() { server.stop(0); executor.shutdownNow(); }
     @Test void readsOnlyThePublicFieldsAndAllowsFutureFields() {
@@ -72,7 +74,7 @@ class CatalogHttpClientTest {
     }
     @Test void finiteReadTimeoutAndConnectionFailureReturnUnavailable() {
         delay = 500;
-        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100);
+        client = new CatalogClientConfiguration().catalogProducts("http://127.0.0.1:" + server.getAddress().getPort(), 1000, 100, RestClient.builder());
         assertThatThrownBy(() -> client.detail("Game-1")).isInstanceOfSatisfying(BusinessException.class,
                 e -> assertThat(e.errorCode().statusCode()).isEqualTo(503));
         server.stop(0);

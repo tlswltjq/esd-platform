@@ -17,6 +17,7 @@ import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.PaymentOrderRequest;
+import com.stove.payment.core.domain.PaymentTraceContext;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -36,7 +37,7 @@ class OrderEventListenerTest {
     @Test void delegatesOnlyValidatedInternalFacts() throws Exception {
         PaymentOrderRequest input=request(); OrderPlacedEvent event=event(input);
         listener.receive(record(event,event.eventId(),event.eventType(),event.orderNo(),json.writeValueAsString(event)));
-        verify(receive).execute(input);
+        verify(receive).execute(input, PaymentTraceContext.NONE);
     }
     @Test void mismatchedEnvelopeCannotReachTheUseCase() throws Exception {
         OrderPlacedEvent e=event(request()); String body=json.writeValueAsString(e);

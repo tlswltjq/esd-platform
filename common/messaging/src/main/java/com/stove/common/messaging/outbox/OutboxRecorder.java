@@ -13,9 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code Propagation.MANDATORY} 로 선언해 <b>반드시 비즈니스 트랜잭션 안에서만</b> 호출되도록 강제한다.
  * (실수로 트랜잭션 밖에서 부르면 즉시 예외 → 원자성 보장 규칙을 컴파일 이후에도 지킬 수 있음)
  *
- * <p>이 강제가 추적 컨텍스트를 붙잡는 자리로도 정확하다. 비즈니스 트랜잭션 안이라는 것은
- * <b>아직 요청 스레드라는 뜻</b>이고, 추적 컨텍스트는 스레드 로컬이라 여기서 놓치면
- * 발행 시점(릴레이 스케줄러)에는 되찾을 방법이 없다.
+ * <p>현재 실행 scope의 추적 컨텍스트를 이벤트와 함께 저장한다. 트랜잭션 자체는
+ * 요청 컨텍스트를 보장하지 않는다. DB에 보관한 업무를 스케줄러가 처리한다면 호출자가
+ * 업무별 추적 scope를 먼저 복원해야 한다. 릴레이는 저장된 컨텍스트를 헤더로 전달한다.
  */
 @RequiredArgsConstructor
 public class OutboxRecorder {

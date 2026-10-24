@@ -7,6 +7,8 @@ import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentTraceContext;
+import com.stove.payment.core.port.PaymentTraceContexts;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,12 +18,19 @@ public class ReceiveOrderPayment {
     private final PaymentRepository payments;
     private final ProcessedEventGuard guard;
     private final String provider;
+    private final PaymentTraceContexts traceContexts;
 
-    public ReceiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, String provider) {
+    public ReceiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, String provider,
+            PaymentTraceContexts traceContexts) {
         this.payments=payments; this.guard=guard; this.provider=provider;
+        this.traceContexts = traceContexts;
     }
 
     public Payment execute(PaymentOrderRequest request) {
+        return execute(request, PaymentTraceContext.NONE);
+    }
+
+    public Payment execute(PaymentOrderRequest request, PaymentTraceContext traceContext) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
 
         // Compare the complete input before treating an Inbox hit as a duplicate.
@@ -37,6 +46,9 @@ public class ReceiveOrderPayment {
         if ((firstDelivery && existing != null) || (!firstDelivery && existing == null)) {
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox와 결제 요청이 일치하지 않습니다.");
         }
-        return existing != null ? existing : payments.saveAndFlush(Payment.receive(request,provider));
+        if (existing != null) return existing;
+        Payment received = payments.saveAndFlush(Payment.receive(request,provider));
+        traceContexts.save(received.getPaymentId(), traceContext, received.getCreatedAt());
+        return received;
     }
 }

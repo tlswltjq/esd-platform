@@ -1,100 +1,228 @@
 package com.stove.e2e;
 
+import static com.stove.e2e.DownloadPurchaseFlowTest.approveAndPublish;
+import static com.stove.e2e.DownloadPurchaseFlowTest.verifyZip;
+import static com.stove.e2e.ReviewJourney.JSON;
+import static com.stove.e2e.ReviewJourney.account;
+import static com.stove.e2e.ReviewJourney.data;
+import static com.stove.e2e.ReviewJourney.login;
+import static com.stove.e2e.ReviewJourney.project;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.stove.e2e.E2eClient.Response;
-import java.util.LinkedHashSet;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stove.e2e.ReviewJourney.Account;
+import com.stove.e2e.ReviewJourney.Project;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Order;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/**
- * Kafka 를 건너는 트레이스가 실제로 이어지는가.
- *
- * <h2>왜 이 자리에 방어선이 없었나</h2>
- *
- * <p>Outbox 가 발행을 다른 스레드로 미루기 때문에 자동 계측만으로는 트레이스가 끊긴다.
- * 그래서 적재 시점의 {@code traceparent} 를 {@code outbox_event} 에 저장했다가 발행 시점에
- * 헤더로 되살린다 — 이 저장소에서 가장 깊은 발견이고 {@code docs/decisions.md} 17번에 적혀 있다.
- *
- * <p><b>그런데 그것을 지키는 테스트가 하나도 없었다.</b> 누가 {@code OutboxRecorder} 의
- * {@code trace_parent} 저장을 지우거나 {@code spring.kafka.template.observation-enabled} 를 켜도
- * 처리 자체는 계속되고 <b>트레이스만 조용히 조각난다.</b> 회귀 방어선이 없는 자랑이었다.
- *
- * <h2>왜 결제 콜백인가</h2>
- *
- * <p>팬아웃이 가장 큰 경로다. {@code PaymentCompleted} 하나가 license·order·settlement 로 갈라지고,
- * license 가 낳은 {@code LicenseIssued} 가 download 까지 간다. 게이트웨이로 들어왔으므로
- * 트레이스 하나가 <b>여섯 서비스</b>에 걸쳐야 한다 — 그리고 그중 넷은 Kafka 를 건너서 붙는다.
- *
- * <p>연결이 끊기면 컨슈머가 <b>새 트레이스를 시작</b>하므로, 이 traceId 로 조회했을 때
- * 남는 것은 gateway 와 payment 둘뿐이다. 그것이 이 판정이 잡는 그림이다.
- */
-@Order(7)
-@DisplayName("관측 — Kafka 를 건너는 트레이스 연결")
+/** Current public APIs, durable Payment processing, and actual Tempo parent relationships. */
+@Tag("tracing")
 class TracePropagationE2eTest {
+    private static Path evidence() { return Path.of(System.getProperty("stove.e2e.tracing-evidence")); }
+    private static ObjectNode saved() throws Exception { return (ObjectNode) JSON.readTree(Files.readString(evidence())); }
+    private static void save(ObjectNode state) throws Exception {
+        Files.writeString(evidence(), JSON.writerWithDefaultPrettyPrinter().writeValueAsString(state));
+        Files.setPosixFilePermissions(evidence(), PosixFilePermissions.fromString("rw-------"));
+    }
+    private static E2eClient tempo() { return new E2eClient(System.getProperty("stove.e2e.tempo-base-url")); }
+    private static String scenario() { return System.getProperty("stove.e2e.tracing-scenario", "initial"); }
+    private static String freshTraceId() { return UUID.randomUUID().toString().replace("-", ""); }
+    private static String parent(String id, boolean sampled) { return "00-" + id + "-" + freshTraceId().substring(0, 16) + (sampled ? "-01" : "-00"); }
 
-    /**
-     * 결제 콜백 하나가 닿아야 하는 서비스들.
-     *
-     * <p>넷이 Kafka 너머다. gateway·payment 는 HTTP 자동 계측만으로도 이어지므로,
-     * <b>이 집합에서 그 둘을 뺀 나머지가 17번 결정이 지키는 것</b>이다.
-     */
-    private static final Set<String> EXPECTED =
-            Set.of("gateway", "payment", "order", "license", "settlement", "download");
-
-    @Test
-    @Order(1)
-    @DisplayName("결제 콜백 하나의 traceId 가 6개 서비스에 걸친다")
-    void traceSpansAllFannedOutServices() {
-        String traceId = Journey.paymentTraceId();
-
-        // Tempo 는 ingester 에 들어간 뒤에야 조회에 뜬다. 스팬 자체가 Kafka 홉을 건너오는 시간도 있다.
-        Await.untilResponse("Tempo 에서 traceId=%s 조회".formatted(traceId),
-                () -> Stove.tempo.get("/api/traces/" + traceId),
-                r -> r.status() == 200 && servicesIn(r).containsAll(EXPECTED));
-
-        Set<String> services = servicesIn(Stove.tempo.get("/api/traces/" + traceId));
-        assertThat(services)
-                .as("""
-                        Kafka 를 건너는 구간이 끊기면 컨슈머가 새 트레이스를 시작한다 — \
-                        그러면 여기 남는 것은 HTTP 로 이어진 gateway·payment 뿐이다. \
-                        decisions.md 17번(적재 시점 traceparent 저장 → 발행 시점 복원)과 \
-                        spring.kafka.template.observation-enabled 를 먼저 본다.""")
-                .containsAll(EXPECTED);
+    @Test void prepareTwoDurableReceipts() throws Exception {
+        Account creator = account(true);
+        Project project = project(creator);
+        approveAndPublish(project.id(), creator);
+        String code = data(project.id(), creator).path("productCode").asText();
+        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
+                assertThat(Stove.gateway.get("/api/v1/storefront/products/" + code).status()).isEqualTo(200));
+        ObjectNode state = JSON.createObjectNode().put("zip", Base64.getEncoder().encodeToString(project.zip()));
+        state.set("product", Stove.gateway.get("/api/v1/products/by-code/" + code).data());
+        state.putArray("purchases");
+        purchase(state, "initial-A");
+        purchase(state, "initial-B");
+        save(state);
     }
 
-    /**
-     * Tempo 의 트레이스 응답에서 {@code service.name} 리소스 속성을 모은다.
-     *
-     * <p>응답은 OTLP JSON 이라 {@code batches[].resource.attributes[]} 아래에 있고,
-     * 속성이 키-값 목록이라 이름으로 골라내야 한다.
-     */
-    private static Set<String> servicesIn(Response response) {
-        Set<String> services = new LinkedHashSet<>();
-        for (JsonNode batch : response.body().path("batches")) {
-            for (JsonNode attribute : batch.path("resource").path("attributes")) {
-                if ("service.name".equals(attribute.path("key").asText())) {
-                    services.add(attribute.path("value").path("stringValue").asText());
-                }
+    @Test void preparePurchase() throws Exception {
+        ObjectNode state = saved();
+        purchase(state, scenario());
+        save(state);
+    }
+
+    private static void purchase(ObjectNode state, String name) throws Exception {
+        Account buyer = account(false);
+        boolean sampled = Boolean.parseBoolean(System.getProperty("stove.e2e.tracing-sampled", "true"));
+        String trace = freshTraceId();
+        Map<String, String> headers = new HashMap<>(buyer.headers());
+        headers.put("traceparent", parent(trace, sampled));
+        JsonNode product = state.path("product");
+        E2eClient.Response response = Stove.gateway.post("/api/v1/orders", Map.of("requestId", UUID.randomUUID().toString(),
+                "productCode", product.path("productCode").asText(), "expectedContentVersion", product.path("contentVersion").asLong(),
+                "expectedAmount", product.path("price").asLong()), headers);
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.headers().getFirst("X-Correlation-Id")).isEqualTo(trace);
+        String number = response.data().path("orderNo").asText();
+        String expected = System.getProperty("stove.e2e.tracing-expected-state", "PENDING");
+        SettlementPurchaseFlowTest.waitStatus(number, buyer, expected);
+        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
+                assertThat(Stove.gateway.get("/api/v1/payments/" + number, buyer.headers()).status()).isEqualTo(200));
+        JsonNode payment = Stove.gateway.get("/api/v1/payments/" + number, buyer.headers()).data();
+        ((ArrayNode) state.path("purchases")).addObject().put("scenario", name).put("buyerEmail", buyer.email())
+                .put("orderNo", number).put("paymentId", payment.path("paymentId").asText()).put("traceId", trace).put("sampled", sampled);
+    }
+
+    @Test void completedPurchasesKeepTheirOriginalTraceAndDownloadSeparately() throws Exception { verifyCompleted(true, true); }
+    @Test void verifyCommonHttpTracing() throws Exception { verifyCompleted(true, false); }
+    @Test void businessCompletesWithoutTraceCollection() throws Exception { verifyCompleted(false, false); }
+
+    private static void verifyCompleted(boolean inspectTraces, boolean inspectPayment) throws Exception {
+        ObjectNode state = saved();
+        for (JsonNode purchase : state.path("purchases")) {
+            String name = purchase.path("scenario").asText();
+            if (!name.startsWith(scenario())) continue;
+            Account buyer = login(purchase.path("buyerEmail").asText(), "creator-password-1234");
+            String number = purchase.path("orderNo").asText();
+            SettlementPurchaseFlowTest.waitStatus(number, buyer, "PAID");
+            String code = state.path("product").path("productCode").asText();
+            Awaitility.await().atMost(Duration.ofSeconds(50)).untilAsserted(() ->
+                    assertThat(Stove.gateway.get("/api/v1/library/" + code, buyer.headers()).status()).isEqualTo(200));
+            String downloadTrace = freshTraceId();
+            Map<String, String> headers = new HashMap<>(buyer.headers());
+            headers.put("traceparent", parent(downloadTrace, purchase.path("sampled").asBoolean()));
+            E2eClient.Response ticket = Stove.gateway.get("/api/v1/downloads/" + code + "/ticket", headers);
+            assertThat(ticket.status()).isEqualTo(200);
+            verifyZip(ticket.data(), Base64.getDecoder().decode(state.path("zip").asText()));
+            ((ObjectNode) purchase).put("downloadTraceId", downloadTrace).put("zipChecksum", ticket.data().path("checksum").asText());
+            Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
+                    assertThat(SettlementPurchaseFlowTest.sales(SettlementPurchaseFlowTest.admin()).path("content").findValuesAsText("orderNo")).contains(number));
+            if (inspectTraces) {
+                String trace = purchase.path("traceId").asText();
+                JsonNode original = awaitTrace(trace, inspectPayment
+                        ? Set.of("gateway", "order", "payment", "license", "settlement", "catalog")
+                        : Set.of("gateway", "order", "catalog"), spans -> {
+                    assertHttpParent(spans, "gateway", "order");
+                    assertHttpParent(spans, "order", "catalog");
+                    if (inspectPayment) assertPaymentTrace(spans, trace, purchase.path("paymentId").asText());
+                });
+                JsonNode download = awaitTrace(downloadTrace, Set.of("gateway", "download", "license", "catalog"), spans -> {
+                    assertHttpParent(spans, "gateway", "download");
+                    assertHttpParent(spans, "download", "license");
+                    assertHttpParent(spans, "download", "catalog");
+                });
+                assertThat(downloadTrace).isNotEqualTo(trace);
+                writeTrace(name + "-purchase", original);
+                writeTrace(name + "-download", download);
+                ((ObjectNode) purchase).put("traceVerified", true);
+            }
+            ((ObjectNode) purchase).put("businessVerified", true);
+            if (scenario().equals("sampling-zero")) {
+                Awaitility.await().during(Duration.ofSeconds(7)).atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                        assertThat(tempo().get("/api/traces/" + purchase.path("traceId").asText(),
+                                Map.of("Accept", "application/json")).status()).isEqualTo(404));
+                ((ObjectNode) purchase).put("unsampledNotExported", true);
             }
         }
-        return services;
+        assertThat(state.path("purchases").findValuesAsText("scenario").stream().anyMatch(s -> s.startsWith(scenario()))).isTrue();
+        save(state);
     }
 
-    @Test
-    @Order(2)
-    @DisplayName("응답 헤더의 X-Correlation-Id 가 실제 트레이스를 가리킨다")
-    void correlationHeaderPointsAtTheTrace() {
-        // 장애 문의에 이 값을 달라고 말할 수 있으려면, 그 값으로 실제 조회가 돼야 한다.
-        // 값이 있는 것과 쓸 수 있는 것은 다르다 — 빈 문자열이나 NOOP traceId 였던 적이 있다.
-        String traceId = Journey.paymentTraceId();
+    private static boolean isClient(TraceSpan span) { return span.kind().equals("SPAN_KIND_CLIENT") || span.kind().equals("3"); }
 
-        assertThat(traceId).as("W3C traceId 는 16바이트 = 32자 16진수다").hasSize(32);
-        assertThat(Stove.tempo.get("/api/traces/" + traceId).status())
-                .as("헤더로 돌려준 값으로 실제 조회가 돼야 한다")
-                .isEqualTo(200);
+    private static void assertHttpParent(List<TraceSpan> spans, String caller, String receiver) {
+        assertThat(spans.stream().filter(s -> s.service().equals(receiver)).anyMatch(s ->
+                spans.stream().anyMatch(p -> p.service().equals(caller) && p.id().equals(s.parent()) && isClient(p))))
+                .as("HTTP parent %s -> %s", caller, receiver).isTrue();
     }
+
+    private static void assertPaymentTrace(List<TraceSpan> spans, String trace, String paymentId) {
+        List<TraceSpan> processing = spans.stream().filter(s -> s.service().equals("payment") && s.name().equals("payment.process")).toList();
+        assertThat(processing).isNotEmpty().allSatisfy(s -> {
+            assertThat(s.traceId()).isEqualTo(trace);
+            assertThat(s.attributes().get("payment.id")).isEqualTo(paymentId);
+            assertThat(spans.stream().anyMatch(p -> p.id().equals(s.parent()) && p.service().equals("order"))).isTrue();
+        });
+        for (String downstream : List.of("license", "settlement")) {
+            assertThat(spans.stream().filter(s -> s.service().equals(downstream))
+                    .anyMatch(s -> processing.stream().anyMatch(p -> hasAncestor(spans, s, p.id()))))
+                    .as("%s is a descendant of Payment %s", downstream, paymentId).isTrue();
+        }
+        assertThat(spans.stream().filter(s -> s.service().equals("payment") && isClient(s))
+                .anyMatch(s -> processing.stream().anyMatch(p -> hasAncestor(spans, s, p.id()))))
+                .as("PG HTTP call is inside the payment attempt").isTrue();
+        assertHttpParent(spans, "settlement", "catalog");
+    }
+
+    private static JsonNode awaitTrace(String traceId, Set<String> services, Consumer<List<TraceSpan>> assertions) {
+        Awaitility.await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+            E2eClient.Response response = tempo().get("/api/traces/" + traceId, Map.of("Accept", "application/json"));
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(spans(response.body()).stream().map(TraceSpan::service).collect(Collectors.toSet())).containsAll(services);
+            assertions.accept(spans(response.body()));
+        });
+        JsonNode trace = tempo().get("/api/traces/" + traceId, Map.of("Accept", "application/json")).body();
+        assertThat(spans(trace)).isNotEmpty().allSatisfy(s -> assertThat(s.traceId()).isEqualTo(traceId));
+        return trace;
+    }
+
+    private static void writeTrace(String label, JsonNode trace) throws Exception {
+        Files.writeString(evidence().resolveSibling(label + "-trace.json"), JSON.writerWithDefaultPrettyPrinter().writeValueAsString(trace));
+    }
+
+    static List<TraceSpan> spans(JsonNode trace) {
+        List<TraceSpan> result = new ArrayList<>();
+        JsonNode batches = trace.has("batches") ? trace.path("batches") : trace.path("resourceSpans");
+        for (JsonNode batch : batches) {
+            String service = attributes(batch.path("resource").path("attributes")).getOrDefault("service.name", "");
+            JsonNode scopes = batch.has("scopeSpans") ? batch.path("scopeSpans") : batch.path("instrumentationLibrarySpans");
+            for (JsonNode scope : scopes) for (JsonNode span : scope.path("spans")) {
+                result.add(new TraceSpan(service, span.path("name").asText(), hex(span.path("traceId").asText(), 32),
+                        hex(span.path("spanId").asText(), 16), hex(span.path("parentSpanId").asText(), 16),
+                        span.path("kind").asText(), attributes(span.path("attributes"))));
+            }
+        }
+        return result;
+    }
+
+    private static String hex(String id, int length) {
+        if (id.isEmpty() || (id.length() == length && id.matches("[0-9a-f]+"))) return id;
+        return HexFormat.of().formatHex(Base64.getDecoder().decode(id));
+    }
+
+    private static Map<String, String> attributes(JsonNode values) {
+        Map<String, String> result = new HashMap<>();
+        for (JsonNode value : values) result.put(value.path("key").asText(), value.path("value").path("stringValue").asText());
+        return result;
+    }
+
+    private static boolean hasAncestor(List<TraceSpan> spans, TraceSpan child, String ancestor) {
+        Set<String> visited = new HashSet<>();
+        String parent = child.parent();
+        while (!parent.isEmpty() && visited.add(parent)) {
+            if (parent.equals(ancestor)) return true;
+            String current = parent;
+            parent = spans.stream().filter(s -> s.id().equals(current)).map(TraceSpan::parent).findFirst().orElse("");
+        }
+        return false;
+    }
+
+    record TraceSpan(String service, String name, String traceId, String id, String parent, String kind, Map<String, String> attributes) { }
 }

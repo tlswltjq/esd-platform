@@ -13,6 +13,7 @@ Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gr
 | 단위·어댑터·아키텍처 규칙 | `./gradlew test` | Docker 불필요 |
 | 실제 저장소·메시징 통합 | `./gradlew integrationTest` | Testcontainers용 Docker |
 | 전체 구매·다운로드·정산 | `python3 tools/verification/verify-jib.py` | 로컬 OrbStack, 이미지 빌드 포함 |
+| Payment 내구 재개·Tempo 추적 | `python3 tools/verification/verify-tracing.py` | 로컬 OrbStack, 격리된 Tempo·Grafana와 이미지 빌드 포함 |
 | 테스트 포함 빌드 | `./gradlew build` | Docker 필요 |
 
 macOS에서 Testcontainers가 Docker 소켓을 찾지 못하면 활성 컨텍스트의 값을 전달한다.
@@ -80,6 +81,31 @@ Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실�
 | OAuth 클라이언트·범위를 직접 지정해야 함 | `swagger-ui` 클라이언트와 PKCE, 대상 서비스의 `studio`·`commerce` 범위 설정 확인 |
 
 설정을 바꾼 뒤에는 Gateway 라우트 테스트와 브라우저 인증을 확인한다. `/default-ui.css`의 응답 형식, 허용된 로컬 Origin에 대한 `OPTIONS /oauth2/token`, 로그인·승인 리다이렉트를 함께 본다. 관련 테스트는 `:apps:gateway:test --tests com.stove.gateway.GatewayRouteTest`다.
+
+## Tempo에서 요청 추적 조회
+
+기본 로컬 스택의 Grafana는 `http://127.0.0.1:3000`, Tempo 조회 API는 `http://127.0.0.1:13200`이다.
+구매 요청 응답의 `X-Correlation-Id`를 복사하고 Grafana Explore에서 Tempo 데이터소스를 선택해 해당 trace ID를 조회한다.
+직접 조회하려면 `TRACE_ID`에 응답 값을 넣고 다음 명령을 실행한다.
+
+```bash
+curl -fsS -H 'Accept: application/json' "http://127.0.0.1:13200/api/traces/$TRACE_ID"
+# 공통 수집·HTTP 전파·장애·샘플링 검증
+python3 -B tools/verification/verify-tracing.py --foundation-only
+# Payment 재시작·재시도와 후속 소비까지 검증
+python3 tools/verification/verify-tracing.py
+```
+
+Payment는 최초 접수의 부모를 DB에 보존하고 예약·재시도마다 자식 span을 만든다.
+Download URL 발급은 별도 요청이므로 그 응답의 trace ID로 License·Catalog HTTP 호출을 확인한다.
+외부 모의 PG 호출은 Payment·Settlement의 HTTP client span으로 확인한다.
+
+추적이 보이지 않으면 Tempo의 `/ready`, 앱의 `OTLP_ENDPOINT`·`TRACING_SAMPLE_RATE`, Outbox 적재·발행과 부모 보존을 순서대로 확인한다.
+컨테이너 안의 전송 주소는 `http://tempo:4318/v1/traces`, 호스트 JVM의 기본 주소는 `http://localhost:4318/v1/traces`다.
+전송·후속 이벤트 처리에는 지연이 있고 현재 로컬 보존 기간은 1시간이다. 샘플링 0과 Tempo 중단 중의 업무 성공을 완전한 trace 수집으로 판정하지 않는다.
+
+검증 도구는 실행별 주소·DB·브로커·볼륨을 사용하고 완료 후 전용 스택을 정리한다. 조회 결과는 `runs/tracing-validation-*/`의 trace JSON·`result.json`에서 확인한다.
+이미지를 재사용할 때는 같은 작업본에서 이미지를 준비한 뒤 `--skip-build`를 사용한다. [범위·정책·검증 기록](tempo-tracing-plan.md)을 따른다.
 
 ## 선택적 원격 관리 도구
 

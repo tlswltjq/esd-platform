@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.client.RestClient;
 
 class DownloadHttpClientsTest {
     HttpServer server;
@@ -56,7 +57,7 @@ class DownloadHttpClientsTest {
         server.start(); base = "http://127.0.0.1:" + server.getAddress().getPort(); status = 200; body = OWNED;
         DownloadClientProperties props = new DownloadClientProperties(base, base, "service-key", Duration.ofSeconds(1), Duration.ofSeconds(3));
         DownloadClientConfiguration config = new DownloadClientConfiguration();
-        license = config.ownedProducts(props); catalog = config.publishedBuilds(props);
+        license = config.ownedProducts(props, RestClient.builder()); catalog = config.publishedBuilds(props, RestClient.builder());
     }
     @AfterEach void stop() { server.stop(0); }
 
@@ -105,7 +106,7 @@ class DownloadHttpClientsTest {
     @Test void finiteReadTimeoutIsUnavailable() {
         delay = 400;
         LicenseHttpClient bounded = new DownloadClientConfiguration().ownedProducts(new DownloadClientProperties(
-                base, base, "service-key", Duration.ofSeconds(1), Duration.ofMillis(100)));
+                base, base, "service-key", Duration.ofSeconds(1), Duration.ofMillis(100)), RestClient.builder());
         assertUnavailable(() -> bounded.require("game", "token"));
     }
     @Test void refusedConnectionIsUnavailable() { server.stop(0); assertUnavailable(() -> catalog.require("game")); }

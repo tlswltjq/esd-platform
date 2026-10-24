@@ -1,5 +1,14 @@
 # 테스트 전략
 
+## 현행 Payment·Tempo 추적 검증
+
+`python3 tools/verification/verify-tracing.py`는 기존 Jib 실행 기반에 격리된 Tempo·Grafana를 추가한다.
+`--foundation-only`는 Payment 추적 저장·복원에 의존하지 않고 공통 HTTP 전파·수집·조회·Tempo 중단·샘플링 전환을 먼저 검증한다.
+Payment 추적 통합은 실제 Micrometer/OpenTelemetry와 메모리 exporter로 접수/작업 스레드·부모·scope·HTTP client span을 대조한다. 별도 스케줄러 통합 검사는 처리 메서드를 직접 호출하지 않는다.
+`:e2e:tracingE2eTest`는 현재 공개 구매 API·실제 ZIP 다운로드와 Tempo의 span/parent 관계를 판정하며, 원래 콜백 기반 `TracePropagationE2eTest`를 대체한다. 일반 `e2eTest`에서는 tracing 태그를 제외한다.
+전용 실행 도구는 요청 저장 뒤 Payment 재시작·PG 응답 유실·결과 롤백·브로커 중단·Tempo 중단·추적 비활성·샘플링 0을 단계별로 주입한다. 필수 검사 0건·건너뜀은 통과로 판정하지 않는다.
+범위·시나리오·실행 수·원자료는 [도입·검증 기록](tempo-tracing-plan.md), 조회 방법은 [실행 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
+
 > 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
 
 

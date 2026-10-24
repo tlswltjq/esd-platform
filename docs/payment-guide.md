@@ -9,8 +9,8 @@ Payment는 **Order가 확정한 금액의 결제 결과**를 보존한다. Catal
 
 | 유스케이스 | 책임 |
 |---|---|
-| ReceiveOrderPayment | 원래 요청 전체 비교, PENDING·Inbox 원자적 접수 |
-| ResolvePayment | 처리 시각이 된 PENDING 재개, PG 호출, 최종 상태·결과 Outbox 저장 |
+| ReceiveOrderPayment | 원래 요청 전체 비교, PENDING·Inbox·추적 메타데이터 원자적 접수 |
+| ResolvePayment | 저장된 부모 아래 PENDING 재개, PG 호출, 최종 상태·결과 Outbox 저장 |
 | SearchPayments | JWT sub 구매자의 목록·페이지 조회 |
 | ReadPayment | 구매자·주문번호로 상세 조회, 타인·없는 결제 404 |
 
@@ -30,6 +30,10 @@ PendingPaymentScheduler가 매초 최대 20건을 재개한다. 공급자 호출
 
 최종 결과와 Outbox는 같은 트랜잭션이다. 같은 요청·결과 재전달은 최초 상태·ID·시각을 바꾸지 않는다.
 PG 수수료 공제액을 청구액으로 대신 쓰지 않는다. 거절 뒤 재구매는 새 Order requestId로 시작한다. 같은 상품의 PENDING·PAID 추가 주문은 Order가 차단하며 Payment가 License 보유 여부를 조회하지 않는다.
+
+추적 부모는 V13의 `payment_request_trace`에 별도 저장한다. 유효한 W3C v00 헤더만 보존하고 누락·이상·중복 헤더는 부모 없음으로 처리한다.
+최초 접수의 컨텍스트를 중복 입력으로 덮어쓰지 않으며 기존 결제의 미보존 부모를 추정하지 않는다. 재시도마다 원래 부모의 새 자식 span을 만들고 다른 주문·스케줄러 scope와 분리한다.
+샘플링·수집기 상태는 결제 상태 전이의 조건이 아니다. [Tempo 조회·검증 실행](getting-started.md#tempo에서-요청-추적-조회) · [정책·검증 기록](tempo-tracing-plan.md)을 따른다.
 
 ## API와 설정
 

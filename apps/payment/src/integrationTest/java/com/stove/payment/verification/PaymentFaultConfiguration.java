@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.common.messaging.trace.TraceContextCapture;
 import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgUnavailable;
@@ -26,12 +27,15 @@ public class PaymentFaultConfiguration {
             return result;
         };
     }
-    @Bean @Primary OutboxRecorder verificationOutbox(OutboxEventRepository repository,ObjectMapper mapper,Environment env) {
-        return new FaultOutbox(repository,mapper,env.getProperty("stove.verification.fail-after-outbox",Boolean.class,false));
+    @Bean @Primary OutboxRecorder verificationOutbox(OutboxEventRepository repository,ObjectMapper mapper,Environment env,
+            TraceContextCapture traceContextCapture) {
+        return new FaultOutbox(repository,mapper,traceContextCapture,env.getProperty("stove.verification.fail-after-outbox",Boolean.class,false));
     }
     public static class FaultOutbox extends OutboxRecorder {
         private final boolean fail;
-        FaultOutbox(OutboxEventRepository repository,ObjectMapper mapper,boolean fail) { super(repository,mapper); this.fail=fail; }
+        FaultOutbox(OutboxEventRepository repository,ObjectMapper mapper,TraceContextCapture capture,boolean fail) {
+            super(repository,mapper,capture); this.fail=fail;
+        }
         @Override @Transactional(propagation=Propagation.MANDATORY)
         public void record(String type,String id,DomainEvent event) {
             super.record(type,id,event);

@@ -9,6 +9,8 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.port.PgGateway;
+import com.stove.payment.core.port.PaymentTraceContexts;
+import com.stove.payment.core.port.PaymentTracing;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.util.List;
@@ -29,15 +31,20 @@ public class ResolvePayment {
     private final int batchSize;
     private final Duration retryDelay;
     private final TransactionTemplate transaction;
+    private final PaymentTraceContexts traceContexts;
+    private final PaymentTracing tracing;
 
     public ResolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
-            EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay) {
+            EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay,
+            PaymentTraceContexts traceContexts, PaymentTracing tracing) {
         this.payments = payments;
         this.gateway = gateway;
         this.outbox = outbox;
         this.entityManager = entityManager;
         this.batchSize = batchSize;
         this.retryDelay = retryDelay;
+        this.traceContexts = traceContexts;
+        this.tracing = tracing;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
@@ -61,6 +68,11 @@ public class ResolvePayment {
         Payment payment = payments.findByPaymentId(paymentId).orElse(null);
         if (payment == null || payment.getStatus() != PaymentStatus.PENDING) return;
 
+        tracing.run(traceContexts.find(paymentId), paymentId, () -> process(payment));
+    }
+
+    private void process(Payment payment) {
+        String paymentId = payment.getPaymentId();
         PgResult result;
         try {
             result = gateway.charge(payment.chargeRequest());

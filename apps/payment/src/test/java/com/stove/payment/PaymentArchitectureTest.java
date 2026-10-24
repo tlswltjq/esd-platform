@@ -1,5 +1,7 @@
 package com.stove.payment;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+
 import com.stove.common.archunit.ConsumerGroupRules;
 import com.stove.common.archunit.EventInputRules;
 import com.stove.common.archunit.EventOrderingRules;
@@ -9,10 +11,15 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.junit.ArchTests;
+import com.tngtech.archunit.lang.ArchRule;
 
 /** payment 모듈 패키지 구조 검증. 규칙 본체는 common:archunit 에 한 벌만 둔다. */
 @AnalyzeClasses(packages = "com.stove.payment", importOptions = ImportOption.DoNotIncludeTests.class)
 class PaymentArchitectureTest {
+
+    @ArchTest static final ArchRule core_는_추적_라이브러리를_모른다 = noClasses()
+            .that().resideInAPackage("..core..")
+            .should().dependOnClassesThat().resideInAnyPackage("io.micrometer.tracing..", "io.opentelemetry..");
 
     @ArchTest static final ArchTests 이벤트_입력 = ArchTests.in(EventInputRules.class);
 
