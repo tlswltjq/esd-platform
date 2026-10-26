@@ -558,7 +558,7 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 ## 7. Order 전액 환불의 RED 테스트 목록
 
 2026-10-25. 기준은 [환불 정책 결정](decisions.md#full-refund-policy)과 완료된 모듈의 현재 계약이다.
-아래는 **앞으로 작성할 행위 테스트 목록**이며 실제 실패를 확인한 실행 기록은 아니다. R 번호는 시나리오 식별자이며 JUnit 실행 건수가 아니다.
+아래 R 번호 표는 **작성할 행위 테스트 계획**이다. 개별 Red·Green 실행은 별도 기록하며 일부 도메인 테스트의 결과를 전체 시나리오 완료로 표시하지 않는다. R 번호는 시나리오 식별자이며 JUnit 실행 건수가 아니다.
 정책을 새로 정해야 하는 사항은 [미결 질문](domain/open-questions.md#q9)과 7.8절에서 먼저 결정한다.
 
 ### 7.1 기존 Green과 Order의 검증 경계
@@ -567,9 +567,102 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 정확히 4시간인 접수의 허용, 마이크로초 경계, 초·시간 절삭 방지, 현재 날짜 대신 기록된 두 시각을 사용하는 규칙을 이미 검증한다.
 새 접수 테스트에서는 실제 주문에 기록된 결제 확정 시각과 최초 접수 시각이 이 판정에 사용되는지 확인한다.
 
+2026-10-25 첫 환불 모델 TDD는 [RefundTest](../apps/order/src/test/java/com/stove/order/core/domain/RefundTest.java)로 R04·R05의 도메인 부분부터 작성했다.
+기한 내·정확한 4시간 경계는 PENDING_LICENSE_SUSPENSION, 기한 초과는 PENDING_REVIEW로 시작하고, 최초 접수·자동 허용 판정을 보존하며 Order의 PAID·원래 결제 결과는 유지하는 기대다.
+`./gradlew :apps:order:test --tests com.stove.order.core.domain.RefundTest --console=plain` 실행에서 컴파일은 통과하고 Refund.request 미구현 예외로 3건 모두 실패했다.
+원자료는 `runs/order-refund-domain-red-r6wowh0h/`의 JUnit XML·result.json·소스 사본과 SHA-256에 보존했다. DB 저장·멱등 접수·Outbox 원자성은 이 첫 도메인 Red의 검증 범위에 포함하지 않는다.
+
+이후 필수 주문·접수 시각 누락과 PENDING·FAILED 주문 거절 4건을 추가하고, 미구현 상태에서 총 7건의 Red를 확인했다.
+Refund.request가 기존 RefundPolicy로 최초 자격을 판정하고 식별자·주문 연결·접수 시각·초기 상태를 생성하도록 구현했다. Order는 변경하지 않는다.
+`./gradlew :apps:order:test --console=plain`에서 RefundTest 7건과 기존 테스트를 포함한 전체 143건이 실패·오류·건너뜀 0건으로 통과했다.
+Red·Green의 JUnit XML, 명령, 소스 사본·SHA-256은 `runs/order-refund-domain-tdd-jtwz7ekb/`에 단계별로 보존했다. 접수 시각 역전 처리 정책은 아직 결정하지 않았다.
+
+2026-10-25, [RequestRefundTest](../apps/order/src/test/java/com/stove/order/core/service/RequestRefundTest.java)에 R04의 서비스 단위 Red 1건을 추가했다.
+본인 PAID 주문을 결제 확정 후 3시간에 접수하고, 주문 잠금 뒤 기존 환불 조회·Refund 저장과 최초 정지 요청 Outbox 기록을 기대한다.
+고정 Clock으로 최초 접수 시각·자동 허용 판정·PENDING_LICENSE_SUSPENSION을 확인하고, Outbox의 환불·주문·구매자·상품·결제 연결값과 Order 토픽·주문번호 키를 검증한다.
+최초 결제 결과는 유지하고 Outbox에는 정지 요청만 한 번 기록해야 한다. 저장된 과거 주문 픽스처의 생성 시각은 결제 확정 2시간 전으로 두어, 주문 생성 시각을 기한 시작으로 쓰는 오구현도 잡도록 했다.
+컴파일에 필요한 RequestRefund 미구현 골격·RefundRepository 저장 계약·LicenseSuspensionRequestedEvent를 추가했다. 서비스는 아직 Spring 빈으로 등록하지 않고, 실제 DB 저장 구현·트랜잭션 조립도 추가하지 않았다.
+새 이벤트는 기존 공통 이벤트 계약 카탈로그에도 등록해 직렬화 왕복·메타데이터·전방 호환·토픽 검증에 포함했다.
+`./gradlew :common:kafka:test :apps:order:test --continue --console=plain` 실행에서 컴파일은 통과했고, Order 144건 중 새 서비스 테스트 1건만 RequestRefund.execute의 미구현 예외로 실패했다. 기존 Order 143건과 공통 Kafka 171건은 실패·오류·건너뜀 없이 통과했다.
+실행 로그·JUnit XML·명령·기준 커밋·소스 사본과 SHA-256은 `runs/order-refund-reception-red-hswhjlph/`에 보존했다.
+이 Red는 Mockito 기반 서비스 조율 검증이며 실제 DB 원자성·잠금 효과, 동시 접수·실제 메시지 전달·License 업무 완료를 증명하지 않는다. R04의 실제 DB 검증과 R08·R09는 후속 범위다.
+
+2026-10-25, 담당자는 논의에서 선택한 범위의 테스트·코드 작성을 위임했다. 새로운 정책과 중요한 대안은 담당자가 선택하고 이유를 설명한 뒤 구현하며, 합의한 범위의 코딩·검증에는 매번 재승인을 요청하지 않는다.
+접수 서비스는 R04 Green 1건 → R05 Red·Green 2건 → R07 Red·Green 3건 순으로 확장했다. R05는 심사 대기에서도 정지 요청이 발행되는 실패, R07은 중복 접수에서 정지 요청이 다시 발행되는 실패를 각각 확인하고 수정했다.
+누락·공백·길이 초과 입력 8건도 INVALID_REQUEST 대신 NOT_FOUND가 반환되는 Red를 확인한 뒤 서비스 입력 검증을 추가했다. 이때 함께 추가한 없는 주문·타인 주문·PENDING·FAILED 거절 4건은 기존 구현으로 Green이었으며 Red로 집계하지 않는다.
+잠금 대기로 기한을 넘겨도 서비스 진입 시 확보한 접수 시각을 유지하는 회귀와 심사 대기 중복 접수 보존도 보완해 RequestRefundTest는 총 17건이다.
+서비스의 READ_COMMITTED 트랜잭션, JPA Refund·저장소, V12 order_refund의 환불 ID·주문번호 유일 제약과 주문 연결 외래 키, config의 객체 조립을 추가했다.
+운영 Clock은 기존 DATETIME(6) 저장 정밀도에 맞춘 마이크로초 단위이며 초 단위 절삭은 하지 않는다. 최초 접수 시각·자동 허용 판정·주문 연결은 생성 후 갱신하지 않는다.
+`./gradlew :common:kafka:test :apps:order:test :apps:order:compileIntegrationTestJava --continue --console=plain`은 성공했다. Order 160건·공통 Kafka 171건이 통과했고 통합 테스트 소스도 컴파일했다. 공통 Kafka 태스크는 앞선 통과 결과와 소스가 같아 UP-TO-DATE였다.
+단계별 명령·로그·JUnit XML·소스 사본과 SHA-256은 `runs/order-refund-reception-tdd-opx7e0k1/`의 r04-green·r05-red/green·r07-red/green·guards-red·final-green에 보존했다. R04의 최초 Red는 앞선 `runs/order-refund-reception-red-hswhjlph/`를 함께 사용한다.
+
+[RefundReceptionIntegrationTest](../apps/order/src/integrationTest/java/com/stove/order/RefundReceptionIntegrationTest.java)는 실제 MySQL에서 접수·심사·중복·Outbox 삽입 후 실패 롤백과 재접수·동시 접수·서비스 잠금 우회 시 유일 제약·타인 주문·미결제 주문을 검증할 9건이다. Kafka 없이 DB 경계만 사용한다.
+그중 정상 접수 한 건의 실제 실행을 시도했으나 DockerClientProviderStrategy의 Docker 환경 연결 실패로 컨텍스트 시작 단계에서 실패했다. 테스트 본문에는 진입하지 못했으며 이 결과는 업무 Red가 아니다.
+`integration-infra-check/`에 해당 로그·JUnit XML을 보존했다. 당시 로컬 환경에는 접근 가능한 OrbStack/Docker 소켓이 없어 실제 DB 검증은 미검증으로 남겼다. 이후 명시적인 OCI 검증 요청에 따라 아래 명령의 원격 실행 결과를 별도로 확인했다.
+
+```bash
+./gradlew :apps:order:integrationTest --console=plain
+```
+
+2026-10-25, 사용자의 `ssh sng` OCI 검증 요청에 따라 이번 실행은 로컬 OrbStack 기본 지침의 예외로 원격에서 수행했다.
+공유 작업본을 덮어쓰지 않고 `/tmp/stove-order-refund-check-c9ntg4wp/work`에 미커밋 변경을 포함한 859개 파일을 전달했다. 실행 전 각 파일의 SHA-256을 대조했다. 환경은 Linux ARM64·Temurin 21.0.12+8·Docker 28.1.1이며 Testcontainers의 전용 MySQL·Kafka와 임의 포트를 사용했다.
+첫 실행은 Order 단위 160건·공통 Kafka 171건 통과, Order 통합 44건 중 새 환불 테스트 2건 실패였다. Outbox spy의 장애 주입 설정이 MANDATORY 프록시를 트랜잭션 밖에서 호출했고, 그 설정 실패가 다음 테스트의 UnfinishedStubbingException으로 이어졌다.
+기존 통합 테스트와 같이 장애 주입 설정만 TransactionTemplate 안에서 수행하고 finally에서 spy를 초기화하도록 수정했다. 실제 서비스 호출은 테스트의 외부 트랜잭션 없이 실행하므로 서비스가 생성하는 커밋·롤백 경계를 검증한다. 이 수정은 테스트 픽스처 한 파일이며 운영 코드는 변경하지 않았다.
+그 뒤 `./gradlew :apps:order:integrationTest --console=plain --no-daemon --max-workers=2`로 전체 Order 통합 44건을 다시 실행해 실패·오류·건너뜀 0건을 확인했다. 새 환불 접수 9건도 모두 통과했다. 단위 160건·171건은 첫 원격 실행의 통과 결과다.
+V12 마이그레이션과 JPA 검증, R04·R05·R07의 실제 저장·분기·최초 자격 보존, R08의 Outbox 삽입 후 전체 롤백·재접수, R09의 동시 접수·서비스 잠금 우회 시 주문번호 유일 제약을 확인했다. 기존 Order HTTP·JWT·결제 결과·Kafka·마이그레이션 회귀도 함께 통과했다.
+검증 전후 기존 컨테이너 18개의 ID·실행 여부·시작 시각·재시작 횟수·health와 기존 볼륨 55개가 동일했다. 추가 컨테이너·볼륨과 잔여 Testcontainers도 없었다. 공유 배포를 재시작하거나 교체하지 않았다.
+원격의 `results/initial`·`results/rerun`·`results/preservation.json`과 로컬 `runs/order-refund-oci-zem6q_3u/`에 명령·로그·JUnit XML·초기/수정 소스 묶음·SHA-256·검증 전후 자원 목록을 보존했다. 집계는 로컬 validation-summary.json, 회수 원자료는 collected/results에 있다.
+완료 범위는 Order의 환불 접수 서비스와 DB 경계다. 환불 HTTP API·관리자 승인/반려·License 정지/복구·Payment의 PG 환불과 전체 흐름은 후속 범위다.
+
+2026-10-26, 합의한 License 지급 확인 이벤트와 Order의 대기·재개를 추가했다. 즉시 지급 확인을 조회하지 않아도 된다는 선택을 반영하며 기존 지급 기록의 일괄 보완·확인 요청 방식은 구현하지 않았다.
+LicenseGranted는 지급 시각·보유권·주문·구매자·상품·결제 식별자를 전달한다. License의 최초 지급과 확인 Outbox가 함께 저장되고, Order는 내부 LicenseGrant로 변환·검증한 뒤 V13 order_license_grant에 확인 근거를 보존한다.
+환불은 지급 미확인이면 PENDING_LICENSE_GRANT로 대기한다. 기존 확인 근거가 있거나 나중에 확인이 도착하면 한 번만 정지 요청을 발행한다. 접수와 확인 반영이 같은 주문 잠금을 사용하므로 두 처리의 순서·동시성에 관계없이 최초 자격과 정지 요청의 유일성을 유지한다.
+도메인·발행 테스트는 도메인 10건 중 새 동작 5건 실패와 License 발행 1건 실패를 확인한 뒤 Green으로 만들었다. Order의 확인 반영 9건도 미구현 예외에 의한 Red 후 Green을 확인했다. 입력·리스너·기존 접수 테스트는 새 선행 조건에 맞춰 보완했다.
+로컬 단위는 Order 185건·License 73건·공통 Kafka 175건 통과했다. 생성자 확장에 따른 통합 검증 픽스처·릴레이 계측 조립의 컴파일 오류를 수정하고 두 모듈 통합 소스의 컴파일도 통과했다. 이 컴파일 오류는 업무 Red로 집계하지 않는다.
+원자료는 runs/refund-grant-tdd-wmjhghc1의 domain-producer-red/green·receiver-red/green·local-full·local-compile-fixed·local-compile-green에 보존했다.
+사용자가 허용한 ssh sng OCI 검증을 같은 격리 방식으로 이어가 /tmp/stove-refund-grant-check-24p05p14/work에서 871개 소스 파일을 SHA-256으로 대조했다. 원격에서 Order 단위 185건·통합 49건, License 단위 73건·통합 43건, 공통 Kafka 175건이 모두 실패·오류·건너뜀 0건으로 통과했다.
+실제 MySQL에서 확인 선행·후행, 4시간 이후 재개 시 최초 자격 유지, 확인·접수의 두 동시 순서, 중복 처리, 확인 Inbox·근거·환불 상태·정지 요청의 전체 롤백과 재처리를 검증했다. Kafka에서는 License의 확인 Outbox 발행 ACK와 Order의 확인 이벤트 수신·중복 재개 방지도 확인했다. 이는 각 모듈 계약 경계의 검증이며 전체 앱·PG 환불 E2E 완료를 뜻하지 않는다.
+License 릴레이의 기본값을 활성화하고 DB 검증에서는 명시적으로 비활성화했다. V6 마이그레이션은 이전 계약의 대기 Outbox를 원본 보존 후 격리하며, 기존 구매의 지급 사실을 자동으로 재통지하지 않는다. 기존 보유권·Inbox는 보존한다.
+공유 컨테이너 18개의 ID·실행·시작 시각·재시작 횟수·health와 기존 볼륨 55개가 동일했고 잔여 테스트 컨테이너·볼륨도 없었다. 원격 results와 로컬 runs/refund-grant-oci-m_f835mh/collected/results에 로그·JUnit XML·소스 묶음·명령·전후 자원 목록을 보존했다.
+tools/verification/verify-license.py의 Outbox 0건 기대를 새 지급당 LicenseGranted 1건으로 갱신하고 Python 구문 검사를 통과했다. 해당 9개 앱·13단계 검증 스크립트는 이번에 다시 실행하지 않았다. 환불 HTTP·관리자 판정·실제 보유권 정지/복구·PG 환불·기존 지급 보완·새 흐름의 Tempo 검증은 후속 범위다.
+
+2026-10-26, 정지된 보유권을 라이브러리에 표시하는 A안을 반영했다. License 상태 변경 도메인 3건, 정지 서비스 7건의 미구현 동작 Red를 확인한 뒤 Green으로 만들었다. Download HTTP 단위 33건 중 상태 미확인 허용을 잡는 새 6건도 Red 후 Green을 확인했다. 최초 실행의 License 컴파일 오류와 당시 복사된 이전 73건 XML은 도메인 Red 근거로 집계하지 않는다. 입력 검증·리스너 12건도 추가했다.
+로컬 전체 단위는 공통 Kafka 179건·License 95건·Download 99건을 통과했고 두 앱의 통합 소스 컴파일도 통과했다. 원자료는 runs/license-suspend-tdd-pcqm9dw_의 access-red·license-state-red·access-green·suspension-service-red/green·local-full에 보존했다.
+새 계약은 라이브러리 목록·상세의 status(ACTIVE/SUSPENDED)다. 정지 상품도 조회되지만 Download는 ACTIVE만 허용한다. SUSPENDED는 403, 상태 누락·미지원 값은 503으로 거절하고 Catalog·저장소 호출로 진행하지 않는다. 기존 presigned URL의 만료 전 사용은 허용한다. LicenseSuspended 발행 이후 Order의 완료 수신·Payment 실행·복구는 이번 구현에 포함하지 않는다.
+사용자가 허용한 ssh sng로 /tmp/stove-license-suspend-check-fbie80hr/work에 격리 작업본을 만들고 885개 파일의 SHA-256을 대조했다. 공통 Kafka 179건, Order 단위 185건·통합 49건, License 단위 95건·통합 48건, Download 단위 99건·통합 10건, 합계 665건이 실패·오류·건너뜀 없이 통과했다.
+License의 새 DB 통합 5건은 정지 후 구매 사실·지급 시각과 라이브러리 노출 유지, 과거 지급 재전달의 무복구, 정지 요청의 중복 처리, Outbox 삽입 후 상태·처리 근거·Inbox 전체 롤백과 같은 요청 재처리, 동시 요청의 한 번 처리, 변경된 요청 근거 거절과 Kafka 요청 수신을 확인했다. V5 이전 자료의 최신 마이그레이션에서 ACTIVE 초기값·원래 구매 근거도 확인했다. OpenAPI는 status가 추가된 스냅샷과 비교했다.
+Download의 실제 MinIO 통합은 정지 후 새 요청 403·Catalog 미호출, 상태 누락·미지원 값 503, 기존 URL의 만료 전 GET 200을 확인했다. License 연동은 HTTP 픽스처이며 모든 실제 앱을 연결한 환불 E2E는 아니다. PG 환불·복구·기존 지급 확인 보완과 새 흐름의 Tempo 검증은 남아 있다.
+검증 전후 공유 컨테이너 18개의 ID·실행·시작 시각·재시작 횟수·health와 볼륨 55개가 동일했다. 추가 컨테이너·볼륨·잔여 Testcontainers도 없었다. 공유 배포는 변경하지 않았다. 원격 results와 로컬 runs/license-suspend-oci-6onh6n_u/collected/results에 로그·JUnit XML·소스 묶음·명령·전후 자원 목록을 보존했다. SHA 대조 후 달라진 파일은 이 실행 결과를 기록한 문서 3개뿐이며 validation-summary.json에 구분했다.
+
+2026-10-26, 고객·운영자에게 환불 처리 경위를 설명하기 위해 실행 이력을 별도로 보존하는 B안을 선택했다. 내부 refundId와 attemptId를 구분하며, PG 멱등 키 매핑은 별도 계약으로 남긴다. RefundAttempt의 시작·확정 성공/실패·결과 시각·실패 사유와 같은 결과의 중복 반영을 구현했다. 시도를 추가해도 이전 실패를 덮어쓰지 않고, 같은 기록의 다른 확정 결과도 거절한다. PENDING은 아직 확정 결과가 없다는 뜻이며 타임아웃을 확정 실패로 저장하는 경로는 추가하지 않았다.
+도메인 12건의 미구현 동작 Red 뒤 Green을 확인했다. 로컬 Order 단위 197건과 통합 소스 컴파일이 통과했다. 최초 통합 픽스처에서 존재하지 않는 저장소 조회 메서드를 사용한 컴파일 오류를 수정했으며, 이는 업무 Red로 집계하지 않는다. 원자료는 runs/refund-attempt-tdd-fy3x99cm의 domain-red/green·local-full·local-compile-fixed에 보존했다.
+V14 order_refund_attempt는 같은 환불의 실행 순번과 attemptId에 유일 제약, 기존 Refund에 외래 키를 둔다. 실제 DB 검증은 과거 실패·최초 접수·자격·원래 결제 보존, 두 실행의 순서 조회, 중복 순번/ID 거절, 없는 환불 참조 거절과 결과 변경·새 기록의 전체 롤백을 대상으로 한다. 이력 저장 능력의 검증이며 새로운 실행을 실제로 허용하거나 PG를 호출하는 검증과 구분한다.
+사용자가 허용한 ssh sng OCI의 /tmp/stove-refund-attempt-check-crgt41aa/work에서 891개 파일을 SHA-256으로 대조하고 Order 단위 197건·통합 54건을 통과했다. 새 DB 통합은 위 저장 경계의 5건이다. 실패·오류·건너뜀은 모두 0건이며 공유 컨테이너 18개·볼륨 55개가 동일했고 추가 자원·잔여 Testcontainers도 없었다. 원격 results와 로컬 runs/refund-attempt-oci-3lfhuyf8/collected/results에 로그·JUnit XML·소스 묶음·명령·전후 자원 목록을 보존했다. validation-summary.json은 XML 집계·소스 해시와 실행 후 문서 변경을 구분한다.
+이번 단계는 모델·저장 경계다. Order의 정지 완료 수신과 첫 실행 기록·Payment 요청 Outbox의 원자적 저장, 현재 실행 검증·동시 실행 차단, 실패 분류·복구 확인·사용자 재시도 허용과 PG 키 변환은 후속이다. DB 유일 제약과 이력 분리만으로 환불 실행의 멱등성을 보장했다고 주장하지 않는다.
+
+2026-10-26, 근거 없는 정지 완료는 자동 업무 대기 대신 거절·격리하는 A안을 선택하고 Order의 완료 수신 경로를 구현했다. mapper·유효한 내부 입력 생성 뒤 주문 잠금으로 원래 PAID 주문·지급 확인·환불·실제 발행한 정지 요청 ID를 대조한다. 일치하면 PENDING_PAYMENT_REFUND로 전이하고 첫 RefundAttempt·완료 Inbox·RefundExecutionRequested Outbox를 같은 트랜잭션으로 저장한다. 최초 접수 시각과 환불 자격을 다시 계산하지 않는다.
+도메인 7건은 요청 상관키 생성 누락과 전이 미구현으로 Red를 확인한 뒤 Green으로 만들었다. 완료 반영 서비스 16건도 미구현 Red 뒤 Green을 확인했다. 입력·리스너 21건을 보완했고 로컬 Order 단위 241건·공통 Kafka 183건과 통합 소스 컴파일이 통과했다. 원자료는 runs/refund-completion-tdd-d42873w8의 domain-red/green·service-red/green·local-full·local-integration-compile에 보존했다.
+정지 요청 ID를 Outbox 발행 때마다 새로 만드는 대신 Refund의 상관키를 사용한다. 실행 기록에는 원래 정지 요청·완료 이벤트·완료 시각·보유권·Payment 요청 이벤트 ID를 보존한다. 중복 완료는 이 근거와 Inbox를 대조하며 새 실행·요청을 만들지 않는다. 현재 실행 포인터와 이력이 모순되거나 근거가 바뀐 재전달은 정상 중복으로 받아들이지 않는다.
+전용 Kafka 소비 설정은 RefundCompletionRejected만 업무 재시도 없이 기존 DLT 발행자로 격리하고, DB 등 일시 장애는 기존 제한 재시도를 유지한다. 다른 Order 소비자의 재시도 정책은 유지한다. DLT 발행이 실패하면 원본 소비 완료로 처리하지 않는다. 격리된 통지는 환불 실패 확정이나 보유권 복구를 뜻하지 않는다.
+V15는 기존 접수의 상관키를 로컬 Outbox의 단일 일치 요청과 PAID 주문·지급 확인에서만 복원한다. 요청 원문이 없거나 여러 건이거나 구매 근거가 맞지 않으면 NULL로 남기고 새 요청 ID를 추정 발급하지 않는다. 기존 구매의 LicenseGranted 확인 누락을 보완하는 작업은 아니다. Payment의 실제 접수·PG 환불·결과·복구·사용자 재시도와 새 흐름의 Tempo 검증은 후속이다.
+ssh sng OCI의 /tmp/stove-refund-completion-check-2hvqx8gn/work에서 904개 파일을 SHA-256으로 대조했다. Order 단위 241건·공통 Kafka 183건을 통과했다. 실제 DB의 완료·중복, Outbox 삽입 후 전체 롤백·재처리, 동시 완료, 변경된 근거 거절, 미승인 심사·Inbox 유실 거절 6건과 기존 요청 상관키의 유일/부재/중복/구매자 불일치 마이그레이션 4건을 통과했다.
+초기 통합 실행에서 생성 컬럼까지 복사한 마이그레이션 픽스처와 Boot KafkaTemplate 빈의 제네릭을 잘못 지정한 테스트 대역을 수정했다. 이후 전체 통합 68건 중 Kafka 원문 비교 1건이 JSON 숫자 노드 타입 차이로 실패했다. 원문 문자열을 직접 대조하도록 수정하고 해당 Kafka 클래스의 4건만 다시 실행해 모두 통과했다. 그 사이 운영 코드는 변경하지 않았다. 최종 통합 근거는 앞선 전체 실행의 나머지 64건과 선별 재실행 4건이며, 단일 전체 실행 68건이 한 번에 통과한 기록으로 표기하지 않는다.
+Kafka 4건은 중복 완료의 실행 1건·소비 위치 커밋, 환불 근거 부재의 업무 처리 1회 후 DLT 원문·키·파티션·소비 그룹 보존, DB 일시 장애의 같은 완료 재처리, DLT 발행 실패 중 원본 소비 위치 미완료와 발행 복구 뒤 커밋을 검증했다. License 완료는 계약 픽스처이고 Payment의 실제 접수·PG HTTP를 연결한 E2E는 아니다. 앞선 Order 소비자의 재시도·DLT 회귀도 별도 기본 설정으로 유지했다.
+마지막 kafka-final 실행에서는 격리 발행 실패 주입을 해당 환불 이벤트 ID로 한정해 같은 4건을 다시 통과했다. 다른 소비자의 DLT 발행 실패를 목표 환불의 장애로 오인하지 않게 했다. 최종 XML 출처 선택은 이 4건과 앞서 통과한 나머지 통합 64건이다.
+공유 컨테이너 18개의 ID·실행·시작 시각·재시작 횟수·health와 볼륨 55개가 동일했고 추가 자원·잔여 Testcontainers도 없었다. 초기·수정 소스/명령/로그/JUnit과 전후 자원 목록은 원격 results와 로컬 runs/refund-completion-oci-8wcbu9hl/collected/results에 보존했다. validation-summary.json과 assembled-junit은 원본 XML을 수정하지 않고 통과한 64건·4건의 실행 출처를 구분한다. 결과 집계 이후 변경은 검증 기록 문서뿐이다.
+
+2026-10-27, Payment가 RefundExecutionRequested를 내부 RefundExecutionRequest로 변환·검증하고 로컬 PAID 결제와 대조해 접수하는 경로를 추가했다. 결제의 최초 결과·PG 거래/비용·원래 주문 사실은 보존한다. Order의 환불 허용 판정은 다시 계산하지 않는다. 실제 청구액 9,000원·정가 10,000원인 구매의 전액 기준도 실제 청구액임을 검증했다.
+도메인 13건과 접수 서비스 15건의 미구현 Red 뒤 Green을 확인했다. 할인액 회귀 1건과 입력·리스너 20건을 보완해 로컬 Payment 단위 123건을 통과했다. 새 통합 소스도 컴파일했다. 원자료는 runs/payment-refund-reception-tdd-fbrwbk1q의 domain-red/green·service-red/green·local-full·integration-compile에 보존했다.
+V14 refund_execution은 attemptId·요청 이벤트 ID와 PENDING 결제/환불에 유일 제약, 원래 purchase_payment에 외래 키를 둔다. Inbox·접수·별도 refund_execution_trace를 같은 트랜잭션으로 저장하고, 추적 정보는 시도 ID로 연결해 최초 결제 추적 부모와 분리한다. 같은 요청의 재전달은 최초 본문·접수 시각·추적 부모를 유지한다. 새 시도는 기존 실행이 미확정인 동안 거절한다.
+접수 서비스는 PG 포트를 호출하지 않는다. PG 환불 실행·미확정 재개·결과 발행·확정 실패 후 새 시도 허용·권한 복구와 새 환불의 Tempo E2E는 후속이다. 잘못된 실행 입력은 기존 Payment 소비자의 제한 재시도·DLT 계약을 유지하며, 이를 환불 실패 확정이나 복구 요청으로 바꾸지 않는다.
+ssh sng OCI의 /tmp/stove-payment-refund-reception-check-ke_8kzmp/work에서 920개 소스 파일을 SHA-256으로 대조한 뒤 Payment 단위 123건·통합 48건과 공통 Kafka 183건을 실패·오류·건너뜀 없이 통과했다. 공통 Kafka는 변경되지 않은 입력의 Gradle 캐시 결과를 사용했다. Payment 단위·통합은 OCI에서 실행했다.
+신규 통합 14건은 실제 DB의 접수·중복·최초 결제와 추적 부모 보존, 추적 행 삽입 후 전체 롤백·재처리, 동시 접수, 미확정 실행 중 새 시도 차단, 변경된 금액·근거와 Inbox 불일치 거절, DB 식별자·PENDING 결제/환불 유일 제약·외래 키를 검증했다. 별도 모의 PG 프로세스를 실제로 중단한 동안에도 접수를 저장하고 PG 어댑터를 호출하지 않음을 확인한 뒤 공급자를 재기동했다. 모두 이 검증의 격리된 공급자 프로세스·DB를 사용했다.
+실제 Kafka에서는 중복 요청의 소비 위치를 모두 커밋하면서 접수·Inbox는 각각 한 건, 추적 부모는 첫 값으로 유지됨을 확인했다. 잘못된 금액의 요청은 원문·키·소비 그룹을 DLT에 보존하고 접수·Inbox·결과 Outbox와 PG 호출을 만들지 않았다. 기존 결제 HTTP·JWT·비용·공급자 응답 유실·마이그레이션·추적/스케줄러 회귀도 함께 통과했다. 환불의 실제 PG HTTP·Order 결과 반영·License 복구 E2E와는 구분한다.
+검증 전후 공유 컨테이너 18개의 ID·실행·시작 시각·재시작 횟수·health와 볼륨 55개가 같았고 추가 자원·잔여 Testcontainers도 없었다. 원격 results와 로컬 runs/payment-refund-reception-oci-prqa5s5l/collected/results에 소스 묶음·해시·명령·로그·JUnit·전후 자원 목록을 보존했다. validation-summary.json은 원자료·해시·집계를 대조하고 검증 후 문서 변경을 구분한다.
+
 Order가 검증할 결과는 자기 DB의 접수·판정·진행 상태, Inbox와 Outbox다.
-License 정지 완료와 Payment 환불 결과는 새로 정의할 계약의 픽스처로 입력한다. 제거된 구 환불 이벤트를 호환성 요구로 가져오지 않는다.
-모델·테이블·enum·클래스·이벤트·API 이름은 이 목록으로 확정하지 않는다. 표의 상태 표현은 업무 의미다.
+License 정지 완료는 정의한 LicenseSuspended 계약의 픽스처로 입력하며 Payment 환불 결과 계약은 후속 정의한다. 제거된 구 환불 이벤트를 호환성 요구로 가져오지 않는다.
+환불 기록은 Order 모듈의 별도 모델을 접수 시 생성하고 그 모델이 FSM을 소유하기로 했다. 첫 도메인 테스트의 대상은 Refund와 RefundStatus다. 이후 정지 요청 계약과 V12 접수 테이블을 추가했다. API 계약과 후속 전이는 아직 확정하지 않았다. 표의 상태 표현은 업무 의미다.
 
 | 다른 모듈의 검증 대상 | Order에서 대신 검증할 내용 |
 |---|---|
@@ -580,28 +673,41 @@ License 정지 완료와 Payment 환불 결과는 새로 정의할 계약의 픽
 
 ### 7.2 첫 단계: 환불 접수
 
+2026-10-25 OCI 접수 검증 뒤, Order가 환불 허용과 License 지급 확인을 모두 확보한 뒤 정지 요청을 발행하기로 확정했다.
+아래 표는 이 새 선행 조건을 포함한 목표다. 2026-10-25 접수 OCI 기록은 조건 도입 전 구현의 결과이고, 2026-10-26 기록은 새 지급의 이벤트 확인·대기·재개를 포함한다. 기존 지급 건의 확인 보완 방식은 아직 결정하지 않았다.
+
 | ID | 상황·행동 | 기대 결과 | 주 검증 층 |
 |---|---|---|---|
 | R01 | 존재하지 않는 주문으로 접수 | 거절. 접수 기록과 정지·환불 실행 Outbox 추가 없음 | 서비스·실제 DB |
 | R02 | 다른 구매자가 보유한 주문으로 접수 | JWT sub와 주문 구매자를 대조해 거절. 업무 변경과 Outbox 추가 없음 | 서비스·실제 DB, HTTP·JWT |
 | R03 | PENDING 또는 FAILED 주문으로 접수 | 거절. 결제 상태를 바꾸거나 환불 업무를 생성하지 않음 | 도메인·서비스 |
-| R04 | 본인 PAID 주문을 결제 확정 후 4시간 이내 접수 | 최초 접수 시각과 자동 허용 판정을 저장하고 정지 요청 Outbox를 같은 트랜잭션으로 저장. Payment 실행 요청은 아직 없음 | 서비스·실제 DB |
+| R04 | 본인 PAID 주문을 결제 확정 후 4시간 이내 접수 | 최초 접수 시각과 자동 허용 판정을 저장. 지급 미확인이면 Order에서 대기하며 정지·Payment 실행 요청 없음. 지급 확인 근거도 확보했다면 정지 요청 Outbox를 같은 트랜잭션으로 저장 | 서비스·실제 DB |
 | R05 | 본인 PAID 주문을 4시간 초과 후 접수 | 심사 대기 기록 저장. 정지·Payment 실행 요청은 발행하지 않음 | 서비스·실제 DB |
 | R06 | 환불 접수 후 기존 주문·결제 근거 조회 | 주문 금액·통화·상품 스냅샷과 최초 결제 성공 근거는 유지. 전액 환불의 금액 근거는 원래 주문·결제와 일치 | 도메인·서비스 |
 | R07 | 처리 중인 같은 주문을 4시간이 지난 뒤 중복 접수 | 같은 환불 업무와 최초 접수 시각·판정 유지. 자동 허용을 심사 대기로 바꾸거나 정지 요청을 중복 생성하지 않음 | 서비스·실제 DB |
-| R08 | 접수 저장 과정에서 정지 요청 Outbox 저장 실패 | 접수 기록·판정 변경도 함께 롤백. 접수 완료로 응답하지 않음 | 실제 DB 트랜잭션 |
-| R09 | 같은 주문의 환불 요청이 동시에 도착 | 환불 업무와 최초 정지 요청을 중복 생성하지 않음. 실제 DB의 잠금·제약 아래 최종 저장 결과와 반환 결과 확인 | 실제 DB 동시성 |
+| R08 | 지급 확인 근거가 있는 접수에서 정지 요청 Outbox 저장 실패 | 접수 기록·판정 변경도 함께 롤백. 접수 완료로 응답하지 않음. 지급 확인 대기 후 정지 요청 생성 시의 상태 전이·Outbox 원자성도 후속 검증 | 실제 DB 트랜잭션 |
+| R09 | 같은 주문의 환불 요청이 동시에 도착 | 환불 업무를 중복 생성하지 않음. 지급 미확인이면 정지 요청 0건, 지급 확인도 확보했다면 최초 정지 요청 1건. 실제 DB의 잠금·제약 아래 최종 저장 결과와 반환 결과 확인 | 실제 DB 동시성 |
 
 R04·R05에서는 Order 생성 시각·최종 수정 시각과 결제 확정 시각을 의도적으로 다르게 둔다.
 재처리 시각을 앞뒤로 바꾸어도 최초 접수의 판정을 다시 계산하지 않는지는 R07에서 검증한다.
 R06은 환불 실패를 기존 결제의 FAILED로 덮어쓰는 구현도 잡아야 한다.
+
+2026-10-25, R09의 구현 방향은 주문 행의 비관적 쓰기 잠금과 Refund 주문번호의 DB 유일 제약을 함께 사용하는 것으로 결정했다.
+실제 DB에서 두 접수 트랜잭션을 겹쳐 실행하고, 성공한 두 응답의 refundId가 같으며 해당 주문의 Refund가 하나인지 검증한다. 새 지급 확인 조건에서는 확인 근거 유무에 따라 정지 요청 Outbox의 0건·1건도 검증한다.
+기존 환불이 없는 상태의 동시 접수를 대상으로 하며, Mockito의 잠금 메서드 호출 확인만으로 동시성 검증을 대신하지 않는다. 해당 테스트와 서비스 잠금 우회 시 유일 제약 검증은 RefundReceptionIntegrationTest로 작성해 2026-10-25 OCI의 실제 MySQL에서 통과했다.
+
+2026-10-25, 정지 요청의 본문은 refundId·orderNo·buyerSubject·productId·productCode·paymentId를 전달하기로 했다.
+R04의 Outbox 검증에서는 환불 식별자와 주문에 보존된 구매자·상품·결제 식별자가 모두 일치하는지 확인한다. 외부 요청자가 전달한 구매 근거를 그대로 발행하지 않는다.
+License가 자신의 구매 기록과 대조하고 불일치한 정지를 막는 검증은 2026-10-26 License 테스트에 추가했다. Order 테스트로 License 업무 완료를 대신 주장하지 않는다.
+정지 요청은 기존 Order 토픽(`stove.order.v1`)과 orderNo 키를 사용하기로 했다. R04에서는 Outbox의 토픽·키도 확인한다.
+이 저장 검증은 Kafka 전달 순서나 License 반영 순서까지 증명하지 않는다. 발행 재시도 중 선행 이벤트 추월과 소비 경계는 별도 검증 대상으로 유지한다.
 
 ### 7.3 관리자 심사
 
 | ID | 상황·행동 | 기대 결과 | 주 검증 층 |
 |---|---|---|---|
 | R10 | ADMIN 권한 없이 승인·반려 요청 | 거절. 판정 변경과 정지·환불 실행 Outbox 추가 없음 | HTTP·실제 JWT |
-| R11 | 관리자가 심사 대기 요청 승인 | 승인 판정과 정지 요청을 원자적으로 저장. 정지 완료 전 Payment 실행 요청 없음 | 도메인·실제 DB |
+| R11 | 관리자가 심사 대기 요청 승인 | 승인 판정을 저장. 지급 확인도 확보했다면 정지 요청을 원자적으로 저장하고, 미확인이면 Order에서 대기. 정지 완료 전 Payment 실행 요청 없음 | 도메인·실제 DB |
 | R12 | 관리자가 심사 대기 요청 반려 | 반려 결과 저장. 보유권 정지·Payment 실행 요청 없음. 원래 결제 성공 근거 유지 | 도메인·실제 DB |
 | R13 | 같은 승인 요청을 중복 처리 | 기존 승인 결과 유지. 정지 요청을 추가로 만들지 않음 | 서비스·실제 DB |
 
@@ -619,9 +725,9 @@ R13은 동일 승인 재처리만 다루며 반려 후 재신청 규칙을 대�
 | R18 | 동일 정지 완료를 반복 또는 동시에 수신 | 동일 확인 결과 유지. Payment 실행 업무를 중복 생성하지 않음 | 서비스·실제 DB 동시성 |
 | R19 | 정지 완료 처리 중 Payment 실행 Outbox 저장 실패 | 정지 확인 상태·Inbox도 함께 롤백. 같은 완료 입력으로 재처리 가능 | 실제 DB 트랜잭션 |
 
-이벤트의 구체적인 이름·필드·키와 확인 대상 식별자는 계약을 결정한 뒤 픽스처로 고정한다.
+정지 완료는 LicenseSuspended 계약을 사용한다. 실행 요청은 RefundExecutionRequested로 eventId·occurredAt·refundId·attemptId·orderNo·paymentId·buyerSubject·amount·currency·licenseSuspensionEventId를 전달하며 Order 토픽·orderNo 키를 사용한다. 금액·통화는 원래 주문의 전액 근거에서 만든다. 이 요청 등록은 실제 PG 실행 완료와 구분한다.
 서비스에는 외부 이벤트 전체 대신 mapper가 검증한 내부 입력을 전달한다.
-승인되지 않은 요청이나 존재하지 않는 환불로 도착한 완료를 무시·거절·재시도 중 어떻게 처리할지는 먼저 결정한다.
+승인되지 않았거나 원래 환불·정지 요청을 확인할 수 없는 완료는 업무 진행을 거절·격리하는 A안으로 결정했다. DB 접속 등 일시 장애의 재시도와 구분한다.
 
 ### 7.5 Payment 확정 결과 반영
 
@@ -659,9 +765,9 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 
 ### 7.7 작성 순서와 단언 기준
 
-첫 Red는 **R04: 본인 PAID 주문의 기한 내 접수** 한 건을 권한다.
-그다음 R05(심사 분기), R07(최초 접수 보존), R08(Outbox 실패 롤백)을 순차적으로 작성하고 각 Green을 확인한다.
-같은 접수 단계에서 R01~R03의 거절과 R06·R09의 불변성·동시성을 보완한 뒤 심사 → 정지 확인 → 확정 결과로 확장한다.
+첫 Red는 **R04: 본인 PAID 주문의 기한 내 접수**로 시작했다.
+서비스 단위 R04 → R05(심사 분기) → R07(최초 접수 보존)의 Red·Green을 확인했고 R01~R03의 거절과 R06의 결제 근거 보존을 보완했다.
+실제 DB의 접수 검증 뒤 2026-10-26 지급 확인 대기 조건도 Red·Green과 OCI로 확인했다. 이어 License 정지·완료 발행과 Download 상태 검증, 실행 이력 모델, Order의 정지 완료 반영·실행 요청과 Payment의 내구성 있는 접수를 추가했다. 다음은 모의 PG의 환불 승인·조회 계약과 처리이며, 미결 계약은 7.8절에서 먼저 결정한다.
 33개 시나리오를 한 번에 실패 상태로 만들지 않는다.
 
 - 순수 판정·입력 검증·mapper는 `src/test`에서 검증한다. 기존 `RefundPolicyTest`와 `OrderArchitectureTest`는 회귀로 유지한다.
@@ -676,11 +782,11 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 
 | 쟁점 | 영향을 받는 테스트 |
 |---|---|
-| Order 필드로 진행 상태를 관리할지, Order 모듈의 별도 환불 모델을 둘지 | 접수·진행 상태의 구체적인 저장 테스트. 이 목록은 어느 모델도 미리 확정하지 않음 |
-| 정지 요청·완료·환불 실행·확정 결과·복구 요청의 필드, 키와 업무·시도 식별자 | R04·R11·R14~R25의 구체적인 이벤트 픽스처 |
+| 기존 지급 건·확인 누락 복구와 장기 대기 방식. 새 지급의 LicenseGranted 계약·근거 저장·선행/후행 재개는 구현·검증 | 기존 지급 보완과 장기 대기·운영 재처리 테스트 |
+| 확정 결과·복구 요청의 필드·키와 PG 멱등 키 매핑. 내부 refundId/attemptId, 정지 요청·완료와 실행 요청, Order의 완료 수신과 Payment 접수는 정의·구현했다 | R20~R25의 구체적인 이벤트 픽스처와 PG 경계 |
 | 이미 반려된 요청의 재신청, 승인·반려 경합과 판정 변경 | R13 이후의 추가 심사 시나리오 |
-| 어떤 확정 실패에 사용자 재시도가 유효한지, 새 시도와 이전 결과를 구분하는 방법 | 확정 실패 후 재시도·이전 시도의 지연 결과 테스트 |
-| 예상하지 않은 단계·없는 환불로 도착한 이벤트를 거절·무시·재시도 중 어떻게 다룰지 | R14~R25의 추가 상태 전이·순서 역전 테스트 |
+| 어떤 확정 실패에 사용자 재시도가 유효한지, 현재 실행의 선택·이전 결과 대조와 복구 완료의 연결. 시도별 모델은 이 판단을 대신하지 않음 | 확정 실패 후 재시도·이전 시도의 지연 결과 테스트 |
+| 정지 완료의 근거 부재·불일치는 A안으로 거절·격리한다. 아직 정의하지 않은 Payment 결과·복구 이벤트의 예상하지 않은 단계 처리는 후속 | R20~R25의 추가 상태 전이·순서 역전 테스트 |
 | 접수 시각이 결제 확정 시각보다 앞서는 경우의 처리 | 현재 시간 판정 테스트의 유효한 두 시각 전제를 확장하는 테스트 |
 | 복구 완료 확인 방식, 조회 경로·HTTP 상태·응답 필드·관리자 조회 범위 | R21·R27~R29와 복구 완료 수신 테스트 |
 | 정책 변경의 과거 주문·접수 적용, 환불 후 재구매, 정산·비용 반환 | 별도 후속 테스트. 현재 4시간·최초 판정 보존 규칙을 임의로 변경하지 않음 |
@@ -705,7 +811,7 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 | 동일 상품 추가 구매 제한 | 같은 구매자의 PENDING·PAID 주문이 있으면 다른 요청의 추가 구매를 막음 | 실제 동시 구매 방어는 DB 제약·잠금을 포함한 통합 검증 필요 |
 | 내 주문 조회 | 상세는 orderNo·구매자, 목록은 구매자로 범위를 제한. 페이지 범위와 최신순 정렬을 적용 | 다른 구매자 주문 조회와 관리자 전체 조회를 같은 기능으로 취급하지 않음 |
 | 결제 결과 반영 | 자기 주문·요청·구매자·금액·통화를 대조해 최종 결과 적용. 첫 성공만 저장된 주문 근거로 OrderPaid 발행 | Payment가 승인·실패를 결정하며 Order는 PG를 직접 호출하지 않음 |
-| 환불 접수·허용 | 접수 시 4시간 판정, 기한 초과 심사, 정지 확인 뒤 환불 실행 요청, 확정 결과 반영 | 합의한 신규 기능이며 7절의 Red 대상. 현재 시간 판정만 구현됨 |
+| 환불 접수·허용 | 접수 시 4시간 판정, 기한 초과 심사, 지급 확인 뒤 정지 요청과 정지 확인 뒤 환불 실행 요청, 확정 결과 반영 | 단계별 구현·검증은 7절을 따른다. 지급 확인 대기·재개, License 정지·완료 발행·Download 접근 검증, 실행 이력과 Order의 완료 수신·실행 요청, Payment의 내구성 있는 접수를 구현했다. 환불 API·관리자 판정·PG 실행·결과·복구·기존 지급 보완은 후속 |
 
 기존 OrderRequest·OrderPrice·Order·PaymentResult 검증, Catalog HTTP 오류 매핑, 이벤트 mapper, 아키텍처 테스트도 회귀로 유지한다.
 새 서비스 단위 테스트는 이 기능들이 유스케이스에서 올바른 입력·연결값으로 조립되는지 검증한다.
