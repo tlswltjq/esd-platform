@@ -13,7 +13,10 @@ import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
 import com.stove.common.kafka.contract.payload.LicenseIssueFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseIssuedEvent;
+import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRevokedEvent;
+import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
 import com.stove.common.kafka.contract.payload.OrderCanceledEvent;
 import com.stove.common.kafka.contract.payload.OrderCreatedEvent;
 import com.stove.common.kafka.contract.payload.OrderLine;
@@ -39,6 +42,7 @@ import com.stove.common.kafka.contract.payload.ReviewAppealedEvent;
 import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
@@ -111,6 +115,20 @@ class EventContractTest {
                 new OrderPaidEvent("paid-1", Instant.parse("2026-10-17T00:00:00.123456Z"),
                         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "placed-1", "result-1", "payment-1", "usr_buyer",
                         1L, "PROJECT-1", "Game", 1, 1000, "KRW"),
+                new LicenseSuspensionRequestedEvent("suspension-requested-1",
+                        Instant.parse("2026-10-25T13:00:00.123456Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new LicenseGrantedEvent("grant-1", Instant.parse("2026-10-25T11:00:00.123456Z"),
+                        "cccccccc-cccc-cccc-cccc-cccccccccccc", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new LicenseSuspendedEvent("suspended-1", Instant.parse("2026-10-26T01:00:00.123456Z"),
+                        "suspension-requested-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                        "cccccccc-cccc-cccc-cccc-cccccccccccc", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new RefundExecutionRequestedEvent("execution-requested-1", Instant.parse("2026-10-26T01:01:00.123456Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "suspended-1"),
                 OrderPaymentCompletedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW"),
                 OrderPaymentFailedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW", "DECLINED", "Declined"),
                 CatalogProductPublishedEvent.of(new CatalogProductSnapshot(1L, "PROJECT-1", "Game", "Summary",

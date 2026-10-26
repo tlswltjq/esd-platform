@@ -1,0 +1,15 @@
+package com.stove.common.kafka.contract.payload;
+
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.Topics;
+import java.time.Instant;
+
+/** License가 보유권을 내구성 있게 지급한 사실. occurredAt은 저장된 지급 시각이다. */
+public record LicenseGrantedEvent(String eventId, Instant occurredAt, String licenseId,
+        String orderNo, String buyerSubject, Long productId, String productCode, String paymentId)
+        implements DomainEvent {
+    public String eventType() { return EventType.LICENSE_GRANTED; }
+    public String topic() { return Topics.LICENSE; }
+    public String partitionKey() { return orderNo; }
+}

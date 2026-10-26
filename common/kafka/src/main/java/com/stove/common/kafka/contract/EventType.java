@@ -47,6 +47,9 @@ public final class EventType {
 
     // order
     public static final String ORDER_PAID = "OrderPaid";
+    /** Order에 환불을 위한 보유권 정지 요청이 등록됐음을 나타낸다. */
+    public static final String LICENSE_SUSPENSION_REQUESTED = "LicenseSuspensionRequested";
+    public static final String REFUND_EXECUTION_REQUESTED = "RefundExecutionRequested";
     public static final String ORDER_PLACED = "OrderPlaced";
     public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";
     public static final String ORDER_PAYMENT_FAILED = "OrderPaymentFailed";
@@ -64,6 +67,8 @@ public final class EventType {
     public static final String PAYMENT_FAILED = "PaymentFailed";
 
     // license
+    public static final String LICENSE_GRANTED = "LicenseGranted";
+    public static final String LICENSE_SUSPENDED = "LicenseSuspended";
     /** 이용권 지급 완료를 나타내는 이벤트 타입. */
     public static final String LICENSE_ISSUED = "LicenseIssued";
     /** 이용권 회수 완료를 나타내는 이벤트 타입. */
