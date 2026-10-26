@@ -80,6 +80,18 @@ public class Order {
                 failureReasonCode, failureReason);
     }
 
+    public void verifyLicenseGrant(LicenseGrant grant) {
+        if (grant == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지급 확인 근거가 필요합니다.");
+        }
+        if (status != OrderStatus.PAID || paymentId == null || paymentResultEventId == null
+                || resultOccurredAt == null || !orderNo.equals(grant.orderNo())
+                || !buyerSubject.equals(grant.buyerSubject()) || !productId.equals(grant.productId())
+                || !productCode.equals(grant.productCode()) || !paymentId.equals(grant.paymentId())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "지급 확인이 결제 완료 주문과 일치하지 않습니다.");
+        }
+    }
+
     public void apply(PaymentResult result) {
         if (!orderNo.equals(result.orderNo()) || !requestEventId.equals(result.requestEventId())
                 || !buyerSubject.equals(result.buyerSubject()) || amount != result.amount()

@@ -29,6 +29,7 @@ import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
@@ -41,12 +42,16 @@ import com.stove.order.core.domain.OrderErrorCode;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderRequest;
 import com.stove.order.core.domain.OrderStatus;
+import com.stove.order.core.domain.Refund;
+import com.stove.order.core.domain.RefundRepository;
+import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.port.CatalogProducts;
 import com.stove.order.core.service.ApplyPaymentResult;
 import com.stove.order.core.service.CreateOrder;
 import com.stove.order.core.service.ReadOrder;
 import com.stove.order.core.service.SearchOrders;
+import com.stove.order.core.service.RequestRefund;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -89,6 +94,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired ReadOrder read;
     @Autowired SearchOrders search;
     @Autowired ApplyPaymentResult apply;
+    @Autowired RequestRefund requestRefund;
+    @Autowired RefundRepository refunds;
     @MockitoSpyBean OrderRepository orders;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -103,7 +110,9 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
-        jdbc.update("DELETE FROM purchase_order"); jdbc.update("DELETE FROM outbox_event"); jdbc.update("DELETE FROM processed_event");
+        jdbc.update("DELETE FROM order_refund_attempt");
+        jdbc.update("DELETE FROM order_license_grant"); jdbc.update("DELETE FROM order_refund"); jdbc.update("DELETE FROM purchase_order");
+        jdbc.update("DELETE FROM outbox_event"); jdbc.update("DELETE FROM processed_event");
         when(catalog.detail(anyString())).thenAnswer(inv -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             return product();
@@ -518,6 +527,26 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         record.headers().add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
         kafka.send(record).get(10, TimeUnit.SECONDS);
+    }
+
+    @Test void aKafkaGrantConfirmationResumesTheWaitingRefundOnlyOnce() throws Exception {
+        Order order = saved("usr_buyer");
+        accept(completed(order));
+        Order paid = stored(order);
+        Refund received = requestRefund.execute(paid.getBuyerSubject(), paid.getOrderNo());
+        assertThat(received.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_GRANT);
+        LicenseGrantedEvent event = new LicenseGrantedEvent(id(), paid.getResultOccurredAt(), id(),
+                paid.getOrderNo(), paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
+        try {
+            listeners.start();
+            send(event); send(event);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                assertThat(refunds.findByOrderNo(paid.getOrderNo()).orElseThrow().getStatus())
+                        .isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseSuspensionRequested' AND partition_key=?",
+                        Integer.class, paid.getOrderNo())).isEqualTo(1);
+            });
+        } finally { listeners.stop(); }
     }
     @Test void openApiMatchesSnapshotAndContainsOnlyThreeBusinessOperations() throws Exception {
         OpenApiSnapshot.verify(port, "order");
