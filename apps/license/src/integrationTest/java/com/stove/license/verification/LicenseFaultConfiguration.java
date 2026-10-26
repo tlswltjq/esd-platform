@@ -1,6 +1,7 @@
 package com.stove.license.verification;
 
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.license.core.domain.LicenseRepository;
 import com.stove.license.core.domain.PaidOrder;
 import com.stove.license.core.service.GrantLicense;
@@ -27,8 +28,9 @@ public class LicenseFaultConfiguration {
     @Bean
     @Primary
     GrantLicense verificationGrant(LicenseRepository licenses,
-                                   ProcessedEventGuard inbox, EntityManager entityManager, Environment env) {
-        return new HaltAfterCommitGrant(licenses, inbox, entityManager,
+                                   ProcessedEventGuard inbox, EntityManager entityManager,
+                                   OutboxRecorder outbox, Environment env) {
+        return new HaltAfterCommitGrant(licenses, inbox, entityManager, outbox,
                 Path.of(env.getRequiredProperty("stove.verification.commit-marker")),
                 env.getProperty("stove.verification.halt-after-commit", Boolean.class, false));
     }
@@ -38,8 +40,9 @@ public class LicenseFaultConfiguration {
         private final boolean halt;
 
         HaltAfterCommitGrant(LicenseRepository licenses,
-                             ProcessedEventGuard inbox, EntityManager entityManager, Path marker, boolean halt) {
-            super(licenses, inbox, entityManager);
+                             ProcessedEventGuard inbox, EntityManager entityManager,
+                             OutboxRecorder outbox, Path marker, boolean halt) {
+            super(licenses, inbox, entityManager, outbox);
             this.marker = marker;
             this.halt = halt;
         }

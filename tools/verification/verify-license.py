@@ -177,7 +177,9 @@ try:
         check("SELECT COUNT(*) FROM stove_license.product_license",rights,"Product rights: "+str(rights))
         check("SELECT COUNT(*) FROM stove_license.license_purchase",0,"No writes to historical purchase table")
         check("SELECT COUNT(*) FROM stove_license.processed_event WHERE consumer_group='license-paid-order'",markers,"License Inbox: "+str(markers))
-        assert sql("SELECT COUNT(*) FROM stove_license.outbox_event")=="0"
+        check("SELECT COUNT(*) FROM stove_license.outbox_event WHERE event_type='LicenseGranted'",rights,
+              "License grant confirmations: "+str(rights))
+        assert sql("SELECT COUNT(*) FROM stove_license.outbox_event WHERE event_type<>'LicenseGranted'")=="0"
     phase("preparePendingPurchase")
     evidence_counts(0,0)
     restart_payment()

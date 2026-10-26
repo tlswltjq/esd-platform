@@ -4,6 +4,8 @@ import static com.stove.license.core.domain.LicenseValues.consistent;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -55,6 +57,25 @@ public class License {
     private Instant acquiredAt;
     @Column(nullable = false)
     private Instant receivedAt;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
+    private LicenseStatus status = LicenseStatus.ACTIVE;
+    @Column(length = 64)
+    private String suspensionRequestEventId;
+
+    public void suspend(String requestEventId) {
+        LicenseValues.require(LicenseValues.text(requestEventId, 64), "정지 요청 식별자가 필요합니다.");
+        if (status == LicenseStatus.SUSPENDED && requestEventId.equals(suspensionRequestEventId)) return;
+        consistent(status == LicenseStatus.ACTIVE, "다른 요청으로 이미 정지된 보유권입니다.");
+        status = LicenseStatus.SUSPENDED;
+        suspensionRequestEventId = requestEventId;
+    }
+
+    public void verifySuspensionTarget(SuspensionRequest request) {
+        LicenseValues.require(request != null, "정지 요청이 필요합니다.");
+        consistent(orderNo.equals(request.orderNo()) && buyerSubject.equals(request.buyerSubject())
+                && productId.equals(request.productId()) && productCode.equals(request.productCode())
+                && paymentId.equals(request.paymentId()), "정지 요청이 보유권의 구매 근거와 다릅니다.");
+    }
 
     public static License grant(PaidOrder order) {
         License license = new License();

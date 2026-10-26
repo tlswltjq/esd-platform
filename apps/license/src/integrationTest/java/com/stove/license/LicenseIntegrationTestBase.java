@@ -23,7 +23,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "spring.kafka.listener.auto-startup=false"})
+        "spring.kafka.listener.auto-startup=false", "stove.outbox.relay-enabled=false"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 public abstract class LicenseIntegrationTestBase {
     static final String ISSUER = "https://license-test.example";

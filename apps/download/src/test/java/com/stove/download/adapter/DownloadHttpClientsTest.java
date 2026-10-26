@@ -34,7 +34,7 @@ class DownloadHttpClientsTest {
     long delay;
     LicenseHttpClient license;
     CatalogBuildHttpClient catalog;
-    static final String OWNED = "{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game\"}}";
+    static final String OWNED = "{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game\",\"status\":\"ACTIVE\"}}";
     static final String BUILD = "{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game\",\"releaseRequestId\":2,\"contentVersion\":3,\"buildId\":4,\"version\":\"v1\",\"fileSize\":10,\"checksum\":\"" + "a".repeat(64) + "\",\"storagePath\":\"s3://stove-builds/game.zip\"}}";
 
     @BeforeEach void start() throws Exception {
@@ -110,6 +110,20 @@ class DownloadHttpClientsTest {
         assertUnavailable(() -> bounded.require("game", "token"));
     }
     @Test void refusedConnectionIsUnavailable() { server.stop(0); assertUnavailable(() -> catalog.require("game")); }
+    @Test void aVisibleSuspendedProductDoesNotAuthorizeAnotherDownload() {
+        body = OWNED.replace("ACTIVE", "SUSPENDED");
+        assertThatThrownBy(() -> license.require("game", "token")).isInstanceOfSatisfying(BusinessException.class,
+                failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+    }
+    @Test void missingAccessStateDoesNotDefaultToActive() {
+        body = OWNED.replace(",\"status\":\"ACTIVE\"", "");
+        assertUnavailable(() -> license.require("game", "token"));
+    }
+    @ParameterizedTest @ValueSource(strings = {"UNKNOWN", "active", "", "REVOKED"})
+    void onlyExplicitActiveStateAuthorizesIssuance(String state) {
+        body = OWNED.replace("ACTIVE", state);
+        assertUnavailable(() -> license.require("game", "token"));
+    }
     static void assertUnavailable(ThrowableAssert.ThrowingCallable action) {
         assertThatThrownBy(action).isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.UPSTREAM_UNAVAILABLE));
     }

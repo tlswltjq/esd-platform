@@ -24,6 +24,12 @@ import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.ops.OutboxOpsController;
 import com.stove.common.messaging.outbox.OutboxRelay;
+import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.common.messaging.outbox.OutboxEventRepository;
+import com.stove.common.messaging.outbox.OutboxMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
+import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
@@ -68,6 +74,8 @@ import org.springframework.web.client.RestClient;
 class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     @MockitoSpyBean
     GrantLicense grant;
+    @MockitoSpyBean
+    OutboxRecorder outbox;
     @Autowired
     SearchLicenses search;
     @Autowired
@@ -94,6 +102,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     @BeforeEach
     void clean() {
         listeners.stop();
+        jdbc.update("DELETE FROM license_suspension");
         jdbc.update("DELETE FROM license_purchase");
         jdbc.update("DELETE FROM product_license");
         jdbc.update("DELETE FROM processed_event");
@@ -105,10 +114,14 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     void counts(int rights, int markers) {
+        counts(rights, markers, rights);
+    }
+
+    void counts(int rights, int markers, int events) {
         assertThat(count("product_license")).isEqualTo(rights);
         assertThat(count("license_purchase")).isZero();
         assertThat(count("processed_event")).isEqualTo(markers);
-        assertThat(count("outbox_event")).isZero();
+        assertThat(count("outbox_event")).isEqualTo(events);
     }
 
     PaidOrder changed(PaidOrder p, String field, Object value) throws Exception {
@@ -213,11 +226,11 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         grant.execute(p);
         jdbc.update("DELETE FROM product_license");
         assertThatThrownBy(() -> grant.execute(p)).isInstanceOf(BusinessException.class);
-        counts(0, 1);
+        counts(0, 1, 1);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"inbox", "license"})
+    @ValueSource(strings = {"inbox", "license", "outbox"})
     void failureAfterEachWriteRollsBackTheWholeGrantAndFreshTransactionRecovers(String stage) {
         PaidOrder p = paid();
         TransactionTemplate tx = new TransactionTemplate(transactions);
@@ -229,6 +242,12 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
                 written.set(true);
                 throw new IllegalStateException("after inbox");
             }).when(inbox).firstDelivery(anyString(), anyString(), anyString());
+            if (stage.equals("outbox")) doAnswer(inv -> {
+                inv.callRealMethod();
+                assertThat(count("outbox_event")).isEqualTo(1);
+                written.set(true);
+                throw new IllegalStateException("after outbox");
+            }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class));
             if (stage.equals("license")) doAnswer(inv -> {
                 mockingDetails(licenses).getMockCreationSettings().getDefaultAnswer().answer(inv);
                 assertThat(count("product_license")).isEqualTo(1);
@@ -240,7 +259,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
             assertThatThrownBy(() -> grant.execute(p)).isInstanceOf(RuntimeException.class);
             counts(0, 0);
         } finally {
-            reset(inbox, licenses);
+            reset(inbox, licenses, outbox);
         }
         assertThat(written).isTrue();
         grant.execute(p);
@@ -355,7 +374,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         String bearer = token("usr_buyer", "MEMBER");
         Response detail = http("GET", "/api/v1/library/Game-1", bearer);
         assertThat(detail.status()).isEqualTo(200);
-        assertThat(detail.data().size()).isEqualTo(5);
+        assertThat(detail.data().size()).isEqualTo(6);
+        assertThat(detail.data().path("status").asText()).isEqualTo("ACTIVE");
         assertThat(detail.body().toString()).doesNotContain("buyerSubject", "orderNo", "eventId", "amount", "paymentId");
         assertThat(http("GET", "/api/v1/library?buyerSubject=other&memberId=999", bearer).data().path("totalElements").asInt()).isEqualTo(1);
         assertThat(http("GET", "/api/v1/library/Game-1", token("other", "MEMBER")).status()).isEqualTo(404);
@@ -381,11 +401,32 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void legacyOutboxRelayAndOperationsAreDisabledByDefault() {
+    void operationsRemainDisabledAndRelayIsPausedForDatabaseAssertions() {
         assertThat(context.getBeansOfType(OutboxRelay.class)).isEmpty();
         assertThat(context.getBeansOfType(OutboxOpsController.class)).isEmpty();
         jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES('old','License','legacy','LicenseIssued','stove.license.v1','legacy','{}','PENDING',NOW())");
         assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id='old'", String.class)).isEqualTo("PENDING");
+    }
+
+    @Test
+    void theCommittedGrantCanBeRelayedToKafka() throws Exception {
+        PaidOrder input = paid();
+        grant.execute(input);
+        License stored = licenses.findByOrderNo(input.orderNo()).orElseThrow();
+        LicenseGrantedEvent event = json.readValue(jdbc.queryForObject(
+                "SELECT payload FROM outbox_event WHERE event_type='LicenseGranted'", String.class), LicenseGrantedEvent.class);
+        assertThat(event.licenseId()).isEqualTo(stored.getLicenseId());
+        assertThat(event.occurredAt()).isEqualTo(stored.getAcquiredAt());
+        assertThat(event.orderNo()).isEqualTo(input.orderNo());
+        assertThat(event.paymentId()).isEqualTo(input.paymentId());
+        OutboxEventRepository rows = context.getBean(OutboxEventRepository.class);
+        OutboxRelay relay = new OutboxRelay(rows, kafka,
+                200, 10, 5, new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
+        relay.relay();
+        assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id=?",
+                String.class, event.eventId())).isEqualTo("SENT");
+        grant.execute(input);
+        assertThat(jdbc.queryForObject("SELECT event_id FROM outbox_event", String.class)).isEqualTo(event.eventId());
     }
 
     @Test

@@ -26,6 +26,11 @@ public class LicenseHttpClient implements OwnedProducts {
                         throw HttpResponseValues.invalid();
                     }).body(JsonNode.class);
             JsonNode data = HttpResponseValues.data(body);
+            String status = HttpResponseValues.text(data, "status");
+            if ("SUSPENDED".equals(status)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "이용이 정지된 상품입니다.");
+            }
+            if (!"ACTIVE".equals(status)) throw HttpResponseValues.invalid();
             OwnedProduct product = new OwnedProduct(HttpResponseValues.number(data, "productId"),
                     HttpResponseValues.text(data, "productCode"));
             if (!productCode.equals(product.productCode())) throw HttpResponseValues.invalid();

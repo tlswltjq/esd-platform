@@ -37,6 +37,8 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
             Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
             flyway.migrate(); flyway.validate();
             Map<String, Object> merged = jdbc.queryForMap("SELECT * FROM product_license");
+            assertThat(merged.get("status")).isEqualTo("ACTIVE");
+            assertThat(merged.get("suspension_request_event_id")).isNull();
             assertThat(merged).containsAllEntriesOf(right);
             HashMap<String, Object> facts = new HashMap<>(historical);
             facts.remove("id"); facts.remove("license_id");
@@ -101,7 +103,7 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void v4PreservesLegacyRightsInboxAndPendingOutboxWithoutConvertingThem() {
+    void v6PreservesLegacyRightsInboxAndArchivesPendingEventsBeforeRelayActivation() {
         MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
         String schema = "license_migration_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
@@ -121,7 +123,9 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
             flyway.validate();
             assertThat(jdbc.queryForObject("SELECT license_key FROM license", String.class)).isEqualTo("legacy-key");
             assertThat(jdbc.queryForObject("SELECT consumer_group FROM processed_event", String.class)).isEqualTo("license");
-            assertThat(jdbc.queryForObject("SELECT status FROM outbox_event", String.class)).isEqualTo("PENDING");
+            assertThat(jdbc.queryForObject("SELECT status FROM outbox_event", String.class)).isEqualTo("DEAD");
+            assertThat(jdbc.queryForObject("SELECT status FROM license_legacy_outbox_archive", String.class)).isEqualTo("PENDING");
+            assertThat(jdbc.queryForObject("SELECT event_id FROM license_legacy_outbox_archive", String.class)).isEqualTo("legacy-outbox");
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM product_license", Integer.class)).isZero();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM license_purchase", Integer.class)).isZero();
         } finally {

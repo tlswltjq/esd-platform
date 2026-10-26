@@ -72,6 +72,7 @@ class DownloadIntegrationTest {
     static final AtomicInteger LICENSE_CALLS = new AtomicInteger();
     static final AtomicInteger CATALOG_CALLS = new AtomicInteger();
     static volatile int licenseStatus = 200;
+    static volatile String licenseAccessState = "ACTIVE";
     static volatile int catalogStatus = 200;
     static volatile long productId = 1;
     static volatile String storagePath = "s3://stove-builds/game.zip";
@@ -95,7 +96,9 @@ class DownloadIntegrationTest {
                     LICENSE_CALLS.incrementAndGet(); seenAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
                     if (exchange.getRequestHeaders().getFirst("X-Download-Service-Key") != null) throw new AssertionError("Service key leaked to License");
                     status = ("Bearer " + OWNER).equals(seenAuthorization) ? licenseStatus : 404;
-                    body = "{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game\"}}";
+                    ObjectNode ownership = JSON.createObjectNode().put("productId", 1).put("productCode", "game");
+                    if (licenseAccessState != null) ownership.put("status", licenseAccessState);
+                    body = JSON.writeValueAsString(JSON.createObjectNode().put("success", true).set("data", ownership));
                 } else {
                     CATALOG_CALLS.incrementAndGet(); seenServiceKey = exchange.getRequestHeaders().getFirst("X-Download-Service-Key");
                     if (exchange.getRequestHeaders().getFirst("Authorization") != null) throw new AssertionError("User token leaked to Catalog");
@@ -145,12 +148,31 @@ class DownloadIntegrationTest {
         assertThat(MINIO.execInContainer("mc", "admin", "policy", "attach", "admin", "download-read", "--user", READER).getExitCode()).isZero();
     }
     @BeforeEach void reset() {
-        licenseStatus = 200; catalogStatus = 200; productId = 1; storagePath = "s3://stove-builds/game.zip";
+        licenseStatus = 200; licenseAccessState = "ACTIVE"; catalogStatus = 200; productId = 1; storagePath = "s3://stove-builds/game.zip";
         LICENSE_CALLS.set(0); CATALOG_CALLS.set(0);
         try (S3Client admin = client("stove", "stove1234")) {
             admin.putObject(PutObjectRequest.builder().bucket(BUCKET).key("game.zip").build(), RequestBody.fromBytes(BYTES));
         }
     }
+    @Test void suspendedLibraryEntryDoesNotAuthorizeANewUrlAndOldUrlIsIndependent() throws Exception {
+        JsonNode ticket = JSON.readTree(get("/api/v1/downloads/game/ticket", OWNER).body()).path("data");
+        String originalUrl = ticket.path("downloadUrl").asText();
+        licenseAccessState = "SUSPENDED";
+        CATALOG_CALLS.set(0);
+        assertThat(get("/api/v1/downloads/game/ticket", OWNER).statusCode()).isEqualTo(403);
+        assertThat(CATALOG_CALLS.get()).isZero();
+        assertThat(HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(originalUrl)).GET().build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(200);
+    }
+
+    @Test void missingOrUnknownAccessStateCannotReachCatalogOrStorage() throws Exception {
+        for (String state : new String[]{null, "UNKNOWN", "active"}) {
+            licenseAccessState = state;
+            assertThat(get("/api/v1/downloads/game/ticket", OWNER).statusCode()).isEqualTo(503);
+            assertThat(CATALOG_CALLS.get()).isZero();
+        }
+    }
+
     @AfterAll static void stop() { UPSTREAM.stop(0); }
     static String token(String subject, String issuer, String audience, String role, Instant expires) {
         NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(KEY)));

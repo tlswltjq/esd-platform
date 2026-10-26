@@ -1,7 +1,9 @@
 package com.stove.license.core.service;
 
 import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.license.core.domain.License;
@@ -9,6 +11,7 @@ import com.stove.license.core.domain.LicenseRepository;
 import com.stove.license.core.domain.PaidOrder;
 import jakarta.persistence.EntityManager;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -22,6 +25,7 @@ public class GrantLicense {
     private final LicenseRepository licenses;
     private final ProcessedEventGuard inbox;
     private final EntityManager entityManager;
+    private final OutboxRecorder outbox;
 
     public void execute(PaidOrder order) {
         Optional<License> previous = licenses.findByOrderNo(order.orderNo());
@@ -37,7 +41,12 @@ public class GrantLicense {
         if (!inbox.firstDelivery(order.eventId(), CONSUMER_GROUP, EventType.ORDER_PAID))
             throw conflict("Inbox에 해당하는 구매 근거가 없습니다.");
 
-        licenses.save(License.grant(order));
+        License license = License.grant(order);
+        licenses.save(license);
+        LicenseGrantedEvent event = new LicenseGrantedEvent(UUID.randomUUID().toString(), license.getAcquiredAt(),
+                license.getLicenseId(), license.getOrderNo(), license.getBuyerSubject(),
+                license.getProductId(), license.getProductCode(), license.getPaymentId());
+        outbox.record("License", license.getLicenseId(), event);
         entityManager.flush();
     }
 

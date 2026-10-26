@@ -83,6 +83,10 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          },
           "title" : {
             "type" : "string"
           }
