@@ -52,6 +52,17 @@ public class Payment {
 
     public static Instant now() { return Instant.now().truncatedTo(ChronoUnit.MICROS); }
 
+    public void requireRefundRequest(RefundExecutionRequest request) {
+        if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST, "환불 실행 요청이 필요합니다.");
+        if (status != PaymentStatus.PAID || !PaymentValues.text(providerTransactionId, 100)
+                || providerOccurredAt == null || resultEventId == null || resultOccurredAt == null
+                || !paymentId.equals(request.paymentId()) || !orderNo.equals(request.orderNo())
+                || !buyerSubject.equals(request.buyerSubject()) || amount != request.amount()
+                || !currency.equals(request.currency())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "환불 실행 요청이 확정된 결제 사실과 다릅니다.");
+        }
+    }
+
     public static Payment receive(PaymentOrderRequest request, String provider) {
         if (request == null || !PaymentValues.text(provider,30)) throw new BusinessException(ErrorCode.INVALID_REQUEST);
         Payment p = new Payment();

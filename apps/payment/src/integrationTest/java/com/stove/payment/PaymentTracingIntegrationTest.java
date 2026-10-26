@@ -92,6 +92,7 @@ class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
     @MockitoSpyBean PaymentTraceContexts contexts;
 
     @BeforeEach void clean() {
+        jdbc.update("DELETE FROM refund_execution");
         jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");

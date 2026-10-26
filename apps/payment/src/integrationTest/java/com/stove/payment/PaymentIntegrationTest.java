@@ -90,6 +90,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
+        jdbc.update("DELETE FROM refund_execution");
         jdbc.update("DELETE FROM purchase_payment");
         ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement_item");
         ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement");
