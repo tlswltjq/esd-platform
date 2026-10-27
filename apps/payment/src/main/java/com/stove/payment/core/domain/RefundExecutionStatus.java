@@ -1,5 +1,6 @@
 package com.stove.payment.core.domain;
 
 public enum RefundExecutionStatus {
-    PENDING
+    PENDING,
+    SUCCEEDED, FAILED
 }

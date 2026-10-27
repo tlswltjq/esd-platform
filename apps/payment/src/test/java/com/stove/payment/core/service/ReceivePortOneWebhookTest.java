@@ -19,6 +19,7 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PortOneWebhookNotice;
+import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.PortOneWebhookReceipts;
 import java.time.Clock;
 import java.time.Instant;
@@ -33,6 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ReceivePortOneWebhookTest {
     @Mock PaymentRepository payments;
     @Mock PortOneWebhookReceipts receipts;
+    @Mock RefundExecutionRepository executions;
 
     @Test void durableReceptionOnlyWakesRecheckingAndDoesNotTrustTheClaimedPaidStatus() {
         Payment payment = pending();
@@ -100,6 +102,6 @@ class ReceivePortOneWebhookTest {
                 payment.getPaymentId(), id(), NOW);
     }
     private ReceivePortOneWebhook service() {
-        return new ReceivePortOneWebhook(payments, receipts, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new ReceivePortOneWebhook(payments, receipts, Clock.fixed(NOW, ZoneOffset.UTC), executions);
     }
 }

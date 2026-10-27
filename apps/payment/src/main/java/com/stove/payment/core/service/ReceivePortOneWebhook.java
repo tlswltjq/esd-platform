@@ -5,6 +5,7 @@ import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PortOneWebhookNotice;
+import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.PortOneWebhookReceipts;
 import java.time.Clock;
 import java.time.Instant;
@@ -18,6 +19,7 @@ public class ReceivePortOneWebhook {
     private final PaymentRepository payments;
     private final PortOneWebhookReceipts receipts;
     private final Clock clock;
+    private final RefundExecutionRepository executions;
 
     public void execute(PortOneWebhookNotice notice) {
         if (notice == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
@@ -34,5 +36,10 @@ public class ReceivePortOneWebhook {
         Instant receivedAt = clock.instant();
         receipts.save(notice, receivedAt);
         payment.requestRecheck(receivedAt);
+        if (notice.type().equals("Transaction.CancelPending") || notice.type().equals("Transaction.PartialCancelled")
+                || notice.type().equals("Transaction.Cancelled")) {
+            executions.findFirstByPaymentIdOrderByIdAsc(payment.getPaymentId()).ifPresent(received ->
+                    executions.lockByAttemptId(received.getAttemptId()).orElseThrow().getLookupSchedule().wake(receivedAt));
+        }
     }
 }

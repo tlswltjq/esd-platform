@@ -60,6 +60,8 @@ stove:
     poll-interval-ms: ${PAYMENT_POLL_MS:1000}
     batch-size: ${PAYMENT_BATCH_SIZE:20}
     retry-delay-ms: ${PAYMENT_RETRY_MS:5000}
+    refund-lookup:
+      enabled: ${PAYMENT_REFUND_LOOKUP_ENABLED:false}
     pg:
       provider: ${PAYMENT_PG_PROVIDER:SIMULATED}
       base-url: ${MOCK_PG_URI:http://localhost:8092}

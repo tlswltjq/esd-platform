@@ -20,14 +20,19 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PortOneWebhookNotice;
+import com.stove.payment.core.domain.RefundExecution;
+import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.PortOneWebhookReceipts;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import com.stove.payment.core.service.ResolvePayment;
+import com.stove.payment.core.service.ReceiveRefundExecution;
+import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -105,6 +110,9 @@ class PortOneWebhookIntegrationTest {
     @Autowired PaymentRepository payments;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired ReceiveRefundExecution receiveRefund;
+    @Autowired RefundExecutionRepository refunds;
+    @Autowired RecordRefundCancellationPreparation prepareRefund;
     @MockitoBean Clock clock;
     @MockitoSpyBean PortOneWebhookReceipts receipts;
     @LocalServerPort int port;
@@ -117,6 +125,8 @@ class PortOneWebhookIntegrationTest {
     @AfterEach void clear() {
         reset(receipts);
         jdbc.update("DELETE FROM payment_pg_webhook");
+        jdbc.update("DELETE FROM refund_cancellation_evidence");
+        jdbc.update("DELETE FROM refund_execution_trace");
         jdbc.update("DELETE FROM refund_execution");
         jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
@@ -243,6 +253,26 @@ class PortOneWebhookIntegrationTest {
     @Test void unsupportedSignedEventsAreAcknowledgedWithoutInventingAReceipt() {
         assertThat(post("msg_future", "{\"type\":\"Transaction.FutureEvent\"}".getBytes(StandardCharsets.UTF_8))).isEqualTo(200);
         assertThat(count("payment_pg_webhook")).isZero();
+    }
+
+    @Test void signedCancellationWebhookWakesOnlyAPreparedRefundAndReplayDoesNotWakeItAgain() {
+        Payment payment = pending(); resolve.execute(); payment = stored(payment);
+        RefundExecution refund = receiveRefund.execute(RefundFixtures.execution(payment));
+        assertThat(post("msg_unprepared_cancel", notice(payment, "Transaction.CancelPending"))).isEqualTo(200);
+        assertThat(refunds.findByAttemptId(refund.getAttemptId()).orElseThrow().getLookupSchedule().getWakeAt()).isNull();
+        prepareRefund.execute(refund.getAttemptId());
+        byte[] body = notice(payment, "Transaction.Cancelled");
+        assertThat(post("msg_refund_ready", body)).isEqualTo(200);
+        RefundExecution woken = refunds.findByAttemptId(refund.getAttemptId()).orElseThrow();
+        assertThat(woken.getLookupSchedule().getWakeAt()).isEqualTo(CHECKED_AT);
+        assertThat(woken.getLookupSchedule().getNextAt()).isEqualTo(CHECKED_AT.plusSeconds(5));
+        assertThat(woken.getRefundConfirmedAt()).isNull();
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> refunds.lockByAttemptId(refund.getAttemptId())
+                .orElseThrow().getLookupSchedule().claim(id(), CHECKED_AT, Duration.ofSeconds(97)));
+        assertThat(post("msg_refund_ready", body)).isEqualTo(200);
+        assertThat(refunds.findByAttemptId(refund.getAttemptId()).orElseThrow().getLookupSchedule().getWakeAt()).isNull();
+        assertThat(PG_READS.get()).isEqualTo(1); assertThat(PG_WRITES.get()).isZero();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
     @Test void checkoutReadsTheOwnedFixedPurchaseAndPublicSdkSettingsWithoutCallingTheProvider() {
