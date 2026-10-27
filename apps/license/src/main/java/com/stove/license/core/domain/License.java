@@ -62,6 +62,12 @@ public class License {
     @Column(length = 64)
     private String suspensionRequestEventId;
 
+    public void restore(String suspensionRequestId) {
+        LicenseValues.require(LicenseValues.text(suspensionRequestId, 64), "정지 요청 식별자가 필요합니다.");
+        consistent(status == LicenseStatus.SUSPENDED && suspensionRequestId.equals(suspensionRequestEventId), "복구할 현재 정지가 다릅니다.");
+        status = LicenseStatus.ACTIVE; suspensionRequestEventId = null;
+    }
+
     public void suspend(String requestEventId) {
         LicenseValues.require(LicenseValues.text(requestEventId, 64), "정지 요청 식별자가 필요합니다.");
         if (status == LicenseStatus.SUSPENDED && requestEventId.equals(suspensionRequestEventId)) return;
