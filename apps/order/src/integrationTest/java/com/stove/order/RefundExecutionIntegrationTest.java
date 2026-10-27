@@ -30,6 +30,12 @@ import com.stove.order.core.domain.RefundAttemptRepository;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundPaymentConfirmation;
+import com.stove.order.core.domain.RefundFailureConfirmation;
+import com.stove.order.core.domain.LicenseRestorationConfirmation;
+import com.stove.order.core.service.ApplyRefundRestoration;
+import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import com.stove.order.core.service.ApplyLicenseGrant;
 import com.stove.order.core.service.ApplyRefundSuspension;
 import com.stove.order.core.service.RequestRefund;
@@ -83,11 +89,15 @@ class RefundExecutionIntegrationTest {
     @Autowired RefundAttemptRepository attempts;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired ApplyRefundPaymentConfirmation confirmMoney;
+    @Autowired ApplyRefundRestoration restore;
+    @MockitoSpyBean ProcessedEventGuard inbox;
     @MockitoBean Clock clock;
     @MockitoSpyBean OutboxRecorder outbox;
 
     @BeforeEach void initialize() { clear(); when(clock.instant()).thenReturn(RECEIVED_AT); }
     @AfterEach void clear() {
+        reset(inbox);
         jdbc.update("DELETE FROM order_refund_attempt");
         jdbc.update("DELETE FROM order_license_grant");
         jdbc.update("DELETE FROM processed_event");
@@ -248,6 +258,121 @@ class RefundExecutionIntegrationTest {
             assertThat(migrated.get("current_attempt_id")).isNull();
             assertThat(old.queryForObject("SELECT COUNT(*) FROM order_refund_attempt", Integer.class)).isZero();
         } finally { root.execute("DROP DATABASE " + schema); }
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"PG_QUERY_UNATTRIBUTED", "PG_RESPONSE"})
+    void moneyConfirmationInboxAndInvestigationFlagRollBackTogether(String source) {
+        Fixture fixture = fixture(false); apply.execute(fixture.input());
+        RefundPaymentConfirmation previous = confirmation(fixture);
+        RefundPaymentConfirmation confirmation = new RefundPaymentConfirmation(previous.eventId(), previous.occurredAt(), previous.refundId(),
+                previous.attemptId(), previous.requestEventId(), previous.orderNo(), previous.paymentId(), previous.buyerSubject(),
+                previous.amount(), previous.currency(), source, previous.providerTransactionId(), previous.cancellationIds());
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
+            boolean first = (Boolean) call.callRealMethod();
+            if (ApplyRefundPaymentConfirmation.CONSUMER_GROUP.equals(call.getArgument(1)))
+                throw new IllegalStateException("after confirmation inbox insert");
+            return first;
+        }).when(inbox).firstDelivery(anyString(), anyString(), anyString()));
+        assertThatThrownBy(() -> confirmMoney.execute(confirmation)).isInstanceOf(IllegalStateException.class);
+        assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
+        assertThat(stored(fixture).getCompletedAt()).isNull();
+        assertThat(attempts.findByAttemptId(confirmation.attemptId()).orElseThrow().getStatus().name()).isEqualTo("PENDING");
+        assertThat(attempts.findByAttemptId(confirmation.attemptId()).orElseThrow().isReconciliationRequired()).isFalse();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=?", Integer.class,
+                ApplyRefundPaymentConfirmation.CONSUMER_GROUP)).isZero();
+        reset(inbox); confirmMoney.execute(confirmation);
+        assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.COMPLETED);
+        assertThat(attempts.findByAttemptId(confirmation.attemptId()).orElseThrow().isReconciliationRequired())
+                .isEqualTo("PG_QUERY_UNATTRIBUTED".equals(source));
+        apply.execute(fixture.input());
+        assertThat(executionRequests()).isEqualTo(1);
+    }
+
+    @Test void concurrentMoneyConfirmationsPreserveOneCompletionAndOriginalPaidFacts() throws Exception {
+        Fixture fixture = fixture(false); apply.execute(fixture.input());
+        PaymentResult original = fixture.order().paymentResult();
+        RefundPaymentConfirmation confirmation = confirmation(fixture);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<?>> work = List.of(pool.submit(() -> { start.await(); confirmMoney.execute(confirmation); return null; }),
+                    pool.submit(() -> { start.await(); confirmMoney.execute(confirmation); return null; }));
+            start.countDown(); for (Future<?> future : work) future.get(15, TimeUnit.SECONDS);
+            assertThat(stored(fixture).getPaymentConfirmationEventId()).isEqualTo(confirmation.eventId());
+            assertThat(stored(fixture).getCompletedAt()).isEqualTo(confirmation.occurredAt());
+            assertThat(orders.findById(fixture.order().getId()).orElseThrow().paymentResult()).isEqualTo(original);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=?", Integer.class,
+                    ApplyRefundPaymentConfirmation.CONSUMER_GROUP)).isEqualTo(1);
+        } finally { pool.shutdownNow(); }
+    }
+
+    @Test void changedEvidenceCannotReplaceTheFirstCompletionEvenWithTheSameEventId() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input());
+        RefundPaymentConfirmation first = confirmation(fixture); confirmMoney.execute(first);
+        RefundPaymentConfirmation changed = new RefundPaymentConfirmation(first.eventId(), first.occurredAt(), first.refundId(),
+                first.attemptId(), first.requestEventId(), first.orderNo(), first.paymentId(), first.buyerSubject(), first.amount(),
+                first.currency(), first.source(), first.providerTransactionId(), List.of("different-cancel"));
+        assertThatThrownBy(() -> confirmMoney.execute(changed)).isInstanceOf(RefundCompletionRejected.class);
+        assertThat(stored(fixture).getPaymentConfirmationFingerprint()).isEqualTo(first.fingerprint());
+    }
+
+    @Test void verifiedFailureCreatesOneRestorationRequestAndOnlyActualRestorationEndsTheFailedWorkflow() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input()); RefundFailureConfirmation failure = failure(fixture);
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(2)); restore.execute(failure); restore.execute(failure);
+        Refund current = stored(fixture); RefundAttempt attempt = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();
+        assertThat(current.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);
+        assertThat(attempt.getRestoredAt()).isNull(); assertThat(current.getCompletedAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isEqualTo(1);
+        LicenseRestorationConfirmation completed = restored(fixture, attempt); restore.execute(completed); restore.execute(completed);
+        assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.FAILED);
+        assertThat(attempts.findByAttemptId(attempt.getAttemptId()).orElseThrow().getRestoredAt()).isEqualTo(completed.occurredAt());
+        assertThat(stored(fixture).getReceivedAt()).isEqualTo(RECEIVED_AT); assertThat(stored(fixture).isAutomaticRefundEligible()).isTrue();
+        assertThat(orders.findById(fixture.order().getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(attempts.count()).isEqualTo(1); assertThat(executionRequests()).isEqualTo(1);
+    }
+
+    @Test void failureAttemptInboxAndRestorationRequestRollbackTogetherAndTheSameFailureCanResume() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input()); RefundFailureConfirmation failure = failure(fixture);
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(2));
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
+                call.callRealMethod(); orders.flush(); throw new IllegalStateException("after failure and restoration request flush");
+            }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
+            assertThatThrownBy(() -> restore.execute(failure)).isInstanceOf(IllegalStateException.class);
+            assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
+            assertThat(attempts.findByAttemptId(failure.attemptId()).orElseThrow().getFailureEventId()).isNull();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group='order-refund-restoration'", Integer.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isZero();
+        } finally { reset(outbox); }
+        restore.execute(failure); assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);
+    }
+
+    @Test void aMoneyConfirmationCommittedFirstRejectsALateFailureAndNeverRequestsRestoration() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input()); confirmMoney.execute(confirmation(fixture));
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(2));
+        assertThatThrownBy(() -> restore.execute(failure(fixture))).isInstanceOf(RefundCompletionRejected.class);
+        assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.COMPLETED);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isZero();
+    }
+
+    private RefundFailureConfirmation failure(Fixture fixture) {
+        Refund current = stored(fixture); RefundAttempt attempt = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();
+        return new RefundFailureConfirmation(id(), EXECUTION_AT.plusSeconds(1), current.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
+                current.getOrderNo(), fixture.order().getPaymentId(), fixture.order().getBuyerSubject(), fixture.order().getAmount(), fixture.order().getCurrency(),
+                "pg-original", "cancel-own", "a".repeat(64));
+    }
+    private LicenseRestorationConfirmation restored(Fixture fixture, RefundAttempt attempt) {
+        return new LicenseRestorationConfirmation(id(), EXECUTION_AT.plusSeconds(3), attempt.getRestorationRequestEventId(), attempt.getRefundId(),
+                attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(), fixture.order().getOrderNo(), fixture.order().getBuyerSubject(),
+                fixture.order().getProductId(), fixture.order().getProductCode(), fixture.order().getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId());
+    }
+
+    private RefundPaymentConfirmation confirmation(Fixture fixture) {
+        Refund current = stored(fixture);
+        RefundAttempt attempt = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();
+        return new RefundPaymentConfirmation(id(), EXECUTION_AT.plusSeconds(1), current.getRefundId(), attempt.getAttemptId(),
+                attempt.getExecutionRequestEventId(), current.getOrderNo(), fixture.order().getPaymentId(), fixture.order().getBuyerSubject(),
+                fixture.order().getAmount(), fixture.order().getCurrency(), "PG_QUERY_UNATTRIBUTED", "pg-original", List.of("cancel-1"));
     }
 
     private Fixture fixture(boolean review) {

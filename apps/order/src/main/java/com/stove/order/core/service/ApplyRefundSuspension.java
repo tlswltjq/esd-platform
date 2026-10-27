@@ -51,7 +51,7 @@ public class ApplyRefundSuspension {
         grant.verifySuspension(input);
         refund.verifySuspensionRequest(input);
         if (refund.getCurrentAttemptId() != null) {
-            if (refund.getStatus() != RefundStatus.PENDING_PAYMENT_REFUND) {
+            if (refund.getStatus() != RefundStatus.PENDING_PAYMENT_REFUND && refund.getStatus() != RefundStatus.COMPLETED) {
                 throw new RefundCompletionRejected("현재 환불 단계와 실행 기록이 다릅니다.");
             }
             RefundAttempt previous = attempts.findByAttemptId(refund.getCurrentAttemptId())

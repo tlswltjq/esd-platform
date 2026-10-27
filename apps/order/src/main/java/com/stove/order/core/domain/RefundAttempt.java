@@ -49,6 +49,71 @@ public class RefundAttempt {
     private String licenseId;
     @Column(unique = true, length = 64)
     private String executionRequestEventId;
+    @Column(nullable = false)
+    private boolean reconciliationRequired;
+    @Column(unique = true, length = 64)
+    private String successEventId;
+    @Column(length = 64)
+    private String successConfirmationEventId;
+    @Column(length = 100)
+    private String successfulCancellationId;
+    @Column(length = 64)
+    private String successFingerprint;
+
+    @Column(unique = true, length = 64) private String failureEventId;
+    @Column(length = 64) private String failureFingerprint;
+    @Column(unique = true, length = 64) private String restorationRequestEventId;
+    private Instant restorationRequestedAt;
+    @Column(unique = true, length = 64) private String restoredEventId;
+    private Instant restoredAt;
+    @Column(length = 64) private String restorationFingerprint;
+
+    public void recordRefundFailure(RefundFailureConfirmation input, Instant at) {
+        if (!RefundRestorationValues.time(at) || at.isBefore(input.occurredAt()) || status != RefundAttemptStatus.PENDING)
+            throw new RefundCompletionRejected("미취소 실패를 기다리는 시도가 아닙니다.");
+        fail(input.occurredAt(), "PG_CANCELLATION_FAILED", "PG 취소 실패와 원결제 미취소를 확인했습니다.");
+        failureEventId = input.eventId(); failureFingerprint = input.fingerprint();
+        restorationRequestEventId = UUID.randomUUID().toString(); restorationRequestedAt = at;
+        reconciliationRequired = false;
+    }
+
+    public boolean recordRestoration(LicenseRestorationConfirmation input) {
+        if (status != RefundAttemptStatus.FAILED || !Objects.equals(restorationRequestEventId, input.requestEventId())
+                || !Objects.equals(failureEventId, input.failureEventId()) || !Objects.equals(licenseId, input.licenseId())
+                || !Objects.equals(suspensionRequestEventId, input.suspensionRequestEventId())
+                || !Objects.equals(suspensionEventId, input.suspensionEventId()) || input.occurredAt().isBefore(restorationRequestedAt))
+            throw new RefundCompletionRejected("복구 완료가 실패·복구 요청·실제 정지와 다릅니다.");
+        if (restoredEventId != null) {
+            if (!Objects.equals(restorationFingerprint, input.fingerprint())) throw new RefundCompletionRejected("확정한 복구 완료와 다릅니다.");
+            return false;
+        }
+        restoredEventId = input.eventId(); restoredAt = input.occurredAt(); restorationFingerprint = input.fingerprint();
+        return true;
+    }
+
+    public boolean recordCancellationSuccess(RefundExecutionSuccess input) {
+        if (input == null || !attemptId.equals(input.execution().attemptId()) || !refundId.equals(input.execution().refundId())
+                || !Objects.equals(executionRequestEventId, input.execution().requestEventId())
+                || input.execution().occurredAt().isBefore(startedAt)) throw new RefundCompletionRejected("실행 성공의 요청 근거가 다릅니다.");
+        RefundPaymentConfirmation proof = input.execution();
+        if (status != RefundAttemptStatus.PENDING) {
+            if (status == RefundAttemptStatus.SUCCEEDED && Objects.equals(successEventId, proof.eventId())
+                    && Objects.equals(resolvedAt, proof.occurredAt()) && Objects.equals(successConfirmationEventId, input.confirmationEventId())
+                    && Objects.equals(successfulCancellationId, proof.cancellationIds().get(0))
+                    && Objects.equals(successFingerprint, proof.fingerprint())) return false;
+            throw new RefundCompletionRejected("이미 확정한 실행 성공 근거가 다릅니다.");
+        }
+        succeed(proof.occurredAt()); successEventId = proof.eventId(); successConfirmationEventId = input.confirmationEventId();
+        successfulCancellationId = proof.cancellationIds().get(0); successFingerprint = proof.fingerprint();
+        reconciliationRequired = false;
+        return true;
+    }
+
+    /** Completion of the customer's refund does not establish the outcome of this execution. */
+    public void requireReconciliation() {
+        if (status != RefundAttemptStatus.PENDING) throw new RefundCompletionRejected("이미 확정된 실행의 결과와 다릅니다.");
+        reconciliationRequired = true;
+    }
 
     public static RefundAttempt afterSuspension(Refund refund, LicenseSuspensionConfirmation input, Instant startedAt) {
         if (refund == null) throw new RefundCompletionRejected("환불 접수 근거가 필요합니다.");

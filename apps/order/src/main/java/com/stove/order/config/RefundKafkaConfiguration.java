@@ -26,7 +26,7 @@ public class RefundKafkaConfiguration {
         configurer.configure(factory, consumers);
         ConsumerRecordRecoverer publisher = DeadLetterPublisher.to(kafka, metrics);
         DefaultErrorHandler handler = new DefaultErrorHandler((record, exception) -> {
-            log.error("정지 완료 처리 격리 topic={} partition={} offset={} key={}",
+            log.error("환불 완료 근거 처리 격리 topic={} partition={} offset={} key={}",
                     record.topic(), record.partition(), record.offset(), record.key(), exception);
             publisher.accept(record, exception);
         }, ConsumerRetryPolicy.backOff());
