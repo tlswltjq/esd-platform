@@ -59,6 +59,8 @@ public final class EventType {
     public static final String ORDER_CANCELED = "OrderCanceled";
 
     // payment
+    public static final String REFUND_PAYMENT_CONFIRMED = "RefundPaymentConfirmed";
+    public static final String REFUND_EXECUTION_SUCCEEDED = "RefundExecutionSucceeded";
     /** 결제 승인 완료를 나타내는 이벤트 타입. */
     public static final String PAYMENT_COMPLETED = "PaymentCompleted";
     /** 결제 환불 완료를 나타내는 이벤트 타입. */
@@ -75,6 +77,10 @@ public final class EventType {
     public static final String LICENSE_REVOKED = "LicenseRevoked";
     /** 이용권 지급 실패를 나타내는 이벤트 타입. */
     public static final String LICENSE_ISSUE_FAILED = "LicenseIssueFailed";
+
+    public static final String REFUND_EXECUTION_FAILED = "RefundExecutionFailed";
+    public static final String LICENSE_RESTORATION_REQUESTED = "LicenseRestorationRequested";
+    public static final String LICENSE_RESTORED = "LicenseRestored";
 
     private EventType() {
     }

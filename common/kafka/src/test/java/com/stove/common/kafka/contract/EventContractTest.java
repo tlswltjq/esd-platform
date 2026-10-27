@@ -43,6 +43,11 @@ import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
@@ -110,6 +115,19 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                new RefundExecutionFailedEvent("failure-1", Instant.parse("2026-10-27T01:03:00Z"), "refund-1", "attempt-1", "request-1",
+                        "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64)),
+                new LicenseRestorationRequestedEvent("restore-1", Instant.parse("2026-10-27T01:04:00Z"), "refund-1", "attempt-1", "failure-1",
+                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
+                new LicenseRestoredEvent("restored-1", Instant.parse("2026-10-27T01:05:00Z"), "restore-1", "refund-1", "attempt-1", "failure-1",
+                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
+                new RefundExecutionSucceededEvent("execution-succeeded-1", Instant.parse("2026-10-27T01:03:00Z"),
+                        "refund-confirmed-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                        "execution-requested-1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "pg-original", "cancel-1"),
+                new RefundPaymentConfirmedEvent("refund-confirmed-1", Instant.parse("2026-10-27T01:02:00Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd", "execution-requested-1",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW",
+                        "PG_QUERY_UNATTRIBUTED", "pg-original", List.of("cancel-1")),
                 new OrderPlacedEvent("placed-1", Instant.parse("2026-10-16T00:00:00Z"), "order-1", "usr_buyer",
                         1L, "PROJECT-1", "Game", 1, 1000, 0, 1000, "KRW"),
                 new OrderPaidEvent("paid-1", Instant.parse("2026-10-17T00:00:00.123456Z"),
