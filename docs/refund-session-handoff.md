@@ -1,6 +1,6 @@
 # 전액 환불 학습·구현 세션 인계
 
-2026-10-27 작성. 기준 저장소는 `/Users/jade/Projects/esd-platform`, 브랜치는 `main`, 인계 직전 HEAD는 `ff9a6d90b339bad9e1e872457fd4a05c7354b59f`다. 아래 내용은 이 시점의 합의·구현·검증을 구분한 기록이다. 이후 변경이 있으면 실제 코드와 최신 결정 기록을 먼저 대조한다.
+2026-10-27 작성. 기준 저장소는 `/Users/jade/Projects/esd-platform`, 브랜치는 `main`, 초기 인계 기준 HEAD는 `ff9a6d90b339bad9e1e872457fd4a05c7354b59f`이며 후속 작업은 아래 최신 기록과 git log를 대조한다. 아래 내용은 이 시점의 합의·구현·검증을 구분한 기록이다. 이후 변경이 있으면 실제 코드와 최신 결정 기록을 먼저 대조한다.
 
 ## 1. 사용자의 목표와 협업 방식
 
@@ -44,7 +44,7 @@
 | 기존 파일·URL | 기존 presigned URL은 만료까지 사용할 수 있다. 다운로드된 파일의 회수·실행 시 권한 검사·기존 URL 즉시 무효화는 이번 환불 범위 밖이다. |
 | PG 결과 미확정 | 서비스가 같은 실행 시도의 결과 조회·재개를 자동으로 맡는다. 타임아웃은 확정 실패가 아니다. 결과가 확인될 때까지 정지를 유지하며 시간 경과만으로 복구하지 않는다. 고객의 대기·운영 대응 비용은 남는다. |
 | PG 확정 실패 | 보유권을 복구하고 실패 사유·복구 여부를 안내한다. 고객에게 돈을 돌려받거나 상품을 계속 보유하는 명확한 근거가 있어야 한다. 복구 요청 저장만으로 복구 완료라고 말하지 않는다. |
-| 실행 이력 | 환불의 refundId와 각 실행의 attemptId를 구분하고 시도별 시작·결과·실패 사유를 보존한다(B안). 새 실행으로 이전 실패를 덮어쓰지 않는다. 미확정의 자동 재개는 같은 시도이며, 확정 실패 뒤 새로운 실행은 사용자의 명시적 재시도 방향이다. 허용할 실패 종류·복구 완료 조건은 미결이다. |
+| 실행 이력 | 환불의 refundId와 각 실행의 attemptId를 구분하고 시도별 시작·결과·실패 사유를 보존한다(B안). 새 실행으로 이전 실패를 덮어쓰지 않는다. 미확정의 자동 재개는 같은 시도이며, 확정 실패 뒤 새로운 실행은 사용자의 명시적 재시도 방향이다. FAILED/미취소 조회와 실제 복구 완료 조건은 후속 B안으로 검증했다. 새 실행을 허용할 실패 종류와 추가 운영 확인 여부는 미결이다. |
 | 근거 없는 정지 완료 | Order가 원래 환불·정지 요청을 확인할 수 없거나 연결값이 다르면 업무 진행을 거절·격리한다(A안). 외부 자료가 나중에 맞춰질 것으로 기대해 새 업무 대기를 만들지 않는다. DB 일시 장애는 재시도하며, DLT 발행 실패 시 원본 소비를 완료하지 않는다. 이를 환불 확정 실패나 복구 사유로 바꾸지 않는다. |
 | 추적 | Tempo는 진단을 돕는다. 환불 상태·이력의 정본은 업무 DB다. 수집 장애·샘플링·보존 기간 때문에 trace가 없어도 미실행·실패라고 단정하지 않는다. 새 환불 흐름의 Tempo 전체 연결은 아직 검증 전이다. |
 
@@ -92,18 +92,56 @@ API·웹훅 비밀값은 계속 로컬에 있다. OCI nginx → OCI loopback 188
 
 실제 주문 검증 환경의 Payment도 검증된 해시 이름 runtime JAR로 교체했다. 건강검사 UP·V16 성공·기존 Order/Payment의 PAID 각 1건·refund_execution 0건을 확인했으며 PG 환불은 요청하지 않았다. 새 준비 서비스 활성화 근거는 `runs/refund-window-tdd-u8jdb08z/live-activation.json`과 `live-guard-runtime.json`이다.
 
+2026-10-27 사용자는 조회로 해당 결제의 전액 취소가 확인되면 환불 업무를 완료하는 A안을 선택했다. 기존 작업은 01456a7로 커밋했다. 새 RefundPaymentLookup/PortOne 읽기 어댑터와 ReconcileRefundPayment가 원 PAID·PG 거래·상점·채널·TEST·주문·금액·성공 취소 합계를 검증하고 별도 확인 시각·성공 취소 근거·RefundPaymentConfirmed Outbox를 저장한다. Payment의 실행 PENDING은 귀속 불명을 유지하며 성공을 추정하지 않는다. Order의 전용 mapper/소비자와 ApplyRefundPaymentConfirmation은 현재 요청·실행·구매 사실을 대조하고 COMPLETED·최초 확인 지문·Inbox·실행 reconciliationRequired를 원자적으로 기록한다. 기존 PAID·보유권 정지는 보존한다. 자동 조회 스케줄/주기·PG 취소 송신·실패/복구·조사 UI·고객 환불 API는 후속이다. 최종 corrected 실행은 --rerun-tasks로 공통 Kafka 단위 187·Payment 단위 172·Order 단위 247·Payment 통합 69·Order 통합 75건을 모두 실패·오류·건너뜀 0으로 통과했다. 단위 합계 606·통합 합계 144건이다. 신규 통합은 Payment 4건과 Order 7건이며, 실제 DB의 근거/Outbox·완료/Inbox 롤백·동시 처리, Kafka 중복/offset·일시 실패 재시도·격리·DLT 발행 실패 시 미커밋을 검증한다. OCI 소스 986개를 대조했고 공유 컨테이너 22개·볼륨 57개·ID/시작/재시작/건강 상태를 보존했다. 추가·잔여 Testcontainers와 볼륨은 없다. 원자료 full·corrected 명령/소스/로그/JUnit·보존 기록은 runs/refund-confirmation-oci-5naahx04/collected/results, 원격 격리는 /tmp/stove-refund-confirmation-check-E5y3zflx/work이다. 현재 운영·테스트 소스는 corrected 해시와 같으며 검증 이후에는 문서만 갱신했다. 로컬 bootJar와 통합 소스 컴파일도 통과했다. [상세 계약](pg-test-integration-plan.md#2026-10-27-전액-취소-조회-확인-a안)을 따른다.
+
+검증된 해시 이름 runtime JAR로 로컬 실제 주문 환경의 Order·Payment를 재개했다. 두 건강검사는 UP이고 Order V16·Payment V17 적용 로그를 확인했다. 반영 전후 본인 주문/결제 조회 응답 전체가 동일하며 기존 9,000원 결제는 PAID다. 실제 PG 취소 POST는 보내지 않았다. 근거는 runs/refund-confirmation-tdd-7pavkmo2/live-before-activation.json·live-activation.json·activation.log다.
+
+2026-10-27 사용자는 자동화는 명확하고 간단한 경우에만 적용한다는 이유로 원결제 전액 잔액 조건 A안을 선택했다. 부분 취소의 잔액을 자동 보완하지 않는다. RequestRefundCancellation·RefundCancellationGateway/PortOne 송신 어댑터와 V18을 추가했다. 원액=amount=currentCancellableAmount를 고정하고 최초 JSON 본문·attemptId·준비 시각을 DB 커밋한 뒤 잠금 밖에서 송신한다. 부분 취소나 명시적 예상 잔액 오류는 cancellationBalanceChangedAt으로 보존해 이후 자동 POST를 막는다. 조회 전후의 3시간 기한 검사와 고정된 UTF-8 본문·따옴표로 감싼 멱등 키를 사용한다. 2xx만으로 시도 성공/실패를 만들지 않으며 별도 조회로 전액 취소가 확인되면 앞선 A안에 따라 고객 업무만 완료할 수 있다. 자동 스케줄·환불 API 연결과 실제 PG 송신 검증은 아직 없다. 단위 Red 15건·로컬 및 OCI Payment 단위 187건·통합 77건 통과 기록은 [최신 계약](pg-test-integration-plan.md#2026-10-27-원결제-전액-잔액-조건-a안)을 따른다. 원자료는 runs/refund-balance-tdd-t3jgf86j 및 runs/refund-balance-oci-gzscdzop, 원격은 /tmp/stove-refund-balance-check-YVJLAOCo/work이다.
+
+최종 OCI full 실행에서 Payment 단위 187건·통합 77건이 실패·오류·건너뜀 0으로 통과했다. 신규 통합 8건은 실제 DB 커밋의 외부 관측·HTTP 본문/키·선행 부분 취소·조회/POST 사이 잔액 변화·처리 뒤 결과 미확정과 조회 복구·배포/재시작의 최초 본문 보존·3시간 기한·실제 flush 후 롤백·동시 처리/Outbox 1건을 검증했다. HTTP 공급자는 격리 계약 픽스처이며 실제 포트원의 경합 원자성이나 실제 자금 이동을 검증한 것으로 표시하지 않는다. 소스 996개를 SHA-256 대조했다. 공유 컨테이너 22개·볼륨 57개와 상태를 보존했고 추가·잔여 Testcontainers/볼륨이 없다. 원자료는 runs/refund-balance-oci-gzscdzop/collected/results/full 및 preservation.json이다. 로컬 단위·통합 컴파일·bootJar도 통과했다. 이번 실행은 Payment만 재검증했으며 이전 단계의 Order 247·공통 Kafka 187 단위와 Order 75 통합을 다시 실행한 것으로 합치지 않는다.
+
+검증된 해시 이름 runtime JAR로 로컬 Payment만 재개해 건강검사 UP·V18 적용을 확인했다. Auth·Catalog·Order·SSH는 재시작하지 않았다. 반영 전후 본인 주문/결제 응답 전체가 동일하고 기존 9,000원 주문·결제는 PAID다. 실제 PG 취소 POST는 보내지 않았다. 근거는 runs/refund-balance-tdd-t3jgf86j/live-before-activation.json·live-activation.json·activation.log다.
+
+2026-10-27 사용자는 검증된 취소 완료 응답으로 후속 조회를 기다리지 않고 시도 성공·환불 완료를 확정하는 A안을 선택했다. 정상 응답은 PG_RESPONSE 금융 완료 이벤트 한 건으로 양쪽 상태를 원자적으로 반영한다. 조회가 먼저 완료했다면 최초 금융 ID/시각/source는 유지하고 같은 취소 ID의 늦은 직접 응답을 별도 RefundExecutionSucceeded로 한 번 발행한다. Order는 늦은 성공과 원래 금융 이벤트가 역순으로 도착해도 최초 금융 결과와 시도 SUCCEEDED를 보존하고 조사 표시를 해제한다. 원 응답의 선택적 cancelledAt은 없으면 NULL이다. 미완성/불일치·REQUESTED/FAILED·통신 장애는 성공으로 만들지 않으며 확정 실패·복구 분류는 후속이다. 로컬 단위 640건·통합 컴파일·두 bootJar가 통과했고 OCI 단위 640·통합 160건이 통과했다. 원자료는 runs/refund-success-tdd-9nvmjlg2 및 runs/refund-success-oci-6tndqndq, 원격 격리는 /tmp/stove-refund-success-check-JeQiK1OD/work이다. [상세 계약](pg-test-integration-plan.md#2026-10-27-검증된-취소-완료-응답-a안)을 따른다.
+
+OCI full 실행에서 공통 Kafka 단위 191·Payment 단위 195·Order 단위 254건(단위 합계 640), Payment 통합 81·Order 통합 79건(통합 합계 160)이 모두 실패·오류·건너뜀 0으로 통과했다. 신규 통합 8건은 성공 뒤 GET 장애와 무관한 확정, 실제 HTTP 응답을 지연한 조회 선행 경합, 성공/근거/Outbox 롤백과 동일 근거 재개, 동일 응답 동시 저장, Order 직접 성공/Inbox 롤백, 실제 Kafka의 정상 직접 완료 및 늦은 성공/금융 이벤트 양방향 순서·중복을 검증했다. 공급자는 HTTP 계약 픽스처이며 실제 PG 자금 이동 검증으로 확대하지 않는다. 소스 1005개를 SHA-256 대조했고 공유 컨테이너 22개·볼륨 57개의 ID/시작/재시작/건강 상태를 보존했다. 추가·잔여 Testcontainers/볼륨이 없다. 원자료 명령/소스/로그/JUnit·보존 기록은 runs/refund-success-oci-6tndqndq/collected/results/full 및 preservation.json이다. 검증 이후에는 문서만 갱신했으며 로컬 단위·통합 컴파일·두 bootJar도 통과했다.
+
+검증된 해시 이름 runtime JAR로 로컬 Order·Payment를 재개해 건강검사 UP·Order V17/Payment V19 적용을 확인했다. Auth·Catalog·SSH는 보존했다. 반영 전후 본인 주문/결제 API 응답 전체가 동일하며 기존 9,000원 주문·결제는 PAID다. 실제 PG 취소 POST는 보내지 않았다. 근거는 runs/refund-success-tdd-9nvmjlg2/live-before-activation.json·live-activation.json·activation.log다.
+
+
+2026-10-27 사용자는 REQUESTED 후 조회 간격 B안(최초 취소 준비 후 5·15·35초, 이후 1분)을 선택했다. DB에 최초 일정·단계·선점 임대·웹훅 깨우기를 저장하고 별도 스케줄러/최대 4개 조회 작업자로 GET만 재개한다. 기존 미확정 송신 직후 1회 GET은 유지한다. 재시작·긴 HTTP 후 밀린 조회는 건너뛰며, 3시간 POST 제한 이후에도 GET은 가능하다. 서명 검증된 취소 웹훅 첫 접수는 준비된 실행을 깨우고 같은 알림 재전달은 다시 깨우지 않는다. HTTP 중 깨우기 보존·새 임대를 늦은 이전 작업자가 덮어쓰지 못함·금융 완료 후 일정 해제를 검증했다. 자동 취소 POST 시작/재시도 간격과 확정 실패/복구는 여전히 미결이다.
+
+최신 B안 검증은 로컬 Payment 단위 206·통합 컴파일·bootJar 및 OCI corrected Payment 단위 206·통합 93건(모두 실패/오류/건너뜀 0)이다. 신규 통합은 12건이다. 최초 full의 trace 테이블 정리 오류로 인한 실패 24건은 수정하고 --rerun-tasks 전체 재검증했으며 원자료를 함께 보존했다. 소스 1,014개를 대조하고 공유 컨테이너 22개·볼륨 57개와 상태를 보존했으며 잔여/추가 자원은 없다. 원자료는 runs/refund-lookup-tdd-1yp2c1o0 및 runs/refund-lookup-oci-lg92j8wa/collected/results/{full,corrected}, 원격은 /tmp/stove-refund-lookup-check-O4ndTMWD/work이다. Payment V20과 [최신 계약](pg-test-integration-plan.md#2026-10-27-requested-후-결과-조회-간격-b안)을 따른다. Order·공통 Kafka를 이번 단계에서 다시 검증한 것으로 합치지 않는다.
+
+
+
+검증된 해시 이름 runtime JAR로 로컬 실제 주문 환경의 Payment만 재개하고 `PAYMENT_REFUND_LOOKUP_ENABLED=true`를 적용했다. Payment V20·건강검사 UP·서로 다른 결제/환불 스캔 스레드를 확인했다. Auth/Catalog/Order 및 SSH PID는 보존했다. 적용 전후 본인 주문/결제 API 응답 전체가 같고 기존 9,000원은 PAID다. 실제 PG 취소 POST는 보내지 않았다. 근거는 `runs/refund-lookup-tdd-1yp2c1o0/live-before-activation.json`·`live-activation.json`·`activation.log`다.
+
+
+2026-10-27 사용자는 PG 실패 후 미취소 조회와 권한 복구 B안을 선택했다. REQUESTED/FAILED 정상 응답에서 우리 시도의 PG 취소 ID·원액·요청 시각·세금·사유를 보존한다. 추가 GET은 같은 취소 ID의 FAILED와 원결제 PAID/전액 미취소·진행 중/성공 취소 없음을 함께 확인한다. 이때만 Payment FAILED·실패/조회 근거·RefundExecutionFailed Outbox를 원자 저장한다. 다른 경로의 전액 취소가 먼저 확인되면 기존 금융 완료를 사용하고 복구하지 않는다. 조회 장애·부분/진행 취소·연결 근거 부재는 보류한다. 원 PAID와 최초 자격을 유지한다.
+
+Order는 시도 FAILED·Inbox·LicenseRestorationRequested Outbox·PENDING_LICENSE_RESTORATION을 함께 저장한다. License는 현재 보유권/구매·실제 정지 요청/완료를 대조하고 ACTIVE·복구 이력·Inbox·LicenseRestored Outbox를 원자 저장한다. Order는 실제 완료의 현재 요청/시도/정지/구매를 검증한 뒤 환불 FAILED로 마친다. 요청만으로 완료하지 않는다. 옛 정지/복구 메시지가 다른 정지를 바꾸지 않으며 자동 새 시도는 없다. Payment V21·Order V18·License V8을 따른다.
+
+최종 로컬 단위 공통 Kafka 203·Payment 213·Order 263·License 99건과 세 모듈 통합 컴파일/bootJar가 통과했다. OCI full의 전체 태스크는 모두 통과했고 후속 토픽 경계를 보강한 Order 단위 263/통합 83은 updated, 관리자 전액 취소 픽스처를 추가한 Payment 통합 전체 98은 payment-final에서 재검증했다. 나머지 최종 출처는 full의 공통 Kafka 203·Payment 단위 213·License 단위 99/통합 53이다. 모두 실패/오류/건너뜀 0이며 한 번의 전체 실행으로 합치지 않는다. 신규 통합은 14건이다. 소스 1,043개·공유 컨테이너 22개/볼륨 57개 보존·추가/잔여 자원 없음. 원자료는 runs/refund-restoration-tdd-ur27gau4 및 runs/refund-restoration-oci-fg84qzci/collected/results/{full,updated,payment-final}, 원격은 /tmp/stove-refund-restoration-check-EpKxdIk5/work다. [최신 B안](pg-test-integration-plan.md#2026-10-27-실패-후-미취소-조회와-권한-복구-b안)을 따른다. 실제 PG 환불이나 전체 실거래 환불 E2E의 완료 기록이 아니다.
+
+
+
+검증된 해시 이름 runtime JAR로 실제 주문 검증 환경의 Order·Payment만 재개했다. 건강검사는 UP이고 Order V18·Payment V21 적용을 확인했다. Auth·Catalog·SSH PID와 읽기 전용 환불 조회 활성화를 보존했다. 적용 전후 본인 주문/결제 API 응답 전체가 동일하고 기존 9,000원은 PAID다. 실제 PG 취소 POST는 보내지 않았다. 이 환경에서 License 서비스를 새로 실행한 것은 아니며 License 복구는 OCI 격리 통합으로 검증했다. 근거는 `runs/refund-restoration-tdd-ur27gau4/live-before-activation.json`·`live-activation.json`·`activation.log`다.
+
 ## 4. 구현 완료 지점
 
-현재 흐름은 다음과 같다. 이 흐름의 마지막은 **Payment 접수**이며 실제 PG 환불은 아직 없다.
+현재 흐름은 다음과 같다. 전액 잔액 조건의 PG 취소 송신 서비스와 전액 취소 조회→Payment 근거/Outbox→Order 완료 경로를 구현했다. 결과 GET 스케줄과 실패/권한 복구 B안은 연결했다. 자동 취소 POST/API 연결·실제 PG 송신 검증은 후속이다.
 
 1. Order `RequestRefund`가 PAID 주문의 본인 여부·결제 근거·기한을 검증하고 최초 Refund를 저장한다. 지급 미확인이면 `PENDING_LICENSE_GRANT`, 지급 확인이 있으면 정지 요청과 `PENDING_LICENSE_SUSPENSION`, 기한 초과면 `PENDING_REVIEW`다.
 2. License `GrantLicense`가 최초 지급에 `LicenseGranted` Outbox를 원자적으로 저장한다. Order `ApplyLicenseGrant`가 지급 사실을 저장하고 허용된 환불의 대기를 재개한다. 환불보다 먼저 도착한 지급 확인도 저장한다.
 3. License `ApplyLicenseSuspension`이 로컬 구매 근거를 검증하고 보유권 정지·정지 이력·Inbox·`LicenseSuspended` Outbox를 함께 저장한다. 지급이 없으면 완료를 만들지 않는다. 기존 `OrderPaid` 재전달로 정지를 해제하지 않는다.
 4. Download `LicenseHttpClient`는 ACTIVE만 허용한다. SUSPENDED는 403, 누락·알 수 없는 상태는 503이며 Catalog/S3로 진행하지 않는다.
 5. Order `ApplyRefundSuspension`이 원래 주문·환불·지급·실제 정지 요청 ID와 완료를 대조한다. 첫 `RefundAttempt`·Inbox·`RefundExecutionRequested` Outbox와 `PENDING_PAYMENT_REFUND` 전이를 함께 저장한다. 같은 완료가 재전달돼도 새 실행을 만들지 않는다. 전용 소비자의 근거 불일치만 즉시 DLT로 보내며 다른 소비자 정책은 유지한다.
-6. Payment `ReceiveRefundExecution`이 로컬 PAID 결제의 주문·paymentId·구매자·실제 청구액·통화를 검증한다. refund_execution·Inbox·별도 시도별 추적 부모를 함께 저장한다. PG는 호출하지 않으며 최초 결제·PG 비용·구매 추적 부모도 바꾸지 않는다. 같은 요청의 재전달은 최초 값을 유지하고, 미확정 실행 중 새 시도·변경된 본문·식별자 재사용을 거절한다. 현재 실행 상태는 PENDING뿐이다.
+6. Payment `ReceiveRefundExecution`이 로컬 PAID 결제의 주문·paymentId·구매자·실제 청구액·통화를 검증한다. refund_execution·Inbox·별도 시도별 추적 부모를 함께 저장한다. PG는 호출하지 않으며 최초 결제·PG 비용·구매 추적 부모도 바꾸지 않는다. 같은 요청의 재전달은 최초 값을 유지하고, 미확정 실행 중 새 시도·변경된 본문·식별자 재사용을 거절한다. 접수 직후 상태는 PENDING이며, 검증된 직접 성공 응답에서 SUCCEEDED를 기록하고 최신 B안의 실패/미취소 조회가 함께 입증되면 FAILED를 기록한다.
 
-시도별 결과 보존 도메인 모델은 구현했지만 PG 결과의 수신·Order 반영·복구까지 연결한 것은 아니다. 환불 접수·조회 HTTP API와 관리자 승인·반려 유스케이스도 아직 구현하지 않았다. RequestRefund 서비스의 완료를 API 제공 완료로 표현하지 않는다.
+7. Payment의 전액 잔액 조건 송신·직접 성공 저장·조회 확인과 Order의 금융 완료/시도 성공 수신은 최신 A안 기록을 따른다. 정상 직접 응답은 후속 GET 없이 완료하며, 조회 선행이면 최초 금융 이벤트를 보존하고 늦은 시도 성공만 보완한다. 결과 GET 스케줄은 후속 B안으로 연결했다. FAILED/미취소 확인과 실제 권한 복구는 최신 B안으로 연결했다. 자동 취소 POST/API·실제 PG 송신·HTTP 오류 세부 분류는 후속이다.
+
+조회 확인 서비스가 반환한 전액 취소 근거는 Payment Outbox와 Order 전용 소비자를 통해 환불 완료로 연결된다. 이때 실행 PENDING·결과 미확정은 유지하고 조사 표시를 남긴다. 취소 송신 서비스·검증된 성공 응답 귀속·결과 GET 스케줄과 FAILED/미취소 확인·보유권 복구를 구현했다. 자동 취소 POST/API 연결은 후속이다. 환불 접수·조회 HTTP API와 관리자 승인·반려 유스케이스도 아직 구현하지 않았다. RequestRefund 서비스의 완료를 API 제공 완료로 표현하지 않는다.
 
 읽기 시작할 코드:
 
@@ -117,7 +155,7 @@ API·웹훅 비밀값은 계속 로컬에 있다. OCI nginx → OCI loopback 188
 
 ## 5. 커밋과 검증 근거
 
-직전 요청에 따라 다음 5개 작업 단위로 커밋했으며, 인계 문서를 쓰기 전 작업 트리는 깨끗했다.
+초기 인계 작성 전 요청에 따라 다음 5개 작업 단위로 커밋했다. 이는 초기 인계 시점의 기록이며 이후 누적 커밋은 아래에 구분한다.
 
 | 커밋 | 작업 단위 |
 |---|---|
@@ -126,6 +164,17 @@ API·웹훅 비밀값은 계속 로컬에 있다. OCI nginx → OCI loopback 188
 | `af3ce8f` | License 정지·완료 발행과 Download 신규 URL 차단 |
 | `c57f76e` | Payment 환불 실행 요청 검증·멱등·내구 접수 |
 | `ff9a6d9` | 설계 결정·TDD·OCI 검증 기록 |
+
+2026-10-27 누적 구현 커밋: `01456a7`의 포트원 결제창/3시간 제한 이후 사용자가 선택한 전액 취소 조회 확인·전액 잔액 조건·직접 성공 응답·조회 주기 B안·실패/권한 복구 B안을 다음 단위로 커밋했다. 운영·테스트 소스는 최신 OCI 검증 해시와 같으며 기록 변경은 문서뿐이다. 비밀값과 runs의 실행 자료는 커밋에서 제외했다.
+
+| 커밋 | 작업 단위 |
+|---|---|
+| `00f24ee` | 환불 결과·권한 복구 공통 이벤트 계약 |
+| `b31c436` | Payment 취소 송신·결과 확인·내구 조회·실패 근거 |
+| `838d5f8` | License 실제 권한 복구·상관키·멱등/롤백 |
+| `279b895` | Order 환불 완료·실패/복구 요청·실제 복구 완료 반영 |
+
+이 표와 단계별 결정·실행별 검증·인계 갱신은 별도 문서 커밋에 포함한다. 커밋만을 위해 동일 소스의 테스트를 다시 실행한 것으로 표시하지 않는다. 다음은 복구가 끝난 실패 건의 명시적 새 실행 계약이며 아직 선택·구현하지 않았다.
 
 검증 수치는 단계별 기록이다. 모든 모듈을 최종 소스에서 한 번에 재실행한 것으로 합치지 않는다.
 
@@ -147,16 +196,16 @@ OCI 검증 전후 공유 컨테이너 18개와 볼륨 55개를 보존했고 잔�
 
 ## 6. 다음 세션의 첫 목표와 남은 결정
 
-원래 첫 목표는 **모의 PG 환불 승인·조회·중복 방지 계약을 정하는 것**이었다. 후속으로 시도별 키·실제 제공사 테스트 전환을 선택했고, 독립 9,000원 결제·전액 취소를 확인했다. 사용자가 B안(웹훅·주기 조회 병행)을 선택해 첫 Payment 기반을 구현·OCI 검증했고, OCI 공개 IP HTTPS 경로에서 실제 준비 웹훅·재발송 수신까지 확인했다. 이후 전용 결제창 정보 API A안도 구현·OCI 검증했다. 해당 연결은 사용자 휴대폰 승인과 테스트 페이지 결과 반환 뒤 실제 포트원·Payment·Order PAID 및 Outbox/중복 대조까지 완료했다. 같은 9,000원 PAID 주문·결제를 후속 환불 검증 근거로 보존한다. 후속으로 3시간 경과 자동 재전송 중단 A안의 DB 준비·권한 경계를 구현·검증했다. 다음은 PG 취소 응답·조회에서 해당 환불 시도의 성공을 확정할 근거와 요청/응답 계약을 한 쟁점씩 논의한다. License 실제 지급·정지와 환불 결과·복구·정산 연결은 후속이다. 초기 합성 주문 READY·별도 독립 결제/취소 기록과 구별해, 최신 실제 Order에서 발생한 TEST 결제 성공도 검증했다. 주문 접수 직후 아직 Payment가 없을 때의 대기 안내·실제 PG 실패 분류가 필요하면 별도 쟁점으로 다룬다. 미결 PG 실패 분류·새 실행·복구 조건은 후속이며 임의로 확정하지 않는다. Cloudflare 인증·같은 비밀값·이미 합의한 주소를 다시 요구하지 않는다.
+원래 첫 목표는 **모의 PG 환불 승인·조회·중복 방지 계약을 정하는 것**이었다. 후속으로 시도별 키·실제 제공사 테스트 전환을 선택했고, 독립 9,000원 결제·전액 취소를 확인했다. 사용자가 B안(웹훅·주기 조회 병행)을 선택해 첫 Payment 기반을 구현·OCI 검증했고, OCI 공개 IP HTTPS 경로에서 실제 준비 웹훅·재발송 수신까지 확인했다. 이후 전용 결제창 정보 API A안도 구현·OCI 검증했다. 해당 연결은 사용자 휴대폰 승인과 테스트 페이지 결과 반환 뒤 실제 포트원·Payment·Order PAID 및 Outbox/중복 대조까지 완료했다. 같은 9,000원 PAID 주문·결제를 후속 환불 검증 근거로 보존한다. 후속으로 3시간 경과 자동 재전송 중단 A안의 DB 준비·권한 경계를 구현·검증했다. 후속으로 조회 확인 A안을 선택했다. 이후 원액=취소액=예상 잔액의 A안을 선택해 송신 서비스를 추가했다. 이후 검증된 취소 완료 응답 A안으로 직접 성공 귀속·고객 완료·늦은 응답 보완을 구현했다. 이후 REQUESTED의 결과 GET 간격 B안도 구현·검증했다. 이후 FAILED와 미취소 조회를 함께 검증해 실제 보유권 복구로 연결하는 B안도 구현·검증했다. 다음은 복구 뒤 명시적 새 실행의 계약·자동 취소 POST 시작/재시도 주기·나머지 HTTP 오류 분류를 한 쟁점씩 논의한다. 실제 9,000원 주문의 License 지급·정지·환불 결과·복구·정산을 연결한 E2E는 후속이다. 초기 합성 주문 READY·별도 독립 결제/취소 기록과 구별해, 최신 실제 Order에서 발생한 TEST 결제 성공도 검증했다. 주문 접수 직후 아직 Payment가 없을 때의 대기 안내·실제 PG 실패 분류가 필요하면 별도 쟁점으로 다룬다. 나머지 HTTP 오류 분류·새 실행·모순 결과의 운영 처리는 후속이며 임의로 확정하지 않는다. Cloudflare 인증·같은 비밀값·이미 합의한 주소를 다시 요구하지 않는다.
 
 첫 사례는 이렇게 구체화할 수 있다. 주문 O1은 9,000원을 결제했고 환불 R1·시도 A1의 권한 정지와 Payment 접수까지 끝났다. Payment가 PG에 환불을 요청했는데 PG는 돈을 돌려준 후 응답이 유실됐다. 우리 DB에는 아직 PENDING만 있다. 이때 같은 요청의 재호출·조회가 중복 환불 없이 기존 결과로 연결돼야 한다. 이 사례의 계약을 먼저 정하고, 확정 거절 후 고객이 다시 요청하는 다른 사례와 구분한다.
 
 미결 사항:
 
-- PG 환불 승인·조회의 상세 필드·응답. attemptId → PG 키의 동일 매핑과 확정 결과 보존은 결정했다. 이미 환불된 원결제에 다른 시도 키로 요청했을 때의 응답은 미결이다.
-- 결과 미확정·일시 장애·확정 실패의 분류, 조회·재개 간격, 장기 대기 고객 안내·운영 개입 기준.
+- 조회의 전액 취소 확인 및 원결제 전액 잔액 조건 A안은 선택·구현했다. POST의 기본 필드·본문/키 보존과 검증된 SUCCEEDED 응답의 시도 성공 귀속은 구현했다. REQUESTED/FAILED 연결·미취소 조회·실제 복구 B안은 구현했고 나머지 HTTP 오류 분류는 미결이다. attemptId → PG 키의 동일 매핑은 유지하며, 이미 취소된 결제는 조회로 검증한 고객 업무 완료와 실행 결과 불명을 구분한다.
+- 결과 미확정·일시 장애·확정 실패의 분류, 자동 취소 POST 시작/재시도 간격, 장기 대기 고객 안내·운영 개입 기준. 결과 GET 간격은 B안으로 결정·검증했다.
 - 어떤 확정 실패에 고객의 새 실행이 유효한지, 이전 시도의 지연 결과와 현재 실행 대조, 실제 보유권 복구 완료 후 재정지·실행 허용 조건.
-- PG 확정 결과·보유권 복구 요청/완료 이벤트 계약과 원자적 반영.
+- 검증된 직접 성공·FAILED/미취소 조회와 보유권 복구 요청/완료 계약·원자적 반영은 구현했다. 나머지 오류·모순 결과의 운영 처리는 후속이다.
 - 관리자 승인·반려 경합, 판정 변경·반려 후 재신청, 환불 접수·조회·관리자 HTTP 계약과 권한.
 - 기존 지급 건의 확인 누락 보완·재처리, Outbox 재시도와 소비 순서·재시작 후 재개, 새 흐름의 Tempo 검증.
 - 접수 시각이 결제 확정 시각보다 앞서는 비정상 시간 관계, 기한 정책 변경의 과거 적용.
@@ -176,8 +225,8 @@ OCI 검증 전후 공유 컨테이너 18개와 볼륨 55개를 보존했고 잔�
 ```text
 /Users/jade/Projects/esd-platform에서 전액 환불 설계·구현을 이어가자.
 AGENTS.md와 docs/refund-session-handoff.md를 먼저 읽고 최신 코드·git 상태를 대조해줘.
-현재는 Payment의 환불 실행 요청 검증·내구성 있는 접수까지 구현·OCI 검증·커밋했고 PG 환불 실행은 아직이야.
-다음은 모의 PG 환불 승인·조회·중복 방지 계약부터 한 쟁점씩 논의하자.
+현재는 Payment 접수·3시간 POST 제한·전액 잔액 조건·직접 성공/조회 확인·결과 GET 주기와 FAILED/미취소 확인 후 실제 권한 복구 B안까지 구현·검증했어. 최신 검증 기록과 미결 범위를 먼저 대조해줘.
+다음은 복구 뒤 명시적 새 실행의 계약과 자동 취소 POST 시작/재시도 주기·나머지 HTTP 오류 분류를 한 쟁점씩 논의하자.
 각 쟁점의 배경·구체적인 사례·대안·트레이드오프와 네 의견을 설명한 뒤 내가 선택하고 이유를 말할 시간을 줘.
 내 선택의 반례와 놓친 비용을 검토하고, 합의한 뒤에는 테스트·코드 작성과 검증을 맡아줘.
 TDD로 진행하고, 인프라 검증은 승인한 ssh sng OCI의 격리 환경을 사용하며 공유 자료를 보존해줘.
