@@ -33,10 +33,17 @@ public class ResolvePayment {
     private final TransactionTemplate transaction;
     private final PaymentTraceContexts traceContexts;
     private final PaymentTracing tracing;
+    private final String provider;
 
     public ResolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
             EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay,
             PaymentTraceContexts traceContexts, PaymentTracing tracing) {
+        this(payments, gateway, outbox, entityManager, transactions, batchSize, retryDelay, traceContexts, tracing, "SIMULATED");
+    }
+
+    public ResolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
+            EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay,
+            PaymentTraceContexts traceContexts, PaymentTracing tracing, String provider) {
         this.payments = payments;
         this.gateway = gateway;
         this.outbox = outbox;
@@ -45,12 +52,13 @@ public class ResolvePayment {
         this.retryDelay = retryDelay;
         this.traceContexts = traceContexts;
         this.tracing = tracing;
+        this.provider = provider;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
     public void execute() {
-        List<String> due = payments.due(PaymentStatus.PENDING, Payment.now(), PageRequest.of(0, batchSize));
+        List<String> due = payments.due(PaymentStatus.PENDING, provider, Payment.now(), PageRequest.of(0, batchSize));
         for (String paymentId : due) {
             try {
                 execute(paymentId);
@@ -66,7 +74,7 @@ public class ResolvePayment {
             throw new IllegalStateException("PG 호출은 Payment 트랜잭션 밖에서 실행해야 합니다.");
         }
         Payment payment = payments.findByPaymentId(paymentId).orElse(null);
-        if (payment == null || payment.getStatus() != PaymentStatus.PENDING) return;
+        if (payment == null || payment.getStatus() != PaymentStatus.PENDING || !provider.equals(payment.getProvider())) return;
 
         tracing.run(traceContexts.find(paymentId), paymentId, () -> process(payment));
     }

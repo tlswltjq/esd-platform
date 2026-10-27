@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESD · 포트원 테스트 연결</title>
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#1e293b;font:16px/1.6 system-ui,sans-serif}
+  main{max-width:700px;margin:64px auto;padding:32px;background:white;border:1px solid #dce2e9;border-radius:16px}
+  h1{font-size:27px;margin:8px 0 20px}.tag{font-size:13px;font-weight:700;color:#286751}p{color:#526175}
+  .amount{font-size:32px;font-weight:750;padding:20px 0;border-bottom:1px solid #e2e8f0}
+  .buttons{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0}button{border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;background:white;font:inherit;cursor:pointer}
+  button.primary{background:#1d4ed8;color:white;border-color:#1d4ed8}button:disabled{opacity:.4;cursor:default}
+  #status{background:#f1f5f9;border-radius:10px;padding:18px;white-space:pre-wrap;overflow-wrap:anywhere}small{display:block;color:#64748b;margin-top:20px}
+  @media(max-width:720px){main{margin:16px;padding:22px}}
+</style>
+<main>
+  <span class="tag">PORTONE V2 · 토스페이 테스트</span>
+  <h1>테스트 결제 연결</h1>
+  <p>토스페이 결제창에서 테스트 결제를 진행한 뒤, 서버에서 결과를 확인합니다.</p>
+  <div class="amount">ESD 테스트 상품 · 9,000원</div>
+  <div class="buttons">
+    <button id="pay" class="primary" disabled>토스페이 테스트 결제</button>
+    <button id="check" disabled>결과 다시 확인</button>
+    <button id="cancel" disabled>테스트 결제 전액 취소</button>
+  </div>
+  <div id="status" role="status" aria-live="polite">연결 정보를 불러오는 중입니다.</div>
+  <small>포트원 연결 검증용 화면입니다. 기존 주문·라이브러리·정산에는 반영되지 않습니다.<br>현재 PC 브라우저를 기준으로 검증합니다.</small>
+</main>
+<script>
+  let config, busy = false, verified = 'NOT_CREATED';
+  const statusBox = document.querySelector('#status');
+  const pay = document.querySelector('#pay'), check = document.querySelector('#check'), cancel = document.querySelector('#cancel');
+  const labels = {NOT_CREATED:'아직 결제를 시작하지 않았습니다.',READY:'결제 진행 전입니다.',PENDING:'결제 결과를 확인 중입니다.',PAY_PENDING:'결제 결과를 확인 중입니다.',FAILED:'포트원에서 결제 실패 상태를 확인했습니다.',PAID:'서버에서 9,000원 테스트 결제 성공을 확인했습니다.',CANCELLED:'서버에서 9,000원 전액 취소 완료를 확인했습니다.',PARTIAL_CANCELLED:'부분 취소 상태입니다. 이 검증 도구에서는 추가 취소하지 않습니다.'};
+  function buttons(){pay.disabled=busy||!config||['PAID','CANCELLED','PARTIAL_CANCELLED'].includes(verified);check.disabled=busy||!config;cancel.disabled=busy||verified!=='PAID';}
+  async function api(path){
+    const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Verification-Token':config.token},body:'{}'});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.code||'VERIFICATION_UNAVAILABLE');
+    verified=data.status;
+    const message=data.cancellation_unconfirmed?'전액 취소 완료는 아직 확인되지 않았습니다. 결과 다시 확인을 눌러주세요.':(labels[data.status]||'결과 확인 중입니다.');
+    statusBox.textContent=message+'\n\n결제 번호: '+data.payment_id;
+    return data;
+  }
+  function failed(error){statusBox.textContent='확인이 필요합니다: '+error.message+'\n결과를 확인하지 못한 경우, 결과 다시 확인을 눌러주세요.';}
+  async function action(work){busy=true;buttons();try{await work();}catch(error){failed(error);}finally{busy=false;buttons();}}
+  pay.addEventListener('click',()=>action(async()=>{
+    statusBox.textContent='토스페이 테스트 결제창을 여는 중입니다.';
+    const result=await PortOne.requestPayment(config.payment);
+    if(result&&result.code){statusBox.textContent='결제창 응답: '+result.code;}
+    await api('/api/verify');
+  }));
+  check.addEventListener('click',()=>action(()=>api('/api/verify')));
+  cancel.addEventListener('click',()=>action(async()=>{statusBox.textContent='테스트 결제 취소를 요청하고 결과를 재조회합니다.';await api('/api/cancel');}));
+  (async()=>{try{const response=await fetch('/api/config');if(!response.ok)throw new Error('CONFIGURATION_UNAVAILABLE');config=await response.json();buttons();await action(()=>api('/api/verify'));}catch(error){failed(error);}})();
+</script>
+</html>

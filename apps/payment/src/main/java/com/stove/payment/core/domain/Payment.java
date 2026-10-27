@@ -121,4 +121,14 @@ public class Payment {
             throw new IllegalArgumentException("Invalid pending retry");
         nextAttemptAt=until; lastErrorCode=errorCode; updatedAt=now();
     }
+
+    /** An authenticated hint can advance a pending recheck, never decide or reopen a payment. */
+    public void requestRecheck(Instant at) {
+        if (!PaymentValues.microsecond(at)) throw new IllegalArgumentException("A recheck time is required");
+        if (status != PaymentStatus.PENDING) return;
+        if (nextAttemptAt == null || at.isBefore(nextAttemptAt)) {
+            nextAttemptAt = at;
+            updatedAt = at;
+        }
+    }
 }

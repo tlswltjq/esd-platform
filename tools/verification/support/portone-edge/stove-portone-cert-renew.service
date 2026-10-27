@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew the PortOne webhook IP certificate and reload nginx
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/stove-portone-webhook/renew.sh
+TimeoutStartSec=5min

@@ -660,6 +660,16 @@ ssh sng OCI의 /tmp/stove-payment-refund-reception-check-ke_8kzmp/work에서 920
 실제 Kafka에서는 중복 요청의 소비 위치를 모두 커밋하면서 접수·Inbox는 각각 한 건, 추적 부모는 첫 값으로 유지됨을 확인했다. 잘못된 금액의 요청은 원문·키·소비 그룹을 DLT에 보존하고 접수·Inbox·결과 Outbox와 PG 호출을 만들지 않았다. 기존 결제 HTTP·JWT·비용·공급자 응답 유실·마이그레이션·추적/스케줄러 회귀도 함께 통과했다. 환불의 실제 PG HTTP·Order 결과 반영·License 복구 E2E와는 구분한다.
 검증 전후 공유 컨테이너 18개의 ID·실행·시작 시각·재시작 횟수·health와 볼륨 55개가 같았고 추가 자원·잔여 Testcontainers도 없었다. 원격 results와 로컬 runs/payment-refund-reception-oci-prqa5s5l/collected/results에 소스 묶음·해시·명령·로그·JUnit·전후 자원 목록을 보존했다. validation-summary.json은 원자료·해시·집계를 대조하고 검증 후 문서 변경을 구분한다.
 
+2026-10-27, 사용자가 실제 PG 테스트 연동을 먼저 진행하기로 선택하고 포트원 V2·토스페이 테스트 채널 정보를 준비했다. 실제 GET /payments의 테스트 필터 조회는 HTTP 200·반환 0건으로 인증을 확인했다. 업무 앱과 별개인 portone-test-checkout 검증 도구의 핵심 9건과 취소 미확정 표시 1건은 Red → Green을 확인했고, 최종 메모리 기반 Python 테스트 20건·Python 컴파일·JavaScript 문법 검사를 통과했다. 자동 브라우저의 로컬 Origin 접근은 승인 단계에서 거절돼 실제 결제창·PG 승인·취소는 검증하지 못했다. 이 결과를 Payment 환불 구현이나 OCI 인프라·전체 환불 완료로 합치지 않는다. 원자료와 실행 범위는 [PG 테스트 연동 계획](pg-test-integration-plan.md#2026-10-27-독립-테스트-결제-검증-도구)을 따른다.
+
+이어 사용자의 명시적 curl·헤드리스 요청에 따라 실제 HTTP·Chromium 검증을 수행했다. 로컬 페이지/설정/서버 조회 200, 잘못된 요청의 403/400, SDK 로딩과 초기 버튼 상태, 토스페이 QR 인증 팝업을 확인했다. 서버 재조회는 READY·TEST·TOSSPAY_V2·9,000원이며 휴대폰 인증·PAID 승인·실제 취소는 아직이다. 앞선 자동 브라우저 거절 뒤 사용자 요청으로 진행한 별도 검증이며 OCI 인프라나 업무 환불 E2E 완료가 아니다. 원자료는 [curl·헤드리스 기록](pg-test-integration-plan.md#2026-10-27-사용자-요청에-따른-curl헤드리스-검증)을 따른다.
+
+이후 사용자 결제·취소 보고 뒤 포트원 서버를 독립 재조회해 TEST·TOSSPAY_V2·상점/채널 일치·KRW·총액/결제액/취소액 9,000원·CANCELLED와 SUCCEEDED 취소 1건을 확인했다. 완료된 검증 도구의 취소 재요청도 기존 결과·취소 ID·시도 키를 유지했다. 실제 PG의 응답 유실이나 다른 키 경합을 주입한 것은 아니다. 원자료는 `runs/portone-checkout-live-20261027/provider-final-verification.json`이다. 독립 제공사 연결 검증만 완료했으며 Payment·Order·License·Settlement의 업무 연동·OCI 검증 완료로 합치지 않는다.
+
+사용자가 웹훅·주기 조회 병행의 B안을 선택한 뒤 Payment에 서명 검증·내부 입력 변환·내구 접수·재조회 예약과 포트원 PAID 조회 어댑터를 추가했다. 서명 5·mapper 3·서비스 5·조회 어댑터 4건의 단위 테스트를 추가했고 미구현 Red → Green 원자료는 `runs/payment-portone-tdd-nuclayzz/`에 보존했다. 로컬 단위 140건과 통합 소스 컴파일이 통과했다. 승인한 OCI 격리 작업본에서 소스 946개를 SHA-256 대조해 단위 140·통합 57건(신규 DB·HTTP 9건)을 통과했다. 실패·오류·건너뜀 0이며 공유 컨테이너 18개·볼륨 55개와 기존 상태를 보존했다. 원자료는 `runs/payment-portone-oci-e4wppb57/collected/results/`다. 실제 제공사 웹훅·공개 주소·SDK 주문 연결이나 전체 환불 E2E로 확대하지 않는다. 상세 범위는 [연동 계획](pg-test-integration-plan.md#2026-10-27-b안-웹훅-접수주기-조회-기반)을 따른다.
+
+이어 사용자가 OCI 공개 IP HTTPS 구성을 승인했다. 로컬 Payment bootJar, 공개 TLS 신뢰·IP SAN·TLS 1.3, HTTP 경계 7건, IP 인증서 갱신 dry-run·systemd 성공을 확인했다. 실제 SDK의 noticeUrls로 포트원 TEST Transaction.Ready를 수신해 제공사 SUCCEEDED·HTTP 200·DB 접수를 대조했고, 실제 웹훅 재발송도 200이며 최초 접수 1건을 보존했다. 새 PG 거래는 READY·로컬 Payment는 PENDING인 합성 주문 픽스처다. 실제 Order 주문·결제 승인·환불 전체 연결 검증으로 확대하지 않는다. 기존 공유 컨테이너 18개·볼륨 55개를 보존하고 전용 nginx·MySQL만 추가했다. 원자료는 `runs/portone-public-https-cm9y22_z/`, 구성·로컬 연결의 실행 의존성은 [edge 기록](../tools/verification/support/portone-edge/README.md)을 따른다. 이 인프라 설정 뒤 앞선 140·57건을 재실행했다고 기록하지 않는다.
+
 Order가 검증할 결과는 자기 DB의 접수·판정·진행 상태, Inbox와 Outbox다.
 License 정지 완료는 정의한 LicenseSuspended 계약의 픽스처로 입력하며 Payment 환불 결과 계약은 후속 정의한다. 제거된 구 환불 이벤트를 호환성 요구로 가져오지 않는다.
 환불 기록은 Order 모듈의 별도 모델을 접수 시 생성하고 그 모델이 FSM을 소유하기로 했다. 첫 도메인 테스트의 대상은 Refund와 RefundStatus다. 이후 정지 요청 계약과 V12 접수 테이블을 추가했다. API 계약과 후속 전이는 아직 확정하지 않았다. 표의 상태 표현은 업무 의미다.
@@ -783,7 +793,7 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 | 쟁점 | 영향을 받는 테스트 |
 |---|---|
 | 기존 지급 건·확인 누락 복구와 장기 대기 방식. 새 지급의 LicenseGranted 계약·근거 저장·선행/후행 재개는 구현·검증 | 기존 지급 보완과 장기 대기·운영 재처리 테스트 |
-| 확정 결과·복구 요청의 필드·키와 PG 멱등 키 매핑. 내부 refundId/attemptId, 정지 요청·완료와 실행 요청, Order의 완료 수신과 Payment 접수는 정의·구현했다 | R20~R25의 구체적인 이벤트 픽스처와 PG 경계 |
+| 확정 결과·복구 요청의 필드·키와 PG 승인·조회 상세 계약. PG 멱등 키는 2026-10-27 attemptId로 결정했다. 같은 키의 확정 결과 보존·다른 본문 거절과 원결제의 전액 환불 성공 1회 제한은 합의했고, 이미 환불된 원결제에 다른 키로 요청했을 때의 응답은 미결이다. 내부 refundId/attemptId, 정지 요청·완료와 실행 요청, Order의 완료 수신과 Payment 접수는 정의·구현했다 | R20~R25의 구체적인 이벤트 픽스처와 PG 경계. 새 PG 키 계약의 Red·Green·OCI 검증은 아직 수행하지 않음 |
 | 이미 반려된 요청의 재신청, 승인·반려 경합과 판정 변경 | R13 이후의 추가 심사 시나리오 |
 | 어떤 확정 실패에 사용자 재시도가 유효한지, 현재 실행의 선택·이전 결과 대조와 복구 완료의 연결. 시도별 모델은 이 판단을 대신하지 않음 | 확정 실패 후 재시도·이전 시도의 지연 결과 테스트 |
 | 정지 완료의 근거 부재·불일치는 A안으로 거절·격리한다. 아직 정의하지 않은 Payment 결과·복구 이벤트의 예상하지 않은 단계 처리는 후속 | R20~R25의 추가 상태 전이·순서 역전 테스트 |
@@ -856,3 +866,11 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 - 이미 Green인 주문 기능·권한 테스트는 회귀로 유지한다. 계약 위반이 발견되면 그 입력·기대 결과·실제 실패를 남긴다.
 - 실제 DB의 소유자 필터·중복 키·구매 경합·Inbox/Outbox 롤백은 기존 통합 테스트를 유지·확장한다. 이를 순수 단위 테스트의 성공으로 대체하지 않는다.
 - 새로운 주문 기능이나 권한 확대는 담당자의 선택·이유와 반례·비용 검토 후 기대 결과를 고정한다.
+
+2026-10-27 후속으로 사용자가 본인 결제창 정보 전용 API A안을 선택했다. 서비스 미구현 Red 5건, SDK 응답·HTTPS 설정 검증의 Red 2건을 확인한 뒤 로컬 Payment 단위 148건·통합 컴파일·bootJar가 통과했다. OCI HTTP Red 3건은 신규 경로가 연결되기 전의 403이었다. 구현 후 실제 JWT/JWKS·Spring HTTP·MySQL로 본인 PENDING·고정 ID·할인 후 금액·공개 설정·서버 Secret 부재·캐시 금지·반복 읽기 불변·401/403/404/409·웹훅 후 PAID 및 새 checkout 거절을 검증했다. 최종 OCI 단위 148·통합 60건(신규 3건), 실패·오류·건너뜀 0이다. 소스 959개를 대조했고 공유 컨테이너 20개·볼륨 55개를 보존했다. 단위 원자료는 `runs/payment-checkout-tdd-p2__qvdo/`, OCI Red/Green·JUnit·소스·보존 기록은 `runs/payment-checkout-oci-zoy5astj/collected/results/`다. 실제 포트원 신규 승인이나 Order부터 시작한 E2E로 확대하지 않는다. API 계약·응답 이후 경합·접수 전 404의 범위는 [A안 기록](pg-test-integration-plan.md#2026-10-27-a안-본인-결제창-정보-전용-api)을 따른다.
+
+2026-10-27 후속 실제 연결 검증에서는 업무 코드 변경 없이 실제 Auth 회원가입/PKCE·Catalog의 출시 요청 계약 픽스처 처리·Order 생성 HTTP·Outbox/Kafka·Payment 생성·checkout 응답·SDK·실제 Transaction.Ready 웹훅 200까지 확인했다. 주문과 결제는 같은 9,000 KRW·PENDING이며 사용자 휴대폰 승인 대기다. 구매 성공으로 집계하지 않는다. 최신 원자료는 `runs/portone-order-live-j2flh033/`다. 소스 959개·JAR 해시와 공개 응답 연결값·DB 접수·공유 컨테이너 20개/볼륨 55개 보존, 전용 컨테이너 2개/소유 볼륨 2개 추가를 기록했다. 기존 단위·통합 테스트 숫자를 이 실제 승인 대기 단계의 재실행 결과로 합치지 않는다.
+
+2026-10-27 후속 사용자 휴대폰 승인 보고 뒤 공식 토스 테스트 페이지의 마지막 이동하기 버튼을 처리하고 실제 포트원 PAID·Payment PAID·Order PAID·9,000 KRW를 확인했다. 상점·채널·TEST/TOSSPAY_V2·주문·구매자·상품·금액·요청 ID·결과 ID가 일치하고 Ready/Paid 웹훅은 200이다. 실제 Paid 웹훅 재발송에도 최초 확정 결과·시각·웹훅 2개·OrderPlaced/OrderPaymentCompleted/OrderPaid의 SENT 각 1개를 보존했다. PAID 후 checkout은 409다. 최신 실행의 provider-paid-verification.json·confirmed-facts-before/after-replay.json·paid-webhook-replay.json·checkout-after-paid.json·validation-summary.json에 원자료를 보존했다. 공유 컨테이너 20개·기존 볼륨 55개 보존도 재확인했다. 완료 범위는 실제 TEST 구매의 Order·Payment 연결이며 Studio·Review의 실제 출시 업무·License 지급·정산·환불 전체 검증으로 합치지 않는다.
+
+2026-10-27 사용자가 장기 미확정 환불 재전송 A안을 선택했다. 최초 송신 준비의 커밋 후 권한 반환, 동일 attemptId·원입력·3시간 기한 보존, 정확한 경계·오래된 권한의 송신 직전 재검사, 중단 관측의 내구 저장과 PENDING 유지의 준비 서비스를 구현했다. 도메인 6·서비스 4건의 미구현 Red를 확인한 뒤 로컬 단위 158건·통합 컴파일·bootJar가 통과했다. OCI full 실행 단위 158건은 통과했고 통합 65건 중 신규 픽스처 2건이 실패했다. 운영 코드를 바꾸지 않고 실제 EntityManager.flush 뒤 장애 주입, MySQL CHECK 이름·오류 번호 3819 검사로 픽스처 한 파일을 고쳤다. corrected 실행은 통합 전체 65건을 실패·오류·건너뜀 0으로 통과했으며 단위는 재실행한 것으로 합치지 않는다. 신규 DB 5건은 재조회·재시작의 기한 보존, 동시 준비, 실제 flush 후 롤백·재개, SQL 제약, V15 접수의 V16 이행을 검증한다. 공유 컨테이너 22개·볼륨 57개를 보존했고 잔여 Testcontainers는 없다. 단위 원자료는 runs/refund-window-tdd-u8jdb08z, OCI 소스 966개·두 실행·JUnit·보존 기록은 runs/refund-window-oci-22cus_i6/collected/results다. PG 취소·조회 작업자와 최종 환불 결과·운영 UI는 후속이며 이 준비 경계 검증을 실제 PG 환불 성공으로 표시하지 않는다.

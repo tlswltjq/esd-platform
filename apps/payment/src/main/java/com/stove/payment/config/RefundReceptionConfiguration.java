@@ -6,11 +6,13 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReceiveRefundExecution;
+import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
@@ -25,5 +27,10 @@ public class RefundReceptionConfiguration {
     @Bean ReceiveRefundExecution receiveRefundExecution(PaymentRepository payments, RefundExecutionRepository executions,
             ProcessedEventGuard inbox, RefundExecutionTraceContexts contexts, Clock refundReceptionClock) {
         return new ReceiveRefundExecution(payments, executions, inbox, contexts, refundReceptionClock);
+    }
+
+    @Bean RecordRefundCancellationPreparation recordRefundCancellationPreparation(RefundExecutionRepository executions,
+            PlatformTransactionManager transactions, Clock refundReceptionClock) {
+        return new RecordRefundCancellationPreparation(executions, transactions, refundReceptionClock);
     }
 }

@@ -45,6 +45,23 @@ public class RefundExecution {
     private Instant receivedAt;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
     private RefundExecutionStatus status;
+    @Column(name = "first_cancel_prepared_at")
+    private Instant firstCancellationPreparedAt;
+    @Column(name = "auto_cancel_stopped_at")
+    private Instant automaticCancellationStoppedAt;
+
+    public RefundCancellationPermission prepareCancellation(Instant at) {
+        if (!PaymentValues.microsecond(at) || at.isBefore(receivedAt)) {
+            throw new IllegalArgumentException("Preparation must have database precision and follow receipt");
+        }
+        if (status != RefundExecutionStatus.PENDING) throw new BusinessException(ErrorCode.CONFLICT);
+        if (firstCancellationPreparedAt == null) firstCancellationPreparedAt = at;
+        if (automaticCancellationStoppedAt == null
+                && !at.isBefore(RefundCancellationWindow.deadline(firstCancellationPreparedAt))) {
+            automaticCancellationStoppedAt = at;
+        }
+        return new RefundCancellationPermission(request(), firstCancellationPreparedAt, automaticCancellationStoppedAt != null);
+    }
 
     public static RefundExecution receive(Payment payment, RefundExecutionRequest request, Instant receivedAt) {
         if (payment == null || !PaymentValues.microsecond(receivedAt)) {

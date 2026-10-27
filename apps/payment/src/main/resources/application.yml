@@ -66,6 +66,15 @@ stove:
       api-key: ${MOCK_PG_PAYMENT_KEY:}
       connect-timeout: 2s
       read-timeout: 5s
+    portone:
+      base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
+      api-secret: ${PORTONE_API_SECRET:}
+      store-id: ${PORTONE_STORE_ID:}
+      channel-key: ${PORTONE_CHANNEL_KEY:}
+      webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
+      webhook-url: ${PORTONE_WEBHOOK_URL:}
+      connect-timeout: 2s
+      read-timeout: 65s
   messaging:
     ops:
       enabled: false

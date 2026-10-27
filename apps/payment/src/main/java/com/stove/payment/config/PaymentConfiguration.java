@@ -19,6 +19,7 @@ import java.time.Duration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,12 +30,13 @@ public class PaymentConfiguration {
     @Bean
     ResolvePayment resolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
             EntityManager entityManager, PlatformTransactionManager transactions, PaymentProcessingProperties properties,
-            PaymentTraceContexts traceContexts, PaymentTracing tracing) {
+            PaymentTraceContexts traceContexts, PaymentTracing tracing, PgHttpProperties pg) {
         return new ResolvePayment(payments, gateway, outbox, entityManager, transactions,
-                properties.batchSize(), Duration.ofMillis(properties.retryDelayMs()), traceContexts, tracing);
+                properties.batchSize(), Duration.ofMillis(properties.retryDelayMs()), traceContexts, tracing, pg.provider());
     }
 
     @Bean
+    @ConditionalOnProperty(name = "stove.payment.pg.provider", havingValue = "SIMULATED", matchIfMissing = true)
     SimulatedPgHttpGateway simulatedPgGateway(PgHttpProperties properties, RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.connectTimeout()); factory.setReadTimeout(properties.readTimeout());
