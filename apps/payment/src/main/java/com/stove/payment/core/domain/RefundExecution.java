@@ -34,6 +34,8 @@ public class RefundExecution {
     private String attemptId;
     @Column(nullable = false, updatable = false, length = 36)
     private String refundId;
+    @Column(unique = true, updatable = false, length = 36)
+    private String previousAttemptId;
     @Column(nullable = false, unique = true, updatable = false, length = 64)
     private String requestEventId;
     @Column(nullable = false, updatable = false)
@@ -63,6 +65,28 @@ public class RefundExecution {
     private String cancellationRequestBody;
     @Embedded
     private RefundLookupSchedule lookupSchedule = new RefundLookupSchedule();
+    @Embedded
+    private RefundCancellationSchedule cancellationSchedule = new RefundCancellationSchedule();
+    @Column(name = "active_cancel_hold_id", unique = true, length = 36)
+    private String activeCancellationHoldId;
+
+    public void holdCancellation(String holdId, RefundCancellationClaim claim) {
+        if (!PaymentValues.uuid(holdId)) throw new IllegalArgumentException("A rejection hold identity is required");
+        if (status != RefundExecutionStatus.PENDING || refundConfirmedAt != null || firstCancellationPreparedAt == null
+                || cancellationRequestBody == null || activeCancellationHoldId != null || !cancellationSchedule.ownsClaim(claim))
+            throw new BusinessException(ErrorCode.CONFLICT, "현재 송신의 거절 근거만 중단에 반영할 수 있습니다.");
+        activeCancellationHoldId = holdId; cancellationSchedule.stop();
+    }
+
+    public void resumeCancellation(String holdId, Instant at) {
+        if (!PaymentValues.uuid(holdId) || !PaymentValues.microsecond(at)) throw new IllegalArgumentException("A hold and precise resume time are required");
+        if (!holdId.equals(activeCancellationHoldId) || status != RefundExecutionStatus.PENDING || refundConfirmedAt != null
+                || firstCancellationPreparedAt == null || cancellationRequestBody == null || automaticCancellationStoppedAt != null
+                || cancellationBalanceChangedAt != null || receiptCancellationId != null || at.isBefore(firstCancellationPreparedAt)
+                || !at.isBefore(RefundCancellationWindow.deadline(firstCancellationPreparedAt)))
+            throw new BusinessException(ErrorCode.CONFLICT, "현재 중단과 원래 송신 조건 안에서만 재개할 수 있습니다.");
+        cancellationSchedule.resume(at); activeCancellationHoldId = null;
+    }
 
     @Column(length = 100) private String receiptCancellationId;
     @Enumerated(EnumType.STRING) @Column(length = 20) private PgRefundCancellationReceipt.State receiptState;
@@ -92,6 +116,7 @@ public class RefundExecution {
         receiptCancellationId = receipt.cancellationId(); receiptState = receipt.state();
         receiptRequestedAt = receipt.requestedAt(); receiptObservedAt = at;
         receiptTaxFreeAmount = receipt.taxFreeAmount(); receiptVatAmount = receipt.vatAmount(); receiptReason = receipt.reason();
+        cancellationSchedule.stop();
         return true;
     }
 
@@ -119,6 +144,7 @@ public class RefundExecution {
         recordCancellationReceipt(payment, proof.failedReceipt(), at);
         status = RefundExecutionStatus.FAILED; failureEventId = eventId; failureConfirmedAt = at; failureLookupHash = proof.snapshotHash();
         lookupSchedule.stop();
+        cancellationSchedule.stop();
         return true;
     }
 
@@ -133,6 +159,7 @@ public class RefundExecution {
         if (firstCancellationPreparedAt == null || !PaymentValues.microsecond(at) || at.isBefore(firstCancellationPreparedAt))
             throw new IllegalArgumentException("A balance observation must follow dispatch preparation");
         if (cancellationBalanceChangedAt == null) cancellationBalanceChangedAt = at;
+        cancellationSchedule.stop();
     }
     private Instant refundConfirmedAt;
     private Instant providerRefundedAt;
@@ -190,6 +217,7 @@ public class RefundExecution {
             confirmedCancellations = new ArrayList<>(List.of(success.cancellation()));
         }
         lookupSchedule.stop();
+        cancellationSchedule.stop();
         return true;
     }
     @ElementCollection(fetch = FetchType.EAGER)
@@ -225,6 +253,7 @@ public class RefundExecution {
         refundConfirmationEventId = eventId;
         confirmedCancellations = new ArrayList<>(confirmation.cancellations());
         lookupSchedule.stop();
+        cancellationSchedule.stop();
         return true;
     }
 
@@ -241,8 +270,10 @@ public class RefundExecution {
                 && !at.isBefore(RefundCancellationWindow.deadline(firstCancellationPreparedAt))) {
             automaticCancellationStoppedAt = at;
         }
+        if (automaticCancellationStoppedAt != null || cancellationBalanceChangedAt != null || receiptCancellationId != null || activeCancellationHoldId != null)
+            cancellationSchedule.stop();
         return new RefundCancellationPermission(request(), firstCancellationPreparedAt,
-                automaticCancellationStoppedAt != null || cancellationBalanceChangedAt != null || receiptCancellationId != null);
+                automaticCancellationStoppedAt != null || cancellationBalanceChangedAt != null || receiptCancellationId != null || activeCancellationHoldId != null);
     }
 
     public static RefundExecution receive(Payment payment, RefundExecutionRequest request, Instant receivedAt) {
@@ -251,7 +282,7 @@ public class RefundExecution {
         }
         payment.requireRefundRequest(request);
         RefundExecution execution = new RefundExecution();
-        execution.attemptId = request.attemptId(); execution.refundId = request.refundId();
+        execution.attemptId = request.attemptId(); execution.refundId = request.refundId(); execution.previousAttemptId = request.previousAttemptId();
         execution.requestEventId = request.eventId(); execution.requestOccurredAt = request.occurredAt();
         execution.orderNo = request.orderNo(); execution.paymentId = request.paymentId();
         execution.buyerSubject = request.buyerSubject(); execution.amount = request.amount();
@@ -262,7 +293,7 @@ public class RefundExecution {
 
     public RefundExecutionRequest request() {
         return new RefundExecutionRequest(requestEventId, requestOccurredAt, refundId, attemptId, orderNo,
-                paymentId, buyerSubject, amount, currency, licenseSuspensionEventId);
+                paymentId, buyerSubject, amount, currency, licenseSuspensionEventId, previousAttemptId);
     }
 
     public void requireSameRequest(RefundExecutionRequest request) {

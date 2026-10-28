@@ -18,6 +18,10 @@ import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
+import com.stove.order.core.domain.RefundRetryRequest;
+import com.stove.order.core.domain.RefundRetryReceipt;
+import com.stove.order.core.service.RequestRefundRetry;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.order.core.domain.LicenseGrant;
 import com.stove.order.core.domain.RefundPaymentConfirmation;
@@ -81,6 +85,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
     private static final Instant RECEIVED_AT = PAID_AT.plusSeconds(3 * 3600);
     private static final Instant STOPPED_AT = PAID_AT.plusSeconds(6 * 3600);
     @Autowired RequestRefund request;
+    @Autowired RequestRefundRetry retry;
     @Autowired ApplyLicenseGrant grant;
     @Autowired ApplyRefundSuspension suspend;
     @Autowired OrderRepository orders;
@@ -98,7 +103,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
     @AfterEach void clear() {
         listeners.stop();
         reset(kafka, apply);
-        jdbc.update("DELETE FROM order_refund_attempt");
+        jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");
         jdbc.update("DELETE FROM order_license_grant");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM order_refund");
@@ -129,7 +134,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
 
     @Test void aCompletionWithNoRefundIsQuarantinedWithoutBusinessRetryOrReplacement() throws Exception {
         Fixture fixture = fixture();
-        jdbc.update("DELETE FROM order_refund_attempt");
+        jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");
         jdbc.update("DELETE FROM order_refund");
         try (KafkaConsumer<String, String> consumer = dltConsumer(); AdminClient admin = admin()) {
             listeners.start();
@@ -170,7 +175,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
 
     @Test void failedQuarantinePublicationKeepsTheSourceUncommittedUntilRecovery() throws Exception {
         Fixture fixture = fixture();
-        jdbc.update("DELETE FROM order_refund_attempt");
+        jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");
         jdbc.update("DELETE FROM order_refund");
         AtomicBoolean unavailable = new AtomicBoolean(true);
         AtomicInteger failedPublications = new AtomicInteger();
@@ -191,7 +196,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         } finally { unavailable.set(false); }
     }
 
-    @Test void realKafkaFailureAndRestorationCompletionPreserveTheTwoDistinctStepsAcrossDuplicates() throws Exception {
+    @Test void realKafkaFailureRestorationAndExplicitRetryRequireANewSeparateSuspension() throws Exception {
         Fixture fixture = fixture(); RefundPaymentConfirmedEvent purchase = fixture.event();
         when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(5));
         RefundExecutionFailedEvent failed = new RefundExecutionFailedEvent(id(), STOPPED_AT.plusSeconds(2), purchase.refundId(), purchase.attemptId(),
@@ -213,6 +218,19 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group='order-refund-restoration'", Integer.class)).isEqualTo(2);
         });
         assertThat(executionRequests()).isEqualTo(1);
+        when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(86400));
+        RefundRetryReceipt receipt = retry.execute(new RefundRetryRequest(purchase.buyerSubject(), purchase.orderNo(), purchase.attemptId()));
+        assertThat(executionRequests()).isEqualTo(1);
+        LicenseSuspendedEvent nextStop = new LicenseSuspendedEvent(id(), STOPPED_AT.plusSeconds(86401), receipt.suspensionRequestEventId(),
+                receipt.refundId(), requested.licenseId(), purchase.orderNo(), purchase.buyerSubject(), requested.productId(), requested.productCode(), purchase.paymentId());
+        when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(86402)); send(nextStop); send(nextStop); send(failed); send(restored);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            Refund current = refunds.findByOrderNo(purchase.orderNo()).orElseThrow();
+            RefundAttempt next = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();
+            assertThat(current.getStatus()).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
+            assertThat(next.getAttemptNo()).isEqualTo(2); assertThat(next.getPreviousAttemptId()).isEqualTo(purchase.attemptId());
+            assertThat(executionRequests()).isEqualTo(2); assertThat(attempts.count()).isEqualTo(2);
+        });
     }
     private Fixture fixture() {
         Order paid = order();

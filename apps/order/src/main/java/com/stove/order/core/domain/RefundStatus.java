@@ -7,5 +7,6 @@ public enum RefundStatus {
     PENDING_PAYMENT_REFUND,
     PENDING_LICENSE_RESTORATION,
     FAILED,
+    REJECTED,
     COMPLETED
 }

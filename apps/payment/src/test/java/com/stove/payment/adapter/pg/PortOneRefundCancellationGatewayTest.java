@@ -18,7 +18,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
+import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.domain.PgAuthenticationUnavailable;
+import com.stove.payment.core.domain.PgPaymentNotFound;
+import com.stove.payment.core.domain.PgCancellationNotFound;
+import com.stove.payment.core.domain.PgPaymentLookupForbidden;
 import com.stove.payment.core.domain.RefundCancellationDispatch;
 import com.stove.payment.core.domain.RefundCancellationPermission;
 import com.stove.payment.core.domain.RefundExecutionRequest;
@@ -153,6 +158,127 @@ class PortOneRefundCancellationGatewayTest {
                 .contentType(MediaType.APPLICATION_JSON));
         assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isInstanceOf(PgUnavailable.class);
         server.verify();
+    }
+
+    @Test void aLeaseThatExpiresDuringPreflightCannotAuthorizeALatePost() {
+        Clock clock = mock(Clock.class);
+        when(clock.instant()).thenReturn(FIRST.plusSeconds(1), FIRST.plusSeconds(5));
+        RefundCancellationPermission claimed = new RefundCancellationPermission(request, FIRST, false, List.of(), FIRST.plusSeconds(5));
+        expectRead(paid());
+        assertThatThrownBy(() -> gateway(clock).send(claimed, purchase, body())).isInstanceOf(BusinessException.class);
+        server.verify();
+    }
+
+    @Test void unauthorizedPreflightIsIdentifiableWithoutParsingOrExposingTheResponse() {
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED).body("<html>private-provider-detail</html>").contentType(MediaType.TEXT_HTML));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                .isInstanceOf(PgAuthenticationUnavailable.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void unauthorizedCancellationKeepsTheRequestUnconfirmedAndDoesNotInterpretTheBodyAsAFailure() {
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.UNAUTHORIZED).body("{\"type\":\"UNAUTHORIZED\",\"message\":\"private-provider-detail\"}")
+                .contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                .isInstanceOf(PgAuthenticationUnavailable.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void invalidCancellationInputRequiresReviewWithoutInterpretingItAsAFailedRefund() {
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.BAD_REQUEST).body("{\"type\":\"INVALID_REQUEST\",\"message\":\"private-provider-detail\"}")
+                .contentType(MediaType.APPLICATION_JSON));
+        assertThat(gateway.send(permission, purchase, body())).isEqualTo(RefundCancellationDispatch.INVALID_REQUEST);
+        server.verify();
+    }
+
+    @Test void unrecognizedOrMalformedBadRequestsRemainUnconfirmedWithoutCreatingAnInputRejection() {
+        for (String error : List.of("<html>private-provider-detail</html>", "{}", "{\"type\":\"OTHER_ERROR\"}",
+                "{\"type\":\"INVALID_REQUEST\",\"type\":\"OTHER_ERROR\"}", "{\"type\":\"INVALID_REQUEST\"} {}", "{\"type\":400}",
+                "{\"type\":\"INVALID_REQUEST \"}")) {
+            server.reset(); expectRead(paid());
+            expectPost(body(), withStatus(HttpStatus.BAD_REQUEST).body(error).contentType(MediaType.APPLICATION_JSON));
+            assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                    .isExactlyInstanceOf(PgUnavailable.class).hasMessageNotContaining("private-provider-detail");
+            server.verify();
+        }
+    }
+
+    @Test void invalidPreflightInputIsAnUnavailableReadAndCannotCreateACancellationHold() {
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).body("{\"type\":\"INVALID_REQUEST\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgUnavailable.class);
+        server.verify();
+    }
+
+    @Test void forbiddenCancellationRequiresReviewWithoutInterpretingTheProviderBodyAsAFailedRefund() {
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.FORBIDDEN).body("<html>private-provider-detail</html>").contentType(MediaType.TEXT_HTML));
+        assertThat(gateway.send(permission, purchase, body())).isEqualTo(RefundCancellationDispatch.FORBIDDEN);
+        server.verify();
+    }
+
+    @Test void forbiddenPreflightIsAnIdentifiableUnavailableReadAndCannotCreateAPostRejection() {
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).body("<html>private-provider-detail</html>").contentType(MediaType.TEXT_HTML));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                .isExactlyInstanceOf(PgPaymentLookupForbidden.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void missingPreflightIsAnIdentifiableUnavailableReadAndCannotSendACancellation() {
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND).body("<html>private-provider-detail</html>").contentType(MediaType.TEXT_HTML));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                .isInstanceOf(PgPaymentNotFound.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void missingCancelPostIsAnIdentifiableUnconfirmedCancellationWithoutExposingTheResponse() {
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.NOT_FOUND).body("<html>private-provider-detail</html>").contentType(MediaType.TEXT_HTML));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                .isExactlyInstanceOf(PgCancellationNotFound.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void aNewExplicitAttemptCanPostWithItsNewKeyWhenOnlyTheVerifiedPredecessorFailureRemains() {
+        RefundCancellationPermission retry = retryPermission();
+        expectRead(paid().replace("\"cancellations\":[]", "\"cancellations\":["+previousFailure()+"]"));
+        server.expect(requestTo(url()+"/cancel")).andExpect(method(HttpMethod.POST))
+                .andExpect(header("Idempotency-Key", "\""+retry.request().attemptId()+"\""))
+                .andExpect(content().string(body())).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        assertThat(gateway.send(retry, purchase, body())).isEqualTo(RefundCancellationDispatch.UNCONFIRMED);
+        assertThat(retry.idempotencyKey()).isNotEqualTo(retry.request().previousAttemptId()); server.verify();
+    }
+    @Test void missingChangedPendingOrExtraCancellationHistoryCannotAuthorizeTheRetryPost() {
+        RefundCancellationPermission retry = retryPermission();
+        for (String history : List.of("[]", "["+previousFailure().replace("FAILED", "REQUESTED")+"]",
+                "["+previousFailure().replace("cancel-prior", "unknown")+"]",
+                "["+previousFailure().replace("ESD refund", "different reason")+"]",
+                "["+previousFailure()+","+previousFailure().replace("cancel-prior", "extra")+"]")) {
+            server.reset(); expectRead(paid().replace("\"cancellations\":[]", "\"cancellations\":"+history));
+            assertThat(gateway.send(retry, purchase, body())).isEqualTo(RefundCancellationDispatch.NOT_READY); server.verify();
+        }
+    }
+    @Test void aPreparationWithoutVerifiedPredecessorEvidenceCannotSendEvenWithinItsNewWindow() {
+        RefundCancellationPermission allowed = retryPermission();
+        RefundCancellationPermission missing = new RefundCancellationPermission(allowed.request(), FIRST, false);
+        assertThat(missing.maySendAt(FIRST.plusSeconds(1))).isFalse();
+        assertThatThrownBy(() -> gateway.send(missing, purchase, body())).isInstanceOf(BusinessException.class); server.verify();
+    }
+    private RefundCancellationPermission retryPermission() {
+        String previous = id();
+        RefundExecutionRequest retry = new RefundExecutionRequest(id(), FIRST.plusSeconds(1), request.refundId(), id(), request.orderNo(), request.paymentId(),
+                request.buyerSubject(), request.amount(), request.currency(), id(), previous);
+        PgRefundCancellationReceipt failure = new PgRefundCancellationReceipt(purchase, previous, "cancel-prior", PgRefundCancellationReceipt.State.FAILED,
+                FIRST, 0, 0, "ESD refund " + request.refundId());
+        return new RefundCancellationPermission(retry, FIRST.plusSeconds(1), false, List.of(failure));
+    }
+    private String previousFailure() {
+        return "{\"id\":\"cancel-prior\",\"status\":\"FAILED\",\"totalAmount\":9000,\"taxFreeAmount\":0,\"vatAmount\":0,\"requestedAt\":\""+FIRST+"\",\"reason\":\"ESD refund "+request.refundId()+"\"}";
     }
 
     private PortOneRefundCancellationGateway gateway(Clock clock) { return new PortOneRefundCancellationGateway(client, STORE, CHANNEL, clock); }

@@ -90,6 +90,18 @@ class EventContractTest {
         return List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 2));
     }
 
+    @Test void anInitialExecutionWithoutTheNewPredecessorFieldStillDeserializesAsAnInitialRequest() throws Exception {
+        RefundExecutionRequestedEvent initial = new RefundExecutionRequestedEvent("request-1", Instant.parse("2026-10-27T01:00:00Z"),
+                "refund-1", "attempt-1", "order-1", "payment-1", "buyer", 9000, "KRW", "stop-1");
+        String legacy = MAPPER.writeValueAsString(initial).replace(",\"previousAttemptId\":null", "");
+        assertThat(MAPPER.readValue(legacy, RefundExecutionRequestedEvent.class).previousAttemptId()).isNull();
+    }
+    @Test void retryRequestsRetainTheirExplicitPredecessorThroughTheWireContract() throws Exception {
+        RefundExecutionRequestedEvent retry = new RefundExecutionRequestedEvent("request-2", Instant.parse("2026-10-27T01:01:00Z"),
+                "refund-1", "attempt-2", "order-1", "payment-1", "buyer", 9000, "KRW", "stop-2", "attempt-1");
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(retry), RefundExecutionRequestedEvent.class)).isEqualTo(retry);
+    }
+
     /** 전 payload 카탈로그. 새 이벤트를 추가하면 여기에도 넣어야 계약 검사를 받는다. */
     static Stream<Named<DomainEvent>> allEvents() {
         return events().map(event -> Named.of(event.getClass().getSimpleName(), event));

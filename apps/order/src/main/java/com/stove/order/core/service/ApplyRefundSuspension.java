@@ -49,34 +49,31 @@ public class ApplyRefundSuspension {
             throw new RefundCompletionRejected("지급 확인이 원래 결제 주문과 다릅니다.", inconsistent);
         }
         grant.verifySuspension(input);
-        refund.verifySuspensionRequest(input);
-        if (refund.getCurrentAttemptId() != null) {
-            if (refund.getStatus() != RefundStatus.PENDING_PAYMENT_REFUND && refund.getStatus() != RefundStatus.COMPLETED) {
-                throw new RefundCompletionRejected("현재 환불 단계와 실행 기록이 다릅니다.");
-            }
-            RefundAttempt previous = attempts.findByAttemptId(refund.getCurrentAttemptId())
-                    .orElseThrow(() -> new RefundCompletionRejected("현재 실행의 처리 근거가 없습니다."));
-            previous.verifySuspension(input);
-            if (previous.getAttemptNo() != 1) throw new RefundCompletionRejected("첫 실행의 순번이 다릅니다.");
-            if (inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.LICENSE_SUSPENDED)) {
+        RefundAttempt known = attempts.findBySuspensionEventId(input.eventId()).orElse(null);
+        if (known != null) {
+            if (!known.getRefundId().equals(refund.getRefundId())) throw new RefundCompletionRejected("다른 환불의 정지 완료입니다.");
+            known.verifySuspension(input);
+            if (inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.LICENSE_SUSPENDED))
                 throw new RefundCompletionRejected("실행 기록에 해당하는 Inbox가 없습니다.");
-            }
             return;
         }
-        if (refund.getStatus() != RefundStatus.PENDING_LICENSE_SUSPENSION
-                || attempts.existsByRefundId(refund.getRefundId())
-                || attempts.findBySuspensionEventId(input.eventId()).isPresent()) {
-            throw new RefundCompletionRejected("첫 실행을 시작할 수 없거나 완료 식별자가 이미 사용됐습니다.");
-        }
+        refund.verifySuspensionRequest(input);
+        if (refund.getStatus() != RefundStatus.PENDING_LICENSE_SUSPENSION)
+            throw new RefundCompletionRejected("실제 정지 완료를 기다리는 환불이 아닙니다.");
+        RefundAttempt previous = refund.getCurrentAttemptId() == null ? null : attempts.findByAttemptId(refund.getCurrentAttemptId())
+                .orElseThrow(() -> new RefundCompletionRejected("재실행 이전 시도가 없습니다."));
+        if (previous == null && attempts.existsByRefundId(refund.getRefundId()))
+            throw new RefundCompletionRejected("현재 실행 없이 과거 시도가 존재합니다.");
         if (!inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.LICENSE_SUSPENDED)) {
             throw new RefundCompletionRejected("Inbox에 대응하는 실행 기록이 없습니다.");
         }
-        RefundAttempt attempt = RefundAttempt.afterSuspension(refund, input, clock.instant());
+        RefundAttempt attempt = previous == null ? RefundAttempt.afterSuspension(refund, input, clock.instant())
+                : RefundAttempt.afterRetrySuspension(refund, previous, input, clock.instant());
         refund.recordExecution(attempt);
         attempts.save(attempt);
         RefundExecutionRequestedEvent event = new RefundExecutionRequestedEvent(attempt.getExecutionRequestEventId(),
                 attempt.getStartedAt(), refund.getRefundId(), attempt.getAttemptId(), order.getOrderNo(),
-                order.getPaymentId(), order.getBuyerSubject(), order.getAmount(), order.getCurrency(), input.eventId());
+                order.getPaymentId(), order.getBuyerSubject(), order.getAmount(), order.getCurrency(), input.eventId(), attempt.getPreviousAttemptId());
         outbox.record("Order", order.getOrderNo(), event);
         entityManager.flush();
     }

@@ -97,7 +97,7 @@ class ApplyRefundSuspensionTest {
         known(fixture);
         RefundAttempt previous = RefundAttempt.afterSuspension(fixture.refund(), fixture.input(), EXECUTION_AT);
         fixture.refund().recordExecution(previous);
-        when(attempts.findByAttemptId(previous.getAttemptId())).thenReturn(Optional.of(previous));
+        when(attempts.findBySuspensionEventId(fixture.input().eventId())).thenReturn(Optional.of(previous));
 
         service().execute(fixture.input());
 
@@ -157,7 +157,7 @@ class ApplyRefundSuspensionTest {
         known(fixture);
         RefundAttempt previous = RefundAttempt.afterSuspension(fixture.refund(), fixture.input(), EXECUTION_AT);
         fixture.refund().recordExecution(previous);
-        when(attempts.findByAttemptId(previous.getAttemptId())).thenReturn(Optional.of(previous));
+        when(attempts.findBySuspensionEventId(fixture.input().eventId())).thenReturn(Optional.of(previous));
         LicenseSuspensionConfirmation input = fixture.input();
         LicenseSuspensionConfirmation changed = new LicenseSuspensionConfirmation(input.eventId(), input.occurredAt().plusSeconds(1),
                 input.requestEventId(), input.refundId(), input.licenseId(), input.orderNo(), input.buyerSubject(),

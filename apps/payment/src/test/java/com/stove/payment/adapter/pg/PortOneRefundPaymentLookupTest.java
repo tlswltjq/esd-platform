@@ -9,12 +9,17 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 import com.stove.payment.core.domain.PgRefundConfirmation;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.domain.PgAuthenticationUnavailable;
+import com.stove.payment.core.domain.PgPaymentNotFound;
+import com.stove.payment.core.domain.PgPaymentLookupForbidden;
+import org.springframework.http.HttpStatus;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -79,6 +84,30 @@ class PortOneRefundPaymentLookupTest {
     @Test void transportFailureRemainsUnavailableAndNeverCausesACancelRequest() {
         server.expect(requestTo(url())).andExpect(method(HttpMethod.GET)).andRespond(withServerError());
         assertThatThrownBy(() -> lookup.find(purchase)).isInstanceOf(PgUnavailable.class);
+        server.verify();
+    }
+
+    @Test void unauthorizedResultLookupHasNoFailureEvidenceAndDoesNotExposeProviderText() {
+        server.expect(requestTo(url())).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED).body("private-provider-detail").contentType(MediaType.TEXT_PLAIN));
+        assertThatThrownBy(() -> lookup.inspect(purchase, receipt()))
+                .isInstanceOf(PgAuthenticationUnavailable.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void forbiddenResultLookupCannotSupplyFinancialOrFailureEvidenceAndDoesNotExposeProviderText() {
+        server.expect(requestTo(url())).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).body("private-provider-detail").contentType(MediaType.TEXT_PLAIN));
+        assertThatThrownBy(() -> lookup.inspect(purchase, receipt()))
+                .isExactlyInstanceOf(PgPaymentLookupForbidden.class).hasMessageNotContaining("private-provider-detail");
+        server.verify();
+    }
+
+    @Test void missingResultLookupCannotSupplyFinancialOrFailureEvidenceAndDoesNotExposeProviderText() {
+        server.expect(requestTo(url())).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND).body("private-provider-detail").contentType(MediaType.TEXT_PLAIN));
+        assertThatThrownBy(() -> lookup.inspect(purchase, receipt()))
+                .isInstanceOf(PgPaymentNotFound.class).hasMessageNotContaining("private-provider-detail");
         server.verify();
     }
 

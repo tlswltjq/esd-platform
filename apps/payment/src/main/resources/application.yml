@@ -62,6 +62,10 @@ stove:
     retry-delay-ms: ${PAYMENT_RETRY_MS:5000}
     refund-lookup:
       enabled: ${PAYMENT_REFUND_LOOKUP_ENABLED:false}
+    refund-execution:
+      enabled: ${PAYMENT_REFUND_EXECUTION_ENABLED:false}
+    refund-retry:
+      enabled: ${PAYMENT_REFUND_RETRY_ENABLED:false}
     pg:
       provider: ${PAYMENT_PG_PROVIDER:SIMULATED}
       base-url: ${MOCK_PG_URI:http://localhost:8092}

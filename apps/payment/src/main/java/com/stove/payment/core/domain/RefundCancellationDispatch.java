@@ -5,6 +5,8 @@ public record RefundCancellationDispatch(Observation observation, PgRefundCancel
     public static final RefundCancellationDispatch UNCONFIRMED = new RefundCancellationDispatch(Observation.UNCONFIRMED, null, null);
     public static final RefundCancellationDispatch BALANCE_CHANGED = new RefundCancellationDispatch(Observation.BALANCE_CHANGED, null, null);
     public static final RefundCancellationDispatch NOT_READY = new RefundCancellationDispatch(Observation.NOT_READY, null, null);
+    public static final RefundCancellationDispatch FORBIDDEN = new RefundCancellationDispatch(Observation.FORBIDDEN, null, null);
+    public static final RefundCancellationDispatch INVALID_REQUEST = new RefundCancellationDispatch(Observation.INVALID_REQUEST, null, null);
 
     public RefundCancellationDispatch {
         if (observation == null || (observation == Observation.SUCCEEDED) != (success != null)
@@ -17,5 +19,5 @@ public record RefundCancellationDispatch(Observation observation, PgRefundCancel
     public static RefundCancellationDispatch received(PgRefundCancellationReceipt receipt) {
         return new RefundCancellationDispatch(Observation.RECEIVED, null, receipt);
     }
-    public enum Observation { UNCONFIRMED, BALANCE_CHANGED, NOT_READY, SUCCEEDED, RECEIVED }
+    public enum Observation { UNCONFIRMED, BALANCE_CHANGED, NOT_READY, SUCCEEDED, RECEIVED, FORBIDDEN, INVALID_REQUEST }
 }

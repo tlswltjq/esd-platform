@@ -15,7 +15,11 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/refunds", "/api/v1/admin/refunds/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/decision").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasRole("MEMBER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/orders/*/refund").hasRole("MEMBER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/*/refund").hasRole("MEMBER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders", "/api/v1/orders/*").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))

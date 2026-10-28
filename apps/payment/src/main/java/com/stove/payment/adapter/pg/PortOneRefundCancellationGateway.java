@@ -6,8 +6,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.domain.PgAuthenticationUnavailable;
+import com.stove.payment.core.domain.PgPaymentNotFound;
+import com.stove.payment.core.domain.PgCancellationNotFound;
+import com.stove.payment.core.domain.PgPaymentLookupForbidden;
 import com.stove.payment.core.domain.PgRefundCancellationSuccess;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.domain.RefundCancellationDispatch;
 import com.stove.payment.core.domain.RefundCancellationPermission;
@@ -47,6 +55,9 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
         try {
             String json = client.get().uri(uri -> uri.path("/payments/{id}").queryParam("storeId", storeId)
                     .build(purchase.paymentId())).exchange((request, response) -> {
+                        if (response.getStatusCode().value() == 401) throw new PgAuthenticationUnavailable();
+                        if (response.getStatusCode().value() == 403) throw new PgPaymentLookupForbidden();
+                        if (response.getStatusCode().value() == 404) throw new PgPaymentNotFound();
                         if (!response.getStatusCode().is2xxSuccessful()) throw new PgUnavailable("Cancellation preflight unavailable");
                         return response.bodyTo(String.class);
                     });
@@ -57,7 +68,7 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
             if (cancelled > 0 && cancelled < purchase.amount()) return RefundCancellationDispatch.BALANCE_CHANGED;
             JsonNode cancellations = payment.path("cancellations");
             if (!cancellations.isMissingNode() && !cancellations.isArray()) throw new IllegalArgumentException("Invalid cancellation list");
-            if (!"PAID".equals(text(payment, "status")) || cancelled != 0 || (cancellations.isArray() && !cancellations.isEmpty()))
+            if (!"PAID".equals(text(payment, "status")) || cancelled != 0 || !matchesPreviousFailures(permission, purchase, cancellations))
                 return RefundCancellationDispatch.NOT_READY;
             // A slow preflight cannot carry a once-valid permission beyond the three-hour guarantee.
             permission.requireCancellationAllowedAt(clock.instant());
@@ -65,6 +76,11 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
                     .header("Idempotency-Key", "\"" + permission.idempotencyKey() + "\"")
                     .contentType(MediaType.APPLICATION_JSON).body(body.getBytes(StandardCharsets.UTF_8))
                     .exchange((request, response) -> {
+                        if (response.getStatusCode().value() == 401) throw new PgAuthenticationUnavailable();
+                        if (response.getStatusCode().value() == 403) return RefundCancellationDispatch.FORBIDDEN;
+                        if (response.getStatusCode().value() == 404) throw new PgCancellationNotFound();
+                        if (response.getStatusCode().value() == 400 && isInvalidRequestRejection(response.bodyTo(String.class)))
+                            return RefundCancellationDispatch.INVALID_REQUEST;
                         if (response.getStatusCode().is2xxSuccessful())
                             return successResponse(permission, purchase, body, response.bodyTo(String.class));
                         if (response.getStatusCode().value() == 409) {
@@ -79,6 +95,26 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
         } catch (DateTimeException invalid) {
             throw new IllegalArgumentException("Invalid original payment time", invalid);
         }
+    }
+
+    private boolean matchesPreviousFailures(RefundCancellationPermission permission, PgRefundLookupRequest purchase, JsonNode rows) {
+        if (permission.previousFailures().isEmpty()) return rows.isMissingNode() || rows.isArray() && rows.isEmpty();
+        if (!rows.isArray() || rows.size() != permission.previousFailures().size()) return false;
+        Map<String, PgRefundCancellationReceipt> expected = new HashMap<>();
+        for (PgRefundCancellationReceipt failure : permission.previousFailures()) {
+            if (!purchase.equals(failure.purchase())) throw new IllegalArgumentException("Previous failure purchase mismatch");
+            expected.put(failure.cancellationId(), failure);
+        }
+        Set<String> seen = new HashSet<>();
+        for (JsonNode row : rows) {
+            String id = text(row, "id"); PgRefundCancellationReceipt failure = expected.get(id);
+            if (failure == null || !seen.add(id) || !"FAILED".equals(text(row, "status")) || number(row, "totalAmount") != purchase.amount()) return false;
+            PgRefundCancellationReceipt observed = new PgRefundCancellationReceipt(purchase, failure.attemptId(), id,
+                    PgRefundCancellationReceipt.State.FAILED, Instant.parse(text(row, "requestedAt")).truncatedTo(ChronoUnit.MICROS),
+                    number(row, "taxFreeAmount"), number(row, "vatAmount"), text(row, "reason"));
+            if (!failure.equals(observed) || (row.has("easyPayDiscountAmount") && number(row, "easyPayDiscountAmount") != 0)) return false;
+        }
+        return true;
     }
 
     private RefundCancellationDispatch successResponse(RefundCancellationPermission permission, PgRefundLookupRequest purchase,
@@ -130,6 +166,11 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
                 || !purchase.paidAt().equals(Instant.parse(text(payment, "paidAt")).truncatedTo(ChronoUnit.MICROS))
                 || !purchase.orderNo().equals(text(read(text(payment, "customData")), "orderNo")))
             throw new IllegalArgumentException("Cancellation preflight does not match the paid purchase");
+    }
+
+    private boolean isInvalidRequestRejection(String body) {
+        try { return "INVALID_REQUEST".equals(text(read(body), "type")); }
+        catch (IllegalArgumentException malformed) { return false; }
     }
 
     private JsonNode read(String body) {

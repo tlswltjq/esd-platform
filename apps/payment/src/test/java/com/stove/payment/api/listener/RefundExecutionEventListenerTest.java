@@ -8,6 +8,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +23,10 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.PaymentTraceContext;
 import com.stove.payment.core.domain.RefundExecutionRequest;
 import com.stove.payment.core.service.ReceiveRefundExecution;
+import com.stove.payment.core.service.RequestFirstRefundCancellation;
+import java.util.Optional;
+import org.mockito.InOrder;
+import org.springframework.dao.TransientDataAccessResourceException;
 import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -30,7 +36,39 @@ import org.junit.jupiter.params.provider.ValueSource;
 class RefundExecutionEventListenerTest {
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules().disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
     private final ReceiveRefundExecution receive = mock(ReceiveRefundExecution.class);
-    private final RefundExecutionEventListener listener = new RefundExecutionEventListener(mapper, receive);
+    private final RequestFirstRefundCancellation cancellation = mock(RequestFirstRefundCancellation.class);
+    private final RefundExecutionEventListener listener = new RefundExecutionEventListener(mapper, receive, Optional.of(cancellation));
+
+    @Test void everyValidDeliveryContinuesAfterReceiptIncludingAnAlreadyReceivedEvent() throws Exception {
+        RefundExecutionRequest input = execution(paid());
+        RefundExecutionRequestedEvent event = event(input);
+        ConsumerRecord<String, String> record = record(event, mapper.writeValueAsString(event));
+        listener.receive(record);
+        listener.receive(record);
+        InOrder calls = inOrder(receive, cancellation);
+        calls.verify(receive).execute(input, PaymentTraceContext.NONE);
+        calls.verify(cancellation).execute(input.attemptId());
+        calls.verify(receive).execute(input, PaymentTraceContext.NONE);
+        calls.verify(cancellation).execute(input.attemptId());
+    }
+
+    @Test void receiptFailureCannotCallTheSupplierAndMustRemainARetryableDelivery() throws Exception {
+        RefundExecutionRequest input = execution(paid());
+        RefundExecutionRequestedEvent event = event(input);
+        doThrow(new TransientDataAccessResourceException("receipt commit failed"))
+                .when(receive).execute(input, PaymentTraceContext.NONE);
+        assertThatThrownBy(() -> listener.receive(record(event, mapper.writeValueAsString(event))))
+                .isInstanceOf(TransientDataAccessResourceException.class);
+        verifyNoInteractions(cancellation);
+    }
+
+    @Test void disabledDispatchStillReceivesDurably() throws Exception {
+        RefundExecutionRequest input = execution(paid());
+        RefundExecutionRequestedEvent event = event(input);
+        new RefundExecutionEventListener(mapper, receive, Optional.empty()).receive(record(event, mapper.writeValueAsString(event)));
+        verify(receive).execute(input, PaymentTraceContext.NONE);
+        verifyNoInteractions(cancellation);
+    }
 
     @Test void mapsTheRequestToInternalInputWithOptionalTraceParent() throws Exception {
         RefundExecutionRequest input = execution(paid());

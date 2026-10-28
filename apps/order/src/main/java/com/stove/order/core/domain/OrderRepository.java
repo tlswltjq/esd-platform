@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
+    Optional<Order> findByOrderNo(String orderNo);
     Optional<Order> findByBuyerSubjectAndRequestId(String buyerSubject, String requestId);
     Optional<Order> findByOrderNoAndBuyerSubject(String orderNo, String buyerSubject);
     Optional<Order> findByPaymentResultEventId(String eventId);

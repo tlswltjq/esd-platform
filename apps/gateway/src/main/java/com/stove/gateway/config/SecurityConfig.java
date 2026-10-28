@@ -105,6 +105,8 @@ public class SecurityConfig {
                         .hasRole("CREATOR")
                         .pathMatchers("/api/v1/promotions/platform/**").hasRole("ADMIN")
                         .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.GET, "/api/v1/admin/refunds", "/api/v1/admin/refunds/*").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/decision").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
                                 "/api/v1/downloads/**").hasRole("MEMBER")
                         .anyExchange().denyAll())

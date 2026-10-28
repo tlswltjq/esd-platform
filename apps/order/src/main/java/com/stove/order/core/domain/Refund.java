@@ -46,6 +46,45 @@ public class Refund {
     private String paymentConfirmationFingerprint;
     @Column(length = 30)
     private String paymentConfirmationSource;
+    @Column(unique = true, length = 36) private String reviewRequestId;
+    @Enumerated(EnumType.STRING) @Column(length = 20) private RefundReviewDecision reviewDecision;
+    @Column(length = 100) private String reviewOperatorSubject;
+    @Column(length = 500) private String reviewReason;
+    private Instant reviewedAt;
+
+    public boolean decide(RefundReviewRequest request, Instant at) {
+        if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        if (!refundId.equals(request.refundId())) throw new BusinessException(ErrorCode.CONFLICT, "다른 환불의 판정입니다.");
+        if (reviewRequestId != null) {
+            if (!reviewRequestId.equals(request.requestId()) || reviewDecision != request.decision()
+                    || !reviewOperatorSubject.equals(request.operatorSubject()) || !reviewReason.equals(request.reason()))
+                throw new BusinessException(ErrorCode.CONFLICT, "최초 판정과 다른 지시로 변경할 수 없습니다.");
+            return false;
+        }
+        RefundReviewValues.requireTime(at);
+        if (automaticRefundEligible || status != RefundStatus.PENDING_REVIEW || at.isBefore(receivedAt))
+            throw new BusinessException(ErrorCode.CONFLICT, "관리자 판정을 기다리는 환불이 아닙니다.");
+        reviewRequestId = request.requestId(); reviewDecision = request.decision();
+        reviewOperatorSubject = request.operatorSubject(); reviewReason = request.reason(); reviewedAt = at;
+        status = reviewDecision == RefundReviewDecision.APPROVED ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.REJECTED;
+        return true;
+    }
+
+    public RefundReviewReceipt reviewReceipt() {
+        return reviewRequestId == null ? null : new RefundReviewReceipt(reviewRequestId, refundId, reviewOperatorSubject,
+                reviewDecision, reviewReason, reviewedAt);
+    }
+
+    public boolean requestRetry(Order order, RefundAttempt previous, Instant at) {
+        if (order == null || previous == null || order.getStatus() != OrderStatus.PAID || !orderNo.equals(order.getOrderNo())
+                || !refundId.equals(previous.getRefundId())) throw new BusinessException(ErrorCode.CONFLICT, "재시도 대상의 원래 구매·환불이 다릅니다.");
+        previous.requireRetryableAt(at);
+        if (previous.getRetryRequestedAt() != null) return false;
+        if (status != RefundStatus.FAILED || !previous.getAttemptId().equals(currentAttemptId) || paymentConfirmationEventId != null)
+            throw new BusinessException(ErrorCode.CONFLICT, "현재 시도의 실패·복구 완료를 지정해야 합니다.");
+        previous.registerRetry(at); suspensionRequestEventId = previous.getRetrySuspensionRequestEventId();
+        status = RefundStatus.PENDING_LICENSE_SUSPENSION; return true;
+    }
 
     public boolean recordFailure(Order order, RefundAttempt attempt, RefundFailureConfirmation input, Instant at) {
         if (input == null) throw new RefundCompletionRejected("실패 확인이 필요합니다.");
@@ -57,7 +96,7 @@ public class Refund {
             if (!input.fingerprint().equals(attempt.getFailureFingerprint())) throw new RefundCompletionRejected("확정한 실패 근거가 다릅니다.");
             return false;
         }
-        if (status != RefundStatus.PENDING_PAYMENT_REFUND || paymentConfirmationEventId != null)
+        if (!input.attemptId().equals(currentAttemptId) || status != RefundStatus.PENDING_PAYMENT_REFUND || paymentConfirmationEventId != null)
             throw new RefundCompletionRejected("실패 확인을 기다리는 환불이 아닙니다.");
         attempt.recordRefundFailure(input, at); status = RefundStatus.PENDING_LICENSE_RESTORATION;
         return true;
@@ -66,8 +105,10 @@ public class Refund {
     public boolean confirmRestoration(Order order, RefundAttempt attempt, LicenseRestorationConfirmation input) {
         if (input == null) throw new RefundCompletionRejected("복구 완료가 필요합니다.");
         requireRestorationPurchase(order, attempt, input.refundId(), input.attemptId(), input.orderNo(), input.paymentId(), input.buyerSubject());
-        if ((status != RefundStatus.PENDING_LICENSE_RESTORATION && status != RefundStatus.FAILED)
-                || !order.getProductId().equals(input.productId()) || !order.getProductCode().equals(input.productCode()))
+        if (!order.getProductId().equals(input.productId()) || !order.getProductCode().equals(input.productCode()))
+            throw new RefundCompletionRejected("복구 완료의 상품이 다릅니다.");
+        if (attempt.getRestoredEventId() != null) return attempt.recordRestoration(input);
+        if (!input.attemptId().equals(currentAttemptId) || status != RefundStatus.PENDING_LICENSE_RESTORATION)
             throw new RefundCompletionRejected("복구 완료가 현재 복구 대기와 다릅니다.");
         boolean changed = attempt.recordRestoration(input);
         if (changed) status = RefundStatus.FAILED;
@@ -77,7 +118,7 @@ public class Refund {
     private void requireRestorationPurchase(Order order, RefundAttempt attempt, String refund, String execution, String orderId, String payment, String buyer) {
         if (order == null || attempt == null || order.getStatus() != OrderStatus.PAID || !refundId.equals(refund) || !orderNo.equals(orderId)
                 || !orderNo.equals(order.getOrderNo()) || !payment.equals(order.getPaymentId()) || !buyer.equals(order.getBuyerSubject())
-                || !execution.equals(currentAttemptId) || !execution.equals(attempt.getAttemptId()) || !refundId.equals(attempt.getRefundId()))
+                || !execution.equals(attempt.getAttemptId()) || !refundId.equals(attempt.getRefundId()))
             throw new RefundCompletionRejected("실패·복구 근거가 현재 주문·환불·시도와 다릅니다.");
     }
 
@@ -131,8 +172,10 @@ public class Refund {
     }
 
     public void recordExecution(RefundAttempt attempt) {
-        if (status != RefundStatus.PENDING_LICENSE_SUSPENSION || currentAttemptId != null || attempt == null
-                || !refundId.equals(attempt.getRefundId()) || attempt.getAttemptNo() != 1
+        if (status != RefundStatus.PENDING_LICENSE_SUSPENSION || attempt == null
+                || !refundId.equals(attempt.getRefundId())
+                || (currentAttemptId == null ? attempt.getAttemptNo() != 1 || attempt.getPreviousAttemptId() != null
+                    : !currentAttemptId.equals(attempt.getPreviousAttemptId()) || attempt.getAttemptNo() <= 1)
                 || attempt.getStatus() != RefundAttemptStatus.PENDING || suspensionRequestEventId == null
                 || !suspensionRequestEventId.equals(attempt.getSuspensionRequestEventId())
                 || attempt.getSuspensionEventId() == null || attempt.getExecutionRequestEventId() == null) {

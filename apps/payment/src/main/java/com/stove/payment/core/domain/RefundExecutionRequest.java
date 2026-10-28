@@ -6,11 +6,17 @@ import java.time.Instant;
 
 public record RefundExecutionRequest(String eventId, Instant occurredAt, String refundId, String attemptId,
         String orderNo, String paymentId, String buyerSubject, long amount, String currency,
-        String licenseSuspensionEventId) {
+        String licenseSuspensionEventId, String previousAttemptId) {
     public RefundExecutionRequest {
         requireEvent(eventId, occurredAt, licenseSuspensionEventId);
         requireIdentity(refundId, attemptId, orderNo, paymentId, buyerSubject);
+        if (previousAttemptId != null && (!PaymentValues.uuid(previousAttemptId) || previousAttemptId.equals(attemptId))) throw invalid();
         if (amount <= 0 || !"KRW".equals(currency)) throw invalid();
+    }
+
+    public RefundExecutionRequest(String eventId, Instant occurredAt, String refundId, String attemptId, String orderNo, String paymentId,
+            String buyerSubject, long amount, String currency, String licenseSuspensionEventId) {
+        this(eventId, occurredAt, refundId, attemptId, orderNo, paymentId, buyerSubject, amount, currency, licenseSuspensionEventId, null);
     }
 
     private static void requireEvent(String eventId, Instant occurredAt, String suspensionEventId) {

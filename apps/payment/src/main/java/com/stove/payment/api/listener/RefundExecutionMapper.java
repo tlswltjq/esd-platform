@@ -16,6 +16,6 @@ public final class RefundExecutionMapper {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "환불 실행 요청의 봉투와 본문이 다릅니다.");
         }
         return new RefundExecutionRequest(event.eventId(), event.occurredAt(), event.refundId(), event.attemptId(),
-                event.orderNo(), event.paymentId(), event.buyerSubject(), event.amount(), event.currency(), event.licenseSuspensionEventId());
+                event.orderNo(), event.paymentId(), event.buyerSubject(), event.amount(), event.currency(), event.licenseSuspensionEventId(), event.previousAttemptId());
     }
 }

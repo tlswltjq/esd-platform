@@ -15,6 +15,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.common.web.error.BusinessException;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.testcontainers.SharedContainers;
 import com.stove.order.config.RefundConfiguration;
@@ -34,6 +35,9 @@ import com.stove.order.core.domain.RefundPaymentConfirmation;
 import com.stove.order.core.domain.RefundFailureConfirmation;
 import com.stove.order.core.domain.LicenseRestorationConfirmation;
 import com.stove.order.core.service.ApplyRefundRestoration;
+import com.stove.order.core.service.RequestRefundRetry;
+import com.stove.order.core.domain.RefundRetryRequest;
+import com.stove.order.core.domain.RefundRetryReceipt;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import com.stove.order.core.service.ApplyLicenseGrant;
@@ -91,6 +95,7 @@ class RefundExecutionIntegrationTest {
     @Autowired PlatformTransactionManager transactions;
     @Autowired ApplyRefundPaymentConfirmation confirmMoney;
     @Autowired ApplyRefundRestoration restore;
+    @Autowired RequestRefundRetry retry;
     @MockitoSpyBean ProcessedEventGuard inbox;
     @MockitoBean Clock clock;
     @MockitoSpyBean OutboxRecorder outbox;
@@ -98,7 +103,7 @@ class RefundExecutionIntegrationTest {
     @BeforeEach void initialize() { clear(); when(clock.instant()).thenReturn(RECEIVED_AT); }
     @AfterEach void clear() {
         reset(inbox);
-        jdbc.update("DELETE FROM order_refund_attempt");
+        jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");
         jdbc.update("DELETE FROM order_license_grant");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM order_refund");
@@ -354,6 +359,87 @@ class RefundExecutionIntegrationTest {
         assertThat(stored(fixture).getStatus()).isEqualTo(RefundStatus.COMPLETED);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isZero();
     }
+
+    @Test void anExplicitRetryAfterTheOriginalWindowKeepsEligibilityAndNeedsANewActualSuspension() throws Exception {
+        RestoredFixture old = restoredFixture(); RefundRetryRequest input = retryRequest(old);
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(86400));
+        RefundRetryReceipt receipt = retry.execute(input); assertThat(retry.execute(input)).isEqualTo(receipt);
+        Refund pending = stored(old.fixture());
+        assertThat(pending.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
+        assertThat(pending.getCurrentAttemptId()).isEqualTo(old.previous().getAttemptId());
+        assertThat(pending.getReceivedAt()).isEqualTo(RECEIVED_AT); assertThat(pending.isAutomaticRefundEligible()).isTrue();
+        assertThat(executionRequests()).isEqualTo(1);
+        apply.execute(old.fixture().input()); restore.execute(old.failure()); restore.execute(old.restored());
+        assertThat(stored(old.fixture()).getSuspensionRequestEventId()).isEqualTo(receipt.suspensionRequestEventId());
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(86402));
+        LicenseSuspensionConfirmation stop = retrySuspension(old, receipt); apply.execute(stop); apply.execute(stop);
+        RefundAttempt next = attempts.findByAttemptId(stored(old.fixture()).getCurrentAttemptId()).orElseThrow();
+        assertThat(next.getAttemptNo()).isEqualTo(2); assertThat(next.getPreviousAttemptId()).isEqualTo(old.previous().getAttemptId());
+        assertThat(next.getSuspensionEventId()).isEqualTo(stop.eventId()); assertThat(executionRequests()).isEqualTo(2);
+        apply.execute(old.fixture().input()); restore.execute(old.failure()); restore.execute(old.restored());
+        assertThat(retry.execute(input)).isEqualTo(receipt); assertThat(stored(old.fixture()).getCurrentAttemptId()).isEqualTo(next.getAttemptId());
+        assertThat(attempts.findByAttemptId(old.previous().getAttemptId()).orElseThrow().getFailureFingerprint()).isEqualTo(old.failure().fingerprint());
+        RefundExecutionRequestedEvent event = new ObjectMapper().registerModule(new JavaTimeModule()).readValue(
+                jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_id=?", String.class, next.getExecutionRequestEventId()), RefundExecutionRequestedEvent.class);
+        assertThat(event.previousAttemptId()).isEqualTo(old.previous().getAttemptId());
+    }
+
+    @Test void concurrentExplicitRequestsNameOnePredecessorAndCommitOneRetryReceipt() throws Exception {
+        RestoredFixture old = restoredFixture(); when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(86400));
+        RefundRetryRequest input = retryRequest(old); ExecutorService pool = Executors.newFixedThreadPool(2); CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<RefundRetryReceipt> first = pool.submit(() -> { start.await(); return retry.execute(input); });
+            Future<RefundRetryReceipt> second = pool.submit(() -> { start.await(); return retry.execute(input); });
+            start.countDown(); assertThat(first.get(15, TimeUnit.SECONDS)).isEqualTo(second.get(15, TimeUnit.SECONDS));
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseSuspensionRequested'", Integer.class)).isEqualTo(2);
+            assertThat(attempts.count()).isEqualTo(1); assertThat(executionRequests()).isEqualTo(1);
+        } finally { pool.shutdownNow(); }
+    }
+
+    @Test void retryReceiptStateAndOutboxRollbackTogetherThenResumeWithoutMovingTheFirstEligibility() {
+        RestoredFixture old = restoredFixture(); when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(86400));
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
+                call.callRealMethod(); orders.flush(); throw new IllegalStateException("after retry receipt and outbox flush");
+            }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
+            assertThatThrownBy(() -> retry.execute(retryRequest(old))).isInstanceOf(IllegalStateException.class);
+            assertThat(stored(old.fixture()).getStatus()).isEqualTo(RefundStatus.FAILED);
+            assertThat(attempts.findByAttemptId(old.previous().getAttemptId()).orElseThrow().getRetryRequestedAt()).isNull();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseSuspensionRequested'", Integer.class)).isEqualTo(1);
+        } finally { reset(outbox); }
+        RefundRetryReceipt receipt = retry.execute(retryRequest(old));
+        assertThat(stored(old.fixture()).getSuspensionRequestEventId()).isEqualTo(receipt.suspensionRequestEventId());
+        assertThat(stored(old.fixture()).getReceivedAt()).isEqualTo(RECEIVED_AT);
+    }
+
+    @Test void restorationRequestAloneAndAnotherBuyerCannotAuthorizeARetry() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input()); RefundFailureConfirmation failed = failure(fixture);
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(2)); restore.execute(failed);
+        RefundAttempt previous = attempts.findByAttemptId(stored(fixture).getCurrentAttemptId()).orElseThrow();
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(86400));
+        assertThatThrownBy(() -> retry.execute(new RefundRetryRequest(fixture.order().getBuyerSubject(), fixture.order().getOrderNo(), previous.getAttemptId())))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> retry.execute(new RefundRetryRequest("another-buyer", fixture.order().getOrderNo(), previous.getAttemptId())))
+                .isInstanceOf(BusinessException.class);
+        assertThat(attempts.findByAttemptId(previous.getAttemptId()).orElseThrow().getRetryRequestedAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseSuspensionRequested'", Integer.class)).isEqualTo(1);
+    }
+
+    private RestoredFixture restoredFixture() {
+        Fixture fixture = fixture(false); apply.execute(fixture.input()); RefundFailureConfirmation failed = failure(fixture);
+        when(clock.instant()).thenReturn(EXECUTION_AT.plusSeconds(2)); restore.execute(failed);
+        RefundAttempt previous = attempts.findByAttemptId(stored(fixture).getCurrentAttemptId()).orElseThrow();
+        LicenseRestorationConfirmation completed = restored(fixture, previous); restore.execute(completed);
+        return new RestoredFixture(fixture, previous, failed, completed);
+    }
+    private RefundRetryRequest retryRequest(RestoredFixture old) {
+        return new RefundRetryRequest(old.fixture().order().getBuyerSubject(), old.fixture().order().getOrderNo(), old.previous().getAttemptId());
+    }
+    private LicenseSuspensionConfirmation retrySuspension(RestoredFixture old, RefundRetryReceipt receipt) {
+        Order order = old.fixture().order(); return new LicenseSuspensionConfirmation(id(), EXECUTION_AT.plusSeconds(86401), receipt.suspensionRequestEventId(),
+                receipt.refundId(), old.previous().getLicenseId(), order.getOrderNo(), order.getBuyerSubject(), order.getProductId(), order.getProductCode(), order.getPaymentId());
+    }
+    private record RestoredFixture(Fixture fixture, RefundAttempt previous, RefundFailureConfirmation failure, LicenseRestorationConfirmation restored) { }
 
     private RefundFailureConfirmation failure(Fixture fixture) {
         Refund current = stored(fixture); RefundAttempt attempt = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();

@@ -28,6 +28,26 @@ import org.testcontainers.containers.MySQLContainer;
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 
+    @Test void v20PreservesV19PendingAndCompletedRefundsWithoutInventingOperatorHistory() {
+        withVersion("19", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source); insert(jdbc, "PAID");
+            String orderNo = jdbc.queryForObject("SELECT order_no FROM purchase_order", String.class);
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status) VALUES(?,?,NOW(6),FALSE,'PENDING_REVIEW')", id(), orderNo);
+            jdbc.update("UPDATE purchase_order SET product_id=2,product_code='previous-product'"); insert(jdbc, "PAID");
+            String completedOrder = jdbc.queryForObject("SELECT order_no FROM purchase_order WHERE product_id=1", String.class);
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,payment_confirmation_event_id,completed_at,payment_confirmation_fingerprint,payment_confirmation_source) VALUES(?,?,NOW(6),TRUE,'COMPLETED',?,NOW(6),?,'PG_RESPONSE')", id(), completedOrder, id(), "a".repeat(64));
+            List<Map<String, Object>> beforeOrders = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            List<Map<String, Object>> beforeRefunds = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+            assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(beforeOrders);
+            List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            for (int index = 0; index < beforeRefunds.size(); index++) {
+                assertThat(after.get(index)).containsAllEntriesOf(beforeRefunds.get(index));
+                assertThat(after.get(index).get("review_request_id")).isNull(); assertThat(after.get(index).get("reviewed_at")).isNull();
+            }
+        });
+    }
+
     @Test void v11PreservesFailedHistoryAndProtectsThePendingAndPaidSlot() {
         withV10(source -> {
             JdbcTemplate jdbc = new JdbcTemplate(source);
@@ -68,6 +88,10 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     }
 
     private void withV10(Consumer<DriverManagerDataSource> check) {
+        withVersion("10", check);
+    }
+
+    private void withVersion(String version, Consumer<DriverManagerDataSource> check) {
         MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
         String schema = "order_exclusive_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
@@ -76,7 +100,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         root.execute("CREATE DATABASE " + schema);
         try {
             DriverManagerDataSource source = new DriverManagerDataSource(server + schema + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword());
-            Flyway.configure().dataSource(source).locations(LOCATION).target("10").load().migrate();
+            Flyway.configure().dataSource(source).locations(LOCATION).target(version).load().migrate();
             check.accept(source);
         } finally { root.execute("DROP DATABASE " + schema); }
     }

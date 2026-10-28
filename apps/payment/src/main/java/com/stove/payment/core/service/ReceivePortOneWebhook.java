@@ -6,6 +6,7 @@ import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PortOneWebhookNotice;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.port.PortOneWebhookReceipts;
 import java.time.Clock;
 import java.time.Instant;
@@ -38,7 +39,7 @@ public class ReceivePortOneWebhook {
         payment.requestRecheck(receivedAt);
         if (notice.type().equals("Transaction.CancelPending") || notice.type().equals("Transaction.PartialCancelled")
                 || notice.type().equals("Transaction.Cancelled")) {
-            executions.findFirstByPaymentIdOrderByIdAsc(payment.getPaymentId()).ifPresent(received ->
+            executions.findFirstByPaymentIdAndStatusAndRefundConfirmedAtIsNullOrderByIdDesc(payment.getPaymentId(), RefundExecutionStatus.PENDING).ifPresent(received ->
                     executions.lockByAttemptId(received.getAttemptId()).orElseThrow().getLookupSchedule().wake(receivedAt));
         }
     }

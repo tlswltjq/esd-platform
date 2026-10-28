@@ -46,6 +46,62 @@ class RefundRestorationTest {
         assertThatThrownBy(() -> refund.confirmRestoration(paid, attempt, other)).isInstanceOf(RefundCompletionRejected.class);
         assertThat(refund.getStatus().name()).isEqualTo("PENDING_LICENSE_RESTORATION");
     }
+    @Test void explicitRetryPreservesFirstEligibilityAndStartsASecondExecutionOnlyAfterAnotherActualSuspension() {
+        prepare(); RefundFailureConfirmation failed = failure(); refund.recordFailure(paid, attempt, failed, NOW.plusSeconds(1));
+        refund.confirmRestoration(paid, attempt, restored());
+        Instant originalReceipt = refund.getReceivedAt(); String originalStop = refund.getSuspensionRequestEventId();
+        assertThat(refund.requestRetry(paid, attempt, NOW.plusSeconds(86400))).isTrue();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
+        assertThat(refund.getCurrentAttemptId()).isEqualTo(attempt.getAttemptId());
+        assertThat(refund.getReceivedAt()).isEqualTo(originalReceipt); assertThat(refund.isAutomaticRefundEligible()).isTrue();
+        assertThat(refund.getSuspensionRequestEventId()).isNotEqualTo(originalStop);
+        assertThat(refund.requestRetry(paid, attempt, NOW.plusSeconds(86401))).isFalse();
+        RefundAttempt next = second();
+        assertThat(next.getAttemptNo()).isEqualTo(2); assertThat(next.getPreviousAttemptId()).isEqualTo(attempt.getAttemptId());
+        assertThat(next.getAttemptId()).isNotEqualTo(attempt.getAttemptId());
+        assertThat(attempt.getStatus()).isEqualTo(RefundAttemptStatus.FAILED); assertThat(attempt.getFailureEventId()).isEqualTo(failed.eventId());
+    }
+    @Test void pendingExecutionAndRestorationRequestAloneCannotAuthorizeAnotherAttempt() {
+        prepare(); assertThatThrownBy(() -> refund.requestRetry(paid, attempt, NOW.plusSeconds(86400))).isInstanceOf(RuntimeException.class);
+        refund.recordFailure(paid, attempt, failure(), NOW.plusSeconds(1));
+        assertThatThrownBy(() -> refund.requestRetry(paid, attempt, NOW.plusSeconds(86400))).isInstanceOf(RuntimeException.class);
+        assertThat(attempt.getRetryRequestedAt()).isNull();
+    }
+    @Test void knownOldFailureAndRestorationReplaysCannotReplaceTheNewSuspensionOrExecution() {
+        prepare(); RefundFailureConfirmation failed = failure(); refund.recordFailure(paid, attempt, failed, NOW.plusSeconds(1));
+        LicenseRestorationConfirmation completed = restored(); refund.confirmRestoration(paid, attempt, completed);
+        refund.requestRetry(paid, attempt, NOW.plusSeconds(86400)); String stop = refund.getSuspensionRequestEventId();
+        assertThat(refund.recordFailure(paid, attempt, failed, NOW.plusSeconds(86401))).isFalse();
+        assertThat(refund.confirmRestoration(paid, attempt, completed)).isFalse();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION); assertThat(refund.getSuspensionRequestEventId()).isEqualTo(stop);
+        RefundAttempt next = second();
+        assertThat(refund.recordFailure(paid, attempt, failed, NOW.plusSeconds(86403))).isFalse();
+        assertThat(refund.confirmRestoration(paid, attempt, completed)).isFalse();
+        assertThat(refund.getCurrentAttemptId()).isEqualTo(next.getAttemptId());
+    }
+    @Test void lateRedeliveryOfTheFirstRetryCannotCreateAThirdAttemptAfterTheSecondAttemptAlsoFailedAndWasRestored() {
+        prepare(); refund.recordFailure(paid, attempt, failure(), NOW.plusSeconds(1)); refund.confirmRestoration(paid, attempt, restored());
+        refund.requestRetry(paid, attempt, NOW.plusSeconds(86400)); RefundAttempt next = second();
+        RefundFailureConfirmation failed = new RefundFailureConfirmation(id(), NOW.plusSeconds(86403), refund.getRefundId(), next.getAttemptId(),
+                next.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW", "pg-original", "cancel-second", "b".repeat(64));
+        refund.recordFailure(paid, next, failed, NOW.plusSeconds(86404));
+        LicenseRestorationConfirmation restored = new LicenseRestorationConfirmation(id(), NOW.plusSeconds(86405), next.getRestorationRequestEventId(),
+                refund.getRefundId(), next.getAttemptId(), next.getFailureEventId(), next.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(),
+                paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), next.getSuspensionRequestEventId(), next.getSuspensionEventId());
+        refund.confirmRestoration(paid, next, restored);
+        assertThat(refund.requestRetry(paid, attempt, NOW.plusSeconds(172800))).isFalse();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.FAILED); assertThat(next.getRetryRequestedAt()).isNull();
+        assertThat(refund.requestRetry(paid, next, NOW.plusSeconds(172800))).isTrue();
+        assertThat(next.getRetryRequestedAt()).isEqualTo(NOW.plusSeconds(172800));
+    }
+
+    private RefundAttempt second() {
+        LicenseSuspensionConfirmation stop = new LicenseSuspensionConfirmation(id(), NOW.plusSeconds(86401), refund.getSuspensionRequestEventId(),
+                refund.getRefundId(), attempt.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
+        RefundAttempt next = RefundAttempt.afterRetrySuspension(refund, attempt, stop, NOW.plusSeconds(86402));
+        assertThat(next).isNotNull(); refund.recordExecution(next); return next;
+    }
+
     private LicenseRestorationConfirmation restored() { return new LicenseRestorationConfirmation(id(), NOW.plusSeconds(2), attempt.getRestorationRequestEventId(),
             refund.getRefundId(), attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(),
             paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId()); }

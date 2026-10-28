@@ -10,6 +10,9 @@ import com.stove.payment.core.domain.PgRefundFailureConfirmation;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.domain.PgAuthenticationUnavailable;
+import com.stove.payment.core.domain.PgPaymentNotFound;
+import com.stove.payment.core.domain.PgPaymentLookupForbidden;
 import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.port.RefundPaymentLookup;
 import java.time.DateTimeException;
@@ -46,6 +49,9 @@ public class PortOneRefundPaymentLookup implements RefundPaymentLookup {
         try {
             String json = client.get().uri(uri -> uri.path("/payments/{id}").queryParam("storeId", storeId)
                     .build(purchase.paymentId())).exchange((outgoing, response) -> {
+                        if (response.getStatusCode().value() == 401) throw new PgAuthenticationUnavailable();
+                        if (response.getStatusCode().value() == 403) throw new PgPaymentLookupForbidden();
+                        if (response.getStatusCode().value() == 404) throw new PgPaymentNotFound();
                         if (!response.getStatusCode().is2xxSuccessful()) throw new PgUnavailable("Refund lookup unavailable");
                         return response.bodyTo(String.class);
                     });

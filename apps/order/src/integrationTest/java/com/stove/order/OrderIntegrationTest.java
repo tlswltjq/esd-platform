@@ -548,11 +548,17 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             });
         } finally { listeners.stop(); }
     }
-    @Test void openApiMatchesSnapshotAndContainsOnlyThreeBusinessOperations() throws Exception {
+    @Test void openApiMatchesSnapshotAndContainsEightBusinessOperations() throws Exception {
         OpenApiSnapshot.verify(port, "order");
         JsonNode paths = http("GET", "/v3/api-docs", null, null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(2);
+        assertThat(paths.size()).isEqualTo(6);
         assertThat(paths.path("/api/v1/orders").has("post")).isTrue();
         assertThat(paths.path("/api/v1/orders").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/orders/{orderNo}").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/orders/{orderNo}/refund").has("post")).isTrue();
+        assertThat(paths.path("/api/v1/orders/{orderNo}/refund").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refunds").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refunds/{refundId}").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refunds/{refundId}/decision").has("post")).isTrue();
     }
 }

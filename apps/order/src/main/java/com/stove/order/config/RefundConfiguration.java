@@ -7,6 +7,10 @@ import com.stove.order.core.domain.OrderLicenseGrantRepository;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundAttemptRepository;
 import com.stove.order.core.service.RequestRefund;
+import com.stove.order.core.service.ReadRefund;
+import com.stove.order.core.service.ReadRefundReviews;
+import com.stove.order.core.service.DecideRefund;
+import com.stove.order.core.service.RequestRefundRetry;
 import com.stove.order.core.service.ApplyRefundRestoration;
 import com.stove.order.core.service.ApplyLicenseGrant;
 import com.stove.order.core.service.ApplyRefundSuspension;
@@ -19,6 +23,24 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundConfiguration {
+    @Bean ReadRefundReviews readRefundReviews(OrderRepository orders, RefundRepository refunds) {
+        return new ReadRefundReviews(orders, refunds);
+    }
+
+    @Bean DecideRefund decideRefund(OrderRepository orders, RefundRepository refunds, OrderLicenseGrantRepository grants,
+            OutboxRecorder outbox, Clock refundClock) {
+        return new DecideRefund(orders, refunds, grants, outbox, refundClock);
+    }
+
+    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds) {
+        return new ReadRefund(orders, refunds);
+    }
+
+    @Bean RequestRefundRetry requestRefundRetry(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,
+            OutboxRecorder outbox, EntityManager entityManager, Clock refundClock) {
+        return new RequestRefundRetry(orders, refunds, attempts, outbox, entityManager, refundClock);
+    }
+
     @Bean ApplyRefundRestoration applyRefundRestoration(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,
             ProcessedEventGuard inbox, OutboxRecorder outbox, EntityManager entityManager, Clock refundClock) {
         return new ApplyRefundRestoration(orders, refunds, attempts, inbox, outbox, entityManager, refundClock);

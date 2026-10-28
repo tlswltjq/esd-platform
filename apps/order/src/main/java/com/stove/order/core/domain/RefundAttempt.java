@@ -115,6 +115,36 @@ public class RefundAttempt {
         reconciliationRequired = true;
     }
 
+    @Column(length = 36, unique = true) private String previousAttemptId;
+    private Instant retryRequestedAt;
+    @Column(length = 64, unique = true) private String retrySuspensionRequestEventId;
+
+    public void requireRetryableAt(Instant at) {
+        if (!RefundRestorationValues.time(at) || status != RefundAttemptStatus.FAILED || failureEventId == null
+                || restoredEventId == null || restoredAt == null || at.isBefore(restoredAt))
+            throw new BusinessException(ErrorCode.CONFLICT, "확인된 실패와 실제 권한 복구 완료가 필요합니다.");
+    }
+
+    public void registerRetry(Instant at) {
+        requireRetryableAt(at);
+        if (retryRequestedAt != null) return;
+        retryRequestedAt = at; retrySuspensionRequestEventId = UUID.randomUUID().toString();
+    }
+
+    public static RefundAttempt afterRetrySuspension(Refund refund, RefundAttempt previous, LicenseSuspensionConfirmation input, Instant at) {
+        if (refund == null || previous == null || input == null) throw new RefundCompletionRejected("재실행과 실제 정지 근거가 필요합니다.");
+        refund.verifySuspensionRequest(input); previous.requireRetryableAt(at);
+        if (refund.getStatus() != RefundStatus.PENDING_LICENSE_SUSPENSION || !previous.getAttemptId().equals(refund.getCurrentAttemptId())
+                || !previous.getRefundId().equals(refund.getRefundId()) || previous.getRetryRequestedAt() == null
+                || !input.requestEventId().equals(previous.getRetrySuspensionRequestEventId())
+                || !input.licenseId().equals(previous.getLicenseId()) || input.occurredAt().isBefore(previous.getRetryRequestedAt())
+                || at.isBefore(input.occurredAt())) throw new RefundCompletionRejected("새 실행에 해당하는 재접수·실제 정지가 다릅니다.");
+        RefundAttempt attempt = start(refund.getRefundId(), Math.addExact(previous.getAttemptNo(), 1), at);
+        attempt.previousAttemptId = previous.getAttemptId(); attempt.suspensionRequestEventId = input.requestEventId();
+        attempt.suspensionEventId = input.eventId(); attempt.suspensionOccurredAt = input.occurredAt(); attempt.licenseId = input.licenseId();
+        attempt.executionRequestEventId = UUID.randomUUID().toString(); return attempt;
+    }
+
     public static RefundAttempt afterSuspension(Refund refund, LicenseSuspensionConfirmation input, Instant startedAt) {
         if (refund == null) throw new RefundCompletionRejected("환불 접수 근거가 필요합니다.");
         refund.verifySuspensionRequest(input);
