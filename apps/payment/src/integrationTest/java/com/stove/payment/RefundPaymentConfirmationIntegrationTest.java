@@ -112,7 +112,9 @@ class RefundPaymentConfirmationIntegrationTest extends PaymentIntegrationTestBas
                 .containsEntry("topic", "stove.payment.v1").containsEntry("partition_key", received.getOrderNo());
         service().execute(received.getAttemptId());
         assertThat(stored(received).getRefundConfirmationEventId()).isEqualTo(event.eventId());
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='RefundExecutionPrepared'",Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='RefundPaymentConfirmed'",Integer.class)).isEqualTo(1);
         assertThat(reads.get()).isEqualTo(1); assertThat(writes.get()).isZero();
         assertThatThrownBy(() -> prepare.execute(received.getAttemptId())).isInstanceOf(RuntimeException.class);
     }

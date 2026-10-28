@@ -22,6 +22,7 @@ import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
+import com.stove.payment.core.service.RecordRefundPreparation;
 import jakarta.persistence.EntityManager;
 import java.nio.file.Path;
 import java.sql.SQLException;
@@ -57,6 +58,7 @@ class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase
     @Autowired ReceiveOrderPayment orderReceipt;
     @Autowired ReceiveRefundExecution receive;
     @Autowired RecordRefundCancellationPreparation prepare;
+    @Autowired RecordRefundPreparation preparationEvents;
     @Autowired PaymentRepository payments;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
@@ -87,7 +89,7 @@ class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase
 
         Instant deadline = first.plusSeconds(10800);
         RecordRefundCancellationPreparation restarted = new RecordRefundCancellationPreparation(executions, transactions,
-                Clock.fixed(deadline, ZoneOffset.UTC));
+                Clock.fixed(deadline, ZoneOffset.UTC), preparationEvents);
         RefundCancellationPermission expired = restarted.execute(received.getAttemptId());
         assertThat(expired.maySendAt(deadline)).isFalse();
         assertThat(expired.requiresOperatorReviewAt(deadline)).isTrue();
@@ -101,7 +103,8 @@ class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase
         assertThat(stored(received).getAutomaticCancellationStoppedAt()).isEqualTo(deadline);
         assertThat(payments.findByPaymentId(received.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(executions.count()).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='RefundExecutionPrepared'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", Integer.class)).isZero();
     }
 
     @Test void concurrentPreparationsCannotMoveTheFirstTimeToTheLaterWorker() throws Exception {

@@ -11,6 +11,7 @@ import com.stove.payment.core.port.RefundPaymentLookup;
 import com.stove.payment.core.port.RefundCancellationGateway;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.RequestRefundCancellation;
+import com.stove.payment.core.service.RecordRefundPreparation;
 import com.stove.payment.core.service.RecordRefundCancellationSuccess;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
@@ -45,9 +46,9 @@ public class PortOneConfiguration {
     @Bean RequestRefundCancellation requestRefundCancellation(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationGateway gateway, ReconcileRefundPayment reconcile, PlatformTransactionManager transactions,
             Clock refundReceptionClock, RecordRefundCancellationSuccess successes, PortOneProperties properties,
-            RefundCancellationHoldRepository holds) {
+            RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents) {
         Duration lease = properties.connectTimeout().plus(properties.readTimeout()).multipliedBy(3).plusSeconds(30);
-        return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, refundReceptionClock, successes, lease, holds);
+        return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, refundReceptionClock, successes, lease, holds, preparationEvents);
     }
 
     @Bean RecordRefundCancellationSuccess recordRefundCancellationSuccess(PaymentRepository payments, RefundExecutionRepository executions,

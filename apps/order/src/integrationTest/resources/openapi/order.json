@@ -583,6 +583,22 @@
         },
         "type" : "object"
       },
+      "RefundProcessingNoticeResponse" : {
+        "properties" : {
+          "code" : {
+            "enum" : [ "RESULT_CONFIRMATION_DELAYED" ],
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "since" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "RefundReconsiderationBody" : {
         "properties" : {
           "previousReviewId" : {
@@ -645,6 +661,11 @@
           },
           "orderNo" : {
             "type" : "string"
+          },
+          "processingNotice" : {
+            "$ref" : "#/components/schemas/RefundProcessingNoticeResponse",
+            "description" : "현재 환불 결과 확인이 지연될 때 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
+            "type" : "null"
           },
           "receivedAt" : {
             "format" : "date-time",

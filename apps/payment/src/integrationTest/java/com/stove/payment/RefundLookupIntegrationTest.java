@@ -26,6 +26,7 @@ import com.stove.payment.core.service.ReceivePortOneWebhook;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
+import com.stove.payment.core.service.RecordRefundPreparation;
 import com.stove.payment.core.service.ResolveRefundLookup;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
@@ -135,7 +136,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(stored().getLookupSchedule().getClaimId()).isNull();
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus().name()).isEqualTo("PAID");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", Integer.class)).isEqualTo(1);
         at(1000); worker(Runnable::run).execute(); assertThat(reads.get()).isEqualTo(1); assertThat(writes.get()).isZero();
         assertThat(callbackFailure.get()).isNull();
     }
@@ -145,7 +146,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(stored().getLookupSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(15));
         assertThat(stored().getLookupSchedule().getClaimId()).isNull();
         assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", Integer.class)).isZero();
     }
 
     @Test void aNewProcessResumesAfterTheThreeHourPostDeadlineWithoutSendingACancellation() {
@@ -266,7 +267,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
                 BASE.minusSeconds(60), PgResult.Decision.APPROVED, null, null, null), id(), BASE.minusSeconds(30));
         payments.saveAndFlush(paid); current = receive.execute(execution(paid));
     }
-    private void prepare() { new RecordRefundCancellationPreparation(executions, transactions, clock).execute(current.getAttemptId()); }
+    private void prepare() { new RecordRefundCancellationPreparation(executions, transactions, clock, new RecordRefundPreparation(outbox)).execute(current.getAttemptId()); }
     private RefundExecution stored() { return executions.findByAttemptId(current.getAttemptId()).orElseThrow(); }
     private void at(long seconds) { when(clock.instant()).thenReturn(BASE.plusSeconds(seconds)); }
     private void wake(String messageId) { new TransactionTemplate(transactions).executeWithoutResult(tx -> receiver().execute(notice(messageId))); }

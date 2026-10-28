@@ -43,6 +43,7 @@ import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
@@ -129,6 +130,8 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                new RefundExecutionPreparedEvent("prepared-1",Instant.parse("2026-10-29T01:00:00.123456Z"),"refund-1","attempt-1","request-1", "order-1","payment-1","buyer",9000,"KRW","suspended-1",null,
+                        Instant.parse("2026-10-29T01:00:00.123456Z"),Instant.parse("2026-10-29T04:00:00.123456Z")),
                 new LicenseApprovalCorrectionRequestedEvent("correction-1",Instant.parse("2026-10-29T01:00:00Z"),"refund-1","review-1","stop-1",
                         "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
                 new LicenseApprovalCorrectedEvent("corrected-1",Instant.parse("2026-10-29T01:01:00Z"),"correction-1","refund-1","review-1","stop-1",

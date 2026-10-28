@@ -92,6 +92,6 @@ class RefundAccessTest {
         return new RefundView("refund-fixture", ORDER, 9000, "KRW", state, Instant.parse("2026-10-28T02:00:00Z"),
                 state == RefundStatus.COMPLETED ? Instant.parse("2026-10-28T02:01:00Z") : null,
                 state == RefundStatus.REJECTED ? "환불 심사 반려 사유" : null,
-                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null, null, null, false);
+                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null, null, null, false, null);
     }
 }

@@ -10,6 +10,8 @@ import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import com.stove.payment.core.service.RequestRefundCancellationResume;
 import com.stove.payment.core.service.ReadRefundCancellationHolds;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
+import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.payment.core.service.RecordRefundPreparation;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +21,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
+    @Bean RecordRefundPreparation recordRefundPreparation(OutboxRecorder outbox) { return new RecordRefundPreparation(outbox); }
+
     @Bean ReadRefundCancellationHolds readRefundCancellationHolds(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationHoldRepository holds, Clock refundReceptionClock) {
         return new ReadRefundCancellationHolds(payments, executions, holds, refundReceptionClock);
@@ -42,7 +46,7 @@ public class RefundReceptionConfiguration {
     }
 
     @Bean RecordRefundCancellationPreparation recordRefundCancellationPreparation(RefundExecutionRepository executions,
-            PlatformTransactionManager transactions, Clock refundReceptionClock) {
-        return new RecordRefundCancellationPreparation(executions, transactions, refundReceptionClock);
+            PlatformTransactionManager transactions, Clock refundReceptionClock, RecordRefundPreparation preparationEvents) {
+        return new RecordRefundCancellationPreparation(executions, transactions, refundReceptionClock, preparationEvents);
     }
 }

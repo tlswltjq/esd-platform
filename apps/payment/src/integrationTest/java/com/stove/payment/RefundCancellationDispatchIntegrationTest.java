@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
+import com.stove.payment.core.service.RecordRefundPreparation;
 import com.stove.payment.adapter.pg.PortOneRefundCancellationGateway;
 import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
 import com.stove.payment.core.domain.Payment;
@@ -262,7 +263,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         assertThat(stored().getCancellationBalanceChangedAt()).isNull();
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().supplierResult()).isEqualTo(original);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(resultEventCount()).isEqualTo(1);
         service(gateway()).execute(current.getAttemptId()); assertThat(bodies).hasSize(1);
     }
 
@@ -285,7 +286,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         service(gateway()).execute(current.getAttemptId());
         assertThat(callbackFailure.get()).isNull(); assertThat(bodies).hasSize(1);
         assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE);
-        assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(resultEventCount()).isZero();
         service(gateway()).execute(current.getAttemptId()); assertThat(bodies).hasSize(1);
     }
 
@@ -293,7 +294,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         received(); mode = Mode.COMPLETE_THEN_UNAVAILABLE;
         service(gateway()).execute(current.getAttemptId());
         assertThat(callbackFailure.get()).isNull(); assertThat(stored().getRefundConfirmedAt()).isNotNull();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void restartAndChangedBodyGenerationCannotReplaceTheFirstKeyBodyOrDeadline() {
@@ -337,7 +338,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             start.countDown(); for (Future<?> future : work) future.get(20, TimeUnit.SECONDS);
             assertThat(callbackFailure.get()).isNull(); assertThat(bodies).isNotEmpty();
             assertThat(bodies.stream().distinct().toList()).hasSize(1); assertThat(keys.stream().distinct().toList()).hasSize(1);
-            assertThat(completedKeys).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(completedKeys).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
 
@@ -351,8 +352,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getLookupSchedule().getClaimId()).isNull();
         assertThat(stored().getProviderRefundedAt()).isNull();
         assertThat(stored().getCancellationSuccessEventId()).isEqualTo(stored().getRefundConfirmationEventId());
-        assertThat(count("outbox_event")).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT payload FROM outbox_event", String.class)).contains("PG_RESPONSE");
+        assertThat(resultEventCount()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", String.class)).contains("PG_RESPONSE");
     }
 
     @Test void aDelayedSuccessPreservesTheAlreadyCommittedQueryConfirmation() throws Exception {
@@ -376,19 +377,20 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     @Test void successEvidenceAndItsOutboxRollBackTogetherAndTheSameReceiptCanResume() {
         received(); mode = Mode.DIRECT_SUCCESS;
         new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
-            call.callRealMethod(); throw new IllegalStateException("after success outbox insert");
+            call.callRealMethod(); if (call.getArgument(2,DomainEvent.class).eventType().equals("RefundExecutionPrepared")) return null;
+            throw new IllegalStateException("after success outbox insert");
         }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
         assertThatThrownBy(() -> service(gateway()).execute(current.getAttemptId())).isInstanceOf(IllegalStateException.class);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(stored().getCancellationSucceededAt()).isNull();
-        assertThat(count("outbox_event")).isZero(); assertThat(count("refund_cancellation_evidence")).isZero();
+        assertThat(resultEventCount()).isZero(); assertThat(count("refund_cancellation_evidence")).isZero();
         reset(outbox); successRecorder().execute(current.getAttemptId(), successProof());
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void concurrentReceiptRecordersKeepOneSuccessAndOneCompletionEvent() throws Exception {
         received();
-        new RecordRefundCancellationPreparation(executions, transactions, clock).execute(current.getAttemptId());
+        new RecordRefundCancellationPreparation(executions, transactions, clock, new RecordRefundPreparation(outbox)).execute(current.getAttemptId());
         new TransactionTemplate(transactions).executeWithoutResult(tx -> executions.lockByAttemptId(current.getAttemptId()).orElseThrow()
                 .freezeCancellationBody(gateway().prepareBody(current.request())));
         ExecutorService pool = Executors.newFixedThreadPool(2); CountDownLatch start = new CountDownLatch(1);
@@ -397,7 +399,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             List<Future<?>> work = List.of(pool.submit(() -> { start.await(); successRecorder().execute(current.getAttemptId(), proof); return null; }),
                     pool.submit(() -> { start.await(); successRecorder().execute(current.getAttemptId(), proof); return null; }));
             start.countDown(); for (Future<?> future : work) future.get(15, TimeUnit.SECONDS);
-            assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(resultEventCount()).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
 
@@ -426,10 +428,10 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
         assertThat(stored().getFailureLookupHash()).matches("[a-f0-9]{64}");
         assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNull();
-        assertThat(count("outbox_event")).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event", String.class)).isEqualTo("RefundExecutionFailed");
+        assertThat(resultEventCount()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", String.class)).isEqualTo("RefundExecutionFailed");
         service(gateway()).execute(current.getAttemptId()); reconcile().execute(current.getAttemptId());
-        assertThat(bodies).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void aFailedOwnRequestDoesNotRestoreAccessWhenAnotherCancellationAlreadyRefundedTheWholePurchase() {
@@ -439,16 +441,16 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
         assertThat(stored().getConfirmedCancellations().getFirst().getCancellationId()).isEqualTo("cancel-manual");
         assertThat(stored().getFailureEventId()).isNull();
-        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event", String.class)).isEqualTo("RefundPaymentConfirmed");
+        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", String.class)).isEqualTo("RefundPaymentConfirmed");
     }
 
     @Test void aRequestedReceiptSurvivesRestartAndItsOwnFailedIdCanLaterBeVerified() {
         received(); mode = Mode.REQUESTED_THEN_FAILED; service(gateway()).execute(current.getAttemptId());
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(stored().getReceiptCancellationId()).isEqualTo("cancel-1");
-        assertThat(count("outbox_event")).isZero();
+        assertThat(resultEventCount()).isZero();
         mode = Mode.FAILED_ZERO; when(clock.instant()).thenReturn(BASE.plusSeconds(5));
         reconcile().execute(current.getAttemptId()); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
-        assertThat(count("outbox_event")).isEqualTo(1); assertThat(bodies).hasSize(1);
+        assertThat(resultEventCount()).isEqualTo(1); assertThat(bodies).hasSize(1);
     }
 
     @Test void aFailedReplyWithAnUnavailableQueryOrOtherPendingCancellationCannotAuthorizeRestoration() {
@@ -456,21 +458,22 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThatThrownBy(() -> service(gateway()).execute(current.getAttemptId())).isInstanceOf(PgUnavailable.class);
         assertThat(stored().getReceiptState().name()).isEqualTo("FAILED"); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         mode = Mode.FAILED_OTHER_PENDING; reconcile().execute(current.getAttemptId());
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
         mode = Mode.FAILED_PARTIAL; cancelled = 3000; reconcile().execute(current.getAttemptId());
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void verifiedFailureAndOutboxRollbackTogetherThenResumeFromThePersistedReceipt() {
         received(); mode = Mode.FAILED_ZERO;
         new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
-            call.callRealMethod(); executions.flush(); throw new IllegalStateException("after failure flush and outbox insert");
+            call.callRealMethod(); if (call.getArgument(2,DomainEvent.class).eventType().equals("RefundExecutionPrepared")) return null;
+            executions.flush(); throw new IllegalStateException("after failure flush and outbox insert");
         }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
         assertThatThrownBy(() -> service(gateway()).execute(current.getAttemptId())).isInstanceOf(IllegalStateException.class);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(stored().getFailureEventId()).isNull();
-        assertThat(stored().getReceiptState().name()).isEqualTo("FAILED"); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getReceiptState().name()).isEqualTo("FAILED"); assertThat(resultEventCount()).isZero();
         reset(outbox); reconcile().execute(current.getAttemptId());
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED); assertThat(count("outbox_event")).isEqualTo(1); assertThat(bodies).hasSize(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED); assertThat(resultEventCount()).isEqualTo(1); assertThat(bodies).hasSize(1);
     }
 
     @Test void twoVerifiedFailuresCanLeadToAnExplicitThirdAttemptWithANewKeyAndOneRefund() {
@@ -482,7 +485,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         current = receiveNext(second); mode = Mode.RETRY_SUCCESS; service(gateway()).execute(current.getAttemptId());
         assertThat(callbackFailure.get()).isNull(); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         assertThat(bodies).hasSize(3); assertThat(keys.stream().distinct().toList()).hasSize(3); assertThat(completedKeys).hasSize(1);
-        assertThat(executions.count()).isEqualTo(3); assertThat(count("outbox_event")).isEqualTo(3);
+        assertThat(executions.count()).isEqualTo(3); assertThat(resultEventCount()).isEqualTo(3);
         RefundExecution retained = executions.findByAttemptId(first.getAttemptId()).orElseThrow();
         assertThat(retained.getFailureEventId()).isEqualTo(firstFailure); assertThat(retained.getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(second.getFirstCancellationPreparedAt()).isEqualTo(BASE.plusSeconds(86400));
@@ -494,7 +497,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         received(); mode = Mode.FAILED_ZERO; service(gateway()).execute(current.getAttemptId()); RefundExecution first = stored(); rememberFailure(first);
         current = receiveNext(first); mode = Mode.RETRY_OTHER_PENDING; service(gateway()).execute(current.getAttemptId());
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(stored().getReceiptCancellationId()).isNull();
-        assertThat(bodies).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1); assertThat(callbackFailure.get()).isNull();
+        assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1); assertThat(callbackFailure.get()).isNull();
     }
 
     @Test void concurrentSuccessorDeliveriesCommitOneReceiptAndLeaveTheOriginalFailedTraceUntouched() throws Exception {
@@ -513,7 +516,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
 
     @Test void aCancellationWebhookWakesTheCurrentPendingSuccessorRatherThanTheOldFailedExecution() {
         received(); mode = Mode.FAILED_ZERO; service(gateway()).execute(current.getAttemptId()); RefundExecution first = stored();
-        current = receiveNext(first); new RecordRefundCancellationPreparation(executions, transactions, clock).execute(current.getAttemptId());
+        current = receiveNext(first); new RecordRefundCancellationPreparation(executions, transactions, clock, new RecordRefundPreparation(outbox)).execute(current.getAttemptId());
         when(clock.instant()).thenReturn(BASE.plusSeconds(86401));
         new TransactionTemplate(transactions).executeWithoutResult(tx -> new ReceivePortOneWebhook(payments, new JdbcPortOneWebhookReceipts(jdbc), clock, executions)
                 .execute(new PortOneWebhookNotice("msg_successor", "a".repeat(64), "Transaction.CancelPending", STORE, current.getPaymentId(), "pg-original", BASE.plusSeconds(86401))));
@@ -535,7 +538,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(keys.stream().distinct().toList()).containsExactly("\"" + current.getAttemptId() + "\"");
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
-        assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(completedKeys).hasSize(1);
     }
 
@@ -625,7 +628,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             Future<?> second = pool.submit(() -> retryWorker().execute()); second.get(10, TimeUnit.SECONDS);
             assertThat(bodies).hasSize(2); assertThat(stored().getCancellationSchedule().getClaimId()).isNotNull();
             releaseResponse.countDown(); first.get(15, TimeUnit.SECONDS);
-            assertThat(stored().getRefundConfirmedAt()).isNotNull(); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(stored().getRefundConfirmedAt()).isNotNull(); assertThat(resultEventCount()).isEqualTo(1);
         } finally { releaseResponse.countDown(); pool.shutdownNow(); }
     }
 
@@ -647,7 +650,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         String originalBody = stored().getCancellationRequestBody();
         assertThat(authenticationRejections.get()).isEqualTo(2); assertThat(bodies).isEmpty();
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(10));
         when(clock.instant()).thenReturn(BASE.plusSeconds(600)); mode = Mode.RETRY_SUCCESS;
         authenticatedWorker("corrected-fixture-secret").execute();
@@ -655,7 +658,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(keys).containsExactly("\"" + current.getAttemptId() + "\"");
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
-        assertThat(executions.count()).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(executions.count()).isEqualTo(1); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
@@ -669,7 +672,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).containsExactlyElementsOf(rejectedBodies); assertThat(keys).containsExactlyElementsOf(rejectedKeys);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
-        assertThat(completedKeys).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(completedKeys).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void correctedLookupCredentialsDiscoverAnAlreadyCompletedRefundWithoutPostingAgain() {
@@ -681,7 +684,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         authenticatedWorker("corrected-fixture-secret").execute();
         assertThat(bodies).hasSize(1); assertThat(stored().getRefundConfirmedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
     }
 
@@ -695,7 +698,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getAutomaticCancellationStoppedAt()).isEqualTo(BASE.plusSeconds(10800));
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
         assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void restoredAuthenticationCannotBypassAPartialCancellationFoundInTheNewPreflight() {
@@ -706,7 +709,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         authenticatedWorker("corrected-fixture-secret").execute();
         assertThat(bodies).isEmpty(); assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
     }
 
@@ -716,7 +719,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(hold.isActivated()).isTrue(); assertThat(hold.getReason()).isEqualTo("PG_REQUEST_FORBIDDEN");
         assertThat(hold.getObservedAt()).isEqualTo(BASE); assertThat(holds.count()).isEqualTo(1);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         int before = reads.get();
         when(clock.instant()).thenReturn(BASE.plusSeconds(60)); mode = Mode.RETRY_SUCCESS;
         retryWorker().execute(); service(gateway()).executeFirst(current.getAttemptId()); service(gateway()).execute(current.getAttemptId());
@@ -739,7 +742,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         RefundCancellationHold saved = holds.findByHoldId(hold.getHoldId()).orElseThrow();
         assertThat(saved.getResumeRequestId()).isEqualTo(request.requestId()); assertThat(saved.getResumedAt()).isEqualTo(BASE.plusSeconds(10));
-        assertThat(saved.getOperatorSubject()).isEqualTo(request.operatorSubject()); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(saved.getOperatorSubject()).isEqualTo(request.operatorSubject()); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(resume.execute(request)).isEqualTo(first);
     }
 
@@ -781,7 +784,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThatThrownBy(() -> resume.execute(resumeCommand(first))).isInstanceOf(BusinessException.class);
         resume.execute(resumeCommand(second)); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
         assertThat(bodies).hasSize(3); assertThat(holds.count()).isEqualTo(2);
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void concurrentIdenticalResumeCommandsReleaseOnlyTheSameHoldOnce() throws Exception {
@@ -794,7 +797,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             start.countDown(); assertThat(first.get(15, TimeUnit.SECONDS)).isEqualTo(second.get(15, TimeUnit.SECONDS));
             assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(10));
             assertThat(holds.count()).isEqualTo(1); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
-            assertThat(bodies).hasSize(2); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(bodies).hasSize(2); assertThat(resultEventCount()).isEqualTo(1);
         } finally { start.countDown(); pool.shutdownNow(); }
     }
 
@@ -805,7 +808,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getRefundConfirmedAt()).isNotNull();
         assertThatThrownBy(() -> resume.execute(resumeCommand(hold))).isInstanceOf(BusinessException.class);
         assertThat(holds.findByHoldId(hold.getHoldId()).orElseThrow().getResumeRequestId()).isNull();
-        retryWorker().execute(); assertThat(bodies).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1);
+        retryWorker().execute(); assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void operatorResumeCannotResetTheThreeHourWindow() {
@@ -824,7 +827,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         cancelled = 3000; mode = Mode.COMPLETE; retryWorker().execute();
         assertThat(bodies).hasSize(1); assertThat(stored().getCancellationBalanceChangedAt()).isNotNull();
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void aHoldInsertFailureRollsBackTheHoldAndPauseAndTheSameExecutionCanRecover() {
@@ -840,7 +843,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(holds.count()).isZero(); assertThat(stored().getActiveCancellationHoldId()).isNull();
         reset(holds); when(clock.instant()).thenReturn(BASE.plusSeconds(10)); retryWorker().execute();
         assertThat(holds.count()).isEqualTo(1); assertThat(stored().getActiveCancellationHoldId()).isNotNull();
-        assertThat(bodies).hasSize(2); assertThat(count("outbox_event")).isZero();
+        assertThat(bodies).hasSize(2); assertThat(resultEventCount()).isZero();
     }
 
     @Test void aFailureAfterResumeFlushRollsBackBothTheAuditAndTheReleasedSchedule() {
@@ -868,7 +871,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             releaseResponse.countDown(); old.get(15, TimeUnit.SECONDS);
             assertThat(holds.count()).isEqualTo(1); assertThat(holds.findAll().getFirst().isActivated()).isFalse();
             assertThat(stored().getActiveCancellationHoldId()).isNull(); assertThat(bodies).hasSize(2);
-            assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(resultEventCount()).isEqualTo(1);
         } finally { releaseResponse.countDown(); pool.shutdownNow(); }
     }
 
@@ -897,7 +900,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(executions.count()).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(executions.count()).isEqualTo(1); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void restoredLookupCanDiscoverAPreviouslyCompletedRefundWithoutSendingAnotherPost() {
@@ -907,7 +910,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); lookupState = LookupState.AVAILABLE; retryWorker().execute();
         assertThat(bodies).hasSize(1); assertThat(stored().getRefundConfirmedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(holds.count()).isZero();
     }
 
@@ -919,7 +922,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).isEmpty(); assertThat(stored().getAutomaticCancellationStoppedAt()).isEqualTo(BASE.plusSeconds(10800));
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void aSuccessfulHttpReadOfADifferentPurchaseCannotAuthorizeTheResumedPost() {
@@ -941,7 +944,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         retryWorker().execute();
         assertThat(bodies).isEmpty(); assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void recoveringA404LookupDoesNotReleaseAnExistingForbiddenPostHold() {
@@ -954,7 +957,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(1); assertThat(stored().getActiveCancellationHoldId()).isEqualTo(holdId);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(holds.count()).isEqualTo(1);
         assertThat(holds.findByHoldId(holdId).orElseThrow().getResumeRequestId()).isNull();
-        assertThat(count("outbox_event")).isZero();
+        assertThat(resultEventCount()).isZero();
     }
 
     @Test void repeatedMissingCancellationTargetsKeepTheSameRequestAndBackoffUntilAValidRetrySucceeds() {
@@ -970,14 +973,14 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         when(clock.instant()).thenReturn(BASE.plusSeconds(40)); retryWorker().execute();
         assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(100));
         assertThat(stored().getActiveCancellationHoldId()).isNull(); assertThat(holds.count()).isZero();
-        assertThat(count("outbox_event")).isZero();
+        assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(100)); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
         assertThat(bodies).containsExactly(frozen, frozen, frozen, frozen);
         assertThat(keys).containsExactlyElementsOf(Collections.nCopies(4, "\"" + current.getAttemptId() + "\""));
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
-        assertThat(executions.count()).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(executions.count()).isEqualTo(1); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
@@ -988,7 +991,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(1); assertThat(stored().getRefundConfirmedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
         assertThat(stored().getFailureEventId()).isNull(); assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
-        assertThat(count("outbox_event")).isEqualTo(1); assertThat(holds.count()).isZero();
+        assertThat(resultEventCount()).isEqualTo(1); assertThat(holds.count()).isZero();
     }
 
     @Test void aPartialCancellationAfterPost404StillStopsAutomaticFullCancellation() {
@@ -998,7 +1001,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(1); assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
         assertThat(stored().getFailureEventId()).isNull(); assertThat(stored().getRefundConfirmedAt()).isNull();
-        assertThat(count("outbox_event")).isZero();
+        assertThat(resultEventCount()).isZero();
     }
 
     @Test void aDifferentPurchaseAfterPost404CannotAuthorizeTheRetryButTheOriginalPurchaseCan() {
@@ -1022,7 +1025,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(1); assertThat(stored().getAutomaticCancellationStoppedAt()).isEqualTo(BASE.plusSeconds(10800));
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
         int previousReads = reads.get(); reconcile().execute(current.getAttemptId()); assertThat(reads.get()).isGreaterThan(previousReads);
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void aLaterForbiddenResponseAfterPost404StillRequiresExplicitOperatorResume() {
@@ -1034,7 +1037,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         retryWorker().execute(); service(gateway()).executeFirst(current.getAttemptId());
         assertThat(bodies).hasSize(2); assertThat(stored().getActiveCancellationHoldId()).isEqualTo(holdId);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(holds.count()).isEqualTo(1);
-        assertThat(currentHold().getResumeRequestId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(currentHold().getResumeRequestId()).isNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void forbiddenPreflightDoesNotHoldOrFailTheRefundAndValidRecoveryResumesTheSameRequest() {
@@ -1047,13 +1050,13 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(10));
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); retryWorker().execute();
         assertThat(bodies).isEmpty(); assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(40));
-        assertThat(count("outbox_event")).isZero();
+        assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(40)); lookupState = LookupState.AVAILABLE; mode = Mode.RETRY_SUCCESS;
         retryWorker().execute();
         assertThat(bodies).containsExactly(frozen); assertThat(keys).containsExactly("\"" + current.getAttemptId() + "\"");
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
-        assertThat(executions.count()).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(executions.count()).isEqualTo(1); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
@@ -1063,14 +1066,14 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(1); assertThat(stored().getRefundConfirmedAt()).isNull();
         when(clock.instant()).thenReturn(BASE.plusSeconds(5)); lookupWorker().execute();
         assertThat(stored().getLookupSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(15));
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         assertThat(stored().getActiveCancellationHoldId()).isNull();
         when(clock.instant()).thenReturn(BASE.plusSeconds(15)); lookupState = LookupState.AVAILABLE; lookupWorker().execute();
         retryWorker().execute();
         assertThat(bodies).hasSize(1); assertThat(stored().getRefundConfirmedAt()).isEqualTo(BASE.plusSeconds(15));
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
         assertThat(stored().getLookupSchedule().getNextAt()).isNull(); assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isEqualTo(1);
     }
 
     @Test void aFailedReceiptWithForbiddenLookupCannotRequestRestorationUntilTheUnrefundedPurchaseIsVerified() {
@@ -1079,15 +1082,15 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getReceiptState().name()).isEqualTo("FAILED");
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         assertThat(stored().getFailureEventId()).isNull(); assertThat(stored().getFailureLookupHash()).isNull();
-        assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(5)); lookupWorker().execute(); retryWorker().execute();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(15)); lookupState = LookupState.AVAILABLE; lookupWorker().execute();
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
         assertThat(stored().getFailureLookupHash()).matches("[a-f0-9]{64}");
-        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event", String.class)).isEqualTo("RefundExecutionFailed");
+        assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", String.class)).isEqualTo("RefundExecutionFailed");
         lookupWorker().execute(); retryWorker().execute();
-        assertThat(bodies).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1); assertThat(holds.count()).isZero();
+        assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1); assertThat(holds.count()).isZero();
     }
 
     @Test void recoveringForbiddenLookupAfterThreeHoursCannotRestartAutomaticCancellation() {
@@ -1099,7 +1102,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         int previousReads = reads.get(); lookupWorker().execute(); assertThat(reads.get()).isGreaterThan(previousReads);
         assertThat(stored().getLookupSchedule().getNextAt()).isAfter(BASE.plusSeconds(10800));
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
     }
 
     @Test void partialCancellationAfterForbiddenLookupStillBlocksAutomaticFullCancellation() {
@@ -1110,7 +1113,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).isEmpty(); assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
         assertThat(stored().getFailureEventId()).isNull(); assertThat(stored().getRefundConfirmedAt()).isNull();
-        assertThat(count("outbox_event")).isZero(); assertThat(holds.count()).isZero();
+        assertThat(resultEventCount()).isZero(); assertThat(holds.count()).isZero();
     }
 
     @Test void successfulLookupOfAnotherPurchaseAfter403CannotAuthorizeTheRetry() {
@@ -1118,7 +1121,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThatThrownBy(() -> service(gateway()).executeFirst(current.getAttemptId())).isInstanceOf(PgPaymentLookupForbidden.class);
         String frozen = stored().getCancellationRequestBody();
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); lookupState = LookupState.WRONG_PURCHASE; retryWorker().execute();
-        assertThat(bodies).isEmpty(); assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(bodies).isEmpty(); assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(40)); lookupState = LookupState.AVAILABLE; mode = Mode.RETRY_SUCCESS;
         retryWorker().execute(); assertThat(bodies).containsExactly(frozen);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
@@ -1134,7 +1137,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         lookupWorker().execute(); retryWorker().execute(); service(gateway()).executeFirst(current.getAttemptId());
         assertThat(bodies).hasSize(1); assertThat(stored().getActiveCancellationHoldId()).isEqualTo(holdId);
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(holds.count()).isEqualTo(1);
-        assertThat(currentHold().getResumeRequestId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(currentHold().getResumeRequestId()).isNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void invalidRequestStopsAcrossRecreatedSendersAndLookupContinues() {
@@ -1142,7 +1145,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         RefundCancellationHold hold = currentHold();
         assertThat(hold.getReason()).isEqualTo("PG_REQUEST_INVALID"); assertThat(hold.isActivated()).isTrue();
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(60)); mode = Mode.RETRY_SUCCESS;
         int previousReads = reads.get(); lookupWorker().execute(); retryWorker().execute();
         service(gateway()).executeFirst(current.getAttemptId()); service(gateway()).execute(current.getAttemptId());
@@ -1166,7 +1169,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         resume.execute(resumeCommand(second)); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
         assertThat(bodies).containsExactly(frozen, frozen, frozen);
         assertThat(keys.stream().distinct().toList()).containsExactly("\"" + current.getAttemptId() + "\"");
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(holds.findByHoldId(first.getHoldId()).orElseThrow().getResumeRequestId()).isEqualTo(original.requestId());
         assertThat(resume.execute(original)).isEqualTo(receipt);
     }
@@ -1178,7 +1181,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); mode = Mode.RETRY_SUCCESS;
         lookupWorker().execute(); retryWorker().execute(); service(gateway()).executeFirst(current.getAttemptId());
         assertThat(stored().getActiveCancellationHoldId()).isEqualTo(holdId); assertThat(holds.count()).isEqualTo(1);
-        assertThat(bodies).hasSize(1); assertThat(stored().getFailureEventId()).isNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(bodies).hasSize(1); assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void invalidRequestResumeCannotExtendTheOriginalWindow() {
@@ -1190,7 +1193,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
         assertThat(stored().getActiveCancellationHoldId()).isEqualTo(hold.getHoldId());
         assertThat(holds.findByHoldId(hold.getHoldId()).orElseThrow().getResumeRequestId()).isNull();
-        assertThat(stored().getLookupSchedule().getNextAt()).isNotNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getLookupSchedule().getNextAt()).isNotNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void lookupCanCompleteAnInvalidRequestHeldRefundAndBlocksResume() {
@@ -1200,7 +1203,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getRefundConfirmedAt()).isEqualTo(BASE.plusSeconds(5));
         assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
         assertThatThrownBy(() -> resume.execute(resumeCommand(hold))).isInstanceOf(BusinessException.class);
-        retryWorker().execute(); assertThat(bodies).hasSize(1); assertThat(count("outbox_event")).isEqualTo(1);
+        retryWorker().execute(); assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
         assertThat(stored().getFailureEventId()).isNull();
     }
 
@@ -1210,7 +1213,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         cancelled = 3000; mode = Mode.RETRY_SUCCESS; retryWorker().execute();
         assertThat(bodies).hasSize(1); assertThat(stored().getCancellationBalanceChangedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(stored().getFailureEventId()).isNull();
-        assertThat(stored().getLookupSchedule().getNextAt()).isNotNull(); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getLookupSchedule().getNextAt()).isNotNull(); assertThat(resultEventCount()).isZero();
     }
 
     @Test void invalidRequestHoldInsertAndPauseRollBackTogether() {
@@ -1225,7 +1228,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(holds.count()).isZero(); assertThat(stored().getActiveCancellationHoldId()).isNull();
         reset(holds); when(clock.instant()).thenReturn(BASE.plusSeconds(10)); retryWorker().execute();
         assertThat(currentHold().getReason()).isEqualTo("PG_REQUEST_INVALID");
-        assertThat(bodies).hasSize(2); assertThat(count("outbox_event")).isZero();
+        assertThat(bodies).hasSize(2); assertThat(resultEventCount()).isZero();
     }
 
     @Test void lateInvalidRequestFromExpiredOwnerCannotPauseSuccessfulRefund() throws Exception {
@@ -1239,7 +1242,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             assertThat(holds.count()).isEqualTo(1); RefundCancellationHold late = holds.findAll().getFirst();
             assertThat(late.getReason()).isEqualTo("PG_REQUEST_INVALID"); assertThat(late.isActivated()).isFalse();
             assertThat(stored().getActiveCancellationHoldId()).isNull(); assertThat(bodies).hasSize(2);
-            assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(resultEventCount()).isEqualTo(1);
         } finally { releaseResponse.countDown(); pool.shutdownNow(); }
     }
 
@@ -1247,7 +1250,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         received(); mode = Mode.UNRECOGNIZED_BAD_REQUEST;
         assertThatThrownBy(() -> service(gateway()).executeFirst(current.getAttemptId())).isExactlyInstanceOf(PgUnavailable.class);
         assertThat(holds.count()).isZero(); assertThat(stored().getActiveCancellationHoldId()).isNull();
-        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(count("outbox_event")).isZero();
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING); assertThat(resultEventCount()).isZero();
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
         assertThat(bodies).hasSize(2); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
     }
@@ -1280,7 +1283,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             Map<String, Object> execution = migration.queryForMap("SELECT * FROM refund_execution");
             Flyway.configure().dataSource(source).locations(location).load().migrate();
             assertThat(migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id")).isEqualTo(original);
-            assertThat(migration.queryForMap("SELECT * FROM refund_execution")).isEqualTo(execution);
+            assertThat(migration.queryForMap("SELECT * FROM refund_execution")).containsAllEntriesOf(execution);
             assertThat(migration.queryForObject("SELECT active_cancel_hold_id FROM refund_execution", String.class)).isEqualTo(active);
             assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='UNKNOWN_REASON' WHERE hold_id=?", active))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_observation");
@@ -1361,9 +1364,10 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         ReconcileRefundPayment reconcile = new ReconcileRefundPayment(payments, executions,
                 new PortOneRefundPaymentLookup(client, STORE, CHANNEL), outbox, transactions, clock);
         return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, clock,
-                new RecordRefundCancellationSuccess(payments, executions, outbox, transactions, clock), Duration.ofMinutes(4), holds);
+                new RecordRefundCancellationSuccess(payments, executions, outbox, transactions, clock), Duration.ofMinutes(4), holds, new RecordRefundPreparation(outbox));
     }
     private RefundExecution stored() { return executions.findByAttemptId(current.getAttemptId()).orElseThrow(); }
+    private int resultEventCount() { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'",Integer.class); }
     private int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class); }
     private enum Mode { COMPLETE, RACE, UNAVAILABLE, COMPLETE_THEN_UNAVAILABLE, DIRECT_SUCCESS, DELAYED_SUCCESS, FAILED_ZERO, FAILED_MANUAL_FULL, FAILED_LOOKUP_DOWN, FAILED_OTHER_PENDING, FAILED_PARTIAL, REQUESTED_THEN_FAILED, RETRY_SUCCESS, RETRY_FAILURE, RETRY_OTHER_PENDING, FORBIDDEN, DELAYED_FORBIDDEN, FORBIDDEN_LOOKUP_DOWN, POST_NOT_FOUND, INVALID_REQUEST, INVALID_LOOKUP_DOWN, DELAYED_INVALID, UNRECOGNIZED_BAD_REQUEST }
     private enum AuthenticationGate { NONE, ALL, POST_ONLY, GET_AFTER_POST }

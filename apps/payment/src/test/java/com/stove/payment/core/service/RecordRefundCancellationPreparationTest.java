@@ -7,11 +7,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.stove.common.web.error.BusinessException;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.RefundCancellationPermission;
@@ -80,6 +82,6 @@ class RecordRefundCancellationPreparationTest {
     }
 
     private RecordRefundCancellationPreparation service() {
-        return new RecordRefundCancellationPreparation(executions, transactions, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new RecordRefundCancellationPreparation(executions, transactions, Clock.fixed(NOW, ZoneOffset.UTC), new RecordRefundPreparation(mock(OutboxRecorder.class)));
     }
 }

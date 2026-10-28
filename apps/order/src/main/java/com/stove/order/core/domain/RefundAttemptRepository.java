@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RefundAttemptRepository extends JpaRepository<RefundAttempt, Long> {
     Optional<RefundAttempt> findByAttemptId(String attemptId);
+    Optional<RefundAttempt> findByPreparationEventId(String eventId);
     Optional<RefundAttempt> findBySuspensionEventId(String suspensionEventId);
     boolean existsByRefundId(String refundId);
     List<RefundAttempt> findByRefundIdOrderByAttemptNoAsc(String refundId);

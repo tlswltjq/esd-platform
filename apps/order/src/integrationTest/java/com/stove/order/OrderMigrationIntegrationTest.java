@@ -32,6 +32,20 @@ import org.testcontainers.containers.MySQLContainer;
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 
+    @Test void v23PreservesAttemptsWithoutGuessingPreparationFromTheOrderStartTime() {
+        withVersion("22",source->{
+            JdbcTemplate jdbc=new JdbcTemplate(source);insert(jdbc,"PAID");String order=jdbc.queryForObject("SELECT order_no FROM purchase_order",String.class);
+            String refund=id();String attempt=id();Instant at=Instant.parse("2026-10-29T01:00:00.123456Z");
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,current_attempt_id) VALUES(?,?,?,TRUE,'PENDING_PAYMENT_REFUND',?)",refund,order,Timestamp.from(at),attempt);
+            jdbc.update("INSERT INTO order_refund_attempt(attempt_id,refund_id,attempt_no,started_at,status) VALUES(?,?,1,?,'PENDING')",attempt,refund,Timestamp.from(at));
+            Map<String,Object> before=jdbc.queryForMap("SELECT * FROM order_refund_attempt");Map<String,Object> parent=jdbc.queryForMap("SELECT * FROM order_refund");
+            Flyway flyway=Flyway.configure().dataSource(source).locations(LOCATION).load();flyway.migrate();flyway.validate();
+            assertThat(jdbc.queryForMap("SELECT * FROM order_refund_attempt")).containsAllEntriesOf(before).containsEntry("preparation_event_id",null).containsEntry("first_refund_prepared_at",null).containsEntry("confirmation_delay_at",null).containsEntry("preparation_fingerprint",null);
+            assertThat(jdbc.queryForMap("SELECT * FROM order_refund")).isEqualTo(parent);
+            assertThatThrownBy(()->jdbc.update("UPDATE order_refund_attempt SET first_refund_prepared_at=started_at WHERE attempt_id=?",attempt)).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
+        });
+    }
+
     @Test void v22PreservesExistingReviewFactsAndDoesNotInventAnyApprovalStop() {
         withVersion("21",source->{
             JdbcTemplate jdbc=new JdbcTemplate(source); insert(jdbc,"PAID"); String order=jdbc.queryForObject("SELECT order_no FROM purchase_order",String.class);

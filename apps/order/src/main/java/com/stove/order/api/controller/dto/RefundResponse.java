@@ -7,7 +7,9 @@ import java.time.Instant;
 public record RefundResponse(String refundId, String orderNo, long amount, String currency,
         Status status, Instant receivedAt, Instant completedAt, String rejectionReason,
         @Schema(description = "확정 실패와 실제 이용권 복구가 끝나 재시도 가능한 현재 시도 ID. 그 외 상태는 null", format = "uuid", nullable = true)
-        String retryableAttemptId, CustomerRefundReviewResponse currentReview, Instant reconsiderationDeadlineAt, boolean reconsiderationAvailable) {
+        String retryableAttemptId, CustomerRefundReviewResponse currentReview, Instant reconsiderationDeadlineAt, boolean reconsiderationAvailable,
+        @Schema(description="현재 환불 결과 확인이 지연될 때 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",nullable=true)
+        RefundProcessingNoticeResponse processingNotice) {
     public enum Status { PENDING_REVIEW, PROCESSING, COMPLETED, FAILED, REJECTED }
 
     public static RefundResponse from(RefundView view) {
@@ -19,6 +21,6 @@ public record RefundResponse(String refundId, String orderNo, long amount, Strin
             case PENDING_APPROVAL_STOP, PENDING_LICENSE_GRANT, PENDING_LICENSE_SUSPENSION, PENDING_PAYMENT_REFUND, PENDING_LICENSE_RESTORATION -> Status.PROCESSING;
         };
         return new RefundResponse(view.refundId(), view.orderNo(), view.amount(), view.currency(), status, view.receivedAt(), view.completedAt(), view.rejectionReason(),
-                view.retryableAttemptId(), CustomerRefundReviewResponse.from(view.currentReview()), view.reconsiderationDeadlineAt(), view.reconsiderationAvailable());
+                view.retryableAttemptId(), CustomerRefundReviewResponse.from(view.currentReview()), view.reconsiderationDeadlineAt(), view.reconsiderationAvailable(), RefundProcessingNoticeResponse.delayed(view.confirmationDelayedSince()));
     }
 }

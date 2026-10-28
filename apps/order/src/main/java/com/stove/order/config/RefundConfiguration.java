@@ -22,6 +22,7 @@ import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import jakarta.persistence.EntityManager;
 import com.stove.order.core.service.RequestRefundApprovalStop;
 import com.stove.order.core.service.ApplyApprovalCorrection;
+import com.stove.order.core.service.ApplyRefundPreparation;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -29,6 +30,10 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundConfiguration {
+    @Bean ApplyRefundPreparation applyRefundPreparation(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts, ProcessedEventGuard inbox) {
+        return new ApplyRefundPreparation(orders,refunds,attempts,inbox);
+    }
+
     @Bean RequestRefundApprovalStop stopRefundApproval(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock) {
         return new RequestRefundApprovalStop(orders,refunds,rounds,refundClock);
     }
@@ -56,8 +61,8 @@ public class RefundConfiguration {
         return new DecideRefund(orders, refunds, grants, outbox, refundClock, rounds);
     }
 
-    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock) {
-        return new ReadRefund(orders, refunds, rounds, refundClock);
+    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock, RefundAttemptRepository attempts) {
+        return new ReadRefund(orders, refunds, rounds, refundClock, attempts);
     }
 
     @Bean RequestRefundRetry requestRefundRetry(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,

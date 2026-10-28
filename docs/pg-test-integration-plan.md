@@ -854,3 +854,40 @@ Order V22는 기존 최초 판정·심사 행을 바꾸지 않고 nullable 중�
 - 공유 컨테이너 23개·볼륨 57개의 ID·시작 시각·재시작·상태와 볼륨을 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0이다. 세부는 validation-summary.json과 collected/results/preservation.json을 따른다.
 
 기존 실제 런타임과 DB에는 V22/V9를 적용하지 않았다. 실제 ADMIN 계정 생성/권한 부여·운영 화면·추가 PortOne 결제/환불은 실행하지 않았다. PG 송신 이후 중단, 장기 미확정 운영 안내와 Settlement 환불 조정은 이번 완료 범위가 아니다.
+
+## 2026-10-29 장기 미확정 고객 안내와 준비 이벤트
+
+사용자는 **A안: 고객 조회에 환불 결과 확인 지연 안내 추가**, **A안: Payment의 진행 근거를 이벤트로 Order에 전달·보관**을 선택했다. 기존 환불 상태와 최초 자격·접수·구매 사실을 보존하며 고객 조회에서 Payment HTTP를 호출하지 않는다. 시간 경과만으로 실패·이용권 복구·새 금융 시도/키를 만들거나 환불 완료 시각을 약속하지 않는다.
+
+Payment의 최초 `firstCancellationPreparedAt`과 원래 3시간 경계를 `RefundExecutionPrepared` 사실로 한 번만 발행한다. 같은 준비 트랜잭션에서 준비 시각·조회 일정·발행 ID·Outbox를 저장하고 커밋 뒤에만 외부 송신 권한이 반환된다. 실제 PG 송신/취소 성공을 뜻하는 이벤트가 아니다. 기존 취소 POST·GET/재시도·운영 중단/재개 경로와 키·고정 본문·3시간 창은 유지한다. 반복 준비·재시작·명시적 재개가 발행 ID·최초 시각을 바꾸거나 사실을 다시 만들지 않는다.
+
+이벤트는 Payment 토픽/orderNo 키이며 refundId·attemptId·원래 실행 요청·결제/구매자/금액/통화·실제 정지 완료·이전 시도·최초 준비/경계를 연결한다. Order의 api.listener Mapper가 봉투·본문·키·값 자체를 검증하고 내부 입력으로 변환한다. 서비스는 원래 주문을 잠근 뒤 해당 환불·실행·정지·구매 근거를 대조하고 준비 근거·본문 fingerprint·Inbox를 원자 저장한다. 금융 상태나 새로운 Outbox를 만들지 않는다. 다른 대상/내용의 재전송은 거절하고 같은 재전송은 원래 근거를 유지한다.
+
+기존 고객 환불 GET의 `processingNotice`는 아래 규칙으로 제공한다.
+
+| 조건 | 응답 |
+|---|---|
+| 현재 환불이 PENDING_PAYMENT_REFUND이고 해당 시도가 PENDING, 실제 준비 정보 수신, 조회 시각이 최초 준비 + 3시간 이상 | 기존 status=PROCESSING을 유지하고 code=RESULT_CONFIRMATION_DELAYED·안내 문구·since=원래 경계를 제공 |
+| 정확한 경계 1마이크로초 전 | 안내 null |
+| 준비 근거 미수신/없음 | 안내 null. Order 접수/실행 요청 시각으로 추정하지 않음 |
+| 완료·반려·심사/정지 대기·확정 실패/복구 단계 또는 새 시도의 과거 준비 정보 | 안내 null. 새 시도는 자신의 실제 준비 정보와 경계를 사용 |
+| 전액 취소 조회로 고객 환불은 완료됐으나 실행 귀속은 PENDING | COMPLETED를 유지하고 안내 null. 조사 필요 근거를 지우지 않음 |
+
+문구는 “환불 결과 확인이 지연되고 있습니다. 결과를 계속 확인 중이며, 별도 재신청은 필요하지 않습니다.”다. 안내에는 관리자/PG 원문·키·요청/실행 ID를 노출하지 않는다. 정확한 경계부터 포함하며 이벤트가 늦게 도착해도 since를 현재 시각으로 바꾸지 않는다. 통지 이벤트를 경계마다 새로 발행하는 작업자를 추가하지 않고, 저장된 실제 준비 근거와 Order의 조회 시각으로 안내를 계산한다. 이벤트 전달 지연/실패 중에는 안내가 늦어질 수 있으며 준비 시각을 추정해 채우지 않는다.
+
+Payment V26은 이미 최초 준비 시각이 있는 건에만 안정적인 준비 발행 ID·Outbox를 추가한다. 최초 시각·금융 상태·기존 일정/요청·Outbox를 보존하고 준비 미확인 건의 시각을 만들지 않는다. 과거 준비 사실의 이벤트 occurredAt은 실제 저장된 최초 시각이며 createdAt은 발행 준비 시각이다. Order V23은 기존 시도에 nullable 준비 근거·경계·fingerprint와 CHECK/유일 키를 추가하고 과거 접수 시각으로 backfill하지 않는다. Order의 기존 earliest 소비 설정으로 수신기 시작 전에 발행된 사실도 소비한다.
+
+실행 근거는 Git 제외 `runs/refund-delay-notice-tdd-3o4ukemi`와 `runs/refund-delay-notice-oci-fwbz8qjm`다.
+
+- 실제 서비스/도메인 Red 6건(Order 4·Payment 2)은 컴파일 뒤 미구현 동작으로 실패했다. Green 후 준비·재전송·입력/봉투·토픽 경계 검사를 보완했다.
+- 로컬 최종 단위 Order 331·Payment 292·공통 Kafka 217, 총 840건 및 두 모듈 통합 소스 컴파일이 통과했다.
+- `new-and-dispatch`는 Order 새 통합 11건과 Payment 새 준비/기존 송신·창 통합 88건을 통과했다. `schema-update`는 Order 마이그레이션/명세 9건과 Payment V25→V26 사실 backfill 1건을 통과했다. 명세 갱신 플래그는 이 선별 단계에서만 사용했다.
+- 첫 전체 `full`은 기존 테스트 2건이 실패했다. Kafka 금융 결과 롤백용 fault가 새 준비 Outbox에 먼저 걸려 원래 시나리오와 달리 직접 PG_RESPONSE로 완료되는 경우였고, 다른 한 건은 준비 사실이 추가된 Outbox 총수를 여전히 1건으로 기대한 경우였다. fault를 원래 금융 확인 이벤트에만 주입하고 실제 PG 성공/금융 상태 flush 이후였음을 단언했다. 총수 검사는 준비/금융 사실 각 1건을 확인하도록 보강했다. 운영 코드는 바꾸지 않았으며 첫 실패 원자료와 correction-scope.json을 보존했다.
+- 최종 OCI `corrected`는 명세 갱신 없이 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 Order 331·통합 170, Payment 292·통합 183, 공통 Kafka 217, **총 1193건**을 통과했다. 실패·오류·건너뜀 0. 선별/로컬 반복 수치를 총수에 더하지 않는다.
+- 실제 MySQL에서 최초 준비·Outbox·조회 일정의 커밋/롤백·동시 준비, Order 준비 근거/Inbox의 실제 flush 롤백·동시 재송신, V25→V26 및 V22→V23 보존/제약을 확인했다. 실제 Kafka에서는 수신기 시작 전에 발행된 준비 사실과 중복을 소비하고 Order 저장 조회의 안내를 확인했다. Payment 준비 Outbox의 봉투·본문 전체와 migration payload의 의미상 동일 시각/필드를 대조했다.
+- 고객 JWT/소유권·가격/상태/자격 보존, 3시간 기준 차이·정확한 경계, 늦은 도착/재전송, 완료 선행·귀속 미확정 완료, 실패/복구/재시도·오래된 근거·새 시도의 독립 경계·정보 제한을 검증했다. Order 검사에서 Payment나 PG의 실시간 HTTP 조회를 요구하지 않는다.
+- 기존 PG HTTP 픽스처 테스트의 금융 결과 Outbox 단언은 새 준비 사실만 제외하도록 명확히 했다. 기존 금융 결과 롤백용 fault는 준비 사실 이후 원래 결과 기록 지점에 주입하며, 준비 자체의 실제 Outbox 롤백은 별도 검사한다. 금융/정지·키/본문/재송신 정책을 바꿔 기대값에 맞추지 않았다.
+- 기존 OpenAPI 12개 경로·14개 연산과 기존 환불 응답 필드를 그대로 보존하고 nullable processingNotice·그 안내 스키마만 추가했다. Payment 명세는 변경하지 않았다. Gateway·License 소스는 앞선 967건 검증과 같고 이번에 재실행하지 않았다.
+- 기존 공유 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·상태를 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0. validation-summary.json·compatibility-review.json·collected/results/preservation.json을 따른다.
+
+기존 실제 런타임/DB에는 Order V23·Payment V26를 적용하지 않았다. 실제 PortOne 금융 동작·실제 ADMIN 계정/운영 화면·실제 PG 장애와 고객 화면의 전체 검증을 추가하지 않았다. 운영자의 장기 미확정 대상 조회·조사 기록/조치와 Settlement 환불 조정은 후속이다.

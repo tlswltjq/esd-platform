@@ -40,15 +40,16 @@ public class RequestRefundCancellation {
     private final RecordRefundCancellationSuccess successes;
     private final Duration lease;
     private final RefundCancellationHoldRepository holds;
+    private final RecordRefundPreparation preparationEvents;
 
     public RequestRefundCancellation(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationGateway gateway, ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock clock,
-            RecordRefundCancellationSuccess successes, Duration lease, RefundCancellationHoldRepository holds) {
+            RecordRefundCancellationSuccess successes, Duration lease, RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents) {
         if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0)
             throw new IllegalArgumentException("A bounded dispatch lease is required");
         this.payments = payments; this.executions = executions; this.gateway = gateway; this.reconcile = reconcile; this.clock = clock;
         this.lease = lease;
-        this.holds = holds;
+        this.holds = holds; this.preparationEvents=preparationEvents;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         this.successes = successes;
@@ -91,6 +92,7 @@ public class RequestRefundCancellation {
             if (!"PORTONE_TEST".equals(payment.getProvider()) || finished(current)
                     || current.getFirstCancellationPreparedAt() == null || current.getCancellationRequestBody() == null) return null;
             RefundCancellationPermission permission = current.prepareCancellation(clock.instant());
+            preparationEvents.execute(current);
             if (permission.automaticCancellationStopped()) { current.getCancellationSchedule().stop(); return null; }
             current.getCancellationSchedule().initializeUnknown(clock.instant());
             return current.getCancellationSchedule().claim(UUID.randomUUID().toString(), clock.instant(), lease, true);
@@ -105,6 +107,7 @@ public class RequestRefundCancellation {
         updateSchedule(attemptId, current -> {
             if (finished(current)) { current.getCancellationSchedule().stop(); return; }
             RefundCancellationPermission permission = current.prepareCancellation(clock.instant());
+            preparationEvents.execute(current);
             if (permission.automaticCancellationStopped()) { current.getCancellationSchedule().stop(); return; }
             current.getCancellationSchedule().finish(claim, clock.instant());
         });
@@ -145,6 +148,7 @@ public class RequestRefundCancellation {
             if (finished(current)) return null;
             boolean alreadyPrepared = current.getFirstCancellationPreparedAt() != null;
             RefundCancellationPermission base = current.prepareCancellation(clock.instant());
+            preparationEvents.execute(current);
             if (firstOnly && alreadyPrepared) { executions.flush(); return null; }
             if (base.automaticCancellationStopped()) { executions.flush(); return null; }
             current.freezeCancellationBody(candidate);

@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doAnswer;
 
 import com.stove.payment.core.domain.Payment;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgRefundCancellationSuccess;
@@ -237,6 +238,6 @@ class RequestRefundCancellationTest {
     }
     private RequestRefundCancellation service(Clock clock) {
         return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, clock, successes,
-                Duration.ofMinutes(4), holds);
+                Duration.ofMinutes(4), holds, new RecordRefundPreparation(mock(OutboxRecorder.class)));
     }
 }

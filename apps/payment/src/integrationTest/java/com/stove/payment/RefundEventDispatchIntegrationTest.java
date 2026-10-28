@@ -207,17 +207,23 @@ class RefundEventDispatchIntegrationTest extends PaymentIntegrationTestBase {
         RefundExecutionRequest input = paidRequest();
         AtomicBoolean first = new AtomicBoolean(true);
         new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
-            Object result = call.callRealMethod();
-            if (first.getAndSet(false)) {
+            call.callRealMethod();
+            DomainEvent recorded=call.getArgument(2,DomainEvent.class);
+            if (recorded.eventType().equals(EventType.REFUND_PAYMENT_CONFIRMED) && first.getAndSet(false)) {
                 executions.flush();
+                assertThat(posts).contains(input.attemptId());
+                assertThat(jdbc.queryForObject("SELECT refund_confirmation_source FROM refund_execution WHERE attempt_id=?",String.class,input.attemptId())).isEqualTo("PG_RESPONSE");
+                assertThat(count(EventType.REFUND_EXECUTION_PREPARED)).isEqualTo(1);
                 throw new TransientDataAccessResourceException("abort supplier result transaction");
             }
-            return result;
+            return null;
         }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
         listeners.start(); awaitConsumed(send(input));
         assertThat(posts).containsExactly(input.attemptId());
         assertThat(stored(input).getRefundConfirmedAt()).isNotNull();
+        assertThat(first.get()).isFalse();
         assertThat(stored(input).getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
+        assertThat(count(EventType.REFUND_EXECUTION_PREPARED)).isEqualTo(1);
         assertThat(count(EventType.REFUND_PAYMENT_CONFIRMED)).isEqualTo(1);
         assertThat(count(EventType.REFUND_EXECUTION_SUCCEEDED)).isZero();
     }

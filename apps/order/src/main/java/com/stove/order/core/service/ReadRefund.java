@@ -7,6 +7,9 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundView;
+import com.stove.order.core.domain.RefundAttempt;
+import com.stove.order.core.domain.RefundAttemptRepository;
+import java.time.Instant;
 import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundReviewRound;
 import com.stove.order.core.domain.RefundReviewRoundRepository;
@@ -21,6 +24,7 @@ public class ReadRefund {
     private final RefundRepository refunds;
     private final RefundReviewRoundRepository rounds;
     private final Clock clock;
+    private final RefundAttemptRepository attempts;
 
     public RefundView execute(String orderNo, String buyer) {
         Order order = orders.findByOrderNoAndBuyerSubject(orderNo, buyer)
@@ -34,6 +38,15 @@ public class ReadRefund {
                 refund.getStatus() == RefundStatus.REJECTED ? current == null ? refund.getReviewReason() : current.getDecisionReason() : null,
                 refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null,
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
-                refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()));
+                refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund));
     }
+    private Instant delayedSince(Refund refund) {
+        if (refund.getStatus()!=RefundStatus.PENDING_PAYMENT_REFUND) return null;
+        if (refund.getCurrentAttemptId()==null) return null;
+        RefundAttempt attempt=attempts.findByAttemptId(refund.getCurrentAttemptId()).orElse(null);
+        if (attempt==null) return null;
+        if (!attempt.getRefundId().equals(refund.getRefundId())) throw new BusinessException(ErrorCode.CONFLICT);
+        return attempt.confirmationDelayedSince(clock.instant());
+    }
+
 }

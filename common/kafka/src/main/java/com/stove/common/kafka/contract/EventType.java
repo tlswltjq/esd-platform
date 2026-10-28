@@ -50,6 +50,7 @@ public final class EventType {
     /** Order에 환불을 위한 보유권 정지 요청이 등록됐음을 나타낸다. */
     public static final String LICENSE_SUSPENSION_REQUESTED = "LicenseSuspensionRequested";
     public static final String REFUND_EXECUTION_REQUESTED = "RefundExecutionRequested";
+    public static final String REFUND_EXECUTION_PREPARED = "RefundExecutionPrepared";
     public static final String ORDER_PLACED = "OrderPlaced";
     public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";
     public static final String ORDER_PAYMENT_FAILED = "OrderPaymentFailed";

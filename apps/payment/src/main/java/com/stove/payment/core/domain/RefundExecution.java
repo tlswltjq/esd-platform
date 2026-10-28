@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -56,6 +57,13 @@ public class RefundExecution {
     private Instant receivedAt;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
     private RefundExecutionStatus status;
+    @Column(unique=true,length=36) private String preparationEventId;
+    public boolean recordPreparationPublication() {
+        if (firstCancellationPreparedAt==null) throw new IllegalStateException("Preparation time must be committed with its fact");
+        if (preparationEventId!=null) return false;
+        preparationEventId=UUID.randomUUID().toString(); return true;
+    }
+
     @Column(name = "first_cancel_prepared_at")
     private Instant firstCancellationPreparedAt;
     @Column(name = "auto_cancel_stopped_at")

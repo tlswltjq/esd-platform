@@ -23,6 +23,30 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefundAttempt {
+    @Column(unique=true,length=64) private String preparationEventId;
+    private Instant firstRefundPreparedAt;
+    private Instant confirmationDelayAt;
+    @Column(length=64) private String preparationFingerprint;
+
+    public boolean recordPreparation(Order order, RefundPreparationConfirmation input) {
+        if (order==null || input==null || order.getStatus()!=OrderStatus.PAID || !order.getOrderNo().equals(input.orderNo())
+                || !order.getPaymentId().equals(input.paymentId()) || !order.getBuyerSubject().equals(input.buyerSubject())
+                || order.getAmount()!=input.amount() || !order.getCurrency().equals(input.currency())
+                || !refundId.equals(input.refundId()) || !attemptId.equals(input.attemptId())
+                || !Objects.equals(executionRequestEventId,input.requestEventId()) || !Objects.equals(suspensionEventId,input.licenseSuspensionEventId())
+                || !Objects.equals(previousAttemptId,input.previousAttemptId()) || input.firstPreparedAt().isBefore(startedAt)
+                || (resolvedAt!=null && input.firstPreparedAt().isAfter(resolvedAt)))
+            throw new RefundCompletionRejected("준비 사실이 원래 구매·실행·정지 근거와 다릅니다.");
+        if (preparationEventId!=null) {
+            if (!preparationFingerprint.equals(input.fingerprint())) throw new RefundCompletionRejected("이미 기록한 준비 사실과 다릅니다.");
+            return false;
+        }
+        preparationEventId=input.eventId(); firstRefundPreparedAt=input.firstPreparedAt(); confirmationDelayAt=input.confirmationDelayAt();
+        preparationFingerprint=input.fingerprint(); return true;
+    }
+    public Instant confirmationDelayedSince(Instant at) {
+        return status==RefundAttemptStatus.PENDING && confirmationDelayAt!=null && at!=null && !at.isBefore(confirmationDelayAt) ? confirmationDelayAt : null;
+    }
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false, unique = true, updatable = false, length = 36)
