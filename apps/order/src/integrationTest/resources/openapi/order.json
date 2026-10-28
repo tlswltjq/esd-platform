@@ -1,6 +1,29 @@
 {
   "components" : {
     "schemas" : {
+      "AdminRefundApprovalStopResponse" : {
+        "properties" : {
+          "nextReviewId" : {
+            "type" : "string"
+          },
+          "receipt" : {
+            "$ref" : "#/components/schemas/RefundApprovalStopResponse"
+          },
+          "reopenedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "restorationRequestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "restoredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AdminRefundDecisionResponse" : {
         "properties" : {
           "decidedAt" : {
@@ -65,6 +88,9 @@
           "currency" : {
             "type" : "string"
           },
+          "currentReview" : {
+            "$ref" : "#/components/schemas/AdminRefundReviewResponse"
+          },
           "orderNo" : {
             "type" : "string"
           },
@@ -86,11 +112,78 @@
             "$ref" : "#/components/schemas/AdminRefundDecisionResponse"
           },
           "status" : {
-            "enum" : [ "PENDING_REVIEW", "PENDING_LICENSE_GRANT", "PENDING_LICENSE_SUSPENSION", "PENDING_PAYMENT_REFUND", "PENDING_LICENSE_RESTORATION", "FAILED", "REJECTED", "COMPLETED" ],
+            "enum" : [ "PENDING_REVIEW", "PENDING_APPROVAL_STOP", "PENDING_LICENSE_GRANT", "PENDING_LICENSE_SUSPENSION", "PENDING_PAYMENT_REFUND", "PENDING_LICENSE_RESTORATION", "FAILED", "REJECTED", "COMPLETED" ],
             "type" : "string"
           },
           "title" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "AdminRefundReviewPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminRefundReviewResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "AdminRefundReviewResponse" : {
+        "properties" : {
+          "approvalStop" : {
+            "$ref" : "#/components/schemas/AdminRefundApprovalStopResponse"
+          },
+          "correctionRequestId" : {
+            "type" : "string"
+          },
+          "customerReason" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "type" : "string"
+          },
+          "previousReviewId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "review" : {
+            "$ref" : "#/components/schemas/AdminRefundDecisionResponse"
+          },
+          "reviewId" : {
+            "type" : "string"
+          },
+          "reviewNo" : {
+            "format" : "int64",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -137,6 +230,48 @@
         },
         "type" : "object"
       },
+      "ApiResponseAdminRefundReviewPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/AdminRefundReviewPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseAdminRefundReviewResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/AdminRefundReviewResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseCustomerRefundReviewPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CustomerRefundReviewPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseOrderPage" : {
         "properties" : {
           "data" : {
@@ -155,6 +290,34 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/OrderResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundApprovalStopResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundApprovalStopResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundReconsiderationResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundReconsiderationResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -213,6 +376,76 @@
           }
         },
         "required" : [ "expectedAmount", "expectedContentVersion", "productCode", "requestId" ],
+        "type" : "object"
+      },
+      "CustomerRefundReviewPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CustomerRefundReviewResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "CustomerRefundReviewResponse" : {
+        "properties" : {
+          "approvalStoppedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "decidedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "decision" : {
+            "enum" : [ "APPROVED", "REJECTED" ],
+            "type" : "string"
+          },
+          "origin" : {
+            "type" : "string"
+          },
+          "previousReviewId" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "rejectionReason" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "reviewId" : {
+            "type" : "string"
+          },
+          "reviewNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
         "type" : "object"
       },
       "ErrorBody" : {
@@ -312,6 +545,88 @@
         },
         "type" : "object"
       },
+      "RefundApprovalStopBody" : {
+        "properties" : {
+          "reason" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "reviewId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundApprovalStopResponse" : {
+        "properties" : {
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "reviewId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundReconsiderationBody" : {
+        "properties" : {
+          "previousReviewId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "reason" : {
+            "description" : "재심사를 요청하는 사유. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "previousReviewId", "reason", "requestId" ],
+        "type" : "object"
+      },
+      "RefundReconsiderationResponse" : {
+        "properties" : {
+          "previousReviewId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "reviewId" : {
+            "type" : "string"
+          },
+          "reviewNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "RefundResponse" : {
         "properties" : {
           "amount" : {
@@ -325,10 +640,20 @@
           "currency" : {
             "type" : "string"
           },
+          "currentReview" : {
+            "$ref" : "#/components/schemas/CustomerRefundReviewResponse"
+          },
           "orderNo" : {
             "type" : "string"
           },
           "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reconsiderationAvailable" : {
+            "type" : "boolean"
+          },
+          "reconsiderationDeadlineAt" : {
             "format" : "date-time",
             "type" : "string"
           },
@@ -428,7 +753,7 @@
           "required" : false,
           "schema" : {
             "default" : "PENDING_REVIEW",
-            "enum" : [ "PENDING_REVIEW", "PENDING_LICENSE_GRANT", "PENDING_LICENSE_SUSPENSION", "PENDING_PAYMENT_REFUND", "PENDING_LICENSE_RESTORATION", "FAILED", "REJECTED", "COMPLETED" ],
+            "enum" : [ "PENDING_REVIEW", "PENDING_APPROVAL_STOP", "PENDING_LICENSE_GRANT", "PENDING_LICENSE_SUSPENSION", "PENDING_PAYMENT_REFUND", "PENDING_LICENSE_RESTORATION", "FAILED", "REJECTED", "COMPLETED" ],
             "type" : "string"
           }
         }, {
@@ -499,6 +824,47 @@
         "tags" : [ "admin-refund-controller" ]
       }
     },
+    "/api/v1/admin/refunds/{refundId}/approval-stops" : {
+      "post" : {
+        "description" : "지정한 현재 승인 회차의 Payment 실행 요청 저장 전까지만 중단합니다. ADMIN sub·필수 사유를 보존하고 같은 명령·대상·담당자·내용은 최초 영수증을 반환합니다. 필요한 실제 이용권 복구를 확인한 뒤 새 심사 회차로 복귀합니다. 202는 접수이며 복구 완료가 아닙니다.",
+        "operationId" : "stopRefundApproval",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "refundId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundApprovalStopBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundApprovalStopResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 잘못된 환불 승인 중단",
+        "tags" : [ "admin-refund-controller" ]
+      }
+    },
     "/api/v1/admin/refunds/{refundId}/decision" : {
       "post" : {
         "description" : "ADMIN의 sub로 판정자와 사유를 저장합니다. 먼저 저장된 판정이 확정되며 동일 명령·내용의 재전송은 최초 판정 영수증을 반환합니다. 승인은 환불 완료를 의미하지 않습니다. 반려 사유는 고객에게 표시됩니다.",
@@ -537,6 +903,103 @@
           "oauth2" : [ "commerce" ]
         } ],
         "summary" : "관리자 환불 최초 판정",
+        "tags" : [ "admin-refund-controller" ]
+      }
+    },
+    "/api/v1/admin/refunds/{refundId}/reconsiderations/{reviewId}/decision" : {
+      "post" : {
+        "description" : "고객 재심사 또는 승인 정정으로 열린 현재 후속 회차의 최초 판정을 확정하고 ADMIN sub와 사유를 저장합니다. 동일 명령·회차·판정자·내용의 재전송은 해당 회차의 최초 영수증을 반환하며 이후 회차를 바꾸지 않습니다. 승인은 기존 실제 지급·정지 완료·PG 환불 절차로 이어집니다. 200은 판정 저장이며 환불 완료가 아닙니다.",
+        "operationId" : "decideRefundReconsideration",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "refundId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "reviewId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundReviewRequestBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAdminRefundReviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 지정 후속 심사 회차 판정",
+        "tags" : [ "admin-refund-controller" ]
+      }
+    },
+    "/api/v1/admin/refunds/{refundId}/reviews" : {
+      "get" : {
+        "description" : "최초 판정과 모든 재심사 접수 사유·판정 감사 기록을 회차 순으로 조회합니다. page/size 기본 0/20, 최대 100입니다.",
+        "operationId" : "readAdminRefundReviews",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "refundId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAdminRefundReviewPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 심사 이력",
         "tags" : [ "admin-refund-controller" ]
       }
     },
@@ -706,6 +1169,47 @@
         "tags" : [ "refund-controller" ]
       }
     },
+    "/api/v1/orders/{orderNo}/refund/reconsiderations" : {
+      "post" : {
+        "description" : "환불 조회의 currentReview.reviewId를 previousReviewId로 지정하고 새 requestId와 필수 사유를 보냅니다. 마지막 반려 저장 후 정확히 7일까지 접수하며 횟수 제한은 없습니다. 같은 명령·회차·사유의 재전송은 최초 영수증을 반환합니다. 기한 내 접수 뒤 처리 지연은 접수 효력에 영향을 주지 않습니다. 202는 심사 접수이며 자동 환불이나 이용권 정지가 아닙니다. 원래 환불 자격과 판정 이력은 보존됩니다.",
+        "operationId" : "requestRefundReconsideration",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundReconsiderationBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundReconsiderationResponse"
+                }
+              }
+            },
+            "description" : "재심사 최초 접수 또는 동일 접수 영수증"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "내 반려 환불 재심사 접수",
+        "tags" : [ "refund-controller" ]
+      }
+    },
     "/api/v1/orders/{orderNo}/refund/retries" : {
       "post" : {
         "description" : "환불 조회의 retryableAttemptId를 previousAttemptId로 전달합니다. 확정 실패와 실제 이용권 복구가 끝난 현재 시도만 새 정지를 요청할 수 있습니다. 같은 이전 시도의 반복 요청은 최초 재시도 접수 영수증을 202로 반환합니다. receivedAt은 재시도 접수 시각이며 최초 환불 자격은 보존됩니다. 접수는 정지·PG 환불 완료를 뜻하지 않으며 현재 결과는 Location의 환불 조회로 확인합니다.",
@@ -774,6 +1278,55 @@
           "oauth2" : [ "commerce" ]
         } ],
         "summary" : "내 주문 환불 명시적 재시도",
+        "tags" : [ "refund-controller" ]
+      }
+    },
+    "/api/v1/orders/{orderNo}/refund/reviews" : {
+      "get" : {
+        "description" : "최초 심사와 모든 재심사 회차를 회차 순으로 조회합니다. 관리자 명령 ID·판정자·승인 사유는 공개하지 않습니다. page/size 기본 0/20, 최대 100입니다.",
+        "operationId" : "readCustomerRefundReviews",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCustomerRefundReviewPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "내 환불 심사 이력",
         "tags" : [ "refund-controller" ]
       }
     }

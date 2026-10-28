@@ -10,6 +10,9 @@ import com.stove.common.testcontainers.SharedContainers;
 import com.stove.order.core.domain.Order;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
@@ -27,6 +31,48 @@ import org.testcontainers.containers.MySQLContainer;
 
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
+
+    @Test void v22PreservesExistingReviewFactsAndDoesNotInventAnyApprovalStop() {
+        withVersion("21",source->{
+            JdbcTemplate jdbc=new JdbcTemplate(source); insert(jdbc,"PAID"); String order=jdbc.queryForObject("SELECT order_no FROM purchase_order",String.class);
+            String refund=id(); String decision=id(); Instant at=Instant.parse("2026-10-29T01:00:00.123456Z");
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,current_review_id,review_request_id,review_decision,review_operator_subject,review_reason,reviewed_at) VALUES(?,?,?,FALSE,'PENDING_LICENSE_GRANT',?,?,'APPROVED','admin','original',?)",refund,order,Timestamp.from(at),refund,decision,Timestamp.from(at));
+            jdbc.update("INSERT INTO order_refund_review_round(review_id,refund_id,review_no,buyer_subject,received_at,decision_request_id,decision,operator_subject,decision_reason,decided_at) VALUES(?,?,1,'usr_buyer',?,?,'APPROVED','admin','original',?)",refund,refund,Timestamp.from(at),decision,Timestamp.from(at));
+            Map<String,Object> before=jdbc.queryForMap("SELECT * FROM order_refund_review_round"); Map<String,Object> parent=jdbc.queryForMap("SELECT * FROM order_refund");
+            Flyway flyway=Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+            assertThat(jdbc.queryForMap("SELECT * FROM order_refund_review_round")).containsAllEntriesOf(before).containsEntry("stop_request_id",null).containsEntry("correction_request_id",null);
+            assertThat(jdbc.queryForMap("SELECT * FROM order_refund")).isEqualTo(parent);
+            assertThatThrownBy(()->jdbc.update("UPDATE order_refund_review_round SET stop_request_id=?",id())).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
+            assertThatThrownBy(()->jdbc.update("INSERT INTO order_refund_review_round(review_id,refund_id,review_no,previous_review_id,buyer_subject,received_at) VALUES(?,?,2,?,'usr_buyer',?)",id(),refund,refund,Timestamp.from(at))).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
+        });
+    }
+
+    @Test void v21CopiesOnlyKnownFirstReviewFactsAndKeepsOriginalAuditAndPurchaseRows() {
+        withVersion("20", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source); Instant received = Instant.parse("2026-10-28T12:00:00.123456Z");
+            int number = 100;
+            for (String state : List.of("PENDING_REVIEW", "APPROVED", "REJECTED", "AUTOMATIC", "LEGACY_WITHOUT_AUDIT")) {
+                insert(jdbc, "PAID");
+                String orderNo = jdbc.queryForObject("SELECT order_no FROM purchase_order WHERE product_id=1", String.class);
+                jdbc.update("UPDATE purchase_order SET product_id=?,product_code=? WHERE order_no=?", number, "migration-product-" + number, orderNo); number++;
+                boolean automatic = state.equals("AUTOMATIC"); boolean decided = state.equals("APPROVED") || state.equals("REJECTED");
+                String status = state.equals("APPROVED") || automatic || state.equals("LEGACY_WITHOUT_AUDIT") ? "PENDING_LICENSE_GRANT" : state;
+                jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,review_request_id,review_decision,review_operator_subject,review_reason,reviewed_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        id(), orderNo, Timestamp.from(received), automatic, status, decided ? id() : null, decided ? state : null,
+                        decided ? "migration-admin" : null, decided ? "기존 실제 판정 사유" : null, decided ? Timestamp.from(received.plusSeconds(1)) : null);
+            }
+            List<Map<String, Object>> original = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            List<Map<String, Object>> purchases = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+            List<Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            for (int index = 0; index < original.size(); index++) assertThat(migrated.get(index)).containsAllEntriesOf(original.get(index));
+            assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(purchases);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round", Integer.class)).isEqualTo(4);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round WHERE decision_request_id IS NOT NULL AND operator_subject='migration-admin'", Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round WHERE decision_request_id IS NULL AND operator_subject IS NULL AND customer_reason IS NULL", Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund WHERE automatic_refund_eligible=TRUE AND current_review_id IS NULL", Integer.class)).isEqualTo(1);
+        });
+    }
 
     @Test void v20PreservesV19PendingAndCompletedRefundsWithoutInventingOperatorHistory() {
         withVersion("19", source -> {

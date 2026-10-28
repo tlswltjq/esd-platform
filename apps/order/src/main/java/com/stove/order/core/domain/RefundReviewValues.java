@@ -6,6 +6,12 @@ import java.time.Instant;
 
 final class RefundReviewValues {
     private RefundReviewValues() { }
+    static void requireReviewId(String reviewId) {
+        if (reviewId == null || !reviewId.matches(OrderValues.UUID_PATTERN)) throw invalid();
+    }
+    static void requireBuyer(String subject) {
+        if (subject == null || subject.isBlank() || subject.length() > 100) throw invalid();
+    }
     static void requireIdentity(String requestId, String refundId) {
         if (requestId == null || !requestId.matches(OrderValues.UUID_PATTERN)
                 || refundId == null || !refundId.matches(OrderValues.UUID_PATTERN)) throw invalid();

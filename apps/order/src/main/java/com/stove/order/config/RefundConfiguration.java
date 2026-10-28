@@ -6,6 +6,10 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderLicenseGrantRepository;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundAttemptRepository;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
+import com.stove.order.core.service.RequestRefundReconsideration;
+import com.stove.order.core.service.DecideRefundReconsideration;
+import com.stove.order.core.service.ReadRefundReviewRounds;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.ReadRefundReviews;
@@ -16,6 +20,8 @@ import com.stove.order.core.service.ApplyLicenseGrant;
 import com.stove.order.core.service.ApplyRefundSuspension;
 import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import jakarta.persistence.EntityManager;
+import com.stove.order.core.service.RequestRefundApprovalStop;
+import com.stove.order.core.service.ApplyApprovalCorrection;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -23,17 +29,35 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundConfiguration {
-    @Bean ReadRefundReviews readRefundReviews(OrderRepository orders, RefundRepository refunds) {
-        return new ReadRefundReviews(orders, refunds);
+    @Bean RequestRefundApprovalStop stopRefundApproval(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock) {
+        return new RequestRefundApprovalStop(orders,refunds,rounds,refundClock);
+    }
+    @Bean ApplyApprovalCorrection applyApprovalCorrection(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds,
+            ProcessedEventGuard inbox, OutboxRecorder outbox, EntityManager entityManager, Clock refundClock) {
+        return new ApplyApprovalCorrection(orders,refunds,rounds,inbox,outbox,entityManager,refundClock);
+    }
+
+    @Bean ReadRefundReviews readRefundReviews(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds) {
+        return new ReadRefundReviews(orders, refunds, rounds);
+    }
+
+    @Bean RequestRefundReconsideration requestRefundReconsideration(OrderRepository orders, RefundRepository refunds,
+            RefundReviewRoundRepository rounds, Clock refundClock) { return new RequestRefundReconsideration(orders, refunds, rounds, refundClock); }
+    @Bean DecideRefundReconsideration decideRefundReconsideration(OrderRepository orders, RefundRepository refunds,
+            RefundReviewRoundRepository rounds, OrderLicenseGrantRepository grants, OutboxRecorder outbox, Clock refundClock) {
+        return new DecideRefundReconsideration(orders, refunds, rounds, grants, outbox, refundClock);
+    }
+    @Bean ReadRefundReviewRounds readRefundReviewRounds(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds) {
+        return new ReadRefundReviewRounds(orders, refunds, rounds);
     }
 
     @Bean DecideRefund decideRefund(OrderRepository orders, RefundRepository refunds, OrderLicenseGrantRepository grants,
-            OutboxRecorder outbox, Clock refundClock) {
-        return new DecideRefund(orders, refunds, grants, outbox, refundClock);
+            OutboxRecorder outbox, Clock refundClock, RefundReviewRoundRepository rounds) {
+        return new DecideRefund(orders, refunds, grants, outbox, refundClock, rounds);
     }
 
-    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds) {
-        return new ReadRefund(orders, refunds);
+    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock) {
+        return new ReadRefund(orders, refunds, rounds, refundClock);
     }
 
     @Bean RequestRefundRetry requestRefundRetry(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,
@@ -59,8 +83,8 @@ public class RefundConfiguration {
 
     @Bean
     RequestRefund requestRefund(OrderRepository orders, RefundRepository refunds,
-            OrderLicenseGrantRepository grants, OutboxRecorder outbox, Clock refundClock) {
-        return new RequestRefund(orders, refunds, grants, outbox, refundClock);
+            OrderLicenseGrantRepository grants, OutboxRecorder outbox, Clock refundClock, RefundReviewRoundRepository rounds) {
+        return new RequestRefund(orders, refunds, grants, outbox, refundClock, rounds);
     }
 
     @Bean
@@ -73,7 +97,7 @@ public class RefundConfiguration {
     @Bean
     ApplyRefundSuspension applyRefundSuspension(OrderRepository orders, RefundRepository refunds,
             OrderLicenseGrantRepository grants, RefundAttemptRepository attempts, ProcessedEventGuard inbox,
-            OutboxRecorder outbox, EntityManager entityManager, Clock refundClock) {
-        return new ApplyRefundSuspension(orders, refunds, grants, attempts, inbox, outbox, entityManager, refundClock);
+            OutboxRecorder outbox, EntityManager entityManager, Clock refundClock, ApplyApprovalCorrection correction) {
+        return new ApplyRefundSuspension(orders, refunds, grants, attempts, inbox, outbox, entityManager, refundClock, correction);
     }
 }

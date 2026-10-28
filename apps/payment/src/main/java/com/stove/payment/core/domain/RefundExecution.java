@@ -80,12 +80,25 @@ public class RefundExecution {
 
     public void resumeCancellation(String holdId, Instant at) {
         if (!PaymentValues.uuid(holdId) || !PaymentValues.microsecond(at)) throw new IllegalArgumentException("A hold and precise resume time are required");
-        if (!holdId.equals(activeCancellationHoldId) || status != RefundExecutionStatus.PENDING || refundConfirmedAt != null
-                || firstCancellationPreparedAt == null || cancellationRequestBody == null || automaticCancellationStoppedAt != null
-                || cancellationBalanceChangedAt != null || receiptCancellationId != null || at.isBefore(firstCancellationPreparedAt)
-                || !at.isBefore(RefundCancellationWindow.deadline(firstCancellationPreparedAt)))
+        if (!canResumeCancellation(holdId, at))
             throw new BusinessException(ErrorCode.CONFLICT, "현재 중단과 원래 송신 조건 안에서만 재개할 수 있습니다.");
         cancellationSchedule.resume(at); activeCancellationHoldId = null;
+    }
+
+    public boolean isCurrentCancellationHold(String holdId) {
+        return holdId != null && holdId.equals(activeCancellationHoldId)
+                && status == RefundExecutionStatus.PENDING && refundConfirmedAt == null;
+    }
+
+    public boolean canResumeCancellation(String holdId, Instant at) {
+        return PaymentValues.uuid(holdId) && PaymentValues.microsecond(at) && isCurrentCancellationHold(holdId)
+                && firstCancellationPreparedAt != null && cancellationRequestBody != null && automaticCancellationStoppedAt == null
+                && cancellationBalanceChangedAt == null && receiptCancellationId == null && !at.isBefore(firstCancellationPreparedAt)
+                && at.isBefore(cancellationResumeDeadline());
+    }
+
+    public Instant cancellationResumeDeadline() {
+        return firstCancellationPreparedAt == null ? null : RefundCancellationWindow.deadline(firstCancellationPreparedAt);
     }
 
     @Column(length = 100) private String receiptCancellationId;

@@ -18,6 +18,8 @@ import com.stove.order.core.domain.RefundRetryRequest;
 import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundRetry;
+import com.stove.order.core.service.RequestRefundReconsideration;
+import com.stove.order.core.service.ReadRefundReviewRounds;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +48,8 @@ class RefundRetryAccessTest {
     @MockitoBean RequestRefund request;
     @MockitoBean ReadRefund read;
     @MockitoBean RequestRefundRetry retry;
+    @MockitoBean RequestRefundReconsideration reconsideration;
+    @MockitoBean ReadRefundReviewRounds reviews;
 
     @BeforeEach void principal() {
         when(decoder.decode(anyString())).thenAnswer(call -> {

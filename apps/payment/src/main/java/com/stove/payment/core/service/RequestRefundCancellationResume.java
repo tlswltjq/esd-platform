@@ -13,10 +13,12 @@ import com.stove.payment.core.domain.RefundExecutionRepository;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Trusted operator use case; HTTP authentication/role enforcement belongs at its future API boundary. */
+/** The administrator boundary authenticates the operator; this transaction stores the durable instruction. */
 @RequiredArgsConstructor
 @Transactional(isolation = Isolation.READ_COMMITTED)
 public class RequestRefundCancellationResume {
@@ -27,9 +29,10 @@ public class RequestRefundCancellationResume {
 
     public RefundCancellationResumeReceipt execute(RefundCancellationResumeRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        RefundExecution received = executions.findByAttemptId(request.attemptId())
+        String paymentId = executions.findPaymentIdByAttemptId(request.attemptId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        Payment payment = payments.lockByPaymentId(received.getPaymentId()).orElseThrow();
+        // Read only the scalar before the payment lock, then load the latest execution under its lock.
+        Payment payment = payments.lockByPaymentId(paymentId).orElseThrow();
         RefundExecution execution = executions.lockByAttemptId(request.attemptId()).orElseThrow();
         payment.requireRefundRequest(execution.request());
         if (!"PORTONE_TEST".equals(payment.getProvider())) throw new BusinessException(ErrorCode.CONFLICT);
@@ -42,7 +45,25 @@ public class RequestRefundCancellationResume {
         Instant at = clock.instant();
         execution.resumeCancellation(hold.getHoldId(), at);
         hold.recordResume(request, at);
-        executions.flush();
+        try {
+            executions.flush();
+        } catch (DataIntegrityViolationException collision) {
+            if (isResumeRequestCollision(collision))
+                throw new BusinessException(ErrorCode.CONFLICT, "다른 중단에서 이미 접수한 재개 명령입니다.");
+            throw collision;
+        }
         return hold.receipt();
+    }
+
+    private boolean isResumeRequestCollision(DataIntegrityViolationException collision) {
+        Throwable cause = collision;
+        while (cause != null) {
+            if (cause instanceof ConstraintViolationException constraint) {
+                String name = constraint.getConstraintName();
+                if (name != null && (name.equals("uq_cancel_resume_request") || name.endsWith(".uq_cancel_resume_request"))) return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }

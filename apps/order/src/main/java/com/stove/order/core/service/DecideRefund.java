@@ -14,9 +14,10 @@ import com.stove.order.core.domain.RefundReviewDecision;
 import com.stove.order.core.domain.RefundReviewRequest;
 import com.stove.order.core.domain.RefundReviewReceipt;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundReviewRound;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Isolation;
@@ -29,6 +30,7 @@ public class DecideRefund {
     private final OrderLicenseGrantRepository grants;
     private final OutboxRecorder outbox;
     private final Clock clock;
+    private final RefundReviewRoundRepository rounds;
 
     public RefundReviewReceipt execute(RefundReviewRequest input) {
         if (input == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
@@ -36,12 +38,15 @@ public class DecideRefund {
         String orderNo = refunds.findOrderNoByRefundId(input.refundId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         Order order = orders.lockByOrderNo(orderNo).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         Refund refund = refunds.findByRefundId(input.refundId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        Optional<String> used = refunds.findRefundIdByReviewRequestId(input.requestId());
-        if (used.isPresent() && !used.get().equals(input.refundId())) throw new BusinessException(ErrorCode.CONFLICT, "다른 환불에서 사용한 판정 명령입니다.");
+        RefundReviewRound used = rounds.findByDecisionRequestId(input.requestId()).orElse(null);
+        if (used != null && !used.getReviewId().equals(input.refundId())) throw new BusinessException(ErrorCode.CONFLICT, "다른 심사에서 사용한 판정 명령입니다.");
         if (order.getStatus() != OrderStatus.PAID) throw new BusinessException(ErrorCode.CONFLICT);
+        RefundReviewRound first = rounds.findByReviewId(input.refundId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT));
         Instant at = clock.instant();
         try {
-            if (refund.decide(input, at) && input.decision() == RefundReviewDecision.APPROVED) {
+            boolean changed = refund.decide(input, at);
+            if (first.decide(input, at) != changed) throw new BusinessException(ErrorCode.CONFLICT, "최초 판정과 심사 이력이 다릅니다.");
+            if (changed && input.decision() == RefundReviewDecision.APPROVED) {
                 grants.findByOrderNo(orderNo).ifPresent(grant -> {
                     order.verifyLicenseGrant(grant.confirmation()); refund.confirmLicenseGrant(grant.confirmation());
                 });

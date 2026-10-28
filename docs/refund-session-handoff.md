@@ -1,8 +1,8 @@
 # 전액 환불 현재 인계
 
-2026-10-28 기준. 다음 세션은 [공통 지시·다음 작업](refund-next-session.md)부터 읽는다. 상세 정책·단계별 검증은 [PG 테스트 연동·환불 기록](pg-test-integration-plan.md), 이전 대화의 진행·실패·대기 기록은 [과거 세션 이력](history/refund-session-through-2026-10-28.md)에 보존했다. 이 문서는 최신 상태의 요약이며 실제 코드·Git·프로세스 상태를 함께 확인한다.
+2026-10-29 기준. 다음 세션은 [공통 지시·다음 작업](refund-next-session.md)부터 읽는다. 상세 정책·단계별 검증은 [PG 테스트 연동·환불 기록](pg-test-integration-plan.md), 이전 대화의 진행·실패·대기 기록은 [과거 세션 이력](history/refund-session-through-2026-10-28.md)에 보존했다. 이 문서는 최신 상태의 요약이며 실제 코드·Git·프로세스 상태를 함께 확인한다.
 
-기존 누적 환불 구현은 `67f250d`, 문서 정리는 `6b010d5`에 커밋했다. 이후 이번 세션에서 고객 명시적 재시도 HTTP를 추가했다. 새 작업의 커밋·원격 동기화 여부는 `git log`·`git status`로 확인한다.
+기존 누적 환불 구현은 `67f250d`, 문서 정리는 `6b010d5`, 고객 명시적 재시도 HTTP는 `fe3bd49`에 커밋했다. 이후 Payment 운영 중단 조회·재개 관리자 API, 반려 뒤 고객 재심사와 잘못된 승인 중단·새 심사 복귀를 추가했다. 새 작업의 커밋·원격 동기화 여부는 `git log`·`git status`로 확인한다.
 
 ## 현재 완료한 범위
 
@@ -11,7 +11,10 @@
 - 승인 또는 자동 허용 → 실제 지급 확인 → 정지 요청 → 실제 이용권 정지 확인 → Payment 환불 실행 요청. 관리자 API가 PG를 직접 호출하지 않는다.
 - Payment의 PortOne 취소/조회, 같은 attemptId·고정 본문·최초 준비 3시간 창, 내구 조회/재송신 일정, 오류별 자동 복구/운영 중단 정책.
 - 전액 취소 증거에 따른 환불 완료와 실행 성공 귀속 구분. 확인된 실패 → 복구 요청 → 실제 이용권 복구 → FAILED.
-- 확정 실패·실제 복구 후 고객 명시적 재시도 HTTP를 구현·검증했다. 고객 조회의 retryableAttemptId를 POST `/api/v1/orders/{orderNo}/refund/retries`의 previousAttemptId로 전달한다. 같은 ID의 재전송은 최초 접수 영수증을 반환한다. Payment 운영 중단 재개 HTTP는 아직 없다.
+- 확정 실패·실제 복구 후 고객 명시적 재시도 HTTP를 구현·검증했다. 고객 조회의 retryableAttemptId를 POST `/api/v1/orders/{orderNo}/refund/retries`의 previousAttemptId로 전달한다. 같은 ID의 재전송은 최초 접수 영수증을 반환한다.
+- Payment 운영 중단의 ADMIN 목록·상세·재개 API를 구현·검증했다. `/api/v1/admin/refund-cancellation-holds`에서 사유·기한·재개 가능 여부와 이전 지시를 조회하고 같은 중단/시도의 송신을 재예약한다. ADMIN sub·사유와 최초 영수증을 저장하며 원래 키·본문·3시간 창을 유지한다. 실제 계정·운영 화면·실제 PG 장애 뒤 재개 검증은 후속이다.
+- 반려 뒤 고객 직접 재심사를 구현·검증했다. 횟수 제한 없이 마지막 반려 저장 후 7일 경계까지 필수 사유로 접수하고, 별도 회차의 관리자 판정·고객/관리자 이력을 제공한다. 과거 접수·판정 영수증은 이후 회차를 바꾸지 않고 최초 환불 자격·구매 사실·과거 이력을 보존한다. 승인 뒤 기존 지급→실제 정지→PG 실행·확정 실패/복구/고객 재시도 계약을 유지한다.
+- 잘못된 승인 중단과 새 심사 복귀를 구현·검증했다. Order의 Payment 실행 요청 저장 전까지만 ADMIN 중단을 받고 과거 승인/중단을 보존한다. 정지 요청 전에는 바로, 정지 요청 뒤에는 실제 정지·해당 정지의 복구 완료 뒤 새 관리자 정정 회차로 복귀한다. 오래된 명령/이벤트는 이후 회차나 새 정지를 바꾸지 않는다.
 - 실제 새 9,000원 TEST 주문에서 자동 환불 전체 흐름 1건을 완료했다. 실제 관리자 수동 심사 PG 환불이나 Settlement 환불 조정의 완료는 아니다.
 
 ## 유지할 계약
@@ -29,21 +32,32 @@
 | 인증·조회 오류 | 401·GET 403/404·POST 404는 기존 조건 회복 후 같은 요청 재개. 다른 구매·부분 취소·완료·기한·기존 운영 중단을 우회하지 않음 |
 | 취소 요청 거절 | POST 403 및 정확한 400 INVALID_REQUEST는 자동 POST 중단·GET 유지. 운영자의 명시적 내부 재개도 원래 키/본문/3시간을 유지 |
 | 성공·실패 근거 | 직접 SUCCEEDED 또는 검증된 전액 취소 조회를 대조. FAILED는 자기 취소 실패 영수증과 원결제 전액 미취소 조회 등 추가 증거 필요 |
-| 동시 판정 | Order 잠금 뒤 최신 Refund를 읽음. 판정·감사 기록·필요 Outbox 원자 저장. 판정 번복/반려 재심사는 별도 미결 |
+| 동시 판정 | Order 잠금 뒤 최신 Refund·회차를 읽음. 각 회차의 최초 판정·감사·필요 Outbox를 원자 저장. 반려 뒤에는 고객 재심사 회차를 사용하고, 잘못된 승인은 선택한 실행 요청 저장 전 중단·필요 복구 뒤 관리자 정정 회차를 사용. 과거 판정을 덮어쓰지 않음 |
 
 ## 검증과 근거
 
 | 검증 | 결과·출처 |
 |---|---|
-| 고객 명시적 재시도 HTTP 포함 최신 Order | 단위 308·통합 124, 실패/오류/건너뜀 0. `runs/refund-retry-http-oci-fw4f42_q/collected/results/full` |
-| 재시도 경로 포함 최신 Gateway | 단위 100·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력. Bearer·본문·경로·응답·Location 전달과 위조 회원 헤더 제거 |
+| 승인 중단 포함 최신 Order | 단위 323·통합 158, 실패/오류/건너뜀 0. `runs/refund-approval-stop-oci-zbcavxkv/collected/results/full` |
+| 승인 중단 포함 최신 License | 단위 102·통합 59, 실패/오류/건너뜀 0. 같은 full 입력 |
+| 승인 중단 포함 최신 Gateway | 단위 111·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력 |
+| 승인 중단 포함 공통 Kafka | 단위 213, 실패/오류/건너뜀 0. 새 정정 요청/복구 이벤트의 전체 계약 포함 |
+| 승인 중단 OCI 보존 | 공유 컨테이너 23개·볼륨 57개와 상태 보존, 추가/잔여 자원 없음. `runs/refund-approval-stop-oci-zbcavxkv/validation-summary.json` |
+| 이전 재심사 Order | 단위 315·통합 142, 실패/오류/건너뜀 0. `runs/refund-reconsideration-oci-2fz1w7px/collected/results/corrected` |
+| 이전 재심사 Gateway | 단위 110·Redis 통합 1, 실패/오류/건너뜀 0. 같은 corrected 입력. 기존 Payment 관리자 경로도 회귀 검증 |
+| 재심사 OCI 보존 | 기존 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·상태 보존. 추가/잔여 컨테이너·볼륨 없음. `runs/refund-reconsideration-oci-2fz1w7px/validation-summary.json` |
+| 운영 중단 관리자 API 포함 최신 Payment | 단위 290·통합 177, 실패/오류/건너뜀 0. `runs/refund-resume-admin-oci-o2_0_er9/collected/results/full` |
+| 이전 운영 중단 관리자 Gateway | 단위 106·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력. ADMIN 권한·경로/쿼리/본문/Bearer·Location 전달·위조 회원 헤더 제거 |
+| 운영 중단 관리자 OCI 보존 | 기존 컨테이너 23개·볼륨 57개 및 상태 보존, 추가/잔여 자원 없음. `runs/refund-resume-admin-oci-o2_0_er9/validation-summary.json` |
+| 이전 고객 명시적 재시도 Order | 단위 308·통합 124, 실패/오류/건너뜀 0. `runs/refund-retry-http-oci-fw4f42_q/collected/results/full` |
+| 이전 재시도 경로 Gateway | 단위 100·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력. Bearer·본문·경로·응답·Location 전달과 위조 회원 헤더 제거 |
 | 고객 재시도 OCI 보존 | 기존 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·상태 보존, 추가/잔여 자원 없음. `runs/refund-retry-http-oci-fw4f42_q/validation-summary.json` |
 | Order 관리자 심사 포함 | 단위 290·통합 114, 실패/오류/건너뜀 0. `runs/refund-review-oci-d1jx_po3/collected/results/corrected` |
-| Payment 마지막 코드 | 단위 276·통합 166, 실패/오류/건너뜀 0. `runs/refund-invalid400-oci-3bpzduhu/collected/results/corrected`와 현재 Payment 소스 동일 |
-| 공통 Kafka 계약 | 단위 205, 실패/오류/건너뜀 0. `runs/refund-retry-oci-q_c7wgvb/collected/results/full`과 현재 소스 동일 |
+| 이전 Payment INVALID_REQUEST 중단 | 단위 276·통합 166, 실패/오류/건너뜀 0. `runs/refund-invalid400-oci-3bpzduhu/collected/results/corrected`. 당시 코드·이력은 새 관리자 API 검증과 구분 |
+| 이전 공통 Kafka 계약 | 단위 205, 실패/오류/건너뜀 0. `runs/refund-retry-oci-q_c7wgvb/collected/results/full`. 현재 새 승인 정정 이벤트 포함 결과는 위 최신 213건을 따름 |
 | Gateway 관리자 경로 | 단위 97·Redis 통합 1, 실패/오류/건너뜀 0. `runs/refund-review-gateway-oci-7l32q55b/collected/results/full`. ADMIN 전달·다른 역할/경로 차단·Bearer 전달/위조 회원 헤더 제거 |
 | TDD | 관리자 판정 도메인 Red 6건·Gateway Red 4건. `runs/refund-review-tdd-brt1d7x3` |
-| 명세 | 기존 주문/고객 API 3개 경로·5개 연산 보존. 고객 REJECTED/rejectionReason 및 관리자 3개 연산 추가 |
+| 이전 관리자 API 명세 | 기존 주문/고객 API 3개 경로·5개 연산 보존. 고객 REJECTED/rejectionReason 및 관리자 3개 연산 추가 |
 | OCI 보존 | 기존 컨테이너 23개·볼륨 57개, ID·시작/재시작·상태 보존. 실제 비밀값 소스 묶음 포함 0 |
 | 실제 자동 환불 | `runs/refund-live-obe63z8s/e2e-result.json`의 complete=true. 이전 고객 URL 자체의 만료 후 GET은 미확인이고 별도 S3 만료 제어 검사와 구분 |
 
@@ -51,9 +65,15 @@
 
 고객 재시도 HTTP의 Red 8건, 초기 Gateway CSRF 기대값·OCI 중복 구매 픽스처 오류와 최종 전체 재실행은 [고객 재시도 HTTP 기록](pg-test-integration-plan.md#2026-10-28-고객-명시적-재시도-http-첫-번째-안)을 따른다. 기존 6개 경로·8개 연산을 유지하고 1개 연산과 nullable retryableAttemptId를 추가했다. 새 HTTP 통합 10건의 Payment 실패·License 복구 완료는 계약 픽스처이며 실제 PG·License 전체 연계 완료를 뜻하지 않는다.
 
+운영 중단 관리자 API는 Gateway 경로 Red 3건과 명령 유일 키 경합 Red 1건 뒤 최종 전체 574건을 통과했다. spy 추상 메서드 호출과 잔액 중단 필드 기대값의 픽스처 오류는 업무 Red에서 제외했다. 기존 Payment 2개 조회 연산은 그대로 두고 관리자 3개 연산을 추가했다. [관리자 API 상세 기록](pg-test-integration-plan.md#2026-10-28-운영-중단-조회재개-관리자-api-a안)을 따른다.
+
+재심사는 HTTP Red 2건·Gateway Red 1건 뒤 구현했다. 본문 전체 대조의 JSON 숫자 노드 타입 오류 1건을 정정한 최종 corrected 전체 568건이 통과했다. V21의 최초 이력 복사·과거 판정 미조작, 18회차·기한 경계/잠금 지연·기한 뒤 정상 판정·명령 경합·실제 flush 롤백·승인/정지/확정 실패/복구/기존 고객 재시도를 검증했다. Payment 소스 193개는 앞선 검증과 같고 재실행하지 않았다. [재심사 상세](pg-test-integration-plan.md#2026-10-29-반려-뒤-고객-재심사)를 따른다.
+
+승인 중단은 서비스 Red 3건 뒤 구현했으며 최종 OCI 전체 967건을 통과했다. 테스트 설정/열 이름/CHECK 예외 분류 보정과 각 모듈 실제 DB·Kafka 검증의 범위는 [승인 중단 검증 기록](pg-test-integration-plan.md#2026-10-29-잘못된-승인-중단과-새-심사-복귀)을 따른다. 기존 최초 판정과 고객 반려 뒤 재심사, 실제 정지 선행·확정 실패 복구·고객 명시적 재시도 계약을 유지했다.
+
 ## 유지 중인 실제 검증 환경
 
-- 고객 재시도 HTTP 작업에서는 기존 실제 검증 런타임·비밀 설정·거래를 갱신하지 않았다. 아래 기존 프로세스에는 새 API가 적용되지 않았다.
+- 고객 재시도·운영 중단 관리자 API·재심사·승인 중단 작업에서는 기존 실제 검증 런타임·비밀 설정·거래를 갱신하지 않았다. 아래 기존 Order V20 런타임에는 재심사 V21·승인 중단 V22를 적용하지 않았고 실제 License DB에도 승인 정정 V9를 적용하지 않았다.
 - 기존 실행: `runs/portone-order-live-j2flh033`, 실제 새 환불: `runs/refund-live-obe63z8s`. `runs/*-current` 파일에서 경로를 확인한다.
 - 로컬 Auth 18891, Catalog 18881, Order 18882, Payment 18783, License 18884, Download 18888. OCI의 전용 MySQL 13384·Kafka 19492·MinIO 19008을 SSH로 연결한다. PID는 해당 run의 파일을 다시 확인한다.
 - Order V20 runtime PID **33244**, JAR SHA-256 `317c5978346e093e7949e737569ff56fdb08d007f10633f7ac95ebff59b2c2fa`. Payment V25 runtime PID **22084**, SHA-256 `718a4baa937f93e31ae7e651a5032a01e48ba9ebb74a91ccc64edad6a9cf7475`.
@@ -70,4 +90,4 @@
 
 휴대폰 승인은 끝났고 토스페이 TEST 마지막 “이동하기”까지 확인했다. 결제/환불 스크립트를 재실행하지 않는다. 초기 DB 보고서 오류는 읽기 전용 검증으로 복구했으며 원자료에 남겼다. 브라우저 진단 포트 9229는 닫았고 결제 headless 브라우저는 종료했다.
 
-다음 작업과 미결 정책은 [공통 지시·다음 작업](refund-next-session.md#추천하는-다음-작업-payment-운영-중단-재개-http-계약)에 있다. 사용자에게 제시하고 선택을 받은 뒤 진행한다.
+다음 작업과 미결 정책은 [공통 지시·다음 작업](refund-next-session.md#추천하는-다음-논의-장기-미확정-고객-안내와-운영-확인)에 있다. 고객 재심사의 다섯 선택과 잘못된 승인 중단 경계 A안·중단/복구 뒤 새 심사 복귀 B안은 구현·검증했으므로 다시 묻지 않는다. 다음은 원래 PG 3시간 창을 넘긴 장기 미확정의 고객 안내와 운영 확인 절차를 논의한다. 실제 ADMIN/운영 화면과 추가 PG 장애 전체 검증, Settlement 환불 조정 등은 여전히 별도 범위다.

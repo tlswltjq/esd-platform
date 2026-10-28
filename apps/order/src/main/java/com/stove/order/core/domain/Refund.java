@@ -51,6 +51,46 @@ public class Refund {
     @Column(length = 100) private String reviewOperatorSubject;
     @Column(length = 500) private String reviewReason;
     private Instant reviewedAt;
+    @Column(unique = true, length = 36) private String currentReviewId;
+
+    public void stopApproval(RefundReviewRound round, RefundApprovalStopRequest input, Instant at) {
+        if (automaticRefundEligible || round==null || !refundId.equals(round.getRefundId())
+                || !round.getReviewId().equals(currentReviewId) || !refundId.equals(input.refundId())
+                || currentAttemptId!=null || paymentConfirmationEventId!=null
+                || (status!=RefundStatus.PENDING_LICENSE_GRANT && status!=RefundStatus.PENDING_LICENSE_SUSPENSION))
+            throw new BusinessException(ErrorCode.CONFLICT,"Payment 실행 요청 저장 전의 현재 승인만 중단할 수 있습니다.");
+        round.stopApproval(input,suspensionRequestEventId,at); status=RefundStatus.PENDING_APPROVAL_STOP;
+    }
+    public void reopenStoppedApproval(RefundReviewRound previous, RefundReviewRound next, Instant at) {
+        if (status!=RefundStatus.PENDING_APPROVAL_STOP || currentAttemptId!=null || paymentConfirmationEventId!=null
+                || previous==null || next==null || !currentReviewId.equals(previous.getReviewId())
+                || !refundId.equals(next.getRefundId()) || !currentReviewId.equals(next.getPreviousReviewId())
+                || previous.getApprovalStop()==null || !previous.getApprovalStop().getRequestId().equals(next.getCorrectionRequestId()))
+            throw new BusinessException(ErrorCode.CONFLICT);
+        previous.getApprovalStop().reopen(next.getReviewId(),at);
+        currentReviewId=next.getReviewId(); suspensionRequestEventId=null; status=RefundStatus.PENDING_REVIEW;
+    }
+
+    public void openReconsideration(RefundReviewRound previous, RefundReviewRound next) {
+        if (automaticRefundEligible || status != RefundStatus.REJECTED || previous == null || next == null
+                || !refundId.equals(previous.getRefundId()) || !refundId.equals(next.getRefundId())
+                || !previous.getReviewId().equals(currentReviewId) || !previous.getReviewId().equals(next.getPreviousReviewId())
+                || previous.getDecision() != RefundReviewDecision.REJECTED || suspensionRequestEventId != null
+                || currentAttemptId != null || paymentConfirmationEventId != null)
+            throw new BusinessException(ErrorCode.CONFLICT, "현재 반려 뒤의 재심사만 접수할 수 있습니다.");
+        currentReviewId = next.getReviewId(); status = RefundStatus.PENDING_REVIEW;
+    }
+
+    public boolean decideReconsideration(RefundReviewRound round, RefundReviewRequest input, Instant at) {
+        if (round == null || round.getReviewNo() <= 1 || !refundId.equals(round.getRefundId()))
+            throw new BusinessException(ErrorCode.CONFLICT);
+        if (round.getDecision() != null) return round.decide(input, at);
+        if (automaticRefundEligible || !round.getReviewId().equals(currentReviewId) || status != RefundStatus.PENDING_REVIEW)
+            throw new BusinessException(ErrorCode.CONFLICT, "지정한 재심사 판정을 기다리는 환불이 아닙니다.");
+        boolean changed = round.decide(input, at);
+        if (changed) status = input.decision() == RefundReviewDecision.APPROVED ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.REJECTED;
+        return changed;
+    }
 
     public boolean decide(RefundReviewRequest request, Instant at) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
@@ -197,6 +237,7 @@ public class Refund {
                 order.getResultOccurredAt(), receivedAt);
         refund.status = refund.automaticRefundEligible
                 ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.PENDING_REVIEW;
+        refund.currentReviewId = refund.automaticRefundEligible ? null : refund.refundId;
         return refund;
     }
 

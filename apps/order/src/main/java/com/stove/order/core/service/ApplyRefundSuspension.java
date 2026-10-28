@@ -34,6 +34,7 @@ public class ApplyRefundSuspension {
     private final OutboxRecorder outbox;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final ApplyApprovalCorrection correction;
 
     public void execute(LicenseSuspensionConfirmation input) {
         if (input == null) throw new RefundCompletionRejected("정지 완료 근거가 필요합니다.");
@@ -49,6 +50,7 @@ public class ApplyRefundSuspension {
             throw new RefundCompletionRejected("지급 확인이 원래 결제 주문과 다릅니다.", inconsistent);
         }
         grant.verifySuspension(input);
+        if (correction.handleStoppedSuspension(order,refund,input)) return;
         RefundAttempt known = attempts.findBySuspensionEventId(input.eventId()).orElse(null);
         if (known != null) {
             if (!known.getRefundId().equals(refund.getRefundId())) throw new RefundCompletionRejected("다른 환불의 정지 완료입니다.");

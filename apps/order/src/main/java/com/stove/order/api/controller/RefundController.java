@@ -5,9 +5,14 @@ import com.stove.common.web.response.ApiResponse;
 import com.stove.order.api.controller.dto.RefundResponse;
 import com.stove.order.api.controller.dto.RefundRetryRequestBody;
 import com.stove.order.api.controller.dto.RefundRetryResponse;
+import com.stove.order.api.controller.dto.RefundReconsiderationBody;
+import com.stove.order.api.controller.dto.RefundReconsiderationResponse;
+import com.stove.order.api.controller.dto.CustomerRefundReviewPage;
 import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundRetry;
+import com.stove.order.core.service.RequestRefundReconsideration;
+import com.stove.order.core.service.ReadRefundReviewRounds;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,6 +36,26 @@ public class RefundController {
     private final RequestRefund request;
     private final ReadRefund read;
     private final RequestRefundRetry retry;
+    private final RequestRefundReconsideration reconsideration;
+    private final ReadRefundReviewRounds reviews;
+
+    @PostMapping("/reconsiderations")
+    @Operation(operationId = "requestRefundReconsideration", summary = "내 반려 환불 재심사 접수",
+            description = "환불 조회의 currentReview.reviewId를 previousReviewId로 지정하고 새 requestId와 필수 사유를 보냅니다. 마지막 반려 저장 후 정확히 7일까지 접수하며 횟수 제한은 없습니다. 같은 명령·회차·사유의 재전송은 최초 영수증을 반환합니다. 기한 내 접수 뒤 처리 지연은 접수 효력에 영향을 주지 않습니다. 202는 심사 접수이며 자동 환불이나 이용권 정지가 아닙니다. 원래 환불 자격과 판정 이력은 보존됩니다.")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "재심사 최초 접수 또는 동일 접수 영수증")})
+    public ResponseEntity<ApiResponse<RefundReconsiderationResponse>> reconsider(@CurrentSubject String buyer, @PathVariable String orderNo,
+            @RequestBody RefundReconsiderationBody body) {
+        RefundReconsiderationResponse receipt = RefundReconsiderationResponse.from(reconsideration.execute(body.toInput(orderNo, buyer)));
+        return ResponseEntity.accepted().cacheControl(CacheControl.noStore())
+                .location(URI.create("/api/v1/orders/" + orderNo + "/refund")).body(ApiResponse.ok(receipt));
+    }
+
+    @GetMapping("/reviews")
+    @Operation(operationId = "readCustomerRefundReviews", summary = "내 환불 심사 이력", description = "최초 심사와 모든 재심사 회차를 회차 순으로 조회합니다. 관리자 명령 ID·판정자·승인 사유는 공개하지 않습니다. page/size 기본 0/20, 최대 100입니다.")
+    public ResponseEntity<ApiResponse<CustomerRefundReviewPage>> reviews(@CurrentSubject String buyer, @PathVariable String orderNo,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(CustomerRefundReviewPage.from(reviews.customer(orderNo, buyer, page, size))));
+    }
 
     @PostMapping("/retries")
     @Operation(operationId = "requestRefundRetry", summary = "내 주문 환불 명시적 재시도",

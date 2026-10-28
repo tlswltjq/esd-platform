@@ -69,7 +69,7 @@ class LicenseRestorationIntegrationTest extends LicenseIntegrationTestBase {
     @BeforeEach void initialize() { clear(); when(clock.instant()).thenReturn(NOW); }
     @AfterEach void clear() {
         listeners.stop(); reset(outbox);
-        jdbc.update("DELETE FROM license_restoration"); jdbc.update("DELETE FROM license_suspension"); jdbc.update("DELETE FROM license_purchase");
+        jdbc.update("DELETE FROM license_approval_correction"); jdbc.update("DELETE FROM license_restoration"); jdbc.update("DELETE FROM license_suspension"); jdbc.update("DELETE FROM license_purchase");
         jdbc.update("DELETE FROM product_license"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
     @Test void actualRestorationPreservesPurchaseAndOldSuspensionOrRestorationReplaysCannotUndoANewerSuspension() {

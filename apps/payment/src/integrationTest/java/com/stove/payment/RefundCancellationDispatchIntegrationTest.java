@@ -85,6 +85,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.dao.DataAccessException;
@@ -103,6 +104,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     @Autowired PlatformTransactionManager transactions;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
+    @Autowired ObjectMapper mapper;
+    @LocalServerPort int port;
     @MockitoBean Clock clock;
     @MockitoSpyBean RefundExecutionRepository executions;
     @MockitoSpyBean OutboxRecorder outbox;
@@ -738,6 +741,32 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(saved.getResumeRequestId()).isEqualTo(request.requestId()); assertThat(saved.getResumedAt()).isEqualTo(BASE.plusSeconds(10));
         assertThat(saved.getOperatorSubject()).isEqualTo(request.operatorSubject()); assertThat(count("outbox_event")).isEqualTo(1);
         assertThat(resume.execute(request)).isEqualTo(first);
+    }
+
+    @Test void administratorHttpResumeReusesTheFrozenPgRequestAndAReplayCannotSendAgain() {
+        received(); mode = Mode.FORBIDDEN; service(gateway()).executeFirst(current.getAttemptId());
+        RefundCancellationHold hold = currentHold(); String originalBody = bodies.getFirst(); String originalKey = keys.getFirst();
+        String path = "/api/v1/admin/refund-cancellation-holds/" + hold.getHoldId();
+        Map<String, String> command = Map.of("requestId", id(), "attemptId", current.getAttemptId(), "note", "PG 설정 확인");
+        when(clock.instant()).thenReturn(BASE.plusSeconds(10));
+        JsonNode first = resumeHttp(path, command);
+        assertThat(first.path("data").path("holdId").asText()).isEqualTo(hold.getHoldId());
+        assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
+        mode = Mode.RETRY_SUCCESS; retryWorker().execute();
+        assertThat(bodies).containsExactly(originalBody, originalBody); assertThat(keys).containsExactly(originalKey, originalKey);
+        assertThat(stored().getRefundConfirmedAt()).isNotNull();
+        assertThat(resumeHttp(path, command)).isEqualTo(first); retryWorker().execute(); assertThat(bodies).hasSize(2);
+        assertThat(holds.findByHoldId(hold.getHoldId()).orElseThrow().getOperatorSubject()).isEqualTo("usr_http_admin");
+        assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    private JsonNode resumeHttp(String path, Map<String, String> command) {
+        return RestClient.create("http://127.0.0.1:" + port).post().uri(path + "/resume").header("Authorization", "Bearer " + token("usr_http_admin", "ADMIN"))
+                .body(command).exchange((request, response) -> {
+                    assertThat(response.getStatusCode().value()).isEqualTo(200);
+                    assertThat(response.getHeaders().getCacheControl()).isEqualTo("no-store");
+                    return mapper.readTree(response.getBody());
+                });
     }
 
     @Test void anOldResumeCommandCannotReleaseANewForbiddenPostHold() {

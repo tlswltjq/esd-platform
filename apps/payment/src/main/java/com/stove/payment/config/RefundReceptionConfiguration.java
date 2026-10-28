@@ -8,6 +8,7 @@ import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import com.stove.payment.core.service.RequestRefundCancellationResume;
+import com.stove.payment.core.service.ReadRefundCancellationHolds;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -18,6 +19,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
+    @Bean ReadRefundCancellationHolds readRefundCancellationHolds(PaymentRepository payments, RefundExecutionRepository executions,
+            RefundCancellationHoldRepository holds, Clock refundReceptionClock) {
+        return new ReadRefundCancellationHolds(payments, executions, holds, refundReceptionClock);
+    }
     @Bean Clock refundReceptionClock() {
         return Clock.tick(Clock.systemUTC(), Duration.ofNanos(1_000));
     }

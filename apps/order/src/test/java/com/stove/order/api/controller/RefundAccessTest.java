@@ -17,6 +17,8 @@ import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundRetry;
+import com.stove.order.core.service.RequestRefundReconsideration;
+import com.stove.order.core.service.ReadRefundReviewRounds;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +44,8 @@ class RefundAccessTest {
     @MockitoBean RequestRefund request;
     @MockitoBean ReadRefund read;
     @MockitoBean RequestRefundRetry retry;
+    @MockitoBean RequestRefundReconsideration reconsideration;
+    @MockitoBean ReadRefundReviewRounds reviews;
 
     @BeforeEach void principal() {
         when(decoder.decode(anyString())).thenAnswer(call -> {
@@ -88,6 +92,6 @@ class RefundAccessTest {
         return new RefundView("refund-fixture", ORDER, 9000, "KRW", state, Instant.parse("2026-10-28T02:00:00Z"),
                 state == RefundStatus.COMPLETED ? Instant.parse("2026-10-28T02:01:00Z") : null,
                 state == RefundStatus.REJECTED ? "환불 심사 반려 사유" : null,
-                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null);
+                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null, null, null, false);
     }
 }

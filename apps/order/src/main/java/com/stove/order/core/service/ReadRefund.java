@@ -8,6 +8,9 @@ import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundReviewRound;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
+import java.time.Clock;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,15 +19,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReadRefund {
     private final OrderRepository orders;
     private final RefundRepository refunds;
+    private final RefundReviewRoundRepository rounds;
+    private final Clock clock;
 
     public RefundView execute(String orderNo, String buyer) {
         Order order = orders.findByOrderNoAndBuyerSubject(orderNo, buyer)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         Refund refund = refunds.findByOrderNo(orderNo)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        RefundReviewRound current = refund.getCurrentReviewId() == null ? null : rounds.findByReviewId(refund.getCurrentReviewId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "현재 심사 이력이 없습니다."));
         return new RefundView(refund.getRefundId(), orderNo, order.getAmount(), order.getCurrency(),
                 refund.getStatus(), refund.getReceivedAt(), refund.getCompletedAt(),
-                refund.getStatus() == RefundStatus.REJECTED ? refund.getReviewReason() : null,
-                refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null);
+                refund.getStatus() == RefundStatus.REJECTED ? current == null ? refund.getReviewReason() : current.getDecisionReason() : null,
+                refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null,
+                current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
+                refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()));
     }
 }

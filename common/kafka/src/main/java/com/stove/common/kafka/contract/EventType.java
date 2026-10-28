@@ -80,6 +80,8 @@ public final class EventType {
 
     public static final String REFUND_EXECUTION_FAILED = "RefundExecutionFailed";
     public static final String LICENSE_RESTORATION_REQUESTED = "LicenseRestorationRequested";
+    public static final String LICENSE_APPROVAL_CORRECTION_REQUESTED = "LicenseApprovalCorrectionRequested";
+    public static final String LICENSE_APPROVAL_CORRECTED = "LicenseApprovalCorrected";
     public static final String LICENSE_RESTORED = "LicenseRestored";
 
     private EventType() {

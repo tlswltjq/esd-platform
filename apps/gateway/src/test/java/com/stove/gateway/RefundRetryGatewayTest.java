@@ -80,4 +80,20 @@ class RefundRetryGatewayTest {
                     .bodyValue(BODY).exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isZero();
     }
+
+    @Test void memberReconsiderationPreservesTheCompleteCommandAndPollingLocation() {
+        String body = "{\"requestId\":\"11111111-1111-1111-1111-111111111111\",\"previousReviewId\":\"22222222-2222-2222-2222-222222222222\",\"reason\":\"재심사 요청 사유\"}";
+        http.post().uri(ROOT + "/reconsiderations").header("Authorization", "Bearer MEMBER").header("X-Member-Id", "forged")
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange().expectStatus().isAccepted().expectHeader().valueEquals("Location", ROOT);
+        assertThat(REQUEST_PATH.get()).isEqualTo(ROOT + "/reconsiderations"); assertThat(REQUEST_BODY.get()).isEqualTo(body);
+        assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER");
+    }
+
+    @Test void nonMembersCannotSubmitReconsiderationsOrReadCustomerReviewHistory() {
+        for (String role : new String[]{"ADMIN", "CREATOR", "REVIEWER"}) {
+            http.post().uri(ROOT + "/reconsiderations").header("Authorization", "Bearer " + role).bodyValue("{}").exchange().expectStatus().isForbidden();
+            http.get().uri(ROOT + "/reviews").header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
+        }
+        assertThat(CALLS.get()).isZero();
+    }
 }

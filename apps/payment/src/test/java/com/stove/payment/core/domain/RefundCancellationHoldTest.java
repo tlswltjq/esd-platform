@@ -56,6 +56,20 @@ class RefundCancellationHoldTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test void readEligibilityUsesTheSameOriginalWindowWithoutMutatingTheHold() {
+        Fixture fixture = fixture(); RefundExecution execution = fixture.execution();
+        execution.holdCancellation(fixture.hold().getHoldId(), fixture.claim());
+        assertThat(execution.cancellationResumeDeadline()).isEqualTo(BASE.plusSeconds(10800));
+        assertThat(execution.isCurrentCancellationHold(fixture.hold().getHoldId())).isTrue();
+        assertThat(execution.canResumeCancellation(fixture.hold().getHoldId(), BASE.plusSeconds(10))).isTrue();
+        assertThat(execution.canResumeCancellation(fixture.hold().getHoldId(), BASE.plusSeconds(10800))).isFalse();
+        assertThat(execution.canResumeCancellation(id(), BASE.plusSeconds(10))).isFalse();
+        assertThat(execution.getActiveCancellationHoldId()).isEqualTo(fixture.hold().getHoldId());
+        execution.resumeCancellation(fixture.hold().getHoldId(), BASE.plusSeconds(10));
+        assertThat(execution.isCurrentCancellationHold(fixture.hold().getHoldId())).isFalse();
+        assertThat(execution.canResumeCancellation(fixture.hold().getHoldId(), BASE.plusSeconds(20))).isFalse();
+    }
+
     @Test void oneOperatorCommandHasAnImmutableReceiptAndChangedOrNewCommandsCannotRewriteIt() {
         Fixture fixture = fixture(); RefundCancellationHold hold = fixture.hold(); RefundCancellationResumeRequest command = command(hold);
         assertThat(hold.recordResume(command, BASE.plusSeconds(10))).isTrue();

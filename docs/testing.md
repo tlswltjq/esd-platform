@@ -791,12 +791,13 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 
 ### 7.8 현재 남은 계약과 검증
 
-2026-10-28 기준이다. PG 멱등 키/고정 본문·내구 재송신/조회·확정 실패와 실제 복구·최초 관리자 판정·고객 명시적 재시도 HTTP는 구현·검증했다. 다음 세션의 구체적 순서는 [공통 지시·다음 작업](refund-next-session.md)을 따른다.
+2026-10-29 기준이다. PG 멱등 키/고정 본문·내구 재송신/조회·확정 실패와 실제 복구·최초 관리자 판정·고객 명시적 재시도 HTTP·운영 중단 조회/재개 관리자 HTTP·반려 뒤 재심사·잘못된 승인 중단/실제 복구 후 새 심사는 구현·검증했다. 다음 세션의 구체적 순서는 [공통 지시·다음 작업](refund-next-session.md)을 따른다.
 
 | 남은 항목 | 테스트를 쓰기 전 확인할 것 |
 |---|---|
-| 반려 재접수·잘못된 승인 구제 | 최초 판정 확정 A안을 임의로 바꾸지 않음. 재심사/판정 번복은 별도 정책 |
-| Payment 운영 중단 재개 HTTP | 내부 재개 유스케이스의 키/본문/기한·현재 중단 근거를 유지할 권한/감사/응답 계약 |
+| 재심사의 실제 사용자 흐름 | 선택한 재심사 정책과 API·이력/감사·기한·정지/복구 연계는 검증됨. 실제 운영 화면·실제 ADMIN/PG의 전체 흐름은 별도 검증 |
+| 잘못된 승인의 실제 사용자 흐름 | 중단 경계 A안·실제 복구 후 새 심사 B안의 API·각 모듈 DB/Kafka·경합/중복·실제 flush 롤백·정보 제한·V22/V9·명세는 검증됨. 최종 OCI 967건. 실제 ADMIN/운영 화면/두 실제 서비스의 전체 사용자 검증은 후속 |
+| 운영 중단 재개의 실제 사용 흐름 | 관리자 조회·재개 HTTP/권한/감사는 검증됨. 실제 ADMIN 계정·운영 화면·실제 PG 장애 뒤 재개는 별도 검증 |
 | 지급 확인 누락·장기 미확정 운영 | 현재 새 지급의 LicenseGranted와 선행/후행 재개는 검증됨. 과거 자료 보완과 장기 대기의 고객 안내/담당자 조치가 남음 |
 | 시간/정책 변경·재구매·정산 | 비정상 시각의 추가 입력 계약, 정책의 과거 적용, 환불 후 같은 상품 재구매, 마감 후 환불 조정은 별도 결정 |
 | 실제 제공사/추적 전체 검증 | 실제 ADMIN 수동 환불, 실제 PG 오류·응답 유실과 Tempo 전체 연결은 계약 픽스처나 정상 자동 환불 1건으로 대체하지 않음 |
@@ -929,3 +930,9 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 2026-10-28 Gateway 관리자 환불 경로 보완: 서비스 직접 호출과 별도로 /api/v1/admin/refunds의 목록/상세/판정이 Order에 도달하도록 라우트와 ADMIN 허용 경계를 추가했다. 미등록 경로/메서드는 거절하고 Bearer 전달·X-Member-Id 제거를 검증했다. 로컬 Red 4건 뒤 Gateway 단위 97건·통합 컴파일·bootJar가 통과했다. OCI Gateway 단위 97·Redis 통합 1건이 실패/오류/건너뜀 0이고 기존 컨테이너 23개/볼륨 57개를 보존했다. 근거는 runs/refund-review-gateway-oci-7l32q55b/collected/results/full, 최초 Red는 runs/refund-review-tdd-brt1d7x3/gateway-red.json이다. HTTP upstream은 Order 계약 픽스처이며 실제 관리자 로그인/수동 PG 환불 전체 검증을 대신하지 않는다. 기존 실제 주문 검증 스택에는 Gateway 프로세스를 새로 기동하지 않았다.
 
 2026-10-28 고객 명시적 재시도 HTTP 첫 번째 안: 미구현 HTTP 경계 Red 8건 뒤 previousAttemptId를 받는 MEMBER API와 실패 ID 조회를 연결했다. 로컬 Order 308·Gateway 100건 및 빌드/통합 컴파일 통과. 초기 Gateway CSRF 기대값과 OCI 중복 구매 픽스처 2건을 보정한 최종 OCI 전체 --rerun-tasks에서 Order 단위 308·통합 124건, Gateway 단위 100·Redis 통합 1건 모두 실패/오류/건너뜀 0이다. 새 HTTP 통합 10건이 현재 실패 식별·동시/중복·후속 실패 뒤 오래된 요청·실제 재정지 선행·복구 전 거절·권한/소유권·실제 flush 롤백·반려/미확정/완료 거절을 확인한다. 기존 6개 경로·8개 연산을 보존하고 재시도 POST와 nullable retryableAttemptId만 추가했으며 최종 명세 대조는 갱신 플래그 없이 수행했다. 소스 1,108개 대조·비밀값 포함 0. runs/refund-retry-http-tdd-w407gjr7 및 runs/refund-retry-http-oci-fw4f42_q/collected/results/{schema-update,full}과 validation-summary.json에 원자료·보존 결과가 있다. 기존 실제 런타임은 미갱신이며 Payment/License/Order upstream 계약 픽스처를 실제 PG 환불 E2E로 확대하지 않는다. [상세](pg-test-integration-plan.md#2026-10-28-고객-명시적-재시도-http-첫-번째-안).
+
+2026-10-28 운영 중단 조회·재개 관리자 API A안: Gateway 경로 Red 3건과 실제 명령 유일 키 경합 Red 1건 뒤 관리자 목록·상세·재개를 연결했다. spy 추상 메서드 호출·잔액 중단 필드 기대값 오류는 업무 Red에서 제외하고 실제 JPA/DB 조율로 보정했다. 로컬 Payment 단위 290·Gateway 106건 및 빌드/통합 컴파일 통과. 최종 OCI --rerun-tasks에서 Payment 단위 290·통합 177, Gateway 단위 106·Redis 통합 1건이 모두 실패/오류/건너뜀 0이다. 새 HTTP 10건과 기존 PG HTTP 픽스처 연계 1건이 권한/감사·현재/과거 목록/상세·같은/다른 명령·새 중단에 대한 옛 영수증·3시간/잔액 변경·동시 명령 ID 충돌·실제 flush 롤백과 같은 키/본문의 재개를 확인한다. 기존 Payment 조회 2개 연산 보존, 관리자 3개 추가와 정상 명세 대조를 확인했다. 소스 1,121개·현재 코드/설정/명세 943개 해시 대조, 비밀값 포함 0, 공유 컨테이너 23개·볼륨 57개 및 상태 보존·추가/잔여 자원 없음이다. runs/refund-resume-admin-tdd-euaclz5i 및 runs/refund-resume-admin-oci-o2_0_er9/collected/results/{schema-update,red-command-collision,full}과 validation-summary.json에 근거가 있다. 실제 런타임/PortOne 금융 동작·실제 ADMIN 계정/운영 화면·PG 장애 후 재개 전체 검증은 별도다. [상세](pg-test-integration-plan.md#2026-10-28-운영-중단-조회재개-관리자-api-a안).
+
+2026-10-29 반려 뒤 고객 재심사: 고객 HTTP Red 2건·Gateway Red 1건 뒤 구현하고 도메인 7건과 로컬 Order 315·Gateway 110건, 빌드/통합 컴파일을 통과했다. OCI full 성공 뒤 발행 본문 전체 대조의 LongNode/IntNode 테스트 오류 1건을 보정한 최종 corrected 전체 --rerun-tasks에서 Order 단위 315·통합 142, Gateway 단위 110·Redis 통합 1건 모두 실패/오류/건너뜀 0이다. 재심사 API 통합 17건과 V20→V21 자료 보존 1건이 기한 경계/잠금 대기/기한 뒤 판정·18회차·공개 범위·접수/판정 경합·실제 flush 롤백·승인/정지/완료/확정 실패/복구/기존 고객 재시도, 전체 정지 본문/키를 검증한다. 기존 7개 경로·9개 연산을 보존하고 4개 경로/연산과 현재 회차 정보를 추가했으며 최종 명세 대조는 갱신 플래그 없이 수행했다. 소스 1,139개·현재 코드/설정/명세 961개 해시 대조, Payment 소스 193개 유지, 비밀값 포함 0·공유 컨테이너 23개/볼륨 57개 및 상태 보존·추가/잔여 테스트 자원 없음이다. runs/refund-reconsideration-tdd-rh3d3gds 및 runs/refund-reconsideration-oci-2fz1w7px/collected/results/{red-http,schema-update,full,final,corrected}와 validation-summary.json에 근거가 있다. 실제 런타임/PG 금융 동작·실제 ADMIN/운영 화면의 재심사 E2E는 별도다. [상세](pg-test-integration-plan.md#2026-10-29-반려-뒤-고객-재심사).
+
+2026-10-29 승인 중단의 최종 전체 회귀: Order 323·통합 158, License 102·통합 59, Gateway 111·Redis 1, 공통 Kafka 213, 총 967건 실패/오류/건너뜀 0. 선별/반복 수치를 더하지 않는다. 실제 실행 단계·픽스처 오류 보정·보존·계약/실제 전체 흐름의 구분은 [승인 중단 검증 기록](pg-test-integration-plan.md#2026-10-29-잘못된-승인-중단과-새-심사-복귀)을 따른다.

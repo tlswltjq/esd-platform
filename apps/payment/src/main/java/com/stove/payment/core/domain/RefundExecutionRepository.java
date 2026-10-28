@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface RefundExecutionRepository extends JpaRepository<RefundExecution, Long> {
     Optional<RefundExecution> findByAttemptId(String attemptId);
+    @Query("select r.paymentId from RefundExecution r where r.attemptId=:attemptId")
+    Optional<String> findPaymentIdByAttemptId(String attemptId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from RefundExecution r where r.attemptId=:attemptId")
     Optional<RefundExecution> lockByAttemptId(String attemptId);

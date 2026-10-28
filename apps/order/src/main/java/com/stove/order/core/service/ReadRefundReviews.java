@@ -8,6 +8,7 @@ import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundReviewView;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReadRefundReviews {
     private final OrderRepository orders;
     private final RefundRepository refunds;
+    private final RefundReviewRoundRepository rounds;
 
     public Page<RefundReviewView> search(RefundStatus status, int page, int size) {
         if (status == null || page < 0 || size < 1 || size > 100)
@@ -34,6 +36,7 @@ public class ReadRefundReviews {
         Order order = orders.findByOrderNo(refund.getOrderNo()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         return new RefundReviewView(refund.getRefundId(), order.getOrderNo(), order.getBuyerSubject(), order.getProductCode(),
                 order.getTitle(), order.getAmount(), order.getCurrency(), order.getResultOccurredAt(), refund.getReceivedAt(),
-                refund.getStatus(), refund.reviewReceipt());
+                refund.getStatus(), refund.reviewReceipt(), refund.getCurrentReviewId() == null ? null
+                        : rounds.findByReviewId(refund.getCurrentReviewId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT)).view());
     }
 }

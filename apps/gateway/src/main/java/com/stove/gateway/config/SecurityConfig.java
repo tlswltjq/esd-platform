@@ -107,6 +107,11 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/settlements/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/admin/refunds", "/api/v1/admin/refunds/*").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/decision").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/approval-stops").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.GET, "/api/v1/admin/refunds/*/reviews").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/reconsiderations/*/decision").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.GET, "/api/v1/admin/refund-cancellation-holds", "/api/v1/admin/refund-cancellation-holds/*").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-cancellation-holds/*/resume").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
                                 "/api/v1/downloads/**").hasRole("MEMBER")
                         .anyExchange().denyAll())

@@ -134,6 +134,12 @@ spring:
                 - Path=/api/v1/studio/**
 
             # ── 사내 운영툴 (실운영에서는 내부망 전용 게이트웨이로 분리) ──
+            - id: payment-refund-admin
+              uri: ${PAYMENT_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/admin/refund-cancellation-holds/**
+                - Method=GET,POST
+              filters: [RemoveRequestHeader=X-Member-Id]
             - id: order-refund-admin
               uri: ${ORDER_URI:http://localhost:8082}
               predicates:

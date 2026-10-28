@@ -766,3 +766,91 @@ TDD는 미구현 HTTP 테스트 9건 중 8건의 실제 Red(202/400 대신 403)�
 최종 OCI는 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 두 모듈 533건을 전부 실행했다. 입력 소스 1,108개를 SHA-256으로 대조했고 실제 비밀값 포함은 0이다. 문서 기록 후에도 검증한 현재 코드·설정·명세 930개가 같은 해시임을 확인했다. 기존 컨테이너 23개·볼륨 57개의 ID·시작 시각·재시작 횟수·실행/건강 상태를 보존했으며 추가·잔여 테스트 자원은 없다. 원자료는 `runs/refund-retry-http-tdd-w407gjr7` 및 `runs/refund-retry-http-oci-fw4f42_q/collected/results/{schema-update,full}`이며 source-manifest·JUnit·명세 대조·공유 자원 보존 결과를 함께 보관한다. 최종 보존 결과는 해당 run의 `validation-summary.json`을 따른다.
 
 Order V20·Payment V25와 기존 PG 정책은 바꾸지 않았다. 기존 실제 검증 런타임/터널을 갱신하거나 실제 PortOne 결제·환불을 추가 실행하지 않았다. 새 테스트의 Payment 실패·License 완료와 Gateway의 Order upstream은 계약 픽스처이며 실제 PG 오류·License 복구·고객 브라우저 전체 E2E 검증으로 확대하지 않는다. 운영 중단 재개 관리자 HTTP·반려 재심사·정산 조정·재구매 등 남은 범위는 별도다.
+
+## 2026-10-28 운영 중단 조회·재개 관리자 API A안
+
+사용자는 **A안: 운영 중단 목록·상세 조회와 재개 API를 함께 구현**하도록 선택했다. 기존 `RequestRefundCancellationResume`의 현재 중단·같은 시도·원래 키/본문/최초 준비 3시간 창과 명령 영수증 계약을 유지한다. 확정 실패 뒤 고객이 새 시도를 요청하는 API와 업무 근거를 구분한다.
+
+- ADMIN 전용 `GET /api/v1/admin/refund-cancellation-holds`: activeOnly=true(기본)는 현재 PENDING·미완료 시도의 활성 중단만, false는 과거 재개·미적용 관측도 포함한다. observedAt·ID 순으로 page/size(기본 0/20, 최대 100)를 적용한다. 3시간이 지난 현재 중단도 목록에서 유지하며 resumable=false로 표시한다.
+- `GET /api/v1/admin/refund-cancellation-holds/{holdId}`: 시도·환불·주문·결제 식별자, 금액/통화, 중단 사유/관측 시각, activated(관측 당시 적용)·current(현재 중단)·resumable(조회 시점 실행 조건), 원래 준비/재개 기한, 실행/전액 취소 확인, 이전 명령 영수증·운영자/사유를 조회한다. PG 키·고정 본문·claim/비밀 설정은 공개하지 않는다. 조회는 읽기 전용이며 실행 시 다시 검증한다.
+- `POST /api/v1/admin/refund-cancellation-holds/{holdId}/resume`: requestId(UUID)·attemptId(UUID)·note(공백 제외 필수, 최대 500자)를 받는다. holdId는 경로에서, 운영자는 검증된 ADMIN JWT sub에서 읽는다. 본문 운영자 필드는 신뢰하지 않는다. 200은 기존 송신의 재예약과 감사/영수증 저장이다. PG를 직접 호출하거나 환불 완료를 주장하지 않는다. 모든 정상 응답은 no-store이며 재개 Location은 해당 중단 상세다.
+- 같은 명령 ID·시도·중단·운영자·사유만 최초 `{requestId,attemptId,holdId,receivedAt}` 영수증으로 재전송한다. 이후 새 중단이나 환불 완료·3시간 경과가 있어도 예전 영수증의 재전송은 새 송신을 예약하지 않는다. 다른 내용/대상·이미 재개한 중단의 새 지시·재개 불가 상태는 409다. 값/본문 오류 400, 없는 시도/중단 404, 익명 401·비ADMIN 403을 검증했다. 새로운 중단에는 새 명령이 필요하다.
+- 기존 Payment→RefundExecution 잠금 순서를 유지한다. 잠금 전 실행 엔티티 대신 결제 ID 스칼라만 읽고, 잠금을 얻은 뒤 최신 실행을 읽는다. 동일/다른 명령의 동시 요청과 기다리는 사이 생긴 잔액 중단을 검증한다. 다른 중단의 같은 명령 ID 경합은 기존 `uq_cancel_resume_request`가 막으며, 이 제약의 충돌만 409로 변환하고 다른 무결성 오류는 진단을 위해 보존한다. 패자의 송신 예약/감사는 모두 롤백한다.
+- Gateway에 ADMIN 목록/상세/재개 경로를 추가했다. 경로·activeOnly/page/size 쿼리·명령 본문·Bearer·no-store·Location 전달, 위조 X-Member-Id 제거, 비ADMIN/미등록 메서드·경로 차단을 검증했다.
+
+TDD: Gateway 미연결 경로의 실제 Red 3건 뒤 구현했다. 최초 OCI schema-update 12건 중 동시성 2건은 추상 Spring Data 메서드의 spy callRealMethod 오류였다. 실제 JPA 조회/잠금/flush로 픽스처를 보정했다. 다음 red-command-collision 3건에서 명령 ID 유일 키 경합이 실제 `[200,500]`으로 드러난 1건을 업무 Red로 기록하고 409로 수정했다. 같은 실행의 다른 실패 1건은 blockAutomaticCancellation이 기록하는 cancellationBalanceChangedAt 대신 automaticCancellationStoppedAt을 단언한 테스트 오류여서 바로잡았다. 실제 flush 후 중단 감사와 송신 예약이 DB에 보이는 것을 먼저 확인한 뒤 고의 예외를 내어 롤백을 검증한다. 초기 오류 원자료는 최종 성공과 함께 보존한다.
+
+| 최종 검증 | 결과 |
+|---|---|
+| 로컬 Payment·Gateway | 단위 290·106건, 실패/오류/건너뜀 0; 두 bootJar와 Payment 통합 컴파일 통과 |
+| OCI Payment 전체 | 단위 290·통합 177건, 실패/오류/건너뜀 0 |
+| OCI Gateway 전체 | 단위 106·Redis 통합 1건, 실패/오류/건너뜀 0 |
+| 새 HTTP 통합 10건 | 현재/과거 중단 목록·페이지/상세·사유/기한/재개 가능 여부, ADMIN sub/감사·명령 재전송, 동시 동일 지시·다른 내용, 새 중단에 대한 옛 영수증, 정확히 3시간의 거절·기존 영수증, JWT/역할·입력/없는 대상·타 시도, 실제 flush 롤백/재접수, 잠금 대기 중 잔액 변경 보존, 다른 중단의 같은 명령 동시/순차 사용 |
+| 추가 PG HTTP 연계 1건 | 실제 HTTP 계약 픽스처의 403→관리자 HTTP 재개→같은 PG 키/본문으로 후속 성공, 재전송 영수증과 추가 미송신. 기존 PAID 사실 보존 |
+| OpenAPI | 기존 Payment 2개 경로/조회 연산 보존, 관리자 3개 경로/연산 추가. 최종 full은 갱신 플래그 없이 스냅샷 대조 |
+
+최종 OCI는 수정된 소스 1,121개를 SHA-256으로 대조하고 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 두 모듈 574건을 모두 실행했다. 현재 코드·설정·명세 943개도 검증 입력과 같다. 실제 비밀값 포함 0, 기존 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·실행/건강 상태 보존, 추가/잔여 자원 없음이다. 근거는 `runs/refund-resume-admin-tdd-euaclz5i` 및 `runs/refund-resume-admin-oci-o2_0_er9/collected/results/{schema-update,red-command-collision,full}`과 validation-summary.json이다. 중간 결과의 단위 XML을 재실행 수치로 합산하지 않는다.
+
+V25와 기존 PG 오류별 정책·원래 3시간 창·고객 재시도 조건은 유지했다. 실제 검증 런타임/터널·비밀 설정·보호 거래를 변경하지 않았고 실제 PortOne 취소/결제는 추가 실행하지 않았다. 실제 ADMIN 계정 발급·운영 화면·실제 PG 오류 후 재개 전체 검증은 별도 후속이다. Gateway upstream과 추가 PG 응답은 계약 픽스처이며 기존 실제 TEST 환불 1건의 증거와 구분한다. 관리자 반려 재심사·정산 환불 조정·재구매 등 미결 범위를 완료로 간주하지 않는다.
+
+## 2026-10-29 반려 뒤 고객 재심사
+
+2026-10-28 사용자는 별도 심사 회차로 재심사 허용 B안 → 고객 직접 요청 A안 → 횟수 제한 없음 B안 → 마지막 반려 저장 후 7일 이내 A안 → 사유 필수 A안을 선택했다. 사유는 공백만 입력할 수 없고 최대 500자이며, 실질적으로 새로운 설명인지는 관리자가 과거 이력과 비교한다. 서버가 같은 문구를 의미 분석해 차단하지 않는다. 최초 접수·자동 환불 자격·PAID 구매 사실·과거 판정은 보존한다.
+
+- `POST /api/v1/orders/{orderNo}/refund/reconsiderations`: MEMBER sub/본인 주문을 확인하고 requestId·previousReviewId·reason으로 새 회차를 접수한다. previousReviewId는 고객 환불 조회의 currentReview.reviewId다. 마지막 반려 저장 시각 + 7×24시간의 정확한 경계를 포함한다. 잠금 대기로 접수 시각을 뒤로 옮기지 않으며, 기한 내 접수 뒤 7일을 지나도 정상 판정할 수 있다. 접수는 이용권 정지나 자동 환불을 뜻하지 않는다.
+- 최초 접수와 동일 requestId·환불·이전 회차·구매자·사유의 재전송은 HTTP 202, no-store, 기존 환불 조회 Location과 최초 `{requestId,refundId,reviewId,previousReviewId,reviewNo,receivedAt}` 영수증을 반환한다. 이후 회차나 금융 상태가 진행돼도 과거 접수 재전송은 새 회차를 만들지 않는다. 다른 명령으로 이미 소비한 반려 회차를 다시 쓰거나 다른 내용으로 같은 명령을 쓰면 409다. 신청 기한 초과·현재 반려 불일치도 409, 입력 오류 400, 본인 주문/환불 없음은 404다.
+- `GET /api/v1/orders/{orderNo}/refund/reviews`와 `GET /api/v1/admin/refunds/{refundId}/reviews`: 최초 심사와 재심사 전체를 reviewNo 순으로 page/size(기본 0/20, 최대 100)로 조회한다. 고객 이력에는 자신의 접수 명령/사유·판정·반려 사유·시각만 제공하며 관리자 명령 ID·판정자·승인 사유는 숨긴다. 관리자 이력에는 판정 감사 기록도 제공한다. 기존 환불 조회에 현재 회차·재심사 기한/가능 여부를, 관리자 상세에는 현재 회차를 추가한다. 기존 관리자 상세 review는 최초 판정으로 유지한다.
+- `POST /api/v1/admin/refunds/{refundId}/reconsiderations/{reviewId}/decision`: ADMIN sub로 지정한 현재 재심사를 승인/반려한다. 동일 명령·회차·판정자·내용은 해당 회차의 최초 판정 영수증을 HTTP 200으로 반환하고, 다른 지시는 409다. 현재 회차가 달라진 뒤의 과거 판정 재전송은 그 과거 영수증만 반환한다. 기존 `/{refundId}/decision`은 최초 판정 전용으로 유지하며 새 재심사를 묵시적으로 판정하지 않는다.
+- 재심사 승인 뒤 실제 지급 확인→정지 요청 Outbox→실제 정지 확인→Payment 실행의 기존 계약을 사용한다. 접수/반려는 새 정지·PG 요청을 만들지 않는다. 확정 실패와 실제 복구 뒤에는 기존 `/refund/retries`가 같은 승인 근거의 새 실행을 맡는다. REJECTED 재심사와 PG FAILED 재시도를 섞지 않는다.
+- Order 잠금 뒤 현재 환불/회차를 읽는다. V21의 `order_refund_review_round`는 최초·후속 회차를 함께 저장하며 application_request_id·previous_review_id·판정 명령 ID에 유일 키를 둔다. 판정 명령의 전역 유일성은 최초/재심사 사이에도 적용한다. 첫 회차 reviewId는 refundId이며 후속 회차는 새 UUID다. 신청·현재 회차 포인터, 판정·감사·승인 Outbox는 각각 같은 트랜잭션으로 저장한다. 한 회차의 첫 판정은 이후에도 불변이다.
+- V21은 V20의 기존 최초 판정과 원래 주문/환불 열을 보존하고 알려진 판정만 복사한다. 과거 미기록 판정에 가짜 운영자·사유를 만들지 않는다. 자동 환불에는 수동 심사 회차를 만들지 않는다. 이전 회차는 주문 잠금 안에서 검증하고, 횟수 제한 없음과 18회차 삭제 검증을 위해 자기 참조 연쇄 cascade FK를 두지 않는다.
+
+TDD는 고객 HTTP Red 2건과 Gateway 회차별 판정 경로의 Red 1건을 실제 확인한 뒤 진행했다. 도메인 7건과 로컬 Order 315·Gateway 110건, 두 bootJar·Order 통합 컴파일을 통과했다. OCI schema-update 16건 뒤 full 전체 568건을 통과했다. 발행 본문 전체 비교를 추가한 final에서 숫자 값은 같은데 valueToTree의 LongNode와 저장 JSON 파싱의 IntNode가 달라 테스트 1건이 실패했다. 기대값도 JSON 직렬화/파싱으로 같은 형태로 비교하도록 테스트를 정정했다. 업무 소스는 이 보정으로 바꾸지 않았다. 최종 corrected는 정상 명세 대조와 추가 기한 뒤 판정 검증을 포함해 전체를 다시 실행했다.
+
+| 최종 검증 | 결과 |
+|---|---|
+| OCI Order | 단위 315·통합 142, 실패/오류/건너뜀 0 |
+| OCI Gateway | 단위 110·Redis 통합 1, 실패/오류/건너뜀 0 |
+| 새 재심사 API 통합 17건 | 사유/소유권/JWT·역할·페이지/공개 범위, 7일 경계·접수 잠금 대기·기한 뒤 재전송/정상 판정, 18회차와 과거 이력, 동일/다른 신청·반대 판정 경합, 최초/재심사 간 판정 명령 충돌, 실제 초기/후속 접수 flush 롤백·승인 감사/Outbox 롤백, 정지 요청의 전체 본문/종류/주문 키/메타데이터, 지급 대기→정지→완료와 확정 실패→복구→기존 고객 재시도 |
+| V20→V21 통합 1건 | 심사 대기·알려진 승인/반려·자동·과거 판정 미기록 5가지 기존 주문/환불 열 보존과 알려진 감사만 복사 |
+| OpenAPI | 기존 7개 경로·9개 연산 보존, 4개 경로/연산과 현재 회차/재심사 가능 정보 추가. corrected는 갱신 플래그 없이 스냅샷 대조 |
+| 기존 Payment | 앞선 운영 중단 검증의 소스 193개와 동일함을 해시 대조. 이번에 Payment 테스트/런타임은 재실행하지 않음 |
+
+최종 corrected는 소스 1,139개를 SHA-256으로 대조하고 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 두 모듈 568건을 모두 실행했다. 현재 코드·설정·명세 961개도 검증 입력과 같다. 실제 비밀값 포함 0이며, 기존 컨테이너 23개·볼륨 57개의 ID·시작/재시작·실행/건강 상태를 보존했고 추가/잔여 테스트 컨테이너·볼륨은 없다. 원자료는 `runs/refund-reconsideration-tdd-rh3d3gds` 및 `runs/refund-reconsideration-oci-2fz1w7px/collected/results/{red-http,schema-update,full,final,corrected}`와 validation-summary.json이다. 초기 실패·중간 성공·최종 정상 실행을 구분하며 실행 수치를 중복 합산하지 않는다.
+
+기존 실제 검증 Order V20/Payment V25 런타임·터널·비밀 설정과 보호 거래는 갱신하지 않았다. 새 V21은 격리 검증 DB에서 검증했으며 실제 PortOne 취소/결제는 추가 실행하지 않았다. License 정지/복구와 Payment 결과는 완료 모듈의 계약 픽스처이고 실제 ADMIN 계정·운영 화면·실제 PG를 사용한 재심사 전체 E2E 완료를 뜻하지 않는다. 잘못된 승인 구제·장기 미확정 운영·정산 조정·재구매 등 남은 범위를 완료로 간주하지 않는다.
+
+## 2026-10-29 잘못된 승인 중단과 새 심사 복귀
+
+사용자는 **A안: Order가 Payment 실행 요청을 저장하기 전까지만 관리자 중단 허용**, **B안: 중단·필요한 이용권 복구 후 같은 환불의 새 심사 회차로 복귀**를 선택했다. 기존 승인·중단 감사와 최초 환불 자격·접수 시각·원구매를 보존한다. 고객 반려 뒤 재심사의 요청 주체/7일 정책을 관리자 정정에 적용하지 않고 고객에게 재신청을 요구하지 않는다. 각 회차의 판정은 계속 불변이며 별도 정정 회차를 만든다.
+
+관리자는 `POST /api/v1/admin/refunds/{refundId}/approval-stops`에 requestId·현재 승인 reviewId·필수 reason(공백 불가, 최대 500자)을 전달한다. 판정자는 ADMIN JWT sub이며 HTTP 202·no-store·관리자 상세 Location과 최초 접수 영수증을 반환한다. 동일 명령/환불/회차/담당자/사유는 이후 상태에서도 최초 영수증만 반환하고, 바뀐 내용·소진된 승인에 대한 다른 명령은 409다. 입력/역할/없는 회차와 타 환불 연결을 검증한다. 기존 최초 판정 API와 후속 회차 판정 API의 과거 영수증은 중단 뒤에도 후속 업무를 다시 시작하지 않는다.
+
+| 중단 당시 단계 | 처리 |
+|---|---|
+| 승인 뒤 실제 지급 확인 대기, 정지 요청 없음 | 같은 트랜잭션에서 관리자 정정 출처의 새 회차·PENDING_REVIEW로 복귀. 뒤늦은 지급 확인은 이 회차의 승인 전 정지를 발행하지 않음 |
+| 정지 요청이 이미 저장됨 | PENDING_APPROVAL_STOP. 정지 결과를 기다리며 새 심사 회차·PG 실행 시도를 먼저 만들지 않음 |
+| 해당 정지의 실제 완료 도착 | 기존 지급/구매 근거를 대조하고 승인 정정 전용 복구 요청을 Inbox·중단 이력·Outbox와 원자 저장. RefundAttempt·Payment 실행 요청 없음 |
+| 해당 정지의 실제 복구 완료 도착 | 연결 근거를 검증하고 Inbox·복구 감사·새 심사 회차·현재 포인터를 원자 저장. 정지 요청 포인터를 비우고 PENDING_REVIEW로 복귀 |
+| Payment 실행 요청이 이미 커밋됨 | 실제 PG 송신 전·Outbox PENDING이어도 중단 거절. 정지 완료와 중단을 같은 주문 잠금으로 직렬화 |
+
+새 회차는 INITIAL/CUSTOMER_RECONSIDERATION/APPROVAL_CORRECTION 출처를 구분한다. 관리자 상세/회차 이력은 중단 명령·담당자·사유·접수·복구/복귀 시각과 후속 회차를 표시한다. 고객 이력은 출처·승인 중단 시각만 추가하고 관리자 명령 ID·담당자·내부 중단 사유를 숨긴다. 정정 회차도 기존 후속 판정 경로 `/reconsiderations/{reviewId}/decision`을 사용한다. 정정 회차의 반려 뒤에는 기존 고객 재심사 계약이 적용된다.
+
+Order 발행 `LicenseApprovalCorrectionRequested`와 License 발행 `LicenseApprovalCorrected`는 환불·승인 회차·중단 명령·실제 정지 요청/완료·보유권·구매 근거를 연결한다. 발생하지 않은 PG 실패나 실행 시도를 만들지 않으며 기존 실패 복구 이벤트의 의미를 바꾸지 않는다. 각 모듈 api.listener Mapper에서 봉투/본문/키와 값 자체를 검증하고 내부 입력만 서비스에 전달한다. License는 현재 정지와 불변 구매를 확인해 실제 ACTIVE 복구·감사·Inbox·Outbox를 원자 저장한다. 과거 정지/복구 재전송은 이후 재승인의 새 정지를 해제하거나 새 심사를 만들지 않는다. HTTP/이벤트 타임아웃만으로 복구 완료를 가정하지 않는다.
+
+Order V22는 기존 최초 판정·심사 행을 바꾸지 않고 nullable 중단 감사와 관리자 정정 회차 연결·유일 키·CHECK를 추가한다. License V9는 실제 승인 정정 복구 이력과 보유권/정지 FK를 추가한다. 이전 자료에 가상의 중단/복구를 채우지 않는다. 무제한 후속 회차의 기존 정리 구조와 원구매 PAID를 보존한다.
+
+검증 원자료는 Git 제외 `runs/refund-approval-stop-tdd-q6n45e_1`와 `runs/refund-approval-stop-oci-zbcavxkv`다.
+
+- 최초 서비스 Red 3건은 미구현 예외로 실패했다. 이후 컴파일의 static mock import 누락, 저장소 서비스 이름 허용 규칙에 따른 RequestRefundApprovalStop 이름 조정, Gateway 익명 POST의 기존 CSRF 403 기대값을 보정했다. 이 컴파일/픽스처 보정은 업무 Red로 추가 집계하지 않는다.
+- 첫 OCI `order-first`는 13건 중 11건 통과, 2건은 Outbox 열 이름(message_key 대신 partition_key)과 Mockito spy 설정 시 MANDATORY 트랜잭션 누락이었다. 테스트를 고친 뒤 재실행했다.
+- `schema-and-new`의 Order 22건 중 1건은 MySQL CHECK 3819를 JdbcTemplate이 UncategorizedSQLException으로 번역한 것을 DataIntegrityViolationException으로만 기대한 오류였다. 제약 거절은 동작했으며 테스트는 실제 SQLException 코드 3819를 확인하도록 보정했다. 이 단계에서는 License 검사가 실행되지 않았다.
+- `schema-corrected`는 Order 23건(새 API/이벤트 15·마이그레이션 7·OpenAPI 1)과 License 새 통합 6건을 통과했다. 명세 갱신은 이 선별 단계에서만 사용했다.
+- 로컬 최종 단위는 Order 323·License 102·Gateway 111·공통 Kafka 213, 총 749건 통과. 두 앱의 통합 테스트 소스도 컴파일했다.
+- 최종 OCI `full`은 명세 갱신 플래그 없이 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 Order 323·통합 158, License 102·통합 59, Gateway 111·Redis 통합 1, 공통 Kafka 213, **총 967건**을 통과했다. 실패·오류·건너뜀 0이다. 앞선 선별/반복 실행을 총수에 더하지 않는다.
+- 같은 주문의 중단/정지 완료 경합, 같은/다른 중단 명령의 동시 요청, 다른 환불의 전역 중단 ID 경합, 실제 flush 뒤 중단/포인터/새 회차·정지 Inbox/복구 Outbox·복구 Inbox/새 회차의 롤백, 재승인·다시 중단·반려 후 고객 신청, 오래된 판정/중단/정지/복구 재전송과 고객 정보 비노출을 확인했다. 새 복구 요청과 완료의 Outbox 봉투/업무 연결 본문을 대조했다.
+- License 실제 DB 복구 및 Kafka 요청 수신, Order 실제 DB 심사 복귀 및 Kafka 완료 수신을 각 모듈에서 검증했다. 두 실제 서비스와 실제 ADMIN/PG를 잇는 전체 흐름의 완료로 확대하지 않는다.
+- 기존 OpenAPI 11개 경로/13개 연산과 operationId·기존 응답 필드를 보존하고 1개 경로/연산을 추가해 12개 경로/14개 연산이다. 관리자 상태 enum에 PENDING_APPROVAL_STOP을 추가하고 후속 판정 설명·회차 출처/중단 이력을 확장했다. Payment 모듈 193개 파일은 이전 검증과 같으며 Payment 자체 테스트는 이번에 반복하지 않았다.
+- 공유 컨테이너 23개·볼륨 57개의 ID·시작 시각·재시작·상태와 볼륨을 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0이다. 세부는 validation-summary.json과 collected/results/preservation.json을 따른다.
+
+기존 실제 런타임과 DB에는 V22/V9를 적용하지 않았다. 실제 ADMIN 계정 생성/권한 부여·운영 화면·추가 PortOne 결제/환불은 실행하지 않았다. PG 송신 이후 중단, 장기 미확정 운영 안내와 Settlement 환불 조정은 이번 완료 범위가 아니다.

@@ -20,6 +20,8 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(a -> {
             a.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
             if (verifier != null) a.requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/portone").permitAll();
+            a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-cancellation-holds", "/api/v1/admin/refund-cancellation-holds/*").hasRole("ADMIN");
+            a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-cancellation-holds/*/resume").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.GET, "/api/v1/payments", "/api/v1/payments/*", "/api/v1/payments/*/checkout")
                     .hasRole("MEMBER");
             a.anyRequest().denyAll();

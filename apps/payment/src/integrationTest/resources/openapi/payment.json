@@ -29,6 +29,48 @@
         },
         "type" : "object"
       },
+      "ApiResponseRefundCancellationHoldPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationHoldPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundCancellationHoldResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationHoldResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundCancellationResumeResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationResumeResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ErrorBody" : {
         "properties" : {
           "code" : {
@@ -131,6 +173,138 @@
           }
         },
         "type" : "object"
+      },
+      "RefundCancellationHoldPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundCancellationHoldResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundCancellationHoldResponse" : {
+        "properties" : {
+          "activated" : {
+            "type" : "boolean"
+          },
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "attemptId" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "executionStatus" : {
+            "enum" : [ "PENDING", "SUCCEEDED", "FAILED" ],
+            "type" : "string"
+          },
+          "firstPreparedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "holdId" : {
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "observedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "refundConfirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "resumable" : {
+            "type" : "boolean"
+          },
+          "resume" : {
+            "$ref" : "#/components/schemas/RefundCancellationResumeResponse"
+          },
+          "resumeDeadlineAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundCancellationResumeBody" : {
+        "properties" : {
+          "attemptId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "note" : {
+            "description" : "확인 내용과 재개 사유. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "attemptId", "note", "requestId" ],
+        "type" : "object"
+      },
+      "RefundCancellationResumeResponse" : {
+        "properties" : {
+          "attemptId" : {
+            "type" : "string"
+          },
+          "holdId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
       }
     },
     "securitySchemes" : {
@@ -159,6 +333,128 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/admin/refund-cancellation-holds" : {
+      "get" : {
+        "description" : "기본 activeOnly=true는 현재 중단만 조회합니다. false는 과거 재개·미적용 관측도 포함합니다. 기한이 지난 중단도 표시하며 observedAt·ID 순으로 조회합니다. 재개 가능 여부는 조회 시점의 안내이며 실행 시 다시 검증합니다.",
+        "operationId" : "searchRefundCancellationHolds",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "activeOnly",
+          "required" : false,
+          "schema" : {
+            "default" : true,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationHoldPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 목록",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-cancellation-holds/{holdId}" : {
+      "get" : {
+        "description" : "중단 사유·현재 여부·원래 3시간 기한·재개 가능 여부와 이전 재개 지시를 확인합니다. PG 키·본문·비밀 설정은 응답에 포함하지 않습니다.",
+        "operationId" : "readRefundCancellationHold",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationHoldResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 상세",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-cancellation-holds/{holdId}/resume" : {
+      "post" : {
+        "description" : "ADMIN sub·확인 사유를 기록하고 기존 시도의 송신을 다시 예약합니다. 200은 지시 저장이며 PG 환불 완료가 아닙니다. 같은 requestId·시도·중단·판정자·사유의 재전송은 최초 영수증을 반환합니다. 다른 내용은 409입니다. 원래 PG 키·본문·최초 준비 시각·3시간 기한을 유지하며, 새 중단은 별도 지시가 필요합니다.",
+        "operationId" : "resumeRefundCancellation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundCancellationResumeBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationResumeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 재개",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
     "/api/v1/payments" : {
       "get" : {
         "operationId" : "list",

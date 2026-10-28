@@ -28,6 +28,7 @@ import com.stove.order.core.domain.PaymentResult;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,13 +56,14 @@ class RequestRefundTest {
     @Mock private RefundRepository refunds;
     @Mock private OrderLicenseGrantRepository grants;
     @Mock private OutboxRecorder outbox;
+    @Mock private RefundReviewRoundRepository rounds;
 
     @Test
     void anEligibleOwnersRequestSavesTheRefundAndRequestsOnlyLicenseSuspension() {
         Order paid = paidOrder();
         PaymentResult originalPayment = paid.paymentResult();
         Clock clock = Clock.fixed(RECEIVED_AT, ZoneOffset.UTC);
-        RequestRefund request = new RequestRefund(orders, refunds, grants, outbox, clock);
+        RequestRefund request = new RequestRefund(orders, refunds, grants, outbox, clock, rounds);
         when(orders.lockByOrderNo(paid.getOrderNo())).thenReturn(Optional.of(paid));
         when(refunds.findByOrderNo(paid.getOrderNo())).thenReturn(Optional.empty());
         when(refunds.save(any(Refund.class))).thenAnswer(call -> call.getArgument(0, Refund.class));
@@ -111,7 +113,7 @@ class RequestRefundTest {
         PaymentResult originalPayment = paid.paymentResult();
         Instant lateReceipt = PAYMENT_CONFIRMED_AT.plus(Duration.ofHours(4)).plusNanos(1_000);
         RequestRefund request = new RequestRefund(orders, refunds, grants, outbox,
-                Clock.fixed(lateReceipt, ZoneOffset.UTC));
+                Clock.fixed(lateReceipt, ZoneOffset.UTC), rounds);
         when(orders.lockByOrderNo(paid.getOrderNo())).thenReturn(Optional.of(paid));
         when(refunds.findByOrderNo(paid.getOrderNo())).thenReturn(Optional.empty());
         when(refunds.save(any(Refund.class))).thenAnswer(call -> call.getArgument(0, Refund.class));
@@ -137,7 +139,7 @@ class RequestRefundTest {
         PaymentResult originalPayment = paid.paymentResult();
         Refund previous = Refund.request(paid, RECEIVED_AT);
         RequestRefund request = new RequestRefund(orders, refunds, grants, outbox,
-                Clock.fixed(PAYMENT_CONFIRMED_AT.plus(Duration.ofHours(6)), ZoneOffset.UTC));
+                Clock.fixed(PAYMENT_CONFIRMED_AT.plus(Duration.ofHours(6)), ZoneOffset.UTC), rounds);
         when(orders.lockByOrderNo(paid.getOrderNo())).thenReturn(Optional.of(paid));
         when(refunds.findByOrderNo(paid.getOrderNo())).thenReturn(Optional.of(previous));
 
@@ -230,7 +232,7 @@ class RequestRefundTest {
         AtomicReference<Instant> currentTime = new AtomicReference<>(receipt);
         Clock clock = mock(Clock.class);
         when(clock.instant()).thenAnswer(call -> currentTime.get());
-        RequestRefund request = new RequestRefund(orders, refunds, grants, outbox, clock);
+        RequestRefund request = new RequestRefund(orders, refunds, grants, outbox, clock, rounds);
         when(orders.lockByOrderNo(paid.getOrderNo())).thenAnswer(call -> {
             currentTime.set(receipt.plusSeconds(30));
             return Optional.of(paid);
@@ -265,7 +267,7 @@ class RequestRefundTest {
     }
 
     private RequestRefund requestAt(Instant receivedAt) {
-        return new RequestRefund(orders, refunds, grants, outbox, Clock.fixed(receivedAt, ZoneOffset.UTC));
+        return new RequestRefund(orders, refunds, grants, outbox, Clock.fixed(receivedAt, ZoneOffset.UTC), rounds);
     }
 
     @Test

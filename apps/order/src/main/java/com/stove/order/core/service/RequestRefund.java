@@ -10,6 +10,8 @@ import com.stove.order.core.domain.OrderLicenseGrantRepository;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundStatus;
+import com.stove.order.core.domain.RefundReviewRound;
+import com.stove.order.core.domain.RefundReviewRoundRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -25,6 +27,7 @@ public class RequestRefund {
     private final OrderLicenseGrantRepository grants;
     private final OutboxRecorder outbox;
     private final Clock clock;
+    private final RefundReviewRoundRepository rounds;
 
     public Refund execute(String buyerSubject, String orderNo) {
         requireBuyer(buyerSubject);
@@ -45,6 +48,7 @@ public class RequestRefund {
             refund.confirmLicenseGrant(grant.confirmation());
         });
         refunds.save(refund);
+        if (!refund.isAutomaticRefundEligible()) rounds.save(RefundReviewRound.initial(refund, buyerSubject));
         if (refund.getStatus() == RefundStatus.PENDING_LICENSE_SUSPENSION) {
             LicenseSuspensionRequestedEvent event = new LicenseSuspensionRequestedEvent(
                     refund.getSuspensionRequestEventId(), receivedAt, refund.getRefundId(), orderNo,

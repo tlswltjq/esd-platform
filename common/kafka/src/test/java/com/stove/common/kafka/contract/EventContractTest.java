@@ -48,6 +48,8 @@ import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
+import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
@@ -127,6 +129,10 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                new LicenseApprovalCorrectionRequestedEvent("correction-1",Instant.parse("2026-10-29T01:00:00Z"),"refund-1","review-1","stop-1",
+                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
+                new LicenseApprovalCorrectedEvent("corrected-1",Instant.parse("2026-10-29T01:01:00Z"),"correction-1","refund-1","review-1","stop-1",
+                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
                 new RefundExecutionFailedEvent("failure-1", Instant.parse("2026-10-27T01:03:00Z"), "refund-1", "attempt-1", "request-1",
                         "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64)),
                 new LicenseRestorationRequestedEvent("restore-1", Instant.parse("2026-10-27T01:04:00Z"), "refund-1", "attempt-1", "failure-1",
