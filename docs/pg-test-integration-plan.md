@@ -891,3 +891,34 @@ Payment V26은 이미 최초 준비 시각이 있는 건에만 안정적인 준�
 - 기존 공유 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·상태를 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0. validation-summary.json·compatibility-review.json·collected/results/preservation.json을 따른다.
 
 기존 실제 런타임/DB에는 Order V23·Payment V26를 적용하지 않았다. 실제 PortOne 금융 동작·실제 ADMIN 계정/운영 화면·실제 PG 장애와 고객 화면의 전체 검증을 추가하지 않았다. 운영자의 장기 미확정 대상 조회·조사 기록/조치와 Settlement 환불 조정은 후속이다.
+
+## 2026-10-29 장기 미확정 운영 조회와 조사 기록 A안
+
+사용자는 **A안: 목록·상세 조회와 조사 기록 API**를 선택했다. Payment의 PG 실행 근거를 ADMIN이 조회하고 확인 내용을 보존하며, 금융 결과·이용권·조회/재송신 일정을 변경하는 명령으로 사용하지 않는다.
+
+| 계약 | 내용 |
+|---|---|
+| GET `/api/v1/admin/refund-delays` | PortOne 실행 중 최초 준비 + 3시간 이상이고 현재 PENDING·refundConfirmedAt 미확정인 시도. 준비 시각·ID 순, page=0/size=20, 최대 100 |
+| GET `/{attemptId}` | 원래 준비 경계·현재 상태·저장된 조회/송신 일정·lease 만료·PG 접수 근거·잔액 중단/거절 중단 연결. 경계가 지난 준비 건은 결과 확정 뒤에도 조회 가능 |
+| GET `/{attemptId}/investigations` | 해당 시도의 조사 이력을 서버 저장 시각·ID 순으로 페이지 조회 |
+| POST `/{attemptId}/investigations` | 현재 장기 미확정 시도에 requestId·필수 확인 내용(note, 최대 500자)을 추가. ADMIN 신원은 JWT sub, 저장 시각은 서버 시계 |
+| 재전송·감사 | 같은 requestId·시도·운영자·내용은 결과 확정 뒤에도 같은 최초 기록/200. 다른 내용은 409. 새 명령만 기록을 추가하며 수정·삭제 API 없음 |
+| 권한·응답 | Payment·Gateway에서 ADMIN만 허용. no-store. POST Location은 조사 이력. PG 원문·키·클레임 토큰·비밀 설정·구매자 신원은 상세에 포함하지 않음 |
+
+지연 대상은 최초 준비 시각으로 계산하며 자동 중단 관측 행이 아직 없어도 포함한다. 접수 시각으로 준비를 추정하지 않는다. 거절 중단·잔액 변화·REQUESTED 접수 영수증이 있어도 현재 미확정이고 경계를 지났다면 포함한다. 전액 취소 조회로 금융 결과를 확인한 PENDING 실행은 현재 목록에서 제외하고 reconciliationRequired 근거는 보존한다. 확정 실패·완료 건은 새 기록 추가를 거절하고 기존 기록은 조회한다. 명시적 후속 시도는 자신의 준비 시각과 별도 이력을 사용한다. 과거 기록을 후속 시도의 조사로 복사하지 않는다.
+
+조회/송신 일정은 저장된 예약·임대 근거이며 마지막 PG GET의 성공 시각/응답을 뜻하지 않는다. 이 API는 실제 License 상태를 읽지 않는다. 조사 내용은 운영자의 확인 기록이며 환불 완료/실패의 금융 증거가 아니다. 200은 기록 저장이고 PG 호출·조회 깨우기·송신 재개·원래 3시간 초기화·실패/복구·새 키/시도를 발생시키지 않는다. 조사 뒤 추가 조치·종결/담당 배정·알림은 이번 선택으로 구현하지 않는다.
+
+기록 저장은 기존 Payment→실행 잠금 순서를 따른다. 잠금 전에는 paymentId 스칼라만 조회하고 잠금 뒤 최신 실행을 검증한다. 결과 저장이 먼저 커밋됐다면 새 기록은 409다. 같은 명령은 최초 기록을 유지한다. 서로 다른 결제의 동일 명령 경합은 V27의 전역 명령 유일 키로 한 건만 커밋하며 패자의 409 트랜잭션은 롤백한다. V27은 별도 불변 조사 테이블·대상 FK·시각/내용 CHECK·이력/지연 조회 인덱스만 추가한다. 기존 실행/구매/일정/Inbox/Outbox를 변경하거나 과거 조사 기록을 만들지 않는다.
+
+실행 근거는 Git 제외 `runs/refund-investigation-tdd-n8a8cbw0`와 `runs/refund-investigation-oci-7k7xaibd`다.
+
+- 컴파일 뒤 도메인 지연 경계 Red 1건·Gateway 새 경로 Red 1건을 확인하고 Green으로 연결했다. 로컬 Payment 304·Gateway 114 단위와 최신 통합 소스 컴파일·Payment bootJar가 통과했다.
+- `schema-and-new`의 총 14건 중 새 통합 12건과 명세 1건은 통과했고 V26→V27 마이그레이션 픽스처 1건은 기존 자동 생성 열 pending_payment_guard를 SELECT *로 복사하려 해 실패했다. 메타데이터에서 자동 생성 열만 제외한 명시적 열 복사로 고쳤다. 운영 코드/마이그레이션은 바꾸지 않았다. 처음 실패 원자료와 correction-scope.json을 보존했다.
+- 최종 OCI `full`은 명세 갱신 플래그 없이 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 **Payment 단위 304·통합 196, Gateway 단위 114·Redis 통합 1, 총 615건**을 통과했다. 실패·오류·건너뜀 0. 로컬/선별 반복 수치를 합산하지 않는다.
+- 새 실제 HTTP/JWT/MySQL 통합 13건은 정확한 3시간/-1µs·준비 미확인·다른 공급자 제외, 거절/잔액 중단·REQUESTED·자기 성공·귀속 미확정 전액 완료, 고정 감사/복수 기록·페이지·재전송·같은/다른 명령/운영자/대상·동시 경합, 실제 flush 후 롤백·잠금 대기 중 결과 확정, 실패/명시적 후속 실행의 별도 시계/이력, 권한/issuer/audience/만료·잘못된 입력/금지 동작을 검증한다. PG·정지/복구 근거는 기존 도메인 계약 픽스처이며 실제 금융 동작이 아니다.
+- V26→V27에서 실행·구매·Inbox·Outbox의 모든 기존 값을 보존하고 새 조사는 0건임을 대조했다. 명령 유일 키·대상 FK·공백 내용/시각 역전 CHECK·Flyway 반복 무변경을 확인했다. 조회/기록 전후 금융/일정/Outbox/Inbox 전체 스냅샷이 동일하다.
+- 기존 Payment OpenAPI 5개 경로/5개 연산과 12개 응답 스키마를 그대로 보존하고 3개 경로/4개 연산을 추가했다. Gateway는 Bearer·경로/쿼리·본문·Location/no-store 전달과 위조 회원 헤더 제거, 역할·금지 메서드를 확인했다. Order·License·공통 Kafka 소스는 앞선 검증과 같고 이번 검사에 합산하지 않았다.
+- 공유 컨테이너 23개·볼륨 57개와 ID·시작/재시작·상태를 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0이다. validation-summary.json·compatibility-review.json·collected/results/preservation.json을 따른다.
+
+실제 런타임/DB에는 Payment V27를 적용하지 않았다. Payment V25의 기존 실제 검증 DB에는 앞선 V26도 미적용이다. 실제 ADMIN 계정/권한 부여·운영 화면·추가 PortOne 결제/환불·터널 재시작은 수행하지 않았다. 조사 후 금융/이용권 조치, 귀속 미확정 완료 건의 별도 조사 종결, 지급 확인 누락 복구와 Settlement 환불 조정은 후속이다.

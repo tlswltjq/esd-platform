@@ -352,15 +352,19 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         record.headers().add(EventHeaders.EVENT_TYPE,event.eventType().getBytes(StandardCharsets.UTF_8));
         kafka.send(record).get(10,TimeUnit.SECONDS);
     }
-    @Test void openApiContainsPaymentReadsAndThreeAdministratorHoldOperations() throws Exception {
+    @Test void openApiContainsPaymentReadsAndAdministratorHoldAndInvestigationOperations() throws Exception {
         OpenApiSnapshot.verify(port,"payment");
         JsonNode paths=http("GET","/v3/api-docs",null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(5);
+        assertThat(paths.size()).isEqualTo(8);
         assertThat(paths.path("/api/v1/payments").size()).isEqualTo(1);
         assertThat(paths.path("/api/v1/payments").has("get")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds/{holdId}").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds/{holdId}/resume").has("post")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refund-delays").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refund-delays/{attemptId}").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refund-delays/{attemptId}/investigations").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/refund-delays/{attemptId}/investigations").has("post")).isTrue();
     }
 }

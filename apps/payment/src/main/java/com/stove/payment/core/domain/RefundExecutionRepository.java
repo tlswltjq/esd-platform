@@ -5,11 +5,16 @@ import java.util.Optional;
 import java.util.List;
 import java.time.Instant;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface RefundExecutionRepository extends JpaRepository<RefundExecution, Long> {
+    @Query("select r from RefundExecution r, Payment p where p.paymentId=r.paymentId and p.provider='PORTONE_TEST' "
+            + "and r.status='PENDING' and r.refundConfirmedAt is null and r.firstCancellationPreparedAt<=:preparedBy")
+    Page<RefundExecution> findDelayedForAdministration(Instant preparedBy, Pageable page);
+
     Optional<RefundExecution> findByAttemptId(String attemptId);
     @Query("select r.paymentId from RefundExecution r where r.attemptId=:attemptId")
     Optional<String> findPaymentIdByAttemptId(String attemptId);

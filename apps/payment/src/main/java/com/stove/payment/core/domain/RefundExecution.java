@@ -29,6 +29,13 @@ import lombok.NoArgsConstructor;
 @Entity @Table(name = "refund_execution")
 @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefundExecution {
+    public Instant confirmationDelayedSince(Instant at) {
+        if (!PaymentValues.microsecond(at)) throw new IllegalArgumentException("Database-precision time is required");
+        Instant deadline = cancellationResumeDeadline();
+        return status == RefundExecutionStatus.PENDING && refundConfirmedAt == null && deadline != null
+                && !at.isBefore(deadline) ? deadline : null;
+    }
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false, unique = true, updatable = false, length = 36)

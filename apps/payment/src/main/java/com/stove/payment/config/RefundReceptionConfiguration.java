@@ -12,6 +12,9 @@ import com.stove.payment.core.service.ReadRefundCancellationHolds;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.service.RecordRefundPreparation;
+import com.stove.payment.core.service.ReadRefundDelays;
+import com.stove.payment.core.service.RecordRefundInvestigation;
+import com.stove.payment.core.domain.RefundInvestigationRepository;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -21,6 +24,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
+    @Bean ReadRefundDelays readRefundDelays(PaymentRepository payments, RefundExecutionRepository executions,
+            RefundCancellationHoldRepository holds, RefundInvestigationRepository investigations, Clock refundReceptionClock) {
+        return new ReadRefundDelays(payments, executions, holds, investigations, refundReceptionClock);
+    }
+
+    @Bean RecordRefundInvestigation recordRefundInvestigation(PaymentRepository payments, RefundExecutionRepository executions,
+            RefundInvestigationRepository investigations, Clock refundReceptionClock) {
+        return new RecordRefundInvestigation(payments, executions, investigations, refundReceptionClock);
+    }
+
     @Bean RecordRefundPreparation recordRefundPreparation(OutboxRecorder outbox) { return new RecordRefundPreparation(outbox); }
 
     @Bean ReadRefundCancellationHolds readRefundCancellationHolds(PaymentRepository payments, RefundExecutionRepository executions,
