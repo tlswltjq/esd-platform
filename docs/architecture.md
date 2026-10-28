@@ -42,9 +42,9 @@ Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품�
 HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다. 최초 PAID이면 OrderPaid Outbox도 함께 저장한다.
 Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
 출처와 권한은 License 한 행에 저장한다. Order의 DB 유일 제약은 동일 상품의 PENDING·PAID 주문을 합쳐 한 건으로 제한하며 최종 FAILED에서만 새 구매를 허용한다. Order PAID와 라이브러리 반영 사이에는 전달 지연이 있다.
-실제 자금 이동·환불·권한 회수는 후속 대상이다. [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
+PortOne TEST의 환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행한다. 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](refund-session-handoff.md). [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
 
-후속 결제·이용권·정산에서는 실제 승인·지급·환불·비용을 각각 보존하는 계약이 필요하다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
+승인·지급·환불·비용은 각 담당 모듈이 근거를 보존한다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료이며 현재 환불 구현의 완료 여부는 위 인계와 검증 기록을 따른다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
 환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 당시 상태와 검증 근거가 있다.
 
 <a id="tracing"></a>

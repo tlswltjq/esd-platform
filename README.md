@@ -12,6 +12,8 @@ Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완�
 
 License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. Download의 보유권·현재 공개 빌드 조회와 전체 ZIP 만료 URL 제공은 [완료 기록](docs/download-mvp-plan.md#재작업-완료-기록), 실행은 [Download 안내](docs/download-guide.md)를 따른다. Settlement의 외부 모의 PG·배분·월 마감·수령 대사는 [완료 기록](docs/settlement-mvp-plan.md#재작성-완료-기록), 전체 실행은 [Settlement 안내](docs/settlement-guide.md)를 따른다.
 
+PortOne TEST의 전액 환불은 고객 접수·관리자 최초 판정·실제 이용권 정지·취소/조회·확정 실패 후 복구까지 확장했다. 실제 자동 환불 1건을 확인했으며, 고객 재시도 HTTP·운영 재개 HTTP·정산 환불 조정은 남아 있다. [현재 환불 인계](docs/refund-session-handoff.md) · [다음 세션 공통 지시와 작업](docs/refund-next-session.md)
+
 ## 문서 찾기
 
 | 궁금한 내용 | 읽을 문서 |

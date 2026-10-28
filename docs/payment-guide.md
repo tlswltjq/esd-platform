@@ -3,7 +3,7 @@
 [문서 목록](README.md) · [MVP 범위·검증 기록](payment-mvp-plan.md) · [주문 실행](order-guide.md) · [모델](domain/models/order-payment.md#payment)
 
 Payment는 **Order가 확정한 금액의 결제 결과**를 보존한다. Catalog·Store 가격을 다시 조회하지 않는다.
-이번 실행은 모의 PG이며 실제 자금 이동은 없다. 결과는 Kafka로 Order에 전달하고 주문 상태는 Order가 변경한다.
+이 문서의 기존 실행 예제는 모의 PG이며 실제 자금 이동은 없다. 별도로 PortOne TEST 결제창·웹훅과 환불 실행/조회/재송신을 구현했다. 테스트 채널의 현재 계약·실행 환경·제약은 [환불 인계](refund-session-handoff.md)와 [검증 기록](pg-test-integration-plan.md)을 따른다. 결과는 Kafka로 Order에 전달하고 주문 상태는 Order가 변경한다.
 
 ## 코드와 처리 경계
 

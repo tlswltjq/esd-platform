@@ -28,14 +28,14 @@ Download는 보유권과 현재 공개 빌드를 조회하고 전체 ZIP의 만�
 `OrderPaid`를 처음 처리할 때 출처와 권한을 한 행으로 생성한다.
 구매자·상품 ID와 구매자·상품 코드, 출처 주문·이벤트·요청 이벤트·결과 이벤트·결제 ID는 각각 유일하다.
 다른 주문의 같은 상품을 기존 권한에 추가하거나 출처를 교체하지 않는다. 예외 입력은 충돌로 남긴다.
-상품 후속 버전에도 같은 영구 보유권을 사용한다. 만료·회수 상태·좌석 수·빌드 제한은 이번 범위에 없다.
+상품 후속 버전에도 같은 영구 보유권을 사용한다. 환불을 위한 ACTIVE/SUSPENDED와 지급·정지·복구 근거가 추가됐다. 신규 Download는 ACTIVE만 허용한다. [현재 환불 계약](../../refund-session-handoff.md). 기간 만료·좌석 수·빌드 제한은 범위 밖이다.
 조회 주체는 JWT sub이며 Catalog 조회 없이 내 목록·상품 코드별 상세를 반환한다.
 
 [PaidOrder](../../../apps/license/src/main/java/com/stove/license/core/domain/PaidOrder.java)는 OrderPaid의 13개 값을 담고 생성 시 유효성을 보장하는 내부 입력이다.
 License.paidOrder()가 저장된 출처를 재구성하고 verify(...)가 전체 입력을 대조한다.
 같은 주문의 재전달은 원래 eventId·발생 시각·본문 모두 일치해야 한다. 다른 주문에서 출처 식별자를 재사용할 수 없다.
 
-[GrantLicense](../../../apps/license/src/main/java/com/stove/license/core/service/GrantLicense.java)는 출처·상품 충돌과 Inbox를 비교하고, 출처를 포함한 권한·Inbox를 같은 READ_COMMITTED 트랜잭션에서 저장한다.
+[GrantLicense](../../../apps/license/src/main/java/com/stove/license/core/service/GrantLicense.java)는 출처·상품 충돌과 Inbox를 비교하고, 출처를 포함한 권한·Inbox·LicenseGranted Outbox를 같은 READ_COMMITTED 트랜잭션에서 저장한다.
 동시 최초 지급의 유일 제약 경합은 전체 롤백하고 Kafka 재전달의 새 트랜잭션에서 다시 판단한다.
 같은 원본이면 한 권한으로 수렴한다. 다른 주문의 같은 상품이면 충돌이다.
 외부 이벤트 변환은 [LicenseOrderMapper](../../../apps/license/src/main/java/com/stove/license/api/listener/LicenseOrderMapper.java)가 맡는다.

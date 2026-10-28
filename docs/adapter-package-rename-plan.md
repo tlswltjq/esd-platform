@@ -178,7 +178,7 @@ Java 21·Gradle 8.14.3·OrbStack Docker를 사용했다. 테스트는 `CI=true`�
 
 ### 명령과 증거
 
-이번 실행 자료는 [별도 검증 폴더](../runs/adapter-rename-20261018-150523/)에 보존했다. 이전 Download 검증 폴더는 덮어쓰지 않았다.
+이번 실행 자료는 당시 Git 제외 검증 폴더 `runs/adapter-rename-20261018-150523/`에 보존했다. 이전 Download 검증 폴더는 덮어쓰지 않았다.
 
 - `compile-command.json`·`unit-command.json`·`integration-command.json`·`jars-command.json`: 실제 Gradle 명령 원문. 공통 옵션은 `-Pstove.infraTest.maxParallel=1 --offline --no-daemon`이다.
 - `compile.log`·`unit.log`·`integration.log`·`jars.log`: 단계별 실행 로그.
@@ -186,7 +186,9 @@ Java 21·Gradle 8.14.3·OrbStack Docker를 사용했다. 테스트는 `CI=true`�
 - `before/`·`before-manifest.json`·`moves.json`·`index-before.patch`·`worktree-before.patch`: 기존 작업본과 이동 대응.
 - `source-checks.json`·`legacy-reference-check.json`·`artifact-checks.json`: 소스·계약·구 패키지 참조·JAR 클래스 및 해시 대조.
 - `flow-command.json`·`flow.log`: 기존 실제 흐름 스크립트의 실행 명령과 로그.
-- `flow-checks.json`: 실제 열 앱 15단계의 JUnit 검사 및 결과 집계. 원본 로그·단계별 JUnit·요약은 [별도 실제 흐름 폴더](../runs/stove-download-check-ifaxfd2j/)에 있다.
+- `flow-checks.json`: 실제 열 앱 15단계의 JUnit 검사 및 결과 집계. 원본 로그·단계별 JUnit·요약은 당시 Git 제외 실제 흐름 폴더 `runs/stove-download-check-ifaxfd2j/`에 있다.
 - `environment.json`·`verification-summary.json`·`cleanup-checks.json`: 실행 환경·최종 집계·검증 전후 자원 대조.
 
 후속 업무 모듈 재작성 대상은 계속 **Settlement**다.
+
+위 두 과거 원자료 폴더는 현재 checkout에 포함돼 있지 않다. 해당 실행의 기록 위치를 보존하며 이 문서 정리에서 다시 검증한 것으로 간주하지 않는다.

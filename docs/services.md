@@ -158,6 +158,11 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 | POST | /api/v1/orders | requestId·productCode·expectedContentVersion·expectedAmount로 생성 또는 동일 요청 재조회 |
 | GET | /api/v1/orders | 내 주문 페이지. page=0·size=20, 최대 100 |
 | GET | /api/v1/orders/{orderNo} | 본인 상세, 타인·없는 주문 404 |
+| POST | /api/v1/orders/{orderNo}/refund | MEMBER의 서버 원금 전액 접수. 신규/진행 중 202, 기존 최종 결과 200 |
+| GET | /api/v1/orders/{orderNo}/refund | MEMBER의 본인 환불 상태·첫 접수·완료 시각·반려 사유 |
+| GET | /api/v1/admin/refunds | ADMIN의 상태별 목록. 기본 PENDING_REVIEW, page=0/size=20, 최대 100 |
+| GET | /api/v1/admin/refunds/{refundId} | ADMIN의 원구매·처리 상태·최초 판정 상세 |
+| POST | /api/v1/admin/refunds/{refundId}/decision | ADMIN의 requestId·APPROVED/REJECTED·사유. 판정자는 JWT sub |
 
 MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문·임의 헤더로 구매자를 선택하지 않는다.
 Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 버전·정가를 비교한다. 차이는 409이며 무료 상품도 409다.
@@ -171,7 +176,10 @@ Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 �
 원래 eventId·내용의 재전달은 무효과이며 확정 결과를 새 결과로 덮어쓰지 않는다.
 주문·Outbox와 결과·상태·Inbox는 각각 같은 트랜잭션으로 저장한다.
 
-업무 테이블은 purchase_order 하나다. 기존 V1~V9와 구 자료는 보존하고 V10을 추가한다.
+원구매는 purchase_order에 보존한다. 환불 접수/판정은 order_refund, 실제 지급 근거는 order_license_grant, 실행 이력은 order_refund_attempt에 저장한다. 원래 PAID와 환불 상태를 분리하고 V20까지 기존 마이그레이션·자료를 보존한다.
+환불 고객 상태는 PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED다. FAILED는 검증된 PG 실패와 실제 복구 완료 뒤에만 표시한다. REJECTED에는 고객에게 보이는 rejectionReason이 있고 승인 감사 메모·판정자는 공개하지 않는다.
+최초 내구 접수가 결제 확정 후 정확히 4시간 이내면 자동 허용하고, 이후에는 관리자 심사한다. 먼저 커밋된 판정이 확정되며 같은 명령·판정자·내용만 최초 판정 영수증으로 재전송 처리한다. 판정 변경·다른 명령은 409다.
+승인은 실제 License 지급 확인과 함께 정지 요청을 발행하고, 실제 정지 확인 뒤에만 RefundExecutionRequested를 발행한다. 조회/판정은 no-store이며 관리자 200은 환불 완료를 의미하지 않는다. 현재 고객 재시도 HTTP는 없고 반려 후 재심사는 미결이다. [계약·검증](refund-session-handoff.md).
 구 견적·다중 항목·Redis·만료·취소·정산 계산을 사용하지 않는다.
 Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guide.md)은 실제 Payment 앱을 사용한다.
 
@@ -179,27 +187,30 @@ Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guid
 
 ## payment
 
-확정된 주문의 결제 접수, 모의 PG 자동 처리, 미확정 건 재개와 내 결제 조회를 담당한다.
+확정된 주문의 결제 접수, 외부 PG 승인/조회, 미확정 건 재개·내 결제 조회와 허용된 환불의 PG 실행/결과 확인을 담당한다.
 [모델](domain/models/order-payment.md#payment) · [실행](payment-guide.md) · [MVP 범위·검증](payment-mvp-plan.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | /api/v1/payments?page=0&size=20 | JWT sub 기준 본인 목록 |
 | GET | /api/v1/payments/{orderNo} | 본인 상세, 타인·없는 결제 404 |
+| GET | /api/v1/payments/{orderNo}/checkout | 본인 PENDING/PORTONE_TEST 결제의 공개 SDK 설정. 생성·승인 API가 아님 |
+| POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. 공개 edge가 Payment로 직접 전달 |
 
 MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
-공개 provider는 SIMULATED다. prepare·콜백·승인 주입·환불·운영 HTTP API는 제공하지 않는다.
+provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 주입·운영 재개 HTTP API는 없다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
 
-수신은 OrderPlaced, 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
+기본 결제 수신은 OrderPlaced, 결과 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
 입력은 api.listener의 Mapper에서 내부 값으로 변환한다. ReceiveOrderPayment가 원래 요청 전체를 비교하고 PENDING·Inbox를 함께 저장한다.
-주기 실행이 처리 시각에 도달한 PENDING을 ResolvePayment로 재개한다. 기본 주기 1초·20건·오류 재시도 간격 5초다.
+주기 실행이 처리 시각에 도달한 PENDING을 ResolvePayment로 재개한다. PORTONE_TEST는 구매자가 SDK 결제창을 승인하고 서버가 PG 거래의 주문·금액을 대조한다. 기본 주기 1초·20건·오류 재시도 간격 5초다.
 PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId를 멱등 키로 사용한다.
 확인된 승인·거절만 결과와 Outbox를 함께 확정한다. 응답 유실·결과 저장 실패는 PENDING을 유지한다.
 최종 상태·이벤트 ID·시각은 고정하며 Order 상태는 Order가 결과 검증 뒤 변경한다.
 
-업무 테이블은 purchase_payment다. PG 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다.
+기본 결제는 purchase_payment에 저장한다. 모의 PG의 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
 V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.
-실제 PG·결제창·환불은 후속 범위다. Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다.
+환불은 RefundExecutionRequested를 내구 접수한 뒤 고정 attemptId/본문과 최초 준비 3시간 창으로 취소·조회한다. 같은 실행의 재송신/조회 예약과 운영 중단 이력을 별도로 보존한다. 확인된 전액 취소/실행 성공/확정 실패는 결과 이벤트를 발행하며 원 purchase_payment의 PAID는 바꾸지 않는다. 오류별 자동 복구·운영 중단과 실제 TEST 범위는 [환불 계약](refund-session-handoff.md)을 따른다.
+Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다. 실제 운영 자금 이동·정산 환불 조정은 후속이다.
 
 ---
 
@@ -213,16 +224,16 @@ V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge
 | GET | `/api/v1/library?page=0&size=20` | JWT sub 기준 내 보유 상품 페이지 |
 | GET | `/api/v1/library/{productCode}` | 본인이 보유한 상품 한 개. 타인·미보유 404 |
 
-**이벤트** — `stove.order.v1`의 `OrderPaid`만 수신. 소비 그룹 `license-paid-order`. 발행 이벤트 없음.
+**이벤트** — `stove.order.v1`의 OrderPaid·LicenseSuspensionRequested·LicenseRestorationRequested를 수신한다. 지급·정지·복구 완료와 LicenseGranted·LicenseSuspended·LicenseRestored Outbox를 같은 트랜잭션으로 저장한다.
 
 - Order가 최초 PAID에 함께 저장한 상품·결제 스냅샷을 사용한다. 추가 결제 승인이나 구매 확정 절차는 없다.
 - 권한은 `(buyerSubject, productId)`별 한 개이며 출처 전체를 `product_license`에 함께 저장한다. 다른 주문의 같은 상품은 충돌이다.
-- 같은 주문의 입력 전체와 기존 권한·Inbox를 비교하고, 출처를 포함한 License·Inbox를 함께 커밋한다.
+- 같은 주문의 입력 전체와 기존 권한·Inbox를 비교하고, 출처를 포함한 License·Inbox·지급 완료 Outbox를 함께 커밋한다.
 - 최초 licenseId·제목·획득 시각은 유지한다. Catalog·Order·Payment HTTP 조회로 지급하거나 가격을 바꾸지 않는다.
 - MEMBER JWT가 필요하다. 본문·쿼리·헤더의 회원 ID로 소유자를 바꾸지 않는다.
-- 구 License Outbox 릴레이와 운영 HTTP는 비활성화한다. 지급 실패는 공통 재시도·DLT로 남기며 자동 환불을 요청하지 않는다.
+- 운영 HTTP는 제공하지 않는다. 현재 지급·정지·복구 완료 이벤트는 Outbox 릴레이를 사용한다. 지급 실패는 공통 재시도·DLT로 남기며 자동 환불을 요청하지 않는다.
 - 기존 마이그레이션과 구 자료를 보존하고 V5에서 출처를 권한에 통합한다. license_purchase는 과거 자료로만 남긴다. 기존 PAID 주문의 자동 소급 지급은 없다.
-- 환불·회수는 후속 범위다. Download는 기존 내 라이브러리 상세 API로 보유권을 확인한다.
+- 환불용 ACTIVE/SUSPENDED와 정지·복구 이력을 제공한다. 원래 구매 출처는 유지하고 정지 상품도 목록/상세에 남긴다. Download는 상세의 ACTIVE를 확인한다. 이미 받은 파일 회수·재구매 정책은 후속이다.
 
 ---
 
@@ -240,7 +251,7 @@ V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge
 - License·Catalog의 상품 ID·코드를 대조하고, 현재 COMPLETED 공개본의 전체 빌드만 사용한다.
 - 저장소 HEAD로 객체·크기를 확인한 뒤 해당 파일의 GET URL을 발급한다. 기본 TTL 5분, 허용 범위 1초~15분이다.
 - 응답은 no-store다. 쿼리·과거 버전·플랫폼·델타 선택·manifests API는 제공하지 않는다.
-- 미보유/지급 전 403, 현재 공개 상품 없음 404, 파일 누락/크기 불일치 409, 연계 장애/응답 불일치 503이다.
+- 미보유/지급 전/이용권 SUSPENDED는 403, 현재 공개 상품 없음 404, 파일 누락/크기 불일치 409, 연계 장애/응답 불일치 503이다.
 - URL은 만료 전 반복 사용·공유가 가능하다. License 보유권과 URL 유효기간을 구분한다.
 - 외부 이벤트 수신·발행은 없으며 발급·실패·재시작이 주문·보유권·공개본을 변경하지 않는다.
 

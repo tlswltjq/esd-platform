@@ -11,7 +11,7 @@ License는 이 이벤트의 출처 전체와 상품 보유권을 product_license
 
 | 유스케이스 | 책임 |
 |---|---|
-| GrantLicense | 전체 출처·상품 충돌·Inbox 비교, 출처를 포함한 권한·Inbox의 원자적 지급 |
+| GrantLicense | 전체 출처·상품 충돌·Inbox 비교, 출처를 포함한 권한·Inbox·LicenseGranted Outbox의 원자적 지급 |
 | SearchLicenses | JWT sub 기준 목록·페이지 조회 |
 | ReadLicense | 본인·상품 코드별 상세, 타인·없는 상품 404 |
 
@@ -30,12 +30,12 @@ curl -H "Authorization: Bearer $TOKEN" "$GATEWAY/api/v1/library/$PRODUCT_CODE"
 ```
 
 목록은 acquiredAt·내부 id 역순이며 page는 0 이상, size는 1~100이다.
-응답 항목은 licenseId·productId·productCode·title·acquiredAt이다. licenseId는 공개 UUID이며 비밀 키가 아니다.
+응답 항목은 licenseId·productId·productCode·title·acquiredAt·status(ACTIVE/SUSPENDED)다. licenseId는 공개 UUID이며 비밀 키가 아니다.
 익명 401, MEMBER 없음 403, 미보유·타인 404, 잘못된 페이지·코드 형식 400이다.
 JWT sub를 사용하며 memberId·buyerSubject 쿼리와 X-Member-Id는 주체를 바꾸지 않는다.
 
 Order PAID 직후에는 이벤트 전달 중이므로 라이브러리에 없거나 상세가 404일 수 있다.
-조회는 지급을 수행하지 않는다. 환불·회수·기간제·다운로드 URL 제공은 후속 범위다.
+조회는 지급을 수행하지 않는다. 환불용 지급 확인·정지·확정 실패 뒤 복구는 이벤트와 Outbox로 처리한다. SUSPENDED도 라이브러리에 남으며 Download는 ACTIVE에서만 신규 URL을 제공한다. [현재 환불 흐름](refund-session-handoff.md)을 따른다. 기간제와 이미 받은 파일 회수는 범위 밖이다.
 
 ## OCI 검증
 

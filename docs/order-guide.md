@@ -4,7 +4,7 @@
 
 Order는 **누가 어떤 공개 상품을 얼마에 주문했는가**를 보존한다.
 상품 하나·수량 하나·양수 KRW 정가만 주문하며 결제 결과에 따라 PENDING → PAID/FAILED로 전이한다.
-실제 PG·결제창·환불·정산은 후속 범위다. 이용 권한은 [License](license-guide.md)가 담당한다. Order 독립 검증은 이벤트 픽스처를 사용하며, 실제 모의 PG 연계는 [Payment 안내](payment-guide.md)를 따른다.
+현재 고객 전액 환불 접수/조회와 ADMIN의 최초 승인/반려도 제공한다. [현재 환불 계약·환경](refund-session-handoff.md), [API 명세](services.md#order)를 따른다. 정산 환불 조정은 후속 범위다. 이용 권한은 [License](license-guide.md)가 담당한다. Order 독립 검증은 이벤트 픽스처를 사용하며, 실제 모의 PG 연계는 [Payment 안내](payment-guide.md)를 따른다.
 
 ## 코드와 데이터 흐름
 

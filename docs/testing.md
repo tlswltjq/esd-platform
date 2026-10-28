@@ -561,6 +561,8 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 아래 R 번호 표는 **작성할 행위 테스트 계획**이다. 개별 Red·Green 실행은 별도 기록하며 일부 도메인 테스트의 결과를 전체 시나리오 완료로 표시하지 않는다. R 번호는 시나리오 식별자이며 JUnit 실행 건수가 아니다.
 정책을 새로 정해야 하는 사항은 [미결 질문](domain/open-questions.md#q9)과 7.8절에서 먼저 결정한다.
 
+현재 구현/검증은 [인계의 검증 표](refund-session-handoff.md#검증과-근거)를 먼저 확인한다. 아래 날짜별 계획·미결 표기는 당시 상태이며 최신 합의를 대신하지 않는다.
+
 ### 7.1 기존 Green과 Order의 검증 경계
 
 현재 [RefundPolicyTest](../apps/order/src/test/java/com/stove/order/core/domain/RefundPolicyTest.java)의 10건은 시간 판정의 Green으로 유지한다.
@@ -721,8 +723,7 @@ License가 자신의 구매 기록과 대조하고 불일치한 정지를 막는
 | R12 | 관리자가 심사 대기 요청 반려 | 반려 결과 저장. 보유권 정지·Payment 실행 요청 없음. 원래 결제 성공 근거 유지 | 도메인·실제 DB |
 | R13 | 같은 승인 요청을 중복 처리 | 기존 승인 결과 유지. 정지 요청을 추가로 만들지 않음 | 서비스·실제 DB |
 
-승인과 반려가 경합하거나 이미 내려진 판정을 뒤집는 경우의 규칙은 추가 결정이 필요하다.
-R13은 동일 승인 재처리만 다루며 반려 후 재신청 규칙을 대신 확정하지 않는다.
+2026-10-28 A안으로 먼저 커밋된 판정을 확정했다. 동일 명령·환불·판정자·판정·사유는 최초 영수증을 반환하고 다른 지시는 409다. R10~R13과 반대 판정 경합·다른 환불의 명령 재사용·지급 경합·Outbox 롤백은 실제 JWT/DB로 검증했다. 반려 후 재심사는 별도 미결이다. [검증 기록](pg-test-integration-plan.md#2026-10-28-관리자-최초-환불-판정-확정-a안).
 
 ### 7.4 License 정지 완료 수신과 Payment 실행 요청
 
@@ -786,22 +787,22 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 - Outbox의 건수뿐 아니라 종류·업무 연결값·파티션 키·금액·통화와 계약에 포함한 본문 전체를 확인한다. 기존 주문 이벤트가 있으므로 전체 테이블이 0건이라고 단언하지 않는다.
 - 거절·불일치·롤백에는 업무 상태·Inbox·관련 Outbox 모두의 무변경을 확인한다. 시간 경과는 고정 시각으로 재현하고 `Thread.sleep`으로 경계를 넘기지 않는다.
 - 각 Red는 컴파일 누락이 아니라 기대 동작 미구현 때문에 실패하는지 확인하고, Green 후 기존 Order 테스트와 함께 검증한다. 신규 기능 TDD를 구 결함 재현용 `known-defect` 태그로 숨기지 않는다.
-- 격리 실행은 로컬 OrbStack에서 수행하며 실행별 포트·DB·컨테이너를 분리하고 공유 자료를 보존한다.
+- 기본 격리 환경은 로컬 OrbStack이다. 현재 환불 작업의 인프라 검증은 사용자가 승인한 ssh sng OCI를 사용하며 실행별 포트·DB·컨테이너를 분리하고 공유 자료를 보존한다.
 
-### 7.8 기대값을 고정하기 전에 결정할 사항
+### 7.8 현재 남은 계약과 검증
 
-| 쟁점 | 영향을 받는 테스트 |
+2026-10-28 기준이다. PG 멱등 키/고정 본문·내구 재송신/조회·확정 실패와 실제 복구·최초 관리자 판정은 구현·검증했다. 다음 세션의 구체적 순서는 [공통 지시·다음 작업](refund-next-session.md)을 따른다.
+
+| 남은 항목 | 테스트를 쓰기 전 확인할 것 |
 |---|---|
-| 기존 지급 건·확인 누락 복구와 장기 대기 방식. 새 지급의 LicenseGranted 계약·근거 저장·선행/후행 재개는 구현·검증 | 기존 지급 보완과 장기 대기·운영 재처리 테스트 |
-| 확정 결과·복구 요청의 필드·키와 PG 승인·조회 상세 계약. PG 멱등 키는 2026-10-27 attemptId로 결정했다. 같은 키의 확정 결과 보존·다른 본문 거절과 원결제의 전액 환불 성공 1회 제한은 합의했고, 이미 환불된 원결제에 다른 키로 요청했을 때의 응답은 미결이다. 내부 refundId/attemptId, 정지 요청·완료와 실행 요청, Order의 완료 수신과 Payment 접수는 정의·구현했다 | R20~R25의 구체적인 이벤트 픽스처와 PG 경계. 새 PG 키 계약의 Red·Green·OCI 검증은 아직 수행하지 않음 |
-| 이미 반려된 요청의 재신청, 승인·반려 경합과 판정 변경 | R13 이후의 추가 심사 시나리오 |
-| 어떤 확정 실패에 사용자 재시도가 유효한지, 현재 실행의 선택·이전 결과 대조와 복구 완료의 연결. 시도별 모델은 이 판단을 대신하지 않음 | 확정 실패 후 재시도·이전 시도의 지연 결과 테스트 |
-| 정지 완료의 근거 부재·불일치는 A안으로 거절·격리한다. 아직 정의하지 않은 Payment 결과·복구 이벤트의 예상하지 않은 단계 처리는 후속 | R20~R25의 추가 상태 전이·순서 역전 테스트 |
-| 접수 시각이 결제 확정 시각보다 앞서는 경우의 처리 | 현재 시간 판정 테스트의 유효한 두 시각 전제를 확장하는 테스트 |
-| 복구 완료 확인 방식, 조회 경로·HTTP 상태·응답 필드·관리자 조회 범위 | R21·R27~R29와 복구 완료 수신 테스트 |
-| 정책 변경의 과거 주문·접수 적용, 환불 후 재구매, 정산·비용 반환 | 별도 후속 테스트. 현재 4시간·최초 판정 보존 규칙을 임의로 변경하지 않음 |
+| 고객 명시적 새 시도 HTTP | 기존 RequestRefundRetry의 FAILED/실제 복구 조건을 유지하고 입력·응답·중복·소유권 계약을 설명/확인 |
+| 반려 재접수·잘못된 승인 구제 | 최초 판정 확정 A안을 임의로 바꾸지 않음. 재심사/판정 번복은 별도 정책 |
+| Payment 운영 중단 재개 HTTP | 내부 재개 유스케이스의 키/본문/기한·현재 중단 근거를 유지할 권한/감사/응답 계약 |
+| 지급 확인 누락·장기 미확정 운영 | 현재 새 지급의 LicenseGranted와 선행/후행 재개는 검증됨. 과거 자료 보완과 장기 대기의 고객 안내/담당자 조치가 남음 |
+| 시간/정책 변경·재구매·정산 | 비정상 시각의 추가 입력 계약, 정책의 과거 적용, 환불 후 같은 상품 재구매, 마감 후 환불 조정은 별도 결정 |
+| 실제 제공사/추적 전체 검증 | 실제 ADMIN 수동 환불, 실제 PG 오류·응답 유실과 Tempo 전체 연결은 계약 픽스처나 정상 자동 환불 1건으로 대체하지 않음 |
 
-각 쟁점은 담당자가 선택과 이유를 설명한 뒤 반례·비용을 검토한다. 미결 정책의 정답을 테스트 작성 과정에서 임의로 확정하지 않는다.
+각 쟁점은 사용자가 선택과 이유를 설명한 뒤 반례·비용을 검토한다. 미결 정책을 테스트 기대값으로 먼저 확정하지 않는다.
 
 <a id="order-module-tests"></a>
 
@@ -889,3 +890,41 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 
 
 2026-10-27 PG 실패 뒤 미취소 확인·권한 복구 B안: 미구현 Red는 Payment 3·Order 2·License 2건이다. 최초 로컬의 카탈로그/변경 전 기대값/송신 제네릭 오류를 수정했고 최종 로컬 단위 공통 Kafka 203·Payment 213·Order 263·License 99건 및 세 모듈 통합 컴파일/bootJar가 통과했다. OCI full에서 7개 태스크 전체(공통 Kafka 203·Payment 213/통합 97·Order 261/통합 83·License 99/통합 53)를 통과했다. Order 발행 모듈 토픽 검증 보강 후 updated에서 Order 전체 단위 263/통합 83, Payment 관리자 전액 취소 경합 픽스처 추가 후 payment-final에서 통합 전체 98건을 각각 --rerun-tasks로 재검증했다. 모두 실패·오류·건너뜀 0이며 단일 전체 실행 수치로 합치지 않는다. 신규 통합은 Payment 5·Order 4·License 5건으로 실제 DB 원자성/롤백/재개/동시 복구·PG 조회의 보류/완료·옛 정지/복구 메시지·실제 Kafka의 중복/단계 반영을 검증했다. HTTP는 계약 픽스처이며 실제 PG 환불이나 전체 실거래 환불 E2E는 아니다. 소스 1,043개 대조·비밀값 포함 0건·공유 컨테이너 22개/볼륨 57개와 상태 보존·추가/잔여 자원 없음. runs/refund-restoration-tdd-ur27gau4 및 runs/refund-restoration-oci-fg84qzci/collected/results/{full,updated,payment-final}에 원자료를 보존했다. [계약·실행별 출처](pg-test-integration-plan.md#2026-10-27-실패-후-미취소-조회와-권한-복구-b안)를 따른다.
+
+
+2026-10-27 실제 복구 후 명시적 재시도 A안: Order 미구현 Red 3건과 수정한 Payment 기준 구현의 업무 Red 1건을 확인했다. 최초 Payment Red의 모의 저장소 설정 오류는 업무 Red에서 제외하고 corrected baseline의 BusinessException을 보존했다. 최종 로컬/OCI 단위 공통 Kafka 205·Payment 218·Order 268, OCI Payment 통합 102·Order 통합 87건은 같은 full 입력에서 실패·오류·건너뜀 0으로 통과했다. 새 통합 8건과 확장한 Kafka 사례는 최초 자격/이력·동시/중복 접수·접수/Outbox 실제 flush 롤백·새 정지 완료·현재 시도/선행당 단일 후행·연속 실패 뒤 새 키/창·다른 진행 취소 미송신·현재 시도 웹훅·옛 메시지 대조를 검증한다. 통합 컴파일·두 bootJar 통과. 소스 1,050개 SHA-256 대조·비밀값 포함 0·공유 컨테이너 22개/볼륨 57개와 상태 보존·추가/잔여 자원 없음. runs/refund-retry-tdd-5qwhady7 및 runs/refund-retry-oci-q_c7wgvb/collected/results/full에 원자료를 남겼다. License는 변경/재실행하지 않았고 HTTP/License 완료는 계약 픽스처이므로 실제 PG 환불/전체 E2E로 확대하지 않는다. [상세·활성화 기록](pg-test-integration-plan.md#2026-10-27-복구-뒤-명시적-재시도-a안).
+
+
+2026-10-27 이벤트 소비자 첫 취소 송신 A안: 최초 업무 Red 4건과 실제 Kafka 컨테이너 설정 누락 Red 1건을 확인했다. OCI full의 테스트 설정/기대값 2건과 corrected의 Kafka 설정 누락 1건을 보완한 final에서 Payment 단위 229·통합 109건이 모두 실패/오류/건너뜀 0으로 통과했다. 새 통합 7건은 커밋 후 송신·중복/동시/재전달·응답 유실과 GET 회복·준비 후 미송신 가능 구간·PG 성공 뒤 DB/Outbox 롤백·느린 PG의 Kafka 대기를 검증한다. 로컬 단위·통합 컴파일·bootJar 통과. 소스 1,057개 대조, 공유 컨테이너 22개/볼륨 57개 및 상태 보존, 추가/잔여 자원 없음. runs/refund-event-tdd-rb272_9q 및 runs/refund-event-oci-edsrov3x/collected/results/{full,corrected,final}에 원자료를 보존했다. [계약·실행별 기록·B안 고도화 계획](pg-test-integration-plan.md#2026-10-27-이벤트-소비자의-첫-취소-송신-a안)을 따른다. 실제 PG 취소/전체 환불 E2E 및 다른 모듈 재검증으로 확대하지 않는다.
+
+
+2026-10-27 명확한 조건의 동일 시도 자동 재송신 A안+간격 B안: 일정/작업 배정의 Red 11건을 확인했다. 로컬 최종 Payment 단위 249건·통합 컴파일·bootJar가 통과했다. OCI full의 신규 복구 픽스처 모드 오류 2건을 수정하고 corrected 전체를 --rerun-tasks로 재실행해 Payment 단위 249·통합 121건 모두 실패/오류/건너뜀 0으로 통과했다. 운영 코드는 최초 OCI 이후 변경하지 않았다. 새 통합 12건은 종료 후 10/30/60초·같은 키/본문/준비·기존 준비 관측/중단 후 재개·금지 조건·임대/동시/늦은 결과/포화·3시간 경계·실제 Kafka/자동 타이머를 검증한다. 소스 1,066개 대조, 실제 비밀값 포함 0·컨테이너 22개/볼륨 57개와 상태 보존·추가/잔여 자원 없음. runs/refund-resend-tdd-ui0rl4k9 및 runs/refund-resend-oci-hpe9gmgp/collected/results/{full,corrected}에 실행별 근거가 있다. [상세 계약/검증](pg-test-integration-plan.md#2026-10-27-동일-시도-재송신-간격-b안)을 따른다. HTTP는 계약 픽스처이며 실제 PG 환불 E2E 및 다른 모듈 재검증이 아니다.
+
+
+2026-10-27 401 인증 오류 뒤 자동 재개 B안: 기존 미확정 재시도 동작을 유지하고, 사전 GET/POST/결과 GET의 인증 오류 식별 Red 3건 뒤 PgAuthenticationUnavailable 분류와 안전한 로그를 추가했다. 로컬/OCI Payment 단위 253건·OCI 통합 126건은 모두 실패/오류/건너뜀 0이다. 새 통합 5건은 잘못된 키→올바른 키의 클라이언트 조립/같은 접수 재개, POST 401의 같은 본문/키, 조회 401 뒤 이미 완료된 환불의 미중복 처리, 3시간 경계, 부분 취소 금지 조건을 검증한다. 로컬 통합 컴파일·bootJar 통과. 소스 1,067개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개 및 상태 보존·추가/잔여 자원 없음. runs/refund-auth-tdd-ep4o24t7 및 runs/refund-auth-oci-sf6_xxur/collected/results/full에 근거가 있다. [상세](pg-test-integration-plan.md#2026-10-27-인증-오류-401-뒤-자동-재개-b안)를 따른다. V23 유지, 실제 API 키 변경/실제 PG 환불 E2E 또는 다른 모듈 재실행의 완료가 아니다.
+
+
+2026-10-28 취소 POST 403 자동 중단 A안: 어댑터 1·도메인 7건의 Red를 확인했다. 로컬 Payment 단위 264건·통합 컴파일·bootJar가 통과했다. OCI full의 롤백 저장소 spy 추상 실제 메서드 호출 오류 1건을 실제 EntityManager 삽입/flush 후 실패로 고쳤고, corrected 전체 --rerun-tasks에서 Payment 단위 264·통합 137건이 모두 실패/오류/건너뜀 0이다. 운영 코드는 최초 OCI 이후 바꾸지 않았다. 새 통합 11건은 중단/GET·원자 저장과 롤백·운영 재개/중복/새 중단·동시/늦은 결과·원래 3시간/금융 완료/부분 취소를 검증한다. 소스 1,074개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개 및 상태 보존·추가/잔여 자원 없음. runs/refund-forbidden-tdd-4f_lh_a6 및 runs/refund-forbidden-oci-t90dzc63/collected/results/{full,corrected}에 원자료를 보존했다. [상세](pg-test-integration-plan.md#2026-10-28-취소-post-403-자동-중단-a안)를 따른다. 관리자 HTTP/권한 인증·실제 PG 환불 E2E·다른 모듈 재검증의 완료가 아니다.
+
+
+2026-10-28 조회 GET 404 자동 재개 B안: 사전/결과 GET 404 식별의 Red 2건 뒤 PgPaymentNotFound 분류를 추가하고 기존 미확정 동작을 유지했다. 로컬/OCI Payment 단위 268건·OCI 통합 143건 모두 실패/오류/건너뜀 0이다. 새 통합 6건은 정상 구매 확인 뒤 같은 요청 재개·조회 회복 후 이미 완료된 환불의 미중복 처리·3시간 경계·다른 구매/부분 취소·기존 403 중단 유지다. 로컬 통합 컴파일·bootJar 통과. 소스 1,075개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개 및 상태 보존·추가/잔여 자원 없음. runs/refund-lookup404-tdd-q205utzl 및 runs/refund-lookup404-oci-1cis4_cs/collected/results/full에 근거가 있다. [상세](pg-test-integration-plan.md#2026-10-28-조회-get-404-뒤-자동-재개-b안)를 따른다. V24 유지, POST 404/다른 오류 정책·다른 모듈 재실행·실제 PG 환불 E2E 완료는 아니다.
+
+
+2026-10-28 취소 POST 404 자동 재개 B안: 전용 분류의 Red 1건 뒤 기존 미확정 동작을 유지하고 PgCancellationNotFound를 추가했다. 로컬/OCI Payment 단위 269건·OCI 통합 149건 모두 실패/오류/건너뜀 0이다. 새 통합 6건은 반복 404의 10/30/60초·같은 본문/키/첫 준비 유지 후 재개, 전액 완료의 미중복 처리·부분/다른 구매·3시간/GET·후속 403 중단을 검증한다. 로컬 통합 컴파일·bootJar 통과. 소스 1,076개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개 및 상태 보존·추가/잔여 자원 없음. runs/refund-post404-tdd-0mfmnlca 및 runs/refund-post404-oci-_0gml1ha/collected/results/full에 근거가 있다. [상세](pg-test-integration-plan.md#2026-10-28-취소-post-404-뒤-자동-재개-b안)를 따른다. V24 유지, HTTP는 계약 픽스처이며 실제 PG 환불 E2E·다른 모듈 재실행의 완료가 아니다. 다음은 조회 GET 403 등 나머지 HTTP 오류/장기 대기 운영 기준을 한 쟁점씩 논의한다.
+
+
+2026-10-28 조회 GET 403 자동 재개 B안: 사전/결과 GET의 식별 Red 2건 뒤 PgPaymentLookupForbidden을 추가하고 기존 미확정 동작을 유지했다. 로컬/OCI Payment 단위 271건·OCI 통합 156건 모두 실패/오류/건너뜀 0이다. 새 통합 7건은 사전 거절 뒤 같은 요청 재개·결과 조회 일정/미중복 완료·FAILED의 추가 증거 대기 후 1회 실패 확인·3시간/GET·부분/다른 구매·기존 POST 403 중단 유지를 검증한다. 로컬 통합 컴파일·bootJar 통과. 소스 1,077개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개 및 상태 보존·추가/잔여 자원 없음. runs/refund-get403-tdd-a6d6edc_ 및 runs/refund-get403-oci-u43efztz/collected/results/full에 근거가 있다. [상세](pg-test-integration-plan.md#2026-10-28-조회-get-403-뒤-자동-재개-b안)를 따른다. V24 유지, HTTP/후속 경계는 계약 픽스처이며 실제 PG 환불·License 복구 E2E·다른 모듈 재실행의 완료가 아니다. 다음은 나머지 HTTP 오류/장기 대기 운영 기준을 한 쟁점씩 논의한다.
+
+
+2026-10-28 취소 POST 400 INVALID_REQUEST 자동 중단 A안: 어댑터/중단 커밋 Red 2건 뒤 구현했다. 로컬 Payment 단위 276건·통합 컴파일·bootJar가 통과했다. OCI full의 생성 열 직접 복사 픽스처 1건을 수정하고 corrected 전체 --rerun-tasks에서 Payment 단위 276·통합 166건 모두 실패/오류/건너뜀 0으로 통과했다. 운영 코드/V25는 최초 OCI 이후 변경하지 않았다. 새 통합 10건은 중단/GET·명시적 재개/새 중단과 과거 지시·기한/완료/부분·조회 장애·실제 flush 롤백·늦은 소유자·미지 400·V24 이력/활성 중단의 V25 보존을 검증한다. 소스 1,078개 대조·실제 비밀값 포함 0·컨테이너 22개/볼륨 57개와 상태 보존·추가/잔여 자원 없음. runs/refund-invalid400-tdd-60edk1d3 및 runs/refund-invalid400-oci-3bpzduhu/collected/results/{full,corrected}에 원자료를 보존했다. [상세](pg-test-integration-plan.md#2026-10-28-취소-post-400-invalid_request-자동-중단-a안)를 따른다. 본문 정정·관리자 HTTP/인증·다른 모듈 재검증·실제 PG 환불 E2E의 완료가 아니다. 다음은 나머지 HTTP 오류/장기 대기 운영 기준을 한 쟁점씩 논의한다.
+
+
+2026-10-28 고객 환불 요청/조회 API: Red 4건 뒤 구현하고 로컬 Order 단위 282/통합 컴파일/bootJar를 통과했다. OCI full의 명세/테스트 설정 4건을 수정하고 기존 명세 불변을 대조한 corrected 전체 --rerun-tasks에서 Order 단위 282·통합 95건 모두 실패/오류/건너뜀 0이다. 새 통합 HTTP 8건이 권한/소유권·전액/상태·중복/동시/거절/심사 대기와 실제 Outbox 롤백을 검증한다. 소스 1,085개·비밀값 포함 0·기존 컨테이너 22개/볼륨 57개 및 상태 보존. runs/refund-customer-api-oci-yd50q5ee/collected/results/{full,schema-update,corrected}에 출처가 있으며 schema-update의 단위 XML은 재실행 수치가 아니다. Order만 runtime 갱신(V19)했고 원래 9,000원 PAID/본인 API 응답·다른 앱 PID·자격 증명을 보존했다. 실제 새 결제/환불 전체 검증은 별도 승인 대기 단계다. [계약](pg-test-integration-plan.md#2026-10-28-고객-환불-api와-새-test-결제-전체-검증-a안).
+
+2026-10-28 새 TEST 주문의 실제 자동 전액 환불 검증 완료: 휴대폰 승인 후 토스페이 테스트용 PAY_APPROVED 페이지의 같은 결제 번호를 확인하고 이동하기를 눌러 PAID까지 진행했다. 새 9,000원 결제에서 실제 지급/ZIP 다운로드→고객 접수·중복→실제 정지→PG 전액 취소 1건→Order COMPLETED·Payment/Order 시도 SUCCEEDED(PG_RESPONSE)→Library SUSPENDED·신규 Download 403을 확인했다. 관련 Outbox 8건 SENT·동일 정지 완료 근거/저장 순서·원 PAID/구매 사실·기존 별도 9,000원 결제를 보존했다. DB 보고서의 존재하지 않는 열 오류를 읽기 전용으로 고쳤고 결제/환불 POST는 추가하지 않았다. 기존 고객 URL 자체의 만료 후 GET은 확인하지 못했고 별도 S3 만료 제어 검사 200→403과 구분한다. runs/refund-live-obe63z8s/e2e-result.json 및 resource-preservation-final.json이 최종 근거이며 초기 오류도 보존했다. 기존 컨테이너 22/볼륨 57 보존·신규 전용 MinIO 1개. [실제 검증 범위](pg-test-integration-plan.md#2026-10-28-새-test-주문의-실제-자동-전액-환불-검증-완료).
+
+
+2026-10-28 관리자 최초 판정 A안 검증: 도메인 Red 6건 뒤 구현했다. 로컬 Order 단위 290건·통합 컴파일·bootJar 통과. OCI full에서 새 API 명세 차이와 JDBC CHECK 위반 예외 분류 테스트 1건을 보정하고, 명세 갱신 후 corrected 전체 --rerun-tasks에서 Order 단위 290·통합 114건이 모두 실패/오류/건너뜀 0이다. 새 통합 19건은 실제 JWT 권한·페이지/상세·고객 반려 상태·동시 반대/같은 판정·명령의 다른 환불 재사용·지급 경합·실제 Outbox 삽입 후 롤백·기존 정지/결과 흐름·V19 자료 보존을 검증한다. 업무 로직/V20은 최초 OCI 이후 바꾸지 않았으며 후속 운영 코드 변경은 새 API의 명시적 OpenAPI operationId뿐이다. 기존 3개 경로·5개 연산의 명세는 같고 RefundResponse에 REJECTED/rejectionReason과 관리자 3개 API만 추가했다. 소스 1,100개·실제 비밀값 포함 0·기존 컨테이너 23개/볼륨 57개 및 상태 보존. runs/refund-review-oci-d1jx_po3/collected/results/{full,schema-update,corrected}와 runs/refund-review-tdd-brt1d7x3에 근거가 있다. schema-update의 단위 XML은 직전 full의 결과이며 재실행 수치가 아니다. [계약](pg-test-integration-plan.md#2026-10-28-관리자-최초-환불-판정-확정-a안).
+
+
+2026-10-28 Gateway 관리자 환불 경로 보완: 서비스 직접 호출과 별도로 /api/v1/admin/refunds의 목록/상세/판정이 Order에 도달하도록 라우트와 ADMIN 허용 경계를 추가했다. 미등록 경로/메서드는 거절하고 Bearer 전달·X-Member-Id 제거를 검증했다. 로컬 Red 4건 뒤 Gateway 단위 97건·통합 컴파일·bootJar가 통과했다. OCI Gateway 단위 97·Redis 통합 1건이 실패/오류/건너뜀 0이고 기존 컨테이너 23개/볼륨 57개를 보존했다. 근거는 runs/refund-review-gateway-oci-7l32q55b/collected/results/full, 최초 Red는 runs/refund-review-tdd-brt1d7x3/gateway-red.json이다. HTTP upstream은 Order 계약 픽스처이며 실제 관리자 로그인/수동 PG 환불 전체 검증을 대신하지 않는다. 기존 실제 주문 검증 스택에는 Gateway 프로세스를 새로 기동하지 않았다.

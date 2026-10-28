@@ -97,7 +97,7 @@ Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 �
 기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다. [전환 절차](../../settlement-guide.md#기존-내장-pg-이관)를 따른다.
 
 PG 비용·지급 명세는 Settlement가 자기 포트로 직접 조회한다. 주문·License 이벤트에 수수료를 중계하지 않는다.
-실제 PG·금융 거래·결제창·웹훅·환불은 후속 범위다.
+이 절은 외부 모의 PG의 계약이다. 후속 구현으로 PortOne TEST 결제창·서명 웹훅·전액 환불 실행/조회와 관리자 심사를 제공한다. [현재 계약](../../refund-session-handoff.md)과 [검증 범위](../../pg-test-integration-plan.md)를 따른다. 실제 운영 자금 이동과 정산 환불 조정은 후속 범위다.
 
 ## 결제 입력과 결과 값
 
