@@ -2,7 +2,7 @@
 
 개발·검증 명령은 [tools 안내](../tools/README.md), 정리 범위는 [scripts 조사·실행 기록](scripts-tools-audit.md)을 따른다. 과거 성능·장애 실험 결과는 해당 기록 문서에 보존한다.
 
-현재 전액 환불 작업을 이어갈 때는 [공통 지시·다음 작업](refund-next-session.md) → [현재 인계](refund-session-handoff.md) → [PG·환불 계약과 검증 기록](pg-test-integration-plan.md) 순서로 읽는다. [과거 세션 이력](history/refund-session-through-2026-10-28.md)의 대기 상태는 현재 상태가 아니다.
+현재 개발 목표·모듈 평가·권장 순서는 [전체 기능 일반화 계획](platform-generalization-plan.md)을 우선한다. 전액 환불의 상세 작업을 이어갈 때는 [공통 지시](refund-next-session.md) → [현재 인계](refund-session-handoff.md) → [PG·환불 계약과 검증 기록](pg-test-integration-plan.md) 순서로 읽는다. [과거 세션 이력](history/refund-session-through-2026-10-28.md)의 대기 상태는 현재 상태가 아니다.
 
 처음 읽을 때는 [도메인·모델 안내](domain/model-guide.md) → [업무 흐름](domain/workflows.md) → 필요한 모델 사전 순서로 읽는다. 모델 사전에는 필드뿐 아니라 생성·사용 시점, 업무 규칙 제안과 코드·테스트 근거가 함께 있다.
 
@@ -10,6 +10,7 @@
 
 | 문서 | 다루는 내용 |
 |---|---|
+| [전체 기능 일반화 계획](platform-generalization-plan.md) | 현재 사용자 목표, 환불·Payment 평가, 열한 모듈의 공백·권장 실행 순서·일반화 완료 조건 |
 | [도메인·모델 안내](domain/model-guide.md) | 전체 지도, 모델 사전 연결, 한 게임의 출시·구매 사례 |
 | [용어집](domain-glossary.md) | 표준 용어 색인, 헷갈리는 상태·식별자·버전 |
 | [업무 흐름](domain/workflows.md) | 창작자·심사자·구매자·운영자별 순서와 이벤트 |

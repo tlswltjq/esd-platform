@@ -45,9 +45,9 @@ curl -H "Authorization: Bearer $TOKEN" "$GATEWAY/api/v1/payments/$ORDER_NO"
 ```
 
 목록은 최신 생성순이며 같은 시각에는 내부 id 역순이다. page는 0 이상, size는 1~100이다.
-내부 요청·결과 이벤트 ID, PG 거래 ID와 재시도 오류는 응답에 노출하지 않는다. provider는 SIMULATED다.
+내부 요청·결과 이벤트 ID, PG 거래 ID와 재시도 오류는 응답에 노출하지 않는다. 이 절의 모의 PG 예제는 provider=SIMULATED이며 현재 PortOne TEST 경로도 별도로 구현돼 있다.
 Order 생성 직후에는 Kafka 접수 전이므로 Payment 상세가 잠시 404일 수 있다.
-prepare·결제창·콜백·환불·승인 주입·운영 HTTP API는 없다.
+Payment는 고객의 환불 접수를 받지 않고 Order의 실행 요청을 처리한다. 현재는 PortOne 결제창 정보 GET·서명 웹훅, ADMIN 송신 중단 조회/재개와 장기 미확정 조회/조사 기록 API가 있다. 계약·검증/런타임 범위는 [현재 인계](refund-session-handoff.md), 결제 생명주기·정산 연결의 공백과 다음 순서는 [전체 기능 일반화 계획](platform-generalization-plan.md)을 따른다. 고객이 결제 승인 결과를 주입하는 API는 두지 않는다.
 
 | 환경변수 | 기본값·범위 |
 |---|---|

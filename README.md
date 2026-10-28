@@ -6,18 +6,21 @@
 
 현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**다. 신규 구현과 검증은 이 열한 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
 
+현재 목표는 이 MVP 기능들을 일반적인 사용 수준으로 올린 뒤 엣지 케이스·성능을 고도화하는 것이다. [전체 평가·개발 계획](docs/platform-generalization-plan.md)에 모듈별 공백, 환불·Payment 평가와 권장 작업 순서를 정리했다. MVP 완료와 전체 일반화 완료를 구분한다.
+
 Catalog의 완료 범위와 검증 결과는 [MVP 계획·완료 기록](docs/catalog-mvp-plan.md#재작성-완료-기록)에 정리했다.
 Store의 학습용 최소 범위와 OCI 검증 결과는 [Store 계획·완료 기록](docs/store-mvp-plan.md#재작성-완료-기록)을 따른다.
 Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완료 기록](docs/order-mvp-plan.md#재작성-완료-기록), 실행은 [Order 안내](docs/order-guide.md)를 따른다. Payment의 모의 PG 자동 처리·복구·조회와 8개 앱 OCI 검증은 [Payment 완료 기록](docs/payment-mvp-plan.md#재작성-완료-기록), 실행은 [Payment 안내](docs/payment-guide.md)를 따른다.
 
 License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. Download의 보유권·현재 공개 빌드 조회와 전체 ZIP 만료 URL 제공은 [완료 기록](docs/download-mvp-plan.md#재작업-완료-기록), 실행은 [Download 안내](docs/download-guide.md)를 따른다. Settlement의 외부 모의 PG·배분·월 마감·수령 대사는 [완료 기록](docs/settlement-mvp-plan.md#재작성-완료-기록), 전체 실행은 [Settlement 안내](docs/settlement-guide.md)를 따른다.
 
-PortOne TEST의 전액 환불은 고객 접수·관리자 최초 판정·실제 이용권 정지·취소/조회·확정 실패 후 복구까지 확장했다. 실제 자동 환불 1건을 확인했으며, 고객 재시도 HTTP·운영 재개 HTTP·정산 환불 조정은 남아 있다. [현재 환불 인계](docs/refund-session-handoff.md) · [다음 세션 공통 지시와 작업](docs/refund-next-session.md)
+PortOne TEST의 전액 환불은 고객 접수·관리자 판정·이용권 정지/복구·취소/조회, 고객 재시도·재심사·승인 정정, 운영 중단 조회/재개와 장기 미확정 조사 기록까지 확장했다. 실제 자동 환불 1건의 근거와 각 확장 검증을 구분하며 최신 관리자 전체 여정·정산 환불 조정 등은 남아 있다. [현재 환불 인계](docs/refund-session-handoff.md) · [환불 세션 공통 지시](docs/refund-next-session.md)
 
 ## 문서 찾기
 
 | 궁금한 내용 | 읽을 문서 |
 |---|---|
+| 현재 목표·모듈 평가·다음 개발 순서 | [전체 기능 일반화 계획](docs/platform-generalization-plan.md) |
 | 어떤 도메인과 모델이 있고 어떻게 연결되는가 | [도메인·모델 안내](docs/domain/model-guide.md) |
 | 업무 용어와 행위자별 처리 순서 | [용어집](docs/domain-glossary.md) · [업무 흐름](docs/domain/workflows.md) |
 | 아직 결정되지 않은 정책과 구현 차이 | [미결 질문](docs/domain/open-questions.md) |
@@ -38,7 +41,7 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 | `apps/catalog` | 출시 요청 처리, 공개 상품·공개본 정본과 공개 조회 |
 | `apps/store` | MySQL 공개 상품 사본, 제목 검색·목록·상세와 초기 동기화 |
 | `apps/order` | 단일 상품 주문 스냅샷·청구액·내 주문 조회와 결제 결과 반영 |
-| `apps/payment` | 확정 주문의 모의 PG 결제·미확정 재개·결과 발행·내 결제 조회 |
+| `apps/payment` | 확정 주문 결제·PortOne TEST 결제창/웹훅·환불 실행/조회·미확정 재개 |
 | `apps/license` | 구매 출처·상품별 영구 보유권·내 라이브러리 |
 | `apps/download` | 보유권·현재 공개 빌드 확인·전체 ZIP 만료 URL |
 | `apps/settlement` | OrderPaid 매출·판매자 배분·월 마감·PG 지급 명세 수령 대사 |
