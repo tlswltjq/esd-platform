@@ -791,11 +791,10 @@ Outbox·Inbox 공통 라이브러리의 기존 단위 테스트를 그대로 복
 
 ### 7.8 현재 남은 계약과 검증
 
-2026-10-28 기준이다. PG 멱등 키/고정 본문·내구 재송신/조회·확정 실패와 실제 복구·최초 관리자 판정은 구현·검증했다. 다음 세션의 구체적 순서는 [공통 지시·다음 작업](refund-next-session.md)을 따른다.
+2026-10-28 기준이다. PG 멱등 키/고정 본문·내구 재송신/조회·확정 실패와 실제 복구·최초 관리자 판정·고객 명시적 재시도 HTTP는 구현·검증했다. 다음 세션의 구체적 순서는 [공통 지시·다음 작업](refund-next-session.md)을 따른다.
 
 | 남은 항목 | 테스트를 쓰기 전 확인할 것 |
 |---|---|
-| 고객 명시적 새 시도 HTTP | 기존 RequestRefundRetry의 FAILED/실제 복구 조건을 유지하고 입력·응답·중복·소유권 계약을 설명/확인 |
 | 반려 재접수·잘못된 승인 구제 | 최초 판정 확정 A안을 임의로 바꾸지 않음. 재심사/판정 번복은 별도 정책 |
 | Payment 운영 중단 재개 HTTP | 내부 재개 유스케이스의 키/본문/기한·현재 중단 근거를 유지할 권한/감사/응답 계약 |
 | 지급 확인 누락·장기 미확정 운영 | 현재 새 지급의 LicenseGranted와 선행/후행 재개는 검증됨. 과거 자료 보완과 장기 대기의 고객 안내/담당자 조치가 남음 |
@@ -928,3 +927,5 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 
 
 2026-10-28 Gateway 관리자 환불 경로 보완: 서비스 직접 호출과 별도로 /api/v1/admin/refunds의 목록/상세/판정이 Order에 도달하도록 라우트와 ADMIN 허용 경계를 추가했다. 미등록 경로/메서드는 거절하고 Bearer 전달·X-Member-Id 제거를 검증했다. 로컬 Red 4건 뒤 Gateway 단위 97건·통합 컴파일·bootJar가 통과했다. OCI Gateway 단위 97·Redis 통합 1건이 실패/오류/건너뜀 0이고 기존 컨테이너 23개/볼륨 57개를 보존했다. 근거는 runs/refund-review-gateway-oci-7l32q55b/collected/results/full, 최초 Red는 runs/refund-review-tdd-brt1d7x3/gateway-red.json이다. HTTP upstream은 Order 계약 픽스처이며 실제 관리자 로그인/수동 PG 환불 전체 검증을 대신하지 않는다. 기존 실제 주문 검증 스택에는 Gateway 프로세스를 새로 기동하지 않았다.
+
+2026-10-28 고객 명시적 재시도 HTTP 첫 번째 안: 미구현 HTTP 경계 Red 8건 뒤 previousAttemptId를 받는 MEMBER API와 실패 ID 조회를 연결했다. 로컬 Order 308·Gateway 100건 및 빌드/통합 컴파일 통과. 초기 Gateway CSRF 기대값과 OCI 중복 구매 픽스처 2건을 보정한 최종 OCI 전체 --rerun-tasks에서 Order 단위 308·통합 124건, Gateway 단위 100·Redis 통합 1건 모두 실패/오류/건너뜀 0이다. 새 HTTP 통합 10건이 현재 실패 식별·동시/중복·후속 실패 뒤 오래된 요청·실제 재정지 선행·복구 전 거절·권한/소유권·실제 flush 롤백·반려/미확정/완료 거절을 확인한다. 기존 6개 경로·8개 연산을 보존하고 재시도 POST와 nullable retryableAttemptId만 추가했으며 최종 명세 대조는 갱신 플래그 없이 수행했다. 소스 1,108개 대조·비밀값 포함 0. runs/refund-retry-http-tdd-w407gjr7 및 runs/refund-retry-http-oci-fw4f42_q/collected/results/{schema-update,full}과 validation-summary.json에 원자료·보존 결과가 있다. 기존 실제 런타임은 미갱신이며 Payment/License/Order upstream 계약 픽스처를 실제 PG 환불 E2E로 확대하지 않는다. [상세](pg-test-integration-plan.md#2026-10-28-고객-명시적-재시도-http-첫-번째-안).

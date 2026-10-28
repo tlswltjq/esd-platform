@@ -16,6 +16,7 @@ import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.RequestRefund;
+import com.stove.order.core.service.RequestRefundRetry;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +41,7 @@ class RefundAccessTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean RequestRefund request;
     @MockitoBean ReadRefund read;
+    @MockitoBean RequestRefundRetry retry;
 
     @BeforeEach void principal() {
         when(decoder.decode(anyString())).thenAnswer(call -> {
@@ -69,7 +71,9 @@ class RefundAccessTest {
         when(read.execute(ORDER, "usr_buyer")).thenReturn(view(state));
         String expected = switch (state) { case PENDING_REVIEW, COMPLETED, FAILED, REJECTED -> state.name(); default -> "PROCESSING"; };
         mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer member"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value(expected));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value(expected))
+                .andExpect(jsonPath("$.data.retryableAttemptId").value(state == RefundStatus.FAILED
+                        ? "22222222-2222-2222-2222-222222222222" : null));
         verifyNoInteractions(request);
     }
 
@@ -83,6 +87,7 @@ class RefundAccessTest {
     private RefundView view(RefundStatus state) {
         return new RefundView("refund-fixture", ORDER, 9000, "KRW", state, Instant.parse("2026-10-28T02:00:00Z"),
                 state == RefundStatus.COMPLETED ? Instant.parse("2026-10-28T02:01:00Z") : null,
-                state == RefundStatus.REJECTED ? "환불 심사 반려 사유" : null);
+                state == RefundStatus.REJECTED ? "환불 심사 반려 사유" : null,
+                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null);
     }
 }

@@ -18,6 +18,8 @@ import com.stove.order.core.domain.RefundView;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ReadRefundTest {
@@ -49,5 +51,19 @@ class ReadRefundTest {
         when(orders.findByOrderNoAndBuyerSubject(order.getOrderNo(), "usr_buyer")).thenReturn(Optional.of(order));
         when(refunds.findByOrderNo(order.getOrderNo())).thenReturn(Optional.empty());
         assertThatThrownBy(() -> read.execute(order.getOrderNo(), "usr_buyer")).isInstanceOf(BusinessException.class);
+    }
+
+    @ParameterizedTest @EnumSource(RefundStatus.class)
+    void onlyTheCurrentRestoredFailureIsOfferedAsAnExplicitRetryTarget(RefundStatus status) {
+        Order order = order();
+        ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
+        ReflectionTestUtils.setField(order, "resultOccurredAt", Instant.parse("2026-10-28T01:00:00Z"));
+        Refund refund = Refund.request(order, Instant.parse("2026-10-28T02:00:00Z"));
+        String attempt = "22222222-2222-2222-2222-222222222222";
+        ReflectionTestUtils.setField(refund, "status", status);
+        ReflectionTestUtils.setField(refund, "currentAttemptId", attempt);
+        when(orders.findByOrderNoAndBuyerSubject(order.getOrderNo(), "usr_buyer")).thenReturn(Optional.of(order));
+        when(refunds.findByOrderNo(order.getOrderNo())).thenReturn(Optional.of(refund));
+        assertThat(read.execute(order.getOrderNo(), "usr_buyer").retryableAttemptId()).isEqualTo(status == RefundStatus.FAILED ? attempt : null);
     }
 }

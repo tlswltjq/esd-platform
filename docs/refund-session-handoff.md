@@ -2,7 +2,7 @@
 
 2026-10-28 기준. 다음 세션은 [공통 지시·다음 작업](refund-next-session.md)부터 읽는다. 상세 정책·단계별 검증은 [PG 테스트 연동·환불 기록](pg-test-integration-plan.md), 이전 대화의 진행·실패·대기 기록은 [과거 세션 이력](history/refund-session-through-2026-10-28.md)에 보존했다. 이 문서는 최신 상태의 요약이며 실제 코드·Git·프로세스 상태를 함께 확인한다.
 
-현재 누적 환불 구현은 `67f250d`에 커밋했다. 문서 정리 커밋과 원격 동기화 여부는 `git log`·`git status`로 확인한다.
+기존 누적 환불 구현은 `67f250d`, 문서 정리는 `6b010d5`에 커밋했다. 이후 이번 세션에서 고객 명시적 재시도 HTTP를 추가했다. 새 작업의 커밋·원격 동기화 여부는 `git log`·`git status`로 확인한다.
 
 ## 현재 완료한 범위
 
@@ -11,7 +11,7 @@
 - 승인 또는 자동 허용 → 실제 지급 확인 → 정지 요청 → 실제 이용권 정지 확인 → Payment 환불 실행 요청. 관리자 API가 PG를 직접 호출하지 않는다.
 - Payment의 PortOne 취소/조회, 같은 attemptId·고정 본문·최초 준비 3시간 창, 내구 조회/재송신 일정, 오류별 자동 복구/운영 중단 정책.
 - 전액 취소 증거에 따른 환불 완료와 실행 성공 귀속 구분. 확인된 실패 → 복구 요청 → 실제 이용권 복구 → FAILED.
-- 확정 실패·실제 복구 후 고객의 명시적 새 시도는 내부 유스케이스까지 구현했다. 고객 재시도 HTTP와 Payment 운영 중단 재개 HTTP는 아직 없다.
+- 확정 실패·실제 복구 후 고객 명시적 재시도 HTTP를 구현·검증했다. 고객 조회의 retryableAttemptId를 POST `/api/v1/orders/{orderNo}/refund/retries`의 previousAttemptId로 전달한다. 같은 ID의 재전송은 최초 접수 영수증을 반환한다. Payment 운영 중단 재개 HTTP는 아직 없다.
 - 실제 새 9,000원 TEST 주문에서 자동 환불 전체 흐름 1건을 완료했다. 실제 관리자 수동 심사 PG 환불이나 Settlement 환불 조정의 완료는 아니다.
 
 ## 유지할 계약
@@ -35,6 +35,9 @@
 
 | 검증 | 결과·출처 |
 |---|---|
+| 고객 명시적 재시도 HTTP 포함 최신 Order | 단위 308·통합 124, 실패/오류/건너뜀 0. `runs/refund-retry-http-oci-fw4f42_q/collected/results/full` |
+| 재시도 경로 포함 최신 Gateway | 단위 100·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력. Bearer·본문·경로·응답·Location 전달과 위조 회원 헤더 제거 |
+| 고객 재시도 OCI 보존 | 기존 컨테이너 23개·볼륨 57개 및 ID·시작/재시작·상태 보존, 추가/잔여 자원 없음. `runs/refund-retry-http-oci-fw4f42_q/validation-summary.json` |
 | Order 관리자 심사 포함 | 단위 290·통합 114, 실패/오류/건너뜀 0. `runs/refund-review-oci-d1jx_po3/collected/results/corrected` |
 | Payment 마지막 코드 | 단위 276·통합 166, 실패/오류/건너뜀 0. `runs/refund-invalid400-oci-3bpzduhu/collected/results/corrected`와 현재 Payment 소스 동일 |
 | 공통 Kafka 계약 | 단위 205, 실패/오류/건너뜀 0. `runs/refund-retry-oci-q_c7wgvb/collected/results/full`과 현재 소스 동일 |
@@ -46,8 +49,11 @@
 
 최초 OCI의 명세 차이와 JDBC CHECK 위반 예외 분류 테스트를 보정하고 전체를 정상 명세 검사로 다시 실행했다. `schema-update`에 남은 단위 XML은 재실행 수치가 아니다. 상세 근거는 [관리자 A안 기록](pg-test-integration-plan.md#2026-10-28-관리자-최초-환불-판정-확정-a안)을 따른다.
 
+고객 재시도 HTTP의 Red 8건, 초기 Gateway CSRF 기대값·OCI 중복 구매 픽스처 오류와 최종 전체 재실행은 [고객 재시도 HTTP 기록](pg-test-integration-plan.md#2026-10-28-고객-명시적-재시도-http-첫-번째-안)을 따른다. 기존 6개 경로·8개 연산을 유지하고 1개 연산과 nullable retryableAttemptId를 추가했다. 새 HTTP 통합 10건의 Payment 실패·License 복구 완료는 계약 픽스처이며 실제 PG·License 전체 연계 완료를 뜻하지 않는다.
+
 ## 유지 중인 실제 검증 환경
 
+- 고객 재시도 HTTP 작업에서는 기존 실제 검증 런타임·비밀 설정·거래를 갱신하지 않았다. 아래 기존 프로세스에는 새 API가 적용되지 않았다.
 - 기존 실행: `runs/portone-order-live-j2flh033`, 실제 새 환불: `runs/refund-live-obe63z8s`. `runs/*-current` 파일에서 경로를 확인한다.
 - 로컬 Auth 18891, Catalog 18881, Order 18882, Payment 18783, License 18884, Download 18888. OCI의 전용 MySQL 13384·Kafka 19492·MinIO 19008을 SSH로 연결한다. PID는 해당 run의 파일을 다시 확인한다.
 - Order V20 runtime PID **33244**, JAR SHA-256 `317c5978346e093e7949e737569ff56fdb08d007f10633f7ac95ebff59b2c2fa`. Payment V25 runtime PID **22084**, SHA-256 `718a4baa937f93e31ae7e651a5032a01e48ba9ebb74a91ccc64edad6a9cf7475`.
@@ -64,4 +70,4 @@
 
 휴대폰 승인은 끝났고 토스페이 TEST 마지막 “이동하기”까지 확인했다. 결제/환불 스크립트를 재실행하지 않는다. 초기 DB 보고서 오류는 읽기 전용 검증으로 복구했으며 원자료에 남겼다. 브라우저 진단 포트 9229는 닫았고 결제 headless 브라우저는 종료했다.
 
-다음 작업과 미결 정책은 [공통 지시·다음 작업](refund-next-session.md#다음-작업-고객의-명시적-재시도-http-계약-연결)에 있다. 사용자에게 제시하고 선택을 받은 뒤 진행한다.
+다음 작업과 미결 정책은 [공통 지시·다음 작업](refund-next-session.md#추천하는-다음-작업-payment-운영-중단-재개-http-계약)에 있다. 사용자에게 제시하고 선택을 받은 뒤 진행한다.

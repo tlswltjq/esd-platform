@@ -19,6 +19,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/decision").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasRole("MEMBER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders/*/refund").hasRole("MEMBER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/orders/*/refund/retries").hasRole("MEMBER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders/*/refund").hasRole("MEMBER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders", "/api/v1/orders/*").hasRole("MEMBER")
                         .anyRequest().denyAll())

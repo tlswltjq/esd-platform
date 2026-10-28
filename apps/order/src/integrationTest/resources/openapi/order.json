@@ -179,6 +179,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseRefundRetryResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundRetryResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "CreateOrderRequest" : {
         "properties" : {
           "expectedAmount" : {
@@ -324,8 +338,39 @@
           "rejectionReason" : {
             "type" : "string"
           },
+          "retryableAttemptId" : {
+            "description" : "확정 실패와 실제 이용권 복구가 끝나 재시도 가능한 현재 시도 ID. 그 외 상태는 null",
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
           "status" : {
             "enum" : [ "PENDING_REVIEW", "PROCESSING", "COMPLETED", "FAILED", "REJECTED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundRetryRequestBody" : {
+        "properties" : {
+          "previousAttemptId" : {
+            "description" : "환불 조회에서 제공한 재시도 가능한 실패 시도 ID",
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "previousAttemptId" ],
+        "type" : "object"
+      },
+      "RefundRetryResponse" : {
+        "properties" : {
+          "previousAttemptId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
             "type" : "string"
           }
         },
@@ -658,6 +703,77 @@
           "oauth2" : [ "commerce" ]
         } ],
         "summary" : "내 주문 전액 환불 접수",
+        "tags" : [ "refund-controller" ]
+      }
+    },
+    "/api/v1/orders/{orderNo}/refund/retries" : {
+      "post" : {
+        "description" : "환불 조회의 retryableAttemptId를 previousAttemptId로 전달합니다. 확정 실패와 실제 이용권 복구가 끝난 현재 시도만 새 정지를 요청할 수 있습니다. 같은 이전 시도의 반복 요청은 최초 재시도 접수 영수증을 202로 반환합니다. receivedAt은 재시도 접수 시각이며 최초 환불 자격은 보존됩니다. 접수는 정지·PG 환불 완료를 뜻하지 않으며 현재 결과는 Location의 환불 조회로 확인합니다.",
+        "operationId" : "requestRefundRetry",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundRetryRequestBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundRetryResponse"
+                }
+              }
+            },
+            "description" : "재시도 최초 접수 또는 동일 접수 영수증"
+          },
+          "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundRetryResponse"
+                }
+              }
+            },
+            "description" : "이전 시도 ID 또는 요청 형식 오류"
+          },
+          "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundRetryResponse"
+                }
+              }
+            },
+            "description" : "본인 주문 또는 환불 없음"
+          },
+          "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundRetryResponse"
+                }
+              }
+            },
+            "description" : "지정한 시도가 없거나 현재 실패·복구 완료 조건 불충족"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "내 주문 환불 명시적 재시도",
         "tags" : [ "refund-controller" ]
       }
     }

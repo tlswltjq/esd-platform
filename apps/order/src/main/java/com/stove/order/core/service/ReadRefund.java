@@ -24,6 +24,7 @@ public class ReadRefund {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         return new RefundView(refund.getRefundId(), orderNo, order.getAmount(), order.getCurrency(),
                 refund.getStatus(), refund.getReceivedAt(), refund.getCompletedAt(),
-                refund.getStatus() == RefundStatus.REJECTED ? refund.getReviewReason() : null);
+                refund.getStatus() == RefundStatus.REJECTED ? refund.getReviewReason() : null,
+                refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null);
     }
 }

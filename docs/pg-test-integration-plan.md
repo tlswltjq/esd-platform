@@ -742,3 +742,27 @@ UTC 기준 접수 07:00:34.999077 → License 정지 07:00:36.814689 → Payment
 
 
 2026-10-28 Gateway 관리자 환불 경로 보완: 서비스 직접 호출과 별도로 /api/v1/admin/refunds의 목록/상세/판정이 Order에 도달하도록 라우트와 ADMIN 허용 경계를 추가했다. 미등록 경로/메서드는 거절하고 Bearer 전달·X-Member-Id 제거를 검증했다. 로컬 Red 4건 뒤 Gateway 단위 97건·통합 컴파일·bootJar가 통과했다. OCI Gateway 단위 97·Redis 통합 1건이 실패/오류/건너뜀 0이고 기존 컨테이너 23개/볼륨 57개를 보존했다. 근거는 runs/refund-review-gateway-oci-7l32q55b/collected/results/full, 최초 Red는 runs/refund-review-tdd-brt1d7x3/gateway-red.json이다. HTTP upstream은 Order 계약 픽스처이며 실제 관리자 로그인/수동 PG 환불 전체 검증을 대신하지 않는다. 기존 실제 주문 검증 스택에는 Gateway 프로세스를 새로 기동하지 않았다.
+
+## 2026-10-28 고객 명시적 재시도 HTTP 첫 번째 안
+
+사용자는 확정 실패·실제 이용권 복구 이후 고객이 **이전 실패 시도 ID를 명시**하는 첫 번째 안의 실행을 선택했다. 주문번호만 보내 최신 실패를 서버가 고르는 방식은 늦은 중복 요청과 새로운 고객 의도를 구별하는 추가 장치가 필요하므로 사용하지 않는다. 기존 내부 재시도의 조건·잠금·Outbox 조율은 그대로 사용한다.
+
+- `GET /api/v1/orders/{orderNo}/refund`와 기존 환불 접수 응답에 nullable `retryableAttemptId`를 추가했다. FAILED는 실제 복구 완료 뒤의 환불 상태이며 해당 현재 시도 ID만 제공한다. PROCESSING·PENDING_REVIEW·REJECTED·COMPLETED는 null이다. 기존 최초 접수 POST를 반복해도 새 시도가 생기지 않는다.
+- `POST /api/v1/orders/{orderNo}/refund/retries`의 본문은 `{"previousAttemptId":"실패한 시도의 UUID"}`다. 구매자는 검증된 MEMBER JWT sub에서 읽으며 본문에 구매자·금액을 보내도 신뢰하지 않는다. 본문/식별자 형식 오류는 400, 본인 주문·환불 없음은 404, 시도 없음·다른 환불의 시도·확정 실패/실제 복구 등 조건 불충족은 409다. 직접 Order 호출의 익명은 401, 비회원 역할은 403이다.
+- 최초 접수와 동일한 이전 시도 ID의 재전송은 모두 HTTP 202, no-store, 기존 환불 조회 Location과 `{refundId, previousAttemptId, receivedAt}` 영수증을 반환한다. receivedAt은 재시도 최초 접수 시각이다. 현재 상태나 내부 정지 이벤트 ID를 영수증에 섞지 않는다. 응답을 잃으면 **같은 previousAttemptId**를 다시 보내며, 후속 시도가 실패한 뒤에도 예전 요청의 재전송은 그 최초 영수증만 반환한다. 이후의 새 고객 의도는 조회에서 제공한 후속 실패 ID를 명시해야 한다.
+- 최초 refundId·접수 시각·자동 환불 자격·원래 PAID/금액·실패 이력은 보존한다. 접수는 실제 재정지의 요청이며 새 실행 attemptId/Payment 요청은 실제 정지 완료를 받은 뒤 생성한다. 결과 미확정이나 운영 중단을 새 키로 우회하지 않으며 관리자 반려의 재심사도 만들지 않는다.
+- Gateway의 기존 orders 경로·MEMBER 규칙을 사용한다. 새 HTTP upstream 계약 테스트는 previousAttemptId 본문·경로·Bearer·202·Location·no-store의 전달, X-Member-Id 제거와 다른 역할의 미전달을 확인한다. 익명 브라우저 POST는 기존 CSRF 필터가 먼저 403으로 막는다.
+
+TDD는 미구현 HTTP 테스트 9건 중 8건의 실제 Red(202/400 대신 403)를 확인한 뒤 진행했다. 마지막 입력 경계 보완 후 해당 테스트는 10건이다. 로컬 최초 Gateway 실행에서 익명 POST를 401로 기대한 1건은 기존 CSRF 경계에 맞게 수정했다. 최초 OCI schema-update는 11건 중 다른 주문을 준비하던 2건이 같은 고객·상품의 PAID 중복 금지에 걸렸다. 픽스처 상품을 분리하고 후속 시도 FK를 자식부터 정리하도록 보완했다. 이는 업무 Red나 운영 코드 결함으로 계산하지 않는다. 원자료를 보존하고 수정한 입력으로 최종 전체 검증했다.
+
+| 최종 검증 | 결과 |
+|---|---|
+| 로컬 Order·Gateway | 단위 308·100건, 실패/오류/건너뜀 0; 두 bootJar와 Order 최종 통합 컴파일 통과 |
+| OCI Order 전체 | 단위 308·통합 124건, 실패/오류/건너뜀 0 |
+| OCI Gateway 전체 | 단위 100·Redis 통합 1건, 실패/오류/건너뜀 0 |
+| 새 HTTP 통합 10건 | 조회에서 실패 ID 획득→최초/중복·동시 재시도, 실제 재정지 뒤 후속 실행, 연속 실패 뒤 오래된 요청의 미재실행, 실제 Outbox flush 뒤 전체 롤백·재접수, 실제 복구 전 거절, 타인/없는 주문·환불·다른 시도, JWT·역할/위조 구매자, 기존 접수 의미, 미확정/완료/관리자 반려 거절 |
+| OpenAPI | 기존 6개 경로·8개 연산과 기존 응답 필드 보존. 재시도 POST 1개와 nullable retryableAttemptId 추가; 최종 full은 갱신 플래그 없이 스냅샷 대조 |
+
+최종 OCI는 `--rerun-tasks --continue -Pstove.infraTest.maxParallel=1`로 두 모듈 533건을 전부 실행했다. 입력 소스 1,108개를 SHA-256으로 대조했고 실제 비밀값 포함은 0이다. 문서 기록 후에도 검증한 현재 코드·설정·명세 930개가 같은 해시임을 확인했다. 기존 컨테이너 23개·볼륨 57개의 ID·시작 시각·재시작 횟수·실행/건강 상태를 보존했으며 추가·잔여 테스트 자원은 없다. 원자료는 `runs/refund-retry-http-tdd-w407gjr7` 및 `runs/refund-retry-http-oci-fw4f42_q/collected/results/{schema-update,full}`이며 source-manifest·JUnit·명세 대조·공유 자원 보존 결과를 함께 보관한다. 최종 보존 결과는 해당 run의 `validation-summary.json`을 따른다.
+
+Order V20·Payment V25와 기존 PG 정책은 바꾸지 않았다. 기존 실제 검증 런타임/터널을 갱신하거나 실제 PortOne 결제·환불을 추가 실행하지 않았다. 새 테스트의 Payment 실패·License 완료와 Gateway의 Order upstream은 계약 픽스처이며 실제 PG 오류·License 복구·고객 브라우저 전체 E2E 검증으로 확대하지 않는다. 운영 중단 재개 관리자 HTTP·반려 재심사·정산 조정·재구매 등 남은 범위는 별도다.
