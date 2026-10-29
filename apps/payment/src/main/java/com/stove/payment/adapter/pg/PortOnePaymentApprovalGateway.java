@@ -9,6 +9,7 @@ import com.stove.payment.core.domain.ApprovalPurchase;
 import com.stove.payment.core.domain.ApprovalToken;
 import com.stove.payment.core.domain.PgChargeRequest;
 import com.stove.payment.core.domain.PgResult;
+import com.stove.payment.core.domain.PgPaymentAmounts;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.port.PgPaymentApprovalGateway;
 import java.time.Clock;
@@ -48,7 +49,8 @@ public class PortOnePaymentApprovalGateway implements PgPaymentApprovalGateway {
             requireAmounts(current, requested.purchase().amount(), true);
             PgResult paid = new PgResult("PORTONE_TEST", requested.purchase().paymentId(), requested.purchase().orderNo(),
                     requested.purchase().amount(), requested.purchase().currency(), text(current,"pgTxId"), time(current,"paidAt"),
-                    PgResult.Decision.APPROVED, null, null, null);
+                    PgResult.Decision.APPROVED, null, null, null,
+                    new PgPaymentAmounts(number(current.path("amount"), "paid"), number(current.path("amount"), "discount")));
             return new ApprovalObservation(ApprovalObservation.State.PAID, paid, null);
         }
         if (currentAttempt.equals(requested.supplierAttemptId())) return unpaid(current, requested.purchase());
@@ -123,8 +125,13 @@ public class PortOnePaymentApprovalGateway implements PgPaymentApprovalGateway {
     }
     private static void requireAmounts(JsonNode item, long amount, boolean paid) {
         JsonNode values = item.path("amount");
-        if (number(values,"total") != amount || number(values,"paid") != (paid ? amount : 0)
-                || number(values,"cancelled") != 0 || number(values,"discount") != 0)
+        // PortOne can fill the intended paid amount before approval; status still determines whether payment succeeded.
+        long providerPaid = number(values, "paid");
+        long discount = number(values, "discount");
+        boolean matchingPaidAmount = discount >= 0 && discount <= amount
+                && (providerPaid == amount - discount || (!paid && providerPaid == 0));
+        if (number(values,"total") != amount || !matchingPaidAmount
+                || number(values,"cancelled") != 0)
             throw new IllegalArgumentException("Approval amounts do not match the purchase");
     }
     private static String text(JsonNode item, String name) {

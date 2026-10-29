@@ -953,3 +953,8 @@ TDD·수정 경과:
 OCI 소스 1,218개를 대조하고 실제 비밀값 포함은 0이었다. 최종 코드·설정·명세 등 Markdown 이외 1,147개는 실행 묶음의 해시와 일치했다. 공유 컨테이너 **23개·볼륨 57개**와 기존 ID·시작/재시작·건강 상태를 보존했고 추가/잔여 자원은 없다. 최종 대조 결과는 같은 run의 `validation-summary.json`에 남겼다.
 
 원자료는 Git 제외 `runs/payment-attempts-tdd-k9a_v40h`와 `runs/payment-attempts-oci-fdk5ugoo/collected/results/{schema-and-new,corrected-focus,full,red-history-race,corrected}`다. 이번 외부 PG HTTP는 루프백 계약 픽스처이며 실제 PortOne 거래를 추가하지 않았다. 기존 실제 Order V20·Payment V25·License 런타임·터널·보호 거래를 갱신하지 않았고 실제 Payment DB에 V28을 적용하지 않았다. Order·License·공통 Kafka 재실행, 실제 ADMIN/PG 전체 여정, 미결제 종료/만료와 G1 전체 완료를 주장하지 않는다. 다음 쟁점은 같은 주문 이어 결제 합의를 유지한 **미결제 이탈/재진입과 안전한 종료 경계**다.
+
+
+## 2026-10-29 실제 G1 서버 승인·재결제·자연 만료 검증
+
+서버 수동 승인, 실제 승인 응답 유실 후 조회 복구, FAILED 뒤 같은 주문·paymentId 재결제, 실제 30분 만료와 새 주문 연결을 검증했다. 두 성공 거래는 각각 총액 9,000원·PG 할인 24원·실결제 8,976원이며 사용자 선택 A안으로 별도 금액 스냅샷과 V32를 추가했다. 최종 Payment check 597건이 통과했다. 2026-10-30 원자료 수집과 전용 환경 정리를 마쳤으며, 공유 컨테이너 23개·볼륨 57개와 기존 상태를 보존했다. [최신 상세 기록](g1-portone-live-verification.md)의 실제 거래·진단 보류·환불/정산 미결 범위를 따른다. 과거 단계의 미실시 표현·검증 수치·JAR 해시와 구분한다.

@@ -109,3 +109,8 @@ Content-Type: application/json
 ## 후속: Order 만료 전달
 
 위 1,219건과 해시는 서버 승인 연결 단계의 당시 검증이다. 이후 [Order 만료 결과 전달](order-expiry-propagation-plan.md)에서 OrderExpired Outbox·Payment의 원구매 대조/주문별 잠금·늦은 OrderPlaced 처리와 조회 예약 종료를 추가했다. 최신 소스와 검증은 후속 기록을 따른다. 위에서 남은 범위로 기재한 만료 사본·조회 정리는 이 후속 구현에서 연결하며, 실제 TEST 채널·거래·전체 사용자 여정은 여전히 별도 범위다.
+
+
+## 후속: 실제 TEST 생명주기 검증
+
+2026-10-29 실제 서버 승인·실패 후 같은 주문 재결제·승인 응답 유실 복구·30분 자연 만료와 새 주문 연결을 확인했다. PG 할인 A안의 별도 금액 저장·조회와 V32를 추가한 최종 Payment check 597건이 통과했다. 실행·보류 기록·현재 환경 종료 상태는 [최신 실제 검증](g1-portone-live-verification.md)을 따른다. 위 각 단계의 실제 TEST 미실시 표현과 당시 JAR/검증 건수를 최신 소스의 전체 결과로 대체하지 않는다.

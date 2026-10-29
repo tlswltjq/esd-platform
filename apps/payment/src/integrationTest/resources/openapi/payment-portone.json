@@ -376,6 +376,14 @@
           "paymentId" : {
             "type" : "string"
           },
+          "pgDiscountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgPaidAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "productCode" : {
             "type" : "string"
           },

@@ -6,6 +6,7 @@ import static com.stove.payment.PortOneFixtures.CHANNEL;
 import static com.stove.payment.PortOneFixtures.STORE;
 import static com.stove.payment.PortOneFixtures.SECRET;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
@@ -34,6 +35,7 @@ import com.sun.net.httpserver.HttpServer;
 import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.sql.SQLException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -58,6 +60,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -84,6 +87,7 @@ class PaymentApprovalIntegrationTest {
     private static final List<String> BODIES=new CopyOnWriteArrayList<>();
     private static final List<String> KEYS=new CopyOnWriteArrayList<>();
     private static final AtomicInteger GETS=new AtomicInteger();
+    private static final AtomicInteger PG_DISCOUNT=new AtomicInteger();
     private static final AtomicBoolean LOSE_PG=new AtomicBoolean();
     private static final AtomicBoolean LOSE_ORDER=new AtomicBoolean();
     private static final AtomicBoolean LOSE_CLOSURE=new AtomicBoolean();
@@ -137,7 +141,7 @@ class PaymentApprovalIntegrationTest {
         CountDownLatch release=RELEASE.getAndSet(null); if(release!=null)release.countDown(); ENTERED.set(null);
         reset(outbox); jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
-        PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); RECEIPTS.clear(); CLOSURES.clear(); BODIES.clear(); KEYS.clear(); GETS.set(0);
+        PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); RECEIPTS.clear(); CLOSURES.clear(); BODIES.clear(); KEYS.clear(); GETS.set(0); PG_DISCOUNT.set(0);
         LOSE_PG.set(false); LOSE_ORDER.set(false); LOSE_CLOSURE.set(false); PG_DOWN.set(false); FIRST_UNAVAILABLE.set(false); REJECT.set(false); EXPIRED.set(false); WRONG_AMOUNT.set(false);
     }
     @Test void receptionIsDurableEncryptedAndSeparateFromFinancialSuccess() {
@@ -180,6 +184,27 @@ class PaymentApprovalIntegrationTest {
         assertThat(STATES.get(payment.getPaymentId())).isEqualTo("PAID");
         advance(5); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED); assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isEqualTo(1);
+    }
+    @Test void discountedPaidLookupRecoversTheLostResponseAndPersistsTheAmountsWithoutAnotherPost() {
+        Payment payment = purchase(); String command = id(); PG_DISCOUNT.set(24); LOSE_PG.set(true); submit(payment, command);
+        worker.execute(command);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        advance(5); worker.execute(command);
+        Payment paid = stored(payment);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(paid.getAmount()).isEqualTo(payment.getAmount());
+        assertThat(paid.getDiscountAmount()).isEqualTo(payment.getDiscountAmount());
+        assertThat(paid.getPgPaidAmount()).isEqualTo(payment.getAmount() - 24);
+        assertThat(paid.getPgDiscountAmount()).isEqualTo(24);
+        assertThat(paid.getPgFeeAmount()).isNull();
+        JsonNode view = http("GET", "/api/v1/payments/" + payment.getOrderNo(), null, member(payment)).body().path("data");
+        assertThat(view.path("pgPaidAmount").asLong()).isEqualTo(payment.getAmount() - 24);
+        assertThat(view.path("pgDiscountAmount").asLong()).isEqualTo(24);
+        assertProviderAmountsConstraint(() -> jdbc.update("UPDATE purchase_payment SET pg_discount_amount=25 WHERE payment_id=?", payment.getPaymentId()));
+        assertProviderAmountsConstraint(() -> jdbc.update("UPDATE purchase_payment SET pg_paid_amount=NULL WHERE payment_id=?", payment.getPaymentId()));
+        worker.execute(command);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isEqualTo(1);
+        assertThat(stored(payment).supplierResult()).isEqualTo(paid.supplierResult());
     }
     @Test void anUnappliedRequestIsRetransmittedWithTheIdenticalKeyAndBytes() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true);
@@ -311,6 +336,77 @@ class PaymentApprovalIntegrationTest {
         worker.execute(command); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.FAILED);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED); assertThat(countOutbox()).isZero(); assertThat(BODIES).hasSize(1);
     }
+    @Test void correctedUnadmittedEvidenceExpiresOnlyAfterTheOrderExpiryReceipt() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); WRONG_AMOUNT.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        WRONG_AMOUNT.set(false); TIME.set(payment.getOrderOccurredAt().plusSeconds(1801)); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        PaymentApproval closed=row(command); Instant resolvedAt=closed.getResolvedAt();
+        assertThat(closed.getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(closed.getAdmittedAt()).isNull(); assertThat(closed.getFirstPreparedAt()).isNull();
+        assertThat(closed.getProtectedPayload()).isNull(); assertThat(closed.getNextAt()).isNull();
+        assertThat(closed.getLastErrorCode()).isEqualTo("PG_INVALID_EVIDENCE");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(stored(payment).getNextAttemptAt()).isNull(); assertThat(stored(payment).getNextFailureLookupAt()).isNull();
+        assertThat(GETS.get()).isGreaterThan(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty();
+        assertThat(countOutbox()).isZero();
+        Reply progress=http("GET",path(payment)+"/"+command,null,member(payment));
+        assertThat(progress.body().path("data").path("status").asText()).isEqualTo("EXPIRED");
+        advance(5); before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getResolvedAt()).isEqualTo(resolvedAt); assertThat(GETS.get()).isEqualTo(before);
+    }
+    @Test void orderExpiryCannotCloseAReviewWhilePurchaseEvidenceIsStillInvalid() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); WRONG_AMOUNT.set(true); worker.execute(command);
+        recordExpiry(payment); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(row(command).getNextAt()).isNotNull();
+        assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    @Test void aDatabaseFailureRollsBackBothTheReviewedApprovalAndItsPaymentExpiry() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); WRONG_AMOUNT.set(true); worker.execute(command);
+        WRONG_AMOUNT.set(false); recordExpiry(payment); advance(5);
+        jdbc.execute("ALTER TABLE purchase_payment ADD CONSTRAINT chk_fixture_review_expiry CHECK (status <> 'EXPIRED')");
+        try {
+            worker.execute(command);
+            assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+            assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(row(command).getResolvedAt()).isNull();
+            assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        } finally {
+            jdbc.execute("ALTER TABLE purchase_payment DROP CHECK chk_fixture_review_expiry");
+        }
+        advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    @Test void orderExpiryCannotCloseAReviewWhileTheProviderLookupIsUnavailable() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); WRONG_AMOUNT.set(true); worker.execute(command);
+        WRONG_AMOUNT.set(false); PG_DOWN.set(true); recordExpiry(payment); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(row(command).getNextAt()).isNotNull();
+        assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    @Test void orderExpiryCannotCloseAReviewWithAProviderPaymentStillPending() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); WRONG_AMOUNT.set(true); worker.execute(command);
+        WRONG_AMOUNT.set(false); STATES.put(payment.getPaymentId(),"PAY_PENDING"); recordExpiry(payment); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(row(command).getNextAt()).isNotNull();
+        assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    @Test void aLaterInvalidLookupCannotMakeAnUnadmittedPaidObservationSafeToExpire() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAID"); worker.execute(command);
+        recordExpiry(payment); WRONG_AMOUNT.set(true); advance(5); worker.execute(command);
+        WRONG_AMOUNT.set(false); STATES.put(payment.getPaymentId(),"READY"); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(BODIES).isEmpty(); assertThat(countOutbox()).isZero();
+    }
     @Test void anExpiryNoticeCannotEraseAnAlreadyObservedUnadmittedFinancialAnomaly() {
         Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAID"); worker.execute(command);
         recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
@@ -324,6 +420,15 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
         assertThat(row(command).getAdmittedAt()).isNotNull(); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(GETS.get()).isGreaterThan(before); assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero();
+    }
+    private void assertProviderAmountsConstraint(Runnable update) {
+        assertThatThrownBy(update::run).isInstanceOf(DataAccessException.class).satisfies(failure -> {
+            Throwable cause = failure;
+            while (cause.getCause() != null) cause = cause.getCause();
+            assertThat(cause).isInstanceOf(SQLException.class);
+            assertThat(((SQLException) cause).getErrorCode()).isEqualTo(3819);
+            assertThat(cause.getMessage()).contains("ck_payment_provider_amounts");
+        });
     }
     private void recordExpiry(Payment payment) {
         expire.execute(new OrderExpiryInput(id(),payment.getOrderOccurredAt().plusSeconds(1801),payment.getOrderNo(),payment.getRequestEventId(),payment.getBuyerSubject(),payment.getAmount(),payment.getCurrency(),payment.getOrderOccurredAt().plusSeconds(1800)));
@@ -357,7 +462,7 @@ class PaymentApprovalIntegrationTest {
             Map<String,Object> data=new LinkedHashMap<>();
             data.putAll(Map.of("status",state,"id",paymentId,"transactionId",ATTEMPTS.get(paymentId),"storeId",STORE,"version","V2","currency","KRW",
                     "channel",Map.of("type","TEST","key",CHANNEL,"pgProvider","TOSSPAY_V2"),
-                    "amount",Map.of("total",amount,"paid","PAID".equals(state)?amount:0,"discount",0,"cancelled",0),
+                    "amount",Map.of("total",amount,"paid","PAID".equals(state)?amount-PG_DISCOUNT.get():0,"discount",PG_DISCOUNT.get(),"cancelled",0),
                     "customData",JSON.writeValueAsString(Map.of("orderNo",payment.getOrderNo()))));
             if("PAID".equals(state)) { data.put("paidAt",TIME.get().toString()); data.put("pgTxId","pg-"+paymentId); }
             if("FAILED".equals(state)) { data.put("failedAt",TIME.get().toString()); data.put("failure",Map.of("pgMessage","fixture decline")); }

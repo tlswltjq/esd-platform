@@ -48,11 +48,20 @@ class PortOnePaymentAttemptLookupTest {
         String valid = failed("tx-1");
         for (String wrong : List.of(valid.replace(STORE, "other-store"), valid.replace(CHANNEL, "other-channel"), valid.replace(purchase.orderNo(), id()),
                 valid.replace(purchase.paymentId(), id()), valid.replace("9000", "8999"), valid.replace("\"TEST\"", "\"LIVE\""),
-                valid.replace("\"paid\":0", "\"paid\":9000"), valid.replace("\"discount\":0", "\"discount\":100"), valid.replace("\"cancelled\":0", "\"cancelled\":9000"),
+                valid.replace("\"paid\":0", "\"paid\":8000"), valid.replace("\"discount\":0", "\"discount\":9001"), valid.replace("\"cancelled\":0", "\"cancelled\":9000"),
                 valid.replace("KRW", "USD"), valid.replace("TOSSPAY_V2", "TOSSPAYMENTS"), valid.replace("01:00:01.123456789Z", "00:59:59Z"))) {
             server.reset(); expect("{\"items\":[" + wrong + "]}");
             assertThatThrownBy(() -> lookup.findFailed(purchase)).isInstanceOf(IllegalArgumentException.class);
         }
+    }
+
+    @Test void failedHistoryCanContainTheCheckoutTotalInTheProviderPaidAmountField() {
+        String body = failed("tx-first").replace("\"paid\":0", "\"paid\":9000");
+        expect("{\"items\":[" + body + "]}");
+        List<PgFailedPaymentAttempt> facts = lookup.findFailed(purchase);
+        assertThat(facts).hasSize(1);
+        assertThat(facts.getFirst().supplierAttemptId()).isEqualTo("tx-first");
+        server.verify();
     }
 
     @Test void unavailableMalformedOrConflictingHistoryIsNotAnEmptySuccessfulCollection() {

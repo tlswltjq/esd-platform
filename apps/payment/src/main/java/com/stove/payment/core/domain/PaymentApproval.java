@@ -108,7 +108,18 @@ public class PaymentApproval {
     }
     public void stopPosts(String reason) {
         if (terminal() || !PaymentValues.text(reason, 100)) throw new IllegalArgumentException("A current stop reason is required");
-        postStopped = true; lastErrorCode = reason; status = PaymentApprovalStatus.REVIEW_REQUIRED;
+        postStopped = true;
+        // A later lookup error must not hide an already observed financial anomaly.
+        if (!"PAID_WITHOUT_ADMISSION".equals(lastErrorCode)) lastErrorCode = reason;
+        status = PaymentApprovalStatus.REVIEW_REQUIRED;
+    }
+    public boolean expireAfterVerifiedReady(ApprovalObservation observation, Instant at) {
+        if (observation == null || observation.state() != ApprovalObservation.State.READY
+                || status != PaymentApprovalStatus.REVIEW_REQUIRED || !postStopped
+                || !"PG_INVALID_EVIDENCE".equals(lastErrorCode)
+                || admittedAt != null || firstPreparedAt != null || failedAt != null) return false;
+        expire(at);
+        return true;
     }
     public void recordFailure(Instant observedFailureAt) {
         if (terminal() || !PaymentValues.microsecond(observedFailureAt)) throw new IllegalArgumentException("Verified attempt failure is required");

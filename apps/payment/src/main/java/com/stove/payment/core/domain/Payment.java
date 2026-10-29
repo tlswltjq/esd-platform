@@ -38,6 +38,8 @@ public class Payment {
     @Column(length=100) private String pgFeePolicyId;
     private Integer pgFeeRateBps;
     private Long pgFeeAmount;
+    private Long pgPaidAmount;
+    private Long pgDiscountAmount;
     @Enumerated(EnumType.STRING) @Column(nullable=false,length=20) private PaymentStatus status;
     @Column(length=100) private String providerTransactionId;
     private Instant providerOccurredAt;
@@ -107,7 +109,8 @@ public class Payment {
     public PgResult supplierResult() {
         return status==PaymentStatus.PENDING || status==PaymentStatus.EXPIRED ? null : new PgResult(provider,paymentId,orderNo,amount,currency,
                 providerTransactionId,providerOccurredAt,status==PaymentStatus.PAID ? PgResult.Decision.APPROVED : PgResult.Decision.DECLINED,
-                failureReasonCode,failureReason,pgFeePolicyId == null ? null : new PgFee(pgFeePolicyId,pgFeeRateBps,pgFeeAmount));
+                failureReasonCode,failureReason,pgFeePolicyId == null ? null : new PgFee(pgFeePolicyId,pgFeeRateBps,pgFeeAmount),
+                pgPaidAmount == null ? null : new PgPaymentAmounts(pgPaidAmount, pgDiscountAmount));
     }
 
     /** Final supplier decisions are immutable, including their original transaction and timestamp. */
@@ -125,6 +128,9 @@ public class Payment {
         providerTransactionId=result.transactionId(); providerOccurredAt=result.occurredAt();
         if (result.fee() != null) {
             pgFeePolicyId=result.fee().policyId(); pgFeeRateBps=result.fee().rateBps(); pgFeeAmount=result.fee().amount();
+        }
+        if (result.paymentAmounts() != null) {
+            pgPaidAmount = result.paymentAmounts().paidAmount(); pgDiscountAmount = result.paymentAmounts().discountAmount();
         }
         status=result.decision()==PgResult.Decision.APPROVED ? PaymentStatus.PAID : PaymentStatus.FAILED;
         if (status==PaymentStatus.FAILED) nextFailureLookupAt=null;

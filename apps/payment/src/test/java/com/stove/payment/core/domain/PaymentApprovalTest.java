@@ -74,4 +74,12 @@ class PaymentApprovalTest {
         assertThat(approval.getNextAt()).isEqualTo(at.plusSeconds(8));
         assertThat(approval.terminal()).isFalse();
     }
+    @Test void aLaterInvalidLookupCannotHideAnObservedUnadmittedPayment() {
+        PaymentApproval approval = approval();
+        approval.stopPosts("PG_INVALID_EVIDENCE");
+        approval.stopPosts("PAID_WITHOUT_ADMISSION");
+        approval.stopPosts("PG_INVALID_EVIDENCE");
+        assertThat(approval.getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+    }
 }

@@ -101,6 +101,15 @@ public class ResolvePaymentApproval {
         if(current.getAdmittedAt()!=null && orderExpired(current.getOrderNo()))stop(id,token,"ORDER_EXPIRY_CONFLICT");
         ApprovalObservation observed=gateway.inspect(current.purchase());
         if (current.getAdmittedAt()==null) {
+            if (observed.state()==ApprovalObservation.State.READY && orderExpired(current.getOrderNo())) {
+                locked(id,(payment,approval)->{
+                    if (approval.owns(token,now()) && payment.getStatus()==PaymentStatus.PENDING
+                            && orderExpired(approval.getOrderNo()) && approval.expireAfterVerifiedReady(observed,now()))
+                        payment.expireUnpaid();
+                    return null;
+                });
+                return;
+            }
             if (observed.state()==ApprovalObservation.State.FAILED) {
                 locked(id,(payment,approval)->{ if (approval.owns(token,now())) {
                     approval.failBeforeAdmission(observed.failedAt(),now());

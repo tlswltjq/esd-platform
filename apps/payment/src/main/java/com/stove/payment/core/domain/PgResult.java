@@ -4,8 +4,14 @@ import java.time.Instant;
 
 /** A confirmed supplier decision. An unavailable or unresolved call has no final result. */
 public record PgResult(String provider, String paymentId, String orderNo, long amount, String currency,
-        String transactionId, Instant occurredAt, Decision decision, String reasonCode, String reason, PgFee fee) {
+        String transactionId, Instant occurredAt, Decision decision, String reasonCode, String reason, PgFee fee,
+        PgPaymentAmounts paymentAmounts) {
     public enum Decision { APPROVED, DECLINED }
+    public PgResult(String provider, String paymentId, String orderNo, long amount, String currency,
+            String transactionId, Instant occurredAt, Decision decision, String reasonCode, String reason, PgFee fee) {
+        this(provider, paymentId, orderNo, amount, currency, transactionId, occurredAt, decision, reasonCode, reason, fee, null);
+    }
+
     /** Existing supplier decisions may have an unknown fee. */
     public PgResult(String provider, String paymentId, String orderNo, long amount, String currency,
             String transactionId, Instant occurredAt, Decision decision, String reasonCode, String reason) {
@@ -19,6 +25,10 @@ public record PgResult(String provider, String paymentId, String orderNo, long a
                 || (decision == Decision.DECLINED && (!PaymentValues.text(reasonCode,100) || !PaymentValues.text(reason,500)))
                 || (fee != null && (fee.amount() > amount || decision == Decision.DECLINED && fee.amount() != 0)))
             throw new IllegalArgumentException("Invalid confirmed PG result");
+        if (paymentAmounts != null) {
+            if (decision != Decision.APPROVED) throw new IllegalArgumentException("Only approved payments have confirmed supplier amounts");
+            paymentAmounts.requireTotal(amount);
+        }
     }
     public void requireRequest(PgChargeRequest request) {
         if (!paymentId.equals(request.paymentId()) || !orderNo.equals(request.orderNo())

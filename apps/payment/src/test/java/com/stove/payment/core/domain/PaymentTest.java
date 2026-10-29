@@ -13,6 +13,24 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentTest {
+    @Test void supplierDiscountAndCustomerPaymentAreImmutableAndDoNotRewriteTheOrderOrFee() {
+        Payment payment = Payment.receive(request(), "SIMULATED");
+        PgResult original = approved(payment);
+        PgResult discounted = new PgResult(original.provider(), original.paymentId(), original.orderNo(), original.amount(), original.currency(),
+                original.transactionId(), original.occurredAt(), original.decision(), null, null, null,
+                new PgPaymentAmounts(original.amount() - 24, 24));
+        assertThat(payment.confirm(discounted, id(), Payment.now())).isTrue();
+        assertThat(payment.getAmount()).isEqualTo(original.amount());
+        assertThat(payment.getPgPaidAmount()).isEqualTo(original.amount() - 24);
+        assertThat(payment.getPgDiscountAmount()).isEqualTo(24);
+        assertThat(payment.getPgFeeAmount()).isNull();
+        assertThat(payment.supplierResult()).isEqualTo(discounted);
+        assertThat(payment.confirm(discounted, id(), Payment.now())).isFalse();
+        PgResult changed = new PgResult(original.provider(), original.paymentId(), original.orderNo(), original.amount(), original.currency(),
+                original.transactionId(), original.occurredAt(), original.decision(), null, null, null,
+                new PgPaymentAmounts(original.amount() - 25, 25));
+        assertThatThrownBy(() -> payment.confirm(changed, id(), Payment.now())).isInstanceOf(BusinessException.class);
+    }
     @Test void preservesSupplierFeeAndRejectsFeeOnlyChangesToFinalDecision() {
         Payment p=Payment.receive(request(),"SIMULATED");PgResult original=approved(p);
         PgResult withFee=new PgResult(original.provider(),original.paymentId(),original.orderNo(),original.amount(),original.currency(),

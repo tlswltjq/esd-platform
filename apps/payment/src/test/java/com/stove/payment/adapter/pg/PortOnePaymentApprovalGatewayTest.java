@@ -56,6 +56,24 @@ class PortOnePaymentApprovalGatewayTest {
         assertThat(observed.paid().amount()).isEqualTo(9000); assertThat(observed.paid().fee()).isNull();
         assertThat(observed.paid().transactionId()).isEqualTo("pg-original"); server.verify();
     }
+    @Test void providerDiscountCanReduceTheCustomerPaymentWhileTheOrderTotalStaysFixed() throws Exception {
+        String body = paid().replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24");
+        body = body.substring(0, body.length() - 1) + ",\"paidAt\":\"" + at + "\",\"pgTxId\":\"pg-discounted\"}";
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        ApprovalObservation observed = gateway(at).inspect(purchase);
+        assertThat(observed.state()).isEqualTo(ApprovalObservation.State.PAID);
+        assertThat(observed.paid().amount()).isEqualTo(9000);
+        assertThat(observed.paid().paymentAmounts().paidAmount()).isEqualTo(8976);
+        assertThat(observed.paid().paymentAmounts().discountAmount()).isEqualTo(24);
+        assertThat(observed.paid().fee()).isNull();
+        server.verify();
+    }
+    @Test void inconsistentProviderDiscountCannotApproveTheOriginalPurchase() throws Exception {
+        String body = paid().replace("\"paid\":9000", "\"paid\":8975").replace("\"discount\":0", "\"discount\":24");
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway(at).inspect(purchase)).isInstanceOf(IllegalArgumentException.class);
+        server.verify();
+    }
     @Test void storeChannelLiveCurrencyProductAndTransactionMismatchesCannotBePaidEvidence() throws Exception {
         String body=paid();
         for(String invalid:List.of(body.replace(STORE,"other-store"),body.replace(CHANNEL,"other-channel"),body.replace("TEST","LIVE"),
@@ -92,6 +110,23 @@ class PortOnePaymentApprovalGatewayTest {
     @Test void readyIsOnlyAnObservationAndDoesNotInventAPaidResult() throws Exception {
         server.expect(requestTo(url()+"?storeId="+STORE)).andRespond(withSuccess(snapshot("READY","tx-original"),MediaType.APPLICATION_JSON));
         ApprovalObservation result=gateway(at).inspect(purchase); assertThat(result.state()).isEqualTo(ApprovalObservation.State.READY); assertThat(result.paid()).isNull(); server.verify();
+    }
+    @Test void unpaidProviderAmountCanAlreadyContainTheCheckoutTotalWithoutBecomingPaid() throws Exception {
+        for (String state : List.of("READY", "PENDING", "PAY_PENDING")) {
+            server.reset();
+            String body = snapshot(state, "tx-original").replace("\"paid\":0", "\"paid\":9000");
+            server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+            ApprovalObservation observed = gateway(at).inspect(purchase);
+            assertThat(observed.state()).isEqualTo("READY".equals(state) ? ApprovalObservation.State.READY : ApprovalObservation.State.PENDING);
+            assertThat(observed.paid()).isNull();
+            server.verify();
+        }
+    }
+    @Test void aPartialUnpaidAmountCannotBeUsedToAdmitTheOriginalFullCheckout() throws Exception {
+        String body = snapshot("READY", "tx-original").replace("\"paid\":0", "\"paid\":8000");
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway(at).inspect(purchase)).isInstanceOf(IllegalArgumentException.class);
+        server.verify();
     }
     @Test void anInformationMismatchIsAHardStopAndDoesNotEchoTheSupplierResponse() {
         server.expect(requestTo(url()+"/confirm")).andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)

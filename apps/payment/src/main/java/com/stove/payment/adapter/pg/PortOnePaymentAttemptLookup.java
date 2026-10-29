@@ -42,9 +42,13 @@ public class PortOnePaymentAttemptLookup implements PaymentAttemptLookup {
                 if (!"FAILED".equals(text(item, "status"))) continue;
                 JsonNode channel = item.path("channel"); JsonNode amount = item.path("amount");
                 JsonNode custom = mapper.readTree(text(item, "customData"));
+                // Failed transactions can retain the intended checkout amount in PortOne's paid field.
+                long providerPaid = number(amount, "paid");
+                long providerDiscount = number(amount, "discount");
                 if (!"TEST".equals(text(channel, "type")) || !channelKey.equals(text(channel, "key")) || !"TOSSPAY_V2".equals(text(channel, "pgProvider"))
                         || !purchase.currency().equals(text(item, "currency")) || number(amount, "total") != purchase.amount()
-                        || number(amount, "paid") != 0 || number(amount, "discount") != 0 || number(amount, "cancelled") != 0
+                        || providerDiscount < 0 || providerDiscount > purchase.amount()
+                        || (providerPaid != 0 && providerPaid != purchase.amount() - providerDiscount) || number(amount, "cancelled") != 0
                         || custom == null || !purchase.orderNo().equals(text(custom, "orderNo")) || !item.path("failure").isObject())
                     throw new IllegalArgumentException("Failed attempt does not match the original checkout");
                 PgFailedPaymentAttempt fact = new PgFailedPaymentAttempt(purchase, text(item, "id"), time(item, "requestedAt"), time(item, "failedAt"));
