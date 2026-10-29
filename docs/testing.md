@@ -2,6 +2,8 @@
 
 [Order 전액 환불의 RED 테스트 목록](#order-full-refund-tdd)은 7절, [Order 전체 기능·권한의 단위 테스트](#order-module-tests)는 8절을 따른다.
 
+2026-10-29 Order·Payment는 공유 픽스처와 과거 DB 이행 검사 실행을 분리했다. 개발 반복의 `integrationTest`는 현재 스키마의 업무·경계를 검증하고, `migrationTest`가 과거 이행을 담당한다. 최종 `check`·`build`는 둘 다 실행한다. [적용 범위·명령·검증 기록](test-verification-optimization-plan.md#10-사용자-승인-후-적용--2026-10-29)을 따른다. 아래 과거 완료 건수는 당시 기록이며 현재 전체 건수와 구분한다.
+
 ## 현행 Payment·Tempo 추적 검증
 
 `python3 tools/verification/verify-tracing.py`는 기존 Jib 실행 기반에 격리된 Tempo·Grafana를 추가한다.
@@ -70,18 +72,21 @@ L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 
 걸린다 — `src/test` 의 클래스는 `InfraContainers` 를 **임포트조차 할 수 없다.**
 
 ```
-./gradlew test              945건 · Docker 불필요 · 수 초
-./gradlew integrationTest   241건 · Testcontainers · 동시 스택 수는 따로 조인다
-./gradlew build             둘 다 (단위가 먼저 돈다)
+./gradlew test              Docker 불필요 · 단위/아키텍처
+./gradlew integrationTest   Testcontainers · Order/Payment의 과거 이행 검사는 별도
+./gradlew :apps:order:migrationTest :apps:payment:migrationTest
+./gradlew build             단위·통합·과거 이행을 모두 포함
 ./gradlew :e2e:e2eTest      46건 · 떠 있는 스택이 필요하다
 ./gradlew :e2e:chaosTest    5건 · 스택을 실제로 정지시킨다 (L7)
 ```
 
-태그로 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
+단위/인프라 경계를 태그로만 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
 잊으면 컨테이너 테스트가 빠른 소스셋에 섞여 **예전 상태로 조용히 돌아간다.**
 실제로 분리 작업 중에 `InfraContainers` 를 쓰지 않고 Testcontainers 를 직접 쓰던
 테스트 2건(`S3PresignedUrlSignerTest`·`S3BuildStorageTest`)이 있었는데,
 찾아낸 것은 사람의 검토가 아니라 **컴파일 실패**였다.
+
+2026-10-29 추가한 `migration` 태그는 이미 인프라 계층에 있는 검사의 실행 주기만 나눈다. 단위/인프라의 classpath 경계는 유지하며, 태그가 없는 검사는 일반 통합 실행에 남는다. 두 실행의 사례 합집합을 이전 전체 결과와 대조한다.
 
 동시에 뜨는 컨테이너 스택 수는 공유 빌드 서비스(`InfraTestThrottle`)가 따로 센다.
 예전에는 `org.gradle.workers.max` 하나가 컴파일 병렬도와 컨테이너 수를 같이 정해서,

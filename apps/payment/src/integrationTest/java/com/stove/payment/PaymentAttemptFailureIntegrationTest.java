@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -272,6 +273,7 @@ class PaymentAttemptFailureIntegrationTest {
         assertThat(snapshot()).isEqualTo(before);
     }
 
+    @Tag("migration")
     @Test void v28PreservesOriginalPurchasesAndSchedulesOnlyReadOnlyHistoryWithoutInventingAttempts() {
         Payment pending = received(); Payment paid = received(); PAYMENTS.put(paid.getPaymentId(), paid(paid)); history(paid); resolve.execute(paid.getPaymentId());
         Payment simulated = Payment.receive(request(), "SIMULATED"); payments.saveAndFlush(simulated);

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -24,6 +25,7 @@ import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
 import org.springframework.web.client.RestClient;
 
+@Tag("migration")
 class PaymentMigrationIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired ReceiveOrderPayment receive;
     @Autowired ResolvePayment resolve;

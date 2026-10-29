@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -305,6 +306,7 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(note(execution, id()).data().path("recordedAt").asText()).isEqualTo(DELAY.plusSeconds(100).toString());
     }
 
+    @Tag("migration")
     @Test void v27PreservesExistingDataAddsNoInventedNotesAndEnforcesAuditConstraints() {
         RefundExecution execution = prepared(); MySQLContainer<?> mysql = SharedContainers.MYSQL;
         String schema = "investigation_upgrade_" + id().replace("-", ""); String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";

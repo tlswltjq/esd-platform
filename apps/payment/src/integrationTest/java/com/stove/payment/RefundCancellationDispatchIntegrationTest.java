@@ -84,6 +84,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -1255,6 +1256,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(bodies).hasSize(2); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
     }
 
+    @Tag("migration")
     @Test void v25MigrationKeepsExistingHoldsAndResumeHistoryAndRejectsUnknownReasons() {
         received(); mode = Mode.FORBIDDEN; service(gateway()).executeFirst(current.getAttemptId());
         when(clock.instant()).thenReturn(BASE.plusSeconds(10)); resume.execute(resumeCommand(currentHold())); retryWorker().execute();

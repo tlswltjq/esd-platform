@@ -1,0 +1,64 @@
+import groovy.json.JsonOutput
+
+// 앱 테스트를 실행하지 않고 실제 Gradle 모델의 선택·입력·최종 게이트를 검증한다.
+// ./gradlew --offline -I tools/verification/verify-test-boundaries.gradle verifyTestBoundaries
+gradle.projectsEvaluated {
+    rootProject.tasks.register('verifyTestBoundaries') {
+        group = 'verification'
+        description = 'Order/Payment 검증 분리의 입력과 필수 게이트를 검증한다'
+        doLast {
+            def require = { condition, message ->
+                if (!condition) {
+                    throw new GradleException(message)
+                }
+            }
+            def covered = { task, file ->
+                def target = file.canonicalFile.toPath()
+                task.inputs.files.files.any { input ->
+                    def path = input.canonicalFile.toPath()
+                    path == target || (input.isDirectory() && target.startsWith(path))
+                }
+            }
+            def observations = [:]
+            ['order', 'payment'].each { name ->
+                def module = rootProject.project(":apps:${name}")
+                def integration = module.tasks.getByName('integrationTest')
+                def migration = module.tasks.getByName('migrationTest')
+                def runtime = integration.classpath.files.collect { it.canonicalFile }.toSet()
+                def unitOutputs = module.sourceSets.test.output.files.collect { it.canonicalFile }
+                require(!unitOutputs.any { runtime.contains(it) }, "${name}: unit output leaked into integration classpath")
+                require(integration.options.excludeTags.contains('migration'), "${name}: integration must exclude migration")
+                require(migration.options.includeTags.toSet() == ['migration'].toSet(), "${name}: migration must select its tag")
+                require(integration.options.excludeTags.contains('known-defect') &&
+                        migration.options.excludeTags.contains('known-defect'), "${name}: known defects must remain separate")
+                require(migration.classpath.files == integration.classpath.files, "${name}: migration lost integration runtime")
+                def checkDependencies = module.tasks.getByName('check').dependsOn.collect { dependency ->
+                    dependency instanceof org.gradle.api.provider.Provider ? dependency.get() : dependency
+                }
+                require(checkDependencies.contains(integration) && checkDependencies.contains(migration),
+                        "${name}: check must retain both integration and migration")
+                require(covered(migration, rootProject.file("tools/migrations/${name}/${name}-transition.sql")),
+                        "${name}: external migration SQL must be an input")
+                observations[name] = [unitOutputOnIntegrationClasspath: false,
+                        integrationExcludesMigration: true, checkIncludesBoth: true]
+            }
+            def payment = rootProject.project(':apps:payment')
+            def jar = rootProject.project(':simulators:mock-pg').tasks.getByName('bootJar').archiveFile.get().asFile
+            ['integrationTest', 'migrationTest'].each { name ->
+                def task = payment.tasks.getByName(name)
+                require(covered(task, jar), "payment ${name}: supplier JAR content must be an input")
+                require(!task.classpath.files.collect { it.canonicalFile }.contains(jar.canonicalFile),
+                        "payment ${name}: supplier must remain an independent process")
+                require(task.dependsOn.contains(':simulators:mock-pg:bootJar'),
+                        "payment ${name}: supplier must be built first")
+            }
+            require(covered(payment.tasks.getByName('migrationTest'), rootProject.file('tools/migrations/mock-pg/migrate.py')),
+                    'payment: external importer must be an input')
+            require(covered(rootProject.project(':apps:catalog').tasks.getByName('integrationTest'),
+                    rootProject.file('tools/migrations/catalog/catalog-transition.sql')),
+                    'catalog: external migration SQL must be an input')
+            println JsonOutput.toJson([kind: 'verification_boundary_contract', applicationTestsExecuted: false,
+                    modules: observations, externalSupplierContentTracked: true, externalMigrationToolsTracked: true])
+        }
+    }
+}

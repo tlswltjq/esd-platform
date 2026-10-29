@@ -2,7 +2,7 @@
 
 2026-10-29. 사용자가 제공한 「AX 시대의 테스트 검증 최적화 전략」을 현재 프로젝트의 코드·Gradle 입력·최근 실행 기록에 대조한 검토다. 첨부 문서는 기술 제안으로 읽었으며, 내부 예제 명령·체크리스트를 이 저장소의 실행 지시나 품질 게이트 변경 승인으로 해석하지 않았다.
 
-이번 산출물은 진단·도입안과 기존 JUnit XML을 재집계하는 도구다. 업무 코드·빌드 설정·테스트 선택/제외·CI 정책은 이 검토에서 변경하지 않았다. 새로운 전체 회귀나 성능 벤치마크도 실행하지 않았다. 기존 성공 기록을 분석하고 테스트를 실행하지 않는 임시 Gradle 메타데이터 태스크를 조회했다.
+최초 검토 산출물은 진단·도입안과 기존 JUnit XML을 재집계하는 도구였다. 해당 검토에서는 업무 코드·빌드 설정·테스트 선택/제외·CI 정책을 변경하지 않았고 전체 회귀나 성능 벤치마크도 실행하지 않았다. 이후 사용자가 개선 실행을 요청해 적용한 범위와 검증은 아래 10절에 별도로 기록한다.
 
 ## 1. 결론과 우선순위
 
@@ -157,3 +157,48 @@ python3 tools/verification/report-test-costs.py \
 이번 분석 원자료는 `runs/test-verification-audit-20261029/{metrics.json,gradle-inputs.json}`이다. 1초짜리 메타데이터 조회의 BUILD SUCCESSFUL은 애플리케이션 테스트 성공이 아니다. 이행 비중 계산·기동 로그 집계와 실제 단축률을 구분한다.
 
 첫 구현 범위로 **외부 파일 입력 선언 + Order/Payment 공유 픽스처 분리**를 권한다. 이후 **migrationTest 분리와 최종 게이트 보존**을 연결한다. 변경 전후 같은 코드/환경에서 첫 실행과 재사용 실행을 구분해 비교하고, 단위만 수정했을 때 불필요 통합 재실행이 줄었는지 확인한다. 목표 시간·단축률은 이 실험 후 확정한다.
+
+## 10. 사용자 승인 후 적용 — 2026-10-29
+
+기존 작업을 기능·기록·진단의 네 커밋으로 저장하고 `origin/main`에 푸시한 뒤 개선을 시작했다. 이 단계는 주문·결제 정책을 변경하지 않는다.
+
+### 적용 범위
+
+- Order·Payment의 공유 Fixture 네 파일을 `src/testFixtures`로 이동했다. 두 모듈의 통합 classpath에서 일반 단위 테스트 출력을 제거했다. 다른 모듈의 Fixture 분리는 이번 범위에 포함하지 않았다.
+- 두 모듈은 plain JAR를 만들지 않으므로 Fixture와 단위 테스트가 `main.output`을 직접 참조한다. ArchUnit은 표준 `DoNotIncludeGradleTestFixtures`로 Fixture 산출물만 제외한다. 운영 클래스의 기존 아키텍처 규칙은 유지한다. [ArchUnit 1.3.0 옵션 정의](https://raw.githubusercontent.com/TNG/ArchUnit/v1.3.0/archunit/src/main/java/com/tngtech/archunit/core/importer/ImportOption.java)
+- 과거 이행 사례에 `migration` 태그를 부여했다. `integrationTest`는 이 태그를 제외하고 새 `migrationTest`가 전담한다. `check`에는 두 태스크가 모두 연결되며 `build`의 필수 검증도 유지한다. 알려진 결함의 별도 실행과 PIT의 두 테스트 소스셋은 유지한다.
+- Payment의 두 태스크는 별도 프로세스 PG JAR 내용을 파일 입력으로 추적한다. Order·Payment의 외부 SQL 및 Payment의 Python importer는 `migrationTest`, Catalog의 외부 SQL은 기존 `integrationTest` 입력으로 선언했다. 공급자 JAR는 테스트 실행 classpath에 추가하지 않았다.
+- Payment의 JWT/DB/Kafka 지원과 독립 공급자 기동 지원을 분리했다. PG가 필요 없는 OrderExpiry 테스트는 DB 지원만 사용하고, PG 대역에 호출이 전혀 없음을 매 사례 확인한다. 기존 실제 공급자 HTTP·재시작 검사는 공급자 지원 베이스를 그대로 사용한다.
+- CI의 실제 실행 강제·기존 인프라 동시 태스크 제한·공유 상태의 직렬 실행은 유지한다. 별도의 CI/예약 실행을 생성하지 않았다.
+
+### 실행 방법
+
+OrbStack 엔드포인트를 `DOCKER_HOST`로 지정한 로컬 셸에서 실행한다. 빠른 단계가 성공한 뒤 다음 단계로 진행한다. 같은 모듈의 Gradle 명령을 동시에 실행하지 않는다.
+
+```bash
+# 인프라 없이 먼저 확인
+./gradlew :apps:order:test :apps:payment:test --console=plain
+
+# 개발 중 현재 스키마의 업무·경계 반복 검증
+./gradlew :apps:order:integrationTest :apps:payment:integrationTest --console=plain
+
+# 스키마/이관 수정 시 또는 이행 사례의 집중 검증
+./gradlew :apps:order:migrationTest :apps:payment:migrationTest --console=plain
+
+# 완료 전 두 종류를 포함한 최종 검증·산출물
+./gradlew :apps:order:check :apps:payment:check \
+  :apps:order:bootJar :apps:payment:bootJar --console=plain
+
+# 테스트 실행 없이 실제 Gradle 입력·태그·최종 게이트 계약 확인
+./gradlew --offline -I tools/verification/verify-test-boundaries.gradle verifyTestBoundaries
+```
+
+로컬 실패의 수정 반복에는 태스크의 `--tests`·`--fail-fast`를 사용하고 부분 결과로 기록한다. 최종 성공 뒤 일반 단위 테스트만 수정한 경우 통합 전체를 반복하기 전에 입력 영향부터 확인한다.
+
+### 검증과 비용 해석
+
+- 도입 중 빠른 컴파일에서 plain JAR 비활성화에 따른 main 클래스 경로 누락을 확인하고 출력 경로를 명시했다. 이후 단위 검사에서 Fixture의 ArchUnit 오인식을 확인하고 표준 제외 옵션을 적용했다. 이 실패들은 업무 규칙 TDD Red와 구분한다.
+- 빠른 전체 단위·아키텍처와 통합 컴파일, 실제 Gradle 경계 계약 검사가 통과했다. 경계 검사에 단위 출력을 의도적으로 다시 넣은 음성 대조는 실제 실패했다. 검사를 실행하지 않고 통과하는 공허한 진단과 구분한다.
+- 개발 중 반복 실행에서 역사 이행 비용은 빠지지만, 최종 `check`에서는 새 JVM/컨테이너 기동 비용이 추가될 수 있다. 전체 빌드의 단축을 보장하는 변경으로 해석하지 않는다.
+- 첫 단계는 같은 통합 소스셋 안의 태그 분리다. 통합 테스트 클래스나 공유 Fixture가 바뀌면 두 태스크의 입력이 함께 달라질 수 있다. 메서드 단위 캐시나 자동 영향 분석을 구현한 것은 아니며, 일반 단위 테스트 출력의 결합을 제거한 효과와 구분한다.
+- 최종 결과·테스트 사례 보존 대조·입력 무효화 확인은 `runs/test-verification-optimization-20261029`와 아래 완료 기록에 남긴다.

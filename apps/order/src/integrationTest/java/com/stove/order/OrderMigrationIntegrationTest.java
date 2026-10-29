@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -29,6 +30,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
 
+@Tag("migration")
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 

@@ -41,6 +41,7 @@ import org.flywaydb.core.Flyway;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -150,6 +151,7 @@ class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase
         assertThat(stored(received).getAutomaticCancellationStoppedAt()).isNull();
     }
 
+    @Tag("migration")
     @Test void migrationFromV15PreservesAnUnsentPendingReceiptWithoutInventingADispatchTime() {
         RefundExecution received = received();
         MySQLContainer<?> mysql = SharedContainers.MYSQL;

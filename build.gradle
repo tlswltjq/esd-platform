@@ -44,6 +44,12 @@ subprojects {
     apply plugin: 'java'
     apply plugin: 'io.spring.dependency-management'
 
+    // 비용을 확인한 두 모듈부터 공유 픽스처와 과거 DB 이행 검사의 경계를 분리한다.
+    def stagedVerification = project.path in [':apps:order', ':apps:payment']
+    if (stagedVerification) {
+        apply plugin: 'java-test-fixtures'
+    }
+
     java {
         toolchain {
             languageVersion = JavaLanguageVersion.of(21)
@@ -69,6 +75,10 @@ subprojects {
 
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+        if (stagedVerification) {
+            testFixturesImplementation project(':common:kafka')
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {
@@ -90,8 +100,12 @@ subprojects {
     // 임포트조차 할 수 없다 — 컨테이너 테스트를 빠른 소스셋에 잘못 두면 컴파일이 막는다.
     sourceSets {
         integrationTest {
-            compileClasspath += sourceSets.main.output + sourceSets.test.output
-            runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+            compileClasspath += sourceSets.main.output
+            runtimeClasspath += sourceSets.main.output
+            if (!stagedVerification) {
+                compileClasspath += sourceSets.test.output
+                runtimeClasspath += sourceSets.test.output
+            }
         }
     }
 
@@ -100,6 +114,17 @@ subprojects {
         integrationTestCompileOnly.extendsFrom testCompileOnly
         integrationTestAnnotationProcessor.extendsFrom testAnnotationProcessor
         integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+    }
+
+    if (stagedVerification) {
+        // 실행 앱은 plain jar를 만들지 않으므로 픽스처도 main의 클래스 출력을 직접 쓴다.
+        sourceSets.testFixtures.compileClasspath += sourceSets.main.output
+        sourceSets.testFixtures.runtimeClasspath += sourceSets.main.output
+        sourceSets.test.compileClasspath += sourceSets.main.output
+        sourceSets.test.runtimeClasspath += sourceSets.main.output
+        dependencies {
+            integrationTestImplementation testFixtures(project(project.path))
+        }
     }
 
     tasks.register('integrationTest', Test) {
@@ -135,6 +160,26 @@ subprojects {
 
         // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
         shouldRunAfter tasks.named('test')
+        if (stagedVerification) {
+            useJUnitPlatform { excludeTags 'migration' }
+        }
+    }
+
+    if (stagedVerification) {
+        tasks.register('migrationTest', Test) {
+            group = 'verification'
+            description = '과거 DB 버전의 데이터 보존·이관을 실제 인프라로 검증한다'
+            testClassesDirs = sourceSets.integrationTest.output.classesDirs
+            classpath = sourceSets.integrationTest.runtimeClasspath
+            usesService(infraTestThrottle)
+            systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
+            useJUnitPlatform {
+                includeTags 'migration'
+                excludeTags 'known-defect'
+            }
+            shouldRunAfter tasks.named('test'), tasks.named('integrationTest')
+        }
+        tasks.named('check') { dependsOn tasks.named('migrationTest') }
     }
 
     // 통합 테스트도 `./gradlew build` 로 돈다. 기본 빌드에서 빠지면 아무도 안 돌린다.

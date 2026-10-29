@@ -9,3 +9,8 @@ dependencies {
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
+
+tasks.named('integrationTest') {
+    inputs.file(rootProject.file('tools/migrations/catalog/catalog-transition.sql'))
+            .withPropertyName('externalMigrationSql').withPathSensitivity(PathSensitivity.RELATIVE)
+}
