@@ -17,8 +17,8 @@
 - Catalog는 Studio 출시 요청의 불변 스냅샷을 공개본으로 확정하고 공개 상품 조회·출시 결과 발행을 담당한다. 범위와 검증 기록은 `docs/catalog-mvp-plan.md`를 따른다.
 - Store는 Catalog 공개 상품의 조회 사본, 제목 검색·목록·상세와 시작 시 초기 동기화를 담당한다. 범위와 검증 기록은 `docs/store-mvp-plan.md`를 따른다.
 - Order는 공개 상품 하나의 주문 스냅샷·청구액 확정, JWT sub 기준 내 주문 조회와 결제 결과 반영을 담당한다. 범위와 검증 기록은 `docs/order-mvp-plan.md`를 따른다. Order 독립 검증은 결과 픽스처를 사용하고 실제 Payment 연계는 `docs/payment-mvp-plan.md`를 따른다.
-- Payment는 OrderPlaced의 내구성 있는 접수, 고정 paymentId로 외부 모의 PG HTTP 승인·조회와 미확정 건 재개, 최종 결과·비용 스냅샷·Outbox 저장과 JWT sub 기준 내 결제 조회를 담당한다. 실제 PG·자금 이동·환불은 후속 범위다. 원래 완료 기록은 `docs/payment-mvp-plan.md`, 2026-10-18 외부 PG 전환·로컬 검증은 `docs/settlement-mvp-plan.md`를 따른다.
-- License는 OrderPaid의 불변 구매 근거와 구매자·상품별 영구 보유권, JWT sub 기준 내 라이브러리 조회를 담당한다. 출처와 권한은 License 하나에 저장한다(통합 수정 OCI 검증: 2026-10-18). 본인용 동일 상품의 PENDING·PAID 중복 구매는 Order가 차단하며, 최종 FAILED 이후 새 주문만 허용한다. 환불·회수는 후속 범위다. Download는 기존 내 라이브러리 상세 API로 보유권을 확인한다. 범위와 OCI 검증 기록은 `docs/license-mvp-plan.md`를 따른다.
+- Payment는 OrderPlaced의 내구성 있는 접수, 고정 paymentId로 외부 모의 PG HTTP 승인·조회와 미확정 건 재개, 최종 결과·비용 스냅샷·Outbox 저장과 JWT sub 기준 내 결제 조회를 담당한다. 실제 PG·자금 이동·환불은 후속 범위다. 원래 완료 기록은 `docs/payment-mvp-plan.md`, 2026-10-18 외부 PG 전환·로컬 검증은 `docs/settlement-mvp-plan.md`를 따른다. 후속 서버 승인·암호화된 접수/복구·Order 승인 영수증 계약은 `docs/payment-confirmation-plan.md`, Order 만료 전달·순서 역전/중복·조회 종료는 `docs/order-expiry-propagation-plan.md`를 따른다.
+- License는 OrderPaid의 불변 구매 근거와 구매자·상품별 영구 보유권, JWT sub 기준 내 라이브러리 조회를 담당한다. 출처와 권한은 License 하나에 저장한다(통합 수정 OCI 검증: 2026-10-18). 본인용 동일 상품의 PENDING·PAYMENT_PROCESSING·PAID 중복 구매는 Order가 차단하며, 최종 FAILED 또는 안전한 EXPIRED 이후 새 주문을 허용한다. 환불·회수는 후속 범위다. Download는 기존 내 라이브러리 상세 API로 보유권을 확인한다. 범위와 OCI 검증 기록은 `docs/license-mvp-plan.md`를 따른다.
 - Download는 기존 License 내 라이브러리와 Catalog 내부 현재 공개 빌드를 조회해 상품 ID·코드를 대조하고 읽기 전용 S3/MinIO HEAD·presigned GET으로 전체 ZIP의 만료 URL을 제공한다. 업무 DB·MongoDB·Kafka·보유권 사본·패치/플랫폼 선택은 없다. 범위와 로컬 OrbStack 검증 기록은 `docs/download-mvp-plan.md`를 따른다.
 
 - Settlement는 OrderPaid·외부 PG 거래/비용·Catalog 불변 소유자를 대조한 매출·플랫폼 전액 부담 PG 비용·판매자 배분·월 마감과 PG 지급 명세 접수·거래별 대사·모의 수령 확인을 담당한다. Payment를 경유하지 않는다. 외부 모의 PG는 simulators/mock-pg의 독립 프로세스·DB·HTTP 공급자이며 업무 완료 모듈 수에 포함하지 않는다. 실제 은행 입금·판매자 송금·환불은 후속 범위다. 범위와 로컬 OrbStack 검증·완료 기록은 `docs/settlement-mvp-plan.md`를 따른다.
@@ -27,7 +27,9 @@
 
 2026-10-29 사용자가 정한 현재 목표는 **MVP 상태의 전 기능을 일반적인 사용 수준으로 고도화한 뒤, 엣지 케이스·성능 관점으로 추가 고도화**하는 것이다. 전체 평가·권장 실행 순서·단계별 완료 조건은 `docs/platform-generalization-plan.md`를 따른다. 아래의 재작성 완료는 MVP 범위의 완료 기록이며 일반화 전체 완료와 구분한다. 환불의 기존 합의와 검증은 보존하되 개별 환불 예외 정책의 확장을 전체 기능 일반화보다 자동으로 우선하지 않는다.
 
-2026-10-28 전액 환불 후속 확장은 위 MVP 완료 시점과 별도로 진행했다. 현재 PortOne TEST 결제·환불 실행/조회, License 정지/복구, 고객 환불 API와 관리자 최초 판정 계약은 `docs/refund-session-handoff.md`를 기준으로 대조한다. 세션을 이어갈 때는 사용자가 요청한 공통 지시·다음 작업 문서 `docs/refund-next-session.md`도 읽는다. 이 확장의 인프라 검증은 사용자가 승인한 `ssh sng` OCI 격리 환경을 사용하며 공유 자료를 보존한다. 정산 환불 조정 등 남은 범위를 완료로 간주하지 않는다.
+2026-10-28 전액 환불 후속 확장은 위 MVP 완료 시점과 별도로 진행했다. 현재 PortOne TEST 결제·환불 실행/조회, License 정지/복구, 고객 환불 API와 관리자 최초 판정 계약은 `docs/refund-session-handoff.md`를 기준으로 대조한다. 세션을 이어갈 때는 사용자가 요청한 공통 지시·다음 작업 문서 `docs/refund-next-session.md`도 읽는다. 이 확장의 기존 인프라 검증은 `ssh sng` OCI 격리 환경에서 수행했다. **2026-10-29 사용자 지시에 따라 이후 빌드·테스트·서비스 실행은 로컬에서, 인프라 검증은 로컬 OrbStack의 격리 환경에서 수행한다.** 기존 OCI 검증 기록·공유 자료는 보존하며 로컬 검증 결과와 구분한다. 이후 사용자는 보존할 중요한 기록이 없으므로 과거 개발 주문을 제거하고 새 정책으로 통일하는 B안을 선택했다. 과거 특정 주문 행 보호나 기존 자동 승인 주문의 호환 경로를 구현·테스트 요구로 삼지 않는다. 개발 데이터 정리는 연관 업무·이벤트 재유입을 함께 고려하며, 외부 PG 금융 동작과 무관한 자료 삭제로 확대하지 않는다. 정산 환불 조정 등 남은 범위를 완료로 간주하지 않는다.
+
+- 문제별로 배경과 구체적 사례 → 현재 구현과 문제 → 해결 대안 및 개발·운영·고객 관점의 트레이드오프 → 추천과 이유를 설명하는 과정을 반복한다. 핵심 정책은 한 번에 하나씩 다루고 사용자의 선택과 이유를 기다린다. 이미 합의한 정책은 다시 묻지 않으며, 미결 정책을 구현·테스트 기대값으로 먼저 확정하지 않는다. 합의 뒤 TDD·구현·관련 검증·결과 기록은 맡아서 진행한다.
 
 최소 MVP를 구현·실행하며 도메인의 책임, 데이터 흐름과 코드를 이해한 뒤 확장한다. 다음 순서로 모듈을 재작성한다.
 아래 다섯 단계의 최소 MVP 재작성을 완료했다. 후속 확장은 별도 계획으로 정한다.
