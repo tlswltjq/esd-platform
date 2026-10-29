@@ -120,12 +120,12 @@ public class ResolvePayment {
     /** Approval and its Outbox have already committed before this optional supplier lookup. */
     private void collectFailureHistory(String paymentId) {
         Payment received = payments.findByPaymentId(paymentId).orElseThrow();
-        if (received.getStatus() == PaymentStatus.FAILED || (received.getStatus() == PaymentStatus.PAID && received.getNextFailureLookupAt() == null)) return;
+        if (received.getStatus() == PaymentStatus.FAILED || received.getStatus() == PaymentStatus.EXPIRED || (received.getStatus() == PaymentStatus.PAID && received.getNextFailureLookupAt() == null)) return;
         try {
             List<PgFailedPaymentAttempt> failures = List.copyOf(attemptLookup.findFailed(received.chargeRequest()));
             transaction.executeWithoutResult(tx -> {
                 Payment current = payments.lockByPaymentId(paymentId).orElseThrow();
-                if (current.getStatus() == PaymentStatus.FAILED) return;
+                if (current.getStatus() == PaymentStatus.FAILED || current.getStatus() == PaymentStatus.EXPIRED) return;
                 Instant at = Payment.now();
                 for (PgFailedPaymentAttempt fact : failures) {
                     current.requireFailedAttempt(fact, at);
@@ -141,7 +141,7 @@ public class ResolvePayment {
             log.warn("Payment attempt history remains incomplete: paymentId={}, errorType={}", paymentId, incomplete.getClass().getSimpleName());
             transaction.executeWithoutResult(tx -> {
                 Payment current = payments.lockByPaymentId(paymentId).orElseThrow();
-                if (current.getStatus() != PaymentStatus.FAILED) {
+                if (current.getStatus() != PaymentStatus.FAILED && current.getStatus() != PaymentStatus.EXPIRED) {
                     Instant at = Payment.now();
                     current.recordFailureLookup(false, at, at.plus(retryDelay));
                 }

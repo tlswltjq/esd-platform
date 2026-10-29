@@ -114,6 +114,7 @@ spring:
               uri: ${PAYMENT_URI:http://localhost:8083}
               predicates:
                 - Path=/api/v1/payments/**
+              filters: [RemoveRequestHeader=X-Member-Id]
             - id: license
               uri: ${LICENSE_URI:http://localhost:8084}
               predicates:

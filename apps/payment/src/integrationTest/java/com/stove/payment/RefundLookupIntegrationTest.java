@@ -33,7 +33,8 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -115,7 +116,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
     private void clear() {
         jdbc.update("DELETE FROM refund_cancellation_evidence"); jdbc.update("DELETE FROM refund_execution_trace");
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
 
     @Test void onlyPreparedRequestsAreCheckedAtThePersistedBackoffDeadlinesWithoutPosting() {
@@ -246,8 +247,8 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
             legacy.update("INSERT INTO refund_execution(" + columns + ") SELECT " + columns + " FROM " + mysql.getDatabaseName()
                     + ".refund_execution WHERE attempt_id=?", current.getAttemptId());
             Flyway.configure().dataSource(source).locations(location).load().migrate();
-            assertThat(legacy.queryForObject("SELECT next_refund_lookup_at FROM refund_execution", Timestamp.class).toInstant()).isEqualTo(BASE.plusSeconds(5));
-            assertThat(legacy.queryForObject("SELECT first_cancel_prepared_at FROM refund_execution", Timestamp.class).toInstant()).isEqualTo(BASE);
+            assertThat(legacy.queryForObject("SELECT next_refund_lookup_at FROM refund_execution", LocalDateTime.class).toInstant(ZoneOffset.UTC)).isEqualTo(BASE.plusSeconds(5));
+            assertThat(legacy.queryForObject("SELECT first_cancel_prepared_at FROM refund_execution", LocalDateTime.class).toInstant(ZoneOffset.UTC)).isEqualTo(BASE);
             assertThat(legacy.queryForObject("SELECT status FROM refund_execution", String.class)).isEqualTo("PENDING");
             assertThat(legacy.queryForObject("SELECT refund_lookup_stage FROM refund_execution", Integer.class)).isZero();
         } finally { root.execute("DROP DATABASE " + schema); }

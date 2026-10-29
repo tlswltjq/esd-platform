@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
@@ -98,6 +99,9 @@ class PortOneWebhookIntegrationTest {
     }
 
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) {
+        registry.add("stove.payment.approval.order-service-key", () -> "fixture-order-service-key");
+        registry.add("stove.payment.approval.payload-key", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+        registry.add("stove.payment.approval.order-base-url", () -> "http://127.0.0.1:1");
         registry.add("stove.payment.portone.base-url", () -> "http://127.0.0.1:" + PG.getAddress().getPort());
         registry.add("stove.payment.portone.api-secret", () -> "test-api-secret");
         registry.add("stove.payment.portone.store-id", () -> STORE);
@@ -112,6 +116,7 @@ class PortOneWebhookIntegrationTest {
     @Autowired ReceiveOrderPayment receive;
     @Autowired ResolvePayment resolve;
     @Autowired PaymentRepository payments;
+    @Autowired PaymentApprovalRepository approvals;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @Autowired ReceiveRefundExecution receiveRefund;
@@ -132,13 +137,13 @@ class PortOneWebhookIntegrationTest {
         jdbc.update("DELETE FROM refund_cancellation_evidence");
         jdbc.update("DELETE FROM refund_execution_trace");
         jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
         PG_ROWS.clear(); PG_DOWN.set(false); PG_READS.set(0); PG_WRITES.set(0); HISTORY_READS.set(0);
     }
 
-    @Test void webhookCanArriveBeforeTheBrowserAndOnlyServerLookupConfirmsPaymentOnce() {
+    @Test void webhookAfterServerAdmissionConfirmsPaymentBeforeBrowserAcknowledgementOnce() {
         Payment payment = pending();
         defer(payment, CHECKED_AT.plusSeconds(600));
         byte[] body = notice(payment, "Transaction.Paid");
@@ -322,9 +327,10 @@ class PortOneWebhookIntegrationTest {
     }
 
     @Test void checkoutCannotReopenAFinalPurchaseOrMoveASimulatedPurchaseToPortOne() {
-        Payment payment = pending();
+        Payment payment = receive.execute(request());
         String token = PaymentIntegrationTestBase.token(payment.getBuyerSubject(), "MEMBER");
         assertThat(checkout(payment.getOrderNo(), token).status()).isEqualTo(200);
+        PG_ROWS.put(payment.getPaymentId(), paid(payment));
         assertThat(post("msg_checkout_paid", notice(payment, "Transaction.Paid"))).isEqualTo(200);
         resolve.execute(payment.getPaymentId());
         assertThat(checkout(payment.getOrderNo(), token).status()).isEqualTo(409);
@@ -385,13 +391,14 @@ class PortOneWebhookIntegrationTest {
                 .getBytes(StandardCharsets.UTF_8);
     }
 
-    private static String paid(Payment payment) {
+    private String paid(Payment payment) {
+        PaymentApprovalFixtures.admit(approvals, payment);
         return """
-                {"status":"PAID","id":"%s","storeId":"%s","version":"V2","currency":"KRW",
+                {"status":"PAID","id":"%s","transactionId":"success-%s","storeId":"%s","version":"V2","currency":"KRW",
                  "channel":{"type":"TEST","key":"%s","pgProvider":"TOSSPAY_V2"},
                  "amount":{"total":%d,"paid":%d,"discount":0,"cancelled":0},
                  "customData":"{\\"orderNo\\":\\"%s\\"}","paidAt":"%s","pgTxId":"pg-%s"}
-                """.formatted(payment.getPaymentId(), STORE, CHANNEL, payment.getAmount(), payment.getAmount(),
+                """.formatted(payment.getPaymentId(), payment.getPaymentId(), STORE, CHANNEL, payment.getAmount(), payment.getAmount(),
                 payment.getOrderNo(), CHECKED_AT, payment.getPaymentId());
     }
 }

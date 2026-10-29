@@ -291,7 +291,7 @@
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "PENDING", "PAID", "FAILED" ],
+            "enum" : [ "PENDING", "PAID", "FAILED", "EXPIRED" ],
             "type" : "string"
           },
           "title" : {

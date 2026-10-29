@@ -98,7 +98,7 @@ class RefundReceptionIntegrationTest extends PaymentIntegrationTestBase {
         listeners.stop();
         reset(contexts, gateway);
         jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
     }

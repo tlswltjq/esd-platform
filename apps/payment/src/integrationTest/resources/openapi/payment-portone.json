@@ -1,0 +1,1347 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponsePaymentAttemptFailurePage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PaymentAttemptFailurePage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePaymentCheckoutResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PaymentCheckoutResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePaymentPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PaymentPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePaymentResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PaymentResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseProgress" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/Progress"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseReception" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/Reception"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundCancellationHoldPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationHoldPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundCancellationHoldResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationHoldResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundCancellationResumeResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundCancellationResumeResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundDelayPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundDelayPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundDelayResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundDelayResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundInvestigationPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundInvestigationPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundInvestigationResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundInvestigationResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApprovalRequest" : {
+        "properties" : {
+          "paymentToken" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "txId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorBody" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "OrderReference" : {
+        "properties" : {
+          "orderNo" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentAttemptFailurePage" : {
+        "properties" : {
+          "checkedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "collectionPending" : {
+            "type" : "boolean"
+          },
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PaymentAttemptFailureResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentAttemptFailureResponse" : {
+        "properties" : {
+          "attemptId" : {
+            "type" : "string"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "failedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "observedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentCheckoutResponse" : {
+        "properties" : {
+          "channelKey" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "customData" : {
+            "$ref" : "#/components/schemas/OrderReference"
+          },
+          "noticeUrls" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "orderName" : {
+            "type" : "string"
+          },
+          "payMethod" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "storeId" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PaymentResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentResponse" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "discountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureReasonCode" : {
+            "type" : "string"
+          },
+          "listAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "resultOccurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "PAID", "FAILED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Progress" : {
+        "properties" : {
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "resolvedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "ADMITTED", "REVIEW_REQUIRED", "FAILURE_CONFIRMED", "SUCCEEDED", "FAILED", "EXPIRED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Reception" : {
+        "properties" : {
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundCancellationHoldPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundCancellationHoldResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundCancellationHoldResponse" : {
+        "properties" : {
+          "activated" : {
+            "type" : "boolean"
+          },
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "attemptId" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "executionStatus" : {
+            "enum" : [ "PENDING", "SUCCEEDED", "FAILED" ],
+            "type" : "string"
+          },
+          "firstPreparedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "holdId" : {
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "observedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "refundConfirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "resumable" : {
+            "type" : "boolean"
+          },
+          "resume" : {
+            "$ref" : "#/components/schemas/RefundCancellationResumeResponse"
+          },
+          "resumeDeadlineAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundCancellationResumeBody" : {
+        "properties" : {
+          "attemptId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "note" : {
+            "description" : "확인 내용과 재개 사유. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "attemptId", "note", "requestId" ],
+        "type" : "object"
+      },
+      "RefundCancellationResumeResponse" : {
+        "properties" : {
+          "attemptId" : {
+            "type" : "string"
+          },
+          "holdId" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundDelayPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundDelayResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundDelayResponse" : {
+        "properties" : {
+          "activeCancellationHoldId" : {
+            "type" : "string"
+          },
+          "activeCancellationHoldReason" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "attemptId" : {
+            "type" : "string"
+          },
+          "automaticCancellationStoppedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "cancellationBalanceChangedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "cancellationLeaseUntil" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "currentlyDelayed" : {
+            "type" : "boolean"
+          },
+          "delayThresholdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "executionStatus" : {
+            "enum" : [ "PENDING", "SUCCEEDED", "FAILED" ],
+            "type" : "string"
+          },
+          "failureConfirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "firstPreparedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lookupLeaseUntil" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lookupWakeAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "nextCancellationRetryAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "nextLookupAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "receiptObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "receiptState" : {
+            "enum" : [ "REQUESTED", "FAILED" ],
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reconciliationRequired" : {
+            "type" : "boolean"
+          },
+          "refundConfirmationSource" : {
+            "type" : "string"
+          },
+          "refundConfirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundInvestigationBody" : {
+        "properties" : {
+          "note" : {
+            "description" : "확인한 사실과 조사 내용. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "note", "requestId" ],
+        "type" : "object"
+      },
+      "RefundInvestigationPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundInvestigationResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundInvestigationResponse" : {
+        "properties" : {
+          "attemptId" : {
+            "type" : "string"
+          },
+          "delayedSince" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "recordedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "/oauth2/authorize",
+            "scopes" : {
+              "commerce" : "구매·정산 API",
+              "openid" : "사용자 식별",
+              "profile" : "기본 프로필",
+              "studio" : "크리에이터·심사 API"
+            },
+            "tokenUrl" : "/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
+      }
+    }
+  },
+  "info" : {
+    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
+    "title" : "STOVE payment API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/admin/refund-cancellation-holds" : {
+      "get" : {
+        "description" : "기본 activeOnly=true는 현재 중단만 조회합니다. false는 과거 재개·미적용 관측도 포함합니다. 기한이 지난 중단도 표시하며 observedAt·ID 순으로 조회합니다. 재개 가능 여부는 조회 시점의 안내이며 실행 시 다시 검증합니다.",
+        "operationId" : "searchRefundCancellationHolds",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "activeOnly",
+          "required" : false,
+          "schema" : {
+            "default" : true,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationHoldPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 목록",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-cancellation-holds/{holdId}" : {
+      "get" : {
+        "description" : "중단 사유·현재 여부·원래 3시간 기한·재개 가능 여부와 이전 재개 지시를 확인합니다. PG 키·본문·비밀 설정은 응답에 포함하지 않습니다.",
+        "operationId" : "readRefundCancellationHold",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationHoldResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 상세",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-cancellation-holds/{holdId}/resume" : {
+      "post" : {
+        "description" : "ADMIN sub·확인 사유를 기록하고 기존 시도의 송신을 다시 예약합니다. 200은 지시 저장이며 PG 환불 완료가 아닙니다. 같은 requestId·시도·중단·판정자·사유의 재전송은 최초 영수증을 반환합니다. 다른 내용은 409입니다. 원래 PG 키·본문·최초 준비 시각·3시간 기한을 유지하며, 새 중단은 별도 지시가 필요합니다.",
+        "operationId" : "resumeRefundCancellation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundCancellationResumeBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundCancellationResumeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 송신 중단 재개",
+        "tags" : [ "admin-refund-cancellation-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-delays" : {
+      "get" : {
+        "description" : "PortOne 실행 중 최초 준비 후 3시간 이상이고 현재 PENDING·환불 미확정인 시도를 준비 시각·ID 순으로 조회합니다. 자동 중단 관측 여부와 무관하며 조회는 PG 호출이나 일정 변경을 하지 않습니다.",
+        "operationId" : "searchRefundDelays",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundDelayPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 장기 미확정 환불 목록",
+        "tags" : [ "admin-refund-delay-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-delays/{attemptId}" : {
+      "get" : {
+        "description" : "원래 3시간 경계가 지난 준비 건의 현재 상태와 저장된 조회 일정·접수 근거를 확인합니다. 완료 뒤에도 조회할 수 있습니다. 일정은 PG 조회 성공의 증거가 아니며 실제 License 상태는 이 응답으로 확정하지 않습니다. PG 키·본문·비밀 설정은 포함하지 않습니다.",
+        "operationId" : "readRefundDelay",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "attemptId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundDelayResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 장기 미확정 환불 상세",
+        "tags" : [ "admin-refund-delay-controller" ]
+      }
+    },
+    "/api/v1/admin/refund-delays/{attemptId}/investigations" : {
+      "get" : {
+        "description" : "저장 시각·ID 순으로 확인 내용과 ADMIN 신원을 조회합니다. 금융 결과가 확정돼도 기존 기록을 보존합니다.",
+        "operationId" : "readRefundInvestigations",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "attemptId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundInvestigationPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 환불 조사 기록 이력",
+        "tags" : [ "admin-refund-delay-controller" ]
+      },
+      "post" : {
+        "description" : "현재 장기 미확정인 시도에 확인 내용을 추가합니다. ADMIN sub는 JWT에서, 저장 시각은 서버에서 기록합니다. 같은 requestId·시도·운영자·내용은 확정 결과 뒤에도 최초 영수증을 반환하고 다른 내용은 409입니다. 200은 기록 저장이며 PG 호출·일정 재개·실패/복구/완료·새 실행을 수행하지 않습니다. 기존 기록은 수정·삭제하지 않습니다.",
+        "operationId" : "recordRefundInvestigation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "attemptId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundInvestigationBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundInvestigationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 장기 미확정 환불 조사 기록",
+        "tags" : [ "admin-refund-delay-controller" ]
+      }
+    },
+    "/api/v1/payments" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/payments/webhooks/portone" : {
+      "post" : {
+        "operationId" : "receive_1",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "webhook-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "format" : "byte",
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "port-one-webhook-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}" : {
+      "get" : {
+        "operationId" : "detail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/approvals" : {
+      "post" : {
+        "operationId" : "receive",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApprovalRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseReception"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-approval-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/approvals/{requestId}" : {
+      "get" : {
+        "operationId" : "read_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "requestId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProgress"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-approval-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/attempt-failures" : {
+      "get" : {
+        "description" : "서버가 검증한 PortOne 결제 시도 실패를 요청 시각·실패 시각·ID 역순으로 조회합니다. 결제/주문 전체의 최종 실패가 아닙니다. 기존 PENDING의 동일 주문·결제창 정보를 사용하며 새 주문이나 결제 ID를 만들지 않습니다. 조회는 DB만 읽습니다. checkedAt은 마지막 정상 수집 시각이고 collectionPending은 재수집 대기 여부입니다. PG 거래 ID·원문 사유는 노출하지 않습니다.",
+        "operationId" : "readPaymentAttemptFailures",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentAttemptFailurePage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "내 결제의 실패한 시도 이력",
+        "tags" : [ "payment-attempt-failure-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/checkout" : {
+      "get" : {
+        "operationId" : "read",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentCheckoutResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "tags" : [ "payment-checkout-controller" ]
+      }
+    }
+  }
+}

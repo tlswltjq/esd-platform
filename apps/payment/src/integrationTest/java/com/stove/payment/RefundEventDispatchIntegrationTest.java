@@ -92,6 +92,9 @@ class RefundEventDispatchIntegrationTest extends PaymentIntegrationTestBase {
         } catch (IOException failure) { throw new ExceptionInInitializerError(failure); }
     }
     @DynamicPropertySource static void provider(DynamicPropertyRegistry registry) {
+        registry.add("stove.payment.approval.order-service-key", () -> "fixture-order-service-key");
+        registry.add("stove.payment.approval.payload-key", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+        registry.add("stove.payment.approval.order-base-url", () -> "http://127.0.0.1:1");
         registry.add("stove.payment.portone.base-url", () -> "http://127.0.0.1:" + PG.getAddress().getPort());
         registry.add("stove.payment.portone.api-secret", () -> "fixture-only-api-secret");
         registry.add("stove.payment.portone.store-id", () -> STORE);
@@ -137,7 +140,7 @@ class RefundEventDispatchIntegrationTest extends PaymentIntegrationTestBase {
     private void clearDatabase() {
         listeners.stop(); reset(outbox);
         jdbc.update("DELETE FROM refund_execution ORDER BY id DESC");
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
     }

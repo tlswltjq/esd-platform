@@ -252,7 +252,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         lookupState = LookupState.AVAILABLE;
         rejectedBodies.clear(); rejectedKeys.clear(); authenticationRejections.set(0); authenticationGate = AuthenticationGate.NONE;
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM refund_execution ORDER BY id DESC");
-        jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
 
     @Test void aClearFullBalanceUsesACommittedBodyAndCompletesOnlyThroughVerifiedLookup() {

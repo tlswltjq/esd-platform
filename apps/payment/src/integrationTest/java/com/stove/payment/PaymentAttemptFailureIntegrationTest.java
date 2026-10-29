@@ -18,6 +18,7 @@ import com.stove.common.testcontainers.SharedContainers;
 import com.stove.payment.core.domain.FailedPaymentAttempt;
 import com.stove.payment.core.domain.FailedPaymentAttemptRepository;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.service.ReceiveOrderPayment;
@@ -30,6 +31,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +97,9 @@ class PaymentAttemptFailureIntegrationTest {
         } catch (Exception failure) { throw new ExceptionInInitializerError(failure); }
     }
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) {
+        registry.add("stove.payment.approval.order-service-key", () -> "fixture-order-service-key");
+        registry.add("stove.payment.approval.payload-key", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+        registry.add("stove.payment.approval.order-base-url", () -> "http://127.0.0.1:1");
         registry.add("stove.payment.portone.base-url", () -> "http://127.0.0.1:" + PG.getAddress().getPort());
         registry.add("stove.payment.portone.api-secret", () -> "attempt-test-secret"); registry.add("stove.payment.portone.store-id", () -> STORE);
         registry.add("stove.payment.portone.channel-key", () -> CHANNEL); registry.add("stove.payment.portone.webhook-secret", () -> SECRET);
@@ -104,6 +110,7 @@ class PaymentAttemptFailureIntegrationTest {
     @Autowired ReceiveOrderPayment receive;
     @Autowired ResolvePayment resolve;
     @Autowired PaymentRepository payments;
+    @Autowired PaymentApprovalRepository approvals;
     @MockitoSpyBean FailedPaymentAttemptRepository failures;
     @MockitoSpyBean PaymentAttemptLookup attemptLookup;
     @Autowired JdbcTemplate jdbc;
@@ -114,7 +121,7 @@ class PaymentAttemptFailureIntegrationTest {
     @BeforeEach @AfterEach void clear() {
         CountDownLatch release = HISTORY_RELEASE.get(); if (release != null) release.countDown(); HISTORY_ENTERED.set(null); HISTORY_RELEASE.set(null);
         reset(failures, attemptLookup); jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM refund_execution ORDER BY id DESC");
-        jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
         PAYMENTS.clear(); HISTORIES.clear(); HISTORY_STATUS.clear(); PAYMENT_READS.set(0); HISTORY_READS.set(0); WRITES.set(0);
     }
 
@@ -164,7 +171,7 @@ class PaymentAttemptFailureIntegrationTest {
         } finally { release.countDown(); HISTORY_ENTERED.set(null); HISTORY_RELEASE.set(null); pool.shutdownNow(); }
         assertThat(get(historyPath(payment)).data().path("collectionPending").asBoolean()).isTrue();
         int paymentReads = PAYMENT_READS.get(); HISTORY_STATUS.clear(); history(payment, failed(payment, "tx-before-paid", 1)); PAYMENTS.put(payment.getPaymentId(), "{\"status\":\"CANCELLED\"}");
-        jdbc.update("UPDATE purchase_payment SET next_failure_lookup_at=? WHERE payment_id=?", Timestamp.from(Payment.now().minusSeconds(1)), payment.getPaymentId());
+        jdbc.update("UPDATE purchase_payment SET next_failure_lookup_at=? WHERE payment_id=?", LocalDateTime.ofInstant(Payment.now().minusSeconds(1),ZoneOffset.UTC), payment.getPaymentId());
         resolve.execute();
         assertThat(PAYMENT_READS.get()).isEqualTo(paymentReads); assertThat(HISTORY_READS.get()).isEqualTo(2);
         assertThat(stored(payment).getNextFailureLookupAt()).isNull(); assertThat(get(historyPath(payment)).data().path("totalElements").asInt()).isEqualTo(1);
@@ -311,11 +318,12 @@ class PaymentAttemptFailureIntegrationTest {
                 """.formatted(attempt, payment.getPaymentId(), STORE, CHANNEL, payment.getOrderNo(), requested, failed);
     }
     private String paid(Payment payment) {
+        PaymentApprovalFixtures.admit(approvals, payment);
         return """
-                {"status":"PAID","id":"%s","transactionId":"successful-attempt","storeId":"%s","version":"V2","currency":"KRW",
+                {"status":"PAID","id":"%s","transactionId":"success-%s","storeId":"%s","version":"V2","currency":"KRW",
                  "channel":{"type":"TEST","key":"%s","pgProvider":"TOSSPAY_V2"},"amount":{"total":10000,"paid":10000,"discount":0,"cancelled":0},
                  "customData":"{\\"orderNo\\":\\"%s\\"}","paidAt":"%s","pgTxId":"pg-%s"}
-                """.formatted(payment.getPaymentId(), STORE, CHANNEL, payment.getOrderNo(), payment.getCreatedAt().plusNanos(100000), payment.getPaymentId());
+                """.formatted(payment.getPaymentId(), payment.getPaymentId(), STORE, CHANNEL, payment.getOrderNo(), payment.getCreatedAt().plusNanos(100000), payment.getPaymentId());
     }
     private void assertCompletion(Payment payment) {
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM outbox_event WHERE aggregate_id=?", payment.getOrderNo());

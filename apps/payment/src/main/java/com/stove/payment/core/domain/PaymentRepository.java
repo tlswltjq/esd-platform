@@ -17,6 +17,9 @@ public interface PaymentRepository extends JpaRepository<Payment,Long> {
     Optional<Payment> findByOrderNoAndBuyerSubject(String orderNo,String buyerSubject);
     Page<Payment> findByBuyerSubject(String buyerSubject,Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.orderNo=:orderNo")
+    Optional<Payment> lockByOrderNo(String orderNo);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.paymentId=:paymentId")
     Optional<Payment> lockByPaymentId(String paymentId);
     @Query("select p.paymentId from Payment p where p.provider=:provider "

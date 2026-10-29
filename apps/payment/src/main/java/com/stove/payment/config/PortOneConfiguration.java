@@ -2,7 +2,6 @@ package com.stove.payment.config;
 
 import com.stove.payment.adapter.pg.HmacPortOneWebhookVerifier;
 import com.stove.payment.adapter.pg.JdbcPortOneWebhookReceipts;
-import com.stove.payment.adapter.pg.PortOnePgHttpGateway;
 import com.stove.payment.adapter.pg.PortOnePaymentAttemptLookup;
 import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
@@ -16,6 +15,7 @@ import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.RecordRefundPreparation;
 import com.stove.payment.core.service.RecordRefundCancellationSuccess;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
 import com.stove.payment.core.port.PortOneWebhookReceipts;
 import com.stove.payment.core.port.PortOneWebhookVerifier;
@@ -81,16 +81,6 @@ public class PortOneConfiguration {
         return new ReconcileRefundPayment(payments, executions, lookup, outbox, transactions, refundReceptionClock);
     }
 
-    @Bean PortOnePgHttpGateway portOneGateway(PortOneProperties properties, RestClient.Builder builder) {
-        properties.requireConfigured();
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.connectTimeout());
-        factory.setReadTimeout(properties.readTimeout());
-        RestClient client = builder.clone().baseUrl(properties.baseUrl().toString())
-                .defaultHeader("Authorization", "PortOne " + properties.apiSecret()).requestFactory(factory).build();
-        return new PortOnePgHttpGateway(client, properties.storeId(), properties.channelKey());
-    }
-
     @Bean PortOneWebhookVerifier portOneWebhookVerifier(PortOneProperties properties, Clock refundReceptionClock) {
         properties.requireConfigured();
         return new HmacPortOneWebhookVerifier(properties.webhookSecret(), refundReceptionClock, Duration.ofMinutes(5));
@@ -98,9 +88,9 @@ public class PortOneConfiguration {
 
     @Bean PortOneWebhookReceipts portOneWebhookReceipts(JdbcTemplate jdbc) { return new JdbcPortOneWebhookReceipts(jdbc); }
 
-    @Bean ReadPaymentCheckout readPaymentCheckout(ReadPayment readPayment, PortOneProperties properties) {
+    @Bean ReadPaymentCheckout readPaymentCheckout(ReadPayment readPayment, PortOneProperties properties,PaymentApprovalRepository approvals,Clock refundReceptionClock) {
         properties.requireConfigured();
-        return new ReadPaymentCheckout(readPayment, properties.storeId(), properties.channelKey(), properties.webhookUrl());
+        return new ReadPaymentCheckout(readPayment, properties.storeId(), properties.channelKey(), properties.webhookUrl(),approvals,refundReceptionClock);
     }
 
     @Bean ReceivePortOneWebhook receivePortOneWebhook(PaymentRepository payments, PortOneWebhookReceipts receipts,

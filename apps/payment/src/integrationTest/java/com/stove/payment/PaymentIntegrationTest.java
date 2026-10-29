@@ -91,7 +91,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     @BeforeEach void clean() {
         listeners.stop();
         jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement_item");
         ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement");
         ExternalPgProcess.JDBC.update("DELETE FROM pg_charge");
@@ -129,7 +129,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(count("processed_event")).isZero(); assertThat(count("purchase_payment")).isZero();
         reset(guard); receive.execute(r); jdbc.update("DELETE FROM processed_event");
         assertThatThrownBy(() -> receive.execute(r)).isInstanceOf(BusinessException.class);
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         tx(() -> guard.firstDelivery(r.eventId(),ReceiveOrderPayment.CONSUMER_GROUP,EventType.ORDER_PLACED));
         assertThatThrownBy(() -> receive.execute(r)).isInstanceOf(BusinessException.class);
         assertThat(count("purchase_payment")).isZero();

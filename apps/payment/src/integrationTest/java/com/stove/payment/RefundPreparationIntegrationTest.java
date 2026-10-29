@@ -81,7 +81,7 @@ class RefundPreparationIntegrationTest extends PaymentIntegrationTestBase {
         reset(executions,outbox);
         jdbc.update("DELETE FROM payment_pg_webhook");
         jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
     }

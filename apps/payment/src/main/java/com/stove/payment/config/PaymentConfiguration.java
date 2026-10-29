@@ -7,6 +7,11 @@ import com.stove.payment.adapter.trace.JdbcPaymentTraceContexts;
 import com.stove.payment.adapter.trace.MicrometerPaymentTracing;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentApprovalRepository;
+import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
+import com.stove.payment.core.service.ApplyOrderExpiry;
+import com.stove.payment.core.port.OrderPaymentLifecycleLocks;
+import com.stove.payment.adapter.order.JdbcOrderPaymentLifecycleLocks;
 import com.stove.payment.core.domain.FailedPaymentAttemptRepository;
 import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.core.port.PgGateway;
@@ -31,6 +36,10 @@ import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
 public class PaymentConfiguration {
+    @Bean OrderPaymentLifecycleLocks orderPaymentLifecycleLocks(JdbcTemplate jdbc) { return new JdbcOrderPaymentLifecycleLocks(jdbc); }
+    @Bean ApplyOrderExpiry applyOrderExpiry(PaymentOrderLifecycleRepository lifecycle,PaymentRepository payments,PaymentApprovalRepository approvals,ProcessedEventGuard inbox,OrderPaymentLifecycleLocks locks) {
+        return new ApplyOrderExpiry(lifecycle,payments,approvals,inbox,locks);
+    }
     @Bean ReadPaymentFailureHistory readPaymentFailureHistory(PaymentRepository payments, FailedPaymentAttemptRepository attempts) {
         return new ReadPaymentFailureHistory(payments, attempts);
     }
@@ -59,8 +68,8 @@ public class PaymentConfiguration {
 
     @Bean
     ReceiveOrderPayment receiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, PgHttpProperties properties,
-            PaymentTraceContexts traceContexts) {
-        return new ReceiveOrderPayment(payments,guard,properties.provider(),traceContexts);
+            PaymentTraceContexts traceContexts,PaymentOrderLifecycleRepository lifecycle,OrderPaymentLifecycleLocks locks) {
+        return new ReceiveOrderPayment(payments,guard,properties.provider(),traceContexts,lifecycle,locks);
     }
 
     @Bean

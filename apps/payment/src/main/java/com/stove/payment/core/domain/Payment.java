@@ -105,7 +105,7 @@ public class Payment {
     public PgChargeRequest chargeRequest() { return new PgChargeRequest(paymentId,orderNo,amount,currency); }
 
     public PgResult supplierResult() {
-        return status==PaymentStatus.PENDING ? null : new PgResult(provider,paymentId,orderNo,amount,currency,
+        return status==PaymentStatus.PENDING || status==PaymentStatus.EXPIRED ? null : new PgResult(provider,paymentId,orderNo,amount,currency,
                 providerTransactionId,providerOccurredAt,status==PaymentStatus.PAID ? PgResult.Decision.APPROVED : PgResult.Decision.DECLINED,
                 failureReasonCode,failureReason,pgFeePolicyId == null ? null : new PgFee(pgFeePolicyId,pgFeeRateBps,pgFeeAmount));
     }
@@ -115,6 +115,7 @@ public class Payment {
         if (result==null) throw new IllegalArgumentException("Confirmed PG result is required");
         result.requireRequest(chargeRequest());
         if (!provider.equals(result.provider())) throw new IllegalArgumentException("PG provider does not match");
+        if (status == PaymentStatus.EXPIRED) throw new BusinessException(ErrorCode.CONFLICT, "Expired payment cannot be confirmed without admission");
         if (status!=PaymentStatus.PENDING) {
             if (!supplierResult().equals(result)) throw new BusinessException(ErrorCode.CONFLICT,"확정된 결제 결과가 다릅니다.");
             return false;
@@ -131,6 +132,12 @@ public class Payment {
         resultEventId=eventId; resultOccurredAt=occurredAt;
         nextAttemptAt=null; lastErrorCode=null; updatedAt=now();
         return true;
+    }
+
+    public void expireUnpaid() {
+        if (status != PaymentStatus.PENDING || resultEventId != null)
+            throw new BusinessException(ErrorCode.CONFLICT, "Only an unresolved unpaid purchase can expire");
+        status = PaymentStatus.EXPIRED; nextAttemptAt = null; nextFailureLookupAt = null; lastErrorCode = null; updatedAt = now();
     }
 
     public void defer(Instant until, String errorCode) {

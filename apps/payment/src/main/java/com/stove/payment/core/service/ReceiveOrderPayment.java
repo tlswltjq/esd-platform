@@ -5,6 +5,9 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.port.OrderPaymentLifecycleLocks;
+import com.stove.payment.core.domain.PaymentOrderLifecycle;
+import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentTraceContext;
@@ -16,13 +19,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReceiveOrderPayment {
     public static final String CONSUMER_GROUP = "payment-order-request";
     private final PaymentRepository payments;
+    private final PaymentOrderLifecycleRepository lifecycle;
+    private final OrderPaymentLifecycleLocks locks;
     private final ProcessedEventGuard guard;
     private final String provider;
     private final PaymentTraceContexts traceContexts;
 
     public ReceiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, String provider,
-            PaymentTraceContexts traceContexts) {
-        this.payments=payments; this.guard=guard; this.provider=provider;
+            PaymentTraceContexts traceContexts,PaymentOrderLifecycleRepository lifecycle,OrderPaymentLifecycleLocks locks) {
+        this.lifecycle=lifecycle; this.locks=locks; this.payments=payments; this.guard=guard; this.provider=provider;
         this.traceContexts = traceContexts;
     }
 
@@ -33,6 +38,10 @@ public class ReceiveOrderPayment {
     public Payment execute(PaymentOrderRequest request, PaymentTraceContext traceContext) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
 
+        PaymentOrderLifecycle expected=PaymentOrderLifecycle.from(request);
+        locks.ensure(expected.getOrderNo(),expected.getRequestEventId(),expected.getBuyerSubject(),expected.getAmount(),expected.getCurrency(),expected.getExpiresAt());
+        PaymentOrderLifecycle state=lifecycle.lockByOrderNo(request.orderNo()).orElseThrow();
+        state.requireOriginal(request);
         // Compare the complete input before treating an Inbox hit as a duplicate.
         Payment existing = payments.findByOrderNo(request.orderNo()).orElse(null);
         if (existing != null) existing.requireSameRequest(request);
@@ -47,7 +56,9 @@ public class ReceiveOrderPayment {
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox와 결제 요청이 일치하지 않습니다.");
         }
         if (existing != null) return existing;
-        Payment received = payments.saveAndFlush(Payment.receive(request,provider));
+        Payment received=Payment.receive(request,provider);
+        if(state.expired())received.expireUnpaid();
+        payments.saveAndFlush(received);
         traceContexts.save(received.getPaymentId(), traceContext, received.getCreatedAt());
         return received;
     }

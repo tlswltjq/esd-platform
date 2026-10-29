@@ -72,6 +72,12 @@ stove:
       api-key: ${MOCK_PG_PAYMENT_KEY:}
       connect-timeout: 2s
       read-timeout: 5s
+    approval:
+      order-base-url: ${ORDER_URI:http://localhost:8082}
+      order-service-key: ${PAYMENT_ORDER_SERVICE_KEY:}
+      payload-key: ${PAYMENT_APPROVAL_PAYLOAD_KEY:}
+      order-connect-timeout: 2s
+      order-read-timeout: 5s
     portone:
       base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
       api-secret: ${PORTONE_API_SECRET:}

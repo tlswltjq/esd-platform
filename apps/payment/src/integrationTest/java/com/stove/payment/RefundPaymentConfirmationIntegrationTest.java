@@ -87,7 +87,7 @@ class RefundPaymentConfirmationIntegrationTest extends PaymentIntegrationTestBas
         if (pg != null) { pg.stop(0); pg = null; }
         reset(outbox); reads.set(0); writes.set(0);
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM refund_execution");
-        jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
 
     @Test void expiredExecutionCanConfirmMoneyAndPublishOnceWithoutClaimingItsOwnSuccess() throws Exception {
