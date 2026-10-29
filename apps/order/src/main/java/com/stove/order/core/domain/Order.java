@@ -10,6 +10,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
@@ -68,6 +69,48 @@ public class Order {
         return order;
     }
 
+    public Instant getExpiresAt() { return createdAt.plus(Duration.ofMinutes(30)); }
+
+    public boolean beginPaymentProcessing(PaymentAdmissionInput input, Instant at) {
+        requireObservationTime(at);
+        if (input == null || !orderNo.equals(input.orderNo()) || !requestEventId.equals(input.requestEventId())
+                || !buyerSubject.equals(input.buyerSubject()) || amount != input.amount() || !currency.equals(input.currency()))
+            throw new BusinessException(ErrorCode.CONFLICT, "승인 진행 요청이 원래 주문과 다릅니다.");
+        if (status == OrderStatus.EXPIRED) return false;
+        if (status != OrderStatus.PENDING)
+            throw new BusinessException(ErrorCode.CONFLICT, "새 승인 진행을 시작할 수 없는 주문입니다.");
+        if (!at.isBefore(getExpiresAt())) {
+            expire(at);
+            return false;
+        }
+        status = OrderStatus.PAYMENT_PROCESSING;
+        paymentId = input.paymentId();
+        updatedAt = at;
+        return true;
+    }
+
+    public void releaseFailedPaymentProcessing(String expectedPaymentId,Instant at) {
+        requireObservationTime(at);
+        if (status != OrderStatus.PAYMENT_PROCESSING || !paymentId.equals(expectedPaymentId) || paymentResultEventId != null)
+            throw new BusinessException(ErrorCode.CONFLICT,"Failure does not identify the current payment processing");
+        paymentId = null;
+        status = at.isBefore(getExpiresAt()) ? OrderStatus.PENDING : OrderStatus.EXPIRED;
+        updatedAt = at;
+    }
+
+    public boolean expire(Instant at) {
+        requireObservationTime(at);
+        if (status != OrderStatus.PENDING || at.isBefore(getExpiresAt())) return false;
+        status = OrderStatus.EXPIRED;
+        updatedAt = at;
+        return true;
+    }
+
+    private void requireObservationTime(Instant at) {
+        if (at == null || at.getNano() % 1000 != 0 || at.isBefore(createdAt))
+            throw new IllegalArgumentException("주문 생성 이후의 마이크로초 시각이 필요합니다.");
+    }
+
     public void requireSameRequest(OrderRequest request) {
         if (!requestId.equals(request.requestId()) || !productCode.equals(request.productCode())
                 || contentVersion != request.expectedContentVersion() || amount != request.expectedAmount())
@@ -104,6 +147,10 @@ public class Order {
         }
         if (result.status() != OrderStatus.PAID && result.status() != OrderStatus.FAILED)
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "최종 결제 결과가 필요합니다.");
+        if (status == OrderStatus.EXPIRED)
+            throw new BusinessException(ErrorCode.CONFLICT, "만료된 주문의 승인 근거 없는 결과입니다.");
+        if (status == OrderStatus.PAYMENT_PROCESSING && !paymentId.equals(result.paymentId()))
+            throw new BusinessException(ErrorCode.CONFLICT, "진행 중인 승인과 결제 식별자가 다릅니다.");
         paymentResultEventId = result.eventId(); paymentId = result.paymentId();
         resultOccurredAt = result.occurredAt(); status = result.status();
         failureReasonCode = result.reasonCode(); failureReason = result.reason();

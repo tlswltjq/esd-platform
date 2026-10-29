@@ -24,6 +24,7 @@ import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
 import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
 import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.PaymentFailedEvent;
@@ -130,6 +131,7 @@ class EventContractTest {
                         "abc",
                         "s3://bucket/key");
         return Stream.of(
+                new OrderExpiredEvent("expired-1",Instant.parse("2026-10-29T01:00:00Z"),"order-1","placed-1","buyer",9000,"KRW",Instant.parse("2026-10-29T01:00:00Z")),
                 new RefundExecutionPreparedEvent("prepared-1",Instant.parse("2026-10-29T01:00:00.123456Z"),"refund-1","attempt-1","request-1", "order-1","payment-1","buyer",9000,"KRW","suspended-1",null,
                         Instant.parse("2026-10-29T01:00:00.123456Z"),Instant.parse("2026-10-29T04:00:00.123456Z")),
                 new LicenseApprovalCorrectionRequestedEvent("correction-1",Instant.parse("2026-10-29T01:00:00Z"),"refund-1","review-1","stop-1",

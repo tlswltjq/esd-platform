@@ -51,6 +51,7 @@ public final class EventType {
     public static final String LICENSE_SUSPENSION_REQUESTED = "LicenseSuspensionRequested";
     public static final String REFUND_EXECUTION_REQUESTED = "RefundExecutionRequested";
     public static final String REFUND_EXECUTION_PREPARED = "RefundExecutionPrepared";
+    public static final String ORDER_EXPIRED = "OrderExpired";
     public static final String ORDER_PLACED = "OrderPlaced";
     public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";
     public static final String ORDER_PAYMENT_FAILED = "OrderPaymentFailed";

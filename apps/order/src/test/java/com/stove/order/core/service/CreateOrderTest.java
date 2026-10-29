@@ -24,6 +24,7 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderRequest;
 import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PaymentResult;
+import com.stove.order.core.domain.PaymentAdmissionInput;
 import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.port.CatalogProducts;
 import java.util.List;
@@ -75,7 +76,7 @@ class CreateOrderTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = OrderStatus.class, names = {"PENDING", "PAID", "FAILED"})
+    @EnumSource(value = OrderStatus.class, names = {"PENDING", "PAYMENT_PROCESSING", "PAID", "FAILED", "EXPIRED"})
     void theSameRequestReturnsItsCurrentOrderWithoutCallingCatalogOrStartingAnotherPayment(OrderStatus status) {
         OrderRequest input = request();
         Order stored = Order.create(BUYER, input, product(), id());
@@ -86,6 +87,12 @@ class CreateOrderTest {
                     stored.getRequestEventId(), id(), BUYER, stored.getAmount(), stored.getCurrency(),
                     OrderStatus.FAILED, "DECLINED", "승인이 거절되었습니다.");
             stored.apply(failed);
+        }
+        if (status == OrderStatus.PAYMENT_PROCESSING) {
+            stored.beginPaymentProcessing(new PaymentAdmissionInput(id(), stored.getOrderNo(), stored.getRequestEventId(),
+                    id(), BUYER, stored.getAmount(), stored.getCurrency()), stored.getCreatedAt());
+        } else if (status == OrderStatus.EXPIRED) {
+            stored.expire(stored.getExpiresAt());
         }
         when(orders.findByBuyerSubjectAndRequestId(BUYER, input.requestId())).thenReturn(Optional.of(stored));
 
@@ -123,7 +130,7 @@ class CreateOrderTest {
         when(orders.findByBuyerSubjectAndRequestId(BUYER, input.requestId())).thenReturn(Optional.empty());
         when(catalog.detail(input.productCode())).thenReturn(published);
         when(orders.findPurchaseConflicts(BUYER, published.productId(), published.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAID))).thenReturn(List.of());
+                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID))).thenReturn(List.of());
         when(orders.saveAndFlush(any(Order.class))).thenAnswer(call -> call.getArgument(0, Order.class));
         allowTransaction();
 
@@ -161,7 +168,7 @@ class CreateOrderTest {
         if (previousStatus == OrderStatus.PAID) previous.apply(result(completed(previous)));
         when(catalog.detail(input.productCode())).thenReturn(published);
         when(orders.findPurchaseConflicts(BUYER, published.productId(), published.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAID))).thenReturn(List.of(previous));
+                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID))).thenReturn(List.of(previous));
         allowTransaction();
 
         assertThatThrownBy(() -> create.execute(BUYER, input))
@@ -199,6 +206,23 @@ class CreateOrderTest {
 
         verify(orders, never()).saveAndFlush(any(Order.class));
         verifyNoInteractions(outbox, transactions);
+    }
+
+    @Test
+    void processingAlsoBlocksAnotherPurchaseRequest() {
+        OrderRequest input = request();
+        Order processing = Order.create(BUYER, request(), product(), id());
+        processing.beginPaymentProcessing(new PaymentAdmissionInput(id(), processing.getOrderNo(),
+                processing.getRequestEventId(), id(), BUYER, processing.getAmount(), processing.getCurrency()),
+                processing.getCreatedAt());
+        when(catalog.detail(input.productCode())).thenReturn(product());
+        when(orders.findPurchaseConflicts(eq(BUYER), eq(1L), eq("Game-1"), any()))
+                .thenAnswer(call -> call.<List<OrderStatus>>getArgument(3).contains(OrderStatus.PAYMENT_PROCESSING)
+                        ? List.of(processing) : List.of());
+        allowTransaction();
+        assertThatThrownBy(() -> create.execute(BUYER, input))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        failure -> assertThat(failure.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
     }
 
     private void allowTransaction() {

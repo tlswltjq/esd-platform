@@ -507,6 +507,10 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "failureReason" : {
             "type" : "string"
           },
@@ -532,7 +536,7 @@
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "PENDING", "PAID", "FAILED" ],
+            "enum" : [ "PENDING", "PAYMENT_PROCESSING", "PAID", "FAILED", "EXPIRED" ],
             "type" : "string"
           },
           "title" : {

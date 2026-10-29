@@ -23,7 +23,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "stove.outbox.relay-enabled=false", "spring.kafka.listener.auto-startup=false"})
+        "stove.order.expiry-enabled=false", "stove.outbox.relay-enabled=false", "spring.kafka.listener.auto-startup=false"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 public abstract class OrderIntegrationTestBase {
     static final String ISSUER = "https://order-test.example";

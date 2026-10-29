@@ -87,7 +87,7 @@ public class CreateOrder {
 
     private void requirePurchasable(String buyer, PublishedProduct product) {
         List<Order> conflicts = orders.findPurchaseConflicts(buyer, product.productId(), product.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAID));
+                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID));
         if (conflicts.isEmpty()) return;
         if (conflicts.size() != 1) throw new BusinessException(ErrorCode.CONFLICT, "구매 제한 주문의 상품 연결이 다릅니다.");
         Order previous = conflicts.getFirst();
