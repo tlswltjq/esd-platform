@@ -195,6 +195,7 @@ Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guid
 | GET | /api/v1/payments?page=0&size=20 | JWT sub 기준 본인 목록 |
 | GET | /api/v1/payments/{orderNo} | 본인 상세, 타인·없는 결제 404 |
 | GET | /api/v1/payments/{orderNo}/checkout | 본인 PENDING/PORTONE_TEST 결제의 공개 SDK 설정. 생성·승인 API가 아님 |
+| GET | /api/v1/payments/{orderNo}/attempt-failures?page=0&size=20 | 본인 실패 시도 이력·수집 상태. no-store, DB 조회만 수행 |
 | POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. 공개 edge가 Payment로 직접 전달 |
 
 MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
@@ -206,6 +207,7 @@ provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API�
 PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId를 멱등 키로 사용한다.
 확인된 승인·거절만 결과와 Outbox를 함께 확정한다. 응답 유실·결과 저장 실패는 PENDING을 유지한다.
 최종 상태·이벤트 ID·시각은 고정하며 Order 상태는 Order가 결과 검증 뒤 변경한다.
+PortOne의 개별 FAILED는 별도 이력이며 최종 OrderPaymentFailed로 바꾸지 않는다. 같은 orderNo·paymentId·금액의 PENDING checkout으로 재결제한다. 서버가 원구매와 대조한 실패 근거를 V28에 보존하며, 승인·Outbox 커밋 뒤 별도로 수집한다. 이력 조회 실패는 내구 재예약하고 PAID 뒤에도 이력 GET만 재개한다. 종료/만료 정책과 실제 TEST 재결제 전체 검증은 후속이다.
 
 기본 결제는 purchase_payment에 저장한다. 모의 PG의 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
 V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.

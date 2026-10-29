@@ -73,15 +73,19 @@ class PortOneWebhookIntegrationTest {
     private static final AtomicBoolean PG_DOWN = new AtomicBoolean();
     private static final AtomicInteger PG_READS = new AtomicInteger();
     private static final AtomicInteger PG_WRITES = new AtomicInteger();
+    private static final AtomicInteger HISTORY_READS = new AtomicInteger();
     private static final HttpServer PG;
     static {
         try {
             PG = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             PG.createContext("/payments/", exchange -> {
                 boolean get = "GET".equals(exchange.getRequestMethod());
-                if (get) PG_READS.incrementAndGet(); else PG_WRITES.incrementAndGet();
                 String paymentId = exchange.getRequestURI().getPath().substring("/payments/".length());
+                boolean history = paymentId.endsWith("/transactions");
+                if (get && history) HISTORY_READS.incrementAndGet(); else if (get) PG_READS.incrementAndGet(); else PG_WRITES.incrementAndGet();
+                if (history) paymentId = paymentId.substring(0, paymentId.length() - "/transactions".length());
                 String body = PG_ROWS.get(paymentId);
+                if (history && body != null) body = "{\"items\":[]}";
                 int status = !get ? 405 : PG_DOWN.get() ? 503 : body == null ? 404 : 200;
                 byte[] bytes = (status == 200 ? body : "{}").getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -131,7 +135,7 @@ class PortOneWebhookIntegrationTest {
         jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
-        PG_ROWS.clear(); PG_DOWN.set(false); PG_READS.set(0); PG_WRITES.set(0);
+        PG_ROWS.clear(); PG_DOWN.set(false); PG_READS.set(0); PG_WRITES.set(0); HISTORY_READS.set(0);
     }
 
     @Test void webhookCanArriveBeforeTheBrowserAndOnlyServerLookupConfirmsPaymentOnce() {

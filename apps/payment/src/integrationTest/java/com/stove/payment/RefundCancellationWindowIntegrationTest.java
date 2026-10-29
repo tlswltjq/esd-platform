@@ -163,7 +163,8 @@ class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase
             JdbcTemplate legacy = new JdbcTemplate(source);
             String location = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
             Flyway.configure().dataSource(source).locations(location).target("15").load().migrate();
-            legacy.update("INSERT INTO purchase_payment SELECT * FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", received.getPaymentId());
+            String paymentColumns = String.join(",", legacy.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='purchase_payment' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema));
+            legacy.update("INSERT INTO purchase_payment(" + paymentColumns + ") SELECT " + paymentColumns + " FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", received.getPaymentId());
             String columns = "attempt_id,refund_id,request_event_id,request_occurred_at,order_no,payment_id,buyer_subject,amount,currency,license_suspension_event_id,received_at,status";
             legacy.update("INSERT INTO refund_execution(" + columns + ") SELECT " + columns + " FROM " + mysql.getDatabaseName()
                     + ".refund_execution WHERE attempt_id=?", received.getAttemptId());

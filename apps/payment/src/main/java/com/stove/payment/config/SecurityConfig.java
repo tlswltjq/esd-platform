@@ -25,7 +25,7 @@ public class SecurityConfig {
             a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-delays", "/api/v1/admin/refund-delays/*",
                     "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN");
-            a.requestMatchers(HttpMethod.GET, "/api/v1/payments", "/api/v1/payments/*", "/api/v1/payments/*/checkout")
+            a.requestMatchers(HttpMethod.GET, "/api/v1/payments", "/api/v1/payments/*", "/api/v1/payments/*/checkout", "/api/v1/payments/*/attempt-failures")
                     .hasRole("MEMBER");
             a.anyRequest().denyAll();
         }).oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())));

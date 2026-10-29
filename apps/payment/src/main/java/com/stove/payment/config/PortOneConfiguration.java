@@ -3,6 +3,8 @@ package com.stove.payment.config;
 import com.stove.payment.adapter.pg.HmacPortOneWebhookVerifier;
 import com.stove.payment.adapter.pg.JdbcPortOneWebhookReceipts;
 import com.stove.payment.adapter.pg.PortOnePgHttpGateway;
+import com.stove.payment.adapter.pg.PortOnePaymentAttemptLookup;
+import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
 import com.stove.payment.adapter.pg.PortOneRefundCancellationGateway;
 import com.stove.common.messaging.outbox.OutboxRecorder;
@@ -33,6 +35,15 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "stove.payment.pg.provider", havingValue = "PORTONE_TEST")
 public class PortOneConfiguration {
+    @Bean PaymentAttemptLookup paymentAttemptLookup(PortOneProperties properties, RestClient.Builder builder) {
+        properties.requireConfigured();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(properties.connectTimeout()); factory.setReadTimeout(properties.readTimeout());
+        RestClient client = builder.clone().baseUrl(properties.baseUrl().toString())
+                .defaultHeader("Authorization", "PortOne " + properties.apiSecret()).requestFactory(factory).build();
+        return new PortOnePaymentAttemptLookup(client, properties.storeId(), properties.channelKey());
+    }
+
     @Bean RefundCancellationGateway refundCancellationGateway(PortOneProperties properties, RestClient.Builder builder,
             Clock refundReceptionClock) {
         properties.requireConfigured();

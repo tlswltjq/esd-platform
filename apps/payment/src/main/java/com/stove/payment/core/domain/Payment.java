@@ -47,10 +47,26 @@ public class Payment {
     @Column(length=500) private String failureReason;
     private Instant nextAttemptAt;
     @Column(length=100) private String lastErrorCode;
+    private Instant nextFailureLookupAt;
+    private Instant failureHistoryCheckedAt;
     @Column(nullable=false,updatable=false) private Instant createdAt;
     @Column(nullable=false) private Instant updatedAt;
 
     public static Instant now() { return Instant.now().truncatedTo(ChronoUnit.MICROS); }
+
+    public void requireFailedAttempt(PgFailedPaymentAttempt input, Instant at) {
+        if (input == null || !"PORTONE_TEST".equals(provider) || !chargeRequest().equals(input.purchase())
+                || !PaymentValues.microsecond(at) || at.isBefore(input.failedAt()))
+            throw new IllegalArgumentException("Failure evidence must identify this purchase and precede observation");
+    }
+
+    public void recordFailureLookup(boolean complete, Instant at, Instant retryAt) {
+        if (!"PORTONE_TEST".equals(provider) || !PaymentValues.microsecond(at) || !PaymentValues.microsecond(retryAt)
+                || retryAt.isBefore(at) || status == PaymentStatus.FAILED)
+            throw new IllegalArgumentException("Failure history lookup requires a PortOne payment and ordered times");
+        if (complete && (failureHistoryCheckedAt == null || at.isAfter(failureHistoryCheckedAt))) failureHistoryCheckedAt = at;
+        nextFailureLookupAt = complete ? null : retryAt;
+    }
 
     public void requireRefundRequest(RefundExecutionRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST, "환불 실행 요청이 필요합니다.");
@@ -72,6 +88,7 @@ public class Payment {
         p.contentVersion=request.contentVersion(); p.listAmount=request.listAmount(); p.discountAmount=request.discountAmount();
         p.amount=request.amount(); p.currency=request.currency(); p.provider=provider;
         p.status=PaymentStatus.PENDING; p.createdAt=now(); p.updatedAt=p.createdAt; p.nextAttemptAt=p.createdAt;
+        if ("PORTONE_TEST".equals(provider)) p.nextFailureLookupAt=p.createdAt;
         return p;
     }
 
@@ -109,6 +126,7 @@ public class Payment {
             pgFeePolicyId=result.fee().policyId(); pgFeeRateBps=result.fee().rateBps(); pgFeeAmount=result.fee().amount();
         }
         status=result.decision()==PgResult.Decision.APPROVED ? PaymentStatus.PAID : PaymentStatus.FAILED;
+        if (status==PaymentStatus.FAILED) nextFailureLookupAt=null;
         failureReasonCode=result.reasonCode(); failureReason=result.reason();
         resultEventId=eventId; resultOccurredAt=occurredAt;
         nextAttemptAt=null; lastErrorCode=null; updatedAt=now();

@@ -19,6 +19,7 @@ public interface PaymentRepository extends JpaRepository<Payment,Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.paymentId=:paymentId")
     Optional<Payment> lockByPaymentId(String paymentId);
-    @Query("select p.paymentId from Payment p where p.status=:status and p.provider=:provider and p.nextAttemptAt<=:now order by p.nextAttemptAt,p.id")
+    @Query("select p.paymentId from Payment p where p.provider=:provider "
+            + "and ((p.status=:status and p.nextAttemptAt<=:now) or p.nextFailureLookupAt<=:now) order by coalesce(p.nextAttemptAt,p.nextFailureLookupAt),p.id")
     List<String> due(PaymentStatus status,String provider,Instant now,Pageable pageable);
 }

@@ -147,14 +147,15 @@ class RefundPreparationIntegrationTest extends PaymentIntegrationTestBase {
             String location="filesystem:"+Path.of("src/main/resources/db/migration").toAbsolutePath();Flyway.configure().dataSource(source).locations(location).target("25").load().migrate();
             List<String> columns=legacy.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='refund_execution' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION",String.class,schema);
             String list=String.join(",",columns);
+            String paymentColumns=String.join(",",legacy.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='purchase_payment' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION",String.class,schema));
             for (RefundExecution value:List.of(first,old,unknown)) {
-                legacy.update("INSERT INTO purchase_payment SELECT * FROM "+mysql.getDatabaseName()+".purchase_payment WHERE payment_id=?",value.getPaymentId());
+                legacy.update("INSERT INTO purchase_payment("+paymentColumns+") SELECT "+paymentColumns+" FROM "+mysql.getDatabaseName()+".purchase_payment WHERE payment_id=?",value.getPaymentId());
                 legacy.update("INSERT INTO refund_execution("+list+") SELECT "+list+" FROM "+mysql.getDatabaseName()+".refund_execution WHERE attempt_id=?",value.getAttemptId());
                 legacy.update("INSERT INTO refund_execution_trace SELECT * FROM "+mysql.getDatabaseName()+".refund_execution_trace WHERE attempt_id=?",value.getAttemptId());
             }
             legacy.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,created_at) VALUES(?,'Payment','existing','ExistingFact','stove.payment.v1','existing','{\"keep\":true}','SENT',NOW(6))",id());
             List<Map<String,Object>> before=legacy.queryForList("SELECT * FROM refund_execution ORDER BY id");List<Map<String,Object>> paymentsBefore=legacy.queryForList("SELECT * FROM purchase_payment ORDER BY id");
-            List<Map<String,Object>> outboxBefore=legacy.queryForList("SELECT * FROM outbox_event ORDER BY id"); Flyway flyway=Flyway.configure().dataSource(source).locations(location).load();flyway.migrate();flyway.validate();
+            List<Map<String,Object>> outboxBefore=legacy.queryForList("SELECT * FROM outbox_event ORDER BY id"); Flyway flyway=Flyway.configure().dataSource(source).locations(location).target("26").load();flyway.migrate();flyway.validate();
             List<Map<String,Object>> after=legacy.queryForList("SELECT * FROM refund_execution ORDER BY id");for (int index=0;index<before.size();index++) assertThat(after.get(index)).containsAllEntriesOf(before.get(index));
             assertThat(legacy.queryForList("SELECT * FROM purchase_payment ORDER BY id")).isEqualTo(paymentsBefore);
             assertThat(legacy.queryForList("SELECT * FROM outbox_event WHERE event_type='ExistingFact' ORDER BY id")).isEqualTo(outboxBefore);

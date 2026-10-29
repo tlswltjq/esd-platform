@@ -355,10 +355,11 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     @Test void openApiContainsPaymentReadsAndAdministratorHoldAndInvestigationOperations() throws Exception {
         OpenApiSnapshot.verify(port,"payment");
         JsonNode paths=http("GET","/v3/api-docs",null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(8);
+        assertThat(paths.size()).isEqualTo(9);
         assertThat(paths.path("/api/v1/payments").size()).isEqualTo(1);
         assertThat(paths.path("/api/v1/payments").has("get")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/payments/{orderNo}/attempt-failures").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds/{holdId}").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/refund-cancellation-holds/{holdId}/resume").has("post")).isTrue();

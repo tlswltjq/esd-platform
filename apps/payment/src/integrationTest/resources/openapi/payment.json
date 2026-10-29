@@ -1,6 +1,20 @@
 {
   "components" : {
     "schemas" : {
+      "ApiResponsePaymentAttemptFailurePage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PaymentAttemptFailurePage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePaymentPage" : {
         "properties" : {
           "data" : {
@@ -133,6 +147,66 @@
             "type" : "string"
           },
           "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentAttemptFailurePage" : {
+        "properties" : {
+          "checkedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "collectionPending" : {
+            "type" : "boolean"
+          },
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PaymentAttemptFailureResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PaymentAttemptFailureResponse" : {
+        "properties" : {
+          "attemptId" : {
+            "type" : "string"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "failedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "observedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "format" : "date-time",
             "type" : "string"
           }
         },
@@ -936,6 +1010,55 @@
           "oauth2" : [ "commerce" ]
         } ],
         "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/payments/{orderNo}/attempt-failures" : {
+      "get" : {
+        "description" : "서버가 검증한 PortOne 결제 시도 실패를 요청 시각·실패 시각·ID 역순으로 조회합니다. 결제/주문 전체의 최종 실패가 아닙니다. 기존 PENDING의 동일 주문·결제창 정보를 사용하며 새 주문이나 결제 ID를 만들지 않습니다. 조회는 DB만 읽습니다. checkedAt은 마지막 정상 수집 시각이고 collectionPending은 재수집 대기 여부입니다. PG 거래 ID·원문 사유는 노출하지 않습니다.",
+        "operationId" : "readPaymentAttemptFailures",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderNo",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePaymentAttemptFailurePage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "내 결제의 실패한 시도 이력",
+        "tags" : [ "payment-attempt-failure-controller" ]
       }
     }
   }

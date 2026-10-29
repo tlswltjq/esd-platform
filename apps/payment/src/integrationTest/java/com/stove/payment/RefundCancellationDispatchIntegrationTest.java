@@ -1270,7 +1270,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             String location = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
             Flyway.configure().dataSource(source).locations(location).target("24").load().migrate();
             JdbcTemplate migration = new JdbcTemplate(source);
-            migration.update("INSERT INTO purchase_payment SELECT * FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", current.getPaymentId());
+            String paymentColumns = String.join(",", migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='purchase_payment' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema));
+            migration.update("INSERT INTO purchase_payment(" + paymentColumns + ") SELECT " + paymentColumns + " FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", current.getPaymentId());
             List<String> columns = migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=?"
                     + " AND TABLE_NAME='refund_execution' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema);
             assertThat(columns).doesNotContain("pending_payment_guard");

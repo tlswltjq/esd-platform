@@ -322,7 +322,7 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
             }
             Map<String, List<Map<String, Object>>> before = new LinkedHashMap<>();
             for (String table : List.of("purchase_payment", "refund_execution", "processed_event", "outbox_event")) before.put(table, legacy.queryForList("SELECT * FROM " + table + " ORDER BY id"));
-            Flyway flyway = Flyway.configure().dataSource(source).locations(location).load(); flyway.migrate(); flyway.validate();
+            Flyway flyway = Flyway.configure().dataSource(source).locations(location).target("27").load(); flyway.migrate(); flyway.validate();
             for (String table : before.keySet()) assertThat(legacy.queryForList("SELECT * FROM " + table + " ORDER BY id")).isEqualTo(before.get(table));
             assertThat(legacy.queryForObject("SELECT COUNT(*) FROM refund_investigation", Integer.class)).isZero();
             String insert = "INSERT INTO refund_investigation(request_id,attempt_id,operator_subject,note,recorded_at,delayed_since) VALUES(?,?,?,?,'2026-10-29 04:00:00','2026-10-29 04:00:00')";

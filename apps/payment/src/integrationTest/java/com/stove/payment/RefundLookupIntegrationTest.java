@@ -219,7 +219,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
 
     @Test void simulatedProviderRowsAreExcludedAndInvalidLeaseStateIsRejectedByTheDatabase() {
         received(); prepare(); at(5);
-        jdbc.update("UPDATE purchase_payment SET provider='SIMULATED' WHERE payment_id=?", current.getPaymentId());
+        jdbc.update("UPDATE purchase_payment SET provider='SIMULATED',next_failure_lookup_at=NULL WHERE payment_id=?", current.getPaymentId());
         worker(Runnable::run).execute(); assertThat(reads.get()).isZero();
         assertThatThrownBy(() -> jdbc.update("UPDATE refund_execution SET refund_lookup_claim_id=? WHERE attempt_id=?",
                 id(), current.getAttemptId())).isInstanceOf(DataAccessException.class).hasMessageContaining("ck_refund_lookup_lease");
@@ -240,7 +240,8 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
             JdbcTemplate legacy = new JdbcTemplate(source);
             String location = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
             Flyway.configure().dataSource(source).locations(location).target("19").load().migrate();
-            legacy.update("INSERT INTO purchase_payment SELECT * FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", current.getPaymentId());
+            String paymentColumns = String.join(",", legacy.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='purchase_payment' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema));
+            legacy.update("INSERT INTO purchase_payment(" + paymentColumns + ") SELECT " + paymentColumns + " FROM " + mysql.getDatabaseName() + ".purchase_payment WHERE payment_id=?", current.getPaymentId());
             String columns = "attempt_id,refund_id,request_event_id,request_occurred_at,order_no,payment_id,buyer_subject,amount,currency,license_suspension_event_id,received_at,status,first_cancel_prepared_at";
             legacy.update("INSERT INTO refund_execution(" + columns + ") SELECT " + columns + " FROM " + mysql.getDatabaseName()
                     + ".refund_execution WHERE attempt_id=?", current.getAttemptId());

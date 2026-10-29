@@ -19,6 +19,10 @@
 - 장기 미확정 운영 A안의 ADMIN 목록·상세·조사 이력/기록을 구현·검증했다. 원래 준비의 3시간 경계와 현재 금융 미확정으로 조회하며 JWT sub·내용·서버 시각을 별도 저장한다. 조사 기록은 금융 상태·작업 일정을 바꾸지 않고 결과 확정 뒤에도 보존한다.
 - 실제 새 9,000원 TEST 주문에서 자동 환불 전체 흐름 1건을 완료했다. 실제 관리자 수동 심사 PG 환불이나 Settlement 환불 조정의 완료는 아니다.
 
+## 일반화 G1의 첫 범위: 같은 주문 재결제 A안
+
+PortOne의 개별 실패 시도는 원구매·금액과 대조한 별도 이력이며 Payment/Order의 최종 실패가 아니다. 기존 PENDING checkout의 같은 orderNo·paymentId·금액으로 다시 결제한다. MEMBER `/api/v1/payments/{orderNo}/attempt-failures`는 본인 페이지와 수집 상태를 DB에서 no-store로 제공한다. PAID·결과 Outbox를 먼저 커밋하고 이력은 별도 HTTP/DB로 수집·재개한다. 오래된 PENDING 응답은 승인 뒤 예약을 지우지 않는다. V28과 최종 OCI 640건의 [검증 기록](pg-test-integration-plan.md#2026-10-29-같은-주문-재결제와-실패-시도-이력-a안)을 따른다. 실제 TEST 재결제와 G1 전체 완료는 구분한다.
+
 ## 유지할 계약
 
 | 항목 | 계약 |
@@ -40,9 +44,9 @@
 
 | 검증 | 결과·출처 |
 |---|---|
-| 운영 조회·조사 기록 포함 최신 Payment | 단위 304·통합 196, 실패/오류/건너뜀 0. `runs/refund-investigation-oci-7k7xaibd/collected/results/full` |
-| 운영 조회·조사 기록 포함 최신 Gateway | 단위 114·Redis 통합 1, 실패/오류/건너뜀 0. 같은 full 입력 |
-| 운영 조회·조사 기록 OCI 보존 | 공유 컨테이너 23개·볼륨 57개와 상태 보존, 추가/잔여 자원 없음. `runs/refund-investigation-oci-7k7xaibd/validation-summary.json` |
+| 같은 주문 재결제 A안 포함 최신 Payment | 단위 314·통합 209, 실패/오류/건너뜀 0. `runs/payment-attempts-oci-fdk5ugoo/collected/results/corrected` |
+| 같은 주문 재결제 A안 포함 최신 Gateway | 단위 116·Redis 통합 1, 실패/오류/건너뜀 0. 같은 corrected 입력 |
+| 같은 주문 재결제 OCI 보존 | 공유 컨테이너 23개·볼륨 57개와 상태 보존, 추가/잔여 자원 없음. `runs/payment-attempts-oci-fdk5ugoo/validation-summary.json` |
 | 지연 안내 포함 최신 Order | 단위 331·통합 170, 실패/오류/건너뜀 0. `runs/refund-delay-notice-oci-fwbz8qjm/collected/results/corrected` |
 | 이전 준비 이벤트 Payment | 단위 292·통합 183, 실패/오류/건너뜀 0. 같은 corrected 입력 |
 | 준비 이벤트 포함 최신 공통 Kafka | 단위 217, 실패/오류/건너뜀 0. 같은 corrected 입력 |
@@ -86,7 +90,7 @@
 
 ## 유지 중인 실제 검증 환경
 
-- 고객 재시도·운영 중단 관리자 API·재심사·승인 중단·지연 안내·운영 조회/조사 기록 작업에서는 기존 실제 검증 런타임·비밀 설정·거래를 갱신하지 않았다. 아래 기존 Order V20 런타임에는 재심사 V21·승인 중단 V22·준비 정보 V23을 적용하지 않았다. 실제 Payment V25 DB에는 준비 사실 V26·조사 기록 V27를, 실제 License DB에는 승인 정정 V9를 적용하지 않았다.
+- 고객 재시도·운영 중단 관리자 API·재심사·승인 중단·지연 안내·운영 조회/조사 기록과 같은 주문 재결제 작업에서는 기존 실제 검증 런타임·비밀 설정·거래를 갱신하지 않았다. 아래 기존 Order V20 런타임에는 재심사 V21·승인 중단 V22·준비 정보 V23을 적용하지 않았다. 실제 Payment V25 DB에는 준비 사실 V26·조사 기록 V27·결제 실패 이력 V28을, 실제 License DB에는 승인 정정 V9를 적용하지 않았다.
 - 기존 실행: `runs/portone-order-live-j2flh033`, 실제 새 환불: `runs/refund-live-obe63z8s`. `runs/*-current` 파일에서 경로를 확인한다.
 - 로컬 Auth 18891, Catalog 18881, Order 18882, Payment 18783, License 18884, Download 18888. OCI의 전용 MySQL 13384·Kafka 19492·MinIO 19008을 SSH로 연결한다. PID는 해당 run의 파일을 다시 확인한다.
 - Order V20 runtime PID **33244**, JAR SHA-256 `317c5978346e093e7949e737569ff56fdb08d007f10633f7ac95ebff59b2c2fa`. Payment V25 runtime PID **22084**, SHA-256 `718a4baa937f93e31ae7e651a5032a01e48ba9ebb74a91ccc64edad6a9cf7475`.
@@ -103,4 +107,4 @@
 
 휴대폰 승인은 끝났고 토스페이 TEST 마지막 “이동하기”까지 확인했다. 결제/환불 스크립트를 재실행하지 않는다. 초기 DB 보고서 오류는 읽기 전용 검증으로 복구했으며 원자료에 남겼다. 브라우저 진단 포트 9229는 닫았고 결제 headless 브라우저는 종료했다.
 
-2026-10-29 사용자는 전 기능의 일반적인 사용 수준 완성 → 엣지 케이스·성능 고도화를 현재 목표로 정했다. 다음 권장 구현은 [전체 기능 일반화 계획](platform-generalization-plan.md)의 G1 Payment·Order 일반 결제 생명주기다. 환불의 기존 선택과 운영 조회·조사 기록 A안은 구현·검증했으므로 다시 묻지 않는다. 조사 종결 등의 [개별 환불 백로그](refund-next-session.md#추천하는-다음-논의-조사-이후-조치와-종결-기준)는 보존하며 자동으로 최우선 작업으로 삼지 않는다. 실제 ADMIN/PG 전체 여정·Settlement 환불 조정 등은 전체 계획에서 순서를 정해 진행한다.
+2026-10-29 사용자는 전 기능의 일반적인 사용 수준 완성 → 엣지 케이스·성능 고도화를 현재 목표로 정했다. [전체 기능 일반화 계획](platform-generalization-plan.md)의 G1 첫 범위인 같은 주문 재결제 A안은 코드·계약 검증을 마쳤다. 다음 권장 작업은 미결제 이탈/재진입·안전한 종료 경계다. 환불의 기존 선택과 운영 조회·조사 기록, 같은 주문 재결제 A안은 다시 묻지 않는다. 조사 종결 등의 [개별 환불 백로그](refund-next-session.md#추천하는-다음-논의-조사-이후-조치와-종결-기준)는 보존하며 자동으로 최우선 작업으로 삼지 않는다. 실제 ADMIN/PG 전체 여정·Settlement 환불 조정 등은 전체 계획에서 순서를 정해 진행한다.

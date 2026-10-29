@@ -922,3 +922,34 @@ Payment V26은 이미 최초 준비 시각이 있는 건에만 안정적인 준�
 - 공유 컨테이너 23개·볼륨 57개와 ID·시작/재시작·상태를 보존했다. 추가/잔여 자원 없음, 실제 비밀값 소스 묶음 포함 0이다. validation-summary.json·compatibility-review.json·collected/results/preservation.json을 따른다.
 
 실제 런타임/DB에는 Payment V27를 적용하지 않았다. Payment V25의 기존 실제 검증 DB에는 앞선 V26도 미적용이다. 실제 ADMIN 계정/권한 부여·운영 화면·추가 PortOne 결제/환불·터널 재시작은 수행하지 않았다. 조사 후 금융/이용권 조치, 귀속 미확정 완료 건의 별도 조사 종결, 지급 확인 누락 복구와 Settlement 환불 조정은 후속이다.
+## 2026-10-29 같은 주문 재결제와 실패 시도 이력 A안
+
+전체 기능 일반화 G1의 첫 합의다. 사용자는 **개별 결제 시도 실패를 보존하고 같은 주문에서 다시 결제**하는 A안을 선택했다. [PortOne 인증 결제](https://developers.portone.io/opi/ko/integration/start/v2/checkout)는 같은 paymentId의 복수 시도와 한 번의 성공을 허용하며, [SDK 응답](https://developers.portone.io/sdk/ko/v2-sdk/payment-response)의 txId는 개별 시도를 식별한다. 실패 시도를 모의 PG의 불변 최종 거절로 바꾸지 않는다.
+
+| 관측·처리 | 이번 계약 |
+|---|---|
+| 서버가 검증한 FAILED 시도 | 원구매·금액과 공급자 transactionId별 실패 시각을 별도 보존. Payment/Order는 PENDING, OrderPaymentFailed 미발행 |
+| 고객 재결제 | 기존 본인 PENDING checkout의 같은 orderNo·paymentId·최초 확정 금액을 다시 사용. 별도 결제 생성/실패 주입 POST 없음 |
+| PAID | 기존 승인 검증·원구매·결과 Outbox를 먼저 커밋. 그 뒤 별도 HTTP/DB 작업으로 실패 이력을 수집 |
+| 이력 장애·잘못된 근거·저장 충돌 | 금융 결과를 보존하고 이력 GET을 내구 재예약. PAID 뒤의 재개는 금융 상태를 다시 조회/판정하지 않음 |
+| 오래된 이력 응답 | PENDING 조회 중 PAID로 바뀌었다면 후속 이력 조회 예약을 유지. 승인 뒤 수집을 이전 응답으로 완료 처리하지 않음 |
+| 미접수·READY·타임아웃·404·미지 결제 상태 | 실패 근거를 만들거나 결제창을 닫지 않음. 기존 PENDING/조회 재개 유지 |
+
+`PaymentAttemptLookup`은 Payment의 core.port에, `PortOnePaymentAttemptLookup`은 adapter.pg에 두고 config에서 조립했다. 서버 GET `/payments/{paymentId}/transactions`의 items를 스토어·V2·TEST 채널·주문·통화·원금액·미납/미취소·시각과 대조한다. 같은 공급자 시도의 다른 근거는 덮어쓰지 않는다. 공개 문서의 [거래 이력 API](https://developers.portone.io/api/rest-v2/payment)는 unstable이며, 공식 server-sdk의 `83cb5ec4b940922b9d8fa65694c64586fa347160` 응답 타입도 대조했다. FAILED에서 채널/customData 등 구매 대조 근거가 없으면 수집 미완료로 남긴다. 실제 TEST 응답의 필드 충족 여부와 재결제 전체 여정은 아직 확인하지 않았다.
+
+MEMBER GET `/api/v1/payments/{orderNo}/attempt-failures`는 JWT sub의 본인 이력만 no-store 페이지로 반환한다. 기본 page=0/size=20, 최대 100, 요청/실패 시각과 내부 ID 역순이다. 공개 attemptId·공통 실패 코드/안내·요청/실패/관측 시각, 마지막 정상 수집 `checkedAt`·재수집 대기 `collectionPending`을 제공한다. 공급자 시도/거래 ID와 원문 사유는 노출하지 않으며 원문 사유는 저장하지도 않는다. 고객 GET은 DB만 읽는다. 기존 Gateway 회원 라우트를 사용하고 실제 Bearer·페이지 전달과 역할 거절을 검사했다.
+
+V28은 실패 시도 테이블·공개/공급자 ID 유일성·부모 FK·시간/금액 CHECK와 별도 조회 예약/검사 시각을 추가한다. 기존 PORTONE_TEST PENDING/PAID는 읽기 전용 수집만 예약하고 과거 실패·검사 시각을 만들지 않는다. 기존 구매·비용·금융 일정·Outbox 보존, V27→V28 업그레이드와 재실행을 검사한다.
+
+TDD·수정 경과:
+
+1. 로컬 실패 이력 도메인 Red 3건 뒤 구현했다. 어댑터 테스트의 나노초 문자열 치환 오류 2건은 픽스처 오류로 분리하고 정정했다. 로컬 Payment 단위 314·Gateway 116건과 통합 컴파일/빌드를 통과했다.
+2. 최초 OCI `schema-and-new`의 새 12건은 테스트 웹훅 키 형식 오류로 컨텍스트가 뜨지 못했다. 유효한 테스트 키로 고쳤다. 기존 웹훅·OpenAPI 14건은 통과했고, 명세를 반영한 `corrected-focus` 통합 28건은 전부 통과했다.
+3. 최초 전체 `full`은 Payment 단위 314·통합 208, Gateway 단위 116·Redis 통합 1건을 실행했다. 통합 4건이 실패했다. 과거 V15/V19/V24 스키마로 `SELECT *`를 복사하던 3건을 대상 열의 명시적 복사로 고쳤고, 공급자를 SIMULATED로 바꾸는 픽스처는 PortOne 전용 이력 예약도 함께 제거했다. V26/V27의 독립 마이그레이션 검사는 각 목표 버전에 고정하고 최신 체인은 새 V28 검사로 확인한다. 운영 마이그레이션이나 기존 보존 단언을 완화하지 않았다.
+4. `red-history-race`에서 픽스처 4건은 통과하고, 오래된 PENDING 응답이 승인 뒤의 이력 재개를 지우는 실제 Red 1건을 확인했다. 결정적으로 끼워 넣은 다른 resolver의 실제 승인·Outbox/503 후 재예약 뒤, 과거 빈 이력이 예약을 지우는 순서다. 조회 시작/저장 시 결제 상태를 대조해 전환 뒤 예약을 유지하도록 수정했다. 로컬 최종 통합 컴파일·bootJar가 통과했다. 이 단계의 단위/Gateway XML은 앞선 전체 실행 자료이며 새 실행 수치로 더하지 않는다.
+
+최종 `corrected`는 명세 갱신 플래그 없이 `--rerun-tasks --continue`로 Payment 단위 **314·통합 209**, Gateway 단위 **116·Redis 통합 1**, 총 **640건**을 모두 통과했다. 실패/오류/건너뜀은 0이며 선별·반복 수치는 더하지 않는다. 새 통합 13건은 동일 checkout·복수 실패/재수집·실패 뒤 성공·원래 성공 Outbox·느린 HTTP/잘못된 자료/실제 flush 롤백·시도 ID 충돌/동시성·오래된 응답 경합·본인/역할/JWT·읽기 부작용 없음과 V28 데이터 보존/DB 제약을 확인한다. 기존 OpenAPI **8개 경로·9개 연산·21개 스키마**를 그대로 보존하고 조회 1개 경로/연산을 추가했다.
+
+OCI 소스 1,218개를 대조하고 실제 비밀값 포함은 0이었다. 최종 코드·설정·명세 등 Markdown 이외 1,147개는 실행 묶음의 해시와 일치했다. 공유 컨테이너 **23개·볼륨 57개**와 기존 ID·시작/재시작·건강 상태를 보존했고 추가/잔여 자원은 없다. 최종 대조 결과는 같은 run의 `validation-summary.json`에 남겼다.
+
+원자료는 Git 제외 `runs/payment-attempts-tdd-k9a_v40h`와 `runs/payment-attempts-oci-fdk5ugoo/collected/results/{schema-and-new,corrected-focus,full,red-history-race,corrected}`다. 이번 외부 PG HTTP는 루프백 계약 픽스처이며 실제 PortOne 거래를 추가하지 않았다. 기존 실제 Order V20·Payment V25·License 런타임·터널·보호 거래를 갱신하지 않았고 실제 Payment DB에 V28을 적용하지 않았다. Order·License·공통 Kafka 재실행, 실제 ADMIN/PG 전체 여정, 미결제 종료/만료와 G1 전체 완료를 주장하지 않는다. 다음 쟁점은 같은 주문 이어 결제 합의를 유지한 **미결제 이탈/재진입과 안전한 종료 경계**다.
