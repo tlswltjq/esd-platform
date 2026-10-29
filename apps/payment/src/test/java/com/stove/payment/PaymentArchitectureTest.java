@@ -14,7 +14,7 @@ import com.tngtech.archunit.junit.ArchTests;
 import com.tngtech.archunit.lang.ArchRule;
 
 /** payment 모듈 패키지 구조 검증. 규칙 본체는 common:archunit 에 한 벌만 둔다. */
-@AnalyzeClasses(packages = "com.stove.payment", importOptions = ImportOption.DoNotIncludeTests.class)
+@AnalyzeClasses(packages = "com.stove.payment", importOptions = {ImportOption.DoNotIncludeTests.class, ImportOption.DoNotIncludeGradleTestFixtures.class})
 class PaymentArchitectureTest {
 
     @ArchTest static final ArchRule core_는_추적_라이브러리를_모른다 = noClasses()

@@ -2,7 +2,7 @@
 
 2026-10-29. 사용자가 제공한 「AX 시대의 테스트 검증 최적화 전략」을 현재 프로젝트의 코드·Gradle 입력·최근 실행 기록에 대조한 검토다. 첨부 문서는 기술 제안으로 읽었으며, 내부 예제 명령·체크리스트를 이 저장소의 실행 지시나 품질 게이트 변경 승인으로 해석하지 않았다.
 
-이번 산출물은 진단·도입안과 기존 JUnit XML을 재집계하는 도구다. 업무 코드·빌드 설정·테스트 선택/제외·CI 정책은 이 검토에서 변경하지 않았다. 새로운 전체 회귀나 성능 벤치마크도 실행하지 않았다. 기존 성공 기록을 분석하고 테스트를 실행하지 않는 임시 Gradle 메타데이터 태스크를 조회했다.
+최초 검토 산출물은 진단·도입안과 기존 JUnit XML을 재집계하는 도구였다. 해당 검토에서는 업무 코드·빌드 설정·테스트 선택/제외·CI 정책을 변경하지 않았고 전체 회귀나 성능 벤치마크도 실행하지 않았다. 이후 사용자가 개선 실행을 요청해 적용한 범위와 검증은 아래 10절에 별도로 기록한다.
 
 ## 1. 결론과 우선순위
 
@@ -157,3 +157,82 @@ python3 tools/verification/report-test-costs.py \
 이번 분석 원자료는 `runs/test-verification-audit-20261029/{metrics.json,gradle-inputs.json}`이다. 1초짜리 메타데이터 조회의 BUILD SUCCESSFUL은 애플리케이션 테스트 성공이 아니다. 이행 비중 계산·기동 로그 집계와 실제 단축률을 구분한다.
 
 첫 구현 범위로 **외부 파일 입력 선언 + Order/Payment 공유 픽스처 분리**를 권한다. 이후 **migrationTest 분리와 최종 게이트 보존**을 연결한다. 변경 전후 같은 코드/환경에서 첫 실행과 재사용 실행을 구분해 비교하고, 단위만 수정했을 때 불필요 통합 재실행이 줄었는지 확인한다. 목표 시간·단축률은 이 실험 후 확정한다.
+
+## 10. 사용자 승인 후 적용 — 2026-10-29
+
+기존 작업을 기능·기록·진단의 네 커밋으로 저장하고 `origin/main`에 푸시한 뒤 개선을 시작했다. 이 단계는 주문·결제 정책을 변경하지 않는다.
+
+### 적용 범위
+
+- Order·Payment의 공유 Fixture 네 파일을 `src/testFixtures`로 이동했다. 두 모듈의 통합 classpath에서 일반 단위 테스트 출력을 제거했다. 다른 모듈의 Fixture 분리는 이번 범위에 포함하지 않았다.
+- 두 모듈은 plain JAR를 만들지 않으므로 Fixture와 단위 테스트가 `main.output`을 직접 참조한다. Fixture 컴파일에서 참조하는 JPA 애노테이션 API는 compile-only 의존성으로 명시했다. ArchUnit은 표준 `DoNotIncludeGradleTestFixtures`로 Fixture 산출물만 제외한다. 운영 클래스의 기존 아키텍처 규칙은 유지한다. [ArchUnit 1.3.0 옵션 정의](https://raw.githubusercontent.com/TNG/ArchUnit/v1.3.0/archunit/src/main/java/com/tngtech/archunit/core/importer/ImportOption.java)
+- 과거 이행 사례에 `migration` 태그를 부여했다. `integrationTest`는 이 태그를 제외하고 새 `migrationTest`가 전담한다. `check`에는 두 태스크가 모두 연결되며 `build`의 필수 검증도 유지한다. 알려진 결함의 별도 실행과 PIT의 두 테스트 소스셋은 유지한다.
+- Payment의 두 태스크는 별도 프로세스 PG JAR 내용을 파일 입력으로 추적한다. Order·Payment의 외부 SQL 및 Payment의 Python importer는 `migrationTest`, Catalog의 외부 SQL은 기존 `integrationTest` 입력으로 선언했다. 공급자 JAR는 테스트 실행 classpath에 추가하지 않았다.
+- Payment의 JWT/DB/Kafka 지원과 독립 공급자 기동 지원을 분리했다. PG가 필요 없는 OrderExpiry 테스트는 DB 지원만 사용하고, PG 대역에 호출이 전혀 없음을 매 사례 확인한다. 기존 실제 공급자 HTTP·재시작 검사는 공급자 지원 베이스를 그대로 사용한다.
+- CI의 실제 실행 강제·기존 인프라 동시 태스크 제한·공유 상태의 직렬 실행은 유지한다. 별도의 CI/예약 실행을 생성하지 않았다.
+
+### 실행 방법
+
+현재는 로컬 호스트 변경 후 사용자 지시로 `ssh sng` OCI의 새 격리 작업 디렉터리에서 아래 명령을 실행한다. 설치한 OrbStack은 제거했다. 빠른 단계가 성공한 뒤 다음 단계로 진행하고 같은 모듈의 Gradle 명령을 동시에 실행하지 않는다. OCI의 공유 서비스 자원을 고려해 인프라 동시도는 `-Pstove.infraTest.maxParallel=1`로 제한한다.
+
+```bash
+# 인프라 없이 먼저 확인
+./gradlew :apps:order:test :apps:payment:test --console=plain
+
+# 개발 중 현재 스키마의 업무·경계 반복 검증
+./gradlew --max-workers=2 -Pstove.infraTest.maxParallel=1 \
+  :apps:order:integrationTest :apps:payment:integrationTest --console=plain
+
+# 스키마/이관 수정 시 또는 이행 사례의 집중 검증
+./gradlew --max-workers=2 -Pstove.infraTest.maxParallel=1 \
+  :apps:order:migrationTest :apps:payment:migrationTest --console=plain
+
+# 완료 전 두 종류를 포함한 최종 검증·산출물
+./gradlew --max-workers=2 -Pstove.infraTest.maxParallel=1 \
+  :apps:order:check :apps:payment:check \
+  :apps:order:bootJar :apps:payment:bootJar --console=plain
+
+# 테스트 실행 없이 실제 Gradle 입력·태그·최종 게이트 계약 확인
+./gradlew --offline -I tools/verification/verify-test-boundaries.gradle verifyTestBoundaries
+```
+
+로컬 실패의 수정 반복에는 태스크의 `--tests`·`--fail-fast`를 사용하고 부분 결과로 기록한다. 최종 성공 뒤 일반 단위 테스트만 수정한 경우 통합 전체를 반복하기 전에 입력 영향부터 확인한다.
+
+### 검증과 비용 해석
+
+- 도입 중 빠른 컴파일에서 plain JAR 비활성화에 따른 main 클래스 경로 누락을 확인하고 출력 경로를 명시했다. 이후 단위 검사에서 Fixture의 ArchUnit 오인식을 확인하고 표준 제외 옵션을 적용했다. 이 실패들은 업무 규칙 TDD Red와 구분한다.
+- 빠른 전체 단위·아키텍처와 통합 컴파일, 실제 Gradle 경계 계약 검사가 통과했다. 경계 검사에 단위 출력을 의도적으로 다시 넣은 음성 대조는 실제 실패했다. 검사를 실행하지 않고 통과하는 공허한 진단과 구분한다.
+- 개발 중 반복 실행에서 역사 이행 비용은 빠지지만, 최종 `check`에서는 새 JVM/컨테이너 기동 비용이 추가될 수 있다. 전체 빌드의 단축을 보장하는 변경으로 해석하지 않는다.
+- 첫 단계는 같은 통합 소스셋 안의 태그 분리다. 통합 테스트 클래스나 공유 Fixture가 바뀌면 두 태스크의 입력이 함께 달라질 수 있다. 메서드 단위 캐시나 자동 영향 분석을 구현한 것은 아니며, 일반 단위 테스트 출력의 결합을 제거한 효과와 구분한다.
+- 최종 결과·테스트 사례 보존 대조·입력 무효화 확인은 `runs/test-verification-optimization-20261029`와 아래 완료 기록에 남긴다.
+
+### 호스트 이동 뒤 검증 재개
+
+원래 호스트에서 진행 중이던 최종 실행의 완료 로그·XML은 새 호스트로 이전되지 않았다. 중간 진행을 최종 성공으로 표시하지 않는다. 새 로컬 호스트에서 단위·아키텍처 694건과 Gradle 경계 계약을 확인한 뒤, 사용자가 OCI 사용을 지시해 이후 실행을 중단했다. 설치한 OrbStack의 앱·CLI·Homebrew 설치 항목은 제거했다. 현재 최종 검증은 OCI의 별도 작업 경로에서 수행하고 원자료를 수집한다. 이전 전체 결과와의 대조에는 보존된 소스·완료 문서의 건수와 새 결과의 중복 없는 분할을 사용하며, 이전 원본 XML이 없는 상태에서 과거 사례 ID 전체를 직접 대조했다고 주장하지 않는다.
+
+### OCI 최종 완료 기록
+
+2026-10-29 `ssh sng`의 `/tmp/esd-verification-optimization-20261029.uC5uJU/work`에서 완료했다. 사용자가 전송 목록을 명시적으로 승인한 검증 소스 1,190개를 전송했고, 실행 전·임시 대조 원복 후 모두 해시가 일치했다. 비밀 설정·키·Git 이력·문서는 전송하지 않았다.
+
+| 모듈 | 단위·아키텍처 | 일반 통합 | 과거 이행 | 실패·오류·건너뜀 |
+|---|---:|---:|---:|---:|
+| Order | 347 | 178 | 12 | 0 |
+| Payment | 347 | 233 | 8 | 0 |
+| Catalog | 47 | 18 | 기존 통합에 포함 | 0 |
+| 합계 | 741 | 429 | 20 | 0 |
+
+총 **1,190건**이다. 초기 빠른 실행·집중 검사·대조 실행을 중복 합산하지 않는다. OCI의 `CI=true` 최종 `check`에서 모든 Test 태스크를 실제 실행했고, 컴파일/산출물의 캐시는 별도로 허용했다. 두 모듈 bootJar와 공통 런타임 의존성 검사도 통과했다. 배포 JAR에는 공유 테스트 Fixture 클래스와 Fixture JAR가 포함되지 않는다.
+
+- 새 일반 통합과 이행 결과의 사례 목록은 서로 겹치지 않는다. 합계는 기존 완료 문서의 Order 190·Payment 241건과 일치한다. 이행 검사 9개 소스 파일도 태그/import만 제거하면 도입 전 커밋 `d8cdf94`의 본문과 바이트 단위로 같다. 원래 호스트의 이전 전체 XML이 없으므로 과거 사례 ID 전부를 직접 대조한 결과와 구분한다.
+- 실제 단위 테스트 클래스 두 개에 임시 private 메서드를 넣어 바이트코드 SHA가 바뀐 것을 확인했다. 이후 Order·Payment의 `integrationTest`·`migrationTest` **네 태스크 모두 UP-TO-DATE**, 전체 명령 **5초**였다. 원복 뒤 두 소스와 클래스 SHA가 최초 값으로 돌아왔고 단위·경계 검사가 통과했다. 이 대조는 주석만 바꾼 실험이나 dry-run이 아니다.
+- 단위 출력을 다시 통합 classpath에 넣은 음성 대조는 경계 검사에서 실제 실패했다. 정상 모델은 다시 통과했다. PIT·defectTest는 Fixture 산출물이 연결된 태스크 그래프만 확인했고 실제 mutation/결함 재현을 실행한 것으로 합산하지 않았다.
+- 기존 컨테이너 **23→23**, 볼륨 **57→57**이며 ID·시작 시각·재시작 횟수·실행/건강 상태·포트가 모두 같다. 추가 잔여 자원과 격리 공급자 Java 프로세스는 없다. 실제 PortOne 채널·거래·기존 실행 앱은 변경하지 않았다.
+
+OCI의 인프라 동시도 1에서 측정한 태스크 경과 시간은 Order 일반 통합 143.4초·이행 101.5초, Payment 일반 통합 231.0초·이행 127.0초였다. Catalog를 포함한 최종 전체 명령은 11분 28초다. 이는 이번 환경의 실행 기록이며 최초 로컬 기록과 통제한 A/B 단축률이 아니다. 이번에 실제 입증한 효과는 일반 단위 변경 때 네 인프라 태스크를 재실행하지 않는 것과, 개발 반복에서 과거 이행을 별도 경로로 선택할 수 있는 것이다. 완료 전 전체 게이트의 검사 수는 유지했다.
+
+실행 JAR SHA-256:
+
+- order: `a52cb79cfb48d448e533c1eb6f7c2d8e219f6fbdc0399be5432ddbd4a7a06418`
+- payment: `f173ccfa9145c03f680fe96158e4fe5b406182fc14d0b9e85c1b449c278f761d`
+
+원자료는 `runs/test-verification-optimization-oci-20261029/{transfer-manifest.json,metrics.json,collected/results}`다. `results`에는 전체/빠른 실행 로그, 8개 Test 태스크의 XML·시간, 실제 캐시 대조·원복, 경계 음성/양성 대조와 전후 자원 스냅샷·요약이 있다. `runs/`는 Git 제외 자료이며 새 checkout에서 원자료가 없으면 그 부재를 명시한다. 이 검증 뒤 실행 소스는 수정하지 않았고 완료 문서만 갱신했다.

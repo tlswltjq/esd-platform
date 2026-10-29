@@ -5,12 +5,14 @@ import static com.stove.payment.PaymentFixtures.request;
 import static com.stove.payment.PaymentFixtures.approved;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
+import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
 import com.stove.payment.core.domain.OrderExpiryInput;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
@@ -42,10 +44,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-class OrderExpiryPaymentIntegrationTest extends PaymentIntegrationTestBase {
+@TestPropertySource(properties = {"stove.payment.pg.base-url=http://127.0.0.1:1", "stove.payment.pg.api-key=unused-expiry-fixture"})
+class OrderExpiryPaymentIntegrationTest extends PaymentDatabaseIntegrationTestBase {
+    @MockitoBean(enforceOverride = true) SimulatedPgHttpGateway gateway;
     @Autowired ReceiveOrderPayment receive;
     @Autowired ApplyOrderExpiry expire;
     @Autowired OrderPaymentLifecycleLocks locks;
@@ -61,6 +67,7 @@ class OrderExpiryPaymentIntegrationTest extends PaymentIntegrationTestBase {
 
     @BeforeEach @AfterEach void clean() {
         listeners.stop();
+        verifyNoInteractions(gateway);
         jdbc.update("DELETE FROM refund_execution"); jdbc.update("DELETE FROM payment_pg_webhook");
         jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM payment_order_lifecycle");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");

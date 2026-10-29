@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -228,6 +229,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
                 current.getAttemptId())).isInstanceOf(DataAccessException.class).hasMessageContaining("ck_refund_lookup_stage");
     }
 
+    @Tag("migration")
     @Test void migrationFromV19BackfillsTheOriginalPreparationAnchorWithoutChangingTheReceipt() {
         received(); prepare();
         MySQLContainer<?> mysql = SharedContainers.MYSQL;

@@ -48,6 +48,7 @@ import org.flywaydb.core.Flyway;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -136,6 +137,7 @@ class RefundPreparationIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(stored(execution).getFirstCancellationPreparedAt()).isEqualTo(BASE); assertThat(stored(execution).cancellationResumeDeadline()).isEqualTo(BASE.plusSeconds(10800));
     }
 
+    @Tag("migration")
     @Test void v26PublishesOnlyKnownPreparationFactsAndPreservesOldFinancialStateSchedulesAndOutbox() throws Exception {
         RefundExecution first=received(); when(clock.instant()).thenReturn(BASE.plusSeconds(30)); prepare.execute(first.getAttemptId());
         when(clock.instant()).thenReturn(BASE); RefundExecution old=received(); prepare.execute(old.getAttemptId()); when(clock.instant()).thenReturn(BASE.plusSeconds(14400)); prepare.execute(old.getAttemptId());

@@ -9,3 +9,8 @@ dependencies {
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
+
+tasks.named('migrationTest') {
+    inputs.file(rootProject.file('tools/migrations/order/order-transition.sql'))
+            .withPropertyName('externalMigrationSql').withPathSensitivity(PathSensitivity.RELATIVE)
+}
