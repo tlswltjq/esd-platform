@@ -7,6 +7,7 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundView;
+import com.stove.order.core.domain.RefundAmountView;
 import com.stove.order.core.domain.RefundAttempt;
 import com.stove.order.core.domain.RefundAttemptRepository;
 import java.time.Instant;
@@ -38,7 +39,8 @@ public class ReadRefund {
                 refund.getStatus() == RefundStatus.REJECTED ? current == null ? refund.getReviewReason() : current.getDecisionReason() : null,
                 refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null,
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
-                refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund));
+                refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund),
+                RefundAmountView.from(order, refund));
     }
     private Instant delayedSince(Refund refund) {
         if (refund.getStatus()!=RefundStatus.PENDING_PAYMENT_REFUND) return null;

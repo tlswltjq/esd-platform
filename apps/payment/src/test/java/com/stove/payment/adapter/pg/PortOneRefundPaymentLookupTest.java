@@ -15,6 +15,8 @@ import com.stove.payment.core.domain.PgRefundConfirmation;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
+import com.stove.payment.core.domain.PgPaymentAmounts;
+import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.domain.PgAuthenticationUnavailable;
 import com.stove.payment.core.domain.PgPaymentNotFound;
@@ -42,6 +44,69 @@ class PortOneRefundPaymentLookupTest {
         assertThat(result.cancellations()).hasSize(1);
         assertThat(result.cancellations().get(0).getCancellationId()).isEqualTo("cancel-1");
         server.verify();
+    }
+
+    @Test void aFullyCancelledDiscountedPurchaseMatchesTheOriginalApprovalInsteadOfAnUndiscountedAmount() {
+        PgRefundLookupRequest discounted = new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(),
+                purchase.currency(), purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+        expect(cancelled().replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24"));
+        PgRefundConfirmation result = lookup.find(discounted).orElseThrow();
+        assertThat(result.purchase()).isEqualTo(discounted);
+        assertThat(result.cancellations().getFirst().getAmount()).isEqualTo(9000);
+        server.verify();
+    }
+
+    @Test void failureEvidenceForADiscountedPurchaseStillRequiresOurReceiptAndAnUntouchedBalance() {
+        PgRefundLookupRequest discounted = new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(),
+                purchase.currency(), purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+        PgRefundCancellationReceipt receipt = new PgRefundCancellationReceipt(discounted, receipt().attemptId(),
+                receipt().cancellationId(), receipt().state(), receipt().requestedAt(), 0, 0, receipt().reason());
+        expect(unrefunded(failed()).replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24"));
+        assertThat(lookup.inspect(discounted, receipt).failure().failedReceipt()).isEqualTo(receipt.failed());
+        server.verify();
+    }
+
+    @Test void aQueriedProviderPointRefundIsPreservedRatherThanTreatedAsTheEntireDiscount() {
+        PgRefundLookupRequest discounted = pointPurchase();
+        expect(pointResponse(cancelled()).replace("\"totalAmount\":9000", "\"totalAmount\":9000,\"easyPayDiscountAmount\":12"));
+        RefundCancellation evidence = lookup.find(discounted).orElseThrow().cancellations().getFirst();
+        assertThat(evidence.getAmount()).isEqualTo(9000);
+        assertThat(evidence.getEasyPayDiscountAmount()).isEqualTo(12L);
+        server.verify();
+    }
+
+    @Test void failureLookupMatchesTheStoredPointReceiptWithoutRestoringAccessFromOnlyAState() {
+        PgRefundCancellationReceipt expected = new PgRefundCancellationReceipt(pointPurchase(), receipt().attemptId(),
+                receipt().cancellationId(), receipt().state(), receipt().requestedAt(), 0, 0, receipt().reason(), 12L);
+        expect(pointResponse(unrefunded(failed())).replace("\"totalAmount\":9000", "\"totalAmount\":9000,\"easyPayDiscountAmount\":12"));
+        assertThat(lookup.inspect(pointPurchase(), expected).failure().failedReceipt()).isEqualTo(expected.failed());
+        server.verify();
+    }
+
+    @Test void malformedAndExcessivePointEvidenceCannotCompleteARefund() {
+        for (String points : List.of("-1", "25", "1.5", "null", "\"12\"")) {
+            server.reset();
+            expect(pointResponse(cancelled()).replace("\"totalAmount\":9000", "\"totalAmount\":9000,\"easyPayDiscountAmount\":" + points));
+            assertThatThrownBy(() -> lookup.find(pointPurchase())).isInstanceOf(IllegalArgumentException.class);
+            server.verify();
+        }
+    }
+
+    @Test void unknownApprovalAmountsDoNotAuthorizeNewDiscountEvidenceAndMissingPointsStayUnknown() {
+        expect(pointResponse(cancelled()));
+        assertThatThrownBy(() -> lookup.find(purchase)).isInstanceOf(IllegalArgumentException.class);
+        server.reset(); expect(pointResponse(cancelled()));
+        assertThat(lookup.find(pointPurchase()).orElseThrow().cancellations().getFirst().getEasyPayDiscountAmount()).isNull();
+        server.verify();
+    }
+
+    private PgRefundLookupRequest pointPurchase() {
+        return new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(), purchase.currency(),
+                purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+    }
+
+    private String pointResponse(String body) {
+        return body.replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24");
     }
 
     @Test void aFullyCancelledPaymentCanBeProvedByTheSumOfDistinctSuccessfulCancellations() {

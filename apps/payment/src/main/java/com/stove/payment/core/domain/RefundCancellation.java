@@ -18,13 +18,21 @@ public class RefundCancellation {
     private long amount;
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
+    private Long easyPayDiscountAmount;
 
     public RefundCancellation(String cancellationId, long amount, Instant cancelledAt) {
+        this(cancellationId, amount, cancelledAt, null);
+    }
+
+    public RefundCancellation(String cancellationId, long amount, Instant cancelledAt, Long easyPayDiscountAmount) {
         if (!PaymentValues.text(cancellationId, 100) || amount <= 0
                 || (cancelledAt != null && !PaymentValues.microsecond(cancelledAt)))
             throw new IllegalArgumentException("Invalid successful cancellation evidence");
         this.cancellationId = cancellationId;
         this.amount = amount;
         this.cancelledAt = cancelledAt;
+        if (easyPayDiscountAmount != null && (easyPayDiscountAmount < 0 || easyPayDiscountAmount > amount))
+            throw new IllegalArgumentException("Invalid provider point refund amount");
+        this.easyPayDiscountAmount = easyPayDiscountAmount;
     }
 }

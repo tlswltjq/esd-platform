@@ -155,7 +155,8 @@ public class ResolvePayment {
         if (current.getStatus() == PaymentStatus.PAID) {
             outbox.record("Payment", current.getOrderNo(), new OrderPaymentCompletedEvent(
                     current.getResultEventId(), current.getResultOccurredAt(), current.getOrderNo(), current.getRequestEventId(),
-                    current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency()));
+                    current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
+                    current.getPgPaidAmount(), current.getPgDiscountAmount()));
         } else {
             outbox.record("Payment", current.getOrderNo(), new OrderPaymentFailedEvent(
                     current.getResultEventId(), current.getResultOccurredAt(), current.getOrderNo(), current.getRequestEventId(),

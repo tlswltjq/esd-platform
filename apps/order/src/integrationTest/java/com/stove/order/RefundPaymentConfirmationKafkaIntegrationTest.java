@@ -2,7 +2,9 @@ package com.stove.order;
 
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
+import static com.stove.order.OrderFixtures.envelope;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
@@ -14,6 +16,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
@@ -25,6 +29,8 @@ import com.stove.order.core.service.RequestRefundRetry;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.order.core.domain.LicenseGrant;
 import com.stove.order.core.domain.RefundPaymentConfirmation;
+import com.stove.order.core.domain.RefundAmountView;
+import com.stove.order.api.listener.RefundPaymentConfirmationMapper;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderStatus;
@@ -259,10 +265,11 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
 
     @ParameterizedTest @ValueSource(booleans = {true, false})
     void lateSuccessAndMoneyConfirmationCanArriveInEitherOrder(boolean successFirst) throws Exception {
-        Fixture fixture = fixture(); RefundPaymentConfirmedEvent money = fixture.event();
+        Fixture fixture = fixture(); RefundPaymentConfirmedEvent base = fixture.event();
+        RefundPaymentConfirmedEvent money = withAmounts(base, null);
         RefundExecutionSucceededEvent success = new RefundExecutionSucceededEvent(id(), money.occurredAt().plusSeconds(1), money.eventId(),
                 money.refundId(), money.attemptId(), money.requestEventId(), money.orderNo(), money.paymentId(), money.buyerSubject(),
-                money.amount(), money.currency(), money.providerTransactionId(), money.cancellationIds().get(0));
+                money.amount(), money.currency(), money.providerTransactionId(), money.cancellationIds().get(0), withAmounts(base, 12L).amountDetails());
         listeners.start();
         send(successFirst ? success : money);
         RecordMetadata last = send(successFirst ? money : success);
@@ -275,9 +282,43 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         assertThat(attempt.getStatus()).isEqualTo(RefundAttemptStatus.SUCCEEDED);
         assertThat(attempt.getSuccessEventId()).isEqualTo(success.eventId());
         assertThat(attempt.isReconciliationRequired()).isFalse();
-        RecordMetadata duplicate = send(success);
+        Order original = orders.findByOrderNo(money.orderNo()).orElseThrow();
+        RefundAmountView amounts = RefundAmountView.from(original, completed);
+        assertThat(amounts.pgPaidAmount()).isEqualTo(money.amount() - 24);
+        assertThat(amounts.confirmedPointRefundAmount()).isEqualTo(12L);
+        assertThat(amounts.reportedAt()).isEqualTo(success.occurredAt());
+        assertThat(original.getPgPaidAmount()).isNull();
+        send(success);
+        RecordMetadata duplicate = send(money);
         try (AdminClient admin = admin()) { awaitConsumed(admin, duplicate); }
         assertThat(inboxCount()).isEqualTo(2);
+    }
+
+    @Test void amountProjectionCompletionAndInboxRollBackTogetherAfterRealFlush() {
+        Fixture fixture = fixture(); RefundPaymentConfirmedEvent event = withAmounts(fixture.event(), 12L);
+        RefundPaymentConfirmation input = RefundPaymentConfirmationMapper.from(envelope(event), event);
+        doAnswer(call -> {
+            call.callRealMethod();
+            assertThat(jdbc.queryForObject("SELECT confirmed_point_refund_amount FROM order_refund WHERE refund_id=?", Long.class,
+                    event.refundId())).isEqualTo(12L);
+            throw new IllegalStateException("after amount projection and inbox flush");
+        }).when(apply).execute(input);
+        assertThatThrownBy(() -> apply.execute(input)).isInstanceOf(IllegalStateException.class);
+        Refund pending = refunds.findByOrderNo(event.orderNo()).orElseThrow();
+        assertThat(pending.getStatus()).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
+        assertThat(pending.getAmountProjection()).isNull(); assertThat(inboxCount()).isZero();
+        reset(apply); apply.execute(input);
+        Refund completed = refunds.findByOrderNo(event.orderNo()).orElseThrow();
+        assertThat(completed.getStatus()).isEqualTo(RefundStatus.COMPLETED);
+        assertThat(completed.getAmountProjection().getConfirmedPointRefundAmount()).isEqualTo(12L);
+        assertThat(inboxCount()).isEqualTo(1);
+    }
+
+    private RefundPaymentConfirmedEvent withAmounts(RefundPaymentConfirmedEvent value, Long points) {
+        return new RefundPaymentConfirmedEvent(value.eventId(), value.occurredAt(), value.refundId(), value.attemptId(), value.requestEventId(),
+                value.orderNo(), value.paymentId(), value.buyerSubject(), value.amount(), value.currency(), value.source(), value.providerTransactionId(),
+                value.cancellationIds(), new RefundAmountsSnapshot(value.amount() - 24, 24L,
+                        List.of(new RefundCancellationAmount(value.cancellationIds().getFirst(), value.amount(), points)), value.occurredAt().minusSeconds(1)));
     }
 
     @Test void directCompletionFromKafkaAlsoConfirmsTheExecutionInTheSameOrderTransaction() throws Exception {

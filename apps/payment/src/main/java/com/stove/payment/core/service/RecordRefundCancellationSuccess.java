@@ -40,12 +40,14 @@ public class RecordRefundCancellationSuccess {
                 outbox.record("Payment", current.getOrderNo(), new RefundPaymentConfirmedEvent(current.getRefundConfirmationEventId(),
                         current.getRefundConfirmedAt(), current.getRefundId(), current.getAttemptId(), current.getRequestEventId(),
                         current.getOrderNo(), current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
-                        "PG_RESPONSE", payment.getProviderTransactionId(), List.of(current.getSuccessfulCancellationId())));
+                        "PG_RESPONSE", payment.getProviderTransactionId(), List.of(current.getSuccessfulCancellationId()),
+                        CreateRefundAmountsSnapshot.from(payment, current)));
             } else {
                 outbox.record("Payment", current.getOrderNo(), new RefundExecutionSucceededEvent(current.getCancellationSuccessEventId(),
                         current.getCancellationSucceededAt(), current.getRefundConfirmationEventId(), current.getRefundId(), current.getAttemptId(),
                         current.getRequestEventId(), current.getOrderNo(), current.getPaymentId(), current.getBuyerSubject(), current.getAmount(),
-                        current.getCurrency(), payment.getProviderTransactionId(), current.getSuccessfulCancellationId()));
+                        current.getCurrency(), payment.getProviderTransactionId(), current.getSuccessfulCancellationId(),
+                        CreateRefundAmountsSnapshot.from(payment, current)));
             }
             executions.flush();
         });

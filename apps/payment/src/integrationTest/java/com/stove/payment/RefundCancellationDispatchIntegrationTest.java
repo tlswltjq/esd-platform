@@ -45,6 +45,7 @@ import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgResult;
+import com.stove.payment.core.domain.PgPaymentAmounts;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.domain.PgAuthenticationUnavailable;
 import com.stove.payment.core.domain.PgPaymentNotFound;
@@ -123,6 +124,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     private final List<String> rejectedBodies = new CopyOnWriteArrayList<>();
     private final List<String> rejectedKeys = new CopyOnWriteArrayList<>();
     private volatile long cancelled;
+    private PgPaymentAmounts supplierAmounts;
+    private Long supplierPointRefund;
     private final List<PgRefundCancellationReceipt> retryHistory = new CopyOnWriteArrayList<>();
     private final List<String> bodies = new CopyOnWriteArrayList<>();
     private final List<String> keys = new CopyOnWriteArrayList<>();
@@ -212,9 +215,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                     String cancellationId = "cancel-" + bodies.size();
                     if (mode == Mode.RETRY_FAILURE) {
                         Payment payment = payments.findByPaymentId(current.getPaymentId()).orElseThrow();
-                        retryHistory.add(new PgRefundCancellationReceipt(new PgRefundLookupRequest(payment.getPaymentId(), payment.getOrderNo(), payment.getAmount(),
-                                "KRW", payment.getProviderTransactionId(), payment.getProviderOccurredAt()), current.getAttemptId(), cancellationId,
-                                PgRefundCancellationReceipt.State.FAILED, clock.instant(), 0, 0, json.path("reason").textValue()));
+                        retryHistory.add(new PgRefundCancellationReceipt(PgRefundLookupRequest.from(payment), current.getAttemptId(), cancellationId,
+                                PgRefundCancellationReceipt.State.FAILED, clock.instant(), 0, 0, json.path("reason").textValue(), supplierPointRefund));
                     } else { completedKeys.add(key); cancelled = current.getAmount(); }
                     reply = new ObjectMapper().writeValueAsString(Map.of("cancellation", Map.of("status", state, "id", cancellationId,
                             "totalAmount", current.getAmount(), "taxFreeAmount", 0, "vatAmount", 0,
@@ -236,7 +238,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                             if (!releaseResponse.await(20, TimeUnit.SECONDS)) throw new IllegalStateException("reply fixture not released"); }
                     }
                 }
-                byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
+                byte[] bytes = withProviderPoints(reply).getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json"); exchange.sendResponseHeaders(status, bytes.length);
                 try (OutputStream output = exchange.getResponseBody()) { output.write(bytes); }
             } catch (Throwable failure) { callbackFailure.set(failure); exchange.close(); }
@@ -251,6 +253,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         reset(executions, outbox, holds, resume); retryHistory.clear(); bodies.clear(); keys.clear(); completedKeys.clear(); callbackFailure.set(null); cancelled = 0;
         reads.set(0);
         lookupState = LookupState.AVAILABLE;
+        supplierAmounts = null; supplierPointRefund = null;
         rejectedBodies.clear(); rejectedKeys.clear(); authenticationRejections.set(0); authenticationGate = AuthenticationGate.NONE;
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM refund_execution ORDER BY id DESC");
         jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
@@ -266,6 +269,73 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().supplierResult()).isEqualTo(original);
         assertThat(resultEventCount()).isEqualTo(1);
         service(gateway()).execute(current.getAttemptId()); assertThat(bodies).hasSize(1);
+    }
+
+    @Test void aDiscountedDirectRefundPersistsProviderPointsAndKeepsTheOriginalPurchaseAmounts() throws Exception {
+        received(new PgPaymentAmounts(9976, 24), 12L); mode = Mode.DIRECT_SUCCESS;
+        PgResult original = payments.findByPaymentId(current.getPaymentId()).orElseThrow().supplierResult();
+        service(gateway()).execute(current.getAttemptId());
+        assertThat(callbackFailure.get()).isNull(); assertThat(bodies).hasSize(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
+        assertThat(stored().getResponseEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThat(stored().getConfirmedCancellations().getFirst().getEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThat(jdbc.queryForObject("SELECT easy_pay_discount_amount FROM refund_cancellation_evidence", Long.class)).isEqualTo(12L);
+        JsonNode published = mapper.readTree(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type='RefundPaymentConfirmed'", String.class));
+        assertThat(published.path("amountDetails").path("pgPaidAmount").asLong()).isEqualTo(9976);
+        assertThat(published.path("amountDetails").path("cancellations").get(0).path("pointAmount").asLong()).isEqualTo(12);
+        assertThat(payments.findByPaymentId(current.getPaymentId()).orElseThrow().supplierResult()).isEqualTo(original);
+        service(gateway()).execute(current.getAttemptId()); reconcile().execute(current.getAttemptId());
+        assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
+        assertThatThrownBy(() -> jdbc.update("UPDATE refund_execution SET response_easy_pay_discount_amount=-1"))
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_refund_response_point_amount");
+        assertThatThrownBy(() -> jdbc.update("UPDATE refund_cancellation_evidence SET easy_pay_discount_amount=amount+1"))
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_refund_evidence_point_amount");
+    }
+
+    @Test void aLostDiscountedRefundResponseRecoversTheReportedPointsByReadOnlyReconciliation() {
+        received(new PgPaymentAmounts(9976, 24), 12L); mode = Mode.COMPLETE_THEN_UNAVAILABLE;
+        service(gateway()).execute(current.getAttemptId());
+        assertThat(callbackFailure.get()).isNull(); assertThat(bodies).hasSize(1);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
+        assertThat(stored().getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
+        assertThat(stored().getConfirmedCancellations().getFirst().getEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThat(stored().getResponseEasyPayDiscountAmount()).isNull();
+        service(gateway()).execute(current.getAttemptId());
+        assertThat(bodies).hasSize(1); assertThat(resultEventCount()).isEqualTo(1);
+    }
+
+    @Test void aDiscountedFailureAndItsExplicitSuccessorKeepTheOriginalPointsAndFailureEvidence() {
+        received(new PgPaymentAmounts(9976, 24), 12L); mode = Mode.FAILED_ZERO;
+        service(gateway()).execute(current.getAttemptId());
+        RefundExecution failed = stored();
+        assertThat(failed.getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
+        assertThat(failed.getReceiptEasyPayDiscountAmount()).isEqualTo(12L);
+        rememberFailure(failed); current = receiveNext(failed); mode = Mode.RETRY_SUCCESS;
+        service(gateway()).execute(current.getAttemptId());
+        assertThat(callbackFailure.get()).isNull(); assertThat(bodies).hasSize(2);
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
+        assertThat(stored().getResponseEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThat(executions.findByAttemptId(failed.getAttemptId()).orElseThrow().getReceiptEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThatThrownBy(() -> jdbc.update("UPDATE refund_execution SET receipt_easy_pay_discount_amount=-1 WHERE attempt_id=?", failed.getAttemptId()))
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_refund_receipt_point_amount");
+    }
+
+    @Test void discountedPointEvidenceAndTheCompletionOutboxRollBackTogetherAfterRealFlush() {
+        received(new PgPaymentAmounts(9976, 24), 12L); mode = Mode.DIRECT_SUCCESS;
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {
+            call.callRealMethod();
+            if (call.getArgument(2, DomainEvent.class).eventType().equals("RefundExecutionPrepared")) return null;
+            entityManager.flush();
+            throw new IllegalStateException("after point evidence and outbox flush");
+        }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
+        assertThatThrownBy(() -> service(gateway()).execute(current.getAttemptId()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("after point evidence and outbox flush");
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
+        assertThat(stored().getResponseEasyPayDiscountAmount()).isNull();
+        assertThat(count("refund_cancellation_evidence")).isZero(); assertThat(resultEventCount()).isZero();
+        reset(outbox); successRecorder().execute(current.getAttemptId(), successProof());
+        assertThat(stored().getResponseEasyPayDiscountAmount()).isEqualTo(12L);
+        assertThat(resultEventCount()).isEqualTo(1); assertThat(bodies).hasSize(1);
     }
 
     @Test void priorPartialCancellationPersistsTheStopAndNeverPostsTheRemainingAmount() {
@@ -406,9 +476,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
 
     private PgRefundCancellationSuccess successProof() {
         Payment payment = payments.findByPaymentId(current.getPaymentId()).orElseThrow();
-        return new PgRefundCancellationSuccess(new PgRefundLookupRequest(payment.getPaymentId(), payment.getOrderNo(), payment.getAmount(),
-                "KRW", payment.getProviderTransactionId(), payment.getProviderOccurredAt()), current.getAttemptId(),
-                new RefundCancellation("cancel-1", current.getAmount(), null), BASE, 0, 0, "ESD refund " + current.getRefundId());
+        return new PgRefundCancellationSuccess(PgRefundLookupRequest.from(payment), current.getAttemptId(),
+                new RefundCancellation("cancel-1", current.getAmount(), null, supplierPointRefund), BASE, 0, 0, "ESD refund " + current.getRefundId());
     }
     private RecordRefundCancellationSuccess successRecorder() {
         return new RecordRefundCancellationSuccess(payments, executions, outbox, transactions, clock);
@@ -418,9 +487,14 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     }
 
     private void received() {
+        received(null, null);
+    }
+
+    private void received(PgPaymentAmounts amounts, Long points) {
+        supplierAmounts = amounts; supplierPointRefund = points;
         Payment paid = Payment.receive(request(), "PORTONE_TEST");
         paid.confirm(new PgResult("PORTONE_TEST", paid.getPaymentId(), paid.getOrderNo(), paid.getAmount(), "KRW", "pg-original",
-                BASE.minusSeconds(60), PgResult.Decision.APPROVED, null, null, null), id(), BASE.minusSeconds(30));
+                BASE.minusSeconds(60), PgResult.Decision.APPROVED, null, null, null, amounts), id(), BASE.minusSeconds(30));
         payments.saveAndFlush(paid); current = receive.execute(execution(paid));
     }
     @Test void aValidatedFailedResponseRequiresTheAdditionalUnrefundedLookupBeforePublishingOneFailure() {
@@ -1298,6 +1372,40 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         return new ResolveRefundLookup(payments, executions, reconcile(), transactions, clock, Runnable::run, Duration.ofMinutes(2), 20);
     }
 
+    @Tag("migration")
+    @Test void v33MigrationPreservesTheFrozenRequestAndDoesNotInventHistoricalPointAmounts() {
+        received(new PgPaymentAmounts(9976, 24), null); mode = Mode.DIRECT_SUCCESS;
+        service(gateway()).execute(current.getAttemptId());
+        String originalBody = stored().getCancellationRequestBody();
+        MySQLContainer<?> mysql = SharedContainers.MYSQL;
+        String schema = "refund_points_upgrade_" + id().replace("-", "");
+        String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
+        String options = "?useSSL=false&allowPublicKeyRetrieval=true";
+        JdbcTemplate root = new JdbcTemplate(new DriverManagerDataSource(server + mysql.getDatabaseName() + options, "root", mysql.getPassword()));
+        root.execute("CREATE DATABASE " + schema);
+        try {
+            DriverManagerDataSource source = new DriverManagerDataSource(server + schema + options, "root", mysql.getPassword());
+            String location = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
+            Flyway.configure().dataSource(source).locations(location).target("32").load().migrate();
+            JdbcTemplate migration = new JdbcTemplate(source);
+            for (String table : List.of("purchase_payment", "refund_execution", "refund_cancellation_evidence")) {
+                String columns = String.join(",", migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS"
+                        + " WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema, table));
+                migration.update("INSERT INTO " + table + "(" + columns + ") SELECT " + columns + " FROM " + mysql.getDatabaseName() + "." + table);
+            }
+            Map<String, Object> originalPayment = migration.queryForMap("SELECT * FROM purchase_payment");
+            Map<String, Object> originalExecution = migration.queryForMap("SELECT * FROM refund_execution");
+            Map<String, Object> originalEvidence = migration.queryForMap("SELECT * FROM refund_cancellation_evidence");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            assertThat(migration.queryForMap("SELECT * FROM purchase_payment")).isEqualTo(originalPayment);
+            assertThat(migration.queryForMap("SELECT * FROM refund_execution")).containsAllEntriesOf(originalExecution)
+                    .containsEntry("receipt_easy_pay_discount_amount", null).containsEntry("response_easy_pay_discount_amount", null)
+                    .containsEntry("cancellation_request_body", originalBody);
+            assertThat(migration.queryForMap("SELECT * FROM refund_cancellation_evidence")).containsAllEntriesOf(originalEvidence)
+                    .containsEntry("easy_pay_discount_amount", null);
+        } finally { root.execute("DROP DATABASE " + schema); }
+    }
+
     private RefundCancellationHold currentHold() {
         return holds.findByHoldId(stored().getActiveCancellationHoldId()).orElseThrow();
     }
@@ -1350,13 +1458,19 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                     + (mode == Mode.FAILED_OTHER_PENDING ? "," + failureRow("REQUESTED").replace("cancel-1", "someone-else") : "") + "]";
         }
         if (mode.name().startsWith("RETRY_")) rows = retryRows();
-        return """
+        return withProviderPoints("""
                 {"status":"%s","id":"%s","storeId":"%s","version":"V2","currency":"KRW",
                 "channel":{"type":"TEST","key":"%s","pgProvider":"TOSSPAY_V2"},
-                "amount":{"total":%d,"paid":%d,"discount":0,"cancelled":%d},"cancellations":%s,
+                "amount":{"total":%d,"paid":%d,"discount":%d,"cancelled":%d},"cancellations":%s,
                 "customData":"{\\"orderNo\\":\\"%s\\"}","paidAt":"%s","pgTxId":"pg-original","cancelledAt":"%s"}
-                """.formatted(status, current.getPaymentId(), STORE, CHANNEL, current.getAmount(), current.getAmount(), cancelled,
-                        rows, current.getOrderNo(), BASE.minusSeconds(60), BASE);
+                """.formatted(status, current.getPaymentId(), STORE, CHANNEL, current.getAmount(),
+                        supplierAmounts == null ? current.getAmount() : supplierAmounts.paidAmount(),
+                        supplierAmounts == null ? 0 : supplierAmounts.discountAmount(), cancelled,
+                        rows, current.getOrderNo(), BASE.minusSeconds(60), BASE));
+    }
+    private String withProviderPoints(String body) {
+        return supplierPointRefund == null ? body : body.replace("\"totalAmount\":" + current.getAmount(),
+                "\"totalAmount\":" + current.getAmount() + ",\"easyPayDiscountAmount\":" + supplierPointRefund);
     }
     private RestClient client() { return RestClient.builder().baseUrl("http://127.0.0.1:" + pg.getAddress().getPort()).build(); }
     private PortOneRefundCancellationGateway gateway() { return new PortOneRefundCancellationGateway(client(), STORE, CHANNEL, clock); }

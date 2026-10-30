@@ -4,6 +4,7 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -46,6 +47,7 @@ public class Refund {
     private String paymentConfirmationFingerprint;
     @Column(length = 30)
     private String paymentConfirmationSource;
+    @Embedded private RefundAmountProjection amountProjection;
     @Column(unique = true, length = 36) private String reviewRequestId;
     @Enumerated(EnumType.STRING) @Column(length = 20) private RefundReviewDecision reviewDecision;
     @Column(length = 100) private String reviewOperatorSubject;
@@ -168,7 +170,10 @@ public class Refund {
         if ((status != RefundStatus.PENDING_PAYMENT_REFUND && status != RefundStatus.COMPLETED)
                 || (paymentConfirmationEventId != null && !paymentConfirmationEventId.equals(input.confirmationEventId())))
             throw new RefundCompletionRejected("실행 성공과 최초 환불 완료의 연결이 다릅니다.");
-        return attempt.recordCancellationSuccess(input);
+        RefundAmountProjection next = RefundAmountProjection.merge(amountProjection, order, input.execution());
+        boolean changed = attempt.recordCancellationSuccess(input);
+        if (changed) amountProjection = next;
+        return changed;
     }
 
     public boolean confirmPayment(Order order, RefundAttempt attempt, RefundPaymentConfirmation input) {
@@ -184,11 +189,13 @@ public class Refund {
         if (status != RefundStatus.PENDING_PAYMENT_REFUND
                 || (attempt.getStatus() != RefundAttemptStatus.PENDING && attempt.getStatus() != RefundAttemptStatus.SUCCEEDED))
             throw new RefundCompletionRejected("전액 취소 확인을 기다리는 환불이 아닙니다.");
+        RefundAmountProjection next = RefundAmountProjection.merge(amountProjection, order, input);
         if ("PG_RESPONSE".equals(input.source())) attempt.recordCancellationSuccess(new RefundExecutionSuccess(input, input.eventId()));
         else if (attempt.getStatus() == RefundAttemptStatus.PENDING) attempt.requireReconciliation();
         status = RefundStatus.COMPLETED;
         paymentConfirmationEventId = input.eventId(); completedAt = input.occurredAt();
         paymentConfirmationFingerprint = input.fingerprint(); paymentConfirmationSource = input.source();
+        amountProjection = next;
         return true;
     }
 

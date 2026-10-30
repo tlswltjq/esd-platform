@@ -9,7 +9,12 @@ import java.util.UUID;
 
 /** Final approval for one immutable OrderPlaced request. */
 public record OrderPaymentCompletedEvent(String eventId, Instant occurredAt, String orderNo,
-        String requestEventId, String paymentId, String buyerSubject, long amount, String currency) implements DomainEvent {
+        String requestEventId, String paymentId, String buyerSubject, long amount, String currency,
+        Long pgPaidAmount, Long pgDiscountAmount) implements DomainEvent {
+    public OrderPaymentCompletedEvent(String eventId, Instant occurredAt, String orderNo, String requestEventId,
+            String paymentId, String buyerSubject, long amount, String currency) {
+        this(eventId, occurredAt, orderNo, requestEventId, paymentId, buyerSubject, amount, currency, null, null);
+    }
     public static OrderPaymentCompletedEvent of(String orderNo, String requestEventId, String paymentId,
                                                 String buyerSubject, long amount, String currency) {
         return new OrderPaymentCompletedEvent(UUID.randomUUID().toString(), Instant.now().truncatedTo(ChronoUnit.MICROS),

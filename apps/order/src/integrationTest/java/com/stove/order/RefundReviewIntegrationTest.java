@@ -20,6 +20,9 @@ import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PaymentResult;
+import com.stove.order.core.domain.ProviderPaymentAmounts;
+import com.stove.order.core.domain.ReportedRefundAmounts;
+import com.stove.order.core.domain.ReportedRefundCancellation;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundAttempt;
 import com.stove.order.core.domain.RefundAttemptRepository;
@@ -137,6 +140,42 @@ class RefundReviewIntegrationTest extends OrderIntegrationTestBase {
         assertThat(decision(pending, command, "admin").data()).isEqualTo(first.data());
         assertThat(count("order_refund_attempt")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(orders.findById(paid.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test void customerAndAdministratorReadTheSameStoredAmountDetailsAndUnconfirmedPaymentMethodReturn() {
+        Order paid = saved(new ProviderPaymentAmounts(9976, 24)); LicenseGrant granted = grantInput(paid); applyGrant.execute(granted);
+        Refund pending = pending(paid);
+        JsonNode initial = customer("GET", paid).data().path("amountDetails");
+        assertThat(initial.path("pgPaidAmount").asLong()).isEqualTo(9976);
+        assertThat(initial.path("pgDiscountAmount").asLong()).isEqualTo(24);
+        assertThat(initial.path("confirmedCancellationAmount").isNull()).isTrue();
+        decision(pending, command("APPROVED"), "admin"); Refund approved = current(pending);
+        when(clock.instant()).thenReturn(BASE.plusSeconds(2));
+        applySuspension.execute(new LicenseSuspensionConfirmation(id(), BASE.plusSeconds(1), approved.getSuspensionRequestEventId(),
+                pending.getRefundId(), granted.licenseId(), paid.getOrderNo(), paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId()));
+        Refund executing = current(pending); RefundAttempt attempt = attempts.findByAttemptId(executing.getCurrentAttemptId()).orElseThrow();
+        applyPayment.execute(new RefundPaymentConfirmation(id(), BASE.plusSeconds(3), pending.getRefundId(), attempt.getAttemptId(),
+                attempt.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), paid.getCurrency(),
+                "PG_RESPONSE", "provider-transaction", List.of("full-cancel"), new ReportedRefundAmounts(paid.getAmount(),
+                        new ProviderPaymentAmounts(9976, 24), List.of(new ReportedRefundCancellation("full-cancel", paid.getAmount(), 12L)), BASE.plusSeconds(2))));
+        Response customer = customer("GET", paid);
+        Response admin = http("GET", ADMIN + "/" + pending.getRefundId(), null, "admin", "ADMIN");
+        assertThat(customer.data().path("amount").asLong()).isEqualTo(10000);
+        assertThat(customer.data().path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(admin.data().path("amountDetails")).isEqualTo(customer.data().path("amountDetails"));
+        JsonNode details = customer.data().path("amountDetails");
+        assertThat(details.path("confirmedCancellationAmount").asLong()).isEqualTo(10000);
+        assertThat(details.path("confirmedPointRefundAmount").asLong()).isEqualTo(12);
+        assertThat(details.path("confirmedPaymentMethodRefundAmount").isNull()).isTrue();
+        assertThat(details.path("unconfirmedFields").toString()).contains("confirmedPaymentMethodRefundAmount");
+        assertThat(admin.cache()).isEqualTo("no-store");
+        assertThat(http("GET", "/api/v1/orders/" + paid.getOrderNo() + "/refund", null, "another", "MEMBER").status()).isEqualTo(404);
+        assertThat(http("GET", ADMIN + "/" + pending.getRefundId(), null, "buyer", "MEMBER").status()).isEqualTo(403);
+        assertThat(customer.data().has("operatorSubject")).isFalse();
+        assertThatThrownBy(() -> jdbc.update("UPDATE purchase_order SET pg_discount_amount=25 WHERE order_no=?", paid.getOrderNo()))
+                .hasStackTraceContaining("ck_order_provider_amounts");
+        assertThatThrownBy(() -> jdbc.update("UPDATE order_refund SET confirmed_point_refund_amount=25 WHERE refund_id=?", pending.getRefundId()))
+                .hasStackTraceContaining("ck_refund_amount_details");
     }
 
     @Test void mismatchedStoredGrantRollsBackApprovalBeforeSuspension() {
@@ -277,12 +316,15 @@ class RefundReviewIntegrationTest extends OrderIntegrationTestBase {
     }
 
     private Order saved() {
+        return saved(null);
+    }
+    private Order saved(ProviderPaymentAmounts amounts) {
         Order paid = order(); ReflectionTestUtils.setField(paid, "createdAt", BASE.minusSeconds(21600));
         long product = products.incrementAndGet();
         ReflectionTestUtils.setField(paid, "productId", product);
         ReflectionTestUtils.setField(paid, "productCode", "review-product-" + product);
         paid.apply(new PaymentResult(id(), BASE.minusSeconds(18000), paid.getOrderNo(), paid.getRequestEventId(), id(),
-                paid.getBuyerSubject(), paid.getAmount(), paid.getCurrency(), OrderStatus.PAID, null, null));
+                paid.getBuyerSubject(), paid.getAmount(), paid.getCurrency(), OrderStatus.PAID, null, null, amounts));
         return orders.saveAndFlush(paid);
     }
     private Refund pending(Order paid) { requestRefund.execute(paid.getBuyerSubject(), paid.getOrderNo()); return refunds.findByOrderNo(paid.getOrderNo()).orElseThrow(); }

@@ -49,8 +49,7 @@ public class ReconcileRefundPayment {
         Payment payment = payments.findByPaymentId(received.getPaymentId()).orElseThrow();
         payment.requireRefundRequest(received.request());
         if (!"PORTONE_TEST".equals(payment.getProvider())) throw new BusinessException(ErrorCode.CONFLICT);
-        PgRefundLookupRequest purchase = new PgRefundLookupRequest(payment.getPaymentId(), payment.getOrderNo(), payment.getAmount(),
-                payment.getCurrency(), payment.getProviderTransactionId(), payment.getProviderOccurredAt());
+        PgRefundLookupRequest purchase = PgRefundLookupRequest.from(payment);
         RefundLookupResult observed = received.cancellationReceipt(payment) == null
                 ? new RefundLookupResult(lookup.find(purchase).orElse(null), null)
                 : lookup.inspect(purchase, received.cancellationReceipt(payment));
@@ -75,7 +74,8 @@ public class ReconcileRefundPayment {
                     current.getRefundConfirmedAt(), current.getRefundId(), current.getAttemptId(), current.getRequestEventId(),
                     current.getOrderNo(), current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
                     "PG_QUERY_UNATTRIBUTED", currentPayment.getProviderTransactionId(),
-                    current.getConfirmedCancellations().stream().map(RefundCancellation::getCancellationId).toList()));
+                    current.getConfirmedCancellations().stream().map(RefundCancellation::getCancellationId).toList(),
+                    CreateRefundAmountsSnapshot.from(currentPayment, current)));
             executions.flush();
         });
     }

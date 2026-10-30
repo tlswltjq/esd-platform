@@ -8,6 +8,7 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PaymentResult;
+import com.stove.order.core.domain.ProviderPaymentAmounts;
 import java.util.Objects;
 
 public final class PaymentResultMapper {
@@ -17,7 +18,8 @@ public final class PaymentResultMapper {
         validate(envelope, event);
         return new PaymentResult(event.eventId(), event.occurredAt(), event.orderNo(),
                 event.requestEventId(), event.paymentId(), event.buyerSubject(), event.amount(),
-                event.currency(), OrderStatus.PAID, null, null);
+                event.currency(), OrderStatus.PAID, null, null,
+                ProviderPaymentAmounts.fromNullable(event.pgPaidAmount(), event.pgDiscountAmount()));
     }
 
     public static PaymentResult from(EventEnvelope envelope, OrderPaymentFailedEvent event) {

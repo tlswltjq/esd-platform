@@ -122,6 +122,7 @@ public class RefundExecution {
     private Instant receiptObservedAt;
     private Long receiptTaxFreeAmount;
     private Long receiptVatAmount;
+    private Long receiptEasyPayDiscountAmount;
     @Column(length = 500) private String receiptReason;
     @Column(unique = true, length = 64) private String failureEventId;
     private Instant failureConfirmedAt;
@@ -129,9 +130,8 @@ public class RefundExecution {
 
     public PgRefundCancellationReceipt cancellationReceipt(Payment payment) {
         if (receiptCancellationId == null) return null;
-        return new PgRefundCancellationReceipt(new PgRefundLookupRequest(paymentId, orderNo, amount, currency,
-                payment.getProviderTransactionId(), payment.getProviderOccurredAt()), attemptId, receiptCancellationId,
-                receiptState, receiptRequestedAt, receiptTaxFreeAmount, receiptVatAmount, receiptReason);
+        return new PgRefundCancellationReceipt(PgRefundLookupRequest.from(payment), attemptId, receiptCancellationId,
+                receiptState, receiptRequestedAt, receiptTaxFreeAmount, receiptVatAmount, receiptReason, receiptEasyPayDiscountAmount);
     }
 
     public boolean recordCancellationReceipt(Payment payment, PgRefundCancellationReceipt receipt, Instant at) {
@@ -144,6 +144,7 @@ public class RefundExecution {
         receiptCancellationId = receipt.cancellationId(); receiptState = receipt.state();
         receiptRequestedAt = receipt.requestedAt(); receiptObservedAt = at;
         receiptTaxFreeAmount = receipt.taxFreeAmount(); receiptVatAmount = receipt.vatAmount(); receiptReason = receipt.reason();
+        receiptEasyPayDiscountAmount = receipt.easyPayDiscountAmount();
         cancellationSchedule.stop();
         return true;
     }
@@ -155,8 +156,7 @@ public class RefundExecution {
             throw new IllegalArgumentException("Prepared request and observed supplier receipt are required");
         payment.requireRefundRequest(request());
         if (!"PORTONE_TEST".equals(payment.getProvider()) || !attemptId.equals(receipt.attemptId())
-                || !receipt.purchase().equals(new PgRefundLookupRequest(paymentId, orderNo, amount, currency,
-                    payment.getProviderTransactionId(), payment.getProviderOccurredAt())))
+                || !receipt.purchase().equals(PgRefundLookupRequest.from(payment)))
             throw new IllegalArgumentException("Cancellation receipt belongs to another execution");
     }
 
@@ -204,6 +204,7 @@ public class RefundExecution {
     private Instant responseCancelledAt;
     private Long responseTaxFreeAmount;
     private Long responseVatAmount;
+    private Long responseEasyPayDiscountAmount;
     @Column(length = 500)
     private String responseReason;
 
@@ -215,30 +216,32 @@ public class RefundExecution {
         if (status == RefundExecutionStatus.FAILED) throw new BusinessException(ErrorCode.CONFLICT, "확정 실패와 성공 근거가 충돌합니다.");
         payment.requireRefundRequest(request());
         if (!"PORTONE_TEST".equals(payment.getProvider()) || !attemptId.equals(success.attemptId())
-                || !success.purchase().equals(new PgRefundLookupRequest(paymentId, orderNo, amount, currency,
-                    payment.getProviderTransactionId(), payment.getProviderOccurredAt())))
+                || !success.purchase().equals(PgRefundLookupRequest.from(payment)))
             throw new IllegalArgumentException("Success does not belong to this execution");
         PgRefundCancellationReceipt receipt = cancellationReceipt(payment);
         if (receipt != null && !receipt.failed().equals(new PgRefundCancellationReceipt(success.purchase(), success.attemptId(),
                 success.cancellation().getCancellationId(), PgRefundCancellationReceipt.State.FAILED, success.requestedAt(),
-                success.taxFreeAmount(), success.vatAmount(), success.reason())))
+                success.taxFreeAmount(), success.vatAmount(), success.reason(), success.cancellation().getEasyPayDiscountAmount())))
             throw new BusinessException(ErrorCode.CONFLICT, "성공 응답이 접수한 취소 ID와 다릅니다.");
         if (status == RefundExecutionStatus.SUCCEEDED) {
             if (!Objects.equals(successfulCancellationId, success.cancellation().getCancellationId())
                     || !Objects.equals(cancellationRequestedAt, success.requestedAt())
                     || !Objects.equals(responseCancelledAt, success.cancellation().getCancelledAt())
                     || !Objects.equals(responseTaxFreeAmount, success.taxFreeAmount()) || !Objects.equals(responseVatAmount, success.vatAmount())
+                    || !Objects.equals(responseEasyPayDiscountAmount, success.cancellation().getEasyPayDiscountAmount())
                     || !Objects.equals(responseReason, success.reason())) throw new BusinessException(ErrorCode.CONFLICT, "확정한 실행 성공 근거가 다릅니다.");
             return false;
         }
         if (refundConfirmedAt != null && (confirmedCancellations.size() != 1
                 || !confirmedCancellations.get(0).getCancellationId().equals(success.cancellation().getCancellationId())
-                || confirmedCancellations.get(0).getAmount() != amount))
+                || confirmedCancellations.get(0).getAmount() != amount
+                || !Objects.equals(confirmedCancellations.get(0).getEasyPayDiscountAmount(), success.cancellation().getEasyPayDiscountAmount())))
             throw new BusinessException(ErrorCode.CONFLICT, "최초 환불 완료와 실행 성공의 취소 근거가 다릅니다.");
         cancellationSuccessEventId = eventId; cancellationSucceededAt = at;
         successfulCancellationId = success.cancellation().getCancellationId(); cancellationRequestedAt = success.requestedAt();
         responseCancelledAt = success.cancellation().getCancelledAt(); responseTaxFreeAmount = success.taxFreeAmount();
         responseVatAmount = success.vatAmount(); responseReason = success.reason(); status = RefundExecutionStatus.SUCCEEDED;
+        responseEasyPayDiscountAmount = success.cancellation().getEasyPayDiscountAmount();
         if (refundConfirmedAt == null) {
             refundConfirmedAt = at; refundConfirmationEventId = eventId; refundConfirmationSource = "PG_RESPONSE";
             providerRefundedAt = success.cancellation().getCancelledAt();
@@ -258,8 +261,7 @@ public class RefundExecution {
                 || !PaymentValues.microsecond(observedAt) || observedAt.isBefore(receivedAt))
             throw new IllegalArgumentException("Refund observation evidence is required");
         payment.requireRefundRequest(request());
-        if (!"PORTONE_TEST".equals(payment.getProvider()) || !confirmation.purchase().equals(new PgRefundLookupRequest(
-                paymentId, orderNo, amount, currency, payment.getProviderTransactionId(), payment.getProviderOccurredAt())))
+        if (!"PORTONE_TEST".equals(payment.getProvider()) || !confirmation.purchase().equals(PgRefundLookupRequest.from(payment)))
             throw new IllegalArgumentException("Verified cancellation does not match the paid purchase");
         if (confirmation.cancelledAt().isAfter(observedAt))
             throw new IllegalArgumentException("Cancellation observation precedes the cancellation");
@@ -268,6 +270,7 @@ public class RefundExecution {
                     ? confirmedCancellations.size() == 1 && confirmation.cancellations().size() == 1
                         && confirmedCancellations.get(0).getCancellationId().equals(confirmation.cancellations().get(0).getCancellationId())
                         && confirmedCancellations.get(0).getAmount() == confirmation.cancellations().get(0).getAmount()
+                        && Objects.equals(confirmedCancellations.get(0).getEasyPayDiscountAmount(), confirmation.cancellations().get(0).getEasyPayDiscountAmount())
                     : List.copyOf(confirmedCancellations).equals(confirmation.cancellations())
                         && Objects.equals(providerRefundedAt, confirmation.cancelledAt());
             if (!same)

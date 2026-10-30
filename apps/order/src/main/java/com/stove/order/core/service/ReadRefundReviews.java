@@ -7,6 +7,7 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundReviewView;
+import com.stove.order.core.domain.RefundAmountView;
 import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundReviewRoundRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class ReadRefundReviews {
         return new RefundReviewView(refund.getRefundId(), order.getOrderNo(), order.getBuyerSubject(), order.getProductCode(),
                 order.getTitle(), order.getAmount(), order.getCurrency(), order.getResultOccurredAt(), refund.getReceivedAt(),
                 refund.getStatus(), refund.reviewReceipt(), refund.getCurrentReviewId() == null ? null
-                        : rounds.findByReviewId(refund.getCurrentReviewId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT)).view());
+                        : rounds.findByReviewId(refund.getCurrentReviewId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT)).view(),
+                RefundAmountView.from(order, refund));
     }
 }

@@ -185,7 +185,7 @@ class PaymentApprovalIntegrationTest {
         advance(5); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED); assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isEqualTo(1);
     }
-    @Test void discountedPaidLookupRecoversTheLostResponseAndPersistsTheAmountsWithoutAnotherPost() {
+    @Test void discountedPaidLookupRecoversTheLostResponseAndPersistsTheAmountsWithoutAnotherPost() throws Exception {
         Payment payment = purchase(); String command = id(); PG_DISCOUNT.set(24); LOSE_PG.set(true); submit(payment, command);
         worker.execute(command);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
@@ -200,6 +200,9 @@ class PaymentApprovalIntegrationTest {
         JsonNode view = http("GET", "/api/v1/payments/" + payment.getOrderNo(), null, member(payment)).body().path("data");
         assertThat(view.path("pgPaidAmount").asLong()).isEqualTo(payment.getAmount() - 24);
         assertThat(view.path("pgDiscountAmount").asLong()).isEqualTo(24);
+        JsonNode event = JSON.readTree(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type='OrderPaymentCompleted'", String.class));
+        assertThat(event.path("pgPaidAmount").asLong()).isEqualTo(payment.getAmount() - 24);
+        assertThat(event.path("pgDiscountAmount").asLong()).isEqualTo(24);
         assertProviderAmountsConstraint(() -> jdbc.update("UPDATE purchase_payment SET pg_discount_amount=25 WHERE payment_id=?", payment.getPaymentId()));
         assertProviderAmountsConstraint(() -> jdbc.update("UPDATE purchase_payment SET pg_paid_amount=NULL WHERE payment_id=?", payment.getPaymentId()));
         worker.execute(command);

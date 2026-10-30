@@ -82,6 +82,9 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "amountDetails" : {
+            "$ref" : "#/components/schemas/RefundAmountDetailsResponse"
+          },
           "buyerSubject" : {
             "type" : "string"
           },
@@ -549,6 +552,57 @@
         },
         "type" : "object"
       },
+      "RefundAmountDetailsResponse" : {
+        "description" : "주문·결제 당시 PG 금액·확인된 취소 근거를 구분합니다. null은 미확인이며 환불 완료 상태를 바꾸지 않습니다.",
+        "properties" : {
+          "confirmedCancellationAmount" : {
+            "description" : "제공사가 확인한 취소 총액이며 현금 입금액이 아닙니다.",
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "confirmedPaymentMethodRefundAmount" : {
+            "description" : "직접 확인된 결제수단별 반환액. 현재 근거가 없으면 null이며 승인 실결제액으로 대신하지 않습니다.",
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "confirmedPointRefundAmount" : {
+            "description" : "성공 취소 전체에서 직접 보고한 포인트 합계. 하나라도 미기록이면 null입니다.",
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "orderAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgDiscountAmount" : {
+            "description" : "결제 당시 PG 할인액이며 반환 포인트가 아닙니다.",
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "pgPaidAmount" : {
+            "description" : "결제 당시 PG 실결제액이며 반환 완료 금액이 아닙니다.",
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "reportedAt" : {
+            "description" : "반환 금액 상세의 확인·보완 시각입니다.",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "source" : {
+            "description" : "반환 근거 출처입니다.",
+            "type" : [ "string", "null" ]
+          },
+          "unconfirmedFields" : {
+            "description" : "미확인인 금액 필드명입니다. 0원과 구분하며 금융 완료를 보류하는 사유가 아닙니다.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
       "RefundApprovalStopBody" : {
         "properties" : {
           "reason" : {
@@ -652,6 +706,9 @@
           "amount" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "amountDetails" : {
+            "$ref" : "#/components/schemas/RefundAmountDetailsResponse"
           },
           "completedAt" : {
             "format" : "date-time",

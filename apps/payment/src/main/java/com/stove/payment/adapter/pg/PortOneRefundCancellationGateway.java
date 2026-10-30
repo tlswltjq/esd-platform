@@ -111,8 +111,8 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
             if (failure == null || !seen.add(id) || !"FAILED".equals(text(row, "status")) || number(row, "totalAmount") != purchase.amount()) return false;
             PgRefundCancellationReceipt observed = new PgRefundCancellationReceipt(purchase, failure.attemptId(), id,
                     PgRefundCancellationReceipt.State.FAILED, Instant.parse(text(row, "requestedAt")).truncatedTo(ChronoUnit.MICROS),
-                    number(row, "taxFreeAmount"), number(row, "vatAmount"), text(row, "reason"));
-            if (!failure.equals(observed) || (row.has("easyPayDiscountAmount") && number(row, "easyPayDiscountAmount") != 0)) return false;
+                    number(row, "taxFreeAmount"), number(row, "vatAmount"), text(row, "reason"), PortOneRefundAmounts.reportedPoints(row));
+            if (!failure.equals(observed)) return false;
         }
         return true;
     }
@@ -128,17 +128,17 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
             Instant cancelledAt = value.path("cancelledAt").isMissingNode() || value.path("cancelledAt").isNull() ? null
                     : Instant.parse(text(value, "cancelledAt")).truncatedTo(ChronoUnit.MICROS);
             Instant observedAt = clock.instant();
-            if (requestedAt.isAfter(observedAt) || (cancelledAt != null && cancelledAt.isAfter(observedAt))
-                    || (value.has("easyPayDiscountAmount") && number(value, "easyPayDiscountAmount") != 0))
+            if (requestedAt.isAfter(observedAt) || (cancelledAt != null && cancelledAt.isAfter(observedAt)))
                 return RefundCancellationDispatch.UNCONFIRMED;
             if (!"SUCCEEDED".equals(status)) {
                 if (number(value, "totalAmount") != purchase.amount()) return RefundCancellationDispatch.UNCONFIRMED;
                 return RefundCancellationDispatch.received(new PgRefundCancellationReceipt(purchase, permission.idempotencyKey(),
                         text(value, "id"), PgRefundCancellationReceipt.State.valueOf(status), requestedAt,
-                        number(value, "taxFreeAmount"), number(value, "vatAmount"), text(value, "reason")));
+                        number(value, "taxFreeAmount"), number(value, "vatAmount"), text(value, "reason"), PortOneRefundAmounts.reportedPoints(value)));
             }
             PgRefundCancellationSuccess success = new PgRefundCancellationSuccess(purchase, permission.idempotencyKey(),
-                    new RefundCancellation(text(value, "id"), number(value, "totalAmount"), cancelledAt), requestedAt,
+                    new RefundCancellation(text(value, "id"), number(value, "totalAmount"), cancelledAt,
+                            PortOneRefundAmounts.reportedPoints(value)), requestedAt,
                     number(value, "taxFreeAmount"), number(value, "vatAmount"), text(value, "reason"));
             return RefundCancellationDispatch.succeeded(success);
         } catch (IllegalArgumentException | DateTimeException invalid) { return RefundCancellationDispatch.UNCONFIRMED; }
@@ -157,11 +157,11 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
 
     private void requirePurchase(PgRefundLookupRequest purchase, JsonNode payment) {
         JsonNode channel = payment.path("channel"); JsonNode amount = payment.path("amount");
+        PortOneRefundAmounts.requireOriginal(purchase, amount);
         if (!purchase.paymentId().equals(text(payment, "id")) || !storeId.equals(text(payment, "storeId"))
                 || !"V2".equals(text(payment, "version")) || !purchase.currency().equals(text(payment, "currency"))
                 || !"TEST".equals(text(channel, "type")) || !channelKey.equals(text(channel, "key"))
-                || !"TOSSPAY_V2".equals(text(channel, "pgProvider")) || number(amount, "total") != purchase.amount()
-                || number(amount, "paid") != purchase.amount() || number(amount, "discount") != 0
+                || !"TOSSPAY_V2".equals(text(channel, "pgProvider"))
                 || !purchase.transactionId().equals(text(payment, "pgTxId"))
                 || !purchase.paidAt().equals(Instant.parse(text(payment, "paidAt")).truncatedTo(ChronoUnit.MICROS))
                 || !purchase.orderNo().equals(text(read(text(payment, "customData")), "orderNo")))

@@ -11,7 +11,7 @@ import java.util.List;
 /** Money confirmation is independent of the outcome of our execution attempt. */
 public record RefundPaymentConfirmation(String eventId, Instant occurredAt, String refundId, String attemptId,
         String requestEventId, String orderNo, String paymentId, String buyerSubject, long amount, String currency,
-        String source, String providerTransactionId, List<String> cancellationIds) {
+        String source, String providerTransactionId, List<String> cancellationIds, ReportedRefundAmounts amountDetails) {
     public RefundPaymentConfirmation {
         if (!text(eventId, 64) || !time(occurredAt) || !uuid(refundId) || !uuid(attemptId) || !text(requestEventId, 64)
                 || !uuid(orderNo) || !text(paymentId, 64) || !text(buyerSubject, 100) || amount <= 0 || !"KRW".equals(currency)
@@ -20,6 +20,17 @@ public record RefundPaymentConfirmation(String eventId, Instant occurredAt, Stri
                 || new HashSet<>(cancellationIds).size() != cancellationIds.size() || ("PG_RESPONSE".equals(source) && cancellationIds.size() != 1))
             throw new RefundCompletionRejected("전액 취소 확인의 근거가 올바르지 않습니다.");
         cancellationIds = cancellationIds.stream().sorted().toList();
+        if (amountDetails != null && (amountDetails.orderAmount() != amount
+                || !amountDetails.cancellationIds().equals(cancellationIds)
+                || (amountDetails.providerCancelledAt() != null && amountDetails.providerCancelledAt().isAfter(occurredAt))))
+            throw new RefundCompletionRejected("반환 금액 상세가 전액 취소의 금액·식별자·시각과 다릅니다.");
+    }
+
+    public RefundPaymentConfirmation(String eventId, Instant occurredAt, String refundId, String attemptId,
+            String requestEventId, String orderNo, String paymentId, String buyerSubject, long amount, String currency,
+            String source, String providerTransactionId, List<String> cancellationIds) {
+        this(eventId, occurredAt, refundId, attemptId, requestEventId, orderNo, paymentId, buyerSubject, amount, currency,
+                source, providerTransactionId, cancellationIds, null);
     }
 
     public String fingerprint() {
@@ -28,6 +39,7 @@ public record RefundPaymentConfirmation(String eventId, Instant occurredAt, Stri
             for (String value : List.of(eventId, occurredAt.toString(), refundId, attemptId, requestEventId,
                     orderNo, paymentId, buyerSubject, Long.toString(amount), currency, source, providerTransactionId)) update(digest, value);
             for (String id : cancellationIds) update(digest, id);
+            if (amountDetails != null) { update(digest, "amount-details-v1"); update(digest, amountDetails.fingerprint()); }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException unavailable) { throw new IllegalStateException("SHA-256 unavailable", unavailable); }
     }

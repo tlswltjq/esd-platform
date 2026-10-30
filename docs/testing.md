@@ -562,6 +562,14 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
 
 ## 7. Order 전액 환불의 RED 테스트 목록
 
+**2026-10-30 실제 수동 환불 완료:** 특정 G2 TEST 거래의 실제 ADMIN 승인·License 정지 선행·PG 전액 취소 1건·고객/관리자 금액 상세·새 다운로드 차단·기존 URL 자연 만료·동일 명령/실제 Kafka 완료 이벤트 중복·웹훅을 확인했다. 신규 구매는 0건이다. [관측·도구 보정·실행본·공유 자원 정리 기록](g2-refund-role-journey-verification.md)을 따른다. 선행 P2 1,526건과 합산하지 않으며 R3 실패/복구·자동 환불의 남은 검증과 G2 전체 종료는 별도다.
+
+**2026-10-30 실제 역할 여정 준비:** 최신 일곱 앱의 bootJar와 실제 Auth/Gateway ADMIN·MEMBER PKCE/쿠키·권한/CSRF, 최초 반려·명시적 재심사, 심사 전/중·반려·재심사 중 ACTIVE와 원본 ZIP을 확인했다. [특정 거래·관측·보존·금융 미실행 기록](g2-refund-role-journey-preparation.md)을 따른다. 관리자 승인·PG 취소·정지 후 다운로드는 아직 실행하지 않았으며 선행 1,526건과 합산하지 않는다.
+
+**2026-10-30 P2 금액 상세 A안:** 동작 Red 5건 뒤 공통 이벤트·Order 사본/응답·Payment 발행을 구현했다. 최종 OCI 공통 Kafka 224, Order 단위 359·일반 통합 180·이행 13, Payment 373·244·9, Gateway 122·Redis 통합 2의 **1,526건**과 Order·Payment bootJar가 통과했다. NULL/0원 구분·본인/ADMIN·이벤트 순서 역전/중복·실제 flush 후 사본/완료/Inbox 롤백·V27의 과거 값 보존·명세를 포함한다. [Red/Green·원자료·실제 PG 미실행 경계](g2-refund-amount-details-implementation.md)를 따른다. 집중·이전 단계 결과와 중복 합산하지 않는다.
+
+**2026-10-30 Payment 할인 환불 A안 후속:** 원승인 실결제/할인 대조의 동작 Red 3건, 보고 포인트 보존의 동작 Red 4건을 확인한 뒤 구현했다. 최종 OCI Payment 단위·아키텍처 373·일반 통합 244·이행 9의 626건과 bootJar가 통과했다. 실제 MySQL의 포인트 저장·응답 유실 조회·실패 후 후속 시도·Outbox flush 롤백과 V33의 NULL/고정 본문 보존을 포함한다. [상세 검증·원자료·실제 PG 미실행 범위](g2-discount-refund-implementation.md)를 따른다. 기존 Order·License·Download 검증과 중복 합산하지 않는다.
+
 2026-10-25. 기준은 [환불 정책 결정](decisions.md#full-refund-policy)과 완료된 모듈의 현재 계약이다.
 아래 R 번호 표는 **작성할 행위 테스트 계획**이다. 개별 Red·Green 실행은 별도 기록하며 일부 도메인 테스트의 결과를 전체 시나리오 완료로 표시하지 않는다. R 번호는 시나리오 식별자이며 JUnit 실행 건수가 아니다.
 정책을 새로 정해야 하는 사항은 [미결 질문](domain/open-questions.md#q9)과 7.8절에서 먼저 결정한다.

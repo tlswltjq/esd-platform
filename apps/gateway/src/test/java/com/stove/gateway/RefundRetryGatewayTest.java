@@ -41,11 +41,14 @@ class RefundRetryGatewayTest {
                 AUTHORIZATION.set(exchange.getRequestHeaders().getFirst("Authorization"));
                 REQUEST_BODY.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                 REQUEST_PATH.set(exchange.getRequestURI().getPath());
-                byte[] body = "{\"success\":true,\"data\":{\"previousAttemptId\":\"22222222-2222-2222-2222-222222222222\"}}".getBytes(StandardCharsets.UTF_8);
+                boolean read = "GET".equals(exchange.getRequestMethod());
+                byte[] body = (read ? "{\"success\":true,\"data\":{\"amount\":10000,\"status\":\"COMPLETED\",\"amountDetails\":{\"pgPaidAmount\":9976,\"pgDiscountAmount\":24,\"confirmedCancellationAmount\":10000,\"confirmedPointRefundAmount\":null,\"confirmedPaymentMethodRefundAmount\":null}}}"
+                        : "{\"success\":true,\"data\":{\"previousAttemptId\":\"22222222-2222-2222-2222-222222222222\"}}")
+                        .getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.getResponseHeaders().set("Cache-Control", "no-store");
                 exchange.getResponseHeaders().set("Location", ROOT);
-                exchange.sendResponseHeaders(202, body.length); exchange.getResponseBody().write(body); exchange.close();
+                exchange.sendResponseHeaders(read ? 200 : 202, body.length); exchange.getResponseBody().write(body); exchange.close();
             });
             ORDER.start(); Runtime.getRuntime().addShutdownHook(new Thread(() -> ORDER.stop(0)));
         } catch (Exception error) { throw new ExceptionInInitializerError(error); }
@@ -71,6 +74,17 @@ class RefundRetryGatewayTest {
         assertThat(CALLS.get()).isEqualTo(1); assertThat(MEMBER_HEADER.get()).isNull();
         assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER"); assertThat(REQUEST_BODY.get()).isEqualTo(BODY);
         assertThat(REQUEST_PATH.get()).isEqualTo(ROOT + "/retries");
+    }
+
+    @Test void aMemberCanReadTheOriginalAmountAndConfirmedCancellationWithoutInventedCashOrPoints() {
+        http.get().uri(ROOT).header("Authorization", "Bearer MEMBER").header("X-Member-Id", "forged")
+                .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store")
+                .expectBody().jsonPath("$.data.amount").isEqualTo(10000)
+                .jsonPath("$.data.amountDetails.pgPaidAmount").isEqualTo(9976)
+                .jsonPath("$.data.amountDetails.confirmedCancellationAmount").isEqualTo(10000)
+                .jsonPath("$.data.amountDetails.confirmedPointRefundAmount").isEmpty()
+                .jsonPath("$.data.amountDetails.confirmedPaymentMethodRefundAmount").isEmpty();
+        assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER");
     }
     @Test void anonymousAndNonMembersCannotForwardARetry() {
         // An anonymous browser write is rejected by CSRF before authentication; nothing reaches Order.

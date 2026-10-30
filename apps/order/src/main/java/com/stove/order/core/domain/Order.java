@@ -40,6 +40,8 @@ public class Order {
     @Column(unique = true, length = 64) private String paymentResultEventId;
     @Column(length = 64) private String paymentId;
     private Instant resultOccurredAt;
+    private Long pgPaidAmount;
+    private Long pgDiscountAmount;
     @Column(length = 100) private String failureReasonCode;
     @Column(length = 500) private String failureReason;
     @Column(nullable = false) private Instant createdAt;
@@ -120,7 +122,7 @@ public class Order {
     public PaymentResult paymentResult() {
         return paymentResultEventId == null ? null : new PaymentResult(paymentResultEventId, resultOccurredAt,
                 orderNo, requestEventId, paymentId, buyerSubject, amount, currency, status,
-                failureReasonCode, failureReason);
+                failureReasonCode, failureReason, ProviderPaymentAmounts.fromNullable(pgPaidAmount, pgDiscountAmount));
     }
 
     public void verifyLicenseGrant(LicenseGrant grant) {
@@ -154,6 +156,9 @@ public class Order {
         paymentResultEventId = result.eventId(); paymentId = result.paymentId();
         resultOccurredAt = result.occurredAt(); status = result.status();
         failureReasonCode = result.reasonCode(); failureReason = result.reason();
+        if (result.paymentAmounts() != null) {
+            pgPaidAmount = result.paymentAmounts().paidAmount(); pgDiscountAmount = result.paymentAmounts().discountAmount();
+        }
         updatedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }

@@ -46,6 +46,8 @@ import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
@@ -92,6 +94,40 @@ class EventContractTest {
 
     private static List<OrderLine> lines() {
         return List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 2));
+    }
+
+    @Test void approvalAmountsSurviveTheWireAndAbsentAmountsRemainUnknown() throws Exception {
+        OrderPaymentCompletedEvent event = new OrderPaymentCompletedEvent("approved-1", Instant.parse("2026-10-30T01:00:00Z"),
+                "order-1", "placed-1", "payment-1", "buyer", 9000, "KRW", 8976L, 24L);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(event), OrderPaymentCompletedEvent.class)).isEqualTo(event);
+        String previous = MAPPER.writeValueAsString(new OrderPaymentCompletedEvent("approved-1", event.occurredAt(),
+                "order-1", "placed-1", "payment-1", "buyer", 9000, "KRW"))
+                .replace(",\"pgPaidAmount\":null", "").replace(",\"pgDiscountAmount\":null", "");
+        assertThat(MAPPER.readValue(previous, OrderPaymentCompletedEvent.class).pgPaidAmount()).isNull();
+        assertThat(MAPPER.readValue(previous, OrderPaymentCompletedEvent.class).pgDiscountAmount()).isNull();
+    }
+
+    @Test void cancellationTotalsAndReportedPointsAreSeparateFromTheOriginalApproval() throws Exception {
+        RefundAmountsSnapshot details = new RefundAmountsSnapshot(8976L, 24L,
+                List.of(new RefundCancellationAmount("cancel-1", 9000, 12L)), Instant.parse("2026-10-30T01:02:00Z"));
+        RefundPaymentConfirmedEvent event = new RefundPaymentConfirmedEvent("confirmation-1", Instant.parse("2026-10-30T01:03:00Z"),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW",
+                "PG_QUERY_UNATTRIBUTED", "pg-1", List.of("cancel-1"), details);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(event), RefundPaymentConfirmedEvent.class)).isEqualTo(event);
+        RefundExecutionSucceededEvent late = new RefundExecutionSucceededEvent("success-1", event.occurredAt(), event.eventId(),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW", "pg-1", "cancel-1", details);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(late), RefundExecutionSucceededEvent.class)).isEqualTo(late);
+    }
+
+    @Test void omittedDetailsAndOmittedPointsDoNotTurnIntoZeroAmounts() throws Exception {
+        RefundPaymentConfirmedEvent event = new RefundPaymentConfirmedEvent("confirmation-1", Instant.parse("2026-10-30T01:03:00Z"),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW",
+                "PG_QUERY_UNATTRIBUTED", "pg-1", List.of("cancel-1"));
+        String previous = MAPPER.writeValueAsString(event).replace(",\"amountDetails\":null", "");
+        assertThat(MAPPER.readValue(previous, RefundPaymentConfirmedEvent.class).amountDetails()).isNull();
+        RefundAmountsSnapshot points = new RefundAmountsSnapshot(null, null, List.of(new RefundCancellationAmount("cancel-1", 9000, null)), null);
+        RefundAmountsSnapshot decoded = MAPPER.readValue(MAPPER.writeValueAsString(points), RefundAmountsSnapshot.class);
+        assertThat(decoded.pgPaidAmount()).isNull(); assertThat(decoded.cancellations().getFirst().pointAmount()).isNull();
     }
 
     @Test void anInitialExecutionWithoutTheNewPredecessorFieldStillDeserializesAsAnInitialRequest() throws Exception {

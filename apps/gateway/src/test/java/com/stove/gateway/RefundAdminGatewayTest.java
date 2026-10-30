@@ -33,6 +33,7 @@ class RefundAdminGatewayTest {
     private static final AtomicReference<String> AUTHORIZATION = new AtomicReference<>();
     private static final AtomicReference<String> BODY = new AtomicReference<>();
     private static final AtomicReference<String> REQUEST_PATH = new AtomicReference<>();
+    private static final AtomicReference<String> RESPONSE_BODY = new AtomicReference<>("{\"success\":true}");
     static {
         try {
             ORDER = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -41,8 +42,9 @@ class RefundAdminGatewayTest {
                 AUTHORIZATION.set(exchange.getRequestHeaders().getFirst("Authorization"));
                 BODY.set(new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8));
                 REQUEST_PATH.set(exchange.getRequestURI().getPath());
-                byte[] body = "{\"success\":true}".getBytes(StandardCharsets.UTF_8);
+                byte[] body = RESPONSE_BODY.get().getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.getResponseHeaders().set("Cache-Control", "no-store");
                 boolean stop=exchange.getRequestURI().getPath().endsWith("/approval-stops");
                 if (stop) { exchange.getResponseHeaders().set("Location",ROOT+"/example"); exchange.getResponseHeaders().set("Cache-Control","no-store"); }
                 exchange.sendResponseHeaders(stop ? 202 : 200, body.length); exchange.getResponseBody().write(body); exchange.close();
@@ -57,6 +59,7 @@ class RefundAdminGatewayTest {
     }
     @BeforeEach void tokens() {
         CALLS.set(0); MEMBER_HEADER.set(null); AUTHORIZATION.set(null); BODY.set(null); REQUEST_PATH.set(null);
+        RESPONSE_BODY.set("{\"success\":true}");
         when(decoder.decode(anyString())).thenAnswer(call -> {
             String role = call.getArgument(0, String.class);
             return Mono.just(Jwt.withTokenValue(role).header("alg", "RS256").subject("operator")
@@ -71,6 +74,20 @@ class RefundAdminGatewayTest {
                 .bodyValue("{}").exchange().expectStatus().isOk();
         assertThat(CALLS.get()).isEqualTo(3); assertThat(MEMBER_HEADER.get()).isNull();
         assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
+    }
+
+    @Test void administratorRefundAmountsAndUnknownValuesPassThroughWithoutChangingTheirMeaning() {
+        RESPONSE_BODY.set("{\"success\":true,\"data\":{\"amount\":10000,\"status\":\"COMPLETED\",\"amountDetails\":{"
+                + "\"orderAmount\":10000,\"pgPaidAmount\":9976,\"pgDiscountAmount\":24,\"confirmedCancellationAmount\":10000,"
+                + "\"confirmedPointRefundAmount\":12,\"confirmedPaymentMethodRefundAmount\":null,"
+                + "\"unconfirmedFields\":[\"confirmedPaymentMethodRefundAmount\"]}}}");
+        http.get().uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+                .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store")
+                .expectBody().jsonPath("$.data.amount").isEqualTo(10000)
+                .jsonPath("$.data.amountDetails.pgPaidAmount").isEqualTo(9976)
+                .jsonPath("$.data.amountDetails.confirmedPointRefundAmount").isEqualTo(12)
+                .jsonPath("$.data.amountDetails.confirmedPaymentMethodRefundAmount").isEmpty();
+        assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
     }
     @Test void anonymousMembersAndCreatorsCannotReachTheReviewService() {
         http.get().uri(ROOT).exchange().expectStatus().isUnauthorized();

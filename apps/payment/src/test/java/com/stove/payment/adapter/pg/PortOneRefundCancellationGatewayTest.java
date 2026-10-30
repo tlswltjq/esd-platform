@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
+import com.stove.payment.core.domain.PgPaymentAmounts;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.domain.PgAuthenticationUnavailable;
@@ -75,6 +76,66 @@ class PortOneRefundCancellationGatewayTest {
         assertThat(result.success().cancellation().getCancellationId()).isEqualTo("cancel-1");
         assertThat(result.success().cancellation().getCancelledAt()).isNull();
         server.verify();
+    }
+
+    @Test void aDiscountedPurchaseMustMatchTheStoredApprovalBreakdownBeforeTheFullAmountIsCancelled() {
+        PgRefundLookupRequest discounted = new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(),
+                purchase.currency(), purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+        expectRead(paid().replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24"));
+        expectPost(body(), withSuccess(success(), MediaType.APPLICATION_JSON));
+        RefundCancellationDispatch result = gateway.send(permission, discounted, body());
+        assertThat(result.success()).isNotNull();
+        assertThat(result.success().purchase()).isEqualTo(discounted);
+        assertThat(result.success().cancellation().getAmount()).isEqualTo(9000);
+        server.verify();
+    }
+
+    @Test void aDifferentDiscountBreakdownCannotBeUsedEvenWhenItHasTheSameOrderTotal() {
+        PgRefundLookupRequest discounted = new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(),
+                purchase.currency(), purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+        expectRead(paid().replace("\"paid\":9000", "\"paid\":8975").replace("\"discount\":0", "\"discount\":25"));
+        assertThatThrownBy(() -> gateway.send(permission, discounted, body())).isInstanceOf(IllegalArgumentException.class);
+        server.verify();
+    }
+
+    @Test void aProviderPointRefundIsPreservedSeparatelyFromTheFullCancellationAmount() {
+        PgRefundLookupRequest discounted = pointPurchase();
+        expectRead(pointPaid());
+        expectPost(body(), withSuccess(success().replace("\"taxFreeAmount\":0", "\"easyPayDiscountAmount\":24,\"taxFreeAmount\":0"), MediaType.APPLICATION_JSON));
+        RefundCancellationDispatch result = gateway.send(permission, discounted, body());
+        assertThat(result.success()).isNotNull();
+        assertThat(result.success().cancellation().getEasyPayDiscountAmount()).isEqualTo(24L);
+        assertThat(result.success().cancellation().getAmount()).isEqualTo(9000);
+        server.verify();
+    }
+
+    @Test void requestedAndFailedCancellationReceiptsKeepTheReportedPointAmount() {
+        for (String state : List.of("REQUESTED", "FAILED")) {
+            server.reset(); expectRead(pointPaid());
+            expectPost(body(), withSuccess(success().replace("SUCCEEDED", state)
+                    .replace("\"taxFreeAmount\":0", "\"easyPayDiscountAmount\":24,\"taxFreeAmount\":0"), MediaType.APPLICATION_JSON));
+            assertThat(gateway.send(permission, pointPurchase(), body()).receipt().easyPayDiscountAmount()).isEqualTo(24L);
+            server.verify();
+        }
+    }
+
+    @Test void malformedOrExcessiveReportedPointsCannotBecomeSuccessOrAFailureReceipt() {
+        for (String points : List.of("-1", "25", "1.5", "null", "\"12\"")) {
+            server.reset(); expectRead(pointPaid());
+            expectPost(body(), withSuccess(success().replace("\"taxFreeAmount\":0",
+                    "\"easyPayDiscountAmount\":" + points + ",\"taxFreeAmount\":0"), MediaType.APPLICATION_JSON));
+            assertThat(gateway.send(permission, pointPurchase(), body())).isEqualTo(RefundCancellationDispatch.UNCONFIRMED);
+            server.verify();
+        }
+    }
+
+    private PgRefundLookupRequest pointPurchase() {
+        return new PgRefundLookupRequest(purchase.paymentId(), purchase.orderNo(), purchase.amount(), purchase.currency(),
+                purchase.transactionId(), purchase.paidAt(), new PgPaymentAmounts(8976, 24));
+    }
+
+    private String pointPaid() {
+        return paid().replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24");
     }
 
     @Test void requestedAndFailedResponsesCarryCorrelationButDoNotClaimSuccessOrRestoration() {

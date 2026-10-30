@@ -6,7 +6,7 @@ import java.time.Instant;
 
 public record PaymentResult(String eventId, Instant occurredAt, String orderNo, String requestEventId,
                             String paymentId, String buyerSubject, long amount, String currency,
-                            OrderStatus status, String reasonCode, String reason) {
+                            OrderStatus status, String reasonCode, String reason, ProviderPaymentAmounts paymentAmounts) {
     public PaymentResult {
         if (!text(eventId, 64) || occurredAt == null || occurredAt.getNano() % 1000 != 0
                 || orderNo == null || !orderNo.matches(OrderValues.UUID_PATTERN)
@@ -16,6 +16,15 @@ public record PaymentResult(String eventId, Instant occurredAt, String orderNo, 
                 || (status == OrderStatus.FAILED && (!text(reasonCode, 100) || !text(reason, 500)))
                 || (status == OrderStatus.PAID && (reasonCode != null || reason != null)))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "결제 결과가 올바르지 않습니다.");
+        if (paymentAmounts != null) {
+            if (status != OrderStatus.PAID) throw new BusinessException(ErrorCode.INVALID_REQUEST, "PG 금액은 승인 결과에만 제공됩니다.");
+            paymentAmounts.requireTotal(amount);
+        }
+    }
+
+    public PaymentResult(String eventId, Instant occurredAt, String orderNo, String requestEventId, String paymentId,
+            String buyerSubject, long amount, String currency, OrderStatus status, String reasonCode, String reason) {
+        this(eventId, occurredAt, orderNo, requestEventId, paymentId, buyerSubject, amount, currency, status, reasonCode, reason, null);
     }
 
     private static boolean text(String value, int max) {

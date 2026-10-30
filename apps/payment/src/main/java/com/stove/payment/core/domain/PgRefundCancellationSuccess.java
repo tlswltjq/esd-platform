@@ -11,5 +11,6 @@ public record PgRefundCancellationSuccess(PgRefundLookupRequest purchase, String
                 || (cancellation.getCancelledAt() != null && cancellation.getCancelledAt().isBefore(requestedAt))
                 || taxFreeAmount < 0 || taxFreeAmount > purchase.amount() || vatAmount < 0 || vatAmount > purchase.amount() - taxFreeAmount
                 || !PaymentValues.text(reason, 500)) throw new IllegalArgumentException("Invalid successful cancellation response");
+        RefundPointAmounts.requireOriginalLimit(cancellation.getEasyPayDiscountAmount(), purchase.paymentAmounts());
     }
 }

@@ -17,6 +17,7 @@ public final class RefundExecutionSuccessMapper {
             throw new RefundCompletionRejected("실행 성공 봉투·본문·키가 다릅니다.");
         return new RefundExecutionSuccess(new RefundPaymentConfirmation(event.eventId(), event.occurredAt(), event.refundId(),
                 event.attemptId(), event.requestEventId(), event.orderNo(), event.paymentId(), event.buyerSubject(), event.amount(),
-                event.currency(), "PG_RESPONSE", event.providerTransactionId(), List.of(event.cancellationId())), event.confirmationEventId());
+                event.currency(), "PG_RESPONSE", event.providerTransactionId(), List.of(event.cancellationId()),
+                RefundAmountMapper.from(event.amountDetails(), event.amount())), event.confirmationEventId());
     }
 }

@@ -15,6 +15,6 @@ public final class RefundPaymentConfirmationMapper {
             throw new RefundCompletionRejected("전액 취소 확인의 봉투·본문·키가 다릅니다.");
         return new RefundPaymentConfirmation(event.eventId(), event.occurredAt(), event.refundId(), event.attemptId(),
                 event.requestEventId(), event.orderNo(), event.paymentId(), event.buyerSubject(), event.amount(), event.currency(),
-                event.source(), event.providerTransactionId(), event.cancellationIds());
+                event.source(), event.providerTransactionId(), event.cancellationIds(), RefundAmountMapper.from(event.amountDetails(), event.amount()));
     }
 }

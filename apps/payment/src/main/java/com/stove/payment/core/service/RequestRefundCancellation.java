@@ -138,8 +138,7 @@ public class RequestRefundCancellation {
         Payment paid = payments.findByPaymentId(received.getPaymentId()).orElseThrow();
         paid.requireRefundRequest(received.request());
         if (!"PORTONE_TEST".equals(paid.getProvider())) throw new BusinessException(ErrorCode.CONFLICT);
-        PgRefundLookupRequest purchase = new PgRefundLookupRequest(paid.getPaymentId(), paid.getOrderNo(), paid.getAmount(),
-                paid.getCurrency(), paid.getProviderTransactionId(), paid.getProviderOccurredAt());
+        PgRefundLookupRequest purchase = PgRefundLookupRequest.from(paid);
         String candidate = gateway.prepareBody(received.request());
         PreparedRefundCancellation prepared = transaction.execute(tx -> {
             Payment currentPayment = payments.lockByPaymentId(received.getPaymentId()).orElseThrow();

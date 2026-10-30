@@ -16,14 +16,18 @@ public record PgRefundConfirmation(PgRefundLookupRequest purchase, List<RefundCa
             throw new IllegalArgumentException("Invalid full cancellation time");
         Set<String> ids = new HashSet<>();
         long total = 0;
+        long reportedPoints = 0;
         for (RefundCancellation cancellation : cancellations) {
             Instant individualTime = cancellation.getCancelledAt();
             if (!ids.add(cancellation.getCancellationId()) || (individualTime != null
                     && (individualTime.isBefore(purchase.paidAt()) || individualTime.isAfter(cancelledAt))))
                 throw new IllegalArgumentException("Contradictory cancellation evidence");
             total = Math.addExact(total, cancellation.getAmount());
+            Long points = cancellation.getEasyPayDiscountAmount();
+            if (points != null) reportedPoints = Math.addExact(reportedPoints, points);
         }
         if (total != purchase.amount()) throw new IllegalArgumentException("Cancellation is not for the full purchase");
+        RefundPointAmounts.requireOriginalLimit(reportedPoints, purchase.paymentAmounts());
         cancellations = cancellations.stream().sorted(Comparator.comparing(RefundCancellation::getCancellationId)).toList();
     }
 

@@ -61,13 +61,13 @@ public class PortOneRefundPaymentLookup implements RefundPaymentLookup {
             if (!"CANCELLED".equals(text(body, "status"))) return inspectFailure(purchase, receipt, body, json);
             JsonNode channel = body.path("channel");
             JsonNode amount = body.path("amount");
+            PortOneRefundAmounts.requireOriginal(purchase, amount);
             JsonNode custom = mapper.readTree(text(body, "customData"));
             if (!purchase.paymentId().equals(text(body, "id")) || !storeId.equals(text(body, "storeId"))
                     || !"V2".equals(text(body, "version")) || !purchase.currency().equals(text(body, "currency"))
                     || !"TEST".equals(text(channel, "type")) || !channelKey.equals(text(channel, "key"))
                     || !"TOSSPAY_V2".equals(text(channel, "pgProvider"))
-                    || number(amount, "total") != purchase.amount() || number(amount, "paid") != purchase.amount()
-                    || number(amount, "discount") != 0 || number(amount, "cancelled") != purchase.amount()
+                    || number(amount, "cancelled") != purchase.amount()
                     || custom == null || !purchase.orderNo().equals(text(custom, "orderNo"))
                     || !purchase.transactionId().equals(text(body, "pgTxId")) || !purchase.paidAt().equals(time(body, "paidAt")))
                 throw new IllegalArgumentException("Cancellation does not match the paid purchase");
@@ -80,7 +80,7 @@ public class PortOneRefundPaymentLookup implements RefundPaymentLookup {
                 String status = text(row, "status");
                 if ("SUCCEEDED".equals(status)) successes.add(new RefundCancellation(text(row, "id"),
                         number(row, "totalAmount"), row.path("cancelledAt").isMissingNode() || row.path("cancelledAt").isNull()
-                                ? null : time(row, "cancelledAt")));
+                                ? null : time(row, "cancelledAt"), PortOneRefundAmounts.reportedPoints(row)));
                 else if (!"FAILED".equals(status)) throw new IllegalArgumentException("Unresolved cancellation evidence");
             }
             PgRefundConfirmation confirmation = new PgRefundConfirmation(purchase, successes, time(body, "cancelledAt"));
@@ -96,11 +96,11 @@ public class PortOneRefundPaymentLookup implements RefundPaymentLookup {
             throws JsonProcessingException {
         if (receipt == null || !"PAID".equals(text(body, "status"))) return new RefundLookupResult(null, null);
         JsonNode channel = body.path("channel"); JsonNode amount = body.path("amount");
+        PortOneRefundAmounts.requireOriginal(purchase, amount);
         JsonNode custom = mapper.readTree(text(body, "customData"));
         if (!purchase.equals(receipt.purchase()) || !purchase.paymentId().equals(text(body, "id")) || !storeId.equals(text(body, "storeId"))
                 || !"V2".equals(text(body, "version")) || !purchase.currency().equals(text(body, "currency"))
                 || !"TEST".equals(text(channel, "type")) || !channelKey.equals(text(channel, "key")) || !"TOSSPAY_V2".equals(text(channel, "pgProvider"))
-                || number(amount, "total") != purchase.amount() || number(amount, "paid") != purchase.amount() || number(amount, "discount") != 0
                 || custom == null || !purchase.orderNo().equals(text(custom, "orderNo"))
                 || !purchase.transactionId().equals(text(body, "pgTxId")) || !purchase.paidAt().equals(time(body, "paidAt")))
             throw new IllegalArgumentException("Failure lookup does not match the paid purchase");
@@ -114,11 +114,11 @@ public class PortOneRefundPaymentLookup implements RefundPaymentLookup {
             if (!ids.add(id)) throw new IllegalArgumentException("Duplicate cancellation identity");
             if (!"FAILED".equals(text(row, "status"))) return new RefundLookupResult(null, null);
             if (receipt.cancellationId().equals(id)) {
-                if (number(row, "totalAmount") != purchase.amount()
-                        || (row.has("easyPayDiscountAmount") && number(row, "easyPayDiscountAmount") != 0))
+                if (number(row, "totalAmount") != purchase.amount())
                     throw new IllegalArgumentException("Failed cancellation amount mismatch");
                 found = new PgRefundCancellationReceipt(purchase, receipt.attemptId(), id, PgRefundCancellationReceipt.State.FAILED,
-                        time(row, "requestedAt"), number(row, "taxFreeAmount"), number(row, "vatAmount"), text(row, "reason"));
+                        time(row, "requestedAt"), number(row, "taxFreeAmount"), number(row, "vatAmount"), text(row, "reason"),
+                        PortOneRefundAmounts.reportedPoints(row));
                 if (!found.equals(receipt.failed())) throw new IllegalArgumentException("Failed cancellation does not match our receipt");
             }
         }

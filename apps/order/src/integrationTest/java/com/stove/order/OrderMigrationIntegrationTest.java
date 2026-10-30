@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -34,6 +35,24 @@ import org.testcontainers.containers.MySQLContainer;
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 
+    @Test void v27KeepsOldCompletionAndPurchaseFactsWithoutInventingAnyAmountDetails() {
+        withVersion("26", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source); insert(jdbc, "PAID");
+            String orderNo = jdbc.queryForObject("SELECT order_no FROM purchase_order", String.class);
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,payment_confirmation_event_id,completed_at,payment_confirmation_fingerprint,payment_confirmation_source)"
+                    + " VALUES(?,?,NOW(6),TRUE,'COMPLETED',?,NOW(6),?,'PG_QUERY_UNATTRIBUTED')", id(), orderNo, id(), "a".repeat(64));
+            Map<String, Object> purchase = jdbc.queryForMap("SELECT * FROM purchase_order");
+            Map<String, Object> completed = jdbc.queryForMap("SELECT * FROM order_refund");
+            Flyway.configure().dataSource(source).locations(LOCATION).load().migrate();
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForMap("SELECT * FROM purchase_order"), purchase);
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForMap("SELECT * FROM order_refund"), completed);
+            assertThatThrownBy(() -> jdbc.update("UPDATE purchase_order SET pg_paid_amount=amount WHERE order_no=?", orderNo))
+                    .hasStackTraceContaining("ck_order_provider_amounts");
+            assertThatThrownBy(() -> jdbc.update("UPDATE order_refund SET confirmed_cancellation_amount=10000"))
+                    .hasStackTraceContaining("ck_refund_amount_details");
+        });
+    }
+
     @Test void v23PreservesAttemptsWithoutGuessingPreparationFromTheOrderStartTime() {
         withVersion("22",source->{
             JdbcTemplate jdbc=new JdbcTemplate(source);insert(jdbc,"PAID");String order=jdbc.queryForObject("SELECT order_no FROM purchase_order",String.class);
@@ -43,7 +62,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             Map<String,Object> before=jdbc.queryForMap("SELECT * FROM order_refund_attempt");Map<String,Object> parent=jdbc.queryForMap("SELECT * FROM order_refund");
             Flyway flyway=Flyway.configure().dataSource(source).locations(LOCATION).load();flyway.migrate();flyway.validate();
             assertThat(jdbc.queryForMap("SELECT * FROM order_refund_attempt")).containsAllEntriesOf(before).containsEntry("preparation_event_id",null).containsEntry("first_refund_prepared_at",null).containsEntry("confirmation_delay_at",null).containsEntry("preparation_fingerprint",null);
-            assertThat(jdbc.queryForMap("SELECT * FROM order_refund")).isEqualTo(parent);
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForMap("SELECT * FROM order_refund"), parent);
             assertThatThrownBy(()->jdbc.update("UPDATE order_refund_attempt SET first_refund_prepared_at=started_at WHERE attempt_id=?",attempt)).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
         });
     }
@@ -57,7 +76,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             Map<String,Object> before=jdbc.queryForMap("SELECT * FROM order_refund_review_round"); Map<String,Object> parent=jdbc.queryForMap("SELECT * FROM order_refund");
             Flyway flyway=Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
             assertThat(jdbc.queryForMap("SELECT * FROM order_refund_review_round")).containsAllEntriesOf(before).containsEntry("stop_request_id",null).containsEntry("correction_request_id",null);
-            assertThat(jdbc.queryForMap("SELECT * FROM order_refund")).isEqualTo(parent);
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForMap("SELECT * FROM order_refund"), parent);
             assertThatThrownBy(()->jdbc.update("UPDATE order_refund_review_round SET stop_request_id=?",id())).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
             assertThatThrownBy(()->jdbc.update("INSERT INTO order_refund_review_round(review_id,refund_id,review_no,previous_review_id,buyer_subject,received_at) VALUES(?,?,2,?,'usr_buyer',?)",id(),refund,refund,Timestamp.from(at))).isInstanceOf(DataAccessException.class).rootCause().isInstanceOfSatisfying(SQLException.class,failure->assertThat(failure.getErrorCode()).isEqualTo(3819));
         });
@@ -82,7 +101,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
             List<Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
             for (int index = 0; index < original.size(); index++) assertThat(migrated.get(index)).containsAllEntriesOf(original.get(index));
-            assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(purchases);
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id"), purchases);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round", Integer.class)).isEqualTo(4);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round WHERE decision_request_id IS NOT NULL AND operator_subject='migration-admin'", Integer.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_refund_review_round WHERE decision_request_id IS NULL AND operator_subject IS NULL AND customer_reason IS NULL", Integer.class)).isEqualTo(2);
@@ -101,7 +120,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             List<Map<String, Object>> beforeOrders = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
             List<Map<String, Object>> beforeRefunds = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
             Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
-            assertThat(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id")).isEqualTo(beforeOrders);
+            assertAmountColumnsAreOnlyUnknownAdditions(jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id"), beforeOrders);
             List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
             for (int index = 0; index < beforeRefunds.size(); index++) {
                 assertThat(after.get(index)).containsAllEntriesOf(beforeRefunds.get(index));
@@ -147,6 +166,21 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         jdbc.update("INSERT INTO purchase_order(order_no,buyer_subject,request_id,product_id,product_code,title,content_version,list_amount,discount_amount,amount,currency,status,request_event_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(6),NOW(6))",
                 order.getOrderNo(), order.getBuyerSubject(), order.getRequestId(), order.getProductId(), order.getProductCode(), order.getTitle(),
                 order.getContentVersion(), order.getListAmount(), order.getDiscountAmount(), order.getAmount(), order.getCurrency(), status, order.getRequestEventId());
+    }
+
+    private void assertAmountColumnsAreOnlyUnknownAdditions(List<Map<String, Object>> actual, List<Map<String, Object>> original) {
+        assertThat(actual).hasSize(original.size());
+        for (int index = 0; index < original.size(); index++) assertAmountColumnsAreOnlyUnknownAdditions(actual.get(index), original.get(index));
+    }
+
+    private void assertAmountColumnsAreOnlyUnknownAdditions(Map<String, Object> actual, Map<String, Object> original) {
+        Map<String, Object> previousColumns = new HashMap<>(actual);
+        for (String column : List.of("pg_paid_amount", "pg_discount_amount", "refund_pg_paid_amount", "refund_pg_discount_amount",
+                "confirmed_cancellation_amount", "confirmed_point_refund_amount", "refund_amounts_reported_at", "refund_provider_cancelled_at",
+                "refund_amounts_source", "refund_amounts_cancellation_ids_hash")) {
+            if (!original.containsKey(column) && previousColumns.containsKey(column)) assertThat(previousColumns.remove(column)).isNull();
+        }
+        assertThat(previousColumns).isEqualTo(original);
     }
 
     private void withV10(Consumer<DriverManagerDataSource> check) {
