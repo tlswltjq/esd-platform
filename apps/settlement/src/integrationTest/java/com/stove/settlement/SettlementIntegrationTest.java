@@ -265,7 +265,8 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
-        for(String table:List.of("settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
+        for(String table:List.of("settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
+                "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
             jdbc.update("DELETE FROM "+table);
         provider.clear(); when(clock.instant()).thenReturn(NOW);
         refundProvider.clear();
@@ -522,10 +523,14 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
             Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_sale")).isEqualTo(1));
         } finally { listeners.stop(); }
     }
-    @Test void publicOpenApiHasThirteenOperationsAndNoLegacyOrInternalRoutes() throws Exception {
+    @Test void disabledStatementSourceReturnsUnavailableRatherThanAnEmptyFinancialReport() {
+        Reply result=http("POST","/api/v1/settlements/pg-statements",token("usr_admin","ADMIN"),Map.of("dateType","DUE","baseDate","2026-10-01"));
+        assertThat(result.status()).isEqualTo(503);assertThat(count("settlement_pg_statement")).isZero();
+    }
+    @Test void publicOpenApiHasNineteenOperationsAndNoLegacyOrInternalRoutes() throws Exception {
         OpenApiSnapshot.verify(port,"settlement");
         JsonNode paths=http("GET","/v3/api-docs",null,null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(12);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(13);
+        assertThat(paths.size()).isEqualTo(17);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(19);
         assertThat(paths.toString()).doesNotContain("/internal/","reconciliation","tax-invoice");
     }
     PgPayment withoutCost(PaidOrder input) {

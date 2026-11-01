@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SettlementRefundRepository extends JpaRepository<SettlementRefund, Long> {
+    List<SettlementRefund> findByOrderNoIn(List<String> orderNos);
     @EntityGraph(attributePaths = "cancellations") Optional<SettlementRefund> findByRefundId(String refundId);
     @EntityGraph(attributePaths = "cancellations") Optional<SettlementRefund> findByOrderNo(String orderNo);
     List<SettlementRefund> findAllBySellerSubjectAndSettlementMonth(String sellerSubject, String settlementMonth);

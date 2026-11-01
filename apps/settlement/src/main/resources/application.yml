@@ -64,6 +64,21 @@ stove:
     catalog-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
     connect-timeout: 2s
     read-timeout: 5s
+    tosspay:
+      enabled: ${SETTLEMENT_TOSSPAY_ENABLED:false}
+      base-url: ${TOSSPAY_API_BASE_URL:https://pay.toss.im}
+      api-key: ${TOSSPAY_API_KEY:}
+      merchant-id: ${TOSSPAY_MERCHANT_ID:}
+      environment: ${TOSSPAY_ENVIRONMENT:TEST}
+      portone-store-id: ${TOSSPAY_PORTONE_STORE_ID:}
+      portone-channel-key: ${TOSSPAY_PORTONE_CHANNEL_KEY:}
+      identity-mapping-verified: ${TOSSPAY_IDENTITY_MAPPING_VERIFIED:false}
+      max-pages: 100
+      connect-timeout: 2s
+      read-timeout: 10s
+      scheduled-enabled: ${TOSSPAY_SCHEDULED_ENABLED:true}
+      poll-delay: 1h
+      lookback-days: 7
     portone:
       base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
       api-secret: ${PORTONE_API_SECRET:}

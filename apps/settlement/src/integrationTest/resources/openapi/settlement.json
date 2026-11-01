@@ -167,6 +167,34 @@
         },
         "type" : "object"
       },
+      "ApiResponsePgStatementPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PgStatementPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePgStatementResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PgStatementResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePgTransactionResponse" : {
         "properties" : {
           "data" : {
@@ -241,6 +269,34 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/SettlementPagePgReceiptResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseSettlementPagePgStatementItemResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SettlementPagePgStatementItemResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseSettlementPagePgStatementResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SettlementPagePgStatementResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -658,6 +714,193 @@
         },
         "type" : "object"
       },
+      "PgStatementItemResponse" : {
+        "properties" : {
+          "checkCode" : {
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "position" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "reported" : {
+            "$ref" : "#/components/schemas/PgStatementRow"
+          },
+          "reportedNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementPage" : {
+        "properties" : {
+          "nextCursor" : {
+            "type" : "string"
+          },
+          "requestCursor" : {
+            "type" : "string"
+          },
+          "responseBody" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementQuery" : {
+        "properties" : {
+          "baseDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "dateType" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementResponse" : {
+        "properties" : {
+          "baseDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "collectedBy" : {
+            "type" : "string"
+          },
+          "dateType" : {
+            "type" : "string"
+          },
+          "fingerprint" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pageCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "recordCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scope" : {
+            "$ref" : "#/components/schemas/PgStatementScope"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/PgStatementTotals"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementRow" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "fee" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "feeVatSum" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "payMethod" : {
+            "type" : "string"
+          },
+          "payToken" : {
+            "type" : "string"
+          },
+          "productDesc" : {
+            "type" : "string"
+          },
+          "transactionId" : {
+            "type" : "string"
+          },
+          "transactionType" : {
+            "type" : "string"
+          },
+          "vat" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementScope" : {
+        "properties" : {
+          "environment" : {
+            "type" : "string"
+          },
+          "identityMappingVerified" : {
+            "type" : "boolean"
+          },
+          "merchantId" : {
+            "type" : "string"
+          },
+          "portoneChannelKey" : {
+            "type" : "string"
+          },
+          "portoneStoreId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PgStatementTotals" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "fee" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feeVatSum" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "vat" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PgTransactionResponse" : {
         "properties" : {
           "amount" : {
@@ -925,6 +1168,60 @@
           "content" : {
             "items" : {
               "$ref" : "#/components/schemas/PgReceiptResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SettlementPagePgStatementItemResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PgStatementItemResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SettlementPagePgStatementResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PgStatementResponse"
             },
             "type" : "array"
           },
@@ -1309,7 +1606,7 @@
     },
     "/api/v1/settlements/pg-receipts/{providerSettlementId}/reconcile" : {
       "post" : {
-        "operationId" : "reconcile",
+        "operationId" : "reconcile_1",
         "parameters" : [ {
           "in" : "path",
           "name" : "providerSettlementId",
@@ -1331,6 +1628,203 @@
           }
         },
         "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-statements" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSettlementPagePgStatementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
+      },
+      "post" : {
+        "operationId" : "collect",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PgStatementQuery"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePgStatementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-statements/{id}" : {
+      "get" : {
+        "operationId" : "detail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePgStatementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-statements/{id}/items" : {
+      "get" : {
+        "operationId" : "items",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSettlementPagePgStatementItemResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-statements/{id}/pages/{position}" : {
+      "get" : {
+        "operationId" : "page",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "position",
+          "required" : true,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePgStatementPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-statements/{id}/reconcile" : {
+      "post" : {
+        "operationId" : "reconcile",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePgStatementResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-statement-controller" ]
       }
     },
     "/api/v1/settlements/pg-transactions/{paymentId}/refresh" : {

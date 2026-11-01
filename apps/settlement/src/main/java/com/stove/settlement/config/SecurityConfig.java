@@ -35,9 +35,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,"/api/v1/settlements/sales","/api/v1/settlements/months",
                                 "/api/v1/settlements/pg-receipts","/api/v1/settlements/pg-receipts/*",
                                 "/api/v1/settlements/refunds","/api/v1/settlements/refunds/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET,"/api/v1/settlements/pg-statements","/api/v1/settlements/pg-statements/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST,"/api/v1/settlements/pg-receipts",
                                 "/api/v1/settlements/pg-receipts/*/reconcile","/api/v1/settlements/sellers/*/months/*/close",
                                 "/api/v1/settlements/pg-transactions/*/refresh").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,"/api/v1/settlements/pg-statements","/api/v1/settlements/pg-statements/*/reconcile").hasRole("ADMIN")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))

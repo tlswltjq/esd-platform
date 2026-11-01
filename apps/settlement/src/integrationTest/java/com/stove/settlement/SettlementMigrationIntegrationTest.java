@@ -16,7 +16,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.MySQLContainer;
 
 class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
-    @Test void v8ThroughV10PreserveClosedAllocationsReportsAndNeverInventFundingOrRefunds() {
+    @Test void v8ThroughV11PreserveClosedAllocationsReportsAndNeverInventFundingOrRefunds() {
         MySQLContainer<?> mysql = SharedContainers.MYSQL;
         String schema = "settlement_v8_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
@@ -112,7 +112,7 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             List<Map<String, Object>> oldFees = jdbc.queryForList("SELECT * FROM settlement_pg_fee ORDER BY id");
             Map<String, Object> oldMonth = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
             List<Map<String, Object>> oldChecksums = jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
-            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            Flyway.configure().dataSource(source).locations(location).target("10").load().migrate();
             assertThat(jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id")).isEqualTo(oldSales);
             assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id")).isEqualTo(oldTransactions);
             assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_fee ORDER BY id")).isEqualTo(oldFees);
@@ -125,6 +125,18 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_refund", Long.class)).isZero();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_refund_cancellation", Long.class)).isZero();
             assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'10' ORDER BY installed_rank")).isEqualTo(oldChecksums);
+            List<Map<String,Object>> v10Checksums=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
+            Map<String,Object> v10Month=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'11' ORDER BY installed_rank")).isEqualTo(v10Checksums);
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id")).isEqualTo(oldSales);
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id")).isEqualTo(oldTransactions);
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_fee ORDER BY id")).isEqualTo(oldFees);
+            assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(v10Month);
+            assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt")).isEqualTo(receiptBefore);
+            assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt_item")).isEqualTo(itemBefore);
+            for(String table:List.of("settlement_pg_statement","settlement_pg_statement_page","settlement_pg_statement_entry","settlement_pg_statement_item"))
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM "+table,Long.class)).as(table).isZero();
             Flyway.configure().dataSource(source).locations(location).load().validate();
         } finally { root.execute("DROP DATABASE " + schema); }
     }

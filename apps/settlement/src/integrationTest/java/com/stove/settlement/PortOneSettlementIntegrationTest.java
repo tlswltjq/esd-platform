@@ -19,6 +19,13 @@ import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.service.CloseSellerMonth;
 import com.stove.settlement.core.service.RecordPaidSale;
 import com.stove.settlement.core.service.RecordConfirmedRefund;
+import com.stove.settlement.core.service.ReceivePgStatement;
+import com.stove.settlement.core.domain.PgStatement;
+import com.stove.settlement.core.domain.PgStatementPage;
+import com.stove.settlement.core.domain.PgStatementReport;
+import com.stove.settlement.core.domain.PgStatementScope;
+import com.stove.settlement.core.domain.PgStatementTotals;
+import com.stove.settlement.core.port.PgStatementSource;
 import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
@@ -29,6 +36,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
+import static com.stove.settlement.PgStatementFixtures.query;
+import static com.stove.settlement.PgStatementFixtures.page;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
@@ -96,16 +105,19 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
 
     @Autowired RecordPaidSale record;
     @Autowired RecordConfirmedRefund refunds;
+    @Autowired ReceivePgStatement statements;
     @Autowired CloseSellerMonth close;
     @Autowired SynchronizePgTransaction synchronize;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean Clock clock;
+    @MockitoBean PgStatementSource statementSource;
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
 
     @BeforeEach void clean() {
-        for (String table : List.of("settlement_refund_cancellation","settlement_refund","pg_receipt_item", "pg_receipt", "settlement_sale", "seller_monthly_settlement",
+        for (String table : List.of("settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
+                "settlement_refund_cancellation","settlement_refund","pg_receipt_item", "pg_receipt", "settlement_sale", "seller_monthly_settlement",
                 "settlement_pg_fee", "settlement_pg_transaction", "processed_event")) jdbc.update("DELETE FROM " + table);
         PG_GETS.set(0); CONTRACT_ERRORS.set(0); HTTP_STATUS.set(200); RESPONSE.set("{}");
         when(clock.instant()).thenReturn(NOW);
@@ -198,6 +210,18 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
         HTTP_STATUS.set(200); refunds.execute(confirmation); assertThat(count("settlement_refund")).isEqualTo(1);
     }
     int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class); }
+    @Test void aRealisticEmptyTestStatementNeverConfirmsFeesOrChangesTheClosedSellerMonth() {
+        PaidOrder input=order();RESPONSE.set(approved(input).toString());record.execute(input);close.execute("usr_seller","2026-09");
+        Map<String,Object> month=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        PgStatementTotals totals=new PgStatementTotals(0,0,0,0);
+        PgStatementReport report=new PgStatementReport(new PgStatementScope("test-merchant","TEST","store-test","channel-test",false),query(),
+                List.of(new PgStatementPage(null,"",page(List.of(),"",totals).toString())),List.of(),totals);
+        when(statementSource.fetch(query())).thenReturn(report);PgStatement result=statements.execute(query(),"usr_admin");
+        assertThat(result.getStatus()).isEqualTo("EMPTY_TEST");assertThat(result.getRecordCount()).isZero();
+        assertThat(count("settlement_pg_fee")).isZero();assertThat(count("settlement_pg_statement_entry")).isZero();
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(month);
+        assertThat(http("GET","/api/v1/settlements/months","ADMIN").body().path("data").path("content").get(0).path("pgFeeAmount").isNull()).isTrue();
+    }
     record Reply(int status, JsonNode body) { }
     Reply http(String method, String path, String role) {
         return RestClient.create("http://127.0.0.1:" + port).method(HttpMethod.valueOf(method)).uri(path)

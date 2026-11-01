@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SettlementSaleRepository extends JpaRepository<SettlementSale,Long> {
+    List<SettlementSale> findByPaymentIdIn(List<String> paymentIds);
     Optional<SettlementSale> findByOrderNo(String orderNo);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from SettlementSale s where s.orderNo=:orderNo")
