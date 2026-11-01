@@ -5,6 +5,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
@@ -37,10 +38,17 @@ public final class EventInputRules {
             .should(new ArchCondition<JavaMethod>("외부 이벤트 대신 내부 입력을 받는다") {
                 @Override
                 public void check(JavaMethod method, ConditionEvents events) {
-                    for (JavaClass parameter : method.getRawParameterTypes()) {
-                        if (parameter.isAssignableTo("com.stove.common.kafka.contract.DomainEvent"))
-                            events.add(SimpleConditionEvent.violated(method,
-                                    method.getFullName() + " receives external event " + parameter.getName()));
+                    for (JavaType parameter : method.getParameterTypes()) {
+                        for (JavaClass involved : parameter.getAllInvolvedRawTypes()) {
+                            JavaClass element = involved;
+                            while (element.isArray()) {
+                                element = element.getComponentType();
+                            }
+                            if (element.isAssignableTo("com.stove.common.kafka.contract.DomainEvent")) {
+                                events.add(SimpleConditionEvent.violated(method,
+                                        method.getFullName() + " receives external event " + element.getName()));
+                            }
+                        }
                     }
                 }
             })

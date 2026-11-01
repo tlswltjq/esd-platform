@@ -19,7 +19,6 @@ public final class EventOrderingRules {
     private static final String ASYNC = "org.springframework.scheduling.annotation.Async";
     private static final String RETRYABLE_TOPIC = "org.springframework.kafka.annotation.RetryableTopic";
     private static final String EXECUTOR = "java.util.concurrent.Executor";
-    private static final String EXECUTOR_SERVICE = "java.util.concurrent.ExecutorService";
     private static final String COMPLETABLE_FUTURE = "java.util.concurrent.CompletableFuture";
 
     private EventOrderingRules() {
@@ -32,9 +31,8 @@ public final class EventOrderingRules {
     @ArchTest
     public static final ArchRule 리스너는_다른_스레드로_넘기지_않는다 = noClasses()
             .that().resideInAPackage(LISTENER)
-            .should().dependOnClassesThat().haveFullyQualifiedName(EXECUTOR)
-            .orShould().dependOnClassesThat().haveFullyQualifiedName(EXECUTOR_SERVICE)
-            .orShould().dependOnClassesThat().haveFullyQualifiedName(COMPLETABLE_FUTURE)
+            .should().dependOnClassesThat().areAssignableTo(EXECUTOR)
+            .orShould().dependOnClassesThat().areAssignableTo(COMPLETABLE_FUTURE)
             .because("리스너 안에서 비동기로 넘기면 처리 순서가 도착 순서와 무관해진다 "
                     + "(docs/event-ordering.md 5절). 처리량은 concurrency 로 올린다")
             .allowEmptyShould(true);
@@ -44,6 +42,13 @@ public final class EventOrderingRules {
             .that().areDeclaredInClassesThat().resideInAPackage(LISTENER)
             .should().notBeAnnotatedWith(ASYNC)
             .because("@Async 는 리스너 스레드와 처리 스레드를 갈라 놓아 순서 보장을 무효화한다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 리스너_클래스에_Async_를_붙이지_않는다 = noClasses()
+            .that().resideInAPackage(LISTENER)
+            .should().beAnnotatedWith(ASYNC)
+            .because("클래스의 @Async도 리스너 처리를 다른 스레드로 넘긴다")
             .allowEmptyShould(true);
 
     /**

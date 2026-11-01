@@ -3,10 +3,7 @@ package com.stove.archfixture.violating.core.service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 위반 픽스처 — {@code core.service} 에 있으면서 이름이 {@code Service} 로 끝나지 않는다.
- *
- * <p>{@code core_서비스_네이밍} 이 이것을 잡아야 한다. 이 클래스는 규칙이 실제로 위반을
- * 판정하는지 확인하기 위한 것이지 어디에도 쓰이지 않는다.
+ * 이름의 업무 의미는 작성 지침에서 검토한다. 이 이름은 PascalCase 자동 검사의 허용 대상이다.
  */
 @Transactional
 public class BadlyNamedThing {

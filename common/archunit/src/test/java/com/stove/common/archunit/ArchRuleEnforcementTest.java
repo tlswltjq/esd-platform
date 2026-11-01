@@ -11,6 +11,7 @@ import com.stove.archfixture.adapterboundary.core.port.RemoteProducts;
 import com.stove.archfixture.adapterboundary.core.service.MisplacedProductsClient;
 import com.stove.archfixture.adapterboundary.core.service.ReadProduct;
 import com.stove.archfixture.adapterboundary.core.service.ReadProductViaAdapter;
+import com.stove.archfixture.precision.core.service.lowercaseUseCase;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
@@ -72,9 +73,11 @@ class ArchRuleEnforcementTest {
     class NamingRules {
 
         @Test
-        @DisplayName("core.service 의 이름 규칙은 위반을 잡는다")
+        @DisplayName("core.service 의 자동 이름 검사는 PascalCase 표기를 확인한다")
         void coreServiceNaming() {
-            assertCatchesViolation(ModuleHygieneRules.core_서비스_네이밍, "core_서비스_네이밍");
+            JavaClasses classes = new ClassFileImporter().importClasses(lowercaseUseCase.class);
+            assertThatThrownBy(() -> ModuleHygieneRules.core_서비스_네이밍.check(classes))
+                    .isInstanceOf(AssertionError.class).hasMessageContaining(lowercaseUseCase.class.getName());
             assertAcceptsCompliant(ModuleHygieneRules.core_서비스_네이밍, "core_서비스_네이밍");
         }
 

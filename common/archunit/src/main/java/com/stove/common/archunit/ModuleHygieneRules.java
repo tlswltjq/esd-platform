@@ -10,7 +10,9 @@ import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
@@ -87,6 +89,17 @@ public final class ModuleHygieneRules {
                     .areAssignableTo(SPRING_DATA_REPOSITORY)
                     .allowEmptyShould(true);
 
+    /** 업무 트랜잭션 조율은 서비스가 맡는다. Auth 프로토콜 어댑터의 저장 책임은 이 대상이 아니다. */
+    @ArchTest
+    public static final ArchRule 인바운드는_프로그램_방식_트랜잭션을_열지_않는다 = noClasses()
+            .that().resideInAnyPackage(CONTROLLER, LISTENER, SCHEDULER)
+            .should().dependOnClassesThat()
+            .areAssignableTo("org.springframework.transaction.support.TransactionOperations")
+            .orShould().dependOnClassesThat()
+            .areAssignableTo("org.springframework.transaction.TransactionManager")
+            .because("인바운드는 입력을 변환하고 트랜잭션을 소유한 유스케이스를 호출한다")
+            .allowEmptyShould(true);
+
     /** 멱등 가드는 서비스가 소유한다(결정 6). 리스너는 역직렬화와 위임만 한다. */
     @ArchTest
     public static final ArchRule 멱등_가드는_서비스가_소유한다 =
@@ -118,34 +131,24 @@ public final class ModuleHygieneRules {
                     .because("스텁이 조건 없이 빈으로 뜨면 운영에서 조용히 돌거나 실제 어댑터와 충돌한다")
                     .allowEmptyShould(true);
 
-    /** {@code core.service} 와 {@code api.application} 을 이름으로 구분한다. */
+    /** 동사+대상의 의미는 작성 지침으로 검토하고, 자동 검사는 표기만 보장한다. */
     @ArchTest
     public static final ArchRule core_서비스_네이밍 =
             classes()
                     .that()
                     .resideInAPackage(CORE_SERVICE)
-                    .should(
-                            new ArchCondition<
-                                    JavaClass>(
-                                    "use an action and subject name") {
-                                @Override
-                                public void check(
-                                        JavaClass type,
-                                        ConditionEvents events) {
-                                    if (!type.getSimpleName()
-                                            .matches(
-                                                    "(?:[A-Z][A-Za-z0-9]*Service|(?:Register|Create|Read|Get|Update|Upload|Request|Record|Apply|Publish|Resolve|Receive|Decide|Change|Bootstrap|Search|Synchronize|Grant|Close|Reconcile)[A-Z][A-Za-z0-9]*)")) {
-                                        events.add(
-                                                SimpleConditionEvent
-                                                        .violated(
-                                                                type,
-                                                                type.getName()
-                                                                        + " must use an action and"
-                                                                        + " subject name"));
-                                    }
-                                }
-                            })
-                    .because("업무 유스케이스는 동사+대상이며 기존 Service 이름도 전환 기간에 허용한다")
+                    .and(DescribedPredicate.<JavaClass>describe("private 구현 보조 타입을 제외한다",
+                            type -> !type.getModifiers().contains(JavaModifier.PRIVATE)))
+                    .should(new ArchCondition<JavaClass>("use PascalCase") {
+                        @Override
+                        public void check(JavaClass type, ConditionEvents events) {
+                            if (!type.getSimpleName().matches("[A-Z][A-Za-z0-9]*")) {
+                                events.add(SimpleConditionEvent.violated(type,
+                                        type.getName() + " must use PascalCase"));
+                            }
+                        }
+                    })
+                    .because("업무 타입은 PascalCase를 쓰고 동사 선택은 use-case-conventions.md에서 검토한다")
                     .allowEmptyShould(true);
 
     @ArchTest

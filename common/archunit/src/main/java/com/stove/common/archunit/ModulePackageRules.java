@@ -6,6 +6,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
@@ -37,7 +38,8 @@ public final class ModulePackageRules {
     /** 아웃바운드 포트 인터페이스. 구현체가 어디에 있어야 하는지를 판정하는 기준이 된다. */
     private static final DescribedPredicate<JavaClass> PORT_INTERFACE =
             DescribedPredicate.describe("아웃바운드 포트 인터페이스",
-                    javaClass -> javaClass.isInterface() && javaClass.getPackageName().endsWith(".core.port"));
+                    javaClass -> javaClass.isInterface()
+                            && javaClass.getPackageName().matches(".*\\.core\\.port(?:\\..*)?"));
 
     private ModulePackageRules() {
     }
@@ -67,7 +69,7 @@ public final class ModulePackageRules {
             .optionalLayer("Adapter").definedBy(ADAPTER)
             .optionalLayer("Config").definedBy(CONFIG)
 
-            .whereLayer("Inbound").mayNotBeAccessedByAnyLayer()
+            .whereLayer("Inbound").mayOnlyBeAccessedByLayers("Config")
             .whereLayer("Adapter").mayOnlyBeAccessedByLayers("Config")
             .whereLayer("Application").mayOnlyBeAccessedByLayers("Inbound", "Config")
             .whereLayer("CoreService").mayOnlyBeAccessedByLayers("Inbound", "Application", "Config")
@@ -137,6 +139,42 @@ public final class ModulePackageRules {
             .that().areAnnotatedWith("org.springframework.scheduling.annotation.Scheduled")
             .should().beDeclaredInClassesThat().resideInAPackage(SCHEDULER)
             .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule Bean_팩토리는_config_에_둔다 = methods()
+            .that().areAnnotatedWith("org.springframework.context.annotation.Bean")
+            .should().beDeclaredInClassesThat().resideInAPackage(CONFIG)
+            .because("앱의 객체 조립은 config가 담당한다")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    public static final ArchRule 앱은_다른_앱의_구현을_모른다 = classes()
+            .that().resideInAPackage("com.stove..")
+            .and().resideOutsideOfPackage("com.stove.common..")
+            .should(new ArchCondition<JavaClass>("depend only on the same app and shared contracts") {
+                @Override
+                public void check(JavaClass type, ConditionEvents events) {
+                    String owner = appPackage(type);
+                    for (Dependency dependency : type.getDirectDependenciesFromSelf()) {
+                        String target = appPackage(dependency.getTargetClass());
+                        if (!target.isEmpty() && !target.equals(owner)) {
+                            events.add(SimpleConditionEvent.violated(type, dependency.getDescription()));
+                        }
+                    }
+                }
+            })
+            .because("다른 앱의 구현 대신 공통 계약과 호출 모듈의 포트를 사용한다")
+            .allowEmptyShould(true);
+
+    private static String appPackage(JavaClass type) {
+        String packageName = type.getPackageName();
+        if (!packageName.startsWith("com.stove.") || packageName.equals("com.stove.common")
+                || packageName.startsWith("com.stove.common.")) {
+            return "";
+        }
+        int end = packageName.indexOf('.', "com.stove.".length());
+        return end < 0 ? packageName : packageName.substring(0, end);
+    }
 
     /** External configuration is bound and assembled at the configuration boundary. */
     @ArchTest
