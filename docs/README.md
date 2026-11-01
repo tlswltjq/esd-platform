@@ -33,7 +33,14 @@
 | [Payment 실행·결제·복구 확인](payment-guide.md) | 모의 PG·내 결제 조회, 응답 유실·결과 롤백·8개 앱 장애와 재시작 검증 |
 | [License 실행·라이브러리·재전달 확인](license-guide.md) | 상품 보유권·구매 근거·내 라이브러리, 아홉 앱의 중단·재시작·원본 이벤트 복구 검증 |
 | [Download 실행·빌드 다운로드 확인](download-guide.md) | 로컬 OrbStack, 보유권·현재 공개 빌드·실제 ZIP·만료·장애·재시작 |
-| [Settlement·외부 모의 PG 실행](settlement-guide.md) | 역할별 키·독립 PG·명세 수집·수령 대사·판매자 월 마감·기존 원장 이관 |
+| [Settlement·외부 모의 PG 실행](settlement-guide.md) | 역할별 키·독립 PG·명세 수집·수령 대사·PG 비용 독립 판매자 월 마감·기존 원장 이관 |
+| [Settlement 책임 분리·검증](settlement-separation-verification.md) | G3 첫 단위: 승인 거래·비용·판매자 배분 분리, V8 자료 보존과 OCI 75건 |
+| [Settlement 외부 부담 혜택 A·PortOne 조회](settlement-external-benefit-verification.md) | 총액·실결제·외부 혜택 근거 보존, 주문 금액 배분·V9·최신 OCI 84건 |
+| [Settlement 환불 배분 계산 정책·인터페이스](settlement-refund-allocation-policy.md) | 원배분 전액 상계 A·정책 조립과 계산 단계 OCI 92건, 정책 인터페이스 적용 범위 |
+| [Settlement 환불 월 선택 A](settlement-refund-month-policy.md) | 금융 확인 월·마감 시 현재 OPEN 월 선택, 최초 결과 보존과 정책 단계 OCI 102건 |
+| [Settlement 전액 환불 원장·월 합계](settlement-refund-ledger-verification.md) | 금융 확인·독립 PG 취소 조회·불변 원장·월 순액·역순 DLT 복구·V10과 최신 OCI 120건 |
+| [Settlement PG 비용·반환·지급 자료 계획](settlement-pg-evidence-plan.md) | 공식 출처·TEST 제약과 사용자가 선택한 토스페이 정산 API 자동 수집 A |
+| [Settlement 토스페이 정산 API 수집·대사](settlement-pg-evidence-verification.md) | 전체 페이지·불변 원본/거래·주기 재수집·ADMIN 조회·V11과 OCI 144건, 실제 가맹점/월 요약 후속 범위 |
 
 ## 설계·검증·운영 근거
 

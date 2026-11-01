@@ -1,5 +1,17 @@
 # 테스트 전략
 
+2026-11-02 G3 토스페이 정산 API 수집 A는 OCI 단위/아키텍처 92·통합/이행 52의 **144건**과 check·bootJar를 통과했다. 전체 HTTP 페이지·부호/VAT·엄격한 JSON/커서/전체 합계·원자 저장/실제 DB 실패·동시/중복/변경 충돌·EMPTY_TEST/환경 격리·ADMIN 조회·주기 타이머 조립·17경로/19연산 명세와 V11 보존을 검증했다. [Red/수정·최종 XML·355개 해시·공유 23개/57개 보존](settlement-pg-evidence-verification.md)을 따른다. LIVE 대사 일치의 입력은 단위 계약 픽스처이며 실제 LIVE 승인 수신·실명세나 월 요약 통합 검증으로 확대하지 않는다. 실제 제공사 조회/금융 동작·기존 런타임은 갱신하지 않았다.
+
+2026-11-02 G3 전액 환불 원장·월 합계 연결은 OCI 단위/아키텍처 77·통합/이행 43의 **120건**과 check·bootJar를 통과했다. 직접 PG 취소 GET·원배분 상계·OPEN/CLOSED 월·불변/롤백·중복/동시 마감·역순 DLT 원본 재처리·역할별 조회·12경로/13연산 명세·V10 보존을 확인했다. [Red/Green·최종 XML·321개 해시·공유 23개/57개 보존](settlement-refund-ledger-verification.md)을 따른다. 실제 PG 금융 동작·기존 런타임 갱신·비용 반환·자동 이월/송금/회수는 추가하지 않았다.
+
+2026-11-02 환불 월 선택 A는 OCI 단위/아키텍처 71·통합/이행 31의 **102건**과 check·bootJar를 통과했다. 확인 월 OPEN/CLOSED·지연·KST 경계·재처리 시 최초 선택 보존·근거 불일치와 실제 MySQL 잠금 상태의 Spring 정책 조립을 검증했다. [Red/Green·최종 XML·302개 소스 해시·23개 컨테이너/57개 볼륨 보존](settlement-refund-month-policy.md)을 따른다. 환불 이벤트 소비·원장 저장·월 합계 갱신은 후속 연결 단위다.
+
+2026-11-02 G3 환불 배분 계산 정책 A는 사용자 승인한 소스 7개를 OCI 격리 사본에 반영해 단위/아키텍처 62·통합/이행 30의 **92건**과 check·bootJar를 통과했다. 원래 정책/반올림의 전액 상계·경계/잘못된 결과 거절·실제 Spring 정책 빈과 원매출/월/Inbox 불변을 확인했다. [승인·Red/Green·최종 XML·297개 해시·23개 컨테이너/57개 볼륨 보존](settlement-refund-allocation-policy.md#verified-20261102)을 따른다. 환불 이벤트 소비·원장 저장·월 합계 반영과 실제 PG 금융 동작은 이번 계산 검증 범위에 포함하지 않았다.
+
+2026-10-31 G3 외부 부담 혜택 A·PortOne 원승인 읽기 연결은 최신 OCI 정산 단위/아키텍처 55·통합/이행 29의 **84건**과 check·bootJar를 통과했다. 실제 HTTP 어댑터·루프백 공급자와 실제 MySQL에서 총액/실결제/혜택 보존·주문 금액 배분·미확정 비용 마감·구매/채널/금액 거절·불변/롤백·V9 NULL 보존을 검증했다. [최종 XML·소스 해시·공유 23개/57개 보존과 범위](settlement-external-benefit-verification.md)를 따른다. 실제 제공사 거래·런타임은 갱신하지 않았다.
+
+2026-10-31 G3 책임 분리·PG 비용 독립 판매자 마감은 OCI에서 정산 단위/아키텍처 50·통합/이행 25의 **75건**과 check·bootJar를 통과했다. 비용 미확정/확정 0원·늦은 비용·동시 확인·원자 롤백·기존 자료 이행·명세·권한을 검증하고 공유 컨테이너 23개·볼륨 57개를 보존했다. [실행·실패 보정·최종 XML과 검증 경계](settlement-separation-verification.md)를 따른다. 실제 PortOne 정산·할인 배분·환불 조정과 전체 G3 완료는 별도다.
+
 [Order 전액 환불의 RED 테스트 목록](#order-full-refund-tdd)은 7절, [Order 전체 기능·권한의 단위 테스트](#order-module-tests)는 8절을 따른다.
 
 2026-10-29 Order·Payment는 공유 픽스처와 과거 DB 이행 검사 실행을 분리했다. 개발 반복의 `integrationTest`는 현재 스키마의 업무·경계를 검증하고, `migrationTest`가 과거 이행을 담당한다. 최종 `check`·`build`는 둘 다 실행한다. [적용 범위·명령·검증 기록](test-verification-optimization-plan.md#10-사용자-승인-후-적용--2026-10-29)을 따른다. 아래 과거 완료 건수는 당시 기록이며 현재 전체 건수와 구분한다.
@@ -957,3 +969,24 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 2026-10-29 장기 미확정 운영 조회·조사 기록 A안: 지연 경계·Gateway의 실제 Red 2건 뒤 구현했다. V26→V27 데이터 복사의 자동 생성 열 오류를 테스트 픽스처에서 정정하고 운영 코드는 유지했다. 최종 OCI full의 Payment 단위 304·통합 196 및 Gateway 단위 114·Redis 통합 1, 총 615건은 실패/오류/건너뜀 0이다. 새 HTTP/MySQL 13건이 경계/현재 금융 결과·이력/중복/명령 충돌·잠금 대기/실제 flush 롤백·별도 후속 시도·권한·데이터 보존/DB 제약을 확인한다. 기존 OpenAPI 5개 연산/12개 스키마 보존과 새 4개 연산, 공유 23개 컨테이너/57개 볼륨 보존·비밀값 포함 0을 대조했다. 원자료는 runs/refund-investigation-tdd-n8a8cbw0 및 runs/refund-investigation-oci-7k7xaibd/collected/results/full이다. 실제 런타임/PG/ADMIN 전체 흐름과 Order·License·공통 Kafka 재실행은 이번 범위가 아니다. [상세](pg-test-integration-plan.md#2026-10-29-장기-미확정-운영-조회와-조사-기록-a안).
 
 2026-10-29 같은 주문 재결제 A안: 도메인 Red 3건과 오래된 PENDING 응답의 승인 뒤 수집 예약 유실 Red 1건 뒤 구현했다. 최종 OCI `corrected` 전체 --rerun-tasks에서 Payment 단위 314·통합 209, Gateway 단위 116·Redis 통합 1, 총 640건이 실패/오류/건너뜀 0이다. 초기 웹훅 키·어댑터 문자열 치환·과거 마이그레이션 복사/공급자 전환 픽스처 오류와 선별/반복 XML은 업무 Red·최종 실행 수치에서 구분했다. 새 통합 13건은 같은 checkout·실패 뒤 성공·수집 장애/실제 flush 롤백·중복/동시/시도 ID 충돌·예약 유실 경합·권한/읽기 부작용·V28 보존/제약을 확인한다. 기존 OpenAPI 8개 경로·9개 연산·21개 스키마 보존, 소스 1,218개·비밀값 포함 0, 공유 컨테이너 23개/볼륨 57개와 상태 보존을 대조했다. 원자료는 runs/payment-attempts-tdd-k9a_v40h 및 runs/payment-attempts-oci-fdk5ugoo/collected/results/{schema-and-new,corrected-focus,full,red-history-race,corrected}다. 실제 PG 거래·기존 런타임 갱신·Order/License/공통 Kafka 재실행과 G1 전체 완료는 이번 범위가 아니다. [계약·검증 기록](pg-test-integration-plan.md#2026-10-29-같은-주문-재결제와-실패-시도-이력-a안)을 따른다.
+
+<a id="license-event-recovery-tdd"></a>
+
+## 지급·지급 확인의 기존 이벤트 복구 — P3 A
+
+2026-10-31 [결정 37](decisions.md#license-event-recovery)의 범위다. [운영 절차](license-event-recovery-runbook.md)에 따라 원인을 해결한 운영자가 기존 이벤트를 재처리하며, 조건부 자동 재투입·별도 지급 엔진·확인 이벤트 재생성의 기대값은 추가하지 않는다.
+
+| 경계 | 수용 조건과 검증 |
+|---|---|
+| DLT 발행 실패 | 비동기 send 실패는 recoverer 밖으로 전파하고 성공 계측을 하지 않는다. `DeadLetterPublisherTest`. |
+| DLT 재투입 실패·중단 | 재발행 미래 결과를 확인하기 전에는 성공으로 반환하거나 오프셋을 커밋하지 않는다. 중단 플래그를 보존한다. `DltOpsServiceTest`. |
+| 배치 경계 | 한 poll이 max보다 많이 가져와도 실제 재발행한 레코드의 파티션별 다음 오프셋만 커밋한다. 미처리 레코드를 건너뛰지 않는다. `DltOpsServiceTest`. |
+| 운영 소비자 | 업무 소비자의 latest/auto-commit 설정과 무관하게 earliest·auto-commit=false를 사용한다. 조회는 커밋하지 않는다. |
+| 실제 브로커 | 두 파티션 6건을 max=2로 나눠 운영 서비스 재생성 사이에도 모두 재투입한다. 일부 발행 성공 뒤 다른 발행이 실패하면 커서는 남고 다음 실행으로 모두 회수된다. 먼저 성공한 건의 중복을 숨기지 않는다. `DltReplayIntegrationTest`. |
+| DEAD 회수 | 실제 Order PAID/OrderPaid 또는 License 지급/LicenseGranted를 저장하고 발행 경계 실패로 DEAD에 도달한다. ADMIN HTTP 회수 뒤 실제 릴레이/Kafka로 같은 eventId·본문·키·생성 근거를 발행한다. 두 모듈의 `*RecoveryOpsIntegrationTest`. |
+| 운영 접근 | 명시적 활성화 때 ADMIN의 조회·재투입·건별 회수만 허용한다. MEMBER·익명과 Outbox 일괄 회수 경로는 차단한다. 기본 비활성 때 컨트롤러가 등록되지 않는다. 두 모듈의 `RecoveryOpsAccessTest`와 기존 License 통합 검사. |
+| 모듈 간 여정 | OCI의 실제 Auth/Gateway·Order·Payment·License·Download·Catalog와 전용 DB/Kafka에서 지급 전/지급 확인 전 DB 오류를 구분해 재현한다. 원래 이벤트의 운영 재투입 뒤 지급·확인·대기 중 환불의 실제 정지를 확인하고, 중복은 같은 licenseId·Inbox·정지 상태를 유지한다. PG 경계는 루프백 HTTP 계약 픽스처다. |
+
+관련 단위·아키텍처 → 집중 통합 → 변경 영향의 최종 check(통합·이행 포함) 순서로 `ssh sng`에서 수행한다. 실행 회차·JUnit XML·캐시/재사용·역할별 관측·자원 보존은 별도 결과 기록에 남기며, JUnit 사례와 여정 관측을 합산하지 않는다.
+
+2026-10-31 A 완료의 최신 성공 XML 합집합은 **1,951건**, 실패·오류·건너뜀 0건이다. 생성 전/형식 오류 DLT의 HTTP 400 후속 검사도 포함한다. 실제 지급·확인 DLT, 재시작·중복·환불 대기 연결과 검증 환경 보존은 [완료 기록](license-event-recovery-verification.md)을 따른다. 실제 PG 금융 동작 0건이며 JUnit과 역할별 관측을 합산하지 않았다.

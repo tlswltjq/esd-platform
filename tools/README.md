@@ -1,11 +1,12 @@
 # 개발·검증 도구
 
-저장소 루트에서 실행한다. 현재 검증 환경은 로컬 OrbStack이다.
+저장소 루트에서 실행한다. 코드·문서는 로컬에서 편집하고 빌드·테스트·서비스 실행은 `ssh sng` OCI의 격리 환경에서 수행한다.
 
 | 디렉터리 | 용도 |
 |---|---|
 | [verification](verification/README.md) | 모듈별 격리 검증, Jib 전체 흐름, Compose 상태 검사 |
 | [observability](observability/README.md) | Outbox·컨슈머·브로커 랙·알람의 읽기 전용 수집 |
+| [operations/license-recovery.sql](operations/license-recovery.sql) | [운영 재처리 절차](../docs/license-event-recovery-runbook.md)의 주문·지급·확인 읽기 전용 대조 |
 | [db-lab](db-lab/README.md) | 격리 MySQL의 락·동시성 학습 실험 |
 | [migrations](migrations/README.md) | 버전을 지정한 기존 자료 전환·사전 점검 |
 | [image-benchmark](image-benchmark/README.md) | 고정 과거 revision의 이미지 비교 재현 |
