@@ -50,6 +50,7 @@
 | [유스케이스 작성 규칙](use-case-conventions.md) | SRP에 따른 책임 분리, 동사형 클래스·메서드 이름, 트랜잭션 유지 기준 |
 | [adapter 패키지 변경·완료 기록](adapter-package-rename-plan.md) | 기존 구조 유지·ArchUnit 경계 전환·단위 965건·통합 101건·실제 15단계 OrbStack 검증 |
 | [업무 코드 경계 점검](core-boundary-audit.md) | 이벤트 입력·Inbox·검증 책임 분석과 전역 설정 바인딩 경계 개선 |
+| [아키텍처 검사 정밀도·적용 범위 점검](architecture-test-audit-20261102.md) | 작업별 선행 커밋, OCI 기준선 477건, 과도한 제약 3유형·검사 공백 8유형과 권장 수정 순서 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임, 의존성과 실행 환경 |
 | [Studio 단순화 계획·완료 기록](studio-simplification-plan.md) | Project 중심의 전체 빌드 업로드·심사 및 출시 요청·재요청 범위와 완료·검증 기록 |
 | [Review 개선 계획·완료 기록](review-simplification-plan.md) | 단일 스냅샷 심사·빌드 열람·승인 및 반려·결과 이벤트의 범위와 완료·검증 기록 |
