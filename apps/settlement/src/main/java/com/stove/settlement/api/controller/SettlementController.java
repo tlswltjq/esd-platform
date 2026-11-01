@@ -3,6 +3,10 @@ package com.stove.settlement.api.controller;
 import com.stove.common.web.response.ApiResponse;
 import com.stove.settlement.api.controller.dto.AdminMonthResponse;
 import com.stove.settlement.api.controller.dto.AdminSaleResponse;
+import com.stove.settlement.api.controller.dto.AdminRefundResponse;
+import com.stove.settlement.api.controller.dto.AdminRefundSummaryResponse;
+import com.stove.settlement.api.controller.dto.RefundResponse;
+import com.stove.settlement.core.service.ReadRefunds;
 import com.stove.settlement.api.controller.dto.MonthResponse;
 import com.stove.settlement.api.controller.dto.PgReceiptResponse;
 import com.stove.settlement.api.controller.dto.PgTransactionResponse;
@@ -39,6 +43,20 @@ public class SettlementController {
     private final ReadPgReceipts receipts;
     private final ReadPgFinancials financials;
     private final SynchronizePgTransaction refresh;
+    private final ReadRefunds refunds;
+
+    @GetMapping("/me/refunds")
+    public ApiResponse<SettlementPage<RefundResponse>> myRefunds(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(refunds.execute(new SettlementQuery(jwt.getSubject(),month,page,size)).map(RefundResponse::from)));
+    }
+    @GetMapping("/refunds")
+    public ApiResponse<SettlementPage<AdminRefundSummaryResponse>> refunds(@RequestParam(required=false) String sellerSubject,
+            @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(SettlementPage.from(refunds.execute(new SettlementQuery(sellerSubject,month,page,size)).map(AdminRefundSummaryResponse::from)));
+    }
+    @GetMapping("/refunds/{refundId}")
+    public ApiResponse<AdminRefundResponse> refund(@PathVariable String refundId) { return ApiResponse.ok(AdminRefundResponse.from(refunds.execute(refundId))); }
 
     @GetMapping("/me/sales")
     public ApiResponse<SettlementPage<SaleResponse>> mySales(@AuthenticationPrincipal Jwt jwt,

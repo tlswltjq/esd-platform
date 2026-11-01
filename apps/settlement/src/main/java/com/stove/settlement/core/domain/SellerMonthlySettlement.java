@@ -22,6 +22,10 @@ public class SellerMonthlySettlement {
     private long platformFeeAmount;
     private long sellerPayoutAmount;
     private long recordCount;
+    private long refundAmount;
+    private long refundedPlatformFeeAmount;
+    private long refundedSellerPayoutAmount;
+    private long refundCount;
     @Column(nullable=false,updatable=false) private Instant createdAt;
     @Column(nullable=false) private Instant updatedAt;
     private Instant closedAt;
@@ -37,6 +41,16 @@ public class SellerMonthlySettlement {
         return new SettlementTotals(paidAmount,platformFeeAmount,sellerPayoutAmount,recordCount);
     }
     public boolean isClosed() { return "CLOSED".equals(status); }
+    public SettlementTotals refundTotals() { return new SettlementTotals(refundAmount, refundedPlatformFeeAmount, refundedSellerPayoutAmount, refundCount); }
+    public long getNetPaidAmount() { return Math.subtractExact(paidAmount, refundAmount); }
+    public long getNetPlatformFeeAmount() { return Math.subtractExact(platformFeeAmount, refundedPlatformFeeAmount); }
+    public long getNetSellerPayoutAmount() { return Math.subtractExact(sellerPayoutAmount, refundedSellerPayoutAmount); }
+    public void addRefund(SettlementTotals refund, Instant now) {
+        SettlementValues.consistent(!isClosed(), "마감한 월에는 환불을 반영할 수 없습니다.");
+        SettlementTotals sum = refundTotals().plus(refund);
+        refundAmount=sum.paidAmount(); refundedPlatformFeeAmount=sum.platformFeeAmount();
+        refundedSellerPayoutAmount=sum.sellerPayoutAmount(); refundCount=sum.recordCount(); updatedAt=now;
+    }
     public void add(SettlementTotals sale,Instant now) {
         SettlementValues.consistent(!isClosed(),"마감한 월에는 매출을 반영할 수 없습니다.");
         SettlementTotals sum=totals().plus(sale);
@@ -44,8 +58,11 @@ public class SellerMonthlySettlement {
         recordCount=sum.recordCount(); updatedAt=now;
     }
     public void close(SettlementTotals actual,Instant now) {
+        close(actual, SettlementTotals.empty(), now);
+    }
+    public void close(SettlementTotals actual, SettlementTotals actualRefunds, Instant now) {
         if(isClosed()) return;
-        SettlementValues.consistent(totals().equals(actual),"원장과 월 합계가 다릅니다.");
+        SettlementValues.consistent(totals().equals(actual) && refundTotals().equals(actualRefunds),"원장과 월 합계가 다릅니다.");
         status="CLOSED"; closedAt=now; updatedAt=now;
     }
 }

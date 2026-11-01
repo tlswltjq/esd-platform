@@ -25,7 +25,64 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "salePgFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "sellerSubject" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "AdminRefundResponse" : {
+        "properties" : {
+          "cancellations" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PgRefundCancellation"
+            },
+            "type" : "array"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "source" : {
+            "$ref" : "#/components/schemas/ConfirmedRefund"
+          },
+          "summary" : {
+            "$ref" : "#/components/schemas/AdminRefundSummaryResponse"
+          },
+          "supplierCancelledAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "AdminRefundSummaryResponse" : {
+        "properties" : {
+          "allocationPolicyId" : {
+            "type" : "string"
+          },
+          "eventId" : {
+            "type" : "string"
+          },
+          "monthPolicyId" : {
+            "type" : "string"
+          },
+          "originalPlatformPolicyId" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "refund" : {
+            "$ref" : "#/components/schemas/RefundResponse"
+          },
+          "sellerSubject" : {
+            "type" : "string"
+          },
+          "source" : {
             "type" : "string"
           }
         },
@@ -82,6 +139,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseAdminRefundResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/AdminRefundResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePgReceiptResponse" : {
         "properties" : {
           "data" : {
@@ -114,6 +185,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/SettlementPageAdminMonthResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseSettlementPageAdminRefundSummaryResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SettlementPageAdminRefundSummaryResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -166,6 +251,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseSettlementPageRefundResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SettlementPageRefundResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseSettlementPageSaleResponse" : {
         "properties" : {
           "data" : {
@@ -176,6 +275,55 @@
           },
           "success" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ConfirmedRefund" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "attemptId" : {
+            "type" : "string"
+          },
+          "buyerSubject" : {
+            "type" : "string"
+          },
+          "cancellationIds" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "eventId" : {
+            "type" : "string"
+          },
+          "occurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "providerTransactionId" : {
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "requestEventId" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -211,6 +359,18 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "netPaidAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "netPlatformFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "netSellerPayoutAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "paidAmount" : {
             "format" : "int64",
             "type" : "integer"
@@ -220,6 +380,22 @@
             "type" : "integer"
           },
           "recordCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundedPlatformFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundedSellerPayoutAmount" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -416,6 +592,25 @@
         },
         "type" : "object"
       },
+      "PgRefundCancellation" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "cancellationId" : {
+            "type" : "string"
+          },
+          "cancelledAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PgSettlement" : {
         "properties" : {
           "currency" : {
@@ -509,6 +704,63 @@
         },
         "type" : "object"
       },
+      "RefundResponse" : {
+        "properties" : {
+          "amountDelta" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "confirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "monthReason" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "platformFeeAmountDelta" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "productId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "refundMonth" : {
+            "type" : "string"
+          },
+          "sellerPayoutAmountDelta" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "settlementMonth" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "SaleResponse" : {
         "properties" : {
           "amount" : {
@@ -565,6 +817,33 @@
           "content" : {
             "items" : {
               "$ref" : "#/components/schemas/AdminMonthResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SettlementPageAdminRefundSummaryResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminRefundSummaryResponse"
             },
             "type" : "array"
           },
@@ -646,6 +925,33 @@
           "content" : {
             "items" : {
               "$ref" : "#/components/schemas/PgReceiptResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SettlementPageRefundResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundResponse"
             },
             "type" : "array"
           },
@@ -757,6 +1063,50 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponseSettlementPageMonthResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/me/refunds" : {
+      "get" : {
+        "operationId" : "myRefunds",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSettlementPageRefundResponse"
                 }
               }
             },
@@ -1000,6 +1350,83 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponsePgTransactionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/refunds" : {
+      "get" : {
+        "operationId" : "refunds",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "sellerSubject",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSettlementPageAdminRefundSummaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/refunds/{refundId}" : {
+      "get" : {
+        "operationId" : "refund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "refundId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAdminRefundResponse"
                 }
               }
             },

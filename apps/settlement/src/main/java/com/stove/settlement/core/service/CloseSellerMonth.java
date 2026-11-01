@@ -8,6 +8,8 @@ import com.stove.settlement.core.domain.SettlementMonth;
 import com.stove.settlement.core.domain.SettlementSale;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.domain.SettlementTotals;
+import com.stove.settlement.core.domain.SettlementRefund;
+import com.stove.settlement.core.domain.SettlementRefundRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -21,9 +23,10 @@ public class CloseSellerMonth {
     private final SellerMonthlySettlementRepository months;
     private final SettlementSaleRepository sales;
     private final Clock clock;
+    private final SettlementRefundRepository refunds;
     private final TransactionTemplate transaction;
-    public CloseSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions) {
-        this.months=months; this.sales=sales; this.clock=clock;
+    public CloseSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,SettlementRefundRepository refunds) {
+        this.months=months; this.sales=sales; this.clock=clock; this.refunds=refunds;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public SellerMonthlySettlement execute(String seller,String month) {
@@ -42,6 +45,8 @@ public class CloseSellerMonth {
         if(bucket.isClosed()) return bucket;
         SettlementTotals total=SettlementTotals.empty();
         for(SettlementSale sale:sales.findAllBySellerSubjectAndSettlementMonth(seller,month)) total=total.plus(sale.totals());
-        bucket.close(total,now); months.flush(); return bucket;
+        SettlementTotals reversed=SettlementTotals.empty();
+        for(SettlementRefund refund:refunds.findAllBySellerSubjectAndSettlementMonth(seller,month)) reversed=reversed.plus(refund.totals());
+        bucket.close(total,reversed,now); months.flush(); return bucket;
     }
 }

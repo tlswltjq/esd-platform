@@ -4,9 +4,13 @@ import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import java.time.Instant;
 
 public record MonthResponse(String settlementMonth,String status,long paidAmount,long platformFeeAmount,
-        long sellerPayoutAmount,long recordCount,Instant closedAt) {
+        long sellerPayoutAmount,long recordCount,Instant closedAt,
+        long refundAmount,long refundedPlatformFeeAmount,long refundedSellerPayoutAmount,long refundCount,
+        long netPaidAmount,long netPlatformFeeAmount,long netSellerPayoutAmount) {
     public static MonthResponse from(SellerMonthlySettlement month) {
         return new MonthResponse(month.getSettlementMonth(),month.getStatus(),month.getPaidAmount(),month.getPlatformFeeAmount(),
-                month.getSellerPayoutAmount(),month.getRecordCount(),month.getClosedAt());
+                month.getSellerPayoutAmount(),month.getRecordCount(),month.getClosedAt(),month.getRefundAmount(),
+                month.getRefundedPlatformFeeAmount(),month.getRefundedSellerPayoutAmount(),month.getRefundCount(),
+                month.getNetPaidAmount(),month.getNetPlatformFeeAmount(),month.getNetSellerPayoutAmount());
     }
 }

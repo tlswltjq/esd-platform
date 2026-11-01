@@ -13,10 +13,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
+import com.stove.settlement.core.domain.ConfirmedRefund;
 import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.service.CloseSellerMonth;
 import com.stove.settlement.core.service.RecordPaidSale;
+import com.stove.settlement.core.service.RecordConfirmedRefund;
 import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
@@ -25,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -92,6 +95,7 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
     }
 
     @Autowired RecordPaidSale record;
+    @Autowired RecordConfirmedRefund refunds;
     @Autowired CloseSellerMonth close;
     @Autowired SynchronizePgTransaction synchronize;
     @Autowired JdbcTemplate jdbc;
@@ -101,7 +105,7 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
     @LocalServerPort int port;
 
     @BeforeEach void clean() {
-        for (String table : List.of("pg_receipt_item", "pg_receipt", "settlement_sale", "seller_monthly_settlement",
+        for (String table : List.of("settlement_refund_cancellation","settlement_refund","pg_receipt_item", "pg_receipt", "settlement_sale", "seller_monthly_settlement",
                 "settlement_pg_fee", "settlement_pg_transaction", "processed_event")) jdbc.update("DELETE FROM " + table);
         PG_GETS.set(0); CONTRACT_ERRORS.set(0); HTTP_STATUS.set(200); RESPONSE.set("{}");
         when(clock.instant()).thenReturn(NOW);
@@ -120,6 +124,78 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
         body.putObject("channel").put("type", "TEST").put("key", "channel-test").put("pgProvider", "TOSSPAY_V2");
         body.putObject("amount").put("total", 9000).put("paid", 8976).put("discount", 24).put("cancelled", 0);
         return body;
+    }
+    ConfirmedRefund confirmation(PaidOrder input) {
+        return new ConfirmedRefund(id(), NOW.minusSeconds(2), id(), id(), id(), input.orderNo(), input.paymentId(),
+                input.buyerSubject(), input.amount(), input.currency(), "PG_QUERY_UNATTRIBUTED", "pg-" + input.paymentId(), List.of(id()));
+    }
+    ObjectNode cancelled(PaidOrder input, ConfirmedRefund confirmation) {
+        ObjectNode body = approved(input).put("status", "CANCELLED").put("cancelledAt", confirmation.occurredAt().minusSeconds(1).toString());
+        ((ObjectNode) body.path("amount")).put("cancelled", input.amount());
+        body.putArray("cancellations").addObject().put("id", confirmation.cancellationIds().getFirst())
+                .put("status", "SUCCEEDED").put("totalAmount", input.amount()).putNull("cancelledAt");
+        return body;
+    }
+    @Test void independentlyReadCancellationReversesOriginalFundingAndPreservesTheClosedSaleMonth() {
+        PaidOrder input = order(); RESPONSE.set(approved(input).toString()); record.execute(input); close.execute("usr_seller", "2026-09");
+        Map<String, Object> sale = jdbc.queryForMap("SELECT * FROM settlement_sale");
+        Map<String, Object> closed = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        Map<String, Object> funding = jdbc.queryForMap("SELECT * FROM settlement_pg_transaction");
+        ConfirmedRefund confirmation = confirmation(input); RESPONSE.set(cancelled(input, confirmation).toString());
+        long firstId = refunds.execute(confirmation).getId();
+        assertThat(PG_GETS.get()).isEqualTo(2);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_sale")).isEqualTo(sale);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_transaction")).isEqualTo(funding);
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-09'")).isEqualTo(closed);
+        assertThat(jdbc.queryForMap("SELECT amount,platform_fee_amount,seller_payout_amount,settlement_month FROM settlement_refund"))
+                .containsEntry("amount", 9000L).containsEntry("platform_fee_amount", 900L).containsEntry("seller_payout_amount", 8100L)
+                .containsEntry("settlement_month", "2026-10");
+        assertThat(jdbc.queryForMap("SELECT provider,cancelled_amount,cancelled_at FROM settlement_refund_cancellation"))
+                .containsEntry("provider", "PORTONE_TEST").containsEntry("cancelled_amount", 9000L).containsEntry("cancelled_at", null);
+        assertThat(jdbc.queryForObject("SELECT seller_payout_amount-refunded_seller_payout_amount FROM seller_monthly_settlement WHERE settlement_month='2026-10'", Long.class)).isEqualTo(-8100);
+        JsonNode finance = http("GET", "/api/v1/settlements/months?month=2026-10", "ADMIN").body().path("data").path("content").get(0);
+        assertThat(finance.path("pgCostStatus").asText()).isEqualTo("UNCONFIRMED");
+        assertThat(finance.path("pgFeeAmount").isNull()).isTrue(); assertThat(finance.path("platformNetAmount").isNull()).isTrue();
+        assertThat(count("settlement_pg_fee")).isZero();
+        HTTP_STATUS.set(503); assertThat(refunds.execute(confirmation).getId()).isEqualTo(firstId);
+        assertThat(PG_GETS.get()).isEqualTo(2); assertThat(count("settlement_refund")).isEqualTo(1);
+    }
+
+    @Test void delayedOriginalSaleCanBeRecoveredFromAFullyCancelledApprovalBeforeRefundPosting() {
+        PaidOrder input = order(); ConfirmedRefund confirmation = confirmation(input); RESPONSE.set(cancelled(input, confirmation).toString());
+        assertThatThrownBy(() -> refunds.execute(confirmation)).isInstanceOf(BusinessException.class);
+        assertThat(PG_GETS.get()).isZero(); noAllocation();
+        record.execute(input); refunds.execute(confirmation);
+        assertThat(PG_GETS.get()).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT SUM(paid_amount-refund_amount) FROM seller_monthly_settlement", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT SUM(seller_payout_amount-refunded_seller_payout_amount) FROM seller_monthly_settlement", Long.class)).isZero();
+        assertThat(count("settlement_refund")).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(2);
+    }
+
+    @Test void unverifiedOrIncompleteCancellationsCannotChangeRefundLedgerMonthOrInbox() {
+        PaidOrder input = order(); RESPONSE.set(approved(input).toString()); record.execute(input);
+        ConfirmedRefund confirmation = confirmation(input); ObjectNode good = cancelled(input, confirmation);
+        Map<String, Object> month = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        List<ObjectNode> invalid = new ArrayList<>();
+        invalid.add(good.deepCopy().put("status", "PARTIAL_CANCELLED"));
+        invalid.add(good.deepCopy().put("pgTxId", "other"));
+        invalid.add(good.deepCopy().put("cancelledAt", "invalid"));
+        ObjectNode wrongId = good.deepCopy(); ((ObjectNode) wrongId.path("cancellations").get(0)).put("id", id()); invalid.add(wrongId);
+        ObjectNode pending = good.deepCopy(); ((ObjectNode) pending.path("cancellations").get(0)).put("status", "REQUESTED"); invalid.add(pending);
+        ObjectNode partial = good.deepCopy(); ((ObjectNode) partial.path("cancellations").get(0)).put("totalAmount", 8999); invalid.add(partial);
+        ObjectNode textAmount = good.deepCopy(); ((ObjectNode) textAmount.path("amount")).put("cancelled", "9000"); invalid.add(textAmount);
+        ObjectNode funding = good.deepCopy(); ((ObjectNode) funding.path("amount")).put("paid", 8975).put("discount", 25); invalid.add(funding);
+        ObjectNode duplicate = good.deepCopy(); duplicate.withArray("cancellations").add(duplicate.path("cancellations").get(0).deepCopy()); invalid.add(duplicate);
+        for (ObjectNode bad : invalid) {
+            RESPONSE.set(bad.toString()); assertThatThrownBy(() -> refunds.execute(confirmation)).isInstanceOf(BusinessException.class);
+            assertThat(count("settlement_refund")).isZero(); assertThat(count("settlement_refund_cancellation")).isZero();
+            assertThat(count("processed_event")).isEqualTo(1);
+            assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(month);
+        }
+        HTTP_STATUS.set(503); RESPONSE.set(good.toString());
+        assertThatThrownBy(() -> refunds.execute(confirmation)).isInstanceOf(BusinessException.class);
+        assertThat(count("settlement_refund")).isZero(); assertThat(count("processed_event")).isEqualTo(1);
+        HTTP_STATUS.set(200); refunds.execute(confirmation); assertThat(count("settlement_refund")).isEqualTo(1);
     }
     int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class); }
     record Reply(int status, JsonNode body) { }

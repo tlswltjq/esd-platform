@@ -5,9 +5,13 @@ import static com.stove.settlement.SettlementFixtures.id;
 import static com.stove.settlement.SettlementFixtures.order;
 import static com.stove.settlement.SettlementFixtures.payment;
 import static com.stove.settlement.SettlementFixtures.report;
+import static com.stove.settlement.SettlementRefundFixtures.confirmation;
+import static com.stove.settlement.SettlementRefundFixtures.proof;
+import static com.stove.settlement.SettlementRefundFixtures.event;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -19,10 +23,19 @@ import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.api.listener.SettlementOrderMapper;
+import com.stove.settlement.api.listener.SettlementRefundMapper;
+import com.stove.settlement.core.domain.ConfirmedRefund;
+import com.stove.settlement.core.domain.PgRefund;
+import com.stove.settlement.core.domain.PgRefundCancellation;
+import com.stove.settlement.core.domain.SettlementRefund;
+import com.stove.settlement.core.port.PgRefunds;
+import com.stove.settlement.core.service.RecordConfirmedRefund;
 import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
 import com.stove.settlement.core.domain.RefundAllocation;
@@ -64,8 +77,11 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,6 +99,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired RecordPaidSale record;
+    @Autowired RecordConfirmedRefund recordRefund;
     @Autowired FullRefundAllocationPolicy fullRefundAllocationPolicy;
     @Autowired RefundSettlementMonthPolicy refundSettlementMonthPolicy;
     @Autowired SynchronizePgTransaction synchronize;
@@ -98,11 +115,119 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired KafkaListenerEndpointRegistry listeners;
     @MockitoBean PgPayments pgPayments;
     @MockitoBean PgSettlements pgSettlements;
+    @MockitoBean PgRefunds pgRefunds;
     @MockitoBean CatalogOwners owners;
     @MockitoBean Clock clock;
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
     private final Map<String,PgPayment> provider=new ConcurrentHashMap<String,PgPayment>();
+    private final Map<String,PgRefund> refundProvider=new ConcurrentHashMap<>();
+
+    ConfirmedRefund prepareRefund(PaidOrder input) {
+        PgPayment payment=provider.get(input.paymentId());ConfirmedRefund confirmed=confirmation(input,payment);
+        refundProvider.put(confirmed.refundId(),proof(payment,confirmed));return confirmed;
+    }
+    @Test void aConfirmedRefundIsAtomicAndVisibleInCreatorAndAdministratorQueries() {
+        PaidOrder input=order();SettlementSale original=sale(input);ConfirmedRefund confirmed=prepareRefund(input);
+        Map<String,Object> originalRow=jdbc.queryForMap("SELECT * FROM settlement_sale");
+        SettlementRefund refund=recordRefund.execute(confirmed);
+        assertThat(refund.getOrderNo()).isEqualTo(original.getOrderNo());
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_sale")).isEqualTo(originalRow);
+        assertThat(count("settlement_refund")).isEqualTo(1);assertThat(count("settlement_refund_cancellation")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT refund_count FROM seller_monthly_settlement",Long.class)).isEqualTo(1);
+        JsonNode month=http("GET","/api/v1/settlements/me/months",token("usr_seller","CREATOR"),null).body().path("data").path("content").get(0);
+        assertThat(month.path("paidAmount").asLong()).isEqualTo(10000);assertThat(month.path("refundAmount").asLong()).isEqualTo(10000);
+        assertThat(month.path("netSellerPayoutAmount").asLong()).isZero();
+        Reply mine=http("GET","/api/v1/settlements/me/refunds",token("usr_seller","CREATOR"),null);
+        assertThat(mine.status()).isEqualTo(200);assertThat(mine.body().toString()).doesNotContain("buyerSubject","cancellationIds","attemptId","paymentId");
+        assertThat(mine.body().path("data").path("content").get(0).path("sellerPayoutAmountDelta").asLong()).isEqualTo(-9000);
+        assertThat(http("GET","/api/v1/settlements/me/refunds",token("usr_other","CREATOR"),null).body().path("data").path("totalElements").asLong()).isZero();
+        String detail="/api/v1/settlements/refunds/"+confirmed.refundId();String admin=token("usr_admin","ADMIN");
+        assertThat(http("GET",detail,admin,null).body().path("data").path("source").path("cancellationIds").size()).isEqualTo(1);
+        assertThat(http("GET",detail,token("usr_seller","CREATOR"),null).status()).isEqualTo(403);
+        assertThat(http("GET",detail,null,null).status()).isEqualTo(401);
+        assertThat(http("GET","/api/v1/settlements/refunds/"+id(),admin,null).status()).isEqualTo(404);
+        assertThat(http("GET","/api/v1/settlements/refunds/bad",admin,null).status()).isEqualTo(400);
+        assertThat(http("GET","/api/v1/settlements/me/refunds?size=0",token("usr_seller","CREATOR"),null).status()).isEqualTo(400);
+        JsonNode finance=http("GET","/api/v1/settlements/months",admin,null).body().path("data").path("content").get(0);
+        assertThat(finance.path("pgCostStatus").asText()).isEqualTo("PARTIAL");
+        assertThat(finance.path("salePgFeeAmount").asLong()).isEqualTo(300);
+        assertThat(finance.path("pgFeeAmount").isNull()).isTrue();assertThat(finance.path("platformNetAmount").isNull()).isTrue();
+    }
+    @Test void refundAfterSaleMonthCloseUsesConfirmationMonthAndDuplicatesKeepTheFirstMonth() {
+        PaidOrder input=order(Instant.parse("2026-09-01T00:00:00Z"));sale(input);close.execute("usr_seller","2026-09");
+        Map<String,Object> closedSeptember=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-09'");
+        ConfirmedRefund confirmed=prepareRefund(input);SettlementRefund first=recordRefund.execute(confirmed);
+        assertThat(first.getSettlementMonth()).isEqualTo("2026-10");
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-09'")).isEqualTo(closedSeptember);
+        assertThat(jdbc.queryForObject("SELECT seller_payout_amount-refunded_seller_payout_amount FROM seller_monthly_settlement WHERE settlement_month='2026-10'",Long.class)).isEqualTo(-9000);
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-02T00:00:00Z"));
+        SellerMonthlySettlement october=close.execute("usr_seller","2026-10");assertThat(october.getNetSellerPayoutAmount()).isEqualTo(-9000);
+        Map<String,Object> closedOctober=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-10'");
+        when(pgRefunds.require(any(PgPayment.class),any(ConfirmedRefund.class))).thenThrow(new IllegalStateException("PG unavailable after posting"));
+        assertThat(recordRefund.execute(confirmed).getId()).isEqualTo(first.getId());
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-10'")).isEqualTo(closedOctober);
+        assertThat(count("seller_monthly_settlement")).isEqualTo(2);
+    }
+    @Test void delayedRefundUsesTheStillOpenConfirmationMonth() { delayedRefund(false); }
+    @Test void delayedRefundUsesTheCurrentMonthAfterConfirmationMonthClosed() { delayedRefund(true); }
+    void delayedRefund(boolean closed) {
+        PaidOrder input=order(Instant.parse("2026-09-01T00:00:00Z"));sale(input);ConfirmedRefund fresh=prepareRefund(input);
+        if(closed) close.execute("usr_seller","2026-09");
+        ConfirmedRefund delayed=new ConfirmedRefund(fresh.eventId(),Instant.parse("2026-09-29T00:00:00Z"),fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),
+                fresh.orderNo(),fresh.paymentId(),fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),fresh.cancellationIds());
+        refundProvider.put(delayed.refundId(),proof(provider.get(input.paymentId()),delayed));
+        SettlementRefund refund=recordRefund.execute(delayed);
+        assertThat(refund.getRefundMonth()).isEqualTo("2026-09");assertThat(refund.getSettlementMonth()).isEqualTo(closed?"2026-10":"2026-09");
+    }
+    @Test void concurrentRefundDeliveriesPostOneReversal() throws Exception {
+        PaidOrder input=order();sale(input);ConfirmedRefund confirmed=prepareRefund(input);
+        try(ExecutorService pool=Executors.newFixedThreadPool(4)) {
+            List<Future<?>> calls=new ArrayList<>();CountDownLatch start=new CountDownLatch(1);
+            for(int i=0;i<4;i++) calls.add(pool.submit(() -> {start.await();return recordRefund.execute(confirmed);}));
+            start.countDown();for(Future<?> call:calls) call.get(30,TimeUnit.SECONDS);
+        }
+        assertThat(count("settlement_refund")).isEqualTo(1);assertThat(jdbc.queryForObject("SELECT refund_count FROM seller_monthly_settlement",Long.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT refunded_seller_payout_amount FROM seller_monthly_settlement",Long.class)).isEqualTo(9000);
+    }
+    @Test void refundRacingWithCloseChoosesOneConsistentMonth() throws Exception {
+        PaidOrder input=order(Instant.parse("2026-09-01T00:00:00Z"));sale(input);ConfirmedRefund fresh=prepareRefund(input);
+        ConfirmedRefund confirmed=new ConfirmedRefund(fresh.eventId(),Instant.parse("2026-09-29T00:00:00Z"),fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),
+                fresh.orderNo(),fresh.paymentId(),fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),fresh.cancellationIds());
+        refundProvider.put(confirmed.refundId(),proof(provider.get(input.paymentId()),confirmed));
+        try(ExecutorService pool=Executors.newFixedThreadPool(2)) {
+            Future<?> a=pool.submit(() -> close.execute("usr_seller","2026-09"));Future<?> b=pool.submit(() -> recordRefund.execute(confirmed));
+            a.get(30,TimeUnit.SECONDS);b.get(30,TimeUnit.SECONDS);
+        }
+        assertThat(count("settlement_refund")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT SUM(seller_payout_amount-refunded_seller_payout_amount) FROM seller_monthly_settlement",Long.class)).isZero();
+        SellerMonthlySettlement closed=close.execute("usr_seller","2026-09");
+        long actual=jdbc.queryForObject("SELECT COALESCE(SUM(seller_payout_amount),0) FROM settlement_refund WHERE settlement_month='2026-09'",Long.class);
+        assertThat(closed.getRefundedSellerPayoutAmount()).isEqualTo(actual);
+    }
+    @Test void supplierMismatchAndRollbackCannotLeaveHalfAPosting() {
+        PaidOrder input=order();sale(input);ConfirmedRefund confirmed=prepareRefund(input);
+        PgPayment payment=provider.get(input.paymentId());
+        refundProvider.put(confirmed.refundId(),new PgRefund(payment,List.of(new PgRefundCancellation("SIMULATED",id(),10000,NOW)),NOW));
+        assertThatThrownBy(() -> recordRefund.execute(confirmed)).isInstanceOf(BusinessException.class);
+        assertThat(count("settlement_refund")).isZero();
+        refundProvider.put(confirmed.refundId(),proof(payment,confirmed));
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> doAnswer(call -> {call.callRealMethod();throw new IllegalStateException("after refund inbox");})
+                .when(guard).firstDelivery(anyString(),anyString(),anyString()));
+        assertThatThrownBy(() -> recordRefund.execute(confirmed)).isInstanceOf(IllegalStateException.class);
+        assertThat(count("settlement_refund")).isZero();assertThat(count("settlement_refund_cancellation")).isZero();
+        assertThat(jdbc.queryForObject("SELECT refund_amount FROM seller_monthly_settlement",Long.class)).isZero();
+        assertThat(count("processed_event")).isEqualTo(1);
+    }
+    @Test void reusedCancellationCannotReverseAnotherOrder() {
+        PaidOrder first=order();sale(first);ConfirmedRefund confirmed=prepareRefund(first);recordRefund.execute(confirmed);
+        PaidOrder second=order();sale(second);ConfirmedRefund fresh=prepareRefund(second);
+        ConfirmedRefund reused=new ConfirmedRefund(fresh.eventId(),fresh.occurredAt(),fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),fresh.orderNo(),fresh.paymentId(),
+                fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),confirmed.cancellationIds());
+        refundProvider.put(reused.refundId(),proof(provider.get(second.paymentId()),reused));
+        assertThatThrownBy(() -> recordRefund.execute(reused)).isInstanceOf(BusinessException.class);
+        assertThat(count("settlement_refund")).isEqualTo(1);assertThat(jdbc.queryForObject("SELECT refund_count FROM seller_monthly_settlement",Long.class)).isEqualTo(1);
+    }
 
     @Test void configuredRefundMonthPolicyUsesLockedStatesWithoutChangingTheClosedLedger() {
         SettlementSale original = sale(order(Instant.parse("2026-09-01T00:00:00Z")));
@@ -140,9 +265,14 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
-        for(String table:List.of("pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
+        for(String table:List.of("settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
             jdbc.update("DELETE FROM "+table);
         provider.clear(); when(clock.instant()).thenReturn(NOW);
+        refundProvider.clear();
+        when(pgRefunds.require(any(PgPayment.class),any(ConfirmedRefund.class))).thenAnswer(call -> {
+            PgRefund refund=refundProvider.get(call.getArgument(1,ConfirmedRefund.class).refundId());
+            if(refund==null) throw new IllegalStateException("PG refund fixture unavailable");return refund;
+        });
         when(pgPayments.require(anyString())).thenAnswer(call -> {
             PgPayment payment=provider.get(call.getArgument(0,String.class));
             if(payment==null) throw new IllegalStateException("PG fixture unavailable");
@@ -331,6 +461,44 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
                 token("s","CREATOR",ISSUER,"esd-api",Instant.now().minusSeconds(300)),creator.substring(0,creator.length()-10)+"invalid-signature"))
             assertThat(http("GET","/api/v1/settlements/me/sales",invalid,null).status()).isEqualTo(401);
     }
+    @Test void refundBeforeOriginalSaleGoesToDltAndOriginalReplayPostsOnceDespiteLateExecutionEnrichment() throws Exception {
+        PaidOrder input=order(); prepare(input); ConfirmedRefund confirmation=prepareRefund(input);
+        RefundPaymentConfirmedEvent financial=event(confirmation);
+        Map<String,Object> configuration=new HashMap<>();
+        configuration.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
+        configuration.put("group.id","settlement-refund-dlt-"+id()); configuration.put("auto.offset.reset","earliest");
+        configuration.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
+        configuration.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
+        try(KafkaConsumer<String,String> consumer=new KafkaConsumer<>(configuration);
+                AdminClient admin=AdminClient.create(Map.of("bootstrap.servers",configuration.get("bootstrap.servers")))) {
+            consumer.subscribe(List.of(Topics.PAYMENT+".DLT")); listeners.start(); sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
+            boolean found=false; long deadline=System.nanoTime()+Duration.ofSeconds(35).toNanos();
+            while(!found && System.nanoTime()<deadline) for(ConsumerRecord<String,String> failure:consumer.poll(Duration.ofMillis(300)))
+                if(failure.value().contains(financial.eventId())) found=true;
+            assertThat(found).isTrue(); assertThat(count("settlement_refund")).isZero(); assertThat(count("processed_event")).isZero();
+            record.execute(input);
+            sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_refund")).isEqualTo(1));
+            sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
+            RefundExecutionSucceededEvent late=new RefundExecutionSucceededEvent(id(),NOW,financial.eventId(),financial.refundId(),financial.attemptId(),
+                    financial.requestEventId(),financial.orderNo(),financial.paymentId(),financial.buyerSubject(),financial.amount(),financial.currency(),
+                    financial.providerTransactionId(),financial.cancellationIds().getFirst());
+            RecordMetadata last=sendRefundEvent(late.eventId(),late.eventType(),input.orderNo(),late);
+            TopicPartition partition=new TopicPartition(last.topic(),last.partition());
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                    assertThat(admin.listConsumerGroupOffsets(RecordConfirmedRefund.CONSUMER_GROUP).partitionsToOffsetAndMetadata()
+                            .get(5,TimeUnit.SECONDS).get(partition).offset()).isGreaterThan(last.offset()));
+            assertThat(count("settlement_refund")).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT refund_count FROM seller_monthly_settlement",Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT seller_payout_amount-refunded_seller_payout_amount FROM seller_monthly_settlement",Long.class)).isZero();
+        } finally { listeners.stop(); }
+    }
+    RecordMetadata sendRefundEvent(String eventId,String eventType,String orderNo,Object body) throws Exception {
+        ProducerRecord<String,String> message=new ProducerRecord<>(Topics.PAYMENT,orderNo,mapper.writeValueAsString(body));
+        message.headers().add(EventHeaders.EVENT_ID,eventId.getBytes(StandardCharsets.UTF_8));
+        message.headers().add(EventHeaders.EVENT_TYPE,eventType.getBytes(StandardCharsets.UTF_8));
+        return kafka.send(message).get(10,TimeUnit.SECONDS).getRecordMetadata();
+    }
     @Test void mapperValidatesEnvelopeAndKafkaFailureCanBeReplayedWithOriginalIdentity() throws Exception {
         PaidOrder input=order();prepare(input);
         OrderPaidEvent event=new OrderPaidEvent(input.eventId(),input.occurredAt(),input.orderNo(),input.requestEventId(),input.paymentResultEventId(),
@@ -354,10 +522,10 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
             Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_sale")).isEqualTo(1));
         } finally { listeners.stop(); }
     }
-    @Test void publicOpenApiHasTenOperationsAndNoLegacyOrInternalRoutes() throws Exception {
+    @Test void publicOpenApiHasThirteenOperationsAndNoLegacyOrInternalRoutes() throws Exception {
         OpenApiSnapshot.verify(port,"settlement");
         JsonNode paths=http("GET","/v3/api-docs",null,null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(9);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(10);
+        assertThat(paths.size()).isEqualTo(12);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(13);
         assertThat(paths.toString()).doesNotContain("/internal/","reconciliation","tax-invoice");
     }
     PgPayment withoutCost(PaidOrder input) {

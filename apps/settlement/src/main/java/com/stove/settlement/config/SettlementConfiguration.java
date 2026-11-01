@@ -6,6 +6,7 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.settlement.adapter.CatalogOwnerHttpClient;
 import com.stove.settlement.adapter.SimulatedPgPaymentHttpClient;
 import com.stove.settlement.adapter.SimulatedPgSettlementHttpClient;
+import com.stove.settlement.adapter.UnavailablePgRefunds;
 import com.stove.settlement.core.domain.PgReceiptRepository;
 import com.stove.settlement.core.domain.PgTransactionRepository;
 import com.stove.settlement.core.domain.PgFeeRepository;
@@ -20,6 +21,9 @@ import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
 import com.stove.settlement.core.port.PgPayments;
+import com.stove.settlement.core.port.PgRefunds;
+import com.stove.settlement.core.domain.SettlementRefundRepository;
+import com.stove.settlement.core.service.RecordConfirmedRefund;
 import com.stove.settlement.core.port.PgSettlements;
 import com.stove.settlement.core.service.CloseSellerMonth;
 import com.stove.settlement.core.service.ReceivePgSettlement;
@@ -52,6 +56,13 @@ public class SettlementConfiguration {
     @Bean CatalogOwners catalogOwners(SettlementHttpProperties p, RestClient.Builder builder) {
         return new CatalogOwnerHttpClient(client(p.catalogBaseUrl(),"X-Settlement-Service-Key",p.catalogKey(),p,builder));
     }
+    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
+    PgRefunds pgRefunds() { return new UnavailablePgRefunds(); }
+    @Bean RecordConfirmedRefund recordConfirmedRefund(SettlementRefundRepository refunds,SettlementSaleRepository sales,
+            SellerMonthlySettlementRepository months,PgTransactionRepository records,PgRefunds supplier,ProcessedEventGuard inbox,
+            FullRefundAllocationPolicy allocation,RefundSettlementMonthPolicy policy,Clock clock,PlatformTransactionManager manager) {
+        return new RecordConfirmedRefund(refunds,sales,months,records,supplier,inbox,allocation,policy,clock,manager);
+    }
     private RestClient client(URI uri,String header,String key,SettlementHttpProperties p, RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(p.connectTimeout()); factory.setReadTimeout(p.readTimeout());
@@ -68,8 +79,8 @@ public class SettlementConfiguration {
             PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
         return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords);
     }
-    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions) {
-        return new CloseSellerMonth(months,sales,clock,transactions);
+    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,SettlementRefundRepository refunds) {
+        return new CloseSellerMonth(months,sales,clock,transactions,refunds);
     }
     @Bean ReconcilePgReceipt reconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock,PgTransactionRepository transactions,PgFeeRepository fees) {
         return new ReconcilePgReceipt(receipts,sales,clock,transactions,fees);

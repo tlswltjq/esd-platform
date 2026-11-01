@@ -16,7 +16,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.MySQLContainer;
 
 class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
-    @Test void v8ThenV9PreserveClosedAllocationsReportsAndNeverInventFunding() {
+    @Test void v8ThroughV10PreserveClosedAllocationsReportsAndNeverInventFundingOrRefunds() {
         MySQLContainer<?> mysql = SharedContainers.MYSQL;
         String schema = "settlement_v8_" + UUID.randomUUID().toString().replace("-", "");
         String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
@@ -92,7 +92,7 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             assertThat(jdbc.queryForList("SELECT DISTINCT recorded_by FROM settlement_pg_fee", String.class)).containsExactly("MIGRATED_V8");
             List<Map<String, Object>> transactionsBefore = jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id");
             List<Map<String, Object>> checksumsBeforeV9 = jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
-            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            Flyway.configure().dataSource(source).locations(location).target("9").load().migrate();
             List<Map<String, Object>> transactionsAfter = jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id");
             for (Map<String, Object> row : transactionsAfter) {
                 for (String column : List.of("funding_total_amount", "pg_paid_amount", "pg_discount_amount", "provider_store_id",
@@ -107,6 +107,24 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
                         assertThat(failure.getSQLException().getMessage()).contains("ck_pg_transaction_funding");
                     });
             assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt")).isEqualTo(receiptBefore);
+            List<Map<String, Object>> oldSales = jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id");
+            List<Map<String, Object>> oldTransactions = jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id");
+            List<Map<String, Object>> oldFees = jdbc.queryForList("SELECT * FROM settlement_pg_fee ORDER BY id");
+            Map<String, Object> oldMonth = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+            List<Map<String, Object>> oldChecksums = jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id")).isEqualTo(oldSales);
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id")).isEqualTo(oldTransactions);
+            assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_fee ORDER BY id")).isEqualTo(oldFees);
+            Map<String, Object> newMonth = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+            for (String column : List.of("refund_amount", "refunded_platform_fee_amount", "refunded_seller_payout_amount", "refund_count"))
+                assertThat(((Number) newMonth.remove(column)).longValue()).as(column).isZero();
+            assertThat(newMonth).isEqualTo(oldMonth);
+            assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt")).isEqualTo(receiptBefore);
+            assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt_item")).isEqualTo(itemBefore);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_refund", Long.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_refund_cancellation", Long.class)).isZero();
+            assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'10' ORDER BY installed_rank")).isEqualTo(oldChecksums);
             Flyway.configure().dataSource(source).locations(location).load().validate();
         } finally { root.execute("DROP DATABASE " + schema); }
     }
