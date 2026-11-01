@@ -12,6 +12,8 @@ import com.stove.settlement.core.domain.PgFeeRepository;
 import com.stove.settlement.core.service.RecordPgTransaction;
 import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.stove.settlement.core.domain.PlatformFeePolicy;
+import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
+import com.stove.settlement.core.domain.ReverseOriginalFullRefundPolicy;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
@@ -35,6 +37,7 @@ import org.springframework.web.client.RestClient;
 public class SettlementConfiguration {
     @Bean Clock settlementClock() { return Clock.systemUTC(); }
     @Bean PlatformFeePolicy platformFeePolicy() { return new PlatformFeePolicy("PLATFORM_MVP_V1",1000); }
+    @Bean FullRefundAllocationPolicy fullRefundAllocationPolicy() { return new ReverseOriginalFullRefundPolicy(); }
     @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
     PgPayments pgPayments(SettlementHttpProperties p, RestClient.Builder builder) {
         return new SimulatedPgPaymentHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));

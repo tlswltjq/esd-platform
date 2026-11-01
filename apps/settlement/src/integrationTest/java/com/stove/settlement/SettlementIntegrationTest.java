@@ -24,6 +24,8 @@ import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.api.listener.SettlementOrderMapper;
 import com.stove.settlement.core.domain.PaidOrder;
+import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
+import com.stove.settlement.core.domain.RefundAllocation;
 import com.stove.settlement.core.domain.PgCost;
 import com.stove.settlement.core.domain.PgEvidence;
 import com.stove.settlement.core.service.SynchronizePgTransaction;
@@ -78,6 +80,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired RecordPaidSale record;
+    @Autowired FullRefundAllocationPolicy fullRefundAllocationPolicy;
     @Autowired SynchronizePgTransaction synchronize;
     @Autowired CloseSellerMonth close;
     @Autowired ReceivePgSettlement receive;
@@ -96,6 +99,20 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
     private final Map<String,PgPayment> provider=new ConcurrentHashMap<String,PgPayment>();
+
+    @Test void configuredRefundPolicyUsesTheStoredAllocationWithoutChangingAnyLedgerRows() {
+        SettlementSale original = sale(order());
+        Map<String, Object> beforeSale = jdbc.queryForMap("SELECT * FROM settlement_sale WHERE id=?", original.getId());
+        Map<String, Object> beforeMonth = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        int beforeInbox = count("processed_event");
+        RefundAllocation allocation = fullRefundAllocationPolicy.allocate(original);
+        assertThat(allocation.paidAmountDelta()).isEqualTo(-10000);
+        assertThat(allocation.platformFeeAmountDelta()).isEqualTo(-1000);
+        assertThat(allocation.sellerPayoutAmountDelta()).isEqualTo(-9000);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_sale WHERE id=?", original.getId())).isEqualTo(beforeSale);
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(beforeMonth);
+        assertThat(count("processed_event")).isEqualTo(beforeInbox);
+    }
 
     @BeforeEach void clean() {
         listeners.stop();
