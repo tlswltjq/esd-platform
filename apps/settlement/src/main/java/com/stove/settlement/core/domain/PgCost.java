@@ -18,6 +18,12 @@ public class PgCost {
     @Column(nullable=false,updatable=false) private int pgFeeRateBps;
     @Column(nullable=false,updatable=false) private long pgFeeAmount;
 
+    public void requireEvidence(PgEvidence evidence) {
+        SettlementValues.consistent(evidence != null && provider.equals(evidence.provider())
+                && providerTransactionId.equals(evidence.transactionId()) && providerOccurredAt.equals(evidence.occurredAt()),
+                "PG 비용과 승인 거래 근거가 다릅니다.");
+    }
+
     public PgCost(String provider,String transactionId,Instant occurredAt,String policyId,int rateBps,long fee) {
         SettlementValues.require("SIMULATED".equals(provider) && SettlementValues.text(transactionId,100)
                 && SettlementValues.microsecond(occurredAt),"PG 거래 근거가 올바르지 않습니다.");

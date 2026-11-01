@@ -5,6 +5,9 @@ import com.stove.settlement.api.controller.dto.AdminMonthResponse;
 import com.stove.settlement.api.controller.dto.AdminSaleResponse;
 import com.stove.settlement.api.controller.dto.MonthResponse;
 import com.stove.settlement.api.controller.dto.PgReceiptResponse;
+import com.stove.settlement.api.controller.dto.PgTransactionResponse;
+import com.stove.settlement.core.service.ReadPgFinancials;
+import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.stove.settlement.api.controller.dto.SaleResponse;
 import com.stove.settlement.api.controller.dto.SettlementPage;
 import com.stove.settlement.core.domain.SettlementQuery;
@@ -34,6 +37,8 @@ public class SettlementController {
     private final ReceivePgSettlement receive;
     private final ReconcilePgReceipt reconcile;
     private final ReadPgReceipts receipts;
+    private final ReadPgFinancials financials;
+    private final SynchronizePgTransaction refresh;
 
     @GetMapping("/me/sales")
     public ApiResponse<SettlementPage<SaleResponse>> mySales(@AuthenticationPrincipal Jwt jwt,
@@ -48,16 +53,20 @@ public class SettlementController {
     @GetMapping("/sales")
     public ApiResponse<SettlementPage<AdminSaleResponse>> sales(@RequestParam(required=false) String sellerSubject,
             @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
-        return ApiResponse.ok(SettlementPage.from(sales.execute(new SettlementQuery(sellerSubject,month,page,size)).map(AdminSaleResponse::from)));
+        return ApiResponse.ok(SettlementPage.from(sales.executeWithPgData(new SettlementQuery(sellerSubject,month,page,size)).map(AdminSaleResponse::from)));
     }
     @GetMapping("/months")
     public ApiResponse<SettlementPage<AdminMonthResponse>> months(@RequestParam(required=false) String sellerSubject,
             @RequestParam(required=false) String month,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) {
-        return ApiResponse.ok(SettlementPage.from(months.execute(new SettlementQuery(sellerSubject,month,page,size)).map(AdminMonthResponse::from)));
+        return ApiResponse.ok(SettlementPage.from(months.executeWithPgData(new SettlementQuery(sellerSubject,month,page,size)).map(AdminMonthResponse::from)));
     }
     @PostMapping("/sellers/{sellerSubject}/months/{month}/close")
     public ApiResponse<AdminMonthResponse> close(@PathVariable String sellerSubject,@PathVariable String month) {
-        return ApiResponse.ok(AdminMonthResponse.from(close.execute(sellerSubject,month)));
+        return ApiResponse.ok(AdminMonthResponse.from(financials.month(close.execute(sellerSubject,month))));
+    }
+    @PostMapping("/pg-transactions/{paymentId}/refresh")
+    public ApiResponse<PgTransactionResponse> refresh(@PathVariable String paymentId,@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(PgTransactionResponse.from(refresh.execute(paymentId,jwt.getSubject())));
     }
     public record ReceiptRequest(String providerSettlementId) { }
     @PostMapping("/pg-receipts")

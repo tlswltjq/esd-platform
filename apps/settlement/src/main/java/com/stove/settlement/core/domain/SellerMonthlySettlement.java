@@ -21,8 +21,6 @@ public class SellerMonthlySettlement {
     private long paidAmount;
     private long platformFeeAmount;
     private long sellerPayoutAmount;
-    private long pgFeeAmount;
-    private long platformNetAmount;
     private long recordCount;
     @Column(nullable=false,updatable=false) private Instant createdAt;
     @Column(nullable=false) private Instant updatedAt;
@@ -36,14 +34,14 @@ public class SellerMonthlySettlement {
         result.createdAt=now; result.updatedAt=now; return result;
     }
     public SettlementTotals totals() {
-        return new SettlementTotals(paidAmount,platformFeeAmount,sellerPayoutAmount,pgFeeAmount,platformNetAmount,recordCount);
+        return new SettlementTotals(paidAmount,platformFeeAmount,sellerPayoutAmount,recordCount);
     }
     public boolean isClosed() { return "CLOSED".equals(status); }
     public void add(SettlementTotals sale,Instant now) {
         SettlementValues.consistent(!isClosed(),"마감한 월에는 매출을 반영할 수 없습니다.");
         SettlementTotals sum=totals().plus(sale);
         paidAmount=sum.paidAmount(); platformFeeAmount=sum.platformFeeAmount(); sellerPayoutAmount=sum.sellerPayoutAmount();
-        pgFeeAmount=sum.pgFeeAmount(); platformNetAmount=sum.platformNetAmount(); recordCount=sum.recordCount(); updatedAt=now;
+        recordCount=sum.recordCount(); updatedAt=now;
     }
     public void close(SettlementTotals actual,Instant now) {
         if(isClosed()) return;

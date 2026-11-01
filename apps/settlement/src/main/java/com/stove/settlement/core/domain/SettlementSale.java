@@ -1,7 +1,6 @@
 package com.stove.settlement.core.domain;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -34,8 +33,8 @@ public class SettlementSale {
     @Column(nullable=false,updatable=false) private int platformFeeRateBps;
     @Column(nullable=false,updatable=false) private long platformFeeAmount;
     @Column(nullable=false,updatable=false) private long sellerPayoutAmount;
-    @Column(nullable=false,updatable=false) private long platformNetAmount;
-    @Embedded private PgCost pgCost;
+    @Column(nullable=false,updatable=false,length=30) private String provider;
+    @Column(nullable=false,updatable=false,length=100) private String providerTransactionId;
     @Column(nullable=false,length=7,updatable=false) private String saleMonth;
     @Column(nullable=false,length=7,updatable=false) private String settlementMonth;
     @Column(nullable=false,updatable=false) private Instant receivedAt;
@@ -61,17 +60,16 @@ public class SettlementSale {
         sale.currency=order.currency();
         sale.sellerSubject=owner.sellerSubject(); sale.platformPolicyId=policy.policyId(); sale.platformFeeRateBps=policy.rateBps();
         sale.platformFeeAmount=policy.fee(order.amount()); sale.sellerPayoutAmount=Math.subtractExact(order.amount(),sale.platformFeeAmount);
-        sale.pgCost=payment.cost(); sale.platformNetAmount=Math.subtractExact(sale.platformFeeAmount,payment.cost().getPgFeeAmount());
+        sale.provider=payment.evidence().provider(); sale.providerTransactionId=payment.evidence().transactionId();
         sale.saleMonth=SettlementMonth.at(order.occurredAt()).value(); sale.settlementMonth=month; sale.receivedAt=receivedAt;
         sale.totals(); return sale;
     }
 
     public PaidOrder source() { return new PaidOrder(eventId,occurredAt,orderNo,requestEventId,paymentResultEventId,paymentId,buyerSubject,productId,productCode,title,contentVersion,amount,currency); }
-    public PgPayment pgPayment() { return new PgPayment(paymentId,orderNo,amount,currency,pgCost); }
     public void requireSame(PaidOrder input) {
         SettlementValues.consistent(source().equals(input),"같은 주문의 매출 입력이 다릅니다.");
     }
     public SettlementTotals totals() {
-        return new SettlementTotals(amount,platformFeeAmount,sellerPayoutAmount,pgCost.getPgFeeAmount(),platformNetAmount,1);
+        return new SettlementTotals(amount,platformFeeAmount,sellerPayoutAmount,1);
     }
 }

@@ -3,8 +3,19 @@
     "schemas" : {
       "AdminMonthResponse" : {
         "properties" : {
+          "confirmedPgFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "month" : {
             "$ref" : "#/components/schemas/MonthResponse"
+          },
+          "pendingPgCostCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgCostStatus" : {
+            "type" : "string"
           },
           "pgFeeAmount" : {
             "format" : "int64",
@@ -24,6 +35,12 @@
         "properties" : {
           "pgCost" : {
             "$ref" : "#/components/schemas/PgCost"
+          },
+          "pgCostStatus" : {
+            "type" : "string"
+          },
+          "pgTransaction" : {
+            "$ref" : "#/components/schemas/PgEvidence"
           },
           "platformFeeRateBps" : {
             "format" : "int32",
@@ -66,6 +83,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/PgReceiptResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePgTransactionResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PgTransactionResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -276,6 +307,21 @@
         },
         "type" : "object"
       },
+      "PgEvidence" : {
+        "properties" : {
+          "occurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "transactionId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PgPayment" : {
         "properties" : {
           "amount" : {
@@ -287,6 +333,9 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "evidence" : {
+            "$ref" : "#/components/schemas/PgEvidence"
           },
           "orderNo" : {
             "type" : "string"
@@ -372,6 +421,41 @@
           },
           "status" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PgTransactionResponse" : {
+        "properties" : {
+          "amount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "costReceivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "pgCost" : {
+            "$ref" : "#/components/schemas/PgCost"
+          },
+          "pgCostStatus" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "transaction" : {
+            "$ref" : "#/components/schemas/PgEvidence"
           }
         },
         "type" : "object"
@@ -849,6 +933,32 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ApiResponsePgReceiptResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-transactions/{paymentId}/refresh" : {
+      "post" : {
+        "operationId" : "refresh",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "paymentId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePgTransactionResponse"
                 }
               }
             },

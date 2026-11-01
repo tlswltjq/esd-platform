@@ -34,11 +34,12 @@ public class RecordPaidSale {
     private final CatalogOwners owners;
     private final PlatformFeePolicy policy;
     private final Clock clock;
+    private final RecordPgTransaction pgRecords;
     private final TransactionTemplate transaction;
 
     public RecordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
-            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions) {
-        this.sales=sales; this.months=months; this.guard=guard; this.payments=payments; this.owners=owners; this.policy=policy; this.clock=clock;
+            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
+        this.sales=sales; this.months=months; this.guard=guard; this.payments=payments; this.owners=owners; this.policy=policy; this.clock=clock; this.pgRecords=pgRecords;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public SettlementSale execute(PaidOrder input) {
@@ -83,6 +84,7 @@ public class RecordPaidSale {
         previous=existing(input);
         if(previous!=null) return previous;
         now=clock.instant().truncatedTo(ChronoUnit.MICROS);
+        pgRecords.execute(payment,now,CONSUMER_GROUP);
         SettlementSale sale=SettlementSale.record(input,owner,payment,policy,month.getSettlementMonth(),now);
         if(!guard.firstDelivery(input.eventId(),CONSUMER_GROUP,EventType.ORDER_PAID))
             throw new BusinessException(ErrorCode.CONFLICT,"Inbox와 매출이 일치하지 않습니다.");

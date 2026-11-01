@@ -15,6 +15,7 @@ import com.stove.settlement.core.domain.PlatformFeePolicy;
 import com.stove.settlement.core.domain.ProductOwner;
 import com.stove.settlement.core.domain.SettlementMonth;
 import com.stove.settlement.core.domain.SettlementSale;
+import com.stove.settlement.core.domain.SettlementSaleView;
 import com.stove.settlement.core.domain.SettlementTotals;
 import java.time.Instant;
 import java.util.List;
@@ -24,18 +25,19 @@ class SettlementDomainTest {
     @Test void pgExpenseOnlyChangesPlatformShareIncludingNegativeRemainder() {
         PaidOrder order=order();
         for(long fee:new long[]{300,500,1200}) {
-            SettlementSale sale=SettlementSale.record(order,new ProductOwner(1L,"game-1","usr_seller"),payment(order,fee),
+            PgPayment paid=payment(order,fee);
+            SettlementSale sale=SettlementSale.record(order,new ProductOwner(1L,"game-1","usr_seller"),paid,
                     new PlatformFeePolicy("PLATFORM_MVP_V1",1000),"2026-10",NOW);
             assertThat(sale.getSellerPayoutAmount()).isEqualTo(9000);
-            assertThat(sale.getPlatformNetAmount()).isEqualTo(1000-fee);
+            assertThat(new SettlementSaleView(sale,paid.evidence(),paid.cost()).platformNetAmount()).isEqualTo(1000-fee);
             assertThat(sale.totals().paidAmount()).isEqualTo(10000);
         }
     }
     @Test void halfUpAndOverflowAreExplicit() {
         assertThat(new PlatformFeePolicy("test",100).fee(50)).isEqualTo(1);
         assertThat(new PlatformFeePolicy("test",0).fee(Long.MAX_VALUE)).isZero();
-        assertThatThrownBy(() -> new SettlementTotals(Long.MAX_VALUE,0,Long.MAX_VALUE,0,0,1)
-                .plus(new SettlementTotals(1,0,1,0,0,1))).isInstanceOf(ArithmeticException.class);
+        assertThatThrownBy(() -> new SettlementTotals(Long.MAX_VALUE,0,Long.MAX_VALUE,1)
+                .plus(new SettlementTotals(1,0,1,1))).isInstanceOf(ArithmeticException.class);
     }
     @Test void reportRejectsDuplicateItemsAndChangedTotals() {
         PgPayment payment=payment(order(),300); PgSettlement valid=report(List.of(payment));

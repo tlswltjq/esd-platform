@@ -3,6 +3,8 @@ package com.stove.settlement.core.service;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.core.domain.PgReceipt;
+import com.stove.settlement.core.domain.PgTransactionRepository;
+import com.stove.settlement.core.domain.PgFeeRepository;
 import com.stove.settlement.core.domain.PgReceiptItem;
 import com.stove.settlement.core.domain.PgReceiptRepository;
 import com.stove.settlement.core.domain.PgReceiptView;
@@ -17,15 +19,18 @@ public class ReconcilePgReceipt {
     private final PgReceiptRepository receipts;
     private final SettlementSaleRepository sales;
     private final Clock clock;
-    public ReconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock) {
-        this.receipts=receipts; this.sales=sales; this.clock=clock;
+    private final PgTransactionRepository transactions;
+    private final PgFeeRepository fees;
+    public ReconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock,PgTransactionRepository transactions,PgFeeRepository fees) {
+        this.receipts=receipts; this.sales=sales; this.clock=clock; this.transactions=transactions; this.fees=fees;
     }
     @Transactional(isolation=Isolation.READ_COMMITTED)
     public PgReceiptView execute(String id) {
         new PgSettlementId(id);
         PgReceipt receipt=receipts.lock("SIMULATED",id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if(!receipt.isReceived()) {
-            for(PgReceiptItem item:receipt.getItems()) item.compare(sales.findByOrderNo(item.getOrderNo()).orElse(null));
+            for(PgReceiptItem item:receipt.getItems()) item.compare(sales.findByOrderNo(item.getOrderNo()).orElse(null),
+                    transactions.findByPaymentId(item.getPaymentId()).orElse(null),fees.findByPaymentId(item.getPaymentId()).orElse(null));
             receipt.finishCheck(clock.instant().truncatedTo(ChronoUnit.MICROS));
             receipts.flush();
         }

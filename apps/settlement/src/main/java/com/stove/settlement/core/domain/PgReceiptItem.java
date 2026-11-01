@@ -34,8 +34,14 @@ public class PgReceiptItem {
         item.currency=payment.currency(); item.cost=payment.cost(); return item;
     }
     public PgPayment payment() { return new PgPayment(paymentId,orderNo,amount,currency,cost); }
-    public void compare(SettlementSale sale) {
-        mismatchCode=sale==null ? "MISSING_SALE" : sale.pgPayment().equals(payment()) ? null : "DIFFERENT_TRANSACTION";
-        mismatchReason=mismatchCode==null ? null : "MISSING_SALE".equals(mismatchCode) ? "내부 매출이 아직 도착하지 않았습니다." : "내부 매출과 PG 거래 근거가 다릅니다.";
+    public void compare(SettlementSale sale,PgTransactionRecord transaction,PgFeeRecord fee) {
+        if(sale==null) mismatchCode="MISSING_SALE";
+        else if(transaction==null || !transaction.payment(null).equals(new PgPayment(paymentId,orderNo,amount,currency,
+                new PgEvidence(cost.getProvider(),cost.getProviderTransactionId(),cost.getProviderOccurredAt()),null))
+                || !sale.getPaymentId().equals(paymentId) || !sale.getProvider().equals(cost.getProvider())
+                || !sale.getProviderTransactionId().equals(cost.getProviderTransactionId())) mismatchCode="DIFFERENT_TRANSACTION";
+        else if(fee==null) mismatchCode="PG_COST_PENDING";
+        else mismatchCode=fee.getCost().equals(cost) ? null : "DIFFERENT_COST";
+        mismatchReason=mismatchCode==null ? null : "MISSING_SALE".equals(mismatchCode) ? "내부 매출이 아직 도착하지 않았습니다." : "PG_COST_PENDING".equals(mismatchCode) ? "PG 비용 확인을 기다리고 있습니다." : "내부 거래 또는 비용 근거가 다릅니다.";
     }
 }

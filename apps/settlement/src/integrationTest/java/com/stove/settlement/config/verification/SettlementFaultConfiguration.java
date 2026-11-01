@@ -9,6 +9,7 @@ import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
 import com.stove.settlement.core.port.PgPayments;
 import com.stove.settlement.core.service.RecordPaidSale;
+import com.stove.settlement.core.service.RecordPgTransaction;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,16 +25,16 @@ public class SettlementFaultConfiguration {
     @Bean @Primary
     RecordPaidSale commitBeforeAckRecordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,
             ProcessedEventGuard guard,PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,
-            PlatformTransactionManager transactions,@Value("${stove.verification.commit-marker}") Path marker) {
-        return new CommitBeforeAck(sales,months,guard,payments,owners,policy,clock,transactions,marker);
+            PlatformTransactionManager transactions,RecordPgTransaction pgRecords,@Value("${stove.verification.commit-marker}") Path marker) {
+        return new CommitBeforeAck(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords,marker);
     }
 
     /** Halt only after the business transaction commits, before the listener can return and acknowledge. */
     static final class CommitBeforeAck extends RecordPaidSale {
         private final Path marker;
         CommitBeforeAck(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
-                PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,Path marker) {
-            super(sales,months,guard,payments,owners,policy,clock,transactions);this.marker=marker;
+                PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords,Path marker) {
+            super(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords);this.marker=marker;
         }
         @Override public SettlementSale execute(PaidOrder input) {
             SettlementSale saved=super.execute(input);

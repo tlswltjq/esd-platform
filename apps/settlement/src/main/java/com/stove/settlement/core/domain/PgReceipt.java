@@ -59,8 +59,9 @@ public class PgReceipt {
     public void finishCheck(Instant now) {
         if(isReceived()) return;
         boolean missing=items.stream().anyMatch(i -> "MISSING_SALE".equals(i.getMismatchCode()));
-        boolean different=items.stream().anyMatch(i -> "DIFFERENT_TRANSACTION".equals(i.getMismatchCode()));
-        status=different ? "MISMATCH" : missing ? "REPORTED_PAID" : "SIMULATED_RECEIVED";
+        boolean different=items.stream().anyMatch(i -> "DIFFERENT_TRANSACTION".equals(i.getMismatchCode()) || "DIFFERENT_COST".equals(i.getMismatchCode()));
+        boolean pending=items.stream().anyMatch(i -> "PG_COST_PENDING".equals(i.getMismatchCode()));
+        status=different ? "MISMATCH" : missing || pending ? "REPORTED_PAID" : "SIMULATED_RECEIVED";
         lastCheckedAt=now;
         if(isReceived()) simulatedReceivedAt=now;
     }

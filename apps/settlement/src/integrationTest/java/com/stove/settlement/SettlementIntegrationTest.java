@@ -25,6 +25,8 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.api.listener.SettlementOrderMapper;
 import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.PgCost;
+import com.stove.settlement.core.domain.PgEvidence;
+import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.stove.settlement.core.domain.PgPayment;
 import com.stove.settlement.core.domain.PgReceiptView;
 import com.stove.settlement.core.domain.PgSettlement;
@@ -76,6 +78,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired RecordPaidSale record;
+    @Autowired SynchronizePgTransaction synchronize;
     @Autowired CloseSellerMonth close;
     @Autowired ReceivePgSettlement receive;
     @Autowired ReconcilePgReceipt reconcile;
@@ -96,7 +99,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
-        for(String table:List.of("pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","processed_event"))
+        for(String table:List.of("pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
             jdbc.update("DELETE FROM "+table);
         provider.clear(); when(clock.instant()).thenReturn(NOW);
         when(pgPayments.require(anyString())).thenAnswer(call -> {
@@ -117,7 +120,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         PaidOrder input=order(); SettlementSale first=sale(input); SettlementSale again=record.execute(input);
         assertThat(again.getId()).isEqualTo(first.getId()); assertThat(again.source()).isEqualTo(input);
         assertThat(first.getAmount()).isEqualTo(10000); assertThat(first.getSellerPayoutAmount()).isEqualTo(9000);
-        assertThat(first.getPlatformNetAmount()).isEqualTo(700); assertThat(count("processed_event")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT pg_fee_amount FROM settlement_pg_fee",Long.class)).isEqualTo(300); assertThat(count("processed_event")).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT paid_amount FROM seller_monthly_settlement",Long.class)).isEqualTo(10000);
     }
     @Test void fullSourceComparisonHappensBeforeInboxDeduplication() {
@@ -148,6 +151,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
                 .when(guard).firstDelivery(anyString(),anyString(),anyString()));
         assertThatThrownBy(() -> record.execute(input)).isInstanceOf(IllegalStateException.class);
         assertThat(count("settlement_sale")).isZero();assertThat(count("seller_monthly_settlement")).isZero();assertThat(count("processed_event")).isZero();
+        assertThat(count("settlement_pg_transaction")).isZero();assertThat(count("settlement_pg_fee")).isZero();
     }
     @Test void missingExternalFactsOrInconsistentInboxNeverProduceNormalSales() {
         assertThatThrownBy(() -> record.execute(order())).isInstanceOf(IllegalStateException.class);
@@ -309,10 +313,151 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
             Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_sale")).isEqualTo(1));
         } finally { listeners.stop(); }
     }
-    @Test void publicOpenApiHasNineOperationsAndNoLegacyOrInternalRoutes() throws Exception {
+    @Test void publicOpenApiHasTenOperationsAndNoLegacyOrInternalRoutes() throws Exception {
         OpenApiSnapshot.verify(port,"settlement");
         JsonNode paths=http("GET","/v3/api-docs",null,null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(8);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(9);
+        assertThat(paths.size()).isEqualTo(9);int operations=0;for(JsonNode path:paths) operations+=path.size();assertThat(operations).isEqualTo(10);
         assertThat(paths.toString()).doesNotContain("/internal/","reconciliation","tax-invoice");
     }
+    PgPayment withoutCost(PaidOrder input) {
+        PgPayment result = new PgPayment(input.paymentId(), input.orderNo(), input.amount(), input.currency(),
+                new PgEvidence("SIMULATED", id(), input.occurredAt().minusSeconds(1)), null);
+        provider.put(input.paymentId(), result);
+        return result;
+    }
+    PgPayment withFee(PgPayment payment, long fee) {
+        PgEvidence evidence = payment.evidence();
+        return new PgPayment(payment.paymentId(), payment.orderNo(), payment.amount(), payment.currency(), evidence,
+                new PgCost(evidence.provider(), evidence.transactionId(), evidence.occurredAt(), "FEE_CONFIRMED", 300, fee));
+    }
+
+    @Test
+    void unknownCostCanCloseSellerMonthAndLateCostOnlyChangesThePgView() {
+        PaidOrder input = order(Instant.parse("2026-09-01T00:00:00Z"));
+        PgPayment pending = withoutCost(input);
+        SettlementSale original = record.execute(input);
+        String admin = token("usr_admin", "ADMIN");
+        JsonNode before = http("GET", "/api/v1/settlements/sales", admin, null).body().path("data").path("content").get(0);
+        assertThat(before.path("pgCostStatus").asText()).isEqualTo("UNCONFIRMED");
+        assertThat(before.path("pgCost").isNull()).isTrue();
+        assertThat(before.path("platformNetAmount").isNull()).isTrue();
+        Reply closed = http("POST", "/api/v1/settlements/sellers/usr_seller/months/2026-09/close", admin, null);
+        assertThat(closed.status()).isEqualTo(200);
+        assertThat(closed.body().path("data").path("month").path("status").asText()).isEqualTo("CLOSED");
+        assertThat(closed.body().path("data").path("pgFeeAmount").isNull()).isTrue();
+        assertThat(closed.body().path("data").path("pendingPgCostCount").asLong()).isEqualTo(1);
+        Instant closedAt = close.execute("usr_seller", "2026-09").getClosedAt();
+        Map<String, Object> saleBefore = jdbc.queryForMap("SELECT * FROM settlement_sale");
+        Map<String, Object> monthBefore = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        assertThat(count("settlement_pg_transaction")).isEqualTo(1);
+        assertThat(count("settlement_pg_fee")).isZero();
+        assertThat(jdbc.queryForObject("SELECT legacy_pg_fee_amount IS NULL FROM settlement_sale", Boolean.class)).isTrue();
+        String path = "/api/v1/settlements/pg-transactions/" + input.paymentId() + "/refresh";
+        assertThat(http("POST", path, token("usr_seller", "CREATOR"), null).status()).isEqualTo(403);
+        assertThat(http("POST", path, null, null).status()).isEqualTo(401);
+        when(clock.instant()).thenReturn(NOW.plusSeconds(3600));
+        provider.put(input.paymentId(), withFee(pending, 300));
+        Reply refreshed = http("POST", path, admin, null);
+        assertThat(refreshed.status()).isEqualTo(200);
+        assertThat(refreshed.body().path("data").path("pgCostStatus").asText()).isEqualTo("CONFIRMED");
+        assertThat(jdbc.queryForObject("SELECT recorded_by FROM settlement_pg_fee", String.class)).isEqualTo("usr_admin");
+        assertThat(http("POST", path, admin, null).body()).isEqualTo(refreshed.body());
+        assertThat(count("settlement_pg_fee")).isEqualTo(1);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_sale")).isEqualTo(saleBefore);
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(monthBefore);
+        JsonNode after = http("GET", "/api/v1/settlements/months", admin, null).body().path("data").path("content").get(0);
+        assertThat(after.path("pgFeeAmount").asLong()).isEqualTo(300);
+        assertThat(after.path("platformNetAmount").asLong()).isEqualTo(700);
+        assertThat(after.path("month").path("sellerPayoutAmount").asLong()).isEqualTo(9000);
+        assertThat(close.execute("usr_seller", "2026-09").getClosedAt()).isEqualTo(closedAt);
+        when(pgPayments.require(input.paymentId())).thenThrow(new IllegalStateException("PG query unavailable"));
+        assertThat(record.execute(input).getId()).isEqualTo(original.getId());
+        assertThat(count("processed_event")).isEqualTo(1);
+    }
+
+    @Test
+    void receiptDistinguishesMissingCostAndReconcilesAfterIndependentConfirmation() {
+        PaidOrder input = order();
+        PgPayment pending = withoutCost(input);
+        record.execute(input);
+        PgPayment confirmed = withFee(pending, 300);
+        PgSettlement statement = statement(List.of(confirmed));
+        PgReceiptView waiting = receive.execute(statement.providerSettlementId(), "usr_admin");
+        assertThat(waiting.status()).isEqualTo("REPORTED_PAID");
+        assertThat(waiting.checks().getFirst().code()).isEqualTo("PG_COST_PENDING");
+        provider.put(input.paymentId(), confirmed);
+        synchronize.execute(input.paymentId(), "usr_admin");
+        when(pgPayments.require(input.paymentId())).thenThrow(new IllegalStateException("PG unavailable after recording"));
+        assertThat(reconcile.execute(statement.providerSettlementId()).status()).isEqualTo("SIMULATED_RECEIVED");
+        assertThat(count("settlement_sale")).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentLateCostQueriesConvergeWithoutChangingSellerMonth() throws Exception {
+        PaidOrder input = order();
+        PgPayment pending = withoutCost(input);
+        record.execute(input);
+        Map<String, Object> before = jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
+        provider.put(input.paymentId(), withFee(pending, 300));
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService pool = Executors.newFixedThreadPool(4)) {
+            List<Future<?>> calls = new ArrayList<>();
+            for (int i = 0; i < 4; i++) calls.add(pool.submit(() -> {
+                start.await(); synchronize.execute(input.paymentId(), "usr_admin"); return null;
+            }));
+            start.countDown();
+            for (Future<?> call : calls) call.get(30, TimeUnit.SECONDS);
+        }
+        assertThat(count("settlement_pg_fee")).isEqualTo(1);
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(before);
+    }
+
+    @Test
+    void feeMismatchAndUpstreamFailureCannotOverwriteVerifiedEvidence() {
+        PaidOrder input = order();
+        PgPayment confirmed = prepare(input);
+        record.execute(input);
+        Map<String, Object> feeBefore = jdbc.queryForMap("SELECT * FROM settlement_pg_fee");
+        Map<String, Object> transactionBefore = jdbc.queryForMap("SELECT * FROM settlement_pg_transaction");
+        // 조회 응답에서 비용 자료가 빠져도 이미 확인한 비용은 사라지지 않는다.
+        provider.put(input.paymentId(), new PgPayment(confirmed.paymentId(), confirmed.orderNo(), confirmed.amount(),
+                confirmed.currency(), confirmed.evidence(), null));
+        assertThat(synchronize.execute(input.paymentId(), "usr_admin").payment().cost()).isEqualTo(confirmed.cost());
+        provider.put(input.paymentId(), new PgPayment(confirmed.paymentId(), confirmed.orderNo(), confirmed.amount(),
+                confirmed.currency(), new PgEvidence("SIMULATED", "wrong-transaction", confirmed.evidence().occurredAt()), null));
+        assertThatThrownBy(() -> synchronize.execute(input.paymentId(), "usr_admin")).isInstanceOf(BusinessException.class);
+        provider.put(input.paymentId(), withFee(confirmed, 500));
+        assertThatThrownBy(() -> synchronize.execute(input.paymentId(), "usr_admin")).isInstanceOf(BusinessException.class);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_fee")).isEqualTo(feeBefore);
+        when(pgPayments.require(input.paymentId())).thenThrow(new IllegalStateException("PG fixture unavailable"));
+        assertThatThrownBy(() -> synchronize.execute(input.paymentId(), "usr_admin")).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_fee")).isEqualTo(feeBefore);
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_transaction")).isEqualTo(transactionBefore);
+    }
+
+    @Test
+    void aConfirmedZeroCostAndAnUnconfirmedCostRemainDifferentInMonthlyQueries() {
+        PaidOrder pendingOrder = order();
+        PgPayment pending = withoutCost(pendingOrder);
+        record.execute(pendingOrder);
+        PaidOrder zeroOrder = order();
+        PgPayment zero = withoutCost(zeroOrder);
+        provider.put(zeroOrder.paymentId(), withFee(zero, 0));
+        record.execute(zeroOrder);
+        JsonNode month = http("GET", "/api/v1/settlements/months", token("usr_admin", "ADMIN"), null)
+                .body().path("data").path("content").get(0);
+        assertThat(month.path("pgCostStatus").asText()).isEqualTo("PARTIAL");
+        assertThat(month.path("confirmedPgFeeAmount").asLong()).isZero();
+        assertThat(month.path("pgFeeAmount").isNull()).isTrue();
+        assertThat(month.path("pendingPgCostCount").asLong()).isEqualTo(1);
+        provider.put(pendingOrder.paymentId(), withFee(pending, 0));
+        synchronize.execute(pendingOrder.paymentId(), "usr_admin");
+        JsonNode confirmed = http("GET", "/api/v1/settlements/months", token("usr_admin", "ADMIN"), null)
+                .body().path("data").path("content").get(0);
+        assertThat(confirmed.path("pgCostStatus").asText()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.path("pgFeeAmount").asLong()).isZero();
+        assertThat(confirmed.path("platformNetAmount").asLong()).isEqualTo(2000);
+        assertThat(confirmed.path("month").path("sellerPayoutAmount").asLong()).isEqualTo(18000);
+    }
+
 }

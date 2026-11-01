@@ -7,6 +7,10 @@ import com.stove.settlement.adapter.CatalogOwnerHttpClient;
 import com.stove.settlement.adapter.SimulatedPgPaymentHttpClient;
 import com.stove.settlement.adapter.SimulatedPgSettlementHttpClient;
 import com.stove.settlement.core.domain.PgReceiptRepository;
+import com.stove.settlement.core.domain.PgTransactionRepository;
+import com.stove.settlement.core.domain.PgFeeRepository;
+import com.stove.settlement.core.service.RecordPgTransaction;
+import com.stove.settlement.core.service.SynchronizePgTransaction;
 import com.stove.settlement.core.domain.PlatformFeePolicy;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
@@ -44,15 +48,22 @@ public class SettlementConfiguration {
         factory.setConnectTimeout(p.connectTimeout()); factory.setReadTimeout(p.readTimeout());
         return builder.clone().baseUrl(uri.toString()).defaultHeader(header,key).requestFactory(factory).build();
     }
+    @Bean RecordPgTransaction recordPgTransaction(PgTransactionRepository transactions,PgFeeRepository fees) {
+        return new RecordPgTransaction(transactions,fees);
+    }
+    @Bean SynchronizePgTransaction refreshPgTransaction(PgTransactionRepository records,PgFeeRepository fees,PgPayments payments,
+            RecordPgTransaction recorder,Clock clock,PlatformTransactionManager transactions) {
+        return new SynchronizePgTransaction(records,fees,payments,recorder,clock,transactions);
+    }
     @Bean RecordPaidSale recordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
-            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions) {
-        return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions);
+            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
+        return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords);
     }
     @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions) {
         return new CloseSellerMonth(months,sales,clock,transactions);
     }
-    @Bean ReconcilePgReceipt reconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock) {
-        return new ReconcilePgReceipt(receipts,sales,clock);
+    @Bean ReconcilePgReceipt reconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock,PgTransactionRepository transactions,PgFeeRepository fees) {
+        return new ReconcilePgReceipt(receipts,sales,clock,transactions,fees);
     }
     @Bean ReceivePgSettlement receivePgSettlement(PgReceiptRepository receipts,PgSettlements supplier,ReconcilePgReceipt reconcile,
             Clock clock,PlatformTransactionManager transactions) {

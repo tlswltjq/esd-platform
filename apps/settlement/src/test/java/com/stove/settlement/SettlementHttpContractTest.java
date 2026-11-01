@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.web.error.BusinessException;
+import com.stove.settlement.core.domain.PgPayment;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.adapter.CatalogOwnerHttpClient;
 import com.stove.settlement.adapter.SimulatedPgPaymentHttpClient;
@@ -76,6 +77,17 @@ class SettlementHttpContractTest {
         response.set("{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game-1\",\"ownerSubject\":\"usr_seller\"}}");
         assertThat(gateway.require("game-1").sellerSubject()).isEqualTo("usr_seller");assertUnavailable(() -> gateway.require("game-2"));
         response.set("{\"productId\":1,\"productCode\":\"game-1\",\"ownerSubject\":\"usr_seller\"}");assertUnavailable(() -> gateway.require("game-1"));
+    }
+    @Test void paymentEvidenceCanExistWithoutCostButPartialCostStillFails() throws Exception {
+        ObjectNode pending=payment();
+        for(String field:List.of("pgFeePolicyId","pgFeeRateBps","pgFeeAmount")) pending.putNull(field);
+        response.set(pending.toString());
+        PgPayment payment=new SimulatedPgPaymentHttpClient(client).require(paymentId);
+        assertThat(payment.cost()).isNull();
+        assertThat(payment.evidence().transactionId()).isEqualTo(pending.path("providerTransactionId").asText());
+        assertThat(payment.amount()).isEqualTo(10000);
+        pending.put("pgFeeAmount",0);response.set(pending.toString());
+        assertUnavailable(() -> new SimulatedPgPaymentHttpClient(client).require(paymentId));
     }
     private void assertUnavailable(Runnable operation) {
         assertThatThrownBy(operation::run).isInstanceOfSatisfying(BusinessException.class,error -> assertThat(error.errorCode()).isEqualTo(ErrorCode.UPSTREAM_UNAVAILABLE));

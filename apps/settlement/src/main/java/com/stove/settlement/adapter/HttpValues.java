@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.core.domain.PgCost;
+import com.stove.settlement.core.domain.PgEvidence;
 import com.stove.settlement.core.domain.PgPayment;
 import java.time.Instant;
 import org.springframework.web.client.RestClient;
@@ -33,9 +34,17 @@ final class HttpValues {
     }
     static PgPayment payment(JsonNode body) {
         if(!"APPROVED".equals(text(body,"decision"))) throw unavailable();
-        return new PgPayment(text(body,"paymentId"),text(body,"orderNo"),number(body,"amount"),text(body,"currency"),
-                new PgCost(text(body,"provider"),text(body,"providerTransactionId"),Instant.parse(text(body,"providerOccurredAt")),
-                        text(body,"pgFeePolicyId"),Math.toIntExact(number(body,"pgFeeRateBps")),number(body,"pgFeeAmount")));
+        PgEvidence evidence=new PgEvidence(text(body,"provider"),text(body,"providerTransactionId"),
+                Instant.parse(text(body,"providerOccurredAt")));
+        boolean noPolicy=body.path("pgFeePolicyId").isNull() || body.path("pgFeePolicyId").isMissingNode();
+        boolean noRate=body.path("pgFeeRateBps").isNull() || body.path("pgFeeRateBps").isMissingNode();
+        boolean noAmount=body.path("pgFeeAmount").isNull() || body.path("pgFeeAmount").isMissingNode();
+        PgCost cost=null;
+        if(!(noPolicy && noRate && noAmount)) {
+            cost=new PgCost(evidence.provider(),evidence.transactionId(),evidence.occurredAt(),
+                    text(body,"pgFeePolicyId"),Math.toIntExact(number(body,"pgFeeRateBps")),number(body,"pgFeeAmount"));
+        }
+        return new PgPayment(text(body,"paymentId"),text(body,"orderNo"),number(body,"amount"),text(body,"currency"),evidence,cost);
     }
     static BusinessException unavailable() { return new BusinessException(ErrorCode.UPSTREAM_UNAVAILABLE); }
 }

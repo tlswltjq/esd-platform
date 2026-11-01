@@ -18,6 +18,7 @@ public record PgSettlement(String provider,String providerSettlementId,String cu
         Set<String> payments=new HashSet<String>(); Set<String> transactions=new HashSet<String>(); Set<String> orders=new HashSet<String>();
         long amount=0; long fee=0;
         for(PgPayment item:items) {
+            SettlementValues.require(item.cost()!=null,"PG 지급 명세에는 확정 비용이 필요합니다.");
             SettlementValues.require(provider.equals(item.cost().getProvider()) && currency.equals(item.currency())
                     && !item.cost().getProviderOccurredAt().isAfter(cutoffAt)
                     && payments.add(item.paymentId()) && transactions.add(item.cost().getProviderTransactionId()) && orders.add(item.orderNo()),
