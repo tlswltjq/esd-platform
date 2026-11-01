@@ -271,7 +271,7 @@ try:
     report=payout(); assert report["recordCount"]==2
     phase("allReceiptsAndAllocationsAgree")
     check("SELECT COUNT(*) FROM stove_settlement.settlement_sale",7,"Seven immutable sales")
-    assert sql("SELECT SUM(amount),SUM(seller_payout_amount),SUM(pg_fee_amount),SUM(platform_net_amount) FROM stove_settlement.settlement_sale")=="70000\t63000\t2100\t4900"
+    assert sql("SELECT SUM(s.amount),SUM(s.seller_payout_amount),SUM(f.pg_fee_amount),SUM(s.platform_fee_amount-f.pg_fee_amount) FROM stove_settlement.settlement_sale s JOIN stove_settlement.settlement_pg_fee f ON f.payment_id=s.payment_id")=="70000\t63000\t2100\t4900"
     assert sql("SELECT SUM(payout_amount) FROM stove_settlement.pg_receipt WHERE status='SIMULATED_RECEIVED'")=="67900"
     assert sql("SELECT COUNT(*) FROM stove_settlement.processed_event WHERE consumer_group='settlement-paid-order'")=="7"
     assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
