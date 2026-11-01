@@ -26,6 +26,9 @@ import com.stove.settlement.api.listener.SettlementOrderMapper;
 import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
 import com.stove.settlement.core.domain.RefundAllocation;
+import com.stove.settlement.core.domain.RefundMonthInput;
+import com.stove.settlement.core.domain.RefundMonthSelection;
+import com.stove.settlement.core.domain.RefundSettlementMonthPolicy;
 import com.stove.settlement.core.domain.PgCost;
 import com.stove.settlement.core.domain.PgEvidence;
 import com.stove.settlement.core.service.SynchronizePgTransaction;
@@ -81,6 +84,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired RecordPaidSale record;
     @Autowired FullRefundAllocationPolicy fullRefundAllocationPolicy;
+    @Autowired RefundSettlementMonthPolicy refundSettlementMonthPolicy;
     @Autowired SynchronizePgTransaction synchronize;
     @Autowired CloseSellerMonth close;
     @Autowired ReceivePgSettlement receive;
@@ -99,6 +103,26 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
     private final Map<String,PgPayment> provider=new ConcurrentHashMap<String,PgPayment>();
+
+    @Test void configuredRefundMonthPolicyUsesLockedStatesWithoutChangingTheClosedLedger() {
+        SettlementSale original = sale(order(Instant.parse("2026-09-01T00:00:00Z")));
+        sale(order()); close.execute("usr_seller", "2026-09");
+        List<Map<String, Object>> beforeSales = jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id");
+        List<Map<String, Object>> beforeMonths = jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id");
+        int beforeInbox = count("processed_event");
+        RefundMonthSelection selected = new TransactionTemplate(transactions).execute(tx -> {
+            boolean confirmedClosed = jdbc.queryForObject("SELECT status='CLOSED' FROM seller_monthly_settlement WHERE seller_subject='usr_seller' AND settlement_month='2026-09' FOR UPDATE", Boolean.class);
+            boolean currentClosed = jdbc.queryForObject("SELECT status='CLOSED' FROM seller_monthly_settlement WHERE seller_subject='usr_seller' AND settlement_month='2026-10' FOR UPDATE", Boolean.class);
+            return refundSettlementMonthPolicy.select(new RefundMonthInput(id(), original.getOrderNo(),
+                    Instant.parse("2026-09-29T00:00:00Z"), NOW, confirmedClosed, currentClosed, null));
+        });
+        assertThat(selected.refundMonth()).isEqualTo("2026-09");
+        assertThat(selected.settlementMonth()).isEqualTo("2026-10");
+        assertThat(selected.reason()).isEqualTo("CLOSED_MONTH_ROLLOVER");
+        assertThat(jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id")).isEqualTo(beforeSales);
+        assertThat(jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id")).isEqualTo(beforeMonths);
+        assertThat(count("processed_event")).isEqualTo(beforeInbox);
+    }
 
     @Test void configuredRefundPolicyUsesTheStoredAllocationWithoutChangingAnyLedgerRows() {
         SettlementSale original = sale(order());
