@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,10 +16,15 @@ import com.stove.common.kafka.contract.Topics;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
@@ -31,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.support.SendResult;
@@ -53,13 +60,21 @@ class DltOpsServiceTest {
      * 호출 자체를 붙잡는다.
      */
     private final AtomicInteger commits = new AtomicInteger();
+    private final AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
     private final MockConsumer<String, String> consumer =
             new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
                 @Override
                 public synchronized void commitSync() {
+                    commitSync(assignment().stream().collect(Collectors.toMap(
+                            partition -> partition, partition -> new OffsetAndMetadata(position(partition)))));
+                }
+
+                @Override
+                public synchronized void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
                     commits.incrementAndGet();
-                    super.commitSync();
+                    committed.set(Map.copyOf(offsets));
+                    super.commitSync(offsets);
                 }
             };
 
@@ -79,7 +94,8 @@ class DltOpsServiceTest {
                 List.of(new PartitionInfo(DLT_TOPIC, 0, null, new Node[0],
                         new Node[0])));
         consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
-        when(consumerFactory.createConsumer(anyString(), anyString())).thenReturn(consumer);
+        when(consumerFactory.createConsumer(anyString(), anyString(), isNull(), any(Properties.class)))
+                .thenReturn(consumer);
         when(kafkaTemplate.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
     }
@@ -92,6 +108,12 @@ class DltOpsServiceTest {
      * 테스트가 미리 넣으려 하면 "not assigned" 로 거절당한다.
      */
     private ConsumerRecord<String, String> deadLetter(String eventId) {
+        ConsumerRecord<String, String> record = record(eventId);
+        consumer.schedulePollTask(() -> consumer.addRecord(record));
+        return record;
+    }
+
+    private ConsumerRecord<String, String> record(String eventId) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 DLT_TOPIC, 0, nextOffset++, "ORD-1", "{\"orderNo\":\"ORD-1\"}");
         record.headers().add(EventHeaders.EVENT_ID, eventId.getBytes(StandardCharsets.UTF_8));
@@ -101,7 +123,6 @@ class DltOpsServiceTest {
         record.headers().add(KafkaHeaders.DLT_ORIGINAL_TOPIC, Topics.PAYMENT.getBytes(StandardCharsets.UTF_8));
         record.headers().add(KafkaHeaders.DLT_EXCEPTION_MESSAGE,
                 "connection pool exhausted".getBytes(StandardCharsets.UTF_8));
-        consumer.schedulePollTask(() -> consumer.addRecord(record));
         return record;
     }
 
@@ -145,7 +166,6 @@ class DltOpsServiceTest {
 
         service.replay(DLT_TOPIC, 10);
 
-        verify(kafkaTemplate).flush();
         assertThat(commits).hasValue(1);
     }
 
@@ -215,6 +235,54 @@ class DltOpsServiceTest {
     }
 
     @Test
+    @DisplayName("한 poll이 max보다 많이 가져와도 재발행하지 않은 레코드의 오프셋은 커밋하지 않는다")
+    void replayCommitsOnlyPublishedOffsets() {
+        List<ConsumerRecord<String, String>> batch = List.of(record("EVT-1"), record("EVT-2"), record("EVT-3"));
+        consumer.schedulePollTask(() -> batch.forEach(consumer::addRecord));
+
+        assertThat(service.replay(DLT_TOPIC, 2)).isEqualTo(2);
+
+        assertThat(committed.get().get(PARTITION).offset()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("비동기 재발행 실패는 성공으로 반환하거나 DLT 오프셋을 커밋하지 않는다")
+    void failedSendDoesNotCommit() {
+        deadLetter("EVT-1");
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")));
+
+        assertThatThrownBy(() -> service.replay(DLT_TOPIC, 10)).isInstanceOf(KafkaException.class);
+
+        assertThat(commits).hasValue(0);
+    }
+
+    @Test
+    void interruptedPublicationDoesNotCommitAndPreservesTheInterruptFlag() {
+        deadLetter("EVT-1");
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(call -> {
+            Thread.currentThread().interrupt();
+            return new CompletableFuture<>();
+        });
+        try {
+            assertThatThrownBy(() -> service.replay(DLT_TOPIC, 10)).isInstanceOf(KafkaException.class);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            assertThat(commits).hasValue(0);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void operationalConsumersExplicitlyDisableAutoCommitAndReadExistingRecords() {
+        service.peek(DLT_TOPIC, 10);
+        ArgumentCaptor<Properties> options = ArgumentCaptor.forClass(Properties.class);
+        verify(consumerFactory).createConsumer(anyString(), anyString(), isNull(), options.capture());
+        assertThat(options.getValue()).containsEntry(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+                .containsEntry(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+    }
+
+    @Test
     @DisplayName("비어 있으면 0 건이고 아무것도 발행하지 않는다")
     void replayOnEmptyTopic() {
         assertThat(service.replay(DLT_TOPIC, 10)).isZero();
@@ -228,5 +296,12 @@ class DltOpsServiceTest {
         assertThatThrownBy(() -> service.peek("stove.없는토픽.v1.DLT", 10))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("없는토픽");
+    }
+
+    @Test
+    void anOriginalTopicCannotBeUsedAsAReplaySource() {
+        assertThatThrownBy(() -> service.replay(Topics.PAYMENT, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(consumerFactory, never()).createConsumer(anyString(), anyString(), isNull(), any(Properties.class));
     }
 }

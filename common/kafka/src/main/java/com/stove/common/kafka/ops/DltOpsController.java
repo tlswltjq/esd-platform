@@ -29,14 +29,22 @@ public class DltOpsController {
     @GetMapping
     public ApiResponse<List<DltRecordResponse>> peek(@RequestParam String topic,
                                                      @RequestParam(defaultValue = "20") int max) {
-        return ApiResponse.ok(dltOps.peek(topic, capped(max)));
+        try {
+            return ApiResponse.ok(dltOps.peek(topic, capped(max)));
+        } catch (IllegalArgumentException failure) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, failure.getMessage());
+        }
     }
 
     /** 원본 토픽으로 되돌린다. <b>원인을 먼저 고쳐야 한다</b> — {@link #peek} 로 보고 판단한다. */
     @PostMapping("/replay")
     public ApiResponse<ReplayedCount> replay(@RequestParam String topic,
                                              @RequestParam(defaultValue = "100") int max) {
-        return ApiResponse.ok(new ReplayedCount(dltOps.replay(topic, capped(max))));
+        try {
+            return ApiResponse.ok(new ReplayedCount(dltOps.replay(topic, capped(max))));
+        } catch (IllegalArgumentException failure) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, failure.getMessage());
+        }
     }
 
     private static int capped(int max) {

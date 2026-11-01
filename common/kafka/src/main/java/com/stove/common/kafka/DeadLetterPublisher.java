@@ -19,8 +19,10 @@ public final class DeadLetterPublisher {
      */
     public static ConsumerRecordRecoverer to(KafkaTemplate<String, String> kafkaTemplate,
                                              DeadLetterMetrics metrics) {
-        ConsumerRecordRecoverer publisher =
+        DeadLetterPublishingRecoverer publisher =
                 new DeadLetterPublishingRecoverer(kafkaTemplate, DeadLetterTopics::of);
+        // 비동기 발행 실패도 복구 실패로 전파해 원본 소비 오프셋이 넘어가지 않게 한다.
+        publisher.setFailIfSendResultIsError(true);
         return (record, exception) -> {
             publisher.accept(record, exception);
             metrics.recordDeadLettered(record.topic());

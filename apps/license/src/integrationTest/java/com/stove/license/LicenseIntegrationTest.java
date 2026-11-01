@@ -387,7 +387,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         assertThat(http("GET", "/api/v1/library/bad!code", bearer).status()).isEqualTo(400);
         for (String path : List.of("/api/v1/library", "/api/v1/library/Game-1/revoke", "/api/v1/ops/dlt", "/api/v1/licenses"))
             assertThat(http("POST", path, bearer).status()).isEqualTo(403);
-        assertThat(http("GET", "/api/v1/ops/dlt", token("admin", "ADMIN")).status()).isEqualTo(403);
+        // ADMIN 권한이 있어도 기본 비활성 설정에서는 운영 컨트롤러가 등록되지 않는다.
+        assertThat(http("GET", "/api/v1/ops/dlt", token("admin", "ADMIN")).status()).isEqualTo(404);
     }
 
     @Test

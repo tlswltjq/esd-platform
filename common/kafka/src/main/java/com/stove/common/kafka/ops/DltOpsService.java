@@ -4,19 +4,30 @@ import com.stove.common.kafka.DeadLetterTopics;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.kafka.support.SendResult;
 
 /**
  * DLT 를 들여다보고 원본 토픽으로 되돌린다. 조회는 커밋하지 않으므로
@@ -54,33 +65,52 @@ public class DltOpsService {
     public int replay(String topic, int max) {
         try (Consumer<String, String> consumer = openConsumer(topic)) {
             List<ConsumerRecord<String, String>> records = drain(consumer, max);
-            records.forEach(this::republish);
             if (!records.isEmpty()) {
-                // 발행이 끝난 뒤에만 커밋한다 — 뒤집히면 실패한 레코드가 사라진다.
-                kafkaTemplate.flush();
-                consumer.commitSync();
-                log.warn("운영 재투입 — DLT {}건을 원본 토픽으로 되돌렸다 topic={}", records.size(), topic);
+                awaitPublished(records);
+                Map<TopicPartition, OffsetAndMetadata> offsets = new HashMap<>();
+                for (ConsumerRecord<String, String> record : records) {
+                    offsets.put(new TopicPartition(record.topic(), record.partition()),
+                            new OffsetAndMetadata(record.offset() + 1));
+                }
+                // poll 위치는 max 밖의 레코드까지 전진할 수 있다. 실제 발행한 범위만 커밋한다.
+                consumer.commitSync(offsets);
+                log.warn("운영 재투입 — DLT {}건을 원본 토픽으로 되돌렸다 topic={} offsets={}",
+                        records.size(), topic, offsets);
             }
             return records.size();
         }
     }
 
     private Consumer<String, String> openConsumer(String topic) {
-        Consumer<String, String> consumer = consumerFactory.createConsumer(replayGroupId, "-ops");
-        List<PartitionInfo> partitions = consumer.partitionsFor(topic);
-        if (partitions == null || partitions.isEmpty()) {
-            consumer.close();
-            throw new IllegalArgumentException("그런 토픽이 없다: " + topic);
+        if (topic == null || !topic.endsWith(DeadLetterTopics.SUFFIX)
+                || topic.length() == DeadLetterTopics.SUFFIX.length()) {
+            throw new IllegalArgumentException("DLT 토픽 이름이 필요합니다: " + topic);
         }
-        // subscribe 가 아니라 assign 이다 — 리밸런스를 기다리지 않고 바로 읽는다.
-        consumer.assign(partitions.stream()
-                .map(partition -> new TopicPartition(partition.topic(), partition.partition()))
-                .toList());
-        return consumer;
+        Properties overrides = new Properties();
+        overrides.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        overrides.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        Consumer<String, String> consumer = consumerFactory.createConsumer(replayGroupId, "-ops", null, overrides);
+        try {
+            List<PartitionInfo> partitions = consumer.partitionsFor(topic);
+            if (partitions == null || partitions.isEmpty()) {
+                throw new IllegalArgumentException("그런 토픽이 없다: " + topic);
+            }
+            // subscribe 가 아니라 assign 이다 — 리밸런스를 기다리지 않고 바로 읽는다.
+            consumer.assign(partitions.stream()
+                    .map(partition -> new TopicPartition(partition.topic(), partition.partition()))
+                    .toList());
+            return consumer;
+        } catch (RuntimeException failure) {
+            consumer.close();
+            throw failure;
+        }
     }
 
     /** 더 나올 것이 없거나 {@code max} 를 채울 때까지 읽는다. */
     private List<ConsumerRecord<String, String>> drain(Consumer<String, String> consumer, int max) {
+        if (max < 1) {
+            throw new IllegalArgumentException("max 는 1 이상이어야 한다");
+        }
         List<ConsumerRecord<String, String>> collected = new ArrayList<>();
         while (collected.size() < max) {
             ConsumerRecords<String, String> polled = consumer.poll(POLL_TIMEOUT);
@@ -101,7 +131,7 @@ public class DltOpsService {
      * 원본 토픽으로 되돌린다. {@code kafka_dlt-*} 헤더는 <b>떼고</b> 보내고,
      * 파티션은 지정하지 않는다(키가 그대로라 원래 파티션으로 간다).
      */
-    private void republish(ConsumerRecord<String, String> record) {
+    private CompletableFuture<SendResult<String, String>> republish(ConsumerRecord<String, String> record) {
         String originalTopic = originalTopicOf(record);
         ProducerRecord<String, String> restored =
                 new ProducerRecord<>(originalTopic, record.key(), record.value());
@@ -110,7 +140,19 @@ public class DltOpsService {
                 restored.headers().add(header);
             }
         }
-        kafkaTemplate.send(restored);
+        return kafkaTemplate.send(restored);
+    }
+
+    private void awaitPublished(List<ConsumerRecord<String, String>> records) {
+        try {
+            CompletableFuture.allOf(records.stream().map(this::republish)
+                    .toArray(CompletableFuture<?>[]::new)).get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new KafkaException("DLT 재투입이 중단되었습니다. 오프셋을 커밋하지 않습니다.", failure);
+        } catch (ExecutionException | TimeoutException failure) {
+            throw new KafkaException("DLT 재투입 발행을 확인하지 못했습니다. 오프셋을 커밋하지 않습니다.", failure);
+        }
     }
 
     /** 헤더가 정답이다. 없는 레코드(손으로 넣은 것 등)는 이름 규칙으로 되돌린다. */

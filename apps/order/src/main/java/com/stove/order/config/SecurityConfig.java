@@ -36,6 +36,9 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay",
+                                "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/refunds", "/api/v1/admin/refunds/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/decision").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/refunds/*/approval-stops").hasRole("ADMIN")
