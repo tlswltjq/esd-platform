@@ -21,6 +21,8 @@ MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변�
 환경변수·YAML 바인딩과 객체 조립은 config에서 담당한다. 서비스·도메인·어댑터는 필요한 값과 구성된 클라이언트를 받으며 Properties를 참조하지 않는다.
 공통 라이브러리의 AutoConfiguration도 같은 조립 경계다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)과 [전역 적용 기록](core-boundary-audit.md#설정-바인딩과-내부-입력-경계-개선)을 따른다.
 
+완료 앱은 `AppArchitectureRules`의 공통 묶음을 등록해 패키지·위생·이벤트 입력/순서·그룹 규칙을 적용한다. 검사 대상 앱이 비면 실패하고, 역할에 없는 개별 계층은 빈 대상을 허용한다. 다른 앱의 `com.stove.<앱>` 구현을 직접 참조하지 않으며 공통 계약과 호출 모듈의 포트를 사용한다. config의 인바운드 조립은 허용한다. [검사 정비와 OCI 검증](architecture-test-improvement-20261102.md)을 따른다.
+
 ## 트랜잭션과 이벤트 전달
 
 `core.service`의 업무 클래스 명명과 책임 분리는 [유스케이스 작성 규칙](use-case-conventions.md)을 따른다.

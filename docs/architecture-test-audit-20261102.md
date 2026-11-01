@@ -2,6 +2,8 @@
 
 2026-11-02. 사용자의 요청에 따라 기존 변경을 작업별로 먼저 커밋한 뒤, 프로젝트의 책임 경계·최근 검사 실패·검사의 적용 범위와 반례를 점검했다. 기준 코드는 `4e22870`이다.
 
+이 문서는 수정 전 점검 기록이다. 이후 사용자가 권장안에 맞춘 수정을 요청했으며, 현재 적용 내용과 실행 결과는 [검사 정비 기록](architecture-test-improvement-20261102.md)을 따른다.
+
 **판단: 현재 구조의 큰 틀을 유지하고 검사 규칙과 등록 범위를 정비하는 것이 적절하다.** 현재 등록된 검사 477건은 통과했다. 별도 진단에서 과도한 제약 3유형과 놓치는 경계 8유형을 재현했다. 이는 현재 업무 코드의 고장 11건을 발견했다는 뜻이 아니다. 기존 업무 코드·아키텍처 규칙·테스트 등록은 변경하지 않았다. 아래 수정 방향은 검토 권고이며 새로운 합의로 기록하지 않는다.
 
 ## 1. 먼저 완료한 작업별 커밋
@@ -82,7 +84,7 @@ Spring은 클래스 수준 Async도 지원하고, Bean 메서드는 일반 Compo
 
 | 대상 | 현재 등록 | 추가 진단 결과·권고 |
 |---|---|---|
-| Auth | [설정 경계 4개](../apps/auth/src/test/java/com/stove/auth/AuthConfigurationBoundaryTest.java) | 기본 패키지·위생 규칙 33개를 별도 적용해 모두 통과했다. 기본 구조 검사 등록을 확대할 수 있다. 33개에는 기존 설정 경계도 포함한다. |
+| Auth | 당시 `AuthConfigurationBoundaryTest`의 설정 경계 4개 | 기본 패키지·위생 규칙 33개를 별도 적용해 모두 통과했다. 기본 구조 검사 등록을 확대할 수 있다. 33개에는 기존 설정 경계도 포함한다. 이후 [AuthArchitectureTest](../apps/auth/src/test/java/com/stove/auth/AuthArchitectureTest.java)로 통합했다. |
 | Settlement | [기본 규칙 39개](../apps/settlement/src/test/java/com/stove/settlement/SettlementArchitectureTest.java), EventInputRules 등록 없음 | 현재 Mapper/내부 입력 구조에 이벤트 입력 규칙 3개를 별도 적용해 모두 통과했다. 등록 누락을 보완할 수 있다. |
 | Catalog·License·Order·Payment·Review·Store·Studio | 기본 규칙과 이벤트 입력 규칙 등록 | 기존 등록 검사 통과. Payment는 별도의 core 추적 라이브러리 경계 1개도 검사한다. |
 | Download·Gateway | 기본 규칙 등록 | 기존 등록 검사 통과. 실제 역할에 없는 이벤트 소비를 만들거나 같은 검사 숫자를 맞출 필요는 없다. |

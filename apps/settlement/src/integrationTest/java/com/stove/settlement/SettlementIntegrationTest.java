@@ -76,6 +76,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Arrays;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -462,6 +463,40 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
                 token("s","CREATOR",ISSUER,"esd-api",Instant.now().minusSeconds(300)),creator.substring(0,creator.length()-10)+"invalid-signature"))
             assertThat(http("GET","/api/v1/settlements/me/sales",invalid,null).status()).isEqualTo(401);
     }
+    @Test void listenerConsumerGroupsMatchTheInboxKeysUsedByTheirServices() throws Exception {
+        PaidOrder input = order();
+        prepare(input);
+        OrderPaidEvent paid = new OrderPaidEvent(input.eventId(), input.occurredAt(), input.orderNo(),
+                input.requestEventId(), input.paymentResultEventId(), input.paymentId(), input.buyerSubject(),
+                input.productId(), input.productCode(), input.title(), input.contentVersion(), input.amount(), input.currency());
+        ProducerRecord<String, String> message = new ProducerRecord<>(Topics.ORDER, input.orderNo(), mapper.writeValueAsString(paid));
+        message.headers().add(EventHeaders.EVENT_ID, paid.eventId().getBytes(StandardCharsets.UTF_8));
+        message.headers().add(EventHeaders.EVENT_TYPE, paid.eventType().getBytes(StandardCharsets.UTF_8));
+        listeners.start();
+        try {
+            kafka.send(message).get(10, TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_sale")).isEqualTo(1));
+            assertInboxUsesListenerGroup(Topics.ORDER, paid.eventId());
+
+            RefundPaymentConfirmedEvent confirmed = event(prepareRefund(input));
+            sendRefundEvent(confirmed.eventId(), confirmed.eventType(), input.orderNo(), confirmed);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_refund")).isEqualTo(1));
+            assertInboxUsesListenerGroup(Topics.PAYMENT, confirmed.eventId());
+            assertThat(count("processed_event")).isEqualTo(2);
+        } finally {
+            listeners.stop();
+        }
+    }
+
+    private void assertInboxUsesListenerGroup(String topic, String eventId) {
+        List<String> groups = listeners.getListenerContainers().stream()
+                .filter(container -> container.getContainerProperties().getTopics() != null)
+                .filter(container -> Arrays.asList(container.getContainerProperties().getTopics()).contains(topic))
+                .map(container -> container.getGroupId()).toList();
+        String inboxGroup = jdbc.queryForObject("SELECT consumer_group FROM processed_event WHERE event_id=?", String.class, eventId);
+        assertThat(groups).as("%s listener group must match the Inbox group for %s", topic, eventId).containsExactly(inboxGroup);
+    }
+
     @Test void refundBeforeOriginalSaleGoesToDltAndOriginalReplayPostsOnceDespiteLateExecutionEnrichment() throws Exception {
         PaidOrder input=order(); prepare(input); ConfirmedRefund confirmation=prepareRefund(input);
         RefundPaymentConfirmedEvent financial=event(confirmation);
