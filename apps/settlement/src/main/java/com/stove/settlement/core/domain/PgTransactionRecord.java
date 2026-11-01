@@ -2,11 +2,13 @@ package com.stove.settlement.core.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,6 +25,7 @@ public class PgTransactionRecord {
     @Column(nullable = false, updatable = false, length = 100) private String providerTransactionId;
     @Column(nullable = false, updatable = false) private Instant providerOccurredAt;
     @Column(nullable = false, updatable = false) private Instant receivedAt;
+    @Embedded private PgFunding funding;
 
     public static PgTransactionRecord record(PgPayment input, Instant now) {
         SettlementValues.require(input != null && SettlementValues.microsecond(now), "PG 거래 접수 근거가 필요합니다.");
@@ -31,13 +34,15 @@ public class PgTransactionRecord {
         result.amount = input.amount(); result.currency = input.currency();
         result.provider = input.evidence().provider(); result.providerTransactionId = input.evidence().transactionId();
         result.providerOccurredAt = input.evidence().occurredAt(); result.receivedAt = now;
+        result.funding = input.funding();
         return result;
     }
     public PgEvidence evidence() { return new PgEvidence(provider, providerTransactionId, providerOccurredAt); }
-    public PgPayment payment(PgCost cost) { return new PgPayment(paymentId, orderNo, amount, currency, evidence(), cost); }
+    public PgPayment payment(PgCost cost) { return new PgPayment(paymentId, orderNo, amount, currency, evidence(), cost, funding); }
     public void requireSame(PgPayment input) {
         SettlementValues.consistent(input != null && paymentId.equals(input.paymentId()) && orderNo.equals(input.orderNo())
-                && amount == input.amount() && currency.equals(input.currency()) && evidence().equals(input.evidence()),
+                && amount == input.amount() && currency.equals(input.currency()) && evidence().equals(input.evidence())
+                && Objects.equals(funding, input.funding()),
                 "이미 확인한 PG 거래 근거와 다릅니다.");
     }
     public void requireSale(SettlementSale sale) {

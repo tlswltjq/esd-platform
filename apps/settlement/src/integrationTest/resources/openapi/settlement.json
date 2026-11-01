@@ -33,6 +33,9 @@
       },
       "AdminSaleResponse" : {
         "properties" : {
+          "funding" : {
+            "$ref" : "#/components/schemas/PgFunding"
+          },
           "pgCost" : {
             "$ref" : "#/components/schemas/PgCost"
           },
@@ -322,6 +325,38 @@
         },
         "type" : "object"
       },
+      "PgFunding" : {
+        "properties" : {
+          "benefitPolicyId" : {
+            "type" : "string"
+          },
+          "fundingTotalAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgDiscountAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "pgPaidAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "providerChannelKey" : {
+            "type" : "string"
+          },
+          "providerChannelType" : {
+            "type" : "string"
+          },
+          "providerPgProvider" : {
+            "type" : "string"
+          },
+          "providerStoreId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PgPayment" : {
         "properties" : {
           "amount" : {
@@ -336,6 +371,9 @@
           },
           "evidence" : {
             "$ref" : "#/components/schemas/PgEvidence"
+          },
+          "funding" : {
+            "$ref" : "#/components/schemas/PgFunding"
           },
           "orderNo" : {
             "type" : "string"
@@ -437,6 +475,9 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "funding" : {
+            "$ref" : "#/components/schemas/PgFunding"
           },
           "orderNo" : {
             "type" : "string"

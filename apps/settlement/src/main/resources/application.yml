@@ -57,12 +57,20 @@ spring:
 
 stove:
   settlement:
+    pg-provider: ${SETTLEMENT_PG_PROVIDER:SIMULATED}
     pg-base-url: ${MOCK_PG_URI:http://localhost:8092}
     pg-api-key: ${MOCK_PG_SETTLEMENT_KEY:}
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     catalog-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
     connect-timeout: 2s
     read-timeout: 5s
+    portone:
+      base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
+      api-secret: ${PORTONE_API_SECRET:}
+      store-id: ${PORTONE_STORE_ID:}
+      channel-key: ${PORTONE_CHANNEL_KEY:}
+      connect-timeout: 2s
+      read-timeout: 5s
   messaging:
     ops:
       enabled: false

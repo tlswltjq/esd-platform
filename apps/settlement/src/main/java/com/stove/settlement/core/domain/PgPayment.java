@@ -1,20 +1,27 @@
 package com.stove.settlement.core.domain;
 
 public record PgPayment(String paymentId, String orderNo, long amount, String currency,
-                        PgEvidence evidence, PgCost cost) {
+                        PgEvidence evidence, PgCost cost, PgFunding funding) {
     public PgPayment {
         SettlementValues.require(SettlementValues.text(paymentId, 64) && SettlementValues.uuid(orderNo),
                 "PG 결제 연결이 올바르지 않습니다.");
         SettlementValues.require(amount > 0 && "KRW".equals(currency) && evidence != null,
                 "PG 결제액과 거래 근거가 올바르지 않습니다.");
+        SettlementValues.require("PORTONE_TEST".equals(evidence.provider()) == (funding != null),
+                "PortOne 원승인에는 검증된 지급 구성 근거가 필요합니다.");
+        if (funding != null) funding.requirePayment(evidence, amount);
         if (cost != null) {
             cost.requireEvidence(evidence);
             SettlementValues.require(cost.getPgFeeAmount() <= amount, "PG 비용이 결제액을 초과합니다.");
         }
     }
 
+    public PgPayment(String paymentId, String orderNo, long amount, String currency, PgEvidence evidence, PgCost cost) {
+        this(paymentId, orderNo, amount, currency, evidence, cost, null);
+    }
+
     public PgPayment(String paymentId, String orderNo, long amount, String currency, PgCost cost) {
-        this(paymentId, orderNo, amount, currency, evidenceOf(cost), cost);
+        this(paymentId, orderNo, amount, currency, evidenceOf(cost), cost, null);
     }
 
     private static PgEvidence evidenceOf(PgCost cost) {

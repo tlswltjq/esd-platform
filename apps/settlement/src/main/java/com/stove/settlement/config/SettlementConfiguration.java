@@ -24,6 +24,7 @@ import com.stove.settlement.core.service.RecordPaidSale;
 import java.net.URI;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -34,10 +35,12 @@ import org.springframework.web.client.RestClient;
 public class SettlementConfiguration {
     @Bean Clock settlementClock() { return Clock.systemUTC(); }
     @Bean PlatformFeePolicy platformFeePolicy() { return new PlatformFeePolicy("PLATFORM_MVP_V1",1000); }
-    @Bean PgPayments pgPayments(SettlementHttpProperties p, RestClient.Builder builder) {
+    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
+    PgPayments pgPayments(SettlementHttpProperties p, RestClient.Builder builder) {
         return new SimulatedPgPaymentHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
     }
-    @Bean PgSettlements pgSettlements(SettlementHttpProperties p, RestClient.Builder builder) {
+    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
+    PgSettlements pgSettlements(SettlementHttpProperties p, RestClient.Builder builder) {
         return new SimulatedPgSettlementHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
     }
     @Bean CatalogOwners catalogOwners(SettlementHttpProperties p, RestClient.Builder builder) {

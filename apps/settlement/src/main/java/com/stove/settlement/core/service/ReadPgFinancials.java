@@ -39,7 +39,7 @@ public class ReadPgFinancials {
             PgTransactionRecord fact = facts.get(sale.getPaymentId());
             if (fact == null) throw new BusinessException(ErrorCode.CONFLICT, "매출의 PG 거래 근거가 없습니다.");
             fact.requireSale(sale);
-            return new SettlementSaleView(sale, fact.evidence(), costs.get(sale.getPaymentId()));
+            return new SettlementSaleView(sale, fact.evidence(), costs.get(sale.getPaymentId()), fact.getFunding());
         });
     }
 

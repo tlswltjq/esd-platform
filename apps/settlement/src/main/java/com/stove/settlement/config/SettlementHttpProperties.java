@@ -6,9 +6,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("stove.settlement")
 public record SettlementHttpProperties(URI pgBaseUrl,String pgApiKey,URI catalogBaseUrl,String catalogKey,
-        Duration connectTimeout,Duration readTimeout) {
+        Duration connectTimeout,Duration readTimeout,String pgProvider) {
     public SettlementHttpProperties {
-        if(!http(pgBaseUrl) || !http(catalogBaseUrl) || pgApiKey==null || pgApiKey.isBlank() || catalogKey==null || catalogKey.isBlank()
+        boolean simulated = "SIMULATED".equals(pgProvider);
+        if((!simulated && !"PORTONE_TEST".equals(pgProvider))
+                || (simulated && (!http(pgBaseUrl) || pgApiKey==null || pgApiKey.isBlank()))
+                || !http(catalogBaseUrl) || catalogKey==null || catalogKey.isBlank()
                 || connectTimeout==null || connectTimeout.isNegative() || connectTimeout.isZero()
                 || readTimeout==null || readTimeout.isNegative() || readTimeout.isZero())
             throw new IllegalArgumentException("PG/Catalog endpoints, keys and timeouts are required");
