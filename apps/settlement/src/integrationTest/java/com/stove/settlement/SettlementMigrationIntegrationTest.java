@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.stove.common.testcontainers.SharedContainers;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
@@ -127,7 +128,7 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'10' ORDER BY installed_rank")).isEqualTo(oldChecksums);
             List<Map<String,Object>> v10Checksums=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
             Map<String,Object> v10Month=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
-            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            Flyway.configure().dataSource(source).locations(location).target("11").load().migrate();
             assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'11' ORDER BY installed_rank")).isEqualTo(v10Checksums);
             assertThat(jdbc.queryForList("SELECT * FROM settlement_sale ORDER BY id")).isEqualTo(oldSales);
             assertThat(jdbc.queryForList("SELECT * FROM settlement_pg_transaction ORDER BY id")).isEqualTo(oldTransactions);
@@ -137,6 +138,29 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             assertThat(jdbc.queryForMap("SELECT * FROM pg_receipt_item")).isEqualTo(itemBefore);
             for(String table:List.of("settlement_pg_statement","settlement_pg_statement_page","settlement_pg_statement_entry","settlement_pg_statement_item"))
                 assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM "+table,Long.class)).as(table).isZero();
+            jdbc.update("""
+                    INSERT INTO settlement_pg_statement(merchant_id,environment,portone_store_id,portone_channel_key,identity_mapping_verified,
+                      date_type,base_date,fingerprint,total_amount,total_fee,total_vat,total_fee_vat_sum,record_count,page_count,
+                      received_at,collected_by,status)
+                    VALUES('historical-merchant','LIVE','store','channel',false,'DUE','2026-10-01','historical-fingerprint',
+                      10000,-300,-30,-330,1,1,'2026-10-02','admin','PENDING')
+                    """);
+            jdbc.update("INSERT INTO settlement_pg_statement_page(statement_id,page_position,request_cursor,next_cursor,response_body) VALUES(1,0,NULL,'','historical-raw-page')");
+            jdbc.update("""
+                    INSERT INTO settlement_pg_statement_entry(merchant_id,environment,transaction_type,transaction_id,pay_token,order_no,
+                      amount,fee,vat,fee_vat_sum,pay_method,due_date,received_at)
+                    VALUES('historical-merchant','LIVE','PAY','historical-pay','token','payment',10000,-300,-30,-330,'CARD','2026-10-01','2026-10-02')
+                    """);
+            jdbc.update("INSERT INTO settlement_pg_statement_item(statement_id,item_position,entry_id,check_code) VALUES(1,0,1,'MISSING_SALE')");
+            List<String> preservedTables=List.of("settlement_sale","settlement_pg_transaction","settlement_pg_fee","seller_monthly_settlement",
+                    "pg_receipt","pg_receipt_item","settlement_pg_statement","settlement_pg_statement_page","settlement_pg_statement_entry","settlement_pg_statement_item");
+            Map<String,List<Map<String,Object>>> preserved=new HashMap<>();
+            for(String table:preservedTables) preserved.put(table,jdbc.queryForList("SELECT * FROM "+table));
+            List<Map<String,Object>> beforeV12=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'12' ORDER BY installed_rank")).isEqualTo(beforeV12);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_pg_cost_posting",Long.class)).isZero();
+            for(String table:preservedTables) assertThat(jdbc.queryForList("SELECT * FROM "+table)).as(table).isEqualTo(preserved.get(table));
             Flyway.configure().dataSource(source).locations(location).load().validate();
         } finally { root.execute("DROP DATABASE " + schema); }
     }

@@ -1,0 +1,10 @@
+{
+  "transactionList": [
+    {"transactionType":"REFUND","transactionId":"refund-1","payToken":"token","orderNo":"payment","productDesc":"Fixture title","amount":-9000,"fee":200,"vat":20,"feeVatSum":220,"payMethod":"CARD","dueDate":"20261001"}
+  ],
+  "nextCursor":"",
+  "totalAmount":0,
+  "totalFee":-100,
+  "totalVat":-10,
+  "totalFeeVatSum":-110
+}

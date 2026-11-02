@@ -12,8 +12,12 @@ public class SynchronizePgStatements implements Runnable {
     private final ReceivePgStatement collect;
     private final Clock clock;
     private final int lookbackDays;
+    private final Runnable recovery;
     public SynchronizePgStatements(ReceivePgStatement collect,Clock clock,int lookbackDays) {
-        this.collect=collect;this.clock=clock;this.lookbackDays=lookbackDays;
+        this(collect,clock,lookbackDays,() -> { });
+    }
+    public SynchronizePgStatements(ReceivePgStatement collect,Clock clock,int lookbackDays,Runnable recovery) {
+        this.collect=collect;this.clock=clock;this.lookbackDays=lookbackDays;this.recovery=recovery;
     }
     @Override public void run() {
         ZonedDateTime now=clock.instant().atZone(ZoneId.of("Asia/Seoul"));
@@ -22,6 +26,7 @@ public class SynchronizePgStatements implements Runnable {
         for(int day=1;day<=lookbackDays;day++) {
             LocalDate date=today.minusDays(day);collect("DUE",date);collect("SETTLE",date);
         }
+        recovery.run();
     }
     private void collect(String type,LocalDate date) {
         try {collect.execute(new PgStatementQuery(type,date),"SYSTEM:TOSSPAY");}

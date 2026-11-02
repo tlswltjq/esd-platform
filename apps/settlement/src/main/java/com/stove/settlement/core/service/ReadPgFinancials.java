@@ -3,6 +3,9 @@ package com.stove.settlement.core.service;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.core.domain.PgCost;
+import com.stove.settlement.core.domain.PgCostPostingRepository;
+import com.stove.settlement.core.domain.PgCostTotals;
+import com.stove.settlement.core.domain.PgPostedCostGroup;
 import com.stove.settlement.core.domain.PgFeeGroup;
 import com.stove.settlement.core.domain.PgFeeRecord;
 import com.stove.settlement.core.domain.PgFeeRepository;
@@ -15,6 +18,7 @@ import com.stove.settlement.core.domain.SellerMonthKey;
 import com.stove.settlement.core.domain.SettlementSale;
 import com.stove.settlement.core.domain.SettlementSaleView;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReadPgFinancials {
     private final PgTransactionRepository transactions;
     private final PgFeeRepository fees;
+    private final PgCostPostingRepository postings;
 
     public Page<SettlementSaleView> sales(Page<SettlementSale> page) {
         if (page.isEmpty()) return new PageImpl<>(List.of(),page.getPageable(),page.getTotalElements());
@@ -44,23 +49,34 @@ public class ReadPgFinancials {
     }
 
     public Page<SellerMonthView> months(Page<SellerMonthlySettlement> page) {
-        if (page.isEmpty()) return new PageImpl<>(List.of(),page.getPageable(),page.getTotalElements());
-        Map<SellerMonthKey, PgFeeTotals> totals = summaries(page.getContent());
-        return page.map(month -> new SellerMonthView(month, totals.getOrDefault(
-                new SellerMonthKey(month.getSellerSubject(), month.getSettlementMonth()), new PgFeeTotals(0, 0, 0))));
+        if(page.isEmpty()) return new PageImpl<>(List.of(),page.getPageable(),page.getTotalElements());
+        Map<SellerMonthKey,SellerMonthView> views=summaries(page.getContent());
+        return page.map(month -> views.get(new SellerMonthKey(month.getSellerSubject(),month.getSettlementMonth())));
     }
-
     public SellerMonthView month(SellerMonthlySettlement month) {
-        Map<SellerMonthKey, PgFeeTotals> totals = summaries(List.of(month));
-        return new SellerMonthView(month, totals.getOrDefault(
-                new SellerMonthKey(month.getSellerSubject(), month.getSettlementMonth()), new PgFeeTotals(0, 0, 0)));
+        return summaries(List.of(month)).get(new SellerMonthKey(month.getSellerSubject(),month.getSettlementMonth()));
     }
-
-    private Map<SellerMonthKey, PgFeeTotals> summaries(List<SellerMonthlySettlement> months) {
-        List<String> sellers = months.stream().map(SellerMonthlySettlement::getSellerSubject).distinct().toList();
-        List<String> periods = months.stream().map(SellerMonthlySettlement::getSettlementMonth).distinct().toList();
-        return fees.summarize(sellers, periods).stream().collect(Collectors.toMap(
-                group -> new SellerMonthKey(group.sellerSubject(), group.settlementMonth()), PgFeeGroup::totals));
+    private Map<SellerMonthKey,SellerMonthView> summaries(List<SellerMonthlySettlement> months) {
+        List<String> sellers=months.stream().map(SellerMonthlySettlement::getSellerSubject).distinct().toList();
+        List<String> periods=months.stream().map(SellerMonthlySettlement::getSettlementMonth).distinct().toList();
+        Map<SellerMonthKey,PgFeeTotals> legacy=fees.summarize(sellers,periods).stream().collect(Collectors.toMap(
+                group -> new SellerMonthKey(group.sellerSubject(),group.settlementMonth()),PgFeeGroup::totals));
+        List<PgPostedCostGroup> reported=postings.summarize(sellers,periods);
+        Map<SellerMonthKey,SellerMonthView> result=new HashMap<>();
+        for(SellerMonthlySettlement month:months) {
+            SellerMonthKey key=new SellerMonthKey(month.getSellerSubject(),month.getSettlementMonth());
+            PgFeeTotals old=legacy.getOrDefault(key,new PgFeeTotals(0,0,0));
+            long saleCount=old.confirmedCount();long saleFee=old.confirmedFeeAmount();long saleVat=0;
+            long refundCount=0;long refundFee=0;long refundVat=0;
+            for(PgPostedCostGroup group:reported) {
+                if(!key.equals(new SellerMonthKey(group.sellerSubject(),group.businessMonth()))) continue;
+                if("PAY".equals(group.transactionType())) {
+                    saleCount=Math.addExact(saleCount,group.confirmedCount());saleFee=Math.addExact(saleFee,group.fee());saleVat=Math.addExact(saleVat,group.vat());
+                } else {refundCount=Math.addExact(refundCount,group.confirmedCount());refundFee=Math.addExact(refundFee,group.fee());refundVat=Math.addExact(refundVat,group.vat());}
+            }
+            result.put(key,new SellerMonthView(month,new PgCostTotals(month.getRecordCount(),saleCount,saleFee,saleVat),
+                    new PgCostTotals(month.getRefundCount(),refundCount,refundFee,refundVat)));
+        }
+        return result;
     }
-
 }

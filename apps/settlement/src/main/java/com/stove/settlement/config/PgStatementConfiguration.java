@@ -3,6 +3,7 @@ package com.stove.settlement.config;
 import com.stove.settlement.adapter.TossPayStatementHttpClient;
 import com.stove.settlement.adapter.UnavailablePgStatementSource;
 import com.stove.settlement.core.domain.PgStatementEntryRepository;
+import com.stove.settlement.core.domain.PgCostPostingRepository;
 import com.stove.settlement.core.domain.PgStatementItemRepository;
 import com.stove.settlement.core.domain.PgStatementRepository;
 import com.stove.settlement.core.domain.PgStatementScope;
@@ -11,6 +12,7 @@ import com.stove.settlement.core.domain.SettlementRefundRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.PgStatementSource;
 import com.stove.settlement.core.service.ReceivePgStatement;
+import com.stove.settlement.core.service.ReconcilePendingPgStatements;
 import com.stove.settlement.core.service.SynchronizePgStatements;
 import com.stove.settlement.core.service.ReconcilePgStatement;
 import java.time.Clock;
@@ -31,8 +33,8 @@ public class PgStatementConfiguration {
     }
     @Bean(destroyMethod="")
     @ConditionalOnProperty(prefix="stove.settlement.tosspay",name={"enabled","scheduled-enabled"},havingValue="true")
-    ScheduledFuture<?> pgStatementSchedule(ReceivePgStatement collect,Clock clock,TossPayStatementProperties properties,ThreadPoolTaskScheduler scheduler) {
-        return scheduler.scheduleWithFixedDelay(new SynchronizePgStatements(collect,clock,properties.lookbackDays()),properties.pollDelay());
+    ScheduledFuture<?> pgStatementSchedule(ReceivePgStatement collect,Clock clock,TossPayStatementProperties properties,ThreadPoolTaskScheduler scheduler,ReconcilePendingPgStatements recovery) {
+        return scheduler.scheduleWithFixedDelay(new SynchronizePgStatements(collect,clock,properties.lookbackDays(),recovery),properties.pollDelay());
     }
     @Bean @ConditionalOnProperty(prefix="stove.settlement.tosspay",name="enabled",havingValue="false",matchIfMissing=true)
     PgStatementSource unavailablePgStatementSource() {return new UnavailablePgStatementSource();}
@@ -45,8 +47,11 @@ public class PgStatementConfiguration {
                 properties.portoneStoreId(),properties.portoneChannelKey(),properties.identityMappingVerified()),properties.maxPages());
     }
     @Bean ReconcilePgStatement reconcilePgStatement(PgStatementRepository statements,PgStatementEntryRepository entries,PgStatementItemRepository items,
-            PgTransactionRepository transactions,SettlementSaleRepository sales,SettlementRefundRepository refunds,Clock clock) {
-        return new ReconcilePgStatement(statements,entries,items,transactions,sales,refunds,clock);
+            PgTransactionRepository transactions,SettlementSaleRepository sales,SettlementRefundRepository refunds,Clock clock,PgCostPostingRepository postings) {
+        return new ReconcilePgStatement(statements,entries,items,transactions,sales,refunds,clock,postings);
+    }
+    @Bean ReconcilePendingPgStatements reconcilePendingPgStatements(PgStatementRepository statements,ReconcilePgStatement reconcile) {
+        return new ReconcilePendingPgStatements(statements,reconcile);
     }
     @Bean ReceivePgStatement receivePgStatement(PgStatementSource source,PgStatementRepository statements,PgStatementEntryRepository entries,
             PgStatementItemRepository items,ReconcilePgStatement reconcile,Clock clock,PlatformTransactionManager manager) {

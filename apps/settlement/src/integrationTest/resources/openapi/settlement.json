@@ -3,7 +3,15 @@
     "schemas" : {
       "AdminMonthResponse" : {
         "properties" : {
+          "confirmedNetPgCostAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "confirmedPgFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "confirmedRefundPgFeeReturnAmount" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -25,7 +33,19 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "refundPgFeeReturnAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "refundPgFeeVatReturnAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "salePgFeeAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "salePgFeeVatAmount" : {
             "format" : "int64",
             "type" : "integer"
           },
@@ -251,6 +271,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseSettlementPageItem" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/SettlementPageItem"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseSettlementPageMonthResponse" : {
         "properties" : {
           "data" : {
@@ -335,6 +369,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseSummary" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/Summary"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ConfirmedRefund" : {
         "properties" : {
           "amount" : {
@@ -391,6 +439,61 @@
           },
           "message" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Item" : {
+        "properties" : {
+          "businessMonth" : {
+            "type" : "string"
+          },
+          "checkCode" : {
+            "type" : "string"
+          },
+          "costPostingId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "payToken" : {
+            "type" : "string"
+          },
+          "paymentReference" : {
+            "type" : "string"
+          },
+          "reportedAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedFee" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "reportedNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedPayoutDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "reportedVat" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sourceEntryId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "transactionId" : {
+            "type" : "string"
+          },
+          "transactionType" : {
+            "type" : "string"
+          },
+          "verificationStatementId" : {
+            "format" : "int64",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -1136,6 +1239,33 @@
         },
         "type" : "object"
       },
+      "SettlementPageItem" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Item"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "SettlementPageMonthResponse" : {
         "properties" : {
           "content" : {
@@ -1294,6 +1424,54 @@
           "totalPages" : {
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "Summary" : {
+        "properties" : {
+          "basis" : {
+            "type" : "string"
+          },
+          "collectedPayoutDayCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "environment" : {
+            "type" : "string"
+          },
+          "linkedCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "merchantId" : {
+            "type" : "string"
+          },
+          "month" : {
+            "type" : "string"
+          },
+          "recordCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedFee" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedNetAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportedVat" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1506,6 +1684,104 @@
           }
         },
         "tags" : [ "settlement-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-payouts" : {
+      "get" : {
+        "operationId" : "summary",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "merchantId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "environment",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSummary"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-payout-controller" ]
+      }
+    },
+    "/api/v1/settlements/pg-payouts/items" : {
+      "get" : {
+        "operationId" : "items_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "merchantId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "environment",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "month",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseSettlementPageItem"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "pg-payout-controller" ]
       }
     },
     "/api/v1/settlements/pg-receipts" : {

@@ -1,17 +1,22 @@
 package com.stove.settlement.core.domain;
 
-/** 판매자 마감 값과 독립된 현재 PG 비용 확인 현황이다. */
-public record SellerMonthView(SellerMonthlySettlement month, PgFeeTotals fees) {
+/** Seller closing facts combined with independently received PG charges and returns. */
+public record SellerMonthView(SellerMonthlySettlement month,PgCostTotals saleCosts,PgCostTotals refundReturns) {
     public SellerMonthView {
-        SettlementValues.require(month != null && fees != null, "판매자 월과 PG 비용 조회 근거가 필요합니다.");
-        SettlementValues.consistent(month.getRecordCount() == fees.recordCount(), "판매자 월과 매출 건수가 다릅니다.");
+        SettlementValues.require(month!=null && saleCosts!=null && refundReturns!=null,"판매자 월과 PG 비용 조회 근거가 필요합니다.");
+        SettlementValues.consistent(month.getRecordCount()==saleCosts.recordCount() && month.getRefundCount()==refundReturns.recordCount(),
+                "판매자 월과 매출·환불 건수가 다릅니다.");
     }
-    public Long pgFeeAmount() { return month.getRefundCount() == 0 ? fees.feeAmount() : null; }
+    public SellerMonthView(SellerMonthlySettlement month,PgFeeTotals fees) {
+        this(month,new PgCostTotals(fees.recordCount(),fees.confirmedCount(),fees.confirmedFeeAmount(),0),
+                new PgCostTotals(month.getRefundCount(),0,0,0));
+    }
+    public PgFeeTotals fees() {return new PgFeeTotals(saleCosts.recordCount(),saleCosts.confirmedCount(),saleCosts.confirmedAmount());}
+    public long confirmedNetCost() {return Math.subtractExact(saleCosts.confirmedAmount(),refundReturns.confirmedAmount());}
+    public Long pgFeeAmount() {return pendingPgCostCount()==0?confirmedNetCost():null;}
     public String pgCostStatus() {
-        return month.getRefundCount() == 0 ? fees.status() : fees.confirmedCount() == 0 ? "UNCONFIRMED" : "PARTIAL";
+        return pendingPgCostCount()==0?"CONFIRMED":saleCosts.confirmedCount()+refundReturns.confirmedCount()==0?"UNCONFIRMED":"PARTIAL";
     }
-    public long pendingPgCostCount() { return Math.addExact(fees.pendingCount(), month.getRefundCount()); }
-    public Long platformNetAmount() {
-        return pgFeeAmount() == null ? null : Math.subtractExact(month.getNetPlatformFeeAmount(), pgFeeAmount());
-    }
+    public long pendingPgCostCount() {return Math.addExact(saleCosts.pendingCount(),refundReturns.pendingCount());}
+    public Long platformNetAmount() {return pgFeeAmount()==null?null:Math.subtractExact(month.getNetPlatformFeeAmount(),pgFeeAmount());}
 }

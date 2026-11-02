@@ -8,6 +8,7 @@ import com.stove.settlement.adapter.UnavailablePgStatementSource;
 import com.stove.settlement.config.PgStatementConfiguration;
 import com.stove.settlement.config.TossPayStatementProperties;
 import com.stove.settlement.core.domain.PgStatementEntryRepository;
+import com.stove.settlement.core.domain.PgCostPostingRepository;
 import com.stove.settlement.core.domain.PgStatementItemRepository;
 import com.stove.settlement.core.domain.PgStatementRepository;
 import com.stove.settlement.core.domain.PgTransactionRepository;
@@ -28,6 +29,7 @@ import org.springframework.web.client.RestClient;
 class PgStatementConfigurationTest {
     ApplicationContextRunner runner() {
         return new ApplicationContextRunner().withUserConfiguration(PgStatementConfiguration.class)
+                .withBean(PgCostPostingRepository.class,() -> mock(PgCostPostingRepository.class))
                 .withBean(PgStatementRepository.class,() -> mock(PgStatementRepository.class))
                 .withBean(PgStatementEntryRepository.class,() -> mock(PgStatementEntryRepository.class))
                 .withBean(PgStatementItemRepository.class,() -> mock(PgStatementItemRepository.class))

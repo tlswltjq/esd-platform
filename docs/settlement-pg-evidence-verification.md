@@ -1,5 +1,7 @@
 # G3 토스페이 정산 API 수집·원본·대사
 
+**후속 완료:** 업무 반영 월 비용 연결·기존 월 금융 요약·PG 보고 지급일별 조회는 [2026-11-02 후속 167건 검증](settlement-pg-cost-posting-verification.md)을 따른다. 아래 기록의 비용 월 귀속/요약 미연결 표현은 수집 단위 당시 범위다.
+
 2026-11-02. 사용자는 [결정 43](decisions.md#tosspay-statement-api-source)의 **A: 토스페이 공식 정산 API 자동 수집**을 선택했다. [출처 조사와 선택 배경](settlement-pg-evidence-plan.md)을 기준으로 같은 Settlement 모듈에 읽기 수집·불변 원본/거래 근거·대사·관리자 조회·주기 재수집을 구현하고 OCI **144건**·check·bootJar를 통과했다. 실제 가맹점 자료 검증과 현재 TEST의 비용 미확정은 구분한다.
 
 ## 데이터 흐름

@@ -11,8 +11,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.PgEvidence;
@@ -26,24 +24,21 @@ import com.stove.settlement.core.domain.ProductOwner;
 import com.stove.settlement.core.port.CatalogOwners;
 import com.stove.settlement.core.port.PgPayments;
 import com.stove.settlement.core.service.ReceivePgStatement;
+import com.stove.settlement.core.service.ReconcilePendingPgStatements;
 import com.stove.settlement.core.service.ReconcilePgStatement;
 import com.stove.settlement.core.service.RecordPaidSale;
-import com.sun.net.httpserver.HttpServer;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
+import com.stove.settlement.support.TossPayStatementServer;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +46,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -63,37 +59,22 @@ import org.springframework.web.client.RestClient;
         "stove.settlement.tosspay.enabled=true","stove.settlement.tosspay.scheduled-enabled=false",
         "stove.settlement.tosspay.api-key=sk_live_contract-fixture-only","stove.settlement.tosspay.environment=LIVE",
         "stove.settlement.tosspay.merchant-id=merchant-fixture","stove.settlement.tosspay.portone-store-id=store-fixture",
-        "stove.settlement.tosspay.portone-channel-key=channel-fixture","stove.settlement.tosspay.identity-mapping-verified=false",
+        "stove.settlement.tosspay.portone-channel-key=channel-fixture","stove.settlement.tosspay.identity-mapping-verified=true",
         "stove.outbox.relay-enabled=false","stove.messaging.ops.enabled=false","spring.kafka.listener.auto-startup=false"})
 class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
-    private static final ObjectMapper JSON=new ObjectMapper();
-    private static final Map<String,String> RESPONSES=new ConcurrentHashMap<>();
-    private static final AtomicInteger CALLS=new AtomicInteger();
-    private static final AtomicInteger ERRORS=new AtomicInteger();
-    private static final AtomicInteger LATE_STATUS=new AtomicInteger(200);
-    private static final HttpServer SUPPLIER;
+    private static final TossPayStatementServer SUPPLIER;
     static {
         try {
-            SUPPLIER=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
-            SUPPLIER.createContext("/",exchange -> {
-                CALLS.incrementAndGet();
-                if(!"POST".equals(exchange.getRequestMethod()) || !"/api/v2/settlement-details".equals(exchange.getRequestURI().getPath())) {
-                    ERRORS.incrementAndGet();exchange.sendResponseHeaders(405,-1);exchange.close();return;
-                }
-                JsonNode body=JSON.readTree(exchange.getRequestBody());
-                if(!"sk_live_contract-fixture-only".equals(body.path("apiKey").asText())) ERRORS.incrementAndGet();
-                String cursor=body.path("nextCursor").asText("");String response=RESPONSES.getOrDefault(cursor,"{}");
-                byte[] bytes=response.getBytes(StandardCharsets.UTF_8);exchange.getResponseHeaders().set("Content-Type","application/json");
-                exchange.sendResponseHeaders(cursor.isEmpty()?200:LATE_STATUS.get(),bytes.length);
-                try(OutputStream out=exchange.getResponseBody()) {out.write(bytes);}
-            });SUPPLIER.start();Runtime.getRuntime().addShutdownHook(new Thread(() -> SUPPLIER.stop(0)));
+            SUPPLIER=TossPayStatementServer.start();
+            Runtime.getRuntime().addShutdownHook(new Thread(SUPPLIER::close));
         } catch(Exception failure) {throw new ExceptionInInitializerError(failure);}
     }
     @DynamicPropertySource static void source(DynamicPropertyRegistry properties) {
-        properties.add("stove.settlement.tosspay.base-url",() -> "http://127.0.0.1:"+SUPPLIER.getAddress().getPort());
+        properties.add("stove.settlement.tosspay.base-url",() -> SUPPLIER.baseUrl());
     }
     @Autowired ReceivePgStatement receive;
     @Autowired ReconcilePgStatement reconcile;
+    @Autowired ReconcilePendingPgStatements recovery;
     @Autowired RecordPaidSale record;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager manager;
@@ -102,15 +83,18 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
     @MockitoBean Clock clock;
     @LocalServerPort int port;
     @BeforeEach void clean() {
-        for(String table:List.of("settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
+        for(String table:List.of("settlement_pg_cost_posting","settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
                 "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement",
                 "settlement_pg_fee","settlement_pg_transaction","processed_event")) jdbc.update("DELETE FROM "+table);
-        RESPONSES.clear();CALLS.set(0);ERRORS.set(0);LATE_STATUS.set(200);when(clock.instant()).thenReturn(NOW);
+        SUPPLIER.reset();when(clock.instant()).thenReturn(NOW);
         when(owners.require(anyString())).thenReturn(new ProductOwner(1L,"game-1","usr_seller"));
     }
-    @AfterEach void contract() {assertThat(ERRORS.get()).isZero();}
+    @AfterEach void contract() {
+        assertThat(SUPPLIER.contractErrorCount()).isZero();
+        assertThat(SUPPLIER.requests()).allSatisfy(request -> assertThat(request.path("apiKey").asText()).isEqualTo("sk_live_contract-fixture-only"));
+    }
     int count(String table) {return jdbc.queryForObject("SELECT COUNT(*) FROM "+table,Integer.class);}
-    void response(List<PgStatementRow> rows) {RESPONSES.put("",page(rows,"",PgStatementTotals.sum(rows)).toString());}
+    void response(List<PgStatementRow> rows) {SUPPLIER.respond("",page(rows,"",PgStatementTotals.sum(rows)).toString());}
     PgStatementRow pay(String id,String payment) {return row("PAY",id,"token-"+payment,payment,10000,-300,-30);}
     record Reply(int status,JsonNode body) { }
     Reply http(String method,String path,String role,Object body) {
@@ -122,10 +106,10 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
     @Test void collectsCompleteHttpEvidenceAndExposesOnlyAdministratorReportsAndRawPages() {
         PgStatementRow pay=pay("pay-1","payment-1");PgStatementRow refund=row("REFUND","refund-1",pay.payToken(),pay.orderNo(),-10000,300,30);
         PgStatementTotals totals=PgStatementTotals.sum(List.of(pay,refund));
-        RESPONSES.put("",page(List.of(pay),"next",totals).toString());RESPONSES.put("next",page(List.of(refund),"",totals).toString());
+        SUPPLIER.respond("",page(List.of(pay),"next",totals).toString());SUPPLIER.respond("next",page(List.of(refund),"",totals).toString());
         Map<String,String> input=Map.of("dateType","DUE","baseDate","2026-10-01");
         assertThat(http("POST","/api/v1/settlements/pg-statements",null,input).status()).isEqualTo(401);
-        assertThat(http("POST","/api/v1/settlements/pg-statements","CREATOR",input).status()).isEqualTo(403);assertThat(CALLS.get()).isZero();
+        assertThat(http("POST","/api/v1/settlements/pg-statements","CREATOR",input).status()).isEqualTo(403);assertThat(SUPPLIER.requestCount()).isZero();
         Reply created=http("POST","/api/v1/settlements/pg-statements","ADMIN",input);assertThat(created.status()).isEqualTo(200);
         long id=created.body().path("data").path("id").asLong();assertThat(id).isPositive();
         assertThat(created.body().path("data").path("reportedNetAmount").asLong()).isZero();
@@ -134,11 +118,11 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(count("settlement_pg_statement_entry")).isEqualTo(2);assertThat(count("settlement_pg_statement_item")).isEqualTo(2);
         String path="/api/v1/settlements/pg-statements/"+id;
         assertThat(http("GET",path+"/items?size=1","ADMIN",null).body().path("data").path("totalElements").asLong()).isEqualTo(2);
-        assertThat(http("GET",path+"/pages/1","ADMIN",null).body().path("data").path("responseBody").asText()).isEqualTo(RESPONSES.get("next"));
+        assertThat(http("GET",path+"/pages/1","ADMIN",null).body().path("data").path("responseBody").asText()).isEqualTo(SUPPLIER.responseAt("next"));
         assertThat(http("GET",path,"ADMIN",null).body().toString()).doesNotContain("sk_live_","responseBody");
         assertThat(http("GET",path+"/items","CREATOR",null).status()).isEqualTo(403);
         assertThat(http("GET",path+"/pages/0",null,null).status()).isEqualTo(401);
-        int calls=CALLS.get();assertThat(http("POST",path+"/reconcile","ADMIN",null).status()).isEqualTo(200);assertThat(CALLS.get()).isEqualTo(calls);
+        int calls=SUPPLIER.requestCount();assertThat(http("POST",path+"/reconcile","ADMIN",null).status()).isEqualTo(200);assertThat(SUPPLIER.requestCount()).isEqualTo(calls);
         assertThat(count("pg_receipt")).isZero();assertThat(count("settlement_pg_fee")).isZero();
     }
     @Test void duplicateAndDifferentDateQueriesShareOneImmutableTransactionWithoutDoubleCounting() {
@@ -169,9 +153,9 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
     }
     @Test void incompleteHttpAndActualDatabaseWriteFailureCannotLeaveHalfAStatement() {
         PgStatementRow pay=pay("pay-1","payment-1");PgStatementTotals totals=PgStatementTotals.sum(List.of(pay));
-        RESPONSES.put("",page(List.of(pay),"next",totals).toString());RESPONSES.put("next",page(List.of(),"",totals).toString());LATE_STATUS.set(503);
+        SUPPLIER.respond("",page(List.of(pay),"next",totals).toString());SUPPLIER.respond("next",page(List.of(),"",totals).toString());SUPPLIER.laterStatus(503);
         assertThatThrownBy(() -> receive.execute(query(),"admin")).isInstanceOf(BusinessException.class);noStatement();
-        LATE_STATUS.set(200);response(List.of(pay));
+        SUPPLIER.laterStatus(200);response(List.of(pay));
         jdbc.execute("ALTER TABLE settlement_pg_statement_item ADD CONSTRAINT ck_fixture_statement_failure CHECK(item_position<0)");
         try {assertThatThrownBy(() -> receive.execute(query(),"admin")).isInstanceOf(RuntimeException.class);noStatement();}
         finally {jdbc.execute("ALTER TABLE settlement_pg_statement_item DROP CHECK ck_fixture_statement_failure");}
@@ -184,7 +168,9 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
                 null,new PgFunding(order.amount(),order.amount(),0,"store-fixture","channel-fixture"));
         when(payments.require(order.paymentId())).thenReturn(payment);record.execute(order);
         Map<String,Object> month=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement");
-        reconcile.execute(statement.getId());assertThat(jdbc.queryForObject("SELECT check_code FROM settlement_pg_statement_item",String.class)).isEqualTo("SOURCE_ENVIRONMENT_PENDING");
+        int calls=SUPPLIER.requestCount();when(clock.instant()).thenReturn(Instant.parse("2026-12-20T03:00:00Z"));
+        recovery.run();assertThat(SUPPLIER.requestCount()).isEqualTo(calls);
+        assertThat(jdbc.queryForObject("SELECT check_code FROM settlement_pg_statement_item",String.class)).isEqualTo("SOURCE_ENVIRONMENT_PENDING");
         assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement")).isEqualTo(month);assertThat(count("settlement_pg_fee")).isZero();
         assertThat(http("GET","/api/v1/settlements/months","ADMIN",null).body().path("data").path("content").get(0).path("pgFeeAmount").isNull()).isTrue();
     }
@@ -193,9 +179,58 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(http("POST","/api/v1/settlements/pg-statements","ADMIN",Map.of("dateType","OTHER","baseDate","2026-10-01")).status()).isEqualTo(400);
         assertThatThrownBy(() -> receive.execute(new PgStatementQuery("SETTLE",LocalDate.of(2026,10,18)),"admin")).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new TransactionTemplate(manager).execute(tx -> receive.execute(query(),"admin"))).isInstanceOf(IllegalStateException.class);
-        assertThat(CALLS.get()).isZero();noStatement();
+        assertThat(SUPPLIER.requestCount()).isZero();noStatement();
         assertThat(http("GET","/api/v1/settlements/pg-statements?size=0","ADMIN",null).status()).isEqualTo(400);
         assertThat(http("GET","/api/v1/settlements/pg-statements/999999","ADMIN",null).status()).isEqualTo(404);
+    }
+    String payoutPath() {return "/api/v1/settlements/pg-payouts?merchantId=merchant-fixture&environment=LIVE&month=2026-10";}
+    @Test void productionFundingConstraintRejectsLivePromotionAndKeepsOriginalTestEvidence() {
+        PaidOrder source=recordTestPurchase();
+        Map<String,Object> before=jdbc.queryForMap("SELECT * FROM settlement_pg_transaction");
+        assertThatThrownBy(() -> jdbc.update("UPDATE settlement_pg_transaction SET provider_channel_type='LIVE' WHERE payment_id=?",source.paymentId()))
+                .isInstanceOfSatisfying(UncategorizedSQLException.class,failure -> {
+                    assertThat(failure.getSQLException().getErrorCode()).isEqualTo(3819);
+                    assertThat(failure.getSQLException().getMessage()).contains("ck_pg_transaction_funding");
+                });
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_transaction")).isEqualTo(before);
+        assertThatThrownBy(() -> new PgEvidence("PORTONE_LIVE","token",NOW)).isInstanceOf(BusinessException.class);
+        assertThat(count("settlement_pg_cost_posting")).isZero();
+    }
+    @Test void reconciliationWriteFailureRollsBackActualDatabaseChangesAndStoredSourceCanRetry() {
+        PaidOrder source=order();response(List.of(pay("pay-rollback",source.paymentId())));
+        PgStatement report=receive.execute(query(),"admin");
+        recordTestPurchase(source);Map<String,Object> before=jdbc.queryForMap("SELECT * FROM settlement_pg_statement_item");
+        jdbc.execute("ALTER TABLE settlement_pg_statement_item ADD CONSTRAINT ck_fixture_reconcile_failure CHECK(check_code<>'SOURCE_ENVIRONMENT_PENDING')");
+        try {assertThatThrownBy(() -> reconcile.execute(report.getId())).isInstanceOf(RuntimeException.class);}
+        finally {jdbc.execute("ALTER TABLE settlement_pg_statement_item DROP CHECK ck_fixture_reconcile_failure");}
+        assertThat(jdbc.queryForMap("SELECT * FROM settlement_pg_statement_item")).isEqualTo(before);
+        assertThat(count("settlement_pg_statement_entry")).isEqualTo(1);assertThat(count("settlement_pg_cost_posting")).isZero();
+        int calls=SUPPLIER.requestCount();recovery.run();assertThat(SUPPLIER.requestCount()).isEqualTo(calls);
+        assertThat(jdbc.queryForObject("SELECT check_code FROM settlement_pg_statement_item",String.class)).isEqualTo("SOURCE_ENVIRONMENT_PENDING");
+    }
+    PaidOrder recordTestPurchase() {return recordTestPurchase(order());}
+    PaidOrder recordTestPurchase(PaidOrder source) {
+        PgPayment payment=new PgPayment(source.paymentId(),source.orderNo(),source.amount(),source.currency(),
+                new PgEvidence("PORTONE_TEST","token-"+source.paymentId(),source.occurredAt()),null,
+                new PgFunding(source.amount(),source.amount(),0,"store-fixture","channel-fixture"));
+        when(payments.require(source.paymentId())).thenReturn(payment);record.execute(source);return source;
+    }
+    @Test void unlinkedPayoutsRemainVisibleAndScopesAndMissingEvidenceAreExplicit() {
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-15T03:00:00Z"));
+        PaidOrder absent=order();response(List.of(pay("unlinked",absent.paymentId())));receive.execute(query(),"admin");
+        JsonNode data=http("GET",payoutPath(),"ADMIN",null).body().path("data");
+        assertThat(data.path("recordCount").asLong()).isEqualTo(1);assertThat(data.path("linkedCount").asLong()).isZero();
+        assertThat(data.path("status").asText()).isEqualTo("PENDING_OR_MISMATCH");
+        assertThat(http("GET",payoutPath().replace("merchant-fixture","other"),"ADMIN",null).body().path("data").path("status").asText()).isEqualTo("NO_EVIDENCE");
+        assertThat(http("GET",payoutPath().replace("2026-10","bad"),"ADMIN",null).status()).isEqualTo(400);
+        String items=payoutPath().replace("pg-payouts?","pg-payouts/items?");
+        Reply detail=http("GET",items,"ADMIN",null);assertThat(detail.status()).isEqualTo(200);
+        assertThat(detail.body().path("data").path("content").get(0).path("checkCode").asText()).isEqualTo("MISSING_SALE");
+        assertThat(detail.body().path("data").path("content").get(0).path("businessMonth").isNull()).isTrue();
+        assertThat(http("GET",payoutPath(),"CREATOR",null).status()).isEqualTo(403);
+        assertThat(http("GET",payoutPath(),"MEMBER",null).status()).isEqualTo(403);
+        assertThat(http("GET",payoutPath(),null,null).status()).isEqualTo(401);
+        assertThat(count("settlement_pg_cost_posting")).isZero();
     }
     void noStatement() {
         for(String table:List.of("settlement_pg_statement","settlement_pg_statement_page","settlement_pg_statement_entry","settlement_pg_statement_item"))

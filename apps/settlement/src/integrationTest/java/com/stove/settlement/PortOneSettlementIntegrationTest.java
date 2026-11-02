@@ -116,7 +116,7 @@ class PortOneSettlementIntegrationTest extends SettlementIntegrationTestBase {
     @LocalServerPort int port;
 
     @BeforeEach void clean() {
-        for (String table : List.of("settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
+        for (String table : List.of("settlement_pg_cost_posting","settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
                 "settlement_refund_cancellation","settlement_refund","pg_receipt_item", "pg_receipt", "settlement_sale", "seller_monthly_settlement",
                 "settlement_pg_fee", "settlement_pg_transaction", "processed_event")) jdbc.update("DELETE FROM " + table);
         PG_GETS.set(0); CONTRACT_ERRORS.set(0); HTTP_STATUS.set(200); RESPONSE.set("{}");

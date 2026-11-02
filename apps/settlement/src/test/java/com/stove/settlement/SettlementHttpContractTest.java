@@ -4,15 +4,14 @@ import static com.stove.settlement.SettlementFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stove.common.web.error.BusinessException;
-import com.stove.settlement.core.domain.PgPayment;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.adapter.CatalogOwnerHttpClient;
 import com.stove.settlement.adapter.SimulatedPgPaymentHttpClient;
 import com.stove.settlement.adapter.SimulatedPgSettlementHttpClient;
+import com.stove.settlement.core.domain.PgPayment;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
