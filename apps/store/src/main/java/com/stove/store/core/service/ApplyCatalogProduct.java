@@ -59,7 +59,9 @@ public class ApplyCatalogProduct {
                 || !text(s.thumbnailUrl(), 1000) || !text(s.content(), 100000)
                 || (s.videoUrl() != null && s.videoUrl().length() > 1000)
                 || !text(s.buildVersion(), 100) || s.price() < 0 || !"KRW".equals(s.currency())
-                || s.publishedAt() == null || s.updatedAt() == null)
+                || s.publishedAt() == null || s.updatedAt() == null
+                || (!"ON_SALE".equals(s.saleStatus()) && !"STOPPED".equals(s.saleStatus()) && !"BLOCKED".equals(s.saleStatus()))
+                || s.catalogVersion() < s.contentVersion())
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "공개 상품 데이터가 올바르지 않습니다.");
     }
     private static boolean text(String value, int max) {

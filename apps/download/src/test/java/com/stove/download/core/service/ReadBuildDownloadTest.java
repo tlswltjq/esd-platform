@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.download.core.domain.DownloadRequest;
+import com.stove.download.core.domain.DownloadError;
 import com.stove.download.core.domain.DownloadTicket;
 import com.stove.download.core.domain.OwnedProduct;
 import com.stove.download.core.domain.SignedUrl;
@@ -67,6 +68,14 @@ class ReadBuildDownloadTest {
                     e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.UPSTREAM_UNAVAILABLE));
             verifyNoInteractions(storage);
         }
+    }
+
+    @Test void aProductDistributionRestrictionPreventsEveryStorageCall() {
+        when(owned.require(anyString(), anyString())).thenReturn(new OwnedProduct(1, "game-one"));
+        when(published.require(anyString())).thenThrow(new BusinessException(DownloadError.PRODUCT_DOWNLOAD_RESTRICTED));
+        assertThatThrownBy(() -> issue.execute(request, "token")).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.errorCode()).isEqualTo(DownloadError.PRODUCT_DOWNLOAD_RESTRICTED));
+        verifyNoInteractions(storage);
     }
 
     @Test void unavailableCatalogStopsBeforeStorage() {

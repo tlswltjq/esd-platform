@@ -46,12 +46,14 @@ import com.stove.order.core.domain.Refund;
 import com.stove.order.core.domain.RefundRepository;
 import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.PublishedProduct;
+import com.stove.order.core.domain.PaymentAdmissionInput;
 import com.stove.order.core.port.CatalogProducts;
 import com.stove.order.core.service.ApplyPaymentResult;
 import com.stove.order.core.service.CreateOrder;
 import com.stove.order.core.service.ReadOrder;
 import com.stove.order.core.service.SearchOrders;
 import com.stove.order.core.service.RequestRefund;
+import com.stove.order.core.service.AdmitOrderPayment;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -95,6 +97,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired SearchOrders search;
     @Autowired ApplyPaymentResult apply;
     @Autowired RequestRefund requestRefund;
+    @Autowired AdmitOrderPayment processing;
     @Autowired RefundRepository refunds;
     @MockitoSpyBean OrderRepository orders;
     @Autowired JdbcTemplate jdbc;
@@ -110,6 +113,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
 
     @BeforeEach void clean() {
         listeners.stop();
+        jdbc.update("DELETE FROM order_payment_admission");
         jdbc.update("DELETE FROM order_refund_attempt");
         jdbc.update("DELETE FROM order_license_grant"); jdbc.update("DELETE FROM order_refund"); jdbc.update("DELETE FROM purchase_order");
         jdbc.update("DELETE FROM outbox_event"); jdbc.update("DELETE FROM processed_event");
@@ -153,6 +157,51 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(paidEvents()).isEqualTo(1);
         assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
         assertThat(read.execute(o.getOrderNo(), "usr_buyer").getTitle()).isEqualTo("한글 게임");
+    }
+
+    @Test void hidingAnOnSaleProductRejectsNewOrdersButPreservesExistingRequestsAndAdmission() {
+        PublishedProduct current = product();
+        PublishedProduct hidden = new PublishedProduct(current.productId(), current.productCode(), current.title(),
+                current.contentVersion(), current.price(), current.currency(), current.saleStatus(), false);
+        OrderRequest input = request();
+        when(catalog.detail(anyString())).thenReturn(hidden);
+        assertThat(http("POST", "/api/v1/orders", body(input), token("usr_buyer", "MEMBER")).status()).isEqualTo(404);
+        assertThat(count("purchase_order")).isZero(); assertThat(count("outbox_event")).isZero();
+        when(catalog.detail(anyString())).thenReturn(current);
+        Order original = create.execute("usr_buyer", input);
+        when(catalog.detail(anyString())).thenReturn(hidden);
+        assertThat(create.execute("usr_buyer", input).getOrderNo()).isEqualTo(original.getOrderNo());
+        assertThat(http("POST", "/api/v1/orders", body(request()), token("usr_other", "MEMBER")).status()).isEqualTo(404);
+        PaymentAdmissionInput admission = new PaymentAdmissionInput(id(), original.getOrderNo(), original.getRequestEventId(),
+                id(), original.getBuyerSubject(), original.getAmount(), original.getCurrency());
+        assertThat(processing.execute(admission)).isPresent();
+        Order saved = stored(original);
+        assertThat(saved.getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
+        assertThat(saved.getExpiresAt()).isEqualTo(original.getExpiresAt());
+        assertThat(saved.getAmount()).isEqualTo(original.getAmount());
+        assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+    }
+
+    @Test void stoppingSalesRejectsNewOrdersButKeepsTheOriginalOrderAndApprovalTerms() {
+        OrderRequest input = request();
+        Order original = create.execute("usr_buyer", input);
+        PublishedProduct current = product();
+        when(catalog.detail(anyString())).thenReturn(new PublishedProduct(current.productId(), current.productCode(),
+                current.title(), current.contentVersion(), current.price(), current.currency(), "STOPPED"));
+        assertThatThrownBy(() -> create.execute("usr_other", request()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        failure -> assertThat(failure.errorCode()).isEqualTo(OrderErrorCode.PRODUCT_NOT_ON_SALE));
+        assertThat(create.execute("usr_buyer", input).getOrderNo()).isEqualTo(original.getOrderNo());
+        PaymentAdmissionInput admission = new PaymentAdmissionInput(id(), original.getOrderNo(), original.getRequestEventId(),
+                id(), original.getBuyerSubject(), original.getAmount(), original.getCurrency());
+        assertThat(processing.execute(admission)).isPresent();
+        Order saved = stored(original);
+        assertThat(saved.getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
+        assertThat(saved.getCreatedAt()).isEqualTo(original.getCreatedAt());
+        assertThat(saved.getExpiresAt()).isEqualTo(original.getExpiresAt());
+        assertThat(saved.getAmount()).isEqualTo(original.getAmount());
+        assertThat(count("purchase_order")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(1);
     }
     @Test void newPublicationDoesNotRewriteOrderTerms() {
         Order first = saved("usr_buyer");

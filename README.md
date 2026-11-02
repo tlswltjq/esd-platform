@@ -27,6 +27,7 @@ PortOne TEST의 전액 환불은 고객 접수·관리자 판정·이용권 정�
 | 로컬·원격 실행과 Swagger 로그인 | [개발 환경과 실행](docs/getting-started.md) |
 | 출시·구매·다운로드·정산의 실제 흐름 검증 | [Settlement 전체 실행](docs/settlement-guide.md) |
 | 서비스 API와 인증·권한 | [서비스 명세](docs/services.md) · [인증·권한 계약](docs/security.md) |
+| 숨긴 상품의 공개 상세·새 주문과 내부 조회 | [공개 상세 B 구현·검증](docs/public-product-detail-plan.md) |
 | 구조와 설계 이유, 실험·운영 기록 | [아키텍처](docs/architecture.md) · [전체 문서 목록](docs/README.md) |
 
 ## 구성

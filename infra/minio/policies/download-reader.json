@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::stove-builds/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::stove-builds"]
+    },
+    {
+      "Sid": "DenyQuarantinedBuildReads",
+      "Effect": "Deny",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::stove-builds/*"],
+      "Condition": {"StringEquals": {"s3:ExistingObjectTag/stove-download-blocked": "true"}}
+    }
+  ]
+}

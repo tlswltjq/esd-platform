@@ -45,6 +45,10 @@
           "buildVersion" : {
             "type" : "string"
           },
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "content" : {
             "type" : "string"
           },
@@ -54,6 +58,9 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "listed" : {
+            "type" : "boolean"
           },
           "price" : {
             "format" : "int64",
@@ -68,6 +75,9 @@
           },
           "publishedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "saleStatus" : {
             "type" : "string"
           },
           "shortDescription" : {
@@ -118,8 +128,15 @@
       },
       "StoreProductSummary" : {
         "properties" : {
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "currency" : {
             "type" : "string"
+          },
+          "listed" : {
+            "type" : "boolean"
           },
           "price" : {
             "format" : "int64",
@@ -134,6 +151,9 @@
           },
           "publishedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "saleStatus" : {
             "type" : "string"
           },
           "shortDescription" : {

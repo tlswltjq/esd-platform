@@ -61,6 +61,17 @@ class DownloadHttpClientsTest {
     }
     @AfterEach void stop() { server.stop(0); }
 
+    @Test void recognizesOnlyTheExplicitCatalogDownloadRestrictionContract() {
+        status = 403;
+        body = "{\"success\":false,\"error\":{\"code\":\"PRODUCT_DOWNLOAD_RESTRICTED\"}}";
+        assertThatThrownBy(() -> catalog.require("game")).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.errorCode().code()).isEqualTo("PRODUCT_DOWNLOAD_RESTRICTED"));
+        body = "broken";
+        assertUnavailable(() -> catalog.require("game"));
+        body = "{\"success\":true,\"error\":{\"code\":\"PRODUCT_DOWNLOAD_RESTRICTED\"}}";
+        assertUnavailable(() -> catalog.require("game"));
+    }
+
     @Test void forwardsUserTokenOnlyToLibraryAndServiceKeyOnlyToCatalog() {
         assertThat(license.require("game", "user-token").productId()).isEqualTo(1);
         assertThat(path).isEqualTo("/api/v1/library/game"); assertThat(authorization).isEqualTo("Bearer user-token"); assertThat(key).isNull();

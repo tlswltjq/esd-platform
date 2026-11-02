@@ -10,6 +10,10 @@
 
 | 문서 | 다루는 내용 |
 |---|---|
+| [판매 중지·재개와 관리자 제한](catalog-sales-policy-plan.md) | 판매자/관리자 독립 권한, 기존 주문·승인 접수, Store 사본과 로컬 OrbStack 검증 |
+| [상품 다운로드 제한·저장소 적용](download-restriction-plan.md) | 판매/개인 이용권과 독립한 관리자 제한·과거 URL 차단·실패 재시도 |
+| [상품 검색·목록 노출](catalog-listing-policy-plan.md) | 독립 노출·판매 기반 AUTO 기본값·판매자/관리자 권한·Store 사본과 전체 동기화 |
+| [공개 상세 B와 새 주문 차단](public-product-detail-plan.md) | 숨긴 상품의 상세/새 주문 404·내부 업무 조회 분리·C 확장 경계 |
 | [전체 기능 일반화 계획](platform-generalization-plan.md) | 현재 사용자 목표, 환불·Payment 평가, 열한 모듈의 공백·권장 실행 순서·일반화 완료 조건 |
 | [도메인·모델 안내](domain/model-guide.md) | 전체 지도, 모델 사전 연결, 한 게임의 출시·구매 사례 |
 | [용어집](domain-glossary.md) | 표준 용어 색인, 헷갈리는 상태·식별자·버전 |

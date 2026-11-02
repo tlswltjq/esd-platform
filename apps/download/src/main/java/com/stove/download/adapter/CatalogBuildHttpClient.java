@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.download.core.domain.PublishedBuild;
+import com.stove.download.core.domain.DownloadError;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import com.stove.download.core.port.PublishedBuilds;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -23,6 +26,14 @@ public class CatalogBuildHttpClient implements PublishedBuilds {
             JsonNode body = client.get().uri("/internal/v1/products/{code}/build", productCode)
                     .header("X-Download-Service-Key", serviceKey)
                     .retrieve().onStatus(status -> !status.is2xxSuccessful(), (request, response) -> {
+                        if (response.getStatusCode().value() == 403) {
+                            JsonNode error;
+                            try { error = new ObjectMapper().readTree(response.getBody()); }
+                            catch (IOException malformed) { throw HttpResponseValues.invalid(); }
+                            if (error != null && error.path("success").isBoolean() && !error.path("success").booleanValue()
+                                    && "PRODUCT_DOWNLOAD_RESTRICTED".equals(error.path("error").path("code").textValue()))
+                                throw new BusinessException(DownloadError.PRODUCT_DOWNLOAD_RESTRICTED);
+                        }
                         if (response.getStatusCode().value() == 404)
                             throw new BusinessException(ErrorCode.NOT_FOUND, "현재 공개된 상품이 없습니다.");
                         throw HttpResponseValues.invalid();

@@ -1,5 +1,7 @@
 # Store 실행·검색·사본 확인
 
+[검색·목록 노출 계약](catalog-listing-policy-plan.md): 기본 AUTO는 판매 가능 상품만 검색·목록에 포함한다. 판매자의 명시적 노출/숨김과 관리자의 강제 숨김을 별도로 반영한다. [공개 상세 B](public-product-detail-plan.md)에 따라 최종 listed=false인 사본의 공개 상세도 404다. 초기 동기화를 위해 Catalog·Store에 같은 전용 CATALOG_STORE_SERVICE_KEY를 준비해야 한다.
+
 [문서 목록](README.md) · [MVP 계획·검증](store-mvp-plan.md) · [상품 모델](domain/models/catalog-store.md)
 
 Store는 Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다.
@@ -7,20 +9,18 @@ Store는 Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다
 
 ## 실행 환경
 
-코드·문서는 로컬에서 수정하고 빌드·모든 테스트·서비스 실행은 OCI에서 한다.
-기존 tools/remote/remote.sh의 SSH·작업 디렉터리 설정을 사용한다. 실제 접속 값은 로컬 Git 설정에만 둔다.
+2026-11-02 최신 지시에 따라 코드·문서 편집과 빌드·테스트·서비스 실행은 로컬에서 수행하며 인프라는 OrbStack의 격리 자원을 사용한다. 기존 컨테이너·볼륨과 공유 자료를 보존한다. 과거 OCI 완료 기록은 당시 이력이다.
 
 ```sh
-./tools/remote/remote.sh gradle :apps:store:test :apps:catalog:test :common:kafka:test
-./tools/remote/remote.sh gradle :apps:store:integrationTest :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1
-./tools/remote/remote.sh sync
+./gradlew :apps:store:test :apps:catalog:test :common:kafka:test
+./gradlew :apps:store:integrationTest :apps:catalog:integrationTest -Pstove.infraTest.maxParallel=1
 ```
 
-동기화한 원격 저장소 루트에서 `python3 tools/verification/verify-store.py`를 실행한다.
-이 스크립트는 OCI에서 현재 소스로 여섯 앱을 빌드하고 임시 MySQL·Redis·Kafka·MinIO를 띄운다.
+저장소 루트에서 `python3 tools/verification/verify-store.py`를 실행한다.
+이 스크립트는 현재 소스로 여섯 앱을 빌드하고 임시 MySQL·Redis·Kafka·MinIO를 띄운다.
 기존 전체 스택을 올리지 않으며, 자신이 생성한 프로세스와 임시 데이터만 종료 시 정리한다.
 실행 로그·JSON 증거 경로는 출력되는 임시 디렉터리다. 포트가 겹치면 STORE_TEST_PORT_OFFSET을 지정한다.
-Gradle 의존성과 테스트 이미지를 처음 준비하는 경우 원격에서 네트워크 접근이 필요하다.
+Gradle 의존성과 테스트 이미지를 처음 준비하는 경우 네트워크 접근이 필요하다.
 
 기존 개발 MySQL에서는 [스키마 준비 SQL](../tools/migrations/store/store-schema.sql)을 관리자 계정으로 적용한다.
 새 환경은 infra/mysql/init의 초기화 SQL에 포함돼 있다. 기존 볼륨은 삭제하지 않는다.
@@ -40,11 +40,11 @@ GET /api/v1/storefront/products/{productCode}
 검색어는 제목 부분 일치이며 앞뒤 공백을 제외해 100자까지다. `%`, `_`, `!`도 문자 그대로 검색한다.
 목록은 ApiResponse.data 안에 content·page·size·totalElements·totalPages를 반환한다.
 상세의 공개 필드는 Catalog 상세와 같으며 내부 저장 경로나 소유자 정보는 포함하지 않는다.
-잘못된 입력은 400, 준비 후 없는 상품은 404, 초기 동기화 미완료는 STORE_NOT_READY·503이다.
+잘못된 입력은 400, 준비 후 없거나 숨긴 상품은 404, 초기 동기화 미완료는 STORE_NOT_READY·503이다.
 
 ## 두 가지 사본 입력 경로
 
-시작 시 기존 Catalog 목록 API를 페이지로 읽고, 각 상품의 상세 API로 버전·본문을 가져온다.
+시작 시 전용 키로 보호한 Catalog `/internal/v1/store-products` 전체 목록을 페이지로 읽고 `/internal/v1/store-products/{code}`에서 숨긴 상품까지 버전·본문·listed를 가져온다. 공개 상세로 우회하지 않는다. 키가 없거나 연계에 실패하면 준비되지 않은 상태를 유지한다.
 빈 목록까지 읽으면 메모리 준비 상태가 열린다. HTTP 호출 중에는 DB 트랜잭션을 유지하지 않는다.
 연결·읽기 실패나 계약 충돌 시 503을 유지하고 로그에 원인을 남긴다. 원인 해결 후 Store를 재시작한다.
 
@@ -63,7 +63,7 @@ Store는 사본 저장만 수행하므로 버전 비교·저장을 같은 트랜
 2. Catalog 공개 상세와 Store 상세가 일치하고 제목 검색에 나타나는지 확인한다.
 3. Studio 작업본만 수정했을 때 Store가 기존 공개본을 유지하는지 확인한다.
 4. 다시 심사·출시하면 같은 상품 ID·최초 공개 시각을 유지하면서 제목·가격·버전이 갱신되는지 확인한다.
-5. Store를 재시작하면 시작 전 공개 상품도 기존 HTTP API로 읽는다. Kafka 수신을 끈 독립 검증 단계로 이 경로를 구분한다.
+5. Store를 재시작하면 시작 전 상품을 숨김 여부와 관계없이 보호한 내부 HTTP API로 읽는다. Kafka 수신을 끈 독립 검증 단계로 이 경로를 구분한다. 숨긴 사본은 보존하고 공개 목록·상세에서는 제외한다.
 
 준비된 Store는 Catalog가 일시 중단돼도 저장한 사본을 조회한다. Catalog가 중단된 상태에서 새로 시작한 Store는 503을 유지한다.
 주기적 자동 대조는 없으며 누락 확인 시 재시작해 다시 읽는다.

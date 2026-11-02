@@ -11,6 +11,18 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentApprovalTest {
+    @Test void aPlatformSaleRestrictionKeepsTheOriginalUnadmittedRequestAndClearsAfterAdmission() {
+        PaymentApproval approval = approval();
+        approval.recordSaleRestriction();
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(approval.getLastErrorCode()).isEqualTo("ORDER_SALE_RESTRICTED");
+        assertThat(approval.getAdmittedAt()).isNull();
+        assertThat(approval.getFirstPreparedAt()).isNull();
+        assertThat(approval.isPostStopped()).isFalse();
+        approval.admit(receipt(approval));
+        assertThat(approval.getLastErrorCode()).isNull();
+        assertThatThrownBy(approval::recordSaleRestriction).isInstanceOf(IllegalStateException.class);
+    }
     private final Payment payment = Payment.receive(request(), "PORTONE_TEST");
     private final Instant at = Payment.now();
     private final PaymentApprovalInput input = new PaymentApprovalInput(id(), payment.getOrderNo(), "tx-owned", new ApprovalToken("secret-token"));

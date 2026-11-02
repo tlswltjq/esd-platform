@@ -73,6 +73,7 @@ class DownloadIntegrationTest {
     static final AtomicInteger CATALOG_CALLS = new AtomicInteger();
     static volatile int licenseStatus = 200;
     static volatile String licenseAccessState = "ACTIVE";
+    static volatile boolean catalogRestriction;
     static volatile int catalogStatus = 200;
     static volatile long productId = 1;
     static volatile String storagePath = "s3://stove-builds/game.zip";
@@ -106,7 +107,9 @@ class DownloadIntegrationTest {
                     ObjectNode data = JSON.createObjectNode().put("productId", productId).put("productCode", "game")
                             .put("releaseRequestId", 2).put("contentVersion", 3).put("buildId", 4).put("version", "v1")
                             .put("fileSize", BYTES.length).put("checksum", checksum()).put("storagePath", storagePath);
-                    body = JSON.writeValueAsString(JSON.createObjectNode().put("success", true).set("data", data));
+                    body = status == 403 && catalogRestriction
+                            ? "{\"success\":false,\"error\":{\"code\":\"PRODUCT_DOWNLOAD_RESTRICTED\"}}"
+                            : JSON.writeValueAsString(JSON.createObjectNode().put("success", true).set("data", data));
                 }
                 byte[] response = body.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -148,12 +151,24 @@ class DownloadIntegrationTest {
         assertThat(MINIO.execInContainer("mc", "admin", "policy", "attach", "admin", "download-read", "--user", READER).getExitCode()).isZero();
     }
     @BeforeEach void reset() {
+        catalogRestriction = false;
         licenseStatus = 200; licenseAccessState = "ACTIVE"; catalogStatus = 200; productId = 1; storagePath = "s3://stove-builds/game.zip";
         LICENSE_CALLS.set(0); CATALOG_CALLS.set(0);
         try (S3Client admin = client("stove", "stove1234")) {
             admin.putObject(PutObjectRequest.builder().bucket(BUCKET).key("game.zip").build(), RequestBody.fromBytes(BYTES));
         }
     }
+    @Test void productRestrictionIsDistinguishedFromOwnershipAndUpstreamFailures() throws Exception {
+        catalogRestriction = true;
+        catalogStatus = 403;
+        HttpResponse<String> response = get("/api/v1/downloads/game/ticket", OWNER);
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(JSON.readTree(response.body()).path("error").path("code").asText()).isEqualTo("PRODUCT_DOWNLOAD_RESTRICTED");
+        assertThat(JSON.readTree(response.body()).has("data")).isFalse();
+        assertThat(LICENSE_CALLS.get()).isEqualTo(1);
+        assertThat(CATALOG_CALLS.get()).isEqualTo(1);
+    }
+
     @Test void suspendedLibraryEntryDoesNotAuthorizeANewUrlAndOldUrlIsIndependent() throws Exception {
         JsonNode ticket = JSON.readTree(get("/api/v1/downloads/game/ticket", OWNER).body()).path("data");
         String originalUrl = ticket.path("downloadUrl").asText();

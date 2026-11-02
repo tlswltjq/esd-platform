@@ -46,6 +46,7 @@ spring:
 
 stove:
   store:
+    catalog-service-key: ${CATALOG_STORE_SERVICE_KEY:}
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     sync:
       enabled: true

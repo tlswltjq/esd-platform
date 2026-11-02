@@ -2,6 +2,8 @@
 
 [문서 목록](README.md) · [MVP 범위·완료 조건](download-mvp-plan.md) · [License 조회](license-guide.md) · [Catalog 공개본](catalog-guide.md)
 
+[상품 다운로드 제한·저장소 적용](download-restriction-plan.md)은 판매 상태와 별도의 관리자 정책이다. 제한 중이거나 저장소 해제를 확인하지 못하면 신규 URL은 403/PRODUCT_DOWNLOAD_RESTRICTED다. 현재 MinIO에서는 Download 읽기 계정의 태그 거절 IAM 정책까지 준비해야 기존 URL의 새 GET도 거절된다. 설정·적용 순서와 부분 적용/재시도 한계는 해당 문서를 따른다.
+
 Download는 본인의 상품 보유권과 현재 공개 빌드를 HTTP로 조회하고 전체 ZIP의 S3/MinIO 서명 URL을 발급한다.
 업무 DB·MongoDB·Kafka·동기화 작업은 사용하지 않는다. 파일 전송은 저장소가 맡는다.
 
@@ -71,7 +73,7 @@ JWT sub로 본인을 식별하고 X-Member-Id·member_id를 주체 선택에 사
 |---|---|
 | 400 | 상품 코드 또는 쿼리 입력 오류. 코드만 전달 |
 | 401 | 사용자 JWT가 없거나 유효하지 않음. 재인증 |
-| 403 | MEMBER 없음, 보유권 없음 또는 SUSPENDED. PAID 직후라면 License 지급 상태 확인 |
+| 403 | MEMBER 없음, 보유권 없음·SUSPENDED 또는 PRODUCT_DOWNLOAD_RESTRICTED. 상품 제한은 관리자 상태 확인, PAID 직후 미보유는 지급 상태 확인 |
 | 404 | 보유 확인 후 Catalog에 현재 공개 상품 없음 |
 | 409 | 공개본의 참조 파일 누락 또는 크기 불일치. 해당 파일의 보존·복구 확인 |
 | 503 | License·Catalog·저장소 통신/인증/응답 오류 또는 상품 연결 불일치. 원인 복구 후 재요청 |

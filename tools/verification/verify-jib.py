@@ -93,12 +93,12 @@ def main():
     else:
         raise RuntimeError("No isolated MinIO port available")
     public = "http://127.0.0.1:" + str(PORTS["gateway"] + offset)
-    keys = {name: secrets.token_urlsafe(32) for name in ["pg-db", "payment", "settlement", "control", "catalog", "download"]}
+    keys = {name: secrets.token_urlsafe(32) for name in ["pg-db", "payment", "settlement", "control", "catalog", "download", "store", "order-catalog"]}
     environment = os.environ.copy()
     environment.update(MOCK_PG_DB_PASSWORD=keys["pg-db"], MOCK_PG_DB_ROOT_PASSWORD=keys["pg-db"],
                        MOCK_PG_PAYMENT_KEY=keys["payment"], MOCK_PG_SETTLEMENT_KEY=keys["settlement"],
                        MOCK_PG_CONTROL_KEY=keys["control"], CATALOG_SETTLEMENT_SERVICE_KEY=keys["catalog"],
-                       CATALOG_DOWNLOAD_SERVICE_KEY=keys["download"])
+                       CATALOG_DOWNLOAD_SERVICE_KEY=keys["download"], CATALOG_STORE_SERVICE_KEY=keys["store"], CATALOG_ORDER_SERVICE_KEY=keys["order-catalog"])
     base = json.loads(capture(["docker", "compose", "-f", "docker-compose.apps.yml", "config", "--format", "json"], env=environment))
     schemas = [name for name in PORTS if name not in {"gateway", "download", "mock-pg"}]
     init = output / "init.sql"

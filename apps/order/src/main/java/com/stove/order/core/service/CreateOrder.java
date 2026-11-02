@@ -10,6 +10,7 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderRequest;
 import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PublishedProduct;
+import com.stove.order.core.domain.ProductPublicAccess;
 import com.stove.order.core.port.CatalogProducts;
 import java.util.List;
 import java.util.UUID;
@@ -86,6 +87,7 @@ public class CreateOrder {
     }
 
     private void requirePurchasable(String buyer, PublishedProduct product) {
+        ProductPublicAccess.requireNewOrder(product.publicDetailAllowed());
         List<Order> conflicts = orders.findPurchaseConflicts(buyer, product.productId(), product.productCode(),
                 List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID));
         if (conflicts.isEmpty()) return;

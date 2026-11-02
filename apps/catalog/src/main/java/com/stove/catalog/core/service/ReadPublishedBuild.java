@@ -3,6 +3,7 @@ package com.stove.catalog.core.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.core.domain.CatalogProduct;
+import com.stove.catalog.core.domain.CatalogDownloadError;
 import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogRelease;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
@@ -27,6 +28,8 @@ public class ReadPublishedBuild {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         CatalogProduct product = products.findByProductCode(code).filter(p -> code.equals(p.getProductCode()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (product.isDownloadUnavailable())
+            throw new BusinessException(CatalogDownloadError.PRODUCT_DOWNLOAD_RESTRICTED);
         CatalogRelease release = releases.findById(product.getCurrentReleaseRequestId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR));
         try {

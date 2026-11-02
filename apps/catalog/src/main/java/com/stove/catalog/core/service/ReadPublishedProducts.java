@@ -7,6 +7,8 @@ import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogRelease;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.PublishedProduct;
+import com.stove.catalog.core.domain.ProductPublicAccess;
+import com.stove.catalog.core.domain.ListingPreference;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
@@ -27,14 +29,18 @@ public class ReadPublishedProducts {
     private final CatalogReleaseRepository releases;
     private final ObjectMapper mapper;
 
-    public Page<PublishedProduct> list(int page, int size) {
+    public Page<PublishedProduct> list(int page, int size) { return page(page, size, true); }
+
+    public Page<PublishedProduct> synchronizationPage(int page, int size) { return page(page, size, false); }
+
+    private Page<PublishedProduct> page(int page, int size, boolean listedOnly) {
         if (page < 0 || size < 1 || size > 100)
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST, "page >= 0, 1 <= size <= 100이어야 합니다.");
-        Page<CatalogProduct> result =
-                products.findAll(
-                        PageRequest.of(
-                                page, size, Sort.by(Sort.Direction.DESC, "publishedAt", "id")));
+        PageRequest request = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "publishedAt", "id"));
+        Page<CatalogProduct> result = listedOnly
+                ? products.findListed(ListingPreference.LISTED, ListingPreference.AUTO, request)
+                : products.findAll(request);
         Map<Long, CatalogRelease> snapshots =
                 releases
                         .findAllById(
@@ -47,11 +53,21 @@ public class ReadPublishedProducts {
     }
 
     public PublishedProduct detail(String code) {
-        CatalogProduct product =
+        CatalogProduct product = require(code);
+        ProductPublicAccess.requireDetail(product.isListed());
+        return view(product, releases.findById(product.getCurrentReleaseRequestId()).orElseThrow());
+    }
+
+    public PublishedProduct internalDetail(String code) {
+        CatalogProduct product = require(code);
+        return view(product, releases.findById(product.getCurrentReleaseRequestId()).orElseThrow());
+    }
+
+    private CatalogProduct require(String code) {
+        return
                 products.findByProductCode(code)
                         .filter(p -> p.getProductCode().equals(code))
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        return view(product, releases.findById(product.getCurrentReleaseRequestId()).orElseThrow());
     }
 
     private PublishedProduct view(CatalogProduct product, CatalogRelease release) {
@@ -60,7 +76,7 @@ public class ReadPublishedProducts {
                     product.getId(),
                     mapper.readValue(release.getSnapshot(), ProjectSnapshot.class),
                     product.getPublishedAt(),
-                    product.getUpdatedAt());
+                    product.getUpdatedAt(), product.getSaleStatus(), product.getCatalogVersion(), product.isListed());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("저장된 공개 스냅샷을 읽을 수 없습니다.", e);
         }

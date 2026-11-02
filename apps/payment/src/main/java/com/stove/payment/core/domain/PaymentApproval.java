@@ -87,7 +87,13 @@ public class PaymentApproval {
         receipt.requireRequest(admissionRequest());
         if (admittedAt != null && !admittedAt.equals(receipt.admittedAt()))
             throw new IllegalArgumentException("Original admission changed");
-        admittedAt = receipt.admittedAt(); status = PaymentApprovalStatus.ADMITTED;
+        admittedAt = receipt.admittedAt(); status = PaymentApprovalStatus.ADMITTED; lastErrorCode = null;
+    }
+
+    public void recordSaleRestriction() {
+        if (status != PaymentApprovalStatus.REQUESTED || admittedAt != null || firstPreparedAt != null || postStopped)
+            throw new IllegalStateException("Only an unadmitted request can wait for a sale restriction");
+        lastErrorCode = "ORDER_SALE_RESTRICTED";
     }
     public void prepare(Instant at) {
         requireTime(at);

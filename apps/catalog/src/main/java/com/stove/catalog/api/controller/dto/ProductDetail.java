@@ -18,7 +18,7 @@ public record ProductDetail(
         String videoUrl,
         long contentVersion,
         String buildVersion,
-        Instant updatedAt) {
+        Instant updatedAt, String saleStatus, long catalogVersion, boolean listed) {
     public static ProductDetail from(PublishedProduct p) {
         ProjectSnapshot s = p.snapshot();
         return new ProductDetail(
@@ -34,6 +34,6 @@ public record ProductDetail(
                 s.videoUrl(),
                 s.contentVersion(),
                 s.version(),
-                p.updatedAt());
+                p.updatedAt(), p.saleStatus(), p.catalogVersion(), p.listed());
     }
 }

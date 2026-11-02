@@ -107,24 +107,32 @@ V1~V9 SQL·역사 자료를 보존하고 V10의 project_review만 새 업무에 
 
 ## catalog
 
+상품 검색·목록은 [노출 계약](catalog-listing-policy-plan.md)의 독립 설정을 따른다. CREATOR GET/PUT `/api/v1/products/by-code/{code}/listing`은 자기 상품의 AUTO/LISTED/UNLISTED, ADMIN GET/PUT `/api/v1/admin/products/{code}/listing/restriction`은 독립 강제 숨김을 관리한다. AUTO는 최종 ON_SALE만 노출하고 관리자 숨김이 우선한다. Catalog 공개 목록과 Store 검색·페이지·총개수는 listed=true만 포함한다. [공개 상세 B](public-product-detail-plan.md)에 따라 최종 listed=false이면 Catalog/Store 공개 상세와 새 주문도 404로 거절한다.
+
+상품 다운로드는 ADMIN GET/PUT `/api/v1/admin/products/{code}/downloads/restriction`의 독립 제한으로 관리한다. 202는 제한 상태·감사·작업 예약 접수이며 저장소 적용은 PENDING/APPLIED/FAILED로 별도 조회한다. [저장소 적용·보장 한계](download-restriction-plan.md)를 따른다.
+
+판매자 자율 중지와 관리자 판매 제한의 API·역할·기존 주문 영향·사본 버전은 [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
+
 Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 관리한다.
 상세 범위·버전 정책·검증 기준은 [Catalog MVP 계획](catalog-mvp-plan.md)을 따른다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/api/v1/products` | 공개 상품 페이지 목록. page=0, size=20, 최대 100 |
-| GET | `/api/v1/products/by-code/{productCode}` | 현재 공개본 상세 |
+| GET | `/api/v1/products/by-code/{productCode}` | 현재 공개본 상세·saleStatus·catalogVersion. no-store |
+| GET·PUT | `/api/v1/products/by-code/{code}/sales` | CREATOR 본인의 판매 의사 조회·변경. expectedCatalogVersion 필요 |
+| GET·PUT | `/api/v1/admin/products/{code}/sales/restriction` | ADMIN의 독립 판매 제한 조회·설정·해제 |
 
-두 API는 익명 조회를 허용한다. 목록은 최초 공개 시각·상품 ID 내림차순이다.
+공개 목록·상세 두 API는 익명 조회를 허용한다. 판매 관리 API는 JWT 역할·소유권을 검증한다. 목록은 최초 공개 시각·상품 ID 내림차순이다.
 상세에는 공개 자료·가격·자료 버전·빌드 버전을 제공하고 저장 경로·소유자 subject·내부 요청 ID는 노출하지 않는다.
 
 수신은 `ProjectReleaseRequested`(stove.studio.v1), 발행은
 `ProjectReleaseCompleted/Rejected`(stove.release.v1)다. 결과의 requestEventId로 Studio 원본 요청을 연결한다.
-실제 공개본 변경 시 `CatalogProductPublished`(stove.catalog.v1)를 같은 트랜잭션의 Outbox에 추가한다.
+실제 공개본 또는 판매 조건 변경 시 `CatalogProductPublished`(stove.catalog.v1)를 같은 트랜잭션의 Outbox에 추가한다. 콘텐츠 버전과 독립적인 catalogVersion으로 Store 사본을 갱신한다.
 최초 공개와 더 높은 버전 공개를 처리하며, 낮은 버전의 새 요청은 거절한다.
 공개 데이터·요청 결과·Inbox·Outbox는 같은 트랜잭션으로 확정한다.
 
-기존 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다.
+재작성 전 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다. 현재 판매 관리는 위 별도 GET·PUT 계약을 사용한다.
 이 문서의 미완료 모듈에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.
 
 ---
@@ -141,10 +149,12 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 목록·상세는 익명 GET이다. NEWEST·PRICE_ASC·PRICE_DESC를 지원하며 size 상한은 100이다.
 초기 동기화 전 503, 잘못된 입력 400, 없는 상품 코드 404를 반환한다.
 수신은 `CatalogProductPublished`(stove.catalog.v1), 업무 이벤트 발행은 없다.
-시작 시 Catalog 기존 목록·상세 API로 초기 사본을 만들고 재시작하면 처음부터 다시 읽는다.
-더 높은 contentVersion만 교체하고 중복·역순은 현재 사본을 유지한다. 동일 버전의 다른 데이터·식별 충돌은 실패한다.
+시작 시 Catalog 내부 전체 목록·상세로 초기 사본을 만들고 재시작하면 처음부터 다시 읽는다.
+Store 초기 동기화는 CATALOG_STORE_SERVICE_KEY로 보호한 Catalog `/internal/v1/store-products`와 `/internal/v1/store-products/{code}`에서 숨긴 상품까지 읽는다. 상세의 필수 listed를 검증하며 내부 키는 이 두 GET에만 전달한다. 공개 API로 우회하지 않는다. 숨긴 사본은 보존하되 공개 상세는 404로 거절한다.
+
+catalogVersion으로 공개 사본을 교체하고 중복·역순은 현재 사본을 유지한다. 콘텐츠 버전이 같아도 판매 상태 변경을 반영한다. 동일 Catalog 버전의 다른 데이터·식별 충돌은 실패한다.
 업무 테이블은 store_product 하나이며 Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다.
-가격은 공개 KRW 정가이며 구매·할인·판매 가능 여부는 다루지 않는다.
+가격은 공개 KRW 정가이며 saleStatus·catalogVersion을 조회 사본으로 제공한다. 구매 허용의 최종 판단은 Order가 Catalog 정본으로 확인한다. [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
 
 ---
 
@@ -152,6 +162,8 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 
 공개 상품 하나의 주문 스냅샷·청구액을 고정하고 내 주문 조회·최종 결제 결과 반영을 담당한다.
 [MVP 범위](order-mvp-plan.md) · [실행·결과 확인](order-guide.md)
+
+상품 근거는 CATALOG_ORDER_SERVICE_KEY·X-Order-Service-Key로 보호한 Catalog `/internal/v1/order-products/{code}`에서 조회한다. 상품 식별·가격·판매 상태·publicDetailAllowed만 받고 공개 본문·저장 경로는 받지 않는다. 새 주문은 공개 상세 허용 근거가 false이면 404이며 같은 requestId의 기존 주문 재전송·기존 주문 승인 접수는 원래 계약을 유지한다. 기존 관리자 판매 제한의 승인 접수 차단은 유지한다. [정책·연계 오류·검증 경계](public-product-detail-plan.md)를 따른다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -165,9 +177,9 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 | POST | /api/v1/admin/refunds/{refundId}/decision | ADMIN의 requestId·APPROVED/REJECTED·사유. 판정자는 JWT sub |
 
 MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문·임의 헤더로 구매자를 선택하지 않는다.
-Catalog의 기존 코드별 공개 상세를 DB 트랜잭션 밖에서 읽고 버전·정가를 비교한다. 차이는 409이며 무료 상품도 409다.
+Catalog의 코드별 내부 주문 근거를 DB 트랜잭션 밖에서 읽고 공개 접근·판매 가능 여부와 버전·정가를 확인한다. 기대 값 차이는 409이며 무료 상품도 409다.
 정가 listAmount·할인액 discountAmount=0·청구액 amount를 고정하고 구매자별 requestId 유일 제약으로 중복 생성을 막는다.
-같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다.
+같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다. 신규 주문은 ON_SALE만 허용한다. 새 승인 접수는 관리자 BLOCKED를 확인하되 판매자 STOPPED·현재 가격으로 기존 주문을 바꾸지 않는다. 이미 확정한 승인 영수증은 유지한다. [판매 상태와 승인 경계](catalog-sales-policy-plan.md)를 따른다.
 새 requestId의 같은 상품 구매는 기존 PENDING이면 409 PURCHASE_IN_PROGRESS, PAID이면 409 PRODUCT_ALREADY_PURCHASED다.
 최종 FAILED만 새 주문을 허용한다. V11의 구매자·상품 ID/코드 유일 제약으로 동시 생성도 제한한다.
 
@@ -186,6 +198,8 @@ Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guid
 ---
 
 ## payment
+
+Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다. Payment는 REQUESTED와 ORDER_SALE_RESTRICTED를 저장하고 PG 승인 POST 없이 원래 기한 내 재확인한다. 제한 해제·만료·기존 영수증의 처리는 [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
 
 확정된 주문의 결제 접수, 외부 PG 승인/조회, 미확정 건 재개·내 결제 조회와 허용된 환불의 PG 실행/결과 확인을 담당한다.
 [모델](domain/models/order-payment.md#payment) · [실행](payment-guide.md) · [MVP 범위·검증](payment-mvp-plan.md)
@@ -253,7 +267,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 - License·Catalog의 상품 ID·코드를 대조하고, 현재 COMPLETED 공개본의 전체 빌드만 사용한다.
 - 저장소 HEAD로 객체·크기를 확인한 뒤 해당 파일의 GET URL을 발급한다. 기본 TTL 5분, 허용 범위 1초~15분이다.
 - 응답은 no-store다. 쿼리·과거 버전·플랫폼·델타 선택·manifests API는 제공하지 않는다.
-- 미보유/지급 전/이용권 SUSPENDED는 403, 현재 공개 상품 없음 404, 파일 누락/크기 불일치 409, 연계 장애/응답 불일치 503이다.
+- 미보유/지급 전/이용권 SUSPENDED와 상품 PRODUCT_DOWNLOAD_RESTRICTED는 403, 현재 공개 상품 없음 404, 파일 누락/크기 불일치 409, 연계 장애/응답 불일치 503이다.
 - URL은 만료 전 반복 사용·공유가 가능하다. License 보유권과 URL 유효기간을 구분한다.
 - 외부 이벤트 수신·발행은 없으며 발급·실패·재시작이 주문·보유권·공개본을 변경하지 않는다.
 

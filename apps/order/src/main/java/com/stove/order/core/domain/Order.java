@@ -52,6 +52,9 @@ public class Order {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "구매자 식별자가 올바르지 않습니다.");
         if (eventId == null || eventId.isBlank() || eventId.length() > 64)
             throw new IllegalArgumentException("주문 이벤트 ID가 필요합니다.");
+        ProductPublicAccess.requireNewOrder(product.publicDetailAllowed());
+        if (!"ON_SALE".equals(product.saleStatus()))
+            throw new BusinessException(OrderErrorCode.PRODUCT_NOT_ON_SALE);
         if (product.price() == 0)
             throw new BusinessException(ErrorCode.CONFLICT, "무료 상품 지급은 이번 주문 범위에 포함되지 않습니다.");
         if (!request.productCode().equals(product.productCode())

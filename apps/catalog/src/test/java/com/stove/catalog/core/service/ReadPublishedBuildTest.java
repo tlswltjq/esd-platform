@@ -28,6 +28,22 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ReadPublishedBuildTest {
+    @Test void blocksBeforeReadingAnyBuildAndKeepsTheGateUntilStorageRestoration() {
+        ProjectReleaseRequestedEvent event = event(id(), 1);
+        CatalogProduct product = CatalogProduct.publish(event.snapshot(), event.releaseRequestId(), Instant.now());
+        CatalogProductRepository products = mock(CatalogProductRepository.class);
+        CatalogReleaseRepository releases = mock(CatalogReleaseRepository.class);
+        when(products.findByProductCode(event.partitionKey())).thenReturn(Optional.of(product));
+        ReadPublishedBuild read = new ReadPublishedBuild(products, releases, new ObjectMapper());
+        product.changeDownloadRestriction(true, 1, Instant.now());
+        assertThatThrownBy(() -> read.execute(event.partitionKey())).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.errorCode().code()).isEqualTo("PRODUCT_DOWNLOAD_RESTRICTED"));
+        product.changeDownloadRestriction(false, 2, Instant.now());
+        assertThatThrownBy(() -> read.execute(event.partitionKey())).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.errorCode().code()).isEqualTo("PRODUCT_DOWNLOAD_RESTRICTED"));
+        verifyNoInteractions(releases);
+    }
+
     @Test void returnsTheInitiallySelectedImmutableReleaseWhenPublicationChangesDuringRead() {
         ProjectReleaseRequestedEvent event = event(id(), 1);
         CatalogProduct product = CatalogProduct.publish(event.snapshot(), event.releaseRequestId(), Instant.now());
@@ -38,7 +54,7 @@ class ReadPublishedBuildTest {
         CatalogReleaseRepository releases = mock(CatalogReleaseRepository.class);
         when(products.findByProductCode(event.partitionKey())).thenReturn(Optional.of(product));
         when(releases.findById(event.releaseRequestId())).thenAnswer(call -> {
-            product.replace(event.releaseRequestId() + 1, Instant.now());
+            product.replace(event.releaseRequestId() + 1, event.snapshot().contentVersion() + 1, Instant.now());
             return Optional.of(original);
         });
         ReadPublishedBuild read = new ReadPublishedBuild(products, releases, new ObjectMapper().findAndRegisterModules());

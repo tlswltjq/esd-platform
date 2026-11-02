@@ -96,6 +96,36 @@ spring:
                 - Path=/api/v1/storefront/**
             # 상품 상세 조회만 공개. 가격 재계산(POST /quote)·운영툴 API 는
             # 이 라우트에 매칭되지 않으므로 외부에서 호출할 수 없다.
+            - id: catalog-sales
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/products/by-code/*/sales
+                - Method=GET,PUT
+              filters: [RemoveRequestHeader=X-Member-Id]
+            - id: catalog-sales-admin
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/admin/products/*/sales/restriction
+                - Method=GET,PUT
+              filters: [RemoveRequestHeader=X-Member-Id]
+            - id: catalog-download-restriction-admin
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/admin/products/*/downloads/restriction
+                - Method=GET,PUT
+              filters: [RemoveRequestHeader=X-Member-Id]
+            - id: catalog-listing-seller
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/products/by-code/*/listing
+                - Method=GET,PUT
+              filters: [RemoveRequestHeader=X-Member-Id]
+            - id: catalog-listing-admin
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/admin/products/*/listing/restriction
+                - Method=GET,PUT
+              filters: [RemoveRequestHeader=X-Member-Id]
             - id: catalog-public
               uri: ${CATALOG_URI:http://localhost:8081}
               predicates:

@@ -62,7 +62,20 @@ spring:
 
 stove:
   catalog:
+    order-service-key: ${CATALOG_ORDER_SERVICE_KEY:}
+    store-service-key: ${CATALOG_STORE_SERVICE_KEY:}
     download-service-key: ${CATALOG_DOWNLOAD_SERVICE_KEY:}
+    download-storage:
+      enabled: ${CATALOG_DOWNLOAD_STORAGE_ENABLED:false}
+      worker-enabled: ${CATALOG_DOWNLOAD_STORAGE_WORKER_ENABLED:true}
+      endpoint: ${CATALOG_DOWNLOAD_STORAGE_ENDPOINT:}
+      region: ${CATALOG_DOWNLOAD_STORAGE_REGION:us-east-1}
+      bucket: ${CATALOG_DOWNLOAD_STORAGE_BUCKET:}
+      access-key: ${CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY:}
+      secret-key: ${CATALOG_DOWNLOAD_STORAGE_SECRET_KEY:}
+      reader-access-key: ${DOWNLOAD_STORAGE_ACCESS_KEY:}
+      reader-secret-key: ${DOWNLOAD_STORAGE_SECRET_KEY:}
+      call-timeout: 5s
     settlement-service-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
   outbox:
     relay-enabled: true

@@ -16,7 +16,10 @@ public final class CatalogProductMapper {
                 || !Objects.equals(envelope.eventId(), event.eventId())
                 || !Objects.equals(envelope.eventType(), event.eventType())
                 || event.occurredAt() == null || event.product() == null
-                || !Objects.equals(envelope.key(), event.product().productCode()))
+                || !Objects.equals(envelope.key(), event.product().productCode())
+                || (!"ON_SALE".equals(event.product().saleStatus()) && !"STOPPED".equals(event.product().saleStatus())
+                    && !"BLOCKED".equals(event.product().saleStatus()))
+                || event.product().catalogVersion() < event.product().contentVersion())
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "공개 상품 이벤트 계약이 올바르지 않습니다.");
         return event.product();
     }

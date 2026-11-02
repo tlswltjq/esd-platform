@@ -14,6 +14,6 @@ public interface StoreProductRepository extends JpaRepository<StoreProduct, Long
     @Query("select p from StoreProduct p where p.productId = :id")
     Optional<StoreProduct> lockById(@Param("id") Long id);
     Optional<StoreProduct> findByProductCode(String code);
-    @Query("select p from StoreProduct p where lower(p.title) like :pattern escape '!'")
+    @Query("select p from StoreProduct p where p.listed = true and lower(p.title) like :pattern escape '!'")
     Page<StoreProduct> search(@Param("pattern") String pattern, Pageable pageable);
 }

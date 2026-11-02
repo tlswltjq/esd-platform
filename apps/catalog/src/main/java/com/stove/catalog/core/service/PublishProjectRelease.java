@@ -83,14 +83,15 @@ public class PublishProjectRelease {
         if (product == null)
             product = products.saveAndFlush(CatalogProduct.publish(s, submission.releaseRequestId(), now));
         else if (s.contentVersion() > currentVersion)
-            product.replace(submission.releaseRequestId(), now);
+            product.replace(submission.releaseRequestId(), s.contentVersion(), now);
         if (publicationChanged)
             outbox.record(
                     "CatalogProduct", s.productCode(),
                     CatalogProductPublishedEvent.of(new CatalogProductSnapshot(
                             product.getId(), s.productCode(), s.title(), s.shortDescription(),
                             s.thumbnailUrl(), s.price(), s.currency(), product.getPublishedAt(),
-                            s.content(), s.videoUrl(), s.contentVersion(), s.version(), product.getUpdatedAt())));
+                            s.content(), s.videoUrl(), s.contentVersion(), s.version(), product.getUpdatedAt(),
+                            product.getSaleStatus(), product.getCatalogVersion(), product.isListed())));
         if (stale)
             outbox.record(
                     "CatalogProduct",

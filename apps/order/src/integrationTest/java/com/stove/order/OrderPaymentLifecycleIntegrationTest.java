@@ -21,6 +21,7 @@ import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PaymentAdmissionInput;
 import com.stove.order.core.domain.PaymentAdmissionFailureInput;
 import com.stove.order.core.domain.PaymentResult;
+import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.port.CatalogProducts;
 import com.stove.order.core.service.ApplyPaymentResult;
 import com.stove.order.core.service.RequestOrderPaymentProcessing;
@@ -97,6 +98,28 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
         assertThat(replay.status()).isEqualTo(200);
         assertThat(replay.body()).isEqualTo(first.body());
         assertThat(stored(order).getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
+        assertThat(admissions.count()).isEqualTo(1);
+    }
+
+    @Test void platformRestrictionBlocksOnlyNewAdmissionsAndSellerStopDoesNotBlockTheExistingOrder() {
+        Order order = saved("usr_buyer");
+        PaymentAdmissionInput input = input(order);
+        PublishedProduct current = product();
+        when(catalog.detail(anyString())).thenReturn(new PublishedProduct(current.productId(), current.productCode(),
+                current.title(), current.contentVersion(), current.price(), current.currency(), "BLOCKED"));
+        Response blocked = post(order.getOrderNo(), body(input), KEY, null);
+        assertThat(blocked.status()).isEqualTo(409);
+        assertThat(blocked.body().path("error").path("code").asText()).isEqualTo("PRODUCT_SALE_RESTRICTED");
+        assertThat(stored(order).getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(admissions.count()).isZero();
+        when(catalog.detail(anyString())).thenReturn(new PublishedProduct(current.productId(), current.productCode(),
+                "Changed title", current.contentVersion()+1, current.price()+1000, current.currency(), "STOPPED"));
+        Response admitted = post(order.getOrderNo(), body(input), KEY, null);
+        assertThat(admitted.status()).isEqualTo(200);
+        when(catalog.detail(anyString())).thenThrow(new IllegalStateException("Catalog now unavailable"));
+        assertThat(post(order.getOrderNo(), body(input), KEY, null).body()).isEqualTo(admitted.body());
+        assertThat(stored(order).getAmount()).isEqualTo(order.getAmount());
+        assertThat(stored(order).getExpiresAt()).isEqualTo(order.getExpiresAt());
         assertThat(admissions.count()).isEqualTo(1);
     }
 

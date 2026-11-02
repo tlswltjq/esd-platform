@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.PgUnavailable;
+import com.stove.payment.core.domain.OrderSaleRestricted;
 import com.stove.payment.core.port.OrderPaymentAdmissions;
 import java.time.DateTimeException;
 import java.time.Instant;
@@ -48,6 +49,9 @@ public class HttpOrderPaymentAdmissions implements OrderPaymentAdmissions {
                         JsonNode result = response.bodyTo(JsonNode.class);
                         if (allowExpiry && response.getStatusCode().value() == 409 && result != null
                                 && "ORDER_EXPIRED".equals(result.path("error").path("code").asText())) return null;
+                        if (allowExpiry && response.getStatusCode().value() == 409 && result != null
+                                && "PRODUCT_SALE_RESTRICTED".equals(result.path("error").path("code").asText()))
+                            throw new OrderSaleRestricted();
                         if (response.getStatusCode().value() == 409)
                             throw new BusinessException(ErrorCode.CONFLICT, "Order approval evidence conflicts");
                         if (!response.getStatusCode().is2xxSuccessful()) throw new PgUnavailable("Order approval service unavailable");

@@ -114,6 +114,8 @@ try:
     public=f"http://127.0.0.1:{8080+offset}"
     service_key=secrets.token_urlsafe(32)
     common=os.environ.copy()
+    common["CATALOG_STORE_SERVICE_KEY"]=secrets.token_urlsafe(32)
+    common["CATALOG_ORDER_SERVICE_KEY"]=secrets.token_urlsafe(32)
     common.update(DB_HOST="127.0.0.1",DB_PORT=str(ports["mysql"]),DB_USER="stove",DB_PASSWORD="stove1234",
         REDIS_HOST="127.0.0.1",REDIS_PORT=str(ports["redis"]),KAFKA_BROKERS="127.0.0.1:"+str(ports["kafka"]),
         CATALOG_DOWNLOAD_SERVICE_KEY=service_key,AUTH_ISSUER=public,JWT_ISSUER_URI=public,JWT_JWK_SET_URI=f"http://127.0.0.1:{8091+offset}/oauth2/jwks",

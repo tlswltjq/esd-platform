@@ -15,7 +15,7 @@ class CatalogProductTest {
         Instant first = Instant.parse("2026-10-15T00:00:00Z");
         CatalogProduct p = CatalogProduct.publish(s, 10L, first);
         p.requireIdentity(CatalogFixtures.event(1, 2).snapshot());
-        p.replace(20L, first.plusSeconds(10));
+        p.replace(20L, 2, first.plusSeconds(10));
         assertThat(p.getPublishedAt()).isEqualTo(first);
         assertThat(p.getUpdatedAt()).isEqualTo(first.plusSeconds(10));
         assertThat(p.getCurrentReleaseRequestId()).isEqualTo(20L);

@@ -1,5 +1,6 @@
 package com.stove.catalog.config;
 
+import com.stove.common.security.ApiJwtSecurity;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 @Configuration
 public class SecurityConfig {
@@ -17,11 +19,25 @@ public class SecurityConfig {
     @Order(1)
     SecurityFilterChain internalBuildSecurity(HttpSecurity http,
             @Value("${stove.catalog.download-service-key:}") String key,
-            @Value("${stove.catalog.settlement-service-key:}") String settlementKey) throws Exception {
+            @Value("${stove.catalog.settlement-service-key:}") String settlementKey,
+            @Value("${stove.catalog.store-service-key:}") String storeKey,
+            @Value("${stove.catalog.order-service-key:}") String orderKey) throws Exception {
         byte[] expected = key.getBytes(StandardCharsets.UTF_8);
         return http.securityMatcher("/internal/**").csrf(csrf -> csrf.disable())
                 .exceptionHandling(e -> e.authenticationEntryPoint((request, response, failure) -> response.setStatus(401)))
                 .authorizeHttpRequests(a -> a
+                        .requestMatchers(HttpMethod.GET, "/internal/v1/store-products", "/internal/v1/store-products/*")
+                        .access((authentication, context) -> {
+                            String provided = context.getRequest().getHeader("X-Store-Service-Key");
+                            return new AuthorizationDecision(!storeKey.isBlank() && provided != null
+                                    && MessageDigest.isEqual(storeKey.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8)));
+                        })
+                        .requestMatchers(HttpMethod.GET, "/internal/v1/order-products/*")
+                        .access((authentication, context) -> {
+                            String provided = context.getRequest().getHeader("X-Order-Service-Key");
+                            return new AuthorizationDecision(!orderKey.isBlank() && provided != null
+                                    && MessageDigest.isEqual(orderKey.getBytes(StandardCharsets.UTF_8), provided.getBytes(StandardCharsets.UTF_8)));
+                        })
                         .requestMatchers(HttpMethod.GET, "/internal/v1/products/*/owner")
                         .access((authentication, context) -> {
                             String provided=context.getRequest().getHeader("X-Settlement-Service-Key");
@@ -42,7 +58,17 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/v1/products/by-code/*/sales", "/api/v1/products/by-code/*/listing").hasRole("CREATOR")
+                        .requestMatchers("/api/v1/admin/products/*/sales/restriction", "/api/v1/admin/products/*/downloads/restriction", "/api/v1/admin/products/*/listing/restriction").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/by-code/*").permitAll()
-                        .anyRequest().denyAll()).build();
+                        .anyRequest().denyAll())
+                .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))
+                .build();
+    }
+
+    @Bean JwtDecoder jwtDecoder(
+            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwks) {
+        return ApiJwtSecurity.decoder(issuer,jwks);
     }
 }

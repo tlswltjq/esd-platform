@@ -93,6 +93,8 @@ public class SecurityConfig {
                                 "/error", "/.well-known/**", "/connect/**", "/userinfo")
                         .permitAll()
                         .pathMatchers("/bff/session", "/bff/logout", "/api/v1/auth/password", "/api/v1/auth/session").authenticated()
+                        .pathMatchers("/api/v1/products/by-code/*/sales", "/api/v1/products/by-code/*/listing").hasRole("CREATOR")
+                        .pathMatchers("/api/v1/admin/products/*/sales/restriction", "/api/v1/admin/products/*/downloads/restriction", "/api/v1/admin/products/*/listing/restriction").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/storefront/**")
                         .permitAll()
                         // catalog의 내부 가격 재계산 경로는 외부 라우트가 없다. 보안 필터가

@@ -11,6 +11,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.stove.payment.core.domain.OrderAdmissionFailure;
+import com.stove.payment.core.domain.OrderSaleRestricted;
 import com.stove.payment.core.domain.OrderAdmissionRequest;
 import com.stove.payment.core.domain.PgChargeRequest;
 import java.time.Instant;
@@ -22,6 +23,12 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class HttpOrderPaymentAdmissionsTest {
+    @Test void aPlatformSaleRestrictionIsDistinguishedFromExpiryAndConflictingEvidence() {
+        server.expect(requestTo(root())).andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"success\":false,\"error\":{\"code\":\"PRODUCT_SALE_RESTRICTED\"}}"));
+        assertThatThrownBy(() -> client.admit(request)).isInstanceOf(OrderSaleRestricted.class);
+        server.verify();
+    }
     private final RestClient.Builder builder=RestClient.builder().baseUrl("http://order.example").defaultHeader("X-Payment-Service-Key","test-key");
     private final MockRestServiceServer server=MockRestServiceServer.bindTo(builder).build();
     private final HttpOrderPaymentAdmissions client=new HttpOrderPaymentAdmissions(builder.build());

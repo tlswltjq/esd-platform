@@ -95,6 +95,7 @@ class PaymentApprovalIntegrationTest {
     private static final AtomicBoolean FIRST_UNAVAILABLE=new AtomicBoolean();
     private static final AtomicBoolean REJECT=new AtomicBoolean();
     private static final AtomicBoolean EXPIRED=new AtomicBoolean();
+    private static final AtomicBoolean SALE_RESTRICTED=new AtomicBoolean();
     private static final AtomicBoolean WRONG_AMOUNT=new AtomicBoolean();
     private static final AtomicReference<CountDownLatch> ENTERED=new AtomicReference<>();
     private static final AtomicReference<CountDownLatch> RELEASE=new AtomicReference<>();
@@ -142,7 +143,7 @@ class PaymentApprovalIntegrationTest {
         reset(outbox); jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
         PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); RECEIPTS.clear(); CLOSURES.clear(); BODIES.clear(); KEYS.clear(); GETS.set(0); PG_DISCOUNT.set(0);
-        LOSE_PG.set(false); LOSE_ORDER.set(false); LOSE_CLOSURE.set(false); PG_DOWN.set(false); FIRST_UNAVAILABLE.set(false); REJECT.set(false); EXPIRED.set(false); WRONG_AMOUNT.set(false);
+        LOSE_PG.set(false); LOSE_ORDER.set(false); LOSE_CLOSURE.set(false); PG_DOWN.set(false); FIRST_UNAVAILABLE.set(false); REJECT.set(false); EXPIRED.set(false); SALE_RESTRICTED.set(false); WRONG_AMOUNT.set(false);
     }
     @Test void receptionIsDurableEncryptedAndSeparateFromFinancialSuccess() {
         Payment payment=purchase(); String command=id(); Reply first=submit(payment,command);
@@ -253,6 +254,31 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED); assertThat(BODIES).hasSize(1);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(countOutbox()).isZero();
         assertThat(submit(payment,id()).status()).isEqualTo(409);
+    }
+
+    @Test void aPlatformRestrictionWaitsWithoutPostingAndResumesTheSameUnexpiredApprovalAfterRelease() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); SALE_RESTRICTED.set(true);
+        worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("ORDER_SALE_RESTRICTED");
+        assertThat(row(command).getFirstPreparedAt()).isNull();
+        assertThat(row(command).getAdmittedAt()).isNull();
+        assertThat(row(command).getNextAt()).isAfter(TIME.get());
+        assertThat(RECEIPTS).isEmpty(); assertThat(BODIES).isEmpty(); assertThat(countOutbox()).isZero();
+        SALE_RESTRICTED.set(false); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(row(command).getLastErrorCode()).isNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(BODIES).hasSize(1); assertThat(KEYS).containsExactly("\""+command+"\"");
+        assertThat(row(command).getExpiresAt()).isEqualTo(payment.getOrderOccurredAt().plusSeconds(1800));
+    }
+
+    @Test void aRestrictionCannotExtendTheOrderDeadlineOrTurnAnUnadmittedExpiryIntoAFinancialFailure() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); SALE_RESTRICTED.set(true); worker.execute(command);
+        TIME.set(payment.getOrderOccurredAt().plusSeconds(1800)); EXPIRED.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
     }
     @Test void aVerifiedIndividualFailureReleasesOrderAdmissionAndAllowsANewAttemptOnTheSamePurchase() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
@@ -492,6 +518,7 @@ class PaymentApprovalIntegrationTest {
         String command=body.path("admissionId").asText(); JsonNode known=RECEIPTS.get(command);
         if(known==null) {
             if(EXPIRED.get()) { send(exchange,409,Map.of("success",false,"error",Map.of("code","ORDER_EXPIRED"))); return; }
+            if(SALE_RESTRICTED.get()) { send(exchange,409,Map.of("success",false,"error",Map.of("code","PRODUCT_SALE_RESTRICTED"))); return; }
             Payment payment=PURCHASES.get(body.path("paymentId").asText());
             known=JSON.valueToTree(Map.of("admissionId",command,"orderNo",orderNo,"paymentId",payment.getPaymentId(),"admittedAt",TIME.get().toString(),"expiresAt",payment.getOrderOccurredAt().plusSeconds(1800).toString()));
             RECEIPTS.put(command,known);

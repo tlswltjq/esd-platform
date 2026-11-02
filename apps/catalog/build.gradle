@@ -1,4 +1,6 @@
 dependencies {
+    implementation 'software.amazon.awssdk:s3'
+    integrationTestImplementation 'org.testcontainers:minio'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
@@ -11,6 +13,9 @@ dependencies {
 }
 
 tasks.named('integrationTest') {
+    inputs.files(rootProject.file('infra/minio/policies/download-reader.json'),
+            rootProject.file('infra/minio/policies/catalog-download-tagger.json'))
+            .withPropertyName('downloadRestrictionPolicies').withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.file('tools/migrations/catalog/catalog-transition.sql'))
             .withPropertyName('externalMigrationSql').withPathSensitivity(PathSensitivity.RELATIVE)
 }

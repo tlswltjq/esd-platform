@@ -8,6 +8,7 @@ import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,13 +53,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.store.sync.enabled=false", "spring.kafka.listener.auto-startup=false"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class StoreIntegrationTest {
-    @Autowired ApplyCatalogProduct apply;
+    @MockitoSpyBean ApplyCatalogProduct apply;
     @Autowired SynchronizeCatalogProducts sync;
     @Autowired SearchStoreProducts search;
     @Autowired ReadStoreProduct read;
@@ -94,6 +97,33 @@ class StoreIntegrationTest {
                 .isInstanceOf(BusinessException.class);
         assertThat(read.execute(old.productCode())).isEqualTo(latest);
         assertThat(products.count()).isEqualTo(1);
+    }
+
+    @Test void stoppedSalesAtTheSameContentVersionSurviveInitialSyncAndOlderEvents() throws Exception {
+        CatalogProductSnapshot original = product(42, 1, "Sales status", 1000);
+        CatalogProductSnapshot stopped = new CatalogProductSnapshot(original.productId(), original.productCode(),
+                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
+                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
+                original.updatedAt(), "STOPPED", 2);
+        apply.execute(stopped);
+        when(catalog.codes(0)).thenReturn(List.of(original.productCode()));
+        when(catalog.codes(1)).thenReturn(List.of());
+        when(catalog.detail(original.productCode())).thenReturn(original);
+        sync.execute();
+        assertThat(products.findByProductCode(original.productCode()).orElseThrow().snapshot()).isEqualTo(stopped);
+        assertThat(status("/api/v1/storefront/products/" + original.productCode())).isEqualTo(404);
+        listeners.start();
+        try {
+            clearInvocations(apply);
+            CatalogProductPublishedEvent old = CatalogProductPublishedEvent.of(original);
+            kafka.send(record(old, old.partitionKey())).get(10, TimeUnit.SECONDS);
+            verify(apply, timeout(10000)).execute(original);
+            assertThat(products.findByProductCode(original.productCode()).orElseThrow().snapshot()).isEqualTo(stopped);
+        } finally { listeners.stop(); }
+        assertThatThrownBy(() -> jdbc.update("UPDATE store_product SET sale_status='UNKNOWN' WHERE product_id=42"))
+                .isInstanceOfSatisfying(UncategorizedSQLException.class,
+                        failure -> assertThat(failure.getSQLException().getErrorCode()).isEqualTo(3819));
+        assertThat(products.findByProductCode(original.productCode()).orElseThrow().snapshot()).isEqualTo(stopped);
     }
     @Test void concurrentHttpAndEventInsertsConvergeToHighestVersion() throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(3);
@@ -179,6 +209,32 @@ class StoreIntegrationTest {
                             assertThat(p.snapshot()).isEqualTo(latest.product())));
         } finally { listeners.stop(); }
     }
+
+    @Test void administratorRestrictionsAndReleaseReachTheActualKafkaDatabaseAndPublicView() throws Exception {
+        CatalogProductSnapshot original = product(77, 1, "Platform restriction", 1000);
+        CatalogProductSnapshot blocked = new CatalogProductSnapshot(original.productId(), original.productCode(),
+                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
+                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
+                original.updatedAt(), "BLOCKED", 2);
+        CatalogProductSnapshot resumed = new CatalogProductSnapshot(original.productId(), original.productCode(),
+                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
+                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
+                original.updatedAt(), "ON_SALE", 3);
+        listeners.start();
+        try {
+            CatalogProductPublishedEvent restriction = CatalogProductPublishedEvent.of(blocked);
+            kafka.send(record(restriction, restriction.partitionKey())).get(10, TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                    assertThat(products.findById(original.productId())).hasValueSatisfying(p ->
+                            assertThat(p.snapshot()).isEqualTo(blocked)));
+            assertThat(status("/api/v1/storefront/products/" + original.productCode())).isEqualTo(404);
+            CatalogProductPublishedEvent release = CatalogProductPublishedEvent.of(resumed);
+            kafka.send(record(release, release.partitionKey())).get(10, TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                    assertThat(products.findById(original.productId())).hasValueSatisfying(p ->
+                            assertThat(p.snapshot()).isEqualTo(resumed)));
+        } finally { listeners.stop(); }
+    }
     @Test void invalidKafkaInputGoesToDltWithoutWritingProduct() throws Exception {
         CatalogProductPublishedEvent event = CatalogProductPublishedEvent.of(product(99, 1, "Invalid", 1000));
         HashMap<String, Object> config = new HashMap<String,Object>();
@@ -198,6 +254,45 @@ class StoreIntegrationTest {
             assertThat(products.findById(99L)).isEmpty();
         } finally { listeners.stop(); }
     }
+    @Test void listingFilterRunsBeforeSearchPaginationAndHiddenDetailIsRejected() {
+        CatalogProductSnapshot first = product(101, 1, "Listing first", 1000);
+        CatalogProductSnapshot hidden = listing(product(102, 1, "Listing hidden", 1), false, 2, "ON_SALE");
+        CatalogProductSnapshot stoppedButListed = listing(product(103, 1, "Listing stopped", 500), true, 2, "STOPPED");
+        apply.execute(first); apply.execute(hidden); apply.execute(stoppedButListed);
+        assertThat(search.execute("Listing", "PRICE_ASC", 0, 1).getTotalElements()).isEqualTo(2);
+        assertThat(search.execute("Listing", "PRICE_ASC", 0, 1).getContent()).extracting(CatalogProductSnapshot::productId).containsExactly(103L);
+        assertThat(search.execute("Listing", "PRICE_ASC", 1, 1).getContent()).extracting(CatalogProductSnapshot::productId).containsExactly(101L);
+        assertThat(search.execute("hidden", "NEWEST", 0, 20).getTotalElements()).isZero();
+        assertThat(status("/api/v1/storefront/products/" + hidden.productCode())).isEqualTo(404);
+        apply.execute(listing(hidden, true, 3, "ON_SALE"));
+        assertThat(status("/api/v1/storefront/products/" + hidden.productCode())).isEqualTo(200);
+    }
+    @Test void kafkaListingUpdatesAndInitializationKeepTheNewerHiddenProjection() throws Exception {
+        CatalogProductSnapshot original = product(104, 1, "Listing Kafka", 1000);
+        CatalogProductSnapshot hidden = listing(original, false, 3, "ON_SALE");
+        apply.execute(hidden);
+        when(catalog.codes(0)).thenReturn(List.of(original.productCode()));
+        when(catalog.codes(1)).thenReturn(List.of());
+        when(catalog.detail(original.productCode())).thenReturn(original);
+        sync.execute();
+        assertThat(search.execute("Listing Kafka", "NEWEST", 0, 20).getTotalElements()).isZero();
+        listeners.start();
+        try {
+            CatalogProductPublishedEvent old = CatalogProductPublishedEvent.of(original);
+            kafka.send(record(old, old.partitionKey())).get(10, TimeUnit.SECONDS);
+            CatalogProductSnapshot shown = listing(original, true, 4, "STOPPED");
+            CatalogProductPublishedEvent latest = CatalogProductPublishedEvent.of(shown);
+            kafka.send(record(latest, latest.partitionKey())).get(10, TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                    assertThat(products.findById(104L)).hasValueSatisfying(p -> assertThat(p.snapshot()).isEqualTo(shown)));
+            assertThat(search.execute("Listing Kafka", "NEWEST", 0, 20).getTotalElements()).isEqualTo(1);
+        } finally { listeners.stop(); }
+    }
+    private CatalogProductSnapshot listing(CatalogProductSnapshot p, boolean listed, long version, String sale) {
+        return new CatalogProductSnapshot(p.productId(), p.productCode(), p.title(), p.shortDescription(), p.thumbnailUrl(),
+                p.price(), p.currency(), p.publishedAt(), p.content(), p.videoUrl(), p.contentVersion(), p.buildVersion(), p.updatedAt(), sale, version, listed);
+    }
+
     @Test void schemaContainsOnlyOneBusinessTableAndNoInboxOrOutbox() {
         assertThat(jdbc.queryForList("SHOW TABLES", String.class))
                 .contains("store_product", "flyway_schema_history").doesNotContain("processed_event", "outbox_event");

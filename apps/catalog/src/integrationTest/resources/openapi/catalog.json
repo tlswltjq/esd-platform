@@ -1,6 +1,48 @@
 {
   "components" : {
     "schemas" : {
+      "ApiResponseCatalogListingView" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CatalogListingView"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseCatalogSalesView" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/CatalogSalesView"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseDownloadRestrictionView" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/DownloadRestrictionView"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListDeadEventResponse" : {
         "properties" : {
           "data" : {
@@ -103,6 +145,56 @@
         },
         "type" : "object"
       },
+      "CatalogListingView" : {
+        "properties" : {
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "listingPreference" : {
+            "enum" : [ "AUTO", "LISTED", "UNLISTED" ],
+            "type" : "string"
+          },
+          "platformHidden" : {
+            "type" : "boolean"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "saleStatus" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CatalogSalesView" : {
+        "properties" : {
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "platformRestricted" : {
+            "type" : "boolean"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "saleStatus" : {
+            "type" : "string"
+          },
+          "sellerSaleStatus" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DeadEventResponse" : {
         "properties" : {
           "aggregateId" : {
@@ -174,6 +266,35 @@
         },
         "type" : "object"
       },
+      "DownloadRestrictionView" : {
+        "properties" : {
+          "downloadUnavailable" : {
+            "type" : "boolean"
+          },
+          "nextAttemptAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "restricted" : {
+            "type" : "boolean"
+          },
+          "restrictionVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "storageCheckedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "storageStatus" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ErrorBody" : {
         "properties" : {
           "code" : {
@@ -185,10 +306,27 @@
         },
         "type" : "object"
       },
+      "PlatformRequest" : {
+        "properties" : {
+          "expectedCatalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "restricted" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "restricted" ],
+        "type" : "object"
+      },
       "ProductDetail" : {
         "properties" : {
           "buildVersion" : {
             "type" : "string"
+          },
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
           },
           "content" : {
             "type" : "string"
@@ -199,6 +337,9 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "listed" : {
+            "type" : "boolean"
           },
           "price" : {
             "format" : "int64",
@@ -213,6 +354,9 @@
           },
           "publishedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "saleStatus" : {
             "type" : "string"
           },
           "shortDescription" : {
@@ -263,8 +407,15 @@
       },
       "ProductSummary" : {
         "properties" : {
+          "catalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "currency" : {
             "type" : "string"
+          },
+          "listed" : {
+            "type" : "boolean"
           },
           "price" : {
             "format" : "int64",
@@ -279,6 +430,9 @@
           },
           "publishedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "saleStatus" : {
             "type" : "string"
           },
           "shortDescription" : {
@@ -302,11 +456,38 @@
         },
         "type" : "object"
       },
+      "Request" : {
+        "properties" : {
+          "expectedRestrictionVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "restricted" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "RequeuedCount" : {
         "properties" : {
           "requeued" : {
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SellerRequest" : {
+        "properties" : {
+          "expectedCatalogVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "saleStatus" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -320,6 +501,186 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/admin/products/{code}/downloads/restriction" : {
+      "get" : {
+        "operationId" : "read",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseDownloadRestrictionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-download-restriction-controller" ]
+      },
+      "put" : {
+        "operationId" : "change",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Request"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseDownloadRestrictionView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-download-restriction-controller" ]
+      }
+    },
+    "/api/v1/admin/products/{code}/listing/restriction" : {
+      "get" : {
+        "operationId" : "platform_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogListingView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-listing-controller" ]
+      },
+      "put" : {
+        "operationId" : "platform_3",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PlatformRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogListingView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-listing-controller" ]
+      }
+    },
+    "/api/v1/admin/products/{code}/sales/restriction" : {
+      "get" : {
+        "operationId" : "platform",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogSalesView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-sales-controller" ]
+      },
+      "put" : {
+        "operationId" : "platform_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PlatformRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogSalesView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-sales-controller" ]
+      }
+    },
     "/api/v1/ops/dlt" : {
       "get" : {
         "operationId" : "peek",
@@ -487,6 +848,126 @@
           }
         },
         "tags" : [ "product-controller" ]
+      }
+    },
+    "/api/v1/products/by-code/{code}/listing" : {
+      "get" : {
+        "operationId" : "seller_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogListingView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-listing-controller" ]
+      },
+      "put" : {
+        "operationId" : "seller_3",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SellerRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogListingView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-listing-controller" ]
+      }
+    },
+    "/api/v1/products/by-code/{code}/sales" : {
+      "get" : {
+        "operationId" : "seller",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogSalesView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-sales-controller" ]
+      },
+      "put" : {
+        "operationId" : "seller_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "code",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SellerRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseCatalogSalesView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "catalog-sales-controller" ]
       }
     },
     "/api/v1/products/by-code/{productCode}" : {

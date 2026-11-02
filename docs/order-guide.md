@@ -1,5 +1,7 @@
 # Order 실행·주문 스냅샷·결제 결과 확인
 
+**2026-11-02 후속 계약:** [공개 상세 B](public-product-detail-plan.md)에 따라 숨긴 상품의 새 주문은 404다. Catalog·Order에 같은 전용 CATALOG_ORDER_SERVICE_KEY를 준비하고 보호한 내부 주문 근거를 조회한다. 같은 requestId 재전송과 기존 주문 승인은 원래 기한·판매자 중지·관리자 제한 계약을 유지한다. 아래 MVP 흐름의 상세 결제/만료 계약은 [현재 인계](refund-session-handoff.md)와 [주문 승인 기한](order-payment-lifecycle-plan.md)을 함께 따른다. 현재 실행 환경은 로컬 OrbStack이며 아래 OCI 실행 기록은 당시 이력이다.
+
 [문서 목록](README.md) · [MVP 범위·검증 기록](order-mvp-plan.md) · [Store 실행 안내](store-guide.md)
 
 Order는 **누가 어떤 공개 상품을 얼마에 주문했는가**를 보존한다.
@@ -10,7 +12,7 @@ Order는 **누가 어떤 공개 상품을 얼마에 주문했는가**를 보존�
 
 | 유스케이스 | 책임 |
 |---|---|
-| CreateOrder | 구매자별 중복 요청 확인 → Catalog 공개 상세 HTTP → 동일 상품의 PENDING·PAID 확인 → 기대 값 비교 → 주문·Outbox 저장 |
+| CreateOrder | 구매자별 중복 요청 확인 → Catalog 내부 주문 근거 HTTP → 공개 접근·판매 상태·중복 구매·기대 값 확인 → 주문·Outbox 저장 |
 | SearchOrders | 구매자의 주문만 최신 생성순 페이지 조회 |
 | ReadOrder | 구매자·주문번호로 상세 조회, 타인·없는 주문은 404 |
 | ApplyPaymentResult | 결제 결과 연결·금액 검증, 행 잠금·Inbox·최종 상태 반영 |
@@ -22,8 +24,8 @@ sequenceDiagram
     participant Catalog
     participant Kafka
     Buyer->>Order: POST /api/v1/orders
-    Order->>Catalog: GET /api/v1/products/by-code/{productCode}
-    Catalog-->>Order: 공개 상품·버전·정가
+    Order->>Catalog: GET /internal/v1/order-products/{productCode} (전용 키)
+    Catalog-->>Order: 상품·버전·정가·판매 상태·공개 접근 근거
     Note over Order: purchase_order와 Outbox 같은 트랜잭션
     Order-->>Buyer: PENDING 주문
     Order-->>Kafka: OrderPlaced
@@ -68,7 +70,7 @@ PG 공제 후 입금액이나 판매자 지급액을 결제 승인액으로 보�
 - 같은 구매자·requestId·입력으로 다시 요청하면 Catalog를 호출하지 않고 같은 주문의 현재 상태를 반환한다.
 - 같은 requestId에 다른 상품·버전·금액을 보내면 409다. 응답을 잃었으면 원래 입력으로 재조회한다.
 - Catalog 공개본이 바뀌어 기대 버전·금액이 다르면 409다. 현재 정보를 확인하고 새 requestId로 요청한다.
-- 무료 상품은 409, 없는 공개 상품은 404, Catalog 중단·타임아웃은 503, 잘못된 Catalog 응답은 502다.
+- 무료 상품은 409, 없거나 숨긴 상품의 새 주문은 404, Catalog 중단·타임아웃·서비스 키 미설정/거절은 503, 잘못된 Catalog 응답은 502다.
 - page < 0, size가 1~100 밖, 필수 값 누락·잘못된 형식·소수 금액은 400이다.
 - 목록·상세는 내부 이벤트 ID·구매자 식별자·Inbox/Outbox를 노출하지 않는다.
 - 주문 취소·결과 주입·공통 운영 HTTP API는 제공하지 않는다. 결과는 Payment가 Kafka로 전달한다.

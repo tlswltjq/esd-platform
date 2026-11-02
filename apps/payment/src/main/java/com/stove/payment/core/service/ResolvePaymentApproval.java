@@ -11,6 +11,7 @@ import com.stove.payment.core.domain.PaymentOrderLifecycle;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
 import com.stove.payment.core.domain.PaymentApprovalStatus;
 import com.stove.payment.core.domain.PaymentApproval;
+import com.stove.payment.core.domain.OrderSaleRestricted;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
@@ -69,6 +70,12 @@ public class ResolvePaymentApproval {
         PaymentApproval claimed=locked(id,(payment,approval)->approval.claim(token,now(),lease)?approval:null);
         if (claimed==null) return;
         try { cycle(id,token,claimed); }
+        catch (OrderSaleRestricted restricted) {
+            locked(id,(payment,approval) -> {
+                if (approval.owns(token,now())) approval.recordSaleRestriction();
+                return null;
+            });
+        }
         catch (ApprovalPostRejected rejected) { stop(id,token,"PG_REQUEST_REJECTED"); }
         catch (IllegalArgumentException invalid) { stop(id,token,"PG_INVALID_EVIDENCE"); }
         catch (BusinessException conflict) { stop(id,token,"ORDER_ADMISSION_CONFLICT"); }

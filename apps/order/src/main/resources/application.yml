@@ -62,6 +62,7 @@ stove:
   order:
     payment-service-key: ${PAYMENT_ORDER_SERVICE_KEY:}
     expiry-enabled: ${ORDER_EXPIRY_ENABLED:true}
+    catalog-service-key: ${CATALOG_ORDER_SERVICE_KEY:}
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     catalog-connect-timeout-ms: 3000
     catalog-read-timeout-ms: 10000

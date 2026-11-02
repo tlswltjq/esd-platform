@@ -7,7 +7,7 @@ import com.stove.order.core.domain.OrderPaymentAdmission;
 import com.stove.order.core.domain.PaymentAdmissionInput;
 import com.stove.order.core.domain.PaymentAdmissionFailureInput;
 import com.stove.order.core.service.RecordOrderPaymentAttemptFailure;
-import com.stove.order.core.service.RequestOrderPaymentProcessing;
+import com.stove.order.core.service.AdmitOrderPayment;
 import io.swagger.v3.oas.annotations.Hidden;
 import java.time.Instant;
 import org.springframework.http.CacheControl;
@@ -22,9 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/internal/v1/orders/{orderNo}/payment-admissions")
 public class OrderPaymentAdmissionController {
-    private final RequestOrderPaymentProcessing begin;
+    private final AdmitOrderPayment begin;
     private final RecordOrderPaymentAttemptFailure failures;
-    public OrderPaymentAdmissionController(RequestOrderPaymentProcessing begin,RecordOrderPaymentAttemptFailure failures) {
+    public OrderPaymentAdmissionController(AdmitOrderPayment begin,RecordOrderPaymentAttemptFailure failures) {
         this.begin = begin; this.failures=failures;
     }
 

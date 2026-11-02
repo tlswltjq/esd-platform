@@ -13,7 +13,7 @@ public record ProductSummary(
         String thumbnailUrl,
         long price,
         String currency,
-        Instant publishedAt) {
+        Instant publishedAt, String saleStatus, long catalogVersion, boolean listed) {
     public static ProductSummary from(PublishedProduct p) {
         ProjectSnapshot s = p.snapshot();
         return new ProductSummary(
@@ -24,6 +24,6 @@ public record ProductSummary(
                 s.thumbnailUrl(),
                 s.price(),
                 s.currency(),
-                p.publishedAt());
+                p.publishedAt(), p.saleStatus(), p.catalogVersion(), p.listed());
     }
 }

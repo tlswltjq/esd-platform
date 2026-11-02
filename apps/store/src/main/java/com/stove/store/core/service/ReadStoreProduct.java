@@ -4,6 +4,8 @@ import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.store.core.domain.StoreProductRepository;
+import com.stove.store.core.domain.StoreProduct;
+import com.stove.store.core.domain.ProductPublicAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +18,9 @@ public class ReadStoreProduct {
     @Transactional(readOnly = true)
     public CatalogProductSnapshot execute(String code) {
         synchronization.requireReady();
-        return products.findByProductCode(code).filter(p -> p.getProductCode().equals(code))
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)).snapshot();
+        StoreProduct product = products.findByProductCode(code).filter(p -> p.getProductCode().equals(code))
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        ProductPublicAccess.requireDetail(product.isListed());
+        return product.snapshot();
     }
 }

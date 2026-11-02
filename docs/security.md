@@ -1,5 +1,7 @@
 # 인증·권한 계약
 
+**2026-11-02 후속 계약:** Catalog의 판매·다운로드·노출 관리 권한은 [서비스 명세](services.md#catalog)를 따른다. [공개 상세 B](public-product-detail-plan.md)에 따라 최종 listed=false인 Catalog/Store 공개 상세와 새 주문은 404다. ADMIN JWT도 공개 상세를 우회하지 않는다. Catalog 내부 전체 목록/상세는 X-Store-Service-Key, 최소 주문 근거는 별도 X-Order-Service-Key로 보호한다. 두 키는 각각 CATALOG_STORE_SERVICE_KEY·CATALOG_ORDER_SERVICE_KEY로 해당 호출 서비스와 Catalog에 설정하며 해당 GET에서만 허용한다. 사용자 JWT·다른 서비스 키는 거절하고 Gateway·공개 OpenAPI에는 내부 경로를 노출하지 않는다.
+
 [문서 목록](README.md) · [계정·역할 모델](domain/models/identity.md) · [API 데모](api-demo.md)
 
 Auth가 회원·역할과 서명된 access token을 발행한다. Gateway와 각 서비스는 JWT를 검증하며, 주문 소유권·프로젝트 소유권·다운로드 가능 여부는 담당 서비스가 추가로 확인한다.

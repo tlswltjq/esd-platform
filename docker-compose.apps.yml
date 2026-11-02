@@ -125,7 +125,16 @@ services:
       <<: *common-env
       STUDIO_URI: http://studio:8085
       CATALOG_DOWNLOAD_SERVICE_KEY: ${CATALOG_DOWNLOAD_SERVICE_KEY:-}
+      CATALOG_STORE_SERVICE_KEY: ${CATALOG_STORE_SERVICE_KEY:-}
+      CATALOG_ORDER_SERVICE_KEY: ${CATALOG_ORDER_SERVICE_KEY:-}
       CATALOG_SETTLEMENT_SERVICE_KEY: ${CATALOG_SETTLEMENT_SERVICE_KEY:-}
+      CATALOG_DOWNLOAD_STORAGE_ENABLED: ${CATALOG_DOWNLOAD_STORAGE_ENABLED:-false}
+      CATALOG_DOWNLOAD_STORAGE_ENDPOINT: http://minio:9000
+      CATALOG_DOWNLOAD_STORAGE_BUCKET: ${STORAGE_BUCKET:-stove-builds}
+      CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY: ${CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY:-}
+      CATALOG_DOWNLOAD_STORAGE_SECRET_KEY: ${CATALOG_DOWNLOAD_STORAGE_SECRET_KEY:-}
+      DOWNLOAD_STORAGE_ACCESS_KEY: ${DOWNLOAD_STORAGE_ACCESS_KEY:-}
+      DOWNLOAD_STORAGE_SECRET_KEY: ${DOWNLOAD_STORAGE_SECRET_KEY:-}
 
   store:
     <<: *app
@@ -135,6 +144,7 @@ services:
       test: [CMD-SHELL, "wget -qO- http://localhost:8087/actuator/health | grep -q UP || exit 1"]
     expose: ["8087"]
     environment:
+      CATALOG_STORE_SERVICE_KEY: ${CATALOG_STORE_SERVICE_KEY:-}
       <<: *common-env
       CATALOG_BASE_URL: http://catalog:8081
 
@@ -146,6 +156,7 @@ services:
       test: [CMD-SHELL, "wget -qO- http://localhost:8082/actuator/health | grep -q UP || exit 1"]
     expose: ["8082"]
     environment:
+      CATALOG_ORDER_SERVICE_KEY: ${CATALOG_ORDER_SERVICE_KEY:-}
       <<: *common-env
       CATALOG_BASE_URL: http://catalog:8081
 
