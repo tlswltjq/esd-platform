@@ -58,6 +58,14 @@ public class ProjectReview extends BaseTimeEntity {
 
     private Instant decidedAt;
 
+    @Column(length = 100)
+    private String withdrawnBy;
+
+    @Column(length = 2000)
+    private String withdrawalReason;
+
+    private Instant withdrawnAt;
+
     @Column(nullable = false, updatable = false)
     private Instant requestedAt;
 
@@ -80,8 +88,7 @@ public class ProjectReview extends BaseTimeEntity {
 
     /** Returns false for an identical retry without replacing the original actor/time. */
     public boolean decide(ReviewStatus decision, String actor, String feedback) {
-        if (decision == null
-                || decision == ReviewStatus.REQUESTED
+        if ((decision != ReviewStatus.APPROVED && decision != ReviewStatus.REJECTED)
                 || actor == null
                 || actor.isBlank()
                 || actor.length() > 100
@@ -97,6 +104,18 @@ public class ProjectReview extends BaseTimeEntity {
         this.actor = actor;
         this.feedback = feedback;
         this.decidedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        return true;
+    }
+
+    public boolean withdraw(String subject, String reason, Instant at) {
+        if (!ownerSubject.equals(subject)) throw new BusinessException(ErrorCode.FORBIDDEN);
+        ReviewWithdrawalValues.requireReason(reason);
+        if (at == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        if (status != ReviewStatus.REQUESTED) return false;
+        status = ReviewStatus.WITHDRAWN;
+        withdrawnBy = subject;
+        withdrawalReason = reason;
+        withdrawnAt = at.truncatedTo(ChronoUnit.MICROS);
         return true;
     }
 }

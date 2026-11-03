@@ -15,23 +15,6 @@
         },
         "type" : "object"
       },
-      "ApiResponseListBuild" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/Build"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "ApiResponseListDeadEventResponse" : {
         "properties" : {
           "data" : {
@@ -66,45 +49,11 @@
         },
         "type" : "object"
       },
-      "ApiResponseListProjectReleaseRequest" : {
+      "ApiResponseListProjectRequestCommand" : {
         "properties" : {
           "data" : {
             "items" : {
-              "$ref" : "#/components/schemas/ProjectReleaseRequest"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListProjectResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ProjectResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListProjectReviewRequest" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/ProjectReviewRequest"
+              "$ref" : "#/components/schemas/ProjectRequestCommand"
             },
             "type" : "array"
           },
@@ -121,6 +70,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/ProjectReleaseRequest"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseProjectRequestCommand" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProjectRequestCommand"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -177,6 +140,62 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/RequeuedCount"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseStudioPageResponseBuild" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StudioPageResponseBuild"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseStudioPageResponseProjectReleaseRequest" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StudioPageResponseProjectReleaseRequest"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseStudioPageResponseProjectResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StudioPageResponseProjectResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseStudioPageResponseProjectReviewRequest" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/StudioPageResponseProjectReviewRequest"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -361,6 +380,10 @@
           "failureReason" : {
             "type" : "string"
           },
+          "finalizedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "id" : {
             "format" : "int64",
             "type" : "integer"
@@ -386,12 +409,85 @@
           "updatedAt" : {
             "format" : "date-time",
             "type" : "string"
+          },
+          "withdrawalReason" : {
+            "type" : "string"
+          },
+          "withdrawnBy" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ProjectRequestCommand" : {
+        "properties" : {
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "finalActor" : {
+            "type" : "string"
+          },
+          "finalFeedback" : {
+            "type" : "string"
+          },
+          "finalStatus" : {
+            "type" : "string"
+          },
+          "finalizedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "kind" : {
+            "enum" : [ "REQUEST_REVIEW", "REQUEST_RELEASE", "WITHDRAW_REVIEW", "WITHDRAW_RELEASE" ],
+            "type" : "string"
+          },
+          "projectId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "requestKey" : {
+            "type" : "string"
+          },
+          "sourceRequestEventId" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "targetRequestId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
           }
         },
         "type" : "object"
       },
       "ProjectResponse" : {
         "properties" : {
+          "activeReleaseRequest" : {
+            "$ref" : "#/components/schemas/ProjectReleaseRequest"
+          },
+          "activeReviewRequest" : {
+            "$ref" : "#/components/schemas/ProjectReviewRequest"
+          },
           "contentVersion" : {
             "format" : "int64",
             "type" : "integer"
@@ -442,6 +538,10 @@
           "feedback" : {
             "type" : "string"
           },
+          "finalizedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "id" : {
             "format" : "int64",
             "type" : "integer"
@@ -449,6 +549,9 @@
           "projectId" : {
             "format" : "int64",
             "type" : "integer"
+          },
+          "requestEventId" : {
+            "type" : "string"
           },
           "resultReceivedAt" : {
             "format" : "date-time",
@@ -462,6 +565,9 @@
           },
           "updatedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "withdrawalReason" : {
             "type" : "string"
           }
         },
@@ -507,6 +613,129 @@
             "type" : "string"
           }
         },
+        "type" : "object"
+      },
+      "StudioPageResponseBuild" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Build"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "StudioPageResponseProjectReleaseRequest" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectReleaseRequest"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "StudioPageResponseProjectResponse" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "StudioPageResponseProjectReviewRequest" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ProjectReviewRequest"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SubmitProjectRequest" : {
+        "properties" : {
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "requestId" : {
+            "minLength" : 1,
+            "pattern" : "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
+            "type" : "string"
+          }
+        },
+        "required" : [ "requestId" ],
         "type" : "object"
       },
       "ThumbnailAsset" : {
@@ -564,6 +793,22 @@
           }
         },
         "required" : [ "content", "shortDescription", "title" ],
+        "type" : "object"
+      },
+      "WithdrawProjectRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 2000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "requestId" : {
+            "minLength" : 1,
+            "pattern" : "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
+            "type" : "string"
+          }
+        },
+        "required" : [ "requestId" ],
         "type" : "object"
       }
     },
@@ -761,12 +1006,31 @@
     "/api/v1/studio/projects" : {
       "get" : {
         "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListProjectResponse"
+                  "$ref" : "#/components/schemas/ApiResponseStudioPageResponseProjectResponse"
                 }
               }
             },
@@ -840,13 +1104,31 @@
             "format" : "int64",
             "type" : "integer"
           }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
         } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListBuild"
+                  "$ref" : "#/components/schemas/ApiResponseStudioPageResponseBuild"
                 }
               }
             },
@@ -917,13 +1199,31 @@
             "format" : "int64",
             "type" : "integer"
           }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
         } ],
         "responses" : {
           "200" : {
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListProjectReleaseRequest"
+                  "$ref" : "#/components/schemas/ApiResponseStudioPageResponseProjectReleaseRequest"
                 }
               }
             },
@@ -943,6 +1243,16 @@
             "type" : "integer"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
         "responses" : {
           "202" : {
             "content" : {
@@ -958,12 +1268,124 @@
         "tags" : [ "project-controller" ]
       }
     },
-    "/api/v1/studio/projects/{id}/review-requests" : {
+    "/api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals" : {
       "get" : {
-        "operationId" : "reviewRequests",
+        "operationId" : "releaseReceipts",
         "parameters" : [ {
           "in" : "path",
           "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
+      },
+      "post" : {
+        "operationId" : "release",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WithdrawProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals/{withdrawalId}" : {
+      "get" : {
+        "operationId" : "releaseReceipt",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "withdrawalId",
           "required" : true,
           "schema" : {
             "format" : "int64",
@@ -975,7 +1397,52 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListProjectReviewRequest"
+                  "$ref" : "#/components/schemas/ApiResponseProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/review-requests" : {
+      "get" : {
+        "operationId" : "reviewRequests",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseStudioPageResponseProjectReviewRequest"
                 }
               }
             },
@@ -995,6 +1462,16 @@
             "type" : "integer"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
         "responses" : {
           "202" : {
             "content" : {
@@ -1008,6 +1485,145 @@
           }
         },
         "tags" : [ "project-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/review-requests/{targetId}/withdrawals" : {
+      "get" : {
+        "operationId" : "reviewReceipts",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
+      },
+      "post" : {
+        "operationId" : "review",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WithdrawProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
+      }
+    },
+    "/api/v1/studio/projects/{id}/review-requests/{targetId}/withdrawals/{withdrawalId}" : {
+      "get" : {
+        "operationId" : "reviewReceipt",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "targetId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "withdrawalId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProjectRequestCommand"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "project-withdrawal-controller" ]
       }
     },
     "/api/v1/studio/projects/{id}/store-page" : {

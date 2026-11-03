@@ -69,7 +69,7 @@ class DownloadPurchaseFlowTest {
         long review = request(projectId, creator, reviewer);
         assertThat(Stove.gateway.post(reviewPath(review) + "/approve", null, reviewer.headers()).status()).isEqualTo(200);
         waitForResult(projectId, review, creator, "APPROVED");
-        assertThat(Stove.gateway.post(path(projectId) + "/release-requests", null, creator.headers()).status()).isEqualTo(202);
+        assertThat(Stove.gateway.post(path(projectId) + "/release-requests", ReviewJourney.submission(path(projectId), creator.headers()), creator.headers()).status()).isEqualTo(202);
         Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
                 assertThat(data(projectId, creator).path("currentReleaseRequest").path("status").asText()).isEqualTo("COMPLETED"));
     }

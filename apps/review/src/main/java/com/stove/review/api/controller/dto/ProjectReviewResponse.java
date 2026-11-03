@@ -13,7 +13,10 @@ public record ProjectReviewResponse(
         String actor,
         Instant decidedAt,
         Instant requestedAt,
-        Instant createdAt) {
+        Instant createdAt,
+        String withdrawnBy,
+        String withdrawalReason,
+        Instant withdrawnAt) {
     public static ProjectReviewResponse from(ProjectReview r, ProjectSnapshot s) {
         return new ProjectReviewResponse(
                 r.getReviewRequestId(),
@@ -23,6 +26,6 @@ public record ProjectReviewResponse(
                 r.getActor(),
                 r.getDecidedAt(),
                 r.getRequestedAt(),
-                r.getCreatedAt());
+                r.getCreatedAt(), r.getWithdrawnBy(), r.getWithdrawalReason(), r.getWithdrawnAt());
     }
 }

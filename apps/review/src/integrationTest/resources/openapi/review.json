@@ -273,7 +273,17 @@
             "$ref" : "#/components/schemas/ReviewSnapshotResponse"
           },
           "status" : {
-            "enum" : [ "REQUESTED", "APPROVED", "REJECTED" ],
+            "enum" : [ "REQUESTED", "APPROVED", "REJECTED", "WITHDRAWN" ],
+            "type" : "string"
+          },
+          "withdrawalReason" : {
+            "type" : "string"
+          },
+          "withdrawnAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "withdrawnBy" : {
             "type" : "string"
           }
         },
@@ -308,7 +318,7 @@
             "type" : "integer"
           },
           "status" : {
-            "enum" : [ "REQUESTED", "APPROVED", "REJECTED" ],
+            "enum" : [ "REQUESTED", "APPROVED", "REJECTED", "WITHDRAWN" ],
             "type" : "string"
           },
           "title" : {
@@ -568,7 +578,7 @@
           "name" : "status",
           "required" : false,
           "schema" : {
-            "enum" : [ "REQUESTED", "APPROVED", "REJECTED" ],
+            "enum" : [ "REQUESTED", "APPROVED", "REJECTED", "WITHDRAWN" ],
             "type" : "string"
           }
         }, {

@@ -58,6 +58,7 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/catalog-release-jobs", "/api/v1/admin/catalog-release-jobs/*").hasRole("ADMIN")
                         .requestMatchers("/api/v1/products/by-code/*/sales", "/api/v1/products/by-code/*/listing").hasRole("CREATOR")
                         .requestMatchers("/api/v1/admin/products/*/sales/restriction", "/api/v1/admin/products/*/downloads/restriction", "/api/v1/admin/products/*/listing/restriction").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/by-code/*").permitAll()

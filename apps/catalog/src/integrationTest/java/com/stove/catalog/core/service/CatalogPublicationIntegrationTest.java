@@ -54,6 +54,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired PublishProjectRelease publish;
+    @Autowired PublishQueuedReleases queued;
     @Autowired ReadPublishedProducts read;
     @Autowired CatalogReleaseRepository releases;
     @Autowired CatalogProductRepository products;
@@ -279,9 +280,10 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
             Awaitility.await()
                     .atMost(Duration.ofSeconds(30))
                     .untilAsserted(
-                            () ->
-                                    assertThat(products.findByProductCode(e.partitionKey()))
-                                            .isPresent());
+                            () -> {
+                                queued.execute();
+                                assertThat(products.findByProductCode(e.partitionKey())).isPresent();
+                            });
             assertThat(count("outbox_event", "aggregate_id", e.partitionKey())).isEqualTo(1);
             assertThat(
                             jdbc.queryForObject(
@@ -333,9 +335,10 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
             Awaitility.await()
                     .atMost(Duration.ofSeconds(20))
                     .untilAsserted(
-                            () ->
-                                    assertThat(products.findByProductCode(e.partitionKey()))
-                                            .isPresent());
+                            () -> {
+                                queued.execute();
+                                assertThat(products.findByProductCode(e.partitionKey())).isPresent();
+                            });
         } finally {
             listeners.stop();
         }

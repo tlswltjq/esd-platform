@@ -26,6 +26,7 @@ import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -108,7 +109,7 @@ class ReviewCreatorFlowTest {
                         Stove.gateway
                                 .post(
                                         path(project.id()) + "/release-requests",
-                                        null,
+                                        ReviewJourney.submission(path(project.id()), creator.headers()),
                                         creator.headers())
                                 .status())
                 .isEqualTo(409);
@@ -202,15 +203,21 @@ class ReviewCreatorFlowTest {
 
     @Test
     @Order(6)
-    void realApprovalAllowsAnOutgoingReleaseRequest() {
+    void realApprovalAllowsAnOutgoingReleaseRequest() throws Exception {
         assertThat(data(project.id(), creator).path("releaseEligible").asBoolean()).isTrue();
         E2eClient.Response release =
                 Stove.gateway.post(
-                        path(project.id()) + "/release-requests", null, creator.headers());
+                        path(project.id()) + "/release-requests", ReviewJourney.submission(path(project.id()), creator.headers()), creator.headers());
         assertThat(release.status()).isEqualTo(202);
         assertThat(release.data().path("status").asText()).isEqualTo("REQUESTED");
         assertThat(release.data().path("reviewRequestId").asLong()).isEqualTo(second);
         assertThat(release.data().path("requestEventId").asText()).isNotBlank();
+        // This four-app journey has no Catalog; finish the first release with its explicit result fixture.
+        send(ProjectReleaseCompletedEvent.of(release.data().path("id").asLong(), project.id(),
+                release.data().path("contentVersion").asLong(), data(project.id(), creator).path("productCode").asText(),
+                release.data().path("requestEventId").asText()));
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(data(project.id(), creator).path("activeReleaseRequest").isNull()).isTrue());
     }
 
     @Test
@@ -239,7 +246,7 @@ class ReviewCreatorFlowTest {
                         Stove.gateway
                                 .post(
                                         path(project.id()) + "/release-requests",
-                                        null,
+                                        ReviewJourney.submission(path(project.id()), creator.headers()),
                                         creator.headers())
                                 .status())
                 .isEqualTo(409);
@@ -267,7 +274,7 @@ class ReviewCreatorFlowTest {
                         Stove.gateway
                                 .post(
                                         path(project.id()) + "/release-requests",
-                                        null,
+                                        ReviewJourney.submission(path(project.id()), creator.headers()),
                                         creator.headers())
                                 .status())
                 .isEqualTo(202);
@@ -285,10 +292,7 @@ class ReviewCreatorFlowTest {
     @Test
     @Order(9)
     void duplicateRequestsAndLateOldResultsDoNotOverwriteFinalDecisions() throws Exception {
-        JsonNode history =
-                Stove.gateway
-                        .get(path(project.id()) + "/review-requests", creator.headers())
-                        .data();
+        JsonNode history = ReviewJourney.listItems(path(project.id()) + "/review-requests", creator.headers());
         ProjectSnapshot snapshot = null;
         for (JsonNode r : history)
             if (r.path("id").asLong() == current)

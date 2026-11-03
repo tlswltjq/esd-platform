@@ -7,6 +7,9 @@ import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.studio.core.service.project.RecordProjectWithdrawalResult;
 import com.stove.studio.core.service.release.RecordProjectReleaseResult;
 import com.stove.studio.core.service.review.RecordProjectReviewResult;
 import lombok.RequiredArgsConstructor;
@@ -20,13 +23,20 @@ public class ProjectResultListener {
     private final ObjectMapper mapper;
     private final RecordProjectReviewResult recordProjectReviewResult;
     private final RecordProjectReleaseResult recordProjectReleaseResult;
+    private final RecordProjectWithdrawalResult recordProjectWithdrawalResult;
 
     @KafkaListener(
             topics = {Topics.REVIEW, Topics.RELEASE},
             groupId = RecordProjectReviewResult.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
         EventEnvelope e = EventEnvelope.from(record);
-        if (e.isType("ProjectReviewApproved")) {
+        if (e.isType("ProjectReviewWithdrawalResolved")) {
+            recordProjectWithdrawalResult.execute(ProjectWithdrawalResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReviewWithdrawalResolvedEvent.class)));
+        } else if (e.isType("ProjectReleaseWithdrawalResolved")) {
+            recordProjectWithdrawalResult.execute(ProjectWithdrawalResultMapper.from(
+                    e, e.payloadAs(mapper, ProjectReleaseWithdrawalResolvedEvent.class)));
+        } else if (e.isType("ProjectReviewApproved")) {
             recordProjectReviewResult.execute(ProjectResultMapper.from(
                     e, e.payloadAs(mapper, ProjectReviewApprovedEvent.class)));
         } else if (e.isType("ProjectReviewRejected")) {

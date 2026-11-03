@@ -10,6 +10,41 @@ import org.junit.jupiter.api.Test;
 
 class ProjectReviewTest {
     @Test
+    void creatorCanWithdrawBeforeDecisionAndTheFirstWithdrawalIsPreserved() {
+        ProjectReview review = ReviewFixtures.review(1002);
+        Instant first = Instant.parse("2026-11-02T03:00:00Z");
+        assertThat(review.withdraw("creator", null, first)).isTrue();
+        assertThat(review.withdraw("creator", "later", first.plusSeconds(1))).isFalse();
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.WITHDRAWN);
+        assertThat(review.getWithdrawnAt()).isEqualTo(first);
+        assertThat(review.getWithdrawalReason()).isNull();
+        assertThatThrownBy(() -> review.decide(ReviewStatus.APPROVED, "reviewer", null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void withdrawalCannotReplaceADecisionOrBeRequestedByAnotherCreator() {
+        ProjectReview review = ReviewFixtures.review(1003);
+        assertThatThrownBy(() -> review.withdraw("another", null, Instant.now()))
+                .isInstanceOf(BusinessException.class);
+        review.decide(ReviewStatus.REJECTED, "reviewer", "Fix description");
+        Instant decidedAt = review.getDecidedAt();
+        assertThat(review.withdraw("creator", "changed plans", Instant.now())).isFalse();
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.REJECTED);
+        assertThat(review.getDecidedAt()).isEqualTo(decidedAt);
+        assertThat(review.getFeedback()).isEqualTo("Fix description");
+        assertThat(review.getWithdrawnAt()).isNull();
+    }
+
+    @Test
+    void withdrawalCannotBeSubmittedAsAHumanApprovalOrRejection() {
+        ProjectReview review = ReviewFixtures.review(1001);
+        assertThatThrownBy(() -> review.decide(ReviewStatus.WITHDRAWN, "reviewer", null))
+                .isInstanceOf(BusinessException.class);
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.REQUESTED);
+    }
+
+    @Test
     void identicalDecisionRetryKeepsOriginalActorAndTime() {
         ProjectReview r = ReviewFixtures.review(1);
         assertThat(r.decide(ReviewStatus.APPROVED, "first", null)).isTrue();

@@ -8,6 +8,8 @@ import com.stove.studio.StudioIntegrationTestBase;
 import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.domain.build.BuildRepository;
 import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.StudioPage;
+import com.stove.studio.core.domain.project.SubmissionCommand;
 import com.stove.studio.core.domain.project.StorePage;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;
@@ -33,6 +35,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -68,15 +71,15 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 new StorePage("Game", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
         Build build = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(storage.size(build.getStoragePath())).isEqualTo(build.getFileSize());
-        ProjectReviewRequest request = review.execute(id, owner);
+        ProjectReviewRequest request = review.execute(id, owner, submission(id, owner));
         assertThat(read.snapshot(request).ownerSubject()).isEqualTo(owner);
-        assertThat(review.execute(id, owner).getId()).isEqualTo(request.getId());
-        assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
+        assertThat(review.execute(id, owner, submission(id, owner)).getId()).isEqualTo(request.getId());
+        assertThatThrownBy(() -> release.execute(id, owner, submission(id, owner))).isInstanceOf(BusinessException.class);
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "external-reviewer"));
-        ProjectReleaseRequest first = release.execute(id, owner);
-        assertThat(release.execute(id, owner).getId()).isEqualTo(first.getId());
+        ProjectReleaseRequest first = release.execute(id, owner, submission(id, owner));
+        assertThat(release.execute(id, owner, submission(id, owner)).getId()).isEqualTo(first.getId());
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", first.getId(), id, first.getContentVersion(), true, null, first.getRequestEventId()));
-        assertThat(read.releaseRequests(id, owner).get(0).getStatus()).isEqualTo("COMPLETED");
+        assertThat(read.releaseRequests(id, owner, new StudioPage(0, 100)).getContent().get(0).getStatus()).isEqualTo("COMPLETED");
         p = read.requireOwned(id, owner);
         update.execute(
                 id,
@@ -87,21 +90,21 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         Build nextBuild = upload.execute(id, owner, "2", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(read.snapshot(request).title()).isEqualTo("Game");
         assertThat(read.reviewRequest(read.requireOwned(id, owner))).isNull();
-        assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
-        ProjectReviewRequest next = review.execute(id, owner);
+        assertThatThrownBy(() -> release.execute(id, owner, submission(id, owner))).isInstanceOf(BusinessException.class);
+        ProjectReviewRequest next = review.execute(id, owner, submission(id, owner));
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", request.getId(), id, request.getContentVersion(), true, null, "old-result"));
         assertThat(read.reviewRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", next.getId(), id, next.getContentVersion(), true, null, "external-reviewer"));
-        ProjectReleaseRequest failed = release.execute(id, owner);
+        ProjectReleaseRequest failed = release.execute(id, owner, submission(id, owner));
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseRejected", failed.getId(), id, failed.getContentVersion(), false, "External rejection", failed.getRequestEventId()));
-        ProjectReleaseRequest retry = release.execute(id, owner);
+        ProjectReleaseRequest retry = release.execute(id, owner, submission(id, owner));
         assertThat(retry.getId()).isNotEqualTo(failed.getId());
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", failed.getId(), id, failed.getContentVersion(), true, null, failed.getRequestEventId()));
         assertThat(read.releaseRequest(read.requireOwned(id, owner)).getStatus())
                 .isEqualTo("REQUESTED");
         result.execute(new ProjectReleaseResult(UUID.randomUUID().toString(), "ProjectReleaseCompleted", retry.getId(), id, retry.getContentVersion(), true, null, retry.getRequestEventId()));
-        List<ProjectReleaseRequest> history = read.releaseRequests(id, owner);
+        List<ProjectReleaseRequest> history = read.releaseRequests(id, owner, new StudioPage(0, 100)).getContent();
         assertThat(history)
                 .extracting(r -> r.getStatus())
                 .containsExactly("COMPLETED", "REJECTED", "COMPLETED");
@@ -129,7 +132,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 p.getContentVersion(),
                 new StorePage("First", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
         upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
-        ProjectReviewRequest old = review.execute(id, owner);
+        ProjectReviewRequest old = review.execute(id, owner, submission(id, owner));
         p = read.requireOwned(id, owner);
         update.execute(
                 id,
@@ -140,11 +143,15 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         Project current = read.requireOwned(id, owner);
         assertThat(current.getTitle()).isEqualTo("Second");
         assertThat(read.reviewRequest(current)).isNull();
-        assertThatThrownBy(() -> release.execute(id, owner)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> release.execute(id, owner, submission(id, owner))).isInstanceOf(BusinessException.class);
         assertThat(read.snapshot(old).title()).isEqualTo("First");
-        ProjectReviewRequest next = review.execute(id, owner);
+        ProjectReviewRequest next = review.execute(id, owner, submission(id, owner));
         assertThat(next.getId()).isNotEqualTo(old.getId());
         assertThat(read.snapshot(next).title()).isEqualTo("Second");
+    }
+
+    private SubmissionCommand submission(Long id, String owner) {
+        return new SubmissionCommand(UUID.randomUUID().toString(), read.requireOwned(id, owner).getContentVersion());
     }
 
     @Test
@@ -162,7 +169,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                                         "bad.zip",
                                         new ByteArrayInputStream("bad".getBytes())))
                 .isInstanceOf(BusinessException.class);
-        assertThat(builds.findByProjectIdOrderByIdDesc(id)).isEmpty();
+        assertThat(builds.findByProjectIdOrderByIdDesc(id, PageRequest.of(0, 100)).getContent()).isEmpty();
         assertThat(read.requireOwned(id, owner).getCurrentBuildId()).isNull();
         Build first = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         assertThatThrownBy(
@@ -174,7 +181,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                                         "game.zip",
                                         new ByteArrayInputStream(zip())))
                 .isInstanceOf(BusinessException.class);
-        assertThat(builds.findByProjectIdOrderByIdDesc(id)).hasSize(1);
+        assertThat(builds.findByProjectIdOrderByIdDesc(id, PageRequest.of(0, 100)).getContent()).hasSize(1);
         assertThat(read.requireOwned(id, owner).getCurrentBuildId()).isEqualTo(first.getId());
     }
 

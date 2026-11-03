@@ -51,26 +51,37 @@ Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요
 심사 판정과 실제 출시·공개 상품 관리는 외부 업무이며 결과는 요청 기록에만 표시한다.
 [모델](domain/models/studio.md) · [실행·요청 예제](studio-guide.md)
 
-완료된 기준은 Auth·Gateway·Studio·Review다. 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다.
+소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다. 실제 연계는 Auth·Gateway·Studio·Review·Catalog 여정으로 확인한다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST / GET | /api/v1/studio/projects | 생성(201)·내 목록 |
+| POST / GET | /api/v1/studio/projects | 생성(201)·내 페이지 목록 |
 | GET | /api/v1/studio/projects/{id} | 상세정보·현재 버전의 요청·releaseEligible |
 | PUT | /api/v1/studio/projects/{id}/store-page | contentVersion으로 상세정보 수정 |
-| POST / GET | /api/v1/studio/projects/{id}/builds | 전체 ZIP 등록(201)·이력 |
+| POST / GET | /api/v1/studio/projects/{id}/builds | 전체 ZIP 등록(201)·페이지 이력 |
 | POST | /api/v1/studio/projects/{id}/thumbnail | PNG/JPEG 등록(201) |
 | GET | /api/v1/studio/assets/{id}/{assetId} | 공개 썸네일 |
-| POST / GET | /api/v1/studio/projects/{id}/review-requests | 심사 요청·재요청(202)·이력 |
-| POST / GET | /api/v1/studio/projects/{id}/release-requests | 출시 요청·재요청(202)·이력 |
+| POST / GET | /api/v1/studio/projects/{id}/review-requests | 심사 요청·재요청(202)·페이지 이력 |
+| POST / GET | /api/v1/studio/projects/{id}/release-requests | 출시 요청·재요청(202)·페이지 이력 |
+| POST / GET | /api/v1/studio/projects/{id}/review-requests/{targetId}/withdrawals | 심사 철회 내구 접수(202)·페이지 영수증 이력 |
+| GET | /api/v1/studio/projects/{id}/review-requests/{targetId}/withdrawals/{withdrawalId} | 심사 철회 최종 결과 조회 |
+| POST / GET | /api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals | 출시 철회 내구 접수(202)·페이지 영수증 이력 |
+| GET | /api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals/{withdrawalId} | 출시 철회 최종 결과 조회 |
+
+프로젝트·빌드·심사/출시 이력의 GET 목록은 `page=0`·`size=20`이 기본이며 최대 100개, ID 내림차순이다. `data`는 기존 배열에서 `items/page/size/totalElements/totalPages`로 전환했다. 항목 정보와 소유권은 유지하며 잘못된 범위·정수 조회 구간 초과는 400이다. [계약·검증 기록](studio-list-pagination-plan.md)을 따른다. 철회 영수증은 기존 제한 조회·응답 계약을 유지한다.
 
 외부 결과는 해당 요청 ID·버전에 기록한다. 현재 버전의 승인 결과만 출시 요청 조건으로 인정한다.
 변경된 상세정보를 과거 승인이 승인하지 않으며, 요청에 첨부한 과거 스냅샷은 보존한다.
 동일한 처리 중 요청은 중복 발행하지 않는다. 거절 후 재요청은 새 ID를 사용한다.
+심사·출시 제출 본문은 requestId·contentVersion이 필수다. 같은 명령은 과거 요청으로 수렴하고 새 의사는 새 requestId로 전송한다.
+프로젝트 전체의 진행 중 심사와 출시는 각각 1건이며 철회 접수 중에도 유지한다.
+activeReviewRequest·activeReleaseRequest는 작업본 버전과 독립적으로 조회한다. 편집·다음 버전 심사는 이전 출시 처리 중에도 가능하다.
+철회는 선택 reason과 명시적 대상을 접수하며 PENDING에서 WITHDRAWN 또는 DENIED로 확정된다. 접수는 최종 성공을 보장하지 않는다.
 Project의 APPROVED·PUBLISHED 상태와 공개본 참조, /publish API는 없다.
 
 Studio는 ProjectReviewRequested·ProjectReleaseRequested를 발행한다.
 ProjectReviewApproved/Rejected·ProjectReleaseCompleted/Rejected는 외부 요청 결과로 수신한다.
+ProjectReviewWithdrawalRequested·ProjectReleaseWithdrawalRequested를 발행하고 각각의 WithdrawalResolved 결과를 수신한다.
 예약·채널·공개본 관리·CI·테스터·웹훅·분할 업로드 세션은 제공하지 않는다.
 
 ---
@@ -81,7 +92,7 @@ Review는 Studio의 요청 당시 상세정보·전체 ZIP 스냅샷을 접수�
 [모델](domain/models/review.md) · [실행·검증](review-guide.md) · [개선 계획·완료 기록](review-simplification-plan.md)
 
 REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
-요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED 또는 REJECTED로 한 번 전이한다.
+요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED·REJECTED·WITHDRAWN 중 하나로 최종 전이한다.
 재심사는 새 요청이며 과거 판정·스냅샷을 유지한다.
 
 | 메서드 | 경로 | 설명 |
@@ -98,6 +109,8 @@ REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
 
 ProjectReviewRequested를 새 그룹 review-project로 수신하고 ProjectReviewApproved/Rejected를 발행한다.
 Studio가 원래 요청 ID·버전에 결과를 기록하고 현재 버전의 출시 요청 조건을 계산한다.
+ProjectReviewWithdrawalRequested는 같은 그룹에서 접수하고 판정과 같은 잠금 경계에서 처리한다.
+심사 검토 착수 후에도 최종 판정 전 철회를 허용하며 먼저 커밋된 결과를 ProjectReviewWithdrawalResolved로 전달한다.
 Review는 실제 출시·상품 공개를 수행하지 않는다.
 
 구 심사 흐름·여섯 유형·등급 연동·배정·체크리스트·SLA·이의 제기는 제거했다.
@@ -122,6 +135,7 @@ Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 �
 | GET | `/api/v1/products/by-code/{productCode}` | 현재 공개본 상세·saleStatus·catalogVersion. no-store |
 | GET·PUT | `/api/v1/products/by-code/{code}/sales` | CREATOR 본인의 판매 의사 조회·변경. expectedCatalogVersion 필요 |
 | GET·PUT | `/api/v1/admin/products/{code}/sales/restriction` | ADMIN의 독립 판매 제한 조회·설정·해제 |
+| GET | `/api/v1/admin/catalog-release-jobs` 및 `/{requestId}` | ADMIN의 내구 공개 작업·실패/재시도 조회. no-store |
 
 공개 목록·상세 두 API는 익명 조회를 허용한다. 판매 관리 API는 JWT 역할·소유권을 검증한다. 목록은 최초 공개 시각·상품 ID 내림차순이다.
 상세에는 공개 자료·가격·자료 버전·빌드 버전을 제공하고 저장 경로·소유자 subject·내부 요청 ID는 노출하지 않는다.
@@ -130,7 +144,9 @@ Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 �
 `ProjectReleaseCompleted/Rejected`(stove.release.v1)다. 결과의 requestEventId로 Studio 원본 요청을 연결한다.
 실제 공개본 또는 판매 조건 변경 시 `CatalogProductPublished`(stove.catalog.v1)를 같은 트랜잭션의 Outbox에 추가한다. 콘텐츠 버전과 독립적인 catalogVersion으로 Store 사본을 갱신한다.
 최초 공개와 더 높은 버전 공개를 처리하며, 낮은 버전의 새 요청은 거절한다.
-공개 데이터·요청 결과·Inbox·Outbox는 같은 트랜잭션으로 확정한다.
+원요청·불변 스냅샷·Inbox를 먼저 내구 접수한다. 자동 공개 작업은 공개본·요청 결과·Outbox·작업 완료를 같은 트랜잭션으로 확정한다.
+ProjectReleaseWithdrawalRequested를 수신하고 공개 확정과 같은 종료 경계에서 조정해 ProjectReleaseWithdrawalResolved를 발행한다.
+고정 철회 유예시간은 없다. 철회 선확정 시 기존 공개본을 유지하고 공개 선확정 시 해당 결과를 유지한다.
 
 재작성 전 견적·프로모션·판매 시작/중지·재색인·ID별 상세 API는 제거했다. 현재 판매 관리는 위 별도 GET·PUT 계약을 사용한다.
 이 문서의 미완료 모듈에서 언급하는 구 Catalog 연동은 재작성 전 기록이며 현재 연결 계약이 아니다.

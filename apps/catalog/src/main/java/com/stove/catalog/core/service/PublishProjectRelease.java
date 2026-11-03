@@ -7,11 +7,17 @@ import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogRelease;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.ReleaseSubmission;
+import com.stove.catalog.core.domain.CatalogRequestGateRepository;
+import com.stove.catalog.core.domain.ReleaseWithdrawal;
+import com.stove.catalog.core.domain.ReleaseWithdrawalRepository;
+import com.stove.catalog.core.domain.CatalogPublicationJob;
+import com.stove.catalog.core.domain.CatalogPublicationJobRepository;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
@@ -19,6 +25,7 @@ import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -35,8 +42,13 @@ public class PublishProjectRelease {
     private final OutboxRecorder outbox;
     private final ObjectMapper mapper;
     private final EntityManager entityManager;
+    private final CatalogRequestGateRepository gates;
+    private final ReleaseWithdrawalRepository withdrawals;
+    private final CatalogPublicationJobRepository jobs;
 
     public void execute(ReleaseSubmission submission) {
+        gates.ensure(submission.releaseRequestId());
+        gates.lock(submission.releaseRequestId()).orElseThrow();
         // Check an existing request even when the Inbox already knows the event ID.
         CatalogRelease existing = releases.findById(submission.releaseRequestId()).orElse(null);
         if (existing != null) {
@@ -53,7 +65,15 @@ public class PublishProjectRelease {
                                 throw new BusinessException(
                                         ErrorCode.CONFLICT, "이벤트 ID가 다른 출시 요청에 사용되었습니다.");
                         });
-        if (!guard.firstDelivery(submission.eventId(), CONSUMER_GROUP, submission.eventType())) return;
+        if (!guard.firstDelivery(submission.eventId(), CONSUMER_GROUP, submission.eventType())) {
+            CatalogPublicationJob accepted = jobs.findById(submission.releaseRequestId()).orElse(null);
+            if (accepted == null) return;
+            try {
+                accepted.requireSame(submission, mapper.readValue(accepted.getSnapshot(), ProjectSnapshot.class));
+            } catch (JsonProcessingException failure) {
+                throw new IllegalStateException("출시 접수 원본을 읽을 수 없습니다.", failure);
+            }
+        }
         ProjectSnapshot s = submission.snapshot();
         CatalogProduct product = products.lockByProjectId(s.projectId()).orElse(null);
         if (product != null) product.requireIdentity(s);
@@ -75,10 +95,22 @@ public class PublishProjectRelease {
                                 .getContentVersion();
         boolean stale = s.contentVersion() < currentVersion;
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        CatalogRelease release = CatalogRelease.decided(submission, json(s), stale, now);
+        List<ReleaseWithdrawal> pending = withdrawals
+                .findByRequestIdAndResolvedFalseOrderByWithdrawalIdAsc(submission.releaseRequestId());
+        CatalogRelease release = pending.isEmpty()
+                ? CatalogRelease.decided(submission, json(s), stale, now)
+                : CatalogRelease.withdrawn(submission, json(s), now,
+                        pending.getFirst().getOwnerSubject(), pending.getFirst().getReason());
         // Assigned request IDs must INSERT, never merge over a concurrently committed decision.
         entityManager.persist(release);
         entityManager.flush();
+        if (!pending.isEmpty()) {
+            for (ReleaseWithdrawal withdrawal : pending) {
+                outbox.record("CatalogRelease", s.productCode(),
+                        ProjectReleaseWithdrawalResolvedEvent.of(withdrawal.resolve(release, s)));
+            }
+            return;
+        }
         boolean publicationChanged = product == null || s.contentVersion() > currentVersion;
         if (product == null)
             product = products.saveAndFlush(CatalogProduct.publish(s, submission.releaseRequestId(), now));

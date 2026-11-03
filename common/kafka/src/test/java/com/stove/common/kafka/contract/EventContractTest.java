@@ -36,6 +36,12 @@ import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
 import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.common.kafka.contract.payload.ReleaseRolledBackEvent;
 import com.stove.common.kafka.contract.payload.ReleaseScheduledEvent;
@@ -148,6 +154,9 @@ class EventContractTest {
     }
 
     private static Stream<DomainEvent> events() {
+        ProjectWithdrawalRequest withdrawal = new ProjectWithdrawalRequest(10L, 1L, 1L, 1, "PROJECT-1", "usr_creator", null);
+        ProjectWithdrawalResult resolution = new ProjectWithdrawalResult(10L, 1L, 1L, 1, "PROJECT-1", "WITHDRAWN", "usr_creator", null,
+                Instant.parse("2026-11-03T00:00:00.123456Z"), "original-event");
         ProjectSnapshot snapshot =
                 new ProjectSnapshot(
                         1L,
@@ -212,6 +221,10 @@ class EventContractTest {
                         "https://example.com/thumb.png", 1000, "KRW", Instant.parse("2026-01-01T00:00:00Z"),
                         "Content", null, 1, "1.0", Instant.parse("2026-01-01T00:00:00Z"))),
                 ProjectReviewRequestedEvent.of(1L, snapshot),
+                ProjectReviewWithdrawalRequestedEvent.of(withdrawal),
+                ProjectReviewWithdrawalResolvedEvent.of(resolution),
+                ProjectReleaseWithdrawalRequestedEvent.of(withdrawal),
+                ProjectReleaseWithdrawalResolvedEvent.of(resolution),
                 ProjectReviewApprovedEvent.of(1L, 1L, 1, "PROJECT-1", "reviewer"),
                 ProjectReviewRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "feedback", "reviewer"),
                 ProjectReleaseRequestedEvent.of(1L, 1L, snapshot),

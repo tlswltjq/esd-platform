@@ -18,6 +18,7 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;
 import com.stove.studio.core.domain.review.ProjectReviewResult;
 import com.stove.studio.core.service.release.RecordProjectReleaseResult;
+import com.stove.studio.core.service.project.RecordProjectWithdrawalResult;
 import com.stove.studio.core.service.review.RecordProjectReviewResult;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
@@ -49,7 +50,8 @@ class ProjectResultMapperTest {
         RecordProjectReviewResult review = mock(RecordProjectReviewResult.class);
         RecordProjectReleaseResult release = mock(RecordProjectReleaseResult.class);
         ObjectMapper json = new ObjectMapper().findAndRegisterModules();
-        ProjectResultListener listener = new ProjectResultListener(json, review, release);
+        ProjectResultListener listener = new ProjectResultListener(
+                json, review, release, mock(RecordProjectWithdrawalResult.class));
         ConsumerRecord<String, String> record = new ConsumerRecord<String, String>(event.topic(), 0, 0, event.partitionKey(), json.writeValueAsString(event));
         record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));

@@ -31,7 +31,7 @@ class StorePublicationFlowTest {
         long review = request(project, creator, reviewer);
         assertThat(Stove.gateway.post(reviewPath(review) + "/approve", null, reviewer.headers()).status()).isEqualTo(200);
         waitForResult(project, review, creator, "APPROVED");
-        assertThat(Stove.gateway.post(path(project) + "/release-requests", null, creator.headers()).status()).isEqualTo(202);
+        assertThat(Stove.gateway.post(path(project) + "/release-requests", ReviewJourney.submission(path(project), creator.headers()), creator.headers()).status()).isEqualTo(202);
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(data(project, creator).path("currentReleaseRequest").path("status").asText())
                         .isEqualTo("COMPLETED"));

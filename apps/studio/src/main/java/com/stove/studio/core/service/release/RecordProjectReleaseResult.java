@@ -6,6 +6,7 @@ import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.release.ProjectReleaseRequestRepository;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;
+import com.stove.studio.core.domain.project.ProjectRepository;
 import com.stove.studio.core.service.review.RecordProjectReviewResult;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -19,10 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class RecordProjectReleaseResult {
     private final ProjectReleaseRequestRepository requests;
     private final ProcessedEventGuard guard;
+    private final ProjectRepository projects;
 
     public void execute(ProjectReleaseResult result) {
         if (!guard.firstDelivery(result.eventId(), RecordProjectReviewResult.CONSUMER_GROUP, result.eventType()))
             return;
+        projects.lock(result.projectId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ProjectReleaseRequest request =
                 requests.lock(result.releaseRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));

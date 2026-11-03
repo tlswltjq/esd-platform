@@ -5,11 +5,12 @@ import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.service.build.RegisterBuild;
 import com.stove.studio.core.service.project.ReadProjects;
+import com.stove.studio.core.domain.project.StudioPage;
+import com.stove.studio.api.controller.dto.StudioPageResponse;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -47,7 +48,8 @@ public class BuildController {
     }
 
     @GetMapping
-    public ApiResponse<List<Build>> list(@PathVariable Long id, @CurrentSubject String subject) {
-        return ApiResponse.ok(readProjects.builds(id, subject));
+    public ApiResponse<StudioPageResponse<Build>> list(@PathVariable Long id, @CurrentSubject String subject,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(StudioPageResponse.from(readProjects.builds(id, subject, new StudioPage(page, size))));
     }
 }

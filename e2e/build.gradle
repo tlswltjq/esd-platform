@@ -43,7 +43,7 @@ tasks.register('e2eTest', Test) {
     // 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 같은 리포트에 같은 모양으로 남는다.
     // 실행 정책을 필요 자원으로 가르는 이 저장소의 규칙 그대로다(루트 build.gradle) —
     // 저 장이 요구하는 자원은 '망가뜨려도 되는 스택' 이라 e2e 와도 다르다.
-    useJUnitPlatform { excludeTags 'chaos', 'api-demo', 'studio', 'review', 'review-restart', 'catalog', 'store', 'order', 'payment', 'license', 'download', 'settlement', 'tracing' }
+    useJUnitPlatform { excludeTags 'chaos', 'api-demo', 'studio', 'review', 'review-restart', 'catalog', 'withdrawal', 'g4-operations', 'store', 'order', 'payment', 'license', 'download', 'settlement', 'tracing' }
 
     endpoints.each { name ->
         systemProperty "stove.e2e.${name}",
@@ -233,6 +233,46 @@ tasks.register('catalogE2eTest', Test) {
 }
 
 // Six completed/reworked modules; each phase is executed against an OCI disposable stack.
+tasks.register('withdrawalE2eTest', Test) {
+    group = 'verification'
+    description = '단일 심사·명시적 철회·동일 승인본 재출시와 Catalog 자동 공개 재시작 복구를 검증한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'withdrawal' }
+    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
+    systemProperty 'stove.e2e.withdrawal-evidence', providers.systemProperty('stove.e2e.withdrawal-evidence').getOrElse('')
+    filter { includeTestsMatching "com.stove.e2e.WithdrawalFlowTest.${providers.systemProperty('stove.e2e.withdrawal-phase').getOrElse('prepareQueuedRelease')}" }
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
+    afterSuite { desc, result ->
+        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
+            throw new GradleException('Withdrawal verification requires one executed check without skips')
+    }
+}
+
+tasks.register('g4OperationsE2eTest', Test) {
+    group = 'verification'
+    description = '출시·철회부터 Store 복구·판매/노출/다운로드 제어·기존 구매권까지 연결한다 (결제 결과는 계약 픽스처)'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'g4-operations' }
+    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
+    ['kafka-brokers', 'g4-evidence', 'g4-secrets'].each { name ->
+        systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
+    }
+    filter { includeTestsMatching "com.stove.e2e.G4OperationsFlowTest.${providers.systemProperty('stove.e2e.g4-phase').getOrElse('publishesAndPreparesOwnedAndPendingOrders')}" }
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
+    afterSuite { desc, result ->
+        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
+            throw new GradleException('G4 operations requires one executed check without skips')
+    }
+}
+
 tasks.register('storeE2eTest', Test) {
     group = 'verification'
     description = '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작을 검증한다'

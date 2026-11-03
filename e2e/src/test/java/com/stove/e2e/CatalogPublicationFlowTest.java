@@ -38,7 +38,7 @@ class CatalogPublicationFlowTest {
 
     private static long release(long project, Account creator) {
         E2eClient.Response response =
-                Stove.gateway.post(path(project) + "/release-requests", null, creator.headers());
+                Stove.gateway.post(path(project) + "/release-requests", ReviewJourney.submission(path(project), creator.headers()), creator.headers());
         assertThat(response.status()).isEqualTo(202);
         return response.data().path("id").asLong();
     }
@@ -74,7 +74,7 @@ class CatalogPublicationFlowTest {
         assertThat(Stove.gateway.get(detail).status()).isEqualTo(404);
         assertThat(
                         Stove.gateway
-                                .post(path(p.id()) + "/release-requests", null, creator.headers())
+                                .post(path(p.id()) + "/release-requests", ReviewJourney.submission(path(p.id()), creator.headers()), creator.headers())
                                 .status())
                 .isEqualTo(409);
         approve(p.id(), creator, reviewer);
@@ -92,7 +92,7 @@ class CatalogPublicationFlowTest {
                 .isEqualTo("First title");
         assertThat(
                         Stove.gateway
-                                .post(path(p.id()) + "/release-requests", null, creator.headers())
+                                .post(path(p.id()) + "/release-requests", ReviewJourney.submission(path(p.id()), creator.headers()), creator.headers())
                                 .status())
                 .isEqualTo(409);
         approve(p.id(), creator, reviewer);

@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "stove.outbox.relay-enabled=false",
+            "stove.catalog.publication.worker-enabled=false",
             "spring.kafka.listener.auto-startup=false"
         })
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})

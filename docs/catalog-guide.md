@@ -20,8 +20,34 @@ page는 0 이상, size는 1~100이다. 상세에는 저장 경로·소유자 sub
 
 처음 공개하려면 Auth의 CREATOR로 Studio 프로젝트를 생성하고 자료·빌드를 등록한다.
 Review에서 현재 버전의 승인을 받은 뒤 Studio의 `POST /api/v1/studio/projects/{id}/release-requests`를 호출한다.
-202 응답 이후 Catalog 공개 조회와 Studio의 COMPLETED 반영 사이에는 이벤트 지연이 있다.
+본문에는 논리적 명령 requestId와 기대 contentVersion을 전달한다. Studio의 프로젝트별 진행 중 출시는 1건이다.
+202 응답 이후 Catalog 접수·공개 조회·Studio의 COMPLETED 반영 사이에는 비동기 지연이 있다.
 현재 공개본을 바꾸려면 Studio 작업본 변경 → 새 심사 승인 → 새 출시 요청을 수행한다.
+
+Catalog는 원요청·불변 스냅샷과 Inbox를 먼저 내구 저장하고 별도 자동 작업에서 공개한다.
+공개본·출시 결과·상품 변경 Outbox와 작업 완료는 같은 트랜잭션으로 저장한다.
+실패는 원래 요청으로 재시도하며 기본 실패 대기는 5·15·30·60초(이후 60초)다.
+기본 poll 간격은 200ms, batch-size는 20(1~100)이다.
+설정은 stove.catalog.publication.poll-interval-ms·batch-size·worker-enabled다.
+고정 철회 유예시간이나 추가 공개 버튼은 없으며 poll 간격은 최소 철회 시간을 보장하지 않는다.
+
+창작자의 출시 철회는 [Studio 철회 API](studio-guide.md#심사출시-요청-철회)로 접수한다.
+Catalog에서 철회가 먼저 확정되면 해당 요청은 WITHDRAWN이며 새 공개를 하지 않는다.
+공개가 먼저 확정되면 철회 결과에 기존 COMPLETED/REJECTED를 반환한다. 원요청보다 먼저 온 철회도 보존한다.
+철회는 이전 공개본·승인 근거·기존 판매/노출/다운로드 설정을 보존한다.
+
+ADMIN은 Gateway를 통해 다음 읽기 전용 no-store API로 미완료 작업과 개별 이력을 확인한다.
+목록은 PENDING 작업이고 page·size(최대 100)를 지원한다. 내부 스냅샷·저장 경로는 응답하지 않는다.
+
+~~~http
+GET /api/v1/admin/catalog-release-jobs
+GET /api/v1/admin/catalog-release-jobs/{requestId}
+~~~
+
+state는 작업 처리 상태이므로 작업 COMPLETED만으로 공개 성공을 단정하지 않는다.
+철회로 종료된 요청도 작업은 처리 완료될 수 있다. 출시의 정본 결과와 Studio 요청 이력을 함께 확인한다.
+실패 시 attemptCount·lastError·nextAttemptAt과 원요청 sourceEventId를 확인하고 원본 Outbox·DLT 전달 상태를 조사한다.
+지연만으로 성공·실패를 확정하거나 새 요청 ID로 바꿔 복구하지 않는다.
 
 ## 독립 검증
 
@@ -30,6 +56,7 @@ JDK 21과 Docker가 필요하다. 기본 검증 포트가 사용 중이면 CATAL
 ```sh
 ./gradlew :apps:catalog:test :apps:catalog:integrationTest
 python3 tools/verification/verify-catalog.py
+CATALOG_WITHDRAWAL_CHECK=true python3 tools/verification/verify-catalog.py
 ```
 
 Testcontainers가 Docker 소켓을 찾지 못하면 현재 Docker context의 endpoint를 DOCKER_HOST로 지정한다.
@@ -41,6 +68,18 @@ Testcontainers가 Docker 소켓을 찾지 못하면 현재 Docker context의 end
 Catalog 재시작 전 미발행 결과 저장과 재시작 후 결과 전달을 포함한다.
 브로커를 중단한 상태에서 Catalog의 발행 시도가 실패해도 Outbox가 PENDING으로 보존되고,
 브로커 복구 후 Studio에 같은 요청 결과가 반영되는지 확인한다.
+CATALOG_WITHDRAWAL_CHECK=true는 실제 심사/출시 철회·동일 자료 재신청·같은 승인본 재출시,
+Catalog 프로세스 재시작 후 저장된 공개 작업 재개와 기본 공개 여정을 실행한다.
+검증은 현재 사용자 지정 환경에서 격리 실행하고 기존 자원은 보존한다.
+
+## 단일 요청 제약과 새 이벤트 전환
+
+Studio V26과 Review V11은 프로젝트별 활성 심사 유일성을, Studio V26은 활성 출시 유일성을 추가한다.
+기존 REQUESTED가 프로젝트별로 여러 건이면 이행이 실패한다. 적용 전에 대상을 대조하고 임의 삭제·자동 최신 선택을 하지 않는다.
+Catalog V15는 철회 이력·요청 잠금·내구 공개 작업을 추가한다.
+이번 신규 이벤트 소비자가 준비되기 전에 Studio가 철회 이벤트를 발행하지 않도록 교체 순서를 맞춘다.
+Review/Catalog 철회 요청 소비와 Studio 철회 결과 소비를 모든 대상 인스턴스에서 준비한 뒤 새 명령 경로를 사용한다.
+Studio 제출 POST의 새 필수 본문과 호출부도 함께 교체한다. 실제 운영 DB 전환·공유 배포는 독립 검증과 별도다.
 
 ## 기존 DB 전환
 

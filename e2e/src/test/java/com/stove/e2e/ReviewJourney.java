@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -127,7 +128,7 @@ final class ReviewJourney {
     }
 
     static long request(long id, Account creator, Account reviewer) {
-        E2eClient.Response response = Stove.gateway.post(path(id) + "/review-requests", null, creator.headers());
+        E2eClient.Response response = Stove.gateway.post(path(id) + "/review-requests", ReviewJourney.submission(path(id), creator.headers()), creator.headers());
         assertThat(response.status()).isEqualTo(202);
         long request = response.data().path("id").asLong();
         Awaitility.await()
@@ -149,17 +150,31 @@ final class ReviewJourney {
                 .atMost(Duration.ofSeconds(30))
                 .untilAsserted(
                         () -> {
-                            JsonNode history =
-                                    Stove.gateway
-                                            .get(
-                                                    path(project) + "/review-requests",
-                                                    creator.headers())
-                                            .data();
+                            JsonNode history = listItems(path(project) + "/review-requests", creator.headers());
                             JsonNode match = null;
                             for (JsonNode r : history) if (r.path("id").asLong() == request) match = r;
                             assertThat(match).isNotNull();
                             assertThat(match.path("status").asText()).isEqualTo(state);
                         });
+    }
+
+    static ArrayNode listItems(String path, Map<String, String> headers) {
+        ArrayNode items = JSON.createArrayNode();
+        for (int page = 0; ; page++) {
+            E2eClient.Response response = Stove.gateway.get(path + "?page=" + page + "&size=100", headers);
+            assertThat(response.status()).as(path).isEqualTo(200);
+            JsonNode result = response.data();
+            assertThat(result.path("items").isArray()).as(path + " page items").isTrue();
+            items.addAll((ArrayNode) result.path("items"));
+            if (page + 1 >= result.path("totalPages").asInt()) return items;
+        }
+    }
+
+    /** A new logical request gets a new key; explicit retry tests retain their original body. */
+    static Map<String, Object> submission(String projectPath, Map<String, String> headers) {
+        E2eClient.Response current = Stove.gateway.get(projectPath, headers);
+        long version = current.status() == 200 ? current.data().path("contentVersion").asLong() : 1;
+        return Map.of("requestId", UUID.randomUUID().toString(), "contentVersion", version);
     }
 
     static JsonNode data(long id, Account creator) {

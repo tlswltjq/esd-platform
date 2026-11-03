@@ -9,7 +9,7 @@ Store는 Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다
 
 ## 실행 환경
 
-2026-11-02 최신 지시에 따라 코드·문서 편집과 빌드·테스트·서비스 실행은 로컬에서 수행하며 인프라는 OrbStack의 격리 자원을 사용한다. 기존 컨테이너·볼륨과 공유 자료를 보존한다. 과거 OCI 완료 기록은 당시 이력이다.
+2026-11-03 현재 사용자 지시에 따라 코드·문서 편집은 로컬에서, 빌드·테스트·서비스 실행과 인프라 검증은 `ssh sng` OCI의 격리 자원에서 수행한다. 2026-11-02 OrbStack 지정은 환경 변경 전 기록이다. 기존 컨테이너·볼륨과 공유 자료를 보존한다. 아래 명령도 지정된 OCI 격리 작업본에서 실행한다.
 
 ```sh
 ./gradlew :apps:store:test :apps:catalog:test :common:kafka:test
@@ -21,6 +21,8 @@ Store는 Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다
 기존 전체 스택을 올리지 않으며, 자신이 생성한 프로세스와 임시 데이터만 종료 시 정리한다.
 실행 로그·JSON 증거 경로는 출력되는 임시 디렉터리다. 포트가 겹치면 STORE_TEST_PORT_OFFSET을 지정한다.
 Gradle 의존성과 테스트 이미지를 처음 준비하는 경우 네트워크 접근이 필요하다.
+
+새 심사·출시 철회와 판매·노출·다운로드 제한까지 연결하는 검증은 `python3 tools/verification/verify-g4-operations.py`를 사용한다. [G4 운영 여정](g4-operations-verification.md)에 실제 서비스 범위, 결제 계약 픽스처, 10개 단계와 남은 운영 공백을 기록한다. 이 여정은 Payment나 외부 PG를 실행하지 않는다.
 
 기존 개발 MySQL에서는 [스키마 준비 SQL](../tools/migrations/store/store-schema.sql)을 관리자 계정으로 적용한다.
 새 환경은 infra/mysql/init의 초기화 SQL에 포함돼 있다. 기존 볼륨은 삭제하지 않는다.

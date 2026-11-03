@@ -13,9 +13,12 @@ public record ProjectResponse(
         long contentVersion,
         ProjectReviewRequest currentReviewRequest,
         ProjectReleaseRequest currentReleaseRequest,
-        boolean releaseEligible) {
+        boolean releaseEligible,
+        ProjectReviewRequest activeReviewRequest,
+        ProjectReleaseRequest activeReleaseRequest) {
     public static ProjectResponse from(
-            Project p, ProjectReviewRequest review, ProjectReleaseRequest release) {
+            Project p, ProjectReviewRequest review, ProjectReleaseRequest release,
+            ProjectReviewRequest activeReview, ProjectReleaseRequest activeRelease) {
         return new ProjectResponse(
                 p.getId(),
                 p.getProductCode(),
@@ -24,6 +27,6 @@ public record ProjectResponse(
                 p.getContentVersion(),
                 review,
                 release,
-                review != null && review.approvedFor(p.getContentVersion()));
+                review != null && review.approvedFor(p.getContentVersion()), activeReview, activeRelease);
     }
 }

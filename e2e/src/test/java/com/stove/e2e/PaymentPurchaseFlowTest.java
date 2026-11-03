@@ -82,7 +82,7 @@ class PaymentPurchaseFlowTest {
         long review=request(project.id(),creator,reviewer);
         assertThat(Stove.gateway.post(reviewPath(review)+"/approve",null,reviewer.headers()).status()).isEqualTo(200);
         waitForResult(project.id(),review,creator,"APPROVED");
-        assertThat(Stove.gateway.post(path(project.id())+"/release-requests",null,creator.headers()).status()).isEqualTo(202);
+        assertThat(Stove.gateway.post(path(project.id())+"/release-requests",ReviewJourney.submission(path(project.id()), creator.headers()),creator.headers()).status()).isEqualTo(202);
         Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
                 assertThat(data(project.id(),creator).path("currentReleaseRequest").path("status").asText()).isEqualTo("COMPLETED"));
         String code=data(project.id(),creator).path("productCode").asText();

@@ -3,8 +3,19 @@ package com.stove.studio.core.domain.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import java.time.Instant;
 
 class ProjectReviewRequestTest {
+    @Test
+    void aWithdrawnRequestCannotSupplyReleaseEligibilityOrBeReopenedByALateApproval() {
+        ProjectReviewRequest request = ProjectReviewRequest.create(1L, 2, 3L, "snapshot");
+        request.recordResolution("WITHDRAWN", "owner", null, Instant.now());
+        request.recordResult(true, null, "late-result");
+        assertThat(request.getStatus()).isEqualTo("WITHDRAWN");
+        assertThat(request.approvedFor(2)).isFalse();
+        assertThat(request.getFeedback()).isNull();
+    }
+
     @Test
     void externalApprovalOnlySatisfiesTheReviewedMetadataVersion() {
         ProjectReviewRequest r = ProjectReviewRequest.create(1L, 2, 3L, "snapshot");

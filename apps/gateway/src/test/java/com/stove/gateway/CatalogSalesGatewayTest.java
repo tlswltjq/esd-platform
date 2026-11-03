@@ -111,4 +111,18 @@ class CatalogSalesGatewayTest {
         http.put().uri(ADMIN).header("Authorization","Bearer CREATOR").exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isEqualTo(before);
     }
+
+    @Test void publicationJobInspectionIsReadOnlyAndAdministratorOnly() {
+        String path = "/api/v1/admin/catalog-release-jobs";
+        http.get().uri(path).header("Authorization", "Bearer ADMIN").header("X-Member-Id", "spoof")
+                .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store");
+        http.get().uri(path + "/10").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isOk();
+        assertThat(AUTH.get()).isEqualTo("Bearer ADMIN");
+        assertThat(SPOOFED.get()).isNull();
+        int before = CALLS.get();
+        for (String role : List.of("CREATOR", "MEMBER", "REVIEWER"))
+            http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
+        http.get().uri(path).exchange().expectStatus().isUnauthorized();
+        assertThat(CALLS.get()).isEqualTo(before);
+    }
 }

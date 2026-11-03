@@ -6,6 +6,7 @@ import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
 import com.stove.studio.core.domain.review.ProjectReviewRequestRepository;
 import com.stove.studio.core.domain.review.ProjectReviewResult;
+import com.stove.studio.core.domain.project.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +19,11 @@ public class RecordProjectReviewResult {
     public static final String CONSUMER_GROUP = "studio-project";
     private final ProjectReviewRequestRepository requests;
     private final ProcessedEventGuard guard;
+    private final ProjectRepository projects;
 
     public void execute(ProjectReviewResult result) {
         if (!guard.firstDelivery(result.eventId(), CONSUMER_GROUP, result.eventType())) return;
+        projects.lock(result.projectId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ProjectReviewRequest request =
                 requests.lock(result.reviewRequestId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));

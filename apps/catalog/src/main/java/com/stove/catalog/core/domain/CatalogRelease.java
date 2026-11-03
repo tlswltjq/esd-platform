@@ -1,5 +1,7 @@
 package com.stove.catalog.core.domain;
 
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -47,6 +49,8 @@ public class CatalogRelease {
 
     @Column(nullable = false)
     private Instant processedAt;
+    @Column(length = 100) private String withdrawnBy;
+    @Column(length = 2000) private String withdrawalReason;
 
     public static CatalogRelease decided(
             ReleaseSubmission submission, String json, boolean stale, Instant now) {
@@ -62,6 +66,18 @@ public class CatalogRelease {
         release.reason = stale ? "STALE_CONTENT_VERSION" : null;
         release.requestedAt = submission.occurredAt();
         release.processedAt = now;
+        return release;
+    }
+
+    public static CatalogRelease withdrawn(ReleaseSubmission submission, String json, Instant now,
+            String subject, String reason) {
+        if (!submission.snapshot().ownerSubject().equals(subject))
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        ReleaseWithdrawalValues.requireReason(reason);
+        CatalogRelease release = decided(submission, json, false, now);
+        release.status = "WITHDRAWN";
+        release.withdrawnBy = subject;
+        release.withdrawalReason = reason;
         return release;
     }
 }

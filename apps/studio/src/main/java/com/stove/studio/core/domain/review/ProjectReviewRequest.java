@@ -1,6 +1,9 @@
 package com.stove.studio.core.domain.review;
 
 import com.stove.common.jpa.BaseTimeEntity;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.project.ProjectCommandValues;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -46,6 +49,9 @@ public class ProjectReviewRequest extends BaseTimeEntity {
     private String actor;
 
     private Instant resultReceivedAt;
+    @Column(length = 64) private String requestEventId;
+    @Column(length = 2000) private String withdrawalReason;
+    private Instant finalizedAt;
 
     public static ProjectReviewRequest create(
             Long projectId, long version, Long buildId, String snapshot) {
@@ -60,6 +66,24 @@ public class ProjectReviewRequest extends BaseTimeEntity {
 
     public boolean approvedFor(long version) {
         return contentVersion == version && "APPROVED".equals(status);
+    }
+
+    public void requested(String eventId) {
+        requestEventId = eventId;
+    }
+
+    public void recordResolution(String finalStatus, String actor, String feedback, Instant at) {
+        ProjectCommandValues.requireReviewResult(finalStatus, actor, feedback, at);
+        if (!"REQUESTED".equals(status) && !status.equals(finalStatus))
+            throw new BusinessException(ErrorCode.CONFLICT, "심사 정본의 최종 결과가 기존 결과와 다릅니다.");
+        if ("REQUESTED".equals(status)) {
+            status = finalStatus;
+            this.actor = actor;
+            if ("WITHDRAWN".equals(finalStatus)) withdrawalReason = feedback;
+            else this.feedback = feedback;
+            resultReceivedAt = Instant.now();
+        }
+        if (finalizedAt == null) finalizedAt = at;
     }
 
     public void recordResult(boolean approved, String feedback, String actor) {

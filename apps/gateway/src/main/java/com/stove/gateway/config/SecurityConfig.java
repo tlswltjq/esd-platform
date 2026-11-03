@@ -93,6 +93,7 @@ public class SecurityConfig {
                                 "/error", "/.well-known/**", "/connect/**", "/userinfo")
                         .permitAll()
                         .pathMatchers("/bff/session", "/bff/logout", "/api/v1/auth/password", "/api/v1/auth/session").authenticated()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/admin/catalog-release-jobs", "/api/v1/admin/catalog-release-jobs/*").hasRole("ADMIN")
                         .pathMatchers("/api/v1/products/by-code/*/sales", "/api/v1/products/by-code/*/listing").hasRole("CREATOR")
                         .pathMatchers("/api/v1/admin/products/*/sales/restriction", "/api/v1/admin/products/*/downloads/restriction", "/api/v1/admin/products/*/listing/restriction").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/products/**", "/api/v1/storefront/**")

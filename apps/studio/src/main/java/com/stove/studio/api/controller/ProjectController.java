@@ -5,6 +5,9 @@ import com.stove.common.web.response.ApiResponse;
 import com.stove.studio.api.controller.dto.CreateProjectRequest;
 import com.stove.studio.api.controller.dto.ProjectResponse;
 import com.stove.studio.api.controller.dto.UpdateStorePageRequest;
+import com.stove.studio.api.controller.dto.SubmitProjectRequest;
+import com.stove.studio.api.controller.dto.StudioPageResponse;
+import com.stove.studio.core.domain.project.StudioPage;
 import com.stove.studio.core.domain.project.Project;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
@@ -14,7 +17,6 @@ import com.stove.studio.core.service.project.UpdateStorePage;
 import com.stove.studio.core.service.release.RequestProjectRelease;
 import com.stove.studio.core.service.review.RequestProjectReview;
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -45,8 +48,10 @@ public class ProjectController {
     }
 
     @GetMapping
-    public ApiResponse<List<ProjectResponse>> list(@CurrentSubject String subject) {
-        return ApiResponse.ok(readProjects.list(subject).stream().map(this::response).toList());
+    public ApiResponse<StudioPageResponse<ProjectResponse>> list(@CurrentSubject String subject,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(StudioPageResponse.from(readProjects.list(subject, new StudioPage(page, size))
+                .map(view -> ProjectResponse.from(view.project(), view.currentReview(), view.currentRelease(), view.activeReview(), view.activeRelease()))));
     }
 
     @GetMapping("/{id}")
@@ -68,31 +73,36 @@ public class ProjectController {
     @PostMapping("/{id}/review-requests")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<ProjectReviewRequest> requestReview(
-            @PathVariable Long id, @CurrentSubject String subject) {
-        return ApiResponse.ok(requestProjectReview.execute(id, subject));
+            @PathVariable Long id, @CurrentSubject String subject,
+            @Valid @RequestBody SubmitProjectRequest request) {
+        return ApiResponse.ok(requestProjectReview.execute(id, subject, request.command()));
     }
 
     @GetMapping("/{id}/review-requests")
-    public ApiResponse<List<ProjectReviewRequest>> reviewRequests(
-            @PathVariable Long id, @CurrentSubject String subject) {
-        return ApiResponse.ok(readProjects.reviewRequests(id, subject));
+    public ApiResponse<StudioPageResponse<ProjectReviewRequest>> reviewRequests(
+            @PathVariable Long id, @CurrentSubject String subject,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(StudioPageResponse.from(readProjects.reviewRequests(id, subject, new StudioPage(page, size))));
     }
 
     @PostMapping("/{id}/release-requests")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<ProjectReleaseRequest> requestRelease(
-            @PathVariable Long id, @CurrentSubject String subject) {
-        return ApiResponse.ok(requestProjectRelease.execute(id, subject));
+            @PathVariable Long id, @CurrentSubject String subject,
+            @Valid @RequestBody SubmitProjectRequest request) {
+        return ApiResponse.ok(requestProjectRelease.execute(id, subject, request.command()));
     }
 
     @GetMapping("/{id}/release-requests")
-    public ApiResponse<List<ProjectReleaseRequest>> releaseRequests(
-            @PathVariable Long id, @CurrentSubject String subject) {
-        return ApiResponse.ok(readProjects.releaseRequests(id, subject));
+    public ApiResponse<StudioPageResponse<ProjectReleaseRequest>> releaseRequests(
+            @PathVariable Long id, @CurrentSubject String subject,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(StudioPageResponse.from(readProjects.releaseRequests(id, subject, new StudioPage(page, size))));
     }
 
     private ProjectResponse response(Project p) {
         return ProjectResponse.from(
-                p, readProjects.reviewRequest(p), readProjects.releaseRequest(p));
+                p, readProjects.reviewRequest(p), readProjects.releaseRequest(p),
+                readProjects.activeReviewRequest(p), readProjects.activeReleaseRequest(p));
     }
 }

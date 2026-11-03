@@ -10,14 +10,16 @@ import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.review.ReviewFixtures;
 import com.stove.review.core.service.ReceiveProjectReview;
+import com.stove.review.core.service.ReceiveReviewWithdrawal;
 import java.nio.charset.StandardCharsets;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 
 class StudioEventListenerTest {
     private final ReceiveProjectReview receive = mock(ReceiveProjectReview.class);
+    private final ReceiveReviewWithdrawal withdraw = mock(ReceiveReviewWithdrawal.class);
     private final StudioEventListener listener =
-            new StudioEventListener(ReviewFixtures.JSON, receive);
+            new StudioEventListener(ReviewFixtures.JSON, receive, withdraw);
 
     @Test
     void forwardsTheCurrentProjectRequest() {

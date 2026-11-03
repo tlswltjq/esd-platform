@@ -3,18 +3,32 @@
 
 from pathlib import Path
 from support.minio_image import ensure_minio_image
-import os, socket, subprocess, time, urllib.request, tempfile, json
+import os, socket, subprocess, time, urllib.request, tempfile, json, shutil
 repo=Path(__file__).resolve().parents[2]
-directory=Path(tempfile.mkdtemp(prefix="stove-catalog-check-"))
+withdrawals=os.environ.get("CATALOG_WITHDRAWAL_CHECK")=="true"
+directory=Path(tempfile.mkdtemp(prefix="stove-withdrawal-check-" if withdrawals else "stove-catalog-check-"))
 project=directory.name
 offset=int(os.environ.get("CATALOG_TEST_PORT_OFFSET","30000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081}
+allocated_ports=set()
+container_ids=subprocess.check_output(["docker","ps","-q"],text=True).split()
+if container_ids:
+    mappings=subprocess.check_output(["docker","inspect","--format","{{json .NetworkSettings.Ports}}",*container_ids],text=True)
+    for line in mappings.splitlines():
+        for bindings in json.loads(line).values():
+            for binding in bindings or []: allocated_ports.add(int(binding["HostPort"]))
 for port in apps.values():
+    if port+offset in allocated_ports: raise RuntimeError("Application port is already allocated by Docker")
     with socket.socket() as sock: sock.bind(("127.0.0.1",port+offset))
+    allocated_ports.add(port+offset)
 def free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1",0))
-        return sock.getsockname()[1]
+    while True:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1",0))
+            port=sock.getsockname()[1]
+        if port not in allocated_ports:
+            allocated_ports.add(port)
+            return port
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
 subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
@@ -125,7 +139,8 @@ try:
         try: process.wait(timeout=40)
         except subprocess.TimeoutExpired: process.kill();process.wait()
         log.close();processes.remove(item)
-    for app in apps: start_app(app)
+    for app in apps:
+        start_app(app,["--stove.catalog.publication.worker-enabled=false"] if withdrawals and app=="catalog" else [])
     def apps_ready():
         for app,process,log in processes:
             if process.poll() is not None: raise RuntimeError(app+" stopped. See "+str(directory/(app+".log")))
@@ -134,28 +149,41 @@ try:
     def verify(task,*extra):
         result=subprocess.run(["./gradlew",task,"-Dstove.e2e.port-offset="+str(offset),
             "-Dstove.e2e.kafka-brokers=127.0.0.1:"+str(ports["kafka"]),*extra,"--offline","--no-daemon"],cwd=repo)
+        phase=next((argument.split("=",1)[1] for argument in extra if "-phase=" in argument),"journey")
+        output=repo/"e2e/build/test-results"/task.split(":")[-1]
+        if output.exists(): shutil.copytree(output,directory/"checks"/(task.split(":")[-1]+"-"+phase),dirs_exist_ok=True)
         if result.returncode: raise SystemExit(result.returncode)
-    verify(":e2e:catalogE2eTest")
-    stop_catalog()
-    start_app("catalog",["--stove.outbox.relay-enabled=false"])
-    wait_for(apps_ready,"Catalog with paused relay",180)
-    evidence="-Dstove.e2e.catalog-evidence="+str(directory/"restart.json")
-    verify(":e2e:catalogE2eTest","-Dstove.e2e.catalog-phase=preparePendingResult",evidence)
-    stop_catalog()
-    subprocess.run(docker+["stop","kafka"],check=True)
-    start_app("catalog",["--spring.kafka.producer.properties.max.block.ms=1000",
-        "--spring.kafka.producer.properties.delivery.timeout.ms=2000",
-        "--spring.kafka.producer.properties.request.timeout.ms=1000"])
-    def retained_result_after_send_failure():
-        query="SELECT COUNT(*) FROM stove_catalog.outbox_event WHERE status='PENDING'"
-        result=subprocess.run(docker+["exec","-T","mysql","mysql","-N","-ustove","-pstove1234","-e",query],capture_output=True,text=True,check=True)
-        log=(directory/"catalog.log").read_text()
-        return int(result.stdout.strip())>0 and "not present in metadata after 1000 ms" in log
-    wait_for(retained_result_after_send_failure,"Catalog retained result during broker outage",90)
-    subprocess.run(docker+["start","kafka"],check=True)
-    wait_for(apps_ready,"Catalog restarted and broker recovered",180)
-    verify(":e2e:catalogE2eTest","-Dstove.e2e.catalog-phase=verifyPersistedResultAfterRestart",evidence)
-    print("PASS: Catalog publication journey and two real restart phases",flush=True)
+    if withdrawals:
+        evidence="-Dstove.e2e.withdrawal-evidence="+str(directory/"private.json")
+        verify(":e2e:withdrawalE2eTest","-Dstove.e2e.withdrawal-phase=prepareQueuedRelease",evidence)
+        stop_catalog()
+        start_app("catalog")
+        wait_for(apps_ready,"Catalog restarted with automatic publication enabled",180)
+        verify(":e2e:withdrawalE2eTest","-Dstove.e2e.withdrawal-phase=publishesOnlyTheSurvivingRequestAfterRestart",evidence)
+        verify(":e2e:catalogE2eTest")
+        print("PASS: review/release withdrawal, durable queued publication after restart and publication regression",flush=True)
+    else:
+        verify(":e2e:catalogE2eTest")
+        stop_catalog()
+        start_app("catalog",["--stove.outbox.relay-enabled=false"])
+        wait_for(apps_ready,"Catalog with paused relay",180)
+        evidence="-Dstove.e2e.catalog-evidence="+str(directory/"restart.json")
+        verify(":e2e:catalogE2eTest","-Dstove.e2e.catalog-phase=preparePendingResult",evidence)
+        stop_catalog()
+        subprocess.run(docker+["stop","kafka"],check=True)
+        start_app("catalog",["--spring.kafka.producer.properties.max.block.ms=1000",
+            "--spring.kafka.producer.properties.delivery.timeout.ms=2000",
+            "--spring.kafka.producer.properties.request.timeout.ms=1000"])
+        def retained_result_after_send_failure():
+            query="SELECT COUNT(*) FROM stove_catalog.outbox_event WHERE status='PENDING'"
+            result=subprocess.run(docker+["exec","-T","mysql","mysql","-N","-ustove","-pstove1234","-e",query],capture_output=True,text=True,check=True)
+            log=(directory/"catalog.log").read_text()
+            return int(result.stdout.strip())>0 and "not present in metadata after 1000 ms" in log
+        wait_for(retained_result_after_send_failure,"Catalog retained result during broker outage",90)
+        subprocess.run(docker+["start","kafka"],check=True)
+        wait_for(apps_ready,"Catalog restarted and broker recovered",180)
+        verify(":e2e:catalogE2eTest","-Dstove.e2e.catalog-phase=verifyPersistedResultAfterRestart",evidence)
+        print("PASS: Catalog publication journey and two real restart phases",flush=True)
 finally:
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:

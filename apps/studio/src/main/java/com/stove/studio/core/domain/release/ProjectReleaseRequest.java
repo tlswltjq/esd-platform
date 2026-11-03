@@ -1,6 +1,9 @@
 package com.stove.studio.core.domain.release;
 
 import com.stove.common.jpa.BaseTimeEntity;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
+import com.stove.studio.core.domain.project.ProjectCommandValues;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -41,6 +44,9 @@ public class ProjectReleaseRequest extends BaseTimeEntity {
     private String failureReason;
 
     private Instant resultReceivedAt;
+    @Column(length = 100) private String withdrawnBy;
+    @Column(length = 2000) private String withdrawalReason;
+    private Instant finalizedAt;
 
     public static ProjectReleaseRequest create(Long projectId, Long reviewRequestId, long version) {
         ProjectReleaseRequest r = new ProjectReleaseRequest();
@@ -60,5 +66,23 @@ public class ProjectReleaseRequest extends BaseTimeEntity {
         status = success ? "COMPLETED" : "REJECTED";
         failureReason = reason;
         resultReceivedAt = Instant.now();
+    }
+
+    public void recordResolution(String finalStatus, String actor, String reason, Instant at) {
+        ProjectCommandValues.requireReleaseResult(finalStatus, reason);
+        if (actor == null || actor.isBlank() || actor.length() > 100 || at == null)
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "출시 최종 근거가 올바르지 않습니다.");
+        if (!"REQUESTED".equals(status) && !status.equals(finalStatus))
+            throw new BusinessException(ErrorCode.CONFLICT, "출시 정본의 최종 결과가 기존 결과와 다릅니다.");
+        if ("REQUESTED".equals(status)) {
+            status = finalStatus;
+            failureReason = "REJECTED".equals(finalStatus) ? reason : null;
+            if ("WITHDRAWN".equals(finalStatus)) {
+                withdrawnBy = actor;
+                withdrawalReason = reason;
+            }
+            resultReceivedAt = Instant.now();
+        }
+        if (finalizedAt == null) finalizedAt = at;
     }
 }

@@ -11,6 +11,10 @@ import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.domain.build.BuildRepository;
 import com.stove.studio.core.domain.project.Project;
 import com.stove.studio.core.domain.project.ProjectRepository;
+import com.stove.studio.core.domain.project.ProjectRequestCommand;
+import com.stove.studio.core.domain.project.ProjectRequestCommandRepository;
+import com.stove.studio.core.domain.project.ProjectRequestKind;
+import com.stove.studio.core.domain.project.SubmissionCommand;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
 import com.stove.studio.core.domain.review.ProjectReviewRequestRepository;
 import com.stove.studio.core.port.BuildStorage;
@@ -30,12 +34,28 @@ public class RequestProjectReview {
     private final ObjectMapper mapper;
     private final BuildStorage storage;
     private final ReadProjects readProjects;
+    private final ProjectRequestCommandRepository commands;
 
-    public ProjectReviewRequest execute(Long id, String subject) {
+    public ProjectReviewRequest execute(Long id, String subject, SubmissionCommand input) {
         Project p = projects.lock(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         p.requireOwner(subject);
+        ProjectRequestCommand previous = commands.findByProjectIdAndKindAndRequestKey(
+                id, ProjectRequestKind.REQUEST_REVIEW, input.requestId()).orElse(null);
+        if (previous != null) {
+            previous.requireSubmission(subject, input);
+            return reviews.findById(previous.getTargetRequestId()).orElseThrow();
+        }
+        p.requireVersion(input.contentVersion());
+        ProjectReviewRequest active = reviews.findFirstByProjectIdAndStatusOrderByIdAsc(id, "REQUESTED").orElse(null);
+        if (active != null) {
+            if (active.getContentVersion() != p.getContentVersion()
+                    || commands.existsByProjectIdAndKindAndTargetRequestIdAndState(
+                            id, ProjectRequestKind.WITHDRAW_REVIEW, active.getId(), "PENDING"))
+                throw new BusinessException(ErrorCode.CONFLICT, "진행 중인 심사가 있습니다. 철회 결과를 확인해 주세요.");
+            return accepted(p, input, active);
+        }
         ProjectReviewRequest current = readProjects.reviewRequest(p);
-        if (current != null && !"REJECTED".equals(current.getStatus())) return current;
+        if (current != null && "APPROVED".equals(current.getStatus())) return accepted(p, input, current);
         p.requireReady();
         Build b =
                 builds.findById(p.getCurrentBuildId())
@@ -49,10 +69,17 @@ public class RequestProjectReview {
                         ProjectReviewRequest.create(
                                 id, p.getContentVersion(), b.getId(), json(snapshot)));
         p.linkReviewRequest(review.getId());
+        ProjectReviewRequestedEvent event = ProjectReviewRequestedEvent.of(review.getId(), snapshot);
+        review.requested(event.eventId());
         outbox.record(
                 "Project",
                 p.getProductCode(),
-                ProjectReviewRequestedEvent.of(review.getId(), snapshot));
+                event);
+        return accepted(p, input, review);
+    }
+
+    private ProjectReviewRequest accepted(Project project, SubmissionCommand input, ProjectReviewRequest review) {
+        commands.save(ProjectRequestCommand.submission(project, ProjectRequestKind.REQUEST_REVIEW, input, review.getId()));
         return review;
     }
 

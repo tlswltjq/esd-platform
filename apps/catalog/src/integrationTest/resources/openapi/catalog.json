@@ -77,6 +77,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListPublicationJobResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/PublicationJobResponse"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseProductDetail" : {
         "properties" : {
           "data" : {
@@ -95,6 +112,20 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/ProductPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponsePublicationJobResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PublicationJobResponse"
           },
           "error" : {
             "$ref" : "#/components/schemas/ErrorBody"
@@ -447,6 +478,51 @@
         },
         "type" : "object"
       },
+      "PublicationJobResponse" : {
+        "properties" : {
+          "attemptCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "contentVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "nextAttemptAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "productCode" : {
+            "type" : "string"
+          },
+          "projectId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "requestId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reviewRequestId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sourceEventId" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ReplayedCount" : {
         "properties" : {
           "replayed" : {
@@ -501,6 +577,70 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/admin/catalog-release-jobs" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListPublicationJobResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "publication-job-controller" ]
+      }
+    },
+    "/api/v1/admin/catalog-release-jobs/{requestId}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "requestId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponsePublicationJobResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "publication-job-controller" ]
+      }
+    },
     "/api/v1/admin/products/{code}/downloads/restriction" : {
       "get" : {
         "operationId" : "read",

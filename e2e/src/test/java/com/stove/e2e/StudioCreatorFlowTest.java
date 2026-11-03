@@ -129,7 +129,7 @@ class StudioCreatorFlowTest {
     @Test
     @Order(2)
     void entireZipThumbnailAndStorePageAreRegisteredThroughGateway() throws Exception {
-        assertThat(Stove.gateway.post(project() + "/review-requests", null, creator).status())
+        assertThat(Stove.gateway.post(project() + "/review-requests", ReviewJourney.submission(project(), creator), creator).status())
                 .isEqualTo(409);
         ByteArrayOutputStream image = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "png", image);
@@ -190,7 +190,7 @@ class StudioCreatorFlowTest {
                         "fixture-reviewer"));
         awaitStatus("REJECTED");
         E2eClient.Response history = Stove.gateway.get(project() + "/review-requests", creator);
-        assertThat(history.data().get(0).path("feedback").asText()).isEqualTo("Fix description");
+        assertThat(history.data().path("items").get(0).path("feedback").asText()).isEqualTo("Fix description");
         long previous = reviewRequestId();
         savePage("First title", 1000);
         currentReview = requestReview();
@@ -200,7 +200,7 @@ class StudioCreatorFlowTest {
     @Test
     @Order(4)
     void externalApprovalAllowsOnlyAnOutgoingReleaseRequest() throws Exception {
-        assertThat(Stove.gateway.post(project() + "/release-requests", null, creator).status())
+        assertThat(Stove.gateway.post(project() + "/release-requests", ReviewJourney.submission(project(), creator), creator).status())
                 .isEqualTo(409);
         reportReviewApproval();
         assertThat(data().path("releaseEligible").asBoolean()).isTrue();
@@ -213,7 +213,7 @@ class StudioCreatorFlowTest {
         assertThat(data().has("published")).isFalse();
         assertThat(data().has("status")).isFalse();
         E2eClient.Response history = Stove.gateway.get(project() + "/release-requests", creator);
-        assertThat(history.data().get(0).path("id").asLong()).isEqualTo(firstReleaseRequest);
+        assertThat(history.data().path("items").get(0).path("id").asLong()).isEqualTo(firstReleaseRequest);
     }
 
     @Test
@@ -234,12 +234,13 @@ class StudioCreatorFlowTest {
                 .isEqualTo(409);
         nextBuild = upload("2").path("id").asLong();
         assertThat(data().path("releaseEligible").asBoolean()).isFalse();
-        assertThat(Stove.gateway.post(project() + "/release-requests", null, creator).status())
+        assertThat(Stove.gateway.post(project() + "/release-requests", ReviewJourney.submission(project(), creator), creator).status())
                 .isEqualTo(409);
         assertThat(
                         Stove.gateway
                                 .get(project() + "/release-requests", creator)
                                 .data()
+                                .path("items")
                                 .get(0)
                                 .path("id")
                                 .asLong())
@@ -270,7 +271,7 @@ class StudioCreatorFlowTest {
         reportReleaseCompletion(failed);
         reportReleaseCompletion(retry);
         awaitReleaseResult("COMPLETED");
-        JsonNode history = Stove.gateway.get(project() + "/release-requests", creator).data();
+        JsonNode history = ReviewJourney.listItems(project() + "/release-requests", creator);
         assertThat(history.size()).isEqualTo(3);
         assertThat(history.get(0).path("status").asText()).isEqualTo("COMPLETED");
         assertThat(history.get(1).path("status").asText()).isEqualTo("REJECTED");
@@ -290,9 +291,9 @@ class StudioCreatorFlowTest {
                                         other)
                                 .status())
                 .isEqualTo(403);
-        assertThat(Stove.gateway.post(project() + "/review-requests", null, other).status())
+        assertThat(Stove.gateway.post(project() + "/review-requests", ReviewJourney.submission(project(), other), other).status())
                 .isEqualTo(403);
-        assertThat(Stove.gateway.post(project() + "/release-requests", null, other).status())
+        assertThat(Stove.gateway.post(project() + "/release-requests", ReviewJourney.submission(project(), other), other).status())
                 .isEqualTo(403);
     }
 
@@ -369,7 +370,7 @@ class StudioCreatorFlowTest {
     }
 
     private static JsonNode requestReview() {
-        E2eClient.Response request = Stove.gateway.post(project() + "/review-requests", null, creator);
+        E2eClient.Response request = Stove.gateway.post(project() + "/review-requests", ReviewJourney.submission(project(), creator), creator);
         assertThat(request.status()).as("%s", request).isEqualTo(202);
         return request.data();
     }
@@ -382,7 +383,7 @@ class StudioCreatorFlowTest {
     }
 
     private static JsonNode requestRelease() {
-        E2eClient.Response response = Stove.gateway.post(project() + "/release-requests", null, creator);
+        E2eClient.Response response = Stove.gateway.post(project() + "/release-requests", ReviewJourney.submission(project(), creator), creator);
         assertThat(response.status()).as("%s", response).isEqualTo(202);
         return response.data();
     }

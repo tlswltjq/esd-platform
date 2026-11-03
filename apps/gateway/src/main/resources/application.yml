@@ -126,6 +126,12 @@ spring:
                 - Path=/api/v1/admin/products/*/listing/restriction
                 - Method=GET,PUT
               filters: [RemoveRequestHeader=X-Member-Id]
+            - id: catalog-publication-jobs-admin
+              uri: ${CATALOG_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/admin/catalog-release-jobs,/api/v1/admin/catalog-release-jobs/*
+                - Method=GET
+              filters: [RemoveRequestHeader=X-Member-Id]
             - id: catalog-public
               uri: ${CATALOG_URI:http://localhost:8081}
               predicates:

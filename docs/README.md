@@ -14,6 +14,10 @@
 | [상품 다운로드 제한·저장소 적용](download-restriction-plan.md) | 판매/개인 이용권과 독립한 관리자 제한·과거 URL 차단·실패 재시도 |
 | [상품 검색·목록 노출](catalog-listing-policy-plan.md) | 독립 노출·판매 기반 AUTO 기본값·판매자/관리자 권한·Store 사본과 전체 동기화 |
 | [공개 상세 B와 새 주문 차단](public-product-detail-plan.md) | 숨긴 상품의 상세/새 주문 404·내부 업무 조회 분리·C 확장 경계 |
+| [프로젝트별 단일 심사·명시적 철회 분석](project-review-withdrawal-analysis.md) | 심사·출시 전체 흐름, 최신 철회 정책·검토 대안과 구현·검증 순서 |
+| [단일 심사·출시 철회 구현·검증](project-review-withdrawal-verification.md) | 진행 중 심사/출시 각각 1건, 내구 철회·자동 공개·재시작과 OCI 695건·실제 여정 3건 |
+| [G4 출시·상점·보유자 운영 여정](g4-operations-verification.md) | 9개 서비스의 업데이트·철회·판매/노출/다운로드 제한·Store 복구와 남은 목록/운영 공백 |
+| [Studio 목록 페이지 계약](studio-list-pagination-plan.md) | 직접 전환 A·번호 방식 A·DB 페이지/총건수·일괄 조회와 OCI 103건·실제 여정 10단계 |
 | [전체 기능 일반화 계획](platform-generalization-plan.md) | 현재 사용자 목표, 환불·Payment 평가, 열한 모듈의 공백·권장 실행 순서·일반화 완료 조건 |
 | [도메인·모델 안내](domain/model-guide.md) | 전체 지도, 모델 사전 연결, 한 게임의 출시·구매 사례 |
 | [용어집](domain-glossary.md) | 표준 용어 색인, 헷갈리는 상태·식별자·버전 |
