@@ -369,6 +369,14 @@
           "currency" : {
             "type" : "string"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 1,
+            "type" : "array"
+          },
           "listed" : {
             "type" : "boolean"
           },
@@ -407,6 +415,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "genres" ],
         "type" : "object"
       },
       "ProductPage" : {
@@ -445,6 +454,14 @@
           "currency" : {
             "type" : "string"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 1,
+            "type" : "array"
+          },
           "listed" : {
             "type" : "boolean"
           },
@@ -476,6 +493,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "genres" ],
         "type" : "object"
       },
       "PublicationJobResponse" : {

@@ -14,7 +14,7 @@ Review는 Studio가 제출한 상세정보·전체 빌드 스냅샷과 그에 �
 | reviewRequestId | Studio 요청 ID와 같은 PK. 새 요청마다 새 심사 |
 | requestEventId | 최초 접수 이벤트 ID |
 | projectId·productCode·ownerSubject·contentVersion | 제출 스냅샷에서 고정한 대상·창작자·버전 |
-| snapshot | ProjectSnapshot 전체의 불변 JSON |
+| snapshot | genres 1~3개를 포함한 ProjectSnapshot 전체의 불변 JSON |
 | status | REQUESTED·APPROVED·REJECTED |
 | feedback | 반려 사유, 필수·최대 2000자 |
 | actor·decidedAt | 최초 최종 판정자의 Auth sub와 판정 시각 |
@@ -70,3 +70,5 @@ V1~V9의 SQL 이력은 유지하고 V10에서 새 테이블을 추가했다.
 
 구 ReviewRequest·SubmissionSnapshot·ReviewCase·감사·판정 이력 테이블은 역사 자료다.
 현재 실행 코드와 5개 업무 API는 ProjectReview만 사용한다.
+
+장르가 나중에 선택 중지돼도 이미 제출한 알려진 코드의 심사 근거는 유지한다. 선택 가능 여부는 Studio의 새 심사 제출에서 검사하고 Review는 제출 자료의 알려진 코드·중복·개수 유효성을 검사한다. [장르 계약](../../store-genre-filter-plan.md)을 따른다.

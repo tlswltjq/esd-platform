@@ -17,11 +17,11 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.studio.StudioIntegrationTestBase;
 import com.stove.studio.api.listener.ProjectWithdrawalResultMapper;
 import com.stove.studio.core.domain.project.Project;
-import com.stove.studio.core.domain.project.StudioPage;
 import com.stove.studio.core.domain.project.ProjectRequestCommand;
 import com.stove.studio.core.domain.project.ProjectRequestCommandRepository;
 import com.stove.studio.core.domain.project.ProjectRequestKind;
 import com.stove.studio.core.domain.project.StorePage;
+import com.stove.studio.core.domain.project.StudioPage;
 import com.stove.studio.core.domain.project.SubmissionCommand;
 import com.stove.studio.core.domain.project.WithdrawalCommand;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
@@ -42,6 +42,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -81,7 +82,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
         SubmissionCommand original = new SubmissionCommand("first", project.getContentVersion());
         ProjectReviewRequest first = review.execute(project.getId(), project.getOwnerSubject(), original);
         update.execute(project.getId(), project.getOwnerSubject(), project.getContentVersion(),
-                new StorePage("Changed", "Summary", project.getThumbnailUrl(), null, "Changed description", 1000));
+                new StorePage("Changed", "Summary", project.getThumbnailUrl(), null, "Changed description", 1000, List.of("ACTION")));
         Project current = read.requireOwned(project.getId(), project.getOwnerSubject());
         assertThat(read.reviewRequest(current)).isNull();
         assertThat(read.activeReviewRequest(current).getId()).isEqualTo(first.getId());
@@ -215,7 +216,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
         SubmissionCommand firstIntent = new SubmissionCommand("release-one", project.getContentVersion());
         ProjectReleaseRequest first = release.execute(project.getId(), project.getOwnerSubject(), firstIntent);
         update.execute(project.getId(), project.getOwnerSubject(), project.getContentVersion(),
-                new StorePage("Update", "Summary", project.getThumbnailUrl(), null, "Updated content", 2000));
+                new StorePage("Update", "Summary", project.getThumbnailUrl(), null, "Updated content", 2000, List.of("ACTION")));
         Project current = read.requireOwned(project.getId(), project.getOwnerSubject());
         ProjectReviewRequest nextReview = review.execute(project.getId(), project.getOwnerSubject(),
                 new SubmissionCommand("review-two", current.getContentVersion()));
@@ -292,7 +293,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
         ImageIO.write(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB), "png", image);
         thumbnail.execute(id, owner, new ByteArrayInputStream(image.toByteArray()));
         Project project = read.requireOwned(id, owner);
-        update.execute(id, owner, project.getContentVersion(), new StorePage("Game", "Summary", project.getThumbnailUrl(), null, "Content", 1000));
+        update.execute(id, owner, project.getContentVersion(), new StorePage("Game", "Summary", project.getThumbnailUrl(), null, "Content", 1000, List.of("ACTION")));
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
             zip.putNextEntry(new ZipEntry("game.txt")); zip.write(new byte[] {1, 2, 3}); zip.closeEntry();

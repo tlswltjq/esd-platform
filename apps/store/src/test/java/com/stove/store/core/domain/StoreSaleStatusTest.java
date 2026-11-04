@@ -4,9 +4,9 @@ import static com.stove.store.StoreFixtures.product;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
@@ -47,8 +47,24 @@ class StoreSaleStatusTest {
     }
 
     private CatalogProductSnapshot sales(CatalogProductSnapshot p, String status, long version) {
-        return new CatalogProductSnapshot(p.productId(), p.productCode(), p.title(), p.shortDescription(),
-                p.thumbnailUrl(), p.price(), p.currency(), p.publishedAt(), p.content(), p.videoUrl(),
-                p.contentVersion(), p.buildVersion(), p.updatedAt(), status, version);
+        return new CatalogProductSnapshot(
+                p.productId(),
+                p.productCode(),
+                p.title(),
+                p.shortDescription(),
+                p.thumbnailUrl(),
+                p.price(),
+                p.currency(),
+                p.publishedAt(),
+                p.content(),
+                p.videoUrl(),
+                p.contentVersion(),
+                p.buildVersion(),
+                p.updatedAt(),
+                status,
+                version,
+                "ON_SALE".equals(status),
+                p.genres()
+        );
     }
 }

@@ -91,7 +91,9 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                         "1",
                         10,
                         "a".repeat(64),
-                        "s3://stove-builds/build.zip");
+                        "s3://stove-builds/build.zip",
+                        List.of("ACTION")
+                );
         ProjectReviewRequestedEvent conflict = ProjectReviewRequestedEvent.of(id, changed);
         assertThatThrownBy(() -> receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(conflict), conflict)))
                 .isInstanceOf(BusinessException.class);

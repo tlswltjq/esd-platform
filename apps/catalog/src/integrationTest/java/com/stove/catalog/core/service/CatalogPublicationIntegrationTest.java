@@ -183,7 +183,9 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
                         s.version(),
                         s.fileSize(),
                         s.checksum(),
-                        s.storagePath());
+                        s.storagePath(),
+                        s.genres()
+                );
         ProjectReleaseRequestedEvent sameVersion = ProjectReleaseRequestedEvent.of(id(), id(), changed);
         assertThatThrownBy(() -> send(sameVersion)).isInstanceOf(BusinessException.class);
         ProjectReleaseRequestedEvent sameEvent =

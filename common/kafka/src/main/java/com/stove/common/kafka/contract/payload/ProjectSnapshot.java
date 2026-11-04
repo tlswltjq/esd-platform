@@ -1,5 +1,8 @@
 package com.stove.common.kafka.contract.payload;
 
+import java.util.Comparator;
+import java.util.List;
+
 /** One immutable store page and full build submitted for review. */
 public record ProjectSnapshot(
         Long projectId,
@@ -17,4 +20,9 @@ public record ProjectSnapshot(
         String version,
         long fileSize,
         String checksum,
-        String storagePath) {}
+        String storagePath,
+        List<String> genres) {
+    public ProjectSnapshot {
+        if (genres != null) genres = genres.stream().sorted(Comparator.nullsFirst(Comparator.naturalOrder())).toList();
+    }
+}

@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -106,6 +107,10 @@ final class ReviewJourney {
     }
 
     static void page(long id, Account creator, String title, long price) {
+        page(id, creator, title, price, List.of("ACTION", "RPG"));
+    }
+
+    static void page(long id, Account creator, String title, long price, List<String> genres) {
         JsonNode p = data(id, creator);
         Map<String, Object> page =
                 Map.of(
@@ -122,7 +127,7 @@ final class ReviewJourney {
                         "content",
                         "Submitted content for " + title,
                         "price",
-                        price);
+                        price, "genres", genres);
         assertThat(Stove.gateway.put(path(id) + "/store-page", page, creator.headers()).status())
                 .isEqualTo(200);
     }

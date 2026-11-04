@@ -6,6 +6,10 @@ import com.stove.store.api.controller.dto.StoreProductDetail;
 import com.stove.store.api.controller.dto.StoreProductPage;
 import com.stove.store.core.service.ReadStoreProduct;
 import com.stove.store.core.service.SearchStoreProducts;
+import java.util.List;
+import jakarta.servlet.http.HttpServletRequest;
+import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -24,8 +28,11 @@ public class StoreController {
     @GetMapping
     public ResponseEntity<ApiResponse<StoreProductPage>> search(@RequestParam(required = false) String q,
             @RequestParam(defaultValue = "NEWEST") String sort,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(StoreProductPage.from(searchStoreProducts.execute(q, sort, page, size))));
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) List<String> genres, HttpServletRequest request) {
+        if (request.getParameterMap().containsKey("genres") && (genres == null || genres.isEmpty()))
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "장르 검색 조건이 비어 있습니다.");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(StoreProductPage.from(searchStoreProducts.execute(q, sort, page, size, genres))));
     }
     @GetMapping("/{productCode}")
     public ResponseEntity<ApiResponse<StoreProductDetail>> detail(@PathVariable String productCode) {

@@ -1,6 +1,23 @@
 {
   "components" : {
     "schemas" : {
+      "ApiResponseListGenreDefinition" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/GenreDefinition"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseStoreProductDetail" : {
         "properties" : {
           "data" : {
@@ -40,6 +57,20 @@
         },
         "type" : "object"
       },
+      "GenreDefinition" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "selectable" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "StoreProductDetail" : {
         "properties" : {
           "buildVersion" : {
@@ -58,6 +89,14 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 1,
+            "type" : "array"
           },
           "listed" : {
             "type" : "boolean"
@@ -97,6 +136,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "genres" ],
         "type" : "object"
       },
       "StoreProductPage" : {
@@ -135,6 +175,14 @@
           "currency" : {
             "type" : "string"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 1,
+            "type" : "array"
+          },
           "listed" : {
             "type" : "boolean"
           },
@@ -166,6 +214,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "genres" ],
         "type" : "object"
       }
     }
@@ -177,6 +226,24 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/storefront/genres" : {
+      "get" : {
+        "operationId" : "list",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGenreDefinition"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "genre-controller" ]
+      }
+    },
     "/api/v1/storefront/products" : {
       "get" : {
         "operationId" : "search",
@@ -212,6 +279,16 @@
             "default" : 20,
             "format" : "int32",
             "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "genres",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         } ],
         "responses" : {

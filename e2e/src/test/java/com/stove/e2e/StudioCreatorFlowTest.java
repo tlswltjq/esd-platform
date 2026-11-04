@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -334,7 +335,7 @@ class StudioCreatorFlowTest {
                 "content",
                 "Description",
                 "price",
-                price);
+                price, "genres", List.of("ACTION", "RPG"));
     }
 
     private static void savePage(String title, long price) {

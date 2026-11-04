@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.response.ApiResponse;
 import com.stove.store.config.CatalogClientConfiguration;
@@ -13,14 +14,14 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class CatalogHttpClientTest {
     @Test void readsExistingPublicEnvelopesWithoutDependingOnCatalogClasses() throws Exception {
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules().disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         CatalogProductSnapshot product = product(1, 3, "한글 게임", 2000);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicBoolean redirect = new AtomicBoolean();
@@ -36,7 +37,8 @@ class CatalogHttpClientTest {
             key.set(exchange.getRequestHeaders().getFirst("X-Store-Service-Key"));
             path.set(exchange.getRequestURI().getPath());
             Object data = exchange.getRequestURI().getPath().startsWith("/internal/v1/store-products/") ? product
-                    : Map.of("content", List.of(Map.of("productCode", product.productCode())));
+                    : Map.of("content", List.of(Map.of("productCode", product.productCode())), "page", 0, "size", 100,
+                            "totalElements", 1, "totalPages", 1);
             byte[] body = mapper.writeValueAsBytes(ApiResponse.ok(data));
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, body.length);

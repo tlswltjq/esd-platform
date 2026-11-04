@@ -18,6 +18,8 @@
 | [단일 심사·출시 철회 구현·검증](project-review-withdrawal-verification.md) | 진행 중 심사/출시 각각 1건, 내구 철회·자동 공개·재시작과 OCI 695건·실제 여정 3건 |
 | [G4 출시·상점·보유자 운영 여정](g4-operations-verification.md) | 9개 서비스의 업데이트·철회·판매/노출/다운로드 제한·Store 복구와 남은 목록/운영 공백 |
 | [Studio 목록 페이지 계약](studio-list-pagination-plan.md) | 직접 전환 A·번호 방식 A·DB 페이지/총건수·일괄 조회와 OCI 103건·실제 여정 10단계 |
+| [Store 자동 동기화·복구 계획](store-auto-reconciliation-plan.md) | 자동 초기화 재시도·주기 대조·동일 버전 교정과 Store 95건·실제 여정 11단계 검증 |
+| [상점 장르 분류·필터 계획](store-genre-filter-plan.md) | 코드 관리 장르 10개·심사/출시·AND 검색·정본 교정과 OCI 676건·실제 여정 12단계 |
 | [전체 기능 일반화 계획](platform-generalization-plan.md) | 현재 사용자 목표, 환불·Payment 평가, 열한 모듈의 공백·권장 실행 순서·일반화 완료 조건 |
 | [도메인·모델 안내](domain/model-guide.md) | 전체 지도, 모델 사전 연결, 한 게임의 출시·구매 사례 |
 | [용어집](domain-glossary.md) | 표준 용어 색인, 헷갈리는 상태·식별자·버전 |

@@ -379,6 +379,14 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 1,
+            "type" : "array"
+          },
           "ownerSubject" : {
             "type" : "string"
           },
@@ -409,6 +417,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "genres" ],
         "type" : "object"
       }
     },

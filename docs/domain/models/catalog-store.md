@@ -29,7 +29,7 @@ Store는 이 공개 데이터의 검색·조회 사본을 MySQL에 저장한다.
 |---|---|
 | releaseRequestId·requestEventId·reviewRequestId | Studio 원본 출시 요청·이벤트·승인된 심사 연결 |
 | projectId·productCode·contentVersion | 요청의 Project·상품 코드·자료 버전 |
-| snapshot | 요청 당시 ProjectSnapshot 전체. 이후 변경하지 않음 |
+| snapshot | genres 1~3개를 포함한 요청 당시 ProjectSnapshot 전체. 이후 변경하지 않음 |
 | status·reason | COMPLETED 또는 REJECTED, 거절 시 사유 |
 | requestedAt·processedAt | 원본 이벤트 발생 시각과 Catalog 처리 시각 |
 
@@ -50,6 +50,7 @@ COMPLETED 기록은 공개 가능한 불변 스냅샷이며 현재 상품의 참
 | productId·productCode | Catalog의 상품 식별자·코드. Store는 자체 ID를 발급하지 않음 |
 | contentVersion | Catalog가 공개한 자료 버전. 사본 교체의 신구 판단 기준 |
 | title·shortDescription·content·thumbnailUrl·videoUrl | 공개된 소개 자료 |
+| genres | store_product_genre에 저장한 공개 장르 집합. 복수 조건을 모두 포함하는 AND 검색에 사용 |
 | price·currency | 공개 KRW 정가. 할인이나 구매 가능 여부를 계산하지 않음 |
 | buildVersion | 공개 빌드의 표시 버전. 파일 경로·다운로드 권한은 소유하지 않음 |
 | publishedAt·updatedAt | Catalog 최초 공개 시각·공개본 변경 시각 |
@@ -63,3 +64,5 @@ Store가 초기화에 성공한 뒤 Catalog가 중단돼도 저장한 사본을 
 주기적 자동 대조는 없고 재시작하면 기존 목록·상세 API를 다시 읽는다.
 검색 저장소·캐시·featured·프로모션을 다루던 구 모델은 제거했다.
 검증과 수동 예제는 [Store 실행 안내](../../store-guide.md)를 따른다.
+
+장르도 승인 스냅샷→Catalog 공개 이벤트/내부 정본→Store 사본으로 전달한다. 검색의 장르 조건은 페이지와 총건수 계산 전에 적용하고, 같은 버전의 장르 사본 변조는 검증한 정본으로 교정·감사한다. [장르 계약](../../store-genre-filter-plan.md)을 따른다.

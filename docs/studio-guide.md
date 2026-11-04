@@ -69,7 +69,7 @@ curl -sS "$BASE/api/v1/studio/projects/$PROJECT_ID" \
 ~~~
 
 마지막 조회의 data.contentVersion과 data.storePage.thumbnailUrl을 사용해 상점 내용을 PUT으로 수정한다.
-상점 요청 JSON에는 contentVersion, title, shortDescription, thumbnailUrl, videoUrl, content, price를 넣는다.
+상점 요청 JSON에는 contentVersion, title, shortDescription, thumbnailUrl, videoUrl, content, price, genres를 넣는다. genres는 배열이며 작업본은 []로 저장할 수 있고 새 심사 제출에는 선택 가능한 장르 1~3개가 필요하다. CREATOR GET /api/v1/studio/genres에서 코드·표시명·선택 가능 여부를 조회한다.
 영상은 선택값이며 가격은 0 이상의 KRW 정수다. 오래된 contentVersion은 409다.
 
 조회한 값을 CONTENT_VERSION과 THUMBNAIL_URL에 저장한 뒤 상점 내용을 작성한다.
@@ -77,8 +77,10 @@ curl -sS "$BASE/api/v1/studio/projects/$PROJECT_ID" \
 ~~~bash
 curl -sS -X PUT "$BASE/api/v1/studio/projects/$PROJECT_ID/store-page" \
   -H "Authorization: Bearer $CREATOR_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"contentVersion\":$CONTENT_VERSION,\"title\":\"내 게임\",\"shortDescription\":\"게임 소개\",\"thumbnailUrl\":\"$THUMBNAIL_URL\",\"videoUrl\":null,\"content\":\"게임 상세 설명\",\"price\":10000}"
+  -d "{\"contentVersion\":$CONTENT_VERSION,\"title\":\"내 게임\",\"shortDescription\":\"게임 소개\",\"thumbnailUrl\":\"$THUMBNAIL_URL\",\"videoUrl\":null,\"content\":\"게임 상세 설명\",\"price\":10000,\"genres\":[\"ACTION\",\"RPG\"]}"
 ~~~
+
+장르만 수정해도 작업본 버전이 증가하고 새 심사 승인 후 출시 요청으로 공개본에 반영한다.
 
 내용이 준비되면 프로젝트를 다시 조회해 최신 contentVersion을 CONTENT_VERSION에 저장하고 심사를 요청한다.
 requestId는 논리적인 요청마다 새로 만들고, 응답 유실 등의 재전송에는 같은 requestId와 contentVersion을 사용한다.

@@ -8,9 +8,14 @@ import xml.etree.ElementTree as ET
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-g4-operations-"))
 project=directory.name
-offset=int(os.environ.get("G4_TEST_PORT_OFFSET","43000"))
+offset=int(os.environ.get("G4_TEST_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,
       "store":8087,"order":8082,"license":8084,"download":8088}
+ephemeral_file=Path("/proc/sys/net/ipv4/ip_local_port_range")
+if ephemeral_file.exists():
+    ephemeral_start,ephemeral_end=map(int,ephemeral_file.read_text().split())
+    if any(ephemeral_start<=port+offset<=ephemeral_end for port in apps.values()):
+        raise RuntimeError("Application ports overlap the host ephemeral range; choose another G4_TEST_PORT_OFFSET")
 allocated_ports=set()
 container_ids=subprocess.check_output(["docker","ps","-q"],text=True).split()
 if container_ids:
@@ -157,7 +162,8 @@ try:
     secret_file.touch(mode=0o600)
     secret_file.write_text(json.dumps({"paymentOrderServiceKey":keys["PAYMENT_ORDER_SERVICE_KEY"]}))
     common.update(keys)
-    common.update(CATALOG_BASE_URL=f"http://127.0.0.1:{8081+offset}", LICENSE_BASE_URL=f"http://127.0.0.1:{8084+offset}",
+    common.update(STORE_SYNC_RECONCILE_INTERVAL="PT2S", STORE_SYNC_RETRY_DELAY="PT1S", STORE_SYNC_POLL_INTERVAL_MS="100",
+                  CATALOG_BASE_URL=f"http://127.0.0.1:{8081+offset}", LICENSE_BASE_URL=f"http://127.0.0.1:{8084+offset}",
                   STORAGE_BUCKET="stove-builds",DOWNLOAD_BUILD_URL_TTL="PT15M",
                   DOWNLOAD_STORAGE_ACCESS_KEY="download-reader",DOWNLOAD_STORAGE_SECRET_KEY="g4-isolated-storage-password",
                   CATALOG_DOWNLOAD_STORAGE_ENABLED="true",CATALOG_DOWNLOAD_STORAGE_ENDPOINT=f"http://127.0.0.1:{ports['minio']}",
@@ -219,6 +225,7 @@ try:
             raise RuntimeError("HTTP bootstrap lost hidden product or current build")
         (directory/(label+"-projection.json")).write_text(json.dumps(rows,indent=2))
     phase("publishesAndPreparesOwnedAndPendingOrders")
+    phase("genreOnlyUpdateRequiresApprovalAndAndSearchMatchesAll")
     stop_app("catalog")
     start_app("catalog",["--stove.catalog.publication.worker-enabled=false"])
     wait_for(apps_ready,"Catalog with paused publication worker",180)
@@ -230,23 +237,53 @@ try:
     phase("enforcesIndependentSalesAndListingControls")
     phase("restrictsHistoricalUrlsAndNewlyPublishedBuildIndependently")
     stop_app("store")
-    subprocess.run(docker+["exec","-T","mysql","mysql","-ustove","-pstove1234","-e","TRUNCATE TABLE stove_store.store_product"],check=True,stdout=subprocess.DEVNULL)
+    subprocess.run(docker+["exec","-T","mysql","mysql","-ustove","-pstove1234","-e","DELETE FROM stove_store.store_product"],check=True,stdout=subprocess.DEVNULL)
     start_app("store",["--spring.kafka.listener.auto-startup=false"])
     wait_for(apps_ready,"Store rebuilding empty projection with Kafka disabled",180)
     phase("hiddenProjectionSurvivesHttpBootstrap")
     projection("rebuilt")
+    state=json.loads((directory/"private.json").read_text())
+    main_code=state["code"]
+    control_code=state["controlCode"]
+    if not all(code and all(char.isalnum() or char=='-' for char in code) for code in (main_code,control_code)):
+        raise RuntimeError("Invalid generated fixture code")
+    def sql(query):
+        result=subprocess.run(docker+["exec","-T","mysql","mysql","-N","-B","--raw","-ustove","-pstove1234","-e",query],
+                              capture_output=True,text=True,check=True)
+        return [line.split("\t") for line in result.stdout.splitlines()]
+    audit_start=int(sql("SELECT COALESCE(MAX(id),0) FROM stove_store.store_reconciliation")[0][0])
+    damaged=sql("START TRANSACTION; DELETE FROM stove_store.store_product WHERE product_code='"+control_code+
+                "'; UPDATE stove_store.store_product SET price=1,listed=TRUE,title='Injected projection mismatch' WHERE product_code='"+main_code+
+                "'; DELETE FROM stove_store.store_product_genre WHERE product_id=(SELECT product_id FROM stove_store.store_product WHERE product_code='"+main_code+
+                "'); INSERT INTO stove_store.store_product_genre SELECT product_id,'PUZZLE' FROM stove_store.store_product WHERE product_code='"+main_code+
+                "'; SELECT catalog_version,price,listed FROM stove_store.store_product WHERE product_code='"+main_code+"'; COMMIT;")
+    if len(damaged)!=1 or damaged[0][1:]!=['1','1']: raise RuntimeError("Projection mismatch injection failed")
+    phase("automaticReconciliationRepairsMissingAndSameVersionProjection")
+    corrected=sql("SELECT catalog_version,price,listed FROM stove_store.store_product WHERE product_code='"+main_code+"'")
+    repairs=sql("SELECT action,product_code,JSON_UNQUOTE(JSON_EXTRACT(before_snapshot,'$.price')),"
+                "JSON_UNQUOTE(JSON_EXTRACT(after_snapshot,'$.price')),catalog_version,"
+                "JSON_EXTRACT(before_snapshot,'$.genres'),JSON_EXTRACT(after_snapshot,'$.genres') FROM stove_store.store_reconciliation "
+                "WHERE id>"+str(audit_start)+" ORDER BY id")
+    if corrected!=[[damaged[0][0],'2500','0']]: raise RuntimeError("Same-version canonical repair failed")
+    if not any(row[0]=='REPAIRED' and row[1]==main_code and row[2:4]==['1','2500'] and row[4]==damaged[0][0] for row in repairs):
+        raise RuntimeError("Atomic repair evidence missing")
+    if not any(row[0]=='REPAIRED' and row[1]==main_code and json.loads(row[5])==['PUZZLE'] and json.loads(row[6])==['ACTION','RPG'] for row in repairs):
+        raise RuntimeError("Atomic genre repair evidence missing")
+    if not any(row[0]=='INSERTED' and row[1]==control_code for row in repairs): raise RuntimeError("Automatic missing projection repair missing")
+    (directory/"automatic-reconciliation.json").write_text(json.dumps({"before":damaged,"after":corrected,"audit":repairs},indent=2))
     stop_app("catalog")
     phase("servesCachedSnapshotDuringCatalogOutage")
     stop_app("store")
     start_app("store",["--spring.kafka.listener.auto-startup=false"])
     wait_for(apps_ready,"Store started during Catalog outage",180)
     phase("failedBootstrapIsUnavailable")
+    recovering_store=next(process.pid for app,process,log in processes if app=="store")
     start_app("catalog")
     wait_for(apps_ready,"Catalog recovered",180)
-    stop_app("store")
-    start_app("store",["--spring.kafka.listener.auto-startup=false"])
-    wait_for(apps_ready,"Store bootstrap retry",180)
     phase("bootstrapRetryRecoversBothVisibilityStates")
+    recovered_store=next(process.pid for app,process,log in processes if app=="store")
+    if recovering_store!=recovered_store: raise RuntimeError("Store was restarted during automatic recovery")
+    (directory/"automatic-recovery.json").write_text(json.dumps({"storePidBefore":recovering_store,"storePidAfter":recovered_store,"restarted":False},indent=2))
     projection("recovered")
     stop_app("store")
     start_app("store")
@@ -256,7 +293,7 @@ try:
     safe={key:state[key] for key in ["project","controlProject","code","controlCode","paidOrder","sellerOrder","adminOrder", "paymentEvidence","withdrawnRelease","survivingRelease","latestPendingOrder","finalProduct"]}
     safe["licenseUnchanged"]=True
     (directory/"journey-summary.json").write_text(json.dumps(safe,indent=2))
-    print("PASS: G4 nine-app operations, 10 phases; synthetic payment result, no PG calls",flush=True)
+    print("PASS: G4 nine-app operations, 12 phases including genre approval/AND search and automatic repair/recovery; synthetic payment result, no PG calls",flush=True)
 finally:
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:

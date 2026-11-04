@@ -3,18 +3,26 @@ package com.stove.studio.core.domain.project;
 import com.stove.common.jpa.BaseTimeEntity;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
 @Getter
@@ -50,6 +58,14 @@ public class Project extends BaseTimeEntity {
     @Column(nullable = false)
     private long price;
 
+    @BatchSize(size = 100)
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "studio_project_genre", joinColumns = @JoinColumn(name = "project_id"))
+    @Column(name = "genre_code", nullable = false, length = 32)
+    private Set<String> genres = new HashSet<>();
+
+    public List<String> getGenres() { return genres.stream().sorted().toList(); }
+
     private Long currentBuildId;
 
     @Column(nullable = false)
@@ -80,7 +96,7 @@ public class Project extends BaseTimeEntity {
     }
 
     public StorePage storePage() {
-        return new StorePage(title, shortDescription, thumbnailUrl, videoUrl, content, price);
+        return new StorePage(title, shortDescription, thumbnailUrl, videoUrl, content, price, getGenres());
     }
 
     public void update(StorePage page, long expected) {
@@ -92,6 +108,8 @@ public class Project extends BaseTimeEntity {
         videoUrl = page.videoUrl();
         content = page.content();
         price = page.price();
+        genres.clear();
+        genres.addAll(page.genres());
         changed();
     }
 
@@ -108,6 +126,7 @@ public class Project extends BaseTimeEntity {
     }
 
     public void requireReady() {
+        ProjectGenreValues.requireSubmission(getGenres());
         if (title.isBlank()
                 || shortDescription.isBlank()
                 || content.isBlank()

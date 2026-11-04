@@ -5,6 +5,7 @@ import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import com.stove.store.core.domain.StoreProductValues;
 import java.util.Objects;
 
 public final class CatalogProductMapper {
@@ -21,6 +22,7 @@ public final class CatalogProductMapper {
                     && !"BLOCKED".equals(event.product().saleStatus()))
                 || event.product().catalogVersion() < event.product().contentVersion())
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "공개 상품 이벤트 계약이 올바르지 않습니다.");
+        StoreProductValues.requireSnapshot(event.product());
         return event.product();
     }
 }

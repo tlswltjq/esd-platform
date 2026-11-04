@@ -8,9 +8,9 @@ import com.stove.studio.StudioIntegrationTestBase;
 import com.stove.studio.core.domain.build.Build;
 import com.stove.studio.core.domain.build.BuildRepository;
 import com.stove.studio.core.domain.project.Project;
+import com.stove.studio.core.domain.project.StorePage;
 import com.stove.studio.core.domain.project.StudioPage;
 import com.stove.studio.core.domain.project.SubmissionCommand;
-import com.stove.studio.core.domain.project.StorePage;
 import com.stove.studio.core.domain.release.ProjectReleaseRequest;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;
 import com.stove.studio.core.domain.review.ProjectReviewRequest;
@@ -35,8 +35,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
@@ -68,7 +68,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 id,
                 owner,
                 p.getContentVersion(),
-                new StorePage("Game", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
+                new StorePage("Game", "Summary", p.getThumbnailUrl(), null, "Content", 1000, List.of("ACTION")));
         Build build = upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(storage.size(build.getStoragePath())).isEqualTo(build.getFileSize());
         ProjectReviewRequest request = review.execute(id, owner, submission(id, owner));
@@ -85,8 +85,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 id,
                 owner,
                 p.getContentVersion(),
-                new StorePage(
-                        "Updated", "Summary", p.getThumbnailUrl(), null, "Updated content", 2000));
+                new StorePage("Updated", "Summary", p.getThumbnailUrl(), null, "Updated content", 2000, List.of("ACTION")));
         Build nextBuild = upload.execute(id, owner, "2", "game.zip", new ByteArrayInputStream(zip()));
         assertThat(read.snapshot(request).title()).isEqualTo("Game");
         assertThat(read.reviewRequest(read.requireOwned(id, owner))).isNull();
@@ -130,7 +129,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 id,
                 owner,
                 p.getContentVersion(),
-                new StorePage("First", "Summary", p.getThumbnailUrl(), null, "Content", 1000));
+                new StorePage("First", "Summary", p.getThumbnailUrl(), null, "Content", 1000, List.of("ACTION")));
         upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
         ProjectReviewRequest old = review.execute(id, owner, submission(id, owner));
         p = read.requireOwned(id, owner);
@@ -138,7 +137,7 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
                 id,
                 owner,
                 p.getContentVersion(),
-                new StorePage("Second", "Summary", p.getThumbnailUrl(), null, "Changed", 2000));
+                new StorePage("Second", "Summary", p.getThumbnailUrl(), null, "Changed", 2000, List.of("ACTION")));
         decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", old.getId(), id, old.getContentVersion(), true, null, "external-reviewer"));
         Project current = read.requireOwned(id, owner);
         assertThat(current.getTitle()).isEqualTo("Second");
@@ -148,6 +147,39 @@ class ProjectRequestIntegrationTest extends StudioIntegrationTestBase {
         ProjectReviewRequest next = review.execute(id, owner, submission(id, owner));
         assertThat(next.getId()).isNotEqualTo(old.getId());
         assertThat(read.snapshot(next).title()).isEqualTo("Second");
+    }
+
+    @Test
+    void genreOnlyChangeNeedsANewApprovalAndKeepsTheOriginalSubmission() throws Exception {
+        String owner = "genre-owner-" + UUID.randomUUID();
+        Long id = create.execute(owner, "GENRE-" + UUID.randomUUID(), "Game").getId();
+        thumbnail.execute(id, owner, new ByteArrayInputStream(png()));
+        upload.execute(id, owner, "1", "game.zip", new ByteArrayInputStream(zip()));
+        Project project = read.requireOwned(id, owner);
+        update.execute(id, owner, project.getContentVersion(), new StorePage("Game", "Summary", project.getThumbnailUrl(), null,
+                "Content", 1000, List.of()));
+        assertThatThrownBy(() -> review.execute(id, owner, submission(id, owner))).isInstanceOf(BusinessException.class);
+        project = read.requireOwned(id, owner);
+        update.execute(id, owner, project.getContentVersion(), new StorePage("Game", "Summary", project.getThumbnailUrl(), null,
+                "Content", 1000, List.of("ACTION", "RPG")));
+        ProjectReviewRequest first = review.execute(id, owner, submission(id, owner));
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", first.getId(), id,
+                first.getContentVersion(), true, null, "reviewer"));
+        project = read.requireOwned(id, owner);
+        Long originalBuild = project.getCurrentBuildId();
+        update.execute(id, owner, project.getContentVersion(), new StorePage("Game", "Summary", project.getThumbnailUrl(), null,
+                "Content", 1000, List.of("ACTION", "PUZZLE")));
+        assertThatThrownBy(() -> release.execute(id, owner, submission(id, owner))).isInstanceOf(BusinessException.class);
+        assertThat(read.snapshot(first).genres()).containsExactly("ACTION", "RPG");
+        ProjectReviewRequest second = review.execute(id, owner, submission(id, owner));
+        assertThat(read.snapshot(second).buildId()).isEqualTo(originalBuild);
+        assertThat(read.snapshot(second).genres()).containsExactly("ACTION", "PUZZLE");
+        decision.execute(new ProjectReviewResult(UUID.randomUUID().toString(), "ProjectReviewApproved", second.getId(), id,
+                second.getContentVersion(), true, null, "reviewer"));
+        ProjectReleaseRequest accepted = release.execute(id, owner, submission(id, owner));
+        assertThat(accepted.getReviewRequestId()).isEqualTo(second.getId());
+        assertThat(jdbc.queryForList("SELECT genre_code FROM studio_project_genre WHERE project_id=? ORDER BY genre_code", String.class, id))
+                .containsExactly("ACTION", "PUZZLE");
     }
 
     private SubmissionCommand submission(Long id, String owner) {

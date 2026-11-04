@@ -104,7 +104,7 @@ class ProjectAccessTest {
                                 .header("Authorization", "Bearer creator")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
-                                        "{\"contentVersion\":1,\"title\":\"Game\",\"shortDescription\":\"Summary\",\"content\":\"Content\",\"price\":1000.5}"))
+                                        "{\"contentVersion\":1,\"title\":\"Game\",\"shortDescription\":\"Summary\",\"content\":\"Content\",\"price\":1000.5,\"genres\":[\"ACTION\"]}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(update);
     }

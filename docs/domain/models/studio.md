@@ -32,9 +32,12 @@ Workspace와 sellerId 매핑은 제거했다. 미완료 모듈은 설계·검증
 |---|---|
 | id, productCode, ownerSubject | Project와 Auth 소유자 식별 |
 | title, shortDescription, thumbnailUrl, videoUrl, content, price | 관리하는 출시 상세정보 |
+| genres | studio_project_genre에 저장하는 순위 없는 장르 집합. 작업본 0~3개·새 심사 제출 시 선택 가능한 코드 1~3개 |
 | currentBuildId, contentVersion | 대표 전체 빌드와 상세정보 버전 |
 | currentReviewRequestId, currentReleaseRequestId | 가장 최근에 발행한 요청 참조 |
 | entityVersion | DB 동시 수정 충돌 감지 |
+
+장르만 수정해도 contentVersion이 증가한다. 입력 순서만 바꾸면 같은 집합으로 취급한다. 장르 기준 목록·선택 중지·AND 검색은 [장르 계약](../../store-genre-filter-plan.md)을 따른다.
 
 Project의 승인·출시 상태와 공개본 참조는 없다. 상세정보 수정에는 현재 contentVersion을 보내며 오래된 편집은 409다.
 처리 중인 요청이 있어도 상세정보를 수정할 수 있다. 변경된 버전은 새 심사 결과가 필요하다.

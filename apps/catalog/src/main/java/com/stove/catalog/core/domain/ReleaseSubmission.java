@@ -23,6 +23,7 @@ public record ReleaseSubmission(String eventId, String eventType, Instant occurr
                 || s.fileSize() <= 0 || s.checksum() == null || !s.checksum().matches("[a-fA-F0-9]{64}")
                 || !text(s.storagePath(), 2000) || !s.storagePath().startsWith("s3://"))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "출시 접수 정보가 올바르지 않습니다.");
+        ReleaseGenreValues.requirePublished(s.genres());
     }
 
     private static boolean text(String value, int max) {

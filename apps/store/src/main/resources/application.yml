@@ -49,7 +49,10 @@ stove:
     catalog-service-key: ${CATALOG_STORE_SERVICE_KEY:}
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     sync:
-      enabled: true
+      enabled: ${STORE_SYNC_ENABLED:true}
+      poll-interval-ms: ${STORE_SYNC_POLL_INTERVAL_MS:1000}
+      retry-delay: ${STORE_SYNC_RETRY_DELAY:PT5S}
+      reconcile-interval: ${STORE_SYNC_RECONCILE_INTERVAL:PT1M}
   messaging:
     ops:
       enabled: false

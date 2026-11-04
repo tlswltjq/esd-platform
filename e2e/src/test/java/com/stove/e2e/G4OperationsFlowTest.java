@@ -41,7 +41,7 @@ class G4OperationsFlowTest {
         Project control = ReviewJourney.project(creator);
         String suffix = UUID.randomUUID().toString();
         ReviewJourney.page(project.id(), creator, "G4Main-" + suffix, 1000);
-        ReviewJourney.page(control.id(), creator, "G4Control-" + suffix, 700);
+        ReviewJourney.page(control.id(), creator, "G4Control-" + suffix, 700, List.of("ACTION"));
         publish(project.id(), creator);
         publish(control.id(), creator);
         ObjectNode state = ReviewJourney.JSON.createObjectNode();
@@ -79,6 +79,48 @@ class G4OperationsFlowTest {
         Map<String, String> forged = new HashMap<>(fresh.headers());
         forged.put("X-Member-Id", buyer.subject());
         assertThat(Stove.gateway.get(download(state), forged).status()).isEqualTo(403);
+        save(state);
+    }
+
+    @Test
+    void genreOnlyUpdateRequiresApprovalAndAndSearchMatchesAll() throws Exception {
+        ObjectNode state = saved();
+        Account creator = actor(state, "creatorEmail");
+        long project = state.path("project").asLong();
+        E2eClient.Response vocabulary = Stove.gateway.get("/api/v1/storefront/genres");
+        assertThat(vocabulary.status()).isEqualTo(200);
+        assertThat(vocabulary.data().size()).isEqualTo(10);
+        assertThat(Stove.gateway.get("/api/v1/studio/genres", creator.headers()).data()).isEqualTo(vocabulary.data());
+        assertThat(Stove.gateway.get("/api/v1/studio/genres").status()).isEqualTo(401);
+        assertThat(Stove.gateway.get("/api/v1/studio/genres", actor(state, "buyerEmail").headers()).status()).isEqualTo(403);
+        JsonNode filtered = Stove.gateway.get("/api/v1/storefront/products?genres=ACTION&genres=RPG&size=1").data();
+        assertThat(filtered.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(filtered.path("content").get(0).path("productCode").asText()).isEqualTo(code(state));
+        assertThat(Stove.gateway.get("/api/v1/storefront/products?genres=UNKNOWN").status()).isEqualTo(400);
+        JsonNode before = ReviewJourney.data(project, creator);
+        List<String> genres = List.of("ACTION", "PUZZLE");
+        ReviewJourney.page(project, creator, state.path("firstProduct").path("title").asText(), 1000, genres);
+        JsonNode changed = ReviewJourney.data(project, creator);
+        assertThat(changed.path("contentVersion").asLong()).isEqualTo(before.path("contentVersion").asLong() + 1);
+        assertThat(changed.path("currentBuildId")).isEqualTo(before.path("currentBuildId"));
+        assertThat(changed.path("releaseEligible").asBoolean()).isFalse();
+        assertThat(Stove.gateway.post(ReviewJourney.path(project) + "/release-requests",
+                ReviewJourney.submission(ReviewJourney.path(project), creator.headers()), creator.headers()).status()).isEqualTo(409);
+        assertThat(matches(code(state))).isEqualTo(state.path("firstProduct"));
+        Account reviewer = reviewer();
+        long review = ReviewJourney.request(project, creator, reviewer);
+        JsonNode submitted = Stove.gateway.get(ReviewJourney.reviewPath(review), reviewer.headers()).data().path("snapshot");
+        assertThat(submitted.path("genres")).isEqualTo(ReviewJourney.JSON.valueToTree(genres));
+        assertThat(Stove.gateway.post(ReviewJourney.reviewPath(review) + "/approve", null, reviewer.headers()).status()).isEqualTo(200);
+        ReviewJourney.waitForResult(project, review, creator, "APPROVED");
+        history(project, "release", release(project, creator), creator, "COMPLETED");
+        JsonNode current = matches(code(state));
+        assertThat(current.path("genres")).isEqualTo(ReviewJourney.JSON.valueToTree(genres));
+        assertThat(Stove.gateway.get("/api/v1/storefront/products?genres=ACTION&genres=RPG").data().path("totalElements").asLong()).isZero();
+        assertThat(Stove.gateway.get("/api/v1/storefront/products?genres=ACTION&genres=PUZZLE").data().path("totalElements").asLong()).isEqualTo(1);
+        ticket(state, actor(state, "buyerEmail"), "1", "zip1");
+        state.set("firstProduct", current);
+        stableRight(state);
         save(state);
     }
 
@@ -232,6 +274,11 @@ class G4OperationsFlowTest {
         hidden(state);
         ticket(state, actor(state, "buyerEmail"), "3", "zip3");
         stableRight(state);
+    }
+
+    @Test
+    void automaticReconciliationRepairsMissingAndSameVersionProjection() throws Exception {
+        hiddenProjectionSurvivesHttpBootstrap();
     }
 
     @Test

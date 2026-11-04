@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import java.util.List;
 import java.util.UUID;
 
 public final class CatalogFixtures {
@@ -31,7 +32,9 @@ public final class CatalogFixtures {
                         "build-" + version,
                         10,
                         "a".repeat(64),
-                        "s3://stove-builds/file.zip"));
+                        "s3://stove-builds/file.zip",
+                        List.of("ACTION")
+                ));
     }
 
     public static String json(Object value) {

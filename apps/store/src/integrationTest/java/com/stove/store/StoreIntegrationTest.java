@@ -7,8 +7,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,12 +49,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -101,10 +101,25 @@ class StoreIntegrationTest {
 
     @Test void stoppedSalesAtTheSameContentVersionSurviveInitialSyncAndOlderEvents() throws Exception {
         CatalogProductSnapshot original = product(42, 1, "Sales status", 1000);
-        CatalogProductSnapshot stopped = new CatalogProductSnapshot(original.productId(), original.productCode(),
-                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
-                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
-                original.updatedAt(), "STOPPED", 2);
+        CatalogProductSnapshot stopped = new CatalogProductSnapshot(
+                original.productId(),
+                original.productCode(),
+                original.title(),
+                original.shortDescription(),
+                original.thumbnailUrl(),
+                original.price(),
+                original.currency(),
+                original.publishedAt(),
+                original.content(),
+                original.videoUrl(),
+                original.contentVersion(),
+                original.buildVersion(),
+                original.updatedAt(),
+                "STOPPED",
+                2,
+                "ON_SALE".equals("STOPPED"),
+                original.genres()
+        );
         apply.execute(stopped);
         when(catalog.codes(0)).thenReturn(List.of(original.productCode()));
         when(catalog.codes(1)).thenReturn(List.of());
@@ -147,19 +162,36 @@ class StoreIntegrationTest {
                 .isInstanceOf(BusinessException.class);
         assertThat(products.count()).isZero();
         apply.execute(p);
-        CatalogProductSnapshot collision = new CatalogProductSnapshot(2L, p.productCode(), p.title(), p.shortDescription(),
-                p.thumbnailUrl(), p.price(), p.currency(), p.publishedAt(), p.content(), null, 2, "2", p.updatedAt());
+        CatalogProductSnapshot collision = new CatalogProductSnapshot(
+                2L,
+                p.productCode(),
+                p.title(),
+                p.shortDescription(),
+                p.thumbnailUrl(),
+                p.price(),
+                p.currency(),
+                p.publishedAt(),
+                p.content(),
+                null,
+                2,
+                "2",
+                p.updatedAt(),
+                "ON_SALE",
+                2,
+                true,
+                List.of("ACTION")
+        );
         assertThatThrownBy(() -> apply.execute(collision)).isInstanceOf(BusinessException.class);
         assertThat(products.count()).isEqualTo(1);
     }
-    @Test void startupReadsEveryPageAndCanRestartFromZeroAfterFailure() {
+    @Test void reconciliationReadsEveryPageAndKeepsAlreadyReadyDataAfterFailure() {
         CatalogProductSnapshot old = product(1, 1, "Old", 1000);
         CatalogProductSnapshot latest = product(1, 2, "Latest", 2000);
         when(catalog.codes(0)).thenReturn(List.of("game-1"));
         when(catalog.detail("game-1")).thenReturn(old);
         when(catalog.codes(1)).thenThrow(new IllegalStateException("Catalog down"));
         assertThatThrownBy(sync::execute).isInstanceOf(IllegalStateException.class);
-        assertThat(status("/api/v1/storefront/products")).isEqualTo(503);
+        assertThat(status("/api/v1/storefront/products")).isEqualTo(200);
         apply.execute(latest);
         doReturn(List.of("game-2")).when(catalog).codes(1);
         when(catalog.detail("game-2")).thenReturn(product(2, 1, "Second", 2000));
@@ -212,14 +244,44 @@ class StoreIntegrationTest {
 
     @Test void administratorRestrictionsAndReleaseReachTheActualKafkaDatabaseAndPublicView() throws Exception {
         CatalogProductSnapshot original = product(77, 1, "Platform restriction", 1000);
-        CatalogProductSnapshot blocked = new CatalogProductSnapshot(original.productId(), original.productCode(),
-                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
-                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
-                original.updatedAt(), "BLOCKED", 2);
-        CatalogProductSnapshot resumed = new CatalogProductSnapshot(original.productId(), original.productCode(),
-                original.title(), original.shortDescription(), original.thumbnailUrl(), original.price(), original.currency(),
-                original.publishedAt(), original.content(), original.videoUrl(), original.contentVersion(), original.buildVersion(),
-                original.updatedAt(), "ON_SALE", 3);
+        CatalogProductSnapshot blocked = new CatalogProductSnapshot(
+                original.productId(),
+                original.productCode(),
+                original.title(),
+                original.shortDescription(),
+                original.thumbnailUrl(),
+                original.price(),
+                original.currency(),
+                original.publishedAt(),
+                original.content(),
+                original.videoUrl(),
+                original.contentVersion(),
+                original.buildVersion(),
+                original.updatedAt(),
+                "BLOCKED",
+                2,
+                "ON_SALE".equals("BLOCKED"),
+                original.genres()
+        );
+        CatalogProductSnapshot resumed = new CatalogProductSnapshot(
+                original.productId(),
+                original.productCode(),
+                original.title(),
+                original.shortDescription(),
+                original.thumbnailUrl(),
+                original.price(),
+                original.currency(),
+                original.publishedAt(),
+                original.content(),
+                original.videoUrl(),
+                original.contentVersion(),
+                original.buildVersion(),
+                original.updatedAt(),
+                "ON_SALE",
+                3,
+                "ON_SALE".equals("ON_SALE"),
+                original.genres()
+        );
         listeners.start();
         try {
             CatalogProductPublishedEvent restriction = CatalogProductPublishedEvent.of(blocked);
@@ -289,8 +351,25 @@ class StoreIntegrationTest {
         } finally { listeners.stop(); }
     }
     private CatalogProductSnapshot listing(CatalogProductSnapshot p, boolean listed, long version, String sale) {
-        return new CatalogProductSnapshot(p.productId(), p.productCode(), p.title(), p.shortDescription(), p.thumbnailUrl(),
-                p.price(), p.currency(), p.publishedAt(), p.content(), p.videoUrl(), p.contentVersion(), p.buildVersion(), p.updatedAt(), sale, version, listed);
+        return new CatalogProductSnapshot(
+                p.productId(),
+                p.productCode(),
+                p.title(),
+                p.shortDescription(),
+                p.thumbnailUrl(),
+                p.price(),
+                p.currency(),
+                p.publishedAt(),
+                p.content(),
+                p.videoUrl(),
+                p.contentVersion(),
+                p.buildVersion(),
+                p.updatedAt(),
+                sale,
+                version,
+                listed,
+                p.genres()
+        );
     }
 
     @Test void schemaContainsOnlyOneBusinessTableAndNoInboxOrOutbox() {

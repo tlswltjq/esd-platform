@@ -143,14 +143,30 @@ class ProjectPaginationIntegrationTest extends StudioIntegrationTestBase {
             ProjectReviewRequest approved = history(project, 0);
             ProjectReleaseRequest activeRelease = releases.saveAndFlush(ProjectReleaseRequest.create(project.getId(), approved.getId(), approved.getContentVersion()));
             ProjectSnapshot previous = mapper.readValue(approved.getSnapshot(), ProjectSnapshot.class);
-            ProjectSnapshot next = new ProjectSnapshot(previous.projectId(), previous.productCode(), previous.ownerSubject(), 2,
-                    previous.title(), previous.shortDescription(), previous.thumbnailUrl(), previous.videoUrl(), previous.content(), previous.price(),
-                    previous.currency(), previous.buildId(), previous.version(), previous.fileSize(), previous.checksum(), previous.storagePath());
+            ProjectSnapshot next = new ProjectSnapshot(
+                    previous.projectId(),
+                    previous.productCode(),
+                    previous.ownerSubject(),
+                    2,
+                    previous.title(),
+                    previous.shortDescription(),
+                    previous.thumbnailUrl(),
+                    previous.videoUrl(),
+                    previous.content(),
+                    previous.price(),
+                    previous.currency(),
+                    previous.buildId(),
+                    previous.version(),
+                    previous.fileSize(),
+                    previous.checksum(),
+                    previous.storagePath(),
+                    previous.genres()
+            );
             ProjectReviewRequest activeReview = reviews.saveAndFlush(ProjectReviewRequest.create(project.getId(), 2, approved.getBuildId(), mapper.writeValueAsString(next)));
             project.linkReviewRequest(activeReview.getId());
             project.linkReleaseRequest(activeRelease.getId());
-            project.update(new StorePage("New draft", "Summary", "https://example.com/cover.png", null, "New content", 2000), project.getContentVersion());
-            project.update(new StorePage("Even newer draft", "Summary", "https://example.com/cover.png", null, "Newer content", 3000), project.getContentVersion());
+            project.update(new StorePage("New draft", "Summary", "https://example.com/cover.png", null, "New content", 2000, List.of("ACTION")), project.getContentVersion());
+            project.update(new StorePage("Even newer draft", "Summary", "https://example.com/cover.png", null, "Newer content", 3000, List.of("ACTION")), project.getContentVersion());
             projects.saveAndFlush(project);
         }
         Statistics statistics = entities.unwrap(SessionFactory.class).getStatistics();
@@ -165,7 +181,7 @@ class ProjectPaginationIntegrationTest extends StudioIntegrationTestBase {
             statistics.setStatisticsEnabled(false);
         }
         assertThat(response.path("items").size()).isEqualTo(5);
-        assertThat(queries).as("one page, one count and two bulk request reads").isPositive().isLessThanOrEqualTo(4);
+        assertThat(queries).as("one page, one count, one genre batch and two bulk request reads").isPositive().isLessThanOrEqualTo(5);
         for (JsonNode item : response.path("items")) {
             assertThat(item.path("currentReviewRequest").isNull()).isTrue();
             assertThat(item.path("currentReleaseRequest").isNull()).isTrue();
@@ -179,8 +195,25 @@ class ProjectPaginationIntegrationTest extends StudioIntegrationTestBase {
 
     private ProjectReviewRequest history(Project project, int index) throws Exception {
         Build build = builds.saveAndFlush(Build.create(project.getId(), "build-" + index, "game.zip", "projects/" + project.getId() + "/build-" + index + ".zip", 1, "a".repeat(64)));
-        ProjectSnapshot snapshot = new ProjectSnapshot(project.getId(), project.getProductCode(), project.getOwnerSubject(), index + 1L,
-                "Game", "Summary", "https://example.com/cover.png", null, "Game content", 1000, "KRW", build.getId(), build.getVersion(), build.getFileSize(), build.getChecksum(), build.getStoragePath());
+        ProjectSnapshot snapshot = new ProjectSnapshot(
+                project.getId(),
+                project.getProductCode(),
+                project.getOwnerSubject(),
+                index + 1L,
+                "Game",
+                "Summary",
+                "https://example.com/cover.png",
+                null,
+                "Game content",
+                1000,
+                "KRW",
+                build.getId(),
+                build.getVersion(),
+                build.getFileSize(),
+                build.getChecksum(),
+                build.getStoragePath(),
+                List.of("ACTION")
+        );
         ProjectReviewRequest review = ProjectReviewRequest.create(project.getId(), index + 1L, build.getId(), mapper.writeValueAsString(snapshot));
         review.recordResult(true, null, "reviewer");
         review = reviews.saveAndFlush(review);

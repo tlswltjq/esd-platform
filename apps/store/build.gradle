@@ -6,5 +6,6 @@ dependencies {
     implementation project(':common:web')
     implementation project(':common:jpa')
     implementation project(':common:kafka')
+    implementation 'io.micrometer:micrometer-core'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }

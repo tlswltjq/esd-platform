@@ -6,6 +6,7 @@ import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.review.core.domain.ProjectReview;
 import com.stove.review.core.domain.ReviewSubmission;
+import java.util.List;
 
 public final class ReviewFixtures {
     public static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
@@ -33,7 +34,9 @@ public final class ReviewFixtures {
                 "1",
                 size,
                 checksum,
-                path);
+                path,
+                List.of("ACTION")
+        );
     }
 
     public static ProjectReviewRequestedEvent event(long id, long project) {

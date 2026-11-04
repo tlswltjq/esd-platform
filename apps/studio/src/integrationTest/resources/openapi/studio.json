@@ -49,6 +49,23 @@
         },
         "type" : "object"
       },
+      "ApiResponseListGenreDefinition" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/GenreDefinition"
+            },
+            "type" : "array"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListProjectRequestCommand" : {
         "properties" : {
           "data" : {
@@ -367,6 +384,20 @@
         },
         "type" : "object"
       },
+      "GenreDefinition" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "selectable" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ProjectReleaseRequest" : {
         "properties" : {
           "contentVersion" : {
@@ -596,6 +627,12 @@
           "content" : {
             "type" : "string"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
           "price" : {
             "format" : "int64",
             "type" : "integer"
@@ -767,6 +804,14 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "genres" : {
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array"
+          },
           "price" : {
             "format" : "int64",
             "type" : "integer"
@@ -792,7 +837,7 @@
             "type" : "string"
           }
         },
-        "required" : [ "content", "shortDescription", "title" ],
+        "required" : [ "content", "genres", "shortDescription", "title" ],
         "type" : "object"
       },
       "WithdrawProjectRequest" : {
@@ -1001,6 +1046,24 @@
           }
         },
         "tags" : [ "asset-controller" ]
+      }
+    },
+    "/api/v1/studio/genres" : {
+      "get" : {
+        "operationId" : "list_2",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListGenreDefinition"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "genre-controller" ]
       }
     },
     "/api/v1/studio/projects" : {

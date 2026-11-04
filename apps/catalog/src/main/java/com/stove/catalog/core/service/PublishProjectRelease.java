@@ -4,20 +4,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.core.domain.CatalogProduct;
 import com.stove.catalog.core.domain.CatalogProductRepository;
-import com.stove.catalog.core.domain.CatalogRelease;
-import com.stove.catalog.core.domain.CatalogReleaseRepository;
-import com.stove.catalog.core.domain.ReleaseSubmission;
-import com.stove.catalog.core.domain.CatalogRequestGateRepository;
-import com.stove.catalog.core.domain.ReleaseWithdrawal;
-import com.stove.catalog.core.domain.ReleaseWithdrawalRepository;
 import com.stove.catalog.core.domain.CatalogPublicationJob;
 import com.stove.catalog.core.domain.CatalogPublicationJobRepository;
+import com.stove.catalog.core.domain.CatalogRelease;
+import com.stove.catalog.core.domain.CatalogReleaseRepository;
+import com.stove.catalog.core.domain.CatalogRequestGateRepository;
+import com.stove.catalog.core.domain.ReleaseSubmission;
+import com.stove.catalog.core.domain.ReleaseWithdrawal;
+import com.stove.catalog.core.domain.ReleaseWithdrawalRepository;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
@@ -120,10 +120,24 @@ public class PublishProjectRelease {
             outbox.record(
                     "CatalogProduct", s.productCode(),
                     CatalogProductPublishedEvent.of(new CatalogProductSnapshot(
-                            product.getId(), s.productCode(), s.title(), s.shortDescription(),
-                            s.thumbnailUrl(), s.price(), s.currency(), product.getPublishedAt(),
-                            s.content(), s.videoUrl(), s.contentVersion(), s.version(), product.getUpdatedAt(),
-                            product.getSaleStatus(), product.getCatalogVersion(), product.isListed())));
+                            product.getId(),
+                            s.productCode(),
+                            s.title(),
+                            s.shortDescription(),
+                            s.thumbnailUrl(),
+                            s.price(),
+                            s.currency(),
+                            product.getPublishedAt(),
+                            s.content(),
+                            s.videoUrl(),
+                            s.contentVersion(),
+                            s.version(),
+                            product.getUpdatedAt(),
+                            product.getSaleStatus(),
+                            product.getCatalogVersion(),
+                            product.isListed(),
+                            s.genres()
+                    )));
         if (stale)
             outbox.record(
                     "CatalogProduct",

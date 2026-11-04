@@ -13,13 +13,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
-import com.stove.catalog.core.port.BuildDistribution;
 import com.stove.catalog.core.domain.DownloadRestrictionChange;
-import com.stove.catalog.core.domain.SellerSaleChange;
 import com.stove.catalog.core.domain.PlatformSaleRestriction;
-import com.stove.catalog.core.service.ChangeSellerSaleStatus;
-import com.stove.catalog.core.service.ChangePlatformSaleRestriction;
+import com.stove.catalog.core.domain.SellerSaleChange;
+import com.stove.catalog.core.port.BuildDistribution;
 import com.stove.catalog.core.service.ChangeDownloadRestriction;
+import com.stove.catalog.core.service.ChangePlatformSaleRestriction;
+import com.stove.catalog.core.service.ChangeSellerSaleStatus;
 import com.stove.catalog.core.service.PublishProjectRelease;
 import com.stove.catalog.core.service.ReadDownloadRestriction;
 import com.stove.catalog.core.service.ReconcileDownloadStorage;
@@ -27,8 +27,8 @@ import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.web.error.BusinessException;
-import java.net.URI;
 import java.io.IOException;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -53,13 +53,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.images.builder.Transferable;
@@ -76,9 +76,9 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectTaggingRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectTaggingRequest;
-import software.amazon.awssdk.services.s3.model.Tagging;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.Tag;
+import software.amazon.awssdk.services.s3.model.Tagging;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
@@ -174,9 +174,25 @@ class CatalogDownloadRestrictionIntegrationTest extends CatalogIntegrationTestBa
         ProjectSnapshot s = template.snapshot();
         String key = "projects/" + project + "/" + version + ".zip";
         root.putObject(PutObjectRequest.builder().bucket(BUCKET).key(key).tagging("source=studio").build(), RequestBody.fromBytes(FILE));
-        ProjectSnapshot snapshot = new ProjectSnapshot(s.projectId(), s.productCode(), s.ownerSubject(), s.contentVersion(),
-                s.title(), s.shortDescription(), s.thumbnailUrl(), s.videoUrl(), s.content(), s.price(), s.currency(), s.buildId(),
-                s.version(), FILE.length, s.checksum(), "s3://" + BUCKET + "/" + key);
+        ProjectSnapshot snapshot = new ProjectSnapshot(
+                s.projectId(),
+                s.productCode(),
+                s.ownerSubject(),
+                s.contentVersion(),
+                s.title(),
+                s.shortDescription(),
+                s.thumbnailUrl(),
+                s.videoUrl(),
+                s.content(),
+                s.price(),
+                s.currency(),
+                s.buildId(),
+                s.version(),
+                FILE.length,
+                s.checksum(),
+                "s3://" + BUCKET + "/" + key,
+                s.genres()
+        );
         ProjectReleaseRequestedEvent event = ProjectReleaseRequestedEvent.of(template.releaseRequestId(), template.reviewRequestId(), snapshot);
         publish.execute(ReleaseSubmissionMapper.from(envelope(event), event));
         return s.productCode();

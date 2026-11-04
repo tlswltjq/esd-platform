@@ -22,6 +22,7 @@ public record ReviewSubmission(String eventId, String eventType, Instant occurre
                 || s.fileSize() <= 0 || s.checksum() == null || !s.checksum().matches("[a-fA-F0-9]{64}")
                 || !text(s.storagePath(), 2000) || !s.storagePath().startsWith("s3://"))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "심사 접수 정보가 올바르지 않습니다.");
+        ReviewGenreValues.requirePublished(s.genres());
     }
 
     private static boolean text(String value, int max) {

@@ -34,8 +34,24 @@ class StoreListingTest {
         assertThat(stored.snapshot().listed()).isTrue();
     }
     private CatalogProductSnapshot listing(CatalogProductSnapshot p, boolean listed, long version, String saleStatus) {
-        return new CatalogProductSnapshot(p.productId(), p.productCode(), p.title(), p.shortDescription(), p.thumbnailUrl(),
-                p.price(), p.currency(), p.publishedAt(), p.content(), p.videoUrl(), p.contentVersion(), p.buildVersion(),
-                p.updatedAt(), saleStatus, version, listed);
+        return new CatalogProductSnapshot(
+                p.productId(),
+                p.productCode(),
+                p.title(),
+                p.shortDescription(),
+                p.thumbnailUrl(),
+                p.price(),
+                p.currency(),
+                p.publishedAt(),
+                p.content(),
+                p.videoUrl(),
+                p.contentVersion(),
+                p.buildVersion(),
+                p.updatedAt(),
+                saleStatus,
+                version,
+                listed,
+                p.genres()
+        );
     }
 }

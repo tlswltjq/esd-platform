@@ -100,7 +100,9 @@ public class RequestProjectReview {
                 build.getVersion(),
                 build.getFileSize(),
                 build.getChecksum(),
-                build.getStoragePath());
+                build.getStoragePath(),
+                project.getGenres()
+        );
     }
 
     private String json(ProjectSnapshot value) {

@@ -55,6 +55,7 @@ Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
+| GET | /api/v1/studio/genres | CREATOR 장르 기준 목록·선택 가능 여부 |
 | POST / GET | /api/v1/studio/projects | 생성(201)·내 페이지 목록 |
 | GET | /api/v1/studio/projects/{id} | 상세정보·현재 버전의 요청·releaseEligible |
 | PUT | /api/v1/studio/projects/{id}/store-page | contentVersion으로 상세정보 수정 |
@@ -69,6 +70,8 @@ Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요
 | GET | /api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals/{withdrawalId} | 출시 철회 최종 결과 조회 |
 
 프로젝트·빌드·심사/출시 이력의 GET 목록은 `page=0`·`size=20`이 기본이며 최대 100개, ID 내림차순이다. `data`는 기존 배열에서 `items/page/size/totalElements/totalPages`로 전환했다. 항목 정보와 소유권은 유지하며 잘못된 범위·정수 조회 구간 초과는 400이다. [계약·검증 기록](studio-list-pagination-plan.md)을 따른다. 철회 영수증은 기존 제한 조회·응답 계약을 유지한다.
+
+상점 정보의 genres는 작업본에서 0~3개, 새 심사 제출에서는 선택 가능한 코드 1~3개다. 코드 기준 목록은 코드 수정·배포로 관리하고 향후 선택 중지한 알려진 코드의 기존 근거는 보존한다. 장르만 수정해도 새 버전 심사·출시를 거친다. [장르 계약](store-genre-filter-plan.md)을 따른다.
 
 외부 결과는 해당 요청 ID·버전에 기록한다. 현재 버전의 승인 결과만 출시 요청 조건으로 인정한다.
 변경된 상세정보를 과거 승인이 승인하지 않으며, 요청에 첨부한 과거 스냅샷은 보존한다.
@@ -93,7 +96,7 @@ Review는 Studio의 요청 당시 상세정보·전체 ZIP 스냅샷을 접수�
 
 REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
 요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED·REJECTED·WITHDRAWN 중 하나로 최종 전이한다.
-재심사는 새 요청이며 과거 판정·스냅샷을 유지한다.
+재심사는 새 요청이며 과거 판정·스냅샷을 유지한다. 제출 스냅샷과 심사자 응답의 genres에는 알려진 코드 1~3개가 포함된다. 이미 제출한 장르가 나중에 선택 중지돼도 기존 심사는 이어갈 수 있다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -138,6 +141,7 @@ Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 �
 | GET | `/api/v1/admin/catalog-release-jobs` 및 `/{requestId}` | ADMIN의 내구 공개 작업·실패/재시도 조회. no-store |
 
 공개 목록·상세 두 API는 익명 조회를 허용한다. 판매 관리 API는 JWT 역할·소유권을 검증한다. 목록은 최초 공개 시각·상품 ID 내림차순이다.
+목록·상세·공개 이벤트·Store 내부 정본에는 승인받은 genres 1~3개를 포함한다.
 상세에는 공개 자료·가격·자료 버전·빌드 버전을 제공하고 저장 경로·소유자 subject·내부 요청 ID는 노출하지 않는다.
 
 수신은 `ProjectReleaseRequested`(stove.studio.v1), 발행은
@@ -159,17 +163,18 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/v1/storefront/products?q=&sort=NEWEST&page=0&size=20` | 제목 부분 검색·정렬·페이지 |
+| GET | `/api/v1/storefront/genres` | 익명 장르 기준 목록·선택 가능 여부 |
+| GET | `/api/v1/storefront/products?q=&genres=ACTION&genres=RPG&sort=NEWEST&page=0&size=20` | 제목·모든 선택 장르(AND) 검색·정렬·페이지 |
 | GET | `/api/v1/storefront/products/{productCode}` | 현재 반영된 공개 상품 상세 |
 
 목록·상세는 익명 GET이다. NEWEST·PRICE_ASC·PRICE_DESC를 지원하며 size 상한은 100이다.
 초기 동기화 전 503, 잘못된 입력 400, 없는 상품 코드 404를 반환한다.
 수신은 `CatalogProductPublished`(stove.catalog.v1), 업무 이벤트 발행은 없다.
-시작 시 Catalog 내부 전체 목록·상세로 초기 사본을 만들고 재시작하면 처음부터 다시 읽는다.
-Store 초기 동기화는 CATALOG_STORE_SERVICE_KEY로 보호한 Catalog `/internal/v1/store-products`와 `/internal/v1/store-products/{code}`에서 숨긴 상품까지 읽는다. 상세의 필수 listed를 검증하며 내부 키는 이 두 GET에만 전달한다. 공개 API로 우회하지 않는다. 숨긴 사본은 보존하되 공개 상세는 404로 거절한다.
+시작 시 Catalog 내부 전체 목록·상세로 초기 사본을 만들며 실패하면 자동 재시도한다. 준비 후에도 주기적으로 정본을 대조해 누락·구버전 사본을 복구한다. 기본 재시도 간격은 5초, 정상 대조 간격은 1분이며 설정으로 조정한다. 준비된 사본은 백그라운드 대조가 실패해도 계속 조회할 수 있다. 재시작 시 전체 대조를 새로 시작한다.
+Store 동기화는 CATALOG_STORE_SERVICE_KEY로 보호한 Catalog `/internal/v1/store-products`와 `/internal/v1/store-products/{code}`에서 숨긴 상품까지 읽는다. 상세의 필수 listed 등을 검증하며 내부 키는 이 두 GET에만 전달한다. 공개 API로 우회하지 않는다. 숨긴 사본은 보존하되 공개 상세는 404로 거절한다.
 
-catalogVersion으로 공개 사본을 교체하고 중복·역순은 현재 사본을 유지한다. 콘텐츠 버전이 같아도 판매 상태 변경을 반영한다. 동일 Catalog 버전의 다른 데이터·식별 충돌은 실패한다.
-업무 테이블은 store_product 하나이며 Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다.
+Kafka 반영은 catalogVersion으로 공개 사본을 교체하고 중복·역순은 현재 사본을 유지한다. 콘텐츠 버전이 같아도 판매 상태 변경을 반영한다. Kafka의 동일 Catalog 버전 내용 충돌은 실패한다. 직접 조회·검증한 Catalog 정본은 동일 버전의 내용 차이도 교정하며, 처리 중 반영된 더 최신 사본과 상품 ID·코드·최초 공개 시점의 식별 충돌은 덮어쓰지 않는다.
+업무 테이블은 store_product·장르 관계 store_product_genre·자동 교정의 변경 전후를 원자적으로 기록하는 store_reconciliation이다. 장르 조건도 페이지·총건수 계산 전에 적용하고 정본 대조/교정과 감사에 포함한다. Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다. [자동 동기화·복구의 범위와 검증](store-auto-reconciliation-plan.md)을 따른다.
 가격은 공개 KRW 정가이며 saleStatus·catalogVersion을 조회 사본으로 제공한다. 구매 허용의 최종 판단은 Order가 Catalog 정본으로 확인한다. [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
 
 ---

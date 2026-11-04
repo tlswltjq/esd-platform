@@ -2,8 +2,10 @@ package com.stove.catalog.api.controller.dto;
 
 import com.stove.catalog.core.domain.PublishedProduct;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.List;
 
 public record ProductDetail(
         Long productId,
@@ -18,7 +20,7 @@ public record ProductDetail(
         String videoUrl,
         long contentVersion,
         String buildVersion,
-        Instant updatedAt, String saleStatus, long catalogVersion, boolean listed) {
+        Instant updatedAt, String saleStatus, long catalogVersion, boolean listed, @NotNull @Size(min = 1, max = 3) List<String> genres) {
     public static ProductDetail from(PublishedProduct p) {
         ProjectSnapshot s = p.snapshot();
         return new ProductDetail(
@@ -34,6 +36,6 @@ public record ProductDetail(
                 s.videoUrl(),
                 s.contentVersion(),
                 s.version(),
-                p.updatedAt(), p.saleStatus(), p.catalogVersion(), p.listed());
+                p.updatedAt(), p.saleStatus(), p.catalogVersion(), p.listed(), s.genres());
     }
 }

@@ -16,9 +16,25 @@ import org.junit.jupiter.api.Test;
 class PublicProductDetailTest {
     @Test void hiddenProductsAreNotPublicDetails() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);
-        CatalogProductSnapshot hidden = new CatalogProductSnapshot(p.productId(), p.productCode(), p.title(), p.shortDescription(),
-                p.thumbnailUrl(), p.price(), p.currency(), p.publishedAt(), p.content(), p.videoUrl(), p.contentVersion(), p.buildVersion(),
-                p.updatedAt(), p.saleStatus(), p.catalogVersion(), false);
+        CatalogProductSnapshot hidden = new CatalogProductSnapshot(
+                p.productId(),
+                p.productCode(),
+                p.title(),
+                p.shortDescription(),
+                p.thumbnailUrl(),
+                p.price(),
+                p.currency(),
+                p.publishedAt(),
+                p.content(),
+                p.videoUrl(),
+                p.contentVersion(),
+                p.buildVersion(),
+                p.updatedAt(),
+                p.saleStatus(),
+                p.catalogVersion(),
+                false,
+                p.genres()
+        );
         StoreProductRepository products = mock(StoreProductRepository.class);
         when(products.findByProductCode(p.productCode())).thenReturn(Optional.of(StoreProduct.create(hidden)));
         ReadStoreProduct read = new ReadStoreProduct(products, mock(SynchronizeCatalogProducts.class));

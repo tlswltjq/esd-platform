@@ -11,20 +11,24 @@ import com.stove.common.kafka.contract.payload.BuildValidationFailedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.kafka.contract.payload.GameRegisteredEvent;
+import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectedEvent;
+import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
 import com.stove.common.kafka.contract.payload.LicenseIssueFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseIssuedEvent;
-import com.stove.common.kafka.contract.payload.LicenseGrantedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.common.kafka.contract.payload.LicenseRevokedEvent;
-import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
 import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
+import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
 import com.stove.common.kafka.contract.payload.OrderCanceledEvent;
 import com.stove.common.kafka.contract.payload.OrderCreatedEvent;
+import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
 import com.stove.common.kafka.contract.payload.OrderLine;
 import com.stove.common.kafka.contract.payload.OrderPaidEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
-import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
 import com.stove.common.kafka.contract.payload.PaymentCancelledEvent;
 import com.stove.common.kafka.contract.payload.PaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.PaymentFailedEvent;
@@ -32,16 +36,23 @@ import com.stove.common.kafka.contract.payload.ProductChangedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
 import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
 import com.stove.common.kafka.contract.payload.ProjectSnapshot;
 import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
 import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
+import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.common.kafka.contract.payload.ReleaseRolledBackEvent;
 import com.stove.common.kafka.contract.payload.ReleaseScheduledEvent;
@@ -49,17 +60,6 @@ import com.stove.common.kafka.contract.payload.ReviewAppealedEvent;
 import com.stove.common.kafka.contract.payload.ReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.ReviewChangesRequestedEvent;
 import com.stove.common.kafka.contract.payload.ReviewRejectedEvent;
-import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
-import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
-import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
-import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
-import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
-import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
-import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
-import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
-import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequestedEvent;
-import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.kafka.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
@@ -174,7 +174,9 @@ class EventContractTest {
                         "1.0",
                         1024,
                         "abc",
-                        "s3://bucket/key");
+                        "s3://bucket/key",
+                        List.of("ACTION")
+                );
         return Stream.of(
                 new OrderExpiredEvent("expired-1",Instant.parse("2026-10-29T01:00:00Z"),"order-1","placed-1","buyer",9000,"KRW",Instant.parse("2026-10-29T01:00:00Z")),
                 new RefundExecutionPreparedEvent("prepared-1",Instant.parse("2026-10-29T01:00:00.123456Z"),"refund-1","attempt-1","request-1", "order-1","payment-1","buyer",9000,"KRW","suspended-1",null,
@@ -217,9 +219,25 @@ class EventContractTest {
                         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "suspended-1"),
                 OrderPaymentCompletedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW"),
                 OrderPaymentFailedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW", "DECLINED", "Declined"),
-                CatalogProductPublishedEvent.of(new CatalogProductSnapshot(1L, "PROJECT-1", "Game", "Summary",
-                        "https://example.com/thumb.png", 1000, "KRW", Instant.parse("2026-01-01T00:00:00Z"),
-                        "Content", null, 1, "1.0", Instant.parse("2026-01-01T00:00:00Z"))),
+                CatalogProductPublishedEvent.of(new CatalogProductSnapshot(
+                        1L,
+                        "PROJECT-1",
+                        "Game",
+                        "Summary",
+                        "https://example.com/thumb.png",
+                        1000,
+                        "KRW",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "Content",
+                        null,
+                        1,
+                        "1.0",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "ON_SALE",
+                        1,
+                        true,
+                        List.of("ACTION")
+                )),
                 ProjectReviewRequestedEvent.of(1L, snapshot),
                 ProjectReviewWithdrawalRequestedEvent.of(withdrawal),
                 ProjectReviewWithdrawalResolvedEvent.of(resolution),

@@ -5,6 +5,7 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.store.core.domain.StoreProduct;
 import com.stove.store.core.domain.StoreProductRepository;
+import com.stove.store.core.domain.StoreProductValues;
 import jakarta.persistence.EntityManager;
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.LockAcquisitionException;
@@ -30,7 +31,7 @@ public class ApplyCatalogProduct {
     }
 
     public void execute(CatalogProductSnapshot snapshot) {
-        validate(snapshot);
+        StoreProductValues.requireSnapshot(snapshot);
         // A first INSERT can race with HTTP initialization or Kafka delivery. Retry a fresh transaction.
         for (int attempt = 0; ; attempt++) {
             try {
@@ -52,19 +53,4 @@ public class ApplyCatalogProduct {
         }
     }
 
-    private static void validate(CatalogProductSnapshot s) {
-        if (s == null || s.productId() == null || s.productId() <= 0 || s.contentVersion() <= 0
-                || !text(s.productCode(), 50) || !s.productCode().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,49}")
-                || !text(s.title(), 200) || !text(s.shortDescription(), 500)
-                || !text(s.thumbnailUrl(), 1000) || !text(s.content(), 100000)
-                || (s.videoUrl() != null && s.videoUrl().length() > 1000)
-                || !text(s.buildVersion(), 100) || s.price() < 0 || !"KRW".equals(s.currency())
-                || s.publishedAt() == null || s.updatedAt() == null
-                || (!"ON_SALE".equals(s.saleStatus()) && !"STOPPED".equals(s.saleStatus()) && !"BLOCKED".equals(s.saleStatus()))
-                || s.catalogVersion() < s.contentVersion())
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "공개 상품 데이터가 올바르지 않습니다.");
-    }
-    private static boolean text(String value, int max) {
-        return value != null && !value.isBlank() && value.length() <= max;
-    }
 }
