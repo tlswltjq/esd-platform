@@ -70,4 +70,4 @@
 
 ## 후속: G2 정상 구매·다운로드
 
-2026-10-30 [Gateway BFF·실제 TEST 구매·라이브러리·ZIP 다운로드](g2-purchase-download-verification.md)를 추가 검증했다. 이 문서에서 제외했던 Gateway·Download를 일곱 앱의 최신 격리 스택으로 연결한 별도 여정이다. 최신 환불·재구매·Settlement는 계속 구분한다.
+2026-10-30 Gateway BFF·실제 TEST 구매·라이브러리·ZIP 다운로드를 추가 검증했다. 이 문서에서 제외했던 Gateway·Download를 일곱 앱의 최신 격리 스택으로 연결한 별도 여정이다. 최신 환불·재구매·Settlement는 계속 구분한다.
