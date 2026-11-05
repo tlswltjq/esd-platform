@@ -19,6 +19,8 @@
 - [ ] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4 (platform-generalization-plan 4절 Gateway 행)
 - [ ] 외부 웹훅의 재현 가능한 실행 구성 — G4/G5
 - [ ] 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 — G5
+  - 2026-11-05 `BffAuthenticationFilterTest`: 토큰 갱신 거절 시 브라우저 세션 삭제·401·하위 요청 차단. `RoleAccessGatewayTest`: 계정 상태 변경·역할 부여·회수 세 경로의 ADMIN 통과와 MEMBER·CREATOR·REVIEWER 거절. 이 단위·필터 검증과 아래의 실제 연결 여정을 구분한다.
+  - 2026-11-05 실제 Auth·Gateway·Redis·MySQL 연결 검증에서 복구·잠금·역할 회수 뒤 갱신 거절과 Redis 토큰·브라우저 세션 삭제를 확인했다. `docs/auth-session-journey-verification.md`를 따른다. 전체 역할 여정·서비스 자격증명 등 G5 공통 운영 범위는 남아 있으므로 상위 항목은 미완료로 유지한다.
 
 ## 범위 밖(후속)
 
