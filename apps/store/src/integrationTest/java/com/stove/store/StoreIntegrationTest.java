@@ -83,6 +83,16 @@ class StoreIntegrationTest {
     private int status(String path) {
         return http().get().uri(path).exchange((request, response) -> response.getStatusCode().value());
     }
+    // Prometheus 수집 경로가 보안에서 열려 있는지 검증한다. Store 는 보호 대상이 아닌 경로를
+    // denyAll 로 막으므로(실제로 /actuator 는 403), 이 경로가 403/401 이 아니라는 것이
+    // 곧 "보안 허용 목록에 들었다" 는 뜻이다. 엔드포인트 핸들러 자체의 등록(200·본문)은
+    // 운영 런타임 여정(runtime-auto)에서 확인한다 -- scrape 엔드포인트 빈은 운영 runtimeOnly
+    // 레지스트리에서만 조립되고 통합 테스트 컨텍스트에는 없어, 여기서는 보안 경계만 책임진다.
+    @Test void prometheusScrapePathIsNotBlockedBySecurity() {
+        int status = status("/actuator/prometheus");
+        assertThat(status).isNotEqualTo(401);
+        assertThat(status).isNotEqualTo(403);
+    }
     private ProducerRecord<String, String> record(CatalogProductPublishedEvent event, String key) throws Exception {
         ProducerRecord<String, String> record = new ProducerRecord<String, String>(Topics.CATALOG, key, mapper.writeValueAsString(event));
         record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
