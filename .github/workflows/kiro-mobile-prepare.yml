@@ -1,0 +1,29 @@
+name: Temporary Kiro local SSH preparation
+on:
+  push:
+    branches: ["codex/kiro-mobile-repair-20261105"]
+    paths: [".github/workflows/kiro-mobile-prepare.yml"]
+permissions: {}
+jobs:
+  prepare:
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 3
+    steps:
+      - name: Prepare encrypted local SSH authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_NAME" = "oci-ampere-a1"
+          test "$(hostname -s)" = "host-10-0-0-56"
+          printf '[Scoped sudo permissions]\n'
+          sudo -n -l 2>&1 || true
+          printf '\n[SSH public host key readability]\n'
+          test -r /etc/ssh/ssh_host_ed25519_key.pub
+          printf 'ed25519 public host key readable\n'
+          transport_dir="$(mktemp -d /tmp/kiro-mobile-transport.XXXXXXXX)"
+          chmod 700 "$transport_dir"
+          umask 077
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$transport_dir/transport.pem" 2>/dev/null
+          printf '\nTRANSPORT_DIR=%s\n' "$transport_dir"
+          openssl pkey -in "$transport_dir/transport.pem" -pubout
+          
