@@ -255,3 +255,47 @@ groups:
           description: >-
             미소비 {{ $value }}건이 남았는데 커밋 오프셋이 5분간 움직이지 않았다.
             리스너 예외(spring_kafka_listener_seconds_count{error!="none"})와 DLT 를 본다.
+
+  # Store 사본이 틀어졌는데 자동 복구가 멈춘 것을 사람에게 알리는 규칙.
+  #
+  # Store 는 Catalog 정본의 사본이다. 정상이면 Kafka 로 반영되고, 어긋나면 주기 대조(기본 1분)가
+  # 스스로 교정한다. **멈춘 대조는 정상과 모습이 같다** -- 손님은 틀린 가격·노출을 계속 본다.
+  # 지표 출처는 코드다(apps/store 의 StoreSynchronizationMetrics).
+  #
+  # 경보 임계값은 대조 주기 1분을 기준으로 정했다. 마지막 대조 성공 시각만으로 상품별 갱신 지연을
+  # 보장하지 않으므로, 상품 지연이 아니라 **대조 자체가 도는가**를 본다.
+  - name: stove-store-sync
+    rules:
+      # 시작이 안 끝난다. 정상이면 시작 직후 한 번 전체 대조가 끝나 ready=1 이 된다.
+      # Catalog 일시 장애로 한두 회차 재시도하는 것은 정상이므로 10분을 본다 --
+      # OutboxBacklogGrowing 의 warning 과 같은 결이다. 복구되면 ready=1 로 자동 해제된다.
+      - alert: StoreSyncInitStalled
+        expr: stove_store_sync_ready == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: Store 초기 동기화가 10분째 끝나지 않았다"
+          description: >-
+            ready 가 0 이다. Store 는 아직 조회를 열지 못했다(503).
+            Catalog 접근과 stove.store.sync.runs{result="failure"} 를 본다.
+
+      # 대조가 계속 실패한다. 성공 주기가 1분이므로 성공 시각이 5분 멈추면 약 5회차 연속 실패다.
+      # 한두 번 실패는 일시 장애로 정상이고, 성공 한 번에 시각이 갱신돼 자동 해제된다.
+      #
+      # last.success.timestamp > 0 을 함께 보는 이유 -- 아직 한 번도 성공 못 한 시작 직후에는
+      # 이 값이 0 이라 time() 과의 차가 거대해진다. 그 구간은 StoreSyncInitStalled 가 보므로
+      # 여기서는 "한 번은 성공했는데 그 뒤 5분 끊긴" 상태만 본다.
+      #
+      # for 를 두지 않는다. 지속 조건(5분 끊김)이 이미 식 안에 있다 -- ConsumerStalled 와 같은 이유다.
+      - alert: StoreSyncReconcileFailing
+        expr: >-
+          stove_store_sync_last_success_timestamp > 0
+          and time() - stove_store_sync_last_success_timestamp > 300
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }}: Store 사본 대조가 5분째 성공하지 못했다"
+          description: >-
+            마지막 성공 뒤 {{ $value }}초가 지났다. 사본이 정본과 어긋난 채 손님에게 보일 수 있다.
+            Catalog 정본 조회와 개별 상품 계약/식별 오류 로그를 본다.
