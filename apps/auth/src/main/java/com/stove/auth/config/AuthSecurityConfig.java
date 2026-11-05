@@ -104,7 +104,8 @@ public class AuthSecurityConfig {
     @Bean
     @Order(2)
     SecurityFilterChain applicationSecurityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member")
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                                "/api/v1/auth/password/reset-request", "/api/v1/auth/password/reset")
                         .ignoringRequestMatchers(request -> {
                             String header = request.getHeader("Authorization");
                             return header != null && header.startsWith("Bearer ");
@@ -117,7 +118,9 @@ public class AuthSecurityConfig {
                     return decoded;
                 })))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member", "/actuator/health", "/actuator/metrics/**",
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                                "/api/v1/auth/password/reset-request", "/api/v1/auth/password/reset",
+                                "/actuator/health", "/actuator/metrics/**",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error", "/favicon.ico",
                                 "/.well-known/appspecific/**").permitAll()
                         .anyRequest().authenticated())

@@ -62,6 +62,7 @@ public class SecurityConfig {
             boolean delegated = path.equals("/login") || path.equals("/logout") || path.startsWith("/oauth2/")
                     || path.startsWith("/connect/") || path.equals("/userinfo")
                     || path.equals("/api/v1/auth/signup") || path.equals("/api/v1/auth/signup/member")
+                    || path.equals("/api/v1/auth/password/reset-request") || path.equals("/api/v1/auth/password/reset")
                     || path.startsWith("/actuator/");
             if (apiBearer || delegated)
                 return ServerWebExchangeMatcher.MatchResult.notMatch();
@@ -89,6 +90,7 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
                         .pathMatchers("/", "/index.html", "/bff/csrf", "/oauth2/authorization/**", "/login/oauth2/code/**", "/api/v1/auth/signup", "/api/v1/auth/signup/member",
+                                "/api/v1/auth/password/reset-request", "/api/v1/auth/password/reset",
                                 "/oauth2/**", "/login", "/logout",
                                 "/error", "/.well-known/**", "/connect/**", "/userinfo")
                         .permitAll()
