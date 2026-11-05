@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import socket
 import subprocess
+import sys
 import time
 import uuid
 
@@ -19,6 +20,8 @@ PASSWORD = 'journey-password-123'
 processes = []
 containers = []
 observations = []
+role_mode = '--roles' in sys.argv[1:]
+role_fixtures = None
 
 
 def cmd(*args, **kwargs):
@@ -111,15 +114,22 @@ try:
                    'DB_PORT': str(dbport), 'DB_HOST': '127.0.0.1', 'DB_USER': 'root',
                    'DB_PASSWORD': 'journey-root', 'AUTH_ISSUER': auth,
                    'BFF_REDIRECT_URI': base + '/login/oauth2/code/gateway-bff',
-                   'BFF_ACCESS_TOKEN_SECONDS': '25', 'STOVE_OUTBOX_RELAY_ENABLED': 'false',
+                   'BFF_ACCESS_TOKEN_SECONDS': '900' if role_mode else '25', 'STOVE_OUTBOX_RELAY_ENABLED': 'false',
+                   'AUTH_REVIEWER_EMAIL': 'reviewer@journey.example' if role_mode else '',
+                   'AUTH_REVIEWER_PASSWORD': PASSWORD if role_mode else '',
                    'AUTH_ADMIN_EMAIL': 'admin@journey.example', 'AUTH_ADMIN_PASSWORD': PASSWORD})
     wait_for(lambda: requests.get(auth + '/actuator/health', timeout=2).status_code == 200, 'auth')
-    launch('gateway', {**common, 'SERVER_PORT': str(gatewayport),
+    if role_mode:
+        from gateway_role_journey import Backends, verify
+        role_fixtures = Backends()
+    launch('gateway', {**common, **(role_fixtures.environment if role_mode else {}), 'SERVER_PORT': str(gatewayport),
                       'REDIS_HOST': '127.0.0.1', 'REDIS_PORT': str(redisport),
                       'AUTH_URI': auth, 'JWT_ISSUER_URI': auth,
                       'JWT_JWK_SET_URI': auth + '/oauth2/jwks', 'BFF_PUBLIC_AUTH_BASE': base})
     wait_for(lambda: requests.get(base + '/bff/csrf', timeout=2).status_code == 200, 'gateway')
-    for scenario in ['recovery', 'locked', 'role-revoked']:
+    if role_mode:
+        verify(base, login, require, role_fixtures, PASSWORD)
+    for scenario in ([] if role_mode else ['recovery', 'locked', 'role-revoked']):
         email = scenario + '@journey.example'
         response = requests.post(base + '/api/v1/auth/signup/member',
                                  json={'email': email, 'password': PASSWORD}, timeout=10)
@@ -175,6 +185,8 @@ finally:
             process.wait()
     for name in reversed(containers):
         subprocess.run(['docker', 'stop', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if role_fixtures is not None:
+        role_fixtures.close()
     after = inventory()
     (RUN / 'after.json').write_text(json.dumps(after, indent=2))
     (RUN / 'results.json').write_text(json.dumps({'passed': observations, 'resources_preserved': before == after}, indent=2))
