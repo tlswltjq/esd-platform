@@ -5,6 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
+import com.stove.auth.core.domain.AccountStatus;
+import com.stove.auth.core.domain.PlatformRole;
+import com.stove.auth.core.domain.UserAccount;
+import com.stove.auth.core.domain.UserAccountRepository;
+import com.stove.auth.core.service.ManageAccount;
 import com.stove.common.testcontainers.InfraContainers;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
@@ -20,6 +25,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -39,10 +45,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.outbox.relay-enabled=false", "stove.auth.bff-client-secret=integration-secret",
         "stove.auth.bff-redirect-uri=http://localhost:3000/login/oauth2/code/gateway-bff"})
-@Import(InfraContainers.MySql.class)
+@Import({InfraContainers.MySql.class, PasswordRecoveryIntegrationTest.CapturingMail.class})
 class TokenRotationIntegrationTest {
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ManageAccount manageAccount;
+    @Autowired UserAccountRepository accounts;
+    @Autowired PasswordRecoveryIntegrationTest.CapturingMail mail;
     private final ObjectMapper mapper = new ObjectMapper();
     private static final String CALLBACK = "http://localhost:3000/login/oauth2/code/gateway-bff";
     private String base() { return "http://localhost:" + port; }
@@ -161,6 +170,86 @@ class TokenRotationIntegrationTest {
         String access = mapper.readTree(response.body()).path("access_token").asText();
         JsonNode updated = mapper.readTree(Base64.getUrlDecoder().decode(access.split("\\.")[1]));
         assertThat(updated.path("roles").toString()).contains("CREATOR");
+    }
+
+    private String subjectOf(JsonNode tokens) throws Exception {
+        JsonNode claims = mapper.readTree(Base64.getUrlDecoder().decode(
+                tokens.path("access_token").asText().split("\\.")[1]));
+        return claims.path("sub").asText();
+    }
+
+    @Test void lockingThenUnlockingDoesNotRestoreOldRefreshToken() throws Exception {
+        JsonNode tokens = login();
+        String subject = subjectOf(tokens);
+        UserAccount admin = accounts.saveAndFlush(UserAccount.withRoles(
+                "operator-" + UUID.randomUUID() + "@example.com", "{bcrypt}h",
+                Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER)));
+
+        manageAccount.changeStatus(admin.getSubject(), subject, AccountStatus.LOCKED);
+        assertThat(refresh(tokens.path("refresh_token").asText()).statusCode()).isEqualTo(400);
+        manageAccount.changeStatus(admin.getSubject(), subject, AccountStatus.ACTIVE);
+        assertThat(refresh(tokens.path("refresh_token").asText()).statusCode()).isEqualTo(400);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM role_audit_log WHERE subject = ? AND actor = ? AND action = 'STATUS_CHANGED'",
+                Integer.class, subject, admin.getSubject())).isEqualTo(2);
+    }
+
+    @Test void roleGrantRevokesPreviouslyIssuedRefreshToken() throws Exception {
+        JsonNode tokens = login();
+        String subject = subjectOf(tokens);
+        UserAccount admin = accounts.saveAndFlush(UserAccount.withRoles(
+                "operator-" + UUID.randomUUID() + "@example.com", "{bcrypt}h",
+                Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER)));
+
+        manageAccount.grantRole(admin.getSubject(), subject, PlatformRole.CREATOR);
+
+        assertThat(refresh(tokens.path("refresh_token").asText()).statusCode()).isEqualTo(400);
+        assertThat(accounts.findBySubject(subject).orElseThrow().hasRole(PlatformRole.CREATOR)).isTrue();
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM role_audit_log WHERE subject = ? AND actor = ? AND action = 'ROLE_CHANGED'",
+                Integer.class, subject, admin.getSubject())).isEqualTo(1);
+    }
+
+    @Test void passwordRecoveryRejectsExistingRefreshToken() throws Exception {
+        JsonNode tokens = login();
+        String subject = subjectOf(tokens);
+        String email = accounts.findBySubject(subject).orElseThrow().getEmail();
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> requested = client.send(HttpRequest.newBuilder(
+                URI.create(base() + "/api/v1/auth/password/reset-request"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(Map.of("email", email))))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(requested.statusCode()).isEqualTo(200);
+        String resetToken = mail.lastToken.get();
+        assertThat(resetToken).isNotBlank();
+        HttpResponse<String> reset = client.send(HttpRequest.newBuilder(
+                URI.create(base() + "/api/v1/auth/password/reset"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(Map.of(
+                        "token", resetToken, "newPassword", "recovered-password-123"))))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(reset.statusCode()).isEqualTo(200);
+        assertThat(refresh(tokens.path("refresh_token").asText()).statusCode()).isEqualTo(400);
+    }
+
+    @Test void roleRemovalRejectsPreviouslyIssuedRefreshTokenAndAudits() throws Exception {
+        JsonNode tokens = login();
+        String subject = subjectOf(tokens);
+        UserAccount target = accounts.findBySubject(subject).orElseThrow();
+        target.grantRole(PlatformRole.CREATOR);
+        accounts.saveAndFlush(target);
+        UserAccount admin = accounts.saveAndFlush(UserAccount.withRoles(
+                "operator-" + UUID.randomUUID() + "@example.com", "{bcrypt}h",
+                Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER)));
+
+        manageAccount.revokeRole(admin.getSubject(), subject, PlatformRole.CREATOR);
+
+        assertThat(refresh(tokens.path("refresh_token").asText()).statusCode()).isEqualTo(400);
+        assertThat(accounts.findBySubject(subject).orElseThrow().hasRole(PlatformRole.CREATOR)).isFalse();
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM role_audit_log WHERE subject = ? AND actor = ? AND action = 'ROLE_CHANGED'",
+                Integer.class, subject, admin.getSubject())).isEqualTo(1);
     }
 
     @Test void idTokenCannotAuthenticateAnApiRequest() throws Exception {
