@@ -52,8 +52,20 @@ public class RoleAuditLog {
     }
 
     public static RoleAuditLog assigned(UserAccount account, String actor) {
-        String roles = account.getRoles().stream().map(Enum::name).sorted()
-                .collect(Collectors.joining(","));
-        return new RoleAuditLog(account.getSubject(), actor, "ROLE_ASSIGNED", roles);
+        return new RoleAuditLog(account.getSubject(), actor, "ROLE_ASSIGNED", currentRoles(account));
+    }
+
+    /** 운영자가 역할을 부여하거나 회수한 변경을 기록한다. 기록에는 변경 후 역할 집합을 남긴다. */
+    public static RoleAuditLog roleChanged(UserAccount account, String actor) {
+        return new RoleAuditLog(account.getSubject(), actor, "ROLE_CHANGED", currentRoles(account));
+    }
+
+    /** 운영자가 계정 상태를 바꾼 변경을 기록한다. 기록에는 변경 후 상태를 남긴다. */
+    public static RoleAuditLog statusChanged(UserAccount account, String actor) {
+        return new RoleAuditLog(account.getSubject(), actor, "STATUS_CHANGED", account.getStatus().name());
+    }
+
+    private static String currentRoles(UserAccount account) {
+        return account.getRoles().stream().map(Enum::name).sorted().collect(Collectors.joining(","));
     }
 }

@@ -91,6 +91,9 @@ class GatewayRouteTest {
     @ParameterizedTest(name = "{0} {1} → {2}")
     @CsvSource({
         "POST, /api/v1/auth/signup,          auth-api",
+        "POST, /api/v1/admin/accounts/usr_x/status, auth-admin-accounts",
+        "POST, /api/v1/admin/accounts/usr_x/roles/grant, auth-admin-accounts",
+        "POST, /api/v1/admin/accounts/usr_x/roles/revoke, auth-admin-accounts",
         "GET,  /api/v1/storefront/main,     store",
         "POST, /api/v1/orders,              order",
         "POST, /api/v1/orders/example/refund/retries, order",

@@ -85,4 +85,50 @@ public class UserAccount extends BaseTimeEntity {
     public void changePasswordHash(String hash) {
         this.passwordHash = hash;
     }
+
+    /**
+     * 계정 상태를 바꾼다. 전환 규칙을 도메인이 보장한다.
+     *
+     * <ul>
+     *   <li>ACTIVE ↔ LOCKED: 양방향 가능(정지·해제).
+     *   <li>ACTIVE·LOCKED → DISABLED: 가능(계정 종료).
+     *   <li>DISABLED → 다른 상태: 불가(종료는 되돌리지 않는다).
+     *   <li>같은 상태로의 전환: 불가(의미 없는 변경).
+     * </ul>
+     */
+    public void changeStatus(AccountStatus next) {
+        if (next == null) {
+            throw new IllegalArgumentException("변경할 상태는 null일 수 없습니다.");
+        }
+        if (next == this.status) {
+            throw new IllegalStateException("이미 " + this.status + " 상태입니다.");
+        }
+        if (this.status == AccountStatus.DISABLED) {
+            throw new IllegalStateException("비활성 계정은 상태를 되돌릴 수 없습니다.");
+        }
+        this.status = next;
+    }
+
+    /** 역할을 부여한다. 이미 가진 역할이면 아무 일도 하지 않는다. */
+    public void grantRole(PlatformRole role) {
+        this.roles.add(role);
+    }
+
+    /**
+     * 역할을 회수한다. 가지지 않은 역할을 회수하려 하면 거절한다.
+     * MEMBER는 모든 계정의 기본 역할이므로 회수할 수 없다.
+     */
+    public void revokeRole(PlatformRole role) {
+        if (role == PlatformRole.MEMBER) {
+            throw new IllegalStateException("기본 역할 MEMBER는 회수할 수 없습니다.");
+        }
+        if (!this.roles.contains(role)) {
+            throw new IllegalStateException("가지지 않은 역할은 회수할 수 없습니다: " + role);
+        }
+        this.roles.remove(role);
+    }
+
+    public boolean hasRole(PlatformRole role) {
+        return this.roles.contains(role);
+    }
 }
