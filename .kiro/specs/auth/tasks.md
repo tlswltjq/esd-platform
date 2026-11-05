@@ -12,7 +12,7 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] 실제 역할별 접근 절차의 전체 여정 검증 — G5
+- [x] 실제 역할별 접근 절차의 전체 여정 검증 — Gateway 필터 판정 수준 완료(2026-11-05). `RoleAccessGatewayTest`가 MEMBER·ADMIN·CREATOR·REVIEWER 통과/거부, 미인증 차단(GET 401·변경 메서드 CSRF 403), 미선언 경로 도달 불가를 지킨다. 하위 서비스를 실제로 띄운 끝단 여정은 각 모듈 통합 테스트 범위.
 - [x] 분실 비밀번호 복구의 최소 계약·감사 — 완료(2026-11-05). 요청/실행 2단계, 30분 유효, 계정 존재 비노출(가입 여부 무관 동일 응답), 일회용 토큰(SHA-256 해시 저장)·만료·일회성, 복구 성공 시 전 토큰 폐기. 메일은 `PasswordResetMailPort`로 추상화(현재 모의, 실제 발송은 후속). 단위 `RecoverPasswordTest`, 통합 `PasswordRecoveryIntegrationTest`(실제 MySQL) 통과. 계약은 requirements R6.
 - [ ] 계정 상태(활성/정지 등) 변경과 권한 관리의 최소 계약·감사 — G5
 - [ ] 계정 복구/상태 변경 후 세션·토큰 정책과 감사의 여정 확인 — G5 (platform-generalization-plan 6절 "가입/로그인·계정 복구" 행)
