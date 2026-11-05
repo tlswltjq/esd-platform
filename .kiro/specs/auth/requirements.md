@@ -78,6 +78,18 @@ MVP 재작성은 Gateway와 함께 2026-10-13 완료했다(관련 테스트 132�
 6. IF 토큰이 없거나 이미 소비되었거나 만료되었으면 THEN 시스템 SHALL 사유를 구분하지 않고 동일하게 거절한다(400).
 7. WHERE 실제 메일 발송은 후속 범위로 둔다. THE 시스템 SHALL 발송을 `PasswordResetMailPort`로 추상화하고, 현재는 모의 구현을 연결한다.
 
+### R7. 계정 상태·권한 관리(운영자)
+**사용자 스토리:** 운영자로서, 계정을 정지·해제하고 역할을 부여·회수하고 싶다. 그래야 플랫폼을 안전하게 운영한다.
+
+#### 수용 기준
+1. WHERE `/api/v1/admin/accounts/**` 맥락에서 THE 시스템 SHALL `ADMIN` 역할을 요구한다(게이트웨이에서 판정).
+2. THE 상태 전환 SHALL 다음 규칙을 따른다: ACTIVE↔LOCKED 양방향, ACTIVE·LOCKED→DISABLED 가능, DISABLED는 되돌릴 수 없다, 같은 상태로의 전환은 거절한다.
+3. WHEN 운영자가 역할을 부여·회수하면 THEN 시스템 SHALL 변경을 적용한다. THE 기본 역할 `MEMBER`는 회수할 수 없다.
+4. IF 변경 대상이 요청자 자신이면 THEN 시스템 SHALL 상태·역할 변경을 거절한다(자기 보호).
+5. IF `ADMIN` 역할 회수가 마지막 운영자를 없앤다면 THEN 시스템 SHALL 이를 거절한다(운영자 0명 방지).
+6. WHEN 상태·역할이 바뀌면 THEN 시스템 SHALL 대상 계정의 Refresh Token 계열을 즉시 폐기한다. THE 기존 access token은 수명(기본 15분)까지 유효하다.
+7. WHEN 상태·역할 변경이 일어나면 THEN 시스템 SHALL `role_audit_log`에 변경을 기록한다(수행 주체·행동·변경 후 값).
+
 ## 범위 밖(후속)
 
 - 소셜 로그인 다수·고급 MFA·외부 인증 플랫폼 연동.
