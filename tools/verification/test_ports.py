@@ -65,6 +65,12 @@ class PortOffsetsTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'ephemeral'):
                 ports.application_offset('verify-license', 'LICENSE_TEST_PORT_OFFSET', [8080, 8084])
 
+    def test_override_cannot_push_an_application_port_to_zero_or_below(self):
+        # PR #118 리뷰: 음수 간격이면 --server.port=0이 되어 앱이 임의 포트로 뜨고 준비 확인이 끝까지 실패한다.
+        with mock.patch.dict(os.environ, {'STUDIO_TEST_PORT_OFFSET': '-8080'}):
+            with self.assertRaisesRegex(RuntimeError, 'below 1'):
+                ports.application_offset('verify-studio', 'STUDIO_TEST_PORT_OFFSET', [8080, 8085])
+
     def test_free_default_offset_is_returned(self):
         self.assertEqual(ports.OFFSETS['verify-studio'],
                          ports.application_offset('verify-studio', 'STUDIO_TEST_PORT_OFFSET', [8080, 8085]))

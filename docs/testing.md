@@ -601,7 +601,9 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
   "동시에 출발"은 순서를 운에 맡긴다. `common:test` 의 `PausePoints` 를 테스트 설정에 등록하면 지정한 저장소의
   메서드가 끝날 때마다 `"타입.메서드"` 지점을 지난다. 요청 1을 이름 붙은 스레드로 시작해 지점에서 세우고,
   요청 2를 실제 서비스로 끝낸 뒤 푼다. **잠금 전 읽기** 지점은 잠근 뒤 다시 읽는지, **잠금 뒤** 지점은 상대가
-  기다리는지(`stillRunningAfter`) 본다. 예: `PurchaseInterleavingIntegrationTest`.
+  잠금 호출에 **들어간 뒤** 나오지 못하는지(`watch(...).stillInsideAfter`) 본다. "작업이 아직 안 끝났다"만 보면
+  상대가 늦게 시작한 것과 잠금에 막힌 것을 가르지 못한다(PR #118 리뷰). `reset()` 은 세운 스레드를 모두 풀어,
+  테스트가 중간에 실패해도 잠금을 쥔 채 남지 않게 한다. 예: `PurchaseInterleavingIntegrationTest`.
   다른 방어선(보유권 상태 확인·DB 유일 키)이 먼저 막는 순서는 지키려는 줄을 증명하지 못하므로,
   그 줄만 남는 사례(예: 보유권 없는 보관함 구매)를 따로 둔다
 - **옛 데이터·옛 메시지를 바꾸는 PR은 호환 테스트를 같이 쓴다**([결정 104](decisions.md#upgrade-compat-on-change)).

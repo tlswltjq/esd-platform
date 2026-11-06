@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.stove.common.test.PausePoints;
 import com.stove.common.test.PausePoints.Gate;
 import com.stove.common.test.PausePoints.Run;
+import com.stove.common.test.PausePoints.Watch;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
 import com.stove.license.core.domain.LicenseErrorCode;
@@ -47,6 +48,7 @@ class PurchaseInterleavingIntegrationTest extends LicenseIntegrationTestBase {
     static final String READ_OWNED = "LicenseRepository.findByBuyerSubjectAndLicenseId";
     static final String READ_ORDER = "LicenseRepository.findByOrderNo";
     static final String LOCKED = "LicenseRepository.lockProductPurchases";
+    static final String LOCK_ORDER = "LicenseRepository.lockByOrderNo";
     static final Duration BLOCKED = Duration.ofSeconds(1);
     static final PausePoints POINTS = new PausePoints();
 
@@ -104,8 +106,9 @@ class PurchaseInterleavingIntegrationTest extends LicenseIntegrationTestBase {
         Run<LicenseRegistration> registering = PausePoints.start("register", () -> register.execute(BUYER, purchase.getLicenseId()));
         locked.awaitArrival();
 
+        Watch waiting = POINTS.watch(LOCK_ORDER, "suspend");
         Run<Void> suspending = PausePoints.start("suspend", () -> { suspend.execute(stop(purchase)); return null; });
-        assertThat(suspending.stillRunningAfter(BLOCKED)).as("등록이 잠근 동안 정지는 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("등록이 잠근 동안 정지는 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
 
         assertThat(registering.join().getStatus()).isEqualTo(LicenseStatus.ACTIVE);
@@ -216,8 +219,9 @@ class PurchaseInterleavingIntegrationTest extends LicenseIntegrationTestBase {
         Run<LicenseRegistration> registering = PausePoints.start("register", () -> register.execute(BUYER, second.getLicenseId()));
         locked.awaitArrival();
 
+        Watch waiting = POINTS.watch(LOCKED, "restore");
         Run<Void> restoration = PausePoints.start("restore", () -> { restore.execute(restoring); return null; });
-        assertThat(restoration.stillRunningAfter(BLOCKED)).as("등록이 잠근 동안 복구는 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("등록이 잠근 동안 복구는 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
 
         assertThat(registering.join().getStatus()).isEqualTo(LicenseStatus.ACTIVE);
