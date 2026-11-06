@@ -7,4 +7,4 @@ python3 tools/image-benchmark/run.py --help
 python3 tools/image-benchmark/report.py runs/image-benchmark/실행-ID
 ```
 
-기준 revision과 재현 순서는 [이미지 비교 기록](../../docs/jib-oci-comparison.md)을 따른다. 현재 개발·검증은 로컬 OrbStack에서 수행한다. 이번 이동에서는 원격 벤치마크를 재실행하지 않았다.
+기준 revision과 재현 순서는 [이미지 비교 기록](../../docs/experiments.md#jib-oci)을 따른다. 현재 개발·검증은 로컬 OrbStack에서 수행한다. 이번 이동에서는 원격 벤치마크를 재실행하지 않았다.

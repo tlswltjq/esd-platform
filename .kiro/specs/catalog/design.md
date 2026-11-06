@@ -17,6 +17,7 @@
 - **노출은 독립 설정 + 판매 기반 기본값.** 최종 규칙 `!platformListingHidden && listingPreference.isListed(saleStatus)`. 공개 사본에는 최종 listed만 싣는다.
 - **공개 접근 판정 일원화.** 공개 상세 허용·새 주문 근거(publicDetailAllowed)를 모듈 내부 ProductPublicAccess 한 곳에서 생산한다.
 - **다운로드 제한은 내구 예약 + 저장소 적용 분리.** 상태 저장(202 접수)과 저장소 태그 적용(PENDING/APPLIED/FAILED)을 분리하고 스케줄러가 수렴시킨다.
+- **Studio 명령을 신뢰하되 생산 권한은 좁힌다.** 이벤트 형식 검증이 생산자 인증을 대신하지 않으므로 Studio 토픽 생산 권한은 신뢰 서비스에 한정한다. Catalog는 빌드 파일을 다시 검사하거나 다운로드 URL을 발급하지 않고 Studio가 확인한 파일 참조를 보관한다.
 - **내부 GET은 용도별 전용 키.** Store 동기화·Order 근거·Download 빌드 조회가 서로 다른 서비스 키를 쓰며 Gateway·공개 OpenAPI에 노출하지 않는다.
 
 ## 데이터 모델
@@ -33,7 +34,7 @@
 - productId는 Catalog 내부 생성, releaseRequestId를 공개본 식별자로 재사용한다. productCode는 Studio 제공 값을 변경 없이 사용한다.
 - projectId·productCode·ownerSubject의 최초 연결은 변경할 수 없다. 서비스 간 FK·조인은 사용하지 않는다.
 - 공개 목록 정렬용 최초 공개 시각·productId, 이력/검증용 projectId·contentVersion 인덱스를 둔다.
-- Flyway: V1~V10 체크섬 유지, V11 catalog_product·catalog_release, V12 판매 상태 이행(기존을 ON_SALE·제한 없음·catalogVersion=contentVersion), V13 다운로드 제한(제한 없음·버전 1·APPLIED), V14 노출(AUTO·숨김 없음).
+- Flyway: V1~V10 체크섬 유지, V11 catalog_product·catalog_release, V12 판매 상태 이행(기존을 ON_SALE·제한 없음·catalogVersion=contentVersion), V13 다운로드 제한(제한 없음·버전 1·APPLIED), V14 노출(AUTO·숨김 없음), V15 공개 작업·철회 이력·요청 잠금.
 
 ## API 계약
 
@@ -89,4 +90,13 @@ Inbox 마킹·요청 최종 결과 저장·상품/현재 공개본 변경·결�
 - 공개 조회: listed=true 목록, 최종 listed=false 상세·새 주문 404, no-store, 내부 필드 미노출.
 - 판매/노출: 두 조건 독립 저장·버전 대조·감사·공개 사본 Outbox, 현재 버전 무변경 명령은 변경 없음, 옛 버전 409.
 - 다운로드: 202 접수·저장소 PENDING/APPLIED/FAILED 수렴, 판매 제한과 독립, License ACTIVE·상품 대조 유지.
-- 철회: 공개 확정과 같은 종료 경계 조정, 선확정 결과 유지, 유예시간 없음.
+- 철회: 공개 확정과 같은 종료 경계 조정, 선확정 결과 유지, 유예시간 없음. 기본 poll 200ms는 최소 철회 시간이 아니다.
+- 판매 제한·숨김의 관측 지점은 Order가 읽는 Catalog HTTP 정본이며 Order 저장과 별도 트랜잭션이다. 제한 완료 후 시작한 조회는 반영하지만, 겹친 조회까지 원자 즉시 차단하는 분산 잠금은 없다.
+- 공개 사본 필드 추가(saleStatus·catalogVersion·listed)와 내부 키 경로는 Catalog·Store·Order·Payment를 정비 구간에 함께 교체하는 전제이며 임의 혼합 버전을 지원하지 않는다.
+
+## 사용 안내
+
+- 공개 조회는 Gateway GET `/api/v1/products?page=0&size=20`, `/api/v1/products/by-code/{productCode}`다. 상품 생성·수정 HTTP API는 없고, 공개본은 Studio 출시 요청(`POST /api/v1/studio/projects/{id}/release-requests`, requestId·contentVersion)으로만 바뀐다. 202 이후 Catalog 공개·Studio COMPLETED 반영 사이에 비동기 지연이 있다.
+- 공개 작업 설정: `stove.catalog.publication.poll-interval-ms`(200), `batch-size`(20, 1~100), `worker-enabled`(true).
+- 검증: `./gradlew :apps:catalog:test :apps:catalog:integrationTest`, `python3 tools/verification/verify-catalog.py`(Auth·Gateway·Studio·Review·Catalog와 인프라만, 포트 충돌 시 `CATALOG_TEST_PORT_OFFSET`). `CATALOG_WITHDRAWAL_CHECK=true`를 주면 심사/출시 철회·동일 자료 재신청·같은 승인본 재출시·재시작 후 공개 재개도 실행한다.
+- 기존 DB 전환: 쓰기 프로세스·리스너·릴레이를 멈추고 백업한 뒤 [전환 SQL](../../../tools/migrations/catalog/catalog-transition.sql)을 실행한다(구 미발행 Outbox를 `catalog_legacy_outbox_archive`에 보존하고 DEAD로 격리, 반복 실행 가능, `unexpected_legacy_pending`=0 확인). 이어 Studio `studio_release_request`와 Catalog `catalog_release`를 따로 추출해 대조하고, 빠진 요청은 원본 `ProjectReleaseRequested`를 eventId·키·헤더 그대로 재전달한다. 원본이 없으면 누락으로 기록하고 현재 작업본으로 과거 스냅샷을 추측하지 않는다. 격리한 구 Outbox를 DEAD 일괄 재큐잉으로 되살리지 않는다.

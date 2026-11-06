@@ -1,6 +1,6 @@
 # 정산 매출·월 마감·PG 수령 모델
 
-[전체 안내](../model-guide.md) · [정산 실행](../../settlement-guide.md) · [MVP 기록](../../settlement-mvp-plan.md) · [책임 분리](../../settlement-separation-verification.md) · [PortOne 혜택 A](../../settlement-external-benefit-verification.md) · [Order·Payment](order-payment.md)
+[전체 안내](../model-guide.md) · [정산 실행](../../../.kiro/specs/settlement/design.md#사용-안내) · [MVP 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md) · [책임 분리](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md) · [PortOne 혜택 A](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-external-benefit-verification.md) · [Order·Payment](order-payment.md)
 
 Settlement는 기존 OrderPaid의 불변 구매 근거를 매출로 기록한다. 판매자는 Catalog의 불변 ownerSubject,
 PG 근거는 선택한 공급자에서 직접 확인한다. SIMULATED는 외부 모의 PG의 거래·비용·명세, PORTONE_TEST는 현재 TOSSPAY_V2 원승인·지급 구성을 조회한다. Payment HTTP나 다른 모듈 DB를 경유하지 않는다.
@@ -42,7 +42,7 @@ receivedAt은 이벤트 접수 시각이고 PG 수령 시각이 아니다. PG �
 마감 재요청은 최초 결과를 반환한다. 마감된 원래 월의 지연 매출은 접수 시점의 현재 월에 반영하고 원래 saleMonth를 보존한다.
 CLOSED는 금액 마감이며 실제 송금 완료가 아니다. [결정 39](../../decisions.md#seller-close-independent-of-pg-cost)에 따라 PG 비용이 미확정이어도 검증된 판매자 금액을 마감한다. 늦은 비용 확인은 판매자 금액·최초 closedAt을 바꾸지 않는다.
 
-환불 조정은 [원배분 전액 상계 계산 정책](../../settlement-refund-allocation-policy.md)과 [월 선택 정책 A](../../settlement-refund-month-policy.md)를 서비스의 잠금·[환불 원장/월 합계 원자 저장](../../settlement-refund-ledger-verification.md)에 연결했다. 기존 금액은 매출 총합으로 보존하고 양수 환불 합계 4개와 차감 후 순액 3개를 제공한다. 마감 시 두 원장 합계를 각각 대조한다. 환불만 있는 월의 순액은 음수일 수 있으며 자동 이월·지급/회수는 별도다.
+환불 조정은 [원배분 전액 상계 계산 정책](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-refund-allocation-policy.md)과 [월 선택 정책 A](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-refund-month-policy.md)를 서비스의 잠금·[환불 원장/월 합계 원자 저장](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-refund-ledger-verification.md)에 연결했다. 기존 금액은 매출 총합으로 보존하고 양수 환불 합계 4개와 차감 후 순액 3개를 제공한다. 마감 시 두 원장 합계를 각각 대조한다. 환불만 있는 월의 순액은 음수일 수 있으며 자동 이월·지급/회수는 별도다.
 
 ## SettlementRefund — 최초 금융 확인과 불변 전액 조정
 
@@ -85,7 +85,7 @@ ADMIN이 기존 providerSettlementId로 수집하면 외부 PG의 불변 명세 
 
 승인 행의 금액은 양수·수수료/VAT는 음수, 환불 행은 그 반대 부호로 보고한 값을 보존한다. 원본 전체 페이지·커서·합계가 검증돼야 하나의 트랜잭션으로 접수한다. 대사는 저장한 원본과 내부 구매/환불을 별도로 대조하며 미도착·불일치·환경/키 대응 미검증을 구분한다. `MATCHED_REPORTED`는 은행 실수령·판매자 송금 완료가 아니다.
 
-현재 내부 승인 경로는 PORTONE_TEST다. TEST 빈 결과는 `EMPTY_TEST` 관측일 뿐 기존 구매의 확정 비용 0원이 아니며 LIVE 명세와 TEST 구매를 연결해 비용을 확정하지 않는다. LIVE 승인 접수와 실제 가맹점별 키 대응은 이번에 추가/검증하지 않았다. 기존 월 금융 요약은 그대로이고 PG 보고 비용/반환/VAT는 새 ADMIN 명세·항목 조회에서 확인한다. PG 비용의 월 귀속/요약 통합과 API 밖의 차액 정산 등은 후속이다. [정확한 구현·검증 범위](../../settlement-pg-evidence-verification.md)를 따른다.
+현재 내부 승인 경로는 PORTONE_TEST다. TEST 빈 결과는 `EMPTY_TEST` 관측일 뿐 기존 구매의 확정 비용 0원이 아니며 LIVE 명세와 TEST 구매를 연결해 비용을 확정하지 않는다. LIVE 승인 접수와 실제 가맹점별 키 대응은 이번에 추가/검증하지 않았다. 기존 월 금융 요약은 그대로이고 PG 보고 비용/반환/VAT는 새 ADMIN 명세·항목 조회에서 확인한다. PG 비용의 월 귀속/요약 통합과 API 밖의 차액 정산 등은 후속이다. [정확한 구현·검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-pg-evidence-verification.md)를 따른다.
 
 ## 외부 모의 PG
 

@@ -7,7 +7,7 @@
 
 **모듈 재작성 현황 (2026-10-18): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`, `settlement` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
-Studio의 완료 범위는 [Studio 완료 기록](studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](review-simplification-plan.md#재작성-완료-기록)을 본다.
+Studio의 완료 범위는 [Studio 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md#재작성-완료-기록)을 본다.
 Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열한 모듈의 계약을 기준으로 한다.
 외부 모의 PG는 업무 모듈과 분리된 검증용 공급자이며 완료 모듈 수에 포함하지 않는다.
 
@@ -49,7 +49,7 @@ Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실�
 
 Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요청, 출시 요청·재요청이다.
 심사 판정과 실제 출시·공개 상품 관리는 외부 업무이며 결과는 요청 기록에만 표시한다.
-[모델](domain/models/studio.md) · [실행·요청 예제](studio-guide.md)
+[모델](domain/models/studio.md) · [실행·요청 예제](../.kiro/specs/studio/design.md#사용-안내)
 
 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다. 실제 연계는 Auth·Gateway·Studio·Review·Catalog 여정으로 확인한다.
 
@@ -69,9 +69,9 @@ Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요
 | POST / GET | /api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals | 출시 철회 내구 접수(202)·페이지 영수증 이력 |
 | GET | /api/v1/studio/projects/{id}/release-requests/{targetId}/withdrawals/{withdrawalId} | 출시 철회 최종 결과 조회 |
 
-프로젝트·빌드·심사/출시 이력의 GET 목록은 `page=0`·`size=20`이 기본이며 최대 100개, ID 내림차순이다. `data`는 기존 배열에서 `items/page/size/totalElements/totalPages`로 전환했다. 항목 정보와 소유권은 유지하며 잘못된 범위·정수 조회 구간 초과는 400이다. [계약·검증 기록](studio-list-pagination-plan.md)을 따른다. 철회 영수증은 기존 제한 조회·응답 계약을 유지한다.
+프로젝트·빌드·심사/출시 이력의 GET 목록은 `page=0`·`size=20`이 기본이며 최대 100개, ID 내림차순이다. `data`는 기존 배열에서 `items/page/size/totalElements/totalPages`로 전환했다. 항목 정보와 소유권은 유지하며 잘못된 범위·정수 조회 구간 초과는 400이다. [계약·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-list-pagination-plan.md)을 따른다. 철회 영수증은 기존 제한 조회·응답 계약을 유지한다.
 
-상점 정보의 genres는 작업본에서 0~3개, 새 심사 제출에서는 선택 가능한 코드 1~3개다. 코드 기준 목록은 코드 수정·배포로 관리하고 향후 선택 중지한 알려진 코드의 기존 근거는 보존한다. 장르만 수정해도 새 버전 심사·출시를 거친다. [장르 계약](store-genre-filter-plan.md)을 따른다.
+상점 정보의 genres는 작업본에서 0~3개, 새 심사 제출에서는 선택 가능한 코드 1~3개다. 코드 기준 목록은 코드 수정·배포로 관리하고 향후 선택 중지한 알려진 코드의 기존 근거는 보존한다. 장르만 수정해도 새 버전 심사·출시를 거친다. [장르 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-genre-filter-plan.md)을 따른다.
 
 외부 결과는 해당 요청 ID·버전에 기록한다. 현재 버전의 승인 결과만 출시 요청 조건으로 인정한다.
 변경된 상세정보를 과거 승인이 승인하지 않으며, 요청에 첨부한 과거 스냅샷은 보존한다.
@@ -92,7 +92,7 @@ ProjectReviewWithdrawalRequested·ProjectReleaseWithdrawalRequested를 발행하
 ## review
 
 Review는 Studio의 요청 당시 상세정보·전체 ZIP 스냅샷을 접수하고 수동 승인·반려의 원본을 관리한다.
-[모델](domain/models/review.md) · [실행·검증](review-guide.md) · [개선 계획·완료 기록](review-simplification-plan.md)
+[모델](domain/models/review.md) · [실행·검증](../.kiro/specs/review/design.md#사용-안내) · [개선 계획·완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md)
 
 REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
 요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED·REJECTED·WITHDRAWN 중 하나로 최종 전이한다.
@@ -123,14 +123,14 @@ V1~V9 SQL·역사 자료를 보존하고 V10의 project_review만 새 업무에 
 
 ## catalog
 
-상품 검색·목록은 [노출 계약](catalog-listing-policy-plan.md)의 독립 설정을 따른다. CREATOR GET/PUT `/api/v1/products/by-code/{code}/listing`은 자기 상품의 AUTO/LISTED/UNLISTED, ADMIN GET/PUT `/api/v1/admin/products/{code}/listing/restriction`은 독립 강제 숨김을 관리한다. AUTO는 최종 ON_SALE만 노출하고 관리자 숨김이 우선한다. Catalog 공개 목록과 Store 검색·페이지·총개수는 listed=true만 포함한다. [공개 상세 B](public-product-detail-plan.md)에 따라 최종 listed=false이면 Catalog/Store 공개 상세와 새 주문도 404로 거절한다.
+상품 검색·목록은 [노출 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-listing-policy-plan.md)의 독립 설정을 따른다. CREATOR GET/PUT `/api/v1/products/by-code/{code}/listing`은 자기 상품의 AUTO/LISTED/UNLISTED, ADMIN GET/PUT `/api/v1/admin/products/{code}/listing/restriction`은 독립 강제 숨김을 관리한다. AUTO는 최종 ON_SALE만 노출하고 관리자 숨김이 우선한다. Catalog 공개 목록과 Store 검색·페이지·총개수는 listed=true만 포함한다. [공개 상세 B](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/public-product-detail-plan.md)에 따라 최종 listed=false이면 Catalog/Store 공개 상세와 새 주문도 404로 거절한다.
 
-상품 다운로드는 ADMIN GET/PUT `/api/v1/admin/products/{code}/downloads/restriction`의 독립 제한으로 관리한다. 202는 제한 상태·감사·작업 예약 접수이며 저장소 적용은 PENDING/APPLIED/FAILED로 별도 조회한다. [저장소 적용·보장 한계](download-restriction-plan.md)를 따른다.
+상품 다운로드는 ADMIN GET/PUT `/api/v1/admin/products/{code}/downloads/restriction`의 독립 제한으로 관리한다. 202는 제한 상태·감사·작업 예약 접수이며 저장소 적용은 PENDING/APPLIED/FAILED로 별도 조회한다. [저장소 적용·보장 한계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-restriction-plan.md)를 따른다.
 
-판매자 자율 중지와 관리자 판매 제한의 API·역할·기존 주문 영향·사본 버전은 [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
+판매자 자율 중지와 관리자 판매 제한의 API·역할·기존 주문 영향·사본 버전은 [판매 상태 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)을 따른다.
 
 Studio의 출시 요청을 처리하고 공개 상품·공개본의 정본을 관리한다.
-상세 범위·버전 정책·검증 기준은 [Catalog MVP 계획](catalog-mvp-plan.md)을 따른다.
+상세 범위·버전 정책·검증 기준은 [Catalog MVP 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-mvp-plan.md)을 따른다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -159,7 +159,7 @@ ProjectReleaseWithdrawalRequested를 수신하고 공개 확정과 같은 종료
 
 ## store
 
-Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP 범위](store-mvp-plan.md) · [실행·수동 확인](store-guide.md).
+Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-mvp-plan.md) · [실행·수동 확인](../.kiro/specs/store/design.md#사용-안내).
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -174,17 +174,17 @@ Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP �
 Store 동기화는 CATALOG_STORE_SERVICE_KEY로 보호한 Catalog `/internal/v1/store-products`와 `/internal/v1/store-products/{code}`에서 숨긴 상품까지 읽는다. 상세의 필수 listed 등을 검증하며 내부 키는 이 두 GET에만 전달한다. 공개 API로 우회하지 않는다. 숨긴 사본은 보존하되 공개 상세는 404로 거절한다.
 
 Kafka 반영은 catalogVersion으로 공개 사본을 교체하고 중복·역순은 현재 사본을 유지한다. 콘텐츠 버전이 같아도 판매 상태 변경을 반영한다. Kafka의 동일 Catalog 버전 내용 충돌은 실패한다. 직접 조회·검증한 Catalog 정본은 동일 버전의 내용 차이도 교정하며, 처리 중 반영된 더 최신 사본과 상품 ID·코드·최초 공개 시점의 식별 충돌은 덮어쓰지 않는다.
-업무 테이블은 store_product·장르 관계 store_product_genre·자동 교정의 변경 전후를 원자적으로 기록하는 store_reconciliation이다. 장르 조건도 페이지·총건수 계산 전에 적용하고 정본 대조/교정과 감사에 포함한다. Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다. [자동 동기화·복구의 범위와 검증](store-auto-reconciliation-plan.md)을 따른다.
-가격은 공개 KRW 정가이며 saleStatus·catalogVersion을 조회 사본으로 제공한다. 구매 허용의 최종 판단은 Order가 Catalog 정본으로 확인한다. [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
+업무 테이블은 store_product·장르 관계 store_product_genre·자동 교정의 변경 전후를 원자적으로 기록하는 store_reconciliation이다. 장르 조건도 페이지·총건수 계산 전에 적용하고 정본 대조/교정과 감사에 포함한다. Inbox·Outbox·Elasticsearch·Redis 캐시·featured는 사용하지 않는다. [자동 동기화·복구의 범위와 검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md)을 따른다.
+가격은 공개 KRW 정가이며 saleStatus·catalogVersion을 조회 사본으로 제공한다. 구매 허용의 최종 판단은 Order가 Catalog 정본으로 확인한다. [판매 상태 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)을 따른다.
 
 ---
 
 ## order
 
 공개 상품 하나의 주문 스냅샷·청구액을 고정하고 내 주문 조회·최종 결제 결과 반영을 담당한다.
-[MVP 범위](order-mvp-plan.md) · [실행·결과 확인](order-guide.md)
+[MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-mvp-plan.md) · [실행·결과 확인](../.kiro/specs/order/design.md#사용-안내)
 
-상품 근거는 CATALOG_ORDER_SERVICE_KEY·X-Order-Service-Key로 보호한 Catalog `/internal/v1/order-products/{code}`에서 조회한다. 상품 식별·가격·판매 상태·publicDetailAllowed만 받고 공개 본문·저장 경로는 받지 않는다. 새 주문은 공개 상세 허용 근거가 false이면 404이며 같은 requestId의 기존 주문 재전송·기존 주문 승인 접수는 원래 계약을 유지한다. 기존 관리자 판매 제한의 승인 접수 차단은 유지한다. [정책·연계 오류·검증 경계](public-product-detail-plan.md)를 따른다.
+상품 근거는 CATALOG_ORDER_SERVICE_KEY·X-Order-Service-Key로 보호한 Catalog `/internal/v1/order-products/{code}`에서 조회한다. 상품 식별·가격·판매 상태·publicDetailAllowed만 받고 공개 본문·저장 경로는 받지 않는다. 새 주문은 공개 상세 허용 근거가 false이면 404이며 같은 requestId의 기존 주문 재전송·기존 주문 승인 접수는 원래 계약을 유지한다. 기존 관리자 판매 제한의 승인 접수 차단은 유지한다. [정책·연계 오류·검증 경계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/public-product-detail-plan.md)를 따른다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -200,7 +200,7 @@ Kafka 반영은 catalogVersion으로 공개 사본을 교체하고 중복·역�
 MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문·임의 헤더로 구매자를 선택하지 않는다.
 Catalog의 코드별 내부 주문 근거를 DB 트랜잭션 밖에서 읽고 공개 접근·판매 가능 여부와 버전·정가를 확인한다. 기대 값 차이는 409이며 무료 상품도 409다.
 정가 listAmount·할인액 discountAmount=0·청구액 amount를 고정하고 구매자별 requestId 유일 제약으로 중복 생성을 막는다.
-같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다. 신규 주문은 ON_SALE만 허용한다. 새 승인 접수는 관리자 BLOCKED를 확인하되 판매자 STOPPED·현재 가격으로 기존 주문을 바꾸지 않는다. 이미 확정한 승인 영수증은 유지한다. [판매 상태와 승인 경계](catalog-sales-policy-plan.md)를 따른다.
+같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다. 신규 주문은 ON_SALE만 허용한다. 새 승인 접수는 관리자 BLOCKED를 확인하되 판매자 STOPPED·현재 가격으로 기존 주문을 바꾸지 않는다. 이미 확정한 승인 영수증은 유지한다. [판매 상태와 승인 경계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)를 따른다.
 새 requestId의 같은 상품 구매는 기존 PENDING이면 409 PURCHASE_IN_PROGRESS, PAID이면 409 PRODUCT_ALREADY_PURCHASED다.
 최종 FAILED만 새 주문을 허용한다. V11의 구매자·상품 ID/코드 유일 제약으로 동시 생성도 제한한다.
 
@@ -212,18 +212,18 @@ Catalog의 코드별 내부 주문 근거를 DB 트랜잭션 밖에서 읽고 �
 원구매는 purchase_order에 보존한다. 환불 접수/판정은 order_refund, 실제 지급 근거는 order_license_grant, 실행 이력은 order_refund_attempt에 저장한다. 원래 PAID와 환불 상태를 분리하고 V20까지 기존 마이그레이션·자료를 보존한다.
 환불 고객 상태는 PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED다. FAILED는 검증된 PG 실패와 실제 복구 완료 뒤에만 표시한다. REJECTED에는 고객에게 보이는 rejectionReason이 있고 승인 감사 메모·판정자는 공개하지 않는다.
 최초 내구 접수가 결제 확정 후 정확히 4시간 이내면 자동 허용하고, 이후에는 관리자 심사한다. 먼저 커밋된 판정이 확정되며 같은 명령·판정자·내용만 최초 판정 영수증으로 재전송 처리한다. 판정 변경·다른 명령은 409다.
-승인은 실제 License 지급 확인과 함께 정지 요청을 발행하고, 실제 정지 확인 뒤에만 RefundExecutionRequested를 발행한다. 조회/판정은 no-store이며 관리자 200은 환불 완료를 의미하지 않는다. 현재 고객 재시도 HTTP는 없고 반려 후 재심사는 미결이다. [계약·검증](refund-session-handoff.md).
+승인은 실제 License 지급 확인과 함께 정지 요청을 발행하고, 실제 정지 확인 뒤에만 RefundExecutionRequested를 발행한다. 조회/판정은 no-store이며 관리자 200은 환불 완료를 의미하지 않는다. 현재 고객 재시도 HTTP는 없고 반려 후 재심사는 미결이다. [계약·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md).
 구 견적·다중 항목·Redis·만료·취소·정산 계산을 사용하지 않는다.
-Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](payment-guide.md)은 실제 Payment 앱을 사용한다.
+Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 Payment 앱을 사용한다.
 
 ---
 
 ## payment
 
-Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다. Payment는 REQUESTED와 ORDER_SALE_RESTRICTED를 저장하고 PG 승인 POST 없이 원래 기한 내 재확인한다. 제한 해제·만료·기존 영수증의 처리는 [판매 상태 계약](catalog-sales-policy-plan.md)을 따른다.
+Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다. Payment는 REQUESTED와 ORDER_SALE_RESTRICTED를 저장하고 PG 승인 POST 없이 원래 기한 내 재확인한다. 제한 해제·만료·기존 영수증의 처리는 [판매 상태 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)을 따른다.
 
 확정된 주문의 결제 접수, 외부 PG 승인/조회, 미확정 건 재개·내 결제 조회와 허용된 환불의 PG 실행/결과 확인을 담당한다.
-[모델](domain/models/order-payment.md#payment) · [실행](payment-guide.md) · [MVP 범위·검증](payment-mvp-plan.md)
+[모델](domain/models/order-payment.md#payment) · [실행](../.kiro/specs/payment/design.md#사용-안내) · [MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-mvp-plan.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -234,7 +234,7 @@ Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다
 | POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. 공개 edge가 Payment로 직접 전달 |
 
 MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
-provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기 미확정 목록·상세·조사 이력/기록을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
+provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기 미확정 목록·상세·조사 이력/기록을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
 
 기본 결제 수신은 OrderPlaced, 결과 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
 입력은 api.listener의 Mapper에서 내부 값으로 변환한다. ReceiveOrderPayment가 원래 요청 전체를 비교하고 PENDING·Inbox를 함께 저장한다.
@@ -245,8 +245,8 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 PortOne의 개별 FAILED는 별도 이력이며 최종 OrderPaymentFailed로 바꾸지 않는다. 같은 orderNo·paymentId·금액의 PENDING checkout으로 재결제한다. 서버가 원구매와 대조한 실패 근거를 V28에 보존하며, 승인·Outbox 커밋 뒤 별도로 수집한다. 이력 조회 실패는 내구 재예약하고 PAID 뒤에도 이력 GET만 재개한다. 종료/만료 정책과 실제 TEST 재결제 전체 검증은 후속이다.
 
 기본 결제는 purchase_payment에 저장한다. 모의 PG의 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
-V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](payment-guide.md#기존-db와-kafka-전환)를 따른다.
-환불은 RefundExecutionRequested를 내구 접수한 뒤 고정 attemptId/본문과 최초 준비 3시간 창으로 취소·조회한다. 같은 실행의 재송신/조회 예약과 운영 중단 이력을 별도로 보존한다. 확인된 전액 취소/실행 성공/확정 실패는 결과 이벤트를 발행하며 원 purchase_payment의 PAID는 바꾸지 않는다. 오류별 자동 복구·운영 중단과 실제 TEST 범위는 [환불 계약](refund-session-handoff.md)을 따른다.
+V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](../.kiro/specs/payment/design.md#사용-안내)를 따른다.
+환불은 RefundExecutionRequested를 내구 접수한 뒤 고정 attemptId/본문과 최초 준비 3시간 창으로 취소·조회한다. 같은 실행의 재송신/조회 예약과 운영 중단 이력을 별도로 보존한다. 확인된 전액 취소/실행 성공/확정 실패는 결과 이벤트를 발행하며 원 purchase_payment의 PAID는 바꾸지 않는다. 오류별 자동 복구·운영 중단과 실제 TEST 범위는 [환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)을 따른다.
 Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다. 실제 운영 자금 이동·정산 환불 조정은 후속이다.
 
 ---
@@ -254,7 +254,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 ## license
 
 구매자·상품별 영구 이용 권한과 주문별 불변 구매 근거를 보존한다.
-[MVP 범위·검증 기록](license-mvp-plan.md) · [조회·실행 안내](license-guide.md)
+[MVP 범위·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md) · [조회·실행 안내](../.kiro/specs/license/design.md#사용-안내)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -277,7 +277,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 ## download
 
 본인의 상품 보유권과 현재 공개 빌드를 조회해 전체 ZIP의 만료 URL을 발급한다.
-업무 DB·MongoDB·Kafka·보유권/공개본 사본은 사용하지 않는다. [범위·검증](download-mvp-plan.md) · [실행](download-guide.md)
+업무 DB·MongoDB·Kafka·보유권/공개본 사본은 사용하지 않는다. [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행](../.kiro/specs/download/design.md#사용-안내)
 
 | 메서드 | 경로 | 응답 |
 |---|---|---|
@@ -296,7 +296,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 
 ## settlement
 
-[실행](settlement-guide.md) · [모델](domain/models/settlement.md) · [범위·검증](settlement-mvp-plan.md)
+[실행](../.kiro/specs/settlement/design.md#사용-안내) · [모델](domain/models/settlement.md) · [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)
 
 기존 OrderPaid를 소비해 판매자 매출·배분·월 마감과 PG 지급 명세 수령 대사를 담당한다.
 PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·결제·이용권 계약은 유지한다.
@@ -362,7 +362,7 @@ Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.mess
 | 서비스 | 대상 | 비고 |
 |---|---|---|
 | Auth·Studio·Review·Catalog·Order·Payment·License·Settlement | Outbox DEAD·DLT | 위 규칙을 따른다 |
-| Store | DLT만 존재 | 운영 API를 열지 않는다. Catalog 정본과의 주기 대조가 사본 차이를 자동 보완한다([자동 복구](store-auto-reconciliation-plan.md)) |
+| Store | DLT만 존재 | 운영 API를 열지 않는다. Catalog 정본과의 주기 대조가 사본 차이를 자동 보완한다([자동 복구](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md)) |
 | Download·Gateway | 없음 | Outbox·Kafka 소비가 없다 |
 
 실패 원인과 현재 주문·환불 상태를 확인한 뒤 재처리한다. 재투입이 원래 업무 순서를 복원하지 않는 이유는 [이벤트 순서](event-ordering.md)를 참고한다. 요청 계약은 [OutboxOpsController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxOpsController.java), [DltOpsController](../common/kafka/src/main/java/com/stove/common/kafka/ops/DltOpsController.java)에 있다.
@@ -401,4 +401,4 @@ Payment·Settlement는 각자의 포트와 어댑터를 사용하고 공급자 �
 
 PG의 Payment·Settlement·제어 키는 서로 다르며 제어 키는 검증 운영자만 사용한다.
 잘못된 키는 401, 유효한 다른 역할 키의 접근은 403이다. 키 미설정·중복이면 PG는 기동하지 않는다.
-Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](settlement-guide.md#기존-내장-pg-이관)를 따른다.
+Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](../.kiro/specs/settlement/design.md#사용-안내)를 따른다.

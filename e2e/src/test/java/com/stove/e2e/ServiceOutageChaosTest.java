@@ -21,7 +21,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 /**
  * 시나리오 R-06 — <b>서비스 하나를 실제로 정지시키고, 나머지가 계속 도는지 본다.</b>
  *
- * <p>{@code docs/chaos.md} 7장이 손으로 잰 자리다. 제시받은 가설은
+ * <p>{@code docs/experiments.md} E8(장애 주입)이 손으로 잰 자리다. 제시받은 가설은
  * "download 는 권한 사본을 자기 DB 에 들고 있으니 license 가 죽어도 동작해야 한다" 였고,
  * <b>설계 의도는 그런데 실제로 죽여 본 적이 아무도 없었다.</b> 죽여 보니 됐다 —
  * 티켓 발급 20/20, 평균 9.3ms.

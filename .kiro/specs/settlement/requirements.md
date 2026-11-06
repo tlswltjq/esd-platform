@@ -77,6 +77,9 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 4. IF 내부 매출이 없는 항목이 있으면 THEN 시스템 SHALL 건너뛰지 않고 REPORTED_PAID로 남긴다. IF 값이 다른 항목이 있으면 THEN 시스템 SHALL MISMATCH와 항목별 사유를 남긴다.
 5. THE 명세의 포함 거래·금액·지급 결과 SHALL 삽입 후 불변이며, 상태·대사 사유·대사 시각만 갱신하고 최초 수령 시각을 덮어쓰지 않는다.
 6. THE 수령 합계 SHALL SIMULATED_RECEIVED 명세의 `payoutAmount` 합계로 구하며, 재시도·재대사·동시 실행으로 다시 가산하지 않는다.
+7. IF 명세 형식·합계·항목 중복 오류가 있거나 같은 `providerSettlementId`에 다른 명세가 오거나 이미 다른 명세에 접수한 거래가 포함되면 THEN 시스템 SHALL 접수 자체를 거절하고, 원장 수정·비용 덮어쓰기로 대사를 맞추지 않는다.
+8. THE 재대사 응답 항목 SHALL `PG_COST_PENDING`·`DIFFERENT_TRANSACTION`·`DIFFERENT_COST`를 구분하며, 비용 대기만으로 SIMULATED_RECEIVED를 확정하지 않는다.
+9. WHILE PG·Catalog·Payment가 중단된 동안 THE 저장 명세 조회·재대사 SHALL 저장된 사실만으로 동작하며, 미도착 매출 반영 후 재대사는 운영자가 명시적으로 요청한다(자동 대사 스케줄러 없음).
 
 ### R6. 전액 환불 원배분 상계와 환불 반영 월
 **사용자 스토리:** 운영자로서, 전액 환불이 확정되면 원매출의 판매자/플랫폼 배분을 그대로 상계하고 싶다. 그래야 월 순액이 정확하다.
@@ -90,6 +93,10 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 6. IF 확인 월과 현재 월이 모두 CLOSED이면 THEN 시스템 SHALL 임의 월을 선택하지 않고 충돌로 처리한다.
 7. IF 환불이 원매출보다 먼저 도착하면 THEN 시스템 SHALL 원장·월 합계에 기록하지 않고 기존 Kafka 재시도/DLT로 남기며, 원매출 복구 뒤 원래 금융 확인 이벤트로 재처리한다.
 8. IF SIMULATED 공급자의 환불 읽기를 요청하면 THEN 시스템 SHALL 503으로 반환하고 모의 취소 근거를 생성하지 않는다.
+9. WHEN 같은 환불 근거(환불·주문·최초 금융 확인 시각)가 재전달되면 THEN 시스템 SHALL PG 장애·월 마감 이후에도 최초 반영 월·정책·금액을 반환하고, 다른 본문·다른 환불로 같은 주문을 다시 상계하지 않는다.
+10. WHERE 원매출도 지연된 맥락에서 THE 시스템 SHALL PortOne의 완전한 `CANCELLED` 응답에서 원승인·지급 구성과 전액 성공 취소 합계가 검증될 때만 원매출을 접수하고, 부분·진행 중 취소나 불명확한 채널/거래/지급 구성은 전액 취소로 취급하지 않는다.
+11. IF 제공사가 취소 행의 시각을 보고하지 않으면 THEN 시스템 SHALL NULL로 보존하고 전체 취소 시각으로 채우지 않는다.
+12. THE 월 마감 SHALL 매출 원장 합계와 환불 원장 합계를 각각 월 행과 대조하며, 환불 반영이 원매출·기존 CLOSED 월·최초 closedAt을 바꾸지 않는다.
 
 ### R7. 토스페이 정산 API 비용/반환/지급 자료 수집·대사
 **사용자 스토리:** 운영자로서, PG 수수료·부가세·환불 반환·지급일을 공식 정산 API로 자동 수집하고 내부 원장과 대사하고 싶다.
@@ -103,6 +110,15 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 6. WHILE 설정된 수집 주기의 마지막에 THE 시스템 SHALL 저장된 RECEIVED/PENDING을 ID 커서로 최대 100개씩 PG 재호출 없이 재대사하고 실패를 격리해 다음 순회에서 재시도한다.
 7. THE 현재 TEST 비용 SHALL 미확정으로 유지하며, 빈 TEST 결과를 확정 0원·지급 완료로 해석하지 않는다.
 8. IF 보고된 반환이 명시적 0원이면 THEN 시스템 SHALL 근거가 확인된 0원으로 구분하고, 미도착은 NULL로 둔다.
+9. IF 수집 중 숫자 문자열·누락/비정상 값·중복 JSON 키·후행 JSON·중간 HTTP 실패·커서 순환·페이지 제한 초과·페이지 합계 불일치가 있으면 THEN 시스템 SHALL 부분 명세를 저장하지 않는다. 알 수 없는 부가 필드는 원본에 보존한다.
+10. THE 부호 SHALL 승인은 양수 거래액·음수 수수료/VAT, 환불은 음수 거래액·양수 반환 수수료/VAT로 보존하며, `reportedNetAmount`(거래액+수수료+VAT)는 회계상 순이익·은행 잔액이 아니다.
+11. WHEN 같은 조회 범위·원본이 다시 수집되거나 동시에 수집되면 THEN 시스템 SHALL fingerprint로 하나로 수렴하고 최초 수집자·시각을 유지한다. DUE·SETTLE 등 다른 관측의 같은 거래는 정본 거래 하나로 공유하고, 같은 거래 ID의 내용이 바뀌면 덮어쓰지 않고 충돌로 거절한다.
+12. THE 수집본 목록 SHALL 관측 이력이며 그 합계를 모두 더해 비용 원장으로 쓰지 않는다. 대사는 원본 저장 커밋 뒤 별도 트랜잭션에서 수행하고 대사 실패 시 원본을 보존한다.
+13. WHEN 환불을 대사하면 THEN 시스템 SHALL 가맹점/환경 내 중복 없는 PG 환불 관측 합계가 내부 전액 환불보다 작으면 `REFUND_AMOUNT_PENDING`, 크면 `EXCESS_REFUND` 불일치로 두고, 부분 관측으로 환불 비용 확인을 완료하지 않는다. 합계가 완성되면 같은 결제 묶음의 과거 행도 함께 연결한다.
+14. THE 거래 키 대응(`PortOne pgTxId ↔ 토스페이 payToken`, `PortOne paymentId ↔ PG orderNo`) SHALL `identity-mapping-verified=true`(기본 false, TEST 불가)일 때만 확정 근거로 쓰며, 내부 업무 orderNo를 PG orderNo로 간주하지 않는다. 미검증이면 `IDENTITY_UNVERIFIED`, LIVE 명세에 대응할 LIVE 승인 근거가 없으면 `SOURCE_ENVIRONMENT_PENDING`으로 두고 PORTONE_TEST 승인을 LIVE로 승격하지 않는다.
+15. IF 근거가 약한 관측(`IDENTITY_UNVERIFIED` 등)만 새로 생기면 THEN 시스템 SHALL 기존 검증된 비용 연결을 덮어쓰지 않는다.
+16. WHERE 자동 수집 맥락에서 THE 시스템 SHALL `enabled`·`scheduled-enabled`가 모두 true일 때만 KST 10시 이후 오늘 DUE와 lookback(기본 7일, 1–31일)의 DUE/SETTLE을 수집하고, 날짜별 실패를 격리해 다음 주기에 재시도한다. 미래·공급자 범위(1년) 밖 조회와 10시 전 오늘 DUE는 거절한다.
+17. IF 토스페이 가맹점 키가 설정되지 않으면 THEN 시스템 SHALL 수집을 미연동 503으로 반환하고 빈 보고서를 만들지 않는다.
 
 ### R8. 권한·조회 계약
 **사용자 스토리:** 판매자·운영자로서, 역할에 맞는 정산 정보만 보고 싶다. 그래야 다른 판매자·공급자 자격증명이 노출되지 않는다.
@@ -115,6 +131,8 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 5. THE ADMIN 매출 응답 SHALL `sellerSubject`·PG 비용·플랫폼 잔여액·정책·결제 연결 근거를 추가 제공하되 공급자 자격증명·키·원문은 응답하지 않는다.
 6. THE 목록 SHALL `page=0`·`size=20`(page ≥ 0·1 ≤ size ≤ 100), 매출은 `occurredAt DESC·id DESC`, 월은 `settlementMonth DESC·id DESC`로 정렬하고, 조회가 월 행을 생성하지 않는다.
 7. THE 월 금융 요약 SHALL 미확인 비용이 있으면 `pgFeeAmount`·`platformNetAmount`를 NULL로 두고, 환불 반영 월의 순비용·플랫폼 잔여액은 음수를 허용한다.
+8. THE 월 응답의 기존 `paidAmount`·`platformFeeAmount`·`sellerPayoutAmount`·`recordCount` SHALL 매출 총합 의미를 유지하고, 환불은 양수 합계와 차감 후 `net*` 순액(음수 허용)으로 따로 제공한다.
+9. THE 지급일 조회(`pg-payouts`) SHALL 수집본 헤더 합계를 누적하지 않고 중복 없는 정본 거래를 집계하며, `MATCHED_REPORTED`를 은행 실수령·월 자료 완비로 표시하지 않고 미관측(`NO_EVIDENCE`)과 수집한 DUE의 빈 관측(`EMPTY_REPORTED`)을 구분한다.
 
 ### R9. 최소 저장 모델과 중복/출처 재사용 차단
 **사용자 스토리:** 운영자로서, 중복 매출·출처 재사용·명세 재사용이 DB 차원에서 차단되기를 원한다.
@@ -126,6 +144,17 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 4. THE 환불 원장 SHALL 환불/주문/최초 확인 근거와 취소별 공급자·ID를 불변 저장하고 취소 근거의 공급자·ID를 전체 원장에서 한 번만 사용한다.
 5. THE 식별자 SHALL 원문·대소문자를 보존하고 DB 비교·유일 제약도 동일하게 적용하며, Instant는 UTC·마이크로초 정밀도로 저장한다.
 6. THE DB SHALL 비음수 결제/수수료·판매자 몫, 금액 보존식, 월 상태·closedAt의 일관성을 검증하고 `platformNetAmount`와 그 합계의 음수는 허용한다.
+7. THE PG 지급 명세 항목 SHALL 매출보다 먼저 도착할 수 있으므로 `SettlementSale` 존재를 강제하는 FK를 두지 않고 재대사 때 불변 결제 키로 연결한다.
+8. THE PG 지급 구성(V9) SHALL 전부 없음 또는 전부 검증된 구성만 허용하며, `PORTONE_TEST` 거래에는 필수이고 과거 행에 소급 생성하지 않는다.
+
+### R10. 접수한 PG 거래의 비용 재조회
+**사용자 스토리:** 운영자로서, 비용이 미확정이던 거래를 나중에 공급자에서 다시 확인하고 싶다. 그래야 판매자 금액을 건드리지 않고 비용만 보완된다.
+
+#### 수용 기준
+1. WHEN ADMIN이 `POST /api/v1/settlements/pg-transactions/{paymentId}/refresh`를 요청하면 THEN 시스템 SHALL 공급자 GET과 거래 동일성 검증·거래 행 잠금 뒤 확인된 비용을 한 번만 저장하고 JWT sub를 최초 접수 주체로 기록한다. 본문으로 비용을 입력받지 않는다.
+2. IF 이미 확인된 비용과 다른 비용이 보고되면 THEN 시스템 SHALL 409로 기존 비용을 보존한다. IF 응답에 비용이 없으면 THEN 시스템 SHALL 기존 비용을 지우지 않고 미확정을 유지한다.
+3. THE 비용 재조회 SHALL 원매출·판매자 배분·월 합계·최초 closedAt을 바꾸지 않으며, 확인된 0원은 별도 확정 행으로 미확정(행 없음)과 구분한다.
+4. WHEN 같은 거래의 원승인 근거(`PgFunding`)가 나중에 다르게 보고되면 THEN 시스템 SHALL 409로 최초 근거를 보존한다.
 
 ## 범위 밖(후속)
 

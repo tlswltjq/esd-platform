@@ -28,6 +28,7 @@
 | `projectId, productCode, ownerSubject, contentVersion` | 스냅샷에서 추출한 조회·결과 연결 정보 |
 | `snapshot` | 받은 `ProjectSnapshot` 전체(불변 JSON) |
 | `status` | `REQUESTED` · `APPROVED` · `REJECTED` · `WITHDRAWN` |
+| `withdrawnBy, withdrawalReason, withdrawnAt` | 철회 행위자·선택 사유·시각(판정 필드와 별도) |
 | `feedback` | 반려 사유. 반려 시 필수, 최대 2000자 |
 | `actor` | 최초 최종 판정을 수행한 JWT `sub` |
 | `decidedAt` | 최초 최종 판정 시각 |
@@ -61,7 +62,7 @@
 
 ## 이벤트 계약
 
-새 공통 이벤트를 추가하지 않고 완료된 Studio가 사용하는 계약을 연결한다. 리스너와 접수 유스케이스는 새 consumer group `review-project`를 공유한다.
+새 공통 이벤트를 추가하지 않고 완료된 Studio가 사용하는 계약을 연결한다. 리스너와 접수 유스케이스는 새 consumer group `review-project`(최초 earliest)를 공유하며, 구 이벤트·Studio 토픽의 다른 업무 이벤트는 처리하지 않는다.
 
 | 방향 | 이벤트 | 토픽 |
 |---|---|---|
@@ -94,4 +95,23 @@
 - 판정은 요청 행 잠금·상태 변경·결과 Outbox를 하나의 DB 트랜잭션으로 묶는다. 커밋 뒤 Outbox 릴레이가 결과를 발행하고 실패·재전달은 공통 모듈이 처리한다.
 - 동시 승인·반려는 행 잠금으로 한 판정만 확정한다. 동일 판정·사유 재시도는 최초 결과를 반환하고 새 이벤트를 만들지 않는다. 확정 판정·반려 사유 변경은 409다.
 - 저장소 조회·서명은 긴 DB 트랜잭션 밖에서 실행한다. 파일 열람 실패·저장소 일시 장애를 판정으로 자동 변환하지 않는다.
-- 전환: 기존 Flyway V1~V9와 역사 자료는 보존하고 V10의 `project_review`만 새 업무에 사용한다. 구 데이터는 자동 이관하거나 과거 승인을 새 요청에 연결하지 않는다.
+- 전환: 기존 Flyway V1~V9와 역사 자료는 보존하고 V10의 `project_review`만 새 업무에 사용한다. 구 데이터는 자동 이관하거나 과거 승인을 새 요청에 연결하지 않는다. 운영 전환 시 Studio 미처리 요청과 Review 접수를 대조하고, Kafka 보관 범위 밖 요청은 보존된 원본 이벤트로 재전달한다.
+- V11은 프로젝트별 활성 심사 유일 키·철회 감사/의사·요청 잠금을 추가한다. 적용 전 `project_review`에서 `status='REQUESTED'`가 프로젝트별 2건 이상인지 확인하고, 있으면 임의 정리 없이 별도 전환한다.
+- 새 철회 이벤트 소비자(Review·Catalog)와 Studio 결과 소비자를 모든 인스턴스에 준비한 뒤 Studio 철회 명령 경로를 연다. 구 소비자가 새 이벤트를 모른 채 소비 완료하지 않게 한다.
+
+## 사용 안내
+
+- 심사자 계정은 Auth 시작 전에 `AUTH_REVIEWER_EMAIL`·`AUTH_REVIEWER_PASSWORD`(ADMIN은 `AUTH_ADMIN_EMAIL`·`AUTH_ADMIN_PASSWORD`)로 준비한다. 기존 이메일의 역할은 초기화가 바꾸지 않으므로 전용 이메일을 쓴다. 공개 가입은 REVIEWER를 부여하지 않는다.
+- 직접 실행: `JWT_ISSUER_URI`(Auth `AUTH_ISSUER`와 일치)·`JWT_JWK_SET_URI`, `STORAGE_ENDPOINT`·`STORAGE_PRESIGN_ENDPOINT`·`STORAGE_BUCKET`, 필수 읽기 전용 키 `REVIEW_STORAGE_ACCESS_KEY`·`REVIEW_STORAGE_SECRET_KEY`를 주고 `./gradlew :apps:review:bootRun`한다. 기본 포트는 8086(Gateway `REVIEW_URI`)이다.
+- 읽기 전용 계정에는 같은 버킷의 GetObject·ListBucket만 준다. Studio 쓰기 계정으로 자동 대체하지 않으며 Review는 버킷을 만들지 않는다. `REVIEW_BUILD_URL_TTL`은 기본 PT5M, 1초~15분이다.
+- 검증: `./gradlew :apps:review:test :apps:review:integrationTest`, `python3 tools/verification/verify-review.py`(Auth·Gateway·Studio·Review와 인프라만, 앱 포트 +30000, `REVIEW_TEST_PORT_OFFSET`). 사전 공급 MinIO 이미지는 `STOVE_TEST_MINIO_IMAGE`로 지정한다.
+
+```bash
+curl "$BASE/api/v1/reviews?status=REQUESTED&page=0&size=20" -H "Authorization: Bearer $REVIEWER_TOKEN"
+curl "$BASE/api/v1/reviews/$RID/build-download" -H "Authorization: Bearer $REVIEWER_TOKEN"   # data.url·expiresAt·fileSize·checksum
+curl -X POST "$BASE/api/v1/reviews/$RID/approve" -H "Authorization: Bearer $REVIEWER_TOKEN"
+curl -X POST "$BASE/api/v1/reviews/$RID/reject"  -H "Authorization: Bearer $REVIEWER_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"feedback":"설명과 빌드를 수정해 주세요."}'
+```
+
+`$RID`는 Studio 심사 요청 응답의 `data.id`다. 발급 URL은 Bearer 없이 GET하고, 받은 ZIP의 SHA-256을 `checksum`과 대조할 수 있다.
