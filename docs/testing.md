@@ -591,6 +591,18 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
   **측정 도구의 사각지대**였다. 루트 `build.gradle` 에서 `targetTests = ['com.stove.*']` 로 고쳤다.
   (settlement 기준 31/40 → 33/40, `api.application` 테스트가 11개를 죽인다)
   뮤테이션 점수를 읽을 때는 **무엇이 측정에 포함됐는지**를 먼저 본다
+- **새 통합 테스트는 망가뜨려 본다**([결정 102](decisions.md#integration-test-break-check)).
+  Green 뒤 그 테스트가 지키는 운영 코드의 핵심 줄을 잠깐 망가뜨려 실패를 확인하고 되돌린다.
+  단언 실패와 업무 코드에서 난 예외(DB 제약 등)를 인정한다 — pitest 의 "killed" 와 같은 기준이다.
+  컨텍스트 로딩·Docker 연결 실패는 인정하지 않는다(3절). 망가뜨린 위치와 실패 메시지는 PR 본문에 남기고,
+  예외가 먼저 막아 실행되지 못한 단언이 있으면 그것도 적는다
+- **상태를 바꾸는 두 기능의 엇갈림은 멈춤 지점으로 고정한다**([결정 103](decisions.md#interleaving-pause-point)).
+  "동시에 출발"은 순서를 운에 맡긴다. `common:test` 의 `PausePoints` 를 테스트 설정에 등록하면 지정한 저장소의
+  메서드가 끝날 때마다 `"타입.메서드"` 지점을 지난다. 요청 1을 이름 붙은 스레드로 시작해 지점에서 세우고,
+  요청 2를 실제 서비스로 끝낸 뒤 푼다. **잠금 전 읽기** 지점은 잠근 뒤 다시 읽는지, **잠금 뒤** 지점은 상대가
+  기다리는지(`stillRunningAfter`) 본다. 예: `PurchaseInterleavingIntegrationTest`.
+  다른 방어선(보유권 상태 확인·DB 유일 키)이 먼저 막는 순서는 지키려는 줄을 증명하지 못하므로,
+  그 줄만 남는 사례(예: 보유권 없는 보관함 구매)를 따로 둔다
 - **단언은 값으로 한다.** `anyString()` 은 "무엇이 전달되는가"가 검증 대상일 때 쓰지 않는다
 - **Outbox 단언을 `count()` 차이로 끝내지 않는다.** 잘못된 이벤트를 발행해도 `count` 는 똑같이 1이다.
   `eventType`·`aggregateId`·`partitionKey` 와 페이로드를 읽는다
