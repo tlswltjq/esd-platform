@@ -1,6 +1,6 @@
 # 인증·권한 계약
 
-**2026-11-02 후속 계약:** Catalog의 판매·다운로드·노출 관리 권한은 [서비스 명세](services.md#catalog)를 따른다. [공개 상세 B](public-product-detail-plan.md)에 따라 최종 listed=false인 Catalog/Store 공개 상세와 새 주문은 404다. ADMIN JWT도 공개 상세를 우회하지 않는다. Catalog 내부 전체 목록/상세는 X-Store-Service-Key, 최소 주문 근거는 별도 X-Order-Service-Key로 보호한다. 두 키는 각각 CATALOG_STORE_SERVICE_KEY·CATALOG_ORDER_SERVICE_KEY로 해당 호출 서비스와 Catalog에 설정하며 해당 GET에서만 허용한다. 사용자 JWT·다른 서비스 키는 거절하고 Gateway·공개 OpenAPI에는 내부 경로를 노출하지 않는다.
+**2026-11-02 후속 계약:** Catalog의 판매·다운로드·노출 관리 권한은 [서비스 명세](services.md#catalog)를 따른다. [공개 상세 B](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/public-product-detail-plan.md)에 따라 최종 listed=false인 Catalog/Store 공개 상세와 새 주문은 404다. ADMIN JWT도 공개 상세를 우회하지 않는다. Catalog 내부 전체 목록/상세는 X-Store-Service-Key, 최소 주문 근거는 별도 X-Order-Service-Key로 보호한다. 두 키는 각각 CATALOG_STORE_SERVICE_KEY·CATALOG_ORDER_SERVICE_KEY로 해당 호출 서비스와 Catalog에 설정하며 해당 GET에서만 허용한다. 사용자 JWT·다른 서비스 키는 거절하고 Gateway·공개 OpenAPI에는 내부 경로를 노출하지 않는다.
 
 [문서 목록](README.md) · [계정·역할 모델](domain/models/identity.md) · [API 데모](api-demo.md)
 
@@ -32,7 +32,7 @@ Catalog 내부 빌드 GET은 Catalog·Download가 공유하는 명시적 서비�
 요청에서 저장 경로·다른 사용자·플랫폼·버전을 선택하지 않는다. License·Catalog 상품 ID·코드가 일치한 현재 공개 빌드만 서명한다.
 저장소 계정은 읽기 전용이고 HEAD 후 GET URL을 발급한다. 발급 응답은 no-store다.
 URL은 만료 전 가진 사람이 반복 GET할 수 있으며 일회용·사용자 결박·공유 차단을 보장하지 않는다.
-[전체 계약](download-mvp-plan.md) · [실행·오류 처리](download-guide.md)
+[전체 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행·오류 처리](../.kiro/specs/download/design.md#사용-안내)
 
 ## Payment MVP 경계
 
@@ -45,7 +45,7 @@ OrderPlaced의 봉투·본문 ID·종류·키, 가격 일관성과 상품·구�
 PG 키·주문·청구액·통화·공급자가 일치하는 확정 결과만 반영하고 결과·Outbox는 함께 커밋한다.
 외부 모의 PG는 별도 프로세스·DB·키를 사용한다. Payment의 승인·조회 키와 Settlement의 조회 키를 분리하고 제어 키는 업무 앱에 제공하지 않는다.
 
-PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전달을 검증해 접수한다. 공개 edge가 Payment에 직접 전달하며 웹훅은 최종 상태 대신 서버 조회 힌트로 사용한다. 실제 비밀값은 Git에 넣지 않는다. [현재 계약·검증](refund-session-handoff.md). 카드 정보 저장이나 실제 운영 자금 이동의 검증은 포함하지 않는다.
+PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전달을 검증해 접수한다. 공개 edge가 Payment에 직접 전달하며 웹훅은 최종 상태 대신 서버 조회 힌트로 사용한다. 실제 비밀값은 Git에 넣지 않는다. [현재 계약·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). 카드 정보 저장이나 실제 운영 자금 이동의 검증은 포함하지 않는다.
 과거 HMAC 콜백과 PG_CALLBACK_SECRET은 현재 Payment의 실행 계약이 아니다.
 
 ## 감사와 검증
@@ -53,7 +53,7 @@ PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전�
 Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
 Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-현재 빌드·테스트는 로컬 OrbStack에서 실행한다. 과거 OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](payment-guide.md#로컬-orbstack-검증)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+현재 빌드·테스트는 로컬 OrbStack에서 실행한다. 과거 OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
 API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
 
 ## Settlement와 외부 모의 PG 경계
@@ -63,3 +63,53 @@ ADMIN만 전체 조회·지난 월 마감·PG 명세 수집·재대사를 수행
 Catalog 소유자 GET에는 Download와 다른 전용 서비스 키를 사용하며 Gateway에 내부·PG 제어 경로를 추가하지 않는다.
 Payment에는 PG 정산 중계 API가 없고 Settlement는 PG 공급자 DB를 직접 읽지 않는다.
 PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동하지 않으며 HTTP 오류·PG 지급 보고를 실제 은행 입금 완료로 해석하지 않는다.
+
+<a id="deployment-secrets"></a>
+
+## 배포 비밀 주입
+
+배포 비밀은 배포 도구의 비밀 설정 → 배포 프로세스 환경 → Docker Compose → 필요한 앱 환경으로만 전달한다. 실행기 `scripts/protected-compose.py`는 비밀 파일을 만들거나 읽지 않는다.
+- 값은 환경 변수로 주입하며 shell source·명령 인자에 넣지 않는다. Compose에 `--env-file /dev/null`을 지정해 `.env` 자동 읽기를 막고 `COMPOSE_*` 상속 설정을 거절한다.
+- 기본 실행은 누락과 Compose 구문만 검사하고 `--apply`에서만 `start-apps.sh`의 순차 시작·health 대기를 실행한다. 사전 검사가 실패하면 시작하지 않으며, 시작 도중 실패의 자동 롤백은 없다.
+- 필수 입력의 빈 값·누락은 시작 전에 거절한다(DB·Studio·Review·Download 저장소 키, BFF 비밀, Auth 부트스트랩 비밀번호, Catalog 네 관계·Payment→Order 서비스 키, Payment 승인 암호화 키, 모의 PG 키 셋·DB 비밀번호. `CATALOG_DOWNLOAD_STORAGE_ENABLED=true`면 Catalog의 Download 읽기 계정도). 형식·강도·외부 인증 성공은 보장하지 않는다. `docker-compose.injected.yml`이 DB·Studio 저장소 설정을 덮어 개발 기본 비밀로 복귀하지 못하게 한다.
+- Compose stdout/stderr는 숨긴다. 배포 도구의 `set -x`·환경 덤프·`compose config` 출력은 금지한다. Docker 관리자와 실행 계정은 컨테이너 환경의 키를 읽을 수 있다.
+- 서비스 접근키는 한 값만 받으므로 한쪽만 교체하면 호출이 실패한다. Payment 승인 암호화 키는 기존 자료 복호화에 필요해 임의 재생성하지 않는다. 무중단 교체·폐기, 실제 비밀 저장소·운영 배포는 아직 범위 밖이다.
+
+## 서비스 접근키 수신자와 경계
+
+| 외부 설정 | 받는 서비스 | 수신 헤더·허용 요청 |
+|---|---|---|
+| `CATALOG_STORE_SERVICE_KEY` | Catalog·Store | `X-Store-Service-Key`, `GET /internal/v1/store-products` 및 `/{code}` |
+| `CATALOG_ORDER_SERVICE_KEY` | Catalog·Order | `X-Order-Service-Key`, `GET /internal/v1/order-products/{code}` |
+| `CATALOG_DOWNLOAD_SERVICE_KEY` | Catalog·Download | `X-Download-Service-Key`, `GET /internal/v1/products/{code}/build` |
+| `CATALOG_SETTLEMENT_SERVICE_KEY` | Catalog·Settlement | `X-Settlement-Service-Key`, `GET /internal/v1/products/{code}/owner` |
+| `PAYMENT_ORDER_SERVICE_KEY` | Payment·Order | `X-Payment-Service-Key`, `POST /internal/v1/orders/{orderNo}/payment-admissions` 및 `/{admissionId}/failure` |
+| `PAYMENT_APPROVAL_PAYLOAD_KEY` | Payment | 승인 접수 암호화(HTTP 키 아님) |
+| `BFF_CLIENT_SECRET` | Auth·Gateway | BFF 토큰 교환 |
+| `MOCK_PG_PAYMENT_KEY` / `MOCK_PG_SETTLEMENT_KEY` | 외부 모의 PG·Payment / 외부 모의 PG·Settlement | PG 승인·조회 / 정산 조회 |
+| `MOCK_PG_CONTROL_KEY` | 외부 모의 PG만 | 업무 앱에 제공하지 않음 |
+| `DOWNLOAD_STORAGE_SECRET_KEY` | Catalog·Download | Catalog는 다운로드 금지 검증용 읽기 클라이언트로 사용 |
+
+- 키 누락·빈 값·잘못된 값, 다른 관계의 키나 헤더는 401이다. 서버 쪽 키가 비어 있으면 모든 요청을 거절한다. 올바른 키라도 선언하지 않은 메서드·내부 경로·관리자 작업에는 401이며, 서비스 키는 사용자 ADMIN 권한으로 취급하지 않고 사용자 JWT만으로도 내부 경로에 접근할 수 없다. 정상 응답은 `Cache-Control: no-store`다.
+- 응답 본문·헤더·수신 서버 로그에 키 원문을 남기지 않는다. 같은 이름의 외부 참조를 쓰는지까지 배포 계약으로 검사하며 로컬 오버라이드가 전달 범위를 넓히지 않는다. 검증 실행기도 앱별로 필요한 프로젝트 비밀만 전달한다(Gateway·Download에는 `DB_PASSWORD` 없음).
+- 서로 다른 키를 설정한다는 전제이며 중복 키를 자동 금지하지 않는다. 키 교체·만료·구키/신키 동시 허용은 검증하지 않았다.
+
+## PortOne 웹훅 수신 경계
+
+Payment가 직접 받는 웹훅 POST만 서명을 검증해 접수한다. 알림은 결과를 확정하지 않고 서버 조회의 힌트로만 쓴다.
+
+| 입력 | 응답·처리 |
+|---|---|
+| 서명 헤더 세 종류의 누락·중복, 원문 변조 | 401, 접수·재조회 예약·Outbox 불변 |
+| 전달 시각 | ±300초 허용, ±301초 401 |
+| 복수 서명 | 잘못된 서명·미지원 버전이 섞여도 유효한 v1 서명 하나면 허용 |
+| 본문 크기 | 재서명한 정확한 64 KiB 200, 초과 413 |
+| 서명된 잘못된 JSON(중복 필드·뒤에 붙인 JSON) | 400, 접수 없음 |
+| 같은 ID·같은 원문 재전송 / 같은 ID·다른 원문 | 최초 접수 보존 / 409 |
+| 잘못된 상점·없는 결제·다른 결제 공급자 | 400·404·409, 업무 생성 없음 |
+| 서명만 가진 다른 메서드·경로 | 401, 사용자·관리자 권한을 부여하지 않음 |
+| SIMULATED 제공자 | 검증기 없음, 서명된 POST도 익명 401·MEMBER/ADMIN 403 |
+| 비밀키 누락·빈 값·형식 오류 | 검증기 조립 거절 |
+| 동시 접수·접수 저장 후 DB 실패 | 한 접수 행으로 수렴 / 접수·재조회 예약 동시 롤백 후 재개 |
+
+공개 HTTPS edge의 다른 메서드 응답은 405로 진입점이 다르다. Gateway에 익명 허용·CSRF 예외를 추가하지 않는다. 실제 제공사 전송·인증서 갱신·운영 키 주입은 이 경계의 검증 범위가 아니다.

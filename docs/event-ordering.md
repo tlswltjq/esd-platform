@@ -26,7 +26,7 @@ README 2절은 "메시지 키는 주문번호/상품코드 — 같은 애그리�
 
 ## 2. 먼저 — 주문 하나가 만드는 이벤트와 "짝"
 
-2026-10-16 Order MVP는 주문당 OrderPlaced 하나를 발행하고 취소 이벤트를 만들지 않는다. 아래 OrderCreated/OrderCanceled와 미완료 하류의 짝은 재작성 전 분석 기록이다. 새 Order의 최종 결과·중복 정책은 [Order 계획](order-mvp-plan.md)을 따른다.
+2026-10-16 Order MVP는 주문당 OrderPlaced 하나를 발행하고 취소 이벤트를 만들지 않는다. 아래 OrderCreated/OrderCanceled와 미완료 하류의 짝은 재작성 전 분석 기록이다. 새 Order의 최종 결과·중복 정책은 [Order 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-mvp-plan.md)을 따른다.
 
 순서가 쟁점이 되는 조건은 하나뿐이다.
 **같은 토픽에 같은 파티션 키로 이벤트가 둘 이상 생길 때.** 그것을 여기서는 *짝* 이라고 부른다.
@@ -148,7 +148,7 @@ GC 한 번, 리더 선출 한 번에도 한 건이 실패할 수 있다.
 
 다만 **처리량에서 이 수정의 몫은 ×1.13 이다**(138.0 → 156.1 events/s). 고정 폴링 대기가
 그대로 남아 있어서다 — 간판 수치 ×3.48 은 그 대기까지 걷어낸 뒤의 값이고,
-그쪽은 순서와 무관한 별개 수정이다([performance.md](performance.md) 6장).
+그쪽은 순서와 무관한 별개 수정이다([performance.md](experiments.md) 6장).
 
 ---
 
@@ -290,7 +290,7 @@ WHERE status = 'PENDING'
 
 이러면 워커 수를 바꿀 때 재배치 창이 생기므로(같은 키가 잠시 두 워커에 걸침)
 무중단 스케일링에는 추가 설계가 필요하다. 지금 규모에서는 릴레이 1대로 충분하고,
-처리량은 [performance.md](performance.md) 기준 480 events/s 로
+처리량은 [performance.md](experiments.md) 기준 480 events/s 로
 전체 스택에서 관측된 API 한계선(132.5 RPS, 9-2 절)보다 훨씬 위에 있다.
 
 **즉 다중화는 지금 필요하지 않다.** 필요해지는 시점에 이 문서로 돌아오면 된다.
@@ -327,7 +327,7 @@ WHERE status = 'PENDING'
 ## 참고
 
 - 이 저장소: [defects.md](defects.md) (D-003 / D-010 / D-011 / D-012 / D-013),
-  [performance.md](performance.md) (릴레이 처리량 측정)
+  [performance.md](experiments.md) (릴레이 처리량 측정)
 - 코드: `common/messaging/.../outbox/OutboxRelay.java` — 키 웨이브 발행
 - Kafka — *Idempotent Producer* (`enable.idempotence`, 시퀀스 번호 기반 순서 보장)
 - Debezium — *Outbox Event Router* (B 안의 표준 구현)

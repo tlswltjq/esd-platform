@@ -2,7 +2,7 @@
 
 작성일·완료일: 2026-10-21. 상태: 완료.
 
-[개발 환경과 실행](getting-started.md) · [Dockerfile 제거 기록](dockerfile-removal-plan.md)
+[개발 환경과 실행](getting-started.md) · [Dockerfile 제거 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/dockerfile-removal-plan.md)
 
 ## 파일과 역할
 
@@ -72,4 +72,4 @@ MinIO의 중복 S3 포트 `9000`은 제거하고 서명 업로드·다운로드 
 - 실제 E2E 3건에서 실패·오류·건너뜀은 0건이다. 상품 2개 출시·주문 3개 결제·License 지급·ZIP 다운로드, 판매자 배분·권한 분리, 독립 PG 지급 명세·대사·수령 재요청의 멱등성을 확인했다.
 - 실행 검증은 기본 앱의 이미지·환경 설정·healthcheck·종료 유예를 가져와 별도 프로젝트·포트·DB에서 수행했다. MySQL·PG MySQL·Redis·Kafka·MinIO를 사용했고 검증용 컨테이너·네트워크는 정리했다. 관측 도구 등 나머지 인프라는 구성 비교로 확인했으며 원격 배포는 실행하지 않았다.
 
-구성 비교와 배포 계약 테스트의 원자료는 `runs/compose-simplification-gd1p5pyv/`, 실제 실행 원자료는 `runs/jib-validation-xay4ck0i/`에 보관한다. 후자의 `result.json`은 `complete=true`, 앱 12개·정상 종료 12개를 기록한다. 이번 변경에서는 Compose 설정을 검사하는 테스트와 실제 배포 여정을 실행했다. 앞선 Dockerfile 제거 작업의 전체 단위·통합 테스트 결과는 [별도 기록](dockerfile-removal-plan.md#최종-검증-결과)을 따른다.
+구성 비교와 배포 계약 테스트의 원자료는 `runs/compose-simplification-gd1p5pyv/`, 실제 실행 원자료는 `runs/jib-validation-xay4ck0i/`에 보관한다. 후자의 `result.json`은 `complete=true`, 앱 12개·정상 종료 12개를 기록한다. 이번 변경에서는 Compose 설정을 검사하는 테스트와 실제 배포 여정을 실행했다. 앞선 Dockerfile 제거 작업의 전체 단위·통합 테스트 결과는 [별도 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/dockerfile-removal-plan.md#최종-검증-결과)을 따른다.

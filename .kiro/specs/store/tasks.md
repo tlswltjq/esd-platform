@@ -1,16 +1,10 @@
 # 작업: Store
 
-## 완료 (MVP·검증 기록 있음)
+## 완료 (검증 수치는 [근거 색인](../../../docs/evidence.md))
 
-- [x] StoreProduct 단일 테이블·버전 비교·중복·역순·경합·동일 버전 충돌 처리 — 2026-10-15, `docs/store-mvp-plan.md`
-- [x] 제목 검색·NEWEST/PRICE_ASC/PRICE_DESC 정렬·페이지(최대 100)·코드별 상세, 익명 GET — 2026-10-15
-- [x] `CatalogProductPublished` 수신(그룹 `store-catalog-publication`, earliest), 구 유형 무시 — 2026-10-15
-- [x] 시작 시 Catalog 목록·상세로 초기 사본 구성, 준비 전 503, 재시작 시 재조회 — 2026-10-15
-- [x] 자동 초기화 재시도·주기 정본 대조·동일 버전 정본 교정(A), `store_reconciliation` 원자 감사 — 2026-11-03, `docs/store-auto-reconciliation-plan.md`
-- [x] 준비된 사본은 대조 실패 중에도 조회 유지, 늦은 HTTP 응답이 최신 이벤트를 덮지 않음 — 2026-11-03
-- [x] Micrometer 동기화 지표(`stove.store.sync.*`) 등록과 상품 코드·실패 유형 경고 — 2026-11-03
-- [x] 장르 분류(플랫폼 10개)·`store_product_genre`·복수 장르 AND 검색·장르 정본 교정·`/storefront/genres` — 2026-11-03, `docs/store-genre-filter-plan.md`
-- [x] 통합·실제 여정 검증: 자동 복구 95건·장르 676건, 실제 9개 서비스 11·12단계 — `ssh sng` OCI
+- [x] StoreProduct 사본·버전 규칙·제목 검색/정렬/페이지·상세·`CatalogProductPublished` 수신·시작 시 초기 동기화 — 2026-10-15
+- [x] 자동 초기화 재시도·주기 정본 대조·동일 버전 정본 교정(A)·`store_reconciliation` 원자 감사·`stove.store.sync.*` 지표 — 2026-11-03
+- [x] 장르 분류(플랫폼 10개)·`store_product_genre`·복수 장르 AND 검색·`/storefront/genres` — 2026-11-03
 
 ## 진행 중 / 남음 (일반화 공백)
 

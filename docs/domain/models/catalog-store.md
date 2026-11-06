@@ -1,9 +1,9 @@
 # 공개 상품·진열 모델
 
-[전체 안내](../model-guide.md) · [Catalog MVP 계획](../../catalog-mvp-plan.md)
+[전체 안내](../model-guide.md) · [Catalog MVP 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-mvp-plan.md)
 
 Catalog는 Studio의 출시 요청을 처리해 공개 상품·공개본의 정본을 관리한다.
-Store는 이 공개 데이터의 검색·조회 사본을 MySQL에 저장한다. [Store MVP 계획](../../store-mvp-plan.md).
+Store는 이 공개 데이터의 검색·조회 사본을 MySQL에 저장한다. [Store MVP 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-mvp-plan.md).
 
 <a id="product"></a>
 ## CatalogProduct — 현재 공개 상품
@@ -63,6 +63,6 @@ Store의 부수효과는 사본 저장뿐이므로 별도 Inbox·Outbox를 두�
 Store가 초기화에 성공한 뒤 Catalog가 중단돼도 저장한 사본을 조회한다.
 주기적 자동 대조는 없고 재시작하면 기존 목록·상세 API를 다시 읽는다.
 검색 저장소·캐시·featured·프로모션을 다루던 구 모델은 제거했다.
-검증과 수동 예제는 [Store 실행 안내](../../store-guide.md)를 따른다.
+검증과 수동 예제는 [Store 실행 안내](../../../.kiro/specs/store/design.md#사용-안내)를 따른다.
 
-장르도 승인 스냅샷→Catalog 공개 이벤트/내부 정본→Store 사본으로 전달한다. 검색의 장르 조건은 페이지와 총건수 계산 전에 적용하고, 같은 버전의 장르 사본 변조는 검증한 정본으로 교정·감사한다. [장르 계약](../../store-genre-filter-plan.md)을 따른다.
+장르도 승인 스냅샷→Catalog 공개 이벤트/내부 정본→Store 사본으로 전달한다. 검색의 장르 조건은 페이지와 총건수 계산 전에 적용하고, 같은 버전의 장르 사본 변조는 검증한 정본으로 교정·감사한다. [장르 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-genre-filter-plan.md)을 따른다.

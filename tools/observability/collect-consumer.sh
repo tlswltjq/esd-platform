@@ -77,7 +77,7 @@ kv_set()  { eval "$1=\$2"; }
 # 그래도 계속 긁는 이유는 두 값을 나란히 놓는 것이 그 결함의 재현 증거이기 때문이다.
 # **커넥션 풀도 여기서 본다.** 리스너 스레드와 HTTP 스레드는 같은 앱의 같은 HikariCP 풀을 쓴다 —
 # `listener.concurrency` 를 올리면 그 앱의 API 가 함께 느려질 수 있고, 여태 그 인과를
-# 지연 숫자로 추정만 했다([performance.md](../../docs/performance.md) 8-2 가 계속 열려 있던 항목).
+# 지연 숫자로 추정만 했다([experiments.md](../../docs/experiments.md)의 E5(받는 쪽 랙 관측)에서 계속 열려 있던 항목).
 #
 #   pool_active    지금 빌려 나간 커넥션
 #   pool_pending   커넥션을 **기다리는 스레드 수**  ← 이게 0 보다 크면 풀이 병목이다

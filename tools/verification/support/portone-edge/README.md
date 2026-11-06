@@ -56,7 +56,7 @@ SDK의 `noticeUrls`로 이 검증 결제에만 수신 주소를 지정했다. �
 
 ## 실제 주문 연결 후 최신 실행
 
-2026-10-27 후속으로 실제 Order·Payment 연결 검증을 준비했다. 현재 공개 nginx의 연결 대상은 `runs/portone-order-live-j2flh033/`의 로컬 Payment다. 새 전용 DB·Kafka를 사용하고 Auth·Catalog·Order도 실행한다. 현재 재개 명령은 아래이며 구 `resume-local.py`와 동시에 실행하지 않는다. 자세한 범위·휴대폰 승인 상태는 [PG 연동 계획](../../../../docs/pg-test-integration-plan.md)을 확인한다.
+2026-10-27 후속으로 실제 Order·Payment 연결 검증을 준비했다. 현재 공개 nginx의 연결 대상은 `runs/portone-order-live-j2flh033/`의 로컬 Payment다. 새 전용 DB·Kafka를 사용하고 Auth·Catalog·Order도 실행한다. 현재 재개 명령은 아래이며 구 `resume-local.py`와 동시에 실행하지 않는다. 자세한 범위·휴대폰 승인 상태는 [PG 연동 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)을 확인한다.
 
 ```sh
 python3 runs/portone-order-live-j2flh033/resume-stack.py

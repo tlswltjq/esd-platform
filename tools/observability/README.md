@@ -11,4 +11,4 @@ bash tools/observability/watch-alerts.sh --out runs/alerts.csv --duration 60
 
 앞의 세 수집기는 종료 신호까지 반복한다. 출력 상위 디렉터리를 먼저 준비한다. `INTERVAL`은 수집 간격이다. `ORDER_ACTUATOR`, `CONSUMERS`(공백으로 구분한 `이름=URL`), `KAFKA_CONTAINER`, `KAFKA_BOOTSTRAP`, `LAG_GROUPS`, `PROM`, `LAG_GROUP`으로 대상을 지정한다. `watch-alerts`의 기본 그룹은 `license-paid-order`다. Download는 Kafka를 사용하지 않아 소비자 기본 목록에서 제외했다.
 
-부하 생성·장애 주입·데이터 초기화는 포함하지 않는다. 과거 수집 결과 해석은 [성능 기록](../../docs/performance.md)을 참고한다.
+부하 생성·장애 주입·데이터 초기화는 포함하지 않는다. 과거 수집 결과 해석은 [실험 기록](../../docs/experiments.md#consumer)을 참고한다.

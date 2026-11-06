@@ -1,6 +1,6 @@
 # Project 스냅샷 심사 모델
 
-[전체 안내](../model-guide.md) · [실행·검증](../../review-guide.md) · [개선 계획·완료 기록](../../review-simplification-plan.md)
+[전체 안내](../model-guide.md) · [실행·검증](../../../.kiro/specs/review/design.md#사용-안내) · [개선 계획·완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md)
 
 Review는 Studio가 제출한 상세정보·전체 빌드 스냅샷과 그에 대한 최초 최종 판정의 원본을 관리한다.
 2026-10-14 재작성을 완료했다. 심사 결과를 받은 Studio는 자신의 요청 기록과 출시 요청 조건만 갱신한다.
@@ -71,4 +71,4 @@ V1~V9의 SQL 이력은 유지하고 V10에서 새 테이블을 추가했다.
 구 ReviewRequest·SubmissionSnapshot·ReviewCase·감사·판정 이력 테이블은 역사 자료다.
 현재 실행 코드와 5개 업무 API는 ProjectReview만 사용한다.
 
-장르가 나중에 선택 중지돼도 이미 제출한 알려진 코드의 심사 근거는 유지한다. 선택 가능 여부는 Studio의 새 심사 제출에서 검사하고 Review는 제출 자료의 알려진 코드·중복·개수 유효성을 검사한다. [장르 계약](../../store-genre-filter-plan.md)을 따른다.
+장르가 나중에 선택 중지돼도 이미 제출한 알려진 코드의 심사 근거는 유지한다. 선택 가능 여부는 Studio의 새 심사 제출에서 검사하고 Review는 제출 자료의 알려진 코드·중복·개수 유효성을 검사한다. [장르 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-genre-filter-plan.md)을 따른다.

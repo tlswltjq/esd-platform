@@ -29,7 +29,8 @@
 
 - 활성 심사·출시는 nullable 생성 열의 유일 키로 프로젝트별 1건을 DB에서도 보장한다(Studio V26).
 - 장르는 `studio_project_genre`(Studio V27)에 중복 없는 집합으로 저장하고, 페이지 조회에는 컬렉션 배치 로딩을 사용한다.
-- 공통 Outbox·Inbox는 네 업무 모델과 별도다. Flyway V1~V24 체크섬을 유지하고 V25~V27에서 전환했다.
+- 공통 Outbox·Inbox는 네 업무 모델과 별도다. Flyway V1~V24 체크섬을 유지하고 V25(요청 테이블 전환)·V26(명령/영수증·활성 요청 유일 키)·V27(장르)에서 전환했다.
+- V26 적용 전 `studio_review_request`·`studio_release_request`에서 `status='REQUESTED'`가 프로젝트별 2건 이상인지 확인한다. 충돌은 임의 삭제·최신 선택 없이 정본 결과·미완료 명령·Outbox를 대조해 별도 전환한다. V26은 여러 DDL이므로 부분 적용 실패 시 repair 전에 실제 스키마를 대조한다.
 - 모델 속성은 `docs/domain/models/studio.md` 참조.
 
 ## API 계약
@@ -72,7 +73,7 @@
 
 - 서비스가 Inbox·Project 잠금·업무 변경·Outbox를 같은 트랜잭션에서 조율한다(멱등 가드는 서비스 소유).
 - Project 행 잠금과 활성 요청 DB 유일 키로 버전 독립적 단일 심사·출시를 보장한다. 종료된 요청 ID가 현재 활성 ID와 같을 때만 자리를 해제한다.
-- 저장소 HEAD·파일 확인은 짧은 DB 트랜잭션 밖에서 수행하고, 잠금 뒤 소유권·버전·빌드를 재확인한다.
+- 심사 요청의 빌드 크기 확인(저장소 HEAD)은 현재 Project 잠금 트랜잭션 안에서 수행한다. 업로드는 임시 디스크 검사·객체 저장 뒤 짧은 트랜잭션에서 소유권·버전을 재확인한다.
 - 같은 명령의 재전송은 과거 영수증을 재현하고, 상충 본문·충돌 이벤트는 조용히 성공 처리하지 않고 계약 오류로 구분한다.
 
 ## 외부 연동
@@ -81,7 +82,34 @@
 - 심사·실제 출시는 Studio가 수행하지 않는다. Review·Catalog가 정본을 처리하고 결과를 이벤트로 돌려준다.
 - 검증은 별도 스택에 Auth·Gateway·Studio와 MySQL·Redis·Kafka·MinIO만 실행하고, 외부 결과 픽스처를 Kafka로 보내 요청 결과·재요청·철회·지연 응답을 검증한다.
 
-## 완료 상태
+## 사용 안내
 
-2026-10-14 Project 중심 재작성을 완료했고(커밋 `79cc163`·`37f9807`), 이후 목록 페이지, 장르 분류·AND 검색 연계, 단일 심사/출시와 명시적 철회를 구현·검증했다.
-자세한 범위·검증 수치는 `docs/studio-simplification-plan.md`, `docs/studio-list-pagination-plan.md`, `docs/store-genre-filter-plan.md`, `docs/project-review-withdrawal-verification.md`를 따른다.
+실행·검증에는 JDK 21·Python 3·Docker가 필요하다. 전체 Studio 검증은 Auth·Gateway·Studio와 MySQL·Redis·Kafka·MinIO만 임시 DB·별도 포트로 띄우고, 심사·출시 결과는 Kafka 픽스처로 보낸다.
+
+```bash
+./gradlew :apps:studio:test :apps:studio:integrationTest
+python3 tools/verification/verify-studio.py
+```
+
+직접 실행할 때는 `JWT_ISSUER_URI`, `STORAGE_ENDPOINT`·`STORAGE_PRESIGN_ENDPOINT`(로컬 MinIO `http://localhost:19000`), `STORAGE_ENCRYPTION_ENABLED=false`를 주고 `./gradlew :apps:studio:bootRun`한다. 첫 MinIO 이미지는 `./gradlew :infra:minio:jibDockerBuild`로 준비한다. 파일 상한은 `MAX_ARTIFACT_BYTES`(1GiB)·`MAX_THUMBNAIL_BYTES`(5MiB)이며, 빌드 상한을 올리면 `STUDIO_MAX_FILE_SIZE`·`STUDIO_MAX_REQUEST_SIZE`도 맞춘다.
+
+호출 순서(`BASE`는 Gateway, `$T`는 CREATOR access token, BFF 쿠키의 변경 요청은 `/bff/csrf` 헤더를 붙인다):
+
+```bash
+curl -X POST "$BASE/api/v1/studio/projects" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"productCode":"MY-GAME","title":"내 게임"}'                       # data.id → PID
+curl -X POST "$BASE/api/v1/studio/projects/$PID/thumbnail" -H "Authorization: Bearer $T" -F file=@thumbnail.png
+curl -X POST "$BASE/api/v1/studio/projects/$PID/builds" -H "Authorization: Bearer $T" -F version=1.0.0 -F file=@game.zip
+curl -X PUT  "$BASE/api/v1/studio/projects/$PID/store-page" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"contentVersion\":$CV,\"title\":\"내 게임\",\"shortDescription\":\"소개\",\"thumbnailUrl\":\"$THUMB\",\"videoUrl\":null,\"content\":\"설명\",\"price\":10000,\"genres\":[\"ACTION\",\"RPG\"]}"
+curl -X POST "$BASE/api/v1/studio/projects/$PID/review-requests"  -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"requestId\":\"review-001\",\"contentVersion\":$CV}"
+curl -X POST "$BASE/api/v1/studio/projects/$PID/release-requests" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"requestId\":\"release-001\",\"contentVersion\":$CV}"           # releaseEligible=true일 때
+curl -X POST "$BASE/api/v1/studio/projects/$PID/review-requests/$RID/withdrawals" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d '{"requestId":"withdraw-001","reason":"자료 재확인"}'
+```
+
+- `CV`·`THUMB`는 프로젝트 조회의 `data.contentVersion`·`data.storePage.thumbnailUrl`이다. 상점 정보를 바꾸면 버전이 오르므로 제출 전에 다시 조회한다.
+- requestId는 논리적 요청마다 새로 만들고, 응답 유실 재전송에는 같은 requestId·contentVersion을 쓴다.
+- 목록 응답은 `data.items`와 페이지 정보다(`?page=0&size=20`). 철회 영수증은 응답의 id로 `.../withdrawals/{id}`에서 최종 state·finalStatus·finalActor·finalFeedback·finalizedAt을 확인한다.

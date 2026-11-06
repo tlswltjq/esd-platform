@@ -5,8 +5,8 @@
 License는 완료 주문 하나의 출처와 구매자·상품별 영구 이용 권한을 한 엔티티에 보존한다.
 Order는 PENDING·PAID 주문이 있는 동일 상품의 추가 구매를 차단한다. 선물·추가 수량은 후속 범위다.
 Download는 보유권과 현재 공개 빌드를 조회하고 전체 ZIP의 만료 URL을 발급한다.
-[Download MVP 범위·검증](../../download-mvp-plan.md) · [실행 안내](../../download-guide.md)
-[License 통합 범위](../../license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획) · [조회·실행 안내](../../license-guide.md)
+[Download MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행 안내](../../../.kiro/specs/download/design.md#사용-안내)
+[License 통합 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획) · [조회·실행 안내](../../../.kiro/specs/license/design.md#사용-안내)
 
 <a id="license"></a>
 ## License — 구매 출처를 보존하는 상품 이용 권한
@@ -28,7 +28,7 @@ Download는 보유권과 현재 공개 빌드를 조회하고 전체 ZIP의 만�
 `OrderPaid`를 처음 처리할 때 출처와 권한을 한 행으로 생성한다.
 구매자·상품 ID와 구매자·상품 코드, 출처 주문·이벤트·요청 이벤트·결과 이벤트·결제 ID는 각각 유일하다.
 다른 주문의 같은 상품을 기존 권한에 추가하거나 출처를 교체하지 않는다. 예외 입력은 충돌로 남긴다.
-상품 후속 버전에도 같은 영구 보유권을 사용한다. 환불을 위한 ACTIVE/SUSPENDED와 지급·정지·복구 근거가 추가됐다. 신규 Download는 ACTIVE만 허용한다. [현재 환불 계약](../../refund-session-handoff.md). 기간 만료·좌석 수·빌드 제한은 범위 밖이다.
+상품 후속 버전에도 같은 영구 보유권을 사용한다. 환불을 위한 ACTIVE/SUSPENDED와 지급·정지·복구 근거가 추가됐다. 신규 Download는 ACTIVE만 허용한다. [현재 환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). 기간 만료·좌석 수·빌드 제한은 범위 밖이다.
 조회 주체는 JWT sub이며 Catalog 조회 없이 내 목록·상품 코드별 상세를 반환한다.
 
 [PaidOrder](../../../apps/license/src/main/java/com/stove/license/core/domain/PaidOrder.java)는 OrderPaid의 13개 값을 담고 생성 시 유효성을 보장하는 내부 입력이다.

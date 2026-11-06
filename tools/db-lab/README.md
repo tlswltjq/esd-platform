@@ -14,7 +14,7 @@ Docker 만 있으면 된다. 버리는 `mysql:8.0` 컨테이너(`stove-db-lab-<�
 2026-09-14 에 두 호스트에서 돌렸다. MySQL 은 둘 다 `mysql:8.0` 태그의 8.0.46 이다.
 
 - **로컬** — Apple M1, Docker Desktop 29.4.3 (arm64), 1회
-- **OCI** — Ampere A1 4코어 / 23GB (aarch64), Docker 28.1.1. [measuring.md](../../docs/measuring.md) 규칙 11 대로 CI 러너를 멈추고 2회. 결과는 원격의 `runs/db-lab/2026-09-14-oci/`
+- **OCI** — Ampere A1 4코어 / 23GB (aarch64), Docker 28.1.1. [측정 원칙](../../docs/experiments.md#measuring) 규칙 11 대로 CI 러너를 멈추고 2회. 결과는 원격의 `runs/db-lab/2026-09-14-oci/`
 
 | 실험 | 묻는 것 | 결과 — 대기 시간은 로컬 / OCI 1 / OCI 2 | 관련 근거 |
 |---|---|---|---|
@@ -29,7 +29,7 @@ Docker 만 있으면 된다. 버리는 `mysql:8.0` 컨테이너(`stove-db-lab-<�
 `innodb_flush_log_at_trx_commit`, `sync_binlog`, `binlog_format`, `max_connections` …)도 두 호스트에서 같았다.
 
 **부하에서도 나타나는가** — 실험 1 의 락이 실제 트래픽에서 얼마인지는 이 스크립트가 아니라
-[당시 A/B 도구](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/run-isolation-ab.sh) 로 쟀다. 결과는 [성능 측정](../../docs/performance.md#isolation-ab)에 있다.
+[당시 A/B 도구](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/perf/run-isolation-ab.sh) 로 쟀다. 결과는 [실험 E6](../../docs/experiments.md#isolation-ab)에 있다.
 
 **보는 법**
 
@@ -38,4 +38,4 @@ Docker 만 있으면 된다. 버리는 `mysql:8.0` 컨테이너(`stove-db-lab-<�
 - 대기 시간은 기계마다 다르다. 판정 기준은 숫자의 크기가 아니라 **막혔는가(초 단위) / 안 막혔는가(0에 가까움)** 다.
 
 **이 실험이 말하지 않는 것** — 앱을 띄워 부하를 건 결과가 아니다. 락이 걸린다는 것까지는 확인했고,
-전체 애플리케이션에서 API 지연을 몇 ms 만드는지는 [별도 A/B 절차](../../docs/performance.md#isolation-ab)로 측정한다.
+전체 애플리케이션에서 API 지연을 몇 ms 만드는지는 [별도 A/B 절차](../../docs/experiments.md#isolation-ab)로 측정한다.

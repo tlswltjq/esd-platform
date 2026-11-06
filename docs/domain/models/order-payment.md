@@ -8,7 +8,7 @@ Order는 “무엇을 얼마에 사기로 했는가”, Payment는 “확정된 
 
 ## Order — 단일 상품의 주문 스냅샷과 결제 결과
 
-저장: Order의 purchase_order. [모델](../../../apps/order/src/main/java/com/stove/order/core/domain/Order.java) · [MVP 계획](../../order-mvp-plan.md) · [실행 안내](../../order-guide.md)
+저장: Order의 purchase_order. [모델](../../../apps/order/src/main/java/com/stove/order/core/domain/Order.java) · [MVP 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-mvp-plan.md) · [실행 안내](../../../.kiro/specs/order/design.md#사용-안내)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -37,7 +37,7 @@ PENDING에서 PAID 또는 FAILED로 한 번 확정하며 같은 eventId·결과�
 검증 근거: [도메인 테스트](../../../apps/order/src/test/java/com/stove/order/core/domain/OrderTest.java),
 [실제 MySQL·Kafka·JWT 검사](../../../apps/order/src/integrationTest/java/com/stove/order/OrderIntegrationTest.java),
 [독립 사용자 흐름](../../../e2e/src/test/java/com/stove/e2e/OrderPurchaseFlowTest.java).
-Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연계·복구는 [Payment 검증](../../payment-mvp-plan.md)을 따른다.
+Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연계·복구는 [Payment 검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-mvp-plan.md)을 따른다.
 
 <a id="order-item"></a>
 
@@ -51,7 +51,7 @@ Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연�
 
 ## Payment — 확정된 주문의 결제와 결과
 
-저장: Payment의 `purchase_payment`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java) · [MVP 범위](../../payment-mvp-plan.md) · [실행 안내](../../payment-guide.md)
+저장: Payment의 `purchase_payment`. [모델](../../../apps/payment/src/main/java/com/stove/payment/core/domain/Payment.java) · [MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-mvp-plan.md) · [실행 안내](../../../.kiro/specs/payment/design.md#사용-안내)
 
 | 속성 | 뜻과 사용처 |
 |---|---|
@@ -94,10 +94,10 @@ Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 �
 외부 공급자는 [독립 앱](../../../simulators/mock-pg/src/main/java/com/stove/mockpg/MockPgApplication.java)과 전용 MySQL에 결정·비용을 보존한다.
 동일 paymentId를 먼저 조회하고 404이면 같은 키로 승인한다. 같은 키의 다른 입력은 거부하고 통신 오류는 PENDING으로 남긴다.
 최종 Payment 결과는 pgFeePolicyId·pgFeeRateBps·pgFeeAmount를 함께 보존한다. 비용 없는 과거 결정은 미산정이며 0원으로 보충하지 않는다.
-기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다. [전환 절차](../../settlement-guide.md#기존-내장-pg-이관)를 따른다.
+기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다. [전환 절차](../../../.kiro/specs/settlement/design.md#사용-안내)를 따른다.
 
 PG 비용·지급 명세는 Settlement가 자기 포트로 직접 조회한다. 주문·License 이벤트에 수수료를 중계하지 않는다.
-이 절은 외부 모의 PG의 계약이다. 후속 구현으로 PortOne TEST 결제창·서명 웹훅·전액 환불 실행/조회와 관리자 심사를 제공한다. [현재 계약](../../refund-session-handoff.md)과 [검증 범위](../../pg-test-integration-plan.md)를 따른다. 실제 운영 자금 이동과 정산 환불 조정은 후속 범위다.
+이 절은 외부 모의 PG의 계약이다. 후속 구현으로 PortOne TEST 결제창·서명 웹훅·전액 환불 실행/조회와 관리자 심사를 제공한다. [현재 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)과 [검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)를 따른다. 실제 운영 자금 이동과 정산 환불 조정은 후속 범위다.
 
 ## 결제 입력과 결과 값
 

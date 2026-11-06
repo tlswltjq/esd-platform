@@ -27,7 +27,7 @@ flowchart LR
  S --> P
 ~~~
 
-[모델](models/studio.md) · [실행 예제](../studio-guide.md) ·
+[모델](models/studio.md) · [실행 예제](../../.kiro/specs/studio/design.md#사용-안내) ·
 [인수 테스트](../../e2e/src/test/java/com/stove/e2e/StudioCreatorFlowTest.java)
 
 ## 심사자: Project 스냅샷을 판단한다
@@ -38,7 +38,7 @@ Studio는 같은 요청 ID·Project·버전의 승인·반려 결과를 자신�
 
 반려 후 재심사는 Studio가 새 요청 ID로 시작한다. 확정 판정은 변경하지 않으며 과거 자료·판정을 보존한다.
 심사 중 작업본이 수정되면 과거 승인 결과는 과거 요청에만 기록되고 현재 버전의 출시 요청 조건을 충족하지 않는다.
-[Review 실행·검증](../review-guide.md)은 실제 네 모듈과 Kafka로 이 흐름과 재시작 후 결과 전달을 확인한다.
+[Review 실행·검증](../../.kiro/specs/review/design.md#사용-안내)은 실제 네 모듈과 Kafka로 이 흐름과 재시작 후 결과 전달을 확인한다.
 
 ## 방문자: 공개된 게임을 찾고 확인한다
 
@@ -53,7 +53,7 @@ Store 시작 전 공개 상품은 Catalog의 기존 목록·상세 HTTP API로 �
 
 초기 동기화 실패는 503으로 나타나고 원인 해결 후 Store를 재시작한다.
 준비된 Store는 Catalog가 잠시 중단돼도 자기 사본으로 조회한다. 구매·결제 가능 여부는 이 흐름의 범위가 아니다.
-[실행·수동 확인](../store-guide.md) · [독립 인수 테스트](../../e2e/src/test/java/com/stove/e2e/StorePublicationFlowTest.java)
+[실행·수동 확인](../../.kiro/specs/store/design.md#사용-안내) · [독립 인수 테스트](../../e2e/src/test/java/com/stove/e2e/StorePublicationFlowTest.java)
 
 <a id="purchase-flow"></a>
 
@@ -86,7 +86,7 @@ flowchart LR
 
 Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추가 구매 확정 절차는 없다.
 실제 PG·환불·권한 회수·판매자 송금은 후속 범위다. Settlement는 OrderPaid를 받아 PG·Catalog 근거를 대조하고 매출·월 합계를 기록한다. 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
-[주문 실행](../order-guide.md) · [Payment 검증](../payment-guide.md) · [License 조회·아홉 앱 검증](../license-guide.md) · [Download·열 앱 검증](../download-guide.md)
+[주문 실행](../../.kiro/specs/order/design.md#사용-안내) · [Payment 검증](../../.kiro/specs/payment/design.md#사용-안내) · [License 조회·아홉 앱 검증](../../.kiro/specs/license/design.md#사용-안내) · [Download·열 앱 검증](../../.kiro/specs/download/design.md#사용-안내)
 
 <a id="operations-flow"></a>
 
@@ -99,7 +99,7 @@ Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추
 5. ADMIN은 현재 KST 월보다 이전 월을 판매자별로 마감한다. CLOSED 이후 지연 매출은 현재 월에 기록하고 원래 saleMonth를 보존한다.
 
 PG 회차·플랫폼 모의 수령·판매자 월 마감은 별개의 주기와 상태다. 실제 은행 입금·판매자 송금·환불·계산서·재마감은 후속 범위다.
-실행·복구는 [정산 안내](../settlement-guide.md), 모델은 [정산 모델](models/settlement.md)을 따른다.
+실행·복구는 [정산 안내](../../.kiro/specs/settlement/design.md#사용-안내), 모델은 [정산 모델](models/settlement.md)을 따른다.
 
 ## 이벤트를 업무 사실로 읽기
 

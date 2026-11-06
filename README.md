@@ -4,31 +4,25 @@
 
 프로젝트가 처음이라면 **[도메인·모델 안내](docs/domain/model-guide.md)**부터 읽는다. 도메인별 모델의 속성, 생성·사용 시점과 게임 한 개가 출시되어 판매되는 흐름을 설명한다.
 
-현재 재작성 완료 모듈은 **Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**다. 신규 구현과 검증은 이 열한 모듈의 계약을 기준으로 하며, 미완료 모듈의 기존 구현은 설계·검증 기준으로 삼지 않는다. Studio의 완료 범위와 검증 기록은 [단순화 계획·완료 기록](docs/studio-simplification-plan.md#재작성-완료-기록)을 따른다.
+열한 모듈(**Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**)의 MVP 재작성을 마쳤고, 지금은 이 기능들을 일반적인 사용 수준으로 올린 뒤 엣지 케이스·성능을 고도화하는 단계다([로드맵](docs/roadmap.md)). 결제·환불은 PortOne TEST 채널에서 실제 승인·자동/수동 전액 환불·이용권 정지/복구까지 검증했다([근거 색인](docs/evidence.md)).
 
-현재 목표는 이 MVP 기능들을 일반적인 사용 수준으로 올린 뒤 엣지 케이스·성능을 고도화하는 것이다. [전체 평가·개발 계획](docs/platform-generalization-plan.md)에 모듈별 공백, 환불·Payment 평가와 권장 작업 순서를 정리했다. MVP 완료와 전체 일반화 완료를 구분한다.
+## 어떻게 만드는가
 
-Catalog의 완료 범위와 검증 결과는 [MVP 계획·완료 기록](docs/catalog-mvp-plan.md#재작성-완료-기록)에 정리했다.
-Store의 학습용 최소 범위와 OCI 검증 결과는 [Store 계획·완료 기록](docs/store-mvp-plan.md#재작성-완료-기록)을 따른다.
-Order의 단일 상품 주문·결제 결과 계약과 OCI 검증은 [Order 완료 기록](docs/order-mvp-plan.md#재작성-완료-기록), 실행은 [Order 안내](docs/order-guide.md)를 따른다. Payment의 모의 PG 자동 처리·복구·조회와 8개 앱 OCI 검증은 [Payment 완료 기록](docs/payment-mvp-plan.md#재작성-완료-기록), 실행은 [Payment 안내](docs/payment-guide.md)를 따른다.
-
-License의 상품 보유권·구매 근거·내 라이브러리와 아홉 앱 검증은 [License 완료 기록](docs/license-mvp-plan.md#통합-수정-완료-기록), 실행은 [License 안내](docs/license-guide.md)를 따른다. Download의 보유권·현재 공개 빌드 조회와 전체 ZIP 만료 URL 제공은 [완료 기록](docs/download-mvp-plan.md#재작업-완료-기록), 실행은 [Download 안내](docs/download-guide.md)를 따른다. Settlement의 외부 모의 PG·배분·월 마감·수령 대사는 [완료 기록](docs/settlement-mvp-plan.md#재작성-완료-기록), 전체 실행은 [Settlement 안내](docs/settlement-guide.md)를 따른다.
-
-PortOne TEST의 전액 환불은 고객 접수·관리자 판정·이용권 정지/복구·취소/조회, 고객 재시도·재심사·승인 정정, 운영 중단 조회/재개와 장기 미확정 조사 기록까지 확장했다. 실제 자동 환불 1건의 근거와 각 확장 검증을 구분하며 최신 관리자 전체 여정·정산 환불 조정 등은 남아 있다. [현재 환불 인계](docs/refund-session-handoff.md) · [환불 세션 공통 지시](docs/refund-next-session.md)
+기능은 AI 에이전트(Codex·Claude·Kiro)와 채팅으로 설계한다. 에이전트가 쟁점·대안·트레이드오프·추천을 제시하면 내가 의견을 내고 선택하며, 구현·테스트·검증은 에이전트가 맡는다. 공통 규칙은 [AGENTS.md](AGENTS.md)에 있고, 구조 규칙은 ArchUnit으로 강제한다.
+누가 무엇을 골랐는지는 대화 원문을 인용한 [판단 색인](docs/judgment-index.md)에, 각 결정의 이유와 버린 선택지는 [설계 결정](docs/decisions.md)에 있다.
 
 ## 문서 찾기
 
 | 궁금한 내용 | 읽을 문서 |
 |---|---|
-| 현재 목표·모듈 평가·다음 개발 순서 | [전체 기능 일반화 계획](docs/platform-generalization-plan.md) |
-| 어떤 도메인과 모델이 있고 어떻게 연결되는가 | [도메인·모델 안내](docs/domain/model-guide.md) |
-| 업무 용어와 행위자별 처리 순서 | [용어집](docs/domain-glossary.md) · [업무 흐름](docs/domain/workflows.md) |
-| 아직 결정되지 않은 정책과 구현 차이 | [미결 질문](docs/domain/open-questions.md) |
-| 로컬·원격 실행과 Swagger 로그인 | [개발 환경과 실행](docs/getting-started.md) |
-| 출시·구매·다운로드·정산의 실제 흐름 검증 | [Settlement 전체 실행](docs/settlement-guide.md) |
+| 현재 목표·단계·완료 조건 | [로드맵](docs/roadmap.md) |
+| 모듈별 계약·실행 방법·남은 작업 | [`.kiro/specs/`](.kiro/specs/README.md) (각 `design.md` 끝의 "사용 안내") |
+| 어떤 도메인과 모델이 있고 어떻게 연결되는가 | [도메인·모델 안내](docs/domain/model-guide.md) · [용어집](docs/domain-glossary.md) · [업무 흐름](docs/domain/workflows.md) |
+| 누가 무엇을 왜 골랐나 | [판단 색인](docs/judgment-index.md) · [설계 결정](docs/decisions.md) |
+| 무엇으로 검증했나 | [근거 색인](docs/evidence.md) · [실험 기록](docs/experiments.md) · [결함 대장](docs/defects.md) |
+| 로컬 실행과 Swagger 로그인 | [개발 환경과 실행](docs/getting-started.md) · [API 데모](docs/api-demo.md) |
 | 서비스 API와 인증·권한 | [서비스 명세](docs/services.md) · [인증·권한 계약](docs/security.md) |
-| 숨긴 상품의 공개 상세·새 주문과 내부 조회 | [공개 상세 B 구현·검증](docs/public-product-detail-plan.md) |
-| 구조와 설계 이유, 실험·운영 기록 | [아키텍처](docs/architecture.md) · [전체 문서 목록](docs/README.md) |
+| 구조와 전체 문서 목록 | [아키텍처](docs/architecture.md) · [문서 안내](docs/README.md) |
 
 ## 구성
 
@@ -65,4 +59,4 @@ python3 tools/verification/verify-settlement.py
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.
 
-현재 열 앱의 실제 구매·다운로드 검증은 [Download 독립 검증](docs/download-guide.md#로컬-orbstack-검증)을 사용한다. [전체 API 데모](docs/api-demo.md#full-demo)는 구매·배포·정산 모듈의 재작성 전 참고 기록이다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.
+현재 열 앱의 실제 구매·다운로드 검증은 [Download 독립 검증](.kiro/specs/download/design.md#사용-안내)을 사용한다. [전체 API 데모](docs/api-demo.md#full-demo)는 구매·배포·정산 모듈의 재작성 전 참고 기록이다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.

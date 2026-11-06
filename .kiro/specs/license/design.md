@@ -39,7 +39,7 @@
 | GET | `/api/v1/library/{productCode}` | MEMBER | 본인이 보유한 상품 한 개 |
 | — | 공개 health·API 문서 | 공개 | 기본 거부, 두 GET과 함께만 허용 |
 
-응답은 `ApiResponse<LicensePage>`와 `LicenseResponse`를 사용한다. 상품 응답은 `licenseId`·`productId`·`productCode`·`title`·`acquiredAt`이다.
+응답은 `ApiResponse<LicensePage>`와 `LicenseResponse`를 사용한다. 상품 응답은 `licenseId`·`productId`·`productCode`·`title`·`acquiredAt`·`status`(ACTIVE/SUSPENDED)이고, 페이지는 `content`·`page`·`size`·`totalElements`·`totalPages`를 제공한다. `licenseId`는 공개 조회용 UUID이며 CD키·다운로드 토큰 같은 비밀 값이 아니다.
 익명 401, MEMBER 없음 403, 타인/미보유 404, 잘못된 페이지·상품 코드 형식 400이다.
 
 ## 이벤트 계약
@@ -49,9 +49,28 @@
 | 수신 | `OrderPaid` | `stove.order.v1`. Order가 최초 PAID에 함께 저장한 상품·결제 스냅샷. 소비 그룹 `license-paid-order` |
 | 수신 | `LicenseSuspensionRequested` | 환불 흐름의 정지 요청 |
 | 수신 | `LicenseRestorationRequested` | 환불 반려 등의 복구 요청 |
+| 수신 | `LicenseApprovalCorrectionRequested` | PG 송신 전 승인 중단에 따른 정지 해제 요청 |
 | 발행 | `LicenseGranted` | 지급 완료. 지급과 같은 트랜잭션의 Outbox |
 | 발행 | `LicenseSuspended` | 정지 완료. 정지와 같은 트랜잭션의 Outbox |
 | 발행 | `LicenseRestored` | 복구 완료. 복구와 같은 트랜잭션의 Outbox |
+| 발행 | `LicenseApprovalCorrected` | 승인 정정 복구 완료. 같은 트랜잭션의 Outbox |
+
+### OrderPaid 입력 필드 (13개, Kafka 키·Outbox aggregateId = orderNo)
+
+| 필드 | 값 규칙 |
+|---|---|
+| eventId·requestEventId·paymentResultEventId·paymentId | 공백 아님, 최대 64자. requestEventId는 원 OrderPlaced.eventId, paymentResultEventId는 반영된 OrderPaymentCompleted.eventId |
+| occurredAt | Order가 최초 PAID를 반영한 시각. UTC Instant·마이크로초 정밀도 |
+| orderNo | 주문 UUID |
+| buyerSubject | 공백 아님, 최대 100자 |
+| productId·contentVersion | 양수 |
+| productCode | `[A-Za-z0-9][A-Za-z0-9._-]{0,49}` |
+| title | 공백 아님, 최대 200자 |
+| amount·currency | Order가 확정하고 결제 결과와 대조한 고객 청구액(양수 정수, 판매자 수령액 아님)·KRW |
+
+별도 status 필드는 없다. 값은 Order의 저장 값이며 현재 Catalog 값으로 교체하지 않는다.
+`acquiredAt`은 License의 최초 지급 시각으로 `occurredAt`과 구분한다. 같은 입력 재전달은 `receivedAt`도 갱신하지 않는다. 시각은 DATETIME(6)로 왕복 동일 비교한다.
+도메인·`GrantLicense`는 EventEnvelope·OrderPaidEvent를 입력받지 않고, 공통 값 규칙은 모듈 내부 `LicenseValues`에 둔다.
 
 `OrderPlaced`와 그 밖의 비대상 종류는 처리하지 않는다. 결과 이벤트는 Outbox 릴레이(at-least-once)로 발행한다.
 
@@ -73,4 +92,31 @@
 - 권한/구매 근거/Inbox 저장 실패는 함께 롤백하고 공통 Kafka 재시도의 새 트랜잭션에서 재처리한다.
 - 커밋 직후 ACK 전 종료는 재전달 입력 전체를 비교해 기존 licenseId·획득 시각을 유지한다.
 - 처리 불가 입력·충돌·재시도 소진은 공통 DLT에 보존한다(지급 완료·결제 실패로 해석하지 않음).
-- DEAD/DLT로 남은 기존 이벤트는 Outbox DEAD 재큐잉·원본 토픽 재투입(ADMIN 운영 API, P3 A 검증)으로 복구하며 원래 ID·본문을 보존한다. DB 유실 뒤 전량 재구축은 이 복구와 구분한다.
+- DEAD/DLT로 남은 기존 이벤트는 Outbox DEAD 재큐잉·원본 토픽 재투입(ADMIN 운영 API, P3 A 검증)으로 복구하며 원래 ID·본문을 보존한다. DB 유실 뒤 전량 재구축은 이 복구와 구분한다. 운영 절차는 [License 이벤트 복구 런북](../../../docs/license-event-recovery-runbook.md)을 따른다.
+
+| 중단 지점 | 남는 상태 | 복구 |
+|---|---|---|
+| 지급 전(OrderPaid 처리 실패·재시도 소진) | Order/Payment PAID, 보유권·지급 Inbox 0건, 원래 OrderPaid가 DLT | 원인 제거 뒤 같은 OrderPaid를 DLT 재투입 → 보유권·Inbox 각 1건 |
+| 지급 확인 전(Order의 LicenseGranted 처리 실패) | 보유권 ACTIVE, Order 지급 확인 0건, 대기 중 환불은 PG 취소 없이 대기 | 같은 LicenseGranted를 재투입 → 확인 1건, 대기 환불의 정지 요청 1건 연결 |
+| 재투입 중복 | 원래 이벤트 재전달 | 보유권·확인·Inbox·Outbox·정지 요청 각 1건 유지, licenseId·acquiredAt·SUSPENDED 보존 |
+
+- 원래 이벤트를 새 ID로 재생성하거나 업무 행·시각을 수정해 성공 상태를 만들지 않는다. 원본 부족·모순 건은 운영 확인 대상으로 남기고 별도 권한 재구성·자동 재투입·별도 지급 엔진을 두지 않는다.
+- 주문·보유권·지급 확인·원본 Outbox/Inbox 연결은 읽기 전용 SQL(`tools/operations/license-recovery.sql`)로 대조한다. 재발행 성공과 최종 업무 완료를 구분한다.
+
+## 과거 자료·전환
+
+- Flyway V1~V4와 구 자료를 유지하고 V5가 1:1 구매 근거를 `product_license`로 복사·출처 제약을 추가한다. V5는 검사 실패 시 출처 컬럼 추가 전에 거부한다.
+- 전환 전 점검 SQL `tools/migrations/license/license-merge-preflight.sql`(Order V10·License V4용)을 쓰기 중지 상태에서 실행한다. 통과 조건: 구매자·productId/productCode별 PENDING·PAID 합 ≤ 1, 모든 권한에 출처 정확히 1건, 공통 필드·`license-paid-order` Inbox 대응.
+- MySQL DDL은 자동 커밋이므로 중간 실패의 자동 롤백을 가정하지 않고 실제 스키마·Flyway 기록을 확인한 뒤 백업 복구 또는 검증한 전진 복구를 한다.
+- 구 숫자 member_id·license_key·회수 상태, 구 소비 그룹·Inbox는 새 자료로 변환하지 않는다. 구 Outbox는 릴레이를 끈 채 보존한다. 재작성 전 DB 유실 런북은 새 테이블에 적용하지 않는다.
+- 독립 검증 환경의 성공은 공유 환경 자료 전환 완료를 뜻하지 않는다. 공유 환경 적용 전 과거 PAID·미발행 Outbox·Kafka 오프셋과 소급 지급 필요성을 별도로 대조한다.
+
+## 사용 안내
+
+- MEMBER access token으로 `GET /api/v1/library?page=0&size=20`, `GET /api/v1/library/{productCode}`를 호출한다(인증은 Auth·Gateway 스펙 참조).
+- 추가 결제 승인·고객 구매 확정 절차는 없다. Order가 최초 PAID를 반영하면 OrderPaid가 발행되고 License가 지급한다.
+- Order PAID 직후에는 이벤트 전달 중이라 목록에 없거나 상세가 404일 수 있다. 클라이언트는 주문 PAID를 권한 조회 성공으로 간주하지 않고 다시 조회한다.
+- 본인용 동일 상품은 한 번만 구매한다. 같은 상품의 PENDING·PAID 주문이 있으면 Order가 409로 거절하고, 최종 FAILED 뒤에는 새 requestId로 다시 주문할 수 있다.
+- 환불로 `SUSPENDED`가 된 상품도 라이브러리에 남는다. Download는 `ACTIVE`일 때만 신규 URL을 제공한다. 기간제·이미 받은 파일 회수는 범위 밖이다.
+- 지급 오류는 Payment FAILED나 자동 환불을 뜻하지 않는다. 재투입은 원인 해결 뒤 원래 eventId·키·헤더·본문으로 한다.
+- 장애 주입 픽스처는 integrationTest 클래스패스에만 두고 운영 bootJar·업무 HTTP API에 포함하지 않는다.

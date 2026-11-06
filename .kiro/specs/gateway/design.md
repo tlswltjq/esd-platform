@@ -10,10 +10,11 @@
 ## 핵심 설계 결정
 
 - **외부 노출 통제는 라우트의 부재로 표현한다.** 필터가 아니라 라우팅 표에 경로를 두지 않는 방식이며, `GatewayRouteTest`가 성질을 고정한다. 명세에 보인다고 호출할 수 있는 것은 아니다. 도달 가능성은 라우팅 표가 정한다.
-- **catalog는 GET만 노출한다.** `/api/v1/products/**` 라우트에 `Method=GET` 조건이 걸려 있다. 따라서 주문 금액을 재계산하는 `POST /api/v1/products/quote`는 Gateway를 통해 호출할 수 없고, 서비스 간 내부 호출로만 도달한다.
+- **catalog 공개 라우트는 GET만 노출한다.** `/api/v1/products/**` 라우트에 `Method=GET` 조건이 걸려 있고, 판매자 판매·노출 설정 두 경로만 별도 라우트로 `GET`·`PUT`을 연다. 따라서 주문 금액을 재계산하는 `POST /api/v1/products/quote`는 Gateway를 통해 호출할 수 없고, 서비스 간 내부 호출로만 도달한다.
 - **운영 경로는 열지 않는다.** Gateway에는 `/api/v1/ops/**` 라우트가 없다. 운영 기능은 해당 기능이 활성화된 서비스에 ADMIN으로 직접 접근한다.
 - **문서 프록시는 좁게 연다.** Swagger UI를 Gateway가 서빙하므로 `/v3/api-docs/<service>` 프록시 라우트를 서비스당 한 경로씩 GET만 올리고 하위 경로로 넓히지 않는다.
 - **BFF 토큰 보관.** Access/Refresh Token은 Redis에 두고 브라우저에는 세션 쿠키만 내려준다. Redis 토큰 키는 로그인 때 바뀌는 세션 ID와 독립된 세션 속성에 연결한다.
+- **역할은 계층이 아니다.** 경로마다 선언한 역할만 허용하며 ADMIN이 MEMBER·CREATOR 경로를 자동으로 통과하지 않는다. commerce·판매 관리·관리자 환불 라우트는 외부 `X-Member-Id`를 제거한다.
 - **세션 저장소 장애 시 차단.** 세션 저장소에 접근할 수 없으면 인증을 우회하지 않고 `503 SESSION_STORE_UNAVAILABLE`로 반환한다.
 
 ## 저장소
@@ -37,6 +38,10 @@
 | `/api/v1/studio/**` | studio | |
 | `/api/v1/reviews/**` | review | 운영 |
 | `/api/v1/settlements/**` | settlement | `/me/**`는 `CREATOR`, 나머지는 `ADMIN` |
+| `/api/v1/admin/accounts/**` | auth | `ADMIN` |
+| `/api/v1/products/by-code/*/{sales,listing}` | catalog | `CREATOR`(판매자 판매·노출 설정) |
+| `/api/v1/admin/products/*/{sales,listing,downloads}/restriction`, `/api/v1/admin/catalog-release-jobs[/*]` | catalog | `ADMIN` |
+| `/api/v1/admin/refunds/**` · `/api/v1/admin/refund-cancellation-holds/**`, `/api/v1/admin/refund-delays/**` | order · payment | `ADMIN` |
 | `/v3/api-docs/<service>` | 각 서비스 | GET 전용 문서 프록시, 서비스당 한 경로 |
 
 ## BFF API 계약

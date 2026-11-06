@@ -1,5 +1,5 @@
 # Studio 운영 기능의 축소
-[현재 Studio 모델](studio.md) · [전환 계획](../../studio-simplification-plan.md)
+[현재 Studio 모델](studio.md) · [전환 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md)
 
 Studio는 Project 상세정보·전체 ZIP 업로드·심사 요청·재요청·출시 요청·재요청를 제공한다.
 CI 자격증명·OIDC 신뢰 정책, 내부 테스터 설치 권한, 빌드 웹훅과 커밋 상태 게시,

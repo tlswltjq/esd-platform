@@ -16,8 +16,8 @@ python3 tools/verification/verify-jib.py --help
 | `verify-*.py` | 모듈별 격리 스택 및 Jib 이미지 검증 |
 | `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
-| `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 11개 앱·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. `KIROCREW_SCRATCH` 필요. [범위·재실행](../../docs/gateway-service-ownership-verification.md) |
-| `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [범위·재실행](../../docs/g5-credential-distribution-verification.md) |
+| `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 11개 앱·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. `KIROCREW_SCRATCH` 필요. [범위·재실행](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
+| `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
 | `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |
@@ -39,7 +39,7 @@ python3 tools/verification/verify-jib.py --help
 
 별도 Compose 스택은 `-p PROJECT -f COMPOSE_FILE`로 지정한다. `--service NAME`으로 대상을 좁히고, 성공 종료해야 하는 초기화 작업은 `--one-shot NAME`으로 지정한다. 컨테이너를 변경하거나 시작하지 않는다.
 
-래퍼 제거·상태 검사 교체 후 `python3 -B tools/verification/verify-jib.py --skip-build`도 통과했다. 최신 결과는 `runs/jib-validation-7hmyv5ve/result.json`, 전체 도구 정리 검증은 [조사·실행 기록](../../docs/scripts-tools-audit.md)을 따른다.
+래퍼 제거·상태 검사 교체 후 `python3 -B tools/verification/verify-jib.py --skip-build`도 통과했다. 최신 결과는 `runs/jib-validation-7hmyv5ve/result.json`, 전체 도구 정리 검증은 [조사·실행 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/scripts-tools-audit.md)을 따른다.
 
 ## 포트원 테스트 결제 연결
 
@@ -52,4 +52,4 @@ python3 -m unittest discover -s tools/verification -p test_portone_checkout.py -
 
 `http://127.0.0.1:18792`에서 테스트 결제 → 서버 결과 확인 → 테스트 전액 취소를 진행한다. 이 도구가 만든 고정 9,000원 거래만 사용하고 서버에서 TEST 채널·상점·통화·금액을 확인한 뒤 취소한다. 요청 접수나 브라우저 응답만으로 성공을 확정하지 않는다. 실제 승인·취소는 사용자와 제공사 테스트 환경의 동작 확인이 필요하다.
 
-실행별 `runs/portone-checkout-*/state.json`을 보존한다. 서버 재시작 시 `--run-dir runs/기존실행폴더`로 동일 결제·취소 시도 키를 재사용한다. 미확정 시 새 실행으로 대신하지 않는다. 3시간이 지난 미확정 취소는 새 키나 재호출 없이 결과 대조가 필요하다. 이 도구는 업무 앱의 환불 정책·복구·정산을 구현하지 않는다. 범위·검증 근거는 [연동 계획](../../docs/pg-test-integration-plan.md)을 따른다.
+실행별 `runs/portone-checkout-*/state.json`을 보존한다. 서버 재시작 시 `--run-dir runs/기존실행폴더`로 동일 결제·취소 시도 키를 재사용한다. 미확정 시 새 실행으로 대신하지 않는다. 3시간이 지난 미확정 취소는 새 키나 재호출 없이 결과 대조가 필요하다. 이 도구는 업무 앱의 환불 정책·복구·정산을 구현하지 않는다. 범위·검증 근거는 [연동 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)을 따른다.

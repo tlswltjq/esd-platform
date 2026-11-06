@@ -3,9 +3,9 @@
 > 이 문서의 구 데모·성능·장애 실험 명령과 결과는 재작성 전 기록이다. 해당 실행 코드는 2026-10-21 정리했으며 [정리 전 소스](https://github.com/tlswltjq/esd-platform/blob/e32750ffc95dee1fe5b59b2e248859f84aa77154/scripts/)에서 확인할 수 있다. 현재 검증은 [tools/verification](../tools/verification/README.md)를 사용한다.
 
 
-현재 주문·모의 결제 사용자 흐름은 [Payment 실행·독립 검증](payment-guide.md)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
+현재 주문·모의 결제 사용자 흐름은 [Payment 실행·독립 검증](../.kiro/specs/payment/design.md#사용-안내)을 따른다. 이 문서의 기존 전체 구매·환불 데모는 Payment·License·Download·Settlement의 재작성 전 기록이며 새 Order 계약과 연결되지 않는다.
 
-현재 완료 모듈과 실행 절차는 [개발 환경과 실행](getting-started.md)을 따른다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](studio-guide.md)을 따른다. 아래 CI·E2E Compose 파일명은 당시 기록이고, 현재 파일 구성은 [Compose 실행 구성](compose-layout.md)을 따른다.
+현재 완료 모듈과 실행 절차는 [개발 환경과 실행](getting-started.md)을 따른다. 이 문서의 전체 서비스 데모는 기존 구현의 참고이며, Studio의 현재 검증은 [Studio 실행·검증](../.kiro/specs/studio/design.md#사용-안내)을 따른다. 아래 CI·E2E Compose 파일명은 당시 기록이고, 현재 파일 구성은 [Compose 실행 구성](compose-layout.md)을 따른다.
 
 [문서 목록](README.md) · [개발 환경과 실행](getting-started.md) · [인증·권한 계약](security.md)
 
@@ -92,7 +92,7 @@ bash scripts/api-demo.sh down
 
 ## 창작·심사·출시 수동 실습
 
-[Studio 실행·API 예제](studio-guide.md)를 따른다.
+[Studio 실행·API 예제](../.kiro/specs/studio/design.md#사용-안내)를 따른다.
 CREATOR 가입·Project 생성 → 썸네일·전체 ZIP 업로드 → 상점 내용 편집 →
 단일 심사 승인 → 명시적 상점 등록 → 수정·재심사·재등록을 수행한다.
 ZIP은 manifest나 특정 플랫폼 실행 파일을 요구하지 않는다.

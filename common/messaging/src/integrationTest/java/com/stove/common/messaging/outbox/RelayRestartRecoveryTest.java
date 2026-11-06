@@ -37,7 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@link #restartedRelay()} 가 만드는 인스턴스가 "그 뒤에 새로 뜬 프로세스"다.
  * <b>새 인스턴스는 적재를 목격하지 않았다</b> — 그것이 이 시나리오의 전부다.
  *
- * <p><b>주입 확인이 본체다</b>({@code docs/chaos.md} 9장 1번). 첫 판정이
+ * <p><b>주입 확인이 본체다</b>({@code docs/experiments.md} E8 장애 주입 조건). 첫 판정이
  * {@link #relayIsActuallyAbsent()} 인 이유가 그것이다 — 릴레이가 살아 있는 채로 잰
  * "복구했다" 는 복구를 잰 것이 아니라 아무 일도 없었음을 잰 것이다.
  */
