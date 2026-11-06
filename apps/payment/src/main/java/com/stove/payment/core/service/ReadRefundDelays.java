@@ -32,6 +32,10 @@ public class ReadRefundDelays {
     private final RefundInvestigationRepository investigations;
     private final Clock clock;
 
+    public long count() {
+        return executions.countDelayedForAdministration(RefundCancellationWindow.preparedBy(clock.instant()));
+    }
+
     public Page<RefundDelayView> search(RefundDelayQuery query) {
         if (query == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
         Instant at = clock.instant();

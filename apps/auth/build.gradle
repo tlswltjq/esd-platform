@@ -9,4 +9,6 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-authorization-server'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
 }

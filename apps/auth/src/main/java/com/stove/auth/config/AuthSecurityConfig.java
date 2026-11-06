@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.config.Customizer;
@@ -118,6 +119,7 @@ public class AuthSecurityConfig {
                     return decoded;
                 })))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member",
                                 "/api/v1/auth/password/reset-request", "/api/v1/auth/password/reset",
                                 "/actuator/health", "/actuator/metrics/**",

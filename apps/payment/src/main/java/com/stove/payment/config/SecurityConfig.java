@@ -18,6 +18,7 @@ public class SecurityConfig {
             PortOneProperties portOne) throws Exception {
         PortOneWebhookVerifier verifier = verifiers.getIfAvailable();
         http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(a -> {
+            a.requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll();
             a.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
             if (verifier != null) a.requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/portone").permitAll();
             a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-cancellation-holds", "/api/v1/admin/refund-cancellation-holds/*").hasRole("ADMIN");

@@ -1,5 +1,8 @@
 package com.stove.order.config;
 
+import com.stove.order.adapter.OrderExpiryMetrics;
+import io.micrometer.core.instrument.binder.MeterBinder;
+import org.springframework.beans.factory.ObjectProvider;
 import com.stove.order.core.domain.OrderPaymentAdmissionRepository;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.service.CloseExpiredOrder;
@@ -17,6 +20,10 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class OrderPaymentLifecycleConfiguration {
+    @Bean MeterBinder orderExpiryMetrics(ObjectProvider<CloseExpiredOrders> expiry) {
+        return new OrderExpiryMetrics(() -> expiry.getObject().countPendingExpiry());
+    }
+
     @Bean RecordOrderExpiry recordOrderExpiry(OutboxRecorder outbox) { return new RecordOrderExpiry(outbox); }
     @Bean RequestOrderPaymentProcessing requestOrderPaymentProcessing(OrderRepository orders,
             OrderPaymentAdmissionRepository admissions, Clock clock,RecordOrderExpiry expiry) {

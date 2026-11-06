@@ -1,0 +1,41 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_expirable{application="order"}'
+        values: '2501x30 0x2'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OrderExpirySweepFalling
+        exp_alerts:
+          - exp_labels:
+              application: order
+              severity: warning
+            exp_annotations:
+              summary: "order: 만료 대상 주문이 걷히지 않고 쌓인다"
+              description: >-
+                생성 후 30분을 넘긴 PENDING 주문이 2501건이고 30분 추세가 줄지 않는다.
+                만료 스케줄러 실행·DB 잠금·처리 실패 로그를 확인한다.
+      - eval_time: 31m
+        alertname: OrderExpirySweepFalling
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_expirable{application="order"}'
+        values: '6000-100x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OrderExpirySweepFalling
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_expirable{application="order"}'
+        values: '2000x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OrderExpirySweepFalling
+        exp_alerts: []

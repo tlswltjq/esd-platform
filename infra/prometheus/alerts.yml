@@ -53,67 +53,19 @@ groups:
             최근 5분간 {{ $value }}건. GET /api/v1/ops/dlt?topic={{ $labels.topic }}.DLT 로 원인을 보고,
             고친 뒤 POST /api/v1/ops/dlt/replay 로 되돌린다.
 
-      # 사람이 지시하지 않은 환불. 결제창 만료 자동 환불은 사용자 요청도 운영자 조작도 아닌,
-      # **시스템이 스스로 돈을 되돌리는** 유일한 HTTP 경로다.
-      #
-      # 정상 운영에서 0 은 아니다 -- 결제창을 열어 두고 자리를 뜬 사용자가 늘 조금은 있다.
-      # 그래서 한 건에 울리지 않고 **추세**로 본다. 갑자기 늘었다면 우리 창(checkout-window)이
-      # PG 세션보다 짧아졌다는 뜻이고, 그건 우리가 멀쩡한 결제를 되돌리고 있다는 뜻이다.
-      #
-      # 사용자에게는 "결제했는데 취소됐다" 로 보인다 -- **당사자만 알고 우리는 모르는 상태**가
-      # 이 규칙이 막으려는 것이다.
-      - alert: AutoRefundsRising
-        expr: increase(stove_payment_auto_refunded_total[15m]) > 5
-        labels:
-          severity: warning
-        annotations:
-          summary: "{{ $labels.application }}: 시스템 자동 환불이 늘고 있다 (사유 {{ $labels.reason }})"
-          description: >-
-            최근 15분간 {{ $value }}건. stove.payment.checkout-window 가 PG 결제창 세션보다
-            짧으면 정상 결제가 되돌려진다 -- 두 값을 먼저 대조한다.
-
-      # 돈이 나갔는지 불확실한 상태로 남아 있는 결제.
-      #
-      # CANCELING 은 "PG 환불을 요청하기로 커밋했는데 확정까지 못 갔다" 는 뜻이다. 착수와 확정
-      # 사이에 되돌릴 수 없는 외부 호출이 끼어 있어서 생기는 자리이고, 스윕이 분 단위로 재개한다.
-      #
-      # **게이지에 거는 이유** -- 재개 카운터(stove_payment_refund_resumed_total)는 스윕이 계속
-      # 실패해도 늘지 않고, 계속 성공해도 남아 있는 건수를 말해 주지 않는다.
-      # 물어야 하는 것은 "지금 몇 건이 불확실한가" 이므로 게이지가 답이다.
-      #
-      # 10분을 보는 것은 스윕 주기(1분) × 여유다. 한두 회차 실패는 PG 순간 장애로 정상이고,
-      # 10분을 못 지우면 그건 재개 자체가 막힌 것이다 -- 그때는 사람이 PG 상태를 봐야 한다.
-      - alert: RefundsStuckInCanceling
-        expr: min_over_time(stove_payment_canceling[10m]) > 0
+      # 현재 PortOne TEST 환불의 관리자 지연 목록과 같은 집계다.
+      # 최초 취소 준비 + 3시간 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.
+      # 확정·실패 건은 빠지고, 미확정 중단 건은 남으며 복구 뒤 자동 해제된다.
+      - alert: RefundConfirmationsDelayed
+        expr: stove_payment_refund_confirmation_delayed > 0
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.application }}: 환불이 확정되지 않은 채 10분째 남아 있다"
+          summary: "{{ $labels.application }}: 환불 확인이 원래 3시간 기한을 넘겼다"
           description: >-
-            {{ $value }}건이 CANCELING 이다. 사용자에게는 "환불했다는데 돈이 안 들어왔다" 로 보인다.
-            재시도는 계속되지만 백오프가 걸리므로(2->4->...->30분) 간격이 점점 벌어진다.
-            10분을 못 지웠다면 PG 호출 자체가 막힌 것이다.
-
-      # 위 규칙과 무엇이 다른가 -- **재시도가 아직 정상적으로 남아 있는가**다.
-      #
-      # RefundsStuckInCanceling 은 "10분 안에 안 풀렸다" 를 말한다. 백오프가 30분까지 벌어지므로
-      # 그 시점에는 아직 정상 재시도가 몇 번 남아 있고, 사람이 할 일이 없을 수도 있다.
-      # 이 규칙은 **예산(기본 1시간)을 넘긴 건**만 본다 -- 그건 재시도로 풀릴 것이 아니라는 뜻이다.
-      #
-      # 게이지를 따로 둔 이유가 이것이다. 전체 CANCELING 은 정상 환불이 진행 중인 몇 초 동안에도
-      # 오르내려서 거기에 이 알람을 걸면 잡음이 되고, **잡음은 사람이 알람을 무시하는 법을 가르친다**.
-      #
-      # 포기 상태(DEAD)를 만들지 않기로 한 판단이 이 알람을 필수로 만든다 -- 재시도가 스스로
-      # 멈추지 않으므로 **사람을 부르는 것은 이 규칙뿐이다**(#41).
-      - alert: RefundsStuckBeyondBudget
-        expr: min_over_time(stove_payment_canceling_stale[5m]) > 0
-        labels:
-          severity: critical
-        annotations:
-          summary: "{{ $labels.application }}: 환불이 예산을 넘겨 불확실한 채로 남아 있다"
-          description: >-
-            {{ $value }}건이 취소 착수 뒤 예산(기본 1시간)을 넘겼다. 재시도는 계속되지만
-            그 시간이면 자동으로 풀릴 것이 아니다 -- PG 상태와 stove_payment_refund_resume_failed_total 을 본다.
+            {{ $value }}건이 최초 취소 준비 뒤 3시간 이상 미확정이다.
+            GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
+            시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
 
       # 만료 스윕이 살아 있는가.
       #
@@ -121,12 +73,13 @@ groups:
       # 없었다" 와 "아예 안 돌았다" 가 구분되지 않는다. 이 저장소가 D-021·D-023·D-031 로
       # 세 번 밟은 자리라, 장치를 넣으면서 그 장치가 살아 있다는 증거를 같이 넣는다.
       #
-      # 임계를 배치 크기(500)의 4배로 잡는다. 정상이면 스윕이 회차마다 배치만큼 걷어내므로
-      # 이 값은 배치 크기 언저리에서 머문다.
+      # 현재 스캔은 회차당 100건·기본 1초 간격이며 PENDING 주문만 처리한다.
+      # 기존 임계값 2000건과 10분/30분 관측 창은 유지한다.
       #
       # stove_order_pending 이 아니라 expirable 을 보는 이유 -- pending 은 정상 사용으로도
       # 오르내린다. 거기에 걸면 잡음이 되고, 잡음은 사람이 알람을 무시하는 법을 가르친다.
       #
+      # 아래 D-031 수치는 과거 실험 기록이며 현재 스캔 설정과 구분한다.
       # **deriv 조건이 핵심이다.** 처음 쓴 판은 `> 2000` 뿐이었는데, 실제로 걸어 보니
       # **밀린 것을 정상적으로 걷어내는 3시간 내내 울렸다** -- 스윕은 500건/분으로 잘 돌고 있었다.
       # 그건 "쌓인다" 가 아니라 "많다" 를 잰 것이다. 물어야 하는 것은 양이 아니라 **방향**이므로
@@ -143,10 +96,10 @@ groups:
         annotations:
           summary: "{{ $labels.application }}: 만료 대상 주문이 걷히지 않고 쌓인다"
           description: >-
-            창을 넘긴 CREATED 주문이 {{ $value }}건이고 30분째 줄지 않는다.
-            스윕이 멈췄거나(shedlock 행의 locked_at 을 본다) 유입이 배치 크기를 넘긴 것이다.
+            생성 후 30분을 넘긴 PENDING 주문이 {{ $value }}건이고 30분 추세가 줄지 않는다.
+            만료 스케줄러 실행·DB 잠금·처리 실패 로그를 확인한다.
 
-      # 스크레이프가 끊긴 것도 신호다 -- 위 세 규칙이 전부 조용해지기 때문이다.
+      # 스크레이프가 끊기면 업무 경보가 조용해지므로 수집 실패 자체도 감시한다.
       - alert: ServiceDown
         expr: up == 0
         for: 2m

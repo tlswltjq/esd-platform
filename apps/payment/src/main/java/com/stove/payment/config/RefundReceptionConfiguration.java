@@ -1,6 +1,8 @@
 package com.stove.payment.config;
 
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.payment.adapter.RefundConfirmationMetrics;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import com.stove.payment.adapter.trace.JdbcRefundExecutionTraceContexts;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
@@ -17,6 +19,7 @@ import com.stove.payment.core.service.RecordRefundInvestigation;
 import com.stove.payment.core.domain.RefundInvestigationRepository;
 import java.time.Clock;
 import java.time.Duration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,6 +27,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
+    @Bean MeterBinder refundConfirmationMetrics(ObjectProvider<ReadRefundDelays> delays) {
+        return new RefundConfirmationMetrics(() -> delays.getObject().count());
+    }
+
     @Bean ReadRefundDelays readRefundDelays(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationHoldRepository holds, RefundInvestigationRepository investigations, Clock refundReceptionClock) {
         return new ReadRefundDelays(payments, executions, holds, investigations, refundReceptionClock);

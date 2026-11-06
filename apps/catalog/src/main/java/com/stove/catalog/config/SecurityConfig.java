@@ -57,6 +57,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/catalog-release-jobs", "/api/v1/admin/catalog-release-jobs/*").hasRole("ADMIN")
                         .requestMatchers("/api/v1/products/by-code/*/sales", "/api/v1/products/by-code/*/listing").hasRole("CREATOR")

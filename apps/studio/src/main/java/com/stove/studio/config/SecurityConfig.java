@@ -16,7 +16,9 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(
                         a ->
-                                a.requestMatchers(
+                                a.requestMatchers(HttpMethod.GET, "/actuator/prometheus")
+                                        .permitAll()
+                                        .requestMatchers(
                                                 "/actuator/health",
                                                 "/actuator/metrics/**",
                                                 "/v3/api-docs/**",

@@ -31,6 +31,7 @@ import com.stove.payment.core.domain.RefundExecutionRequest;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundInvestigation;
 import com.stove.payment.core.domain.RefundInvestigationRepository;
+import com.stove.payment.core.service.ReadRefundDelays;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import jakarta.persistence.EntityManager;
@@ -75,6 +76,7 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
     private static final Instant DELAY = BASE.plusSeconds(10800);
     @MockitoSpyBean PaymentRepository payments;
     @Autowired RefundExecutionRepository executions;
+    @Autowired ReadRefundDelays delays;
     @Autowired RefundCancellationHoldRepository holds;
     @MockitoSpyBean RefundInvestigationRepository investigations;
     @Autowired ReceiveRefundExecution receive;
@@ -99,10 +101,12 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
         when(clock.instant()).thenReturn(BASE.plusNanos(1000)); RefundExecution newer = receive.execute(execution(paid("PORTONE_TEST"))); prepare.execute(newer.getAttemptId());
         Map<String, List<Map<String, Object>>> before = snapshot(); when(clock.instant()).thenReturn(DELAY.minusNanos(1000));
         assertThat(list().data().path("totalElements").asInt()).isZero();
+        assertThat(delays.count()).isZero();
         when(clock.instant()).thenReturn(DELAY);
         Response page = http("GET", ROOT + "?size=1", null, admin());
         assertThat(page.status()).isEqualTo(200); assertThat(page.cacheControl()).isEqualTo("no-store");
         assertThat(page.data().path("totalElements").asInt()).isEqualTo(2);
+        assertThat(delays.count()).isEqualTo(2);
         assertThat(page.data().path("content").get(0).path("attemptId").asText()).isEqualTo(first.getAttemptId());
         assertThat(http("GET", ROOT + "?size=1&page=1", null, admin()).data().path("content").get(0).path("attemptId").asText()).isEqualTo(second.getAttemptId());
         JsonNode detail = detail(first).data();
@@ -116,6 +120,8 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(http("GET", path(newer), null, admin()).status()).isEqualTo(404);
         for (String hidden : List.of("cancellationRequestBody", "idempotencyKey", "claimId", "buyerSubject", "apiSecret", "receiptReason"))
             assertThat(detail.has(hidden)).as(hidden).isFalse();
+        when(clock.instant()).thenReturn(DELAY.plusNanos(1000));
+        assertThat(delays.count()).isEqualTo(3);
         assertThat(snapshot()).isEqualTo(before);
     }
 
@@ -175,6 +181,7 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
         confirm(execution, DELAY.plusSeconds(1)); when(clock.instant()).thenReturn(DELAY.plusSeconds(2));
         Map<String, List<Map<String, Object>>> before = snapshot();
         assertThat(list().data().path("totalElements").asInt()).isZero();
+        assertThat(delays.count()).isZero();
         assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         JsonNode detail = detail(execution).data();
         assertThat(detail.path("currentlyDelayed").asBoolean()).isFalse(); assertThat(detail.path("reconciliationRequired").asBoolean()).isTrue();
@@ -196,10 +203,12 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
             current.confirmFailure(payment, new PgRefundFailureConfirmation(failed, "a".repeat(64)), id(), failedAt);
         });
         when(clock.instant()).thenReturn(failedAt); assertThat(list().data().path("totalElements").asInt()).isZero();
+        assertThat(delays.count()).isZero();
         RefundExecutionRequest retry = new RefundExecutionRequest(id(), failedAt, execution.getRefundId(), id(), execution.getOrderNo(), execution.getPaymentId(),
                 execution.getBuyerSubject(), execution.getAmount(), execution.getCurrency(), id(), execution.getAttemptId());
         RefundExecution next = receive.execute(retry); prepare.execute(next.getAttemptId());
         assertThat(list().data().path("totalElements").asInt()).isZero();
+        assertThat(delays.count()).isZero();
         assertThat(note(execution, command).data()).isEqualTo(receipt.data()); assertThat(note(execution, id()).status()).isEqualTo(409);
         when(clock.instant()).thenReturn(failedAt.plusSeconds(10800));
         assertThat(list().data().path("content").get(0).path("attemptId").asText()).isEqualTo(next.getAttemptId());
@@ -240,6 +249,7 @@ class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
         });
         when(clock.instant()).thenReturn(DELAY); Map<String, List<Map<String, Object>>> before = snapshot();
         assertThat(list().data().path("totalElements").asInt()).isEqualTo(2);
+        assertThat(delays.count()).isEqualTo(2);
         assertThat(detail(requested).data().path("receiptState").asText()).isEqualTo("REQUESTED");
         assertThat(detail(requested).data().path("receiptObservedAt").asText()).isEqualTo(BASE.plusSeconds(1).toString());
         assertThat(detail(blocked).data().path("cancellationBalanceChangedAt").asText()).isEqualTo(BASE.plusSeconds(2).toString());

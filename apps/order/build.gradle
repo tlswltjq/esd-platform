@@ -8,6 +8,7 @@ dependencies {
     implementation project(':common:messaging')
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
+    integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
 }
 
 tasks.named('migrationTest') {

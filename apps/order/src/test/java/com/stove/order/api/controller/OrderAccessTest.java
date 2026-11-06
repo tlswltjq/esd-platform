@@ -203,6 +203,14 @@ class OrderAccessTest {
         verifyNoInteractions(create, read, search);
     }
 
+    @Test
+    void prometheusReadPassesSecurityWithoutOpeningOtherActuatorOperations() throws Exception {
+        // This MVC slice has no Actuator handler; 404 proves only the security boundary.
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isNotFound());
+        mvc.perform(post("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+    }
+
     private static MockHttpServletRequestBuilder operation(HttpMethod method, String path) {
         MockHttpServletRequestBuilder request = MockMvcRequestBuilders.request(method, path);
         if (method == HttpMethod.POST) {

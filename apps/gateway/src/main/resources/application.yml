@@ -271,6 +271,7 @@ springdoc:
 
 management:
   endpoints.web.exposure.include: health,info,prometheus,gateway
+  metrics.tags.application: gateway
   # 트레이스가 시작되는 자리. 하류 서비스와 샘플링 비율이 다르면 트레이스가 반쪽만 남는다.
   tracing.sampling.probability: ${TRACING_SAMPLE_RATE:1.0}
   otlp.tracing.endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}

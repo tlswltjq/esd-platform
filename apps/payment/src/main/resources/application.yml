@@ -97,7 +97,7 @@ stove:
     max-retry: 10
 
 management:
-  endpoints.web.exposure.include: health
+  endpoints.web.exposure.include: health,prometheus
   endpoint.health.probes.enabled: true
   metrics.tags.application: payment
   # 전량 샘플링 — 데모에서는 트레이스가 드문드문 있으면 확인 자체가 안 된다. 운영이라면 낮춰 잡는다.
