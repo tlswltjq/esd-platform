@@ -15,40 +15,6 @@
         },
         "type" : "object"
       },
-      "ApiResponseListDeadEventResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DeadEventResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseListDltRecordResponse" : {
-        "properties" : {
-          "data" : {
-            "items" : {
-              "$ref" : "#/components/schemas/DltRecordResponse"
-            },
-            "type" : "array"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "ApiResponseListGenreDefinition" : {
         "properties" : {
           "data" : {
@@ -139,34 +105,6 @@
         },
         "type" : "object"
       },
-      "ApiResponseReplayedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/ReplayedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
-      "ApiResponseRequeuedCount" : {
-        "properties" : {
-          "data" : {
-            "$ref" : "#/components/schemas/RequeuedCount"
-          },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "ApiResponseStudioPageResponseBuild" : {
         "properties" : {
           "data" : {
@@ -237,18 +175,6 @@
         },
         "type" : "object"
       },
-      "ApiResponseVoid" : {
-        "properties" : {
-          "data" : { },
-          "error" : {
-            "$ref" : "#/components/schemas/ErrorBody"
-          },
-          "success" : {
-            "type" : "boolean"
-          }
-        },
-        "type" : "object"
-      },
       "Build" : {
         "properties" : {
           "checksum" : {
@@ -300,77 +226,6 @@
           }
         },
         "required" : [ "productCode", "title" ],
-        "type" : "object"
-      },
-      "DeadEventResponse" : {
-        "properties" : {
-          "aggregateId" : {
-            "type" : "string"
-          },
-          "aggregateType" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "lastError" : {
-            "type" : "string"
-          },
-          "partitionKey" : {
-            "type" : "string"
-          },
-          "retryCount" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "DltRecordResponse" : {
-        "properties" : {
-          "eventId" : {
-            "type" : "string"
-          },
-          "eventType" : {
-            "type" : "string"
-          },
-          "exception" : {
-            "type" : "string"
-          },
-          "key" : {
-            "type" : "string"
-          },
-          "offset" : {
-            "format" : "int64",
-            "type" : "integer"
-          },
-          "originalTopic" : {
-            "type" : "string"
-          },
-          "partition" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "traceParent" : {
-            "type" : "string"
-          }
-        },
         "type" : "object"
       },
       "ErrorBody" : {
@@ -600,24 +455,6 @@
           },
           "withdrawalReason" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "ReplayedCount" : {
-        "properties" : {
-          "replayed" : {
-            "format" : "int32",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "RequeuedCount" : {
-        "properties" : {
-          "requeued" : {
-            "format" : "int32",
-            "type" : "integer"
           }
         },
         "type" : "object"
@@ -889,138 +726,6 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
-    "/api/v1/ops/dlt" : {
-      "get" : {
-        "operationId" : "peek",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 20,
-            "format" : "int32",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDltRecordResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/dlt/replay" : {
-      "post" : {
-        "operationId" : "replay",
-        "parameters" : [ {
-          "in" : "query",
-          "name" : "topic",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        }, {
-          "in" : "query",
-          "name" : "max",
-          "required" : false,
-          "schema" : {
-            "default" : 100,
-            "format" : "int32",
-            "type" : "integer"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseReplayedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "dlt-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead" : {
-      "get" : {
-        "operationId" : "deadEvents",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseListDeadEventResponse"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/requeue-all" : {
-      "post" : {
-        "operationId" : "requeueAll",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseRequeuedCount"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
-    "/api/v1/ops/outbox/dead/{eventId}/requeue" : {
-      "post" : {
-        "operationId" : "requeue",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "eventId",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "tags" : [ "outbox-ops-controller" ]
-      }
-    },
     "/api/v1/studio/assets/{id}/{assetId}" : {
       "get" : {
         "operationId" : "get_1",
