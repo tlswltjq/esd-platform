@@ -109,7 +109,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 2. WHEN `RefundExecutionSucceeded`가 금융 확인보다 늦게 또는 먼저 도착하면 THEN 시스템 SHALL 도착 순서와 무관하게 최초 금융 확인 ID·시각·출처와 시도 `SUCCEEDED`를 보존하고 조사 표시만 해제한다. 같은 이벤트·내용의 재전달은 무효과다.
 3. WHEN 검증된 `RefundExecutionFailed`를 받으면 THEN 시스템 SHALL 시도 `FAILED`·Inbox·`LicenseRestorationRequested` Outbox·`PENDING_LICENSE_RESTORATION`을 원자 저장하고, 현재 요청·시도·정지·구매와 일치하는 실제 `LicenseRestored`를 확인한 뒤에만 환불 `FAILED`로 마친다. 복구 요청 저장만으로 복구 완료라 하지 않는다.
 4. THE 시스템 SHALL 과거 정지·복구 메시지로 다른(새) 정지를 바꾸지 않고, 확정 실패 뒤 새 실행 시도를 자동으로 만들지 않는다. 시간 경과·타임아웃만으로 실패·복구하지 않는다.
-5. WHEN 환불을 처음 `COMPLETED`로 확정하면 THEN 시스템 SHALL 같은 트랜잭션에 `PurchaseRefunded`(refundId·licenseId·orderNo·구매자·상품·paymentId·현재 정지 요청 ID, 키 orderNo) Outbox를 저장해 License가 구매를 끝내게 한다. 재전달은 다시 발행하지 않는다(결정 96).
+5. WHEN 환불을 처음 `COMPLETED`로 확정하면 THEN 시스템 SHALL 같은 트랜잭션에 `PurchaseRefunded`(refundId·licenseId·orderNo·구매자·상품·paymentId·현재 정지 요청 ID, 키 orderNo) Outbox를 저장해 License가 구매를 끝내게 한다. 재전달은 다시 발행하지 않는다(결정 96). `PurchaseRefunded` 도입 전에 끝난 환불은 V30이 같은 본문으로 한 번 채운다(결정 99).
 6. WHEN 복구 완료(`LicenseRestored`·`LicenseApprovalCorrected`)의 `returnedToStorage`가 true면 THEN 시스템 SHALL 환불에 남기고 고객 환불 응답의 `purchaseReturnedToStorage`로 보여 준다. 따로 알리지 않는다(결정 98).
 
 ### R8. 환불 확장: 명시적 재시도·재심사·잘못된 승인 중단·지연 안내

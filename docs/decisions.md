@@ -912,6 +912,15 @@
 - 구분: 추천 수용
 - 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116), 근거 색인 2026-11-06 license·order 행
 
+<a id="p4-legacy-refund-backfill"></a>
+## 99. 이 PR 전에 끝난 환불은 Order V30이 PurchaseRefunded를 채워 License가 끝내게 한다
+- 문제: PR #116 교차 리뷰 R2. 이 PR 전에 환불이 끝난 구매는 License에 `SUSPENDED`로 남아 있고, V10은 Order의 환불 완료를 알 수 없어 이를 정지된 보유권으로 옮긴다. Order는 `PurchaseRefunded`를 처음 완료할 때만 내므로 결정 97과 달리 라이브러리에 계속 보인다.
+- 선택지: A 공유 환경 전환 절차만 적음 / B Order V30이 기존 COMPLETED 환불마다 `PurchaseRefunded`를 Outbox에 채움 / C 지킬 자료가 없으므로 개발 자료를 초기화하고 호환 경로를 두지 않음 (추천: 지킬 자료가 없으면 C, 있으면 B — AI의 처음 판정 초안은 A였다)
+- 내 의견: "R2에 대해서 더 논의하고싶어" → "C로 해, 지킬 자료가 없으니 개발 자료를 초기화해" → (볼륨 삭제 확인 요청 뒤) "B로 결정 바꿀래"
+- 선택: B — 개발 자료를 지우지 않고, 배포만으로 기존 완료 환불을 정리한다. 이유는 따로 말하지 않았다. 비용: SQL로 만든 이벤트 본문이 Java 계약과 어긋나지 않음을 이행 테스트로 고정해야 하고, License의 환불 완료 처리가 이 채움 이벤트에도 멱등해야 한다. License 소비 그룹은 `earliest`부터 읽어 배포 순서가 달라도 받는다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116) 리뷰 판정 R2
+
 ---
 
 ## 검증하며 드러난 것

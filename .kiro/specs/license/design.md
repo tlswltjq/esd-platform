@@ -119,7 +119,7 @@
 
 - Flyway V1~V4와 구 자료를 유지하고 V5가 1:1 구매 근거를 `product_license`로 복사·출처 제약을 추가한다. V5는 검사 실패 시 출처 컬럼 추가 전에 거부한다.
 - 전환 전 점검 SQL `tools/migrations/license/license-merge-preflight.sql`(Order V10·License V4용)을 쓰기 중지 상태에서 실행한다. 통과 조건: 구매자·productId/productCode별 PENDING·PAID 합 ≤ 1, 모든 권한에 출처 정확히 1건, 공통 필드·`license-paid-order` Inbox 대응.
-- V10은 기존 `ACTIVE` 행을 `REGISTERED` + `ACTIVE` 보유권으로, `SUSPENDED` 행을 `SUSPENDED`(suspendedFrom=`REGISTERED`) + `SUSPENDED` 보유권으로 옮긴다. 지우거나 고르지 않는다.
+- V10은 기존 `ACTIVE` 행을 `REGISTERED` + `ACTIVE` 보유권으로, `SUSPENDED` 행을 `SUSPENDED`(suspendedFrom=`REGISTERED`) + `SUSPENDED` 보유권으로 옮긴다. 지우거나 고르지 않는다. V10 이전에 환불이 끝난 구매는 Order V30이 채운 `PurchaseRefunded`로 `REFUNDED`가 된다(결정 99).
 - MySQL DDL은 자동 커밋이므로 중간 실패의 자동 롤백을 가정하지 않고 실제 스키마·Flyway 기록을 확인한 뒤 백업 복구 또는 검증한 전진 복구를 한다.
 - 구 숫자 member_id·license_key·회수 상태, 구 소비 그룹·Inbox는 새 자료로 변환하지 않는다. 구 Outbox는 릴레이를 끈 채 보존한다. 재작성 전 DB 유실 런북은 새 테이블에 적용하지 않는다.
 - 독립 검증 환경의 성공은 공유 환경 자료 전환 완료를 뜻하지 않는다. 공유 환경 적용 전 과거 PAID·미발행 Outbox·Kafka 오프셋과 소급 지급 필요성을 별도로 대조한다.

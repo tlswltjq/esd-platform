@@ -164,6 +164,41 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         assertThat(inboxCount()).isEqualTo(1);
     }
 
+    /** 결정 99·리뷰 R2: 이 PR 전에 끝난 환불(PurchaseRefunded 없음)은 V30이 같은 내용의 PurchaseRefunded를 한 번 채운다. */
+    @Test void v30BackfillsPurchaseRefundedOnceForRefundsCompletedBeforeTheEvent() throws Exception {
+        Fixture fixture = fixture();
+        apply.execute(fixture.input());
+        jdbc.update("DELETE FROM outbox_event WHERE event_type='PurchaseRefunded'");
+        String script = new String(getClass().getResourceAsStream("/db/migration/V30__backfill_purchase_refunded.sql").readAllBytes(),
+                StandardCharsets.UTF_8);
+
+        jdbc.execute(script);
+        jdbc.execute(script);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='PurchaseRefunded'", Integer.class)).isEqualTo(1);
+        Map<String, Object> row = jdbc.queryForMap("SELECT aggregate_type, aggregate_id, topic, partition_key, status, payload, event_id "
+                + "FROM outbox_event WHERE event_type='PurchaseRefunded'");
+        assertThat(row.get("aggregate_type")).isEqualTo("Order");
+        assertThat(row.get("aggregate_id")).isEqualTo(fixture.event().orderNo());
+        assertThat(row.get("topic")).isEqualTo("stove.order.v1");
+        assertThat(row.get("partition_key")).isEqualTo(fixture.event().orderNo());
+        assertThat(row.get("status")).isEqualTo("PENDING");
+        PurchaseRefundedEvent refunded = mapper.readValue((String) row.get("payload"), PurchaseRefundedEvent.class);
+        Refund completed = refunds.findByOrderNo(fixture.event().orderNo()).orElseThrow();
+        RefundAttempt attempt = attempts.findByAttemptId(completed.getCurrentAttemptId()).orElseThrow();
+        Order order = orders.findByOrderNoAndBuyerSubject(completed.getOrderNo(), fixture.event().buyerSubject()).orElseThrow();
+        assertThat(refunded.eventId()).isEqualTo(row.get("event_id"));
+        assertThat(refunded.refundId()).isEqualTo(completed.getRefundId());
+        assertThat(refunded.licenseId()).isEqualTo(attempt.getLicenseId());
+        assertThat(refunded.suspensionRequestEventId()).isEqualTo(attempt.getSuspensionRequestEventId());
+        assertThat(refunded.orderNo()).isEqualTo(order.getOrderNo());
+        assertThat(refunded.buyerSubject()).isEqualTo(order.getBuyerSubject());
+        assertThat(refunded.productId()).isEqualTo(order.getProductId());
+        assertThat(refunded.productCode()).isEqualTo(order.getProductCode());
+        assertThat(refunded.paymentId()).isEqualTo(order.getPaymentId());
+        assertThat(refunded.occurredAt()).isEqualTo(completed.getCompletedAt());
+    }
+
     @Test void aCompletionWithNoRefundIsQuarantinedWithoutBusinessRetryOrReplacement() throws Exception {
         Fixture fixture = fixture();
         jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");

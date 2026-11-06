@@ -35,7 +35,7 @@ public class ApplyApprovalCorrection {
     private final Clock clock;
     public void execute(ApprovalCorrectionRequest input) {
         if (input==null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        License license=ProductPurchaseLock.lock(licenses,input.orderNo());
+        License license=ProductPurchaseLock.lock(licenses,entityManager,input.orderNo());
         if (!license.getLicenseId().equals(input.licenseId()) || !license.getBuyerSubject().equals(input.buyerSubject())
                 || !license.getProductId().equals(input.productId()) || !license.getProductCode().equals(input.productCode())
                 || !license.getPaymentId().equals(input.paymentId())) throw new BusinessException(ErrorCode.CONFLICT);

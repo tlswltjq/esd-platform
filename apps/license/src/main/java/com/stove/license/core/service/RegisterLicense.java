@@ -30,7 +30,7 @@ public class RegisterLicense {
 
     public LicenseRegistration execute(String buyer, String licenseId) {
         if (!LicenseValues.licenseId(licenseId)) throw new BusinessException(ErrorCode.INVALID_REQUEST, "보관함 항목 식별자가 올바르지 않습니다.");
-        License purchase = ProductPurchaseLock.lockOwned(licenses, buyer, licenseId);
+        License purchase = ProductPurchaseLock.lockOwned(licenses, entityManager, buyer, licenseId);
         LicenseRegistration current = LicenseRegistrations.current(registrations, purchase);
         if (purchase.getStatus() == PurchaseStatus.REGISTERED && current != null && current.getStatus() == LicenseStatus.ACTIVE)
             return current;

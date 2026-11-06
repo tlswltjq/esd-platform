@@ -15,6 +15,11 @@ public record ApprovalCorrectionConfirmation(String eventId, Instant occurredAt,
                 || !RefundRestorationValues.text(paymentId,64) || !RefundRestorationValues.text(suspensionRequestEventId,64)
                 || !RefundRestorationValues.text(suspensionEventId,64)) throw new RefundCompletionRejected("승인 정정 복구 본문이 올바르지 않습니다.");
     }
-    public String fingerprint() { return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
-            stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId,Boolean.toString(returnedToStorage)); }
+    /** PR #116 리뷰 R3: 업그레이드 전 지문과 맞도록 보관함 반환(true)일 때만 값을 더한다. */
+    public String fingerprint() {
+        if (!returnedToStorage) return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
+                stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId);
+        return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
+                stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId,"returnedToStorage");
+    }
 }

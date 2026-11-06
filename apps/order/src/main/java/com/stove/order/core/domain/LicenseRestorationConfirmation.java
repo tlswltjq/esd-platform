@@ -13,7 +13,10 @@ public record LicenseRestorationConfirmation(String eventId, Instant occurredAt,
             throw new RefundCompletionRejected("복구 완료의 근거가 올바르지 않습니다.");
     }
     public String fingerprint() {
+        // PR #116 리뷰 R3: 업그레이드 전 지문과 맞도록 보관함 반환(true)일 때만 값을 더한다.
+        if (!returnedToStorage) return RefundRestorationValues.fingerprint(eventId, occurredAt.toString(), requestEventId, refundId, attemptId,
+                failureEventId, licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId);
         return RefundRestorationValues.fingerprint(eventId, occurredAt.toString(), requestEventId, refundId, attemptId, failureEventId,
-                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId, Boolean.toString(returnedToStorage));
+                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId, "returnedToStorage");
     }
 }
