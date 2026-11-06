@@ -54,6 +54,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.TransientDataAccessResourceException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -65,6 +67,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        "server.address=127.0.0.1",
         "stove.payment.pg.provider=PORTONE_TEST", "stove.payment.processing-enabled=false",
         "stove.outbox.relay-enabled=false", "spring.kafka.listener.auto-startup=false"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
@@ -226,6 +229,106 @@ class PortOneWebhookIntegrationTest {
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
     }
 
+    @Test void missingAndRepeatedSignatureHeadersCannotReachBusinessState() {
+        Payment payment = pending();
+        Instant due = CHECKED_AT.plusSeconds(600);
+        defer(payment, due);
+        byte[] body = notice(payment, "Transaction.Paid");
+        HttpHeaders valid = signedHeaders("msg_headers", body);
+        for (String name : List.of("webhook-id", "webhook-timestamp", "webhook-signature")) {
+            HttpHeaders missing = new HttpHeaders();
+            missing.addAll(valid);
+            missing.remove(name);
+            assertThat(deliver(HttpMethod.POST, "/api/v1/payments/webhooks/portone", body, missing)).isEqualTo(401);
+            HttpHeaders repeated = new HttpHeaders();
+            repeated.addAll(valid);
+            repeated.add(name, valid.getFirst(name));
+            assertThat(deliver(HttpMethod.POST, "/api/v1/payments/webhooks/portone", body, repeated)).isEqualTo(401);
+        }
+        assertThat(count("payment_pg_webhook")).isZero();
+        assertThat(stored(payment).getNextAttemptAt()).isEqualTo(due);
+        assertThat(count("outbox_event")).isZero();
+        assertThat(PG_READS.get()).isZero();
+        assertThat(PG_WRITES.get()).isZero();
+    }
+
+    @Test void validSignaturesAllowRotationAndExactFiveMinuteBoundariesOnly() {
+        Payment payment = pending();
+        byte[] body = notice(payment, "Transaction.Paid");
+        for (long offset : new long[] {-301, -300, 300, 301}) {
+            String messageId = "msg_time_" + offset;
+            String timestamp = Long.toString(CHECKED_AT.getEpochSecond() + offset);
+            String signature = "v1,not-base64! v2,unknown " + sign(messageId, timestamp, body);
+            assertThat(post(messageId, body, signature, timestamp)).isEqualTo(Math.abs(offset) == 300 ? 200 : 401);
+        }
+        assertThat(count("payment_pg_webhook")).isEqualTo(2);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(count("outbox_event")).isZero();
+        assertThat(PG_READS.get()).isZero();
+    }
+
+    @Test void evenWhitespaceChangesNeedANewSignatureAndTheExactBodyLimitIsAccepted() {
+        Payment payment = pending();
+        byte[] body = notice(payment, "Transaction.Paid");
+        byte[] padded = (new String(body, StandardCharsets.UTF_8) + " ".repeat(65536 - body.length))
+                .getBytes(StandardCharsets.UTF_8);
+        HttpHeaders headers = signedHeaders("msg_bytes", body);
+        assertThat(deliver(HttpMethod.POST, "/api/v1/payments/webhooks/portone", padded, headers)).isEqualTo(401);
+        assertThat(count("payment_pg_webhook")).isZero();
+        assertThat(post("msg_bytes", padded)).isEqualTo(200);
+        assertThat(count("payment_pg_webhook")).isEqualTo(1);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(PG_READS.get()).isZero();
+        assertThat(count("outbox_event")).isZero();
+    }
+
+    @Test void signedDuplicateJsonFieldsAndTrailingJsonDoNotReachTheReceiptStore() {
+        Payment payment = pending();
+        String body = new String(notice(payment, "Transaction.Paid"), StandardCharsets.UTF_8);
+        for (String invalid : List.of(body + " {}", body.replace("\"type\":", "\"type\":\"Transaction.Ready\",\"type\":"))) {
+            assertThat(post("msg_json_strict", invalid.getBytes(StandardCharsets.UTF_8))).isEqualTo(400);
+        }
+        assertThat(count("payment_pg_webhook")).isZero();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(count("outbox_event")).isZero();
+        assertThat(PG_READS.get()).isZero();
+    }
+
+    @Test void replayPreservesTheFirstReceiptAndDoesNotWakeAnAlreadyHandledHint() {
+        Payment payment = pending();
+        byte[] body = notice(payment, "Transaction.Paid");
+        assertThat(post("msg_replay", body)).isEqualTo(200);
+        Map<String, Object> original = jdbc.queryForMap("SELECT * FROM payment_pg_webhook WHERE message_id = ?", "msg_replay");
+        Instant due = CHECKED_AT.plusSeconds(600);
+        defer(payment, due);
+        when(clock.instant()).thenReturn(CHECKED_AT.plusSeconds(60));
+        String timestamp = Long.toString(CHECKED_AT.plusSeconds(60).getEpochSecond());
+        assertThat(post("msg_replay", body, sign("msg_replay", timestamp, body), timestamp)).isEqualTo(200);
+        assertThat(jdbc.queryForMap("SELECT * FROM payment_pg_webhook WHERE message_id = ?", "msg_replay")).isEqualTo(original);
+        assertThat(stored(payment).getNextAttemptAt()).isEqualTo(due);
+        assertThat(count("outbox_event")).isZero();
+        assertThat(PG_READS.get()).isZero();
+    }
+
+    @Test void aValidSignatureDoesNotGrantOtherMethodsPathsOrProviders() {
+        Payment payment = payments.saveAndFlush(Payment.receive(request(), "SIMULATED"));
+        byte[] body = notice(payment, "Transaction.Paid");
+        HttpHeaders headers = signedHeaders("msg_scope", body);
+        for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)) {
+            assertThat(deliver(method, "/api/v1/payments/webhooks/portone", body, headers)).isEqualTo(401);
+        }
+        for (String path : List.of("/api/v1/payments/webhooks/portone/extra", "/api/v1/admin/refund-delays",
+                "/internal/v1/orders/unknown/payment-admissions")) {
+            assertThat(deliver(HttpMethod.POST, path, body, headers)).isEqualTo(401);
+        }
+        assertThat(post("msg_scope", body)).isEqualTo(409);
+        assertThat(count("payment_pg_webhook")).isZero();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(count("outbox_event")).isZero();
+        assertThat(PG_READS.get()).isZero();
+        assertThat(PG_WRITES.get()).isZero();
+    }
+
     @Test void changedWebhookIdReuseAndMissingPurchaseCannotBeInventedIntoWork() {
         Payment payment = pending();
         assertThat(post("msg_bound", notice(payment, "Transaction.Paid"))).isEqualTo(200);
@@ -382,6 +485,21 @@ class PortOneWebhookIntegrationTest {
         return RestClient.create("http://127.0.0.1:" + port).post().uri("/api/v1/payments/webhooks/portone")
                 .contentType(MediaType.APPLICATION_JSON).header("webhook-id", messageId)
                 .header("webhook-timestamp", timestamp).header("webhook-signature", signature).body(body)
+                .exchange((request, response) -> response.getStatusCode().value());
+    }
+
+    private static HttpHeaders signedHeaders(String messageId, byte[] body) {
+        String timestamp = Long.toString(CHECKED_AT.getEpochSecond());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("webhook-id", messageId);
+        headers.set("webhook-timestamp", timestamp);
+        headers.set("webhook-signature", sign(messageId, timestamp, body));
+        return headers;
+    }
+
+    private int deliver(HttpMethod method, String path, byte[] body, HttpHeaders headers) {
+        return RestClient.create("http://127.0.0.1:" + port).method(method).uri(path)
+                .contentType(MediaType.APPLICATION_JSON).headers(outgoing -> outgoing.addAll(headers)).body(body)
                 .exchange((request, response) -> response.getStatusCode().value());
     }
 
