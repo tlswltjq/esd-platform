@@ -33,6 +33,9 @@ spring:
       properties.enable.idempotence: true
 
 stove:
+  messaging:
+    ops:
+      enabled: false
   auth:
     bff-client-secret: ${BFF_CLIENT_SECRET}
     bff-redirect-uri: ${BFF_REDIRECT_URI:http://localhost:8080/login/oauth2/code/gateway-bff}

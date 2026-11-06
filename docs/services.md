@@ -349,15 +349,21 @@ catalog 라우트에 `Method=GET` 조건이 걸려 있어서, 주문 금액을 �
 
 ## 운영 API
 
-Outbox·DLT 운영 기능이 활성화된 서비스에서 직접 호출한다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며 해당 운영 기능이 활성화된 서비스에만 ADMIN으로 직접 접근한다. 현재 Settlement는 공통 운영 API를 비활성화한다.
+Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.messaging.ops.enabled: false`)이다. 설정은 시작 시점에 정해지므로, 재처리가 필요한 서비스의 지정 인스턴스만 `STOVE_MESSAGING_OPS_ENABLED=true`로 다시 시작해 사용하고 작업 뒤 원래 설정으로 되돌린다. 비활성 상태에서는 ADMIN에게도 404다. Gateway에는 `/api/v1/ops/**` 라우트가 없으며, 켠 인스턴스에도 서비스 직접 접근과 ADMIN JWT가 필요하다. MEMBER·익명은 사용할 수 없다.
 
-| HTTP API | 동작 |
-|---|---|
-| `GET /api/v1/ops/outbox/dead` | 발행을 포기한 Outbox 행과 사유 조회 |
-| `POST /api/v1/ops/outbox/dead/{eventId}/requeue` | 지정한 DEAD 이벤트 회수 |
-| `POST /api/v1/ops/outbox/dead/requeue-all` | DEAD 이벤트 일괄 회수 |
-| `GET /api/v1/ops/dlt?topic={원본토픽}.DLT&max=20` | 재투입 그룹의 미처리 레코드 조회. 오프셋을 커밋하지 않음 |
-| `POST /api/v1/ops/dlt/replay?topic={원본토픽}.DLT&max=100` | 원본 토픽에 재발행하고 재투입 그룹의 오프셋 커밋 |
+| HTTP API | 동작 | ADMIN 허용 |
+|---|---|---|
+| `GET /api/v1/ops/outbox/dead` | 발행을 포기한 Outbox 행과 사유 조회 | 예 |
+| `POST /api/v1/ops/outbox/dead/{eventId}/requeue` | 지정한 DEAD 이벤트 회수 | 예 |
+| `POST /api/v1/ops/outbox/dead/requeue-all` | DEAD 이벤트 일괄 회수 | 아니오(403) |
+| `GET /api/v1/ops/dlt?topic={원본토픽}.DLT&max=20` | 재투입 그룹의 미처리 레코드 조회. 오프셋을 커밋하지 않음 | 예 |
+| `POST /api/v1/ops/dlt/replay?topic={원본토픽}.DLT&max=100` | 원본 토픽에 재발행하고 재투입 그룹의 오프셋 커밋 | 예 |
+
+| 서비스 | 대상 | 비고 |
+|---|---|---|
+| Auth·Studio·Review·Catalog·Order·Payment·License·Settlement | Outbox DEAD·DLT | 위 규칙을 따른다 |
+| Store | DLT만 존재 | 운영 API를 열지 않는다. Catalog 정본과의 주기 대조가 사본 차이를 자동 보완한다([자동 복구](store-auto-reconciliation-plan.md)) |
+| Download·Gateway | 없음 | Outbox·Kafka 소비가 없다 |
 
 실패 원인과 현재 주문·환불 상태를 확인한 뒤 재처리한다. 재투입이 원래 업무 순서를 복원하지 않는 이유는 [이벤트 순서](event-ordering.md)를 참고한다. 요청 계약은 [OutboxOpsController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxOpsController.java), [DltOpsController](../common/kafka/src/main/java/com/stove/common/kafka/ops/DltOpsController.java)에 있다.
 

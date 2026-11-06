@@ -10,6 +10,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
 import com.stove.auth.adapter.oauth.RotatingRefreshProvider;
 import com.stove.auth.core.domain.UserAccount;
+import com.stove.common.security.ApiJwtSecurity;
 import com.stove.auth.core.domain.UserAccountRepository;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
@@ -117,9 +118,14 @@ public class AuthSecurityConfig {
                         throw new BadJwtException("Invalid API audience");
                     }
                     return decoded;
-                })))
+                }).jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
+                        // 공통 운영 API는 기본 비활성이다. 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
+                        // 아래 authenticated()는 회원도 통과시키므로 나머지 운영 경로는 명시적으로 막는다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay", "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/ops/**").denyAll()
                         .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/signup/member",
                                 "/api/v1/auth/password/reset-request", "/api/v1/auth/password/reset",
                                 "/actuator/health", "/actuator/metrics/**",

@@ -6,6 +6,7 @@ dependencies {
     implementation project(':common:web')
     implementation project(':common:jpa')
     implementation project(':common:messaging')
+    implementation project(':common:security')
 
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-authorization-server'
     implementation 'org.springframework.boot:spring-boot-starter-security'

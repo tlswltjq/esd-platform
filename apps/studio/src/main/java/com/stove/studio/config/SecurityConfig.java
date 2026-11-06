@@ -24,6 +24,18 @@ public class SecurityConfig {
                                                 "/v3/api-docs/**",
                                                 "/swagger-ui/**")
                                         .permitAll()
+                                        // 공통 운영 API는 기본 비활성이다.
+                                        // 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
+                                        .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/v1/ops/dlt",
+                                                "/api/v1/ops/outbox/dead")
+                                        .hasRole("ADMIN")
+                                        .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/v1/ops/dlt/replay",
+                                                "/api/v1/ops/outbox/dead/*/requeue")
+                                        .hasRole("ADMIN")
                                         .requestMatchers(HttpMethod.GET, "/api/v1/studio/assets/**")
                                         .permitAll()
                                         .requestMatchers("/api/v1/studio/**")
