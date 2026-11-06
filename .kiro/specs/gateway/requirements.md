@@ -23,11 +23,14 @@ MVP 재작성은 Auth와 함께 2026-10-13 완료했다(관련 테스트 132건 
 #### 수용 기준
 1. WHEN `/api/v1/auth/**`, `/oauth2/**`, `/login`, `/logout`, `/.well-known/**` 요청이 오면 THEN 시스템 SHALL auth로 라우팅하고 브라우저 경로의 Host를 유지한다.
 2. WHEN `/api/v1/storefront/**` 요청이 오면 THEN 시스템 SHALL store로 라우팅한다.
-3. WHERE `/api/v1/products/**` 라우트에서 THE 시스템 SHALL `GET` 메서드만 허용한다.
+3. WHERE `/api/v1/products/**` 공개 라우트에서 THE 시스템 SHALL `GET` 메서드만 허용한다. 판매자 판매·노출 설정(`/api/v1/products/by-code/*/{sales,listing}`)만 별도 라우트로 `GET`·`PUT`을 연다.
 4. WHEN `/api/v1/orders/**`, `/api/v1/payments/**`, `/api/v1/library/**`, `/api/v1/downloads/**` 요청이 오면 THEN 시스템 SHALL 각각 order·payment·license·download로 라우팅한다.
 5. WHEN `/api/v1/studio/**`, `/api/v1/reviews/**` 요청이 오면 THEN 시스템 SHALL 각각 studio·review로 라우팅한다.
 6. WHERE `/api/v1/settlements/me/**` 맥락에서 THE 시스템 SHALL `CREATOR` 역할을, 나머지 `/api/v1/settlements/**`에서는 `ADMIN` 역할을 요구한다.
 7. WHERE `/api/v1/promotions/**` 맥락에서 THE 시스템 SHALL 판매자는 `CREATOR`, 플랫폼은 `ADMIN` 역할을 요구한다.
+8. WHERE `/api/v1/admin/accounts/**`(auth), `/api/v1/admin/products/*/{sales,listing,downloads}/restriction`·`/api/v1/admin/catalog-release-jobs`(catalog), `/api/v1/admin/refunds/**`(order) 맥락에서 THE 시스템 SHALL `ADMIN` 역할을 요구한다.
+9. THE 역할 판정 SHALL 경로에 선언한 역할만 인정하며, `ADMIN`에 `MEMBER`·`CREATOR` 권한을 암묵적으로 부여하지 않는다.
+10. WHERE commerce·Catalog 판매/노출/다운로드 관리·관리자 환불 라우트에서 THE 시스템 SHALL 외부 요청의 `X-Member-Id` 헤더를 제거하고, 소유자는 하위 서비스가 JWT로 판정한다.
 
 ### R2. 내부 전용 API의 외부 차단
 **사용자 스토리:** 운영자로서, 내부 전용 경로가 외부에서 호출되지 않기를 바란다. 그래야 서비스 간 신뢰 경계가 유지된다.
@@ -57,6 +60,8 @@ MVP 재작성은 Auth와 함께 2026-10-13 완료했다(관련 테스트 132건 
 3. THE 토큰 요청 timeout SHALL 기본 5초다.
 4. IF 전송 실패가 불확실하면 THEN 시스템 SHALL 이전 Refresh Token으로 자동 재시도하지 않고 재로그인을 요구한다.
 5. THE Bearer Token API 접근 SHALL 기존대로 지원한다.
+6. IF Auth가 토큰 갱신을 거절하면(계정 복구·잠금·역할 회수 등) THEN 시스템 SHALL Redis 토큰과 브라우저 세션을 삭제하고 401을 반환하며 하위 요청을 보내지 않는다.
+7. WHEN 허용된 요청을 하위 서비스로 전달하면 THEN 시스템 SHALL 하위 응답의 상태(202·4xx·503 포함)·본문·`Location`·`Cache-Control`을 바꾸지 않고 전달한다.
 
 ### R5. CSRF와 로그아웃
 **사용자 스토리:** 사용자로서, 쿠키 인증의 변경 요청이 안전하기를 바란다. 그래야 세션 탈취 위험이 줄어든다.
@@ -78,5 +83,5 @@ MVP 재작성은 Auth와 함께 2026-10-13 완료했다(관련 테스트 132건 
 ## 범위 밖(후속)
 
 - 대규모 트래픽 제어·복잡한 배포 토폴로지 → 일반화 이후 확장.
-- 최신 API의 실제 역할별 여정·오류/진행 응답, 외부 웹훅의 재현 가능한 실행 구성 → 일반화 G4/G5에서 닫음.
-- 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 → G5.
+- 실제 업무 상태 전이(구매·승인·지급·공개·심사 판정)를 끝까지 잇는 역할별 전체 여정, 외부 웹훅의 재현 가능한 실행 구성 → 일반화 G4/G5.
+- 서비스 자격증명 교체·배포 비밀 관리, 다중 Gateway 장애·복구 등 공통 운영 → G5.

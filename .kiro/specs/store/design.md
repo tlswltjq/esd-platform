@@ -15,7 +15,7 @@
 - **정상 변경은 이벤트, 복구는 자동.**(결정 66) Kafka 반영을 정상 경로로 유지하고 초기화 실패 재개·주기 대조·동일 버전 정본 교정을 자동으로 수행한다. 수동 갱신 API를 정상 운영 경로로 두지 않는다.
 - **동일 버전 내용 차이는 검증한 정본으로 교정한다.**(결정 67 A) Kafka의 동일 버전 충돌 검사는 유지하고, 직접 조회·검증한 정본으로만 같은 catalogVersion의 사본을 교정한다.
 - **준비 상태와 대조 작업 상태를 분리한다.** 초기 전체 동기화 1회 성공으로 준비 상태를 열고, 준비된 사본은 이후 대조가 실패해도 조회를 계속 제공한다.
-- **장르는 순위 없는 집합이다.**(결정 70·75) 정렬한 불변 목록으로 전달해 순서 차이로 버전이 오르거나 동일 스냅샷이 충돌하지 않게 하고, 복수 장르 검색은 AND다.
+- **장르는 순위 없는 집합이다.**(결정 70·75) 정렬한 불변 목록으로 전달해 순서 차이로 버전이 오르거나 동일 스냅샷이 충돌하지 않게 하고, 복수 장르 검색은 AND다. 기준 목록(`GenreCatalog`)은 ACTION·ADVENTURE·RPG·STRATEGY·SIMULATION·PUZZLE·SPORTS·RACING·RHYTHM·VISUAL_NOVEL 10개다(결정 72). 코드를 추가할 때는 수신 서비스(Review·Catalog·Store)를 먼저 배포한 뒤 Studio 선택지를 연다.
 
 ## 데이터 모델
 
@@ -70,7 +70,8 @@ Flyway는 V1에 `store_product`, V4에 `store_reconciliation`, V5에 `store_prod
 - 정본 HTTP 경계는 필수 필드·정수 금액/버전·명시적 노출 값·코드 일치·페이지 메타데이터를 검증한다.
 - 구 이벤트용 공통 스냅샷 기본값을 정본 HTTP 응답의 누락 필드에 적용하지 않는다.
 - 네트워크/5xx/429는 일시 접근 실패로 분류하고 제공사 메시지·URL·키를 경고·오류 분류에 복사하지 않는다.
-- HTTP 호출 중에는 Store DB 트랜잭션을 열지 않는다.
+- HTTP 호출 중에는 Store DB 트랜잭션을 열지 않는다. 연결 3초·읽기 10초 제한, 리다이렉트는 따르지 않는다. 키가 없으면 공개 경로로 우회하지 않는다.
+- Kafka의 과거 공개 사본 JSON 해석은 공통 스냅샷 규칙을 따른다: `listed`가 없으면 saleStatus 기준(AUTO 복원), saleStatus·catalogVersion이 모두 없으면 콘텐츠 버전·ON_SALE. 이런 과거 사본은 더 높은 catalogVersion의 중지·제한·숨김을 덮지 못한다.
 
 ## 유스케이스 구성
 
@@ -105,3 +106,10 @@ Flyway는 V1에 `store_product`, V4에 `store_reconciliation`, V5에 `store_prod
 - Micrometer에 `stove.store.sync.ready`·`running`·`runs{result=success|failure}`·`last.success.timestamp`·`last.scanned`·`last.changed`·`last.failed`·`last.skipped.newer`를 등록한다.
 - 지표 어댑터는 도메인 상태 공급자만 받고 서비스·프레임워크 객체 조립은 config가 맡는다.
 - 현재 코드는 지표를 등록하고 공통 빌드에 Prometheus registry·metrics/prometheus 노출을 포함하지만, Store 보안 허용 목록에는 아직 `/actuator/prometheus`가 없다. 실제 경보 전송·대시보드/스크레이프 배포는 별도 운영 범위다.
+
+## 사용 안내
+
+- 실행: `DB_HOST`·`DB_PORT`·`DB_USER`·`DB_PASSWORD`, `CATALOG_BASE_URL`, Catalog와 같은 값의 `CATALOG_STORE_SERVICE_KEY`를 준다. 기존 개발 MySQL에는 관리자 계정으로 [스키마 준비 SQL](../../../tools/migrations/store/store-schema.sql)을 적용하고, 새 환경은 `infra/mysql/init`에 포함돼 있다.
+- 검증: `./gradlew :apps:store:test :apps:store:integrationTest -Pstove.infraTest.maxParallel=1`, `python3 tools/verification/verify-store.py`(Auth·Gateway·Studio·Review·Catalog·Store와 인프라만, 포트 충돌 시 `STORE_TEST_PORT_OFFSET`). 출시·철회·판매/노출/다운로드 제한·사본 복구를 잇는 9개 서비스 여정은 `python3 tools/verification/verify-g4-operations.py`(기본 `G4_TEST_PORT_OFFSET`=20000, Linux 임시 포트 범위와 겹치면 시작 전 거절, 결제는 계약 픽스처)다.
+- 조회 예: `GET /api/v1/storefront/products?q=게임&genres=ACTION&genres=RPG&sort=NEWEST&page=0&size=20`. 검색어의 `%`·`_`·`!`는 문자 그대로 검색한다.
+- 복구 확인: 경고 로그, `stove.store.sync.*`의 마지막 성공 시각·실패 수, `store_reconciliation` 전후 기록을 본다. 식별 충돌·정본 계약 위반은 원인을 고치면 다음 자동 재시도에서 회복 여부를 확인한다. 개발 환경 전체 재구축은 Store를 멈추고 사본 테이블을 비운 뒤 시작한다.

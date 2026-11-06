@@ -12,16 +12,33 @@ Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 �
 Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다. Payment는 확정 주문의 결제 접수·PG 호출·미확정 재개·결과 발행을 담당한다.
 License는 OrderPaid를 근거로 상품 보유권·주문별 구매 근거와 내 라이브러리를 관리한다.
 Download는 License 보유권·Catalog 현재 공개 빌드를 HTTP로 확인하고 전체 ZIP의 S3/MinIO 만료 URL을 발급한다. DB·보유권 사본·Kafka 없이 요청마다 조회하며 연계 장애 중 새 발급은 실패한다.
-Settlement는 OrderPaid·외부 모의 PG 거래/비용·Catalog 소유자를 대조해 매출·배분·월 마감을 저장하고, PG 지급 명세를 직접 조회해 모의 수령을 대사한다. [완료 범위](settlement-mvp-plan.md)를 따른다.
+Settlement는 OrderPaid·외부 모의 PG 거래/비용·Catalog 소유자를 대조해 매출·배분·월 마감을 저장하고, PG 지급 명세를 직접 조회해 모의 수령을 대사한다. [완료 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)를 따른다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 구 MongoDB 자료는 보존하지만 새 업무에서는 읽거나 쓰지 않는다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
-일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `adapter`는 다른 업무 서비스의 HTTP 호출·S3·PG·프레임워크 연동 구현을 담는다. `core.service → core.port ← adapter`의 의존 방향을 유지하며 구현체의 외부 조립은 `config`가 맡는다. 기존 하위 패키지를 유지한 명칭 변경은 [변경 기록](adapter-package-rename-plan.md)을 따른다. 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
+일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `adapter`는 다른 업무 서비스의 HTTP 호출·S3·PG·프레임워크 연동 구현을 담는다. `core.service → core.port ← adapter`의 의존 방향을 유지하며 구현체의 외부 조립은 `config`가 맡는다. 2026-10-18 `infrastructure`에서 이름을 바꿨으며 하위 패키지(`oauth`·`security`·`storage`·`pg`·`tax`)와 클래스 이름은 유지했다. 연결 도메인별 하위 패키지나 `adapter.in/out`은 두지 않는다([결정 26](decisions.md#26-외부-연동-구현-패키지를-adapter로-부른다), [변경 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/adapter-package-rename-plan.md)). 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
 
 환경변수·YAML 바인딩과 객체 조립은 config에서 담당한다. 서비스·도메인·어댑터는 필요한 값과 구성된 클라이언트를 받으며 Properties를 참조하지 않는다.
-공통 라이브러리의 AutoConfiguration도 같은 조립 경계다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)과 [전역 적용 기록](core-boundary-audit.md#설정-바인딩과-내부-입력-경계-개선)을 따른다.
+공통 라이브러리의 AutoConfiguration도 같은 조립 경계다. [결정 13](decisions.md#13-configurationproperties는-config에서-바인딩한다)과 [전역 적용 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/core-boundary-audit.md)을 따른다.
 
-완료 앱은 `AppArchitectureRules`의 공통 묶음을 등록해 패키지·위생·이벤트 입력/순서·그룹 규칙을 적용한다. 검사 대상 앱이 비면 실패하고, 역할에 없는 개별 계층은 빈 대상을 허용한다. 다른 앱의 `com.stove.<앱>` 구현을 직접 참조하지 않으며 공통 계약과 호출 모듈의 포트를 사용한다. config의 인바운드 조립은 허용한다. [검사 정비와 OCI 검증](architecture-test-improvement-20261102.md)을 따른다.
+완료 앱은 `AppArchitectureRules`의 공통 묶음을 등록해 패키지·위생·이벤트 입력/순서·그룹 규칙을 적용한다. 검사 대상 앱이 비면 실패하고, 역할에 없는 개별 계층은 빈 대상을 허용한다. 다른 앱의 `com.stove.<앱>` 구현을 직접 참조하지 않으며 공통 계약과 호출 모듈의 포트를 사용한다. config의 인바운드 조립은 허용한다. 판단은 [결정 44](decisions.md#44-아키텍처-검사는-책임-경계를-강제하고-의미-판단은-작성-지침과-구분한다), 서비스 이름·이벤트 입력 변환·Bean 팩토리 규칙은 [유스케이스 작성 규칙](use-case-conventions.md), 검증 수치는 [근거 색인](evidence.md)을 따른다.
+
+<a id="archunit-scope"></a>
+
+아키텍처 검사가 그 밖에 강제하는 범위는 다음과 같다. 위반·정상 픽스처로 규칙 자체도 검사해 빈 대상의 공허 통과를 막는다([D-021](defects.md#d-021)).
+
+| 영역 | 거절 | 허용 |
+|---|---|---|
+| 포트 | `.core.port`와 그 하위 패키지의 포트를 core에서 구현 | adapter의 포트 구현, config 조립 |
+| 계층 의존 | core → api·adapter·config, controller의 구현체 직접 접근, core·controller·adapter의 Bean 팩토리 | config → inbound, config의 Bean 팩토리 |
+| 이벤트 입력 | core의 `EventEnvelope` 의존, 서비스 메서드 인자의 외부 이벤트(제네릭 구성 타입·배열 요소·wildcard 포함), 도메인 모델의 외부 이벤트 의존 | 내부 입력, 순수 공유 스냅샷, 발행 이벤트 반환 |
+| 순서 | 클래스·메서드 `@Async`, `Executor`와 그 하위 타입, 논블로킹 재시도 | 동기 리스너 |
+| 트랜잭션 | 인바운드(controller·listener·scheduler)의 `TransactionOperations`·`TransactionManager` 계열 의존 | 서비스, Auth OAuth 프로토콜 어댑터의 프로그램 방식 트랜잭션 |
+| 앱 간 경계 | 다른 `com.stove.<앱>` 구현으로의 직접 코드 의존(앱 목록 하드코딩 없음) | 자기 앱, `com.stove.common` 계약 |
+| 스텁 | 조건 없는 `Mock*`·`Stub*`·`Fake*` 구현(접두사별로 따로 검사) | `@Profile`·`@ConditionalOnProperty`로 격리된 스텁 |
+| 설정 | config 밖 Properties 배치·바인딩 타입 유출, config 밖 `@Value`·`Environment`/`Binder` 참조 | config 바인딩 |
+
+소비자 그룹은 그룹 값 집합을 정적으로 검사하고, 리스너별 Inbox 그룹 대응은 실제 Kafka·DB 계약으로 확인한다(현재 Settlement의 두 리스너). 그룹 집합이 같아도 개별 대응은 틀릴 수 있다. 이 검사는 코드 구조를 보장하며 입력 값 검증·업무 원자성·외부 호출 위치·금융 처리를 증명하지 않는다.
 
 ## 트랜잭션과 이벤트 전달
 
@@ -44,10 +61,10 @@ Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품�
 HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다. 최초 PAID이면 OrderPaid Outbox도 함께 저장한다.
 Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
 출처와 권한은 License 한 행에 저장한다. Order의 DB 유일 제약은 동일 상품의 PENDING·PAID 주문을 합쳐 한 건으로 제한하며 최종 FAILED에서만 새 구매를 허용한다. Order PAID와 라이브러리 반영 사이에는 전달 지연이 있다.
-PortOne TEST의 환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행한다. 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](refund-session-handoff.md). [Payment 실행·검증](payment-guide.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](order-guide.md)
+PortOne TEST의 환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행한다. 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). [Payment 실행·검증](../.kiro/specs/payment/design.md#사용-안내) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](../.kiro/specs/order/design.md#사용-안내)
 
 승인·지급·환불·비용은 각 담당 모듈이 근거를 보존한다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료이며 현재 환불 구현의 완료 여부는 위 인계와 검증 기록을 따른다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
-환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오](resilience-scenarios.md)에 당시 상태와 검증 근거가 있다.
+환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오 E9](experiments.md#resilience)에 당시 상태와 검증 근거가 있다.
 
 <a id="tracing"></a>
 
@@ -58,15 +75,15 @@ HTTP 응답의 `X-Correlation-Id`는 trace ID다. Outbox에 추적 컨텍스트�
 Payment는 요청·Inbox와 함께 `payment_request_trace`에 최초 부모를 저장한다. 저장·조회 포트와 건별 추적 실행 포트는 Payment가 소유하고 DB·Micrometer 구현은 adapter, 조립은 config에 둔다. 업무 본문·도메인은 추적 라이브러리를 알지 못한다.
 예약 작업은 저장된 부모 아래 새 span을 생성한다. 중복 접수는 최초 컨텍스트를 바꾸지 않고, 부모가 없는 입력은 다른 작업의 scope를 상속하지 않는 새 root로 처리한다.
 Order·Payment·Settlement·Download의 HTTP 클라이언트는 자동 구성 builder를 사용한다. 별도 Download 요청에서는 License·Catalog HTTP 조회를 추적하며 구매 trace에 Download의 Kafka 소비를 요구하지 않는다.
-Tempo는 독립 인프라 컨테이너로 유지한다. 수집기 장애·샘플링 0에서도 업무는 계속되며, 정책·현재 검증 범위는 [도입·검증 기록](tempo-tracing-plan.md), 실행은 [조회 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
+Tempo는 독립 인프라 컨테이너로 유지한다. 수집기 장애·샘플링 0에서도 업무는 계속되며, 정책은 [결정 28](decisions.md#28-내구-접수의-추적-부모를-저장하고-처리-시도마다-복원한다), 검증은 [실험 E10](experiments.md#tempo), 실행은 [조회 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
 
-기존 관측 예시에서 소비 시작까지 `+527ms`, 후속 전달까지 `+759ms`가 보였던 것은 DB 처리 시간만이 아니라 릴레이 폴링 대기가 포함된 결과다. 2026-08-13 폴링 주기를 1000ms에서 200ms로 줄인 측정에서는 종단 p95가 1.30초에서 0.56초로 줄었다. 원자료와 CPU 비용은 [성능 측정](performance.md)에 있고, 이 수치는 현재 스택을 새로 측정한 값이 아니다.
+기존 관측 예시에서 소비 시작까지 `+527ms`, 후속 전달까지 `+759ms`가 보였던 것은 DB 처리 시간만이 아니라 릴레이 폴링 대기가 포함된 결과다. 2026-08-13 폴링 주기를 1000ms에서 200ms로 줄인 측정에서는 종단 p95가 1.30초에서 0.56초로 줄었다. 원자료와 CPU 비용은 [실험 E3](experiments.md#poll-interval)에 있고, 이 수치는 현재 스택을 새로 측정한 값이 아니다.
 
 ## DB 실험으로 확인하는 범위
 
 [DB 락 실험](../tools/db-lab/README.md)은 MySQL SQL 세션을 겹쳐 여섯 상황을 재현한다. RR·RC의 갭 락 차이, 실행 계획에 따른 잠금 범위, 락 대기 시간 초과, 만료·결제 경합의 갱신 유실, 동시 Inbox 삽입, 유니크 키 삽입의 데드락이다. SQL 실험의 재현과 전체 애플리케이션 경로의 재현은 구별한다.
 
-실제 주문 부하에서 격리 수준만 바꾼 결과는 [성능 측정의 A/B](performance.md#isolation-ab)에 있다. 현재 코드에서 개선 여부를 판정하려면 동일 조건으로 다시 검증해야 한다.
+실제 주문 부하에서 격리 수준만 바꾼 결과는 [실험 E6](experiments.md#isolation-ab)에 있다. 현재 코드에서 개선 여부를 판정하려면 동일 조건으로 다시 검증해야 한다.
 
 ## 설계 위험과 근거
 
@@ -115,7 +132,7 @@ Tempo는 독립 인프라 컨테이너로 유지한다. 수집기 장애·샘플
 새 outbox 행 `('PENDING', NULL, 새 id)` 가 들어갈 자리가 릴레이가 잠근 갭 안이라서, 릴레이가 커밋할 때까지 **outbox 에 쓰는 모든 트랜잭션**이 기다린다 —
 주문 생성, 결제 승인·거절, 환불 확정, 그리고 다음 이벤트를 적재하는 컨슈머(지급, 심의, 상품 반영).
 
-**평시 영향:** 2026-09-14 OCI A/B에서 RR 대비 RC의 주문 쓰기 p95가 약 4.7ms 낮고 행 락 대기가 사라졌다. 회차별 수치·통제 조건·해석 한계는 [성능 측정의 격리 수준 A/B](performance.md#isolation-ab)에 보존한다.
+**평시 영향:** 2026-09-14 OCI A/B에서 RR 대비 RC의 주문 쓰기 p95가 약 4.7ms 낮고 행 락 대기가 사라졌다. 회차별 수치·통제 조건·해석 한계는 [실험 E6 격리 수준 A/B](experiments.md#isolation-ab)에 보존한다.
 
 **브로커 장애 시 영향** **[코드상 추정 — 락과 타임아웃 동작은 실험으로 확인]**
 
@@ -127,7 +144,7 @@ Tempo는 독립 인프라 컨테이너로 유지한다. 수집기 장애·샘플
 ```
 
 Outbox 를 고른 이유 중 하나가 **"브로커 장애가 쓰기 API 장애로 번지지 않게"** 인데, 지금 구현에서는 그 격리가 락을 통해 샌다.
-기존 장애 실험(chaos.md)은 DB 권한만 끊었고 브로커는 멈춰 본 적이 없어서 드러나지 않았다.
+기존 장애 실험([E8](experiments.md#chaos))은 DB 권한만 끊었고 브로커는 멈춰 본 적이 없어서 드러나지 않았다.
 
 **[권장 개선안]**
 

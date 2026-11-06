@@ -108,8 +108,30 @@
 - License·Catalog base URL, Catalog 서비스 키, 읽기 전용 저장소 자격증명·버킷을 필수 설정으로 검증한다. 누락·공백·잘못된 TTL/주소에는 기동을 거절하고 root 계정·기본 공유 키로 대체하지 않는다.
 - 사용자 access token은 HTTP 경계에서 준비하며 Spring `Jwt`·서블릿 요청 객체·외부 응답 DTO를 도메인에 전달하지 않는다.
 
-## 검증 요약 (2026-10-18 로컬 OrbStack)
+## 다운로드 제한의 저장소 경계
 
-- 단위 93건·통합 8건(실제 HTTP·JWT·MinIO, 오류·자격증명 분리, 읽기 전용 권한, URL 만료).
-- 실제 열 앱 15단계: PENDING 403, 지급 후 원본 ZIP 바이트·크기·SHA-256 일치, 타인/위조 거절, 작업본 유지·새 출시 후 버전 2 수신, TTL 만료 후 재발급, License·Catalog·MinIO 중단 시 `503`/`409`, Download 재시작 후 사본 동기화 없이 재발급.
-- 운영 JAR에 MongoDB·Kafka·Messaging·JPA 의존성·구 클래스 없음(`verifyCommonRuntimeDependencies` 통과).
+- Download 읽기 계정 IAM(`infra/minio/policies/download-reader.json`)은 허용 버킷의 GetObject/ListBucket과 예약 태그 `stove-download-blocked=true` 객체의 GetObject **명시적 거절**을 함께 가진다. 실제 버킷으로 맞추고 기존 필요한 권한을 보존한다. 고정 MinIO는 인증 요청에 IAM을 적용하므로 버킷 정책만으로 대체하지 않는다.
+- Catalog는 이 읽기 계정을 적용 결과 확인(1바이트 GET)에만 쓴다. 태그 쓰기·확인·재시도는 Catalog 스펙을 따른다. Download는 제한을 위해 저장소 쓰기 권한·DB·Kafka를 추가하지 않는다.
+- 배포 순서: Download의 새 오류 해석(`PRODUCT_DOWNLOAD_RESTRICTED` 구분)을 먼저 적용하고 Catalog 관리자 경로는 뒤에 연다.
+
+## 검증 요약
+
+2026-10-18 MVP(단위 93·통합 8, 실제 열 앱 15단계)와 2026-11-02 다운로드 제한(관련 348건) 결과는 [근거 색인](../../../docs/evidence.md)을 따른다.
+
+## 사용 안내
+
+| 환경변수 | 의미 |
+|---|---|
+| `LICENSE_BASE_URL`·`CATALOG_BASE_URL` | 고정된 License·Catalog 서비스 주소 |
+| `CATALOG_DOWNLOAD_SERVICE_KEY` | Catalog·Download에 같은 값으로 주입하는 내부 빌드 조회 키(기본값 없음) |
+| `JWT_ISSUER_URI`·`JWT_JWK_SET_URI` | Auth의 issuer·공개 키 주소 |
+| `STORAGE_BUCKET` | Studio가 전체 빌드를 저장한 버킷 |
+| `DOWNLOAD_STORAGE_ACCESS_KEY`·`DOWNLOAD_STORAGE_SECRET_KEY` | 해당 버킷의 읽기 전용 계정(root 대체 없음) |
+| `STORAGE_ENDPOINT`·`STORAGE_PRESIGN_ENDPOINT` | HEAD용 내부 주소·클라이언트 접속 주소(AWS 기본 주소면 생략), `STORAGE_REGION` 기본 us-east-1 |
+| `DOWNLOAD_BUILD_URL_TTL` | URL 유효기간, 기본 PT5M, 1초~15분 |
+
+- 공개·구매·지급을 마친 MEMBER access token으로 `GET /api/v1/downloads/{productCode}/ticket`을 호출한다. 쿼리 파라미터는 보내지 않는다.
+- `downloadUrl`은 그대로 사용한다. host·port를 바꾸면 서명이 맞지 않는다. 파일 바이트는 Download JVM을 거치지 않는다. 받은 뒤 응답의 `fileSize`·`checksum`(SHA-256)과 대조한다.
+- 오류별 다음 행동: 401 재인증, 403 보유권/정지/`PRODUCT_DOWNLOAD_RESTRICTED` 확인(PAID 직후 미보유는 지급 대기), 404 현재 공개 상품 없음, 409 참조 파일 보존·복구 확인, 503 연계 원인 복구 뒤 재요청.
+- 구매 시 버전에 제한되지 않으므로 후속 공개본도 같은 보유권으로 받는다. 작업본 변경만으로 다운로드 파일이 바뀌지 않는다.
+- Gateway에는 `/internal/**` 라우트가 없다. 내부 Catalog 주소·키를 외부에 공개하지 않는다.

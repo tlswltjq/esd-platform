@@ -16,17 +16,16 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4 (platform-generalization-plan 4절 Gateway 행)
-  - [x] Gateway 경계 검증 — 2026-11-05 실제 Auth·Gateway·Redis·MySQL, 네 계정의 실제 역할과 쿠키·Bearer 인증으로 43개 method/path의 허용·거절·JWT 전달·목적 서비스 도달을 검증했다. 익명·CSRF·내부 경로 차단과 202/4xx/503·본문·Location 전달도 확인했다. 하위 업무 9개는 루프백 HTTP 픽스처이며 실제 업무 전체 여정과 구분한다. 재실행·622개 관측·기존 23개 컨테이너/57개 볼륨 보존은 `docs/gateway-role-journey-verification.md`를 따른다.
-  - [x] 실제 서비스 소유권·역할 진입 검증 — 2026-11-05 현재 소스 11개 앱의 전용 스택에서 두 회원의 주문·결제·라이브러리 본인/타인 상세·목록·위조 헤더, 두 창작자의 Studio 프로젝트·정산 격리, 심사자/관리자 접근과 타 역할 거절을 확인했다. 구매 근거는 전용 DB 픽스처이며 구매·승인·지급의 상태 전이와 구분한다. 91개 관측·재실행·자원/상태 보존과 남은 범위는 `docs/gateway-service-ownership-verification.md`를 따른다.
+- [ ] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Gateway 행)
+  - [x] Gateway 경계 — 2026-11-05 실제 Auth·Gateway, 43개 method/path의 역할별 허용·거절·JWT 릴레이·`X-Member-Id` 제거·응답 투명 전달(requirements R1·R4). 하위 업무는 HTTP 픽스처([근거 색인](../../../docs/evidence.md)).
+  - [x] 실제 서비스 소유권·역할 진입 — 2026-11-05 실제 11개 앱에서 회원별 주문·결제·라이브러리, 창작자별 Studio·정산 격리, 심사자/관리자 진입과 타 역할 거절([근거 색인](../../../docs/evidence.md)).
+  - [ ] 남은 범위: 구매·승인·지급·공개 출시·심사 판정·환불 전이를 실제 업무 상태로 잇는 역할별 전체 여정(위 두 검증은 픽스처 기반 구매 근거·HTTP 픽스처를 사용).
 - [ ] 외부 웹훅의 재현 가능한 실행 구성 — G4/G5
 - [ ] 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 — G5
-  - [x] 서비스 접근키 수신 경계 — 2026-11-05 Store·Order·Download·Settlement→Catalog와 Payment→Order의 정상 허용·누락/빈 값/오류·키/헤더 교차·메서드/경로 제한·빈 서버 설정·수신 서버 기본 로그/응답의 키 원문 미노출을 검증했다. 관련 단위·아키텍처 464건과 신규 실제 DB/HTTP 통합 20건 통과. 키 교체·배포 비밀 관리·G5 전체와 구분하며 `docs/g5-service-key-verification.md`를 따른다.
-  - [x] Compose·현재 검증 실행기의 프로젝트 키 전달 범위 — 2026-11-05 Payment→Order 키/Payment 승인 암호화 키의 Compose 누락을 보완하고, 검증 실행기의 공통 비밀을 앱별로 선별했다. Python 12건·공통 Java 7건·실제 11개 앱 소유권 관측 91개와 수신자 계약 11개, 기존 23개 컨테이너/57개 볼륨·상태 보존을 확인했다. 운영 비밀 저장·교체·다른 실행기 전체와 구분하며 `docs/g5-credential-distribution-verification.md`를 따른다.
-  - 2026-11-05 `BffAuthenticationFilterTest`: 토큰 갱신 거절 시 브라우저 세션 삭제·401·하위 요청 차단. `RoleAccessGatewayTest`: 계정 상태 변경·역할 부여·회수 세 경로의 ADMIN 통과와 MEMBER·CREATOR·REVIEWER 거절. 이 단위·필터 검증과 아래의 실제 연결 여정을 구분한다.
-  - 2026-11-05 실제 Auth·Gateway·Redis·MySQL 연결 검증에서 복구·잠금·역할 회수 뒤 갱신 거절과 Redis 토큰·브라우저 세션 삭제를 확인했다. `docs/auth-session-journey-verification.md`를 따른다. 전체 역할 여정·서비스 자격증명 등 G5 공통 운영 범위는 남아 있으므로 상위 항목은 미완료로 유지한다.
-  - 2026-11-05 최신 API 역할별 Gateway 경계와 실제 Auth 계정관리 진입 권한은 `docs/gateway-role-journey-verification.md`로 검증했다. 하위 업무 전체 여정·서비스 자격증명 등과 구분하며 G5 상위 항목은 미완료로 유지한다.
-  - 2026-11-05 실제 업무 서비스의 본인/타인 조회와 심사/운영 역할 진입은 `docs/gateway-service-ownership-verification.md`로 검증했다. 전체 업무 상태 전이·서비스 자격증명·외부 웹훅 등 G5 전체와 구분한다.
+  - [x] 서비스 접근키 수신 경계 — 2026-11-05 Store·Order·Download·Settlement→Catalog, Payment→Order. 단위·아키텍처 464건·실제 DB/HTTP 통합 20건. [`docs/g5-service-key-verification.md`](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g5-service-key-verification.md)를 따른다.
+  - [x] Compose·검증 실행기의 프로젝트 키 전달 범위 — 2026-11-05. [`docs/g5-credential-distribution-verification.md`](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g5-credential-distribution-verification.md)를 따른다.
+  - [x] 계정 변경 후 세션 정리 — 단위(`BffAuthenticationFilterTest`·`RoleAccessGatewayTest`)와 실제 Auth·Gateway·Redis·MySQL 여정에서 갱신 거절 시 Redis 토큰·브라우저 세션 삭제·401(requirements R4.6, [근거 색인](../../../docs/evidence.md)).
+  - [ ] 남은 범위: 서비스 키 교체·배포 비밀 관리, 다중 Gateway 장애·복구, 실제 메일, 공통 운영 전체.
 
 ## 범위 밖(후속)
 
