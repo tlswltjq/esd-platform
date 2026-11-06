@@ -27,6 +27,9 @@ import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.test.OpenApiSnapshot;
+import com.stove.common.test.PausePoints;
+import com.stove.common.test.PausePoints.Gate;
+import com.stove.common.test.PausePoints.Run;
 import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.api.listener.SettlementOrderMapper;
 import com.stove.settlement.api.listener.SettlementRefundMapper;
@@ -50,6 +53,7 @@ import com.stove.settlement.core.domain.PgReceiptView;
 import com.stove.settlement.core.domain.PgSettlement;
 import com.stove.settlement.core.domain.ProductOwner;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
+import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSale;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
@@ -84,9 +88,13 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -99,6 +107,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
+    static final PausePoints PAUSES=new PausePoints();
+    static final String MONTH_LOCKED="SellerMonthlySettlementRepository.lock";
+    static final Duration BLOCKED=Duration.ofSeconds(1);
+    @TestConfiguration
+    static class Pausing {
+        @Bean static BeanPostProcessor pausingMonthRepository() { return PausePoints.pausing(PAUSES,SellerMonthlySettlementRepository.class); }
+    }
+    @AfterEach void unusedPauses() { assertThat(PAUSES.reset()).as("쓰이지 않은 멈춤 지점").isEmpty(); }
     @Autowired RecordPaidSale record;
     @Autowired RecordConfirmedRefund recordRefund;
     @Autowired FullRefundAllocationPolicy fullRefundAllocationPolicy;
@@ -205,6 +221,52 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         SellerMonthlySettlement closed=close.execute("usr_seller","2026-09");
         long actual=jdbc.queryForObject("SELECT COALESCE(SUM(seller_payout_amount),0) FROM settlement_refund WHERE settlement_month='2026-09'",Long.class);
         assertThat(closed.getRefundedSellerPayoutAmount()).isEqualTo(actual);
+    }
+    // 결정 103: 월 장부 잠금을 빼도 위 경합 테스트는 통과했다(마감이 거의 항상 먼저 끝난다). 순서를 멈춤 지점으로 고정한다.
+    @Test void closeWaitsForARefundHoldingTheMonthLockAndIncludesIt() throws Exception {
+        PaidOrder input=order(Instant.parse("2026-09-01T00:00:00Z"));sale(input);ConfirmedRefund confirmed=septemberRefund(input);
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"refund");
+        Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(confirmed));
+        locked.awaitArrival();
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
+        assertThat(closing.stillRunningAfter(BLOCKED)).as("환불이 월을 잠근 동안 마감은 기다린다").isTrue();
+        locked.release();
+        assertThat(refunding.join().getSettlementMonth()).isEqualTo("2026-09");
+        SellerMonthlySettlement closed=closing.join();
+        long refunded=jdbc.queryForObject("SELECT SUM(seller_payout_amount) FROM settlement_refund WHERE settlement_month='2026-09'",Long.class);
+        assertThat(refunded).isPositive();
+        assertThat(closed.getRefundedSellerPayoutAmount()).isEqualTo(refunded);
+    }
+    @Test void refundWaitsForACloseHoldingTheMonthLockAndMovesToTheOpenMonth() throws Exception {
+        PaidOrder input=order(Instant.parse("2026-09-01T00:00:00Z"));sale(input);ConfirmedRefund confirmed=septemberRefund(input);
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
+        locked.awaitArrival();
+        Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(confirmed));
+        assertThat(refunding.stillRunningAfter(BLOCKED)).as("마감이 월을 잠근 동안 환불은 기다린다").isTrue();
+        locked.release();
+        assertThat(closing.join().getRefundedSellerPayoutAmount()).isZero();
+        assertThat(refunding.join().getSettlementMonth()).isNotEqualTo("2026-09");
+        assertThat(close.execute("usr_seller","2026-09").getRefundedSellerPayoutAmount()).isZero();
+    }
+    @Test void closeWaitsForASaleHoldingTheMonthLockAndIncludesIt() throws Exception {
+        sale(order(Instant.parse("2026-09-01T00:00:00Z")));
+        PaidOrder racing=order(Instant.parse("2026-09-02T00:00:00Z"));prepare(racing);
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"sale");
+        Run<SettlementSale> recording=PausePoints.start("sale",() -> record.execute(racing));
+        locked.awaitArrival();
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
+        assertThat(closing.stillRunningAfter(BLOCKED)).as("매출이 월을 잠근 동안 마감은 기다린다").isTrue();
+        locked.release();
+        assertThat(recording.join().getSettlementMonth()).isEqualTo("2026-09");
+        assertThat(closing.join().getPaidAmount()).isEqualTo(20000);
+    }
+    private ConfirmedRefund septemberRefund(PaidOrder input) {
+        ConfirmedRefund fresh=prepareRefund(input);
+        ConfirmedRefund confirmed=new ConfirmedRefund(fresh.eventId(),Instant.parse("2026-09-29T00:00:00Z"),fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),
+                fresh.orderNo(),fresh.paymentId(),fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),fresh.cancellationIds());
+        refundProvider.put(confirmed.refundId(),proof(provider.get(input.paymentId()),confirmed));
+        return confirmed;
     }
     @Test void supplierMismatchAndRollbackCannotLeaveHalfAPosting() {
         PaidOrder input=order();sale(input);ConfirmedRefund confirmed=prepareRefund(input);
