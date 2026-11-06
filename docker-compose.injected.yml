@@ -1,0 +1,26 @@
+# Deployment-only overrides. Never put credential values in this file.
+x-db-secret: &db-secret
+  DB_PASSWORD: ${DB_PASSWORD:?External DB_PASSWORD is required}
+
+services:
+  auth:
+    environment: *db-secret
+  studio:
+    environment:
+      <<: *db-secret
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?External STORAGE_ACCESS_KEY is required}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?External STORAGE_SECRET_KEY is required}
+  review:
+    environment: *db-secret
+  catalog:
+    environment: *db-secret
+  store:
+    environment: *db-secret
+  order:
+    environment: *db-secret
+  payment:
+    environment: *db-secret
+  license:
+    environment: *db-secret
+  settlement:
+    environment: *db-secret
