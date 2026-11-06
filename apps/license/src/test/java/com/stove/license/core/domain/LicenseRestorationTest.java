@@ -5,19 +5,20 @@ import static com.stove.license.LicenseFixtures.paid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class LicenseRestorationTest {
     @Test void restorationPreservesTheImmutablePurchaseAndReleasesOnlyTheNamedSuspension() {
-        License license = License.grant(paid()); PaidOrder purchase = license.paidOrder(); String suspension = id(); license.suspend(suspension);
-        license.restore(suspension);
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.ACTIVE); assertThat(license.getSuspensionRequestEventId()).isNull();
+        License license = License.grant(paid()); PaidOrder purchase = license.paidOrder(); String suspension = id(); license.suspend(suspension, null);
+        license.restore(suspension, null, false, Instant.parse("2026-11-06T00:00:00Z"));
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.STORED); assertThat(license.getSuspensionRequestEventId()).isNull();
         assertThat(license.paidOrder()).isEqualTo(purchase);
     }
     @Test void anotherSuspensionCannotBeRestoredAndAnActiveLicenseRequiresTheDurableRestorationHistoryForReplay() {
-        License license = License.grant(paid()); license.suspend(id());
-        assertThatThrownBy(() -> license.restore(id())).isInstanceOf(RuntimeException.class);
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
-        License active = License.grant(paid()); assertThatThrownBy(() -> active.restore(id())).isInstanceOf(RuntimeException.class);
+        License license = License.grant(paid()); license.suspend(id(), null);
+        assertThatThrownBy(() -> license.restore(id(), null, false, Instant.parse("2026-11-06T00:00:00Z"))).isInstanceOf(RuntimeException.class);
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
+        License active = License.grant(paid()); assertThatThrownBy(() -> active.restore(id(), null, false, Instant.parse("2026-11-06T00:00:00Z"))).isInstanceOf(RuntimeException.class);
     }
 }

@@ -37,7 +37,10 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
             Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
             flyway.migrate(); flyway.validate();
             Map<String, Object> merged = jdbc.queryForMap("SELECT * FROM product_license");
-            assertThat(merged.get("status")).isEqualTo("ACTIVE");
+            // V10: 이미 지급된 보유권은 등록된 구매 근거와 ACTIVE 보유권 행으로 옮겨진다.
+            assertThat(merged.get("status")).isEqualTo("REGISTERED");
+            assertThat(jdbc.queryForObject("SELECT status FROM license_registration WHERE license_id=?", String.class,
+                    merged.get("license_id"))).isEqualTo("ACTIVE");
             assertThat(merged.get("suspension_request_event_id")).isNull();
             assertThat(merged).containsAllEntriesOf(right);
             HashMap<String, Object> facts = new HashMap<>(historical);
@@ -100,6 +103,68 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
             Flyway.configure().dataSource(source).locations(LOCATION).target("4").load().migrate();
             check.accept(source);
         } finally { root.execute("DROP DATABASE " + schema); }
+    }
+
+    @Test
+    void v10SplitsGrantedRightsIntoRegisteredPurchasesAndRegistrationsWithoutLosingSuspensions() {
+        MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
+        String schema = "license_storage_" + UUID.randomUUID().toString().replace("-", "");
+        String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
+        JdbcTemplate root = new JdbcTemplate(new DriverManagerDataSource(server + mysql.getDatabaseName()
+                + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword()));
+        root.execute("CREATE DATABASE " + schema);
+        try {
+            DriverManagerDataSource source = new DriverManagerDataSource(server + schema + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword());
+            Flyway.configure().dataSource(source).locations(LOCATION).target("9").load().migrate();
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            PaidOrder active = paid("usr_buyer", 1L, "Game-1");
+            PaidOrder suspended = paid("usr_buyer", 2L, "Game-2");
+            String activeId = UUID.randomUUID().toString();
+            String suspendedId = UUID.randomUUID().toString();
+            insertV9(jdbc, activeId, active, "ACTIVE", null);
+            insertV9(jdbc, suspendedId, suspended, "SUSPENDED", "suspend-1");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
+            flyway.migrate(); flyway.validate();
+            Map<String, Object> registered = jdbc.queryForMap("SELECT status,suspended_from FROM product_license WHERE license_id=?", activeId);
+            assertThat(registered.get("status")).isEqualTo("REGISTERED");
+            assertThat(registered.get("suspended_from")).isNull();
+            Map<String, Object> paused = jdbc.queryForMap("SELECT status,suspended_from,suspension_request_event_id FROM product_license WHERE license_id=?", suspendedId);
+            assertThat(paused.get("status")).isEqualTo("SUSPENDED");
+            assertThat(paused.get("suspended_from")).isEqualTo("REGISTERED");
+            assertThat(paused.get("suspension_request_event_id")).isEqualTo("suspend-1");
+            Map<String, Object> first = jdbc.queryForMap("SELECT status,order_no,product_code,ended_at FROM license_registration WHERE license_id=?", activeId);
+            assertThat(first.get("status")).isEqualTo("ACTIVE");
+            assertThat(first.get("order_no")).isEqualTo(active.orderNo());
+            assertThat(first.get("product_code")).isEqualTo("Game-1");
+            assertThat(first.get("ended_at")).isNull();
+            assertThat(jdbc.queryForObject("SELECT status FROM license_registration WHERE license_id=?", String.class, suspendedId)).isEqualTo("SUSPENDED");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM license_registration", Integer.class)).isEqualTo(2);
+            // 고객·상품당 1행 제한이 풀리고, ACTIVE 보유권만 DB가 하나로 막는다.
+            PaidOrder again = paid("usr_buyer", 1L, "Game-1");
+            insertV10(jdbc, UUID.randomUUID().toString(), again);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM product_license WHERE product_id=1", Integer.class)).isEqualTo(2);
+            assertThatThrownBy(() -> jdbc.update("INSERT INTO license_registration(registration_id,license_id,order_no,buyer_subject,product_id,product_code,title,status,registered_at) "
+                    + "SELECT UUID(),license_id,order_no,buyer_subject,product_id,product_code,title,'ACTIVE',NOW(6) FROM product_license WHERE order_no=?", again.orderNo()))
+                    .hasStackTraceContaining("uk_license_registration_active");
+        } finally {
+            root.execute("DROP DATABASE " + schema);
+        }
+    }
+
+    private void insertV9(JdbcTemplate jdbc, String licenseId, PaidOrder order, String status, String suspension) {
+        jdbc.update("INSERT INTO product_license(license_id,buyer_subject,product_id,product_code,title,acquired_at,event_id,occurred_at,order_no,request_event_id,"
+                        + "payment_result_event_id,payment_id,content_version,amount,currency,received_at,status,suspension_request_event_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                licenseId, order.buyerSubject(), order.productId(), order.productCode(), order.title(), Timestamp.from(Instant.parse("2026-10-17T01:03:00.123456Z")),
+                order.eventId(), Timestamp.from(order.occurredAt()), order.orderNo(), order.requestEventId(), order.paymentResultEventId(), order.paymentId(),
+                order.contentVersion(), order.amount(), order.currency(), Timestamp.from(Instant.parse("2026-10-17T01:03:00.654321Z")), status, suspension);
+    }
+
+    private void insertV10(JdbcTemplate jdbc, String licenseId, PaidOrder order) {
+        jdbc.update("INSERT INTO product_license(license_id,buyer_subject,product_id,product_code,title,acquired_at,event_id,occurred_at,order_no,request_event_id,"
+                        + "payment_result_event_id,payment_id,content_version,amount,currency,received_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                licenseId, order.buyerSubject(), order.productId(), order.productCode(), order.title(), Timestamp.from(Instant.parse("2026-10-18T01:03:00.123456Z")),
+                order.eventId(), Timestamp.from(order.occurredAt()), order.orderNo(), order.requestEventId(), order.paymentResultEventId(), order.paymentId(),
+                order.contentVersion(), order.amount(), order.currency(), Timestamp.from(Instant.parse("2026-10-18T01:03:00.654321Z")));
     }
 
     @Test

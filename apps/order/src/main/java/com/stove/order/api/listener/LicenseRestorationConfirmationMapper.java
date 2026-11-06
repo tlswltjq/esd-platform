@@ -12,6 +12,6 @@ public final class LicenseRestorationConfirmationMapper {
         if (envelope == null || event == null || !Objects.equals(envelope.eventId(), event.eventId())
                 || !Objects.equals(envelope.eventType(), event.eventType()) || !Objects.equals(envelope.key(), event.orderNo()))
             throw new RefundCompletionRejected("실패/복구 봉투·본문·키가 다릅니다.");
-        return new LicenseRestorationConfirmation(event.eventId(), event.occurredAt(), event.requestEventId(), event.refundId(), event.attemptId(), event.failureEventId(), event.licenseId(), event.orderNo(), event.buyerSubject(), event.productId(), event.productCode(), event.paymentId(), event.suspensionRequestEventId(), event.suspensionEventId());
+        return new LicenseRestorationConfirmation(event.eventId(), event.occurredAt(), event.requestEventId(), event.refundId(), event.attemptId(), event.failureEventId(), event.licenseId(), event.orderNo(), event.buyerSubject(), event.productId(), event.productCode(), event.paymentId(), event.suspensionRequestEventId(), event.suspensionEventId(), event.returnedToStorage());
     }
 }

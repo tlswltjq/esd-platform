@@ -4,7 +4,7 @@ import java.time.Instant;
 
 public record ApprovalCorrectionConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId,
         String reviewId, String stopRequestId, String licenseId, String orderNo, String buyerSubject, Long productId,
-        String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId) {
+        String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId, boolean returnedToStorage) {
     public ApprovalCorrectionConfirmation {
         if (!RefundRestorationValues.text(eventId,64) || !RefundRestorationValues.time(occurredAt)
                 || !RefundRestorationValues.text(requestEventId,64) || !RefundRestorationValues.uuid(refundId)
@@ -15,6 +15,11 @@ public record ApprovalCorrectionConfirmation(String eventId, Instant occurredAt,
                 || !RefundRestorationValues.text(paymentId,64) || !RefundRestorationValues.text(suspensionRequestEventId,64)
                 || !RefundRestorationValues.text(suspensionEventId,64)) throw new RefundCompletionRejected("승인 정정 복구 본문이 올바르지 않습니다.");
     }
-    public String fingerprint() { return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
-            stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId); }
+    /** PR #116 리뷰 R3: 업그레이드 전 지문과 맞도록 보관함 반환(true)일 때만 값을 더한다. */
+    public String fingerprint() {
+        if (!returnedToStorage) return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
+                stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId);
+        return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
+                stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId,"returnedToStorage");
+    }
 }

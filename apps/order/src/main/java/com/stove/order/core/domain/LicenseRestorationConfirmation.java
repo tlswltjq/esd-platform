@@ -2,7 +2,7 @@ package com.stove.order.core.domain;
 
 import java.time.Instant;
 
-public record LicenseRestorationConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId, String attemptId, String failureEventId, String licenseId, String orderNo, String buyerSubject, Long productId, String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId) {
+public record LicenseRestorationConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId, String attemptId, String failureEventId, String licenseId, String orderNo, String buyerSubject, Long productId, String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId, boolean returnedToStorage) {
     public LicenseRestorationConfirmation {
         if (!RefundRestorationValues.text(eventId, 64) || !RefundRestorationValues.time(occurredAt) || !RefundRestorationValues.text(requestEventId, 64)
                 || !RefundRestorationValues.uuid(refundId) || !RefundRestorationValues.uuid(attemptId) || !RefundRestorationValues.uuid(licenseId)
@@ -13,7 +13,10 @@ public record LicenseRestorationConfirmation(String eventId, Instant occurredAt,
             throw new RefundCompletionRejected("복구 완료의 근거가 올바르지 않습니다.");
     }
     public String fingerprint() {
+        // PR #116 리뷰 R3: 업그레이드 전 지문과 맞도록 보관함 반환(true)일 때만 값을 더한다.
+        if (!returnedToStorage) return RefundRestorationValues.fingerprint(eventId, occurredAt.toString(), requestEventId, refundId, attemptId,
+                failureEventId, licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId);
         return RefundRestorationValues.fingerprint(eventId, occurredAt.toString(), requestEventId, refundId, attemptId, failureEventId,
-                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId);
+                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId, "returnedToStorage");
     }
 }

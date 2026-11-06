@@ -105,6 +105,8 @@ class GatewayRouteTest {
         "POST, /api/v1/admin/refund-cancellation-holds/example/resume, payment-refund-admin",
         "GET,  /api/v1/payments,            payment",
         "GET,  /api/v1/library,             license",
+        "GET,  /api/v1/storage,             license",
+        "POST, /api/v1/storage/example/registration, license",
         "POST, /api/v1/downloads/1,         download",
         "POST, /api/v1/studio/projects,        studio",
         "POST, /api/v1/promotions/seller/products/1, promotions",

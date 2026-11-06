@@ -53,7 +53,7 @@ class LicenseRecoveryOpsIntegrationTest extends LicenseIntegrationTestBase {
     void clean() {
         listeners.stop();
         jdbc.update("DELETE FROM license_suspension");
-        jdbc.update("DELETE FROM product_license");
+        jdbc.update("DELETE FROM license_registration"); jdbc.update("DELETE FROM product_license");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
     }

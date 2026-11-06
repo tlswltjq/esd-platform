@@ -313,7 +313,9 @@ class RefundReconsiderationIntegrationTest extends OrderIntegrationTestBase {
         assertThat(customer(fixture).data().path("status").asText()).isEqualTo("COMPLETED");
         assertThat(verdict(fixture, review, command, "APPROVED", "승인", "admin").data()).isEqualTo(accepted.data());
         assertThat(current(fixture).reviewReceipt()).isEqualTo(fixture.refund().reviewReceipt()); assertThat(attempts.count()).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isEqualTo(2);
+        // 정지 요청·실행 요청 + 환불 완료 사실(PurchaseRefunded, 결정 96)
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='PurchaseRefunded'", Integer.class)).isEqualTo(1);
     }
 
     @Test void approvalBeforeGrantWaitsAndLateGrantStartsExactlyOneSuspension() {
@@ -341,7 +343,7 @@ class RefundReconsiderationIntegrationTest extends OrderIntegrationTestBase {
         RefundAttempt failed = attempts.findByAttemptId(attempt.getAttemptId()).orElseThrow();
         restore.execute(new LicenseRestorationConfirmation(id(), BASE.plusSeconds(7), failed.getRestorationRequestEventId(), approved.getRefundId(),
                 failed.getAttemptId(), failed.getFailureEventId(), granted.licenseId(), fixture.order().getOrderNo(), "usr_buyer", fixture.order().getProductId(),
-                fixture.order().getProductCode(), fixture.order().getPaymentId(), failed.getSuspensionRequestEventId(), failed.getSuspensionEventId()));
+                fixture.order().getProductCode(), fixture.order().getPaymentId(), failed.getSuspensionRequestEventId(), failed.getSuspensionEventId(), false));
         when(clock.instant()).thenReturn(BASE.plusSeconds(8)); assertThat(customer(fixture).data().path("status").asText()).isEqualTo("FAILED");
         assertThat(customer(fixture).data().path("reconsiderationAvailable").asBoolean()).isFalse();
         assertThat(http("POST", path(fixture) + "/retries", Map.of("previousAttemptId", attempt.getAttemptId()), "usr_buyer", "MEMBER").status()).isEqualTo(202);

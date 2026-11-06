@@ -2,8 +2,9 @@ package com.stove.license.core.service;
 
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
-import com.stove.license.core.domain.License;
-import com.stove.license.core.domain.LicenseRepository;
+import com.stove.license.core.domain.LicenseRegistration;
+import com.stove.license.core.domain.LicenseRegistrationRepository;
+import com.stove.license.core.domain.LicenseRegistrations;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -15,11 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SearchLicenses {
-    private final LicenseRepository licenses;
+    private final LicenseRegistrationRepository registrations;
 
-    public Page<License> execute(String buyer, int page, int size) {
+    /** 라이브러리: 쓸 수 있거나 환불로 정지된 보유권. 끝난 보유권은 뺀다(결정 97). */
+    public Page<LicenseRegistration> execute(String buyer, int page, int size) {
         if (page < 0 || size < 1 || size > 100) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        return licenses.findByBuyerSubject(buyer, PageRequest.of(page, size,
-                Sort.by(Sort.Order.desc("acquiredAt"), Sort.Order.desc("id"))));
+        return registrations.findByBuyerSubjectAndStatusIn(buyer, LicenseRegistrations.OPEN, PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("registeredAt"), Sort.Order.desc("id"))));
     }
 }

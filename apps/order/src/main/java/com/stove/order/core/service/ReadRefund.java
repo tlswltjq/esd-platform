@@ -40,7 +40,7 @@ public class ReadRefund {
                 refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null,
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
                 refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund),
-                RefundAmountView.from(order, refund));
+                RefundAmountView.from(order, refund), refund.isPurchaseReturnedToStorage());
     }
     private Instant delayedSince(Refund refund) {
         if (refund.getStatus()!=RefundStatus.PENDING_PAYMENT_REFUND) return null;

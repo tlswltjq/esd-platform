@@ -76,8 +76,8 @@ public class RefundConfiguration {
     }
 
     @Bean ApplyRefundPaymentConfirmation applyRefundPaymentConfirmation(OrderRepository orders, RefundRepository refunds,
-            RefundAttemptRepository attempts, ProcessedEventGuard inbox, EntityManager entityManager) {
-        return new ApplyRefundPaymentConfirmation(orders, refunds, attempts, inbox, entityManager);
+            RefundAttemptRepository attempts, ProcessedEventGuard inbox, OutboxRecorder outbox, EntityManager entityManager) {
+        return new ApplyRefundPaymentConfirmation(orders, refunds, attempts, inbox, outbox, entityManager);
     }
 
     @Bean

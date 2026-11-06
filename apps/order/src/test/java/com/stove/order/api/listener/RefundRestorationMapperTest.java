@@ -17,10 +17,11 @@ class RefundRestorationMapperTest {
     private final RefundExecutionFailedEvent failed = new RefundExecutionFailedEvent(id(), Instant.parse("2026-10-27T01:02:00Z"), id(), id(), id(),
             id(), id(), "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64));
     private final LicenseRestoredEvent restored = new LicenseRestoredEvent(id(), Instant.parse("2026-10-27T01:03:00Z"), id(), failed.refundId(), failed.attemptId(),
-            failed.eventId(), id(), failed.orderNo(), failed.buyerSubject(), 1L, "PRODUCT-1", failed.paymentId(), id(), id());
+            failed.eventId(), id(), failed.orderNo(), failed.buyerSubject(), 1L, "PRODUCT-1", failed.paymentId(), id(), id(), true);
     @Test void mapsFailureAndRestorationWithAllTheirDifferentCorrelationKeys() {
         assertThat(RefundFailureConfirmationMapper.from(envelope(failed), failed).lookupHash()).isEqualTo(failed.lookupHash());
         assertThat(LicenseRestorationConfirmationMapper.from(envelope(restored), restored).failureEventId()).isEqualTo(failed.eventId());
+        assertThat(LicenseRestorationConfirmationMapper.from(envelope(restored), restored).returnedToStorage()).isTrue();
     }
     @Test void wrongEnvelopeIdsTypesAndKeysNeverReachInternalState() {
         for (EventEnvelope invalid : List.of(new EventEnvelope(id(), failed.eventType(), failed.orderNo(), ""),

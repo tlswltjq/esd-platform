@@ -14,6 +14,6 @@ public final class ApprovalCorrectionMapper {
             throw new RefundCompletionRejected("승인 정정 복구 봉투·본문·키가 다릅니다.");
         return new ApprovalCorrectionConfirmation(event.eventId(),event.occurredAt(),event.requestEventId(),event.refundId(),event.reviewId(),
                 event.stopRequestId(),event.licenseId(),event.orderNo(),event.buyerSubject(),event.productId(),event.productCode(),event.paymentId(),
-                event.suspensionRequestEventId(),event.suspensionEventId());
+                event.suspensionRequestEventId(),event.suspensionEventId(), event.returnedToStorage());
     }
 }

@@ -155,7 +155,9 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
                 .isInstanceOf(BusinessException.class);
         assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(paidEvents()).isEqualTo(1);
-        assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
+        // Catalog가 멈춘 동안 새 requestId는 상품 확인이 불가해 거절된다(구매 제한 때문이 아니다).
+        assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.UPSTREAM_UNAVAILABLE));
         assertThat(read.execute(o.getOrderNo(), "usr_buyer").getTitle()).isEqualTo("한글 게임");
     }
 
@@ -207,27 +209,46 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         Order first = saved("usr_buyer");
         when(catalog.detail(anyString())).thenReturn(new PublishedProduct(1L, "Game-1", "New title", 4, 20000, "KRW"));
         assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000)))
-                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+        Order again = create.execute("usr_buyer", new OrderRequest(id(), "Game-1", 4, 20000));
+        assertThat(again.getOrderNo()).isNotEqualTo(first.getOrderNo());
+        assertThat(again.getTitle()).isEqualTo("New title"); assertThat(again.getAmount()).isEqualTo(20000);
         Order next = create.execute("usr_other", new OrderRequest(id(), "Game-1", 4, 20000));
         assertThat(stored(first).getTitle()).isEqualTo("한글 게임");
         assertThat(stored(first).getAmount()).isEqualTo(10000);
         assertThat(next.getTitle()).isEqualTo("New title");
     }
-    @Test void pendingAndPaidBlockNewRequestsWithoutCreatingAnotherPaymentRequest() {
+    /** 결정 89: 같은 상품의 진행 중·결제 완료 주문은 새 requestId의 새 주문을 막지 않는다. 같은 requestId는 계속 멱등이다. */
+    @Test void pendingAndPaidDoNotBlockNewRequestsAndTheSameRequestStaysIdempotent() {
         OrderRequest input = request(); Order first = create.execute("usr_buyer", input);
         Response pending = http("POST", "/api/v1/orders", body(request()), token("usr_buyer", "MEMBER"));
-        assertThat(pending.status()).isEqualTo(409);
-        assertThat(pending.body().toString()).contains("PURCHASE_IN_PROGRESS");
+        assertThat(pending.status()).isBetween(200, 201);
+        assertThat(pending.data().path("orderNo").asText()).isNotEqualTo(first.getOrderNo());
         accept(completed(first));
         Response paid = http("POST", "/api/v1/orders", body(request()), token("usr_buyer", "MEMBER"));
-        assertThat(paid.status()).isEqualTo(409);
-        assertThat(paid.body().toString()).contains("PRODUCT_ALREADY_PURCHASED");
+        assertThat(paid.status()).isBetween(200, 201);
+        assertThat(paid.data().path("orderNo").asText()).isNotIn(first.getOrderNo(), pending.data().path("orderNo").asText());
         assertThat(create.execute("usr_buyer", input).getOrderNo()).isEqualTo(first.getOrderNo());
-        assertThat(count("purchase_order")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(2);
+        assertThat(count("purchase_order")).isEqualTo(3);
+        assertThat(count("outbox_event")).isEqualTo(4);
     }
-    @Test void onlyCommittedDefinitiveFailureReleasesTheProductForANewRequest() {
+    /** 결정 89: 결제 완료 주문과 환불 완료 주문이 있어도 같은 상품을 다시 주문할 수 있다. */
+    @Test void paidAndRefundCompletedOrdersOfTheSameProductDoNotBlockAnotherOrder() {
+        OrderRequest original = request(); Order paidOrder = create.execute("usr_buyer", original); accept(completed(paidOrder));
+        Order refundedOrder = create.execute("usr_buyer", request()); accept(completed(refundedOrder));
+        jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,payment_confirmation_event_id,completed_at,payment_confirmation_fingerprint,payment_confirmation_source)"
+                + " VALUES(?,?,NOW(6),TRUE,'COMPLETED',?,NOW(6),?,'PG_QUERY_UNATTRIBUTED')", id(), refundedOrder.getOrderNo(), id(), "a".repeat(64));
+        assertThat(refunds.findByOrderNo(refundedOrder.getOrderNo()).orElseThrow().getStatus().name()).isEqualTo("COMPLETED");
+        OrderRequest again = request();
+        Order next = create.execute("usr_buyer", again);
+        assertThat(next.getOrderNo()).isNotIn(paidOrder.getOrderNo(), refundedOrder.getOrderNo());
+        assertThat(next.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(create.execute("usr_buyer", again).getOrderNo()).isEqualTo(next.getOrderNo());
+        assertThat(create.execute("usr_buyer", original).getOrderNo()).isEqualTo(paidOrder.getOrderNo());
+        assertThat(stored(paidOrder).getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(stored(refundedOrder).getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(count("purchase_order")).isEqualTo(3);
+    }
+    @Test void definitiveFailureKeepsItsHistoryAndNeverBlockedANewRequest() {
         OrderRequest input = request(); Order first = create.execute("usr_buyer", input);
         OrderPaymentFailedEvent result = failed(first);
         assertThatThrownBy(() -> new TransactionTemplate(transactions).executeWithoutResult(tx -> {
@@ -235,17 +256,18 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             assertThat(stored(first).getStatus()).isEqualTo(OrderStatus.FAILED);
             throw new IllegalStateException("abort after failure flush");
         })).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOfSatisfying(BusinessException.class,
-                e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+        assertThat(stored(first).getStatus()).isEqualTo(OrderStatus.PENDING);
+        Order during = saved("usr_buyer");
         accept(result);
         Order next = saved("usr_buyer");
-        assertThat(next.getOrderNo()).isNotEqualTo(first.getOrderNo());
+        assertThat(next.getOrderNo()).isNotIn(first.getOrderNo(), during.getOrderNo());
         assertThat(next.getRequestEventId()).isNotEqualTo(first.getRequestEventId());
         assertThat(create.execute("usr_buyer", input).getStatus()).isEqualTo(OrderStatus.FAILED);
-        assertThat(count("purchase_order")).isEqualTo(2);
-        assertThat(count("outbox_event")).isEqualTo(2);
+        assertThat(count("purchase_order")).isEqualTo(3);
+        assertThat(count("outbox_event")).isEqualTo(3);
     }
-    @Test void uncommittedFailureDoesNotPermitACompetingPurchase() throws Exception {
+    /** 결정 89: 새 주문은 기존 주문 행을 잠그거나 기다리지 않는다. */
+    @Test void uncommittedFailureDoesNotBlockOrWaitForAnotherPurchase() throws Exception {
         Order first = saved("usr_buyer");
         CountDownLatch flushed = new CountDownLatch(1); CountDownLatch commit = new CountDownLatch(1);
         ExecutorService pool = Executors.newSingleThreadExecutor();
@@ -256,20 +278,23 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
             }));
             assertThat(flushed.await(15, TimeUnit.SECONDS)).isTrue();
-            assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOfSatisfying(BusinessException.class,
-                    e -> assertThat(e.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+            Order during = saved("usr_buyer");
+            assertThat(during.getStatus()).isEqualTo(OrderStatus.PENDING);
+            assertThat(during.getOrderNo()).isNotEqualTo(first.getOrderNo());
             commit.countDown(); result.get(20, TimeUnit.SECONDS);
-            assertThat(saved("usr_buyer").getStatus()).isEqualTo(OrderStatus.PENDING);
+            assertThat(stored(first).getStatus()).isEqualTo(OrderStatus.FAILED);
         } finally { commit.countDown(); pool.shutdownNow(); }
     }
-    @Test void changedCatalogIdentityCannotBypassThePurchaseGuard() {
-        saved("usr_buyer");
+    @Test void changedCatalogIdentityCreatesSeparateOrdersWithTheirOwnSnapshots() {
+        Order first = saved("usr_buyer");
         when(catalog.detail("Game-1")).thenReturn(new PublishedProduct(2L, "Game-1", "Changed ID", 3, 10000, "KRW"));
-        assertThatThrownBy(() -> saved("usr_buyer")).isInstanceOf(BusinessException.class);
+        Order changedId = saved("usr_buyer");
         when(catalog.detail("Game-2")).thenReturn(new PublishedProduct(1L, "Game-2", "Changed code", 3, 10000, "KRW"));
-        assertThatThrownBy(() -> create.execute("usr_buyer", new OrderRequest(id(), "Game-2", 3, 10000)))
-                .isInstanceOf(BusinessException.class);
-        assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        Order changedCode = create.execute("usr_buyer", new OrderRequest(id(), "Game-2", 3, 10000));
+        assertThat(stored(first).getProductId()).isEqualTo(1L); assertThat(stored(first).getProductCode()).isEqualTo("Game-1");
+        assertThat(stored(changedId).getProductId()).isEqualTo(2L); assertThat(stored(changedId).getProductCode()).isEqualTo("Game-1");
+        assertThat(stored(changedCode).getProductId()).isEqualTo(1L); assertThat(stored(changedCode).getProductCode()).isEqualTo("Game-2");
+        assertThat(count("purchase_order")).isEqualTo(3); assertThat(count("outbox_event")).isEqualTo(3);
     }
     @Test void unavailableMalformedMissingAndFreeProductsLeaveNoOrderOrOutbox() {
         for (BusinessException error : new BusinessException[]{new BusinessException(ErrorCode.NOT_FOUND),
@@ -306,7 +331,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
-    @Test void differentRequestRaceHitsTheDatabaseGuardAndCreatesOneOrderAndEvent() throws Exception {
+    /** 결정 89: 서로 다른 requestId의 동시 주문은 각각 새 주문이 된다. */
+    @Test void differentRequestRaceCreatesSeparateOrdersAndEvents() throws Exception {
         CyclicBarrier inserted = new CyclicBarrier(4);
         doAnswer(inv -> {
             inserted.await(15, TimeUnit.SECONDS);
@@ -321,8 +347,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
             }));
             List<String> outcomes = new ArrayList<>();
             for (Future<String> future : futures) outcomes.add(future.get(30, TimeUnit.SECONDS));
-            assertThat(outcomes).containsExactlyInAnyOrder("created", "PURCHASE_IN_PROGRESS", "PURCHASE_IN_PROGRESS", "PURCHASE_IN_PROGRESS");
-            assertThat(count("purchase_order")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(outcomes).containsExactly("created", "created", "created", "created");
+            assertThat(count("purchase_order")).isEqualTo(4); assertThat(count("outbox_event")).isEqualTo(4);
         } finally { reset(orders); pool.shutdownNow(); }
     }
     @Test void unrelatedIntegrityFailureIsNotReportedAsAnExistingPurchase() {

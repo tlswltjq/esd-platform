@@ -47,7 +47,7 @@ public class LicenseSuspension {
     public static LicenseSuspension record(License license, SuspensionRequest input, Instant suspendedAt) {
         require(license != null && input != null && microsecond(suspendedAt), "정지 처리 근거가 필요합니다.");
         license.verifySuspensionTarget(input);
-        consistent(license.getStatus() == LicenseStatus.SUSPENDED
+        consistent(license.getStatus() == PurchaseStatus.SUSPENDED
                 && input.eventId().equals(license.getSuspensionRequestEventId()), "정지된 요청과 근거가 다릅니다.");
         LicenseSuspension result = new LicenseSuspension();
         result.requestEventId = input.eventId(); result.requestOccurredAt = input.occurredAt();

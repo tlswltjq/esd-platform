@@ -18,6 +18,7 @@ import com.stove.common.kafka.contract.payload.LicenseIssueFailedEvent;
 import com.stove.common.kafka.contract.payload.LicenseIssuedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
+import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRevokedEvent;
 import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
 import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
@@ -184,13 +185,15 @@ class EventContractTest {
                 new LicenseApprovalCorrectionRequestedEvent("correction-1",Instant.parse("2026-10-29T01:00:00Z"),"refund-1","review-1","stop-1",
                         "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
                 new LicenseApprovalCorrectedEvent("corrected-1",Instant.parse("2026-10-29T01:01:00Z"),"correction-1","refund-1","review-1","stop-1",
-                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
+                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1",true),
                 new RefundExecutionFailedEvent("failure-1", Instant.parse("2026-10-27T01:03:00Z"), "refund-1", "attempt-1", "request-1",
                         "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64)),
                 new LicenseRestorationRequestedEvent("restore-1", Instant.parse("2026-10-27T01:04:00Z"), "refund-1", "attempt-1", "failure-1",
                         "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
                 new LicenseRestoredEvent("restored-1", Instant.parse("2026-10-27T01:05:00Z"), "restore-1", "refund-1", "attempt-1", "failure-1",
-                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
+                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1", true),
+                new PurchaseRefundedEvent("refunded-1", Instant.parse("2026-10-27T01:06:00Z"), "refund-1", "license-1", "order-1",
+                        "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1"),
                 new RefundExecutionSucceededEvent("execution-succeeded-1", Instant.parse("2026-10-27T01:03:00Z"),
                         "refund-confirmed-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd",
                         "execution-requested-1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "pg-original", "cancel-1"),

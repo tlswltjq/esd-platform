@@ -12,7 +12,7 @@
 - **주문 당시 스냅샷을 고정한다.** 확인한 공개본의 상품 ID·코드·제목·contentVersion·정가·할인액 0·청구액·통화를 주문에 박고, 이후 Catalog 변경이나 결과 이벤트로 수정하지 않는다. amount는 **고객 청구액**이며 PG 비용·판매자 지급액과 구분한다.
 - **구매자는 JWT sub.** 본문·쿼리·헤더로 선택하지 않는다. `(buyerSubject, requestId)` 유일 제약으로 멱등을 처리하며 별도 Redis 락·멱등 테이블을 두지 않는다.
 - **결제 생명주기는 서버 시각 기준.** `createdAt + 30분` 고정 기한을 상태와 함께 검사한다. 30분은 서버가 승인 진행을 확정·기록할 수 있는 기한이며, 기한 내 확정된 진행은 늦은 PG 승인·통지에도 완료한다([결정 32](../../../docs/decisions.md#order-expiry-approval-admission)).
-- **중복 구매 제한.** 같은 상품의 `PENDING`→409 `PURCHASE_IN_PROGRESS`, `PAID`→409 `PRODUCT_ALREADY_PURCHASED`, 최종 `FAILED`만 새 주문. 구매자·상품 ID/코드 유일 제약으로 동시 생성도 막는다.
+- **구매는 판매 금지만 막는다(결정 89).** 같은 상품의 기존 주문 상태와 무관하게 새 requestId면 새 주문이다. 중복 청구는 `(buyerSubject, requestId)` 멱등이 막고, 보유 중복은 License 등록이 막는다. V28이 구매 슬롯(`purchase_guard`)과 구매자·상품 유일 제약을 지웠다.
 - **결과 반영은 행 잠금·Inbox·상태 전이를 원자 처리.** 최종 상태는 덮어쓰지 않고, 최초 `PAID`에 `OrderPaid` Outbox를 함께 기록한다.
 - **OrderPaid는 한 번만 만든다.** eventId는 최초 PAID 트랜잭션에서 생성하고, 릴레이 재시도·DEAD 재큐잉·재전달은 저장된 eventId·키·본문을 그대로 쓴다. 조회나 중복 결제 결과 수신으로 다시 만들지 않으며, 롤백된 후보 eventId는 발행된 결과가 아니다.
 - **전액 환불은 접수/심사와 실제 실행을 분리.** Order는 접수·심사·진행을 소유하고 Payment가 PG 실행/조회, License가 실제 이용권 상태를 소유한다.
@@ -32,7 +32,7 @@
 
 - 시각은 UTC·마이크로초 정밀도, 금액은 정수 long. 식별자 컬럼·유일 제약은 대소문자를 구분한다.
 - `requestEventId`(최초 OrderPlaced.eventId)와 nullable `paymentResultEventId`에 각각 유일 제약을 둔다.
-- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세)까지 기존 버전·자료를 보존한다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
+- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99)까지 기존 버전·자료를 보존한다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
 
 ## API 계약
 
@@ -69,7 +69,8 @@
 | 발행 | `LicenseSuspensionRequested` / stove.order.v1 | 환불·주문·구매자·상품·결제 연결값. License 불변 구매 기록과 대조 |
 | 발행 | `RefundExecutionRequested` / stove.order.v1 | 실제 지급·정지 확인 뒤 refundId·attemptId·원구매 연결·금액. 재시도는 선택적 previousAttemptId |
 | 발행 | `LicenseRestorationRequested` / `LicenseApprovalCorrectionRequested` | 검증된 PG 실패 뒤 복구 / 승인 중단 뒤 정정 복구 |
-| 수신 | `LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected` / stove.license.v1 | 실제 지급·정지·복구·정정 완료. 원래 요청 ID·구매 연결 대조 |
+| 발행 | `PurchaseRefunded` / stove.order.v1 | 최초 환불 `COMPLETED`와 같은 트랜잭션. License가 구매 근거를 `REFUNDED`로 끝낸다(결정 96) |
+| 수신 | `LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected` / stove.license.v1 | 구매 근거 생성(지급 확인)·정지·복구·정정 완료. 복구 두 이벤트의 `returnedToStorage`는 환불의 `purchaseReturnedToStorage`로 남긴다. 원래 요청 ID·구매 연결 대조 |
 | 수신 | `RefundPaymentConfirmed`·`RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundExecutionPrepared` / stove.payment.v1 | 금융 완료(출처·취소 ID·선택적 금액 스냅샷)·시도 성공·검증된 실패·최초 준비 시각/3시간 경계 |
 | 수신 | `OrderPaymentCompleted`/`OrderPaymentFailed` / stove.payment.v1 | requestEventId·orderNo·buyerSubject·amount·currency(+실패 reasonCode·reason) |
 
@@ -98,7 +99,7 @@ stateDiagram-v2
 
 - `expiresAt = createdAt + 30분`. 상태가 PENDING이어도 서버 시각이 기한을 지나면 새 승인 접수를 거절하고 EXPIRED를 먼저 커밋한다.
 - 기한 내 확정된 `PAYMENT_PROCESSING`은 시각 경과만으로 EXPIRED·FAILED로 바꾸지 않는다. 늦은 성공은 연결된 paymentId와 대조한다.
-- `PAID`·`FAILED`·`EXPIRED`는 최종 상태다. `EXPIRED`는 구매 슬롯을 해제하고 `PENDING`/`PAYMENT_PROCESSING`/`PAID`는 슬롯을 공유한다.
+- `PAID`·`FAILED`·`EXPIRED`는 최종 상태다. 구매 슬롯은 없다(V28).
 
 ## 환불 처리 요약
 
@@ -146,7 +147,7 @@ stateDiagram-v2
 ## 미연결·후속 범위
 
 - G1 결제 생명주기의 종료 조건(금융 보류 건의 다음 행동·실제 TEST 전체 여정 종결).
-- G2 지급 확인 누락의 Order 측 복구 연계, 환불 후 재구매(P4) 정책, 환불 조사 이후 조치·종결 기준, 실제 ADMIN 계정·운영 화면 여정.
+- G2 지급 확인 누락의 Order 측 복구 연계, 환불 조사 이후 조치·종결 기준, 실제 ADMIN 계정·운영 화면 여정.
 - 장바구니·다중 통화·부분 환불·다중 PG·조사 종결 등 제품 범위·성능 고도화.
 
 ## 사용 안내

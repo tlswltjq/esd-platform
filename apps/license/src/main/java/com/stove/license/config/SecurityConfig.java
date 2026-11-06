@@ -20,7 +20,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay",
                                 "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/library", "/api/v1/library/*").hasRole("MEMBER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/library", "/api/v1/library/*", "/api/v1/storage").hasRole("MEMBER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/storage/*/registration").hasRole("MEMBER")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())))
                 .build();

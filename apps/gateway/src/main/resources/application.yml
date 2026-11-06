@@ -160,7 +160,7 @@ spring:
             - id: license
               uri: ${LICENSE_URI:http://localhost:8084}
               predicates:
-                - Path=/api/v1/library/**
+                - Path=/api/v1/library/**,/api/v1/storage/**
               filters: [RemoveRequestHeader=X-Member-Id]
             - id: download
               uri: ${DOWNLOAD_URI:http://localhost:8088}

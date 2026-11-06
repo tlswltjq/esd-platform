@@ -1,7 +1,9 @@
 package com.stove.order.core.service;
 
 import com.stove.common.kafka.contract.EventType;
+import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.Refund;
@@ -12,6 +14,7 @@ import com.stove.order.core.domain.RefundPaymentConfirmation;
 import com.stove.order.core.domain.RefundExecutionSuccess;
 import com.stove.order.core.domain.RefundRepository;
 import jakarta.persistence.EntityManager;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,7 @@ public class ApplyRefundPaymentConfirmation {
     private final RefundRepository refunds;
     private final RefundAttemptRepository attempts;
     private final ProcessedEventGuard inbox;
+    private final OutboxRecorder outbox;
     private final EntityManager entityManager;
 
     public void execute(RefundExecutionSuccess input) {
@@ -46,6 +50,10 @@ public class ApplyRefundPaymentConfirmation {
         boolean changed = refund.confirmPayment(order, attempt, input);
         boolean first = inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.REFUND_PAYMENT_CONFIRMED);
         if (changed != first) throw new RefundCompletionRejected("환불 완료 기록과 Inbox가 다릅니다.");
+        // 결정 96: 환불 완료는 License가 구매 근거를 끝내는 근거다. 같은 트랜잭션의 Outbox로 남긴다.
+        if (changed) outbox.record("Order", order.getOrderNo(), new PurchaseRefundedEvent(UUID.randomUUID().toString(),
+                refund.getCompletedAt(), refund.getRefundId(), attempt.getLicenseId(), order.getOrderNo(), order.getBuyerSubject(),
+                order.getProductId(), order.getProductCode(), order.getPaymentId(), attempt.getSuspensionRequestEventId()));
         entityManager.flush();
     }
 }

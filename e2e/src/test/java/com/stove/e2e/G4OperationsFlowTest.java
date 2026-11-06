@@ -59,10 +59,9 @@ class G4OperationsFlowTest {
         Map<String, Object> admission = G4PaymentFixture.admission(placed);
         assertThat(G4PaymentFixture.admit(number, admission).status()).isEqualTo(200);
         G4PaymentFixture.complete(placed, (String) admission.get("paymentId"));
-        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> {
-            assertThat(Stove.gateway.get("/api/v1/orders/" + number, buyer.headers()).data().path("status").asText()).isEqualTo("PAID");
-            assertThat(Stove.gateway.get(library(state), buyer.headers()).status()).isEqualTo(200);
-        });
+        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
+            assertThat(Stove.gateway.get("/api/v1/orders/" + number, buyer.headers()).data().path("status").asText()).isEqualTo("PAID"));
+        ReviewJourney.registeredLibrary(buyer, code(state));
         state.put("paidOrder", number).put("paymentEvidence", "synthetic OrderPaymentCompleted after real protected admission; no PG call");
         state.set("license", Stove.gateway.get(library(state), buyer.headers()).data());
         assertThat(state.path("license").path("status").asText()).isEqualTo("ACTIVE");
@@ -320,7 +319,10 @@ class G4OperationsFlowTest {
         assertThat(order.path("contentVersion")).isEqualTo(current.path("contentVersion"));
         assertThat(order.path("status").asText()).isEqualTo("PENDING");
         assertThat(Stove.gateway.get(download(state), fresh.headers()).status()).isEqualTo(403);
-        assertThat(createOrder(state, actor(state, "buyerEmail"), 409).errorCode()).isEqualTo("PRODUCT_ALREADY_PURCHASED");
+        // 결정 89: 이미 가진 상품도 새 주문은 받는다(결제하지 않아 보관함·라이브러리는 그대로다).
+        JsonNode repurchase = createOrder(state, actor(state, "buyerEmail"), 200).data();
+        assertThat(repurchase.path("orderNo").asText()).isNotEqualTo(state.path("paidOrder").asText());
+        assertThat(repurchase.path("status").asText()).isEqualTo("PENDING");
         ticket(state, actor(state, "buyerEmail"), "3", "zip3");
         stableRight(state);
         state.set("finalProduct", current);

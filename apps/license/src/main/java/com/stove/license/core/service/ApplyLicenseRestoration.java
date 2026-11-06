@@ -7,6 +7,9 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRegistration;
+import com.stove.license.core.domain.LicenseRegistrationRepository;
+import com.stove.license.core.domain.LicenseRegistrations;
 import com.stove.license.core.domain.LicenseRepository;
 import com.stove.license.core.domain.LicenseSuspension;
 import com.stove.license.core.domain.LicenseSuspensionRepository;
@@ -25,6 +28,7 @@ public class ApplyLicenseRestoration {
     public static final String CONSUMER_GROUP = "license-restoration";
     private final LicenseRepository licenses;
     private final LicenseSuspensionRepository suspensions;
+    private final LicenseRegistrationRepository registrations;
     private final LicenseRestorationRepository restorations;
     private final ProcessedEventGuard inbox;
     private final OutboxRecorder outbox;
@@ -33,7 +37,7 @@ public class ApplyLicenseRestoration {
 
     public void execute(RestorationRequest input) {
         if (input == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        License license = licenses.lockByOrderNo(input.orderNo()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        License license = ProductPurchaseLock.lock(licenses, entityManager, input.orderNo());
         if (!license.getLicenseId().equals(input.licenseId()) || !license.getBuyerSubject().equals(input.buyerSubject())
                 || !license.getProductId().equals(input.productId()) || !license.getProductCode().equals(input.productCode())
                 || !license.getPaymentId().equals(input.paymentId())) throw new BusinessException(ErrorCode.CONFLICT, "복구 대상의 구매 근거가 다릅니다.");
@@ -51,11 +55,12 @@ public class ApplyLicenseRestoration {
             throw new BusinessException(ErrorCode.CONFLICT, "복구 요청의 환불·실제 정지 근거가 다릅니다.");
         if (!inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.LICENSE_RESTORATION_REQUESTED))
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox에 해당하는 복구 이력이 없습니다.");
-        license.restore(input.suspensionRequestEventId());
-        LicenseRestoration result = LicenseRestoration.record(license, input, clock.instant()); restorations.save(result);
+        LicenseRegistration current = LicenseRegistrations.current(registrations, license);
+        boolean returned = license.restore(input.suspensionRequestEventId(), current, LicenseRegistrations.activeExists(registrations, license), clock.instant());
+        LicenseRestoration result = LicenseRestoration.record(license, input, clock.instant(), returned); restorations.save(result);
         outbox.record("License", license.getLicenseId(), new LicenseRestoredEvent(result.getCompletedEventId(), result.getRestoredAt(),
                 input.eventId(), input.refundId(), input.attemptId(), input.failureEventId(), input.licenseId(), input.orderNo(),
-                input.buyerSubject(), input.productId(), input.productCode(), input.paymentId(), input.suspensionRequestEventId(), input.suspensionEventId()));
+                input.buyerSubject(), input.productId(), input.productCode(), input.paymentId(), input.suspensionRequestEventId(), input.suspensionEventId(), returned));
         entityManager.flush();
     }
 }

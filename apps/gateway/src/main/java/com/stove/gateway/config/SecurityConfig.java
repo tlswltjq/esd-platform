@@ -123,7 +123,7 @@ public class SecurityConfig {
                                 "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
-                                "/api/v1/downloads/**").hasRole("MEMBER")
+                                "/api/v1/storage/**", "/api/v1/downloads/**").hasRole("MEMBER")
                         .anyExchange().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))

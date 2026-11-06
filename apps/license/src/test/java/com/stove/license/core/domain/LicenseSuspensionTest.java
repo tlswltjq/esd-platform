@@ -15,9 +15,9 @@ class LicenseSuspensionTest {
         PaidOrder original = license.paidOrder();
         String requestId = id();
 
-        license.suspend(requestId);
+        license.suspend(requestId, null);
 
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
         assertThat(license.getSuspensionRequestEventId()).isEqualTo(requestId);
         assertThat(license.paidOrder()).isEqualTo(original);
     }
@@ -26,16 +26,16 @@ class LicenseSuspensionTest {
     void anotherRequestCannotReplaceAnActiveSuspension() {
         License license = License.grant(paid());
         String first = id();
-        license.suspend(first);
+        license.suspend(first, null);
 
-        assertThatThrownBy(() -> license.suspend(id())).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> license.suspend(id(), null)).isInstanceOf(BusinessException.class);
         assertThat(license.getSuspensionRequestEventId()).isEqualTo(first);
     }
 
     @Test
     void missingRequestEvidenceIsRejected() {
         License license = License.grant(paid());
-        assertThatThrownBy(() -> license.suspend(null)).isInstanceOf(BusinessException.class);
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.ACTIVE);
+        assertThatThrownBy(() -> license.suspend(null, null)).isInstanceOf(BusinessException.class);
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.STORED);
     }
 }

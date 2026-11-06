@@ -31,18 +31,17 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 7. WHERE 무료(0원) 상품 맥락에서 THE 시스템 SHALL 양수 가격만 받아 409로 거절한다.
 8. WHERE Catalog의 `publicDetailAllowed`가 false인 맥락에서 THE 시스템 SHALL 신규 주문을 404로 거절한다. 같은 requestId의 기존 주문 재조회·기존 주문 승인 접수는 원래 계약을 유지한다.
 
-### R2. 요청 멱등과 중복 구매 차단
-**사용자 스토리:** 구매자로서, 재전송이나 중복 구매로 주문이 여러 건 생기지 않기를 바란다. 그래야 중복 청구가 없다.
+### R2. 요청 멱등과 재구매
+**사용자 스토리:** 구매자로서, 재전송으로 주문이 여러 건 생기지 않기를 바라고, 같은 상품도 다시 살 수 있기를 바란다. 그래야 중복 청구가 없고 선물·재구매를 막지 않는다(결정 89).
 
 #### 수용 기준
 1. THE 시스템 SHALL `(buyerSubject, requestId)` 유일 제약으로 중복 생성을 막는다.
 2. WHEN 같은 구매자·requestId·같은 입력(코드·기대 버전·기대 금액)의 재요청이 오면 THEN 시스템 SHALL Catalog를 다시 호출하지 않고 기존 주문의 현재 상태를 반환한다.
 3. IF 같은 구매자·requestId에 다른 입력이 오면 THEN 시스템 SHALL 409로 거절하고 기존 주문을 보존한다.
 4. WHEN 같은 요청이 동시에 생성되면 THEN 시스템 SHALL DB 유일 제약으로 한 건만 확정하고, 패한 트랜잭션 종료 후 기존 주문을 다시 읽어 동일 입력/충돌 규칙을 적용한다.
-5. WHEN 새 requestId로 같은 상품을 구매하려 하고 기존 주문이 `PENDING`이면 THEN 시스템 SHALL 409 `PURCHASE_IN_PROGRESS`로 거절한다.
-6. WHEN 새 requestId로 같은 상품을 구매하려 하고 기존 주문이 `PAID`이면 THEN 시스템 SHALL 409 `PRODUCT_ALREADY_PURCHASED`로 거절한다.
-7. WHERE 같은 상품의 기존 주문이 최종 `FAILED` 또는 `EXPIRED`인 맥락에서만 THE 시스템 SHALL 새 requestId의 새 주문을 허용한다. `PENDING`·`PAYMENT_PROCESSING`·`PAID`는 한 구매 슬롯을 공유하며, 서비스 검사와 구매자·상품 ID/코드 유일 제약으로 동시 생성도 제한한다.
-8. THE 시스템 SHALL 결제 미확정·시간 경과·License 지급 지연만으로 구매 제한을 풀지 않는다.
+5. WHEN 새 requestId로 같은 상품을 구매하면 THEN 시스템 SHALL 기존 주문의 상태(`PENDING`·`PAYMENT_PROCESSING`·`PAID`·환불 완료 포함)와 무관하게 새 주문을 만든다. 구매를 막는 업무 사유는 판매 금지(R1의 공개·판매 상태)뿐이다(결정 89).
+6. THE 중복 청구 방지 SHALL 같은 requestId 멱등(R2-1~4)이 맡고, 이미 가진 상품의 중복 보유는 License가 라이브러리 등록에서 막는다. 같은 상품을 다시 산 구매분은 License 보관함에 남는다(결정 90·93).
+7. THE 시스템 SHALL 구매자·상품 단위의 구매 슬롯·유일 제약을 두지 않는다(V28에서 제거).
 9. IF Catalog 조회·기대 값 검증이 실패했는데 같은 requestId 주문이 그사이 먼저 확정됐으면 THEN 시스템 SHALL 원래 오류 대신 기존 주문에 동일 입력/충돌 규칙을 적용한다. Catalog 중단 중에도 기존 주문 조회·동일 요청 재조회는 제공한다.
 
 ### R3. 결제 생명주기 상태와 30분 고정 기한
@@ -110,6 +109,8 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 2. WHEN `RefundExecutionSucceeded`가 금융 확인보다 늦게 또는 먼저 도착하면 THEN 시스템 SHALL 도착 순서와 무관하게 최초 금융 확인 ID·시각·출처와 시도 `SUCCEEDED`를 보존하고 조사 표시만 해제한다. 같은 이벤트·내용의 재전달은 무효과다.
 3. WHEN 검증된 `RefundExecutionFailed`를 받으면 THEN 시스템 SHALL 시도 `FAILED`·Inbox·`LicenseRestorationRequested` Outbox·`PENDING_LICENSE_RESTORATION`을 원자 저장하고, 현재 요청·시도·정지·구매와 일치하는 실제 `LicenseRestored`를 확인한 뒤에만 환불 `FAILED`로 마친다. 복구 요청 저장만으로 복구 완료라 하지 않는다.
 4. THE 시스템 SHALL 과거 정지·복구 메시지로 다른(새) 정지를 바꾸지 않고, 확정 실패 뒤 새 실행 시도를 자동으로 만들지 않는다. 시간 경과·타임아웃만으로 실패·복구하지 않는다.
+5. WHEN 환불을 처음 `COMPLETED`로 확정하면 THEN 시스템 SHALL 같은 트랜잭션에 `PurchaseRefunded`(refundId·licenseId·orderNo·구매자·상품·paymentId·현재 정지 요청 ID, 키 orderNo) Outbox를 저장해 License가 구매를 끝내게 한다. 재전달은 다시 발행하지 않는다(결정 96). `PurchaseRefunded` 도입 전에 끝난 환불은 V30이 같은 본문으로 한 번 채운다(결정 99).
+6. WHEN 복구 완료(`LicenseRestored`·`LicenseApprovalCorrected`)의 `returnedToStorage`가 true면 THEN 시스템 SHALL 환불에 남기고 고객 환불 응답의 `purchaseReturnedToStorage`로 보여 준다. 따로 알리지 않는다(결정 98).
 
 ### R8. 환불 확장: 명시적 재시도·재심사·잘못된 승인 중단·지연 안내
 **사용자 스토리:** 구매자로서, 실패·반려 뒤 다시 요청하고 지연 사유를 알고 싶다. 운영자로서, 잘못 승인한 환불을 PG 실행 전에 멈추고 싶다.
@@ -134,7 +135,6 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 ## 범위 밖(후속)
 
 - 장바구니·복수 상품·수량 선택·선물·쿠폰·할인 조합·다중 통화·무료 상품 지급.
-- 환불 후 재구매(P4) 허용/불허와 새 구매·권한 연결·과거 이벤트 격리 — 후속 논의로 유지.
 - 지급 확인 누락의 근거 기반 복구(G2 P3는 License 측 이벤트 복구로 완료, Order 측 연계 확장은 후속).
 - 환불 조사 이후 조치·종결 기준(조사 기록과 금융/이용권 조치·종결의 구분), 실제 ADMIN 계정·운영 화면의 수동 심사·재심사·승인 중단 전체 여정.
 - 부분 환불·다중 PG·조사 종결/담당 배정 등 운영·성능 고도화.

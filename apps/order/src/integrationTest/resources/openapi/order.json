@@ -728,6 +728,10 @@
             "description" : "현재 환불 결과 확인이 지연될 때 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
             "type" : "null"
           },
+          "purchaseReturnedToStorage" : {
+            "description" : "환불 확정 실패로 복구할 때 같은 상품의 다른 보유권이 이미 쓰이고 있어 이 구매분이 보관함으로 돌아갔으면 true",
+            "type" : "boolean"
+          },
           "receivedAt" : {
             "format" : "date-time",
             "type" : "string"

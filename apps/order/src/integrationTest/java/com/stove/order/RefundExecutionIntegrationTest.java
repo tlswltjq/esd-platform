@@ -452,7 +452,7 @@ class RefundExecutionIntegrationTest {
     private LicenseRestorationConfirmation restored(Fixture fixture, RefundAttempt attempt) {
         return new LicenseRestorationConfirmation(id(), EXECUTION_AT.plusSeconds(3), attempt.getRestorationRequestEventId(), attempt.getRefundId(),
                 attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(), fixture.order().getOrderNo(), fixture.order().getBuyerSubject(),
-                fixture.order().getProductId(), fixture.order().getProductCode(), fixture.order().getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId());
+                fixture.order().getProductId(), fixture.order().getProductCode(), fixture.order().getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId(), false);
     }
 
     private RefundPaymentConfirmation confirmation(Fixture fixture) {

@@ -44,7 +44,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
@@ -140,14 +139,17 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
         assertThat(next.getStatus()).isEqualTo(OrderStatus.PENDING);
     }
 
-    @Test void processingBlocksNewPurchasesInBothTheServiceAndTheDatabase() {
+    /** 결정 89: 결제 진행 중인 주문도 같은 상품의 새 주문을 막지 않는다. 서비스와 DB 어느 쪽에도 구매 슬롯이 없다. */
+    @Test void processingDoesNotBlockNewPurchasesInTheServiceOrTheDatabase() {
         Order order = saved("usr_buyer");
         begin.execute(input(order)).orElseThrow();
-        assertThatThrownBy(() -> create.execute("usr_buyer", request())).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> jdbc.update("INSERT INTO purchase_order(order_no,buyer_subject,request_id,product_id,product_code,title,content_version,list_amount,discount_amount,amount,currency,status,request_event_id,created_at,updated_at) "
+        Order next = create.execute("usr_buyer", request());
+        assertThat(next.getOrderNo()).isNotEqualTo(order.getOrderNo());
+        jdbc.update("INSERT INTO purchase_order(order_no,buyer_subject,request_id,product_id,product_code,title,content_version,list_amount,discount_amount,amount,currency,status,request_event_id,created_at,updated_at) "
                 + "SELECT ?,buyer_subject,?,product_id,product_code,title,content_version,list_amount,discount_amount,amount,currency,'PENDING',?,created_at,updated_at FROM purchase_order WHERE order_no=?",
-                id(), id(), id(), order.getOrderNo())).isInstanceOf(DataIntegrityViolationException.class);
-        assertThat(orders.count()).isEqualTo(1);
+                id(), id(), id(), order.getOrderNo());
+        assertThat(stored(order).getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
+        assertThat(orders.count()).isEqualTo(3);
     }
 
     @Test void anAdmittedPaymentCompletesAfterThirtyMinutesAndPublishesThePaidFact() {

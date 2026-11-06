@@ -2,6 +2,7 @@
 """Verify License against completed Auth/Gateway/Studio/Review/Catalog/Store/Order/Payment in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
 import secrets
@@ -11,7 +12,9 @@ output_root=repo/"runs"
 output_root.mkdir(exist_ok=True)
 directory=Path(tempfile.mkdtemp(prefix="stove-license-check-",dir=output_root))
 project=directory.name
-offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","31000"))
+# 앱 포트는 리눅스 임시 포트 범위(32768-60999) 밖에 둔다. 31000이면 Review가 39086이 되어, 같은 실행의 다른
+# 프로세스가 밖으로 연결할 때 잡은 임시 포트와 겹쳐 "Port already in use"로 멈췄다(2026-11-06).
+offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084}
 for port in apps.values():
     with socket.socket() as sock:
@@ -126,7 +129,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=(),fault=False):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
         if fault:
@@ -187,22 +190,22 @@ try:
     evidence_counts(0,0)
     restart_payment()
     phase("approvedOrderGrantsOneProduct")
-    evidence_counts(1,1)
+    evidence_counts(2,2)
     first=sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")
     pg.start("DECLINED")
     phase("declinedOrderDoesNotAddAPurchase")
-    evidence_counts(1,1)
+    evidence_counts(2,2)
     restart_payment()
     phase("rejectsRepurchaseAndRetriesAFailedOrder")
-    evidence_counts(2,2)
-    phase("anotherBuyerGetsASeparateRight")
     evidence_counts(3,3)
+    phase("anotherBuyerGetsASeparateRight")
+    evidence_counts(4,4)
     stop_app("license")
     phase("payWhileLicenseIsStopped")
-    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",4,"Four paid orders while License stopped")
-    evidence_counts(3,3)
-    start_app("license"); wait_for(apps_ready,"License catches up",180)
+    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",5,"Five paid orders while License stopped")
     evidence_counts(4,4)
+    start_app("license"); wait_for(apps_ready,"License catches up",180)
+    evidence_counts(5,5)
     phase("catchesUpAfterLicenseRestart")
 
     marker=directory/"after-commit"
@@ -215,22 +218,22 @@ try:
     assert item[1].returncode==91
     event_id=marker.read_text()
     before=sql("SELECT CONCAT(id,'|',license_id,'|',event_id,'|',acquired_at,'|',received_at) FROM stove_license.product_license WHERE event_id='"+event_id+"'")
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     restart_license(fault_arguments,True)
     wait_for(lambda:Path(str(marker)+".deliveries").read_text().splitlines().count(event_id)>=2,"Original OrderPaid redelivered after unacknowledged commit",90)
     phase("redeliveryAfterUnacknowledgedCommitPreservesTheRight")
     assert sql("SELECT CONCAT(id,'|',license_id,'|',event_id,'|',acquired_at,'|',received_at) FROM stove_license.product_license WHERE event_id='"+event_id+"'")==before
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     restart_license()
 
     restart_payment(["--stove.payment.processing-enabled=false"])
     phase("preparePaymentBeforeOrderRelayPause")
     stop_app("order"); start_app("order",["--stove.outbox.relay-enabled=false"]); wait_for(apps_ready,"Order relay paused",180)
     restart_payment()
-    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",6,"Six paid orders")
+    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",7,"Seven paid orders")
     check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'",1,"Original OrderPaid stored with relay paused")
     original=sql("SELECT CONCAT(event_id,'|',payload) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'")
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     stop_app("catalog")
     subprocess.run(docker+["stop","kafka"],check=True)
     stop_app("order"); start_app("order",["--stove.outbox.relay-enabled=false"]); wait_for(apps_ready,"Order restarted while broker and Catalog stopped",180)
@@ -238,7 +241,7 @@ try:
     assert sql("SELECT CONCAT(event_id,'|',payload) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'")==original
     subprocess.run(docker+["start","kafka"],check=True)
     stop_app("order"); start_app("order"); wait_for(apps_ready,"Order relay recovered",180)
-    evidence_counts(6,6)
+    evidence_counts(7,7)
     phase("catchesUpOriginalPaidOutboxAndReplaysIt")
     replay=json.loads((directory/"license.json").read_text())
     original_id=original.split("|",1)[0]
@@ -248,26 +251,53 @@ try:
     check("SELECT status FROM stove_order.outbox_event WHERE event_id='"+original_id+"'","SENT","Original OrderPaid sent")
     restart_license()
     phase("ownershipSecurityAndStableRightsAfterRestart")
-    evidence_counts(6,6)
+    evidence_counts(7,7)
     assert sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")==first
-    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="7"
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="8"
     assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
-    # Seven orders: six approved, one declined. New OrderPaid records never create another payment.
+    # Eight orders: seven approved (one is a repurchase kept in storage), one declined. New OrderPaid records never create another payment.
     for table in ["purchase_payment","processed_event","outbox_event"]:
-        assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="7",table
-    assert sql("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid'")=="6"
+        assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="8",table
+    assert sql("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid'")=="7"
     assert sql("SELECT COUNT(*) FROM stove_license.product_license l "
         "JOIN stove_order.purchase_order o ON l.order_no=o.order_no "
         "JOIN stove_order.outbox_event e ON e.event_type='OrderPaid' AND e.event_id=l.event_id AND e.aggregate_id=o.order_no "
         "WHERE o.status='PAID' AND l.occurred_at=o.updated_at AND l.request_event_id=o.request_event_id "
         "AND l.payment_result_event_id=o.payment_result_event_id AND l.payment_id=o.payment_id "
         "AND l.buyer_subject=o.buyer_subject AND l.product_id=o.product_id AND l.product_code=o.product_code "
-        "AND l.title=o.title AND l.content_version=o.content_version AND l.amount=o.amount AND l.currency=o.currency")=="6"
+        "AND l.title=o.title AND l.content_version=o.content_version AND l.amount=o.amount AND l.currency=o.currency")=="7"
 
     assert sql("SELECT COUNT(*) FROM stove_license.product_license WHERE order_no=(SELECT order_no FROM stove_order.purchase_order WHERE status='FAILED')")=="0"
-    (directory/"summary.json").write_text(json.dumps({"phases":13,"rights":6,"inbox":6,"orders":7,
+
+    # 결정 93~97·100: 등록 → 자동 환불 → PG 결과만 주입 → 환불 완료 → License 종료 → 같은 상품 재구매·등록.
+    # 격리 스택의 Payment는 PortOne 자격이 없어(SIMULATED, refund-execution 비활성) 실행 요청을 받기만 하고 PG 취소를 보내지 않는다.
+    # 앞 단계가 장애 시험으로 끈 Catalog를 다시 켠다. 새 주문은 Catalog 공개 상품을 확인한다.
+    start_app("catalog"); wait_for(apps_ready,"Catalog restarted for refund repurchase",180)
+    phase("refundStartsForARegisteredPurchase")
+    state=json.loads((directory/"license.json").read_text())
+    refund_order=state["refund"]["orderNo"]
+    check("SELECT status FROM stove_order.order_refund WHERE order_no='"+refund_order+"'","PENDING_PAYMENT_REFUND","Refund waits for the PG result")
+    check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='RefundExecutionRequested' AND aggregate_id='"+refund_order+"' AND status='SENT'",1,"Refund execution request sent")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+refund_order+"'","SUSPENDED","Refunded purchase suspended")
+    fields=sql("SELECT CONCAT_WS('|',r.refund_id,r.current_attempt_id,a.execution_request_event_id,o.payment_id,o.buyer_subject,o.amount,o.currency) "
+        "FROM stove_order.order_refund r JOIN stove_order.order_refund_attempt a ON a.attempt_id=r.current_attempt_id "
+        "JOIN stove_order.purchase_order o ON o.order_no=r.order_no WHERE r.order_no='"+refund_order+"'").split("|")
+    state["refundConfirmation"]={"orderNo":refund_order,"refundId":fields[0],"attemptId":fields[1],"requestEventId":fields[2],
+        "paymentId":fields[3],"buyerSubject":fields[4],"amount":int(fields[5]),"currency":fields[6]}
+    (directory/"license.json").write_text(json.dumps(state))
+    phase("repurchaseAfterRefundCompletes")
+    state=json.loads((directory/"license.json").read_text())
+    again=state["refundRepurchase"]["orderNo"]
+    check("SELECT status FROM stove_order.order_refund WHERE order_no='"+refund_order+"'","COMPLETED","Refund completed")
+    check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='PurchaseRefunded' AND aggregate_id='"+refund_order+"'",1,"Exactly one PurchaseRefunded")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+refund_order+"'","REFUNDED","Refunded purchase ended")
+    check("SELECT GROUP_CONCAT(status) FROM stove_license.license_registration WHERE order_no='"+refund_order+"'","ENDED","Refunded registration ended")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+again+"'","REGISTERED","Repurchase registered")
+    check("SELECT COUNT(*) FROM stove_license.license_registration WHERE status='ACTIVE' AND buyer_subject=(SELECT buyer_subject FROM stove_order.purchase_order WHERE order_no='"+again+"')",1,"One ACTIVE license after repurchase")
+    check("SELECT status FROM stove_order.purchase_order WHERE order_no='"+again+"'","PAID","Repurchase paid")
+    (directory/"summary.json").write_text(json.dumps({"phases":15,"rights":9,"inbox":9,"orders":10,"refundOrder":refund_order,"refundRepurchaseOrder":again,
         "beforeAckEventId":event_id,"replayedEventId":original_id,"firstRight":first},indent=2))
-    print("PASS: nine apps; approval/decline/pending; duplicate purchase rejection, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay (13 phases)",flush=True)
+    print("PASS: nine apps; approval/decline/pending; repurchase kept in storage, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay; refund completion then repurchase and registration (15 phases)",flush=True)
 
 finally:
     pg.stop()
