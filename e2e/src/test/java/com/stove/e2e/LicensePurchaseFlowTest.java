@@ -12,6 +12,7 @@ import static com.stove.e2e.ReviewJourney.path;
 import static com.stove.e2e.ReviewJourney.project;
 import static com.stove.e2e.ReviewJourney.registeredLibrary;
 import static com.stove.e2e.ReviewJourney.repurchaseStaysInStorage;
+import static com.stove.e2e.ReviewJourney.storageItem;
 import static com.stove.e2e.ReviewJourney.request;
 import static com.stove.e2e.ReviewJourney.reviewPath;
 import static com.stove.e2e.ReviewJourney.waitForResult;
@@ -23,10 +24,13 @@ import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -200,6 +204,67 @@ class LicensePurchaseFlowTest {
             });
         }
     }
+    /**
+     * 결정 93·94: 등록한 구매를 4시간 안에 환불 요청하면 자동 승인되고 License가 구매 근거·보유권을 정지한다.
+     * 격리 스택의 Payment는 PortOne 자격이 없어 실행 요청을 받기만 하고 PG 취소를 보내지 않는다. 다음 단계에서 PG 결과만 넣는다.
+     */
+    @Test void refundStartsForARegisteredPurchase() throws Exception {
+        ObjectNode s = saved(); Account buyer = newBuyer(s, "refund"); create(s, "refund", buyer); state(s, "refund", buyer, "PAID");
+        JsonNode registered = library(s, buyer); s.set("refundLicense", registered); save(s);
+        String no = s.path("refund").path("orderNo").asText();
+        E2eClient.Response requested = Stove.gateway.post("/api/v1/orders/" + no + "/refund", null, buyer.headers());
+        assertThat(requested.status()).as(requested.toString()).isBetween(200, 202);
+        Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            assertThat(get("orders", no + "/refund", buyer).path("status").asText()).isEqualTo("PROCESSING");
+            assertThat(get("library", code(s), buyer).path("status").asText()).isEqualTo("SUSPENDED");
+        });
+    }
+
+    /**
+     * 결정 96·97·89: PG 전액 취소 결과(RefundPaymentConfirmed)를 Payment처럼 Kafka에 넣으면 Order가 환불을 끝내고
+     * PurchaseRefunded로 License가 구매를 끝낸다. 라이브러리에서 빠진 뒤 같은 상품을 다시 사서 등록하면 새 보유권이 ACTIVE다.
+     */
+    @Test void repurchaseAfterRefundCompletes() throws Exception {
+        ObjectNode s = saved(); Account buyer = buyer(s, "refund"); JsonNode refund = s.path("refundConfirmation");
+        String no = refund.path("orderNo").asText();
+        RefundPaymentConfirmedEvent confirmed = new RefundPaymentConfirmedEvent(UUID.randomUUID().toString(),
+                Instant.now().truncatedTo(ChronoUnit.MICROS), refund.path("refundId").asText(), refund.path("attemptId").asText(),
+                refund.path("requestEventId").asText(), no, refund.path("paymentId").asText(), refund.path("buyerSubject").asText(),
+                refund.path("amount").asLong(), refund.path("currency").asText(), "PG_QUERY_UNATTRIBUTED", "e2e-pg-" + no,
+                List.of("e2e-cancel-" + refund.path("refundId").asText()));
+        HashMap<String, Object> config = new HashMap<>(); config.put("bootstrap.servers", System.getProperty("stove.e2e.kafka-brokers"));
+        config.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer"); config.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(config)) {
+            ProducerRecord<String, String> record = new ProducerRecord<>(confirmed.topic(), confirmed.partitionKey(), JSON.writeValueAsString(confirmed));
+            record.headers().add(EventHeaders.EVENT_ID, confirmed.eventId().getBytes(StandardCharsets.UTF_8));
+            record.headers().add(EventHeaders.EVENT_TYPE, confirmed.eventType().getBytes(StandardCharsets.UTF_8));
+            producer.send(record).get(15, TimeUnit.SECONDS);
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            assertThat(get("orders", no + "/refund", buyer).path("status").asText()).isEqualTo("COMPLETED");
+            assertThat(Stove.gateway.get("/api/v1/library/" + code(s), buyer.headers()).status()).isEqualTo(404);
+        });
+        assertThat(storageItem(buyer, no).isMissingNode()).as("환불이 끝난 구매는 보관함에서도 빠진다").isTrue();
+        assertThat(Stove.gateway.get("/api/v1/library", buyer.headers()).data().path("totalElements").asInt()).isZero();
+
+        create(s, "refundRepurchase", buyer); state(s, "refundRepurchase", buyer, "PAID");
+        String again = s.path("refundRepurchase").path("orderNo").asText();
+        JsonNode[] item = new JsonNode[1];
+        Awaitility.await().atMost(Duration.ofSeconds(50)).untilAsserted(() -> {
+            item[0] = storageItem(buyer, again);
+            assertThat(item[0].isMissingNode()).as("재구매 보관함 항목").isFalse();
+            assertThat(item[0].path("registrable").asBoolean()).isTrue();
+        });
+        E2eClient.Response registered = Stove.gateway.post("/api/v1/storage/" + item[0].path("licenseId").asText() + "/registration", null, buyer.headers());
+        assertThat(registered.status()).as(registered.toString()).isEqualTo(200);
+        JsonNode license = get("library", code(s), buyer);
+        assertThat(license.path("status").asText()).isEqualTo("ACTIVE");
+        assertThat(license.path("licenseId").asText()).isEqualTo(item[0].path("licenseId").asText())
+                .isNotEqualTo(s.path("refundLicense").path("licenseId").asText());
+        assertThat(get("orders", no + "/refund", buyer).path("status").asText()).isEqualTo("COMPLETED");
+        s.set("refundRepurchaseLicense", license); save(s);
+    }
+
     @Test void ownershipSecurityAndStableRightsAfterRestart() throws Exception {
         ObjectNode s = saved(); stableLibrary(s); Account buyer = buyer(s); Account other = other(s);
         assertThat(library(s, other)).isEqualTo(s.path("otherLicense"));

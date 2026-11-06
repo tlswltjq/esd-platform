@@ -2,6 +2,7 @@
 """Verify License against completed Auth/Gateway/Studio/Review/Catalog/Store/Order/Payment in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
 import secrets
@@ -11,7 +12,9 @@ output_root=repo/"runs"
 output_root.mkdir(exist_ok=True)
 directory=Path(tempfile.mkdtemp(prefix="stove-license-check-",dir=output_root))
 project=directory.name
-offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","31000"))
+# 앱 포트는 리눅스 임시 포트 범위(32768-60999) 밖에 둔다. 31000이면 Review가 39086이 되어, 같은 실행의 다른
+# 프로세스가 밖으로 연결할 때 잡은 임시 포트와 겹쳐 "Port already in use"로 멈췄다(2026-11-06).
+offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084}
 for port in apps.values():
     with socket.socket() as sock:
@@ -126,7 +129,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=(),fault=False):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
         if fault:
@@ -265,9 +268,36 @@ try:
         "AND l.title=o.title AND l.content_version=o.content_version AND l.amount=o.amount AND l.currency=o.currency")=="7"
 
     assert sql("SELECT COUNT(*) FROM stove_license.product_license WHERE order_no=(SELECT order_no FROM stove_order.purchase_order WHERE status='FAILED')")=="0"
-    (directory/"summary.json").write_text(json.dumps({"phases":13,"rights":7,"inbox":7,"orders":8,
+
+    # 결정 93~97·100: 등록 → 자동 환불 → PG 결과만 주입 → 환불 완료 → License 종료 → 같은 상품 재구매·등록.
+    # 격리 스택의 Payment는 PortOne 자격이 없어(SIMULATED, refund-execution 비활성) 실행 요청을 받기만 하고 PG 취소를 보내지 않는다.
+    # 앞 단계가 장애 시험으로 끈 Catalog를 다시 켠다. 새 주문은 Catalog 공개 상품을 확인한다.
+    start_app("catalog"); wait_for(apps_ready,"Catalog restarted for refund repurchase",180)
+    phase("refundStartsForARegisteredPurchase")
+    state=json.loads((directory/"license.json").read_text())
+    refund_order=state["refund"]["orderNo"]
+    check("SELECT status FROM stove_order.order_refund WHERE order_no='"+refund_order+"'","PENDING_PAYMENT_REFUND","Refund waits for the PG result")
+    check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='RefundExecutionRequested' AND aggregate_id='"+refund_order+"' AND status='SENT'",1,"Refund execution request sent")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+refund_order+"'","SUSPENDED","Refunded purchase suspended")
+    fields=sql("SELECT CONCAT_WS('|',r.refund_id,r.current_attempt_id,a.execution_request_event_id,o.payment_id,o.buyer_subject,o.amount,o.currency) "
+        "FROM stove_order.order_refund r JOIN stove_order.order_refund_attempt a ON a.attempt_id=r.current_attempt_id "
+        "JOIN stove_order.purchase_order o ON o.order_no=r.order_no WHERE r.order_no='"+refund_order+"'").split("|")
+    state["refundConfirmation"]={"orderNo":refund_order,"refundId":fields[0],"attemptId":fields[1],"requestEventId":fields[2],
+        "paymentId":fields[3],"buyerSubject":fields[4],"amount":int(fields[5]),"currency":fields[6]}
+    (directory/"license.json").write_text(json.dumps(state))
+    phase("repurchaseAfterRefundCompletes")
+    state=json.loads((directory/"license.json").read_text())
+    again=state["refundRepurchase"]["orderNo"]
+    check("SELECT status FROM stove_order.order_refund WHERE order_no='"+refund_order+"'","COMPLETED","Refund completed")
+    check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='PurchaseRefunded' AND aggregate_id='"+refund_order+"'",1,"Exactly one PurchaseRefunded")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+refund_order+"'","REFUNDED","Refunded purchase ended")
+    check("SELECT GROUP_CONCAT(status) FROM stove_license.license_registration WHERE order_no='"+refund_order+"'","ENDED","Refunded registration ended")
+    check("SELECT status FROM stove_license.product_license WHERE order_no='"+again+"'","REGISTERED","Repurchase registered")
+    check("SELECT COUNT(*) FROM stove_license.license_registration WHERE status='ACTIVE' AND buyer_subject=(SELECT buyer_subject FROM stove_order.purchase_order WHERE order_no='"+again+"')",1,"One ACTIVE license after repurchase")
+    check("SELECT status FROM stove_order.purchase_order WHERE order_no='"+again+"'","PAID","Repurchase paid")
+    (directory/"summary.json").write_text(json.dumps({"phases":15,"rights":9,"inbox":9,"orders":10,"refundOrder":refund_order,"refundRepurchaseOrder":again,
         "beforeAckEventId":event_id,"replayedEventId":original_id,"firstRight":first},indent=2))
-    print("PASS: nine apps; approval/decline/pending; repurchase kept in storage, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay (13 phases)",flush=True)
+    print("PASS: nine apps; approval/decline/pending; repurchase kept in storage, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay; refund completion then repurchase and registration (15 phases)",flush=True)
 
 finally:
     pg.stop()
