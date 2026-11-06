@@ -30,7 +30,7 @@ class RefundRestorationEventListenerTest {
     }
     @Test void aRestorationClaimOnThePaymentTopicCannotCompleteTheWorkflow() throws Exception {
         LicenseRestoredEvent event = new LicenseRestoredEvent(id(), Instant.parse("2026-10-27T01:03:00Z"), id(), id(), id(), id(), id(), id(),
-                "buyer", 1L, "PRODUCT-1", "payment-1", id(), id());
+                "buyer", 1L, "PRODUCT-1", "payment-1", id(), id(), false);
         assertThatThrownBy(() -> listener.receive(record(event, Topics.PAYMENT))).isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }

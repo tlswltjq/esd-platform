@@ -138,7 +138,9 @@ class RefundReviewIntegrationTest extends OrderIntegrationTestBase {
                 paid.getCurrency(), "PG_RESPONSE", "provider-transaction", List.of("full-cancel")));
         assertThat(customer("GET", paid).data().path("status").asText()).isEqualTo("COMPLETED");
         assertThat(decision(pending, command, "admin").data()).isEqualTo(first.data());
-        assertThat(count("order_refund_attempt")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(2);
+        // 정지 요청·실행 요청 + 환불 완료 사실(PurchaseRefunded, 결정 96)
+        assertThat(count("order_refund_attempt")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='PurchaseRefunded'", Integer.class)).isEqualTo(1);
         assertThat(orders.findById(paid.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
     }
 

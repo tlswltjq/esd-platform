@@ -65,8 +65,7 @@ class SettlementPurchaseFlowTest {
     }
     static void verifyDownload(JsonNode product,Account buyer,byte[] zip) throws Exception {
         String code=product.path("productCode").asText();
-        Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
-                assertThat(Stove.gateway.get("/api/v1/library/"+code,buyer.headers()).status()).isEqualTo(200));
+        ReviewJourney.registeredLibrary(buyer,code);
         E2eClient.Response ticket=Stove.gateway.get("/api/v1/downloads/"+code+"/ticket",buyer.headers());
         assertThat(ticket.status()).isEqualTo(200);verifyZip(ticket.data(),zip);
     }

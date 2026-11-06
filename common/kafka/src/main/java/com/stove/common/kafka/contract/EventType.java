@@ -51,6 +51,8 @@ public final class EventType {
     public static final String LICENSE_SUSPENSION_REQUESTED = "LicenseSuspensionRequested";
     public static final String REFUND_EXECUTION_REQUESTED = "RefundExecutionRequested";
     public static final String REFUND_EXECUTION_PREPARED = "RefundExecutionPrepared";
+    /** Order가 전액 환불 완료를 확정했음을 나타낸다. */
+    public static final String PURCHASE_REFUNDED = "PurchaseRefunded";
     public static final String ORDER_EXPIRED = "OrderExpired";
     public static final String ORDER_PLACED = "OrderPlaced";
     public static final String ORDER_PAYMENT_COMPLETED = "OrderPaymentCompleted";

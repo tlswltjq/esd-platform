@@ -104,8 +104,7 @@ class DownloadPurchaseFlowTest {
     }
     @Test void paidOrderDownloadsOriginalZip() throws Exception {
         ObjectNode state = saved(); Account buyer = buyer(state); waitPaid(state.path("orderNo").asText(), buyer, "PAID");
-        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(Stove.gateway.get("/api/v1/library/" + code(state), buyer.headers()).status()).isEqualTo(200));
-        state.set("license", Stove.gateway.get("/api/v1/library/" + code(state), buyer.headers()).data());
+        state.set("license", ReviewJourney.registeredLibrary(buyer, code(state)));
         JsonNode result = ticket(state, buyer); verifyZip(result, Base64.getDecoder().decode(state.path("zip").asText()));
         assertThat(result.path("version").asText()).isEqualTo("1"); save(state);
     }

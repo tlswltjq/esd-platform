@@ -67,6 +67,7 @@ public class ApplyApprovalCorrection {
         if (changed) {
             Instant at=clock.instant(); RefundReviewRound next=RefundReviewRound.correctApproval(round,at);
             refund.reopenStoppedApproval(round,next,at); rounds.save(next);
+            refund.recordApprovalCorrectionRestoration(input.returnedToStorage());
         }
         entityManager.flush();
     }

@@ -43,6 +43,9 @@ public class Refund {
     @Column(unique = true, length = 64)
     private String paymentConfirmationEventId;
     private Instant completedAt;
+    /** 확정 실패·승인 정정 복구 때 다른 보유권이 쓰이고 있어 구매분이 보관함으로 돌아갔는지(결정 96·98). */
+    @Column(nullable = false)
+    private boolean purchaseReturnedToStorage;
     @Column(length = 64)
     private String paymentConfirmationFingerprint;
     @Column(length = 30)
@@ -153,7 +156,10 @@ public class Refund {
         if (!input.attemptId().equals(currentAttemptId) || status != RefundStatus.PENDING_LICENSE_RESTORATION)
             throw new RefundCompletionRejected("복구 완료가 현재 복구 대기와 다릅니다.");
         boolean changed = attempt.recordRestoration(input);
-        if (changed) status = RefundStatus.FAILED;
+        if (changed) {
+            status = RefundStatus.FAILED;
+            purchaseReturnedToStorage = input.returnedToStorage();
+        }
         return changed;
     }
 
@@ -162,6 +168,11 @@ public class Refund {
                 || !orderNo.equals(order.getOrderNo()) || !payment.equals(order.getPaymentId()) || !buyer.equals(order.getBuyerSubject())
                 || !execution.equals(attempt.getAttemptId()) || !refundId.equals(attempt.getRefundId()))
             throw new RefundCompletionRejected("실패·복구 근거가 현재 주문·환불·시도와 다릅니다.");
+    }
+
+    /** 승인 정정 복구 결과의 보관함 반환 여부를 남긴다. */
+    public void recordApprovalCorrectionRestoration(boolean returnedToStorage) {
+        purchaseReturnedToStorage = returnedToStorage;
     }
 
     public boolean recordExecutionSuccess(Order order, RefundAttempt attempt, RefundExecutionSuccess input) {

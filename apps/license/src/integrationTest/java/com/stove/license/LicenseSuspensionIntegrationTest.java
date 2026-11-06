@@ -19,12 +19,13 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
 import com.stove.license.core.domain.LicenseRepository;
-import com.stove.license.core.domain.LicenseStatus;
+import com.stove.license.core.domain.PurchaseStatus;
 import com.stove.license.core.domain.LicenseSuspensionRepository;
 import com.stove.license.core.domain.PaidOrder;
 import com.stove.license.core.domain.SuspensionRequest;
 import com.stove.license.core.service.ApplyLicenseSuspension;
 import com.stove.license.core.service.GrantLicense;
+import com.stove.license.core.service.RegisterLicense;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -51,6 +52,7 @@ import org.springframework.web.client.RestClient;
 
 class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
     @Autowired GrantLicense grant;
+    @Autowired RegisterLicense register;
     @Autowired ApplyLicenseSuspension apply;
     @Autowired LicenseRepository licenses;
     @Autowired LicenseSuspensionRepository suspensions;
@@ -67,7 +69,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
         listeners.stop();
         jdbc.update("DELETE FROM license_suspension");
         jdbc.update("DELETE FROM license_purchase");
-        jdbc.update("DELETE FROM product_license");
+        jdbc.update("DELETE FROM license_registration"); jdbc.update("DELETE FROM product_license");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
     }
@@ -78,7 +80,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
         SuspensionRequest input = request(original);
         apply.execute(input);
         License stored = licenses.findByOrderNo(original.getOrderNo()).orElseThrow();
-        assertThat(stored.getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+        assertThat(stored.getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
         assertThat(stored.paidOrder()).isEqualTo(purchase);
         assertThat(stored.getAcquiredAt()).isEqualTo(original.getAcquiredAt());
         assertThat(stored.getSuspensionRequestEventId()).isEqualTo(input.eventId());
@@ -97,7 +99,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
         assertThat(event.paymentId()).isEqualTo(original.getPaymentId());
         assertThat(event.eventId()).isEqualTo(suspensions.findByRequestEventId(input.eventId()).orElseThrow().getCompletedEventId());
         grant.execute(purchase);
-        assertThat(licenses.findByOrderNo(original.getOrderNo()).orElseThrow().getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+        assertThat(licenses.findByOrderNo(original.getOrderNo()).orElseThrow().getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
         apply.execute(input);
         assertThat(completions()).isEqualTo(1);
     }
@@ -113,7 +115,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
                     }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
             assertThatThrownBy(() -> apply.execute(input)).isInstanceOf(IllegalStateException.class);
             License stored = licenses.findByOrderNo(license.getOrderNo()).orElseThrow();
-            assertThat(stored.getStatus()).isEqualTo(LicenseStatus.ACTIVE);
+            assertThat(stored.getStatus()).isEqualTo(PurchaseStatus.REGISTERED);
             assertThat(stored.getSuspensionRequestEventId()).isNull();
             assertThat(suspensions.count()).isZero();
             assertThat(completions()).isZero();
@@ -175,7 +177,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
             kafka.send(record).get(10, TimeUnit.SECONDS);
         }
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            assertThat(licenses.findByOrderNo(input.orderNo()).orElseThrow().getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+            assertThat(licenses.findByOrderNo(input.orderNo()).orElseThrow().getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
             assertThat(completions()).isEqualTo(1);
         });
     }
@@ -183,6 +185,7 @@ class LicenseSuspensionIntegrationTest extends LicenseIntegrationTestBase {
     private License saved() {
         PaidOrder input = paid();
         grant.execute(input);
+        register.execute(input.buyerSubject(), licenses.findByOrderNo(input.orderNo()).orElseThrow().getLicenseId());
         return licenses.findByOrderNo(input.orderNo()).orElseThrow();
     }
 

@@ -30,6 +30,7 @@ import com.stove.order.core.port.CatalogProducts;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -129,8 +130,6 @@ class CreateOrderTest {
         PublishedProduct published = product();
         when(orders.findByBuyerSubjectAndRequestId(BUYER, input.requestId())).thenReturn(Optional.empty());
         when(catalog.detail(input.productCode())).thenReturn(published);
-        when(orders.findPurchaseConflicts(BUYER, published.productId(), published.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID))).thenReturn(List.of());
         when(orders.saveAndFlush(any(Order.class))).thenAnswer(call -> call.getArgument(0, Order.class));
         allowTransaction();
 
@@ -161,23 +160,21 @@ class CreateOrderTest {
 
     @ParameterizedTest
     @EnumSource(value = OrderStatus.class, names = {"PENDING", "PAID"})
-    void anotherRequestCannotBuyAProductAlreadyPendingOrPaid(OrderStatus previousStatus) {
+    @DisplayName("결정 89: 같은 상품의 기존 주문이 있어도 새 requestId면 새 주문을 만든다. 막는 것은 판매 금지뿐이다")
+    void anotherRequestCanBuyAProductAlreadyPendingOrPaid(OrderStatus previousStatus) {
         OrderRequest input = request();
         PublishedProduct published = product();
         Order previous = Order.create(BUYER, request(), published, id());
         if (previousStatus == OrderStatus.PAID) previous.apply(result(completed(previous)));
         when(catalog.detail(input.productCode())).thenReturn(published);
-        when(orders.findPurchaseConflicts(BUYER, published.productId(), published.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID))).thenReturn(List.of(previous));
+        when(orders.saveAndFlush(any(Order.class))).thenAnswer(call -> call.getArgument(0, Order.class));
         allowTransaction();
 
-        assertThatThrownBy(() -> create.execute(BUYER, input))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        failure -> assertThat(failure.errorCode()).isEqualTo(previousStatus == OrderStatus.PAID
-                                ? OrderErrorCode.PRODUCT_ALREADY_PURCHASED : OrderErrorCode.PURCHASE_IN_PROGRESS));
+        Order created = create.execute(BUYER, input);
 
-        verify(orders, never()).saveAndFlush(any(Order.class));
-        verifyNoInteractions(outbox);
+        assertThat(created.getOrderNo()).isNotEqualTo(previous.getOrderNo());
+        assertThat(created.getStatus()).isEqualTo(OrderStatus.PENDING);
+        verify(outbox).record(eq("PurchaseOrder"), eq(created.getOrderNo()), any(OrderPlacedEvent.class));
     }
 
     @Test
@@ -209,20 +206,18 @@ class CreateOrderTest {
     }
 
     @Test
-    void processingAlsoBlocksAnotherPurchaseRequest() {
+    @DisplayName("결정 89: 결제 진행 중인 같은 상품 주문도 새 주문을 막지 않는다")
+    void processingDoesNotBlockAnotherPurchaseRequest() {
         OrderRequest input = request();
         Order processing = Order.create(BUYER, request(), product(), id());
         processing.beginPaymentProcessing(new PaymentAdmissionInput(id(), processing.getOrderNo(),
                 processing.getRequestEventId(), id(), BUYER, processing.getAmount(), processing.getCurrency()),
                 processing.getCreatedAt());
         when(catalog.detail(input.productCode())).thenReturn(product());
-        when(orders.findPurchaseConflicts(eq(BUYER), eq(1L), eq("Game-1"), any()))
-                .thenAnswer(call -> call.<List<OrderStatus>>getArgument(3).contains(OrderStatus.PAYMENT_PROCESSING)
-                        ? List.of(processing) : List.of());
+        when(orders.saveAndFlush(any(Order.class))).thenAnswer(call -> call.getArgument(0, Order.class));
         allowTransaction();
-        assertThatThrownBy(() -> create.execute(BUYER, input))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        failure -> assertThat(failure.errorCode()).isEqualTo(OrderErrorCode.PURCHASE_IN_PROGRESS));
+
+        assertThat(create.execute(BUYER, input).getOrderNo()).isNotEqualTo(processing.getOrderNo());
     }
 
     private void allowTransaction() {

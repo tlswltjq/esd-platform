@@ -8,11 +8,9 @@ import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderErrorCode;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderRequest;
-import com.stove.order.core.domain.OrderStatus;
 import com.stove.order.core.domain.PublishedProduct;
 import com.stove.order.core.domain.ProductPublicAccess;
 import com.stove.order.core.port.CatalogProducts;
-import java.util.List;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.LockAcquisitionException;
@@ -52,7 +50,7 @@ public class CreateOrder {
                     return transaction.execute(tx -> {
                         Order concurrent = existing(buyer, request);
                         if (concurrent != null) return concurrent;
-                        requirePurchasable(buyer, product);
+                        requirePurchasable(product);
                         Order order = orders.saveAndFlush(Order.create(buyer, request, product, UUID.randomUUID().toString()));
                         OrderPlacedEvent event = new OrderPlacedEvent(order.getRequestEventId(), order.getCreatedAt(),
                                 order.getOrderNo(), buyer, order.getProductId(), order.getProductCode(),
@@ -66,8 +64,7 @@ public class CreateOrder {
                          | LockAcquisitionException collision) {
                     Order concurrent = existing(buyer, request);
                     if (concurrent != null) return concurrent;
-                    if (purchaseCollision(collision)) requirePurchasable(buyer, product);
-                    else if (!(collision instanceof TransientDataAccessException)
+                    if (!(collision instanceof TransientDataAccessException)
                             && !(collision instanceof LockAcquisitionException)) throw collision;
                     if (attempt == 2) throw collision;
                 }
@@ -86,27 +83,8 @@ public class CreateOrder {
         return order;
     }
 
-    private void requirePurchasable(String buyer, PublishedProduct product) {
+    /** 결정 89: 구매를 막는 업무 사유는 판매 금지뿐이다. 중복 청구는 같은 requestId 멱등이 막고, 보유 중복은 License 등록이 막는다. */
+    private void requirePurchasable(PublishedProduct product) {
         ProductPublicAccess.requireNewOrder(product.publicDetailAllowed());
-        List<Order> conflicts = orders.findPurchaseConflicts(buyer, product.productId(), product.productCode(),
-                List.of(OrderStatus.PENDING, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID));
-        if (conflicts.isEmpty()) return;
-        if (conflicts.size() != 1) throw new BusinessException(ErrorCode.CONFLICT, "구매 제한 주문의 상품 연결이 다릅니다.");
-        Order previous = conflicts.getFirst();
-        if (!previous.getProductId().equals(product.productId()) || !previous.getProductCode().equals(product.productCode()))
-            throw new BusinessException(ErrorCode.CONFLICT, "기존 주문의 상품 ID와 코드가 일치하지 않습니다.");
-        throw new BusinessException(previous.getStatus() == OrderStatus.PAID
-                ? OrderErrorCode.PRODUCT_ALREADY_PURCHASED : OrderErrorCode.PURCHASE_IN_PROGRESS);
-    }
-
-    private static boolean purchaseCollision(Throwable failure) {
-        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof ConstraintViolationException constraint) {
-                String name = constraint.getConstraintName();
-                return name != null && (name.contains("uk_purchase_order_buyer_product")
-                        || name.contains("uk_purchase_order_buyer_code"));
-            }
-        }
-        return false;
     }
 }

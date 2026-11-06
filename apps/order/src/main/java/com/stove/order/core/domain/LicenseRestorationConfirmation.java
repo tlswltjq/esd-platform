@@ -2,7 +2,7 @@ package com.stove.order.core.domain;
 
 import java.time.Instant;
 
-public record LicenseRestorationConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId, String attemptId, String failureEventId, String licenseId, String orderNo, String buyerSubject, Long productId, String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId) {
+public record LicenseRestorationConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId, String attemptId, String failureEventId, String licenseId, String orderNo, String buyerSubject, Long productId, String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId, boolean returnedToStorage) {
     public LicenseRestorationConfirmation {
         if (!RefundRestorationValues.text(eventId, 64) || !RefundRestorationValues.time(occurredAt) || !RefundRestorationValues.text(requestEventId, 64)
                 || !RefundRestorationValues.uuid(refundId) || !RefundRestorationValues.uuid(attemptId) || !RefundRestorationValues.uuid(licenseId)
@@ -14,6 +14,6 @@ public record LicenseRestorationConfirmation(String eventId, Instant occurredAt,
     }
     public String fingerprint() {
         return RefundRestorationValues.fingerprint(eventId, occurredAt.toString(), requestEventId, refundId, attemptId, failureEventId,
-                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId);
+                licenseId, orderNo, buyerSubject, productId.toString(), productCode, paymentId, suspensionRequestEventId, suspensionEventId, Boolean.toString(returnedToStorage));
     }
 }

@@ -35,8 +35,10 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
 import com.stove.license.core.domain.LicenseRepository;
 import com.stove.license.core.domain.PaidOrder;
+import com.stove.license.core.domain.PurchaseStatus;
 import com.stove.license.core.service.GrantLicense;
 import com.stove.license.core.service.ReadLicense;
+import com.stove.license.core.service.RegisterLicense;
 import com.stove.license.core.service.SearchLicenses;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -81,6 +83,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     @Autowired
     ReadLicense read;
     @Autowired
+    RegisterLicense register;
+    @Autowired
     JdbcTemplate jdbc;
     @Autowired
     ObjectMapper json;
@@ -104,6 +108,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         listeners.stop();
         jdbc.update("DELETE FROM license_suspension");
         jdbc.update("DELETE FROM license_purchase");
+        jdbc.update("DELETE FROM license_registration");
         jdbc.update("DELETE FROM product_license");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
@@ -134,12 +139,12 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     void duplicateDeliveryPreservesPublicIdTimestampsAndAllEvidence() {
         PaidOrder p = paid();
         grant.execute(p);
-        License license = read.execute(p.buyerSubject(), p.productCode());
+        License license = licenses.findByOrderNo(p.orderNo()).orElseThrow();
         Instant received = licenses.findByOrderNo(p.orderNo()).orElseThrow().getReceivedAt();
         grant.execute(p);
         grant.execute(p);
         counts(1, 1);
-        License duplicate = read.execute(p.buyerSubject(), p.productCode());
+        License duplicate = licenses.findByOrderNo(p.orderNo()).orElseThrow();
         assertThat(duplicate.getLicenseId()).isEqualTo(license.getLicenseId());
         assertThat(duplicate.getAcquiredAt()).isEqualTo(license.getAcquiredAt());
         License evidence = licenses.findByOrderNo(p.orderNo()).orElseThrow();
@@ -148,20 +153,25 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void anotherOrderForTheSameProductIsRejectedWithoutChangingTheOriginalFact() throws Exception {
+    void anotherOrderForTheSameProductIsStoredAsASeparatePurchaseWithoutChangingTheOriginalFact() throws Exception {
+        // 결정 89·93: 같은 상품의 다른 주문도 막지 않고 별도 구매 근거(보관함 항목)로 남긴다.
         PaidOrder first = paid();
         grant.execute(first);
-        License original = read.execute(first.buyerSubject(), first.productCode());
+        License original = licenses.findByOrderNo(first.orderNo()).orElseThrow();
         PaidOrder later = changed(changed(changed(paid(), "title", "Older title"), "contentVersion", 1L), "occurredAt", first.occurredAt().minusSeconds(100));
-        assertThatThrownBy(() -> grant.execute(later)).isInstanceOf(BusinessException.class);
+        grant.execute(later);
         grant.execute(paid("other", 1L, "Game-1"));
-        counts(2, 2);
-        License unchanged = read.execute(first.buyerSubject(), first.productCode());
+        counts(3, 3);
+        License unchanged = licenses.findByOrderNo(first.orderNo()).orElseThrow();
         assertThat(unchanged.getLicenseId()).isEqualTo(original.getLicenseId());
         assertThat(unchanged.getTitle()).isEqualTo(first.title());
         assertThat(unchanged.getAcquiredAt()).isEqualTo(original.getAcquiredAt());
-        assertThat(licenses.findByOrderNo(later.orderNo())).isEmpty();
         assertThat(unchanged.paidOrder()).isEqualTo(first);
+        License second = licenses.findByOrderNo(later.orderNo()).orElseThrow();
+        assertThat(second.getLicenseId()).isNotEqualTo(original.getLicenseId());
+        assertThat(second.paidOrder()).isEqualTo(later);
+        assertThat(List.of(unchanged.getStatus(), second.getStatus())).containsOnly(PurchaseStatus.STORED);
+        assertThat(count("license_registration")).isZero();
     }
 
     @ParameterizedTest
@@ -191,11 +201,13 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void productIdAndCodeMustReferToTheSameOwnedRight() {
+    void productIdOrCodeVariantsAreSeparatePurchasesAndDoNotCreateLicenses() {
+        // 구매 근거는 주문 단위다. 상품 ID·코드 대응은 Catalog 정본이 맡고, 보유 중복은 등록이 막는다.
         grant.execute(paid());
         for (PaidOrder p : List.of(paid("usr_buyer", 1L, "Game-2"), paid("usr_buyer", 2L, "Game-1")))
-            assertThatThrownBy(() -> grant.execute(p)).isInstanceOf(BusinessException.class);
-        counts(1, 1);
+            grant.execute(p);
+        counts(3, 3);
+        assertThat(count("license_registration")).isZero();
     }
 
     @Test
@@ -280,7 +292,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void absentRightCreationRaceRollsBackLoserAndConvergesOnFreshTransaction() throws Exception {
+    void concurrentPurchasesOfTheSameProductBothCommitAsSeparatePurchases() throws Exception {
+        // 결정 89: 고객·상품당 1행 제한이 없으므로 같은 상품의 두 주문이 동시에 와도 둘 다 보관함에 남는다.
         PaidOrder a = paid();
         PaidOrder b = paid();
         CyclicBarrier absent = new CyclicBarrier(2);
@@ -294,18 +307,15 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
             List<Future<Boolean>> futures = List.of(pool.submit(() -> attempt(a)), pool.submit(() -> attempt(b)));
             int successes = 0;
             for (Future<Boolean> f : futures) if (f.get(30, TimeUnit.SECONDS)) successes++;
-            assertThat(successes).isEqualTo(1);
-            counts(1, 1);
+            assertThat(successes).isEqualTo(2);
+            counts(2, 2);
         } finally {
             reset(licenses);
             pool.shutdownNow();
         }
-        License winner = licenses.findAll().getFirst();
-        PaidOrder committed = winner.getOrderNo().equals(a.orderNo()) ? a : b;
-        PaidOrder rejected = committed == a ? b : a;
-        grant.execute(committed);
-        assertThatThrownBy(() -> grant.execute(rejected)).isInstanceOf(BusinessException.class);
-        counts(1, 1);
+        grant.execute(a);
+        grant.execute(b);
+        counts(2, 2);
     }
 
     boolean attempt(PaidOrder p) {
@@ -343,10 +353,11 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
 
     @Test
     void ownerAndCodeAreComparedExactlyAndPagesHaveStableTies() {
-        grant.execute(paid());
-        grant.execute(paid("USR_BUYER", 1L, "Game-1"));
-        grant.execute(paid("usr_buyer", 2L, "game-1"));
-        jdbc.update("UPDATE product_license SET acquired_at='2026-10-17 00:00:00'");
+        for (PaidOrder p : List.of(paid(), paid("USR_BUYER", 1L, "Game-1"), paid("usr_buyer", 2L, "game-1"))) {
+            grant.execute(p);
+            register.execute(p.buyerSubject(), licenses.findByOrderNo(p.orderNo()).orElseThrow().getLicenseId());
+        }
+        jdbc.update("UPDATE license_registration SET registered_at='2026-10-17 00:00:00'");
         assertThat(search.execute("usr_buyer", 0, 1).getContent().getFirst().getProductId()).isEqualTo(2L);
         assertThat(search.execute("usr_buyer", 1, 1).getContent().getFirst().getProductId()).isEqualTo(1L);
         assertThat(search.execute("usr_buyer", 0, 20).getTotalElements()).isEqualTo(2);
@@ -370,7 +381,9 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
 
     @Test
     void signedJwtOwnershipPagingAndClosedPaths() {
-        grant.execute(paid());
+        PaidOrder owned = paid();
+        grant.execute(owned);
+        register.execute(owned.buyerSubject(), licenses.findByOrderNo(owned.orderNo()).orElseThrow().getLicenseId());
         String bearer = token("usr_buyer", "MEMBER");
         Response detail = http("GET", "/api/v1/library/Game-1", bearer);
         assertThat(detail.status()).isEqualTo(200);

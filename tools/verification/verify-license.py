@@ -187,22 +187,22 @@ try:
     evidence_counts(0,0)
     restart_payment()
     phase("approvedOrderGrantsOneProduct")
-    evidence_counts(1,1)
+    evidence_counts(2,2)
     first=sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")
     pg.start("DECLINED")
     phase("declinedOrderDoesNotAddAPurchase")
-    evidence_counts(1,1)
+    evidence_counts(2,2)
     restart_payment()
     phase("rejectsRepurchaseAndRetriesAFailedOrder")
-    evidence_counts(2,2)
-    phase("anotherBuyerGetsASeparateRight")
     evidence_counts(3,3)
+    phase("anotherBuyerGetsASeparateRight")
+    evidence_counts(4,4)
     stop_app("license")
     phase("payWhileLicenseIsStopped")
-    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",4,"Four paid orders while License stopped")
-    evidence_counts(3,3)
-    start_app("license"); wait_for(apps_ready,"License catches up",180)
+    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",5,"Five paid orders while License stopped")
     evidence_counts(4,4)
+    start_app("license"); wait_for(apps_ready,"License catches up",180)
+    evidence_counts(5,5)
     phase("catchesUpAfterLicenseRestart")
 
     marker=directory/"after-commit"
@@ -215,22 +215,22 @@ try:
     assert item[1].returncode==91
     event_id=marker.read_text()
     before=sql("SELECT CONCAT(id,'|',license_id,'|',event_id,'|',acquired_at,'|',received_at) FROM stove_license.product_license WHERE event_id='"+event_id+"'")
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     restart_license(fault_arguments,True)
     wait_for(lambda:Path(str(marker)+".deliveries").read_text().splitlines().count(event_id)>=2,"Original OrderPaid redelivered after unacknowledged commit",90)
     phase("redeliveryAfterUnacknowledgedCommitPreservesTheRight")
     assert sql("SELECT CONCAT(id,'|',license_id,'|',event_id,'|',acquired_at,'|',received_at) FROM stove_license.product_license WHERE event_id='"+event_id+"'")==before
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     restart_license()
 
     restart_payment(["--stove.payment.processing-enabled=false"])
     phase("preparePaymentBeforeOrderRelayPause")
     stop_app("order"); start_app("order",["--stove.outbox.relay-enabled=false"]); wait_for(apps_ready,"Order relay paused",180)
     restart_payment()
-    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",6,"Six paid orders")
+    check("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'",7,"Seven paid orders")
     check("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'",1,"Original OrderPaid stored with relay paused")
     original=sql("SELECT CONCAT(event_id,'|',payload) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'")
-    evidence_counts(5,5)
+    evidence_counts(6,6)
     stop_app("catalog")
     subprocess.run(docker+["stop","kafka"],check=True)
     stop_app("order"); start_app("order",["--stove.outbox.relay-enabled=false"]); wait_for(apps_ready,"Order restarted while broker and Catalog stopped",180)
@@ -238,7 +238,7 @@ try:
     assert sql("SELECT CONCAT(event_id,'|',payload) FROM stove_order.outbox_event WHERE event_type='OrderPaid' AND status='PENDING'")==original
     subprocess.run(docker+["start","kafka"],check=True)
     stop_app("order"); start_app("order"); wait_for(apps_ready,"Order relay recovered",180)
-    evidence_counts(6,6)
+    evidence_counts(7,7)
     phase("catchesUpOriginalPaidOutboxAndReplaysIt")
     replay=json.loads((directory/"license.json").read_text())
     original_id=original.split("|",1)[0]
@@ -248,26 +248,26 @@ try:
     check("SELECT status FROM stove_order.outbox_event WHERE event_id='"+original_id+"'","SENT","Original OrderPaid sent")
     restart_license()
     phase("ownershipSecurityAndStableRightsAfterRestart")
-    evidence_counts(6,6)
+    evidence_counts(7,7)
     assert sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")==first
-    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="7"
+    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="8"
     assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
-    # Seven orders: six approved, one declined. New OrderPaid records never create another payment.
+    # Eight orders: seven approved (one is a repurchase kept in storage), one declined. New OrderPaid records never create another payment.
     for table in ["purchase_payment","processed_event","outbox_event"]:
-        assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="7",table
-    assert sql("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid'")=="6"
+        assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="8",table
+    assert sql("SELECT COUNT(*) FROM stove_order.outbox_event WHERE event_type='OrderPaid'")=="7"
     assert sql("SELECT COUNT(*) FROM stove_license.product_license l "
         "JOIN stove_order.purchase_order o ON l.order_no=o.order_no "
         "JOIN stove_order.outbox_event e ON e.event_type='OrderPaid' AND e.event_id=l.event_id AND e.aggregate_id=o.order_no "
         "WHERE o.status='PAID' AND l.occurred_at=o.updated_at AND l.request_event_id=o.request_event_id "
         "AND l.payment_result_event_id=o.payment_result_event_id AND l.payment_id=o.payment_id "
         "AND l.buyer_subject=o.buyer_subject AND l.product_id=o.product_id AND l.product_code=o.product_code "
-        "AND l.title=o.title AND l.content_version=o.content_version AND l.amount=o.amount AND l.currency=o.currency")=="6"
+        "AND l.title=o.title AND l.content_version=o.content_version AND l.amount=o.amount AND l.currency=o.currency")=="7"
 
     assert sql("SELECT COUNT(*) FROM stove_license.product_license WHERE order_no=(SELECT order_no FROM stove_order.purchase_order WHERE status='FAILED')")=="0"
-    (directory/"summary.json").write_text(json.dumps({"phases":13,"rights":6,"inbox":6,"orders":7,
+    (directory/"summary.json").write_text(json.dumps({"phases":13,"rights":7,"inbox":7,"orders":8,
         "beforeAckEventId":event_id,"replayedEventId":original_id,"firstRight":first},indent=2))
-    print("PASS: nine apps; approval/decline/pending; duplicate purchase rejection, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay (13 phases)",flush=True)
+    print("PASS: nine apps; approval/decline/pending; repurchase kept in storage, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay (13 phases)",flush=True)
 
 finally:
     pg.stop()

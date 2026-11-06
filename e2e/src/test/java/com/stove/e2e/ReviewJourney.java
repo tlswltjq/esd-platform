@@ -195,4 +195,62 @@ final class ReviewJourney {
     static String reviewPath(long id) {
         return "/api/v1/reviews/" + id;
     }
+
+    /**
+     * 결정 93: 결제 뒤 보유권은 저절로 생기지 않는다. 보관함 항목이 생길 때까지 기다렸다가 결제한 구매자가 직접 등록하고
+     * 라이브러리 상세를 돌려준다. 이미 쓸 수 있는 보유권이 있으면 그대로 돌려준다.
+     */
+    static JsonNode registeredLibrary(Account buyer, String productCode) {
+        Awaitility.await().atMost(Duration.ofSeconds(50)).untilAsserted(() -> {
+            if (Stove.gateway.get("/api/v1/library/" + productCode, buyer.headers()).status() == 200) return;
+            JsonNode item = registrableItem(buyer, productCode);
+            assertThat(item).as("등록할 보관함 항목").isNotNull();
+            E2eClient.Response registered = Stove.gateway.post(
+                    "/api/v1/storage/" + item.path("licenseId").asText() + "/registration", null, buyer.headers());
+            assertThat(registered.status()).as(registered.toString()).isEqualTo(200);
+        });
+        E2eClient.Response library = Stove.gateway.get("/api/v1/library/" + productCode, buyer.headers());
+        assertThat(library.status()).as(library.toString()).isEqualTo(200);
+        return library.data();
+    }
+
+    /** 보관함에서 상품의 등록 가능한 항목. 없으면 null. */
+    static JsonNode registrableItem(Account buyer, String productCode) {
+        E2eClient.Response storage = Stove.gateway.get("/api/v1/storage?size=100", buyer.headers());
+        assertThat(storage.status()).as(storage.toString()).isEqualTo(200);
+        for (JsonNode item : storage.data().path("content")) {
+            if (productCode.equals(item.path("productCode").asText()) && item.path("registrable").asBoolean()) return item;
+        }
+        return null;
+    }
+
+    /** 보관함에서 주문 한 건의 항목. 아직 없으면 MissingNode. */
+    static JsonNode storageItem(Account buyer, String orderNo) {
+        E2eClient.Response storage = Stove.gateway.get("/api/v1/storage?size=100", buyer.headers());
+        assertThat(storage.status()).as(storage.toString()).isEqualTo(200);
+        for (JsonNode item : storage.data().path("content")) {
+            if (orderNo.equals(item.path("orderNo").asText())) return item;
+        }
+        return storage.data().path("missing");
+    }
+
+    /**
+     * 결정 89·93: 이미 가진 상품을 다시 산 구매분은 보관함에 남고 등록은 409 PRODUCT_ALREADY_OWNED다. 라이브러리는 1건 그대로다.
+     */
+    static void repurchaseStaysInStorage(Account buyer, String productCode, String orderNo) {
+        JsonNode[] found = new JsonNode[1];
+        Awaitility.await().atMost(Duration.ofSeconds(50)).untilAsserted(() -> {
+            found[0] = storageItem(buyer, orderNo);
+            assertThat(found[0].isMissingNode()).as("재구매 보관함 항목").isFalse();
+        });
+        assertThat(found[0].path("status").asText()).isEqualTo("STORED");
+        assertThat(found[0].path("registrable").asBoolean()).isFalse();
+        E2eClient.Response rejected = Stove.gateway.post(
+                "/api/v1/storage/" + found[0].path("licenseId").asText() + "/registration", null, buyer.headers());
+        assertThat(rejected.status()).as(rejected.toString()).isEqualTo(409);
+        assertThat(rejected.errorCode()).isEqualTo("PRODUCT_ALREADY_OWNED");
+        E2eClient.Response library = Stove.gateway.get("/api/v1/library", buyer.headers());
+        assertThat(library.data().path("content").size()).isEqualTo(1);
+        assertThat(library.data().path("content").get(0).path("productCode").asText()).isEqualTo(productCode);
+    }
 }

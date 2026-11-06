@@ -165,7 +165,7 @@ class RefundDelayNoticeIntegrationTest extends OrderIntegrationTestBase {
         when(clock.instant()).thenReturn(DELAY); preparation.execute(oldFact);
         assertThat(customer(f).data().path("status").asText()).isEqualTo("PROCESSING"); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
         RefundAttempt failedAttempt=attempt(f); restore.execute(new LicenseRestorationConfirmation(id(),DELAY.plusSeconds(90),failedAttempt.getRestorationRequestEventId(),
-                f.refund().getRefundId(),old.getAttemptId(),failed,old.getLicenseId(),f.order().getOrderNo(),f.order().getBuyerSubject(),f.order().getProductId(),f.order().getProductCode(),f.order().getPaymentId(),old.getSuspensionRequestEventId(),old.getSuspensionEventId()));
+                f.refund().getRefundId(),old.getAttemptId(),failed,old.getLicenseId(),f.order().getOrderNo(),f.order().getBuyerSubject(),f.order().getProductId(),f.order().getProductCode(),f.order().getPaymentId(),old.getSuspensionRequestEventId(),old.getSuspensionEventId(),false));
         assertThat(customer(f).data().path("status").asText()).isEqualTo("FAILED"); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
         when(clock.instant()).thenReturn(DELAY.plusSeconds(100));
         assertThat(http("POST",path(f)+"/retries",Map.of("previousAttemptId",old.getAttemptId()),"usr_buyer","MEMBER").status()).isEqualTo(202);

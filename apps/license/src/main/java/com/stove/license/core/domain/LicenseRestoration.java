@@ -25,14 +25,15 @@ public class LicenseRestoration {
     @Column(nullable = false, unique = true, length = 64) private String suspensionRequestEventId;
     @Column(nullable = false, unique = true, length = 64) private String completedEventId;
     @Column(nullable = false) private Instant restoredAt;
+    @Column(nullable = false) private boolean returnedToStorage;
 
-    public static LicenseRestoration record(License license, RestorationRequest input, Instant at) {
+    public static LicenseRestoration record(License license, RestorationRequest input, Instant at, boolean returnedToStorage) {
         LicenseValues.require(license != null && input != null && LicenseValues.microsecond(at) && !at.isBefore(input.occurredAt()), "복구 근거가 필요합니다.");
-        LicenseValues.consistent(license.getStatus() == LicenseStatus.ACTIVE && license.getLicenseId().equals(input.licenseId()), "실제 복구된 대상이 다릅니다.");
+        LicenseValues.consistent((license.getStatus() == PurchaseStatus.REGISTERED || license.getStatus() == PurchaseStatus.STORED) && license.getLicenseId().equals(input.licenseId()), "실제 복구된 대상이 다릅니다.");
         LicenseRestoration result = new LicenseRestoration(); result.requestEventId = input.eventId(); result.requestFingerprint = input.fingerprint();
         result.requestOccurredAt = input.occurredAt(); result.refundId = input.refundId(); result.attemptId = input.attemptId();
         result.failureEventId = input.failureEventId(); result.licenseId = input.licenseId(); result.suspensionRequestEventId = input.suspensionRequestEventId();
-        result.completedEventId = UUID.randomUUID().toString(); result.restoredAt = at; return result;
+        result.completedEventId = UUID.randomUUID().toString(); result.restoredAt = at; result.returnedToStorage = returnedToStorage; return result;
     }
     public void verify(RestorationRequest input) {
         LicenseValues.consistent(requestFingerprint.equals(input.fingerprint()), "같은 복구 요청의 본문이 다릅니다.");

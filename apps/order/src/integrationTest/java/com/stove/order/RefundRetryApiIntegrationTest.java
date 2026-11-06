@@ -119,6 +119,20 @@ class RefundRetryApiIntegrationTest extends OrderIntegrationTestBase {
         assertThat(orders.findById(fixture.order().getId()).orElseThrow().paymentResult()).isEqualTo(purchase);
     }
 
+    /** 결정 96·98: 복구 때 다른 보유권이 쓰이고 있어 구매분이 보관함으로 돌아갔으면 고객 환불 상세에 표시한다. */
+    @Test void restorationThatReturnedThePurchaseToStorageIsShownOnTheCustomerRefund() {
+        Fixture returned = failed(true, true);
+        Response shown = read(returned.order());
+        assertThat(shown.status()).isEqualTo(200);
+        assertThat(shown.data().path("status").asText()).isEqualTo("FAILED");
+        assertThat(shown.data().path("purchaseReturnedToStorage").asBoolean()).isTrue();
+        assertThat(refund(returned.order()).isPurchaseReturnedToStorage()).isTrue();
+        Fixture kept = failed(true, false);
+        JsonNode keptBody = read(kept.order()).data();
+        assertThat(keptBody.path("purchaseReturnedToStorage").isBoolean()).isTrue();
+        assertThat(keptBody.path("purchaseReturnedToStorage").asBoolean()).isFalse();
+    }
+
     @Test void concurrentHttpRetriesCommitOneStableReceiptAndOneAdditionalSuspension() throws Exception {
         Fixture fixture = failed(true); String bearer = token("usr_buyer", "MEMBER");
         CountDownLatch start = new CountDownLatch(1); ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -235,7 +249,8 @@ class RefundRetryApiIntegrationTest extends OrderIntegrationTestBase {
         assertThat(snapshot()).isEqualTo(before);
     }
 
-    private Fixture failed(boolean restored) {
+    private Fixture failed(boolean restored) { return failed(restored, false); }
+    private Fixture failed(boolean restored, boolean returnedToStorage) {
         Order paid = paid(); String licenseId = id();
         applyGrant.execute(new LicenseGrant(id(), BASE.minusSeconds(30), licenseId, paid.getOrderNo(), "usr_buyer",
                 paid.getProductId(), paid.getProductCode(), paid.getPaymentId()));
@@ -245,12 +260,15 @@ class RefundRetryApiIntegrationTest extends OrderIntegrationTestBase {
         suspend.execute(new LicenseSuspensionConfirmation(id(), BASE.plusSeconds(1), refund.getSuspensionRequestEventId(), refund.getRefundId(),
                 licenseId, paid.getOrderNo(), "usr_buyer", paid.getProductId(), paid.getProductCode(), paid.getPaymentId()));
         RefundAttempt previous = currentAttempt(paid);
-        failAndRestore(paid, previous, BASE.plusSeconds(3), restored);
+        failAndRestore(paid, previous, BASE.plusSeconds(3), restored, returnedToStorage);
         when(clock.instant()).thenReturn(BASE.plusSeconds(86400));
         return new Fixture(paid, previous);
     }
 
     private void failAndRestore(Order order, RefundAttempt attempt, Instant failedAt, boolean restored) {
+        failAndRestore(order, attempt, failedAt, restored, false);
+    }
+    private void failAndRestore(Order order, RefundAttempt attempt, Instant failedAt, boolean restored, boolean returnedToStorage) {
         when(clock.instant()).thenReturn(failedAt.plusSeconds(1));
         restore.execute(new RefundFailureConfirmation(id(), failedAt, attempt.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
                 order.getOrderNo(), order.getPaymentId(), "usr_buyer", order.getAmount(), "KRW", "pg-original", "cancel-" + attempt.getAttemptNo(), "a".repeat(64)));
@@ -258,7 +276,7 @@ class RefundRetryApiIntegrationTest extends OrderIntegrationTestBase {
             RefundAttempt failed = currentAttempt(order);
             restore.execute(new LicenseRestorationConfirmation(id(), failedAt.plusSeconds(2), failed.getRestorationRequestEventId(), failed.getRefundId(),
                     failed.getAttemptId(), failed.getFailureEventId(), failed.getLicenseId(), order.getOrderNo(), "usr_buyer", order.getProductId(),
-                    order.getProductCode(), order.getPaymentId(), failed.getSuspensionRequestEventId(), failed.getSuspensionEventId()));
+                    order.getProductCode(), order.getPaymentId(), failed.getSuspensionRequestEventId(), failed.getSuspensionEventId(), returnedToStorage));
             when(clock.instant()).thenReturn(failedAt.plusSeconds(3));
         }
     }

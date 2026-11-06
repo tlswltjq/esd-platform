@@ -260,7 +260,7 @@ class RefundApprovalStopIntegrationTest extends OrderIntegrationTestBase {
     @Test void wrongRestorationEvidenceAndChangedSuspensionDuplicatesLeaveNoChanges() {
         Fixture fixture=approved(true); stop(fixture,id(),fixture.refund().getRefundId(),"admin"); LicenseSuspensionConfirmation suspended=suspensionInput(fixture);
         when(clock.instant()).thenReturn(BASE.plusSeconds(2)); suspension.execute(suspended); ApprovalCorrectionConfirmation good=restored(fixture,suspended); Map<String,List<Map<String,Object>>> before=snapshot();
-        ApprovalCorrectionConfirmation bad=new ApprovalCorrectionConfirmation(good.eventId(),good.occurredAt(),good.requestEventId(),good.refundId(),good.reviewId(),id(),good.licenseId(),good.orderNo(),good.buyerSubject(),good.productId(),good.productCode(),good.paymentId(),good.suspensionRequestEventId(),good.suspensionEventId());
+        ApprovalCorrectionConfirmation bad=new ApprovalCorrectionConfirmation(good.eventId(),good.occurredAt(),good.requestEventId(),good.refundId(),good.reviewId(),id(),good.licenseId(),good.orderNo(),good.buyerSubject(),good.productId(),good.productCode(),good.paymentId(),good.suspensionRequestEventId(),good.suspensionEventId(),false);
         assertThatThrownBy(()->correction.execute(bad)).isInstanceOf(RuntimeException.class);
         assertThatThrownBy(()->suspension.execute(new LicenseSuspensionConfirmation(suspended.eventId(),suspended.occurredAt().plusSeconds(1),suspended.requestEventId(),suspended.refundId(),suspended.licenseId(),suspended.orderNo(),suspended.buyerSubject(),suspended.productId(),suspended.productCode(),suspended.paymentId()))).isInstanceOf(RuntimeException.class);
         assertThat(snapshot()).isEqualTo(before);
@@ -270,7 +270,7 @@ class RefundApprovalStopIntegrationTest extends OrderIntegrationTestBase {
         Fixture fixture=approved(true); stop(fixture,id(),fixture.refund().getRefundId(),"admin"); LicenseSuspensionConfirmation suspended=suspensionInput(fixture);
         when(clock.instant()).thenReturn(BASE.plusSeconds(2)); suspension.execute(suspended); ApprovalCorrectionConfirmation input=restored(fixture,suspended); when(clock.instant()).thenReturn(BASE.plusSeconds(3));
         LicenseApprovalCorrectedEvent event=new LicenseApprovalCorrectedEvent(input.eventId(),input.occurredAt(),input.requestEventId(),input.refundId(),input.reviewId(),input.stopRequestId(),
-                input.licenseId(),input.orderNo(),input.buyerSubject(),input.productId(),input.productCode(),input.paymentId(),input.suspensionRequestEventId(),input.suspensionEventId());
+                input.licenseId(),input.orderNo(),input.buyerSubject(),input.productId(),input.productCode(),input.paymentId(),input.suspensionRequestEventId(),input.suspensionEventId(),false);
         listeners.start();
         for (int index=0;index<2;index++) {
             ProducerRecord<String,String> record=new ProducerRecord<>(event.topic(),event.partitionKey(),mapper.writeValueAsString(event));
@@ -316,7 +316,7 @@ class RefundApprovalStopIntegrationTest extends OrderIntegrationTestBase {
     private ApprovalCorrectionConfirmation restored(Fixture fixture,LicenseSuspensionConfirmation suspended) {
         RefundReviewRound round=rounds.findByReviewId(fixture.refund().getRefundId()).orElseThrow(); RefundApprovalStop audit=round.getApprovalStop();
         return new ApprovalCorrectionConfirmation(id(),BASE.plusSeconds(3),audit.getRestorationRequestId(),fixture.refund().getRefundId(),round.getReviewId(),audit.getRequestId(),
-                suspended.licenseId(),suspended.orderNo(),suspended.buyerSubject(),suspended.productId(),suspended.productCode(),suspended.paymentId(),suspended.requestEventId(),suspended.eventId());
+                suspended.licenseId(),suspended.orderNo(),suspended.buyerSubject(),suspended.productId(),suspended.productCode(),suspended.paymentId(),suspended.requestEventId(),suspended.eventId(),false);
     }
     private int outboxCount(String type) { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type=?",Integer.class,type); }
     private Order paid() {

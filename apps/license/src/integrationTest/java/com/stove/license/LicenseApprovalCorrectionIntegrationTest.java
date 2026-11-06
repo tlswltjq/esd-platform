@@ -18,13 +18,14 @@ import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequeste
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.license.core.domain.License;
 import com.stove.license.core.domain.LicenseRepository;
-import com.stove.license.core.domain.LicenseStatus;
+import com.stove.license.core.domain.PurchaseStatus;
 import com.stove.license.core.domain.LicenseSuspension;
 import com.stove.license.core.domain.LicenseSuspensionRepository;
 import com.stove.license.core.domain.PaidOrder;
 import com.stove.license.core.domain.SuspensionRequest;
 import com.stove.license.core.domain.ApprovalCorrectionRequest;
 import com.stove.license.core.service.GrantLicense;
+import com.stove.license.core.service.RegisterLicense;
 import com.stove.license.core.service.ApplyLicenseSuspension;
 import com.stove.license.core.service.ApplyApprovalCorrection;
 import java.nio.charset.StandardCharsets;
@@ -56,6 +57,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBase {
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MICROS);
     @Autowired GrantLicense grant;
+    @Autowired RegisterLicense register;
     @Autowired ApplyLicenseSuspension suspend;
     @Autowired ApplyApprovalCorrection restore;
     @Autowired LicenseRepository licenses;
@@ -72,18 +74,18 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
     @AfterEach void clear() {
         listeners.stop(); reset(outbox);
         jdbc.update("DELETE FROM license_approval_correction"); jdbc.update("DELETE FROM license_restoration"); jdbc.update("DELETE FROM license_suspension"); jdbc.update("DELETE FROM license_purchase");
-        jdbc.update("DELETE FROM product_license"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM license_registration"); jdbc.update("DELETE FROM product_license"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
     @Test void actualRestorationPreservesPurchaseAndOldSuspensionOrRestorationReplaysCannotUndoANewerSuspension() {
         ApprovalCorrectionRequest input = fixture(); PaidOrder purchase = stored(input).paidOrder(); restore.execute(input);
-        assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.ACTIVE); assertThat(stored(input).paidOrder()).isEqualTo(purchase);
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(stored(input).paidOrder()).isEqualTo(purchase);
         restore.execute(input);
         LicenseSuspension original = suspensions.findByRequestEventId(input.suspensionRequestEventId()).orElseThrow();
-        suspend.execute(original.request()); assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.ACTIVE);
+        suspend.execute(original.request()); assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED);
         when(clock.instant()).thenReturn(NOW.plusSeconds(10));
         SuspensionRequest next = new SuspensionRequest(id(), NOW.plusSeconds(1), id(), input.orderNo(), input.buyerSubject(), input.productId(), input.productCode(), input.paymentId());
         suspend.execute(next); restore.execute(input);
-        assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
         assertThat(stored(input).getSuspensionRequestEventId()).isEqualTo(next.eventId()); assertThat(completions()).isEqualTo(1);
     }
     @Test void anotherSuspensionCannotBeRestoredAndFailedValidationHasNoInboxOrCompletion() {
@@ -91,7 +93,7 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
         ApprovalCorrectionRequest other = new ApprovalCorrectionRequest(input.eventId(), input.occurredAt(), input.refundId(), input.reviewId(), input.stopRequestId(),
                 input.licenseId(), input.orderNo(), input.buyerSubject(), input.productId(), input.productCode(), input.paymentId(), id(), input.suspensionEventId());
         assertThatThrownBy(() -> restore.execute(other)).isInstanceOf(RuntimeException.class);
-        assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.SUSPENDED); assertThat(completions()).isZero();
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.SUSPENDED); assertThat(completions()).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group='license-approval-correction'", Integer.class)).isZero();
     }
     @Test void actualStateHistoryInboxAndOutboxRollbackTogetherAndReplayCanResume() {
@@ -100,9 +102,9 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
             call.callRealMethod(); licenses.flush(); throw new IllegalStateException("after restored state/history/outbox flush");
         }).when(outbox).record(anyString(), anyString(), any(DomainEvent.class)));
         assertThatThrownBy(() -> restore.execute(input)).isInstanceOf(IllegalStateException.class);
-        assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.SUSPENDED); assertThat(completions()).isZero();
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.SUSPENDED); assertThat(completions()).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM license_approval_correction", Integer.class)).isZero();
-        reset(outbox); restore.execute(input); assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.ACTIVE); assertThat(completions()).isEqualTo(1);
+        reset(outbox); restore.execute(input); assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
     }
     @Test void concurrentDeliveriesRestoreOnceAndKeepOneCompletion() throws Exception {
         ApprovalCorrectionRequest input = fixture(); ExecutorService pool = Executors.newFixedThreadPool(2); CountDownLatch start = new CountDownLatch(1);
@@ -110,7 +112,7 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
             List<Future<?>> work = List.of(pool.submit(() -> { start.await(); restore.execute(input); return null; }),
                     pool.submit(() -> { start.await(); restore.execute(input); return null; }));
             start.countDown(); for (Future<?> future : work) future.get(15, TimeUnit.SECONDS);
-            assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.ACTIVE); assertThat(completions()).isEqualTo(1);
+            assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
     @Test void realKafkaDeliversTheCorrelatedApprovalCorrectionRequestAndDuplicateOnlyProducesOneResult() throws Exception {
@@ -125,7 +127,7 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
             record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8)); kafka.send(record).get(10, TimeUnit.SECONDS);
         }
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            assertThat(stored(input).getStatus()).isEqualTo(LicenseStatus.ACTIVE); assertThat(completions()).isEqualTo(1);
+            assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
         });
     }
     @Test void completionCarriesAllPurchaseAndCorrectionEvidenceWithoutInventingAPgFailure() throws Exception {
@@ -133,7 +135,7 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
         Map<String,Object> row=jdbc.queryForMap("SELECT aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status FROM outbox_event WHERE event_type='LicenseApprovalCorrected'");
         LicenseApprovalCorrectedEvent actual=mapper.readValue(row.get("payload").toString(),LicenseApprovalCorrectedEvent.class);
         LicenseApprovalCorrectedEvent expected=new LicenseApprovalCorrectedEvent(actual.eventId(),NOW,input.eventId(),input.refundId(),input.reviewId(),input.stopRequestId(),
-                input.licenseId(),input.orderNo(),input.buyerSubject(),input.productId(),input.productCode(),input.paymentId(),input.suspensionRequestEventId(),input.suspensionEventId());
+                input.licenseId(),input.orderNo(),input.buyerSubject(),input.productId(),input.productCode(),input.paymentId(),input.suspensionRequestEventId(),input.suspensionEventId(),false);
         assertThat(actual).isEqualTo(expected); assertThat(actual.eventId()).isNotBlank();
         assertThat(row).containsEntry("aggregate_type","License").containsEntry("aggregate_id",input.licenseId()).containsEntry("event_type",expected.eventType())
                 .containsEntry("topic",expected.topic()).containsEntry("partition_key",input.orderNo()).containsEntry("status","PENDING");
@@ -142,6 +144,7 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
 
     private ApprovalCorrectionRequest fixture() {
         PaidOrder purchase = paid(); grant.execute(purchase); License license = licenses.findByOrderNo(purchase.orderNo()).orElseThrow();
+        register.execute(purchase.buyerSubject(), license.getLicenseId());
         SuspensionRequest request = new SuspensionRequest(id(), NOW.minusSeconds(10), id(), license.getOrderNo(), license.getBuyerSubject(),
                 license.getProductId(), license.getProductCode(), license.getPaymentId());
         suspend.execute(request); LicenseSuspension suspended = suspensions.findByRequestEventId(request.eventId()).orElseThrow();

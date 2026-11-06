@@ -4,7 +4,7 @@ import java.time.Instant;
 
 public record ApprovalCorrectionConfirmation(String eventId, Instant occurredAt, String requestEventId, String refundId,
         String reviewId, String stopRequestId, String licenseId, String orderNo, String buyerSubject, Long productId,
-        String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId) {
+        String productCode, String paymentId, String suspensionRequestEventId, String suspensionEventId, boolean returnedToStorage) {
     public ApprovalCorrectionConfirmation {
         if (!RefundRestorationValues.text(eventId,64) || !RefundRestorationValues.time(occurredAt)
                 || !RefundRestorationValues.text(requestEventId,64) || !RefundRestorationValues.uuid(refundId)
@@ -16,5 +16,5 @@ public record ApprovalCorrectionConfirmation(String eventId, Instant occurredAt,
                 || !RefundRestorationValues.text(suspensionEventId,64)) throw new RefundCompletionRejected("승인 정정 복구 본문이 올바르지 않습니다.");
     }
     public String fingerprint() { return RefundRestorationValues.fingerprint(eventId,occurredAt.toString(),requestEventId,refundId,reviewId,
-            stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId); }
+            stopRequestId,licenseId,orderNo,buyerSubject,productId.toString(),productCode,paymentId,suspensionRequestEventId,suspensionEventId,Boolean.toString(returnedToStorage)); }
 }

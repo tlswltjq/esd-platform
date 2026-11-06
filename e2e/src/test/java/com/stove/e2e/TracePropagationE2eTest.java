@@ -103,8 +103,7 @@ class TracePropagationE2eTest {
             String number = purchase.path("orderNo").asText();
             SettlementPurchaseFlowTest.waitStatus(number, buyer, "PAID");
             String code = state.path("product").path("productCode").asText();
-            Awaitility.await().atMost(Duration.ofSeconds(50)).untilAsserted(() ->
-                    assertThat(Stove.gateway.get("/api/v1/library/" + code, buyer.headers()).status()).isEqualTo(200));
+            ReviewJourney.registeredLibrary(buyer, code);
             String downloadTrace = freshTraceId();
             Map<String, String> headers = new HashMap<>(buyer.headers());
             headers.put("traceparent", parent(downloadTrace, purchase.path("sampled").asBoolean()));

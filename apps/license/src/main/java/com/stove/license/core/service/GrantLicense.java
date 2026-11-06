@@ -27,6 +27,7 @@ public class GrantLicense {
     private final EntityManager entityManager;
     private final OutboxRecorder outbox;
 
+    /** 결제 사실로 보관함 항목(구매 근거)을 만든다. 같은 상품을 이미 가져도 막지 않는다(결정 89·93). */
     public void execute(PaidOrder order) {
         Optional<License> previous = licenses.findByOrderNo(order.orderNo());
         if (previous.isPresent()) {
@@ -36,8 +37,6 @@ public class GrantLicense {
         if (!licenses.findSourceConflicts(order.eventId(), order.requestEventId(),
                 order.paymentResultEventId(), order.paymentId()).isEmpty())
             throw conflict("이벤트·요청·결제 식별자가 다른 주문에 사용되었습니다.");
-        if (!licenses.findProductConflicts(order.buyerSubject(), order.productId(), order.productCode()).isEmpty())
-            throw conflict("다른 주문으로 이미 지급된 상품입니다.");
         if (!inbox.firstDelivery(order.eventId(), CONSUMER_GROUP, EventType.ORDER_PAID))
             throw conflict("Inbox에 해당하는 구매 근거가 없습니다.");
 

@@ -17,9 +17,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByOrderNoAndBuyerSubject(String orderNo, String buyerSubject);
     Optional<Order> findByPaymentResultEventId(String eventId);
     Page<Order> findByBuyerSubject(String buyerSubject, Pageable pageable);
-    @Query("select o from Order o where o.buyerSubject = :buyer and o.status in :statuses "
-            + "and (o.productId = :productId or o.productCode = :code)")
-    List<Order> findPurchaseConflicts(String buyer, Long productId, String code, List<OrderStatus> statuses);
     @Query("select o.orderNo from Order o where o.status=:status and o.createdAt<=:cutoff order by o.createdAt,o.id")
     List<String> expiryCandidates(OrderStatus status,Instant cutoff,Pageable pageable);
     long countByStatusAndCreatedAtLessThanEqual(OrderStatus status, Instant cutoff);

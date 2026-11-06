@@ -77,4 +77,5 @@
 | 2026-11-05 | cross | PortOne 웹훅 수신 경계 | Payment 단위·아키텍처 381, 웹훅 통합 2클래스 20건 실패 0(최초 1건은 테스트 설정 누락 실패) | [원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g5-webhook-verification.md) |
 | 2026-11-05 | gateway | 최신 API 역할 경계 | 43개 method/path를 4계정×쿠키/Bearer 344조합·익명 43조합으로 검증, 관측 622개 통과(하위 업무는 HTTP 픽스처) | [원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-role-journey-verification.md) |
 | 2026-11-05 | gateway | 실제 업무 서비스 소유권·역할 진입 | 실제 11개 앱, 관측 91개 통과(구매 근거는 DB 읽기 픽스처) | [원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
+| 2026-11-06 | license·order | 환불 후 재구매·보관함(P4, 결정 89~98) | 전체 단위·아키텍처 2,249건, License 통합 67건(보관함 4건 포함)·Order 통합 193건·Order 과거 이행 14건, 실패 0. Red는 단위(Order 재구매 409 3건·계약/도메인 컴파일)와 Gateway 경로 4건. 새 License 통합 클래스는 구현 뒤 작성해 Red 없음. 실제 11개 앱 E2E·PortOne TEST는 미실행 | PR 본문 |
 | 2026-11-06 | cross | MySQL·MinIO 유실 후 백업 복구 격리 연습 | Jib 12개 이미지, 데이터 볼륨째 삭제 후 복구: 테이블 131개·300행 체크섬 일치(덤프 뒤 binlog로만 복구한 행 141개), 객체 5개 SHA-256 일치, 복구 뒤 정산 단계 통과·중복 없음. 도구 단위 테스트 14건. Kafka 동시 유실·시점 복구는 미검증 | [백업과 장애 복구](backup-restore.md#격리-연습-2026-11-06) · PR #114 |

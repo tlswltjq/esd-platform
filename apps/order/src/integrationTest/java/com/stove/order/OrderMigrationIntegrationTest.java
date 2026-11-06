@@ -35,6 +35,33 @@ import org.testcontainers.containers.MySQLContainer;
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 
+    /** 결정 89·98: V28은 구매 슬롯만 없애고 주문을 바꾸지 않는다. V29는 기존 환불에 보관함 반환 false를 더한다. */
+    @Test void v28RemovesOnlyThePurchaseSlotAndV29AddsAFalseStorageReturnToExistingRefunds() {
+        withVersion("27", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source); insert(jdbc, "FAILED"); insert(jdbc, "PAID");
+            String orderNo = jdbc.queryForObject("SELECT order_no FROM purchase_order WHERE status='PAID'", String.class);
+            jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,payment_confirmation_event_id,completed_at,payment_confirmation_fingerprint,payment_confirmation_source)"
+                    + " VALUES(?,?,NOW(6),TRUE,'COMPLETED',?,NOW(6),?,'PG_QUERY_UNATTRIBUTED')", id(), orderNo, id(), "a".repeat(64));
+            assertThatThrownBy(() -> insert(jdbc, "PENDING")).isInstanceOf(DataIntegrityViolationException.class);
+            List<Map<String, Object>> orders = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            Map<String, Object> refund = jdbc.queryForMap("SELECT * FROM order_refund");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+            List<Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
+            assertThat(migrated).hasSize(orders.size());
+            for (int index = 0; index < orders.size(); index++) {
+                Map<String, Object> expected = new HashMap<>(orders.get(index)); expected.remove("purchase_guard");
+                assertThat(migrated.get(index)).doesNotContainKey("purchase_guard").isEqualTo(expected);
+            }
+            Map<String, Object> migratedRefund = new HashMap<>(jdbc.queryForMap("SELECT * FROM order_refund"));
+            assertThat(migratedRefund.remove("purchase_returned_to_storage")).isIn(false, 0, (byte) 0, Boolean.FALSE);
+            assertThat(migratedRefund).isEqualTo(refund);
+            insert(jdbc, "PENDING"); insert(jdbc, "PAID");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_order WHERE product_id=1", Integer.class)).isEqualTo(4);
+            assertThat(jdbc.queryForList("SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='purchase_order'", String.class))
+                    .doesNotContain("uk_purchase_order_buyer_product", "uk_purchase_order_buyer_code");
+        });
+    }
+
     @Test void v27KeepsOldCompletionAndPurchaseFactsWithoutInventingAnyAmountDetails() {
         withVersion("26", source -> {
             JdbcTemplate jdbc = new JdbcTemplate(source); insert(jdbc, "PAID");
@@ -134,7 +161,8 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             JdbcTemplate jdbc = new JdbcTemplate(source);
             insert(jdbc, "FAILED"); insert(jdbc, "FAILED"); insert(jdbc, "PENDING");
             List<Map<String, Object>> original = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
-            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
+            // V11~V27의 과거 구매 슬롯 계약. V28(결정 89)이 이 슬롯을 없앤다.
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).target("27").load();
             flyway.migrate(); flyway.validate();
             List<Map<String, Object>> migrated = jdbc.queryForList("SELECT * FROM purchase_order ORDER BY id");
             for (int i = 0; i < original.size(); i++) assertThat(migrated.get(i)).containsAllEntriesOf(original.get(i));
@@ -180,7 +208,13 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
                 "refund_amounts_source", "refund_amounts_cancellation_ids_hash")) {
             if (!original.containsKey(column) && previousColumns.containsKey(column)) assertThat(previousColumns.remove(column)).isNull();
         }
-        assertThat(previousColumns).isEqualTo(original);
+        // V29(결정 98): 기존 환불에는 보관함 반환 표시가 false로만 더해진다.
+        if (!original.containsKey("purchase_returned_to_storage") && previousColumns.containsKey("purchase_returned_to_storage"))
+            assertThat(previousColumns.remove("purchase_returned_to_storage")).isIn(false, 0, (byte) 0);
+        // V28(결정 89): 구매 슬롯 계산 열만 사라지고 나머지 주문 값은 그대로다.
+        Map<String, Object> expected = new HashMap<>(original);
+        if (!actual.containsKey("purchase_guard")) expected.remove("purchase_guard");
+        assertThat(previousColumns).isEqualTo(expected);
     }
 
     private void withV10(Consumer<DriverManagerDataSource> check) {

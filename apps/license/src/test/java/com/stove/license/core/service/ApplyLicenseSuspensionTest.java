@@ -15,11 +15,12 @@ import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRegistrationRepository;
 import com.stove.license.core.domain.LicenseRepository;
-import com.stove.license.core.domain.LicenseStatus;
 import com.stove.license.core.domain.LicenseSuspension;
 import com.stove.license.core.domain.LicenseSuspensionRepository;
 import com.stove.license.core.domain.PaidOrder;
+import com.stove.license.core.domain.PurchaseStatus;
 import com.stove.license.core.domain.SuspensionRequest;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
@@ -39,6 +40,7 @@ class ApplyLicenseSuspensionTest {
     private static final Instant NOW = Instant.parse("2026-10-26T01:00:00.123456Z");
     @Mock LicenseRepository licenses;
     @Mock LicenseSuspensionRepository suspensions;
+    @Mock LicenseRegistrationRepository registrations;
     @Mock ProcessedEventGuard inbox;
     @Mock OutboxRecorder outbox;
     @Mock EntityManager entityManager;
@@ -54,7 +56,7 @@ class ApplyLicenseSuspensionTest {
 
         service().execute(input);
 
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.SUSPENDED);
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.SUSPENDED);
         assertThat(license.paidOrder()).isEqualTo(original);
         ArgumentCaptor<LicenseSuspension> stored = ArgumentCaptor.forClass(LicenseSuspension.class);
         verify(suspensions).save(stored.capture());
@@ -82,7 +84,7 @@ class ApplyLicenseSuspensionTest {
     void anIdenticalRequestDoesNotChangeTheStateOrPublishAnotherCompletion() {
         License license = License.grant(paid());
         SuspensionRequest input = request(license);
-        license.suspend(input.eventId());
+        license.suspend(input.eventId(), null);
         LicenseSuspension previous = LicenseSuspension.record(license, input, NOW.minusSeconds(10));
         when(licenses.lockByOrderNo(input.orderNo())).thenReturn(Optional.of(license));
         when(suspensions.findByRequestEventId(input.eventId())).thenReturn(Optional.of(previous));
@@ -106,7 +108,7 @@ class ApplyLicenseSuspensionTest {
         when(licenses.lockByOrderNo(input.orderNo())).thenReturn(Optional.of(license));
 
         assertThatThrownBy(() -> service().execute(input)).isInstanceOf(BusinessException.class);
-        assertThat(license.getStatus()).isEqualTo(LicenseStatus.ACTIVE);
+        assertThat(license.getStatus()).isEqualTo(PurchaseStatus.STORED);
         verifyNoInteractions(inbox, suspensions, outbox, entityManager);
     }
 
@@ -118,7 +120,7 @@ class ApplyLicenseSuspensionTest {
     }
 
     private ApplyLicenseSuspension service() {
-        return new ApplyLicenseSuspension(licenses, suspensions, inbox, outbox, entityManager,
+        return new ApplyLicenseSuspension(licenses, suspensions, registrations, inbox, outbox, entityManager,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

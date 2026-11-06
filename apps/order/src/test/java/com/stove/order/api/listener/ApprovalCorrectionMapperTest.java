@@ -14,7 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ApprovalCorrectionMapperTest {
-    private final LicenseApprovalCorrectedEvent event=new LicenseApprovalCorrectedEvent(id(),Instant.parse("2026-10-29T01:00:00.123456Z"),id(),id(),id(),id(),id(),id(),"buyer",1L,"PRODUCT-1","payment-1",id(),id());
+    private final LicenseApprovalCorrectedEvent event=new LicenseApprovalCorrectedEvent(id(),Instant.parse("2026-10-29T01:00:00.123456Z"),id(),id(),id(),id(),id(),id(),"buyer",1L,"PRODUCT-1","payment-1",id(),id(),false);
     private final ObjectMapper mapper=new ObjectMapper().findAndRegisterModules();
     @Test void validatesAndRetainsThePurchaseAndCorrectionIdentities() {
         assertThat(ApprovalCorrectionMapper.from(envelope(),event).stopRequestId()).isEqualTo(event.stopRequestId());

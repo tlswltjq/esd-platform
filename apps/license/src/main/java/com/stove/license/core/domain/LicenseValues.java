@@ -17,6 +17,10 @@ public final class LicenseValues {
         return value != null && value.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
     }
 
+    public static boolean licenseId(String value) {
+        return uuid(value);
+    }
+
     public static boolean productCode(String value) {
         return value != null && value.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,49}");
     }

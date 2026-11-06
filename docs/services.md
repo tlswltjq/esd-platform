@@ -201,7 +201,7 @@ MEMBER와 검증된 Auth JWT sub를 구매자로 사용한다. member_id·본문
 Catalog의 코드별 내부 주문 근거를 DB 트랜잭션 밖에서 읽고 공개 접근·판매 가능 여부와 버전·정가를 확인한다. 기대 값 차이는 409이며 무료 상품도 409다.
 정가 listAmount·할인액 discountAmount=0·청구액 amount를 고정하고 구매자별 requestId 유일 제약으로 중복 생성을 막는다.
 같은 입력의 재요청은 Catalog 없이 기존 주문의 현재 상태를 반환한다. 신규 주문은 ON_SALE만 허용한다. 새 승인 접수는 관리자 BLOCKED를 확인하되 판매자 STOPPED·현재 가격으로 기존 주문을 바꾸지 않는다. 이미 확정한 승인 영수증은 유지한다. [판매 상태와 승인 경계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)를 따른다.
-새 requestId의 같은 상품 구매는 기존 PENDING이면 409 PURCHASE_IN_PROGRESS, PAID이면 409 PRODUCT_ALREADY_PURCHASED다.
+새 requestId의 같은 상품 구매는 기존 주문 상태와 무관하게 새 주문이다. 막는 것은 판매 금지뿐이며, 이미 가진 상품은 License 등록이 409 `PRODUCT_ALREADY_OWNED`로 막고 구매분은 보관함에 남는다([결정 89](decisions.md#purchase-blocked-only-by-sale-ban)).
 최종 FAILED만 새 주문을 허용한다. V11의 구매자·상품 ID/코드 유일 제약으로 동시 생성도 제한한다.
 
 발행은 OrderPlaced(stove.order.v1), 수신은 OrderPaymentCompleted/OrderPaymentFailed(stove.payment.v1)다.
@@ -270,7 +270,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 - MEMBER JWT가 필요하다. 본문·쿼리·헤더의 회원 ID로 소유자를 바꾸지 않는다.
 - 운영 HTTP는 제공하지 않는다. 현재 지급·정지·복구 완료 이벤트는 Outbox 릴레이를 사용한다. 지급 실패는 공통 재시도·DLT로 남기며 자동 환불을 요청하지 않는다.
 - 기존 마이그레이션과 구 자료를 보존하고 V5에서 출처를 권한에 통합한다. license_purchase는 과거 자료로만 남긴다. 기존 PAID 주문의 자동 소급 지급은 없다.
-- 환불용 ACTIVE/SUSPENDED와 정지·복구 이력을 제공한다. 원래 구매 출처는 유지하고 정지 상품도 목록/상세에 남긴다. Download는 상세의 ACTIVE를 확인한다. 이미 받은 파일 회수·재구매 정책은 후속이다.
+- 결제가 끝나면 구매 근거(보관함 항목)를 만들고, 고객이 `/api/v1/storage/{licenseId}/registration`으로 등록할 때 보유권이 생긴다. 같은 상품의 `ACTIVE` 보유권은 1개뿐이다. 정지·복구·환불 완료는 구매 근거 단위이며 끝난 항목은 라이브러리·보관함에서 빠진다. Download는 상세의 ACTIVE를 확인한다. 이미 받은 파일 회수는 후속이다([결정 89~98](decisions.md#purchase-blocked-only-by-sale-ban)).
 
 ---
 

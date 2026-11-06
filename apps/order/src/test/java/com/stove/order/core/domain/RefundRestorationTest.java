@@ -37,12 +37,19 @@ class RefundRestorationTest {
         assertThat(refund.confirmRestoration(paid, attempt, restored)).isFalse();
         assertThat(refund.getCompletedAt()).isNull(); assertThat(paid.getStatus()).isEqualTo(OrderStatus.PAID);
     }
+    @Test void restorationThatReturnedThePurchaseToStorageIsShownOnTheRefund() {
+        prepare(); refund.recordFailure(paid, attempt, failure(), NOW.plusSeconds(1));
+        assertThat(refund.isPurchaseReturnedToStorage()).isFalse();
+        assertThat(refund.confirmRestoration(paid, attempt, restored(true))).isTrue();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.FAILED);
+        assertThat(refund.isPurchaseReturnedToStorage()).isTrue();
+    }
     @Test void fabricatedCompletionAndADifferentCurrentSuspensionCannotEndRestorationWaiting() {
         prepare(); RefundFailureConfirmation failure = failure(); refund.recordFailure(paid, attempt, failure, NOW.plusSeconds(1));
         LicenseRestorationConfirmation original = restored();
         LicenseRestorationConfirmation other = new LicenseRestorationConfirmation(original.eventId(), original.occurredAt(), original.requestEventId(),
                 original.refundId(), original.attemptId(), original.failureEventId(), original.licenseId(), original.orderNo(), original.buyerSubject(),
-                original.productId(), original.productCode(), original.paymentId(), id(), original.suspensionEventId());
+                original.productId(), original.productCode(), original.paymentId(), id(), original.suspensionEventId(), false);
         assertThatThrownBy(() -> refund.confirmRestoration(paid, attempt, other)).isInstanceOf(RefundCompletionRejected.class);
         assertThat(refund.getStatus().name()).isEqualTo("PENDING_LICENSE_RESTORATION");
     }
@@ -87,7 +94,7 @@ class RefundRestorationTest {
         refund.recordFailure(paid, next, failed, NOW.plusSeconds(86404));
         LicenseRestorationConfirmation restored = new LicenseRestorationConfirmation(id(), NOW.plusSeconds(86405), next.getRestorationRequestEventId(),
                 refund.getRefundId(), next.getAttemptId(), next.getFailureEventId(), next.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(),
-                paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), next.getSuspensionRequestEventId(), next.getSuspensionEventId());
+                paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), next.getSuspensionRequestEventId(), next.getSuspensionEventId(), false);
         refund.confirmRestoration(paid, next, restored);
         assertThat(refund.requestRetry(paid, attempt, NOW.plusSeconds(172800))).isFalse();
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.FAILED); assertThat(next.getRetryRequestedAt()).isNull();
@@ -102,9 +109,10 @@ class RefundRestorationTest {
         assertThat(next).isNotNull(); refund.recordExecution(next); return next;
     }
 
-    private LicenseRestorationConfirmation restored() { return new LicenseRestorationConfirmation(id(), NOW.plusSeconds(2), attempt.getRestorationRequestEventId(),
+    private LicenseRestorationConfirmation restored() { return restored(false); }
+    private LicenseRestorationConfirmation restored(boolean returnedToStorage) { return new LicenseRestorationConfirmation(id(), NOW.plusSeconds(2), attempt.getRestorationRequestEventId(),
             refund.getRefundId(), attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(),
-            paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId()); }
+            paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId(), returnedToStorage); }
 
     private RefundFailureConfirmation failure() { return new RefundFailureConfirmation(id(), NOW, refund.getRefundId(), attempt.getAttemptId(),
             attempt.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW",
