@@ -603,6 +603,12 @@ store·order·payment 리스너에는 **헤더 누락·페이로드 파손 테�
   기다리는지(`stillRunningAfter`) 본다. 예: `PurchaseInterleavingIntegrationTest`.
   다른 방어선(보유권 상태 확인·DB 유일 키)이 먼저 막는 순서는 지키려는 줄을 증명하지 못하므로,
   그 줄만 남는 사례(예: 보유권 없는 보관함 구매)를 따로 둔다
+- **옛 데이터·옛 메시지를 바꾸는 PR은 호환 테스트를 같이 쓴다**([결정 104](decisions.md#upgrade-compat-on-change)).
+  ① 이행 파일이 옛 행을 바꾸거나 의미를 옮기면 `Flyway.target(직전 버전)`까지 올린 DB에 옛 행을 넣고
+  끝까지 올려 확인한다(`OrderMigrationIntegrationTest` 방식, `@Tag("migration")`).
+  ② 이벤트 본문·지문이 바뀌면 옛 본문 견본과 옛 지문 값으로 새 코드가 받아들이는지 확인한다
+  (`RestorationFingerprintCompatibilityTest` 방식). 새 표·새 칸만 더하는 이행은 제외한다.
+  `migrationTest` 가 없는 모듈은 첫 해당 PR에서 틀을 만든다
 - **단언은 값으로 한다.** `anyString()` 은 "무엇이 전달되는가"가 검증 대상일 때 쓰지 않는다
 - **Outbox 단언을 `count()` 차이로 끝내지 않는다.** 잘못된 이벤트를 발행해도 `count` 는 똑같이 1이다.
   `eventType`·`aggregateId`·`partitionKey` 와 페이로드를 읽는다
