@@ -89,8 +89,10 @@ python3 tools/verification/verify-gateway-ownership.py            # 실제 11개
 | **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
-| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **main push** |
+| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **CI 밤마다·수동** (`verify-jib.py`) |
 | **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로 |
+
+CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 PR·main push마다 `./gradlew build`(L0~L5·과거 이행)를, 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`)을 돌린다. 공개 저장소라 self-hosted 러너를 쓰지 않고, 실제 PortOne 결제·환불과 비밀 값은 CI에 넣지 않는다.
 
 L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
 컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.
