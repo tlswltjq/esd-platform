@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -25,19 +26,49 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 public final class PausePoints {
     private static final Duration WAIT = Duration.ofSeconds(30);
     private final Map<String, Gate> armed = new ConcurrentHashMap<>();
+    private final List<Gate> issued = new CopyOnWriteArrayList<>();
+    private final Map<String, Watch> watched = new ConcurrentHashMap<>();
 
     /** 이름이 {@code threadName}인 스레드가 다음에 {@code point}를 지날 때 세운다. 한 번만 세운다. */
     public Gate arm(String point, String threadName) {
         Gate gate = new Gate(threadName);
         if (armed.putIfAbsent(point, gate) != null) throw new IllegalStateException("이미 세운 지점입니다: " + point);
+        issued.add(gate);
         return gate;
     }
 
-    /** 테스트마다 남은 지점을 지운다. 세운 지점이 남아 있으면 그 테스트의 순서가 틀렸다는 뜻이다. */
+    /**
+     * 이름이 {@code threadName}인 스레드가 {@code point} 메서드에 들어가고 나오는지 지켜본다.
+     * 상대가 잠금 호출 안에서 기다리는지 볼 때 쓴다(시작이 늦은 것과 잠금에 막힌 것을 가른다).
+     */
+    public Watch watch(String point, String threadName) {
+        Watch watch = new Watch(threadName);
+        if (watched.putIfAbsent(point + "@" + threadName, watch) != null)
+            throw new IllegalStateException("이미 지켜보는 지점입니다: " + point + "@" + threadName);
+        return watch;
+    }
+
+    /**
+     * 테스트마다 남은 지점을 지우고, 세운 스레드를 모두 풀어 준다. 테스트가 중간에 실패해도 잠금을 쥔 채
+     * 남지 않게 한다. 돌려준 목록은 쓰이지 않은 지점이며, 남아 있으면 그 테스트의 순서가 틀렸다는 뜻이다.
+     */
     public List<String> reset() {
         List<String> left = List.copyOf(armed.keySet());
         armed.clear();
+        watched.clear();
+        for (Gate gate : issued) gate.release();
+        issued.clear();
         return left;
+    }
+
+    void entered(String point) {
+        Watch watch = watched.get(point + "@" + Thread.currentThread().getName());
+        if (watch != null) watch.entered.countDown();
+    }
+
+    void returned(String point) {
+        Watch watch = watched.get(point + "@" + Thread.currentThread().getName());
+        if (watch != null) watch.returned.countDown();
     }
 
     void passed(String point) {
@@ -64,8 +95,15 @@ public final class PausePoints {
         factory.setTarget(bean);
         factory.addInterface(type);
         MethodInterceptor interceptor = invocation -> {
-            Object result = invocation.proceed();
-            points.passed(type.getSimpleName() + "." + invocation.getMethod().getName());
+            String point = type.getSimpleName() + "." + invocation.getMethod().getName();
+            points.entered(point);
+            Object result;
+            try {
+                result = invocation.proceed();
+            } finally {
+                points.returned(point);
+            }
+            points.passed(point);
             return result;
         };
         factory.addAdvice(interceptor);
@@ -110,6 +148,29 @@ public final class PausePoints {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(interrupted);
             }
+        }
+    }
+
+    /** 지켜보는 지점. 들어갔는지, 들어간 뒤 일정 시간 안에 나왔는지 본다. */
+    public static final class Watch {
+        private final String threadName;
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch returned = new CountDownLatch(1);
+
+        private Watch(String threadName) {
+            this.threadName = threadName;
+        }
+
+        /** 지켜보는 스레드가 메서드에 들어갈 때까지 기다린다. */
+        public void awaitEntered() throws InterruptedException {
+            if (!entered.await(WAIT.toMillis(), TimeUnit.MILLISECONDS))
+                throw new AssertionError(threadName + " 스레드가 지켜보는 지점에 들어오지 않았습니다.");
+        }
+
+        /** 들어간 뒤 {@code within} 동안 메서드에서 나오지 못하면 true. 잠금에 막혀 기다린다는 뜻이다. */
+        public boolean stillInsideAfter(Duration within) throws InterruptedException {
+            awaitEntered();
+            return !returned.await(within.toMillis(), TimeUnit.MILLISECONDS);
         }
     }
 
