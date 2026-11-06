@@ -1,0 +1,57 @@
+plugins {
+    id 'com.google.cloud.tools.jib'
+}
+
+// 백업·복구 도구용 MySQL 클라이언트 이미지. 공식 MySQL 이미지에 같은 버전의 mysqlbinlog만 더한다.
+// 기반 이미지는 로컬 Docker의 것을 그대로 쓴다 — 추출한 바이너리와 기반 서버의 버전을 맞추기 위해서다.
+def baseImage = providers.gradleProperty('stove.mysqlClient.baseImage').getOrElse('mysql:8.0')
+def registry = providers.gradleProperty('stove.jib.registry')
+        .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
+def rootfs = layout.buildDirectory.dir('rootfs')
+// 앱 이미지를 한꺼번에 만드는 `./gradlew jibDockerBuild`에는 끼지 않는다.
+// 추출에 패키지 저장소 접근이 필요하므로 이 프로젝트의 작업을 직접 지정했을 때만 실행한다.
+def requested = gradle.startParameter.taskNames.any { it.startsWith(':infra:mysql-client:') }
+
+tasks.register('extractMysqlbinlog', Exec) {
+    onlyIf { requested }
+    group = 'build'
+    description = '기반 MySQL 이미지와 같은 버전의 mysqlbinlog를 Oracle Linux 패키지에서 추출한다'
+    inputs.file('extract.sh')
+    inputs.property('baseImage', baseImage)
+    outputs.dir(rootfs)
+    doFirst { rootfs.get().asFile.mkdirs() }
+    commandLine 'docker', 'run', '--rm', '--entrypoint', 'sh',
+            '--mount', "type=bind,source=${projectDir}/extract.sh,target=/extract.sh,readonly",
+            '--mount', "type=bind,source=${rootfs.get().asFile},target=/out",
+            baseImage, '/extract.sh'
+}
+
+jib {
+    from {
+        image = 'docker://' + baseImage
+    }
+    to {
+        image = providers.gradleProperty('stove.mysqlClient.image').getOrElse("${registry}/mysql-client:8.0-local")
+    }
+    container {
+        entrypoint = 'INHERIT'
+        creationTime = 'EPOCH'
+    }
+    extraDirectories {
+        paths {
+            path {
+                from = rootfs
+                into = '/'
+            }
+        }
+        permissions = ['/usr/bin/mysqlbinlog': '755']
+    }
+}
+
+['jib', 'jibDockerBuild', 'jibBuildTar'].each { name ->
+    tasks.named(name) {
+        onlyIf { requested }
+        dependsOn tasks.named('extractMysqlbinlog')
+    }
+}
+tasks.named('jar') { enabled = false }
