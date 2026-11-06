@@ -2,14 +2,16 @@
 """Verify Catalog against completed Auth/Gateway/Studio/Review in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.ports import application_offset
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 import os, socket, subprocess, time, urllib.request, tempfile, json, shutil
 repo=Path(__file__).resolve().parents[2]
 withdrawals=os.environ.get("CATALOG_WITHDRAWAL_CHECK")=="true"
 directory=Path(tempfile.mkdtemp(prefix="stove-withdrawal-check-" if withdrawals else "stove-catalog-check-"))
 project=directory.name
-offset=int(os.environ.get("CATALOG_TEST_PORT_OFFSET","30000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081}
+offset=application_offset("verify-catalog","CATALOG_TEST_PORT_OFFSET",apps.values())
 allocated_ports=set()
 container_ids=subprocess.check_output(["docker","ps","-q"],text=True).split()
 if container_ids:
@@ -19,7 +21,6 @@ if container_ids:
             for binding in bindings or []: allocated_ports.add(int(binding["HostPort"]))
 for port in apps.values():
     if port+offset in allocated_ports: raise RuntimeError("Application port is already allocated by Docker")
-    with socket.socket() as sock: sock.bind(("127.0.0.1",port+offset))
     allocated_ports.add(port+offset)
 def free_port():
     while True:
@@ -128,7 +129,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=()):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         process=subprocess.Popen(["java","-Xmx256m","-jar",str(jar),"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))

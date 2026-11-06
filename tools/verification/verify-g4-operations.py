@@ -2,15 +2,17 @@
 """G4 operational journey. Real nine apps; Payment is an explicit Kafka contract fixture, never a PG call."""
 
 from pathlib import Path
+from support.ports import application_offset
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 import os, socket, subprocess, time, urllib.request, tempfile, json, shutil, secrets
 import xml.etree.ElementTree as ET
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-g4-operations-"))
 project=directory.name
-offset=int(os.environ.get("G4_TEST_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,
       "store":8087,"order":8082,"license":8084,"download":8088}
+offset=application_offset("verify-g4-operations","G4_TEST_PORT_OFFSET",apps.values())
 ephemeral_file=Path("/proc/sys/net/ipv4/ip_local_port_range")
 if ephemeral_file.exists():
     ephemeral_start,ephemeral_end=map(int,ephemeral_file.read_text().split())
@@ -25,7 +27,6 @@ if container_ids:
             for binding in bindings or []: allocated_ports.add(int(binding["HostPort"]))
 for port in apps.values():
     if port+offset in allocated_ports: raise RuntimeError("Application port is already allocated by Docker")
-    with socket.socket() as sock: sock.bind(("127.0.0.1",port+offset))
     allocated_ports.add(port+offset)
 def free_port():
     while True:
@@ -172,7 +173,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=()):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         process=subprocess.Popen(["java","-Xmx256m","-jar",str(jar),"--server.address=127.0.0.1","--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))
