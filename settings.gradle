@@ -49,3 +49,6 @@ include 'simulators:mock-pg'
 
 // 로컬 S3 검증용 MinIO/mc: 고정 Go 소스 빌드와 Jib 이미지 패키징.
 include 'infra:minio'
+
+// 백업·복구 도구용 MySQL 클라이언트: 공식 MySQL 이미지 + 같은 버전의 mysqlbinlog.
+include 'infra:mysql-client'

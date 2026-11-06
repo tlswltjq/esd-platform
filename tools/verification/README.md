@@ -15,6 +15,8 @@ python3 tools/verification/verify-jib.py --help
 |---|---|
 | `verify-*.py` | 모듈별 격리 스택 및 Jib 이미지 검증 |
 | `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
+| `verify-jib.py --backup-restore` · `support/backup_restore_verification.py` | 구매 전 전체 백업과 binlog·빌드 연속 복사 뒤 MySQL·MinIO를 데이터째 삭제하고 `tools/operations/backup.py`로 복구. 테이블 체크섬·객체 해시 비교 후 정산 단계를 이어서 검증. [절차](../../docs/backup-restore.md) |
+| `verify-jib.py --prometheus-only` · `support/prometheus_verification.py` | 실제 Prometheus로 11개 수집 대상·필수 지표·운영 경보 로드 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
 | `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 11개 앱·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. `KIROCREW_SCRATCH` 필요. [범위·재실행](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
 | `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |

@@ -57,14 +57,20 @@ def main():
     parser.add_argument("--tracing", action="store_true", help="Include isolated Tempo/Grafana and durable tracing fault checks")
     parser.add_argument("--foundation-only", action="store_true", help="Verify common HTTP tracing before Payment context persistence")
     parser.add_argument("--prometheus-only", action="store_true", help="Verify real production scrape targets and metrics")
+    parser.add_argument("--backup-restore", action="store_true",
+                        help="Lose MySQL and MinIO between purchase phases and restore them from continuous copies")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
         parser.error("--prometheus-only cannot be combined with tracing modes")
+    if args.backup_restore and (args.prometheus_only or args.tracing or args.foundation_only):
+        parser.error("--backup-restore cannot be combined with other verification modes")
     if args.foundation_only:
         args.tracing = True
-    output_root = Path(os.environ["KIROCREW_SCRATCH"]) if args.prometheus_only else ROOT / "runs"
+    scratch = os.environ.get("KIROCREW_SCRATCH")
+    output_root = Path(scratch) if scratch and (args.prometheus_only or args.backup_restore) else ROOT / "runs"
     output_root.mkdir(exist_ok=True)
-    prefix = "prometheus-validation-" if args.prometheus_only else ("tracing-validation-" if args.tracing else "jib-validation-")
+    prefix = "prometheus-validation-" if args.prometheus_only else (
+        "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else "jib-validation-"))
     output = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
     output.chmod(0o700)
     project = output.name
@@ -87,6 +93,11 @@ def main():
             tasks.append(":apps:payment:writeVerificationClasspath")
         run(["./gradlew", *tasks, "--offline", "--no-daemon", "--console=plain"], "tracing-classpath")
     minio_image = ensure_minio_image(ROOT)
+    recovery = None
+    if args.backup_restore:
+        from support.backup_restore_verification import BackupRestoreVerification, ensure_client_image
+        ensure_client_image(ROOT)
+        recovery = BackupRestoreVerification(ROOT, output, minio_image, capture)
     offset = free_offset()
     for attempt in range(100):
         minio_port = 15000 + secrets.randbelow(3000)
@@ -114,7 +125,9 @@ def main():
     base = json.loads(capture(["docker", "compose", *compose_options, "-f", "docker-compose.apps.yml", "config", "--format", "json"], env=environment))
     schemas = [name for name in PORTS if name not in {"gateway", "download", "mock-pg"}]
     init = output / "init.sql"
-    init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in schemas))
+    init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in schemas)
+                    + ("\n" + recovery.init_sql() if recovery else ""))
+    init.chmod(0o644)
     db_health = {"test": ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"], "interval": "2s", "timeout": "3s", "retries": 90}
     services = {
         "mysql": {"image": "mysql:8.0", "networks": ["app"],
@@ -189,20 +202,35 @@ def main():
                 original.append(container["Id"])
     result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False,
               "started_at": started_at, "host": platform.platform(), "command": sys.argv, "project": project}
-    try:
-        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio"], "infra")
-        mc = docker + ["exec", "-T", "minio", "mc"]
-        run(mc + ["alias", "set", "admin", "http://localhost:9000", "stove", "stove1234"], "minio-alias")
-        run(mc + ["mb", "admin/stove-builds"], "minio-bucket")
+    mc = docker + ["exec", "-T", "minio", "mc"]
+
+    def provision_storage(suffix=""):
+        # Bucket, read-only policy and accounts are provisioning, not data: they are recreated, not restored.
+        run(mc + ["alias", "set", "admin", "http://localhost:9000", "stove", "stove1234"], "minio-alias" + suffix)
+        run(mc + ["mb", "admin/stove-builds"], "minio-bucket" + suffix)
         policy = json.dumps({"Version": "2012-10-17", "Statement": [
             {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::stove-builds/*"]},
             {"Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": ["arn:aws:s3:::stove-builds"]}]})
-        run(docker + ["exec", "-T", "minio", "sh", "-c", "cat > /tmp/read-policy.json"], "minio-policy-file", input=policy, text=True)
-        run(mc + ["admin", "policy", "create", "admin", "build-read", "/tmp/read-policy.json"], "minio-policy")
+        run(docker + ["exec", "-T", "minio", "sh", "-c", "cat > /tmp/read-policy.json"], "minio-policy-file" + suffix, input=policy, text=True)
+        run(mc + ["admin", "policy", "create", "admin", "build-read", "/tmp/read-policy.json"], "minio-policy" + suffix)
         for user in ["review-reader", "download-reader"]:
-            run(mc + ["admin", "user", "add", "admin", user, "isolated-read-only-password"], user + "-create")
-            run(mc + ["admin", "policy", "attach", "admin", "build-read", "--user", user], user + "-policy")
-        run(mc + ["alias", "set", "reader", "http://localhost:9000", "review-reader", "isolated-read-only-password"], "minio-reader")
+            run(mc + ["admin", "user", "add", "admin", user, "isolated-read-only-password"], user + "-create" + suffix)
+            run(mc + ["admin", "policy", "attach", "admin", "build-read", "--user", user], user + "-policy" + suffix)
+        run(mc + ["alias", "set", "reader", "http://localhost:9000", "review-reader", "isolated-read-only-password"], "minio-reader" + suffix)
+
+    def start_applications(suffix=""):
+        launcher = output / "start-apps.sh"
+        shutil.copyfile(ROOT / "scripts/start-apps.sh", launcher)
+        run(["bash", str(launcher), "-p", project, "-f", str(compose)], "start-apps" + suffix)
+        # Prometheus is started by its own verification after the applications are ready.
+        selected = [option for name in services if not (prometheus and name == "prometheus")
+                    for option in ("--service", name)] if prometheus else []
+        run([sys.executable, str(ROOT / "tools/verification/stack-status.py"),
+             "-p", project, "-f", str(compose), "--timeout", "30", *selected], "stack-status" + suffix)
+
+    try:
+        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio"], "infra")
+        provision_storage()
         denied = subprocess.run(mc + ["pipe", "reader/stove-builds/forbidden.zip"], input=b"forbidden", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if denied.returncode == 0:
             raise RuntimeError("Read-only MinIO account accepted an upload")
@@ -212,14 +240,7 @@ def main():
             raise RuntimeError("Read-only MinIO account deleted an object")
         if tracing:
             tracing.start(docker, compose)
-        launcher = output / "start-apps.sh"
-        shutil.copyfile(ROOT / "scripts/start-apps.sh", launcher)
-        run(["bash", str(launcher), "-p", project, "-f", str(compose)], "start-apps")
-        # Prometheus is started by its own verification after the applications are ready.
-        selected = [option for name in services if not (prometheus and name == "prometheus")
-                    for option in ("--service", name)] if prometheus else []
-        run([sys.executable, str(ROOT / "tools/verification/stack-status.py"),
-             "-p", project, "-f", str(compose), "--timeout", "30", *selected], "stack-status")
+        start_applications()
         for name in PORTS:
             container_id = capture(docker + ["ps", "-q", name])
             info = json.loads(capture(["docker", "inspect", container_id]))[0]
@@ -261,8 +282,19 @@ def main():
         elif tracing:
             tracing.verify(result, list(PORTS), keys["pg-db"])
         else:
+            if recovery:
+                recovery.bind(docker, run, project)
+                recovery.start_copies()
+                # The dump holds schemas and seed accounts; every purchase, payment, license and
+                # settlement row below exists only in the streamed binlogs and the object mirror.
+                recovery.full_backup()
             phase("initialPurchasesAndDownloads")
             phase("allocationAndOwnershipAreIsolated")
+            if recovery:
+                recovery.lose_and_restore([name for name in PORTS if name != "mock-pg"],
+                                          lambda: provision_storage("-replacement"),
+                                          lambda: start_applications("-after-restore"))
+                result["backup_restore"] = recovery.evidence
             request = urllib.request.Request("http://127.0.0.1:" + str(PORTS["mock-pg"] + offset) + "/test-support/v1/settlement-runs",
                                              data=json.dumps({"requestId": str(uuid.uuid4())}).encode(),
                                              headers={"X-Pg-Api-Key": keys["control"], "Content-Type": "application/json"})
@@ -286,6 +318,8 @@ def main():
         result["error"] = str(error)
         raise
     finally:
+        if recovery:
+            recovery.close()
         if tracing:
             subprocess.run(docker + ["unpause", "kafka"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for name in [*PORTS, *(["tempo", "grafana"] if tracing else []), *(["prometheus"] if prometheus else [])]:
@@ -298,9 +332,9 @@ def main():
         if missing:
             result["complete"] = False
             result["error"] = "An original container disappeared"
-        if tracing or prometheus:
+        if tracing or prometheus or recovery:
             try:
-                (tracing or prometheus).check_preserved_volumes()
+                (tracing or prometheus or recovery).check_preserved_volumes()
                 result["original_volumes_preserved"] = True
             except RuntimeError as error:
                 result["complete"] = False
@@ -311,8 +345,9 @@ def main():
         if missing:
             raise RuntimeError(result["error"])
     description = "real Prometheus collection and normal shutdown" if prometheus else (
+        "MySQL/MinIO loss, restore from continuous copies, continued settlement and normal shutdown" if recovery else (
         "common Tempo/Grafana, HTTP tracing and collector/sampling checks" if args.foundation_only else (
-        "durable Payment tracing, Tempo/Grafana and fault recovery" if tracing else "Jib deployment, purchase/download/settlement and normal shutdown"))
+        "durable Payment tracing, Tempo/Grafana and fault recovery" if tracing else "Jib deployment, purchase/download/settlement and normal shutdown")))
     print("PASS: " + description, flush=True)
 
 

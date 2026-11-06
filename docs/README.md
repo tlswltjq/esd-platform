@@ -42,6 +42,7 @@
 |---|---|
 | [개발 환경과 실행](getting-started.md) | 로컬 실행, Swagger OAuth, 문제 해결 |
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
+| [백업과 장애 복구](backup-restore.md) | MySQL 전체 백업 + binlog 연속 복사, 빌드 연속 미러, 복구 순서와 격리 연습 결과 |
 | [License 이벤트 복구 절차](license-event-recovery-runbook.md) | 지급·확인 이벤트의 DLT 재투입·재큐잉 |
 | [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록 (현재 License에 적용하지 않음) |
 | [tools 안내](../tools/README.md) | 검증·관측·DB 실험 도구 |
