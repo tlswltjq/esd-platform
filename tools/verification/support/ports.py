@@ -32,6 +32,8 @@ def application_offset(tool, env_name, ports):
     """
     offset = int(os.environ.get(env_name, OFFSETS[tool]))
     used = sorted(offset + port for port in ports)
+    if used[0] < 1:
+        raise RuntimeError(tool + ": application port " + str(used[0]) + " is below 1; raise " + env_name)
     if used[-1] >= EPHEMERAL_START:
         raise RuntimeError(tool + ": application port " + str(used[-1]) + " is inside the ephemeral range (>= "
                            + str(EPHEMERAL_START) + "); lower " + env_name)
