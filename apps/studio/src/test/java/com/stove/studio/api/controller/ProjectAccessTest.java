@@ -108,4 +108,12 @@ class ProjectAccessTest {
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(update);
     }
+
+    @Test
+    void onlyExactPrometheusGetIsAllowedWithoutAuthentication() throws Exception {
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isNotFound());
+        mvc.perform(post("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/prometheus/extra")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+    }
 }

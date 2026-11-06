@@ -53,7 +53,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
-@TestPropertySource(properties = "stove.order.payment-service-key=development-payment-service-key")
+@TestPropertySource(properties = {
+        "server.address=127.0.0.1", "stove.order.payment-service-key=development-payment-service-key"})
 class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
     private static final String KEY = "development-payment-service-key";
     @Autowired CreateOrder create;
@@ -155,9 +156,11 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
         OrderPaymentAdmission receipt = begin.execute(input).orElseThrow();
         when(clock.instant()).thenReturn(order.getExpiresAt().plusSeconds(10));
         assertThat(expire.execute(order.getOrderNo())).isFalse();
+        assertThat(scan.countPendingExpiry()).isZero();
         PaymentResult result = paid(order, input.paymentId(), order.getExpiresAt().plusSeconds(10));
         apply.execute(EventType.ORDER_PAYMENT_COMPLETED, result);
         assertThat(stored(order).getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(scan.countPendingExpiry()).isZero();
         assertThat(stored(order).getAmount()).isEqualTo(order.getAmount());
         assertThat(begin.execute(input).orElseThrow().getAdmittedAt()).isEqualTo(receipt.getAdmittedAt());
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE event_type='OrderPaid'")).isEqualTo(1);
@@ -303,7 +306,20 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
 
     @Test void theDurableExpiryScanClosesOnlyPendingOrdersAndCanRunAgainAfterRestart() {
         Order pending=saved("usr_buyer"); Order processing=saved("other-buyer"); begin.execute(input(processing)).orElseThrow();
-        when(clock.instant()).thenReturn(processing.getExpiresAt().plusSeconds(1)); scan.execute(); scan.execute();
+        long originalEvents = outboxRows.count();
+        when(clock.instant()).thenReturn(pending.getExpiresAt().minusNanos(1000));
+        assertThat(scan.countPendingExpiry()).isZero();
+        when(clock.instant()).thenReturn(pending.getExpiresAt());
+        assertThat(scan.countPendingExpiry()).isEqualTo(1);
+        assertThat(stored(pending).getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(stored(processing).getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
+        assertThat(outboxRows.count()).isEqualTo(originalEvents);
+        when(clock.instant()).thenReturn(processing.getExpiresAt().plusSeconds(1));
+        assertThat(scan.countPendingExpiry()).isEqualTo(1);
+        scan.execute();
+        assertThat(scan.countPendingExpiry()).isZero();
+        scan.execute();
+        assertThat(scan.countPendingExpiry()).isZero();
         assertThat(stored(pending).getStatus()).isEqualTo(OrderStatus.EXPIRED);
         assertThat(stored(processing).getStatus()).isEqualTo(OrderStatus.PAYMENT_PROCESSING);
         assertThat(create.execute("usr_buyer",request()).getStatus()).isEqualTo(OrderStatus.PENDING);

@@ -56,6 +56,9 @@ spring:
       observation-enabled: true
 
 stove:
+  messaging:
+    ops:
+      enabled: false
   review-storage:
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
     presign-endpoint: ${STORAGE_PRESIGN_ENDPOINT:${STORAGE_ENDPOINT:http://localhost:9000}}

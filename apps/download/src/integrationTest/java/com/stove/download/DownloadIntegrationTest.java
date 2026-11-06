@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -57,7 +58,9 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "server.address=127.0.0.1")
+@AutoConfigureObservability(tracing = false)
 @Testcontainers
 class DownloadIntegrationTest {
     static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
@@ -186,6 +189,30 @@ class DownloadIntegrationTest {
             assertThat(get("/api/v1/downloads/game/ticket", OWNER).statusCode()).isEqualTo(503);
             assertThat(CATALOG_CALLS.get()).isZero();
         }
+    }
+
+    @Test
+    void prometheusScrapeExportsRuntimeMetricsWithoutUpstreamCalls() throws Exception {
+        HttpResponse<String> response = get("/actuator/prometheus", null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("jvm_memory_used_bytes", "application=\"download\"");
+        assertThat(LICENSE_CALLS.get()).isZero();
+        assertThat(CATALOG_CALLS.get()).isZero();
+    }
+
+    @Test
+    void prometheusPermissionDoesNotOpenOtherPathsOrWrites() throws Exception {
+        for (String path : List.of("/actuator/env", "/actuator/metrics", "/actuator/prometheus/extra")) {
+            assertThat(get(path, null).statusCode()).isEqualTo(401);
+        }
+        HttpRequest request = HttpRequest.newBuilder(
+                        URI.create("http://127.0.0.1:" + port + "/actuator/prometheus"))
+                .POST(HttpRequest.BodyPublishers.noBody()).build();
+        assertThat(HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding())
+                .statusCode()).isEqualTo(401);
+        assertThat(LICENSE_CALLS.get()).isZero();
+        assertThat(CATALOG_CALLS.get()).isZero();
     }
 
     @AfterAll static void stop() { UPSTREAM.stop(0); }

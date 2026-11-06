@@ -29,6 +29,7 @@ scrape_configs:
           - store:8087
           - download:8088
           - settlement:8089
+          - auth:8091
 
   # 컨슈머 랙. **앱에서 긁을 수 없어 따로 있는 잡이다.**
   #

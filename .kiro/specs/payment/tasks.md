@@ -21,6 +21,8 @@
 - [x] 환불 운영: ADMIN `/api/v1/admin/refund-cancellation-holds` 중단/재개, `/api/v1/admin/refund-delays` 장기 미확정 조사 — `docs/refund-session-handoff.md`
 - [x] 실제 자동 환불 전체 흐름 1건, 실제 ADMIN 수동 심사 PG 환불(2차 승인→License SUSPENDED→PortOne CANCELLED) 1건 — 2026-10-30 `docs/refund-session-handoff.md`
 
+- [x] G5 웹훅 수신 경계: 누락/중복 헤더·시간/원문/크기·접수 보존·비활성 제공자·키 조립 거절, 단위/아키텍처 381건·웹훅 통합 20건 — 2026-11-05 `docs/g5-webhook-verification.md` (공개 HTTPS·실제 제공사·배포 검증은 별도)
+
 ## 진행 중 / 남음 (일반화 공백)
 
 - [ ] 실제 TEST 재결제 전체 여정 검증 — G1 (`docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업`)

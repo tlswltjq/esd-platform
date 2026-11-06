@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -17,7 +18,11 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/metrics/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        // 공통 운영 API는 기본 비활성이다. 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay", "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN")
                         .requestMatchers("/api/v1/reviews/**").hasAnyRole("REVIEWER", "ADMIN")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer

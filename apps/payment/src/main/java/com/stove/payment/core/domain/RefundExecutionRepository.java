@@ -11,6 +11,10 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface RefundExecutionRepository extends JpaRepository<RefundExecution, Long> {
+    @Query("select count(r) from RefundExecution r, Payment p where p.paymentId=r.paymentId and p.provider='PORTONE_TEST' "
+            + "and r.status='PENDING' and r.refundConfirmedAt is null and r.firstCancellationPreparedAt<=:preparedBy")
+    long countDelayedForAdministration(Instant preparedBy);
+
     @Query("select r from RefundExecution r, Payment p where p.paymentId=r.paymentId and p.provider='PORTONE_TEST' "
             + "and r.status='PENDING' and r.refundConfirmedAt is null and r.firstCancellationPreparedAt<=:preparedBy")
     Page<RefundExecution> findDelayedForAdministration(Instant preparedBy, Pageable page);

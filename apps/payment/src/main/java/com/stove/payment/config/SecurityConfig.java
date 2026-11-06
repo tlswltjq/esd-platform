@@ -18,8 +18,12 @@ public class SecurityConfig {
             PortOneProperties portOne) throws Exception {
         PortOneWebhookVerifier verifier = verifiers.getIfAvailable();
         http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(a -> {
+            a.requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll();
             a.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
             if (verifier != null) a.requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/portone").permitAll();
+            // 공통 운영 API는 기본 비활성이다. 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
+            a.requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN");
+            a.requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay", "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-cancellation-holds", "/api/v1/admin/refund-cancellation-holds/*").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-cancellation-holds/*/resume").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-delays", "/api/v1/admin/refund-delays/*",

@@ -22,6 +22,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findPurchaseConflicts(String buyer, Long productId, String code, List<OrderStatus> statuses);
     @Query("select o.orderNo from Order o where o.status=:status and o.createdAt<=:cutoff order by o.createdAt,o.id")
     List<String> expiryCandidates(OrderStatus status,Instant cutoff,Pageable pageable);
+    long countByStatusAndCreatedAtLessThanEqual(OrderStatus status, Instant cutoff);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.orderNo = :orderNo")
     Optional<Order> lockByOrderNo(@Param("orderNo") String orderNo);

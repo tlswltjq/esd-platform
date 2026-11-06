@@ -9,6 +9,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 public class CloseExpiredOrders {
@@ -21,11 +22,19 @@ public class CloseExpiredOrders {
         this.orders=orders; this.close=close; this.clock=clock; this.batchSize=batchSize;
     }
     public void execute() {
-        Instant cutoff=clock.instant().truncatedTo(ChronoUnit.MICROS).minus(Duration.ofMinutes(30));
+        Instant cutoff=expiryCutoff();
         List<String> due=orders.expiryCandidates(OrderStatus.PENDING,cutoff,PageRequest.of(0,batchSize));
         for(String orderNo:due) {
             try { close.execute(orderNo); }
             catch(RuntimeException unavailable) { log.warn("Order expiry remains pending: orderNo={}, errorType={}",orderNo,unavailable.getClass().getSimpleName()); }
         }
+    }
+    @Transactional(readOnly = true)
+    public long countPendingExpiry() {
+        return orders.countByStatusAndCreatedAtLessThanEqual(OrderStatus.PENDING, expiryCutoff());
+    }
+
+    private Instant expiryCutoff() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS).minus(Duration.ofMinutes(30));
     }
 }

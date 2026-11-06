@@ -4,6 +4,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.stove.common.kafka.ops.DltOpsController;
@@ -14,6 +16,7 @@ import com.stove.common.security.CommonSecurityAutoConfiguration;
 import com.stove.license.config.SecurityConfig;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,4 +80,13 @@ class RecoveryOpsAccessTest {
     private static MockHttpServletRequestBuilder operation(HttpMethod method, String path) {
         return MockMvcRequestBuilders.request(method, path).param("topic", "stove.order.v1.DLT");
     }
+
+    @Test
+    void prometheusReadsPassSecurityWithoutOpeningWritesOrOtherActuatorPaths() throws Exception {
+        // No Actuator handler exists in this MVC slice; 404 checks only security.
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isNotFound());
+        mvc.perform(post("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/prometheus/extra")).andExpect(status().isUnauthorized());
+    }
+
 }

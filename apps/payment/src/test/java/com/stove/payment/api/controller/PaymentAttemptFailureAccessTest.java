@@ -57,6 +57,14 @@ class PaymentAttemptFailureAccessTest {
         mvc.perform(get("/api/v1/payments/bad/attempt-failures").header(HttpHeaders.AUTHORIZATION, "Bearer MEMBER")).andExpect(status().isBadRequest());
         verifyNoInteractions(read);
     }
+    @Test
+    void prometheusReadPassesSecurityWithoutOpeningOtherActuatorOperations() throws Exception {
+        // This MVC slice has no Actuator handler; 404 proves only the security boundary.
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isNotFound());
+        mvc.perform(post("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+    }
+
     @Test void historyRequiresMemberAndCannotBeWrittenThroughHttp() throws Exception {
         mvc.perform(get(PATH)).andExpect(status().isUnauthorized());
         for (String role : List.of("ADMIN", "CREATOR", "REVIEWER"))

@@ -1,0 +1,30 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'stove_payment_refund_confirmation_delayed{application="payment",instance="payment:8083"}'
+        values: '0 2 2 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: RefundConfirmationsDelayed
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: RefundConfirmationsDelayed
+        exp_alerts:
+          - exp_labels:
+              application: payment
+              instance: payment:8083
+              severity: critical
+            exp_annotations:
+              summary: "payment: 환불 확인이 원래 3시간 기한을 넘겼다"
+              description: >-
+                2건이 최초 취소 준비 뒤 3시간 이상 미확정이다.
+                GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
+                시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
+      - eval_time: 3m
+        alertname: RefundConfirmationsDelayed
+        exp_alerts: []

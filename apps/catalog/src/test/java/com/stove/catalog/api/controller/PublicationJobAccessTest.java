@@ -3,6 +3,7 @@ package com.stove.catalog.api.controller;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -60,4 +61,13 @@ class PublicationJobAccessTest {
                     .andExpect(status().isForbidden());
         verifyNoInteractions(read);
     }
+
+    @Test
+    void prometheusReadsPassSecurityWithoutOpeningWritesOrOtherActuatorPaths() throws Exception {
+        // No Actuator handler exists in this MVC slice; 404 checks only security.
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isNotFound());
+        mvc.perform(post("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/prometheus/extra")).andExpect(status().isUnauthorized());
+    }
+
 }

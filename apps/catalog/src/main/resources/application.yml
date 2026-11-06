@@ -61,6 +61,9 @@ spring:
       observation-enabled: true           # 처리 성공 레코드 단위 커밋
 
 stove:
+  messaging:
+    ops:
+      enabled: false
   catalog:
     order-service-key: ${CATALOG_ORDER_SERVICE_KEY:}
     store-service-key: ${CATALOG_STORE_SERVICE_KEY:}

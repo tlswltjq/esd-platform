@@ -49,6 +49,9 @@ spring:
       ack-mode: record
       observation-enabled: true
 stove:
+  messaging:
+    ops:
+      enabled: false
   asset:
     public-base-url: ${STUDIO_ASSET_PUBLIC_BASE_URL:http://localhost:8080}
     max-thumbnail-bytes: ${MAX_THUMBNAIL_BYTES:5242880}

@@ -30,7 +30,11 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        // 공통 운영 API는 기본 비활성이다. 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay", "/api/v1/ops/outbox/dead/*/requeue").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET,"/api/v1/settlements/me/sales","/api/v1/settlements/me/months","/api/v1/settlements/me/refunds").hasRole("CREATOR")
                         .requestMatchers(HttpMethod.GET,"/api/v1/settlements/sales","/api/v1/settlements/months",
                                 "/api/v1/settlements/pg-receipts","/api/v1/settlements/pg-receipts/*",
