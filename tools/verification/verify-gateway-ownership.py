@@ -4,6 +4,8 @@
 from pathlib import Path
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
+from support.service_credentials import credential_names, service_environment
+from support.boot_jars import application_jar
 import os, socket, subprocess, time, urllib.request, tempfile, json, secrets
 repo=Path(__file__).resolve().parents[2]
 output_root=Path(os.environ["KIROCREW_SCRATCH"])
@@ -131,6 +133,7 @@ try:
     common.update(PAYMENT_PG_PROVIDER='SIMULATED',SETTLEMENT_TOSSPAY_ENABLED='false')
     common["CATALOG_STORE_SERVICE_KEY"]=secrets.token_urlsafe(32)
     common["CATALOG_ORDER_SERVICE_KEY"]=secrets.token_urlsafe(32)
+    common['PAYMENT_ORDER_SERVICE_KEY']=secrets.token_urlsafe(32)
     common.update(DB_HOST="127.0.0.1",DB_PORT=str(ports["mysql"]),DB_USER="stove",DB_PASSWORD="stove1234",
         REDIS_HOST="127.0.0.1",REDIS_PORT=str(ports["redis"]),KAFKA_BROKERS="127.0.0.1:"+str(ports["kafka"]),
         CATALOG_DOWNLOAD_SERVICE_KEY=service_key,AUTH_ISSUER=public,JWT_ISSUER_URI=public,JWT_JWK_SET_URI=f"http://127.0.0.1:{8091+offset}/oauth2/jwks",
@@ -143,11 +146,14 @@ try:
         AUTH_ADMIN_EMAIL="admin-check@review.local",AUTH_ADMIN_PASSWORD="admin-password-1234",
         REVIEW_STORAGE_ACCESS_KEY="review-reader",REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password")
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    credential_recipients={}
     def start_app(app,arguments=(),fault=False):
         port=apps[app]
-        app_environment=pg.client_environment(app,common)
+        app_environment=pg.client_environment(app,service_environment(app,common))
         if app in {"catalog","settlement"}: app_environment["CATALOG_SETTLEMENT_SERVICE_KEY"]=settlement_service_key
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        credential_recipients[app]=credential_names(app_environment)
+        (directory/'credential-recipients.json').write_text(json.dumps(credential_recipients,indent=2))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
         if fault:

@@ -17,6 +17,8 @@ python3 tools/verification/verify-jib.py --help
 | `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
 | `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 11개 앱·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. `KIROCREW_SCRATCH` 필요. [범위·재실행](../../docs/gateway-service-ownership-verification.md) |
+| `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [범위·재실행](../../docs/g5-credential-distribution-verification.md) |
+| `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
 | `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |
 | `portone-test-checkout.py` · `support/portone_checkout.py` | 준비된 포트원 V2·토스페이 TEST 채널의 독립 결제창·서버 조회·전액 취소 검증. 업무 앱과 DB는 변경하지 않음 |

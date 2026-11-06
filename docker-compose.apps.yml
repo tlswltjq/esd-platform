@@ -157,6 +157,7 @@ services:
     expose: ["8082"]
     environment:
       CATALOG_ORDER_SERVICE_KEY: ${CATALOG_ORDER_SERVICE_KEY:-}
+      PAYMENT_ORDER_SERVICE_KEY: ${PAYMENT_ORDER_SERVICE_KEY:-}
       <<: *common-env
       CATALOG_BASE_URL: http://catalog:8081
 
@@ -171,6 +172,8 @@ services:
       <<: *common-env
       MOCK_PG_URI: http://mock-pg:8092
       MOCK_PG_PAYMENT_KEY: ${MOCK_PG_PAYMENT_KEY:-}
+      PAYMENT_ORDER_SERVICE_KEY: ${PAYMENT_ORDER_SERVICE_KEY:-}
+      PAYMENT_APPROVAL_PAYLOAD_KEY: ${PAYMENT_APPROVAL_PAYLOAD_KEY:-}
 
   license:
     <<: *app
