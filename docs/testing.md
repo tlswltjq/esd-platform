@@ -47,6 +47,7 @@ CI=true ./gradlew :common:archunit:test \
 python3 -B -m unittest discover -s tools/verification -p test_protected_compose.py -v
 python3 -B -m unittest discover -s tools/verification -p test_service_credentials.py -v
 python3 -B -m unittest discover -s tools/verification -p test_boot_jars.py -v
+python3 -B -m unittest discover -s tools/verification -p test_ports.py -v   # 도구별 포트 간격·JAR 선택(결정 105)
 ./gradlew :common:test:test --no-daemon --max-workers=2          # Compose 배포 계약
 ./gradlew :apps:catalog:integrationTest --tests 'com.stove.catalog.*ServiceKey*IntegrationTest' \
   :apps:order:integrationTest --tests 'com.stove.order.*ServiceKey*IntegrationTest' --no-daemon --max-workers=2

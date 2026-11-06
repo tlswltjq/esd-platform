@@ -2,6 +2,8 @@
 """Verify Download against completed Auth/Gateway/Studio/Review/Catalog/Store/Order/Payment/License in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.ports import application_offset
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
 import os, socket, subprocess, time, urllib.request, tempfile, json, secrets
@@ -10,12 +12,8 @@ output_root=repo/"runs"
 output_root.mkdir(exist_ok=True)
 directory=Path(tempfile.mkdtemp(prefix="stove-download-check-",dir=output_root))
 project=directory.name
-offset=int(os.environ.get("DOWNLOAD_TEST_PORT_OFFSET","32000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084,"download":8088}
-for port in apps.values():
-    with socket.socket() as sock:
-        sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        sock.bind(("127.0.0.1",port+offset))
+offset=application_offset("verify-download","DOWNLOAD_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1",0))
@@ -130,7 +128,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=()):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
         process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=pg.client_environment(app,common),cwd=repo,stdout=log,stderr=subprocess.STDOUT)

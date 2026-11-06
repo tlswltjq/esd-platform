@@ -21,6 +21,7 @@ python3 tools/verification/verify-jib.py --help
 | `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 11개 앱·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. `KIROCREW_SCRATCH` 필요. [범위·재실행](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
 | `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
+| `support/ports.py` · `test_ports.py` | 도구별 앱 포트 간격(1000 간격, 모두 32768 아래). 시작 전 사용 중·임시 포트 범위를 확인하고 실패하면 바로 멈춤. 기존 `*_PORT_OFFSET` 환경 변수로 바꿀 수 있음. [결정 105](../../docs/decisions.md#verification-tool-ports) |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
 | `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |
 | `portone-test-checkout.py` · `support/portone_checkout.py` | 준비된 포트원 V2·토스페이 TEST 채널의 독립 결제창·서버 조회·전액 취소 검증. 업무 앱과 DB는 변경하지 않음 |

@@ -2,6 +2,7 @@
 """Verify License against completed Auth/Gateway/Studio/Review/Catalog/Store/Order/Payment in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.ports import application_offset
 from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
@@ -14,12 +15,9 @@ directory=Path(tempfile.mkdtemp(prefix="stove-license-check-",dir=output_root))
 project=directory.name
 # 앱 포트는 리눅스 임시 포트 범위(32768-60999) 밖에 둔다. 31000이면 Review가 39086이 되어, 같은 실행의 다른
 # 프로세스가 밖으로 연결할 때 잡은 임시 포트와 겹쳐 "Port already in use"로 멈췄다(2026-11-06).
-offset=int(os.environ.get("LICENSE_TEST_PORT_OFFSET","20000"))
+# 도구별 간격은 support/ports.py 한 곳에 있다(결정 105).
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084}
-for port in apps.values():
-    with socket.socket() as sock:
-        sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        sock.bind(("127.0.0.1",port+offset))
+offset=application_offset("verify-license","LICENSE_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1",0))

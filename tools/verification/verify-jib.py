@@ -18,6 +18,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 
+from support.ports import application_offset
 from support.minio_image import ensure_minio_image
 
 
@@ -29,25 +30,6 @@ PORTS = {"auth": 8091, "gateway": 8080, "studio": 8085, "review": 8086,
 
 def capture(command, **kwargs):
     return subprocess.check_output(command, cwd=ROOT, text=True, **kwargs).strip()
-
-
-def free_offset():
-    for attempt in range(100):
-        # Keep application ports below Docker's automatic host-port allocation range.
-        offset = 10000 + secrets.randbelow(8000)
-        sockets = []
-        try:
-            for port in PORTS.values():
-                connection = socket.socket()
-                sockets.append(connection)
-                connection.bind(("127.0.0.1", offset + port))
-            return offset
-        except OSError:
-            continue
-        finally:
-            for connection in sockets:
-                connection.close()
-    raise RuntimeError("No isolated application port range available")
 
 
 def main():
@@ -98,7 +80,7 @@ def main():
         from support.backup_restore_verification import BackupRestoreVerification, ensure_client_image
         ensure_client_image(ROOT)
         recovery = BackupRestoreVerification(ROOT, output, minio_image, capture)
-    offset = free_offset()
+    offset = application_offset("verify-jib", "JIB_TEST_PORT_OFFSET", PORTS.values())
     for attempt in range(100):
         minio_port = 15000 + secrets.randbelow(3000)
         with socket.socket() as connection:

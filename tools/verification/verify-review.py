@@ -2,15 +2,15 @@
 """Verify Review against completed Auth/Gateway/Studio in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.ports import application_offset
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-review-check-"))
 project=directory.name
-offset=int(os.environ.get("REVIEW_TEST_PORT_OFFSET","30000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086}
-for port in apps.values():
-    with socket.socket() as sock: sock.bind(("127.0.0.1",port+offset))
+offset=application_offset("verify-review","REVIEW_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1",0))
@@ -114,7 +114,7 @@ try:
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     def start_app(app,arguments=()):
         port=apps[app]
-        jar=next(path for path in (repo/"apps"/app/"build/libs").glob("*.jar") if not path.name.endswith("-plain.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         process=subprocess.Popen(["java","-Xmx256m","-jar",str(jar),"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))

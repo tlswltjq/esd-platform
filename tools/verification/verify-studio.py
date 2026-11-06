@@ -2,15 +2,15 @@
 """Verify Studio against completed Auth/Gateway in an isolated, disposable stack."""
 
 from pathlib import Path
+from support.ports import application_offset
+from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
 import os, socket, subprocess, time, urllib.request, tempfile
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-studio-check-"))
 project=directory.name
-offset=int(os.environ.get("STUDIO_TEST_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080}
-for port in apps.values():
-    with socket.socket() as sock: sock.bind(("127.0.0.1",port+offset))
+offset=application_offset("verify-studio","STUDIO_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1",0))
@@ -91,7 +91,7 @@ try:
         STUDIO_ASSET_PUBLIC_BASE_URL=public,TRACING_SAMPLE_RATE="0")
     for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
     for app,port in apps.items():
-        jar=next((repo/"apps"/app/"build/libs").glob("*.jar"))
+        jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"w")
         process=subprocess.Popen(["java","-Xmx256m","-jar",str(jar),"--server.port="+str(port+offset)],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))

@@ -2,6 +2,7 @@
 """Verify real Gateway/service ownership boundaries in a disposable local stack."""
 
 from pathlib import Path
+from support.ports import application_offset
 from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
 from support.service_credentials import credential_names, service_environment
@@ -19,17 +20,13 @@ def inventory():
     return {'containers':sorted(states),'volumes':sorted(volumes)}
 before=inventory()
 (directory/'before.json').write_text(json.dumps(before,indent=2))
-offset=int(os.environ.get("GATEWAY_OWNERSHIP_PORT_OFFSET","20000"))
 apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,"store":8087,"order":8082,"payment":8083,"license":8084,"download":8088,"settlement":8089}
+offset=application_offset("verify-gateway-ownership","GATEWAY_OWNERSHIP_PORT_OFFSET",apps.values())
 ephemeral=Path('/proc/sys/net/ipv4/ip_local_port_range')
 if ephemeral.exists():
     low,high=map(int,ephemeral.read_text().split())
     if any(low <= port+offset <= high for port in apps.values()):
         raise RuntimeError('Choose GATEWAY_OWNERSHIP_PORT_OFFSET outside host ephemeral port range')
-for port in apps.values():
-    with socket.socket() as sock:
-        sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        sock.bind(("127.0.0.1",port+offset))
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1",0))

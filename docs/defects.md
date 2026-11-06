@@ -63,6 +63,8 @@
 | [D-035](#d-035) | 컨테이너 종료 유예가 짧아 graceful shutdown 이 SIGKILL 로 잘림 | 사용자 영향 | **수정됨** | R-01 시나리오 추가 ([E9](experiments.md#resilience)) |
 | [D-036](#d-036) | 통합 테스트 컨텍스트가 늘면 관계없는 기존 클래스가 빨개짐 | 게이트 마비 | **수정됨** | R-04 실행 중 ([E9](experiments.md#resilience)) |
 | [D-037](#d-037) | 장애를 주입했는데 컨슈머 그룹 멤버가 둘이라 파티션만 옆으로 옮겨 감 | 게이트 마비 | **수정됨** | CI의 R-03 실패 |
+| [D-038](#d-038) | 검증 도구 9개가 실행 JAR 대신 `-test-fixtures.jar`를 고를 수 있음 | 검증 무효 | **수정됨** | PR #116 `verify-license.py` 실패 |
+| [D-039](#d-039) | 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈춤 | 검증 마비 | **수정됨** | 결정 105 적용 중 연속 실행 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -496,6 +498,24 @@
 
 - **원인** license 통합 소스셋의 두 컨텍스트가 모두 그룹 `license` 멤버라 한쪽을 멈추면 파티션이 다른 쪽으로 리밸런싱됐다. 합류 순서에 따라 원격에서는 통과하고 CI에서 실패하는 간헐 실패였다. 하네스의 "중단 중 미지급" 판정이 이것을 잡았다.
 - **수정** `LicenseOpenApiContractTest`에 `spring.kafka.listener.auto-startup=false`(폴링을 재운 것과 같은 처방, 배선 검증은 유지). 캐시 컨텍스트가 쥐는 배경 스레드·커넥션 풀(D-036)·그룹 멤버십의 세 번째 사례다.
+
+<a id="d-038"></a>
+## D-038 검증 도구 9개가 실행 JAR 대신 `-test-fixtures.jar`를 고를 수 있었다
+
+**상태** 수정됨 · **영향** 검증 무효 · **위치** `tools/verification/verify-*.py`
+**재현** `test_ports.ApplicationJarUseTest` — 수정 전 `glob("*.jar")`를 직접 쓰는 도구 9개로 실패 · **실측** Order·Payment의 `build/libs`에 `*-SNAPSHOT.jar`와 `*-test-fixtures.jar`가 함께 있다
+
+- **원인** PR #116에서 `verify-license.py`만 `support/boot_jars.application_jar`로 고쳤고, 나머지 도구는 `-plain.jar`만 빼는(또는 아무것도 빼지 않는) 옛 선택을 복사해 쓰고 있었다. 파일 순서에 따라 테스트 픽스처 JAR로 앱을 띄운다.
+- **수정** 모든 도구가 `application_jar`를 쓴다. 테스트가 직접 `glob("*.jar")`를 막는다.
+
+<a id="d-039"></a>
+## D-039 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈췄다
+
+**상태** 수정됨 · **영향** 검증 마비 · **위치** `tools/verification/support/ports.py`, 각 `verify-*.py`의 자체 포트 확인
+**재현** `test_ports.PortOffsetsTest#test_port_left_in_time_wait_by_a_previous_run_is_not_reported_busy` — 수정 전 `application ports in use`로 실패 · **실측** `verify-studio.py`를 끝내자마자 다시 돌리면 30085·30091이 TIME_WAIT로 남아 시작 전에 멈췄다
+
+- **원인** 빈 포트 확인이 `SO_REUSEADDR` 없이 bind했다. 앱(Tomcat·Netty)은 이 옵션으로 listen하므로 TIME_WAIT 포트를 쓸 수 있는데, 확인만 막혔다. 도구 6개의 자체 확인도 같은 이유로 연속 실행을 막았다(옵션을 켠 도구 5개는 무사).
+- **수정** 공용 확인에 `SO_REUSEADDR`를 켜고, 도구마다 중복된 자체 bind 확인을 지웠다. 리눅스는 TIME_WAIT를 남긴 쪽도 옵션을 켰어야 다시 bind를 허용하므로, 재현 테스트의 서버도 옵션을 켠다.
 
 ---
 
