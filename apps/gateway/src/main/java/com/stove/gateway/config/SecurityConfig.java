@@ -120,7 +120,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/v1/admin/refund-cancellation-holds", "/api/v1/admin/refund-cancellation-holds/*").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-cancellation-holds/*/resume").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/admin/approval-reviews", "/api/v1/admin/approval-reviews/*", "/api/v1/admin/approval-reviews/*/investigations").hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/approval-reviews/*/investigations").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/approval-reviews/*/investigations", "/api/v1/admin/approval-reviews/*/closure").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/admin/refund-delays", "/api/v1/admin/refund-delays/*",
                                 "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN")

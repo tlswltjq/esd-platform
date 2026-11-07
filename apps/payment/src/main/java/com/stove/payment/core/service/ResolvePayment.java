@@ -1,7 +1,5 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.Payment;
@@ -151,18 +149,7 @@ public class ResolvePayment {
 
     private void confirm(Payment current, PgResult result) {
         if (!current.confirm(result, UUID.randomUUID().toString(), Payment.now())) return;
-
-        if (current.getStatus() == PaymentStatus.PAID) {
-            outbox.record("Payment", current.getOrderNo(), new OrderPaymentCompletedEvent(
-                    current.getResultEventId(), current.getResultOccurredAt(), current.getOrderNo(), current.getRequestEventId(),
-                    current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
-                    current.getPgPaidAmount(), current.getPgDiscountAmount()));
-        } else {
-            outbox.record("Payment", current.getOrderNo(), new OrderPaymentFailedEvent(
-                    current.getResultEventId(), current.getResultOccurredAt(), current.getOrderNo(), current.getRequestEventId(),
-                    current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
-                    current.getFailureReasonCode(), current.getFailureReason()));
-        }
+        PaymentResultOutbox.record(outbox, current);
     }
 
     private void defer(String paymentId, String code, RuntimeException failure) {

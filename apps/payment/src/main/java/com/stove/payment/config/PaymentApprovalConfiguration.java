@@ -1,9 +1,11 @@
 package com.stove.payment.config;
 
+import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.adapter.crypto.AesGcmApprovalPayloadProtection;
 import com.stove.payment.adapter.order.HttpOrderPaymentAdmissions;
 import com.stove.payment.adapter.pg.AdmittedPortOnePgGateway;
 import com.stove.payment.adapter.pg.PortOnePaymentApprovalGateway;
+import com.stove.payment.core.domain.ApprovalClosureRepository;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -11,6 +13,7 @@ import com.stove.payment.core.port.ApprovalPayloadProtection;
 import com.stove.payment.core.port.OrderPaymentAdmissions;
 import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.PgPaymentApprovalGateway;
+import com.stove.payment.core.service.CloseApprovalReview;
 import com.stove.payment.core.service.RequestPaymentApproval;
 import com.stove.payment.core.service.ReadPayment;
 import com.stove.payment.core.service.ReadPaymentApproval;
@@ -63,10 +66,19 @@ public class PaymentApprovalConfiguration {
             OrderPaymentAdmissions orders,PgPaymentApprovalGateway gateway,ApprovalPayloadProtection protection,ResolvePayment resolve,
             Clock refundReceptionClock,PortOneProperties pg,PaymentApprovalProperties properties,PaymentProcessingProperties processing,
             PlatformTransactionManager transactions,PaymentOrderLifecycleRepository lifecycle) {
-        Duration lease=pg.connectTimeout().plus(pg.readTimeout()).multipliedBy(3)
-                .plus(properties.orderConnectTimeout()).plus(properties.orderReadTimeout()).plusSeconds(30);
         return new ResolvePaymentApproval(payments,approvals,orders,gateway,protection,resolve,refundReceptionClock,
-                lease,Duration.ofMillis(processing.retryDelayMs()),processing.batchSize(),transactions,lifecycle);
+                approvalLease(pg,properties),Duration.ofMillis(processing.retryDelayMs()),processing.batchSize(),transactions,lifecycle);
+    }
+    /** The operator closure takes the worker's lease (decision 115), so both use one lease length. */
+    @Bean CloseApprovalReview closeApprovalReview(PaymentRepository payments,PaymentApprovalRepository approvals,ApprovalClosureRepository closures,
+            PaymentOrderLifecycleRepository lifecycle,PgPaymentApprovalGateway gateway,OutboxRecorder outbox,Clock refundReceptionClock,
+            PortOneProperties pg,PaymentApprovalProperties properties,PlatformTransactionManager transactions) {
+        return new CloseApprovalReview(payments,approvals,closures,lifecycle,gateway,outbox,refundReceptionClock,
+                approvalLease(pg,properties),transactions);
+    }
+    private static Duration approvalLease(PortOneProperties pg,PaymentApprovalProperties properties) {
+        return pg.connectTimeout().plus(pg.readTimeout()).multipliedBy(3)
+                .plus(properties.orderConnectTimeout()).plus(properties.orderReadTimeout()).plusSeconds(30);
     }
     @Configuration(proxyBeanMethods=false)
     @EnableScheduling
