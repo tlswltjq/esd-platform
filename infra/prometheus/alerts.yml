@@ -67,6 +67,8 @@ groups:
             GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
             시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
 
+      # 승인 보류(결정 114·115). PAID_WITHOUT_ADMISSION은 돈이 나갔는데 주문이 결제되지 않아 critical이다.
+      # PG_CANCELLED를 포함한 나머지는 warning이다. PG_CANCELLED는 PG가 이미 전액을 돌려준 상태이고 종결만 남았다.
       - alert: PaymentApprovalsRequireReview
         expr: stove_payment_approval_review_required{reason="PAID_WITHOUT_ADMISSION"} > 0
         labels:
@@ -76,6 +78,7 @@ groups:
           description: >-
             {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
             GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+            PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
             알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
 
       - alert: PaymentApprovalsRequireReview
@@ -87,6 +90,7 @@ groups:
           description: >-
             {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
             GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+            PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
             알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
 
       # 만료 스윕이 살아 있는가.

@@ -100,6 +100,7 @@ stateDiagram-v2
 - `expiresAt = createdAt + 30분`. 상태가 PENDING이어도 서버 시각이 기한을 지나면 새 승인 접수를 거절하고 EXPIRED를 먼저 커밋한다.
 - 기한 내 확정된 `PAYMENT_PROCESSING`은 시각 경과만으로 EXPIRED·FAILED로 바꾸지 않는다. 늦은 성공은 연결된 paymentId와 대조한다.
 - `PAID`·`FAILED`·`EXPIRED`는 최종 상태다. 구매 슬롯은 없다(V28).
+- 예외 하나: Payment가 승인 보류를 운영자 종결로 끝낸 `OrderPaymentFailed`(reasonCode `REVIEW_CLOSED`)가 이미 `EXPIRED`인 주문에 오면 Inbox만 남기고 만료를 유지한다(결정 115, R4.8). 종결과 30분 만료가 엇갈린 경합이 DLT로 가지 않게 하는 무효과이며, 다른 결과는 계속 충돌이다.
 
 ## 환불 처리 요약
 

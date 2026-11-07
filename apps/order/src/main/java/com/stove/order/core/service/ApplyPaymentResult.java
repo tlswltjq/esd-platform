@@ -35,6 +35,11 @@ public class ApplyPaymentResult {
                 throw new BusinessException(ErrorCode.CONFLICT, "결과 이벤트 ID가 다른 주문에 사용되었습니다.");
         });
         if (order.paymentResult() != null) { order.apply(result); return; }
+        if (order.keepsExpiryFor(result)) {
+            // 결정 115: 만료와 엇갈린 운영자 종결은 Inbox만 남기는 무효과다. 재전달도 같은 무효과라 재시도·DLT로 가지 않는다.
+            guard.firstDelivery(result.eventId(), CONSUMER_GROUP, eventType);
+            return;
+        }
         if (!guard.firstDelivery(result.eventId(), CONSUMER_GROUP, eventType))
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox와 주문의 결제 결과가 일치하지 않습니다.");
         order.apply(result);

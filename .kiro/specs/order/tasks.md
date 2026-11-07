@@ -18,6 +18,7 @@
 - [x] 환불 금액 상세(amountDetails) A안: 주문·승인 PG 실결제/할인·확인 취소/포인트·미확인 목록, Order V27 — 2026-10-30
 - [x] 실제 ADMIN 수동 심사 PG 환불 1건(할인 거래, 취소 총액·보고 포인트 상세·결제수단 반환액 NULL) — 2026-10-30
 - [x] 공개 상세 B·판매 상태: `publicDetailAllowed` false 신규 주문 404, 관리자 BLOCKED 새 승인 접수 차단, 판매자 STOPPED가 기존 주문·기한 미변경 — 2026-11-02
+- [x] [결정 115](../../../docs/decisions.md#approval-review-closure-outcome): 이미 `EXPIRED`인 주문에 늦게 온 운영자 종결 실패(`REVIEW_CLOSED`)는 Inbox만 남기는 무효과(재시도·DLT 없음), 그 밖의 결과는 충돌 유지 — 2026-11-07
 
 ## 진행 중 / 남음 (일반화 공백)
 

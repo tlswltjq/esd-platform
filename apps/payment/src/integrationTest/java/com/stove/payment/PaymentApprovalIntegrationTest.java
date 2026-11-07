@@ -341,6 +341,7 @@ class PaymentApprovalIntegrationTest {
         assertThat(paths.path("/api/v1/payments/{orderNo}/approvals").has("post")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}/approvals/{requestId}").has("get")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}/checkout").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}/closure").has("post")).isTrue();
     }
     @Test void anOrderExpiryReceiptClosesAQueuedUnadmittedApprovalWithoutPgTraffic() {
         Payment payment=purchase(); String command=id(); submit(payment,command); recordExpiry(payment);

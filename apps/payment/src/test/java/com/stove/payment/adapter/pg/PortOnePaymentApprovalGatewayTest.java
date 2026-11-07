@@ -134,6 +134,58 @@ class PortOnePaymentApprovalGatewayTest {
         assertThatThrownBy(()->gateway(at).submit(id(),purchase,"private-token",at,at.plusSeconds(60)))
                 .isInstanceOf(ApprovalPostRejected.class).hasMessageNotContaining("private-token").hasNoCause(); server.verify();
     }
+    private String cancelled(long cancelledAmount, String... rows) throws Exception {
+        String body = snapshot("CANCELLED", "tx-original").replace("\"paid\":0", "\"paid\":9000").replace("\"cancelled\":0", "\"cancelled\":" + cancelledAmount);
+        return body.substring(0, body.length() - 1) + ",\"paidAt\":\"" + at + "\",\"pgTxId\":\"pg-original\",\"cancelledAt\":\"" + at.plusSeconds(60)
+                + "\",\"cancellations\":[" + String.join(",", rows) + "]}";
+    }
+    private static String cancellation(String id, String status, long amount) {
+        return "{\"id\":\"" + id + "\",\"status\":\"" + status + "\",\"totalAmount\":" + amount + ",\"cancelledAt\":\"2026-10-29T01:01:00Z\"}";
+    }
+    @Test void aVerifiedFullCancellationOfTheHeldAttemptIsCancelledEvidenceWithoutAPaidResult() throws Exception {
+        for (String body : List.of(cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 9000)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 4000), cancellation("cancel-2", "FAILED", 9000), cancellation("cancel-3", "SUCCEEDED", 5000)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 9000)).replace("\"paid\":9000", "\"paid\":8976").replace("\"discount\":0", "\"discount\":24"))) {
+            server.reset();
+            server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+            ApprovalObservation observed = gateway(at).inspect(purchase);
+            assertThat(observed.state()).isEqualTo(ApprovalObservation.State.CANCELLED);
+            assertThat(observed.paid()).isNull(); assertThat(observed.failedAt()).isNull();
+            server.verify();
+        }
+    }
+    @Test void partialUnresolvedOrForeignCancellationsRemainInvalidEvidence() throws Exception {
+        String full = cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 9000));
+        List<String> invalid = List.of(
+                cancelled(4000, cancellation("cancel-1", "SUCCEEDED", 4000)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 4000)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 9000), cancellation("cancel-2", "SUCCEEDED", 1)),
+                cancelled(9000),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 4000), cancellation("cancel-2", "REQUESTED", 5000)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 4500), cancellation("cancel-1", "SUCCEEDED", 4500)),
+                cancelled(9000, cancellation("cancel-1", "SUCCEEDED", 0), cancellation("cancel-2", "SUCCEEDED", 9000)),
+                full.replace(",\"cancellations\":[" + cancellation("cancel-1", "SUCCEEDED", 9000) + "]", ""),
+                full.replace("\"CANCELLED\"", "\"PARTIAL_CANCELLED\""),
+                full.replace("tx-original", "other-tx"),
+                full.replace(STORE, "other-store"), full.replace(CHANNEL, "other-channel"), full.replace("TEST", "LIVE"),
+                full.replace(purchase.purchase().orderNo(), id()), full.replace("\"total\":9000", "\"total\":8000"));
+        for (String body : invalid) {
+            server.reset();
+            server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+            assertThatThrownBy(() -> gateway(at).inspect(purchase)).as(body).isInstanceOf(IllegalArgumentException.class);
+            server.verify();
+        }
+    }
+    @Test void aCancelledHistoryItemForAnotherCurrentAttemptIsNotTrustedAsAFullCancel() throws Exception {
+        server.expect(requestTo(url() + "?storeId=" + STORE)).andRespond(withSuccess(snapshot("READY", "tx-other"), MediaType.APPLICATION_JSON));
+        String item = new ObjectMapper().writeValueAsString(Map.of("id", "tx-original", "paymentId", purchase.purchase().paymentId(), "status", "CANCELLED",
+                "storeId", STORE, "version", "V2", "currency", "KRW", "channel", Map.of("type", "TEST", "key", CHANNEL, "pgProvider", "TOSSPAY_V2"),
+                "amount", Map.of("total", 9000, "paid", 9000, "discount", 0, "cancelled", 9000),
+                "customData", new ObjectMapper().writeValueAsString(Map.of("orderNo", purchase.purchase().orderNo()))));
+        server.expect(requestTo(url() + "/transactions?storeId=" + STORE)).andRespond(withSuccess("{\"items\":[" + item + "]}", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway(at).inspect(purchase)).isInstanceOf(IllegalArgumentException.class);
+        server.verify();
+    }
     @Test void anOutstandingIdenticalRequestLeavesTheDecisionToLookup() {
         server.expect(requestTo(url()+"/confirm")).andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
                 .body("{\"type\":\"IDEMPOTENCY_OUTSTANDING_REQUEST\"}"));

@@ -73,6 +73,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 5. WHEN 최초 `PAID`를 반영하면 THEN 시스템 SHALL 같은 트랜잭션에 `OrderPaid` Outbox를 기록한다. `FAILED`에는 발행하지 않고 과거 `PAID`의 자동 소급 발행도 없다.
 6. WHEN 성공·실패가 동시에 도착하면 THEN 시스템 SHALL 행 잠금으로 직렬화해 먼저 수락한 최종 결과를 보존한다. 다른 주문에서 이미 쓴 결과 eventId는 Inbox 중복 판단 전에 거절하고, Inbox만 있고 일치하는 저장 결과가 없으면 정상 중복으로 넘기지 않는다.
 7. THE 완료 결과의 amount SHALL 고객에게 승인된 금액이며, PG 수수료 공제 후 입금액·판매자 지급액과 비교하지 않는다. 선택적 `pgPaidAmount`·`pgDiscountAmount` 쌍은 합계가 원주문 총액과 다르거나 한쪽만 있으면 거절한다.
+8. WHEN Payment의 운영자 승인 보류 종결 실패(`OrderPaymentFailed`, reasonCode `REVIEW_CLOSED`)가 이미 `EXPIRED`인 주문에 도착하면 THEN 시스템 SHALL 연결값(R4.1)을 검증한 뒤 Inbox만 기록하고 `EXPIRED`를 유지한다. 재전달도 같은 무효과이며 재시도·DLT로 보내지 않는다(결정 115: 종결과 주문 자체 30분 만료가 엇갈려도 끝은 같은 새 주문 안내다). 그 밖의 결과가 `EXPIRED` 주문에 오면 R3.11·R4.4대로 충돌이다. `PENDING`·`PAYMENT_PROCESSING`(같은 paymentId) 주문의 `REVIEW_CLOSED`는 일반 실패처럼 `FAILED`가 된다.
 
 ### R5. 내 주문 조회와 최소 보안
 **사용자 스토리:** 구매자로서, 내 주문만 목록·상세로 보고 싶다. 그래야 타인 주문이 노출되지 않는다.

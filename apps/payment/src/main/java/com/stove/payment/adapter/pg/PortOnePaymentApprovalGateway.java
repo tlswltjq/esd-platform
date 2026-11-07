@@ -17,8 +17,10 @@ import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -52,6 +54,12 @@ public class PortOnePaymentApprovalGateway implements PgPaymentApprovalGateway {
                     PgResult.Decision.APPROVED, null, null, null,
                     new PgPaymentAmounts(number(current.path("amount"), "paid"), number(current.path("amount"), "discount")));
             return new ApprovalObservation(ApprovalObservation.State.PAID, paid, null);
+        }
+        if ("CANCELLED".equals(status)) {
+            // Only a full cancel of the held attempt itself is evidence; another attempt's cancel says nothing about ours.
+            if (!currentAttempt.equals(requested.supplierAttemptId())) throw new IllegalArgumentException("Cancelled transaction is not the held attempt");
+            requireFullCancellation(current, requested.purchase().amount());
+            return new ApprovalObservation(ApprovalObservation.State.CANCELLED, null, null);
         }
         if (currentAttempt.equals(requested.supplierAttemptId())) return unpaid(current, requested.purchase());
         JsonNode history = get("/payments/{id}/transactions", requested.purchase().paymentId());
@@ -133,6 +141,31 @@ public class PortOnePaymentApprovalGateway implements PgPaymentApprovalGateway {
         if (number(values,"total") != amount || !matchingPaidAmount
                 || number(values,"cancelled") != 0)
             throw new IllegalArgumentException("Approval amounts do not match the purchase");
+    }
+    /** A full cancel: the whole original total is cancelled and the succeeded cancellations alone add up to it. */
+    private static void requireFullCancellation(JsonNode item, long amount) {
+        JsonNode values = item.path("amount");
+        long total = number(values, "total");
+        long paid = number(values, "paid");
+        long discount = number(values, "discount");
+        if (total != amount || number(values, "cancelled") != total || discount < 0 || discount > total || paid != total - discount)
+            throw new IllegalArgumentException("Cancellation amounts are not a full cancel of the purchase");
+        JsonNode rows = item.path("cancellations");
+        if (!rows.isArray() || rows.isEmpty()) throw new IllegalArgumentException("Missing cancellation evidence");
+        Set<String> ids = new HashSet<>();
+        long succeeded = 0;
+        try {
+            for (JsonNode row : rows) {
+                if (!ids.add(text(row, "id"))) throw new IllegalArgumentException("Duplicate cancellation identity");
+                String state = text(row, "status");
+                if ("SUCCEEDED".equals(state)) {
+                    long cancelled = number(row, "totalAmount");
+                    if (cancelled <= 0) throw new IllegalArgumentException("Invalid cancellation amount");
+                    succeeded = Math.addExact(succeeded, cancelled);
+                } else if (!"FAILED".equals(state)) throw new IllegalArgumentException("Unresolved cancellation evidence");
+            }
+        } catch (ArithmeticException overflow) { throw new IllegalArgumentException("Invalid cancellation amount"); }
+        if (succeeded != total) throw new IllegalArgumentException("Succeeded cancellations do not cover the purchase");
     }
     private static String text(JsonNode item, String name) {
         if (!item.path(name).isTextual() || item.path(name).asText().isBlank()) throw new IllegalArgumentException("Missing approval evidence field");

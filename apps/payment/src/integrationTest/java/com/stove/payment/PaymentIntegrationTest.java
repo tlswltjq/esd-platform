@@ -360,6 +360,8 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}/investigations").has("get")).isTrue();
         assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}/investigations").has("post")).isTrue();
+        // Only PortOne approvals can be held, so the closure operation exists only in PORTONE_TEST mode (decision 115).
+        assertThat(paths.has("/api/v1/admin/approval-reviews/{approvalId}/closure")).isFalse();
         assertThat(paths.path("/api/v1/payments").size()).isEqualTo(1);
         assertThat(paths.path("/api/v1/payments").has("get")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}").has("get")).isTrue();

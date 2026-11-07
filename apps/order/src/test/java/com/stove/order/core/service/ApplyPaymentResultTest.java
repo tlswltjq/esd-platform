@@ -2,6 +2,7 @@ package com.stove.order.core.service;
 
 import static com.stove.order.OrderFixtures.completed;
 import static com.stove.order.OrderFixtures.failed;
+import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
 import static com.stove.order.OrderFixtures.result;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -145,6 +146,82 @@ class ApplyPaymentResultTest {
 
         assertThat(stored.getStatus()).isEqualTo(OrderStatus.PENDING);
         verifyNoInteractions(outbox, entityManager);
+    }
+
+    /** 결정 115: 운영자 종결 실패가 주문 자체 만료와 엇갈려 도착하면 만료를 유지하고 재시도·DLT로 보내지 않는다. */
+    @Test
+    void aReviewClosureThatCrossesTheOrdersOwnExpiryKeepsTheExpiryAndMarksOnlyTheInbox() {
+        Order stored = expired();
+        PaymentResult input = failure(stored, "REVIEW_CLOSED");
+        when(orders.lockByOrderNo(stored.getOrderNo())).thenReturn(Optional.of(stored));
+        when(inbox.firstDelivery(input.eventId(), ApplyPaymentResult.CONSUMER_GROUP, EventType.ORDER_PAYMENT_FAILED)).thenReturn(true);
+
+        apply.execute(EventType.ORDER_PAYMENT_FAILED, input);
+
+        assertThat(stored.getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        assertThat(stored.paymentResult()).isNull();
+        assertThat(stored.getFailureReasonCode()).isNull();
+        verify(inbox).firstDelivery(input.eventId(), ApplyPaymentResult.CONSUMER_GROUP, EventType.ORDER_PAYMENT_FAILED);
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void aRedeliveredReviewClosureForAnExpiredOrderIsStillANoOp() {
+        Order stored = expired();
+        PaymentResult input = failure(stored, "REVIEW_CLOSED");
+        when(orders.lockByOrderNo(stored.getOrderNo())).thenReturn(Optional.of(stored));
+        when(inbox.firstDelivery(input.eventId(), ApplyPaymentResult.CONSUMER_GROUP, EventType.ORDER_PAYMENT_FAILED)).thenReturn(false);
+
+        apply.execute(EventType.ORDER_PAYMENT_FAILED, input);
+
+        assertThat(stored.getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        assertThat(stored.paymentResult()).isNull();
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void everyOtherResultForAnExpiredOrderStillConflicts() {
+        Order stored = expired();
+        for (PaymentResult input : new PaymentResult[]{failure(stored, "DECLINED"), result(completed(stored))}) {
+            String type = input.status() == OrderStatus.PAID ? EventType.ORDER_PAYMENT_COMPLETED : EventType.ORDER_PAYMENT_FAILED;
+            when(orders.lockByOrderNo(stored.getOrderNo())).thenReturn(Optional.of(stored));
+            when(inbox.firstDelivery(input.eventId(), ApplyPaymentResult.CONSUMER_GROUP, type)).thenReturn(true);
+
+            assertThatThrownBy(() -> apply.execute(type, input))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+            assertThat(stored.getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        }
+        PaymentResult mismatched = new PaymentResult(id(), stored.getExpiresAt(), stored.getOrderNo(), stored.getRequestEventId(), id(),
+                "other-buyer", stored.getAmount(), stored.getCurrency(), OrderStatus.FAILED, "REVIEW_CLOSED", "closed");
+        assertThatThrownBy(() -> apply.execute(EventType.ORDER_PAYMENT_FAILED, mismatched))
+                .isInstanceOfSatisfying(BusinessException.class, failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.CONFLICT));
+        verifyNoInteractions(outbox);
+    }
+
+    @Test
+    void aReviewClosureBeforeExpiryFailsThePendingOrderAsAnyFinalFailure() {
+        Order stored = order();
+        PaymentResult input = failure(stored, "REVIEW_CLOSED");
+        when(orders.lockByOrderNo(stored.getOrderNo())).thenReturn(Optional.of(stored));
+        when(inbox.firstDelivery(input.eventId(), ApplyPaymentResult.CONSUMER_GROUP, EventType.ORDER_PAYMENT_FAILED)).thenReturn(true);
+
+        apply.execute(EventType.ORDER_PAYMENT_FAILED, input);
+
+        assertThat(stored.getStatus()).isEqualTo(OrderStatus.FAILED);
+        assertThat(stored.paymentResult()).isEqualTo(input);
+        verifyNoInteractions(outbox);
+    }
+
+    private static Order expired() {
+        Order stored = order();
+        assertThat(stored.expire(stored.getExpiresAt())).isTrue();
+        return stored;
+    }
+
+    private static PaymentResult failure(Order stored, String reasonCode) {
+        return new PaymentResult(id(), stored.getExpiresAt(), stored.getOrderNo(), stored.getRequestEventId(), id(),
+                stored.getBuyerSubject(), stored.getAmount(), stored.getCurrency(), OrderStatus.FAILED, reasonCode, "Payment approval review closed");
     }
 
     @ParameterizedTest
