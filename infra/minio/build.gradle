@@ -4,16 +4,11 @@ plugins {
 
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
         System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
-def registry = providers.gradleProperty('stove.jib.registry')
-        .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
-def suppliedImage = providers.environmentVariable('STOVE_MINIO_IMAGE')
-        .map { !it.isBlank() }.getOrElse(false)
-def targetImage = providers.gradleProperty('stove.minio.image')
-        .getOrElse("${registry}/minio:RELEASE.2025-04-22T22-12-26Z-local".toString())
-// STOVE_TEST_MINIO_IMAGE가 이 빌드 대상과 같은 이름이면, 그 이미지가 로컬에 있을 때만 빌드를 건너뛴다.
-// 없으면 빌드한다(registry에서 받지 않는다). tools/verification/support/minio_image.py와 같은 판단이다.
-def reuseRequested = providers.environmentVariable('STOVE_TEST_MINIO_IMAGE')
-        .map { it.trim() == targetImage }.getOrElse(false)
+// 이미지 이름과 빌드 여부는 루트 build.gradle의 minioImageSelection이 정한다.
+def minioImageSelection = rootProject.ext.minioImageSelection
+String targetImage = minioImageSelection.buildImage
+boolean suppliedImage = minioImageSelection.supplied
+boolean reuseRequested = minioImageSelection.reuseRequested
 def rootfs = layout.buildDirectory.dir('rootfs')
 def goModules = layout.buildDirectory.dir('go-modules')
 def goCache = layout.buildDirectory.dir('go-cache')
