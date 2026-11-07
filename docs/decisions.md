@@ -992,7 +992,7 @@
 - 내 의견: "C안으로 하자"
 - 선택: C — 기본 브랜치에 GitHub 규칙셋(`main protection (decision 107)`)을 둔다. 삭제·강제 push 금지, PR 필수(승인 0건), 필수 검사 `build (unit · architecture · integration · migration)`, 최신 main 반영은 요구하지 않음, 우회자 없음. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](defects.md)에 남긴다. 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. 흔들리는 Store 동시성 테스트와 문서 PR의 CI 시간은 별도 쟁점으로 남긴다.
 - 구분: 추천 수용
-- 결과: PR (작성 중)
+- 결과: [PR #122](https://github.com/tlswltjq/esd-platform/pull/122), [근거 색인](evidence.md) 2026-11-07 main 보호 규칙셋 행
 
 ---
 
