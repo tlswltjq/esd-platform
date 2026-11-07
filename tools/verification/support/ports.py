@@ -22,6 +22,7 @@ OFFSETS = {
     "verify-settlement": 20000,
     "verify-store": 21000,
     "verify-studio": 22000,
+    "verify-refund-settlement": 23000,
 }
 
 

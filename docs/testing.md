@@ -48,10 +48,12 @@ python3 -B -m unittest discover -s tools/verification -p test_protected_compose.
 python3 -B -m unittest discover -s tools/verification -p test_service_credentials.py -v
 python3 -B -m unittest discover -s tools/verification -p test_boot_jars.py -v
 python3 -B -m unittest discover -s tools/verification -p test_ports.py -v   # 도구별 포트 간격·JAR 선택(결정 105)
+python3 -B -m unittest discover -s tools/verification -p test_portone_fake.py -v  # 로컬 PortOne V2 계약
 ./gradlew :common:test:test --no-daemon --max-workers=2          # Compose 배포 계약
 ./gradlew :apps:catalog:integrationTest --tests 'com.stove.catalog.*ServiceKey*IntegrationTest' \
   :apps:order:integrationTest --tests 'com.stove.order.*ServiceKey*IntegrationTest' --no-daemon --max-workers=2
 ./gradlew :apps:payment:integrationTest --tests 'com.stove.payment.PortOneWebhook*IntegrationTest' --no-daemon --max-workers=2
+python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
 python3 tools/verification/verify-gateway-ownership.py            # 실제 11개 앱의 키 수신자 기록(이름만)
 ```
 
