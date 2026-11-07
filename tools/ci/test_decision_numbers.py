@@ -44,6 +44,10 @@ class DecisionNumbersTest(unittest.TestCase):
         self.write('docs/decisions.md', '## 1. A\n## 3. C\n## 2. B\n')
         self.assertIn('역순 번호 2', self.errors())
 
+    def test_sequence_starts_at_one(self):
+        self.write('docs/decisions.md', '## 0. 잘못된 시작\n## 1. 첫째\n')
+        self.assertIn('순서 오류 번호 0 (기대 1)', self.errors())
+
     def test_duplicate_anchor(self):
         self.write('docs/decisions.md', VALID + '<a id="one"></a>\n')
         self.assertIn('중복 앵커 one', self.errors())
