@@ -75,14 +75,14 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 ## 5. 실행·검증 환경
 
 - worktree에서 MinIO를 쓰는 통합 테스트를 돌릴 때, MinIO 빌드 입력을 바꾸지 않았다면 이미 만든 이미지를 다시 쓴다([testing.md](docs/testing.md#minio-image)).
-
 - 빌드·테스트·서비스 실행과 인프라 검증은 로컬 호스트(과거 `ssh sng` OCI 인스턴스)에서 수행한다.
 - 검증마다 작업 디렉터리·포트·DB·컨테이너를 격리하고, 기존 컨테이너·볼륨·공유 자료를 실행 전후 대조해 보존한다.
 - 테스트 범위·실행 명령·병목 진단은 [testing.md](docs/testing.md)를 따른다. 관련 단위·아키텍처 검사 → 필요한 통합 검증 → 최종 게이트 순서로 실행하고, 변경하지 않은 범위의 전체 검증을 이유 없이 반복하지 않는다.
 - 실제 금융 동작(PortOne TEST 결제·환불)은 사용자와 합의한 사례에서만 실행한다.
 - `main`은 PR과 CI `build` 통과로만 바뀐다([결정 107](docs/decisions.md#main-branch-protection)). 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](docs/defects.md)에 남긴다.
 - CI 테스트가 가끔 실패해도 자동 재시도나 격리를 하지 않는다. 병합이 막히면 실패한 작업만 한 번 다시 돌릴 수 있다. 이때 실패한 테스트와 run을 PR 본문에 적고, 재현 테스트와 함께 결함 대장에 올려 고친다([결정 113](docs/decisions.md#flaky-tests)).
-- 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 심각도가 high이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 `채택 (AI 판정)`으로 적는다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)).
+- 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude가 하고, 교차 리뷰는 Codex가 맡는다([결정 117](docs/decisions.md#review-roles)).
+- 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델(Codex)이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 심각도가 high이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 `채택 (AI 판정)`으로 적는다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)).
 
 ## 6. 현재 상태
 
