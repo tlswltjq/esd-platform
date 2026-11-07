@@ -65,7 +65,7 @@
 | [D-037](#d-037) | 장애를 주입했는데 컨슈머 그룹 멤버가 둘이라 파티션만 옆으로 옮겨 감 | 게이트 마비 | **수정됨** | CI의 R-03 실패 |
 | [D-038](#d-038) | 검증 도구 9개가 실행 JAR 대신 `-test-fixtures.jar`를 고를 수 있음 | 검증 무효 | **수정됨** | PR #116 `verify-license.py` 실패 |
 | [D-039](#d-039) | 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈춤 | 검증 마비 | **수정됨** | 결정 105 적용 중 연속 실행 |
-| [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | 사본 갱신 실패 | **수정됨** | main CI 42249703875 |
+| [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | HTTP 회차 실패·Kafka 지연 | **수정됨** | main CI 42249703875·교차 리뷰 R1 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -518,6 +518,17 @@
 - **원인** 빈 포트 확인이 `SO_REUSEADDR` 없이 bind했다. 앱(Tomcat·Netty)은 이 옵션으로 listen하므로 TIME_WAIT 포트를 쓸 수 있는데, 확인만 막혔다. 도구 6개의 자체 확인도 같은 이유로 연속 실행을 막았다(옵션을 켠 도구 5개는 무사).
 - **수정** 공용 확인에 `SO_REUSEADDR`를 켜고, 도구마다 중복된 자체 bind 확인을 지웠다. 리눅스는 TIME_WAIT를 남긴 쪽도 옵션을 켰어야 다시 bind를 허용하므로, 재현 테스트의 서버도 옵션을 켠다.
 
+<a id="d-040"></a>
+## D-040 Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인
+
+**상태** 수정됨 · **영향** HTTP 동기화 회차 실패·Kafka 처리 지연과 ERROR 로그 · **위치** `ApplyCatalogProduct.execute`, `ReconcileCatalogProduct.apply`
+**재현** `StoreIntegrationTest#sameProductCommittedBetweenIdAndCodeReadsConverges`, `#reconciliationConvergesWhenEventCommitsBetweenIdAndCodeReads` — 각각 known-defect Red 1건, `BusinessException: 상품 코드가 다른 상품에 연결되어 있습니다.` · **실측** main CI run 42249703875의 `concurrentHttpAndEventInsertsConvergeToHighestVersion` 실패. HTTP 경로는 독립 교차 리뷰 R1에서 추가 확인했다.
+
+- **원인** READ_COMMITTED에서 빈 ID 잠금 조회 뒤 다른 트랜잭션이 같은 ID를 커밋하면 코드 조회에 같은 상품이 보인다. 두 서비스가 ID를 비교하지 않아 다른 상품으로 오인한다. BusinessException은 서비스 내부 최대 3회 재시도 루프에서는 제외된다. CI 테스트는 리스너를 거치지 않고 서비스를 직접 호출하므로 예외가 곧 테스트 실패가 된다.
+- **운영 영향** 이벤트는 `CatalogEventListener` → `ApplyCatalogProduct` 경로다. Store 자체 CommonErrorHandler가 없어 `KafkaConsumerAutoConfiguration`의 DefaultErrorHandler와 `ConsumerRetryPolicy`(1·2·4초)가 적용되고 BusinessException도 재시도된다. 따라서 옛 코드도 첫 실패 뒤 약 1초 후 재배달로 v3에 수렴하며 짧은 지연과 ERROR 로그가 발생한다. HTTP 초기화·복구는 `SynchronizeCatalogProducts` → `ReconcileCatalogProduct` 경로로, 해당 동기화 회차가 실패하고 기본 5초 뒤 다음 회차를 시도한다. 첫 동기화라면 그동안 storefront가 NOT_READY다. 영구적으로 낮은 버전에 머문다고 단정하지 않는다.
+- **수정** 두 서비스에서 코드 조회 결과의 productId를 비교한다. 같은 ID면 ConcurrencyFailureException으로 기존 최대 3회 새 트랜잭션 재시도를 사용해 잠금 조회부터 다시 수행한다. 다른 ID의 CONFLICT는 유지한다. 로직 통합 리팩터링은 하지 않았다. 두 결정적 테스트는 PausePoints로 빈 ID 조회 → 상대 v1 커밋 → v3 반영 순서를 고정하고 known-defect 태그를 떼어 기본 회귀 검사로 옮겼다. 실제 Kafka 경합은 `#kafkaDeliveryConvergesWhenSameProductIsCommittedBetweenReads`로 검증한다. 옛 Apply 코드로 이 테스트 1건이 통과했고 `Seeking to offset 0`, `Record in retry and not yet recovered` 로그 뒤 v3 수렴을 확인했다.
+- **망가뜨리기 확인(결정 102)** Apply 수정 제거 시 `ApplyCatalogProduct.execute`에서 새 회귀 1건이 같은 BusinessException으로 실패했다. Reconcile 수정만 제거해도 `ReconcileCatalogProduct.apply`에서 HTTP 회귀 1건이 같은 메시지로 실패(Gradle exit 1)한다. 행 번호 대신 메서드 이름으로 식별한다.
+
 ---
 
 ## 닫힌 항목
@@ -529,15 +540,3 @@
 ### 결번
 
 - **D-005** — 작성 중 철회. "DEAD 전이를 관측할 수 있어야 한다"는 [D-003](#d-003)의 일부라 합쳤다. 번호는 재사용하지 않는다(기존 커밋·주석의 참조가 흔들린다).
-
-
-<a id="d-040"></a>
-## D-040 Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인
-
-**상태** 수정됨 · **영향** HTTP 초기화와 이벤트 경합 시 높은 버전 반영 실패 · **위치** `apps/store/src/main/java/com/stove/store/core/service/ApplyCatalogProduct.java:42`
-**재현** `StoreIntegrationTest#sameProductCommittedBetweenIdAndCodeReadsConverges` — `[D-040]`, `:apps:store:defectTest` 1건 실패. `BusinessException: 상품 코드가 다른 상품에 연결되어 있습니다.` (`ApplyCatalogProduct.java:42`, `StoreIntegrationTest.java:192`).
-
-- **원인** READ_COMMITTED에서 B의 빈 ID 잠금 조회 뒤 A가 같은 ID를 커밋하면, B의 코드 조회에 같은 상품이 보인다. ID를 비교하지 않고 다른 상품으로 판정하며 BusinessException은 재시도하지 않는다. PausePoints로 B를 ID 조회 반환 직후 세우고 A의 버전 1 커밋 후 B의 버전 3 반영을 진행하여 가설을 확인했다.
-- **수정** 코드 조회 결과의 productId를 비교한다. 같은 ID이면 ConcurrencyFailureException으로 기존 최대 3회 새 트랜잭션 재시도를 사용해 잠금 조회부터 다시 수행한다. 다른 ID의 코드 충돌은 기존 CONFLICT를 유지한다. known-defect 태그를 떼어 기본 통합 회귀 검사로 옮겼다.
-
-- **망가뜨리기 확인(결정 102)** 수정 전 서비스로 되돌리고 태그 없는 새 회귀 테스트를 실행하면 1건 실패(Gradle exit 1), `ApplyCatalogProduct.java:42`의 같은 BusinessException, 호출 `StoreIntegrationTest.java:190`. 수정 복원 후 같은 테스트 1건 통과.
