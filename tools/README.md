@@ -7,6 +7,7 @@
 | [verification](verification/README.md) | 모듈별 격리 검증, Jib 전체 흐름, Compose 상태 검사 |
 | [observability](observability/README.md) | Outbox·컨슈머·브로커 랙·알람의 읽기 전용 수집 |
 | [ci/review_gate.py](ci/review_gate.py) | PR 본문 `리뷰 판정` 표 확인([결정 109](../docs/decisions.md#review-gate)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_review_gate.py -v` |
+| [ci/decision_numbers.py](ci/decision_numbers.py) | 결정 번호 순서·앵커 중복·링크 번호 확인([결정 114](../docs/decisions.md#decision-numbers)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_decision_numbers.py -v` |
 | [operations/license-recovery.sql](operations/license-recovery.sql) | [운영 재처리 절차](../docs/license-event-recovery-runbook.md)의 주문·지급·확인 읽기 전용 대조 |
 | [db-lab](db-lab/README.md) | 격리 MySQL의 락·동시성 학습 실험 |
 | [migrations](migrations/README.md) | 버전을 지정한 기존 자료 전환·사전 점검 |
