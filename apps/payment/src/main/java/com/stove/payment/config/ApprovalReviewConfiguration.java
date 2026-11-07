@@ -8,6 +8,7 @@ import com.stove.payment.core.service.ReadApprovalReviews;
 import com.stove.payment.core.service.RecordApprovalInvestigation;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import java.time.Clock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,7 +21,7 @@ public class ApprovalReviewConfiguration {
     @Bean RecordApprovalInvestigation recordApprovalInvestigation(PaymentRepository payments, PaymentApprovalRepository approvals, ApprovalInvestigationRepository investigations, Clock refundReceptionClock) {
         return new RecordApprovalInvestigation(payments, approvals, investigations, refundReceptionClock);
     }
-    @Bean MeterBinder approvalReviewMetrics(ObjectProvider<ReadApprovalReviews> reviews) {
-        return new ApprovalReviewMetrics(reason -> reviews.getObject().count(reason));
+    @Bean MeterBinder approvalReviewMetrics(ObjectProvider<ReadApprovalReviews> reviews, @Value("${spring.application.name}") String application) {
+        return new ApprovalReviewMetrics(() -> reviews.getObject().counts(), application);
     }
 }

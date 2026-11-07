@@ -371,6 +371,13 @@
             "format" : "int64",
             "type" : "integer"
           },
+          "lastInspectedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastInspectionError" : {
+            "type" : "string"
+          },
           "latestPgObservedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -394,6 +401,10 @@
           },
           "reviewStartedAt" : {
             "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "ADMITTED", "REVIEW_REQUIRED", "FAILURE_CONFIRMED", "SUCCEEDED", "FAILED", "EXPIRED" ],
             "type" : "string"
           }
         },

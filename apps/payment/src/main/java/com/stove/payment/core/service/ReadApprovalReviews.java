@@ -11,7 +11,9 @@ import com.stove.payment.core.domain.ApprovalInvestigationRepository;
 import com.stove.payment.core.domain.ApprovalInvestigationView;
 import com.stove.payment.core.domain.PaymentApproval;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
-import com.stove.payment.core.domain.PaymentApprovalStatus;
+import com.stove.payment.core.domain.ApprovalReviewCount;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.time.Clock;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
@@ -26,15 +28,18 @@ public class ReadApprovalReviews {
     private final PaymentApprovalRepository approvals;
     private final ApprovalInvestigationRepository investigations;
     private final Clock clock;
-    public long count(String reason) {
-        if (!"OTHER".equals(reason)) return approvals.countByStatusAndLastErrorCode(PaymentApprovalStatus.REVIEW_REQUIRED, reason);
-        long known = 0;
-        for (String code : ApprovalReviewReason.ALL) if (!"OTHER".equals(code)) known += approvals.countByStatusAndLastErrorCode(PaymentApprovalStatus.REVIEW_REQUIRED, code);
-        return approvals.countByStatus(PaymentApprovalStatus.REVIEW_REQUIRED) - known;
+    public Map<String, Long> counts() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (String reason : ApprovalReviewReason.ALL) counts.put(reason, 0L);
+        for (ApprovalReviewCount row : approvals.countReviewsByReason()) {
+            String reason = row.getReason() != null && ApprovalReviewReason.KNOWN.contains(row.getReason()) ? row.getReason() : "OTHER";
+            counts.merge(reason, row.getTotal(), Long::sum);
+        }
+        return counts;
     }
     public Page<ApprovalReviewView> search(ApprovalReviewQuery query) {
         PageRequest page = PageRequest.of(query.page(), query.size());
-        return (query.reason() == null ? approvals.findReviews(page) : approvals.findReviewsByReason(query.reason(), ApprovalReviewReason.ALL.subList(0, 5), page)).map(this::view);
+        return (query.reason() == null ? approvals.findReviews(page) : approvals.findReviewsByReason(query.reason(), ApprovalReviewReason.KNOWN, page)).map(this::view);
     }
     public ApprovalReviewView read(ApprovalReviewLookup lookup) { return view(find(lookup)); }
     public Page<ApprovalInvestigationView> history(ApprovalReviewLookup lookup, ApprovalReviewQuery query) {
@@ -42,11 +47,11 @@ public class ReadApprovalReviews {
         return investigations.findByApprovalId(lookup.approvalId(), PageRequest.of(query.page(), query.size(), Sort.by("recordedAt", "id"))).map(ApprovalInvestigation::view);
     }
     private PaymentApproval find(ApprovalReviewLookup lookup) {
-        return approvals.findByApprovalId(lookup.approvalId()).filter(a -> a.getStatus() == PaymentApprovalStatus.REVIEW_REQUIRED).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        return approvals.findByApprovalId(lookup.approvalId()).filter(a -> a.getReviewStartedAt() != null).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
     private ApprovalReviewView view(PaymentApproval a) {
         return new ApprovalReviewView(a.getApprovalId(), a.getOrderNo(), a.getPaymentId(), a.getLastErrorCode(), a.getAdmittedAt() != null,
                 a.getReceivedAt(), a.getAdmittedAt(), a.getFirstPreparedAt(), a.getReviewStartedAt(), a.getReviewStartedAt() == null ? null : Math.max(0, Duration.between(a.getReviewStartedAt(), clock.instant()).getSeconds()),
-                a.getLatestPgState(), a.getLatestPgObservedAt(), investigations.countByApprovalId(a.getApprovalId()));
+                a.getLatestPgState(), a.getLatestPgObservedAt(), investigations.countByApprovalId(a.getApprovalId()), a.getStatus(), a.getLastInspectedAt(), a.getLastInspectionError());
     }
 }

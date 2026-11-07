@@ -56,16 +56,6 @@ groups:
       # 현재 PortOne TEST 환불의 관리자 지연 목록과 같은 집계다.
       # 최초 취소 준비 + 3시간 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.
       # 확정·실패 건은 빠지고, 미확정 중단 건은 남으며 복구 뒤 자동 해제된다.
-      - alert: PaymentApprovalsRequireReview
-        expr: stove_payment_approval_review_required > 0
-        labels:
-          severity: critical
-        annotations:
-          summary: "{{ $labels.application }}: 결제 승인 보류 조사 필요"
-          description: >-
-            {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
-            GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
-
       - alert: RefundConfirmationsDelayed
         expr: stove_payment_refund_confirmation_delayed > 0
         labels:
@@ -76,6 +66,28 @@ groups:
             {{ $value }}건이 최초 취소 준비 뒤 3시간 이상 미확정이다.
             GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
             시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
+
+      - alert: PaymentApprovalsRequireReview
+        expr: stove_payment_approval_review_required{reason="PAID_WITHOUT_ADMISSION"} > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }}: 결제 승인 보류 조사 필요"
+          description: >-
+            {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
+            GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+            알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+
+      - alert: PaymentApprovalsRequireReview
+        expr: stove_payment_approval_review_required{reason!="PAID_WITHOUT_ADMISSION"} > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 결제 승인 보류 조사 필요"
+          description: >-
+            {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
+            GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+            알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
 
       # 만료 스윕이 살아 있는가.
       #

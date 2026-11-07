@@ -45,6 +45,13 @@ public class PaymentApproval {
     @Column(nullable = false) private boolean postStopped;
     @Column(length = 100) private String lastErrorCode;
 
+    private Instant lastInspectedAt;
+    @Column(length = 32) private String lastInspectionError;
+    public void recordInspectionFailure(String error, Instant at) {
+        requireTime(at);
+        if (!"INVALID_EVIDENCE".equals(error) && !"UNAVAILABLE".equals(error)) throw new IllegalArgumentException("Bounded inspection error required");
+        lastInspectedAt = at; lastInspectionError = error;
+    }
     private Instant reviewStartedAt;
     @Enumerated(EnumType.STRING) @Column(length = 16) private ApprovalObservation.State latestPgState;
     private Instant latestPgObservedAt;
@@ -52,6 +59,7 @@ public class PaymentApproval {
     public void recordObservation(ApprovalObservation observation, Instant at) {
         requireTime(at);
         if (observation == null) throw new IllegalArgumentException("Observation is required");
+        lastInspectedAt = at; lastInspectionError = null;
         latestPgState = observation.state();
         latestPgObservedAt = at;
     }

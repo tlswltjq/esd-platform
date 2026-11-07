@@ -182,11 +182,16 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 ### R12. 승인 보류 운영 조회와 조사 (결정 112 part 1)
 
 #### 수용 기준
-1. WHEN ADMIN이 승인 보류 목록·상세를 요청하면 THEN 시스템 SHALL REVIEW_REQUIRED만 페이지·사유 필터로 DB에서 조회하고 no-store를 반환한다. 토큰·보호 본문·암호문은 공개하지 않는다.
-2. WHEN 승인 작업자가 PG를 조회하면 THEN 시스템 SHALL 최신 상태와 관측 시각을 기존 잠금 트랜잭션에 저장한다. 최초 보류 시각은 보존하며 기존 행의 알 수 없는 시각은 NULL로 둔다.
+1. WHEN ADMIN이 승인 보류 목록을 요청하면 THEN 시스템 SHALL REVIEW_REQUIRED만 페이지·사유 필터로 DB에서 조회하고 no-store를 반환한다. 토큰·보호 본문·암호문은 공개하지 않는다.
+2. WHEN 승인 작업자가 PG를 조회하면 THEN 시스템 SHALL 최신 상태와 관측 시각을 inspect 후 별도 잠금 트랜잭션에 저장한다. 최초 보류 시각은 보존하며 기존 행의 알 수 없는 시각은 NULL로 둔다.
 3. WHEN ADMIN이 보류 조사 내용을 기록하면 THEN 시스템 SHALL JWT sub·서버 시각과 500자 이내 내용을 append-only로 저장한다. 입력 본문 신원은 사용하지 않는다.
 4. WHILE 승인 보류가 존재하면 THEN 시스템 SHALL 5개 사유와 OTHER로 제한한 게이지와 ADMIN API 안내 경보를 제공한다.
 5. THE 시스템 SHALL 보류 종결·재시도 간격·고객 메시지·금융 동작 정책을 이 기능에서 정하지 않는다.
+
+6. WHEN 상세·조사 이력을 조회하면 THEN 시스템 SHALL 과거에 보류된 승인도 현재 status와 함께 제공하고, 한 번도 보류되지 않은 승인은 404로 거절한다. POST는 현재 REVIEW_REQUIRED에만 허용한다.
+7. WHEN inspect가 실패하면 THEN 시스템 SHALL lastInspectedAt과 INVALID_EVIDENCE 또는 UNAVAILABLE을 기록하고 원래 예외를 유지한다. 성공은 오류를 지운다. latestPgState는 마지막 유효 관측(the last valid observation)이다. lease 상실 뒤에는 관측·오류를 저장하지 않는다.
+8. THE 시스템 SHALL 스크레이프당 GROUP BY 한 번으로 사유별 보류를 집계하고 PAID_WITHOUT_ADMISSION은 critical, 나머지는 warning으로 경보한다. 알려진 과거 보류는 Alertmanager silence를 사용한다.
+9. THE 시스템 SHALL 유효 PG 상태 집합·상태/시각 쌍·보류 시각 순서를 DB CHECK로 보장한다. 추가 열과 과거 자료 보존 근거는 [설계](design.md#승인-보류-운영-조회-결정-112-part-1)를 따른다.
 
 ## 범위 밖(후속)
 

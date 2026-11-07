@@ -7,6 +7,7 @@ import com.stove.payment.core.domain.ApprovalInvestigationRepository;
 import com.stove.payment.core.domain.ApprovalInvestigationRequest;
 import com.stove.payment.core.domain.ApprovalInvestigationView;
 import com.stove.payment.core.domain.PaymentApproval;
+import com.stove.payment.core.domain.PaymentApprovalStatus;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import java.time.Clock;
@@ -25,9 +26,10 @@ public class RecordApprovalInvestigation {
     private final Clock clock;
     public ApprovalInvestigationView execute(ApprovalInvestigationRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        PaymentApproval snapshot = approvals.findByApprovalId(request.approvalId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        payments.lockByPaymentId(snapshot.getPaymentId()).orElseThrow();
+        String paymentId = approvals.findPaymentIdByApprovalId(request.approvalId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        payments.lockByPaymentId(paymentId).orElseThrow();
         PaymentApproval approval = approvals.lockByApprovalId(request.approvalId()).orElseThrow();
+        if (approval.getStatus() != PaymentApprovalStatus.REVIEW_REQUIRED) throw new BusinessException(ErrorCode.CONFLICT);
         ApprovalInvestigation known = investigations.findByRequestId(request.requestId()).orElse(null);
         if (known != null) { known.requireSame(request); return known.view(); }
         ApprovalInvestigation record = ApprovalInvestigation.record(approval, request, clock.instant());

@@ -18,12 +18,38 @@ tests:
           - exp_labels:
               application: payment
               reason: PG_INVALID_EVIDENCE
-              severity: critical
+              severity: warning
             exp_annotations:
               summary: "payment: 결제 승인 보류 조사 필요"
               description: >-
                 2건의 승인 보류가 PG_INVALID_EVIDENCE 사유로 조사 대기 중이다.
                 GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+                알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+      - eval_time: 3m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'stove_payment_approval_review_required{application="payment",reason="PAID_WITHOUT_ADMISSION"}'
+        values: '0 2 2 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts:
+          - exp_labels:
+              application: payment
+              reason: PAID_WITHOUT_ADMISSION
+              severity: critical
+            exp_annotations:
+              summary: "payment: 결제 승인 보류 조사 필요"
+              description: >-
+                2건의 승인 보류가 PAID_WITHOUT_ADMISSION 사유로 조사 대기 중이다.
+                GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+                알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
       - eval_time: 3m
         alertname: PaymentApprovalsRequireReview
         exp_alerts: []

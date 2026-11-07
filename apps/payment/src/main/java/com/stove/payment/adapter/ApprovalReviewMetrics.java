@@ -1,17 +1,22 @@
 package com.stove.payment.adapter;
 
-import com.stove.payment.core.domain.ApprovalReviewReason;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.MeterBinder;
-import java.util.function.ToLongFunction;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import io.prometheus.metrics.core.metrics.GaugeWithCallback;
+import java.util.Map;
+import java.util.function.Supplier;
 
 public final class ApprovalReviewMetrics implements MeterBinder {
-    private final ToLongFunction<String> counts;
-    public ApprovalReviewMetrics(ToLongFunction<String> counts) { this.counts = counts; }
+    private final Supplier<Map<String, Long>> counts;
+    private final String application;
+    public ApprovalReviewMetrics(Supplier<Map<String, Long>> counts, String application) { this.counts = counts; this.application = application; }
     @Override public void bindTo(MeterRegistry registry) {
-        for (String reason : ApprovalReviewReason.ALL)
-            Gauge.builder("stove.payment.approval.review.required", this, metrics -> metrics.counts.applyAsLong(reason))
-                    .tag("reason", reason).description("Payment approvals requiring operator review").register(registry);
+        if (registry instanceof PrometheusMeterRegistry prometheus) {
+            GaugeWithCallback.builder().name("stove_payment_approval_review_required")
+                    .help("Payment approvals requiring operator review").labelNames("application", "reason")
+                    .callback(callback -> counts.get().forEach((reason, total) -> callback.call(total, application, reason)))
+                    .register(prometheus.getPrometheusRegistry());
+        }
     }
 }

@@ -157,7 +157,19 @@ public class ResolvePaymentApproval {
         completeObservation(id,token,dispatch,inspect(id, token, dispatch));
     }
     private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
-        ApprovalObservation observation = gateway.inspect(current.purchase());
+        ApprovalObservation observation;
+        try { observation = gateway.inspect(current.purchase()); }
+        catch (RuntimeException failure) {
+            try {
+                locked(id, (payment, approval) -> {
+                    if (approval.owns(token, now())) approval.recordInspectionFailure(failure instanceof IllegalArgumentException ? "INVALID_EVIDENCE" : "UNAVAILABLE", now());
+                    return null;
+                });
+            } catch (RuntimeException recordingFailure) {
+                failure.addSuppressed(recordingFailure);
+            }
+            throw failure;
+        }
         locked(id, (payment, approval) -> {
             if (approval.owns(token, now())) approval.recordObservation(observation, now());
             return null;

@@ -15,8 +15,10 @@ public interface PaymentApprovalRepository extends JpaRepository<PaymentApproval
     Page<PaymentApproval> findReviews(Pageable page);
     @Query("select a from PaymentApproval a where a.status=com.stove.payment.core.domain.PaymentApprovalStatus.REVIEW_REQUIRED and (a.lastErrorCode=:reason or (:reason='OTHER' and (a.lastErrorCode is null or a.lastErrorCode not in :known))) order by a.receivedAt,a.id")
     Page<PaymentApproval> findReviewsByReason(String reason, List<String> known, Pageable page);
-    long countByStatusAndLastErrorCode(PaymentApprovalStatus status, String reason);
-    long countByStatus(PaymentApprovalStatus status);
+    @Query("select a.paymentId from PaymentApproval a where a.approvalId=:approvalId")
+    Optional<String> findPaymentIdByApprovalId(String approvalId);
+    @Query("select a.lastErrorCode as reason, count(a) as total from PaymentApproval a where a.status=com.stove.payment.core.domain.PaymentApprovalStatus.REVIEW_REQUIRED group by a.lastErrorCode")
+    List<ApprovalReviewCount> countReviewsByReason();
     Optional<PaymentApproval> findByApprovalId(String approvalId);
     Optional<PaymentApproval> findBySupplierAttemptId(String supplierAttemptId);
     Optional<PaymentApproval> findFirstByPaymentIdAndStatusInOrderByIdDesc(String paymentId, List<PaymentApprovalStatus> statuses);
