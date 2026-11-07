@@ -355,7 +355,11 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     @Test void openApiContainsPaymentReadsAndAdministratorHoldAndInvestigationOperations() throws Exception {
         OpenApiSnapshot.verify(port,"payment");
         JsonNode paths=http("GET","/v3/api-docs",null).body().path("paths");
-        assertThat(paths.size()).isEqualTo(9);
+        assertThat(paths.size()).isEqualTo(12);
+        assertThat(paths.path("/api/v1/admin/approval-reviews").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}/investigations").has("get")).isTrue();
+        assertThat(paths.path("/api/v1/admin/approval-reviews/{approvalId}/investigations").has("post")).isTrue();
         assertThat(paths.path("/api/v1/payments").size()).isEqualTo(1);
         assertThat(paths.path("/api/v1/payments").has("get")).isTrue();
         assertThat(paths.path("/api/v1/payments/{orderNo}").has("get")).isTrue();
