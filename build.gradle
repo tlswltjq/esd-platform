@@ -329,13 +329,17 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') || it.path == ':sim
 }
 
 // MinIO를 사용하는 통합 테스트는 빈 Docker 환경에서도 같은 로컬 이미지를 준비한다.
-// 별도 공급 이미지를 지정한 경우에는 Testcontainers의 일반 pull 경로를 사용한다.
+// 기본 이름이면(STOVE_TEST_MINIO_IMAGE로 같은 이름을 명시한 경우 포함) :infra:minio가 준비한다.
+// 명시한 경우 로컬에 이미 있으면 다시 쓰고, 없으면 빌드한다(registry에서 받지 않는다).
+// 다른 이름의 공급 이미지를 지정한 경우에는 Testcontainers의 일반 pull 경로를 사용한다.
 configure(subprojects.findAll { it.path in [':apps:studio', ':apps:review', ':apps:download', ':apps:catalog'] }) {
-    def suppliedMinioImage = providers.environmentVariable('STOVE_TEST_MINIO_IMAGE')
-            .filter { !it.isBlank() }.orElse(
-                    providers.environmentVariable('STOVE_MINIO_IMAGE').filter { !it.isBlank() })
-            .isPresent()
-    if (!suppliedMinioImage) {
+    def defaultMinioImage = providers.environmentVariable('STOVE_JIB_REGISTRY')
+            .filter { !it.isBlank() }.getOrElse('stove') +
+            '/minio:RELEASE.2025-04-22T22-12-26Z-local'
+    def minioImage = providers.environmentVariable('STOVE_TEST_MINIO_IMAGE').filter { !it.isBlank() }.orElse(
+            providers.environmentVariable('STOVE_MINIO_IMAGE').filter { !it.isBlank() })
+            .getOrElse(defaultMinioImage)
+    if (minioImage == defaultMinioImage) {
         tasks.named('integrationTest') { dependsOn ':infra:minio:jibDockerBuild' }
     }
 }

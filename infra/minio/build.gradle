@@ -8,25 +8,30 @@ def registry = providers.gradleProperty('stove.jib.registry')
         .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
 def suppliedImage = providers.environmentVariable('STOVE_MINIO_IMAGE')
         .map { !it.isBlank() }.getOrElse(false)
+def targetImage = providers.gradleProperty('stove.minio.image')
+        .getOrElse("${registry}/minio:RELEASE.2025-04-22T22-12-26Z-local".toString())
+// STOVE_TEST_MINIO_IMAGE가 이 빌드 대상과 같은 이름이면, 그 이미지가 로컬에 있을 때만 빌드를 건너뛴다.
+// 없으면 빌드한다(registry에서 받지 않는다). tools/verification/support/minio_image.py와 같은 판단이다.
+def reuseRequested = providers.environmentVariable('STOVE_TEST_MINIO_IMAGE')
+        .map { it.trim() == targetImage }.getOrElse(false)
 def rootfs = layout.buildDirectory.dir('rootfs')
 def goModules = layout.buildDirectory.dir('go-modules')
 def goCache = layout.buildDirectory.dir('go-cache')
 def builderImage = providers.gradleProperty('stove.minio.builderImage').getOrElse('golang:1.24-alpine')
 
-// Provider API로 외부 명령을 추적해 설정 캐시에서도 호스트 ID를 다시 확인한다.
-def hostId = { option ->
+// 실행 시점에 판단한다(설정 단계에서 외부 명령을 띄우지 않는다).
+def localImagePresent = { String image ->
     try {
-        def value = providers.exec {
-            commandLine 'id', option
-            ignoreExitValue = true
-        }.standardOutput.asText.get().trim()
-        return value ==~ /[0-9]+/ ? value : ''
-    } catch (org.gradle.api.GradleException ignored) {
-        return '' // id가 없는 플랫폼에서는 소유권 복구를 생략한다.
+        Process process = new ProcessBuilder('docker', 'image', 'inspect', image)
+                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .start()
+        return process.waitFor() == 0
+    } catch (IOException ignored) {
+        return false
     }
 }
-def hostUid = hostId('-u')
-def hostGid = hostId('-g')
+def buildNeeded = { -> !suppliedImage && !(reuseRequested && localImagePresent(targetImage)) }
 
 tasks.register('compileMinio', Exec) {
     group = 'build'
@@ -34,19 +39,17 @@ tasks.register('compileMinio', Exec) {
     inputs.file('compile.sh')
     inputs.property('architecture', targetArchitecture)
     inputs.property('builderImage', builderImage)
-    inputs.property('hostUid', hostUid)
-    inputs.property('hostGid', hostGid)
     outputs.dir(rootfs)
-    onlyIf { !suppliedImage }
+    onlyIf('공급 이미지가 없고, 재사용할 로컬 이미지도 없다') { buildNeeded() }
     doFirst {
         [rootfs, goModules, goCache].each { it.get().asFile.mkdirs() }
     }
+    // 컨테이너는 root로 돈다(compile.sh가 apk add를 한다). 결과물의 주인은 compile.sh가 끝날 때 되돌린다.
     commandLine 'docker', 'run', '--rm',
             '--mount', "type=bind,source=${projectDir}/compile.sh,target=/compile.sh,readonly",
             '--mount', "type=bind,source=${rootfs.get().asFile},target=/out",
             '--mount', "type=bind,source=${goModules.get().asFile},target=/go/pkg/mod",
             '--mount', "type=bind,source=${goCache.get().asFile},target=/root/.cache/go-build",
-            '--env', "HOST_UID=${hostUid}", '--env', "HOST_GID=${hostGid}",
             '--env', "GOARCH=${targetArchitecture}", builderImage, 'sh', '/compile.sh'
 }
 
@@ -61,8 +64,7 @@ jib {
         }
     }
     to {
-        image = providers.gradleProperty('stove.minio.image')
-                .getOrElse("${registry}/minio:RELEASE.2025-04-22T22-12-26Z-local")
+        image = targetImage
     }
     container {
         entrypoint = ['/usr/bin/minio']
@@ -82,7 +84,7 @@ jib {
 
 ['jib', 'jibDockerBuild', 'jibBuildTar'].each { name ->
     tasks.named(name) {
-        onlyIf { !suppliedImage }
+        onlyIf('공급 이미지가 없고, 재사용할 로컬 이미지도 없다') { buildNeeded() }
         dependsOn tasks.named('compileMinio')
     }
 }

@@ -72,7 +72,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 ## 5. 실행·검증 환경
 
-- worktree에서 통합 테스트를 돌릴 때는 이미 만든 MinIO 이미지를 `STOVE_TEST_MINIO_IMAGE`로 지정해 다시 빌드하지 않는다.
+- worktree에서 MinIO를 쓰는 통합 테스트를 돌릴 때, MinIO 빌드 입력을 바꾸지 않았다면 이미 만든 이미지를 다시 쓴다([testing.md](docs/testing.md#minio-image)).
 
 - 빌드·테스트·서비스 실행과 인프라 검증은 로컬 호스트(과거 `ssh sng` OCI 인스턴스)에서 수행한다.
 - 검증마다 작업 디렉터리·포트·DB·컨테이너를 격리하고, 기존 컨테이너·볼륨·공유 자료를 실행 전후 대조해 보존한다.
