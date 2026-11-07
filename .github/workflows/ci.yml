@@ -2,6 +2,8 @@
 # - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
 # - 밤마다·수동: 실제 앱 스택 E2E (verify-jib.py, 모의 PG)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
+# 결정 107: main 규칙셋이 build 작업의 name을 필수 검사로 쓴다. name을 바꾸거나 pull_request에
+# paths 조건을 달면 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
 name: CI
 
 on:
