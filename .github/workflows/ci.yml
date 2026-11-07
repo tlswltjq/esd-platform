@@ -1,6 +1,6 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
 # - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
-# - 밤마다·수동: 실제 앱 스택 E2E (verify-jib.py, 모의 PG)
+# - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정 (실제 PortOne·비밀 값 없음)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
 # 결정 107: main 규칙셋이 build 작업의 name을 필수 검사로 쓴다. name을 바꾸거나 pull_request에
 # paths 조건을 달면 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       stack:
-        description: "실제 앱 스택 E2E(verify-jib.py)도 실행"
+        description: "실제 앱 스택 E2E와 로컬 fake-PortOne 환불·정산 여정 실행"
         type: boolean
         default: true
 
@@ -79,5 +79,37 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stack-run
+          path: runs/
+          retention-days: 7
+
+  refund-settlement:
+    name: fake PortOne refund settlement
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare cached local dependencies
+        run: |
+          docker pull mysql:8.0
+          docker pull redis:7-alpine
+          docker pull apache/kafka:3.9.0
+      - name: Refund settlement journey
+        run: python3 -B tools/verification/verify-refund-settlement.py
+      - name: Upload run logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refund-settlement-run
           path: runs/
           retention-days: 7
