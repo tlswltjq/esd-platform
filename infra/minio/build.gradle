@@ -7,8 +7,10 @@ def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrEls
 // 이미지 이름과 빌드 여부는 루트 build.gradle의 minioImageSelection이 정한다.
 def minioImageSelection = rootProject.ext.minioImageSelection
 String targetImage = minioImageSelection.buildImage
+String testImage = minioImageSelection.testImage
 boolean suppliedImage = minioImageSelection.supplied
 boolean reuseRequested = minioImageSelection.reuseRequested
+boolean retagForTest = minioImageSelection.retagForTest
 def rootfs = layout.buildDirectory.dir('rootfs')
 def goModules = layout.buildDirectory.dir('go-modules')
 def goCache = layout.buildDirectory.dir('go-cache')
@@ -26,7 +28,11 @@ def localImagePresent = { String image ->
         return false
     }
 }
-def buildNeeded = { -> !suppliedImage && !(reuseRequested && localImagePresent(targetImage)) }
+def reuseLocalImage = { -> reuseRequested && localImagePresent(targetImage) }
+// 로컬 이미지 재사용은 jibDockerBuild만 대신한다. 같은 실행에 게시(jib)·tar(jibBuildTar)가 있으면 rootfs를 만든다.
+def artifactTaskPaths = ['jib', 'jibBuildTar'].collect { "${project.path}:${it}".toString() }
+boolean artifactRequested = false
+gradle.taskGraph.whenReady { graph -> artifactRequested = artifactTaskPaths.any { graph.hasTask(it) } }
 
 tasks.register('compileMinio', Exec) {
     group = 'build'
@@ -35,7 +41,9 @@ tasks.register('compileMinio', Exec) {
     inputs.property('architecture', targetArchitecture)
     inputs.property('builderImage', builderImage)
     outputs.dir(rootfs)
-    onlyIf('공급 이미지가 없고, 재사용할 로컬 이미지도 없다') { buildNeeded() }
+    onlyIf('공급 이미지가 없고, 게시·tar를 만들거나 재사용할 로컬 이미지가 없다') {
+        !suppliedImage && (artifactRequested || !reuseLocalImage())
+    }
     doFirst {
         [rootfs, goModules, goCache].each { it.get().asFile.mkdirs() }
     }
@@ -79,8 +87,20 @@ jib {
 
 ['jib', 'jibDockerBuild', 'jibBuildTar'].each { name ->
     tasks.named(name) {
-        onlyIf('공급 이미지가 없고, 재사용할 로컬 이미지도 없다') { buildNeeded() }
+        onlyIf('공급 이미지가 없다') { !suppliedImage }
         dependsOn tasks.named('compileMinio')
     }
+}
+tasks.named('jibDockerBuild') {
+    onlyIf('재사용할 로컬 이미지가 없다') { !reuseLocalImage() }
+}
+
+// 통합 테스트가 고정 기본 이름을 골랐는데 빌드 이름(registry)이 다르면, 빌드한 이미지에 그 이름을 붙인다.
+tasks.register('tagTestImage', Exec) {
+    group = 'build'
+    description = '통합 테스트용 MinIO 이미지를 준비한다(필요하면 고정 기본 이름을 붙인다)'
+    dependsOn tasks.named('jibDockerBuild')
+    onlyIf('테스트 이름이 빌드 이름과 다른 고정 기본 이름이다') { retagForTest }
+    commandLine 'docker', 'tag', targetImage, testImage
 }
 tasks.named('jar') { enabled = false }
