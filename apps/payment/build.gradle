@@ -8,7 +8,7 @@ dependencies {
     implementation project(':common:messaging')
 
     testImplementation 'org.springframework.kafka:spring-kafka-test'
-    integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 }
 
 // 공급자는 별도 프로세스다. classpath에 넣지 않고 실제 실행 파일 내용을 추적한다.

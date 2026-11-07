@@ -1,6 +1,62 @@
 {
   "components" : {
     "schemas" : {
+      "ApiResponseApprovalInvestigationPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ApprovalInvestigationPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseApprovalInvestigationResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ApprovalInvestigationResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseApprovalReviewPage" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ApprovalReviewPage"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseApprovalReviewResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ApprovalReviewResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponsePaymentAttemptFailurePage" : {
         "properties" : {
           "data" : {
@@ -183,6 +239,73 @@
         },
         "type" : "object"
       },
+      "ApprovalInvestigationBody" : {
+        "properties" : {
+          "note" : {
+            "description" : "확인한 사실과 조사 내용. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "note", "requestId" ],
+        "type" : "object"
+      },
+      "ApprovalInvestigationPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ApprovalInvestigationResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ApprovalInvestigationResponse" : {
+        "properties" : {
+          "approvalId" : {
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "recordedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "reviewStartedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ApprovalRequest" : {
         "properties" : {
           "paymentToken" : {
@@ -192,6 +315,96 @@
             "type" : "string"
           },
           "txId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ApprovalReviewPage" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ApprovalReviewResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ApprovalReviewResponse" : {
+        "properties" : {
+          "admitted" : {
+            "type" : "boolean"
+          },
+          "admittedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "approvalId" : {
+            "type" : "string"
+          },
+          "firstPreparedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "heldSeconds" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "investigationCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "lastInspectedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastInspectionError" : {
+            "type" : "string"
+          },
+          "latestPgObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "latestPgState" : {
+            "enum" : [ "READY", "PENDING", "PAID", "FAILED" ],
+            "type" : "string"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "receivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reviewStartedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "ADMITTED", "REVIEW_REQUIRED", "FAILURE_CONFIRMED", "SUCCEEDED", "FAILED", "EXPIRED" ],
             "type" : "string"
           }
         },
@@ -816,6 +1029,174 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/admin/approval-reviews" : {
+      "get" : {
+        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "operationId" : "searchApprovalReviews",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "reason",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseApprovalReviewPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 승인 보류 목록",
+        "tags" : [ "admin-approval-review-controller" ]
+      }
+    },
+    "/api/v1/admin/approval-reviews/{approvalId}" : {
+      "get" : {
+        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "operationId" : "readApprovalReview",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "approvalId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseApprovalReviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 승인 보류 상세",
+        "tags" : [ "admin-approval-review-controller" ]
+      }
+    },
+    "/api/v1/admin/approval-reviews/{approvalId}/investigations" : {
+      "get" : {
+        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "operationId" : "readApprovalInvestigations",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "approvalId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseApprovalInvestigationPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 승인 보류 조사 이력",
+        "tags" : [ "admin-approval-review-controller" ]
+      },
+      "post" : {
+        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "operationId" : "recordApprovalInvestigation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "approvalId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApprovalInvestigationBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseApprovalInvestigationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 승인 보류 조사 기록 추가",
+        "tags" : [ "admin-approval-review-controller" ]
+      }
+    },
     "/api/v1/admin/refund-cancellation-holds" : {
       "get" : {
         "description" : "기본 activeOnly=true는 현재 중단만 조회합니다. false는 과거 재개·미적용 관측도 포함합니다. 기한이 지난 중단도 표시하며 observedAt·ID 순으로 조회합니다. 재개 가능 여부는 조회 시점의 안내이며 실행 시 다시 검증합니다.",

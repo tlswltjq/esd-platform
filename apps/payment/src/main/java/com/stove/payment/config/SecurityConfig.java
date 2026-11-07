@@ -33,6 +33,8 @@ public class SecurityConfig {
                     .hasRole("MEMBER");
             a.requestMatchers(HttpMethod.POST,"/api/v1/payments/*/approvals").hasRole("MEMBER");
             a.requestMatchers(HttpMethod.GET,"/api/v1/payments/*/approvals/*").hasRole("MEMBER");
+            a.requestMatchers(HttpMethod.GET, "/api/v1/admin/approval-reviews", "/api/v1/admin/approval-reviews/*", "/api/v1/admin/approval-reviews/*/investigations").hasRole("ADMIN");
+            a.requestMatchers(HttpMethod.POST, "/api/v1/admin/approval-reviews/*/investigations").hasRole("ADMIN");
             a.anyRequest().denyAll();
         }).oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(ApiJwtSecurity.rolesConverter())));
         if (verifier != null) http.addFilterBefore(new PortOneWebhookAuthenticationFilter(verifier, portOne.storeId()),
