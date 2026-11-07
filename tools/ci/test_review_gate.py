@@ -81,6 +81,10 @@ class ReviewTableTest(unittest.TestCase):
         text = body([]).replace('<!-- 지적마다', '<!--\n| R1 | 채택 | 이유 |\n지적마다')
         self.assertEqual(len(review_gate.check(text, CODE)), 1)
 
+    def test_a_whole_table_inside_an_html_comment_does_not_count(self):
+        hidden = '## 리뷰 판정\n\n<!--\n| 지적 | 판정 |\n|---|---|\n| R1 | 채택 |\n-->\n'
+        self.assertEqual(len(review_gate.check(hidden, CODE)), 1)
+
     def test_rows_after_the_next_heading_do_not_count(self):
         text = body([], after='## 남은 범위\n\n| 항목 | 상태 |\n|---|---|\n| R1 | 채택 |\n')
         self.assertEqual(len(review_gate.check(text, CODE)), 1)
@@ -97,18 +101,97 @@ class ReviewTableTest(unittest.TestCase):
         self.assertEqual(review_gate.check(body(['| R1 | 채택 | 이유 |']).replace('\n', '\r\n'), CODE), [])
 
 
+class CrossReviewFindingsTest(unittest.TestCase):
+    """PR #125 교차 리뷰 R1~R5 (판정: R1·R2·R4 채택, R3·R5 부분 반영)."""
+
+    SECTION = '## 리뷰 판정\n\n'
+    TABLE = '| 지적 | 판정 |\n|---|---|\n| R1 | 채택 |\n'
+
+    def test_r1_an_h1_heading_ends_the_section(self):
+        self.assertEqual(len(review_gate.check(self.SECTION + '# 다른 절\n\n' + self.TABLE, CODE)), 1)
+
+    def test_r1_an_indented_h2_heading_ends_the_section(self):
+        for indent in (' ', '  ', '   '):
+            with self.subTest(indent=len(indent)):
+                self.assertEqual(len(review_gate.check(self.SECTION + indent + '## 남은 범위\n\n' + self.TABLE, CODE)), 1)
+
+    def test_r1_four_spaces_is_not_a_heading(self):
+        self.assertEqual(review_gate.check(self.SECTION + '    ## 코드처럼 들여쓴 줄\n\n' + self.TABLE, CODE), [])
+
+    def test_r1_an_h3_heading_stays_inside_the_section(self):
+        self.assertEqual(review_gate.check(self.SECTION + '### Codex 리뷰\n\n' + self.TABLE, CODE), [])
+
+    def test_r1_hash_without_space_is_not_a_heading(self):
+        self.assertEqual(review_gate.check(self.SECTION + '#태그\n\n' + self.TABLE, CODE), [])
+
+    def test_r2_rows_inside_a_code_fence_do_not_count(self):
+        for fence in ('```', '~~~', '```markdown'):
+            with self.subTest(fence=fence):
+                text = self.SECTION + fence + '\n' + self.TABLE + fence[:3] + '\n'
+                self.assertEqual(len(review_gate.check(text, CODE)), 1)
+
+    def test_r2_a_table_after_a_closed_fence_counts(self):
+        text = self.SECTION + '```\n예시\n```\n\n' + self.TABLE
+        self.assertEqual(review_gate.check(text, CODE), [])
+
+    def test_r2_a_row_without_header_and_separator_does_not_count(self):
+        self.assertEqual(len(review_gate.check(self.SECTION + '| R1 | 채택 |\n', CODE)), 1)
+
+    def test_r2_several_rows_without_a_separator_do_not_count(self):
+        text = self.SECTION + '| 지적 | 판정 |\n| R0 | 메모 |\n| R1 | 채택 |\n'
+        self.assertEqual(len(review_gate.check(text, CODE)), 1)
+
+    def test_r2_rows_after_a_blank_line_belong_to_no_table(self):
+        text = self.SECTION + '| 지적 | 판정 |\n|---|---|\n\n| R1 | 채택 |\n'
+        self.assertEqual(len(review_gate.check(text, CODE)), 1)
+
+    def test_r3_fewer_listed_files_than_changed_files_fails(self):
+        errors = review_gate.check('', DOCS, expected_files=3001)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('3001', errors[0])
+
+    def test_r3_matching_file_count_keeps_markdown_only_passing(self):
+        self.assertEqual(review_gate.check('', DOCS, expected_files=len(DOCS)), [])
+
+    def test_r4_no_findings_row_without_a_reviewer_fails(self):
+        for row in ('| 지적 없음 |  |  |', '| 지적 없음 (리뷰어: ) | — | — |', '| 지적 없음 | — | 리뷰어: |'):
+            with self.subTest(row=row):
+                errors = review_gate.check(body([row]), CODE)
+                self.assertEqual(len(errors), 1)
+                self.assertIn('리뷰어', errors[0])
+
+    def test_r4_reviewer_may_be_in_any_cell(self):
+        self.assertEqual(review_gate.check(body(['| 지적 없음 | — | 리뷰어: Codex(독립 문맥) |']), CODE), [])
+
+    def test_r5_a_table_without_outer_pipes_fails_with_the_accepted_format(self):
+        errors = review_gate.check(self.SECTION + '지적 | 판정\n---|---\nR1 | 채택\n', CODE)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('줄 앞뒤', errors[0])
+
+
 class CommandLineTest(unittest.TestCase):
 
-    def run_main(self, text, files):
+    def run_main(self, text, files, expected=None):
         with tempfile.TemporaryDirectory() as directory:
             body_path = os.path.join(directory, 'body.md')
             files_path = os.path.join(directory, 'files.txt')
             Path(body_path).write_text(text, encoding='utf-8')
             Path(files_path).write_text('\n'.join(files) + '\n', encoding='utf-8')
+            argv = ['--body', body_path, '--files', files_path]
+            if expected is not None:
+                argv += ['--expected-files', str(expected)]
             out = io.StringIO()
             with redirect_stdout(out):
-                code = review_gate.main(['--body', body_path, '--files', files_path])
+                code = review_gate.main(argv)
             return code, out.getvalue()
+
+    def test_r3_truncated_markdown_only_list_exits_one(self):
+        code, out = self.run_main('', DOCS, expected=3001)
+        self.assertEqual(code, 1)
+        self.assertIn('3001', out)
+
+    def test_r3_matching_count_exits_zero(self):
+        self.assertEqual(self.run_main('', DOCS, expected=len(DOCS))[0], 0)
 
     def test_failure_exits_one_and_explains(self):
         code, out = self.run_main(body([]), CODE)
@@ -145,6 +228,11 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertTrue(run_lines)
         for line in run_lines:
             self.assertNotIn('${{', line)
+
+    def test_r3_passes_the_changed_file_count_from_the_api(self):
+        script_line = next(line for line in self.text.splitlines() if 'tools/ci/review_gate.py' in line)
+        self.assertIn('--expected-files', script_line)
+        self.assertIn('.changed_files', self.text)
 
 
 if __name__ == '__main__':

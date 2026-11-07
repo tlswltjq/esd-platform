@@ -35,6 +35,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
+          gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.changed_files' > "$RUNNER_TEMP/expected.txt"
           gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename' > "$RUNNER_TEMP/files.txt"
           printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.md"
-          python3 -I -B tools/ci/review_gate.py --body "$RUNNER_TEMP/body.md" --files "$RUNNER_TEMP/files.txt"
+          python3 -I -B tools/ci/review_gate.py --body "$RUNNER_TEMP/body.md" --files "$RUNNER_TEMP/files.txt" --expected-files "$(cat "$RUNNER_TEMP/expected.txt")"
