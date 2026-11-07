@@ -65,8 +65,7 @@
 | [D-037](#d-037) | 장애를 주입했는데 컨슈머 그룹 멤버가 둘이라 파티션만 옆으로 옮겨 감 | 게이트 마비 | **수정됨** | CI의 R-03 실패 |
 | [D-038](#d-038) | 검증 도구 9개가 실행 JAR 대신 `-test-fixtures.jar`를 고를 수 있음 | 검증 무효 | **수정됨** | PR #116 `verify-license.py` 실패 |
 | [D-039](#d-039) | 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈춤 | 검증 마비 | **수정됨** | 결정 105 적용 중 연속 실행 |
-
-| [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | 사본 갱신 실패 | **재현됨** | main CI 42249703875 |
+| [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | 사본 갱신 실패 | **수정됨** | main CI 42249703875 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -535,8 +534,10 @@
 <a id="d-040"></a>
 ## D-040 Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인
 
-**상태** 재현됨 · **영향** HTTP 초기화와 이벤트 경합 시 높은 버전 반영 실패 · **위치** `apps/store/src/main/java/com/stove/store/core/service/ApplyCatalogProduct.java:42`
+**상태** 수정됨 · **영향** HTTP 초기화와 이벤트 경합 시 높은 버전 반영 실패 · **위치** `apps/store/src/main/java/com/stove/store/core/service/ApplyCatalogProduct.java:42`
 **재현** `StoreIntegrationTest#sameProductCommittedBetweenIdAndCodeReadsConverges` — `[D-040]`, `:apps:store:defectTest` 1건 실패. `BusinessException: 상품 코드가 다른 상품에 연결되어 있습니다.` (`ApplyCatalogProduct.java:42`, `StoreIntegrationTest.java:192`).
 
 - **원인** READ_COMMITTED에서 B의 빈 ID 잠금 조회 뒤 A가 같은 ID를 커밋하면, B의 코드 조회에 같은 상품이 보인다. ID를 비교하지 않고 다른 상품으로 판정하며 BusinessException은 재시도하지 않는다. PausePoints로 B를 ID 조회 반환 직후 세우고 A의 버전 1 커밋 후 B의 버전 3 반영을 진행하여 가설을 확인했다.
-- **수정** 미적용. 같은 ID의 동시 생성은 새 트랜잭션에서 재시도하고 다른 ID의 코드 충돌은 유지할 예정이다.
+- **수정** 코드 조회 결과의 productId를 비교한다. 같은 ID이면 ConcurrencyFailureException으로 기존 최대 3회 새 트랜잭션 재시도를 사용해 잠금 조회부터 다시 수행한다. 다른 ID의 코드 충돌은 기존 CONFLICT를 유지한다. known-defect 태그를 떼어 기본 통합 회귀 검사로 옮겼다.
+
+- **망가뜨리기 확인(결정 102)** 수정 전 서비스로 되돌리고 태그 없는 새 회귀 테스트를 실행하면 1건 실패(Gradle exit 1), `ApplyCatalogProduct.java:42`의 같은 BusinessException, 호출 `StoreIntegrationTest.java:190`. 수정 복원 후 같은 테스트 1건 통과.

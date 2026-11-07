@@ -47,7 +47,6 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -183,7 +182,6 @@ class StoreIntegrationTest {
         } finally { pool.shutdownNow(); }
     }
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-040] 빈 ID 조회 뒤 같은 상품이 커밋돼도 높은 버전으로 수렴한다")
     void sameProductCommittedBetweenIdAndCodeReadsConverges() throws Exception {
         // 기대: 같은 ID의 버전 3 반영. 실제: 다른 상품으로 오인해 CONFLICT. 영향: 사본 갱신 실패.
