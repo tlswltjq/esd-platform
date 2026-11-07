@@ -20,16 +20,14 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.UUID;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
     @Autowired S3ReviewBuildStorage storage;
 
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-041] 첫 요청이 지연돼도 제출 빌드의 바이트와 체크섬을 검증한다")
     void downloadedBytesMatchTheSubmittedBuildAndUrlExpires() throws Exception {
         byte[] bytes = "Immutable uploaded ZIP".getBytes(StandardCharsets.UTF_8);
@@ -47,11 +45,11 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
                                 "stove-builds",
                                 Duration.ofSeconds(1)));
         try {
-            BuildDownload url = shortLived.download(snapshot);
+            BuildDownload url = storage.download(snapshot);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url.url())).GET().build();
             HttpClient client = HttpClient.newHttpClient();
             // 기대: 느린 러너에서도 내용 검증은 200이다.
-            // 실제: 1초 URL은 첫 GET 전에 만료된다. 영향: 코드 변경 없이 CI 실패.
+            // 짧은 URL의 수명보다 지연돼도 내용 검증용 URL은 유효해야 한다.
             Thread.sleep(2100);
             HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
             assertThat(response.statusCode()).isEqualTo(200);
@@ -62,11 +60,16 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
                                             MessageDigest.getInstance("SHA-256")
                                                     .digest(response.body())))
                     .isEqualTo(snapshot.checksum());
+            BuildDownload expiringUrl = shortLived.download(snapshot);
+            assertThat(URI.create(expiringUrl.url()).getRawQuery())
+                    .contains("X-Amz-Expires=1");
+            HttpRequest expiringRequest =
+                    HttpRequest.newBuilder(URI.create(expiringUrl.url())).GET().build();
             Awaitility.await()
-                    .atMost(Duration.ofSeconds(5))
+                    .atMost(Duration.ofSeconds(20))
                     .until(
                             () ->
-                                    client.send(request, HttpResponse.BodyHandlers.discarding())
+                                    client.send(expiringRequest, HttpResponse.BodyHandlers.discarding())
                                                     .statusCode()
                                             == 403);
         } finally {
