@@ -21,6 +21,7 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.LockAcquisitionException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -56,8 +57,12 @@ public class ReconcileCatalogProduct {
         CatalogProductSnapshot before = product == null ? null : product.snapshot();
         ReconciliationResult result;
         if (product == null) {
-            if (products.findByProductCode(canonical.requestedCode()).isPresent())
+            StoreProduct sameCode = products.findByProductCode(canonical.requestedCode()).orElse(null);
+            if (sameCode != null) {
+                if (sameCode.getProductId().equals(canonical.snapshot().productId()))
+                    throw new ConcurrencyFailureException("같은 상품이 동시에 생성되었습니다. 새 트랜잭션에서 재시도합니다.");
                 throw new BusinessException(ErrorCode.CONFLICT, "상품 코드가 다른 상품에 연결되어 있습니다.");
+            }
             product = StoreProduct.create(canonical.snapshot());
             entityManager.persist(product);
             entityManager.flush();

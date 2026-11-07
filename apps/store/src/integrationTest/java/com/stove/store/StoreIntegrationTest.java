@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -45,17 +46,16 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -204,7 +204,6 @@ class StoreIntegrationTest {
         assertThat(products.count()).isEqualTo(1);
     }
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-040] HTTP 정본 대조 중 이벤트가 같은 상품을 생성해도 높은 버전으로 수렴한다")
     void reconciliationConvergesWhenEventCommitsBetweenIdAndCodeReads() throws Exception {
         // 기대: 정본 v3 반영. 실제: 같은 ID를 다른 상품으로 오인. 영향: HTTP 동기화 회차 실패.
@@ -224,6 +223,31 @@ class StoreIntegrationTest {
         updating.join();
         assertThat(read.execute("game-1")).isEqualTo(latest);
         assertThat(products.count()).isEqualTo(1);
+    }
+    @Test
+    @DisplayName("[D-040] 실제 Kafka 배달은 최초 삽입 경합 뒤에도 높은 버전으로 수렴한다")
+    void kafkaDeliveryConvergesWhenSameProductIsCommittedBetweenReads() throws Exception {
+        CatalogProductSnapshot latest = product(1, 3, "Latest", 3000);
+        doAnswer(invocation -> {
+            Thread listener = Thread.currentThread();
+            String originalName = listener.getName();
+            listener.setName("kafka-insert");
+            try { return invocation.callRealMethod(); }
+            finally { listener.setName(originalName); }
+        }).when(apply).execute(latest);
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "kafka-insert");
+        listeners.start();
+        try {
+            CatalogProductPublishedEvent event = CatalogProductPublishedEvent.of(latest);
+            kafka.send(record(event, event.partitionKey())).get(10, TimeUnit.SECONDS);
+            try {
+                gate.awaitArrival();
+                apply.execute(product(1, 1, "Old", 1000));
+            } finally { gate.release(); }
+            Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                    assertThat(read.execute("game-1")).isEqualTo(latest));
+            assertThat(products.count()).isEqualTo(1);
+        } finally { gate.release(); listeners.stop(); }
     }
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);
@@ -252,6 +276,9 @@ class StoreIntegrationTest {
                 List.of("ACTION")
         );
         assertThatThrownBy(() -> apply.execute(collision)).isInstanceOf(BusinessException.class);
+        when(catalog.detail(p.productCode())).thenReturn(collision);
+        assertThatThrownBy(() -> reconcile.execute(p.productCode())).isInstanceOf(BusinessException.class);
+        assertThat(read.execute(p.productCode())).isEqualTo(p);
         assertThat(products.count()).isEqualTo(1);
     }
     @Test void reconciliationReadsEveryPageAndKeepsAlreadyReadyDataAfterFailure() {
