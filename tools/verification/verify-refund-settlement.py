@@ -47,8 +47,9 @@ PORTONE = {key: secrets.token_urlsafe(24) for key in ["PORTONE_STORE_ID", "PORTO
 PORTONE.update(PORTONE_WEBHOOK_SECRET="whsec_" + base64.b64encode(secrets.token_bytes(32)).decode(),
                PORTONE_WEBHOOK_URL="https://webhook.invalid/api/v1/payments/webhooks/portone")
 SETTLEMENT_SECRET = secrets.token_urlsafe(24)
+SDK_SECRET = secrets.token_urlsafe(24)
 GRADLE_NETWORK = [] if os.environ.get("GITHUB_ACTIONS") == "true" else ["--offline"]
-fake = PortOneFake({"payment": PORTONE["PORTONE_API_SECRET"], "settlement": SETTLEMENT_SECRET}, PORTONE["PORTONE_STORE_ID"], PORTONE["PORTONE_CHANNEL_KEY"])
+fake = PortOneFake({"payment": PORTONE["PORTONE_API_SECRET"], "settlement": SETTLEMENT_SECRET, "sdk": SDK_SECRET}, PORTONE["PORTONE_STORE_ID"], PORTONE["PORTONE_CHANNEL_KEY"])
 infra = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"]}
 minio_image = ensure_minio_image(REPO)
 for image in ["mysql:8.0", "redis:7-alpine", "apache/kafka:3.9.0"]:
@@ -155,6 +156,34 @@ def check(name, query, expected, seconds=120):
 
 
 
+def verify_refund_totals(orders, refunded_order):
+    # V10 stores positive reversal amounts; ReverseOriginalFullRefundPolicy copies
+    # the original allocation. Net payout subtracts the positive refund amount.
+    row = sql("SELECT r.amount,r.seller_payout_amount,s.seller_payout_amount,r.seller_subject,r.settlement_month "
+              "FROM stove_settlement.settlement_refund r JOIN stove_settlement.settlement_sale s ON s.order_no=r.order_no "
+              "WHERE r.order_no='" + refunded_order + "'").split("\t")
+    assert int(row[0]) == journey_info["product"]["price"], "settlement refund amount differs from paid price"
+    assert int(row[1]) == int(row[2]) and int(row[2]) - int(row[1]) == 0, "refund must reverse original positive seller payout"
+    cancellation_ids = sorted(r["cancellationId"] for r in fake.requests
+                              if r["path"].endswith("/cancel") and r["status"] == 200)
+    stored_ids = sql("SELECT c.cancellation_id FROM stove_settlement.settlement_refund_cancellation c "
+                     "JOIN stove_settlement.settlement_refund r ON r.id=c.refund_record_id "
+                     "WHERE r.order_no='" + refunded_order + "' ORDER BY c.cancellation_id").splitlines()
+    assert stored_ids and stored_ids == cancellation_ids, "Settlement cancellation IDs differ from cancel response"
+    seller, month = row[3], row[4]
+    scope = "seller_subject='" + seller + "' AND settlement_month='" + month + "'"
+    own_orders = ",".join("'" + order + "'" for order in orders)
+    expected = sql("SELECT COUNT(*),COALESCE(SUM(amount),0),COALESCE(SUM(seller_payout_amount),0) "
+                   "FROM stove_settlement.settlement_refund WHERE " + scope + " AND order_no IN (" + own_orders + ")")
+    actual = sql("SELECT refund_count,refund_amount,refunded_seller_payout_amount "
+                 "FROM stove_settlement.seller_monthly_settlement WHERE " + scope)
+    assert actual == expected, "monthly refund totals: expected " + expected + "; actual " + actual
+    label = "refund allocation/cancellation/monthly totals (" + str(len(orders)) + " journey orders)"
+    STATE["checks"][label] = expected
+    save_state()
+    log("PASS: " + label + " = " + expected.replace("\t", "|"))
+
+
 def create_order(name):
     product = journey_info["product"]
     request = {"requestId": str(uuid.uuid4()), "productCode": product["productCode"],
@@ -174,7 +203,7 @@ def pay(name, order_no, label):
     set_step(name, label, order_no=order_no)
     checkout = buyer.data("/api/v1/payments/" + order_no + "/checkout")
     request = urllib.request.Request(fake.base_url + "/_fake/sdk/request-payment", data=json.dumps(checkout).encode(),
-        headers={"Authorization": "PortOne " + PORTONE["PORTONE_API_SECRET"], "Content-Type": "application/json"})
+        headers={"Authorization": "PortOne " + SDK_SECRET, "Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=5) as response:
         sdk = json.load(response)
     status, _ = buyer.call("POST", "/api/v1/payments/" + order_no + "/approvals", dict(requestId=str(uuid.uuid4()), **sdk))
@@ -229,8 +258,13 @@ def snapshot(label):
 
 def preservation(own):
     after = snapshot("after")
+    labeled_containers = container_snapshot(project)
+    labeled_volumes = subprocess.check_output(["docker", "volume", "ls", "-q", "--filter",
+        "label=com.docker.compose.project=" + project], text=True, timeout=30).split()
     own_volumes = {volume for row in own.values() for volume in row["volumes"]}
     differences = dict(
+        remainingLabeledContainers=sorted(labeled_containers),
+        remainingLabeledVolumes=sorted(labeled_volumes),
         remainingOwnContainers=sorted(set(own) & set(after["containers"])),
         remainingOwnVolumes=sorted(own_volumes & set(after["volumes"])),
         missingProtectedContainers=sorted(key for key, row in before["containers"].items()
@@ -241,7 +275,7 @@ def preservation(own):
                                          if row["testcontainers"] and key not in after["containers"]),
         removedAnonymousVolumes=sorted(volume for volume in before["volumes"]
                                       if re.fullmatch(r"[0-9a-f]{64}", volume) and volume not in after["volumes"]))
-    passed = not any(differences[key] for key in ["remainingOwnContainers", "remainingOwnVolumes",
+    passed = not any(differences[key] for key in ["remainingLabeledContainers", "remainingLabeledVolumes", "remainingOwnContainers", "remainingOwnVolumes",
                                                "missingProtectedContainers", "missingNamedVolumes"])
     (directory / "preservation.json").write_text(json.dumps(dict(passed=passed, **differences), indent=2))
     log(("PASS" if passed else "FAIL") + ": preservation: own resources removed; protected containers and named volumes retained" if passed
@@ -252,6 +286,23 @@ def preservation(own):
 before = snapshot("before")
 started = time.monotonic()
 journey_passed = False
+journey_error = None
+failed_step = None
+cleanup_errors = []
+
+
+def cleanup_step(label, action):
+    try:
+        return action()
+    except Exception as error:
+        cleanup_errors.append(label + ": " + str(error))
+        try:
+            log("FAIL: cleanup " + cleanup_errors[-1])
+        except Exception:
+            print("FAIL: cleanup " + label, flush=True)
+        return None
+
+
 try:
     fake.start()
     PORTONE["PORTONE_API_BASE_URL"] = fake.base_url
@@ -363,6 +414,7 @@ try:
     check("license refunded", "SELECT status FROM stove_license.product_license WHERE order_no='" + first + "'", "REFUNDED")
     check("registration ended", "SELECT GROUP_CONCAT(status) FROM stove_license.license_registration WHERE order_no='" + first + "'", "ENDED")
     check("settlement refund", "SELECT COUNT(*) FROM stove_settlement.settlement_refund WHERE order_no='" + first + "'", 1, 120)
+    verify_refund_totals([first], first)
     with LOCK:
         STATE["refund"] = {
             "order": buyer.data("/api/v1/orders/" + first + "/refund"),
@@ -378,6 +430,7 @@ try:
     assert again_license != first_license
     check("one ACTIVE license", "SELECT COUNT(*) FROM stove_license.license_registration WHERE status='ACTIVE' AND order_no='" + again + "' AND buyer_subject='" + subject + "'", 1)
     check("repurchase sale", "SELECT COUNT(*) FROM stove_settlement.settlement_sale WHERE order_no='" + again + "'", 1, 180)
+    verify_refund_totals([first, again], first)
     with LOCK:
         STATE["summary"] = {"first": first, "firstLicense": first_license, "repurchase": again, "repurchaseLicense": again_license,
                             "sales": sql("SELECT GROUP_CONCAT(CONCAT_WS('|',order_no,settlement_month,amount,seller_payout_amount) ORDER BY id) FROM stove_settlement.settlement_sale"),
@@ -385,6 +438,8 @@ try:
         save_state()
     for order in [first, again]:
         payment_id = buyer.data("/api/v1/payments/" + order)["paymentId"]
+        all_confirms = [r for r in fake.requests if r["method"] == "POST" and r["path"] == "/payments/" + payment_id + "/confirm"]
+        assert len(all_confirms) == 1, "exactly one confirm request per payment, including failures"
         confirms = [r for r in fake.requests if r["method"] == "POST" and r["path"] == "/payments/" + payment_id + "/confirm" and r["status"] == 200]
         assert len(confirms) == 1, "exactly one confirm per paid order"
     cancels = [r for r in fake.requests if r["method"] == "POST" and r["path"].endswith("/cancel")]
@@ -401,45 +456,57 @@ try:
         log("PASS: settlement GET payment for order " + order)
     assert not any(r["caller"] == "settlement" and r["method"] == "POST" for r in fake.requests)
     assert all(r["caller"] == "payment" for r in fake.requests if r["path"].endswith(("/confirm", "/cancel")))
+    assert all(r["path"].startswith("/_fake/sdk/") for r in fake.requests if r["caller"] == "sdk")
+    log("PASS: sdk only /_fake/sdk/*; exactly one total and successful confirm per payment")
     log("PASS: settlement POST=0; all confirm/cancel callers=payment")
-    (directory / "summary.json").write_text(json.dumps(dict(passed=True, checks=STATE["checks"], steps=len(STATE["checks"]), durationSeconds=round(time.monotonic()-started, 1)), indent=2))
     journey_passed = True
-    set_step("done", "여정을 모두 마쳤습니다.")
-    log("PASS: local PortOne fake purchase -> register -> refund (fake cancel) -> License ended -> Settlement refund -> repurchase -> register")
+    log("PASS: local PortOne fake purchase -> register -> refund -> Settlement adjustment -> repurchase -> register")
 except Exception as failure:
-    with LOCK:
-        STATE["failure"] = type(failure).__name__ + ": " + str(failure)
-        save_state()
-    set_step("failed", "여정이 실패했습니다: " + str(failure))
-    (directory / "failure.txt").write_text(traceback.format_exc())
-    (directory / "summary.json").write_text(json.dumps(dict(passed=False, failedStep=STATE["step"], error=str(failure), steps=len(STATE["checks"]), durationSeconds=round(time.monotonic()-started, 1)), indent=2))
-    log("FAIL: " + str(failure))
+    journey_error = type(failure).__name__ + ": " + str(failure)
+    failed_step = STATE["step"]
+    cleanup_step("failure evidence", lambda: (directory / "failure.txt").write_text(traceback.format_exc()))
+    cleanup_step("failure log", lambda: log("FAIL: " + journey_error))
     raise
 finally:
-    if buyer is not None:
-        (directory / "gateway-audit.json").write_text(json.dumps(buyer.audit, indent=2))
-    for app, process, handle in processes:
-        process.terminate()
-    for app, process, handle in processes:
-        try:
-            process.wait(timeout=40)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
-        handle.close()
-    fake.stop()
-    (directory / "fake-requests.json").write_text(json.dumps(fake.requests, indent=2))
+    # Compose removal lives in the outer finally, independently of all earlier
+    # cleanup failures. Never replace an active journey exception.
     try:
-        own = container_snapshot(project)
-        (directory / "resources-own-before-down.json").write_text(json.dumps(own, indent=2))
-        down = subprocess.run(docker + ["down", "--volumes", "--remove-orphans"], cwd=REPO,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-        preserved = preservation(own)
-        if down.returncode or not preserved:
-            raise RuntimeError("Project cleanup/preservation failed; see preservation.json")
-    except Exception as cleanup_failure:
-        log("FAIL: preservation: " + str(cleanup_failure))
-        if journey_passed:
-            raise
+        if buyer is not None:
+            cleanup_step("gateway audit", lambda: (directory / "gateway-audit.json").write_text(json.dumps(buyer.audit, indent=2)))
+        for app, process, handle in processes:
+            cleanup_step(app + " terminate", process.terminate)
+        for app, process, handle in processes:
+            def stop_and_wait(process=process):
+                try:
+                    process.wait(timeout=40)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=10)
+            cleanup_step(app + " wait", stop_and_wait)
+            cleanup_step(app + " log close", handle.close)
+        cleanup_step("fake stop", fake.stop)
+        cleanup_step("fake requests", lambda: (directory / "fake-requests.json").write_text(json.dumps(fake.requests, indent=2)))
     finally:
-        log("Duration seconds: " + str(round(time.monotonic() - started, 1)))
+        own = cleanup_step("own snapshot", lambda: container_snapshot(project))
+        if own is not None:
+            cleanup_step("own evidence", lambda: (directory / "resources-own-before-down.json").write_text(json.dumps(own, indent=2)))
+        cleanup_step("compose down", lambda: subprocess.run(docker + ["down", "--volumes", "--remove-orphans"], cwd=REPO,
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120))
+        preserved = cleanup_step("preservation", lambda: preservation(own or {}))
+        cleanup_passed = preserved is True and not cleanup_errors
+        passed = journey_passed and cleanup_passed
+        duration = round(time.monotonic() - started, 1)
+        STATE.update(step="done" if passed else "failed", stepText="Verification passed" if passed else "Verification failed",
+                     journeyPassed=journey_passed, cleanupPassed=cleanup_passed)
+        summary = dict(passed=passed, journeyPassed=journey_passed, cleanupPassed=cleanup_passed,
+                       checks=STATE["checks"], steps=len(STATE["checks"]), durationSeconds=duration,
+                       failedStep=failed_step, error=journey_error, cleanupErrors=list(cleanup_errors))
+        cleanup_step("final state", save_state)
+        # Final evidence writes may themselves fail; report failure in summary.
+        summary["cleanupPassed"] = cleanup_passed and not cleanup_errors
+        summary["passed"] = journey_passed and summary["cleanupPassed"]
+        summary["cleanupErrors"] = list(cleanup_errors)
+        cleanup_step("final summary", lambda: (directory / "summary.json").write_text(json.dumps(summary, indent=2)))
+        cleanup_step("duration log", lambda: log("Duration seconds: " + str(duration)))
+        if journey_passed and (not cleanup_passed or cleanup_errors):
+            raise RuntimeError("Cleanup/preservation failed: " + "; ".join(cleanup_errors))

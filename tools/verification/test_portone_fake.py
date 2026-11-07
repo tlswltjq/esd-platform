@@ -98,3 +98,19 @@ class PortOneFakeTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, 400)
         raised.exception.close()
         self.assertEqual(self.fake.requests[-1]['status'], 400)
+
+    def test_idempotency_key_rejects_changed_confirm_and_cancel_body(self):
+        checkout = dict(storeId='store', channelKey='channel', paymentId='payment', orderName='game',
+                        totalAmount=10000, currency='CURRENCY_KRW', payMethod='EASY_PAY', customData={'orderNo': 'order'})
+        _, sdk = self.call('POST', '/_fake/sdk/request-payment', checkout)
+        confirm = dict(storeId='store', paymentToken=sdk['paymentToken'], txId=sdk['txId'],
+                       currency='KRW', totalAmount=10000, isTest=True)
+        approved = self.call('POST', '/payments/payment/confirm', confirm, '"approval"')
+        conflict = (409, {'type': 'IDEMPOTENCY_CONFLICT'})
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', dict(confirm, totalAmount=1), '"approval"'), conflict)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', dict(confirm, storeId='wrong'), '"approval"'), conflict)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', confirm, '"approval"'), approved)
+        cancel = dict(storeId='store', amount=10000, currentCancellableAmount=10000, reason='ESD refund refund-id')
+        cancelled = self.call('POST', '/payments/payment/cancel', cancel, '"cancel"')
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', dict(cancel, reason='changed'), '"cancel"'), conflict)
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', cancel, '"cancel"'), cancelled)

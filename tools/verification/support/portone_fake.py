@@ -1,4 +1,8 @@
-"""Thread-safe, loopback-only PortOne V2 contract fake; no external calls."""
+"""Thread-safe, loopback-only, happy-path PortOne V2 journey fake.
+
+Failure branches (REQUESTED cancellations, provider error codes, lost responses,
+and webhooks) are covered by the adapter and integration tests. No external calls.
+"""
 import copy
 import datetime
 import http.server
@@ -55,7 +59,8 @@ class PortOneFake:
                     entry = dict(method=self.command, path=self.path, status=status, caller=caller,
                                  idempotencyKey=self.headers.get('Idempotency-Key'))
                     if self.path.endswith('/cancel'):
-                        entry.update(amount=body.get('amount'), reason=body.get('reason'))
+                        entry.update(amount=body.get('amount'), reason=body.get('reason'),
+                                     cancellationId=result.get('cancellation', {}).get('id'))
                     owner.requests.append(entry)
                     raw = json.dumps(result).encode()
                     self.send_response(status)
@@ -100,6 +105,12 @@ class PortOneFake:
             return 404, {'type': 'PAYMENT_NOT_FOUND'}
         payment_id = parts[1]
         payment = self.payments[payment_id]
+        replay_key = (payment_id, parts[-1], key)
+        if method == 'POST' and replay_key in self.replays:
+            previous_body, previous_result = self.replays[replay_key]
+            if body != previous_body:
+                return 409, {'type': 'IDEMPOTENCY_CONFLICT'}
+            return copy.deepcopy(previous_result)
         store = urllib.parse.parse_qs(parsed.query).get('storeId', [None])[0] if method == 'GET' else body.get('storeId')
         if store != self.store:
             return 403, {'type': 'STORE_MISMATCH'}
@@ -116,8 +127,6 @@ class PortOneFake:
             return 404, {'type': 'NOT_FOUND'}
         if not key or not (key.startswith('"') and key.endswith('"')):
             return 400, {'type': 'INFORMATION_MISMATCH'}
-        if replay_key in self.replays:
-            return copy.deepcopy(self.replays[replay_key])
         if action == 'confirm':
             if (body.get('paymentToken'), body.get('txId'), body.get('totalAmount'), body.get('currency'), body.get('isTest')) != (self.tokens[payment_id], payment['transactionId'], payment['amount']['total'], 'KRW', True):
                 return 400, {'type': 'INFORMATION_MISMATCH'}
@@ -136,5 +145,5 @@ class PortOneFake:
             payment.update(status='CANCELLED', cancelledAt=now, cancellations=[{k: cancellation[k] for k in ('status', 'id', 'totalAmount', 'cancelledAt')}])
             payment['amount']['cancelled'] = remaining
             result = 200, {'cancellation': cancellation}
-        self.replays[replay_key] = copy.deepcopy(result)
+        self.replays[replay_key] = copy.deepcopy((body, result))
         return result

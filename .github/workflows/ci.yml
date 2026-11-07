@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       stack:
-        description: "실제 앱 스택 E2E(verify-jib.py)도 실행"
+        description: "실제 앱 스택 E2E와 로컬 fake-PortOne 환불·정산 여정 실행"
         type: boolean
         default: true
 
