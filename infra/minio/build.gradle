@@ -13,12 +13,29 @@ def goModules = layout.buildDirectory.dir('go-modules')
 def goCache = layout.buildDirectory.dir('go-cache')
 def builderImage = providers.gradleProperty('stove.minio.builderImage').getOrElse('golang:1.24-alpine')
 
+// Provider API로 외부 명령을 추적해 설정 캐시에서도 호스트 ID를 다시 확인한다.
+def hostId = { option ->
+    try {
+        def value = providers.exec {
+            commandLine 'id', option
+            ignoreExitValue = true
+        }.standardOutput.asText.get().trim()
+        return value ==~ /[0-9]+/ ? value : ''
+    } catch (org.gradle.api.GradleException ignored) {
+        return '' // id가 없는 플랫폼에서는 소유권 복구를 생략한다.
+    }
+}
+def hostUid = hostId('-u')
+def hostGid = hostId('-g')
+
 tasks.register('compileMinio', Exec) {
     group = 'build'
     description = '고정 MinIO/mc 소스를 Go 컨테이너에서 Linux 바이너리로 빌드한다'
     inputs.file('compile.sh')
     inputs.property('architecture', targetArchitecture)
     inputs.property('builderImage', builderImage)
+    inputs.property('hostUid', hostUid)
+    inputs.property('hostGid', hostGid)
     outputs.dir(rootfs)
     onlyIf { !suppliedImage }
     doFirst {
@@ -29,6 +46,7 @@ tasks.register('compileMinio', Exec) {
             '--mount', "type=bind,source=${rootfs.get().asFile},target=/out",
             '--mount', "type=bind,source=${goModules.get().asFile},target=/go/pkg/mod",
             '--mount', "type=bind,source=${goCache.get().asFile},target=/root/.cache/go-build",
+            '--env', "HOST_UID=${hostUid}", '--env', "HOST_GID=${hostGid}",
             '--env', "GOARCH=${targetArchitecture}", builderImage, 'sh', '/compile.sh'
 }
 
