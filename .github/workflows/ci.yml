@@ -1,5 +1,5 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
-# - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
+# - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build, 이후 결정 번호·기준 판 보존 검사(빌드 실패와 무관)
 # - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정 (실제 PortOne·비밀 값 없음)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
 # 결정 107: main 규칙셋이 build 작업의 name을 필수 검사로 쓴다. name을 바꾸거나 pull_request에
@@ -34,8 +34,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Check decision numbers
-        run: python3 -I -B tools/ci/decision_numbers.py --root .
+        with:
+          fetch-depth: 2
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -47,6 +47,9 @@ jobs:
         run: docker version --format 'server {{.Server.Version}} api {{.Server.APIVersion}}'
       - name: Build
         run: ./gradlew build --continue --console=plain
+      - name: Check decision numbers
+        if: ${{ !cancelled() }}
+        run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

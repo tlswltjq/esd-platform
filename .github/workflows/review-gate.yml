@@ -1,4 +1,4 @@
-# 결정 109: 결정 108의 교차 리뷰를 PR 본문 `리뷰 판정` 표로 확인한다. 변경 파일이 모두 *.md면 통과한다.
+# 결정 109: 결정 108의 교차 리뷰를 PR 본문 `리뷰 판정` 표로 확인한다. 교차 리뷰 표는 *.md만 바뀌면 생략하지만 결정 번호는 모든 PR에서 검사한다.
 # main 규칙셋이 이 작업의 name(review-gate)을 필수 검사로 쓴다. name을 바꾸거나 paths 조건을 달면
 # 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
 # PR 본문을 고치면(edited) 이 검사만 다시 돈다. ci.yml의 build는 다시 돌지 않는다.
@@ -26,10 +26,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 2
       - name: Self-test
         run: python3 -B -m unittest discover -s tools/ci -p 'test_*.py'
       - name: Check decision numbers
-        run: python3 -I -B tools/ci/decision_numbers.py --root .
+        if: ${{ !cancelled() }}
+        run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1
       - name: Check review section
         env:
           GH_TOKEN: ${{ github.token }}
