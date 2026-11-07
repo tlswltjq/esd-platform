@@ -48,7 +48,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -293,7 +292,6 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
         }
     }
 
-    @Tag("known-defect")
     @Test
     @DisplayName("[D-042] 빈 Project 잠금 조회 뒤 같은 Project의 최초 공개가 커밋돼도 높은 버전으로 수렴한다")
     void sameProjectFirstPublicationCommittedBetweenProjectAndCodeReadsConverges() throws Exception {
@@ -348,7 +346,6 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
         assertThat(rejected.reason()).isEqualTo("STALE_CONTENT_VERSION");
     }
 
-    @Tag("known-defect")
     @Test
     @DisplayName("[D-042] 출시 접수의 빈 Project 잠금 조회 뒤 같은 Project의 최초 공개가 커밋돼도 접수해 높은 버전으로 수렴한다")
     void receiptConvergesWhenSameProjectFirstPublicationCommitsBetweenProjectAndCodeReads() throws Exception {
