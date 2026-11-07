@@ -5,15 +5,12 @@
 - [x] StoreProduct 사본·버전 규칙·제목 검색/정렬/페이지·상세·`CatalogProductPublished` 수신·시작 시 초기 동기화 — 2026-10-15
 - [x] 자동 초기화 재시도·주기 정본 대조·동일 버전 정본 교정(A)·`store_reconciliation` 원자 감사·`stove.store.sync.*` 지표 — 2026-11-03
 - [x] 장르 분류(플랫폼 10개)·`store_product_genre`·복수 장르 AND 검색·`/storefront/genres` — 2026-11-03
+- [x] 자동 복구 경보 연결: `/actuator/prometheus` 익명 GET 허용, `StoreSyncInitStalled`(초기화 10분)·`StoreSyncReconcileFailing`(대조 성공 5분 끊김) 경보, 격리 스택 발화·해제 검증 — 2026-11-05, [결정 85](../../../docs/decisions.md), PR #104
+- [x] 서비스 11개 공통 Prometheus 수집에 Store 포함(실제 격리 Prometheus 대상 up) — 2026-11-06, PR #113
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] **Store 자동 복구 경보 연결 — 현재 최우선 미완료(2026-11-04)**
-  - 지표 수집 주체·접근 범위를 정하고 실제 Prometheus 수집을 연결한다. Store 보안 허용 목록에 `/actuator/prometheus`를 추가하고 `infra/prometheus/prometheus.yml`의 수집 대상과 실제 접근 경계를 맞춘다.
-  - 초기화 지연·대조 실패 지속·수집 중단을 구분해 경보를 만들고, 회복 시 자동 해제를 검증한다. 이미 준비된 조회의 가용성과 정본 대조 성공 여부를 구분하며, 마지막 대조 시각만으로 상품별 갱신 지연을 보장하지 않는다.
-  - `ssh sng` 격리 환경에서 실제 수집·장애·회복과 기존 조회 유지를 확인하고 운영자가 볼 상태·다음 행동을 기록한다.
-  - 경보 임계값·허용 지연은 **아직 선택하지 않았다.** 이 작업에서 필요한 정책으로 설명하고 선택한다.
-- [ ] 위 경보 연결 다음은 **G5 계정 복구·상태·운영 권한 점검**이다 — Auth·Gateway·공통 모듈. 계정 복구/상태 변경 후 세션·토큰 정책과 감사, 서비스 자격증명·접근 범위, 기본 대기/실패 지표·원본 재처리·백업/복구 절차.
+- (Store 단독 남은 일반화 항목 없음.) 계정 복구·상태 등 G5 공통 운영은 [Auth](../auth/tasks.md)·[Gateway](../gateway/tasks.md) 작업과 [로드맵](../../../docs/roadmap.md)을 따른다.
 
 ## 범위 밖(후속)
 

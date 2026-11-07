@@ -105,7 +105,9 @@ Flyway는 V1에 `store_product`, V4에 `store_reconciliation`, V5에 `store_prod
 
 - Micrometer에 `stove.store.sync.ready`·`running`·`runs{result=success|failure}`·`last.success.timestamp`·`last.scanned`·`last.changed`·`last.failed`·`last.skipped.newer`를 등록한다.
 - 지표 어댑터는 도메인 상태 공급자만 받고 서비스·프레임워크 객체 조립은 config가 맡는다.
-- 현재 코드는 지표를 등록하고 공통 빌드에 Prometheus registry·metrics/prometheus 노출을 포함하지만, Store 보안 허용 목록에는 아직 `/actuator/prometheus`가 없다. 실제 경보 전송·대시보드/스크레이프 배포는 별도 운영 범위다.
+- 보안 허용 목록에 익명 GET `/actuator/prometheus`가 있고, `infra/prometheus/prometheus.yml`이 `store:8087`을 수집한다.
+- 경보는 `infra/prometheus/alerts.yml`의 `StoreSyncInitStalled`(`stove_store_sync_ready == 0`이 10분)·`StoreSyncReconcileFailing`(한 번 성공한 뒤 대조 성공이 5분 끊김)다([결정 85](../../../docs/decisions.md)). 상품별 갱신 지연이 아니라 대조 자체가 도는지를 본다.
+- 경보 전송(알림 채널)·대시보드·공유 환경 배포는 별도 운영 범위다.
 
 ## 사용 안내
 
