@@ -179,7 +179,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 8. WHEN `PG_INVALID_EVIDENCE`로 송신 중단된 `REVIEW_REQUIRED` 작업이 승인 접수·송신 준비·실패 종료 기록 없이 원구매와 대조된 새 READY를 관측하고 확정 만료 통지가 있으면 THEN 시스템 SHALL 같은 Payment 잠금·현재 lease 안에서 승인 작업·Payment를 `EXPIRED`로 바꾸고 암호문·조회 예약을 제거한다. 시각 경과·조회 장애·금액 불일치·승인 접수 이력이 있으면 이 경로로 닫지 않고, 관측한 `PAID_WITHOUT_ADMISSION` 사유는 덮어쓰지 않는다.
 9. WHILE 생성·만료가 동시에 일어나는 동안 THE 시스템 SHALL 주문별 잠금으로 직렬화하고, 같은 만료의 중복 수신은 최초 만료 ID·시각을 바꾸지 않는다.
 
-### R12. 승인 보류 운영 조회와 조사 (결정 112 part 1)
+### R12. 승인 보류 운영 조회와 조사 (결정 114 1부)
 
 #### 수용 기준
 1. WHEN ADMIN이 승인 보류 목록을 요청하면 THEN 시스템 SHALL REVIEW_REQUIRED만 페이지·사유 필터로 DB에서 조회하고 no-store를 반환한다. 토큰·보호 본문·암호문은 공개하지 않는다.
