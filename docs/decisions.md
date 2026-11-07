@@ -1030,6 +1030,15 @@
 - 구분: 추천 수용
 - 결과: [PR #129](https://github.com/tlswltjq/esd-platform/pull/129), [근거 색인](evidence.md) 2026-11-07 "PortOne 흉내 서버 환불 → 정산·재구매 여정" 행
 
+<a id="approval-review-hold-closure"></a>
+## 112. 승인 금융 보류(`REVIEW_REQUIRED`)는 운영자가 조사하고, PG 재조회 근거로만 종결한다
+- 문제: `ResolvePaymentApproval`이 설명되지 않는 상황(`PAID_WITHOUT_ADMISSION`·`PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`)에서 `stopPosts`로 보류한 승인은, PG가 PAID나 FAILED로 바뀔 때만 풀린다. 그 밖에는 활성 행으로 남아 5초(`PAYMENT_RETRY_MS`)마다 PortOne 조회를 끝없이 반복한다. ADMIN API·지표·경보가 없어 운영자에게 보이지 않는다. 운영자가 PG 콘솔에서 취소해도 승인 관측은 CANCELLED를 모르는 상태로 보고 다시 보류한다. `PAID_WITHOUT_ADMISSION`은 돈이 나갔는데 주문이 결제되지 않은 상태라, 고객이 새 주문으로 다시 사면 이중 결제가 된다.
+- 선택지: A 지금 유지(자동 재조회만) / B 운영자 조사·종결: ADMIN 목록·상세(이유·최신 PG 상태·경과 시간), 조사 기록, PG 재조회로 CANCELLED·FAILED·READY 만료를 확인해야만 닫히는 종결 기록, 보류 건 수 지표·경보, 보류 건 재조회 간격 늘림. 시스템은 돈을 움직이지 않음 / C B + `PAID_WITHOUT_ADMISSION`만 시스템이 PG 전액 취소 자동 실행 / D B + ADMIN 버튼으로 시스템이 PG 취소 실행 (추천: B — 지금 가장 큰 문제는 보이지 않는다는 것이고 B가 바로 해결한다. 보류는 대부분 원인을 사람이 봐야 하는 건이라 자동으로 닫으면 잘못 닫을 위험이 있다. C·D는 "주문 없는 결제 취소"라는 돈을 움직이는 새 경로를 만드는데, `PAID_WITHOUT_ADMISSION`은 콘솔 설정 실수 같은 드문 원인에서만 생기므로 지표로 빈도를 본 뒤 정한다. 종결은 운영자 말이 아니라 PG 재조회 근거로만 한다는 원칙은 환불 쪽과 같다)
+- 내 의견: "B로 해, 운영자 조사·종결"
+- 선택: B — 환불의 `/api/v1/admin/refund-delays`처럼 ADMIN이 보류 승인을 목록·상세로 보고 조사 기록을 남긴다. 종결은 운영자가 PG 콘솔에서 처리한 뒤 시스템이 PG를 다시 조회해 근거를 확인할 때만 닫는다. 보류 건 수 지표와 경보를 둔다. 보류 건의 끝없는 5초 재조회는 늘어나는 간격으로 바꾼다. 시스템이 PG 취소를 실행하는 경로는 만들지 않는다. 종결 때 주문·결제가 어떤 상태가 되는지, 재조회 간격 값, 고객 안내는 따로 정한다.
+- 구분: 추천 수용
+- 결과: (진행 중)
+
 ---
 
 ## 검증하며 드러난 것
