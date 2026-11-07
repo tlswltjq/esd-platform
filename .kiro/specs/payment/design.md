@@ -62,6 +62,7 @@ PENDING --> EXPIRED     (Order가 만료를 전달. 금융 결과를 만들지 �
 | GET | `/api/v1/payments/{orderNo}/approvals/{requestId}` | MEMBER | 승인 진행 조회. `no-store`, 토큰·암호문 없음 |
 | POST | `/api/v1/payments/webhooks/portone` | 공개(서명) | 서명·스토어 검증 뒤 조회 힌트 접수. 공개 edge가 직접 전달 |
 | GET/POST | `/api/v1/admin/refund-cancellation-holds` | ADMIN | 운영 중단 목록·상세·재개 |
+| GET/POST | `/api/v1/admin/approval-reviews` | ADMIN | REVIEW_REQUIRED 목록(reason 필터)·상세·조사 이력 GET, append-only 조사 기록 POST |
 | GET/POST | `/api/v1/admin/refund-delays` | ADMIN | 장기 미확정 목록·상세·조사 이력 GET, 조사 기록 POST |
 
 - 익명 401, 역할 없음 403, 타인·없는 결제 404, 잘못된 페이지 400. checkout의 로컬 `PAID`/`FAILED`·다른 공급자는 409.
@@ -150,3 +151,11 @@ PENDING --> EXPIRED     (Order가 만료를 전달. 금융 결과를 만들지 �
 - 공유 환경 전환: 구 V1~V10·자료는 보존하고 자동 변환·자동 결제하지 않는다. 구 쓰기·릴레이를 멈추고 `tools/migrations/payment/payment-transition.sql`(반복 실행 가능)로 구 PENDING·DEAD Outbox를 보관·격리한다. 새 그룹 `payment-order-request`의 시작 오프셋은 과거 OrderPlaced·미발행 Outbox·기존 결과를 대조해 정하며 earliest로 바로 켜거나 구 Inbox를 지우지 않는다.
 - 내장 모의 PG(V11 `simulated_payment_charge`) 이관: 처리기를 멈추고 원래 결정을 외부 PG로 이관·대조한 뒤 재개한다. 빈 PG로 기존 `PENDING`을 재개하면 결정을 잃으므로 자동 전환하지 않는다. V12 비용은 NULL로 두고 0원으로 채우지 않는다.
 - DEAD 결과 Outbox는 원인을 해소한 뒤 원래 eventId·본문으로 공통 requeue한다. 새 결제·결과 이벤트로 대신 보내지 않는다.
+
+### 승인 보류 운영 조회 (결정 112, part 1)
+
+`GET /api/v1/admin/approval-reviews?page=0&size=20&reason=PG_INVALID_EVIDENCE`와 `/{approvalId}`는 DB에 저장된 보류만 조회하며 `Cache-Control: no-store`를 반환한다. 접수·입장·최초 준비·보류 시작 시각, 보류 경과 초, 마지막 PG 상태/관측 시각, 조사 건수를 제공한다. 토큰·암호문·보호 본문은 응답에 포함하지 않는다. 기존 행의 보류 시작 시각은 NULL이며 경과 시간도 NULL이다.
+
+V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 기존 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다.
+
+`stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 5개 사유 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 보류 종결·고객 안내·금융 동작 정책은 미정이다.

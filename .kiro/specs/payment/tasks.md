@@ -26,6 +26,7 @@
 
 ## 진행 중 / 남음
 
+- [x] [결정 112](../../../docs/decisions.md#approval-review-hold-closure) 1부: 승인 보류 ADMIN 조회·최신 PG 관측·조사 기록·사유별 게이지/경보 — 2026-11-07 (운영 종결·간격·고객 안내는 G1 미정)
 - [ ] G1 종료 조건 대조: 금융 보류(`REVIEW_REQUIRED` 등) 건의 다음 행동·운영 종결 정책. 승인 전 검증 보류의 만료 경로 보완은 모든 `REVIEW_REQUIRED`의 해제·재승인·금융 구제 정책이 아니며, 과거 실제 TEST 진단 건의 원래 기록·종료된 스택은 수정하지 않았다 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업))
 - [ ] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증: 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 나머지 이탈/재진입 조합의 범위는 G1 종료 조건 대조에서 정한다 — G1
 - [ ] 같은 공급자 거래/비용·지급 자료로 Settlement까지 연결, 미확정 비용 모델 확정 — G3 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md))

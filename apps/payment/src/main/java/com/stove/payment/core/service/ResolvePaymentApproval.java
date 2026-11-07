@@ -106,7 +106,7 @@ public class ResolvePaymentApproval {
             return;
         }
         if(current.getAdmittedAt()!=null && orderExpired(current.getOrderNo()))stop(id,token,"ORDER_EXPIRY_CONFLICT");
-        ApprovalObservation observed=gateway.inspect(current.purchase());
+        ApprovalObservation observed=inspect(id, token, current);
         if (current.getAdmittedAt()==null) {
             if (observed.state()==ApprovalObservation.State.READY && orderExpired(current.getOrderNo())) {
                 locked(id,(payment,approval)->{
@@ -154,7 +154,15 @@ public class ResolvePaymentApproval {
         Boolean permitted=locked(id,(payment,approval)->approval.owns(token,now()) && approval.canPost(now()));
         if (!Boolean.TRUE.equals(permitted)) return;
         gateway.submit(id,dispatch.purchase(),body,dispatch.getFirstPreparedAt(),dispatch.getLeaseUntil());
-        completeObservation(id,token,dispatch,gateway.inspect(dispatch.purchase()));
+        completeObservation(id,token,dispatch,inspect(id, token, dispatch));
+    }
+    private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
+        ApprovalObservation observation = gateway.inspect(current.purchase());
+        locked(id, (payment, approval) -> {
+            if (approval.owns(token, now())) approval.recordObservation(observation, now());
+            return null;
+        });
+        return observation;
     }
     private boolean completeObservation(String id, String token, PaymentApproval current, ApprovalObservation observed) {
         if (observed.state()==ApprovalObservation.State.PAID) {
@@ -189,7 +197,7 @@ public class ResolvePaymentApproval {
         return lifecycle.findById(orderNo).map(PaymentOrderLifecycle::expired).orElse(false);
     }
     private void stop(String id,String token,String code) {
-        locked(id,(payment,approval)->{ if (approval.owns(token,now()) && !approval.terminal()) approval.stopPosts(code); return null; });
+        locked(id,(payment,approval)->{ if (approval.owns(token,now()) && !approval.terminal()) approval.stopPosts(code,now()); return null; });
     }
     private <T> T locked(String id,BiFunction<Payment,PaymentApproval,T> action) {
         PaymentApproval snapshot=approvals.findByApprovalId(id).orElse(null);

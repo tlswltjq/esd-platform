@@ -180,7 +180,7 @@ spring:
             - id: payment-refund-admin
               uri: ${PAYMENT_URI:http://localhost:8083}
               predicates:
-                - Path=/api/v1/admin/refund-cancellation-holds/**,/api/v1/admin/refund-delays/**
+                - Path=/api/v1/admin/refund-cancellation-holds/**,/api/v1/admin/refund-delays/**,/api/v1/admin/approval-reviews/**
                 - Method=GET,POST
               filters: [RemoveRequestHeader=X-Member-Id]
             - id: order-refund-admin

@@ -11,6 +11,17 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentApprovalTest {
+    @Test void observationsPreserveHoldStartAndNeverChangeStatusOrPayload() {
+        PaymentApproval approval = approval();
+        approval.recordObservation(new ApprovalObservation(ApprovalObservation.State.READY, null, null), at);
+        approval.stopPosts("PG_INVALID_EVIDENCE", at);
+        approval.recordObservation(new ApprovalObservation(ApprovalObservation.State.PENDING, null, null), at.plusSeconds(2));
+        assertThat(approval.getReviewStartedAt()).isEqualTo(at);
+        assertThat(approval.getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        assertThat(approval.getLatestPgObservedAt()).isEqualTo(at.plusSeconds(2));
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(approval.getProtectedPayload()).isEqualTo("encrypted-body");
+    }
     @Test void aPlatformSaleRestrictionKeepsTheOriginalUnadmittedRequestAndClearsAfterAdmission() {
         PaymentApproval approval = approval();
         approval.recordSaleRestriction();
