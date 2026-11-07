@@ -28,6 +28,7 @@ import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.port.CatalogProducts;
 import com.stove.store.core.service.ApplyCatalogProduct;
 import com.stove.store.core.service.ReadStoreProduct;
+import com.stove.store.core.service.ReconcileCatalogProduct;
 import com.stove.store.core.service.SearchStoreProducts;
 import com.stove.store.core.service.SynchronizeCatalogProducts;
 import java.nio.charset.StandardCharsets;
@@ -51,6 +52,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -79,6 +81,7 @@ class StoreIntegrationTest {
     }
     @MockitoSpyBean ApplyCatalogProduct apply;
     @Autowired SynchronizeCatalogProducts sync;
+    @Autowired ReconcileCatalogProduct reconcile;
     @Autowired SearchStoreProducts search;
     @Autowired ReadStoreProduct read;
     @Autowired StoreProductRepository products;
@@ -198,6 +201,28 @@ class StoreIntegrationTest {
         } finally { gate.release(); }
         updating.join();
         assertThat(read.execute("game-1")).isEqualTo(product(1, 3, "Latest", 3000));
+        assertThat(products.count()).isEqualTo(1);
+    }
+    @Test
+    @Tag("known-defect")
+    @DisplayName("[D-040] HTTP 정본 대조 중 이벤트가 같은 상품을 생성해도 높은 버전으로 수렴한다")
+    void reconciliationConvergesWhenEventCommitsBetweenIdAndCodeReads() throws Exception {
+        // 기대: 정본 v3 반영. 실제: 같은 ID를 다른 상품으로 오인. 영향: HTTP 동기화 회차 실패.
+        CatalogProductSnapshot latest = product(1, 3, "Latest", 3000);
+        when(catalog.detail("game-1")).thenReturn(latest);
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "reconcile-insert");
+        PausePoints.Run<Void> updating = PausePoints.start("reconcile-insert", () -> {
+            reconcile.execute("game-1");
+            return null;
+        });
+        try {
+            gate.awaitArrival();
+            assertThat(products.count()).isZero();
+            apply.execute(product(1, 1, "Old", 1000));
+            assertThat(read.execute("game-1").contentVersion()).isEqualTo(1);
+        } finally { gate.release(); }
+        updating.join();
+        assertThat(read.execute("game-1")).isEqualTo(latest);
         assertThat(products.count()).isEqualTo(1);
     }
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
