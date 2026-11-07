@@ -985,6 +985,15 @@
 - 구분: 추천 수용
 - 결과: [PR #118](https://github.com/tlswltjq/esd-platform/pull/118)
 
+<a id="main-branch-protection"></a>
+## 107. main은 PR과 CI `build` 통과로만 바뀌고, 관리자도 우회하지 않는다
+- 문제: main에 보호가 없어 직접 push와 CI 없는 병합이 가능했다. CI가 없던 09-16~11-06에 코드 PR 22개(#102~#116 포함)가 로컬 검증만으로 병합됐다. PR #117은 PR CI 통과 뒤 #116이 먼저 병합된 main에 들어가 main CI가 `StoreIntegrationTest` 1건으로 실패했다. 모든 PR을 한 계정(`tlswltjq`)이 만들고 병합하므로 AI도 관리자 권한으로 병합한다.
+- 선택지: A 지금 유지 / B 직접 push 금지 + PR 필수 + `build` 통과 필수, 관리자 우회 허용 / C B + 관리자도 우회 금지 / D C + 병합 전 최신 main 반영 필수 (추천: C — AI가 관리자 계정으로 병합하므로 관리자 우회를 허용하면 AI에게 보호가 걸리지 않는다. D는 겹친 PR마다 CI를 다시 15분 돌리는데, #117 같은 경우는 한 번뿐이었고 main push CI와 매일 밤 E2E가 잡는다). 승인 필수는 한 계정이라 자기 승인이 안 되고, merge queue는 개인 저장소에서 지원되지 않아 제외했다.
+- 내 의견: "C안으로 하자"
+- 선택: C — 기본 브랜치에 GitHub 규칙셋(`main protection (decision 107)`)을 둔다. 삭제·강제 push 금지, PR 필수(승인 0건), 필수 검사 `build (unit · architecture · integration · migration)`, 최신 main 반영은 요구하지 않음, 우회자 없음. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](defects.md)에 남긴다. 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. 흔들리는 Store 동시성 테스트와 문서 PR의 CI 시간은 별도 쟁점으로 남긴다.
+- 구분: 추천 수용
+- 결과: PR (작성 중)
+
 ---
 
 ## 검증하며 드러난 것
