@@ -21,12 +21,16 @@ import java.util.HexFormat;
 import java.util.UUID;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.DisplayName;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
     @Autowired S3ReviewBuildStorage storage;
 
     @Test
+    @Tag("known-defect")
+    @DisplayName("[D-041] 첫 요청이 지연돼도 제출 빌드의 바이트와 체크섬을 검증한다")
     void downloadedBytesMatchTheSubmittedBuildAndUrlExpires() throws Exception {
         byte[] bytes = "Immutable uploaded ZIP".getBytes(StandardCharsets.UTF_8);
         String checksum =
@@ -46,6 +50,9 @@ class ReviewBuildDownloadIntegrationTest extends ReviewIntegrationTestBase {
             BuildDownload url = shortLived.download(snapshot);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url.url())).GET().build();
             HttpClient client = HttpClient.newHttpClient();
+            // 기대: 느린 러너에서도 내용 검증은 200이다.
+            // 실제: 1초 URL은 첫 GET 전에 만료된다. 영향: 코드 변경 없이 CI 실패.
+            Thread.sleep(2100);
             HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).isEqualTo(bytes);
