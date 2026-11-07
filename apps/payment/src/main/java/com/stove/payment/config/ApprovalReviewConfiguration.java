@@ -1,6 +1,7 @@
 package com.stove.payment.config;
 
 import com.stove.payment.adapter.ApprovalReviewMetrics;
+import com.stove.payment.core.domain.ApprovalClosureRepository;
 import com.stove.payment.core.domain.ApprovalInvestigationRepository;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
@@ -15,8 +16,9 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class ApprovalReviewConfiguration {
-    @Bean ReadApprovalReviews readApprovalReviews(PaymentApprovalRepository approvals, ApprovalInvestigationRepository investigations, Clock refundReceptionClock) {
-        return new ReadApprovalReviews(approvals, investigations, refundReceptionClock);
+    @Bean ReadApprovalReviews readApprovalReviews(PaymentApprovalRepository approvals, ApprovalInvestigationRepository investigations,
+            ApprovalClosureRepository closures, Clock refundReceptionClock) {
+        return new ReadApprovalReviews(approvals, investigations, closures, refundReceptionClock);
     }
     @Bean RecordApprovalInvestigation recordApprovalInvestigation(PaymentRepository payments, PaymentApprovalRepository approvals, ApprovalInvestigationRepository investigations, Clock refundReceptionClock) {
         return new RecordApprovalInvestigation(payments, approvals, investigations, refundReceptionClock);

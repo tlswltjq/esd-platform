@@ -90,13 +90,37 @@ public class PaymentApproval {
     }
     public boolean terminal() { return status == PaymentApprovalStatus.SUCCEEDED || status == PaymentApprovalStatus.FAILED || status == PaymentApprovalStatus.EXPIRED; }
     public boolean claim(String token, Instant at, Duration lease) {
+        requireLease(token, at, lease);
+        if (terminal() || nextAt == null || at.isBefore(nextAt) || leased(at)) return false;
+        take(token, at, lease);
+        return true;
+    }
+    /**
+     * An operator closure takes the same lease as a worker cycle, so the two never run together. It does not wait for the
+     * next scheduled lookup, but it never takes over an active lease.
+     */
+    public boolean claimForClosure(String token, Instant at, Duration lease) {
+        requireLease(token, at, lease);
+        if (status != PaymentApprovalStatus.REVIEW_REQUIRED) throw new BusinessException(PaymentErrorCode.APPROVAL_NOT_HELD);
+        if (leased(at)) return false;
+        take(token, at, lease);
+        return true;
+    }
+    /** Ends a held approval on re-inspected closable PG evidence. The hold reason stays as the record of why it was held. */
+    public void closeAfterReview(ApprovalObservation evidence, String token, Instant at) {
+        if (!owns(token, at)) throw new IllegalStateException("The closure lease is required");
+        if (status != PaymentApprovalStatus.REVIEW_REQUIRED || !postStopped) throw new BusinessException(PaymentErrorCode.APPROVAL_NOT_HELD);
+        if (evidence == null || !evidence.closesReview()) throw new IllegalArgumentException("Closable PG evidence is required");
+        close(PaymentApprovalStatus.FAILED, at);
+        leaseToken = null; leaseUntil = null;
+    }
+    private void requireLease(String token, Instant at, Duration lease) {
         requireTime(at);
         if (!PaymentValues.uuid(token) || lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0)
             throw new IllegalArgumentException("A bounded identified lease is required");
-        if (terminal() || nextAt == null || at.isBefore(nextAt) || leaseUntil != null && at.isBefore(leaseUntil)) return false;
-        leaseToken = token; leaseUntil = at.plus(lease); nextAt = leaseUntil;
-        return true;
     }
+    private boolean leased(Instant at) { return leaseUntil != null && at.isBefore(leaseUntil); }
+    private void take(String token, Instant at, Duration lease) { leaseToken = token; leaseUntil = at.plus(lease); nextAt = leaseUntil; }
     public boolean owns(String token, Instant at) {
         return PaymentValues.microsecond(at) && token != null && token.equals(leaseToken)
                 && leaseUntil != null && at.isBefore(leaseUntil);

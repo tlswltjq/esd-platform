@@ -1,6 +1,20 @@
 {
   "components" : {
     "schemas" : {
+      "ApiResponseApprovalClosureResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ApprovalClosureResponse"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/ErrorBody"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseApprovalInvestigationPage" : {
         "properties" : {
           "data" : {
@@ -239,6 +253,73 @@
         },
         "type" : "object"
       },
+      "ApprovalClosureBody" : {
+        "properties" : {
+          "note" : {
+            "description" : "PG 콘솔에서 확인·처리한 내용과 종결 이유. 공백만 입력할 수 없습니다.",
+            "maxLength" : 500,
+            "type" : "string"
+          },
+          "requestId" : {
+            "description" : "같은 종결 요청의 재전송을 식별합니다.",
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "note", "requestId" ],
+        "type" : "object"
+      },
+      "ApprovalClosureRecordResponse" : {
+        "properties" : {
+          "closedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "evidenceObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "evidenceState" : {
+            "enum" : [ "READY", "PENDING", "PAID", "FAILED", "CANCELLED" ],
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ApprovalClosureResponse" : {
+        "properties" : {
+          "approvalId" : {
+            "type" : "string"
+          },
+          "approvalStatus" : {
+            "enum" : [ "REQUESTED", "ADMITTED", "REVIEW_REQUIRED", "FAILURE_CONFIRMED", "SUCCEEDED", "FAILED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "closure" : {
+            "$ref" : "#/components/schemas/ApprovalClosureRecordResponse"
+          },
+          "orderNo" : {
+            "type" : "string"
+          },
+          "paymentId" : {
+            "type" : "string"
+          },
+          "paymentStatus" : {
+            "enum" : [ "PENDING", "PAID", "FAILED", "EXPIRED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ApprovalInvestigationBody" : {
         "properties" : {
           "note" : {
@@ -256,6 +337,9 @@
       },
       "ApprovalInvestigationPage" : {
         "properties" : {
+          "closure" : {
+            "$ref" : "#/components/schemas/ApprovalClosureRecordResponse"
+          },
           "content" : {
             "items" : {
               "$ref" : "#/components/schemas/ApprovalInvestigationResponse"
@@ -359,6 +443,9 @@
           "approvalId" : {
             "type" : "string"
           },
+          "closure" : {
+            "$ref" : "#/components/schemas/ApprovalClosureRecordResponse"
+          },
           "firstPreparedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -383,7 +470,7 @@
             "type" : "string"
           },
           "latestPgState" : {
-            "enum" : [ "READY", "PENDING", "PAID", "FAILED" ],
+            "enum" : [ "READY", "PENDING", "PAID", "FAILED", "CANCELLED" ],
             "type" : "string"
           },
           "orderNo" : {
@@ -1109,9 +1196,50 @@
         "tags" : [ "admin-approval-review-controller" ]
       }
     },
+    "/api/v1/admin/approval-reviews/{approvalId}/closure" : {
+      "post" : {
+        "description" : "PG를 다시 조회해 전액 취소·실패·READY 근거가 확인될 때만 보류를 끝내고 주문을 실패(또는 이미 만료)로 마칩니다. PAID·진행 중·근거 불일치·조회 장애는 409입니다. PG 취소·승인을 실행하지 않습니다.",
+        "operationId" : "closeApprovalReview",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "approvalId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApprovalClosureBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseApprovalClosureResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ {
+          "oauth2" : [ "commerce" ]
+        } ],
+        "summary" : "관리자 승인 보류 종결",
+        "tags" : [ "admin-approval-closure-controller" ]
+      }
+    },
     "/api/v1/admin/approval-reviews/{approvalId}/investigations" : {
       "get" : {
-        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "description" : "저장된 승인 보류 근거와 조사 기록, 종결했다면 종결 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
         "operationId" : "readApprovalInvestigations",
         "parameters" : [ {
           "in" : "path",

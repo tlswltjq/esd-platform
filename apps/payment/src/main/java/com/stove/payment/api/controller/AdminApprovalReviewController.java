@@ -45,7 +45,7 @@ public class AdminApprovalReviewController {
     }
 
     @GetMapping("/{approvalId}/investigations")
-    @Operation(operationId = "readApprovalInvestigations", summary = "관리자 승인 보류 조사 이력", description = "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.")
+    @Operation(operationId = "readApprovalInvestigations", summary = "관리자 승인 보류 조사 이력", description = "저장된 승인 보류 근거와 조사 기록, 종결했다면 종결 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.")
     public ResponseEntity<ApiResponse<ApprovalInvestigationPage>> history(@PathVariable String approvalId,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(ApprovalInvestigationPage.from(read.history(new ApprovalReviewLookup(approvalId), new ApprovalReviewQuery(page, size, null)))));

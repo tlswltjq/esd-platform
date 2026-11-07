@@ -23,6 +23,7 @@
 |---|---|
 | `purchase_order` | 단일 업무 엔티티. orderNo·buyerSubject·requestId·상품 스냅샷·listAmount·discountAmount·amount·currency·status·createdAt·updatedAt·requestEventId·paymentResultEventId·paymentResult·expiresAt·승인 진행 식별자. 선택적 pgPaidAmount·pgDiscountAmount |
 | `order_payment_admission` | 승인 진행 확정의 불변 영수증. admissionId·paymentId·admittedAt·원래 만료 시각 |
+| `order_expired_review_closure`(V31) | 이미 만료된 주문에 늦게 온 운영자 종결 실패(`REVIEW_CLOSED`)의 결과 식별. 주문·eventId 각각 유일, 주문 FK(삭제 cascade 없음). 주문 상태는 EXPIRED 그대로 |
 | `order_refund` | 환불 접수·판정·고객 상태(PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED)·첫 접수 시각·rejectionReason |
 | `order_license_grant` | 실제 지급 확인 근거 |
 | `order_refund_attempt` | 환불 실행 시도 이력(attemptId·순번·previousAttemptId·PENDING/SUCCEEDED/FAILED·준비 사실·조사 표시) |
@@ -100,6 +101,7 @@ stateDiagram-v2
 - `expiresAt = createdAt + 30분`. 상태가 PENDING이어도 서버 시각이 기한을 지나면 새 승인 접수를 거절하고 EXPIRED를 먼저 커밋한다.
 - 기한 내 확정된 `PAYMENT_PROCESSING`은 시각 경과만으로 EXPIRED·FAILED로 바꾸지 않는다. 늦은 성공은 연결된 paymentId와 대조한다.
 - `PAID`·`FAILED`·`EXPIRED`는 최종 상태다. 구매 슬롯은 없다(V28).
+- 예외 하나: Payment가 승인 보류를 운영자 종결로 끝낸 `OrderPaymentFailed`(reasonCode `REVIEW_CLOSED`)가 이미 `EXPIRED`인 주문에 오면 만료를 유지하고 결과 식별만 `order_expired_review_closure`에 남긴다(결정 115, R4.8). `purchase_order`의 결과 열에 쓰지 않으므로 EXPIRED 주문을 읽는 곳(조회 응답·환불 자격·`OrderPaid`·`paymentResult()`)은 바뀌지 않는다. 같은 결과의 재전달만 무효과이고, 바뀐 재전달·다른 주문의 같은 eventId·기록 없는 Inbox 중복은 다른 결과처럼 충돌이다.
 
 ## 환불 처리 요약
 
