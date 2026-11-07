@@ -41,7 +41,7 @@
 | `/api/v1/admin/accounts/**` | auth | `ADMIN` |
 | `/api/v1/products/by-code/*/{sales,listing}` | catalog | `CREATOR`(판매자 판매·노출 설정) |
 | `/api/v1/admin/products/*/{sales,listing,downloads}/restriction`, `/api/v1/admin/catalog-release-jobs[/*]` | catalog | `ADMIN` |
-| `/api/v1/admin/refunds/**` · `/api/v1/admin/refund-cancellation-holds/**`, `/api/v1/admin/refund-delays/**` | order · payment | `ADMIN` |
+| `/api/v1/admin/refunds/**` · `/api/v1/admin/refund-cancellation-holds/**`, `/api/v1/admin/refund-delays/**` · `/api/v1/admin/approval-reviews/**` | order · payment | `ADMIN` |
 | `/v3/api-docs/<service>` | 각 서비스 | GET 전용 문서 프록시, 서비스당 한 경로 |
 
 ## BFF API 계약

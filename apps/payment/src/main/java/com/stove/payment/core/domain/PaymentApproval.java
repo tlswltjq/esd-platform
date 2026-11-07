@@ -45,6 +45,25 @@ public class PaymentApproval {
     @Column(nullable = false) private boolean postStopped;
     @Column(length = 100) private String lastErrorCode;
 
+    private Instant lastInspectedAt;
+    @Column(length = 32) private String lastInspectionError;
+    public void recordInspectionFailure(String error, Instant at) {
+        requireTime(at);
+        if (!"INVALID_EVIDENCE".equals(error) && !"UNAVAILABLE".equals(error)) throw new IllegalArgumentException("Bounded inspection error required");
+        lastInspectedAt = at; lastInspectionError = error;
+    }
+    private Instant reviewStartedAt;
+    @Enumerated(EnumType.STRING) @Column(length = 16) private ApprovalObservation.State latestPgState;
+    private Instant latestPgObservedAt;
+
+    public void recordObservation(ApprovalObservation observation, Instant at) {
+        requireTime(at);
+        if (observation == null) throw new IllegalArgumentException("Observation is required");
+        lastInspectedAt = at; lastInspectionError = null;
+        latestPgState = observation.state();
+        latestPgObservedAt = at;
+    }
+
     public static PaymentApproval receive(Payment payment, PaymentApprovalInput input, String payload, Instant at) {
         if (payment == null || input == null || !"PORTONE_TEST".equals(payment.getProvider())
                 || payment.getStatus() != PaymentStatus.PENDING || !payment.getOrderNo().equals(input.orderNo())
@@ -112,8 +131,11 @@ public class PaymentApproval {
         nextAt = terminal() ? null : next; leaseToken = null; leaseUntil = null;
         return true;
     }
-    public void stopPosts(String reason) {
+    public void stopPosts(String reason) { stopPosts(reason, Payment.now()); }
+    public void stopPosts(String reason, Instant at) {
+        requireTime(at);
         if (terminal() || !PaymentValues.text(reason, 100)) throw new IllegalArgumentException("A current stop reason is required");
+        if (status != PaymentApprovalStatus.REVIEW_REQUIRED && reviewStartedAt == null) reviewStartedAt = at;
         postStopped = true;
         // A later lookup error must not hide an already observed financial anomaly.
         if (!"PAID_WITHOUT_ADMISSION".equals(lastErrorCode)) lastErrorCode = reason;
