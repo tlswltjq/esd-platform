@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -20,6 +21,7 @@ import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.test.OpenApiSnapshot;
+import com.stove.common.test.PausePoints;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.web.error.BusinessException;
 import com.stove.store.api.listener.CatalogProductMapper;
@@ -27,6 +29,7 @@ import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.port.CatalogProducts;
 import com.stove.store.core.service.ApplyCatalogProduct;
 import com.stove.store.core.service.ReadStoreProduct;
+import com.stove.store.core.service.ReconcileCatalogProduct;
 import com.stove.store.core.service.SearchStoreProducts;
 import com.stove.store.core.service.SynchronizeCatalogProducts;
 import java.nio.charset.StandardCharsets;
@@ -43,11 +46,16 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -59,10 +67,21 @@ import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.store.sync.enabled=false", "spring.kafka.listener.auto-startup=false"})
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
+@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, StoreIntegrationTest.Pausing.class})
 class StoreIntegrationTest {
+    static final PausePoints POINTS = new PausePoints();
+    @TestConfiguration
+    static class Pausing {
+        @Bean static BeanPostProcessor pausingProducts() {
+            return PausePoints.pausing(POINTS, StoreProductRepository.class);
+        }
+    }
+    @AfterEach void clearPauses() {
+        assertThat(POINTS.reset()).as("쓰이지 않은 멈춤 지점").isEmpty();
+    }
     @MockitoSpyBean ApplyCatalogProduct apply;
     @Autowired SynchronizeCatalogProducts sync;
+    @Autowired ReconcileCatalogProduct reconcile;
     @Autowired SearchStoreProducts search;
     @Autowired ReadStoreProduct read;
     @Autowired StoreProductRepository products;
@@ -165,6 +184,71 @@ class StoreIntegrationTest {
             assertThat(products.count()).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
+    @Test
+    @DisplayName("[D-040] 빈 ID 조회 뒤 같은 상품이 커밋돼도 높은 버전으로 수렴한다")
+    void sameProductCommittedBetweenIdAndCodeReadsConverges() throws Exception {
+        // 기대: 같은 ID의 버전 3 반영. 실제: 다른 상품으로 오인해 CONFLICT. 영향: 사본 갱신 실패.
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "late-insert");
+        PausePoints.Run<Void> updating = PausePoints.start("late-insert", () -> {
+            apply.execute(product(1, 3, "Latest", 3000));
+            return null;
+        });
+        try {
+            gate.awaitArrival();
+            assertThat(products.count()).isZero();
+            apply.execute(product(1, 1, "Old", 1000));
+            assertThat(read.execute("game-1").contentVersion()).isEqualTo(1);
+        } finally { gate.release(); }
+        updating.join();
+        assertThat(read.execute("game-1")).isEqualTo(product(1, 3, "Latest", 3000));
+        assertThat(products.count()).isEqualTo(1);
+    }
+    @Test
+    @DisplayName("[D-040] HTTP 정본 대조 중 이벤트가 같은 상품을 생성해도 높은 버전으로 수렴한다")
+    void reconciliationConvergesWhenEventCommitsBetweenIdAndCodeReads() throws Exception {
+        // 기대: 정본 v3 반영. 실제: 같은 ID를 다른 상품으로 오인. 영향: HTTP 동기화 회차 실패.
+        CatalogProductSnapshot latest = product(1, 3, "Latest", 3000);
+        when(catalog.detail("game-1")).thenReturn(latest);
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "reconcile-insert");
+        PausePoints.Run<Void> updating = PausePoints.start("reconcile-insert", () -> {
+            reconcile.execute("game-1");
+            return null;
+        });
+        try {
+            gate.awaitArrival();
+            assertThat(products.count()).isZero();
+            apply.execute(product(1, 1, "Old", 1000));
+            assertThat(read.execute("game-1").contentVersion()).isEqualTo(1);
+        } finally { gate.release(); }
+        updating.join();
+        assertThat(read.execute("game-1")).isEqualTo(latest);
+        assertThat(products.count()).isEqualTo(1);
+    }
+    @Test
+    @DisplayName("[D-040] 실제 Kafka 배달은 최초 삽입 경합 뒤에도 높은 버전으로 수렴한다")
+    void kafkaDeliveryConvergesWhenSameProductIsCommittedBetweenReads() throws Exception {
+        CatalogProductSnapshot latest = product(1, 3, "Latest", 3000);
+        doAnswer(invocation -> {
+            Thread listener = Thread.currentThread();
+            String originalName = listener.getName();
+            listener.setName("kafka-insert");
+            try { return invocation.callRealMethod(); }
+            finally { listener.setName(originalName); }
+        }).when(apply).execute(latest);
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "kafka-insert");
+        listeners.start();
+        try {
+            CatalogProductPublishedEvent event = CatalogProductPublishedEvent.of(latest);
+            kafka.send(record(event, event.partitionKey())).get(10, TimeUnit.SECONDS);
+            try {
+                gate.awaitArrival();
+                apply.execute(product(1, 1, "Old", 1000));
+            } finally { gate.release(); }
+            Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                    assertThat(read.execute("game-1")).isEqualTo(latest));
+            assertThat(products.count()).isEqualTo(1);
+        } finally { gate.release(); listeners.stop(); }
+    }
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);
         CatalogProductPublishedEvent event = CatalogProductPublishedEvent.of(p);
@@ -192,6 +276,9 @@ class StoreIntegrationTest {
                 List.of("ACTION")
         );
         assertThatThrownBy(() -> apply.execute(collision)).isInstanceOf(BusinessException.class);
+        when(catalog.detail(p.productCode())).thenReturn(collision);
+        assertThatThrownBy(() -> reconcile.execute(p.productCode())).isInstanceOf(BusinessException.class);
+        assertThat(read.execute(p.productCode())).isEqualTo(p);
         assertThat(products.count()).isEqualTo(1);
     }
     @Test void reconciliationReadsEveryPageAndKeepsAlreadyReadyDataAfterFailure() {
