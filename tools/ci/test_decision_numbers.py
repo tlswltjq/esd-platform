@@ -169,7 +169,7 @@ class ReviewFindingsTest(Fixture):
         self.assertEqual(self.errors(), '')
 
     def test_fence_close_guards(self):
-        for wrong in ('``', '~~~', '```info'):
+        for wrong in ('```', '~~~~', '````info'):
             self.write('docs/decisions.md', VALID + '\n````md\n' + wrong + '\n## 99. 코드\n````\n')
             self.assertEqual(decision_numbers.check(self.root)[1][0], 2)
         self.write('docs/decisions.md', '```md\n예\n```\n' + VALID)
@@ -212,7 +212,7 @@ class DecisionWorkflowTest(unittest.TestCase):
         self.assertIn('--base-ref HEAD^1', block)
 
     def test_build_contract(self):
-        text = (ROOT / '.github/workflows/ci.yml').read_text().split('  stack:')[0]
+        text = (ROOT / '.github/workflows/ci.yml').read_text().split('\n  stack:')[0]
         self.assertIn('fetch-depth: 2', text)
         self.assertLess(text.index('- name: Build'), text.index('- name: Check decision numbers'))
         block = text.split('- name: Check decision numbers')[1].split('- name:')[0]
