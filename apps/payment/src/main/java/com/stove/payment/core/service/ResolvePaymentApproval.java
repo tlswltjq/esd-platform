@@ -126,6 +126,7 @@ public class ResolvePaymentApproval {
             }
             if (observed.state()!=ApprovalObservation.State.READY || current.isPostStopped()) {
                 if (observed.state()==ApprovalObservation.State.PAID) stop(id,token,"PAID_WITHOUT_ADMISSION");
+                if (observed.state()==ApprovalObservation.State.CANCELLED) holdForCancellation(id,token);
                 return;
             }
             Optional<OrderAdmissionReceipt> receipt=orders.admit(current.admissionRequest());
@@ -185,6 +186,10 @@ public class ResolvePaymentApproval {
             });
             return true;
         }
+        if (observed.state()==ApprovalObservation.State.CANCELLED) {
+            holdForCancellation(id,token);
+            return true;
+        }
         if (observed.state()!=ApprovalObservation.State.FAILED) return false;
         PaymentApproval failed=locked(id,(payment,approval)->{
             if (!approval.owns(token,now())) return null;
@@ -207,6 +212,17 @@ public class ResolvePaymentApproval {
     }
     private boolean orderExpired(String orderNo) {
         return lifecycle.findById(orderNo).map(PaymentOrderLifecycle::expired).orElse(false);
+    }
+    /**
+     * A verified full PG cancellation never closes an approval by itself (decision 115). An approval that is not yet held stops
+     * posting and waits for an operator; an already held approval keeps its original reason and only records the observation.
+     */
+    private void holdForCancellation(String id,String token) {
+        locked(id,(payment,approval)->{
+            if (approval.owns(token,now()) && !approval.terminal() && approval.getStatus()!=PaymentApprovalStatus.REVIEW_REQUIRED)
+                approval.stopPosts("PG_CANCELLED",now());
+            return null;
+        });
     }
     private void stop(String id,String token,String code) {
         locked(id,(payment,approval)->{ if (approval.owns(token,now()) && !approval.terminal()) approval.stopPosts(code,now()); return null; });
