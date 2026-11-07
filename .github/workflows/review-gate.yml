@@ -1,0 +1,41 @@
+# 결정 109: 결정 108의 교차 리뷰를 PR 본문 `리뷰 판정` 표로 확인한다. 변경 파일이 모두 *.md면 통과한다.
+# main 규칙셋이 이 작업의 name(review-gate)을 필수 검사로 쓴다. name을 바꾸거나 paths 조건을 달면
+# 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
+# PR 본문을 고치면(edited) 이 검사만 다시 돈다. ci.yml의 build는 다시 돌지 않는다.
+# PR 본문은 환경 변수로만 넘긴다(run 줄에 ${{ }}로 넣으면 본문이 셸 명령으로 해석될 수 있다).
+name: Review gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: review-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-gate:
+    name: review-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Self-test
+        run: python3 -B -m unittest discover -s tools/ci -p test_review_gate.py
+      - name: Check review section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.changed_files' > "$RUNNER_TEMP/expected.txt"
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename' > "$RUNNER_TEMP/files.txt"
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.md"
+          python3 -I -B tools/ci/review_gate.py --body "$RUNNER_TEMP/body.md" --files "$RUNNER_TEMP/files.txt" --expected-files "$(cat "$RUNNER_TEMP/expected.txt")"
