@@ -10,7 +10,9 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- (Store 단독 남은 일반화 항목 없음.) 계정 복구·상태 등 G5 공통 운영은 [Auth](../auth/tasks.md)·[Gateway](../gateway/tasks.md) 작업과 [로드맵](../../../docs/roadmap.md)을 따른다.
+- [ ] flush 중 MySQL 교착(1213)이 Hibernate에서 `jakarta.persistence` 예외로 바뀌어 `ApplyCatalogProduct`·`ReconcileCatalogProduct`의 재시도 catch(`LockAcquisitionException`)를 지나칠 수 있다는 의심(PR #127 교차 리뷰 R3). 재현부터 한다.
+
+- 계정 복구·상태 등 G5 공통 운영은 [Auth](../auth/tasks.md)·[Gateway](../gateway/tasks.md) 작업과 [로드맵](../../../docs/roadmap.md)을 따른다.
 
 ## 범위 밖(후속)
 
