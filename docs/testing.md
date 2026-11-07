@@ -41,7 +41,11 @@ CI=true ./gradlew :common:archunit:test \
   verifyCommonRuntimeDependencies :common:archunit:check --console=plain
 ```
 
-배포 비밀·서비스 접근키·웹훅 경계([보안 계약](security.md#deployment-secrets))는 다음으로 확인한다. Python 검사는 알려진 픽스처 값만 쓰고 실제 `.env`를 읽지 않는다. 통합 검사에서 MinIO를 쓰지 않으면 준비된 `STOVE_TEST_MINIO_IMAGE`를 지정해 MinIO 소스 빌드 의존을 건너뛴다.
+배포 비밀·서비스 접근키·웹훅 경계([보안 계약](security.md#deployment-secrets))는 다음으로 확인한다. Python 검사는 알려진 픽스처 값만 쓰고 실제 `.env`를 읽지 않는다. `STOVE_TEST_MINIO_IMAGE`(또는 `STOVE_MINIO_IMAGE`)를 명시하면 기본 이미지 이름과 같아도 공급 이미지로 취급해 MinIO 소스 빌드 의존을 건너뛴다. 지정하지 않으면 빈 Docker 환경에서도 이미지를 빌드한다. worktree에서는 로컬에 이미 만든 이미지를 다음처럼 재사용한다.
+
+```bash
+STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local ./gradlew :apps:review:integrationTest --console=plain
+```
 
 ```bash
 python3 -B -m unittest discover -s tools/verification -p test_protected_compose.py -v
