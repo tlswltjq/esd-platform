@@ -25,7 +25,8 @@
 - [ ] 환불 조정 완료와 판매자 순액 전체 연결 — G3
 - [ ] 음수 월 순액·플랫폼 잔여액의 이월·실제 지급/회수 정책 — G3 (현재 음수 표시만, 실행 없음)
 - [ ] PORTONE_TEST 원승인 읽기·토스페이 정산 수집 설정을 실제 스택(Compose override)에 적용하고 런타임 검증 — G3 (현재 config·계약 검증만, 실제 스택 미적용)
-- [ ] G3 변경 이후 열한 업무 앱 + PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 책임 분리 이후 미재실행, 2026-10-18 결과를 최신 PortOne 연결 검증으로 해석하지 않음
+- [x] G3 변경 이후 열한 업무 앱 + 모의 PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 2026-11-07 21단계 통과([근거 색인](../../../docs/evidence.md)). 모의 PG 기준이며 최신 PortOne 연결 검증이 아니다.
+- [ ] 환불 → 정산 조정의 실제 스택 여정 — 위 여정에는 환불 단계가 없다. 모의 PG에 취소 기능이 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회만 받는다. 실행 방식은 정책 선택이 필요하다(PortOne TEST는 사람 승인 필요).
 - [ ] 실제 PG 지급 수령 확인: PORTONE 공급자의 지급 명세 수집(현재 503)과 PG 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G3 이후
 
 ## 범위 밖(후속)
