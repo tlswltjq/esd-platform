@@ -185,7 +185,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 1. WHEN ADMIN이 승인 보류 목록을 요청하면 THEN 시스템 SHALL REVIEW_REQUIRED만 페이지·사유 필터로 DB에서 조회하고 no-store를 반환한다. 토큰·보호 본문·암호문은 공개하지 않는다.
 2. WHEN 승인 작업자가 PG를 조회하면 THEN 시스템 SHALL 최신 상태와 관측 시각을 inspect 후 별도 잠금 트랜잭션에 저장한다. 최초 보류 시각은 보존하며 기존 행의 알 수 없는 시각은 NULL로 둔다.
 3. WHEN ADMIN이 보류 조사 내용을 기록하면 THEN 시스템 SHALL JWT sub·서버 시각과 500자 이내 내용을 append-only로 저장한다. 입력 본문 신원은 사용하지 않는다.
-4. WHILE 승인 보류가 존재하면 THEN 시스템 SHALL 5개 사유와 OTHER로 제한한 게이지와 ADMIN API 안내 경보를 제공한다.
+4. WHILE 승인 보류가 존재하면 THEN 시스템 SHALL 6개 알려진 사유(`PAID_WITHOUT_ADMISSION`·`PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_CANCELLED`)와 OTHER로 제한한 게이지와 ADMIN API 안내 경보를 제공한다. `PG_CANCELLED`는 R13.8(결정 115)에서 더했다.
 5. THE 시스템 SHALL 보류 종결·재시도 간격·고객 메시지·금융 동작 정책을 이 기능에서 정하지 않는다. 종결은 R13(결정 115)이 정한다.
 
 6. WHEN 상세·조사 이력을 조회하면 THEN 시스템 SHALL 과거에 보류된 승인도 현재 status와 함께 제공하고, 한 번도 보류되지 않은 승인은 404로 거절한다. POST는 현재 REVIEW_REQUIRED에만 허용한다.

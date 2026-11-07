@@ -12,7 +12,8 @@ CREATE TABLE approval_closure (
     PRIMARY KEY (id),
     CONSTRAINT uq_approval_closure_request UNIQUE (request_id),
     CONSTRAINT uq_approval_closure_approval UNIQUE (approval_id),
-    CONSTRAINT fk_approval_closure_approval FOREIGN KEY (approval_id) REFERENCES payment_approval(approval_id) ON DELETE CASCADE,
+    -- No ON DELETE CASCADE: deleting the approval (or its purchase) must not silently erase this audit record.
+    CONSTRAINT fk_approval_closure_approval FOREIGN KEY (approval_id) REFERENCES payment_approval(approval_id),
     CONSTRAINT chk_approval_closure_evidence CHECK (evidence_state IN ('CANCELLED','FAILED','READY')),
     CONSTRAINT chk_approval_closure_time CHECK (closed_at >= evidence_observed_at),
     CONSTRAINT chk_approval_closure_note CHECK (CHAR_LENGTH(TRIM(note)) > 0),

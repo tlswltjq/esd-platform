@@ -21,6 +21,7 @@ import com.stove.order.core.service.CreateOrder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,7 @@ class ReviewClosureAfterExpiryKafkaIntegrationTest extends OrderIntegrationTestB
     @BeforeEach void prepare() { clean(); when(catalog.detail(anyString())).thenReturn(product()); }
     @AfterEach void clean() {
         listeners.stop();
+        jdbc.update("DELETE FROM order_expired_review_closure");
         jdbc.update("DELETE FROM order_payment_admission");
         jdbc.update("DELETE FROM purchase_order");
         jdbc.update("DELETE FROM outbox_event");
@@ -92,9 +94,56 @@ class ReviewClosureAfterExpiryKafkaIntegrationTest extends OrderIntegrationTestB
         assertThat(kept.paymentResult()).isNull();
         assertThat(kept.getFailureReasonCode()).isNull();
         assertThat(inbox(review.eventId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_expired_review_closure WHERE event_id=? AND order_no=? AND payment_id=?",
+                Integer.class, review.eventId(), closed.getOrderNo(), review.paymentId())).isEqualTo(1);
         assertThat(inbox(control.eventId())).isZero();
         assertThat(orders.findById(declined.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.EXPIRED);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='OrderPaid'", Integer.class)).isZero();
+    }
+
+    /** R4.6: 한 주문에 남긴 종결 결과의 eventId를 다른 만료 주문이 다시 쓰면 무효과가 아니라 충돌이다(DLT 격리). */
+    @Test void aReviewClosureEventIdReusedForAnotherExpiredOrderIsDeadLettered() throws Exception {
+        Order first = expired("usr_buyer");
+        Order second = expired("other-buyer");
+        OrderPaymentFailedEvent original = failure(first, "REVIEW_CLOSED");
+        OrderPaymentFailedEvent reused = new OrderPaymentFailedEvent(original.eventId(), original.occurredAt(), second.getOrderNo(),
+                second.getRequestEventId(), original.paymentId(), second.getBuyerSubject(), second.getAmount(), second.getCurrency(),
+                original.reasonCode(), original.reason());
+        try (KafkaConsumer<String, String> dlt = dltConsumer(); AdminClient admin = admin()) {
+            paymentResults().start();
+            awaitConsumed(admin, send(original));
+            awaitConsumed(admin, send(reused));
+            List<ConsumerRecord<String, String>> dead = deadLetters(dlt);
+            assertThat(dead).filteredOn(record -> record.key().equals(second.getOrderNo()) && record.value().contains(original.eventId())).hasSize(1);
+            assertThat(dead).noneMatch(record -> record.key().equals(first.getOrderNo()) && record.value().contains(original.eventId()));
+        }
+        assertThat(jdbc.queryForList("SELECT order_no FROM order_expired_review_closure WHERE event_id=?", String.class, original.eventId()))
+                .containsExactly(first.getOrderNo());
+        assertThat(kept(second)).isZero();
+        assertThat(orders.findById(second.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        assertThat(inbox(original.eventId())).isEqualTo(1);
+    }
+
+    /** R4.6: 같은 eventId의 재전달이 다른 내용(결제 ID·사유·시각)이면 저장한 결과와 맞지 않으므로 충돌이다(DLT 격리). */
+    @Test void aChangedRedeliveryOfAKeptReviewClosureIsDeadLettered() throws Exception {
+        Order closed = expired("usr_buyer");
+        OrderPaymentFailedEvent original = failure(closed, "REVIEW_CLOSED");
+        OrderPaymentFailedEvent changed = new OrderPaymentFailedEvent(original.eventId(), original.occurredAt(), original.orderNo(),
+                original.requestEventId(), OrderFixtures.id(), original.buyerSubject(), original.amount(), original.currency(),
+                original.reasonCode(), "a changed reason");
+        try (KafkaConsumer<String, String> dlt = dltConsumer(); AdminClient admin = admin()) {
+            paymentResults().start();
+            awaitConsumed(admin, send(original));
+            awaitConsumed(admin, send(original));
+            awaitConsumed(admin, send(changed));
+            List<ConsumerRecord<String, String>> dead = deadLetters(dlt).stream().filter(record -> record.value().contains(original.eventId())).toList();
+            assertThat(dead).hasSize(1);
+            assertThat(dead.getFirst().value()).contains("a changed reason");
+        }
+        assertThat(jdbc.queryForList("SELECT payment_id FROM order_expired_review_closure WHERE event_id=?", String.class, original.eventId()))
+                .containsExactly(original.paymentId());
+        assertThat(kept(closed)).isEqualTo(1);
+        assertThat(orders.findById(closed.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.EXPIRED);
     }
 
     private Order expired(String buyer) {
@@ -153,6 +202,27 @@ class ReviewClosureAfterExpiryKafkaIntegrationTest extends OrderIntegrationTestB
             for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(300)))
                 assertThat(fromPaymentResults(record) && record.value().contains(eventId)).as("DLT record for " + eventId).isFalse();
         }
+    }
+    /** 소비 오프셋이 커밋된 뒤의 DLT 전체(이 소비 그룹이 보낸 것만). 실패했다면 커밋 전에 DLT 발행이 끝나 있다. */
+    private List<ConsumerRecord<String, String>> deadLetters(KafkaConsumer<String, String> consumer) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        while (consumer.assignment().isEmpty()) {
+            if (System.nanoTime() > deadline) throw new AssertionError("DLT 파티션을 배정받지 못했습니다");
+            consumer.poll(Duration.ofMillis(300));
+        }
+        Set<TopicPartition> partitions = consumer.assignment();
+        Map<TopicPartition, Long> end = consumer.endOffsets(partitions);
+        consumer.seekToBeginning(partitions);
+        List<ConsumerRecord<String, String>> records = new ArrayList<>();
+        while (partitions.stream().anyMatch(partition -> consumer.position(partition) < end.get(partition))) {
+            if (System.nanoTime() > deadline) throw new AssertionError("DLT를 끝까지 읽지 못했습니다");
+            for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(300)))
+                if (fromPaymentResults(record)) records.add(record);
+        }
+        return records;
+    }
+    private int kept(Order order) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM order_expired_review_closure WHERE order_no=?", Integer.class, order.getOrderNo());
     }
     private static boolean fromPaymentResults(ConsumerRecord<String, String> record) {
         return record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP) != null

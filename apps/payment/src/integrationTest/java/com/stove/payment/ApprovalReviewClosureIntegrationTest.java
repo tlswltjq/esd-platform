@@ -6,6 +6,7 @@ import static com.stove.payment.PortOneFixtures.CHANNEL;
 import static com.stove.payment.PortOneFixtures.SECRET;
 import static com.stove.payment.PortOneFixtures.STORE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -57,6 +58,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -136,6 +138,8 @@ class ApprovalReviewClosureIntegrationTest {
     @BeforeEach void initialize() { clean(); when(clock.instant()).thenAnswer(call -> TIME.get()); }
     @AfterEach void clean() {
         POINTS.reset();
+        // The closure audit is not cascaded from its approval (V37), so it is removed before the purchases it refers to.
+        jdbc.update("DELETE FROM approval_closure");
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
         PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); GETS.clear(); RECEIPTS.clear(); FAILURE_NOTICES.clear(); POSTS.clear();
@@ -422,6 +426,18 @@ class ApprovalReviewClosureIntegrationTest {
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertFailurePublished(payment, "CANCELLED");
         assertThat(jdbc.queryForObject("SELECT financial_conflict FROM payment_order_lifecycle WHERE order_no=?", Boolean.class, payment.getOrderNo())).isTrue();
+    }
+
+    /** The append-only closure record is audit evidence: deleting its approval or purchase must not silently erase it. */
+    @Test void theClosureAuditCannotBeErasedByDeletingItsApprovalOrPurchase() {
+        Payment payment = purchase(); PaymentApproval held = paidWithoutAdmission(payment); STATES.put(payment.getPaymentId(), "CANCELLED");
+        assertThat(closure(held, id(), "콘솔 취소 확인", "ADMIN").status()).isEqualTo(200);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM payment_approval WHERE approval_id=?", held.getApprovalId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM purchase_payment WHERE payment_id=?", payment.getPaymentId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM approval_closure WHERE approval_id=?", Integer.class, held.getApprovalId())).isEqualTo(1);
+        assertThat(row(held).getStatus()).isEqualTo(PaymentApprovalStatus.FAILED);
     }
 
     private void assertClosed(Payment payment, PaymentApproval held, String evidence, Reply closed, PaymentStatus outcome) {

@@ -77,6 +77,7 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
         when(catalog.detail(anyString())).thenReturn(product());
     }
     @AfterEach void clean() {
+        jdbc.update("DELETE FROM order_expired_review_closure");
         jdbc.update("DELETE FROM order_payment_admission");
         jdbc.update("DELETE FROM order_refund_attempt");
         jdbc.update("DELETE FROM order_license_grant");
@@ -192,10 +193,24 @@ class OrderPaymentLifecycleIntegrationTest extends OrderIntegrationTestBase {
         assertThat(kept.paymentResult()).isNull();
         assertThat(kept.getFailureReasonCode()).isNull();
         assertThat(count("SELECT COUNT(*) FROM processed_event WHERE event_id='" + closed.eventId() + "'")).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM order_expired_review_closure WHERE order_no='" + order.getOrderNo() + "' AND event_id='"
+                + closed.eventId() + "' AND payment_id='" + closed.paymentId() + "'")).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE event_type='OrderExpired'")).isEqualTo(1);
+        PaymentResult changed = new PaymentResult(closed.eventId(), closed.occurredAt(), closed.orderNo(), closed.requestEventId(), id(),
+                closed.buyerSubject(), closed.amount(), closed.currency(), OrderStatus.FAILED, "REVIEW_CLOSED", closed.reason());
+        assertThatThrownBy(() -> apply.execute(EventType.ORDER_PAYMENT_FAILED, changed)).isInstanceOf(BusinessException.class);
+        Order other = saved("other-buyer");
+        when(clock.instant()).thenReturn(other.getExpiresAt());
+        assertThat(expire.execute(other.getOrderNo())).isTrue();
+        PaymentResult reused = new PaymentResult(closed.eventId(), closed.occurredAt(), other.getOrderNo(), other.getRequestEventId(), closed.paymentId(),
+                other.getBuyerSubject(), other.getAmount(), other.getCurrency(), OrderStatus.FAILED, "REVIEW_CLOSED", closed.reason());
+        assertThatThrownBy(() -> apply.execute(EventType.ORDER_PAYMENT_FAILED, reused)).isInstanceOf(BusinessException.class);
+        assertThat(count("SELECT COUNT(*) FROM order_expired_review_closure WHERE order_no='" + other.getOrderNo() + "'")).isZero();
+        assertThat(stored(other).getStatus()).isEqualTo(OrderStatus.EXPIRED);
         assertThatThrownBy(() -> apply.execute(EventType.ORDER_PAYMENT_FAILED, failure(order, "DECLINED"))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> apply.execute(EventType.ORDER_PAYMENT_COMPLETED, paid(order, id(), order.getExpiresAt()))).isInstanceOf(BusinessException.class);
         assertThat(count("SELECT COUNT(*) FROM processed_event")).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM order_expired_review_closure")).isEqualTo(1);
         assertThat(stored(order).getStatus()).isEqualTo(OrderStatus.EXPIRED);
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE event_type='OrderPaid'")).isZero();
         assertThat(create.execute("usr_buyer", request()).getOrderNo()).isNotEqualTo(order.getOrderNo());
