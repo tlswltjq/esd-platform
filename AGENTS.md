@@ -22,7 +22,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 사용자의 판단 이력은 [판단 색인](docs/judgment-index.md)에 모은다. 새 결정이 색인 기준(비즈니스 영향·사용자 판단이 뚜렷함)에 맞으면 한 행을 추가한다.
 
-새 결정은 main의 마지막 번호 다음 번호를 쓴다. 다른 PR과 번호가 겹치면 나중에 병합하는 쪽이 바꾼다. 번호를 바꾸면 `git grep '결정 N'`으로 링크가 아닌 언급도 찾아 바꾼다. CI가 번호 중복·순서와 `[결정 N]` 링크 번호를 확인한다([결정 115](docs/decisions.md#decision-numbers)).
+새 결정은 main의 마지막 번호 다음 번호를 쓴다. 다른 PR과 번호가 겹치면 나중에 병합하는 쪽이 바꾼다. 번호를 바꾸면 `git grep '결정 N'`으로 링크가 아닌 언급도 찾아 바꾼다. CI가 번호 중복·순서와 `[결정 N]` 링크 번호를 확인한다([결정 116](docs/decisions.md#decision-numbers)).
 
 ## 2. 문서 규칙 — 새 문서를 만들지 않는다
 
@@ -81,7 +81,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 - 실제 금융 동작(PortOne TEST 결제·환불)은 사용자와 합의한 사례에서만 실행한다.
 - `main`은 PR과 CI `build` 통과로만 바뀐다([결정 107](docs/decisions.md#main-branch-protection)). 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](docs/defects.md)에 남긴다.
 - CI 테스트가 가끔 실패해도 자동 재시도나 격리를 하지 않는다. 병합이 막히면 실패한 작업만 한 번 다시 돌릴 수 있다. 이때 실패한 테스트와 run을 PR 본문에 적고, 재현 테스트와 함께 결함 대장에 올려 고친다([결정 113](docs/decisions.md#flaky-tests)).
-- 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude가 하고, 교차 리뷰는 Codex가 맡는다([결정 116](docs/decisions.md#review-roles)).
+- 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude가 하고, 교차 리뷰는 Codex가 맡는다([결정 117](docs/decisions.md#review-roles)).
 - 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델(Codex)이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 심각도가 high이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 `채택 (AI 판정)`으로 적는다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)).
 
 ## 6. 현재 상태

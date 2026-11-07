@@ -28,6 +28,31 @@ class OrderTest {
         assertThat(o.paymentResult()).isNull();
     }
 
+    /** 결정 115: 만료를 유지하는 결과는 연결이 맞는 운영자 종결(REVIEW_CLOSED) 실패 하나뿐이다. */
+    @Test void onlyAMatchingReviewClosureKeepsAnExpiredOrderUnchanged() {
+        Order o = order();
+        PaymentResult closed = failure(o, "REVIEW_CLOSED");
+        assertThat(closed.closesHeldReview()).isTrue();
+        assertThat(failure(o, "DECLINED").closesHeldReview()).isFalse();
+        assertThat(result(completed(o)).closesHeldReview()).isFalse();
+        assertThat(o.keepsExpiryFor(closed)).isFalse();
+        assertThat(o.expire(o.getExpiresAt())).isTrue();
+        assertThat(o.keepsExpiryFor(closed)).isTrue();
+        assertThat(o.keepsExpiryFor(failure(o, "DECLINED"))).isFalse();
+        assertThat(o.keepsExpiryFor(result(completed(o)))).isFalse();
+        PaymentResult otherBuyer = new PaymentResult(id(), closed.occurredAt(), o.getOrderNo(), o.getRequestEventId(), id(), "other-buyer",
+                o.getAmount(), o.getCurrency(), OrderStatus.FAILED, "REVIEW_CLOSED", "closed");
+        assertThatThrownBy(() -> o.keepsExpiryFor(otherBuyer)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> o.apply(closed)).isInstanceOf(BusinessException.class);
+        assertThat(o.getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        assertThat(o.paymentResult()).isNull();
+    }
+
+    private static PaymentResult failure(Order o, String reasonCode) {
+        return new PaymentResult(id(), o.getExpiresAt(), o.getOrderNo(), o.getRequestEventId(), id(), o.getBuyerSubject(),
+                o.getAmount(), o.getCurrency(), OrderStatus.FAILED, reasonCode, "Payment approval review closed");
+    }
+
     @Test void resultMustBeFinalAndFailureMustExplainItsReason() {
         PaymentResult r = result(completed(order()));
         for (OrderStatus status : new OrderStatus[]{null, OrderStatus.PENDING, OrderStatus.FAILED})

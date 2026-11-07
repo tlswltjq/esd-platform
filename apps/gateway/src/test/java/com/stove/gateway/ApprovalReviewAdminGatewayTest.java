@@ -77,13 +77,24 @@ class ApprovalReviewAdminGatewayTest {
         assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
         assertThat(REQUEST_BODY.get()).isEqualTo(COMMAND); assertThat(REQUEST_URI.get()).isEqualTo(ROOT + "/example/investigations");
     }
+    /** 결정 115: 종결도 ADMIN만 Payment로 전달된다. 위조한 회원 헤더는 지우고 Bearer·본문·no-store는 그대로 둔다. */
+    @Test void administratorClosureReachesPaymentWithBearerAndWithoutForgedMemberHeader() {
+        http.post().uri(ROOT + "/example/closure").header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(COMMAND).exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Cache-Control", "no-store");
+        assertThat(CALLS.get()).isEqualTo(1); assertThat(MEMBER_HEADER.get()).isNull();
+        assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
+        assertThat(REQUEST_BODY.get()).isEqualTo(COMMAND); assertThat(REQUEST_URI.get()).isEqualTo(ROOT + "/example/closure");
+    }
     @Test void anonymousMembersAndCreatorsCannotReachThePaymentService() {
         http.get().uri(ROOT).exchange().expectStatus().isUnauthorized();
+        // Without a Bearer token the BFF CSRF filter refuses the POST before authentication; either way Payment is not reached.
+        http.post().uri(ROOT + "/example/closure").bodyValue(COMMAND).exchange().expectStatus().is4xxClientError();
         for (String role : new String[]{"MEMBER", "CREATOR", "REVIEWER"}) {
             for (String path : new String[]{ROOT, ROOT + "/example", ROOT + "/example/investigations"})
                 http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
-            http.post().uri(ROOT + "/example/investigations").header("Authorization", "Bearer " + role)
-                    .bodyValue("{}").exchange().expectStatus().isForbidden();
+            for (String path : new String[]{ROOT + "/example/investigations", ROOT + "/example/closure"})
+                http.post().uri(path).header("Authorization", "Bearer " + role).bodyValue("{}").exchange().expectStatus().isForbidden();
         }
         assertThat(CALLS.get()).isZero();
     }
@@ -92,6 +103,9 @@ class ApprovalReviewAdminGatewayTest {
             http.method(method).uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
         http.post().uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
         http.post().uri(ROOT + "/example/close").header("Authorization", "Bearer ADMIN").bodyValue("{}").exchange().expectStatus().isForbidden();
+        for (HttpMethod method : new HttpMethod[]{HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH})
+            http.method(method).uri(ROOT + "/example/closure").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
+        http.post().uri(ROOT + "/example/closure/extra").header("Authorization", "Bearer ADMIN").bodyValue("{}").exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isZero();
     }
 }

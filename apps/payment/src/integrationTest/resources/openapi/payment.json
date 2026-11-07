@@ -197,6 +197,32 @@
         },
         "type" : "object"
       },
+      "ApprovalClosureRecordResponse" : {
+        "properties" : {
+          "closedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "evidenceObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "evidenceState" : {
+            "enum" : [ "READY", "PENDING", "PAID", "FAILED", "CANCELLED" ],
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ApprovalInvestigationBody" : {
         "properties" : {
           "note" : {
@@ -214,6 +240,9 @@
       },
       "ApprovalInvestigationPage" : {
         "properties" : {
+          "closure" : {
+            "$ref" : "#/components/schemas/ApprovalClosureRecordResponse"
+          },
           "content" : {
             "items" : {
               "$ref" : "#/components/schemas/ApprovalInvestigationResponse"
@@ -303,6 +332,9 @@
           "approvalId" : {
             "type" : "string"
           },
+          "closure" : {
+            "$ref" : "#/components/schemas/ApprovalClosureRecordResponse"
+          },
           "firstPreparedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -327,7 +359,7 @@
             "type" : "string"
           },
           "latestPgState" : {
-            "enum" : [ "READY", "PENDING", "PAID", "FAILED" ],
+            "enum" : [ "READY", "PENDING", "PAID", "FAILED", "CANCELLED" ],
             "type" : "string"
           },
           "orderNo" : {
@@ -963,7 +995,7 @@
     },
     "/api/v1/admin/approval-reviews/{approvalId}/investigations" : {
       "get" : {
-        "description" : "저장된 승인 보류 근거와 조사 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
+        "description" : "저장된 승인 보류 근거와 조사 기록, 종결했다면 종결 기록. 금융 상태와 재시도 일정을 변경하지 않습니다.",
         "operationId" : "readApprovalInvestigations",
         "parameters" : [ {
           "in" : "path",

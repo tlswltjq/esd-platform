@@ -140,6 +140,21 @@ public class Payment {
         return true;
     }
 
+    /**
+     * An operator closure of a held approval ends the unresolved purchase (decision 115). The PortOne attempt and the closure
+     * re-inspection time identify the evidence; this is not a supplier decline and never moves money.
+     */
+    public void failAfterReview(String supplierAttemptId, Instant evidenceAt, String reason, String eventId, Instant at) {
+        if (!"PORTONE_TEST".equals(provider) || status != PaymentStatus.PENDING || resultEventId != null)
+            throw new BusinessException(ErrorCode.CONFLICT, "Only an unresolved PortOne purchase can end after review");
+        if (!PaymentValues.text(supplierAttemptId, 100) || !PaymentValues.microsecond(evidenceAt) || !PaymentValues.text(reason, 500)
+                || !PaymentValues.text(eventId, 64) || !PaymentValues.microsecond(at) || at.isBefore(evidenceAt))
+            throw new IllegalArgumentException("Review evidence and a result identity are required");
+        status = PaymentStatus.FAILED; providerTransactionId = supplierAttemptId; providerOccurredAt = evidenceAt;
+        failureReasonCode = ApprovalClosure.REASON_CODE; failureReason = reason; resultEventId = eventId; resultOccurredAt = at;
+        nextAttemptAt = null; nextFailureLookupAt = null; lastErrorCode = null; updatedAt = now();
+    }
+
     public void expireUnpaid() {
         if (status != PaymentStatus.PENDING || resultEventId != null)
             throw new BusinessException(ErrorCode.CONFLICT, "Only an unresolved unpaid purchase can expire");

@@ -140,11 +140,17 @@ public class Order {
         }
     }
 
+    /**
+     * 결정 115: Payment가 운영자 종결(REVIEW_CLOSED)을 확정하는 사이 주문이 스스로 만료됐다면 만료가 이미 같은 끝(새 주문 안내)이다.
+     * 연결이 맞는 그 실패 하나만 만료를 유지하는 무효과로 받는다. 그 밖의 결과는 {@link #apply}가 계속 충돌로 거절한다.
+     */
+    public boolean keepsExpiryFor(PaymentResult result) {
+        requireConnection(result);
+        return status == OrderStatus.EXPIRED && paymentResultEventId == null && result.closesHeldReview();
+    }
+
     public void apply(PaymentResult result) {
-        if (!orderNo.equals(result.orderNo()) || !requestEventId.equals(result.requestEventId())
-                || !buyerSubject.equals(result.buyerSubject()) || amount != result.amount()
-                || !currency.equals(result.currency()))
-            throw new BusinessException(ErrorCode.CONFLICT, "결제 결과가 주문과 일치하지 않습니다.");
+        requireConnection(result);
         if (paymentResultEventId != null) {
             if (!paymentResult().equals(result))
                 throw new BusinessException(ErrorCode.CONFLICT, "이미 확정한 결제 결과와 다릅니다.");
@@ -163,5 +169,12 @@ public class Order {
             pgPaidAmount = result.paymentAmounts().paidAmount(); pgDiscountAmount = result.paymentAmounts().discountAmount();
         }
         updatedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    private void requireConnection(PaymentResult result) {
+        if (!orderNo.equals(result.orderNo()) || !requestEventId.equals(result.requestEventId())
+                || !buyerSubject.equals(result.buyerSubject()) || amount != result.amount()
+                || !currency.equals(result.currency()))
+            throw new BusinessException(ErrorCode.CONFLICT, "결제 결과가 주문과 일치하지 않습니다.");
     }
 }

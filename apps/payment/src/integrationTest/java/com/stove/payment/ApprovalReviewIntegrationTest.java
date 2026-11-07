@@ -284,9 +284,11 @@ class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
         prometheus.scrape();
         verify(approvals, times(1)).countReviewsByReason();
         PaymentApproval approval = held("PG_INVALID_EVIDENCE");
-        assertThatThrownBy(() -> jdbc.update("UPDATE payment_approval SET latest_pg_state='CANCELLED', latest_pg_observed_at=received_at WHERE approval_id=?", approval.getApprovalId())).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("UPDATE payment_approval SET latest_pg_state='PARTIAL_CANCELLED', latest_pg_observed_at=received_at WHERE approval_id=?", approval.getApprovalId())).isInstanceOf(DataAccessException.class);
         assertThatThrownBy(() -> jdbc.update("UPDATE payment_approval SET latest_pg_state='PENDING' WHERE approval_id=?", approval.getApprovalId())).isInstanceOf(DataAccessException.class);
         assertThatThrownBy(() -> jdbc.update("UPDATE payment_approval SET review_started_at=received_at - INTERVAL 1 SECOND WHERE approval_id=?", approval.getApprovalId())).isInstanceOf(DataAccessException.class);
+        // V36: a verified full cancellation is a valid observation (decision 115).
+        assertThat(jdbc.update("UPDATE payment_approval SET latest_pg_state='CANCELLED', latest_pg_observed_at=received_at WHERE approval_id=?", approval.getApprovalId())).isEqualTo(1);
     }
     private double gauge(String reason) {
         String line = prometheus.scrape().lines().filter(l -> l.startsWith("stove_payment_approval_review_required{") && l.contains("reason=\"" + reason + "\"")).findFirst().orElseThrow();
