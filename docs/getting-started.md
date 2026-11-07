@@ -64,7 +64,7 @@ MinIO와 mc는 `:infra:minio:compileMinio`가 고정 커밋의 공식 소스를 
 
 Studio·Review·Download 통합 테스트도 기본적으로 같은 이미지를 자동 준비한다. 미리 공급한 이미지는 `STOVE_MINIO_IMAGE`로 지정하고, 테스트 전용 변경은 `STOVE_TEST_MINIO_IMAGE`로 지정한다. 지정한 이미지는 필요한 MinIO·mc 명령을 제공해야 한다.
 
-이미지 생성만 수행하려면 `./gradlew jibDockerBuild`, MinIO만 생성하려면 `./gradlew :infra:minio:jibDockerBuild`를 사용한다. 레지스트리·앱 태그는 `STOVE_JIB_REGISTRY`·`STOVE_IMAGE_TAG` 또는 `stove.jib.registry`·`stove.jib.tag` Gradle 프로퍼티로 지정한다. 게시에는 `./gradlew jib`를 사용하고 배포 환경에서는 같은 이미지 이름을 설정해 pull한 뒤 `scripts/start-apps.sh`로 시작한다. 호스트 접속이 필요하면 `-f docker-compose.apps.yml -f docker-compose.apps.local.yml`을 적용한다. MinIO의 태그는 기존 릴리즈 이름을 유지하며 `STOVE_JIB_REGISTRY`를 함께 따른다. `STOVE_MINIO_IMAGE`로 사전 공급 이미지를 지정하면 MinIO 소스 빌드·Jib 패키징을 건너뛴다.
+이미지 생성만 수행하려면 `./gradlew jibDockerBuild`, MinIO만 생성하려면 `./gradlew :infra:minio:jibDockerBuild`를 사용한다. 레지스트리·앱 태그는 `STOVE_JIB_REGISTRY`·`STOVE_IMAGE_TAG` 또는 `stove.jib.registry`·`stove.jib.tag` Gradle 프로퍼티로 지정한다. 게시에는 `./gradlew jib`를 사용하고 배포 환경에서는 같은 이미지 이름을 설정해 pull한 뒤 `scripts/start-apps.sh`로 시작한다. 호스트 접속이 필요하면 `-f docker-compose.apps.yml -f docker-compose.apps.local.yml`을 적용한다. MinIO의 태그는 기존 릴리즈 이름을 유지하며 `STOVE_JIB_REGISTRY`를 함께 따른다. `STOVE_MINIO_IMAGE`로 사전 공급 이미지를 지정하면 MinIO 소스 빌드·Jib 패키징을 건너뛴다. `STOVE_TEST_MINIO_IMAGE`를 함께 쓸 때의 우선순위는 [testing.md](testing.md#minio-image)를 따른다.
 
 브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다.
 
