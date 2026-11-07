@@ -20,7 +20,7 @@
 - [ ] 선물(보관함 항목의 받는 사람 변경) — 보관함 구조만 준비, 정책 미정
 - [ ] 고객 알림(보관함 반환·환불 결과) — 결정 98, 업무 이벤트 구독 방식으로 별도 설계
 - [x] 보관함·등록을 포함한 실제 스택 여정: `verify-jib.py`(11개 앱) 통과, `verify-license.py` 15단계(환불 완료 뒤 재구매·등록, PG 결과 주입 — 결정 100) 통과 — 2026-11-06 PR #116
-- [x] PG 취소 구간까지 거치는 환불 후 재구매 여정: PortOne 흉내 서버로 Payment의 실제 취소 경로 → 환불 완료 → 보유권 REFUNDED·등록 ENDED → 재구매·새 보유권 등록(`verify-refund-settlement.py`) — 2026-11-07 [결정 111](../../../docs/decisions.md#portone-fake-journey). 실제 PortOne·PG 확인은 [Payment 작업](../payment/tasks.md)에 남김
+- [x] PG 취소 구간까지 거치는 환불 후 재구매 여정: PortOne 흉내 서버로 Payment의 실제 취소 경로 → 환불 완료 → 보유권 REFUNDED·등록 ENDED → 재구매·새 보유권 등록(`verify-refund-settlement.py`) — 2026-11-07 [결정 111](../../../docs/decisions.md#portone-fake-journey), PR #129. 실제 PortOne·PG 확인은 [Payment 작업](../payment/tasks.md)에 남김
 - [ ] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/DLT 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
 
 ## 범위 밖(후속)

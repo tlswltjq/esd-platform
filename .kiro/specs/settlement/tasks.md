@@ -16,7 +16,7 @@
 - [x] G3 토스페이 정산 API 수집 A: 전체 페이지·불변 원본/거래 정본·중복/충돌·거래별 대사·ADMIN 조회·주기 재수집·V11 (OCI 144건) — 2026-11-02, 결정 43
 - [x] G3 PG 비용 업무 반영 월 연결·지급일 대사: `settlement_pg_cost_posting`·월 금융 요약·`pg-payouts` 조회·원본 재대사·V12 (OCI 167건) — 2026-11-02, 결정 45
 - [x] G3 테스트 경계 정비: 루프백 HTTP 서버·저장소 대역 합성 LIVE 자료 분리, 제약 해제 픽스처 제거 (OCI 176건) — 2026-11-02, 결정 46
-- [x] 환불 → 정산 조정 실제 스택 여정: `PORTONE_TEST` 모드의 Settlement가 PortOne 흉내 서버로 원승인(`PgFunding`)·취소(`PgRefunds`)를 직접 조회해 매출 2건·환불 1건 반영(`verify-refund-settlement.py`) — 2026-11-07, [결정 111](../../../docs/decisions.md#portone-fake-journey)
+- [x] 환불 → 정산 조정 실제 스택 여정: `PORTONE_TEST` 모드의 Settlement가 PortOne 흉내 서버로 원승인(`PgFunding`)·취소(`PgRefunds`)를 직접 조회해 매출 2건·환불 1건 반영(`verify-refund-settlement.py`) — 2026-11-07, [결정 111](../../../docs/decisions.md#portone-fake-journey), PR #129
 
 ## 진행 중 / 남음 (G3 공백)
 
