@@ -1012,6 +1012,24 @@
 - 구분: 추천 수용
 - 결과: [PR #125](https://github.com/tlswltjq/esd-platform/pull/125)
 
+<a id="portone-refund-settlement-journey"></a>
+## 110. 환불 → 정산 조정과 PG 취소 뒤 재구매는 PortOne TEST 한 번의 실제 여정으로 확인한다
+- 문제: `verify-settlement.py`(2026-11-07 21단계 통과)에는 환불 단계가 없다. 모의 PG에는 취소가 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회(`PortOneRefundHttpClient`)만 받는다. 그래서 환불 → 정산 조정은 가짜 PG 응답의 통합 테스트로만 확인됐다. License의 "PG 취소 구간까지 거치는 환불 후 재구매"도 결정 100에서 PG 결과 주입으로 대신했다.
+- 선택지: A PortOne TEST로 실제 결제·환불 한 번 / B 모의 PG에 취소와 정산용 모의 환불 조회를 추가 / C 통합 테스트만 두고 빈틈을 기록 (추천: A — 한 번의 TEST 여정으로 License·Settlement의 남은 두 항목이 함께 끝나고, 결정 100처럼 모의 PG를 키우지 않으며, 정산의 독립 PG 확인 경로가 실제 PortOne 조회로 검증된다)
+- 내 의견: "A로 해, PortOne TEST로 한 번"
+- 선택: A — 구매 → 등록 → 자동 환불(PortOne TEST 실제 취소) → 환불 완료 → License 종료 → Settlement 환불 조정 → 재구매 → 등록을 한 여정으로 돈다. AGENTS.md 5절의 "합의한 사례"는 이 여정에 한정한다. 결제창 승인은 사람이 한다. API 비밀은 Git 제외 설정 파일로만 주고 기록·로그에 남기지 않는다.
+- 구분: 추천 수용
+- 결과: 중단 — 2026-11-07 결제 단계에서 토스페이가 채널 `esd`(토스페이 V2)의 공용 예제 테스트 키를 "가맹점 정보를 찾을 수 없습니다"(`COMMON_INVALID_PARAMETER`)로 거절했다. 일부러 만든 가짜 키에도 같은 답이 왔고, 우리 PortOne 키·채널 설정은 10-30과 같았다. [결정 111](#portone-fake-journey)로 대체한다.
+
+<a id="portone-fake-journey"></a>
+## 111. 환불 → 정산 조정과 PG 취소 뒤 재구매는 PortOne 흉내 서버를 둔 실제 스택 여정으로 확인한다
+- 문제: 결정 110의 PortOne TEST 여정이 결제 단계에서 멈췄다. 채널의 토스페이 키는 문서 예제에 실린 공용 키라, 토스페이가 이 키를 끄면 우리 연동도 같이 끊긴다. 결제창 승인도 사람이 해야 해서 여정을 반복해 돌릴 수 없다.
+- 선택지: A PortOne에 다른 PG의 공용 TEST 채널 추가(결제수단 `EASY_PAY` 고정 해제) / B 모의 PG(`simulators/mock-pg`)에 취소를 넣고 Settlement에 모의 PG용 환불 조회 추가 / C 검증 도구에 PortOne 흉내 서버를 두고, Payment·Settlement의 PortOne 부품은 그대로 쓰며 주소만 바꿈 / ① 우리 전용 테스트 키로 카드 결제 TEST 채널 / PortOne 교체 (추천: C — 공용 테스트 키에 기대지 않아 다시 끊기지 않는다. 운영 코드를 바꾸지 않고 정산이 PortOne에 환불을 묻는 실제 부품이 매번 돈다. 사람 승인이 없어 매일 밤 CI에서도 돌 수 있다. A는 또 공용 키에 기대고, B는 운영 코드에 모의 전용 부품이 늘며 PortOne 부품을 거치지 않는다. 진짜 응답 모양은 10-28·10-31 PortOne TEST로 이미 확인했다)
+- 내 의견: "C로 해, PortOne 흉내 서버로 가자"
+- 선택: C — 흉내 서버는 검증 도구 쪽에만 두고 운영 코드에 넣지 않는다. Payment·Settlement는 PortOne 주소 설정만 흉내 서버로 바꾼다. 응답 모양은 PortOne 어댑터 테스트의 견본과 같게 한다. 결제창 인증 결과는 여정 도구가 흉내 서버에서 받아, 사람 승인과 실제 금융 동작 없이 끝까지 돈다. 진짜 PortOne·PG 확인은 우리 전용 테스트 가맹점이 생긴 뒤 따로 정한다.
+- 구분: 추천 수용
+- 결과: [PR #129](https://github.com/tlswltjq/esd-platform/pull/129), [근거 색인](evidence.md) 2026-11-07 "PortOne 흉내 서버 환불 → 정산·재구매 여정" 행
+
 ---
 
 ## 검증하며 드러난 것
