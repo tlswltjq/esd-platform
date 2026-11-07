@@ -20,6 +20,7 @@ import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.test.OpenApiSnapshot;
+import com.stove.common.test.PausePoints;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.web.error.BusinessException;
 import com.stove.store.api.listener.CatalogProductMapper;
@@ -44,6 +45,12 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,8 +66,18 @@ import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.store.sync.enabled=false", "spring.kafka.listener.auto-startup=false"})
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
+@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, StoreIntegrationTest.Pausing.class})
 class StoreIntegrationTest {
+    static final PausePoints POINTS = new PausePoints();
+    @TestConfiguration
+    static class Pausing {
+        @Bean static BeanPostProcessor pausingProducts() {
+            return PausePoints.pausing(POINTS, StoreProductRepository.class);
+        }
+    }
+    @AfterEach void clearPauses() {
+        assertThat(POINTS.reset()).as("쓰이지 않은 멈춤 지점").isEmpty();
+    }
     @MockitoSpyBean ApplyCatalogProduct apply;
     @Autowired SynchronizeCatalogProducts sync;
     @Autowired SearchStoreProducts search;
@@ -164,6 +181,26 @@ class StoreIntegrationTest {
             assertThat(read.execute("game-1").contentVersion()).isEqualTo(3);
             assertThat(products.count()).isEqualTo(1);
         } finally { pool.shutdownNow(); }
+    }
+    @Test
+    @Tag("known-defect")
+    @DisplayName("[D-040] 빈 ID 조회 뒤 같은 상품이 커밋돼도 높은 버전으로 수렴한다")
+    void sameProductCommittedBetweenIdAndCodeReadsConverges() throws Exception {
+        // 기대: 같은 ID의 버전 3 반영. 실제: 다른 상품으로 오인해 CONFLICT. 영향: 사본 갱신 실패.
+        PausePoints.Gate gate = POINTS.arm("StoreProductRepository.lockById", "late-insert");
+        PausePoints.Run<Void> updating = PausePoints.start("late-insert", () -> {
+            apply.execute(product(1, 3, "Latest", 3000));
+            return null;
+        });
+        try {
+            gate.awaitArrival();
+            assertThat(products.count()).isZero();
+            apply.execute(product(1, 1, "Old", 1000));
+            assertThat(read.execute("game-1").contentVersion()).isEqualTo(1);
+        } finally { gate.release(); }
+        updating.join();
+        assertThat(read.execute("game-1")).isEqualTo(product(1, 3, "Latest", 3000));
+        assertThat(products.count()).isEqualTo(1);
     }
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);
