@@ -1241,7 +1241,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "D로 해, 고객 응답에 실패 사유랑 안내 추가")
 - 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 실패한 환불의 새 실행은 지금처럼 고객 재신청으로만 만든다. ADMIN 대신 재신청과 실패 종결 시 자동 재송신은 두지 않는다. Order 고객 환불 응답(`FAILED`)에 실패 사유 코드(이미 저장된 `RefundAttempt.failureReasonCode`를 고객용 코드로 옮김, 내부 PG 오류 원문은 노출하지 않음)와 "다시 신청하면 환불됩니다" 안내를 넣는다. 운영 절차서에 "환불해 줄 건이면 실패 종결보다 콘솔 취소 → 결정 127 종결을 먼저, 실패 종결은 지금 환불할 수 없는 건에만"을 적는다. 알림은 결정 98대로 넣지 않는다. 장애로 수백 건이 한꺼번에 생기는 규모가 실제로 나오면 B를 다시 검토한다.
 - 구분: 추천 수용
-- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), [PR #159](https://github.com/tlswltjq/esd-platform/pull/159) (구현: 고객 응답 `failureNotice`, `PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`), 절차서 문장은 [PR #157](https://github.com/tlswltjq/esd-platform/pull/157) `docs/runbooks/refund-delay-closure.md`, 근거 색인 2026-11-08 order 실패 안내 행
 
 <a id="local-image-registry"></a>
 ## 135. 직접 만드는 이미지의 기본 이름은 Docker Hub로 해석되지 않는 `localhost/stove`를 쓴다
