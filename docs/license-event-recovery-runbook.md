@@ -4,6 +4,8 @@
 
 ## 1. 대상과 원인 확인
 
+경보 `RefundLicenseGrantsDelayed`([결정 125](decisions.md#license-grant-wait-detection))에서 왔다면 Order `GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT`의 `licenseGrantWaitStartedAt`으로 10분 넘게 기다린 환불의 orderNo를 찾고, 아래 표의 "실제 지급 있음, Order 확인 없음" 행부터 확인한다.
+
 대상 orderNo, 발견 시각, 담당자, 장애 증거와 원인 해결 내용을 운영 기록에 남긴다. 같은 서비스·DLT 토픽의 재투입은 한 담당자/프로세스가 수행한다. 직접 할당하는 운영 소비자는 컨슈머 그룹 리밸런스로 서로를 배제하지 않기 때문이다.
 
 동일 MySQL 인스턴스에서 두 DB를 읽을 권한이 있다면 [조회 SQL](../tools/operations/license-recovery.sql)을 사용한다. SQL은 읽기 전용 트랜잭션이며 업무·Inbox·Outbox를 수정하지 않는다. DB를 분리한 환경에서는 각 소유 모듈에서 같은 사실을 별도로 조회하고 조회 시각도 기록한다.

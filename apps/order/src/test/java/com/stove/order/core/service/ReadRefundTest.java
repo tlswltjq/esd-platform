@@ -18,6 +18,7 @@ import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.domain.RefundAttemptRepository;
 import com.stove.order.core.domain.RefundReviewRoundRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ReadRefundTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final RefundRepository refunds = mock(RefundRepository.class);
-    private final ReadRefund read = new ReadRefund(orders, refunds, mock(RefundReviewRoundRepository.class), Clock.systemUTC(), mock(RefundAttemptRepository.class));
+    private final ReadRefund read = new ReadRefund(orders, refunds, mock(RefundReviewRoundRepository.class), Clock.systemUTC(), mock(RefundAttemptRepository.class), Duration.ofMinutes(10));
 
     @Test void theOwnersSnapshotUsesTheOriginalOrderAmountAndStoredRefundFacts() {
         Order order = order();

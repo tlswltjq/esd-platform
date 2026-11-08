@@ -24,7 +24,7 @@
 | `purchase_order` | 단일 업무 엔티티. orderNo·buyerSubject·requestId·상품 스냅샷·listAmount·discountAmount·amount·currency·status·createdAt·updatedAt·requestEventId·paymentResultEventId·paymentResult·expiresAt·승인 진행 식별자. 선택적 pgPaidAmount·pgDiscountAmount |
 | `order_payment_admission` | 승인 진행 확정의 불변 영수증. admissionId·paymentId·admittedAt·원래 만료 시각 |
 | `order_expired_review_closure`(V31) | 이미 만료된 주문에 늦게 온 운영자 종결 실패(`REVIEW_CLOSED`)의 결과 식별. 주문·eventId 각각 유일, 주문 FK(삭제 cascade 없음). 주문 상태는 EXPIRED 그대로 |
-| `order_refund` | 환불 접수·판정·고객 상태(PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED)·첫 접수 시각·rejectionReason |
+| `order_refund` | 환불 접수·판정·고객 상태(PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED)·첫 접수 시각·rejectionReason·지급 확인 대기 진입 시각(V32, 대기 중 NOT NULL CHECK·`(status, license_grant_wait_started_at)` 인덱스) |
 | `order_license_grant` | 실제 지급 확인 근거 |
 | `order_refund_attempt` | 환불 실행 시도 이력(attemptId·순번·previousAttemptId·PENDING/SUCCEEDED/FAILED·준비 사실·조사 표시) |
 | `order_refund_review_round` | 심사 회차(최초·고객 재심사·관리자 정정)별 판정·감사·명령 영수증·승인 중단 |
@@ -33,7 +33,7 @@
 
 - 시각은 UTC·마이크로초 정밀도, 금액은 정수 long. 식별자 컬럼·유일 제약은 대소문자를 구분한다.
 - `requestEventId`(최초 OrderPlaced.eventId)와 nullable `paymentResultEventId`에 각각 유일 제약을 둔다.
-- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99)까지 기존 버전·자료를 보존한다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
+- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99), V31(만료 주문의 운영자 종결 결과 식별), V32(지급 확인 대기 진입 시각, 결정 125)까지 기존 버전·자료를 보존한다. V32는 이미 대기 중인 옛 행만 기록된 사실로 채운다(자동 허용은 접수 시각, 심사 환불은 현재 회차 승인 시각, 판정 시각이 없는 옛 행은 접수 시각 — 실제 진입보다 늦지 않아 멈춘 건을 숨기지 않는다). 다른 상태는 NULL로 둔다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
 
 ## API 계약
 
@@ -108,7 +108,7 @@ stateDiagram-v2
 | 내부 상태(`RefundStatus`) | 고객 상태 | 의미 |
 |---|---|---|
 | `PENDING_REVIEW` | PENDING_REVIEW | 4시간 초과 접수·재심사·정정 회차의 관리자 판정 대기. 이용권 유지 |
-| `PENDING_LICENSE_GRANT` | PROCESSING | 허용됐으나 실제 지급 확인 대기 |
+| `PENDING_LICENSE_GRANT` | PROCESSING | 허용됐으나 실제 지급 확인 대기. 진입 + 10분부터 게이지·경보 `RefundLicenseGrantsDelayed`(warning)·고객 `processingNotice`(결정 125) |
 | `PENDING_LICENSE_SUSPENSION` | PROCESSING | 정지 요청 발행, 실제 정지 완료 대기 |
 | `PENDING_PAYMENT_REFUND` | PROCESSING | 실행 요청 저장, Payment 금융 결과 대기 |
 | `PENDING_LICENSE_RESTORATION` | PROCESSING | 검증된 PG 실패 뒤 실제 복구 대기 |
@@ -129,6 +129,7 @@ stateDiagram-v2
 - 접수→(4시간 이내 자동 허용 또는 관리자 심사)→승인→실제 License 지급 확인→정지 요청→실제 정지 확인→`RefundExecutionRequested`.
 - 자동 허용 자격은 최초 Payment 결과 시각부터 정확히 4시간. 관리자 API가 PG를 직접 호출하지 않는다.
 - 환불 상태는 원구매 PAID와 분리 저장한다. 조회는 no-store이며 저장된 근거만 사용하고 조회 시 Payment·PG HTTP를 호출하지 않는다.
+- 지급 확인 대기 감지(결정 125): `ReadLicenseGrantDelays`가 게이지(`RefundLicenseGrantMetrics`, 수집마다 COUNT 1회)를, `ReadRefund`가 고객 안내를 같은 경계로 계산한다. 경계 `stove.order.refund.license-grant-delay`는 `RefundConfiguration`이 바인딩한다. 복구는 [지급·지급 확인 운영 재처리](../../../docs/license-event-recovery-runbook.md).
 
 ## 유스케이스 구성
 
@@ -149,7 +150,7 @@ stateDiagram-v2
 ## 미연결·후속 범위
 
 - G1 결제 생명주기의 종료 조건(금융 보류 건의 다음 행동·실제 TEST 전체 여정 종결).
-- G2 지급 확인 누락의 Order 측 복구 연계, 환불 조사 이후 조치·종결 기준, 실제 ADMIN 계정·운영 화면 여정.
+- 원본 이벤트가 없는 `PENDING_LICENSE_GRANT`의 종결(결정 125가 남김), 환불 조사 이후 조치·종결 기준, 실제 ADMIN 계정·운영 화면 여정.
 - 장바구니·다중 통화·부분 환불·다중 PG·조사 종결 등 제품 범위·성능 고도화.
 
 ## 사용 안내

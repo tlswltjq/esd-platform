@@ -35,6 +35,84 @@ import org.testcontainers.containers.MySQLContainer;
 class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
     private static final String LOCATION = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
 
+    /**
+     * 결정 125: V32는 지급 확인을 기다리는 옛 환불에 기록된 사실로만 진입 시각을 채운다.
+     * 자동 환불은 접수 시각, 심사 환불은 현재 회차 승인 시각, 판정 시각이 없는 옛 행은 접수 시각(실제 진입보다 늦지 않음)이다.
+     * 다른 상태는 NULL로 두고, 다른 열은 바꾸지 않는다. 이행 뒤에는 대기 상태가 시각 없이 저장되지 않는다.
+     */
+    @Test void v32BackfillsTheWaitStartOnlyFromRecordedFactsAndKeepsOtherRowsUnchanged() {
+        withVersion("31", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            Instant received = Instant.parse("2026-11-08T10:00:00.123456Z"); Instant decided = received.plusSeconds(600);
+            Instant reconsidered = received.plusSeconds(3600);
+            String automatic = refund(jdbc, received, true, "PENDING_LICENSE_GRANT", null);
+            String approved = refund(jdbc, received, false, "PENDING_LICENSE_GRANT", decided);
+            round(jdbc, approved, approved, 1, null, received, decided);
+            String reconsideredRefund = refund(jdbc, received, false, "REJECTED", decided, "REJECTED");
+            round(jdbc, reconsideredRefund, reconsideredRefund, 1, null, received, decided, "REJECTED");
+            String second = id(); round(jdbc, second, reconsideredRefund, 2, reconsideredRefund, received.plusSeconds(1800), reconsidered, "APPROVED");
+            jdbc.update("UPDATE order_refund SET current_review_id=?,status='PENDING_LICENSE_GRANT' WHERE refund_id=?", second, reconsideredRefund);
+            String legacy = refund(jdbc, received, false, "PENDING_LICENSE_GRANT", null);
+            round(jdbc, legacy, legacy, 1, null, received, null);
+            String suspended = refund(jdbc, received, true, "PENDING_LICENSE_SUSPENSION", null);
+            jdbc.update("UPDATE order_refund SET suspension_request_event_id=? WHERE refund_id=?", id(), suspended);
+            String review = refund(jdbc, received, false, "PENDING_REVIEW", null);
+            round(jdbc, review, review, 1, null, received, null);
+            List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+
+            List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            assertThat(after).hasSize(before.size());
+            for (int index = 0; index < before.size(); index++) {
+                Map<String, Object> unchanged = new HashMap<>(after.get(index)); unchanged.remove("license_grant_wait_started_at");
+                assertThat(unchanged).isEqualTo(before.get(index));
+            }
+            assertThat(started(jdbc, automatic)).isEqualTo(received);
+            assertThat(started(jdbc, approved)).isEqualTo(decided);
+            assertThat(started(jdbc, reconsideredRefund)).isEqualTo(reconsidered);
+            assertThat(started(jdbc, legacy)).isEqualTo(received);
+            assertThat(started(jdbc, suspended)).isNull();
+            assertThat(started(jdbc, review)).isNull();
+            assertThatThrownBy(() -> jdbc.update("UPDATE order_refund SET license_grant_wait_started_at=NULL WHERE refund_id=?", automatic))
+                    .isInstanceOf(DataAccessException.class).rootCause()
+                    .isInstanceOfSatisfying(SQLException.class, failure -> assertThat(failure.getErrorCode()).isEqualTo(3819));
+            assertThat(jdbc.queryForList("SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='order_refund'", String.class))
+                    .contains("ix_order_refund_license_grant_wait");
+        });
+    }
+
+    private String refund(JdbcTemplate jdbc, Instant received, boolean automatic, String status, Instant reviewedAt) {
+        return refund(jdbc, received, automatic, status, reviewedAt, "APPROVED");
+    }
+
+    private String refund(JdbcTemplate jdbc, Instant received, boolean automatic, String status, Instant reviewedAt, String decision) {
+        insert(jdbc, "PAID");
+        String orderNo = jdbc.queryForObject("SELECT order_no FROM purchase_order ORDER BY id DESC LIMIT 1", String.class);
+        String refundId = id();
+        jdbc.update("INSERT INTO order_refund(refund_id,order_no,received_at,automatic_refund_eligible,status,current_review_id,review_request_id,review_decision,review_operator_subject,review_reason,reviewed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                refundId, orderNo, Timestamp.from(received), automatic, status, automatic ? null : refundId, reviewedAt == null ? null : id(),
+                reviewedAt == null ? null : decision, reviewedAt == null ? null : "migration-admin", reviewedAt == null ? null : "기존 판정 사유",
+                reviewedAt == null ? null : Timestamp.from(reviewedAt));
+        return refundId;
+    }
+
+    private void round(JdbcTemplate jdbc, String reviewId, String refundId, int number, String previous, Instant received, Instant decided) {
+        round(jdbc, reviewId, refundId, number, previous, received, decided, "APPROVED");
+    }
+
+    private void round(JdbcTemplate jdbc, String reviewId, String refundId, int number, String previous, Instant received, Instant decided, String decision) {
+        jdbc.update("INSERT INTO order_refund_review_round(review_id,refund_id,review_no,application_request_id,previous_review_id,buyer_subject,customer_reason,received_at,decision_request_id,decision,operator_subject,decision_reason,decided_at) VALUES(?,?,?,?,?,'usr_buyer',?,?,?,?,?,?,?)",
+                reviewId, refundId, number, number == 1 ? null : id(), previous, number == 1 ? null : "재심사 사유", Timestamp.from(received),
+                decided == null ? null : id(), decided == null ? null : decision, decided == null ? null : "migration-admin",
+                decided == null ? null : "승인 사유", decided == null ? null : Timestamp.from(decided));
+    }
+
+    private Instant started(JdbcTemplate jdbc, String refundId) {
+        Timestamp value = jdbc.queryForObject("SELECT license_grant_wait_started_at FROM order_refund WHERE refund_id=?", Timestamp.class, refundId);
+        return value == null ? null : value.toInstant();
+    }
+
     /** 결정 89·98: V28은 구매 슬롯만 없애고 주문을 바꾸지 않는다. V29는 기존 환불에 보관함 반환 false를 더한다. */
     @Test void v28RemovesOnlyThePurchaseSlotAndV29AddsAFalseStorageReturnToExistingRefunds() {
         withVersion("27", source -> {
@@ -54,6 +132,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             }
             Map<String, Object> migratedRefund = new HashMap<>(jdbc.queryForMap("SELECT * FROM order_refund"));
             assertThat(migratedRefund.remove("purchase_returned_to_storage")).isIn(false, 0, (byte) 0, Boolean.FALSE);
+            assertThat(migratedRefund.remove("license_grant_wait_started_at")).isNull();
             assertThat(migratedRefund).isEqualTo(refund);
             insert(jdbc, "PENDING"); insert(jdbc, "PAID");
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_order WHERE product_id=1", Integer.class)).isEqualTo(4);
@@ -211,6 +290,11 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         // V29(결정 98): 기존 환불에는 보관함 반환 표시가 false로만 더해진다.
         if (!original.containsKey("purchase_returned_to_storage") && previousColumns.containsKey("purchase_returned_to_storage"))
             assertThat(previousColumns.remove("purchase_returned_to_storage")).isIn(false, 0, (byte) 0);
+        // V32(결정 125): 지급 확인 대기 중인 환불만 진입 시각이 채워지고, 다른 상태는 NULL로 더해진다. 값은 v32 테스트가 따로 본다.
+        if (!original.containsKey("license_grant_wait_started_at") && previousColumns.containsKey("license_grant_wait_started_at")) {
+            Object started = previousColumns.remove("license_grant_wait_started_at");
+            if ("PENDING_LICENSE_GRANT".equals(actual.get("status"))) assertThat(started).isNotNull(); else assertThat(started).isNull();
+        }
         // V28(결정 89): 구매 슬롯 계산 열만 사라지고 나머지 주문 값은 그대로다.
         Map<String, Object> expected = new HashMap<>(original);
         if (!actual.containsKey("purchase_guard")) expected.remove("purchase_guard");
