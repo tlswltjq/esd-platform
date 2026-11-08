@@ -365,7 +365,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @BeforeEach void clean() {
         listeners.stop();
         for(String table:List.of("settlement_pg_cost_posting","settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
-                "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
+                "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","settlement_seller_carryover","seller_monthly_settlement","settlement_pg_fee","settlement_pg_transaction","processed_event"))
             jdbc.update("DELETE FROM "+table);
         provider.clear(); when(clock.instant()).thenReturn(NOW);
         refundProvider.clear();
@@ -529,6 +529,112 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(receive.execute(report.providerSettlementId(),"usr_admin").status()).isEqualTo("SIMULATED_RECEIVED");
         assertThat(close.execute("usr_seller","2026-09").getClosedAt()).isEqualTo(month.getClosedAt());
         assertThat(receipts.execute(report.providerSettlementId()).statement()).isEqualTo(report);
+    }
+    // 결정 121·130: 판매자 월 마감 순서 강제와 음수 순액 이월
+    PaidOrder paid(Instant at,long amount) {
+        return new PaidOrder(id(),at,id(),id(),id(),id(),"usr_buyer",1L,"game-1","Frozen title",1,amount,"KRW");
+    }
+    Reply closeMonth(String month) { return http("POST","/api/v1/settlements/sellers/usr_seller/months/"+month+"/close",token("usr_admin","ADMIN"),null); }
+    JsonNode adminMonth(String month) {
+        JsonNode content=http("GET","/api/v1/settlements/months?sellerSubject=usr_seller&month="+month,token("usr_admin","ADMIN"),null).body().path("data").path("content");
+        assertThat(content.size()).as(month).isEqualTo(1);return content.get(0).path("month");
+    }
+    static void balance(JsonNode month,long carriedIn,long payable,long carriedOut) {
+        assertThat(List.of(month.path("carriedIn").isIntegralNumber(),month.path("payable").isIntegralNumber(),month.path("carriedOut").isIntegralNumber()))
+                .as(month.path("settlementMonth").asText()).containsOnly(true);
+        assertThat(List.of(month.path("carriedIn").asLong(),month.path("payable").asLong(),month.path("carriedOut").asLong()))
+                .as(month.path("settlementMonth").asText()).containsExactly(carriedIn,payable,carriedOut);
+    }
+    static void unsettled(JsonNode month) {
+        for(String field:List.of("carriedIn","payable","carriedOut")) assertThat(month.path(field).isNull()).as(field).isTrue();
+    }
+    JsonNode closed(String month) {
+        Reply reply=closeMonth(month);assertThat(reply.status()).as(month).isEqualTo(200);
+        JsonNode result=reply.body().path("data").path("month");assertThat(result.path("status").asText()).isEqualTo("CLOSED");return result;
+    }
+    void at(String instant) { when(clock.instant()).thenReturn(Instant.parse(instant)); }
+    Map<String,Object> carryover(String month) {
+        return jdbc.queryForMap("SELECT * FROM settlement_seller_carryover WHERE seller_subject='usr_seller' AND settlement_month=?",month);
+    }
+
+    @Test void negativeNetCarriesForwardOnlyThroughClosingsInMonthOrder() {
+        PaidOrder september=paid(Instant.parse("2026-09-01T00:00:00Z"),9000);sale(september);
+        balance(closed("2026-09"),0,8100,0);
+        recordRefund.execute(prepareRefund(september));sale(paid(NOW.minusSeconds(20),5000));
+        JsonNode octoberOpen=adminMonth("2026-10");
+        assertThat(octoberOpen.path("netSellerPayoutAmount").asLong()).isEqualTo(-3600);unsettled(octoberOpen);
+        at("2026-11-15T03:00:00Z");sale(paid(Instant.parse("2026-11-15T02:00:00Z"),3000));
+        at("2026-12-02T03:00:00Z");
+        Reply outOfOrder=closeMonth("2026-11");Reply current=closeMonth("2026-12");
+        assertThat(outOfOrder.status()).isEqualTo(409);assertThat(current.status()).isEqualTo(409);
+        assertThat(outOfOrder.body().path("success").asBoolean()).isFalse();
+        assertThat(outOfOrder.body().path("error").path("code").asText()).isEqualTo(current.body().path("error").path("code").asText());
+        assertThat(adminMonth("2026-11").path("status").asText()).isEqualTo("OPEN");
+        assertThat(count("settlement_seller_carryover")).isEqualTo(1);
+        balance(closed("2026-10"),0,0,-3600);
+        balance(closed("2026-11"),-3600,0,-900);
+        at("2026-12-15T03:00:00Z");sale(paid(Instant.parse("2026-12-15T02:00:00Z"),2000));
+        at("2027-01-02T03:00:00Z");
+        balance(closed("2026-12"),-900,900,0);
+        assertThat(carryover("2026-09").get("source_month")).isNull();
+        assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-09");
+        assertThat(carryover("2026-11").get("source_month")).isEqualTo("2026-10");
+        assertThat(carryover("2026-11").get("net_seller_payout_amount")).isEqualTo(2700L);
+        assertThat(carryover("2026-12").get("source_month")).isEqualTo("2026-11");
+        List<Map<String,Object>> ledger=jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id");
+        Map<String,Object> novemberRow=jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-11'");
+        balance(closed("2026-11"),-3600,0,-900);
+        assertThat(jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id")).isEqualTo(ledger);
+        assertThat(jdbc.queryForMap("SELECT * FROM seller_monthly_settlement WHERE settlement_month='2026-11'")).isEqualTo(novemberRow);
+        JsonNode mine=http("GET","/api/v1/settlements/me/months?month=2026-11",token("usr_seller","CREATOR"),null).body().path("data").path("content").get(0);
+        balance(mine,-3600,0,-900);
+    }
+    @Test void monthsWithoutRowsAreSkippedWhenFindingTheCarry() {
+        PaidOrder september=order(Instant.parse("2026-09-01T00:00:00Z"));sale(september);closed("2026-09");
+        recordRefund.execute(prepareRefund(september));
+        at("2026-11-02T03:00:00Z");balance(closed("2026-10"),0,0,-9000);
+        at("2026-12-15T03:00:00Z");sale(paid(Instant.parse("2026-12-15T02:00:00Z"),20000));
+        at("2027-01-02T03:00:00Z");
+        balance(closed("2026-12"),-9000,9000,0);
+        assertThat(carryover("2026-12").get("source_month")).isEqualTo("2026-10");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM seller_monthly_settlement WHERE settlement_month='2026-11'",Long.class)).isZero();
+    }
+    @Test void closedMonthsWithoutLedgerAreReadAsCarriedInZeroAndStillHandOverTheirNegativeNet() {
+        PaidOrder september=order(Instant.parse("2026-09-01T00:00:00Z"));sale(september);closed("2026-09");
+        recordRefund.execute(prepareRefund(september));
+        at("2026-11-02T03:00:00Z");closed("2026-10");
+        jdbc.update("DELETE FROM settlement_seller_carryover");
+        balance(adminMonth("2026-09"),0,9000,0);balance(adminMonth("2026-10"),0,0,-9000);
+        JsonNode mine=http("GET","/api/v1/settlements/me/months?month=2026-10",token("usr_seller","CREATOR"),null).body().path("data").path("content").get(0);
+        balance(mine,0,0,-9000);
+        sale(paid(Instant.parse("2026-11-02T02:00:00Z"),5000));
+        at("2026-12-02T03:00:00Z");
+        balance(closed("2026-11"),-9000,0,-4500);
+        assertThat(carryover("2026-11").get("source_month")).isEqualTo("2026-10");
+        assertThat(count("settlement_seller_carryover")).isEqualTo(1);
+    }
+    @Test void concurrentClosingsOfOneMonthWriteOneLedgerRow() throws Exception {
+        sale(order(Instant.parse("2026-09-01T00:00:00Z")));CountDownLatch start=new CountDownLatch(1);
+        List<Future<SellerMonthlySettlement>> calls=new ArrayList<>();
+        try(ExecutorService pool=Executors.newFixedThreadPool(4)) {
+            for(int i=0;i<4;i++) calls.add(pool.submit(() -> { start.await();return close.execute("usr_seller","2026-09"); }));
+            start.countDown();
+            for(Future<SellerMonthlySettlement> call:calls) assertThat(call.get(30,TimeUnit.SECONDS).isClosed()).isTrue();
+        }
+        assertThat(count("settlement_seller_carryover")).isEqualTo(1);
+        assertThat(carryover("2026-09").get("payable")).isEqualTo(9000L);
+    }
+    @Test void closingALaterMonthWhileAnEarlierCloseHoldsItsLockIsRejected() throws Exception {
+        sale(order(Instant.parse("2026-09-01T00:00:00Z")));sale(order(NOW.minusSeconds(20)));
+        at("2026-11-02T03:00:00Z");
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
+        locked.awaitArrival();
+        assertThatThrownBy(() -> close.execute("usr_seller","2026-10")).isInstanceOf(BusinessException.class);
+        locked.release();
+        assertThat(closing.join().isClosed()).isTrue();
+        balance(closed("2026-10"),0,9000,0);
+        assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-09");
     }
     record Reply(int status,JsonNode body) { }
     Reply http(String method,String path,String token,Object body) {

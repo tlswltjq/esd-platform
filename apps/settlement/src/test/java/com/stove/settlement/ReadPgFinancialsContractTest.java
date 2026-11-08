@@ -12,6 +12,7 @@ import com.stove.settlement.core.domain.PgFeeGroup;
 import com.stove.settlement.core.domain.PgFeeRepository;
 import com.stove.settlement.core.domain.PgPostedCostGroup;
 import com.stove.settlement.core.domain.PgTransactionRepository;
+import com.stove.settlement.core.domain.SellerMonthBalance;
 import com.stove.settlement.core.domain.SellerMonthView;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.domain.SettlementTotals;
@@ -34,7 +35,7 @@ class ReadPgFinancialsContractTest {
         month.add(new SettlementTotals(10000,1000,9000,1),NOW);month.close(month.totals(),NOW);
         assertThat(read.month(month).platformNetAmount()).isNull();
         when(reported.summarize(anyList(),anyList())).thenReturn(List.of(new PgPostedCostGroup("seller","2026-10","PAY",1,0,-300,-30)));
-        AdminMonthResponse response=AdminMonthResponse.from(read.month(month));
+        AdminMonthResponse response=AdminMonthResponse.from(read.month(month),SellerMonthBalance.of(month,null));
         assertThat(response.pgFeeAmount()).isEqualTo(330);assertThat(response.platformNetAmount()).isEqualTo(670);
         assertThat(response.salePgFeeVatAmount()).isEqualTo(30);assertThat(response.month().closedAt()).isEqualTo(NOW);
         assertThat(month.totals()).isEqualTo(new SettlementTotals(10000,1000,9000,1));assertThat(month.isClosed()).isTrue();
@@ -42,12 +43,12 @@ class ReadPgFinancialsContractTest {
     @Test void refundOnlyMonthDistinguishesMissingZeroAndPartialFeeReturns() {
         SellerMonthlySettlement month=SellerMonthlySettlement.open("seller","2026-11",NOW);
         month.addRefund(new SettlementTotals(10000,1000,9000,1),NOW);
-        AdminMonthResponse missing=AdminMonthResponse.from(read.month(month));
+        AdminMonthResponse missing=AdminMonthResponse.from(read.month(month),SellerMonthBalance.of(month,null));
         assertThat(missing.refundPgFeeReturnAmount()).isNull();assertThat(missing.refundPgFeeVatReturnAmount()).isNull();
         when(reported.summarize(anyList(),anyList())).thenReturn(List.of(new PgPostedCostGroup("seller","2026-11","REFUND",1,1,0,0)));
         assertThat(read.month(month).platformNetAmount()).isEqualTo(-1000);
         when(reported.summarize(anyList(),anyList())).thenReturn(List.of(new PgPostedCostGroup("seller","2026-11","REFUND",1,1,200,20)));
-        AdminMonthResponse returned=AdminMonthResponse.from(read.month(month));
+        AdminMonthResponse returned=AdminMonthResponse.from(read.month(month),SellerMonthBalance.of(month,null));
         assertThat(returned.pgFeeAmount()).isEqualTo(-220);assertThat(returned.platformNetAmount()).isEqualTo(-780);
         assertThat(returned.refundPgFeeVatReturnAmount()).isEqualTo(20);assertThat(returned.pendingPgCostCount()).isZero();
     }

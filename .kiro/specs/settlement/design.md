@@ -16,6 +16,7 @@
 - **중복/출처 재사용 차단.** OrderPaid 13개 값 전체 비교와 업무 유일 제약(orderNo·eventId·requestEventId·paymentResultEventId·paymentId)으로 중복 생성과 출처 재사용을 막는다.
 - **원승인 외부 부담 혜택 보존.** PortOne 원승인의 총액·실결제·외부 혜택을 보존하고 주문 금액으로 배분한다(`TOSSPAY_EXTERNAL_BENEFIT_V1`). 현재 TEST 비용은 미확정이다. (결정 40)
 - **전액 환불 원배분 상계·반영 월.** 원매출 배분을 그대로 음수 상계하고(`FULL_REFUND_REVERSE_ORIGINAL_V1`, 결정 41), 확인 월 OPEN이면 그 월, CLOSED이면 현재 OPEN 월에 반영한다(`REFUND_CONFIRMED_MONTH_V1`, 결정 42).
+- **판매자 음수 순액 이월·마감 순서.** 판매자 월은 오래된 월부터 마감한다(이전 월에 OPEN 행이 있으면 409). 마감 때 직전 CLOSED 월의 `carriedOut`을 받아 `payable = max(0, 순액 + carriedIn)`을 확정하고 남은 음수는 `carriedOut`으로 넘긴다. 행 없는 월은 건너뛴다. 이월은 불변 원장(`settlement_seller_carryover`)에 마감 트랜잭션 안에서 한 번만 쓴다. 송금·청구·회수는 하지 않는다. ([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)·결정 130)
 - **PG 비용의 업무 반영 월 연결·지급일 대사.** 검증된 PG 정본 거래 비용을 저장된 반영 월에 한 번 연결하고, 월 금융 요약은 반영 월, PG 대사는 보고 지급일(`dueDate`) 기준으로 조회한다. (결정 43·45)
 - **테스트 경계.** 상시 모의 PG 서비스를 복원하지 않고 루프백 HTTP 응답 서버·명시적 시험 자료로 계약을 검증한다. 운영 TEST 허용 계약을 테스트 편의로 확장하지 않는다. (결정 46)
 
@@ -30,6 +31,7 @@
 | `pg_receipt` / `pg_receipt_item` (`PgReceipt`) | SIMULATED 공급자 명세 헤더·불변 항목, 세 합계·건수, 대사 상태(REPORTED_PAID/MISMATCH/SIMULATED_RECEIVED)·운영자 sub·reportedAt·lastCheckedAt·simulatedReceivedAt |
 | `settlement_refund` (+ 취소 근거) (`SettlementRefund`) | 최초 금융 확인/접수 시각, 환불/시도/요청/원매출 식별자, 당시 판매자/상품 스냅샷, 원래 배분 정책·금액, 두 정책 ID, 확인 월·반영 월·선택 사유, 독립 조회한 취소별 근거. 불변 |
 | `settlement_pg_statement` (+ `_page`·`_entry`·`_item`) | V11 토스페이 수집본: 헤더(가맹점/환경·상점/채널·검증 매핑 여부, 조회 기준/일자, 원본 fingerprint·합계·최초 수집자/시각·대사 상태), 페이지(요청/다음 커서·응답 원문), 정본 거래 entry(가맹점+환경+거래 ID별 불변 금액·수수료·VAT·지급일), item(수집본↔정본 연결·대사 코드·결제 연결) |
+| `settlement_seller_carryover` (`SellerCarryover`) | V13. `(sellerSubject, settlementMonth)` 유일, 마감 시점 `netSellerPayoutAmount`·`carriedIn`·`payable`·`carriedOut`·출처 월(`sourceMonth`, 직전 CLOSED 월 또는 NULL)·createdAt. 마감 트랜잭션에서 한 번 삽입, 불변 |
 | `settlement_pg_cost_posting` | `source_entry_id`(PG 정본 거래, 유일), 원매출·선택적 환불·판매자·업무 반영 월·`LINKED_BUSINESS_MONTH_V1`·검증 명세 ID·최초 검증 시각·`check_code` |
 | 공통 `processed_event` | Kafka 매출/환불 접수 Inbox. 대소문자 구분 비교 |
 
@@ -45,6 +47,12 @@ pgFeeAmount        = 외부 PG가 거래별로 확정·보존한 비용 (현재 
 platformNetAmount  = platformFeeAmount − pgFeeAmount        (음수 허용)
 
 paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
+
+판매자 월 마감(결정 121·130):
+carriedIn  = M 이전 마지막 CLOSED 월의 carriedOut (없으면 0, 행 없는 월은 건너뜀, ≤ 0)
+total      = netSellerPayoutAmount + carriedIn
+payable    = max(0, total)
+carriedOut = min(0, total)
 ```
 
 | 정책 | 값 |
@@ -55,7 +63,7 @@ paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
 | 환불 반영 월 | `REFUND_CONFIRMED_MONTH_V1` (확인 월 OPEN→그 월, CLOSED→현재 OPEN 월) |
 | PG 비용 월 연결 | `LINKED_BUSINESS_MONTH_V1` (저장된 반영 월 사용) |
 
-금액은 모두 정수 long·KRW. 음수 플랫폼 잔여액·음수 월 순액은 자동 이월·계좌 회수·송금 실행을 뜻하지 않는다.
+금액은 모두 정수 long·KRW. 판매자 음수 월 순액은 마감 때 `carriedOut`으로 다음 마감에 넘길 뿐 계좌 회수·청구·송금을 뜻하지 않는다. `payable`은 지급 기준액이며 지급 완료가 아니다. 음수 플랫폼 잔여액은 이월하지 않는다.
 
 ## API 계약
 
@@ -69,7 +77,7 @@ paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
 | GET | `/api/v1/settlements/sales` | ADMIN 전체/판매자별 매출. `sellerSubject`·PG 비용·플랫폼 잔여액·정책 포함, `sale.refund`는 본인 조회와 같은 연결 |
 | GET | `/api/v1/settlements/months` | ADMIN 월 금융 요약. 반영 월의 매출 비용·환불 반환 조합. 미확인 시 NULL |
 | GET | `/api/v1/settlements/refunds` · `/{refundId}` | ADMIN 환불 목록(필터·정책/출처 요약)·상세(취소별 근거) |
-| POST | `/api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | ADMIN 지난 월 마감 |
+| POST | `/api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | ADMIN 지난 월 마감. 같은 판매자의 이전 월에 OPEN 행이 있으면 409 |
 | POST | `/api/v1/settlements/pg-transactions/{paymentId}/refresh` | ADMIN 접수한 거래의 PG 근거 재조회·확인 비용 1회 저장(R10). 본문 없음, 다른 비용 409 |
 | POST·GET | `/api/v1/settlements/pg-receipts` (+ `/{providerSettlementId}`, `/reconcile`) | ADMIN SIMULATED 명세 수집·접수·목록·상세·재대사 |
 | POST·GET | `/api/v1/settlements/pg-statements` (+ `/{id}`, `/items`, `/pages/{position}`, `/reconcile`) | ADMIN 토스페이 정산 전체 페이지 수집·원본/거래·대사·재대사 |
@@ -87,6 +95,7 @@ paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
 | `confirmedPgFeeAmount` · `salePgFeeAmount` · `pendingPgCostCount` | 확인된 승인 비용 부분합 / 매출 비용 전체 확인 시 총액 / 미확인 건수(환불 반환 미확인 포함) |
 | `refundAmount` · `refundedPlatformFeeAmount` · `refundedSellerPayoutAmount` · `refundCount` | 양수 환불 합계 |
 | `netPaidAmount` · `netPlatformFeeAmount` · `netSellerPayoutAmount` | 매출 총합 − 환불 합계. 음수 허용 |
+| `carriedIn` · `payable` · `carriedOut` | CLOSED 월: 직전 CLOSED 월에서 받은 이월(≤ 0) / 지급 기준액(≥ 0) / 다음 마감에 넘기는 이월(≤ 0). 이월 원장이 없는 옛 CLOSED 월은 `carriedIn = 0`, `payable = max(0, 순액)`, `carriedOut = min(0, 순액)`. OPEN 월은 확정 전이라 세 값 모두 `null` |
 | `refundPgFeeReturnAmount` · `confirmedRefundPgFeeReturnAmount` · 승인/반환 VAT · `confirmedNetPgCostAmount` | 환불 비용 반환과 VAT, 확인된 순비용 |
 | `pgFeeAmount` · `platformNetAmount` | 매출 비용(수수료+VAT) − 확인된 반환 / 환불 조정 후 플랫폼 몫 − 순비용. 미확인이 하나라도 있으면 NULL |
 
@@ -143,16 +152,17 @@ Settlement는 업무 이벤트·Outbox를 발행하지 않는다(별도 정산 �
 ## 처리 흐름 요약
 
 - **매출 접수(RecordPaidSale):** 기존 원장 조회 → (신규) PG 승인/비용·Catalog 소유자 직접 조회·대조 → 월 행 생성/잠금·마감·지연 규칙으로 반영 월 확정 → Inbox·SettlementSale·OPEN 월 합계 원자 커밋.
-- **월 마감(CloseSellerMonth):** 이전 월만, 월 행 잠금, 원장 합계·건수 대조 후 CLOSED·closedAt 확정. 재요청은 최초 결과 반환.
+- **월 마감(CloseSellerMonth):** 이전 월만, 같은 판매자의 더 이전 OPEN 행이 있으면 409, 월 행 잠금, 원장 합계·건수 대조 후 CLOSED·closedAt 확정, 같은 트랜잭션에서 직전 CLOSED 월의 이월을 받아 이월 원장 한 행 삽입. 재요청은 최초 결과 반환(원장 행 추가 없음). 동시 마감은 월 행 잠금으로 순서가 정해지고, 유일 제약이 두 번째 행을 막는다.
 - **PG 수령(ReceivePgSettlement/ReconcilePgReceipt):** 명세 접수(REPORTED_PAID) → 별도 트랜잭션 재대사 → 전 항목 일치 시 SIMULATED_RECEIVED.
 - **환불(RecordConfirmedRefund):** 금융 확인 소비 → 원매출·PG 취소 직접 GET 대조 → 배분 A·월 정책 A 적용 → Inbox·환불 원장·월 환불 합계 원자 저장.
 - **PG 비용(ReconcilePgStatement/ReconcilePendingPgStatements):** 토스페이 수집(트랜잭션 밖, 원본 선행 커밋) → 정본 거래 잠금·대조·비용 연결 원자 저장 → 주기 재대사(PG 재호출 없음).
 
 ## DB 전환과 보존
 
-- Settlement V1~V5 보존, V6(매출 2개 테이블)·V7(PG 명세 2개)·V8(책임 분리·legacy 열 이름 변경)·V9(PgFunding CHECK)·V10(환불 원장)·V11(토스페이 수집)·V12(PG 비용 연결)로 확장.
+- Settlement V1~V5 보존, V6(매출 2개 테이블)·V7(PG 명세 2개)·V8(책임 분리·legacy 열 이름 변경)·V9(PgFunding CHECK)·V10(환불 원장)·V11(토스페이 수집)·V12(PG 비용 연결)·V13(판매자 이월 원장)으로 확장.
 - Payment V12는 `purchase_payment` 비용 스냅샷만 추가하고, 외부 모의 PG는 자체 Flyway로 공급자 테이블을 만든다. 플랫폼 Flyway와 스키마/이력을 공유하지 않는다.
 - 과거 열은 nullable `legacy_*`로 보존하고 현재 모델은 읽거나 갱신하지 않는다. V9 CHECK는 전부 없음/전부 검증된 PgFunding 구성만 허용하며, 과거 행에 실결제·혜택·외부 부담을 소급 생성하지 않는다.
+- **V13 적용 절차.** V13은 빈 새 테이블 하나(`CREATE TABLE` 한 문장, CHECK·유일 제약 포함)만 만들고 기존 테이블을 바꾸거나 채우지 않는다. 그래서 기존 행이 새 CHECK에 걸려 이행이 중간에 멈추는 경우가 없다. MySQL 8의 `CREATE TABLE`은 원자 DDL이라 실패하면 테이블이 남지 않는다. 실패 시 Flyway 이력에 실패 행이 남으므로 원인을 고친 뒤 `flyway repair`로 그 행을 지우고 다시 `migrate`한다. 적용 전 마감한 월은 원장 행이 없고 `carriedIn = 0`으로 읽는다(결정 130). 적용 뒤 첫 마감은 직전 CLOSED 월이 옛 월이면 그 월의 `min(0, 순액)`을 이월로 받는다.
 
 ## 검증 범위와 한계
 
