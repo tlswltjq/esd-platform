@@ -36,6 +36,16 @@ public class RefundExecution {
                 && !at.isBefore(deadline) ? deadline : null;
     }
 
+    /** Money is confirmed by a full-cancellation lookup, but no PG response has tied it to this attempt yet. */
+    public boolean unattributed() {
+        return status == RefundExecutionStatus.PENDING && refundConfirmedAt != null && "PG_QUERY_UNATTRIBUTED".equals(refundConfirmationSource);
+    }
+
+    /** Targets of the operator closure (decision 127): unconfirmed past the original window, or confirmed but unattributed. */
+    public boolean closableAt(Instant at) {
+        return confirmationDelayedSince(at) != null || unattributed();
+    }
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false, unique = true, updatable = false, length = 36)

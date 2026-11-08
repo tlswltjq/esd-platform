@@ -7,9 +7,11 @@ import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
 import com.stove.payment.adapter.pg.PortOneRefundCancellationGateway;
 import com.stove.common.messaging.outbox.OutboxRecorder;
+import com.stove.payment.core.domain.RefundClosureRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.RefundPaymentLookup;
 import com.stove.payment.core.port.RefundCancellationGateway;
+import com.stove.payment.core.service.CloseRefundDelay;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.RecordRefundPreparation;
@@ -74,6 +76,14 @@ public class PortOneConfiguration {
         RestClient client = builder.clone().baseUrl(properties.baseUrl().toString())
                 .defaultHeader("Authorization", "PortOne " + properties.apiSecret()).requestFactory(factory).build();
         return new PortOneRefundPaymentLookup(client, properties.storeId(), properties.channelKey());
+    }
+
+    /** The operator closure takes the lookup worker's lease (decision 127), so both use one lease length. */
+    @Bean CloseRefundDelay closeRefundDelay(PaymentRepository payments, RefundExecutionRepository executions, RefundClosureRepository closures,
+            RefundPaymentLookup lookup, OutboxRecorder outbox, PlatformTransactionManager transactions, Clock refundReceptionClock,
+            PortOneProperties properties) {
+        return new CloseRefundDelay(payments, executions, closures, lookup, outbox, refundReceptionClock,
+                RefundLookupConfiguration.lookupLease(properties), transactions);
     }
 
     @Bean ReconcileRefundPayment reconcileRefundPayment(PaymentRepository payments, RefundExecutionRepository executions,

@@ -12,13 +12,14 @@ public record RefundDelayResponse(String attemptId, String refundId, String orde
         Instant automaticCancellationStoppedAt, Instant cancellationBalanceChangedAt, String activeCancellationHoldId,
         String activeCancellationHoldReason, PgRefundCancellationReceipt.State receiptState, Instant receiptObservedAt,
         Instant nextLookupAt, Instant lookupWakeAt, Instant lookupLeaseUntil,
-        Instant nextCancellationRetryAt, Instant cancellationLeaseUntil) {
+        Instant nextCancellationRetryAt, Instant cancellationLeaseUntil, RefundClosureRecordResponse closure) {
     public static RefundDelayResponse from(RefundDelayView view) {
         return new RefundDelayResponse(view.attemptId(), view.refundId(), view.orderNo(), view.paymentId(), view.amount(), view.currency(),
                 view.receivedAt(), view.firstPreparedAt(), view.delayThresholdAt(), view.asOf(), view.currentlyDelayed(), view.executionStatus(),
                 view.refundConfirmedAt(), view.refundConfirmationSource(), view.reconciliationRequired(), view.failureConfirmedAt(),
                 view.automaticCancellationStoppedAt(), view.cancellationBalanceChangedAt(), view.activeCancellationHoldId(),
                 view.activeCancellationHoldReason(), view.receiptState(), view.receiptObservedAt(), view.nextLookupAt(), view.lookupWakeAt(),
-                view.lookupLeaseUntil(), view.nextCancellationRetryAt(), view.cancellationLeaseUntil());
+                view.lookupLeaseUntil(), view.nextCancellationRetryAt(), view.cancellationLeaseUntil(),
+                view.closure() == null ? null : RefundClosureRecordResponse.from(view.closure()));
     }
 }
