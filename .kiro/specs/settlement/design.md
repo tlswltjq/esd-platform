@@ -16,7 +16,7 @@
 - **중복/출처 재사용 차단.** OrderPaid 13개 값 전체 비교와 업무 유일 제약(orderNo·eventId·requestEventId·paymentResultEventId·paymentId)으로 중복 생성과 출처 재사용을 막는다.
 - **원승인 외부 부담 혜택 보존.** PortOne 원승인의 총액·실결제·외부 혜택을 보존하고 주문 금액으로 배분한다(`TOSSPAY_EXTERNAL_BENEFIT_V1`). 현재 TEST 비용은 미확정이다. (결정 40)
 - **전액 환불 원배분 상계·반영 월.** 원매출 배분을 그대로 음수 상계하고(`FULL_REFUND_REVERSE_ORIGINAL_V1`, 결정 41), 확인 월 OPEN이면 그 월, CLOSED이면 현재 OPEN 월에 반영한다(`REFUND_CONFIRMED_MONTH_V1`, 결정 42).
-- **판매자 음수 순액 이월·마감 순서.** 판매자 월은 오래된 월부터 마감한다(이전 월에 OPEN 행이 있으면 409). 마감 때 직전 CLOSED 월의 `carriedOut`을 받아 `payable = max(0, 순액 + carriedIn)`을 확정하고 남은 음수는 `carriedOut`으로 넘긴다. 행 없는 월은 건너뛴다. 이월은 불변 원장(`settlement_seller_carryover`)에 마감 트랜잭션 안에서 한 번만 쓴다. 송금·청구·회수는 하지 않는다. ([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)·결정 130)
+- **판매자 음수 순액 이월·마감 순서.** 판매자 월은 오래된 월부터 마감한다(이전 월에 OPEN 행이 있으면 409). 마감 때 직전 CLOSED 월의 `carriedOut`을 받아 `payable = max(0, 순액 + carriedIn)`을 확정하고 남은 음수는 `carriedOut`으로 넘긴다. 행 없는 월은 건너뛴다. 이월은 불변 원장(`settlement_seller_carryover`)에 마감 트랜잭션 안에서 한 번만 쓴다. 송금·청구·회수는 하지 않는다. ([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)·[결정 130](../../../docs/decisions.md#seller-close-order-carryover))
 - **PG 비용의 업무 반영 월 연결·지급일 대사.** 검증된 PG 정본 거래 비용을 저장된 반영 월에 한 번 연결하고, 월 금융 요약은 반영 월, PG 대사는 보고 지급일(`dueDate`) 기준으로 조회한다. (결정 43·45)
 - **테스트 경계.** 상시 모의 PG 서비스를 복원하지 않고 루프백 HTTP 응답 서버·명시적 시험 자료로 계약을 검증한다. 운영 TEST 허용 계약을 테스트 편의로 확장하지 않는다. (결정 46)
 
@@ -162,7 +162,7 @@ Settlement는 업무 이벤트·Outbox를 발행하지 않는다(별도 정산 �
 - Settlement V1~V5 보존, V6(매출 2개 테이블)·V7(PG 명세 2개)·V8(책임 분리·legacy 열 이름 변경)·V9(PgFunding CHECK)·V10(환불 원장)·V11(토스페이 수집)·V12(PG 비용 연결)·V13(판매자 이월 원장)으로 확장.
 - Payment V12는 `purchase_payment` 비용 스냅샷만 추가하고, 외부 모의 PG는 자체 Flyway로 공급자 테이블을 만든다. 플랫폼 Flyway와 스키마/이력을 공유하지 않는다.
 - 과거 열은 nullable `legacy_*`로 보존하고 현재 모델은 읽거나 갱신하지 않는다. V9 CHECK는 전부 없음/전부 검증된 PgFunding 구성만 허용하며, 과거 행에 실결제·혜택·외부 부담을 소급 생성하지 않는다.
-- **V13 적용 절차.** V13은 빈 새 테이블 하나(`CREATE TABLE` 한 문장, CHECK·유일 제약 포함)만 만들고 기존 테이블을 바꾸거나 채우지 않는다. 그래서 기존 행이 새 CHECK에 걸려 이행이 중간에 멈추는 경우가 없다. MySQL 8의 `CREATE TABLE`은 원자 DDL이라 실패하면 테이블이 남지 않는다. 실패 시 Flyway 이력에 실패 행이 남으므로 원인을 고친 뒤 `flyway repair`로 그 행을 지우고 다시 `migrate`한다. 적용 전 마감한 월은 원장 행이 없고 `carriedIn = 0`으로 읽는다(결정 130). 적용 뒤 첫 마감은 직전 CLOSED 월이 옛 월이면 그 월의 `min(0, 순액)`을 이월로 받는다.
+- **V13 적용 절차.** V13은 빈 새 테이블 하나(`CREATE TABLE` 한 문장, CHECK·유일 제약 포함)만 만들고 기존 테이블을 바꾸거나 채우지 않는다. 그래서 기존 행이 새 CHECK에 걸려 이행이 중간에 멈추는 경우가 없다. MySQL 8의 `CREATE TABLE`은 원자 DDL이라 실패하면 테이블이 남지 않는다. 실패 시 Flyway 이력에 실패 행이 남으므로 원인을 고친 뒤 `flyway repair`로 그 행을 지우고 다시 `migrate`한다. 적용 전 마감한 월은 원장 행이 없고 `carriedIn = 0`으로 읽는다([결정 130](../../../docs/decisions.md#seller-close-order-carryover)). 적용 뒤 첫 마감은 직전 CLOSED 월이 옛 월이면 그 월의 `min(0, 순액)`을 이월로 받는다.
 
 ## 검증 범위와 한계
 

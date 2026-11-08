@@ -55,7 +55,7 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 5. IF 늦은 거래의 `saleMonth`가 이미 CLOSED이면 THEN 시스템 SHALL 접수 트랜잭션 시점의 현재 KST 월에 반영하고 `saleMonth`를 보존한다.
 6. WHERE 둘 이상의 월 행을 잠그는 맥락에서 THE 시스템 SHALL 판매자·월의 일정한 순서로 잠근다.
 7. THE 월 마감 SHALL PG 수령 확인·PG 비용 확정과 독립적으로 수행하며, CLOSED를 수령 완료나 판매자 지급 완료로 해석하지 않는다.
-8. IF 같은 판매자의 M보다 이전 월에 OPEN 행이 있는데 M 마감을 요청하면 THEN 시스템 SHALL 409(`CONFLICT`, "지난 월만 마감"과 같은 오류 모양)로 거절하고 아무 행도 바꾸지 않는다. 행이 없는 월은 마감 순서 검사에서 건너뛴다(결정 130).
+8. IF 같은 판매자의 M보다 이전 월에 OPEN 행이 있는데 M 마감을 요청하면 THEN 시스템 SHALL 409(`CONFLICT`, "지난 월만 마감"과 같은 오류 모양)로 거절하고 아무 행도 바꾸지 않는다. 행이 없는 월은 마감 순서 검사에서 건너뛴다([결정 130](../../../docs/decisions.md#seller-close-order-carryover)).
 9. WHEN 판매자 월 M을 마감하면 THEN 시스템 SHALL 같은 트랜잭션에서 `carriedIn` = M보다 이전의 마지막 CLOSED 월의 `carriedOut`(없으면 0, 행 없는 월은 건너뜀)으로 두고, `netSellerPayoutAmount + carriedIn`이 음수면 `payable = 0`·`carriedOut =` 그 음수, 0 이상이면 `payable =` 그 값·`carriedOut = 0`으로 이월 원장에 한 행을 쓴다([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)). 실제 송금·청구·회수는 하지 않는다.
 10. THE 이월 원장 SHALL `(sellerSubject, settlementMonth)`마다 최대 한 행이며 삽입 뒤 바꾸지 않는다. 같은 월 재마감·동시 마감은 새 행을 만들지 않는다. 원장 행이 없는 옛 CLOSED 월(V13 이전 마감)은 `carriedIn = 0`으로 읽고, 다음 월 마감은 그 월의 `min(0, 순액)`을 이월로 받는다.
 
