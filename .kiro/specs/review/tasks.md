@@ -9,8 +9,8 @@
 
 ## 남음 (일반화 공백)
 
-- [ ] 심사 목록/상태 조회의 사용성 개선 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Review 행)
-- [ ] 진행 중 요청 철회/보류 시 창작자 통지 계약 — G4
+- [ ] [결정 필요] 심사 목록/상태 조회의 사용성 개선 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Review 행)
+- [ ] [결정 필요] 진행 중 요청 철회/보류 시 창작자 통지 계약 — G4
 
 ## 범위 밖(후속)
 

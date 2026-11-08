@@ -17,9 +17,9 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] 공개본 변경 이력의 조회 계약·사용성 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) Catalog 행 "공개본 변경 이력")
-- [ ] 허용 지연 SLA와 실제 운영 경보·화면 — G4
-- [ ] 공유 환경의 정책/계정 준비와 실제 배포 — G4 이후
+- [ ] [결정 필요] 공개본 변경 이력의 조회 계약·사용성 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) Catalog 행 "공개본 변경 이력")
+- [ ] [결정 필요] 허용 지연 SLA와 실제 운영 경보·화면 — G4
+- [ ] [외부 대기] 공유 환경의 정책/계정 준비와 실제 배포 — G4 이후
 - [ ] G4 전체 완료 판정(실제 운영 여정 전체) — G4
 
 ## 범위 밖(후속)
