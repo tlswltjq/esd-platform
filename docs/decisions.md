@@ -1232,7 +1232,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 형식 갖춘 4xx는 바로 멈춰")
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 환불 취소 POST가 정상 JSON에 type이 있는 4xx(400·409·그 밖)를 받으면 자동 POST를 멈추고 새 중단 사유(가칭 `PG_REQUEST_REJECTED`)와 응답 상태·type을 남긴다. 401·404는 결정 29대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정으로 계속 재송신, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 지금대로 잔액 변화 차단, 403·`INVALID_REQUEST`는 지금대로다. 운영자는 3시간 안에서 재개(R7.16)하거나 언제든 결정 128 실패 종결을 쓴다. 조회는 계속해 늦은 성공을 놓치지 않는다. R7.11·R7.15 문구를 고친다. 502 `PG_PROVIDER`의 분류와 실제 PortOne 오류 타입 확인은 전용 테스트 가맹점 뒤로 미룬다. `INVALID_REQUEST` 본문은 같은 시도 안에서 고치지 않는다(R4.4·R7.10, 같은 키에 다른 본문은 멱등 충돌). 원인을 고친 뒤 결정 128 실패 종결 → 고객 재시도(새 attemptId·본문·3시간 창)로 잇고 운영 절차서에 적는다.
 - 구분: 추천 수용
-- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현 [PR #__PR__](https://github.com/tlswltjq/esd-platform/pull/__PR__)(중단 사유 `PG_REQUEST_REJECTED`·V40 상태/type, `INVALID_REQUEST` 정정 절차서, D-048·D-049), 근거 색인 2026-11-08 payment 결정 133 행. 저장 본문·설정 불일치 환불은 Payment `tasks.md` `[결정 필요]`로 남김
 
 <a id="refund-failure-customer-notice"></a>
 ## 134. 실패로 닫은 환불의 새 시도는 고객 재신청으로만 만들고, 고객 환불 응답에 실패 사유와 재신청 안내를 보인다
