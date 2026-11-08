@@ -198,6 +198,38 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         SettlementRefund refund=recordRefund.execute(delayed);
         assertThat(refund.getRefundMonth()).isEqualTo("2026-09");assertThat(refund.getSettlementMonth()).isEqualTo(closed?"2026-10":"2026-09");
     }
+    @Test void salesOfAClosedMonthShowTheirRolledOverRefundLinkForCreatorAndAdministrator() {
+        PaidOrder refundedOrder=order(Instant.parse("2026-09-01T00:00:00Z"));sale(refundedOrder);
+        PaidOrder keptOrder=order(Instant.parse("2026-09-02T00:00:00Z"));sale(keptOrder);
+        close.execute("usr_seller","2026-09");
+        ConfirmedRefund fresh=prepareRefund(refundedOrder);
+        ConfirmedRefund confirmed=new ConfirmedRefund(fresh.eventId(),Instant.parse("2026-09-29T00:00:00Z"),fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),
+                fresh.orderNo(),fresh.paymentId(),fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),fresh.cancellationIds());
+        refundProvider.put(confirmed.refundId(),proof(provider.get(refundedOrder.paymentId()),confirmed));
+        SettlementRefund refund=recordRefund.execute(confirmed);
+        assertThat(refund.getSettlementMonth()).isEqualTo("2026-10");
+
+        JsonNode mine=http("GET","/api/v1/settlements/me/sales?month=2026-09",token("usr_seller","CREATOR"),null).body().path("data").path("content");
+        assertThat(mine.size()).isEqualTo(2);
+        JsonNode kept=mine.get(0);JsonNode refunded=mine.get(1);
+        assertThat(kept.path("orderNo").asText()).isEqualTo(keptOrder.orderNo());assertThat(kept.path("refund").isNull()).isTrue();
+        assertThat(refunded.path("orderNo").asText()).isEqualTo(refundedOrder.orderNo());
+        assertThat(refunded.path("settlementMonth").asText()).isEqualTo("2026-09");
+        JsonNode link=refunded.path("refund");
+        assertThat(link.path("refundId").asText()).isEqualTo(confirmed.refundId());
+        assertThat(link.path("refundMonth").asText()).isEqualTo("2026-09");assertThat(link.path("settlementMonth").asText()).isEqualTo("2026-10");
+        assertThat(link.path("monthReason").asText()).isEqualTo("CLOSED_MONTH_ROLLOVER");
+        assertThat(Instant.parse(link.path("confirmedAt").asText())).isEqualTo(confirmed.occurredAt());
+        assertThat(mine.toString()).doesNotContain("buyerSubject","paymentId","cancellationIds","sellerSubject");
+        JsonNode linkedRefund=http("GET","/api/v1/settlements/me/refunds?month=2026-10",token("usr_seller","CREATOR"),null).body().path("data").path("content").get(0);
+        assertThat(linkedRefund.path("refundId").asText()).isEqualTo(link.path("refundId").asText());
+        assertThat(linkedRefund.path("orderNo").asText()).isEqualTo(refundedOrder.orderNo());
+        assertThat(http("GET","/api/v1/settlements/me/sales",token("usr_other","CREATOR"),null).body().path("data").path("totalElements").asLong()).isZero();
+
+        JsonNode admin=http("GET","/api/v1/settlements/sales?sellerSubject=usr_seller&month=2026-09",token("usr_admin","ADMIN"),null).body().path("data").path("content");
+        assertThat(admin.get(0).path("sale").path("refund").isNull()).isTrue();
+        assertThat(admin.get(1).path("sale").path("refund")).isEqualTo(link);
+    }
     @Test void concurrentRefundDeliveriesPostOneReversal() throws Exception {
         PaidOrder input=order();sale(input);ConfirmedRefund confirmed=prepareRefund(input);
         try(ExecutorService pool=Executors.newFixedThreadPool(4)) {
