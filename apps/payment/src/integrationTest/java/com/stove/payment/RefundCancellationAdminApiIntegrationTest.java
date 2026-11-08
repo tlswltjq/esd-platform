@@ -95,7 +95,7 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
     /** Decision 133: a formal rejection is listed and detailed like the other holds, with its response status and error type. */
     @Test void aFormalRejectionHoldShowsItsStatusAndTypeInTheListAndDetailAndIsResumable() {
         // Decision 133 sets no format or length on the type: the received value is stored and shown whole (PR #168 R1).
-        String type = "payment_not_paid: " + "x".repeat(300);
+        String type = "결제_불가: " + "가".repeat(300); // non-ASCII so the length is in characters, not UTF-8 bytes
         Fixture fixture = held(false, new PgCancellationRejection(409, type));
         Response list = http("GET", ROOT, null, admin());
         assertThat(list.status()).isEqualTo(200);

@@ -8,6 +8,7 @@ import com.stove.payment.core.domain.RefundCancellationHold;
 import com.stove.payment.core.domain.RefundCancellationHoldLookup;
 import com.stove.payment.core.domain.RefundCancellationHoldQuery;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
+import com.stove.payment.core.domain.RefundCancellationHoldSummary;
 import com.stove.payment.core.domain.RefundCancellationHoldView;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;
@@ -27,28 +28,31 @@ public class ReadRefundCancellationHolds {
     private final RefundCancellationHoldRepository holds;
     private final Clock clock;
 
+    /** List rows carry only the type preview and length; the full type is in {@link #read} (PR #168 R5). */
     public Page<RefundCancellationHoldView> search(RefundCancellationHoldQuery query) {
         if (query == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
         Instant at = clock.instant();
         return holds.findForAdministration(query.activeOnly(), PageRequest.of(query.page(), query.size(), Sort.by("observedAt", "id")))
-                .map(hold -> view(hold, at));
+                .map(hold -> view(hold, null, at));
     }
 
     public RefundCancellationHoldView read(RefundCancellationHoldLookup query) {
         if (query == null) throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        return view(holds.findByHoldId(query.holdId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)), clock.instant());
+        RefundCancellationHold hold = holds.findByHoldId(query.holdId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        return view(RefundCancellationHoldSummary.of(hold), hold.getRejectionType(), clock.instant());
     }
 
-    private RefundCancellationHoldView view(RefundCancellationHold hold, Instant at) {
-        RefundExecution execution = executions.findByAttemptId(hold.getAttemptId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    private RefundCancellationHoldView view(RefundCancellationHoldSummary hold, String rejectionType, Instant at) {
+        RefundExecution execution = executions.findByAttemptId(hold.attemptId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         Payment payment = payments.findByPaymentId(execution.getPaymentId()).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!"PORTONE_TEST".equals(payment.getProvider())) throw new BusinessException(ErrorCode.NOT_FOUND);
-        boolean resumable = hold.isActivated() && hold.getResumeRequestId() == null && !at.isBefore(hold.getObservedAt())
-                && execution.canResumeCancellation(hold.getHoldId(), at);
-        return new RefundCancellationHoldView(hold.getHoldId(), hold.getAttemptId(), execution.getRefundId(), execution.getOrderNo(),
-                execution.getPaymentId(), execution.getAmount(), execution.getCurrency(), hold.getReason(), hold.getRejectionStatus(), hold.getRejectionType(), hold.getObservedAt(), hold.isActivated(),
-                execution.isCurrentCancellationHold(hold.getHoldId()), resumable, execution.getFirstCancellationPreparedAt(),
+        boolean resumable = hold.activated() && hold.resumeRequestId() == null && !at.isBefore(hold.observedAt())
+                && execution.canResumeCancellation(hold.holdId(), at);
+        return new RefundCancellationHoldView(hold.holdId(), hold.attemptId(), execution.getRefundId(), execution.getOrderNo(),
+                execution.getPaymentId(), execution.getAmount(), execution.getCurrency(), hold.reason(), hold.rejectionStatus(), rejectionType,
+                hold.rejectionTypePreview(), hold.rejectionTypeLength(), hold.observedAt(), hold.activated(),
+                execution.isCurrentCancellationHold(hold.holdId()), resumable, execution.getFirstCancellationPreparedAt(),
                 execution.cancellationResumeDeadline(), execution.getStatus(), execution.getRefundConfirmedAt(),
-                hold.getResumeRequestId() == null ? null : hold.receipt(), hold.getOperatorSubject(), hold.getResumeNote());
+                hold.receipt(), hold.operatorSubject(), hold.resumeNote());
     }
 }
