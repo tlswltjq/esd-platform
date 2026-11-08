@@ -145,6 +145,7 @@ public class ResolvePaymentApproval {
             if (current==null) return;
         }
         if (completeObservation(id,token,current,observed)) return;
+        if (holdAfterConfirmWindow(id,token,observed)) return;
         if (observed.state()!=ApprovalObservation.State.READY || current.isPostStopped()) return;
         PaymentApproval dispatch=locked(id,(payment,approval)->{
             if (!approval.owns(token,now())) return null;
@@ -180,6 +181,14 @@ public class ResolvePaymentApproval {
         else if (state==ApprovalObservation.State.CANCELLED) holdForCancellation(id,token);
         else if (state==ApprovalObservation.State.PENDING) stop(id,token,"PG_PENDING_AT_ORDER_EXPIRY");
         else expireRequested(id,token);
+    }
+    /**
+     * Right after a lookup, an admitted approval past its confirm window with the PG still PENDING or READY is held with
+     * CONFIRM_WINDOW_EXPIRED (decision 124), so it joins the existing hold list, gauge, interval and closure flow.
+     */
+    private boolean holdAfterConfirmWindow(String id,String token,ApprovalObservation observed) {
+        Boolean held=locked(id,(payment,approval)->approval.owns(token,now()) && approval.holdAfterConfirmWindow(observed,now()));
+        return Boolean.TRUE.equals(held);
     }
     private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
         ApprovalObservation observation;

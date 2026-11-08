@@ -1109,7 +1109,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — "A-D 좀 더 쉽게 설명해줘"라고 설명을 요청한 뒤 고른 선택지: "C로 해, 31분 대기 포함")
 - 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 30분 안 조합은 기존 야간 흉내 서버 작업에 넣는다. 기한을 넘는 세 조합은 시작할 때 주문을 함께 만들고 31분 대기 한 번으로 묶은 별도 야간 작업(제한 60분)에 둔다. 두 작업 모두 PR CI에는 넣지 않으므로 실패는 다음 날 알게 된다. PAY_PENDING이 3시간을 넘겨 조회만 계속하는 조합은 통합 테스트로 인정한다. (2026-11-08 정정: 설명 때 근거로 든 `PaymentApprovalIntegrationTest:220-227`은 3시간 경계에서 PG가 READY인 경우만 확인한다. PAY_PENDING으로 3시간을 넘기는 통합 테스트는 없어서 새로 더한다. AI 설명의 사실 오류이며 선택의 방향은 바뀌지 않는다) 흉내 서버에는 같은 paymentId 다중 시도, PAY_PENDING 유지 뒤 PAID/FAILED 전환, confirm 400/403 거절 주입을 더한다(검증 도구만).
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다(D-044 기한 여정 추가는 남음)
 
 <a id="seller-negative-net-carryover"></a>
 ## 121. 판매자의 음수 월 순액은 마감 때 다음 월로 이월하고, 지급 기준액은 0원 아래로 내리지 않는다
@@ -1151,7 +1151,7 @@
 - 내 의견: "D안으로 해줘"
 - 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 대상은 `ADMITTED`이고 `firstPreparedAt + 3시간`이 지났으며 최신 PG 상태가 `PENDING` 또는 `READY`인 승인이다. 작업자가 조회한 직후 `stopPosts`로 새 사유를 붙여 보류한다. 늦은 PAID·FAILED는 지금처럼 원래 주문으로 끝낸다. 보류 게이지의 사유 목록, 경보 테스트, R4.6·R12.4 문구를 갱신하고, PAY_PENDING으로 3시간을 넘기는 통합 테스트를 더한다. 기존 행은 다음 조회 때 저절로 올라오므로 별도 이행 작업은 두지 않는다. 고객 안내는 결정 123의 묶음을 따른다(PG `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`면 `NOT_CHARGED`). R4.6의 "시간만으로 실패·새 키·새 결제를 만들지 않는다"는 그대로 지킨다.
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)(사유 `CONFIRM_WINDOW_EXPIRED`), 근거 색인 2026-11-08 confirm 기한 경과 보류 행
 
 <a id="license-grant-wait-detection"></a>
 ## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
