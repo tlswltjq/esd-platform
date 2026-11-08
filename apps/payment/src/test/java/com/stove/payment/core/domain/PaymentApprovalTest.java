@@ -97,6 +97,30 @@ class PaymentApprovalTest {
         assertThat(approval.getNextAt()).isEqualTo(at.plusSeconds(8));
         assertThat(approval.terminal()).isFalse();
     }
+    /** Decision 124: only an admitted, unstopped approval past first preparation + 3 hours with the PG PENDING or READY is held. */
+    @Test void anAdmittedApprovalPastTheConfirmWindowWithAnUnsettledPgIsHeldWithoutClosing() {
+        ApprovalObservation pending = new ApprovalObservation(ApprovalObservation.State.PENDING, null, null);
+        ApprovalObservation ready = new ApprovalObservation(ApprovalObservation.State.READY, null, null);
+        assertThat(approval().holdAfterConfirmWindow(pending, at.plusSeconds(20000))).isFalse();
+        PaymentApproval approval = approval(); approval.admit(receipt(approval));
+        Instant prepared = at.plusSeconds(2); approval.prepare(prepared);
+        Instant window = prepared.plus(PaymentApproval.CONFIRM_WINDOW);
+        assertThat(approval.holdAfterConfirmWindow(pending, window.minusNanos(1000))).isFalse();
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        assertThat(approval.holdAfterConfirmWindow(new ApprovalObservation(ApprovalObservation.State.FAILED, null, window), window)).isFalse();
+        assertThat(approval.holdAfterConfirmWindow(pending, window)).isTrue();
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(approval.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(approval.getReviewStartedAt()).isEqualTo(window);
+        assertThat(approval.isPostStopped()).isTrue(); assertThat(approval.terminal()).isFalse();
+        assertThat(approval.getProtectedPayload()).isEqualTo("encrypted-body");
+        assertThat(approval.holdAfterConfirmWindow(ready, window.plusSeconds(60))).isFalse();
+        assertThat(approval.getReviewStartedAt()).isEqualTo(window);
+        PaymentApproval rejected = approval(); rejected.admit(receipt(rejected)); rejected.prepare(prepared);
+        rejected.stopPosts("PG_REQUEST_REJECTED", prepared);
+        assertThat(rejected.holdAfterConfirmWindow(ready, window)).isFalse();
+        assertThat(rejected.getLastErrorCode()).isEqualTo("PG_REQUEST_REJECTED");
+    }
     @Test void aLaterInvalidLookupCannotHideAnObservedUnadmittedPayment() {
         PaymentApproval approval = approval();
         approval.stopPosts("PG_INVALID_EVIDENCE");
