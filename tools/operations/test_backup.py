@@ -187,7 +187,7 @@ class ObjectMirrorTest(unittest.TestCase):
 
 
 class DockerHubStoveImageTest(unittest.TestCase):
-    """Decision 118: Docker Hub's `stove` namespace belongs to someone else, so its images never run here."""
+    """Decision 135: Docker Hub's `stove` namespace belongs to someone else, so its images never run here."""
 
     REFUSED = ["stove/mysql-client:8.0-local", "docker.io/stove/minio:tag", "Docker.IO/stove/minio:tag",
                "index.docker.io/stove/minio@sha256:" + "0" * 64]
@@ -197,7 +197,7 @@ class DockerHubStoveImageTest(unittest.TestCase):
             with self.subTest(image=image):
                 run = Recorder()
                 with tempfile.TemporaryDirectory() as directory:
-                    with self.assertRaisesRegex(backup.BackupError, "decision 118"):
+                    with self.assertRaisesRegex(backup.BackupError, "decision 135"):
                         backup.full_backup(arguments(Path(directory), dest=Path(directory), image=image),
                                            {"MYSQL_BACKUP_PASSWORD": SECRET}, run=run)
                 self.assertEqual(run.calls, [])
@@ -205,7 +205,7 @@ class DockerHubStoveImageTest(unittest.TestCase):
     def test_object_commands_refuse_before_running(self):
         run = Recorder()
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(backup.BackupError, "decision 118"):
+            with self.assertRaisesRegex(backup.BackupError, "decision 135"):
                 backup.objects_backup(arguments(Path(directory), dest=Path(directory), image="stove/minio:tag"),
                                       {"STORAGE_BACKUP_ACCESS_KEY": "reader", "STORAGE_BACKUP_SECRET_KEY": SECRET},
                                       run=run)

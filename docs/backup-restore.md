@@ -28,6 +28,13 @@ MinIO도 같은 이유로 연속 미러를 쓴다. DB를 장애 직전까지 되
 
 비밀값은 환경 변수로만 받고 컨테이너에는 이름으로만 전달한다. 명령 인자와 파일에 남지 않는다.
 
+클라이언트 컨테이너는 DB 비밀번호·스토리지 키와 백업 폴더를 받으므로, Docker Hub의 다른 사람 계정(`stove`)을 가리키는 이미지 이름은 실행 전에 거절한다([결정 135](decisions.md#local-image-registry)). 로컬에 이미지가 있어도 이름만으로 판단한다. 예전 이름(`stove/mysql-client:8.0-local`, `stove/minio:…`)이 `--image`·`STOVE_MYSQL_CLIENT_IMAGE`·`STOVE_MINIO_IMAGE`에 남아 있으면 지우거나 새 이름으로 바꾼다. 예전 이름의 이미지만 있으면 다시 빌드하지 않고 새 이름을 붙여 쓸 수 있다(내용이 같다).
+
+```bash
+docker tag stove/mysql-client:8.0-local localhost/stove/mysql-client:8.0-local
+docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local
+```
+
 | 명령 | 환경 변수 | 하는 일 |
 |---|---|---|
 | `stream-binlog --dest DIR --user backup` | `MYSQL_BACKUP_PASSWORD` | binlog를 `DIR/binlog`에 계속 복사. 재시작하면 마지막 파일부터 다시 받는다 |

@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * 결정 118: 이 저장소가 직접 만드는 이미지의 Compose 기본 이름은 Docker Hub로 해석되지 않는다.
+ * 결정 135: 이 저장소가 직접 만드는 이미지의 Compose 기본 이름은 Docker Hub로 해석되지 않는다.
  *
  * <p>registry 주소가 없는 이름({@code stove/gateway})은 Docker Hub의 {@code stove} 계정을 가리키고, 그 계정은
  * 이 프로젝트와 무관한 다른 사람 것이다. {@code docker compose up}은 로컬에 없는 이미지를 그 주소에서 받으므로,

@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * 결정 118: 이 저장소가 직접 만드는 이미지의 이름 규칙.
+ * 결정 135: 이 저장소가 직접 만드는 이미지의 이름 규칙.
  *
  * <p>registry 주소가 없는 이름은 Docker Hub로 해석되고, Docker Hub의 {@code stove}는 이 프로젝트와 무관한
  * 다른 사람 계정이다. 그래서 기본 registry는 Docker Hub로 해석되지 않는 {@code localhost/stove}이고,
@@ -68,6 +68,6 @@ final class LocalImageNames {
 
     private static IllegalStateException refusal(String setting, String value, String replacement) {
         return new IllegalStateException(setting + "=" + value
-                + " 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 118). " + replacement + " 로 바꾼다.");
+                + " 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 135). " + replacement + " 로 바꾼다.");
     }
 }

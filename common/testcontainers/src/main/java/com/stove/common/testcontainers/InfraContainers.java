@@ -32,7 +32,7 @@ public final class InfraContainers {
     /**
      * 테스트 이름 > 공급 이미지 > {@code <registry>/minio:<태그>} 순서로 고른다. Gradle 통합 테스트는
      * 루트 build.gradle이 고른 이름을 {@code STOVE_TEST_MINIO_IMAGE}로 넘긴다. Docker Hub의 stove 계정을
-     * 가리키는 값은 받지 않고 거절한다(결정 118).
+     * 가리키는 값은 받지 않고 거절한다(결정 135).
      */
     static DockerImageName minioImage(Map<String, String> environment) {
         String image = LocalImageNames.requireNotDockerHubStove(

@@ -98,7 +98,7 @@ class ComposeCheckScriptTest(unittest.TestCase):
         self.assertIn("stove/gateway:latest", result.stderr)
         self.assertIn("docker.io/stove/minio:tag", result.stderr)
         self.assertNotIn("localhost/stove/auth:latest", result.stderr)
-        self.assertIn("결정 118", result.stderr)
+        self.assertIn("결정 135", result.stderr)
 
 
 class CopiedLauncherTest(unittest.TestCase):
@@ -134,7 +134,7 @@ class CopiedLauncherTest(unittest.TestCase):
     def test_copy_still_refuses_docker_hub_stove(self):
         _, result, started = self.launch(["stove/gateway:latest"])
         self.assertEqual(1, result.returncode)
-        self.assertIn("결정 118", result.stderr)
+        self.assertIn("결정 135", result.stderr)
         self.assertEqual([], started)
 
 

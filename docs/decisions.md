@@ -1085,7 +1085,7 @@
 - 결과: [PR #134](https://github.com/tlswltjq/esd-platform/pull/134), [판단 색인](judgment-index.md) 2026-11-07 행
 
 <a id="local-image-registry"></a>
-## 118. 직접 만드는 이미지의 기본 이름은 Docker Hub로 해석되지 않는 `localhost/stove`를 쓴다
+## 135. 직접 만드는 이미지의 기본 이름은 Docker Hub로 해석되지 않는 `localhost/stove`를 쓴다
 - 문제: 앱 11개·`mock-pg`·MinIO·`mysql-client` 이미지의 기본 이름이 `stove/<이름>`이었다. Docker는 레지스트리 주소가 없는 이름을 Docker Hub(`docker.io/stove/…`)로 해석한다. `docker compose up`·`docker run`·Testcontainers는 로컬에 이미지가 없으면 그 주소에서 받는다. Docker Hub의 `stove`는 이 프로젝트와 무관한 다른 사람 계정이다(2026-11-07 확인 당시 `quasar-cli` 저장소 하나). 그 계정이 같은 이름을 올리면, 이미지를 빌드하지 않은 컴퓨터에서 `.env`의 DB 비밀번호·서비스 키·PortOne TEST 키를 받는 컨테이너로 남의 이미지가 실행된다.
 - 선택지: A 문서에 경고만 / B 실행 스크립트(`start-apps.sh`·`local-stack.sh`·`remote.sh`)에서 `STOVE_JIB_REGISTRY`가 없으면 `--pull never` / C 기본 레지스트리 이름을 `localhost/stove`로 바꿈 (추천: C — 이름 자체를 바꿔 Compose·Testcontainers·Python·`docker` 직접 실행을 한 번에 막고, 잘못 받으려 해도 다른 사람 이미지 대신 즉시 실패한다)
 - 내 의견: "C안으로 하자"

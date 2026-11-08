@@ -222,7 +222,7 @@ do_stack() {
             [ "${STOVE_FORCE_STACK:-0}" = 1 ] || assert_stack_free
             do_sync
             case "$target" in
-                # 결정 118: 시작 전에 Compose가 푼 이미지 이름을 확인한다(앱은 start-apps.sh가 확인).
+                # 결정 135: 시작 전에 Compose가 푼 이미지 이름을 확인한다(앱은 start-apps.sh가 확인).
                 infra) prepare_minio; say "인프라 12종"
                        rexec "bash scripts/check-image-names.sh docker compose ${INFRA[*]} && docker compose ${INFRA[*]} up -d"
                        wait_for_mysql_bootstrap ;;

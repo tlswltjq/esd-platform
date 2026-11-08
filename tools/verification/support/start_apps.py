@@ -1,6 +1,6 @@
 """Copy the app launcher into a verification output directory.
 
-start-apps.sh calls check-image-names.sh from its own directory before starting anything (decision 118),
+start-apps.sh calls check-image-names.sh from its own directory before starting anything (decision 135),
 so the copy carries both scripts.
 """
 

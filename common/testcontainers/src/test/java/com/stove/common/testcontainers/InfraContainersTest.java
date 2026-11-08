@@ -10,7 +10,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** 결정 118: 직접 만드는 MinIO 이미지는 Docker Hub의 다른 사람 계정(stove)에서 받지 않는다. */
+/** 결정 135: 직접 만드는 MinIO 이미지는 Docker Hub의 다른 사람 계정(stove)에서 받지 않는다. */
 class InfraContainersTest {
 
     private static final String TAG = "RELEASE.2025-04-22T22-12-26Z-local";

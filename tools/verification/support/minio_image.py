@@ -1,7 +1,7 @@
 """Prepare the shared MinIO/mc image without depending on a Dockerfile.
 
 The selection rule mirrors minioImageSelection in the root build.gradle (docs/testing.md#minio-image).
-Names in Docker Hub's `stove` namespace are refused instead of pulled (decision 118).
+Names in Docker Hub's `stove` namespace are refused instead of pulled (decision 135).
 """
 
 import os

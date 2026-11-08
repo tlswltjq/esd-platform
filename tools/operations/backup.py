@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 SCHEMAS = ("stove_auth", "stove_studio", "stove_review", "stove_catalog", "stove_store",
            "stove_order", "stove_payment", "stove_license", "stove_settlement")
 # The official mysql image lacks mysqlbinlog; build this one with ./gradlew :infra:mysql-client:jibDockerBuild
-# Self-built images default to localhost/stove, which Docker never pulls from Docker Hub (decision 118).
+# Self-built images default to localhost/stove, which Docker never pulls from Docker Hub (decision 135).
 DEFAULT_MYSQL_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "localhost/stove/mysql-client:8.0-local")
 DEFAULT_MC_IMAGE = os.environ.get("STOVE_MINIO_IMAGE", "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
 # Same rule as tools/verification/support/image_names.py; this tool runs on hosts without that package.
@@ -90,10 +90,10 @@ def docker_hub_stove(image):
 
 def docker_client(image, network, mount, variables, interactive=False, entrypoint=None):
     # Every client container receives database or storage credentials, so never run an image that could
-    # come from Docker Hub's `stove` namespace (decision 118).
+    # come from Docker Hub's `stove` namespace (decision 135).
     if docker_hub_stove(image):
         raise BackupError("Image " + image + " points at Docker Hub's stove account, which is not ours "
-                          "(decision 118). Use localhost/stove/... or our registry.")
+                          "(decision 135). Use localhost/stove/... or our registry.")
     command = ["docker", "run", "--rm", "--network", network, "-v", str(mount) + ":/backup",
                "--user", str(os.getuid()) + ":" + str(os.getgid())]
     if interactive:

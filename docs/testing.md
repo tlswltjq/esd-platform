@@ -63,7 +63,7 @@ Studio·Review·Download·Catalog 통합 테스트는 `:infra:minio:jibDockerBui
 
 - 빌드 이름은 `-Pstove.minio.image`, 없으면 `<registry>/minio:RELEASE.2025-04-22T22-12-26Z-local`(registry는 `-Pstove.jib.registry`·`STOVE_JIB_REGISTRY`, 기본 `localhost/stove`)이다. Compose·게시도 이 이름을 쓰며, 테스트 전용 변수는 이 이름을 바꾸지 않는다.
 - `STOVE_TEST_MINIO_IMAGE`가 고정 기본 이름 `localhost/stove/minio:…-local`인데 빌드 이름과 다르면(registry를 바꾼 경우), 빌드 이름으로 만든 뒤 `:infra:minio:tagTestImage`가 고정 이름을 붙인다. 이때는 재사용하지 않는다.
-- 예전 기본값 `stove/minio:…`처럼 Docker Hub의 `stove` 계정을 가리키는 이름은 받지 않고 거절한다([결정 118](decisions.md#local-image-registry)). 예전 이름의 이미지가 로컬에 있으면 `docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`로 새 이름을 붙여 다시 쓸 수 있다(내용이 같다).
+- 예전 기본값 `stove/minio:…`처럼 Docker Hub의 `stove` 계정을 가리키는 이름은 받지 않고 거절한다([결정 135](decisions.md#local-image-registry)). 예전 이름의 이미지가 로컬에 있으면 `docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`로 새 이름을 붙여 다시 쓸 수 있다(내용이 같다).
 - 로컬 이미지 재사용은 `jibDockerBuild`만 건너뛴다. 같은 실행에 게시(`jib`)·tar(`jibBuildTar`)가 있으면 소스 빌드를 한다.
 - 변수를 지정하지 않으면 지금처럼 빌드한다. 빈 Docker 환경에서도 이미지를 만든다.
 - `STOVE_TEST_MINIO_IMAGE`에 빌드 이름을 지정하면, 그 이미지가 로컬에 있을 때만 빌드를 건너뛴다. 없으면 빌드하며, registry에서 받지 않는다. `STOVE_MINIO_IMAGE`가 함께 있어도 같다.

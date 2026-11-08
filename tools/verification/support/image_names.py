@@ -1,4 +1,4 @@
-"""Image names this repository builds itself (decision 118).
+"""Image names this repository builds itself (decision 135).
 
 Names without a registry host resolve to Docker Hub, and Docker Hub's `stove` namespace belongs to an
 unrelated account. Self-built images therefore default to `localhost/stove`, which Docker never pulls
@@ -35,5 +35,5 @@ def refuse_docker_hub_stove(setting: str, value: str, registry: bool = False) ->
     if parts[0].lower() in DOCKER_HUB_HOSTS:
         parts = parts[1:]
     replacement = "/".join([DEFAULT_REGISTRY] + parts[1:])
-    raise ValueError(setting + "=" + value + " 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 118). "
+    raise ValueError(setting + "=" + value + " 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 135). "
                      + replacement + " 로 바꾼다.")

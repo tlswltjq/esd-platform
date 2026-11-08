@@ -322,7 +322,7 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
     tasks.named('jar') { enabled = false }
 }
 
-// 결정 118: 직접 만드는 이미지(앱·mock-pg·MinIO·mysql-client)의 registry는 여기서 한 번만 정한다.
+// 결정 135: 직접 만드는 이미지(앱·mock-pg·MinIO·mysql-client)의 registry는 여기서 한 번만 정한다.
 // registry 주소가 없는 이름(stove/...)은 Docker Hub의 다른 사람 계정(stove)을 가리키므로, 기본값은 Docker Hub로
 // 해석되지 않는 localhost/stove다. 배포는 STOVE_JIB_REGISTRY·-Pstove.jib.registry로 우리 registry를 지정한다.
 // Docker Hub의 stove를 가리키는 값은 받지 않고 거절한다. 같은 규칙: common/testcontainers의 LocalImageNames,
@@ -347,7 +347,7 @@ def requireNotDockerHubStove = { String setting, String image ->
         if (written[0].toLowerCase(Locale.ROOT) in dockerHubHosts) {
             written = written.subList(1, written.size())
         }
-        throw new GradleException("${setting}=${image} 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 118). "
+        throw new GradleException("${setting}=${image} 는 Docker Hub의 다른 사람 계정(stove)을 가리킨다(결정 135). "
                 + "${([defaultImageRegistry] + written.subList(1, written.size())).join('/')} 로 바꾼다.")
     }
     return image
@@ -358,7 +358,7 @@ def stoveImageRegistry = providers.gradleProperty('stove.jib.registry').map { it
 List<String> registryPath = dockerHubPath(stoveImageRegistry + '/image')
 if (registryPath != null && registryPath.size() > 1 && registryPath[0] == 'stove') {
     throw new GradleException("STOVE_JIB_REGISTRY·stove.jib.registry=${stoveImageRegistry} 는 Docker Hub의 "
-            + "다른 사람 계정(stove)을 가리킨다(결정 118). ${defaultImageRegistry} 로 바꾸거나 지운다.")
+            + "다른 사람 계정(stove)을 가리킨다(결정 135). ${defaultImageRegistry} 로 바꾸거나 지운다.")
 }
 ext.stoveImageRegistry = stoveImageRegistry
 ext.requireNotDockerHubStove = requireNotDockerHubStove
@@ -376,7 +376,7 @@ configure(subprojects.findAll { it.path.startsWith(':apps:') || it.path == ':sim
 // - STOVE_TEST_MINIO_IMAGE 없이 STOVE_MINIO_IMAGE만 있으면 공급 이미지로 보고 빌드하지 않는다.
 // - 테스트 이름이 빌드 이름이나 고정 기본 이름(localhost/stove/minio:<태그>)이면 소스로 만든다(registry에서 받지 않는다).
 //   고정 기본 이름이 빌드 이름과 다르면 빌드한 이미지에 그 이름을 붙인다. 그 밖의 이름은 Testcontainers가 받는다.
-// - Docker Hub의 stove를 가리키는 이름(예전 기본값 stove/minio:<태그>)은 거절한다(결정 118).
+// - Docker Hub의 stove를 가리키는 이름(예전 기본값 stove/minio:<태그>)은 거절한다(결정 135).
 def minioTag = 'RELEASE.2025-04-22T22-12-26Z-local'
 def minioEnv = { String name ->
     requireNotDockerHubStove(name, providers.environmentVariable(name).map { it.trim() }.getOrElse(''))
