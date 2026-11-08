@@ -234,7 +234,7 @@ Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다
 | POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. 공개 edge가 Payment로 직접 전달 |
 
 MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
-provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기·귀속 미확정 목록·상세·조사 이력/기록과 PG 재조회 근거 종결(`/{attemptId}/closure`, [결정 127](decisions.md#refund-delay-closure))을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
+provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기·귀속 미확정 목록·상세·조사 이력/기록과 PG 재조회 근거 종결(`/{attemptId}/closure`, [결정 127](decisions.md#refund-delay-closure))과 자동 송신이 멈춘 환불의 실패 종결(`/{attemptId}/failure-closure`, [결정 128](decisions.md#refund-failure-closure))을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
 
 기본 결제 수신은 OrderPlaced, 결과 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
 입력은 api.listener의 Mapper에서 내부 값으로 변환한다. ReceiveOrderPayment가 원래 요청 전체를 비교하고 PENDING·Inbox를 함께 저장한다.
