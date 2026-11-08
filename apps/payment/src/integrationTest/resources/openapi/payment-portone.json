@@ -888,6 +888,13 @@
           "refundId" : {
             "type" : "string"
           },
+          "rejectionStatus" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "rejectionType" : {
+            "type" : "string"
+          },
           "resumable" : {
             "type" : "boolean"
           },

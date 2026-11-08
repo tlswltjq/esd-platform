@@ -21,6 +21,7 @@ import static org.mockito.Mockito.doAnswer;
 import com.stove.payment.core.domain.Payment;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PgCancellationRejection;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgRefundCancellationSuccess;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
@@ -212,6 +213,27 @@ class RequestRefundCancellationTest {
         order.verify(executions).flush(); order.verify(transactions).commit(any());
         order.verify(reconcile).execute(received.getAttemptId());
         assertThat(recorded.getValue().getReason()).isEqualTo("PG_REQUEST_INVALID");
+        assertThat(recorded.getValue().isActivated()).isTrue();
+        assertThat(received.getActiveCancellationHoldId()).isEqualTo(recorded.getValue().getHoldId());
+        assertThat(received.getCancellationSchedule().getNextAt()).isNull();
+        assertThat(received.getLookupSchedule().getNextAt()).isNotNull();
+        assertThat(received.getFailureEventId()).isNull(); assertThat(received.getRefundConfirmedAt()).isNull();
+        assertThat(received.getCancellationRequestBody()).isEqualTo("frozen-wire-body");
+    }
+
+    @Test void aFormalRejectionCommitsItsHoldWithStatusAndTypeBeforeLookupWithoutFailingTheRefund() {
+        RefundExecution received = fixture();
+        when(gateway.send(any(), any(), anyString()))
+                .thenReturn(RefundCancellationDispatch.rejected(new PgCancellationRejection(409, "PAYMENT_NOT_PAID")));
+        service().executeFirst(received.getAttemptId());
+        ArgumentCaptor<RefundCancellationHold> recorded = ArgumentCaptor.forClass(RefundCancellationHold.class);
+        InOrder order = inOrder(holds, executions, transactions, reconcile);
+        order.verify(holds).saveAndFlush(recorded.capture());
+        order.verify(executions).flush(); order.verify(transactions).commit(any());
+        order.verify(reconcile).execute(received.getAttemptId());
+        assertThat(recorded.getValue().getReason()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(recorded.getValue().getRejectionStatus()).isEqualTo(409);
+        assertThat(recorded.getValue().getRejectionType()).isEqualTo("PAYMENT_NOT_PAID");
         assertThat(recorded.getValue().isActivated()).isTrue();
         assertThat(received.getActiveCancellationHoldId()).isEqualTo(recorded.getValue().getHoldId());
         assertThat(received.getCancellationSchedule().getNextAt()).isNull();

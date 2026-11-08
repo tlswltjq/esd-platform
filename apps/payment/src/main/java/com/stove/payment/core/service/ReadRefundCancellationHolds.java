@@ -46,7 +46,7 @@ public class ReadRefundCancellationHolds {
         boolean resumable = hold.isActivated() && hold.getResumeRequestId() == null && !at.isBefore(hold.getObservedAt())
                 && execution.canResumeCancellation(hold.getHoldId(), at);
         return new RefundCancellationHoldView(hold.getHoldId(), hold.getAttemptId(), execution.getRefundId(), execution.getOrderNo(),
-                execution.getPaymentId(), execution.getAmount(), execution.getCurrency(), hold.getReason(), hold.getObservedAt(), hold.isActivated(),
+                execution.getPaymentId(), execution.getAmount(), execution.getCurrency(), hold.getReason(), hold.getRejectionStatus(), hold.getRejectionType(), hold.getObservedAt(), hold.isActivated(),
                 execution.isCurrentCancellationHold(hold.getHoldId()), resumable, execution.getFirstCancellationPreparedAt(),
                 execution.cancellationResumeDeadline(), execution.getStatus(), execution.getRefundConfirmedAt(),
                 hold.getResumeRequestId() == null ? null : hold.receipt(), hold.getOperatorSubject(), hold.getResumeNote());
