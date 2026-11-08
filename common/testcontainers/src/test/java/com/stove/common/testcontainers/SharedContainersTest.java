@@ -12,8 +12,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.JdbcDatabaseContainer;
+import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.wait.strategy.AbstractWaitStrategy;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * D-043: 공유 컨테이너 하나가 시작 대기를 넘기면 그 모듈의 통합 테스트 컨텍스트가 모두 실패한다.
@@ -53,6 +57,33 @@ class SharedContainersTest {
         for (GenericContainer<?> container : containers)
             assertThat(waitStrategy(container)).as(container.getDockerImageName()).isNotSameAs(shared);
         assertThat(startupTimeout(shared)).isEqualTo(Duration.ofSeconds(60));
+    }
+
+    /**
+     * 라이브러리가 컨테이너 종류마다 정적 대기 객체를 나눠 쓰기도 한다(예: {@code ConfluentKafkaContainer}의
+     * {@code KafkaHelper.WAIT_STRATEGY}). 같은 종류의 새 컨테이너와 대기 객체가 다르고, 새 컨테이너는
+     * 라이브러리 기본 대기를 그대로 가져야 공유 컨테이너의 3분이 다른 컨테이너로 번지지 않은 것이다.
+     */
+    @Test
+    @DisplayName("[D-043] 공유 컨테이너의 3분 대기는 같은 종류의 새 컨테이너로 번지지 않는다")
+    void longerWaitsDoNotLeakIntoFreshContainersOfTheSameType() throws ReflectiveOperationException {
+        Map<String, GenericContainer<?>> shared = new LinkedHashMap<>();
+        shared.put("kafka", SharedContainers.KAFKA);
+        shared.put("redis", SharedContainers.REDIS);
+        shared.put("elasticsearch", SharedContainers.ELASTICSEARCH);
+        shared.put("mongo", SharedContainers.MONGO);
+        Map<String, GenericContainer<?>> fresh = new LinkedHashMap<>();
+        fresh.put("kafka", new ConfluentKafkaContainer(DockerImageName.parse(SharedContainers.KAFKA.getDockerImageName())));
+        fresh.put("redis", new GenericContainer<>(DockerImageName.parse(SharedContainers.REDIS.getDockerImageName())));
+        fresh.put("elasticsearch", new ElasticsearchContainer(DockerImageName.parse(SharedContainers.ELASTICSEARCH.getDockerImageName())));
+        fresh.put("mongo", new MongoDBContainer(DockerImageName.parse(SharedContainers.MONGO.getDockerImageName())));
+
+        for (String name : shared.keySet())
+            assertThat(waitStrategy(fresh.get(name))).as(name).isNotSameAs(waitStrategy(shared.get(name)));
+        Map<String, Duration> freshTimeouts = new LinkedHashMap<>();
+        for (String name : List.of("kafka", "redis", "mongo")) freshTimeouts.put(name, waitTimeout(fresh.get(name)));
+        assertThat(freshTimeouts).containsExactlyInAnyOrderEntriesOf(
+                Map.of("kafka", Duration.ofSeconds(60), "redis", Duration.ofSeconds(60), "mongo", Duration.ofSeconds(60)));
     }
 
     private static WaitStrategy waitStrategy(GenericContainer<?> container) throws ReflectiveOperationException {

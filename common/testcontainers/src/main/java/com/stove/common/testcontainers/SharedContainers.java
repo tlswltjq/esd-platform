@@ -39,10 +39,15 @@ public final class SharedContainers {
      * 이미지 엔트리포인트가 광고 리스너를 주입받기 전에 스토리지를 포맷하면서
      * {@code advertised.listeners cannot use the nonroutable meta-address 0.0.0.0} 으로 죽는다.
      * 컨텍스트 로딩 검증에 브로커 구현 차이는 영향이 없으므로 안정적인 쪽을 택했다.
+     *
+     * <p>{@code ConfluentKafkaContainer}는 모든 인스턴스가 정적 {@code KafkaHelper.WAIT_STRATEGY}를 나눠 쓴다.
+     * {@code withStartupTimeout}만 걸면 같은 JVM의 다른 Kafka 컨테이너까지 바뀌므로, 같은 로그 조건으로
+     * 새 대기 객체를 준다.
      */
     public static final ConfluentKafkaContainer KAFKA =
             new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
-                    .withStartupTimeout(STARTUP_TIMEOUT);
+                    .waitingFor(Wait.forLogMessage(".*Transitioning from RECOVERY to RUNNING.*", 1)
+                            .withStartupTimeout(STARTUP_TIMEOUT));
 
     public static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
