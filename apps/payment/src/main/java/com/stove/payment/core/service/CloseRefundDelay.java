@@ -154,8 +154,10 @@ public class CloseRefundDelay {
     }
 
     private static RefundClosureReceipt receipt(RefundClosure closure, RefundExecution execution) {
+        // Status and confirmation come from the closure record, not the current execution: a late PG success may move the
+        // execution to SUCCEEDED, and a replay must still return the first result (R14.1). Identity fields never change.
         return new RefundClosureReceipt(closure.view(), execution.getRefundId(), execution.getOrderNo(), execution.getPaymentId(),
-                execution.getStatus(), execution.getRefundConfirmedAt(), execution.getRefundConfirmationSource());
+                closure.getExecutionStatus(), closure.getRefundConfirmedAt(), closure.getRefundConfirmationSource());
     }
 
     /** Locks in the existing order — payment, then execution — like the lookup worker and the investigation record. */

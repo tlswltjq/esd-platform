@@ -13,6 +13,11 @@ CREATE TABLE refund_closure (
     evidence_refunded_at DATETIME(6) NOT NULL,
     evidence_observed_at DATETIME(6) NOT NULL,
     closed_at DATETIME(6) NOT NULL,
+    -- The execution facts the first response reported. A late PG success may later move the execution to SUCCEEDED;
+    -- a replay of the same command still returns these values.
+    execution_status VARCHAR(20) NOT NULL,
+    refund_confirmed_at DATETIME(6) NOT NULL,
+    refund_confirmation_source VARCHAR(30) NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uq_refund_closure_request UNIQUE (request_id),
     CONSTRAINT uq_refund_closure_attempt UNIQUE (attempt_id),
@@ -21,6 +26,7 @@ CREATE TABLE refund_closure (
     CONSTRAINT chk_refund_closure_attribution CHECK (attribution IN ('OUR_REQUEST','EXTERNAL_CANCELLATION','UNDETERMINED')),
     CONSTRAINT chk_refund_closure_outcome CHECK (outcome IN ('COMPLETED','RECORDED')),
     CONSTRAINT chk_refund_closure_time CHECK (closed_at >= evidence_observed_at),
+    CONSTRAINT chk_refund_closure_receipt CHECK (execution_status = 'PENDING' AND refund_confirmation_source = 'PG_QUERY_UNATTRIBUTED'),
     CONSTRAINT chk_refund_closure_note CHECK (CHAR_LENGTH(TRIM(note)) > 0),
     CONSTRAINT chk_refund_closure_operator CHECK (CHAR_LENGTH(TRIM(operator_subject)) > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

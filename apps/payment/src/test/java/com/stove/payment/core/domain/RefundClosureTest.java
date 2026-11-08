@@ -61,6 +61,9 @@ class RefundClosureTest {
         assertThat(view.evidenceRefundedAt()).isEqualTo(execution.getProviderRefundedAt());
         assertThat(view.evidenceObservedAt()).isEqualTo(delayed);
         assertThat(view.closedAt()).isEqualTo(delayed.plusSeconds(1));
+        assertThat(closure.getExecutionStatus()).isEqualTo(RefundExecutionStatus.PENDING);
+        assertThat(closure.getRefundConfirmedAt()).isEqualTo(delayed);
+        assertThat(closure.getRefundConfirmationSource()).isEqualTo("PG_QUERY_UNATTRIBUTED");
         closure.requireSame(request);
         for (RefundClosureRequest changed : List.of(
                 new RefundClosureRequest(request.requestId(), request.attemptId(), "usr_admin", RefundAttribution.OUR_REQUEST, request.note()),

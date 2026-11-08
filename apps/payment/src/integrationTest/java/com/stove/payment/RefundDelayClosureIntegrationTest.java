@@ -202,6 +202,30 @@ class RefundDelayClosureIntegrationTest extends PaymentDatabaseIntegrationTestBa
         verify(lookup, times(1)).find(any());
     }
 
+    /** PR #157 R2: a late PG success after the closure must not change what a replay of the same command returns (R14.1). */
+    @Test void aReplayAfterALateOwnSuccessReturnsTheFirstReceiptUnchanged() {
+        RefundExecution execution = prepared(); Payment payment = payment(execution);
+        new TransactionTemplate(transactions).executeWithoutResult(tx ->
+                executions.lockByAttemptId(execution.getAttemptId()).orElseThrow().freezeCancellationBody("{\"reason\":\"review\"}"));
+        PgRefundConfirmation found = confirmation(payment, "found-1"); confirm(execution, found, BASE.plusSeconds(60));
+        when(lookup.find(PgRefundLookupRequest.from(payment))).thenReturn(Optional.of(found));
+        when(clock.instant()).thenReturn(BASE.plusSeconds(61));
+        String command = id(); Reply first = close(execution, command, "OUR_REQUEST", "응답 유실 뒤 우리 취소로 판단");
+        assertThat(first.status()).isEqualTo(200); assertThat(first.data().path("executionStatus").asText()).isEqualTo("PENDING");
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            Payment current = payments.lockByPaymentId(payment.getPaymentId()).orElseThrow();
+            RefundExecution locked = executions.lockByAttemptId(execution.getAttemptId()).orElseThrow();
+            assertThat(locked.confirmCancellationSuccess(current, new PgRefundCancellationSuccess(PgRefundLookupRequest.from(current), locked.getAttemptId(),
+                    found.cancellations().get(0), BASE, 0, 0, "review"), id(), BASE.plusSeconds(62))).isTrue();
+        });
+        assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
+        when(clock.instant()).thenReturn(BASE.plusSeconds(120));
+        Reply replay = close(execution, command, "OUR_REQUEST", "응답 유실 뒤 우리 취소로 판단");
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.data()).isEqualTo(first.data());
+        verify(lookup, times(1)).find(any());
+    }
+
     @Test void aPaidPurchaseIsRefusedTheLeaseReturnsAndTheWorkerScheduleIsKept() {
         RefundExecution execution = prepared(); Payment payment = payment(execution);
         when(lookup.find(PgRefundLookupRequest.from(payment))).thenReturn(Optional.empty());
@@ -383,13 +407,15 @@ class RefundDelayClosureIntegrationTest extends PaymentDatabaseIntegrationTestBa
             // The same filter as the gauge and the UNATTRIBUTED list: the old unattributed row is an open target.
             assertThat(legacy.queryForObject("SELECT COUNT(*) FROM refund_execution r WHERE r.status='PENDING' AND r.refund_confirmed_at IS NOT NULL "
                     + "AND r.refund_confirmation_source='PG_QUERY_UNATTRIBUTED' AND NOT EXISTS (SELECT 1 FROM refund_closure c WHERE c.attempt_id=r.attempt_id)", Integer.class)).isEqualTo(1);
-            String insert = "INSERT INTO refund_closure(request_id,attempt_id,operator_subject,attribution,note,outcome,evidence_refunded_at,evidence_observed_at,closed_at) "
-                    + "VALUES(?,?,?,?,?,?,'2026-11-08 01:00:00','2026-11-08 02:00:00','2026-11-08 02:00:00')";
+            String insert = "INSERT INTO refund_closure(request_id,attempt_id,operator_subject,attribution,note,outcome,evidence_refunded_at,evidence_observed_at,closed_at,"
+                    + "execution_status,refund_confirmed_at,refund_confirmation_source) "
+                    + "VALUES(?,?,?,?,?,?,'2026-11-08 01:00:00','2026-11-08 02:00:00','2026-11-08 02:00:00','PENDING','2026-11-08 01:30:00','PG_QUERY_UNATTRIBUTED')";
             String command = id(); legacy.update(insert, command, open.getAttemptId(), "usr_admin", "OUR_REQUEST", "판정", "RECORDED");
             assertThatThrownBy(() -> legacy.update(insert, command, open.getAttemptId(), "usr_admin", "OUR_REQUEST", "판정", "RECORDED")).isInstanceOf(DataIntegrityViolationException.class);
             assertThatThrownBy(() -> legacy.update(insert, id(), open.getAttemptId(), "usr_admin", "OUR_REQUEST", "판정", "RECORDED")).isInstanceOf(DataIntegrityViolationException.class);
             assertThatThrownBy(() -> legacy.update(insert, id(), id(), "usr_admin", "OUR_REQUEST", "판정", "RECORDED")).isInstanceOf(DataIntegrityViolationException.class);
             assertThatThrownBy(() -> legacy.update(insert, id(), open.getAttemptId(), "usr_admin", "CONSOLE", "판정", "RECORDED")).isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_closure_attribution");
+            assertThatThrownBy(() -> legacy.update("UPDATE refund_closure SET execution_status='SUCCEEDED' WHERE request_id=?", command)).isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_closure_receipt");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_closure SET note=' ' WHERE request_id=?", command)).isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_closure_note");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_closure SET closed_at='2026-11-08 01:59:59' WHERE request_id=?", command)).isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_closure_time");
             assertThatThrownBy(() -> legacy.update("DELETE FROM refund_execution WHERE attempt_id=?", open.getAttemptId())).isInstanceOf(DataIntegrityViolationException.class);

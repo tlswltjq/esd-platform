@@ -42,6 +42,10 @@ public class RefundClosure {
     @Column(nullable = false, updatable = false) private Instant evidenceRefundedAt;
     @Column(nullable = false, updatable = false) private Instant evidenceObservedAt;
     @Column(nullable = false, updatable = false) private Instant closedAt;
+    // The execution facts the first response reported, frozen so that a replay returns them unchanged (R14.1).
+    @Enumerated(EnumType.STRING) @Column(nullable = false, updatable = false, length = 20) private RefundExecutionStatus executionStatus;
+    @Column(nullable = false, updatable = false) private Instant refundConfirmedAt;
+    @Column(nullable = false, updatable = false, length = 30) private String refundConfirmationSource;
 
     public static RefundClosure record(RefundExecution execution, RefundClosureRequest request, Outcome outcome, Instant observedAt, Instant at) {
         if (execution == null || request == null || outcome == null || !execution.getAttemptId().equals(request.attemptId()))
@@ -55,6 +59,8 @@ public class RefundClosure {
         closure.operatorSubject = request.operatorSubject(); closure.attribution = request.attribution(); closure.note = request.note();
         closure.outcome = outcome; closure.evidenceRefundedAt = execution.getProviderRefundedAt();
         closure.evidenceObservedAt = observedAt; closure.closedAt = at;
+        closure.executionStatus = execution.getStatus(); closure.refundConfirmedAt = execution.getRefundConfirmedAt();
+        closure.refundConfirmationSource = execution.getRefundConfirmationSource();
         return closure;
     }
 
