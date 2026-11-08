@@ -7,6 +7,7 @@ import com.stove.payment.api.controller.dto.RefundDelayResponse;
 import com.stove.payment.api.controller.dto.RefundInvestigationBody;
 import com.stove.payment.api.controller.dto.RefundInvestigationPage;
 import com.stove.payment.api.controller.dto.RefundInvestigationResponse;
+import com.stove.payment.core.domain.RefundDelayKind;
 import com.stove.payment.core.domain.RefundDelayLookup;
 import com.stove.payment.core.domain.RefundDelayQuery;
 import com.stove.payment.core.service.ReadRefundDelays;
@@ -34,14 +35,18 @@ public class AdminRefundDelayController {
 
     @GetMapping
     @Operation(operationId = "searchRefundDelays", summary = "관리자 장기 미확정 환불 목록",
-            description = "PortOne 실행 중 최초 준비 후 3시간 이상이고 현재 PENDING·환불 미확정인 시도를 준비 시각·ID 순으로 조회합니다. 자동 중단 관측 여부와 무관하며 조회는 PG 호출이나 일정 변경을 하지 않습니다.")
-    public ResponseEntity<ApiResponse<RefundDelayPage>> search(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(RefundDelayPage.from(read.search(new RefundDelayQuery(page, size)))));
+            description = "kind=DELAYED(기본): PortOne 실행 중 최초 준비 후 3시간 이상이고 현재 PENDING·환불 미확정인 시도를 준비 시각·ID 순으로 조회합니다. 자동 중단 관측 여부와 무관합니다. "
+                    + "kind=UNATTRIBUTED: 조회로 전액 취소가 확인됐지만 우리 시도에 귀속되지 않았고(PG_QUERY_UNATTRIBUTED, PENDING) 운영 종결이 없는 시도를 확인 시각·ID 순으로 조회합니다(결정 127). "
+                    + "조회는 PG 호출이나 일정 변경을 하지 않습니다.")
+    public ResponseEntity<ApiResponse<RefundDelayPage>> search(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String kind) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(ApiResponse.ok(RefundDelayPage.from(read.search(RefundDelayKind.parse(kind), new RefundDelayQuery(page, size)))));
     }
 
     @GetMapping("/{attemptId}")
     @Operation(operationId = "readRefundDelay", summary = "관리자 장기 미확정 환불 상세",
-            description = "원래 3시간 경계가 지난 준비 건의 현재 상태와 저장된 조회 일정·접수 근거를 확인합니다. 완료 뒤에도 조회할 수 있습니다. 일정은 PG 조회 성공의 증거가 아니며 실제 License 상태는 이 응답으로 확정하지 않습니다. PG 키·본문·비밀 설정은 포함하지 않습니다.")
+            description = "원래 3시간 경계가 지난 준비 건과 귀속 미확정 건의 현재 상태와 저장된 조회 일정·접수 근거·운영 종결 기록을 확인합니다. 완료 뒤에도 조회할 수 있습니다. 일정은 PG 조회 성공의 증거가 아니며 실제 License 상태는 이 응답으로 확정하지 않습니다. PG 키·본문·비밀 설정은 포함하지 않습니다.")
     public ResponseEntity<ApiResponse<RefundDelayResponse>> detail(@PathVariable String attemptId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.ok(RefundDelayResponse.from(read.read(new RefundDelayLookup(attemptId)))));
     }

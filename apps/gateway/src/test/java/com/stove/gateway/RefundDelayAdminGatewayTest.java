@@ -87,6 +87,26 @@ class RefundDelayAdminGatewayTest {
         }
         assertThat(CALLS.get()).isZero();
     }
+    /** Decision 127 (PR #157 R1): the operator closure reaches Payment through the gateway; other roles never do. */
+    @Test void onlyAnAdministratorClosureReachesPaymentWithBearerAndWithoutForgedMemberHeader() {
+        String closure = "{\"requestId\":\"11111111-1111-1111-1111-111111111111\",\"attribution\":\"EXTERNAL_CANCELLATION\",\"note\":\"console\"}";
+        // Without a bearer token a POST is a browser-session request and the CSRF filter refuses it first.
+        http.post().uri(ROOT + "/example/closure").exchange().expectStatus().isForbidden();
+        for (String role : new String[]{"MEMBER", "CREATOR", "REVIEWER"})
+            http.post().uri(ROOT + "/example/closure").header("Authorization", "Bearer " + role)
+                    .contentType(MediaType.APPLICATION_JSON).bodyValue(closure).exchange().expectStatus().isForbidden();
+        assertThat(CALLS.get()).isZero();
+        http.post().uri(ROOT + "/example/closure").header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(closure).exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Cache-Control", "no-store");
+        assertThat(CALLS.get()).isEqualTo(1); assertThat(MEMBER_HEADER.get()).isNull();
+        assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
+        assertThat(REQUEST_BODY.get()).isEqualTo(closure); assertThat(REQUEST_URI.get()).isEqualTo(ROOT + "/example/closure");
+        for (HttpMethod method : new HttpMethod[]{HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE})
+            http.method(method).uri(ROOT + "/example/closure").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
+        assertThat(CALLS.get()).isEqualTo(1);
+    }
+
     @Test void unlistedAdministratorMethodsAndPathsRemainDenied() {
         for (HttpMethod method : new HttpMethod[]{HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH})
             http.method(method).uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();

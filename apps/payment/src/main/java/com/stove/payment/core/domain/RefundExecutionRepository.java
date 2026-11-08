@@ -19,6 +19,17 @@ public interface RefundExecutionRepository extends JpaRepository<RefundExecution
             + "and r.status='PENDING' and r.refundConfirmedAt is null and r.firstCancellationPreparedAt<=:preparedBy")
     Page<RefundExecution> findDelayedForAdministration(Instant preparedBy, Pageable page);
 
+    /** Decision 127: money confirmed by a full-cancellation lookup, not attributed to our attempt, and not closed by an operator. */
+    String UNATTRIBUTED_OPEN = " from RefundExecution r, Payment p where p.paymentId=r.paymentId and p.provider='PORTONE_TEST' "
+            + "and r.status='PENDING' and r.refundConfirmedAt is not null and r.refundConfirmationSource='PG_QUERY_UNATTRIBUTED' "
+            + "and not exists (select c.id from RefundClosure c where c.attemptId=r.attemptId)";
+
+    @Query("select count(r)" + UNATTRIBUTED_OPEN)
+    long countUnattributedOpen();
+
+    @Query(value = "select r" + UNATTRIBUTED_OPEN, countQuery = "select count(r)" + UNATTRIBUTED_OPEN)
+    Page<RefundExecution> findUnattributedOpen(Pageable page);
+
     Optional<RefundExecution> findByAttemptId(String attemptId);
     @Query("select r.paymentId from RefundExecution r where r.attemptId=:attemptId")
     Optional<String> findPaymentIdByAttemptId(String attemptId);
