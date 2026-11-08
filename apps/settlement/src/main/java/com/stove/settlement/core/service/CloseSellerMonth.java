@@ -4,6 +4,8 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.settlement.core.domain.SellerCarryover;
 import com.stove.settlement.core.domain.SellerCarryoverRepository;
+import com.stove.settlement.core.domain.SellerLock;
+import com.stove.settlement.core.domain.SellerLockRepository;
 import com.stove.settlement.core.domain.SellerMonthBalance;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
@@ -29,10 +31,11 @@ public class CloseSellerMonth {
     private final Clock clock;
     private final SettlementRefundRepository refunds;
     private final SellerCarryoverRepository carryovers;
+    private final SellerLockRepository sellers;
     private final TransactionTemplate transaction;
     public CloseSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,
-            SettlementRefundRepository refunds,SellerCarryoverRepository carryovers) {
-        this.months=months; this.sales=sales; this.clock=clock; this.refunds=refunds; this.carryovers=carryovers;
+            SettlementRefundRepository refunds,SellerCarryoverRepository carryovers,SellerLockRepository sellers) {
+        this.months=months; this.sales=sales; this.clock=clock; this.refunds=refunds; this.carryovers=carryovers; this.sellers=sellers;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public SellerMonthlySettlement execute(String seller,String month) {
@@ -47,9 +50,13 @@ public class CloseSellerMonth {
     private SellerMonthlySettlement close(String seller,String month) {
         Instant now=clock.instant().truncatedTo(ChronoUnit.MICROS);
         if(month.compareTo(SettlementMonth.at(now).value())>=0) throw new BusinessException(ErrorCode.CONFLICT,"지난 월만 마감할 수 있습니다.");
+        if(sellers.lock(seller).isEmpty()) sellers.saveAndFlush(SellerLock.of(seller,now));
         Optional<SellerMonthlySettlement> locked=months.lock(seller,month);
-        // R3.4: a CLOSED month answers with its first result before the decision 130 order check, which only guards OPEN -> CLOSED.
+        // R3.4: a CLOSED month answers with its first result before the decision 130 order checks, which only guard OPEN -> CLOSED.
         if(locked.isPresent() && locked.get().isClosed()) return locked.get();
+        // Decisions 42·130: a later CLOSED month already closed this one; closing it again would reuse that month's carry source.
+        if(months.existsBySellerSubjectAndStatusAndSettlementMonthGreaterThan(seller,"CLOSED",month))
+            throw new BusinessException(ErrorCode.CONFLICT,"이후 월이 이미 마감됐습니다.");
         if(months.existsBySellerSubjectAndStatusAndSettlementMonthLessThan(seller,"OPEN",month))
             throw new BusinessException(ErrorCode.CONFLICT,"이전 월을 먼저 마감해야 합니다.");
         SellerMonthlySettlement bucket=locked.orElseGet(() -> months.saveAndFlush(SellerMonthlySettlement.open(seller,month,now)));
