@@ -13,6 +13,8 @@ import com.stove.settlement.core.domain.PgTransactionRepository;
 import com.stove.settlement.core.domain.RefundMonthInput;
 import com.stove.settlement.core.domain.RefundMonthSelection;
 import com.stove.settlement.core.domain.RefundSettlementMonthPolicy;
+import com.stove.settlement.core.domain.SellerLock;
+import com.stove.settlement.core.domain.SellerLockRepository;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementMonth;
@@ -42,14 +44,15 @@ public class RecordConfirmedRefund {
     private final FullRefundAllocationPolicy allocation;
     private final RefundSettlementMonthPolicy monthPolicy;
     private final Clock clock;
+    private final SellerLockRepository sellers;
     private final TransactionTemplate transaction;
 
     public RecordConfirmedRefund(SettlementRefundRepository refunds, SettlementSaleRepository sales,
             SellerMonthlySettlementRepository months, PgTransactionRepository transactions, PgRefunds supplier,
             ProcessedEventGuard inbox, FullRefundAllocationPolicy allocation, RefundSettlementMonthPolicy monthPolicy,
-            Clock clock, PlatformTransactionManager manager) {
+            Clock clock, PlatformTransactionManager manager, SellerLockRepository sellers) {
         this.refunds=refunds; this.sales=sales; this.months=months; this.transactions=transactions; this.supplier=supplier;
-        this.inbox=inbox; this.allocation=allocation; this.monthPolicy=monthPolicy; this.clock=clock;
+        this.inbox=inbox; this.allocation=allocation; this.monthPolicy=monthPolicy; this.clock=clock; this.sellers=sellers;
         transaction = new TransactionTemplate(manager); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public SettlementRefund execute(ConfirmedRefund input) {
@@ -85,9 +88,12 @@ public class RecordConfirmedRefund {
         SettlementRefund duplicate = existing(input); if (duplicate != null) return duplicate;
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         String confirmedMonth = SettlementMonth.at(input.occurredAt()).value();
-        SellerMonthlySettlement confirmed = lockMonth(original.getSellerSubject(), confirmedMonth, now);
-        SellerMonthlySettlement selected = confirmed;
-        if (confirmed.isClosed()) {
+        lockSeller(original.getSellerSubject(), now);
+        // Decisions 42·130: a later CLOSED month closes every earlier month of the seller, rows or not; no row is created for it.
+        boolean laterClosed = months.existsBySellerSubjectAndStatusAndSettlementMonthGreaterThan(original.getSellerSubject(), "CLOSED", confirmedMonth);
+        SellerMonthlySettlement selected = laterClosed ? null : lockMonth(original.getSellerSubject(), confirmedMonth, now);
+        boolean confirmationClosed = laterClosed || selected.isClosed();
+        if (confirmationClosed) {
             for (int rollover=0; rollover<3; rollover++) {
                 now=clock.instant().truncatedTo(ChronoUnit.MICROS);
                 selected=lockMonth(original.getSellerSubject(), SettlementMonth.at(now).value(), now);
@@ -98,7 +104,7 @@ public class RecordConfirmedRefund {
         }
         now=clock.instant().truncatedTo(ChronoUnit.MICROS);
         RefundMonthSelection selection=monthPolicy.select(new RefundMonthInput(input.refundId(), input.orderNo(), input.occurredAt(), now,
-                confirmed.isClosed(), confirmed.isClosed() ? selected.isClosed() : false, null));
+                confirmationClosed, confirmationClosed ? selected.isClosed() : false, null));
         if (!selection.settlementMonth().equals(selected.getSettlementMonth())) throw new BusinessException(ErrorCode.CONFLICT, "월 경계가 변경됐습니다.");
         SettlementRefund refund=SettlementRefund.record(input, original, proof, allocation.allocate(original), selection);
         if (!inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.REFUND_PAYMENT_CONFIRMED))
@@ -108,5 +114,8 @@ public class RecordConfirmedRefund {
     }
     private SellerMonthlySettlement lockMonth(String seller, String month, Instant now) {
         return months.lock(seller, month).orElseGet(() -> months.saveAndFlush(SellerMonthlySettlement.open(seller, month, now)));
+    }
+    private void lockSeller(String seller, Instant now) {
+        if (sellers.lock(seller).isEmpty()) sellers.saveAndFlush(SellerLock.of(seller, now));
     }
 }

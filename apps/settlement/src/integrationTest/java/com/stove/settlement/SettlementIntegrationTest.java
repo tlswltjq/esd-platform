@@ -53,6 +53,7 @@ import com.stove.settlement.core.domain.PgPayment;
 import com.stove.settlement.core.domain.PgReceiptView;
 import com.stove.settlement.core.domain.PgSettlement;
 import com.stove.settlement.core.domain.ProductOwner;
+import com.stove.settlement.core.domain.SellerLockRepository;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSale;
@@ -91,7 +92,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -112,10 +112,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     static final PausePoints PAUSES=new PausePoints();
     static final String MONTH_LOCKED="SellerMonthlySettlementRepository.lock";
+    static final String SELLER_LOCKED="SellerLockRepository.lock";
     static final Duration BLOCKED=Duration.ofSeconds(1);
     @TestConfiguration
     static class Pausing {
-        @Bean static BeanPostProcessor pausingMonthRepository() { return PausePoints.pausing(PAUSES,SellerMonthlySettlementRepository.class); }
+        @Bean static BeanPostProcessor pausingMonthRepository() { return PausePoints.pausing(PAUSES,SellerMonthlySettlementRepository.class,SellerLockRepository.class); }
     }
     @AfterEach void unusedPauses() { assertThat(PAUSES.reset()).as("쓰이지 않은 멈춤 지점").isEmpty(); }
     @Autowired RecordPaidSale record;
@@ -263,9 +264,9 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         Gate locked=PAUSES.arm(MONTH_LOCKED,"refund");
         Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(confirmed));
         locked.awaitArrival();
-        Watch waiting=PAUSES.watch(MONTH_LOCKED,"close");
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
-        assertThat(waiting.stillInsideAfter(BLOCKED)).as("환불이 월을 잠근 동안 마감은 잠금 호출 안에서 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("환불이 판매자·월을 잠근 동안 마감은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(refunding.join().getSettlementMonth()).isEqualTo("2026-09");
         SellerMonthlySettlement closed=closing.join();
@@ -278,9 +279,9 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
         locked.awaitArrival();
-        Watch waiting=PAUSES.watch(MONTH_LOCKED,"refund");
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"refund");
         Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(confirmed));
-        assertThat(waiting.stillInsideAfter(BLOCKED)).as("마감이 월을 잠근 동안 환불은 잠금 호출 안에서 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("마감이 판매자·월을 잠근 동안 환불은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(closing.join().getRefundedSellerPayoutAmount()).isZero();
         assertThat(refunding.join().getSettlementMonth()).isNotEqualTo("2026-09");
@@ -292,9 +293,9 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         Gate locked=PAUSES.arm(MONTH_LOCKED,"sale");
         Run<SettlementSale> recording=PausePoints.start("sale",() -> record.execute(racing));
         locked.awaitArrival();
-        Watch waiting=PAUSES.watch(MONTH_LOCKED,"close");
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
-        assertThat(waiting.stillInsideAfter(BLOCKED)).as("매출이 월을 잠근 동안 마감은 잠금 호출 안에서 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("매출이 판매자·월을 잠근 동안 마감은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(recording.join().getSettlementMonth()).isEqualTo("2026-09");
         assertThat(closing.join().getPaidAmount()).isEqualTo(20000);
@@ -635,15 +636,19 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(count("settlement_seller_carryover")).isEqualTo(1);
         assertThat(carryover("2026-09").get("payable")).isEqualTo(9000L);
     }
-    @Test void closingALaterMonthWhileAnEarlierCloseHoldsItsLockIsRejected() throws Exception {
+    /** 앞 월 마감이 판매자를 잠근 동안 뒤 월 마감은 기다렸다가, 앞 월이 CLOSED가 된 뒤 그 월을 출처로 마감한다(D-045 판매자 직렬화). */
+    @Test void closingALaterMonthWaitsForAnEarlierCloseHoldingTheSellerLock() throws Exception {
         sale(order(Instant.parse("2026-09-01T00:00:00Z")));sale(order(NOW.minusSeconds(20)));
         at("2026-11-02T03:00:00Z");
         Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-09"));
         locked.awaitArrival();
-        assertThatThrownBy(() -> close.execute("usr_seller","2026-10")).isInstanceOf(BusinessException.class);
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"later");
+        Run<SellerMonthlySettlement> later=PausePoints.start("later",() -> close.execute("usr_seller","2026-10"));
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("앞 월 마감이 판매자를 잠근 동안 뒤 월 마감은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(closing.join().isClosed()).isTrue();
+        assertThat(later.join().isClosed()).isTrue();
         balance(closed("2026-10"),0,9000,0);
         assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-09");
     }
@@ -681,7 +686,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
      * [D-045] 기대: 10월이 CLOSED라 9/30 확인 환불은 11월에 반영되고 9월 행은 생기지 않으며, 11월 마감이 8,100원을 상계해 carriedOut −5,400.
      * 실제(수정 전): 9월 OPEN 행이 생겨 환불이 9월(CONFIRMED_MONTH)에 붙고 11월 마감은 409, 9월을 먼저 마감해도 11월은 출처 10월이라 8,100원을 과지급한다.
      */
-    @Test @Tag("known-defect") void lateRefundOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
+    @Test void lateRefundOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
         PaidOrder august=augustAndOctoberClosed();
         at("2026-11-03T03:00:00Z");
         SettlementRefund refund=recordRefund.execute(refundConfirmedAt(august,SEPTEMBER_30_KST));
@@ -695,7 +700,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(monthRows("2026-09")).isZero();
     }
     /** [D-045] 같은 흐름의 매출: 9/30 매출이 11/3에 도착하면 saleMonth 9월을 보존한 채 11월에 반영되고 9월 행은 생기지 않는다. */
-    @Test @Tag("known-defect") void lateSaleOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
+    @Test void lateSaleOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
         augustAndOctoberClosed();
         at("2026-11-03T03:00:00Z");
         SettlementSale late=sale(paid(SEPTEMBER_30_KST,5000));
@@ -710,7 +715,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
      * [D-046] 기대: 12월이 출처 10월(−9,000)을 받아 마감된 뒤 행 없는 11월 마감은 409이고 11월 행·원장 행이 생기지 않는다.
      * 실제(수정 전): 0원 11월 CLOSED 행이 생기고 출처 10월의 −9,000을 다시 받아, 같은 이월을 두 번 쓴다.
      */
-    @Test @Tag("known-defect") void closingAnEarlierMonthAfterALaterMonthClosedIsRejectedWithoutReusingTheCarry() {
+    @Test void closingAnEarlierMonthAfterALaterMonthClosedIsRejectedWithoutReusingTheCarry() {
         PaidOrder september=order(Instant.parse("2026-09-01T00:00:00Z"));sale(september);closed("2026-09");
         recordRefund.execute(prepareRefund(september));
         at("2026-11-02T03:00:00Z");balance(closed("2026-10"),0,0,-9000);
@@ -726,7 +731,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(closed("2026-12").path("carriedIn").asLong()).as("이미 CLOSED인 대상 월 재요청은 첫 결과(R3.4)").isEqualTo(-9000);
     }
     /** [D-046] 추가 방어선: 이월 원장은 판매자마다 같은 출처 월을 한 번만 받는다. 다른 판매자는 같은 출처 월을 쓸 수 있다. */
-    @Test @Tag("known-defect") void theCarryLedgerAcceptsEachSourceMonthOncePerSeller() {
+    @Test void theCarryLedgerAcceptsEachSourceMonthOncePerSeller() {
         String insert="INSERT INTO settlement_seller_carryover (seller_subject,settlement_month,net_seller_payout_amount,carried_in,payable,carried_out,source_month,created_at)"
                 +" VALUES (?,?,0,0,0,0,?,'2027-01-02 03:00:00')";
         jdbc.update(insert,"usr_seller","2026-10","2026-09");
@@ -737,14 +742,15 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(count("settlement_seller_carryover")).isEqualTo(4);
     }
     /** [D-045] 10월 마감이 판매자를 잠근 동안 도착한 9/30 환불은 마감을 기다렸다가 11월로 넘어간다. */
-    @Test @Tag("known-defect") void aLateEarlierMonthRefundWaitsForTheLaterCloseAndMovesToTheCurrentMonth() throws Exception {
+    @Test void aLateEarlierMonthRefundWaitsForTheLaterCloseAndMovesToTheCurrentMonth() throws Exception {
         PaidOrder august=augustClosedAndOctoberSold();
         at("2026-11-03T03:00:00Z");ConfirmedRefund late=refundConfirmedAt(august,SEPTEMBER_30_KST);
         Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-10"));
         locked.awaitArrival();
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"refund");
         Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(late));
-        assertThat(refunding.stillRunningAfter(BLOCKED)).as("마감이 판매자를 잠근 동안 앞 월 환불은 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("마감이 판매자를 잠근 동안 앞 월 환불은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(closing.join().isClosed()).isTrue();
         SettlementRefund refund=refunding.join();
@@ -752,14 +758,15 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(monthRows("2026-09")).isZero();
     }
     /** [D-045] 앞 월 매출이 판매자를 잠근 동안 10월 마감은 기다리고, 새로 생긴 9월 OPEN 때문에 409로 끝난다. 9월부터 마감하면 이월이 이어진다. */
-    @Test @Tag("known-defect") void aLaterCloseWaitsForAnEarlierMonthSaleAndThenRequiresThatMonthFirst() throws Exception {
+    @Test void aLaterCloseWaitsForAnEarlierMonthSaleAndThenRequiresThatMonthFirst() throws Exception {
         augustClosedAndOctoberSold();
         at("2026-11-03T03:00:00Z");PaidOrder late=paid(SEPTEMBER_30_KST,5000);prepare(late);
         Gate locked=PAUSES.arm(MONTH_LOCKED,"sale");
         Run<SettlementSale> recording=PausePoints.start("sale",() -> record.execute(late));
         locked.awaitArrival();
+        Watch waiting=PAUSES.watch(SELLER_LOCKED,"close");
         Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-10"));
-        assertThat(closing.stillRunningAfter(BLOCKED)).as("앞 월 매출이 판매자를 잠근 동안 뒤 월 마감은 기다린다").isTrue();
+        assertThat(waiting.stillInsideAfter(BLOCKED)).as("앞 월 매출이 판매자를 잠근 동안 뒤 월 마감은 판매자 잠금 호출 안에서 기다린다").isTrue();
         locked.release();
         assertThat(recording.join().getSettlementMonth()).isEqualTo("2026-09");
         assertThat(closing.failure()).isInstanceOf(BusinessException.class).hasMessage("이전 월을 먼저 마감해야 합니다.");

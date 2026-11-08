@@ -193,7 +193,7 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
                     """);
             List<Map<String,Object>> months=jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id");
             List<Map<String,Object>> beforeV13=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
-            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            Flyway.configure().dataSource(source).locations(location).target("13").load().migrate();
             assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'13' ORDER BY installed_rank")).isEqualTo(beforeV13);
             assertThat(jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id")).isEqualTo(months);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_carryover",Long.class)).isZero();
@@ -219,8 +219,46 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
                             assertThat(failure.getSQLException().getMessage()).contains(bad.getValue());
                         });
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_carryover",Long.class)).isEqualTo(3);
-            Flyway.configure().dataSource(source).locations(location).load().validate();
+            Flyway.configure().dataSource(source).locations(location).target("13").load().validate();
         } finally { root.execute("DROP DATABASE "+schema); }
+    }
+    /**
+     * D-045·D-046: V14는 빈 판매자 잠금 테이블만 만들고, V15는 이월 원장에 (판매자, 출처 월) 유일 제약을 더한다.
+     * 옛 원장 행이 출처를 겹쳐 쓰지 않았으면 행을 그대로 두고 적용되고, 겹쳐 썼으면 V15만 실패하고 원장은 바뀌지 않는다.
+     */
+    @Test void v14AndV15SerializeSellersAndRejectAReusedCarrySourceWithoutChangingTheLedger() {
+        MySQLContainer<?> mysql=SharedContainers.MYSQL;
+        String server="jdbc:mysql://"+mysql.getHost()+":"+mysql.getMappedPort(3306)+"/";
+        JdbcTemplate root=new JdbcTemplate(new DriverManagerDataSource(server+mysql.getDatabaseName()+"?useSSL=false&allowPublicKeyRetrieval=true","root",mysql.getPassword()));
+        String insert="INSERT INTO settlement_seller_carryover(seller_subject,settlement_month,net_seller_payout_amount,carried_in,payable,carried_out,source_month,created_at) VALUES";
+        String location="filesystem:"+Path.of("src/main/resources/db/migration").toAbsolutePath();
+        for(boolean reused:List.of(false,true)) {
+            String schema="settlement_v15_"+UUID.randomUUID().toString().replace("-","");
+            root.execute("CREATE DATABASE "+schema);
+            try {
+                DriverManagerDataSource source=new DriverManagerDataSource(server+schema+"?useSSL=false&allowPublicKeyRetrieval=true","root",mysql.getPassword());JdbcTemplate jdbc=new JdbcTemplate(source);
+                Flyway.configure().dataSource(source).locations(location).target("13").load().migrate();
+                jdbc.update(insert+"('seller','2026-08',8100,0,8100,0,NULL,'2026-09-02'),('seller','2026-10',-9000,0,0,-9000,'2026-08','2026-11-02'),"
+                        +"('seller','2026-12',20000,-9000,11000,0,'2026-10','2027-01-02'),('other','2026-12',100,0,100,0,'2026-10','2027-01-02')");
+                if(reused) jdbc.update(insert+"('seller','2026-11',0,-9000,0,-9000,'2026-10','2027-01-03')");
+                List<Map<String,Object>> ledger=jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id");
+                if(!reused) {
+                    Flyway.configure().dataSource(source).locations(location).load().migrate();
+                    assertThat(jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id")).isEqualTo(ledger);
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_lock",Long.class)).isZero();
+                    assertThatThrownBy(() -> jdbc.update(insert+"('seller','2026-11',0,-9000,0,-9000,'2026-10','2027-01-03')"))
+                            .isInstanceOf(DuplicateKeyException.class).hasMessageContaining("uk_seller_carryover_source");
+                    jdbc.update(insert+"('seller','2026-07',0,0,0,0,NULL,'2026-08-02')");
+                    Flyway.configure().dataSource(source).locations(location).load().validate();
+                } else {
+                    assertThatThrownBy(() -> Flyway.configure().dataSource(source).locations(location).load().migrate())
+                            .as("겹친 출처가 있으면 V15가 실패한다").hasMessageContaining("uk_seller_carryover_source");
+                    assertThat(jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id")).isEqualTo(ledger);
+                    assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success=1 ORDER BY installed_rank DESC LIMIT 1",String.class)).containsExactly("14");
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=? AND index_name='uk_seller_carryover_source'",Long.class,schema)).isZero();
+                }
+            } finally { root.execute("DROP DATABASE "+schema); }
+        }
     }
 
     @Test void v5ToV6ToV7PreservesOldLedgerAndInboxAndUsesCaseSensitiveNewKeys() {

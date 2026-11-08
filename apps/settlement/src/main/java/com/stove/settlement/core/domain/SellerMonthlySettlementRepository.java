@@ -14,6 +14,7 @@ public interface SellerMonthlySettlementRepository extends JpaRepository<SellerM
     @Query("select m from SellerMonthlySettlement m where m.sellerSubject=:seller and m.settlementMonth=:month")
     Optional<SellerMonthlySettlement> lock(@Param("seller") String seller,@Param("month") String month);
     boolean existsBySellerSubjectAndStatusAndSettlementMonthLessThan(String seller,String status,String month);
+    boolean existsBySellerSubjectAndStatusAndSettlementMonthGreaterThan(String seller,String status,String month);
     Optional<SellerMonthlySettlement> findFirstBySellerSubjectAndStatusAndSettlementMonthLessThanOrderBySettlementMonthDesc(String seller,String status,String month);
     @Query("select m from SellerMonthlySettlement m where (:seller is null or m.sellerSubject=:seller) and (:month is null or m.settlementMonth=:month)")
     Page<SellerMonthlySettlement> search(@Param("seller") String seller,@Param("month") String month,Pageable pageable);
