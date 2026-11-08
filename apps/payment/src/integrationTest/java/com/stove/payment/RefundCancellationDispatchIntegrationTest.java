@@ -1450,6 +1450,21 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=429,"
                     + " rejection_type='TOO_MANY_REQUESTS' WHERE hold_id=?", active))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            // A NULL inside the CHECK must not make it UNKNOWN (and so pass): each detail is required on its own.
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=NULL,"
+                    + " rejection_type='PAYMENT_NOT_PAID' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
+                    + " rejection_type=NULL WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
+                    + " rejection_type='' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            String received = "payment_not_paid_" + "x".repeat(5000);
+            assertThat(migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=422,"
+                    + " rejection_type=? WHERE hold_id=?", received, active)).isEqualTo(1);
+            assertThat(migration.queryForObject("SELECT rejection_type FROM refund_cancellation_hold WHERE hold_id=?", String.class, active))
+                    .isEqualTo(received);
             assertThat(migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
                     + " rejection_type='PAYMENT_NOT_PAID' WHERE hold_id=?", active)).isEqualTo(1);
             assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='UNKNOWN_REASON', rejection_status=NULL,"

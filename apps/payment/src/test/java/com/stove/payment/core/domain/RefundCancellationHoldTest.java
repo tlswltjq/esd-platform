@@ -155,9 +155,11 @@ class RefundCancellationHoldTest {
         assertThat(PgCancellationRejection.rejects(400, "INVALID_REQUEST")).isFalse();
         assertThat(PgCancellationRejection.rejects(409, "CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN")).isFalse();
         assertThat(PgCancellationRejection.rejects(409, "IDEMPOTENCY_OUTSTANDING_REQUEST")).isFalse();
-        for (String type : new String[] {null, "", "lower", "1ABC", "A B", "A".repeat(65)})
+        for (String type : new String[] {null, "", " ", "\t"})
             assertThat(PgCancellationRejection.rejects(409, type)).isFalse();
-        assertThat(PgCancellationRejection.rejects(409, "A".repeat(64))).isTrue();
+        for (String type : new String[] {"lower", "1ABC", "A B", "INVALID_REQUEST ", "결제 오류", "A".repeat(65), "X".repeat(5000)})
+            assertThat(PgCancellationRejection.rejects(409, type)).as(type).isTrue();
+        assertThat(PgCancellationRejection.rejects(400, "INVALID_REQUEST ")).isTrue();
         assertThatThrownBy(() -> new PgCancellationRejection(429, "TOO_MANY_REQUESTS")).isInstanceOf(IllegalArgumentException.class);
     }
 

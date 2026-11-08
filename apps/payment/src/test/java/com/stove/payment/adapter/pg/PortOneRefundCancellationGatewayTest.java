@@ -274,7 +274,8 @@ class PortOneRefundCancellationGatewayTest {
     @Test void malformedOrUntypedBadRequestsRemainUnconfirmedWithoutCreatingAnInputRejection() {
         for (String error : List.of("<html>private-provider-detail</html>", "{}",
                 "{\"type\":\"INVALID_REQUEST\",\"type\":\"OTHER_ERROR\"}", "{\"type\":\"INVALID_REQUEST\"} {}", "{\"type\":400}",
-                "{\"type\":\"INVALID_REQUEST \"}", "{\"type\":\"invalid_request\"}", "{\"type\":\"" + "A".repeat(65) + "\"}")) {
+                "{\"type\":{\"code\":\"INVALID_REQUEST\"}}", "{\"type\":[\"INVALID_REQUEST\"]}", "{\"type\":null}", "{\"type\":true}",
+                "{\"type\":\"\"}", "{\"type\":\"  \"}")) {
             server.reset(); expectRead(paid());
             expectPost(body(), withStatus(HttpStatus.BAD_REQUEST).body(error).contentType(MediaType.APPLICATION_JSON));
             assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
@@ -286,7 +287,9 @@ class PortOneRefundCancellationGatewayTest {
     /** Decision 133: PortOne judged the request, so a typed 400·409·other 4xx stops automatic POSTs with its status and type. */
     @Test void formallyTypedClientErrorsStopAutomaticPostsWithTheirStatusAndType() {
         for (Object[] error : List.of(new Object[] {400, "OTHER_ERROR"}, new Object[] {409, "PAYMENT_NOT_PAID"},
-                new Object[] {409, "INVALID_REQUEST"}, new Object[] {405, "METHOD_NOT_ALLOWED"}, new Object[] {422, "CANCEL_AMOUNT_EXCEEDED"})) {
+                new Object[] {409, "INVALID_REQUEST"}, new Object[] {405, "METHOD_NOT_ALLOWED"}, new Object[] {422, "CANCEL_AMOUNT_EXCEEDED"},
+                new Object[] {422, "payment_not_paid"}, new Object[] {400, "INVALID_REQUEST "}, new Object[] {409, "결제 상태 오류"},
+                new Object[] {409, "A".repeat(65)}, new Object[] {400, "TYPE_" + "X".repeat(5000)})) {
             server.reset(); expectRead(paid());
             expectPost(body(), withStatus(HttpStatus.valueOf((Integer) error[0]))
                     .body("{\"type\":\"" + error[1] + "\",\"message\":\"private-provider-detail\"}").contentType(MediaType.APPLICATION_JSON));
