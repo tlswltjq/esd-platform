@@ -1160,7 +1160,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 경보 기준 10분")
 - 선택: A, N = 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Order는 환불이 `PENDING_LICENSE_GRANT`에 들어간 시각을 저장한다(새 이행, 옛 행 호환 테스트 포함). 그 시각이 10분을 넘은 환불 건수를 게이지로 내고, Prometheus 경보 하나를 둔다. ADMIN 환불 목록·상세에 진입 시각을 보인다. 같은 경계를 넘은 환불의 고객 조회에는 `processingNotice`를 붙이고, 문구는 기존 환불 지연 안내와 같은 모양으로 둔다. 재처리는 결정 37의 운영 절차(DLT 재투입·Outbox DEAD 재큐잉)로 한다. 새 이벤트 계약은 만들지 않는다. 원본 이벤트가 남아 있지 않은 건의 종결은 환불 조사 이후 조치·종결 결정에서 함께 정한다.
 - 구분: 추천 수용
-- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현 [PR #151](https://github.com/tlswltjq/esd-platform/pull/151), 근거 색인 2026-11-08 order 행
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현 [PR #151](https://github.com/tlswltjq/esd-platform/pull/151), 근거 색인 2026-11-08 order 행. 정지·복구·승인 중단 대기로 범위 확장 [PR #PR_NO](https://github.com/tlswltjq/esd-platform/pull/PR_NO)(V34, 게이지 `status` 라벨), 근거 색인 2026-11-08 order·license·common 결정 125·129 범위 확장 행
 
 <a id="pre-admission-pending-expiry"></a>
 ## 126. 접수 전 승인이 PG 관측 이력을 가진 채 주문이 만료되면 PG를 다시 조회하고, 아직 PENDING이면 보류로 올린다
@@ -1196,7 +1196,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 원래 이벤트를 같은 ID로 재발행"). 질문 전에 "해당 문제를 실제 기술용어를 들어 조금 더 쉽게 설명해줘"를 요청해 Outbox·DLT·Inbox·보존 기간 기준으로 다시 설명을 받았다.
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이벤트를 소유한 모듈(License의 `LicenseGranted`, Order의 `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행을 더한다. ADMIN만 쓰고, 한 번에 한 건이며, 실행자·시각·사유를 기록한다. 행은 원래 `event_id`·본문·키를 그대로 두고 다시 publish 대상으로 돌린다. 새 이벤트 ID는 만들지 않는다. 받는 쪽은 Inbox로 중복을 거르므로 이미 처리된 이벤트의 재발행은 효과가 없어야 하고, 이를 테스트로 보인다. 구매 근거가 있으면 `LicenseGranted`를, 구매 근거가 없으면 `OrderPaid`를 재발행한다. 그러면 License가 지급한 뒤 `LicenseGranted`를 보내 정상 흐름으로 이어진다. 결정 37의 "원래 ID·본문·키를 보존해 재투입"을 `SENT` 행까지 넓힌 것이다. 절차서의 "원본 없음"은 "Outbox 행도 없음"으로 좁히고, 재발행 전에 "Outbox `SENT`·상대 Inbox 없음"을 확인하는 순서를 적는다. Outbox 행까지 없는 경우와 받는 쪽 검증이 거절하는 모순 건은 여전히 조사 대상이다. 자동 재발행·대조 엔진은 만들지 않는다(결정 37).
 - 구분: 추천 수용
-- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현 [PR #164](https://github.com/tlswltjq/esd-platform/pull/164) (`OrderPaid`·`LicenseGranted`), 근거 색인 2026-11-08 order·license 행
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현 [PR #164](https://github.com/tlswltjq/esd-platform/pull/164) (`OrderPaid`·`LicenseGranted`), 근거 색인 2026-11-08 order·license 행. 정지·복구·승인 정정 이벤트 6종과 소유 모듈별 허용 목록으로 범위 확장 [PR #PR_NO](https://github.com/tlswltjq/esd-platform/pull/PR_NO)
 
 <a id="seller-close-order-carryover"></a>
 ## 130. 판매자 월 마감은 오래된 월부터 하고, 이월은 직전 마감 월에서 받는다

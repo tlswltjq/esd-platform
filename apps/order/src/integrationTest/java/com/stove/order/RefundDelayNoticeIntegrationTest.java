@@ -163,7 +163,11 @@ class RefundDelayNoticeIntegrationTest extends OrderIntegrationTestBase {
         restore.execute(new RefundFailureConfirmation(failed,FIRST.plusSeconds(60),f.refund().getRefundId(),old.getAttemptId(),old.getExecutionRequestEventId(),
                 f.order().getOrderNo(),f.order().getPaymentId(),f.order().getBuyerSubject(),f.order().getAmount(),"KRW","pg-original","pg-failed","a".repeat(64)));
         when(clock.instant()).thenReturn(DELAY); preparation.execute(oldFact);
-        assertThat(customer(f).data().path("status").asText()).isEqualTo("PROCESSING"); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
+        assertThat(customer(f).data().path("status").asText()).isEqualTo("PROCESSING");
+        // 옛 준비 사실의 결과 확인 지연 안내는 내지 않는다. 실패 확정 + 10분이 지난 복구 대기에는 복구 지연 안내가 붙는다(결정 125 범위 확장).
+        JsonNode restoring=customer(f).data().path("processingNotice");
+        assertThat(restoring.path("code").asText()).isEqualTo("LICENSE_RESTORATION_CONFIRMATION_DELAYED");
+        assertThat(restoring.path("since").asText()).isEqualTo(FIRST.plusSeconds(60).plus(Duration.ofMinutes(10)).toString());
         RefundAttempt failedAttempt=attempt(f); restore.execute(new LicenseRestorationConfirmation(id(),DELAY.plusSeconds(90),failedAttempt.getRestorationRequestEventId(),
                 f.refund().getRefundId(),old.getAttemptId(),failed,old.getLicenseId(),f.order().getOrderNo(),f.order().getBuyerSubject(),f.order().getProductId(),f.order().getProductCode(),f.order().getPaymentId(),old.getSuspensionRequestEventId(),old.getSuspensionEventId(),false));
         assertThat(customer(f).data().path("status").asText()).isEqualTo("FAILED"); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
