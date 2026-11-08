@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -219,6 +220,19 @@ class PortOneRefundCancellationGatewayTest {
                 .contentType(MediaType.APPLICATION_JSON));
         assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isInstanceOf(PgUnavailable.class);
         server.verify();
+    }
+
+    /** [D-048] A 409 whose body is not a typed JSON object is an unconfirmed outcome, not an escaping parse failure (R7.15). */
+    @Tag("known-defect")
+    @Test void malformedOrUntypedConflictsRemainUnconfirmedInsteadOfEscapingAsInvalidInput() {
+        for (String error : List.of("<html>private-provider-detail</html>", "", "{}", "[]", "{\"type\":409}", "{\"type\":\" \"}",
+                "{\"type\":\"PAYMENT_NOT_PAID\",\"type\":\"OTHER\"}", "{\"type\":\"PAYMENT_NOT_PAID\"} {}")) {
+            server.reset(); expectRead(paid());
+            expectPost(body(), withStatus(HttpStatus.CONFLICT).body(error).contentType(MediaType.APPLICATION_JSON));
+            assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                    .isExactlyInstanceOf(PgUnavailable.class).hasMessageNotContaining("private-provider-detail");
+            server.verify();
+        }
     }
 
     @Test void aLeaseThatExpiresDuringPreflightCannotAuthorizeALatePost() {
