@@ -1,7 +1,10 @@
 package com.stove.common.messaging.outbox;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +31,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
 
     /** 운영 회수용. 원인을 제거한 뒤 {@link OutboxEvent#requeue()} 로 되살린다. */
     List<OutboxEvent> findByStatusOrderByIdAsc(OutboxEvent.OutboxStatus status);
+
+    /**
+     * 운영 재발행용 한 건 잠금([결정 129]). 같은 행을 두 운영자가 동시에 재발행해도 한 번만 대기로 돌아간다.
+     * 릴레이는 {@code SKIP LOCKED} 로 집으므로 이 잠금을 기다리지 않는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM OutboxEvent e WHERE e.eventId = :eventId")
+    Optional<OutboxEvent> lockByEventId(@Param("eventId") String eventId);
 }
