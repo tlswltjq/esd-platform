@@ -186,5 +186,37 @@ class ObjectMirrorTest(unittest.TestCase):
             self.assertEqual(command[-2:], ["/backup/objects/stove-builds", "target/stove-builds"])
 
 
+class DockerHubStoveImageTest(unittest.TestCase):
+    """Decision 118: Docker Hub's `stove` namespace belongs to someone else, so its images never run here."""
+
+    REFUSED = ["stove/mysql-client:8.0-local", "docker.io/stove/minio:tag", "Docker.IO/stove/minio:tag",
+               "index.docker.io/stove/minio@sha256:" + "0" * 64]
+
+    def test_database_commands_refuse_before_running(self):
+        for image in self.REFUSED:
+            with self.subTest(image=image):
+                run = Recorder()
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaisesRegex(backup.BackupError, "decision 118"):
+                        backup.full_backup(arguments(Path(directory), dest=Path(directory), image=image),
+                                           {"MYSQL_BACKUP_PASSWORD": SECRET}, run=run)
+                self.assertEqual(run.calls, [])
+
+    def test_object_commands_refuse_before_running(self):
+        run = Recorder()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(backup.BackupError, "decision 118"):
+                backup.objects_backup(arguments(Path(directory), dest=Path(directory), image="stove/minio:tag"),
+                                      {"STORAGE_BACKUP_ACCESS_KEY": "reader", "STORAGE_BACKUP_SECRET_KEY": SECRET},
+                                      run=run)
+        self.assertEqual(run.calls, [])
+
+    def test_local_and_other_registries_run(self):
+        for image in ["localhost/stove/mysql-client:8.0-local", "ghcr.io/stove/minio:tag",
+                      "localhost:5000/stove/minio:tag", "mysql:8.0", "stove-team/minio:tag"]:
+            with self.subTest(image=image):
+                self.assertEqual(backup.docker_client(image, "host", Path("/b"), [])[-1], image)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -47,6 +47,8 @@ class InfraContainersTest {
             "STOVE_TEST_MINIO_IMAGE, stove/minio:" + TAG,
             "STOVE_MINIO_IMAGE, docker.io/stove/minio:" + TAG,
             "STOVE_TEST_MINIO_IMAGE, index.docker.io/stove/minio",
+            "STOVE_TEST_MINIO_IMAGE, Docker.IO/stove/minio:t",
+            "STOVE_TEST_MINIO_IMAGE, stove/minio:t@sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "STOVE_JIB_REGISTRY, stove",
             "STOVE_JIB_REGISTRY, docker.io/stove"
     })
@@ -59,8 +61,8 @@ class InfraContainersTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"localhost/stove/minio:t", "ghcr.io/stove/minio:t", "127.0.0.1:5000/stove/minio:t",
-            "stove-team/minio:t", "minio/minio:t"})
+    @ValueSource(strings = {"localhost/stove/minio:t", "localhost:5000/stove/minio:t", "ghcr.io/stove/minio:t",
+            "127.0.0.1:5000/stove/minio:t", "stove-team/minio:t", "minio/minio:t"})
     @DisplayName("다른 registry나 다른 계정의 이름은 그대로 쓴다")
     void otherNamesAreAllowed(String image) {
         assertThat(InfraContainers.minioImage(Map.of("STOVE_TEST_MINIO_IMAGE", image)).asCanonicalNameString())

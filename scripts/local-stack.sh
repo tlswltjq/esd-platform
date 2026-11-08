@@ -13,6 +13,7 @@ APPS=(docker compose -p stove-apps -f docker-compose.apps.yml -f docker-compose.
 case "${1:-up}" in
   up)
     ./gradlew jibDockerBuild --no-daemon
+    bash scripts/check-image-names.sh "${INFRA[@]}"   # 결정 118. 앱은 start-apps.sh가 확인한다.
     "${INFRA[@]}" up -d --no-build
     "${INFRA[@]}" wait mysql-bootstrap
     bash scripts/start-apps.sh "${APPS[@]:2}"
