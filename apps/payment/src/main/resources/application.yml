@@ -64,6 +64,9 @@ stove:
     review-retry-max-ms: ${PAYMENT_REVIEW_RETRY_MAX_MS:600000}
     refund-lookup:
       enabled: ${PAYMENT_REFUND_LOOKUP_ENABLED:false}
+      # 결정 122·128: 최초 준비 후 3시간이 지난 미확정 환불과 실패 뒤 조회 간격. min(상한, max(시작값, 경과 시간)), 상한은 10분을 넘지 못한다.
+      late-initial-ms: ${PAYMENT_REFUND_LOOKUP_LATE_INITIAL_MS:60000}
+      late-max-ms: ${PAYMENT_REFUND_LOOKUP_LATE_MAX_MS:600000}
     refund-execution:
       enabled: ${PAYMENT_REFUND_EXECUTION_ENABLED:false}
     refund-retry:

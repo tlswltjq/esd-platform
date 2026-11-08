@@ -6,6 +6,7 @@ import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundLookupClaim;
+import com.stove.payment.core.domain.RefundLookupInterval;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
@@ -31,11 +32,18 @@ public class ResolveRefundLookup {
     private final Executor executor;
     private final Duration lease;
     private final int batchSize;
+    private final RefundLookupInterval interval;
 
     public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
             PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize) {
-        if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0 || batchSize < 1 || batchSize > 100)
-            throw new IllegalArgumentException("A bounded lookup batch and positive lease are required");
+        this(payments, executions, reconcile, transactions, clock, executor, lease, batchSize, RefundLookupInterval.DEFAULT);
+    }
+
+    public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
+            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize, RefundLookupInterval interval) {
+        if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0 || batchSize < 1 || batchSize > 100 || interval == null)
+            throw new IllegalArgumentException("A bounded lookup batch, positive lease and refund lookup interval are required");
+        this.interval = interval;
         this.payments = payments; this.executions = executions; this.reconcile = reconcile; this.clock = clock;
         this.executor = executor; this.lease = lease; this.batchSize = batchSize;
         transaction = new TransactionTemplate(transactions);
@@ -56,18 +64,19 @@ public class ResolveRefundLookup {
         RefundLookupClaim claim = transaction.execute(tx -> {
             Payment payment = payments.lockByPaymentId(received.getPaymentId()).orElseThrow();
             RefundExecution execution = executions.lockByAttemptId(attemptId).orElseThrow();
-            if (!"PORTONE_TEST".equals(payment.getProvider()) || execution.getRefundConfirmedAt() != null || execution.getStatus() != RefundExecutionStatus.PENDING) return null;
+            // A failed execution keeps a low-frequency lookup for a late full cancellation (decision 128).
+            if (!"PORTONE_TEST".equals(payment.getProvider()) || execution.getRefundConfirmedAt() != null
+                    || execution.getStatus() == RefundExecutionStatus.SUCCEEDED) return null;
             payment.requireRefundRequest(execution.request());
             return execution.getLookupSchedule().claim(UUID.randomUUID().toString(), clock.instant(), lease);
         });
         if (claim == null) return;
         try {
             executor.execute(() -> {
-                try { reconcile.execute(attemptId); }
+                try { reconcile.executeScheduled(attemptId); }
                 catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 finally {
-                    try { update(received, execution -> execution.getLookupSchedule()
-                            .finish(claim, execution.getFirstCancellationPreparedAt(), clock.instant())); }
+                    try { update(received, execution -> execution.finishLookup(claim, clock.instant(), interval)); }
                     catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 }
             });
