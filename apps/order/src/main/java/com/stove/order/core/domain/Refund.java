@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
@@ -57,6 +58,8 @@ public class Refund {
     @Column(length = 500) private String reviewReason;
     private Instant reviewedAt;
     @Column(unique = true, length = 36) private String currentReviewId;
+    /** 결정 125: 이번 PENDING_LICENSE_GRANT 대기에 들어간 시각. 다시 들어가면 새 시각으로 바뀌고, 벗어나도 운영 조회를 위해 남긴다. */
+    private Instant licenseGrantWaitStartedAt;
 
     public void stopApproval(RefundReviewRound round, RefundApprovalStopRequest input, Instant at) {
         if (automaticRefundEligible || round==null || !refundId.equals(round.getRefundId())
@@ -93,7 +96,10 @@ public class Refund {
         if (automaticRefundEligible || !round.getReviewId().equals(currentReviewId) || status != RefundStatus.PENDING_REVIEW)
             throw new BusinessException(ErrorCode.CONFLICT, "지정한 재심사 판정을 기다리는 환불이 아닙니다.");
         boolean changed = round.decide(input, at);
-        if (changed) status = input.decision() == RefundReviewDecision.APPROVED ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.REJECTED;
+        if (changed) {
+            status = input.decision() == RefundReviewDecision.APPROVED ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.REJECTED;
+            if (status == RefundStatus.PENDING_LICENSE_GRANT) licenseGrantWaitStartedAt = at;
+        }
         return changed;
     }
 
@@ -112,7 +118,15 @@ public class Refund {
         reviewRequestId = request.requestId(); reviewDecision = request.decision();
         reviewOperatorSubject = request.operatorSubject(); reviewReason = request.reason(); reviewedAt = at;
         status = reviewDecision == RefundReviewDecision.APPROVED ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.REJECTED;
+        if (status == RefundStatus.PENDING_LICENSE_GRANT) licenseGrantWaitStartedAt = at;
         return true;
+    }
+
+    /** 결정 125: 지급 확인 대기가 경계를 넘었으면 경계 시각, 아니면 null. */
+    public Instant licenseGrantDelayedSince(Instant at, Duration threshold) {
+        if (status != RefundStatus.PENDING_LICENSE_GRANT || licenseGrantWaitStartedAt == null || at == null || threshold == null) return null;
+        Instant boundary = licenseGrantWaitStartedAt.plus(threshold);
+        return at.isBefore(boundary) ? null : boundary;
     }
 
     public RefundReviewReceipt reviewReceipt() {
@@ -256,6 +270,7 @@ public class Refund {
         refund.status = refund.automaticRefundEligible
                 ? RefundStatus.PENDING_LICENSE_GRANT : RefundStatus.PENDING_REVIEW;
         refund.currentReviewId = refund.automaticRefundEligible ? null : refund.refundId;
+        refund.licenseGrantWaitStartedAt = refund.automaticRefundEligible ? receivedAt : null;
         return refund;
     }
 

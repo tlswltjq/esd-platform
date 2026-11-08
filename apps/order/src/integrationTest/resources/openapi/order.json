@@ -94,6 +94,11 @@
           "currentReview" : {
             "$ref" : "#/components/schemas/AdminRefundReviewResponse"
           },
+          "licenseGrantWaitStartedAt" : {
+            "description" : "이번 지급 확인(PENDING_LICENSE_GRANT) 대기에 들어간 시각(결정 125). 대기를 벗어나도 남는다. 한 번도 들어가지 않았으면 null",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
           "orderNo" : {
             "type" : "string"
           },
@@ -644,7 +649,7 @@
       "RefundProcessingNoticeResponse" : {
         "properties" : {
           "code" : {
-            "enum" : [ "RESULT_CONFIRMATION_DELAYED" ],
+            "enum" : [ "RESULT_CONFIRMATION_DELAYED", "LICENSE_GRANT_CONFIRMATION_DELAYED" ],
             "type" : "string"
           },
           "message" : {
@@ -725,7 +730,7 @@
           },
           "processingNotice" : {
             "$ref" : "#/components/schemas/RefundProcessingNoticeResponse",
-            "description" : "현재 환불 결과 확인이 지연될 때 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
+            "description" : "현재 환불 결과 확인이 지연되거나(RESULT_CONFIRMATION_DELAYED) 환불 처리 준비가 지연될 때(LICENSE_GRANT_CONFIRMATION_DELAYED) 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
             "type" : "null"
           },
           "purchaseReturnedToStorage" : {
