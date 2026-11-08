@@ -114,3 +114,147 @@ class PortOneFakeTest(unittest.TestCase):
         cancelled = self.call('POST', '/payments/payment/cancel', cancel, '"cancel"')
         self.assertEqual(self.call('POST', '/payments/payment/cancel', dict(cancel, reason='changed'), '"cancel"'), conflict)
         self.assertEqual(self.call('POST', '/payments/payment/cancel', cancel, '"cancel"'), cancelled)
+
+
+# Fields PortOnePaymentAttemptLookup/PortOnePaymentApprovalGateway read from a transaction-history item.
+HISTORY_FIELDS = {'id', 'paymentId', 'storeId', 'version', 'currency', 'channel', 'amount', 'customData', 'status', 'requestedAt'}
+
+
+class PortOneFakeControlTest(unittest.TestCase):
+    """Decision 119: FAILED attempts with retry, PAY_PENDING, PAID without confirm, console cancel, confirm rejection."""
+
+    def setUp(self):
+        self.fake = PortOneFake({'payment': 'secret', 'console': 'console-secret'}, 'store', 'channel').start()
+        self.addCleanup(self.fake.stop)
+
+    call = PortOneFakeTest.call
+
+    def checkout(self, payment_id='payment'):
+        body = dict(storeId='store', channelKey='channel', paymentId=payment_id, orderName='game',
+                    totalAmount=10000, currency='CURRENCY_KRW', payMethod='EASY_PAY', customData={'orderNo': 'order'})
+        return self.call('POST', '/_fake/sdk/request-payment', body)
+
+    def confirm_body(self, sdk):
+        return dict(storeId='store', paymentToken=sdk['paymentToken'], txId=sdk['txId'], currency='KRW', totalAmount=10000, isTest=True)
+
+    def control(self, action, body=None, payment_id='payment', secret='console-secret'):
+        return self.call('POST', '/_fake/control/payments/' + payment_id + '/' + action, body or {}, secret=secret)
+
+    def current(self):
+        return self.call('GET', '/payments/payment?storeId=store')[1]
+
+    def history(self):
+        return self.call('GET', '/payments/payment/transactions?storeId=store')[1]['items']
+
+    def test_failed_attempt_stays_in_history_and_same_payment_id_retries_with_new_tx(self):
+        first = self.checkout()[1]
+        self.assertEqual(self.control('fail-attempt')[0], 200)
+        failed = self.current()
+        self.assertEqual((failed['status'], failed['transactionId']), ('FAILED', first['txId']))
+        self.assertIsInstance(failed['failure'], dict)
+        self.assertIn('failedAt', failed)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(first), '"late"')[0], 409)
+        status, second = self.checkout()
+        self.assertEqual(status, 200)
+        self.assertNotEqual(second['txId'], first['txId'])
+        self.assertNotEqual(second['paymentToken'], first['paymentToken'])
+        ready = self.current()
+        self.assertEqual((ready['status'], ready['transactionId']), ('READY', second['txId']))
+        self.assertNotIn('failure', ready)
+        items = self.history()
+        self.assertEqual([(i['id'], i['status']) for i in items], [(first['txId'], 'FAILED'), (second['txId'], 'READY')])
+        for item in items:
+            self.assertLessEqual(HISTORY_FIELDS, set(item))
+            self.assertEqual((item['paymentId'], item['storeId'], item['version'], item['currency']), ('payment', 'store', 'V2', 'KRW'))
+            self.assertEqual(json.loads(item['customData']), {'orderNo': 'order'})
+        self.assertIsInstance(items[0]['failure'], dict)
+        self.assertIn('failedAt', items[0])
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(first), '"old"')[0], 400)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(second), '"second"')[0], 200)
+        self.assertEqual([i['status'] for i in self.history()], ['FAILED', 'PAID'])
+        self.assertEqual(self.current()['transactionId'], second['txId'])
+        self.assertEqual(self.checkout(), (409, {'type': 'ALREADY_PAID'}))
+
+    def test_confirm_pg_failure_fails_the_attempt_with_a_provider_error(self):
+        sdk = self.checkout()[1]
+        self.assertEqual(self.control('arm-confirm', {'outcome': 'FAILED'})[0], 200)
+        rejected = self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')
+        self.assertEqual(rejected[0], 502)
+        self.assertEqual(rejected[1]['type'], 'PG_PROVIDER')
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"'), rejected)
+        self.assertEqual(self.current()['status'], 'FAILED')
+        self.assertEqual(self.history()[0]['status'], 'FAILED')
+        retry = self.checkout()[1]
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(retry), '"retry"')[0], 200)
+        self.assertEqual([i['status'] for i in self.history()], ['FAILED', 'PAID'])
+
+    def test_pay_pending_settles_to_paid_or_failed(self):
+        for payment_id, final in (('payment', 'PAID'), ('other', 'FAILED')):
+            sdk = self.checkout(payment_id)[1]
+            self.assertEqual(self.control('settle', {'status': 'PAID'}, payment_id)[0], 409)
+            self.control('arm-confirm', {'outcome': 'PAY_PENDING'}, payment_id)
+            self.assertEqual(self.call('POST', '/payments/' + payment_id + '/confirm', self.confirm_body(sdk), '"a"')[0], 200)
+            pending = self.call('GET', '/payments/' + payment_id + '?storeId=store')[1]
+            self.assertEqual(pending['status'], 'PAY_PENDING')
+            self.assertEqual(self.checkout(payment_id)[0], 409)
+            self.assertEqual(self.control('settle', {'status': final}, payment_id)[0], 200)
+            settled = self.call('GET', '/payments/' + payment_id + '?storeId=store')[1]
+            self.assertEqual(settled['status'], final)
+            self.assertEqual('pgTxId' in settled and 'paidAt' in settled, final == 'PAID')
+            self.assertEqual('failure' in settled, final == 'FAILED')
+            self.assertEqual(settled['amount']['paid'], 10000 if final == 'PAID' else 0)
+            self.assertEqual(self.control('settle', {'status': final}, payment_id)[0], 409)
+
+    def test_pay_pending_without_confirm_blocks_confirm_and_retry_until_settled(self):
+        # Decision 120 follow-up: PAY_PENDING before our admission, then expiry, then a late PAID or FAILED.
+        sdk = self.checkout()[1]
+        self.assertEqual(self.control('pay-pending')[0], 200)
+        self.assertEqual(self.control('pay-pending')[0], 409)
+        pending = self.current()
+        self.assertEqual((pending['status'], pending['transactionId'], pending['amount']['paid']), ('PAY_PENDING', sdk['txId'], 0))
+        self.assertEqual(self.history()[0]['status'], 'PAY_PENDING')
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"a"'), (409, {'type': 'PAYMENT_NOT_READY'}))
+        self.assertEqual(self.checkout(), (409, {'type': 'ALREADY_PAID'}))
+        self.assertEqual(self.control('settle', {'status': 'PAID'})[0], 200)
+        self.assertEqual([i['status'] for i in self.history()], ['PAID'])
+        self.assertEqual([r for r in self.fake.requests if r['path'].endswith('/confirm') and r['status'] == 200], [])
+
+    def test_console_approval_pays_without_confirm_and_console_cancel_fully_cancels(self):
+        sdk = self.checkout()[1]
+        self.assertEqual(self.control('console-cancel')[0], 409)
+        self.assertEqual(self.control('console-approve')[0], 200)
+        paid = self.current()
+        self.assertEqual((paid['status'], paid['transactionId'], paid['amount']['paid']), ('PAID', sdk['txId'], 10000))
+        self.assertTrue(paid['pgTxId'] and paid['paidAt'])
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"late"'), (409, {'type': 'ALREADY_PAID'}))
+        self.assertEqual(self.control('console-cancel')[0], 200)
+        cancelled = self.current()
+        self.assertEqual((cancelled['status'], cancelled['amount']['cancelled']), ('CANCELLED', 10000))
+        self.assertEqual((cancelled['pgTxId'], cancelled['paidAt']), (paid['pgTxId'], paid['paidAt']))
+        rows = cancelled['cancellations']
+        self.assertEqual([(r['status'], r['totalAmount']) for r in rows], [('SUCCEEDED', 10000)])
+        self.assertEqual(self.history()[0]['status'], 'CANCELLED')
+        api_cancel = dict(storeId='store', amount=10000, currentCancellableAmount=10000, reason='ESD refund r')
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', api_cancel, '"c"')[0], 409)
+        confirms = [r for r in self.fake.requests if r['path'].endswith('/confirm') and r['status'] == 200]
+        self.assertEqual(confirms, [])
+
+    def test_confirm_rejection_injection_is_one_shot_and_keeps_ready(self):
+        sdk = self.checkout()[1]
+        for outcome, status in (('REJECT_400', 400), ('REJECT_403', 403)):
+            self.control('arm-confirm', {'outcome': outcome})
+            self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"' + outcome + '"')[0], status)
+            self.assertEqual(self.current()['status'], 'READY')
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')[0], 200)
+
+    def test_control_is_console_only_and_validated(self):
+        self.checkout()
+        self.assertEqual(self.control('console-approve', secret='secret')[0], 403)
+        self.assertEqual(self.control('console-approve', secret='unknown')[0], 401)
+        self.assertEqual(self.control('console-approve', payment_id='missing')[0], 404)
+        self.assertEqual(self.control('unknown')[0], 404)
+        self.assertEqual(self.control('arm-confirm', {'outcome': 'MAYBE'})[0], 400)
+        self.assertEqual(self.control('settle', {'status': 'CANCELLED'})[0], 400)
+        self.assertEqual(self.current()['status'], 'READY')
+        self.assertTrue(all(r['caller'] in {'console', 'payment', None} for r in self.fake.requests))
+        self.assertNotIn('console-secret', json.dumps(self.fake.requests))
