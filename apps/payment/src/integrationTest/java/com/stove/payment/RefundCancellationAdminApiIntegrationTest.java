@@ -92,17 +92,19 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
 
     /** Decision 133: a formal rejection is listed and detailed like the other holds, with its response status and error type. */
     @Test void aFormalRejectionHoldShowsItsStatusAndTypeInTheListAndDetailAndIsResumable() {
-        Fixture fixture = held(false, new PgCancellationRejection(409, "PAYMENT_NOT_PAID"));
+        // Decision 133 sets no format or length on the type: the received value is stored and shown whole (PR #168 R1).
+        String type = "payment_not_paid: " + "x".repeat(300);
+        Fixture fixture = held(false, new PgCancellationRejection(409, type));
         Response list = http("GET", ROOT, null, admin());
         assertThat(list.status()).isEqualTo(200);
         JsonNode listed = list.data().path("content").get(0);
         assertThat(listed.path("holdId").asText()).isEqualTo(fixture.hold().getHoldId());
         assertThat(listed.path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
-        assertThat(listed.path("rejectionStatus").asInt()).isEqualTo(409); assertThat(listed.path("rejectionType").asText()).isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(listed.path("rejectionStatus").asInt()).isEqualTo(409); assertThat(listed.path("rejectionType").asText()).isEqualTo(type);
         Response detail = detail(fixture);
         assertThat(detail.data().path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
         assertThat(detail.data().path("rejectionStatus").asInt()).isEqualTo(409);
-        assertThat(detail.data().path("rejectionType").asText()).isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(detail.data().path("rejectionType").asText()).isEqualTo(type);
         assertThat(detail.data().path("resumable").asBoolean()).isTrue();
         assertThat(resume(fixture, id()).status()).isEqualTo(200);
         assertThat(stored(fixture).getActiveCancellationHoldId()).isNull();
