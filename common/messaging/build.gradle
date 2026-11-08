@@ -20,6 +20,9 @@ dependencies {
     testImplementation 'org.springframework:spring-web'
     compileOnly project(':common:web')
     testImplementation project(':common:web')
+    // 재발행 실행자(ADMIN sub)를 @CurrentSubject 로 받는다. 웹과 같은 이유로 compileOnly 다.
+    compileOnly project(':common:security')
+    testImplementation project(':common:security')
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 

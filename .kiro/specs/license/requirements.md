@@ -95,10 +95,11 @@ MVP와 통합(V5) 재작성은 2026-10-17 완료, 정지·복구와 Order 지급
 3. IF 기술적 지급 오류가 발생하면 THEN 시스템 SHALL Payment FAILED·자동 환불·지급 실패 이벤트를 만들지 않는다.
 4. WHEN 원래 이벤트를 재투입하면 THEN 시스템 SHALL 원래 eventId·키·헤더·본문을 보존한다.
 5. THE 시스템 SHALL OrderPaid 발행을 도입하기 전에 이미 PAID였던 주문을 자동 소급 지급하지 않는다.
-6. WHERE 공통 운영 API(DLT 조회·재투입, Outbox DEAD 건별 재큐잉)를 명시적으로 활성화한 맥락에서 THE 시스템 SHALL `ADMIN`만 허용하고 MEMBER·익명과 Outbox 일괄 회수를 차단한다. 기본값은 비활성·Gateway 미노출이다.
+6. WHERE 공통 운영 API(DLT 조회·재투입, Outbox DEAD 건별 재큐잉, `SENT` 건별 재발행)를 명시적으로 활성화한 맥락에서 THE 시스템 SHALL `ADMIN`만 허용하고 MEMBER·익명과 Outbox 일괄 회수를 차단한다. 기본값은 비활성·Gateway 미노출이다.
 7. WHEN DLT 재투입을 실행하면 THEN 시스템 SHALL 모든 재발행 결과를 제한 시간 안에 확인하고, 실제 발행한 레코드의 파티션별 다음 오프셋만 커밋한다. 발행 실패·미확정·중단이면 오프셋을 커밋하지 않는다.
 8. IF DLT 발행 자체가 실패하면 THEN 시스템 SHALL 그 실패를 예외로 전파하고 성공으로 계측하지 않는다.
 9. IF 운영 요청의 토픽이 아직 없거나 DLT 형식이 아니면 THEN 시스템 SHALL 400으로 안내하고, 실제 브로커·발행 오류를 성공이나 빈 목록으로 바꾸지 않는다.
+10. WHEN ADMIN이 `POST /api/v1/ops/outbox/{eventId}/republish`(필수 사유 1~500자)를 보내고 그 행이 `SENT`인 `LicenseGranted`이면 THEN 시스템 SHALL 원래 `event_id`·본문·키를 그대로 둔 채 발행 대기로 돌리고 실행자·시각·사유·이전 발행 시각을 `outbox_republish`에 같은 트랜잭션으로 남긴다. 없는 행·`SENT`가 아닌 행은 404, 허용 목록 밖 타입·사유 없음은 400으로 거절하고 행을 바꾸지 않는다. 이미 처리된 `OrderPaid`의 재전달은 기존 구매 근거·Inbox 대조로 효과가 없다([결정 129](../../../docs/decisions.md#orphan-license-grant-republish)).
 
 ### R8. 입력 경계 검증
 **사용자 스토리:** 플랫폼으로서, 외부 이벤트를 저장 전에 검증하고 싶다. 그래야 잘못된 근거로 권한이 생기지 않는다.

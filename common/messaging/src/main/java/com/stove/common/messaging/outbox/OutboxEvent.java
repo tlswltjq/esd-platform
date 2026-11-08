@@ -170,6 +170,22 @@ public class OutboxEvent {
         this.lastError = null;
     }
 
+    /**
+     * SENT 를 발행 대기로 되돌린다([결정 129]). Kafka 에서 원본이 사라진 이벤트를 다시 내보내는 운영 경로다.
+     * <b>{@code eventId}·본문·키·적재 시각·추적 컨텍스트는 그대로 둔다</b> — 받는 쪽 Inbox 가 같은 ID 로 중복을 거른다.
+     * 이전 발행 시각은 재발행 기록이 보존하고, 여기서는 다시 보낼 때까지 비운다.
+     */
+    public void republish() {
+        if (this.status != OutboxStatus.SENT) {
+            return;
+        }
+        this.status = OutboxStatus.PENDING;
+        this.retryCount = 0;
+        this.nextAttemptAt = null;
+        this.lastError = null;
+        this.sentAt = null;
+    }
+
     /** 1초에서 시작해 두 배씩, 상한까지. 시프트가 넘치지 않도록 지수를 먼저 자른다. */
     static Duration backOffDelay(int retryCount) {
         int exponent = Math.min(Math.max(retryCount - 1, 0), 30);
