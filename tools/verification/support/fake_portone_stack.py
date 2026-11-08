@@ -170,6 +170,37 @@ class FakePortOneStack:
     def requests_for(self, payment_id, suffix, method="POST"):
         return [r for r in self.fake.requests if r["method"] == method and r["path"] == "/payments/" + payment_id + suffix]
 
+    def confirm_statuses(self, payment_id):
+        return [r["status"] for r in self.requests_for(payment_id, "/confirm")]
+
+    def lookups(self, payment_id):
+        """PortOne GET /payments/{id} calls by Payment (current-attempt lookups, history excluded)."""
+        return len([r for r in self.fake.requests if r["method"] == "GET" and r["caller"] == "payment"
+                    and r["path"].split("?")[0] == "/payments/" + payment_id])
+
+    def statuses(self, order_no, approval_id=None):
+        """(Order, Payment[, approval]) status as the buyer sees them."""
+        values = (self.buyer.data("/api/v1/orders/" + order_no)["status"], self.buyer.data("/api/v1/payments/" + order_no)["status"])
+        if approval_id is not None:
+            values += (self.buyer.data("/api/v1/payments/" + order_no + "/approvals/" + approval_id)["status"],)
+        return values
+
+    def admit_pay_pending(self, order_no):
+        """Admitted approval whose confirm answers PAY_PENDING: Order PAYMENT_PROCESSING, approval ADMITTED, one confirm."""
+        self.wait_payment_pending(order_no)
+        checkout, sdk = self.open_checkout(order_no)
+        payment_id = checkout["paymentId"]
+        self.console(payment_id, "arm-confirm", {"outcome": "PAY_PENDING"})
+        approval_id = self.submit_approval(order_no, sdk)["requestId"]
+        self.wait_for(lambda: self.confirm_statuses(payment_id) == [200]
+                      and self.statuses(order_no, approval_id) == ("PAYMENT_PROCESSING", "PENDING", "ADMITTED"),
+                      "admitted PAY_PENDING " + order_no, 120, 2)
+        assert self.fake.view_history(payment_id)[-1]["status"] == "PAY_PENDING"
+        return payment_id, sdk, approval_id
+
+    def storage(self):
+        return self.buyer.data("/api/v1/storage?page=0&size=50")["content"]
+
     # --- shared journey steps ----------------------------------------------------------------
     def create_order(self, name):
         product = self.info["product"]
