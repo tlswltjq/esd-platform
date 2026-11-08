@@ -4,6 +4,7 @@ import java.time.Duration;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -18,11 +19,18 @@ import org.testcontainers.utility.DockerImageName;
  * <p>컨테이너를 모듈 간에 재사용하지 않는다. 재사용하면 앞선 모듈이 남긴
  * {@code flyway_schema_history} 때문에 다음 모듈의 마이그레이션 검증이 깨진다 —
  * 모듈마다 깨끗한 인프라에서 시작하는 편이 검증으로서도 정확하다.
+ *
+ * <p>모든 컨테이너는 {@link #STARTUP_TIMEOUT}까지 시작을 기다린다(D-043). 기본값(로그·포트 60초, JDBC 120초)은
+ * 부하가 몰린 CI 러너에서 모자라, 컨테이너 하나가 늦으면 그 모듈의 통합 테스트 컨텍스트가 모두 실패했다.
+ * 대기는 실패할 때만 길어지고, 정상 시작(보통 10초 안)에는 영향이 없다.
  */
 public final class SharedContainers {
 
+    static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(3);
+
     public static final MySQLContainer<?> MYSQL =
-            new MySQLContainer<>(DockerImageName.parse("mysql:8.0"));
+            new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
+                    .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds());
 
     /**
      * 로컬 실행은 {@code apache/kafka:3.9.0} 을 쓰지만 테스트는 Confluent 이미지를 쓴다.
@@ -33,21 +41,26 @@ public final class SharedContainers {
      * 컨텍스트 로딩 검증에 브로커 구현 차이는 영향이 없으므로 안정적인 쪽을 택했다.
      */
     public static final ConfluentKafkaContainer KAFKA =
-            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"));
+            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
+                    .withStartupTimeout(STARTUP_TIMEOUT);
 
     public static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-                    .withExposedPorts(6379);
+                    .withExposedPorts(6379)
+                    // 새 대기 객체를 쓴다. withStartupTimeout만 걸면 GenericContainer가 모든 컨테이너와
+                    // 나눠 쓰는 기본 대기 객체(DEFAULT_WAIT_STRATEGY)의 시간이 바뀐다.
+                    .waitingFor(Wait.forListeningPort().withStartupTimeout(STARTUP_TIMEOUT));
 
     public static final ElasticsearchContainer ELASTICSEARCH =
             new ElasticsearchContainer(
                     DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.18.6"))
                     .withEnv("xpack.security.enabled", "false")
                     .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
-                    .withStartupTimeout(Duration.ofMinutes(3));
+                    .withStartupTimeout(STARTUP_TIMEOUT);
 
     public static final MongoDBContainer MONGO =
-            new MongoDBContainer(DockerImageName.parse("mongo:7"));
+            new MongoDBContainer(DockerImageName.parse("mongo:7"))
+                    .withStartupTimeout(STARTUP_TIMEOUT);
 
     private SharedContainers() {
     }

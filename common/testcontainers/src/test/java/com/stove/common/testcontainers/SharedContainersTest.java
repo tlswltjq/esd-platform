@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.JdbcDatabaseContainer;
@@ -29,7 +28,6 @@ class SharedContainersTest {
     private static final Duration EXPECTED = Duration.ofMinutes(3);
 
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-043] 공유 컨테이너는 모두 기본값(60초·120초)이 아닌 3분 시작 대기를 갖는다")
     void everySharedContainerWaitsThreeMinutesForStartup() throws ReflectiveOperationException {
         Map<String, Duration> actual = new LinkedHashMap<>();
@@ -45,7 +43,6 @@ class SharedContainersTest {
     }
 
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-043] 대기 시간을 늘린 컨테이너는 모든 컨테이너가 나눠 쓰는 기본 대기 객체를 바꾸지 않는다")
     void longerWaitsDoNotMutateTheSharedDefaultWaitStrategy() throws ReflectiveOperationException {
         Field field = GenericContainer.class.getDeclaredField("DEFAULT_WAIT_STRATEGY");

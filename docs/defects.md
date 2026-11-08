@@ -67,6 +67,7 @@
 | [D-039](#d-039) | 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈춤 | 검증 마비 | **수정됨** | 결정 105 적용 중 연속 실행 |
 | [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | HTTP 회차 실패·Kafka 지연 | **수정됨** | main CI 42249703875·교차 리뷰 R1 |
 | [D-041](#d-041) | Review 다운로드 테스트가 서명 초 경계에서 조기 만료로 실패 | 초 경계 CI 불안정 | **수정됨** | CI run 42373571409 |
+| [D-043](#d-043) | 공유 테스트 컨테이너가 기본 시작 대기(60초)만 기다려 부하 시 모듈 통합 테스트 전체가 실패 | 부하 시 CI 불안정 | **수정됨** | PR #137 CI run 42410179110 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -538,6 +539,17 @@
 
 - **원인** 고정 MinIO의 [서명 검증](https://github.com/minio/minio/blob/0d7408fc9969caf07de6a8c3a84f9fbb10a6739e/cmd/signature-v4.go#L225-L227)은 초 단위 `X-Amz-Date`를 읽고 `현재 - 서명시각 > Expires`이면 만료로 판정한다. 1초 URL의 실제 수명은 서명 순간의 초 미만 부분만큼 짧아져 약 0~1초다. 예를 들어 00.95초에 서명하면 약 0.05초 뒤 만료하므로 0.304초 실행에서도 실패한다. 이전의 "느린 러너에서 1초 이상 지연" 설명은 잘못됐다. 운영 코드 결함이 아니라 내용·만료 검증을 같은 1초 URL로 수행한 테스트 설계 문제다([결정 113](decisions.md#flaky-tests)).
 - **수정** `downloadedBytesMatchTheSubmittedBuild`는 `X-Amz-Expires=300`과 바이트·SHA-256을 확인하고 고정 지연을 제거했다. `validDownloadUrlExpires`는 컨테이너의 실제 자격 증명으로 3초 URL을 만들고 첫 GET 200 뒤 `403 + Request has expired`를 최대 10초 안에 확인한다. 초 경계 재현은 만료 오류를 확인하는 회귀 테스트로 승격하고 태그를 제거했다. 운영 코드는 변경하지 않았다.
+
+
+<a id="d-043"></a>
+## D-043 공유 테스트 컨테이너가 기본 시작 대기만 기다려 부하 시 통합 테스트 전체가 실패했다
+
+**상태** 수정됨 · **영향** 부하가 몰린 CI 러너에서 한 모듈의 통합 테스트 컨텍스트가 모두 실패(코드와 무관한 PR이 병합 대기) · **위치** `common/testcontainers/src/main/java/com/stove/common/testcontainers/SharedContainers.java`
+**재현** `common/testcontainers/src/test/java/com/stove/common/testcontainers/SharedContainersTest.java` 2건을 `known-defect` 태그로 먼저 커밋했다. 옛 코드에서 실제 대기 객체(`getWaitStrategy()`)의 시작 대기가 MySQL 2분·Kafka·Redis·Mongo 1분이라 `containsExactlyEntriesOf`가 실패하고, Redis가 공유 기본 대기 객체와 같아 `Expected not same: HostPortWaitStrategy`로 실패한다. 러너 부하는 결정적으로 재현할 수 없어, 결정 113의 재현을 "기본값이 아닌 3분 대기를 갖는다"는 설정 고정으로 대신했다. · **실측** PR #137 CI run 42410179110: Settlement `PgStatementIntegrationTest` 10건이 컨텍스트 로딩 실패. 원인은 `Container startup failed for image confluentinc/cp-kafka:7.8.0` — `Timed out waiting for log output matching '.*Transitioning from RECOVERY to RUNNING.*'`. 같은 run의 다른 Kafka 시작은 5~9초였고, 실패한 컨테이너는 60초 동안 로그 0줄이었다.
+
+- **원인** `SharedContainers`는 Elasticsearch만 3분 대기를 두고, 나머지는 Testcontainers 기본값(로그·포트 60초, JDBC 120초)을 썼다. 공유 정적 컨테이너라 하나가 늦으면 그 Gradle 모듈의 통합 테스트 컨텍스트가 모두 실패한다. 또 Testcontainers 1.21의 `GenericContainer`는 필드가 공유 기본값이면 `ContainerDef`의 대기 객체를 쓰는데, 일반 `GenericContainer`(Redis)의 그 객체는 모든 컨테이너가 나눠 쓰는 정적 `DEFAULT_WAIT_STRATEGY`다. 그래서 Redis에 `withStartupTimeout`만 걸면 다른 기본 컨테이너의 대기까지 바뀐다.
+- **수정** `STARTUP_TIMEOUT = 3분`을 모든 공유 컨테이너에 건다. MySQL은 `withStartupTimeoutSeconds`, Kafka·Elasticsearch·Mongo는 `withStartupTimeout`(각자 대기 객체를 가진다), Redis는 `waitingFor(Wait.forListeningPort().withStartupTimeout(...))`로 새 대기 객체를 준다. 두 테스트의 태그를 떼어 기본 회귀 검사로 옮겼다. 두 번째 테스트는 네 컨테이너 모두 공유 기본 대기 객체를 쓰지 않고, 그 객체의 60초도 그대로인지 확인한다.
+- **운영 영향** 테스트 전용 모듈이라 운영 코드와 배포에는 영향이 없다. 대기는 시작이 늦을 때만 길어지고 정상 시작(보통 10초 안)에는 그대로다.
 
 ---
 
