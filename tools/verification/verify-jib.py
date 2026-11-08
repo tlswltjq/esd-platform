@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 
 from support.ports import application_offset
 from support.minio_image import ensure_minio_image
+from support.start_apps import copy_launcher
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -201,8 +202,7 @@ def main():
         run(mc + ["alias", "set", "reader", "http://localhost:9000", "review-reader", "isolated-read-only-password"], "minio-reader" + suffix)
 
     def start_applications(suffix=""):
-        launcher = output / "start-apps.sh"
-        shutil.copyfile(ROOT / "scripts/start-apps.sh", launcher)
+        launcher = copy_launcher(ROOT, output)
         run(["bash", str(launcher), "-p", project, "-f", str(compose)], "start-apps" + suffix)
         # Prometheus is started by its own verification after the applications are ready.
         selected = [option for name in services if not (prometheus and name == "prometheus")
