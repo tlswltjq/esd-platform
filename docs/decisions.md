@@ -1109,7 +1109,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — "A-D 좀 더 쉽게 설명해줘"라고 설명을 요청한 뒤 고른 선택지: "C로 해, 31분 대기 포함")
 - 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 30분 안 조합은 기존 야간 흉내 서버 작업에 넣는다. 기한을 넘는 세 조합은 시작할 때 주문을 함께 만들고 31분 대기 한 번으로 묶은 별도 야간 작업(제한 60분)에 둔다. 두 작업 모두 PR CI에는 넣지 않으므로 실패는 다음 날 알게 된다. PAY_PENDING이 3시간을 넘겨 조회만 계속하는 조합은 통합 테스트로 인정한다. (2026-11-08 정정: 설명 때 근거로 든 `PaymentApprovalIntegrationTest:220-227`은 3시간 경계에서 PG가 READY인 경우만 확인한다. PAY_PENDING으로 3시간을 넘기는 통합 테스트는 없어서 새로 더한다. AI 설명의 사실 오류이며 선택의 방향은 바뀌지 않는다) 흉내 서버에는 같은 paymentId 다중 시도, PAY_PENDING 유지 뒤 PAID/FAILED 전환, confirm 400/403 거절 주입을 더한다(검증 도구만).
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다(D-044 기한 여정 추가는 남음)
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다; D-044 접수 전 PAY_PENDING 만료 조합은 기한 여정 p1로 더했다([근거 색인](evidence.md) 2026-11-08 p1 행)
 
 <a id="seller-negative-net-carryover"></a>
 ## 121. 판매자의 음수 월 순액은 마감 때 다음 월로 이월하고, 지급 기준액은 0원 아래로 내리지 않는다
@@ -1169,7 +1169,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 보류로 올리고 관측 건만 조회")
 - 선택: A + 관측 이력이 있는 승인만 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 주문 만료 통지를 받은 접수 전 `REQUESTED` 승인 중 `latestPgState`가 있는 승인은 닫기 전에 PG를 한 번 조회한다. 결과별 처리는 다음과 같다. PAID는 `PAID_WITHOUT_ADMISSION` 보류, READY·FAILED는 닫음, 전액 CANCELLED는 보류 후 운영자 종결(결정 115)이다. 아직 `PENDING`이면 새 사유로 `REVIEW_REQUIRED`에 올리고, 결정 122·123·115의 흐름을 그대로 쓴다. 고객 안내는 `CHARGE_UNCONFIRMED`다. `latestPgState`가 없는 승인은 R11.5대로 PG 호출 없이 닫는다. R11.5를 이 예외에 맞게 고치고, D-044 재현 테스트를 이 결정에 맞춰 확정한다(PR #145 교차 리뷰 R1의 사용자 판정).
 - 구분: 추천 수용
-- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145. 실제 스택 기한 여정 p1(`verify-expiry-journeys.py`)로 PENDING 보류·늦은 PAID 보류·종결 뒤 결제 `EXPIRED`를 확인([근거 색인](evidence.md) 2026-11-08 p1 행)
 
 <a id="refund-delay-closure"></a>
 ## 127. 장기 미확정·귀속 미확정 환불은 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 ADMIN이 닫는다
