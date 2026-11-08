@@ -102,6 +102,8 @@ import org.springframework.web.client.RestClient;
 
 class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBase {
     private static final Instant BASE = Payment.now();
+    /** The largest type the error parser accepts (Jackson 20,000,000 characters), 3 UTF-8 bytes each: 60,000,000 bytes. */
+    private static final String LARGEST_TYPE = "가".repeat(20_000_000);
     @Autowired PaymentRepository payments;
     @Autowired ReceiveRefundExecution receive;
     @Autowired PlatformTransactionManager transactions;
@@ -205,6 +207,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                 else if (mode == Mode.UNRECOGNIZED_BAD_REQUEST) { status = 400; reply = "{\"message\":\"untyped provider detail\"}"; }
                 else if (mode == Mode.FORMAL_REJECTION) { status = 409; reply = "{\"type\":\"PAYMENT_NOT_PAID\",\"message\":\"private-provider-detail\"}"; }
                 else if (mode == Mode.MALFORMED_CONFLICT) { status = 409; reply = "<html>private-provider-detail</html>"; }
+                else if (mode == Mode.LARGEST_REJECTION) { status = 409; reply = "{\"type\":\"" + LARGEST_TYPE + "\"}"; }
                 else if (mode == Mode.FORBIDDEN || mode == Mode.FORBIDDEN_LOOKUP_DOWN || mode == Mode.DELAYED_FORBIDDEN) {
                     status = 403; reply = "<html>private-provider-detail</html>";
                     if (mode == Mode.DELAYED_FORBIDDEN) { responseReady.countDown();
@@ -1397,6 +1400,24 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
     }
 
+    /**
+     * PR #168 R4: the largest type the parser accepts is still stored whole and stops automatic POSTs. With a column smaller
+     * than the parser limit the hold insert failed, no hold was recorded and the next round would have posted again.
+     */
+    @Test void theLargestParsableRejectionTypeIsStoredWholeAndStopsAutomaticPosts() {
+        received(); mode = Mode.LARGEST_REJECTION; service(gateway()).executeFirst(current.getAttemptId());
+        String holdId = stored().getActiveCancellationHoldId();
+        assertThat(holdId).isNotNull(); assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT CHAR_LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
+                .isEqualTo(20_000_000L);
+        assertThat(jdbc.queryForObject("SELECT LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
+                .isEqualTo(60_000_000L);
+        assertThat(jdbc.queryForObject("SELECT reason FROM refund_cancellation_hold WHERE hold_id=?", String.class, holdId))
+                .isEqualTo("PG_REQUEST_REJECTED");
+        when(clock.instant()).thenReturn(BASE.plusSeconds(60)); retryWorker().execute();
+        assertThat(bodies).hasSize(1);
+    }
+
     /** [D-048] A 409 whose body cannot be read is unconfirmed: the same round looks up and the POST is retried, without a hold. */
     @Test void aMalformedConflictIsUnconfirmedLooksUpInTheSameRoundAndIsRetriedWithoutAHold() {
         received(); mode = Mode.MALFORMED_CONFLICT; int previousReads = reads.get();
@@ -1591,7 +1612,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     private RefundExecution stored() { return executions.findByAttemptId(current.getAttemptId()).orElseThrow(); }
     private int resultEventCount() { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'",Integer.class); }
     private int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class); }
-    private enum Mode { COMPLETE, RACE, UNAVAILABLE, COMPLETE_THEN_UNAVAILABLE, DIRECT_SUCCESS, DELAYED_SUCCESS, FAILED_ZERO, FAILED_MANUAL_FULL, FAILED_LOOKUP_DOWN, FAILED_OTHER_PENDING, FAILED_PARTIAL, REQUESTED_THEN_FAILED, RETRY_SUCCESS, RETRY_FAILURE, RETRY_OTHER_PENDING, FORBIDDEN, DELAYED_FORBIDDEN, FORBIDDEN_LOOKUP_DOWN, POST_NOT_FOUND, INVALID_REQUEST, INVALID_LOOKUP_DOWN, DELAYED_INVALID, UNRECOGNIZED_BAD_REQUEST, FORMAL_REJECTION, MALFORMED_CONFLICT }
+    private enum Mode { COMPLETE, RACE, UNAVAILABLE, COMPLETE_THEN_UNAVAILABLE, DIRECT_SUCCESS, DELAYED_SUCCESS, FAILED_ZERO, FAILED_MANUAL_FULL, FAILED_LOOKUP_DOWN, FAILED_OTHER_PENDING, FAILED_PARTIAL, REQUESTED_THEN_FAILED, RETRY_SUCCESS, RETRY_FAILURE, RETRY_OTHER_PENDING, FORBIDDEN, DELAYED_FORBIDDEN, FORBIDDEN_LOOKUP_DOWN, POST_NOT_FOUND, INVALID_REQUEST, INVALID_LOOKUP_DOWN, DELAYED_INVALID, UNRECOGNIZED_BAD_REQUEST, FORMAL_REJECTION, MALFORMED_CONFLICT, LARGEST_REJECTION }
     private enum AuthenticationGate { NONE, ALL, POST_ONLY, GET_AFTER_POST }
     private enum LookupState { AVAILABLE, NOT_FOUND, NOT_FOUND_AFTER_POST, WRONG_PURCHASE, FORBIDDEN, FORBIDDEN_AFTER_POST }
 }
