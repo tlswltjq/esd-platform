@@ -60,11 +60,11 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | 메서드 | 경로 | 역할 | 동작 |
 |---|---|---|---|
 | GET | `/api/v1/payments?page=0&size=20` | MEMBER | 본인 결제 목록(`createdAt DESC, id DESC`) |
-| GET | `/api/v1/payments/{orderNo}` | MEMBER | 본인 주문의 결제 상세 |
+| GET | `/api/v1/payments/{orderNo}` | MEMBER | 본인 주문의 결제 상세. 금융 보류·보류 종결 건은 `reviewNotice`(R14, 결정 123) |
 | GET | `/api/v1/payments/{orderNo}/checkout` | MEMBER | 본인 `PENDING`/`PORTONE_TEST`의 SDK 설정. `no-store`. 생성·승인 아님 |
 | GET | `/api/v1/payments/{orderNo}/attempt-failures?page=0&size=20` | MEMBER | 본인 실패 시도 이력·수집 상태. `no-store`, DB 조회만 |
 | POST | `/api/v1/payments/{orderNo}/approvals` | MEMBER | PortOne 승인 내구 접수(202). `PORTONE_TEST` 모드만 |
-| GET | `/api/v1/payments/{orderNo}/approvals/{requestId}` | MEMBER | 승인 진행 조회. `no-store`, 토큰·암호문 없음 |
+| GET | `/api/v1/payments/{orderNo}/approvals/{requestId}` | MEMBER | 승인 진행 조회. `no-store`, 토큰·암호문 없음. 보류·보류 종결 건은 `reviewNotice`(R14) |
 | POST | `/api/v1/payments/webhooks/portone` | 공개(서명) | 서명·스토어 검증 뒤 조회 힌트 접수. 공개 edge가 직접 전달 |
 | GET/POST | `/api/v1/admin/refund-cancellation-holds` | ADMIN | 운영 중단 목록·상세·재개 |
 | GET/POST | `/api/v1/admin/approval-reviews` | ADMIN | REVIEW_REQUIRED 목록(reason 필터)·상세·조사 이력 GET(종결 기록 포함), append-only 조사 기록 POST |
@@ -170,7 +170,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 
 V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 inspect 후 별도 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다. V34의 승인 FK는 삭제 cascade였으나, V38이 RESTRICT로 다시 만들어 승인이나 그 결제를 지우면 조사 기록이 조용히 사라지지 않고 삭제가 거절된다(옛 행은 고치지 않음, 결정 104 이행 테스트 대상 아님).
 
-`stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 8개 알려진 사유(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY`, 결정 124의 `CONFIRM_WINDOW_EXPIRED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부, 재조회 간격은 아래 "보류 재조회 간격"이고, 고객 안내는 미정이다.
+`stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 8개 알려진 사유(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY`, 결정 124의 `CONFIRM_WINDOW_EXPIRED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부, 재조회 간격은 아래 "보류 재조회 간격", 고객 안내는 아래 "금융 보류 고객 안내"다.
 
 승인 보류 상세·조사 이력 GET은 `reviewStartedAt != null`인 과거 보류도 현재 `status`와 함께 제공한다. 한 번도 보류되지 않은 승인은 404이고 조사 POST는 현재 REVIEW_REQUIRED에만 허용된다. `latestPgState`는 마지막 유효 관측(the last valid observation)이며 최근 조회 성공을 뜻하지 않는다. `lastInspectedAt`·`lastInspectionError`는 inspect 후 별도 잠금 트랜잭션에서 현재 lease 소유자만 기록한다. 오류는 INVALID_EVIDENCE 또는 UNAVAILABLE이고 성공 시 NULL로 지운다. 기존 예외 분류·원래 예외는 유지한다. CANCELLED 인식과 종결은 아래 2부에서 더했다.
 
@@ -195,6 +195,12 @@ V36은 `chk_approval_pg_state`를 지우고 CANCELLED를 더해 다시 만든다
 ### 보류 재조회 간격 (결정 122)
 
 `ResolvePaymentApproval`은 한 회를 끝낼 때(`PaymentApproval.finish`) 잠금 안의 현재 상태로 다음 조회 시각을 정한다. `REVIEW_REQUIRED`이면 `now + ApprovalReviewRequeryInterval.after(reviewStartedAt, now)` = `now + min(상한, max(시작값, now − reviewStartedAt))`이고, 그 밖은 `now + PAYMENT_RETRY_MS`다. 시작값·상한은 `stove.payment.review-retry-initial-ms`·`review-retry-max-ms`(`PAYMENT_REVIEW_RETRY_INITIAL_MS`·`PAYMENT_REVIEW_RETRY_MAX_MS`, 기본 5초·10분)이고 `PaymentProcessingProperties`가 범위를 검증한다. 같은 회에 막 보류된 승인은 경과가 0이라 시작값으로 시작한다. `reviewStartedAt`이 NULL인 옛 보류 행(V34 이전)은 상한을 쓰며, 새 열·이행은 없다. 종결은 `claimForClosure`로 `nextAt`을 기다리지 않고, 거절·실패하면 잡기 전의 `nextAt`(늘어난 간격 그대로)으로 돌려준다. 보류가 저절로 풀리는 분기(PAID·FAILED·READY 만료)는 바꾸지 않았고, 다음 조회가 늦어지는 만큼만 늦게 일어난다(예: 30분 보류 뒤 만료 통지를 받은 READY 건은 최대 10분 뒤 닫힌다).
+
+### 금융 보류 고객 안내 (결정 123)
+
+`ApprovalReviewNotice.of(approval, closure)`(도메인)가 고객 안내를 만든다. 승인이 `REVIEW_REQUIRED`면 보류 사유(`lastErrorCode`)를 `BUNDLES`로 묶음에 매핑한다. `PG_INVALID_EVIDENCE`만 `CHARGE_UNCONFIRMED`로 고정이다(결정 123). 나머지 알려진 사유와 알 수 없는 값은 `BY_OBSERVATION`이며(결정 132), `lastInspectionError`가 있거나 `latestPgState`가 NULL·`PENDING`이면 `CHARGE_UNCONFIRMED`, `PAID`면 `CHARGED`, 전액 `CANCELLED`면 `CHARGE_CANCELLED`, `READY`·`FAILED`면 `NOT_CHARGED`다. `ApprovalReviewNoticeTest`가 `BUNDLES`의 키가 `ApprovalReviewReason.KNOWN`과 같은지 확인하므로, 게이지에 새 사유를 더하면 묶음을 정해야 빌드가 통과한다. 승인이 `FAILED`이고 그 승인의 `approval_closure`가 있으면 근거 CANCELLED → `CLOSED_CHARGE_CANCELLED`, READY·FAILED → `CLOSED_NOT_CHARGED`다. 그 밖의 승인은 안내가 없다. `since`는 `reviewStartedAt`, 금액은 승인의 `amount`(주문 청구액)이다.
+
+`ReadApprovalReviewNotice`(읽기 전용 서비스, `PaymentConfiguration`에서 조립)는 결제 상세에서 그 결제의 마지막 승인(`findFirstByPaymentIdOrderByIdDesc`)을, 승인 조회에서는 그 승인을 쓴다. 미종결 승인은 결제당 하나이고 종결은 결제를 끝내므로 마지막 승인이 고객이 보는 건이다. 종결 기록은 승인이 `FAILED`일 때만 찾는다. 응답 필드는 `PaymentResponse.reviewNotice`·`Progress.reviewNotice`(`ApprovalReviewNoticeResponse`)이고, 목록(`PaymentPage`)은 `null`이다. 결제창 409 `APPROVAL_IN_PROGRESS`는 `ReadPaymentCheckout`이 이미 찾은 진행 중 승인에 같은 함수를 적용해 보류면 그 문구를, 아니면 한국어 기본 문구를 메시지로 쓴다. 보류 사유는 ADMIN 응답(R12)에만 남고, Order 응답·이벤트(`OrderPaymentFailed`의 reason 포함)는 바꾸지 않는다. 새 열·이행은 없다.
 
 ### 장기·귀속 미확정 환불 종결 (결정 127)
 

@@ -21,6 +21,7 @@ public interface PaymentApprovalRepository extends JpaRepository<PaymentApproval
     List<ApprovalReviewCount> countReviewsByReason();
     Optional<PaymentApproval> findByApprovalId(String approvalId);
     Optional<PaymentApproval> findBySupplierAttemptId(String supplierAttemptId);
+    Optional<PaymentApproval> findFirstByPaymentIdOrderByIdDesc(String paymentId);
     Optional<PaymentApproval> findFirstByPaymentIdAndStatusInOrderByIdDesc(String paymentId, List<PaymentApprovalStatus> statuses);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from PaymentApproval a where a.approvalId=:approvalId")
