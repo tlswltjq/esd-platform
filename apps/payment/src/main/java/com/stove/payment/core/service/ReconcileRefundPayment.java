@@ -1,6 +1,5 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
@@ -12,7 +11,6 @@ import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
-import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.RefundPaymentLookup;
@@ -70,12 +68,7 @@ public class ReconcileRefundPayment {
                 executions.flush(); return;
             }
             if (!current.confirmRefund(currentPayment, verified.orElseThrow(), UUID.randomUUID().toString(), clock.instant())) return;
-            outbox.record("Payment", current.getOrderNo(), new RefundPaymentConfirmedEvent(current.getRefundConfirmationEventId(),
-                    current.getRefundConfirmedAt(), current.getRefundId(), current.getAttemptId(), current.getRequestEventId(),
-                    current.getOrderNo(), current.getPaymentId(), current.getBuyerSubject(), current.getAmount(), current.getCurrency(),
-                    "PG_QUERY_UNATTRIBUTED", currentPayment.getProviderTransactionId(),
-                    current.getConfirmedCancellations().stream().map(RefundCancellation::getCancellationId).toList(),
-                    CreateRefundAmountsSnapshot.from(currentPayment, current)));
+            RefundConfirmationOutbox.recordUnattributed(outbox, currentPayment, current);
             executions.flush();
         });
     }

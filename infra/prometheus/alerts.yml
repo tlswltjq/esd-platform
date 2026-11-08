@@ -67,6 +67,22 @@ groups:
             GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
             시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
 
+      # 귀속 미확정 환불(결정 127). PG 조회가 같은 원결제의 전액 취소를 확인해 고객 환불은 끝났지만,
+      # 우리 시도의 취소인지 모르는(PG_QUERY_UNATTRIBUTED) PENDING 실행 중 운영 종결이 없는 건이다.
+      # 돈은 이미 돌아갔고 종결만 남은 점이 승인 보류 PG_CANCELLED와 같아 warning이며, 대상이 생기면 바로 알리도록 for 를 두지 않는다.
+      # 위 RefundConfirmationsDelayed(미확정, critical)와 대상이 겹치지 않는다. 종결하면 자동 해제된다.
+      - alert: RefundsUnattributed
+        expr: stove_payment_refund_unattributed_open > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 귀속 미확정 환불 종결 필요"
+          description: >-
+            {{ $value }}건이 PG 전액 취소로 환불됐지만 우리 시도의 취소인지 판정되지 않았다.
+            GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED에서 대상을 찾고,
+            POST /api/v1/admin/refund-delays/{attemptId}/closure로 PG 재조회 근거와 귀속 판정을 남겨 종결한다.
+            알려진 과거 건은 Alertmanager silence로 알림을 관리한다.
+
       # 지급 확인을 기다리다 멈춘 환불(결정 125). LicenseGranted가 DEAD·DLT로 가면 이벤트 경보는 한 번만 울리고,
       # 그 뒤 들어온 환불은 조용히 PENDING_LICENSE_GRANT에 남는다. 이 경보는 그 환불이 남아 있는 동안 계속 울린다.
       # 진입 + 10분(stove.order.refund.license-grant-delay) 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.

@@ -49,6 +49,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | `pg_paid_amount`·`pg_discount_amount`(V32) | PG 실결제/할인 쌍. NULL 일치·`PAID`·음수 금지·합계=amount CHECK |
 | `approval_investigation`(V34·V38) | 승인 보류 조사의 append-only 기록. V38부터 승인 FK에 삭제 cascade 없음(RESTRICT) |
 | `approval_closure`(V37) | 승인 보류 운영 종결의 append-only 기록. approvalId·requestId(각각 유일)·종결자·note·근거 상태(CANCELLED·FAILED·READY)·관측/종결 시각. 승인 FK에 삭제 cascade 없음 |
+| `refund_closure`(V39) | 장기·귀속 미확정 환불 운영 종결의 append-only 기록(결정 127). attemptId·requestId(각각 유일)·종결자·귀속 판정(OUR_REQUEST·EXTERNAL_CANCELLATION·UNDETERMINED)·note·결과(COMPLETED·RECORDED)·PG 취소 시각·관측/종결 시각, 첫 응답의 실행 상태·최초 금융 확인 시각·출처(재요청 응답용, 상태 PENDING·출처 PG_QUERY_UNATTRIBUTED CHECK). 실행 FK에 삭제 cascade 없음 |
 
 - paymentId·orderNo·requestEventId·nullable resultEventId와 nullable `(provider, providerTransactionId)`에 각각 유일 제약을 둔다. 문자열 식별자는 대소문자를 구분하고 `(status, nextAttemptAt, id)`·`(buyerSubject, id)` 조회를 지원한다.
 - V1~V10 체크섬을 보존하고 `V11`이 `purchase_payment`를 추가한다. 이후 V12 비용 스냅샷(외부 모의 PG 전환), PortOne 웹훅·checkout·승인 접수·환불 취소/조회·실패 시도 이력·암호화 본문·EXPIRED 허용 등을 후속 마이그레이션으로 쌓았다.
@@ -68,7 +69,8 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | GET/POST | `/api/v1/admin/refund-cancellation-holds` | ADMIN | 운영 중단 목록·상세·재개 |
 | GET/POST | `/api/v1/admin/approval-reviews` | ADMIN | REVIEW_REQUIRED 목록(reason 필터)·상세·조사 이력 GET(종결 기록 포함), append-only 조사 기록 POST |
 | POST | `/api/v1/admin/approval-reviews/{approvalId}/closure` | ADMIN | PG 재조회 근거로 보류 종결(`PORTONE_TEST`만). `no-store`, requestId 멱등. PG 취소·승인 없음 |
-| GET/POST | `/api/v1/admin/refund-delays` | ADMIN | 장기 미확정 목록·상세·조사 이력 GET, 조사 기록 POST |
+| GET/POST | `/api/v1/admin/refund-delays` | ADMIN | 장기 미확정(`kind=DELAYED`, 기본)·귀속 미확정(`kind=UNATTRIBUTED`) 목록·상세(종결 기록 포함)·조사 이력 GET, 조사 기록 POST |
+| POST | `/api/v1/admin/refund-delays/{attemptId}/closure` | ADMIN | PG 재조회로 같은 원결제 전액 취소를 확인할 때만 종결·귀속 판정 기록(`PORTONE_TEST`만, 결정 127). `no-store`, requestId 멱등. PG 취소 없음 |
 
 - 익명 401, 역할 없음 403, 타인·없는 결제 404, 잘못된 페이지 400. checkout의 로컬 `PAID`/`FAILED`·다른 공급자는 409.
 - MEMBER 조회의 구매자는 `CurrentSubject`의 JWT sub다. 본문·쿼리·헤더·`X-Member-Id`로 소유자를 바꾸지 않는다.
@@ -199,3 +201,18 @@ V36은 `chk_approval_pg_state`를 지우고 CANCELLED를 더해 다시 만든다
 `ApprovalReviewNotice.of(approval, closure)`(도메인)가 고객 안내를 만든다. 승인이 `REVIEW_REQUIRED`면 보류 사유(`lastErrorCode`)를 `BUNDLES`로 묶음에 매핑한다. `PG_INVALID_EVIDENCE`만 `CHARGE_UNCONFIRMED`로 고정이다(결정 123). 나머지 알려진 사유와 알 수 없는 값은 `BY_OBSERVATION`이며(결정 132), `lastInspectionError`가 있거나 `latestPgState`가 NULL·`PENDING`이면 `CHARGE_UNCONFIRMED`, `PAID`면 `CHARGED`, 전액 `CANCELLED`면 `CHARGE_CANCELLED`, `READY`·`FAILED`면 `NOT_CHARGED`다. `ApprovalReviewNoticeTest`가 `BUNDLES`의 키가 `ApprovalReviewReason.KNOWN`과 같은지 확인하므로, 게이지에 새 사유를 더하면 묶음을 정해야 빌드가 통과한다. 승인이 `FAILED`이고 그 승인의 `approval_closure`가 있으면 근거 CANCELLED → `CLOSED_CHARGE_CANCELLED`, READY·FAILED → `CLOSED_NOT_CHARGED`다. 그 밖의 승인은 안내가 없다. `since`는 `reviewStartedAt`, 금액은 승인의 `amount`(주문 청구액)이다.
 
 `ReadApprovalReviewNotice`(읽기 전용 서비스, `PaymentConfiguration`에서 조립)는 결제 상세에서 그 결제의 마지막 승인(`findFirstByPaymentIdOrderByIdDesc`)을, 승인 조회에서는 그 승인을 쓴다. 미종결 승인은 결제당 하나이고 종결은 결제를 끝내므로 마지막 승인이 고객이 보는 건이다. 종결 기록은 승인이 `FAILED`일 때만 찾는다. 응답 필드는 `PaymentResponse.reviewNotice`·`Progress.reviewNotice`(`ApprovalReviewNoticeResponse`)이고, 목록(`PaymentPage`)은 `null`이다. 결제창 409 `APPROVAL_IN_PROGRESS`는 `ReadPaymentCheckout`이 이미 찾은 진행 중 승인에 같은 함수를 적용해 보류면 그 문구를, 아니면 한국어 기본 문구를 메시지로 쓴다. 보류 사유는 ADMIN 응답(R12)에만 남고, Order 응답·이벤트(`OrderPaymentFailed`의 reason 포함)는 바꾸지 않는다. 새 열·이행은 없다.
+
+### 장기·귀속 미확정 환불 종결 (결정 127)
+
+`POST /api/v1/admin/refund-delays/{attemptId}/closure`(`PORTONE_TEST`만, ADMIN, `CloseRefundDelay`)는 `{requestId, attribution, note}`를 받아 JWT sub를 종결자로 쓴다. 구조는 승인 종결(결정 115)과 같다. 운영 순서는 [환불 종결 절차서](../../../docs/runbooks/refund-delay-closure.md)다.
+
+1. 같은 requestId의 종결 기록이 있으면 PG를 부르지 않고 내용(대상·종결자·판정·note)을 대조해 최초 영수증을 반환한다. 다르면 `REFUND_CLOSURE_CHANGED`.
+2. payment→execution 잠금 안에서 대상(`RefundExecution.closableAt`: 3시간 지난 `PENDING` 미확정 또는 `PENDING`·`PG_QUERY_UNATTRIBUTED`)과 종결 기록 없음을 확인한다. 조회 일정이 살아 있는 실행(미확정)은 `RefundLookupSchedule.claimForClosure`로 작업자와 같은 lease를 잡는다(`nextAt`을 기다리지 않음, 다른 lease가 살아 있으면 `REFUND_CLOSURE_BUSY`). lease 길이는 작업자와 같은 `connectTimeout + readTimeout + 30초`(`RefundLookupConfiguration.lookupLease`)다. 귀속 미확정 실행은 `confirmRefund`가 일정을 멈춰 작업자가 없고, DB가 조회 시각 없는 lease를 허용하지 않으므로(`ck_refund_lookup_lease`) lease를 잡지 않는다. 대신 4번의 잠금·시도 UNIQUE·requestId가 한 번만 닫게 한다.
+3. 트랜잭션 없이 작업자와 같은 읽기를 한다. 우리 취소 접수가 있으면 `RefundPaymentLookup.inspect`, 없으면 `find`다. 전액 취소 확인(`PgRefundConfirmation`)이 없으면 `REFUND_CLOSURE_PG_NOT_CANCELLED`(잔액 있는 PAID·부분 취소·진행/실패 취소. 실패 근거도 기록하지 않음), `IllegalArgumentException`은 `CLOSURE_PG_INVALID_EVIDENCE`, 그 밖의 예외는 `CLOSURE_PG_UNAVAILABLE`이다. 거절되면 lease만 돌려주고(`releaseClosure`) 작업자의 `nextAt`·`wakeAt`은 그대로 둔다.
+4. 다시 payment→execution 잠금 안에서 lease 소유(잡았을 때만)·같은 실행 요청·대상·종결 기록 없음을 확인하고 기존 `RefundExecution.confirmRefund`를 부른다. 미확정이면 첫 금융 확인(source `PG_QUERY_UNATTRIBUTED`)과 `RefundPaymentConfirmed` Outbox(`RefundConfirmationOutbox`, 조회 작업자와 같은 코드)를 저장하고 일정을 멈춘다(`COMPLETED`). 이미 귀속 미확정이면 같은 근거는 무변화(`RECORDED`), 다른 취소 내역은 409 `CONFLICT`다. 같은 트랜잭션에 `refund_closure`를 저장한다. 시도 UNIQUE 충돌은 같은 requestId면 최초 영수증, 아니면 `REFUND_NOT_CLOSABLE`이다. 영수증의 `executionStatus`·`refundConfirmedAt`·`refundConfirmationSource`는 현재 실행이 아니라 종결 기록에 함께 저장한 첫 응답 값으로 만든다. 종결 뒤 같은 취소 ID의 늦은 성공 응답(R7.13)이 실행을 `SUCCEEDED`로 바꿔도 같은 명령의 재요청은 최초 결과를 그대로 받는다(R14.1, PR #157 R2).
+
+`ReadRefundDelays`는 `kind=UNATTRIBUTED`(`RefundDelayKind`)로 `PENDING`·`PG_QUERY_UNATTRIBUTED`·종결 기록 없음인 PortOne 실행을 `refundConfirmedAt, id` 순으로 준다. 같은 조건의 건수가 게이지 `stove.payment.refund.unattributed.open`(`RefundConfirmationMetrics`)이고, 경보 `RefundsUnattributed`는 `> 0`·`for` 없음·warning이다(`infra/prometheus/tests/refund-unattributed.yml`). 기존 `stove.payment.refund.confirmation.delayed`(`refundConfirmedAt is null`)와 `RefundConfirmationsDelayed`(critical)는 그대로라 대상이 겹치지 않는다. 상세는 귀속 미확정 실행을 3시간 창 안에서도 보이고(창 안에서 조회로 완료될 수 있음) `closure`를 싣는다. 상세의 `reconciliationRequired`는 `RefundExecution.unattributed() && 종결 없음`으로 계산한다. 그래서 늦은 성공 응답(`SUCCEEDED`)이나 종결 뒤에는 `false`다(전에는 출처만 보고 계속 `true`였다).
+
+Order 시도의 `reconciliationRequired`는 이 종결로 바뀌지 않는다. 기존 계약에서 이를 지우는 것은 `RefundExecutionSucceeded`(우리 취소 ID의 PG 성공 응답. Order는 시도를 `SUCCEEDED`·source `PG_RESPONSE`로 기록)뿐이고, 운영 판정(특히 외부·판단 불가)을 그 이벤트로 보내면 계약의 뜻이 바뀐다. 새 이벤트나 뜻 변경은 새 정책이라 구현하지 않았다(결정 127, `tasks.md`). 지금 Order의 그 필드를 읽는 API·지표는 없다.
+
+V39는 새 표만 더하고 옛 행을 고치지 않는다. 이행 전에 있던 귀속 미확정 실행은 종결 기록이 없으므로 목록·게이지·경보 대상이 된다(결정 104 이행 테스트 `RefundDelayClosureIntegrationTest.v39PreservesExistingExecutionsAddsNoClosuresAndEnforcesAuditConstraints`). 적용 절차: V39는 `CREATE TABLE` 한 문장이고 MySQL 8의 원자적 DDL이라 일부만 남지 않는다. 옛 버전은 이 표를 쓰지 않아 함께 돌아도 문제가 없다. 새 버전 기동 직후 기존 귀속 미확정 건만큼 `RefundsUnattributed`가 울리므로, 알려진 과거 건은 미리 Alertmanager silence를 건다. 부분 실패 복구: `flyway_schema_history`에 V39 실패 행이 있으면 `SHOW TABLES LIKE 'refund_closure';`로 표가 생겼는지 보고, 있으면 `DROP TABLE refund_closure;`를 실행한 뒤 V39 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동한다. 종결 기록이 이미 쌓인 뒤에는 표를 지우지 않는다(감사 기록, 실행 FK RESTRICT).

@@ -63,6 +63,31 @@ public class RefundLookupSchedule {
 
     public void stop() { nextAt = null; claimId = null; leaseUntil = null; wakeAt = null; }
 
+    /**
+     * The operator closure (decision 127) takes the worker's lease without waiting for {@code nextAt}. It refuses while any
+     * other lease is live. A stopped schedule has no worker and the database keeps no lease without a lookup deadline
+     * ({@code ck_refund_lookup_lease}), so there is nothing to take.
+     */
+    public boolean claimForClosure(String token, Instant at, Duration lease) {
+        requireTime(at);
+        if (!PaymentValues.uuid(token) || lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0)
+            throw new IllegalArgumentException("A closure token and positive database-precision lease are required");
+        if (nextAt == null) throw new IllegalStateException("A stopped lookup schedule has no worker lease");
+        if (leaseUntil != null && at.isBefore(leaseUntil)) return false;
+        claimId = token; leaseUntil = at.plus(lease);
+        return true;
+    }
+
+    public boolean ownsClosure(String token, Instant at) {
+        requireTime(at);
+        return token != null && token.equals(claimId) && leaseUntil != null && at.isBefore(leaseUntil);
+    }
+
+    /** Returns the lease; the worker's own deadline and wake hint stay as they were. A lease that is not ours is left alone. */
+    public void releaseClosure(String token) {
+        if (token != null && token.equals(claimId)) { claimId = null; leaseUntil = null; }
+    }
+
     private boolean owns(RefundLookupClaim claim) {
         return nextAt != null && claim != null && Objects.equals(claimId, claim.token());
     }

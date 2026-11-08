@@ -5,7 +5,7 @@
 Payment는 Order가 확정한 주문의 결제를 내구성 있게 접수하고, 외부 PG(현재 SIMULATED 또는 PortOne TEST)로 승인·조회를 수행하며, 미확정 건을 주기적으로 재개한다.
 확인된 승인만 PAID로 확정해 `OrderPaymentCompleted`/`OrderPaymentFailed`를 발행하고, Order가 그 결과를 검증해 자기 상태를 바꾼다.
 Payment는 가격을 다시 산정하지 않고 Order DB를 직접 바꾸지 않는다. 고객 환불 접수는 Order가 받고, Payment는 승인된 환불의 PG 취소·조회만 실행한다.
-MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TEST 승인·웹훅·환불·관리자 복구/조사까지 더했다(2026-10-18~). 실제 TEST 생명주기(승인·시도 실패 뒤 재결제·응답 유실 복구·자연 만료)는 2026-10-29 확인했다. 금융 보류는 운영 조회·조사(R12)와 PG 재조회 근거의 운영 종결(R13), 보류 기간에 비례해 늘어나는 보류 재조회 간격(R13.10)까지 더했고, 고객 안내·LIVE·정산 연결은 G1 잔여·G3에서 닫는다.
+MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TEST 승인·웹훅·환불·관리자 복구/조사까지 더했다(2026-10-18~). 실제 TEST 생명주기(승인·시도 실패 뒤 재결제·응답 유실 복구·자연 만료)는 2026-10-29 확인했다. 금융 보류는 운영 조회·조사(R12)와 PG 재조회 근거의 운영 종결(R13), 보류 기간에 비례해 늘어나는 보류 재조회 간격(R13.10), 장기·귀속 미확정 환불의 운영 종결(R14)까지 더했고, 고객 안내·LIVE·정산 연결은 G1 잔여·G3에서 닫는다.
 
 ## 용어
 
@@ -138,10 +138,10 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 2. THE 시스템 SHALL 익명 401, 역할 없음 403, 타인·없는 결제 404, 잘못된 페이지 400을 적용하고, 조회가 결제를 생성·실행하지 않는다.
 3. THE 목록의 임의 buyerSubject·memberId·`X-Member-Id` SHALL 조회 소유자를 바꾸지 않는다.
 4. THE 본인 응답 SHALL paymentId·orderNo·상품 스냅샷·정가/할인/청구액·통화·상태·생성/갱신/결과 시각·실패 사유·provider를 제공하고, requestEventId·resultEventId·Inbox/Outbox·공급자 요청 원문·재시도/내부 오류는 숨긴다.
-5. WHERE `ADMIN` 맥락에서 THE 시스템 SHALL `/api/v1/admin/refund-cancellation-holds`로 운영 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`로 장기 미확정 목록·상세·조사 이력/기록을 제공하며, 재개는 원래 키·본문·3시간 창을 유지하고 조사 기록은 금융 상태·일정을 바꾸지 않는다.
+5. WHERE `ADMIN` 맥락에서 THE 시스템 SHALL `/api/v1/admin/refund-cancellation-holds`로 운영 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`로 장기 미확정·귀속 미확정 목록(R14.7)·상세·조사 이력/기록·운영 종결(R14)을 제공하며, 재개는 원래 키·본문·3시간 창을 유지하고 조사 기록은 금융 상태·일정을 바꾸지 않는다.
 6. THE 시스템 SHALL 구 prepare·callback·cancel·simulator·승인 주입 업무 API와 이전 Gateway의 익명/CSRF 예외를 제공하지 않는다.
 7. WHILE `OrderPlaced`를 아직 접수하지 못한 동안 THE 상세 조회 SHALL 404를 반환하며 결제를 만들지 않는다(주문 생성 직후 잠시 404일 수 있다).
-8. THE 장기 미확정 대상 SHALL 최초 준비 + 3시간 이상이고 `PENDING`·금융 미확정인 PortOne 환불 시도이며 준비 시각을 접수 시각으로 추정하지 않는다. 전액 취소 조회로 완료된 건은 현재 목록에서 빠지되 조사 표시는 보존한다. 조사 기록 POST는 같은 requestId·내용이면 최초 기록을 반환하고, 다른 내용·결과 확정 뒤 새 기록은 409다.
+8. THE 장기 미확정 대상 SHALL 최초 준비 + 3시간 이상이고 `PENDING`·금융 미확정인 PortOne 환불 시도이며 준비 시각을 접수 시각으로 추정하지 않는다. 전액 취소 조회로 완료된 건은 현재 목록에서 빠지되 조사 표시는 보존하고, 귀속 미확정 목록(R14.7)에 남는다. 조사 기록 POST는 같은 requestId·내용이면 최초 기록을 반환하고, 다른 내용·결과 확정 뒤 새 기록은 409다.
 
 ### R9. 모의 PG 포트와 비용·정산 경계
 **사용자 스토리:** 시스템으로서, 공급자 결정을 독립적으로 보존하고 정산 책임과 섞지 않고 싶다. 그래야 장애·롤백이 격리된다.
@@ -218,6 +218,21 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 4. THE 문구 SHALL [결정 123](../../../docs/decisions.md#approval-review-customer-notice)의 한국어 원문을 그대로 쓰고, 금액은 주문 청구액(천 단위 쉼표 + "원")이다. 처리 시점은 약속하지 않는다.
 5. WHEN 결제창(`GET …/checkout`)이 진행 중 승인으로 409 `APPROVAL_IN_PROGRESS`를 내면 THEN 시스템 SHALL 보류 중 승인에는 R14.2의 문구를, 그 밖의 진행 중 승인에는 "기존 결제 승인을 처리하고 있습니다."를 메시지로 쓴다. 오류 코드는 그대로다.
 6. THE 고객 응답 SHALL 원래 보류 사유 코드·공급자 시도 ID·토큰을 넣지 않는다. Order 응답과 이벤트 계약은 바꾸지 않는다.
+
+### R14. 장기·귀속 미확정 환불 운영 종결 ([결정 127](../../../docs/decisions.md#refund-delay-closure))
+**사용자 스토리:** 운영자로서, 3시간 넘게 미확정이거나 전액 취소는 확인됐지만 우리 시도의 취소인지 모르는 환불을 PG 근거로 닫고 귀속 판정을 남기고 싶다. 그래야 콘솔 취소한 건이 영구 미결로 남지 않는다.
+
+#### 수용 기준
+1. WHEN ADMIN이 `POST /api/v1/admin/refund-delays/{attemptId}/closure`로 `{requestId(UUID), attribution(OUR_REQUEST·EXTERNAL_CANCELLATION·UNDETERMINED), note(공백 불가·500자 이내)}`를 보내면 THEN 시스템 SHALL JWT sub를 종결자로 기록하고 실행 상태·최초 금융 확인·종결 기록을 `no-store`로 반환한다. 같은 requestId·같은 내용(대상·종결자·판정·note)은 PG를 다시 조회하지 않고 최초 결과(종결 뒤 늦은 성공 응답으로 실행 상태가 바뀌어도 첫 응답의 상태·금융 확인)를 반환하고, 다른 내용은 409 `REFUND_CLOSURE_CHANGED`다. 익명 401·역할 없음 403·없는 시도 404·잘못된 입력 400이다. `PORTONE_TEST` 모드에만 있다.
+2. THE 종결 대상 SHALL `PENDING`이면서 최초 준비 + 3시간이 지난 미확정 실행(R8.8), 또는 `PG_QUERY_UNATTRIBUTED`로 금융 완료된 실행(창 안 포함)이고 종결 기록이 없는 것뿐이다. 그 밖(창 안 미확정, 미준비, 우리 성공·확정 실패, 이미 종결)은 409 `REFUND_NOT_CLOSABLE`이며 PG를 조회하지 않는다.
+3. WHEN 종결을 시작하면 THEN 시스템 SHALL 조회 작업자가 예약된 실행이면 그 lease를 먼저 잡는다. 다음 조회 시각은 기다리지 않지만, 작업자가 lease를 쥐고 있으면 409 `REFUND_CLOSURE_BUSY`다. 귀속 미확정 실행은 조회 일정이 멈춰 작업자가 없으므로 lease 없이 진행한다. 그 뒤 DB 트랜잭션 없이 PortOne을 조회하고(우리 취소 접수가 있으면 연결 조회, 없으면 전액 취소 조회 — 작업자와 같은 읽기), payment→execution 잠금 안에서 대상·lease 소유를 다시 확인한다. lease를 잃었으면 아무것도 저장하지 않는다.
+4. THE 종결 근거 SHALL 같은 원결제의 전액 취소(R7.12)뿐이다. PG가 아직 결제 상태(잔액 있음)·부분 취소·진행 중이거나 실패한 취소만 있으면 409 `REFUND_CLOSURE_PG_NOT_CANCELLED`(콘솔에서 먼저 취소)이고, 이 조회로 실패를 확정하지 않는다. 근거 불일치는 `CLOSURE_PG_INVALID_EVIDENCE`, 조회 장애는 `CLOSURE_PG_UNAVAILABLE`, 이미 확인한 귀속 미확정 근거와 다른 취소 내역은 409 `CONFLICT`다. 거절되면 lease를 돌려주고 작업자의 원래 다음 조회 시각을 유지한다.
+5. WHEN 근거가 맞으면 THEN 시스템 SHALL 한 트랜잭션에서 미확정 실행은 기존 조회 완료 경로(R7.5, source `PG_QUERY_UNATTRIBUTED`, `RefundPaymentConfirmed` Outbox, 일정 중지)로 완료하고(`outcome=COMPLETED`), 이미 귀속 미확정으로 완료된 실행은 금융 상태·이벤트를 바꾸지 않고 판정만 기록한다(`outcome=RECORDED`). 두 경우 모두 append-only 종결 기록(attemptId·requestId 각각 유일, 종결자·판정·note·결과·PG 취소 시각·관측 시각·종결 시각)을 남긴다.
+6. THE 종결 SHALL PG 취소를 실행하지 않고 금액·실행 상태(`PENDING`)·최초 금융 확인을 바꾸지 않는다. 귀속 판정은 기록일 뿐 금액·상태를 바꾸지 않는다.
+7. WHERE `GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED` 맥락에서 THE 시스템 SHALL `PENDING`·`PG_QUERY_UNATTRIBUTED`·종결 기록 없음인 PortOne 실행을 확인 시각·ID 순으로 제공한다. `kind`가 없거나 `DELAYED`면 R8.8 목록이고, 그 밖의 값은 400이다. 상세는 귀속 미확정 실행을 창 안에서도 제공하고 `closure` 기록을 함께 보이며, `reconciliationRequired`는 귀속 미확정이고 종결 기록이 없을 때만 `true`다.
+8. THE 시스템 SHALL 같은 대상의 건수를 `stove.payment.refund.unattributed.open` 게이지로 내고, 경보 `RefundsUnattributed`는 `> 0`·`for` 없음·warning이다. 기존 `stove.payment.refund.confirmation.delayed`·`RefundConfirmationsDelayed`의 대상·식은 바꾸지 않는다.
+9. THE 종결 SHALL Order 시도의 조사 표시(`reconciliationRequired`)를 지우지 않는다. 기존 계약으로 지우는 이벤트는 우리 시도의 PG 성공 응답을 뜻하는 `RefundExecutionSucceeded`뿐이라, 운영 판정에 쓰려면 새 정책이 필요하다(결정 127 "새 정책이 필요하면 다시 묻는다", Payment `tasks.md`).
+
 
 ## 범위 밖(후속)
 
