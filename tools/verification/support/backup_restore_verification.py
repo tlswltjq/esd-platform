@@ -16,13 +16,16 @@ import sys
 import time
 from pathlib import Path
 
+from support.image_names import DEFAULT_REGISTRY, refuse_docker_hub_stove
+
 
 SCHEMAS = ("stove_auth", "stove_studio", "stove_review", "stove_catalog", "stove_store",
            "stove_order", "stove_payment", "stove_license", "stove_settlement")
 BACKUP_GRANTS = "SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT, RELOAD, REPLICATION CLIENT, REPLICATION SLAVE"
 ROOT_PASSWORD = "root1234"
 BUCKET = "stove-builds"
-CLIENT_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "stove/mysql-client:8.0-local")
+CLIENT_IMAGE = refuse_docker_hub_stove("STOVE_MYSQL_CLIENT_IMAGE", os.environ.get(
+    "STOVE_MYSQL_CLIENT_IMAGE", DEFAULT_REGISTRY + "/mysql-client:8.0-local").strip())
 
 
 def ensure_client_image(root):

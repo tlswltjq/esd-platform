@@ -229,7 +229,7 @@ def benchmark_runtime(root, method, keep=False):
     names = [name for name in MODULES if name not in {"gateway", "download", "mock-pg"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in names))
-    minio_image = "stove/minio:RELEASE.2025-04-22T22-12-26Z-local"
+    minio_image = "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local"  # decision 135
     if subprocess.run(["docker", "image", "inspect", minio_image], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
         run(["docker", "build", "-t", minio_image, "infra/minio"], source, output / "minio-build.log")
     kafka_port = ports["kafka"]

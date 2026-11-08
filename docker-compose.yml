@@ -135,7 +135,7 @@ services:
 
   # 빌드 바이너리 저장소 (S3 호환). 운영의 S3 자리를 로컬에서 대신한다.
   minio:
-    image: ${STOVE_MINIO_IMAGE:-${STOVE_JIB_REGISTRY:-stove}/minio:RELEASE.2025-04-22T22-12-26Z-local}
+    image: ${STOVE_MINIO_IMAGE:-${STOVE_JIB_REGISTRY:-localhost/stove}/minio:RELEASE.2025-04-22T22-12-26Z-local}
     container_name: stove-minio
     environment:
       MINIO_ROOT_USER: stove
