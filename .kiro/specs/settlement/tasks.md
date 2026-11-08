@@ -24,7 +24,7 @@
 - [ ] [결정 필요] 정상 LIVE 승인 근거 수용의 도메인·스키마·조회 계약 — G3 (현재 운영 계약은 PORTONE_TEST)
 - [ ] 정상 LIVE 입력 → 비용 저장/SQL 집계, 동시 첫 비용 INSERT, 해당 INSERT 실패 롤백의 제약 보존 상태 검증 — G3 (현재 검증 공백)
 - [ ] 환불 조정 완료와 판매자 순액 전체 연결 — G3. 월 안 환불 상계·마감 전후 반영·월 순액 조회는 이미 연결돼 있다(`RecordConfirmedRefund`·`CloseSellerMonth`·`SellerMonthlySettlement`). 남은 것은 [결정 121](../../../docs/decisions.md#seller-negative-net-carryover)의 음수 월 순액 이월이다. 판매자 월 마감 때 불변 이월 원장을 쓰고, 월 응답에 `carriedIn`·`payable`·`carriedOut`을 더한다(새 이행, 옛 데이터 호환 테스트 포함). 송금은 실행하지 않는다
-- [ ] 판매자·운영 매출 조회(`/me/sales`·`/sales`)에 그 매출의 환불 연결(환불 ID·반영 월)을 보인다. 원장에 이미 있는 사실을 조회에 붙이는 일이며, 서로 다른 월의 매출·환불을 원매출로 함께 조회하기 위함이다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month) 검토 메모) — G3
+- [x] 판매자·운영 매출 조회(`/me/sales`·`/sales`)에 그 매출의 환불 연결(환불 ID·반영 월)을 보인다. 원장에 이미 있는 사실을 조회에 붙이는 일이며, 서로 다른 월의 매출·환불을 원매출로 함께 조회하기 위함이다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month) 검토 메모) — 2026-11-08, `SaleResponse.refund`(환불 없으면 null), 단위 137·통합 64건 통과, PR #142
 - [ ] [결정 필요] 판매자 실제 송금·청구/회수 정책 — G3 이후. 판매자 음수 월 순액의 월 이월과 지급 기준액은 [결정 121](../../../docs/decisions.md#seller-negative-net-carryover)로 정했다. 플랫폼 잔여액 음수는 요구사항(음수 보존, 판매자 전가 없음)대로 둔다. 실제 송금·청구 기능을 만들 때 정한다
 - [ ] PORTONE_TEST 원승인 읽기·토스페이 정산 수집 설정을 실제 스택(Compose override)에 적용하고 런타임 검증 — G3 (원승인·취소 직접 조회는 PortOne 흉내 서버 여정의 호스트 JVM 스택에서 런타임 확인 — 결정 111. Compose override 적용, 토스페이 정산 수집, 실제 공급자 연결은 남음)
 - [x] G3 변경 이후 열한 업무 앱 + 모의 PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 2026-11-07 21단계 통과([근거 색인](../../../docs/evidence.md)). 모의 PG 기준이며 최신 PortOne 연결 검증이 아니다.

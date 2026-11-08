@@ -1107,6 +1107,27 @@
         },
         "type" : "object"
       },
+      "SaleRefundResponse" : {
+        "properties" : {
+          "confirmedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "monthReason" : {
+            "type" : "string"
+          },
+          "refundId" : {
+            "type" : "string"
+          },
+          "refundMonth" : {
+            "type" : "string"
+          },
+          "settlementMonth" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "SaleResponse" : {
         "properties" : {
           "amount" : {
@@ -1141,6 +1162,9 @@
           "receivedAt" : {
             "format" : "date-time",
             "type" : "string"
+          },
+          "refund" : {
+            "$ref" : "#/components/schemas/SaleRefundResponse"
           },
           "saleMonth" : {
             "type" : "string"
