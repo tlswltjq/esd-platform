@@ -15,6 +15,8 @@ import com.stove.payment.core.domain.PgRefundConfirmation;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
+import com.stove.payment.core.domain.PgRefundUncancelled;
+import com.stove.payment.core.domain.RefundFailedCancellation;
 import com.stove.payment.core.domain.PgPaymentAmounts;
 import com.stove.payment.core.domain.RefundCancellation;
 import com.stove.payment.core.domain.PgUnavailable;
@@ -199,6 +201,37 @@ class PortOneRefundPaymentLookupTest {
                 unrefunded(failed()).replace("our reason", "another reason"), unrefunded(failed()+","+failed()))) {
             server.reset(); expect(invalid);
             assertThatThrownBy(() -> lookup.inspect(purchase, receipt())).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    /** Decision 128: the failure closure's proof — PAID, nothing cancelled, every listed cancellation FAILED for the full amount. */
+    @Test void anUncancelledPaymentWithOnlyFailedCancellationsIsProofForTheFailureClosure() {
+        expect(unrefunded(""));
+        PgRefundUncancelled none = lookup.inspectUncancelled(purchase).orElseThrow();
+        assertThat(none.failedCancellations()).isEmpty(); assertThat(none.snapshotHash()).matches("[a-f0-9]{64}"); server.verify();
+        server.reset(); expect(unrefunded(failed()+","+failed().replace("cancel-own", "console-failed")));
+        PgRefundUncancelled rows = lookup.inspectUncancelled(purchase).orElseThrow();
+        assertThat(rows.failedCancellations()).extracting(RefundFailedCancellation::getCancellationId).containsExactly("cancel-own", "console-failed");
+        assertThat(rows.failedCancellations().getFirst().getRequestedAt()).isEqualTo(Instant.parse("2026-10-27T01:01:00Z"));
+        assertThat(rows.failedCancellations().getFirst().getReason()).isEqualTo("our reason"); server.verify();
+    }
+
+    @Test void aCancelledAmountOrARequestedOrSuccessfulCancellationIsNotProofOfAnUncancelledPayment() {
+        for (String body : List.of(cancelled(), unrefunded(failed().replace("FAILED", "REQUESTED")), unrefunded(failed().replace("FAILED", "SUCCEEDED")),
+                unrefunded(failed()+","+failed().replace("cancel-own", "another").replace("FAILED", "REQUESTED")),
+                unrefunded(failed()).replace("\"cancelled\":0", "\"cancelled\":1000"),
+                cancelled().replace("\"CANCELLED\"", "\"PARTIAL_CANCELLED\""), unrefunded("").replace("\"PAID\"", "\"READY\""))) {
+            server.reset(); expect(body);
+            assertThat(lookup.inspectUncancelled(purchase)).as(body).isEmpty(); server.verify();
+        }
+    }
+
+    @Test void mismatchedPurchaseOrUnexpectableFailedRowsAreInvalidEvidenceForTheFailureClosure() {
+        for (String invalid : List.of(unrefunded("").replace(STORE, "store-other"), unrefunded("").replace("pg-original", "pg-other"),
+                unrefunded(failed()).replace("\"totalAmount\":9000", "\"totalAmount\":8999"), unrefunded(failed()+","+failed()),
+                unrefunded("").replace("\"cancellations\":[]", "\"cancellations\":{}"))) {
+            server.reset(); expect(invalid);
+            assertThatThrownBy(() -> lookup.inspectUncancelled(purchase)).as(invalid).isInstanceOf(IllegalArgumentException.class);
         }
     }
 
