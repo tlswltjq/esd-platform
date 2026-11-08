@@ -1129,6 +1129,21 @@
 - 구분: 추천 수용
 - 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
 
+<a id="approval-review-customer-notice"></a>
+## 123. 금융 보류 건은 청구 여부별 안내를 Payment 고객 응답에 붙인다
+- 문제: [결정 114](#approval-review-hold-closure)·[115](#approval-review-closure-outcome)는 고객 안내 문구를 따로 남겼다. 지금 고객용 주문 상세·결제 상세·결제창 409(`APPROVAL_IN_PROGRESS`)는 보류와 정상 진행을 구분하지 않는다. 승인 조회만 `status: REVIEW_REQUIRED`를 문구 없이 보인다. 종결 뒤 사유는 영문 기술 문장이고, 접수 전 만료 건에는 흔적이 남지 않는다. 그래서 `PAID_WITHOUT_ADMISSION`(돈이 나감) 고객은 "주문 만료"를 보고 다시 사서 이중 청구될 수 있다(예: 33,000원 두 번, 보유권은 하나).
+- 선택지: A 지금처럼 '처리 중'만 보여 준다 / B 결제 상세·승인 조회에 `reviewNotice {code, message, since}`를 더하고 고정 문구 하나를 쓴다 / C B와 같은 필드에 청구 여부별 코드 넷(`CHARGED`: `PAID_WITHOUT_ADMISSION`, `CHARGE_CANCELLED`: `PG_CANCELLED`, `CHARGE_UNCONFIRMED`: `PG_INVALID_EVIDENCE`·PG `PENDING`·조회 실패, `NOT_CHARGED`: 그 밖)과 종결 뒤 코드 둘(근거 CANCELLED / READY·FAILED)을 쓰고, 원래 사유 코드는 노출하지 않는다 / D C + 고객 문의 경로 + 주문 화면 안내(새 Payment→Order 이벤트 계약) (추천: C — 돈이 실제로 나간 경우는 두 사유뿐이라 이를 문구로 나누면 이중 청구를 고객 쪽에서 막는다. B는 돈이 안 나간 다수에게도 불안을 준다. 환불 `processingNotice`와 같은 형태라 Order·Kafka 계약을 건드리지 않는다. D는 지표로 빈도를 본 뒤 정한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "C로 해, 청구 여부별 문구")
+- 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 결제 상세(`GET /api/v1/payments/{orderNo}`)와 승인 조회 응답에 `reviewNotice {code, message, since=reviewStartedAt}`를 더한다. 결제창 409 메시지도 같은 한국어 문구로 바꾼다. Order 응답과 이벤트 계약은 바꾸지 않는다. 처리 시점은 약속하지 않는다. "취소됩니다"라는 표현의 근거는 PG가 PAID인 동안 종결할 수 없다는 점이다([결정 115](#approval-review-closure-outcome)). `NOT_CHARGED`는 마지막 관측 기준이라 "현재까지"라고 쓴다. 금액은 주문 청구액이다. 문구는 다음과 같다.
+  - `CHARGED`: "결제 금액 {금액}원이 청구된 것으로 확인되어 담당자가 확인하고 있습니다. 확인이 끝나면 청구된 금액은 취소되고 이 주문은 종료됩니다. 같은 상품을 지금 다시 주문하면 중복 청구될 수 있으니 확인 결과를 기다려 주세요."
+  - `CHARGE_CANCELLED`: "결제 금액 {금액}원은 전액 취소되었습니다. 카드사 사정에 따라 취소 반영까지 시간이 걸릴 수 있습니다. 담당자 확인이 끝나면 이 주문은 종료됩니다."
+  - `CHARGE_UNCONFIRMED`: "결제 확인이 지연되고 있습니다. 결제사와 청구 여부를 확인하고 있으며, 청구된 금액이 있다면 확인 뒤 취소되고 이 주문은 종료됩니다. 별도로 다시 결제하지 마세요."
+  - `NOT_CHARGED`: "결제 확인이 지연되고 있습니다. 현재까지 청구된 금액은 없습니다. 담당자 확인이 끝나면 이 주문은 종료되며, 새 주문으로 다시 구매하실 수 있습니다."
+  - 종결 뒤(근거 CANCELLED): "결제 확인 결과 이 주문은 종료되었습니다. 청구되었던 {금액}원은 전액 취소되었습니다. 새 주문으로 다시 구매해 주세요."
+  - 종결 뒤(근거 READY·FAILED): "결제 확인 결과 이 주문은 종료되었습니다. 청구된 금액은 없습니다. 새 주문으로 다시 구매해 주세요."
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
