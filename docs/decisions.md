@@ -1153,6 +1153,33 @@
 - 구분: 추천 수용
 - 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
 
+<a id="license-grant-wait-detection"></a>
+## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
+- 문제: 환불 접수 때 `order_license_grant`가 없으면 환불은 `order_refund.status = PENDING_LICENSE_GRANT`로 기다린다([결정 29](#full-refund-policy) B). 이 상태를 벗어나는 길은 나중에 도착하는 `LicenseGranted` 하나뿐이다(`ApplyLicenseGrant`). 그 이벤트가 재시도를 소진해 Outbox `DEAD`나 DLT로 가면, 이벤트 단위 경보(`OutboxEventsAbandoned`·`MessagesDeadLettered`)는 한 번만 울린다. 그 뒤 들어온 환불은 경보·고객 안내·종료 없이 멈춘다. 예: 10:05 `LicenseGranted` DEAD → 10:30 결제 후 4시간 안 9,000원 무조건 환불이 `PENDING_LICENSE_GRANT`로 멈추고, 고객은 `PROCESSING`만 본다. 이 상태의 진입 시각도 저장하지 않는다(추정). 고객 지연 안내(`processingNotice`)는 `PENDING_PAYMENT_REFUND`에만 붙는다.
+- 선택지: A Order에 `PENDING_LICENSE_GRANT` 진입 시각을 저장하고, N분이 넘은 건수를 게이지·Prometheus 경보로 낸다. ADMIN 환불 목록에 진입 시각을 보이고, 같은 경계를 넘으면 고객 `processingNotice`를 붙인다. 복구는 [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉 그대로 / B A + N분이 지나면 Order가 `LicenseGrantConfirmationRequested`를 내고 License가 `LicenseGranted`를 다시 발행 / C `order_license_grant`가 없는 `PAID` 주문을 대조해 License가 일괄 재발행하는 운영 도구. 환불마다 License 내부 HTTP로 조회하는 안은 결정 29 하위에서 기각했으므로 제외했다 (추천: A, N = 10분 — 비어 있는 것은 Order가 멈춘 환불을 보지 못한다는 점 하나라서 결정 37의 판단을 그대로 잇는다. 결정 122·123의 승인 보류 감지·안내와 같은 모양이다. B는 A의 게이지로 빈도를 본 뒤 다시 정한다. 10분은 정상 경로가 초 단위로 끝난다는 점에서 잡은 초기값이며 사업 근거는 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 경보 기준 10분")
+- 선택: A, N = 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Order는 환불이 `PENDING_LICENSE_GRANT`에 들어간 시각을 저장한다(새 이행, 옛 행 호환 테스트 포함). 그 시각이 10분을 넘은 환불 건수를 게이지로 내고, Prometheus 경보 하나를 둔다. ADMIN 환불 목록·상세에 진입 시각을 보인다. 같은 경계를 넘은 환불의 고객 조회에는 `processingNotice`를 붙이고, 문구는 기존 환불 지연 안내와 같은 모양으로 둔다. 재처리는 결정 37의 운영 절차(DLT 재투입·Outbox DEAD 재큐잉)로 한다. 새 이벤트 계약은 만들지 않는다. 원본 이벤트가 남아 있지 않은 건의 종결은 환불 조사 이후 조치·종결 결정에서 함께 정한다.
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현은 후속 PR
+
+<a id="pre-admission-pending-expiry"></a>
+## 126. 접수 전 승인이 PG 관측 이력을 가진 채 주문이 만료되면 PG를 다시 조회하고, 아직 PENDING이면 보류로 올린다
+- 문제: 결함 D-044. 접수 전 승인이 PortOne `PAY_PENDING`을 본 채 `REQUESTED`로 남아 있다가 주문 만료 통지를 받으면, `ResolvePaymentApproval`의 만료 분기가 PG를 조회하지 않고 승인·결제를 `EXPIRED`로 닫는다. 그 뒤로는 다시 조회하지 않는다. 그래서 PG가 나중에 PAID가 되면 돈은 나갔는데 보류·게이지·경보 어디에도 보이지 않는다. 예: 14:00 33,000원 주문 → 14:05 인증 후 PG `PAY_PENDING` → 14:30 만료로 닫힘 → 14:31 PG PAID. 스펙 R11.5는 "접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다"고 정했다. 조회 결과가 PAID(`PAID_WITHOUT_ADMISSION` 보류, [결정 114](#approval-review-hold-closure))·READY·FAILED(닫음)·전액 CANCELLED(보류 후 운영자 종결, [결정 115](#approval-review-closure-outcome))일 때의 처리는 이미 정해져 있다. 그래서 남은 것은 만료 전 조회 범위와, 조회 결과가 아직 PENDING일 때의 처리다.
+- 선택지: A 결정 124처럼 새 사유로 `REVIEW_REQUIRED`에 올린다 / B `REQUESTED`로 두고 조회만 계속한다 / C 지금처럼 닫는다. 조회 범위는 모든 `REQUESTED`로 할지, PG 관측 이력(`latestPgState`)이 있는 승인만으로 할지다 (추천: A + 관측 이력이 있는 승인만 — 돈이 나갔을 수 있는 건을 조용히 닫지 않는다. 결정 124와 같은 보류 흐름(목록·경보·간격·안내·종결)을 그대로 쓴다. 관측 이력이 없는 승인은 R11.5대로 PG 호출 없이 닫으므로 기존 계약과 테스트를 거의 그대로 둔다. B는 결정 124가 막은 "보이지 않는 무한 조회"를 접수 전 쪽에 다시 만들고, C는 만료 직후 PAID가 되는 경우를 그대로 놓친다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 보류로 올리고 관측 건만 조회")
+- 선택: A + 관측 이력이 있는 승인만 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 주문 만료 통지를 받은 접수 전 `REQUESTED` 승인 중 `latestPgState`가 있는 승인은 닫기 전에 PG를 한 번 조회한다. 결과별 처리는 다음과 같다. PAID는 `PAID_WITHOUT_ADMISSION` 보류, READY·FAILED는 닫음, 전액 CANCELLED는 보류 후 운영자 종결(결정 115)이다. 아직 `PENDING`이면 새 사유로 `REVIEW_REQUIRED`에 올리고, 결정 122·123·115의 흐름을 그대로 쓴다. 고객 안내는 `CHARGE_UNCONFIRMED`다. `latestPgState`가 없는 승인은 R11.5대로 PG 호출 없이 닫는다. R11.5를 이 예외에 맞게 고치고, D-044 재현 테스트를 이 결정에 맞춰 확정한다(PR #145 교차 리뷰 R1의 사용자 판정).
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145
+
+<a id="refund-delay-closure"></a>
+## 127. 장기 미확정·귀속 미확정 환불은 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 ADMIN이 닫는다
+- 문제: 환불 결과가 3시간 넘게 확정되지 않으면 경보 `RefundConfirmationsDelayed`가 울리고, ADMIN은 Payment `GET /api/v1/admin/refund-delays`로 보고 `POST …/{attemptId}/investigations`로 조사 내용을 남긴다. 이 기록은 메모일 뿐이고 건을 닫는 동작은 없다. 확정은 자동 PG 조회(1분 간격)가 같은 원결제의 전액 취소나 우리 취소 ID의 실패를 찾을 때만 된다. 전액 취소를 찾았지만 우리 요청 때문인지 모르면 `PG_QUERY_UNATTRIBUTED`로 고객 환불은 `COMPLETED`가 되지만, Payment 실행은 `PENDING`으로 남고 Order 시도에 조사 표시가 남는다. 이 건은 지연 목록·게이지(`refundConfirmedAt is null`로 거름)에서 빠지고, 조사 기록 POST는 409를 내서 판정을 남길 곳이 없다. 예: 11:00:06 첫 취소 응답 유실 → 14:00:06 3시간 창 끝·재송신 중단·경보 → 15:00 운영자 PortOne 콘솔에서 9,000원 취소 → 15:01 조회로 고객 `COMPLETED` → 이 건은 목록에서 사라지고 내부 기록은 영구히 미결. "콘솔 취소 → 자동 조회 확인" 절차도 절차서에 없다. 승인 보류에는 PG 재조회 근거 종결([결정 115](#approval-review-closure-outcome))이 있지만 환불에는 없다.
+- 선택지: A 운영 절차서만(콘솔 취소 → 자동 조회 확인, 귀속 판정은 시스템 밖) / B 결정 115 모양의 환불 종결 API: Payment에 귀속 미확정 목록과 `POST /api/v1/admin/refund-delays/{attemptId}/closure`(가칭)를 두고, 트랜잭션 밖 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 닫는다. 귀속 판정·ADMIN·근거를 기록하고, 시스템은 PG 취소를 실행하지 않는다 / C B + 자동 종결 기한(예: 7일 뒤 자동 실패·보유권 복구) / D B + ADMIN 재송신(3시간 뒤에도 같은 attemptId로 PG 취소 재송신) (추천: B — 빠진 것은 "근거로 닫는 동작"과 "귀속 판정을 남길 자리" 둘이고, 결정 114·115의 원칙(운영자 말이 아니라 PG 재조회 근거로만 닫고 시스템은 돈을 움직이지 않는다)을 그대로 쓴다. C는 늦은 PG 취소 성공 시 환불과 보유권이 함께 남아 [결정 29](#full-refund-policy) 하위의 "시간만으로 실패·복구하지 않는다"에 어긋나고, D는 결정 29의 "3시간 이후 재전송 중단"을 뒤집는 새 금융 경로다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, PG 재조회 근거로 종결")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment에 ADMIN 환불 종결 API를 둔다. 대상은 3시간이 지난 미확정 실행과, 전액 취소는 확인됐지만 귀속이 미확정(`PG_QUERY_UNATTRIBUTED`)인 실행이다. 귀속 미확정 건도 ADMIN 목록에서 찾을 수 있게 한다. 종결은 승인 종결과 같은 구조(작업자와 같은 lease, 트랜잭션 밖 PG 재조회, 조회 뒤 별도 잠금 트랜잭션)로 하고, 같은 원결제의 전액 취소가 확인될 때만 닫는다. 미완료 건은 기존 완료 경로로 즉시 완료하고, 이미 완료된 귀속 미확정 건은 판정만 기록하고 조사를 닫는다. 귀속 판정(우리 요청 / 외부·콘솔 취소 / 판단 불가)과 ADMIN·근거·시각을 정본 DB에 남긴다. PG가 아직 결제 상태(잔액 있음)면 409로 거절하고 "콘솔에서 먼저 취소"를 안내한다. 시스템은 PG 취소를 실행하지 않고, 금액·정해진 끝 상태(결정 29 Q9 A안의 완료)는 바꾸지 않는다. "콘솔 취소 → 종결" 절차를 운영 절차서에 적는다. Order 쪽 조사 표시 해제 방식은 기존 이벤트 계약을 확인해 구현 PR에서 정한다(새 정책이 필요하면 다시 묻는다). 이 종결로 닫히지 않는 것(PG가 취소를 거절한 건의 실패 종결, 원본 이벤트가 없는 `PENDING_LICENSE_GRANT` 종결, 담당 배정, 귀속 미확정 건의 경보·조회 간격)은 따로 정한다.
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
