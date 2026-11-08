@@ -23,7 +23,7 @@ class RefundLicenseGrantWaitTest {
         Refund refund = Refund.request(paid(BASE.minusSeconds(18000)), BASE);
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_REVIEW);
         assertThat(refund.getLicenseGrantWaitStartedAt()).isNull();
-        assertThat(refund.licenseGrantDelayedSince(BASE.plusSeconds(86400), THRESHOLD)).isNull();
+        assertThat(refund.licenseWaitDelayedSince(BASE.plusSeconds(86400), THRESHOLD)).isNull();
     }
 
     @Test void anApprovedReviewStartsWaitingAtTheDecisionTimeAndARejectionDoesNot() {
@@ -51,19 +51,19 @@ class RefundLicenseGrantWaitTest {
     @Test void theDelayStartsExactlyAtTheBoundaryAndReportsTheBoundaryTime() {
         Refund refund = Refund.request(paid(BASE.minusSeconds(3600)), BASE);
         Instant boundary = BASE.plus(THRESHOLD);
-        assertThat(refund.licenseGrantDelayedSince(boundary.minusNanos(1000), THRESHOLD)).isNull();
-        assertThat(refund.licenseGrantDelayedSince(boundary, THRESHOLD)).isEqualTo(boundary);
-        assertThat(refund.licenseGrantDelayedSince(boundary.plusSeconds(86400), THRESHOLD)).isEqualTo(boundary);
+        assertThat(refund.licenseWaitDelayedSince(boundary.minusNanos(1000), THRESHOLD)).isNull();
+        assertThat(refund.licenseWaitDelayedSince(boundary, THRESHOLD)).isEqualTo(boundary);
+        assertThat(refund.licenseWaitDelayedSince(boundary.plusSeconds(86400), THRESHOLD)).isEqualTo(boundary);
     }
 
     @Test void theGrantEndsTheDelayButKeepsTheRecordedStartForOperators() {
         Order order = paid(BASE.minusSeconds(3600));
         Refund refund = Refund.request(order, BASE);
         refund.confirmLicenseGrant(new LicenseGrant(id(), BASE.plusSeconds(1200), id(), order.getOrderNo(), order.getBuyerSubject(),
-                order.getProductId(), order.getProductCode(), order.getPaymentId()));
+                order.getProductId(), order.getProductCode(), order.getPaymentId()), BASE.plusSeconds(1200));
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
         assertThat(refund.getLicenseGrantWaitStartedAt()).isEqualTo(BASE);
-        assertThat(refund.licenseGrantDelayedSince(BASE.plusSeconds(86400), THRESHOLD)).isNull();
+        assertThat(refund.licenseWaitDelayedSince(BASE.plusSeconds(1201), THRESHOLD)).as("지급 확인 대기는 끝나고 정지 대기는 방금 시작했다").isNull();
     }
 
     private static Order paid(Instant resultAt) {

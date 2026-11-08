@@ -60,7 +60,7 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             round(jdbc, review, review, 1, null, received, null);
             List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
 
-            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load(); flyway.migrate(); flyway.validate();
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).target("32").load(); flyway.migrate(); flyway.validate();
 
             List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
             assertThat(after).hasSize(before.size());
@@ -80,6 +80,102 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             assertThat(jdbc.queryForList("SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='order_refund'", String.class))
                     .contains("ix_order_refund_license_grant_wait");
         });
+    }
+
+    /**
+     * 결정 125 범위 확장: V34는 정지·복구·승인 중단을 기다리는 옛 환불에 기록된 사실로만 진입 시각을 채운다.
+     * 정지는 재시도면 현재 시도의 재접수 시각, 첫 정지면 정지 요청 Outbox 행의 생성 시각이고, 그 행이 없으면 지급 확인 대기 진입 시각,
+     * 그것도 없으면 접수 시각이다(실제 진입보다 늦지 않음). 복구는 현재 시도의 복구 요청 시각, 승인 중단은 현재 회차의 중단 접수 시각이다.
+     * 다른 상태는 NULL로 두고, 다른 열은 바꾸지 않는다. 이행 뒤에는 대기 상태가 시각 없이 저장되지 않는다.
+     */
+    @Test void v34BackfillsTheStepWaitStartsOnlyFromRecordedFactsAndKeepsOtherRowsUnchanged() {
+        withVersion("33", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            Instant received = Instant.parse("2026-11-08T10:00:00.123456Z");
+            Instant requested = received.plusSeconds(5); Instant granted = received.plusSeconds(2);
+            String requestedRefund = refund(jdbc, received, true, "PENDING_LICENSE_SUSPENSION", null);
+            String requestEvent = id();
+            jdbc.update("UPDATE order_refund SET suspension_request_event_id=?,license_grant_wait_started_at=? WHERE refund_id=?",
+                    requestEvent, Timestamp.from(received), requestedRefund);
+            jdbc.update("INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,status,retry_count,created_at,sent_at)"
+                    + " VALUES(?,'Order','order-1','LicenseSuspensionRequested','stove.order.v1','order-1','{}','SENT',0,?,?)",
+                    requestEvent, Timestamp.from(requested), Timestamp.from(requested));
+            String orphanRefund = refund(jdbc, received, true, "PENDING_LICENSE_SUSPENSION", null);
+            jdbc.update("UPDATE order_refund SET suspension_request_event_id=?,license_grant_wait_started_at=? WHERE refund_id=?",
+                    id(), Timestamp.from(granted), orphanRefund);
+            String legacySuspension = refund(jdbc, received, true, "PENDING_LICENSE_SUSPENSION", null);
+            jdbc.update("UPDATE order_refund SET suspension_request_event_id=? WHERE refund_id=?", id(), legacySuspension);
+
+            Instant started = received.plusSeconds(10); Instant failed = received.plusSeconds(20); Instant restored = received.plusSeconds(30);
+            Instant retried = received.plusSeconds(3600);
+            String retryRefund = refund(jdbc, received, true, "PENDING_LICENSE_SUSPENSION", null);
+            String retryAttempt = attempt(jdbc, retryRefund, started, failed, restored, retried);
+            jdbc.update("UPDATE order_refund SET current_attempt_id=?,suspension_request_event_id=?,license_grant_wait_started_at=? WHERE refund_id=?",
+                    retryAttempt, jdbc.queryForObject("SELECT retry_suspension_request_event_id FROM order_refund_attempt WHERE attempt_id=?", String.class, retryAttempt),
+                    Timestamp.from(received), retryRefund);
+            String restoringRefund = refund(jdbc, received, true, "PENDING_LICENSE_RESTORATION", null);
+            String restoringAttempt = attempt(jdbc, restoringRefund, started, failed, null, null);
+            jdbc.update("UPDATE order_refund SET current_attempt_id=?,suspension_request_event_id=?,license_grant_wait_started_at=? WHERE refund_id=?",
+                    restoringAttempt, jdbc.queryForObject("SELECT suspension_request_event_id FROM order_refund_attempt WHERE attempt_id=?", String.class, restoringAttempt),
+                    Timestamp.from(received), restoringRefund);
+
+            Instant decided = received.plusSeconds(600); Instant stopped = received.plusSeconds(900);
+            String stoppedRefund = refund(jdbc, received, false, "PENDING_APPROVAL_STOP", decided);
+            round(jdbc, stoppedRefund, stoppedRefund, 1, null, received, decided);
+            jdbc.update("UPDATE order_refund_review_round SET stop_request_id=?,stop_operator_subject='migration-admin',stop_reason='잘못 승인',stop_received_at=? WHERE review_id=?",
+                    id(), Timestamp.from(stopped), stoppedRefund);
+            jdbc.update("UPDATE order_refund SET license_grant_wait_started_at=? WHERE refund_id=?", Timestamp.from(decided), stoppedRefund);
+            String waiting = refund(jdbc, received, true, "PENDING_LICENSE_GRANT", null);
+            jdbc.update("UPDATE order_refund SET license_grant_wait_started_at=? WHERE refund_id=?", Timestamp.from(received), waiting);
+            String paying = refund(jdbc, received, true, "PENDING_PAYMENT_REFUND", null);
+            List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            List<String> added = List.of("license_suspension_wait_started_at", "license_restoration_wait_started_at", "approval_stop_wait_started_at");
+
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).target("34").load(); flyway.migrate(); flyway.validate();
+
+            List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
+            assertThat(after).hasSize(before.size());
+            for (int index = 0; index < before.size(); index++) {
+                Map<String, Object> unchanged = new HashMap<>(after.get(index)); added.forEach(unchanged::remove);
+                assertThat(unchanged).isEqualTo(before.get(index));
+            }
+            assertThat(waitStart(jdbc, requestedRefund, "license_suspension_wait_started_at")).isEqualTo(requested);
+            assertThat(waitStart(jdbc, orphanRefund, "license_suspension_wait_started_at")).isEqualTo(granted);
+            assertThat(waitStart(jdbc, legacySuspension, "license_suspension_wait_started_at")).isEqualTo(received);
+            assertThat(waitStart(jdbc, retryRefund, "license_suspension_wait_started_at")).isEqualTo(retried);
+            assertThat(waitStart(jdbc, restoringRefund, "license_restoration_wait_started_at")).isEqualTo(failed);
+            assertThat(waitStart(jdbc, stoppedRefund, "approval_stop_wait_started_at")).isEqualTo(stopped);
+            for (String other : List.of(waiting, paying)) for (String column : added) assertThat(waitStart(jdbc, other, column)).isNull();
+            assertThat(waitStart(jdbc, requestedRefund, "license_restoration_wait_started_at")).isNull();
+            assertThat(waitStart(jdbc, restoringRefund, "license_suspension_wait_started_at")).as("지난 대기는 만들어 내지 않는다").isNull();
+            for (String[] row : new String[][] {{requestedRefund, "license_suspension_wait_started_at"},
+                    {restoringRefund, "license_restoration_wait_started_at"}, {stoppedRefund, "approval_stop_wait_started_at"}}) {
+                assertThatThrownBy(() -> jdbc.update("UPDATE order_refund SET " + row[1] + "=NULL WHERE refund_id=?", row[0]))
+                        .isInstanceOf(DataAccessException.class).rootCause()
+                        .isInstanceOfSatisfying(SQLException.class, failure -> assertThat(failure.getErrorCode()).isEqualTo(3819));
+            }
+            assertThat(jdbc.queryForList("SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='order_refund'", String.class))
+                    .contains("ix_order_refund_license_suspension_wait", "ix_order_refund_license_restoration_wait", "ix_order_refund_approval_stop_wait");
+        });
+    }
+
+    /** 확정 실패한 시도. restored·retried가 있으면 실제 복구와 재접수까지 끝난 시도다. */
+    private String attempt(JdbcTemplate jdbc, String refundId, Instant started, Instant failed, Instant restored, Instant retried) {
+        String attemptId = id();
+        jdbc.update("INSERT INTO order_refund_attempt(attempt_id,refund_id,attempt_no,started_at,status,resolved_at,failure_reason_code,failure_reason,"
+                + "suspension_request_event_id,suspension_event_id,suspension_occurred_at,license_id,execution_request_event_id,reconciliation_required,"
+                + "failure_event_id,failure_fingerprint,restoration_request_event_id,restoration_requested_at,restored_event_id,restored_at,restoration_fingerprint,"
+                + "retry_requested_at,retry_suspension_request_event_id)"
+                + " VALUES(?,?,1,?,'FAILED',?,'PG_CANCELLATION_FAILED','PG 취소 실패',?,?,?,?,?,FALSE,?,?,?,?,?,?,?,?,?)",
+                attemptId, refundId, Timestamp.from(started), Timestamp.from(failed), id(), id(), Timestamp.from(started), id(), id(),
+                id(), "a".repeat(64), id(), Timestamp.from(failed), restored == null ? null : id(), restored == null ? null : Timestamp.from(restored),
+                restored == null ? null : "b".repeat(64), retried == null ? null : Timestamp.from(retried), retried == null ? null : id());
+        return attemptId;
+    }
+
+    private Instant waitStart(JdbcTemplate jdbc, String refundId, String column) {
+        Timestamp value = jdbc.queryForObject("SELECT " + column + " FROM order_refund WHERE refund_id=?", Timestamp.class, refundId);
+        return value == null ? null : value.toInstant();
     }
 
     private String refund(JdbcTemplate jdbc, Instant received, boolean automatic, String status, Instant reviewedAt) {
@@ -133,6 +229,8 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             Map<String, Object> migratedRefund = new HashMap<>(jdbc.queryForMap("SELECT * FROM order_refund"));
             assertThat(migratedRefund.remove("purchase_returned_to_storage")).isIn(false, 0, (byte) 0, Boolean.FALSE);
             assertThat(migratedRefund.remove("license_grant_wait_started_at")).isNull();
+            for (String column : List.of("license_suspension_wait_started_at", "license_restoration_wait_started_at", "approval_stop_wait_started_at"))
+                assertThat(migratedRefund.remove(column)).isNull();
             assertThat(migratedRefund).isEqualTo(refund);
             insert(jdbc, "PENDING"); insert(jdbc, "PAID");
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase_order WHERE product_id=1", Integer.class)).isEqualTo(4);
@@ -294,6 +392,14 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         if (!original.containsKey("license_grant_wait_started_at") && previousColumns.containsKey("license_grant_wait_started_at")) {
             Object started = previousColumns.remove("license_grant_wait_started_at");
             if ("PENDING_LICENSE_GRANT".equals(actual.get("status"))) assertThat(started).isNotNull(); else assertThat(started).isNull();
+        }
+        // V34(결정 125 범위 확장): 정지·복구·승인 중단 대기 중인 환불만 그 진입 시각이 채워진다. 값은 v34 테스트가 따로 본다.
+        for (String[] wait : new String[][] {{"license_suspension_wait_started_at", "PENDING_LICENSE_SUSPENSION"},
+                {"license_restoration_wait_started_at", "PENDING_LICENSE_RESTORATION"}, {"approval_stop_wait_started_at", "PENDING_APPROVAL_STOP"}}) {
+            if (!original.containsKey(wait[0]) && previousColumns.containsKey(wait[0])) {
+                Object started = previousColumns.remove(wait[0]);
+                if (wait[1].equals(actual.get("status"))) assertThat(started).isNotNull(); else assertThat(started).isNull();
+            }
         }
         // V28(결정 89): 구매 슬롯 계산 열만 사라지고 나머지 주문 값은 그대로다.
         Map<String, Object> expected = new HashMap<>(original);
