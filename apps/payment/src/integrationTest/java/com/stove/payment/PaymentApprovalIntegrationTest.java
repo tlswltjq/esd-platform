@@ -19,6 +19,7 @@ import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.test.OpenApiSnapshot;
+import com.stove.payment.core.domain.ApprovalObservation;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.OrderExpiryInput;
 import com.stove.payment.core.service.ApplyOrderExpiry;
@@ -55,6 +56,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -443,6 +446,26 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(GETS.get()).isGreaterThan(before);
         assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(BODIES).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    /**
+     * [D-044] Expected: a purchase the PG approved without our order admission stays held as PAID_WITHOUT_ADMISSION
+     * (decision 114), even when the order expired while the PG still showed PAY_PENDING. Actual: the expiry branch closes
+     * the approval and the payment as EXPIRED without looking up the PG, so the later PAID is never seen. Impact: money is
+     * taken for an expired order with no hold, gauge or alert, and a webhook cannot reopen an EXPIRED payment.
+     */
+    @Test
+    @Tag("known-defect")
+    @DisplayName("[D-044] 접수 전 PAY_PENDING 뒤 주문이 만료되고 PG가 PAID가 되면 PAID_WITHOUT_ADMISSION 보류로 남아야 한다")
+    void aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING); assertThat(row(command).getAdmittedAt()).isNull();
+        recordExpiry(payment); STATES.put(payment.getPaymentId(),"PAID"); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(GETS.get()).isGreaterThan(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
     }
     @Test void aConflictingExpiryAndAdmissionStopFurtherPostsWhileLookupContinues() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
