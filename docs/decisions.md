@@ -1153,6 +1153,15 @@
 - 구분: 추천 수용
 - 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
 
+<a id="license-grant-wait-detection"></a>
+## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
+- 문제: 환불 접수 때 `order_license_grant`가 없으면 환불은 `order_refund.status = PENDING_LICENSE_GRANT`로 기다린다([결정 29](#full-refund-policy) B). 이 상태를 벗어나는 길은 나중에 도착하는 `LicenseGranted` 하나뿐이다(`ApplyLicenseGrant`). 그 이벤트가 재시도를 소진해 Outbox `DEAD`나 DLT로 가면, 이벤트 단위 경보(`OutboxEventsAbandoned`·`MessagesDeadLettered`)는 한 번만 울린다. 그 뒤 들어온 환불은 경보·고객 안내·종료 없이 멈춘다. 예: 10:05 `LicenseGranted` DEAD → 10:30 결제 후 4시간 안 9,000원 무조건 환불이 `PENDING_LICENSE_GRANT`로 멈추고, 고객은 `PROCESSING`만 본다. 이 상태의 진입 시각도 저장하지 않는다(추정). 고객 지연 안내(`processingNotice`)는 `PENDING_PAYMENT_REFUND`에만 붙는다.
+- 선택지: A Order에 `PENDING_LICENSE_GRANT` 진입 시각을 저장하고, N분이 넘은 건수를 게이지·Prometheus 경보로 낸다. ADMIN 환불 목록에 진입 시각을 보이고, 같은 경계를 넘으면 고객 `processingNotice`를 붙인다. 복구는 [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉 그대로 / B A + N분이 지나면 Order가 `LicenseGrantConfirmationRequested`를 내고 License가 `LicenseGranted`를 다시 발행 / C `order_license_grant`가 없는 `PAID` 주문을 대조해 License가 일괄 재발행하는 운영 도구. 환불마다 License 내부 HTTP로 조회하는 안은 결정 29 하위에서 기각했으므로 제외했다 (추천: A, N = 10분 — 비어 있는 것은 Order가 멈춘 환불을 보지 못한다는 점 하나라서 결정 37의 판단을 그대로 잇는다. 결정 122·123의 승인 보류 감지·안내와 같은 모양이다. B는 A의 게이지로 빈도를 본 뒤 다시 정한다. 10분은 정상 경로가 초 단위로 끝난다는 점에서 잡은 초기값이며 사업 근거는 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 경보 기준 10분")
+- 선택: A, N = 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Order는 환불이 `PENDING_LICENSE_GRANT`에 들어간 시각을 저장한다(새 이행, 옛 행 호환 테스트 포함). 그 시각이 10분을 넘은 환불 건수를 게이지로 내고, Prometheus 경보 하나를 둔다. ADMIN 환불 목록·상세에 진입 시각을 보인다. 같은 경계를 넘은 환불의 고객 조회에는 `processingNotice`를 붙이고, 문구는 기존 환불 지연 안내와 같은 모양으로 둔다. 재처리는 결정 37의 운영 절차(DLT 재투입·Outbox DEAD 재큐잉)로 한다. 새 이벤트 계약은 만들지 않는다. 원본 이벤트가 남아 있지 않은 건의 종결은 환불 조사 이후 조치·종결 결정에서 함께 정한다.
+- 구분: 추천 수용
+- 결과: PR 번호는 생성 후 기입, 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
