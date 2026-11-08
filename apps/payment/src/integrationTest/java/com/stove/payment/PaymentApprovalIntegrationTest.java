@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -271,8 +270,9 @@ class PaymentApprovalIntegrationTest {
      * the last valid PG state (READY here) holds it with CONFIRM_WINDOW_EXPIRED instead of leaving it unseen, and a late PAID
      * after the PG recovers still completes the original order.
      */
-    @Tag("known-defect")
-    @Test void anAdmittedApprovalWhoseLookupsKeepFailingPastTheConfirmWindowIsHeldFromItsLastValidState() {
+    @Test
+    @DisplayName("[D-049] 접수 승인의 조회가 계속 실패해도 3시간이 지나면 마지막 유효 PG 상태로 CONFIRM_WINDOW_EXPIRED 보류에 오른다")
+    void anAdmittedApprovalWhoseLookupsKeepFailingPastTheConfirmWindowIsHeldFromItsLastValidState() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
         assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
         Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);

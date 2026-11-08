@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.payment.core.domain.PgCancellationRejection;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.domain.PgAuthenticationUnavailable;
@@ -76,18 +77,13 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
                     .header("Idempotency-Key", "\"" + permission.idempotencyKey() + "\"")
                     .contentType(MediaType.APPLICATION_JSON).body(body.getBytes(StandardCharsets.UTF_8))
                     .exchange((request, response) -> {
-                        if (response.getStatusCode().value() == 401) throw new PgAuthenticationUnavailable();
-                        if (response.getStatusCode().value() == 403) return RefundCancellationDispatch.FORBIDDEN;
-                        if (response.getStatusCode().value() == 404) throw new PgCancellationNotFound();
-                        if (response.getStatusCode().value() == 400 && isInvalidRequestRejection(response.bodyTo(String.class)))
-                            return RefundCancellationDispatch.INVALID_REQUEST;
+                        int status = response.getStatusCode().value();
+                        if (status == 401) throw new PgAuthenticationUnavailable();
+                        if (status == 403) return RefundCancellationDispatch.FORBIDDEN;
+                        if (status == 404) throw new PgCancellationNotFound();
                         if (response.getStatusCode().is2xxSuccessful())
                             return successResponse(permission, purchase, body, response.bodyTo(String.class));
-                        if (response.getStatusCode().value() == 409) {
-                            JsonNode error = read(response.bodyTo(String.class));
-                            if ("CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN".equals(text(error, "type")))
-                                return RefundCancellationDispatch.BALANCE_CHANGED;
-                        }
+                        if (response.getStatusCode().is4xxClientError()) return clientError(status, response.bodyTo(String.class));
                         throw new PgUnavailable("Cancellation outcome is unconfirmed");
                     });
         } catch (RestClientException unavailable) {
@@ -168,9 +164,22 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
             throw new IllegalArgumentException("Cancellation preflight does not match the paid purchase");
     }
 
-    private boolean isInvalidRequestRejection(String body) {
-        try { return "INVALID_REQUEST".equals(text(read(body), "type")); }
-        catch (IllegalArgumentException malformed) { return false; }
+    /**
+     * Decision 133: a 4xx with a well-formed typed JSON body was judged by PortOne, so the same key and body cannot change
+     * its outcome. Only an unreadable or untyped body, an outstanding idempotent request and 408/429 stay unconfirmed.
+     */
+    private RefundCancellationDispatch clientError(int status, String body) {
+        String type = errorType(body);
+        if (type == null) throw new PgUnavailable("Cancellation outcome is unconfirmed");
+        if (status == 400 && "INVALID_REQUEST".equals(type)) return RefundCancellationDispatch.INVALID_REQUEST;
+        if (status == 409 && "CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN".equals(type)) return RefundCancellationDispatch.BALANCE_CHANGED;
+        if (PgCancellationRejection.rejects(status, type)) return RefundCancellationDispatch.rejected(new PgCancellationRejection(status, type));
+        throw new PgUnavailable("Cancellation outcome is unconfirmed");
+    }
+
+    private String errorType(String body) {
+        try { return text(read(body), "type"); }
+        catch (IllegalArgumentException malformed) { return null; }
     }
 
     private JsonNode read(String body) {

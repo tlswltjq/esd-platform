@@ -31,6 +31,9 @@ public class RefundCancellationHold {
     private Instant resumedAt;
     @Column(length = 100) private String operatorSubject;
     @Column(length = 500) private String resumeNote;
+    /** Response status and error type of a PG_REQUEST_REJECTED hold (decision 133); NULL for the other reasons. */
+    @Column(updatable = false) private Integer rejectionStatus;
+    @Column(updatable = false, length = PgCancellationRejection.TYPE_LENGTH) private String rejectionType;
 
     public static RefundCancellationHold forbidden(String attemptId, RefundCancellationClaim claim, Instant at, boolean activated) {
         return rejection(attemptId, claim, at, activated, "PG_REQUEST_FORBIDDEN");
@@ -38,6 +41,14 @@ public class RefundCancellationHold {
 
     public static RefundCancellationHold invalidRequest(String attemptId, RefundCancellationClaim claim, Instant at, boolean activated) {
         return rejection(attemptId, claim, at, activated, "PG_REQUEST_INVALID");
+    }
+
+    public static RefundCancellationHold rejected(String attemptId, RefundCancellationClaim claim, Instant at, boolean activated,
+            PgCancellationRejection rejection) {
+        if (rejection == null) throw new IllegalArgumentException("A formal rejection needs its response status and type");
+        RefundCancellationHold hold = rejection(attemptId, claim, at, activated, "PG_REQUEST_REJECTED");
+        hold.rejectionStatus = rejection.status(); hold.rejectionType = rejection.type();
+        return hold;
     }
 
     private static RefundCancellationHold rejection(String attemptId, RefundCancellationClaim claim, Instant at, boolean activated, String reason) {

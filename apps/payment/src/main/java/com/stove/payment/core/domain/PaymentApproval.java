@@ -158,8 +158,19 @@ public class PaymentApproval {
      * still completes the original order.
      */
     public boolean holdAfterConfirmWindow(ApprovalObservation observation, Instant at) {
+        return holdAfterConfirmWindow(observation == null ? null : observation.state(), at);
+    }
+    /**
+     * Decision 124 when the lookup itself fails (D-049): the last valid PG state (`latestPgState`) stands in for the failed
+     * lookup, so an approval whose GET keeps failing past the window is held instead of being retried unseen. Without a
+     * valid PENDING or READY observation nothing changes.
+     */
+    public boolean holdAfterConfirmWindowWithoutLookup(Instant at) {
+        return holdAfterConfirmWindow(latestPgState, at);
+    }
+    private boolean holdAfterConfirmWindow(ApprovalObservation.State state, Instant at) {
         requireTime(at);
-        if (observation == null || (observation.state() != ApprovalObservation.State.PENDING && observation.state() != ApprovalObservation.State.READY)
+        if ((state != ApprovalObservation.State.PENDING && state != ApprovalObservation.State.READY)
                 || status != PaymentApprovalStatus.ADMITTED || postStopped || admittedAt == null || firstPreparedAt == null
                 || at.isBefore(firstPreparedAt.plus(CONFIRM_WINDOW))) return false;
         stopPosts(CONFIRM_WINDOW_EXPIRED, at);
