@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.payment.core.domain.ApprovalObservation;
+import com.stove.payment.core.domain.ApprovalReviewRequeryInterval;
 import com.stove.payment.core.domain.ApprovalToken;
 import com.stove.payment.core.domain.OrderAdmissionReceipt;
 import com.stove.payment.core.domain.PgResult;
@@ -76,6 +77,7 @@ class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
     }
 
     private static final String ROOT = "/api/v1/admin/approval-reviews";
+    private static final ApprovalReviewRequeryInterval REVIEW_INTERVAL = new ApprovalReviewRequeryInterval(Duration.ofSeconds(5), Duration.ofMinutes(10));
     @Autowired PaymentRepository payments;
     @Autowired RecordApprovalInvestigation record;
     @MockitoSpyBean PaymentApprovalRepository approvals;
@@ -244,7 +246,7 @@ class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
     }
     private ResolvePaymentApproval resolver(PgPaymentApprovalGateway pg, Instant at) {
-        return new ResolvePaymentApproval(payments, approvals, mock(OrderPaymentAdmissions.class), pg, mock(ApprovalPayloadProtection.class), mock(ResolvePayment.class), Clock.fixed(at, ZoneOffset.UTC), Duration.ofSeconds(60), Duration.ofSeconds(5), 10, transactions, lifecycle);
+        return new ResolvePaymentApproval(payments, approvals, mock(OrderPaymentAdmissions.class), pg, mock(ApprovalPayloadProtection.class), mock(ResolvePayment.class), Clock.fixed(at, ZoneOffset.UTC), Duration.ofSeconds(60), Duration.ofSeconds(5), REVIEW_INTERVAL, 10, transactions, lifecycle);
     }
     private void resolveFailed(PaymentApproval approval) {
         PgPaymentApprovalGateway pg = mock(PgPaymentApprovalGateway.class);
@@ -290,7 +292,7 @@ class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
         when(pg.inspect(held.purchase())).thenReturn(new ApprovalObservation(ApprovalObservation.State.PENDING, null, null));
         ResolvePaymentApproval resolver = new ResolvePaymentApproval(payments, approvals, mock(OrderPaymentAdmissions.class), pg,
                 mock(ApprovalPayloadProtection.class), mock(ResolvePayment.class), Clock.fixed(at, ZoneOffset.UTC),
-                Duration.ofSeconds(60), Duration.ofSeconds(5), 10, transactions, lifecycle);
+                Duration.ofSeconds(60), Duration.ofSeconds(5), REVIEW_INTERVAL, 10, transactions, lifecycle);
         resolver.execute(held.getApprovalId());
         PaymentApproval stored = approvals.findByApprovalId(held.getApprovalId()).orElseThrow();
         assertThat(stored.getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
