@@ -39,11 +39,21 @@ public interface RefundExecutionRepository extends JpaRepository<RefundExecution
     Optional<RefundExecution> findByPreviousAttemptId(String previousAttemptId);
     Optional<RefundExecution> findByLicenseSuspensionEventId(String eventId);
     Optional<RefundExecution> findFirstByPaymentIdAndStatusAndRefundConfirmedAtIsNullOrderByIdDesc(String paymentId, RefundExecutionStatus status);
+    /** The newest execution of the payment whose read-only lookup is still scheduled: unconfirmed, or failed and watched (decision 128). */
+    Optional<RefundExecution> findFirstByPaymentIdAndLookupScheduleNextAtIsNotNullOrderByIdDesc(String paymentId);
+
+    /** Decision 128: failed executions on which a later lookup found a full cancellation; the gauge behind its alert. */
+    @Query("select count(r) from RefundExecution r where r.status='FAILED' and r.lateCancellationObservedAt is not null")
+    long countLateCancellationsAfterFailure();
+
+    @Query(value = "select r from RefundExecution r where r.status='FAILED' and r.lateCancellationObservedAt is not null",
+            countQuery = "select count(r) from RefundExecution r where r.status='FAILED' and r.lateCancellationObservedAt is not null")
+    Page<RefundExecution> findLateCancellationsAfterFailure(Pageable page);
     Optional<RefundExecution> findByRequestEventId(String requestEventId);
     Optional<RefundExecution> findFirstByPaymentIdOrderByIdAsc(String paymentId);
     Optional<RefundExecution> findFirstByRefundIdOrderByIdAsc(String refundId);
     @Query("select r.attemptId from RefundExecution r, Payment p where p.paymentId=r.paymentId "
-            + "and p.provider='PORTONE_TEST' and r.refundConfirmedAt is null and r.status='PENDING' and r.lookupSchedule.nextAt is not null "
+            + "and p.provider='PORTONE_TEST' and r.refundConfirmedAt is null and r.status in ('PENDING','FAILED') and r.lookupSchedule.nextAt is not null "
             + "and (r.lookupSchedule.nextAt<=:at or r.lookupSchedule.wakeAt<=:at) "
             + "and (r.lookupSchedule.leaseUntil is null or r.lookupSchedule.leaseUntil<=:at) "
             + "order by r.lookupSchedule.nextAt, r.id")

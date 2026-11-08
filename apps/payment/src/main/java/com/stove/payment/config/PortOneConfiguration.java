@@ -8,10 +8,12 @@ import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
 import com.stove.payment.adapter.pg.PortOneRefundCancellationGateway;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.RefundClosureRepository;
+import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.port.RefundPaymentLookup;
 import com.stove.payment.core.port.RefundCancellationGateway;
 import com.stove.payment.core.service.CloseRefundDelay;
+import com.stove.payment.core.service.CloseRefundFailure;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.RecordRefundPreparation;
@@ -59,9 +61,10 @@ public class PortOneConfiguration {
     @Bean RequestRefundCancellation requestRefundCancellation(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationGateway gateway, ReconcileRefundPayment reconcile, PlatformTransactionManager transactions,
             Clock refundReceptionClock, RecordRefundCancellationSuccess successes, PortOneProperties properties,
-            RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents) {
+            RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents, RefundFailureClosureRepository failureClosures) {
         Duration lease = properties.connectTimeout().plus(properties.readTimeout()).multipliedBy(3).plusSeconds(30);
-        return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, refundReceptionClock, successes, lease, holds, preparationEvents);
+        return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, refundReceptionClock, successes, lease, holds,
+                preparationEvents, failureClosures);
     }
 
     @Bean RecordRefundCancellationSuccess recordRefundCancellationSuccess(PaymentRepository payments, RefundExecutionRepository executions,
@@ -83,6 +86,14 @@ public class PortOneConfiguration {
             RefundPaymentLookup lookup, OutboxRecorder outbox, PlatformTransactionManager transactions, Clock refundReceptionClock,
             PortOneProperties properties) {
         return new CloseRefundDelay(payments, executions, closures, lookup, outbox, refundReceptionClock,
+                RefundLookupConfiguration.lookupLease(properties), transactions);
+    }
+
+    /** The operator failure closure (decision 128) takes the same lookup lease as the delay closure and the lookup worker. */
+    @Bean CloseRefundFailure closeRefundFailure(PaymentRepository payments, RefundExecutionRepository executions,
+            RefundFailureClosureRepository failureClosures, RefundClosureRepository closures, RefundPaymentLookup lookup, OutboxRecorder outbox,
+            PlatformTransactionManager transactions, Clock refundReceptionClock, PortOneProperties properties) {
+        return new CloseRefundFailure(payments, executions, failureClosures, closures, lookup, outbox, refundReceptionClock,
                 RefundLookupConfiguration.lookupLease(properties), transactions);
     }
 

@@ -23,6 +23,11 @@ import com.stove.payment.core.domain.RefundClosureRequest;
 import com.stove.payment.core.domain.RefundClosureView;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.service.CloseRefundDelay;
+import com.stove.payment.core.service.CloseRefundFailure;
+import com.stove.payment.core.domain.RefundFailureClosure;
+import com.stove.payment.core.domain.RefundFailureClosureReceipt;
+import com.stove.payment.core.domain.RefundFailureClosureRequest;
+import com.stove.payment.core.domain.RefundFailureClosureView;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +55,7 @@ class AdminRefundDelayClosureAccessTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean PortOneProperties properties;
     @MockitoBean CloseRefundDelay close;
+    @MockitoBean CloseRefundFailure fail;
 
     @BeforeEach void principal() {
         when(decoder.decode(anyString())).thenAnswer(call -> {
@@ -112,5 +118,47 @@ class AdminRefundDelayClosureAccessTest {
         when(close.execute(any(RefundClosureRequest.class))).thenThrow(new BusinessException(PaymentErrorCode.REFUND_CLOSURE_PG_NOT_CANCELLED));
         mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("REFUND_CLOSURE_PG_NOT_CANCELLED"));
+    }
+
+    private static final String FAILURE_PATH = "/api/v1/admin/refund-delays/" + ATTEMPT + "/failure-closure";
+    private static final String FAILURE_BODY = "{\"requestId\":\"" + COMMAND + "\",\"note\":\"403 원인 확인\"}";
+
+    /** Decision 128: the operator comes from the JWT; forged fields in the body are ignored. */
+    @Test void theFailureClosureOperatorComesFromTheJwtAndTheReceiptCarriesTheEvidence() throws Exception {
+        Instant at = Instant.parse("2026-11-08T04:00:00Z");
+        when(fail.execute(any(RefundFailureClosureRequest.class))).thenReturn(new RefundFailureClosureReceipt(
+                new RefundFailureClosureView(COMMAND, ATTEMPT, "usr_operator", "403 원인 확인", RefundFailureClosure.Evidence.NO_LINKED_CANCELLATION,
+                        RefundFailureClosure.StopReason.CANCELLATION_HOLD, List.of(), "c".repeat(64), at.minusSeconds(1), at),
+                "44444444-4444-4444-4444-444444444444", "55555555-5555-5555-5555-555555555555", "payment-1", RefundExecutionStatus.FAILED, at));
+        mvc.perform(post(FAILURE_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestId\":\"" + COMMAND + "\",\"note\":\"403 원인 확인\",\"operatorSubject\":\"forged\",\"executionStatus\":\"PENDING\"}"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().string(HttpHeaders.LOCATION, "/api/v1/admin/refund-delays/" + ATTEMPT))
+                .andExpect(jsonPath("$.data.executionStatus").value("FAILED"))
+                .andExpect(jsonPath("$.data.failureClosure.operatorSubject").value("usr_operator"))
+                .andExpect(jsonPath("$.data.failureClosure.evidence").value("NO_LINKED_CANCELLATION"))
+                .andExpect(jsonPath("$.data.failureClosure.stopReason").value("CANCELLATION_HOLD"));
+        verify(fail).execute(new RefundFailureClosureRequest(COMMAND, ATTEMPT, "usr_operator", "403 원인 확인"));
+        verifyNoInteractions(close);
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"", "null", "{}", "{\"requestId\":\"bad\",\"note\":\"x\"}",
+            "{\"requestId\":\"33333333-3333-3333-3333-333333333333\",\"note\":\" \"}",
+            "{\"requestId\":\"33333333-3333-3333-3333-333333333333\"}"})
+    void malformedFailureClosuresNeverReachTheService(String body) throws Exception {
+        mvc.perform(post(FAILURE_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(fail);
+    }
+
+    @Test void onlyAnAdministratorCanCloseAsFailedAndAMovedPaymentIsAConflict() throws Exception {
+        mvc.perform(post(FAILURE_PATH).contentType(MediaType.APPLICATION_JSON).content(FAILURE_BODY)).andExpect(status().isUnauthorized());
+        for (String role : List.of("MEMBER", "CREATOR", "REVIEWER"))
+            mvc.perform(post(FAILURE_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + role).contentType(MediaType.APPLICATION_JSON).content(FAILURE_BODY))
+                    .andExpect(status().isForbidden());
+        verifyNoInteractions(fail);
+        when(fail.execute(any(RefundFailureClosureRequest.class))).thenThrow(new BusinessException(PaymentErrorCode.REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED));
+        mvc.perform(post(FAILURE_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN").contentType(MediaType.APPLICATION_JSON).content(FAILURE_BODY))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED"));
     }
 }
