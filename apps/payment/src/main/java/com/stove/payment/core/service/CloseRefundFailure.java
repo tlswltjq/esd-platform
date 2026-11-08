@@ -80,7 +80,8 @@ public class CloseRefundFailure {
                 throw new BusinessException(PaymentErrorCode.REFUND_NOT_FAILURE_CLOSABLE);
             boolean leased = execution.getLookupSchedule().getNextAt() != null;
             if (leased && !execution.getLookupSchedule().claimForClosure(token, at, lease)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
-            return Claim.owned(PgRefundLookupRequest.from(payment), execution.cancellationReceipt(payment), execution.request(), leased);
+            return Claim.owned(PgRefundLookupRequest.from(payment), execution.cancellationReceipt(payment), execution.request(), leased,
+                    execution.getActiveCancellationHoldId(), execution.getCancellationSchedule().getGeneration());
         });
         if (claim.prior() != null) return replay(claim.prior(), request);
 
@@ -106,9 +107,13 @@ public class CloseRefundFailure {
                 execution.requireSameRequest(claim.request());
                 RefundFailureClosure prior = closures.findByRequestId(request.requestId()).orElse(null);
                 if (prior != null) { execution.getLookupSchedule().releaseClosure(token); prior.requireSame(request); return receipt(prior, execution); }
-                // A resumed hold, a new PG receipt or a POST started since the claim makes the observation stale.
+                // The observation is valid only for the stop it was taken under (PR #166 R1). A resume or a dispatch claim since
+                // then (generation), another hold, or a new PG receipt means a POST may have moved money after the GET, even if
+                // the attempt is closable again (a new hold, or the window ended after a lost response).
                 if (!execution.failureClosableAt(at) || closures.findByAttemptId(execution.getAttemptId()).isPresent()
                         || delayClosures.findByAttemptId(execution.getAttemptId()).isPresent()
+                        || execution.getCancellationSchedule().getGeneration() != claim.dispatchGeneration()
+                        || !Objects.equals(execution.getActiveCancellationHoldId(), claim.holdId())
                         || !Objects.equals(execution.cancellationReceipt(payment), claim.receipt()))
                     throw new BusinessException(PaymentErrorCode.REFUND_NOT_FAILURE_CLOSABLE);
                 RefundFailureClosure.StopReason reason = execution.getActiveCancellationHoldId() != null ? RefundFailureClosure.StopReason.CANCELLATION_HOLD
@@ -182,11 +187,13 @@ public class CloseRefundFailure {
 
     private Instant now() { return clock.instant().truncatedTo(ChronoUnit.MICROS); }
 
+    /** The claim keeps the stop it observed: the active hold and the dispatch generation (PR #166 R1). */
     private record Claim(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request,
-            boolean leased, RefundFailureClosure prior) {
-        static Claim owned(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request, boolean leased) {
-            return new Claim(purchase, receipt, request, leased, null);
+            boolean leased, String holdId, long dispatchGeneration, RefundFailureClosure prior) {
+        static Claim owned(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request, boolean leased,
+                String holdId, long dispatchGeneration) {
+            return new Claim(purchase, receipt, request, leased, holdId, dispatchGeneration, null);
         }
-        static Claim known(RefundFailureClosure prior) { return new Claim(null, null, null, false, prior); }
+        static Claim known(RefundFailureClosure prior) { return new Claim(null, null, null, false, null, 0, prior); }
     }
 }

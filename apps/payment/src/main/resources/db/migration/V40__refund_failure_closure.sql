@@ -10,10 +10,14 @@ ALTER TABLE refund_execution
     DROP CHECK chk_refund_execution_failure,
     ADD COLUMN late_cancel_observed_at DATETIME(6) NULL,
     ADD COLUMN late_cancelled_at DATETIME(6) NULL,
+    -- PR #166 R1: grows on every dispatch claim and operator resume. The failure closure compares it before and after its
+    -- PG lookup. Existing rows start at 0; only a change during one closure matters, never the absolute value.
+    ADD COLUMN cancel_dispatch_generation BIGINT NOT NULL DEFAULT 0,
     ADD CONSTRAINT chk_refund_execution_failure_v40 CHECK (
         (status<>'FAILED' AND failure_event_id IS NULL AND failure_confirmed_at IS NULL AND failure_lookup_hash IS NULL)
         OR (status='FAILED' AND failure_event_id IS NOT NULL AND failure_confirmed_at IS NOT NULL AND failure_confirmed_at >= received_at
             AND failure_lookup_hash IS NOT NULL AND refund_confirmed_at IS NULL)),
+    ADD CONSTRAINT chk_refund_cancel_dispatch_generation CHECK (cancel_dispatch_generation >= 0),
     ADD CONSTRAINT chk_refund_execution_late_cancel CHECK (
         (late_cancel_observed_at IS NULL AND late_cancelled_at IS NULL)
         OR (status='FAILED' AND late_cancel_observed_at IS NOT NULL AND late_cancelled_at IS NOT NULL
