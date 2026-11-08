@@ -33,7 +33,7 @@ public class RefundCancellationHold {
     @Column(length = 500) private String resumeNote;
     /** Response status and error type of a PG_REQUEST_REJECTED hold (decision 133); NULL for the other reasons. */
     @Column(updatable = false) private Integer rejectionStatus;
-    @Column(updatable = false, length = PgCancellationRejection.TYPE_LENGTH) private String rejectionType;
+    @Column(updatable = false, columnDefinition = "MEDIUMTEXT") private String rejectionType;
 
     public static RefundCancellationHold forbidden(String attemptId, RefundCancellationClaim claim, Instant at, boolean activated) {
         return rejection(attemptId, claim, at, activated, "PG_REQUEST_FORBIDDEN");
