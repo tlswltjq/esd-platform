@@ -1207,6 +1207,42 @@
 - 구분: 추천 수용
 - 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), [PR #154](https://github.com/tlswltjq/esd-platform/pull/154) (구현), 근거 색인 2026-11-08 settlement 행
 
+<a id="investigation-trail-no-assignee"></a>
+## 131. 운영 조사 건에 담당자를 두지 않고, 목록에 마지막 조사자·시각만 보인다
+- 문제: 운영 조사 건(금융 보류 승인, 장기·귀속 미확정 환불, 지급 확인 대기 환불)은 게이지·경보로 드러나고 ADMIN이 조사 기록을 남긴 뒤 PG 재조회 근거로 닫는다([결정 114](#approval-review-hold-closure)·[115](#approval-review-closure-outcome)·[125](#license-grant-wait-detection)·[127](#refund-delay-closure)·[128](#refund-failure-closure)·[129](#orphan-license-grant-republish)). 조사 기록(`approval_investigation`, `refund_investigation`)에는 작성자 ADMIN sub와 시각만 있고 담당 필드는 없다. 동시 종결은 lease·`requestId` 멱등·종결 행 UNIQUE로 이미 한 번만 된다. 비어 있는 것은 "누가 이미 봤는지 목록에서 모른다"이다. 예: 14:10 운영자 A가 환불 지연 건에 "콘솔 확인 중"을 남겼는데, 14:20 운영자 B는 `GET /api/v1/admin/refund-delays`에서 조사 여부를 볼 수 없어 같은 건을 다시 조사한다. 돈은 한 번만 움직이지만 사람 시간이 두 번 든다. 승인 보류 목록은 `investigationCount`만 보이고, 환불 지연 목록은 그것도 없다. 현재 ADMIN은 초기 1명(`AUTH_ADMIN_EMAIL`)이고 전용 운영 화면이 없다. Review는 "심사자 배정 없이 모든 건 판정"으로 이미 정했다.
+- 선택지: A 범위 밖으로 닫는다(모든 ADMIN이 모든 건을 보고 종결) / B A + 환불 지연·승인 보류 목록 항목에 `investigationCount`·`lastInvestigatedBy`·`lastInvestigatedAt`을 보인다(기존 조사 기록 읽기만, 새 상태·테이블 없음) / C 참고용 담당 지정(`POST …/{id}/assignment`, `assignee=me|unassigned` 필터, 종결은 모든 ADMIN) / D 담당 강제(담당자만 조사 기록·종결, 재배정·SLA) (추천: B — 빈 곳은 "누가 봤는지 모름" 하나이고 기존 조사 기록만으로 닫힌다. 중복 금전 조치는 이미 lease·멱등·PG 재조회로 막혀 C·D가 더 막는 금전 위험이 없고, ADMIN 1명인 지금 규모에서 배정 상태는 관리 비용만 늘린다. D는 결정 115·127·128의 "ADMIN이 종결"에 조건을 붙이고 Review 선례와도 어긋난다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 목록에 마지막 조사자·시각만 보여 줘")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 환불 지연 목록(`GET /api/v1/admin/refund-delays`)과 승인 보류 목록 항목에 조사 건수(`investigationCount`), 마지막 조사자 ADMIN sub(`lastInvestigatedBy`), 마지막 조사 시각(`lastInvestigatedAt`)을 보인다. 기존 조사 기록을 읽기만 하고 새 상태·테이블·배정 API는 만들지 않는다. 담당 배정은 범위 밖으로 두고 모든 ADMIN이 모든 건을 조사·종결한다. 운영자가 동시에 여러 명 일하게 되거나 G6 운영 규모를 잴 때 다시 정한다. 경보를 사람에게 전달하는 경로(Alertmanager·알림 채널)는 이 결정과 별개다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
+<a id="reviewnotice-last-observation"></a>
+## 132. 금융 보류 고객 안내 코드는 보류 사유보다 마지막 PG 관측을 우선해 정한다
+- 문제: [결정 123](#approval-review-customer-notice)은 `reviewNotice` 코드를 보류 사유로 정했다(`CHARGED`: `PAID_WITHOUT_ADMISSION`, `CHARGE_CANCELLED`: `PG_CANCELLED`, `CHARGE_UNCONFIRMED`: `PG_INVALID_EVIDENCE`·PG `PENDING`·조회 실패, `NOT_CHARGED`: 그 밖). 그런데 `PG_REQUEST_REJECTED`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`CONFIRM_WINDOW_EXPIRED` 보류도 마지막 PG 관측이 `PAID`·`CANCELLED`이거나 관측 기록이 없을 수 있다(옛 행). 예: confirm 400 거절로 보류된 승인이 실제로는 `PAID`인데 사유가 "그 밖"이라 고객에게 "현재까지 청구된 금액은 없습니다, 새 주문으로 다시 구매하세요"가 나가 33,000원이 두 번 청구될 수 있다. `PAID_WITHOUT_ADMISSION` 건을 콘솔에서 취소해 관측이 `CANCELLED`가 돼도 "청구됨" 문구가 남는다. 결정 123 구현(PR 진행 중)은 이 경우를 임시로 `CHARGE_UNCONFIRMED`로 두었다.
+- 선택지: A 마지막 PG 관측을 우선해 코드를 정한다(PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, 관측 없음·PENDING·조회 실패 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`; `PG_INVALID_EVIDENCE`는 관측과 무관하게 `CHARGE_UNCONFIRMED`) / B 어긋나는 경우는 모두 `CHARGE_UNCONFIRMED`(임시안) / C 결정 123 원문 그대로 `NOT_CHARGED` (추천: A — 결정 123의 취지는 청구 여부별 문구이고 청구 여부를 가장 정확히 말하는 것은 사유가 아니라 마지막 PG 관측이다. `NOT_CHARGED` 문구도 이미 "마지막 관측 기준이라 '현재까지'"로 정했다. B는 이미 전액 취소된 고객에게도 "확인 중"을 계속 보이고, C는 돈이 나간 고객에게 "청구 없음, 다시 구매하세요"를 보일 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마지막 PG 관측 기준으로 코드 결정")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `PG_INVALID_EVIDENCE`(근거 자체가 유효하지 않음)는 관측과 상관없이 `CHARGE_UNCONFIRMED`다. 그 밖의 모든 보류 사유는 마지막 PG 관측으로 코드를 정한다: PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, PENDING·조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`. 문구와 종결 뒤 코드, 원래 사유 코드 비노출, Order 계약 불변은 결정 123 그대로다. 한계: 관측은 보류 재조회 간격(최대 10분, [결정 122](#approval-review-requery-interval))만큼 늦을 수 있다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 결정 123 구현 PR
+
+<a id="refund-formal-rejection-stop"></a>
+## 133. PortOne이 환불 취소를 형식을 갖춰 거절한 4xx는 재송신하지 않고 바로 자동 송신을 멈춘다
+- 문제: Payment의 환불 취소(`POST /payments/{id}/cancel`, 같은 `Idempotency-Key`·처음 저장한 본문)는 403·400 `INVALID_REQUEST`(중단)와 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`(잔액 변화 차단)만 바로 멈추고, 그 밖의 일반 409·다른 타입의 400·5xx는 모두 미확정으로 보고 최초 준비 후 3시간까지 다시 보낸다(R7.11·R7.15). 예: 11:00:06 취소 POST가 409 `PAYMENT_NOT_PAID`(예시 타입)를 받으면 같은 요청을 1분마다 14:00:06까지 약 180번 보내고 매번 같은 409를 받는다. 그동안 보유권은 정지돼 있고 고객은 `PROCESSING`만 보며, 운영자도 [결정 128](#refund-failure-closure) 실패 종결이 "자동 송신이 멈춘 실행"만 대상이라 3시간이 지나야 손댈 수 있다. 같은 키라 돈이 두 번 움직일 위험은 없다. 승인 쪽 confirm의 400·일반 409는 이미 바로 `PG_REQUEST_REJECTED` 보류다([결정 114](#approval-review-hold-closure)).
+- 선택지: A 지금처럼 3시간 재송신 / B 정상 JSON에 type이 있는 400·409·그 밖 4xx는 403처럼 바로 자동 POST를 멈추고 새 중단 사유를 남긴다(401·404는 [결정 29](#full-refund-policy)대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정 유지, 잔액 변화 409는 지금대로) / C 영구로 확인된 오류 타입 목록만 멈춤(실제 타입 목록은 전용 테스트 가맹점 뒤라 그 전까지 사실상 A) / D B + 502 `PG_PROVIDER`도 멈춤 (추천: B — 형식을 갖춘 4xx는 PortOne이 요청을 받아 판단한 응답이라 같은 키·본문으로는 결과가 바뀌지 않는다. 3시간 안 재개와 계속되는 조회로 잘못 멈춰도 되돌리기 쉽고, 승인 쪽 결정 114와 기준이 같아지며, 멈춘 뒤 처리는 결정 128을 그대로 쓴다. D의 502는 하위 PG 일시 장애와 구분되지 않을 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 형식 갖춘 4xx는 바로 멈춰")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 환불 취소 POST가 정상 JSON에 type이 있는 4xx(400·409·그 밖)를 받으면 자동 POST를 멈추고 새 중단 사유(가칭 `PG_REQUEST_REJECTED`)와 응답 상태·type을 남긴다. 401·404는 결정 29대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정으로 계속 재송신, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 지금대로 잔액 변화 차단, 403·`INVALID_REQUEST`는 지금대로다. 운영자는 3시간 안에서 재개(R7.16)하거나 언제든 결정 128 실패 종결을 쓴다. 조회는 계속해 늦은 성공을 놓치지 않는다. R7.11·R7.15 문구를 고친다. 502 `PG_PROVIDER`의 분류와 실제 PortOne 오류 타입 확인은 전용 테스트 가맹점 뒤로 미룬다. `INVALID_REQUEST` 본문은 같은 시도 안에서 고치지 않는다(R4.4·R7.10, 같은 키에 다른 본문은 멱등 충돌). 원인을 고친 뒤 결정 128 실패 종결 → 고객 재시도(새 attemptId·본문·3시간 창)로 잇고 운영 절차서에 적는다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
+<a id="refund-failure-customer-notice"></a>
+## 134. 실패로 닫은 환불의 새 시도는 고객 재신청으로만 만들고, 고객 환불 응답에 실패 사유와 재신청 안내를 보인다
+- 문제: 환불 실패가 확정되면(PG FAILED 확인 또는 [결정 128](#refund-failure-closure) ADMIN 실패 종결) Order가 보유권을 복구하고 환불은 `FAILED`가 된다. 새 실행은 고객이 `POST /api/v1/orders/{orderNo}/refund/retries`를 보낼 때만 생긴다(재정지 → 새 attemptId·멱등 키·3시간 창, 기한 없음, 최초 자격 유지). 고객은 조회해야만 `FAILED`를 알고 실패 사유도 알림도 없다([결정 98](#storage-return-no-notification): 알림 수단 미결). 예: 11:00 9,000원 자동 환불 → 11:00:06 취소 POST 400 `INVALID_REQUEST`로 중단 → 11:40 설정 수정(같은 시도는 저장 본문 그대로라 재개해도 같은 400) → 11:41 결정 128 실패 종결·보유권 복구 → 고객이 앱을 다시 열어 "다시 신청"을 누르지 않으면 환불은 기한 없이 멈춘다. [결정 29](#full-refund-policy) 하위는 "고객 재시도에 직원 승인 불필요"와 "시스템 자동 새 시도 없음"만 정했고, ADMIN이 새 시도를 시작하는 경로는 후속으로 남겼다.
+- 선택지: A 지금처럼 고객만 재신청(절차서에 "환불할 건이면 실패 종결보다 콘솔 취소 → [결정 127](#refund-delay-closure) 종결 먼저") / B ADMIN이 고객 대신 재신청(`POST /api/v1/admin/refunds/{refundId}/retries` 가칭, 같은 재시도 경로·ADMIN 기록) / C 실패 종결 때 보유권을 복구하지 않고 바로 새 시도로 재송신 / D A + 고객 환불 응답에 실패 사유 코드와 "다시 신청하면 환불됩니다" 안내(알림은 결정 98대로 넣지 않음) (추천: D — "고객 의사로만 새 시도"를 지키면서 실제 원인인 "고객이 실패와 할 일을 모름"을 줄인다. 환불해 줄 건은 이미 콘솔 취소 + 결정 127로 고객 행동 없이 끝난다. B는 복구된 게임을 동의 없이 다시 정지해 결정 29 하위와 부딪히고, C는 "확정 실패면 보유권 복구"와 R7.3을 바꾼다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "D로 해, 고객 응답에 실패 사유랑 안내 추가")
+- 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 실패한 환불의 새 실행은 지금처럼 고객 재신청으로만 만든다. ADMIN 대신 재신청과 실패 종결 시 자동 재송신은 두지 않는다. Order 고객 환불 응답(`FAILED`)에 실패 사유 코드(이미 저장된 `RefundAttempt.failureReasonCode`를 고객용 코드로 옮김, 내부 PG 오류 원문은 노출하지 않음)와 "다시 신청하면 환불됩니다" 안내를 넣는다. 운영 절차서에 "환불해 줄 건이면 실패 종결보다 콘솔 취소 → 결정 127 종결을 먼저, 실패 종결은 지금 환불할 수 없는 건에만"을 적는다. 알림은 결정 98대로 넣지 않는다. 장애로 수백 건이 한꺼번에 생기는 규모가 실제로 나오면 B를 다시 검토한다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
