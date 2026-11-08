@@ -7,10 +7,9 @@
 - [x] 장르 분류(플랫폼 10개)·`store_product_genre`·복수 장르 AND 검색·`/storefront/genres` — 2026-11-03
 - [x] 자동 복구 경보 연결: `/actuator/prometheus` 익명 GET 허용, `StoreSyncInitStalled`(초기화 10분)·`StoreSyncReconcileFailing`(대조 성공 5분 끊김) 경보, 격리 스택 발화·해제 검증 — 2026-11-05, [결정 85](../../../docs/decisions.md), PR #104
 - [x] 서비스 11개 공통 Prometheus 수집에 Store 포함(실제 격리 Prometheus 대상 up) — 2026-11-06, PR #113
+- [x] 최초 삽입 flush의 MySQL 교착(1213)이 `jakarta.persistence.OptimisticLockException`으로 감싸여 재시도를 지나치던 결함 재현·수정(원인 사슬로 판단) — 2026-11-08, [D-047](../../../docs/defects.md#d-047)
 
 ## 진행 중 / 남음 (일반화 공백)
-
-- [ ] flush 중 MySQL 교착(1213)이 Hibernate에서 `jakarta.persistence` 예외로 바뀌어 `ApplyCatalogProduct`·`ReconcileCatalogProduct`의 재시도 catch(`LockAcquisitionException`)를 지나칠 수 있다는 의심(PR #127 교차 리뷰 R3). 재현부터 한다.
 
 - 계정 복구·상태 등 G5 공통 운영은 [Auth](../auth/tasks.md)·[Gateway](../gateway/tasks.md) 작업과 [로드맵](../../../docs/roadmap.md)을 따른다.
 

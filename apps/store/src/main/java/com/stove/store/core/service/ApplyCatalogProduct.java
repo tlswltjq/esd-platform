@@ -7,11 +7,7 @@ import com.stove.store.core.domain.StoreProduct;
 import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.domain.StoreProductValues;
 import jakarta.persistence.EntityManager;
-import org.hibernate.exception.ConstraintViolationException;
-import org.hibernate.exception.LockAcquisitionException;
 import org.springframework.dao.ConcurrencyFailureException;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -50,10 +46,9 @@ public class ApplyCatalogProduct {
                     } else product.apply(snapshot);
                 });
                 return;
-            } catch (DataIntegrityViolationException | TransientDataAccessException
-                     | ConstraintViolationException
-                     | LockAcquisitionException failure) {
-                if (attempt == 2) throw failure;
+            } catch (RuntimeException failure) {
+                // flush의 교착·중복 키는 jakarta.persistence 예외로 감싸여 온다(D-047). 원인 사슬로 판단한다.
+                if (attempt == 2 || !RetryableWriteFailure.retryable(failure)) throw failure;
             }
         }
     }

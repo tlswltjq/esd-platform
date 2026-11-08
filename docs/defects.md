@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -71,6 +71,7 @@
 | [D-044](#d-044) | 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침 | 금전 손실(주문 없는 청구가 보류·경보 없이 남음) | **수정됨** | G1 조합 조사 코드 판독 뒤 재현 테스트 |
 | [D-045](#d-045) | 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급 | 금전 손실(과지급)·판매자 마감 정지 | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
+| [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -578,6 +579,18 @@
 **재현** `SettlementIntegrationTest#closingAnEarlierMonthAfterALaterMonthClosedIsRejectedWithoutReusingTheCarry`(`expected: 409 but was: 200`), `#theCarryLedgerAcceptsEachSourceMonthOncePerSeller`(같은 판매자·같은 출처 두 번째 삽입이 성공) — 수정 전 known-defect Red 2건. 지금은 태그를 뗀 회귀 테스트이고, `SettlementMigrationIntegrationTest#v14AndV15SerializeSellersAndRejectAReusedCarrySourceWithoutChangingTheLedger`가 이행을 지킨다.
 
 - **수정** `CloseSellerMonth`는 대상 월이 CLOSED가 아니고 뒤 월이 CLOSED면 409("이후 월이 이미 마감됐습니다")를 내고 행을 만들지 않는다. 이미 CLOSED인 대상 월의 재요청은 이 검사보다 먼저 최초 결과를 돌려준다(R3.4). 추가 방어선으로 V15가 `uk_seller_carryover_source (seller_subject, source_month)`를 둔다. 409 검사를 되돌리면 V15 유일 키가 두 번째 사용을 막아 재시도 뒤 500이 됐다(결정 102, DB 제약 예외로 인정). 그 경우 원장은 바뀌지 않았다.
+
+<a id="d-047"></a>
+## D-047 Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패
+
+**상태** 수정됨 · **영향** HTTP 정본 대조 회차 실패, Kafka 반영 지연과 ERROR 로그 · **위치** `ApplyCatalogProduct.execute`, `ReconcileCatalogProduct.execute`의 재시도 catch
+**재현** `StoreIntegrationTest#eventInsertDeadlockVictimRetries`, `#reconciliationInsertDeadlockVictimRetries` — known-defect Red 2건. 둘 다 `jakarta.persistence.OptimisticLockException: org.hibernate.exception.LockAcquisitionException: … Deadlock found when trying to get lock`(MySQL 1213) · **발견 경로** PR #127 교차 리뷰 R3의 의심을 Store `tasks.md`에 남긴 항목
+
+- **원인** 두 서비스는 새 상품 INSERT를 주입받은 `EntityManager.flush()`로 직접 실행한다. 이 호출은 Spring의 리포지토리 예외 변환을 거치지 않고, Hibernate가 교착(`LockAcquisitionException`)을 `jakarta.persistence.OptimisticLockException`으로 감싸 던진다. 재시도 catch는 Hibernate `ConstraintViolationException`·`LockAcquisitionException` 자체와 Spring `DataIntegrityViolationException`·`TransientDataAccessException`만 잡으므로, 감싼 예외는 최대 3회 새 트랜잭션 재시도를 지나 그대로 실패한다(리포지토리 호출·커밋 시 flush는 Spring이 `CannotAcquireLockException`으로 바꿔 잡힌다).
+- **재현 방법** READ COMMITTED에서 두 작업을 "없음" 확인(`lockById`·`findByProductCode`) 뒤에 `PausePoints`로 세운다. 그 사이 세 번째 트랜잭션이 같은 상품 ID를 커밋하지 않은 채 삽입한다. 두 작업의 INSERT가 그 행의 공유 잠금을 기다리다(`performance_schema.data_lock_waits` 2건), 세 번째가 롤백되면 둘 다 배타 잠금을 요청해 교착이 나고 InnoDB가 한쪽을 1213으로 되돌린다(MySQL의 세 세션 중복 삽입 교착). 실제로 교착이 났는지는 `performance_schema.events_errors_summary_global_by_error`의 1213 발생 수로 확인한다.
+- **운영 영향** 같은 상품을 세 곳(이벤트·초기 동기화·정본 대조)이 거의 동시에 처음 넣고 그중 하나가 롤백될 때만 생긴다. 이벤트 경로는 Kafka 기본 오류 처리기의 재배달(1·2·4초)로 결국 수렴하지만 지연과 ERROR 로그가 남는다. HTTP 대조는 그 회차가 실패로 끝나 다음 회차까지 사본 반영이 늦는다.
+- **수정** 두 서비스의 재시도 catch를 `RuntimeException`으로 받고, 새 `RetryableWriteFailure.retryable`이 원인 사슬(최대 16단계)에서 기존 네 타입(Spring `DataIntegrityViolationException`·`TransientDataAccessException`, Hibernate `ConstraintViolationException`·`LockAcquisitionException`)을 찾을 때만 새 트랜잭션으로 다시 시도한다. 재시도 대상은 넓히지 않았고 감싼 예외만 찾는다. 업무 충돌(`BusinessException`)·원인 없는 `OptimisticLockException`(오래된 버전)은 그대로 실패한다. Order `CreateOrder`도 같은 catch 모양이지만 `saveAndFlush`(리포지토리)로 저장해 Spring 변환을 거치므로 해당하지 않는다.
+- **망가뜨리기 확인(결정 102)** `retryable`이 원인 사슬을 보지 않게 바꾸면 두 재현 테스트가 같은 `OptimisticLockException(LockAcquisitionException)`으로 실패(Gradle exit 1)하고, 되돌리면 통과한다.
 
 ---
 
