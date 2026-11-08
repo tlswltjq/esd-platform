@@ -23,7 +23,8 @@
 - [ ] [외부 대기] PG 비용 LIVE 확정: 실제 가맹점 키·거래 키 대응(`PortOne pgTxId ↔ 토스페이 payToken`, `paymentId ↔ PG orderNo`) 검증과 `identity-mapping-verified` 활성화 — G3
 - [ ] [결정 필요] 정상 LIVE 승인 근거 수용의 도메인·스키마·조회 계약 — G3 (현재 운영 계약은 PORTONE_TEST)
 - [ ] 정상 LIVE 입력 → 비용 저장/SQL 집계, 동시 첫 비용 INSERT, 해당 INSERT 실패 롤백의 제약 보존 상태 검증 — G3 (현재 검증 공백)
-- [ ] 환불 조정 완료와 판매자 순액 전체 연결 — G3
+- [ ] [결정 필요] 환불 조정 완료와 판매자 순액 전체 연결 — G3. 월 안 환불 상계·마감 전후 반영·월 순액 조회는 이미 연결돼 있다(`RecordConfirmedRefund`·`CloseSellerMonth`·`SellerMonthlySettlement`). 남은 것은 마감된 월 매출을 다음 달에 환불해 생긴 음수 월 순액을 월 경계 너머로 정리하는 규칙이며, 아래 음수 월 순액 정책이 정해져야 한다(2026-11-08 조사)
+- [ ] 판매자·운영 매출 조회(`/me/sales`·`/sales`)에 그 매출의 환불 연결(환불 ID·반영 월)을 보인다. 원장에 이미 있는 사실을 조회에 붙이는 일이며, 서로 다른 월의 매출·환불을 원매출로 함께 조회하기 위함이다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month) 검토 메모) — G3
 - [ ] [결정 필요] 음수 월 순액·플랫폼 잔여액의 이월·실제 지급/회수 정책 — G3 (현재 음수 표시만, 실행 없음)
 - [ ] PORTONE_TEST 원승인 읽기·토스페이 정산 수집 설정을 실제 스택(Compose override)에 적용하고 런타임 검증 — G3 (원승인·취소 직접 조회는 PortOne 흉내 서버 여정의 호스트 JVM 스택에서 런타임 확인 — 결정 111. Compose override 적용, 토스페이 정산 수집, 실제 공급자 연결은 남음)
 - [x] G3 변경 이후 열한 업무 앱 + 모의 PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 2026-11-07 21단계 통과([근거 색인](../../../docs/evidence.md)). 모의 PG 기준이며 최신 PortOne 연결 검증이 아니다.
