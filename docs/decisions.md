@@ -1055,7 +1055,7 @@
 - 내 의견: "B로 해, 운영자 조사·종결"
 - 선택: B — 환불의 `/api/v1/admin/refund-delays`처럼 ADMIN이 보류 승인을 목록·상세로 보고 조사 기록을 남긴다. 종결은 운영자가 PG 콘솔에서 처리한 뒤 시스템이 PG를 다시 조회해 근거를 확인할 때만 닫는다. 보류 건 수 지표와 경보를 둔다. 보류 건의 끝없는 5초 재조회는 늘어나는 간격으로 바꾼다. 시스템이 PG 취소를 실행하는 경로는 만들지 않는다. 종결 때 주문·결제가 어떤 상태가 되는지, 재조회 간격 값, 고객 안내는 따로 정한다.
 - 구분: 추천 수용
-- 결과: (진행 중) 1부 [PR #131](https://github.com/tlswltjq/esd-platform/pull/131) — ADMIN 목록·상세·조사 기록, 최신 PG 관측, 지표·경보. 종결 동작은 [결정 115](#approval-review-closure-outcome), 재조회 간격·고객 안내는 남음
+- 결과: (진행 중) 1부 [PR #131](https://github.com/tlswltjq/esd-platform/pull/131) — ADMIN 목록·상세·조사 기록, 최신 PG 관측, 지표·경보. 종결 동작은 [결정 115](#approval-review-closure-outcome), 재조회 간격은 [결정 122](#approval-review-requery-interval) [PR #147](https://github.com/tlswltjq/esd-platform/pull/147), 고객 안내는 남음
 
 <a id="approval-review-closure-outcome"></a>
 ## 115. 승인 보류를 종결하면 주문은 끝나고, 고객은 새 주문으로 안내한다
@@ -1127,7 +1127,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "상한 10분으로 해")
 - 선택: 상한 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `REVIEW_REQUIRED` 승인의 다음 조회 시각은 `now + min(10분, max(5초, now − review_started_at))`이다. 시작값과 상한은 보류 전용 설정 키로 둔다. 일반 결제 재시도의 `PAYMENT_RETRY_MS`는 바꾸지 않는다. `review_started_at`이 없는 옛 행은 상한을 쓴다. 새 열과 이행은 없다. PortOne 호출 한도 기록이 생기면 상한을 다시 본다.
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #147](https://github.com/tlswltjq/esd-platform/pull/147), 근거 색인 2026-11-08 금융 보류 건 PG 재조회 간격 행
 
 <a id="approval-review-customer-notice"></a>
 ## 123. 금융 보류 건은 청구 여부별 안내를 Payment 고객 응답에 붙인다

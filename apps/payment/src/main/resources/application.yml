@@ -60,6 +60,8 @@ stove:
     poll-interval-ms: ${PAYMENT_POLL_MS:1000}
     batch-size: ${PAYMENT_BATCH_SIZE:20}
     retry-delay-ms: ${PAYMENT_RETRY_MS:5000}
+    review-retry-initial-ms: ${PAYMENT_REVIEW_RETRY_INITIAL_MS:5000}
+    review-retry-max-ms: ${PAYMENT_REVIEW_RETRY_MAX_MS:600000}
     refund-lookup:
       enabled: ${PAYMENT_REFUND_LOOKUP_ENABLED:false}
     refund-execution:
