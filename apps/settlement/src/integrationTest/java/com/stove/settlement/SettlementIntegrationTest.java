@@ -599,6 +599,15 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(carryover("2026-12").get("source_month")).isEqualTo("2026-10");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM seller_monthly_settlement WHERE settlement_month='2026-11'",Long.class)).isZero();
     }
+    /** R3.4: re-closing a CLOSED month returns its first result, even when an earlier month is OPEN (pre-V13 out-of-order data or a late event). */
+    @Test void reclosingAClosedMonthReturnsItsFirstResultEvenWhenAnEarlierMonthIsOpen() {
+        sale(order(Instant.parse("2026-09-01T00:00:00Z")));closed("2026-09");
+        at("2026-11-02T03:00:00Z");JsonNode first=closed("2026-10");
+        jdbc.update("UPDATE seller_monthly_settlement SET status='OPEN',closed_at=NULL WHERE settlement_month='2026-09'");
+        assertThat(closed("2026-10")).isEqualTo(first);
+        assertThat(count("settlement_seller_carryover")).isEqualTo(2);
+        assertThat(closeMonth("2026-11").status()).isEqualTo(409);
+    }
     @Test void closedMonthsWithoutLedgerAreReadAsCarriedInZeroAndStillHandOverTheirNegativeNet() {
         PaidOrder september=order(Instant.parse("2026-09-01T00:00:00Z"));sale(september);closed("2026-09");
         recordRefund.execute(prepareRefund(september));

@@ -47,10 +47,12 @@ public class CloseSellerMonth {
     private SellerMonthlySettlement close(String seller,String month) {
         Instant now=clock.instant().truncatedTo(ChronoUnit.MICROS);
         if(month.compareTo(SettlementMonth.at(now).value())>=0) throw new BusinessException(ErrorCode.CONFLICT,"지난 월만 마감할 수 있습니다.");
+        Optional<SellerMonthlySettlement> locked=months.lock(seller,month);
+        // R3.4: a CLOSED month answers with its first result before the decision 130 order check, which only guards OPEN -> CLOSED.
+        if(locked.isPresent() && locked.get().isClosed()) return locked.get();
         if(months.existsBySellerSubjectAndStatusAndSettlementMonthLessThan(seller,"OPEN",month))
             throw new BusinessException(ErrorCode.CONFLICT,"이전 월을 먼저 마감해야 합니다.");
-        SellerMonthlySettlement bucket=months.lock(seller,month).orElseGet(() -> months.saveAndFlush(SellerMonthlySettlement.open(seller,month,now)));
-        if(bucket.isClosed()) return bucket;
+        SellerMonthlySettlement bucket=locked.orElseGet(() -> months.saveAndFlush(SellerMonthlySettlement.open(seller,month,now)));
         SettlementTotals total=SettlementTotals.empty();
         for(SettlementSale sale:sales.findAllBySellerSubjectAndSettlementMonth(seller,month)) total=total.plus(sale.totals());
         SettlementTotals reversed=SettlementTotals.empty();
