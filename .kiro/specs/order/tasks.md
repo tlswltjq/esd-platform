@@ -27,7 +27,7 @@
 - [ ] G2 지급 확인 누락의 Order 측 감지([결정 125](../../../docs/decisions.md#license-grant-wait-detection)): 환불의 `PENDING_LICENSE_GRANT` 진입 시각을 저장한다(새 이행·옛 행 호환 테스트). 10분 넘은 건수 게이지와 Prometheus 경보, ADMIN 환불 목록·상세의 진입 시각, 같은 경계를 넘은 고객 `processingNotice`를 더한다. 복구는 결정 37 절차(License P3 A 이벤트 복구 완료)를 쓴다 — G2
 - [x] 환불 후 재구매(P4): 구매 슬롯·유일 제약 제거(판매 금지만 거절), 환불 완료 시 `PurchaseRefunded` 발행, 복구의 보관함 반환을 환불 응답에 표시 — [결정 89~98](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban)
 - [ ] [외부 대기] 재심사·잘못된 승인 중단의 실제 사용자 흐름: 계약·API·DB/Kafka 검증은 완료. 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정은 남음 — G2 후속
-- [ ] [결정 필요] 환불 조사 이후 조치·종결의 나머지: 공통 종결은 PG 재조회 근거의 Payment ADMIN 종결로 정했다([결정 127](../../../docs/decisions.md#refund-delay-closure), 구현은 Payment 항목). 남은 쟁점은 PG가 취소를 거절한 건의 실패 종결, 원본 이벤트가 없는 `PENDING_LICENSE_GRANT` 종결(결정 125가 남김), `LicenseSuspended`·`LicenseRestored` 유실 대응, 담당 배정이다. 원래 3시간 경계 유지, 시간만으로 실패/복구/새 금융 동작 추가 금지. 한 쟁점씩 사용자 선택 — 환불 백로그
+- [ ] [결정 필요] 환불 조사 이후 조치·종결의 나머지: 공통 종결은 PG 재조회 근거의 Payment ADMIN 종결로 정했다([결정 127](../../../docs/decisions.md#refund-delay-closure), 구현은 Payment 항목). PG가 취소를 거절한 건의 실패 종결도 Payment ADMIN 실패 종결로 정했다([결정 128](../../../docs/decisions.md#refund-failure-closure), 종결 뒤에는 기존 보유권 복구·고객 재시도를 쓴다). 남은 쟁점은 원본 이벤트가 없는 `PENDING_LICENSE_GRANT` 종결(결정 125가 남김), `LicenseSuspended`·`LicenseRestored` 유실 대응, 담당 배정이다. 원래 3시간 경계 유지, 시간만으로 실패/복구/새 금융 동작 추가 금지. 한 쟁점씩 사용자 선택 — 환불 백로그
 - [ ] 새 환불 흐름의 Tempo 전체 연결, 실제 PG 오류·응답 유실 뒤 환불 전체 검증(현재는 루프백 계약 픽스처) — 후속 검증
 
 ## 범위 밖(후속)
