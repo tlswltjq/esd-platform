@@ -67,8 +67,26 @@ groups:
             GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
             시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
 
+      # 지급 확인을 기다리다 멈춘 환불(결정 125). LicenseGranted가 DEAD·DLT로 가면 이벤트 경보는 한 번만 울리고,
+      # 그 뒤 들어온 환불은 조용히 PENDING_LICENSE_GRANT에 남는다. 이 경보는 그 환불이 남아 있는 동안 계속 울린다.
+      # 진입 + 10분(stove.order.refund.license-grant-delay) 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.
+      # 돈은 아직 움직이지 않았고 고객은 보유권을 그대로 가지므로 warning이다. 지급 확인이 반영되면 자동 해제된다.
+      - alert: RefundLicenseGrantsDelayed
+        expr: stove_order_refund_license_grant_delayed > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 환불이 지급 확인을 10분 넘게 기다린다"
+          description: >-
+            {{ $value }}건이 PENDING_LICENSE_GRANT에 들어간 뒤 10분 넘게 LicenseGranted를 받지 못했다.
+            GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 licenseGrantWaitStartedAt으로 대상을 찾고,
+            docs/license-event-recovery-runbook.md(결정 37)로 LicenseGranted DEAD 재큐잉·DLT 재투입을 확인한다.
+            새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+
       # 승인 보류(결정 114·115). PAID_WITHOUT_ADMISSION은 돈이 나갔는데 주문이 결제되지 않아 critical이다.
       # PG_CANCELLED를 포함한 나머지는 warning이다. PG_CANCELLED는 PG가 이미 전액을 돌려준 상태이고 종결만 남았다.
+      # PG_PENDING_AT_ORDER_EXPIRY(결정 126)는 접수 전 PAY_PENDING 관측 건이 만료 뒤에도 PENDING인 상태이고, PAID가 되면 critical 사유로 바뀐다.
+      # CONFIRM_WINDOW_EXPIRED(결정 124)는 접수 승인이 최초 준비 + 3시간(confirm 기한)을 넘겼는데 PG가 PENDING·READY인 상태다. 늦은 PAID·FAILED는 원래 주문으로 끝난다.
       - alert: PaymentApprovalsRequireReview
         expr: stove_payment_approval_review_required{reason="PAID_WITHOUT_ADMISSION"} > 0
         labels:

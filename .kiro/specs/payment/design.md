@@ -24,7 +24,7 @@
 PENDING --> PENDING     (일시 오류·응답 유실·미확정 결과·3시간 후 조회만)
 PENDING --> PAID        (일치하는 승인 확인)
 PENDING --> FAILED      (일치하는 최종 거절 확인)
-PENDING --> EXPIRED     (Order가 만료를 전달. 금융 결과를 만들지 않음)
+PENDING --> EXPIRED     (Order가 만료를 전달. 금융 결과를 만들지 않음. PG 관측 이력이 있는 접수 전 승인은 PG 재조회 뒤 READY·FAILED일 때만. 결정 126)
 PENDING --> FAILED      (운영자 승인 보류 종결, reasonCode REVIEW_CLOSED. 결정 115)
 PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤트 없음. 결정 115)
 [*] --> EXPIRED        (만료 뒤 늦은 OrderPlaced. 승인·조회 예약 없음)
@@ -47,6 +47,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | 승인 접수(V29) | 암호화 고정 본문·토큰 지문·원구매·승인 상태·최초 준비·다음 일정·lease, 명령/공급자 시도/진행 중 작업 유일 키 |
 | `payment_order_lifecycle`(V31) | 주문별 잠금과 최초 만료 근거. Payment 없이도 존재, cascade 삭제 없음 |
 | `pg_paid_amount`·`pg_discount_amount`(V32) | PG 실결제/할인 쌍. NULL 일치·`PAID`·음수 금지·합계=amount CHECK |
+| `approval_investigation`(V34·V38) | 승인 보류 조사의 append-only 기록. V38부터 승인 FK에 삭제 cascade 없음(RESTRICT) |
 | `approval_closure`(V37) | 승인 보류 운영 종결의 append-only 기록. approvalId·requestId(각각 유일)·종결자·note·근거 상태(CANCELLED·FAILED·READY)·관측/종결 시각. 승인 FK에 삭제 cascade 없음 |
 
 - paymentId·orderNo·requestEventId·nullable resultEventId와 nullable `(provider, providerTransactionId)`에 각각 유일 제약을 둔다. 문자열 식별자는 대소문자를 구분하고 `(status, nextAttemptAt, id)`·`(buyerSubject, id)` 조회를 지원한다.
@@ -82,7 +83,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | 기한 내 개별 실패·Order 종료 확인 | PENDING | FAILED | PENDING | 같은 주문·금액으로 새 인증 |
 | Order 만료 응답 또는 기한 후 실패 종료 | EXPIRED | EXPIRED/FAILED | EXPIRED | 현재 상품 조건으로 새 주문 |
 | PG 성공 재조회·Payment/Outbox 커밋 | 이벤트 반영 뒤 PAID | SUCCEEDED | PAID | 주문·라이브러리 후속 반영 확인 |
-| HTTP 결과 유실·3시간 경과·운영 확인 필요 | 진행 유지 | ADMITTED/REVIEW_REQUIRED | PENDING | 기존 결과 확인. 시간만으로 새 결제 없음 |
+| HTTP 결과 유실·3시간 경과·운영 확인 필요 | 진행 유지 | ADMITTED/REVIEW_REQUIRED(3시간 뒤 PG `PENDING`·`READY`면 `CONFIRM_WINDOW_EXPIRED`) | PENDING | 기존 결과 확인. 시간만으로 새 결제 없음 |
 | 운영자 보류 종결(재조회 근거 전액 CANCELLED·FAILED·READY) | 이벤트 반영 뒤 FAILED(이미 EXPIRED면 유지) | FAILED(보류 사유 유지) | FAILED(`REVIEW_CLOSED`), 접수 전·만료 통지 뒤면 EXPIRED | 현재 상품 조건으로 새 주문 |
 
 - `SUCCEEDED`는 Payment 금융 결과/Outbox 저장이며 OrderPaid·License 지급까지 동기 완료를 뜻하지 않는다.
@@ -122,10 +123,12 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 
 - 주기 실행은 단일 인스턴스 fixed-delay(기본 1초·20건)로 due인 `PENDING`을 `nextAttemptAt, id` 순으로 고른다. 오류·미확정은 기본 5초 뒤 재예약하고 결제별로 처리한다. `stove.payment.processing-enabled`는 기본 true, 검증에서 false→true 재시작으로 접수/재개를 나눈다.
 - 승인 복구: 최초 준비부터 3시간 미만은 같은 승인 ID·멱등 키·본문으로 자동 재송신+조회, 3시간부터는 GET만. 암호화 본문은 복호화한 원래 바이트만 재사용한다.
+- confirm 기한 경과 보류(R4.6, 결정 124): `ResolvePaymentApproval`은 조회 결과가 PAID·FAILED·전액 CANCELLED가 아니면 같은 lease의 잠금 트랜잭션에서 `PaymentApproval.holdAfterConfirmWindow`를 부른다. `ADMITTED`·송신 중단 전이고 `firstPreparedAt + 3시간`(`CONFIRM_WINDOW`, `canPost`와 같은 경계)에 이르렀으며 PG가 `PENDING`·`READY`이면 `stopPosts("CONFIRM_WINDOW_EXPIRED")`로 보류한다. 실패·새 키·결제 전이는 만들지 않고 보호 본문도 지우지 않는다. 이후는 보류 흐름(재조회 간격 결정 122, 종결 결정 115)을 그대로 타며, 늦은 PAID는 원래 주문 성공, 늦은 FAILED는 기존 Order 실패 통지로 끝난다. 다른 사유로 이미 보류된 승인은 사유를 바꾸지 않는다. 기존 행은 다음 조회 때 올라오므로 이행은 없다.
 - 환불: 고정 attemptId를 Idempotency-Key로, 원액을 amount·currentCancellableAmount에 명시. 부분 취소·명시적 잔액 불일치(409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`)는 자동 POST 중단·조회 유지. 검증된 전액 취소 조회 또는 검증된 취소 완료 응답으로만 완료를 확정한다.
 - 중복 공급자 호출은 같은 키의 멱등 처리와 최종 행 잠금으로 중복 승인·중복 결과를 막는다. 다중 인스턴스 임대는 후속 범위다.
 - 원자성은 같은 DB 안의 상태·Outbox에만 적용한다. 공급자 결정과 Payment DB를 한 트랜잭션으로 묶거나 exactly-once 전달을 가정하지 않는다. 스케줄러는 유스케이스에만 위임한다.
 - 순서 역전: `OrderPlaced`·`OrderExpired`가 같은 `payment_order_lifecycle` 행을 먼저 잠근다. 만료가 먼저면 근거만 보존하고, 늦은 `OrderPlaced`는 원구매 대조 뒤 예약 없는 `EXPIRED`로 만든다. 확정 금융 결과가 있으면 덮어쓰지 않고 충돌을 표시한다.
+- 접수 전 만료(R11.5, 결정 126): 주문 만료 통지를 받은 `REQUESTED`·미접수 승인은 `latestPgState`가 NULL이면 PG 호출 없이 승인·Payment를 `EXPIRED`로 닫는다. 값이 있으면(PG를 한 번이라도 유효하게 관측함) `ResolvePaymentApproval.expireAfterLookup`이 같은 lease로 트랜잭션 밖에서 `inspect`하고 관측을 별도 잠금 트랜잭션에 저장한 뒤, PAID → `PAID_WITHOUT_ADMISSION`, 전액 CANCELLED → `holdForCancellation`(`PG_CANCELLED`), PENDING → `PG_PENDING_AT_ORDER_EXPIRY`로 `stopPosts`하고, READY·FAILED는 잠금 안에서 `REQUESTED`를 다시 확인해 `EXPIRED`로 닫는다. 보류된 건은 이후 기존 보류 흐름(재조회 간격 결정 122, 종결 결정 115)을 그대로 탄다. 늦은 PAID는 사유를 `PAID_WITHOUT_ADMISSION`으로 바꾸고, FAILED는 기존 접수 전 실패 경로로 닫힌다. 조회 장애는 상태를 바꾸지 않아 다음 회차에 다시 조회하고, 조회 실패 기록(`lastInspectionError`)만 있는 승인은 관측이 없으므로 PG 호출 없이 닫는다. 새 열·이행은 없다([D-044](../../../docs/defects.md#d-044)).
 - 실패 시도 이력은 `PAID`·결과 Outbox 커밋 뒤 별도 트랜잭션으로 수집하고 장애는 `next_failure_lookup_at`으로 재예약한다. 오래된 `PENDING` 응답이 승인 뒤 예약을 지우지 않는다.
 - 추적: 재시도마다 원래 부모의 새 자식 span을 만들고 다른 주문·스케줄러 scope와 분리한다. 샘플링·수집기 상태는 상태 전이 조건이 아니다.
 
@@ -147,6 +150,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | `PAYMENT_PG_PROVIDER` | `SIMULATED` (`PORTONE_TEST` 선택 가능) |
 | `PAYMENT_PROCESSING_ENABLED` | true. false면 접수·조회만(승인 작업자 포함 중지) |
 | `PAYMENT_POLL_MS` / `PAYMENT_BATCH_SIZE` / `PAYMENT_RETRY_MS` | 1000(100~60000) / 20(1~200) / 5000(100~300000) |
+| `PAYMENT_REVIEW_RETRY_INITIAL_MS` / `PAYMENT_REVIEW_RETRY_MAX_MS` | 5000(100~300000) / 600000(1000~600000, 시작값 이상. 설정으로 줄일 수는 있지만 결정 122의 10분보다 늘릴 수 없다). 보류(`REVIEW_REQUIRED`) 승인의 PG 재조회 시작값·상한만 정한다([결정 122](../../../docs/decisions.md#approval-review-requery-interval)) |
 | `MOCK_PG_URI` / `MOCK_PG_PAYMENT_KEY` | `http://localhost:8092` / 필수, Payment 전용 승인·조회 키 |
 | `PAYMENT_ORDER_SERVICE_KEY` | Order와 같은 값. Order 내부 승인/실패 API 전용 |
 | `PAYMENT_APPROVAL_PAYLOAD_KEY` / `ORDER_URI` | 32바이트 Base64, 교체 금지 / Payment가 접근할 Order 주소 |
@@ -162,13 +166,13 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 
 `GET /api/v1/admin/approval-reviews?page=0&size=20&reason=PG_INVALID_EVIDENCE`는 현재 보류 목록을, `/{approvalId}`는 현재·과거 보류 상세를 DB에서 조회하며 `Cache-Control: no-store`를 반환한다. 접수·입장·최초 준비·보류 시작 시각, 보류 경과 초, 마지막 PG 상태/관측 시각, 조사 건수를 제공한다. 토큰·암호문·보호 본문은 응답에 포함하지 않는다. 기존 행의 보류 시작 시각은 NULL이며 경과 시간도 NULL이다.
 
-V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 inspect 후 별도 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다.
+V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 inspect 후 별도 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다. V34의 승인 FK는 삭제 cascade였으나, V38이 RESTRICT로 다시 만들어 승인이나 그 결제를 지우면 조사 기록이 조용히 사라지지 않고 삭제가 거절된다(옛 행은 고치지 않음, 결정 104 이행 테스트 대상 아님).
 
-`stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 6개 알려진 사유(2부의 `PG_CANCELLED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부이고, 재조회 간격·고객 안내는 미정이다.
+`stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 8개 알려진 사유(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY`, 결정 124의 `CONFIRM_WINDOW_EXPIRED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부, 재조회 간격은 아래 "보류 재조회 간격"이고, 고객 안내는 미정이다.
 
 승인 보류 상세·조사 이력 GET은 `reviewStartedAt != null`인 과거 보류도 현재 `status`와 함께 제공한다. 한 번도 보류되지 않은 승인은 404이고 조사 POST는 현재 REVIEW_REQUIRED에만 허용된다. `latestPgState`는 마지막 유효 관측(the last valid observation)이며 최근 조회 성공을 뜻하지 않는다. `lastInspectedAt`·`lastInspectionError`는 inspect 후 별도 잠금 트랜잭션에서 현재 lease 소유자만 기록한다. 오류는 INVALID_EVIDENCE 또는 UNAVAILABLE이고 성공 시 NULL로 지운다. 기존 예외 분류·원래 예외는 유지한다. CANCELLED 인식과 종결은 아래 2부에서 더했다.
 
-V35는 `(status,last_error_code,received_at,id)` 색인, 조회 시각·오류 열 및 상태 집합/관측 쌍/보류 시각 CHECK를 추가한다. V34의 과거 NULL 행은 모두 제약을 충족하며 이후 값은 도메인이 같은 쌍·시간 순서로만 저장했으므로 기존 행을 수정하거나 과거 자료를 정정할 필요가 없다. 게이지는 스크레이프당 GROUP BY 한 번으로 6개 KNOWN(2부의 `PG_CANCELLED` 포함) 및 OTHER를 집계한다. PAID_WITHOUT_ADMISSION 경보는 critical, 나머지는 warning이며 알려진 과거 보류는 Alertmanager silence를 사용한다.
+V35는 `(status,last_error_code,received_at,id)` 색인, 조회 시각·오류 열 및 상태 집합/관측 쌍/보류 시각 CHECK를 추가한다. V34의 과거 NULL 행은 모두 제약을 충족하며 이후 값은 도메인이 같은 쌍·시간 순서로만 저장했으므로 기존 행을 수정하거나 과거 자료를 정정할 필요가 없다. 게이지는 스크레이프당 GROUP BY 한 번으로 7개 KNOWN(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY` 포함) 및 OTHER를 집계한다. PAID_WITHOUT_ADMISSION 경보는 critical, 나머지는 warning이며 알려진 과거 보류는 Alertmanager silence를 사용한다.
 
 ### 승인 보류 종결 (결정 115, 2부)
 
@@ -185,3 +189,7 @@ V35는 `(status,last_error_code,received_at,id)` 색인, 조회 시각·오류 �
 작업자가 전액 CANCELLED를 보면 보류 전 승인은 `PG_CANCELLED`로 송신을 멈추고, 보류된 승인은 관측만 남긴다. 저절로 닫지 않는다. 전액 판정은 같은 시도·`cancelled == total`·`paid + discount == total`·성공 취소 합계 = 총액(FAILED 내역 제외, REQUESTED 등은 잘못된 근거)이다.
 
 V36은 `chk_approval_pg_state`를 지우고 CANCELLED를 더해 다시 만든다(허용 집합만 넓어져 기존 행은 그대로 충족). V37은 새 표만 더한다. `approval_closure`의 승인 FK는 삭제 cascade가 없어(RESTRICT), 종결된 승인이나 그 결제를 지우려 하면 감사 기록이 조용히 사라지지 않고 삭제가 거절된다. 둘 다 옛 행을 고치지 않아 결정 104의 이행 테스트 대상이 아니다. 주문이 스스로 만료된 뒤 도착한 `REVIEW_CLOSED`는 Order가 만료를 유지하고 결과 식별만 남겨 DLT로 보내지 않는다. 같은 결과의 재전달만 무효과다([Order R4.8](../order/requirements.md)).
+
+### 보류 재조회 간격 (결정 122)
+
+`ResolvePaymentApproval`은 한 회를 끝낼 때(`PaymentApproval.finish`) 잠금 안의 현재 상태로 다음 조회 시각을 정한다. `REVIEW_REQUIRED`이면 `now + ApprovalReviewRequeryInterval.after(reviewStartedAt, now)` = `now + min(상한, max(시작값, now − reviewStartedAt))`이고, 그 밖은 `now + PAYMENT_RETRY_MS`다. 시작값·상한은 `stove.payment.review-retry-initial-ms`·`review-retry-max-ms`(`PAYMENT_REVIEW_RETRY_INITIAL_MS`·`PAYMENT_REVIEW_RETRY_MAX_MS`, 기본 5초·10분)이고 `PaymentProcessingProperties`가 범위를 검증한다. 같은 회에 막 보류된 승인은 경과가 0이라 시작값으로 시작한다. `reviewStartedAt`이 NULL인 옛 보류 행(V34 이전)은 상한을 쓰며, 새 열·이행은 없다. 종결은 `claimForClosure`로 `nextAt`을 기다리지 않고, 거절·실패하면 잡기 전의 `nextAt`(늘어난 간격 그대로)으로 돌려준다. 보류가 저절로 풀리는 분기(PAID·FAILED·READY 만료)는 바꾸지 않았고, 다음 조회가 늦어지는 만큼만 늦게 일어난다(예: 30분 보류 뒤 만료 통지를 받은 READY 건은 최대 10분 뒤 닫힌다).

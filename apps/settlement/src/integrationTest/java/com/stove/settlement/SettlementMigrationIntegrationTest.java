@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -157,16 +158,69 @@ class SettlementMigrationIntegrationTest extends SettlementIntegrationTestBase {
             Map<String,List<Map<String,Object>>> preserved=new HashMap<>();
             for(String table:preservedTables) preserved.put(table,jdbc.queryForList("SELECT * FROM "+table));
             List<Map<String,Object>> beforeV12=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
-            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            Flyway.configure().dataSource(source).locations(location).target("12").load().migrate();
             assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'12' ORDER BY installed_rank")).isEqualTo(beforeV12);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_pg_cost_posting",Long.class)).isZero();
             for(String table:preservedTables) assertThat(jdbc.queryForList("SELECT * FROM "+table)).as(table).isEqualTo(preserved.get(table));
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            for(String table:preservedTables) assertThat(jdbc.queryForList("SELECT * FROM "+table)).as(table).isEqualTo(preserved.get(table));
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_carryover",Long.class)).isZero();
             Flyway.configure().dataSource(source).locations(location).load().validate();
         } finally { root.execute("DROP DATABASE " + schema); }
     }
 
     private void restoreLegacyColumn(Map<String, Object> row, String column) {
         row.put(column, row.remove("legacy_" + column));
+    }
+
+    /** 결정 121·130: V13은 새 이월 원장만 만들고 옛 CLOSED 월을 채우거나 바꾸지 않는다. */
+    @Test void v13AddsAnEmptyCarryLedgerAndKeepsClosedMonthsAsTheyWere() {
+        MySQLContainer<?> mysql=SharedContainers.MYSQL;
+        String schema="settlement_v13_"+UUID.randomUUID().toString().replace("-","");
+        String server="jdbc:mysql://"+mysql.getHost()+":"+mysql.getMappedPort(3306)+"/";
+        JdbcTemplate root=new JdbcTemplate(new DriverManagerDataSource(server+mysql.getDatabaseName()+"?useSSL=false&allowPublicKeyRetrieval=true","root",mysql.getPassword()));
+        root.execute("CREATE DATABASE "+schema);
+        try {
+            DriverManagerDataSource source=new DriverManagerDataSource(server+schema+"?useSSL=false&allowPublicKeyRetrieval=true","root",mysql.getPassword());JdbcTemplate jdbc=new JdbcTemplate(source);
+            String location="filesystem:"+Path.of("src/main/resources/db/migration").toAbsolutePath();
+            Flyway.configure().dataSource(source).locations(location).target("12").load().migrate();
+            jdbc.update("""
+                    INSERT INTO seller_monthly_settlement(seller_subject,settlement_month,status,paid_amount,platform_fee_amount,seller_payout_amount,
+                      record_count,refund_amount,refunded_platform_fee_amount,refunded_seller_payout_amount,refund_count,created_at,updated_at,closed_at)
+                    VALUES('seller','2026-09','CLOSED',9000,900,8100,1,0,0,0,0,'2026-09-01','2026-10-02','2026-10-02'),
+                      ('seller','2026-10','CLOSED',5000,500,4500,1,9000,900,8100,1,'2026-10-01','2026-11-02','2026-11-02'),
+                      ('seller','2026-11','OPEN',3000,300,2700,1,0,0,0,0,'2026-11-01','2026-11-15',NULL)
+                    """);
+            List<Map<String,Object>> months=jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id");
+            List<Map<String,Object>> beforeV13=jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history ORDER BY installed_rank");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            assertThat(jdbc.queryForList("SELECT version,checksum FROM flyway_schema_history WHERE version<>'13' ORDER BY installed_rank")).isEqualTo(beforeV13);
+            assertThat(jdbc.queryForList("SELECT * FROM seller_monthly_settlement ORDER BY id")).isEqualTo(months);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_carryover",Long.class)).isZero();
+            String insert="INSERT INTO settlement_seller_carryover(seller_subject,settlement_month,net_seller_payout_amount,carried_in,payable,carried_out,source_month,created_at) VALUES";
+            jdbc.update(insert+"('seller','2026-11',2700,-3600,0,-900,'2026-10','2026-12-02')");
+            jdbc.update(insert+"('seller','2026-12',1800,-900,900,0,'2026-11','2027-01-02')");
+            jdbc.update(insert+"('seller','2026-09',8100,0,8100,0,NULL,'2026-10-02')");
+            assertThatThrownBy(() -> jdbc.update(insert+"('seller','2026-11',2700,-3600,0,-900,'2026-10','2026-12-03')"))
+                    .as("같은 판매자·월 두 번째 행").isInstanceOf(DuplicateKeyException.class);
+            Map<String,String> rejected=Map.of(
+                    "('seller','2027-01',100,1,101,0,'2026-12','2027-02-01')","ck_seller_carryover_amount",
+                    "('seller','2027-01',-100,0,-100,0,NULL,'2027-02-01')","ck_seller_carryover_amount",
+                    "('seller','2027-01',100,0,0,100,NULL,'2027-02-01')","ck_seller_carryover_amount",
+                    "('seller','2027-01',100,-50,60,-10,'2026-12','2027-02-01')","ck_seller_carryover_amount",
+                    "('seller','2027-01',100,0,90,0,NULL,'2027-02-01')","ck_seller_carryover_amount",
+                    "('seller','2027-01',100,-50,50,0,NULL,'2027-02-01')","ck_seller_carryover_source",
+                    "('seller','2027-01',100,0,100,0,'2027-01','2027-02-01')","ck_seller_carryover_source",
+                    "('seller','2027-01',100,0,100,0,'2027-02','2027-02-01')","ck_seller_carryover_source");
+            for(Map.Entry<String,String> bad:rejected.entrySet())
+                assertThatThrownBy(() -> jdbc.update(insert+bad.getKey())).as(bad.getKey())
+                        .isInstanceOfSatisfying(UncategorizedSQLException.class, failure -> {
+                            assertThat(failure.getSQLException().getErrorCode()).isEqualTo(3819);
+                            assertThat(failure.getSQLException().getMessage()).contains(bad.getValue());
+                        });
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_seller_carryover",Long.class)).isEqualTo(3);
+            Flyway.configure().dataSource(source).locations(location).load().validate();
+        } finally { root.execute("DROP DATABASE "+schema); }
     }
 
     @Test void v5ToV6ToV7PreservesOldLedgerAndInboxAndUsesCaseSensitiveNewKeys() {

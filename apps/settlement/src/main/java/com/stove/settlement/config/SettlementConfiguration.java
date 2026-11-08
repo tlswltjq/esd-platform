@@ -17,6 +17,7 @@ import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
 import com.stove.settlement.core.domain.ReverseOriginalFullRefundPolicy;
 import com.stove.settlement.core.domain.RefundSettlementMonthPolicy;
 import com.stove.settlement.core.domain.UseConfirmedRefundMonthPolicy;
+import com.stove.settlement.core.domain.SellerCarryoverRepository;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
@@ -79,8 +80,9 @@ public class SettlementConfiguration {
             PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
         return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords);
     }
-    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,SettlementRefundRepository refunds) {
-        return new CloseSellerMonth(months,sales,clock,transactions,refunds);
+    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,
+            SettlementRefundRepository refunds,SellerCarryoverRepository carryovers) {
+        return new CloseSellerMonth(months,sales,clock,transactions,refunds,carryovers);
     }
     @Bean ReconcilePgReceipt reconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock,PgTransactionRepository transactions,PgFeeRepository fees) {
         return new ReconcilePgReceipt(receipts,sales,clock,transactions,fees);

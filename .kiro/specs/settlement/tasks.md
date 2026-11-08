@@ -20,15 +20,18 @@
 
 ## 진행 중 / 남음 (G3 공백)
 
-- [ ] PG 비용 LIVE 확정: 실제 가맹점 키·거래 키 대응(`PortOne pgTxId ↔ 토스페이 payToken`, `paymentId ↔ PG orderNo`) 검증과 `identity-mapping-verified` 활성화 — G3
-- [ ] 정상 LIVE 승인 근거 수용의 도메인·스키마·조회 계약 — G3 (현재 운영 계약은 PORTONE_TEST)
+- [ ] [외부 대기] PG 비용 LIVE 확정: 실제 가맹점 키·거래 키 대응(`PortOne pgTxId ↔ 토스페이 payToken`, `paymentId ↔ PG orderNo`) 검증과 `identity-mapping-verified` 활성화 — G3
+- [ ] [결정 필요] 정상 LIVE 승인 근거 수용의 도메인·스키마·조회 계약 — G3 (현재 운영 계약은 PORTONE_TEST)
 - [ ] 정상 LIVE 입력 → 비용 저장/SQL 집계, 동시 첫 비용 INSERT, 해당 INSERT 실패 롤백의 제약 보존 상태 검증 — G3 (현재 검증 공백)
-- [ ] 환불 조정 완료와 판매자 순액 전체 연결 — G3
-- [ ] 음수 월 순액·플랫폼 잔여액의 이월·실제 지급/회수 정책 — G3 (현재 음수 표시만, 실행 없음)
+- [x] 환불 조정 완료와 판매자 순액 전체 연결 — G3, [결정 121](../../../docs/decisions.md#seller-negative-net-carryover)·[결정 130](../../../docs/decisions.md#seller-close-order-carryover). 이전 월에 OPEN 행이 있으면 마감 409, 마감 트랜잭션에서 V13 불변 이월 원장(`settlement_seller_carryover`) 한 행, 월 응답 `carriedIn`·`payable`·`carriedOut`(OPEN은 null, 원장 없는 옛 CLOSED 월은 `carriedIn = 0`). 송금·청구·회수 없음 — 2026-11-08, 단위·아키텍처 143·통합 70건 통과, PR 본문
+- [ ] 늦은 앞 월 이벤트를 마감 경계 뒤로 반영한다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month)·[결정 130](../../../docs/decisions.md#seller-close-order-carryover) 적용, 새 정책 없음 — 2026-11-08 조사) — G3. 같은 판매자에 더 뒤의 CLOSED 월이 있으면 그 앞 월(행이 없어도)을 CLOSED로 본다. `RecordPaidSale`·`RecordConfirmedRefund`는 원래 월 행을 만들기 전에 뒤 월 CLOSED를 확인하고 참이면 현재 KST 월로 넘긴다(`CLOSED_MONTH_ROLLOVER`, 원래 월 행은 만들지 않고 `saleMonth`·확인 월은 보존). `CloseSellerMonth`는 대상 월이 CLOSED가 아니고 뒤 월이 CLOSED면 409("이후 월이 이미 마감됐습니다")를 내고 행 없는 월은 만들지 않는다(같은 출처 이월을 두 번 쓰는 결함도 함께 막는다). 마감과 앞 월 행 생성의 경쟁은 판매자 단위로 직렬화한다(판매자 잠금 행 등). R3.5·R6.5·design 문구를 고친다. 테스트: 8월 마감 → 10월 마감 → 9/30 확인 환불 11/3 도착 시 11월 반영·9월 행 없음·11월 이월 확인, 같은 흐름의 매출, 뒤 월 CLOSED에서 앞 월 마감 409, 마감과 앞 월 이벤트 동시 실행
+- [ ] [외부 대기] V13 이전 순서 없는 마감 자료 탐지: 마감된 월 뒤에 OPEN 행이 남은 판매자, 원장 없는 CLOSED 월이 연속하며 앞쪽이 음수인 판매자를 읽기 전용 SQL로 센다(공유 환경 자료가 생기면). 행이 나오면 처리 방법을 사용자에게 묻는다 — G3
+- [x] 판매자·운영 매출 조회(`/me/sales`·`/sales`)에 그 매출의 환불 연결(환불 ID·반영 월)을 보인다. 원장에 이미 있는 사실을 조회에 붙이는 일이며, 서로 다른 월의 매출·환불을 원매출로 함께 조회하기 위함이다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month) 검토 메모) — 2026-11-08, `SaleResponse.refund`(환불 없으면 null), 단위 137·통합 64건 통과, PR #142
+- [ ] [결정 필요] 판매자 실제 송금·청구/회수 정책 — G3 이후. 판매자 음수 월 순액의 월 이월과 지급 기준액은 [결정 121](../../../docs/decisions.md#seller-negative-net-carryover)로 정했다. 플랫폼 잔여액 음수는 요구사항(음수 보존, 판매자 전가 없음)대로 둔다. 실제 송금·청구 기능을 만들 때 정한다
 - [ ] PORTONE_TEST 원승인 읽기·토스페이 정산 수집 설정을 실제 스택(Compose override)에 적용하고 런타임 검증 — G3 (원승인·취소 직접 조회는 PortOne 흉내 서버 여정의 호스트 JVM 스택에서 런타임 확인 — 결정 111. Compose override 적용, 토스페이 정산 수집, 실제 공급자 연결은 남음)
 - [x] G3 변경 이후 열한 업무 앱 + 모의 PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 2026-11-07 21단계 통과([근거 색인](../../../docs/evidence.md)). 모의 PG 기준이며 최신 PortOne 연결 검증이 아니다.
-- [ ] 환불 → 정산 조정의 실제 스택 여정 — 위 여정에는 환불 단계가 없다. 모의 PG에 취소 기능이 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회만 받는다. 실행 방식은 정책 선택이 필요하다(PortOne TEST는 사람 승인 필요).
-- [ ] 실제 PG 지급 수령 확인: PORTONE 공급자의 지급 명세 수집(현재 503)과 PG 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G3 이후
+- [ ] [결정 필요] 환불 → 정산 조정의 실제 스택 여정 — 위 여정에는 환불 단계가 없다. 모의 PG에 취소 기능이 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회만 받는다. 실행 방식은 정책 선택이 필요하다(PortOne TEST는 사람 승인 필요).
+- [ ] [외부 대기] 실제 PG 지급 수령 확인: PORTONE 공급자의 지급 명세 수집(현재 503)과 PG 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G3 이후
 
 ## 범위 밖(후속)
 

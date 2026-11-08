@@ -16,7 +16,7 @@
 - [x] 분실 비밀번호 복구의 최소 계약·감사 — 2026-11-05, requirements R6. `RecoverPasswordTest`·`PasswordRecoveryIntegrationTest`(실제 MySQL).
 - [x] 계정 상태·권한 관리의 최소 계약·감사 — 2026-11-05, requirements R7. `UserAccountTest`·`ManageAccountTest`·`AccountManagementIntegrationTest`.
 - [x] 복구·잠금·역할 회수 후 세션·토큰 정리 여정 — 2026-11-05 실제 Auth·Gateway·Redis·MySQL([근거 색인](../../../docs/evidence.md)). 복구 토큰은 DB 해시 픽스처, access token은 검증용 25초를 썼다.
-- [ ] 실제 메일 발송 연동(`PasswordResetMailPort`의 실제 어댑터) — 현재 모의 구현.
+- [ ] [결정 필요] 실제 메일 발송 연동(`PasswordResetMailPort`의 실제 어댑터) — 현재 모의 구현.
 
 ## 범위 밖(후속)
 

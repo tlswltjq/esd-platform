@@ -10,6 +10,8 @@ import socket
 EPHEMERAL_START = 32768
 
 OFFSETS = {
+    # The 1000-wide slots above 24000 would cross the ephemeral range; new tools take free slots below 11000.
+    "verify-expiry-journeys": 10000,
     "verify-jib": 11000,
     "verify-catalog": 12000,
     "verify-download": 13000,
@@ -23,6 +25,7 @@ OFFSETS = {
     "verify-store": 21000,
     "verify-studio": 22000,
     "verify-refund-settlement": 23000,
+    "verify-approval-journeys": 24000,
 }
 
 
