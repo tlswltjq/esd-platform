@@ -1216,6 +1216,15 @@
 - 구분: 추천 수용
 - 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
 
+<a id="reviewnotice-last-observation"></a>
+## 132. 금융 보류 고객 안내 코드는 보류 사유보다 마지막 PG 관측을 우선해 정한다
+- 문제: [결정 123](#approval-review-customer-notice)은 `reviewNotice` 코드를 보류 사유로 정했다(`CHARGED`: `PAID_WITHOUT_ADMISSION`, `CHARGE_CANCELLED`: `PG_CANCELLED`, `CHARGE_UNCONFIRMED`: `PG_INVALID_EVIDENCE`·PG `PENDING`·조회 실패, `NOT_CHARGED`: 그 밖). 그런데 `PG_REQUEST_REJECTED`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`CONFIRM_WINDOW_EXPIRED` 보류도 마지막 PG 관측이 `PAID`·`CANCELLED`이거나 관측 기록이 없을 수 있다(옛 행). 예: confirm 400 거절로 보류된 승인이 실제로는 `PAID`인데 사유가 "그 밖"이라 고객에게 "현재까지 청구된 금액은 없습니다, 새 주문으로 다시 구매하세요"가 나가 33,000원이 두 번 청구될 수 있다. `PAID_WITHOUT_ADMISSION` 건을 콘솔에서 취소해 관측이 `CANCELLED`가 돼도 "청구됨" 문구가 남는다. 결정 123 구현(PR 진행 중)은 이 경우를 임시로 `CHARGE_UNCONFIRMED`로 두었다.
+- 선택지: A 마지막 PG 관측을 우선해 코드를 정한다(PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, 관측 없음·PENDING·조회 실패 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`; `PG_INVALID_EVIDENCE`는 관측과 무관하게 `CHARGE_UNCONFIRMED`) / B 어긋나는 경우는 모두 `CHARGE_UNCONFIRMED`(임시안) / C 결정 123 원문 그대로 `NOT_CHARGED` (추천: A — 결정 123의 취지는 청구 여부별 문구이고 청구 여부를 가장 정확히 말하는 것은 사유가 아니라 마지막 PG 관측이다. `NOT_CHARGED` 문구도 이미 "마지막 관측 기준이라 '현재까지'"로 정했다. B는 이미 전액 취소된 고객에게도 "확인 중"을 계속 보이고, C는 돈이 나간 고객에게 "청구 없음, 다시 구매하세요"를 보일 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마지막 PG 관측 기준으로 코드 결정")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `PG_INVALID_EVIDENCE`(근거 자체가 유효하지 않음)는 관측과 상관없이 `CHARGE_UNCONFIRMED`다. 그 밖의 모든 보류 사유는 마지막 PG 관측으로 코드를 정한다: PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, PENDING·조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`. 문구와 종결 뒤 코드, 원래 사유 코드 비노출, Order 계약 불변은 결정 123 그대로다. 한계: 관측은 보류 재조회 간격(최대 10분, [결정 122](#approval-review-requery-interval))만큼 늦을 수 있다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 결정 123 구현 PR
+
 ---
 
 ## 검증하며 드러난 것
