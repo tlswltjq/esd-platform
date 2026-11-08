@@ -121,7 +121,8 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 
 ```bash
 python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
-python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제(결정 119)
+python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제·30분 안 재진입 조합(결정 119·120)
+python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합(31분 대기, 별도 야간 작업, 결정 120)
 ```
 
 CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 PR·main push마다 `./gradlew build`(L0~L5·과거 이행)를, 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`)을 돌린다. 공개 저장소라 self-hosted 러너를 쓰지 않고, 실제 PortOne 결제·환불과 비밀 값은 CI에 넣지 않는다.
