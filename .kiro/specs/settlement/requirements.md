@@ -52,12 +52,12 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 2. WHEN ADMIN이 판매자·월 마감을 요청하면 THEN 시스템 SHALL 현재 KST 월보다 이전 월만 허용하고, 월 행을 잠근 상태에서 원장 합계·건수를 대조해 CLOSED·closedAt을 함께 확정한다.
 3. IF 현재·미래 월 마감을 요청하면 THEN 시스템 SHALL 409로 거절한다.
 4. WHEN 동일 판매자·월의 마감을 재요청하면 THEN 시스템 SHALL 최초 금액·closedAt을 그대로 반환하고 재집계로 확정 금액을 바꾸지 않는다.
-5. IF 늦은 거래의 `saleMonth`가 이미 CLOSED이면 THEN 시스템 SHALL 접수 트랜잭션 시점의 현재 KST 월에 반영하고 `saleMonth`를 보존한다.
-6. WHERE 둘 이상의 월 행을 잠그는 맥락에서 THE 시스템 SHALL 판매자·월의 일정한 순서로 잠근다.
+5. IF 늦은 거래의 `saleMonth`가 이미 CLOSED이거나 같은 판매자의 더 뒤 월이 CLOSED이면(그 월에 행이 없어도) THEN 시스템 SHALL 접수 트랜잭션 시점의 현재 KST 월에 반영하고(`saleMonth` 월 행은 만들지 않는다) `saleMonth`를 보존한다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month)·[결정 130](../../../docs/decisions.md#seller-close-order-carryover)).
+6. WHERE 매출·환불 반영과 판매자 월 마감 맥락에서 THE 시스템 SHALL 먼저 판매자 잠금 행(`settlement_seller_lock`)을 잠가 같은 판매자의 월 판정·행 생성·마감을 직렬화하고, 둘 이상의 월 행은 판매자·월의 일정한 순서로 잠근다.
 7. THE 월 마감 SHALL PG 수령 확인·PG 비용 확정과 독립적으로 수행하며, CLOSED를 수령 완료나 판매자 지급 완료로 해석하지 않는다.
-8. IF 같은 판매자의 M보다 이전 월에 OPEN 행이 있는데 M 마감을 요청하면 THEN 시스템 SHALL 409(`CONFLICT`, "지난 월만 마감"과 같은 오류 모양)로 거절하고 아무 행도 바꾸지 않는다. 행이 없는 월은 마감 순서 검사에서 건너뛴다([결정 130](../../../docs/decisions.md#seller-close-order-carryover)).
+8. IF 같은 판매자의 M보다 이전 월에 OPEN 행이 있는데 M 마감을 요청하면 THEN 시스템 SHALL 409(`CONFLICT`, "지난 월만 마감"과 같은 오류 모양)로 거절하고 아무 행도 바꾸지 않는다. 행이 없는 월은 마감 순서 검사에서 건너뛴다([결정 130](../../../docs/decisions.md#seller-close-order-carryover)). M이 CLOSED가 아닌데 같은 판매자의 M보다 뒤 월이 CLOSED이면 같은 409("이후 월이 이미 마감됐습니다")로 거절하고 M 행을 만들지 않는다(이미 CLOSED인 M의 재요청은 4번대로 최초 결과).
 9. WHEN 판매자 월 M을 마감하면 THEN 시스템 SHALL 같은 트랜잭션에서 `carriedIn` = M보다 이전의 마지막 CLOSED 월의 `carriedOut`(없으면 0, 행 없는 월은 건너뜀)으로 두고, `netSellerPayoutAmount + carriedIn`이 음수면 `payable = 0`·`carriedOut =` 그 음수, 0 이상이면 `payable =` 그 값·`carriedOut = 0`으로 이월 원장에 한 행을 쓴다([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)). 실제 송금·청구·회수는 하지 않는다.
-10. THE 이월 원장 SHALL `(sellerSubject, settlementMonth)`마다 최대 한 행이며 삽입 뒤 바꾸지 않는다. 같은 월 재마감·동시 마감은 새 행을 만들지 않는다. 원장 행이 없는 옛 CLOSED 월(V13 이전 마감)은 `carriedIn = 0`으로 읽고, 다음 월 마감은 그 월의 `min(0, 순액)`을 이월로 받는다.
+10. THE 이월 원장 SHALL `(sellerSubject, settlementMonth)`마다 최대 한 행이고 같은 판매자의 출처 월(`sourceMonth`)을 한 번만 받으며 삽입 뒤 바꾸지 않는다. 같은 월 재마감·동시 마감은 새 행을 만들지 않는다. 원장 행이 없는 옛 CLOSED 월(V13 이전 마감)은 `carriedIn = 0`으로 읽고, 다음 월 마감은 그 월의 `min(0, 순액)`을 이월로 받는다.
 
 ### R4. PG 거래·비용·지급 자료의 Settlement 소유 직접 조회
 **사용자 스토리:** 운영자로서, PG 거래·비용·지급 명세를 Payment를 거치지 않고 Settlement가 직접 확인하기를 원한다. 그래야 책임 경계가 분명하다.
@@ -92,7 +92,7 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 2. THE 늦은 `RefundExecutionSucceeded` SHALL 최초 금융 확인을 보강하는 사건으로만 처리하고 두 번째 금액 조정으로 소비하지 않는다.
 3. WHEN 전액 환불을 배분하면 THEN 시스템 SHALL `FULL_REFUND_REVERSE_ORIGINAL_V1`로 원매출의 총액·플랫폼 수수료·판매자 몫을 그대로 음수 상계하고, 현재 요율로 재계산하거나 확인된 외부 혜택만큼 판매자 몫을 줄이지 않는다.
 4. WHEN 환불을 기록하면 THEN 시스템 SHALL `PgRefunds`로 같은 결제를 직접 GET해 전액 취소·성공 취소 ID 전체·합계·기존 지급 구성을 확인한 뒤, Inbox·불변 환불 원장·월 환불 합계를 원자 저장한다.
-5. WHERE 환불 반영 월 선택 맥락에서 THE 시스템 SHALL `REFUND_CONFIRMED_MONTH_V1`로 최초 금융 확인 월이 OPEN이면 그 월, CLOSED이면 현재 OPEN 월을 선택한다(`CONFIRMED_MONTH` / `CLOSED_MONTH_ROLLOVER`).
+5. WHERE 환불 반영 월 선택 맥락에서 THE 시스템 SHALL `REFUND_CONFIRMED_MONTH_V1`로 최초 금융 확인 월이 OPEN이면 그 월, CLOSED이거나 같은 판매자의 더 뒤 월이 CLOSED이면(확인 월에 행이 없어도) 현재 OPEN 월을 선택한다(`CONFIRMED_MONTH` / `CLOSED_MONTH_ROLLOVER`). 뒤 월 CLOSED로 넘길 때 확인 월 행은 만들지 않고 확인 월(`refundMonth`)은 보존한다.
 6. IF 확인 월과 현재 월이 모두 CLOSED이면 THEN 시스템 SHALL 임의 월을 선택하지 않고 충돌로 처리한다.
 7. IF 환불이 원매출보다 먼저 도착하면 THEN 시스템 SHALL 원장·월 합계에 기록하지 않고 기존 Kafka 재시도/DLT로 남기며, 원매출 복구 뒤 원래 금융 확인 이벤트로 재처리한다.
 8. IF SIMULATED 공급자의 환불 읽기를 요청하면 THEN 시스템 SHALL 503으로 반환하고 모의 취소 근거를 생성하지 않는다.
