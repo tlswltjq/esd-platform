@@ -84,7 +84,7 @@ class PgStatementIntegrationTest extends SettlementIntegrationTestBase {
     @LocalServerPort int port;
     @BeforeEach void clean() {
         for(String table:List.of("settlement_pg_cost_posting","settlement_pg_statement_item","settlement_pg_statement_page","settlement_pg_statement","settlement_pg_statement_entry",
-                "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","seller_monthly_settlement",
+                "settlement_refund_cancellation","settlement_refund","pg_receipt_item","pg_receipt","settlement_sale","settlement_seller_carryover","seller_monthly_settlement",
                 "settlement_pg_fee","settlement_pg_transaction","processed_event")) jdbc.update("DELETE FROM "+table);
         SUPPLIER.reset();when(clock.instant()).thenReturn(NOW);
         when(owners.require(anyString())).thenReturn(new ProductOwner(1L,"game-1","usr_seller"));
