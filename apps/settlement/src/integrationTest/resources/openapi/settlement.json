@@ -514,6 +514,14 @@
       },
       "MonthResponse" : {
         "properties" : {
+          "carriedIn" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "carriedOut" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "closedAt" : {
             "format" : "date-time",
             "type" : "string"
@@ -531,6 +539,10 @@
             "type" : "integer"
           },
           "paidAmount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "payable" : {
             "format" : "int64",
             "type" : "integer"
           },

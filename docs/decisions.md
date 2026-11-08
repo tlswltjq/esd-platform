@@ -1118,7 +1118,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 다음 월로 이월")
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 판매자 월을 마감할 때 `순액 + 들어온 이월액`을 계산한다. 음수이면 그 금액을 다음 월로 넘기고 지급 기준액을 0원으로 둔다. 0 이상이면 그 값을 지급 기준액으로 확정하고 넘기는 금액은 0원이다. 이월은 불변 원장에 남기고, 이미 마감한 월의 행은 바꾸지 않는다(결정 42). 실제 송금·청구·회수는 하지 않는다. 플랫폼 잔여액은 현 요구사항을 그대로 둔다.
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), [PR #154](https://github.com/tlswltjq/esd-platform/pull/154) (구현), 근거 색인 2026-11-08 settlement 행
 
 <a id="approval-review-requery-interval"></a>
 ## 122. 금융 보류 건의 PG 재조회는 보류된 시간에 비례해 늘리되 10분에서 멈춘다
@@ -1205,7 +1205,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마감 순서 강제하고 직전 마감 월에서 이월")
 - 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 판매자 월 M을 마감할 때 같은 판매자의 M보다 이전 월에 OPEN 행이 있으면 409로 거절한다. `carriedIn`은 M 이전의 마지막 CLOSED 월이 넘긴 `carriedOut`이고, 행이 없는 월은 건너뛴다. 이월 원장은 `(판매자, 월)`마다 한 행이며 마감 트랜잭션 안에서 쓴다. 이월 원장이 없는 옛 CLOSED 월은 `carriedIn = 0`으로 보고, 그 응답 값은 구현 PR에서 테스트로 고정한다. 결정 121의 지급 기준액 규칙(`payable = max(0, 순액 + carriedIn)`, 음수면 넘김)과 송금 미실행은 그대로다.
 - 구분: 추천 수용
-- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현은 후속 PR
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), [PR #154](https://github.com/tlswltjq/esd-platform/pull/154) (구현), 근거 색인 2026-11-08 settlement 행
 
 <a id="investigation-trail-no-assignee"></a>
 ## 131. 운영 조사 건에 담당자를 두지 않고, 목록에 마지막 조사자·시각만 보인다
