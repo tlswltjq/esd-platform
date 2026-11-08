@@ -31,7 +31,7 @@
 
 - [ ] 금융 보류 건 PG 재조회 간격([결정 122](../../../docs/decisions.md#approval-review-requery-interval)): `REVIEW_REQUIRED` 승인의 다음 조회를 `now + min(10분, max(5초, now − review_started_at))`로 잡는다. 시작값·상한은 보류 전용 설정 키로 두고 `PAYMENT_RETRY_MS`는 바꾸지 않으며, `review_started_at`이 없는 옛 행은 상한을 쓴다 — G1
 - [ ] G1 종료 조건 대조 — 금융 보류 건 고객 안내([결정 123](../../../docs/decisions.md#approval-review-customer-notice)): 결제 상세·승인 조회 응답에 청구 여부별 `reviewNotice {code, message, since}`(`CHARGED`·`CHARGE_CANCELLED`·`CHARGE_UNCONFIRMED`·`NOT_CHARGED`, 종결 뒤 둘)를 더한다. 결제창 409 메시지도 한국어로 바꾼다. 원래 사유 코드는 노출하지 않고, Order 계약은 바꾸지 않는다. 운영 종결(결정 115)과 재조회 간격(결정 122)은 정했다. 승인 전 검증 보류의 만료 경로 보완은 모든 `REVIEW_REQUIRED`의 해제·재승인·금융 구제 정책이 아니며, 과거 실제 TEST 진단 건의 원래 기록·종료된 스택은 수정하지 않았다 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업))
-- [ ] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증([결정 120](../../../docs/decisions.md#g1-reentry-scope)): 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 흉내 서버 실제 스택 여정에 30분 안 위험 조합(승인 요청 미도달 뒤 재결제, 처리 중 결제창 재요청 거절, 처리 중 새 주문 이중 구매, PAY_PENDING 유지, confirm 400/403 보류)을 기존 야간 작업으로 넣는다. 기한을 넘는 조합(기한 뒤 FAILED, 기한 안 접수 뒤 늦은 PAID, 접수 전 PAY_PENDING 만료)은 31분 대기 한 번으로 묶은 별도 야간 작업으로 넣는다. 3시간 조합은 `PaymentApprovalIntegrationTest`로 인정한다 — G1
+- [ ] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증([결정 120](../../../docs/decisions.md#g1-reentry-scope)): 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 흉내 서버 실제 스택 여정에 30분 안 위험 조합(승인 요청 미도달 뒤 재결제, 처리 중 결제창 재요청 거절, 처리 중 새 주문 이중 구매, PAY_PENDING 유지, confirm 400/403 보류)을 기존 야간 작업으로 넣는다. 기한을 넘는 조합(기한 뒤 FAILED, 기한 안 접수 뒤 늦은 PAID, 접수 전 PAY_PENDING 만료)은 31분 대기 한 번으로 묶은 별도 야간 작업으로 넣는다. 3시간 조합은 통합 테스트로 인정하되, 기존 `PaymentApprovalIntegrationTest:220-227`은 PG READY만 확인하므로 PAY_PENDING으로 3시간을 넘기는 통합 테스트를 새로 더한다 — G1
 - [ ] 접수 전 PAY_PENDING 승인이 주문 만료로 닫힐 때 PG를 다시 조회하지 않아(`ResolvePaymentApproval.java:98-107`), 그 뒤 PG가 PAID가 되면 놓칠 수 있다는 의심(2026-11-08 G1 조합 조사, 코드 판독 추정). 재현 테스트부터 하고, 재현되면 결함 대장에 올린다 — G1
 - [ ] [결정 필요] 접수된 승인이 PAY_PENDING으로 3시간(confirm 재송신 기한)을 넘기면 POST를 멈추고 조회만 계속하는데, `REVIEW_REQUIRED`가 아니라서 보류 게이지·경보(`stove_payment_approval_review_required`)와 ADMIN 목록에 보이지 않는다. 이 건을 운영자에게 어떻게 보일지 정해야 한다(2026-11-08 G1 조합 조사) — G1
 - [ ] [결정 필요] 같은 공급자 거래/비용·지급 자료로 Settlement까지 연결, 미확정 비용 모델 확정 — G3 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md))
@@ -40,7 +40,7 @@
 - [ ] [결정 필요] 장기 미확정 환불의 알림/경보·조사 종결/담당 배정, 귀속 미확정 완료 건(`PG_QUERY_UNATTRIBUTED`)의 조사 종결 절차 — G2 후속
 - [ ] [결정 필요] 처리량 증가 시 첫 환불 송신을 별도 DB 송신 작업자로 옮기는 B안(전환 판단 지표: 접수 지연·PG p95/p99·소비 lag·최장 대기) — 후속
 - [ ] 새 환불 이벤트·재개 작업의 Tempo 추적 전체 연결 검증 — 후속
-- [ ] [외부 대기] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음
+- [ ] [외부 대기] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음 함께 확인할 것: PortOne `PAY_PENDING`이 "우리 confirm을 기다림"을 뜻한다면 지금 코드는 READY에서만 confirm을 보내므로(`ResolvePaymentApproval.java:147`) 그 건은 처음부터 멈춘다(2026-11-08 조사, 저장소 근거 없는 추정).
 - [ ] [외부 대기] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 확인 — G1 재결제 여정과 함께
 
 ## 범위 밖(후속)
