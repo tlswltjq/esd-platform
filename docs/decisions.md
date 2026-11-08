@@ -1189,6 +1189,15 @@
 - 구분: 추천 수용
 - 결과: [PR #149](https://github.com/tlswltjq/esd-platform/pull/149) (기록), 구현은 후속 PR
 
+<a id="orphan-license-grant-republish"></a>
+## 129. Kafka에서 원본이 사라져 지급 확인을 기다리는 환불은, DB에 남은 원래 Outbox 이벤트를 같은 ID로 다시 발행해 잇는다
+- 문제: 환불은 Order가 `LicenseGranted`를 받아 `order_license_grant`를 기록해야 `PENDING_LICENSE_GRANT`를 벗어난다([결정 125](#license-grant-wait-detection)). 그 이벤트가 Order 소비에서 재시도를 다 써 DLT로 갔는데 재투입하지 않은 채 Kafka 보존 기간(설정이 없어 기본 7일로 추정)이 지나면, [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉을 쓸 수 없다. publish는 성공해 License Outbox 행이 `SENT`이기 때문이다. 원래 이벤트는 License `outbox_event`에 `event_id`·본문·키와 함께 남아 있지만, `SENT` 행을 다시 내보내는 경로가 없다. 절차서(`license-event-recovery-runbook.md`)는 "원본 없음은 확인 대상, 새 이벤트 ID·SQL 보정 금지"라고만 한다. 예: 11-01 10:00 9,000원 결제 → 10:00:02 `LicenseGranted` SENT → Order DB 장애로 DLT → 11-08 DLT 레코드 삭제(추정) → 11-09 15:30 심사 환불 승인 → `PENDING_LICENSE_GRANT`에 멈춤. 고객은 `PROCESSING`만 보고 돈을 돌려받지 못하며, 자동 환불이면 ADMIN 승인 중단도 쓸 수 없다. `OrderPaid`가 같은 식으로 사라지면 License 구매 근거 자체가 없다.
+- 선택지: A 현행 유지(확인 대상으로 남기고 원인 조사) / B 이벤트를 소유한 모듈의 ops API(예: `POST /api/v1/ops/outbox/{eventId}/republish`)로 `SENT`인 `OrderPaid`·`LicenseGranted` 한 건을 원래 `event_id`·본문·키 그대로 다시 발행한다. 받는 쪽의 Inbox·검증·환불 흐름은 그대로 쓴다 / C Order ADMIN 지급 확인 종결: License 내부 HTTP 조회(새 서비스 키)로 구매 근거가 맞을 때만 `order_license_grant`를 기록 / D 환불을 새 끝 상태로 닫고 재신청 허용 (추천: B — 남아 있는 원래 이벤트를 다시 쓰므로 근거가 시스템 기록 자체이고, 지급·확인·정지 검증은 기존 소비자가 그대로 한다. 지급 건(`LicenseGranted`)과 미지급 건(`OrderPaid`)을 한 경로로 다루며 서비스 간 HTTP 의존과 새 이벤트 계약을 만들지 않는다. C는 미지급 건을 닫지 못하고 [결정 29](#full-refund-policy) 하위의 "환불마다 HTTP 조회 기각"과 결정 125의 "새 계약 없음"에 부딪히며, D는 "정지 확인 후 PG 실행" 순서를 지킬 수 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 원래 이벤트를 같은 ID로 재발행"). 질문 전에 "해당 문제를 실제 기술용어를 들어 조금 더 쉽게 설명해줘"를 요청해 Outbox·DLT·Inbox·보존 기간 기준으로 다시 설명을 받았다.
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이벤트를 소유한 모듈(License의 `LicenseGranted`, Order의 `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행을 더한다. ADMIN만 쓰고, 한 번에 한 건이며, 실행자·시각·사유를 기록한다. 행은 원래 `event_id`·본문·키를 그대로 두고 다시 publish 대상으로 돌린다. 새 이벤트 ID는 만들지 않는다. 받는 쪽은 Inbox로 중복을 거르므로 이미 처리된 이벤트의 재발행은 효과가 없어야 하고, 이를 테스트로 보인다. 구매 근거가 있으면 `LicenseGranted`를, 구매 근거가 없으면 `OrderPaid`를 재발행한다. 그러면 License가 지급한 뒤 `LicenseGranted`를 보내 정상 흐름으로 이어진다. 결정 37의 "원래 ID·본문·키를 보존해 재투입"을 `SENT` 행까지 넓힌 것이다. 절차서의 "원본 없음"은 "Outbox 행도 없음"으로 좁히고, 재발행 전에 "Outbox `SENT`·상대 Inbox 없음"을 확인하는 순서를 적는다. Outbox 행까지 없는 경우와 받는 쪽 검증이 거절하는 모순 건은 여전히 조사 대상이다. 자동 재발행·대조 엔진은 만들지 않는다(결정 37).
+- 구분: 추천 수용
+- 결과: PR 번호는 이 문서 PR, 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
