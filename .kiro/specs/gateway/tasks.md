@@ -16,11 +16,11 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Gateway 행)
+- [ ] [결정 필요] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4. 남은 범위(아래)는 G5 "역할별 전체 여정의 단일 기준"(아래 `[결정 필요]`)과 같은 결정에 묶인다 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Gateway 행)
   - [x] Gateway 경계 — 2026-11-05 실제 Auth·Gateway, 43개 method/path의 역할별 허용·거절·JWT 릴레이·`X-Member-Id` 제거·응답 투명 전달(requirements R1·R4). 하위 업무는 HTTP 픽스처([근거 색인](../../../docs/evidence.md)).
   - [x] 실제 서비스 소유권·역할 진입 — 2026-11-05 실제 11개 앱에서 회원별 주문·결제·라이브러리, 창작자별 Studio·정산 격리, 심사자/관리자 진입과 타 역할 거절([근거 색인](../../../docs/evidence.md)).
   - [ ] 남은 범위: 구매·승인·지급·공개 출시·심사 판정·환불 전이를 실제 업무 상태로 잇는 역할별 전체 여정(위 두 검증은 픽스처 기반 구매 근거·HTTP 픽스처를 사용).
-- [ ] 외부 웹훅의 재현 가능한 실행 구성 — G4/G5
+- [ ] [결정 필요] 외부 웹훅의 재현 가능한 실행 구성 — G4/G5. PortOne 흉내 서버가 서명한 웹훅을 보내는 실제 스택 여정으로 재현할지, 실제 PortOne 공개 HTTPS 수신(전용 가맹점 `[외부 대기]`)을 스크립트로 재현할지
 - [ ] [결정 필요] 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 — G5
   - [x] 서비스 접근키 수신 경계 — 2026-11-05 Store·Order·Download·Settlement→Catalog, Payment→Order. 단위·아키텍처 464건·실제 DB/HTTP 통합 20건. [`docs/g5-service-key-verification.md`](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g5-service-key-verification.md)를 따른다.
   - [x] Compose·검증 실행기의 프로젝트 키 전달 범위 — 2026-11-05. [`docs/g5-credential-distribution-verification.md`](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g5-credential-distribution-verification.md)를 따른다.
