@@ -15,6 +15,7 @@ import com.stove.common.security.CommonSecurityAutoConfiguration;
 import com.stove.common.web.GlobalExceptionHandler;
 import com.stove.payment.config.PortOneProperties;
 import com.stove.payment.config.SecurityConfig;
+import com.stove.payment.core.domain.RefundDelayKind;
 import com.stove.payment.core.domain.RefundDelayQuery;
 import com.stove.payment.core.domain.RefundInvestigationRequest;
 import com.stove.payment.core.domain.RefundInvestigationView;
@@ -57,10 +58,20 @@ class AdminRefundDelayAccessTest {
     }
 
     @Test void defaultListDisablesCaching() throws Exception {
-        when(read.search(any(RefundDelayQuery.class))).thenReturn(Page.empty());
+        when(read.search(any(RefundDelayKind.class), any(RefundDelayQuery.class))).thenReturn(Page.empty());
         mvc.perform(get(ROOT).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN")).andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store")).andExpect(jsonPath("$.data.totalElements").value(0));
-        verify(read).search(new RefundDelayQuery(0, 20));
+        verify(read).search(RefundDelayKind.DELAYED, new RefundDelayQuery(0, 20));
+    }
+
+    /** Decision 127: unattributed executions are found with a filter; an unknown filter is a bad request. */
+    @Test void theUnattributedListIsAFilterOfTheSameRoute() throws Exception {
+        when(read.search(any(RefundDelayKind.class), any(RefundDelayQuery.class))).thenReturn(Page.empty());
+        mvc.perform(get(ROOT + "?kind=UNATTRIBUTED&size=5").header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN")).andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+        verify(read).search(RefundDelayKind.UNATTRIBUTED, new RefundDelayQuery(0, 5));
+        for (String kind : List.of("unattributed", "ALL", ""))
+            mvc.perform(get(ROOT + "?kind=" + kind).header(HttpHeaders.AUTHORIZATION, "Bearer ADMIN")).andExpect(status().isBadRequest());
     }
 
     @Test void recordingTakesTheOperatorFromJwtAndReturnsAnAuditReceipt() throws Exception {

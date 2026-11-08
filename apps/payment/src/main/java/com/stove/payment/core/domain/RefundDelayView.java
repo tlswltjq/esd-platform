@@ -2,7 +2,10 @@ package com.stove.payment.core.domain;
 
 import java.time.Instant;
 
-/** Stored facts as of this read; schedule fields do not prove a successful supplier lookup. */
+/**
+ * Stored facts as of this read; schedule fields do not prove a successful supplier lookup. {@code reconciliationRequired}
+ * is an open unattributed execution: a PG response or an operator closure (decision 127) ends it.
+ */
 public record RefundDelayView(String attemptId, String refundId, String orderNo, String paymentId,
         long amount, String currency, Instant receivedAt, Instant firstPreparedAt, Instant delayThresholdAt,
         Instant asOf, boolean currentlyDelayed, RefundExecutionStatus executionStatus,
@@ -10,4 +13,4 @@ public record RefundDelayView(String attemptId, String refundId, String orderNo,
         Instant automaticCancellationStoppedAt, Instant cancellationBalanceChangedAt, String activeCancellationHoldId,
         String activeCancellationHoldReason, PgRefundCancellationReceipt.State receiptState, Instant receiptObservedAt,
         Instant nextLookupAt, Instant lookupWakeAt, Instant lookupLeaseUntil,
-        Instant nextCancellationRetryAt, Instant cancellationLeaseUntil) { }
+        Instant nextCancellationRetryAt, Instant cancellationLeaseUntil, RefundClosureView closure) { }

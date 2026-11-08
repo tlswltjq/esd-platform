@@ -41,7 +41,11 @@ public class RefundLookupConfiguration {
             ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock refundReceptionClock,
             @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone) {
         portone.requireConfigured();
-        Duration lease = portone.connectTimeout().plus(portone.readTimeout()).plusSeconds(30);
-        return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lease, 20);
+        return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lookupLease(portone), 20);
+    }
+
+    /** One PortOne GET plus margin. The operator closure (decision 127) holds the same lease while it re-inspects the PG. */
+    static Duration lookupLease(PortOneProperties portone) {
+        return portone.connectTimeout().plus(portone.readTimeout()).plusSeconds(30);
     }
 }
