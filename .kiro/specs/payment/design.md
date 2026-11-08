@@ -148,7 +148,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | `PAYMENT_PG_PROVIDER` | `SIMULATED` (`PORTONE_TEST` 선택 가능) |
 | `PAYMENT_PROCESSING_ENABLED` | true. false면 접수·조회만(승인 작업자 포함 중지) |
 | `PAYMENT_POLL_MS` / `PAYMENT_BATCH_SIZE` / `PAYMENT_RETRY_MS` | 1000(100~60000) / 20(1~200) / 5000(100~300000) |
-| `PAYMENT_REVIEW_RETRY_INITIAL_MS` / `PAYMENT_REVIEW_RETRY_MAX_MS` | 5000(100~300000) / 600000(1000~3600000, 시작값 이상). 보류(`REVIEW_REQUIRED`) 승인의 PG 재조회 시작값·상한만 정한다([결정 122](../../../docs/decisions.md#approval-review-requery-interval)) |
+| `PAYMENT_REVIEW_RETRY_INITIAL_MS` / `PAYMENT_REVIEW_RETRY_MAX_MS` | 5000(100~300000) / 600000(1000~600000, 시작값 이상. 설정으로 줄일 수는 있지만 결정 122의 10분보다 늘릴 수 없다). 보류(`REVIEW_REQUIRED`) 승인의 PG 재조회 시작값·상한만 정한다([결정 122](../../../docs/decisions.md#approval-review-requery-interval)) |
 | `MOCK_PG_URI` / `MOCK_PG_PAYMENT_KEY` | `http://localhost:8092` / 필수, Payment 전용 승인·조회 키 |
 | `PAYMENT_ORDER_SERVICE_KEY` | Order와 같은 값. Order 내부 승인/실패 API 전용 |
 | `PAYMENT_APPROVAL_PAYLOAD_KEY` / `ORDER_URI` | 32바이트 Base64, 교체 금지 / Payment가 접근할 Order 주소 |

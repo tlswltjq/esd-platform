@@ -18,7 +18,9 @@ class PaymentProcessingPropertiesTest {
         assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,99,600000)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,300001,600000)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,5000,999)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,5000,3600001)).isInstanceOf(IllegalArgumentException.class);
+        // PR #147 R1 (user verdict): the cap may be lowered by configuration but never raised above decision 122's 10 minutes.
+        assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,5000,600001))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("review-retry-max-ms");
         assertThatThrownBy(() -> new PaymentProcessingProperties(true,1000,20,5000,60000,59999))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("review-retry-max-ms");
     }
