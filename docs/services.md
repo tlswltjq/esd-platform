@@ -356,6 +356,7 @@ Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.mess
 | `GET /api/v1/ops/outbox/dead` | 발행을 포기한 Outbox 행과 사유 조회 | 예 |
 | `POST /api/v1/ops/outbox/dead/{eventId}/requeue` | 지정한 DEAD 이벤트 회수 | 예 |
 | `POST /api/v1/ops/outbox/dead/requeue-all` | DEAD 이벤트 일괄 회수 | 아니오(403) |
+| `POST /api/v1/ops/outbox/{eventId}/republish` | Kafka에서 원본이 사라진 `SENT` 이벤트 한 건을 같은 ID·본문·키로 재발행([결정 129](decisions.md#orphan-license-grant-republish)). 사유 필수, 실행자·시각·사유를 `outbox_republish`에 기록. Order(`OrderPaid`)·License(`LicenseGranted`)만 연다(`stove.messaging.ops.republish-enabled`) | 예(Order·License) |
 | `GET /api/v1/ops/dlt?topic={원본토픽}.DLT&max=20` | 재투입 그룹의 미처리 레코드 조회. 오프셋을 커밋하지 않음 | 예 |
 | `POST /api/v1/ops/dlt/replay?topic={원본토픽}.DLT&max=100` | 원본 토픽에 재발행하고 재투입 그룹의 오프셋 커밋 | 예 |
 
@@ -365,7 +366,7 @@ Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.mess
 | Store | DLT만 존재 | 운영 API를 열지 않는다. Catalog 정본과의 주기 대조가 사본 차이를 자동 보완한다([자동 복구](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md)) |
 | Download·Gateway | 없음 | Outbox·Kafka 소비가 없다 |
 
-실패 원인과 현재 주문·환불 상태를 확인한 뒤 재처리한다. 재투입이 원래 업무 순서를 복원하지 않는 이유는 [이벤트 순서](event-ordering.md)를 참고한다. 요청 계약은 [OutboxOpsController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxOpsController.java), [DltOpsController](../common/kafka/src/main/java/com/stove/common/kafka/ops/DltOpsController.java)에 있다.
+실패 원인과 현재 주문·환불 상태를 확인한 뒤 재처리한다. 재투입이 원래 업무 순서를 복원하지 않는 이유는 [이벤트 순서](event-ordering.md)를 참고한다. 요청 계약은 [OutboxOpsController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxOpsController.java), [OutboxRepublishController](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxRepublishController.java), [DltOpsController](../common/kafka/src/main/java/com/stove/common/kafka/ops/DltOpsController.java)에 있다.
 
 ---
 

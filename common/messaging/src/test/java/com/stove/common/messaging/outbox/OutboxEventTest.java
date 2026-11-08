@@ -174,6 +174,44 @@ class OutboxEventTest {
     }
 
     @Test
+    @DisplayName("[결정 129] SENT 는 같은 eventId·본문·키로 발행 대기로 돌아간다")
+    void sentCanBeRepublishedWithTheSameEvidence() {
+        OutboxEvent event = pending();
+        event.markSent();
+        String eventId = event.getEventId();
+        String payload = event.getPayload();
+        String key = event.getPartitionKey();
+        Instant createdAt = event.getCreatedAt();
+
+        event.republish();
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(event.getRetryCount()).isZero();
+        assertThat(event.getNextAttemptAt()).as("재발행 직후는 즉시 대상").isNull();
+        assertThat(event.getSentAt()).as("다시 보내기 전에는 보낸 시각이 없다").isNull();
+        assertThat(event.getEventId()).isEqualTo(eventId);
+        assertThat(event.getPayload()).isEqualTo(payload);
+        assertThat(event.getPartitionKey()).isEqualTo(key);
+        assertThat(event.getCreatedAt()).isEqualTo(createdAt);
+    }
+
+    @Test
+    @DisplayName("SENT 가 아닌 이벤트에 재발행을 걸어도 상태가 흔들리지 않는다")
+    void republishOnlyAffectsSent() {
+        OutboxEvent retrying = pending();
+        retrying.markFailed("broker down", 10);
+        OutboxEvent dead = pending();
+        dead.markFailed("broker down", 1);
+
+        retrying.republish();
+        dead.republish();
+
+        assertThat(retrying.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(retrying.getRetryCount()).isEqualTo(1);
+        assertThat(dead.getStatus()).as("DEAD 는 requeue 가 맡는다").isEqualTo(OutboxStatus.DEAD);
+    }
+
+    @Test
     @DisplayName("에러 메시지는 정확히 500자까지 그대로 남는다 — 자르는 경계")
     void errorIsTruncatedOnlyBeyondLimit() {
         OutboxEvent atLimit = pending();

@@ -1109,7 +1109,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — "A-D 좀 더 쉽게 설명해줘"라고 설명을 요청한 뒤 고른 선택지: "C로 해, 31분 대기 포함")
 - 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 30분 안 조합은 기존 야간 흉내 서버 작업에 넣는다. 기한을 넘는 세 조합은 시작할 때 주문을 함께 만들고 31분 대기 한 번으로 묶은 별도 야간 작업(제한 60분)에 둔다. 두 작업 모두 PR CI에는 넣지 않으므로 실패는 다음 날 알게 된다. PAY_PENDING이 3시간을 넘겨 조회만 계속하는 조합은 통합 테스트로 인정한다. (2026-11-08 정정: 설명 때 근거로 든 `PaymentApprovalIntegrationTest:220-227`은 3시간 경계에서 PG가 READY인 경우만 확인한다. PAY_PENDING으로 3시간을 넘기는 통합 테스트는 없어서 새로 더한다. AI 설명의 사실 오류이며 선택의 방향은 바뀌지 않는다) 흉내 서버에는 같은 paymentId 다중 시도, PAY_PENDING 유지 뒤 PAID/FAILED 전환, confirm 400/403 거절 주입을 더한다(검증 도구만).
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다(D-044 기한 여정 추가는 남음)
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다; D-044 접수 전 PAY_PENDING 만료 조합은 기한 여정 p1로 더했다([근거 색인](evidence.md) 2026-11-08 p1 행)
 
 <a id="seller-negative-net-carryover"></a>
 ## 121. 판매자의 음수 월 순액은 마감 때 다음 월로 이월하고, 지급 기준액은 0원 아래로 내리지 않는다
@@ -1169,7 +1169,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 보류로 올리고 관측 건만 조회")
 - 선택: A + 관측 이력이 있는 승인만 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 주문 만료 통지를 받은 접수 전 `REQUESTED` 승인 중 `latestPgState`가 있는 승인은 닫기 전에 PG를 한 번 조회한다. 결과별 처리는 다음과 같다. PAID는 `PAID_WITHOUT_ADMISSION` 보류, READY·FAILED는 닫음, 전액 CANCELLED는 보류 후 운영자 종결(결정 115)이다. 아직 `PENDING`이면 새 사유로 `REVIEW_REQUIRED`에 올리고, 결정 122·123·115의 흐름을 그대로 쓴다. 고객 안내는 `CHARGE_UNCONFIRMED`다. `latestPgState`가 없는 승인은 R11.5대로 PG 호출 없이 닫는다. R11.5를 이 예외에 맞게 고치고, D-044 재현 테스트를 이 결정에 맞춰 확정한다(PR #145 교차 리뷰 R1의 사용자 판정).
 - 구분: 추천 수용
-- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145. 실제 스택 기한 여정 p1(`verify-expiry-journeys.py`)로 PENDING 보류·늦은 PAID 보류·종결 뒤 결제 `EXPIRED`를 확인([근거 색인](evidence.md) 2026-11-08 p1 행)
 
 <a id="refund-delay-closure"></a>
 ## 127. 장기 미확정·귀속 미확정 환불은 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 ADMIN이 닫는다
@@ -1196,7 +1196,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 원래 이벤트를 같은 ID로 재발행"). 질문 전에 "해당 문제를 실제 기술용어를 들어 조금 더 쉽게 설명해줘"를 요청해 Outbox·DLT·Inbox·보존 기간 기준으로 다시 설명을 받았다.
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이벤트를 소유한 모듈(License의 `LicenseGranted`, Order의 `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행을 더한다. ADMIN만 쓰고, 한 번에 한 건이며, 실행자·시각·사유를 기록한다. 행은 원래 `event_id`·본문·키를 그대로 두고 다시 publish 대상으로 돌린다. 새 이벤트 ID는 만들지 않는다. 받는 쪽은 Inbox로 중복을 거르므로 이미 처리된 이벤트의 재발행은 효과가 없어야 하고, 이를 테스트로 보인다. 구매 근거가 있으면 `LicenseGranted`를, 구매 근거가 없으면 `OrderPaid`를 재발행한다. 그러면 License가 지급한 뒤 `LicenseGranted`를 보내 정상 흐름으로 이어진다. 결정 37의 "원래 ID·본문·키를 보존해 재투입"을 `SENT` 행까지 넓힌 것이다. 절차서의 "원본 없음"은 "Outbox 행도 없음"으로 좁히고, 재발행 전에 "Outbox `SENT`·상대 Inbox 없음"을 확인하는 순서를 적는다. Outbox 행까지 없는 경우와 받는 쪽 검증이 거절하는 모순 건은 여전히 조사 대상이다. 자동 재발행·대조 엔진은 만들지 않는다(결정 37).
 - 구분: 추천 수용
-- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현은 후속 PR
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현 [PR #164](https://github.com/tlswltjq/esd-platform/pull/164) (`OrderPaid`·`LicenseGranted`), 근거 색인 2026-11-08 order·license 행
 
 <a id="seller-close-order-carryover"></a>
 ## 130. 판매자 월 마감은 오래된 월부터 하고, 이월은 직전 마감 월에서 받는다
