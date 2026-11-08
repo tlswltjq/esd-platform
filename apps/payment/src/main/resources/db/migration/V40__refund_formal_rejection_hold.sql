@@ -1,11 +1,12 @@
 -- Decision 133: a well-formed typed 4xx on the cancellation POST stops automatic POSTs with PG_REQUEST_REJECTED and keeps
--- the response status and error type. Decision 133 sets no format or length on the type, so it is stored whole.
+-- the response status and error type. Decision 133 sets no format or length on the type, so it is stored whole: the error
+-- parser accepts strings up to 20,000,000 characters (at most 60,000,000 UTF-8 bytes), so LONGTEXT, not MEDIUMTEXT (16 MiB).
 -- Existing FORBIDDEN/INVALID holds and their resume history are not touched: the new columns stay NULL for them, and no
 -- historical generic error is reinterpreted as a rejection. Every condition names IS NOT NULL / IS NULL explicitly so a
 -- NULL cannot turn the CHECK into UNKNOWN (which MySQL accepts).
 ALTER TABLE refund_cancellation_hold
     ADD COLUMN rejection_status INT NULL,
-    ADD COLUMN rejection_type MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,
+    ADD COLUMN rejection_type LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL,
     DROP CHECK ck_cancel_hold_observation,
     ADD CONSTRAINT ck_cancel_hold_observation CHECK (
         observed_at >= claimed_at AND reason IN ('PG_REQUEST_FORBIDDEN', 'PG_REQUEST_INVALID', 'PG_REQUEST_REJECTED')),

@@ -1,6 +1,8 @@
 package com.stove.payment.adapter.pg;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,7 +38,15 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
     private final String storeId;
     private final String channelKey;
     private final Clock clock;
-    private final ObjectMapper mapper = new ObjectMapper().enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+    /**
+     * Longest JSON string the supplier parser reads (PR #168 R4). It pins Jackson's default so a library upgrade cannot
+     * silently outgrow the hold column: a formal rejection type of at most this many characters (at most 60,000,000 UTF-8
+     * bytes) is stored whole in V40's LONGTEXT; a longer string cannot be parsed and stays an unconfirmed malformed body.
+     */
+    public static final int MAX_SUPPLIER_STRING_LENGTH = 20_000_000;
+    private final ObjectMapper mapper = new ObjectMapper(JsonFactory.builder()
+            .streamReadConstraints(StreamReadConstraints.builder().maxStringLength(MAX_SUPPLIER_STRING_LENGTH).build()).build())
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     public PortOneRefundCancellationGateway(RestClient client, String storeId, String channelKey, Clock clock) {
