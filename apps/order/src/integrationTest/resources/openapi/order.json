@@ -729,9 +729,12 @@
             "type" : "string"
           },
           "processingNotice" : {
-            "$ref" : "#/components/schemas/RefundProcessingNoticeResponse",
-            "description" : "현재 환불 결과 확인이 지연되거나(RESULT_CONFIRMATION_DELAYED) 환불 처리 준비가 지연될 때(LICENSE_GRANT_CONFIRMATION_DELAYED) 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
-            "type" : "null"
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/RefundProcessingNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "현재 환불 결과 확인이 지연되거나(RESULT_CONFIRMATION_DELAYED) 환불 처리 준비가 지연될 때(LICENSE_GRANT_CONFIRMATION_DELAYED) 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다."
           },
           "purchaseReturnedToStorage" : {
             "description" : "환불 확정 실패로 복구할 때 같은 상품의 다른 보유권이 이미 쓰이고 있어 이 구매분이 보관함으로 돌아갔으면 true",

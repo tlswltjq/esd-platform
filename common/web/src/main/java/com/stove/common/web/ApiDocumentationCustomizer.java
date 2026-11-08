@@ -3,6 +3,7 @@ package com.stove.common.web;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.OAuthFlow;
 import io.swagger.v3.oas.models.security.OAuthFlows;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 
@@ -48,6 +50,38 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
         openApi.setServers(List.of(new Server().url("/")));
         describeIdentityHeaders(openApi);
         addSecuritySchemes(openApi);
+        allowNullableReferences(openApi);
+    }
+
+    /**
+     * OpenAPI 3.1에서 springdoc은 {@code @Schema(nullable = true)}인 객체 참조를 {@code $ref}와 {@code type: "null"}로 함께 적는다.
+     * 3.1에서 두 조건은 모두 적용되므로 실제 객체를 허용하지 않는다. 객체 또는 null을 뜻하도록 {@code anyOf}로 바꾼다.
+     */
+    private void allowNullableReferences(OpenAPI openApi) {
+        if (openApi.getComponents() == null || openApi.getComponents().getSchemas() == null) {
+            return;
+        }
+        for (String schemaName : openApi.getComponents().getSchemas().keySet()) {
+            Schema<?> schema = openApi.getComponents().getSchemas().get(schemaName);
+            if (schema.getProperties() == null) {
+                continue;
+            }
+            for (String propertyName : List.copyOf(schema.getProperties().keySet())) {
+                Schema<?> property = schema.getProperties().get(propertyName);
+                if (property.get$ref() != null && property.getTypes() != null && property.getTypes().contains("null")) {
+                    schema.getProperties().put(propertyName, nullableReference(property));
+                }
+            }
+        }
+    }
+
+    private static Schema<Object> nullableReference(Schema<?> property) {
+        Schema<Object> absent = new Schema<>();
+        absent.setTypes(Set.of("null"));
+        Schema<Object> replacement = new Schema<>();
+        replacement.setDescription(property.getDescription());
+        replacement.setAnyOf(List.of(new Schema<>().$ref(property.get$ref()), absent));
+        return replacement;
     }
 
     private void addSecuritySchemes(OpenAPI openApi) {
