@@ -356,7 +356,7 @@ Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.mess
 | `GET /api/v1/ops/outbox/dead` | 발행을 포기한 Outbox 행과 사유 조회 | 예 |
 | `POST /api/v1/ops/outbox/dead/{eventId}/requeue` | 지정한 DEAD 이벤트 회수 | 예 |
 | `POST /api/v1/ops/outbox/dead/requeue-all` | DEAD 이벤트 일괄 회수 | 아니오(403) |
-| `POST /api/v1/ops/outbox/{eventId}/republish` | Kafka에서 원본이 사라진 `SENT` 이벤트 한 건을 같은 ID·본문·키로 재발행([결정 129](decisions.md#orphan-license-grant-republish)). 사유 필수, 실행자·시각·사유를 `outbox_republish`에 기록. Order(`OrderPaid`)·License(`LicenseGranted`)만 연다(`stove.messaging.ops.republish-enabled`) | 예(Order·License) |
+| `POST /api/v1/ops/outbox/{eventId}/republish` | Kafka에서 원본이 사라진 `SENT` 이벤트 한 건을 같은 ID·본문·키로 재발행([결정 129](decisions.md#orphan-license-grant-republish)). 사유 필수, 실행자·시각·사유를 `outbox_republish`에 기록. Order·License만 연다(`stove.messaging.ops.republish-enabled`). 각 모듈은 소유한 이벤트만 재발행한다(`stove.messaging.ops.republish-owner`, `OutboxRepublishTargets`): Order는 `OrderPaid`와 정지·복구·승인 정정 요청, License는 `LicenseGranted`와 그 결과 | 예(Order·License) |
 | `GET /api/v1/ops/dlt?topic={원본토픽}.DLT&max=20` | 재투입 그룹의 미처리 레코드 조회. 오프셋을 커밋하지 않음 | 예 |
 | `POST /api/v1/ops/dlt/replay?topic={원본토픽}.DLT&max=100` | 원본 토픽에 재발행하고 재투입 그룹의 오프셋 커밋 | 예 |
 
