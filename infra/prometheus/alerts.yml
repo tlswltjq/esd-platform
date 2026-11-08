@@ -81,11 +81,12 @@ groups:
             {{ $value }}건이 PG 전액 취소로 환불됐지만 우리 시도의 취소인지 판정되지 않았다.
             GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED에서 대상을 찾고,
             POST /api/v1/admin/refund-delays/{attemptId}/closure로 PG 재조회 근거와 귀속 판정을 남겨 종결한다.
-            알려진 과거 건은 Alertmanager silence로 알림을 관리한다.
+            종결하면 다음 평가에서 해제된다.
 
       # 실패로 끝난 환불(PG FAILED 확인 또는 결정 128 ADMIN 실패 종결) 뒤 낮은 빈도 조회가 원결제의 전액 취소를 찾은 건이다.
       # 보유권은 이미 복구됐고 시스템은 상태·보유권을 자동으로 바꾸지 않으므로 사람이 조사해야 한다. 대상이 생기면 바로 알리도록 for 를 두지 않는다.
-      # 처리 방식은 결정 128대로 실제로 생기면 다시 정하므로, 이 경보를 끄는 시스템 동작은 없다. 조사한 건은 Alertmanager silence로 관리한다.
+      # 처리 방식은 결정 128대로 실제로 생기면 다시 정하므로, 이 경보를 끄는 시스템 동작은 없다. 현재 구성에는 Alertmanager가 없어
+      # silence로도 끌 수 없다(Payment tasks.md [결정 필요]).
       - alert: RefundCancelledAfterFailure
         expr: stove_payment_refund_failed_late_cancellation > 0
         labels:

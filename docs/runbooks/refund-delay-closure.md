@@ -39,7 +39,7 @@
 
 ## 늦은 전액 취소 — 실패 뒤 PG에서 전액 취소가 발견됐을 때
 
-`RefundCancelledAfterFailure` 경보가 울리면 `GET /api/v1/admin/refund-delays?kind=LATE_CANCELLATION`에서 `lateCancellationObservedAt`(발견 시각)·`lateCancelledAt`(PG 취소 시각)과 `failureClosure`를 확인한다. 시스템은 보유권과 환불 상태를 바꾸지 않았고 이벤트도 보내지 않았다. 고객은 돈과 게임을 함께 갖고 있을 수 있다. PortOne 콘솔에서 누가 언제 취소했는지 조사해 기록하고, 처리 방식은 결정 128대로 실제 사례를 보고 다시 정한다. 조사한 건의 경보는 Alertmanager silence로 관리한다.
+`RefundCancelledAfterFailure` 경보가 울리면 `GET /api/v1/admin/refund-delays?kind=LATE_CANCELLATION`에서 `lateCancellationObservedAt`(발견 시각)·`lateCancelledAt`(PG 취소 시각)과 `failureClosure`를 확인한다. 시스템은 보유권과 환불 상태를 바꾸지 않았고 이벤트도 보내지 않았다. 고객은 돈과 게임을 함께 갖고 있을 수 있다. PortOne 콘솔에서 누가 언제 취소했는지 조사해 기록하고, 처리 방식은 결정 128대로 실제 사례를 보고 다시 정한다. 현재 구성에는 Alertmanager가 없어(`infra/prometheus/prometheus.yml`에 `alerting` 연결 없음) 경보는 Prometheus 경보 화면(`/alerts`)에만 보이고 silence로 끌 수 없다. 이 경보를 끄는 시스템 동작도 아직 없어, 조사한 건도 계속 firing으로 남는다. 끄는 방법은 Payment `tasks.md`의 `[결정 필요]`(실패 뒤 늦은 전액 취소 처리)로 남아 있다.
 
 ## 409가 오면
 
@@ -60,4 +60,4 @@
 - 시간만으로 실패·보유권 복구·새 취소 요청을 만들지 않는다([결정 29](../decisions.md#full-refund-policy) 하위). 실패 종결도 운영자 요청과 PG 재조회 근거로만 한다.
 - 실패 종결 뒤 ADMIN이 고객 대신 새 시도를 만들지 않는다(결정 134).
 - Order 시도의 조사 표시(`reconciliationRequired`)는 이 종결로 지워지지 않는다. Payment 상세의 `reconciliationRequired`는 종결 뒤 `false`다. Order 쪽 해제는 남은 결정이다(Payment `tasks.md`).
-- 알려진 과거 건의 경보는 Alertmanager silence로 관리한다.
+- 현재 구성에는 Alertmanager가 없어 경보를 silence로 끌 수 없다. `RefundConfirmationsDelayed`·`RefundsUnattributed`는 위 종결로 대상이 없어지면 다음 평가에서 풀린다. `RefundCancelledAfterFailure`는 풀 방법이 `[결정 필요]`로 남아 있다.
