@@ -646,6 +646,19 @@
         },
         "type" : "object"
       },
+      "RefundFailureNoticeResponse" : {
+        "properties" : {
+          "code" : {
+            "description" : "고객용 환불 실패 사유. PAYMENT_NOT_CANCELLED: 결제 취소가 처리되지 않아 환불되지 않음",
+            "enum" : [ "PAYMENT_NOT_CANCELLED" ],
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "RefundProcessingNoticeResponse" : {
         "properties" : {
           "code" : {
@@ -724,6 +737,14 @@
           },
           "currentReview" : {
             "$ref" : "#/components/schemas/CustomerRefundReviewResponse"
+          },
+          "failureNotice" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/RefundFailureNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "환불이 FAILED일 때만 제공하는 고객용 실패 사유 코드와 재신청 안내(결정 134). 재신청은 retryableAttemptId로 POST /api/v1/orders/{orderNo}/refund/retries. 그 외 상태는 null"
           },
           "orderNo" : {
             "type" : "string"

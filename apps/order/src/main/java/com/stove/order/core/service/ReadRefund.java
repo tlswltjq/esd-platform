@@ -10,6 +10,7 @@ import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.domain.RefundAmountView;
 import com.stove.order.core.domain.RefundAttempt;
 import com.stove.order.core.domain.RefundAttemptRepository;
+import com.stove.order.core.domain.RefundFailureReason;
 import java.time.Instant;
 import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundReviewRound;
@@ -47,7 +48,16 @@ public class ReadRefund {
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
                 refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund),
                 RefundAmountView.from(order, refund), refund.isPurchaseReturnedToStorage(),
-                refund.licenseGrantDelayedSince(clock.instant(), licenseGrantDelay));
+                refund.licenseGrantDelayedSince(clock.instant(), licenseGrantDelay), failureReason(refund));
+    }
+    /** 결정 134: FAILED(확정 실패 + 실제 복구 완료)의 현재 시도에 저장된 실패 코드를 고객용 사유로 옮긴다. */
+    private RefundFailureReason failureReason(Refund refund) {
+        if (refund.getStatus() != RefundStatus.FAILED) return null;
+        RefundAttempt attempt = attempts.findByAttemptId(refund.getCurrentAttemptId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "실패한 환불의 현재 시도가 없습니다."));
+        if (!attempt.getRefundId().equals(refund.getRefundId())) throw new BusinessException(ErrorCode.CONFLICT);
+        return RefundFailureReason.fromAttemptCode(attempt.getFailureReasonCode())
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "고객에게 안내할 수 없는 실패 사유입니다."));
     }
     private Instant delayedSince(Refund refund) {
         if (refund.getStatus()!=RefundStatus.PENDING_PAYMENT_REFUND) return null;

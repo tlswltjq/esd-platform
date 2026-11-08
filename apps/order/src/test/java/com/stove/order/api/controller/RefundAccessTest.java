@@ -1,5 +1,7 @@
 package com.stove.order.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -12,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.stove.common.security.CommonSecurityAutoConfiguration;
 import com.stove.order.config.SecurityConfig;
+import com.stove.order.core.domain.RefundAmountView;
+import com.stove.order.core.domain.RefundFailureReason;
 import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundView;
 import com.stove.order.core.service.ReadRefund;
@@ -19,6 +23,7 @@ import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundRetry;
 import com.stove.order.core.service.RequestRefundReconsideration;
 import com.stove.order.core.service.ReadRefundReviewRounds;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +38,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 @WebMvcTest(RefundController.class)
 @ContextConfiguration(classes = {RefundController.class, SecurityConfig.class, CommonSecurityAutoConfiguration.class})
@@ -74,11 +80,24 @@ class RefundAccessTest {
     void customerStatusesPreserveTerminalFactsAndHideInternalProcessingStages(RefundStatus state) throws Exception {
         when(read.execute(ORDER, "usr_buyer")).thenReturn(view(state));
         String expected = switch (state) { case PENDING_REVIEW, COMPLETED, FAILED, REJECTED -> state.name(); default -> "PROCESSING"; };
-        mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer member"))
+        ResultActions result = mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer member"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value(expected))
                 .andExpect(jsonPath("$.data.retryableAttemptId").value(state == RefundStatus.FAILED
                         ? "22222222-2222-2222-2222-222222222222" : null));
+        if (state == RefundStatus.FAILED) {
+            result.andExpect(jsonPath("$.data.failureNotice.code").value("PAYMENT_NOT_CANCELLED"))
+                    .andExpect(jsonPath("$.data.failureNotice.message").value("결제 취소가 처리되지 않아 환불되지 않았습니다. 다시 신청하면 환불됩니다."));
+        } else {
+            result.andExpect(jsonPath("$.data.failureNotice").value(nullValue()));
+        }
         verifyNoInteractions(request);
+    }
+
+    @Test void theFailureNoticeCarriesOnlyTheCustomerCodeAndGuidanceNotTheInternalReason() throws Exception {
+        when(read.execute(ORDER, "usr_buyer")).thenReturn(view(RefundStatus.FAILED));
+        String body = mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer member"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(body).doesNotContain("PG_CANCELLATION_FAILED").doesNotContain("failureReasonCode").doesNotContain("PG 내부 오류");
     }
 
     @ParameterizedTest @EnumSource(value = RefundStatus.class, names = {"COMPLETED", "FAILED", "REJECTED"})
@@ -92,6 +111,7 @@ class RefundAccessTest {
         return new RefundView("refund-fixture", ORDER, 9000, "KRW", state, Instant.parse("2026-10-28T02:00:00Z"),
                 state == RefundStatus.COMPLETED ? Instant.parse("2026-10-28T02:01:00Z") : null,
                 state == RefundStatus.REJECTED ? "환불 심사 반려 사유" : null,
-                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null, null, null, false, null);
+                state == RefundStatus.FAILED ? "22222222-2222-2222-2222-222222222222" : null, null, null, false, null,
+                RefundAmountView.unknown(9000), false, null, state == RefundStatus.FAILED ? RefundFailureReason.PAYMENT_NOT_CANCELLED : null);
     }
 }
