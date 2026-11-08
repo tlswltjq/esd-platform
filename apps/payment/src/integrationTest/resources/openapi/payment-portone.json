@@ -404,6 +404,22 @@
         },
         "type" : "object"
       },
+      "ApprovalReviewNoticeResponse" : {
+        "properties" : {
+          "code" : {
+            "enum" : [ "CHARGED", "CHARGE_CANCELLED", "CHARGE_UNCONFIRMED", "NOT_CHARGED", "CLOSED_CHARGE_CANCELLED", "CLOSED_NOT_CHARGED" ],
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "since" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ApprovalReviewPage" : {
         "properties" : {
           "content" : {
@@ -698,6 +714,14 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "reviewNotice" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/ApprovalReviewNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "결제 상세에서 금융 보류 중이거나 보류 종결로 끝난 결제의 고객 안내(청구 여부별 코드·문구·보류 시작 시각). 그 밖의 결제와 목록에서는 null입니다."
+          },
           "status" : {
             "enum" : [ "PENDING", "PAID", "FAILED", "EXPIRED" ],
             "type" : "string"
@@ -734,6 +758,14 @@
           "resolvedAt" : {
             "format" : "date-time",
             "type" : "string"
+          },
+          "reviewNotice" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/ApprovalReviewNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "금융 보류 중이거나 보류 종결로 끝난 승인의 고객 안내(청구 여부별 코드·문구·보류 시작 시각). 그 밖에는 null입니다."
           },
           "status" : {
             "enum" : [ "REQUESTED", "ADMITTED", "REVIEW_REQUIRED", "FAILURE_CONFIRMED", "SUCCEEDED", "FAILED", "EXPIRED" ],
