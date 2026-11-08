@@ -54,4 +54,4 @@
 - SQL로 `refund_execution`·`refund_closure`를 고치지 않는다. 종결 기록은 append-only이고 실행 삭제를 막는다(V39).
 - 시간만으로 실패·보유권 복구·새 취소 요청을 만들지 않는다([결정 29](../decisions.md#full-refund-policy) 하위).
 - Order 시도의 조사 표시(`reconciliationRequired`)는 이 종결로 지워지지 않는다. Payment 상세의 `reconciliationRequired`는 종결 뒤 `false`다. Order 쪽 해제는 남은 결정이다(Payment `tasks.md`).
-- 알려진 과거 건의 경보는 Alertmanager silence로 관리한다.
+- 현재 구성에는 Alertmanager가 없어 경보를 silence로 끌 수 없다. `RefundConfirmationsDelayed`·`RefundsUnattributed`는 위 종결로 대상이 없어지면 다음 평가에서 풀린다.

@@ -38,7 +38,7 @@ SOURCE /절대경로/tools/operations/license-recovery.sql;
 | LicenseGranted SENT, Order `order_license_grant`·Inbox 없음, `stove.license.v1.DLT`에도 원본 없음 | License에서 그 `LicenseGranted` 한 건을 같은 ID로 재발행한다(3절 재발행 전 확인). `PENDING_LICENSE_GRANT` 환불은 기존 정지 요청으로 이어진다. |
 | 정지·복구·승인 정정 요청 SENT, License Inbox 없음, `stove.order.v1.DLT`에도 원본 없음 | Order에서 그 요청 한 건을 같은 ID로 재발행한다(3절 재발행 전 확인). License가 처리하고 결과 이벤트를 낸다. |
 | 정지·복구·승인 정정 요청은 License가 처리함(Inbox 있음), 결과 SENT, Order Inbox 없음, `stove.license.v1.DLT`에도 원본 없음 | License에서 그 결과 한 건을 같은 ID로 재발행한다(3절 재발행 전 확인). License는 이미 처리한 요청을 다시 받아도 결과를 다시 내지 않으므로, 요청을 재발행하지 않는다. `LicenseSuspended`는 `PENDING_LICENSE_SUSPENSION`을 PG 실행 요청으로(승인 중단 건은 승인 정정 요청으로), `LicenseRestored`는 `PENDING_LICENSE_RESTORATION`을 `FAILED`로, `LicenseApprovalCorrected`는 `PENDING_APPROVAL_STOP`을 정정 회차(`PENDING_REVIEW`)로 잇는다. |
-| Outbox 행도 없음, 구매 근거/Inbox/지급 기록 모순, 받는 쪽 검증 거절, 조회 장애 | 확인 대상으로 남기고 원인을 조사한다. 새 이벤트 ID 생성·SQL 보정·ACTIVE 재설정으로 진행하지 않는다. |
+| Outbox 행도 없음, 구매 근거/Inbox/지급 기록 모순, 받는 쪽 검증 거절, 조회 장애 | 확인 대상으로 남기고 원인을 조사한다. 새 이벤트 ID 생성·SQL 보정·상태 재설정(구매 근거 `STORED`·`REGISTERED`, 보유권 `ACTIVE`)으로 진행하지 않는다. |
 
 ## 2. 접근과 조회
 
@@ -76,7 +76,7 @@ curl --fail-with-body --silent --show-error --config "$ops_curl_config" -X POST 
 
 ### Kafka에서 원본이 사라진 SENT 이벤트의 재발행
 
-DLT 재투입과 DEAD 재큐잉을 쓸 수 없을 때만 쓴다. 발행은 성공해 원래 Outbox 행이 `SENT`이고, 받는 쪽 DLT 레코드가 보존 기간을 넘겨 사라진 경우다. 재발행은 행의 `event_id`·본문·키를 바꾸지 않고 상태만 발행 대기로 돌린다. 새 이벤트 ID를 만들지 않는다. 허용 타입은 소유 모듈별이며([OutboxRepublishTargets](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxRepublishTargets.java), 모듈 설정 `stove.messaging.ops.republish-owner`), 각 모듈은 자기가 Outbox로 낸 이벤트만 재발행한다. 다른 모듈 타입은 400이다.
+DLT 재투입과 DEAD 재큐잉을 쓸 수 없을 때만 쓴다. 발행은 성공해 원래 Outbox 행이 `SENT`이고, 받는 쪽 DLT 레코드가 보존 기간을 넘겨 사라진 경우다. 저장소의 Compose·코드에는 토픽 보존 설정이 없어 브로커 기본값(7일, [R9](architecture.md#r9))을 따른다. 기본 Compose의 Kafka에는 데이터 볼륨도 없어, 컨테이너를 다시 만들면 보존 기간 안의 원본·DLT도 함께 사라진다. 재발행은 행의 `event_id`·본문·키를 바꾸지 않고 상태만 발행 대기로 돌린다. 새 이벤트 ID를 만들지 않는다. 허용 타입은 소유 모듈별이며([OutboxRepublishTargets](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxRepublishTargets.java), 모듈 설정 `stove.messaging.ops.republish-owner`), 각 모듈은 자기가 Outbox로 낸 이벤트만 재발행한다. 다른 모듈 타입은 400이다.
 
 | 소유 모듈(재발행 실행 위치) | 재발행 타입 | 받는 모듈 | 받는 쪽 `processed_event.consumer_group`(코드 상수) | 받는 쪽 DLT |
 |---|---|---|---|---|
@@ -121,9 +121,9 @@ HTTP 실패·응답 유실이면 성공/실패를 추정하지 말고 원래 이
 
 재처리 전후의 조회 결과와 다음 사실을 대조한다.
 
-- 같은 원구매의 보유권은 한 건이고 기존 licenseId·구매 근거를 보존한다. 기존 정지 상태가 임의로 ACTIVE가 되지 않는다.
+- 같은 원구매의 구매 근거(`product_license`)는 한 건이고 기존 licenseId를 보존한다. 지급은 구매 근거를 `STORED`로 만들 뿐 보유권(`license_registration`)을 만들지 않는다(License V10, 결정 93). 정지된 구매 근거(`SUSPENDED`)가 임의로 `STORED`·`REGISTERED`로, 정지된 보유권이 `ACTIVE`로 되지 않는다.
 - Order의 지급 확인은 해당 원본 LicenseGranted와 일치하고 같은 Inbox가 중복되지 않는다.
-- 정상 ACTIVE 고객은 기존 Library/Download API로 확인한다. 환불이 지급 확인을 기다렸다면 확인 이후 기존 정지 요청이 연결됐는지 확인한다. 실제 정지가 이뤄진 건의 다운로드 차단도 확인한다.
+- 구매 근거가 `STORED`면 보관함(`GET /api/v1/storage`)에, 등록된 건(구매 근거 `REGISTERED`, 보유권 `ACTIVE`)은 기존 Library/Download API로 확인한다. 환불이 지급 확인을 기다렸다면 확인 이후 기존 정지 요청이 연결됐는지 확인한다. 실제 정지가 이뤄진 건의 다운로드 차단도 확인한다.
 - 정지 대기였다면 PG 실행 요청(`RefundExecutionRequested`)이, 복구 대기였다면 `FAILED`와 실제 보유권 복구가, 승인 중단 대기였다면 정정 회차(`PENDING_REVIEW`)가 이어졌는지 확인한다. 경보의 해당 `status` 시계열이 0으로 돌아왔는지도 본다.
 - Outbox SENT나 DLT 커서 전진만으로 완료하지 않는다. 재발행 성공 뒤 다시 DLT에 들어간 건도 확인한다. `SENT` 재발행이면 소유 모듈 `outbox_republish`의 행과 받는 쪽 Inbox 한 건을 함께 대조한다.
 
