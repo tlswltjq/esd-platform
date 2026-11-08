@@ -69,6 +69,7 @@ groups:
 
       # 승인 보류(결정 114·115). PAID_WITHOUT_ADMISSION은 돈이 나갔는데 주문이 결제되지 않아 critical이다.
       # PG_CANCELLED를 포함한 나머지는 warning이다. PG_CANCELLED는 PG가 이미 전액을 돌려준 상태이고 종결만 남았다.
+      # PG_PENDING_AT_ORDER_EXPIRY(결정 126)는 접수 전 PAY_PENDING 관측 건이 만료 뒤에도 PENDING인 상태이고, PAID가 되면 critical 사유로 바뀐다.
       - alert: PaymentApprovalsRequireReview
         expr: stove_payment_approval_review_required{reason="PAID_WITHOUT_ADMISSION"} > 0
         labels:
