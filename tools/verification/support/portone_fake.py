@@ -7,10 +7,16 @@ attempt stays in the history and the same paymentId can be retried with a new tx
 Console-only control API (decision 119), caller "console" only:
 POST /_fake/control/payments/{paymentId}/{action}
   fail-attempt     latest READY attempt -> FAILED (payment window closed / PG auth failed)
+  pay-pending      latest READY attempt -> PAY_PENDING without confirm (PG still deciding before our admission)
   arm-confirm      {"outcome": FAILED|PAY_PENDING|REJECT_400|REJECT_403} applied to the next valid confirm
   settle           {"status": PAID|FAILED} latest PAY_PENDING attempt
   console-approve  latest READY attempt -> PAID without confirm (approval without our admission)
   console-cancel   latest PAID attempt -> full CANCELLED (operator cancels in the PortOne console)
+
+Every action targets one paymentId and its latest attempt only, so a journey can prepare many orders
+up front, drive each into its state, wait once past the order deadline and then settle each one
+(decision 120 follow-up). arm-confirm is one-shot and cleared when a new attempt starts. While an
+attempt is PAY_PENDING, confirm answers 409 PAYMENT_NOT_READY and a new attempt is refused until settle.
 
 Response shapes follow the PortOne adapter fixtures and the 2026-10-27~31 PortOne TEST runs.
 Inferred, not observed in a real run: the confirm PG failure answer (HTTP 502, type PG_PROVIDER,
@@ -27,7 +33,7 @@ import threading
 import urllib.parse
 
 CONFIRM_OUTCOMES = {'FAILED', 'PAY_PENDING', 'REJECT_400', 'REJECT_403'}
-CONTROL_ACTIONS = {'fail-attempt', 'arm-confirm', 'settle', 'console-approve', 'console-cancel'}
+CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'settle', 'console-approve', 'console-cancel'}
 
 
 def timestamp():
@@ -266,6 +272,8 @@ class PortOneFake:
                 return 409, {'type': 'INVALID_STATE'}
             if action == 'fail-attempt':
                 self.fail(attempt, 'fake payment window closed')
+            elif action == 'pay-pending':
+                attempt['status'] = 'PAY_PENDING'
             elif action == 'console-approve':
                 self.pay(attempt)
             else:

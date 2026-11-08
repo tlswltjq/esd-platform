@@ -205,6 +205,20 @@ class PortOneFakeControlTest(unittest.TestCase):
             self.assertEqual(settled['amount']['paid'], 10000 if final == 'PAID' else 0)
             self.assertEqual(self.control('settle', {'status': final}, payment_id)[0], 409)
 
+    def test_pay_pending_without_confirm_blocks_confirm_and_retry_until_settled(self):
+        # Decision 120 follow-up: PAY_PENDING before our admission, then expiry, then a late PAID or FAILED.
+        sdk = self.checkout()[1]
+        self.assertEqual(self.control('pay-pending')[0], 200)
+        self.assertEqual(self.control('pay-pending')[0], 409)
+        pending = self.current()
+        self.assertEqual((pending['status'], pending['transactionId'], pending['amount']['paid']), ('PAY_PENDING', sdk['txId'], 0))
+        self.assertEqual(self.history()[0]['status'], 'PAY_PENDING')
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"a"'), (409, {'type': 'PAYMENT_NOT_READY'}))
+        self.assertEqual(self.checkout(), (409, {'type': 'ALREADY_PAID'}))
+        self.assertEqual(self.control('settle', {'status': 'PAID'})[0], 200)
+        self.assertEqual([i['status'] for i in self.history()], ['PAID'])
+        self.assertEqual([r for r in self.fake.requests if r['path'].endswith('/confirm') and r['status'] == 200], [])
+
     def test_console_approval_pays_without_confirm_and_console_cancel_fully_cancels(self):
         sdk = self.checkout()[1]
         self.assertEqual(self.control('console-cancel')[0], 409)
