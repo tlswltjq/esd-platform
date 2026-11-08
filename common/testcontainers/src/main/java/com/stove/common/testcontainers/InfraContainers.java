@@ -1,5 +1,6 @@
 package com.stove.common.testcontainers;
 
+import java.util.Map;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -18,23 +19,40 @@ import org.testcontainers.utility.DockerImageName;
  */
 public final class InfraContainers {
 
+    private static final String MINIO_TAG = "RELEASE.2025-04-22T22-12-26Z-local";
+
     private InfraContainers() {
     }
 
     /** 기본 이미지는 Gradle이 준비하는 고정 MinIO/mc 릴리즈의 Jib 이미지다. */
     public static DockerImageName minioImage() {
-        String image = System.getenv("STOVE_TEST_MINIO_IMAGE");
-        if (image == null || image.isBlank()) {
-            image = System.getenv("STOVE_MINIO_IMAGE");
+        return minioImage(System.getenv());
+    }
+
+    /**
+     * 테스트 이름 > 공급 이미지 > {@code <registry>/minio:<태그>} 순서로 고른다. Gradle 통합 테스트는
+     * 루트 build.gradle이 고른 이름을 {@code STOVE_TEST_MINIO_IMAGE}로 넘긴다. Docker Hub의 stove 계정을
+     * 가리키는 값은 받지 않고 거절한다(결정 118).
+     */
+    static DockerImageName minioImage(Map<String, String> environment) {
+        String image = LocalImageNames.requireNotDockerHubStove(
+                "STOVE_TEST_MINIO_IMAGE", value(environment, "STOVE_TEST_MINIO_IMAGE"));
+        String supplied = LocalImageNames.requireNotDockerHubStove(
+                "STOVE_MINIO_IMAGE", value(environment, "STOVE_MINIO_IMAGE"));
+        String registry = LocalImageNames.requireRegistryNotDockerHubStove(
+                "STOVE_JIB_REGISTRY", value(environment, "STOVE_JIB_REGISTRY"));
+        if (image.isEmpty()) {
+            image = supplied;
         }
-        if (image == null || image.isBlank()) {
-            String registry = System.getenv("STOVE_JIB_REGISTRY");
-            if (registry == null || registry.isBlank()) {
-                registry = "stove";
-            }
-            image = registry + "/minio:RELEASE.2025-04-22T22-12-26Z-local";
+        if (image.isEmpty()) {
+            image = (registry.isEmpty() ? LocalImageNames.DEFAULT_REGISTRY : registry) + "/minio:" + MINIO_TAG;
         }
         return DockerImageName.parse(image).asCompatibleSubstituteFor("minio/minio");
+    }
+
+    private static String value(Map<String, String> environment, String name) {
+        String value = environment.get(name);
+        return value == null ? "" : value.strip();
     }
 
     @TestConfiguration(proxyBeanMethods = false)

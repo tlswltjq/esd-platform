@@ -25,8 +25,9 @@ from datetime import datetime, timezone
 SCHEMAS = ("stove_auth", "stove_studio", "stove_review", "stove_catalog", "stove_store",
            "stove_order", "stove_payment", "stove_license", "stove_settlement")
 # The official mysql image lacks mysqlbinlog; build this one with ./gradlew :infra:mysql-client:jibDockerBuild
-DEFAULT_MYSQL_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "stove/mysql-client:8.0-local")
-DEFAULT_MC_IMAGE = os.environ.get("STOVE_MINIO_IMAGE", "stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
+# Self-built images default to localhost/stove, which Docker never pulls from Docker Hub (decision 118).
+DEFAULT_MYSQL_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "localhost/stove/mysql-client:8.0-local")
+DEFAULT_MC_IMAGE = os.environ.get("STOVE_MINIO_IMAGE", "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
 SOURCE_POSITION = re.compile(
     r"^-- CHANGE (?:REPLICATION SOURCE|MASTER) TO (?:SOURCE|MASTER)_LOG_FILE='([^']+)', "
     r"(?:SOURCE|MASTER)_LOG_POS=(\d+);", re.MULTILINE)

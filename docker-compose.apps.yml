@@ -42,7 +42,7 @@ x-app: &app
 services:
   gateway:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/gateway:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/gateway:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8080/actuator/health | grep -q UP || exit 1"]
@@ -67,7 +67,7 @@ services:
 
   auth:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/auth:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/auth:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
@@ -83,7 +83,7 @@ services:
 
   studio:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/studio:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/studio:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8085/actuator/health | grep -q UP || exit 1"]
@@ -100,7 +100,7 @@ services:
 
   review:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/review:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/review:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8086/actuator/health | grep -q UP || exit 1"]
@@ -116,7 +116,7 @@ services:
 
   catalog:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/catalog:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/catalog:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8081/actuator/health | grep -q UP || exit 1"]
@@ -138,7 +138,7 @@ services:
 
   store:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/store:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/store:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8087/actuator/health | grep -q UP || exit 1"]
@@ -150,7 +150,7 @@ services:
 
   order:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/order:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/order:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8082/actuator/health | grep -q UP || exit 1"]
@@ -163,7 +163,7 @@ services:
 
   payment:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/payment:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/payment:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8083/actuator/health | grep -q UP || exit 1"]
@@ -177,7 +177,7 @@ services:
 
   license:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/license:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/license:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8084/actuator/health | grep -q UP || exit 1"]
@@ -186,7 +186,7 @@ services:
 
   download:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/download:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/download:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8088/actuator/health | grep -q UP || exit 1"]
@@ -207,7 +207,7 @@ services:
 
   settlement:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/settlement:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/settlement:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8089/actuator/health | grep -q UP || exit 1"]
@@ -221,7 +221,7 @@ services:
 
   mock-pg:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-stove}/mock-pg:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/mock-pg:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8092/actuator/health | grep -q UP || exit 1"]

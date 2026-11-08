@@ -23,7 +23,7 @@ MinIO도 같은 이유로 연속 미러를 쓴다. DB를 장애 직전까지 되
 `tools/operations/backup.py`. 클라이언트는 서버와 같은 버전의 컨테이너에서 실행한다. 공식 `mysql:8.0` 이미지에는 `mysqlbinlog`가 없으므로 같은 버전을 더한 이미지를 먼저 만든다.
 
 ```bash
-./gradlew :infra:mysql-client:jibDockerBuild   # stove/mysql-client:8.0-local
+./gradlew :infra:mysql-client:jibDockerBuild   # localhost/stove/mysql-client:8.0-local
 ```
 
 비밀값은 환경 변수로만 받고 컨테이너에는 이름으로만 전달한다. 명령 인자와 파일에 남지 않는다.

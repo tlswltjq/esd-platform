@@ -5,8 +5,8 @@ def imagePorts = [auth: 8091, gateway: 8080, studio: 8085, review: 8086,
                   license: 8084, download: 8088, settlement: 8089, 'mock-pg': 8092]
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
         System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
-def targetRegistry = providers.gradleProperty('stove.jib.registry')
-        .orElse(providers.environmentVariable('STOVE_JIB_REGISTRY').filter { !it.isBlank() }).getOrElse('stove')
+// registry는 루트 build.gradle이 정한다(기본 localhost/stove, 결정 118).
+def targetRegistry = rootProject.ext.stoveImageRegistry
 def targetTag = providers.gradleProperty('stove.jib.tag')
         .orElse(providers.environmentVariable('STOVE_IMAGE_TAG').filter { !it.isBlank() }).getOrElse('latest')
 

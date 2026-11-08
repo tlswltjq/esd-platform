@@ -7,7 +7,8 @@ from support import minio_image
 from support.minio_image import ensure_minio_image, select_minio_image
 
 TAG = "RELEASE.2025-04-22T22-12-26Z-local"
-FIXED = "stove/minio:" + TAG
+FIXED = "localhost/stove/minio:" + TAG
+LEGACY = "stove/minio:" + TAG
 
 
 class SelectMinioImageTest(unittest.TestCase):
@@ -45,6 +46,14 @@ class SelectMinioImageTest(unittest.TestCase):
     def test_values_are_trimmed(self):
         self.assertEqual((FIXED, "source"), select_minio_image({"STOVE_TEST_MINIO_IMAGE": " " + FIXED + " "}))
 
+    def test_docker_hub_stove_names_are_refused_instead_of_pulled(self):
+        for name, value in [("STOVE_TEST_MINIO_IMAGE", LEGACY), ("STOVE_MINIO_IMAGE", "docker.io/" + LEGACY),
+                            ("STOVE_JIB_REGISTRY", "stove")]:
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError) as raised:
+                    select_minio_image({name: value})
+                self.assertIn(name, str(raised.exception))
+
 
 class EnsureMinioImageTest(unittest.TestCase):
     def setUp(self):
@@ -77,6 +86,11 @@ class EnsureMinioImageTest(unittest.TestCase):
     def test_missing_supplied_image_is_pulled(self):
         self.ensure({"STOVE_MINIO_IMAGE": "vendor/minio:test"}, 1)
         self.assertEqual(["docker", "pull", "vendor/minio:test"], self.calls[-1][0])
+
+    def test_legacy_name_runs_no_docker_command(self):
+        with self.assertRaises(ValueError):
+            self.ensure({"STOVE_TEST_MINIO_IMAGE": LEGACY}, 1)
+        self.assertEqual([], self.calls)
 
 
 if __name__ == "__main__":
