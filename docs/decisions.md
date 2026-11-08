@@ -1162,6 +1162,15 @@
 - 구분: 추천 수용
 - 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현은 후속 PR
 
+<a id="pre-admission-pending-expiry"></a>
+## 126. 접수 전 승인이 PG 관측 이력을 가진 채 주문이 만료되면 PG를 다시 조회하고, 아직 PENDING이면 보류로 올린다
+- 문제: 결함 D-044. 접수 전 승인이 PortOne `PAY_PENDING`을 본 채 `REQUESTED`로 남아 있다가 주문 만료 통지를 받으면, `ResolvePaymentApproval`의 만료 분기가 PG를 조회하지 않고 승인·결제를 `EXPIRED`로 닫는다. 그 뒤로는 다시 조회하지 않는다. 그래서 PG가 나중에 PAID가 되면 돈은 나갔는데 보류·게이지·경보 어디에도 보이지 않는다. 예: 14:00 33,000원 주문 → 14:05 인증 후 PG `PAY_PENDING` → 14:30 만료로 닫힘 → 14:31 PG PAID. 스펙 R11.5는 "접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다"고 정했다. 조회 결과가 PAID(`PAID_WITHOUT_ADMISSION` 보류, [결정 114](#approval-review-hold-closure))·READY·FAILED(닫음)·전액 CANCELLED(보류 후 운영자 종결, [결정 115](#approval-review-closure-outcome))일 때의 처리는 이미 정해져 있다. 그래서 남은 것은 만료 전 조회 범위와, 조회 결과가 아직 PENDING일 때의 처리다.
+- 선택지: A 결정 124처럼 새 사유로 `REVIEW_REQUIRED`에 올린다 / B `REQUESTED`로 두고 조회만 계속한다 / C 지금처럼 닫는다. 조회 범위는 모든 `REQUESTED`로 할지, PG 관측 이력(`latestPgState`)이 있는 승인만으로 할지다 (추천: A + 관측 이력이 있는 승인만 — 돈이 나갔을 수 있는 건을 조용히 닫지 않는다. 결정 124와 같은 보류 흐름(목록·경보·간격·안내·종결)을 그대로 쓴다. 관측 이력이 없는 승인은 R11.5대로 PG 호출 없이 닫으므로 기존 계약과 테스트를 거의 그대로 둔다. B는 결정 124가 막은 "보이지 않는 무한 조회"를 접수 전 쪽에 다시 만들고, C는 만료 직후 PAID가 되는 경우를 그대로 놓친다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 보류로 올리고 관측 건만 조회")
+- 선택: A + 관측 이력이 있는 승인만 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 주문 만료 통지를 받은 접수 전 `REQUESTED` 승인 중 `latestPgState`가 있는 승인은 닫기 전에 PG를 한 번 조회한다. 결과별 처리는 다음과 같다. PAID는 `PAID_WITHOUT_ADMISSION` 보류, READY·FAILED는 닫음, 전액 CANCELLED는 보류 후 운영자 종결(결정 115)이다. 아직 `PENDING`이면 새 사유로 `REVIEW_REQUIRED`에 올리고, 결정 122·123·115의 흐름을 그대로 쓴다. 고객 안내는 `CHARGE_UNCONFIRMED`다. `latestPgState`가 없는 승인은 R11.5대로 PG 호출 없이 닫는다. R11.5를 이 예외에 맞게 고치고, D-044 재현 테스트를 이 결정에 맞춰 확정한다(PR #145 교차 리뷰 R1의 사용자 판정).
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145
+
 ---
 
 ## 검증하며 드러난 것
