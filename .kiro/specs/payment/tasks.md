@@ -52,6 +52,7 @@
 - [ ] 새 환불 이벤트·재개 작업의 Tempo 추적 전체 연결 검증 — 후속
 - [ ] [외부 대기] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음 함께 확인할 것: PortOne `PAY_PENDING`이 "우리 confirm을 기다림"을 뜻한다면 지금 코드는 READY에서만 confirm을 보내므로(`ResolvePaymentApproval.java:147`) 그 건은 처음부터 멈춘다(2026-11-08 조사, 저장소 근거 없는 추정).
 - [ ] [외부 대기] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 확인 — G1 재결제 여정과 함께
+- [ ] [결정 필요] 종결할 수 없는 과거 승인 보류·환불 지연 경보를 끄는 방법: 저장소에는 Alertmanager와 Prometheus `alerting` 연결이 없어(`infra/prometheus/prometheus.yml`) silence를 쓸 수 없는데, `infra/prometheus/alerts.yml`의 `PaymentApprovalsRequireReview`(두 규칙)·`RefundsUnattributed` 안내문과 `infra/prometheus/tests/approval-review.yml`·`refund-unattributed.yml`의 기대 문구가 아직 "Alertmanager silence로 알림을 관리한다"를 안내한다. Alertmanager 도입·경보 억제 표·안내문 정정 중 무엇을 할지 정한 뒤 규칙과 시험을 함께 고친다([R12.8](requirements.md), 문서 정정은 PR #170)
 
 ## 범위 밖(후속)
 
