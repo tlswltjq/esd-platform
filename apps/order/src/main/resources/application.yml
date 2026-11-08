@@ -73,6 +73,8 @@ stove:
   messaging:
     ops:
       enabled: false
+      # 결정 129: SENT 이벤트 재발행. ops 가 켜진 인스턴스에서만 열리고, 기록 표(outbox_republish)가 있어야 한다.
+      republish-enabled: true
   outbox:
     relay-enabled: true
     batch-size: 200

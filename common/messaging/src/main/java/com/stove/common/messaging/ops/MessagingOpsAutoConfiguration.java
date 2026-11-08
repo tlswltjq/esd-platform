@@ -1,6 +1,7 @@
 package com.stove.common.messaging.ops;
 
 import com.stove.common.messaging.outbox.OutboxEventRepository;
+import java.time.Clock;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -8,6 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Outbox 운영 API 를 자동 등록한다.
@@ -38,5 +41,26 @@ public class MessagingOpsAutoConfiguration {
     @ConditionalOnMissingBean
     public OutboxOpsController outboxOpsController(OutboxOpsService outboxOpsService) {
         return new OutboxOpsController(outboxOpsService);
+    }
+
+    /**
+     * SENT 재발행([결정 129]). 재발행 기록 표({@code outbox_republish})를 가진 모듈만 켠다 —
+     * 표가 없는 모듈에서 켜면 재발행 요청이 기록 단계에서 실패해 트랜잭션째 되돌려진다.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(prefix = "stove.messaging.ops", name = "republish-enabled", havingValue = "true")
+    static class RepublishConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        OutboxRepublishService outboxRepublishService(OutboxEventRepository repository, JdbcTemplate jdbc) {
+            return new OutboxRepublishService(repository, jdbc, Clock.systemUTC());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        OutboxRepublishController outboxRepublishController(OutboxRepublishService outboxRepublishService) {
+            return new OutboxRepublishController(outboxRepublishService);
+        }
     }
 }
