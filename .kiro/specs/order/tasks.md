@@ -22,7 +22,7 @@
 
 ## 진행 중 / 남음 (일반화 공백)
 
-- [ ] [결정 필요] G1 결제 생명주기 종료 조건: 금융 보류 건의 다음 행동과 실제 TEST 채널 전체 여정의 종결 기준. `EXPIRED` 주문에 승인 근거 없이 도착한 성공(금융 이상)의 운영 대응은 자동 취소로 확정하지 않은 미결 — G1
+- [ ] G1 종료 검증([결정 119](../../../docs/decisions.md#g1-exit-verification)): PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)에 FAILED 시도 이력·PAY_PENDING·승인 근거 없는 PAID 생성을 검증 도구 쪽에만 더한다. 그 서버로 11개 서비스 실제 스택 여정을 만들어 시도 실패 뒤 같은 주문 재결제, `PAID_WITHOUT_ADMISSION` 보류 → 콘솔 취소 → `closure` 종결을 검증한다. 남은 이탈/재진입 조합은 Payment의 범위 결정 뒤 같은 여정에 더한다. 금융 보류 건의 다음 행동과 `EXPIRED` 주문에 승인 근거 없이 도착한 성공(`PAID_WITHOUT_ADMISSION`)의 운영 대응은 운영자 조사·PG 재조회 근거 종결로 정했다([결정 114](../../../docs/decisions.md#approval-review-hold-closure)·[115](../../../docs/decisions.md#approval-review-closure-outcome)). 시스템 자동 취소는 지표로 빈도를 본 뒤 다시 정한다 — G1
 - [ ] [결정 필요] G2 지급 확인 누락의 Order 측 근거 기반 복구 연계 (License P3 A 이벤트 복구는 완료, Order 연계는 미결) — G2
 - [x] 환불 후 재구매(P4): 구매 슬롯·유일 제약 제거(판매 금지만 거절), 환불 완료 시 `PurchaseRefunded` 발행, 복구의 보관함 반환을 환불 응답에 표시 — [결정 89~98](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban)
 - [ ] [외부 대기] 재심사·잘못된 승인 중단의 실제 사용자 흐름: 계약·API·DB/Kafka 검증은 완료. 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정은 남음 — G2 후속
