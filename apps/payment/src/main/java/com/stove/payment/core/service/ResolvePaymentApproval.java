@@ -99,13 +99,11 @@ public class ResolvePaymentApproval {
             return;
         }
         if(current.getStatus()==PaymentApprovalStatus.REQUESTED && current.getAdmittedAt()==null && orderExpired(current.getOrderNo())) {
-            locked(id,(payment,approval)->{
-                if(approval.owns(token,now()) && approval.getAdmittedAt()==null && approval.getStatus()==PaymentApprovalStatus.REQUESTED) {
-                    approval.expire(now());
-                    if(payment.getStatus()==PaymentStatus.PENDING)payment.expireUnpaid();
-                }
-                return null;
-            });
+            if(current.getLatestPgState()!=null) {
+                expireAfterLookup(id,token,current);
+                return;
+            }
+            expireRequested(id,token);
             return;
         }
         if(current.getAdmittedAt()!=null && orderExpired(current.getOrderNo()))stop(id,token,"ORDER_EXPIRY_CONFLICT");
@@ -159,6 +157,29 @@ public class ResolvePaymentApproval {
         if (!Boolean.TRUE.equals(permitted)) return;
         gateway.submit(id,dispatch.purchase(),body,dispatch.getFirstPreparedAt(),dispatch.getLeaseUntil());
         completeObservation(id,token,dispatch,inspect(id, token, dispatch));
+    }
+    /** Closes a queued unadmitted approval on the order expiry notice without PG traffic (R11.5). */
+    private void expireRequested(String id,String token) {
+        locked(id,(payment,approval)->{
+            if(approval.owns(token,now()) && approval.getAdmittedAt()==null && approval.getStatus()==PaymentApprovalStatus.REQUESTED) {
+                approval.expire(now());
+                if(payment.getStatus()==PaymentStatus.PENDING)payment.expireUnpaid();
+            }
+            return null;
+        });
+    }
+    /**
+     * An unadmitted approval that has already seen the PG may have been charged later, so it looks up the PG once before
+     * the order expiry closes it (decision 126, D-044). PAID and a full cancellation keep the existing holds, READY and
+     * FAILED close as before, and a PG still PENDING is held for an operator instead of being closed or polled unseen.
+     */
+    private void expireAfterLookup(String id,String token,PaymentApproval current) {
+        ApprovalObservation observed=inspect(id,token,current);
+        ApprovalObservation.State state=observed.state();
+        if (state==ApprovalObservation.State.PAID) stop(id,token,"PAID_WITHOUT_ADMISSION");
+        else if (state==ApprovalObservation.State.CANCELLED) holdForCancellation(id,token);
+        else if (state==ApprovalObservation.State.PENDING) stop(id,token,"PG_PENDING_AT_ORDER_EXPIRY");
+        else expireRequested(id,token);
     }
     private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
         ApprovalObservation observation;
