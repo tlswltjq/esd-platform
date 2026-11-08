@@ -67,8 +67,9 @@
 | [D-039](#d-039) | 앞 실행이 남긴 TIME_WAIT만으로 검증 도구가 "포트 사용 중"으로 멈춤 | 검증 마비 | **수정됨** | 결정 105 적용 중 연속 실행 |
 | [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | HTTP 회차 실패·Kafka 지연 | **수정됨** | main CI 42249703875·교차 리뷰 R1 |
 | [D-041](#d-041) | Review 다운로드 테스트가 서명 초 경계에서 조기 만료로 실패 | 초 경계 CI 불안정 | **수정됨** | CI run 42373571409 |
+| [D-042](#d-042) | Catalog 최초 공개 경합에서 같은 Project를 상품 코드 충돌로 오인 | 공개·접수 회차 실패와 계약 위반 오분류 | **수정됨** | CI run 42397961475 |
 
-반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
+반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
 ---
 
@@ -538,6 +539,17 @@
 
 - **원인** 고정 MinIO의 [서명 검증](https://github.com/minio/minio/blob/0d7408fc9969caf07de6a8c3a84f9fbb10a6739e/cmd/signature-v4.go#L225-L227)은 초 단위 `X-Amz-Date`를 읽고 `현재 - 서명시각 > Expires`이면 만료로 판정한다. 1초 URL의 실제 수명은 서명 순간의 초 미만 부분만큼 짧아져 약 0~1초다. 예를 들어 00.95초에 서명하면 약 0.05초 뒤 만료하므로 0.304초 실행에서도 실패한다. 이전의 "느린 러너에서 1초 이상 지연" 설명은 잘못됐다. 운영 코드 결함이 아니라 내용·만료 검증을 같은 1초 URL로 수행한 테스트 설계 문제다([결정 113](decisions.md#flaky-tests)).
 - **수정** `downloadedBytesMatchTheSubmittedBuild`는 `X-Amz-Expires=300`과 바이트·SHA-256을 확인하고 고정 지연을 제거했다. `validDownloadUrlExpires`는 컨테이너의 실제 자격 증명으로 3초 URL을 만들고 첫 GET 200 뒤 `403 + Request has expired`를 최대 10초 안에 확인한다. 초 경계 재현은 만료 오류를 확인하는 회귀 테스트로 승격하고 태그를 제거했다. 운영 코드는 변경하지 않았다.
+
+<a id="d-042"></a>
+## D-042 Catalog 최초 공개 경합에서 같은 Project를 상품 코드 충돌로 오인
+
+**상태** 수정됨 · **영향** 공개 작업·출시 접수 회차가 계약 위반(CONFLICT)으로 실패하고 다음 재시도까지 지연, 실패 사유 오분류 · **위치** `PublishProjectRelease.execute`, `ReceiveProjectRelease.requireStableIdentity`
+**재현** `CatalogPublicationIntegrationTest#sameProjectFirstPublicationCommittedBetweenProjectAndCodeReadsConverges`(공개), `#receiptConvergesWhenSameProjectFirstPublicationCommitsBetweenProjectAndCodeReads`(접수) — 수정 전 코드에서 각 1건 Red, `BusinessException: 상품 코드가 다른 Project에 연결되어 있습니다.` · **실측** [CI run 42397961475](https://github.com/tlswltjq/esd-platform/actions/runs/42397961475)(PR #135, Catalog 코드는 main `dc793705`과 같음)의 `concurrentFirstPublicationAndDuplicateDeliveriesConvergeToHighestVersion` 실패. 보고서상 v1 스레드가 `PublishProjectRelease.execute`에서 같은 메시지로 실패했다.
+
+- **원인** 출시 요청 게이트는 요청 ID별이라 같은 Project의 다른 요청(v1·v2)은 서로 직렬화되지 않는다. READ_COMMITTED의 `lockByProjectId`는 행이 없으면 아무것도 잠그지 않아 둘 다 빈 결과를 받는다. 한쪽이 최초 `catalog_product`를 커밋한 뒤 다른 쪽의 `findByProductCode`가 그 행을 보는데, projectId를 비교하지 않아 다른 Project의 코드 충돌로 판정한다. 두 요청이 함께 삽입까지 가면 유일 키 위반으로 재시도되어 통과하므로, 상대 커밋이 두 읽기 사이에 들어올 때만 실패하는 간헐 실패였다. 기존 테스트의 `retry` 도우미는 `DataAccessException`·`NoSuchElementException`만 다시 시도하므로 BusinessException이 곧 테스트 실패가 된다. 접수의 식별 검사도 같은 두 읽기를 쓴다.
+- **운영 영향** 공개는 `PublicationScheduler` → `PublishQueuedReleases`가 작업마다 트랜잭션을 열어 `PublishProjectRelease`를 부르는 경로뿐이다. 모든 RuntimeException을 잡아 같은 요청을 5·15·30·60초 뒤 다시 시도하므로(requirements R10.3) 옛 코드도 다음 회차에 v1이 STALE로 거절되며 v2로 수렴한다. 그동안 WARN 로그와 ADMIN 작업 조회의 `lastError`에 계약 위반 메시지가 남는다. 한 인스턴스의 스케줄러는 작업을 차례로 처리하므로 이 경합은 Catalog 인스턴스가 둘 이상일 때 생긴다. 접수는 `StudioReleaseEventListener` → `ReceiveProjectRelease` 경로다. Catalog 자체 CommonErrorHandler가 없어 공통 DefaultErrorHandler(1·2·4초 재시도 뒤 DLT)가 BusinessException도 재시도하므로, 첫 실패 뒤 약 1초 후 재배달에서 접수된다. 이쪽은 한 인스턴스에서도 리스너 스레드와 스케줄러 스레드 사이에서 생긴다(예: 중단 뒤 v1·v2 이벤트를 연달아 따라잡을 때). 영구히 낮은 버전에 머물거나 DLT로 간다고 단정하지 않는다.
+- **수정** 두 서비스에서 코드 조회 결과의 projectId를 비교한다. 같은 Project면 `ConcurrencyFailureException`으로 트랜잭션 전체를 롤백하고, 같은 요청이 새 트랜잭션에서 잠금 조회부터 다시 하게 한다(requirements R2.5). 재시도 장치는 바꾸지 않았다(공개는 작업 재시도, 접수는 Kafka 재배달). 다른 Project의 CONFLICT는 유지하며 `#differentProjectWithSameProductCodeStaysConflict`가 공개·접수 양쪽을 지킨다. 같은 트랜잭션에서 다시 잠그고 계속하는 방식은 쓰지 않았다. 코드 조회로 이미 영속성 컨텍스트에 올라온 엔티티를 잠금 조회가 새로 읽는다는 보장에 기대야 하기 때문이다. 기존 경합 테스트는 바꾸지 않았다. 새 예외는 `DataAccessException`이므로 기존 `retry` 도우미가 다시 시도한다. 두 결정적 테스트는 PausePoints로 빈 Project 잠금 조회 → 상대 최초 공개 커밋 → 재개 순서를 고정한다. 롤백(출시 기록·작업·Inbox 없음)을 확인한 뒤 같은 요청을 다시 처리해 v2·상품 1행·Outbox(`CatalogProductPublished` v2, v2 `ProjectReleaseCompleted`, v1 `ProjectReleaseRejected` STALE)를 확인한다.
+- **망가뜨리기 확인(결정 102)** 공개 수정 제거 시 공개 재현 1건이 `PublishProjectRelease.execute`에서 같은 BusinessException으로 실패했다. 접수 수정 제거 시 접수 재현 1건이 `ReceiveProjectRelease.requireStableIdentity`에서 같은 메시지로 실패했다. projectId 비교를 항상 참으로 바꾸면 경계 테스트가 공개·접수 각각에서 `ConcurrencyFailureException`(기대 BusinessException)으로 실패했다. 두 실행 모두 Gradle exit 1이었고, 복원한 운영 코드 diff는 수정 패치와 같다. 행 번호 대신 메서드 이름으로 식별한다.
 
 ---
 

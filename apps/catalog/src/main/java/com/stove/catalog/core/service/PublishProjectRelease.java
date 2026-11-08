@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,8 +78,15 @@ public class PublishProjectRelease {
         ProjectSnapshot s = submission.snapshot();
         CatalogProduct product = products.lockByProjectId(s.projectId()).orElse(null);
         if (product != null) product.requireIdentity(s);
-        else if (products.findByProductCode(s.productCode()).isPresent())
-            throw new BusinessException(ErrorCode.CONFLICT, "상품 코드가 다른 Project에 연결되어 있습니다.");
+        else {
+            CatalogProduct sameCode = products.findByProductCode(s.productCode()).orElse(null);
+            if (sameCode != null) {
+                // READ_COMMITTED: the same Project's first INSERT committed after the empty lock read.
+                if (sameCode.getProjectId().equals(s.projectId()))
+                    throw new ConcurrencyFailureException("같은 Project의 상품이 동시에 생성되었습니다. 새 트랜잭션에서 재시도합니다.");
+                throw new BusinessException(ErrorCode.CONFLICT, "상품 코드가 다른 Project에 연결되어 있습니다.");
+            }
+        }
         releases.findFirstByProjectIdAndContentVersionOrderByReleaseRequestIdAsc(
                         s.projectId(), s.contentVersion())
                 .ifPresent(
