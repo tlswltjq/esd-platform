@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -264,6 +265,28 @@ class PaymentApprovalIntegrationTest {
         assertThat(CLOSURES.get(command).path("orderStatus").asText()).isEqualTo("EXPIRED");
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
         assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero();
+    }
+    /**
+     * [D-049] Decision 124 also covers an admitted approval whose lookups keep failing: once its confirm window has passed,
+     * the last valid PG state (READY here) holds it with CONFIRM_WINDOW_EXPIRED instead of leaving it unseen, and a late PAID
+     * after the PG recovers still completes the original order.
+     */
+    @Tag("known-defect")
+    @Test void anAdmittedApprovalWhoseLookupsKeepFailingPastTheConfirmWindowIsHeldFromItsLastValidState() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
+        Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);
+        PG_DOWN.set(true); TIME.set(window.plusSeconds(3600)); int before=GETS.get(); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(held.getLastInspectionError()).isEqualTo("UNAVAILABLE");
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(held.isPostStopped()).isTrue();
+        assertThat(held.getReviewStartedAt()).isEqualTo(window.plusSeconds(3600));
+        assertThat(held.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero();
+        PG_DOWN.set(false); STATES.put(payment.getPaymentId(),"PAID"); TIME.set(held.getNextAt()); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1); assertThat(BODIES).hasSize(1);
     }
     @Test void aLostOrderReceiptIsReplayedAfterTheDeadlineAndPreservesTheOriginalAdmission() {
         Payment payment=purchase(); String command=id(); submit(payment,command); LOSE_ORDER.set(true); worker.execute(command);
