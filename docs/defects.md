@@ -69,6 +69,8 @@
 | [D-041](#d-041) | Review 다운로드 테스트가 서명 초 경계에서 조기 만료로 실패 | 초 경계 CI 불안정 | **수정됨** | CI run 42373571409 |
 | [D-042](#d-042) | Catalog 최초 공개 경합에서 같은 Project를 상품 코드 충돌로 오인 | 공개·접수 회차 실패와 계약 위반 오분류 | **수정됨** | CI run 42397961475 |
 | [D-044](#d-044) | 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침 | 금전 손실(주문 없는 청구가 보류·경보 없이 남음) | **수정됨** | G1 조합 조사 코드 판독 뒤 재현 테스트 |
+| [D-045](#d-045) | 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급 | 금전 손실(과지급)·판매자 마감 정지 | **재현됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
+| [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **재현됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -561,6 +563,16 @@
 - **원인** 접수 전 만료 분기가 PG 조회(`inspect`)보다 앞에 있었다. 이 분기는 Payment R11.5("접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다")를 구현한 것인데, 한 번 조회해 PG `PENDING`을 이미 본 승인도 같은 `REQUESTED`라 같은 분기를 탔다. 닫힌 뒤에는 승인이 종결되어 다시 조회하지 않았다. 웹훅도 `Payment.requestRecheck`가 `PENDING`이 아닌 결제를 무시하고 `ResolvePayment`가 `EXPIRED`를 건너뛰므로 늦은 PAID를 살리지 못했다.
 - **수정** [결정 126](decisions.md#pre-admission-pending-expiry). `latestPgState`가 있는 접수 전 `REQUESTED` 승인은 만료로 닫기 전에 `ResolvePaymentApproval.expireAfterLookup`이 PG를 한 번 조회한다. PAID → `PAID_WITHOUT_ADMISSION` 보류, 전액 CANCELLED → `PG_CANCELLED` 보류(결정 115), PENDING → 새 사유 `PG_PENDING_AT_ORDER_EXPIRY` 보류, READY·FAILED → 기존처럼 `EXPIRED`. `latestPgState`가 없으면 R11.5대로 PG 호출 없이 닫는다. 보류 게이지 사유 목록(`ApprovalReviewReason`)과 경보 테스트(`infra/prometheus/tests/approval-review.yml`, warning)에 새 사유를 더했다. Red는 운영 분기를 잠깐 되돌려 3건 실패로 확인했다(결정 102).
 - **실제 PortOne에서 생기는가** 어댑터(`PortOnePaymentApprovalGateway`)는 `PAY_PENDING`을 `PENDING`으로 매핑하고, 접수 전에는 우리가 `confirm`을 보내지 않는다. 그러므로 이 상태는 PG가 우리 confirm 없이 승인 대기로 간 경우다. 실제 PortOne이 그런 응답을 주는지는 저장소에 근거가 없다(payment `tasks.md`의 `[외부 대기]` 항목과 같은 미확인).
+
+## D-045 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급
+
+**상태** 재현됨 · **영향** 8월 마감 → 10월 마감 뒤 9/30 확인 환불(판매자 −8,100)이 11/3에 도착하면 행이 없던 9월에 OPEN 행이 생겨 환불이 9월(`CONFIRMED_MONTH`)에 붙는다. 그러면 11월 마감은 "이전 월 OPEN" 409로 멈추고, 9월을 먼저 마감해도 11월은 출처가 10월이라 9월 −8,100을 받지 못해 8,100원을 과지급한다. 늦은 앞 월 매출도 같은 9월 행을 만든다 · **위치** `RecordPaidSale.record`·`RecordConfirmedRefund.record`의 `lockMonth`(원래 월 행이 없으면 바로 OPEN 행 생성, 뒤 월 CLOSED 미확인), `CloseSellerMonth.close`의 앞 월 OPEN 검사(잠그지 않는 읽기, 월 행 하나만 잠금)
+**재현** `SettlementIntegrationTest#lateRefundOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth`(`expected ["2026-09","2026-11","CLOSED_MONTH_ROLLOVER"] but was ["2026-09","2026-09","CONFIRMED_MONTH"]`), `#lateSaleOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth`(반영 월 `2026-09`), 경합 2건 `#aLateEarlierMonthRefundWaitsForTheLaterCloseAndMovesToTheCurrentMonth`·`#aLaterCloseWaitsForAnEarlierMonthSaleAndThenRequiresThatMonthFirst`(상대가 기다리지 않음 `Expecting value to be true but was false`) — 수정 전 known-defect Red 4건.
+
+## D-046 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음
+
+**상태** 재현됨 · **영향** 10월 carriedOut −9,000을 12월 마감이 받은 뒤 행 없는 11월 마감을 요청하면 0원 CLOSED 11월 행이 생기고 출처 10월의 −9,000을 다시 받는다. 앞 월에 늦은 매출이 있었다면 같은 음수를 두 번 빼서 판매자에게 덜 지급한다 · **위치** `CloseSellerMonth.close`(뒤 월 CLOSED 미확인, 행 없는 대상 월 생성), `CloseSellerMonth.carry`(출처 사용 여부 미확인), V13 원장에 `source_month` 유일 제약 없음
+**재현** `SettlementIntegrationTest#closingAnEarlierMonthAfterALaterMonthClosedIsRejectedWithoutReusingTheCarry`(`expected: 409 but was: 200`), `#theCarryLedgerAcceptsEachSourceMonthOncePerSeller`(같은 판매자·같은 출처 두 번째 삽입이 성공) — 수정 전 known-defect Red 2건.
 
 ---
 

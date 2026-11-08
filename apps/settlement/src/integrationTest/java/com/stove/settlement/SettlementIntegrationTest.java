@@ -91,11 +91,13 @@ import org.apache.kafka.common.TopicPartition;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -643,6 +645,127 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         locked.release();
         assertThat(closing.join().isClosed()).isTrue();
         balance(closed("2026-10"),0,9000,0);
+        assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-09");
+    }
+
+    // 결정 42·130: 같은 판매자의 뒤 월이 CLOSED면 그 앞 월(행이 없어도)은 닫힌 것으로 본다(D-045·D-046).
+    static final Instant SEPTEMBER_30_KST=Instant.parse("2026-09-30T14:50:00Z");
+    /** 8/20 매출 9,000원(판매자 +8,100) → 9/2 8월 마감 → 10/15 매출 5,000원(+4,500). 9월은 활동이 없어 행이 없다. */
+    PaidOrder augustClosedAndOctoberSold() {
+        at("2026-08-20T03:00:00Z");PaidOrder august=paid(Instant.parse("2026-08-20T02:00:00Z"),9000);sale(august);
+        at("2026-09-02T03:00:00Z");balance(closed("2026-08"),0,8100,0);
+        at("2026-10-15T03:00:00Z");sale(paid(Instant.parse("2026-10-15T02:00:00Z"),5000));
+        return august;
+    }
+    /** 위에 더해 11/2 10월 마감(출처 8월, payable 4,500). */
+    PaidOrder augustAndOctoberClosed() {
+        PaidOrder august=augustClosedAndOctoberSold();
+        at("2026-11-02T03:00:00Z");balance(closed("2026-10"),0,4500,0);
+        assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-08");
+        return august;
+    }
+    ConfirmedRefund refundConfirmedAt(PaidOrder input,Instant confirmedAt) {
+        ConfirmedRefund fresh=prepareRefund(input);
+        ConfirmedRefund confirmed=new ConfirmedRefund(fresh.eventId(),confirmedAt,fresh.refundId(),fresh.attemptId(),fresh.requestEventId(),
+                fresh.orderNo(),fresh.paymentId(),fresh.buyerSubject(),fresh.amount(),fresh.currency(),fresh.source(),fresh.providerTransactionId(),fresh.cancellationIds());
+        refundProvider.put(confirmed.refundId(),proof(provider.get(input.paymentId()),confirmed));
+        return confirmed;
+    }
+    long monthRows(String month) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM seller_monthly_settlement WHERE seller_subject='usr_seller' AND settlement_month=?",Long.class,month);
+    }
+    String monthStatus(String month) {
+        return jdbc.queryForObject("SELECT status FROM seller_monthly_settlement WHERE seller_subject='usr_seller' AND settlement_month=?",String.class,month);
+    }
+    /**
+     * [D-045] 기대: 10월이 CLOSED라 9/30 확인 환불은 11월에 반영되고 9월 행은 생기지 않으며, 11월 마감이 8,100원을 상계해 carriedOut −5,400.
+     * 실제(수정 전): 9월 OPEN 행이 생겨 환불이 9월(CONFIRMED_MONTH)에 붙고 11월 마감은 409, 9월을 먼저 마감해도 11월은 출처 10월이라 8,100원을 과지급한다.
+     */
+    @Test @Tag("known-defect") void lateRefundOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
+        PaidOrder august=augustAndOctoberClosed();
+        at("2026-11-03T03:00:00Z");
+        SettlementRefund refund=recordRefund.execute(refundConfirmedAt(august,SEPTEMBER_30_KST));
+        assertThat(List.of(refund.getRefundMonth(),refund.getSettlementMonth(),refund.getMonthReason()))
+                .containsExactly("2026-09","2026-11","CLOSED_MONTH_ROLLOVER");
+        assertThat(monthRows("2026-09")).isZero();
+        at("2026-11-20T03:00:00Z");sale(paid(Instant.parse("2026-11-20T02:00:00Z"),3000));
+        at("2026-12-01T03:00:00Z");
+        balance(closed("2026-11"),0,0,-5400);
+        assertThat(carryover("2026-11").get("source_month")).isEqualTo("2026-10");
+        assertThat(monthRows("2026-09")).isZero();
+    }
+    /** [D-045] 같은 흐름의 매출: 9/30 매출이 11/3에 도착하면 saleMonth 9월을 보존한 채 11월에 반영되고 9월 행은 생기지 않는다. */
+    @Test @Tag("known-defect") void lateSaleOfAMonthWithoutRowBeforeALaterClosedMonthMovesToTheCurrentMonth() {
+        augustAndOctoberClosed();
+        at("2026-11-03T03:00:00Z");
+        SettlementSale late=sale(paid(SEPTEMBER_30_KST,5000));
+        assertThat(List.of(late.getSaleMonth(),late.getSettlementMonth())).containsExactly("2026-09","2026-11");
+        assertThat(monthRows("2026-09")).isZero();
+        at("2026-12-01T03:00:00Z");
+        JsonNode november=closed("2026-11");
+        balance(november,0,4500,0);assertThat(november.path("paidAmount").asLong()).isEqualTo(5000);
+        assertThat(monthRows("2026-09")).isZero();
+    }
+    /**
+     * [D-046] 기대: 12월이 출처 10월(−9,000)을 받아 마감된 뒤 행 없는 11월 마감은 409이고 11월 행·원장 행이 생기지 않는다.
+     * 실제(수정 전): 0원 11월 CLOSED 행이 생기고 출처 10월의 −9,000을 다시 받아, 같은 이월을 두 번 쓴다.
+     */
+    @Test @Tag("known-defect") void closingAnEarlierMonthAfterALaterMonthClosedIsRejectedWithoutReusingTheCarry() {
+        PaidOrder september=order(Instant.parse("2026-09-01T00:00:00Z"));sale(september);closed("2026-09");
+        recordRefund.execute(prepareRefund(september));
+        at("2026-11-02T03:00:00Z");balance(closed("2026-10"),0,0,-9000);
+        at("2026-12-15T03:00:00Z");sale(paid(Instant.parse("2026-12-15T02:00:00Z"),20000));
+        at("2027-01-02T03:00:00Z");balance(closed("2026-12"),-9000,9000,0);
+        List<Map<String,Object>> ledger=jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id");
+        Reply earlier=closeMonth("2026-11");
+        assertThat(earlier.status()).isEqualTo(409);
+        assertThat(earlier.body().path("error").path("message").asText()).isEqualTo("이후 월이 이미 마감됐습니다.");
+        assertThat(earlier.body().path("error").path("code").asText()).isEqualTo(closeMonth("2027-01").body().path("error").path("code").asText());
+        assertThat(monthRows("2026-11")).isZero();
+        assertThat(jdbc.queryForList("SELECT * FROM settlement_seller_carryover ORDER BY id")).isEqualTo(ledger);
+        assertThat(closed("2026-12").path("carriedIn").asLong()).as("이미 CLOSED인 대상 월 재요청은 첫 결과(R3.4)").isEqualTo(-9000);
+    }
+    /** [D-046] 추가 방어선: 이월 원장은 판매자마다 같은 출처 월을 한 번만 받는다. 다른 판매자는 같은 출처 월을 쓸 수 있다. */
+    @Test @Tag("known-defect") void theCarryLedgerAcceptsEachSourceMonthOncePerSeller() {
+        String insert="INSERT INTO settlement_seller_carryover (seller_subject,settlement_month,net_seller_payout_amount,carried_in,payable,carried_out,source_month,created_at)"
+                +" VALUES (?,?,0,0,0,0,?,'2027-01-02 03:00:00')";
+        jdbc.update(insert,"usr_seller","2026-10","2026-09");
+        assertThatThrownBy(() -> jdbc.update(insert,"usr_seller","2026-11","2026-09"))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("uk_seller_carryover_source");
+        jdbc.update(insert,"usr_other","2026-10","2026-09");
+        jdbc.update(insert,"usr_seller","2026-08",null);jdbc.update(insert,"usr_seller","2026-07",null);
+        assertThat(count("settlement_seller_carryover")).isEqualTo(4);
+    }
+    /** [D-045] 10월 마감이 판매자를 잠근 동안 도착한 9/30 환불은 마감을 기다렸다가 11월로 넘어간다. */
+    @Test @Tag("known-defect") void aLateEarlierMonthRefundWaitsForTheLaterCloseAndMovesToTheCurrentMonth() throws Exception {
+        PaidOrder august=augustClosedAndOctoberSold();
+        at("2026-11-03T03:00:00Z");ConfirmedRefund late=refundConfirmedAt(august,SEPTEMBER_30_KST);
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"close");
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-10"));
+        locked.awaitArrival();
+        Run<SettlementRefund> refunding=PausePoints.start("refund",() -> recordRefund.execute(late));
+        assertThat(refunding.stillRunningAfter(BLOCKED)).as("마감이 판매자를 잠근 동안 앞 월 환불은 기다린다").isTrue();
+        locked.release();
+        assertThat(closing.join().isClosed()).isTrue();
+        SettlementRefund refund=refunding.join();
+        assertThat(List.of(refund.getSettlementMonth(),refund.getMonthReason())).containsExactly("2026-11","CLOSED_MONTH_ROLLOVER");
+        assertThat(monthRows("2026-09")).isZero();
+    }
+    /** [D-045] 앞 월 매출이 판매자를 잠근 동안 10월 마감은 기다리고, 새로 생긴 9월 OPEN 때문에 409로 끝난다. 9월부터 마감하면 이월이 이어진다. */
+    @Test @Tag("known-defect") void aLaterCloseWaitsForAnEarlierMonthSaleAndThenRequiresThatMonthFirst() throws Exception {
+        augustClosedAndOctoberSold();
+        at("2026-11-03T03:00:00Z");PaidOrder late=paid(SEPTEMBER_30_KST,5000);prepare(late);
+        Gate locked=PAUSES.arm(MONTH_LOCKED,"sale");
+        Run<SettlementSale> recording=PausePoints.start("sale",() -> record.execute(late));
+        locked.awaitArrival();
+        Run<SellerMonthlySettlement> closing=PausePoints.start("close",() -> close.execute("usr_seller","2026-10"));
+        assertThat(closing.stillRunningAfter(BLOCKED)).as("앞 월 매출이 판매자를 잠근 동안 뒤 월 마감은 기다린다").isTrue();
+        locked.release();
+        assertThat(recording.join().getSettlementMonth()).isEqualTo("2026-09");
+        assertThat(closing.failure()).isInstanceOf(BusinessException.class).hasMessage("이전 월을 먼저 마감해야 합니다.");
+        assertThat(monthStatus("2026-10")).isEqualTo("OPEN");
+        balance(closed("2026-09"),0,4500,0);
+        balance(closed("2026-10"),0,4500,0);
         assertThat(carryover("2026-10").get("source_month")).isEqualTo("2026-09");
     }
     record Reply(int status,JsonNode body) { }
