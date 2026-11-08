@@ -61,8 +61,9 @@ python3 tools/verification/verify-gateway-ownership.py            # 실제 11개
 
 Studio·Review·Download·Catalog 통합 테스트는 `:infra:minio:jibDockerBuild`가 고정 MinIO/mc 소스로 만든 로컬 이미지를 쓴다. 이름은 루트 `build.gradle`의 `minioImageSelection`이 한 번만 정하고, 통합 테스트에 `STOVE_TEST_MINIO_IMAGE`로 넘긴다. `tools/verification/support/minio_image.py`도 같은 규칙을 따른다.
 
-- 빌드 이름은 `-Pstove.minio.image`, 없으면 `<registry>/minio:RELEASE.2025-04-22T22-12-26Z-local`(registry는 `-Pstove.jib.registry`·`STOVE_JIB_REGISTRY`, 기본 `stove`)이다. Compose·게시도 이 이름을 쓰며, 테스트 전용 변수는 이 이름을 바꾸지 않는다.
-- `STOVE_TEST_MINIO_IMAGE`가 고정 기본 이름 `stove/minio:…-local`인데 빌드 이름과 다르면(registry를 바꾼 경우), 빌드 이름으로 만든 뒤 `:infra:minio:tagTestImage`가 고정 이름을 붙인다. 이때는 재사용하지 않는다.
+- 빌드 이름은 `-Pstove.minio.image`, 없으면 `<registry>/minio:RELEASE.2025-04-22T22-12-26Z-local`(registry는 `-Pstove.jib.registry`·`STOVE_JIB_REGISTRY`, 기본 `localhost/stove`)이다. Compose·게시도 이 이름을 쓰며, 테스트 전용 변수는 이 이름을 바꾸지 않는다.
+- `STOVE_TEST_MINIO_IMAGE`가 고정 기본 이름 `localhost/stove/minio:…-local`인데 빌드 이름과 다르면(registry를 바꾼 경우), 빌드 이름으로 만든 뒤 `:infra:minio:tagTestImage`가 고정 이름을 붙인다. 이때는 재사용하지 않는다.
+- 예전 기본값 `stove/minio:…`처럼 Docker Hub의 `stove` 계정을 가리키는 이름은 받지 않고 거절한다([결정 135](decisions.md#local-image-registry)). 예전 이름의 이미지가 로컬에 있으면 `docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`로 새 이름을 붙여 다시 쓸 수 있다(내용이 같다).
 - 로컬 이미지 재사용은 `jibDockerBuild`만 건너뛴다. 같은 실행에 게시(`jib`)·tar(`jibBuildTar`)가 있으면 소스 빌드를 한다.
 - 변수를 지정하지 않으면 지금처럼 빌드한다. 빈 Docker 환경에서도 이미지를 만든다.
 - `STOVE_TEST_MINIO_IMAGE`에 빌드 이름을 지정하면, 그 이미지가 로컬에 있을 때만 빌드를 건너뛴다. 없으면 빌드하며, registry에서 받지 않는다. `STOVE_MINIO_IMAGE`가 함께 있어도 같다.
@@ -70,8 +71,9 @@ Studio·Review·Download·Catalog 통합 테스트는 `:infra:minio:jibDockerBui
 - MinIO 빌드 입력(`infra/minio/**`, 빌더·기반 이미지, `STOVE_JIB_REGISTRY`)을 바꾼 브랜치에서는 재사용하지 않는다. 바뀌기 전 이미지를 검증하게 된다.
 
 ```bash
-STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local ./gradlew :apps:review:integrationTest --console=plain
-python3 -B -m unittest discover -s tools/verification -p test_minio_image.py -v   # 이름 선택 규칙(Python 쪽)
+STOVE_TEST_MINIO_IMAGE=localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local ./gradlew :apps:review:integrationTest --console=plain
+python3 -B -m unittest discover -s tools/verification -p 'test_*image*.py' -v   # 이름 선택·Docker Hub 거절(Python 쪽)
+./gradlew :common:testcontainers:test :common:test:test --tests '*InfraContainersTest' --tests '*LocalImageRegistryContractTest'
 ```
 
 빌드 컨테이너(`compile.sh`)는 끝날 때 결과물·Go 캐시를 마운트 폴더의 주인에게 돌려준다. 컨테이너가 강제 종료(SIGKILL, `docker kill`)되면 돌려주지 못해 지울 수 없는 파일이 남을 수 있다. 다음 빌드가 끝나면 다시 돌려주지만, 그 전에 지워야 하면 다음처럼 주인을 바꾼다.

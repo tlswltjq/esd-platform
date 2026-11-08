@@ -1243,6 +1243,15 @@
 - 구분: 추천 수용
 - 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
 
+<a id="local-image-registry"></a>
+## 135. 직접 만드는 이미지의 기본 이름은 Docker Hub로 해석되지 않는 `localhost/stove`를 쓴다
+- 문제: 앱 11개·`mock-pg`·MinIO·`mysql-client` 이미지의 기본 이름이 `stove/<이름>`이었다. Docker는 레지스트리 주소가 없는 이름을 Docker Hub(`docker.io/stove/…`)로 해석한다. `docker compose up`·`docker run`·Testcontainers는 로컬에 이미지가 없으면 그 주소에서 받는다. Docker Hub의 `stove`는 이 프로젝트와 무관한 다른 사람 계정이다(2026-11-07 확인 당시 `quasar-cli` 저장소 하나). 그 계정이 같은 이름을 올리면, 이미지를 빌드하지 않은 컴퓨터에서 `.env`의 DB 비밀번호·서비스 키·PortOne TEST 키를 받는 컨테이너로 남의 이미지가 실행된다.
+- 선택지: A 문서에 경고만 / B 실행 스크립트(`start-apps.sh`·`local-stack.sh`·`remote.sh`)에서 `STOVE_JIB_REGISTRY`가 없으면 `--pull never` / C 기본 레지스트리 이름을 `localhost/stove`로 바꿈 (추천: C — 이름 자체를 바꿔 Compose·Testcontainers·Python·`docker` 직접 실행을 한 번에 막고, 잘못 받으려 해도 다른 사람 이미지 대신 즉시 실패한다)
+- 내 의견: "C안으로 하자"
+- 선택: C — 기본 레지스트리를 `localhost/stove`로 바꾼다(예: `localhost/stove/gateway:latest`, `localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`). Docker는 `localhost`를 레지스트리 주소로 보므로 받기가 Docker Hub로 가지 않는다. 배포는 지금처럼 `STOVE_JIB_REGISTRY`에 우리 레지스트리를 지정해 게시하고 받는다. 구현 판단: 예전 이름(`stove/…`)을 환경 변수로 직접 지정한 설정(예전 `testing.md`가 안내한 `STOVE_TEST_MINIO_IMAGE=stove/minio:…`)도 Docker Hub로 가지 않도록, Gradle·테스트·검증 도구가 받지 않고 오류로 알린다.
+- 구분: 추천 수용
+- 결과: [PR #139](https://github.com/tlswltjq/esd-platform/pull/139), 근거 색인 2026-11-08 기본 registry 행
+
 ---
 
 ## 검증하며 드러난 것
