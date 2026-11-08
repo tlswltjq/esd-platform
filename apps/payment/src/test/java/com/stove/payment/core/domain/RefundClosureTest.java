@@ -117,16 +117,14 @@ class RefundClosureTest {
         assertThat(schedule.claimForClosure(id(), nextAt, LEASE)).as("the closure waits for the worker lease").isFalse();
     }
 
-    @Test void anUnattributedExecutionWithAStoppedScheduleCanStillBeLeasedForClosure() {
+    /** No worker runs after an unattributed confirmation, and the database keeps no lease without a lookup deadline. */
+    @Test void anUnattributedExecutionHasNoWorkerLeaseToTake() {
         RefundExecution execution = prepared();
         execution.confirmRefund(payment, confirmation(), id(), prepared.plusSeconds(10));
         RefundLookupSchedule schedule = execution.getLookupSchedule();
         assertThat(schedule.getNextAt()).isNull();
-        String token = id();
-        assertThat(schedule.claimForClosure(token, prepared.plusSeconds(20), LEASE)).isTrue();
-        assertThat(schedule.ownsClosure(token, prepared.plusSeconds(20))).isTrue();
-        schedule.releaseClosure(token);
-        assertThat(schedule.getNextAt()).isNull(); assertThat(schedule.getLeaseUntil()).isNull();
+        assertThatThrownBy(() -> schedule.claimForClosure(id(), prepared.plusSeconds(20), LEASE)).isInstanceOf(IllegalStateException.class);
+        assertThat(schedule.getClaimId()).isNull(); assertThat(schedule.getLeaseUntil()).isNull();
     }
 
     private RefundExecution prepared() {

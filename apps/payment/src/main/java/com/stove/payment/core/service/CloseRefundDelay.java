@@ -33,8 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Operator closure of a delayed or unattributed refund execution (decision 127). Same shape as the approval closure
- * (decision 115): take the lookup worker's lease, re-inspect the PG with no transaction open, then lock payment → execution
- * and close atomically. It closes only on a full cancellation of the same original payment. An unconfirmed execution is
+ * (decision 115): take the lookup worker's lease (when a worker is scheduled), re-inspect the PG with no transaction open,
+ * then lock payment → execution and close atomically. It closes only on a full cancellation of the same original payment. An unconfirmed execution is
  * completed through the existing lookup confirmation; an already unattributed one only records the judgment. It never
  * cancels at the PG.
  */
@@ -73,8 +73,11 @@ public class CloseRefundDelay {
             Instant at = now();
             if (closures.findByAttemptId(execution.getAttemptId()).isPresent() || !execution.closableAt(at))
                 throw new BusinessException(PaymentErrorCode.REFUND_NOT_CLOSABLE);
-            if (!execution.getLookupSchedule().claimForClosure(token, at, lease)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
-            return Claim.owned(PgRefundLookupRequest.from(payment), execution.cancellationReceipt(payment), execution.request());
+            // An unconfirmed execution has a running lookup worker; the closure takes its lease. An unattributed one has a
+            // stopped schedule and no worker, so the row lock, the attempt UNIQUE and the requestId guard it instead.
+            boolean leased = execution.getLookupSchedule().getNextAt() != null;
+            if (leased && !execution.getLookupSchedule().claimForClosure(token, at, lease)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
+            return Claim.owned(PgRefundLookupRequest.from(payment), execution.cancellationReceipt(payment), execution.request(), leased);
         });
         if (claim.prior() != null) return replay(claim.prior(), request);
 
@@ -97,13 +100,17 @@ public class CloseRefundDelay {
             return locked(request.attemptId(), (payment, execution) -> {
                 Instant at = now();
                 // A lost lease means another cycle may have acted; nothing from this closure is saved.
-                if (!execution.getLookupSchedule().ownsClosure(token, at)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
+                if (claim.leased() && !execution.getLookupSchedule().ownsClosure(token, at)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
                 execution.requireSameRequest(claim.request());
-                if (!execution.closableAt(at)) throw new BusinessException(PaymentErrorCode.REFUND_NOT_CLOSABLE);
+                // The same command may have committed while this one inspected the PG (an unattributed closure takes no lease).
+                RefundClosure prior = closures.findByRequestId(request.requestId()).orElse(null);
+                if (prior != null) { execution.getLookupSchedule().releaseClosure(token); prior.requireSame(request); return receipt(prior, execution); }
+                if (!execution.closableAt(at) || closures.findByAttemptId(execution.getAttemptId()).isPresent())
+                    throw new BusinessException(PaymentErrorCode.REFUND_NOT_CLOSABLE);
                 // The existing completion path: the first lookup confirmation, or a no-op when the same evidence is already stored.
                 boolean completed = execution.confirmRefund(payment, confirmation, UUID.randomUUID().toString(), at);
                 if (completed) RefundConfirmationOutbox.recordUnattributed(outbox, payment, execution);
-                else execution.getLookupSchedule().releaseClosure(token);
+                else execution.getLookupSchedule().releaseClosure(token);  // no-op when nothing was leased
                 RefundClosure closure = RefundClosure.record(execution, request,
                         completed ? RefundClosure.Outcome.COMPLETED : RefundClosure.Outcome.RECORDED, observedAt, at);
                 closures.saveAndFlush(closure);
@@ -163,10 +170,11 @@ public class CloseRefundDelay {
 
     private Instant now() { return clock.instant().truncatedTo(ChronoUnit.MICROS); }
 
-    private record Claim(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request, RefundClosure prior) {
-        static Claim owned(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request) {
-            return new Claim(purchase, receipt, request, null);
+    private record Claim(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request,
+            boolean leased, RefundClosure prior) {
+        static Claim owned(PgRefundLookupRequest purchase, PgRefundCancellationReceipt receipt, RefundExecutionRequest request, boolean leased) {
+            return new Claim(purchase, receipt, request, leased, null);
         }
-        static Claim known(RefundClosure prior) { return new Claim(null, null, null, prior); }
+        static Claim known(RefundClosure prior) { return new Claim(null, null, null, false, prior); }
     }
 }
