@@ -34,6 +34,7 @@
 - 시각은 UTC·마이크로초 정밀도, 금액은 정수 long. 식별자 컬럼·유일 제약은 대소문자를 구분한다.
 - `requestEventId`(최초 OrderPlaced.eventId)와 nullable `paymentResultEventId`에 각각 유일 제약을 둔다.
 - 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99), V31(만료 주문의 운영자 종결 결과 식별), V32(지급 확인 대기 진입 시각, 결정 125)까지 기존 버전·자료를 보존한다. V32는 이미 대기 중인 옛 행만 기록된 사실로 채운다(자동 허용은 접수 시각, 심사 환불은 현재 회차 승인 시각, 판정 시각이 없는 옛 행은 접수 시각 — 실제 진입보다 늦지 않아 멈춘 건을 숨기지 않는다). 다른 상태는 NULL로 둔다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
+- V32 적용 절차: V32는 열 추가 → 대기 행 채움 → CHECK·색인 추가를 차례로 실행하고, MySQL DDL은 문장마다 커밋된다. 그래서 모든 Order 인스턴스를 멈춰 진행 중 트랜잭션이 없게 한 뒤 새 버전을 기동해 Flyway가 V32를 실행하게 한다. 옛 버전과 함께 돌리면 채움 뒤 옛 버전이 만든 대기 행의 시각이 NULL이라 CHECK 추가가 실패하거나, CHECK 뒤에는 옛 버전의 환불 접수·승인이 제약 위반으로 실패한다. 부분 실패 복구: `flyway_schema_history`에서 V32 실패 행과 이미 적용된 변경을 확인하고, 적용된 것만 역순으로 되돌린 뒤(`ALTER TABLE order_refund DROP INDEX ix_order_refund_license_grant_wait`, `DROP CHECK chk_order_refund_license_grant_wait`, `DROP COLUMN license_grant_wait_started_at`) V32 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동한다.
 
 ## API 계약
 
