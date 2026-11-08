@@ -13,7 +13,12 @@ public enum PaymentErrorCode implements ApiErrorCode {
     CLOSURE_PG_PENDING(409,"The PG payment is still pending; retry the closure later"),
     CLOSURE_PG_INVALID_EVIDENCE(409,"The PG evidence does not match the held purchase"),
     CLOSURE_PG_UNAVAILABLE(409,"The PG lookup is unavailable; retry the closure later"),
-    CLOSURE_PAYMENT_RESOLVED(409,"The purchase already has a final result");
+    CLOSURE_PAYMENT_RESOLVED(409,"The purchase already has a final result"),
+    // Bounded refusals of an operator closure of a delayed or unattributed refund (decision 127). None of them moves money.
+    REFUND_NOT_CLOSABLE(409,"The refund attempt is not delayed past its window or unattributed, or it is already closed"),
+    REFUND_CLOSURE_BUSY(409,"The refund lookup is in progress; retry the closure later"),
+    REFUND_CLOSURE_CHANGED(409,"The closure request ID was already used with different content"),
+    REFUND_CLOSURE_PG_NOT_CANCELLED(409,"The PG does not report a full cancellation of the original payment; cancel it in the PG console before closing");
     private final int status;
     private final String message;
     PaymentErrorCode(int status,String message) { this.status=status; this.message=message; }
