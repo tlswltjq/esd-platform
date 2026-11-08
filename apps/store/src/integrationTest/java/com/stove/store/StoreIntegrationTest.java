@@ -302,29 +302,58 @@ class StoreIntegrationTest {
         CountDownLatch held = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService holderThread = Executors.newSingleThreadExecutor();
-        try {
-            firstGate.awaitArrival();
-            secondGate.awaitArrival();
-            Future<?> holding = holderThread.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+        Future<?> holding = holderThread.submit(() -> {
+            awaitBothPaused(firstGate, secondGate);
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
                 entityManager.persist(StoreProduct.create(holder));
                 entityManager.flush();
                 held.countDown();
                 awaitLatch(release);
                 status.setRollbackOnly();
-            }));
+            });
+        });
+        Throwable failure = null;
+        try {
             assertThat(held.await(30, TimeUnit.SECONDS)).as("같은 ID를 잡은 삽입").isTrue();
             firstGate.release();
             secondGate.release();
             Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> lockWaits() >= 2);
-            release.countDown();
-            holding.get(30, TimeUnit.SECONDS);
-            firstRun.join();
-            secondRun.join();
-        } finally {
-            firstGate.release();
-            secondGate.release();
-            release.countDown();
-            holderThread.shutdownNow();
+        } catch (Throwable thrown) {
+            failure = thrown;
+        }
+        // 실패해도 세 작업을 모두 풀고 끝날 때까지 기다린다. 남은 작업이 다음 테스트의 deleteAll과 겹치지 않게 한다.
+        firstGate.release();
+        secondGate.release();
+        release.countDown();
+        failure = settle(failure, () -> holding.get(30, TimeUnit.SECONDS));
+        failure = settle(failure, firstRun::join);
+        failure = settle(failure, secondRun::join);
+        holderThread.shutdownNow();
+        if (!holderThread.awaitTermination(30, TimeUnit.SECONDS)) {
+            failure = settle(failure, () -> { throw new IllegalStateException("같은 ID를 잡은 삽입 스레드가 끝나지 않았다"); });
+        }
+        if (failure instanceof Exception exception) throw exception;
+        if (failure instanceof Error error) throw error;
+    }
+    /** 앞선 실패를 보존하고, 뒤 실패는 그 실패에 덧붙인다. 성공이면 앞선 실패를 그대로 돌려준다. */
+    private static Throwable settle(Throwable failure, Callable<?> step) {
+        try {
+            step.call();
+            return failure;
+        } catch (Throwable thrown) {
+            if (failure == null) return thrown;
+            failure.addSuppressed(thrown);
+            return failure;
+        }
+    }
+    /** 두 작업이 모두 "없음" 확인 뒤 멈춘 다음에 같은 ID를 잡는다. */
+    private static void awaitBothPaused(PausePoints.Gate firstGate, PausePoints.Gate secondGate) {
+        try {
+            firstGate.awaitArrival();
+            secondGate.awaitArrival();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
         }
     }
     private static void awaitLatch(CountDownLatch latch) {
