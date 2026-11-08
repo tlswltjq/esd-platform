@@ -133,6 +133,7 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 7. THE 월 금융 요약 SHALL 미확인 비용이 있으면 `pgFeeAmount`·`platformNetAmount`를 NULL로 두고, 환불 반영 월의 순비용·플랫폼 잔여액은 음수를 허용한다.
 8. THE 월 응답의 기존 `paidAmount`·`platformFeeAmount`·`sellerPayoutAmount`·`recordCount` SHALL 매출 총합 의미를 유지하고, 환불은 양수 합계와 차감 후 `net*` 순액(음수 허용)으로 따로 제공한다.
 9. THE 지급일 조회(`pg-payouts`) SHALL 수집본 헤더 합계를 누적하지 않고 중복 없는 정본 거래를 집계하며, `MATCHED_REPORTED`를 은행 실수령·월 자료 완비로 표시하지 않고 미관측(`NO_EVIDENCE`)과 수집한 DUE의 빈 관측(`EMPTY_REPORTED`)을 구분한다.
+10. THE 매출 응답(`/me/sales`·`/sales`의 `SaleResponse`) SHALL 원매출을 상계한 환불 원장이 있으면 `refund`에 `refundId`·`confirmedAt`·`refundMonth`·`settlementMonth`·`monthReason`을, 없으면 `null`을 담아 서로 다른 월의 매출과 환불을 원매출 기준으로 잇는다. 원장에 저장된 사실만 조회하며 매출 페이지당 환불 원장을 한 번에 조회한다(N+1 없음). CREATOR에게는 `/me/refunds`로 이미 보이는 값만 노출한다.
 
 ### R9. 최소 저장 모델과 중복/출처 재사용 차단
 **사용자 스토리:** 운영자로서, 중복 매출·출처 재사용·명세 재사용이 DB 차원에서 차단되기를 원한다.

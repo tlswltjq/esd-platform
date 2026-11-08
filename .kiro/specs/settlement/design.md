@@ -63,10 +63,10 @@ paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
 
 | 메서드 | 경로 | 권한·동작 |
 |---|---|---|
-| GET | `/api/v1/settlements/me/sales` | CREATOR 본인 매출 페이지 |
+| GET | `/api/v1/settlements/me/sales` | CREATOR 본인 매출 페이지. 환불된 매출은 `refund` 연결(환불 ID·확인/반영 월·사유) |
 | GET | `/api/v1/settlements/me/months` | CREATOR 본인 월 합계 페이지 |
 | GET | `/api/v1/settlements/me/refunds` | CREATOR 본인 환불 조정(음수 조정액·확인/접수 월·사유). 구매자·PG 실행 정보 미노출 |
-| GET | `/api/v1/settlements/sales` | ADMIN 전체/판매자별 매출. `sellerSubject`·PG 비용·플랫폼 잔여액·정책 포함 |
+| GET | `/api/v1/settlements/sales` | ADMIN 전체/판매자별 매출. `sellerSubject`·PG 비용·플랫폼 잔여액·정책 포함, `sale.refund`는 본인 조회와 같은 연결 |
 | GET | `/api/v1/settlements/months` | ADMIN 월 금융 요약. 반영 월의 매출 비용·환불 반환 조합. 미확인 시 NULL |
 | GET | `/api/v1/settlements/refunds` · `/{refundId}` | ADMIN 환불 목록(필터·정책/출처 요약)·상세(취소별 근거) |
 | POST | `/api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | ADMIN 지난 월 마감 |
@@ -89,6 +89,19 @@ paidAmount = sellerPayoutAmount + platformNetAmount + pgFeeAmount
 | `netPaidAmount` · `netPlatformFeeAmount` · `netSellerPayoutAmount` | 매출 총합 − 환불 합계. 음수 허용 |
 | `refundPgFeeReturnAmount` · `confirmedRefundPgFeeReturnAmount` · 승인/반환 VAT · `confirmedNetPgCostAmount` | 환불 비용 반환과 VAT, 확인된 순비용 |
 | `pgFeeAmount` · `platformNetAmount` | 매출 비용(수수료+VAT) − 확인된 반환 / 환불 조정 후 플랫폼 몫 − 순비용. 미확인이 하나라도 있으면 NULL |
+
+### 매출의 환불 연결 (`SaleResponse.refund`)
+
+환불 원장은 `uk_refund_order(order_no)`와 전액 환불만 받는 계약 때문에 원매출당 최대 1건이다. 그래서 목록이 아닌 단일 객체이며, 환불이 없으면 `null`이다.
+
+| 필드 | 의미 |
+|---|---|
+| `refundId` | 환불 원장의 환불 ID. `/me/refunds`·`/refunds/{refundId}`와 같은 값 |
+| `confirmedAt` · `refundMonth` | 최초 금융 확인 시각과 그 KST 월 |
+| `settlementMonth` · `monthReason` | 환불을 실제 반영한 월과 선택 사유(`CONFIRMED_MONTH`/`CLOSED_MONTH_ROLLOVER`). 매출의 `settlementMonth`와 다를 수 있다 |
+
+- 금액 조정(음수 상계액)은 환불 조회가 정본이며 매출 응답에 다시 싣지 않는다. 매출 조회의 월 필터는 매출 반영 월 기준이고 환불 반영 월로 거르지 않는다.
+- `SearchSales`가 매출 페이지의 `orderNo` 묶음으로 `findByOrderNoIn`을 한 번 호출해 붙인다(페이지가 비면 조회하지 않음). 스키마 변경 없음.
 
 ### PG 수집·대사 상태
 
