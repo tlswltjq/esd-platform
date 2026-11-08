@@ -29,16 +29,16 @@
 
 ## 진행 중 / 남음
 
-- [ ] G1 종료 조건 대조: 금융 보류(`REVIEW_REQUIRED`) 건은 운영 종결까지 정했고(결정 115), 보류 건 재조회 간격과 고객 안내 문구만 남았다. 승인 전 검증 보류의 만료 경로 보완은 모든 `REVIEW_REQUIRED`의 해제·재승인·금융 구제 정책이 아니며, 과거 실제 TEST 진단 건의 원래 기록·종료된 스택은 수정하지 않았다 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업))
-- [ ] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증: 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 나머지 이탈/재진입 조합의 범위는 G1 종료 조건 대조에서 정한다 — G1
-- [ ] 같은 공급자 거래/비용·지급 자료로 Settlement까지 연결, 미확정 비용 모델 확정 — G3 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md))
-- [ ] 실제 PG 오류(POST 403·정확한 400 등) 뒤 운영 재개를 실제 ADMIN 경로로 검증 — G2 후속
-- [ ] 나머지 HTTP 오류(5xx·일반 409·기타 400)의 업무 분류와 `INVALID_REQUEST` 본문 정정 계약 — G2 후속
-- [ ] 장기 미확정 환불의 알림/경보·조사 종결/담당 배정, 귀속 미확정 완료 건(`PG_QUERY_UNATTRIBUTED`)의 조사 종결 절차 — G2 후속
-- [ ] 처리량 증가 시 첫 환불 송신을 별도 DB 송신 작업자로 옮기는 B안(전환 판단 지표: 접수 지연·PG p95/p99·소비 lag·최장 대기) — 후속
+- [ ] [결정 필요] G1 종료 조건 대조: 금융 보류(`REVIEW_REQUIRED`) 건은 운영 종결까지 정했고(결정 115), 보류 건 재조회 간격과 고객 안내 문구만 남았다. 승인 전 검증 보류의 만료 경로 보완은 모든 `REVIEW_REQUIRED`의 해제·재승인·금융 구제 정책이 아니며, 과거 실제 TEST 진단 건의 원래 기록·종료된 스택은 수정하지 않았다 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업))
+- [ ] [결정 필요] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증: 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 나머지 이탈/재진입 조합의 범위는 G1 종료 조건 대조에서 정한다 — G1
+- [ ] [결정 필요] 같은 공급자 거래/비용·지급 자료로 Settlement까지 연결, 미확정 비용 모델 확정 — G3 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md))
+- [ ] [외부 대기] 실제 PG 오류(POST 403·정확한 400 등) 뒤 운영 재개를 실제 ADMIN 경로로 검증 — G2 후속
+- [ ] [결정 필요] 나머지 HTTP 오류(5xx·일반 409·기타 400)의 업무 분류와 `INVALID_REQUEST` 본문 정정 계약 — G2 후속
+- [ ] [결정 필요] 장기 미확정 환불의 알림/경보·조사 종결/담당 배정, 귀속 미확정 완료 건(`PG_QUERY_UNATTRIBUTED`)의 조사 종결 절차 — G2 후속
+- [ ] [결정 필요] 처리량 증가 시 첫 환불 송신을 별도 DB 송신 작업자로 옮기는 B안(전환 판단 지표: 접수 지연·PG p95/p99·소비 lag·최장 대기) — 후속
 - [ ] 새 환불 이벤트·재개 작업의 Tempo 추적 전체 연결 검증 — 후속
-- [ ] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음
-- [ ] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 확인 — G1 재결제 여정과 함께
+- [ ] [외부 대기] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음
+- [ ] [외부 대기] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 확인 — G1 재결제 여정과 함께
 
 ## 범위 밖(후속)
 
