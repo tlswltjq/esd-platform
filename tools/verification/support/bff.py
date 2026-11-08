@@ -41,7 +41,7 @@ class BffClient:
         self.audit.append({"method": method, "path": urllib.parse.urlsplit(target).path, "status": result[0]})
         return result
 
-    def login(self, email, password):
+    def login(self, email, password, role="MEMBER"):
         response = self.request("GET", "/oauth2/authorization/gateway-bff")
         pkce = False
         for _ in range(8):
@@ -69,7 +69,7 @@ class BffClient:
         status, _, raw = self.request("GET", "/bff/session")
         assert status == 200, "BFF session unavailable"
         session = json.loads(raw)
-        assert pkce and "MEMBER" in session["roles"]
+        assert pkce and role in session["roles"]
         return session["subject"]
 
     def call(self, method, path, body=None):
