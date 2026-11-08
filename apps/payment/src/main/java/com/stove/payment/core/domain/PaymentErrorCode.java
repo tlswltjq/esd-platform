@@ -4,7 +4,7 @@ import com.stove.common.web.error.ApiErrorCode;
 
 public enum PaymentErrorCode implements ApiErrorCode {
     ORDER_EXPIRED(409,"The checkout deadline has passed"),
-    APPROVAL_IN_PROGRESS(409,"The existing approval is still processing"),
+    APPROVAL_IN_PROGRESS(409,"기존 결제 승인을 처리하고 있습니다."),
     // Bounded refusals of an operator closure of a held approval (decision 115). None of them moves money.
     APPROVAL_NOT_HELD(409,"The approval is not currently held for review"),
     APPROVAL_CLOSURE_BUSY(409,"The approval is being processed; retry the closure later"),

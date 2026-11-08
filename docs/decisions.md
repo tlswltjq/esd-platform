@@ -1142,7 +1142,7 @@
   - 종결 뒤(근거 CANCELLED): "결제 확인 결과 이 주문은 종료되었습니다. 청구되었던 {금액}원은 전액 취소되었습니다. 새 주문으로 다시 구매해 주세요."
   - 종결 뒤(근거 READY·FAILED): "결제 확인 결과 이 주문은 종료되었습니다. 청구된 금액은 없습니다. 새 주문으로 다시 구매해 주세요."
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #PR_NUMBER](https://github.com/tlswltjq/esd-platform/pull/PR_NUMBER)(종결 뒤 코드 `CLOSED_CHARGE_CANCELLED`·`CLOSED_NOT_CHARGED`), 근거 색인 2026-11-08 금융 보류 건 고객 안내 행. 묶음 밖 보류의 안내는 payment `tasks.md` `[결정 필요]`
 
 <a id="confirm-window-expired-hold"></a>
 ## 124. confirm 기한(3시간)이 지난 접수 승인이 미확정이면 새 사유로 보류에 올린다
