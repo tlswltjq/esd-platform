@@ -21,6 +21,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PaymentApproval {
+    /** PortOne's idempotency window and our automatic confirm retransmission limit (R4.5·R4.6). */
+    public static final Duration CONFIRM_WINDOW = Duration.ofHours(3);
+    public static final String CONFIRM_WINDOW_EXPIRED = "CONFIRM_WINDOW_EXPIRED";
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable = false, unique = true, length = 36, updatable = false) private String approvalId;
     @Column(nullable = false, length = 64, updatable = false) private String paymentId;
@@ -145,8 +148,22 @@ public class PaymentApproval {
     }
     public boolean canPost(Instant at) {
         return PaymentValues.microsecond(at) && admittedAt != null && firstPreparedAt != null && !postStopped && !terminal()
-                && !at.isBefore(firstPreparedAt) && at.isBefore(firstPreparedAt.plus(Duration.ofHours(3)))
+                && !at.isBefore(firstPreparedAt) && at.isBefore(firstPreparedAt.plus(CONFIRM_WINDOW))
                 && leaseUntil != null && at.isBefore(leaseUntil);
+    }
+    /**
+     * Decision 124: an admitted approval whose confirm window (first preparation + 3 hours, R4.6) has passed while the PG
+     * is still PENDING or READY can no longer be confirmed by us, so it is held for an operator instead of being looked up
+     * unseen. It only stops posts: no failure, new key or new payment is made on time alone, and a late PAID or FAILED
+     * still completes the original order.
+     */
+    public boolean holdAfterConfirmWindow(ApprovalObservation observation, Instant at) {
+        requireTime(at);
+        if (observation == null || (observation.state() != ApprovalObservation.State.PENDING && observation.state() != ApprovalObservation.State.READY)
+                || status != PaymentApprovalStatus.ADMITTED || postStopped || admittedAt == null || firstPreparedAt == null
+                || at.isBefore(firstPreparedAt.plus(CONFIRM_WINDOW))) return false;
+        stopPosts(CONFIRM_WINDOW_EXPIRED, at);
+        return true;
     }
     public boolean finish(String token, Instant at, Instant next) {
         if (!owns(token, at)) return false;

@@ -15,10 +15,9 @@ import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.RefundReviewRound;
 import com.stove.order.core.domain.RefundReviewRoundRepository;
 import java.time.Clock;
-import lombok.RequiredArgsConstructor;
+import java.time.Duration;
 import org.springframework.transaction.annotation.Transactional;
 
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReadRefund {
     private final OrderRepository orders;
@@ -26,6 +25,13 @@ public class ReadRefund {
     private final RefundReviewRoundRepository rounds;
     private final Clock clock;
     private final RefundAttemptRepository attempts;
+    private final Duration licenseGrantDelay;
+
+    public ReadRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock clock,
+            RefundAttemptRepository attempts, Duration licenseGrantDelay) {
+        this.orders = orders; this.refunds = refunds; this.rounds = rounds; this.clock = clock; this.attempts = attempts;
+        this.licenseGrantDelay = LicenseGrantDelay.require(licenseGrantDelay);
+    }
 
     public RefundView execute(String orderNo, String buyer) {
         Order order = orders.findByOrderNoAndBuyerSubject(orderNo, buyer)
@@ -40,7 +46,8 @@ public class ReadRefund {
                 refund.getStatus() == RefundStatus.FAILED ? refund.getCurrentAttemptId() : null,
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
                 refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund),
-                RefundAmountView.from(order, refund), refund.isPurchaseReturnedToStorage());
+                RefundAmountView.from(order, refund), refund.isPurchaseReturnedToStorage(),
+                refund.licenseGrantDelayedSince(clock.instant(), licenseGrantDelay));
     }
     private Instant delayedSince(Refund refund) {
         if (refund.getStatus()!=RefundStatus.PENDING_PAYMENT_REFUND) return null;
