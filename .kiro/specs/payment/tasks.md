@@ -6,6 +6,7 @@
 
 - [x] [결정 114](../../../docs/decisions.md#approval-review-hold-closure) 1부: 승인 보류 ADMIN 조회·최신 PG 관측·조사 기록·사유별 게이지/경보 — 2026-11-07 (간격·고객 안내는 G1 미정)
 - [x] [결정 115](../../../docs/decisions.md#approval-review-closure-outcome)(결정 114 2부): PG 재조회 근거의 ADMIN 보류 종결(작업자와 같은 lease·트랜잭션 밖 조회·전액 CANCELLED/FAILED/READY만), 주문 `FAILED`(`REVIEW_CLOSED`) 또는 이미 만료면 `EXPIRED`, 전액 CANCELLED 관측·`PG_CANCELLED` 보류·경보, V36·V37 — 2026-11-07
+- [x] 금융 보류 건 PG 재조회 간격([결정 122](../../../docs/decisions.md#approval-review-requery-interval)): `REVIEW_REQUIRED` 승인의 다음 조회를 `now + min(10분, max(5초, now − review_started_at))`로 잡는다. 시작값·상한은 보류 전용 설정 키로 두고 `PAYMENT_RETRY_MS`는 바꾸지 않으며, `review_started_at`이 없는 옛 행은 상한을 쓴다 — 2026-11-08 (`PAYMENT_REVIEW_RETRY_INITIAL_MS`·`PAYMENT_REVIEW_RETRY_MAX_MS`, R13.10)
 
 - [x] `OrderPlaced` 내구 접수(요청 전체 비교·Inbox·접수 경합), `PENDING` 결제 생성 — 2026-10-16
 - [x] 미확정 건 주기 재개(기본 1초·20건·오류 재시도 5초), 재시작 후 DB `PENDING` 재개 — 2026-10-16
@@ -29,7 +30,6 @@
 
 ## 진행 중 / 남음
 
-- [ ] 금융 보류 건 PG 재조회 간격([결정 122](../../../docs/decisions.md#approval-review-requery-interval)): `REVIEW_REQUIRED` 승인의 다음 조회를 `now + min(10분, max(5초, now − review_started_at))`로 잡는다. 시작값·상한은 보류 전용 설정 키로 두고 `PAYMENT_RETRY_MS`는 바꾸지 않으며, `review_started_at`이 없는 옛 행은 상한을 쓴다 — G1
 - [ ] G1 종료 조건 대조 — 금융 보류 건 고객 안내([결정 123](../../../docs/decisions.md#approval-review-customer-notice)): 결제 상세·승인 조회 응답에 청구 여부별 `reviewNotice {code, message, since}`(`CHARGED`·`CHARGE_CANCELLED`·`CHARGE_UNCONFIRMED`·`NOT_CHARGED`, 종결 뒤 둘)를 더한다. 결제창 409 메시지도 한국어로 바꾼다. 원래 사유 코드는 노출하지 않고, Order 계약은 바꾸지 않는다. 운영 종결(결정 115)과 재조회 간격(결정 122)은 정했다. 승인 전 검증 보류의 만료 경로 보완은 모든 `REVIEW_REQUIRED`의 해제·재승인·금융 구제 정책이 아니며, 과거 실제 TEST 진단 건의 원래 기록·종료된 스택은 수정하지 않았다 ([계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md#g1에서-바로-시작할-구체적-작업))
 - [ ] 결제창 이탈 후 재진입의 Order 결과/다음 행동 검증([결정 120](../../../docs/decisions.md#g1-reentry-scope)): 실제 TEST로는 시도 실패(결제창 닫기)→같은 주문 재결제와 이탈→30분 자연 만료를 확인했다. 흉내 서버 실제 스택 여정에 30분 안 위험 조합(승인 요청 미도달 뒤 재결제, 처리 중 결제창 재요청 거절, 처리 중 새 주문 이중 구매, PAY_PENDING 유지, confirm 400/403 보류)을 기존 야간 작업으로 넣는다. 기한을 넘는 조합(기한 뒤 FAILED, 기한 안 접수 뒤 늦은 PAID, 접수 전 PAY_PENDING 만료)은 31분 대기 한 번으로 묶은 별도 야간 작업으로 넣는다. 3시간 조합은 통합 테스트로 인정하되, 기존 `PaymentApprovalIntegrationTest:220-227`은 PG READY만 확인하므로 PAY_PENDING으로 3시간을 넘기는 통합 테스트를 새로 더한다 — G1
 - [ ] 접수 전 PAY_PENDING 승인이 주문 만료로 닫힐 때 PG를 다시 조회하지 않아(`ResolvePaymentApproval.java:98-107`), 그 뒤 PG가 PAID가 되면 놓칠 수 있다는 의심(2026-11-08 G1 조합 조사, 코드 판독 추정). 재현 테스트부터 하고, 재현되면 결함 대장에 올린다 — G1
