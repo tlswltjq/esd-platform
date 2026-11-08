@@ -560,7 +560,7 @@
 
 - **원인** 접수 전 만료 분기가 PG 조회(`inspect`)보다 앞에 있다. 이 분기는 Payment R11.5("접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다")를 구현한 것인데, 한 번 조회해 PG `PENDING`을 이미 본 승인도 같은 `REQUESTED`라 같은 분기를 탄다. 접수 전 PG `PENDING`은 기존 분기(`observed.state()!=READY` → PAID·CANCELLED가 아니면 그냥 반환)에서 `REQUESTED`로 남는다. 닫힌 뒤에는 승인이 종결되어 다시 조회하지 않는다. 웹훅도 `Payment.requestRecheck`가 `PENDING`이 아닌 결제를 무시하고 `ResolvePayment`가 `EXPIRED`를 건너뛰므로 늦은 PAID를 살리지 못한다.
 - **실제 PortOne에서 생기는가** 어댑터(`PortOnePaymentApprovalGateway`)는 `PAY_PENDING`을 `PENDING`으로 매핑하고, 접수 전에는 우리가 `confirm`을 보내지 않는다. 그러므로 이 상태는 PG가 우리 confirm 없이 승인 대기로 간 경우다. 실제 PortOne이 그런 응답을 주는지는 저장소에 근거가 없다(payment `tasks.md`의 `[외부 대기]` 항목과 같은 미확인).
-- **수정 범위(미결)** 만료로 닫기 전에 PG를 한 번 조회하면 PAID(기존 `PAID_WITHOUT_ADMISSION` 보류)·READY·FAILED·전액 CANCELLED(지금처럼 닫음)는 기존 규칙으로 처리된다. 하지만 조회 결과가 여전히 `PENDING`일 때 할 일(보류로 올림 / 조회만 계속 / 지금처럼 닫음)이 정해지지 않았고, 어느 쪽을 코드로 쓰든 정책을 정하는 일이다. 그래서 운영 코드는 고치지 않고 재현 테스트만 남겼다. 이 테스트는 만료 뒤 첫 조회가 이미 PAID를 보는 경우만 단언하므로, `PENDING` 분기를 어떻게 정하든 기대값이 바뀌지 않는다.
+- **수정 범위(미결)** 만료로 닫기 전에 PG를 한 번 조회하면, 관측 결과별 처리는 이미 정해진 규칙을 따른다. PAID는 기존 `PAID_WITHOUT_ADMISSION` 보류이고, READY·FAILED는 지금처럼 닫는다. 전액 CANCELLED는 결정 115·`holdForCancellation`대로 보류하고 운영자 종결을 기다린다(저절로 닫지 않는다. 만료 때 자동 종료하는 예외는 정하지 않았다). 정해지지 않은 것은 둘이다. 첫째, 이 조회를 어떤 `REQUESTED` 승인에 할지다. 이는 R11.5 "PG 호출 없이 닫는다"의 예외 범위를 정하는 일이다. 둘째, 조회 결과가 여전히 `PENDING`일 때 할 일이다(보류로 올림 / 조회만 계속 / 지금처럼 닫음). 둘 다 정책이라 운영 코드는 고치지 않고 재현 테스트만 남겼다. 이 테스트는 PG 관측 이력이 있는 승인을 만료 뒤 다시 조회한다고 기대한다. 그래서 첫째 결정이 나오기 전에는 이 PR을 병합하지 않고, 결정에 맞춰 R11.5와 함께 테스트를 확정한다(교차 리뷰 R1).
 
 ---
 
