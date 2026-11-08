@@ -102,8 +102,13 @@ import org.springframework.web.client.RestClient;
 
 class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBase {
     private static final Instant BASE = Payment.now();
-    /** The largest type the error parser accepts (Jackson 20,000,000 characters), 3 UTF-8 bytes each: 60,000,000 bytes. */
-    private static final String LARGEST_TYPE = "가".repeat(20_000_000);
+    /**
+     * Parser limit for the large-type boundary test. The production limit (20,000,000 characters, 60,000,000 bytes here)
+     * does not fit the 512 MB test heap next to the cached contexts, so the same boundary is checked at 6,000,000
+     * characters: 18,000,000 UTF-8 bytes, already larger than the MEDIUMTEXT the hold used to have (16,777,215 bytes).
+     */
+    private static final int LARGE_TYPE_LIMIT = 6_000_000;
+    private volatile String largeType;
     @Autowired PaymentRepository payments;
     @Autowired ReceiveRefundExecution receive;
     @Autowired PlatformTransactionManager transactions;
@@ -207,7 +212,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                 else if (mode == Mode.UNRECOGNIZED_BAD_REQUEST) { status = 400; reply = "{\"message\":\"untyped provider detail\"}"; }
                 else if (mode == Mode.FORMAL_REJECTION) { status = 409; reply = "{\"type\":\"PAYMENT_NOT_PAID\",\"message\":\"private-provider-detail\"}"; }
                 else if (mode == Mode.MALFORMED_CONFLICT) { status = 409; reply = "<html>private-provider-detail</html>"; }
-                else if (mode == Mode.LARGEST_REJECTION) { status = 409; reply = "{\"type\":\"" + LARGEST_TYPE + "\"}"; }
+                else if (mode == Mode.LARGEST_REJECTION) { status = 409; reply = "{\"type\":\"" + largeType + "\"}"; }
                 else if (mode == Mode.FORBIDDEN || mode == Mode.FORBIDDEN_LOOKUP_DOWN || mode == Mode.DELAYED_FORBIDDEN) {
                     status = 403; reply = "<html>private-provider-detail</html>";
                     if (mode == Mode.DELAYED_FORBIDDEN) { responseReady.countDown();
@@ -1401,21 +1406,25 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     }
 
     /**
-     * PR #168 R4: the largest type the parser accepts is still stored whole and stops automatic POSTs. With a column smaller
-     * than the parser limit the hold insert failed, no hold was recorded and the next round would have posted again.
+     * PR #168 R4: a type at the parser limit is stored whole and stops automatic POSTs, and one character more stays an
+     * unconfirmed malformed body. With a column smaller than the parsed type the hold insert failed, no hold was recorded
+     * and the next round would have posted again.
      */
-    @Test void theLargestParsableRejectionTypeIsStoredWholeAndStopsAutomaticPosts() {
-        received(); mode = Mode.LARGEST_REJECTION; service(gateway()).executeFirst(current.getAttemptId());
+    @Test void aRejectionTypeAtTheParserLimitIsStoredWholeAndStopsAutomaticPostsWhileALongerOneStaysUnconfirmed() {
+        received(); largeType = "가".repeat(LARGE_TYPE_LIMIT + 1); mode = Mode.LARGEST_REJECTION;
+        assertThatThrownBy(() -> service(gateway(LARGE_TYPE_LIMIT)).executeFirst(current.getAttemptId())).isExactlyInstanceOf(PgUnavailable.class);
+        assertThat(holds.count()).isZero(); assertThat(stored().getCancellationSchedule().getNextAt()).isNotNull();
+        largeType = largeType.substring(1);
+        when(clock.instant()).thenReturn(BASE.plusSeconds(10)); service(gateway(LARGE_TYPE_LIMIT)).execute(current.getAttemptId());
         String holdId = stored().getActiveCancellationHoldId();
         assertThat(holdId).isNotNull(); assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
         assertThat(jdbc.queryForObject("SELECT CHAR_LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
-                .isEqualTo(20_000_000L);
+                .isEqualTo((long) LARGE_TYPE_LIMIT);
         assertThat(jdbc.queryForObject("SELECT LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
-                .isEqualTo(60_000_000L);
-        assertThat(jdbc.queryForObject("SELECT reason FROM refund_cancellation_hold WHERE hold_id=?", String.class, holdId))
-                .isEqualTo("PG_REQUEST_REJECTED");
-        when(clock.instant()).thenReturn(BASE.plusSeconds(60)); retryWorker().execute();
-        assertThat(bodies).hasSize(1);
+                .isEqualTo(3L * LARGE_TYPE_LIMIT);
+        largeType = null;
+        when(clock.instant()).thenReturn(BASE.plusSeconds(70)); retryWorker().execute();
+        assertThat(bodies).hasSize(2);
     }
 
     /** [D-048] A 409 whose body cannot be read is unconfirmed: the same round looks up and the POST is retried, without a hold. */
@@ -1600,6 +1609,9 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     }
     private RestClient client() { return RestClient.builder().baseUrl("http://127.0.0.1:" + pg.getAddress().getPort()).build(); }
     private PortOneRefundCancellationGateway gateway() { return new PortOneRefundCancellationGateway(client(), STORE, CHANNEL, clock); }
+    private PortOneRefundCancellationGateway gateway(int maxSupplierStringLength) {
+        return new PortOneRefundCancellationGateway(client(), STORE, CHANNEL, clock, maxSupplierStringLength);
+    }
     private RequestRefundCancellation service(RefundCancellationGateway gateway) {
         return service(gateway, client());
     }

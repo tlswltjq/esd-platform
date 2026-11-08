@@ -44,13 +44,21 @@ public class PortOneRefundCancellationGateway implements RefundCancellationGatew
      * bytes) is stored whole in V40's LONGTEXT; a longer string cannot be parsed and stays an unconfirmed malformed body.
      */
     public static final int MAX_SUPPLIER_STRING_LENGTH = 20_000_000;
-    private final ObjectMapper mapper = new ObjectMapper(JsonFactory.builder()
-            .streamReadConstraints(StreamReadConstraints.builder().maxStringLength(MAX_SUPPLIER_STRING_LENGTH).build()).build())
-            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+    private final ObjectMapper mapper;
 
     public PortOneRefundCancellationGateway(RestClient client, String storeId, String channelKey, Clock clock) {
+        this(client, storeId, channelKey, clock, MAX_SUPPLIER_STRING_LENGTH);
+    }
+
+    /** A smaller string limit lets tests check the same parse/store boundary without a 60 MB body; production uses the default. */
+    public PortOneRefundCancellationGateway(RestClient client, String storeId, String channelKey, Clock clock, int maxSupplierStringLength) {
+        if (maxSupplierStringLength <= 0 || maxSupplierStringLength > MAX_SUPPLIER_STRING_LENGTH)
+            throw new IllegalArgumentException("The supplier string limit must stay within the stored type capacity");
         this.client = client; this.storeId = storeId; this.channelKey = channelKey; this.clock = clock;
+        this.mapper = new ObjectMapper(JsonFactory.builder()
+                .streamReadConstraints(StreamReadConstraints.builder().maxStringLength(maxSupplierStringLength).build()).build())
+                .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+                .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     }
 
     @Override public String prepareBody(RefundExecutionRequest request) {
