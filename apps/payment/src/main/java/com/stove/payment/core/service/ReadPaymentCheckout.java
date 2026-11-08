@@ -2,7 +2,9 @@ package com.stove.payment.core.service;
 
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import com.stove.payment.core.domain.ApprovalReviewNotice;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentApproval;
 import com.stove.payment.core.domain.PaymentCheckout;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
@@ -11,6 +13,7 @@ import com.stove.payment.core.domain.PaymentErrorCode;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.net.URI;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,9 +39,14 @@ public class ReadPaymentCheckout {
         if (!"PORTONE_TEST".equals(payment.getProvider()) || payment.getStatus() != PaymentStatus.PENDING) {
             throw new BusinessException(ErrorCode.CONFLICT, "결제창을 열 수 있는 포트원 테스트 결제가 아닙니다.");
         }
-        if (approvals.findFirstByPaymentIdAndStatusInOrderByIdDesc(payment.getPaymentId(),List.of(PaymentApprovalStatus.REQUESTED,
-                PaymentApprovalStatus.ADMITTED,PaymentApprovalStatus.REVIEW_REQUIRED,PaymentApprovalStatus.FAILURE_CONFIRMED)).isPresent())
-            throw new BusinessException(PaymentErrorCode.APPROVAL_IN_PROGRESS);
+        Optional<PaymentApproval> active=approvals.findFirstByPaymentIdAndStatusInOrderByIdDesc(payment.getPaymentId(),List.of(PaymentApprovalStatus.REQUESTED,
+                PaymentApprovalStatus.ADMITTED,PaymentApprovalStatus.REVIEW_REQUIRED,PaymentApprovalStatus.FAILURE_CONFIRMED));
+        if (active.isPresent()) {
+            // A held approval tells the customer whether money was charged (decision 123); the hold reason stays internal.
+            String message=ApprovalReviewNotice.of(active.get(),null).map(ApprovalReviewNotice::message)
+                    .orElse(PaymentErrorCode.APPROVAL_IN_PROGRESS.defaultMessage());
+            throw new BusinessException(PaymentErrorCode.APPROVAL_IN_PROGRESS,message);
+        }
         if (!clock.instant().isBefore(payment.getOrderOccurredAt().plus(Duration.ofMinutes(30))))
             throw new BusinessException(PaymentErrorCode.ORDER_EXPIRED);
         return new PaymentCheckout(payment.getPaymentId(), payment.getOrderNo(), payment.getTitle(),

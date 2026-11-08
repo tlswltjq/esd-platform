@@ -1142,7 +1142,7 @@
   - 종결 뒤(근거 CANCELLED): "결제 확인 결과 이 주문은 종료되었습니다. 청구되었던 {금액}원은 전액 취소되었습니다. 새 주문으로 다시 구매해 주세요."
   - 종결 뒤(근거 READY·FAILED): "결제 확인 결과 이 주문은 종료되었습니다. 청구된 금액은 없습니다. 새 주문으로 다시 구매해 주세요."
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #155](https://github.com/tlswltjq/esd-platform/pull/155)(종결 뒤 코드 `CLOSED_CHARGE_CANCELLED`·`CLOSED_NOT_CHARGED`), 근거 색인 2026-11-08 금융 보류 건 고객 안내 행. 결정 123에 없던 경우의 코드는 결정 132(마지막 PG 관측 기준)로 정해 같은 PR에 구현
 
 <a id="confirm-window-expired-hold"></a>
 ## 124. confirm 기한(3시간)이 지난 접수 승인이 미확정이면 새 사유로 보류에 올린다
@@ -1223,7 +1223,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마지막 PG 관측 기준으로 코드 결정")
 - 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `PG_INVALID_EVIDENCE`(근거 자체가 유효하지 않음)는 관측과 상관없이 `CHARGE_UNCONFIRMED`다. 그 밖의 모든 보류 사유는 마지막 PG 관측으로 코드를 정한다: PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, PENDING·조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`. 문구와 종결 뒤 코드, 원래 사유 코드 비노출, Order 계약 불변은 결정 123 그대로다. 한계: 관측은 보류 재조회 간격(최대 10분, [결정 122](#approval-review-requery-interval))만큼 늦을 수 있다.
 - 구분: 추천 수용
-- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 결정 123 구현 PR
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현 [PR #155](https://github.com/tlswltjq/esd-platform/pull/155)
 
 <a id="refund-formal-rejection-stop"></a>
 ## 133. PortOne이 환불 취소를 형식을 갖춰 거절한 4xx는 재송신하지 않고 바로 자동 송신을 멈춘다
