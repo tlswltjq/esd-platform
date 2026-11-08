@@ -1356,17 +1356,22 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             String projection = String.join(",", columns);
             migration.update("INSERT INTO refund_execution(" + projection + ") SELECT " + projection + " FROM "
                     + mysql.getDatabaseName() + ".refund_execution WHERE attempt_id=?", current.getAttemptId());
-            migration.update("INSERT INTO refund_cancellation_hold SELECT * FROM " + mysql.getDatabaseName() + ".refund_cancellation_hold WHERE attempt_id=?", current.getAttemptId());
-            List<Map<String, Object>> original = migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id");
+            // Copy only the V24 columns: later migrations (V40) add columns the legacy table does not have yet.
+            String holdColumns = String.join(",", migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=?"
+                    + " AND TABLE_NAME='refund_cancellation_hold' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema));
+            migration.update("INSERT INTO refund_cancellation_hold(" + holdColumns + ") SELECT " + holdColumns + " FROM " + mysql.getDatabaseName()
+                    + ".refund_cancellation_hold WHERE attempt_id=?", current.getAttemptId());
+            String legacyHolds = "SELECT " + holdColumns + " FROM refund_cancellation_hold ORDER BY id";
+            List<Map<String, Object>> original = migration.queryForList(legacyHolds);
             assertThat(original).hasSize(2);
             Map<String, Object> execution = migration.queryForMap("SELECT * FROM refund_execution");
             Flyway.configure().dataSource(source).locations(location).load().migrate();
-            assertThat(migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id")).isEqualTo(original);
+            assertThat(migration.queryForList(legacyHolds)).isEqualTo(original);
             assertThat(migration.queryForMap("SELECT * FROM refund_execution")).containsAllEntriesOf(execution);
             assertThat(migration.queryForObject("SELECT active_cancel_hold_id FROM refund_execution", String.class)).isEqualTo(active);
             assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='UNKNOWN_REASON' WHERE hold_id=?", active))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_observation");
-            assertThat(migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id")).isEqualTo(original);
+            assertThat(migration.queryForList(legacyHolds)).isEqualTo(original);
         } finally { root.execute("DROP DATABASE " + schema); }
     }
 
