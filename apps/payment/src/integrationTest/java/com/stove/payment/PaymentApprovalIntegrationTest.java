@@ -219,13 +219,51 @@ class PaymentApprovalIntegrationTest {
         assertThat(BODIES).hasSize(2); assertThat(BODIES.get(0)).isEqualTo(BODIES.get(1)); assertThat(KEYS.get(0)).isEqualTo(KEYS.get(1));
         assertThat(row(command).getFirstPreparedAt()).isEqualTo(original); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID);
     }
+    /** Decision 124: at the exact 3-hour boundary a READY approval stops posts and is held, and a late PAID still completes the order. */
     @Test void theExactThreeHourBoundaryStopsPostsButContinuesLookupAndAcceptsLateSuccess() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
-        TIME.set(row(command).getFirstPreparedAt().plusSeconds(10800)); int before=GETS.get(); worker.execute(command);
-        assertThat(BODIES).hasSize(1); assertThat(GETS.get()).isGreaterThan(before); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
-        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);
+        TIME.set(window); int before=GETS.get(); worker.execute(command);
+        assertThat(BODIES).hasSize(1); assertThat(GETS.get()).isGreaterThan(before);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(held.getReviewStartedAt()).isEqualTo(window);
+        assertThat(held.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY); assertThat(held.getAdmittedAt()).isNotNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(countOutbox()).isZero();
         STATES.put(payment.getPaymentId(),"PAID"); advance(5); worker.execute(command);
-        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1); assertThat(BODIES).hasSize(1);
+    }
+    /**
+     * Decision 124 (and the decision 120 correction): an admitted approval whose PG stays PAY_PENDING is only looked up before
+     * the 3-hour window ends, is held with CONFIRM_WINDOW_EXPIRED right after the first lookup at the window, and a late
+     * FAILED still closes the original order without a new key, a new payment or a financial failure invented by time.
+     */
+    @Test void anAdmittedPayPendingApprovalPastTheConfirmWindowIsHeldAndALateFailureClosesTheOriginalOrder() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);
+        // The last lookup before the window (its 5 s retry lands exactly on the window) stays an unheld admitted approval.
+        TIME.set(window.minusSeconds(5)); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        assertThat(row(command).getNextAt()).isEqualTo(window);
+        assertThat(row(command).getReviewStartedAt()).isNull(); assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        TIME.set(window); before=GETS.get(); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(GETS.get()).isEqualTo(before+1);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(held.getReviewStartedAt()).isEqualTo(window);
+        assertThat(held.isPostStopped()).isTrue(); assertThat(held.getNextAt()).isEqualTo(window.plusSeconds(5));
+        assertThat(held.getProtectedPayload()).isNotNull(); assertThat(held.getFailedAt()).isNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero(); assertThat(CLOSURES).isEmpty();
+        assertThat(submit(payment,id()).status()).isEqualTo(409);
+        STATES.put(payment.getPaymentId(),"FAILED"); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.FAILED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(CLOSURES.get(command).path("orderStatus").asText()).isEqualTo("EXPIRED");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero();
     }
     @Test void aLostOrderReceiptIsReplayedAfterTheDeadlineAndPreservesTheOriginalAdmission() {
         Payment payment=purchase(); String command=id(); submit(payment,command); LOSE_ORDER.set(true); worker.execute(command);
