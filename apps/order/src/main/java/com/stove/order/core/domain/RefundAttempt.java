@@ -23,6 +23,8 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefundAttempt {
+    /** 검증된 PG 취소 실패(R7.3)의 저장 코드. 고객 응답에는 RefundFailureReason으로 옮겨 보인다(결정 134). */
+    public static final String PG_CANCELLATION_FAILED = "PG_CANCELLATION_FAILED";
     @Column(unique=true,length=64) private String preparationEventId;
     private Instant firstRefundPreparedAt;
     private Instant confirmationDelayAt;
@@ -95,7 +97,7 @@ public class RefundAttempt {
     public void recordRefundFailure(RefundFailureConfirmation input, Instant at) {
         if (!RefundRestorationValues.time(at) || at.isBefore(input.occurredAt()) || status != RefundAttemptStatus.PENDING)
             throw new RefundCompletionRejected("미취소 실패를 기다리는 시도가 아닙니다.");
-        fail(input.occurredAt(), "PG_CANCELLATION_FAILED", "PG 취소 실패와 원결제 미취소를 확인했습니다.");
+        fail(input.occurredAt(), PG_CANCELLATION_FAILED, "PG 취소 실패와 원결제 미취소를 확인했습니다.");
         failureEventId = input.eventId(); failureFingerprint = input.fingerprint();
         restorationRequestEventId = UUID.randomUUID().toString(); restorationRequestedAt = at;
         reconciliationRequired = false;
