@@ -560,9 +560,12 @@
             "type" : "string"
           },
           "reviewNotice" : {
-            "$ref" : "#/components/schemas/ApprovalReviewNoticeResponse",
-            "description" : "결제 상세에서 금융 보류 중이거나 보류 종결로 끝난 결제의 고객 안내(청구 여부별 코드·문구·보류 시작 시각). 그 밖의 결제와 목록에서는 null입니다.",
-            "type" : "null"
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/ApprovalReviewNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "결제 상세에서 금융 보류 중이거나 보류 종결로 끝난 결제의 고객 안내(청구 여부별 코드·문구·보류 시작 시각). 그 밖의 결제와 목록에서는 null입니다."
           },
           "status" : {
             "enum" : [ "PENDING", "PAID", "FAILED", "EXPIRED" ],
