@@ -1207,6 +1207,15 @@
 - 구분: 추천 수용
 - 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현은 후속 PR
 
+<a id="investigation-trail-no-assignee"></a>
+## 131. 운영 조사 건에 담당자를 두지 않고, 목록에 마지막 조사자·시각만 보인다
+- 문제: 운영 조사 건(금융 보류 승인, 장기·귀속 미확정 환불, 지급 확인 대기 환불)은 게이지·경보로 드러나고 ADMIN이 조사 기록을 남긴 뒤 PG 재조회 근거로 닫는다([결정 114](#approval-review-hold-closure)·[115](#approval-review-closure-outcome)·[125](#license-grant-wait-detection)·[127](#refund-delay-closure)·[128](#refund-failure-closure)·[129](#orphan-license-grant-republish)). 조사 기록(`approval_investigation`, `refund_investigation`)에는 작성자 ADMIN sub와 시각만 있고 담당 필드는 없다. 동시 종결은 lease·`requestId` 멱등·종결 행 UNIQUE로 이미 한 번만 된다. 비어 있는 것은 "누가 이미 봤는지 목록에서 모른다"이다. 예: 14:10 운영자 A가 환불 지연 건에 "콘솔 확인 중"을 남겼는데, 14:20 운영자 B는 `GET /api/v1/admin/refund-delays`에서 조사 여부를 볼 수 없어 같은 건을 다시 조사한다. 돈은 한 번만 움직이지만 사람 시간이 두 번 든다. 승인 보류 목록은 `investigationCount`만 보이고, 환불 지연 목록은 그것도 없다. 현재 ADMIN은 초기 1명(`AUTH_ADMIN_EMAIL`)이고 전용 운영 화면이 없다. Review는 "심사자 배정 없이 모든 건 판정"으로 이미 정했다.
+- 선택지: A 범위 밖으로 닫는다(모든 ADMIN이 모든 건을 보고 종결) / B A + 환불 지연·승인 보류 목록 항목에 `investigationCount`·`lastInvestigatedBy`·`lastInvestigatedAt`을 보인다(기존 조사 기록 읽기만, 새 상태·테이블 없음) / C 참고용 담당 지정(`POST …/{id}/assignment`, `assignee=me|unassigned` 필터, 종결은 모든 ADMIN) / D 담당 강제(담당자만 조사 기록·종결, 재배정·SLA) (추천: B — 빈 곳은 "누가 봤는지 모름" 하나이고 기존 조사 기록만으로 닫힌다. 중복 금전 조치는 이미 lease·멱등·PG 재조회로 막혀 C·D가 더 막는 금전 위험이 없고, ADMIN 1명인 지금 규모에서 배정 상태는 관리 비용만 늘린다. D는 결정 115·127·128의 "ADMIN이 종결"에 조건을 붙이고 Review 선례와도 어긋난다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 목록에 마지막 조사자·시각만 보여 줘")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 환불 지연 목록(`GET /api/v1/admin/refund-delays`)과 승인 보류 목록 항목에 조사 건수(`investigationCount`), 마지막 조사자 ADMIN sub(`lastInvestigatedBy`), 마지막 조사 시각(`lastInvestigatedAt`)을 보인다. 기존 조사 기록을 읽기만 하고 새 상태·테이블·배정 API는 만들지 않는다. 담당 배정은 범위 밖으로 두고 모든 ADMIN이 모든 건을 조사·종결한다. 운영자가 동시에 여러 명 일하게 되거나 G6 운영 규모를 잴 때 다시 정한다. 경보를 사람에게 전달하는 경로(Alertmanager·알림 채널)는 이 결정과 별개다.
+- 구분: 추천 수용
+- 결과: PR 번호는 이 문서 PR, 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
