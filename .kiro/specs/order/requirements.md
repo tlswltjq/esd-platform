@@ -126,6 +126,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 7. WHEN 검증된 `RefundExecutionPrepared`(최초 준비 시각·원래 3시간 경계)를 받으면 THEN 시스템 SHALL 근거와 Inbox를 원자 저장하고, 현재 시도가 금융 미확정인 동안 그 경계부터 고객 조회에 `processingNotice`(code·message·since)를 제공한다. 준비 근거가 없으면 접수 시각으로 추정하지 않고 null이며, 완료·실패/복구·새 시도에서는 오래된 안내를 내지 않는다. 고객 조회는 Payment HTTP를 호출하지 않는다.
 8. WHEN 환불이 `PENDING_LICENSE_GRANT`에 들어가면(자동 허용 접수, 최초 승인, 재심사·정정 회차 승인) THEN 시스템 SHALL 그 시각을 `licenseGrantWaitStartedAt`으로 저장하고, 다시 들어가면 새 시각으로 바꾼다. 대기를 벗어나도 운영 조회용으로 남긴다. ADMIN 환불 목록·상세는 이 시각을 보인다([결정 125](../../../docs/decisions.md#license-grant-wait-detection)).
 9. WHILE 환불이 `PENDING_LICENSE_GRANT`이고 진입 시각 + `stove.order.refund.license-grant-delay`(기본 10분, 경계 포함)가 지났으면 THE 시스템 SHALL 게이지 `stove.order.refund.license.grant.delayed`에 세고, 고객 조회에 `processingNotice`(code `LICENSE_GRANT_CONFIRMATION_DELAYED`·message·since=경계 시각)를 제공한다. 고객 상태는 `PROCESSING` 그대로이며, 지급 확인이 반영되면 집계·안내에서 빠진다. 재처리는 결정 37 절차(LicenseGranted DEAD 재큐잉·DLT 재투입)로 하고 새 이벤트를 만들지 않는다.
+10. WHEN 원본이 Kafka에서 사라져 ADMIN이 Outbox 운영 API(`POST /api/v1/ops/outbox/{eventId}/republish`, 필수 사유 1~500자)로 `SENT` `OrderPaid`를 재발행하면 THEN 시스템 SHALL 원래 `event_id`·본문·키를 그대로 둔 채 발행 대기로 돌리고 실행자·시각·사유·이전 발행 시각을 `outbox_republish`에 같은 트랜잭션으로 남긴다. 없는 행·`SENT`가 아닌 행은 404, 허용 목록 밖 타입·사유 없음은 400으로 거절한다. License가 같은 ID로 재발행한 `LicenseGranted`가 미처리면 `PENDING_LICENSE_GRANT`를 기존 정지 요청으로 잇고, 이미 처리됐으면 효과가 없다([결정 129](../../../docs/decisions.md#orphan-license-grant-republish)).
 
 ### R9. 환불 금액 상세
 **사용자 스토리:** 구매자·운영자로서, 주문 금액과 확인된 반환 구성을 한 응답에서 보고 싶다.

@@ -44,13 +44,14 @@ PaymentCompleted(event_id=E)
 가드는 `(event_id, consumer_group)` 로 판정한다. 원장만 지워지고 가드 행이 살아 있으면
 되읽은 이벤트가 **전부 "이미 처리함"** 이 된다.
 
-그리고 **운영이 쓸 수 있는 재처리 수단은 셋 다 `event_id` 를 보존한다.**
+그리고 **운영이 쓸 수 있는 재처리 수단은 넷 다 `event_id` 를 보존한다.**
 
 | 수단 | event_id |
 |---|---|
 | 컨슈머 그룹 오프셋 리셋 | 원본 그대로 |
 | `POST /api/v1/ops/dlt/replay` | 원본 헤더를 그대로 되돌린다 |
 | `POST /api/v1/ops/outbox/dead/{id}/requeue` | 적재된 이벤트 그대로 |
+| `POST /api/v1/ops/outbox/{id}/republish` | `SENT` 행의 이벤트 그대로([결정 129](../decisions.md#orphan-license-grant-republish)) |
 
 즉 **`event_id` 가 바뀌는 경로는 운영에 없다.** 가드를 지우는 것 말고는 방법이 없다.
 
