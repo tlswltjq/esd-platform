@@ -1,0 +1,32 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+# 결정 125: 지급 확인 대기 10분 경계는 게이지가 적용한다. 0이면 조용하고, 1건 이상이면 바로 울리고, 0으로 돌아오면 풀린다.
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082"}'
+        values: '0 1 3 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts:
+          - exp_labels:
+              application: order
+              instance: order:8082
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 지급 확인을 10분 넘게 기다린다"
+              description: >-
+                3건이 PENDING_LICENSE_GRANT에 들어간 뒤 10분 넘게 LicenseGranted를 받지 못했다.
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 licenseGrantWaitStartedAt으로 대상을 찾고,
+                docs/license-event-recovery-runbook.md(결정 37)로 LicenseGranted DEAD 재큐잉·DLT 재투입을 확인한다.
+                새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+      - eval_time: 3m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts: []

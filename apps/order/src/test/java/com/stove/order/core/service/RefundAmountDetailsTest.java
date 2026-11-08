@@ -38,6 +38,7 @@ import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.ReportedRefundAmounts;
 import com.stove.order.core.domain.ReportedRefundCancellation;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -205,7 +206,7 @@ class RefundAmountDetailsTest {
     private RefundResponse customer(Order order, Refund refund) {
         when(orders.findByOrderNoAndBuyerSubject(order.getOrderNo(), order.getBuyerSubject())).thenReturn(Optional.of(order));
         when(refunds.findByOrderNo(order.getOrderNo())).thenReturn(Optional.of(refund));
-        return RefundResponse.from(new ReadRefund(orders, refunds, rounds, Clock.systemUTC(), mock(RefundAttemptRepository.class))
+        return RefundResponse.from(new ReadRefund(orders, refunds, rounds, Clock.systemUTC(), mock(RefundAttemptRepository.class), Duration.ofMinutes(10))
                 .execute(order.getOrderNo(), order.getBuyerSubject()));
     }
 

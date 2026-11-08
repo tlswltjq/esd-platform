@@ -12,6 +12,11 @@ import com.stove.order.core.service.DecideRefundReconsideration;
 import com.stove.order.core.service.ReadRefundReviewRounds;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.ReadRefund;
+import com.stove.order.core.service.ReadLicenseGrantDelays;
+import com.stove.order.adapter.RefundLicenseGrantMetrics;
+import io.micrometer.core.instrument.binder.MeterBinder;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import com.stove.order.core.service.ReadRefundReviews;
 import com.stove.order.core.service.DecideRefund;
 import com.stove.order.core.service.RequestRefundRetry;
@@ -61,8 +66,19 @@ public class RefundConfiguration {
         return new DecideRefund(orders, refunds, grants, outbox, refundClock, rounds);
     }
 
-    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock, RefundAttemptRepository attempts) {
-        return new ReadRefund(orders, refunds, rounds, refundClock, attempts);
+    @Bean ReadRefund readRefund(OrderRepository orders, RefundRepository refunds, RefundReviewRoundRepository rounds, Clock refundClock, RefundAttemptRepository attempts,
+            @Value("${stove.order.refund.license-grant-delay:10m}") Duration licenseGrantDelay) {
+        return new ReadRefund(orders, refunds, rounds, refundClock, attempts, licenseGrantDelay);
+    }
+
+    /** 결정 125: 게이지와 고객 안내가 같은 경계(stove.order.refund.license-grant-delay)를 쓴다. */
+    @Bean ReadLicenseGrantDelays readLicenseGrantDelays(RefundRepository refunds, Clock refundClock,
+            @Value("${stove.order.refund.license-grant-delay:10m}") Duration licenseGrantDelay) {
+        return new ReadLicenseGrantDelays(refunds, refundClock, licenseGrantDelay);
+    }
+
+    @Bean MeterBinder refundLicenseGrantMetrics(ObjectProvider<ReadLicenseGrantDelays> delays) {
+        return new RefundLicenseGrantMetrics(() -> delays.getObject().count());
     }
 
     @Bean RequestRefundRetry requestRefundRetry(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,

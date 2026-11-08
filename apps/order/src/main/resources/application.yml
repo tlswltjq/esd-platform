@@ -66,6 +66,10 @@ stove:
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     catalog-connect-timeout-ms: 3000
     catalog-read-timeout-ms: 10000
+    refund:
+      # 결정 125: 지급 확인(LicenseGranted)을 이보다 오래 기다린 환불을 게이지·고객 안내로 낸다.
+      # 정상 경로는 초 단위로 끝난다는 데서 잡은 초기값이며 사업 근거는 없다.
+      license-grant-delay: 10m
   messaging:
     ops:
       enabled: false

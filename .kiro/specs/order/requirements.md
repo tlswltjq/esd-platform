@@ -124,6 +124,8 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 5. WHEN ADMIN이 `POST /api/v1/admin/refunds/{refundId}/approval-stops`(requestId·현재 승인 reviewId·필수 사유)를 보내면 THEN 시스템 SHALL Order가 `RefundExecutionRequested`를 저장하기 전에만 202 최초 영수증으로 접수(`PENDING_APPROVAL_STOP`)하고, 실행 요청이 먼저 저장됐으면 PG 송신 전이어도 409로 거절한다. 중단과 정지 완료는 같은 주문 잠금으로 순서를 정한다.
 6. WHEN 승인 중단이 접수되면 THEN 시스템 SHALL 정지 요청 전이면 바로, 정지 요청 뒤면 실제 정지 완료와 그 정지의 승인 정정 복구(`LicenseApprovalCorrectionRequested`→`LicenseApprovalCorrected`) 완료 뒤 같은 환불의 관리자 정정 회차로 복귀한다. 늦은 정지 완료는 PG 실행 요청이 아니라 정정 복구로 연결하며, 복구 완료 전에는 새 판정을 받지 않고 과거 승인·중단·최초 접수/자격을 보존한다.
 7. WHEN 검증된 `RefundExecutionPrepared`(최초 준비 시각·원래 3시간 경계)를 받으면 THEN 시스템 SHALL 근거와 Inbox를 원자 저장하고, 현재 시도가 금융 미확정인 동안 그 경계부터 고객 조회에 `processingNotice`(code·message·since)를 제공한다. 준비 근거가 없으면 접수 시각으로 추정하지 않고 null이며, 완료·실패/복구·새 시도에서는 오래된 안내를 내지 않는다. 고객 조회는 Payment HTTP를 호출하지 않는다.
+8. WHEN 환불이 `PENDING_LICENSE_GRANT`에 들어가면(자동 허용 접수, 최초 승인, 재심사·정정 회차 승인) THEN 시스템 SHALL 그 시각을 `licenseGrantWaitStartedAt`으로 저장하고, 다시 들어가면 새 시각으로 바꾼다. 대기를 벗어나도 운영 조회용으로 남긴다. ADMIN 환불 목록·상세는 이 시각을 보인다([결정 125](../../../docs/decisions.md#license-grant-wait-detection)).
+9. WHILE 환불이 `PENDING_LICENSE_GRANT`이고 진입 시각 + `stove.order.refund.license-grant-delay`(기본 10분, 경계 포함)가 지났으면 THE 시스템 SHALL 게이지 `stove.order.refund.license.grant.delayed`에 세고, 고객 조회에 `processingNotice`(code `LICENSE_GRANT_CONFIRMATION_DELAYED`·message·since=경계 시각)를 제공한다. 고객 상태는 `PROCESSING` 그대로이며, 지급 확인이 반영되면 집계·안내에서 빠진다. 재처리는 결정 37 절차(LicenseGranted DEAD 재큐잉·DLT 재투입)로 하고 새 이벤트를 만들지 않는다.
 
 ### R9. 환불 금액 상세
 **사용자 스토리:** 구매자·운영자로서, 주문 금액과 확인된 반환 구성을 한 응답에서 보고 싶다.
@@ -136,6 +138,6 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 ## 범위 밖(후속)
 
 - 장바구니·복수 상품·수량 선택·선물·쿠폰·할인 조합·다중 통화·무료 상품 지급.
-- 지급 확인 누락의 근거 기반 복구(G2 P3는 License 측 이벤트 복구로 완료, Order 측 연계 확장은 후속).
+- 지급 확인 누락의 근거 기반 복구(G2 P3는 License 측 이벤트 복구로 완료, Order 측은 감지·안내만 R8.8~9). 원본 이벤트가 남아 있지 않은 `PENDING_LICENSE_GRANT`의 종결은 후속 결정.
 - 환불 조사 이후 조치·종결 기준(조사 기록과 금융/이용권 조치·종결의 구분), 실제 ADMIN 계정·운영 화면의 수동 심사·재심사·승인 중단 전체 여정.
 - 부분 환불·다중 PG·조사 종결/담당 배정 등 운영·성능 고도화.
