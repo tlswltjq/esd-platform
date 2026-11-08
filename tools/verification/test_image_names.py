@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from support.image_names import DEFAULT_REGISTRY, docker_hub_stove, refuse_docker_hub_stove
+from support.start_apps import copy_launcher
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECK_SCRIPT = ROOT / "scripts" / "check-image-names.sh"
@@ -98,6 +99,43 @@ class ComposeCheckScriptTest(unittest.TestCase):
         self.assertIn("docker.io/stove/minio:tag", result.stderr)
         self.assertNotIn("localhost/stove/auth:latest", result.stderr)
         self.assertIn("결정 118", result.stderr)
+
+
+class CopiedLauncherTest(unittest.TestCase):
+    """verify-jib.py runs a copy of start-apps.sh from its output directory; the copy must keep its check."""
+
+    def launch(self, images):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            output.mkdir()
+            calls = root / "calls"
+            fake = root / "bin" / "docker"
+            fake.parent.mkdir()
+            fake.write_text('#!/usr/bin/env bash\n'
+                            'if [ "${@: -2:1}" = config ] && [ "${@: -1}" = --images ]; then\n'
+                            '  printf "%s\\n" ' + " ".join('"' + image + '"' for image in images) + '\n'
+                            '  exit 0\nfi\necho "$*" >> "' + str(calls) + '"\n')
+            fake.chmod(0o755)
+            launcher = copy_launcher(ROOT, output)
+            environment = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run(["bash", str(launcher), "-p", "isolated", "-f", "compose.yml"],
+                                    env=environment, capture_output=True, text=True)
+            started = calls.read_text().splitlines() if calls.exists() else []
+            return launcher, result, started
+
+    def test_copy_lives_in_the_output_directory_and_starts_the_apps(self):
+        launcher, result, started = self.launch(["localhost/stove/gateway:latest"])
+        self.assertEqual("start-apps.sh", launcher.name)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(4, len(started))
+        self.assertTrue(all(line.startswith("compose -p isolated -f compose.yml up -d") for line in started))
+
+    def test_copy_still_refuses_docker_hub_stove(self):
+        _, result, started = self.launch(["stove/gateway:latest"])
+        self.assertEqual(1, result.returncode)
+        self.assertIn("결정 118", result.stderr)
+        self.assertEqual([], started)
 
 
 if __name__ == "__main__":
