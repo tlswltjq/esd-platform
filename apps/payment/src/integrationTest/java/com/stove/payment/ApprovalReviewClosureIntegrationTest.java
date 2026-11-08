@@ -138,8 +138,10 @@ class ApprovalReviewClosureIntegrationTest {
     @BeforeEach void initialize() { clean(); when(clock.instant()).thenAnswer(call -> TIME.get()); }
     @AfterEach void clean() {
         POINTS.reset();
-        // The closure audit is not cascaded from its approval (V37), so it is removed before the purchases it refers to.
+        // The closure (V37) and investigation (V38) audits are not cascaded from their approval,
+        // so they are removed before the purchases they refer to.
         jdbc.update("DELETE FROM approval_closure");
+        jdbc.update("DELETE FROM approval_investigation");
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
         PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); GETS.clear(); RECEIPTS.clear(); FAILURE_NOTICES.clear(); POSTS.clear();

@@ -59,6 +59,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.http.MediaType;
@@ -85,7 +86,26 @@ class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired JdbcTemplate jdbc;
     @LocalServerPort int port;
 
-    @AfterEach void releaseGates() { POINTS.reset(); }
+    @AfterEach void releaseGates() {
+        POINTS.reset();
+        // The investigation audit is not cascaded from its approval (V38), so other classes that delete
+        // purchases must not find rows left by this class.
+        jdbc.update("DELETE FROM approval_investigation");
+    }
+
+    /** The append-only investigation record is audit evidence: deleting its approval or purchase must not erase it. */
+    @Test void theInvestigationAuditCannotBeErasedByDeletingItsApprovalOrPurchase() {
+        PaymentApproval held = held("PG_INVALID_EVIDENCE");
+        Response note = http("POST", ROOT + "/" + held.getApprovalId() + "/investigations",
+                Map.of("requestId", id(), "note", "audit kept"), "ADMIN");
+        assertThat(note.status()).isEqualTo(200);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM payment_approval WHERE approval_id=?", held.getApprovalId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM purchase_payment WHERE payment_id=?", held.getPaymentId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM approval_investigation WHERE approval_id=?",
+                Integer.class, held.getApprovalId())).isEqualTo(1);
+    }
 
     @Test void dbOnlyListDetailAndAppendUseJwtActorAndHideSecrets() {
         PaymentApproval held = held("PG_INVALID_EVIDENCE");
