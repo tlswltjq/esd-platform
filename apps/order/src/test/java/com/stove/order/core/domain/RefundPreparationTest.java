@@ -9,6 +9,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class RefundPreparationTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant BASE=Instant.parse("2026-10-29T01:00:00.123456Z");
     @Test void theExactDelayBoundaryUsesPaymentPreparationRatherThanTheEarlierOrderRequest() {
         Fixture f=fixture(); RefundPreparationConfirmation input=input(f);
@@ -42,7 +43,7 @@ class RefundPreparationTest {
     private Fixture fixture() {
         Order paid=order(); paid.apply(new PaymentResult(id(),BASE.minusSeconds(7200),paid.getOrderNo(),paid.getRequestEventId(),id(),paid.getBuyerSubject(),paid.getAmount(),paid.getCurrency(),OrderStatus.PAID,null,null));
         Refund refund=Refund.request(paid,BASE.minusSeconds(1)); LicenseGrant grant=new LicenseGrant(id(),BASE.minusSeconds(10),id(),paid.getOrderNo(),paid.getBuyerSubject(),paid.getProductId(),paid.getProductCode(),paid.getPaymentId());
-        refund.confirmLicenseGrant(grant); LicenseSuspensionConfirmation suspended=new LicenseSuspensionConfirmation(id(),BASE,refund.getSuspensionRequestEventId(),refund.getRefundId(),grant.licenseId(),paid.getOrderNo(),paid.getBuyerSubject(),paid.getProductId(),paid.getProductCode(),paid.getPaymentId());
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT); LicenseSuspensionConfirmation suspended=new LicenseSuspensionConfirmation(id(),BASE,refund.getSuspensionRequestEventId(),refund.getRefundId(),grant.licenseId(),paid.getOrderNo(),paid.getBuyerSubject(),paid.getProductId(),paid.getProductCode(),paid.getPaymentId());
         RefundAttempt attempt=RefundAttempt.afterSuspension(refund,suspended,BASE); refund.recordExecution(attempt); return new Fixture(paid,refund,attempt);
     }
     private record Fixture(Order order,Refund refund,RefundAttempt attempt) { }

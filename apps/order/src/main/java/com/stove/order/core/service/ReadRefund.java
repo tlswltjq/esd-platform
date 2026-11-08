@@ -48,7 +48,7 @@ public class ReadRefund {
                 current == null ? null : current.view(), current == null ? null : current.reconsiderationDeadline(),
                 refund.getStatus() == RefundStatus.REJECTED && current != null && current.canReconsiderAt(clock.instant()), delayedSince(refund),
                 RefundAmountView.from(order, refund), refund.isPurchaseReturnedToStorage(),
-                refund.licenseGrantDelayedSince(clock.instant(), licenseGrantDelay), failureReason(refund));
+                refund.licenseWaitDelayedSince(clock.instant(), licenseGrantDelay), failureReason(refund));
     }
     /** 결정 134: FAILED(확정 실패 + 실제 복구 완료)의 현재 시도에 저장된 실패 코드를 고객용 사유로 옮긴다. */
     private RefundFailureReason failureReason(Refund refund) {

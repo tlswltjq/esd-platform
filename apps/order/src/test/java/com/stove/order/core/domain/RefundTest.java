@@ -14,6 +14,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class RefundTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant PAYMENT_CONFIRMED_AT = Instant.parse("2026-10-25T10:00:00.123456Z");
 
     @ParameterizedTest
@@ -102,8 +103,8 @@ class RefundTest {
         Refund refund = Refund.request(paid, receivedAt);
         LicenseGrant grant = grant(paid);
 
-        assertThat(refund.confirmLicenseGrant(grant)).isTrue();
-        assertThat(refund.confirmLicenseGrant(grant)).isFalse();
+        assertThat(refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT)).isTrue();
+        assertThat(refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT)).isFalse();
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
         assertThat(refund.getReceivedAt()).isEqualTo(receivedAt);
         assertThat(refund.isAutomaticRefundEligible()).isTrue();
@@ -114,7 +115,7 @@ class RefundTest {
         Order paid = paidOrder();
         Refund refund = Refund.request(paid, PAYMENT_CONFIRMED_AT.plusSeconds(5 * 3600));
 
-        assertThat(refund.confirmLicenseGrant(grant(paid))).isFalse();
+        assertThat(refund.confirmLicenseGrant(grant(paid), GRANT_CONFIRMED_AT)).isFalse();
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_REVIEW);
         assertThat(refund.isAutomaticRefundEligible()).isFalse();
     }
@@ -124,10 +125,10 @@ class RefundTest {
         Order paid = paidOrder();
         Refund refund = Refund.request(paid, PAYMENT_CONFIRMED_AT);
 
-        assertThatThrownBy(() -> refund.confirmLicenseGrant(null))
+        assertThatThrownBy(() -> refund.confirmLicenseGrant(null, GRANT_CONFIRMED_AT))
                 .isInstanceOfSatisfying(BusinessException.class,
                         failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
-        assertThatThrownBy(() -> refund.confirmLicenseGrant(grant(paidOrder())))
+        assertThatThrownBy(() -> refund.confirmLicenseGrant(grant(paidOrder()), GRANT_CONFIRMED_AT))
                 .isInstanceOfSatisfying(BusinessException.class,
                         failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.CONFLICT));
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_GRANT);

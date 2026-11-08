@@ -60,6 +60,12 @@ public class Refund {
     @Column(unique = true, length = 36) private String currentReviewId;
     /** 결정 125: 이번 PENDING_LICENSE_GRANT 대기에 들어간 시각. 다시 들어가면 새 시각으로 바뀌고, 벗어나도 운영 조회를 위해 남긴다. */
     private Instant licenseGrantWaitStartedAt;
+    /** 결정 125 범위 확장: 이번 PENDING_LICENSE_SUSPENSION 대기에 들어간 시각(지급 확인·재시도). 다시 들어가면 바뀌고 벗어나도 남는다. */
+    private Instant licenseSuspensionWaitStartedAt;
+    /** 결정 125 범위 확장: 이번 PENDING_LICENSE_RESTORATION 대기에 들어간 시각(확정 실패). */
+    private Instant licenseRestorationWaitStartedAt;
+    /** 결정 125 범위 확장: 이번 PENDING_APPROVAL_STOP 대기에 들어간 시각(승인 중단). */
+    private Instant approvalStopWaitStartedAt;
 
     public void stopApproval(RefundReviewRound round, RefundApprovalStopRequest input, Instant at) {
         if (automaticRefundEligible || round==null || !refundId.equals(round.getRefundId())
@@ -67,7 +73,7 @@ public class Refund {
                 || currentAttemptId!=null || paymentConfirmationEventId!=null
                 || (status!=RefundStatus.PENDING_LICENSE_GRANT && status!=RefundStatus.PENDING_LICENSE_SUSPENSION))
             throw new BusinessException(ErrorCode.CONFLICT,"Payment 실행 요청 저장 전의 현재 승인만 중단할 수 있습니다.");
-        round.stopApproval(input,suspensionRequestEventId,at); status=RefundStatus.PENDING_APPROVAL_STOP;
+        round.stopApproval(input,suspensionRequestEventId,at); status=RefundStatus.PENDING_APPROVAL_STOP; approvalStopWaitStartedAt=at;
     }
     public void reopenStoppedApproval(RefundReviewRound previous, RefundReviewRound next, Instant at) {
         if (status!=RefundStatus.PENDING_APPROVAL_STOP || currentAttemptId!=null || paymentConfirmationEventId!=null
@@ -122,11 +128,26 @@ public class Refund {
         return true;
     }
 
-    /** 결정 125: 지급 확인 대기가 경계를 넘었으면 경계 시각, 아니면 null. */
-    public Instant licenseGrantDelayedSince(Instant at, Duration threshold) {
-        if (status != RefundStatus.PENDING_LICENSE_GRANT || licenseGrantWaitStartedAt == null || at == null || threshold == null) return null;
-        Instant boundary = licenseGrantWaitStartedAt.plus(threshold);
+    /**
+     * 결정 125(범위 확장 포함): 지급 확인·정지·복구·승인 중단 대기가 경계를 넘었으면 경계 시각, 아니면 null.
+     * 경계는 지금 상태에 들어간 시각부터 센다. 그 밖의 상태와 진입 시각이 없는 행은 null이다.
+     */
+    public Instant licenseWaitDelayedSince(Instant at, Duration threshold) {
+        Instant started = licenseWaitStartedAt();
+        if (started == null || at == null || threshold == null) return null;
+        Instant boundary = started.plus(threshold);
         return at.isBefore(boundary) ? null : boundary;
+    }
+
+    /** 지금 상태가 License 단계 대기(지급 확인·정지·복구·승인 중단)면 그 진입 시각, 아니면 null. */
+    public Instant licenseWaitStartedAt() {
+        return switch (status) {
+            case PENDING_LICENSE_GRANT -> licenseGrantWaitStartedAt;
+            case PENDING_LICENSE_SUSPENSION -> licenseSuspensionWaitStartedAt;
+            case PENDING_LICENSE_RESTORATION -> licenseRestorationWaitStartedAt;
+            case PENDING_APPROVAL_STOP -> approvalStopWaitStartedAt;
+            default -> null;
+        };
     }
 
     public RefundReviewReceipt reviewReceipt() {
@@ -142,7 +163,7 @@ public class Refund {
         if (status != RefundStatus.FAILED || !previous.getAttemptId().equals(currentAttemptId) || paymentConfirmationEventId != null)
             throw new BusinessException(ErrorCode.CONFLICT, "현재 시도의 실패·복구 완료를 지정해야 합니다.");
         previous.registerRetry(at); suspensionRequestEventId = previous.getRetrySuspensionRequestEventId();
-        status = RefundStatus.PENDING_LICENSE_SUSPENSION; return true;
+        status = RefundStatus.PENDING_LICENSE_SUSPENSION; licenseSuspensionWaitStartedAt = at; return true;
     }
 
     public boolean recordFailure(Order order, RefundAttempt attempt, RefundFailureConfirmation input, Instant at) {
@@ -157,7 +178,7 @@ public class Refund {
         }
         if (!input.attemptId().equals(currentAttemptId) || status != RefundStatus.PENDING_PAYMENT_REFUND || paymentConfirmationEventId != null)
             throw new RefundCompletionRejected("실패 확인을 기다리는 환불이 아닙니다.");
-        attempt.recordRefundFailure(input, at); status = RefundStatus.PENDING_LICENSE_RESTORATION;
+        attempt.recordRefundFailure(input, at); status = RefundStatus.PENDING_LICENSE_RESTORATION; licenseRestorationWaitStartedAt = at;
         return true;
     }
 
@@ -283,8 +304,9 @@ public class Refund {
         }
     }
 
-    public boolean confirmLicenseGrant(LicenseGrant grant) {
-        if (grant == null) {
+    /** {@code at}: 이 확인을 반영하는 시각. 정지 요청을 내면 정지 대기 진입 시각이 된다(결정 125 범위 확장). */
+    public boolean confirmLicenseGrant(LicenseGrant grant, Instant at) {
+        if (grant == null || at == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "지급 확인 근거가 필요합니다.");
         }
         if (!orderNo.equals(grant.orderNo())) {
@@ -295,6 +317,7 @@ public class Refund {
         }
         status = RefundStatus.PENDING_LICENSE_SUSPENSION;
         suspensionRequestEventId = UUID.randomUUID().toString();
+        licenseSuspensionWaitStartedAt = at;
         return true;
     }
 

@@ -24,7 +24,7 @@
 | `purchase_order` | 단일 업무 엔티티. orderNo·buyerSubject·requestId·상품 스냅샷·listAmount·discountAmount·amount·currency·status·createdAt·updatedAt·requestEventId·paymentResultEventId·paymentResult·승인 진행 식별자(`expiresAt`은 열이 없고 `createdAt + 30분`으로 매번 계산). 선택적 pgPaidAmount·pgDiscountAmount |
 | `order_payment_admission` | 승인 진행 확정의 불변 영수증. admissionId·paymentId·admittedAt·원래 만료 시각 |
 | `order_expired_review_closure`(V31) | 이미 만료된 주문에 늦게 온 운영자 종결 실패(`REVIEW_CLOSED`)의 결과 식별. 주문·eventId 각각 유일, 주문 FK(삭제 cascade 없음). 주문 상태는 EXPIRED 그대로 |
-| `order_refund` | 환불 접수·판정·고객 상태(PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED)·첫 접수 시각·rejectionReason·지급 확인 대기 진입 시각(V32, 대기 중 NOT NULL CHECK·`(status, license_grant_wait_started_at)` 인덱스) |
+| `order_refund` | 환불 접수·판정·고객 상태(PENDING_REVIEW/PROCESSING/COMPLETED/FAILED/REJECTED)·첫 접수 시각·rejectionReason·지급 확인 대기 진입 시각(V32, 대기 중 NOT NULL CHECK·`(status, license_grant_wait_started_at)` 인덱스)·정지/복구/승인 중단 대기 진입 시각(V34, 상태별 NOT NULL CHECK·`(status, 시각)` 인덱스) |
 | `order_license_grant` | 실제 지급 확인 근거 |
 | `order_refund_attempt` | 환불 실행 시도 이력(attemptId·순번·previousAttemptId·PENDING/SUCCEEDED/FAILED·준비 사실·조사 표시) |
 | `order_refund_review_round` | 심사 회차(최초·고객 재심사·관리자 정정)별 판정·감사·명령 영수증·승인 중단 |
@@ -33,8 +33,9 @@
 
 - 시각은 UTC·마이크로초 정밀도, 금액은 정수 long. 식별자 컬럼·유일 제약은 대소문자를 구분한다.
 - `requestEventId`(최초 OrderPlaced.eventId)와 nullable `paymentResultEventId`에 각각 유일 제약을 둔다.
-- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99), V31(만료 주문의 운영자 종결 결과 식별), V32(지급 확인 대기 진입 시각, 결정 125)까지 기존 버전·자료를 보존한다. V32는 이미 대기 중인 옛 행만 기록된 사실로 채운다(자동 허용은 접수 시각, 심사 환불은 현재 회차 승인 시각, 판정 시각이 없는 옛 행은 접수 시각 — 실제 진입보다 늦지 않아 멈춘 건을 숨기지 않는다). 다른 상태는 NULL로 둔다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
+- 마이그레이션은 V10(purchase_order)부터 누적되며, V11(중복 구매 제한), V12~V19(환불 접수·지급 확인·시도·정지 완료·금융 확인·직접 성공·실패/복구·명시적 재시도), V20~V23(최초 판정·재심사·승인 중단·준비 사실), V24(승인 영수증·구매 제한 열), V25(실패 종료 영수증), V26(만료 스캔 인덱스), V27(환불 금액 상세), V28(구매 슬롯·유일 제약 제거), V29(환불의 보관함 반환 표시), V30(이전에 끝난 환불의 `PurchaseRefunded` 채움, 이벤트 ID `purchase-refunded-<refundId>`, 결정 99), V31(만료 주문의 운영자 종결 결과 식별), V32(지급 확인 대기 진입 시각, 결정 125), V33(재발행 기록 `outbox_republish`, 결정 129), V34(정지·복구·승인 중단 대기 진입 시각, 결정 125 범위 확장)까지 기존 버전·자료를 보존한다. V34는 이미 대기 중인 옛 행만 기록된 사실로 채운다. 정지는 재시도면 현재 시도의 `retry_requested_at`, 첫 정지면 정지 요청 Outbox 행의 `created_at`, 그 행이 없으면 `license_grant_wait_started_at`, 그것도 없으면 접수 시각이다(실제 진입보다 늦지 않다). 복구는 현재 시도의 `restoration_requested_at`, 승인 중단은 현재 회차의 `stop_received_at`이며 없으면 접수 시각이다. 다른 상태는 NULL로 둔다. V32는 이미 대기 중인 옛 행만 기록된 사실로 채운다(자동 허용은 접수 시각, 심사 환불은 현재 회차 승인 시각, 판정 시각이 없는 옛 행은 접수 시각 — 실제 진입보다 늦지 않아 멈춘 건을 숨기지 않는다). 다른 상태는 NULL로 둔다. V21은 알려진 최초 판정만 이력으로 복사하고 미기록 판정자를 만들지 않는다. V27의 새 금액 열은 nullable이며 과거 값을 주문 총액·0원으로 채우지 않는다. 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다.
 - V32 적용 절차: V32는 열 추가 → 대기 행 채움 → CHECK·색인 추가를 차례로 실행하고, MySQL DDL은 문장마다 커밋된다. 그래서 모든 Order 인스턴스를 멈춰 진행 중 트랜잭션이 없게 한 뒤 새 버전을 기동해 Flyway가 V32를 실행하게 한다. 옛 버전과 함께 돌리면 채움 뒤 옛 버전이 만든 대기 행의 시각이 NULL이라 CHECK 추가가 실패하거나, CHECK 뒤에는 옛 버전의 환불 접수·승인이 제약 위반으로 실패한다. 부분 실패 복구: `flyway_schema_history`에서 V32 실패 행과 이미 적용된 변경을 확인하고, 적용된 것만 역순으로 되돌린 뒤(`ALTER TABLE order_refund DROP INDEX ix_order_refund_license_grant_wait;`, `ALTER TABLE order_refund DROP CHECK chk_order_refund_license_grant_wait;`, `ALTER TABLE order_refund DROP COLUMN license_grant_wait_started_at;`) V32 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동한다.
+- V34 적용 절차: V32와 같다. 열 추가 → 세 대기 상태 채움 → CHECK·색인 추가를 차례로 실행하고 DDL이 문장마다 커밋되므로, 모든 Order 인스턴스를 멈춘 뒤 새 버전을 기동해 Flyway가 V34를 실행하게 한다. 옛 버전과 함께 돌리면 채움 뒤 옛 버전이 만든 대기 행의 시각이 NULL이라 CHECK 추가가 실패하거나, CHECK 뒤 옛 버전의 지급 확인·재시도·실패 확정·승인 중단이 제약 위반으로 실패한다. 부분 실패 복구: `flyway_schema_history`에서 V34 실패 행과 이미 적용된 변경을 확인하고, 적용된 것만 역순으로 되돌린 뒤(`ALTER TABLE order_refund DROP INDEX ix_order_refund_approval_stop_wait, DROP INDEX ix_order_refund_license_restoration_wait, DROP INDEX ix_order_refund_license_suspension_wait;`, `ALTER TABLE order_refund DROP CHECK chk_order_refund_approval_stop_wait, DROP CHECK chk_order_refund_license_restoration_wait, DROP CHECK chk_order_refund_license_suspension_wait;`, `ALTER TABLE order_refund DROP COLUMN approval_stop_wait_started_at, DROP COLUMN license_restoration_wait_started_at, DROP COLUMN license_suspension_wait_started_at;`, 존재하지 않는 항목은 그 문장에서 뺀다) V34 실패 행을 지우고 다시 기동한다. 채움 `UPDATE`는 새 열에만 쓰므로 열을 지우면 함께 사라진다.
 
 ## API 계약
 
@@ -110,10 +111,10 @@ stateDiagram-v2
 |---|---|---|
 | `PENDING_REVIEW` | PENDING_REVIEW | 4시간 초과 접수·재심사·정정 회차의 관리자 판정 대기. 이용권 유지 |
 | `PENDING_LICENSE_GRANT` | PROCESSING | 허용됐으나 실제 지급 확인 대기. 진입 + 10분부터 게이지·경보 `RefundLicenseGrantsDelayed`(warning)·고객 `processingNotice`(결정 125) |
-| `PENDING_LICENSE_SUSPENSION` | PROCESSING | 정지 요청 발행, 실제 정지 완료 대기 |
+| `PENDING_LICENSE_SUSPENSION` | PROCESSING | 정지 요청 발행, 실제 정지 완료 대기. 진입(지급 확인·재시도) + 10분부터 같은 게이지 `status` 라벨·경보·`LICENSE_SUSPENSION_CONFIRMATION_DELAYED` |
 | `PENDING_PAYMENT_REFUND` | PROCESSING | 실행 요청 저장, Payment 금융 결과 대기 |
-| `PENDING_LICENSE_RESTORATION` | PROCESSING | 검증된 PG 실패 뒤 실제 복구 대기 |
-| `PENDING_APPROVAL_STOP` | PROCESSING | 잘못된 승인 중단 뒤 정지·정정 복구 대기 |
+| `PENDING_LICENSE_RESTORATION` | PROCESSING | 검증된 PG 실패 뒤 실제 복구 대기. 진입(실패 확정) + 10분부터 같은 게이지·경보·`LICENSE_RESTORATION_CONFIRMATION_DELAYED`(돈이 돌아가지 않았고 이용권이 돌아오면 재신청 가능하다는 문구) |
+| `PENDING_APPROVAL_STOP` | PROCESSING | 잘못된 승인 중단 뒤 정지·정정 복구 대기. 진입(중단 접수) + 10분부터 같은 게이지·경보·`APPROVAL_STOP_CONFIRMATION_DELAYED` |
 | `COMPLETED` / `FAILED` / `REJECTED` | 같음 | 금융 완료 / 확정 실패+실제 복구 완료 / 반려(사유 표시) |
 
 | 경합·역순·중복 | 처리 |
@@ -131,7 +132,7 @@ stateDiagram-v2
 - 자동 허용 자격은 최초 Payment 결과 시각부터 정확히 4시간. 판정에 쓰는 접수 시각은 주문 행 잠금 전 요청 수신 시각(`RequestRefund`의 `clock.instant()`)이다. 결과 시각은 Payment 서버 시각이라, 서비스 간 시계 차이로 접수 시각이 확정 시각보다 이른 접수도 자격 안으로 보고 자동 허용한다(결정 29 하위 "기한 시작: Payment 최초 확정"·"기한 판정: 접수 시각 고정", `RefundPolicyTest`). 관리자 API가 PG를 직접 호출하지 않는다.
 - 실패 안내(결정 134): `ReadRefund`가 `FAILED`의 현재 시도 `failureReasonCode`를 `RefundFailureReason`으로 옮기고(`PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`, 결정 128 실패 종결도 같은 `RefundExecutionFailed`라 같은 코드), API가 `failureNotice`(code·"다시 신청하면 환불됩니다")로 보인다. 시도가 없거나 옮길 수 없는 코드는 409. 새 시도는 고객 재신청(`POST …/refund/retries`)으로만 만든다.
 - 환불 상태는 원구매 PAID와 분리 저장한다. 조회는 no-store이며 저장된 근거만 사용하고 조회 시 Payment·PG HTTP를 호출하지 않는다.
-- 지급 확인 대기 감지(결정 125): `ReadLicenseGrantDelays`가 게이지(`RefundLicenseGrantMetrics`, 수집마다 COUNT 1회)를, `ReadRefund`가 고객 안내를 같은 경계로 계산한다. 경계 `stove.order.refund.license-grant-delay`는 `RefundConfiguration`이 바인딩한다. 복구는 [지급·지급 확인 운영 재처리](../../../docs/license-event-recovery-runbook.md).
+- License 단계 대기 감지(결정 125, 정지·복구·승인 중단으로 범위 확장): `ReadLicenseGrantDelays`가 상태별 게이지(`RefundLicenseGrantMetrics`, 이름 그대로 `status` 라벨 4개, 수집마다 상태별 COUNT 1회)를, `ReadRefund`가 고객 안내(`Refund.licenseWaitDelayedSince`, 지금 상태의 진입 시각부터)를 같은 경계로 계산한다. 경계 `stove.order.refund.license-grant-delay`는 `RefundConfiguration`이 바인딩한다. 라벨 없이 쓰던 식(`stove_order_refund_license_grant_delayed > 0`·`sum(...)`)은 그대로 동작한다. 복구는 [운영 재처리](../../../docs/license-event-recovery-runbook.md).
 
 ## 유스케이스 구성
 
@@ -163,4 +164,4 @@ stateDiagram-v2
 - 주문 취소·결과 주입·공통 운영 HTTP API는 없다. 결과는 Payment가 Kafka로 전달한다. Order 단독 검증의 결과 이벤트는 테스트 픽스처이며 실제 PG 승인 증거가 아니다.
 - 독립 사용자 흐름 검증: `python3 tools/verification/verify-order.py`(일곱 앱과 임시 MySQL·Redis·Kafka·MinIO를 기동, 포트 오프셋 `ORDER_TEST_PORT_OFFSET` 기본 30000, 이 실행이 만든 자원만 정리). 공개·주문·소유권·재출시 스냅샷, Kafka 중단 중 Outbox 보존, 결과 픽스처·수수료 공제 결과 DLT, Catalog 중단 중 조회 유지·신규 503, 재시작 후 상태 보존의 6단계를 확인한다.
 - 구 DB 전환: 구 Order 쓰기·릴레이를 멈춘 뒤 `tools/migrations/order/order-transition.sql`을 명시적으로 실행한다. 구 미발행 Outbox는 `order_legacy_outbox_archive`에 보존하고 DEAD로 격리하며, 마지막 `unexpected_legacy_pending`=0을 확인한 뒤 새 릴레이를 켠다. 기본 기동은 이 SQL을 실행하지 않는다.
-- 이벤트 복구: 재시도 소진 DEAD는 원인 해결 뒤 원래 eventId·본문으로 공통 Outbox 복구 절차로 회수한다. 발행은 됐지만 Kafka에서 원본이 사라진 `SENT` `OrderPaid`는 공통 `POST /api/v1/ops/outbox/{eventId}/republish`(ADMIN, 필수 사유, 행 잠금 아래 상태만 `PENDING`)로 같은 ID 재발행하고 실행자·시각·사유·이전 발행 시각을 V33 `outbox_republish`에 같은 트랜잭션으로 남긴다. 재발행된 `LicenseGranted`는 기존 `ApplyLicenseGrant`가 처리하므로 미처리면 `PENDING_LICENSE_GRANT`가 정지 요청으로 이어지고, 이미 처리됐으면 기존 지급 확인 대조로 효과가 없다(결정 129). 허용 이벤트 목록은 `OutboxRepublishTargets` 한 곳에 둔다. 결과 DLT는 원래 주문·요청 연결을 복구한 뒤 원본 이벤트로 재전달하며 새 주문번호·이벤트 ID로 맞추지 않는다. 격리된 구 이벤트는 재투입하지 않는다. 상충하는 최종 결과는 먼저 확정한 결과를 보존하므로 거래 기록을 대조해 조사한다.
+- 이벤트 복구: 재시도 소진 DEAD는 원인 해결 뒤 원래 eventId·본문으로 공통 Outbox 복구 절차로 회수한다. 발행은 됐지만 Kafka에서 원본이 사라진 `SENT` `OrderPaid`는 공통 `POST /api/v1/ops/outbox/{eventId}/republish`(ADMIN, 필수 사유, 행 잠금 아래 상태만 `PENDING`)로 같은 ID 재발행하고 실행자·시각·사유·이전 발행 시각을 V33 `outbox_republish`에 같은 트랜잭션으로 남긴다. 재발행된 `LicenseGranted`는 기존 `ApplyLicenseGrant`가 처리하므로 미처리면 `PENDING_LICENSE_GRANT`가 정지 요청으로 이어지고, 이미 처리됐으면 기존 지급 확인 대조로 효과가 없다(결정 129). 정지·복구·승인 정정 요청(`LicenseSuspensionRequested`·`LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested`)도 같은 API로 재발행하고, License가 재발행한 결과(`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`)는 기존 `ApplyRefundSuspension`·`ApplyRefundRestoration`·`ApplyApprovalCorrection`이 Inbox로 거른다(결정 129 범위 확장). 허용 이벤트 목록은 `OutboxRepublishTargets` 한 곳에 소유 모듈별로 두고, Order는 `stove.messaging.ops.republish-owner=order`로 자기 목록만 쓴다. 결과 DLT는 원래 주문·요청 연결을 복구한 뒤 원본 이벤트로 재전달하며 새 주문번호·이벤트 ID로 맞추지 않는다. 격리된 구 이벤트는 재투입하지 않는다. 상충하는 최종 결과는 먼저 확정한 결과를 보존하므로 거래 기록을 대조해 조사한다.

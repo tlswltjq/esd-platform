@@ -4,12 +4,12 @@ import java.time.Instant;
 
 /**
  * purchaseReturnedToStorage: 확정 실패 복구 때 구매분이 보관함으로 돌아갔는지(결정 98).
- * licenseGrantDelayedSince: 지급 확인 대기가 경계를 넘은 시각(결정 125). 그 밖에는 null.
+ * licenseWaitDelayedSince: 지급 확인·정지·복구·승인 중단 대기가 경계를 넘은 시각(결정 125와 범위 확장). 어느 대기인지는 status로 안다. 그 밖에는 null.
  */
 public record RefundView(String refundId, String orderNo, long amount, String currency,
         RefundStatus status, Instant receivedAt, Instant completedAt, String rejectionReason, String retryableAttemptId,
         RefundReviewRoundView currentReview, Instant reconsiderationDeadlineAt, boolean reconsiderationAvailable, Instant confirmationDelayedSince,
-        RefundAmountView amountDetails, boolean purchaseReturnedToStorage, Instant licenseGrantDelayedSince,
+        RefundAmountView amountDetails, boolean purchaseReturnedToStorage, Instant licenseWaitDelayedSince,
         RefundFailureReason failureReason) {
     public RefundView(String refundId, String orderNo, long amount, String currency,
             RefundStatus status, Instant receivedAt, Instant completedAt, String rejectionReason, String retryableAttemptId,

@@ -9,6 +9,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class RefundRestorationTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant NOW = Instant.parse("2026-10-27T01:00:00.123456Z");
     private Order paid; private Refund refund; private RefundAttempt attempt;
     @Test void failureStartsRestorationAndPreservesTheOriginalEligibilityWithoutPretendingRestorationCompleted() {
@@ -123,7 +124,7 @@ class RefundRestorationTest {
         refund = Refund.request(paid, NOW.minusSeconds(30));
         LicenseGrant grant = new LicenseGrant(id(), NOW.minusSeconds(50), id(), paid.getOrderNo(), paid.getBuyerSubject(),
                 paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation suspension = new LicenseSuspensionConfirmation(id(), NOW.minusSeconds(10), refund.getSuspensionRequestEventId(),
                 refund.getRefundId(), grant.licenseId(), paid.getOrderNo(), paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
         attempt = RefundAttempt.afterSuspension(refund, suspension, NOW.minusSeconds(5)); refund.recordExecution(attempt);

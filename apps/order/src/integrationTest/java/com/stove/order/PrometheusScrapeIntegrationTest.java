@@ -23,6 +23,10 @@ class PrometheusScrapeIntegrationTest extends OrderIntegrationTestBase {
         assertThat(response.getBody()).contains("jvm_memory_used_bytes", "stove_outbox_pending",
                 "stove_outbox_dead_total", "application=\"order\"", "stove_order_expirable",
                 "stove_order_refund_license_grant_delayed");
+        // 결정 125 게이지 이름은 그대로 두고, 대기 상태를 status 라벨로 나눈다(정지·복구·승인 중단 범위 확장).
+        for (String status : List.of("PENDING_LICENSE_GRANT", "PENDING_LICENSE_SUSPENSION", "PENDING_LICENSE_RESTORATION", "PENDING_APPROVAL_STOP")) {
+            assertThat(response.getBody()).containsPattern("stove_order_refund_license_grant_delayed\\{[^}]*status=\"" + status + "\"");
+        }
     }
 
     @Test
