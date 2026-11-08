@@ -173,7 +173,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 2. THE `OrderPlaced`·`OrderExpired` 수신 SHALL 모두 같은 주문별 생명주기 행(`payment_order_lifecycle`)을 먼저 잠그고, Payment가 아직 없어도 최초 만료 근거를 보존한다. 이 행은 Payment 삭제 cascade로 지우지 않는다.
 3. WHEN 만료 뒤 늦은 `OrderPlaced`가 오면 THEN 시스템 SHALL 원래 구매 조건과 대조해 승인·조회 예약 없는 `EXPIRED` Payment를 만들고 기존 만료를 다시 열지 않는다.
 4. WHEN 승인 작업이 없는 `PENDING`이 만료되면 THEN 시스템 SHALL `EXPIRED`로 정리하고 승인 결과·실패 이력 조회 예약을 비우며, 과거 실패 이력·구매 스냅샷은 보존하고 금융 실패·환불·권한 회수 이벤트를 만들지 않는다.
-5. WHEN 접수만 된 `REQUESTED` 승인 작업이 있으면 THEN 작업자 SHALL Order 만료 근거를 확인해 PG 호출 없이 `EXPIRED`로 닫고 암호문을 제거한다. 이미 진행 중인 작업은 수신기가 즉시 종료하지 않고 작업자가 실패·원래 종료 영수증을 확인한다.
+5. WHEN 접수만 된 `REQUESTED` 승인 작업이 있으면 THEN 작업자 SHALL Order 만료 근거를 확인해 PG 호출 없이 `EXPIRED`로 닫고 암호문을 제거한다. 단, 유효한 PG 관측(`latestPgState`)이 있는 작업은 닫기 전에 현재 lease 안에서 PG를 한 번 조회한다(트랜잭션 밖 조회, 결정 126). PAID면 `PAID_WITHOUT_ADMISSION`, 전액 CANCELLED면 `PG_CANCELLED`(R13.8), 아직 PENDING이면 `PG_PENDING_AT_ORDER_EXPIRY`로 송신을 멈춰 `REVIEW_REQUIRED`에 올리고 Payment는 `PENDING`으로 둔다. READY·FAILED면 위와 같이 `EXPIRED`로 닫는다. 조회 장애는 닫지 않고 다음 조회로 미룬다. 조회 실패 기록만 있는 작업은 관측이 없는 것으로 보아 PG 호출 없이 닫는다. 이미 진행 중인 작업은 수신기가 즉시 종료하지 않고 작업자가 실패·원래 종료 영수증을 확인한다.
 6. WHEN 기한 내 실패 종료 영수증이 `PENDING`이었더라도 이후 실제 만료 통지를 받으면 THEN 시스템 SHALL 실패 확인을 끝낸 Payment를 `PENDING`으로 남기지 않되, 최초 종료 영수증·실패 시도는 바꾸지 않는다.
 7. IF 만료와 승인 진행이 모순되거나 확정 금융 결과가 이미 있으면 THEN 시스템 SHALL 추가 POST를 멈추고 GET·기존 근거를 유지하며, 확정 결과를 덮어쓰지 않고 만료 통지와 충돌 표시를 보관한다.
 8. WHEN `PG_INVALID_EVIDENCE`로 송신 중단된 `REVIEW_REQUIRED` 작업이 승인 접수·송신 준비·실패 종료 기록 없이 원구매와 대조된 새 READY를 관측하고 확정 만료 통지가 있으면 THEN 시스템 SHALL 같은 Payment 잠금·현재 lease 안에서 승인 작업·Payment를 `EXPIRED`로 바꾸고 암호문·조회 예약을 제거한다. 시각 경과·조회 장애·금액 불일치·승인 접수 이력이 있으면 이 경로로 닫지 않고, 관측한 `PAID_WITHOUT_ADMISSION` 사유는 덮어쓰지 않는다.
@@ -185,7 +185,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 1. WHEN ADMIN이 승인 보류 목록을 요청하면 THEN 시스템 SHALL REVIEW_REQUIRED만 페이지·사유 필터로 DB에서 조회하고 no-store를 반환한다. 토큰·보호 본문·암호문은 공개하지 않는다.
 2. WHEN 승인 작업자가 PG를 조회하면 THEN 시스템 SHALL 최신 상태와 관측 시각을 inspect 후 별도 잠금 트랜잭션에 저장한다. 최초 보류 시각은 보존하며 기존 행의 알 수 없는 시각은 NULL로 둔다.
 3. WHEN ADMIN이 보류 조사 내용을 기록하면 THEN 시스템 SHALL JWT sub·서버 시각과 500자 이내 내용을 append-only로 저장한다. 입력 본문 신원은 사용하지 않는다.
-4. WHILE 승인 보류가 존재하면 THEN 시스템 SHALL 6개 알려진 사유(`PAID_WITHOUT_ADMISSION`·`PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_CANCELLED`)와 OTHER로 제한한 게이지와 ADMIN API 안내 경보를 제공한다. `PG_CANCELLED`는 R13.8(결정 115)에서 더했다.
+4. WHILE 승인 보류가 존재하면 THEN 시스템 SHALL 7개 알려진 사유(`PAID_WITHOUT_ADMISSION`·`PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_CANCELLED`·`PG_PENDING_AT_ORDER_EXPIRY`)와 OTHER로 제한한 게이지와 ADMIN API 안내 경보를 제공한다. `PG_CANCELLED`는 R13.8(결정 115), `PG_PENDING_AT_ORDER_EXPIRY`는 R11.5(결정 126)에서 더했다.
 5. THE 시스템 SHALL 보류 종결·재시도 간격·고객 메시지·금융 동작 정책을 이 기능에서 정하지 않는다. 종결은 R13(결정 115), 재조회 간격은 R13.10(결정 122)이 정한다.
 
 6. WHEN 상세·조사 이력을 조회하면 THEN 시스템 SHALL 과거에 보류된 승인도 현재 status와 함께 제공하고, 한 번도 보류되지 않은 승인은 404로 거절한다. POST는 현재 REVIEW_REQUIRED에만 허용한다.

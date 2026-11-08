@@ -7,7 +7,7 @@
 
 ```bash
 ./gradlew build         # 결함 테스트 제외하고 전건 통과
-./gradlew defectTest    # 남아 있는 결함만 재현. 현재 2건 ([D-026](#d-026)·[D-044](#d-044))
+./gradlew defectTest    # 남아 있는 결함만 재현. 현재 1건 ([D-026](#d-026))
 ```
 
 ## 빌드 연동
@@ -15,9 +15,9 @@
 - 고치기 전의 재현 테스트는 `@Tag("known-defect")`로 먼저 커밋한다. 루트 `build.gradle`이 `test`·`integrationTest` **두 태스크에 각각** 이 태그를 제외한다(`withType`으로 걸면 `defectTest`까지 걸러져 0건으로 초록이 된다). `integrationTest` 제외는 통합 소스셋에 들어온 [D-026](#d-026) 때문에 추가됐다.
 - `defectTest`는 단위·통합 소스셋을 모두 훑어 `known-defect` 테스트만 돌리고, 루트 태스크가 전 모듈 결과를 합산한다. 0건이면 "통과가 아니라 미실행", 실패가 있으면 "아직 살아 있다", 전부 통과하면 "태그를 떼고 회귀 방어선으로 승격"을 출력한다.
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
-- **현재 남은 결함은 [D-026](#d-026)·[D-044](#d-044) 2건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패, `PaymentApprovalIntegrationTest#aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission`은 수정 정책 결정 대기).
+- **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -68,7 +68,7 @@
 | [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | HTTP 회차 실패·Kafka 지연 | **수정됨** | main CI 42249703875·교차 리뷰 R1 |
 | [D-041](#d-041) | Review 다운로드 테스트가 서명 초 경계에서 조기 만료로 실패 | 초 경계 CI 불안정 | **수정됨** | CI run 42373571409 |
 | [D-042](#d-042) | Catalog 최초 공개 경합에서 같은 Project를 상품 코드 충돌로 오인 | 공개·접수 회차 실패와 계약 위반 오분류 | **수정됨** | CI run 42397961475 |
-| [D-044](#d-044) | 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침 | 금전 손실(주문 없는 청구가 보류·경보 없이 남음) | **재현됨** | G1 조합 조사 코드 판독 뒤 재현 테스트 |
+| [D-044](#d-044) | 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침 | 금전 손실(주문 없는 청구가 보류·경보 없이 남음) | **수정됨** | G1 조합 조사 코드 판독 뒤 재현 테스트 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -555,12 +555,12 @@
 <a id="d-044"></a>
 ## D-044 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침
 
-**상태** 재현됨(수정 정책 결정 대기) · **영향** PG가 나중에 PAID가 되면 돈은 나갔는데 주문은 `EXPIRED`, 결제·승인도 `EXPIRED`로 끝나 보류·게이지·경보·ADMIN 목록 어디에도 보이지 않는다. 고객이 새 주문으로 다시 사면 이중 결제가 된다(결정 114가 막으려던 상황) · **위치** `ResolvePaymentApproval.cycle`의 접수 전 만료 분기(`current.getStatus()==REQUESTED && admittedAt==null && orderExpired` → `approval.expire`·`payment.expireUnpaid`)
-**재현** `PaymentApprovalIntegrationTest#aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission` — known-defect Red 1건, `expected: REVIEW_REQUIRED but was: EXPIRED`. 루프백 PG가 접수 전 `PAY_PENDING`을 돌려주면 승인은 `REQUESTED`·최신 PG 상태 `PENDING`으로 남는다(두 단언 통과). 주문 만료 통지 뒤 PG를 `PAID`로 바꾸고 작업자를 돌리면 PG 조회 0회로 승인 `EXPIRED`가 된다.
+**상태** 수정됨(결정 126, PR #145) · **영향** PG가 나중에 PAID가 되면 돈은 나갔는데 주문은 `EXPIRED`, 결제·승인도 `EXPIRED`로 끝나 보류·게이지·경보·ADMIN 목록 어디에도 보이지 않았다. 고객이 새 주문으로 다시 사면 이중 결제가 된다(결정 114가 막으려던 상황) · **위치** `ResolvePaymentApproval.cycle`의 접수 전 만료 분기(`current.getStatus()==REQUESTED && admittedAt==null && orderExpired` → `approval.expire`·`payment.expireUnpaid`)
+**재현** `PaymentApprovalIntegrationTest#aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission` — 수정 전 known-defect Red, `expected: REVIEW_REQUIRED but was: EXPIRED`. 루프백 PG가 접수 전 `PAY_PENDING`을 돌려주면 승인은 `REQUESTED`·최신 PG 상태 `PENDING`으로 남는다. 주문 만료 통지 뒤 PG를 `PAID`로 바꾸고 작업자를 돌리면 PG 조회 0회로 승인 `EXPIRED`가 됐다. 지금은 태그를 뗀 회귀 테스트이고, 같은 클래스의 `anUnadmittedPendingObservationStillPendingAtOrderExpiryIsHeld`(PENDING 보류)·`anUnadmittedPendingObservationThatIsReadyAtOrderExpiryClosesAfterOneLookup`(READY 닫힘)·`anUnadmittedApprovalWithOnlyAFailedLookupStillClosesOnOrderExpiryWithoutPgTraffic`(관측 없음, PG 0회)가 함께 지킨다.
 
-- **원인** 접수 전 만료 분기가 PG 조회(`inspect`)보다 앞에 있다. 이 분기는 Payment R11.5("접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다")를 구현한 것인데, 한 번 조회해 PG `PENDING`을 이미 본 승인도 같은 `REQUESTED`라 같은 분기를 탄다. 접수 전 PG `PENDING`은 기존 분기(`observed.state()!=READY` → PAID·CANCELLED가 아니면 그냥 반환)에서 `REQUESTED`로 남는다. 닫힌 뒤에는 승인이 종결되어 다시 조회하지 않는다. 웹훅도 `Payment.requestRecheck`가 `PENDING`이 아닌 결제를 무시하고 `ResolvePayment`가 `EXPIRED`를 건너뛰므로 늦은 PAID를 살리지 못한다.
+- **원인** 접수 전 만료 분기가 PG 조회(`inspect`)보다 앞에 있었다. 이 분기는 Payment R11.5("접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다")를 구현한 것인데, 한 번 조회해 PG `PENDING`을 이미 본 승인도 같은 `REQUESTED`라 같은 분기를 탔다. 닫힌 뒤에는 승인이 종결되어 다시 조회하지 않았다. 웹훅도 `Payment.requestRecheck`가 `PENDING`이 아닌 결제를 무시하고 `ResolvePayment`가 `EXPIRED`를 건너뛰므로 늦은 PAID를 살리지 못했다.
+- **수정** [결정 126](decisions.md#pre-admission-pending-expiry). `latestPgState`가 있는 접수 전 `REQUESTED` 승인은 만료로 닫기 전에 `ResolvePaymentApproval.expireAfterLookup`이 PG를 한 번 조회한다. PAID → `PAID_WITHOUT_ADMISSION` 보류, 전액 CANCELLED → `PG_CANCELLED` 보류(결정 115), PENDING → 새 사유 `PG_PENDING_AT_ORDER_EXPIRY` 보류, READY·FAILED → 기존처럼 `EXPIRED`. `latestPgState`가 없으면 R11.5대로 PG 호출 없이 닫는다. 보류 게이지 사유 목록(`ApprovalReviewReason`)과 경보 테스트(`infra/prometheus/tests/approval-review.yml`, warning)에 새 사유를 더했다. Red는 운영 분기를 잠깐 되돌려 3건 실패로 확인했다(결정 102).
 - **실제 PortOne에서 생기는가** 어댑터(`PortOnePaymentApprovalGateway`)는 `PAY_PENDING`을 `PENDING`으로 매핑하고, 접수 전에는 우리가 `confirm`을 보내지 않는다. 그러므로 이 상태는 PG가 우리 confirm 없이 승인 대기로 간 경우다. 실제 PortOne이 그런 응답을 주는지는 저장소에 근거가 없다(payment `tasks.md`의 `[외부 대기]` 항목과 같은 미확인).
-- **수정 범위(미결)** 만료로 닫기 전에 PG를 한 번 조회하면, 관측 결과별 처리는 이미 정해진 규칙을 따른다. PAID는 기존 `PAID_WITHOUT_ADMISSION` 보류이고, READY·FAILED는 지금처럼 닫는다. 전액 CANCELLED는 결정 115·`holdForCancellation`대로 보류하고 운영자 종결을 기다린다(저절로 닫지 않는다. 만료 때 자동 종료하는 예외는 정하지 않았다). 정해지지 않은 것은 둘이다. 첫째, 이 조회를 어떤 `REQUESTED` 승인에 할지다. 이는 R11.5 "PG 호출 없이 닫는다"의 예외 범위를 정하는 일이다. 둘째, 조회 결과가 여전히 `PENDING`일 때 할 일이다(보류로 올림 / 조회만 계속 / 지금처럼 닫음). 둘 다 정책이라 운영 코드는 고치지 않고 재현 테스트만 남겼다. 이 테스트는 PG 관측 이력이 있는 승인을 만료 뒤 다시 조회한다고 기대한다. 그래서 첫째 결정이 나오기 전에는 이 PR을 병합하지 않고, 결정에 맞춰 R11.5와 함께 테스트를 확정한다(교차 리뷰 R1).
 
 ---
 

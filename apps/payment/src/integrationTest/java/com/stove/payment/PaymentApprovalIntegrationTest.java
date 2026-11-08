@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -374,7 +373,7 @@ class PaymentApprovalIntegrationTest {
     }
     @Test void anOrderExpiryReceiptClosesAQueuedUnadmittedApprovalWithoutPgTraffic() {
         Payment payment=purchase(); String command=id(); submit(payment,command); recordExpiry(payment);
-        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED); assertThat(row(command).getLatestPgState()).isNull();
         int before=GETS.get(); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
         assertThat(row(command).getProtectedPayload()).isNull(); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
@@ -477,14 +476,13 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(BODIES).isEmpty(); assertThat(countOutbox()).isZero();
     }
     /**
-     * [D-044] Expected: a purchase the PG approved without our order admission stays held as PAID_WITHOUT_ADMISSION
-     * (decision 114), even when the order expired while the PG still showed PAY_PENDING. Actual: the expiry branch closes
-     * the approval and the payment as EXPIRED without looking up the PG, so the later PAID is never seen. Impact: money is
-     * taken for an expired order with no hold, gauge or alert, and a webhook cannot reopen an EXPIRED payment.
+     * [D-044] Regression (decision 126): a purchase the PG approved without our order admission stays held as
+     * PAID_WITHOUT_ADMISSION (decision 114), even when the order expired while the PG still showed PAY_PENDING. Before the
+     * fix the expiry branch closed the approval and the payment as EXPIRED without looking up the PG, so the later PAID was
+     * never seen and money stayed taken for an expired order with no hold, gauge or alert.
      */
     @Test
-    @Tag("known-defect")
-    @DisplayName("[D-044] 접수 전 PAY_PENDING 뒤 주문이 만료되고 PG가 PAID가 되면 PAID_WITHOUT_ADMISSION 보류로 남아야 한다")
+    @DisplayName("[D-044] 접수 전 PAY_PENDING 뒤 주문이 만료되고 PG가 PAID가 되면 PAID_WITHOUT_ADMISSION 보류로 남는다")
     void aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission() {
         Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
         worker.execute(command);
@@ -495,6 +493,45 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(GETS.get()).isGreaterThan(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    /** [D-044] Decision 126: an unadmitted approval that saw PAY_PENDING and still sees it after the order expiry is held, not closed. */
+    @Test
+    @DisplayName("[D-044] 접수 전 PAY_PENDING 관측 건이 만료 뒤에도 PENDING이면 PG_PENDING_AT_ORDER_EXPIRY 보류로 올린다")
+    void anUnadmittedPendingObservationStillPendingAtOrderExpiryIsHeld() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("PG_PENDING_AT_ORDER_EXPIRY");
+        assertThat(held.getReviewStartedAt()).isNotNull(); assertThat(held.getAdmittedAt()).isNull();
+        assertThat(held.getProtectedPayload()).isNotNull(); assertThat(held.getNextAt()).isNotNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+        // The hold keeps looking up the PG (decision 122): a later PAID becomes the money-taken hold, not a silent close.
+        STATES.put(payment.getPaymentId(),"PAID"); advance(600); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(BODIES).isEmpty();
+    }
+    /** [D-044] Decision 126: a still-unadmitted approval whose PG turned READY again closes as before, after one lookup. */
+    @Test void anUnadmittedPendingObservationThatIsReadyAtOrderExpiryClosesAfterOneLookup() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        recordExpiry(payment); STATES.put(payment.getPaymentId(),"READY"); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(row(command).getProtectedPayload()).isNull(); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    /** [D-044] Decision 126 keeps R11.5 for approvals with no valid PG observation: a failed lookup alone is not an observation. */
+    @Test void anUnadmittedApprovalWithOnlyAFailedLookupStillClosesOnOrderExpiryWithoutPgTraffic() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); PG_DOWN.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED); assertThat(row(command).getLatestPgState()).isNull();
+        PG_DOWN.set(false); recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
     }
     @Test void aConflictingExpiryAndAdmissionStopFurtherPostsWhileLookupContinues() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
