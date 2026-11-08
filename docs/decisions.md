@@ -1214,7 +1214,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 목록에 마지막 조사자·시각만 보여 줘")
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 환불 지연 목록(`GET /api/v1/admin/refund-delays`)과 승인 보류 목록 항목에 조사 건수(`investigationCount`), 마지막 조사자 ADMIN sub(`lastInvestigatedBy`), 마지막 조사 시각(`lastInvestigatedAt`)을 보인다. 기존 조사 기록을 읽기만 하고 새 상태·테이블·배정 API는 만들지 않는다. 담당 배정은 범위 밖으로 두고 모든 ADMIN이 모든 건을 조사·종결한다. 운영자가 동시에 여러 명 일하게 되거나 G6 운영 규모를 잴 때 다시 정한다. 경보를 사람에게 전달하는 경로(Alertmanager·알림 채널)는 이 결정과 별개다.
 - 구분: 추천 수용
-- 결과: PR 번호는 이 문서 PR, 구현은 후속 PR
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
 
 ---
 
