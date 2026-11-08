@@ -68,7 +68,7 @@ DLT 재투입과 DEAD 재큐잉을 쓸 수 없을 때만 쓴다. 발행은 성�
 재발행 전 확인 순서:
 
 1. 소유 모듈 Outbox에 원래 행이 있고 `status = SENT`다. `PENDING`이면 발행을 기다리고, `DEAD`면 위 `requeue`를 쓴다. 행이 없으면 재발행할 수 없으며 1절 마지막 행(조사 대상)으로 간다.
-2. 받는 쪽에 그 eventId의 처리 기록이 없다. `OrderPaid`는 License `processed_event`(`license-grant` 그룹)·구매 근거, `LicenseGranted`는 Order `processed_event`(`order-license-grant` 그룹)·`order_license_grant`다. 이미 있으면 재발행해도 효과가 없으므로 실행하지 않고 다른 원인을 찾는다.
+2. 받는 쪽에 그 eventId의 처리 기록이 없다. `OrderPaid`는 License `processed_event`(`license-paid-order` 그룹)·구매 근거, `LicenseGranted`는 Order `processed_event`(`order-license-grant` 그룹)·`order_license_grant`다. 이미 있으면 재발행해도 효과가 없으므로 실행하지 않고 다른 원인을 찾는다.
 3. 받는 쪽 DLT에 그 원본이 없다. 남아 있으면 DLT 재투입을 먼저 검토한다.
 4. Order 환불이 그 주문의 `PENDING_LICENSE_GRANT`에 있다(지급 확인 대기에서 왔을 때).
 
