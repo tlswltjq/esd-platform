@@ -301,6 +301,22 @@ class PortOneRefundCancellationGatewayTest {
         }
     }
 
+    /**
+     * PR #168 R4: the error body parser keeps Jackson's 20,000,000-character string limit. A type at the limit is a formal
+     * rejection kept whole; one character more cannot be parsed and stays an unconfirmed (malformed) body, as before.
+     */
+    @Test void aFormalRejectionTypeAtTheParserLimitIsKeptWholeAndOneCharacterMoreIsUnconfirmed() {
+        String atLimit = "가".repeat(20_000_000);
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.CONFLICT).body("{\"type\":\"" + atLimit + "\"}").contentType(MediaType.APPLICATION_JSON));
+        RefundCancellationDispatch dispatch = gateway.send(permission, purchase, body());
+        assertThat(dispatch.rejection()).isEqualTo(new PgCancellationRejection(409, atLimit));
+        server.verify(); server.reset(); expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.CONFLICT).body("{\"type\":\"" + atLimit + "가\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgUnavailable.class);
+        server.verify();
+    }
+
     /** Decision 133 keeps an outstanding key, throttling, a request timeout and every 5xx unconfirmed even with a typed body. */
     @Test void typedThrottlingTimeoutAndServerErrorsRemainUnconfirmed() {
         for (Object[] error : List.of(new Object[] {429, "TOO_MANY_REQUESTS"}, new Object[] {408, "REQUEST_TIMEOUT"},

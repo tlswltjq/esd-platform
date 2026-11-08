@@ -77,6 +77,8 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
         assertThat(list.status()).isEqualTo(200); assertThat(list.cacheControl()).isEqualTo("no-store");
         assertThat(list.data().path("totalElements").asInt()).isEqualTo(2);
         assertThat(list.data().path("content").get(0).path("holdId").asText()).isEqualTo(first.hold().getHoldId());
+        assertThat(list.data().path("content").get(0).path("rejectionTypePreview").isNull()).isTrue();
+        assertThat(list.data().path("content").get(0).path("rejectionTypeLength").isNull()).isTrue();
         assertThat(http("GET", ROOT + "?size=1&page=1", null, admin()).data().path("content").get(0).path("holdId").asText()).isEqualTo(second.hold().getHoldId());
         Response detail = detail(second);
         assertThat(detail.status()).isEqualTo(200); assertThat(detail.cacheControl()).isEqualTo("no-store");
@@ -100,7 +102,10 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
         JsonNode listed = list.data().path("content").get(0);
         assertThat(listed.path("holdId").asText()).isEqualTo(fixture.hold().getHoldId());
         assertThat(listed.path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
-        assertThat(listed.path("rejectionStatus").asInt()).isEqualTo(409); assertThat(listed.path("rejectionType").asText()).isEqualTo(type);
+        // PR #168 R5: the list carries only a bounded preview and the original length; the full type is in the detail.
+        assertThat(listed.path("rejectionStatus").asInt()).isEqualTo(409); assertThat(listed.has("rejectionType")).isFalse();
+        assertThat(listed.path("rejectionTypePreview").asText()).isEqualTo(type.substring(0, 200));
+        assertThat(listed.path("rejectionTypeLength").asLong()).isEqualTo(type.length());
         Response detail = detail(fixture);
         assertThat(detail.data().path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
         assertThat(detail.data().path("rejectionStatus").asInt()).isEqualTo(409);
