@@ -2,6 +2,7 @@ package com.stove.payment.config;
 
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.domain.RefundLookupInterval;
 import com.stove.payment.core.port.PaymentTracing;
 import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReconcileRefundPayment;
@@ -42,10 +43,15 @@ public class RefundLookupConfiguration {
     @Bean ResolveRefundLookup resolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions,
             ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock refundReceptionClock,
             @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone,
-            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing) {
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing, RefundLookupProperties properties) {
         portone.requireConfigured();
         return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lookupLease(portone), 20,
-                traceContexts, tracing);
+                traceContexts, tracing, lateInterval(properties));
+    }
+
+    /** Decisions 122·128: the lookup delay past the original window and after a failure has its own keys, capped at 10 minutes. */
+    static RefundLookupInterval lateInterval(RefundLookupProperties properties) {
+        return new RefundLookupInterval(Duration.ofMillis(properties.lateInitialMs()), Duration.ofMillis(properties.lateMaxMs()));
     }
 
     /** One PortOne GET plus margin. The operator closure (decision 127) holds the same lease while it re-inspects the PG. */

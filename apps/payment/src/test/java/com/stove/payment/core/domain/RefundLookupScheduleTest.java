@@ -1,6 +1,7 @@
 package com.stove.payment.core.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -35,8 +36,59 @@ class RefundLookupScheduleTest {
         Instant resumed = FIRST.plusSeconds(14400);
         RefundLookupClaim claim = schedule.claim(token(), resumed, LEASE);
         schedule.finish(claim, FIRST, resumed);
-        assertThat(schedule.getNextAt()).isEqualTo(resumed.plusSeconds(60));
+        // Four hours after preparation the original window has passed: the capped post-window delay (decision 122 formula).
+        assertThat(schedule.getNextAt()).isEqualTo(resumed.plusSeconds(600));
         assertThat(schedule.getStage()).isEqualTo(3);
+    }
+
+    /** Past the 3-hour window: min(max, max(initial, at - firstPreparedAt)); inside it the 60-second step is unchanged. */
+    @Test void pastTheWindowTheDelayIsTheElapsedTimeBetweenTheInitialDelayAndTheCap() {
+        RefundLookupInterval interval = new RefundLookupInterval(Duration.ofSeconds(60), Duration.ofMinutes(10));
+        RefundLookupSchedule inside = prepared();
+        Instant last = FIRST.plusSeconds(10799);
+        RefundLookupClaim claim = inside.claim(token(), last, LEASE);
+        inside.finish(claim, FIRST, last, interval, false);
+        assertThat(inside.getNextAt()).isEqualTo(last.plusSeconds(60));
+        Instant edge = FIRST.plusSeconds(10800);
+        RefundLookupSchedule past = prepared();
+        past.finish(past.claim(token(), edge, LEASE), FIRST, edge, interval, false);
+        assertThat(past.getNextAt()).isEqualTo(edge.plusSeconds(600));
+        // A lowered cap (and initial) is honoured.
+        RefundLookupSchedule lowered = prepared();
+        lowered.finish(lowered.claim(token(), edge, LEASE), FIRST, edge, new RefundLookupInterval(Duration.ofSeconds(30), Duration.ofSeconds(90)), false);
+        assertThat(lowered.getNextAt()).isEqualTo(edge.plusSeconds(90));
+    }
+
+    /** Decision 128: a failure confirmed inside the window is watched at the low frequency, not every minute. */
+    @Test void aFailedExecutionUsesTheLowFrequencyDelayEvenInsideTheWindow() {
+        RefundLookupInterval interval = new RefundLookupInterval(Duration.ofSeconds(60), Duration.ofMinutes(10));
+        RefundLookupSchedule early = prepared();
+        Instant soon = FIRST.plusSeconds(20);
+        early.finish(early.claim(token(), soon, LEASE), FIRST, soon, interval, true);
+        assertThat(early.getNextAt()).as("max(initial, 20s)").isEqualTo(soon.plusSeconds(60));
+        RefundLookupSchedule later = prepared();
+        Instant fiveMinutes = FIRST.plusSeconds(300);
+        later.finish(later.claim(token(), fiveMinutes, LEASE), FIRST, fiveMinutes, interval, true);
+        assertThat(later.getNextAt()).as("the elapsed 300s").isEqualTo(fiveMinutes.plusSeconds(300));
+    }
+
+    /** A webhook wake is not bound by the long post-window delay. */
+    @Test void aWebhookWakeIsClaimableImmediatelyAfterALongDelay() {
+        RefundLookupSchedule schedule = prepared();
+        Instant edge = FIRST.plusSeconds(10800);
+        schedule.finish(schedule.claim(token(), edge, LEASE), FIRST, edge, RefundLookupInterval.DEFAULT, false);
+        assertThat(schedule.getNextAt()).isEqualTo(edge.plusSeconds(600));
+        assertThat(schedule.claim(token(), edge.plusSeconds(1), LEASE)).isNull();
+        schedule.wake(edge.plusSeconds(1));
+        assertThat(schedule.claim(token(), edge.plusSeconds(1), LEASE)).isNotNull();
+    }
+
+    @Test void theIntervalCapCannotExceedTenMinutes() {
+        assertThat(RefundLookupInterval.DEFAULT).isEqualTo(new RefundLookupInterval(Duration.ofSeconds(60), Duration.ofMinutes(10)));
+        assertThatThrownBy(() -> new RefundLookupInterval(Duration.ofSeconds(60), Duration.ofMinutes(10).plusMillis(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new RefundLookupInterval(Duration.ofSeconds(120), Duration.ofSeconds(60))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new RefundLookupInterval(Duration.ZERO, Duration.ofSeconds(60))).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test void slowHttpDoesNotProduceACatchUpBurst() {
