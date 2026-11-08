@@ -1225,6 +1225,15 @@
 - 구분: 추천 수용
 - 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 결정 123 구현 PR
 
+<a id="refund-formal-rejection-stop"></a>
+## 133. PortOne이 환불 취소를 형식을 갖춰 거절한 4xx는 재송신하지 않고 바로 자동 송신을 멈춘다
+- 문제: Payment의 환불 취소(`POST /payments/{id}/cancel`, 같은 `Idempotency-Key`·처음 저장한 본문)는 403·400 `INVALID_REQUEST`(중단)와 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`(잔액 변화 차단)만 바로 멈추고, 그 밖의 일반 409·다른 타입의 400·5xx는 모두 미확정으로 보고 최초 준비 후 3시간까지 다시 보낸다(R7.11·R7.15). 예: 11:00:06 취소 POST가 409 `PAYMENT_NOT_PAID`(예시 타입)를 받으면 같은 요청을 1분마다 14:00:06까지 약 180번 보내고 매번 같은 409를 받는다. 그동안 보유권은 정지돼 있고 고객은 `PROCESSING`만 보며, 운영자도 [결정 128](#refund-failure-closure) 실패 종결이 "자동 송신이 멈춘 실행"만 대상이라 3시간이 지나야 손댈 수 있다. 같은 키라 돈이 두 번 움직일 위험은 없다. 승인 쪽 confirm의 400·일반 409는 이미 바로 `PG_REQUEST_REJECTED` 보류다([결정 114](#approval-review-hold-closure)).
+- 선택지: A 지금처럼 3시간 재송신 / B 정상 JSON에 type이 있는 400·409·그 밖 4xx는 403처럼 바로 자동 POST를 멈추고 새 중단 사유를 남긴다(401·404는 [결정 29](#full-refund-policy)대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정 유지, 잔액 변화 409는 지금대로) / C 영구로 확인된 오류 타입 목록만 멈춤(실제 타입 목록은 전용 테스트 가맹점 뒤라 그 전까지 사실상 A) / D B + 502 `PG_PROVIDER`도 멈춤 (추천: B — 형식을 갖춘 4xx는 PortOne이 요청을 받아 판단한 응답이라 같은 키·본문으로는 결과가 바뀌지 않는다. 3시간 안 재개와 계속되는 조회로 잘못 멈춰도 되돌리기 쉽고, 승인 쪽 결정 114와 기준이 같아지며, 멈춘 뒤 처리는 결정 128을 그대로 쓴다. D의 502는 하위 PG 일시 장애와 구분되지 않을 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 형식 갖춘 4xx는 바로 멈춰")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 환불 취소 POST가 정상 JSON에 type이 있는 4xx(400·409·그 밖)를 받으면 자동 POST를 멈추고 새 중단 사유(가칭 `PG_REQUEST_REJECTED`)와 응답 상태·type을 남긴다. 401·404는 결정 29대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정으로 계속 재송신, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 지금대로 잔액 변화 차단, 403·`INVALID_REQUEST`는 지금대로다. 운영자는 3시간 안에서 재개(R7.16)하거나 언제든 결정 128 실패 종결을 쓴다. 조회는 계속해 늦은 성공을 놓치지 않는다. R7.11·R7.15 문구를 고친다. 502 `PG_PROVIDER`의 분류와 실제 PortOne 오류 타입 확인은 전용 테스트 가맹점 뒤로 미룬다. `INVALID_REQUEST` 본문은 같은 시도 안에서 고치지 않는다(R4.4·R7.10, 같은 키에 다른 본문은 멱등 충돌). 원인을 고친 뒤 결정 128 실패 종결 → 고객 재시도(새 attemptId·본문·3시간 창)로 잇고 운영 절차서에 적는다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
