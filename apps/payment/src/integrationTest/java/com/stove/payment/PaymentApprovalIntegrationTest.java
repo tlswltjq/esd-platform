@@ -258,6 +258,32 @@ class PaymentApprovalIntegrationTest {
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(countOutbox()).isZero();
         assertThat(submit(payment,id()).status()).isEqualTo(409);
     }
+    /** Decision 122: a held approval is looked up again after min(10 min, max(5 s, time held)); a legacy hold uses the cap. */
+    @Test void aHeldApprovalIsLookedUpLessOftenTheLongerItHasBeenHeld() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); REJECT.set(true); worker.execute(command);
+        Instant held=row(command).getReviewStartedAt();
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(5));
+        TIME.set(held.plusSeconds(60)); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isGreaterThan(before); assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(120));
+        TIME.set(held.plusSeconds(119)); before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(120));
+        TIME.set(held.plusSeconds(3600)); worker.execute(command);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(3600+600));
+        jdbc.update("UPDATE payment_approval SET review_started_at=NULL WHERE approval_id=?",command);
+        TIME.set(held.plusSeconds(4200)); worker.execute(command);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(4200+600));
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED); assertThat(BODIES).hasSize(1);
+    }
+    /** Decision 122 leaves PAYMENT_RETRY_MS alone: an approval that is not held keeps the 5 s lookup however long it waits. */
+    @Test void anUnheldApprovalKeepsTheGeneralRetryDelayHoweverLongItWaits() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        assertThat(row(command).getNextAt()).isEqualTo(TIME.get().plusSeconds(5));
+        PG_DOWN.set(true); TIME.set(TIME.get().plusSeconds(3600)); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED); assertThat(row(command).getReviewStartedAt()).isNull();
+        assertThat(row(command).getNextAt()).isEqualTo(TIME.get().plusSeconds(5));
+    }
 
     @Test void aPlatformRestrictionWaitsWithoutPostingAndResumesTheSameUnexpiredApprovalAfterRelease() {
         Payment payment=purchase(); String command=id(); submit(payment,command); SALE_RESTRICTED.set(true);
@@ -375,7 +401,10 @@ class PaymentApprovalIntegrationTest {
         WRONG_AMOUNT.set(false); TIME.set(payment.getOrderOccurredAt().plusSeconds(1801)); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        // Held for about 30 minutes, the next lookup comes 10 minutes later (decision 122), not after the 5 s retry delay.
         recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        advance(595); worker.execute(command);
         PaymentApproval closed=row(command); Instant resolvedAt=closed.getResolvedAt();
         assertThat(closed.getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
         assertThat(closed.getAdmittedAt()).isNull(); assertThat(closed.getFirstPreparedAt()).isNull();

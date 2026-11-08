@@ -6,6 +6,7 @@ import com.stove.payment.adapter.order.HttpOrderPaymentAdmissions;
 import com.stove.payment.adapter.pg.AdmittedPortOnePgGateway;
 import com.stove.payment.adapter.pg.PortOnePaymentApprovalGateway;
 import com.stove.payment.core.domain.ApprovalClosureRepository;
+import com.stove.payment.core.domain.ApprovalReviewRequeryInterval;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -67,7 +68,12 @@ public class PaymentApprovalConfiguration {
             Clock refundReceptionClock,PortOneProperties pg,PaymentApprovalProperties properties,PaymentProcessingProperties processing,
             PlatformTransactionManager transactions,PaymentOrderLifecycleRepository lifecycle) {
         return new ResolvePaymentApproval(payments,approvals,orders,gateway,protection,resolve,refundReceptionClock,
-                approvalLease(pg,properties),Duration.ofMillis(processing.retryDelayMs()),processing.batchSize(),transactions,lifecycle);
+                approvalLease(pg,properties),Duration.ofMillis(processing.retryDelayMs()),reviewRequeryInterval(processing),
+                processing.batchSize(),transactions,lifecycle);
+    }
+    /** Decision 122: a held approval has its own growing lookup delay; the general retry delay stays as it is. */
+    private static ApprovalReviewRequeryInterval reviewRequeryInterval(PaymentProcessingProperties processing) {
+        return new ApprovalReviewRequeryInterval(Duration.ofMillis(processing.reviewRetryInitialMs()),Duration.ofMillis(processing.reviewRetryMaxMs()));
     }
     /** The operator closure takes the worker's lease (decision 115), so both use one lease length. */
     @Bean CloseApprovalReview closeApprovalReview(PaymentRepository payments,PaymentApprovalRepository approvals,ApprovalClosureRepository closures,

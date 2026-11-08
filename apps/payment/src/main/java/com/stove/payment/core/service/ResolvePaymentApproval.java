@@ -6,6 +6,7 @@ import com.stove.payment.core.domain.OrderAdmissionReceipt;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.ApprovalObservation;
 import com.stove.payment.core.domain.ApprovalPostRejected;
+import com.stove.payment.core.domain.ApprovalReviewRequeryInterval;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderLifecycle;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -45,16 +46,18 @@ public class ResolvePaymentApproval {
     private final Clock clock;
     private final Duration lease;
     private final Duration delay;
+    private final ApprovalReviewRequeryInterval reviewInterval;
     private final int batchSize;
     private final TransactionTemplate transaction;
 
     public ResolvePaymentApproval(PaymentRepository payments, PaymentApprovalRepository approvals, OrderPaymentAdmissions orders,
             PgPaymentApprovalGateway gateway, ApprovalPayloadProtection protection, ResolvePayment resolve, Clock clock,
-            Duration lease, Duration delay, int batchSize, PlatformTransactionManager transactions,PaymentOrderLifecycleRepository lifecycle) {
-        if (lease==null || lease.isNegative() || lease.isZero() || delay==null || delay.isNegative() || delay.isZero() || batchSize<1)
+            Duration lease, Duration delay, ApprovalReviewRequeryInterval reviewInterval, int batchSize, PlatformTransactionManager transactions,
+            PaymentOrderLifecycleRepository lifecycle) {
+        if (lease==null || lease.isNegative() || lease.isZero() || delay==null || delay.isNegative() || delay.isZero() || reviewInterval==null || batchSize<1)
             throw new IllegalArgumentException("Bounded approval scheduling is required");
         this.lifecycle=lifecycle; this.payments=payments; this.approvals=approvals; this.orders=orders; this.gateway=gateway;
-        this.protection=protection; this.resolve=resolve; this.clock=clock; this.lease=lease; this.delay=delay; this.batchSize=batchSize;
+        this.protection=protection; this.resolve=resolve; this.clock=clock; this.lease=lease; this.delay=delay; this.reviewInterval=reviewInterval; this.batchSize=batchSize;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public void execute() {
@@ -82,7 +85,7 @@ public class ResolvePaymentApproval {
         catch (RuntimeException unavailable) {
             log.warn("Approval remains unconfirmed: id={}, errorType={}",id,unavailable.getClass().getSimpleName());
         } finally {
-            locked(id,(payment,approval)->approval.finish(token,now(),now().plus(delay)));
+            locked(id,(payment,approval)->{ Instant at=now(); return approval.finish(token,at,nextCheck(approval,at)); });
         }
     }
     private void cycle(String id, String token, PaymentApproval current) {
@@ -209,6 +212,11 @@ public class ResolvePaymentApproval {
             }
             return null;
         });
+    }
+    /** A held approval waits longer the longer it has been held (decision 122); every other approval keeps the retry delay. */
+    private Instant nextCheck(PaymentApproval approval,Instant at) {
+        if (approval.getStatus()!=PaymentApprovalStatus.REVIEW_REQUIRED) return at.plus(delay);
+        return at.plus(reviewInterval.after(approval.getReviewStartedAt(),at));
     }
     private boolean orderExpired(String orderNo) {
         return lifecycle.findById(orderNo).map(PaymentOrderLifecycle::expired).orElse(false);
