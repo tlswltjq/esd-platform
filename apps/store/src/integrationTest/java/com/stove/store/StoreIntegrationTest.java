@@ -23,8 +23,10 @@ import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.test.PausePoints;
 import com.stove.common.testcontainers.InfraContainers;
+import com.stove.common.testcontainers.SharedContainers;
 import com.stove.common.web.error.BusinessException;
 import com.stove.store.api.listener.CatalogProductMapper;
+import com.stove.store.core.domain.StoreProduct;
 import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.port.CatalogProducts;
 import com.stove.store.core.service.ApplyCatalogProduct;
@@ -32,11 +34,17 @@ import com.stove.store.core.service.ReadStoreProduct;
 import com.stove.store.core.service.ReconcileCatalogProduct;
 import com.stove.store.core.service.SearchStoreProducts;
 import com.stove.store.core.service.SynchronizeCatalogProducts;
+import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,6 +71,8 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -89,6 +99,8 @@ class StoreIntegrationTest {
     @Autowired KafkaListenerEndpointRegistry listeners;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
+    @Autowired EntityManager entityManager;
     @MockitoBean CatalogProducts catalog;
     @LocalServerPort int port;
 
@@ -248,6 +260,131 @@ class StoreIntegrationTest {
                     assertThat(read.execute("game-1")).isEqualTo(latest));
             assertThat(products.count()).isEqualTo(1);
         } finally { gate.release(); listeners.stop(); }
+    }
+    @Test
+    @DisplayName("[D-047] 이벤트 최초 삽입 flush가 MySQL 교착(1213) 희생자가 되어도 새 트랜잭션에서 재시도해 수렴한다")
+    void eventInsertDeadlockVictimRetries() throws Exception {
+        // 기대: 같은 상품을 동시에 처음 넣다 한쪽이 flush에서 교착 희생자가 되면 재시도해 둘 다 성공.
+        // 실제(의심): 1213이 jakarta.persistence 예외로 와 재시도 catch를 지나쳐 실패. 영향: 이벤트 반영 실패.
+        long deadlocksBefore = deadlocks();
+        insertBothWhileIdIsHeld(() -> { apply.execute(product(1, 1, "First", 1000)); return null; },
+                () -> { apply.execute(product(1, 2, "Second", 2000)); return null; });
+        assertThat(deadlocks()).as("교착이 실제로 났다").isGreaterThan(deadlocksBefore);
+        assertThat(read.execute("game-1").contentVersion()).isEqualTo(2);
+        assertThat(products.count()).isEqualTo(1);
+    }
+    @Test
+    @DisplayName("[D-047] HTTP 정본 대조의 최초 삽입 flush가 MySQL 교착(1213) 희생자가 되어도 재시도해 수렴한다")
+    void reconciliationInsertDeadlockVictimRetries() throws Exception {
+        // 기대: 동시 대조 두 회차가 같은 상품을 처음 넣다 한쪽이 교착 희생자가 되면 재시도해 둘 다 성공.
+        // 실제(의심): 1213이 재시도 catch를 지나쳐 대조 회차 실패. 영향: HTTP 자동 복구 회차 실패.
+        CatalogProductSnapshot latest = product(1, 2, "Latest", 2000);
+        when(catalog.detail("game-1")).thenReturn(latest);
+        long deadlocksBefore = deadlocks();
+        insertBothWhileIdIsHeld(() -> reconcile.execute("game-1"), () -> reconcile.execute("game-1"));
+        assertThat(deadlocks()).as("교착이 실제로 났다").isGreaterThan(deadlocksBefore);
+        assertThat(read.execute("game-1")).isEqualTo(latest);
+        assertThat(products.count()).isEqualTo(1);
+    }
+    /**
+     * MySQL의 세 세션 중복 삽입 교착을 flush에서 만든다. 두 작업을 "없음" 확인(lockById·findByProductCode) 뒤에
+     * 세운 사이, 세 번째 트랜잭션이 같은 상품 ID를 삽입한 채 커밋하지 않는다. 두 작업의 INSERT는 그 행의 공유
+     * 잠금을 기다리고, 세 번째가 롤백되면 둘 다 공유 잠금을 얻은 채 배타 잠금을 요청해 교착이 난다. InnoDB는
+     * 한쪽을 1213으로 되돌린다(READ COMMITTED라 "없음" 확인은 틈 잠금을 남기지 않는다).
+     */
+    private void insertBothWhileIdIsHeld(Callable<?> first, Callable<?> second) throws Exception {
+        CatalogProductSnapshot holder = withCode(product(1, 9, "Holder", 1), "holder-1");
+        // 한 지점에는 하나만 세울 수 있어 두 작업을 "없음" 확인의 서로 다른 단계 뒤에 세운다. 둘 다 아직 INSERT 전이다.
+        PausePoints.Gate firstGate = POINTS.arm("StoreProductRepository.lockById", "insert-first");
+        PausePoints.Gate secondGate = POINTS.arm("StoreProductRepository.findByProductCode", "insert-second");
+        PausePoints.Run<?> firstRun = PausePoints.start("insert-first", first);
+        PausePoints.Run<?> secondRun = PausePoints.start("insert-second", second);
+        CountDownLatch held = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService holderThread = Executors.newSingleThreadExecutor();
+        Future<?> holding = holderThread.submit(() -> {
+            awaitBothPaused(firstGate, secondGate);
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                entityManager.persist(StoreProduct.create(holder));
+                entityManager.flush();
+                held.countDown();
+                awaitLatch(release);
+                status.setRollbackOnly();
+            });
+        });
+        Throwable failure = null;
+        try {
+            assertThat(held.await(30, TimeUnit.SECONDS)).as("같은 ID를 잡은 삽입").isTrue();
+            firstGate.release();
+            secondGate.release();
+            Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> lockWaits() >= 2);
+        } catch (Throwable thrown) {
+            failure = thrown;
+        }
+        // 실패해도 세 작업을 모두 풀고 끝날 때까지 기다린다. 남은 작업이 다음 테스트의 deleteAll과 겹치지 않게 한다.
+        firstGate.release();
+        secondGate.release();
+        release.countDown();
+        failure = settle(failure, () -> holding.get(30, TimeUnit.SECONDS));
+        failure = settle(failure, firstRun::join);
+        failure = settle(failure, secondRun::join);
+        holderThread.shutdownNow();
+        if (!holderThread.awaitTermination(30, TimeUnit.SECONDS)) {
+            failure = settle(failure, () -> { throw new IllegalStateException("같은 ID를 잡은 삽입 스레드가 끝나지 않았다"); });
+        }
+        if (failure instanceof Exception exception) throw exception;
+        if (failure instanceof Error error) throw error;
+    }
+    /** 앞선 실패를 보존하고, 뒤 실패는 그 실패에 덧붙인다. 성공이면 앞선 실패를 그대로 돌려준다. */
+    private static Throwable settle(Throwable failure, Callable<?> step) {
+        try {
+            step.call();
+            return failure;
+        } catch (Throwable thrown) {
+            if (failure == null) return thrown;
+            failure.addSuppressed(thrown);
+            return failure;
+        }
+    }
+    /** 두 작업이 모두 "없음" 확인 뒤 멈춘 다음에 같은 ID를 잡는다. */
+    private static void awaitBothPaused(PausePoints.Gate firstGate, PausePoints.Gate secondGate) {
+        try {
+            firstGate.awaitArrival();
+            secondGate.awaitArrival();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
+        }
+    }
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            if (!latch.await(60, TimeUnit.SECONDS)) throw new IllegalStateException("해제 신호가 오지 않았다");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
+        }
+    }
+    private static CatalogProductSnapshot withCode(CatalogProductSnapshot s, String code) {
+        return new CatalogProductSnapshot(s.productId(), code, s.title(), s.shortDescription(), s.thumbnailUrl(),
+                s.price(), s.currency(), s.publishedAt(), s.content(), s.videoUrl(), s.contentVersion(),
+                s.buildVersion(), s.updatedAt(), s.saleStatus(), s.catalogVersion(), s.listed(), s.genres());
+    }
+    /** 잠금 대기·교착 수는 서버 전체 표라 PROCESS 권한이 있는 root로 읽는다. */
+    private static long lockWaits() throws Exception {
+        return rootQuery("SELECT COUNT(*) FROM performance_schema.data_lock_waits");
+    }
+    private static long deadlocks() throws Exception {
+        return rootQuery("SELECT SUM_ERROR_RAISED FROM performance_schema.events_errors_summary_global_by_error"
+                + " WHERE ERROR_NUMBER = 1213");
+    }
+    private static long rootQuery(String sql) throws Exception {
+        try (Connection root = DriverManager.getConnection(SharedContainers.MYSQL.getJdbcUrl(), "root",
+                SharedContainers.MYSQL.getPassword());
+             Statement statement = root.createStatement();
+             ResultSet result = statement.executeQuery(sql)) {
+            result.next();
+            return result.getLong(1);
+        }
     }
     @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);

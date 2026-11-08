@@ -12,13 +12,13 @@
 - [x] 무상태화: 업무 DB·MongoDB·Kafka 소비/발행·Inbox·Outbox·사본 제거, 외부 이벤트 없음 — 2026-10-18
 - [x] 상품 다운로드 제한 반영: Catalog 내부 `403`·`PRODUCT_DOWNLOAD_RESTRICTED` 구분 403, 그 밖 내부 403·오류 503 — 2026-11-02 ([결정 50](../../../docs/decisions.md#independent-download-restriction))
 - [x] 통합 검증: 실제 HTTP·JWT·MinIO 단위 93건·통합 8건, 실제 열 앱 15단계, 운영 JAR MongoDB/Kafka/Messaging/JPA 의존성 부재 — 2026-10-18 (제한 반영 관련 348건 — 2026-11-02, [근거 색인](../../../docs/evidence.md))
+- [x] 업데이트·판매 중지 정책과 기존 보유자 접근의 전체 여정 검증 — 2026-11-08 G4 여정 `verifiesPublishedUpdateAndPermanentRight`·`enforcesIndependentSalesAndListingControls`·`restrictsHistoricalUrlsAndNewlyPublishedBuildIndependently` ([근거 색인](../../../docs/evidence.md) 2026-11-08 G4 행)
+- [x] 새 구매 허용·기존 보유자 접근까지 포함한 Order·Download 경계의 운영 여정 — 2026-11-08 G4 여정 `restoresPublicAccessAndCurrentPurchaseSnapshot`(공개 복구 뒤 새 주문은 현재 가격·contentVersion, 미결제 구매자 403, 보유자 재구매 주문 허용·다운로드 유지) ([근거 색인](../../../docs/evidence.md) 2026-11-08 G4 행)
 
 ## 진행 중 / 남음 (일반화 공백 — G4)
 
 - [ ] [결정 필요] 결제/지급 대기·정지·파일 없음을 사용자에게 구분해 전달하는 계약 — G4
-- [ ] 업데이트·판매 중지 정책과 기존 보유자 접근의 전체 여정 검증 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) Download 행)
 - [ ] [결정 필요] 공개 노출 중지와 기존 구매자 다운로드 금지를 분리한 정책의 일관된 안내·거절 — G4
-- [ ] 새 구매 허용·기존 보유자 접근까지 포함한 Order·Download 경계의 운영 여정 — G4
 - [ ] [외부 대기] 다운로드 제한의 공유 환경 적용: 읽기 계정 IAM 태그 거절 정책·Catalog 태그 계정 준비와 배포(격리 검증만 완료) — 미수행
 - [ ] [외부 대기] 공유 배포 환경의 Catalog 내부 키·Download 읽기 전용 계정 준비와 기존 인스턴스 교체, 구 MongoDB 자료·소비 그룹 오프셋 정리(현재 보존·미사용) — 미수행
 
