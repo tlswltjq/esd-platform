@@ -57,7 +57,6 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -263,7 +262,6 @@ class StoreIntegrationTest {
         } finally { gate.release(); listeners.stop(); }
     }
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-047] 이벤트 최초 삽입 flush가 MySQL 교착(1213) 희생자가 되어도 새 트랜잭션에서 재시도해 수렴한다")
     void eventInsertDeadlockVictimRetries() throws Exception {
         // 기대: 같은 상품을 동시에 처음 넣다 한쪽이 flush에서 교착 희생자가 되면 재시도해 둘 다 성공.
@@ -276,7 +274,6 @@ class StoreIntegrationTest {
         assertThat(products.count()).isEqualTo(1);
     }
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-047] HTTP 정본 대조의 최초 삽입 flush가 MySQL 교착(1213) 희생자가 되어도 재시도해 수렴한다")
     void reconciliationInsertDeadlockVictimRetries() throws Exception {
         // 기대: 동시 대조 두 회차가 같은 상품을 처음 넣다 한쪽이 교착 희생자가 되면 재시도해 둘 다 성공.
