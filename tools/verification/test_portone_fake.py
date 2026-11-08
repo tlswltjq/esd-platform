@@ -175,6 +175,19 @@ class PortOneFakeControlTest(unittest.TestCase):
         self.assertEqual(self.current()['transactionId'], second['txId'])
         self.assertEqual(self.checkout(), (409, {'type': 'ALREADY_PAID'}))
 
+    def test_unsent_approval_leaves_ready_attempt_and_same_payment_id_reopens(self):
+        # Decision 120: the window authenticated an attempt but our approval request never arrived.
+        first = self.checkout()[1]
+        status, second = self.checkout()
+        self.assertEqual(status, 200)
+        self.assertNotEqual(second['txId'], first['txId'])
+        self.assertEqual(self.current()['transactionId'], second['txId'])
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(first), '"stale"')[0], 400)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(second), '"second"')[0], 200)
+        items = self.history()
+        self.assertEqual([(i['id'], i['status']) for i in items], [(first['txId'], 'READY'), (second['txId'], 'PAID')])
+        self.assertNotIn('failure', items[0])
+
     def test_confirm_pg_failure_fails_the_attempt_with_a_provider_error(self):
         sdk = self.checkout()[1]
         self.assertEqual(self.control('arm-confirm', {'outcome': 'FAILED'})[0], 200)
