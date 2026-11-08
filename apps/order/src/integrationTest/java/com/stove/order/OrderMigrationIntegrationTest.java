@@ -125,8 +125,8 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
             jdbc.update("UPDATE order_refund_review_round SET stop_request_id=?,stop_operator_subject='migration-admin',stop_reason='잘못 승인',stop_received_at=? WHERE review_id=?",
                     id(), Timestamp.from(stopped), stoppedRefund);
             jdbc.update("UPDATE order_refund SET license_grant_wait_started_at=? WHERE refund_id=?", Timestamp.from(decided), stoppedRefund);
-            String waiting = refund(jdbc, received, true, "PENDING_LICENSE_GRANT", null);
-            jdbc.update("UPDATE order_refund SET license_grant_wait_started_at=? WHERE refund_id=?", Timestamp.from(received), waiting);
+            String waiting = refund(jdbc, received, true, "PENDING_PAYMENT_REFUND", null);
+            jdbc.update("UPDATE order_refund SET status='PENDING_LICENSE_GRANT',license_grant_wait_started_at=? WHERE refund_id=?", Timestamp.from(received), waiting);
             String paying = refund(jdbc, received, true, "PENDING_PAYMENT_REFUND", null);
             List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM order_refund ORDER BY id");
             List<String> added = List.of("license_suspension_wait_started_at", "license_restoration_wait_started_at", "approval_stop_wait_started_at");
