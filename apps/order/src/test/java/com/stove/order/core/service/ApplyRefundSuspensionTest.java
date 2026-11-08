@@ -45,6 +45,7 @@ import org.springframework.dao.TransientDataAccessResourceException;
 
 @ExtendWith(MockitoExtension.class)
 class ApplyRefundSuspensionTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant PAID_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant RECEIVED_AT = PAID_AT.plusSeconds(3 * 3600);
     private static final Instant STOPPED_AT = PAID_AT.plusSeconds(6 * 3600);
@@ -203,7 +204,7 @@ class ApplyRefundSuspensionTest {
         LicenseGrant grant = new LicenseGrant(id(), PAID_AT.plusSeconds(60), id(), paid.getOrderNo(), paid.getBuyerSubject(),
                 paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
         Refund refund = Refund.request(paid, RECEIVED_AT);
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation input = new LicenseSuspensionConfirmation(id(), STOPPED_AT,
                 refund.getSuspensionRequestEventId(), refund.getRefundId(), grant.licenseId(), paid.getOrderNo(),
                 paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId());

@@ -104,7 +104,7 @@
 - 권한/구매 근거/Inbox 저장 실패는 함께 롤백하고 공통 Kafka 재시도의 새 트랜잭션에서 재처리한다.
 - 커밋 직후 ACK 전 종료는 재전달 입력 전체를 비교해 기존 licenseId·획득 시각을 유지한다.
 - 처리 불가 입력·충돌·재시도 소진은 공통 DLT에 보존한다(지급 완료·결제 실패로 해석하지 않음).
-- DEAD/DLT로 남은 기존 이벤트는 Outbox DEAD 재큐잉·원본 토픽 재투입(ADMIN 운영 API, P3 A 검증)으로 복구하며 원래 ID·본문을 보존한다. DB 유실 뒤 전량 재구축은 이 복구와 구분한다. Kafka에서 원본이 사라진 `SENT` `LicenseGranted`는 공통 `OutboxRepublishService`로 같은 ID 재발행한다(결정 129). 행 잠금(`lockByEventId`, `PESSIMISTIC_WRITE`) 아래 상태만 `PENDING`으로 돌리고 기록은 V11 `outbox_republish`에 남긴다. 새 표만 더하는 이행이라 옛 행 호환 테스트 대상이 아니다. 기록 단계가 실패하면 상태 변경도 함께 되돌려진다. 운영 절차는 [License 이벤트 복구 런북](../../../docs/license-event-recovery-runbook.md)을 따른다.
+- DEAD/DLT로 남은 기존 이벤트는 Outbox DEAD 재큐잉·원본 토픽 재투입(ADMIN 운영 API, P3 A 검증)으로 복구하며 원래 ID·본문을 보존한다. DB 유실 뒤 전량 재구축은 이 복구와 구분한다. Kafka에서 원본이 사라진 `SENT` `LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`는 공통 `OutboxRepublishService`로 같은 ID 재발행한다(결정 129와 범위 확장). License는 `stove.messaging.ops.republish-owner=license`로 자기가 소유한 이 네 타입만 재발행한다(`OutboxRepublishTargets`). 이미 처리한 요청은 다시 받아도 결과를 다시 내지 않으므로, 결과 유실은 이 재발행으로 잇는다. 행 잠금(`lockByEventId`, `PESSIMISTIC_WRITE`) 아래 상태만 `PENDING`으로 돌리고 기록은 V11 `outbox_republish`에 남긴다. 새 표만 더하는 이행이라 옛 행 호환 테스트 대상이 아니다. 기록 단계가 실패하면 상태 변경도 함께 되돌려진다. 운영 절차는 [License 이벤트 복구 런북](../../../docs/license-event-recovery-runbook.md)을 따른다.
 
 | 중단 지점 | 남는 상태 | 복구 |
 |---|---|---|

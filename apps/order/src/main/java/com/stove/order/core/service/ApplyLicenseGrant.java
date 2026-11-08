@@ -15,6 +15,7 @@ import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.RefundRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Isolation;
@@ -52,9 +53,10 @@ public class ApplyLicenseGrant {
         }
         grants.save(OrderLicenseGrant.record(input));
         refunds.findByOrderNo(order.getOrderNo()).ifPresent(refund -> {
-            if (refund.confirmLicenseGrant(input)) {
+            Instant at = clock.instant();
+            if (refund.confirmLicenseGrant(input, at)) {
                 LicenseSuspensionRequestedEvent event = new LicenseSuspensionRequestedEvent(
-                        refund.getSuspensionRequestEventId(), clock.instant(), refund.getRefundId(), order.getOrderNo(),
+                        refund.getSuspensionRequestEventId(), at, refund.getRefundId(), order.getOrderNo(),
                         order.getBuyerSubject(), order.getProductId(), order.getProductCode(), order.getPaymentId());
                 outbox.record("Order", order.getOrderNo(), event);
             }

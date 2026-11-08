@@ -15,6 +15,10 @@ import com.stove.order.core.service.ReadRefund;
 import com.stove.order.core.service.ReadLicenseGrantDelays;
 import com.stove.order.adapter.RefundLicenseGrantMetrics;
 import io.micrometer.core.instrument.binder.MeterBinder;
+import com.stove.order.core.domain.RefundStatus;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.LongSupplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import com.stove.order.core.service.ReadRefundReviews;
@@ -77,8 +81,11 @@ public class RefundConfiguration {
         return new ReadLicenseGrantDelays(refunds, refundClock, licenseGrantDelay);
     }
 
+    /** 결정 125 게이지에 정지·복구·승인 중단 대기를 status 라벨로 더한다(수집마다 상태별 COUNT 1회). */
     @Bean MeterBinder refundLicenseGrantMetrics(ObjectProvider<ReadLicenseGrantDelays> delays) {
-        return new RefundLicenseGrantMetrics(() -> delays.getObject().count());
+        Map<String, LongSupplier> counts = new LinkedHashMap<>();
+        for (RefundStatus status : ReadLicenseGrantDelays.STATUSES) counts.put(status.name(), () -> delays.getObject().count(status));
+        return new RefundLicenseGrantMetrics(counts);
     }
 
     @Bean RequestRefundRetry requestRefundRetry(OrderRepository orders, RefundRepository refunds, RefundAttemptRepository attempts,

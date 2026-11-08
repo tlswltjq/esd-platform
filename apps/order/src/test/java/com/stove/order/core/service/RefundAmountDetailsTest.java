@@ -45,6 +45,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class RefundAmountDetailsTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant PAID_AT = Instant.parse("2026-10-30T01:00:00Z");
     private final OrderRepository orders = mock(OrderRepository.class);
     private final RefundRepository refunds = mock(RefundRepository.class);
@@ -222,7 +223,7 @@ class RefundAmountDetailsTest {
     private RefundAttempt start(Order order, Refund refund) {
         LicenseGrant grant = new LicenseGrant(id(), PAID_AT, id(), order.getOrderNo(), order.getBuyerSubject(),
                 order.getProductId(), order.getProductCode(), order.getPaymentId());
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation suspension = new LicenseSuspensionConfirmation(id(), PAID_AT.plusSeconds(61),
                 refund.getSuspensionRequestEventId(), refund.getRefundId(), grant.licenseId(), order.getOrderNo(), order.getBuyerSubject(),
                 order.getProductId(), order.getProductCode(), order.getPaymentId());

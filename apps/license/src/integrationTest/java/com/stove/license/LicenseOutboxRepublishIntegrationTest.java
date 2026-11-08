@@ -1,6 +1,7 @@
 package com.stove.license;
 
 import static com.stove.license.LicenseFixtures.event;
+import static com.stove.license.LicenseFixtures.id;
 import static com.stove.license.LicenseFixtures.paid;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -9,17 +10,35 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
+import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
+import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
 import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import com.stove.common.messaging.ops.OutboxRepublishTargets;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxMetrics;
 import com.stove.common.messaging.outbox.OutboxRelay;
+import com.stove.license.api.listener.ApprovalCorrectionEventListener;
+import com.stove.license.api.listener.LicenseRestorationEventListener;
+import com.stove.license.api.listener.LicenseSuspensionEventListener;
 import com.stove.license.api.listener.OrderEventListener;
+import com.stove.license.core.domain.License;
+import com.stove.license.core.domain.LicenseRepository;
+import com.stove.license.core.domain.LicenseSuspension;
+import com.stove.license.core.domain.LicenseSuspensionRepository;
 import com.stove.license.core.domain.PaidOrder;
+import com.stove.license.core.service.ApplyApprovalCorrection;
+import com.stove.license.core.service.ApplyLicenseRestoration;
+import com.stove.license.core.service.ApplyLicenseSuspension;
 import com.stove.license.core.service.GrantLicense;
+import com.stove.license.core.service.RegisterLicense;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -55,6 +74,12 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
     private static final String COLUMNS = "event_id,event_type,aggregate_id,payload,topic,partition_key,trace_parent,created_at";
     @Autowired GrantLicense grant;
     @Autowired OrderEventListener orderEvents;
+    @Autowired LicenseSuspensionEventListener suspensionEvents;
+    @Autowired LicenseRestorationEventListener restorationEvents;
+    @Autowired ApprovalCorrectionEventListener correctionEvents;
+    @Autowired RegisterLicense register;
+    @Autowired LicenseRepository licenses;
+    @Autowired LicenseSuspensionRepository suspensions;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @Autowired KafkaTemplate<String, String> kafka;
@@ -67,6 +92,8 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
     @BeforeEach
     void clean() {
         listeners.stop();
+        jdbc.update("DELETE FROM license_approval_correction");
+        jdbc.update("DELETE FROM license_restoration");
         jdbc.update("DELETE FROM license_suspension");
         jdbc.update("DELETE FROM license_registration"); jdbc.update("DELETE FROM product_license");
         jdbc.update("DELETE FROM processed_event");
@@ -129,12 +156,109 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
                 INSERT INTO outbox_event (event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,
                                           status,retry_count,created_at,sent_at)
                 VALUES (?, 'License', 'order-1', ?, ?, 'order-1', '{}', 'SENT', 0, NOW(6), NOW(6))
-                """, other, EventType.LICENSE_SUSPENDED, Topics.LICENSE);
+                """, other, EventType.LICENSE_SUSPENSION_REQUESTED, Topics.ORDER);
         Response rejected = post("/api/v1/ops/outbox/" + other + "/republish", "ADMIN", reason());
         assertThat(rejected.status()).isEqualTo(400);
         assertThat(rejected.body().path("error").path("code").asText()).isEqualTo("INVALID_REQUEST");
         assertThat(status(other)).isEqualTo("SENT");
         assertThat(count("outbox_republish")).isZero();
+    }
+
+    /** 결정 129 범위 확장: License는 자기가 소유한 정지·복구·승인 정정 결과만 재발행하고, Order 요청 이벤트 행은 거절한다. */
+    @Test
+    void licenseRepublishesOnlyItsOwnSuspensionRestorationAndCorrectionResults() {
+        for (String type : List.of(EventType.LICENSE_SUSPENDED, EventType.LICENSE_RESTORED, EventType.LICENSE_APPROVAL_CORRECTED)) {
+            String eventId = insert(type, Topics.LICENSE);
+            Response accepted = post("/api/v1/ops/outbox/" + eventId + "/republish", "ADMIN", reason());
+            assertThat(accepted.status()).as(type).isEqualTo(200);
+            assertThat(accepted.data().path("eventType").asText()).isEqualTo(type);
+            assertThat(status(eventId)).isEqualTo("PENDING");
+        }
+        for (String type : OutboxRepublishTargets.forOwner(OutboxRepublishTargets.ORDER)) {
+            String eventId = insert(type, Topics.ORDER);
+            assertThat(post("/api/v1/ops/outbox/" + eventId + "/republish", "ADMIN", reason()).status()).as(type).isEqualTo(400);
+            assertThat(status(eventId)).isEqualTo("SENT");
+        }
+        assertThat(count("outbox_republish")).isEqualTo(3);
+    }
+
+    /**
+     * Order가 재발행한 정지·복구·승인 정정 요청을 License가 이미 처리했다면 Inbox에서 효과가 없다.
+     * License는 결과 이벤트를 다시 내지 않으므로, 결과 이벤트 유실은 License 쪽 Outbox 행을 재발행해야 한다.
+     */
+    @Test
+    void alreadyProcessedSuspensionRestorationAndCorrectionRequestsHaveNoEffectWhenRepublished() throws Exception {
+        License restoring = registered(1L);
+        LicenseSuspensionRequestedEvent suspension = suspension(restoring);
+        suspensionEvents.receive(record(suspension));
+        assertThat(count("license_suspension")).isEqualTo(1);
+        assertRepeatHasNoEffect(() -> suspensionEvents.receive(record(suspension)));
+
+        LicenseSuspension suspended = suspensions.findByRequestEventId(suspension.eventId()).orElseThrow();
+        LicenseRestorationRequestedEvent restoration = new LicenseRestorationRequestedEvent(id(), now(), suspension.refundId(), id(), id(),
+                restoring.getLicenseId(), restoring.getOrderNo(), restoring.getBuyerSubject(), restoring.getProductId(), restoring.getProductCode(),
+                restoring.getPaymentId(), suspension.eventId(), suspended.getCompletedEventId());
+        restorationEvents.receive(record(restoration));
+        assertThat(count("license_restoration")).isEqualTo(1);
+        assertRepeatHasNoEffect(() -> restorationEvents.receive(record(restoration)));
+
+        License correcting = registered(2L);
+        LicenseSuspensionRequestedEvent stopped = suspension(correcting);
+        suspensionEvents.receive(record(stopped));
+        LicenseSuspension stoppedSuspension = suspensions.findByRequestEventId(stopped.eventId()).orElseThrow();
+        LicenseApprovalCorrectionRequestedEvent correction = new LicenseApprovalCorrectionRequestedEvent(id(), now(), stopped.refundId(), id(), id(),
+                correcting.getLicenseId(), correcting.getOrderNo(), correcting.getBuyerSubject(), correcting.getProductId(), correcting.getProductCode(),
+                correcting.getPaymentId(), stopped.eventId(), stoppedSuspension.getCompletedEventId());
+        correctionEvents.receive(record(correction));
+        assertThat(count("license_approval_correction")).isEqualTo(1);
+        assertRepeatHasNoEffect(() -> correctionEvents.receive(record(correction)));
+        assertThat(jdbc.queryForList("SELECT DISTINCT consumer_group FROM processed_event", String.class)).contains(
+                ApplyLicenseSuspension.CONSUMER_GROUP, ApplyLicenseRestoration.CONSUMER_GROUP, ApplyApprovalCorrection.CONSUMER_GROUP);
+    }
+
+    private interface Delivery {
+        void run() throws Exception;
+    }
+
+    private void assertRepeatHasNoEffect(Delivery repeat) throws Exception {
+        Map<String, List<Map<String, Object>>> afterFirst = snapshot();
+        repeat.run();
+        assertThat(snapshot()).as("이미 처리된 재발행은 받는 쪽에서 효과가 없다").isEqualTo(afterFirst);
+    }
+
+    private License registered(long product) {
+        PaidOrder purchase = paid("usr_buyer", product, "Game-" + product);
+        grant.execute(purchase);
+        License license = licenses.findByOrderNo(purchase.orderNo()).orElseThrow();
+        register.execute(purchase.buyerSubject(), license.getLicenseId());
+        return licenses.findByOrderNo(purchase.orderNo()).orElseThrow();
+    }
+
+    private static LicenseSuspensionRequestedEvent suspension(License license) {
+        return new LicenseSuspensionRequestedEvent(id(), now().minusSeconds(10), id(), license.getOrderNo(), license.getBuyerSubject(),
+                license.getProductId(), license.getProductCode(), license.getPaymentId());
+    }
+
+    private ConsumerRecord<String, String> record(DomainEvent event) throws Exception {
+        String key = mapper.readTree(mapper.writeValueAsString(event)).path("orderNo").asText();
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(Topics.ORDER, 0, 0L, key, mapper.writeValueAsString(event));
+        record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
+        record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));
+        return record;
+    }
+
+    private String insert(String type, String topic) {
+        String eventId = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO outbox_event (event_id,aggregate_type,aggregate_id,event_type,topic,partition_key,payload,
+                                          status,retry_count,created_at,sent_at)
+                VALUES (?, 'License', 'order-1', ?, ?, 'order-1', '{}', 'SENT', 0, NOW(6), NOW(6))
+                """, eventId, type, topic);
+        return eventId;
+    }
+
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     @Test
@@ -162,8 +286,9 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
 
     private Map<String, List<Map<String, Object>>> snapshot() {
         Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
-        for (String table : List.of("product_license", "license_registration", "processed_event", "outbox_event")) {
-            result.put(table, jdbc.queryForList("SELECT * FROM " + table + " ORDER BY id"));
+        for (String table : List.of("product_license", "license_registration", "license_suspension", "license_restoration",
+                "license_approval_correction", "processed_event", "outbox_event")) {
+            result.put(table, jdbc.queryForList("SELECT * FROM " + table + " ORDER BY 1"));
         }
         return result;
     }

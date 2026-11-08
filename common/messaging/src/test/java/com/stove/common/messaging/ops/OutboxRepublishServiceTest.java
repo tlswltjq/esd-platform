@@ -39,7 +39,8 @@ class OutboxRepublishServiceTest {
     private final OutboxEventRepository repository = mock(OutboxEventRepository.class);
     private final JdbcOperations jdbc = mock(JdbcOperations.class);
     private final OutboxRepublishService service =
-            new OutboxRepublishService(repository, jdbc, Clock.fixed(NOW, ZoneOffset.UTC));
+            new OutboxRepublishService(repository, jdbc, Clock.fixed(NOW, ZoneOffset.UTC),
+                    OutboxRepublishTargets.forOwner(OutboxRepublishTargets.LICENSE));
 
     private static OutboxEvent sent(String eventId, String type) {
         OutboxEvent event = OutboxEvent.pending(eventId, "License", "ORD-1", type, Topics.LICENSE, "ORD-1", "{}");
@@ -68,10 +69,38 @@ class OutboxRepublishServiceTest {
     }
 
     @Test
-    @DisplayName("허용 목록은 지금 OrderPaid·LicenseGranted 둘이다")
-    void allowedTypesAreTheGrantPair() {
-        assertThat(OutboxRepublishTargets.EVENT_TYPES)
-                .containsExactlyInAnyOrder(EventType.ORDER_PAID, EventType.LICENSE_GRANTED);
+    @DisplayName("허용 목록은 소유 모듈별이다 — Order 는 지급 확인 요청·정지·복구·승인 정정 요청, License 는 그 결과")
+    void allowedTypesAreListedPerOwningModule() {
+        assertThat(OutboxRepublishTargets.forOwner(OutboxRepublishTargets.ORDER)).containsExactlyInAnyOrder(
+                EventType.ORDER_PAID, EventType.LICENSE_SUSPENSION_REQUESTED,
+                EventType.LICENSE_RESTORATION_REQUESTED, EventType.LICENSE_APPROVAL_CORRECTION_REQUESTED);
+        assertThat(OutboxRepublishTargets.forOwner(OutboxRepublishTargets.LICENSE)).containsExactlyInAnyOrder(
+                EventType.LICENSE_GRANTED, EventType.LICENSE_SUSPENDED,
+                EventType.LICENSE_RESTORED, EventType.LICENSE_APPROVAL_CORRECTED);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"payment", "ORDER"})
+    @DisplayName("소유 모듈을 모르면 조립 단계에서 거절한다")
+    void unknownOwnerIsRejected(String owner) {
+        assertThatThrownBy(() -> OutboxRepublishTargets.forOwner(owner)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("다른 모듈이 소유한 타입은 그 행이 있어도 400 — Order 는 License 결과 이벤트를 재발행하지 않는다")
+    void anotherModulesTypeIsRejected() {
+        OutboxRepublishService order = new OutboxRepublishService(repository, jdbc, Clock.fixed(NOW, ZoneOffset.UTC),
+                OutboxRepublishTargets.forOwner(OutboxRepublishTargets.ORDER));
+        for (String type : OutboxRepublishTargets.forOwner(OutboxRepublishTargets.LICENSE)) {
+            OutboxEvent event = sent("EVT-L", type);
+            when(repository.lockByEventId("EVT-L")).thenReturn(Optional.of(event));
+            assertRejected(() -> order.republish("EVT-L", "usr_admin", "사유"), ErrorCode.INVALID_REQUEST);
+            assertThat(event.getStatus()).isEqualTo(OutboxStatus.SENT);
+        }
+        OutboxEvent own = sent("EVT-O", EventType.LICENSE_RESTORATION_REQUESTED);
+        when(repository.lockByEventId("EVT-O")).thenReturn(Optional.of(own));
+        assertThat(order.republish("EVT-O", "usr_admin", "사유").status()).isEqualTo("PENDING");
     }
 
     @Test
@@ -86,7 +115,7 @@ class OutboxRepublishServiceTest {
     @Test
     @DisplayName("허용 목록 밖의 타입은 SENT 여도 400, 상태는 그대로")
     void typeOutsideTheListIsRejected() {
-        OutboxEvent event = sent("EVT-2", EventType.LICENSE_SUSPENDED);
+        OutboxEvent event = sent("EVT-2", EventType.PURCHASE_REFUNDED);
         when(repository.lockByEventId("EVT-2")).thenReturn(Optional.of(event));
 
         assertRejected(() -> service.republish("EVT-2", "usr_admin", "사유"), ErrorCode.INVALID_REQUEST);
@@ -97,10 +126,10 @@ class OutboxRepublishServiceTest {
     @Test
     @DisplayName("SENT 가 아닌 행(PENDING·DEAD)은 404 — DEAD 는 requeue 로 되살린다")
     void notSentIsRejected() {
-        OutboxEvent pending = OutboxEvent.pending("EVT-3", "Order", "ORD-1", EventType.ORDER_PAID,
-                Topics.ORDER, "ORD-1", "{}");
-        OutboxEvent dead = OutboxEvent.pending("EVT-4", "Order", "ORD-1", EventType.ORDER_PAID,
-                Topics.ORDER, "ORD-1", "{}");
+        OutboxEvent pending = OutboxEvent.pending("EVT-3", "License", "ORD-1", EventType.LICENSE_SUSPENDED,
+                Topics.LICENSE, "ORD-1", "{}");
+        OutboxEvent dead = OutboxEvent.pending("EVT-4", "License", "ORD-1", EventType.LICENSE_RESTORED,
+                Topics.LICENSE, "ORD-1", "{}");
         dead.markFailed("broker down", 1);
         when(repository.lockByEventId("EVT-3")).thenReturn(Optional.of(pending));
         when(repository.lockByEventId("EVT-4")).thenReturn(Optional.of(dead));
@@ -123,7 +152,7 @@ class OutboxRepublishServiceTest {
     @Test
     @DisplayName("사유는 500자까지")
     void reasonIsBounded() {
-        OutboxEvent event = sent("EVT-1", EventType.ORDER_PAID);
+        OutboxEvent event = sent("EVT-1", EventType.LICENSE_APPROVAL_CORRECTED);
         when(repository.lockByEventId("EVT-1")).thenReturn(Optional.of(event));
 
         assertRejected(() -> service.republish("EVT-1", "usr_admin", "가".repeat(501)), ErrorCode.INVALID_REQUEST);

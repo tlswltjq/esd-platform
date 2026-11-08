@@ -9,7 +9,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import lombok.RequiredArgsConstructor;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,9 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>행의 {@code event_id}·본문·키는 바꾸지 않고 상태만 발행 대기로 돌린다. 새 이벤트 ID 를 만들지 않는다.
  * 실행자·시각·사유·이전 발행 시각은 같은 트랜잭션에서 {@code outbox_republish} 에 남긴다.
  * 그 표는 재발행을 켠 모듈만 가진다({@code stove.messaging.ops.republish-enabled}).
+ * 재발행할 수 있는 타입은 그 모듈이 소유한 것뿐이다({@link OutboxRepublishTargets#forOwner}).
  */
 @Slf4j
-@RequiredArgsConstructor
 public class OutboxRepublishService {
 
     private static final int REASON_MAX = 500;
@@ -36,11 +36,22 @@ public class OutboxRepublishService {
     private final OutboxEventRepository repository;
     private final JdbcOperations jdbc;
     private final Clock clock;
+    private final Set<String> allowedTypes;
+
+    public OutboxRepublishService(OutboxEventRepository repository, JdbcOperations jdbc, Clock clock, Set<String> allowedTypes) {
+        if (allowedTypes == null || allowedTypes.isEmpty()) {
+            throw new IllegalArgumentException("재발행 허용 타입이 필요하다");
+        }
+        this.repository = repository;
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.allowedTypes = Set.copyOf(allowedTypes);
+    }
 
     /**
      * 한 건을 재발행 대기로 돌린다.
      *
-     * @throws BusinessException 사유·실행자가 없거나 허용 목록 밖의 타입이면 {@code INVALID_REQUEST},
+     * @throws BusinessException 사유·실행자가 없거나 이 모듈의 허용 목록 밖 타입이면 {@code INVALID_REQUEST},
      *                           행이 없거나 SENT 가 아니면 {@code NOT_FOUND}(DEAD 회수와 같은 규약)
      */
     @Transactional
@@ -49,7 +60,7 @@ public class OutboxRepublishService {
         requireReason(reason);
         OutboxEvent event = repository.lockByEventId(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Outbox 이벤트가 없다: " + eventId));
-        if (!OutboxRepublishTargets.allows(event.getEventType())) {
+        if (event.getEventType() == null || !allowedTypes.contains(event.getEventType())) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "재발행을 허용하지 않는 이벤트 타입이다: " + event.getEventType());
         }
