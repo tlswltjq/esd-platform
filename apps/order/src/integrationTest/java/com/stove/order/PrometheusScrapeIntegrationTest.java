@@ -21,7 +21,8 @@ class PrometheusScrapeIntegrationTest extends OrderIntegrationTestBase {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("jvm_memory_used_bytes", "stove_outbox_pending",
-                "stove_outbox_dead_total", "application=\"order\"", "stove_order_expirable");
+                "stove_outbox_dead_total", "application=\"order\"", "stove_order_expirable",
+                "stove_order_refund_license_grant_delayed");
     }
 
     @Test

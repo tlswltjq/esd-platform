@@ -39,6 +39,6 @@ public class ReadRefundReviews {
                 order.getTitle(), order.getAmount(), order.getCurrency(), order.getResultOccurredAt(), refund.getReceivedAt(),
                 refund.getStatus(), refund.reviewReceipt(), refund.getCurrentReviewId() == null ? null
                         : rounds.findByReviewId(refund.getCurrentReviewId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT)).view(),
-                RefundAmountView.from(order, refund));
+                RefundAmountView.from(order, refund), refund.getLicenseGrantWaitStartedAt());
     }
 }
