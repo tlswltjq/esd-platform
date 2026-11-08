@@ -13,15 +13,18 @@ import java.util.Optional;
 public record ApprovalReviewNotice(Code code, String message, Instant since) {
     public enum Code { CHARGED, CHARGE_CANCELLED, CHARGE_UNCONFIRMED, NOT_CHARGED, CLOSED_CHARGE_CANCELLED, CLOSED_NOT_CHARGED }
 
-    /** How a hold reason decides the charge code: fixed by the reason, or by the latest PG lookup (decisions 123·124·126). */
-    enum Bundle { CHARGED, CHARGE_CANCELLED, CHARGE_UNCONFIRMED, BY_OBSERVATION }
+    /**
+     * How a hold reason decides the charge code. Only invalid evidence is fixed (decision 123); every other reason follows
+     * the latest PG observation (decision 132).
+     */
+    enum Bundle { CHARGE_UNCONFIRMED, BY_OBSERVATION }
 
     /** Every reason in {@link ApprovalReviewReason#KNOWN} has a bundle; a test fails when a new reason is added without one. */
     static final Map<String, Bundle> BUNDLES = Map.of(
-            "PAID_WITHOUT_ADMISSION", Bundle.CHARGED,
-            "PG_CANCELLED", Bundle.CHARGE_CANCELLED,
             "PG_INVALID_EVIDENCE", Bundle.CHARGE_UNCONFIRMED,
-            "PG_PENDING_AT_ORDER_EXPIRY", Bundle.CHARGE_UNCONFIRMED,
+            "PAID_WITHOUT_ADMISSION", Bundle.BY_OBSERVATION,
+            "PG_CANCELLED", Bundle.BY_OBSERVATION,
+            "PG_PENDING_AT_ORDER_EXPIRY", Bundle.BY_OBSERVATION,
             "PG_REQUEST_REJECTED", Bundle.BY_OBSERVATION,
             "ORDER_ADMISSION_CONFLICT", Bundle.BY_OBSERVATION,
             "ORDER_EXPIRY_CONFLICT", Bundle.BY_OBSERVATION,
@@ -45,8 +48,6 @@ public record ApprovalReviewNotice(Code code, String message, Instant since) {
 
     private static ApprovalReviewNotice held(PaymentApproval approval) {
         Code code = switch (BUNDLES.getOrDefault(approval.getLastErrorCode(), Bundle.BY_OBSERVATION)) {
-            case CHARGED -> Code.CHARGED;
-            case CHARGE_CANCELLED -> Code.CHARGE_CANCELLED;
             case CHARGE_UNCONFIRMED -> Code.CHARGE_UNCONFIRMED;
             case BY_OBSERVATION -> byObservation(approval);
         };
@@ -54,15 +55,17 @@ public record ApprovalReviewNotice(Code code, String message, Instant since) {
     }
 
     /**
-     * The latest lookup decides: still PENDING or failed means the charge is unconfirmed, READY or FAILED means nothing was
-     * charged so far. A held approval whose latest lookup reports money (PAID, CANCELLED) or that has no lookup at all is
-     * outside decision 123's bundles; it is shown as unconfirmed, which never claims that nothing was charged.
+     * Decision 132: the latest valid PG observation decides. PAID is charged, a verified full CANCELLED is returned, READY
+     * and FAILED charged nothing so far. A failed latest lookup, a PENDING PG or no observation at all is unconfirmed.
      */
     private static Code byObservation(PaymentApproval approval) {
-        if (approval.getLastInspectionError() != null) return Code.CHARGE_UNCONFIRMED;
-        ApprovalObservation.State latest = approval.getLatestPgState();
-        if (latest == ApprovalObservation.State.READY || latest == ApprovalObservation.State.FAILED) return Code.NOT_CHARGED;
-        return Code.CHARGE_UNCONFIRMED;
+        if (approval.getLastInspectionError() != null || approval.getLatestPgState() == null) return Code.CHARGE_UNCONFIRMED;
+        return switch (approval.getLatestPgState()) {
+            case PAID -> Code.CHARGED;
+            case CANCELLED -> Code.CHARGE_CANCELLED;
+            case READY, FAILED -> Code.NOT_CHARGED;
+            case PENDING -> Code.CHARGE_UNCONFIRMED;
+        };
     }
 
     private static ApprovalReviewNotice closed(PaymentApproval approval, ApprovalClosure closure) {

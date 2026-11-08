@@ -213,12 +213,11 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 
 #### 수용 기준
 1. WHERE 결제 상세(`GET /api/v1/payments/{orderNo}`)와 승인 조회(`GET /api/v1/payments/{orderNo}/approvals/{requestId}`) 맥락에서 THE 시스템 SHALL 승인이 `REVIEW_REQUIRED`이거나 운영자 종결(R13)로 끝났으면 `reviewNotice {code, message, since}`를 반환하고, 그 밖에는 `null`로 둔다. 결제 상세는 그 결제의 마지막 승인을 기준으로 한다. 결제 목록에는 넣지 않는다(`null`). `since`는 보류 시작 시각(`reviewStartedAt`, 옛 행은 `null`)이다.
-2. WHILE 승인이 보류 중인 동안 THE 시스템 SHALL 보류 사유를 청구 여부 코드로 바꾼다. `PAID_WITHOUT_ADMISSION` → `CHARGED`, `PG_CANCELLED` → `CHARGE_CANCELLED`, `PG_INVALID_EVIDENCE`·`PG_PENDING_AT_ORDER_EXPIRY`(결정 126) → `CHARGE_UNCONFIRMED`로 고정한다. 그 밖의 사유(`PG_REQUEST_REJECTED`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`CONFIRM_WINDOW_EXPIRED`(결정 124)·알 수 없는 값)는 마지막 조회로 정한다. 마지막 조회가 실패(`lastInspectionError`)했거나 PG가 `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`·`FAILED`면 `NOT_CHARGED`다. R12.4의 알려진 사유는 모두 이 묶음 중 하나에 속하며, 사유가 늘면 묶음을 함께 정해야 테스트가 통과한다.
+2. WHILE 승인이 보류 중인 동안 THE 시스템 SHALL `PG_INVALID_EVIDENCE`는 관측과 관계없이 `CHARGE_UNCONFIRMED`로 둔다(결정 123). 그 밖의 모든 사유(`PAID_WITHOUT_ADMISSION`·`PG_CANCELLED`·`PG_PENDING_AT_ORDER_EXPIRY`·`PG_REQUEST_REJECTED`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`CONFIRM_WINDOW_EXPIRED`·알 수 없는 값)는 마지막 유효 PG 관측(`latestPgState`)으로 정한다(결정 132). `PAID` → `CHARGED`, 전액 `CANCELLED` → `CHARGE_CANCELLED`, `READY`·`FAILED` → `NOT_CHARGED`, `PENDING`·마지막 조회 실패(`lastInspectionError`)·관측 없음 → `CHARGE_UNCONFIRMED`다. 그래서 `PAID_WITHOUT_ADMISSION` 보류 뒤 콘솔 취소로 관측이 `CANCELLED`가 되면 `CHARGE_CANCELLED`가 된다. R12.4의 알려진 사유는 모두 이 규칙에 묶이며, 사유가 늘면 묶음을 함께 정해야 테스트가 통과한다.
 3. WHEN 운영자 종결로 끝난 승인이면 THEN 시스템 SHALL 종결 기록의 근거로 `CLOSED_CHARGE_CANCELLED`(전액 CANCELLED) 또는 `CLOSED_NOT_CHARGED`(READY·FAILED)를 반환한다.
 4. THE 문구 SHALL [결정 123](../../../docs/decisions.md#approval-review-customer-notice)의 한국어 원문을 그대로 쓰고, 금액은 주문 청구액(천 단위 쉼표 + "원")이다. 처리 시점은 약속하지 않는다.
 5. WHEN 결제창(`GET …/checkout`)이 진행 중 승인으로 409 `APPROVAL_IN_PROGRESS`를 내면 THEN 시스템 SHALL 보류 중 승인에는 R14.2의 문구를, 그 밖의 진행 중 승인에는 "기존 결제 승인을 처리하고 있습니다."를 메시지로 쓴다. 오류 코드는 그대로다.
 6. THE 고객 응답 SHALL 원래 보류 사유 코드·공급자 시도 ID·토큰을 넣지 않는다. Order 응답과 이벤트 계약은 바꾸지 않는다.
-7. IF 사유가 마지막 조회로 정해지는 보류에서 마지막 유효 관측이 `PAID`·`CANCELLED`이거나 관측이 없으면 THEN 시스템 SHALL `CHARGE_UNCONFIRMED`로 보인다. 결정 123의 묶음 밖 상황이며 "청구된 금액은 없습니다"라고 단정하지 않는 임시 처리다(`[결정 필요]`, tasks.md).
 
 ## 범위 밖(후속)
 

@@ -31,42 +31,50 @@ class ApprovalReviewNoticeTest {
         }
     }
 
-    @Test void reasonsThatNameTheMoneyFixTheirCode() {
+    @Test void invalidEvidenceIsUnconfirmedWhateverTheLatestObservation() {
+        for (ApprovalObservation.State latest : ApprovalObservation.State.values())
+            assertCode("PG_INVALID_EVIDENCE", latest, Code.CHARGE_UNCONFIRMED, CHARGE_UNCONFIRMED);
+        PaymentApproval unobserved = approval(); unobserved.stopPosts("PG_INVALID_EVIDENCE", at);
+        assertThat(notice(unobserved).code()).isEqualTo(Code.CHARGE_UNCONFIRMED);
+    }
+
+    /** Decision 132: every other hold reason takes its code from the latest valid PG observation. */
+    @Test void everyOtherReasonFollowsTheLatestObservationForEveryState() {
+        for (String reason : ApprovalReviewReason.KNOWN) {
+            if ("PG_INVALID_EVIDENCE".equals(reason)) continue;
+            for (ApprovalObservation.State latest : ApprovalObservation.State.values()) {
+                Code code = switch (latest) {
+                    case PAID -> Code.CHARGED;
+                    case CANCELLED -> Code.CHARGE_CANCELLED;
+                    case PENDING -> Code.CHARGE_UNCONFIRMED;
+                    case READY, FAILED -> Code.NOT_CHARGED;
+                };
+                assertThat(notice(held(reason, latest)).code()).as(reason + "/" + latest).isEqualTo(code);
+                PaymentApproval failedLookup = held(reason, latest);
+                failedLookup.recordInspectionFailure("UNAVAILABLE", at.plusSeconds(5));
+                assertThat(notice(failedLookup).code()).as(reason + "/" + latest + "/lookup failed").isEqualTo(Code.CHARGE_UNCONFIRMED);
+            }
+            PaymentApproval unobserved = approval(); unobserved.stopPosts(reason, at);
+            assertThat(notice(unobserved).code()).as(reason + "/unobserved").isEqualTo(Code.CHARGE_UNCONFIRMED);
+        }
+    }
+
+    @Test void eachCodeUsesTheDecisionWording() {
         assertCode("PAID_WITHOUT_ADMISSION", ApprovalObservation.State.PAID, Code.CHARGED, CHARGED);
         assertCode("PG_CANCELLED", ApprovalObservation.State.CANCELLED, Code.CHARGE_CANCELLED, CHARGE_CANCELLED);
-        assertCode("PG_INVALID_EVIDENCE", ApprovalObservation.State.READY, Code.CHARGE_UNCONFIRMED, CHARGE_UNCONFIRMED);
         assertCode("PG_PENDING_AT_ORDER_EXPIRY", ApprovalObservation.State.PENDING, Code.CHARGE_UNCONFIRMED, CHARGE_UNCONFIRMED);
+        assertCode("CONFIRM_WINDOW_EXPIRED", ApprovalObservation.State.READY, Code.NOT_CHARGED, NOT_CHARGED);
     }
 
-    @Test void otherReasonsFollowTheLatestObservation() {
-        for (String reason : new String[] {"CONFIRM_WINDOW_EXPIRED", "PG_REQUEST_REJECTED", "ORDER_ADMISSION_CONFLICT", "ORDER_EXPIRY_CONFLICT"}) {
-            assertCode(reason, ApprovalObservation.State.PENDING, Code.CHARGE_UNCONFIRMED, CHARGE_UNCONFIRMED);
-            assertCode(reason, ApprovalObservation.State.READY, Code.NOT_CHARGED, NOT_CHARGED);
-        }
-    }
-
-    @Test void aFailedLatestLookupMeansTheChargeIsUnconfirmed() {
-        for (String error : new String[] {"UNAVAILABLE", "INVALID_EVIDENCE"}) {
-            PaymentApproval held = held("CONFIRM_WINDOW_EXPIRED", ApprovalObservation.State.READY);
-            held.recordInspectionFailure(error, at.plusSeconds(5));
-            assertThat(notice(held).code()).as(error).isEqualTo(Code.CHARGE_UNCONFIRMED);
-        }
-        PaymentApproval recovered = held("CONFIRM_WINDOW_EXPIRED", ApprovalObservation.State.READY);
-        recovered.recordInspectionFailure("UNAVAILABLE", at.plusSeconds(5));
-        recovered.recordObservation(observation(ApprovalObservation.State.READY), at.plusSeconds(10));
-        assertThat(notice(recovered).code()).isEqualTo(Code.NOT_CHARGED);
-    }
-
-    @Test void aFixedReasonKeepsItsCodeWhateverTheLaterLookupSays() {
+    @Test void aConsoleCancellationAfterAPaidHoldShowsTheReturnedCharge() {
         PaymentApproval paid = held("PAID_WITHOUT_ADMISSION", ApprovalObservation.State.PAID);
-        paid.recordInspectionFailure("UNAVAILABLE", at.plusSeconds(5));
         assertThat(notice(paid).code()).isEqualTo(Code.CHARGED);
-        PaymentApproval cancelled = held("PG_CANCELLED", ApprovalObservation.State.CANCELLED);
-        cancelled.recordInspectionFailure("UNAVAILABLE", at.plusSeconds(5));
-        assertThat(notice(cancelled).code()).isEqualTo(Code.CHARGE_CANCELLED);
-        PaymentApproval pending = held("PG_PENDING_AT_ORDER_EXPIRY", ApprovalObservation.State.PENDING);
-        pending.recordObservation(observation(ApprovalObservation.State.READY), at.plusSeconds(5));
-        assertThat(notice(pending).code()).isEqualTo(Code.CHARGE_UNCONFIRMED);
+        paid.recordObservation(observation(ApprovalObservation.State.CANCELLED), at.plusSeconds(5));
+        assertThat(notice(paid)).isEqualTo(new ApprovalReviewNotice(Code.CHARGE_CANCELLED, CHARGE_CANCELLED, at));
+        paid.recordInspectionFailure("UNAVAILABLE", at.plusSeconds(10));
+        assertThat(notice(paid).code()).isEqualTo(Code.CHARGE_UNCONFIRMED);
+        paid.recordObservation(observation(ApprovalObservation.State.CANCELLED), at.plusSeconds(15));
+        assertThat(notice(paid).code()).isEqualTo(Code.CHARGE_CANCELLED);
     }
 
     @Test void theNoticeStartsWhenTheHoldStartedAndNeverShowsTheReason() {

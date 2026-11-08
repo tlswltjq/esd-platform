@@ -465,6 +465,22 @@ class ApprovalReviewClosureIntegrationTest {
         assertThat(checkout.body().path("error").path("message").asText()).isEqualTo("기존 결제 승인을 처리하고 있습니다.");
     }
 
+    /** Decision 132: a hold takes its charge code from the latest PG observation, whatever reason started it. */
+    @Test void theLatestPgObservationDecidesTheChargeNoticeOfAHold() {
+        Payment rejected = purchase(); PaymentApproval rejectedHold = heldAfterAdmission(rejected);
+        assertThat(detail(rejected).path("reviewNotice").path("code").asText()).isEqualTo("NOT_CHARGED");
+        STATES.put(rejected.getPaymentId(), "PAID");
+        assertThat(closure(rejectedHold, id(), "PG 상태 확인", "ADMIN").body().path("error").path("code").asText()).isEqualTo("CLOSURE_PG_PAID");
+        assertThat(row(rejectedHold).getLastErrorCode()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(row(rejectedHold).getLatestPgState()).isEqualTo(ApprovalObservation.State.PAID);
+        assertCustomerNotice(rejected, rejectedHold, "CHARGED", "결제 금액 10,000원이 청구된 것으로 확인되어");
+
+        Payment paid = purchase(); PaymentApproval paidHold = paidWithoutAdmission(paid);
+        STATES.put(paid.getPaymentId(), "CANCELLED"); advance(5); worker.execute(paidHold.getApprovalId());
+        assertThat(row(paidHold).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertCustomerNotice(paid, paidHold, "CHARGE_CANCELLED", "결제 금액 10,000원은 전액 취소되었습니다.");
+    }
+
     /** Decision 123: after an operator closure the customer learns that the order ended and whether the charge was returned. */
     @Test void aClosedHoldTellsTheCustomerTheOrderEndedAndWhetherTheChargeWasReturned() {
         Payment refunded = purchase(); PaymentApproval refundedHold = paidWithoutAdmission(refunded);

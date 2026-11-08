@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import com.stove.payment.core.domain.ApprovalObservation;
 import com.stove.payment.core.domain.ApprovalReviewNotice;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
@@ -135,6 +136,8 @@ class ReadPaymentCheckoutTest {
                     assertThat(error.errorCode()).isEqualTo(PaymentErrorCode.APPROVAL_IN_PROGRESS);
                     assertThat(error.getMessage()).isEqualTo("기존 결제 승인을 처리하고 있습니다.");
                 });
+        approval.recordObservation(new ApprovalObservation(ApprovalObservation.State.PAID,new PgResult("PORTONE_TEST",payment.getPaymentId(),payment.getOrderNo(),
+                payment.getAmount(),payment.getCurrency(),"pg-tx",payment.getCreatedAt(),PgResult.Decision.APPROVED,null,null),null),payment.getCreatedAt());
         approval.stopPosts("PAID_WITHOUT_ADMISSION",payment.getCreatedAt());
         assertThatThrownBy(()->service().execute(payment.getOrderNo(),payment.getBuyerSubject()))
                 .isInstanceOfSatisfying(BusinessException.class,error->{
