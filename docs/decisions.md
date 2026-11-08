@@ -1144,6 +1144,15 @@
 - 구분: 추천 수용
 - 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
 
+<a id="confirm-window-expired-hold"></a>
+## 124. confirm 기한(3시간)이 지난 접수 승인이 미확정이면 새 사유로 보류에 올린다
+- 문제: 접수된 승인이 PortOne `PAY_PENDING`(또는 `READY`)인 채로 최초 준비 후 3시간(confirm 재송신 기한, Payment R4.6)을 넘기는 경우가 있다. 이때 승인은 `ADMITTED`로 남아 5초마다 조회만 끝없이 반복하고, 주문은 Order R3.6에 따라 `PAYMENT_PROCESSING`에 계속 묶인다. `REVIEW_REQUIRED`가 아니라서 보류 게이지·경보·ADMIN 목록·로그에 보이지 않고, 종결은 `APPROVAL_NOT_HELD`로 거절된다. [결정 122](#approval-review-requery-interval)(간격)·[123](#approval-review-customer-notice)(고객 안내)·[115](#approval-review-closure-outcome)(종결)도 적용되지 않는다. 그 사이 고객이 같은 상품을 새로 주문하면, 첫 건이 나중에 PAID가 될 때 같은 상품을 두 번 사게 된다.
+- 선택지: A 지금 유지 / B 3시간을 넘긴 미종결 건수 게이지와 경보만 둔다 / C 환불 지연처럼 별도 ADMIN 목록(`/api/v1/admin/approval-delays`)을 둔다 / D 3시간이 지나고 PG가 `PENDING`·`READY`인 접수 승인을, 작업자가 조회한 직후 새 사유(예: `CONFIRM_WINDOW_EXPIRED`)로 `REVIEW_REQUIRED`에 올린다. 그러면 기존 보류 흐름(결정 114·115·122·123)을 그대로 탄다 (추천: D — 새 화면이나 정책 없이 이미 정한 목록·경보·간격·안내·종결을 그대로 쓴다. 3시간 뒤에는 confirm을 보낼 수 없어서, 보류로 올려도 바뀌는 금융 동작이 없다. B·C는 묶인 주문을 풀지 못한다)
+- 내 의견: "D안으로 해줘"
+- 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 대상은 `ADMITTED`이고 `firstPreparedAt + 3시간`이 지났으며 최신 PG 상태가 `PENDING` 또는 `READY`인 승인이다. 작업자가 조회한 직후 `stopPosts`로 새 사유를 붙여 보류한다. 늦은 PAID·FAILED는 지금처럼 원래 주문으로 끝낸다. 보류 게이지의 사유 목록, 경보 테스트, R4.6·R12.4 문구를 갱신하고, PAY_PENDING으로 3시간을 넘기는 통합 테스트를 더한다. 기존 행은 다음 조회 때 저절로 올라오므로 별도 이행 작업은 두지 않는다. 고객 안내는 결정 123의 묶음을 따른다(PG `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`면 `NOT_CHARGED`). R4.6의 "시간만으로 실패·새 키·새 결제를 만들지 않는다"는 그대로 지킨다.
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
