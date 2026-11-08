@@ -6,6 +6,7 @@ import com.stove.payment.adapter.trace.DisabledPaymentTracing;
 import com.stove.payment.adapter.trace.JdbcPaymentTraceContexts;
 import com.stove.payment.adapter.trace.MicrometerPaymentTracing;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.payment.core.domain.ApprovalClosureRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -17,6 +18,7 @@ import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.PaymentTraceContexts;
 import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.service.ReadApprovalReviewNotice;
 import com.stove.payment.core.service.ResolvePayment;
 import com.stove.payment.core.service.ReadPaymentFailureHistory;
 import com.stove.payment.core.service.ReceiveOrderPayment;
@@ -39,6 +41,9 @@ public class PaymentConfiguration {
     @Bean OrderPaymentLifecycleLocks orderPaymentLifecycleLocks(JdbcTemplate jdbc) { return new JdbcOrderPaymentLifecycleLocks(jdbc); }
     @Bean ApplyOrderExpiry applyOrderExpiry(PaymentOrderLifecycleRepository lifecycle,PaymentRepository payments,PaymentApprovalRepository approvals,ProcessedEventGuard inbox,OrderPaymentLifecycleLocks locks) {
         return new ApplyOrderExpiry(lifecycle,payments,approvals,inbox,locks);
+    }
+    @Bean ReadApprovalReviewNotice readApprovalReviewNotice(PaymentApprovalRepository approvals, ApprovalClosureRepository closures) {
+        return new ReadApprovalReviewNotice(approvals, closures);
     }
     @Bean ReadPaymentFailureHistory readPaymentFailureHistory(PaymentRepository payments, FailedPaymentAttemptRepository attempts) {
         return new ReadPaymentFailureHistory(payments, attempts);

@@ -8,6 +8,8 @@ import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.PgPayment;
 import com.stove.settlement.core.domain.PlatformFeePolicy;
 import com.stove.settlement.core.domain.ProductOwner;
+import com.stove.settlement.core.domain.SellerLock;
+import com.stove.settlement.core.domain.SellerLockRepository;
 import com.stove.settlement.core.domain.SellerMonthlySettlement;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementMonth;
@@ -35,11 +37,14 @@ public class RecordPaidSale {
     private final PlatformFeePolicy policy;
     private final Clock clock;
     private final RecordPgTransaction pgRecords;
+    private final SellerLockRepository sellers;
     private final TransactionTemplate transaction;
 
     public RecordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
-            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
+            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords,
+            SellerLockRepository sellers) {
         this.sales=sales; this.months=months; this.guard=guard; this.payments=payments; this.owners=owners; this.policy=policy; this.clock=clock; this.pgRecords=pgRecords;
+        this.sellers=sellers;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public SettlementSale execute(PaidOrder input) {
@@ -71,8 +76,11 @@ public class RecordPaidSale {
         if(previous!=null) return previous;
         Instant now=clock.instant().truncatedTo(ChronoUnit.MICROS);
         String original=SettlementMonth.at(input.occurredAt()).value();
-        SellerMonthlySettlement month=lockMonth(owner.sellerSubject(),original,now);
-        if(month.isClosed()) {
+        lockSeller(owner.sellerSubject(),now);
+        // Decisions 42·130: a later CLOSED month closes every earlier month of the seller, rows or not; no row is created for it.
+        boolean laterClosed=months.existsBySellerSubjectAndStatusAndSettlementMonthGreaterThan(owner.sellerSubject(),"CLOSED",original);
+        SellerMonthlySettlement month=laterClosed ? null : lockMonth(owner.sellerSubject(),original,now);
+        if(laterClosed || month.isClosed()) {
             for(int rollover=0;rollover<3;rollover++) {
                 now=clock.instant().truncatedTo(ChronoUnit.MICROS);
                 month=lockMonth(owner.sellerSubject(),SettlementMonth.at(now).value(),now);
@@ -93,5 +101,8 @@ public class RecordPaidSale {
     }
     private SellerMonthlySettlement lockMonth(String seller,String month,Instant now) {
         return months.lock(seller,month).orElseGet(() -> months.saveAndFlush(SellerMonthlySettlement.open(seller,month,now)));
+    }
+    private void lockSeller(String seller,Instant now) {
+        if(sellers.lock(seller).isEmpty()) sellers.saveAndFlush(SellerLock.of(seller,now));
     }
 }
