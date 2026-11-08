@@ -1091,7 +1091,7 @@
 - 내 의견: "C안으로 하자"
 - 선택: C — 기본 레지스트리를 `localhost/stove`로 바꾼다(예: `localhost/stove/gateway:latest`, `localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`). Docker는 `localhost`를 레지스트리 주소로 보므로 받기가 Docker Hub로 가지 않는다. 배포는 지금처럼 `STOVE_JIB_REGISTRY`에 우리 레지스트리를 지정해 게시하고 받는다. 구현 판단: 예전 이름(`stove/…`)을 환경 변수로 직접 지정한 설정(예전 `testing.md`가 안내한 `STOVE_TEST_MINIO_IMAGE=stove/minio:…`)도 Docker Hub로 가지 않도록, Gradle·테스트·검증 도구가 받지 않고 오류로 알린다.
 - 구분: 추천 수용
-- 결과: (PR 생성 후 기입)
+- 결과: [PR #139](https://github.com/tlswltjq/esd-platform/pull/139), 근거 색인 2026-11-08 기본 registry 행
 
 ---
 
