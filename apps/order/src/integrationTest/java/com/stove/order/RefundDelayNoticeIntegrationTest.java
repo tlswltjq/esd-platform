@@ -167,9 +167,14 @@ class RefundDelayNoticeIntegrationTest extends OrderIntegrationTestBase {
         RefundAttempt failedAttempt=attempt(f); restore.execute(new LicenseRestorationConfirmation(id(),DELAY.plusSeconds(90),failedAttempt.getRestorationRequestEventId(),
                 f.refund().getRefundId(),old.getAttemptId(),failed,old.getLicenseId(),f.order().getOrderNo(),f.order().getBuyerSubject(),f.order().getProductId(),f.order().getProductCode(),f.order().getPaymentId(),old.getSuspensionRequestEventId(),old.getSuspensionEventId(),false));
         assertThat(customer(f).data().path("status").asText()).isEqualTo("FAILED"); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
+        // 결정 134: 저장된 시도 실패 코드를 고객용 코드로 옮기고, 내부 코드·사유 원문은 보이지 않는다.
+        JsonNode failure=customer(f).data(); assertThat(failure.path("failureNotice").path("code").asText()).isEqualTo("PAYMENT_NOT_CANCELLED");
+        assertThat(failure.path("failureNotice").path("message").asText()).isEqualTo("결제 취소가 처리되지 않아 환불되지 않았습니다. 다시 신청하면 환불됩니다.");
+        assertThat(failure.toString()).doesNotContain(failedAttempt.getFailureReasonCode()).doesNotContain(failedAttempt.getFailureReason());
         when(clock.instant()).thenReturn(DELAY.plusSeconds(100));
         assertThat(http("POST",path(f)+"/retries",Map.of("previousAttemptId",old.getAttemptId()),"usr_buyer","MEMBER").status()).isEqualTo(202);
         preparation.execute(oldFact); assertThat(customer(f).data().path("processingNotice").isNull()).isTrue();
+        assertThat(customer(f).data().path("failureNotice").isNull()).isTrue();
         when(clock.instant()).thenReturn(DELAY.plusSeconds(101)); Refund retry=current(f);
         suspension.execute(new LicenseSuspensionConfirmation(id(),DELAY.plusSeconds(101),retry.getSuspensionRequestEventId(),f.refund().getRefundId(),old.getLicenseId(),
                 f.order().getOrderNo(),f.order().getBuyerSubject(),f.order().getProductId(),f.order().getProductCode(),f.order().getPaymentId()));
