@@ -1109,7 +1109,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — "A-D 좀 더 쉽게 설명해줘"라고 설명을 요청한 뒤 고른 선택지: "C로 해, 31분 대기 포함")
 - 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 30분 안 조합은 기존 야간 흉내 서버 작업에 넣는다. 기한을 넘는 세 조합은 시작할 때 주문을 함께 만들고 31분 대기 한 번으로 묶은 별도 야간 작업(제한 60분)에 둔다. 두 작업 모두 PR CI에는 넣지 않으므로 실패는 다음 날 알게 된다. PAY_PENDING이 3시간을 넘겨 조회만 계속하는 조합은 통합 테스트로 인정한다. (2026-11-08 정정: 설명 때 근거로 든 `PaymentApprovalIntegrationTest:220-227`은 3시간 경계에서 PG가 READY인 경우만 확인한다. PAY_PENDING으로 3시간을 넘기는 통합 테스트는 없어서 새로 더한다. AI 설명의 사실 오류이며 선택의 방향은 바뀌지 않는다) 흉내 서버에는 같은 paymentId 다중 시도, PAY_PENDING 유지 뒤 PAID/FAILED 전환, confirm 400/403 거절 주입을 더한다(검증 도구만).
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다(D-044 기한 여정 추가는 남음)
 
 <a id="seller-negative-net-carryover"></a>
 ## 121. 판매자의 음수 월 순액은 마감 때 다음 월로 이월하고, 지급 기준액은 0원 아래로 내리지 않는다
@@ -1151,7 +1151,7 @@
 - 내 의견: "D안으로 해줘"
 - 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 대상은 `ADMITTED`이고 `firstPreparedAt + 3시간`이 지났으며 최신 PG 상태가 `PENDING` 또는 `READY`인 승인이다. 작업자가 조회한 직후 `stopPosts`로 새 사유를 붙여 보류한다. 늦은 PAID·FAILED는 지금처럼 원래 주문으로 끝낸다. 보류 게이지의 사유 목록, 경보 테스트, R4.6·R12.4 문구를 갱신하고, PAY_PENDING으로 3시간을 넘기는 통합 테스트를 더한다. 기존 행은 다음 조회 때 저절로 올라오므로 별도 이행 작업은 두지 않는다. 고객 안내는 결정 123의 묶음을 따른다(PG `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`면 `NOT_CHARGED`). R4.6의 "시간만으로 실패·새 키·새 결제를 만들지 않는다"는 그대로 지킨다.
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현은 후속 PR
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)(사유 `CONFIRM_WINDOW_EXPIRED`), 근거 색인 2026-11-08 confirm 기한 경과 보류 행
 
 <a id="license-grant-wait-detection"></a>
 ## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
@@ -1188,6 +1188,24 @@
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment에 ADMIN 실패 종결 API를 둔다. 대상은 자동 POST가 멈춘 실행(403·400 중단, 잔액 변화 차단, 또는 3시간 창 종료)이다. 종결은 결정 115·127과 같은 구조(작업자와 같은 lease, 트랜잭션 밖 PG 재조회, 조회 뒤 별도 잠금 트랜잭션)로 하고, 재조회 결과가 원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음일 때만 닫는다. PG가 받아 둔 `REQUESTED` 취소가 있거나 일부라도 취소됐으면 거절한다. 근거 종류(예: `NO_LINKED_CANCELLATION`)·ADMIN·근거 스냅샷·시각을 저장하고, 기존 `RefundExecutionFailed`를 보내 Order의 보유권 복구와 고객 재시도로 잇는다. 고객 재시도의 사전 확인은 PG FAILED 기록이 없는 이 종결 실패도 이전 실패로 받도록 고친다. 실패로 닫은 뒤에도 낮은 빈도로 PG 조회를 남기고, 늦은 전액 취소가 발견되면 조사 대상과 경보로 올린다. 이때 보유권과 환불 상태는 자동으로 바꾸지 않으며, 늦은 취소가 실제로 생기면 그 처리를 다시 정한다. 시간만으로 실패·복구하지 않는다는 결정 29 하위는 그대로 지킨다. 운영 절차서에 "중단 원인 확인 → 실패 종결 또는 콘솔 취소 뒤 결정 127 종결" 순서를 적는다.
 - 구분: 추천 수용
 - 결과: [PR #149](https://github.com/tlswltjq/esd-platform/pull/149) (기록), 구현은 후속 PR
+
+<a id="orphan-license-grant-republish"></a>
+## 129. Kafka에서 원본이 사라져 지급 확인을 기다리는 환불은, DB에 남은 원래 Outbox 이벤트를 같은 ID로 다시 발행해 잇는다
+- 문제: 환불은 Order가 `LicenseGranted`를 받아 `order_license_grant`를 기록해야 `PENDING_LICENSE_GRANT`를 벗어난다([결정 125](#license-grant-wait-detection)). 그 이벤트가 Order 소비에서 재시도를 다 써 DLT로 갔는데 재투입하지 않은 채 Kafka 보존 기간(설정이 없어 기본 7일로 추정)이 지나면, [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉을 쓸 수 없다. publish는 성공해 License Outbox 행이 `SENT`이기 때문이다. 원래 이벤트는 License `outbox_event`에 `event_id`·본문·키와 함께 남아 있지만, `SENT` 행을 다시 내보내는 경로가 없다. 절차서(`license-event-recovery-runbook.md`)는 "원본 없음은 확인 대상, 새 이벤트 ID·SQL 보정 금지"라고만 한다. 예: 11-01 10:00 9,000원 결제 → 10:00:02 `LicenseGranted` SENT → Order DB 장애로 DLT → 11-08 DLT 레코드 삭제(추정) → 11-09 15:30 심사 환불 승인 → `PENDING_LICENSE_GRANT`에 멈춤. 고객은 `PROCESSING`만 보고 돈을 돌려받지 못하며, 자동 환불이면 ADMIN 승인 중단도 쓸 수 없다. `OrderPaid`가 같은 식으로 사라지면 License 구매 근거 자체가 없다.
+- 선택지: A 현행 유지(확인 대상으로 남기고 원인 조사) / B 이벤트를 소유한 모듈의 ops API(예: `POST /api/v1/ops/outbox/{eventId}/republish`)로 `SENT`인 `OrderPaid`·`LicenseGranted` 한 건을 원래 `event_id`·본문·키 그대로 다시 발행한다. 받는 쪽의 Inbox·검증·환불 흐름은 그대로 쓴다 / C Order ADMIN 지급 확인 종결: License 내부 HTTP 조회(새 서비스 키)로 구매 근거가 맞을 때만 `order_license_grant`를 기록 / D 환불을 새 끝 상태로 닫고 재신청 허용 (추천: B — 남아 있는 원래 이벤트를 다시 쓰므로 근거가 시스템 기록 자체이고, 지급·확인·정지 검증은 기존 소비자가 그대로 한다. 지급 건(`LicenseGranted`)과 미지급 건(`OrderPaid`)을 한 경로로 다루며 서비스 간 HTTP 의존과 새 이벤트 계약을 만들지 않는다. C는 미지급 건을 닫지 못하고 [결정 29](#full-refund-policy) 하위의 "환불마다 HTTP 조회 기각"과 결정 125의 "새 계약 없음"에 부딪히며, D는 "정지 확인 후 PG 실행" 순서를 지킬 수 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 원래 이벤트를 같은 ID로 재발행"). 질문 전에 "해당 문제를 실제 기술용어를 들어 조금 더 쉽게 설명해줘"를 요청해 Outbox·DLT·Inbox·보존 기간 기준으로 다시 설명을 받았다.
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이벤트를 소유한 모듈(License의 `LicenseGranted`, Order의 `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행을 더한다. ADMIN만 쓰고, 한 번에 한 건이며, 실행자·시각·사유를 기록한다. 행은 원래 `event_id`·본문·키를 그대로 두고 다시 publish 대상으로 돌린다. 새 이벤트 ID는 만들지 않는다. 받는 쪽은 Inbox로 중복을 거르므로 이미 처리된 이벤트의 재발행은 효과가 없어야 하고, 이를 테스트로 보인다. 구매 근거가 있으면 `LicenseGranted`를, 구매 근거가 없으면 `OrderPaid`를 재발행한다. 그러면 License가 지급한 뒤 `LicenseGranted`를 보내 정상 흐름으로 이어진다. 결정 37의 "원래 ID·본문·키를 보존해 재투입"을 `SENT` 행까지 넓힌 것이다. 절차서의 "원본 없음"은 "Outbox 행도 없음"으로 좁히고, 재발행 전에 "Outbox `SENT`·상대 Inbox 없음"을 확인하는 순서를 적는다. Outbox 행까지 없는 경우와 받는 쪽 검증이 거절하는 모순 건은 여전히 조사 대상이다. 자동 재발행·대조 엔진은 만들지 않는다(결정 37).
+- 구분: 추천 수용
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현은 후속 PR
+
+<a id="seller-close-order-carryover"></a>
+## 130. 판매자 월 마감은 오래된 월부터 하고, 이월은 직전 마감 월에서 받는다
+- 문제: [결정 121](#seller-negative-net-carryover)은 "마감할 때 `순액 + carriedIn`이 음수면 다음 월로 넘긴다"고만 정했다. 그런데 판매자 월 마감(`POST /sellers/{sellerSubject}/months/{month}/close`, `CloseSellerMonth`)은 "현재 월보다 이전 월"인지만 확인하고 순서는 검사하지 않는다. 월 행(`seller_monthly_settlement`)은 활동이나 마감 요청이 있을 때만 생긴다. 예: 10월 순액 −3,600원, 11월 +2,700원인데 12월 5일 11월을 먼저 마감하면 `carriedIn` 0으로 `payable` +2,700원이 확정된다. 12월 6일 10월을 마감하면 넘길 −3,600원이 이미 마감된 11월로 갈 수 없어(결정 42 마감본 불변) 사라지고 판매자는 2,700원을 더 받는다. 활동이 없어 행이 없는 월을 건너뛸지도 정해지지 않았다.
+- 선택지: A 마감 순서 강제: M을 마감할 때 M보다 이전 월에 OPEN 행이 있으면 409로 거절하고, `carriedIn`은 M 이전의 마지막 CLOSED 월의 `carriedOut`, 행이 없는 월은 건너뜀 / B 다음 OPEN 월로 이월(순서 자유, 결정 42 방식) / C 달력 M+1로 고정(순서 자유) (추천: A — 지급 기준액이 마감 순서와 관계없이 하나로 정해지고 이월이 사라지지 않는다. 운영 부담은 "오래된 월부터 마감" 하나이고 기존 "지난 월만 마감" 409와 같은 모양이다. B는 먼저 마감한 월이 앞 월 손실을 반영하지 못해 과지급이 생길 수 있고, C는 M+1이 이미 마감됐으면 이월을 잃는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마감 순서 강제하고 직전 마감 월에서 이월")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 판매자 월 M을 마감할 때 같은 판매자의 M보다 이전 월에 OPEN 행이 있으면 409로 거절한다. `carriedIn`은 M 이전의 마지막 CLOSED 월이 넘긴 `carriedOut`이고, 행이 없는 월은 건너뛴다. 이월 원장은 `(판매자, 월)`마다 한 행이며 마감 트랜잭션 안에서 쓴다. 이월 원장이 없는 옛 CLOSED 월은 `carriedIn = 0`으로 보고, 그 응답 값은 구현 PR에서 테스트로 고정한다. 결정 121의 지급 기준액 규칙(`payable = max(0, 순액 + carriedIn)`, 음수면 넘김)과 송금 미실행은 그대로다.
+- 구분: 추천 수용
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현은 후속 PR
 
 ---
 
