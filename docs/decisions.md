@@ -1315,7 +1315,7 @@
   - PG 비용 확정·비용 반환·지급 수령 대사는 G7에서 실제 공급자 근거로 한다. 로드맵 §4 원칙은 바꾸지 않는다.
   - 비용 대사(`PG_COST_PENDING`·`DIFFERENT_COST`)를 장애 실험에 넣을 필요가 측정으로 드러나면 G6에서 C를 다시 묻는다.
 - 구분: 추천 수용
-- 결과: 기록 PR
+- 결과: [PR #181](https://github.com/tlswltjq/esd-platform/pull/181) (기록)
 
 ---
 
