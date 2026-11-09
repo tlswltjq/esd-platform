@@ -32,10 +32,10 @@
 - [ ] [외부 대기] 토스페이 정산 수집을 실제 스택에서 켜고 런타임 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg)). 토스페이 가맹점 키(`TOSSPAY_API_KEY`·`TOSSPAY_MERCHANT_ID`)와 키 대응 검증(위 "PG 비용 LIVE 확정")이 있어야 의미 있는 응답이 온다. 토스페이 흉내 서버는 없고 HTTP 계약은 `TossPayStatementHttpTest`의 루프백 응답 서버로만 확인한다. override에는 넣지 않았다(`SETTLEMENT_TOSSPAY_ENABLED` 기본 false)
 - [ ] [외부 대기] Settlement PORTONE_TEST override를 실제 PortOne에 연결해 확인 — G7([결정 140](../../../docs/decisions.md#defer-real-pg)). 우리 전용 테스트 가맹점이 생긴 뒤 결정 111의 후속으로 정한다(공용 예제 키는 2026-11-07부터 거절, [결정 110](../../../docs/decisions.md#portone-refund-settlement-journey) 결과)
 - [x] G3 변경 이후 열한 업무 앱 + 모의 PG 전체 여정(`tools/verification/verify-settlement.py`) 재실행 — 2026-11-07 21단계 통과([근거 색인](../../../docs/evidence.md)). 모의 PG 기준이며 최신 PortOne 연결 검증이 아니다.
-- [ ] [결정 필요] 환불 → 정산 조정의 실제 스택 여정 — 위 여정에는 환불 단계가 없다. 모의 PG에 취소 기능이 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회만 받는다. 실행 방식은 정책 선택이 필요하다(PortOne TEST는 사람 승인 필요).
+- [x] (정리: 위 "환불 → 정산 조정 실제 스택 여정" 항목·[결정 111](../../../docs/decisions.md#portone-fake-journey)·근거 색인 2026-11-07 settlement 행으로 끝남) 환불 → 정산 조정의 실제 스택 여정 — 위 여정에는 환불 단계가 없다. 모의 PG에 취소 기능이 없고, Settlement의 환불 근거 조회(`PgRefunds`)는 PortOne 조회만 받는다. 실행 방식은 정책 선택이 필요하다(PortOne TEST는 사람 승인 필요).
 - [ ] [외부 대기] 실제 PG 지급 수령 확인: PORTONE 공급자의 지급 명세 수집(현재 503)과 PG 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
 - [ ] PG 계약 중립화([결정 140](../../../docs/decisions.md#defer-real-pg)): core의 공급자 문자열(`PgEvidence`·`PgRefundCancellation`·`PgPayment`·`PgFunding`의 `PORTONE_TEST`·`SIMULATED`, `PgCostPosting`·`PgStatementCheck`의 `PORTONE_LIVE`)과 `PgStatement`·`PgStatementScope`의 `portoneStoreId`·`portoneChannelKey`를 공급자 중립 근거로 바꾼다. 저장 값·열은 호환한다(결정 104) — G3
-- [ ] [결정 필요] 시뮬레이터 근거의 모의 수령 표시와 G3 완료 판정: 실제 공급자 근거가 G7로 옮겨진 뒤, 시뮬레이터가 준 거래·비용·환불 근거를 어떻게 구분해 저장·조회하고 무엇으로 G3를 닫을지([로드맵 §4](../../../docs/roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다") — G3
+- [ ] G3 종료 여정([결정 142](../../../docs/decisions.md#g3-exit-current-contract)): 중립화를 마친 코드로 PortOne 흉내 서버 실제 스택 여정을 돌려 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영을 확인하고, 비용·지급의 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, PORTONE 지급 명세 503, 빈 TEST 결과를 0원으로 보지 않음)를 확인한다. 비용·지급 대사는 G7 — G3
 
 ## 범위 밖(후속)
 

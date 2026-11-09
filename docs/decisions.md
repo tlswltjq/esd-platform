@@ -1305,6 +1305,18 @@
 - 구분: 추천 수용
 - 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 흉내 서버 확장은 후속 PR
 
+<a id="g3-exit-current-contract"></a>
+## 142. G3는 지금 정산 계약으로 닫고, PG 비용·지급 확인은 G7로 넘긴다
+- 문제: [결정 140](#defer-real-pg)·[결정 141](#portone-fake-as-reference-simulator)로 실제 PG 확인을 G7로 넘기자 G3 완료 판정의 근거를 정해야 했다. PortOne 흉내 서버로 원승인·취소 근거 읽기, 매출 배분, 환불 조정, 이월, 마감은 끝까지 돈다. 반면 PG 비용(토스페이 정산 API)은 TEST에서 미확정으로 남고(Settlement R4.7), PORTONE 지급 명세 접수는 503이며(R3.5), 토스페이 흉내 서버가 없어 비용·반환·지급 대사는 한 번도 끝까지 돌지 않았다.
+- 선택지: A 지금 계약으로 닫는다 — 흉내 서버 근거로 원매출·환불 조정·판매자/플랫폼 순액·마감 전후를 검증하고, 비용·지급은 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, PORTONE 지급 명세 503)만 검증한다 / B 토스페이 정산 흉내 서버를 더하되 비용은 TEST 규칙대로 미확정 유지 / C 토스페이 정산 흉내 서버와 새 근거 출처 `SIMULATOR`를 두고 비용 확정·지급 대사까지 허용 (추천: A — 결정 140의 목적인 PG 소음 축소에 맞다. [결정 39](#seller-close-independent-of-pg-cost)로 판매자 마감이 PG 비용과 이미 분리돼, 판매자 금액 흐름은 비용 없이 모두 검증·실험할 수 있다. C는 [로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다"에 예외를 만든다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 지금 계약으로 G3를 닫아")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - G3 완료 판정: 결정 140의 PG 계약 중립화를 마친 코드로, 흉내 서버 실제 스택 여정에서 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영과 비용·지급의 미확정 표시(NULL·503, 빈 TEST 결과를 0원으로 보지 않음)를 확인한다.
+  - PG 비용 확정·비용 반환·지급 수령 대사는 G7에서 실제 공급자 근거로 한다. 로드맵 §4 원칙은 바꾸지 않는다.
+  - 비용 대사(`PG_COST_PENDING`·`DIFFERENT_COST`)를 장애 실험에 넣을 필요가 측정으로 드러나면 G6에서 C를 다시 묻는다.
+- 구분: 추천 수용
+- 결과: [PR #181](https://github.com/tlswltjq/esd-platform/pull/181) (기록)
+
 <a id="money-spec-first"></a>
 ## 143. 돈이 오가는 4개 모듈(Payment·Order·License·Settlement)의 SPEC을 먼저 정비하고, 그다음 PG 계약 중립화를 구현한다
 - 문제: 결제·환불 결정이 기존 결정과 계속 부딪혔는데, 부딪히는지 확인할 기준이 SPEC에 없었다. Payment `design.md`의 상태 다이어그램은 `Payment` 하나뿐이고, `PaymentApproval`(상태 7개)·`RefundExecution`(상태 3개 + 보류·종결·조회 일정·귀속 판정 필드)은 전이 표 없이 R7·R12~R14 서술과 결정 본문에 흩어져 있다. License·Settlement `design.md`에는 상태 전이 정의가 없다. Payment 요구사항은 결정 순서대로 붙어 R14가 두 개다. 모듈 간 돈 흐름(`docs/domain/workflows.md`)은 2026-11-06 뒤로 갱신되지 않았고 금액 불변식은 어디에도 없다. `tasks.md`는 완료 항목의 구현 경위로 길어졌다(payment 한 줄 최대 1,056자, order 1,207자). 요구사항에는 PortOne 이름이 남아 있다(payment 18곳, settlement 7곳).
