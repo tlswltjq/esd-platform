@@ -22,7 +22,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 사용자의 판단 이력은 [판단 색인](docs/judgment-index.md)에 모은다. 새 결정이 색인 기준(비즈니스 영향·사용자 판단이 뚜렷함)에 맞으면 한 행을 추가한다.
 
-새 결정은 main의 마지막 번호 다음 번호를 쓴다. 다른 PR과 번호가 겹치면 나중에 병합하는 쪽이 바꾼다. 번호를 바꾸면 `git grep '결정 N'`으로 링크가 아닌 언급도 찾아 바꾼다. CI가 번호 중복·순서와 `[결정 N]` 링크 번호를 확인한다([결정 116](docs/decisions.md#decision-numbers)).
+새 결정의 번호는 착수 때 예약한다. `python3 tools/ci/next_decision_number.py`로 main과 열린 PR(draft 포함)이 적은 번호 다음 번호를 받는다. 그 번호를 draft PR 본문 `맡은 항목`의 `결정 번호:`에 적은 뒤에 사용자에게 결정을 묻거나 기록한다. 다른 PR이 예약한 번호가 아직 main에 없어 빈 번호가 생겨도 그대로 둔다. 예약 번호가 늦게 병합되면 결정을 번호 자리에 끼워 넣는다. 같은 번호가 겹치면 나중에 병합하는 쪽이 바꾸고, `git grep '결정 N'`으로 링크가 아닌 언급도 찾아 바꾼다. CI는 번호 중복·오름차순, 새 번호가 main 최대 + 10 이하인지, `[결정 N]` 링크 번호를 확인한다([결정 116](docs/decisions.md#decision-numbers)·[결정 139](docs/decisions.md#decision-number-reservation)).
 
 ### 결정을 기다리는 동안 ([결정 118](docs/decisions.md#continuous-development))
 
