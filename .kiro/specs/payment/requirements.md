@@ -71,7 +71,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 3. THE 승인 접수 SHALL Order의 최초 승인 접수 영수증을 저장한 뒤에만 confirm을 실행하며, 승인 응답 요약만으로 완료 이벤트를 만들지 않고 다시 조회한다.
 4. THE 고정 본문과 토큰 SHALL AES-GCM으로 암호화해 보관하고, 원본을 로그·응답·Order·Kafka에 전달하지 않는다. 재송신은 복호화한 원래 바이트·같은 키만 쓴다.
 5. WHEN 승인 POST 응답이 유실되면 THEN 시스템 SHALL 최초 송신 준비부터 3시간 미만에 같은 승인 ID·멱등 키·본문으로 자동 재송신하며 조회를 병행하고, 재시작·재시도·lease 재획득으로 준비 시각을 초기화하지 않는다.
-6. WHEN 최초 준비부터 3시간이 되면 THEN 시스템 SHALL 자동 POST를 멈추고 GET만 이어가며, 시간만으로 실패·새 키·새 결제를 만들지 않는다. 그 시점부터 접수된(`ADMITTED`) 승인을 조회한 결과 PG가 `PENDING`·`READY`이면 조회 직후 `CONFIRM_WINDOW_EXPIRED`로 승인 보류(`REVIEW_REQUIRED`, R12·R13)에 올린다. 늦은 PAID·FAILED는 원래 주문으로 끝낸다([결정 124](../../../docs/decisions.md#confirm-window-expired-hold)).
+6. WHEN 최초 준비부터 3시간이 되면 THEN 시스템 SHALL 자동 POST를 멈추고 GET만 이어가며, 시간만으로 실패·새 키·새 결제를 만들지 않는다. 그 시점부터 접수된(`ADMITTED`) 승인을 조회한 결과 PG가 `PENDING`·`READY`이면 조회 직후 `CONFIRM_WINDOW_EXPIRED`로 승인 보류(`REVIEW_REQUIRED`, R12·R13)에 올린다. 조회 자체가 장애로 실패하면 마지막 유효 PG 관측(`latestPgState`)이 `PENDING`·`READY`일 때 같은 사유로 보류하고, 유효 관측이 없으면 바꾸지 않는다([D-049](../../../docs/defects.md#d-049)). 늦은 PAID·FAILED는 원래 주문으로 끝낸다([결정 124](../../../docs/decisions.md#confirm-window-expired-hold)).
 7. THE 승인 어댑터 SHALL `PAID`만 확정하고 그 밖의 상태는 미확정(`PENDING`·재조회 예약)으로 유지한다.
 8. WHERE `GET /api/v1/payments/{orderNo}/checkout`인 맥락에서 THE 시스템 SHALL 본인·`PORTONE_TEST`·로컬 `PENDING`일 때만 공개 SDK 설정(storeId·channelKey·paymentId·금액·`EASY_PAY`·customData.orderNo·noticeUrls)을 `no-store`로 반환하고, 로컬 `PAID`/`FAILED`·다른 공급자는 409, 타인/없는 결제는 404다. 이 API는 결제 예약·PG 실행이 아니다.
 9. THE confirm 본문 SHALL txId·currency·totalAmount·isTest를 고정하고, 공급자 거래 조회로 원구매·금액·통화·TEST 채널·txId를 대조한다. READY·FAILED 응답의 `amount.paid` 값으로 성공을 추정하지 않는다.
@@ -120,14 +120,14 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 5. WHEN 전액 취소가 증명되면 THEN 시스템 SHALL `RefundPaymentConfirmed`를 발행하고 원 `purchase_payment`의 `PAID`·원금액을 바꾸지 않는다.
 6. THE 실행 FAILED SHALL 우리 시도에 연결된 PG 취소 ID의 FAILED와, 추가 GET으로 확인한 원결제 PAID·전액 미취소·진행/성공/미지 취소 없음이 함께 있을 때만 `RefundExecutionFailed` Outbox와 함께 저장한다. 취소 ID 누락·부분 취소·조회 장애는 실패를 만들지 않고, FAILED 내역의 reason을 PG 실패 원인으로 표시하지 않는다. 이용권 복구 확인은 Order가 소유한다. IF 금융 완료가 먼저 커밋됐으면 THEN 뒤늦은 실패 근거로 실패·복구를 만들지 않는다.
 7. THE 시스템 SHALL 시간 경과·타임아웃·연결 실패만으로 환불 실패·새 키·새 시도를 만들지 않고 정지·GET을 유지한다.
-8. WHERE 401·GET 403/404·POST 404 맥락에서 THE 시스템 SHALL 기존 조건 회복 후 같은 요청을 재개하고, POST 403·정확한 400 `INVALID_REQUEST`는 자동 POST를 멈추고 GET을 유지한다.
+8. WHERE 401·GET 403/404·POST 404 맥락에서 THE 시스템 SHALL 기존 조건 회복 후 같은 요청을 재개하고, POST 403·정확한 400 `INVALID_REQUEST`·형식 갖춘 그 밖 4xx(R7.15)는 자동 POST를 멈추고 GET을 유지한다.
 9. THE 자동 취소 POST SHALL 송신 직전 정상 GET으로 원결제·상점·채널·주문·통화·PG 거래/시각과 원액=취소 요청액=예상 잔액을 대조한 뒤에만 보낸다. 최초 실행은 취소 이력이 없어야 하고 후속 실행은 저장한 선행 FAILED 이력과 정확히 일치해야 하며, 조회 실패·검증 불가면 그 회에는 POST하지 않는다.
 10. THE Idempotency-Key SHALL attemptId를 RFC 8941 문자열로 감싼 값이며, 본문은 최초 준비 때 커밋한 UTF-8 원문을 재사용하고 reason은 refundId 기반 기술 상관값이다.
-11. WHEN 우리 시도의 REQUESTED/FAILED 정상 접수 응답이 있으면 THEN 시스템 SHALL 같은 시도의 자동 POST를 멈추고 조회만 이어간다. `IDEMPOTENCY_OUTSTANDING_REQUEST`·일반 409는 미확정으로 다룬다.
+11. WHEN 우리 시도의 REQUESTED/FAILED 정상 접수 응답이 있으면 THEN 시스템 SHALL 같은 시도의 자동 POST를 멈추고 조회만 이어간다. 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`와 본문이 깨지거나 type이 없는 409는 미확정으로 다룬다. 그 밖에 정상 JSON에 type이 있는 409는 R7.15의 형식 거절이고, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 R7.3의 잔액 변화다([결정 133](../../../docs/decisions.md#refund-formal-rejection-stop)).
 12. THE 전액 취소 확인 SHALL 중복 없는 양수 성공 취소 ID들의 합계가 원액인 경우(여러 건 합산 포함)를 인정하고 FAILED·REQUESTED 내역은 성공 합계에서 제외한다. 선택 항목 cancelledAt이 없으면 추정하지 않고 NULL로 둔다.
 13. WHEN 조회로 먼저 금융 완료(`PG_QUERY_UNATTRIBUTED`)가 확정된 뒤 같은 취소 ID·금액의 직접 성공 응답이 확인되면 THEN 시스템 SHALL 최초 금융 근거를 유지하고 그 이벤트를 참조하는 `RefundExecutionSucceeded`를 한 번만 저장한다. 다른 취소 ID의 성공 주장은 거절한다.
 14. WHEN 명시적 후속 실행 요청(previousAttemptId)이 오면 THEN 시스템 SHALL 같은 PAID·refundId·검증된 FAILED 선행 실행·새 실제 정지 완료를 확인하고 선행 실행 하나당 후행 실행 하나만 접수한다. 후행 실행은 새 attemptId·본문·준비 시각·3시간 창을 가진다.
-15. WHILE POST 403 또는 정확한 400 `INVALID_REQUEST` 중단이 활성인 동안 THE 시스템 SHALL Kafka 재전달·재송신 스캔·내부 호출 어디서도 POST하지 않으며, GET 회복이나 설정 수정만으로 중단을 풀지 않는다. 그 밖의 400 형태(미지 타입·깨진 JSON 등)는 일반 미확정이다.
+15. WHILE POST 403(`PG_REQUEST_FORBIDDEN`), 정확한 400 `INVALID_REQUEST`(`PG_REQUEST_INVALID`) 또는 형식 거절(`PG_REQUEST_REJECTED`) 중단이 활성인 동안 THE 시스템 SHALL Kafka 재전달·재송신 스캔·내부 호출 어디서도 POST하지 않으며, GET 회복이나 설정 수정만으로 중단을 풀지 않는다. 형식 거절은 정상 JSON 객체에 비어 있지 않은 문자열 type이 있는 400·409·그 밖 4xx이고(type 형식·길이는 따지지 않음), 응답 상태와 type을 중단 기록에 남긴다([결정 133](../../../docs/decisions.md#refund-formal-rejection-stop)). 401·404는 R7.8대로 자동 재개하고, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·408·429·5xx·깨진 본문·type 없는 본문·타임아웃은 일반 미확정이며, 409 잔액 변화는 R7.3대로다. 중단 뒤에도 조회는 이어 가고, 운영자는 3시간 안 재개(R7.16) 또는 [결정 128](../../../docs/decisions.md#refund-failure-closure) 실패 종결로 잇는다.
 16. THE 운영 재개 SHALL 현재 중단 ID·미확정·최초 준비 후 3시간 미만·새 접수/완료/부분 취소 없음을 확인한 뒤 다음 스캔 대상으로만 등록하고 재송신 단계를 초기화하지 않는다. 같은 requestId·내용은 최초 영수증을 반환하고, 예전 재개 지시는 새 중단을 풀지 않는다.
 
 ### R8. 조회·관리자 운영과 최소 보안

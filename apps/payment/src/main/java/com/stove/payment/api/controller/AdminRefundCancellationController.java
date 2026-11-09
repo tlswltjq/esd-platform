@@ -33,7 +33,7 @@ public class AdminRefundCancellationController {
 
     @GetMapping
     @Operation(operationId = "searchRefundCancellationHolds", summary = "관리자 환불 송신 중단 목록",
-            description = "기본 activeOnly=true는 현재 중단만 조회합니다. false는 과거 재개·미적용 관측도 포함합니다. 기한이 지난 중단도 표시하며 observedAt·ID 순으로 조회합니다. 재개 가능 여부는 조회 시점의 안내이며 실행 시 다시 검증합니다.")
+            description = "기본 activeOnly=true는 현재 중단만 조회합니다. false는 과거 재개·미적용 관측도 포함합니다. 기한이 지난 중단도 표시하며 observedAt·ID 순으로 조회합니다. 재개 가능 여부는 조회 시점의 안내이며 실행 시 다시 검증합니다. 형식 거절 type은 앞 200자 미리보기(rejectionTypePreview)와 문자 수(rejectionTypeLength)만 보이고, 원문은 상세에서 확인합니다.")
     public ResponseEntity<ApiResponse<RefundCancellationHoldPage>> search(@RequestParam(defaultValue = "true") boolean activeOnly,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())

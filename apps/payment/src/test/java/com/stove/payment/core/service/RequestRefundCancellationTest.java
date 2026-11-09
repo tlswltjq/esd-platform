@@ -21,6 +21,7 @@ import static org.mockito.Mockito.doAnswer;
 import com.stove.payment.core.domain.Payment;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PgCancellationRejection;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgRefundCancellationSuccess;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
@@ -217,6 +218,45 @@ class RequestRefundCancellationTest {
         assertThat(received.getCancellationSchedule().getNextAt()).isNull();
         assertThat(received.getLookupSchedule().getNextAt()).isNotNull();
         assertThat(received.getFailureEventId()).isNull(); assertThat(received.getRefundConfirmedAt()).isNull();
+        assertThat(received.getCancellationRequestBody()).isEqualTo("frozen-wire-body");
+    }
+
+    @Test void aFormalRejectionCommitsItsHoldWithStatusAndTypeBeforeLookupWithoutFailingTheRefund() {
+        RefundExecution received = fixture();
+        when(gateway.send(any(), any(), anyString()))
+                .thenReturn(RefundCancellationDispatch.rejected(new PgCancellationRejection(409, "PAYMENT_NOT_PAID")));
+        service().executeFirst(received.getAttemptId());
+        ArgumentCaptor<RefundCancellationHold> recorded = ArgumentCaptor.forClass(RefundCancellationHold.class);
+        InOrder order = inOrder(holds, executions, transactions, reconcile);
+        order.verify(holds).saveAndFlush(recorded.capture());
+        order.verify(executions).flush(); order.verify(transactions).commit(any());
+        order.verify(reconcile).execute(received.getAttemptId());
+        assertThat(recorded.getValue().getReason()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(recorded.getValue().getRejectionStatus()).isEqualTo(409);
+        assertThat(recorded.getValue().getRejectionType()).isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(recorded.getValue().isActivated()).isTrue();
+        assertThat(received.getActiveCancellationHoldId()).isEqualTo(recorded.getValue().getHoldId());
+        assertThat(received.getCancellationSchedule().getNextAt()).isNull();
+        assertThat(received.getLookupSchedule().getNextAt()).isNotNull();
+        assertThat(received.getFailureEventId()).isNull(); assertThat(received.getRefundConfirmedAt()).isNull();
+        assertThat(received.getCancellationRequestBody()).isEqualTo("frozen-wire-body");
+    }
+
+    /**
+     * Candidate ③ of the 2026-11-08 HTTP error survey, reproduced as the current contract: a frozen body that no longer
+     * matches the configuration (for example a changed PORTONE_STORE_ID) is refused before any HTTP call on every round,
+     * leaves no hold and keeps the retry schedule until the three-hour window ends. Whether it should stop with a hold is a
+     * policy still to be decided (payment tasks.md [결정 필요]); this test pins the behaviour until then.
+     */
+    @Test void aStoredBodyThatNoLongerMatchesTheConfigurationIsRefusedEveryRoundWithoutAHold() {
+        RefundExecution received = fixture();
+        when(gateway.send(any(), any(), anyString()))
+                .thenThrow(new IllegalArgumentException("Stored cancellation body is not for the original full amount"));
+        assertThatThrownBy(() -> service().executeFirst(received.getAttemptId())).isExactlyInstanceOf(IllegalArgumentException.class);
+        verify(holds, never()).saveAndFlush(any());
+        verify(reconcile, never()).execute(received.getAttemptId());
+        assertThat(received.getActiveCancellationHoldId()).isNull(); assertThat(received.getAutomaticCancellationStoppedAt()).isNull();
+        assertThat(received.getCancellationSchedule().getNextAt()).isNotNull();
         assertThat(received.getCancellationRequestBody()).isEqualTo("frozen-wire-body");
     }
 

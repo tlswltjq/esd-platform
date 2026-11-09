@@ -17,6 +17,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.web.error.BusinessException;
+import com.stove.payment.core.domain.PgCancellationRejection;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.PgPaymentAmounts;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
@@ -32,6 +33,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -221,6 +223,20 @@ class PortOneRefundCancellationGatewayTest {
         server.verify();
     }
 
+    /** [D-048] A 409 whose body is not a typed JSON object is an unconfirmed outcome, not an escaping parse failure (R7.15). */
+    @Test
+    @DisplayName("[D-048] 환불 취소 409의 깨진 본문·type 없음은 IllegalArgumentException으로 새지 않고 미확정이다")
+    void malformedOrUntypedConflictsRemainUnconfirmedInsteadOfEscapingAsInvalidInput() {
+        for (String error : List.of("<html>private-provider-detail</html>", "", "{}", "[]", "{\"type\":409}", "{\"type\":\" \"}",
+                "{\"type\":\"PAYMENT_NOT_PAID\",\"type\":\"OTHER\"}", "{\"type\":\"PAYMENT_NOT_PAID\"} {}")) {
+            server.reset(); expectRead(paid());
+            expectPost(body(), withStatus(HttpStatus.CONFLICT).body(error).contentType(MediaType.APPLICATION_JSON));
+            assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
+                    .isExactlyInstanceOf(PgUnavailable.class).hasMessageNotContaining("private-provider-detail");
+            server.verify();
+        }
+    }
+
     @Test void aLeaseThatExpiresDuringPreflightCannotAuthorizeALatePost() {
         Clock clock = mock(Clock.class);
         when(clock.instant()).thenReturn(FIRST.plusSeconds(1), FIRST.plusSeconds(5));
@@ -255,16 +271,77 @@ class PortOneRefundCancellationGatewayTest {
         server.verify();
     }
 
-    @Test void unrecognizedOrMalformedBadRequestsRemainUnconfirmedWithoutCreatingAnInputRejection() {
-        for (String error : List.of("<html>private-provider-detail</html>", "{}", "{\"type\":\"OTHER_ERROR\"}",
+    @Test void malformedOrUntypedBadRequestsRemainUnconfirmedWithoutCreatingAnInputRejection() {
+        for (String error : List.of("<html>private-provider-detail</html>", "{}",
                 "{\"type\":\"INVALID_REQUEST\",\"type\":\"OTHER_ERROR\"}", "{\"type\":\"INVALID_REQUEST\"} {}", "{\"type\":400}",
-                "{\"type\":\"INVALID_REQUEST \"}")) {
+                "{\"type\":{\"code\":\"INVALID_REQUEST\"}}", "{\"type\":[\"INVALID_REQUEST\"]}", "{\"type\":null}", "{\"type\":true}",
+                "{\"type\":\"\"}", "{\"type\":\"  \"}")) {
             server.reset(); expectRead(paid());
             expectPost(body(), withStatus(HttpStatus.BAD_REQUEST).body(error).contentType(MediaType.APPLICATION_JSON));
             assertThatThrownBy(() -> gateway.send(permission, purchase, body()))
                     .isExactlyInstanceOf(PgUnavailable.class).hasMessageNotContaining("private-provider-detail");
             server.verify();
         }
+    }
+
+    /** Decision 133: PortOne judged the request, so a typed 400·409·other 4xx stops automatic POSTs with its status and type. */
+    @Test void formallyTypedClientErrorsStopAutomaticPostsWithTheirStatusAndType() {
+        for (Object[] error : List.of(new Object[] {400, "OTHER_ERROR"}, new Object[] {409, "PAYMENT_NOT_PAID"},
+                new Object[] {409, "INVALID_REQUEST"}, new Object[] {405, "METHOD_NOT_ALLOWED"}, new Object[] {422, "CANCEL_AMOUNT_EXCEEDED"},
+                new Object[] {422, "payment_not_paid"}, new Object[] {400, "INVALID_REQUEST "}, new Object[] {409, "결제 상태 오류"},
+                new Object[] {409, "A".repeat(65)}, new Object[] {400, "TYPE_" + "X".repeat(5000)})) {
+            server.reset(); expectRead(paid());
+            expectPost(body(), withStatus(HttpStatus.valueOf((Integer) error[0]))
+                    .body("{\"type\":\"" + error[1] + "\",\"message\":\"private-provider-detail\"}").contentType(MediaType.APPLICATION_JSON));
+            RefundCancellationDispatch dispatch = gateway.send(permission, purchase, body());
+            assertThat(dispatch.observation()).isEqualTo(RefundCancellationDispatch.Observation.REJECTED);
+            assertThat(dispatch.rejection()).isEqualTo(new PgCancellationRejection((Integer) error[0], (String) error[1]));
+            assertThat(dispatch.success()).isNull(); assertThat(dispatch.receipt()).isNull();
+            server.verify();
+        }
+    }
+
+    /**
+     * PR #168 R4: the error body parser keeps Jackson's 20,000,000-character string limit. A type at the limit is a formal
+     * rejection kept whole; one character more cannot be parsed and stays an unconfirmed (malformed) body, as before.
+     */
+    @Test void aFormalRejectionTypeAtTheParserLimitIsKeptWholeAndOneCharacterMoreIsUnconfirmed() {
+        String atLimit = "가".repeat(20_000_000);
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.CONFLICT).body("{\"type\":\"" + atLimit + "\"}").contentType(MediaType.APPLICATION_JSON));
+        RefundCancellationDispatch dispatch = gateway.send(permission, purchase, body());
+        assertThat(dispatch.rejection()).isEqualTo(new PgCancellationRejection(409, atLimit));
+        server.verify(); server.reset(); expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.CONFLICT).body("{\"type\":\"" + atLimit + "가\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgUnavailable.class);
+        server.verify();
+    }
+
+    /** Decision 133 keeps an outstanding key, throttling, a request timeout and every 5xx unconfirmed even with a typed body. */
+    @Test void typedThrottlingTimeoutAndServerErrorsRemainUnconfirmed() {
+        for (Object[] error : List.of(new Object[] {429, "TOO_MANY_REQUESTS"}, new Object[] {408, "REQUEST_TIMEOUT"},
+                new Object[] {409, "IDEMPOTENCY_OUTSTANDING_REQUEST"}, new Object[] {500, "INTERNAL_SERVER_ERROR"},
+                new Object[] {502, "PG_PROVIDER"}, new Object[] {503, "SERVICE_UNAVAILABLE"})) {
+            server.reset(); expectRead(paid());
+            expectPost(body(), withStatus(HttpStatus.valueOf((Integer) error[0]))
+                    .body("{\"type\":\"" + error[1] + "\"}").contentType(MediaType.APPLICATION_JSON));
+            assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgUnavailable.class);
+            server.verify();
+        }
+    }
+
+    /** 401 and 404 keep resuming automatically and 403 keeps its own hold even when PortOne sends a typed JSON body. */
+    @Test void typedUnauthorizedMissingAndForbiddenKeepTheirExistingClassification() {
+        expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.UNAUTHORIZED).body("{\"type\":\"UNAUTHORIZED\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgAuthenticationUnavailable.class);
+        server.reset(); expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.NOT_FOUND).body("{\"type\":\"PAYMENT_NOT_FOUND\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> gateway.send(permission, purchase, body())).isExactlyInstanceOf(PgCancellationNotFound.class);
+        server.reset(); expectRead(paid());
+        expectPost(body(), withStatus(HttpStatus.FORBIDDEN).body("{\"type\":\"FORBIDDEN\"}").contentType(MediaType.APPLICATION_JSON));
+        assertThat(gateway.send(permission, purchase, body())).isEqualTo(RefundCancellationDispatch.FORBIDDEN);
+        server.verify();
     }
 
     @Test void invalidPreflightInputIsAnUnavailableReadAndCannotCreateACancellationHold() {
