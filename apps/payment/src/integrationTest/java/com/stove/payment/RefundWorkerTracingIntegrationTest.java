@@ -57,7 +57,6 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -142,7 +141,6 @@ class RefundWorkerTracingIntegrationTest extends PaymentIntegrationTestBase {
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
 
-    @Tag("known-defect")
     @DisplayName("[D-050] 응답 유실 뒤 조회 작업자의 PG 조회와 확정 Outbox가 저장된 환불 부모 아래 이어진다")
     @Test void theLookupWorkerConfirmsALostResponseUnderTheSavedRefundParent() throws Exception {
         mode = Mode.UNKNOWN;
@@ -156,7 +154,6 @@ class RefundWorkerTracingIntegrationTest extends PaymentIntegrationTestBase {
         assertContinuesUnder(parent, switched);
     }
 
-    @Tag("known-defect")
     @DisplayName("[D-050] PG 5xx 뒤 재송신 작업자의 PG 취소와 확정 Outbox가 저장된 환불 부모 아래 이어진다")
     @Test void theRetryWorkerResendsUnderTheSavedRefundParent() throws Exception {
         mode = Mode.UNKNOWN;
