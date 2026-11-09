@@ -96,7 +96,7 @@
 | REGISTERED | 없음 | REGISTERED, 보유권 ACTIVE |
 | REGISTERED | 있음 | STORED, 옛 보유권 ENDED, returnedToStorage=true |
 - 동시 최초 지급은 유일 제약이 최종 방어한다. 경합에서 진 트랜잭션은 전체 롤백하고 Kafka 재전달의 새 트랜잭션에서 수렴한다. 전역 잠금·분산 임대·메모리 중복 집합을 두지 않는다.
-- 정지·복구는 원구매와 요청을 대조한 뒤 상태 전이·이력·Inbox·결과 Outbox를 함께 커밋한다. 정지된 상품도 조회에는 남고, 환불이 끝난(`REFUNDED`·`ENDED`) 항목은 라이브러리·보관함에서 빠진다(결정 97). 이력은 주문 내역에 남는다.
+- 정지·복구는 원구매와 요청을 대조한 뒤 상태 전이·이력·Inbox·결과 Outbox를 함께 커밋한다. 복구·승인 정정은 같은 정지인지를 식별자(`licenseId`·`suspensionRequestEventId`·`suspensionEventId`·`refundId`)로만 대조하고, 요청 발생 시각(Order 시계)과 정지·처리 시각(License 시계)의 선후로 거부하지 않는다(R8-3, [D-052](../../../docs/defects.md#d-052)). 두 시각은 받은 값·처리 시각 그대로 저장한다. 정지된 상품도 조회에는 남고, 환불이 끝난(`REFUNDED`·`ENDED`) 항목은 라이브러리·보관함에서 빠진다(결정 97). 이력은 주문 내역에 남는다.
 - Order PAID와 License 지급 사이에는 전달 지연이 있다. 조회는 권한을 생성하거나 Kafka 처리를 재촉하지 않는다.
 
 ## 오류·복구

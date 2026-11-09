@@ -34,7 +34,6 @@ import java.time.Instant;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,7 +44,6 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -132,7 +130,7 @@ class LicenseRestorationIntegrationTest extends LicenseIntegrationTestBase {
             assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
         });
     }
-    @Test @Tag("known-defect")
+    @Test
     @DisplayName("[D-052] License 시계가 Order보다 늦어 처리 시각이 요청 발생 시각보다 앞서도 복구한다")
     void restoresWhenTheLicenseClockIsBehindTheOrderClock() {
         // 기대: 같은 정지(licenseId·suspensionRequestEventId·suspensionEventId)로 대조된 요청이면 시계 차이와 무관하게 복구하고 두 시각을 그대로 저장한다
@@ -141,11 +139,10 @@ class LicenseRestorationIntegrationTest extends LicenseIntegrationTestBase {
         RestorationRequest input = fixture(NOW.plusSeconds(5));
         restore.execute(input);
         assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
-        Map<String, Object> row = jdbc.queryForMap("SELECT request_occurred_at, restored_at FROM license_restoration WHERE request_event_id=?", input.eventId());
-        assertThat(((Timestamp) row.get("request_occurred_at")).toInstant()).isEqualTo(input.occurredAt());
-        assertThat(((Timestamp) row.get("restored_at")).toInstant()).isEqualTo(NOW);
+        assertThat(jdbc.queryForObject("SELECT request_occurred_at FROM license_restoration WHERE request_event_id=?", Timestamp.class, input.eventId()).toInstant()).isEqualTo(input.occurredAt());
+        assertThat(jdbc.queryForObject("SELECT restored_at FROM license_restoration WHERE request_event_id=?", Timestamp.class, input.eventId()).toInstant()).isEqualTo(NOW);
     }
-    @Test @Tag("known-defect")
+    @Test
     @DisplayName("[D-052] Order 시계가 License보다 늦어 요청 발생 시각이 정지 시각보다 앞서도 복구한다")
     void restoresWhenTheOrderClockIsBehindTheLicenseClock() {
         // 기대: 요청 발생 시각(Order 시계)이 실제 정지 시각(License 시계)보다 앞서도 식별자가 맞으면 복구한다
