@@ -9,15 +9,18 @@ Three automatic refunds run one after another on an isolated stack with its own 
 For every refund the tool reads the buyer's refund trace (Gateway X-Correlation-Id), every refund
 Outbox row of Order/License/Payment with its stored traceparent, Payment's saved refund parent, and the
 Tempo spans of each trace it finds. A segment is connected when its Outbox row (or span) belongs to the
-refund trace. Evidence: runs/refund-tracing-*/refund-tracing.json. The tool fails while any segment is
+refund trace. The refund trace itself must be complete evidence (support/refund_tracing.py): Tempo lookup
+succeeds with spans, exactly one root, gateway/order/license/payment/settlement, no missing parent, and the
+scenario's PG spans with worker lookups/resends under payment.process. Evidence: runs/refund-tracing-*/refund-tracing.json. The tool fails while any segment is
 broken, after the business outcome itself has been checked.
 """
 from pathlib import Path
-import base64, json, sys, time, urllib.parse, urllib.request
+import json, sys, time, urllib.parse, urllib.request
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/verification"))
 from support.fake_portone_stack import FakePortOneStack  # noqa: E402
+from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace  # noqa: E402
 
 REFUND_EVENTS = {
     "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
@@ -28,31 +31,12 @@ SCENARIOS = [("normal", None), ("lost-response", {"outcome": "LOST_RESPONSE", "f
              ("pg-error", {"outcome": "PG_ERROR", "failLookups": 0})]
 
 
-def hex_id(value):
-    if not value:
-        return ""
-    if len(value) in (16, 32) and all(c in "0123456789abcdef" for c in value):
-        return value
-    return base64.b64decode(value).hex()
-
-
 def tempo_spans(stack, trace_id):
+    """Lenient lookup for diagnostics of other traces only; the refund trace itself uses await_trace."""
     try:
-        with urllib.request.urlopen(stack.tempo_url + "/api/traces/" + trace_id, timeout=10) as response:
-            trace = json.load(response)
-    except Exception:
+        return fetch_trace(stack.tempo_url, trace_id)
+    except TraceUnavailable:
         return []
-    spans = []
-    for batch in trace.get("batches") or trace.get("resourceSpans") or []:
-        attributes = {a["key"]: a["value"].get("stringValue") for a in batch.get("resource", {}).get("attributes", [])}
-        for scope in batch.get("scopeSpans") or batch.get("instrumentationLibrarySpans") or []:
-            for span in scope.get("spans", []):
-                tags = {a["key"]: next(iter(a["value"].values()), None) for a in span.get("attributes", [])}
-                spans.append(dict(service=attributes.get("service.name"), name=span["name"], kind=span.get("kind"),
-                                  spanId=hex_id(span.get("spanId")), parentSpanId=hex_id(span.get("parentSpanId")),
-                                  url=tags.get("http.url") or tags.get("url.full") or tags.get("uri"),
-                                  start=int(span.get("startTimeUnixNano", 0)) / 1e9))
-    return spans
 
 
 def pg_call_traces(stack, payment_id, started):
@@ -72,15 +56,6 @@ def pg_call_traces(stack, payment_id, started):
         result.append(dict(traceId=trace["traceID"].rjust(32, "0"), root=trace.get("rootServiceName", "?") + ":" + trace.get("rootTraceName", "?"),
                            calls=sorted(calls), trace=describe(spans)))
     return result
-
-
-def describe(spans):
-    ids = {s["spanId"] for s in spans}
-    roots = [s for s in spans if not s["parentSpanId"]]
-    orphans = [s for s in spans if s["parentSpanId"] and s["parentSpanId"] not in ids]
-    return dict(spanCount=len(spans), services=sorted({s["service"] or "?" for s in spans}),
-                roots=[s["service"] + ":" + s["name"] for s in roots],
-                missingParents=[s["service"] + ":" + s["name"] for s in orphans])
 
 
 def trace_of(parent):
@@ -133,9 +108,15 @@ def journey(stack):
         attempt = stack.sql("SELECT attempt_id FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "'")
         saved = stack.sql("SELECT trace_parent FROM stove_payment.refund_execution_trace WHERE attempt_id='" + attempt + "'")
         source = stack.sql("SELECT COALESCE(refund_confirmation_source,'') FROM stove_payment.refund_execution WHERE attempt_id='" + attempt + "'")
-        time.sleep(15)  # OTLP batch export (5 s) and Tempo ingestion
+        # Wait for OTLP export and Tempo ingestion until the trace is complete evidence (one root, all
+        # services, no missing parent, the scenario's PG spans); an empty or failed lookup never passes.
+        try:
+            main = await_trace(lambda trace_id: fetch_trace(stack.tempo_url, trace_id), refund_trace, name, payment_id)
+            tempo_problems = []
+        except AssertionError as incomplete:
+            main, tempo_problems = tempo_spans(stack, refund_trace), [str(incomplete)]
+            broken.append(name + ": " + str(incomplete))
         rows = outbox_rows(stack, order_no)
-        main = tempo_spans(stack, refund_trace)
         segments = []
         for row in rows:
             row_trace = trace_of(row["traceParent"])
@@ -158,11 +139,9 @@ def journey(stack):
             if trace["traceId"] != refund_trace and any("/cancel" in c or "http get" in c for c in trace["calls"]):
                 broken.append(name + ": Payment PG calls in another trace " + trace["traceId"] + " root " + trace["root"] + " " + str(trace["calls"]))
         summary = describe(main)
-        if summary["missingParents"]:
-            broken.append(name + ": spans without parent in refund trace " + str(summary["missingParents"]))
         evidence["scenarios"][name] = dict(orderNo=order_no, paymentId=payment_id, attemptId=attempt, refundTrace=refund_trace,
                                            refundConfirmationSource=source, savedRefundParent=saved,
-                                           savedParentConnected=saved_trace == refund_trace, tempo=summary,
+                                           savedParentConnected=saved_trace == refund_trace, tempo=summary, tempoProblems=tempo_problems,
                                            pgCancelSpans=len(cancel_spans), pgLookupSpans=len(lookup_spans),
                                            pgRequests=[dict(method=r["method"], path=r["path"].split("?")[0], status=r["status"])
                                                        for r in fake.requests if payment_id in r["path"]],
