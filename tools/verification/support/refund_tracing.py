@@ -173,9 +173,17 @@ def trace_problems(spans, scenario, payment_id):
             problems.append("expected the first PG cancel and a resend, found " + str(len(cancels)))
         if not any(call["worker"] for call in cancels):
             problems.append("no worker PG resend under " + WORKER_SPAN)
-    if scenario == "restoration" and len(cancels) != 1:
-        # The FAILED answer is recorded and confirmed by the lookup right after it; nothing is sent again.
-        problems.append("expected exactly one PG cancel before the confirmed failure, found " + str(len(cancels)))
+    if scenario == "restoration":
+        if len(cancels) != 1:
+            # The FAILED answer is recorded and confirmed by the lookup right after it; nothing is sent again.
+            problems.append("expected exactly one PG cancel before the confirmed failure, found " + str(len(cancels)))
+        elif lookups:
+            # RequestRefundCancellation: preflight GET, POST cancel, then reconcile GET that confirms the failure.
+            sent = cancels[0]["span"]["start"]
+            if not any(call["span"]["start"] < sent for call in lookups):
+                problems.append("no PG preflight lookup before the cancel")
+            if not any(call["span"]["start"] > sent for call in lookups):
+                problems.append("no PG lookup after the cancel confirming the failure")
     return problems
 
 

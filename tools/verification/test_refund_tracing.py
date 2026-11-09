@@ -10,13 +10,13 @@ PAYMENT = "pay-1"
 PG = "http://127.0.0.1:1/payments/" + PAYMENT
 
 
-def span(service, name, span_id, parent="", kind="SPAN_KIND_INTERNAL", url=None, method=None):
-    return dict(service=service, name=name, kind=kind, spanId=span_id, parentSpanId=parent, url=url, method=method, start=0)
+def span(service, name, span_id, parent="", kind="SPAN_KIND_INTERNAL", url=None, method=None, start=0):
+    return dict(service=service, name=name, kind=kind, spanId=span_id, parentSpanId=parent, url=url, method=method, start=start)
 
 
-def client(span_id, parent, url, method=None):
+def client(span_id, parent, url, method=None, start=0):
     method = method or ("POST" if url.endswith("/cancel") else "GET")
-    return span("payment", "http " + method.lower(), span_id, parent, "SPAN_KIND_CLIENT", url, method)
+    return span("payment", "http " + method.lower(), span_id, parent, "SPAN_KIND_CLIENT", url, method, start)
 
 
 def complete(scenario):
@@ -31,7 +31,10 @@ def complete(scenario):
     if scenario == "pg-error":
         spans.append(client("c2", "w", PG + "/cancel"))
     if scenario == "restoration":
-        spans = [s for s in spans if s["service"] != "settlement"]
+        # Preflight GET (1), POST cancel answered FAILED (2), reconcile GET confirming the failure (3).
+        spans = [s for s in spans if s["service"] != "settlement" and s["kind"] != "SPAN_KIND_CLIENT"]
+        spans += [client("g1", "p", PG + "?storeId=s", start=1), client("c1", "p", PG + "/cancel", start=2),
+                  client("g3", "p", PG + "?storeId=s", start=3)]
         spans += [span("order", "stove.payment.v1 receive", "of", "p"), span("license", "stove.order.v1 receive", "lr", "of"),
                   span("order", "stove.license.v1 receive", "ol", "lr")]
     return spans
@@ -74,6 +77,15 @@ class TraceProblemsTest(unittest.TestCase):
                          ["expected exactly one PG cancel before the confirmed failure, found 2"])
         none = [s for s in complete("restoration") if s["spanId"] != "c1"]
         self.assertIn("no PG cancel span", trace_problems(none, "restoration", PAYMENT))
+
+    def test_restoration_requires_the_lookup_after_the_cancel_that_confirms_the_failure(self):
+        # The preflight lookup alone must not stand in for the reconcile lookup that confirms FAILED.
+        without_confirmation = [s for s in complete("restoration") if s["spanId"] != "g3"]
+        self.assertEqual(trace_problems(without_confirmation, "restoration", PAYMENT),
+                         ["no PG lookup after the cancel confirming the failure"])
+        without_preflight = [s for s in complete("restoration") if s["spanId"] != "g1"]
+        self.assertEqual(trace_problems(without_preflight, "restoration", PAYMENT),
+                         ["no PG preflight lookup before the cancel"])
 
     def test_payment_id_prefix_collision_does_not_count(self):
         # Validating pay-1 must not accept calls for pay-10.
