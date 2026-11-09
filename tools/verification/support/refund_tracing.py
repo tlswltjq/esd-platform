@@ -1,7 +1,8 @@
 """Tempo trace judgement for verify-refund-tracing.py (decision 28, D-050).
 
 A refund trace passes only with real evidence: the Tempo lookup must succeed and return spans,
-exactly one root, every required service, no span whose parent is missing, and the scenario's
+exactly one root, every required service (``required_services``: Settlement is not required after a confirmed PG failure),
+no span whose parent is missing, and the scenario's
 Payment PG client spans (worker lookups/resends under ``payment.process``). Collection is awaited
 with a deadline; an empty or failed lookup is a failure, never a pass. A passing snapshot is accepted only
 after STABLE_READS consecutive reads return the same span ids, so a late export (an orphan span) is still
@@ -16,6 +17,9 @@ import urllib.parse
 import urllib.request
 
 REQUIRED_SERVICES = ("gateway", "order", "license", "payment", "settlement")
+# Confirmed PG failure: the refund ends FAILED with the license restored and money untouched, so Settlement
+# records nothing (it may still open a consumer span while skipping Payment events; that is not required).
+RESTORATION_SERVICES = ("gateway", "order", "license", "payment")
 WORKER_SPAN = "payment.process"
 CLIENT_KINDS = ("SPAN_KIND_CLIENT", 3)
 STABLE_READS = 3
@@ -140,6 +144,10 @@ def pg_calls(spans, payment_id):
     return cancels, lookups
 
 
+def required_services(scenario):
+    return RESTORATION_SERVICES if scenario == "restoration" else REQUIRED_SERVICES
+
+
 def trace_problems(spans, scenario, payment_id):
     """Every reason this refund trace is not complete evidence; empty means it passes."""
     if not spans:
@@ -148,7 +156,7 @@ def trace_problems(spans, scenario, payment_id):
     problems = []
     if len(summary["roots"]) != 1:
         problems.append("expected exactly one root, found " + str(len(summary["roots"])) + " " + str(summary["roots"]))
-    missing = [name for name in REQUIRED_SERVICES if name not in summary["services"]]
+    missing = [name for name in required_services(scenario) if name not in summary["services"]]
     if missing:
         problems.append("missing services " + str(missing))
     if summary["missingParents"]:
@@ -165,6 +173,17 @@ def trace_problems(spans, scenario, payment_id):
             problems.append("expected the first PG cancel and a resend, found " + str(len(cancels)))
         if not any(call["worker"] for call in cancels):
             problems.append("no worker PG resend under " + WORKER_SPAN)
+    if scenario == "restoration":
+        if len(cancels) != 1:
+            # The FAILED answer is recorded and confirmed by the lookup right after it; nothing is sent again.
+            problems.append("expected exactly one PG cancel before the confirmed failure, found " + str(len(cancels)))
+        elif lookups:
+            # RequestRefundCancellation: preflight GET, POST cancel, then reconcile GET that confirms the failure.
+            sent = cancels[0]["span"]["start"]
+            if not any(call["span"]["start"] < sent for call in lookups):
+                problems.append("no PG preflight lookup before the cancel")
+            if not any(call["span"]["start"] > sent for call in lookups):
+                problems.append("no PG lookup after the cancel confirming the failure")
     return problems
 
 
@@ -211,6 +230,9 @@ REFUND_GROUP_SOURCES = (
     "apps/license/src/main/java/com/stove/license/core/service/ApplyPurchaseRefund.java",
     "apps/payment/src/main/java/com/stove/payment/core/service/ReceiveRefundExecution.java",
     "apps/settlement/src/main/java/com/stove/settlement/core/service/RecordConfirmedRefund.java",
+    # Restoration after a confirmed PG failure (RefundExecutionFailed -> LicenseRestorationRequested -> LicenseRestored).
+    "apps/order/src/main/java/com/stove/order/core/service/ApplyRefundRestoration.java",
+    "apps/license/src/main/java/com/stove/license/core/service/ApplyLicenseRestoration.java",
 )
 GROUP_CONSTANT = re.compile(r'CONSUMER_GROUP\s*=\s*"([^"]+)"')
 

@@ -12,10 +12,14 @@ POST /_fake/control/payments/{paymentId}/{action}
   settle           {"status": PAID|FAILED} latest PAY_PENDING attempt
   console-approve  latest READY attempt -> PAID without confirm (approval without our admission)
   console-cancel   latest PAID attempt -> full CANCELLED (operator cancels in the PortOne console)
-  arm-cancel       {"outcome": LOST_RESPONSE|PG_ERROR, "failLookups": n} applied to the next valid cancel of a
+  arm-cancel       {"outcome": LOST_RESPONSE|PG_ERROR|FAILED, "failLookups": n} applied to the next valid cancel of a
                    PAID attempt. LOST_RESPONSE cancels, then closes the connection without an answer; PG_ERROR
                    answers HTTP 503 without cancelling and without recording an idempotent replay. The next n
                    GET /payments/{id} calls after that cancel answer 503 (refund tracing, decision 119)
+                   FAILED answers HTTP 200 with a FAILED cancellation (id, full amount, requestedAt, no cancelledAt)
+                   and keeps the attempt PAID with cancelled 0; the FAILED row stays in the payment's cancellations,
+                   which is the confirmed failure Payment restores the license from (PortOneRefundCancellationGateway
+                   records the receipt, PortOneRefundPaymentLookup.inspectFailure confirms it)
 
 Every action targets one paymentId and its latest attempt only, so a journey can prepare many orders
 up front, drive each into its state, wait once past the order deadline and then settle each one
@@ -26,7 +30,8 @@ Response shapes follow the PortOne adapter fixtures and the 2026-10-27~31 PortOn
 Inferred, not observed in a real run: the confirm PG failure answer (HTTP 502, type PG_PROVIDER,
 PortOne V2 PgProviderError), the SDK refusal of an already paid paymentId (ALREADY_PAID), the
 failure object fields (reason/pgCode/pgMessage, PortOne V2 PaymentFailure) and the history order
-(oldest first; Payment does not depend on it). Webhooks are not sent.
+(oldest first; Payment does not depend on it) and the FAILED cancellation answer and row of arm-cancel
+FAILED (PortOne V2 FailedPaymentCancellation, shaped by the Payment adapters). Webhooks are not sent.
 """
 import copy
 import datetime
@@ -37,7 +42,7 @@ import threading
 import urllib.parse
 
 CONFIRM_OUTCOMES = {'FAILED', 'PAY_PENDING', 'REJECT_400', 'REJECT_403'}
-CANCEL_OUTCOMES = {'LOST_RESPONSE', 'PG_ERROR'}
+CANCEL_OUTCOMES = {'LOST_RESPONSE', 'PG_ERROR', 'FAILED'}
 CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'arm-cancel', 'settle', 'console-approve', 'console-cancel'}
 
 
@@ -162,6 +167,15 @@ class PortOneFake:
         attempt['amount']['cancelled'] = remaining
         return cancellation
 
+    @staticmethod
+    def fail_cancel(attempt, reason):
+        """A cancellation the PG refused: the purchase stays PAID with nothing cancelled, the FAILED row stays."""
+        remaining = attempt['amount']['paid'] - attempt['amount']['cancelled']
+        cancellation = dict(status='FAILED', id='cancel-' + secrets.token_hex(12), totalAmount=remaining,
+                            taxFreeAmount=0, vatAmount=remaining // 11, reason=reason, requestedAt=timestamp())
+        attempt.setdefault('cancellations', []).append(copy.deepcopy(cancellation))
+        return cancellation
+
     # --- dispatch ----------------------------------------------------------------------
     def dispatch(self, method, target, body, key, caller=None):
         parsed = urllib.parse.urlsplit(target)
@@ -234,6 +248,10 @@ class PortOneFake:
                 payment['failLookups'] = outcome['failLookups']
             if outcome is not None and outcome['outcome'] == 'PG_ERROR':
                 return 503, {'type': 'PG_PROVIDER', 'message': 'fake PG cancel unavailable'}
+            if outcome is not None and outcome['outcome'] == 'FAILED':
+                result = 200, {'cancellation': self.fail_cancel(attempt, body['reason'])}
+                self.replays[replay_key] = copy.deepcopy((body, result))
+                return result
             result = 200, {'cancellation': self.cancel(attempt, body['reason'])}
             if outcome is not None and outcome['outcome'] == 'LOST_RESPONSE':
                 self.replays[replay_key] = copy.deepcopy((body, result))

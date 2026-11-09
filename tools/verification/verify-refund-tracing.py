@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Tempo trace continuity of the new refund flow on the local PortOne fake (decisions 17, 28, 111, 119).
+"""Tempo trace continuity of the new refund flow on the local PortOne fake (decisions 17, 28, 29, 111, 119).
 
-Three automatic refunds run one after another on an isolated stack with its own Tempo and sampling 1:
+Four automatic refunds run one after another on an isolated stack with its own Tempo and sampling 1:
   normal         cancel answered at once (Kafka listener thread)
   lost-response  cancel applied but its answer lost, first lookup 503 -> durable lookup worker confirms
   pg-error       cancel answered 503 without cancelling -> durable retry worker sends again
+  restoration    cancel answered 200 with a FAILED cancellation, the lookup right after shows the purchase PAID,
+                 nothing cancelled and that FAILED row -> confirmed failure: RefundExecutionFailed ->
+                 LicenseRestorationRequested -> LicenseRestored -> refund FAILED, license back, no settlement refund
 
 For every refund the tool reads the buyer's refund trace (Gateway X-Correlation-Id), every refund
 Outbox row of Order/License/Payment with its stored traceparent, Payment's saved refund parent, and the
 Tempo spans of each trace it finds. A segment is connected when its Outbox row (or span) belongs to the
 refund trace. The refund trace itself must be complete evidence (support/refund_tracing.py): Tempo lookup
-succeeds with spans, exactly one root, gateway/order/license/payment/settlement, no missing parent, and the
+succeeds with spans, exactly one root, gateway/order/license/payment(/settlement except restoration), no missing parent, and the
 scenario's PG spans with worker lookups/resends under payment.process. Evidence: runs/refund-tracing-*/refund-tracing.json. The tool fails while any segment is
 broken, after the business outcome itself has been checked.
 """
@@ -24,12 +27,15 @@ from support.refund_tracing import (TraceUnavailable, await_trace, describe, fet
                                     group_snapshot, observation_window, pg_call, refund_consumer_groups)
 
 REFUND_EVENTS = {
-    "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
-    "stove_license": ["LicenseSuspended", "LicenseRevoked"],
-    "stove_payment": ["RefundExecutionPrepared", "RefundPaymentConfirmed", "RefundExecutionSucceeded"],
+    "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded", "LicenseRestorationRequested"],
+    "stove_license": ["LicenseSuspended", "LicenseRevoked", "LicenseRestored"],
+    "stove_payment": ["RefundExecutionPrepared", "RefundPaymentConfirmed", "RefundExecutionSucceeded", "RefundExecutionFailed"],
 }
 SCENARIOS = [("normal", None), ("lost-response", {"outcome": "LOST_RESPONSE", "failLookups": 1}),
-             ("pg-error", {"outcome": "PG_ERROR", "failLookups": 0})]
+             ("pg-error", {"outcome": "PG_ERROR", "failLookups": 0}), ("restoration", {"outcome": "FAILED", "failLookups": 0})]
+# Outbox rows the restoration path must leave (one each), all expected in the refund request trace.
+RESTORATION_EVENTS = ["LicenseSuspensionRequested", "RefundExecutionRequested", "LicenseRestorationRequested", "LicenseSuspended",
+                      "LicenseRestored", "RefundExecutionPrepared", "RefundExecutionFailed"]
 
 
 def tempo_spans(stack, trace_id):
@@ -103,6 +109,7 @@ def journey(stack):
         # Refund after Order confirmed the grant, so the refund request itself starts the suspension
         # (before that, the later LicenseGranted consumption continues the refund in the purchase trace).
         stack.check(name + " license grant confirmed", "SELECT COUNT(*) FROM stove_order.order_license_grant WHERE order_no='" + order_no + "'", 1, 120)
+        granted = stack.sql("SELECT status FROM stove_license.product_license WHERE order_no='" + order_no + "'")
         started = time.time()
         payment_id = buyer.data("/api/v1/payments/" + order_no)["paymentId"]
         if fault:
@@ -112,12 +119,22 @@ def journey(stack):
         assert status in {200, 202}, "refund HTTP " + str(status) + " " + raw.decode()
         refund_trace = headers.get("X-Correlation-Id")
         assert refund_trace and len(refund_trace) == 32, "refund response has no trace id"
-        stack.wait_for(lambda: buyer.data("/api/v1/orders/" + order_no + "/refund")["status"] == "COMPLETED",
-                       name + " refund COMPLETED", 420, 2)
-        stack.check(name + " license refunded", "SELECT status FROM stove_license.product_license WHERE order_no='" + order_no + "'", "REFUNDED")
-        stack.check(name + " settlement refund", "SELECT COUNT(*) FROM stove_settlement.settlement_refund WHERE order_no='" + order_no + "'", 1, 120)
+        final = "FAILED" if name == "restoration" else "COMPLETED"
+        stack.wait_for(lambda: buyer.data("/api/v1/orders/" + order_no + "/refund")["status"] == final,
+                       name + " refund " + final, 420, 2)
+        if name == "restoration":
+            notice = buyer.data("/api/v1/orders/" + order_no + "/refund").get("failureNotice") or {}
+            assert notice.get("code") == "PAYMENT_NOT_CANCELLED", name + " failure notice " + str(notice)
+            stack.record(name + " failure notice", notice.get("code"))
+            stack.check(name + " license restored", "SELECT status FROM stove_license.product_license WHERE order_no='" + order_no + "'", granted)
+            stack.check(name + " restoration recorded", "SELECT COUNT(*) FROM stove_license.license_restoration r JOIN stove_license.product_license l "
+                        "ON l.license_id=r.license_id WHERE l.order_no='" + order_no + "'", 1)
+            stack.check(name + " refund execution FAILED", "SELECT status FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "'", "FAILED")
+        else:
+            stack.check(name + " license refunded", "SELECT status FROM stove_license.product_license WHERE order_no='" + order_no + "'", "REFUNDED")
+            stack.check(name + " settlement refund", "SELECT COUNT(*) FROM stove_settlement.settlement_refund WHERE order_no='" + order_no + "'", 1, 120)
         cancels = [r["status"] for r in stack.requests_for(payment_id, "/cancel")]
-        expected = {"normal": [200], "lost-response": ["LOST"], "pg-error": [503, 200]}[name]
+        expected = {"normal": [200], "lost-response": ["LOST"], "pg-error": [503, 200], "restoration": [200]}[name]
         assert cancels == expected, name + " cancel statuses " + str(cancels)
         stack.record(name + " PG cancel statuses", cancels)
         attempt = stack.sql("SELECT attempt_id FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "'")
@@ -140,6 +157,11 @@ def journey(stack):
             stack.wait_for(caught_up, name + " consumer groups lag 0", 120, 1)
         except RuntimeError as timeout:
             raise RuntimeError(str(timeout) + ": " + "; ".join(last_lag[0] or [])) from timeout
+        if name == "restoration":
+            # Every consumer has caught up, so a settlement refund now would already exist.
+            stack.check(name + " no settlement refund", "SELECT COUNT(*) FROM stove_settlement.settlement_refund WHERE order_no='" + order_no + "'", 0, 1)
+            kinds = sorted(r["eventType"] for r in outbox_rows(stack, order_no))
+            assert kinds == sorted(RESTORATION_EVENTS), name + " Outbox " + str(kinds)
         done = time.monotonic()
         # Watch the trace for observation_window() seconds after completion, then require a complete, stable
         # snapshot (one root, all services, no missing parent, the scenario's PG spans).
@@ -190,4 +212,4 @@ def journey(stack):
 
 if __name__ == "__main__":
     FakePortOneStack(REPO, "verify-refund-tracing", offset_env="REFUND_TRACING_TEST_PORT_OFFSET", prefix="refund-tracing-",
-                     tracing=True).run(journey, "local PortOne fake refunds keep one Tempo trace (normal, lost response, PG error)")
+                     tracing=True).run(journey, "local PortOne fake refunds keep one Tempo trace (normal, lost response, PG error, confirmed failure restoration)")
