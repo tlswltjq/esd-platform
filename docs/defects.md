@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-051, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -68,11 +68,13 @@
 | [D-040](#d-040) | Store 최초 삽입 경합에서 같은 상품을 코드 충돌로 오인 | HTTP 회차 실패·Kafka 지연 | **수정됨** | main CI 42249703875·교차 리뷰 R1 |
 | [D-041](#d-041) | Review 다운로드 테스트가 서명 초 경계에서 조기 만료로 실패 | 초 경계 CI 불안정 | **수정됨** | CI run 42373571409 |
 | [D-042](#d-042) | Catalog 최초 공개 경합에서 같은 Project를 상품 코드 충돌로 오인 | 공개·접수 회차 실패와 계약 위반 오분류 | **수정됨** | CI run 42397961475 |
+| [D-043](#d-043) | 공유 테스트 컨테이너가 기본 시작 대기(60초)만 기다려 부하 시 모듈 통합 테스트 전체가 실패 | 부하 시 CI 불안정 | **수정됨** | PR #137 CI run 42410179110 |
 | [D-044](#d-044) | 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침 | 금전 손실(주문 없는 청구가 보류·경보 없이 남음) | **수정됨** | G1 조합 조사 코드 판독 뒤 재현 테스트 |
 | [D-045](#d-045) | 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급 | 금전 손실(과지급)·판매자 마감 정지 | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
+| [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
@@ -557,6 +559,16 @@
 - **수정** 두 서비스에서 코드 조회 결과의 projectId를 비교한다. 같은 Project면 `ConcurrencyFailureException`으로 트랜잭션 전체를 롤백하고, 같은 요청이 새 트랜잭션에서 잠금 조회부터 다시 하게 한다(requirements R2.5). 재시도 장치는 바꾸지 않았다(공개는 작업 재시도, 접수는 Kafka 재배달). 다른 Project의 CONFLICT는 유지하며 `#differentProjectWithSameProductCodeStaysConflict`가 공개·접수 양쪽을 지킨다. 같은 트랜잭션에서 다시 잠그고 계속하는 방식은 쓰지 않았다. 코드 조회로 이미 영속성 컨텍스트에 올라온 엔티티를 잠금 조회가 새로 읽는다는 보장에 기대야 하기 때문이다. 기존 경합 테스트는 바꾸지 않았다. 새 예외는 `DataAccessException`이므로 기존 `retry` 도우미가 다시 시도한다. 두 결정적 테스트는 PausePoints로 빈 Project 잠금 조회 → 상대 최초 공개 커밋 → 재개 순서를 고정한다. 롤백(출시 기록·작업·Inbox 없음)을 확인한 뒤 같은 요청을 다시 처리해 v2·상품 1행·Outbox(`CatalogProductPublished` v2, v2 `ProjectReleaseCompleted`, v1 `ProjectReleaseRejected` STALE)를 확인한다.
 - **망가뜨리기 확인(결정 102)** 공개 수정 제거 시 공개 재현 1건이 `PublishProjectRelease.execute`에서 같은 BusinessException으로 실패했다. 접수 수정 제거 시 접수 재현 1건이 `ReceiveProjectRelease.requireStableIdentity`에서 같은 메시지로 실패했다. projectId 비교를 항상 참으로 바꾸면 경계 테스트가 공개·접수 각각에서 `ConcurrencyFailureException`(기대 BusinessException)으로 실패했다. 두 실행 모두 Gradle exit 1이었고, 복원한 운영 코드 diff는 수정 패치와 같다. 행 번호 대신 메서드 이름으로 식별한다.
 
+<a id="d-043"></a>
+## D-043 공유 테스트 컨테이너가 기본 시작 대기만 기다려 부하 시 통합 테스트 전체가 실패했다
+
+**상태** 수정됨 · **영향** 부하가 몰린 CI 러너에서 한 모듈의 통합 테스트 컨텍스트가 모두 실패(코드와 무관한 PR이 병합 대기) · **위치** `common/testcontainers/src/main/java/com/stove/common/testcontainers/SharedContainers.java`
+**재현** `common/testcontainers/src/test/java/com/stove/common/testcontainers/SharedContainersTest.java` 2건을 `known-defect` 태그로 먼저 커밋했다. 옛 코드에서 실제 대기 객체(`getWaitStrategy()`)의 시작 대기가 MySQL 2분·Kafka·Redis·Mongo 1분이라 `containsExactlyEntriesOf`가 실패하고, Redis가 공유 기본 대기 객체와 같아 `Expected not same: HostPortWaitStrategy`로 실패한다. 러너 부하 자체는 결정적으로 재현할 수 없다. 대신 늦은 시작은 결정적으로 만든다(PR #138 교차 리뷰 R2, 사용자 확정): `SharedContainersStartupIntegrationTest`가 Kafka 준비 로그를 65초 뒤에 내는 가짜 컨테이너(`redis:7-alpine`)에 `SharedContainers.kafkaReady()`를 건다. 대기를 라이브러리 기본 60초로 되돌리면 61.5초에 `ContainerLaunchException: Container startup failed`로 실패하고, 3분 대기에서는 66.4초에 통과한다. · **실측** PR #137 CI run 42410179110: Settlement `PgStatementIntegrationTest` 10건이 컨텍스트 로딩 실패. 원인은 `Container startup failed for image confluentinc/cp-kafka:7.8.0` — `Timed out waiting for log output matching '.*Transitioning from RECOVERY to RUNNING.*'`. 같은 run의 다른 Kafka 시작은 5~9초였고, 실패한 컨테이너는 60초 동안 로그 0줄이었다.
+
+- **원인** CI 실패(PR #137 run 42410179110)의 직접 원인은 Kafka가 기본 60초 안에 준비 로그를 내지 못한 것이다. 늦어진 이유는 러너 부하로 **추정**한다(같은 run의 다른 Kafka 시작은 5~9초, 실패 컨테이너는 60초 동안 로그 없음). 이 수정은 60초를 넘는 늦은 시작을 견디게 할 뿐, 시작이 3분을 넘거나 늦어진 원인이 부하가 아니면 다시 실패한다. 구조적 원인: `SharedContainers`는 Elasticsearch만 3분 대기를 두고, 나머지는 Testcontainers 기본값(로그·포트 60초, JDBC 120초)을 썼다. 공유 정적 컨테이너라 하나가 늦으면 그 Gradle 모듈의 통합 테스트 컨텍스트가 모두 실패한다. 또 Testcontainers 1.21의 `GenericContainer`는 필드가 공유 기본값이면 `ContainerDef`의 대기 객체를 쓰는데, 일반 `GenericContainer`(Redis)의 그 객체는 모든 컨테이너가 나눠 쓰는 정적 `DEFAULT_WAIT_STRATEGY`다. 그래서 Redis에 `withStartupTimeout`만 걸면 다른 기본 컨테이너의 대기까지 바뀐다. `ConfluentKafkaContainer`도 모든 인스턴스가 정적 `KafkaHelper.WAIT_STRATEGY`를 나눠 쓴다(PR #138 교차 리뷰 R1).
+- **수정** `STARTUP_TIMEOUT = 3분`을 모든 공유 컨테이너에 건다. MySQL은 `withStartupTimeoutSeconds`, Elasticsearch·Mongo는 `withStartupTimeout`(인스턴스마다 대기 객체를 새로 만든다)을 쓴다. 공유 정적 대기 객체를 쓰는 Redis와 Kafka에는 같은 조건의 새 대기 객체를 준다: Redis는 `Wait.forListeningPort()`, Kafka는 `Wait.forLogMessage(".*Transitioning from RECOVERY to RUNNING.*", 1)`. 재현 테스트 두 건의 태그를 떼어 기본 회귀 검사로 옮겼다. 그 밖에 테스트 두 건으로 3분이 다른 컨테이너로 번지지 않는지 확인한다. 하나는 네 컨테이너가 공유 기본 대기 객체를 쓰지 않고 그 객체의 60초도 그대로인지 본다. 다른 하나는 같은 종류의 새 컨테이너와 대기 객체가 다르고, 새 Kafka·Redis·Mongo는 라이브러리 기본 60초를 그대로 갖는지 본다.
+- **운영 영향** 테스트 전용 모듈이라 운영 코드와 배포에는 영향이 없다. 대기는 시작이 늦을 때만 길어지고 정상 시작(보통 10초 안)에는 그대로다.
+
 <a id="d-044"></a>
 ## D-044 접수 전 PAY_PENDING 승인이 주문 만료로 PG 재조회 없이 닫혀 늦은 PAID를 놓침
 
@@ -604,6 +616,16 @@
 - **원인** 구매 결제는 `ResolvePayment`가 `PaymentTracing.run(traceContexts.find(paymentId), …)`로 처리 시도마다 저장 부모를 복원하지만, 환불 작업자에는 같은 감싸기가 없다. Kafka 리스너 스레드에서 끝나는 첫 송신만 소비 span 아래에 있어 이어진다.
 - **수정** `ResolveRefundLookup`·`ResolveRefundRetry`가 executor 작업마다 `RefundExecutionTraceContexts.find(attemptId)`로 저장 부모를 읽고 `PaymentTracing.run` 안에서 PG 호출·결과 Outbox 적재를 한다(구매 `ResolvePayment`와 같은 포트·방식, 처리 시도마다 새 자식 span `payment.process`, 스케줄러 scope 비상속). 부모가 없거나 읽기에 실패하면 새 root로 진행하고 조회 lease 해제·재송신 claim은 그대로다. 수정 뒤 `verify-refund-tracing.py`가 세 경우 모두 통과했다(Outbox 18행 모두 환불 trace).
 - **망가뜨리기 확인(결정 102)** 같은 재현 테스트를 수정 전 운영 코드로 돌리면 위 Red 2건, 수정 코드로 Green 2건이다.
+
+<a id="d-051"></a>
+## D-051 결제가 PAID로 확정된 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감
+
+**상태** 수정됨 · **영향** 결제 `PAID`·주문 완료인 건의 고객 결제 상세와 승인 조회에 보류 안내가 남는다. 예: READY를 본 `CONFIRM_WINDOW_EXPIRED` 보류 건은 `NOT_CHARGED`("현재까지 청구된 금액은 없습니다. … 새 주문으로 다시 구매하실 수 있습니다")가 나가 돈이 나간 뒤 다시 구매하라고 안내한다(결정 123의 중복 구매 방지와 반대). PAID를 본 건이면 `CHARGED`("확인이 끝나면 청구된 금액은 취소되고 이 주문은 종료됩니다")가 나간다. 같은 시간 동안 ADMIN 보류 목록·보류 게이지(`REVIEW_REQUIRED` 기준)에도 남는다. 남는 시간은 다음 보류 재조회 간격(결정 122, 최대 10분)이다. 돈은 움직이지 않는다 · **위치** `ResolvePayment.confirm`(결제만 `PAID`로 바꾸고 승인은 건드리지 않음), `AdmittedPortOnePgGateway.charge`(`REVIEW_REQUIRED` 승인으로도 PAID 결과를 줌), `ResolvePaymentApproval.cycle`의 PAID 분기(승인을 닫는 유일한 곳)
+**재현** `PaymentApprovalIntegrationTest#aHeldAdmittedApprovalClosesInThePaidPaymentCommitSoNoStaleHeldNoticeRemains`(루프백 PG·Order, 실제 MySQL) — 수정 전 known-defect Red 1건, `[approval status right after the PAID commit] expected: SUCCEEDED but was: REVIEW_REQUIRED`. 승인을 접수·첫 송신 503으로 둔 뒤 3시간 창에서 `CONFIRM_WINDOW_EXPIRED` 보류로 올리고(PG READY, 고객 안내 `NOT_CHARGED` 확인), PG를 PAID로 바꿔 결제 재조회(`ResolvePayment.execute(paymentId)`, `PendingPaymentScheduler`·웹훅 재조회 경로)를 돌리면 결제는 `PAID`·Outbox 1행인데 승인은 `REVIEW_REQUIRED`였다. 지금은 태그를 뗀 회귀 테스트이고, 같은 테스트가 고객 두 조회의 `reviewNotice` 없음, ADMIN 보류 목록 제외, 뒤이은 작업자 회차의 PG 조회 0회·송신 1회 유지·Outbox 1행을 함께 지킨다 · **발견 경로** 결정 143 1부 payment `design.md` 찾은 불일치 3(PR #182)
+
+- **원인** 결제 `PAID`는 두 곳에서 커밋된다. 승인 작업자(`ResolvePaymentApproval.completeObservation`)는 `ResolvePayment.execute` 뒤 같은 회차에 승인을 `succeed`하지만, 결제 재조회 스케줄러와 웹훅(`Payment.requestRecheck` → 같은 스케줄러)은 결제만 확정한다. 그러면 승인은 다음 claim에서 `cycle`의 첫 분기(`PAID && admittedAt!=null` → `succeed`)를 만나야 닫히는데, 보류 승인의 다음 claim은 보류 기간에 따라 늘어나는 재조회 간격 뒤다. 그동안 `ApprovalReviewNotice.of`는 승인 상태 `REVIEW_REQUIRED`와 옛 `latestPgState`로 안내를 계산한다.
+- **수정** `ResolvePayment.confirm`이 결제를 새로 `PAID`로 바꾸고 결과 Outbox를 적재한 그 트랜잭션에서, 같은 결제의 최신 `ADMITTED`·`REVIEW_REQUIRED` 승인을 잠그고(`purchase_payment` → `payment_approval`, 작업자와 같은 순서) 접수됐으면(`admittedAt` 있음) `PaymentApproval.succeed`한다. 규칙은 작업자의 PAID 분기와 같고 시점만 결제 커밋으로 당겼다. 접수 전 승인은 PortOne 게이트웨이가 거절하므로 여기 오지 않고 `PAID_WITHOUT_ADMISSION` 보류로 남는다. 작업자 쪽 분기는 그대로 두어 이미 쌓인 건(배포 전 PAID·보류)도 다음 회차에 닫힌다. 버린 안: 안내 조회가 결제 `PAID`를 먼저 보게 하는 것(고객 두 조회는 맞지만 ADMIN 목록·게이지·결제창 진행 판정이 계속 `REVIEW_REQUIRED`를 셈), PAID 커밋 뒤 승인 `nextAt`을 당겨 작업자를 깨우는 것(작업자 주기만큼 같은 모순이 남고 PG 조회가 한 번 더 듦).
+- **망가뜨리기 확인(결정 102)** 같은 재현 테스트를 수정 전 운영 코드로 돌리면 위 Red 1건(Gradle `defectTest` 실패 1), 수정 코드로 Green 1건이다.
 
 <a id="d-052"></a>
 ## D-052 License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음

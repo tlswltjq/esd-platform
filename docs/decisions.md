@@ -1330,6 +1330,28 @@
 - 구분: 직접 제안 — SPEC 정비는 사용자가 먼저 꺼냈고, 범위 A는 추천 수용
 - 결과: 진행 중(1부: 상태×이벤트 표)
 
+<a id="held-approval-keeps-first-reason"></a>
+## 144. 이미 보류된 승인은 처음 보류된 사유를 유지하고, 접수 없이 청구된 관측만 사유를 올린다
+- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. [결정 143](#money-spec-first) 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
+- 선택지: A 처음 보류된 사유를 유지하고 `PAID_WITHOUT_ADMISSION`만 지금처럼 사유를 올린다. 뒤 사유는 로그로만 남긴다 / B 지금처럼 최신 사유로 바꾸고 요구사항에 적는다 / C 사유 심각도 순서를 정해 더 심각한 사유만 덮는다 / D A에 더해 사유 이력을 테이블에 저장한다 (추천: A — 보류는 운영자 조사 표시이고([결정 114](#approval-review-hold-closure)) 첫 이유가 조사의 출발점이다. 기존 `PAID_WITHOUT_ADMISSION` 보호가 이미 "돈이 움직인 관측은 덮이면 안 된다"는 뜻이다. C는 8개 사유의 순서라는 새 정책이 필요하고, D는 지금 조사 기록으로 대부분 대신된다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 처음 보류 사유를 유지해")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이미 `REVIEW_REQUIRED`인 승인에 새 중단 사유가 오면 송신 중단은 유지하고 `lastErrorCode`·`reviewStartedAt`은 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 사유를 그것으로 올리고, 한 번 그 사유가 되면 바꾸지 않는다. 버린 사유는 승인 ID와 함께 로그로 남긴다. 고객 안내는 결정 132대로 사유 묶음과 마지막 PG 관측으로 정하므로, 유지된 첫 사유가 `PG_INVALID_EVIDENCE`가 아니면 뒤의 깨진 응답이 안내를 고정하지 않는다.
+- 구분: 추천 수용
+
+<a id="review-packet"></a>
+## 145. Codex 교차 리뷰는 high로 하고, 리뷰 묶음과 차분 재리뷰로 입력을 줄인다
+- 문제: [결정 108](#cross-review-before-merge)·[결정 117](#review-roles)의 Codex 교차 리뷰가 추론 수준 `low`로 PR당 1분 안에 끝났다(2026-11-09 PR #183·#185, 테스트 미실행). 돈이 오가는 코드를 이 깊이로 "지적 없음" 처리하면 [결정 143](#money-spec-first) 1부에서 찾은 것 같은 결함을 놓칠 수 있다. 그런데 `high`로 올리면 리뷰 지시가 기준으로 넘기던 문서를 통째로 읽기 쉽다: `docs/decisions.md` 221KB, `docs/testing.md` 160KB, payment `requirements.md` 45KB·`design.md` 72KB. 반면 PR diff에서 운영 코드는 작다(#183: 전체 47KB 중 6.8KB, #185: 25KB 중 3.6KB).
+- 선택지: A `high` + 리뷰 묶음(Claude가 PR이 언급한 결정·R 절·AGENTS 3절·diff를 기계적으로 모음, 설명·결론 없음) + 재리뷰는 리뷰한 커밋 뒤 차분과 이전 지적만 + Codex는 테스트 미실행(CI 결과 사용) + 지적 표만 출력 / B A에 더해 운영 코드 변경 없는 PR은 `medium` / C `high`만 올리고 입력은 지금처럼 (추천: A — `high`로 얻으려는 것은 코드 추론 깊이이고, 결정 기록 전체를 다시 읽는 비용은 그와 무관하다. 묶음을 같은 순서로 쌓아 앞부분이 반복되면 프롬프트 캐시가 맞을 가능성도 높다. 묶음에서 빠진 맥락의 위험은 Codex가 다른 파일을 직접 열 수 있게 하고, 연 경로를 결과에 적게 해 줄인다)
+- 내 의견: "리뷰시 high로 올리되 토큰을 절약할 수 있는 방법이 있을까?" → 고른 선택지: "A로 high에 리뷰 묶음·차분 재리뷰를 적용해"
+- 선택: A
+  - 적용 범위는 결정 108이 리뷰하는 모든 코드 PR이다(돈 모듈에 한정하지 않는다).
+  - `tools/ci/review_packet.py`가 고정 순서로 묶는다: 리뷰 지시(지적 표 형식) → AGENTS.md 3절 → 이 PR의 결정 원문(PR 본문 "이번 PR의 결정" 절과 커밋 제목의 번호) → 그 밖에 언급된 결정의 제목 → 바뀐 모듈 요구사항 중 R 번호가 언급된 절 원문과 바뀐 운영 클래스가 나오는 절의 제목 → 이전 지적(재리뷰) → diff(운영 코드·이행 → 테스트 → 그 밖 → 문서). 번호는 PR 본문(HTML 주석 제외)·커밋 메시지(병합 커밋 제외)·diff의 추가/삭제 줄에서만 센다.
+  - 재리뷰는 `--since <리뷰한 커밋> --previous <이전 지적 파일>`로 그 뒤 차분만 넘긴다.
+  - 측정: PR #185로 만든 묶음은 43.7KB(그중 diff 25.5KB)다. 처음 규칙(문맥 줄의 번호까지 원문)은 101.6KB였다.
+  - 결정 112의 판정 규칙과 리뷰 판정 표는 그대로다.
+- 구분: 직접 제안 — `high`와 토큰 절약 조건은 사용자가 꺼냈고, 방식 A는 추천 수용
+- 결과: 구현 PR
+
 <a id="evidence-fragments"></a>
 ## 146. 근거 색인은 PR별 조각으로 쓰고, 접기 PR만 `docs/evidence.md`를 고친다
 - 문제: 모든 PR이 근거 색인 `docs/evidence.md` 끝에 한 행을 더해, 한 PR이 병합되면 같은 파일을 고친 다른 PR이 GitHub에서 DIRTY가 됐다. [결정 137](#claim-draft-pr)의 `.gitattributes` `merge=union`은 로컬 git 병합에만 쓰이고 GitHub 병합 판정에는 쓰이지 않는다. 2026-11-09에만 PR #185·#186이 그래서 main을 다시 받고 CI(`build`)를 처음부터 다시 돌렸다.

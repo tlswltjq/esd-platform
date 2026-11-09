@@ -263,7 +263,15 @@ public class ResolvePaymentApproval {
         });
     }
     private void stop(String id,String token,String code) {
-        locked(id,(payment,approval)->{ if (approval.owns(token,now()) && !approval.terminal()) approval.stopPosts(code,now()); return null; });
+        locked(id,(payment,approval)->{
+            if (approval.owns(token,now()) && !approval.terminal()) {
+                approval.stopPosts(code,now());
+                // Decision 144: a held approval keeps its first reason; the dropped one is only logged.
+                if (!code.equals(approval.getLastErrorCode()))
+                    log.info("Held approval keeps its first reason: id={}, reason={}, ignored={}",id,approval.getLastErrorCode(),code);
+            }
+            return null;
+        });
     }
     private <T> T locked(String id,BiFunction<Payment,PaymentApproval,T> action) {
         PaymentApproval snapshot=approvals.findByApprovalId(id).orElse(null);

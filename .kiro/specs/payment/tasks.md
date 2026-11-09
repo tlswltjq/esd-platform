@@ -51,6 +51,7 @@
 - [ ] 처리량 증가 시 첫 환불 송신을 별도 DB 송신 작업자로 옮기는 B안(전환 판단 지표: 접수 지연·PG p95/p99·소비 lag·최장 대기) — G6. 결정 29 하위 "첫 취소 송신"에서 처리량 고도화 계획으로 정했고, 전환은 지표가 기준을 넘을 때 한다
 - [x] 새 환불 이벤트·재개 작업의 Tempo 추적 전체 연결 검증 — 2026-11-09 `verify-refund-tracing.py`(흉내 PortOne·격리 Tempo). 정상 환불은 요청 HTTP → Order Outbox → License → Payment 수신·PG 취소 → `RefundPaymentConfirmed` → Order `PurchaseRefunded` → License·Settlement가 한 trace로 이어진다. 응답 유실·PG 5xx 뒤 조회·재송신 작업자 경로는 처음 검증에서 끊겼고([D-050](../../../docs/defects.md#d-050), 아래 항목), D-050 수정 뒤 같은 도구로 세 경우 모두 한 trace로 이어진다
 - [x] [D-050](../../../docs/defects.md#d-050) 환불 조회(`ResolveRefundLookup`)·재송신(`ResolveRefundRetry`) 작업자가 `refund_execution_trace`의 저장 부모를 복원하지 않는다(`RefundExecutionTraceContexts.find` 운영 호출 0곳). 결정 28대로 처리 시도마다 저장 부모의 새 자식 span에서 PG 호출·결과 Outbox를 적재하게 한다. 먼저 실제 tracer 통합 `known-defect` 재현 테스트를 쓰고, 고친 뒤 `verify-refund-tracing.py`가 통과해야 닫는다 — G2, 2026-11-09 수정(`RefundWorkerTracingIntegrationTest` Red 2→Green, 도구 세 경우 통과)
+- [x] [D-051](../../../docs/defects.md#d-051) 결제 재조회·웹훅이 접수된 보류 승인의 결제를 `PAID`로 확정해도 승인은 다음 보류 재조회까지 `REVIEW_REQUIRED`로 남아 고객 안내(결정 123)·ADMIN 보류 목록·게이지가 옛 관측을 보였다. `ResolvePayment.confirm`이 같은 트랜잭션·같은 잠금 순서로 접수된 `ADMITTED`·`REVIEW_REQUIRED` 승인을 `succeed`한다(작업자 PAID 분기와 같은 규칙, 시점만 당김) — G1, 2026-11-09 수정(`PaymentApprovalIntegrationTest` Red 1→Green)
 - [ ] [외부 대기] 실제 PortOne·PG로 승인·취소 다시 확인: 토스페이 공용 예제 키가 2026-11-07 거절돼 우리 전용 테스트 가맹점이 필요. 방법은 가맹점 준비 뒤 정함 — G7([결정 140](../../../docs/decisions.md#defer-real-pg)), [결정 110·111](../../../docs/decisions.md#portone-fake-journey). 반복 검증은 PortOne 흉내 서버 여정(`verify-refund-settlement.py`)이 맡음 함께 확인할 것: PortOne `PAY_PENDING`이 "우리 confirm을 기다림"을 뜻한다면 지금 코드는 READY에서만 confirm을 보내므로(`ResolvePaymentApproval.java:147`) 그 건은 처음부터 멈춘다(2026-11-08 조사, 저장소 근거 없는 추정).
 - [ ] [외부 대기] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 확인 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
 - [ ] [결정 필요] 종결할 수 없는 과거 승인 보류·환불 지연 경보를 끄는 방법: 저장소에는 Alertmanager와 Prometheus `alerting` 연결이 없어(`infra/prometheus/prometheus.yml`) silence를 쓸 수 없는데, `infra/prometheus/alerts.yml`의 `PaymentApprovalsRequireReview`(두 규칙)·`RefundsUnattributed` 안내문과 `infra/prometheus/tests/approval-review.yml`·`refund-unattributed.yml`의 기대 문구가 아직 "Alertmanager silence로 알림을 관리한다"를 안내한다. Alertmanager 도입·경보 억제 표·안내문 정정 중 무엇을 할지 정한 뒤 규칙과 시험을 함께 고친다([R12.8](requirements.md), 문서 정정은 PR #170)
@@ -59,6 +60,8 @@
 - [ ] PG 계약 중립화: PortOne 공개 보장인 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)과 오류 분류를 공급자 설정값·어댑터 판정으로 옮기고 `config`에서 주입한다 — G3
 - [ ] PG 계약 중립화: `PaymentArchitectureTest`에 core 패키지의 공급자 이름(PortOne) 금지 규칙을 더한다 — G3
 - [ ] 기준 시뮬레이터 확장([결정 141](../../../docs/decisions.md#portone-fake-as-reference-simulator)): PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)에 제어 요청으로 장애 주입을 더한다 — 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정(PR #178·결정 138 뒤에 잇는다), 웹훅 중복·역순·누락. 응답 모양은 PortOne 어댑터 테스트 견본과 같게 두고, 문서로 확인하지 못한 동작은 추정으로 표시해 G7 확인 항목에 남긴다. 운영 코드는 바꾸지 않는다 — G3
+
+- [x] 이미 보류된 승인은 처음 보류 사유를 유지([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason)): `PaymentApproval.stopPosts`가 `REVIEW_REQUIRED`의 `lastErrorCode`·`reviewStartedAt`을 바꾸지 않고 `PAID_WITHOUT_ADMISSION`만 사유를 올린다. 버린 사유는 `ResolvePaymentApproval.stop` 로그. R12.10 — G1, 2026-11-09 PR #185
 
 ## 범위 밖(후속)
 
