@@ -129,4 +129,37 @@ class PaymentApprovalTest {
         assertThat(approval.getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
         assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
     }
+    /** Decision 144: a later stop of an already held approval keeps the reason and start it was first held with. */
+    @Test void aHeldApprovalKeepsItsFirstReasonWhenALaterStopArrives() {
+        PaymentApproval approval = approval(); approval.admit(receipt(approval));
+        Instant prepared = at.plusSeconds(2); approval.prepare(prepared);
+        Instant window = prepared.plus(PaymentApproval.CONFIRM_WINDOW);
+        ApprovalObservation pending = new ApprovalObservation(ApprovalObservation.State.PENDING, null, null);
+        assertThat(approval.holdAfterConfirmWindow(pending, window)).isTrue();
+        approval.stopPosts("PG_INVALID_EVIDENCE", window.plusSeconds(60));
+        approval.stopPosts("ORDER_EXPIRY_CONFLICT", window.plusSeconds(120));
+        assertThat(approval.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(approval.getReviewStartedAt()).isEqualTo(window);
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(approval.isPostStopped()).isTrue();
+    }
+    /** Decision 144: a broken lookup cannot turn an operator hold into an automatically expiring PG_INVALID_EVIDENCE hold. */
+    @Test void aLaterInvalidLookupCannotMakeAPendingHoldExpireWithoutAnOperator() {
+        PaymentApproval approval = approval();
+        approval.stopPosts("PG_PENDING_AT_ORDER_EXPIRY", at);
+        approval.stopPosts("PG_INVALID_EVIDENCE", at.plusSeconds(60));
+        ApprovalObservation ready = new ApprovalObservation(ApprovalObservation.State.READY, null, null);
+        assertThat(approval.getLastErrorCode()).isEqualTo("PG_PENDING_AT_ORDER_EXPIRY");
+        assertThat(approval.expireAfterVerifiedReady(ready, at.plusSeconds(120))).isFalse();
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+    }
+    /** Decision 144: an observed charge without admission still raises any held reason, and then stays. */
+    @Test void anObservedChargeWithoutAdmissionRaisesAHeldReason() {
+        PaymentApproval approval = approval();
+        approval.stopPosts("PG_PENDING_AT_ORDER_EXPIRY", at);
+        approval.stopPosts("PAID_WITHOUT_ADMISSION", at.plusSeconds(60));
+        approval.stopPosts("PG_INVALID_EVIDENCE", at.plusSeconds(120));
+        assertThat(approval.getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(approval.getReviewStartedAt()).isEqualTo(at);
+    }
 }
