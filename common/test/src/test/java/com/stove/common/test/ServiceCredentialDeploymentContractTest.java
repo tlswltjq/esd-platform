@@ -75,12 +75,18 @@ class ServiceCredentialDeploymentContractTest {
         }
     }
 
+    private static Set<String> keys(Map<?, ?> map) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (Object key : map.keySet()) keys.add(key.toString());
+        return keys;
+    }
+
     @Test
     void settlementPortOneOverrideTouchesOnlySettlementAndRequiresInjectedValues() throws IOException {
         Map<?, ?> services = services("docker-compose.settlement-portone.yml");
-        assertThat(services.keySet()).containsExactly("settlement");
+        assertThat(keys(services)).containsExactly("settlement");
         Map<?, ?> settlement = (Map<?, ?>) services.get("settlement");
-        assertThat(settlement.keySet()).as("Override changes environment only (no ports, image or network)")
+        assertThat(keys(settlement)).as("Override changes environment only (no ports, image or network)")
                 .containsExactly("environment");
         Map<?, ?> environment = (Map<?, ?>) settlement.get("environment");
         assertThat(environment.get("SETTLEMENT_PG_PROVIDER")).isEqualTo("PORTONE_TEST");
@@ -91,7 +97,7 @@ class ServiceCredentialDeploymentContractTest {
                 "PORTONE_CHANNEL_KEY", "PORTONE_CHANNEL_KEY");
         Set<String> expectedKeys = new LinkedHashSet<>(injected.keySet());
         expectedKeys.add("SETTLEMENT_PG_PROVIDER");
-        assertThat(environment.keySet()).containsExactlyInAnyOrderElementsOf(expectedKeys);
+        assertThat(keys(environment)).containsExactlyInAnyOrderElementsOf(expectedKeys);
         for (Map.Entry<String, String> entry : injected.entrySet()) {
             assertThat(environment.get(entry.getKey()).toString())
                     .as("%s must be a required external value without a default", entry.getKey())
