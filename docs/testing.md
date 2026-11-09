@@ -27,7 +27,8 @@
 Payment 추적 통합은 실제 Micrometer/OpenTelemetry와 메모리 exporter로 접수/작업 스레드·부모·scope·HTTP client span을 대조한다. 별도 스케줄러 통합 검사는 처리 메서드를 직접 호출하지 않는다.
 `:e2e:tracingE2eTest`는 현재 공개 구매 API·실제 ZIP 다운로드와 Tempo의 span/parent 관계를 판정하며, 원래 콜백 기반 `TracePropagationE2eTest`를 대체한다. 일반 `e2eTest`에서는 tracing 태그를 제외한다.
 전용 실행 도구는 요청 저장 뒤 Payment 재시작·PG 응답 유실·결과 롤백·브로커 중단·Tempo 중단·추적 비활성·샘플링 0을 단계별로 주입한다. 필수 검사 0건·건너뜀은 통과로 판정하지 않는다.
-`verify-refund-tracing.py`는 검증 스택에서만 내보내기를 schedule-delay 1초·export timeout 5초·OTLP timeout 5초, max-batch-size = max-queue-size = 2048로 고정한다. 한 번 내보낼 때 큐가 모두 비워지고 큐가 차지 않는다는 조건에서 span 종료 뒤 내보내기 상한은 1+2×5=11초다(진행 중 내보내기 1회 + 자기 내보내기). 관찰은 업무 최종 상태·환불 Outbox 전부 SENT·브로커의 모든 consumer group lag 0(환불 그룹 7개는 코드 상수에서 읽어 필수. `--list`·`--state`·오프셋 표가 일치하고 모두 Stable/Empty이며, 파티션 없는 행·해석 못 한 출력·stderr 경고가 없을 때만)을 확인한 뒤부터 센다. 소비자 여유 5초 + 11초 + Tempo 여유 2초 = 18초 안의 조회는 안정 횟수에 넣지 않고, 그 뒤 같은 span 집합이 연속 3회(기본 간격으로 최소 24초) 조회돼야 판정한다. BatchSpanProcessor의 drop 수는 볼 수 없다(Boot 3.5.6은 `SdkMeterProvider` 빈이 있을 때만 지표를 연결하는데 앱에 없다). 그래서 부모·필수 서비스·PG span이 아닌 말단 span이 버려지면 잡지 못한다.
+`verify-refund-tracing.py`는 검증 스택에서만 내보내기를 schedule-delay 1초·export timeout 5초·OTLP timeout 5초, max-batch-size = max-queue-size = 2048로 고정한다. 한 번 내보낼 때 큐가 모두 비워지고 큐가 차지 않는다는 조건에서 span 종료 뒤 내보내기 상한은 1+2×5=11초다(진행 중 내보내기 1회 + 자기 내보내기). 관찰은 업무 최종 상태·환불 Outbox 전부 SENT·브로커의 모든 consumer group lag 0(환불·복구 그룹 9개는 코드 상수에서 읽어 필수. `--list`·`--state`·오프셋 표가 일치하고 모두 Stable/Empty이며, 파티션 없는 행·해석 못 한 출력·stderr 경고가 없을 때만)을 확인한 뒤부터 센다. 소비자 여유 5초 + 11초 + Tempo 여유 2초 = 18초 안의 조회는 안정 횟수에 넣지 않고, 그 뒤 같은 span 집합이 연속 3회(기본 간격으로 최소 24초) 조회돼야 판정한다. BatchSpanProcessor의 drop 수는 볼 수 없다(Boot 3.5.6은 `SdkMeterProvider` 빈이 있을 때만 지표를 연결하는데 앱에 없다). 그래서 부모·필수 서비스·PG span이 아닌 말단 span이 버려지면 잡지 못한다.
+네 번째 시나리오 `restoration`은 흉내 서버 `arm-cancel` `FAILED`(취소 200 + `FAILED` 취소 행, 원결제 `PAID`·취소액 0)로 Payment 확정 실패를 만들고, 환불 `FAILED`·`failureNotice` `PAYMENT_NOT_CANCELLED`·보유권 원래 상태 복구·정산 환불 0을 확인한 뒤 `RefundExecutionFailed`·`LicenseRestorationRequested`·`LicenseRestored`까지 Outbox 7행이 환불 요청 trace에 있는지 판정한다. 이 시나리오의 필수 서비스는 gateway·order·license·payment이고 PG 취소 span은 정확히 1개다.
 범위·시나리오·실행 수는 [실험 E10](experiments.md#tempo), 조회 방법은 [실행 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
 
 ## 구조·보안 경계 검사 실행
@@ -126,7 +127,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 ```bash
 python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
 python3 -B tools/verification/verify-refund-settlement.py --settlement-compose  # 같은 여정, Settlement만 docker-compose.apps.yml + docker-compose.settlement-portone.yml 컨테이너(host 네트워크). override 적용·설정 바인딩·원승인·취소 조회만 확인하고, 기본 bridge 네트워크와 Compose 내부 이름(mysql·kafka) 해석은 확인하지 않는다
-python3 -B tools/verification/verify-refund-tracing.py           # 로컬 fake PortOne + 격리 Tempo: 정상·응답 유실·PG 5xx 환불의 trace 연결(끊기면 실패)
+python3 -B tools/verification/verify-refund-tracing.py           # 로컬 fake PortOne + 격리 Tempo: 정상·응답 유실·PG 5xx·확정 실패 복구 환불의 trace 연결(끊기면 실패)
 python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제·30분 안 재진입 조합(결정 119·120)
 python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합·접수 전 PAY_PENDING 만료(31분 대기, 별도 야간 작업, 결정 120·126)
 ```
