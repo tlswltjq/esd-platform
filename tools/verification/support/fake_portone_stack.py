@@ -43,6 +43,10 @@ def free_port():
 
 class FakePortOneStack:
     def __init__(self, repo, tool, offset_env, prefix, settlement_compose=False, tracing=False):
+        if settlement_compose and tracing:
+            # The Settlement container exports to a fixed sink and gets no TRACE_EXPORT_ENV, so its spans
+            # would never reach the isolated Tempo; refuse the pair instead of verifying a partial trace.
+            raise ValueError("settlement_compose and tracing cannot be combined")
         self.repo = Path(repo)
         # Settlement as a container from docker-compose.apps.yml + docker-compose.settlement-portone.yml
         # instead of a host JVM. Host networking lets the container reach the loopback fake and stack.
