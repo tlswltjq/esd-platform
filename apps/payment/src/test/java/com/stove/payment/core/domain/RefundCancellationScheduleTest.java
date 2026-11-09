@@ -95,18 +95,4 @@ class RefundCancellationScheduleTest {
         assertThatThrownBy(() -> schedule.claim(id(), BASE, Duration.ZERO, false)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> schedule.initializeUnknown(null)).isInstanceOf(IllegalArgumentException.class);
     }
-
-    /** PR #166 R1: every dispatch claim and operator resume grows the generation; refused claims, finish and stop do not. */
-    @Test void theDispatchGenerationGrowsOnEveryClaimAndResumeOnly() {
-        RefundCancellationSchedule schedule = new RefundCancellationSchedule();
-        assertThat(schedule.getGeneration()).isZero();
-        RefundCancellationClaim claim = schedule.claim(id(), BASE, LEASE, false);
-        assertThat(schedule.getGeneration()).isEqualTo(1);
-        assertThat(schedule.claim(id(), BASE.plusSeconds(1), LEASE, false)).as("lease still live").isNull();
-        assertThat(schedule.getGeneration()).isEqualTo(1);
-        schedule.finish(claim, BASE.plusSeconds(2)); schedule.stop();
-        assertThat(schedule.getGeneration()).isEqualTo(1);
-        schedule.resume(BASE.plusSeconds(3));
-        assertThat(schedule.getGeneration()).isEqualTo(2);
-    }
 }

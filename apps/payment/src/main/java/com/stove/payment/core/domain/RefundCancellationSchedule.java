@@ -15,11 +15,6 @@ public class RefundCancellationSchedule {
     @Column(name = "cancel_retry_claimed_at") private Instant claimedAt;
     @Column(name = "cancel_retry_lease_until") private Instant leaseUntil;
     @Column(name = "cancel_retry_finished_at") private Instant lastFinishedAt;
-    /**
-     * Grows on every dispatch claim and every operator resume (V40, PR #166 R1). A stop, a new hold, a balance block or a
-     * receipt only follows a claim, so an unchanged generation proves no POST could start and no hold was resumed since.
-     */
-    @Column(name = "cancel_dispatch_generation", nullable = false) private long generation;
 
     public RefundCancellationClaim claim(String token, Instant at, Duration lease, boolean dueOnly) {
         RefundCancellationClaim candidate = new RefundCancellationClaim(token, at);
@@ -28,7 +23,6 @@ public class RefundCancellationSchedule {
         if ((leaseUntil != null && at.isBefore(leaseUntil)) || (dueOnly && (nextAt == null || at.isBefore(nextAt)))) return null;
         // The expired owner's completion is unknown. Its stored fallback already waited its current delay.
         if (claimId != null) stage = Math.min(2, stage + 1);
-        generation++;
         claimId = candidate.token(); claimedAt = candidate.startedAt(); leaseUntil = at.plus(lease);
         nextAt = leaseUntil.plusSeconds(delay());
         return candidate;
@@ -58,7 +52,6 @@ public class RefundCancellationSchedule {
     public void resume(Instant at) {
         requireTime(at);
         if (nextAt != null || claimId != null) throw new IllegalStateException("Only stopped cancellation work can be resumed");
-        generation++;
         nextAt = at;
     }
     public boolean ownsClaim(RefundCancellationClaim claim) { return owns(claim); }

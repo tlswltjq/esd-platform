@@ -320,51 +320,6 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     }
 
     /**
-     * PR #166 R1: hold A → closure GET (PAID) → ADMIN resume → a POST whose response is lost → the 3-hour window ends. The
-     * attempt is closable again (window ended) and has no receipt, but the GET predates a POST that may have moved money.
-     */
-    @Test void aResumeAndALostPostDuringTheLookupMakeTheObservationStaleEvenAfterTheWindowEnds() {
-        RefundExecution execution = held(); Payment payment = payment(execution);
-        when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
-            new TransactionTemplate(transactions).executeWithoutResult(tx -> {
-                RefundExecution locked = executions.lockByAttemptId(execution.getAttemptId()).orElseThrow();
-                locked.resumeCancellation(locked.getActiveCancellationHoldId(), DELAY.minusSeconds(30));
-                RefundCancellationClaim post = locked.getCancellationSchedule().claim(id(), DELAY.minusSeconds(29), Duration.ofSeconds(20), false);
-                locked.getCancellationSchedule().finish(post, DELAY.minusSeconds(20));
-            });
-            when(clock.instant()).thenReturn(DELAY.plusSeconds(1));
-            return Optional.of(uncancelled(payment));
-        });
-        when(clock.instant()).thenReturn(DELAY.minusSeconds(31));
-        assertThat(code(fail(execution, id(), "만료 직전 재개와 경합"))).isEqualTo("REFUND_NOT_FAILURE_CLOSABLE");
-        assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored(execution).getLookupSchedule().getClaimId()).isNull();
-        assertThat(closures.count()).isZero(); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
-    }
-
-    /** PR #166 R1: hold A → closure GET → ADMIN resume → POST → new hold B. B is a stop, but the GET predates its POST. */
-    @Test void aResumeAndANewHoldDuringTheLookupMakeTheObservationStale() {
-        RefundExecution execution = held(); Payment payment = payment(execution);
-        String first = execution.getActiveCancellationHoldId();
-        when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
-            new TransactionTemplate(transactions).executeWithoutResult(tx -> {
-                RefundExecution locked = executions.lockByAttemptId(execution.getAttemptId()).orElseThrow();
-                locked.resumeCancellation(locked.getActiveCancellationHoldId(), BASE.plusSeconds(61));
-                RefundCancellationClaim post = locked.getCancellationSchedule().claim(id(), BASE.plusSeconds(62), Duration.ofSeconds(231), false);
-                RefundCancellationHold second = holds.saveAndFlush(RefundCancellationHold.forbidden(locked.getAttemptId(), post, BASE.plusSeconds(63), true));
-                locked.holdCancellation(second.getHoldId(), post);
-            });
-            return Optional.of(uncancelled(payment));
-        });
-        when(clock.instant()).thenReturn(BASE.plusSeconds(61));
-        assertThat(code(fail(execution, id(), "재개 뒤 새 중단과 경합"))).isEqualTo("REFUND_NOT_FAILURE_CLOSABLE");
-        RefundExecution stored = stored(execution);
-        assertThat(stored.getActiveCancellationHoldId()).isNotNull().isNotEqualTo(first);
-        assertThat(stored.getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(closures.count()).isZero(); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
-    }
-
-    /**
      * Decisions 122·128: after the failure the worker keeps looking at min(10 min, max(60 s, age)); a webhook wakes it at
      * once; a late full cancellation is listed, counted and alerted, and changes neither status, money facts nor events.
      */
@@ -494,7 +449,6 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                 List<Map<String, Object>> after = legacy.queryForList("SELECT * FROM " + table);
                 if (table.equals("refund_execution")) after.forEach(row -> {
                     assertThat(row.remove("late_cancel_observed_at")).isNull(); assertThat(row.remove("late_cancelled_at")).isNull();
-                    assertThat(((Number) row.remove("cancel_dispatch_generation")).longValue()).as("old rows start at generation 0").isZero();
                 });
                 assertThat(after).as(table).isEqualTo(before.get(table));
             }
@@ -506,8 +460,6 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                     id(), DELAY, HASH, open.getAttemptId());
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET failure_lookup_hash=NULL WHERE attempt_id=?", open.getAttemptId()))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_failure_v40");
-            assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET cancel_dispatch_generation=-1 WHERE attempt_id=?", open.getAttemptId()))
-                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_cancel_dispatch_generation");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET late_cancel_observed_at=? WHERE attempt_id=?", DELAY.plusSeconds(60), open.getAttemptId()))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_late_cancel");
             String insert = "INSERT INTO refund_failure_closure(request_id,attempt_id,operator_subject,note,evidence,stop_reason,snapshot_hash,evidence_observed_at,"
