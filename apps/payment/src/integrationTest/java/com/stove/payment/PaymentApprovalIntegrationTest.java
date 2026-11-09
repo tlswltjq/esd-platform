@@ -63,6 +63,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -233,6 +234,37 @@ class PaymentApprovalIntegrationTest {
         STATES.put(payment.getPaymentId(),"PAID"); advance(5); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1); assertThat(BODIES).hasSize(1);
+    }
+    /**
+     * D-051: a held admitted approval whose payment the payment resolver (pending scheduler or webhook recheck) confirms
+     * PAID must close in that same commit. Expected: the approval is SUCCEEDED, so neither customer read shows a held
+     * notice and the ADMIN hold list and gauge (both select REVIEW_REQUIRED) no longer count it. Actual before the fix: the
+     * approval stays REVIEW_REQUIRED with its old READY observation until the next held lookup (up to 10 minutes, decision
+     * 122), and the customer of a PAID, completed order reads NOT_CHARGED ("새 주문으로 다시 구매하실 수 있습니다").
+     * Impact: a duplicate purchase invitation (decision 123) after the money was taken.
+     */
+    @Test
+    @DisplayName("[D-051] 접수된 보류 승인의 결제가 PAID로 확정되면 같은 커밋에서 승인도 닫혀 보류 안내·게이지·목록에 남지 않는다")
+    void aHeldAdmittedApprovalClosesInThePaidPaymentCommitSoNoStaleHeldNoticeRemains() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        TIME.set(row(command).getFirstPreparedAt().plusSeconds(10800)); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(held.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
+        assertThat(paymentDetail(payment).path("reviewNotice").path("code").asText()).isEqualTo("NOT_CHARGED");
+        STATES.put(payment.getPaymentId(),"PAID"); advance(5);
+        resolve.execute(payment.getPaymentId());
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1);
+        PaymentApproval closed=row(command);
+        assertThat(closed.getStatus()).as("approval status right after the PAID commit").isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(closed.getNextAt()).isNull(); assertThat(closed.getProtectedPayload()).isNull();
+        assertThat(paymentDetail(payment).path("reviewNotice").isNull()).isTrue();
+        assertThat(approvalDetail(payment,command).path("reviewNotice").isNull()).isTrue();
+        assertThat(approvals.findReviews(PageRequest.of(0,1000)).map(PaymentApproval::getApprovalId).getContent()).doesNotContain(command);
+        int gets=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(gets); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isEqualTo(1);
     }
     /**
      * Decision 124 (and the decision 120 correction): an admitted approval whose PG stays PAY_PENDING is only looked up before
@@ -602,6 +634,14 @@ class PaymentApprovalIntegrationTest {
     private String member(Payment payment) { return PaymentIntegrationTestBase.token(payment.getBuyerSubject(),"MEMBER"); }
     private Map<String,String> body(Payment payment,String command) { return Map.of("requestId",command,"txId",ATTEMPTS.get(payment.getPaymentId()),"paymentToken","private-token"); }
     private Reply submit(Payment payment,String command) { return http("POST",path(payment),body(payment,command),member(payment)); }
+    private JsonNode paymentDetail(Payment payment) {
+        Reply read=http("GET","/api/v1/payments/"+payment.getOrderNo(),null,member(payment));
+        assertThat(read.status()).isEqualTo(200); return read.body().path("data");
+    }
+    private JsonNode approvalDetail(Payment payment,String command) {
+        Reply read=http("GET",path(payment)+"/"+command,null,member(payment));
+        assertThat(read.status()).isEqualTo(200); return read.body().path("data");
+    }
     private Reply http(String method,String path,Map<String,String> body,String token) {
         RestClient.RequestBodySpec request=RestClient.create("http://127.0.0.1:"+port).method(HttpMethod.valueOf(method)).uri(path);
         if(token!=null)request.header("Authorization","Bearer "+token); if(body!=null)request.contentType(MediaType.APPLICATION_JSON).body(body);
