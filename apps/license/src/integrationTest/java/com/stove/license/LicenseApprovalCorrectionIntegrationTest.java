@@ -29,6 +29,7 @@ import com.stove.license.core.service.RegisterLicense;
 import com.stove.license.core.service.ApplyLicenseSuspension;
 import com.stove.license.core.service.ApplyApprovalCorrection;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.Duration;
@@ -44,6 +45,8 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -142,13 +145,38 @@ class LicenseApprovalCorrectionIntegrationTest extends LicenseIntegrationTestBas
         assertThat(row.get("payload").toString()).doesNotContain("attemptId","failureEventId");
     }
 
-    private ApprovalCorrectionRequest fixture() {
+    @Test @Tag("known-defect")
+    @DisplayName("[D-052] License 시계가 Order보다 늦어 처리 시각이 요청 발생 시각보다 앞서도 승인 정정한다")
+    void restoresWhenTheLicenseClockIsBehindTheOrderClock() {
+        // 기대: 같은 정지(licenseId·suspensionRequestEventId·suspensionEventId)로 대조된 요청이면 시계 차이와 무관하게 승인 정정하고 두 시각을 그대로 저장한다
+        // 실제: 기록 생성 가드(at < occurredAt)가 INVALID_REQUEST로 막고, 그 가드를 빼도 DB CHECK(restored_at>=request_occurred_at)가 막는다
+        // 영향: 재시도 뒤 DLT로 가고 구매 근거·보유권이 정지된 채 남는다
+        ApprovalCorrectionRequest input = fixture(NOW.plusSeconds(5));
+        restore.execute(input);
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
+        Map<String, Object> row = jdbc.queryForMap("SELECT request_occurred_at, restored_at FROM license_approval_correction WHERE request_event_id=?", input.eventId());
+        assertThat(((Timestamp) row.get("request_occurred_at")).toInstant()).isEqualTo(input.occurredAt());
+        assertThat(((Timestamp) row.get("restored_at")).toInstant()).isEqualTo(NOW);
+    }
+    @Test @Tag("known-defect")
+    @DisplayName("[D-052] Order 시계가 License보다 늦어 요청 발생 시각이 정지 시각보다 앞서도 승인 정정한다")
+    void restoresWhenTheOrderClockIsBehindTheLicenseClock() {
+        // 기대: 요청 발생 시각(Order 시계)이 실제 정지 시각(License 시계)보다 앞서도 식별자가 맞으면 승인 정정한다
+        // 실제: 서비스 가드(occurredAt < suspendedAt)가 CONFLICT로 막는다
+        // 영향: 재시도 뒤 DLT로 가고 구매 근거·보유권이 정지된 채 남는다
+        ApprovalCorrectionRequest input = fixture(NOW.minusSeconds(5));
+        restore.execute(input);
+        assertThat(stored(input).getStatus()).isEqualTo(PurchaseStatus.REGISTERED); assertThat(completions()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group='license-approval-correction'", Integer.class)).isEqualTo(1);
+    }
+    private ApprovalCorrectionRequest fixture() { return fixture(NOW); }
+    private ApprovalCorrectionRequest fixture(Instant occurredAt) {
         PaidOrder purchase = paid(); grant.execute(purchase); License license = licenses.findByOrderNo(purchase.orderNo()).orElseThrow();
         register.execute(purchase.buyerSubject(), license.getLicenseId());
         SuspensionRequest request = new SuspensionRequest(id(), NOW.minusSeconds(10), id(), license.getOrderNo(), license.getBuyerSubject(),
                 license.getProductId(), license.getProductCode(), license.getPaymentId());
         suspend.execute(request); LicenseSuspension suspended = suspensions.findByRequestEventId(request.eventId()).orElseThrow();
-        return new ApprovalCorrectionRequest(id(), NOW, request.refundId(), id(), id(), license.getLicenseId(), license.getOrderNo(), license.getBuyerSubject(),
+        return new ApprovalCorrectionRequest(id(), occurredAt, request.refundId(), id(), id(), license.getLicenseId(), license.getOrderNo(), license.getBuyerSubject(),
                 license.getProductId(), license.getProductCode(), license.getPaymentId(), request.eventId(), suspended.getCompletedEventId());
     }
     private License stored(ApprovalCorrectionRequest input) { return licenses.findByOrderNo(input.orderNo()).orElseThrow(); }
