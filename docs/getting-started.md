@@ -36,6 +36,8 @@ Compose는 기본 정의 2개와 로컬 오버라이드 2개를 사용한다. �
 
 `local-stack.sh`와 원격 검증 스크립트는 각 기본 파일에 local 오버라이드 하나를 적용한다. CI의 내부 네트워크 실행은 기본 파일만 사용한다. 적용 순서와 검증 기록은 [Compose 실행 구성](compose-layout.md)을 따른다.
 
+Settlement가 PortOne TEST 원승인·취소를 직접 조회하게 하려면 앱 Compose에 `-f docker-compose.settlement-portone.yml`을 더한다. `SETTLEMENT_PORTONE_API_BASE_URL`·`SETTLEMENT_PORTONE_API_SECRET`(Payment의 `PORTONE_API_SECRET`과 별개)·`PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`를 셸 환경으로 넣어야 하며, 하나라도 없으면 Compose가 멈춘다. 이 파일을 빼면 Settlement는 기본 SIMULATED(모의 PG)로 돈다. 토스페이 정산 수집(`SETTLEMENT_TOSSPAY_ENABLED`)은 켜지 않는다.
+
 신규 빈 스택은 외부 모의 PG의 세 역할 키와 전용 DB 비밀번호, Catalog 정산 조회 키를 먼저 설정한다.
 기존 V11 내장 PG 자료가 있으면 [이관 절차](../.kiro/specs/settlement/design.md#사용-안내)를 거쳐 연결한다.
 

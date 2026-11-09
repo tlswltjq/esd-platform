@@ -99,8 +99,19 @@ def journey(stack):
     assert not any(r["path"].startswith("/_fake/control/") for r in fake.requests)
     stack.log("PASS: sdk only /_fake/sdk/*; exactly one total and successful confirm per payment")
     stack.log("PASS: settlement POST=0; all confirm/cancel callers=payment")
+    if stack.settlement_compose:
+        # Only the container holds the Settlement secret in this mode, so these reads came from it.
+        cancel_index = fake.requests.index(cancels[0])
+        assert any(r["caller"] == "settlement" and r["method"] == "GET" and r["status"] == 200
+                   and r["path"].startswith("/payments/" + first_payment + "?") for r in fake.requests[cancel_index + 1:]), \
+            "settlement container must read the cancelled payment after the cancel"
+        assert stack.settlement_container_ready(), "settlement container must stay healthy"
+        stack.record("settlement container approval/cancellation reads (GET after cancel)", "ok")
 
 
 if __name__ == "__main__":
-    FakePortOneStack(REPO, "verify-refund-settlement", offset_env="REFUND_SETTLEMENT_TEST_PORT_OFFSET", prefix="refund-settlement-").run(
-        journey, "local PortOne fake purchase -> register -> refund -> Settlement adjustment -> repurchase -> register")
+    compose = "--settlement-compose" in sys.argv[1:]
+    FakePortOneStack(REPO, "verify-refund-settlement", offset_env="REFUND_SETTLEMENT_TEST_PORT_OFFSET", prefix="refund-settlement-",
+                     settlement_compose=compose).run(
+        journey, "local PortOne fake purchase -> register -> refund -> Settlement adjustment -> repurchase -> register"
+        + (" (Settlement container via docker-compose.settlement-portone.yml)" if compose else ""))
