@@ -5,12 +5,15 @@ import unittest
 import evidence_fragments
 
 INDEX = '# 근거 색인\n\n| 날짜 | 모듈 | 검증 대상 | 결과 | 근거 |\n|---|---|---|---|---|\n| 2026-11-01 | cross | 옛 행 | 통과 | PR #1 |\n'
-ROW = '| 2026-11-09 | payment | 무엇 | 통과 `a|b` | [PR #7](x) |'
+ROW = '| 2026-11-09 | payment | 무엇 | 통과 `a\\|b` | [PR #7](x) |'
 
 
 class CellsTest(unittest.TestCase):
-    def test_pipes_inside_code_and_escaped_pipes_are_not_boundaries(self):
-        self.assertEqual(['2026-11-09', 'payment', '무엇', '통과 `a|b`', '[PR #7](x)'], evidence_fragments.cells(ROW))
+    def test_only_escaped_pipes_are_not_boundaries(self):
+        self.assertEqual(['2026-11-09', 'payment', '무엇', '통과 `a\\|b`', '[PR #7](x)'], evidence_fragments.cells(ROW))
+        # 리뷰 2: GFM에서는 인라인 코드 안의 이스케이프하지 않은 파이프도 칸 경계다.
+        self.assertEqual(6, len(evidence_fragments.cells('| 2026-11-09 | a | b | `x|y` | c |')))
+        self.assertIn('다섯 칸', evidence_fragments.rows('f', '| 2026-11-09 | a | b | `x|y` | c |')[1][0])
         self.assertEqual(['a', 'b \\| c'], evidence_fragments.cells('| a | b \\| c |'))
         self.assertIsNone(evidence_fragments.cells('그냥 문장'))
 
@@ -82,6 +85,21 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual(0, count)
         self.assertEqual(INDEX, (self.root / 'docs/evidence.md').read_text(encoding='utf-8'))
         self.assertEqual(2, len(list((self.root / 'docs/evidence.d').iterdir())))
+
+    def test_a_rename_is_a_removal_and_an_addition(self):
+        # 리뷰 1: 다른 PR의 조각을 자기 번호로 옮기면 그 조각 삭제로 걸린다.
+        changes = self.root / 'changes.txt'
+        changes.write_text('modified\tapps/x/A.java\nrenamed\tdocs/evidence.d/7.md\tdocs/evidence.d/5.md\n', encoding='utf-8')
+        parsed = evidence_fragments.read_changes(changes)
+        self.assertEqual([('modified', 'apps/x/A.java'), ('removed', 'docs/evidence.d/5.md'), ('added', 'docs/evidence.d/7.md')], parsed)
+        self.assertTrue(any('삭제는 접기 PR만' in e for e in evidence_fragments.check_pr(7, parsed)))
+        moved = evidence_fragments.read_changes(self.write_changes('renamed\tdocs/old.md\tdocs/evidence.md\n'))
+        self.assertIn(('removed', 'docs/evidence.md'), moved)
+
+    def write_changes(self, text):
+        path = self.root / 'moved.txt'
+        path.write_text(text, encoding='utf-8')
+        return path
 
     def test_main_pr_command_reads_tab_separated_changes(self):
         changes = self.root / 'changes.txt'

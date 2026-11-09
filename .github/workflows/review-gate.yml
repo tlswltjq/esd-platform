@@ -41,7 +41,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           python3 -I -B tools/ci/evidence_fragments.py check --root .
-          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[] | "\(.status)\t\(.filename)"' > "$RUNNER_TEMP/changes.txt"
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[] | "\(.status)\t\(.filename)\t\(.previous_filename // "")"' > "$RUNNER_TEMP/changes.txt"
           python3 -I -B tools/ci/evidence_fragments.py pr --number "$PR_NUMBER" --changes "$RUNNER_TEMP/changes.txt"
       - name: Check review section
         env:

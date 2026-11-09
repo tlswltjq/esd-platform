@@ -23,18 +23,17 @@ COLUMNS = 5
 
 
 def cells(line):
-    """`| a | b |` 행을 칸 목록으로 나눈다. 인라인 코드 안의 `|`와 `\\|`는 칸 경계가 아니다."""
+    """`| a | b |` 행을 칸 목록으로 나눈다. GFM 표처럼 이스케이프한 `\\|`만 칸 경계가 아니다.
+    리뷰 2: 인라인 코드 안이라도 이스케이프하지 않은 `|`는 GitHub에서 칸 경계다."""
     body = line.strip()
     if not (body.startswith('|') and body.endswith('|')) or len(body) < 2:
         return None
-    parts, current, in_code, i = [], [], False, 1
+    parts, current, i = [], [], 1
     while i < len(body) - 1:
         ch = body[i]
         if ch == '\\' and i + 1 < len(body) - 1 and body[i + 1] == '|':
             current.append('\\|'); i += 2; continue
-        if ch == '`':
-            in_code = not in_code
-        if ch == '|' and not in_code:
+        if ch == '|':
             parts.append(''.join(current).strip()); current = []
         else:
             current.append(ch)
@@ -127,11 +126,19 @@ def fold(root):
 
 
 def read_changes(path):
+    """`상태<TAB>경로[<TAB>이전 경로]` 줄. 리뷰 1: 이름 변경은 이전 경로 삭제와 새 경로 추가로 나눠 양쪽에 규칙을 적용한다."""
     changes = []
     for line in Path(path).read_text(encoding='utf-8').split('\n'):
-        if line.strip():
-            status, _, name = line.partition('\t')
-            changes.append((status.strip(), name.strip()))
+        if not line.strip():
+            continue
+        fields = [field.strip() for field in line.split('\t')]
+        status, name = fields[0], fields[1]
+        previous = fields[2] if len(fields) > 2 else ''
+        if status == 'renamed' and previous:
+            changes.append(('removed', previous))
+            changes.append(('added', name))
+        else:
+            changes.append((status, name))
     return changes
 
 
