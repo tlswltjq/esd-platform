@@ -58,7 +58,7 @@
 - [ ] PG 계약 중립화: 웹훅 통지를 중립 계약으로 바꾼다. `PortOneWebhookNotice`(core.domain)·`PortOneWebhookReceipts`·`PortOneWebhookVerifier`(core.port)·`ReceivePortOneWebhook`(core.service)의 이름과 PortOne 본문 해석·서명 검증은 `adapter`·`api.listener`로 내린다 — G3
 - [ ] PG 계약 중립화: PortOne 공개 보장인 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)과 오류 분류를 공급자 설정값·어댑터 판정으로 옮기고 `config`에서 주입한다 — G3
 - [ ] PG 계약 중립화: `PaymentArchitectureTest`에 core 패키지의 공급자 이름(PortOne) 금지 규칙을 더한다 — G3
-- [ ] [결정 필요] 기준 시뮬레이터의 형태: 기존 PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)를 넓힐지, 중립 계약 전용 시뮬레이터·어댑터를 새로 둘지. [결정 46](../../../docs/decisions.md#pg-test-boundaries-without-provider-service)·[결정 111](../../../docs/decisions.md#portone-fake-journey)과의 관계를 함께 정한다 — G3
+- [ ] 기준 시뮬레이터 확장([결정 141](../../../docs/decisions.md#portone-fake-as-reference-simulator)): PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)에 제어 요청으로 장애 주입을 더한다 — 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정(PR #178·결정 138 뒤에 잇는다), 웹훅 중복·역순·누락. 응답 모양은 PortOne 어댑터 테스트 견본과 같게 두고, 문서로 확인하지 못한 동작은 추정으로 표시해 G7 확인 항목에 남긴다. 운영 코드는 바꾸지 않는다 — G3
 
 ## 범위 밖(후속)
 

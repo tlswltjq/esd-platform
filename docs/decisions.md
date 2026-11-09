@@ -1283,6 +1283,19 @@
 - 구분: 직접 제안 — 실제 연동 미루기는 사용자가 먼저 꺼냈고, 방식 C는 추천 수용
 - 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 중립화는 후속 PR
 
+<a id="portone-fake-as-reference-simulator"></a>
+## 141. 기준 시뮬레이터는 PortOne 흉내 서버를 넓혀 쓰고, 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다
+- 문제: [결정 140](#defer-real-pg)으로 실제 PG 확인을 G7로 미루면서 개발·여정·장애 실험에 쓸 기준 시뮬레이터를 정해야 했다. 지금은 두 가지가 있다. `tools/verification/support/portone_fake.py`(PortOne V2 HTTP 모양, 제어 요청 `fail-attempt`·`arm-confirm`·`arm-cancel`·`settle`·`console-approve`·`console-cancel`, 매일 밤 CI 여정)와 `simulators/mock-pg`(별도 Java 서비스·DB, 승인만, `SIMULATED`)다. 예: PR #178 취소 단계 실패는 흉내 서버에 PortOne 취소 대기(`REQUESTED`)가 없어서 생겼다.
+- 선택지: A PortOne 흉내 서버를 기준으로 넓힌다. 중립화는 `core.port` 경계에서만 하고 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다 / B 중립 프로토콜 시뮬레이터와 전용 `SimulatorPgGateway`·Settlement 클라이언트를 새로 둔다 / C 둘 다 둔다(실험은 중립 시뮬레이터, 어댑터 계약은 흉내 서버) (추천: A — 업무 모델을 PortOne에서 떼는 일은 `core.port` 경계로 이뤄지고 시뮬레이터 프로토콜과는 무관하다. PortOne 어댑터가 매일 밤 돌아 G7에서 주소만 바꾸면 되고, 장애 주입은 기존 `arm-*` 제어 방식으로 더할 수 있으며, [결정 46](#pg-test-boundaries-without-provider-service)·[결정 111](#portone-fake-journey)을 지킨다. B는 결정 46을 뒤집고 어댑터 두 벌을 유지하며 PortOne 어댑터가 G7까지 시험되지 않는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PortOne 흉내 서버를 기준으로 넓혀")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - 흉내 서버는 결정 111대로 검증 도구 쪽에만 둔다. 운영 코드는 흉내 서버를 알지 못하고, PortOne 주소 설정만 바꿔 붙는다. 결정 46의 "상시 모의 PG를 복원하지 않는다"는 그대로다.
+  - 흉내 서버의 응답 모양은 PortOne 어댑터 테스트의 견본과 같게 유지한다. PortOne 문서로 확인하지 못한 동작은 흉내 서버 안에 추정이라고 적고 G7 확인 항목에 남긴다.
+  - 장애 주입은 제어 요청으로 더한다: 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정, 웹훅 중복·역순·누락. 취소 대기는 PR #178(결정 138)이 넣는 것과 겹치지 않게 그 PR 뒤에 잇는다.
+  - `simulators/mock-pg`·`SIMULATED` 경로를 정리할지는 이번에 정하지 않는다.
+- 구분: 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 흉내 서버 확장은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
