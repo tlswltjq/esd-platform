@@ -1317,9 +1317,22 @@
 - 구분: 추천 수용
 - 결과: [PR #181](https://github.com/tlswltjq/esd-platform/pull/181) (기록)
 
+<a id="money-spec-first"></a>
+## 143. 돈이 오가는 4개 모듈(Payment·Order·License·Settlement)의 SPEC을 먼저 정비하고, 그다음 PG 계약 중립화를 구현한다
+- 문제: 결제·환불 결정이 기존 결정과 계속 부딪혔는데, 부딪히는지 확인할 기준이 SPEC에 없었다. Payment `design.md`의 상태 다이어그램은 `Payment` 하나뿐이고, `PaymentApproval`(상태 7개)·`RefundExecution`(상태 3개 + 보류·종결·조회 일정·귀속 판정 필드)은 전이 표 없이 R7·R12~R14 서술과 결정 본문에 흩어져 있다. License·Settlement `design.md`에는 상태 전이 정의가 없다. Payment 요구사항은 결정 순서대로 붙어 R14가 두 개다. 모듈 간 돈 흐름(`docs/domain/workflows.md`)은 2026-11-06 뒤로 갱신되지 않았고 금액 불변식은 어디에도 없다. `tasks.md`는 완료 항목의 구현 경위로 길어졌다(payment 한 줄 최대 1,056자, order 1,207자). 요구사항에는 PortOne 이름이 남아 있다(payment 18곳, settlement 7곳).
+- 선택지: A 돈 흐름 4개 모듈 SPEC을 먼저 정비(집합체별 상태×이벤트 표 → 모듈 간 돈 불변식 → 요구사항 생애주기 순 재배열·공급자 중립 용어 → `tasks.md` 정리)하고 그다음 중립화 구현 / B 중립화 구현 중 바뀌는 부분만 고침 / C 11개 모듈 SPEC 전체 정비 (추천: A — 충돌을 코드보다 먼저 찾고, 불변식 목록이 불변식 검사기의 명세가 된다. 문서만 바꿔 교차 리뷰가 필요 없다. C는 문제가 적은 모듈까지 넓어진다)
+- 내 의견: "SPEC을 더 다듬는건 어떻게 생각해?" → 고른 선택지: "A로 돈 흐름 4개 모듈 SPEC부터 정비해"
+- 선택: A
+  - 상태×이벤트 표는 새 정책 없이 현재 코드(상태 enum과 전이 메서드·가드·발행/수신 이벤트)에서 옮긴다. 코드·요구사항·기존 결정이 서로 어긋나는 곳은 고치지 않고 찾은 것으로 남긴다. 재현되는 결함은 재현 테스트와 함께 [결함 대장](defects.md)에, 정책이 필요한 것은 `[결정 필요]`로 하나씩 묻는다.
+  - 모듈 간 돈 불변식은 기준 문서 `docs/domain/workflows.md`에 둔다. 새 문서를 만들지 않는다.
+  - 요구사항 재배열은 계약을 바꾸지 않는다. R 번호를 바꾸면 기존 참조(`git grep 'R14'` 등)를 함께 고친다.
+  - 테스트에 R 번호를 붙이는 규칙은 이번 범위가 아니다.
+- 구분: 직접 제안 — SPEC 정비는 사용자가 먼저 꺼냈고, 범위 A는 추천 수용
+- 결과: 진행 중(1부: 상태×이벤트 표)
+
 <a id="held-approval-keeps-first-reason"></a>
 ## 144. 이미 보류된 승인은 처음 보류된 사유를 유지하고, 접수 없이 청구된 관측만 사유를 올린다
-- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. 결정 143 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
+- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. [결정 143](#money-spec-first) 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
 - 선택지: A 처음 보류된 사유를 유지하고 `PAID_WITHOUT_ADMISSION`만 지금처럼 사유를 올린다. 뒤 사유는 로그로만 남긴다 / B 지금처럼 최신 사유로 바꾸고 요구사항에 적는다 / C 사유 심각도 순서를 정해 더 심각한 사유만 덮는다 / D A에 더해 사유 이력을 테이블에 저장한다 (추천: A — 보류는 운영자 조사 표시이고([결정 114](#approval-review-hold-closure)) 첫 이유가 조사의 출발점이다. 기존 `PAID_WITHOUT_ADMISSION` 보호가 이미 "돈이 움직인 관측은 덮이면 안 된다"는 뜻이다. C는 8개 사유의 순서라는 새 정책이 필요하고, D는 지금 조사 기록으로 대부분 대신된다)
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 처음 보류 사유를 유지해")
 - 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이미 `REVIEW_REQUIRED`인 승인에 새 중단 사유가 오면 송신 중단은 유지하고 `lastErrorCode`·`reviewStartedAt`은 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 사유를 그것으로 올리고, 한 번 그 사유가 되면 바꾸지 않는다. 버린 사유는 승인 ID와 함께 로그로 남긴다. 고객 안내는 결정 132대로 사유 묶음과 마지막 PG 관측으로 정하므로, 유지된 첫 사유가 `PG_INVALID_EVIDENCE`가 아니면 뒤의 깨진 응답이 안내를 고정하지 않는다.
