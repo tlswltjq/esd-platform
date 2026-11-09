@@ -26,6 +26,7 @@ OFFSETS = {
     "verify-studio": 22000,
     "verify-refund-settlement": 23000,
     "verify-approval-journeys": 24000,
+    "verify-refund-tracing": 9000,
 }
 
 

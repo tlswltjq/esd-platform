@@ -12,6 +12,10 @@ POST /_fake/control/payments/{paymentId}/{action}
   settle           {"status": PAID|FAILED} latest PAY_PENDING attempt
   console-approve  latest READY attempt -> PAID without confirm (approval without our admission)
   console-cancel   latest PAID attempt -> full CANCELLED (operator cancels in the PortOne console)
+  arm-cancel       {"outcome": LOST_RESPONSE|PG_ERROR, "failLookups": n} applied to the next valid cancel of a
+                   PAID attempt. LOST_RESPONSE cancels, then closes the connection without an answer; PG_ERROR
+                   answers HTTP 503 without cancelling and without recording an idempotent replay. The next n
+                   GET /payments/{id} calls after that cancel answer 503 (refund tracing, decision 119)
 
 Every action targets one paymentId and its latest attempt only, so a journey can prepare many orders
 up front, drive each into its state, wait once past the order deadline and then settle each one
@@ -33,7 +37,8 @@ import threading
 import urllib.parse
 
 CONFIRM_OUTCOMES = {'FAILED', 'PAY_PENDING', 'REJECT_400', 'REJECT_403'}
-CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'settle', 'console-approve', 'console-cancel'}
+CANCEL_OUTCOMES = {'LOST_RESPONSE', 'PG_ERROR'}
+CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'arm-cancel', 'settle', 'console-approve', 'console-cancel'}
 
 
 def timestamp():
@@ -86,8 +91,13 @@ class PortOneFake:
                         entry.update(amount=body.get('amount'), reason=body.get('reason'),
                                      cancellationId=result.get('cancellation', {}).get('id'))
                     if self.path.startswith('/_fake/control/'):
-                        entry.update(control={k: body[k] for k in ('outcome', 'status') if k in body})
+                        entry.update(control={k: body[k] for k in ('outcome', 'status', 'failLookups') if k in body})
                     owner.requests.append(entry)
+                    if status is None:
+                        # Lost response: the cancellation happened, the caller never hears about it.
+                        entry.update(status='LOST')
+                        self.close_connection = True
+                        return
                     raw = json.dumps(result).encode()
                     self.send_response(status)
                     self.send_header('Content-Type', 'application/json')
@@ -177,6 +187,9 @@ class PortOneFake:
         if store != self.store:
             return 403, {'type': 'STORE_MISMATCH'}
         if method == 'GET':
+            if len(parts) == 2 and payment.get('failLookups', 0) > 0:
+                payment['failLookups'] -= 1
+                return 503, {'type': 'UNKNOWN', 'message': 'fake lookup unavailable'}
             if len(parts) == 2:
                 return 200, self.view(payment, self.latest(payment))
             if parts[2] == 'transactions':
@@ -216,7 +229,15 @@ class PortOneFake:
             remaining = attempt['amount']['paid'] - attempt['amount']['cancelled']
             if attempt['status'] != 'PAID' or set(body) != {'storeId', 'amount', 'currentCancellableAmount', 'reason'} or body['amount'] != remaining or remaining <= 0 or body['currentCancellableAmount'] != remaining:
                 return 409, {'type': 'CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN'}
+            outcome = payment.pop('armedCancel', None)
+            if outcome is not None:
+                payment['failLookups'] = outcome['failLookups']
+            if outcome is not None and outcome['outcome'] == 'PG_ERROR':
+                return 503, {'type': 'PG_PROVIDER', 'message': 'fake PG cancel unavailable'}
             result = 200, {'cancellation': self.cancel(attempt, body['reason'])}
+            if outcome is not None and outcome['outcome'] == 'LOST_RESPONSE':
+                self.replays[replay_key] = copy.deepcopy((body, result))
+                return None, result[1]
         self.replays[replay_key] = copy.deepcopy((body, result))
         return result
 
@@ -257,6 +278,13 @@ class PortOneFake:
             if attempt['status'] != 'READY':
                 return 409, {'type': 'INVALID_STATE'}
             payment['armedConfirm'] = body['outcome']
+        elif action == 'arm-cancel':
+            fails = body.get('failLookups', 0)
+            if body.get('outcome') not in CANCEL_OUTCOMES or not isinstance(fails, int) or isinstance(fails, bool) or not 0 <= fails <= 10:
+                return 400, {'type': 'INVALID_REQUEST'}
+            if attempt['status'] != 'PAID':
+                return 409, {'type': 'INVALID_STATE'}
+            payment['armedCancel'] = dict(outcome=body['outcome'], failLookups=fails)
         elif action == 'settle':
             if body.get('status') not in {'PAID', 'FAILED'}:
                 return 400, {'type': 'INVALID_REQUEST'}
