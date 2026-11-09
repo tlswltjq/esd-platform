@@ -38,6 +38,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 | 무엇 | 어디에 |
 |---|---|
 | 현재 계약·업무 규칙·남은 작업 | `.kiro/specs/<모듈>/` (`requirements.md`·`design.md`·`tasks.md`) |
+| 모듈 둘 이상에 걸친 계약(이벤트의 사실·소유자·소비자·키·순서·멱등, 모듈 간 흐름, 돈 불변식, 품질 목표)과 그 남은 작업 | `.kiro/specs/platform/` (같은 세 파일). 모듈 스펙은 이 행을 링크하고 다시 적지 않는다([결정 151](docs/decisions.md#platform-spec)) |
 | 왜 그렇게 했고 무엇을 버렸나 | [docs/decisions.md](docs/decisions.md) |
 | 사용자의 판단 이력 | [docs/judgment-index.md](docs/judgment-index.md) |
 | 검증 결과 (날짜·대상·수치·근거) | PR의 `docs/evidence.d/<PR번호>.md`에 **한 행** → 접기 PR이 [docs/evidence.md](docs/evidence.md)로 옮긴다 |
