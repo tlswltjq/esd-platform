@@ -1055,7 +1055,7 @@
 - 내 의견: "B로 해, 운영자 조사·종결"
 - 선택: B — 환불의 `/api/v1/admin/refund-delays`처럼 ADMIN이 보류 승인을 목록·상세로 보고 조사 기록을 남긴다. 종결은 운영자가 PG 콘솔에서 처리한 뒤 시스템이 PG를 다시 조회해 근거를 확인할 때만 닫는다. 보류 건 수 지표와 경보를 둔다. 보류 건의 끝없는 5초 재조회는 늘어나는 간격으로 바꾼다. 시스템이 PG 취소를 실행하는 경로는 만들지 않는다. 종결 때 주문·결제가 어떤 상태가 되는지, 재조회 간격 값, 고객 안내는 따로 정한다.
 - 구분: 추천 수용
-- 결과: (진행 중) 1부 [PR #131](https://github.com/tlswltjq/esd-platform/pull/131) — ADMIN 목록·상세·조사 기록, 최신 PG 관측, 지표·경보. 종결 동작은 [결정 115](#approval-review-closure-outcome), 재조회 간격·고객 안내는 남음
+- 결과: (진행 중) 1부 [PR #131](https://github.com/tlswltjq/esd-platform/pull/131) — ADMIN 목록·상세·조사 기록, 최신 PG 관측, 지표·경보. 종결 동작은 [결정 115](#approval-review-closure-outcome), 재조회 간격은 [결정 122](#approval-review-requery-interval) [PR #147](https://github.com/tlswltjq/esd-platform/pull/147), 고객 안내는 남음
 
 <a id="approval-review-closure-outcome"></a>
 ## 115. 승인 보류를 종결하면 주문은 끝나고, 고객은 새 주문으로 안내한다
@@ -1083,6 +1083,261 @@
 - 선택: 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude(메인 세션, 필요하면 Claude 서브에이전트)가 한다. 결정 108의 교차 리뷰는 Codex(읽기 전용·독립 문맥)가 맡는다. 어긋나던 일반 교훈("Codex에 구현 위임")은 폐기하고, 이 역할 분담으로 바꿨다. 역할이 반대였던 #127·#130도 서로 다른 모델이 리뷰했으므로 결정 108을 어기지는 않았다. 이후 PR부터 이 분담을 따른다.
 - 구분: 직접 제안
 - 결과: [PR #134](https://github.com/tlswltjq/esd-platform/pull/134), [판단 색인](judgment-index.md) 2026-11-07 행
+
+<a id="continuous-development"></a>
+## 118. 결정이 필요 없는 일은 묻지 않고 진행하고, 결정은 하나씩 대기시킨다
+- 문제: 2026-11-05~08에 만든 PR 38개는 모두 KST 14~05시에 생겼고, 06~13시에는 0개였다. 사용자가 없는 동안 개발이 멈춘다. 머지("CI 통과하면 머지해")와 다음 작업 고르기("다음 작업은?")도 사용자 지시를 기다렸는데, 둘 다 이 문서상 에이전트 몫이다. 정책 판단은 맡길 수 없다. 결정 117건 중 대화 원문이 있는 83건에서 26건(31%)은 사용자가 결과를 바꿨다. 교차 리뷰를 맡은 Codex는 2026-11-08에 주간 한도의 85%를 썼다(2026-11-07 하루에 67→85%). 한도가 바닥나면 `review-gate` 때문에 `*.md`가 아닌 PR은 머지되지 않는다.
+- 선택지: AI가 운영안 하나로 제시했다. ① CI `build`·`review-gate`가 통과하고 `CLEAN`이며 사용자 판정이 없으면 지시 없이 머지한다. ② `tasks.md`에 `[결정 필요]`·`[외부 대기]`를 표시하고, 표시 없는 항목은 묻지 않고 고른다. ③ 결정 설명은 미리 준비해 한 번에 하나씩 내고, 기다리는 동안 다른 작업을 계속한다. ④ 관련된 작은 수정은 한 PR로 묶고, 재리뷰는 바뀐 diff만 맡긴다. Codex 한도가 바닥나면 PR을 리뷰 대기로 쌓는다. ⑤ 작업 하나마다 새 문맥에서 시작한다. ⑥ Kiro Crew 모니터 루프(30~60분 간격)로 돌린다. (추천: 전체 적용 — 정책 판단은 사용자에게 남기고 기다림만 없앤다)
+- 내 의견: "해당 방향성에 맞게 적용시켜줘"
+- 선택: 전체 적용. main 규칙셋([결정 107](#main-branch-protection))과 교차 리뷰 필수([결정 108](#cross-review-before-merge))는 그대로 둔다. 결정을 기다리는 작업은 구현·테스트 기대값으로 먼저 확정하지 않는다(AGENTS.md 1절 3번). 첫 표시는 AI가 했다. 미완료 47건 중 결정 필요 24건, 외부 대기 10건, 바로 진행 13건이다. 분류가 틀리면 사용자가 고친다.
+- 구분: 추천 수용
+- 결과: [PR #140](https://github.com/tlswltjq/esd-platform/pull/140) (규칙 변경이라 근거 색인 행 없음)
+
+<a id="g1-exit-verification"></a>
+## 119. G1은 10-29 실제 TEST 기록과 흉내 서버를 넓힌 실제 스택 여정으로 끝낸다
+- 문제: G1 완료 조건("성공·시도 실패·재진입·응답 유실을 Order 결과/다음 행동까지 검증")을 무엇으로 검증해야 끝인지 정해지지 않았다. 2026-11-07부터 토스페이가 공용 예제 키를 거절해 실제 PortOne TEST를 쓸 수 없고, 전용 가맹점은 외부 대기다. PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)는 READY→PAID→CANCELLED만 지원한다. 그래서 시도 실패, PAY_PENDING, 승인 근거 없는 PAID를 만들 수 없다. 10-29 실제 TEST 이후 바뀐 코드(V31·V36·V37, [결정 115](#approval-review-closure-outcome) 보류 종결)는 실제 스택 여정 검증이 없다.
+- 선택지: A 전용 가맹점이 생긴 뒤 실제 PortOne TEST로 모든 조합을 다시 돌려야 닫는다 / B 10-29 실제 TEST 기록을 핵심 네 여정(서버 승인 PAID, 승인 응답 유실 복구, 결제창 닫기 뒤 같은 주문 재결제, 이탈 뒤 30분 자연 만료)의 근거로 인정한다. 흉내 서버에만 FAILED 시도·PAY_PENDING·승인 근거 없는 PAID 생성을 더해, 이후 바뀐 동작과 남은 조합을 11개 서비스 실제 스택 여정으로 검증한다. 실제 PortOne 재확인은 G1 밖 `[외부 대기]`로 둔다 / C 기존 실제 기록과 MySQL·Kafka 통합 테스트로 인정한다 (추천: B — 남은 것은 우리 쪽 상태 전이라 흉내 서버로 반복하는 편이 더 많은 경우를 덮는다. 운영 코드를 바꾸지 않고([결정 111](#portone-fake-journey)), G1이 외부 대기에 묶이지 않는다. C는 통합 테스트가 놓친 경합 결함 D-040·D-042 전례가 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 흉내 서버 확장으로 G1 닫아")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). G1 완료 판정은 두 근거로 한다. 하나는 10-29 실제 TEST 기록(핵심 네 여정)이고, 다른 하나는 흉내 서버를 넓힌 실제 스택 여정이다. 이 여정은 시도 실패 뒤 재결제, 승인 근거 없는 PAID의 보류 → 콘솔 취소 → `closure` 종결, 그리고 남은 이탈/재진입 조합을 검증한다. 흉내 서버 확장은 검증 도구에만 두고 운영 코드는 바꾸지 않는다. 실제 PortOne·PG 재확인은 Payment의 `[외부 대기]` 항목으로 남기며 G1 종료 조건이 아니다. 검증할 이탈/재진입 조합의 범위, 보류 건 재조회 간격, 고객 안내 문구는 각각 따로 정한다.
+- 구분: 추천 수용
+- 결과: [PR #141](https://github.com/tlswltjq/esd-platform/pull/141) (기록), 흉내 서버 확장·여정은 후속 PR
+
+<a id="g1-reentry-scope"></a>
+## 120. G1 실제 스택 여정에는 30분 안 위험 조합과 기한을 넘는 돈 조합까지 넣고, 3시간 조합은 통합 테스트로 인정한다
+- 문제: [결정 119](#g1-exit-verification)로 G1을 흉내 서버를 넓힌 실제 스택 여정으로 닫기로 했지만, 결제창 이탈/재진입 조합 20개 중 무엇을 여정에 넣을지는 정하지 않았다. 10-29 실제 TEST로 확인된 것은 자연 만료, 결제창 닫기 뒤 같은 주문 재결제, 서버 승인 PAID, 승인 응답 유실 복구뿐이다. 주문 기한(30분, `Order.java:77`)과 confirm 재송신 기한(3시간, `PaymentApproval.java:146-150`)은 설정 키 없는 상수이고 시계는 `Clock.systemUTC()`다. 그래서 기한을 넘는 조합은 실제로 기다려야 한다([결정 111](#portone-fake-journey)로 운영 코드에 시계 조작 경로를 두지 않는다).
+- 선택지: A 결정 119 최소(시도 실패 뒤 재결제, 승인 근거 없는 PAID의 보류 종결) / B A + 30분 안 위험 조합(승인 요청 미도달 뒤 같은 주문 재결제, 처리 중 결제창 재요청의 `APPROVAL_IN_PROGRESS` 거절, 처리 중 새 주문에 따른 같은 상품 이중 구매, PAY_PENDING 유지, confirm 400/403 거절 보류) / C B + 기한을 넘는 조합(기한 뒤 FAILED → 만료, 기한 안 접수 뒤 늦은 PAID → 원래 주문 PAID, 접수 전 PAY_PENDING 상태의 만료)을 31분 대기 한 번으로 묶고, 3시간 조합은 통합 테스트(`PaymentApprovalIntegrationTest`)로 인정 / D 3시간 포함 20개 전부 (추천: C — 돈이 걸린 기한 조합은 30분 만료 스캔과 Kafka 전달이 겹치는 곳이라 통합 테스트가 놓친 경합 결함 D-040·D-042가 나던 유형이다. 31분 대기는 한 번으로 묶이고 별도 야간 작업이라 PR을 막지 않는다. 3시간 조합은 실제로 기다리든 시각을 조작하든 이점이 작다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — "A-D 좀 더 쉽게 설명해줘"라고 설명을 요청한 뒤 고른 선택지: "C로 해, 31분 대기 포함")
+- 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 30분 안 조합은 기존 야간 흉내 서버 작업에 넣는다. 기한을 넘는 세 조합은 시작할 때 주문을 함께 만들고 31분 대기 한 번으로 묶은 별도 야간 작업(제한 60분)에 둔다. 두 작업 모두 PR CI에는 넣지 않으므로 실패는 다음 날 알게 된다. PAY_PENDING이 3시간을 넘겨 조회만 계속하는 조합은 통합 테스트로 인정한다. (2026-11-08 정정: 설명 때 근거로 든 `PaymentApprovalIntegrationTest:220-227`은 3시간 경계에서 PG가 READY인 경우만 확인한다. PAY_PENDING으로 3시간을 넘기는 통합 테스트는 없어서 새로 더한다. AI 설명의 사실 오류이며 선택의 방향은 바뀌지 않는다) 흉내 서버에는 같은 paymentId 다중 시도, PAY_PENDING 유지 뒤 PAID/FAILED 전환, confirm 400/403 거절 주입을 더한다(검증 도구만).
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 흉내 서버 확장·여정은 후속 PR. 3시간 조합의 PAY_PENDING 통합 테스트는 [결정 124](#confirm-window-expired-hold) 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)에서 더했다; D-044 접수 전 PAY_PENDING 만료 조합은 기한 여정 p1로 더했다([근거 색인](evidence.md) 2026-11-08 p1 행)
+
+<a id="seller-negative-net-carryover"></a>
+## 121. 판매자의 음수 월 순액은 마감 때 다음 월로 이월하고, 지급 기준액은 0원 아래로 내리지 않는다
+- 문제: 마감된 월의 매출을 다음 달에 전액 환불하면, [결정 42](#settlement-refund-posting-month)에 따라 환불이 현재 OPEN 월에 반영되어 그 달 판매자 순액(`netSellerPayoutAmount`)이 음수가 될 수 있다. 예를 들어 9월에 9,000원 매출(+8,100)을 마감한 뒤, 10월에 그 환불과 5,000원 새 매출이 반영되면 10월 순액은 −3,600이 된다. 스펙(`design.md` "음수 월 순액은 자동 이월·계좌 회수·송금 실행을 뜻하지 않는다")과 결정 42는 음수 잔액 이월·회수를 범위 밖으로 두었다. 그래서 11월 판매자가 받을 금액이 +2,700원인지 −900원인지 시스템이 답하지 못한다. 플랫폼 잔여액(`platformNetAmount`)의 음수는 요구사항(음수 보존, 0 보정·판매자 전가 없음)으로 이미 정해져 있어 이번 범위가 아니다.
+- 선택지: A 표시만 유지하고 범위 밖으로 닫는다 / B 판매자 월 마감 때 음수 순액을 다음 월로 이월한다. 불변 이월 원장을 두고, 월 응답에 들어온 이월액(`carriedIn`), 지급 기준액(`payable = max(0, 순액 + carriedIn)`), 넘기는 이월액(`carriedOut`)을 추가한다. 송금은 실행하지 않는다 / C 판매자 미수금 원장과 청구·회수를 둔다 / D 판매자 지급 기준을 0원에서 멈추고 차액을 플랫폼 손실로 기록한다 (추천: B — 결정 42의 "마감본 불변 + 다음 OPEN 월 반영" 원칙을 그대로 넓힌다. 송금 기능 없이도 판매자가 받을 금액이 확정되고, 나중 송금의 입력값이 된다. C는 송금·청구 절차가 먼저 필요하다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 다음 월로 이월")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 판매자 월을 마감할 때 `순액 + 들어온 이월액`을 계산한다. 음수이면 그 금액을 다음 월로 넘기고 지급 기준액을 0원으로 둔다. 0 이상이면 그 값을 지급 기준액으로 확정하고 넘기는 금액은 0원이다. 이월은 불변 원장에 남기고, 이미 마감한 월의 행은 바꾸지 않는다(결정 42). 실제 송금·청구·회수는 하지 않는다. 플랫폼 잔여액은 현 요구사항을 그대로 둔다.
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), [PR #154](https://github.com/tlswltjq/esd-platform/pull/154) (구현), 근거 색인 2026-11-08 settlement 행
+
+<a id="approval-review-requery-interval"></a>
+## 122. 금융 보류 건의 PG 재조회는 보류된 시간에 비례해 늘리되 10분에서 멈춘다
+- 문제: [결정 114](#approval-review-hold-closure)는 "보류 건의 끝없는 5초 재조회는 늘어나는 간격으로 바꾼다"고 정하면서 값을 따로 남겼다. 지금 `ResolvePaymentApproval`은 보류 사유와 관계없이 `now + PAYMENT_RETRY_MS`(5초)로 다음 조회를 잡는다. 보류 건과 정상 승인이 같은 `payment_approval` 대기열(스레드 1개, 20건씩)에 섞인다. 그래서 보류가 25~40건을 넘으면 정상 고객 승인이 밀리고(100건이면 15~25초, 추정), 결과가 바뀌지 않는 조회가 1건당 시간당 600~720회 반복된다. `PAYMENT_RETRY_MS`는 일반 결제 재시도와 같이 쓰고 최대 5분이라 그대로 바꿀 수 없다. 운영자 종결(`closure`)은 직접 PG를 다시 조회하므로 간격과 무관하다.
+- 선택지: 간격은 `min(상한, max(5초, 지금 − review_started_at))`로 늘린다(결정 114의 "늘어나는 간격"). 상한 후보: 10분 / 1분 / 30분. 5초 유지·고정 간격·자동 재조회 중단은 결정 114와 어긋나 제외했다 (추천: 10분 — 보류 100건이어도 시간당 600회라 정상 승인과 경쟁하지 않고, 종결 속도는 그대로다. 5초 주기에서 종결 요청이 `APPROVAL_CLOSURE_BUSY`로 튕기던 일(약 2~4%)도 거의 없어진다. 1분은 호출이 10배라 수백 건 규모에서 대기열을 다시 압박한다. 30분은 오래된 건의 ADMIN 화면 정보가 너무 늦다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "상한 10분으로 해")
+- 선택: 상한 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `REVIEW_REQUIRED` 승인의 다음 조회 시각은 `now + min(10분, max(5초, now − review_started_at))`이다. 시작값과 상한은 보류 전용 설정 키로 둔다. 일반 결제 재시도의 `PAYMENT_RETRY_MS`는 바꾸지 않는다. `review_started_at`이 없는 옛 행은 상한을 쓴다. 새 열과 이행은 없다. PortOne 호출 한도 기록이 생기면 상한을 다시 본다.
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #147](https://github.com/tlswltjq/esd-platform/pull/147), 근거 색인 2026-11-08 금융 보류 건 PG 재조회 간격 행
+
+<a id="approval-review-customer-notice"></a>
+## 123. 금융 보류 건은 청구 여부별 안내를 Payment 고객 응답에 붙인다
+- 문제: [결정 114](#approval-review-hold-closure)·[115](#approval-review-closure-outcome)는 고객 안내 문구를 따로 남겼다. 지금 고객용 주문 상세·결제 상세·결제창 409(`APPROVAL_IN_PROGRESS`)는 보류와 정상 진행을 구분하지 않는다. 승인 조회만 `status: REVIEW_REQUIRED`를 문구 없이 보인다. 종결 뒤 사유는 영문 기술 문장이고, 접수 전 만료 건에는 흔적이 남지 않는다. 그래서 `PAID_WITHOUT_ADMISSION`(돈이 나감) 고객은 "주문 만료"를 보고 다시 사서 이중 청구될 수 있다(예: 33,000원 두 번, 보유권은 하나).
+- 선택지: A 지금처럼 '처리 중'만 보여 준다 / B 결제 상세·승인 조회에 `reviewNotice {code, message, since}`를 더하고 고정 문구 하나를 쓴다 / C B와 같은 필드에 청구 여부별 코드 넷(`CHARGED`: `PAID_WITHOUT_ADMISSION`, `CHARGE_CANCELLED`: `PG_CANCELLED`, `CHARGE_UNCONFIRMED`: `PG_INVALID_EVIDENCE`·PG `PENDING`·조회 실패, `NOT_CHARGED`: 그 밖)과 종결 뒤 코드 둘(근거 CANCELLED / READY·FAILED)을 쓰고, 원래 사유 코드는 노출하지 않는다 / D C + 고객 문의 경로 + 주문 화면 안내(새 Payment→Order 이벤트 계약) (추천: C — 돈이 실제로 나간 경우는 두 사유뿐이라 이를 문구로 나누면 이중 청구를 고객 쪽에서 막는다. B는 돈이 안 나간 다수에게도 불안을 준다. 환불 `processingNotice`와 같은 형태라 Order·Kafka 계약을 건드리지 않는다. D는 지표로 빈도를 본 뒤 정한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "C로 해, 청구 여부별 문구")
+- 선택: C — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 결제 상세(`GET /api/v1/payments/{orderNo}`)와 승인 조회 응답에 `reviewNotice {code, message, since=reviewStartedAt}`를 더한다. 결제창 409 메시지도 같은 한국어 문구로 바꾼다. Order 응답과 이벤트 계약은 바꾸지 않는다. 처리 시점은 약속하지 않는다. "취소됩니다"라는 표현의 근거는 PG가 PAID인 동안 종결할 수 없다는 점이다([결정 115](#approval-review-closure-outcome)). `NOT_CHARGED`는 마지막 관측 기준이라 "현재까지"라고 쓴다. 금액은 주문 청구액이다. 문구는 다음과 같다.
+  - `CHARGED`: "결제 금액 {금액}원이 청구된 것으로 확인되어 담당자가 확인하고 있습니다. 확인이 끝나면 청구된 금액은 취소되고 이 주문은 종료됩니다. 같은 상품을 지금 다시 주문하면 중복 청구될 수 있으니 확인 결과를 기다려 주세요."
+  - `CHARGE_CANCELLED`: "결제 금액 {금액}원은 전액 취소되었습니다. 카드사 사정에 따라 취소 반영까지 시간이 걸릴 수 있습니다. 담당자 확인이 끝나면 이 주문은 종료됩니다."
+  - `CHARGE_UNCONFIRMED`: "결제 확인이 지연되고 있습니다. 결제사와 청구 여부를 확인하고 있으며, 청구된 금액이 있다면 확인 뒤 취소되고 이 주문은 종료됩니다. 별도로 다시 결제하지 마세요."
+  - `NOT_CHARGED`: "결제 확인이 지연되고 있습니다. 현재까지 청구된 금액은 없습니다. 담당자 확인이 끝나면 이 주문은 종료되며, 새 주문으로 다시 구매하실 수 있습니다."
+  - 종결 뒤(근거 CANCELLED): "결제 확인 결과 이 주문은 종료되었습니다. 청구되었던 {금액}원은 전액 취소되었습니다. 새 주문으로 다시 구매해 주세요."
+  - 종결 뒤(근거 READY·FAILED): "결제 확인 결과 이 주문은 종료되었습니다. 청구된 금액은 없습니다. 새 주문으로 다시 구매해 주세요."
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #155](https://github.com/tlswltjq/esd-platform/pull/155)(종결 뒤 코드 `CLOSED_CHARGE_CANCELLED`·`CLOSED_NOT_CHARGED`), 근거 색인 2026-11-08 금융 보류 건 고객 안내 행. 결정 123에 없던 경우의 코드는 결정 132(마지막 PG 관측 기준)로 정해 같은 PR에 구현
+
+<a id="confirm-window-expired-hold"></a>
+## 124. confirm 기한(3시간)이 지난 접수 승인이 미확정이면 새 사유로 보류에 올린다
+- 문제: 접수된 승인이 PortOne `PAY_PENDING`(또는 `READY`)인 채로 최초 준비 후 3시간(confirm 재송신 기한, Payment R4.6)을 넘기는 경우가 있다. 이때 승인은 `ADMITTED`로 남아 5초마다 조회만 끝없이 반복하고, 주문은 Order R3.6에 따라 `PAYMENT_PROCESSING`에 계속 묶인다. `REVIEW_REQUIRED`가 아니라서 보류 게이지·경보·ADMIN 목록·로그에 보이지 않고, 종결은 `APPROVAL_NOT_HELD`로 거절된다. [결정 122](#approval-review-requery-interval)(간격)·[123](#approval-review-customer-notice)(고객 안내)·[115](#approval-review-closure-outcome)(종결)도 적용되지 않는다. 그 사이 고객이 같은 상품을 새로 주문하면, 첫 건이 나중에 PAID가 될 때 같은 상품을 두 번 사게 된다.
+- 선택지: A 지금 유지 / B 3시간을 넘긴 미종결 건수 게이지와 경보만 둔다 / C 환불 지연처럼 별도 ADMIN 목록(`/api/v1/admin/approval-delays`)을 둔다 / D 3시간이 지나고 PG가 `PENDING`·`READY`인 접수 승인을, 작업자가 조회한 직후 새 사유(예: `CONFIRM_WINDOW_EXPIRED`)로 `REVIEW_REQUIRED`에 올린다. 그러면 기존 보류 흐름(결정 114·115·122·123)을 그대로 탄다 (추천: D — 새 화면이나 정책 없이 이미 정한 목록·경보·간격·안내·종결을 그대로 쓴다. 3시간 뒤에는 confirm을 보낼 수 없어서, 보류로 올려도 바뀌는 금융 동작이 없다. B·C는 묶인 주문을 풀지 못한다)
+- 내 의견: "D안으로 해줘"
+- 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 대상은 `ADMITTED`이고 `firstPreparedAt + 3시간`이 지났으며 최신 PG 상태가 `PENDING` 또는 `READY`인 승인이다. 작업자가 조회한 직후 `stopPosts`로 새 사유를 붙여 보류한다. 늦은 PAID·FAILED는 지금처럼 원래 주문으로 끝낸다. 보류 게이지의 사유 목록, 경보 테스트, R4.6·R12.4 문구를 갱신하고, PAY_PENDING으로 3시간을 넘기는 통합 테스트를 더한다. 기존 행은 다음 조회 때 저절로 올라오므로 별도 이행 작업은 두지 않는다. 고객 안내는 결정 123의 묶음을 따른다(PG `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`면 `NOT_CHARGED`). R4.6의 "시간만으로 실패·새 키·새 결제를 만들지 않는다"는 그대로 지킨다.
+- 구분: 추천 수용
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)(사유 `CONFIRM_WINDOW_EXPIRED`), 근거 색인 2026-11-08 confirm 기한 경과 보류 행
+
+<a id="license-grant-wait-detection"></a>
+## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
+- 문제: 환불 접수 때 `order_license_grant`가 없으면 환불은 `order_refund.status = PENDING_LICENSE_GRANT`로 기다린다([결정 29](#full-refund-policy) B). 이 상태를 벗어나는 길은 나중에 도착하는 `LicenseGranted` 하나뿐이다(`ApplyLicenseGrant`). 그 이벤트가 재시도를 소진해 Outbox `DEAD`나 DLT로 가면, 이벤트 단위 경보(`OutboxEventsAbandoned`·`MessagesDeadLettered`)는 한 번만 울린다. 그 뒤 들어온 환불은 경보·고객 안내·종료 없이 멈춘다. 예: 10:05 `LicenseGranted` DEAD → 10:30 결제 후 4시간 안 9,000원 무조건 환불이 `PENDING_LICENSE_GRANT`로 멈추고, 고객은 `PROCESSING`만 본다. 이 상태의 진입 시각도 저장하지 않는다(추정). 고객 지연 안내(`processingNotice`)는 `PENDING_PAYMENT_REFUND`에만 붙는다.
+- 선택지: A Order에 `PENDING_LICENSE_GRANT` 진입 시각을 저장하고, N분이 넘은 건수를 게이지·Prometheus 경보로 낸다. ADMIN 환불 목록에 진입 시각을 보이고, 같은 경계를 넘으면 고객 `processingNotice`를 붙인다. 복구는 [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉 그대로 / B A + N분이 지나면 Order가 `LicenseGrantConfirmationRequested`를 내고 License가 `LicenseGranted`를 다시 발행 / C `order_license_grant`가 없는 `PAID` 주문을 대조해 License가 일괄 재발행하는 운영 도구. 환불마다 License 내부 HTTP로 조회하는 안은 결정 29 하위에서 기각했으므로 제외했다 (추천: A, N = 10분 — 비어 있는 것은 Order가 멈춘 환불을 보지 못한다는 점 하나라서 결정 37의 판단을 그대로 잇는다. 결정 122·123의 승인 보류 감지·안내와 같은 모양이다. B는 A의 게이지로 빈도를 본 뒤 다시 정한다. 10분은 정상 경로가 초 단위로 끝난다는 점에서 잡은 초기값이며 사업 근거는 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 경보 기준 10분")
+- 선택: A, N = 10분 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Order는 환불이 `PENDING_LICENSE_GRANT`에 들어간 시각을 저장한다(새 이행, 옛 행 호환 테스트 포함). 그 시각이 10분을 넘은 환불 건수를 게이지로 내고, Prometheus 경보 하나를 둔다. ADMIN 환불 목록·상세에 진입 시각을 보인다. 같은 경계를 넘은 환불의 고객 조회에는 `processingNotice`를 붙이고, 문구는 기존 환불 지연 안내와 같은 모양으로 둔다. 재처리는 결정 37의 운영 절차(DLT 재투입·Outbox DEAD 재큐잉)로 한다. 새 이벤트 계약은 만들지 않는다. 원본 이벤트가 남아 있지 않은 건의 종결은 환불 조사 이후 조치·종결 결정에서 함께 정한다.
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현 [PR #151](https://github.com/tlswltjq/esd-platform/pull/151), 근거 색인 2026-11-08 order 행. 정지·복구·승인 중단 대기로 범위 확장 [PR #167](https://github.com/tlswltjq/esd-platform/pull/167)(V34, 게이지 `status` 라벨), 근거 색인 2026-11-08 order·license·common 결정 125·129 범위 확장 행
+
+<a id="pre-admission-pending-expiry"></a>
+## 126. 접수 전 승인이 PG 관측 이력을 가진 채 주문이 만료되면 PG를 다시 조회하고, 아직 PENDING이면 보류로 올린다
+- 문제: 결함 D-044. 접수 전 승인이 PortOne `PAY_PENDING`을 본 채 `REQUESTED`로 남아 있다가 주문 만료 통지를 받으면, `ResolvePaymentApproval`의 만료 분기가 PG를 조회하지 않고 승인·결제를 `EXPIRED`로 닫는다. 그 뒤로는 다시 조회하지 않는다. 그래서 PG가 나중에 PAID가 되면 돈은 나갔는데 보류·게이지·경보 어디에도 보이지 않는다. 예: 14:00 33,000원 주문 → 14:05 인증 후 PG `PAY_PENDING` → 14:30 만료로 닫힘 → 14:31 PG PAID. 스펙 R11.5는 "접수만 된 `REQUESTED` 작업은 PG 호출 없이 `EXPIRED`로 닫는다"고 정했다. 조회 결과가 PAID(`PAID_WITHOUT_ADMISSION` 보류, [결정 114](#approval-review-hold-closure))·READY·FAILED(닫음)·전액 CANCELLED(보류 후 운영자 종결, [결정 115](#approval-review-closure-outcome))일 때의 처리는 이미 정해져 있다. 그래서 남은 것은 만료 전 조회 범위와, 조회 결과가 아직 PENDING일 때의 처리다.
+- 선택지: A 결정 124처럼 새 사유로 `REVIEW_REQUIRED`에 올린다 / B `REQUESTED`로 두고 조회만 계속한다 / C 지금처럼 닫는다. 조회 범위는 모든 `REQUESTED`로 할지, PG 관측 이력(`latestPgState`)이 있는 승인만으로 할지다 (추천: A + 관측 이력이 있는 승인만 — 돈이 나갔을 수 있는 건을 조용히 닫지 않는다. 결정 124와 같은 보류 흐름(목록·경보·간격·안내·종결)을 그대로 쓴다. 관측 이력이 없는 승인은 R11.5대로 PG 호출 없이 닫으므로 기존 계약과 테스트를 거의 그대로 둔다. B는 결정 124가 막은 "보이지 않는 무한 조회"를 접수 전 쪽에 다시 만들고, C는 만료 직후 PAID가 되는 경우를 그대로 놓친다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 보류로 올리고 관측 건만 조회")
+- 선택: A + 관측 이력이 있는 승인만 — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 주문 만료 통지를 받은 접수 전 `REQUESTED` 승인 중 `latestPgState`가 있는 승인은 닫기 전에 PG를 한 번 조회한다. 결과별 처리는 다음과 같다. PAID는 `PAID_WITHOUT_ADMISSION` 보류, READY·FAILED는 닫음, 전액 CANCELLED는 보류 후 운영자 종결(결정 115)이다. 아직 `PENDING`이면 새 사유로 `REVIEW_REQUIRED`에 올리고, 결정 122·123·115의 흐름을 그대로 쓴다. 고객 안내는 `CHARGE_UNCONFIRMED`다. `latestPgState`가 없는 승인은 R11.5대로 PG 호출 없이 닫는다. R11.5를 이 예외에 맞게 고치고, D-044 재현 테스트를 이 결정에 맞춰 확정한다(PR #145 교차 리뷰 R1의 사용자 판정).
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 수정은 PR #145. 실제 스택 기한 여정 p1(`verify-expiry-journeys.py`)로 PENDING 보류·늦은 PAID 보류·종결 뒤 결제 `EXPIRED`를 확인([근거 색인](evidence.md) 2026-11-08 p1 행)
+
+<a id="refund-delay-closure"></a>
+## 127. 장기 미확정·귀속 미확정 환불은 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 ADMIN이 닫는다
+- 문제: 환불 결과가 3시간 넘게 확정되지 않으면 경보 `RefundConfirmationsDelayed`가 울리고, ADMIN은 Payment `GET /api/v1/admin/refund-delays`로 보고 `POST …/{attemptId}/investigations`로 조사 내용을 남긴다. 이 기록은 메모일 뿐이고 건을 닫는 동작은 없다. 확정은 자동 PG 조회(1분 간격)가 같은 원결제의 전액 취소나 우리 취소 ID의 실패를 찾을 때만 된다. 전액 취소를 찾았지만 우리 요청 때문인지 모르면 `PG_QUERY_UNATTRIBUTED`로 고객 환불은 `COMPLETED`가 되지만, Payment 실행은 `PENDING`으로 남고 Order 시도에 조사 표시가 남는다. 이 건은 지연 목록·게이지(`refundConfirmedAt is null`로 거름)에서 빠지고, 조사 기록 POST는 409를 내서 판정을 남길 곳이 없다. 예: 11:00:06 첫 취소 응답 유실 → 14:00:06 3시간 창 끝·재송신 중단·경보 → 15:00 운영자 PortOne 콘솔에서 9,000원 취소 → 15:01 조회로 고객 `COMPLETED` → 이 건은 목록에서 사라지고 내부 기록은 영구히 미결. "콘솔 취소 → 자동 조회 확인" 절차도 절차서에 없다. 승인 보류에는 PG 재조회 근거 종결([결정 115](#approval-review-closure-outcome))이 있지만 환불에는 없다.
+- 선택지: A 운영 절차서만(콘솔 취소 → 자동 조회 확인, 귀속 판정은 시스템 밖) / B 결정 115 모양의 환불 종결 API: Payment에 귀속 미확정 목록과 `POST /api/v1/admin/refund-delays/{attemptId}/closure`(가칭)를 두고, 트랜잭션 밖 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 닫는다. 귀속 판정·ADMIN·근거를 기록하고, 시스템은 PG 취소를 실행하지 않는다 / C B + 자동 종결 기한(예: 7일 뒤 자동 실패·보유권 복구) / D B + ADMIN 재송신(3시간 뒤에도 같은 attemptId로 PG 취소 재송신) (추천: B — 빠진 것은 "근거로 닫는 동작"과 "귀속 판정을 남길 자리" 둘이고, 결정 114·115의 원칙(운영자 말이 아니라 PG 재조회 근거로만 닫고 시스템은 돈을 움직이지 않는다)을 그대로 쓴다. C는 늦은 PG 취소 성공 시 환불과 보유권이 함께 남아 [결정 29](#full-refund-policy) 하위의 "시간만으로 실패·복구하지 않는다"에 어긋나고, D는 결정 29의 "3시간 이후 재전송 중단"을 뒤집는 새 금융 경로다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, PG 재조회 근거로 종결")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment에 ADMIN 환불 종결 API를 둔다. 대상은 3시간이 지난 미확정 실행과, 전액 취소는 확인됐지만 귀속이 미확정(`PG_QUERY_UNATTRIBUTED`)인 실행이다. 귀속 미확정 건도 ADMIN 목록에서 찾을 수 있게 한다. 종결은 승인 종결과 같은 구조(작업자와 같은 lease, 트랜잭션 밖 PG 재조회, 조회 뒤 별도 잠금 트랜잭션)로 하고, 같은 원결제의 전액 취소가 확인될 때만 닫는다. 미완료 건은 기존 완료 경로로 즉시 완료하고, 이미 완료된 귀속 미확정 건은 판정만 기록하고 조사를 닫는다. 귀속 판정(우리 요청 / 외부·콘솔 취소 / 판단 불가)과 ADMIN·근거·시각을 정본 DB에 남긴다. PG가 아직 결제 상태(잔액 있음)면 409로 거절하고 "콘솔에서 먼저 취소"를 안내한다. 시스템은 PG 취소를 실행하지 않고, 금액·정해진 끝 상태(결정 29 Q9 A안의 완료)는 바꾸지 않는다. "콘솔 취소 → 종결" 절차를 운영 절차서에 적는다. Order 쪽 조사 표시 해제 방식은 기존 이벤트 계약을 확인해 구현 PR에서 정한다(새 정책이 필요하면 다시 묻는다). 이 종결로 닫히지 않는 것(PG가 취소를 거절한 건의 실패 종결, 원본 이벤트가 없는 `PENDING_LICENSE_GRANT` 종결, 담당 배정, 귀속 미확정 건의 경보·조회 간격)은 따로 정한다.
+- 구분: 추천 수용
+- 결과: [PR #146](https://github.com/tlswltjq/esd-platform/pull/146) (기록), 구현 [PR #157](https://github.com/tlswltjq/esd-platform/pull/157)(종결 API·귀속 미확정 목록·게이지·경보·절차서), 근거 색인 2026-11-08 payment 결정 127 행. Order 조사 표시 해제는 새 정책이 필요해 Payment `tasks.md` `[결정 필요]`로 남김
+
+<a id="refund-failure-closure"></a>
+## 128. PG가 취소를 거절했거나 끝내 확정되지 않은 환불은, PG 재조회로 돈이 움직이지 않았음이 확인될 때만 ADMIN이 실패로 닫는다
+- 문제: 환불 실패가 확정되는 길은 하나뿐이다. PG가 우리 취소 ID를 `FAILED`로 돌려주고, 이어진 조회에서 원결제가 `PAID`·전액 미취소일 때다(`RefundExecution.confirmFailure`, Payment R7.6). 취소 POST가 403·400 `INVALID_REQUEST`(자동 POST 중단, 3시간 창 안에서만 ADMIN 재개)나 잔액 변화로 막히거나, 응답 유실·5xx로 3시간 창을 넘기면 우리 취소 ID의 FAILED 기록이 없다. 그래서 실패 확정, 보유권 복구(`LicenseRestorationRequested`), 고객 재시도가 모두 막힌다. 예: 11:00 9,000원 자동 환불 접수 → 11:00:05 보유권 정지 → 11:00:06 취소 POST 403 → 14:00:06 재개 기한이 지남 → 조회는 계속 `PAID`·취소액 0원, 1분마다 끝없이 반복되고 고객은 `PROCESSING`만 본다. 고객에게 돈도 게임도 없어, [결정 29](#full-refund-policy) 하위의 "돈을 돌려받던가 게임을 그대로 보유하게 하던가"에 어긋난다. [결정 127](#refund-delay-closure)의 종결은 전액 취소가 확인될 때만 닫으므로 이 건에 쓸 수 없다.
+- 선택지: A 실패 종결을 두지 않는다(모든 건을 운영자가 콘솔에서 환불하고 결정 127로 닫음) / B 결정 115 모양의 ADMIN 실패 종결: `POST /api/v1/admin/refund-delays/{attemptId}/failure-closure`(가칭). 트랜잭션 밖 PG 재조회에서 원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음이고 자동 POST가 멈춘 상태일 때만 닫는다. 근거를 저장하고 기존 `RefundExecutionFailed`로 복구·재시도에 잇는다. 실패 뒤에도 낮은 빈도로 PG를 조회해 늦은 전액 취소는 조사·경보로 올린다 / C B + 늦은 전액 취소가 발견되면 시스템이 보유권을 다시 정지하고 `COMPLETED`로 바꿈 / D 시간 기준 자동 실패(3시간 창 끝 + N시간이 지나도 `PAID`·미취소면 자동 실패·복구) (추천: B — 빠진 것은 "돈이 움직이지 않았다는 근거로 닫는 동작" 하나이고, 결정 114·115·127의 원칙(PG 재조회 근거와 ADMIN 요청으로만 닫고 시스템은 돈을 움직이지 않는다)을 그대로 쓴다. 닫은 뒤에는 기존 복구·재시도 경로로 고객이 돈과 게임 중 하나를 받는다. C는 늦은 성공이 실제로 생기는지 모르는 채로 실패를 최종 상태로 보는 계약(R7.6·R7.13)과 FAILED 뒤 완료 409 규칙을 바꾸고, D는 결정 29 하위의 "시간 경과 복구 기각"과 R7.7에 어긋난다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, PG 재조회 근거로 ADMIN이 실패 종결")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment에 ADMIN 실패 종결 API를 둔다. 대상은 자동 POST가 멈춘 실행(403·400 중단, 잔액 변화 차단, 또는 3시간 창 종료)이다. 종결은 결정 115·127과 같은 구조(작업자와 같은 lease, 트랜잭션 밖 PG 재조회, 조회 뒤 별도 잠금 트랜잭션)로 하고, 재조회 결과가 원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음일 때만 닫는다. PG가 받아 둔 `REQUESTED` 취소가 있거나 일부라도 취소됐으면 거절한다. 근거 종류(예: `NO_LINKED_CANCELLATION`)·ADMIN·근거 스냅샷·시각을 저장하고, 기존 `RefundExecutionFailed`를 보내 Order의 보유권 복구와 고객 재시도로 잇는다. 고객 재시도의 사전 확인은 PG FAILED 기록이 없는 이 종결 실패도 이전 실패로 받도록 고친다. 실패로 닫은 뒤에도 낮은 빈도로 PG 조회를 남기고, 늦은 전액 취소가 발견되면 조사 대상과 경보로 올린다. 이때 보유권과 환불 상태는 자동으로 바꾸지 않으며, 늦은 취소가 실제로 생기면 그 처리를 다시 정한다. 시간만으로 실패·복구하지 않는다는 결정 29 하위는 그대로 지킨다. 운영 절차서에 "중단 원인 확인 → 실패 종결 또는 콘솔 취소 뒤 결정 127 종결" 순서를 적는다.
+- 구분: 추천 수용
+- 결과: [PR #149](https://github.com/tlswltjq/esd-platform/pull/149) (기록), 구현은 후속 PR
+
+<a id="orphan-license-grant-republish"></a>
+## 129. Kafka에서 원본이 사라져 지급 확인을 기다리는 환불은, DB에 남은 원래 Outbox 이벤트를 같은 ID로 다시 발행해 잇는다
+- 문제: 환불은 Order가 `LicenseGranted`를 받아 `order_license_grant`를 기록해야 `PENDING_LICENSE_GRANT`를 벗어난다([결정 125](#license-grant-wait-detection)). 그 이벤트가 Order 소비에서 재시도를 다 써 DLT로 갔는데 재투입하지 않은 채 Kafka 보존 기간(설정이 없어 기본 7일로 추정)이 지나면, [결정 37](#license-event-recovery)의 DLT 재투입·Outbox DEAD 재큐잉을 쓸 수 없다. publish는 성공해 License Outbox 행이 `SENT`이기 때문이다. 원래 이벤트는 License `outbox_event`에 `event_id`·본문·키와 함께 남아 있지만, `SENT` 행을 다시 내보내는 경로가 없다. 절차서(`license-event-recovery-runbook.md`)는 "원본 없음은 확인 대상, 새 이벤트 ID·SQL 보정 금지"라고만 한다. 예: 11-01 10:00 9,000원 결제 → 10:00:02 `LicenseGranted` SENT → Order DB 장애로 DLT → 11-08 DLT 레코드 삭제(추정) → 11-09 15:30 심사 환불 승인 → `PENDING_LICENSE_GRANT`에 멈춤. 고객은 `PROCESSING`만 보고 돈을 돌려받지 못하며, 자동 환불이면 ADMIN 승인 중단도 쓸 수 없다. `OrderPaid`가 같은 식으로 사라지면 License 구매 근거 자체가 없다.
+- 선택지: A 현행 유지(확인 대상으로 남기고 원인 조사) / B 이벤트를 소유한 모듈의 ops API(예: `POST /api/v1/ops/outbox/{eventId}/republish`)로 `SENT`인 `OrderPaid`·`LicenseGranted` 한 건을 원래 `event_id`·본문·키 그대로 다시 발행한다. 받는 쪽의 Inbox·검증·환불 흐름은 그대로 쓴다 / C Order ADMIN 지급 확인 종결: License 내부 HTTP 조회(새 서비스 키)로 구매 근거가 맞을 때만 `order_license_grant`를 기록 / D 환불을 새 끝 상태로 닫고 재신청 허용 (추천: B — 남아 있는 원래 이벤트를 다시 쓰므로 근거가 시스템 기록 자체이고, 지급·확인·정지 검증은 기존 소비자가 그대로 한다. 지급 건(`LicenseGranted`)과 미지급 건(`OrderPaid`)을 한 경로로 다루며 서비스 간 HTTP 의존과 새 이벤트 계약을 만들지 않는다. C는 미지급 건을 닫지 못하고 [결정 29](#full-refund-policy) 하위의 "환불마다 HTTP 조회 기각"과 결정 125의 "새 계약 없음"에 부딪히며, D는 "정지 확인 후 PG 실행" 순서를 지킬 수 없다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 원래 이벤트를 같은 ID로 재발행"). 질문 전에 "해당 문제를 실제 기술용어를 들어 조금 더 쉽게 설명해줘"를 요청해 Outbox·DLT·Inbox·보존 기간 기준으로 다시 설명을 받았다.
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이벤트를 소유한 모듈(License의 `LicenseGranted`, Order의 `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행을 더한다. ADMIN만 쓰고, 한 번에 한 건이며, 실행자·시각·사유를 기록한다. 행은 원래 `event_id`·본문·키를 그대로 두고 다시 publish 대상으로 돌린다. 새 이벤트 ID는 만들지 않는다. 받는 쪽은 Inbox로 중복을 거르므로 이미 처리된 이벤트의 재발행은 효과가 없어야 하고, 이를 테스트로 보인다. 구매 근거가 있으면 `LicenseGranted`를, 구매 근거가 없으면 `OrderPaid`를 재발행한다. 그러면 License가 지급한 뒤 `LicenseGranted`를 보내 정상 흐름으로 이어진다. 결정 37의 "원래 ID·본문·키를 보존해 재투입"을 `SENT` 행까지 넓힌 것이다. 절차서의 "원본 없음"은 "Outbox 행도 없음"으로 좁히고, 재발행 전에 "Outbox `SENT`·상대 Inbox 없음"을 확인하는 순서를 적는다. Outbox 행까지 없는 경우와 받는 쪽 검증이 거절하는 모순 건은 여전히 조사 대상이다. 자동 재발행·대조 엔진은 만들지 않는다(결정 37).
+- 구분: 추천 수용
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), 구현 [PR #164](https://github.com/tlswltjq/esd-platform/pull/164) (`OrderPaid`·`LicenseGranted`), 근거 색인 2026-11-08 order·license 행. 정지·복구·승인 정정 이벤트 6종과 소유 모듈별 허용 목록으로 범위 확장 [PR #167](https://github.com/tlswltjq/esd-platform/pull/167)
+
+<a id="seller-close-order-carryover"></a>
+## 130. 판매자 월 마감은 오래된 월부터 하고, 이월은 직전 마감 월에서 받는다
+- 문제: [결정 121](#seller-negative-net-carryover)은 "마감할 때 `순액 + carriedIn`이 음수면 다음 월로 넘긴다"고만 정했다. 그런데 판매자 월 마감(`POST /sellers/{sellerSubject}/months/{month}/close`, `CloseSellerMonth`)은 "현재 월보다 이전 월"인지만 확인하고 순서는 검사하지 않는다. 월 행(`seller_monthly_settlement`)은 활동이나 마감 요청이 있을 때만 생긴다. 예: 10월 순액 −3,600원, 11월 +2,700원인데 12월 5일 11월을 먼저 마감하면 `carriedIn` 0으로 `payable` +2,700원이 확정된다. 12월 6일 10월을 마감하면 넘길 −3,600원이 이미 마감된 11월로 갈 수 없어(결정 42 마감본 불변) 사라지고 판매자는 2,700원을 더 받는다. 활동이 없어 행이 없는 월을 건너뛸지도 정해지지 않았다.
+- 선택지: A 마감 순서 강제: M을 마감할 때 M보다 이전 월에 OPEN 행이 있으면 409로 거절하고, `carriedIn`은 M 이전의 마지막 CLOSED 월의 `carriedOut`, 행이 없는 월은 건너뜀 / B 다음 OPEN 월로 이월(순서 자유, 결정 42 방식) / C 달력 M+1로 고정(순서 자유) (추천: A — 지급 기준액이 마감 순서와 관계없이 하나로 정해지고 이월이 사라지지 않는다. 운영 부담은 "오래된 월부터 마감" 하나이고 기존 "지난 월만 마감" 409와 같은 모양이다. B는 먼저 마감한 월이 앞 월 손실을 반영하지 못해 과지급이 생길 수 있고, C는 M+1이 이미 마감됐으면 이월을 잃는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마감 순서 강제하고 직전 마감 월에서 이월")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 판매자 월 M을 마감할 때 같은 판매자의 M보다 이전 월에 OPEN 행이 있으면 409로 거절한다. `carriedIn`은 M 이전의 마지막 CLOSED 월이 넘긴 `carriedOut`이고, 행이 없는 월은 건너뛴다. 이월 원장은 `(판매자, 월)`마다 한 행이며 마감 트랜잭션 안에서 쓴다. 이월 원장이 없는 옛 CLOSED 월은 `carriedIn = 0`으로 보고, 그 응답 값은 구현 PR에서 테스트로 고정한다. 결정 121의 지급 기준액 규칙(`payable = max(0, 순액 + carriedIn)`, 음수면 넘김)과 송금 미실행은 그대로다.
+- 구분: 추천 수용
+- 결과: [PR #150](https://github.com/tlswltjq/esd-platform/pull/150) (기록), [PR #154](https://github.com/tlswltjq/esd-platform/pull/154) (구현), 근거 색인 2026-11-08 settlement 행
+
+<a id="investigation-trail-no-assignee"></a>
+## 131. 운영 조사 건에 담당자를 두지 않고, 목록에 마지막 조사자·시각만 보인다
+- 문제: 운영 조사 건(금융 보류 승인, 장기·귀속 미확정 환불, 지급 확인 대기 환불)은 게이지·경보로 드러나고 ADMIN이 조사 기록을 남긴 뒤 PG 재조회 근거로 닫는다([결정 114](#approval-review-hold-closure)·[115](#approval-review-closure-outcome)·[125](#license-grant-wait-detection)·[127](#refund-delay-closure)·[128](#refund-failure-closure)·[129](#orphan-license-grant-republish)). 조사 기록(`approval_investigation`, `refund_investigation`)에는 작성자 ADMIN sub와 시각만 있고 담당 필드는 없다. 동시 종결은 lease·`requestId` 멱등·종결 행 UNIQUE로 이미 한 번만 된다. 비어 있는 것은 "누가 이미 봤는지 목록에서 모른다"이다. 예: 14:10 운영자 A가 환불 지연 건에 "콘솔 확인 중"을 남겼는데, 14:20 운영자 B는 `GET /api/v1/admin/refund-delays`에서 조사 여부를 볼 수 없어 같은 건을 다시 조사한다. 돈은 한 번만 움직이지만 사람 시간이 두 번 든다. 승인 보류 목록은 `investigationCount`만 보이고, 환불 지연 목록은 그것도 없다. 현재 ADMIN은 초기 1명(`AUTH_ADMIN_EMAIL`)이고 전용 운영 화면이 없다. Review는 "심사자 배정 없이 모든 건 판정"으로 이미 정했다.
+- 선택지: A 범위 밖으로 닫는다(모든 ADMIN이 모든 건을 보고 종결) / B A + 환불 지연·승인 보류 목록 항목에 `investigationCount`·`lastInvestigatedBy`·`lastInvestigatedAt`을 보인다(기존 조사 기록 읽기만, 새 상태·테이블 없음) / C 참고용 담당 지정(`POST …/{id}/assignment`, `assignee=me|unassigned` 필터, 종결은 모든 ADMIN) / D 담당 강제(담당자만 조사 기록·종결, 재배정·SLA) (추천: B — 빈 곳은 "누가 봤는지 모름" 하나이고 기존 조사 기록만으로 닫힌다. 중복 금전 조치는 이미 lease·멱등·PG 재조회로 막혀 C·D가 더 막는 금전 위험이 없고, ADMIN 1명인 지금 규모에서 배정 상태는 관리 비용만 늘린다. D는 결정 115·127·128의 "ADMIN이 종결"에 조건을 붙이고 Review 선례와도 어긋난다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 목록에 마지막 조사자·시각만 보여 줘")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). Payment의 환불 지연 목록(`GET /api/v1/admin/refund-delays`)과 승인 보류 목록 항목에 조사 건수(`investigationCount`), 마지막 조사자 ADMIN sub(`lastInvestigatedBy`), 마지막 조사 시각(`lastInvestigatedAt`)을 보인다. 기존 조사 기록을 읽기만 하고 새 상태·테이블·배정 API는 만들지 않는다. 담당 배정은 범위 밖으로 두고 모든 ADMIN이 모든 건을 조사·종결한다. 운영자가 동시에 여러 명 일하게 되거나 G6 운영 규모를 잴 때 다시 정한다. 경보를 사람에게 전달하는 경로(Alertmanager·알림 채널)는 이 결정과 별개다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
+<a id="reviewnotice-last-observation"></a>
+## 132. 금융 보류 고객 안내 코드는 보류 사유보다 마지막 PG 관측을 우선해 정한다
+- 문제: [결정 123](#approval-review-customer-notice)은 `reviewNotice` 코드를 보류 사유로 정했다(`CHARGED`: `PAID_WITHOUT_ADMISSION`, `CHARGE_CANCELLED`: `PG_CANCELLED`, `CHARGE_UNCONFIRMED`: `PG_INVALID_EVIDENCE`·PG `PENDING`·조회 실패, `NOT_CHARGED`: 그 밖). 그런데 `PG_REQUEST_REJECTED`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`CONFIRM_WINDOW_EXPIRED` 보류도 마지막 PG 관측이 `PAID`·`CANCELLED`이거나 관측 기록이 없을 수 있다(옛 행). 예: confirm 400 거절로 보류된 승인이 실제로는 `PAID`인데 사유가 "그 밖"이라 고객에게 "현재까지 청구된 금액은 없습니다, 새 주문으로 다시 구매하세요"가 나가 33,000원이 두 번 청구될 수 있다. `PAID_WITHOUT_ADMISSION` 건을 콘솔에서 취소해 관측이 `CANCELLED`가 돼도 "청구됨" 문구가 남는다. 결정 123 구현(PR 진행 중)은 이 경우를 임시로 `CHARGE_UNCONFIRMED`로 두었다.
+- 선택지: A 마지막 PG 관측을 우선해 코드를 정한다(PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, 관측 없음·PENDING·조회 실패 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`; `PG_INVALID_EVIDENCE`는 관측과 무관하게 `CHARGE_UNCONFIRMED`) / B 어긋나는 경우는 모두 `CHARGE_UNCONFIRMED`(임시안) / C 결정 123 원문 그대로 `NOT_CHARGED` (추천: A — 결정 123의 취지는 청구 여부별 문구이고 청구 여부를 가장 정확히 말하는 것은 사유가 아니라 마지막 PG 관측이다. `NOT_CHARGED` 문구도 이미 "마지막 관측 기준이라 '현재까지'"로 정했다. B는 이미 전액 취소된 고객에게도 "확인 중"을 계속 보이고, C는 돈이 나간 고객에게 "청구 없음, 다시 구매하세요"를 보일 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마지막 PG 관측 기준으로 코드 결정")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `PG_INVALID_EVIDENCE`(근거 자체가 유효하지 않음)는 관측과 상관없이 `CHARGE_UNCONFIRMED`다. 그 밖의 모든 보류 사유는 마지막 PG 관측으로 코드를 정한다: PAID → `CHARGED`, 전액 CANCELLED → `CHARGE_CANCELLED`, PENDING·조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`, READY·FAILED → `NOT_CHARGED`. 문구와 종결 뒤 코드, 원래 사유 코드 비노출, Order 계약 불변은 결정 123 그대로다. 한계: 관측은 보류 재조회 간격(최대 10분, [결정 122](#approval-review-requery-interval))만큼 늦을 수 있다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현 [PR #155](https://github.com/tlswltjq/esd-platform/pull/155)
+
+<a id="refund-formal-rejection-stop"></a>
+## 133. PortOne이 환불 취소를 형식을 갖춰 거절한 4xx는 재송신하지 않고 바로 자동 송신을 멈춘다
+- 문제: Payment의 환불 취소(`POST /payments/{id}/cancel`, 같은 `Idempotency-Key`·처음 저장한 본문)는 403·400 `INVALID_REQUEST`(중단)와 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`(잔액 변화 차단)만 바로 멈추고, 그 밖의 일반 409·다른 타입의 400·5xx는 모두 미확정으로 보고 최초 준비 후 3시간까지 다시 보낸다(R7.11·R7.15). 예: 11:00:06 취소 POST가 409 `PAYMENT_NOT_PAID`(예시 타입)를 받으면 같은 요청을 1분마다 14:00:06까지 약 180번 보내고 매번 같은 409를 받는다. 그동안 보유권은 정지돼 있고 고객은 `PROCESSING`만 보며, 운영자도 [결정 128](#refund-failure-closure) 실패 종결이 "자동 송신이 멈춘 실행"만 대상이라 3시간이 지나야 손댈 수 있다. 같은 키라 돈이 두 번 움직일 위험은 없다. 승인 쪽 confirm의 400·일반 409는 이미 바로 `PG_REQUEST_REJECTED` 보류다([결정 114](#approval-review-hold-closure)).
+- 선택지: A 지금처럼 3시간 재송신 / B 정상 JSON에 type이 있는 400·409·그 밖 4xx는 403처럼 바로 자동 POST를 멈추고 새 중단 사유를 남긴다(401·404는 [결정 29](#full-refund-policy)대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정 유지, 잔액 변화 409는 지금대로) / C 영구로 확인된 오류 타입 목록만 멈춤(실제 타입 목록은 전용 테스트 가맹점 뒤라 그 전까지 사실상 A) / D B + 502 `PG_PROVIDER`도 멈춤 (추천: B — 형식을 갖춘 4xx는 PortOne이 요청을 받아 판단한 응답이라 같은 키·본문으로는 결과가 바뀌지 않는다. 3시간 안 재개와 계속되는 조회로 잘못 멈춰도 되돌리기 쉽고, 승인 쪽 결정 114와 기준이 같아지며, 멈춘 뒤 처리는 결정 128을 그대로 쓴다. D의 502는 하위 PG 일시 장애와 구분되지 않을 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 형식 갖춘 4xx는 바로 멈춰")
+- 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 환불 취소 POST가 정상 JSON에 type이 있는 4xx(400·409·그 밖)를 받으면 자동 POST를 멈추고 새 중단 사유(가칭 `PG_REQUEST_REJECTED`)와 응답 상태·type을 남긴다. 401·404는 결정 29대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정으로 계속 재송신, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 지금대로 잔액 변화 차단, 403·`INVALID_REQUEST`는 지금대로다. 운영자는 3시간 안에서 재개(R7.16)하거나 언제든 결정 128 실패 종결을 쓴다. 조회는 계속해 늦은 성공을 놓치지 않는다. R7.11·R7.15 문구를 고친다. 502 `PG_PROVIDER`의 분류와 실제 PortOne 오류 타입 확인은 전용 테스트 가맹점 뒤로 미룬다. `INVALID_REQUEST` 본문은 같은 시도 안에서 고치지 않는다(R4.4·R7.10, 같은 키에 다른 본문은 멱등 충돌). 원인을 고친 뒤 결정 128 실패 종결 → 고객 재시도(새 attemptId·본문·3시간 창)로 잇고 운영 절차서에 적는다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+
+<a id="refund-failure-customer-notice"></a>
+## 134. 실패로 닫은 환불의 새 시도는 고객 재신청으로만 만들고, 고객 환불 응답에 실패 사유와 재신청 안내를 보인다
+- 문제: 환불 실패가 확정되면(PG FAILED 확인 또는 [결정 128](#refund-failure-closure) ADMIN 실패 종결) Order가 보유권을 복구하고 환불은 `FAILED`가 된다. 새 실행은 고객이 `POST /api/v1/orders/{orderNo}/refund/retries`를 보낼 때만 생긴다(재정지 → 새 attemptId·멱등 키·3시간 창, 기한 없음, 최초 자격 유지). 고객은 조회해야만 `FAILED`를 알고 실패 사유도 알림도 없다([결정 98](#storage-return-no-notification): 알림 수단 미결). 예: 11:00 9,000원 자동 환불 → 11:00:06 취소 POST 400 `INVALID_REQUEST`로 중단 → 11:40 설정 수정(같은 시도는 저장 본문 그대로라 재개해도 같은 400) → 11:41 결정 128 실패 종결·보유권 복구 → 고객이 앱을 다시 열어 "다시 신청"을 누르지 않으면 환불은 기한 없이 멈춘다. [결정 29](#full-refund-policy) 하위는 "고객 재시도에 직원 승인 불필요"와 "시스템 자동 새 시도 없음"만 정했고, ADMIN이 새 시도를 시작하는 경로는 후속으로 남겼다.
+- 선택지: A 지금처럼 고객만 재신청(절차서에 "환불할 건이면 실패 종결보다 콘솔 취소 → [결정 127](#refund-delay-closure) 종결 먼저") / B ADMIN이 고객 대신 재신청(`POST /api/v1/admin/refunds/{refundId}/retries` 가칭, 같은 재시도 경로·ADMIN 기록) / C 실패 종결 때 보유권을 복구하지 않고 바로 새 시도로 재송신 / D A + 고객 환불 응답에 실패 사유 코드와 "다시 신청하면 환불됩니다" 안내(알림은 결정 98대로 넣지 않음) (추천: D — "고객 의사로만 새 시도"를 지키면서 실제 원인인 "고객이 실패와 할 일을 모름"을 줄인다. 환불해 줄 건은 이미 콘솔 취소 + 결정 127로 고객 행동 없이 끝난다. B는 복구된 게임을 동의 없이 다시 정지해 결정 29 하위와 부딪히고, C는 "확정 실패면 보유권 복구"와 R7.3을 바꾼다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "D로 해, 고객 응답에 실패 사유랑 안내 추가")
+- 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 실패한 환불의 새 실행은 지금처럼 고객 재신청으로만 만든다. ADMIN 대신 재신청과 실패 종결 시 자동 재송신은 두지 않는다. Order 고객 환불 응답(`FAILED`)에 실패 사유 코드(이미 저장된 `RefundAttempt.failureReasonCode`를 고객용 코드로 옮김, 내부 PG 오류 원문은 노출하지 않음)와 "다시 신청하면 환불됩니다" 안내를 넣는다. 운영 절차서에 "환불해 줄 건이면 실패 종결보다 콘솔 취소 → 결정 127 종결을 먼저, 실패 종결은 지금 환불할 수 없는 건에만"을 적는다. 알림은 결정 98대로 넣지 않는다. 장애로 수백 건이 한꺼번에 생기는 규모가 실제로 나오면 B를 다시 검토한다.
+- 구분: 추천 수용
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), [PR #159](https://github.com/tlswltjq/esd-platform/pull/159) (구현: 고객 응답 `failureNotice`, `PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`), 절차서 문장은 [PR #157](https://github.com/tlswltjq/esd-platform/pull/157) `docs/runbooks/refund-delay-closure.md`, 근거 색인 2026-11-08 order 실패 안내 행
+
+<a id="local-image-registry"></a>
+## 135. 직접 만드는 이미지의 기본 이름은 Docker Hub로 해석되지 않는 `localhost/stove`를 쓴다
+- 문제: 앱 11개·`mock-pg`·MinIO·`mysql-client` 이미지의 기본 이름이 `stove/<이름>`이었다. Docker는 레지스트리 주소가 없는 이름을 Docker Hub(`docker.io/stove/…`)로 해석한다. `docker compose up`·`docker run`·Testcontainers는 로컬에 이미지가 없으면 그 주소에서 받는다. Docker Hub의 `stove`는 이 프로젝트와 무관한 다른 사람 계정이다(2026-11-07 확인 당시 `quasar-cli` 저장소 하나). 그 계정이 같은 이름을 올리면, 이미지를 빌드하지 않은 컴퓨터에서 `.env`의 DB 비밀번호·서비스 키·PortOne TEST 키를 받는 컨테이너로 남의 이미지가 실행된다.
+- 선택지: A 문서에 경고만 / B 실행 스크립트(`start-apps.sh`·`local-stack.sh`·`remote.sh`)에서 `STOVE_JIB_REGISTRY`가 없으면 `--pull never` / C 기본 레지스트리 이름을 `localhost/stove`로 바꿈 (추천: C — 이름 자체를 바꿔 Compose·Testcontainers·Python·`docker` 직접 실행을 한 번에 막고, 잘못 받으려 해도 다른 사람 이미지 대신 즉시 실패한다)
+- 내 의견: "C안으로 하자"
+- 선택: C — 기본 레지스트리를 `localhost/stove`로 바꾼다(예: `localhost/stove/gateway:latest`, `localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`). Docker는 `localhost`를 레지스트리 주소로 보므로 받기가 Docker Hub로 가지 않는다. 배포는 지금처럼 `STOVE_JIB_REGISTRY`에 우리 레지스트리를 지정해 게시하고 받는다. 구현 판단: 예전 이름(`stove/…`)을 환경 변수로 직접 지정한 설정(예전 `testing.md`가 안내한 `STOVE_TEST_MINIO_IMAGE=stove/minio:…`)도 Docker Hub로 가지 않도록, Gradle·테스트·검증 도구가 받지 않고 오류로 알린다.
+- 구분: 추천 수용
+- 결과: [PR #139](https://github.com/tlswltjq/esd-platform/pull/139), 근거 색인 2026-11-08 기본 registry 행
+
+<a id="db-startup-wait"></a>
+## 136. 부팅 때만 첫 DB 연결을 기다리고, 실행 중 연결 기한은 그대로 둔다
+- 문제: DB를 쓰는 9개 앱(Auth·Studio·Review·Catalog·Store·Order·Payment·License·Settlement)은 Hikari 기본값(`initialization-fail-timeout` 1ms)이라 부팅 때 첫 연결을 한 번만 시도한다. 여러 JVM이 함께 떠 첫 연결이 `connection-timeout`(3초) 안에 끝나지 않으면 Flyway 단계에서 기동이 실패한다(2026-10-31 License 복구 검증). 지금은 `scripts/start-apps.sh`가 앱을 4묶음으로 나눠 띄워 피한다. 그러나 호스트 재부팅처럼 Docker가 `restart: unless-stopped` 컨테이너를 한꺼번에 다시 띄우면 나눠 띄우기가 적용되지 않고, 실패 뒤 재시작으로 수렴하는지도 검증한 적이 없다.
+- 선택지: A 지금처럼 바로 실패하고 Compose 재시작에 맡기며, 동시 기동 수렴 검증만 더한다 / B 9개 앱에 `spring.datasource.hikari.initialization-fail-timeout: 60000`을 더해 부팅 때만 60초 동안 첫 연결을 다시 시도한다. 실행 중 `connection-timeout: 3000`은 그대로 둔다 / C `connection-timeout`을 10초 안팎으로 늘린다 (추천: B — 부팅 때만 바뀌고, 실행 중 요청 기한과 재시도 시간 계산은 그대로다. 나눠 띄우기가 적용되지 않는 재부팅에서도 앱이 스스로 버틴다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 부팅 때만 기다리게 해")
+- 선택: B — 부팅 때 첫 연결만 60초 동안 다시 시도하고, 그래도 안 되면 지금처럼 종료한다. 재시도 예산 60초는 Compose health가 unhealthy로 판정할 수 있는 가장 이른 시각인 약 100초(`start_period` 40초 + 15초 × (5 − 1)회) 전에 끝난다. 예산은 종료 시각의 상한이 아니다. DB가 TCP 연결만 받고 MySQL 인사를 보내지 않으면 한 번의 시도가 드라이버 안에서 더 오래 멈출 수 있고, 이는 설정 전과 같다. 결정 당시 설명의 "115초"는 계산이 틀렸고 교차 리뷰(PR R3)에서 바로잡았다. 나눠 띄우기는 기동 부하를 줄이는 용도로 남긴다. 인프라 MySQL에 재시작 정책이 없는 점은 이 결정에 넣지 않았다.
+- 구분: 추천 수용
+- 결과: [PR #175](https://github.com/tlswltjq/esd-platform/pull/175), 근거 색인 2026-11-09 cross 부팅 DB 연결 대기 행
+
+<a id="claim-draft-pr"></a>
+## 137. 항목에 착수하면 바로 draft PR을 열어 맡은 항목을 GitHub에 표시한다
+- 문제: 여러 세션이 각자 개발 루프를 돌며 main의 `tasks.md`에서 표시 없는 첫 항목을 고른다. 다른 세션이 그 항목을 한다는 신호는 PR을 연 뒤에야 생겨서, 그 전 몇 시간은 두 세션이 같은 항목을 고를 수 있다. 2026-11-08 밤에는 열린 PR의 브랜치 이름으로 payment·order·settlement 작업을 짐작해 피했다. 결정 번호는 110→112, 111→113, 115→116, 116→117, 118→135로 바뀌었다. `docs/evidence.md` 끝 행은 11-07에 5번, 11-08에 #155·#156·#157에서 매번 충돌했다. 2026-11-09에는 커밋 전이던 웹훅 작업의 결정 137이 다른 세션에 보이지 않았다.
+- 선택지: A 세션은 동등하게 두고, 착수하자마자 draft PR로 맡은 항목과 결정 번호를 표시한다. 열린 PR과 겹치는 항목은 건너뛰고, `docs/evidence.md`에 `merge=union`을 둔다 / B Kiro `goal-conductor` 지휘 세션이 work ledger로 항목을 배정한다 / C 한 세션이 항목마다 `workflow_run`을 돌린다 (추천: A — 상태가 GitHub에 있어 에이전트·런타임과 상관없이 보이고, 작은 변경으로 항목 표시·결정 번호·근거 색인 충돌·주인 없는 PR을 다룬다. B의 결정 모으기와 동시 실행 제한은 나중에 A 위에 얹을 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, GitHub에 맡은 항목 표시")
+- 선택: A — `tasks.md` 항목에 착수하면 첫 커밋(빈 커밋 가능)을 push하고 바로 `gh pr create --draft`로 PR을 연다. 본문 `맡은 항목`에는 항목 원문과 쓸 결정 번호를 적는다. 다음 항목을 고르기 전에 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치면 건너뛴다. CI `build`는 draft PR에서 건너뛰고, ready로 바꾸면(`ready_for_review`) 돈다. 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 `ready_for_review` 없이 건너뛰기만 두면 ready PR이 build 없이 병합될 수 있다. 두 설정은 함께 바꾼다. draft 실행이 늦게 시작되거나 다시 돌면 같은 concurrency 그룹의 실제 build를 취소할 수 있어서, 그룹을 draft와 build로 나눈다(교차 리뷰 R1). 같은 SHA에 draft 때의 SKIPPED가 남으므로, 병합 판단은 가장 최근에 시작한 `build`가 SUCCESS인지로 한다. draft PR은 건너뛴 build와 `review-gate` 통과만으로 `CLEAN`으로 보일 수 있다(근거 색인 2026-11-09 착수 draft PR 행). GitHub도 draft 병합은 막지만, 에이전트는 병합 대상을 고를 때 draft를 뺀다. `tools/ci/test_workflows.py`는 조건식 전체와 이벤트 목록, concurrency 그룹을 지킨다(R2: 부분 문자열 비교는 `&& false`를 놓쳤다). 열린 PR 조회는 `--limit 1000`으로 30건 기본 제한을 넘긴다(R3). `docs/evidence.md`는 `.gitattributes`의 `merge=union`으로 로컬 `git merge`에서 양쪽 행을 남긴다. GitHub 화면의 충돌 판정에는 적용되지 않을 수 있다. 양쪽이 같은 행을 고치면 두 줄이 다 남으므로, 기존 행을 고친 병합은 결과를 확인한다. 열린 PR이 적은 결정 번호를 건너뛰는 예약은 병합 순서가 뒤바뀌면 결정 116의 빈 번호 검사와 부딪힌다. 그래서 예약은 따로 정하고, 그때까지 번호 규칙은 결정 116 그대로다.
+- 구분: 추천 수용
+- 결과: [PR #177](https://github.com/tlswltjq/esd-platform/pull/177), 근거 색인 2026-11-09 착수 draft PR 행
+
+<a id="decision-number-reservation"></a>
+## 139. 결정 번호는 착수 때 draft PR로 예약하고, 검사는 빈 번호를 허용한다
+- 문제: 결정 116은 새 결정에 main의 마지막 번호 다음을 쓰고, 겹치면 나중에 병합하는 쪽이 번호를 바꾼다. 그래서 번호가 병합 순서로 정해져 2026-11-07~09에 약 7번 바뀌었다(110→112, 111→113, 114→115→116, 116→117, 118→135, 웹훅 137→138). 결정 135는 사용자가 대화에서 "결정 118"로 고른 결정이었고, 번호를 바꾸느라 파일 23개를 고쳤다. 결정 137의 draft PR에 번호를 적더라도, 열린 PR이 적은 번호를 건너뛰면 결정 116 검사 ①(1부터 빈 번호 없이 차례로)과 부딪힌다. 병합 순서가 뒤바뀌면 `누락 번호`나 `역순 번호`로 막히고, 예약한 PR을 포기하면 그 뒤 번호는 병합할 수 없다.
+- 선택지: A 결정 116 그대로, draft PR의 번호는 정보로만 쓴다 / B 착수 때 예약한다. 새 번호는 main 최대 번호와 열린 PR이 적은 번호 중 큰 값 + 1이다. 검사 ①을 "중복 없음 + 오름차순"으로 바꿔 빈 번호를 허용하고, 나중에 병합하는 PR은 번호 자리에 끼워 넣는다. PR의 새 번호는 main 최대 + 10 이하로 제한한다 / C 결정 116 그대로 두고 번호 변경 스크립트를 더한다 (추천: B — 번호가 착수 시점에 고정돼 대화·판단 색인에서 부르는 번호가 바뀌지 않는다. 중복 없음과 main 기록 보존은 그대로 지킨다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 번호를 착수 때 예약")
+- 선택: B — 새 결정의 번호는 `tools/ci/next_decision_number.py`가 정한다. main의 `docs/decisions.md`와 열린 PR(draft 포함) 본문 `맡은 항목`의 `결정 번호:` 줄에서 가장 큰 값에 1을 더한다. 도구는 열린 PR을 먼저 읽고, 그다음 `git fetch origin +refs/heads/main:refs/remotes/origin/main`으로 main을 새로 받아 그 ref를 읽는다. 두 읽기 사이에 병합된 PR은 둘 중 한쪽에 반드시 보인다. 로컬 `origin/main`이 오래되면 이미 병합된 번호를 다시 내기 때문이다(교차 리뷰 R1). 받을 곳을 명시해, 설정된 fetch refspec이 main을 빼도 갱신된다(R3). 코드 블록·HTML 주석 안의 예시는 세지 않고(R2), 예약 줄의 값은 `` `140` ``처럼 인라인 코드여도 읽는다(R4). draft PR을 연 뒤에 그 번호로 결정을 묻거나 기록한다. 검사는 결정 116의 ①만 바꾼다. 헤딩 번호가 중복 없이 파일 순서대로 커지면 빈 번호를 허용한다. 기준 판(main)과 비교할 때 새로 생긴 번호는 기준 판 최대 + 10 이하여야 한다(오타 방지. 동시에 열린 예약이 10개를 넘으면 경계를 다시 정한다). 앵커 중복, 링크 번호, 기준 판 번호·앵커 보존 검사는 그대로다. 나중에 병합하는 PR은 결정을 번호 자리에 끼워 넣는다(138은 139 앞). 병합하지 않고 닫은 PR의 번호는 빈 번호로 남을 수 있다. 같은 순간에 두 세션이 같은 번호를 고르면 결정 116처럼 나중에 병합하는 쪽이 바꾸고, 중복은 검사가 막는다.
+- 구분: 추천 수용
+- 결과: [PR #179](https://github.com/tlswltjq/esd-platform/pull/179), 근거 색인 2026-11-09 결정 번호 예약 행
+
+<a id="defer-real-pg"></a>
+## 140. 실제 PG 확인은 새 단계 G7로 미루고, Payment·Settlement core의 PG 계약을 공급자 중립으로 바꾼다
+- 문제: 결제·환불 예외 결정(114~134)이 이어지며 기존 결정·구현과 계속 부딪혔다(D-044·D-045·D-046, PR #178 취소 단계 실패). 실제 PortOne TEST는 2026-11-07 토스페이가 공용 예제 키를 거절한 뒤 멈췄고(결정 110 결과), `[외부 대기]` 10여 건이 전용 테스트 가맹점을 기다린다. 업무 모델도 PortOne 모양이다. Payment core에는 `PORTONE_TEST` 공급자 분기(`"PORTONE_TEST".equals(...)`·JPQL `p.provider='PORTONE_TEST'`)가 29곳 있고, `PortOneWebhookNotice`(core.domain)·`PortOneWebhookReceipts`·`PortOneWebhookVerifier`(core.port)·`ReceivePortOneWebhook`(core.service)가 PortOne 이름을 쓴다. 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)은 PortOne의 공개 보장이다. Settlement core도 `PgEvidence`·`PgPayment`·`PgFunding`·`PgStatementCheck`가 `PORTONE_TEST`·`PORTONE_LIVE` 문자열을, `PgStatement`가 `portoneStoreId`·`portoneChannelKey` 열을 쓴다. 그래서 흉내 서버로만 돌려도 PortOne 규칙에서 나온 충돌이 그대로 남는다.
+- 선택지: A PortOne 어댑터·웹훅·Settlement 수집기를 지우고 `simulators/mock-pg`로 돌아간다 / B 코드는 두고 실제 TEST만 완료 조건에서 뺀다 / C B에 더해 core의 PG 계약을 공급자 중립으로 바꾸고 PortOne 이름·규칙은 adapter로 내린다 (추천: C — 문제가 생기는 곳이 어댑터 한 곳에 모이고, AGENTS.md 3절의 `core.port`/`adapter` 경계에 맞는다. 실제 PortOne은 나중에 어댑터로 다시 붙인다. A는 Payment·Settlement 파일 128개를 바꾸고 mock-pg에 환불·취소·웹훅을 새로 만들어야 하며, 결정 110·111·133과 10-27~10-30 실제 TEST 근거가 쓸모를 잃는다. B는 core가 PortOne 모양으로 남는다)
+- 내 의견: "실제 연동도 걷어내고 나중으로 미루고싶어 그래도 될까?" → 고른 선택지: "C로 실제 연동 미루고 PG 계약 중립화해"
+- 선택: C
+  - 실제 PortOne·토스페이 확인(승인·취소·오류 타입·웹훅 공개 수신·토스페이 정산 수집·LIVE 근거·지급 수령)은 새 단계 G7 "실제 PG 연동"으로 옮기고 G1~G3 완료 조건에서 뺀다. PortOne 코드와 10-27~10-30 실제 TEST 근거는 지우지 않는다.
+  - Payment·Settlement core에서 공급자 이름과 공급자 문자열 분기를 없앤다. 승인·조회·취소 요청·취소 결과·통지의 중립 계약은 `core.port`에, PortOne 본문·서명·오류 분류·공개 보장 기한은 `adapter`와 `config`에 둔다. 이미 저장된 `PORTONE_TEST`·`SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트). ArchUnit으로 core의 공급자 이름을 막는다.
+  - 이번에 정하지 않은 것(각각 따로 묻는다): ① 기준 시뮬레이터의 형태 — [결정 46](#pg-test-boundaries-without-provider-service)("상시 모의 PG를 복원하지 않는다", 사용자가 정정한 결정)·[결정 111](#portone-fake-journey)("흉내 서버는 검증 도구 쪽에만")과의 관계 ② Settlement가 시뮬레이터 근거를 모의 수령으로 어떻게 표시하고 G3 완료를 무엇으로 판정할지([로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다").
+  - 진행 중인 PR #166·#168·#178은 그대로 마무리한다. 중립화는 그 뒤에 그 동작을 옮긴다.
+- 구분: 직접 제안 — 실제 연동 미루기는 사용자가 먼저 꺼냈고, 방식 C는 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 중립화는 후속 PR
+
+<a id="portone-fake-as-reference-simulator"></a>
+## 141. 기준 시뮬레이터는 PortOne 흉내 서버를 넓혀 쓰고, 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다
+- 문제: [결정 140](#defer-real-pg)으로 실제 PG 확인을 G7로 미루면서 개발·여정·장애 실험에 쓸 기준 시뮬레이터를 정해야 했다. 지금은 두 가지가 있다. `tools/verification/support/portone_fake.py`(PortOne V2 HTTP 모양, 제어 요청 `fail-attempt`·`arm-confirm`·`arm-cancel`·`settle`·`console-approve`·`console-cancel`, 매일 밤 CI 여정)와 `simulators/mock-pg`(별도 Java 서비스·DB, 승인만, `SIMULATED`)다. 예: PR #178 취소 단계 실패는 흉내 서버에 PortOne 취소 대기(`REQUESTED`)가 없어서 생겼다.
+- 선택지: A PortOne 흉내 서버를 기준으로 넓힌다. 중립화는 `core.port` 경계에서만 하고 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다 / B 중립 프로토콜 시뮬레이터와 전용 `SimulatorPgGateway`·Settlement 클라이언트를 새로 둔다 / C 둘 다 둔다(실험은 중립 시뮬레이터, 어댑터 계약은 흉내 서버) (추천: A — 업무 모델을 PortOne에서 떼는 일은 `core.port` 경계로 이뤄지고 시뮬레이터 프로토콜과는 무관하다. PortOne 어댑터가 매일 밤 돌아 G7에서 주소만 바꾸면 되고, 장애 주입은 기존 `arm-*` 제어 방식으로 더할 수 있으며, [결정 46](#pg-test-boundaries-without-provider-service)·[결정 111](#portone-fake-journey)을 지킨다. B는 결정 46을 뒤집고 어댑터 두 벌을 유지하며 PortOne 어댑터가 G7까지 시험되지 않는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PortOne 흉내 서버를 기준으로 넓혀")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - 흉내 서버는 결정 111대로 검증 도구 쪽에만 둔다. 운영 코드는 흉내 서버를 알지 못하고, PortOne 주소 설정만 바꿔 붙는다. 결정 46의 "상시 모의 PG를 복원하지 않는다"는 그대로다.
+  - 흉내 서버의 응답 모양은 PortOne 어댑터 테스트의 견본과 같게 유지한다. PortOne 문서로 확인하지 못한 동작은 흉내 서버 안에 추정이라고 적고 G7 확인 항목에 남긴다.
+  - 장애 주입은 제어 요청으로 더한다: 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정, 웹훅 중복·역순·누락. 취소 대기는 PR #178(결정 138)이 넣는 것과 겹치지 않게 그 PR 뒤에 잇는다.
+  - `simulators/mock-pg`·`SIMULATED` 경로를 정리할지는 이번에 정하지 않는다.
+- 구분: 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 흉내 서버 확장은 후속 PR
+
+<a id="g3-exit-current-contract"></a>
+## 142. G3는 지금 정산 계약으로 닫고, PG 비용·지급 확인은 G7로 넘긴다
+- 문제: [결정 140](#defer-real-pg)·[결정 141](#portone-fake-as-reference-simulator)로 실제 PG 확인을 G7로 넘기자 G3 완료 판정의 근거를 정해야 했다. PortOne 흉내 서버로 원승인·취소 근거 읽기, 매출 배분, 환불 조정, 이월, 마감은 끝까지 돈다. 반면 PG 비용(토스페이 정산 API)은 TEST에서 미확정으로 남고(Settlement R4.7), PORTONE 지급 명세 접수는 503이며(R3.5), 토스페이 흉내 서버가 없어 비용·반환·지급 대사는 한 번도 끝까지 돌지 않았다.
+- 선택지: A 지금 계약으로 닫는다 — 흉내 서버 근거로 원매출·환불 조정·판매자/플랫폼 순액·마감 전후를 검증하고, 비용·지급은 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, PORTONE 지급 명세 503)만 검증한다 / B 토스페이 정산 흉내 서버를 더하되 비용은 TEST 규칙대로 미확정 유지 / C 토스페이 정산 흉내 서버와 새 근거 출처 `SIMULATOR`를 두고 비용 확정·지급 대사까지 허용 (추천: A — 결정 140의 목적인 PG 소음 축소에 맞다. [결정 39](#seller-close-independent-of-pg-cost)로 판매자 마감이 PG 비용과 이미 분리돼, 판매자 금액 흐름은 비용 없이 모두 검증·실험할 수 있다. C는 [로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다"에 예외를 만든다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 지금 계약으로 G3를 닫아")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - G3 완료 판정: 결정 140의 PG 계약 중립화를 마친 코드로, 흉내 서버 실제 스택 여정에서 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영과 비용·지급의 미확정 표시(NULL·503, 빈 TEST 결과를 0원으로 보지 않음)를 확인한다.
+  - PG 비용 확정·비용 반환·지급 수령 대사는 G7에서 실제 공급자 근거로 한다. 로드맵 §4 원칙은 바꾸지 않는다.
+  - 비용 대사(`PG_COST_PENDING`·`DIFFERENT_COST`)를 장애 실험에 넣을 필요가 측정으로 드러나면 G6에서 C를 다시 묻는다.
+- 구분: 추천 수용
+- 결과: [PR #181](https://github.com/tlswltjq/esd-platform/pull/181) (기록)
+
+<a id="money-spec-first"></a>
+## 143. 돈이 오가는 4개 모듈(Payment·Order·License·Settlement)의 SPEC을 먼저 정비하고, 그다음 PG 계약 중립화를 구현한다
+- 문제: 결제·환불 결정이 기존 결정과 계속 부딪혔는데, 부딪히는지 확인할 기준이 SPEC에 없었다. Payment `design.md`의 상태 다이어그램은 `Payment` 하나뿐이고, `PaymentApproval`(상태 7개)·`RefundExecution`(상태 3개 + 보류·종결·조회 일정·귀속 판정 필드)은 전이 표 없이 R7·R12~R14 서술과 결정 본문에 흩어져 있다. License·Settlement `design.md`에는 상태 전이 정의가 없다. Payment 요구사항은 결정 순서대로 붙어 R14가 두 개다. 모듈 간 돈 흐름(`docs/domain/workflows.md`)은 2026-11-06 뒤로 갱신되지 않았고 금액 불변식은 어디에도 없다. `tasks.md`는 완료 항목의 구현 경위로 길어졌다(payment 한 줄 최대 1,056자, order 1,207자). 요구사항에는 PortOne 이름이 남아 있다(payment 18곳, settlement 7곳).
+- 선택지: A 돈 흐름 4개 모듈 SPEC을 먼저 정비(집합체별 상태×이벤트 표 → 모듈 간 돈 불변식 → 요구사항 생애주기 순 재배열·공급자 중립 용어 → `tasks.md` 정리)하고 그다음 중립화 구현 / B 중립화 구현 중 바뀌는 부분만 고침 / C 11개 모듈 SPEC 전체 정비 (추천: A — 충돌을 코드보다 먼저 찾고, 불변식 목록이 불변식 검사기의 명세가 된다. 문서만 바꿔 교차 리뷰가 필요 없다. C는 문제가 적은 모듈까지 넓어진다)
+- 내 의견: "SPEC을 더 다듬는건 어떻게 생각해?" → 고른 선택지: "A로 돈 흐름 4개 모듈 SPEC부터 정비해"
+- 선택: A
+  - 상태×이벤트 표는 새 정책 없이 현재 코드(상태 enum과 전이 메서드·가드·발행/수신 이벤트)에서 옮긴다. 코드·요구사항·기존 결정이 서로 어긋나는 곳은 고치지 않고 찾은 것으로 남긴다. 재현되는 결함은 재현 테스트와 함께 [결함 대장](defects.md)에, 정책이 필요한 것은 `[결정 필요]`로 하나씩 묻는다.
+  - 모듈 간 돈 불변식은 기준 문서 `docs/domain/workflows.md`에 둔다. 새 문서를 만들지 않는다.
+  - 요구사항 재배열은 계약을 바꾸지 않는다. R 번호를 바꾸면 기존 참조(`git grep 'R14'` 등)를 함께 고친다.
+  - 테스트에 R 번호를 붙이는 규칙은 이번 범위가 아니다.
+- 구분: 직접 제안 — SPEC 정비는 사용자가 먼저 꺼냈고, 범위 A는 추천 수용
+- 결과: 진행 중(1부: 상태×이벤트 표)
+
+<a id="held-approval-keeps-first-reason"></a>
+## 144. 이미 보류된 승인은 처음 보류된 사유를 유지하고, 접수 없이 청구된 관측만 사유를 올린다
+- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. [결정 143](#money-spec-first) 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
+- 선택지: A 처음 보류된 사유를 유지하고 `PAID_WITHOUT_ADMISSION`만 지금처럼 사유를 올린다. 뒤 사유는 로그로만 남긴다 / B 지금처럼 최신 사유로 바꾸고 요구사항에 적는다 / C 사유 심각도 순서를 정해 더 심각한 사유만 덮는다 / D A에 더해 사유 이력을 테이블에 저장한다 (추천: A — 보류는 운영자 조사 표시이고([결정 114](#approval-review-hold-closure)) 첫 이유가 조사의 출발점이다. 기존 `PAID_WITHOUT_ADMISSION` 보호가 이미 "돈이 움직인 관측은 덮이면 안 된다"는 뜻이다. C는 8개 사유의 순서라는 새 정책이 필요하고, D는 지금 조사 기록으로 대부분 대신된다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 처음 보류 사유를 유지해")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이미 `REVIEW_REQUIRED`인 승인에 새 중단 사유가 오면 송신 중단은 유지하고 `lastErrorCode`·`reviewStartedAt`은 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 사유를 그것으로 올리고, 한 번 그 사유가 되면 바꾸지 않는다. 버린 사유는 승인 ID와 함께 로그로 남긴다. 고객 안내는 결정 132대로 사유 묶음과 마지막 PG 관측으로 정하므로, 유지된 첫 사유가 `PG_INVALID_EVIDENCE`가 아니면 뒤의 깨진 응답이 안내를 고정하지 않는다.
+- 구분: 추천 수용
+- 결과: 구현 PR
 
 ---
 

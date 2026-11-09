@@ -52,9 +52,12 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 2. WHEN ADMIN이 판매자·월 마감을 요청하면 THEN 시스템 SHALL 현재 KST 월보다 이전 월만 허용하고, 월 행을 잠근 상태에서 원장 합계·건수를 대조해 CLOSED·closedAt을 함께 확정한다.
 3. IF 현재·미래 월 마감을 요청하면 THEN 시스템 SHALL 409로 거절한다.
 4. WHEN 동일 판매자·월의 마감을 재요청하면 THEN 시스템 SHALL 최초 금액·closedAt을 그대로 반환하고 재집계로 확정 금액을 바꾸지 않는다.
-5. IF 늦은 거래의 `saleMonth`가 이미 CLOSED이면 THEN 시스템 SHALL 접수 트랜잭션 시점의 현재 KST 월에 반영하고 `saleMonth`를 보존한다.
-6. WHERE 둘 이상의 월 행을 잠그는 맥락에서 THE 시스템 SHALL 판매자·월의 일정한 순서로 잠근다.
+5. IF 늦은 거래의 `saleMonth`가 이미 CLOSED이거나 같은 판매자의 더 뒤 월이 CLOSED이면(그 월에 행이 없어도) THEN 시스템 SHALL 접수 트랜잭션 시점의 현재 KST 월에 반영하고(`saleMonth` 월 행은 만들지 않는다) `saleMonth`를 보존한다([결정 42](../../../docs/decisions.md#settlement-refund-posting-month)·[결정 130](../../../docs/decisions.md#seller-close-order-carryover)).
+6. WHERE 매출·환불 반영과 판매자 월 마감 맥락에서 THE 시스템 SHALL 먼저 판매자 잠금 행(`settlement_seller_lock`)을 잠가 같은 판매자의 월 판정·행 생성·마감을 직렬화하고, 둘 이상의 월 행은 판매자·월의 일정한 순서로 잠근다.
 7. THE 월 마감 SHALL PG 수령 확인·PG 비용 확정과 독립적으로 수행하며, CLOSED를 수령 완료나 판매자 지급 완료로 해석하지 않는다.
+8. IF 같은 판매자의 M보다 이전 월에 OPEN 행이 있는데 M 마감을 요청하면 THEN 시스템 SHALL 409(`CONFLICT`, "지난 월만 마감"과 같은 오류 모양)로 거절하고 아무 행도 바꾸지 않는다. 행이 없는 월은 마감 순서 검사에서 건너뛴다([결정 130](../../../docs/decisions.md#seller-close-order-carryover)). M이 CLOSED가 아닌데 같은 판매자의 M보다 뒤 월이 CLOSED이면 같은 409("이후 월이 이미 마감됐습니다")로 거절하고 M 행을 만들지 않는다(이미 CLOSED인 M의 재요청은 4번대로 최초 결과).
+9. WHEN 판매자 월 M을 마감하면 THEN 시스템 SHALL 같은 트랜잭션에서 `carriedIn` = M보다 이전의 마지막 CLOSED 월의 `carriedOut`(없으면 0, 행 없는 월은 건너뜀)으로 두고, `netSellerPayoutAmount + carriedIn`이 음수면 `payable = 0`·`carriedOut =` 그 음수, 0 이상이면 `payable =` 그 값·`carriedOut = 0`으로 이월 원장에 한 행을 쓴다([결정 121](../../../docs/decisions.md#seller-negative-net-carryover)). 실제 송금·청구·회수는 하지 않는다.
+10. THE 이월 원장 SHALL `(sellerSubject, settlementMonth)`마다 최대 한 행이고 같은 판매자의 출처 월(`sourceMonth`)을 한 번만 받으며 삽입 뒤 바꾸지 않는다. 같은 월 재마감·동시 마감은 새 행을 만들지 않는다. 원장 행이 없는 옛 CLOSED 월(V13 이전 마감)은 `carriedIn = 0`으로 읽고, 다음 월 마감은 그 월의 `min(0, 순액)`을 이월로 받는다.
 
 ### R4. PG 거래·비용·지급 자료의 Settlement 소유 직접 조회
 **사용자 스토리:** 운영자로서, PG 거래·비용·지급 명세를 Payment를 거치지 않고 Settlement가 직접 확인하기를 원한다. 그래야 책임 경계가 분명하다.
@@ -89,7 +92,7 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 2. THE 늦은 `RefundExecutionSucceeded` SHALL 최초 금융 확인을 보강하는 사건으로만 처리하고 두 번째 금액 조정으로 소비하지 않는다.
 3. WHEN 전액 환불을 배분하면 THEN 시스템 SHALL `FULL_REFUND_REVERSE_ORIGINAL_V1`로 원매출의 총액·플랫폼 수수료·판매자 몫을 그대로 음수 상계하고, 현재 요율로 재계산하거나 확인된 외부 혜택만큼 판매자 몫을 줄이지 않는다.
 4. WHEN 환불을 기록하면 THEN 시스템 SHALL `PgRefunds`로 같은 결제를 직접 GET해 전액 취소·성공 취소 ID 전체·합계·기존 지급 구성을 확인한 뒤, Inbox·불변 환불 원장·월 환불 합계를 원자 저장한다.
-5. WHERE 환불 반영 월 선택 맥락에서 THE 시스템 SHALL `REFUND_CONFIRMED_MONTH_V1`로 최초 금융 확인 월이 OPEN이면 그 월, CLOSED이면 현재 OPEN 월을 선택한다(`CONFIRMED_MONTH` / `CLOSED_MONTH_ROLLOVER`).
+5. WHERE 환불 반영 월 선택 맥락에서 THE 시스템 SHALL `REFUND_CONFIRMED_MONTH_V1`로 최초 금융 확인 월이 OPEN이면 그 월, CLOSED이거나 같은 판매자의 더 뒤 월이 CLOSED이면(확인 월에 행이 없어도) 현재 OPEN 월을 선택한다(`CONFIRMED_MONTH` / `CLOSED_MONTH_ROLLOVER`). 뒤 월 CLOSED로 넘길 때 확인 월 행은 만들지 않고 확인 월(`refundMonth`)은 보존한다.
 6. IF 확인 월과 현재 월이 모두 CLOSED이면 THEN 시스템 SHALL 임의 월을 선택하지 않고 충돌로 처리한다.
 7. IF 환불이 원매출보다 먼저 도착하면 THEN 시스템 SHALL 원장·월 합계에 기록하지 않고 기존 Kafka 재시도/DLT로 남기며, 원매출 복구 뒤 원래 금융 확인 이벤트로 재처리한다.
 8. IF SIMULATED 공급자의 환불 읽기를 요청하면 THEN 시스템 SHALL 503으로 반환하고 모의 취소 근거를 생성하지 않는다.
@@ -133,6 +136,8 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 7. THE 월 금융 요약 SHALL 미확인 비용이 있으면 `pgFeeAmount`·`platformNetAmount`를 NULL로 두고, 환불 반영 월의 순비용·플랫폼 잔여액은 음수를 허용한다.
 8. THE 월 응답의 기존 `paidAmount`·`platformFeeAmount`·`sellerPayoutAmount`·`recordCount` SHALL 매출 총합 의미를 유지하고, 환불은 양수 합계와 차감 후 `net*` 순액(음수 허용)으로 따로 제공한다.
 9. THE 지급일 조회(`pg-payouts`) SHALL 수집본 헤더 합계를 누적하지 않고 중복 없는 정본 거래를 집계하며, `MATCHED_REPORTED`를 은행 실수령·월 자료 완비로 표시하지 않고 미관측(`NO_EVIDENCE`)과 수집한 DUE의 빈 관측(`EMPTY_REPORTED`)을 구분한다.
+10. THE 매출 응답(`/me/sales`·`/sales`의 `SaleResponse`) SHALL 원매출을 상계한 환불 원장이 있으면 `refund`에 `refundId`·`confirmedAt`·`refundMonth`·`settlementMonth`·`monthReason`을, 없으면 `null`을 담아 서로 다른 월의 매출과 환불을 원매출 기준으로 잇는다. 원장에 저장된 사실만 조회하며 매출 페이지당 환불 원장을 한 번에 조회한다(N+1 없음). CREATOR에게는 `/me/refunds`로 이미 보이는 값만 노출한다.
+11. THE 월 응답(`/me/months`·`/months`·마감 응답) SHALL CLOSED 월에 `carriedIn`(0 이하)·`payable`(0 이상)·`carriedOut`(0 이하)을 담고, OPEN 월은 세 값이 아직 확정되지 않았으므로 모두 `null`로 둔다. 페이지당 이월 원장을 한 번에 조회한다.
 
 ### R9. 최소 저장 모델과 중복/출처 재사용 차단
 **사용자 스토리:** 운영자로서, 중복 매출·출처 재사용·명세 재사용이 DB 차원에서 차단되기를 원한다.
@@ -146,6 +151,7 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 6. THE DB SHALL 비음수 결제/수수료·판매자 몫, 금액 보존식, 월 상태·closedAt의 일관성을 검증하고 `platformNetAmount`와 그 합계의 음수는 허용한다.
 7. THE PG 지급 명세 항목 SHALL 매출보다 먼저 도착할 수 있으므로 `SettlementSale` 존재를 강제하는 FK를 두지 않고 재대사 때 불변 결제 키로 연결한다.
 8. THE PG 지급 구성(V9) SHALL 전부 없음 또는 전부 검증된 구성만 허용하며, `PORTONE_TEST` 거래에는 필수이고 과거 행에 소급 생성하지 않는다.
+9. THE 이월 원장(V13 `settlement_seller_carryover`) SHALL `UNIQUE(seller_subject, settlement_month)`와 CHECK(`carried_in ≤ 0`·`payable ≥ 0`·`carried_out ≤ 0`·둘 중 하나는 0·`순액 + carried_in = payable + carried_out`, 출처 월이 없으면 `carried_in = 0`이고 있으면 마감 월보다 이전)를 두며, 옛 CLOSED 월에 행을 소급 생성하지 않는다.
 
 ### R10. 접수한 PG 거래의 비용 재조회
 **사용자 스토리:** 운영자로서, 비용이 미확정이던 거래를 나중에 공급자에서 다시 확인하고 싶다. 그래야 판매자 금액을 건드리지 않고 비용만 보완된다.
@@ -159,6 +165,6 @@ MVP 재작성은 2026-10-18 완료했다(단위 1,014건·관련 통합 152건·
 ## 범위 밖(후속)
 
 - 공통 운영 API(`/api/v1/ops/**`)·Outbox 릴레이·자동 마감 배치·계산서(세금계산서)·판매자 송금은 제공하지 않는다.
-- 실제 은행 입금 확인·판매자 송금·환불 조정 완료·음수 잔액의 자동 이월/회수는 후속. PG 지급 보고를 실제 은행 입금으로 해석하지 않는다.
-- **G3 남음:** PG 비용 LIVE 확정(실제 가맹점 키·거래 키 대응 검증, 정상 LIVE 입력→비용 저장/SQL 집계·INSERT 경합/실패 롤백은 검증 공백), 환불 조정 완료, 판매자 순액 전체 연결은 미완료다. 현재는 PORTONE_TEST 비용 미확정을 유지한다.
+- 실제 은행 입금 확인·판매자 송금·청구·회수는 후속. 판매자 음수 월 순액은 마감 때 다음 마감으로 이월만 한다(R3.9). 플랫폼 잔여액 음수는 이월하지 않는다(R2.3). PG 지급 보고를 실제 은행 입금으로 해석하지 않는다.
+- **G3 남음:** PG 비용 LIVE 확정(실제 가맹점 키·거래 키 대응 검증, 정상 LIVE 입력→비용 저장/SQL 집계·INSERT 경합/실패 롤백은 검증 공백)은 미완료다. 현재는 PORTONE_TEST 비용 미확정을 유지한다.
 - 할인·쿠폰·복수 상품·다중 통화·판매자별 요율/계약·차지백·세무 회계, 마감 취소/재마감은 후속. 환불 후 재구매(P4)는 새 주문 = 새 원매출이고 환불 조정도 주문 단위라 Settlement 계약 변경이 없다([결정 89](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban)).

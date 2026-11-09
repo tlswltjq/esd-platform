@@ -27,6 +27,8 @@
 Payment 추적 통합은 실제 Micrometer/OpenTelemetry와 메모리 exporter로 접수/작업 스레드·부모·scope·HTTP client span을 대조한다. 별도 스케줄러 통합 검사는 처리 메서드를 직접 호출하지 않는다.
 `:e2e:tracingE2eTest`는 현재 공개 구매 API·실제 ZIP 다운로드와 Tempo의 span/parent 관계를 판정하며, 원래 콜백 기반 `TracePropagationE2eTest`를 대체한다. 일반 `e2eTest`에서는 tracing 태그를 제외한다.
 전용 실행 도구는 요청 저장 뒤 Payment 재시작·PG 응답 유실·결과 롤백·브로커 중단·Tempo 중단·추적 비활성·샘플링 0을 단계별로 주입한다. 필수 검사 0건·건너뜀은 통과로 판정하지 않는다.
+`verify-refund-tracing.py`는 검증 스택에서만 내보내기를 schedule-delay 1초·export timeout 5초·OTLP timeout 5초, max-batch-size = max-queue-size = 2048로 고정한다. 한 번 내보낼 때 큐가 모두 비워지고 큐가 차지 않는다는 조건에서 span 종료 뒤 내보내기 상한은 1+2×5=11초다(진행 중 내보내기 1회 + 자기 내보내기). 관찰은 업무 최종 상태·환불 Outbox 전부 SENT·브로커의 모든 consumer group lag 0(환불·복구 그룹 9개는 코드 상수에서 읽어 필수. `--list`·`--state`·오프셋 표가 일치하고 모두 Stable/Empty이며, 파티션 없는 행·해석 못 한 출력·stderr 경고가 없을 때만)을 확인한 뒤부터 센다. 소비자 여유 5초 + 11초 + Tempo 여유 2초 = 18초 안의 조회는 안정 횟수에 넣지 않고, 그 뒤 같은 span 집합이 연속 3회(기본 간격으로 최소 24초) 조회돼야 판정한다. BatchSpanProcessor의 drop 수는 볼 수 없다(Boot 3.5.6은 `SdkMeterProvider` 빈이 있을 때만 지표를 연결하는데 앱에 없다). 그래서 부모·필수 서비스·PG span이 아닌 말단 span이 버려지면 잡지 못한다.
+네 번째 시나리오 `restoration`은 흉내 서버 `arm-cancel` `FAILED`(취소 200 + `FAILED` 취소 행, 원결제 `PAID`·취소액 0)로 Payment 확정 실패를 만들고, 환불 `FAILED`·`failureNotice` `PAYMENT_NOT_CANCELLED`·보유권 원래 상태 복구·정산 환불 0을 확인한 뒤 `RefundExecutionFailed`·`LicenseRestorationRequested`·`LicenseRestored`까지 Outbox 7행이 환불 요청 trace에 있는지 판정한다. 이 시나리오의 필수 서비스는 gateway·order·license·payment이고 PG 취소 span은 정확히 1개다.
 범위·시나리오·실행 수는 [실험 E10](experiments.md#tempo), 조회 방법은 [실행 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
 
 ## 구조·보안 경계 검사 실행
@@ -49,6 +51,7 @@ python3 -B -m unittest discover -s tools/verification -p test_service_credential
 python3 -B -m unittest discover -s tools/verification -p test_boot_jars.py -v
 python3 -B -m unittest discover -s tools/verification -p test_ports.py -v   # 도구별 포트 간격·JAR 선택(결정 105)
 python3 -B -m unittest discover -s tools/verification -p test_portone_fake.py -v  # 로컬 PortOne V2 계약
+python3 -B -m unittest discover -s tools/verification -p test_refund_tracing.py -v  # 환불 Tempo 판정: 빈·일부 trace 거짓 통과 방지
 ./gradlew :common:test:test --no-daemon --max-workers=2          # Compose 배포 계약
 ./gradlew :apps:catalog:integrationTest --tests 'com.stove.catalog.*ServiceKey*IntegrationTest' \
   :apps:order:integrationTest --tests 'com.stove.order.*ServiceKey*IntegrationTest' --no-daemon --max-workers=2
@@ -61,8 +64,9 @@ python3 tools/verification/verify-gateway-ownership.py            # 실제 11개
 
 Studio·Review·Download·Catalog 통합 테스트는 `:infra:minio:jibDockerBuild`가 고정 MinIO/mc 소스로 만든 로컬 이미지를 쓴다. 이름은 루트 `build.gradle`의 `minioImageSelection`이 한 번만 정하고, 통합 테스트에 `STOVE_TEST_MINIO_IMAGE`로 넘긴다. `tools/verification/support/minio_image.py`도 같은 규칙을 따른다.
 
-- 빌드 이름은 `-Pstove.minio.image`, 없으면 `<registry>/minio:RELEASE.2025-04-22T22-12-26Z-local`(registry는 `-Pstove.jib.registry`·`STOVE_JIB_REGISTRY`, 기본 `stove`)이다. Compose·게시도 이 이름을 쓰며, 테스트 전용 변수는 이 이름을 바꾸지 않는다.
-- `STOVE_TEST_MINIO_IMAGE`가 고정 기본 이름 `stove/minio:…-local`인데 빌드 이름과 다르면(registry를 바꾼 경우), 빌드 이름으로 만든 뒤 `:infra:minio:tagTestImage`가 고정 이름을 붙인다. 이때는 재사용하지 않는다.
+- 빌드 이름은 `-Pstove.minio.image`, 없으면 `<registry>/minio:RELEASE.2025-04-22T22-12-26Z-local`(registry는 `-Pstove.jib.registry`·`STOVE_JIB_REGISTRY`, 기본 `localhost/stove`)이다. Compose·게시도 이 이름을 쓰며, 테스트 전용 변수는 이 이름을 바꾸지 않는다.
+- `STOVE_TEST_MINIO_IMAGE`가 고정 기본 이름 `localhost/stove/minio:…-local`인데 빌드 이름과 다르면(registry를 바꾼 경우), 빌드 이름으로 만든 뒤 `:infra:minio:tagTestImage`가 고정 이름을 붙인다. 이때는 재사용하지 않는다.
+- 예전 기본값 `stove/minio:…`처럼 Docker Hub의 `stove` 계정을 가리키는 이름은 받지 않고 거절한다([결정 135](decisions.md#local-image-registry)). 예전 이름의 이미지가 로컬에 있으면 `docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local`로 새 이름을 붙여 다시 쓸 수 있다(내용이 같다).
 - 로컬 이미지 재사용은 `jibDockerBuild`만 건너뛴다. 같은 실행에 게시(`jib`)·tar(`jibBuildTar`)가 있으면 소스 빌드를 한다.
 - 변수를 지정하지 않으면 지금처럼 빌드한다. 빈 Docker 환경에서도 이미지를 만든다.
 - `STOVE_TEST_MINIO_IMAGE`에 빌드 이름을 지정하면, 그 이미지가 로컬에 있을 때만 빌드를 건너뛴다. 없으면 빌드하며, registry에서 받지 않는다. `STOVE_MINIO_IMAGE`가 함께 있어도 같다.
@@ -70,8 +74,9 @@ Studio·Review·Download·Catalog 통합 테스트는 `:infra:minio:jibDockerBui
 - MinIO 빌드 입력(`infra/minio/**`, 빌더·기반 이미지, `STOVE_JIB_REGISTRY`)을 바꾼 브랜치에서는 재사용하지 않는다. 바뀌기 전 이미지를 검증하게 된다.
 
 ```bash
-STOVE_TEST_MINIO_IMAGE=stove/minio:RELEASE.2025-04-22T22-12-26Z-local ./gradlew :apps:review:integrationTest --console=plain
-python3 -B -m unittest discover -s tools/verification -p test_minio_image.py -v   # 이름 선택 규칙(Python 쪽)
+STOVE_TEST_MINIO_IMAGE=localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local ./gradlew :apps:review:integrationTest --console=plain
+python3 -B -m unittest discover -s tools/verification -p 'test_*image*.py' -v   # 이름 선택·Docker Hub 거절(Python 쪽)
+./gradlew :common:testcontainers:test :common:test:test --tests '*InfraContainersTest' --tests '*LocalImageRegistryContractTest'
 ```
 
 빌드 컨테이너(`compile.sh`)는 끝날 때 결과물·Go 캐시를 마운트 폴더의 주인에게 돌려준다. 컨테이너가 강제 종료(SIGKILL, `docker kill`)되면 돌려주지 못해 지울 수 없는 파일이 남을 수 있다. 다음 빌드가 끝나면 다시 돌려주지만, 그 전에 지워야 하면 다음처럼 주인을 바꾼다.
@@ -121,6 +126,10 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 
 ```bash
 python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
+python3 -B tools/verification/verify-refund-settlement.py --settlement-compose  # 같은 여정, Settlement만 docker-compose.apps.yml + docker-compose.settlement-portone.yml 컨테이너(host 네트워크). override 적용·설정 바인딩·원승인·취소 조회만 확인하고, 기본 bridge 네트워크와 Compose 내부 이름(mysql·kafka) 해석은 확인하지 않는다
+python3 -B tools/verification/verify-refund-tracing.py           # 로컬 fake PortOne + 격리 Tempo: 정상·응답 유실·PG 5xx·확정 실패 복구 환불의 trace 연결(끊기면 실패)
+python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제·30분 안 재진입 조합(결정 119·120)
+python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합·접수 전 PAY_PENDING 만료(31분 대기, 별도 야간 작업, 결정 120·126)
 ```
 
 CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 PR·main push마다 `./gradlew build`(L0~L5·과거 이행)를, 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`)을 돌린다. 공개 저장소라 self-hosted 러너를 쓰지 않고, 실제 PortOne 결제·환불과 비밀 값은 CI에 넣지 않는다.

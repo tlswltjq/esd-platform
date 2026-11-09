@@ -151,6 +151,61 @@ class LicenseMigrationIntegrationTest extends LicenseIntegrationTestBase {
         }
     }
 
+    @Test
+    void v12KeepsExistingRestorationAndCorrectionRowsAndAllowsRestoredAtBeforeTheOrderClock() {
+        MySQLContainer<? extends MySQLContainer<?>> mysql = SharedContainers.MYSQL;
+        String schema = "license_skew_" + UUID.randomUUID().toString().replace("-", "");
+        String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
+        JdbcTemplate root = new JdbcTemplate(new DriverManagerDataSource(server + mysql.getDatabaseName()
+                + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword()));
+        root.execute("CREATE DATABASE " + schema);
+        try {
+            DriverManagerDataSource source = new DriverManagerDataSource(server + schema + "?useSSL=false&allowPublicKeyRetrieval=true", "root", mysql.getPassword());
+            Flyway.configure().dataSource(source).locations(LOCATION).target("11").load().migrate();
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            PaidOrder order = paid();
+            String licenseId = UUID.randomUUID().toString();
+            insertV10(jdbc, licenseId, order);
+            Instant at = Instant.parse("2026-11-01T00:00:00.123456Z");
+            for (String suspension : List.of("old-restore", "old-correct", "skew-restore", "skew-correct")) insertSuspension(jdbc, suspension, licenseId, order, at);
+            insertRestoration(jdbc, "old-restore", licenseId, at, at.plusSeconds(1));
+            insertCorrection(jdbc, "old-correct", licenseId, at, at.plusSeconds(1));
+            // V11까지는 처리 시각(License 시계)이 요청 발생 시각(Order 시계)보다 앞서면 CHECK가 막는다.
+            assertThatThrownBy(() -> insertRestoration(jdbc, "skew-restore", licenseId, at.plusSeconds(5), at)).hasStackTraceContaining("chk_license_restoration_time");
+            assertThatThrownBy(() -> insertCorrection(jdbc, "skew-correct", licenseId, at.plusSeconds(5), at)).hasStackTraceContaining("chk_license_correction_time");
+            List<Map<String, Object>> restorations = jdbc.queryForList("SELECT * FROM license_restoration ORDER BY id");
+            List<Map<String, Object>> corrections = jdbc.queryForList("SELECT * FROM license_approval_correction ORDER BY request_event_id");
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).load();
+            flyway.migrate(); flyway.validate();
+            assertThat(jdbc.queryForList("SELECT * FROM license_restoration ORDER BY id")).isEqualTo(restorations);
+            assertThat(jdbc.queryForList("SELECT * FROM license_approval_correction ORDER BY request_event_id")).isEqualTo(corrections);
+            insertRestoration(jdbc, "skew-restore", licenseId, at.plusSeconds(5), at);
+            insertCorrection(jdbc, "skew-correct", licenseId, at.plusSeconds(5), at);
+            assertThat(jdbc.queryForObject("SELECT restored_at FROM license_restoration WHERE request_event_id='req-skew-restore'", Timestamp.class).toInstant()).isEqualTo(at);
+            assertThat(jdbc.queryForObject("SELECT request_occurred_at FROM license_approval_correction WHERE request_event_id='req-skew-correct'", Timestamp.class).toInstant()).isEqualTo(at.plusSeconds(5));
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.check_constraints WHERE constraint_schema=DATABASE() AND constraint_name IN ('chk_license_restoration_time','chk_license_correction_time')", Integer.class)).isZero();
+        } finally {
+            root.execute("DROP DATABASE " + schema);
+        }
+    }
+
+    private void insertSuspension(JdbcTemplate jdbc, String requestEventId, String licenseId, PaidOrder order, Instant at) {
+        jdbc.update("INSERT INTO license_suspension(request_event_id,request_occurred_at,refund_id,license_id,order_no,buyer_subject,product_id,product_code,payment_id,suspended_at,completed_event_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                requestEventId, Timestamp.from(at), UUID.randomUUID().toString(), licenseId, order.orderNo(), order.buyerSubject(), order.productId(), order.productCode(),
+                order.paymentId(), Timestamp.from(at), "done-" + requestEventId);
+    }
+
+    private void insertRestoration(JdbcTemplate jdbc, String suspension, String licenseId, Instant occurredAt, Instant restoredAt) {
+        jdbc.update("INSERT INTO license_restoration(request_event_id,request_fingerprint,request_occurred_at,refund_id,attempt_id,failure_event_id,license_id,suspension_request_event_id,completed_event_id,restored_at,returned_to_storage) VALUES(?,?,?,?,?,?,?,?,?,?,FALSE)",
+                "req-" + suspension, "fp-" + suspension, Timestamp.from(occurredAt), UUID.randomUUID().toString(), UUID.randomUUID().toString(), "failure-" + suspension,
+                licenseId, suspension, "restored-" + suspension, Timestamp.from(restoredAt));
+    }
+
+    private void insertCorrection(JdbcTemplate jdbc, String suspension, String licenseId, Instant occurredAt, Instant restoredAt) {
+        jdbc.update("INSERT INTO license_approval_correction(request_event_id,request_fingerprint,request_occurred_at,stop_request_id,suspension_request_event_id,license_id,completed_event_id,restored_at,returned_to_storage) VALUES(?,?,?,?,?,?,?,?,FALSE)",
+                "req-" + suspension, "fp-" + suspension, Timestamp.from(occurredAt), UUID.randomUUID().toString(), suspension, licenseId, "corrected-" + suspension, Timestamp.from(restoredAt));
+    }
+
     private void insertV9(JdbcTemplate jdbc, String licenseId, PaidOrder order, String status, String suspension) {
         jdbc.update("INSERT INTO product_license(license_id,buyer_subject,product_id,product_code,title,acquired_at,event_id,occurred_at,order_no,request_event_id,"
                         + "payment_result_event_id,payment_id,content_version,amount,currency,received_at,status,suspension_request_event_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

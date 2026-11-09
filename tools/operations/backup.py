@@ -25,8 +25,11 @@ from datetime import datetime, timezone
 SCHEMAS = ("stove_auth", "stove_studio", "stove_review", "stove_catalog", "stove_store",
            "stove_order", "stove_payment", "stove_license", "stove_settlement")
 # The official mysql image lacks mysqlbinlog; build this one with ./gradlew :infra:mysql-client:jibDockerBuild
-DEFAULT_MYSQL_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "stove/mysql-client:8.0-local")
-DEFAULT_MC_IMAGE = os.environ.get("STOVE_MINIO_IMAGE", "stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
+# Self-built images default to localhost/stove, which Docker never pulls from Docker Hub (decision 135).
+DEFAULT_MYSQL_IMAGE = os.environ.get("STOVE_MYSQL_CLIENT_IMAGE", "localhost/stove/mysql-client:8.0-local")
+DEFAULT_MC_IMAGE = os.environ.get("STOVE_MINIO_IMAGE", "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local")
+# Same rule as tools/verification/support/image_names.py; this tool runs on hosts without that package.
+DOCKER_HUB_HOSTS = {"docker.io", "index.docker.io", "registry-1.docker.io"}
 SOURCE_POSITION = re.compile(
     r"^-- CHANGE (?:REPLICATION SOURCE|MASTER) TO (?:SOURCE|MASTER)_LOG_FILE='([^']+)', "
     r"(?:SOURCE|MASTER)_LOG_POS=(\d+);", re.MULTILINE)
@@ -72,7 +75,25 @@ def binlog_sequence(names, first):
     return selected
 
 
+def docker_hub_stove(image):
+    """Whether Docker would pull this name from Docker Hub's `stove` namespace (someone else's account)."""
+    name = image.strip().split("@", 1)[0]
+    head, _, last = name.rpartition("/")
+    parts = ((head + "/" if head else "") + last.split(":", 1)[0]).split("/")
+    first = parts[0]
+    if len(parts) > 1 and ("." in first or ":" in first or first == "localhost"):
+        if first.lower() not in DOCKER_HUB_HOSTS:
+            return False
+        parts = parts[1:]
+    return len(parts) > 1 and parts[0] == "stove"
+
+
 def docker_client(image, network, mount, variables, interactive=False, entrypoint=None):
+    # Every client container receives database or storage credentials, so never run an image that could
+    # come from Docker Hub's `stove` namespace (decision 135).
+    if docker_hub_stove(image):
+        raise BackupError("Image " + image + " points at Docker Hub's stove account, which is not ours "
+                          "(decision 135). Use localhost/stove/... or our registry.")
     command = ["docker", "run", "--rm", "--network", network, "-v", str(mount) + ":/backup",
                "--user", str(os.getuid()) + ":" + str(os.getgid())]
     if interactive:

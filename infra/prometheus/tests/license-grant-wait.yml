@@ -1,0 +1,114 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+# 결정 125: 지급 확인 대기 10분 경계는 게이지가 적용한다. 0이면 조용하고, 1건 이상이면 바로 울리고, 0으로 돌아오면 풀린다.
+# 범위 확장: 같은 게이지가 status 라벨로 정지·복구·승인 중단 대기를 낸다. 경보는 같은 규칙으로 상태마다 따로 울리고 따로 풀린다.
+# status 라벨이 없는 옛 시계열(결정 125 배포)에도 같은 식으로 울린다.
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082",status="PENDING_LICENSE_GRANT"}'
+        values: '0 1 3 0'
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082",status="PENDING_LICENSE_SUSPENSION"}'
+        values: '0 0 2 2'
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082",status="PENDING_LICENSE_RESTORATION"}'
+        values: '0 0 0 1'
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082",status="PENDING_APPROVAL_STOP"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts:
+          - exp_labels:
+              application: order
+              instance: order:8082
+              status: PENDING_LICENSE_GRANT
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 PENDING_LICENSE_GRANT 대기에서 10분 넘게 다음 License 이벤트를 기다린다"
+              description: >-
+                3건이 PENDING_LICENSE_GRANT에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+                (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+                PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+          - exp_labels:
+              application: order
+              instance: order:8082
+              status: PENDING_LICENSE_SUSPENSION
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 PENDING_LICENSE_SUSPENSION 대기에서 10분 넘게 다음 License 이벤트를 기다린다"
+              description: >-
+                2건이 PENDING_LICENSE_SUSPENSION에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+                (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+                PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_SUSPENSION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+      - eval_time: 3m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts:
+          - exp_labels:
+              application: order
+              instance: order:8082
+              status: PENDING_LICENSE_SUSPENSION
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 PENDING_LICENSE_SUSPENSION 대기에서 10분 넘게 다음 License 이벤트를 기다린다"
+              description: >-
+                2건이 PENDING_LICENSE_SUSPENSION에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+                (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+                PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_SUSPENSION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+          - exp_labels:
+              application: order
+              instance: order:8082
+              status: PENDING_LICENSE_RESTORATION
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 PENDING_LICENSE_RESTORATION 대기에서 10분 넘게 다음 License 이벤트를 기다린다"
+              description: >-
+                1건이 PENDING_LICENSE_RESTORATION에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+                (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+                PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_RESTORATION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+
+  # 옛 배포의 status 라벨 없는 시계열도 같은 식으로 울린다(이름·식 호환).
+  - interval: 1m
+    input_series:
+      - series: 'stove_order_refund_license_grant_delayed{application="order",instance="order:8082"}'
+        values: '0 1 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts:
+          - exp_labels:
+              application: order
+              instance: order:8082
+              severity: warning
+            exp_annotations:
+              summary: "order: 환불이 PENDING_LICENSE_GRANT 대기에서 10분 넘게 다음 License 이벤트를 기다린다"
+              description: >-
+                1건이 PENDING_LICENSE_GRANT에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+                (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+                PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+                GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+      - eval_time: 2m
+        alertname: RefundLicenseGrantsDelayed
+        exp_alerts: []

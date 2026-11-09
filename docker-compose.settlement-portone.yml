@@ -1,0 +1,16 @@
+# Opt-in override: Settlement reads PortOne TEST original approvals and cancellations (decision 111).
+# Never put credential values in this file. Every value is injected from the caller's environment.
+#
+#   docker compose -f docker-compose.apps.yml -f docker-compose.settlement-portone.yml up -d settlement
+#
+# Without this file Settlement keeps the SIMULATED provider (mock-pg). In this mode new
+# /pg-receipts collection answers 503; TossPay statement collection stays off (SETTLEMENT_TOSSPAY_ENABLED).
+# SETTLEMENT_PORTONE_API_SECRET is Settlement's own read secret, not Payment's PORTONE_API_SECRET.
+services:
+  settlement:
+    environment:
+      SETTLEMENT_PG_PROVIDER: PORTONE_TEST
+      PORTONE_API_BASE_URL: ${SETTLEMENT_PORTONE_API_BASE_URL:?SETTLEMENT_PORTONE_API_BASE_URL is required}
+      PORTONE_API_SECRET: ${SETTLEMENT_PORTONE_API_SECRET:?SETTLEMENT_PORTONE_API_SECRET is required}
+      PORTONE_STORE_ID: ${PORTONE_STORE_ID:?PORTONE_STORE_ID is required}
+      PORTONE_CHANNEL_KEY: ${PORTONE_CHANNEL_KEY:?PORTONE_CHANNEL_KEY is required}

@@ -19,6 +19,7 @@ import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.test.OpenApiSnapshot;
+import com.stove.payment.core.domain.ApprovalObservation;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.OrderExpiryInput;
 import com.stove.payment.core.service.ApplyOrderExpiry;
@@ -55,12 +56,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -217,13 +220,82 @@ class PaymentApprovalIntegrationTest {
         assertThat(BODIES).hasSize(2); assertThat(BODIES.get(0)).isEqualTo(BODIES.get(1)); assertThat(KEYS.get(0)).isEqualTo(KEYS.get(1));
         assertThat(row(command).getFirstPreparedAt()).isEqualTo(original); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID);
     }
+    /** Decision 124: at the exact 3-hour boundary a READY approval stops posts and is held, and a late PAID still completes the order. */
     @Test void theExactThreeHourBoundaryStopsPostsButContinuesLookupAndAcceptsLateSuccess() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
-        TIME.set(row(command).getFirstPreparedAt().plusSeconds(10800)); int before=GETS.get(); worker.execute(command);
-        assertThat(BODIES).hasSize(1); assertThat(GETS.get()).isGreaterThan(before); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
-        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);
+        TIME.set(window); int before=GETS.get(); worker.execute(command);
+        assertThat(BODIES).hasSize(1); assertThat(GETS.get()).isGreaterThan(before);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(held.getReviewStartedAt()).isEqualTo(window);
+        assertThat(held.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY); assertThat(held.getAdmittedAt()).isNotNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(countOutbox()).isZero();
         STATES.put(payment.getPaymentId(),"PAID"); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1); assertThat(BODIES).hasSize(1);
+    }
+    /**
+     * D-051: a held admitted approval whose payment the payment resolver (pending scheduler or webhook recheck) confirms
+     * PAID must close in that same commit. Expected: the approval is SUCCEEDED, so neither customer read shows a held
+     * notice and the ADMIN hold list and gauge (both select REVIEW_REQUIRED) no longer count it. Actual before the fix: the
+     * approval stays REVIEW_REQUIRED with its old READY observation until the next held lookup (up to 10 minutes, decision
+     * 122), and the customer of a PAID, completed order reads NOT_CHARGED ("새 주문으로 다시 구매하실 수 있습니다").
+     * Impact: a duplicate purchase invitation (decision 123) after the money was taken.
+     */
+    @Test
+    @DisplayName("[D-051] 접수된 보류 승인의 결제가 PAID로 확정되면 같은 커밋에서 승인도 닫혀 보류 안내·게이지·목록에 남지 않는다")
+    void aHeldAdmittedApprovalClosesInThePaidPaymentCommitSoNoStaleHeldNoticeRemains() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        TIME.set(row(command).getFirstPreparedAt().plusSeconds(10800)); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(held.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
+        assertThat(paymentDetail(payment).path("reviewNotice").path("code").asText()).isEqualTo("NOT_CHARGED");
+        STATES.put(payment.getPaymentId(),"PAID"); advance(5);
+        resolve.execute(payment.getPaymentId());
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(countOutbox()).isEqualTo(1);
+        PaymentApproval closed=row(command);
+        assertThat(closed.getStatus()).as("approval status right after the PAID commit").isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(closed.getNextAt()).isNull(); assertThat(closed.getProtectedPayload()).isNull();
+        assertThat(paymentDetail(payment).path("reviewNotice").isNull()).isTrue();
+        assertThat(approvalDetail(payment,command).path("reviewNotice").isNull()).isTrue();
+        assertThat(approvals.findReviews(PageRequest.of(0,1000)).map(PaymentApproval::getApprovalId).getContent()).doesNotContain(command);
+        int gets=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(gets); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.SUCCEEDED);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isEqualTo(1);
+    }
+    /**
+     * Decision 124 (and the decision 120 correction): an admitted approval whose PG stays PAY_PENDING is only looked up before
+     * the 3-hour window ends, is held with CONFIRM_WINDOW_EXPIRED right after the first lookup at the window, and a late
+     * FAILED still closes the original order without a new key, a new payment or a financial failure invented by time.
+     */
+    @Test void anAdmittedPayPendingApprovalPastTheConfirmWindowIsHeldAndALateFailureClosesTheOriginalOrder() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        Instant window=row(command).getFirstPreparedAt().plusSeconds(10800);
+        // The last lookup before the window (its 5 s retry lands exactly on the window) stays an unheld admitted approval.
+        TIME.set(window.minusSeconds(5)); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        assertThat(row(command).getNextAt()).isEqualTo(window);
+        assertThat(row(command).getReviewStartedAt()).isNull(); assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        TIME.set(window); before=GETS.get(); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(GETS.get()).isEqualTo(before+1);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(held.getReviewStartedAt()).isEqualTo(window);
+        assertThat(held.isPostStopped()).isTrue(); assertThat(held.getNextAt()).isEqualTo(window.plusSeconds(5));
+        assertThat(held.getProtectedPayload()).isNotNull(); assertThat(held.getFailedAt()).isNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero(); assertThat(CLOSURES).isEmpty();
+        assertThat(submit(payment,id()).status()).isEqualTo(409);
+        STATES.put(payment.getPaymentId(),"FAILED"); advance(5); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.FAILED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED");
+        assertThat(CLOSURES.get(command).path("orderStatus").asText()).isEqualTo("EXPIRED");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(BODIES).hasSize(1); assertThat(countOutbox()).isZero();
     }
     @Test void aLostOrderReceiptIsReplayedAfterTheDeadlineAndPreservesTheOriginalAdmission() {
         Payment payment=purchase(); String command=id(); submit(payment,command); LOSE_ORDER.set(true); worker.execute(command);
@@ -254,6 +326,32 @@ class PaymentApprovalIntegrationTest {
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED); assertThat(BODIES).hasSize(1);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(countOutbox()).isZero();
         assertThat(submit(payment,id()).status()).isEqualTo(409);
+    }
+    /** Decision 122: a held approval is looked up again after min(10 min, max(5 s, time held)); a legacy hold uses the cap. */
+    @Test void aHeldApprovalIsLookedUpLessOftenTheLongerItHasBeenHeld() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); REJECT.set(true); worker.execute(command);
+        Instant held=row(command).getReviewStartedAt();
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(5));
+        TIME.set(held.plusSeconds(60)); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isGreaterThan(before); assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(120));
+        TIME.set(held.plusSeconds(119)); before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(120));
+        TIME.set(held.plusSeconds(3600)); worker.execute(command);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(3600+600));
+        jdbc.update("UPDATE payment_approval SET review_started_at=NULL WHERE approval_id=?",command);
+        TIME.set(held.plusSeconds(4200)); worker.execute(command);
+        assertThat(row(command).getNextAt()).isEqualTo(held.plusSeconds(4200+600));
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED); assertThat(BODIES).hasSize(1);
+    }
+    /** Decision 122 leaves PAYMENT_RETRY_MS alone: an approval that is not held keeps the 5 s lookup however long it waits. */
+    @Test void anUnheldApprovalKeepsTheGeneralRetryDelayHoweverLongItWaits() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        assertThat(row(command).getNextAt()).isEqualTo(TIME.get().plusSeconds(5));
+        PG_DOWN.set(true); TIME.set(TIME.get().plusSeconds(3600)); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED); assertThat(row(command).getReviewStartedAt()).isNull();
+        assertThat(row(command).getNextAt()).isEqualTo(TIME.get().plusSeconds(5));
     }
 
     @Test void aPlatformRestrictionWaitsWithoutPostingAndResumesTheSameUnexpiredApprovalAfterRelease() {
@@ -345,7 +443,7 @@ class PaymentApprovalIntegrationTest {
     }
     @Test void anOrderExpiryReceiptClosesAQueuedUnadmittedApprovalWithoutPgTraffic() {
         Payment payment=purchase(); String command=id(); submit(payment,command); recordExpiry(payment);
-        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED); assertThat(row(command).getLatestPgState()).isNull();
         int before=GETS.get(); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
         assertThat(row(command).getProtectedPayload()).isNull(); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
@@ -372,7 +470,10 @@ class PaymentApprovalIntegrationTest {
         WRONG_AMOUNT.set(false); TIME.set(payment.getOrderOccurredAt().plusSeconds(1801)); worker.execute(command);
         assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        // Held for about 30 minutes, the next lookup comes 10 minutes later (decision 122), not after the 5 s retry delay.
         recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        advance(595); worker.execute(command);
         PaymentApproval closed=row(command); Instant resolvedAt=closed.getResolvedAt();
         assertThat(closed.getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
         assertThat(closed.getAdmittedAt()).isNull(); assertThat(closed.getFirstPreparedAt()).isNull();
@@ -444,6 +545,64 @@ class PaymentApprovalIntegrationTest {
         assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(GETS.get()).isGreaterThan(before);
         assertThat(row(command).getProtectedPayload()).isNotNull(); assertThat(BODIES).isEmpty(); assertThat(countOutbox()).isZero();
     }
+    /**
+     * [D-044] Regression (decision 126): a purchase the PG approved without our order admission stays held as
+     * PAID_WITHOUT_ADMISSION (decision 114), even when the order expired while the PG still showed PAY_PENDING. Before the
+     * fix the expiry branch closed the approval and the payment as EXPIRED without looking up the PG, so the later PAID was
+     * never seen and money stayed taken for an expired order with no hold, gauge or alert.
+     */
+    @Test
+    @DisplayName("[D-044] 접수 전 PAY_PENDING 뒤 주문이 만료되고 PG가 PAID가 되면 PAID_WITHOUT_ADMISSION 보류로 남는다")
+    void aPaidProviderPaymentAfterAnUnadmittedPendingExpiryIsHeldAsPaidWithoutAdmission() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED);
+        assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING); assertThat(row(command).getAdmittedAt()).isNull();
+        recordExpiry(payment); STATES.put(payment.getPaymentId(),"PAID"); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(GETS.get()).isGreaterThan(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    /** [D-044] Decision 126: an unadmitted approval that saw PAY_PENDING and still sees it after the order expiry is held, not closed. */
+    @Test
+    @DisplayName("[D-044] 접수 전 PAY_PENDING 관측 건이 만료 뒤에도 PENDING이면 PG_PENDING_AT_ORDER_EXPIRY 보류로 올린다")
+    void anUnadmittedPendingObservationStillPendingAtOrderExpiryIsHeld() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        assertThat(row(command).getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        PaymentApproval held=row(command);
+        assertThat(held.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(held.getLastErrorCode()).isEqualTo("PG_PENDING_AT_ORDER_EXPIRY");
+        assertThat(held.getReviewStartedAt()).isNotNull(); assertThat(held.getAdmittedAt()).isNull();
+        assertThat(held.getProtectedPayload()).isNotNull(); assertThat(held.getNextAt()).isNotNull();
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+        // The hold keeps looking up the PG (decision 122): a later PAID becomes the money-taken hold, not a silent close.
+        STATES.put(payment.getPaymentId(),"PAID"); advance(600); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(row(command).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.PENDING); assertThat(BODIES).isEmpty();
+    }
+    /** [D-044] Decision 126: a still-unadmitted approval whose PG turned READY again closes as before, after one lookup. */
+    @Test void anUnadmittedPendingObservationThatIsReadyAtOrderExpiryClosesAfterOneLookup() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); STATES.put(payment.getPaymentId(),"PAY_PENDING");
+        worker.execute(command);
+        recordExpiry(payment); STATES.put(payment.getPaymentId(),"READY"); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(row(command).getProtectedPayload()).isNull(); assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(GETS.get()).isEqualTo(before+1); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
+    /** [D-044] Decision 126 keeps R11.5 for approvals with no valid PG observation: a failed lookup alone is not an observation. */
+    @Test void anUnadmittedApprovalWithOnlyAFailedLookupStillClosesOnOrderExpiryWithoutPgTraffic() {
+        Payment payment=purchase(); String command=id(); submit(payment,command); PG_DOWN.set(true); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.REQUESTED); assertThat(row(command).getLatestPgState()).isNull();
+        PG_DOWN.set(false); recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
+        assertThat(row(command).getStatus()).isEqualTo(PaymentApprovalStatus.EXPIRED);
+        assertThat(stored(payment).getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        assertThat(GETS.get()).isEqualTo(before); assertThat(BODIES).isEmpty(); assertThat(RECEIPTS).isEmpty(); assertThat(countOutbox()).isZero();
+    }
     @Test void aConflictingExpiryAndAdmissionStopFurtherPostsWhileLookupContinues() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);
         recordExpiry(payment); advance(5); int before=GETS.get(); worker.execute(command);
@@ -475,6 +634,14 @@ class PaymentApprovalIntegrationTest {
     private String member(Payment payment) { return PaymentIntegrationTestBase.token(payment.getBuyerSubject(),"MEMBER"); }
     private Map<String,String> body(Payment payment,String command) { return Map.of("requestId",command,"txId",ATTEMPTS.get(payment.getPaymentId()),"paymentToken","private-token"); }
     private Reply submit(Payment payment,String command) { return http("POST",path(payment),body(payment,command),member(payment)); }
+    private JsonNode paymentDetail(Payment payment) {
+        Reply read=http("GET","/api/v1/payments/"+payment.getOrderNo(),null,member(payment));
+        assertThat(read.status()).isEqualTo(200); return read.body().path("data");
+    }
+    private JsonNode approvalDetail(Payment payment,String command) {
+        Reply read=http("GET",path(payment)+"/"+command,null,member(payment));
+        assertThat(read.status()).isEqualTo(200); return read.body().path("data");
+    }
     private Reply http(String method,String path,Map<String,String> body,String token) {
         RestClient.RequestBodySpec request=RestClient.create("http://127.0.0.1:"+port).method(HttpMethod.valueOf(method)).uri(path);
         if(token!=null)request.header("Authorization","Bearer "+token); if(body!=null)request.contentType(MediaType.APPLICATION_JSON).body(body);

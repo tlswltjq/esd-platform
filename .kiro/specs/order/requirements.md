@@ -12,7 +12,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 - **buyerSubject**: 구매자 식별자. 검증된 Auth JWT의 sub다. 본문·쿼리·헤더로 선택하지 않는다.
 - **requestId**: 클라이언트 UUID 요청 식별자. `(buyerSubject, requestId)` 조합에 유일 제약을 둔다.
 - **스냅샷**: 주문 시점에 고정한 productId·productCode·title·contentVersion·listAmount·discountAmount·amount·currency.
-- **고정 기한(expiresAt)**: 최초 생성 시각 + 30분. 재진입·재시도·요청 재전송으로 연장하지 않는다.
+- **고정 기한(expiresAt)**: 최초 생성 시각 + 30분. 저장하지 않고 `createdAt`에서 매번 계산한다. 재진입·재시도·요청 재전송으로 연장하지 않는다.
 - **승인 진행 확정**: 서버가 주문 상태·기한·금액을 검사해 `PAYMENT_PROCESSING`으로 기록하는 내부 접수. 실제 PG 송신·성공의 근거가 아니다.
 - **publicDetailAllowed**: Catalog 정본이 전달하는 공개 상세 허용 근거. 최종 listed=false이면 false다.
 
@@ -92,8 +92,8 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 #### 수용 기준
 1. WHEN `POST /api/v1/orders/{orderNo}/refund` 요청이 오면 THEN 시스템 SHALL MEMBER 본인의 서버 원금 전액 환불을 접수하고 신규/진행 중은 202, 기존 최종 결과는 200을 반환한다.
 2. WHEN `GET /api/v1/orders/{orderNo}/refund` 요청이 오면 THEN 시스템 SHALL 본인 환불 상태·첫 접수·완료 시각·반려 사유를 제공한다.
-3. THE 환불 고객 상태 SHALL `PENDING_REVIEW`·`PROCESSING`·`COMPLETED`·`FAILED`·`REJECTED` 중 하나다. `FAILED`는 검증된 PG 실패와 실제 복구 완료 뒤에만, `REJECTED`는 고객에게 보이는 `rejectionReason`과 함께 표시한다.
-4. WHEN 최초 내구 접수 시각이 Payment 최초 결제 결과 시각(`resultOccurredAt`)부터 4시간 이내(정확히 4시간 포함, 마이크로초 정밀도)면 THEN 시스템 SHALL 자동 허용하고, 초과하면 관리자 심사(`PENDING_REVIEW`)로 넘긴다. 이후 처리 지연·자동 재개·재시도·재심사·명시적 재시도로 첫 접수 시각과 자격을 현재 시각 기준으로 다시 판정하지 않는다.
+3. THE 환불 고객 상태 SHALL `PENDING_REVIEW`·`PROCESSING`·`COMPLETED`·`FAILED`·`REJECTED` 중 하나다. `FAILED`는 검증된 PG 실패와 실제 복구 완료 뒤에만, `REJECTED`는 고객에게 보이는 `rejectionReason`과 함께 표시한다. `FAILED`에는 고객용 실패 사유 `failureNotice`(code·message)를 함께 보인다. code는 현재 시도에 저장된 실패 코드에서 옮기고(`PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`), message는 "다시 신청하면 환불됩니다" 안내다. 내부 코드·PG 오류 원문은 보이지 않고, 옮길 수 없는 저장 코드는 추측하지 않고 409다. 그 외 상태는 null이며 알림은 보내지 않는다([결정 134](../../../docs/decisions.md#refund-failure-customer-notice)·[98](../../../docs/decisions.md#storage-return-no-notification)).
+4. WHEN 최초 접수의 요청 수신 시각(주문 행 잠금 전 Order 서버 시각, 처음 저장한 값)이 Payment 최초 결제 결과 시각(`resultOccurredAt`)부터 4시간 이내(정확히 4시간 포함, 마이크로초 정밀도, 서비스 간 시계 차이로 결과 시각보다 이른 수신 포함)면 THEN 시스템 SHALL 자동 허용하고, 초과하면 관리자 심사(`PENDING_REVIEW`)로 넘긴다. 이후 처리 지연·자동 재개·재시도·재심사·명시적 재시도로 첫 접수 시각과 자격을 현재 시각 기준으로 다시 판정하지 않는다.
 5. WHEN 같은 주문에 접수가 반복·동시에 오면 THEN 시스템 SHALL 주문 행 비관적 잠금과 Refund 주문번호 유일 제약으로 환불 한 건만 만들고 기존 refundId·첫 접수 시각을 반환한다. 외부 호출을 기다리며 잠금을 보유하지 않는다.
 6. WHEN `GET /api/v1/admin/refunds`(기본 PENDING_REVIEW)·`GET /api/v1/admin/refunds/{refundId}` 요청이 오면 THEN 시스템 SHALL `ADMIN`의 상태별 목록·원구매·처리 상태·최초 판정 상세를 제공한다.
 7. WHEN `POST /api/v1/admin/refunds/{refundId}/decision`이 `requestId`·`APPROVED`/`REJECTED`·사유로 오면 THEN 시스템 SHALL JWT sub를 판정자로 기록하고, 먼저 커밋된 판정을 확정한다. 같은 명령·판정자·내용만 최초 영수증으로 재전송 처리하고 판정 변경·다른 명령은 409다.
@@ -124,6 +124,12 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 5. WHEN ADMIN이 `POST /api/v1/admin/refunds/{refundId}/approval-stops`(requestId·현재 승인 reviewId·필수 사유)를 보내면 THEN 시스템 SHALL Order가 `RefundExecutionRequested`를 저장하기 전에만 202 최초 영수증으로 접수(`PENDING_APPROVAL_STOP`)하고, 실행 요청이 먼저 저장됐으면 PG 송신 전이어도 409로 거절한다. 중단과 정지 완료는 같은 주문 잠금으로 순서를 정한다.
 6. WHEN 승인 중단이 접수되면 THEN 시스템 SHALL 정지 요청 전이면 바로, 정지 요청 뒤면 실제 정지 완료와 그 정지의 승인 정정 복구(`LicenseApprovalCorrectionRequested`→`LicenseApprovalCorrected`) 완료 뒤 같은 환불의 관리자 정정 회차로 복귀한다. 늦은 정지 완료는 PG 실행 요청이 아니라 정정 복구로 연결하며, 복구 완료 전에는 새 판정을 받지 않고 과거 승인·중단·최초 접수/자격을 보존한다.
 7. WHEN 검증된 `RefundExecutionPrepared`(최초 준비 시각·원래 3시간 경계)를 받으면 THEN 시스템 SHALL 근거와 Inbox를 원자 저장하고, 현재 시도가 금융 미확정인 동안 그 경계부터 고객 조회에 `processingNotice`(code·message·since)를 제공한다. 준비 근거가 없으면 접수 시각으로 추정하지 않고 null이며, 완료·실패/복구·새 시도에서는 오래된 안내를 내지 않는다. 고객 조회는 Payment HTTP를 호출하지 않는다.
+8. WHEN 환불이 `PENDING_LICENSE_GRANT`에 들어가면(자동 허용 접수, 최초 승인, 재심사·정정 회차 승인) THEN 시스템 SHALL 그 시각을 `licenseGrantWaitStartedAt`으로 저장하고, 다시 들어가면 새 시각으로 바꾼다. 대기를 벗어나도 운영 조회용으로 남긴다. ADMIN 환불 목록·상세는 이 시각을 보인다([결정 125](../../../docs/decisions.md#license-grant-wait-detection)).
+9. WHILE 환불이 `PENDING_LICENSE_GRANT`이고 진입 시각 + `stove.order.refund.license-grant-delay`(기본 10분, 경계 포함)가 지났으면 THE 시스템 SHALL 게이지 `stove.order.refund.license.grant.delayed`에 세고, 고객 조회에 `processingNotice`(code `LICENSE_GRANT_CONFIRMATION_DELAYED`·message·since=경계 시각)를 제공한다. 고객 상태는 `PROCESSING` 그대로이며, 지급 확인이 반영되면 집계·안내에서 빠진다. 재처리는 결정 37 절차(LicenseGranted DEAD 재큐잉·DLT 재투입)로 하고 새 이벤트를 만들지 않는다.
+10. WHEN 원본이 Kafka에서 사라져 ADMIN이 Outbox 운영 API(`POST /api/v1/ops/outbox/{eventId}/republish`, 필수 사유 1~500자)로 `SENT` `OrderPaid`를 재발행하면 THEN 시스템 SHALL 원래 `event_id`·본문·키를 그대로 둔 채 발행 대기로 돌리고 실행자·시각·사유·이전 발행 시각을 `outbox_republish`에 같은 트랜잭션으로 남긴다. 없는 행·`SENT`가 아닌 행은 404, 허용 목록 밖 타입·사유 없음은 400으로 거절한다. License가 같은 ID로 재발행한 `LicenseGranted`가 미처리면 `PENDING_LICENSE_GRANT`를 기존 정지 요청으로 잇고, 이미 처리됐으면 효과가 없다([결정 129](../../../docs/decisions.md#orphan-license-grant-republish)).
+11. WHEN 환불이 `PENDING_LICENSE_SUSPENSION`(지급 확인 — 자동 접수·심사 승인·재심사 승인 때 지급 근거가 이미 있는 경우 포함 — 또는 명시적 재시도), `PENDING_LICENSE_RESTORATION`(검증된 PG 실패 확정), `PENDING_APPROVAL_STOP`(승인 중단)에 들어가면 THEN 시스템 SHALL 그 시각을 상태별로 `licenseSuspensionWaitStartedAt`·`licenseRestorationWaitStartedAt`·`approvalStopWaitStartedAt`에 저장하고, 다시 들어가면 새 시각으로 바꾸며, 벗어나도 운영 조회용으로 남긴다. ADMIN 환불 목록·상세는 세 시각을 보인다([결정 125](../../../docs/decisions.md#license-grant-wait-detection) 범위 확장).
+12. WHILE 환불이 위 세 상태 중 하나이고 그 상태의 진입 시각 + `stove.order.refund.license-grant-delay`(R8.9와 같은 경계)가 지났으면 THE 시스템 SHALL 결정 125 게이지 `stove.order.refund.license.grant.delayed`의 `status` 라벨(`PENDING_LICENSE_GRANT`·`PENDING_LICENSE_SUSPENSION`·`PENDING_LICENSE_RESTORATION`·`PENDING_APPROVAL_STOP`)별로 세고, 고객 조회에 같은 모양의 `processingNotice`(code `LICENSE_SUSPENSION_CONFIRMATION_DELAYED`·`LICENSE_RESTORATION_CONFIRMATION_DELAYED`·`APPROVAL_STOP_CONFIRMATION_DELAYED`, since=경계 시각)를 제공한다. 복구 대기 문구는 PG 실패가 확정돼 돈이 돌아가지 않았고 이용권이 돌아오면 다시 신청할 수 있다는 사실을 알린다. 경보 `RefundLicenseGrantsDelayed`는 식을 바꾸지 않고 상태별 시계열마다 울린다.
+13. WHEN ADMIN이 Order에서 `SENT` `LicenseSuspensionRequested`·`LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested`를 재발행하면 THEN 시스템 SHALL R8.10과 같이 처리한다. Order는 자기가 소유한 이벤트(`OrderPaid`와 이 세 요청)만 재발행하고 License 소유 타입의 행은 400으로 거절한다. License가 같은 ID로 재발행한 `LicenseSuspended`가 미처리면 `PENDING_LICENSE_SUSPENSION`을 PG 실행 요청으로, `LicenseRestored`는 `PENDING_LICENSE_RESTORATION`을 `FAILED`로, `LicenseApprovalCorrected`는 `PENDING_APPROVAL_STOP`을 정정 회차로 잇고, 이미 처리됐으면 Inbox에서 효과가 없다([결정 129](../../../docs/decisions.md#orphan-license-grant-republish) 범위 확장).
 
 ### R9. 환불 금액 상세
 **사용자 스토리:** 구매자·운영자로서, 주문 금액과 확인된 반환 구성을 한 응답에서 보고 싶다.
@@ -136,6 +142,6 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 ## 범위 밖(후속)
 
 - 장바구니·복수 상품·수량 선택·선물·쿠폰·할인 조합·다중 통화·무료 상품 지급.
-- 지급 확인 누락의 근거 기반 복구(G2 P3는 License 측 이벤트 복구로 완료, Order 측 연계 확장은 후속).
+- 지급 확인 누락의 근거 기반 복구(G2 P3는 License 측 이벤트 복구로 완료, Order 측은 감지·안내만 R8.8~9). 원본 이벤트가 남아 있지 않은 `PENDING_LICENSE_GRANT`의 종결은 후속 결정.
 - 환불 조사 이후 조치·종결 기준(조사 기록과 금융/이용권 조치·종결의 구분), 실제 ADMIN 계정·운영 화면의 수동 심사·재심사·승인 중단 전체 여정.
 - 부분 환불·다중 PG·조사 종결/담당 배정 등 운영·성능 고도화.

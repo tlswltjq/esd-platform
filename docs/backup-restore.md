@@ -23,10 +23,17 @@ MinIO도 같은 이유로 연속 미러를 쓴다. DB를 장애 직전까지 되
 `tools/operations/backup.py`. 클라이언트는 서버와 같은 버전의 컨테이너에서 실행한다. 공식 `mysql:8.0` 이미지에는 `mysqlbinlog`가 없으므로 같은 버전을 더한 이미지를 먼저 만든다.
 
 ```bash
-./gradlew :infra:mysql-client:jibDockerBuild   # stove/mysql-client:8.0-local
+./gradlew :infra:mysql-client:jibDockerBuild   # localhost/stove/mysql-client:8.0-local
 ```
 
 비밀값은 환경 변수로만 받고 컨테이너에는 이름으로만 전달한다. 명령 인자와 파일에 남지 않는다.
+
+클라이언트 컨테이너는 DB 비밀번호·스토리지 키와 백업 폴더를 받으므로, Docker Hub의 다른 사람 계정(`stove`)을 가리키는 이미지 이름은 실행 전에 거절한다([결정 135](decisions.md#local-image-registry)). 로컬에 이미지가 있어도 이름만으로 판단한다. 예전 이름(`stove/mysql-client:8.0-local`, `stove/minio:…`)이 `--image`·`STOVE_MYSQL_CLIENT_IMAGE`·`STOVE_MINIO_IMAGE`에 남아 있으면 지우거나 새 이름으로 바꾼다. 예전 이름의 이미지만 있으면 다시 빌드하지 않고 새 이름을 붙여 쓸 수 있다(내용이 같다).
+
+```bash
+docker tag stove/mysql-client:8.0-local localhost/stove/mysql-client:8.0-local
+docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local
+```
 
 | 명령 | 환경 변수 | 하는 일 |
 |---|---|---|
@@ -62,7 +69,7 @@ MinIO도 같은 이유로 연속 미러를 쓴다. DB를 장애 직전까지 되
 5. 같은 배포 비밀값으로 앱을 시작한다. 결제 암호화 키가 다르면 암호화된 승인 접수 자료를 읽지 못한다.
 6. 확인: 서비스 상태, 테이블 행 수, 다운로드, 진행 중이던 결제의 재개.
 
-**마지막으로 복사된 변경 이후는 잃는다.** 복사 지연(보통 수 초) 사이에 커밋된 결제·지급은 외부 PG와 Kafka에는 있는데 DB에는 없을 수 있다. 복구 직후 PG 거래 조회와 정산의 거래 대사로 우리 기록에 없는 승인을 찾는다. Kafka는 이번 장애 범위에서 살아 있다고 가정한다. 소비 위치가 DB 밖에 있어 그대로 이어진다.
+**마지막으로 복사된 변경 이후는 잃는다.** 복사 지연(보통 수 초) 사이에 커밋된 결제·지급은 외부 PG와 Kafka에는 있는데 DB에는 없을 수 있다. 복구 직후 PG 거래 조회와 정산의 거래 대사로 우리 기록에 없는 승인을 찾는다. Kafka는 이번 장애 범위에서 살아 있다고 가정한다. 소비 위치가 DB 밖에 있어 그대로 이어진다. 이 가정은 저장소 구성이 보장하지 않는다. 기본 Compose의 Kafka는 단일 브로커(복제 계수 1)이고 데이터 볼륨이 없으며, 토픽 보존 설정이 없어 브로커 기본값 7일을 따른다([R9](architecture.md#r9)).
 
 ## 격리 연습 (2026-11-06)
 
@@ -88,7 +95,7 @@ MinIO도 같은 이유로 연속 미러를 쓴다. DB를 장애 직전까지 되
 
 ## 검증하지 않은 것
 
-- Kafka까지 함께 잃는 경우. 이미 보낸(SENT) 이벤트를 소비 전에 잃으면 Outbox 재큐잉 대상이 아니다. 운영 Kafka의 복제 설정이 먼저다.
+- Kafka까지 함께 잃는 경우. 이미 보낸(SENT) 이벤트를 소비 전에 잃으면 Outbox 재큐잉 대상이 아니다. 같은 ID 재발행([결정 129](decisions.md#orphan-license-grant-republish), [절차](license-event-recovery-runbook.md))은 Order·License가 소유한 정해진 타입에만 있다. 운영 Kafka의 복제 설정이 먼저다.
 - 덤프 이전의 특정 시점으로 되돌리기(잘못된 대량 변경 취소). 외부 PG·Kafka와 어긋나므로 별도 절차가 필요하다.
 - GTID를 켠 서버, 관리형 DB의 자체 백업.
 - 복사본을 다른 호스트로 보내는 전송과 스케줄러(cron·systemd 타이머).

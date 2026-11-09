@@ -45,7 +45,7 @@ public class RequestRefund {
         Refund refund = Refund.request(order, receivedAt);
         grants.findByOrderNo(orderNo).ifPresent(grant -> {
             order.verifyLicenseGrant(grant.confirmation());
-            refund.confirmLicenseGrant(grant.confirmation());
+            refund.confirmLicenseGrant(grant.confirmation(), receivedAt);
         });
         refunds.save(refund);
         if (!refund.isAutomaticRefundEligible()) rounds.save(RefundReviewRound.initial(refund, buyerSubject));

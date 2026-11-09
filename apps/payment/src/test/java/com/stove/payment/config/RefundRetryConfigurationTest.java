@@ -8,6 +8,8 @@ import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.service.RequestFirstRefundCancellation;
 import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.ResolveRefundRetry;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -18,7 +20,9 @@ class RefundRetryConfigurationTest {
             .withUserConfiguration(RefundRetryConfiguration.class, RefundRetryScheduler.class)
             .withBean(RefundExecutionRepository.class, () -> mock(RefundExecutionRepository.class))
             .withBean(RequestRefundCancellation.class, () -> mock(RequestRefundCancellation.class))
-            .withBean(Clock.class, Clock::systemUTC);
+            .withBean(Clock.class, Clock::systemUTC)
+            .withBean(RefundExecutionTraceContexts.class, () -> mock(RefundExecutionTraceContexts.class))
+            .withBean(PaymentTracing.class, () -> (parent, paymentId, work) -> work.run());
 
     @Test void readOnlyLookupOrFirstDispatchDoesNotImplicitlyEnableAutomaticRetries() {
         context.withPropertyValues("stove.payment.refund-lookup.enabled=true", "stove.payment.refund-execution.enabled=true")

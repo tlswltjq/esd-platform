@@ -1,13 +1,19 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
 # - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build, 이후 결정 번호·기준 판 보존 검사(빌드 실패와 무관)
-# - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정 (실제 PortOne·비밀 값 없음)
+# - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정과 승인 보류 종결·실패 시도 재결제·30분 안 재진입 여정,
+#   주문 기한(30분)을 넘기는 승인 여정(31분 대기, 별도 작업) (실제 PortOne·비밀 값 없음)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
 # 결정 107: main 규칙셋이 build 작업의 name을 필수 검사로 쓴다. name을 바꾸거나 pull_request에
 # paths 조건을 달면 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
+# 결정 137: 착수 표시용 draft PR에서는 build를 건너뛰고, ready로 바꾸면(ready_for_review) 돈다. job if로 건너뛴
+# 작업은 필수 검사에서 성공으로 보고되므로 types에서 ready_for_review·synchronize를 빼면 ready PR이 build 없이
+# 병합될 수 있다. 같은 SHA에 draft 때의 SKIPPED가 남으므로 병합 전에는 가장 최근 build가 SUCCESS인지 본다.
+# tools/ci/test_workflows.py가 조건식·이벤트 목록·concurrency 그룹을 지킨다.
 name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   schedule:
@@ -22,14 +28,15 @@ on:
 permissions:
   contents: read
 
+# 결정 137: draft 실행이 늦게 시작되거나 다시 돌아도 실제 build를 취소하지 못하게 그룹을 나눈다.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || 'build' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     name: build (unit · architecture · integration · migration)
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -111,10 +118,47 @@ jobs:
           docker pull apache/kafka:3.9.0
       - name: Refund settlement journey
         run: python3 -B tools/verification/verify-refund-settlement.py
+      # 결정 119·120: 흉내 서버를 넓힌 G1 종료 여정과 30분 안 이탈/재진입 조합. 앞 여정이 실패해도 따로 돌린다.
+      - name: Approval hold closure, failed-attempt retry and re-entry journeys
+        if: success() || failure()
+        run: python3 -B tools/verification/verify-approval-journeys.py
       - name: Upload run logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: refund-settlement-run
+          path: runs/
+          retention-days: 7
+
+  # 결정 120: 주문 기한을 넘는 승인 조합. 주문을 함께 만들고 31분을 한 번 기다린다. PR CI에는 넣지 않는다.
+  approval-expiry:
+    name: fake PortOne approval expiry (31 min)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare cached local dependencies
+        run: |
+          docker pull mysql:8.0
+          docker pull redis:7-alpine
+          docker pull apache/kafka:3.9.0
+      - name: Approval expiry journey
+        run: python3 -B tools/verification/verify-expiry-journeys.py
+      - name: Upload run logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approval-expiry-run
           path: runs/
           retention-days: 7

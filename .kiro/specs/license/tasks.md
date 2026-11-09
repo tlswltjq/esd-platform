@@ -17,11 +17,13 @@
 ## 진행 중 / 남음 (일반화 공백)
 
 - [x] 환불 후 재구매(P4): 구매는 판매 금지만 막고 보유 여부는 등록에서 판단, 보관함(구매 근거 `STORED`)·등록 API, 등록마다 새 보유권 행, 정지 대상 = 구매 근거, 복구 세 갈래(보관함 반환 포함), `PurchaseRefunded`로 환불 완료 종료, 라이브러리·보관함에서 끝난 항목 제외 — [결정 89~98](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban), PR 본문·[근거 색인](../../../docs/evidence.md)
-- [ ] 선물(보관함 항목의 받는 사람 변경) — 보관함 구조만 준비, 정책 미정
-- [ ] 고객 알림(보관함 반환·환불 결과) — 결정 98, 업무 이벤트 구독 방식으로 별도 설계
+- [ ] [결정 필요] 선물(보관함 항목의 받는 사람 변경) — 보관함 구조만 준비, 정책 미정. 로드맵 3절 "제품 확장 검토" 대상이며 G2 종료 조건이 아니다
+- [ ] [결정 필요] 고객 알림(보관함 반환·환불 결과) — 알림 수단(메일·앱 푸시)·소유 모듈·구독할 업무 이벤트가 미결이다([결정 98](../../../docs/decisions.md#storage-return-no-notification) "알림 기능 자체의 설계는 미결"). 보관함 반환 표시 정책은 [결정 98](../../../docs/decisions.md#storage-return-no-notification)으로 정했다(보관함 반환은 따로 알리지 않고 환불 상세에 표시). 알림 기능 자체는 결제·심사와 함께 쓰는 공통 기능으로 따로 만들며, G2를 막지 않는다
 - [x] 보관함·등록을 포함한 실제 스택 여정: `verify-jib.py`(11개 앱) 통과, `verify-license.py` 15단계(환불 완료 뒤 재구매·등록, PG 결과 주입 — 결정 100) 통과 — 2026-11-06 PR #116
 - [x] PG 취소 구간까지 거치는 환불 후 재구매 여정: PortOne 흉내 서버로 Payment의 실제 취소 경로 → 환불 완료 → 보유권 REFUNDED·등록 ENDED → 재구매·새 보유권 등록(`verify-refund-settlement.py`) — 2026-11-07 [결정 111](../../../docs/decisions.md#portone-fake-journey), PR #129. 실제 PortOne·PG 확인은 [Payment 작업](../payment/tasks.md)에 남김
-- [ ] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/DLT 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
+- [ ] [외부 대기] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/DLT 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
+- [ ] [결정 필요] 구성 결함 후보(Kafka 보존): [이벤트 복구 절차](../../../docs/license-event-recovery-runbook.md)의 DLT 재투입은 원본이 Kafka에 남아 있어야 하는데, 저장소에는 토픽 보존 설정이 없고(`retention`·토픽 생성 코드 없음, `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`) 브로커 기본값 7일을 따른다(`apache/kafka:3.9.0` `log.retention.hours=168`, [R9](../../../docs/architecture.md#r9)). 기본 `docker-compose.yml`의 `kafka`에는 데이터 볼륨이 없어(`log.dirs`가 컨테이너 안 `/tmp/kraft-combined-logs`) 컨테이너를 다시 만들면 7일 안의 원본·DLT도 사라진다. DLT 보존 기간·볼륨·명시적 토픽 생성은 운영 구성 변경이라 이 문서 정정 PR에서 고치지 않았다. 정할 것: DLT 재투입이 가능해야 하는 기간(원본·DLT 토픽 보존 기간), 로컬·검증 Compose의 Kafka 데이터 볼륨 여부, 토픽을 코드·초기화 스크립트로 명시 생성할지. 보존 기간은 복구 가능 기간과 디스크 비용을 함께 정하는 정책이라 표시 없이 진행하지 않는다
+- [x] 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부하던 결함 수정(시각 비교 가드·V8/V9 CHECK 제거, V12) — [D-052](../../../docs/defects.md#d-052), PR #183
 
 ## 범위 밖(후속)
 

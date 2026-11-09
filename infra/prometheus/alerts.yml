@@ -67,8 +67,47 @@ groups:
             GET /api/v1/admin/refund-delays에서 원래 근거와 다음 조회를 확인한다.
             시간만으로 실패·권한 복구·새 금융 요청을 만들지 않는다.
 
+      # 귀속 미확정 환불(결정 127). PG 조회가 같은 원결제의 전액 취소를 확인해 고객 환불은 끝났지만,
+      # 우리 시도의 취소인지 모르는(PG_QUERY_UNATTRIBUTED) PENDING 실행 중 운영 종결이 없는 건이다.
+      # 돈은 이미 돌아갔고 종결만 남은 점이 승인 보류 PG_CANCELLED와 같아 warning이며, 대상이 생기면 바로 알리도록 for 를 두지 않는다.
+      # 위 RefundConfirmationsDelayed(미확정, critical)와 대상이 겹치지 않는다. 종결하면 자동 해제된다.
+      - alert: RefundsUnattributed
+        expr: stove_payment_refund_unattributed_open > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 귀속 미확정 환불 종결 필요"
+          description: >-
+            {{ $value }}건이 PG 전액 취소로 환불됐지만 우리 시도의 취소인지 판정되지 않았다.
+            GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED에서 대상을 찾고,
+            POST /api/v1/admin/refund-delays/{attemptId}/closure로 PG 재조회 근거와 귀속 판정을 남겨 종결한다.
+            알려진 과거 건은 Alertmanager silence로 알림을 관리한다.
+
+      # License 단계 이벤트를 기다리다 멈춘 환불(결정 125, 정지·복구·승인 중단으로 범위 확장).
+      # LicenseGranted·LicenseSuspended·LicenseRestored·LicenseApprovalCorrected(또는 그 요청)가 DEAD·DLT로 가거나 Kafka에서 사라지면
+      # 이벤트 경보는 한 번만 울리고, 환불은 조용히 그 대기 상태에 남는다. 이 경보는 그 환불이 남아 있는 동안 상태(status 라벨)마다 울린다.
+      # 진입 + 10분(stove.order.refund.license-grant-delay) 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.
+      # 시스템이 새 금융 동작을 하지 않고 운영자 재처리만 남으므로 결정 125와 같은 warning이다. 다음 이벤트가 반영되면 자동 해제된다.
+      # 식은 결정 125 그대로라 status 라벨이 없는 옛 시계열에도 같은 규칙으로 울린다. 그 시계열은 지급 확인 대기만 셌으므로
+      # 문구의 상태 기본값을 PENDING_LICENSE_GRANT로 둔다.
+      - alert: RefundLicenseGrantsDelayed
+        expr: stove_order_refund_license_grant_delayed > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.application }}: 환불이 {{ or $labels.status "PENDING_LICENSE_GRANT" }} 대기에서 10분 넘게 다음 License 이벤트를 기다린다'
+          description: >-
+            {{ $value }}건이 {{ or $labels.status "PENDING_LICENSE_GRANT" }}에 들어간 뒤 10분 넘게 다음 이벤트를 받지 못했다
+            (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
+            PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
+            GET /api/v1/admin/refunds?status={{ or $labels.status "PENDING_LICENSE_GRANT" }}의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
+            licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+            DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
+
       # 승인 보류(결정 114·115). PAID_WITHOUT_ADMISSION은 돈이 나갔는데 주문이 결제되지 않아 critical이다.
       # PG_CANCELLED를 포함한 나머지는 warning이다. PG_CANCELLED는 PG가 이미 전액을 돌려준 상태이고 종결만 남았다.
+      # PG_PENDING_AT_ORDER_EXPIRY(결정 126)는 접수 전 PAY_PENDING 관측 건이 만료 뒤에도 PENDING인 상태이고, PAID가 되면 critical 사유로 바뀐다.
+      # CONFIRM_WINDOW_EXPIRED(결정 124)는 접수 승인이 최초 준비 + 3시간(confirm 기한)을 넘겼는데 PG가 PENDING·READY인 상태다. 늦은 PAID·FAILED는 원래 주문으로 끝난다.
       - alert: PaymentApprovalsRequireReview
         expr: stove_payment_approval_review_required{reason="PAID_WITHOUT_ADMISSION"} > 0
         labels:

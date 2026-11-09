@@ -6,6 +6,7 @@ import com.stove.payment.adapter.trace.DisabledPaymentTracing;
 import com.stove.payment.adapter.trace.JdbcPaymentTraceContexts;
 import com.stove.payment.adapter.trace.MicrometerPaymentTracing;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import com.stove.payment.core.domain.ApprovalClosureRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -17,12 +18,14 @@ import com.stove.payment.core.port.PaymentAttemptLookup;
 import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.PaymentTraceContexts;
 import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.service.ReadApprovalReviewNotice;
 import com.stove.payment.core.service.ResolvePayment;
 import com.stove.payment.core.service.ReadPaymentFailureHistory;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import jakarta.persistence.EntityManager;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
@@ -40,6 +43,9 @@ public class PaymentConfiguration {
     @Bean ApplyOrderExpiry applyOrderExpiry(PaymentOrderLifecycleRepository lifecycle,PaymentRepository payments,PaymentApprovalRepository approvals,ProcessedEventGuard inbox,OrderPaymentLifecycleLocks locks) {
         return new ApplyOrderExpiry(lifecycle,payments,approvals,inbox,locks);
     }
+    @Bean ReadApprovalReviewNotice readApprovalReviewNotice(PaymentApprovalRepository approvals, ApprovalClosureRepository closures) {
+        return new ReadApprovalReviewNotice(approvals, closures);
+    }
     @Bean ReadPaymentFailureHistory readPaymentFailureHistory(PaymentRepository payments, FailedPaymentAttemptRepository attempts) {
         return new ReadPaymentFailureHistory(payments, attempts);
     }
@@ -48,9 +54,11 @@ public class PaymentConfiguration {
     ResolvePayment resolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
             EntityManager entityManager, PlatformTransactionManager transactions, PaymentProcessingProperties properties,
             PaymentTraceContexts traceContexts, PaymentTracing tracing, PgHttpProperties pg,
-            PaymentAttemptLookup attemptLookup, FailedPaymentAttemptRepository failedAttempts) {
+            PaymentAttemptLookup attemptLookup, FailedPaymentAttemptRepository failedAttempts, PaymentApprovalRepository approvals,
+            Clock refundReceptionClock) {
         return new ResolvePayment(payments, gateway, outbox, entityManager, transactions,
-                properties.batchSize(), Duration.ofMillis(properties.retryDelayMs()), traceContexts, tracing, pg.provider(), attemptLookup, failedAttempts);
+                properties.batchSize(), Duration.ofMillis(properties.retryDelayMs()), traceContexts, tracing, pg.provider(), attemptLookup, failedAttempts,
+                approvals, refundReceptionClock);
     }
 
     @Bean

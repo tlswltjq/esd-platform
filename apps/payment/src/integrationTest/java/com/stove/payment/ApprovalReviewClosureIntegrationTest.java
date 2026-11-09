@@ -138,8 +138,10 @@ class ApprovalReviewClosureIntegrationTest {
     @BeforeEach void initialize() { clean(); when(clock.instant()).thenAnswer(call -> TIME.get()); }
     @AfterEach void clean() {
         POINTS.reset();
-        // The closure audit is not cascaded from its approval (V37), so it is removed before the purchases it refers to.
+        // The closure (V37) and investigation (V38) audits are not cascaded from their approval,
+        // so they are removed before the purchases they refer to.
         jdbc.update("DELETE FROM approval_closure");
+        jdbc.update("DELETE FROM approval_investigation");
         jdbc.update("DELETE FROM payment_pg_webhook"); jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
         jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
         PURCHASES.clear(); ATTEMPTS.clear(); STATES.clear(); GETS.clear(); RECEIPTS.clear(); FAILURE_NOTICES.clear(); POSTS.clear();
@@ -438,6 +440,100 @@ class ApprovalReviewClosureIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM approval_closure WHERE approval_id=?", Integer.class, held.getApprovalId())).isEqualTo(1);
         assertThat(row(held).getStatus()).isEqualTo(PaymentApprovalStatus.FAILED);
+    }
+
+    /** Decision 123: the customer's payment detail, approval lookup and refused checkout tell whether money was charged. */
+    @Test void aHeldPurchaseTellsTheCustomerWhetherMoneyWasChargedWithoutTheReason() {
+        Payment paid = purchase(); PaymentApproval paidHold = paidWithoutAdmission(paid);
+        assertCustomerNotice(paid, paidHold, "CHARGED", "결제 금액 10,000원이 청구된 것으로 확인되어");
+        Payment invalid = purchase(); PaymentApproval invalidHold = invalidBeforeAdmission(invalid);
+        assertCustomerNotice(invalid, invalidHold, "CHARGE_UNCONFIRMED", "결제 확인이 지연되고 있습니다. 결제사와 청구 여부를");
+        Payment rejected = purchase(); PaymentApproval rejectedHold = heldAfterAdmission(rejected);
+        assertThat(rejectedHold.getLatestPgState()).isEqualTo(ApprovalObservation.State.READY);
+        assertCustomerNotice(rejected, rejectedHold, "NOT_CHARGED", "결제 확인이 지연되고 있습니다. 현재까지 청구된 금액은 없습니다.");
+        Payment cancelled = purchase(); String command = id(); submit(cancelled, command);
+        STATES.put(cancelled.getPaymentId(), "CANCELLED"); worker.execute(command);
+        assertCustomerNotice(cancelled, approvals.findByApprovalId(command).orElseThrow(), "CHARGE_CANCELLED", "결제 금액 10,000원은 전액 취소되었습니다.");
+
+        Payment processing = purchase(); String active = id(); submit(processing, active);
+        assertThat(customer(processing, active).path("status").asText()).isEqualTo("REQUESTED");
+        assertThat(customer(processing, active).path("reviewNotice").isNull()).isTrue();
+        assertThat(detail(processing).path("reviewNotice").isNull()).isTrue();
+        Reply checkout = http("GET", "/api/v1/payments/" + processing.getOrderNo() + "/checkout", null, member(processing));
+        assertThat(checkout.status()).isEqualTo(409);
+        assertThat(checkout.body().path("error").path("code").asText()).isEqualTo("APPROVAL_IN_PROGRESS");
+        assertThat(checkout.body().path("error").path("message").asText()).isEqualTo("기존 결제 승인을 처리하고 있습니다.");
+    }
+
+    /** Decision 132: a hold takes its charge code from the latest PG observation, whatever reason started it. */
+    @Test void theLatestPgObservationDecidesTheChargeNoticeOfAHold() {
+        Payment rejected = purchase(); PaymentApproval rejectedHold = heldAfterAdmission(rejected);
+        assertThat(detail(rejected).path("reviewNotice").path("code").asText()).isEqualTo("NOT_CHARGED");
+        STATES.put(rejected.getPaymentId(), "PAID");
+        assertThat(closure(rejectedHold, id(), "PG 상태 확인", "ADMIN").body().path("error").path("code").asText()).isEqualTo("CLOSURE_PG_PAID");
+        assertThat(row(rejectedHold).getLastErrorCode()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(row(rejectedHold).getLatestPgState()).isEqualTo(ApprovalObservation.State.PAID);
+        assertCustomerNotice(rejected, rejectedHold, "CHARGED", "결제 금액 10,000원이 청구된 것으로 확인되어");
+
+        Payment paid = purchase(); PaymentApproval paidHold = paidWithoutAdmission(paid);
+        STATES.put(paid.getPaymentId(), "CANCELLED"); advance(5); worker.execute(paidHold.getApprovalId());
+        assertThat(row(paidHold).getLastErrorCode()).isEqualTo("PAID_WITHOUT_ADMISSION");
+        assertCustomerNotice(paid, paidHold, "CHARGE_CANCELLED", "결제 금액 10,000원은 전액 취소되었습니다.");
+    }
+
+    /** Decision 123: after an operator closure the customer learns that the order ended and whether the charge was returned. */
+    @Test void aClosedHoldTellsTheCustomerTheOrderEndedAndWhetherTheChargeWasReturned() {
+        Payment refunded = purchase(); PaymentApproval refundedHold = paidWithoutAdmission(refunded);
+        STATES.put(refunded.getPaymentId(), "CANCELLED");
+        assertThat(closure(refundedHold, id(), "콘솔 취소 확인", "ADMIN").status()).isEqualTo(200);
+        assertClosedNotice(refunded, refundedHold, PaymentStatus.FAILED, "CLOSED_CHARGE_CANCELLED",
+                "결제 확인 결과 이 주문은 종료되었습니다. 청구되었던 10,000원은 전액 취소되었습니다. 새 주문으로 다시 구매해 주세요.");
+        Payment expired = purchase(); PaymentApproval expiredHold = invalidBeforeAdmission(expired);
+        recordExpiry(expired); STATES.put(expired.getPaymentId(), "READY");
+        assertThat(closure(expiredHold, id(), "만료 주문의 보류 종결", "ADMIN").status()).isEqualTo(200);
+        assertClosedNotice(expired, expiredHold, PaymentStatus.EXPIRED, "CLOSED_NOT_CHARGED",
+                "결제 확인 결과 이 주문은 종료되었습니다. 청구된 금액은 없습니다. 새 주문으로 다시 구매해 주세요.");
+    }
+
+    private void assertCustomerNotice(Payment payment, PaymentApproval held, String code, String opening) {
+        PaymentApproval current = row(held);
+        assertThat(current.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        JsonNode fromDetail = detail(payment).path("reviewNotice");
+        JsonNode fromApproval = customer(payment, held.getApprovalId()).path("reviewNotice");
+        for (JsonNode notice : List.of(fromDetail, fromApproval)) {
+            assertThat(notice.path("code").asText()).as(current.getLastErrorCode()).isEqualTo(code);
+            assertThat(notice.path("message").asText()).startsWith(opening);
+            assertThat(notice.path("since").asText()).isEqualTo(current.getReviewStartedAt().toString());
+            assertThat(notice.toString()).doesNotContain(current.getLastErrorCode(), ATTEMPTS.get(payment.getPaymentId()));
+        }
+        assertThat(fromApproval).isEqualTo(fromDetail);
+        Reply checkout = http("GET", "/api/v1/payments/" + payment.getOrderNo() + "/checkout", null, member(payment));
+        assertThat(checkout.status()).isEqualTo(409);
+        assertThat(checkout.body().path("error").path("code").asText()).isEqualTo("APPROVAL_IN_PROGRESS");
+        assertThat(checkout.body().path("error").path("message").asText()).isEqualTo(fromDetail.path("message").asText());
+        assertThat(checkout.body().toString()).doesNotContain(current.getLastErrorCode());
+    }
+    private void assertClosedNotice(Payment payment, PaymentApproval held, PaymentStatus outcome, String code, String message) {
+        JsonNode purchase = detail(payment);
+        assertThat(purchase.path("status").asText()).isEqualTo(outcome.name());
+        JsonNode fromApproval = customer(payment, held.getApprovalId());
+        assertThat(fromApproval.path("status").asText()).isEqualTo("FAILED");
+        for (JsonNode notice : List.of(purchase.path("reviewNotice"), fromApproval.path("reviewNotice"))) {
+            assertThat(notice.path("code").asText()).isEqualTo(code);
+            assertThat(notice.path("message").asText()).isEqualTo(message);
+            assertThat(notice.path("since").asText()).isEqualTo(row(held).getReviewStartedAt().toString());
+            assertThat(notice.toString()).doesNotContain(held.getLastErrorCode());
+        }
+    }
+    private JsonNode detail(Payment payment) {
+        Reply read = http("GET", "/api/v1/payments/" + payment.getOrderNo(), null, member(payment));
+        assertThat(read.status()).isEqualTo(200);
+        return read.body().path("data");
+    }
+    private JsonNode customer(Payment payment, String approvalId) {
+        Reply read = http("GET", "/api/v1/payments/" + payment.getOrderNo() + "/approvals/" + approvalId, null, member(payment));
+        assertThat(read.status()).isEqualTo(200); assertThat(read.cache()).isEqualTo("no-store");
+        return read.body().path("data");
     }
 
     private void assertClosed(Payment payment, PaymentApproval held, String evidence, Reply closed, PaymentStatus outcome) {

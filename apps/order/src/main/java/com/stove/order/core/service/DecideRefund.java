@@ -48,7 +48,7 @@ public class DecideRefund {
             if (first.decide(input, at) != changed) throw new BusinessException(ErrorCode.CONFLICT, "최초 판정과 심사 이력이 다릅니다.");
             if (changed && input.decision() == RefundReviewDecision.APPROVED) {
                 grants.findByOrderNo(orderNo).ifPresent(grant -> {
-                    order.verifyLicenseGrant(grant.confirmation()); refund.confirmLicenseGrant(grant.confirmation());
+                    order.verifyLicenseGrant(grant.confirmation()); refund.confirmLicenseGrant(grant.confirmation(), at);
                 });
                 if (refund.getStatus() == RefundStatus.PENDING_LICENSE_SUSPENSION)
                     outbox.record("Order", orderNo, new LicenseSuspensionRequestedEvent(refund.getSuspensionRequestEventId(), at,

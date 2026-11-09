@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class RefundExecutionTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant PAID_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant RECEIVED_AT = PAID_AT.plusSeconds(3 * 3600);
     private static final Instant STOPPED_AT = PAID_AT.plusSeconds(6 * 3600);
@@ -20,10 +21,10 @@ class RefundExecutionTest {
         Refund refund = Refund.request(paid, RECEIVED_AT);
         LicenseGrant grant = grant(paid);
 
-        assertThat(refund.confirmLicenseGrant(grant)).isTrue();
+        assertThat(refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT)).isTrue();
         String issued = refund.getSuspensionRequestEventId();
         assertThat(issued).isNotBlank();
-        assertThat(refund.confirmLicenseGrant(grant)).isFalse();
+        assertThat(refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT)).isFalse();
         assertThat(refund.getSuspensionRequestEventId()).isEqualTo(issued);
         assertThat(refund.getCurrentAttemptId()).isNull();
     }
@@ -32,7 +33,7 @@ class RefundExecutionTest {
         Order paid = paid();
         Refund refund = Refund.request(paid, RECEIVED_AT);
         LicenseGrant grant = grant(paid);
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation input = confirmation(refund, grant);
 
         RefundAttempt attempt = RefundAttempt.afterSuspension(refund, input, STOPPED_AT.plusSeconds(1));
@@ -60,7 +61,7 @@ class RefundExecutionTest {
         Order paid = paid();
         Refund refund = Refund.request(paid, RECEIVED_AT);
         LicenseGrant grant = grant(paid);
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation original = confirmation(refund, grant);
         LicenseSuspensionConfirmation changed = new LicenseSuspensionConfirmation(original.eventId(), original.occurredAt(),
                 field.equals("request") ? id() : original.requestEventId(), field.equals("refund") ? id() : original.refundId(),
@@ -93,7 +94,7 @@ class RefundExecutionTest {
         Order paid = paid();
         Refund refund = Refund.request(paid, RECEIVED_AT);
         LicenseGrant grant = grant(paid);
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation input = confirmation(refund, grant);
         RefundAttempt attempt = RefundAttempt.afterSuspension(refund, input, STOPPED_AT);
         attempt.verifySuspension(input);

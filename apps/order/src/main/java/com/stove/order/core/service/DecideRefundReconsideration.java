@@ -46,7 +46,7 @@ public class DecideRefundReconsideration {
         Instant at = clock.instant();
         try {
             if (refund.decideReconsideration(round, decision, at) && decision.decision() == RefundReviewDecision.APPROVED) {
-                grants.findByOrderNo(orderNo).ifPresent(grant -> { order.verifyLicenseGrant(grant.confirmation()); refund.confirmLicenseGrant(grant.confirmation()); });
+                grants.findByOrderNo(orderNo).ifPresent(grant -> { order.verifyLicenseGrant(grant.confirmation()); refund.confirmLicenseGrant(grant.confirmation(), at); });
                 if (refund.getStatus() == RefundStatus.PENDING_LICENSE_SUSPENSION)
                     outbox.record("Order", orderNo, new LicenseSuspensionRequestedEvent(refund.getSuspensionRequestEventId(), at,
                             refund.getRefundId(), orderNo, order.getBuyerSubject(), order.getProductId(), order.getProductCode(), order.getPaymentId()));

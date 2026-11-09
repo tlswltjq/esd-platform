@@ -85,6 +85,11 @@
           "amountDetails" : {
             "$ref" : "#/components/schemas/RefundAmountDetailsResponse"
           },
+          "approvalStopWaitStartedAt" : {
+            "description" : "이번 승인 중단(PENDING_APPROVAL_STOP) 대기에 들어간 시각. 대기를 벗어나도 남는다. 한 번도 들어가지 않았거나 이 시각을 기록하기 전에 대기를 벗어났으면 null",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
           "buyerSubject" : {
             "type" : "string"
           },
@@ -93,6 +98,21 @@
           },
           "currentReview" : {
             "$ref" : "#/components/schemas/AdminRefundReviewResponse"
+          },
+          "licenseGrantWaitStartedAt" : {
+            "description" : "이번 지급 확인(PENDING_LICENSE_GRANT) 대기에 들어간 시각(결정 125). 대기를 벗어나도 남는다. 한 번도 들어가지 않았으면 null",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "licenseRestorationWaitStartedAt" : {
+            "description" : "이번 복구(PENDING_LICENSE_RESTORATION) 대기에 들어간 시각(PG 실패 확정). 대기를 벗어나도 남는다. 한 번도 들어가지 않았거나 이 시각을 기록하기 전에 대기를 벗어났으면 null",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "licenseSuspensionWaitStartedAt" : {
+            "description" : "이번 정지(PENDING_LICENSE_SUSPENSION) 대기에 들어간 시각(지급 확인·재시도). 대기를 벗어나도 남는다. 한 번도 들어가지 않았거나 이 시각을 기록하기 전에 대기를 벗어났으면 null",
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
           },
           "orderNo" : {
             "type" : "string"
@@ -641,10 +661,23 @@
         },
         "type" : "object"
       },
+      "RefundFailureNoticeResponse" : {
+        "properties" : {
+          "code" : {
+            "description" : "고객용 환불 실패 사유. PAYMENT_NOT_CANCELLED: 결제 취소가 처리되지 않아 환불되지 않음",
+            "enum" : [ "PAYMENT_NOT_CANCELLED" ],
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "RefundProcessingNoticeResponse" : {
         "properties" : {
           "code" : {
-            "enum" : [ "RESULT_CONFIRMATION_DELAYED" ],
+            "enum" : [ "RESULT_CONFIRMATION_DELAYED", "LICENSE_GRANT_CONFIRMATION_DELAYED", "LICENSE_SUSPENSION_CONFIRMATION_DELAYED", "LICENSE_RESTORATION_CONFIRMATION_DELAYED", "APPROVAL_STOP_CONFIRMATION_DELAYED" ],
             "type" : "string"
           },
           "message" : {
@@ -720,13 +753,24 @@
           "currentReview" : {
             "$ref" : "#/components/schemas/CustomerRefundReviewResponse"
           },
+          "failureNotice" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/RefundFailureNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "환불이 FAILED일 때만 제공하는 고객용 실패 사유 코드와 재신청 안내(결정 134). 재신청은 retryableAttemptId로 POST /api/v1/orders/{orderNo}/refund/retries. 그 외 상태는 null"
+          },
           "orderNo" : {
             "type" : "string"
           },
           "processingNotice" : {
-            "$ref" : "#/components/schemas/RefundProcessingNoticeResponse",
-            "description" : "현재 환불 결과 확인이 지연될 때 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다.",
-            "type" : "null"
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/RefundProcessingNoticeResponse"
+            }, {
+              "type" : "null"
+            } ],
+            "description" : "현재 환불 결과 확인이 지연되거나(RESULT_CONFIRMATION_DELAYED) 환불 처리 준비가 지연될 때(LICENSE_GRANT_CONFIRMATION_DELAYED·LICENSE_SUSPENSION_CONFIRMATION_DELAYED·APPROVAL_STOP_CONFIRMATION_DELAYED), 결제 취소 실패 뒤 이용권 복구가 지연될 때(LICENSE_RESTORATION_CONFIRMATION_DELAYED) 제공하는 안내. 이외 상태와 준비 정보 미수신 시 null이며, 실패·완료나 재신청 허용을 뜻하지 않습니다."
           },
           "purchaseReturnedToStorage" : {
             "description" : "환불 확정 실패로 복구할 때 같은 상품의 다른 보유권이 이미 쓰이고 있어 이 구매분이 보관함으로 돌아갔으면 true",

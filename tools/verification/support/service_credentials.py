@@ -20,9 +20,10 @@ _ALLOWED = {
                       'PORTONE_API_SECRET', 'PORTONE_WEBHOOK_SECRET'},
     'license': _DB,
     'download': _READER | {'CATALOG_DOWNLOAD_SERVICE_KEY'},
-    'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY'},
+    # Settlement's PortOne secret is named apart from Payment's (docker-compose.settlement-portone.yml).
+    'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY', 'SETTLEMENT_PORTONE_API_SECRET'},
 }
-_PREFIXES = ('CATALOG_', 'PAYMENT_', 'MOCK_PG_', 'PORTONE_', 'AUTH_', 'BFF_',
+_PREFIXES = ('CATALOG_', 'PAYMENT_', 'MOCK_PG_', 'PORTONE_', 'SETTLEMENT_PORTONE_', 'AUTH_', 'BFF_',
              'STORAGE_', 'REVIEW_STORAGE_', 'DOWNLOAD_STORAGE_')
 
 

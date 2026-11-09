@@ -25,6 +25,7 @@ python3 tools/verification/verify-jib.py --help
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
 | `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |
 | `portone-test-checkout.py` · `support/portone_checkout.py` | 준비된 포트원 V2·토스페이 TEST 채널의 독립 결제창·서버 조회·전액 취소 검증. 업무 앱과 DB는 변경하지 않음 |
+| `verify-refund-settlement.py` · `verify-approval-journeys.py` · `verify-expiry-journeys.py` · `support/fake_portone_stack.py` · `support/portone_fake.py` | PortOne 흉내 서버를 둔 격리 실제 스택 여정(결정 111·119·120). `verify-expiry-journeys.py`는 주문 기한을 넘는 조합을 31분 대기 한 번으로 묶어 별도 야간 작업(제한 60분)에서 돈다. 흉내 서버는 paymentId별 시도 이력과 콘솔 전용 제어 `POST /_fake/control/payments/{paymentId}/{fail-attempt\|pay-pending\|arm-confirm\|settle\|console-approve\|console-cancel}`를 둔다. 운영 코드는 PortOne 주소만 바뀐다. `verify-refund-settlement.py --settlement-compose`는 Settlement만 `docker-compose.apps.yml` + `docker-compose.settlement-portone.yml`로 띄운 컨테이너(실행별 Jib 태그, host 네트워크)로 바꾼다 |
 | `support/portone-edge/` | OCI 공개 IP의 HTTPS 웹훅 수신·인증서 자동 갱신 설정과 로컬 격리 Payment 연결·검증 기록 |
 
 검증 도구는 인프라와 앱을 실행하고 검증 데이터를 생성한다. 이번 분리는 코드 위치와 진입점만 정리하며, 각 검증의 포트·DB·컨테이너 격리, 결과 저장 위치, 정리 절차는 유지한다. 검증 로직 수정은 이 디렉터리에서 수행한다.

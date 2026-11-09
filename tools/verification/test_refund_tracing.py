@@ -1,0 +1,421 @@
+import http.server
+import json
+import threading
+import unittest
+
+from support import refund_tracing
+from support.refund_tracing import TraceUnavailable, await_trace, fetch_trace, parse_trace, pg_call, trace_problems
+
+PAYMENT = "pay-1"
+PG = "http://127.0.0.1:1/payments/" + PAYMENT
+
+
+def span(service, name, span_id, parent="", kind="SPAN_KIND_INTERNAL", url=None, method=None, start=0):
+    return dict(service=service, name=name, kind=kind, spanId=span_id, parentSpanId=parent, url=url, method=method, start=start)
+
+
+def client(span_id, parent, url, method=None, start=0):
+    method = method or ("POST" if url.endswith("/cancel") else "GET")
+    return span("payment", "http " + method.lower(), span_id, parent, "SPAN_KIND_CLIENT", url, method, start)
+
+
+def complete(scenario):
+    """A refund trace with every required service and the scenario's PG spans."""
+    spans = [span("gateway", "http post", "g"), span("order", "http post /refund", "o", "g"),
+             span("license", "stove.order.v1 receive", "l", "o"), span("payment", "stove.order.v1 receive", "p", "l"),
+             span("settlement", "stove.order.v1 receive", "s", "o"),
+             client("c1", "p", PG + "/cancel"), client("g1", "p", PG + "?storeId=s")]
+    if scenario in ("lost-response", "pg-error"):
+        spans.append(span("payment", "payment.process", "w", "p"))
+        spans.append(client("g2", "w", PG + "?storeId=s"))
+    if scenario == "pg-error":
+        spans.append(client("c2", "w", PG + "/cancel"))
+    if scenario == "restoration":
+        # Preflight GET (1), POST cancel answered FAILED (2), reconcile GET confirming the failure (3).
+        spans = [s for s in spans if s["service"] != "settlement" and s["kind"] != "SPAN_KIND_CLIENT"]
+        spans += [client("g1", "p", PG + "?storeId=s", start=1), client("c1", "p", PG + "/cancel", start=2),
+                  client("g3", "p", PG + "?storeId=s", start=3)]
+        spans += [span("order", "stove.payment.v1 receive", "of", "p"), span("license", "stove.order.v1 receive", "lr", "of"),
+                  span("order", "stove.license.v1 receive", "ol", "lr")]
+    return spans
+
+
+class TraceProblemsTest(unittest.TestCase):
+    def test_complete_traces_pass_for_every_scenario(self):
+        for scenario in ("normal", "lost-response", "pg-error", "restoration"):
+            self.assertEqual(trace_problems(complete(scenario), scenario, PAYMENT), [], scenario)
+
+    def test_empty_trace_fails(self):
+        self.assertEqual(trace_problems([], "normal", PAYMENT), ["no spans"])
+
+    def test_two_roots_fail(self):
+        spans = complete("normal") + [span("payment", "http get", "x")]
+        self.assertTrue(any("exactly one root" in p for p in trace_problems(spans, "normal", PAYMENT)))
+
+    def test_missing_service_fails(self):
+        spans = [s for s in complete("normal") if s["service"] != "settlement"]
+        self.assertIn("missing services ['settlement']", trace_problems(spans, "normal", PAYMENT))
+
+    def test_missing_parent_fails(self):
+        spans = complete("normal") + [span("order", "stove.payment.v1 receive", "y", "absent")]
+        self.assertTrue(any("without parent" in p for p in trace_problems(spans, "normal", PAYMENT)))
+
+    def test_missing_pg_spans_fail(self):
+        spans = [s for s in complete("normal") if s["kind"] != "SPAN_KIND_CLIENT"]
+        self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG cancel span", "no PG lookup span"])
+
+    def test_restoration_does_not_require_settlement_but_every_other_service(self):
+        self.assertEqual(refund_tracing.required_services("restoration"), ("gateway", "order", "license", "payment"))
+        with_settlement = complete("restoration") + [span("settlement", "stove.payment.v1 receive", "s2", "p")]
+        self.assertEqual(trace_problems(with_settlement, "restoration", PAYMENT), [])
+        spans = [s for s in complete("restoration") if s["service"] != "license"]
+        self.assertTrue(any("missing services ['license']" in p for p in trace_problems(spans, "restoration", PAYMENT)))
+
+    def test_restoration_requires_exactly_one_cancel(self):
+        resent = complete("restoration") + [client("c2", "p", PG + "/cancel")]
+        self.assertEqual(trace_problems(resent, "restoration", PAYMENT),
+                         ["expected exactly one PG cancel before the confirmed failure, found 2"])
+        none = [s for s in complete("restoration") if s["spanId"] != "c1"]
+        self.assertIn("no PG cancel span", trace_problems(none, "restoration", PAYMENT))
+
+    def test_restoration_requires_the_lookup_after_the_cancel_that_confirms_the_failure(self):
+        # The preflight lookup alone must not stand in for the reconcile lookup that confirms FAILED.
+        without_confirmation = [s for s in complete("restoration") if s["spanId"] != "g3"]
+        self.assertEqual(trace_problems(without_confirmation, "restoration", PAYMENT),
+                         ["no PG lookup after the cancel confirming the failure"])
+        without_preflight = [s for s in complete("restoration") if s["spanId"] != "g1"]
+        self.assertEqual(trace_problems(without_preflight, "restoration", PAYMENT),
+                         ["no PG preflight lookup before the cancel"])
+
+    def test_payment_id_prefix_collision_does_not_count(self):
+        # Validating pay-1 must not accept calls for pay-10.
+        spans = [dict(s, url=s["url"].replace("/payments/" + PAYMENT, "/payments/" + PAYMENT + "0")) if s["url"] else s
+                 for s in complete("normal")]
+        self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG cancel span", "no PG lookup span"])
+        self.assertIsNone(pg_call(client("x", "p", "http://h/payments/pay-10/cancel"), PAYMENT))
+        self.assertEqual(pg_call(client("x", "p", "http://h/payments/pay-1/cancel"), PAYMENT), "cancel")
+
+    def test_other_api_sub_paths_and_methods_are_not_pg_refund_calls(self):
+        for url, method in [(PG + "/transactions?storeId=s", "GET"), (PG + "/confirm", "POST"), (PG + "/cancel/extra", "POST"),
+                            (PG + "/cancel", "GET"), (PG + "?storeId=s", "POST"), ("http://h/v2/payments/" + PAYMENT, "GET"),
+                            ("http://h/payments/" + PAYMENT + "/billing-key", "GET")]:
+            self.assertIsNone(pg_call(client("x", "p", url, method), PAYMENT), url + " " + method)
+        self.assertEqual(pg_call(client("x", "p", "/payments/" + PAYMENT + "?storeId=s", "GET"), PAYMENT), "lookup")  # http.target
+        not_payment = dict(client("x", "p", PG + "/cancel"), service="settlement")
+        self.assertIsNone(pg_call(not_payment, PAYMENT))
+        server = dict(client("x", "p", PG + "/cancel"), kind="SPAN_KIND_SERVER")
+        self.assertIsNone(pg_call(server, PAYMENT))
+
+    def test_sub_paths_are_not_counted_as_lookups(self):
+        spans = [dict(s, url=PG + "/transactions?storeId=s") if s["spanId"] == "g1" else s for s in complete("normal")]
+        self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG lookup span"])
+
+    def test_pg_spans_of_another_payment_do_not_count(self):
+        spans = [dict(s, url=s["url"].replace(PAYMENT, "other")) if s["url"] else s for s in complete("normal")]
+        self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG cancel span", "no PG lookup span"])
+
+    def test_lost_response_requires_a_worker_lookup_under_payment_process(self):
+        spans = [s for s in complete("lost-response") if s["spanId"] != "g2"]
+        self.assertEqual(trace_problems(spans, "lost-response", PAYMENT), ["no worker PG lookup under payment.process"])
+
+    def test_pg_error_requires_a_worker_resend_under_payment_process(self):
+        spans = [dict(s, parentSpanId="p") if s["spanId"] == "c2" else s for s in complete("pg-error")]
+        self.assertEqual(trace_problems(spans, "pg-error", PAYMENT), ["no worker PG resend under payment.process"])
+        spans = [s for s in complete("pg-error") if s["spanId"] != "c2"]
+        self.assertIn("expected the first PG cancel and a resend, found 1", trace_problems(spans, "pg-error", PAYMENT))
+
+
+class ObservationWindowTest(unittest.TestCase):
+    def test_export_bound_is_schedule_delay_plus_one_in_flight_and_one_own_export(self):
+        self.assertEqual(refund_tracing.export_bound(1, 5, 5), 11)
+        self.assertEqual(refund_tracing.export_bound(5, 30, 10), 25)  # Spring Boot 3.5 defaults: OTLP timeout caps each export
+        self.assertEqual(refund_tracing.export_bound(1, 3, 10), 7)
+
+    def test_window_covers_consumer_finish_export_and_tempo(self):
+        self.assertEqual(refund_tracing.export_bound(), 11)
+        self.assertEqual(refund_tracing.observation_window(), 18)
+        self.assertGreater(refund_tracing.observation_window(), refund_tracing.export_bound())
+        self.assertGreater(refund_tracing.observation_window(), (refund_tracing.STABLE_READS - 1) * 3)
+
+    def test_reads_inside_the_window_do_not_count_toward_stability(self):
+        now = [0.0]
+        reads = []
+
+        def fetch(trace_id):
+            reads.append(now[0])
+            return complete("normal")
+        await_trace(fetch, "t", "normal", PAYMENT, seconds=60, quiet_until=18, clock=lambda: now[0],
+                    sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+        self.assertEqual([t for t in reads if t >= 18], [18, 21, 24])
+
+    def test_one_export_drains_the_whole_queue(self):
+        self.assertEqual(refund_tracing.MAX_BATCH_SIZE, refund_tracing.MAX_QUEUE_SIZE)
+
+    def test_stack_pins_the_export_settings_the_bound_assumes(self):
+        from support.fake_portone_stack import TRACE_EXPORT_ENV
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_QUEUE_SIZE"], str(refund_tracing.MAX_QUEUE_SIZE))
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_BATCH_SIZE"], str(refund_tracing.MAX_BATCH_SIZE))
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY"], str(refund_tracing.SCHEDULE_DELAY_SECONDS) + "s")
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT"], str(refund_tracing.EXPORT_TIMEOUT_SECONDS) + "s")
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_OTLP_TRACING_TIMEOUT"], str(refund_tracing.OTLP_TIMEOUT_SECONDS) + "s")
+
+
+# Shapes captured from apache/kafka:3.9.0 kafka-consumer-groups.sh (2026-11-09).
+GROUPS = ["order-refund-suspension", "license-suspension", "settlement-confirmed-refund", "catalog-sync"]
+STATE = """
+Consumer group 'settlement-confirmed-refund' has no active members.
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+settlement-confirmed-refund kafka:19092  (1)                             Empty           0
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+order-refund-suspension   kafka:19092  (1)          range                Stable          1
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+license-suspension        kafka:19092  (1)          range                Stable          1
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+catalog-sync              kafka:19092  (1)          range                Stable          1
+"""
+OFFSETS = """
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+settlement-confirmed-refund stove.payment.v1 0     8               8               0               -               -               -
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+order-refund-suspension stove.license.v1 0         12              12              0               consumer-1      /127.0.0.1      order
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+license-suspension stove.order.v1  0               30              30              0               consumer-2      /127.0.0.1      license
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+catalog-sync    stove.catalog.v1 0              -               0               -               consumer-3      /127.0.0.1      catalog
+"""
+NO_MEMBERS_STDERR = "\nConsumer group 'settlement-confirmed-refund' has no active members.\n"
+
+
+def snapshot(groups=None, state=STATE, offsets=OFFSETS, offsets_err=NO_MEMBERS_STDERR, list_err="", codes=(0, 0, 0)):
+    listed = "\n".join(GROUPS if groups is None else groups) + "\n"
+    return dict(list=(codes[0], listed, list_err), state=(codes[1], state, ""), offsets=(codes[2], offsets, offsets_err))
+
+
+class ConsumerLagTest(unittest.TestCase):
+    REQUIRED = ["order-refund-suspension", "license-suspension", "settlement-confirmed-refund"]
+
+    def problems(self, **changes):
+        return refund_tracing.lag_problems(snapshot(**changes), self.REQUIRED)
+
+    def test_settled_groups_at_lag_zero_pass_including_a_non_required_group(self):
+        self.assertEqual(self.problems(), [])
+
+    def test_group_snapshot_reads_list_state_and_offsets(self):
+        calls = []
+        refund_tracing.group_snapshot(lambda args: calls.append(args) or (0, "", ""))
+        self.assertEqual(calls, [["--list"], ["--describe", "--all-groups", "--state"], ["--describe", "--all-groups"]])
+
+    def test_rebalancing_group_is_retried(self):
+        state = STATE.replace("catalog-sync              kafka:19092  (1)          range                Stable",
+                              "catalog-sync              kafka:19092  (1)          range                PreparingRebalance")
+        self.assertEqual(self.problems(state=state), ["catalog-sync is PreparingRebalance"])
+
+    def test_rebalancing_warning_on_stderr_is_retried(self):
+        problems = self.problems(offsets_err=NO_MEMBERS_STDERR + "Warning: Consumer group 'catalog-sync' is rebalancing.\n")
+        self.assertEqual(problems, ["offsets stderr: Warning: Consumer group 'catalog-sync' is rebalancing."])
+
+    def test_row_without_partition_is_unverifiable(self):
+        offsets = OFFSETS + "catalog-sync    -               -               -               -               -               consumer-9      /127.0.0.1      catalog\n"
+        self.assertEqual(self.problems(offsets=offsets), ["catalog-sync has a row without a partition (-/-), assignment unverifiable"])
+
+    def test_group_missing_from_offsets_is_retried(self):
+        offsets = OFFSETS.replace("catalog-sync    stove.catalog.v1 0              -               0               -               consumer-3      /127.0.0.1      catalog\n", "")
+        self.assertEqual(self.problems(offsets=offsets), ["catalog-sync missing from offsets"])
+
+    def test_listed_group_without_state_and_unlisted_rows_are_retried(self):
+        self.assertIn("late-group has no state", self.problems(groups=GROUPS + ["late-group"]))
+        self.assertIn("catalog-sync has a state but is not listed", self.problems(groups=GROUPS[:3]))
+        self.assertIn("catalog-sync has offsets but is not listed", self.problems(groups=GROUPS[:3]))
+
+    def test_unparsable_output_and_failed_commands_are_retried(self):
+        self.assertIn("unparsable state output: Error: Consumer group 'x' does not exist.",
+                      self.problems(state=STATE + "Error: Consumer group 'x' does not exist.\n"))
+        self.assertIn("unparsable offset output: truncated row", self.problems(offsets=OFFSETS + "truncated row\n"))
+        self.assertIn("offsets exited 1", self.problems(codes=(0, 0, 1)))
+        self.assertIn("list stderr: Error: timeout", self.problems(list_err="Error: timeout"))
+
+    def test_no_members_message_is_accepted_only_for_an_empty_group(self):
+        problems = self.problems(offsets_err="Consumer group 'catalog-sync' has no active members.\n")
+        self.assertEqual(problems, ["catalog-sync reported without members but state Stable"])
+
+    def test_lag_and_uncommitted_offsets_on_a_non_empty_log_fail(self):
+        lagging = OFFSETS.replace("license-suspension stove.order.v1  0               30              30              0",
+                                  "license-suspension stove.order.v1  0               28              30              2")
+        self.assertEqual(self.problems(offsets=lagging), ["license-suspension stove.order.v1-0 lag 2 (offset 28/30)"])
+        pending = OFFSETS.replace("catalog-sync    stove.catalog.v1 0              -               0               -",
+                                  "catalog-sync    stove.catalog.v1 0              -               4               -")
+        self.assertEqual(self.problems(offsets=pending), ["catalog-sync stove.catalog.v1-0 lag - (offset -/4)"])
+
+    def test_missing_required_group_fails(self):
+        problems = refund_tracing.lag_problems(snapshot(), self.REQUIRED + ["payment-refund-execution"])
+        self.assertEqual(problems, ["consumer groups not listed ['payment-refund-execution']"])
+
+    def test_refund_groups_come_from_the_code_constants(self):
+        from pathlib import Path
+        repo = Path(__file__).resolve().parents[2]
+        self.assertEqual(refund_tracing.refund_consumer_groups(repo),
+                         ["order-refund-suspension", "order-refund-preparation", "order-refund-payment-confirmation",
+                          "license-suspension", "license-purchase-refund", "payment-refund-execution", "settlement-confirmed-refund",
+                          "order-refund-restoration", "license-restoration"])
+
+    def test_a_source_without_exactly_one_constant_is_rejected(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as root:
+            for source in refund_tracing.REFUND_GROUP_SOURCES:
+                (Path(root) / source).parent.mkdir(parents=True, exist_ok=True)
+                (Path(root) / source).write_text("class X {}")
+            with self.assertRaises(RuntimeError):
+                refund_tracing.refund_consumer_groups(Path(root))
+
+
+class FetchAndAwaitTest(unittest.TestCase):
+    def serve(self, status, body):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                raw = body.encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return "http://127.0.0.1:" + str(server.server_port)
+
+    def test_lookup_error_is_unavailable_not_empty(self):
+        with self.assertRaises(TraceUnavailable):
+            fetch_trace(self.serve(404, "trace not found"), "a" * 32)
+        with self.assertRaises(TraceUnavailable):
+            fetch_trace("http://127.0.0.1:1", "a" * 32)
+
+    def test_empty_response_is_unavailable(self):
+        for body in ('{"batches": []}', "{}"):
+            with self.assertRaises(TraceUnavailable):
+                fetch_trace(self.serve(200, body), "a" * 32)
+
+    def test_parses_otlp_json_with_base64_ids(self):
+        trace = {"batches": [{"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "payment"}}]},
+                              "scopeSpans": [{"spans": [{"name": "http get", "kind": "SPAN_KIND_CLIENT", "spanId": "AQIDBAUGBwg=",
+                                                         "attributes": [{"key": "http.url", "value": {"stringValue": PG}}]}]}]}]}
+        spans = fetch_trace(self.serve(200, json.dumps(trace)), "a" * 32)
+        self.assertEqual((spans[0]["service"], spans[0]["spanId"], spans[0]["parentSpanId"], spans[0]["url"]),
+                         ("payment", "0102030405060708", "", PG))
+
+    @staticmethod
+    def sequence(*answers):
+        """fetch() returning each answer in turn, then the last one forever."""
+        queue = list(answers)
+
+        def fetch(trace_id):
+            answer = queue.pop(0) if len(queue) > 1 else queue[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return fetch
+
+    @staticmethod
+    def fake_clock():
+        now = [0.0]
+        return dict(clock=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds)), now
+
+    def test_await_retries_until_complete_and_stable(self):
+        timing, now = self.fake_clock()
+        fetch = self.sequence(TraceUnavailable("not yet"), complete("normal")[:3], complete("normal"))
+        self.assertEqual(await_trace(fetch, "t", "normal", PAYMENT, seconds=60, **timing), complete("normal"))
+        self.assertEqual(now[0], 3 * 4)  # unavailable, partial, then three identical passing reads
+
+    def test_late_orphan_after_a_passing_snapshot_fails(self):
+        timing, _ = self.fake_clock()
+        orphan = complete("normal") + [span("order", "stove.payment.v1 receive", "late", "absent")]
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(self.sequence(complete("normal"), orphan), "t", "normal", PAYMENT, seconds=30, **timing)
+        self.assertIn("spans without parent", str(failed.exception))
+
+    def test_a_late_valid_span_restarts_the_stable_count_and_is_judged(self):
+        timing, now = self.fake_clock()
+        later = complete("normal") + [span("settlement", "stove.payment.v1 receive", "late", "s")]
+        spans = await_trace(self.sequence(complete("normal"), complete("normal"), later), "t", "normal", PAYMENT, seconds=60, **timing)
+        self.assertEqual(spans, later)
+        self.assertEqual(now[0], 3 * 4)
+
+    def test_a_trace_that_keeps_changing_fails_at_the_deadline(self):
+        timing, _ = self.fake_clock()
+        counter = [0]
+
+        def growing(trace_id):
+            counter[0] += 1
+            return complete("normal") + [span("settlement", "extra", "e" + str(i), "s") for i in range(counter[0])]
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(growing, "t", "normal", PAYMENT, seconds=30, **timing)
+        self.assertIn("still changing", str(failed.exception))
+
+    def test_orphan_after_the_third_identical_read_but_within_the_window_fails(self):
+        timing, now = self.fake_clock()
+        orphan = complete("normal") + [span("order", "stove.payment.v1 receive", "late", "absent")]
+
+        def fetch(trace_id):
+            # Reads at 0, 3, 6 s are identical and passing; the orphan is exported at 10 s (inside the window).
+            return orphan if now[0] >= 10 else complete("normal")
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(fetch, "t", "normal", PAYMENT, seconds=60, quiet_until=refund_tracing.observation_window(), **timing)
+        self.assertIn("spans without parent", str(failed.exception))
+
+    def test_a_stable_trace_is_accepted_only_after_the_observation_window(self):
+        timing, now = self.fake_clock()
+        spans = await_trace(lambda trace_id: complete("normal"), "t", "normal", PAYMENT, seconds=60,
+                            quiet_until=refund_tracing.observation_window(), **timing)
+        self.assertEqual(spans, complete("normal"))
+        self.assertGreaterEqual(now[0], refund_tracing.observation_window())
+        # Reads at 0..15 s are inside the window and never counted; 18, 21, 24 s are the three stable reads.
+        self.assertEqual(now[0], 24)
+
+    def test_deadline_before_the_window_fails_instead_of_passing_early(self):
+        timing, _ = self.fake_clock()
+        with self.assertRaises(AssertionError):
+            await_trace(lambda trace_id: complete("normal"), "t", "normal", PAYMENT, seconds=9, quiet_until=18, **timing)
+
+    def test_parses_resource_spans_json_with_hex_ids_and_url_full(self):
+        trace = {"resourceSpans": [{"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "payment"}}]},
+                                    "scopeSpans": [{"spans": [{"name": "POST", "kind": 3, "spanId": "0102030405060708",
+                                                               "parentSpanId": "0807060504030201",
+                                                               "attributes": [{"key": "url.full", "value": {"stringValue": PG + "/cancel"}},
+                                                                              {"key": "http.request.method", "value": {"stringValue": "POST"}}]}]}]}]}
+        spans = parse_trace(trace)
+        self.assertEqual((spans[0]["spanId"], spans[0]["parentSpanId"], spans[0]["method"]), ("0102030405060708", "0807060504030201", "POST"))
+        self.assertEqual(pg_call(spans[0], PAYMENT), "cancel")
+
+    def test_await_fails_at_the_deadline_with_the_last_problems(self):
+        now = [0.0]
+
+        def fetch(trace_id):
+            raise TraceUnavailable("Tempo returned no spans for t")
+
+        def sleep(seconds):
+            now[0] += seconds
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(fetch, "t", "normal", PAYMENT, seconds=9, interval=3, clock=lambda: now[0], sleep=sleep)
+        self.assertIn("no spans", str(failed.exception))
+        self.assertEqual(now[0], 9)
+
+    def test_partial_trace_never_passes(self):
+        now = [0.0]
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(lambda trace_id: complete("lost-response")[:6], "t", "lost-response", PAYMENT, seconds=3,
+                        clock=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s))  # never passes, so never stable
+        self.assertIn("no PG lookup span", str(failed.exception))
+
+    def test_required_services_are_the_refund_flow(self):
+        self.assertEqual(refund_tracing.REQUIRED_SERVICES, ("gateway", "order", "license", "payment", "settlement"))
+
+
+if __name__ == "__main__":
+    unittest.main()

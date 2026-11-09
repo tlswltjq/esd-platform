@@ -38,12 +38,14 @@ import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.domain.ReportedRefundAmounts;
 import com.stove.order.core.domain.ReportedRefundCancellation;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class RefundAmountDetailsTest {
+    private static final Instant GRANT_CONFIRMED_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
     private static final Instant PAID_AT = Instant.parse("2026-10-30T01:00:00Z");
     private final OrderRepository orders = mock(OrderRepository.class);
     private final RefundRepository refunds = mock(RefundRepository.class);
@@ -205,7 +207,7 @@ class RefundAmountDetailsTest {
     private RefundResponse customer(Order order, Refund refund) {
         when(orders.findByOrderNoAndBuyerSubject(order.getOrderNo(), order.getBuyerSubject())).thenReturn(Optional.of(order));
         when(refunds.findByOrderNo(order.getOrderNo())).thenReturn(Optional.of(refund));
-        return RefundResponse.from(new ReadRefund(orders, refunds, rounds, Clock.systemUTC(), mock(RefundAttemptRepository.class))
+        return RefundResponse.from(new ReadRefund(orders, refunds, rounds, Clock.systemUTC(), mock(RefundAttemptRepository.class), Duration.ofMinutes(10))
                 .execute(order.getOrderNo(), order.getBuyerSubject()));
     }
 
@@ -221,7 +223,7 @@ class RefundAmountDetailsTest {
     private RefundAttempt start(Order order, Refund refund) {
         LicenseGrant grant = new LicenseGrant(id(), PAID_AT, id(), order.getOrderNo(), order.getBuyerSubject(),
                 order.getProductId(), order.getProductCode(), order.getPaymentId());
-        refund.confirmLicenseGrant(grant);
+        refund.confirmLicenseGrant(grant, GRANT_CONFIRMED_AT);
         LicenseSuspensionConfirmation suspension = new LicenseSuspensionConfirmation(id(), PAID_AT.plusSeconds(61),
                 refund.getSuspensionRequestEventId(), refund.getRefundId(), grant.licenseId(), order.getOrderNo(), order.getBuyerSubject(),
                 order.getProductId(), order.getProductCode(), order.getPaymentId());

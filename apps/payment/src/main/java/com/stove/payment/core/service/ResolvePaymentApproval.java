@@ -6,6 +6,7 @@ import com.stove.payment.core.domain.OrderAdmissionReceipt;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.ApprovalObservation;
 import com.stove.payment.core.domain.ApprovalPostRejected;
+import com.stove.payment.core.domain.ApprovalReviewRequeryInterval;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderLifecycle;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
@@ -45,16 +46,18 @@ public class ResolvePaymentApproval {
     private final Clock clock;
     private final Duration lease;
     private final Duration delay;
+    private final ApprovalReviewRequeryInterval reviewInterval;
     private final int batchSize;
     private final TransactionTemplate transaction;
 
     public ResolvePaymentApproval(PaymentRepository payments, PaymentApprovalRepository approvals, OrderPaymentAdmissions orders,
             PgPaymentApprovalGateway gateway, ApprovalPayloadProtection protection, ResolvePayment resolve, Clock clock,
-            Duration lease, Duration delay, int batchSize, PlatformTransactionManager transactions,PaymentOrderLifecycleRepository lifecycle) {
-        if (lease==null || lease.isNegative() || lease.isZero() || delay==null || delay.isNegative() || delay.isZero() || batchSize<1)
+            Duration lease, Duration delay, ApprovalReviewRequeryInterval reviewInterval, int batchSize, PlatformTransactionManager transactions,
+            PaymentOrderLifecycleRepository lifecycle) {
+        if (lease==null || lease.isNegative() || lease.isZero() || delay==null || delay.isNegative() || delay.isZero() || reviewInterval==null || batchSize<1)
             throw new IllegalArgumentException("Bounded approval scheduling is required");
         this.lifecycle=lifecycle; this.payments=payments; this.approvals=approvals; this.orders=orders; this.gateway=gateway;
-        this.protection=protection; this.resolve=resolve; this.clock=clock; this.lease=lease; this.delay=delay; this.batchSize=batchSize;
+        this.protection=protection; this.resolve=resolve; this.clock=clock; this.lease=lease; this.delay=delay; this.reviewInterval=reviewInterval; this.batchSize=batchSize;
         transaction=new TransactionTemplate(transactions); transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
     public void execute() {
@@ -82,7 +85,7 @@ public class ResolvePaymentApproval {
         catch (RuntimeException unavailable) {
             log.warn("Approval remains unconfirmed: id={}, errorType={}",id,unavailable.getClass().getSimpleName());
         } finally {
-            locked(id,(payment,approval)->approval.finish(token,now(),now().plus(delay)));
+            locked(id,(payment,approval)->{ Instant at=now(); return approval.finish(token,at,nextCheck(approval,at)); });
         }
     }
     private void cycle(String id, String token, PaymentApproval current) {
@@ -96,13 +99,11 @@ public class ResolvePaymentApproval {
             return;
         }
         if(current.getStatus()==PaymentApprovalStatus.REQUESTED && current.getAdmittedAt()==null && orderExpired(current.getOrderNo())) {
-            locked(id,(payment,approval)->{
-                if(approval.owns(token,now()) && approval.getAdmittedAt()==null && approval.getStatus()==PaymentApprovalStatus.REQUESTED) {
-                    approval.expire(now());
-                    if(payment.getStatus()==PaymentStatus.PENDING)payment.expireUnpaid();
-                }
-                return null;
-            });
+            if(current.getLatestPgState()!=null) {
+                expireAfterLookup(id,token,current);
+                return;
+            }
+            expireRequested(id,token);
             return;
         }
         if(current.getAdmittedAt()!=null && orderExpired(current.getOrderNo()))stop(id,token,"ORDER_EXPIRY_CONFLICT");
@@ -144,6 +145,7 @@ public class ResolvePaymentApproval {
             if (current==null) return;
         }
         if (completeObservation(id,token,current,observed)) return;
+        if (holdAfterConfirmWindow(id,token,observed)) return;
         if (observed.state()!=ApprovalObservation.State.READY || current.isPostStopped()) return;
         PaymentApproval dispatch=locked(id,(payment,approval)->{
             if (!approval.owns(token,now())) return null;
@@ -156,6 +158,37 @@ public class ResolvePaymentApproval {
         if (!Boolean.TRUE.equals(permitted)) return;
         gateway.submit(id,dispatch.purchase(),body,dispatch.getFirstPreparedAt(),dispatch.getLeaseUntil());
         completeObservation(id,token,dispatch,inspect(id, token, dispatch));
+    }
+    /** Closes a queued unadmitted approval on the order expiry notice without PG traffic (R11.5). */
+    private void expireRequested(String id,String token) {
+        locked(id,(payment,approval)->{
+            if(approval.owns(token,now()) && approval.getAdmittedAt()==null && approval.getStatus()==PaymentApprovalStatus.REQUESTED) {
+                approval.expire(now());
+                if(payment.getStatus()==PaymentStatus.PENDING)payment.expireUnpaid();
+            }
+            return null;
+        });
+    }
+    /**
+     * An unadmitted approval that has already seen the PG may have been charged later, so it looks up the PG once before
+     * the order expiry closes it (decision 126, D-044). PAID and a full cancellation keep the existing holds, READY and
+     * FAILED close as before, and a PG still PENDING is held for an operator instead of being closed or polled unseen.
+     */
+    private void expireAfterLookup(String id,String token,PaymentApproval current) {
+        ApprovalObservation observed=inspect(id,token,current);
+        ApprovalObservation.State state=observed.state();
+        if (state==ApprovalObservation.State.PAID) stop(id,token,"PAID_WITHOUT_ADMISSION");
+        else if (state==ApprovalObservation.State.CANCELLED) holdForCancellation(id,token);
+        else if (state==ApprovalObservation.State.PENDING) stop(id,token,"PG_PENDING_AT_ORDER_EXPIRY");
+        else expireRequested(id,token);
+    }
+    /**
+     * Right after a lookup, an admitted approval past its confirm window with the PG still PENDING or READY is held with
+     * CONFIRM_WINDOW_EXPIRED (decision 124), so it joins the existing hold list, gauge, interval and closure flow.
+     */
+    private boolean holdAfterConfirmWindow(String id,String token,ApprovalObservation observed) {
+        Boolean held=locked(id,(payment,approval)->approval.owns(token,now()) && approval.holdAfterConfirmWindow(observed,now()));
+        return Boolean.TRUE.equals(held);
     }
     private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
         ApprovalObservation observation;
@@ -210,6 +243,11 @@ public class ResolvePaymentApproval {
             return null;
         });
     }
+    /** A held approval waits longer the longer it has been held (decision 122); every other approval keeps the retry delay. */
+    private Instant nextCheck(PaymentApproval approval,Instant at) {
+        if (approval.getStatus()!=PaymentApprovalStatus.REVIEW_REQUIRED) return at.plus(delay);
+        return at.plus(reviewInterval.after(approval.getReviewStartedAt(),at));
+    }
     private boolean orderExpired(String orderNo) {
         return lifecycle.findById(orderNo).map(PaymentOrderLifecycle::expired).orElse(false);
     }
@@ -225,7 +263,15 @@ public class ResolvePaymentApproval {
         });
     }
     private void stop(String id,String token,String code) {
-        locked(id,(payment,approval)->{ if (approval.owns(token,now()) && !approval.terminal()) approval.stopPosts(code,now()); return null; });
+        locked(id,(payment,approval)->{
+            if (approval.owns(token,now()) && !approval.terminal()) {
+                approval.stopPosts(code,now());
+                // Decision 144: a held approval keeps its first reason; the dropped one is only logged.
+                if (!code.equals(approval.getLastErrorCode()))
+                    log.info("Held approval keeps its first reason: id={}, reason={}, ignored={}",id,approval.getLastErrorCode(),code);
+            }
+            return null;
+        });
     }
     private <T> T locked(String id,BiFunction<Payment,PaymentApproval,T> action) {
         PaymentApproval snapshot=approvals.findByApprovalId(id).orElse(null);

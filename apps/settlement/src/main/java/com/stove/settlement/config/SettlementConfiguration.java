@@ -17,6 +17,8 @@ import com.stove.settlement.core.domain.FullRefundAllocationPolicy;
 import com.stove.settlement.core.domain.ReverseOriginalFullRefundPolicy;
 import com.stove.settlement.core.domain.RefundSettlementMonthPolicy;
 import com.stove.settlement.core.domain.UseConfirmedRefundMonthPolicy;
+import com.stove.settlement.core.domain.SellerCarryoverRepository;
+import com.stove.settlement.core.domain.SellerLockRepository;
 import com.stove.settlement.core.domain.SellerMonthlySettlementRepository;
 import com.stove.settlement.core.domain.SettlementSaleRepository;
 import com.stove.settlement.core.port.CatalogOwners;
@@ -60,8 +62,8 @@ public class SettlementConfiguration {
     PgRefunds pgRefunds() { return new UnavailablePgRefunds(); }
     @Bean RecordConfirmedRefund recordConfirmedRefund(SettlementRefundRepository refunds,SettlementSaleRepository sales,
             SellerMonthlySettlementRepository months,PgTransactionRepository records,PgRefunds supplier,ProcessedEventGuard inbox,
-            FullRefundAllocationPolicy allocation,RefundSettlementMonthPolicy policy,Clock clock,PlatformTransactionManager manager) {
-        return new RecordConfirmedRefund(refunds,sales,months,records,supplier,inbox,allocation,policy,clock,manager);
+            FullRefundAllocationPolicy allocation,RefundSettlementMonthPolicy policy,Clock clock,PlatformTransactionManager manager,SellerLockRepository sellers) {
+        return new RecordConfirmedRefund(refunds,sales,months,records,supplier,inbox,allocation,policy,clock,manager,sellers);
     }
     private RestClient client(URI uri,String header,String key,SettlementHttpProperties p, RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
@@ -76,11 +78,13 @@ public class SettlementConfiguration {
         return new SynchronizePgTransaction(records,fees,payments,recorder,clock,transactions);
     }
     @Bean RecordPaidSale recordPaidSale(SettlementSaleRepository sales,SellerMonthlySettlementRepository months,ProcessedEventGuard guard,
-            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords) {
-        return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords);
+            PgPayments payments,CatalogOwners owners,PlatformFeePolicy policy,Clock clock,PlatformTransactionManager transactions,RecordPgTransaction pgRecords,
+            SellerLockRepository sellers) {
+        return new RecordPaidSale(sales,months,guard,payments,owners,policy,clock,transactions,pgRecords,sellers);
     }
-    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,SettlementRefundRepository refunds) {
-        return new CloseSellerMonth(months,sales,clock,transactions,refunds);
+    @Bean CloseSellerMonth closeSellerMonth(SellerMonthlySettlementRepository months,SettlementSaleRepository sales,Clock clock,PlatformTransactionManager transactions,
+            SettlementRefundRepository refunds,SellerCarryoverRepository carryovers,SellerLockRepository sellers) {
+        return new CloseSellerMonth(months,sales,clock,transactions,refunds,carryovers,sellers);
     }
     @Bean ReconcilePgReceipt reconcilePgReceipt(PgReceiptRepository receipts,SettlementSaleRepository sales,Clock clock,PgTransactionRepository transactions,PgFeeRepository fees) {
         return new ReconcilePgReceipt(receipts,sales,clock,transactions,fees);

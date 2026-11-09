@@ -81,3 +81,57 @@ tests:
       - eval_time: 3m
         alertname: PaymentApprovalsRequireReview
         exp_alerts: []
+
+  # 결정 126: 접수 전 PAY_PENDING 관측 건이 주문 만료 뒤에도 PENDING이면 warning 보류로 올라온다.
+  - interval: 1m
+    input_series:
+      - series: 'stove_payment_approval_review_required{application="payment",reason="PG_PENDING_AT_ORDER_EXPIRY"}'
+        values: '0 1 1 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts:
+          - exp_labels:
+              application: payment
+              reason: PG_PENDING_AT_ORDER_EXPIRY
+              severity: warning
+            exp_annotations:
+              summary: "payment: 결제 승인 보류 조사 필요"
+              description: >-
+                1건의 승인 보류가 PG_PENDING_AT_ORDER_EXPIRY 사유로 조사 대기 중이다.
+                GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+                PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
+                알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+      - eval_time: 3m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []
+
+  # 결정 124: 접수 승인이 confirm 기한(최초 준비 + 3시간)을 넘겼는데 PG가 PENDING·READY이면 warning 보류로 올라온다.
+  - interval: 1m
+    input_series:
+      - series: 'stove_payment_approval_review_required{application="payment",reason="CONFIRM_WINDOW_EXPIRED"}'
+        values: '0 1 1 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts:
+          - exp_labels:
+              application: payment
+              reason: CONFIRM_WINDOW_EXPIRED
+              severity: warning
+            exp_annotations:
+              summary: "payment: 결제 승인 보류 조사 필요"
+              description: >-
+                1건의 승인 보류가 CONFIRM_WINDOW_EXPIRED 사유로 조사 대기 중이다.
+                GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
+                PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
+                알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+      - eval_time: 3m
+        alertname: PaymentApprovalsRequireReview
+        exp_alerts: []

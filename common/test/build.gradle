@@ -30,7 +30,8 @@ tasks.named('test') {
             .withPropertyName('appConfigs')
             .withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.files(['docker-compose.yml', 'docker-compose.apps.yml',
-                  'docker-compose.local.yml', 'docker-compose.apps.local.yml'].collect { rootProject.file(it) })
+                  'docker-compose.local.yml', 'docker-compose.apps.local.yml',
+                  'docker-compose.settlement-portone.yml'].collect { rootProject.file(it) })
             .withPropertyName('composeConfigs')
             .withPathSensitivity(PathSensitivity.RELATIVE)
 }
