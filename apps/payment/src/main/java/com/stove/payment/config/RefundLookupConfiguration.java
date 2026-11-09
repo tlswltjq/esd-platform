@@ -2,6 +2,8 @@ package com.stove.payment.config;
 
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.ResolveRefundLookup;
 import java.time.Clock;
@@ -39,9 +41,11 @@ public class RefundLookupConfiguration {
 
     @Bean ResolveRefundLookup resolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions,
             ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock refundReceptionClock,
-            @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone) {
+            @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone,
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing) {
         portone.requireConfigured();
-        return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lookupLease(portone), 20);
+        return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lookupLease(portone), 20,
+                traceContexts, tracing);
     }
 
     /** One PortOne GET plus margin. The operator closure (decision 127) holds the same lease while it re-inspects the PG. */

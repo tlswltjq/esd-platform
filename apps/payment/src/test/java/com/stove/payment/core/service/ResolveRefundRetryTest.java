@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.domain.RefundCancellationClaim;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -75,6 +76,7 @@ class ResolveRefundRetryTest {
     }
 
     private ResolveRefundRetry service(Executor executor) {
-        return new ResolveRefundRetry(executions, cancellations, Clock.fixed(NOW, ZoneOffset.UTC), executor, 20);
+        return new ResolveRefundRetry(executions, cancellations, Clock.fixed(NOW, ZoneOffset.UTC), executor, 20,
+                mock(RefundExecutionTraceContexts.class), (parent, paymentId, work) -> work.run());
     }
 }
