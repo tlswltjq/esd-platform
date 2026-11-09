@@ -17,6 +17,10 @@ from support.portone_fake import PortOneFake
 APPS = {"auth": 8091, "studio": 8085, "gateway": 8080, "review": 8086, "catalog": 8081, "store": 8087,
         "order": 8082, "payment": 8083, "license": 8084, "settlement": 8089}
 BUYER_PASSWORD = "creator-password-1234"
+# Short, fixed OTel export latency for tracing journeys only (support/refund_tracing.export_bound()).
+TRACE_EXPORT_ENV = dict(MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY="1s", MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT="5s",
+                        MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_QUEUE_SIZE="2048", MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_BATCH_SIZE="2048",
+                        MANAGEMENT_OTLP_TRACING_TIMEOUT="5s", MANAGEMENT_OTLP_TRACING_CONNECT_TIMEOUT="2s")
 ADMIN_EMAIL, ADMIN_PASSWORD = "admin-check@review.local", "admin-password-1234"
 
 
@@ -38,8 +42,10 @@ def free_port():
 
 
 class FakePortOneStack:
-    def __init__(self, repo, tool, offset_env, prefix):
+    def __init__(self, repo, tool, offset_env, prefix, tracing=False):
         self.repo = Path(repo)
+        # Tracing journeys add an isolated Tempo and sample every request; other journeys keep sampling at 0.
+        self.tracing = tracing
         self.offset = port_rules.application_offset(tool, offset_env, APPS.values())
         out_root = self.repo / "runs"
         out_root.mkdir(exist_ok=True)
@@ -57,9 +63,10 @@ class FakePortOneStack:
         self.fake = PortOneFake({"payment": self.portone["PORTONE_API_SECRET"], "settlement": self.settlement_secret,
                                  "sdk": self.sdk_secret, "console": self.console_secret},
                                 self.portone["PORTONE_STORE_ID"], self.portone["PORTONE_CHANNEL_KEY"])
-        self.infra = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"]}
+        self.infra = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"] + (["tempo", "otlp"] if tracing else [])}
+        self.tempo_url = "http://127.0.0.1:" + str(self.infra["tempo"]) if tracing else None
         self.minio_image = ensure_minio_image(self.repo)
-        for image in ["mysql:8.0", "redis:7-alpine", "apache/kafka:3.9.0"]:
+        for image in ["mysql:8.0", "redis:7-alpine", "apache/kafka:3.9.0"] + (["grafana/tempo:2.9.4"] if tracing else []):
             subprocess.run(["docker", "image", "inspect", image], check=True, stdout=subprocess.DEVNULL, timeout=30)
         self.log("Evidence: " + str(self.directory))
         self.compose = self.write_compose()
@@ -291,7 +298,14 @@ class FakePortOneStack:
       MINIO_ROOT_USER: stove
       MINIO_ROOT_PASSWORD: stove1234
     command: ["server", "/data"]
-""")
+""" + (f"""  tempo:
+    image: grafana/tempo:2.9.4
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports: ["127.0.0.1:{infra['tempo']}:3200", "127.0.0.1:{infra['otlp']}:4318"]
+    volumes: ["{self.repo / 'infra/tempo/tempo.yml'}:/etc/tempo/tempo.yml:ro", "tempo-data:/var/tempo"]
+volumes:
+  tempo-data: {{}}
+""" if self.tracing else ""))
         compose.chmod(0o600)
         return compose
 
@@ -360,6 +374,8 @@ class FakePortOneStack:
         self.log("Isolated stack: " + self.project)
         subprocess.run(docker + ["up", "-d", "--pull", "never"], check=True, cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
         self.wait_for(lambda: self.ready(f"http://127.0.0.1:{infra['minio']}/minio/health/ready"), "MinIO")
+        if self.tracing:
+            self.wait_for(lambda: self.ready(self.tempo_url + "/ready"), "Tempo", 240)
         self.wait_for(lambda: subprocess.run(docker + ["exec", "-T", "mysql", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot1234"],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30).returncode == 0, "MySQL")
         mc = docker + ["exec", "-T", "minio", "mc"]
@@ -389,6 +405,8 @@ class FakePortOneStack:
             AUTH_ADMIN_EMAIL=ADMIN_EMAIL, AUTH_ADMIN_PASSWORD=ADMIN_PASSWORD,
             REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password",
             DOWNLOAD_URI="http://127.0.0.1:9")
+        if self.tracing:
+            common.update(TRACING_SAMPLE_RATE="1", OTLP_ENDPOINT=f"http://127.0.0.1:{infra['otlp']}/v1/traces", **TRACE_EXPORT_ENV)
         for app, port in APPS.items():
             common[app.upper() + "_URI"] = f"http://127.0.0.1:{port + offset}"
         common["CATALOG_BASE_URL"] = common["CATALOG_URI"]

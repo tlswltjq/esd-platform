@@ -2,11 +2,14 @@ package com.stove.payment.core.service;
 
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
+import com.stove.payment.core.domain.PaymentTraceContext;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundLookupClaim;
 import com.stove.payment.core.domain.RefundLookupInterval;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
@@ -32,20 +35,25 @@ public class ResolveRefundLookup {
     private final Executor executor;
     private final Duration lease;
     private final int batchSize;
+    private final RefundExecutionTraceContexts traceContexts;
+    private final PaymentTracing tracing;
     private final RefundLookupInterval interval;
 
     public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
-            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize) {
-        this(payments, executions, reconcile, transactions, clock, executor, lease, batchSize, RefundLookupInterval.DEFAULT);
+            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize,
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing) {
+        this(payments, executions, reconcile, transactions, clock, executor, lease, batchSize, traceContexts, tracing, RefundLookupInterval.DEFAULT);
     }
 
     public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
-            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize, RefundLookupInterval interval) {
+            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize,
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing, RefundLookupInterval interval) {
         if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0 || batchSize < 1 || batchSize > 100 || interval == null)
             throw new IllegalArgumentException("A bounded lookup batch, positive lease and refund lookup interval are required");
         this.interval = interval;
         this.payments = payments; this.executions = executions; this.reconcile = reconcile; this.clock = clock;
         this.executor = executor; this.lease = lease; this.batchSize = batchSize;
+        this.traceContexts = traceContexts; this.tracing = tracing;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
@@ -72,14 +80,16 @@ public class ResolveRefundLookup {
         });
         if (claim == null) return;
         try {
-            executor.execute(() -> {
+            // Each lookup is a new child of the parent saved at reception (decision 28, D-050); none means a new root. The
+            // post-failure watch (decision 128) runs through the same path, so it keeps the same parent.
+            executor.execute(() -> tracing.run(parent(attemptId), received.getPaymentId(), () -> {
                 try { reconcile.executeScheduled(attemptId); }
                 catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 finally {
                     try { update(received, execution -> execution.finishLookup(claim, clock.instant(), interval)); }
                     catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 }
-            });
+            }));
         } catch (RejectedExecutionException full) {
             update(received, execution -> execution.getLookupSchedule().abandon(claim));
         }
@@ -91,6 +101,12 @@ public class ResolveRefundLookup {
             RefundExecution current = executions.lockByAttemptId(received.getAttemptId()).orElseThrow();
             change.accept(current);
         });
+    }
+
+    private PaymentTraceContext parent(String attemptId) {
+        // Tracing metadata never blocks the lookup or its lease release.
+        try { return traceContexts.find(attemptId); }
+        catch (RuntimeException failure) { logFailure(attemptId, failure); return PaymentTraceContext.NONE; }
     }
 
     private static void logFailure(String attemptId, RuntimeException failure) {

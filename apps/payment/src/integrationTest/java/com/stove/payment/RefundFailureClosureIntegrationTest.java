@@ -44,7 +44,9 @@ import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundFailedCancellation;
 import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundLookupInterval;
+import com.stove.payment.core.port.PaymentTracing;
 import com.stove.payment.core.port.RefundCancellationGateway;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.port.RefundPaymentLookup;
 import com.stove.payment.core.service.ReadRefundDelays;
 import com.stove.payment.core.service.ReceivePortOneWebhook;
@@ -127,6 +129,8 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     @Autowired ReceivePortOneWebhook webhook;
     @Autowired PlatformTransactionManager transactions;
     @Autowired MeterRegistry meters;
+    @Autowired RefundExecutionTraceContexts traceContexts;
+    @Autowired PaymentTracing tracing;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @MockitoBean RefundPaymentLookup lookup;
@@ -535,7 +539,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     private ResolveRefundLookup worker() { return worker(Duration.ofSeconds(60), Duration.ofMinutes(10)); }
     private ResolveRefundLookup worker(Duration initial, Duration max) {
         return new ResolveRefundLookup(payments, executions, reconcile, transactions, clock, Runnable::run, Duration.ofSeconds(97), 20,
-                new RefundLookupInterval(initial, max));
+                traceContexts, tracing, new RefundLookupInterval(initial, max));
     }
     private Payment paid() {
         Payment payment = Payment.receive(request(), "PORTONE_TEST");

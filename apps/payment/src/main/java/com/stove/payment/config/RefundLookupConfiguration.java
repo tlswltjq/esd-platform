@@ -3,6 +3,8 @@ package com.stove.payment.config;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundLookupInterval;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.ResolveRefundLookup;
 import java.time.Clock;
@@ -40,10 +42,11 @@ public class RefundLookupConfiguration {
 
     @Bean ResolveRefundLookup resolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions,
             ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock refundReceptionClock,
-            @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone, RefundLookupProperties properties) {
+            @Qualifier("refundLookupExecutor") ThreadPoolTaskExecutor executor, PortOneProperties portone,
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing, RefundLookupProperties properties) {
         portone.requireConfigured();
         return new ResolveRefundLookup(payments, executions, reconcile, transactions, refundReceptionClock, executor, lookupLease(portone), 20,
-                lateInterval(properties));
+                traceContexts, tracing, lateInterval(properties));
     }
 
     /** Decisions 122·128: the lookup delay past the original window and after a failure has its own keys, capped at 10 minutes. */

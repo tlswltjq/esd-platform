@@ -271,3 +271,56 @@ class PortOneFakeControlTest(unittest.TestCase):
         self.assertEqual(self.current()['status'], 'READY')
         self.assertTrue(all(r['caller'] in {'console', 'payment', None} for r in self.fake.requests))
         self.assertNotIn('console-secret', json.dumps(self.fake.requests))
+
+
+class PortOneFakeCancelFaultTest(unittest.TestCase):
+    """Refund tracing journeys: a cancellation whose answer is lost, or a PG error before any cancellation."""
+
+    setUp = PortOneFakeControlTest.setUp
+    call = PortOneFakeTest.call
+    checkout = PortOneFakeControlTest.checkout
+    confirm_body = PortOneFakeControlTest.confirm_body
+    control = PortOneFakeControlTest.control
+    current = PortOneFakeControlTest.current
+    cancel_body = dict(storeId='store', amount=10000, currentCancellableAmount=10000, reason='ESD refund r')
+
+    def paid(self):
+        sdk = self.checkout()[1]
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')[0], 200)
+
+    def raw_cancel(self, key):
+        request = urllib.request.Request(self.fake.base_url + '/payments/payment/cancel', data=json.dumps(self.cancel_body).encode(),
+            headers={'Authorization': 'PortOne secret', 'Content-Type': 'application/json', 'Idempotency-Key': key}, method='POST')
+        return urllib.request.urlopen(request, timeout=3)
+
+    def test_arm_cancel_is_validated_and_requires_a_paid_attempt(self):
+        self.checkout()
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'LOST_RESPONSE'})[0], 409)
+        self.call('POST', '/payments/payment/confirm', self.confirm_body(self.checkout()[1]), '"approval"')
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'MAYBE'})[0], 400)
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'PG_ERROR', 'failLookups': 11})[0], 400)
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'PG_ERROR', 'failLookups': True})[0], 400)
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'PG_ERROR'}, secret='secret')[0], 403)
+        self.assertEqual(self.current()['status'], 'PAID')
+
+    def test_lost_response_cancels_closes_the_connection_and_fails_the_next_lookups(self):
+        self.paid()
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'LOST_RESPONSE', 'failLookups': 1})[0], 200)
+        with self.assertRaises(Exception) as lost:
+            self.raw_cancel('"cancel"').read()
+        self.assertNotIsInstance(lost.exception, urllib.error.HTTPError)
+        self.assertEqual(self.call('GET', '/payments/payment?storeId=store')[0], 503)
+        cancelled = self.current()
+        self.assertEqual((cancelled['status'], cancelled['amount']['cancelled']), ('CANCELLED', 10000))
+        replay = self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"')
+        self.assertEqual((replay[0], replay[1]['cancellation']['id']), (200, cancelled['cancellations'][0]['id']))
+        self.assertEqual([r['status'] for r in self.fake.requests if r['path'].endswith('/cancel')], ['LOST', 200])
+
+    def test_pg_error_does_not_cancel_and_the_same_key_retries_successfully(self):
+        self.paid()
+        self.control('arm-cancel', {'outcome': 'PG_ERROR', 'failLookups': 0})
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"'),
+                         (503, {'type': 'PG_PROVIDER', 'message': 'fake PG cancel unavailable'}))
+        self.assertEqual(self.current()['status'], 'PAID')
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"')[0], 200)
+        self.assertEqual(self.current()['status'], 'CANCELLED')

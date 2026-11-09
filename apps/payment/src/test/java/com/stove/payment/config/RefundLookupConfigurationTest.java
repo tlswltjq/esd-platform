@@ -10,6 +10,8 @@ import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundLookupInterval;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.ResolveRefundLookup;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -27,6 +29,8 @@ class RefundLookupConfigurationTest {
             .withBean(ReconcileRefundPayment.class, () -> mock(ReconcileRefundPayment.class))
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
             .withBean(Clock.class, Clock::systemUTC)
+            .withBean(RefundExecutionTraceContexts.class, () -> mock(RefundExecutionTraceContexts.class))
+            .withBean(PaymentTracing.class, () -> (parent, paymentId, work) -> work.run())
             .withBean(PortOneProperties.class, () -> new PortOneProperties(URI.create("http://127.0.0.1"), "fixture",
                     "store-fixture", "channel-fixture", "fixture", Duration.ofSeconds(2), Duration.ofSeconds(65),
                     URI.create("https://fixture.example/webhook")))

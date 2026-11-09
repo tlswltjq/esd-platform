@@ -22,6 +22,8 @@ import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundLookupClaim;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.ReceivePortOneWebhook;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.ReconcileRefundPayment;
@@ -75,6 +77,8 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired PlatformTransactionManager transactions;
     @Autowired OutboxRecorder outbox;
     @Autowired JdbcTemplate jdbc;
+    @Autowired RefundExecutionTraceContexts traceContexts;
+    @Autowired PaymentTracing tracing;
     @MockitoBean Clock clock;
     private RefundExecution current;
     private HttpServer pg;
@@ -264,7 +268,7 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             return lookup.find(purchase);
         }, outbox, transactions, clock);
-        return new ResolveRefundLookup(payments, executions, reconcile, transactions, clock, executor, Duration.ofSeconds(97), 20);
+        return new ResolveRefundLookup(payments, executions, reconcile, transactions, clock, executor, Duration.ofSeconds(97), 20, traceContexts, tracing);
     }
     private void received() {
         Payment paid = Payment.receive(request(), "PORTONE_TEST");
