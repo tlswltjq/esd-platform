@@ -32,6 +32,17 @@ jobs:
       - name: Check decision numbers
         if: ${{ !cancelled() }}
         run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1
+      - name: Check evidence fragments
+        # 결정 146: 코드 PR은 docs/evidence.d/<PR번호>.md를 더하고, docs/evidence.md는 접기 PR만 고친다.
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 -I -B tools/ci/evidence_fragments.py check --root .
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[] | "\(.status)\t\(.filename)"' > "$RUNNER_TEMP/changes.txt"
+          python3 -I -B tools/ci/evidence_fragments.py pr --number "$PR_NUMBER" --changes "$RUNNER_TEMP/changes.txt"
       - name: Check review section
         env:
           GH_TOKEN: ${{ github.token }}
