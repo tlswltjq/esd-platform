@@ -1261,6 +1261,15 @@
 - 구분: 추천 수용
 - 결과: [PR #175](https://github.com/tlswltjq/esd-platform/pull/175), 근거 색인 2026-11-09 cross 부팅 DB 연결 대기 행
 
+<a id="fake-portone-webhooks"></a>
+## 138. 외부 웹훅은 흉내 서버가 서명해 보내는 실제 스택 여정으로 재현하고, 실제 PortOne 수신은 외부 대기로 둔다
+- 문제: Payment는 PortOne 웹훅(`POST /api/v1/payments/webhooks/portone`, Standard Webhooks HMAC-SHA256)을 조회 힌트로만 받는다. 받으면 다음 PG 조회를 앞당기고, 취소 계열이면 미확정 환불 조회도 앞당긴다. 웹훅만으로 PAID를 만들지는 않는다. 실제 수신은 2026-10-27 한 번뿐이다. OCI 임시 공개 IP·IP 인증서·SSH 역방향 연결·전용 nginx를 손으로 구성해서 다시 돌리기 어렵다. `tools/verification/support/portone_fake.py`는 웹훅을 보내지 않아, 실제 스택 여정 어디에서도 웹훅 → 재조회 → PAID 경로를 지나지 않는다. 2026-11-07부터는 공용 예제 키가 거절돼 실제 PortOne TEST도 쓸 수 없다([결정 119](#g1-exit-verification)).
+- 선택지: A 흉내 서버가 테스트 비밀로 서명한 웹훅을 Payment 웹훅 주소로 직접 보내고, 실제 스택 여정에 웹훅 단계를 더한다 / B 10-27 구성(nginx edge·IP 인증서·SSH 연결)을 스크립트로 만들어 실제 PortOne으로 돌린다 / C A를 지금 하고 B는 외부 대기로 둔다 (추천: C — 결정 119와 같은 방식이다. 웹훅은 확정을 앞당기는 힌트라 망가져도 결과가 아니라 지연이 나빠진다. A로 회귀를 싸게 막고, 실제 형식은 10-27 기록과 이후 B로 덮는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "C로 해, 흉내 서버 웹훅부터")
+- 선택: C — 흉내 서버는 여정이 켤 때만 웹훅을 보낸다. 기존 여정은 그대로 두고 운영 코드도 바꾸지 않는다. 웹훅은 10-27 edge처럼 Gateway를 거치지 않고 Payment로 직접 간다. 실제 PortOne 공개 HTTPS 수신 재현은 Gateway `tasks.md`의 `[외부 대기]`로 남긴다. 운영 배포에서 웹훅을 받을 공개 경로(Gateway 예외 또는 전용 edge)는 G5 "비밀 설정·웹훅"에서 따로 정한다.
+- 구분: 추천 수용
+- 결과: (PR 작성 후 기입)
+
 ---
 
 ## 검증하며 드러난 것
