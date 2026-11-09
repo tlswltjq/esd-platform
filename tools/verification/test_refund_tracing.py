@@ -95,6 +95,25 @@ class TraceProblemsTest(unittest.TestCase):
         self.assertIn("expected the first PG cancel and a resend, found 1", trace_problems(spans, "pg-error", PAYMENT))
 
 
+class ObservationWindowTest(unittest.TestCase):
+    def test_export_bound_is_schedule_delay_plus_one_in_flight_and_one_own_export(self):
+        self.assertEqual(refund_tracing.export_bound(1, 5, 5), 11)
+        self.assertEqual(refund_tracing.export_bound(5, 30, 10), 25)  # Spring Boot 3.5 defaults: OTLP timeout caps each export
+        self.assertEqual(refund_tracing.export_bound(1, 3, 10), 7)
+
+    def test_window_covers_consumer_finish_export_and_tempo(self):
+        self.assertEqual(refund_tracing.export_bound(), 11)
+        self.assertEqual(refund_tracing.observation_window(), 18)
+        self.assertGreater(refund_tracing.observation_window(), refund_tracing.export_bound())
+        self.assertGreater(refund_tracing.observation_window(), (refund_tracing.STABLE_READS - 1) * 3)
+
+    def test_stack_pins_the_export_settings_the_bound_assumes(self):
+        from support.fake_portone_stack import TRACE_EXPORT_ENV
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY"], str(refund_tracing.SCHEDULE_DELAY_SECONDS) + "s")
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT"], str(refund_tracing.EXPORT_TIMEOUT_SECONDS) + "s")
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_OTLP_TRACING_TIMEOUT"], str(refund_tracing.OTLP_TIMEOUT_SECONDS) + "s")
+
+
 class FetchAndAwaitTest(unittest.TestCase):
     def serve(self, status, body):
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -179,6 +198,30 @@ class FetchAndAwaitTest(unittest.TestCase):
         with self.assertRaises(AssertionError) as failed:
             await_trace(growing, "t", "normal", PAYMENT, seconds=30, **timing)
         self.assertIn("still changing", str(failed.exception))
+
+    def test_orphan_after_the_third_identical_read_but_within_the_window_fails(self):
+        timing, now = self.fake_clock()
+        orphan = complete("normal") + [span("order", "stove.payment.v1 receive", "late", "absent")]
+
+        def fetch(trace_id):
+            # Reads at 0, 3, 6 s are identical and passing; the orphan is exported at 10 s (inside the window).
+            return orphan if now[0] >= 10 else complete("normal")
+        with self.assertRaises(AssertionError) as failed:
+            await_trace(fetch, "t", "normal", PAYMENT, seconds=60, quiet_until=refund_tracing.observation_window(), **timing)
+        self.assertIn("spans without parent", str(failed.exception))
+
+    def test_a_stable_trace_is_accepted_only_after_the_observation_window(self):
+        timing, now = self.fake_clock()
+        spans = await_trace(lambda trace_id: complete("normal"), "t", "normal", PAYMENT, seconds=60,
+                            quiet_until=refund_tracing.observation_window(), **timing)
+        self.assertEqual(spans, complete("normal"))
+        self.assertGreaterEqual(now[0], refund_tracing.observation_window())
+        self.assertEqual(now[0], 18)
+
+    def test_deadline_before_the_window_fails_instead_of_passing_early(self):
+        timing, _ = self.fake_clock()
+        with self.assertRaises(AssertionError):
+            await_trace(lambda trace_id: complete("normal"), "t", "normal", PAYMENT, seconds=9, quiet_until=18, **timing)
 
     def test_parses_resource_spans_json_with_hex_ids_and_url_full(self):
         trace = {"resourceSpans": [{"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "payment"}}]},

@@ -17,6 +17,9 @@ from support.portone_fake import PortOneFake
 APPS = {"auth": 8091, "studio": 8085, "gateway": 8080, "review": 8086, "catalog": 8081, "store": 8087,
         "order": 8082, "payment": 8083, "license": 8084, "settlement": 8089}
 BUYER_PASSWORD = "creator-password-1234"
+# Short, fixed OTel export latency for tracing journeys only (support/refund_tracing.export_bound()).
+TRACE_EXPORT_ENV = dict(MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY="1s", MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT="5s",
+                        MANAGEMENT_OTLP_TRACING_TIMEOUT="5s", MANAGEMENT_OTLP_TRACING_CONNECT_TIMEOUT="2s")
 ADMIN_EMAIL, ADMIN_PASSWORD = "admin-check@review.local", "admin-password-1234"
 
 
@@ -402,7 +405,7 @@ volumes:
             REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password",
             DOWNLOAD_URI="http://127.0.0.1:9")
         if self.tracing:
-            common.update(TRACING_SAMPLE_RATE="1", OTLP_ENDPOINT=f"http://127.0.0.1:{infra['otlp']}/v1/traces")
+            common.update(TRACING_SAMPLE_RATE="1", OTLP_ENDPOINT=f"http://127.0.0.1:{infra['otlp']}/v1/traces", **TRACE_EXPORT_ENV)
         for app, port in APPS.items():
             common[app.upper() + "_URI"] = f"http://127.0.0.1:{port + offset}"
         common["CATALOG_BASE_URL"] = common["CATALOG_URI"]

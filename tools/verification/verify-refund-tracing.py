@@ -20,7 +20,7 @@ import json, sys, time, urllib.parse, urllib.request
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/verification"))
 from support.fake_portone_stack import FakePortOneStack  # noqa: E402
-from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace, pg_call  # noqa: E402
+from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace, observation_window, pg_call  # noqa: E402
 
 REFUND_EVENTS = {
     "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
@@ -108,10 +108,15 @@ def journey(stack):
         attempt = stack.sql("SELECT attempt_id FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "'")
         saved = stack.sql("SELECT trace_parent FROM stove_payment.refund_execution_trace WHERE attempt_id='" + attempt + "'")
         source = stack.sql("SELECT COALESCE(refund_confirmation_source,'') FROM stove_payment.refund_execution WHERE attempt_id='" + attempt + "'")
-        # Wait for OTLP export and Tempo ingestion until the trace is complete evidence (one root, all
-        # services, no missing parent, the scenario's PG spans); an empty or failed lookup never passes.
+        # Business completion: every refund Outbox row of this order is SENT (consumers then finish).
+        stack.wait_for(lambda: outbox_rows(stack, order_no) and all(r["status"] == "SENT" for r in outbox_rows(stack, order_no)),
+                       name + " refund Outbox SENT", 120, 1)
+        done = time.monotonic()
+        # Watch the trace for observation_window() seconds after completion, then require a complete, stable
+        # snapshot (one root, all services, no missing parent, the scenario's PG spans).
         try:
-            main = await_trace(lambda trace_id: fetch_trace(stack.tempo_url, trace_id), refund_trace, name, payment_id)
+            main = await_trace(lambda trace_id: fetch_trace(stack.tempo_url, trace_id), refund_trace, name, payment_id,
+                               seconds=120, quiet_until=done + observation_window())
             tempo_problems = []
         except AssertionError as incomplete:
             main, tempo_problems = tempo_spans(stack, refund_trace), [str(incomplete)]

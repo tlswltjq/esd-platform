@@ -19,6 +19,30 @@ WORKER_SPAN = "payment.process"
 CLIENT_KINDS = ("SPAN_KIND_CLIENT", 3)
 STABLE_READS = 3
 
+# Export settings the tracing verification stack pins for every app (fake_portone_stack.TRACE_EXPORT_ENV;
+# Spring Boot 3.5 defaults are 5 s / 30 s / 10 s and are not changed for operation).
+SCHEDULE_DELAY_SECONDS = 1   # management.tracing.opentelemetry.export.schedule-delay (BatchSpanProcessor)
+EXPORT_TIMEOUT_SECONDS = 5   # management.tracing.opentelemetry.export.timeout
+OTLP_TIMEOUT_SECONDS = 5     # management.otlp.tracing.timeout (HTTP exporter, connect timeout 2 s)
+CONSUMER_MARGIN_SECONDS = 5  # a consumer span ends shortly after the DB commit / Outbox SENT the tool observed
+TEMPO_MARGIN_SECONDS = 2     # Tempo answers trace-by-id from ingester live traces right after the push
+
+
+def export_bound(schedule_delay=SCHEDULE_DELAY_SECONDS, export_timeout=EXPORT_TIMEOUT_SECONDS, otlp_timeout=OTLP_TIMEOUT_SECONDS):
+    """Longest time from a span's end until its export finishes.
+
+    BatchSpanProcessor exports on its next tick (<= schedule delay), possibly after an export already in
+    flight, and each export is bounded by min(processor export timeout, OTLP HTTP timeout). A span that
+    misses both is dropped, which the judgement then sees as a missing span or parent.
+    """
+    per_export = min(export_timeout, otlp_timeout)
+    return schedule_delay + 2 * per_export
+
+
+def observation_window(consumer_margin=CONSUMER_MARGIN_SECONDS, tempo_margin=TEMPO_MARGIN_SECONDS, **export):
+    """Seconds to keep watching a trace after business completion; longer than any span can be late."""
+    return consumer_margin + export_bound(**export) + tempo_margin
+
 
 class TraceUnavailable(RuntimeError):
     """Tempo could not be read or returned no spans for the trace."""
@@ -138,7 +162,7 @@ def trace_problems(spans, scenario, payment_id):
 
 
 def await_trace(fetch, trace_id, scenario, payment_id, seconds=120, interval=3, stable_reads=STABLE_READS,
-                clock=time.monotonic, sleep=time.sleep):
+                clock=time.monotonic, sleep=time.sleep, quiet_until=None):
     """Poll Tempo until the trace is complete evidence and stable; raise with the last problems at the deadline.
 
     A snapshot counts only when it passes trace_problems; it is returned after ``stable_reads``
@@ -160,7 +184,9 @@ def await_trace(fetch, trace_id, scenario, payment_id, seconds=120, interval=3, 
             same += 1
         else:
             previous, same = ids, 1
-        if same >= stable_reads:
+        # Accept only after the observation window (business completion + observation_window()) has passed,
+        # so a span exported as late as the bound allows is still judged.
+        if same >= stable_reads and (quiet_until is None or clock() >= quiet_until):
             return spans
         if clock() >= deadline:
             reason = "; ".join(problems) if problems else "spans still changing after " + str(seconds) + " s (" + str(same) + "/" + str(stable_reads) + " stable reads)"
