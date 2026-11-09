@@ -3,6 +3,8 @@ package com.stove.payment.core.service;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.Payment;
+import com.stove.payment.core.domain.PaymentApprovalRepository;
+import com.stove.payment.core.domain.PaymentApprovalStatus;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.domain.PgResult;
@@ -14,8 +16,10 @@ import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.PaymentTraceContexts;
 import com.stove.payment.core.port.PaymentTracing;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -39,11 +43,15 @@ public class ResolvePayment {
     private final String provider;
     private final PaymentAttemptLookup attemptLookup;
     private final FailedPaymentAttemptRepository failedAttempts;
+    private final PaymentApprovalRepository approvals;
+    private final Clock approvalClock;
 
     public ResolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
             EntityManager entityManager, PlatformTransactionManager transactions, int batchSize, Duration retryDelay,
             PaymentTraceContexts traceContexts, PaymentTracing tracing, String provider,
-            PaymentAttemptLookup attemptLookup, FailedPaymentAttemptRepository failedAttempts) {
+            PaymentAttemptLookup attemptLookup, FailedPaymentAttemptRepository failedAttempts,
+            PaymentApprovalRepository approvals, Clock approvalClock) {
+        if (approvals == null || approvalClock == null) throw new IllegalArgumentException("Approval closing on payment success is required");
         this.payments = payments;
         this.gateway = gateway;
         this.outbox = outbox;
@@ -55,6 +63,8 @@ public class ResolvePayment {
         this.provider = provider;
         this.attemptLookup = attemptLookup;
         this.failedAttempts = failedAttempts;
+        this.approvals = approvals;
+        this.approvalClock = approvalClock;
         transaction = new TransactionTemplate(transactions);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
@@ -148,8 +158,29 @@ public class ResolvePayment {
     }
 
     private void confirm(Payment current, PgResult result) {
-        if (!current.confirm(result, UUID.randomUUID().toString(), Payment.now())) return;
+        Instant confirmedAt = Payment.now();
+        if (!current.confirm(result, UUID.randomUUID().toString(), confirmedAt)) return;
         PaymentResultOutbox.record(outbox, current);
+        if (current.getStatus() == PaymentStatus.PAID) succeedAdmittedApproval(current, confirmedAt);
+    }
+
+    /**
+     * D-051: the admitted approval behind a newly PAID payment closes in the same commit, under the same
+     * payment-then-approval lock order the approval worker uses. Without this a held approval stayed REVIEW_REQUIRED until
+     * its next held lookup (decision 122) and kept showing its old observation as the customer notice (decision 123), the
+     * hold list and the gauge. The rule is the worker's own (an admitted approval of a PAID payment succeeds); only the
+     * timing moves. Unadmitted approvals never reach here: the PortOne gateway refuses them and they stay held.
+     */
+    private void succeedAdmittedApproval(Payment paid, Instant confirmedAt) {
+        // The approval timeline uses the approval clock (as the approval worker does); it never closes before the payment
+        // confirmation it reflects. Both read the same system clock in production.
+        Instant approvalNow = approvalClock.instant().truncatedTo(ChronoUnit.MICROS);
+        Instant at = approvalNow.isAfter(confirmedAt) ? approvalNow : confirmedAt;
+        approvals.findFirstByPaymentIdAndStatusInOrderByIdDesc(paid.getPaymentId(),
+                        List.of(PaymentApprovalStatus.ADMITTED, PaymentApprovalStatus.REVIEW_REQUIRED))
+                .flatMap(found -> approvals.lockByApprovalId(found.getApprovalId()))
+                .filter(approval -> approval.getAdmittedAt() != null && !approval.terminal())
+                .ifPresent(approval -> approval.succeed(paid, at));
     }
 
     private void defer(String paymentId, String code, RuntimeException failure) {

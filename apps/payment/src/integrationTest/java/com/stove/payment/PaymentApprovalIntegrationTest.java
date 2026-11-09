@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -245,7 +244,6 @@ class PaymentApprovalIntegrationTest {
      * Impact: a duplicate purchase invitation (decision 123) after the money was taken.
      */
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-051] 접수된 보류 승인의 결제가 PAID로 확정되면 같은 커밋에서 승인도 닫혀 보류 안내·게이지·목록에 남지 않는다")
     void aHeldAdmittedApprovalClosesInThePaidPaymentCommitSoNoStaleHeldNoticeRemains() {
         Payment payment=purchase(); String command=id(); submit(payment,command); FIRST_UNAVAILABLE.set(true); worker.execute(command);

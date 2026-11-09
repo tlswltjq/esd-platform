@@ -89,6 +89,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | 운영자 보류 종결(재조회 근거 전액 CANCELLED·FAILED·READY) | 이벤트 반영 뒤 FAILED(이미 EXPIRED면 유지) | FAILED(보류 사유 유지) | FAILED(`REVIEW_CLOSED`), 접수 전·만료 통지 뒤면 EXPIRED | 현재 상품 조건으로 새 주문 |
 
 - `SUCCEEDED`는 Payment 금융 결과/Outbox 저장이며 OrderPaid·License 지급까지 동기 완료를 뜻하지 않는다.
+- 접수된(`admittedAt` 있음) `ADMITTED`·`REVIEW_REQUIRED` 승인은 결제가 `PAID`로 확정되는 그 트랜잭션에서 `SUCCEEDED`가 된다(`ResolvePayment.confirm` → `succeedAdmittedApproval`, `purchase_payment` → `payment_approval` 잠금 순서). 그래서 웹훅·결제 재조회가 보류 건을 `PAID`로 확정해도 다음 보류 재조회(결정 122)를 기다리지 않고 보류 안내·ADMIN 보류 목록·게이지에서 바로 빠진다([D-051](../../../docs/defects.md#d-051)). 승인 작업자의 같은 규칙(`ResolvePaymentApproval.cycle`의 PAID 분기)은 남아 있다.
 
 ## 이벤트 계약
 
