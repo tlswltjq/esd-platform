@@ -1,6 +1,8 @@
 package com.stove.payment.config;
 
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.service.RequestFirstRefundCancellation;
 import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.ResolveRefundRetry;
@@ -29,8 +31,8 @@ public class RefundRetryConfiguration {
 
     @Bean ResolveRefundRetry resolveRefundRetry(RefundExecutionRepository executions, RequestRefundCancellation cancellations,
             Clock refundReceptionClock, @Qualifier("refundRetryExecutor") ThreadPoolTaskExecutor executor,
-            RequestFirstRefundCancellation first) {
+            RequestFirstRefundCancellation first, RefundExecutionTraceContexts traceContexts, PaymentTracing tracing) {
         // First dispatch requires durable lookup; retry activation must preserve the same configured continuation.
-        return new ResolveRefundRetry(executions, cancellations, refundReceptionClock, executor, 20);
+        return new ResolveRefundRetry(executions, cancellations, refundReceptionClock, executor, 20, traceContexts, tracing);
     }
 }

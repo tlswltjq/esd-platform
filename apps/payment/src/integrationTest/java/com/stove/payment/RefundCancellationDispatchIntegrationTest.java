@@ -54,6 +54,8 @@ import com.stove.payment.core.domain.PgPaymentLookupForbidden;
 import com.stove.payment.core.service.ResolveRefundLookup;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.port.PaymentTracing;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.port.RefundCancellationGateway;
 import com.stove.payment.core.service.ReceiveRefundExecution;
@@ -106,6 +108,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     @Autowired ReceiveRefundExecution receive;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JdbcTemplate jdbc;
+    @Autowired RefundExecutionTraceContexts traceContexts;
+    @Autowired PaymentTracing tracing;
     @Autowired EntityManager entityManager;
     @Autowired ObjectMapper mapper;
     @LocalServerPort int port;
@@ -684,7 +688,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         received(); mode = Mode.UNAVAILABLE;
         assertThatThrownBy(() -> service(gateway()).executeFirst(current.getAttemptId())).isInstanceOf(PgUnavailable.class);
         when(clock.instant()).thenReturn(BASE.plusSeconds(10));
-        new ResolveRefundRetry(executions, service(gateway()), clock, task -> { throw new RejectedExecutionException("full"); }, 20).execute();
+        new ResolveRefundRetry(executions, service(gateway()), clock, task -> { throw new RejectedExecutionException("full"); }, 20, traceContexts, tracing).execute();
         assertThat(stored().getCancellationSchedule().getClaimId()).isNull();
         assertThat(stored().getCancellationSchedule().getStage()).isEqualTo(1);
         assertThat(stored().getCancellationSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(10));
@@ -1369,7 +1373,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     }
 
     private ResolveRefundLookup lookupWorker() {
-        return new ResolveRefundLookup(payments, executions, reconcile(), transactions, clock, Runnable::run, Duration.ofMinutes(2), 20);
+        return new ResolveRefundLookup(payments, executions, reconcile(), transactions, clock, Runnable::run, Duration.ofMinutes(2), 20, traceContexts, tracing);
     }
 
     @Tag("migration")
@@ -1414,9 +1418,9 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         return new RefundCancellationResumeRequest(id(), current.getAttemptId(), hold.getHoldId(), "operator-fixture", "provider rejection reviewed");
     }
 
-    private ResolveRefundRetry retryWorker() { return new ResolveRefundRetry(executions, service(gateway()), clock, Runnable::run, 20); }
+    private ResolveRefundRetry retryWorker() { return new ResolveRefundRetry(executions, service(gateway()), clock, Runnable::run, 20, traceContexts, tracing); }
     private ResolveRefundRetry authenticatedWorker(String apiSecret) {
-        return new ResolveRefundRetry(executions, authenticatedService(apiSecret), clock, Runnable::run, 20);
+        return new ResolveRefundRetry(executions, authenticatedService(apiSecret), clock, Runnable::run, 20, traceContexts, tracing);
     }
 
     private RequestRefundCancellation authenticatedService(String apiSecret) {
