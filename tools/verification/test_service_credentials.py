@@ -23,6 +23,16 @@ class ServiceCredentialsTest(unittest.TestCase):
             actual = {app for app in apps if name in service_environment(app, inherited)}
             self.assertEqual(recipients, actual, name)
 
+    def test_settlement_portone_secret_reaches_only_settlement_and_is_recorded(self):
+        apps = ['auth', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
+                'payment', 'license', 'download', 'settlement']
+        inherited = {'SETTLEMENT_PORTONE_API_SECRET': 'settlement-portone-fixture',
+                     'PORTONE_API_SECRET': 'payment-portone-fixture'}
+        receivers = {app for app in apps if 'SETTLEMENT_PORTONE_API_SECRET' in service_environment(app, inherited)}
+        self.assertEqual({'settlement'}, receivers)
+        self.assertNotIn('PORTONE_API_SECRET', service_environment('settlement', inherited))
+        self.assertIn('SETTLEMENT_PORTONE_API_SECRET', credential_names(inherited))
+
     def test_bootstrap_and_bff_credentials_are_separate(self):
         values = {'BFF_CLIENT_SECRET': 'bff-fixture', 'AUTH_ADMIN_PASSWORD': 'admin-fixture',
                   'AUTH_REVIEWER_PASSWORD': 'reviewer-fixture', 'PAYMENT_APPROVAL_PAYLOAD_KEY': 'payload-fixture'}
