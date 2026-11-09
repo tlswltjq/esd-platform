@@ -61,6 +61,8 @@
 - [ ] PG 계약 중립화: `PaymentArchitectureTest`에 core 패키지의 공급자 이름(PortOne) 금지 규칙을 더한다 — G3
 - [ ] 기준 시뮬레이터 확장([결정 141](../../../docs/decisions.md#portone-fake-as-reference-simulator)): PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)에 제어 요청으로 장애 주입을 더한다 — 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정(PR #178·결정 138 뒤에 잇는다), 웹훅 중복·역순·누락. 응답 모양은 PortOne 어댑터 테스트 견본과 같게 두고, 문서로 확인하지 못한 동작은 추정으로 표시해 G7 확인 항목에 남긴다. 운영 코드는 바꾸지 않는다 — G3
 
+- [x] 이미 보류된 승인은 처음 보류 사유를 유지([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason)): `PaymentApproval.stopPosts`가 `REVIEW_REQUIRED`의 `lastErrorCode`·`reviewStartedAt`을 바꾸지 않고 `PAID_WITHOUT_ADMISSION`만 사유를 올린다. 버린 사유는 `ResolvePaymentApproval.stop` 로그. R12.10 — G1, 2026-11-09 PR #185
+
 ## 범위 밖(후속)
 
 - LIVE 결제·실제 PG 지급 자료·은행 입금·판매자 송금(별도 계약·설정·운영 검증).

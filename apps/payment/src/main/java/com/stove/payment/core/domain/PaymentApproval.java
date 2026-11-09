@@ -24,6 +24,7 @@ public class PaymentApproval {
     /** PortOne's idempotency window and our automatic confirm retransmission limit (R4.5·R4.6). */
     public static final Duration CONFIRM_WINDOW = Duration.ofHours(3);
     public static final String CONFIRM_WINDOW_EXPIRED = "CONFIRM_WINDOW_EXPIRED";
+    public static final String PAID_WITHOUT_ADMISSION = "PAID_WITHOUT_ADMISSION";
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable = false, unique = true, length = 36, updatable = false) private String approvalId;
     @Column(nullable = false, length = 64, updatable = false) private String paymentId;
@@ -176,10 +177,12 @@ public class PaymentApproval {
     public void stopPosts(String reason, Instant at) {
         requireTime(at);
         if (terminal() || !PaymentValues.text(reason, 100)) throw new IllegalArgumentException("A current stop reason is required");
-        if (status != PaymentApprovalStatus.REVIEW_REQUIRED && reviewStartedAt == null) reviewStartedAt = at;
+        boolean held = status == PaymentApprovalStatus.REVIEW_REQUIRED;
+        if (!held && reviewStartedAt == null) reviewStartedAt = at;
         postStopped = true;
-        // A later lookup error must not hide an already observed financial anomaly.
-        if (!"PAID_WITHOUT_ADMISSION".equals(lastErrorCode)) lastErrorCode = reason;
+        // Decision 144: a held approval keeps the reason it was first held with. Only an observed charge without admission
+        // raises it, and once raised no later lookup error can hide that financial anomaly.
+        if (!PAID_WITHOUT_ADMISSION.equals(lastErrorCode) && (!held || PAID_WITHOUT_ADMISSION.equals(reason))) lastErrorCode = reason;
         status = PaymentApprovalStatus.REVIEW_REQUIRED;
     }
     public boolean expireAfterVerifiedReady(ApprovalObservation observation, Instant at) {

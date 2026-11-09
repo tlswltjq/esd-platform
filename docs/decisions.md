@@ -1330,6 +1330,15 @@
 - 구분: 직접 제안 — SPEC 정비는 사용자가 먼저 꺼냈고, 범위 A는 추천 수용
 - 결과: 진행 중(1부: 상태×이벤트 표)
 
+<a id="held-approval-keeps-first-reason"></a>
+## 144. 이미 보류된 승인은 처음 보류된 사유를 유지하고, 접수 없이 청구된 관측만 사유를 올린다
+- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. [결정 143](#money-spec-first) 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
+- 선택지: A 처음 보류된 사유를 유지하고 `PAID_WITHOUT_ADMISSION`만 지금처럼 사유를 올린다. 뒤 사유는 로그로만 남긴다 / B 지금처럼 최신 사유로 바꾸고 요구사항에 적는다 / C 사유 심각도 순서를 정해 더 심각한 사유만 덮는다 / D A에 더해 사유 이력을 테이블에 저장한다 (추천: A — 보류는 운영자 조사 표시이고([결정 114](#approval-review-hold-closure)) 첫 이유가 조사의 출발점이다. 기존 `PAID_WITHOUT_ADMISSION` 보호가 이미 "돈이 움직인 관측은 덮이면 안 된다"는 뜻이다. C는 8개 사유의 순서라는 새 정책이 필요하고, D는 지금 조사 기록으로 대부분 대신된다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 처음 보류 사유를 유지해")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이미 `REVIEW_REQUIRED`인 승인에 새 중단 사유가 오면 송신 중단은 유지하고 `lastErrorCode`·`reviewStartedAt`은 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 사유를 그것으로 올리고, 한 번 그 사유가 되면 바꾸지 않는다. 버린 사유는 승인 ID와 함께 로그로 남긴다. 고객 안내는 결정 132대로 사유 묶음과 마지막 PG 관측으로 정하므로, 유지된 첫 사유가 `PG_INVALID_EVIDENCE`가 아니면 뒤의 깨진 응답이 안내를 고정하지 않는다.
+- 구분: 추천 수용
+- 결과: 구현 PR
+
 ---
 
 ## 검증하며 드러난 것
