@@ -20,7 +20,7 @@ import json, sys, time, urllib.parse, urllib.request
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/verification"))
 from support.fake_portone_stack import FakePortOneStack  # noqa: E402
-from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace  # noqa: E402
+from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace, pg_call  # noqa: E402
 
 REFUND_EVENTS = {
     "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
@@ -50,7 +50,7 @@ def pg_call_traces(stack, payment_id, started):
     for trace in found:
         spans = tempo_spans(stack, trace["traceID"].rjust(32, "0"))
         calls = [s["name"] + " " + urllib.parse.urlsplit(s["url"]).path for s in spans
-                 if s["service"] == "payment" and s["url"] and payment_id in s["url"] and s["start"] >= started]
+                 if pg_call(s, payment_id) and s["start"] >= started]
         if not calls:
             continue  # purchase-phase calls only
         result.append(dict(traceId=trace["traceID"].rjust(32, "0"), root=trace.get("rootServiceName", "?") + ":" + trace.get("rootTraceName", "?"),
@@ -130,13 +130,11 @@ def journey(stack):
         saved_trace = trace_of(saved)
         if saved_trace != refund_trace:
             broken.append(name + ": refund_execution_trace " + saved)
-        cancel_spans = [s for s in main if s["service"] == "payment" and s["kind"] in ("SPAN_KIND_CLIENT", 3)
-                        and s["url"] and "/cancel" in s["url"]]
-        lookup_spans = [s for s in main if s["service"] == "payment" and s["kind"] in ("SPAN_KIND_CLIENT", 3)
-                        and s["url"] and "/payments/" + payment_id in s["url"] and "/cancel" not in s["url"]]
+        cancel_spans = [s for s in main if pg_call(s, payment_id) == "cancel"]
+        lookup_spans = [s for s in main if pg_call(s, payment_id) == "lookup"]
         pg_traces = pg_call_traces(stack, payment_id, started)
         for trace in pg_traces:
-            if trace["traceId"] != refund_trace and any("/cancel" in c or "http get" in c for c in trace["calls"]):
+            if trace["traceId"] != refund_trace:  # calls already hold only this payment's exact PG paths
                 broken.append(name + ": Payment PG calls in another trace " + trace["traceId"] + " root " + trace["root"] + " " + str(trace["calls"]))
         summary = describe(main)
         evidence["scenarios"][name] = dict(orderNo=order_no, paymentId=payment_id, attemptId=attempt, refundTrace=refund_trace,

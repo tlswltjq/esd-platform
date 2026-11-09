@@ -3,16 +3,21 @@
 A refund trace passes only with real evidence: the Tempo lookup must succeed and return spans,
 exactly one root, every required service, no span whose parent is missing, and the scenario's
 Payment PG client spans (worker lookups/resends under ``payment.process``). Collection is awaited
-with a deadline; an empty or failed lookup is a failure, never a pass.
+with a deadline; an empty or failed lookup is a failure, never a pass. A passing snapshot is accepted only
+after STABLE_READS consecutive reads return the same span ids, so a late export (an orphan span) is still
+judged. PG calls are identified by exact path segments of the Payment PortOne adapters:
+GET /payments/{paymentId} (preflight and refund lookup) and POST /payments/{paymentId}/cancel.
 """
 import base64
 import json
 import time
+import urllib.parse
 import urllib.request
 
 REQUIRED_SERVICES = ("gateway", "order", "license", "payment", "settlement")
 WORKER_SPAN = "payment.process"
 CLIENT_KINDS = ("SPAN_KIND_CLIENT", 3)
+STABLE_READS = 3
 
 
 class TraceUnavailable(RuntimeError):
@@ -34,9 +39,14 @@ def parse_trace(trace):
         for scope in batch.get("scopeSpans") or batch.get("instrumentationLibrarySpans") or []:
             for span in scope.get("spans", []):
                 tags = {a["key"]: next(iter(a["value"].values()), None) for a in span.get("attributes", [])}
-                spans.append(dict(service=attributes.get("service.name"), name=span["name"], kind=span.get("kind"),
+                name = span["name"]
+                method = tags.get("http.request.method") or tags.get("http.method") or tags.get("method")
+                if not method and name.lower().startswith("http "):
+                    method = name.split(" ", 2)[1]
+                spans.append(dict(service=attributes.get("service.name"), name=name, kind=span.get("kind"),
                                   spanId=hex_id(span.get("spanId")), parentSpanId=hex_id(span.get("parentSpanId")),
-                                  url=tags.get("http.url") or tags.get("url.full") or tags.get("uri"),
+                                  url=tags.get("http.url") or tags.get("url.full") or tags.get("http.target"),
+                                  method=method.upper() if method else None,
                                   start=int(span.get("startTimeUnixNano", 0)) / 1e9))
     return spans
 
@@ -73,15 +83,29 @@ def under_worker(span, by_id):
     return False
 
 
+def pg_call(span, payment_id):
+    """'cancel' for POST /payments/{id}/cancel, 'lookup' for GET /payments/{id}, else None (exact segments)."""
+    if span["service"] != "payment" or span["kind"] not in CLIENT_KINDS or not span.get("url"):
+        return None
+    segments = [urllib.parse.unquote(part) for part in urllib.parse.urlsplit(span["url"]).path.split("/") if part]
+    method = span.get("method")
+    if segments == ["payments", payment_id] and method == "GET":
+        return "lookup"
+    if segments == ["payments", payment_id, "cancel"] and method == "POST":
+        return "cancel"
+    return None
+
+
 def pg_calls(spans, payment_id):
     """Payment HTTP client spans to the PG for this paymentId: (cancels, lookups), each with a worker flag."""
     by_id = {s["spanId"]: s for s in spans}
     cancels, lookups = [], []
     for span in spans:
-        if span["service"] != "payment" or span["kind"] not in CLIENT_KINDS or not span["url"] or "/payments/" + payment_id not in span["url"]:
+        kind = pg_call(span, payment_id)
+        if kind is None:
             continue
         call = dict(span=span, worker=under_worker(span, by_id))
-        (cancels if "/cancel" in span["url"] else lookups).append(call)
+        (cancels if kind == "cancel" else lookups).append(call)
     return cancels, lookups
 
 
@@ -113,17 +137,32 @@ def trace_problems(spans, scenario, payment_id):
     return problems
 
 
-def await_trace(fetch, trace_id, scenario, payment_id, seconds=90, interval=3, clock=time.monotonic, sleep=time.sleep):
-    """Poll Tempo until the trace is complete evidence; raise with the last problems at the deadline."""
+def await_trace(fetch, trace_id, scenario, payment_id, seconds=120, interval=3, stable_reads=STABLE_READS,
+                clock=time.monotonic, sleep=time.sleep):
+    """Poll Tempo until the trace is complete evidence and stable; raise with the last problems at the deadline.
+
+    A snapshot counts only when it passes trace_problems; it is returned after ``stable_reads``
+    consecutive passing reads with the same span ids. Any change restarts the count, so every span
+    exported late is judged in the final snapshot.
+    """
     deadline = clock() + seconds
+    previous, same = None, 0
     while True:
         try:
             spans = fetch(trace_id)
             problems = trace_problems(spans, scenario, payment_id)
         except TraceUnavailable as failure:
             spans, problems = [], [str(failure)]
-        if not problems:
+        ids = tuple(sorted(s["spanId"] for s in spans))
+        if problems:
+            previous, same = None, 0
+        elif ids == previous:
+            same += 1
+        else:
+            previous, same = ids, 1
+        if same >= stable_reads:
             return spans
         if clock() >= deadline:
-            raise AssertionError(scenario + " trace " + trace_id + " incomplete: " + "; ".join(problems))
+            reason = "; ".join(problems) if problems else "spans still changing after " + str(seconds) + " s (" + str(same) + "/" + str(stable_reads) + " stable reads)"
+            raise AssertionError(scenario + " trace " + trace_id + " incomplete: " + reason)
         sleep(interval)
