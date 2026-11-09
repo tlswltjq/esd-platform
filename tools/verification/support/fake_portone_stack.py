@@ -38,8 +38,12 @@ def free_port():
 
 
 class FakePortOneStack:
-    def __init__(self, repo, tool, offset_env, prefix):
+    def __init__(self, repo, tool, offset_env, prefix, settlement_compose=False):
         self.repo = Path(repo)
+        # Settlement as a container from docker-compose.apps.yml + docker-compose.settlement-portone.yml
+        # instead of a host JVM. Host networking lets the container reach the loopback fake and stack.
+        self.settlement_compose = settlement_compose
+        self.settlement_docker, self.settlement_env, self.settlement_image = None, None, None
         self.offset = port_rules.application_offset(tool, offset_env, APPS.values())
         out_root = self.repo / "runs"
         out_root.mkdir(exist_ok=True)
@@ -424,8 +428,69 @@ class FakePortOneStack:
         for app in ["order", "payment", "license"]:
             start_app(app)
         self.wait_for(apps_ready, "Order, Payment(PORTONE_TEST), License", 240)
-        start_app("settlement")
-        self.wait_for(apps_ready, "Settlement(PORTONE_TEST)", 180)
+        if self.settlement_compose:
+            self.start_settlement_container(common)
+            self.wait_for(lambda: apps_ready() and self.settlement_container_ready(), "Settlement container(PORTONE_TEST)", 180)
+        else:
+            start_app("settlement")
+            self.wait_for(apps_ready, "Settlement(PORTONE_TEST)", 180)
+
+    # --- Settlement through the Compose override ---------------------------------------
+    def start_settlement_container(self, common):
+        """Run Settlement from the real Compose files plus the PortOne override; only connectivity is run-specific."""
+        repo, port, tag = self.repo, APPS["settlement"] + self.offset, self.project.lower()
+        subprocess.run(["./gradlew", ":apps:settlement:jibDockerBuild", "-Pstove.jib.tag=" + tag, *self.gradle_network, "--no-daemon", "-q"],
+                       check=True, cwd=repo, timeout=900)
+        connect = {key: common[key] for key in ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "REDIS_HOST", "REDIS_PORT", "KAFKA_BROKERS",
+                                                 "JWT_ISSUER_URI", "JWT_JWK_SET_URI", "CATALOG_BASE_URL", "CATALOG_SETTLEMENT_SERVICE_KEY",
+                                                 "TRACING_SAMPLE_RATE"]}
+        connect.update(SERVER_ADDRESS="127.0.0.1", SERVER_PORT=str(port), OTLP_ENDPOINT="http://127.0.0.1:9/v1/traces")
+        run_override = self.directory / "compose-settlement-run.yml"
+        # JSON scalars are valid YAML; !reset drops the base stove network and exposed port for host networking.
+        run_override.write_text("services:\n  settlement:\n    network_mode: host\n    networks: !reset []\n    expose: !reset []\n"
+                                "    restart: \"no\"\n    environment:\n"
+                                + "".join(f"      {key}: {json.dumps(value)}\n" for key, value in connect.items())
+                                + "    healthcheck:\n      test: " + json.dumps(["CMD-SHELL", f"wget -qO- http://127.0.0.1:{port}/actuator/health | grep -q UP || exit 1"]) + "\n")
+        run_override.chmod(0o600)
+        self.settlement_docker = ["docker", "compose", "-p", self.project, "-f", str(repo / "docker-compose.apps.yml"),
+                                  "-f", str(repo / "docker-compose.settlement-portone.yml"), "-f", str(run_override)]
+        self.settlement_env = dict(os.environ, STOVE_IMAGE_TAG=tag,
+                                   SETTLEMENT_PORTONE_API_BASE_URL=self.portone["PORTONE_API_BASE_URL"],
+                                   SETTLEMENT_PORTONE_API_SECRET=self.settlement_secret,
+                                   PORTONE_STORE_ID=self.portone["PORTONE_STORE_ID"], PORTONE_CHANNEL_KEY=self.portone["PORTONE_CHANNEL_KEY"])
+        rendered = json.loads(subprocess.check_output(self.settlement_docker + ["config", "--format", "json", "settlement"],
+                                                      cwd=repo, env=self.settlement_env, text=True, timeout=60))["services"]["settlement"]
+        environment = rendered["environment"]
+        assert environment["SETTLEMENT_PG_PROVIDER"] == "PORTONE_TEST" and environment["PORTONE_API_SECRET"] == self.settlement_secret
+        assert environment["PORTONE_API_BASE_URL"] == self.fake.base_url and rendered["network_mode"] == "host"
+        assert rendered["image"].endswith("/settlement:" + tag)
+        self.settlement_image = rendered["image"]
+        self.record("Compose override settlement keys",
+                    ",".join(sorted(key for key in environment if key.startswith(("PORTONE_", "SETTLEMENT_")))))
+        subprocess.run(self.settlement_docker + ["up", "-d", "--no-deps", "--pull", "never", "settlement"],
+                       check=True, cwd=repo, env=self.settlement_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+        self.log("Settlement container: " + self.settlement_image + " (docker-compose.apps.yml + docker-compose.settlement-portone.yml)")
+
+    def settlement_container_ready(self):
+        state = subprocess.check_output(self.settlement_docker + ["ps", "-a", "--format", "{{.State}}|{{.Health}}", "settlement"],
+                                        cwd=self.repo, env=self.settlement_env, text=True, timeout=30).strip()
+        if state.startswith(("exited", "dead")):
+            raise AssertionError("settlement container stopped; see settlement-container.log")
+        return state == "running|healthy"
+
+    def stop_settlement_container(self):
+        if self.settlement_docker is None:
+            return
+        with open(self.directory / "settlement-container.log", "w") as handle:
+            subprocess.run(self.settlement_docker + ["logs", "--no-color", "settlement"], cwd=self.repo, env=self.settlement_env,
+                           stdout=handle, stderr=subprocess.STDOUT, timeout=60)
+        # Remove only the Settlement service: down --remove-orphans here would delete the infra containers of the
+        # same project as orphans and leave their anonymous volumes behind; the infra down below removes them.
+        subprocess.run(self.settlement_docker + ["rm", "--stop", "--force", "--volumes", "settlement"], cwd=self.repo, env=self.settlement_env,
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+        if self.settlement_image:
+            subprocess.run(["docker", "image", "rm", self.settlement_image], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
 
     def prepare(self):
         """Create, review and release a product and the buyer's first PENDING order through the e2e fixture."""
@@ -493,6 +558,7 @@ class FakePortOneStack:
                             process.wait(timeout=10)
                     cleanup_step(app + " wait", stop_and_wait)
                     cleanup_step(app + " log close", handle.close)
+                cleanup_step("settlement container", self.stop_settlement_container)
                 cleanup_step("fake stop", self.fake.stop)
                 cleanup_step("fake requests", lambda: (self.directory / "fake-requests.json").write_text(json.dumps(self.fake.requests, indent=2)))
             finally:
