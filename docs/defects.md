@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-051, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -73,6 +73,7 @@
 | [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
+| [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
@@ -604,6 +605,16 @@
 - **원인** 구매 결제는 `ResolvePayment`가 `PaymentTracing.run(traceContexts.find(paymentId), …)`로 처리 시도마다 저장 부모를 복원하지만, 환불 작업자에는 같은 감싸기가 없다. Kafka 리스너 스레드에서 끝나는 첫 송신만 소비 span 아래에 있어 이어진다.
 - **수정** `ResolveRefundLookup`·`ResolveRefundRetry`가 executor 작업마다 `RefundExecutionTraceContexts.find(attemptId)`로 저장 부모를 읽고 `PaymentTracing.run` 안에서 PG 호출·결과 Outbox 적재를 한다(구매 `ResolvePayment`와 같은 포트·방식, 처리 시도마다 새 자식 span `payment.process`, 스케줄러 scope 비상속). 부모가 없거나 읽기에 실패하면 새 root로 진행하고 조회 lease 해제·재송신 claim은 그대로다. 수정 뒤 `verify-refund-tracing.py`가 세 경우 모두 통과했다(Outbox 18행 모두 환불 trace).
 - **망가뜨리기 확인(결정 102)** 같은 재현 테스트를 수정 전 운영 코드로 돌리면 위 Red 2건, 수정 코드로 Green 2건이다.
+
+<a id="d-051"></a>
+## D-051 결제가 PAID로 확정된 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감
+
+**상태** 수정됨 · **영향** 결제 `PAID`·주문 완료인 건의 고객 결제 상세와 승인 조회에 보류 안내가 남는다. 예: READY를 본 `CONFIRM_WINDOW_EXPIRED` 보류 건은 `NOT_CHARGED`("현재까지 청구된 금액은 없습니다. … 새 주문으로 다시 구매하실 수 있습니다")가 나가 돈이 나간 뒤 다시 구매하라고 안내한다(결정 123의 중복 구매 방지와 반대). PAID를 본 건이면 `CHARGED`("확인이 끝나면 청구된 금액은 취소되고 이 주문은 종료됩니다")가 나간다. 같은 시간 동안 ADMIN 보류 목록·보류 게이지(`REVIEW_REQUIRED` 기준)에도 남는다. 남는 시간은 다음 보류 재조회 간격(결정 122, 최대 10분)이다. 돈은 움직이지 않는다 · **위치** `ResolvePayment.confirm`(결제만 `PAID`로 바꾸고 승인은 건드리지 않음), `AdmittedPortOnePgGateway.charge`(`REVIEW_REQUIRED` 승인으로도 PAID 결과를 줌), `ResolvePaymentApproval.cycle`의 PAID 분기(승인을 닫는 유일한 곳)
+**재현** `PaymentApprovalIntegrationTest#aHeldAdmittedApprovalClosesInThePaidPaymentCommitSoNoStaleHeldNoticeRemains`(루프백 PG·Order, 실제 MySQL) — 수정 전 known-defect Red 1건, `[approval status right after the PAID commit] expected: SUCCEEDED but was: REVIEW_REQUIRED`. 승인을 접수·첫 송신 503으로 둔 뒤 3시간 창에서 `CONFIRM_WINDOW_EXPIRED` 보류로 올리고(PG READY, 고객 안내 `NOT_CHARGED` 확인), PG를 PAID로 바꿔 결제 재조회(`ResolvePayment.execute(paymentId)`, `PendingPaymentScheduler`·웹훅 재조회 경로)를 돌리면 결제는 `PAID`·Outbox 1행인데 승인은 `REVIEW_REQUIRED`였다. 지금은 태그를 뗀 회귀 테스트이고, 같은 테스트가 고객 두 조회의 `reviewNotice` 없음, ADMIN 보류 목록 제외, 뒤이은 작업자 회차의 PG 조회 0회·송신 1회 유지·Outbox 1행을 함께 지킨다 · **발견 경로** 결정 143 1부 payment `design.md` 찾은 불일치 3(PR #182)
+
+- **원인** 결제 `PAID`는 두 곳에서 커밋된다. 승인 작업자(`ResolvePaymentApproval.completeObservation`)는 `ResolvePayment.execute` 뒤 같은 회차에 승인을 `succeed`하지만, 결제 재조회 스케줄러와 웹훅(`Payment.requestRecheck` → 같은 스케줄러)은 결제만 확정한다. 그러면 승인은 다음 claim에서 `cycle`의 첫 분기(`PAID && admittedAt!=null` → `succeed`)를 만나야 닫히는데, 보류 승인의 다음 claim은 보류 기간에 따라 늘어나는 재조회 간격 뒤다. 그동안 `ApprovalReviewNotice.of`는 승인 상태 `REVIEW_REQUIRED`와 옛 `latestPgState`로 안내를 계산한다.
+- **수정** `ResolvePayment.confirm`이 결제를 새로 `PAID`로 바꾸고 결과 Outbox를 적재한 그 트랜잭션에서, 같은 결제의 최신 `ADMITTED`·`REVIEW_REQUIRED` 승인을 잠그고(`purchase_payment` → `payment_approval`, 작업자와 같은 순서) 접수됐으면(`admittedAt` 있음) `PaymentApproval.succeed`한다. 규칙은 작업자의 PAID 분기와 같고 시점만 결제 커밋으로 당겼다. 접수 전 승인은 PortOne 게이트웨이가 거절하므로 여기 오지 않고 `PAID_WITHOUT_ADMISSION` 보류로 남는다. 작업자 쪽 분기는 그대로 두어 이미 쌓인 건(배포 전 PAID·보류)도 다음 회차에 닫힌다. 버린 안: 안내 조회가 결제 `PAID`를 먼저 보게 하는 것(고객 두 조회는 맞지만 ADMIN 목록·게이지·결제창 진행 판정이 계속 `REVIEW_REQUIRED`를 셈), PAID 커밋 뒤 승인 `nextAt`을 당겨 작업자를 깨우는 것(작업자 주기만큼 같은 모순이 남고 PG 조회가 한 번 더 듦).
+- **망가뜨리기 확인(결정 102)** 같은 재현 테스트를 수정 전 운영 코드로 돌리면 위 Red 1건(Gradle `defectTest` 실패 1), 수정 코드로 Green 1건이다.
 
 <a id="d-052"></a>
 ## D-052 License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음
