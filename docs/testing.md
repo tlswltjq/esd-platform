@@ -49,6 +49,7 @@ python3 -B -m unittest discover -s tools/verification -p test_service_credential
 python3 -B -m unittest discover -s tools/verification -p test_boot_jars.py -v
 python3 -B -m unittest discover -s tools/verification -p test_ports.py -v   # 도구별 포트 간격·JAR 선택(결정 105)
 python3 -B -m unittest discover -s tools/verification -p test_portone_fake.py -v  # 로컬 PortOne V2 계약
+python3 -B -m unittest discover -s tools/verification -p test_refund_tracing.py -v  # 환불 Tempo 판정: 빈·일부 trace 거짓 통과 방지
 ./gradlew :common:test:test --no-daemon --max-workers=2          # Compose 배포 계약
 ./gradlew :apps:catalog:integrationTest --tests 'com.stove.catalog.*ServiceKey*IntegrationTest' \
   :apps:order:integrationTest --tests 'com.stove.order.*ServiceKey*IntegrationTest' --no-daemon --max-workers=2
