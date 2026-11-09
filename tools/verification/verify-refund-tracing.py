@@ -21,7 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/verification"))
 from support.fake_portone_stack import FakePortOneStack  # noqa: E402
 from support.refund_tracing import (TraceUnavailable, await_trace, describe, fetch_trace, lag_problems,  # noqa: E402
-                                    observation_window, pg_call, refund_consumer_groups)
+                                    group_snapshot, observation_window, pg_call, refund_consumer_groups)
 
 REFUND_EVENTS = {
     "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
@@ -64,8 +64,11 @@ def trace_of(parent):
 
 
 def consumer_groups(stack):
-    return subprocess.run(stack.docker + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server", "kafka:19092",
-                                          "--describe", "--all-groups"], capture_output=True, text=True, timeout=60).stdout
+    def run(args):
+        done = subprocess.run(stack.docker + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server",
+                                              "kafka:19092", *args], capture_output=True, text=True, timeout=60)
+        return done.returncode, done.stdout, done.stderr
+    return group_snapshot(run)
 
 
 def outbox_rows(stack, order_no):

@@ -27,7 +27,7 @@
 Payment 추적 통합은 실제 Micrometer/OpenTelemetry와 메모리 exporter로 접수/작업 스레드·부모·scope·HTTP client span을 대조한다. 별도 스케줄러 통합 검사는 처리 메서드를 직접 호출하지 않는다.
 `:e2e:tracingE2eTest`는 현재 공개 구매 API·실제 ZIP 다운로드와 Tempo의 span/parent 관계를 판정하며, 원래 콜백 기반 `TracePropagationE2eTest`를 대체한다. 일반 `e2eTest`에서는 tracing 태그를 제외한다.
 전용 실행 도구는 요청 저장 뒤 Payment 재시작·PG 응답 유실·결과 롤백·브로커 중단·Tempo 중단·추적 비활성·샘플링 0을 단계별로 주입한다. 필수 검사 0건·건너뜀은 통과로 판정하지 않는다.
-`verify-refund-tracing.py`는 검증 스택에서만 내보내기를 schedule-delay 1초·export timeout 5초·OTLP timeout 5초, max-batch-size = max-queue-size = 2048로 고정한다. 한 번 내보낼 때 큐가 모두 비워지고 큐가 차지 않는다는 조건에서 span 종료 뒤 내보내기 상한은 1+2×5=11초다(진행 중 내보내기 1회 + 자기 내보내기). 관찰은 업무 최종 상태·환불 Outbox 전부 SENT·브로커의 모든 consumer group lag 0(환불 그룹 7개는 코드 상수에서 읽어 필수)을 확인한 뒤부터 센다. 소비자 여유 5초 + 11초 + Tempo 여유 2초 = 18초 안의 조회는 안정 횟수에 넣지 않고, 그 뒤 같은 span 집합이 연속 3회(기본 간격으로 최소 24초) 조회돼야 판정한다. BatchSpanProcessor의 drop 수는 볼 수 없다(Boot 3.5.6은 `SdkMeterProvider` 빈이 있을 때만 지표를 연결하는데 앱에 없다). 그래서 부모·필수 서비스·PG span이 아닌 말단 span이 버려지면 잡지 못한다.
+`verify-refund-tracing.py`는 검증 스택에서만 내보내기를 schedule-delay 1초·export timeout 5초·OTLP timeout 5초, max-batch-size = max-queue-size = 2048로 고정한다. 한 번 내보낼 때 큐가 모두 비워지고 큐가 차지 않는다는 조건에서 span 종료 뒤 내보내기 상한은 1+2×5=11초다(진행 중 내보내기 1회 + 자기 내보내기). 관찰은 업무 최종 상태·환불 Outbox 전부 SENT·브로커의 모든 consumer group lag 0(환불 그룹 7개는 코드 상수에서 읽어 필수. `--list`·`--state`·오프셋 표가 일치하고 모두 Stable/Empty이며, 파티션 없는 행·해석 못 한 출력·stderr 경고가 없을 때만)을 확인한 뒤부터 센다. 소비자 여유 5초 + 11초 + Tempo 여유 2초 = 18초 안의 조회는 안정 횟수에 넣지 않고, 그 뒤 같은 span 집합이 연속 3회(기본 간격으로 최소 24초) 조회돼야 판정한다. BatchSpanProcessor의 drop 수는 볼 수 없다(Boot 3.5.6은 `SdkMeterProvider` 빈이 있을 때만 지표를 연결하는데 앱에 없다). 그래서 부모·필수 서비스·PG span이 아닌 말단 span이 버려지면 잡지 못한다.
 범위·시나리오·실행 수는 [실험 E10](experiments.md#tempo), 조회 방법은 [실행 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
 
 ## 구조·보안 경계 검사 실행

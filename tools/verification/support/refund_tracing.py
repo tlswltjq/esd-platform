@@ -225,24 +225,94 @@ def refund_consumer_groups(repo):
     return groups
 
 
-def lag_problems(describe_output, required):
-    """Problems in `kafka-consumer-groups --describe --all-groups`: missing required groups or any lag.
+SETTLED_STATES = ("Stable", "Empty")
+GROUP_STATES = SETTLED_STATES + ("PreparingRebalance", "CompletingRebalance", "Dead", "Unknown")
+NO_MEMBERS = re.compile(r"^Consumer group '([^']+)' has no active members\.$")
 
-    Every group of the isolated broker counts, because a group on the same topic still opens a consumer
-    span in the refund trace while it skips the event. A partition without a committed offset ("-") is
-    not caught up unless its log is empty.
+
+def group_snapshot(run):
+    """Three kafka-consumer-groups.sh reads: --list, --describe --all-groups --state, --describe --all-groups.
+
+    ``run(args)`` returns (returncode, stdout, stderr); every stream is judged by lag_problems.
     """
-    seen, problems = set(), []
-    for line in describe_output.splitlines():
-        fields = line.split()
-        if len(fields) < 6 or fields[0] == "GROUP" or not fields[2].isdigit():
+    return dict(list=run(["--list"]), state=run(["--describe", "--all-groups", "--state"]), offsets=run(["--describe", "--all-groups"]))
+
+
+def lag_problems(snapshot, required):
+    """Every reason the broker's consumer groups are not provably caught up; empty means observation may start.
+
+    All groups count, because a group on the same topic still opens a consumer span in the refund trace
+    while it skips the event. The group list, the state table and the offset table must agree; every group
+    must be Stable or Empty (no rebalance); every offset row needs a numeric partition and lag 0 (an
+    uncommitted offset passes only on an empty log). Any stderr except "has no active members" for an Empty
+    group, any non-zero exit and any line that cannot be parsed is a problem, so the caller reads again.
+    """
+    problems = []
+    for name in ("list", "state", "offsets"):
+        code = snapshot[name][0]
+        if code != 0:
+            problems.append(name + " exited " + str(code))
+    listed = [line.strip() for line in snapshot["list"][1].splitlines() if line.strip()]
+    if snapshot["list"][2].strip():
+        problems.append("list stderr: " + snapshot["list"][2].strip())
+    states, no_members = {}, set()
+    for line in snapshot["state"][1].splitlines() + snapshot["state"][2].splitlines():
+        text = line.strip()
+        fields = text.split()
+        if not text or (fields[0] == "GROUP" and "COORDINATOR" in fields):
+            continue
+        matched = NO_MEMBERS.match(text)
+        if matched:
+            no_members.add(matched.group(1))
+        elif len(fields) >= 5 and fields[-2] in GROUP_STATES and fields[-1].isdigit():
+            states[fields[0]] = fields[-2]
+        else:
+            problems.append("unparsable state output: " + text)
+    offsets = {}
+    for line in snapshot["offsets"][1].splitlines():
+        text = line.strip()
+        fields = text.split()
+        if not text or (fields[0] == "GROUP" and "PARTITION" in fields):
+            continue
+        if NO_MEMBERS.match(text):
+            no_members.add(NO_MEMBERS.match(text).group(1))
+            continue
+        if len(fields) < 6:
+            problems.append("unparsable offset output: " + text)
             continue
         group, topic, partition, current, end, lag = fields[:6]
-        seen.add(group)
-        caught_up = lag == "0" or (current == "-" and end == "0")
-        if not caught_up:
+        offsets.setdefault(group, 0)
+        if not partition.isdigit():
+            problems.append(group + " has a row without a partition (" + topic + "/" + partition + "), assignment unverifiable")
+            continue
+        offsets[group] += 1
+        if not (lag == "0" or (current == "-" and end == "0")):
             problems.append(group + " " + topic + "-" + partition + " lag " + lag + " (offset " + current + "/" + end + ")")
-    missing = [group for group in required if group not in seen]
+    for line in snapshot["offsets"][2].splitlines():
+        text = line.strip()
+        matched = NO_MEMBERS.match(text)
+        if not text:
+            continue
+        if matched:
+            no_members.add(matched.group(1))
+        else:
+            problems.append("offsets stderr: " + text)
+    for group in listed:
+        state = states.get(group)
+        if state is None:
+            problems.append(group + " has no state")
+        elif state not in SETTLED_STATES:
+            problems.append(group + " is " + state)
+        if offsets.get(group, 0) == 0:
+            problems.append(group + " missing from offsets")
+    for group in sorted(set(states) - set(listed)):
+        problems.append(group + " has a state but is not listed")
+    for group in sorted(set(offsets) - set(listed)):
+        problems.append(group + " has offsets but is not listed")
+    for group in sorted(no_members):
+        if states.get(group) != "Empty":
+            problems.append(group + " reported without members but state " + str(states.get(group)))
+    missing = [group for group in required if group not in listed]
     if missing:
-        problems.insert(0, "consumer groups not described " + str(missing))
+        problems.insert(0, "consumer groups not listed " + str(missing))
     return problems

@@ -130,37 +130,99 @@ class ObservationWindowTest(unittest.TestCase):
         self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_OTLP_TRACING_TIMEOUT"], str(refund_tracing.OTLP_TIMEOUT_SECONDS) + "s")
 
 
-DESCRIBE = """
-GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
-order-refund-suspension    stove.license.v1 0          12              12              0    c-1          /h    order
-license-suspension         stove.order.v1  0          30              30              0    c-2          /h    license
-
+# Shapes captured from apache/kafka:3.9.0 kafka-consumer-groups.sh (2026-11-09).
+GROUPS = ["order-refund-suspension", "license-suspension", "settlement-confirmed-refund", "catalog-sync"]
+STATE = """
 Consumer group 'settlement-confirmed-refund' has no active members.
 
-GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
-settlement-confirmed-refund stove.payment.v1 0         8               8               0    -            -     -
-idle-group                 stove.other.v1  0          -               0               -    c-3          /h    idle
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+settlement-confirmed-refund kafka:19092  (1)                             Empty           0
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+order-refund-suspension   kafka:19092  (1)          range                Stable          1
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+license-suspension        kafka:19092  (1)          range                Stable          1
+
+GROUP                     COORDINATOR (ID)          ASSIGNMENT-STRATEGY  STATE           #MEMBERS
+catalog-sync              kafka:19092  (1)          range                Stable          1
 """
+OFFSETS = """
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+settlement-confirmed-refund stove.payment.v1 0     8               8               0               -               -               -
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+order-refund-suspension stove.license.v1 0         12              12              0               consumer-1      /127.0.0.1      order
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+license-suspension stove.order.v1  0               30              30              0               consumer-2      /127.0.0.1      license
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+catalog-sync    stove.catalog.v1 0              -               0               -               consumer-3      /127.0.0.1      catalog
+"""
+NO_MEMBERS_STDERR = "\nConsumer group 'settlement-confirmed-refund' has no active members.\n"
+
+
+def snapshot(groups=None, state=STATE, offsets=OFFSETS, offsets_err=NO_MEMBERS_STDERR, list_err="", codes=(0, 0, 0)):
+    listed = "\n".join(GROUPS if groups is None else groups) + "\n"
+    return dict(list=(codes[0], listed, list_err), state=(codes[1], state, ""), offsets=(codes[2], offsets, offsets_err))
 
 
 class ConsumerLagTest(unittest.TestCase):
     REQUIRED = ["order-refund-suspension", "license-suspension", "settlement-confirmed-refund"]
 
-    def test_all_groups_at_lag_zero_pass(self):
-        self.assertEqual(refund_tracing.lag_problems(DESCRIBE, self.REQUIRED), [])
+    def problems(self, **changes):
+        return refund_tracing.lag_problems(snapshot(**changes), self.REQUIRED)
 
-    def test_any_group_with_lag_fails_even_if_not_required(self):
-        lagging = DESCRIBE + "order-license-grant stove.license.v1 0 10 12 2 c-4 /h order\n"
-        self.assertEqual(refund_tracing.lag_problems(lagging, self.REQUIRED), ["order-license-grant stove.license.v1-0 lag 2 (offset 10/12)"])
+    def test_settled_groups_at_lag_zero_pass_including_a_non_required_group(self):
+        self.assertEqual(self.problems(), [])
 
-    def test_uncommitted_offset_on_a_non_empty_log_fails(self):
-        pending = DESCRIBE + "license-purchase-refund stove.order.v1 0 - 30 - c-5 /h license\n"
-        self.assertEqual(refund_tracing.lag_problems(pending, self.REQUIRED), ["license-purchase-refund stove.order.v1-0 lag - (offset -/30)"])
+    def test_group_snapshot_reads_list_state_and_offsets(self):
+        calls = []
+        refund_tracing.group_snapshot(lambda args: calls.append(args) or (0, "", ""))
+        self.assertEqual(calls, [["--list"], ["--describe", "--all-groups", "--state"], ["--describe", "--all-groups"]])
+
+    def test_rebalancing_group_is_retried(self):
+        state = STATE.replace("catalog-sync              kafka:19092  (1)          range                Stable",
+                              "catalog-sync              kafka:19092  (1)          range                PreparingRebalance")
+        self.assertEqual(self.problems(state=state), ["catalog-sync is PreparingRebalance"])
+
+    def test_rebalancing_warning_on_stderr_is_retried(self):
+        problems = self.problems(offsets_err=NO_MEMBERS_STDERR + "Warning: Consumer group 'catalog-sync' is rebalancing.\n")
+        self.assertEqual(problems, ["offsets stderr: Warning: Consumer group 'catalog-sync' is rebalancing."])
+
+    def test_row_without_partition_is_unverifiable(self):
+        offsets = OFFSETS + "catalog-sync    -               -               -               -               -               consumer-9      /127.0.0.1      catalog\n"
+        self.assertEqual(self.problems(offsets=offsets), ["catalog-sync has a row without a partition (-/-), assignment unverifiable"])
+
+    def test_group_missing_from_offsets_is_retried(self):
+        offsets = OFFSETS.replace("catalog-sync    stove.catalog.v1 0              -               0               -               consumer-3      /127.0.0.1      catalog\n", "")
+        self.assertEqual(self.problems(offsets=offsets), ["catalog-sync missing from offsets"])
+
+    def test_listed_group_without_state_and_unlisted_rows_are_retried(self):
+        self.assertIn("late-group has no state", self.problems(groups=GROUPS + ["late-group"]))
+        self.assertIn("catalog-sync has a state but is not listed", self.problems(groups=GROUPS[:3]))
+        self.assertIn("catalog-sync has offsets but is not listed", self.problems(groups=GROUPS[:3]))
+
+    def test_unparsable_output_and_failed_commands_are_retried(self):
+        self.assertIn("unparsable state output: Error: Consumer group 'x' does not exist.",
+                      self.problems(state=STATE + "Error: Consumer group 'x' does not exist.\n"))
+        self.assertIn("unparsable offset output: truncated row", self.problems(offsets=OFFSETS + "truncated row\n"))
+        self.assertIn("offsets exited 1", self.problems(codes=(0, 0, 1)))
+        self.assertIn("list stderr: Error: timeout", self.problems(list_err="Error: timeout"))
+
+    def test_no_members_message_is_accepted_only_for_an_empty_group(self):
+        problems = self.problems(offsets_err="Consumer group 'catalog-sync' has no active members.\n")
+        self.assertEqual(problems, ["catalog-sync reported without members but state Stable"])
+
+    def test_lag_and_uncommitted_offsets_on_a_non_empty_log_fail(self):
+        lagging = OFFSETS.replace("license-suspension stove.order.v1  0               30              30              0",
+                                  "license-suspension stove.order.v1  0               28              30              2")
+        self.assertEqual(self.problems(offsets=lagging), ["license-suspension stove.order.v1-0 lag 2 (offset 28/30)"])
+        pending = OFFSETS.replace("catalog-sync    stove.catalog.v1 0              -               0               -",
+                                  "catalog-sync    stove.catalog.v1 0              -               4               -")
+        self.assertEqual(self.problems(offsets=pending), ["catalog-sync stove.catalog.v1-0 lag - (offset -/4)"])
 
     def test_missing_required_group_fails(self):
-        self.assertEqual(refund_tracing.lag_problems(DESCRIBE, self.REQUIRED + ["payment-refund-execution"]),
-                         ["consumer groups not described ['payment-refund-execution']"])
-        self.assertEqual(refund_tracing.lag_problems("", ["a"]), ["consumer groups not described ['a']"])
+        problems = refund_tracing.lag_problems(snapshot(), self.REQUIRED + ["payment-refund-execution"])
+        self.assertEqual(problems, ["consumer groups not listed ['payment-refund-execution']"])
 
     def test_refund_groups_come_from_the_code_constants(self):
         from pathlib import Path
