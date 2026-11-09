@@ -1252,6 +1252,15 @@
 - 구분: 추천 수용
 - 결과: [PR #139](https://github.com/tlswltjq/esd-platform/pull/139), 근거 색인 2026-11-08 기본 registry 행
 
+<a id="db-startup-wait"></a>
+## 136. 부팅 때만 첫 DB 연결을 기다리고, 실행 중 연결 기한은 그대로 둔다
+- 문제: DB를 쓰는 9개 앱(Auth·Studio·Review·Catalog·Store·Order·Payment·License·Settlement)은 Hikari 기본값(`initialization-fail-timeout` 1ms)이라 부팅 때 첫 연결을 한 번만 시도한다. 여러 JVM이 함께 떠 첫 연결이 `connection-timeout`(3초) 안에 끝나지 않으면 Flyway 단계에서 기동이 실패한다(2026-10-31 License 복구 검증). 지금은 `scripts/start-apps.sh`가 앱을 4묶음으로 나눠 띄워 피한다. 그러나 호스트 재부팅처럼 Docker가 `restart: unless-stopped` 컨테이너를 한꺼번에 다시 띄우면 나눠 띄우기가 적용되지 않고, 실패 뒤 재시작으로 수렴하는지도 검증한 적이 없다.
+- 선택지: A 지금처럼 바로 실패하고 Compose 재시작에 맡기며, 동시 기동 수렴 검증만 더한다 / B 9개 앱에 `spring.datasource.hikari.initialization-fail-timeout: 60000`을 더해 부팅 때만 60초 동안 첫 연결을 다시 시도한다. 실행 중 `connection-timeout: 3000`은 그대로 둔다 / C `connection-timeout`을 10초 안팎으로 늘린다 (추천: B — 부팅 때만 바뀌고, 실행 중 요청 기한과 재시도 시간 계산은 그대로다. 나눠 띄우기가 적용되지 않는 재부팅에서도 앱이 스스로 버틴다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 부팅 때만 기다리게 해")
+- 선택: B — 부팅 때 첫 연결만 60초 동안 다시 시도하고, 그래도 안 되면 지금처럼 종료한다. 60초와 연결 기한 3초를 더해도 Compose health가 unhealthy로 판정하기까지의 약 115초(`start_period` 40초 + 15초 × 5회) 안에 든다. 나눠 띄우기는 기동 부하를 줄이는 용도로 남긴다. 인프라 MySQL에 재시작 정책이 없는 점은 이 결정에 넣지 않았다.
+- 구분: 추천 수용
+- 결과: (PR 작성 후 기입)
+
 ---
 
 ## 검증하며 드러난 것
