@@ -123,6 +123,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 
 ```bash
 python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
+python3 -B tools/verification/verify-refund-tracing.py           # 로컬 fake PortOne + 격리 Tempo: 정상·응답 유실·PG 5xx 환불의 trace 연결(D-050 동안 실패)
 python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제·30분 안 재진입 조합(결정 119·120)
 python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합·접수 전 PAY_PENDING 만료(31분 대기, 별도 야간 작업, 결정 120·126)
 ```

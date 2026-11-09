@@ -72,6 +72,7 @@
 | [D-045](#d-045) | 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급 | 금전 손실(과지급)·판매자 마감 정지 | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
+| [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **재현됨·미수정** | `verify-refund-tracing.py` 실제 스택 2회 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -591,6 +592,15 @@
 - **운영 영향** 같은 상품을 세 곳(이벤트·초기 동기화·정본 대조)이 거의 동시에 처음 넣고 그중 하나가 롤백될 때만 생긴다. 이벤트 경로는 Kafka 기본 오류 처리기의 재배달(1·2·4초)로 결국 수렴하지만 지연과 ERROR 로그가 남는다. HTTP 대조는 그 회차가 실패로 끝나 다음 회차까지 사본 반영이 늦는다.
 - **수정** 두 서비스의 재시도 catch를 `RuntimeException`으로 받고, 새 `RetryableWriteFailure.retryable`이 원인 사슬(최대 16단계)에서 기존 네 타입(Spring `DataIntegrityViolationException`·`TransientDataAccessException`, Hibernate `ConstraintViolationException`·`LockAcquisitionException`)을 찾을 때만 새 트랜잭션으로 다시 시도한다. 재시도 대상은 넓히지 않았고 감싼 예외만 찾는다. 업무 충돌(`BusinessException`)·원인 없는 `OptimisticLockException`(오래된 버전)은 그대로 실패한다. Order `CreateOrder`도 같은 catch 모양이지만 `saveAndFlush`(리포지토리)로 저장해 Spring 변환을 거치므로 해당하지 않는다.
 - **망가뜨리기 확인(결정 102)** `retryable`이 원인 사슬을 보지 않게 바꾸면 두 재현 테스트가 같은 `OptimisticLockException(LockAcquisitionException)`으로 실패(Gradle exit 1)하고, 되돌리면 통과한다.
+
+<a id="d-050"></a>
+## D-050 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐
+
+**상태** 재현됨·미수정(운영 코드 변경 전, `known-defect` 재현 테스트 미작성이라 `defectTest`에 아직 세지 않음) · **영향** 첫 환불 송신의 응답이 유실되거나 PG가 5xx로 답해 작업자가 환불을 확정하면, 고객의 환불 요청 trace에는 PG 재조회·재송신과 그 뒤 Order `PurchaseRefunded`·License 환불 반영·Settlement 환불 조정이 없다. 업무 결과(주문 `COMPLETED`, 보유권 `REFUNDED`, 정산 환불 1건)는 맞다. 장애 뒤 환불을 Tempo에서 한 trace로 따라갈 수 없다([결정 28](decisions.md#28-내구-접수의-추적-부모를-저장하고-처리-시도마다-복원한다), Order 테스트 R32) · **위치** `RefundExecutionTraceContexts.find`(운영 코드 호출 0곳; `ReceiveRefundExecution`이 `refund_execution_trace`에 저장만 함), `ResolveRefundLookup`의 `executor` 작업·`ResolveRefundRetry`의 재송신(부모 복원 없이 실행), 그 안에서 적재하는 Payment `RefundPaymentConfirmed` Outbox
+**재현** `python3 -B tools/verification/verify-refund-tracing.py`(흉내 PortOne + 격리 Tempo, 샘플링 1) 2026-11-09 2회 모두 같은 결과. 정상 환불은 Order·License·Payment 환불 Outbox 6행과 PG 취소·조회 span이 환불 HTTP trace 하나에 있다. 응답 유실(`arm-cancel LOST_RESPONSE`, 첫 재조회 503)과 PG 오류(`arm-cancel PG_ERROR`)에서는 `refund_execution_trace`의 부모가 환불 trace인데도 작업자의 PG 호출이 span 1개짜리 새 root(`payment:http get`·`payment:http post`)가 되고, `RefundPaymentConfirmed.trace_parent`가 NULL, Order의 `PurchaseRefunded`가 `order:stove.payment.v1 receive` root의 새 trace에 생긴다. 근거는 실행 디렉터리 `runs/refund-tracing-*/refund-tracing.json`과 PR 본문.
+
+- **원인 추정** 구매 결제는 `ResolvePayment`가 `PaymentTracing.run(traceContexts.find(paymentId), …)`로 처리 시도마다 저장 부모를 복원하지만, 환불 작업자에는 같은 감싸기가 없다. Kafka 리스너 스레드에서 끝나는 첫 송신만 소비 span 아래에 있어 이어진다.
+- **남은 일** Payment `tasks.md`의 D-050 항목(재현 테스트 → 수정).
 
 ---
 
