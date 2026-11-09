@@ -1279,6 +1279,32 @@
 - 구분: 추천 수용
 - 결과: [PR #179](https://github.com/tlswltjq/esd-platform/pull/179), 근거 색인 2026-11-09 결정 번호 예약 행
 
+<a id="defer-real-pg"></a>
+## 140. 실제 PG 확인은 새 단계 G7로 미루고, Payment·Settlement core의 PG 계약을 공급자 중립으로 바꾼다
+- 문제: 결제·환불 예외 결정(114~134)이 이어지며 기존 결정·구현과 계속 부딪혔다(D-044·D-045·D-046, PR #178 취소 단계 실패). 실제 PortOne TEST는 2026-11-07 토스페이가 공용 예제 키를 거절한 뒤 멈췄고(결정 110 결과), `[외부 대기]` 10여 건이 전용 테스트 가맹점을 기다린다. 업무 모델도 PortOne 모양이다. Payment core에는 `PORTONE_TEST` 공급자 분기(`"PORTONE_TEST".equals(...)`·JPQL `p.provider='PORTONE_TEST'`)가 29곳 있고, `PortOneWebhookNotice`(core.domain)·`PortOneWebhookReceipts`·`PortOneWebhookVerifier`(core.port)·`ReceivePortOneWebhook`(core.service)가 PortOne 이름을 쓴다. 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)은 PortOne의 공개 보장이다. Settlement core도 `PgEvidence`·`PgPayment`·`PgFunding`·`PgStatementCheck`가 `PORTONE_TEST`·`PORTONE_LIVE` 문자열을, `PgStatement`가 `portoneStoreId`·`portoneChannelKey` 열을 쓴다. 그래서 흉내 서버로만 돌려도 PortOne 규칙에서 나온 충돌이 그대로 남는다.
+- 선택지: A PortOne 어댑터·웹훅·Settlement 수집기를 지우고 `simulators/mock-pg`로 돌아간다 / B 코드는 두고 실제 TEST만 완료 조건에서 뺀다 / C B에 더해 core의 PG 계약을 공급자 중립으로 바꾸고 PortOne 이름·규칙은 adapter로 내린다 (추천: C — 문제가 생기는 곳이 어댑터 한 곳에 모이고, AGENTS.md 3절의 `core.port`/`adapter` 경계에 맞는다. 실제 PortOne은 나중에 어댑터로 다시 붙인다. A는 Payment·Settlement 파일 128개를 바꾸고 mock-pg에 환불·취소·웹훅을 새로 만들어야 하며, 결정 110·111·133과 10-27~10-30 실제 TEST 근거가 쓸모를 잃는다. B는 core가 PortOne 모양으로 남는다)
+- 내 의견: "실제 연동도 걷어내고 나중으로 미루고싶어 그래도 될까?" → 고른 선택지: "C로 실제 연동 미루고 PG 계약 중립화해"
+- 선택: C
+  - 실제 PortOne·토스페이 확인(승인·취소·오류 타입·웹훅 공개 수신·토스페이 정산 수집·LIVE 근거·지급 수령)은 새 단계 G7 "실제 PG 연동"으로 옮기고 G1~G3 완료 조건에서 뺀다. PortOne 코드와 10-27~10-30 실제 TEST 근거는 지우지 않는다.
+  - Payment·Settlement core에서 공급자 이름과 공급자 문자열 분기를 없앤다. 승인·조회·취소 요청·취소 결과·통지의 중립 계약은 `core.port`에, PortOne 본문·서명·오류 분류·공개 보장 기한은 `adapter`와 `config`에 둔다. 이미 저장된 `PORTONE_TEST`·`SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트). ArchUnit으로 core의 공급자 이름을 막는다.
+  - 이번에 정하지 않은 것(각각 따로 묻는다): ① 기준 시뮬레이터의 형태 — [결정 46](#pg-test-boundaries-without-provider-service)("상시 모의 PG를 복원하지 않는다", 사용자가 정정한 결정)·[결정 111](#portone-fake-journey)("흉내 서버는 검증 도구 쪽에만")과의 관계 ② Settlement가 시뮬레이터 근거를 모의 수령으로 어떻게 표시하고 G3 완료를 무엇으로 판정할지([로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다").
+  - 진행 중인 PR #166·#168·#178은 그대로 마무리한다. 중립화는 그 뒤에 그 동작을 옮긴다.
+- 구분: 직접 제안 — 실제 연동 미루기는 사용자가 먼저 꺼냈고, 방식 C는 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 중립화는 후속 PR
+
+<a id="portone-fake-as-reference-simulator"></a>
+## 141. 기준 시뮬레이터는 PortOne 흉내 서버를 넓혀 쓰고, 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다
+- 문제: [결정 140](#defer-real-pg)으로 실제 PG 확인을 G7로 미루면서 개발·여정·장애 실험에 쓸 기준 시뮬레이터를 정해야 했다. 지금은 두 가지가 있다. `tools/verification/support/portone_fake.py`(PortOne V2 HTTP 모양, 제어 요청 `fail-attempt`·`arm-confirm`·`arm-cancel`·`settle`·`console-approve`·`console-cancel`, 매일 밤 CI 여정)와 `simulators/mock-pg`(별도 Java 서비스·DB, 승인만, `SIMULATED`)다. 예: PR #178 취소 단계 실패는 흉내 서버에 PortOne 취소 대기(`REQUESTED`)가 없어서 생겼다.
+- 선택지: A PortOne 흉내 서버를 기준으로 넓힌다. 중립화는 `core.port` 경계에서만 하고 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다 / B 중립 프로토콜 시뮬레이터와 전용 `SimulatorPgGateway`·Settlement 클라이언트를 새로 둔다 / C 둘 다 둔다(실험은 중립 시뮬레이터, 어댑터 계약은 흉내 서버) (추천: A — 업무 모델을 PortOne에서 떼는 일은 `core.port` 경계로 이뤄지고 시뮬레이터 프로토콜과는 무관하다. PortOne 어댑터가 매일 밤 돌아 G7에서 주소만 바꾸면 되고, 장애 주입은 기존 `arm-*` 제어 방식으로 더할 수 있으며, [결정 46](#pg-test-boundaries-without-provider-service)·[결정 111](#portone-fake-journey)을 지킨다. B는 결정 46을 뒤집고 어댑터 두 벌을 유지하며 PortOne 어댑터가 G7까지 시험되지 않는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PortOne 흉내 서버를 기준으로 넓혀")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - 흉내 서버는 결정 111대로 검증 도구 쪽에만 둔다. 운영 코드는 흉내 서버를 알지 못하고, PortOne 주소 설정만 바꿔 붙는다. 결정 46의 "상시 모의 PG를 복원하지 않는다"는 그대로다.
+  - 흉내 서버의 응답 모양은 PortOne 어댑터 테스트의 견본과 같게 유지한다. PortOne 문서로 확인하지 못한 동작은 흉내 서버 안에 추정이라고 적고 G7 확인 항목에 남긴다.
+  - 장애 주입은 제어 요청으로 더한다: 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정, 웹훅 중복·역순·누락. 취소 대기는 PR #178(결정 138)이 넣는 것과 겹치지 않게 그 PR 뒤에 잇는다.
+  - `simulators/mock-pg`·`SIMULATED` 경로를 정리할지는 이번에 정하지 않는다.
+- 구분: 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 흉내 서버 확장은 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
