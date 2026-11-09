@@ -10,6 +10,7 @@ import com.stove.common.web.error.BusinessException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
@@ -22,6 +23,16 @@ class HmacPortOneWebhookVerifierTest {
 
     @Test void exactBodyAndMetadataAreVerifiedWithoutReserializingJson() {
         assertThatCode(() -> verifier.verify(body, id, timestamp, sign(id, timestamp, body))).doesNotThrowAnyException();
+    }
+
+    /** Standard Webhooks 명세 예제(standard-webhooks README). PortOne 흉내 서버 서명기(test_portone_fake.py)도 같은 값을 쓴다(결정 138). */
+    @Test void standardWebhooksSpecificationExampleVerifies() {
+        Instant sent = Instant.ofEpochSecond(1614265330L);
+        HmacPortOneWebhookVerifier specification = new HmacPortOneWebhookVerifier("whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw",
+                Clock.fixed(sent, ZoneOffset.UTC), Duration.ofMinutes(5));
+        byte[] payload = "{\"test\": 2432232314}".getBytes(StandardCharsets.UTF_8);
+        assertThatCode(() -> specification.verify(payload, "msg_p5jXN8AQM9LWM0D4loKWxJek", "1614265330",
+                "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=")).doesNotThrowAnyException();
     }
 
     @Test void secretRotationAllowsAnyMatchingSupportedSignature() {

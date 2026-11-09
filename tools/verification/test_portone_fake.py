@@ -1,8 +1,13 @@
+import base64
+import hashlib
+import hmac
+import http.server
 import json
+import threading
 import unittest
 import urllib.request
 import urllib.error
-from support.portone_fake import PortOneFake
+from support.portone_fake import PortOneFake, webhook_key, webhook_signature
 
 
 class PortOneFakeTest(unittest.TestCase):
@@ -324,3 +329,161 @@ class PortOneFakeCancelFaultTest(unittest.TestCase):
         self.assertEqual(self.current()['status'], 'PAID')
         self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"')[0], 200)
         self.assertEqual(self.current()['status'], 'CANCELLED')
+
+    def test_requested_cancel_stays_pending_until_the_pg_settles_it(self):
+        # Decision 138: the PG accepted the cancel but has not finished it; Payment's refund lookup reads it as undecided.
+        self.paid()
+        self.assertEqual(self.control('settle-cancel')[0], 409)
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'REQUESTED'})[0], 200)
+        status, answer = self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"')
+        self.assertEqual((status, answer['cancellation']['status'], answer['cancellation']['totalAmount']), (200, 'REQUESTED', 10000))
+        pending = self.current()
+        self.assertEqual((pending['status'], pending['amount']['cancelled']), ('PAID', 0))
+        self.assertEqual([(r['status'], r['id']) for r in pending['cancellations']], [('REQUESTED', answer['cancellation']['id'])])
+        self.assertNotIn('pendingCancel', pending)
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"'), (status, answer))
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"other"')[0], 409)
+        self.assertEqual(self.control('settle-cancel')[0], 200)
+        settled = self.current()
+        self.assertEqual((settled['status'], settled['amount']['cancelled']), ('CANCELLED', 10000))
+        self.assertEqual([(r['status'], r['id']) for r in settled['cancellations']], [('SUCCEEDED', answer['cancellation']['id'])])
+        self.assertEqual(self.control('settle-cancel')[0], 409)
+
+
+class WebhookReceiver:
+    """Loopback stand-in for Payment's webhook endpoint; records each request as delivered."""
+
+    def __init__(self, status=200):
+        received = []
+        self.received = received
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                received.append(dict(path=self.path, headers={k.lower(): v for k, v in self.headers.items()}, body=body))
+                self.send_response(status)
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.url = 'http://127.0.0.1:' + str(self.server.server_port) + '/api/v1/payments/webhooks/portone'
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+class PortOneFakeWebhookTest(unittest.TestCase):
+    """Decision 138: signed Standard Webhooks messages on attempt status changes, per-payment delivery modes."""
+
+    SECRET = 'whsec_' + base64.b64encode(b'k' * 32).decode()
+
+    def setUp(self):
+        self.fake = PortOneFake({'payment': 'secret', 'console': 'console-secret'}, 'store', 'channel').start()
+        self.addCleanup(self.fake.stop)
+        self.receiver = WebhookReceiver()
+        self.addCleanup(self.receiver.stop)
+
+    call = PortOneFakeTest.call
+    checkout = PortOneFakeControlTest.checkout
+    confirm_body = PortOneFakeControlTest.confirm_body
+    control = PortOneFakeControlTest.control
+
+    def verified(self, request):
+        """Independent Standard Webhooks check, the same steps as Payment HmacPortOneWebhookVerifier."""
+        headers = request['headers']
+        key = base64.b64decode(self.SECRET[len('whsec_'):])
+        signed = (headers['webhook-id'] + '.' + headers['webhook-timestamp'] + '.').encode() + request['body']
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+        return headers['webhook-signature'] == 'v1,' + expected
+
+    def test_signature_matches_the_standard_webhooks_example(self):
+        # Example from the Standard Webhooks specification (standard-webhooks/standard-webhooks README).
+        key = webhook_key('whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw')
+        self.assertEqual(webhook_signature(key, 'msg_p5jXN8AQM9LWM0D4loKWxJek', 1614265330, b'{"test": 2432232314}'),
+                         'v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=')
+        with self.assertRaises(ValueError):
+            webhook_key('not-a-whsec-secret')
+
+    def test_webhooks_are_off_until_a_journey_enables_them(self):
+        self.checkout()
+        self.assertEqual(self.control('console-approve')[0], 200)
+        self.fake.flush_webhooks()
+        self.assertEqual((self.receiver.received, self.fake.deliveries, self.fake.sender), ([], [], None))
+        with self.assertRaises(ValueError):
+            self.fake.enable_webhooks('https://webhook.invalid/api/v1/payments/webhooks/portone', self.SECRET)
+
+    def test_every_status_change_is_one_signed_message_sent_straight_to_payment(self):
+        self.fake.enable_webhooks(self.receiver.url, self.SECRET)
+        status, sdk = self.checkout()
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')[0], 200)
+        self.assertEqual(self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')[0], 200)  # replay: no change
+        self.fake.flush_webhooks()
+        bodies = [json.loads(r['body']) for r in self.receiver.received]
+        self.assertEqual([b['type'] for b in bodies], ['Transaction.Ready', 'Transaction.Paid'])
+        for request, body in zip(self.receiver.received, bodies):
+            self.assertTrue(self.verified(request), request['headers'])
+            self.assertEqual(request['path'], '/api/v1/payments/webhooks/portone')
+            self.assertEqual(body['data'], {'storeId': 'store', 'paymentId': 'payment', 'transactionId': sdk['txId']})
+            self.assertRegex(request['headers']['webhook-id'], r'^[A-Za-z0-9_-]{1,200}$')
+            self.assertTrue(body['timestamp'].endswith('Z'))
+        self.assertEqual([(d['type'], d['kind'], d['status']) for d in self.fake.webhooks_for('payment')],
+                         [('Transaction.Ready', 'delivered', 200), ('Transaction.Paid', 'delivered', 200)])
+
+    def test_hold_waits_for_release_and_mute_drops(self):
+        self.fake.enable_webhooks(self.receiver.url, self.SECRET)
+        self.checkout('held')
+        self.checkout('muted')
+        self.fake.flush_webhooks()
+        self.fake.webhook_mode('held', 'hold')
+        self.fake.webhook_mode('muted', 'mute')
+        self.control('console-approve', payment_id='held')
+        self.control('console-approve', payment_id='muted')
+        self.fake.flush_webhooks()
+        self.assertEqual([json.loads(r['body'])['type'] for r in self.receiver.received], ['Transaction.Ready'] * 2)
+        released = self.fake.release_webhooks('held')
+        self.assertEqual(len(released), 1)
+        self.fake.flush_webhooks()
+        last = json.loads(self.receiver.received[-1]['body'])
+        self.assertEqual((last['type'], last['data']['paymentId']), ('Transaction.Paid', 'held'))
+        self.assertEqual([(d['type'], d['kind']) for d in self.fake.webhooks_for('muted')],
+                         [('Transaction.Ready', 'delivered'), ('Transaction.Paid', 'muted')])
+        self.assertEqual(self.fake.release_webhooks('held'), [])
+        with self.assertRaises(ValueError):
+            self.fake.webhook_mode('held', 'later')
+
+    def test_a_pending_cancel_sends_transaction_cancelled_only_when_the_pg_settles_it(self):
+        self.fake.enable_webhooks(self.receiver.url, self.SECRET)
+        sdk = self.checkout()[1]
+        self.call('POST', '/payments/payment/confirm', self.confirm_body(sdk), '"approval"')
+        self.control('arm-cancel', {'outcome': 'REQUESTED'})
+        cancel = dict(storeId='store', amount=10000, currentCancellableAmount=10000, reason='ESD refund r')
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', cancel, '"cancel"')[0], 200)
+        self.fake.flush_webhooks()
+        self.assertEqual([json.loads(r['body'])['type'] for r in self.receiver.received], ['Transaction.Ready', 'Transaction.Paid'])
+        self.control('settle-cancel')
+        self.fake.flush_webhooks()
+        self.assertEqual(json.loads(self.receiver.received[-1]['body'])['type'], 'Transaction.Cancelled')
+
+    def test_redelivery_keeps_id_and_body_and_a_forged_signature_fails_verification(self):
+        self.fake.enable_webhooks(self.receiver.url, self.SECRET)
+        self.checkout()
+        self.fake.flush_webhooks()
+        first = self.receiver.received[0]
+        self.fake.redeliver(first['headers']['webhook-id'])
+        self.fake.deliver_forged(first['headers']['webhook-id'])
+        self.fake.flush_webhooks()
+        again, forged = self.receiver.received[1], self.receiver.received[2]
+        self.assertEqual((again['headers']['webhook-id'], again['body']), (first['headers']['webhook-id'], first['body']))
+        self.assertTrue(self.verified(again))
+        self.assertEqual((forged['headers']['webhook-id'], forged['body']), (first['headers']['webhook-id'], first['body']))
+        self.assertFalse(self.verified(forged))
+        self.assertEqual([d['kind'] for d in self.fake.webhooks_for('payment')], ['delivered', 'redelivered', 'forged'])
+        with self.assertRaises(KeyError):
+            self.fake.redeliver('msg_unknown')

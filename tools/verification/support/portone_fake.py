@@ -12,10 +12,13 @@ POST /_fake/control/payments/{paymentId}/{action}
   settle           {"status": PAID|FAILED} latest PAY_PENDING attempt
   console-approve  latest READY attempt -> PAID without confirm (approval without our admission)
   console-cancel   latest PAID attempt -> full CANCELLED (operator cancels in the PortOne console)
-  arm-cancel       {"outcome": LOST_RESPONSE|PG_ERROR, "failLookups": n} applied to the next valid cancel of a
+  arm-cancel       {"outcome": LOST_RESPONSE|PG_ERROR|REQUESTED, "failLookups": n} applied to the next valid cancel of a
                    PAID attempt. LOST_RESPONSE cancels, then closes the connection without an answer; PG_ERROR
-                   answers HTTP 503 without cancelling and without recording an idempotent replay. The next n
-                   GET /payments/{id} calls after that cancel answer 503 (refund tracing, decision 119)
+                   answers HTTP 503 without cancelling and without recording an idempotent replay. REQUESTED answers
+                   200 with a REQUESTED cancellation and leaves the attempt PAID until settle-cancel (PG cancel still
+                   pending; decision 138). The next n GET /payments/{id} calls after that cancel answer 503
+                   (refund tracing, decision 119)
+  settle-cancel    latest PAID attempt with a REQUESTED cancellation -> that cancellation SUCCEEDED, attempt CANCELLED
 
 Every action targets one paymentId and its latest attempt only, so a journey can prepare many orders
 up front, drive each into its state, wait once past the order deadline and then settle each one
@@ -25,20 +28,53 @@ attempt is PAY_PENDING, confirm answers 409 PAYMENT_NOT_READY and a new attempt 
 Response shapes follow the PortOne adapter fixtures and the 2026-10-27~31 PortOne TEST runs.
 Inferred, not observed in a real run: the confirm PG failure answer (HTTP 502, type PG_PROVIDER,
 PortOne V2 PgProviderError), the SDK refusal of an already paid paymentId (ALREADY_PAID), the
-failure object fields (reason/pgCode/pgMessage, PortOne V2 PaymentFailure) and the history order
-(oldest first; Payment does not depend on it). Webhooks are not sent.
+failure object fields (reason/pgCode/pgMessage, PortOne V2 PaymentFailure), the history order
+(oldest first; Payment does not depend on it) and a pending cancellation shown as a PAID payment with a
+REQUESTED cancellation row (Payment's refund lookup reads it as undecided).
+
+Webhooks (decision 138) are off unless a journey calls enable_webhooks(url, secret). Then every attempt status
+change (READY, PAY_PENDING, PAID, FAILED, CANCELLED) becomes one Standard Webhooks message
+({"type": "Transaction.Paid", "timestamp", "data": {storeId, paymentId, transactionId}}, HMAC-SHA256 over
+"id.timestamp.body" with the whsec_ key), delivered by one background thread straight to Payment, like the
+2026-10-27 edge that bypassed the Gateway. Per paymentId a journey chooses webhook_mode: deliver (default),
+hold (kept until release_webhooks) or mute (dropped). redeliver(messageId) resends the same id and body,
+deliver_forged signs with another key. Every outcome is recorded in deliveries. Harness controls are Python
+methods, not the console API: they model PortOne's delivery, not an operator action.
 """
+import base64
 import copy
 import datetime
+import hashlib
+import hmac
 import http.server
 import json
+import queue
 import secrets
 import threading
+import time
+import urllib.error
 import urllib.parse
+import urllib.request
 
 CONFIRM_OUTCOMES = {'FAILED', 'PAY_PENDING', 'REJECT_400', 'REJECT_403'}
-CANCEL_OUTCOMES = {'LOST_RESPONSE', 'PG_ERROR'}
-CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'arm-cancel', 'settle', 'console-approve', 'console-cancel'}
+CANCEL_OUTCOMES = {'LOST_RESPONSE', 'PG_ERROR', 'REQUESTED'}
+CONTROL_ACTIONS = {'fail-attempt', 'pay-pending', 'arm-confirm', 'arm-cancel', 'settle', 'settle-cancel', 'console-approve', 'console-cancel'}
+WEBHOOK_TYPES = {'READY': 'Transaction.Ready', 'PAY_PENDING': 'Transaction.PayPending', 'PAID': 'Transaction.Paid',
+                 'FAILED': 'Transaction.Failed', 'CANCELLED': 'Transaction.Cancelled'}
+WEBHOOK_MODES = {'deliver', 'hold', 'mute'}
+
+
+def webhook_key(secret):
+    """Standard Webhooks signing key: the base64 part after whsec_."""
+    if not isinstance(secret, str) or not secret.startswith('whsec_'):
+        raise ValueError('whsec_ secret required')
+    return base64.b64decode(secret[len('whsec_'):], validate=True)
+
+
+def webhook_signature(key, message_id, delivered_at, body):
+    """v1 signature of "id.timestamp.body" (Standard Webhooks; Payment HmacPortOneWebhookVerifier)."""
+    signed = (message_id + '.' + str(delivered_at) + '.').encode() + body
+    return 'v1,' + base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
 
 
 def timestamp():
@@ -52,6 +88,9 @@ class PortOneFake:
         self.lock = threading.RLock()
         self.payments, self.replays, self.requests = {}, {}, []
         self.server = None
+        self.webhook_url, self.webhook_signing_key = None, None
+        self.messages, self.deliveries, self.notified, self.held = {}, [], {}, {}
+        self.outbox, self.sender = queue.Queue(), None
 
     def start(self):
         owner = self
@@ -93,6 +132,7 @@ class PortOneFake:
                     if self.path.startswith('/_fake/control/'):
                         entry.update(control={k: body[k] for k in ('outcome', 'status', 'failLookups') if k in body})
                     owner.requests.append(entry)
+                    owner.notify_changes()
                     if status is None:
                         # Lost response: the cancellation happened, the caller never hears about it.
                         entry.update(status='LOST')
@@ -117,6 +157,116 @@ class PortOneFake:
             self.server.server_close()
             self.thread.join(timeout=5)
             self.server = None
+        if self.sender:
+            self.outbox.put(None)
+            self.sender.join(timeout=15)
+            self.sender = None
+
+    # --- webhooks (decision 138) -------------------------------------------------------
+    def enable_webhooks(self, url, secret):
+        """Send a signed webhook for every later attempt status change to url (Payment, not the Gateway)."""
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != 'http' or parsed.hostname != '127.0.0.1':
+            raise ValueError('loopback webhook url required')
+        with self.lock:
+            self.webhook_url, self.webhook_signing_key = url, webhook_key(secret)
+            for payment_id, payment in self.payments.items():
+                for attempt in payment['attempts']:
+                    self.notified[(payment_id, attempt['id'])] = attempt['status']
+            if self.sender is None:
+                self.sender = threading.Thread(target=self.send_loop, name='portone-fake-webhooks', daemon=True)
+                self.sender.start()
+
+    def webhook_mode(self, payment_id, mode):
+        if mode not in WEBHOOK_MODES:
+            raise ValueError('unknown webhook mode ' + str(mode))
+        with self.lock:
+            self.payments[payment_id]['webhookMode'] = mode
+
+    def release_webhooks(self, payment_id):
+        """Deliver this payment's held messages now, oldest first; later changes follow its current mode."""
+        with self.lock:
+            released = self.held.pop(payment_id, [])
+            for message_id in released:
+                self.outbox.put((message_id, self.webhook_signing_key, 'released'))
+            return list(released)
+
+    def redeliver(self, message_id):
+        """PortOne-style retry: same id and body, new delivery timestamp and signature."""
+        with self.lock:
+            if message_id not in self.messages:
+                raise KeyError(message_id)
+            self.outbox.put((message_id, self.webhook_signing_key, 'redelivered'))
+
+    def deliver_forged(self, message_id):
+        """Same message signed with an unrelated key; Payment must answer 401 and store nothing."""
+        with self.lock:
+            if message_id not in self.messages:
+                raise KeyError(message_id)
+            self.outbox.put((message_id, secrets.token_bytes(32), 'forged'))
+
+    def flush_webhooks(self, timeout=30):
+        """Wait until every queued delivery has an outcome in deliveries."""
+        deadline = time.monotonic() + timeout
+        while self.outbox.unfinished_tasks:
+            if time.monotonic() > deadline:
+                raise TimeoutError('webhook deliveries still pending')
+            time.sleep(0.05)
+
+    def webhooks_for(self, payment_id):
+        with self.lock:
+            return [copy.deepcopy(d) for d in self.deliveries if d['paymentId'] == payment_id]
+
+    def notify_changes(self):
+        """Turn attempt status changes since the last request into messages (caller holds the lock)."""
+        if self.webhook_url is None:
+            return
+        for payment_id, payment in self.payments.items():
+            for attempt in payment['attempts']:
+                identity = (payment_id, attempt['id'])
+                if self.notified.get(identity) == attempt['status'] or attempt['status'] not in WEBHOOK_TYPES:
+                    continue
+                self.notified[identity] = attempt['status']
+                message_id = 'msg_' + secrets.token_hex(12)
+                body = json.dumps({'type': WEBHOOK_TYPES[attempt['status']], 'timestamp': timestamp(),
+                                   'data': {'storeId': self.store, 'paymentId': payment_id,
+                                            'transactionId': attempt['id']}}).encode()
+                self.messages[message_id] = dict(paymentId=payment_id, type=WEBHOOK_TYPES[attempt['status']], body=body)
+                mode = payment.get('webhookMode', 'deliver')
+                if mode == 'deliver':
+                    self.outbox.put((message_id, self.webhook_signing_key, 'delivered'))
+                elif mode == 'hold':
+                    self.held.setdefault(payment_id, []).append(message_id)
+                else:
+                    self.deliveries.append(dict(messageId=message_id, paymentId=payment_id,
+                                                type=WEBHOOK_TYPES[attempt['status']], kind='muted', status=None))
+
+    def send_loop(self):
+        while True:
+            item = self.outbox.get()
+            try:
+                if item is None:
+                    return
+                message_id, key, kind = item
+                with self.lock:
+                    message, url = self.messages[message_id], self.webhook_url
+                delivered_at = int(time.time())
+                request = urllib.request.Request(url, data=message['body'], method='POST', headers={
+                    'Content-Type': 'application/json', 'webhook-id': message_id,
+                    'webhook-timestamp': str(delivered_at),
+                    'webhook-signature': webhook_signature(key, message_id, delivered_at, message['body'])})
+                try:
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        status = response.status
+                except urllib.error.HTTPError as error:
+                    status = error.code
+                except OSError as error:
+                    status = 'ERROR ' + type(error).__name__
+                with self.lock:
+                    self.deliveries.append(dict(messageId=message_id, paymentId=message['paymentId'], type=message['type'],
+                                                kind=kind, status=status))
+            finally:
+                self.outbox.task_done()
 
     # --- views -------------------------------------------------------------------------
     def view(self, payment, attempt):
@@ -161,6 +311,24 @@ class PortOneFake:
                        cancellations=[{k: cancellation[k] for k in ('status', 'id', 'totalAmount', 'cancelledAt')}])
         attempt['amount']['cancelled'] = remaining
         return cancellation
+
+    @staticmethod
+    def request_cancel(attempt, reason):
+        """PG accepted the cancel but has not finished it: the attempt stays PAID with a REQUESTED row."""
+        remaining = attempt['amount']['paid'] - attempt['amount']['cancelled']
+        cancellation = dict(status='REQUESTED', id='cancel-' + secrets.token_hex(12), totalAmount=remaining,
+                            taxFreeAmount=0, vatAmount=remaining // 11, reason=reason, requestedAt=timestamp())
+        attempt['cancellations'] = [{k: cancellation[k] for k in ('status', 'id', 'totalAmount', 'requestedAt')}]
+        attempt['pendingCancel'] = cancellation
+        return cancellation
+
+    @staticmethod
+    def finish_cancel(attempt):
+        pending = attempt.pop('pendingCancel')
+        now = timestamp()
+        attempt.update(status='CANCELLED', cancelledAt=now,
+                       cancellations=[dict(status='SUCCEEDED', id=pending['id'], totalAmount=pending['totalAmount'], cancelledAt=now)])
+        attempt['amount']['cancelled'] += pending['totalAmount']
 
     # --- dispatch ----------------------------------------------------------------------
     def dispatch(self, method, target, body, key, caller=None):
@@ -227,13 +395,17 @@ class PortOneFake:
                 result = 200, {'status': 'PAID'}
         else:
             remaining = attempt['amount']['paid'] - attempt['amount']['cancelled']
-            if attempt['status'] != 'PAID' or set(body) != {'storeId', 'amount', 'currentCancellableAmount', 'reason'} or body['amount'] != remaining or remaining <= 0 or body['currentCancellableAmount'] != remaining:
+            if attempt['status'] != 'PAID' or 'pendingCancel' in attempt or set(body) != {'storeId', 'amount', 'currentCancellableAmount', 'reason'} or body['amount'] != remaining or remaining <= 0 or body['currentCancellableAmount'] != remaining:
                 return 409, {'type': 'CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN'}
             outcome = payment.pop('armedCancel', None)
             if outcome is not None:
                 payment['failLookups'] = outcome['failLookups']
             if outcome is not None and outcome['outcome'] == 'PG_ERROR':
                 return 503, {'type': 'PG_PROVIDER', 'message': 'fake PG cancel unavailable'}
+            if outcome is not None and outcome['outcome'] == 'REQUESTED':
+                result = 200, {'cancellation': self.request_cancel(attempt, body['reason'])}
+                self.replays[replay_key] = copy.deepcopy((body, result))
+                return result
             result = 200, {'cancellation': self.cancel(attempt, body['reason'])}
             if outcome is not None and outcome['outcome'] == 'LOST_RESPONSE':
                 self.replays[replay_key] = copy.deepcopy((body, result))
@@ -285,6 +457,10 @@ class PortOneFake:
             if attempt['status'] != 'PAID':
                 return 409, {'type': 'INVALID_STATE'}
             payment['armedCancel'] = dict(outcome=body['outcome'], failLookups=fails)
+        elif action == 'settle-cancel':
+            if attempt['status'] != 'PAID' or 'pendingCancel' not in attempt:
+                return 409, {'type': 'INVALID_STATE'}
+            self.finish_cancel(attempt)
         elif action == 'settle':
             if body.get('status') not in {'PAID', 'FAILED'}:
                 return 400, {'type': 'INVALID_REQUEST'}

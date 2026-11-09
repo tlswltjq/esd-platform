@@ -42,7 +42,8 @@ def free_port():
 
 
 class FakePortOneStack:
-    def __init__(self, repo, tool, offset_env, prefix, settlement_compose=False, tracing=False):
+    def __init__(self, repo, tool, offset_env, prefix, settlement_compose=False, tracing=False, webhooks=False,
+                 payment_retry_ms=None):
         if settlement_compose and tracing:
             # The Settlement container exports to a fixed sink and gets no TRACE_EXPORT_ENV, so its spans
             # would never reach the isolated Tempo; refuse the pair instead of verifying a partial trace.
@@ -54,6 +55,12 @@ class FakePortOneStack:
         self.settlement_docker, self.settlement_env, self.settlement_image = None, None, None
         # Tracing journeys add an isolated Tempo and sample every request; other journeys keep sampling at 0.
         self.tracing = tracing
+        # Webhook journeys (decision 138): the fake signs PortOne webhooks and sends them straight to Payment, and
+        # Payment may wait longer between PG lookups so a webhook hint is observable. Other journeys keep both off.
+        self.webhooks = webhooks
+        if payment_retry_ms is not None and not 100 <= payment_retry_ms <= 300000:
+            raise ValueError("payment_retry_ms must stay inside Payment retry-delay-ms range 100..300000")
+        self.payment_retry_ms = payment_retry_ms
         self.offset = port_rules.application_offset(tool, offset_env, APPS.values())
         out_root = self.repo / "runs"
         out_root.mkdir(exist_ok=True)
@@ -372,6 +379,9 @@ volumes:
     def boot(self):
         repo, infra, docker = self.repo, self.infra, self.docker
         self.fake.start()
+        if self.webhooks:
+            self.fake.enable_webhooks(f"http://127.0.0.1:{APPS['payment'] + self.offset}/api/v1/payments/webhooks/portone",
+                                      self.portone["PORTONE_WEBHOOK_SECRET"])
         self.portone["PORTONE_API_BASE_URL"] = self.fake.base_url
         parsed = urllib.parse.urlsplit(self.fake.base_url)
         assert parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and not parsed.path
@@ -427,6 +437,8 @@ volumes:
                 env.update(PAYMENT_PG_PROVIDER="PORTONE_TEST", PAYMENT_POLL_MS="1000", PAYMENT_RETRY_MS="5000",
                            PAYMENT_APPROVAL_PAYLOAD_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),
                            PAYMENT_REFUND_EXECUTION_ENABLED="true", PAYMENT_REFUND_LOOKUP_ENABLED="true", PAYMENT_REFUND_RETRY_ENABLED="true")
+                if self.payment_retry_ms is not None:
+                    env["PAYMENT_RETRY_MS"] = str(self.payment_retry_ms)
             if app == "settlement":
                 env.update({k: self.portone[k] for k in ["PORTONE_STORE_ID", "PORTONE_CHANNEL_KEY", "PORTONE_API_SECRET", "PORTONE_API_BASE_URL"]})
                 env["PORTONE_API_SECRET"] = self.settlement_secret
@@ -583,6 +595,8 @@ volumes:
                 cleanup_step("settlement container", self.stop_settlement_container)
                 cleanup_step("fake stop", self.fake.stop)
                 cleanup_step("fake requests", lambda: (self.directory / "fake-requests.json").write_text(json.dumps(self.fake.requests, indent=2)))
+                if self.webhooks:
+                    cleanup_step("fake webhooks", lambda: (self.directory / "fake-webhooks.json").write_text(json.dumps(self.fake.deliveries, indent=2)))
             finally:
                 own = cleanup_step("own snapshot", lambda: self.container_snapshot(self.project))
                 if own is not None:
