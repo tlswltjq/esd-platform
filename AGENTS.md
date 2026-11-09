@@ -29,7 +29,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 - `tasks.md` 미완료 항목 중 정책 선택이 필요한 항목은 `[결정 필요]`로 표시한다. 사용자가 준비할 외부 자원(전용 PG 가맹점·공유 환경·실제 금융 동작 합의)이 필요한 항목은 `[외부 대기]`로 표시한다. 표시 없는 항목은 에이전트가 바로 진행할 수 있다.
 - 다음 작업은 묻지 않고 고른다. 로드맵 단계 순서(G1→G5)와 각 `tasks.md`의 순서를 따르되, 표시가 없고 선행 조건을 충족한 항목을 고른다. 진행 중 정책 쟁점이 드러나면 그 항목에 `[결정 필요]`를 달고 멈춘다.
 - 고르기 전에 `gh pr list --state open --limit 1000 --json number,isDraft,body`로(기본값은 30건만 가져온다) 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치는 항목은 건너뛴다. 착수하면 첫 커밋(빈 커밋 가능)을 push하고 바로 `gh pr create --draft`로 PR을 연다. 본문 `맡은 항목`에는 항목 원문과 쓸 결정 번호를 적는다. draft PR에서는 CI `build`가 돌지 않으니, 검증을 마치면 `gh pr ready`로 바꾼다([결정 137](docs/decisions.md#claim-draft-pr)).
-- `docs/evidence.md`는 `merge=union`이라 로컬에서 main을 받으면 끝 행 충돌이 저절로 풀린다. 병합 뒤에는 붙은 행의 순서와, 같은 행이 고친 판·옛 판 두 줄로 남지 않았는지 확인한다. 순서·유일성이 필요한 `docs/decisions.md`에는 쓰지 않는다.
+- 근거 색인 행은 PR마다 `docs/evidence.d/<PR번호>.md`에 근거 색인 형식(다섯 칸)으로 쓴다. 코드 PR은 필수이고 review-gate가 검사한다. `docs/evidence.md`는 접기 PR만 고친다: 조각이 5개 이상 쌓이거나 하루가 지나면 `python3 tools/ci/evidence_fragments.py fold`로 접고 그 결과만 담은 문서 PR을 연다([결정 146](docs/decisions.md#evidence-fragments)).
 - 결정 설명(위 2번 형식)은 미리 준비하되, 사용자에게는 한 번에 하나만 낸다. 답을 기다리는 동안 표시 없는 작업을 계속한다. 표시 없는 작업이 모두 막혔을 때만 멈추고 알린다.
 - 작업 하나(PR 하나)가 끝나면 상태를 PR 본문과 `tasks.md`에 남기고, 다음 작업은 새 문맥에서 시작한다.
 
@@ -40,7 +40,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 | 현재 계약·업무 규칙·남은 작업 | `.kiro/specs/<모듈>/` (`requirements.md`·`design.md`·`tasks.md`) |
 | 왜 그렇게 했고 무엇을 버렸나 | [docs/decisions.md](docs/decisions.md) |
 | 사용자의 판단 이력 | [docs/judgment-index.md](docs/judgment-index.md) |
-| 검증 결과 (날짜·대상·수치·근거) | [docs/evidence.md](docs/evidence.md)에 **한 행** |
+| 검증 결과 (날짜·대상·수치·근거) | PR의 `docs/evidence.d/<PR번호>.md`에 **한 행** → 접기 PR이 [docs/evidence.md](docs/evidence.md)로 옮긴다 |
 | 재현된 결함 | [docs/defects.md](docs/defects.md) (재현 테스트 필수) |
 | 실험(성능·장애) | [docs/experiments.md](docs/experiments.md) |
 | 단계·순서·완료 조건 | [docs/roadmap.md](docs/roadmap.md) |

@@ -1352,6 +1352,20 @@
 - 구분: 직접 제안 — `high`와 토큰 절약 조건은 사용자가 꺼냈고, 방식 A는 추천 수용
 - 결과: 구현 PR
 
+<a id="evidence-fragments"></a>
+## 146. 근거 색인은 PR별 조각으로 쓰고, 접기 PR만 `docs/evidence.md`를 고친다
+- 문제: 모든 PR이 근거 색인 `docs/evidence.md` 끝에 한 행을 더해, 한 PR이 병합되면 같은 파일을 고친 다른 PR이 GitHub에서 DIRTY가 됐다. [결정 137](#claim-draft-pr)의 `.gitattributes` `merge=union`은 로컬 git 병합에만 쓰이고 GitHub 병합 판정에는 쓰이지 않는다. 2026-11-09에만 PR #185·#186이 그래서 main을 다시 받고 CI(`build`)를 처음부터 다시 돌렸다.
+- 선택지: A 지금처럼 매번 main 병합 / B 코드 PR은 PR 본문에만 쓰고 병합 뒤 문서 PR로 몰아 옮김 / C PR별 조각 `docs/evidence.d/<PR번호>.md`를 코드와 같은 커밋에 넣고, 정해진 주기에 스크립트로 `evidence.md`에 접는 문서 PR을 연다(changelog 조각 방식) / D PR 본문을 정본으로 두고 색인은 `gh`로 생성 / E 커밋 트레일러를 정본으로 두고 `git log`로 생성 (추천: C — 근거가 코드와 같은 커밋에 들어가고(원자성), 쓰는 파일이 PR마다 달라 충돌이 없으며, 정본이 git 안에 남고, 손으로 옮겨 적지 않으며, CI가 누락·형식을 막을 수 있다. B는 근거가 코드와 떨어지고 손으로 옮긴다. D는 병합 뒤에도 본문이 바뀔 수 있고 GitHub에 묶인다. E는 보호된 main에서 메시지를 고칠 수 없다)
+- 내 의견: "아키텍쳐적으로 봤을때 무엇이 더 이득? 완전히 교체하는것도 수용" → 고른 선택지: "C로 조각 파일과 접기 방식으로 바꿔"
+- 선택: C
+  - 조각: `docs/evidence.d/<PR번호>.md`에 근거 색인과 같은 다섯 칸 행(날짜 · 모듈 · 검증 대상 · 결과 · 근거)을 한 줄 이상 쓴다. 링크는 접힌 뒤의 위치(`docs/evidence.md`) 기준이다. PR 번호는 결정 137의 착수 draft PR로 먼저 정해진다.
+  - 검사(review-gate `Check evidence fragments`, `tools/ci/evidence_fragments.py`): 모든 조각의 형식, 코드 PR(`*.md` 밖의 파일을 바꿈)의 자기 번호 조각 존재, 다른 번호 조각 수정 금지, 조각 삭제는 접기 PR만, `docs/evidence.md`는 그것과 조각 삭제만 담은 접기 PR만 고친다.
+  - 접기: 조각이 5개 이상 쌓이거나 하루가 지나면 `python3 tools/ci/evidence_fragments.py fold`가 (날짜, PR 번호) 순으로 행을 붙이고 조각을 지운다. 그 결과만 담은 PR은 `*.md`만 바꾸므로 교차 리뷰 대상이 아니다(결정 108).
+  - `.gitattributes`의 `merge=union`은 지운다(쓰는 쪽이 하나라 필요 없다). AGENTS.md 2절 표와 개발 루프 문단, PR 템플릿을 고친다. `docs/evidence.md` 머리말의 작성 안내는 첫 접기 PR에서 고친다(이 PR이 그 파일을 고치면 새 규칙에 걸린다).
+  - 이 규칙보다 먼저 열린 PR(#184·#185·#186)은 `evidence.md`를 직접 고친 채로 이 PR보다 먼저 병합한다.
+- 구분: 추천 수용
+- 결과: [PR #187](https://github.com/tlswltjq/esd-platform/pull/187)
+
 <a id="architecture-first"></a>
 ## 147. 아키텍처적으로 옳은 방향을 비용보다 앞에 두고, 지금까지의 결정과 코드에도 소급한다
 - 문제: 지금까지 여러 결정이 "바꿀 곳이 적다"·"이미 구현했다"·"지금 얻는 이득이 없다"를 주된 이유로 골라졌다. 예: PR #166 R3에서 AI는 실패 종결 때 `RefundExecutionFailed.cancellationId`(PG 취소 번호 칸)에 종결 식별자 `ADMIN_FAILURE_CLOSURE:<요청 ID>`를 넣는 안(A)을 "문서만 바꾸면 된다"는 이유로 추천했다. 이런 판단이 쌓이면 한 칸에 두 뜻, 보조 필드로 숨은 상태, 공급자 규칙이 core에 섞이는 구조(결정 140·143에서 찾은 것)가 남는다.
@@ -1363,7 +1377,7 @@
   - 소급: 지금까지의 결정과 코드 가운데 비용을 주된 이유로 고른 것을 목록으로 만들고, 위 기준에 어긋나는 것을 한 건씩 다시 묻는다(결정 1절 2번 형식). 이미 병합된 코드도 대상이다. 다시 고르기 전까지 기존 결정은 유효하다.
   - 첫 적용: PR #166 R3은 C — 운영자 실패 종결 전용 이벤트(결정 148).
 - 구분: 직접 제안
-- 결과: 기록 PR, 소급 목록은 후속
+- 결과: [PR #189](https://github.com/tlswltjq/esd-platform/pull/189). 소급 후보는 한 건씩 다시 물어 각자 새 결정으로 남긴다
 
 ---
 
