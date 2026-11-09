@@ -28,6 +28,8 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 - `tasks.md` 미완료 항목 중 정책 선택이 필요한 항목은 `[결정 필요]`로 표시한다. 사용자가 준비할 외부 자원(전용 PG 가맹점·공유 환경·실제 금융 동작 합의)이 필요한 항목은 `[외부 대기]`로 표시한다. 표시 없는 항목은 에이전트가 바로 진행할 수 있다.
 - 다음 작업은 묻지 않고 고른다. 로드맵 단계 순서(G1→G5)와 각 `tasks.md`의 순서를 따르되, 표시가 없고 선행 조건을 충족한 항목을 고른다. 진행 중 정책 쟁점이 드러나면 그 항목에 `[결정 필요]`를 달고 멈춘다.
+- 고르기 전에 `gh pr list --state open --limit 1000 --json number,isDraft,body`로(기본값은 30건만 가져온다) 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치는 항목은 건너뛴다. 착수하면 첫 커밋(빈 커밋 가능)을 push하고 바로 `gh pr create --draft`로 PR을 연다. 본문 `맡은 항목`에는 항목 원문과 쓸 결정 번호를 적는다. draft PR에서는 CI `build`가 돌지 않으니, 검증을 마치면 `gh pr ready`로 바꾼다([결정 137](docs/decisions.md#claim-draft-pr)).
+- `docs/evidence.md`는 `merge=union`이라 로컬에서 main을 받으면 끝 행 충돌이 저절로 풀린다. 병합 뒤에는 붙은 행의 순서와, 같은 행이 고친 판·옛 판 두 줄로 남지 않았는지 확인한다. 순서·유일성이 필요한 `docs/decisions.md`에는 쓰지 않는다.
 - 결정 설명(위 2번 형식)은 미리 준비하되, 사용자에게는 한 번에 하나만 낸다. 답을 기다리는 동안 표시 없는 작업을 계속한다. 표시 없는 작업이 모두 막혔을 때만 멈추고 알린다.
 - 작업 하나(PR 하나)가 끝나면 상태를 PR 본문과 `tasks.md`에 남기고, 다음 작업은 새 문맥에서 시작한다.
 
@@ -90,7 +92,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 - CI 테스트가 가끔 실패해도 자동 재시도나 격리를 하지 않는다. 병합이 막히면 실패한 작업만 한 번 다시 돌릴 수 있다. 이때 실패한 테스트와 run을 PR 본문에 적고, 재현 테스트와 함께 결함 대장에 올려 고친다([결정 113](docs/decisions.md#flaky-tests)).
 - 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude가 하고, 교차 리뷰는 Codex가 맡는다([결정 117](docs/decisions.md#review-roles)).
 - 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델(Codex)이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 심각도가 high이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 `채택 (AI 판정)`으로 적는다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)).
-- PR이 필수 검사(`build`·`review-gate`)를 통과하고 `mergeStateStatus`가 `CLEAN`이며 사용자 판정이 남아 있지 않으면, 에이전트가 사용자 지시 없이 병합한다([결정 118](docs/decisions.md#continuous-development)). 다른 세션이 작업 중인 브랜치는 병합만 할 수 있고, 커밋·main 병합·번호 변경은 그 세션에 맡긴다.
+- PR이 필수 검사(`build`·`review-gate`)를 통과하고 `mergeStateStatus`가 `CLEAN`이며 사용자 판정이 남아 있지 않으면, 에이전트가 사용자 지시 없이 병합한다([결정 118](docs/decisions.md#continuous-development)). `build` 통과는 head SHA에서 가장 최근에 시작한 `build`의 결과가 SUCCESS인 것으로 본다. draft 때 남은 SKIPPED는 통과가 아니다. draft PR은 건너뛴 build가 필수 검사에서 통과로 처리돼 `CLEAN`으로 보여도 병합하지 않는다([결정 137](docs/decisions.md#claim-draft-pr)). 다른 세션이 작업 중인 브랜치는 병합만 할 수 있고, 커밋·main 병합·번호 변경은 그 세션에 맡긴다.
 - Codex 사용 한도를 아낀다. 관련된 작은 수정은 한 PR로 묶고, 재리뷰는 앞선 리뷰 이후 바뀐 diff만 맡긴다. 한도에 걸리면 PR을 리뷰 대기로 두고 다음 작업을 계속한다. 한도가 풀리면 쌓인 PR을 리뷰한다. 리뷰 없이 병합하지 않는다.
 
 ## 6. 현재 상태
