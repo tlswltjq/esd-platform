@@ -19,6 +19,7 @@ APPS = {"auth": 8091, "studio": 8085, "gateway": 8080, "review": 8086, "catalog"
 BUYER_PASSWORD = "creator-password-1234"
 # Short, fixed OTel export latency for tracing journeys only (support/refund_tracing.export_bound()).
 TRACE_EXPORT_ENV = dict(MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY="1s", MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT="5s",
+                        MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_QUEUE_SIZE="2048", MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_BATCH_SIZE="2048",
                         MANAGEMENT_OTLP_TRACING_TIMEOUT="5s", MANAGEMENT_OTLP_TRACING_CONNECT_TIMEOUT="2s")
 ADMIN_EMAIL, ADMIN_PASSWORD = "admin-check@review.local", "admin-password-1234"
 

@@ -10,6 +10,7 @@ GET /payments/{paymentId} (preflight and refund lookup) and POST /payments/{paym
 """
 import base64
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -21,19 +22,25 @@ STABLE_READS = 3
 
 # Export settings the tracing verification stack pins for every app (fake_portone_stack.TRACE_EXPORT_ENV;
 # Spring Boot 3.5 defaults are 5 s / 30 s / 10 s and are not changed for operation).
+MAX_QUEUE_SIZE = 2048        # management.tracing.opentelemetry.export.max-queue-size (Boot default 2048)
+MAX_BATCH_SIZE = MAX_QUEUE_SIZE  # ...export.max-batch-size (Boot default 512): one export drains the whole queue
 SCHEDULE_DELAY_SECONDS = 1   # management.tracing.opentelemetry.export.schedule-delay (BatchSpanProcessor)
 EXPORT_TIMEOUT_SECONDS = 5   # management.tracing.opentelemetry.export.timeout
 OTLP_TIMEOUT_SECONDS = 5     # management.otlp.tracing.timeout (HTTP exporter, connect timeout 2 s)
-CONSUMER_MARGIN_SECONDS = 5  # a consumer span ends shortly after the DB commit / Outbox SENT the tool observed
+CONSUMER_MARGIN_SECONDS = 5  # a consumer span ends just after the offset commit that made the group lag 0
 TEMPO_MARGIN_SECONDS = 2     # Tempo answers trace-by-id from ingester live traces right after the push
 
 
 def export_bound(schedule_delay=SCHEDULE_DELAY_SECONDS, export_timeout=EXPORT_TIMEOUT_SECONDS, otlp_timeout=OTLP_TIMEOUT_SECONDS):
     """Longest time from a span's end until its export finishes.
 
-    BatchSpanProcessor exports on its next tick (<= schedule delay), possibly after an export already in
-    flight, and each export is bounded by min(processor export timeout, OTLP HTTP timeout). A span that
-    misses both is dropped, which the judgement then sees as a missing span or parent.
+    Holds only while max-batch-size == max-queue-size and the queue never fills: then every tick
+    (<= schedule delay, possibly after one export already in flight) exports the whole queue in one
+    batch, bounded by min(processor export timeout, OTLP HTTP timeout). A backlog of several batches or a
+    full queue (spans dropped silently) is outside this bound. Drops are not observable here: Boot 3.5.6
+    passes a MeterProvider to BatchSpanProcessor only when an SdkMeterProvider bean exists, and the apps
+    define none, so the processor's dropped-span counter is a no-op. A dropped parent or a required
+    service/PG span still fails the judgement; a dropped leaf span is the remaining risk.
     """
     per_export = min(export_timeout, otlp_timeout)
     return schedule_delay + 2 * per_export
@@ -178,7 +185,8 @@ def await_trace(fetch, trace_id, scenario, payment_id, seconds=120, interval=3, 
         except TraceUnavailable as failure:
             spans, problems = [], [str(failure)]
         ids = tuple(sorted(s["spanId"] for s in spans))
-        if problems:
+        if problems or (quiet_until is not None and clock() < quiet_until):
+            # Reads inside the observation window are judged but never counted toward stability.
             previous, same = None, 0
         elif ids == previous:
             same += 1
@@ -186,9 +194,55 @@ def await_trace(fetch, trace_id, scenario, payment_id, seconds=120, interval=3, 
             previous, same = ids, 1
         # Accept only after the observation window (business completion + observation_window()) has passed,
         # so a span exported as late as the bound allows is still judged.
-        if same >= stable_reads and (quiet_until is None or clock() >= quiet_until):
+        if same >= stable_reads:
             return spans
         if clock() >= deadline:
             reason = "; ".join(problems) if problems else "spans still changing after " + str(seconds) + " s (" + str(same) + "/" + str(stable_reads) + " stable reads)"
             raise AssertionError(scenario + " trace " + trace_id + " incomplete: " + reason)
         sleep(interval)
+
+
+# Consumer groups of the refund flow, read from the code constants (verify-refund-tracing waits for lag 0).
+REFUND_GROUP_SOURCES = (
+    "apps/order/src/main/java/com/stove/order/core/service/ApplyRefundSuspension.java",
+    "apps/order/src/main/java/com/stove/order/core/service/ApplyRefundPreparation.java",
+    "apps/order/src/main/java/com/stove/order/core/service/ApplyRefundPaymentConfirmation.java",
+    "apps/license/src/main/java/com/stove/license/core/service/ApplyLicenseSuspension.java",
+    "apps/license/src/main/java/com/stove/license/core/service/ApplyPurchaseRefund.java",
+    "apps/payment/src/main/java/com/stove/payment/core/service/ReceiveRefundExecution.java",
+    "apps/settlement/src/main/java/com/stove/settlement/core/service/RecordConfirmedRefund.java",
+)
+GROUP_CONSTANT = re.compile(r'CONSUMER_GROUP\s*=\s*"([^"]+)"')
+
+
+def refund_consumer_groups(repo):
+    groups = []
+    for source in REFUND_GROUP_SOURCES:
+        found = GROUP_CONSTANT.findall((repo / source).read_text())
+        if len(found) != 1:
+            raise RuntimeError("Expected one CONSUMER_GROUP constant in " + source)
+        groups.append(found[0])
+    return groups
+
+
+def lag_problems(describe_output, required):
+    """Problems in `kafka-consumer-groups --describe --all-groups`: missing required groups or any lag.
+
+    Every group of the isolated broker counts, because a group on the same topic still opens a consumer
+    span in the refund trace while it skips the event. A partition without a committed offset ("-") is
+    not caught up unless its log is empty.
+    """
+    seen, problems = set(), []
+    for line in describe_output.splitlines():
+        fields = line.split()
+        if len(fields) < 6 or fields[0] == "GROUP" or not fields[2].isdigit():
+            continue
+        group, topic, partition, current, end, lag = fields[:6]
+        seen.add(group)
+        caught_up = lag == "0" or (current == "-" and end == "0")
+        if not caught_up:
+            problems.append(group + " " + topic + "-" + partition + " lag " + lag + " (offset " + current + "/" + end + ")")
+    missing = [group for group in required if group not in seen]
+    if missing:
+        problems.insert(0, "consumer groups not described " + str(missing))
+    return problems

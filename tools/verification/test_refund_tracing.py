@@ -107,11 +107,77 @@ class ObservationWindowTest(unittest.TestCase):
         self.assertGreater(refund_tracing.observation_window(), refund_tracing.export_bound())
         self.assertGreater(refund_tracing.observation_window(), (refund_tracing.STABLE_READS - 1) * 3)
 
+    def test_reads_inside_the_window_do_not_count_toward_stability(self):
+        now = [0.0]
+        reads = []
+
+        def fetch(trace_id):
+            reads.append(now[0])
+            return complete("normal")
+        await_trace(fetch, "t", "normal", PAYMENT, seconds=60, quiet_until=18, clock=lambda: now[0],
+                    sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+        self.assertEqual([t for t in reads if t >= 18], [18, 21, 24])
+
+    def test_one_export_drains_the_whole_queue(self):
+        self.assertEqual(refund_tracing.MAX_BATCH_SIZE, refund_tracing.MAX_QUEUE_SIZE)
+
     def test_stack_pins_the_export_settings_the_bound_assumes(self):
         from support.fake_portone_stack import TRACE_EXPORT_ENV
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_QUEUE_SIZE"], str(refund_tracing.MAX_QUEUE_SIZE))
+        self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_MAX_BATCH_SIZE"], str(refund_tracing.MAX_BATCH_SIZE))
         self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_SCHEDULE_DELAY"], str(refund_tracing.SCHEDULE_DELAY_SECONDS) + "s")
         self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_TRACING_OPENTELEMETRY_EXPORT_TIMEOUT"], str(refund_tracing.EXPORT_TIMEOUT_SECONDS) + "s")
         self.assertEqual(TRACE_EXPORT_ENV["MANAGEMENT_OTLP_TRACING_TIMEOUT"], str(refund_tracing.OTLP_TIMEOUT_SECONDS) + "s")
+
+
+DESCRIBE = """
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+order-refund-suspension    stove.license.v1 0          12              12              0    c-1          /h    order
+license-suspension         stove.order.v1  0          30              30              0    c-2          /h    license
+
+Consumer group 'settlement-confirmed-refund' has no active members.
+
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+settlement-confirmed-refund stove.payment.v1 0         8               8               0    -            -     -
+idle-group                 stove.other.v1  0          -               0               -    c-3          /h    idle
+"""
+
+
+class ConsumerLagTest(unittest.TestCase):
+    REQUIRED = ["order-refund-suspension", "license-suspension", "settlement-confirmed-refund"]
+
+    def test_all_groups_at_lag_zero_pass(self):
+        self.assertEqual(refund_tracing.lag_problems(DESCRIBE, self.REQUIRED), [])
+
+    def test_any_group_with_lag_fails_even_if_not_required(self):
+        lagging = DESCRIBE + "order-license-grant stove.license.v1 0 10 12 2 c-4 /h order\n"
+        self.assertEqual(refund_tracing.lag_problems(lagging, self.REQUIRED), ["order-license-grant stove.license.v1-0 lag 2 (offset 10/12)"])
+
+    def test_uncommitted_offset_on_a_non_empty_log_fails(self):
+        pending = DESCRIBE + "license-purchase-refund stove.order.v1 0 - 30 - c-5 /h license\n"
+        self.assertEqual(refund_tracing.lag_problems(pending, self.REQUIRED), ["license-purchase-refund stove.order.v1-0 lag - (offset -/30)"])
+
+    def test_missing_required_group_fails(self):
+        self.assertEqual(refund_tracing.lag_problems(DESCRIBE, self.REQUIRED + ["payment-refund-execution"]),
+                         ["consumer groups not described ['payment-refund-execution']"])
+        self.assertEqual(refund_tracing.lag_problems("", ["a"]), ["consumer groups not described ['a']"])
+
+    def test_refund_groups_come_from_the_code_constants(self):
+        from pathlib import Path
+        repo = Path(__file__).resolve().parents[2]
+        self.assertEqual(refund_tracing.refund_consumer_groups(repo),
+                         ["order-refund-suspension", "order-refund-preparation", "order-refund-payment-confirmation",
+                          "license-suspension", "license-purchase-refund", "payment-refund-execution", "settlement-confirmed-refund"])
+
+    def test_a_source_without_exactly_one_constant_is_rejected(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as root:
+            for source in refund_tracing.REFUND_GROUP_SOURCES:
+                (Path(root) / source).parent.mkdir(parents=True, exist_ok=True)
+                (Path(root) / source).write_text("class X {}")
+            with self.assertRaises(RuntimeError):
+                refund_tracing.refund_consumer_groups(Path(root))
 
 
 class FetchAndAwaitTest(unittest.TestCase):
@@ -216,7 +282,8 @@ class FetchAndAwaitTest(unittest.TestCase):
                             quiet_until=refund_tracing.observation_window(), **timing)
         self.assertEqual(spans, complete("normal"))
         self.assertGreaterEqual(now[0], refund_tracing.observation_window())
-        self.assertEqual(now[0], 18)
+        # Reads at 0..15 s are inside the window and never counted; 18, 21, 24 s are the three stable reads.
+        self.assertEqual(now[0], 24)
 
     def test_deadline_before_the_window_fails_instead_of_passing_early(self):
         timing, _ = self.fake_clock()

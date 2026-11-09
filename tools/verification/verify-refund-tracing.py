@@ -15,12 +15,13 @@ scenario's PG spans with worker lookups/resends under payment.process. Evidence:
 broken, after the business outcome itself has been checked.
 """
 from pathlib import Path
-import json, sys, time, urllib.parse, urllib.request
+import json, subprocess, sys, time, urllib.parse, urllib.request
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/verification"))
 from support.fake_portone_stack import FakePortOneStack  # noqa: E402
-from support.refund_tracing import TraceUnavailable, await_trace, describe, fetch_trace, observation_window, pg_call  # noqa: E402
+from support.refund_tracing import (TraceUnavailable, await_trace, describe, fetch_trace, lag_problems,  # noqa: E402
+                                    observation_window, pg_call, refund_consumer_groups)
 
 REFUND_EVENTS = {
     "stove_order": ["LicenseSuspensionRequested", "RefundExecutionRequested", "PurchaseRefunded"],
@@ -62,6 +63,11 @@ def trace_of(parent):
     return parent.split("-")[1] if parent and parent.count("-") == 3 else None
 
 
+def consumer_groups(stack):
+    return subprocess.run(stack.docker + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server", "kafka:19092",
+                                          "--describe", "--all-groups"], capture_output=True, text=True, timeout=60).stdout
+
+
 def outbox_rows(stack, order_no):
     rows = []
     for schema, types in REFUND_EVENTS.items():
@@ -81,6 +87,8 @@ def journey(stack):
     output = stack.directory / "refund-tracing.json"
     broken = []
     order_no = first
+    groups = refund_consumer_groups(REPO)
+    evidence["consumerGroups"] = groups
     for index, (name, fault) in enumerate(SCENARIOS):
         if index:
             order_no = stack.create_order(name)
@@ -108,9 +116,19 @@ def journey(stack):
         attempt = stack.sql("SELECT attempt_id FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "'")
         saved = stack.sql("SELECT trace_parent FROM stove_payment.refund_execution_trace WHERE attempt_id='" + attempt + "'")
         source = stack.sql("SELECT COALESCE(refund_confirmation_source,'') FROM stove_payment.refund_execution WHERE attempt_id='" + attempt + "'")
-        # Business completion: every refund Outbox row of this order is SENT (consumers then finish).
+        # Business completion: final business state (checked above), every refund Outbox row of this order
+        # SENT, and every consumer group of the broker at lag 0 (refund groups from code constants required).
         stack.wait_for(lambda: outbox_rows(stack, order_no) and all(r["status"] == "SENT" for r in outbox_rows(stack, order_no)),
                        name + " refund Outbox SENT", 120, 1)
+        last_lag = [None]
+
+        def caught_up():
+            last_lag[0] = lag_problems(consumer_groups(stack), groups)
+            return not last_lag[0]
+        try:
+            stack.wait_for(caught_up, name + " consumer groups lag 0", 120, 1)
+        except RuntimeError as timeout:
+            raise RuntimeError(str(timeout) + ": " + "; ".join(last_lag[0] or [])) from timeout
         done = time.monotonic()
         # Watch the trace for observation_window() seconds after completion, then require a complete, stable
         # snapshot (one root, all services, no missing parent, the scenario's PG spans).
