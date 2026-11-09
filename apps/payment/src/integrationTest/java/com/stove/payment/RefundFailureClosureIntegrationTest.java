@@ -55,6 +55,7 @@ import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
 import com.stove.payment.core.service.RequestRefundCancellation;
 import com.stove.payment.core.service.ResolveRefundLookup;
+import com.stove.payment.core.service.ResolveRefundRetry;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -302,20 +303,132 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         assertThat(closures.count()).isEqualTo(1); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
     }
 
-    /** A hold resumed while the PG was inspected makes the observation stale; nothing is saved. */
-    @Test void aHoldResumedDuringTheLookupSavesNothing() {
+    /**
+     * PR #166 R1 (B): hold A → closure GET (PAID) → ADMIN resume → (a POST whose response is lost → the 3-hour window ends).
+     * The closure marks the dispatch side while it inspects the PG, so the resume is refused with 409 and nothing is posted.
+     * The window then ends and the closure stands on its own observation, taken under the stop that is still in force.
+     */
+    @Test void aResumeAndALostPostDuringTheLookupAreRefusedAndTheClosureStandsOnItsObservation() {
         RefundExecution execution = held(); Payment payment = payment(execution);
+        String hold = execution.getActiveCancellationHoldId();
+        stubDispatch();
+        AtomicReference<Reply> resumed = new AtomicReference<>();
         when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
-            new TransactionTemplate(transactions).executeWithoutResult(tx -> {
-                RefundExecution locked = executions.lockByAttemptId(execution.getAttemptId()).orElseThrow();
-                locked.resumeCancellation(locked.getActiveCancellationHoldId(), BASE.plusSeconds(61));
-            });
+            resumed.set(resume(execution, hold));
+            retryWorker().execute();
+            when(clock.instant()).thenReturn(DELAY.plusSeconds(1));
+            return Optional.of(uncancelled(payment));
+        });
+        when(clock.instant()).thenReturn(DELAY.minusSeconds(31));
+        Reply closed = fail(execution, id(), "만료 직전 재개와 경합");
+        assertThat(resumed.get().status()).isEqualTo(409); assertThat(code(resumed.get())).isEqualTo("REFUND_CLOSURE_BUSY");
+        assertThat(closed.status()).isEqualTo(200);
+        assertThat(closed.data().path("failureClosure").path("stopReason").asText()).isEqualTo("CANCELLATION_HOLD");
+        verify(gateway, never()).send(any(), any(), anyString());
+        assertThat(holds.findByHoldId(hold).orElseThrow().getResumeRequestId()).as("the refused resume stored nothing").isNull();
+        RefundExecution stored = stored(execution);
+        assertThat(stored.getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
+        assertThat(stored.getCancellationSchedule().getClosureId()).as("released on success").isNull();
+        assertThat(stored.getCancellationSchedule().getClosureUntil()).isNull();
+        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+    }
+
+    /** PR #166 R1 (B): hold A → closure GET → ADMIN resume (refused) → no POST, so no new hold B; the closure closes under A. */
+    @Test void aResumeAndANewHoldDuringTheLookupAreRefusedSoTheClosureClosesUnderTheFirstHold() {
+        RefundExecution execution = held(); Payment payment = payment(execution);
+        String first = execution.getActiveCancellationHoldId();
+        stubDispatch();
+        AtomicReference<Reply> resumed = new AtomicReference<>();
+        when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
+            resumed.set(resume(execution, first));
+            retryWorker().execute(); cancellation.execute(execution.getAttemptId());
             return Optional.of(uncancelled(payment));
         });
         when(clock.instant()).thenReturn(BASE.plusSeconds(61));
-        assertThat(code(fail(execution, id(), "재개와 경합"))).isEqualTo("REFUND_NOT_FAILURE_CLOSABLE");
-        assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-        assertThat(stored(execution).getLookupSchedule().getClaimId()).isNull();
+        Reply closed = fail(execution, id(), "재개 뒤 새 중단과 경합");
+        assertThat(code(resumed.get())).isEqualTo("REFUND_CLOSURE_BUSY");
+        assertThat(closed.status()).isEqualTo(200);
+        verify(gateway, never()).send(any(), any(), anyString());
+        assertThat(holds.count()).as("no POST, so no second hold").isEqualTo(1);
+        assertThat(closed.data().path("failureClosure").path("stopReason").asText()).isEqualTo("CANCELLATION_HOLD");
+        assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
+        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+    }
+
+    /**
+     * PR #166 R1 (B): while the closure inspects the PG, neither the first-send path nor the retry worker claims the attempt,
+     * even if it is otherwise due. Once the closure is refused its mark is gone and the same worker posts.
+     */
+    @Test void theFirstSendAndRetryWorkersDoNotPostWhileTheClosureInspectsThePg() {
+        RefundExecution execution = held(); Payment payment = payment(execution);
+        stubDispatch();
+        when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
+            // Make the attempt due as if nothing stopped it; only the closure mark stands between the workers and a POST.
+            jdbc.update("UPDATE refund_execution SET active_cancel_hold_id=NULL, next_cancel_retry_at=? WHERE attempt_id=?",
+                    BASE.plusSeconds(61), execution.getAttemptId());
+            retryWorker().execute();
+            cancellation.execute(execution.getAttemptId());
+            return Optional.of(uncancelled(payment));
+        });
+        when(clock.instant()).thenReturn(BASE.plusSeconds(61));
+        assertThat(code(fail(execution, id(), "송신과 경합"))).as("no longer stopped").isEqualTo("REFUND_NOT_FAILURE_CLOSABLE");
+        verify(gateway, never()).send(any(), any(), anyString());
+        assertThat(stored(execution).getCancellationSchedule().getClosureId()).as("released on refusal").isNull();
+        retryWorker().execute();
+        verify(gateway, times(1)).send(any(), any(), anyString());
+    }
+
+    /** PR #166 R1 (B): the mark is released when the PG refuses the closure and when the lookup fails; the resume then works. */
+    @Test void theClosureMarkIsReleasedWhenTheClosureIsRefusedOrItsLookupFails() {
+        RefundExecution execution = held();
+        when(clock.instant()).thenReturn(BASE.plusSeconds(61));
+        when(lookup.inspectUncancelled(any())).thenReturn(Optional.empty());
+        assertThat(code(fail(execution, id(), "돈이 움직였을 수 있음"))).isEqualTo("REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED");
+        assertThat(stored(execution).getCancellationSchedule().getClosureId()).isNull();
+        reset(lookup); when(lookup.inspectUncancelled(any())).thenThrow(new PgUnavailable("down"));
+        assertThat(code(fail(execution, id(), "조회 장애"))).isEqualTo("CLOSURE_PG_UNAVAILABLE");
+        assertThat(stored(execution).getCancellationSchedule().getClosureId()).isNull();
+        assertThat(stored(execution).getCancellationSchedule().getClosureUntil()).isNull();
+        assertThat(resume(execution, execution.getActiveCancellationHoldId()).status()).isEqualTo(200);
+    }
+
+    /** PR #166 R1 (B): a dead closure's mark expires with its lease; it then blocks neither the ADMIN resume nor the POST. */
+    @Test void anExpiredClosureMarkBlocksNeitherTheResumeNorTheRetry() {
+        RefundExecution execution = held();
+        jdbc.update("UPDATE refund_execution SET cancel_closure_id=?, cancel_closure_until=? WHERE attempt_id=?",
+                id(), BASE.plusSeconds(60), execution.getAttemptId());
+        stubDispatch();
+        when(clock.instant()).thenReturn(BASE.plusSeconds(60));
+        assertThat(resume(execution, execution.getActiveCancellationHoldId()).status()).isEqualTo(200);
+        retryWorker().execute();
+        verify(gateway, times(1)).send(any(), any(), anyString());
+    }
+
+    /**
+     * PR #166 R1 (B): a closure that outlives its mark (a lookup slower than the lease) saves nothing. After the mark expired
+     * a resume, a POST and a new hold B may follow the GET; the attempt is closable again, but the final lock refuses.
+     */
+    @Test void aClosureThatOutlivesItsMarkSavesNothingEvenWhenANewHoldMakesItClosableAgain() {
+        RefundExecution execution = held(); Payment payment = payment(execution);
+        // No lookup lease to take here: only the dispatch mark guards this closure.
+        jdbc.update("UPDATE refund_execution SET next_refund_lookup_at=NULL WHERE attempt_id=?", execution.getAttemptId());
+        when(lookup.inspectUncancelled(PgRefundLookupRequest.from(payment))).thenAnswer(call -> {
+            Instant expired = closureUntil(execution);
+            new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+                RefundExecution locked = executions.lockByAttemptId(execution.getAttemptId()).orElseThrow();
+                locked.resumeCancellation(locked.getActiveCancellationHoldId(), expired);
+                RefundCancellationClaim post = locked.getCancellationSchedule().claim(id(), expired, Duration.ofSeconds(20), false);
+                RefundCancellationHold second = holds.saveAndFlush(RefundCancellationHold.forbidden(locked.getAttemptId(), post, expired.plusSeconds(1), true));
+                locked.holdCancellation(second.getHoldId(), post);
+            });
+            when(clock.instant()).thenReturn(expired.plusSeconds(2));
+            return Optional.of(uncancelled(payment));
+        });
+        when(clock.instant()).thenReturn(BASE.plusSeconds(61));
+        assertThat(code(fail(execution, id(), "느린 조회"))).isEqualTo("REFUND_CLOSURE_BUSY");
+        RefundExecution stored = stored(execution);
+        assertThat(stored.getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
+        assertThat(stored.getActiveCancellationHoldId()).isNotNull().isNotEqualTo(execution.getActiveCancellationHoldId());
         assertThat(closures.count()).isZero(); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
     }
 
@@ -449,6 +562,8 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                 List<Map<String, Object>> after = legacy.queryForList("SELECT * FROM " + table);
                 if (table.equals("refund_execution")) after.forEach(row -> {
                     assertThat(row.remove("late_cancel_observed_at")).isNull(); assertThat(row.remove("late_cancelled_at")).isNull();
+                    // PR #166 R1 (B): no old row carries a closure mark, so V40 blocks no resume and no POST.
+                    assertThat(row.remove("cancel_closure_id")).isNull(); assertThat(row.remove("cancel_closure_until")).isNull();
                 });
                 assertThat(after).as(table).isEqualTo(before.get(table));
             }
@@ -462,6 +577,10 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_failure_v40");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET late_cancel_observed_at=? WHERE attempt_id=?", DELAY.plusSeconds(60), open.getAttemptId()))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_late_cancel");
+            assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET cancel_closure_id=? WHERE attempt_id=?", id(), open.getAttemptId()))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_cancel_closure_mark");
+            assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET cancel_closure_until=? WHERE attempt_id=?", DELAY, open.getAttemptId()))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_cancel_closure_mark");
             String insert = "INSERT INTO refund_failure_closure(request_id,attempt_id,operator_subject,note,evidence,stop_reason,snapshot_hash,evidence_observed_at,"
                     + "closed_at,failure_event_id,failed_cancellation_id,execution_status,failure_confirmed_at) "
                     + "VALUES(?,?,?,?,?,?,?,'2026-11-08 02:00:00','2026-11-08 02:00:01',?,?,'FAILED','2026-11-08 02:00:01')";
@@ -488,6 +607,18 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         } finally { admin.execute("DROP DATABASE " + schema); }
     }
 
+    private ResolveRefundRetry retryWorker() { return new ResolveRefundRetry(executions, cancellation, clock, Runnable::run, 20, traceContexts, tracing); }
+    private void stubDispatch() {
+        when(gateway.prepareBody(any())).thenReturn("{\"reason\":\"review\"}");
+        when(gateway.send(any(), any(), anyString())).thenReturn(RefundCancellationDispatch.UNCONFIRMED);
+    }
+    private Reply resume(RefundExecution execution, String holdId) {
+        return http("POST", "/api/v1/admin/refund-cancellation-holds/" + holdId + "/resume",
+                Map.of("requestId", id(), "attemptId", execution.getAttemptId(), "note", "권한 복구 확인"), admin());
+    }
+    private Instant closureUntil(RefundExecution execution) {
+        return stored(execution).getCancellationSchedule().getClosureUntil();
+    }
     private ResolveRefundLookup worker() { return worker(Duration.ofSeconds(60), Duration.ofMinutes(10)); }
     private ResolveRefundLookup worker(Duration initial, Duration max) {
         return new ResolveRefundLookup(payments, executions, reconcile, transactions, clock, Runnable::run, Duration.ofSeconds(97), 20,

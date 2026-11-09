@@ -80,6 +80,9 @@ public class CloseRefundFailure {
                 throw new BusinessException(PaymentErrorCode.REFUND_NOT_FAILURE_CLOSABLE);
             boolean leased = execution.getLookupSchedule().getNextAt() != null;
             if (leased && !execution.getLookupSchedule().claimForClosure(token, at, lease)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
+            // PR #166 R1: lock the dispatch side too, for as long as the lookup lease. Until the mark is released or expires
+            // no first send, retry or operator resume starts, so no POST can follow the GET below.
+            if (!execution.getCancellationSchedule().markClosure(token, at, lease)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
             return Claim.owned(PgRefundLookupRequest.from(payment), execution.cancellationReceipt(payment), execution.request(), leased);
         });
         if (claim.prior() != null) return replay(claim.prior(), request);
@@ -103,10 +106,12 @@ public class CloseRefundFailure {
             return locked(request.attemptId(), (payment, execution) -> {
                 Instant at = now();
                 if (claim.leased() && !execution.getLookupSchedule().ownsClosure(token, at)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
+                // An expired dispatch mark may have let a resume or a POST follow the GET (PR #166 R1).
+                if (!execution.getCancellationSchedule().ownsClosure(token, at)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
                 execution.requireSameRequest(claim.request());
                 RefundFailureClosure prior = closures.findByRequestId(request.requestId()).orElse(null);
-                if (prior != null) { execution.getLookupSchedule().releaseClosure(token); prior.requireSame(request); return receipt(prior, execution); }
-                // A resumed hold, a new PG receipt or a POST started since the claim makes the observation stale.
+                if (prior != null) { releaseBoth(execution, token); prior.requireSame(request); return receipt(prior, execution); }
+                // A new PG receipt or a POST since the claim (possible only once a mark expired) makes the observation stale.
                 if (!execution.failureClosableAt(at) || closures.findByAttemptId(execution.getAttemptId()).isPresent()
                         || delayClosures.findByAttemptId(execution.getAttemptId()).isPresent()
                         || !Objects.equals(execution.cancellationReceipt(payment), claim.receipt()))
@@ -116,7 +121,7 @@ public class CloseRefundFailure {
                         : RefundFailureClosure.StopReason.WINDOW_ENDED;
                 execution.closeAsFailed(payment, UUID.randomUUID().toString(), observed.snapshotHash(), at);
                 // The lookup lease returns to the worker; its next lookup uses the post-failure delay (decision 128).
-                execution.getLookupSchedule().releaseClosure(token);
+                releaseBoth(execution, token);
                 RefundFailureClosure closure = RefundFailureClosure.record(execution, request, reason, observed, observedAt);
                 closures.saveAndFlush(closure);
                 RefundConfirmationOutbox.recordFailure(outbox, payment, execution, closure.getFailedCancellationId());
@@ -154,10 +159,16 @@ public class CloseRefundFailure {
 
     private void release(RefundFailureClosureRequest request, String token) {
         try {
-            locked(request.attemptId(), (payment, execution) -> { execution.getLookupSchedule().releaseClosure(token); return null; });
+            locked(request.attemptId(), (payment, execution) -> { releaseBoth(execution, token); return null; });
         } catch (RuntimeException unavailable) {
-            log.warn("Refund failure closure lease remains until expiry: attemptId={}, errorType={}", request.attemptId(), unavailable.getClass().getSimpleName());
+            log.warn("Refund failure closure lease and dispatch mark remain until expiry: attemptId={}, errorType={}", request.attemptId(), unavailable.getClass().getSimpleName());
         }
+    }
+
+    /** Returns the lookup lease and clears the dispatch mark; neither is touched if another closure or worker holds it. */
+    private static void releaseBoth(RefundExecution execution, String token) {
+        execution.getLookupSchedule().releaseClosure(token);
+        execution.getCancellationSchedule().releaseClosure(token);
     }
 
     private RefundFailureClosureReceipt replay(RefundFailureClosure known, RefundFailureClosureRequest request) {
