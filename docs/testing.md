@@ -125,6 +125,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 
 ```bash
 python3 -B tools/verification/verify-refund-settlement.py        # 로컬 fake PortOne 구매·환불·정산·재구매(runs/ 근거)
+python3 -B tools/verification/verify-refund-settlement.py --settlement-compose  # 같은 여정, Settlement만 docker-compose.apps.yml + docker-compose.settlement-portone.yml 컨테이너(host 네트워크). override 적용·설정 바인딩·원승인·취소 조회만 확인하고, 기본 bridge 네트워크와 Compose 내부 이름(mysql·kafka) 해석은 확인하지 않는다
 python3 -B tools/verification/verify-refund-tracing.py           # 로컬 fake PortOne + 격리 Tempo: 정상·응답 유실·PG 5xx 환불의 trace 연결(끊기면 실패)
 python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake PortOne 승인 보류 종결·실패 시도 뒤 같은 주문 재결제·30분 안 재진입 조합(결정 119·120)
 python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합·접수 전 PAY_PENDING 만료(31분 대기, 별도 야간 작업, 결정 120·126)
