@@ -1270,6 +1270,19 @@
 - 구분: 추천 수용
 - 결과: [PR #177](https://github.com/tlswltjq/esd-platform/pull/177), 근거 색인 2026-11-09 착수 draft PR 행
 
+<a id="defer-real-pg"></a>
+## 140. 실제 PG 확인은 새 단계 G7로 미루고, Payment·Settlement core의 PG 계약을 공급자 중립으로 바꾼다
+- 문제: 결제·환불 예외 결정(114~134)이 이어지며 기존 결정·구현과 계속 부딪혔다(D-044·D-045·D-046, PR #178 취소 단계 실패). 실제 PortOne TEST는 2026-11-07 토스페이가 공용 예제 키를 거절한 뒤 멈췄고(결정 110 결과), `[외부 대기]` 10여 건이 전용 테스트 가맹점을 기다린다. 업무 모델도 PortOne 모양이다. Payment core에는 `PORTONE_TEST` 공급자 분기(`"PORTONE_TEST".equals(...)`·JPQL `p.provider='PORTONE_TEST'`)가 29곳 있고, `PortOneWebhookNotice`(core.domain)·`PortOneWebhookReceipts`·`PortOneWebhookVerifier`(core.port)·`ReceivePortOneWebhook`(core.service)가 PortOne 이름을 쓴다. 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)은 PortOne의 공개 보장이다. Settlement core도 `PgEvidence`·`PgPayment`·`PgFunding`·`PgStatementCheck`가 `PORTONE_TEST`·`PORTONE_LIVE` 문자열을, `PgStatement`가 `portoneStoreId`·`portoneChannelKey` 열을 쓴다. 그래서 흉내 서버로만 돌려도 PortOne 규칙에서 나온 충돌이 그대로 남는다.
+- 선택지: A PortOne 어댑터·웹훅·Settlement 수집기를 지우고 `simulators/mock-pg`로 돌아간다 / B 코드는 두고 실제 TEST만 완료 조건에서 뺀다 / C B에 더해 core의 PG 계약을 공급자 중립으로 바꾸고 PortOne 이름·규칙은 adapter로 내린다 (추천: C — 문제가 생기는 곳이 어댑터 한 곳에 모이고, AGENTS.md 3절의 `core.port`/`adapter` 경계에 맞는다. 실제 PortOne은 나중에 어댑터로 다시 붙인다. A는 Payment·Settlement 파일 128개를 바꾸고 mock-pg에 환불·취소·웹훅을 새로 만들어야 하며, 결정 110·111·133과 10-27~10-30 실제 TEST 근거가 쓸모를 잃는다. B는 core가 PortOne 모양으로 남는다)
+- 내 의견: "실제 연동도 걷어내고 나중으로 미루고싶어 그래도 될까?" → 고른 선택지: "C로 실제 연동 미루고 PG 계약 중립화해"
+- 선택: C
+  - 실제 PortOne·토스페이 확인(승인·취소·오류 타입·웹훅 공개 수신·토스페이 정산 수집·LIVE 근거·지급 수령)은 새 단계 G7 "실제 PG 연동"으로 옮기고 G1~G3 완료 조건에서 뺀다. PortOne 코드와 10-27~10-30 실제 TEST 근거는 지우지 않는다.
+  - Payment·Settlement core에서 공급자 이름과 공급자 문자열 분기를 없앤다. 승인·조회·취소 요청·취소 결과·통지의 중립 계약은 `core.port`에, PortOne 본문·서명·오류 분류·공개 보장 기한은 `adapter`와 `config`에 둔다. 이미 저장된 `PORTONE_TEST`·`SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트). ArchUnit으로 core의 공급자 이름을 막는다.
+  - 이번에 정하지 않은 것(각각 따로 묻는다): ① 기준 시뮬레이터의 형태 — [결정 46](#pg-test-boundaries-without-provider-service)("상시 모의 PG를 복원하지 않는다", 사용자가 정정한 결정)·[결정 111](#portone-fake-journey)("흉내 서버는 검증 도구 쪽에만")과의 관계 ② Settlement가 시뮬레이터 근거를 모의 수령으로 어떻게 표시하고 G3 완료를 무엇으로 판정할지([로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다").
+  - 진행 중인 PR #166·#168·#178은 그대로 마무리한다. 중립화는 그 뒤에 그 동작을 옮긴다.
+- 구분: 직접 제안 — 실제 연동 미루기는 사용자가 먼저 꺼냈고, 방식 C는 추천 수용
+- 결과: 기록 PR(이 결정), 중립화는 후속 PR
+
 ---
 
 ## 검증하며 드러난 것
