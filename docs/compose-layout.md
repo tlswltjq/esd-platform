@@ -41,6 +41,8 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml wait mysql-boot
 bash scripts/start-apps.sh -f docker-compose.apps.yml -f docker-compose.apps.local.yml
 ```
 
+`start-apps.sh`는 앱을 4묶음으로 나눠 띄워 기동 부하를 줄인다. 묶음 없이 한꺼번에 떠도(예: 호스트 재부팅 뒤 Docker의 `restart: unless-stopped` 재시작) DB를 쓰는 9개 앱은 부팅 때 첫 DB 연결을 60초 동안 다시 시도한다. 그 안에 DB가 닿지 않으면 앱은 종료되고 재시작 정책을 따른다. 실행 중 요청의 연결 기한은 3초 그대로다([결정 136](decisions.md#db-startup-wait)).
+
 컨테이너 네트워크 안에서만 사용하는 CI 실행은 각 기본 파일만 적용한다. 호스트에서 실행하는 E2E는 local 파일을 추가한다. 기존 프로젝트 이름 `stove`·`stove-apps`, 컨테이너 이름, 네트워크·볼륨 정의는 유지했다. 기존 스택의 포트 설정은 다음 컨테이너 재생성 시 반영된다.
 
 ## 로컬 접속 주소
