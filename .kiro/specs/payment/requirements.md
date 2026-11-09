@@ -190,7 +190,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 
 6. WHEN 상세·조사 이력을 조회하면 THEN 시스템 SHALL 과거에 보류된 승인도 현재 status와 함께 제공하고, 한 번도 보류되지 않은 승인은 404로 거절한다. POST는 현재 REVIEW_REQUIRED에만 허용한다.
 7. WHEN inspect가 실패하면 THEN 시스템 SHALL lastInspectedAt과 INVALID_EVIDENCE 또는 UNAVAILABLE을 기록하고 원래 예외를 유지한다. 성공은 오류를 지운다. latestPgState는 마지막 유효 관측(the last valid observation)이다. lease 상실 뒤에는 관측·오류를 저장하지 않는다.
-8. THE 시스템 SHALL 스크레이프당 GROUP BY 한 번으로 사유별 보류를 집계하고 PAID_WITHOUT_ADMISSION은 critical, 나머지는 warning으로 경보한다. 알려진 과거 보류는 Alertmanager silence를 사용한다.
+8. THE 시스템 SHALL 스크레이프당 GROUP BY 한 번으로 사유별 보류를 집계하고 PAID_WITHOUT_ADMISSION은 critical, 나머지는 warning으로 경보한다. 현재 구성에는 Alertmanager가 없어(`infra/prometheus/prometheus.yml`에 `alerting` 연결 없음) 알려진 과거 보류를 silence로 끌 수 없고, 보류는 R13 종결로 대상이 없어져야 풀린다. 종결할 수 없는 과거 보류의 경보를 끄는 방법은 `[결정 필요]`다(`tasks.md`).
 9. THE 시스템 SHALL 유효 PG 상태 집합·상태/시각 쌍·보류 시각 순서를 DB CHECK로 보장한다. 추가 열과 과거 자료 보존 근거는 [설계](design.md#승인-보류-운영-조회-결정-112-part-1)를 따른다.
 
 ### R13. 승인 보류 운영 종결 (결정 115, 결정 114 2부)
