@@ -22,7 +22,8 @@
 - [x] 보관함·등록을 포함한 실제 스택 여정: `verify-jib.py`(11개 앱) 통과, `verify-license.py` 15단계(환불 완료 뒤 재구매·등록, PG 결과 주입 — 결정 100) 통과 — 2026-11-06 PR #116
 - [x] PG 취소 구간까지 거치는 환불 후 재구매 여정: PortOne 흉내 서버로 Payment의 실제 취소 경로 → 환불 완료 → 보유권 REFUNDED·등록 ENDED → 재구매·새 보유권 등록(`verify-refund-settlement.py`) — 2026-11-07 [결정 111](../../../docs/decisions.md#portone-fake-journey), PR #129. 실제 PortOne·PG 확인은 [Payment 작업](../payment/tasks.md)에 남김
 - [ ] [외부 대기] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/DLT 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
-- [ ] 구성 결함 후보(Kafka 보존): [이벤트 복구 절차](../../../docs/license-event-recovery-runbook.md)의 DLT 재투입은 원본이 Kafka에 남아 있어야 하는데, 저장소에는 토픽 보존 설정이 없고(`retention`·토픽 생성 코드 없음, `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`) 브로커 기본값 7일을 따른다(`apache/kafka:3.9.0` `log.retention.hours=168`, [R9](../../../docs/architecture.md#r9)). 기본 `docker-compose.yml`의 `kafka`에는 데이터 볼륨이 없어(`log.dirs`가 컨테이너 안 `/tmp/kraft-combined-logs`) 컨테이너를 다시 만들면 7일 안의 원본·DLT도 사라진다. DLT 보존 기간·볼륨·명시적 토픽 생성은 운영 구성 변경이라 이 문서 정정 PR에서 고치지 않았다
+- [ ] [결정 필요] 구성 결함 후보(Kafka 보존): [이벤트 복구 절차](../../../docs/license-event-recovery-runbook.md)의 DLT 재투입은 원본이 Kafka에 남아 있어야 하는데, 저장소에는 토픽 보존 설정이 없고(`retention`·토픽 생성 코드 없음, `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`) 브로커 기본값 7일을 따른다(`apache/kafka:3.9.0` `log.retention.hours=168`, [R9](../../../docs/architecture.md#r9)). 기본 `docker-compose.yml`의 `kafka`에는 데이터 볼륨이 없어(`log.dirs`가 컨테이너 안 `/tmp/kraft-combined-logs`) 컨테이너를 다시 만들면 7일 안의 원본·DLT도 사라진다. DLT 보존 기간·볼륨·명시적 토픽 생성은 운영 구성 변경이라 이 문서 정정 PR에서 고치지 않았다. 정할 것: DLT 재투입이 가능해야 하는 기간(원본·DLT 토픽 보존 기간), 로컬·검증 Compose의 Kafka 데이터 볼륨 여부, 토픽을 코드·초기화 스크립트로 명시 생성할지. 보존 기간은 복구 가능 기간과 디스크 비용을 함께 정하는 정책이라 표시 없이 진행하지 않는다
+- [x] 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부하던 결함 수정(시각 비교 가드·V8/V9 CHECK 제거, V12) — [D-052](../../../docs/defects.md#d-052), PR #183
 
 ## 범위 밖(후속)
 

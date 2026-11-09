@@ -28,7 +28,7 @@ public class LicenseRestoration {
     @Column(nullable = false) private boolean returnedToStorage;
 
     public static LicenseRestoration record(License license, RestorationRequest input, Instant at, boolean returnedToStorage) {
-        LicenseValues.require(license != null && input != null && LicenseValues.microsecond(at) && !at.isBefore(input.occurredAt()), "복구 근거가 필요합니다.");
+        LicenseValues.require(license != null && input != null && LicenseValues.microsecond(at), "복구 근거가 필요합니다.");
         LicenseValues.consistent((license.getStatus() == PurchaseStatus.REGISTERED || license.getStatus() == PurchaseStatus.STORED) && license.getLicenseId().equals(input.licenseId()), "실제 복구된 대상이 다릅니다.");
         LicenseRestoration result = new LicenseRestoration(); result.requestEventId = input.eventId(); result.requestFingerprint = input.fingerprint();
         result.requestOccurredAt = input.occurredAt(); result.refundId = input.refundId(); result.attemptId = input.attemptId();

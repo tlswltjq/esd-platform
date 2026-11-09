@@ -1,5 +1,7 @@
-"""결정 116: 결정 번호·앵커·복합 링크와 기준 판의 번호 보존을 검사한다.
+"""결정 116·139: 결정 번호·앵커·복합 링크와 기준 판의 번호 보존을 검사한다.
 
+결정 139부터 번호는 착수 때 열린 PR로 예약하므로 빈 번호를 허용한다. 번호는 중복 없이 파일 순서대로 커져야 하고,
+기준 판에 없던 새 번호는 기준 판 최대 + NEW_NUMBER_SLACK 이하여야 한다(오타 방지).
 Python 3.8 이상, 외부 패키지 없음. 코드·주석은 줄 번호를 보존해 지운다.
 링크가 아닌 '결정 N' 언급의 의미나 결정 본문 자체의 보존은 검사하지 않는다.
 """
@@ -20,6 +22,8 @@ INLINE_CODE = re.compile(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 EXCLUDED = {'.git', 'build', 'node_modules'}
 GUIDANCE = '나중에 병합하는 쪽(이 PR)이 번호를 바꾼다. main의 기존 번호·앵커는 유지한다.'
+ORDER_GUIDANCE = '열린 PR이 예약한 번호가 늦게 병합되면 결정을 번호 자리에 끼워 넣는다(결정 139).'
+NEW_NUMBER_SLACK = 10
 
 
 def visible_lines(text):
@@ -150,13 +154,13 @@ def check(root, base_text=None):
             first_line, first_names = seen[number]
             errors.append('docs/decisions.md:{}: 중복 번호 {} (앵커 {}), 첫 헤딩 {}행 (앵커 {}). {}'.format(
                 line, number, ','.join(names) or '없음', first_line, ','.join(first_names) or '없음', GUIDANCE))
-        if number != previous + 1:
-            kind = '역순 번호' if number < previous else '순서 오류 번호'
-            missing = ' 누락 번호 {}'.format(previous + 1) if number > previous + 1 else ''
-            errors.append('docs/decisions.md:{}: {} {} (기대 {}){}. {}'.format(
-                line, kind, number, previous + 1, missing, GUIDANCE))
+        elif number < 1:
+            errors.append('docs/decisions.md:{}: 순서 오류 번호 {} (기대 1 이상). {}'.format(line, number, GUIDANCE))
+        elif number < previous:
+            errors.append('docs/decisions.md:{}: 역순 번호 {} (앞 번호 {}). {}'.format(
+                line, number, previous, ORDER_GUIDANCE))
         seen.setdefault(number, (line, names))
-        previous = number
+        previous = max(previous, number)
     if not records:
         errors.append('docs/decisions.md: 결정 헤딩이 없다 (기대 번호 1)')
     if base_text is not None:
@@ -168,6 +172,13 @@ def check(root, base_text=None):
         for number, line, names in base_records:
             if not names and number not in seen:
                 errors.append('기준 판 {}행 결정 {}가 삭제됨. {}'.format(line, number, GUIDANCE))
+        base_numbers = {number for number, _, _ in base_records}
+        base_max = max(base_numbers, default=0)
+        for number, line, _ in records:
+            if number not in base_numbers and number > base_max + NEW_NUMBER_SLACK:
+                errors.append('docs/decisions.md:{}: 새 번호 {}이 기준 판 최대 {} + {}을 넘는다. '
+                              '번호는 tools/ci/next_decision_number.py로 받는다(결정 139).'.format(
+                                  line, number, base_max, NEW_NUMBER_SLACK))
     checked = 0
     for path in markdown_files(root):
         for line_number, line in enumerate(document_lines(path.read_text(encoding='utf-8')), 1):

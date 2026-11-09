@@ -1252,6 +1252,93 @@
 - 구분: 추천 수용
 - 결과: [PR #139](https://github.com/tlswltjq/esd-platform/pull/139), 근거 색인 2026-11-08 기본 registry 행
 
+<a id="db-startup-wait"></a>
+## 136. 부팅 때만 첫 DB 연결을 기다리고, 실행 중 연결 기한은 그대로 둔다
+- 문제: DB를 쓰는 9개 앱(Auth·Studio·Review·Catalog·Store·Order·Payment·License·Settlement)은 Hikari 기본값(`initialization-fail-timeout` 1ms)이라 부팅 때 첫 연결을 한 번만 시도한다. 여러 JVM이 함께 떠 첫 연결이 `connection-timeout`(3초) 안에 끝나지 않으면 Flyway 단계에서 기동이 실패한다(2026-10-31 License 복구 검증). 지금은 `scripts/start-apps.sh`가 앱을 4묶음으로 나눠 띄워 피한다. 그러나 호스트 재부팅처럼 Docker가 `restart: unless-stopped` 컨테이너를 한꺼번에 다시 띄우면 나눠 띄우기가 적용되지 않고, 실패 뒤 재시작으로 수렴하는지도 검증한 적이 없다.
+- 선택지: A 지금처럼 바로 실패하고 Compose 재시작에 맡기며, 동시 기동 수렴 검증만 더한다 / B 9개 앱에 `spring.datasource.hikari.initialization-fail-timeout: 60000`을 더해 부팅 때만 60초 동안 첫 연결을 다시 시도한다. 실행 중 `connection-timeout: 3000`은 그대로 둔다 / C `connection-timeout`을 10초 안팎으로 늘린다 (추천: B — 부팅 때만 바뀌고, 실행 중 요청 기한과 재시도 시간 계산은 그대로다. 나눠 띄우기가 적용되지 않는 재부팅에서도 앱이 스스로 버틴다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 부팅 때만 기다리게 해")
+- 선택: B — 부팅 때 첫 연결만 60초 동안 다시 시도하고, 그래도 안 되면 지금처럼 종료한다. 재시도 예산 60초는 Compose health가 unhealthy로 판정할 수 있는 가장 이른 시각인 약 100초(`start_period` 40초 + 15초 × (5 − 1)회) 전에 끝난다. 예산은 종료 시각의 상한이 아니다. DB가 TCP 연결만 받고 MySQL 인사를 보내지 않으면 한 번의 시도가 드라이버 안에서 더 오래 멈출 수 있고, 이는 설정 전과 같다. 결정 당시 설명의 "115초"는 계산이 틀렸고 교차 리뷰(PR R3)에서 바로잡았다. 나눠 띄우기는 기동 부하를 줄이는 용도로 남긴다. 인프라 MySQL에 재시작 정책이 없는 점은 이 결정에 넣지 않았다.
+- 구분: 추천 수용
+- 결과: [PR #175](https://github.com/tlswltjq/esd-platform/pull/175), 근거 색인 2026-11-09 cross 부팅 DB 연결 대기 행
+
+<a id="claim-draft-pr"></a>
+## 137. 항목에 착수하면 바로 draft PR을 열어 맡은 항목을 GitHub에 표시한다
+- 문제: 여러 세션이 각자 개발 루프를 돌며 main의 `tasks.md`에서 표시 없는 첫 항목을 고른다. 다른 세션이 그 항목을 한다는 신호는 PR을 연 뒤에야 생겨서, 그 전 몇 시간은 두 세션이 같은 항목을 고를 수 있다. 2026-11-08 밤에는 열린 PR의 브랜치 이름으로 payment·order·settlement 작업을 짐작해 피했다. 결정 번호는 110→112, 111→113, 115→116, 116→117, 118→135로 바뀌었다. `docs/evidence.md` 끝 행은 11-07에 5번, 11-08에 #155·#156·#157에서 매번 충돌했다. 2026-11-09에는 커밋 전이던 웹훅 작업의 결정 137이 다른 세션에 보이지 않았다.
+- 선택지: A 세션은 동등하게 두고, 착수하자마자 draft PR로 맡은 항목과 결정 번호를 표시한다. 열린 PR과 겹치는 항목은 건너뛰고, `docs/evidence.md`에 `merge=union`을 둔다 / B Kiro `goal-conductor` 지휘 세션이 work ledger로 항목을 배정한다 / C 한 세션이 항목마다 `workflow_run`을 돌린다 (추천: A — 상태가 GitHub에 있어 에이전트·런타임과 상관없이 보이고, 작은 변경으로 항목 표시·결정 번호·근거 색인 충돌·주인 없는 PR을 다룬다. B의 결정 모으기와 동시 실행 제한은 나중에 A 위에 얹을 수 있다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, GitHub에 맡은 항목 표시")
+- 선택: A — `tasks.md` 항목에 착수하면 첫 커밋(빈 커밋 가능)을 push하고 바로 `gh pr create --draft`로 PR을 연다. 본문 `맡은 항목`에는 항목 원문과 쓸 결정 번호를 적는다. 다음 항목을 고르기 전에 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치면 건너뛴다. CI `build`는 draft PR에서 건너뛰고, ready로 바꾸면(`ready_for_review`) 돈다. 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 `ready_for_review` 없이 건너뛰기만 두면 ready PR이 build 없이 병합될 수 있다. 두 설정은 함께 바꾼다. draft 실행이 늦게 시작되거나 다시 돌면 같은 concurrency 그룹의 실제 build를 취소할 수 있어서, 그룹을 draft와 build로 나눈다(교차 리뷰 R1). 같은 SHA에 draft 때의 SKIPPED가 남으므로, 병합 판단은 가장 최근에 시작한 `build`가 SUCCESS인지로 한다. draft PR은 건너뛴 build와 `review-gate` 통과만으로 `CLEAN`으로 보일 수 있다(근거 색인 2026-11-09 착수 draft PR 행). GitHub도 draft 병합은 막지만, 에이전트는 병합 대상을 고를 때 draft를 뺀다. `tools/ci/test_workflows.py`는 조건식 전체와 이벤트 목록, concurrency 그룹을 지킨다(R2: 부분 문자열 비교는 `&& false`를 놓쳤다). 열린 PR 조회는 `--limit 1000`으로 30건 기본 제한을 넘긴다(R3). `docs/evidence.md`는 `.gitattributes`의 `merge=union`으로 로컬 `git merge`에서 양쪽 행을 남긴다. GitHub 화면의 충돌 판정에는 적용되지 않을 수 있다. 양쪽이 같은 행을 고치면 두 줄이 다 남으므로, 기존 행을 고친 병합은 결과를 확인한다. 열린 PR이 적은 결정 번호를 건너뛰는 예약은 병합 순서가 뒤바뀌면 결정 116의 빈 번호 검사와 부딪힌다. 그래서 예약은 따로 정하고, 그때까지 번호 규칙은 결정 116 그대로다.
+- 구분: 추천 수용
+- 결과: [PR #177](https://github.com/tlswltjq/esd-platform/pull/177), 근거 색인 2026-11-09 착수 draft PR 행
+
+<a id="decision-number-reservation"></a>
+## 139. 결정 번호는 착수 때 draft PR로 예약하고, 검사는 빈 번호를 허용한다
+- 문제: 결정 116은 새 결정에 main의 마지막 번호 다음을 쓰고, 겹치면 나중에 병합하는 쪽이 번호를 바꾼다. 그래서 번호가 병합 순서로 정해져 2026-11-07~09에 약 7번 바뀌었다(110→112, 111→113, 114→115→116, 116→117, 118→135, 웹훅 137→138). 결정 135는 사용자가 대화에서 "결정 118"로 고른 결정이었고, 번호를 바꾸느라 파일 23개를 고쳤다. 결정 137의 draft PR에 번호를 적더라도, 열린 PR이 적은 번호를 건너뛰면 결정 116 검사 ①(1부터 빈 번호 없이 차례로)과 부딪힌다. 병합 순서가 뒤바뀌면 `누락 번호`나 `역순 번호`로 막히고, 예약한 PR을 포기하면 그 뒤 번호는 병합할 수 없다.
+- 선택지: A 결정 116 그대로, draft PR의 번호는 정보로만 쓴다 / B 착수 때 예약한다. 새 번호는 main 최대 번호와 열린 PR이 적은 번호 중 큰 값 + 1이다. 검사 ①을 "중복 없음 + 오름차순"으로 바꿔 빈 번호를 허용하고, 나중에 병합하는 PR은 번호 자리에 끼워 넣는다. PR의 새 번호는 main 최대 + 10 이하로 제한한다 / C 결정 116 그대로 두고 번호 변경 스크립트를 더한다 (추천: B — 번호가 착수 시점에 고정돼 대화·판단 색인에서 부르는 번호가 바뀌지 않는다. 중복 없음과 main 기록 보존은 그대로 지킨다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 번호를 착수 때 예약")
+- 선택: B — 새 결정의 번호는 `tools/ci/next_decision_number.py`가 정한다. main의 `docs/decisions.md`와 열린 PR(draft 포함) 본문 `맡은 항목`의 `결정 번호:` 줄에서 가장 큰 값에 1을 더한다. 도구는 열린 PR을 먼저 읽고, 그다음 `git fetch origin +refs/heads/main:refs/remotes/origin/main`으로 main을 새로 받아 그 ref를 읽는다. 두 읽기 사이에 병합된 PR은 둘 중 한쪽에 반드시 보인다. 로컬 `origin/main`이 오래되면 이미 병합된 번호를 다시 내기 때문이다(교차 리뷰 R1). 받을 곳을 명시해, 설정된 fetch refspec이 main을 빼도 갱신된다(R3). 코드 블록·HTML 주석 안의 예시는 세지 않고(R2), 예약 줄의 값은 `` `140` ``처럼 인라인 코드여도 읽는다(R4). draft PR을 연 뒤에 그 번호로 결정을 묻거나 기록한다. 검사는 결정 116의 ①만 바꾼다. 헤딩 번호가 중복 없이 파일 순서대로 커지면 빈 번호를 허용한다. 기준 판(main)과 비교할 때 새로 생긴 번호는 기준 판 최대 + 10 이하여야 한다(오타 방지. 동시에 열린 예약이 10개를 넘으면 경계를 다시 정한다). 앵커 중복, 링크 번호, 기준 판 번호·앵커 보존 검사는 그대로다. 나중에 병합하는 PR은 결정을 번호 자리에 끼워 넣는다(138은 139 앞). 병합하지 않고 닫은 PR의 번호는 빈 번호로 남을 수 있다. 같은 순간에 두 세션이 같은 번호를 고르면 결정 116처럼 나중에 병합하는 쪽이 바꾸고, 중복은 검사가 막는다.
+- 구분: 추천 수용
+- 결과: [PR #179](https://github.com/tlswltjq/esd-platform/pull/179), 근거 색인 2026-11-09 결정 번호 예약 행
+
+<a id="defer-real-pg"></a>
+## 140. 실제 PG 확인은 새 단계 G7로 미루고, Payment·Settlement core의 PG 계약을 공급자 중립으로 바꾼다
+- 문제: 결제·환불 예외 결정(114~134)이 이어지며 기존 결정·구현과 계속 부딪혔다(D-044·D-045·D-046, PR #178 취소 단계 실패). 실제 PortOne TEST는 2026-11-07 토스페이가 공용 예제 키를 거절한 뒤 멈췄고(결정 110 결과), `[외부 대기]` 10여 건이 전용 테스트 가맹점을 기다린다. 업무 모델도 PortOne 모양이다. Payment core에는 `PORTONE_TEST` 공급자 분기(`"PORTONE_TEST".equals(...)`·JPQL `p.provider='PORTONE_TEST'`)가 29곳 있고, `PortOneWebhookNotice`(core.domain)·`PortOneWebhookReceipts`·`PortOneWebhookVerifier`(core.port)·`ReceivePortOneWebhook`(core.service)가 PortOne 이름을 쓴다. 3시간 창(`RefundCancellationWindow`·`PaymentApproval`)은 PortOne의 공개 보장이다. Settlement core도 `PgEvidence`·`PgPayment`·`PgFunding`·`PgStatementCheck`가 `PORTONE_TEST`·`PORTONE_LIVE` 문자열을, `PgStatement`가 `portoneStoreId`·`portoneChannelKey` 열을 쓴다. 그래서 흉내 서버로만 돌려도 PortOne 규칙에서 나온 충돌이 그대로 남는다.
+- 선택지: A PortOne 어댑터·웹훅·Settlement 수집기를 지우고 `simulators/mock-pg`로 돌아간다 / B 코드는 두고 실제 TEST만 완료 조건에서 뺀다 / C B에 더해 core의 PG 계약을 공급자 중립으로 바꾸고 PortOne 이름·규칙은 adapter로 내린다 (추천: C — 문제가 생기는 곳이 어댑터 한 곳에 모이고, AGENTS.md 3절의 `core.port`/`adapter` 경계에 맞는다. 실제 PortOne은 나중에 어댑터로 다시 붙인다. A는 Payment·Settlement 파일 128개를 바꾸고 mock-pg에 환불·취소·웹훅을 새로 만들어야 하며, 결정 110·111·133과 10-27~10-30 실제 TEST 근거가 쓸모를 잃는다. B는 core가 PortOne 모양으로 남는다)
+- 내 의견: "실제 연동도 걷어내고 나중으로 미루고싶어 그래도 될까?" → 고른 선택지: "C로 실제 연동 미루고 PG 계약 중립화해"
+- 선택: C
+  - 실제 PortOne·토스페이 확인(승인·취소·오류 타입·웹훅 공개 수신·토스페이 정산 수집·LIVE 근거·지급 수령)은 새 단계 G7 "실제 PG 연동"으로 옮기고 G1~G3 완료 조건에서 뺀다. PortOne 코드와 10-27~10-30 실제 TEST 근거는 지우지 않는다.
+  - Payment·Settlement core에서 공급자 이름과 공급자 문자열 분기를 없앤다. 승인·조회·취소 요청·취소 결과·통지의 중립 계약은 `core.port`에, PortOne 본문·서명·오류 분류·공개 보장 기한은 `adapter`와 `config`에 둔다. 이미 저장된 `PORTONE_TEST`·`SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트). ArchUnit으로 core의 공급자 이름을 막는다.
+  - 이번에 정하지 않은 것(각각 따로 묻는다): ① 기준 시뮬레이터의 형태 — [결정 46](#pg-test-boundaries-without-provider-service)("상시 모의 PG를 복원하지 않는다", 사용자가 정정한 결정)·[결정 111](#portone-fake-journey)("흉내 서버는 검증 도구 쪽에만")과의 관계 ② Settlement가 시뮬레이터 근거를 모의 수령으로 어떻게 표시하고 G3 완료를 무엇으로 판정할지([로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다").
+  - 진행 중인 PR #166·#168·#178은 그대로 마무리한다. 중립화는 그 뒤에 그 동작을 옮긴다.
+- 구분: 직접 제안 — 실제 연동 미루기는 사용자가 먼저 꺼냈고, 방식 C는 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 중립화는 후속 PR
+
+<a id="portone-fake-as-reference-simulator"></a>
+## 141. 기준 시뮬레이터는 PortOne 흉내 서버를 넓혀 쓰고, 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다
+- 문제: [결정 140](#defer-real-pg)으로 실제 PG 확인을 G7로 미루면서 개발·여정·장애 실험에 쓸 기준 시뮬레이터를 정해야 했다. 지금은 두 가지가 있다. `tools/verification/support/portone_fake.py`(PortOne V2 HTTP 모양, 제어 요청 `fail-attempt`·`arm-confirm`·`arm-cancel`·`settle`·`console-approve`·`console-cancel`, 매일 밤 CI 여정)와 `simulators/mock-pg`(별도 Java 서비스·DB, 승인만, `SIMULATED`)다. 예: PR #178 취소 단계 실패는 흉내 서버에 PortOne 취소 대기(`REQUESTED`)가 없어서 생겼다.
+- 선택지: A PortOne 흉내 서버를 기준으로 넓힌다. 중립화는 `core.port` 경계에서만 하고 운영 코드의 PG HTTP 어댑터는 PortOne 하나로 둔다 / B 중립 프로토콜 시뮬레이터와 전용 `SimulatorPgGateway`·Settlement 클라이언트를 새로 둔다 / C 둘 다 둔다(실험은 중립 시뮬레이터, 어댑터 계약은 흉내 서버) (추천: A — 업무 모델을 PortOne에서 떼는 일은 `core.port` 경계로 이뤄지고 시뮬레이터 프로토콜과는 무관하다. PortOne 어댑터가 매일 밤 돌아 G7에서 주소만 바꾸면 되고, 장애 주입은 기존 `arm-*` 제어 방식으로 더할 수 있으며, [결정 46](#pg-test-boundaries-without-provider-service)·[결정 111](#portone-fake-journey)을 지킨다. B는 결정 46을 뒤집고 어댑터 두 벌을 유지하며 PortOne 어댑터가 G7까지 시험되지 않는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PortOne 흉내 서버를 기준으로 넓혀")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - 흉내 서버는 결정 111대로 검증 도구 쪽에만 둔다. 운영 코드는 흉내 서버를 알지 못하고, PortOne 주소 설정만 바꿔 붙는다. 결정 46의 "상시 모의 PG를 복원하지 않는다"는 그대로다.
+  - 흉내 서버의 응답 모양은 PortOne 어댑터 테스트의 견본과 같게 유지한다. PortOne 문서로 확인하지 못한 동작은 흉내 서버 안에 추정이라고 적고 G7 확인 항목에 남긴다.
+  - 장애 주입은 제어 요청으로 더한다: 응답 지연, 5xx·연결 끊김, 취소 대기(`REQUESTED`) 유지와 뒤늦은 확정, 웹훅 중복·역순·누락. 취소 대기는 PR #178(결정 138)이 넣는 것과 겹치지 않게 그 PR 뒤에 잇는다.
+  - `simulators/mock-pg`·`SIMULATED` 경로를 정리할지는 이번에 정하지 않는다.
+- 구분: 추천 수용
+- 결과: [PR #180](https://github.com/tlswltjq/esd-platform/pull/180) (기록), 흉내 서버 확장은 후속 PR
+
+<a id="g3-exit-current-contract"></a>
+## 142. G3는 지금 정산 계약으로 닫고, PG 비용·지급 확인은 G7로 넘긴다
+- 문제: [결정 140](#defer-real-pg)·[결정 141](#portone-fake-as-reference-simulator)로 실제 PG 확인을 G7로 넘기자 G3 완료 판정의 근거를 정해야 했다. PortOne 흉내 서버로 원승인·취소 근거 읽기, 매출 배분, 환불 조정, 이월, 마감은 끝까지 돈다. 반면 PG 비용(토스페이 정산 API)은 TEST에서 미확정으로 남고(Settlement R4.7), PORTONE 지급 명세 접수는 503이며(R3.5), 토스페이 흉내 서버가 없어 비용·반환·지급 대사는 한 번도 끝까지 돌지 않았다.
+- 선택지: A 지금 계약으로 닫는다 — 흉내 서버 근거로 원매출·환불 조정·판매자/플랫폼 순액·마감 전후를 검증하고, 비용·지급은 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, PORTONE 지급 명세 503)만 검증한다 / B 토스페이 정산 흉내 서버를 더하되 비용은 TEST 규칙대로 미확정 유지 / C 토스페이 정산 흉내 서버와 새 근거 출처 `SIMULATOR`를 두고 비용 확정·지급 대사까지 허용 (추천: A — 결정 140의 목적인 PG 소음 축소에 맞다. [결정 39](#seller-close-independent-of-pg-cost)로 판매자 마감이 PG 비용과 이미 분리돼, 판매자 금액 흐름은 비용 없이 모두 검증·실험할 수 있다. C는 [로드맵 §4](roadmap.md#4-g3-계약-원칙) "모의 비용으로 대체하지 않는다"에 예외를 만든다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 지금 계약으로 G3를 닫아")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정).
+  - G3 완료 판정: 결정 140의 PG 계약 중립화를 마친 코드로, 흉내 서버 실제 스택 여정에서 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영과 비용·지급의 미확정 표시(NULL·503, 빈 TEST 결과를 0원으로 보지 않음)를 확인한다.
+  - PG 비용 확정·비용 반환·지급 수령 대사는 G7에서 실제 공급자 근거로 한다. 로드맵 §4 원칙은 바꾸지 않는다.
+  - 비용 대사(`PG_COST_PENDING`·`DIFFERENT_COST`)를 장애 실험에 넣을 필요가 측정으로 드러나면 G6에서 C를 다시 묻는다.
+- 구분: 추천 수용
+- 결과: [PR #181](https://github.com/tlswltjq/esd-platform/pull/181) (기록)
+
+<a id="money-spec-first"></a>
+## 143. 돈이 오가는 4개 모듈(Payment·Order·License·Settlement)의 SPEC을 먼저 정비하고, 그다음 PG 계약 중립화를 구현한다
+- 문제: 결제·환불 결정이 기존 결정과 계속 부딪혔는데, 부딪히는지 확인할 기준이 SPEC에 없었다. Payment `design.md`의 상태 다이어그램은 `Payment` 하나뿐이고, `PaymentApproval`(상태 7개)·`RefundExecution`(상태 3개 + 보류·종결·조회 일정·귀속 판정 필드)은 전이 표 없이 R7·R12~R14 서술과 결정 본문에 흩어져 있다. License·Settlement `design.md`에는 상태 전이 정의가 없다. Payment 요구사항은 결정 순서대로 붙어 R14가 두 개다. 모듈 간 돈 흐름(`docs/domain/workflows.md`)은 2026-11-06 뒤로 갱신되지 않았고 금액 불변식은 어디에도 없다. `tasks.md`는 완료 항목의 구현 경위로 길어졌다(payment 한 줄 최대 1,056자, order 1,207자). 요구사항에는 PortOne 이름이 남아 있다(payment 18곳, settlement 7곳).
+- 선택지: A 돈 흐름 4개 모듈 SPEC을 먼저 정비(집합체별 상태×이벤트 표 → 모듈 간 돈 불변식 → 요구사항 생애주기 순 재배열·공급자 중립 용어 → `tasks.md` 정리)하고 그다음 중립화 구현 / B 중립화 구현 중 바뀌는 부분만 고침 / C 11개 모듈 SPEC 전체 정비 (추천: A — 충돌을 코드보다 먼저 찾고, 불변식 목록이 불변식 검사기의 명세가 된다. 문서만 바꿔 교차 리뷰가 필요 없다. C는 문제가 적은 모듈까지 넓어진다)
+- 내 의견: "SPEC을 더 다듬는건 어떻게 생각해?" → 고른 선택지: "A로 돈 흐름 4개 모듈 SPEC부터 정비해"
+- 선택: A
+  - 상태×이벤트 표는 새 정책 없이 현재 코드(상태 enum과 전이 메서드·가드·발행/수신 이벤트)에서 옮긴다. 코드·요구사항·기존 결정이 서로 어긋나는 곳은 고치지 않고 찾은 것으로 남긴다. 재현되는 결함은 재현 테스트와 함께 [결함 대장](defects.md)에, 정책이 필요한 것은 `[결정 필요]`로 하나씩 묻는다.
+  - 모듈 간 돈 불변식은 기준 문서 `docs/domain/workflows.md`에 둔다. 새 문서를 만들지 않는다.
+  - 요구사항 재배열은 계약을 바꾸지 않는다. R 번호를 바꾸면 기존 참조(`git grep 'R14'` 등)를 함께 고친다.
+  - 테스트에 R 번호를 붙이는 규칙은 이번 범위가 아니다.
+- 구분: 직접 제안 — SPEC 정비는 사용자가 먼저 꺼냈고, 범위 A는 추천 수용
+- 결과: 진행 중(1부: 상태×이벤트 표)
+
+<a id="held-approval-keeps-first-reason"></a>
+## 144. 이미 보류된 승인은 처음 보류된 사유를 유지하고, 접수 없이 청구된 관측만 사유를 올린다
+- 문제: 보류(`REVIEW_REQUIRED`)된 승인도 승인 작업자(`ResolvePaymentApproval`)가 [결정 122](#approval-review-requery-interval) 간격으로 다시 잡아 PG를 조회한다. 그때 응답 대조 실패(`PG_INVALID_EVIDENCE`)·접수 충돌(`ORDER_ADMISSION_CONFLICT`)·접수 뒤 주문 만료(`ORDER_EXPIRY_CONFLICT`)·confirm 400/403(`PG_REQUEST_REJECTED`)이 나면 `PaymentApproval.stopPosts`가 `lastErrorCode`를 새 사유로 덮었다(`PAID_WITHOUT_ADMISSION`만 보호). 이 필드는 고객 안내([결정 123](#approval-review-customer-notice)·[결정 132](#reviewnotice-last-observation): `PG_INVALID_EVIDENCE`면 "청구 확인 지연" 고정), R11.8 자동 만료(`PG_INVALID_EVIDENCE` 미접수 보류만 운영자 없이 닫힘), 운영 목록·게이지 사유를 정한다. 예: 결정 126으로 `PG_PENDING_AT_ORDER_EXPIRY` 보류된 건이 깨진 응답 한 번에 `PG_INVALID_EVIDENCE`가 되면 운영자 확인 없이 자동 만료 대상이 되고, 처음 보류 이유는 남지 않는다. 요구사항은 전액 취소 관측(R13.8)만 "원래 사유 유지"를 정했다. [결정 143](#money-spec-first) 1부 상태×이벤트 표([PR #182](https://github.com/tlswltjq/esd-platform/pull/182))에서 찾았다.
+- 선택지: A 처음 보류된 사유를 유지하고 `PAID_WITHOUT_ADMISSION`만 지금처럼 사유를 올린다. 뒤 사유는 로그로만 남긴다 / B 지금처럼 최신 사유로 바꾸고 요구사항에 적는다 / C 사유 심각도 순서를 정해 더 심각한 사유만 덮는다 / D A에 더해 사유 이력을 테이블에 저장한다 (추천: A — 보류는 운영자 조사 표시이고([결정 114](#approval-review-hold-closure)) 첫 이유가 조사의 출발점이다. 기존 `PAID_WITHOUT_ADMISSION` 보호가 이미 "돈이 움직인 관측은 덮이면 안 된다"는 뜻이다. C는 8개 사유의 순서라는 새 정책이 필요하고, D는 지금 조사 기록으로 대부분 대신된다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 처음 보류 사유를 유지해")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 이미 `REVIEW_REQUIRED`인 승인에 새 중단 사유가 오면 송신 중단은 유지하고 `lastErrorCode`·`reviewStartedAt`은 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 사유를 그것으로 올리고, 한 번 그 사유가 되면 바꾸지 않는다. 버린 사유는 승인 ID와 함께 로그로 남긴다. 고객 안내는 결정 132대로 사유 묶음과 마지막 PG 관측으로 정하므로, 유지된 첫 사유가 `PG_INVALID_EVIDENCE`가 아니면 뒤의 깨진 응답이 안내를 고정하지 않는다.
+- 구분: 추천 수용
+- 결과: 구현 PR
+
 ---
 
 ## 검증하며 드러난 것

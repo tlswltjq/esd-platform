@@ -38,17 +38,37 @@ class DecisionNumbersTest(Fixture):
         self.write('docs/decisions.md', VALID + '## 2. 중복\n')
         self.assertIn('중복 번호 2', self.errors())
 
-    def test_missing_number(self):
+    def test_gap_reserved_by_open_pr_is_allowed(self):
+        # 결정 139: 열린 PR이 예약한 2가 아직 main에 없어도 3을 병합할 수 있다.
         self.write('docs/decisions.md', VALID.replace('## 2.', '## 3.'))
-        self.assertIn('누락 번호 2', self.errors())
+        self.assertEqual(decision_numbers.check(self.root)[0], [])
 
     def test_reverse_number(self):
         self.write('docs/decisions.md', '## 1. A\n## 3. C\n## 2. B\n')
-        self.assertIn('역순 번호 2', self.errors())
+        error = self.errors()
+        self.assertIn('역순 번호 2 (앞 번호 3)', error)
+        self.assertIn('번호 자리에 끼워 넣는다', error)
 
     def test_sequence_starts_at_one(self):
         self.write('docs/decisions.md', '## 0. 잘못된 시작\n## 1. 첫째\n')
-        self.assertIn('순서 오류 번호 0 (기대 1)', self.errors())
+        self.assertIn('순서 오류 번호 0 (기대 1 이상)', self.errors())
+
+    def test_late_reserved_number_inserted_in_place(self):
+        base = '## 1. A\n## 3. C\n'
+        self.write('docs/decisions.md', '## 1. A\n## 2. B\n## 3. C\n')
+        self.assertEqual(decision_numbers.check(self.root, base_text=base)[0], [])
+
+    def test_new_number_bound(self):
+        self.write('docs/decisions.md', VALID + '## 12. 경계\n')
+        self.assertEqual(decision_numbers.check(self.root, base_text=VALID)[0], [])
+        self.write('docs/decisions.md', VALID + '## 13. 오타\n')
+        error = '\n'.join(decision_numbers.check(self.root, base_text=VALID)[0])
+        self.assertIn('새 번호 13이 기준 판 최대 2 + 10을 넘는다', error)
+
+    def test_bound_ignores_numbers_already_in_base(self):
+        base = VALID + '## 20. 이미 main에 있음\n'
+        self.write('docs/decisions.md', base)
+        self.assertEqual(decision_numbers.check(self.root, base_text=base)[0], [])
 
     def test_duplicate_anchor(self):
         self.write('docs/decisions.md', VALID + '<a id="one"></a>\n')
@@ -125,7 +145,9 @@ class ReviewFindingsTest(Fixture):
         self.assertIn('two', error)
         self.assertIn('three', error)
         self.assertIn('나중에 병합하는 쪽', error)
-        self.assertEqual(error.count('순서 오류'), 1)
+        # 결정 139: 중복은 중복으로만 보고하고, 뒤의 3은 앞 번호 2보다 커서 오류가 아니다.
+        self.assertEqual(error.count('중복 번호 2'), 1)
+        self.assertEqual(error.count('순서 오류') + error.count('역순'), 0)
 
     def test_unpaired_backticks_do_not_hide_headings(self):
         self.write('docs/decisions.md', '`열림\n' + VALID + '`닫힘\n')

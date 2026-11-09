@@ -34,6 +34,162 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 - PortOne 개별 시도 FAILED는 상태 전이가 아니라 별도 이력이다. 같은 orderNo·paymentId로 재결제한다.
 - `EXPIRED`는 Order가 소유한 만료 판단의 전달 결과이며 금융 성공/실패 제약을 만들지 않는다.
 
+## 상태×이벤트 표 (코드 기준, 결정 143)
+
+main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니다. 코드와 문서가 어긋나는 곳은 고치지 않고 절 끝 "찾은 불일치"에 적었다. 스케줄러는 모두 유스케이스에 위임만 한다: `PendingPaymentScheduler` → `ResolvePayment.execute()`, `PaymentApprovalScheduler` → `ResolvePaymentApproval.execute()`, `RefundLookupScheduler` → `ResolveRefundLookup.execute()`, `RefundRetryScheduler` → `ResolveRefundRetry.execute()`. 잠금 순서는 어디서나 `purchase_payment` → `payment_approval`/`refund_execution`이다.
+
+### Payment (`Payment`, `purchase_payment`)
+
+| 상태 | 뜻 |
+|---|---|
+| `PENDING` | 접수됨. 미호출과 결과 미확인을 함께 담는다. `nextAttemptAt` 필수(V30 `chk_purchase_payment_state`) |
+| `PAID` | 공급자 승인 확정. 거래·결과 이벤트 ID·시각 필수, 실패 사유 없음 |
+| `FAILED` | 공급자 거절 확정 또는 운영자 승인 보류 종결(`REVIEW_CLOSED`). 실패 사유 필수 |
+| `EXPIRED` | Order 만료 전달. 거래·결과 이벤트·조회 예약 모두 NULL. 금융 결과 아님 |
+
+| 현재 상태 | 트리거 | 가드(조건) | 다음 상태 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| (없음) | `OrderPlaced` 수신 | 생명주기 행 원구매 일치, 기존 결제·Inbox 일치(첫 전달인데 결제 있음/재전달인데 결제 없음은 CONFLICT), 같은 이벤트 ID의 다른 주문 거절, 만료 근거 없음 | `PENDING` | `paymentId` 발급, `nextAttemptAt=now`, PORTONE_TEST면 `nextFailureLookupAt=now`, 추적 부모 저장 | `ReceiveOrderPayment.execute` → `Payment.receive` | R1.2~R1.9, R11.2 |
+| (없음) | 만료 뒤 늦은 `OrderPlaced` | `payment_order_lifecycle.expired()` | `EXPIRED` | 승인·조회 예약 없음 | `ReceiveOrderPayment.execute` → `Payment.expireUnpaid` | R11.3 |
+| `PENDING` | `PendingPaymentScheduler` | `gateway.charge` 결과가 같은 키·주문·금액·통화·provider이고 APPROVED. PORTONE_TEST는 `AdmittedPortOnePgGateway`가 `ADMITTED`·`REVIEW_REQUIRED`·`SUCCEEDED` 승인 중 접수된(`admittedAt`) 것을 찾아 PG `inspect`가 PAID일 때만 결과를 준다 | `PAID` | `OrderPaymentCompleted` Outbox(`PaymentResultOutbox`), 거래·비용·`pgPaidAmount`/`pgDiscountAmount`·결과 이벤트 ID/시각 저장, `nextAttemptAt`·`lastErrorCode` 비움 | `ResolvePayment.processFinancialResult` → `Payment.confirm` | R3.1, R3.10, R4.7, R10.1~R10.2 |
+| `PENDING` | `PendingPaymentScheduler` | 같은 연결의 DECLINED(현재 SIMULATED만 만든다. PortOne 어댑터는 PAID 외에 `PgUnavailable`) | `FAILED` | `OrderPaymentFailed` Outbox(reasonCode·reason), `nextFailureLookupAt` 비움 | `ResolvePayment.processFinancialResult` → `Payment.confirm` | R3.2, R4.7 |
+| `PENDING` | `ResolvePaymentApproval`의 PAID 관측 | 위 PAID 행과 같은 경로를 동기 호출 | `PAID` | 위와 같음 | `ResolvePaymentApproval.completeObservation` → `ResolvePayment.execute` | R4.3, R4.11 |
+| `PENDING` | `PendingPaymentScheduler` | 결과 없음·불일치(`PG_INVALID_RESULT`)·호출 장애(`PG_UNAVAILABLE`)·결과 트랜잭션 실패(`RESULT_UNCONFIRMED`) | `PENDING` | `nextAttemptAt=now+PAYMENT_RETRY_MS`, `lastErrorCode` 기록 | `ResolvePayment.defer` → `Payment.defer` | R2.4, R2.7, R3.3~R3.6 |
+| `PENDING` | 웹훅 `POST /api/v1/payments/webhooks/portone` | 첫 접수(같은 ID·본문 재전달은 무변화), PORTONE_TEST | `PENDING` | `nextAttemptAt`을 더 이를 때만 수신 시각으로 앞당김 | `ReceivePortOneWebhook.execute` → `Payment.requestRecheck` | R6.3~R6.4 |
+| `PENDING` | `OrderExpired` 수신 | 첫 만료 통지, `resultEventId` NULL, 활성 승인(`REQUESTED`·`ADMITTED`·`REVIEW_REQUIRED`·`FAILURE_CONFIRMED`) 없음 | `EXPIRED` | 조회 예약·`lastErrorCode` 비움, 이벤트 없음 | `ApplyOrderExpiry.execute` → `Payment.expireUnpaid` | R11.1, R11.4 |
+| `PAID`·`FAILED` | `OrderExpired` 수신 | `resultEventId` 있음 | (유지) | `payment_order_lifecycle.financialConflict=true` | `ApplyOrderExpiry.execute` | R11.7 |
+| `PENDING` | `PaymentApprovalScheduler`(승인 작업자) | 승인이 접수 전 만료로 닫힘(`expireRequested`·`expireAfterVerifiedReady`), Order 접수 응답이 만료(빈 영수증), 접수 전 실패 + 만료 근거, 또는 Order 실패 영수증 `EXPIRED`·만료 근거 | `EXPIRED` | 이벤트 없음 | `ResolvePaymentApproval.cycle`·`expireRequested`·`completeFailure` → `Payment.expireUnpaid` | R4.10, R11.5, R11.6, R11.8 |
+| `PENDING` | `POST /api/v1/admin/approval-reviews/{approvalId}/closure` | PORTONE_TEST, `resultEventId` NULL, 승인이 접수됐거나 주문 만료 통지 없음, 종결 근거 CANCELLED·FAILED·READY | `FAILED` | `failureReasonCode=REVIEW_CLOSED`, `providerTransactionId`=보류 시도 txId, 결정 시각=종결 재조회 시각, `OrderPaymentFailed` Outbox | `CloseApprovalReview.execute` → `Payment.failAfterReview` | R13.5, 결정 115 |
+| `PENDING` | 같은 종결 API | 접수 전 승인 + `payment_order_lifecycle` 만료 통지 있음 | `EXPIRED` | 이벤트 없음 | `CloseApprovalReview.execute` → `Payment.expireUnpaid` | R13.5, R13.9 |
+| `PAID`·`FAILED` | 같은 결과의 재확정 | `supplierResult()`가 같음 / 다름 | (유지) | 같으면 무변화(Outbox 없음), 다르면 409 CONFLICT | `Payment.confirm` | R3.7~R3.9, R10.4 |
+| `EXPIRED` | 늦은 확정 결과 | — | (유지) | CONFLICT로 거절, `ResolvePayment`가 `PG_INVALID_RESULT`로 defer 시도(`defer`는 `PENDING`만 바꿈) | `Payment.confirm` | R11.7 |
+
+직교 필드:
+
+| 필드 | 바뀌는 때 | 동작에 미치는 영향 | 코드 위치 |
+|---|---|---|---|
+| `nextFailureLookupAt`·`failureHistoryCheckedAt` | PORTONE_TEST 접수 시 now, 결과 처리·장애 때 재예약, 완전 수집 시 NULL, `FAILED`·`EXPIRED`는 NULL | `PAID` 뒤에도 실패 시도 이력 GET만 재개(`due`가 `nextFailureLookupAt<=now`도 고름). 금융 상태는 바꾸지 않음 | `Payment.recordFailureLookup`, `ResolvePayment.collectFailureHistory` |
+| `payment_order_lifecycle.expiryEventId`·`expiredAt` | `OrderExpired` 첫 수신(Payment 없어도) | 늦은 `OrderPlaced`를 `EXPIRED`로, 승인 작업자·종결의 만료 판정 근거 | `PaymentOrderLifecycle.recordExpiry`·`expired` |
+| `payment_order_lifecycle.financialConflict` | 확정 결과가 있는 결제에 만료 도착 | 표시만. 상태를 바꾸지 않음 | `PaymentOrderLifecycle.retainFinancialConflict` |
+
+### PaymentApproval (`PaymentApproval`, `payment_approval`)
+
+| 상태 | 뜻 |
+|---|---|
+| `REQUESTED` | 인증 결과 내구 접수. Order 접수 영수증 전. confirm 송신 없음 |
+| `ADMITTED` | Order 접수 영수증 저장. 3시간 창 안에서 confirm 송신 가능 |
+| `REVIEW_REQUIRED` | 송신 중단(`postStopped=true`)·운영 확인 필요. 사유는 `lastErrorCode` |
+| `FAILURE_CONFIRMED` | 접수된 시도의 PG FAILED 확인, Order 실패 통지 영수증 대기. 새 승인 접수 막음 |
+| `SUCCEEDED` | 결제 `PAID` 커밋 확인(터미널) |
+| `FAILED` | 시도 실패 종료 또는 운영자 종결(터미널). 같은 주문 재결제 근거 |
+| `EXPIRED` | 주문 만료로 닫힘(터미널) |
+
+터미널(`terminal()`)은 `SUCCEEDED`·`FAILED`·`EXPIRED`이고, 닫을 때 `resolvedAt` 기록·`protectedPayload`·`nextAt` 제거(V29 `chk_payment_approval_resolution`). 비터미널 4개는 `active_guard`로 결제당 하나만 허용(`uk_payment_approval_active`). 아래 "작업자"는 `PaymentApprovalScheduler` → `ResolvePaymentApproval.execute`가 lease(`claim`)를 잡은 한 회다. 한 회의 끝에는 늘 `finish`가 다음 조회 시각을 정한다.
+
+| 현재 상태 | 트리거 | 가드(조건) | 다음 상태 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| (없음) | `POST /api/v1/payments/{orderNo}/approvals` | 본인 결제, PORTONE_TEST, 결제 `PENDING`, 활성 승인 없음, txId(`supplierAttemptId`) 미사용. 같은 requestId는 같은 내용이면 기존 반환, 다르면 CONFLICT | `REQUESTED` | 본문 AES-GCM 봉인 저장, 토큰 지문, `nextAt=receivedAt`, `expiresAt=orderOccurredAt+30분`. PG·Order 미호출 | `RequestPaymentApproval.execute` → `PaymentApproval.receive` | R4.1~R4.2, R4.4 |
+| `REQUESTED` | 작업자 | PG `inspect`=READY, 송신 중단 아님, Order `admit`이 영수증 반환 | `ADMITTED` | `admittedAt`, `firstPreparedAt`(최초 1회), 같은 회에 confirm 송신 가능 | `ResolvePaymentApproval.cycle` → `admit`·`prepare` | R4.3, R4.5 |
+| `REQUESTED` | 작업자 | Order `admit`이 판매 제한(`OrderSaleRestricted`) | `REQUESTED` | `lastErrorCode=ORDER_SALE_RESTRICTED` | `PaymentApproval.recordSaleRestriction` | — |
+| `REQUESTED` | 작업자 | Order `admit`이 빈 영수증(만료) | `EXPIRED` | 결제 `EXPIRED` | `ResolvePaymentApproval.cycle` → `expire` | R4.10 |
+| `REQUESTED` | 작업자 | 미접수 + 주문 만료 통지 + `latestPgState` NULL | `EXPIRED` | PG 미호출, 결제가 `PENDING`이면 `EXPIRED` | `ResolvePaymentApproval.expireRequested` | R11.5, 결정 126 |
+| `REQUESTED` | 작업자 | 미접수 + 만료 통지 + `latestPgState` 있음 → PG `inspect` 한 번 | PAID → `REVIEW_REQUIRED`(`PAID_WITHOUT_ADMISSION`) / 전액 CANCELLED → `REVIEW_REQUIRED`(`PG_CANCELLED`) / PENDING → `REVIEW_REQUIRED`(`PG_PENDING_AT_ORDER_EXPIRY`) / READY·FAILED → `EXPIRED` | 관측은 별도 잠금 트랜잭션 저장. `EXPIRED`는 잠금 안에서 `REQUESTED` 재확인, 결제 `EXPIRED`. 조회 장애(UNAVAILABLE)는 무변화 | `ResolvePaymentApproval.expireAfterLookup` | R11.5, 결정 126, D-044 |
+| `REQUESTED`(보류 포함 미접수) | 작업자 | PG `inspect`=FAILED | `FAILED` | `failedAt` 기록, Order 통지 없음, 만료 통지가 있으면 결제 `EXPIRED`(없으면 `PENDING` 유지) | `PaymentApproval.failBeforeAdmission` | R5.1, R11.5 |
+| `REQUESTED` | 작업자 | 미접수에서 PG PAID | `REVIEW_REQUIRED` | 사유 `PAID_WITHOUT_ADMISSION`, `reviewStartedAt` | `ResolvePaymentApproval.stop` → `stopPosts` | R12.4 |
+| `REQUESTED`·`ADMITTED` | 작업자 | PG 전액 CANCELLED(같은 시도·취소 합계=총액) | `REVIEW_REQUIRED` | 사유 `PG_CANCELLED`. 저절로 닫지 않음 | `ResolvePaymentApproval.holdForCancellation` | R13.8, 결정 115 |
+| `REQUESTED`·`ADMITTED` | 작업자 | confirm POST 거절(`ApprovalPostRejected`) / 근거 오류(`IllegalArgumentException`) / Order 접수 충돌(`BusinessException`) | `REVIEW_REQUIRED` | 사유 `PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT` | `ResolvePaymentApproval.execute`(catch) → `stop` | R4.12, R12.4 |
+| `ADMITTED` | 작업자 | 접수됨 + 주문 만료 통지 | `REVIEW_REQUIRED` | 사유 `ORDER_EXPIRY_CONFLICT`. 같은 회에 조회는 계속 | `ResolvePaymentApproval.cycle` → `stop` | R11.7 |
+| `ADMITTED` | 작업자 | 조회 결과가 PAID·FAILED·CANCELLED 아님, `postStopped=false`, `now ≥ firstPreparedAt+3시간`(`CONFIRM_WINDOW`), PG PENDING·READY | `REVIEW_REQUIRED` | 사유 `CONFIRM_WINDOW_EXPIRED`. 실패·새 키·결제 전이 없음, 본문 유지 | `ResolvePaymentApproval.holdAfterConfirmWindow` → `PaymentApproval.holdAfterConfirmWindow` | R4.6, 결정 124 |
+| `ADMITTED` | 작업자 | PG READY, `canPost`(접수·준비됨, 중단 아님, `firstPreparedAt ≤ now < firstPreparedAt+3시간`, lease 유효) | `ADMITTED` | 복호화한 원래 본문으로 `gateway.submit`(confirm) 뒤 다시 `inspect`해 결과 반영 | `ResolvePaymentApproval.cycle` | R4.5, R4.9 |
+| `ADMITTED`·`REVIEW_REQUIRED`(접수됨) | 작업자 | PG PAID → `ResolvePayment`가 결제 `PAID` 커밋 / 회 시작 시 결제가 이미 `PAID` | `SUCCEEDED` | 결제와 금액·통화 일치 확인 | `PaymentApproval.succeed` | R3.1, R4.11 |
+| `ADMITTED`·`REVIEW_REQUIRED`(접수됨) | 작업자 | PG FAILED(검증된 시도 실패) | `FAILURE_CONFIRMED` → 같은 회에 `FAILED` | `failedAt`, `postStopped`; Order `fail` 통지 영수증 확인 뒤 `FAILED`. 영수증 `EXPIRED`이거나 만료 통지가 있으면 결제 `EXPIRED`, 아니면 결제 `PENDING`(같은 주문 재결제) | `recordFailure` → `completeFailure` → `fail` | R4.13, R11.6 |
+| `FAILURE_CONFIRMED` | 작업자 | `admittedAt`·`failedAt` 있음(앞 회에서 통지 유실) | `FAILED` | 위와 같은 Order 통지 재시도 | `ResolvePaymentApproval.completeFailure` | R4.13, R4.14 |
+| `REVIEW_REQUIRED` | 작업자 | 사유 `PG_INVALID_EVIDENCE`, 미접수·미준비·`failedAt` 없음, PG READY, 만료 통지, 결제 `PENDING` | `EXPIRED` | 결제 `EXPIRED` | `PaymentApproval.expireAfterVerifiedReady` | R11.8 |
+| `REVIEW_REQUIRED` | 작업자 | PG CANCELLED | `REVIEW_REQUIRED` | 관측만 기록, 사유 유지 | `ResolvePaymentApproval.holdForCancellation` | R13.8 |
+| `REVIEW_REQUIRED` | `POST /api/v1/admin/approval-reviews/{approvalId}/closure` | PORTONE_TEST, 같은 lease를 `claimForClosure`(`nextAt` 무시, 산 lease면 409 `APPROVAL_CLOSURE_BUSY`), 트랜잭션 밖 `inspect`, 잠금 안에서 lease 소유·`postStopped` 재확인, 근거 `closesReview()`(CANCELLED·FAILED·READY), 결제 미확정 | `FAILED` | 사유(`lastErrorCode`) 유지, lease 제거, `approval_closure` 저장, 결제 `FAILED`(`REVIEW_CLOSED`)+`OrderPaymentFailed` 또는 `EXPIRED` | `CloseApprovalReview.execute` → `closeAfterReview` | R13.1~R13.6, 결정 115 |
+| `REVIEW_REQUIRED` | 같은 종결 API | PG PAID(`CLOSURE_PG_PAID`)·PENDING(`CLOSURE_PG_PENDING`)·결제 확정(`CLOSURE_PAYMENT_RESOLVED`)·조회 실패(`CLOSURE_PG_INVALID_EVIDENCE`·`CLOSURE_PG_UNAVAILABLE`) | `REVIEW_REQUIRED` | 관측 또는 `lastInspectionError` 기록, lease 반환, `nextAt`을 잡기 전 값으로 복원(지났으면 now) | `CloseApprovalReview.refusal`·`refuse`·`release` | R13.4, 결정 122 |
+| 비터미널 | 작업자 회 종료 | lease 소유 | (유지) | `nextAt` = `REVIEW_REQUIRED`면 `now + ApprovalReviewRequeryInterval.after(reviewStartedAt, now)`, 그 밖은 `now + PAYMENT_RETRY_MS`; lease 제거 | `PaymentApproval.finish`, `ResolvePaymentApproval.nextCheck` | R13.10, 결정 122 |
+
+직교 필드:
+
+| 필드 | 바뀌는 때 | 동작에 미치는 영향 | 코드 위치 |
+|---|---|---|---|
+| `postStopped`·`lastErrorCode`(보류 사유) | `stopPosts`(사유가 `PAID_WITHOUT_ADMISSION`이면 덮지 않음), `recordFailure`는 `postStopped`만 | confirm 송신 금지, 보류 목록·게이지(`ApprovalReviewReason.KNOWN` 8개 + OTHER) 분류, 고객 안내 묶음, R11.8 자동 만료 자격 | `PaymentApproval.stopPosts` |
+| `reviewStartedAt` | 처음 보류될 때 한 번 | 재조회 간격 계산, `reviewNotice.since`, 조사 기록 기준 시각. NULL(옛 행)이면 간격은 상한 | `stopPosts`, `ApprovalReviewRequeryInterval.after` |
+| `latestPgState`·`latestPgObservedAt` | 유효한 `inspect` 성공 때(별도 잠금 트랜잭션, lease 소유자만) | 결정 126 만료 전 조회 여부, 결정 132 고객 안내 코드 | `recordObservation` |
+| `lastInspectedAt`·`lastInspectionError` | `inspect` 실패(INVALID_EVIDENCE·UNAVAILABLE), 성공 시 오류 NULL | 오류가 있으면 안내는 `CHARGE_UNCONFIRMED` | `recordInspectionFailure` |
+| `firstPreparedAt`(confirm 기한 = +3시간) | 접수 직후 최초 1회, 재시작·lease로 초기화 안 함 | `canPost`의 끝 경계, 결정 124 보류 경계 | `prepare`, `canPost`, `holdAfterConfirmWindow` |
+| `expiresAt` | 접수 때 `orderOccurredAt+30분` 고정 | Order 접수 요청에 실어 보냄(만료 판단은 Order 몫) | `receive`, `admissionRequest` |
+| `leaseToken`·`leaseUntil`·`nextAt` | `claim`·`claimForClosure`(잡는 동안 `nextAt=leaseUntil`), `finish` | 작업자와 운영 종결이 동시에 돌지 않게 함 | `claim`, `claimForClosure`, `finish` |
+| `approval_closure`(V37) | 종결 성공 때 한 번(approvalId·requestId 유일) | 승인 `FAILED`를 운영 종결로 구분, `CLOSED_*` 안내 | `ApprovalClosure.record` |
+| `approval_investigation`(V34·V38) | `REVIEW_REQUIRED`일 때 ADMIN POST | 기록뿐. 상태·일정 불변 | `RecordApprovalInvestigation.execute` |
+| `reviewNotice`(파생, 저장 안 함) | 조회 시 계산 | `REVIEW_REQUIRED`: `PG_INVALID_EVIDENCE`면 `CHARGE_UNCONFIRMED`, 그 밖은 마지막 관측(PAID→`CHARGED`, CANCELLED→`CHARGE_CANCELLED`, READY·FAILED→`NOT_CHARGED`, PENDING·조회 오류·관측 없음→`CHARGE_UNCONFIRMED`). `FAILED`+종결 기록: CANCELLED→`CLOSED_CHARGE_CANCELLED`, 그 밖→`CLOSED_NOT_CHARGED` | `ApprovalReviewNotice.of`, `ReadApprovalReviewNotice`(결제 상세는 마지막 승인) |
+
+### RefundExecution (`RefundExecution`, `refund_execution`)
+
+| 상태 | 뜻 |
+|---|---|
+| `PENDING` | 접수됨. 금융 미확정이거나, 조회로 전액 취소를 확인했지만 우리 시도의 응답으로 귀속하지 못함(`PG_QUERY_UNATTRIBUTED`) |
+| `SUCCEEDED` | 우리 취소 ID의 PG 성공 응답 확인(`PG_RESPONSE` 근거 또는 귀속 미확정 뒤 같은 취소 ID 성공) |
+| `FAILED` | 우리 취소 ID FAILED + 원결제 PAID·전액 미취소를 함께 확인. 후속 실행(`previousAttemptId`)의 근거 |
+
+고객 환불의 금융 완료는 상태가 아니라 `refundConfirmedAt`이 정한다. `PENDING`이면서 `refundConfirmedAt`이 있는 행이 귀속 미확정이다(V19 `chk_refund_payment_confirmation`).
+
+| 현재 상태 | 트리거 | 가드(조건) | 다음 상태 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| (없음) | `RefundExecutionRequested` 수신(`stove.order.v1`, 그룹 `payment-refund-execution`) | 결제 `PAID`·연결값 일치, 같은 attemptId는 같은 요청+Inbox 재전달만, 요청 이벤트 ID 미사용, 결제의 첫 실행이면 `previousAttemptId` 없음, 후속이면 같은 refundId·검증된 `FAILED` 선행·선행당 하나, `licenseSuspensionEventId` 미사용 | `PENDING` | 접수만. PG 미호출, 추적 부모 저장 | `ReceiveRefundExecution.execute` → `RefundExecution.receive` | R7.1, R7.14 |
+| `PENDING` | 같은 수신의 첫 송신(접수 커밋 뒤, `PAYMENT_REFUND_EXECUTION_ENABLED`) | 미확정·미실패. 이미 준비됐으면 송신 없이 조회만 | `PENDING` | `firstCancellationPreparedAt`(최초 1회), 조회 일정 `+5초`, `RefundExecutionPrepared` Outbox(한 번), 본문 고정, 송신 lease, 직전 GET 대조 뒤 취소 POST | `RequestFirstRefundCancellation` → `RequestRefundCancellation.executeFirst` → `prepareCancellation`·`freezeCancellationBody`·`dispatch` | R7.1~R7.2, R7.9~R7.10 |
+| `PENDING` | `RefundRetryScheduler` | `findRetryCandidates`: 준비·본문 있음, 접수 응답·잔액 변화·자동 중단·활성 보류 없음, 송신 일정 due | `PENDING` | 같은 attemptId·본문으로 재POST, 일정 10초→30초→60초 | `ResolveRefundRetry.execute` → `claimRetry`·`executeRetry` | R7.7, R7.9 |
+| `PENDING` | 송신·재송신의 준비 단계 | `now ≥ firstCancellationPreparedAt+3시간` | `PENDING` | `automaticCancellationStoppedAt` 기록, 송신 일정 중지(조회는 유지) | `RefundExecution.prepareCancellation` | R7.7, 결정 29 |
+| `PENDING` | POST 응답: 정상 접수(REQUESTED·FAILED) | 같은 attemptId·원구매, 이전 접수와 같은 취소 근거 | `PENDING` | `receiptCancellationId`·`receiptState` 등 저장, 송신 일정 중지 | `RefundExecution.recordCancellationReceipt` | R7.11 |
+| `PENDING` | POST 응답: 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN` | 준비 뒤 관측 | `PENDING` | `cancellationBalanceChangedAt`, 송신 일정 중지 | `RefundExecution.blockAutomaticCancellation` | R7.3 |
+| `PENDING` | POST 응답: 403 / 정확한 400 `INVALID_REQUEST` | 같은 송신 claim 소유, 미확정 | `PENDING` | `refund_cancellation_hold`(사유 `PG_REQUEST_FORBIDDEN`·`PG_REQUEST_INVALID`) 저장, `activeCancellationHoldId`, 송신 일정 중지 | `RequestRefundCancellation.recordRejection` → `holdCancellation` | R7.8, R7.15 |
+| `PENDING` | `POST /api/v1/admin/refund-cancellation-holds/{holdId}/resume` | 현재 보류 ID, 미확정, 3시간 창 안, 자동 중단·잔액 변화·접수 응답 없음, 새 requestId | `PENDING` | 송신 일정 `nextAt=now`(단계 유지), 보류 해제, 재개 기록 | `RequestRefundCancellationResume.execute` → `resumeCancellation` | R7.16 |
+| `PENDING`(미확정) | POST 응답: 취소 성공 | 같은 attemptId·원구매, 접수 응답이 있으면 같은 취소 ID, 미실패 | `SUCCEEDED` | 첫 금융 확인(`refundConfirmationSource=PG_RESPONSE`), `RefundPaymentConfirmed`(PG_RESPONSE) Outbox, 두 일정 중지 | `RecordRefundCancellationSuccess.execute` → `confirmCancellationSuccess` | R7.4~R7.5 |
+| `PENDING`(귀속 미확정) | POST 응답: 취소 성공(진행 중이던 응답이 늦게 도착) | 확인된 취소가 1건이고 같은 취소 ID·금액=원액·같은 포인트 | `SUCCEEDED` | 최초 금융 근거 유지, `RefundExecutionSucceeded`(최초 확인 이벤트 참조) Outbox 한 번 | 같은 메서드 | R7.13 |
+| `PENDING`(미확정) | `RefundLookupScheduler`(due 또는 웹훅 wake) / 송신 뒤 조회 | 우리 접수 응답 없으면 `find`, 있으면 `inspect`; 검증된 전액 취소(`PgRefundConfirmation`) | `PENDING`(귀속 미확정) | `refundConfirmedAt`·`PG_QUERY_UNATTRIBUTED`·`providerRefundedAt`·취소 내역 저장, `RefundPaymentConfirmed` Outbox(`RefundConfirmationOutbox`), 두 일정 중지 | `ResolveRefundLookup` → `ReconcileRefundPayment.execute` → `confirmRefund` | R7.4~R7.5, R7.12 |
+| `PENDING`(미확정) | 같은 조회 | 연결된 취소 ID FAILED + 원결제 PAID·전액 미취소(`PgRefundFailureConfirmation`), 금융 완료 없음 | `FAILED` | `failureEventId`·`failureConfirmedAt`·`failureLookupHash`, `RefundExecutionFailed` Outbox, 두 일정 중지 | `ReconcileRefundPayment.execute` → `confirmFailure` | R7.6 |
+| `PENDING`(미확정, 3시간 지남) | `POST /api/v1/admin/refund-delays/{attemptId}/closure` | PORTONE_TEST, `closableAt`(`confirmationDelayedSince≠null`), 종결 기록 없음, 조회 일정 lease를 `claimForClosure`(산 lease면 `REFUND_CLOSURE_BUSY`), 트랜잭션 밖 `find`/`inspect`가 전액 취소 | `PENDING`(귀속 미확정) | 조회 완료와 같은 `confirmRefund`+`RefundPaymentConfirmed`, `refund_closure`(`COMPLETED`) | `CloseRefundDelay.execute` | R14.2~R14.5(환불), 결정 127 |
+| `PENDING`(귀속 미확정) | 같은 종결 API | `unattributed()`, 종결 기록 없음, lease 없음(일정 멈춤), 재조회 근거가 저장된 취소 내역과 같음(다르면 409 `CONFLICT`) | `PENDING` | 금융·이벤트 불변, `refund_closure`(`RECORDED`) | `CloseRefundDelay.execute` | R14.5(환불), 결정 127 |
+| `PENDING` | 같은 종결 API | 전액 취소 확인 없음(`REFUND_CLOSURE_PG_NOT_CANCELLED`)·근거 오류·조회 장애 / 대상 아님(`REFUND_NOT_CLOSABLE`) | (유지) | lease만 반환, 작업자 `nextAt`·`wakeAt` 그대로. 실패를 확정하지 않음 | `CloseRefundDelay.refuse`·`release` | R14.2, R14.4(환불) |
+| `SUCCEEDED`·`FAILED` | 같은 근거 재관측 | 같은 근거 / 다른 근거 | (유지) | 무변화 / 409 CONFLICT. `FAILED` 뒤 성공 근거, 금융 완료 뒤 실패 근거는 상태를 바꾸지 않음 | `confirmCancellationSuccess`·`confirmFailure`·`confirmRefund` | R7.6, R7.13 |
+
+직교 필드:
+
+| 필드 | 바뀌는 때 | 동작에 미치는 영향 | 코드 위치 |
+|---|---|---|---|
+| `refundConfirmedAt`·`refundConfirmationSource`(`PG_QUERY_UNATTRIBUTED`·`PG_RESPONSE`)·`providerRefundedAt`·`refundConfirmationEventId`·`refund_cancellation_evidence` | 첫 금융 확인 때 한 번 | 금융 완료. 이후 송신·조회·실패 확정 금지. `PG_QUERY_UNATTRIBUTED`+`PENDING`이 귀속 미확정(`unattributed()`) | `confirmRefund`, `confirmCancellationSuccess` |
+| 3시간 창: `firstCancellationPreparedAt`·`cancellationResumeDeadline()`·`automaticCancellationStoppedAt` | 최초 준비 / 창 경과 뒤 준비 단계 | 창 안에서만 자동 POST·운영 재개. 창 뒤 미확정은 장기 미확정(`confirmationDelayedSince`) | `prepareCancellation`, `RefundCancellationWindow` |
+| `cancellationBalanceChangedAt` | 409 잔액 변화 | 자동 POST 영구 중단, 재개 불가 | `blockAutomaticCancellation` |
+| `receiptCancellationId`·`receiptState` | 정상 접수 응답 | 자동 POST 중단, 조회를 `inspect`(연결 조회)로 바꿈, 실패 확정의 전제 | `recordCancellationReceipt` |
+| 환불 취소 보류 `activeCancellationHoldId`(`RefundCancellationHold`) | 403·정확한 400 | Kafka 재전달·재송신 스캔 어디서도 POST 안 함. ADMIN 재개만 해제 | `holdCancellation`, `resumeCancellation` |
+| 조회 일정 `RefundLookupSchedule`(`nextAt`·`stage`·`claimId`·`leaseUntil`·`wakeAt`) | 준비 시 `+5초`, 회마다 5·15·35초 뒤 1분(밀린 단계 건너뜀), 웹훅 `wake`, 금융 확정·실패 시 `stop` | GET만 함. 3시간 뒤에도 유지. 멈춘 일정은 lease를 잡을 수 없음(`ck_refund_lookup_lease`) | `prepare`·`claim`·`finish`·`wake`·`stop`·`claimForClosure` |
+| 송신 일정 `RefundCancellationSchedule` | claim·finish(10→30→60초), 접수·보류·잔액 변화·확정 시 `stop`, 재개 시 `resume` | 재POST 시각과 송신 lease | `RefundCancellationSchedule` |
+| 결정 127 종결 `refund_closure`(V39) | 종결 성공 때 한 번(attemptId·requestId 유일) | 귀속 미확정 목록·게이지 `stove.payment.refund.unattributed.open`에서 빠짐, 상세 `reconciliationRequired=false`. 재요청 응답은 종결 기록에 고정한 첫 상태(`PENDING`·`PG_QUERY_UNATTRIBUTED`)를 반환 | `RefundClosure.record`, `CloseRefundDelay.receipt` |
+| 조사 기록 `refund_investigation`(V27) | ADMIN POST, `confirmationDelayedSince≠null`일 때만 | 기록뿐. 금융 확정 뒤 새 기록은 409 | `RefundInvestigation.record` |
+
+### 웹훅 수신이 깨우는 전이 (`ReceivePortOneWebhook`)
+
+서명·스토어·본문 검증을 통과한 첫 접수만 아래를 한다. 같은 웹훅 ID·같은 본문은 무변화, 다른 본문은 409, 결제가 없으면 404, 다른 공급자면 409다. 웹훅 자체는 어떤 상태도 바꾸지 않는다.
+
+| 웹훅 | 깨우는 것 | 이어지는 전이 | 깨우지 않는 것 |
+|---|---|---|---|
+| 모든 유효 종류 | `Payment.requestRecheck`: 결제가 `PENDING`이면 `nextAttemptAt`을 수신 시각으로 앞당김(더 이른 값만) | `PendingPaymentScheduler`의 Payment `PENDING → PAID`(접수된 승인이 있고 PG PAID일 때만) | `PaymentApproval.nextAt`(승인 작업자 일정). 그래서 접수된 보류 승인은 결제가 먼저 `PAID`가 돼도 `SUCCEEDED`는 다음 보류 재조회(최대 10분) 때 된다 |
+| `Transaction.CancelPending`·`PartialCancelled`·`Cancelled` | 그 결제의 마지막 `PENDING`·`refundConfirmedAt` NULL 실행의 `RefundLookupSchedule.wake`(일정이 살아 있을 때만, 정기 `nextAt`·단계는 그대로) | `RefundLookupScheduler`의 RefundExecution 조회 전이(귀속 미확정 완료 또는 `FAILED`) | 금융 확정·실패한 실행, 준비 전 실행(`nextAt` NULL), 취소 POST |
+
+### 찾은 불일치 (결정 143 1부)
+
+줄 번호는 main `9fe2e18e` 기준이다. `design.md` 줄은 이 절을 넣기 전 번호다.
+
+1. **R14가 두 번 있다.** `requirements.md:211`(금융 보류 고객 안내, 결정 123)과 `requirements.md:222`(장기·귀속 미확정 환불 종결, 결정 127). 참조가 어느 쪽인지 문맥으로만 갈린다. 고객 안내 쪽: `design.md:63`·`design.md:67`, `requirements.md:189`·`209`·`239`. 환불 종결 쪽: `requirements.md:8`·`141`·`144`, `design.md:212`("R14.1"), `docs/runbooks/refund-delay-closure.md:3`, 코드 주석 `RefundClosure.java:45`·`CloseRefundDelay.java:158`, 테스트 `RefundDelayClosureIntegrationTest.java:205`. 영향: 없음(번호만).
+2. **이미 보류된 승인의 사유가 다음 보류 사유로 덮인다.** `PaymentApproval.stopPosts`(`PaymentApproval.java:176-184`)는 사유가 `PAID_WITHOUT_ADMISSION`일 때만 `lastErrorCode`를 지키고, `ResolvePaymentApproval`은 이미 `REVIEW_REQUIRED`인 승인에도 `stop`을 부른다: 조회 근거 오류 → `PG_INVALID_EVIDENCE`(`ResolvePaymentApproval.java:83`), Order 충돌 → `ORDER_ADMISSION_CONFLICT`(`:84`), 접수됨+만료 통지 → 매 회 `ORDER_EXPIRY_CONFLICT`(`:109`). 사유를 지키는 곳은 CANCELLED 관측뿐이다(`:258-264`). 문서는 CANCELLED(`requirements.md:207` R13.8)와 confirm 기한 보류(`design.md:128` "다른 사유로 이미 보류된 승인은 사유를 바꾸지 않는다")만 말하고, 일반 규칙은 적혀 있지 않다. 그래서 예를 들어 `PG_CANCELLED`·`CONFIRM_WINDOW_EXPIRED` 보류 건이 조회 근거 오류를 한 번 만나면 `PG_INVALID_EVIDENCE`가 된다. 그러면 결정 132의 관측 기준 안내가 `CHARGE_UNCONFIRMED`로 고정되고(`ApprovalReviewNotice.java:50`), R11.8의 READY 자동 만료 대상이 된다(`PaymentApproval.java:188`). 반대로 `PG_INVALID_EVIDENCE` 건은 `ORDER_EXPIRY_CONFLICT`로 바뀌면 관측 기준 안내로 넘어간다. 영향: 돈 이동 없음(종결·만료는 여전히 READY·FAILED·전액 CANCELLED 근거만 쓴다). 고객 안내 코드, 보류 게이지의 사유 분류, 자동 만료 여부는 바뀐다. 코드 읽기로 확인했고 테스트로 재현하지는 않았다. 의도인지는 확인 못 함. — 해소: 사용자가 "처음 보류 사유 유지"를 골랐다([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason), PR #185). R12.10.
+3. **웹훅이 승인 작업자를 깨우지 않아 고객 안내가 결제 상태보다 늦을 수 있다(추정).** 웹훅은 `Payment.requestRecheck`만 부른다(`ReceivePortOneWebhook.java:39`). `AdmittedPortOnePgGateway.java:21-22`는 `REVIEW_REQUIRED` 승인으로도 결제를 `PAID`로 확정한다. 하지만 `reviewNotice`는 승인의 `latestPgState`로 정해지므로(`ApprovalReviewNotice.java:62`, `ReadApprovalReviewNotice.java:27`), 다음 보류 재조회(최대 10분, 결정 122) 전까지는 결제가 `PAID`인데도 안내가 옛 관측을 따른다. 예: READY를 본 `CONFIRM_WINDOW_EXPIRED` 건이면 `NOT_CHARGED`("새 주문으로 다시 구매하실 수 있습니다")가 나간다. 결정 132가 적은 한계("관측은 재조회 간격만큼 늦을 수 있다")에 들어가는지는 확인 못 함. 영향: 불명(중복 구매 안내 가능성. 돈이 직접 움직이지는 않음). — 해소: [D-051](../../../docs/defects.md#d-051)(PR #184)에서 `ResolvePayment.confirm`이 결제 `PAID` 커밋과 같은 트랜잭션에서 접수된 보류 승인을 `SUCCEEDED`로 닫는다.
+4. **환불 취소 보류 사유 이름.** `design.md:144`는 POST 403의 중단을 `FORBIDDEN`이라고 쓰지만, 코드와 DB는 `PG_REQUEST_FORBIDDEN`이다(`RefundCancellationHold.java:36`, `V24__refund_forbidden_hold.sql:18`, `V25__refund_invalid_request_hold.sql:4`). 400 쪽 `PG_REQUEST_INVALID`는 같다. 영향: 없음.
+5. **보류 사유 개수.** `design.md:173`은 8개, `design.md:177`은 "7개 KNOWN"이라고 쓴다. 코드 `ApprovalReviewReason.KNOWN`은 8개다(`ApprovalReviewReason.java:7`, `CONFIRM_WINDOW_EXPIRED` 포함). 영향: 없음.
+6. **환불 종결 R14.6과 R14.5의 문장 충돌.** `requirements.md:231`(R14.6)은 종결이 "최초 금융 확인을 바꾸지 않는다"고 쓰지만, `requirements.md:230`(R14.5)과 코드는 미확정 실행에서 첫 금융 확인을 새로 만든다(`CloseRefundDelay.java:111` → `RefundExecution.java:291-296`, `RefundPaymentConfirmed` 발행). "이미 있는 확인을 덮지 않는다"는 뜻으로 보인다(추정). 영향: 없음(코드는 R14.5·결정 127대로 동작한다).
+7. **R12.9 링크 앵커가 깨졌다.** `requirements.md:194`가 `design.md#승인-보류-운영-조회-결정-112-part-1`을 가리키지만, 실제 제목은 `### 승인 보류 운영 조회 (결정 114, 1부)`다(`design.md:167`). 영향: 없음.
+8. **결정 124·126·127·132와 코드 가드는 일치한다.** 결정 124: `ADMITTED`·송신 중단 전·`firstPreparedAt+3시간` 경과·조회 결과 PENDING/READY에서만 보류한다(`PaymentApproval.java:160-167`). 늦은 PAID·FAILED는 원래 경로로 끝난다. 결정 126: `REQUESTED`·미접수·만료 통지·`latestPgState≠null`일 때만 한 번 조회하고, 결과별 분기도 결정 원문과 같다(`ResolvePaymentApproval.java:101-107`, `:177-184`). 결정 127: 대상(`RefundExecution.java:45-47`), lease 처리, 전액 취소 근거만 인정, PG 취소 없음, `COMPLETED`/`RECORDED` 모두 원문대로다. 결정 132: 묶음과 관측 매핑이 원문과 같다(`ApprovalReviewNotice.java:23-31`, `:61-68`). 다만 2번 때문에 결정 124의 "사유 유지"와 결정 132의 관측 기준 안내가 보류 이후에도 지켜진다고는 말할 수 없다. 영향: 해당 없음(일치 확인).
+
 ## 데이터 모델
 
 | 테이블 | 내용 |
@@ -91,6 +247,7 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 | 운영자 보류 종결(재조회 근거 전액 CANCELLED·FAILED·READY) | 이벤트 반영 뒤 FAILED(이미 EXPIRED면 유지) | FAILED(보류 사유 유지) | FAILED(`REVIEW_CLOSED`), 접수 전·만료 통지 뒤면 EXPIRED | 현재 상품 조건으로 새 주문 |
 
 - `SUCCEEDED`는 Payment 금융 결과/Outbox 저장이며 OrderPaid·License 지급까지 동기 완료를 뜻하지 않는다.
+- 접수된(`admittedAt` 있음) `ADMITTED`·`REVIEW_REQUIRED` 승인은 결제가 `PAID`로 확정되는 그 트랜잭션에서 `SUCCEEDED`가 된다(`ResolvePayment.confirm` → `succeedAdmittedApproval`, `purchase_payment` → `payment_approval` 잠금 순서). 그래서 웹훅·결제 재조회가 보류 건을 `PAID`로 확정해도 다음 보류 재조회(결정 122)를 기다리지 않고 보류 안내·ADMIN 보류 목록·게이지에서 바로 빠진다([D-051](../../../docs/defects.md#d-051)). 승인 작업자의 같은 규칙(`ResolvePaymentApproval.cycle`의 PAID 분기)은 남아 있다.
 
 ## 이벤트 계약
 
@@ -172,6 +329,8 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 `GET /api/v1/admin/approval-reviews?page=0&size=20&reason=PG_INVALID_EVIDENCE`는 현재 보류 목록을, `/{approvalId}`는 현재·과거 보류 상세를 DB에서 조회하며 `Cache-Control: no-store`를 반환한다. 접수·입장·최초 준비·보류 시작 시각, 보류 경과 초, 마지막 PG 상태/관측 시각, 조사 건수를 제공한다. 토큰·암호문·보호 본문은 응답에 포함하지 않는다. 기존 행의 보류 시작 시각은 NULL이며 경과 시간도 NULL이다.
 
 V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 inspect 후 별도 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다. V34의 승인 FK는 삭제 cascade였으나, V38이 RESTRICT로 다시 만들어 승인이나 그 결제를 지우면 조사 기록이 조용히 사라지지 않고 삭제가 거절된다(옛 행은 고치지 않음, 결정 104 이행 테스트 대상 아님).
+
+보류 사유는 처음 보류될 때 정해진다. 이미 `REVIEW_REQUIRED`인 승인을 다시 조회하다 새 중단 조건(`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_REQUEST_REJECTED`)이 나와도 `PaymentApproval.stopPosts`는 `lastErrorCode`·`reviewStartedAt`을 바꾸지 않고, `ResolvePaymentApproval.stop`이 버린 사유를 로그로 남긴다. `PAID_WITHOUT_ADMISSION`만 사유를 올리고 그 뒤로는 고정된다([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason)). 그래서 R11.8 자동 만료는 처음부터 `PG_INVALID_EVIDENCE`로 보류된 미접수 승인에만 적용된다.
 
 `stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 8개 알려진 사유(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY`, 결정 124의 `CONFIRM_WINDOW_EXPIRED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부, 재조회 간격은 아래 "보류 재조회 간격", 고객 안내는 아래 "금융 보류 고객 안내"다.
 

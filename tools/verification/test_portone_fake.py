@@ -316,6 +316,22 @@ class PortOneFakeCancelFaultTest(unittest.TestCase):
         self.assertEqual((replay[0], replay[1]['cancellation']['id']), (200, cancelled['cancellations'][0]['id']))
         self.assertEqual([r['status'] for r in self.fake.requests if r['path'].endswith('/cancel')], ['LOST', 200])
 
+    def test_failed_cancel_answers_a_failed_cancellation_and_keeps_the_purchase_paid(self):
+        self.paid()
+        self.assertEqual(self.control('arm-cancel', {'outcome': 'FAILED', 'failLookups': 0})[0], 200)
+        status, answer = self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"')
+        refused = answer['cancellation']
+        self.assertEqual((status, refused['status'], refused['totalAmount'], refused['reason']),
+                         (200, 'FAILED', 10000, self.cancel_body['reason']))
+        self.assertEqual(set(refused), {'status', 'id', 'totalAmount', 'taxFreeAmount', 'vatAmount', 'reason', 'requestedAt'})
+        lookup = self.current()
+        # The confirmed failure PortOneRefundPaymentLookup.inspectFailure accepts: PAID, nothing cancelled, the same FAILED row.
+        self.assertEqual((lookup['status'], lookup['amount']['cancelled']), ('PAID', 0))
+        self.assertEqual(lookup['cancellations'], [refused])
+        self.assertNotIn('cancelledAt', lookup)
+        self.assertEqual(self.call('POST', '/payments/payment/cancel', self.cancel_body, '"cancel"'), (200, answer))
+        self.assertEqual(len(self.current()['cancellations']), 1)
+
     def test_pg_error_does_not_cancel_and_the_same_key_retries_successfully(self):
         self.paid()
         self.control('arm-cancel', {'outcome': 'PG_ERROR', 'failLookups': 0})
