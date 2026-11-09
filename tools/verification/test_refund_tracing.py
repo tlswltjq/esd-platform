@@ -30,12 +30,16 @@ def complete(scenario):
         spans.append(client("g2", "w", PG + "?storeId=s"))
     if scenario == "pg-error":
         spans.append(client("c2", "w", PG + "/cancel"))
+    if scenario == "restoration":
+        spans = [s for s in spans if s["service"] != "settlement"]
+        spans += [span("order", "stove.payment.v1 receive", "of", "p"), span("license", "stove.order.v1 receive", "lr", "of"),
+                  span("order", "stove.license.v1 receive", "ol", "lr")]
     return spans
 
 
 class TraceProblemsTest(unittest.TestCase):
     def test_complete_traces_pass_for_every_scenario(self):
-        for scenario in ("normal", "lost-response", "pg-error"):
+        for scenario in ("normal", "lost-response", "pg-error", "restoration"):
             self.assertEqual(trace_problems(complete(scenario), scenario, PAYMENT), [], scenario)
 
     def test_empty_trace_fails(self):
@@ -56,6 +60,20 @@ class TraceProblemsTest(unittest.TestCase):
     def test_missing_pg_spans_fail(self):
         spans = [s for s in complete("normal") if s["kind"] != "SPAN_KIND_CLIENT"]
         self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG cancel span", "no PG lookup span"])
+
+    def test_restoration_does_not_require_settlement_but_every_other_service(self):
+        self.assertEqual(refund_tracing.required_services("restoration"), ("gateway", "order", "license", "payment"))
+        with_settlement = complete("restoration") + [span("settlement", "stove.payment.v1 receive", "s2", "p")]
+        self.assertEqual(trace_problems(with_settlement, "restoration", PAYMENT), [])
+        spans = [s for s in complete("restoration") if s["service"] != "license"]
+        self.assertTrue(any("missing services ['license']" in p for p in trace_problems(spans, "restoration", PAYMENT)))
+
+    def test_restoration_requires_exactly_one_cancel(self):
+        resent = complete("restoration") + [client("c2", "p", PG + "/cancel")]
+        self.assertEqual(trace_problems(resent, "restoration", PAYMENT),
+                         ["expected exactly one PG cancel before the confirmed failure, found 2"])
+        none = [s for s in complete("restoration") if s["spanId"] != "c1"]
+        self.assertIn("no PG cancel span", trace_problems(none, "restoration", PAYMENT))
 
     def test_payment_id_prefix_collision_does_not_count(self):
         # Validating pay-1 must not accept calls for pay-10.
@@ -229,7 +247,8 @@ class ConsumerLagTest(unittest.TestCase):
         repo = Path(__file__).resolve().parents[2]
         self.assertEqual(refund_tracing.refund_consumer_groups(repo),
                          ["order-refund-suspension", "order-refund-preparation", "order-refund-payment-confirmation",
-                          "license-suspension", "license-purchase-refund", "payment-refund-execution", "settlement-confirmed-refund"])
+                          "license-suspension", "license-purchase-refund", "payment-refund-execution", "settlement-confirmed-refund",
+                          "order-refund-restoration", "license-restoration"])
 
     def test_a_source_without_exactly_one_constant_is_rejected(self):
         import tempfile
