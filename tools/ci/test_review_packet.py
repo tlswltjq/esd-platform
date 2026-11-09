@@ -34,7 +34,9 @@ class ReferenceTest(unittest.TestCase):
 
     def test_requirement_numbers_take_the_top_level(self):
         self.assertEqual({8, 12, 13}, review_packet.requirement_numbers('R12.10, R8-3', 'R13 절'))
-        self.assertEqual(set(), review_packet.requirement_numbers('ORDER_R1 PR #12'))
+        self.assertEqual(set(), review_packet.requirement_numbers('ORDER_R1 PR #12 R2D2'))
+        # 리뷰 2: 한국어 조사가 붙어도 잡는다.
+        self.assertEqual({1, 6}, review_packet.requirement_numbers('R1의 공개 상태, R6-5를 지킨다'))
 
     def test_modules_and_changed_classes(self):
         files = ['apps/payment/src/main/java/a/Holder.java', 'apps/payment/src/test/java/a/HolderTest.java',
@@ -121,6 +123,26 @@ class BuildTest(unittest.TestCase):
         self.assertIn('## 이전 리뷰 지적', packet)
         self.assertIn('R1 high x', packet)
         self.assertNotIn('int x', packet)
+
+    def test_a_rename_keeps_both_paths_in_one_block(self):
+        # 리뷰 1: 이름 변경이 새 파일 추가로 바뀌어 옛 경로 삭제가 빠지지 않는다.
+        self.git('mv', 'apps/payment/src/main/java/a/Holder.java', 'apps/payment/src/main/java/a/Keeper.java')
+        self.commit('rename')
+        packet, files, _ = review_packet.build(self.root, self.base, 'HEAD')
+        self.assertEqual(['apps/payment/src/main/java/a/Keeper.java'], files)
+        self.assertIn('rename from apps/payment/src/main/java/a/Holder.java', packet)
+        self.assertNotIn('new file mode', packet)
+
+    def test_reference_documents_come_from_the_reviewed_revision(self):
+        # 리뷰 3: --head로 다른 판을 리뷰하면 결정·AGENTS·요구사항도 그 판에서 읽는다.
+        self.write('docs/decisions.md', DECISIONS.replace('## 100. 백째', '## 7. 일곱째\n- 문제: 칠\n\n## 100. 백째'))
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int z; }\n')
+        self.commit('fix: 일곱 (결정 7)')
+        reviewed = self.git('rev-parse', 'HEAD').strip()
+        self.write('docs/decisions.md', DECISIONS)
+        packet, _, own = review_packet.build(self.root, self.base, reviewed)
+        self.assertEqual([7], own)
+        self.assertIn('## 7. 일곱째', packet)
 
     def test_main_writes_the_packet_and_requires_since_for_previous(self):
         out = self.root / 'packet.md'

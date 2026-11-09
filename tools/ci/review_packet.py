@@ -32,12 +32,30 @@ INSTRUCTIONS = """# 리뷰 묶음 (결정 145)
 """
 
 DECISION_REF = re.compile(r'결정\s*(\d+(?:\s*[·,/]\s*\d+)*)')
-REQUIREMENT_REF = re.compile(r'\bR(\d+)(?:[.\-]\d+)?\b')
+REQUIREMENT_REF = re.compile(r'(?<![A-Za-z0-9_])R(\d+)(?:[.\-]\d+)?(?![A-Za-z0-9_])')
 MODULE_PATH = re.compile(r'^(?:apps|\.kiro/specs)/([a-z0-9-]+)/')
 
 
 def git(root, *args):
     return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True).stdout
+
+
+def read_at(root, rev, path):
+    """리뷰 3: 기준 문서도 diff와 같은 판(`rev`)에서 읽는다. 없으면 ''."""
+    result = subprocess.run(['git', '-C', str(root), 'show', '%s:%s' % (rev, path)], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else ''
+
+
+def file_blocks(diff):
+    """리뷰 1: 전체 diff를 한 번 만들어 파일 블록으로 나눈다. 이름 변경도 한 블록(이전·이후 경로)으로 남는다."""
+    blocks = []
+    for chunk in re.split(r'(?m)^(?=diff --git )', diff):
+        if not chunk.startswith('diff --git '):
+            continue
+        header = chunk.split('\n', 1)[0]
+        match = re.match(r'diff --git a/(.*) b/(.*)$', header)
+        blocks.append((match.group(2) if match else header, chunk.rstrip()))
+    return blocks
 
 
 def section(text, heading):
@@ -138,13 +156,15 @@ def group(path):
 
 def build(root, base, head, since=None, pr_body='', previous=''):
     rng = '%s..%s' % (since, head) if since else '%s...%s' % (base, head)
-    files = [f for f in git(root, 'diff', '--name-only', rng).split('\n') if f]
-    diff_text = changed_lines(git(root, 'diff', rng))
+    full_diff = git(root, 'diff', '-M', rng)
+    blocks = file_blocks(full_diff)
+    files = [path for path, _ in blocks]
+    diff_text = changed_lines(full_diff)
     log_text = git(root, 'log', '--no-merges', '--format=%B', rng.replace('...', '..'))
     subjects = git(root, 'log', '--no-merges', '--format=%s', rng.replace('...', '..'))
     pr_body = without_comments(pr_body)
-    decisions = (root / 'docs/decisions.md').read_text(encoding='utf-8')
-    agents = (root / 'AGENTS.md').read_text(encoding='utf-8')
+    decisions = read_at(root, head, 'docs/decisions.md')
+    agents = read_at(root, head, 'AGENTS.md')
 
     out = [INSTRUCTIONS, '## AGENTS.md 3절\n', section(agents, '## 3. ')]
     numbers = decision_numbers(pr_body, log_text, diff_text)
@@ -158,21 +178,22 @@ def build(root, base, head, since=None, pr_body='', previous=''):
     refs = requirement_numbers(pr_body, log_text, diff_text)
     classes = changed_classes(files)
     for module in modules(files):
-        path = root / '.kiro/specs' / module / 'requirements.md'
-        if path.exists():
-            full, titles = requirement_sections(path.read_text(encoding='utf-8'), refs, classes)
+        path = '.kiro/specs/%s/requirements.md' % module
+        requirements = read_at(root, head, path)
+        if requirements:
+            full, titles = requirement_sections(requirements, refs, classes)
             if full or titles:
                 out.append('## 요구사항: %s\n' % module)
                 out.extend(full)
             if titles:
                 out.append('바뀐 클래스가 나오는 다른 절(제목만, 필요하면 %s에서 연다):\n%s\n'
-                           % (path.relative_to(root), '\n'.join('- ' + t for t in titles)))
+                           % (path, '\n'.join('- ' + t for t in titles)))
     if previous:
         out.append('## 이전 리뷰 지적 (%s 이후 차분만 본다)\n' % since)
         out.append(previous.rstrip() + '\n')
     out.append('## diff (%s)\n' % rng)
-    for f in sorted(files, key=lambda f: (group(f), f)):
-        out.append('```diff\n' + git(root, 'diff', rng, '--', f).rstrip() + '\n```\n')
+    for _, block in sorted(blocks, key=lambda b: (group(b[0]), b[0])):
+        out.append('```diff\n' + block + '\n```\n')
     return '\n'.join(out), files, own
 
 
