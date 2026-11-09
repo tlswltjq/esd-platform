@@ -25,6 +25,8 @@ spring:
     hikari:
       maximum-pool-size: 20
       connection-timeout: 3000
+      # 부팅 때만 첫 연결을 60초 동안 다시 시도한다(결정 136). 실행 중 요청의 기한은 connection-timeout 그대로다.
+      initialization-fail-timeout: 60000
 
   jpa:
     hibernate:
