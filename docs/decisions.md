@@ -1342,7 +1342,7 @@
   - `.gitattributes`의 `merge=union`은 지운다(쓰는 쪽이 하나라 필요 없다). AGENTS.md 2절 표와 개발 루프 문단, PR 템플릿을 고친다. `docs/evidence.md` 머리말의 작성 안내는 첫 접기 PR에서 고친다(이 PR이 그 파일을 고치면 새 규칙에 걸린다).
   - 이 규칙보다 먼저 열린 PR(#184·#185·#186)은 `evidence.md`를 직접 고친 채로 이 PR보다 먼저 병합한다.
 - 구분: 추천 수용
-- 결과: 구현 PR
+- 결과: [PR #187](https://github.com/tlswltjq/esd-platform/pull/187)
 
 ---
 
