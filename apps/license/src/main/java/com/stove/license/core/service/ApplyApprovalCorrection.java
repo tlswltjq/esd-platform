@@ -48,7 +48,7 @@ public class ApplyApprovalCorrection {
         }
         LicenseSuspension suspension=suspensions.findByRequestEventId(input.suspensionRequestEventId()).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT));
         if (!suspension.getLicenseId().equals(input.licenseId()) || !suspension.getRefundId().equals(input.refundId())
-                || !suspension.getCompletedEventId().equals(input.suspensionEventId()) || input.occurredAt().isBefore(suspension.getSuspendedAt()))
+                || !suspension.getCompletedEventId().equals(input.suspensionEventId()))
             throw new BusinessException(ErrorCode.CONFLICT,"승인 정정 대상의 실제 정지 근거가 다릅니다.");
         if (!inbox.firstDelivery(input.eventId(),CONSUMER_GROUP,EventType.LICENSE_APPROVAL_CORRECTION_REQUESTED)) throw new BusinessException(ErrorCode.CONFLICT);
         LicenseRegistration current=LicenseRegistrations.current(registrations,license);
