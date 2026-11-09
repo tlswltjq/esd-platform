@@ -42,6 +42,11 @@ class ReservedNumbersTest(unittest.TestCase):
         self.assertEqual([140], next_decision_number.reserved_numbers(whole))
         self.assertEqual([140], next_decision_number.reserved_numbers(inside))
 
+    def test_inline_code_reservation_is_read(self):
+        # 리뷰 R4: 예약 줄의 값이 인라인 코드여도 번호를 읽는다.
+        self.assertEqual([140], next_decision_number.reserved_numbers(body('`140`')))
+        self.assertEqual([138, 139], next_decision_number.reserved_numbers(body('`138`, `139`')))
+
     def test_crlf_body(self):
         self.assertEqual([6], next_decision_number.reserved_numbers(body('6').replace('\n', '\r\n')))
 
@@ -71,13 +76,13 @@ class CliTest(unittest.TestCase):
         calls = []
         with mock.patch.object(next_decision_number, 'read_open_prs', lambda root: calls.append('prs') or []), \
                 mock.patch.object(next_decision_number, 'read_main',
-                                  lambda root, ref, fetch: calls.append('main:' + str(fetch)) or MAIN), \
+                                  lambda root, fetch: calls.append('main:' + str(fetch)) or MAIN), \
                 mock.patch('builtins.print'):
             next_decision_number.main([])
         self.assertEqual(['prs', 'main:True'], calls)
 
-    def test_fetches_main_when_local_ref_is_stale(self):
-        # 리뷰 R1: 로컬 origin/main이 2에 머문 사이 3이 병합되고 그 PR이 목록에서 빠져도 4를 낸다.
+    def run_on_stale_clone(self, refspec=None):
+        """로컬 origin/main이 2에 머문 사이 원격에 3이 병합되고, 그 PR은 열린 목록에서 빠졌다."""
         with tempfile.TemporaryDirectory() as temp:
             temp = Path(temp)
             git('init', '-q', '--bare', str(temp / 'remote.git'))
@@ -91,6 +96,8 @@ class CliTest(unittest.TestCase):
             git('remote', 'add', 'origin', str(temp / 'remote.git'), cwd=seed)
             git('push', '-q', 'origin', 'main', cwd=seed)
             git('clone', '-q', '-b', 'main', str(temp / 'remote.git'), str(temp / 'work'))
+            if refspec is not None:
+                git('config', 'remote.origin.fetch', refspec, cwd=temp / 'work')
             (seed / 'docs/decisions.md').write_text(MAIN + '## 3. 병합됨\n', encoding='utf-8')
             git('commit', '-q', '-am', 'three', cwd=seed)
             git('push', '-q', 'origin', 'main', cwd=seed)
@@ -102,6 +109,14 @@ class CliTest(unittest.TestCase):
         self.assertEqual('3', stale.stdout.splitlines()[0])
         self.assertEqual(0, fresh.returncode, fresh.stderr)
         self.assertEqual('4', fresh.stdout.splitlines()[0])
+
+    def test_fetches_main_when_local_ref_is_stale(self):
+        # 리뷰 R1
+        self.run_on_stale_clone()
+
+    def test_fetches_main_even_when_refspec_excludes_it(self):
+        # 리뷰 R3: 설정된 fetch refspec이 main을 포함하지 않아도 origin/main을 갱신해 읽는다.
+        self.run_on_stale_clone('+refs/heads/other:refs/remotes/origin/other')
 
     def test_offline_files(self):
         with tempfile.TemporaryDirectory() as temp:

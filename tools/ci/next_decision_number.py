@@ -20,24 +20,29 @@ import decision_numbers  # noqa: E402
 
 SECTION = re.compile(r'^## +맡은 항목[ \t]*$')
 NEXT_SECTION = re.compile(r'^## ')
-NUMBER_LINE = re.compile(r'^- +결정 번호: *(.+)$')
+NUMBER_LINE = re.compile(r'^- +결정 번호:')
+COMMENT = re.compile(r'<!--.*?-->')
 NUMBER = re.compile(r'\d+')
+MAIN_REF = 'refs/remotes/origin/main'
 
 
 def reserved_numbers(body):
     if not body:
         return []
-    lines = decision_numbers.document_lines(body.replace('\r\n', '\n'))
+    text = body.replace('\r\n', '\n')
+    original = text.split('\n')
+    # 절과 예약 줄은 코드 블록·주석을 지운 줄에서 찾는다(줄 번호는 보존된다).
+    # 값은 원래 줄에서 주석만 지우고 백틱을 벗겨 읽는다: "`140`"도 예약이다(교차 리뷰 R4).
     inside = False
-    for line in lines:
+    for index, line in enumerate(decision_numbers.document_lines(text)):
         if SECTION.match(line):
             inside = True
             continue
         if inside and NEXT_SECTION.match(line):
             return []
-        match = NUMBER_LINE.match(line) if inside else None
-        if match is not None:
-            return [int(value) for value in NUMBER.findall(match.group(1))]
+        if inside and NUMBER_LINE.match(line):
+            value = COMMENT.sub('', original[index].split(':', 1)[1]).replace('`', '')
+            return [int(number) for number in NUMBER.findall(value)]
     return []
 
 
@@ -53,17 +58,18 @@ def next_number(main_text, prs):
     return highest + 1, main_max, reserved
 
 
-def read_main(root, base_ref, fetch):
+def read_main(root, fetch):
     if fetch:
-        fetched = subprocess.run(['git', '-C', str(root), 'fetch', '-q', 'origin', 'main'],
+        # 받을 곳을 명시한다. 설정된 refspec이 main을 빼도 읽을 ref가 갱신된다(교차 리뷰 R3).
+        fetched = subprocess.run(['git', '-C', str(root), 'fetch', '-q', 'origin', '+refs/heads/main:' + MAIN_REF],
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if fetched.returncode != 0:
             raise SystemExit('실패: origin main을 새로 받지 못함(오래된 main으로 번호를 내지 않는다): '
                              + fetched.stderr.decode('utf-8', 'replace').strip())
-    result = subprocess.run(['git', '-C', str(root), 'show', base_ref + ':docs/decisions.md'],
+    result = subprocess.run(['git', '-C', str(root), 'show', MAIN_REF + ':docs/decisions.md'],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
-        raise SystemExit('실패: ' + base_ref + '의 docs/decisions.md를 읽지 못함.')
+        raise SystemExit('실패: ' + MAIN_REF + '의 docs/decisions.md를 읽지 못함.')
     return result.stdout.decode('utf-8')
 
 
@@ -78,7 +84,6 @@ def read_open_prs(root):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='결정 139: 다음 결정 번호(main 최대와 열린 PR 예약 중 큰 값 + 1)')
     parser.add_argument('--root', default=str(Path(__file__).resolve().parents[2]))
-    parser.add_argument('--base-ref', default='origin/main', help='main 결정 기록을 읽을 git 기준 판')
     parser.add_argument('--decisions', help='git 대신 읽을 decisions.md (테스트·오프라인용)')
     parser.add_argument('--prs-json', help='gh 대신 읽을 [{"number": N, "body": "..."}] (테스트·오프라인용)')
     parser.add_argument('--no-fetch', action='store_true', help='git fetch origin main을 건너뜀 (오프라인용)')
@@ -91,7 +96,7 @@ def main(argv=None):
     if args.decisions:
         main_text = Path(args.decisions).read_text(encoding='utf-8')
     else:
-        main_text = read_main(args.root, args.base_ref, not args.no_fetch)
+        main_text = read_main(args.root, not args.no_fetch)
     number, main_max, reserved = next_number(main_text, prs)
     print(number)
     claims = ' · '.join('#{}: {}'.format(pr, ', '.join(str(n) for n in numbers)) for pr, numbers in sorted(reserved.items()))
