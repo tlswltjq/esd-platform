@@ -47,6 +47,12 @@ class ReservedNumbersTest(unittest.TestCase):
         self.assertEqual([140], next_decision_number.reserved_numbers(body('`140`')))
         self.assertEqual([138, 139], next_decision_number.reserved_numbers(body('`138`, `139`')))
 
+    def test_unicode_and_lone_cr_line_breaks(self):
+        # 리뷰 R5: 원래 줄과 코드를 지운 줄을 같은 방식(splitlines)으로 나눠 줄 번호가 어긋나지 않는다.
+        for separator in (' ', '\r', '\x0b'):
+            text = '설명' + separator + '추가\n## 맡은 항목\n- 결정 번호: `140`\n'
+            self.assertEqual([140], next_decision_number.reserved_numbers(text), repr(separator))
+
     def test_crlf_body(self):
         self.assertEqual([6], next_decision_number.reserved_numbers(body('6').replace('\n', '\r\n')))
 

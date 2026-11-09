@@ -30,7 +30,8 @@ def reserved_numbers(body):
     if not body:
         return []
     text = body.replace('\r\n', '\n')
-    original = text.split('\n')
+    # document_lines와 같은 splitlines로 나눠야  ·단독 \r에서도 줄 번호가 맞는다(교차 리뷰 R5).
+    original = text.splitlines()
     # 절과 예약 줄은 코드 블록·주석을 지운 줄에서 찾는다(줄 번호는 보존된다).
     # 값은 원래 줄에서 주석만 지우고 백틱을 벗겨 읽는다: "`140`"도 예약이다(교차 리뷰 R4).
     inside = False
