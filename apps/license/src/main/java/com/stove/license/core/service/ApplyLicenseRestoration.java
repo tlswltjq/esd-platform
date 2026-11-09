@@ -51,7 +51,7 @@ public class ApplyLicenseRestoration {
         LicenseSuspension suspension = suspensions.findByRequestEventId(input.suspensionRequestEventId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "복구에 해당하는 실제 정지 이력이 없습니다."));
         if (!suspension.getLicenseId().equals(license.getLicenseId()) || !suspension.getRefundId().equals(input.refundId())
-                || !suspension.getCompletedEventId().equals(input.suspensionEventId()) || input.occurredAt().isBefore(suspension.getSuspendedAt()))
+                || !suspension.getCompletedEventId().equals(input.suspensionEventId()))
             throw new BusinessException(ErrorCode.CONFLICT, "복구 요청의 환불·실제 정지 근거가 다릅니다.");
         if (!inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.LICENSE_RESTORATION_REQUESTED))
             throw new BusinessException(ErrorCode.CONFLICT, "Inbox에 해당하는 복구 이력이 없습니다.");

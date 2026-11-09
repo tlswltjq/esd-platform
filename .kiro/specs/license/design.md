@@ -33,6 +33,108 @@
 출처 식별자(orderNo·eventId·requestEventId·paymentResultEventId·paymentId)는 각각 `product_license`에서 유일하다.
 기존 V1~V4 마이그레이션·체크섬을 보존하고 V5에서 출처를 권한 행에 통합한다. buyerSubject는 `utf8mb4_bin`, UUID·productCode·currency는 ASCII binary로 정확히 비교한다.
 
+## 상태×이벤트 표 (코드 기준, 결정 143)
+
+main `9fe2e18e`의 코드에서 옮겼다. 코드가 정본이며, 요구사항·설계 문장·결정과 어긋나는 곳은 절 끝 "찾은 불일치"에 남긴다. 공통 사항:
+
+- 수신 이벤트는 모두 `stove.order.v1`에서 받고, 리스너는 `*Mapper.from(...)`으로 봉투·본문 eventId·eventType·키(=orderNo)를 대조해 내부 입력으로 바꾼 뒤 서비스에 넘긴다. 어긋나면 `INVALID_REQUEST`.
+- 도메인 가드 실패는 `LicenseValues.require` → `INVALID_REQUEST`, `LicenseValues.consistent` → `CONFLICT`다. 수신 처리에서 난 예외는 License에 전용 오류 처리기가 없어 공통 `DefaultErrorHandler`(`KafkaConsumerAutoConfiguration`)의 재시도 뒤 DLT로 간다. 트랜잭션은 모두 READ_COMMITTED이고 실패하면 업무 변경·Inbox·Outbox가 함께 롤백된다.
+- 소비 그룹(Inbox 키 `(eventId, consumerGroup)`): `license-paid-order`·`license-suspension`·`license-restoration`·`license-approval-correction`·`license-purchase-refund`.
+- 잠금: `lockByOrderNo`는 대상 구매 근거 한 행만, `ProductPurchaseLock.lock`/`lockOwned`는 같은 고객·상품의 구매 근거 전체를 id 순서로 `PESSIMISTIC_WRITE` 잠근 뒤 대상을 다시 읽는다.
+
+### 구매 근거 (`License`, `product_license`)
+
+`PurchaseStatus`(CHECK `chk_product_license_status`, 기본값 `STORED`):
+
+- `STORED`: 보관함에 있고 아직 등록하지 않았다.
+- `REGISTERED`: 라이브러리에 등록해 열린 보유권(`ACTIVE`)이 있다.
+- `SUSPENDED`: 환불로 정지됐다. 이전 상태(`STORED`/`REGISTERED`)는 `suspendedFrom`에 남는다.
+- `REFUNDED`: 환불이 끝났다. 더 바뀌지 않는다.
+
+| 현재 상태 | 트리거 | 가드(조건) | 다음 상태 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| (없음) | 수신 `OrderPaid` | orderNo 행 없음, eventId·requestEventId·paymentResultEventId·paymentId가 다른 행에 없음(`findSourceConflicts`), Inbox 첫 수신. 어긋나면 `CONFLICT` | `STORED` | 새 `licenseId`(UUID)·`acquiredAt`=`receivedAt`=지금(µs). Outbox `LicenseGranted`(aggregateId=licenseId). Inbox `license-paid-order` | `GrantLicense.execute`, `License.grant` | R1-1·R1-2·R3-4, 결정 89·93 |
+| 모든 상태 | 수신 `OrderPaid` 재전달(같은 orderNo) | 13개 필드가 저장 값과 같음(`License.verify`) 그리고 Inbox가 이미 있음. 다르면 `CONFLICT` | 변화 없음 | 없음(licenseId·acquiredAt·receivedAt 유지) | `GrantLicense.verifyRedelivery` | R3-1·R3-2·R3-6·R8-4 |
+| `STORED` | `POST /api/v1/storage/{licenseId}/registration` | licenseId UUID 형식(아니면 400), 본인 구매 근거(없으면 404), 고객·상품 전체 잠금 뒤 같은 고객·상품에 `ACTIVE` 보유권 없음(있으면 409 `PRODUCT_ALREADY_OWNED`) | `REGISTERED` | 새 `LicenseRegistration` `ACTIVE` 저장(`registeredAt`=지금). Outbox 없음 | `RegisterLicense.execute`, `License.register` | R10-3·R10-4, 결정 93·95 |
+| `REGISTERED` | `POST /api/v1/storage/{licenseId}/registration` 재요청 | 현재 보유권이 `ACTIVE` | 변화 없음 | 기존 보유권을 그대로 반환 | `RegisterLicense.execute` | R10-5 |
+| `SUSPENDED`·`REFUNDED` | `POST /api/v1/storage/{licenseId}/registration` | `status != STORED` | 변화 없음 | 409 `PURCHASE_NOT_REGISTRABLE` | `License.register` | R10-5, 결정 94 |
+| `STORED` | 수신 `LicenseSuspensionRequested` | 대상 행 잠금(`lockByOrderNo`), orderNo·buyerSubject·productId·productCode·paymentId 일치, 같은 요청의 정지 이력 없음, Inbox 첫 수신 | `SUSPENDED`(`suspendedFrom=STORED`) | `suspensionRequestEventId`=요청 eventId. `LicenseSuspension` 저장. Outbox `LicenseSuspended` | `ApplyLicenseSuspension.execute`, `License.suspend` | R6-1, 결정 94 |
+| `REGISTERED` | 수신 `LicenseSuspensionRequested` | 위와 같음 + 현재 보유권이 이 구매 근거의 것이고 `ACTIVE`(아니면 `CONFLICT`) | `SUSPENDED`(`suspendedFrom=REGISTERED`) | 보유권 `ACTIVE`→`SUSPENDED`. 나머지 위와 같음 | `ApplyLicenseSuspension.execute`, `License.suspend` | R6-1, 결정 29·94 |
+| `SUSPENDED`·`REFUNDED` | 수신 `LicenseSuspensionRequested`(새 요청) | 같은 요청의 정지 이력 없음 | 변화 없음 | `CONFLICT`("다른 요청으로 정지됐거나 끝난 구매") → 재시도 뒤 DLT | `ApplyLicenseSuspension.execute` | 결정 96 |
+| 모든 상태 | 수신 `LicenseSuspensionRequested` 재전달 | 같은 eventId의 `LicenseSuspension`이 있고 본문·licenseId 같음, Inbox 이미 있음 | 변화 없음 | 결과 이벤트를 다시 내지 않음 | `ApplyLicenseSuspension.execute`, `LicenseSuspension.verify` | R6-5, R7-11 |
+| (없음) | 수신 `LicenseSuspensionRequested`(지급 전 도착) | orderNo 행 없음 | — | `NOT_FOUND` → 재시도 뒤 DLT. License는 지급 전 정지 의도를 보관하지 않는다 | `ApplyLicenseSuspension.execute` | 결정 29 B(Order가 지급 확인을 기다렸다가 정지 요청) |
+| `SUSPENDED`(`suspendedFrom=STORED`) | 수신 `LicenseRestorationRequested` 또는 `LicenseApprovalCorrectionRequested` | 아래 "정지·복구·승인 정정 요청 처리"의 공통 가드 | `STORED` | `suspendedFrom`·`suspensionRequestEventId` 비움. `returnedToStorage=false` | `License.restore` | R6-5·R6-6, 결정 94·96 |
+| `SUSPENDED`(`suspendedFrom=REGISTERED`) | 같음 | 공통 가드 + 현재 보유권 있음, 같은 고객·상품에 다른 `ACTIVE` 없음 | `REGISTERED` | 보유권 `SUSPENDED`→`ACTIVE`. `returnedToStorage=false` | `License.restore` | R6-5, 결정 96 |
+| `SUSPENDED`(`suspendedFrom=REGISTERED`) | 같음 | 공통 가드 + 현재 보유권 있음, 같은 고객·상품에 다른 `ACTIVE` 있음 | `STORED` | 옛 보유권 `ENDED`(`endedAt`). `returnedToStorage=true` | `License.restore` | R6-5, 결정 96·98 |
+| `SUSPENDED` | 수신 `PurchaseRefunded` | 대상 행 잠금(`lockByOrderNo`), licenseId·buyerSubject·productId·productCode·paymentId 일치, `suspensionRequestEventId` 일치, Inbox 첫 수신(변경 여부와 Inbox 첫 수신이 다르면 `CONFLICT`) | `REFUNDED` | `suspendedFrom=REGISTERED`면 현재 보유권 `ENDED`. `refundedSuspensionRequestEventId`·`refundedAt` 기록, `suspendedFrom`·`suspensionRequestEventId` 비움. Inbox `license-purchase-refund`. Outbox 없음 | `ApplyPurchaseRefund.execute`, `License.refund` | R11-1, 결정 96·97·99 |
+| `REFUNDED` | 수신 `PurchaseRefunded` 재전달 | `refundedSuspensionRequestEventId` 일치(아니면 `CONFLICT`), Inbox 이미 있음 | 변화 없음 | 없음 | `License.refund` | R11-2 |
+| `STORED`·`REGISTERED` | 수신 `PurchaseRefunded` | 정지 중이 아님 | 변화 없음 | `CONFLICT` → 재시도 뒤 DLT | `License.refund` | R11-1 |
+| `REFUNDED` | 수신 `LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested` | `status != SUSPENDED` | 변화 없음 | `CONFLICT` | `License.restore` | R11-2 |
+
+직교 필드(상태 값은 아니지만 동작을 바꾼다):
+
+| 필드 | 값을 넣는 곳 | 지우는 곳 | 쓰임 |
+|---|---|---|---|
+| `suspendedFrom` | `suspend` | `restore`·`refund` | 복구 갈래(보관함/등록 복구/보관함 반환), 환불 완료 때 보유권 종료 여부, 보관함 조회(`SUSPENDED` 중 `suspendedFrom=STORED`만 보관함에 보임, `findStorage`) |
+| `suspensionRequestEventId` | `suspend` | `restore`·`refund` | 복구·환불 완료가 "현재 정지"를 가리키는지 대조. 끝난 정지의 지각 요청이 새 정지를 풀지 못하게 한다 |
+| `refundedSuspensionRequestEventId`·`refundedAt` | `refund` | 지우지 않음 | `REFUNDED` 뒤 같은 환불 완료 재전달 판정 |
+| 보관함 `registrable`(계산값) | `SearchStorage` | — | `STORED`이고 같은 고객·상품에 `ACTIVE`가 없을 때만 true |
+
+### 보유권 (`LicenseRegistration`, `license_registration`)
+
+`LicenseStatus`(CHECK `chk_license_registration_status`):
+
+- `ACTIVE`: 쓸 수 있는 보유권. 고객·상품당 최대 1개(`uk_license_registration_active`, 생성 열 `active_guard`).
+- `SUSPENDED`: 환불로 정지됨. 라이브러리에는 보인다.
+- `ENDED`: 환불 완료 또는 보관함 반환으로 끝남. 이력으로만 남고 라이브러리에서 빠진다.
+
+구매 근거당 열린(`ACTIVE`·`SUSPENDED`) 보유권은 1개다(`uk_license_registration_open`, 생성 열 `open_guard`). `(status = 'ENDED') = (ended_at IS NOT NULL)` CHECK가 있다. 보유권은 구매 근거의 메서드 안에서만 바뀐다(`suspend`/`activate`/`end`가 패키지 공개).
+
+| 현재 상태 | 트리거 | 가드(조건) | 다음 상태 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| (없음) | `POST /api/v1/storage/{licenseId}/registration` | 구매 근거 `STORED`, 다른 `ACTIVE` 없음 | `ACTIVE` | 새 `registrationId`(UUID), licenseId·orderNo·상품·제목 복사, `registeredAt` | `License.register`, `LicenseRegistration.open` | R10-3, 결정 95 |
+| `ACTIVE` | 수신 `LicenseSuspensionRequested`(구매 근거 `REGISTERED`) | `status == ACTIVE`(아니면 `CONFLICT`) | `SUSPENDED` | 없음 | `LicenseRegistration.suspend` | R6-1, 결정 29·94 |
+| `SUSPENDED` | 복구·승인 정정(다른 `ACTIVE` 없음) | `status == SUSPENDED` | `ACTIVE` | 없음 | `LicenseRegistration.activate` | R6-5, 결정 96 |
+| `SUSPENDED` | 복구·승인 정정(다른 `ACTIVE` 있음) | `status != ENDED` | `ENDED` | `endedAt`=처리 시각 | `LicenseRegistration.end` | R6-5, 결정 96 |
+| `SUSPENDED` | 수신 `PurchaseRefunded`(구매 근거 `suspendedFrom=REGISTERED`) | `status != ENDED` | `ENDED` | `endedAt`=처리 시각 | `LicenseRegistration.end` | R11-1, 결정 97 |
+
+조회: 라이브러리 목록·상세는 `ACTIVE`·`SUSPENDED`(`LicenseRegistrations.OPEN`)만 읽는다. 상세는 같은 상품 코드에서 `ACTIVE`가 있으면 그것, 없으면 id가 가장 큰 `SUSPENDED`다(`ReadLicense`). Download는 이 상세의 `ACTIVE`로 판단한다.
+
+### 정지·복구·승인 정정 요청 처리 (`LicenseSuspension`·`LicenseRestoration`·`LicenseApprovalCorrection`)
+
+세 기록은 상태 열이 없는 불변 처리 기록이다. 요청 이벤트 3종을 받아 위 두 집합체를 바꾸고, 같은 트랜잭션에서 결과 이벤트 3종을 Outbox(aggregateType `License`, aggregateId=licenseId)에 쓴다. 결과 이벤트 eventId는 기록의 `completedEventId`(UUID)다.
+
+| 요청 이벤트(수신) | 처리 기록 / 테이블 | 결과 이벤트(발행) | 소비 그룹 |
+|---|---|---|---|
+| `LicenseSuspensionRequested` | `LicenseSuspension` / `license_suspension` | `LicenseSuspended` | `license-suspension` |
+| `LicenseRestorationRequested` | `LicenseRestoration` / `license_restoration` | `LicenseRestored`(`returnedToStorage` 포함) | `license-restoration` |
+| `LicenseApprovalCorrectionRequested` | `LicenseApprovalCorrection` / `license_approval_correction` | `LicenseApprovalCorrected`(`returnedToStorage` 포함) | `license-approval-correction` |
+
+| 현재 상태(구매 근거) | 트리거 | 가드(조건) | 결과 | 부수 효과 | 코드 위치 | 근거 |
+|---|---|---|---|---|---|---|
+| `STORED`·`REGISTERED` | `LicenseSuspensionRequested` 첫 수신 | 위 구매 근거 표의 정지 가드 | 정지 기록 1건 | `LicenseSuspension`(requestEventId·refundId·licenseId·구매 근거·`suspendedAt`=License 시계). Outbox `LicenseSuspended`(요청 eventId·refundId·licenseId·orderNo·구매자·상품·paymentId) | `ApplyLicenseSuspension.execute`, `LicenseSuspension.record` | R5-2·R6-2 |
+| `SUSPENDED` | `LicenseRestorationRequested` 첫 수신 | 고객·상품 전체 잠금, licenseId·buyerSubject·productId·productCode·paymentId 일치, 같은 eventId의 복구 기록 없음, `suspensionRequestEventId`의 `LicenseSuspension`이 있고 licenseId·refundId·`completedEventId`(=요청의 suspensionEventId)가 같음, Inbox 첫 수신, 구매 근거의 현재 정지가 그 요청(`restore`) | 복구 기록 1건, 구매 근거·보유권은 위 세 갈래 | `LicenseRestoration`(요청 지문 SHA-256, attemptId·failureEventId, `restoredAt`, `returnedToStorage`). Outbox `LicenseRestored` | `ApplyLicenseRestoration.execute`, `License.restore`, `LicenseRestoration.record` | R6-5, 결정 29(확정 실패 복구)·96·98 |
+| `SUSPENDED` | `LicenseApprovalCorrectionRequested` 첫 수신 | 복구와 같은 가드(reviewId·stopRequestId 포함 지문). 리스너는 토픽이 `stove.order.v1`인지도 확인 | 정정 기록 1건, 세 갈래 복구 | `LicenseApprovalCorrection`(PK=요청 eventId, `stopRequestId` 유일). Outbox `LicenseApprovalCorrected`. PG 실패·실행 시도를 만들지 않음 | `ApplyApprovalCorrection.execute`, `License.restore`, `LicenseApprovalCorrection.record` | R6-6 |
+| 모든 상태 | 복구·정정 요청 재전달 | 같은 eventId 기록이 있고 지문이 같음(다르면 `CONFLICT`), Inbox 이미 있음(없으면 `CONFLICT`) | 변화 없음 | 결과 이벤트를 다시 내지 않음. 유실된 결과는 `OutboxRepublishService` 재발행으로 잇는다 | 각 `execute`의 `previous`/`known` 분기 | R6-5, R7-11, 결정 129 |
+| `STORED`·`REGISTERED`(이미 복구됨) 또는 다른 정지로 `SUSPENDED` | 같은 정지를 가리키는 새 eventId의 복구·정정 | 구매 근거의 `suspensionRequestEventId`가 다르거나 비어 있음 | 변화 없음 | `CONFLICT`. DB도 `uk_license_restoration_suspension`·`uk_license_correction_suspension`으로 정지 1건당 복구 1건·정정 1건만 허용 | `License.restore` | R6-5("예전 정지의 재전달은 새 정지를 풀지 않는다") |
+| (없음) | 정지 요청이 지급(`OrderPaid`) 전에 도착 | orderNo 행 없음 | 처리 안 함 | `NOT_FOUND` → 재시도 뒤 DLT. 지급 전 정지 의도를 License가 보관하지 않고, Order가 `LicenseGranted`를 확인한 뒤 정지를 요청한다 | `ApplyLicenseSuspension.execute` | 결정 29 B·125·129 |
+
+겹치는 복구(결정 96): 주문1 보유권 L1이 정지된 동안 주문2를 등록해 L2가 `ACTIVE`이면, 주문1 복구는 `activeExists`가 true라 L1을 `ENDED`로 끝내고 주문1 구매 근거를 `STORED`로 돌린다. 등록·복구는 둘 다 `ProductPurchaseLock`으로 같은 고객·상품의 구매 근거 전체를 잠그므로 이 판단이 직렬화되고, `uk_license_registration_active`가 마지막 방어다. 정지·환불 완료는 대상 행만 잠그지만 `ACTIVE`를 새로 만들지 않는다.
+
+### 그 밖의 상태를 가진 집합체
+
+License 모듈에 위 두 enum(`PurchaseStatus`·`LicenseStatus`) 외의 업무 상태 enum은 없다. Outbox 행 상태(`PENDING`·`SENT`·`DEAD` 등)와 `outbox_republish` 기록은 공통 메시징 라이브러리의 것이라 이 표에서 다루지 않는다. 구 `license_purchase`(V4까지)는 읽기·쓰기가 없다.
+
+### 찾은 불일치 (결정 143 1부)
+
+1. **복구·승인 정정이 모듈 간 시각 선후로 정상 입력을 거부할 수 있다(추정).** 서비스는 Order가 찍은 요청 `occurredAt`이 License 시계의 `suspendedAt`보다 앞서면 `CONFLICT`, 기록 생성은 License 시계의 처리 시각이 요청 `occurredAt`보다 앞서면 `INVALID_REQUEST`로 거부하고, DB도 `restored_at >= request_occurred_at`을 강제한다. 요구사항 R8-3은 "발생 시각의 모듈 간 선후관계나 수신 시각만으로 정상 입력을 거부하지 않는다"고 한다(R8은 OrderPaid 절이라 적용 범위는 불명). 두 호스트 시계가 어긋나면 PG 확정 실패 뒤의 복구가 DLT로 가 보유권이 정지된 채 남는다. 코드: `apps/license/src/main/java/com/stove/license/core/service/ApplyLicenseRestoration.java:54`, `apps/license/src/main/java/com/stove/license/core/domain/LicenseRestoration.java:31`, `apps/license/src/main/java/com/stove/license/core/service/ApplyApprovalCorrection.java:51`, `apps/license/src/main/java/com/stove/license/core/domain/LicenseApprovalCorrection.java:25`, `apps/license/src/main/resources/db/migration/V8__license_restoration.sql:18`, `apps/license/src/main/resources/db/migration/V9__approval_correction.sql:15`. 문서: `.kiro/specs/license/requirements.md:111`. 영향: 보유권 있음(추정, 시계 차이가 있을 때만). — 해소: [D-052](../../../docs/defects.md#d-052)(PR #183)에서 두 서비스·두 기록의 다른 모듈 시각 비교와 V8·V9 CHECK를 V12로 뺐다. 위 표의 가드에서도 시각 조건을 지웠다.
+2. **설계의 Outbox 결과 이벤트 목록에 `LicenseApprovalCorrected`가 없다.** 코드는 네 종류(`LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`)를 Outbox에 쓴다. 문서: `.kiro/specs/license/design.md:30`, `.kiro/specs/license/requirements.md:73`(R5-2도 세 종류만, R5-1은 `LicenseApprovalCorrectionRequested`를 빠뜨림). 코드: `apps/license/src/main/java/com/stove/license/core/service/ApplyApprovalCorrection.java:57`. 영향: 없음.
+3. **요구사항 용어의 소비 그룹이 하나뿐이다.** 용어 절은 "소비 그룹은 `license-paid-order`다"라고 하지만 코드는 소비 그룹 5개(`license-paid-order`·`license-suspension`·`license-restoration`·`license-approval-correction`·`license-purchase-refund`)를 쓴다. 설계 이벤트 계약 표도 정지·복구·정정의 소비 그룹을 적지 않았다. 문서: `.kiro/specs/license/requirements.md:17`, `.kiro/specs/license/design.md:156-158`. 코드: `ApplyLicenseSuspension.java:27`, `ApplyLicenseRestoration.java:28`, `ApplyApprovalCorrection.java:27`, `ApplyPurchaseRefund.java:22`. 영향: 없음.
+4. **오류·복구 표가 V10 전 모델(지급=보유권 `ACTIVE`)로 남아 있다.** "지급 확인 전" 행은 "보유권 ACTIVE", "재투입 중복" 행은 "보유권 … SUSPENDED 보존"이라고 쓰지만, 현재 `OrderPaid`는 구매 근거 `STORED`만 만들고 보유권은 만들지 않는다. 문서: `.kiro/specs/license/design.md:214-215`. 코드: `apps/license/src/main/java/com/stove/license/core/service/GrantLicense.java:43-48`. 영향: 없음(설명 문장).
+5. **`acquiredAt`이 두 뜻으로 쓰인다.** 데이터 모델의 `acquiredAt`은 구매 근거 생성 시각이지만, 라이브러리 응답 `LicenseResponse.acquiredAt`에는 보유권 `registeredAt`이 들어가고 목록 정렬도 `registeredAt DESC, id DESC`다. 설계 API 표는 라이브러리 정렬을 `acquiredAt DESC`로 적어 어느 쪽인지 드러나지 않는다(R4-7은 "acquiredAt(등록 시각)"으로 적어 코드와 맞다). 문서: `.kiro/specs/license/design.md:25`, `.kiro/specs/license/design.md:142`. 코드: `apps/license/src/main/java/com/stove/license/api/controller/dto/LicenseResponse.java:12`, `apps/license/src/main/java/com/stove/license/core/service/SearchLicenses.java:25`. 영향: 없음.
+6. **복구 한 번에 시계를 두 번 읽는다.** 옛 보유권의 `endedAt`(`restore`에 넘긴 시각)과 기록의 `restoredAt`·결과 이벤트 `occurredAt`이 서로 다른 `clock.instant()` 호출이라 µs 단위로 다를 수 있다. 문서 규칙은 없다. 코드: `apps/license/src/main/java/com/stove/license/core/service/ApplyLicenseRestoration.java:59-60`, `apps/license/src/main/java/com/stove/license/core/service/ApplyApprovalCorrection.java:55-56`. 영향: 없음.
+7. **확인 못 함: 지급 전 정지 요청의 운영 경로.** 결정 29 B대로 Order가 `LicenseGranted` 확인 뒤에만 정지를 요청하면 생기지 않지만, 그 전에 `LicenseSuspensionRequested`가 오면 License는 `NOT_FOUND`로 공통 재시도 뒤 DLT에 보낸다. 이 경우의 운영 절차가 런북에 있는지는 이번 범위(License 코드·스펙)에서 확인하지 못했다. 코드: `apps/license/src/main/java/com/stove/license/core/service/ApplyLicenseSuspension.java:38-39`. 문서: `docs/decisions.md:245-249`(결정 29). 영향: 불명.
+
 ## API 계약
 
 | 메서드 | 경로 | 역할 | 동작 |
@@ -96,7 +198,7 @@
 | REGISTERED | 없음 | REGISTERED, 보유권 ACTIVE |
 | REGISTERED | 있음 | STORED, 옛 보유권 ENDED, returnedToStorage=true |
 - 동시 최초 지급은 유일 제약이 최종 방어한다. 경합에서 진 트랜잭션은 전체 롤백하고 Kafka 재전달의 새 트랜잭션에서 수렴한다. 전역 잠금·분산 임대·메모리 중복 집합을 두지 않는다.
-- 정지·복구는 원구매와 요청을 대조한 뒤 상태 전이·이력·Inbox·결과 Outbox를 함께 커밋한다. 정지된 상품도 조회에는 남고, 환불이 끝난(`REFUNDED`·`ENDED`) 항목은 라이브러리·보관함에서 빠진다(결정 97). 이력은 주문 내역에 남는다.
+- 정지·복구는 원구매와 요청을 대조한 뒤 상태 전이·이력·Inbox·결과 Outbox를 함께 커밋한다. 복구·승인 정정은 같은 정지인지를 식별자(`licenseId`·`suspensionRequestEventId`·`suspensionEventId`·`refundId`)로만 대조하고, 요청 발생 시각(Order 시계)과 정지·처리 시각(License 시계)의 선후로 거부하지 않는다(R8-3, [D-052](../../../docs/defects.md#d-052)). 두 시각은 받은 값·처리 시각 그대로 저장한다. 정지된 상품도 조회에는 남고, 환불이 끝난(`REFUNDED`·`ENDED`) 항목은 라이브러리·보관함에서 빠진다(결정 97). 이력은 주문 내역에 남는다.
 - Order PAID와 License 지급 사이에는 전달 지연이 있다. 조회는 권한을 생성하거나 Kafka 처리를 재촉하지 않는다.
 
 ## 오류·복구

@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-051, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-051, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -74,6 +74,7 @@
 | [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
 | [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
+| [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -614,6 +615,16 @@
 - **원인** 결제 `PAID`는 두 곳에서 커밋된다. 승인 작업자(`ResolvePaymentApproval.completeObservation`)는 `ResolvePayment.execute` 뒤 같은 회차에 승인을 `succeed`하지만, 결제 재조회 스케줄러와 웹훅(`Payment.requestRecheck` → 같은 스케줄러)은 결제만 확정한다. 그러면 승인은 다음 claim에서 `cycle`의 첫 분기(`PAID && admittedAt!=null` → `succeed`)를 만나야 닫히는데, 보류 승인의 다음 claim은 보류 기간에 따라 늘어나는 재조회 간격 뒤다. 그동안 `ApprovalReviewNotice.of`는 승인 상태 `REVIEW_REQUIRED`와 옛 `latestPgState`로 안내를 계산한다.
 - **수정** `ResolvePayment.confirm`이 결제를 새로 `PAID`로 바꾸고 결과 Outbox를 적재한 그 트랜잭션에서, 같은 결제의 최신 `ADMITTED`·`REVIEW_REQUIRED` 승인을 잠그고(`purchase_payment` → `payment_approval`, 작업자와 같은 순서) 접수됐으면(`admittedAt` 있음) `PaymentApproval.succeed`한다. 규칙은 작업자의 PAID 분기와 같고 시점만 결제 커밋으로 당겼다. 접수 전 승인은 PortOne 게이트웨이가 거절하므로 여기 오지 않고 `PAID_WITHOUT_ADMISSION` 보류로 남는다. 작업자 쪽 분기는 그대로 두어 이미 쌓인 건(배포 전 PAID·보류)도 다음 회차에 닫힌다. 버린 안: 안내 조회가 결제 `PAID`를 먼저 보게 하는 것(고객 두 조회는 맞지만 ADMIN 목록·게이지·결제창 진행 판정이 계속 `REVIEW_REQUIRED`를 셈), PAID 커밋 뒤 승인 `nextAt`을 당겨 작업자를 깨우는 것(작업자 주기만큼 같은 모순이 남고 PG 조회가 한 번 더 듦).
 - **망가뜨리기 확인(결정 102)** 같은 재현 테스트를 수정 전 운영 코드로 돌리면 위 Red 1건(Gradle `defectTest` 실패 1), 수정 코드로 Green 1건이다.
+
+<a id="d-052"></a>
+## D-052 License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음
+
+**상태** 수정됨 · **영향** 수정 전에는 Order·License 호스트 시계가 어긋나면 PG 확정 실패 뒤의 복구(`LicenseRestorationRequested`)와 PG 송신 전 승인 정정(`LicenseApprovalCorrectionRequested`)이 공통 재시도 뒤 DLT로 가고, 구매 근거는 `SUSPENDED`, 보유권은 `SUSPENDED`로 남아 고객이 이미 산 상품을 내려받지 못한다. 시계 차이가 없으면 생기지 않는다 · **위치** `ApplyLicenseRestoration.execute`·`ApplyApprovalCorrection.execute`의 `input.occurredAt().isBefore(suspension.getSuspendedAt())`(→ `CONFLICT`), `LicenseRestoration.record`·`LicenseApprovalCorrection.record`의 `!at.isBefore(input.occurredAt())`(→ `INVALID_REQUEST`), V8 `chk_license_restoration_time`·V9 `chk_license_correction_time`(`restored_at >= request_occurred_at`)
+**재현** 고정 `Clock`(`@MockitoBean`)과 실제 MySQL·Kafka 컨테이너. `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`의 `#restoresWhenTheLicenseClockIsBehindTheOrderClock`(요청 `occurredAt` = License 처리 시각 + 5초)·`#restoresWhenTheOrderClockIsBehindTheLicenseClock`(요청 `occurredAt` = 정지 시각 − 5초) — 수정 전 `known-defect` Red 4건: `BusinessException: 복구 근거가 필요합니다.`·`복구 시각이 올바르지 않습니다.`(INVALID_REQUEST), `복구 요청의 환불·실제 정지 근거가 다릅니다.`·`승인 정정 대상의 실제 정지 근거가 다릅니다.`(CONFLICT). 지금은 태그를 뗀 회귀 테스트다.
+
+- **원인** 요청 `occurredAt`은 Order 시계, `suspendedAt`·`restoredAt`은 License 시계다. 두 가드와 CHECK는 서로 다른 호스트 시계의 선후를 업무 규칙처럼 강제했다. 같은 정지에 대한 요청인지는 이미 `licenseId`·`suspensionRequestEventId`·`suspensionEventId`(정지 결과 eventId)·`refundId` 대조, `License.restore`의 현재 정지 ID 대조, 이력 테이블의 `suspension_request_event_id` 유일 키·FK로 확인하므로 시각 비교가 막는 낡은 요청은 따로 없다. 요구사항 R8-3("발생 시각의 모듈 간 선후관계나 수신 시각만으로 정상 입력을 거부하지 않는다")과 어긋난다.
+- **수정** 두 서비스의 시각 비교와 두 기록 생성 가드의 시각 비교를 뺐다(마이크로초 정밀도 검사는 남김). V12 `V12__restoration_cross_module_time.sql`이 두 CHECK를 지운다. `request_occurred_at`(받은 값)·`restored_at`(License 처리 시각)의 저장 값·뜻은 바꾸지 않았다. 옛 행은 옛 CHECK를 이미 만족하므로 그대로다(`LicenseMigrationIntegrationTest#v12KeepsExistingRestorationAndCorrectionRowsAndAllowsRestoredAtBeforeTheOrderClock`).
+- **망가뜨리기 확인(결정 102)** 운영 코드 수정 전에는 위 Red 4건. 수정 뒤 V12만 빼고 `#restoresWhenTheLicenseClockIsBehindTheOrderClock` 2건을 돌리면 `JpaSystemException: … Check constraint 'chk_license_restoration_time' is violated.`·`'chk_license_correction_time' is violated.`로 실패하고, 되돌리면 통과한다.
 
 ---
 
