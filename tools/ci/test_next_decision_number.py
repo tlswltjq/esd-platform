@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import next_decision_number
 
@@ -34,6 +35,13 @@ class ReservedNumbersTest(unittest.TestCase):
         text = '## 맡은 항목\n\n- 항목: 무엇\n\n## 무엇을 왜\n\n- 결정 번호: 50\n'
         self.assertEqual([], next_decision_number.reserved_numbers(text))
 
+    def test_fenced_examples_are_ignored(self):
+        # 리뷰 R2: 코드 블록 안의 예시는 예약이 아니다.
+        whole = '```\n## 맡은 항목\n- 결정 번호: 999\n```\n\n' + body('140')
+        inside = '## 맡은 항목\n\n```\n- 결정 번호: 999\n```\n- 결정 번호: 140\n'
+        self.assertEqual([140], next_decision_number.reserved_numbers(whole))
+        self.assertEqual([140], next_decision_number.reserved_numbers(inside))
+
     def test_crlf_body(self):
         self.assertEqual([6], next_decision_number.reserved_numbers(body('6').replace('\n', '\r\n')))
 
@@ -52,7 +60,49 @@ class NextNumberTest(unittest.TestCase):
         self.assertEqual((3, 2, {10: [1]}), next_decision_number.next_number(MAIN, prs))
 
 
+def git(*args, cwd=None):
+    subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t'] + list(args), cwd=cwd, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 class CliTest(unittest.TestCase):
+    def test_reads_open_prs_before_main(self):
+        # 리뷰 R1: 두 읽기 사이에 병합된 PR은 PR 목록이나 새 main 중 한쪽에 반드시 보인다.
+        calls = []
+        with mock.patch.object(next_decision_number, 'read_open_prs', lambda root: calls.append('prs') or []), \
+                mock.patch.object(next_decision_number, 'read_main',
+                                  lambda root, ref, fetch: calls.append('main:' + str(fetch)) or MAIN), \
+                mock.patch('builtins.print'):
+            next_decision_number.main([])
+        self.assertEqual(['prs', 'main:True'], calls)
+
+    def test_fetches_main_when_local_ref_is_stale(self):
+        # 리뷰 R1: 로컬 origin/main이 2에 머문 사이 3이 병합되고 그 PR이 목록에서 빠져도 4를 낸다.
+        with tempfile.TemporaryDirectory() as temp:
+            temp = Path(temp)
+            git('init', '-q', '--bare', str(temp / 'remote.git'))
+            seed = temp / 'seed'
+            git('init', '-q', str(seed))
+            git('checkout', '-q', '-b', 'main', cwd=seed)
+            (seed / 'docs').mkdir()
+            (seed / 'docs/decisions.md').write_text(MAIN, encoding='utf-8')
+            git('add', '-A', cwd=seed)
+            git('commit', '-q', '-m', 'two', cwd=seed)
+            git('remote', 'add', 'origin', str(temp / 'remote.git'), cwd=seed)
+            git('push', '-q', 'origin', 'main', cwd=seed)
+            git('clone', '-q', '-b', 'main', str(temp / 'remote.git'), str(temp / 'work'))
+            (seed / 'docs/decisions.md').write_text(MAIN + '## 3. 병합됨\n', encoding='utf-8')
+            git('commit', '-q', '-am', 'three', cwd=seed)
+            git('push', '-q', 'origin', 'main', cwd=seed)
+            prs = temp / 'prs.json'
+            prs.write_text('[]', encoding='utf-8')
+            command = [sys.executable, '-I', '-B', str(SCRIPT), '--root', str(temp / 'work'), '--prs-json', str(prs)]
+            stale = subprocess.run(command + ['--no-fetch'], stdout=subprocess.PIPE, universal_newlines=True)
+            fresh = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual('3', stale.stdout.splitlines()[0])
+        self.assertEqual(0, fresh.returncode, fresh.stderr)
+        self.assertEqual('4', fresh.stdout.splitlines()[0])
+
     def test_offline_files(self):
         with tempfile.TemporaryDirectory() as temp:
             decisions = Path(temp) / 'decisions.md'
