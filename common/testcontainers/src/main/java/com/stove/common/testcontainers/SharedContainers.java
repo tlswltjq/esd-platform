@@ -5,6 +5,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -28,6 +29,14 @@ public final class SharedContainers {
 
     static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(3);
 
+    /** Confluent Kafka(KRaft)가 준비되면 내는 로그. 라이브러리의 기본 대기 조건과 같다. */
+    static final String KAFKA_READY_LOG = ".*Transitioning from RECOVERY to RUNNING.*";
+
+    /** D-043: Kafka 준비 로그를 {@link #STARTUP_TIMEOUT}까지 기다리는 새 대기 객체. 재현 테스트가 같은 객체로 검증한다. */
+    static WaitStrategy kafkaReady() {
+        return Wait.forLogMessage(KAFKA_READY_LOG, 1).withStartupTimeout(STARTUP_TIMEOUT);
+    }
+
     public static final MySQLContainer<?> MYSQL =
             new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
                     .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds());
@@ -46,8 +55,7 @@ public final class SharedContainers {
      */
     public static final ConfluentKafkaContainer KAFKA =
             new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
-                    .waitingFor(Wait.forLogMessage(".*Transitioning from RECOVERY to RUNNING.*", 1)
-                            .withStartupTimeout(STARTUP_TIMEOUT));
+                    .waitingFor(kafkaReady());
 
     public static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
