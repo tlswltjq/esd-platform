@@ -63,10 +63,14 @@ def trace_of(parent):
     return parent.split("-")[1] if parent and parent.count("-") == 3 else None
 
 
-def consumer_groups(stack):
+def consumer_groups(stack, deadline):
+    """Read the three kafka-consumer-groups views; every read is bounded by the caller's absolute deadline."""
     def run(args):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("consumer group lag deadline passed")
         done = subprocess.run(stack.docker + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-consumer-groups.sh", "--bootstrap-server",
-                                              "kafka:19092", *args], capture_output=True, text=True, timeout=60)
+                                              "kafka:19092", *args], capture_output=True, text=True, timeout=min(60, remaining))
         return done.returncode, done.stdout, done.stderr
     return group_snapshot(run)
 
@@ -124,9 +128,13 @@ def journey(stack):
         stack.wait_for(lambda: outbox_rows(stack, order_no) and all(r["status"] == "SENT" for r in outbox_rows(stack, order_no)),
                        name + " refund Outbox SENT", 120, 1)
         last_lag = [None]
+        lag_deadline = time.monotonic() + 120
 
         def caught_up():
-            last_lag[0] = lag_problems(consumer_groups(stack), groups)
+            snapshot = consumer_groups(stack, lag_deadline)
+            if time.monotonic() > lag_deadline:
+                raise AssertionError("consumer groups lag 0 not confirmed within 120 s: " + "; ".join(last_lag[0] or []))
+            last_lag[0] = lag_problems(snapshot, groups)
             return not last_lag[0]
         try:
             stack.wait_for(caught_up, name + " consumer groups lag 0", 120, 1)
