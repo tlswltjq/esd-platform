@@ -30,13 +30,17 @@ import org.junit.jupiter.api.Test;
  *   <li>DB를 쓰는 앱 전부가 같은 부팅 대기를 둔다. 한 앱만 빠지면 그 앱만 동시 기동에서 죽는다.</li>
  *   <li>실행 중 연결 기한은 3초 그대로다. 부팅 대기를 늘리려고 이 값을 바꾸면 장애 때 요청이
  *       더 오래 붙잡히고 환불 재시도 시간 계산이 바뀐다(결정 136 C안을 고르지 않은 이유).</li>
- *   <li>부팅 대기가 Compose health가 unhealthy로 판정하기 전에 끝난다. 아니면 정상적으로 기다리는
- *       앱이 unhealthy가 되어 {@code docker compose up --wait}가 실패한다.</li>
+ *   <li>부팅 재시도 예산이 Compose health가 unhealthy로 판정할 수 있는 가장 이른 시각보다 먼저 끝난다.
+ *       아니면 정상적으로 기다리는 앱이 unhealthy가 되어 {@code docker compose up --wait}가 실패한다.</li>
  * </ol>
+ *
+ * <p>재시도 예산은 종료 시각의 상한이 아니다. Hikari는 연결 시도가 돌아온 뒤에 경과 시간을 보므로,
+ * DB가 TCP 연결만 받고 MySQL 인사를 보내지 않으면 한 번의 시도가 드라이버 안에서 예산보다 오래 멈출 수 있다.
+ * {@code connection-timeout}은 그 시도를 끊지 않는다. 이 설정이 생기기 전에도 같다.
  */
 class DatabaseStartupWaitContractTest {
 
-    /** 결정 136의 부팅 대기. */
+    /** 결정 136의 부팅 재시도 예산({@code initialization-fail-timeout}). */
     private static final Duration STARTUP_WAIT = Duration.ofSeconds(60);
 
     /** 실행 중 요청의 연결 기한. 결정 136은 이 값을 바꾸지 않는다. */
@@ -101,8 +105,16 @@ class DatabaseStartupWaitContractTest {
                 .isEmpty();
     }
 
+    /**
+     * Compose health가 unhealthy로 판정할 수 있는 가장 이른 시각과 비교한다.
+     *
+     * <p>{@code start_period}가 끝난 직후의 probe부터 실패가 집계되므로, 가장 이른 판정은
+     * {@code start_period + interval × (retries - 1)}이다. 비교할 값은 재시도 예산에 마지막 시도 몫으로
+     * 연결 기한을 더한 것이다. 연결이 거절되거나 드라이버가 연결 기한 안에 돌아오는 보통의 경우이고,
+     * 종료 시각의 상한은 아니다(클래스 설명).
+     */
     @Test
-    @DisplayName("부팅 대기가 Compose health의 unhealthy 판정보다 먼저 끝난다")
+    @DisplayName("부팅 재시도 예산이 Compose health의 가장 이른 unhealthy 판정보다 먼저 끝난다")
     void startupWaitEndsBeforeComposeMarksTheAppUnhealthy() {
         Map<String, Object> services = asMap(loadYaml(repoRoot().resolve(APPS_COMPOSE)).get("services"));
         List<String> unhealthyWhileWaiting = new ArrayList<>();
@@ -111,18 +123,19 @@ class DatabaseStartupWaitContractTest {
             String name = app.getFileName().toString();
             Map<String, Object> health = asMap(asMap(services.get(name)).get("healthcheck"));
             assertThat(health).as("%s healthcheck", name).containsKeys("start_period", "interval", "retries");
-            Duration unhealthyAfter = parseDuration(health.get("start_period"))
-                    .plus(parseDuration(health.get("interval"))
-                            .multipliedBy(Long.parseLong(health.get("retries").toString())));
-            Duration longestWait = STARTUP_WAIT.plus(CONNECTION_TIMEOUT);
-            if (longestWait.compareTo(unhealthyAfter) >= 0) {
-                unhealthyWhileWaiting.add("%s (대기 %s ≥ unhealthy %s)".formatted(name, longestWait, unhealthyAfter));
+            long retries = Long.parseLong(health.get("retries").toString());
+            Duration earliestUnhealthy = parseDuration(health.get("start_period"))
+                    .plus(parseDuration(health.get("interval")).multipliedBy(retries - 1));
+            Duration budgetWithLastAttempt = STARTUP_WAIT.plus(CONNECTION_TIMEOUT);
+            if (budgetWithLastAttempt.compareTo(earliestUnhealthy) >= 0) {
+                unhealthyWhileWaiting.add("%s (예산 %s ≥ 가장 이른 unhealthy %s)"
+                        .formatted(name, budgetWithLastAttempt, earliestUnhealthy));
             }
             checked++;
         }
         assertThat(checked).as("Compose에서 확인한 DB 앱 수").isGreaterThanOrEqualTo(DATABASE_APPS.size());
         assertThat(unhealthyWhileWaiting)
-                .as("부팅 대기가 health 판정보다 길면 정상적으로 기다리는 앱이 unhealthy가 된다")
+                .as("재시도 예산이 health 판정보다 길면 정상적으로 기다리는 앱이 unhealthy가 된다")
                 .isEmpty();
     }
 }
