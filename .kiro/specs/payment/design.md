@@ -170,6 +170,8 @@ PENDING --> EXPIRED     (접수 전 보류를 만료 통지 뒤 종결. 이벤�
 
 V34는 기존 행을 갱신하지 않고 관측 열과 `approval_investigation`을 추가한다. resolver의 PG inspect 결과는 inspect 후 별도 payment→approval 잠금 트랜잭션에서 저장한다. `/{approvalId}/investigations` GET/POST는 500자 이내 확인 내용을 추가하고 JWT sub와 서버 시각을 기록한다. 같은 requestId의 다른 내용은 충돌이다. 금융 상태·재시도 간격은 변경하지 않는다. V34의 승인 FK는 삭제 cascade였으나, V38이 RESTRICT로 다시 만들어 승인이나 그 결제를 지우면 조사 기록이 조용히 사라지지 않고 삭제가 거절된다(옛 행은 고치지 않음, 결정 104 이행 테스트 대상 아님).
 
+보류 사유는 처음 보류될 때 정해진다. 이미 `REVIEW_REQUIRED`인 승인을 다시 조회하다 새 중단 조건(`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_REQUEST_REJECTED`)이 나와도 `PaymentApproval.stopPosts`는 `lastErrorCode`·`reviewStartedAt`을 바꾸지 않고, `ResolvePaymentApproval.stop`이 버린 사유를 로그로 남긴다. `PAID_WITHOUT_ADMISSION`만 사유를 올리고 그 뒤로는 고정된다([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason)). 그래서 R11.8 자동 만료는 처음부터 `PG_INVALID_EVIDENCE`로 보류된 미접수 승인에만 적용된다.
+
 `stove.payment.approval.review.required{reason}`는 현재 보류 건수이며 8개 알려진 사유(2부의 `PG_CANCELLED`, 결정 126의 `PG_PENDING_AT_ORDER_EXPIRY`, 결정 124의 `CONFIRM_WINDOW_EXPIRED` 포함) 외 값은 OTHER로 합산한다. `PaymentApprovalsRequireReview` 경보는 ADMIN API로 안내한다. 종결은 아래 2부, 재조회 간격은 아래 "보류 재조회 간격", 고객 안내는 아래 "금융 보류 고객 안내"다.
 
 승인 보류 상세·조사 이력 GET은 `reviewStartedAt != null`인 과거 보류도 현재 `status`와 함께 제공한다. 한 번도 보류되지 않은 승인은 404이고 조사 POST는 현재 REVIEW_REQUIRED에만 허용된다. `latestPgState`는 마지막 유효 관측(the last valid observation)이며 최근 조회 성공을 뜻하지 않는다. `lastInspectedAt`·`lastInspectionError`는 inspect 후 별도 잠금 트랜잭션에서 현재 lease 소유자만 기록한다. 오류는 INVALID_EVIDENCE 또는 UNAVAILABLE이고 성공 시 NULL로 지운다. 기존 예외 분류·원래 예외는 유지한다. CANCELLED 인식과 종결은 아래 2부에서 더했다.
