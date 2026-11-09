@@ -66,6 +66,7 @@ public interface RefundExecutionRepository extends JpaRepository<RefundExecution
             + "and r.activeCancellationHoldId is null "
             + "and (r.cancellationSchedule.nextAt<=:at or (r.cancellationSchedule.nextAt is null and r.cancellationSchedule.lastFinishedAt is null)) "
             + "and (r.cancellationSchedule.leaseUntil is null or r.cancellationSchedule.leaseUntil<=:at) "
+            + "and (r.cancellationSchedule.closureUntil is null or r.cancellationSchedule.closureUntil<=:at) "
             + "order by r.cancellationSchedule.nextAt, r.id")
     List<String> findRetryCandidates(Instant at, Pageable page);
 }

@@ -95,4 +95,40 @@ class RefundCancellationScheduleTest {
         assertThatThrownBy(() -> schedule.claim(id(), BASE, Duration.ZERO, false)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> schedule.initializeUnknown(null)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    /**
+     * PR #166 R1 (B): while a failure closure inspects the PG, its mark refuses every dispatch claim — the first send and
+     * the retry alike — and only its own token releases it. An expired mark (a dead closure) no longer blocks anything.
+     */
+    @Test void aLiveClosureMarkRefusesDispatchClaimsUntilItsOwnerReleasesItOrItExpires() {
+        RefundCancellationSchedule schedule = new RefundCancellationSchedule();
+        String closure = id();
+        assertThat(schedule.markClosure(closure, BASE, LEASE)).isTrue();
+        assertThat(schedule.closureMarkedAt(BASE.plusSeconds(1))).isTrue();
+        assertThat(schedule.ownsClosure(closure, BASE.plusSeconds(1))).isTrue();
+        assertThat(schedule.ownsClosure(id(), BASE.plusSeconds(1))).isFalse();
+        assertThat(schedule.markClosure(id(), BASE.plusSeconds(1), LEASE)).as("another live closure").isFalse();
+        assertThat(schedule.claim(id(), BASE.plusSeconds(1), LEASE, false)).as("first send").isNull();
+        assertThat(schedule.claim(id(), BASE.plusSeconds(1), LEASE, true)).as("retry").isNull();
+        schedule.releaseClosure(id());
+        assertThat(schedule.closureMarkedAt(BASE.plusSeconds(1))).as("a foreign token leaves the mark").isTrue();
+        schedule.releaseClosure(closure);
+        assertThat(schedule.getClosureId()).isNull(); assertThat(schedule.getClosureUntil()).isNull();
+        assertThat(schedule.claim(id(), BASE.plusSeconds(2), LEASE, false)).isNotNull();
+
+        RefundCancellationSchedule dead = new RefundCancellationSchedule();
+        String stale = id();
+        dead.markClosure(stale, BASE, LEASE);
+        Instant expired = BASE.plus(LEASE);
+        assertThat(dead.closureMarkedAt(expired)).isFalse(); assertThat(dead.ownsClosure(stale, expired)).isFalse();
+        assertThat(dead.markClosure(id(), expired, LEASE)).as("a new closure replaces an expired mark").isTrue();
+        dead.releaseClosure(stale);
+        assertThat(dead.closureMarkedAt(expired)).as("the dead closure cannot release its successor").isTrue();
+        assertThatThrownBy(() -> dead.markClosure("not-a-uuid", BASE, LEASE)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> dead.markClosure(id(), BASE, Duration.ZERO)).isInstanceOf(IllegalArgumentException.class);
+
+        RefundCancellationSchedule expiredOnly = new RefundCancellationSchedule();
+        expiredOnly.markClosure(id(), BASE, LEASE);
+        assertThat(expiredOnly.claim(id(), BASE.plus(LEASE), LEASE, false)).as("an expired mark does not block").isNotNull();
+    }
 }

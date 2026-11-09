@@ -10,6 +10,13 @@ ALTER TABLE refund_execution
     DROP CHECK chk_refund_execution_failure,
     ADD COLUMN late_cancel_observed_at DATETIME(6) NULL,
     ADD COLUMN late_cancelled_at DATETIME(6) NULL,
+    -- PR #166 R1: the failure closure's mark on the dispatch side. While it is live (until > now) no first send, retry or
+    -- operator resume starts, so no POST can follow the closure's PG lookup. It expires with the closure's lookup lease if
+    -- the closure dies. Existing rows carry no mark.
+    ADD COLUMN cancel_closure_id VARCHAR(36) NULL,
+    ADD COLUMN cancel_closure_until DATETIME(6) NULL,
+    ADD CONSTRAINT chk_refund_cancel_closure_mark CHECK (
+        (cancel_closure_id IS NULL AND cancel_closure_until IS NULL) OR (cancel_closure_id IS NOT NULL AND cancel_closure_until IS NOT NULL)),
     ADD CONSTRAINT chk_refund_execution_failure_v40 CHECK (
         (status<>'FAILED' AND failure_event_id IS NULL AND failure_confirmed_at IS NULL AND failure_lookup_hash IS NULL)
         OR (status='FAILED' AND failure_event_id IS NOT NULL AND failure_confirmed_at IS NOT NULL AND failure_confirmed_at >= received_at
