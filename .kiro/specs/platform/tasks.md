@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -108,9 +108,9 @@
   - 영향: **보유권** — Payment 소비 중단·DLT 때 보유권 정지·고객 `PROCESSING`이 경보 없이 남는다.
   - 재현: Payment `payment-refund-execution` 소비를 막고 10분 경과 → 게이지 1.
 
-- [ ] **T16. 공개를 확정하는 Catalog가 심사 승인을 확인하지 않는다(RI-2)** [결정 필요 PD-15]
+- [ ] **T16. 공개를 확정하는 Catalog가 심사 승인을 확인하지 않는다(RI-2)** ([결정 167](../../../docs/decisions.md#catalog-verifies-approval))
   - 어디서: `catalog:core/service/ReceiveProjectRelease.java:38-63`(`reviewRequestId`는 저장만), Catalog 설계 "Studio 명령을 신뢰". 가드는 Studio `studio:core/service/release/RequestProjectRelease.java:45-47·58·64`뿐.
-  - 목표: P3.4-2, design 흐름 1 RI-2. PD-15.
+  - 목표: P3.4-2, design 흐름 1 RI-2·S3a. 결정 167: Catalog가 `ProjectReviewApproved`를 새 그룹 `catalog-review-approval`로 받아 보관, 공개 확정 전 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)` 대조, 맞는 승인이 없으면 승인 대기 보류(같은 잠금 안에서 해제), 값이 다르면 `ProjectReleaseRejected`, 승인 대기 게이지. 세부는 Catalog 모듈 스펙(MC-C2).
   - 영향: **돈·보유권** — Studio 결함·`stove.studio.v1` 생산 권한 오용 때 승인 안 된 자료가 판매되고 그 자료로 보유권이 지급된다.
   - 재현: 승인 기록 없는 `reviewRequestId`로 `ProjectReleaseRequested`를 직접 넣어 공개되는지(지금 통과).
 

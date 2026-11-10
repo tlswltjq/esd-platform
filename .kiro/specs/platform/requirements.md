@@ -173,7 +173,7 @@
 #### P3.4 출시 요청·철회 (Studio → Catalog)
 
 1. WHEN Studio가 출시 요청을 접수하면 THEN Studio SHALL Project 잠금 안에서 (a) 현재 버전 심사 `APPROVED` (b) 진행 중 출시 없음 또는 같은 요청 (c) 저장소 HEAD 크기 = 스냅샷 `fileSize`를 확인하고, 승인된 심사 요청의 스냅샷 그대로 `ProjectReleaseRequested`(`releaseRequestId`·`reviewRequestId`·`snapshot`)를 Outbox에 기록한다(`studio:core/service/release/RequestProjectRelease.java:44-67`).
-2. THE 출시 요청의 스냅샷 SHALL 그 `reviewRequestId`로 Review가 승인한 스냅샷과 값이 같다(RI-2). 공개를 확정하는 Catalog가 이를 직접 확인할지는 [결정 필요 PD-15] · T16.
+2. THE 출시 요청의 스냅샷 SHALL 그 `reviewRequestId`로 Review가 승인한 스냅샷과 값이 같다(RI-2). WHEN Catalog가 출시 요청을 받으면 THEN Catalog SHALL 공개를 확정하기 전에 Review에게서 직접 받은 승인 사실(`ProjectReviewApproved`)과 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 대조한다. 맞는 승인이 아직 없으면 출시를 승인 대기로 보류하고 승인이 오면 같은 잠금 안에서 공개 작업을 연다. 승인과 값이 다르면 공개하지 않고 출시를 거절한다(`ProjectReleaseRejected`). 승인 대기 건수는 Catalog가 센다([결정 167](../../../docs/decisions.md#catalog-verifies-approval)·결정 158, T16).
 3. THE 프로젝트별 진행 중 출시 SHALL 1건이며, 앞선 출시의 최종 결과를 Studio가 기록한 뒤에만 다음 출시를 연다(결정 63, `uk_studio_active_release`).
 4. WHEN Catalog가 `ProjectReleaseRequested`를 그룹 `catalog-project-release`에서 받으면 THEN Catalog SHALL 공개하지 않고 원요청·불변 스냅샷·Inbox를 `catalog_publication_job`(`PENDING`)으로 먼저 저장한다(결정 62).
 5. WHEN Catalog가 출시 철회를 받으면 THEN Catalog SHALL 공개 확정과 같은 요청 잠금(`catalog_request_gate`) 안에서, 공개 확정 전이면 `catalog_release`를 `WITHDRAWN`으로 확정하고 `ProjectReleaseWithdrawn`을, 이미 `COMPLETED`/`REJECTED`이면 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied`(`targetStatus`)를 발행한다(결정 57, T21).

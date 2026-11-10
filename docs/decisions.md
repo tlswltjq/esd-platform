@@ -1628,6 +1628,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P3.15-3·P4.5-2, design 칸 변경 목표 표, tasks
 
+<a id="catalog-verifies-approval"></a>
+## 167. 공개를 확정하는 Catalog가 Review의 승인 사실을 직접 받아 출시 요청과 대조한다
+- 문제: "공개본은 Review가 승인한 스냅샷이다"(RI-2)를 지키는 곳은 Studio `RequestProjectRelease`뿐이다. Catalog는 Studio 명령을 신뢰하고 `reviewRequestId`를 저장만 한다. 승인의 정본은 Review이고 Studio의 승인 기록은 사본이다. 예: Studio 결함으로 다른 버전 승인을 근거로 출시 요청을 내거나, `stove.studio.v1` 생산 권한을 가진 다른 서비스가 출시 요청을 넣거나, 운영자가 Studio DB를 고쳐 `APPROVED`로 만들면 승인 안 된 자료가 판매되고 그 자료로 보유권이 지급된다(플랫폼 스펙 PD-15).
+- 선택지: A Studio 신뢰 유지 + 주기 검사기로 사후 감지 / B Catalog가 `ProjectReviewApproved`를 소비해 보관하고 출시 요청과 대조, 맞는 승인이 없으면 보류 / C Review가 스냅샷 지문을 싣고 Studio가 전달해 Catalog가 지문만 비교 (추천: B — 돌이킬 수 없는 판매·보유권 지급을 확정하는 Catalog에 가드를 두고(원칙 ⑤), 정본인 Review가 낸 사실을 직접 받는다(원칙 ③). A는 운영 경로에 모든 스키마를 읽는 검사기를 두지 않기로 한 결정 158과 부딪히고, C는 Studio 결함·위조를 막지 못한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 Catalog가 Review 승인을 직접 대조하게 해")
+- 선택: B
+  - Catalog는 `ProjectReviewApproved`(`stove.review.v1`)를 새 소비 그룹으로 받아 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 보관한다.
+  - 출시 요청을 받으면 공개를 확정하기 전에 그 보관 승인과 대조한다. 맞는 승인이 아직 없으면(토픽이 달라 출시 요청이 먼저 올 수 있다) 출시를 승인 대기 상태로 보류하고, 승인이 오면 같은 잠금 안에서 공개 작업을 연다. 승인은 있는데 값이 다르면 공개하지 않고 출시를 거절한다(`ProjectReleaseRejected`).
+  - 승인 대기로 보류된 출시 요청은 Catalog가 센다(결정 158 방식의 게이지, 경보 기준은 결정 159).
+  - Catalog 설계의 "Studio 명령을 신뢰하되 생산 권한은 좁힌다"는 "승인은 Review 사실로 확인하고, 생산 권한도 좁힌다"로 바뀐다. 상태 이름·보관 표·철회된 승인의 처리는 Catalog 모듈 스펙에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.4-2, design 흐름 1 단계·RI-2·실패 표 S3a·이벤트 목록·정방향 응답 쌍, tasks T16
+
 ---
 
 ## 검증하며 드러난 것
