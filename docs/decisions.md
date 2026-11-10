@@ -1604,6 +1604,17 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P3.21-3, design Order 환불 상태 절·흐름 3 S8·이벤트 목록 `RefundExecutionSucceeded`, tasks T19
 
+<a id="pg-fee-owner"></a>
+## 165. PG 비용의 정본은 Settlement 하나로 두고, Payment는 새 결제에 비용을 쓰지 않는다
+- 문제: PG 비용 확인·대사는 Settlement 책임이고 판매자 마감과 분리돼 있다(결정 38·39·142, `settlement_pg_fee`). 그런데 Payment도 승인 응답의 비용을 `purchase_payment.pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount`(V12)에 저장한다. 이 칸을 채우는 곳은 `mock-pg` 응답(`SimulatedPgHttpGateway.java:43-45`)뿐이다. 시뮬레이터가 승인 응답에 330원, 지급 명세에 300원을 보고하면 두 모듈에 다른 값이 남아 플랫폼 순액의 근거를 정할 수 없다(플랫폼 스펙 PD-13).
+- 선택지: A Settlement만 정본, Payment는 새 행에 쓰지 않고 옛 값은 읽기만 / B Payment가 정본, Settlement는 이벤트로 받음 / C 둘 다 두되 Payment는 "승인 응답 관측", Settlement는 확정 비용으로 뜻을 나눔 (추천: A — 정본 하나(원칙 ③)이고 결정 38·39·142의 책임 분리와 같다. B는 Settlement R4.1 "Payment 경유 없음"과 부딪히고, C는 원칙 ③을 이름으로만 피한다. 결정 162로 Payment 칸을 채우던 유일한 경로도 사라진다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PG 비용은 Settlement만 정본으로 해")
+- 선택: A
+  - PG 비용(정책·요율·금액)의 정본은 Settlement `settlement_pg_fee` 하나다. 플랫폼 순액 등 비용을 쓰는 판정·계산은 이 값만 쓴다.
+  - Payment는 새 결제에 `pg_fee_*`를 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. 이미 저장된 값은 읽을 수 있어야 한다(결정 104 옛 자료 호환 테스트). 칸을 없앨지·언제 없앨지는 Payment 모듈 스펙의 이행 계획에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P1.4-2, design 정본 소유 표·U6, tasks T17
+
 ---
 
 ## 검증하며 드러난 것

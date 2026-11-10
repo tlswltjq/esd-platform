@@ -56,7 +56,7 @@
 #### P1.4 정본 소유
 
 1. THE 사실·값마다 정본 모듈 SHALL design "정본 소유" 표의 한 모듈이다. 다른 모듈의 값은 사본이고, 받은 근거(이벤트 ID·버전)를 함께 저장한다.
-2. IF 같은 사실을 두 모듈이 각자 외부 공급자에게서 받아 저장하면 THEN 스펙 SHALL 판정에 쓰는 정본을 정하고, 정본이 아닌 쪽은 판정·금액 계산에 쓰지 않는다. PG 비용은 [결정 필요 PD-13] · T17.
+2. IF 같은 사실을 두 모듈이 각자 외부 공급자에게서 받아 저장하면 THEN 스펙 SHALL 판정에 쓰는 정본을 정하고, 정본이 아닌 쪽은 판정·금액 계산에 쓰지 않는다. PG 비용의 정본은 Settlement `settlement_pg_fee` 하나이고, Payment는 새 결제에 비용을 쓰지 않는다([결정 165](../../../docs/decisions.md#pg-fee-owner), T17).
 3. THE 주문 결제 기한(`expiresAt`) SHALL Order가 정본이다. 기한 길이(지금 30분, 결정 32)는 Order 설정 키 하나에 두고 주문 생성 때 `purchase_order.expires_at`에 저장한다. Payment와 다른 모듈은 `OrderPlaced.expiresAt`·접수 응답으로 받은 값을 기록·표시에만 쓰고 다시 계산하지 않는다(T12).
 4. THE 환불 취소 결과 확인 지연 시각(`confirmationDelayAt`) SHALL Payment가 정본이다. Order는 `RefundExecutionPrepared`로 받은 값을 그대로 쓰고 `firstPreparedAt + 3시간`과 대조하지 않는다(T14).
 5. THE 결제 공급자의 멱등 재송신 보장 기한(승인 확정 송신 기한·환불 취소 재송신 창, 지금 3시간) SHALL 결제 공급자 adapter 설정이 정본이다. core는 adapter가 준 기한(`confirmDeadline` 등)을 시도에 기록하고 그 값으로만 판정한다(결정 124·140, 원칙 ②, MC-P2).

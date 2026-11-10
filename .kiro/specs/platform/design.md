@@ -77,7 +77,7 @@
 | 주문 청구액·상품 스냅샷 | Order(`purchase_order.amount`·`list_amount`·`discount_amount`·`content_version`) | Payment `purchase_payment`, License `product_license`, Settlement `settlement_sale` | `OrderPlaced`·`OrderPaid` | 하나 |
 | 30분 승인 진행 기한 | Order(`Order.getExpiresAt()` `order:core/domain/Order.java:77`, 영수증 `order_payment_admission`) | Payment `payment_approval.expires_at` 등 | 접수 응답 `expiresAt` | **중복 계산**: Payment가 `OrderPlaced.occurredAt + 30분`을 다시 계산(T12) |
 | 최종 결제 결과(`PAID`/`FAILED`)·PG 결제 구성 | Payment(`purchase_payment.status`·`pg_paid_amount`·`pg_discount_amount`) | Order `purchase_order.status`·`pg_paid_amount`·`pg_discount_amount`(V27 "Read copies only") | `OrderPaymentCompleted`/`Failed` | 하나(PG 결과의 정본은 Payment, 주문 상태의 정본은 Order) |
-| PG 비용 | **둘**: Payment `purchase_payment.pg_fee_*`(`payment/db/V12__pg_fee_snapshot.sql`), Settlement `settlement_pg_fee` | — | 각자 PG 응답 | **정본 중복** [결정 필요 PD-13] |
+| PG 비용 | **둘**: Payment `purchase_payment.pg_fee_*`(`payment/db/V12__pg_fee_snapshot.sql`), Settlement `settlement_pg_fee` | — | 각자 PG 응답 | 목표: Settlement `settlement_pg_fee`만 정본, Payment는 새 결제에 쓰지 않고 옛 값은 읽기만(결정 165) |
 | PG 거래 식별(`provider`·`provider_transaction_id`) | PG(외부). Payment `purchase_payment`, Settlement `settlement_pg_transaction`이 각자 관측 | — | 각자 PG 조회 | 외부 정본의 두 관측. 금액 판정은 각자 자기 업무(Payment: 결제 확정, Settlement: 매출 근거)에만 쓰므로 허용. 두 관측이 다르면 대사 대상(P3) |
 | 환불 접수·판정·진행 | Order(`order_refund`·`order_refund_attempt`) | Payment `refund_execution` 요청 | `RefundExecutionRequested` | 하나 |
 | 환불 금융 확인(취소 합계·확인 시각) | Payment(`refund_execution.refund_confirmed_at`) | Order `order_refund`, Settlement `settlement_refund.confirmed_at` | `RefundPaymentConfirmed` | 하나 |
@@ -708,7 +708,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | U3 | 앞 모듈 기록 → 뒤 모듈 반영의 누락을 감지하는 곳 없음 | I14, P4.3-1·P3.9-2·P3.15-5 | 결정 158: 사실을 낸 모듈의 응답 대기 게이지("정방향 응답 쌍"), 재반영은 재발행·DLT 재투입(결정 155) | 기준 시간 결정 159, 보관 결정 160, 재발행 결정 161, T6·T7 |
 | U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | 결정 162(`mock-pg`·`SIMULATED` 제거, 기준 시뮬레이터 하나), T9 |
 | U5 | 늦은 `RefundExecutionSucceeded`가 정산에 반영된다는 문서와 코드 불일치 | P4.3-3, P3.26-4: Settlement는 소비하지 않는다(정산 금액은 첫 금융 확인 하나, 취소 귀속은 Settlement 자신의 PG 조회) | `settlement:api/listener/RefundEventListener.java:21`(지금 코드가 목표와 같음) | Settlement R6.2 문서 정정 MC-S2 |
-| U6 | PG 비용 확정 경로 | I7은 지켜짐. 비용 확정·대사는 G7(결정 142)·결정 140 범위 | DB `ck_payment_pg_fee`·`ck_pg_fee_money`, `CloseSellerMonth`(비용 미참조) | PD-13(비용 정본), T17 |
+| U6 | PG 비용 확정 경로 | I7은 지켜짐. 비용 확정·대사는 G7(결정 142)·결정 140 범위 | DB `ck_payment_pg_fee`·`ck_pg_fee_money`, `CloseSellerMonth`(비용 미참조) | 비용 정본 결정 165, T17 |
 
 ### 정방향 응답 쌍 (결정 158)
 

@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -114,9 +114,9 @@
   - 영향: **돈·보유권** — Studio 결함·`stove.studio.v1` 생산 권한 오용 때 승인 안 된 자료가 판매되고 그 자료로 보유권이 지급된다.
   - 재현: 승인 기록 없는 `reviewRequestId`로 `ProjectReleaseRequested`를 직접 넣어 공개되는지(지금 통과).
 
-- [ ] **T17. PG 비용이 Payment와 Settlement 두 곳에 기록된다** [결정 필요 PD-13]
+- [ ] **T17. PG 비용이 Payment와 Settlement 두 곳에 기록된다** ([결정 165](../../../docs/decisions.md#pg-fee-owner))
   - 어디서: `payment/db/V12__pg_fee_snapshot.sql:1-9`, `payment:core/domain/Payment.java:38-40`·`:130`, `payment:adapter/pg/SimulatedPgHttpGateway.java:43-45`; Settlement `settlement/db/V8__...sql:25-33`(`settlement_pg_fee`).
-  - 목표: P1.4-2. PD-13(추천: Settlement만 정본).
+  - 목표: P1.4-2. 결정 165: Settlement `settlement_pg_fee`만 정본. Payment는 새 결제에 `pg_fee_*`를 쓰지 않고 공급자 승인 응답의 비용을 core 계약으로 받지 않음, 옛 값은 읽기만(결정 104). 칸 제거 시점은 Payment 모듈 스펙 이행 계획.
   - 영향: **돈(정산)** — 두 값이 다르면 플랫폼 순액의 근거를 정할 수 없다.
   - 재현: 같은 결제에 두 값이 다를 때 ADMIN 응답이 어느 것을 쓰는지 고정하는 계약 테스트.
 
