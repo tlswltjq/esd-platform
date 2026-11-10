@@ -33,7 +33,7 @@
 #### P1.1 경계 (코드 수준)
 
 1. THE 각 업무 모듈 SHALL 다른 업무 모듈의 `com.stove.<앱>` 구현을 직접 참조하지 않고, 모듈 사이에는 `com.stove.common.kafka.contract`의 이벤트 계약과 호출 모듈 `core.port`의 포트만 쓴다(ArchUnit `ModulePackageRules.앱은_다른_앱의_구현을_모른다`).
-2. THE 각 업무 모듈 SHALL 자기 MySQL 스키마(`stove_<모듈>`)만 읽고 쓰며, 다른 모듈 테이블을 조인하거나 한 트랜잭션으로 묶지 않는다. DB 계정 권한으로도 지킨다(T29). 운영 도구의 예외 여부는 [결정 필요 PD-6]이 정한다.
+2. THE 각 업무 모듈 SHALL 자기 MySQL 스키마(`stove_<모듈>`)만 읽고 쓰며, 다른 모듈 테이블을 조인하거나 한 트랜잭션으로 묶지 않는다. DB 계정 권한으로도 지킨다(T29). 운영 도구에도 예외를 두지 않는다. 정방향 누락은 사실을 낸 모듈이 자기 기록으로 센다(P4.3-1). 모든 스키마를 읽는 불변식 검사기(`tools/verification/`)는 실험·여정의 판정 도구로만 쓴다([결정 158](../../../docs/decisions.md#forward-gap-counting)).
 3. WHEN 모듈이 다른 모듈이나 외부 공급자를 동기 호출하면 THEN 시스템 SHALL 호출 계약을 호출 모듈의 `core.port`에, HTTP 구현을 `adapter`에, 주소·키·타임아웃 조립을 `config`에 둔다(AGENTS.md 3절).
 4. THE 외부 공급자의 이름·응답 형식·오류 분류·보장 기한 SHALL `adapter`와 `config`에만 있다. IF `core` 패키지가 공급자 이름이나 공급자 상수를 쓰면 THEN 아키텍처 검사 SHALL 실패한다(결정 140, T28).
 
@@ -161,7 +161,7 @@
 4. WHEN Studio가 심사 철회를 접수하면 THEN Studio SHALL 명령(`PENDING`)과 `ProjectReviewWithdrawalRequested` Outbox를 한 트랜잭션에 저장하고 202로 응답하며, 활성 심사 자리는 최종 결과 전까지 유지한다(결정 54).
 5. WHEN Review가 철회를 받으면 THEN Review SHALL 판정과 같은 `project_review` 행 잠금 안에서 먼저 커밋된 결과를 유지하고(결정 53), 철회가 이기면 `ProjectReviewWithdrawn`, 판정이 먼저면 `ProjectReviewWithdrawalDenied`(`targetStatus`)를 발행한다(원칙 ①, T21).
 6. WHEN 철회가 원요청보다 먼저 Review에 도착하면 THEN Review SHALL 철회 의사를 내구 보관하고 원요청 수신 때 같은 `reviewRequestId`로 대조해 확정하며, 원요청 없이 심사 행을 만들지 않는다.
-7. IF 철회 대상의 원요청이 끝내 도착하지 않으면 THEN 정합 감지 SHALL 그 철회를 "원요청 없는 철회"로 세고 경보한다. 기준 시간·감지 주체는 [결정 필요 PD-6].
+7. IF 철회 대상의 원요청이 끝내 도착하지 않으면 THEN 철회를 보관한 모듈(Review·Catalog) SHALL 자기 보관 기록을 "원요청 없는 철회"로 세고 기준 시간을 넘기면 경보한다(결정 158). 기준 시간은 [결정 필요 PD-6].
 
 #### P3.3 심사 판정 결과 (Review → Studio)
 
@@ -212,7 +212,7 @@
 #### P3.9 출시 흐름의 모듈 간 정합
 
 1. THE 흐름 SHALL design의 정합 조건 RI-1~RI-9를 지키고, 조건마다 지키는 곳과 확인 테스트를 갖는다(원칙 ⑤).
-2. THE 플랫폼 SHALL 모듈을 넘는 정합 조건(RI-1·RI-2·RI-4·RI-5·RI-7)의 정방향 차이를 기준 시간 안에 감지한다. 기준 시간·감지 주체는 [결정 필요 PD-6] · T6.
+2. THE 플랫폼 SHALL 모듈을 넘는 정합 조건(RI-1·RI-2·RI-4·RI-5·RI-7)의 정방향 차이를 기준 시간 안에 감지한다. 감지는 요청한 모듈이 응답을 받지 못한 자기 기록을 세는 방식이다: Studio는 결과 없는 `REQUESTED` 요청·`PENDING` 철회 명령, Review·Catalog는 원요청 없는 철회 보관, Store는 Catalog 정본 대조(결정 85)의 상품 단위 지연([결정 158](../../../docs/decisions.md#forward-gap-counting), design "정방향 응답 쌍"). 기준 시간은 [결정 필요 PD-6] · T6.
 3. IF 역방향 위반(뒤 모듈 기록이 앞 모듈 근거 없이 있음: Studio `COMPLETED`인데 Catalog `COMPLETED` 없음, Catalog `COMPLETED`인데 Review `APPROVED` 없음)이 보이면 THEN 감지 SHALL 기준 시간과 무관하게 즉시 경보한다.
 
 #### P3.10 주문과 결제 기한 (Order)
@@ -265,7 +265,7 @@
 2. WHEN Order가 구매 근거 생성 사실을 처음 받으면 THEN Order SHALL 주문이 `PAID`이고 구매자·상품·`paymentId`가 같을 때만 `order_license_grant`를 저장한다(환불 흐름의 입력, P3.17).
 3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월의 기준 시각은 [결정 필요 PD-14].
 4. IF 매출 기록에 필요한 외부 조회가 실패하거나 대조가 어긋나면 THEN Settlement SHALL 원장·Inbox·월 합계를 만들지 않고 공통 재시도를 받으며, 소진하면 DLT에 원본 그대로 남긴다.
-5. WHILE Order 주문이 `PAID`인데 같은 `orderNo`의 구매 근거나 매출이 없으면 시스템 SHALL 그 건수를 세고 기준 시간을 넘긴 건을 경보한다(I14). 기준 시간·감지 주체는 [결정 필요 PD-6].
+5. WHILE Order 주문이 `PAID`인데 구매 근거 응답(`LicenseGranted`)이나 매출 기록 확인 사실(가칭 `SettlementSaleRecorded`)을 받지 못했으면 THEN Order SHALL 그 건수를 세고 기준 시간을 넘긴 건을 경보한다(I14, [결정 158](../../../docs/decisions.md#forward-gap-counting)). 기준 시간은 [결정 필요 PD-6].
 
 #### P3.16 환불 접수와 자격 (Order)
 
@@ -374,7 +374,7 @@
 
 #### P4.3 정방향 반영 (U3·U4·U5 → I14)
 
-1. WHILE 앞 모듈의 기록(`purchase_order.status`=`PAID`, `order_refund.status`=`COMPLETED`, `refund_execution.refund_confirmed_at` 있음)이 있으면 시스템 SHALL 뒤 모듈의 반영(`product_license`·`settlement_sale`, `product_license.status`=`REFUNDED`·`settlement_refund`)을 결국 만든다. 반영이 기준 시간을 넘으면 감지·경보하고, DLT·원본 소실 사건을 같은 이벤트 ID로 다시 반영하는 운영 경로를 둔다(P2.2-7·P2.6-4). 기준 시간과 감지 주체는 [결정 필요 PD-6](I14, T6).
+1. WHILE 앞 모듈의 기록(`purchase_order.status`=`PAID`, `order_refund.status`=`COMPLETED`, `refund_execution.refund_confirmed_at` 있음)이 있으면 시스템 SHALL 뒤 모듈의 반영(`product_license`·`settlement_sale`, `product_license.status`=`REFUNDED`·`settlement_refund`)을 결국 만든다. 반영이 기준 시간을 넘으면 감지·경보하고, DLT·원본 소실 사건을 같은 이벤트 ID로 다시 반영하는 운영 경로를 둔다(P2.2-7·P2.6-4). 감지는 사실을 낸 모듈이 응답 사실을 받지 못한 자기 기록을 세는 방식이고, 응답 사실이 없는 쌍에는 확인 사실을 새로 둔다(쌍 목록은 design "정방향 응답 쌍", [결정 158](../../../docs/decisions.md#forward-gap-counting)). 기준 시간은 [결정 필요 PD-6](I14, T6).
 2. THE 정산 환불 반영(I4의 Settlement 다리) SHALL 모든 결제 공급자 환경에서 같은 계약으로 성립한다. 공급자가 환불 근거를 줄 수 없는 환경은 [결정 필요 PD-10](U4, T9).
 3. THE 정산 금액 SHALL 첫 금융 확인(`RefundPaymentConfirmed`) 하나로 정해지고, Settlement는 귀속 보강 사실(`RefundExecutionSucceeded`)을 소비하지 않는다. 취소 귀속은 Settlement 자신의 PG 조회 근거(`settlement_refund_cancellation`)로 기록한다(U5 → P3.26-4).
 
