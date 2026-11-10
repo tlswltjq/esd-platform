@@ -292,7 +292,7 @@
 1. WHEN Payment가 `RefundExecutionRequested`를 받으면 THEN Payment SHALL 원결제 `PAID`와 연결값·금액(원결제 전액)을 대조하고 `attemptId` 하나에 `refund_execution` 한 행만 접수하며, 접수 트랜잭션에서 PG를 호출하지 않는다. 같은 `licenseSuspensionEventId`가 다른 실행에 쓰였으면 거절한다.
 2. IF 요청이 재시도(`previousAttemptId`)이면 THEN Payment SHALL 이전 시도가 같은 환불·같은 결제의 `FAILED`이고 다음 실행이 아직 없을 때만 접수한다. 판정은 식별자와 `refund_execution` 행 잠금으로만 한다(U2 PAY-1, T3).
 3. WHEN Payment가 첫 취소 송신을 준비하면 THEN Payment SHALL `firstCancellationPreparedAt`과 `confirmationDelayAt`을 한 번만 정해 `RefundExecutionPrepared`로 알린다. Order는 식별자만 대조해 두 값을 그대로 저장한다(P1.4-4, T14).
-4. WHILE 환불이 `PENDING_PAYMENT_REFUND`이고 현재 시도의 `RefundExecutionPrepared`를 받지 못했으면 Order SHALL 그 건을 감지 대상으로 둔다. 감지 방법은 [결정 필요 PD-7] · T15.
+4. WHILE 환불이 `PENDING_PAYMENT_REFUND`이고 현재 시도의 `RefundExecutionPrepared`를 받지 못했으면 THEN Order SHALL 결정 125 게이지에 "실행 준비 미수신" 라벨로 세고, 같은 10분 경계로 경보하며 고객 안내(`processingNotice`)를 낸다. 요청한 모듈이 응답을 받지 못한 자기 기록을 세는 방식이다([결정 158](../../../docs/decisions.md#forward-gap-counting)·결정 125, T15).
 
 #### P3.20 PG 취소 송신·조회·보류·재개 (Payment)
 

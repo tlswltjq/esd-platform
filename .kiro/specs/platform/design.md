@@ -605,10 +605,10 @@ S14 ADMIN → Payment → Order · Settlement  늦은 취소 반영(RefundLateCa
 | S4 정지 완료 | 상대 모듈 중단 | Order 중단 — 정지는 됐는데 실행 요청이 안 나감(고객은 게임도 돈도 없음) | Order 게이지(`PENDING_LICENSE_SUSPENSION`, 10분) | Order 재시작 뒤 Kafka 소비 재개 | 원본 없으면 License `LicenseSuspended` 재발행 | [표] | 없음 |
 | S5 실행 접수 | 중복 전달 | `RefundExecutionRequested` 재전달 | Payment `ReceiveRefundExecution` | 같은 attemptId는 같은 요청 + Inbox(`payment-refund-execution`)만 무효과 | 해당 없음 | [표] | 없음 |
 | S5 실행 접수 | 순서 역전 | 재시도 요청이 이전 시도 `FAILED` 확정보다 먼저 Payment에 옴(이론상) | Payment | 이전 시도 `FAILED`·`failureEventId` 없으면 409 → 재시도 → DLT | 운영자 DLT 재투입 | [읽음 `ReceiveRefundExecution.java:61-67`] | Order는 실패 반영 뒤에만 재시도를 내므로 정상 경로에서는 생기지 않음. `occurredAt` 비교(PAY-1)는 제거 |
-| S5 실행 접수 | 늦은 도착 | 요청이 Payment 중단으로 몇 시간 늦게 도착 | Payment | 접수 시점부터 3시간 창이 시작(창 기준은 Payment 최초 준비) | 해당 없음 | [표] | Order가 이 지연을 못 본다 — PD-7 |
+| S5 실행 접수 | 늦은 도착 | 요청이 Payment 중단으로 몇 시간 늦게 도착 | Payment | 접수 시점부터 3시간 창이 시작(창 기준은 Payment 최초 준비) | 해당 없음 | [표] | Order가 이 지연을 못 본다 → 목표: 결정 125 게이지 "실행 준비 미수신" 라벨(결정 158) |
 | S5 실행 접수 | 상대 상태가 이미 바뀜 | 원결제가 이미 콘솔에서 부분 취소돼 금액이 다름 | Payment `Payment.requireRefundRequest`·PG 조회 | 접수는 하되 송신 전 GET 대조에서 잔액 다르면 자동 취소 안 함(결정 29 하위 "외부 부분 취소") | 운영자: 콘솔 처리 뒤 결정 127/128 종결 | [표] | 없음 |
 | S5 실행 접수 | 동시 진행 | 같은 정지 완료 ID로 두 실행 요청(버그) | Payment | `licenseSuspensionEventId` 사용 여부 검사 + DB `uk_refund_execution_suspension`(V22)·`uk_refund_execution_request`(V14) | 해당 없음 | [읽음 `ReceiveRefundExecution.java:71-72`, `V22__refund_explicit_retry.sql:4`] | 없음 |
-| S5 실행 접수 | 상대 모듈 중단 | Payment 중단 — Order는 `PENDING_PAYMENT_REFUND`, 고객은 `PROCESSING` | Kafka 소비 지연 게이지(D-026)만 | Payment 재시작 뒤 소비 | 경보 없음(Order 게이지 대상 아님, Payment 3시간 경보는 준비 뒤부터) | [표] Order 게이지 4개 상태 | PD-7 |
+| S5 실행 접수 | 상대 모듈 중단 | Payment 중단 — Order는 `PENDING_PAYMENT_REFUND`, 고객은 `PROCESSING` | Kafka 소비 지연 게이지(D-026)만 | Payment 재시작 뒤 소비 | 경보 없음(Order 게이지 대상 아님, Payment 3시간 경보는 준비 뒤부터) | [표] Order 게이지 4개 상태 | 목표: 결정 125 게이지 "실행 준비 미수신" 라벨, 10분 경계(결정 158) |
 | S6 첫 송신·준비 | 중복 전달 | Kafka 재전달로 첫 송신이 두 번 시작 | Payment `RequestFirstRefundCancellation` | 이미 준비됐으면 송신 없이 조회만, 송신 lease, 같은 `Idempotency-Key`·본문 | 해당 없음 | [표] | 없음 |
 | S6 첫 송신·준비 | 순서 역전 | `RefundExecutionPrepared`가 금융 결과보다 늦게 Order에 옴 | Order `ApplyRefundPreparation` | 같은 Payment 토픽·같은 키라 정상 경로에서는 생기지 않음. 생겨도 준비 기록은 환불 상태를 검사하지 않음 | 해당 없음 | [표] `RefundAttempt.recordPreparation` | 시각 비교 ORD-1 제거 |
 | S6 첫 송신·준비 | 늦은 도착 | 취소 POST 응답 유실 | Payment | 미확정으로 두고 같은 키 재송신·조회 | 3시간 뒤 경보 | [표] | 없음 |
@@ -632,7 +632,7 @@ S14 ADMIN → Payment → Order · Settlement  늦은 취소 반영(RefundLateCa
 | S9 PG 확정 실패 | 늦은 도착 | Order 시계가 Payment보다 늦어 실패 `occurredAt`이 시도 시작보다 앞섬 | Order `Refund.recordFailure`·`RefundAttempt.recordRefundFailure` | 지금은 거절 → DLT(환불이 `PENDING_PAYMENT_REFUND`에 멈춤) | DLT 재투입해도 같은 결과 | [읽음 `Refund.java:173`, `RefundAttempt.java:98`] | ORD-2·ORD-3 제거 — T3 |
 | S9 PG 확정 실패 | 상대 상태가 이미 바뀜 | 실패가 왔는데 Order 환불이 이미 `COMPLETED` | Order | 거절 → DLT(I18가 Payment에서 막음) | 운영자 조사 | [표] 가드 "금융 확인 없음" | 없음 |
 | S9 PG 확정 실패 | 동시 진행 | 실패 확정과 ADMIN 실패 종결이 같은 실행에 | Payment | 조회 lease 공유(`claimForClosure`), 종결 쪽 두 번째 트랜잭션이 `failureClosableAt`·종결 행 없음 재확인, `failure_event_id` UNIQUE | 해당 없음 | [읽음 #166 `CloseRefundFailure.java:82,108-117`] | 없음 |
-| S9 PG 확정 실패 | 상대 모듈 중단 | Order 중단 — 실패 확정됐는데 보유권 정지 유지 | Order 게이지는 `PENDING_LICENSE_RESTORATION` 진입 뒤만 | 재시작 뒤 소비 | Payment 이벤트 재발행 없음 | [읽음 재발행 목록] | PD-9·PD-7 |
+| S9 PG 확정 실패 | 상대 모듈 중단 | Order 중단 — 실패 확정됐는데 보유권 정지 유지 | Order 게이지는 `PENDING_LICENSE_RESTORATION` 진입 뒤만 | 재시작 뒤 소비 | Payment 이벤트 재발행 없음 | [읽음 재발행 목록] | PD-9, 결정 158 응답 대기 |
 | S10 운영자 실패 종결 | 중복 전달 | ADMIN이 같은 `requestId`로 두 번 POST / `RefundFailureClosed` 재전달 | Payment `CloseRefundFailure`, Order `ApplyRefundRestoration` | 종결 `requestId` 유일·최초 응답 재생, Order Inbox(받은 종류로 기록) + 출처를 넣은 지문 | 해당 없음 | [읽음 #166 `CloseRefundFailure.java:69-70`, `ApplyRefundRestoration.java` diff, `RefundFailureConfirmation.fingerprint`] | 없음 |
 | S10 운영자 실패 종결 | 순서 역전 | 종결의 PG GET 뒤에 재개된 POST가 나감 | Payment | R1 B안: 종결 표시 동안 송신·재개 금지, 두 번째 트랜잭션에서 `ownsClosure`·접수 응답 동일 재확인 | 해당 없음 | [읽음 #166 `CloseRefundFailure.java:82-85,108-117`] | 없음 |
 | S10 운영자 실패 종결 | 늦은 도착 | 종결 뒤 PG에서 전액 취소가 늦게 나타남 | Payment 실패 뒤 조회 → `recordLateCancellation` | 조사 목록 `LATE_CANCELLATION`·경보, 상태·보유권 자동 불변 | ADMIN이 PG 근거로 늦은 취소 반영(S14, 결정 157) | [읽음 #166 `RefundExecution.java` `recordLateCancellation`] | 반영 경로가 main에 없음(T4, 결정 157) |
@@ -720,7 +720,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | `ProjectReviewRequested` (Studio) | 심사 `project_review` (Review) | `ProjectReviewApproved`·`ProjectReviewRejected` (있음) | Studio · 결과 없는 `REQUESTED` |
 | `ProjectReleaseRequested` (Studio) | 출시 `catalog_release` (Catalog) | `ProjectReleaseCompleted`·`ProjectReleaseRejected` (있음) | Studio · 결과 없는 `REQUESTED` |
 | 철회 요청 (Studio) | 철회 결과 (Review·Catalog) | 철회 결과 이벤트(SP-7·SP-8 목표 이름) | Studio · `PENDING` 철회 명령. 원요청 없이 보관한 철회는 Review·Catalog가 셈 |
-| `RefundExecutionRequested` (Order) | 실행 접수 (Payment) | `RefundExecutionPrepared` (있음) | Order · 실행 요청 저장 뒤 준비 응답 없음([결정 필요 PD-7]) |
+| `RefundExecutionRequested` (Order) | 실행 접수 (Payment) | `RefundExecutionPrepared` (있음) | Order · 실행 요청 저장 뒤 준비 응답 없음(결정 125 게이지 라벨, 10분 경계) |
 | 공개 사본 이벤트 (Catalog) | 공개 사본 `store_product` (Store) | 없음 — Store가 Catalog 정본을 대조(결정 85) | Store · 상품 단위 지연(정본 `catalogVersion`과의 차이) |
 
 새 확인 사실 3개(`SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`, 모두 가칭)는 이벤트 목록 "목표 행"에 있다(T6). 모든 스키마를 읽는 확인 SQL(위 불변식 표)은 `tools/verification/`의 실험·여정 판정 도구로 쓴다.

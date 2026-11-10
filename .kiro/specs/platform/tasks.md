@@ -9,7 +9,7 @@
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 감지 주체 → 결정 158 완료(PD-6 기준 시간은 남음)(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 감지 주체 → 결정 158, PD-7 → 결정 158 적용 완료(PD-6 기준 시간은 남음)(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -101,9 +101,9 @@
   - 영향: **보유권** — 공급자를 바꾸거나 보장 기한이 3시간이 아니면 Order가 정상 `RefundExecutionPrepared`를 거절해 환불이 보유권 정지 상태로 멈춘다(추정).
   - 재현: 보장 창 설정을 2시간으로 바꾼 `RefundExecutionPrepared`를 Order가 받아들이는지.
 
-- [ ] **T15. Payment가 환불 실행 요청을 받지 못한 경우를 Order가 감지하지 않는다** [결정 필요 PD-7]
+- [ ] **T15. Payment가 환불 실행 요청을 받지 못한 경우를 Order가 감지하지 않는다** ([결정 158](../../../docs/decisions.md#forward-gap-counting) 적용)
   - 어디서: 게이지 대상이 `PENDING_LICENSE_GRANT`·`PENDING_LICENSE_SUSPENSION`·`PENDING_LICENSE_RESTORATION`·`PENDING_APPROVAL_STOP` 4개(order `design.md:210`·`:267-271`). Payment에는 행이 없어 `RefundConfirmationsDelayed`도 안 울린다.
-  - 목표: P3.19-4. PD-7(추천: 결정 125 게이지에 "`PENDING_PAYMENT_REFUND` + 현재 시도 준비 기록 없음" 라벨).
+  - 목표: P3.19-4. 결정 158 적용: 결정 125 게이지에 "`PENDING_PAYMENT_REFUND` + 현재 시도 준비 기록 없음" 라벨, 진입 시각은 시도 `startedAt`, 같은 10분 경계·경보·고객 안내(`processingNotice`). Payment 쪽 게이지는 DLT 건을 못 보므로 두지 않는다.
   - 영향: **보유권** — Payment 소비 중단·DLT 때 보유권 정지·고객 `PROCESSING`이 경보 없이 남는다.
   - 재현: Payment `payment-refund-execution` 소비를 막고 10분 경과 → 게이지 1.
 
