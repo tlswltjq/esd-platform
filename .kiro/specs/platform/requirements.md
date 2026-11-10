@@ -389,7 +389,7 @@
 
 1. THE Order·Payment·License·Settlement SHALL 다른 모듈이 찍은 시각(`occurredAt`·`confirmedAt`·`startedAt`·`restoredAt` 등)과 자기 시각, 또는 서로 다른 모듈이 찍은 두 시각의 선후로 이벤트·명령을 거절·분기하지 않는다. 같은 시도·정지·요청인지는 식별자(`attemptId`·`requestEventId`·`suspensionRequestEventId`·`suspensionEventId`·`restorationRequestEventId`·`refundId`·`admissionId`)와 잠금으로만 판정한다(원칙 ⑥, D-052, I13, T3).
 2. WHERE 업무 규칙이 다른 모듈의 시각을 값으로 써야 하면(정산 귀속 월 = `OrderPaid.occurredAt`의 KST 월, 환불 귀속 월 = `RefundPaymentConfirmed.confirmedAt`의 KST 월, 결정 42) 시스템 SHALL 그 값을 그대로 기록에 쓰되 자기 시계와 비교해 거절하지 않는다.
-3. WHERE 외부 결제 공급자가 찍은 시각(`requestedAt`·`cancelledAt`)이 근거에 있으면 Payment SHALL 그 값을 그대로 저장한다. 자기 관측 시각과의 선후로 PG 근거를 무효로 볼지는 [결정 필요 PD-11] · MC-P10. 같은 모듈 안 시각끼리의 비교는 이 요구사항의 대상이 아니다.
+3. WHERE 외부 결제 공급자가 찍은 시각(`requestedAt`·`cancelledAt`)이 근거에 있으면 Payment SHALL 그 값을 그대로 저장하고, 자기 관측 시각과의 선후로 PG 근거를 무효로 보지 않는다. 근거의 진위는 취소 ID·결제 ID·금액·상태로 판정한다([결정 163](../../../docs/decisions.md#external-clock-principle), 원칙 ⑥, T3·MC-P10). PG가 찍은 시각끼리의 순서 검사와 같은 모듈 안 시각끼리의 비교는 이 요구사항의 대상이 아니다.
 
 #### P4.6 Payment 내부 승인 보류 (I10·I11)
 

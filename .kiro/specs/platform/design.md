@@ -704,7 +704,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | U | 구멍(`docs/domain/workflows.md`) | 목표 계약 | 목표 지키는 곳 | 남은 결정·작업 |
 |---|---|---|---|---|
 | U1 | `PENDING` 주문의 결과를 기한·`paymentId`와 대조하지 않아, 실패로 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID`·보유권·매출 | I12·I15, P3.12-1·P3.14-1·P4.2-5 | Order `Order.apply` 영수증·`admissionId` 대조 + `purchase_order.payment_admission_id` FK·CHECK; Payment 확정 트랜잭션의 시도 재확인 | 결정 153(거절 사실 `OrderPaymentResultRejected` → Payment 보류)·결정 154(`UnlinkedCharge`), T1·T5·T13 |
-| U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3, PD-11(외부 PG 시각), RC-16(결정 29 4시간 기한) |
+| U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3(외부 PG 시각 포함, 결정 163), RC-16(결정 29 4시간 기한) |
 | U3 | 앞 모듈 기록 → 뒤 모듈 반영의 누락을 감지하는 곳 없음 | I14, P4.3-1·P3.9-2·P3.15-5 | 결정 158: 사실을 낸 모듈의 응답 대기 게이지("정방향 응답 쌍"), 재반영은 재발행·DLT 재투입(결정 155) | 기준 시간 결정 159, 보관 결정 160, 재발행 결정 161, T6·T7 |
 | U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | 결정 162(`mock-pg`·`SIMULATED` 제거, 기준 시뮬레이터 하나), T9 |
 | U5 | 늦은 `RefundExecutionSucceeded`가 정산에 반영된다는 문서와 코드 불일치 | P4.3-3, P3.26-4: Settlement는 소비하지 않는다(정산 금액은 첫 금융 확인 하나, 취소 귀속은 Settlement 자신의 PG 조회) | `settlement:api/listener/RefundEventListener.java:21`(지금 코드가 목표와 같음) | Settlement R6.2 문서 정정 MC-S2 |
@@ -757,11 +757,11 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | PAY-1 | `payment:core/service/ReceiveRefundExecution.java:66` | Order 요청 `occurredAt < previous.failureConfirmedAt` 거절 | Order vs Payment | 이전 시도 실패 확정 전에 만든 재시도 | `previous.status == FAILED`·`failureEventId != null`·`findByPreviousAttemptId` 없음·`refund_execution` 잠금이 이미 지킨다(Order는 실패 반영 뒤에만 재시도를 만든다). 비교 지움 | Payment 시계 +5초에서 재시도 `RefundExecutionRequested` |
 | SET-1 | `settlement:core/domain/RefundMonthInput.java:11` | Settlement 수신 `receivedAt < confirmedAt`이면 거절 | Settlement vs Payment | 반영 월이 원래 월보다 앞서는 것(I6) | 거절하지 않는다. 반영 월 = `max(원래 월, 현재 OPEN 월)` 규칙으로 I6을 지킨다(현재 월이 원래 월보다 이르면 원래 월에 반영). 월 선택은 Settlement 잠금 아래서 한다 | KST 월 경계에서 Settlement 시계 −5초(지금 Red 예상) |
 | ORD-0 | `order:core/domain/RefundPolicy.java:9-11` + `RequestRefund.java:35` | 자동 환불: Order 수신 시각 ≤ Payment 결과 시각 + 4시간 | Order vs Payment | 결정 29 하위 "기한 시작" | 결정이 이 비교를 정했다. 바꾸지 않고 RC-16로 올린다 | — |
-| PG-* | `payment:core/domain/RefundExecution.java:163-165`·`:224-225`·`:276`, #166 `recordLateCancellation` | PG가 준 `requestedAt`·`cancelledAt`이 Payment 관측 시각보다 뒤면 근거 무효 | PG(외부) vs Payment | 근거 위조·오염 방지 | `[결정 필요 PD-11]`(원칙 ⑥을 외부 PG 시계까지 넓힐지) | PG 흉내 서버 시계 +5초 |
+| PG-* | `payment:core/domain/RefundExecution.java:163-165`·`:224-225`·`:276`, #166 `recordLateCancellation` | PG가 준 `requestedAt`·`cancelledAt`이 Payment 관측 시각보다 뒤면 근거 무효 | PG(외부) vs Payment | 근거 위조·오염 방지 | PG 시각은 값으로만 저장, 근거 진위는 취소 ID·결제 ID·금액·상태(결정 163). adapter `PortOneRefundCancellationGateway.java:131`의 같은 비교도 없앤다 | PG 흉내 서버 시계 +5초 |
 
 같은 모듈 시각끼리의 비교(예: #166 `RefundFailureConfirmation`의 `evidenceObservedAt ≤ occurredAt`, 둘 다 Payment 시계)는 원칙 ⑥ 위반이 아니다. 다만 받는 쪽이 보낸 쪽 불변식을 다시 검사하는 것이라 원칙 ③ 쪽에서 Order 검사는 빼는 것이 목표다(T14).
 
-위 13곳(ORD-1~ORD-10, PAY-1, SET-1 — ORD-1·ORD-5는 한 메서드 안 두 비교)이 T3의 대상이다. ORD-0은 결정 29가 정한 비교라 RC-16으로, PG-*는 [결정 필요 PD-11]로 따로 다룬다.
+위 13곳(ORD-1~ORD-10, PAY-1, SET-1 — ORD-1·ORD-5는 한 메서드 안 두 비교)이 T3의 대상이다. ORD-0은 결정 29가 정한 비교라 RC-16으로, PG-*는 결정 163으로 T3에 함께 넣는다.
 
 ## 품질 속성 시나리오
 
