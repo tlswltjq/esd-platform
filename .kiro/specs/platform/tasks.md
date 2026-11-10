@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -128,7 +128,7 @@
 
 - [ ] **T19. `RefundPaymentConfirmed.source`가 "근거 종류"와 "시도 귀속"을 함께 말한다** (분리안 SP-5, 소급 RC-8) [결정 필요 PD-18 선행]
   - 어디서: `common/kafka/.../payload/RefundPaymentConfirmedEvent.java`(`source`), Payment `payment:core/service/RecordRefundCancellationSuccess.java:40`(`PG_RESPONSE`), `RefundConfirmationOutbox`(`PG_QUERY_UNATTRIBUTED`), `payment:core/domain/RefundExecution.java:256,292`; Order `order:core/domain/Refund.java:239`, `RefundPaymentConfirmation.java:18-20`; Settlement `settlement_refund.source`(V10).
-  - 목표: P3.21-2. `source` 삭제(칸 삭제는 비호환 — PD-18의 버전 방식으로), 귀속은 `RefundExecutionSucceeded`만(우리 응답이면 같은 트랜잭션에 둘 다). Order 시도 귀속 여부는 PD-12.
+  - 목표: P3.21-2. `source` 삭제(칸 삭제는 비호환 — PD-18의 버전 방식으로), 귀속은 Payment 기록만([결정 164](../../../docs/decisions.md#attribution-in-payment)): Order는 `RefundExecutionSucceeded`를 소비하지 않고 `RefundAttempt.reconciliationRequired`를 없앤다. 소비자가 없어진 `RefundExecutionSucceeded`는 발행을 멈추고 계약에서 뺀다(옛 이벤트 읽기는 결정 104 호환).
   - 영향: 돈 직접 영향 없음. `source` 값 오타는 시도 귀속을 조용히 빠뜨리고, 귀속 판정을 바꾸려면 금융 사실 이벤트의 뜻이 함께 바뀐다(결정 127 후속이 막힌 원인).
   - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
 

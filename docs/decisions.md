@@ -1591,6 +1591,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. `docs/architecture.md` 원칙 ⑥, 플랫폼 스펙 P4.5-3, design U2·PG-*, tasks T3
 
+<a id="attribution-in-payment"></a>
+## 164. 환불 취소의 귀속(누가 취소했나)은 Payment만 갖고, Order 환불 시도는 귀속을 갖지 않는다
+- 문제: 첫 취소 응답이 유실된 뒤 조회로 전액 취소를 확인하면 그 취소가 우리 요청인지 외부·콘솔 취소인지 모른다(`PG_QUERY_UNATTRIBUTED`). 고객 환불은 금융 확인으로 `COMPLETED`가 되고 Order 시도에는 `reconciliationRequired=true`(`RefundAttempt.java:141`)가 남는다. 나중에 ADMIN이 결정 127 종결로 판정해도 Payment만 닫히고 Order 표시는 남는다. 이 표시를 읽는 Order 업무 동작은 없다(`RefundAttempt` 밖 사용처 0곳). Order는 `RefundExecutionSucceeded`를 시도를 `SUCCEEDED`로 바꾸는 데만 쓴다(플랫폼 스펙 PD-12).
+- 선택지: A Payment가 판정 사실 이벤트(가칭 `RefundAttributionResolved`)를 내고 Order가 시도에 기록 / B Order는 귀속을 갖지 않고 귀속·조사는 Payment가 정본 / C `RefundExecutionSucceeded`로 운영자 판정도 보냄 (추천: B — Order에는 귀속에 따른 업무 반응이 없어 귀속 사실의 정본은 Payment 하나여야 한다(원칙 ③). A는 반응 없는 사실을 복사하고, C는 "우리 취소 성공"과 "운영자 판정"을 한 이벤트에 섞는다(원칙 ①))
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 귀속은 Payment만 갖게 해")
+- 선택: B
+  - Order 환불 시도는 귀속을 갖지 않는다. 금융 완료면 시도는 `COMPLETED` 하나다. Order 시도 상태는 `PENDING`·`COMPLETED`·`FAILED`(와 결정 157의 늦은 취소 완료)다. `RefundAttempt.reconciliationRequired`를 없앤다.
+  - 귀속(우리 요청·외부 취소·미확정)과 그 조사·종결(결정 127)은 Payment 기록(`refund_execution`·`refund_closure`)이 정본이다. ADMIN은 Payment 화면 하나로 조사한다.
+  - Order는 `RefundExecutionSucceeded`를 소비하지 않는다. 그러면 이 이벤트는 소비자가 없으므로(Settlement도 소비하지 않음) 발행을 멈추고 이벤트 계약에서 뺀다. 옛 이벤트 읽기는 결정 104 호환 규칙을 따른다.
+  - `RefundPaymentConfirmed.source`(근거 종류와 귀속을 함께 말하는 칸)는 귀속 뜻을 잃으므로 플랫폼 tasks T19대로 없앤다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.21-3, design Order 환불 상태 절·흐름 3 S8·이벤트 목록 `RefundExecutionSucceeded`, tasks T19
+
 ---
 
 ## 검증하며 드러난 것

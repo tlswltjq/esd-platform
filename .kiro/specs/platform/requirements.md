@@ -305,7 +305,7 @@
 
 1. WHEN Payment가 PG 근거로 원결제 전액 취소를 처음 확인하면 THEN Payment SHALL 실행에 금융 확인을 한 번만 기록하고 같은 트랜잭션에서 `RefundPaymentConfirmed`를 쓴다. 근거는 우리 취소 응답 성공이거나 PG 조회로 확인한 같은 원결제의 전액 취소다(결정 29).
 2. `RefundPaymentConfirmed` SHALL "원결제 전액이 PG에서 취소됐음을 Payment가 확인했다"만 뜻한다. 그 취소가 이 시도의 우리 요청 때문인지(귀속)는 싣지 않고, 귀속이 확인되면 `RefundExecutionSucceeded`로 따로 낸다. 우리 응답으로 확인한 경우 두 이벤트를 같은 트랜잭션에 쓴다(원칙 ①, T19).
-3. WHEN Order가 `RefundPaymentConfirmed`를 받아 주문·환불·현재 시도·실행 요청·금액(= 주문 청구액)이 식별자로 맞으면 THEN Order SHALL 환불을 `COMPLETED`로 바꾸고 같은 트랜잭션에서 `PurchaseRefunded`를 쓴다. 두 이벤트가 어떤 순서로 와도 첫 금융 확인 ID·시각과 시도 결과는 같다. Order 시도가 귀속을 가질지는 [결정 필요 PD-12].
+3. WHEN Order가 `RefundPaymentConfirmed`를 받아 주문·환불·현재 시도·실행 요청·금액(= 주문 청구액)이 식별자로 맞으면 THEN Order SHALL 환불을 `COMPLETED`로 바꾸고 같은 트랜잭션에서 `PurchaseRefunded`를 쓴다. 두 이벤트가 어떤 순서로 와도 첫 금융 확인 ID·시각과 시도 결과는 같다. Order 시도는 귀속을 갖지 않는다. 금융 완료면 시도는 `COMPLETED` 하나이고, 귀속(우리 요청·외부 취소·미확정)과 그 조사·종결은 Payment 기록이 정본이다([결정 164](../../../docs/decisions.md#attribution-in-payment)).
 4. WHEN ADMIN이 장기 미확정·귀속 미확정 실행을 종결하면 THEN Payment SHALL 트랜잭션 밖 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 닫고, 미완료 건은 1과 같은 `RefundPaymentConfirmed`로 완료하며, 귀속 판정·ADMIN·근거를 Payment에 남긴다. 시스템은 PG 취소를 실행하지 않는다(결정 127).
 5. IF 금융 확인 뒤 실패 근거가, 실패 확정 뒤 성공 근거가 관측되면 THEN Payment SHALL 이미 정한 끝 상태를 바꾸지 않는다(I18). 실패 뒤 늦은 전액 취소는 P3.23-5.
 
