@@ -14,8 +14,8 @@
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
   - 닫힘 — PD 결정이 이미 답함: RC-6(결정 171), RC-8(결정 164·170), RC-10(결정 167), RC-11(결정 168), RC-12(결정 158·159), RC-15(결정 162), RC-19(결정 158·161 — 지키는 곳은 응답 대기 게이지와 ADMIN 재발행이고, 결정 37의 "자동 재발행·대조 엔진은 만들지 않는다"는 그대로 맞다)
   - 닫힘 — 결정은 그대로이고 구현·문구만 고침(원칙만으로 방향이 정해짐, 결정 150): RC-4(결정 32의 30분은 유지, 기한 정본은 Order — T12·결정 169), RC-5(결정 42의 금융 확인 월은 유지, 선후 비교만 제거 — T3·결정 163), RC-7(결정 128 본문의 이벤트 서술 정정 — 결정 147·148), RC-14(결정 124의 3시간은 adapter 설정으로 — 결정 140 작업), RC-18(결정 29·133의 HTTP 코드 서술은 adapter 메모로 — 결정 140 작업)
-  - 다시 물어 정함: RC-16 → 결정 173
-  - 다시 물음: RC-1(결정 115 운영자 보류 종결 이벤트), RC-2(결정 144 보류 사유 칸), RC-13(결정 114·124·126 보류 상태 하나), RC-17(결정 94·96 License 정지 전 상태), RC-3(결정 92 `LicenseGranted` 이름), RC-9(결정 53·54·57 철회 결과 이벤트)
+  - 다시 물어 정함: RC-16 → 결정 173, RC-1 → 결정 174
+  - 다시 물음: RC-2(결정 144 보류 사유 칸), RC-13(결정 114·124·126 보류 상태 하나), RC-17(결정 94·96 License 정지 전 상태), RC-3(결정 92 `LicenseGranted` 이름), RC-9(결정 53·54·57 철회 결과 이벤트)
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
 ## 코드와 맞출 것
@@ -124,9 +124,9 @@
   - 영향: **돈(정산)** — 두 값이 다르면 플랫폼 순액의 근거를 정할 수 없다.
   - 재현: 같은 결제에 두 값이 다를 때 ADMIN 응답이 어느 것을 쓰는지 고정하는 계약 테스트.
 
-- [ ] **T18. 운영자 승인 보류 종결이 `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)`에 실린다** (분리안 SP-1, 소급 RC-1)
+- [ ] **T18. 운영자 승인 보류 종결이 `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)`에 실린다** (분리안 SP-1, [결정 174](../../../docs/decisions.md#review-closed-event))
   - 어디서: `payment:core/domain/ApprovalClosure.java:27`, `payment:core/domain/Payment.java:147-156`(`failAfterReview`); Order `order:core/domain/PaymentResult.java:34`(문자열 `REVIEW_CLOSED`로 판정), `Order.java:147-150`(`keepsExpiryFor`), `order:core/service/ApplyPaymentResult.java:47,65-72`, `order:core/domain/ExpiredReviewClosure.java:17`, Order V31.
-  - 목표: P3.13-4·P3.14-3, design "목표 행" `OrderPaymentReviewClosed`(그룹 `order-payment-result`). Order 리스너가 두 타입을 받아 결과 종류 enum으로 구별. P2.7-4 순서로 배포. RC-1을 다시 물은 뒤.
+  - 목표: P3.13-4·P3.14-3, design "목표 행" `OrderPaymentReviewClosed`(그룹 `order-payment-result`). Order 리스너가 두 타입을 받아 결과 종류 enum으로 구별. P2.7-4 순서로 배포, 이행 뒤 `REVIEW_CLOSED` 사유 제거(결정 174).
   - 영향: 동작은 같다. 소비자가 사유 문자열로 사실을 구별해 오타·새 소비자 오해 여지.
   - 재현: 계약 테스트 — `OrderPaymentFailed.reasonCode`에 `REVIEW_CLOSED` 0건, Order가 두 타입을 같은 입력으로 합치는지.
 

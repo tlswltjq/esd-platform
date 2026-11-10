@@ -1064,7 +1064,7 @@
 - 내 의견: "B로 해, 주문을 끝내고 새 주문 안내"
 - 선택: B — ADMIN이 종결을 요청하면 시스템이 PG를 다시 조회해 근거를 확인한다. 근거가 맞으면 승인을 끝내고, 주문은 `FAILED`(또는 이미 `EXPIRED`)로 끝난다. 같은 주문은 다시 결제할 수 없고, 고객은 새 주문으로 안내한다. PAID면 종결하지 않는다. 시스템은 PG 취소를 실행하지 않는다. 승인 관측에 전액 CANCELLED를 더하되, 운영자 종결 없이 저절로 닫지는 않는다. 재조회 간격 값과 고객 안내 문구는 따로 정한다.
 - 구분: 추천 수용
-- 결과: (진행 중)
+- 결과: (진행 중) 종결 결과의 전달 이벤트는 [결정 174](#review-closed-event)로 전용 이벤트 `OrderPaymentReviewClosed`로 바뀌었다(정책은 그대로).
 
 <a id="decision-numbers"></a>
 ## 116. 결정 번호는 main의 다음 번호를 쓰고, CI가 번호 중복·순서와 링크 번호를 막는다
@@ -1715,6 +1715,18 @@
   - 옛 `PAID` 행의 `paid_at` 채우기는 Order 모듈 스펙의 이행 계획에서 정한다.
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 3차 PR. P3.16-3, design 흐름 3 S1 행·U2 ORD-0, tasks T3
+
+<a id="review-closed-event"></a>
+## 174. 운영자의 승인 보류 종결은 전용 이벤트 `OrderPaymentReviewClosed`로 낸다(결정 115 B의 전달 방식을 다시 고름)
+- 문제: 결정 115 B는 운영자가 PG 근거로 승인 보류를 종결한 결과를 `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)`에 실었다. 이유는 "Order는 이미 `OrderPaymentFailed`를 `FAILED`로 받으므로 계약을 바꾸지 않는다"(비용)였다. 그래서 이벤트 하나가 "PG가 최종 거절했다"와 "운영자가 PG 근거로 종결했다"를 함께 뜻하고, Order는 사유 문자열로 만료 예외를 분기한다(`Order.keepsExpiryFor`, `ApplyPaymentResult.java:65-72`, V31 `ExpiredReviewClosure`)(소급 후보 RC-1).
+- 선택지: 전용 이벤트 `OrderPaymentReviewClosed`로 바꿈 / 결정 115대로 `OrderPaymentFailed`에 둠 (확인 질문 — 원칙 ①로 방향이 정해지고 업무 결과는 같다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "전용 이벤트 OrderPaymentReviewClosed로 바꿔")
+- 선택: 전용 이벤트 — 결정 115의 업무 정책(PG 근거로만 종결, 주문 `FAILED`·새 주문 안내, 이미 만료된 주문은 만료 유지 + 종결 사실 기록)은 그대로이고 전달 이벤트만 바꾼다.
+  - Payment는 종결 결과를 `OrderPaymentReviewClosed`(`admissionId`는 접수된 시도일 때만, 결정 153)로 낸다. `OrderPaymentFailed`는 PG 최종 거절만 뜻한다.
+  - Order 리스너는 두 타입을 받아 결과 종류 enum으로 구별하고, `ExpiredReviewClosure`는 문자열 `reasonCode` 대신 그 enum을 본다.
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따르고, 끝나면 `OrderPaymentFailed`의 `REVIEW_CLOSED` 사유를 없앤다.
+- 구분: 추천 수용(AI가 원칙 ①로 제시한 확인 질문)
+- 결과: 플랫폼 스펙 3차 PR. P3.13-4, design SP-1·목표 행·흐름 2 S7 행, tasks T18
 
 ---
 

@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-10 | 운영자의 승인 보류 종결을 전용 이벤트로 바꿀지(결정 115 소급) | 전용 이벤트 `OrderPaymentReviewClosed` / 결정 115대로 `OrderPaymentFailed`에 둠 | (선택지 선택만) "전용 이벤트 OrderPaymentReviewClosed로 바꿔" | 전용 이벤트 — 한 이벤트에 한 사실. 업무 결과는 그대로 | 추천 수용 | [결정 174](decisions.md#review-closed-event) |
 | 2026-11-10 | 자동 환불 4시간 기한을 어느 시계로 잴지(결정 29 소급) | A Order가 `PAID`를 반영한 자기 시각(추천) / B Payment가 기한 끝을 값으로 / C 지금대로 + 원칙 ⑥ 예외 | (선택지 선택만) "A로 Order가 PAID를 반영한 시각부터 재" | A — 기준 사건은 여전히 결제 확정이고 License 지급이 아니다. 같은 시계로 비교한다 | 추천 수용 | [결정 173](decisions.md#refund-window-order-clock) |
 | 2026-11-10 | 발행·소비가 없는 Studio·Review 구 계약 13개를 지울지 | A 유지 / B 제거(추천) / C Q10 관련 4개만 남기고 제거 | (선택지 선택만) "B로 구 계약 13개를 제거해" | B — 코드 없는 계약이 목록에 있으면 정본이 둘이 된다. 다시 필요하면 그때 사실로 새로 정의한다 | 추천 수용 | [결정 172](decisions.md#remove-legacy-contracts) |
 | 2026-11-10 | Catalog 공개 사본 이벤트를 사실별로 나눌지, 이름만 바꿀지 | A 사실별 4개, 같은 본문(추천, 원칙상 A·B 모두 성립) / B 상태 전달 이벤트 하나로 이름만 / C 지금대로 | (선택지 선택만) "A로 사실별 4개 이벤트로 나눠" | A — 원인은 Catalog만 아는 사실이라 Catalog가 내고, 같은 반응으로 합치는 일은 Store 리스너가 한다 | 추천 수용 | [결정 171](decisions.md#catalog-copy-events-by-fact) |
