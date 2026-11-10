@@ -515,7 +515,7 @@ core 계약에는 공급자 이름을 쓰지 않았다. 지금 쓰는 공급자(
 | S10 구매 근거 | 동시 진행 | 같은 상품 두 주문의 `OrderPaid`를 동시에 처리 | 각자 다른 `orderNo` 행 | 둘 다 `STORED`. 등록은 고객·상품 잠금으로 하나만 `ACTIVE`(`uk_license_registration_active`) | 해당 없음 | License 설계, I3 | 없음 |
 | S10 구매 근거 | 상대 모듈 중단 | License 중단 / `LicenseGranted` 원본이 Kafka에서 사라짐 | 소비 지연 / 결정 125 게이지(환불 대기만) | Kafka 보존 / `SENT` 원본은 같은 ID 재발행(`outbox_republish`, 결정 129) | DLT 재투입·DEAD 재큐잉(결정 37 런북) | License 설계 "오류·복구" | U3 검사기 없음(PD-6) |
 | S11 매출 배분 | 중복 전달 | `OrderPaid` 재전달 | `RecordPaidSale.existing`(13개 값·Inbox) | 무변화, 다르면 409 | DLT | `S/core/service/RecordPaidSale.java:53-54,65-73` | 없음 |
-| S11 매출 배분 | 순서 역전 | 환불 확정(`RefundPaymentConfirmed`)이 매출보다 먼저 Settlement에 옴 | 환불 정산의 원매출 조회(`ConfirmedRefund.requireSale`) | 환불 쪽이 거절·재시도(흐름 3). 매출은 늦게 와도 그대로 기록 | DLT → 원매출 복구 뒤 재전달 | Settlement 설계 "DLT로 간 매출·환불은 원인 해소(환불은 원매출 복구) 뒤" | F 경계 3 |
+| S11 매출 배분 | 순서 역전 | 환불 확정(`RefundPaymentConfirmed`)이 매출보다 먼저 Settlement에 옴 | 환불 정산의 원매출 조회(`ConfirmedRefund.requireSale`) | 목표: 환불 확인은 "매출 대기 환불"로 저장되고, 늦게 온 매출을 기록하는 트랜잭션에서 함께 반영(결정 156). 지금은 환불 쪽이 거절·재시도 | 대기 게이지. 지금은 DLT → 원매출 복구 뒤 재전달 | Settlement 설계 "DLT로 간 매출·환불은 원인 해소(환불은 원매출 복구) 뒤" | F 경계 3 |
 | S11 매출 배분 | 늦은 도착 | 귀속 월이 마감된 뒤 `OrderPaid` 도착 | 판매자 잠금 뒤 마감 월 확인 | 현재 KST `OPEN` 월에 반영, `saleMonth` 보존(결정 42·130) | 현재 월도 `CLOSED`면 409 → 재시도·DLT | `RecordPaidSale.java:78-91` | 귀속 시각이 Order의 `OrderPaid.occurredAt`(F 경계 4) |
 | S11 매출 배분 | 상대 상태가 이미 바뀜 | PG 승인 조회 결과나 Catalog 소유자가 주문과 다름 | `PgPayment.requireOrder`·`ProductOwner.requireOrder` | 원장 없이 `CONFLICT` → 공통 재시도 | DLT → 운영 조사 | `RecordPaidSale.java:55-56` | 없음 |
 | S11 매출 배분 | 동시 진행 | 같은 판매자의 매출 반영과 월 마감이 동시에 / 유일 키 충돌 | `SellerLockRepository.lock` / DB 유일 제약 | 직렬화 / 5회 재시도 | 409 → DLT | `RecordPaidSale.java:57-62,105-107` | 없음 |
@@ -645,7 +645,7 @@ S13 Payment → Settlement    환불 조정(RefundPaymentConfirmed) → 월 반�
 | S12 회수 | 동시 진행 | 회수와 고객 보관함 등록 | License | 정지 상태는 등록 불가(`PURCHASE_NOT_REGISTRABLE`) | 해당 없음 | [표] | 없음 |
 | S12 회수 | 상대 모듈 중단 | License 중단 — 환불 완료인데 라이브러리에 정지 항목이 남음 | (미확인) 회수 지연 게이지 없음 | 소비 재개 | 원본 없으면 `PurchaseRefunded` 재발행 불가(허용 목록 밖) | [읽음 재발행 목록] | PD-9. 보유권은 정지 상태라 사용 위험은 없음 |
 | S13 정산 조정·이월 | 중복 전달 | `RefundPaymentConfirmed` 재전달 | Settlement `RecordConfirmedRefund.existing` | Inbox(`settlement-confirmed-refund`) + `uk_refund_id`·`uk_refund_event`·`uk_refund_order` | 해당 없음 | [표] | 없음 |
-| S13 정산 조정·이월 | 순서 역전 | 4시간 안 자동 환불의 `RefundPaymentConfirmed`가 Settlement의 `OrderPaid` 반영보다 먼저 옴(Settlement 소비 지연) | Settlement(원매출 없음 404) | 재시도 7초 뒤 DLT | 운영자 DLT 재투입 | [표] | PD-4 |
+| S13 정산 조정·이월 | 순서 역전 | 4시간 안 자동 환불의 `RefundPaymentConfirmed`가 Settlement의 `OrderPaid` 반영보다 먼저 옴(Settlement 소비 지연) | Settlement(원매출 없음 404) | 목표: "매출 대기 환불"로 저장, `OrderPaid` 매출 기록 트랜잭션에서 함께 반영(결정 156). 지금: 재시도 7초 뒤 DLT | 대기 게이지(건수·최장 대기). 매출이 끝내 안 오면 PD-6 기준으로 경보 | [표] | 지금은 DLT → 운영자 재투입, 재투입 전 마감이면 과지급(T8) |
 | S13 정산 조정·이월 | 늦은 도착 | 환불 확인 월이 이미 마감됨 | Settlement | 현재 OPEN 월에 반영(`CLOSED_MONTH_ROLLOVER`), 원래 월 보존 | 해당 없음 | [표] 결정 42·130 | 없음 |
 | S13 정산 조정·이월 | 상대 상태가 이미 바뀜 | 판매자 월 마감과 환불 반영이 겹쳐 월이 CLOSED로 바뀜 | Settlement | 판매자 잠금으로 직렬화, 월이 바뀌면 3번 재선택 뒤 409 | DLT 재투입 | [표] | 없음 |
 | S13 정산 조정·이월 | 동시 진행 | 같은 판매자의 매출 반영·환불 반영·마감 | Settlement `SellerLockRepository.lock` | 판매자 단위 직렬화, 유일 제약 충돌은 5회 재시도 | 해당 없음 | [표] | 없음 |

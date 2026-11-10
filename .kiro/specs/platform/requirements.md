@@ -342,7 +342,7 @@
 3. WHEN 판매자 월을 마감하면 THEN Settlement SHALL 오래된 월부터 마감하고 `payable = max(0, 순액 + carriedIn)`, 음수는 다음 월로 넘긴다(결정 121·130, I5).
 4. Settlement SHALL `RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed`를 소비하지 않는다. 정산 금액은 첫 금융 확인 하나로 정해진다(U5, MC-S2).
 5. IF 결제 공급자가 환불 근거를 줄 수 없는 환경이면 THEN Settlement SHALL P4.3-2의 같은 계약으로 환불을 반영한다. 방법은 [결정 필요 PD-10](U4, T9).
-6. IF 원매출보다 환불 확인이 먼저 도착하면 THEN Settlement SHALL 그 환불 확인을 잃지 않고 원매출이 반영된 뒤 상계한다. 대기 방법은 [결정 필요 PD-4] · T8.
+6. IF 원매출보다 환불 확인이 먼저 도착하면 THEN Settlement SHALL DLT로 보내지 않고 받은 환불 확인을 검증해 "매출 대기 환불"(명시 상태)로 Inbox와 같은 트랜잭션에 저장한다. WHEN 같은 주문의 `OrderPaid`가 매출을 기록하면 THEN Settlement SHALL 같은 트랜잭션에서 대기 환불을 원매출과 대조해 환불 조정까지 반영하고(월 규칙은 결정 42·130), 대조가 맞지 않으면 반영하지 않고 경보한다. THE Settlement SHALL 대기 건수와 가장 오래 기다린 시간을 게이지로 낸다([결정 156](../../../docs/decisions.md#refund-awaiting-sale), T8).
 
 #### P3.27 승인 중단 분기 (Order ↔ License)
 

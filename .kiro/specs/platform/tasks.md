@@ -9,7 +9,7 @@
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -59,9 +59,9 @@
   - 영향: **돈·보유권** — `RefundPaymentConfirmed` 원본 소실 시 Order 환불 완료·Settlement 환불 조정이 둘 다 멈추고 복구 수단이 없다. `PurchaseRefunded`가 사라지면 회수가 안 된다.
   - 재현: Payment에서 `SENT` 행을 재발행 API로 되돌리면 지금은 400(현 동작 고정) → 확장 뒤 통과로 바꿈.
 
-- [ ] **T8. Settlement에 원매출보다 환불 확인이 먼저 오면 404 → DLT** [결정 필요 PD-4]
+- [ ] **T8. Settlement에 원매출보다 환불 확인이 먼저 오면 404 → DLT** ([결정 156](../../../docs/decisions.md#refund-awaiting-sale))
   - 어디서: `settlement:core/domain/ConfirmedRefund.java:22`(`requireSale`), `settlement:core/service/RecordConfirmedRefund.java`(그룹 `settlement-confirmed-refund`). 원매출은 `stove.order.v1`, 환불 확인은 `stove.payment.v1`이라 순서 보장이 없다(P2.5-2).
-  - 목표: P3.26-6. PD-4(추천: "매출 대기 환불"을 명시 상태로 보관하고 매출이 오면 반영, 대기 게이지).
+  - 목표: P3.26-6. 결정 156: 원매출이 없을 때 온 환불 확인은 "매출 대기 환불"로 저장(Inbox와 같은 트랜잭션, DLT 아님), `OrderPaid` 매출 기록 트랜잭션에서 원매출과 대조해 함께 반영, 대조 불일치는 반영하지 않고 경보, 대기 게이지(건수·최장 대기). 상태 이름·표·상태×트리거 표는 Settlement 모듈 스펙(MC-S3).
   - 영향: **돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠짐(과지급).
   - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 DLT, 목표 대기 후 반영.
 
