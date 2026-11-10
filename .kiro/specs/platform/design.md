@@ -408,7 +408,7 @@ Review·Catalog·Studio의 상태×입력 표(원요청·철회·판정 입력�
 | S7 승인 보류·종결 | Payment(작업자·ADMIN) → Order | `stopPosts`, ADMIN 종결 API, `OrderPaymentReviewClosed`(목표) | design "승인 보류 사유" 표 보류 조건, PG 재조회 근거 | 보류 / 시도 `FAILED`+결제 `FAILED`·`EXPIRED` | lease 토큰, 종결 `requestId`(`approval_closure` 유일) | P3.12-5·P3.13-1·P4.6-1·P3.13-2·P3.13-3·P3.13-4·P3.13-5·P3.13-6·P4.6-2 |
 | S8 만료 통지 | Order → Payment | `OrderExpired` / `stove.order.v1` | 원 요청 연결·`expiresAt` | `payment_order_lifecycle` 만료 기록, 활성 시도가 없으면 결제 `EXPIRED`, 있으면 P3.13-6 | 만료 eventId(주문당 하나) | P3.10-5·P3.13-6·P3.13-1 |
 | S9 결과 반영 | Payment → Order | `OrderPaymentCompleted`·`OrderPaymentFailed`·`OrderPaymentReviewClosed` / `stove.payment.v1` | 결과 + `admissionId`(목표) | 주문 `PAID`(+`OrderPaid`)·`FAILED`, 또는 거절(+`OrderPaymentResultRejected`, 결정 153) | Inbox `order-payment-result`, `uk(payment_result_event_id)` | P3.14-1·P3.14-2·P3.14-3·P3.14-4·P3.14-5 |
-| S9-R 거절 사실 | Order → Payment | `OrderPaymentResultRejected` / `stove.order.v1` | 거절한 결과의 `eventId`·`paymentId`·`admissionId`·거절 사유 | 그 결제를 Payment 보류 흐름에 올림(기록 자리는 PD-2와 함께) | 거절한 결과 `eventId`(Order 거절 기록 유일, Payment Inbox) | P3.14-2·P3.13-7 |
+| S9-R 거절 사실 | Order → Payment | `OrderPaymentResultRejected` / `stove.order.v1` | 거절한 결과의 `eventId`·`paymentId`·`admissionId`·거절 사유 | 주문에 연결되지 않은 청구 기록(`UnlinkedCharge`, 출처 `ORDER_REJECTED`)으로 보류 목록에 올림(결정 154) | 거절한 결과 `eventId`(Order 거절 기록 유일, Payment Inbox) | P3.14-2·P3.13-7 |
 | S10 구매 근거 | Order → License → Order | `OrderPaid` / `stove.order.v1`, 구매 근거 생성 사실(지금 `LicenseGranted`) / `stove.license.v1` | `OrderPaid` 13개 값 | `product_license` `STORED`, Order `order_license_grant` | Inbox `license-paid-order`·`order-license-grant`, `uk_product_license_order`·`_result`·`_payment` | P3.15-1·P3.15-2 |
 | S11 매출 배분 | Order → Settlement | `OrderPaid` | 13개 값 + PG 승인·Catalog 소유자 조회 | `settlement_sale`·월 합계·PG 거래 | Inbox `settlement-paid-order`, `uk_sale_order_no`·`uk_sale_payment_result_event_id` | P3.15-3·P3.15-4 |
 
@@ -486,7 +486,7 @@ core 계약에는 공급자 이름을 쓰지 않았다. 지금 쓰는 공급자(
 | S6 결과 확정·시도 실패 통지 | 상대 모듈 중단 | 실패 통지 중 Order 중단 / 결과 Outbox 발행 중 Kafka 중단 | 통지 HTTP 실패 / Outbox 릴레이 | 시도 `FAILURE_CONFIRMED` 유지, 다음 회차에 같은 통지 재전송(R4.14). Outbox는 보존 | Outbox `DEAD` 경보·재큐잉 | `ResolvePaymentApproval.java:97-99` | 없음 |
 | S7 승인 보류·종결 | 중복 전달 | ADMIN이 같은 종결 요청(`requestId`)을 다시 보냄 / `OrderPaymentReviewClosed` 재전달 | `approval_closure`(approvalId·requestId 유일) / Order Inbox | 최초 영수증 반환 / Order 무변화 | 해당 없음 | `ApprovalClosure.record`(V37). Order 쪽은 지금 `OrderPaymentFailed` 재전달 대조 | 이벤트 분리(RC-1) |
 | S7 승인 보류·종결 | 순서 역전 | 종결 결과가 Order에 닿기 전에 주문이 스스로 `EXPIRED` | Order 결과 반영 | 만료 유지 + 종결 사실 기록(P3.13-4) | 해당 없음 — 끝은 같은 "새 주문 안내" | `O/core/service/ApplyPaymentResult.java:47,65-72`, `Order.keepsExpiryFor`(`Order.java:147-150`) | 실패 이벤트에 종결을 실어 예외 분기를 만듦(원칙 ①, RC-1) |
-| S7 승인 보류·종결 | 늦은 도착 | 근거 READY로 종결한 뒤 콘솔 승인 등으로 PG가 PAID가 됨 | 지금: 감지하지 않음(웹훅이 와도 `PENDING`이 아니면 무시) | 목표: [결정 필요 PD-2] | 지금은 운영자가 공급자 콘솔에서만 알 수 있음 | `P/core/domain/Payment.java:174`(`requestRecheck`가 `PENDING` 아니면 반환), `ResolvePayment.java:89` | 청구된 돈이 주문·보류 어디에도 연결되지 않음(원칙 ⑤) |
+| S7 승인 보류·종결 | 늦은 도착 | 근거 READY로 종결한 뒤 콘솔 승인 등으로 PG가 PAID가 됨 | 지금: 감지하지 않음(웹훅이 와도 `PENDING`이 아니면 무시) | 목표: 끝난 결제를 공급자 보장 기한까지 주기 조회하고 웹훅이 오면 조회를 앞당김. `PAID`면 결제를 다시 열지 않고 `UnlinkedCharge`(출처 `LATE_CHARGE`) 기록·보류 목록·경보·안내 청구됨([결정 154](../../../docs/decisions.md#unlinked-charge-discovery), P3.13-8·9) | 운영자가 공급자 콘솔에서 취소한 뒤 PG 근거로 기록 종결. 공급자 기한 뒤 청구는 G7 정산 대사가 마지막 안전망. 지금은 운영자가 공급자 콘솔에서만 알 수 있음 | `P/core/domain/Payment.java:174`(`requestRecheck`가 `PENDING` 아니면 반환), `ResolvePayment.java:89` | 청구된 돈이 주문·보류 어디에도 연결되지 않음(원칙 ⑤) |
 | S7 승인 보류·종결 | 상대 상태가 이미 바뀜 | 종결 요청 사이 PG가 PAID로 바뀜 | 종결의 트랜잭션 밖 재조회 | 409 `CLOSURE_PG_PAID`, 보류 유지·다음 조회 시각 복원 | 운영자가 콘솔에서 먼저 취소 | `CloseApprovalReview.refusal`·`release`(Payment 설계 종결 거절 행) | 없음 |
 | S7 승인 보류·종결 | 동시 진행 | 작업자 회차와 ADMIN 종결이 같은 시도에 | lease(`claimForClosure`) | 살아 있는 lease면 409 `APPROVAL_CLOSURE_BUSY`, 잠금 안에서 lease 소유 재확인 | 해당 없음 — ADMIN 재시도(10분 간격이라 드묾, 결정 122) | `PaymentApproval.java:106-120` | 없음 |
 | S7 승인 보류·종결 | 상대 모듈 중단 | 종결 중 PG 조회 실패 / 종결 결과 발행 중 Order 중단 | 재조회 예외 / Outbox | 409 `CLOSURE_PG_UNAVAILABLE`, 보류 유지 / Outbox 보존 | 보류 게이지·경보 유지 | Payment 설계 종결 거절 행 | 없음 |
@@ -655,7 +655,7 @@ S13 Payment → Settlement    환불 조정(RefundPaymentConfirmed) → 월 반�
 
 I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한다. I12부터는 이 스펙에서 새로 둔 것이다. "지키는 곳"은 코드 위치 또는 DB 제약, "확인 테스트"는 그것을 확인하는 테스트(이름으로 찾았고 단언까지 읽은 것은 ✓), "확인 SQL"은 모든 스키마를 읽는 읽기 전용 계정에서 0행이 통과다. 모듈을 넘는 확인 SQL을 실행하는 테스트·검사기는 아직 없다(T6).
 
-### 불변식 표 (I1 ~ I19)
+### 불변식 표 (I1 ~ I20)
 
 "지키는 곳"은 2026-11-09에 직접 읽은 코드·Flyway다. "테스트"는 테스트 소스에서 해당 제약·메서드 이름으로 찾은 클래스이며, 단언 내용까지 읽은 것은 ✓로 표시했다. 모듈을 넘는 **확인 SQL을 실행하는 테스트·검사기는 어디에도 없다**(`tools/verification/`에 불변식 검사기 없음, T6).
 
@@ -680,13 +680,14 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | **I17** | 보유권 복구는 실패 확정(두 사실 중 하나) 뒤에만 생기고 정지 1건당 1건 | Order·License·Payment | Order는 실패 반영 트랜잭션에서만 `LicenseRestorationRequested`를 쓴다(`order:core/service/ApplyRefundRestoration.java:41`), License `uk_license_restoration_suspension` [표] | `LicenseRestorationIntegrationTest` | `SELECT r.request_event_id FROM stove_license.license_restoration r LEFT JOIN stove_payment.refund_execution e ON e.failure_event_id=r.failure_event_id AND e.status='FAILED' WHERE e.attempt_id IS NULL` |
 | **I18** | 같은 환불 시도에 금융 완료와 실패가 함께 있지 않다 | Payment(→ Order) | `RefundExecution.confirmFailure`(금융 확인 있으면 무시), 종결 대상 판정 `failureClosableAt`(`refundConfirmedAt == null`) [읽음 #166]. 목표: DB CHECK로 승격(MC-P8) | (미확인) | `SELECT attempt_id FROM stove_payment.refund_execution WHERE refund_confirmed_at IS NOT NULL AND status='FAILED'` |
 | **I19** | 운영자 실패 종결 중에는 그 실행의 PG 취소 요청이 나가지 않는다 | Payment | `RefundCancellationSchedule.markClosure`·`closureMarkedAt`(송신 claim이 null), `RefundExecution.resumeCancellation`(409 `REFUND_CLOSURE_BUSY`) [읽음 #166]. main에 없음 → T4 | #166 R1 Red→Green 테스트(직접 실행하지 않음) | SQL로 확인 불가(시간 창 안의 사건). 감사: 종결 시각과 같은 실행의 송신 기록 시각 대조 |
+| **I20** | PG 청구(`PAID` 관측)가 있는 결제는 `PAID` 주문의 결과, 승인 보류(`payment_approval.status`=`REVIEW_REQUIRED`), 주문에 연결되지 않은 청구 기록(`UnlinkedCharge`) 중 하나에 연결된다 | Payment(→ Order) | 목표: 끝난 결제의 공급자 보장 기한까지 주기 조회 + 웹훅 시 조회 앞당김(P3.13-8), `PAID` 관측 시 기록 생성(P3.13-9), Order 거절 사실(P3.14-2) → 기록(P3.13-7). **지금 없음**(`payment:core/domain/Payment.java:172-178` 끝난 결제의 웹훅 무시, `ResolvePayment.java:89`) → T5 | **없음** → T5: 흉내 서버 여정 `READY` 종결 뒤 `console-approve` → 기록·경보, 만료 뒤 `PAID` → 기록, Order 거절 → 기록 | SQL로는 PG 상태를 알 수 없음. 확인: 주기 조회 결과의 `PAID` 관측 건이 모두 기록·보류·`PAID` 주문 중 하나에 있음, G7 PG 명세 대사([결정 154](../../../docs/decisions.md#unlinked-charge-discovery)) |
 
 
 ### U1 ~ U6 — 지키는 곳 없던 구멍과 목표
 
 | U | 구멍(`docs/domain/workflows.md`) | 목표 계약 | 목표 지키는 곳 | 남은 결정·작업 |
 |---|---|---|---|---|
-| U1 | `PENDING` 주문의 결과를 기한·`paymentId`와 대조하지 않아, 실패로 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID`·보유권·매출 | I12·I15, P3.12-1·P3.14-1·P4.2-5 | Order `Order.apply` 영수증·`admissionId` 대조 + `purchase_order.payment_admission_id` FK·CHECK; Payment 확정 트랜잭션의 시도 재확인 | 결정 153(거절 사실 `OrderPaymentResultRejected` → Payment 보류), PD-2, T1·T13 |
+| U1 | `PENDING` 주문의 결과를 기한·`paymentId`와 대조하지 않아, 실패로 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID`·보유권·매출 | I12·I15, P3.12-1·P3.14-1·P4.2-5 | Order `Order.apply` 영수증·`admissionId` 대조 + `purchase_order.payment_admission_id` FK·CHECK; Payment 확정 트랜잭션의 시도 재확인 | 결정 153(거절 사실 `OrderPaymentResultRejected` → Payment 보류)·결정 154(`UnlinkedCharge`), T1·T5·T13 |
 | U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3, PD-11(외부 PG 시각), RC-16(결정 29 4시간 기한) |
 | U3 | 앞 모듈 기록 → 뒤 모듈 반영의 누락을 감지하는 곳 없음 | I14, P4.3-1·P3.9-2·P3.15-5 | [결정 필요 PD-6]이 정하는 감지 주체(검사기 또는 사실 이벤트 + 앞 모듈 게이지), 재반영은 재발행·DLT 재투입 | PD-6·PD-8·PD-9, T6·T7 |
 | U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | [결정 필요 PD-10], T9 |
