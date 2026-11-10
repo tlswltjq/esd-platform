@@ -118,17 +118,17 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 3. IF 현재 취소액이 0보다 크고 원액보다 작으면 THEN 시스템 SHALL 자동 송신을 중단하고, 명시적 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN` 409만 잔액 변화로 관측한다.
 4. THE 시스템 SHALL HTTP 2xx만으로 실행 성공을 기록하지 않고, 검증된 전액 취소 조회(SUCCEEDED·취소 ID·합계=원액·원래 요청 연결) 또는 검증된 취소 완료 응답으로만 금융 완료를 확정한다.
 5. WHEN 전액 취소가 증명되면 THEN 시스템 SHALL `RefundPaymentConfirmed`를 발행하고 원 `purchase_payment`의 `PAID`·원금액을 바꾸지 않는다.
-6. THE 실행 FAILED SHALL 우리 시도에 연결된 PG 취소 ID의 FAILED와, 추가 GET으로 확인한 원결제 PAID·전액 미취소·진행/성공/미지 취소 없음이 함께 있을 때만 `RefundExecutionFailed` Outbox와 함께 저장한다. 취소 ID 누락·부분 취소·조회 장애는 실패를 만들지 않고, FAILED 내역의 reason을 PG 실패 원인으로 표시하지 않는다. 이용권 복구 확인은 Order가 소유한다. IF 금융 완료가 먼저 커밋됐으면 THEN 뒤늦은 실패 근거로 실패·복구를 만들지 않는다.
-7. THE 시스템 SHALL 시간 경과·타임아웃·연결 실패만으로 환불 실패·새 키·새 시도를 만들지 않고 정지·GET을 유지한다.
+6. THE 실행 FAILED SHALL 우리 시도에 연결된 PG 취소 ID의 FAILED와, 추가 GET으로 확인한 원결제 PAID·전액 미취소·진행/성공/미지 취소 없음이 함께 있을 때만 `RefundExecutionFailed` Outbox와 함께 저장한다(또 하나의 길은 R15의 ADMIN 실패 종결이다). 취소 ID 누락·부분 취소·조회 장애는 실패를 만들지 않고, FAILED 내역의 reason을 PG 실패 원인으로 표시하지 않는다. 이용권 복구 확인은 Order가 소유한다. IF 금융 완료가 먼저 커밋됐으면 THEN 뒤늦은 실패 근거로 실패·복구를 만들지 않는다.
+7. THE 시스템 SHALL 시간 경과·타임아웃·연결 실패만으로 환불 실패·새 키·새 시도를 만들지 않고 정지·GET을 유지한다. 최초 준비 후 3시간 안 조회 간격은 5·10·20초 뒤 60초다. 3시간이 지난 미확정 실행과 실패한 실행(R7.6·R15)의 다음 조회는 `min(상한, max(시작값, now − 최초 준비))`이다(결정 122 공식, 기본 60초·10분, `PAYMENT_REFUND_LOOKUP_LATE_INITIAL_MS`·`PAYMENT_REFUND_LOOKUP_LATE_MAX_MS`, 상한은 설정으로도 10분을 넘지 못함). 웹훅 깨우기(R6)와 운영 종결(R14·R15)의 직접 재조회는 이 간격을 기다리지 않는다.
 8. WHERE 401·GET 403/404·POST 404 맥락에서 THE 시스템 SHALL 기존 조건 회복 후 같은 요청을 재개하고, POST 403·정확한 400 `INVALID_REQUEST`는 자동 POST를 멈추고 GET을 유지한다.
-9. THE 자동 취소 POST SHALL 송신 직전 정상 GET으로 원결제·상점·채널·주문·통화·PG 거래/시각과 원액=취소 요청액=예상 잔액을 대조한 뒤에만 보낸다. 최초 실행은 취소 이력이 없어야 하고 후속 실행은 저장한 선행 FAILED 이력과 정확히 일치해야 하며, 조회 실패·검증 불가면 그 회에는 POST하지 않는다.
+9. THE 자동 취소 POST SHALL 송신 직전 정상 GET으로 원결제·상점·채널·주문·통화·PG 거래/시각과 원액=취소 요청액=예상 잔액을 대조한 뒤에만 보낸다. 최초 실행은 취소 이력이 없어야 하고 후속 실행은 저장한 선행 FAILED 이력(PG가 확정한 실패의 FAILED 접수, ADMIN 실패 종결이 관측한 FAILED 행 — R15.6)과 정확히 일치해야 하며, 조회 실패·검증 불가면 그 회에는 POST하지 않는다.
 10. THE Idempotency-Key SHALL attemptId를 RFC 8941 문자열로 감싼 값이며, 본문은 최초 준비 때 커밋한 UTF-8 원문을 재사용하고 reason은 refundId 기반 기술 상관값이다.
 11. WHEN 우리 시도의 REQUESTED/FAILED 정상 접수 응답이 있으면 THEN 시스템 SHALL 같은 시도의 자동 POST를 멈추고 조회만 이어간다. `IDEMPOTENCY_OUTSTANDING_REQUEST`·일반 409는 미확정으로 다룬다.
 12. THE 전액 취소 확인 SHALL 중복 없는 양수 성공 취소 ID들의 합계가 원액인 경우(여러 건 합산 포함)를 인정하고 FAILED·REQUESTED 내역은 성공 합계에서 제외한다. 선택 항목 cancelledAt이 없으면 추정하지 않고 NULL로 둔다.
 13. WHEN 조회로 먼저 금융 완료(`PG_QUERY_UNATTRIBUTED`)가 확정된 뒤 같은 취소 ID·금액의 직접 성공 응답이 확인되면 THEN 시스템 SHALL 최초 금융 근거를 유지하고 그 이벤트를 참조하는 `RefundExecutionSucceeded`를 한 번만 저장한다. 다른 취소 ID의 성공 주장은 거절한다.
-14. WHEN 명시적 후속 실행 요청(previousAttemptId)이 오면 THEN 시스템 SHALL 같은 PAID·refundId·검증된 FAILED 선행 실행·새 실제 정지 완료를 확인하고 선행 실행 하나당 후행 실행 하나만 접수한다. 후행 실행은 새 attemptId·본문·준비 시각·3시간 창을 가진다.
+14. WHEN 명시적 후속 실행 요청(previousAttemptId)이 오면 THEN 시스템 SHALL 같은 PAID·refundId·검증된 FAILED 선행 실행(PG 확정 실패 또는 R15 실패 종결)·새 실제 정지 완료를 확인하고 선행 실행 하나당 후행 실행 하나만 접수한다. 후행 실행은 새 attemptId·본문·준비 시각·3시간 창을 가지며, 접수 때 선행 실행의 실패 뒤 조회(R15.7)를 멈춘다.
 15. WHILE POST 403 또는 정확한 400 `INVALID_REQUEST` 중단이 활성인 동안 THE 시스템 SHALL Kafka 재전달·재송신 스캔·내부 호출 어디서도 POST하지 않으며, GET 회복이나 설정 수정만으로 중단을 풀지 않는다. 그 밖의 400 형태(미지 타입·깨진 JSON 등)는 일반 미확정이다.
-16. THE 운영 재개 SHALL 현재 중단 ID·미확정·최초 준비 후 3시간 미만·새 접수/완료/부분 취소 없음을 확인한 뒤 다음 스캔 대상으로만 등록하고 재송신 단계를 초기화하지 않는다. 같은 requestId·내용은 최초 영수증을 반환하고, 예전 재개 지시는 새 중단을 풀지 않는다.
+16. THE 운영 재개 SHALL 현재 중단 ID·미확정·최초 준비 후 3시간 미만·새 접수/완료/부분 취소 없음을 확인한 뒤 다음 스캔 대상으로만 등록하고 재송신 단계를 초기화하지 않는다. 같은 requestId·내용은 최초 영수증을 반환하고, 예전 재개 지시는 새 중단을 풀지 않는다. 그 실행의 ADMIN 실패 종결이 PG를 조회하는 중(종결 표시가 살아 있음, R15.3)이면 409 `REFUND_CLOSURE_BUSY`이고 아무것도 바꾸지 않는다.
 
 ### R8. 조회·관리자 운영과 최소 보안
 **사용자 스토리:** 구매자·운영자로서, 각자 권한에 맞는 결제·환불 상태만 보고 싶다. 그래야 소유권과 운영 경계가 지켜진다.
@@ -138,7 +138,7 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 2. THE 시스템 SHALL 익명 401, 역할 없음 403, 타인·없는 결제 404, 잘못된 페이지 400을 적용하고, 조회가 결제를 생성·실행하지 않는다.
 3. THE 목록의 임의 buyerSubject·memberId·`X-Member-Id` SHALL 조회 소유자를 바꾸지 않는다.
 4. THE 본인 응답 SHALL paymentId·orderNo·상품 스냅샷·정가/할인/청구액·통화·상태·생성/갱신/결과 시각·실패 사유·provider를 제공하고, requestEventId·resultEventId·Inbox/Outbox·공급자 요청 원문·재시도/내부 오류는 숨긴다.
-5. WHERE `ADMIN` 맥락에서 THE 시스템 SHALL `/api/v1/admin/refund-cancellation-holds`로 운영 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`로 장기 미확정·귀속 미확정 목록(R14.7)·상세·조사 이력/기록·운영 종결(R14)을 제공하며, 재개는 원래 키·본문·3시간 창을 유지하고 조사 기록은 금융 상태·일정을 바꾸지 않는다.
+5. WHERE `ADMIN` 맥락에서 THE 시스템 SHALL `/api/v1/admin/refund-cancellation-holds`로 운영 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`로 장기 미확정·귀속 미확정(R14.7)·늦은 전액 취소(R15.8) 목록·상세·조사 이력/기록·운영 종결(R14)·실패 종결(R15)을 제공하며, 재개는 원래 키·본문·3시간 창을 유지하고 조사 기록은 금융 상태·일정을 바꾸지 않는다.
 6. THE 시스템 SHALL 구 prepare·callback·cancel·simulator·승인 주입 업무 API와 이전 Gateway의 익명/CSRF 예외를 제공하지 않는다.
 7. WHILE `OrderPlaced`를 아직 접수하지 못한 동안 THE 상세 조회 SHALL 404를 반환하며 결제를 만들지 않는다(주문 생성 직후 잠시 404일 수 있다).
 8. THE 장기 미확정 대상 SHALL 최초 준비 + 3시간 이상이고 `PENDING`·금융 미확정인 PortOne 환불 시도이며 준비 시각을 접수 시각으로 추정하지 않는다. 전액 취소 조회로 완료된 건은 현재 목록에서 빠지되 조사 표시는 보존하고, 귀속 미확정 목록(R14.7)에 남는다. 조사 기록 POST는 같은 requestId·내용이면 최초 기록을 반환하고, 다른 내용·결과 확정 뒤 새 기록은 409다.
@@ -234,6 +234,19 @@ MVP 재작성은 2026-10-16 완료했고, 외부 모의 PG 분리와 PortOne TES
 8. THE 시스템 SHALL 같은 대상의 건수를 `stove.payment.refund.unattributed.open` 게이지로 내고, 경보 `RefundsUnattributed`는 `> 0`·`for` 없음·warning이다. 기존 `stove.payment.refund.confirmation.delayed`·`RefundConfirmationsDelayed`의 대상·식은 바꾸지 않는다.
 9. THE 종결 SHALL Order 시도의 조사 표시(`reconciliationRequired`)를 지우지 않는다. 기존 계약으로 지우는 이벤트는 우리 시도의 PG 성공 응답을 뜻하는 `RefundExecutionSucceeded`뿐이라, 운영 판정에 쓰려면 새 정책이 필요하다(결정 127 "새 정책이 필요하면 다시 묻는다", Payment `tasks.md`).
 
+### R15. 자동 송신이 멈춘 환불의 ADMIN 실패 종결과 실패 뒤 조회 ([결정 128](../../../docs/decisions.md#refund-failure-closure))
+**사용자 스토리:** 운영자로서, PG가 취소를 거절했거나 끝내 확정되지 않아 돈이 움직이지 않은 환불을 PG 근거로 실패로 닫고 싶다. 그래야 고객이 보유권을 돌려받거나 다시 환불을 신청할 수 있다.
+
+#### 수용 기준
+1. WHEN ADMIN이 `POST /api/v1/admin/refund-delays/{attemptId}/failure-closure`로 `{requestId(UUID), note(공백 불가·500자 이내)}`를 보내면 THEN 시스템 SHALL JWT sub를 종결자로 기록하고 실행 상태(`FAILED`)·실패 확정 시각·종결 기록을 `no-store`로 반환한다. 같은 requestId·같은 내용(대상·종결자·note)은 PG를 다시 조회하지 않고 종결 기록에 저장한 첫 응답 값을 그대로 반환하고(늦은 전액 취소 기록 뒤에도), 다른 내용은 409 `REFUND_CLOSURE_CHANGED`다. 익명 401·역할 없음 403·없는 시도 404·잘못된 입력 400이다. `PORTONE_TEST` 모드에만 있고 Gateway는 ADMIN POST만 통과시킨다.
+2. THE 실패 종결 대상 SHALL `PENDING`·금융 미확정·준비된 실행 중 자동 POST가 멈춘 것 — 활성 운영 중단(403·400 등, R7.15), 잔액 변화 차단(R7.3), 최초 준비 + 3시간 경과 — 이며 취소 POST lease가 살아 있지 않고 결정 127·128 종결 기록이 없는 것뿐이다. 그 밖은 409 `REFUND_NOT_FAILURE_CLOSABLE`이며 PG를 조회하지 않는다.
+3. WHEN 실패 종결을 시작하면 THEN 시스템 SHALL R14.3과 같이 조회 작업자의 lease를 잡고(다음 조회 시각은 기다리지 않음, 작업자가 쥐고 있으면 409 `REFUND_CLOSURE_BUSY`), DB 트랜잭션 없이 PortOne을 조회한 뒤, payment→execution 잠금 안에서 대상·lease 소유·우리 취소 접수가 그대로인지 다시 확인한다. lease를 잡는 같은 트랜잭션에서 그 실행의 송신 쪽에도 같은 길이의 종결 표시를 두고, 표시가 살아 있는 동안 ADMIN 재개(R7.16)는 409 `REFUND_CLOSURE_BUSY`로 거절되며 상태를 바꾸지 않고, 첫 송신·재송신은 그 실행을 POST하지 않는다. 종결이 끝나면(성공·거절·예외) 표시를 지우고, 종결이 죽으면 표시는 만료 시각이 지나 풀린다. 최종 잠금 때 lease나 표시가 만료됐으면 409 `REFUND_CLOSURE_BUSY`, 그 밖에 대상이 바뀌었으면 409 `REFUND_NOT_FAILURE_CLOSABLE`이고 아무것도 저장하지 않는다.
+4. THE 실패 종결 근거 SHALL 원결제 `PAID`·취소액 0이고 PG 취소 목록이 모두 원액 `FAILED`(진행 중이거나 성공한 취소 없음)인 조회뿐이다. 우리 시도에 PG 취소 접수가 있으면 그 취소가 같은 내용의 `FAILED`로 목록에 있어야 한다. 취소액이 있거나 `REQUESTED`·`SUCCEEDED`·그 밖 상태의 취소가 있으면 409 `REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED`, 근거 불일치는 `CLOSURE_PG_INVALID_EVIDENCE`, 조회 장애는 `CLOSURE_PG_UNAVAILABLE`이다. 거절되면 lease를 돌려주고 원래 다음 조회 시각을 유지한다.
+5. WHEN 근거가 맞으면 THEN 시스템 SHALL 한 트랜잭션에서 실행을 `FAILED`(실패 이벤트 ID·시각·PG 조회 스냅샷 해시)로 바꾸고 기존 `RefundExecutionFailed` Outbox(취소 ID는 우리 접수 취소 ID, 없으면 `ADMIN_FAILURE_CLOSURE:<requestId>`)를 남기며, append-only 실패 종결 기록(attemptId·requestId·실패 이벤트 각각 유일, 종결자·note·근거 종류 `NO_LINKED_CANCELLATION`·`LINKED_CANCELLATION_FAILED`·중단 원인 `CANCELLATION_HOLD`·`BALANCE_CHANGED`·`WINDOW_ENDED`·스냅샷 해시·관측한 FAILED 취소 행·관측·종결 시각·첫 응답 값)을 저장한다. PG 취소를 실행하지 않는다.
+6. THE 고객 재시도(R7.14)의 선행 실패 확인과 송신 전 대조(R7.9) SHALL 실패 종결된 선행 실행을 검증된 실패로 받고, 그 종결이 관측한 FAILED 행(없으면 빈 목록)을 기대 이력으로 쓴다. 그보다 앞선 선행 실행은 종결 관측에 이미 포함되므로 더 거슬러 오르지 않는다.
+7. WHILE 실행이 `FAILED`(PG 확정 실패·실패 종결)인 동안 THE 시스템 SHALL 조회를 멈추지 않고 R7.7의 낮은 빈도로 전액 취소만 조회한다. 웹훅(취소 계열)은 조회 일정이 살아 있는 그 결제의 최신 실행을 깨운다. 후행 실행이 접수되면 선행 실행의 조회를 멈춘다.
+8. WHEN 실패 뒤 조회가 같은 원결제의 전액 취소를 찾으면 THEN 시스템 SHALL 발견 시각·PG 취소 시각만 기록하고 조회를 멈춘다. 상태·보유권·환불 결과·금융 근거는 바꾸지 않고 이벤트를 내지 않는다. `GET /api/v1/admin/refund-delays?kind=LATE_CANCELLATION`이 이 실행을 발견 시각·ID 순으로 보이고, 게이지 `stove.payment.refund.failed.late_cancellation`과 경보 `RefundCancelledAfterFailure`(`> 0`·`for` 없음·warning)가 알린다. 처리 방식은 결정 128대로 실제로 생기면 다시 정한다.
+9. THE 상세(`GET /api/v1/admin/refund-delays/{attemptId}`) SHALL 실패 종결 기록·늦은 전액 취소 시각을 보이고, 실패 종결되거나 늦은 취소가 기록된 실행은 창 안에서도 제공한다.
 
 ## 범위 밖(후속)
 

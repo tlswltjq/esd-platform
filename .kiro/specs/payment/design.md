@@ -144,7 +144,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | `PENDING` | POST 응답: 정상 접수(REQUESTED·FAILED) | 같은 attemptId·원구매, 이전 접수와 같은 취소 근거 | `PENDING` | `receiptCancellationId`·`receiptState` 등 저장, 송신 일정 중지 | `RefundExecution.recordCancellationReceipt` | R7.11 |
 | `PENDING` | POST 응답: 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN` | 준비 뒤 관측 | `PENDING` | `cancellationBalanceChangedAt`, 송신 일정 중지 | `RefundExecution.blockAutomaticCancellation` | R7.3 |
 | `PENDING` | POST 응답: 403 / 정확한 400 `INVALID_REQUEST` | 같은 송신 claim 소유, 미확정 | `PENDING` | `refund_cancellation_hold`(사유 `PG_REQUEST_FORBIDDEN`·`PG_REQUEST_INVALID`) 저장, `activeCancellationHoldId`, 송신 일정 중지 | `RequestRefundCancellation.recordRejection` → `holdCancellation` | R7.8, R7.15 |
-| `PENDING` | `POST /api/v1/admin/refund-cancellation-holds/{holdId}/resume` | 현재 보류 ID, 미확정, 3시간 창 안, 자동 중단·잔액 변화·접수 응답 없음, 새 requestId | `PENDING` | 송신 일정 `nextAt=now`(단계 유지), 보류 해제, 재개 기록 | `RequestRefundCancellationResume.execute` → `resumeCancellation` | R7.16 |
+| `PENDING` | `POST /api/v1/admin/refund-cancellation-holds/{holdId}/resume` | 현재 보류 ID, 미확정, 3시간 창 안, 자동 중단·잔액 변화·접수 응답 없음, 살아 있는 실패 종결 표시 없음(있으면 409 `REFUND_CLOSURE_BUSY`), 새 requestId | `PENDING` | 송신 일정 `nextAt=now`(단계 유지), 보류 해제, 재개 기록 | `RequestRefundCancellationResume.execute` → `resumeCancellation` | R7.16 |
 | `PENDING`(미확정) | POST 응답: 취소 성공 | 같은 attemptId·원구매, 접수 응답이 있으면 같은 취소 ID, 미실패 | `SUCCEEDED` | 첫 금융 확인(`refundConfirmationSource=PG_RESPONSE`), `RefundPaymentConfirmed`(PG_RESPONSE) Outbox, 두 일정 중지 | `RecordRefundCancellationSuccess.execute` → `confirmCancellationSuccess` | R7.4~R7.5 |
 | `PENDING`(귀속 미확정) | POST 응답: 취소 성공(진행 중이던 응답이 늦게 도착) | 확인된 취소가 1건이고 같은 취소 ID·금액=원액·같은 포인트 | `SUCCEEDED` | 최초 금융 근거 유지, `RefundExecutionSucceeded`(최초 확인 이벤트 참조) Outbox 한 번 | 같은 메서드 | R7.13 |
 | `PENDING`(미확정) | `RefundLookupScheduler`(due 또는 웹훅 wake) / 송신 뒤 조회 | 우리 접수 응답 없으면 `find`, 있으면 `inspect`; 검증된 전액 취소(`PgRefundConfirmation`) | `PENDING`(귀속 미확정) | `refundConfirmedAt`·`PG_QUERY_UNATTRIBUTED`·`providerRefundedAt`·취소 내역 저장, `RefundPaymentConfirmed` Outbox(`RefundConfirmationOutbox`), 두 일정 중지 | `ResolveRefundLookup` → `ReconcileRefundPayment.execute` → `confirmRefund` | R7.4~R7.5, R7.12 |
@@ -164,7 +164,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | `receiptCancellationId`·`receiptState` | 정상 접수 응답 | 자동 POST 중단, 조회를 `inspect`(연결 조회)로 바꿈, 실패 확정의 전제 | `recordCancellationReceipt` |
 | 환불 취소 보류 `activeCancellationHoldId`(`RefundCancellationHold`) | 403·정확한 400 | Kafka 재전달·재송신 스캔 어디서도 POST 안 함. ADMIN 재개만 해제 | `holdCancellation`, `resumeCancellation` |
 | 조회 일정 `RefundLookupSchedule`(`nextAt`·`stage`·`claimId`·`leaseUntil`·`wakeAt`) | 준비 시 `+5초`, 회마다 5·15·35초 뒤 1분(밀린 단계 건너뜀), 웹훅 `wake`, 금융 확정·실패 시 `stop` | GET만 함. 3시간 뒤에도 유지. 멈춘 일정은 lease를 잡을 수 없음(`ck_refund_lookup_lease`) | `prepare`·`claim`·`finish`·`wake`·`stop`·`claimForClosure` |
-| 송신 일정 `RefundCancellationSchedule` | claim·finish(10→30→60초), 접수·보류·잔액 변화·확정 시 `stop`, 재개 시 `resume` | 재POST 시각과 송신 lease | `RefundCancellationSchedule` |
+| 송신 일정 `RefundCancellationSchedule` | claim·finish(10→30→60초), 접수·보류·잔액 변화·확정 시 `stop`, 재개 시 `resume`. 실패 종결이 `markClosure`·`releaseClosure`로 종결 표시(`closureId`·`closureUntil`)를 둠 | 재POST 시각과 송신 lease. 종결 표시가 살아 있으면 claim이 null(첫 송신·재송신 모두 POST 안 함) | `RefundCancellationSchedule` |
 | 결정 127 종결 `refund_closure`(V39) | 종결 성공 때 한 번(attemptId·requestId 유일) | 귀속 미확정 목록·게이지 `stove.payment.refund.unattributed.open`에서 빠짐, 상세 `reconciliationRequired=false`. 재요청 응답은 종결 기록에 고정한 첫 상태(`PENDING`·`PG_QUERY_UNATTRIBUTED`)를 반환 | `RefundClosure.record`, `CloseRefundDelay.receipt` |
 | 조사 기록 `refund_investigation`(V27) | ADMIN POST, `confirmationDelayedSince≠null`일 때만 | 기록뿐. 금융 확정 뒤 새 기록은 409 | `RefundInvestigation.record` |
 
@@ -206,6 +206,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | `approval_investigation`(V34·V38) | 승인 보류 조사의 append-only 기록. V38부터 승인 FK에 삭제 cascade 없음(RESTRICT) |
 | `approval_closure`(V37) | 승인 보류 운영 종결의 append-only 기록. approvalId·requestId(각각 유일)·종결자·note·근거 상태(CANCELLED·FAILED·READY)·관측/종결 시각. 승인 FK에 삭제 cascade 없음 |
 | `refund_closure`(V39) | 장기·귀속 미확정 환불 운영 종결의 append-only 기록(결정 127). attemptId·requestId(각각 유일)·종결자·귀속 판정(OUR_REQUEST·EXTERNAL_CANCELLATION·UNDETERMINED)·note·결과(COMPLETED·RECORDED)·PG 취소 시각·관측/종결 시각, 첫 응답의 실행 상태·최초 금융 확인 시각·출처(재요청 응답용, 상태 PENDING·출처 PG_QUERY_UNATTRIBUTED CHECK). 실행 FK에 삭제 cascade 없음 |
+| `refund_failure_closure`·`refund_failure_closure_cancellation`(V40) | 자동 송신이 멈춘 환불의 ADMIN 실패 종결 append-only 기록(결정 128). attemptId·requestId·실패 이벤트 ID(각각 유일)·종결자·note·근거 종류(NO_LINKED_CANCELLATION·LINKED_CANCELLATION_FAILED)·중단 원인(CANCELLATION_HOLD·BALANCE_CHANGED·WINDOW_ENDED)·PG 조회 스냅샷 해시·이벤트 취소 ID·관측/종결 시각, 첫 응답의 실행 상태(FAILED CHECK)·실패 확정 시각, 관측한 FAILED 취소 행(ID·요청 시각·면세·부가세·reason·포인트). 실행 FK에 삭제 cascade 없음. 같은 V40이 `refund_execution`에 늦은 전액 취소 발견·PG 취소 시각과 실패 종결의 송신 쪽 표시(`cancel_closure_id`·`cancel_closure_until`, 둘 다 NULL이거나 둘 다 값, `chk_refund_cancel_closure_mark`)를 더하고, 실패 CHECK를 "PG FAILED 접수·조회 일정 중지 필수"에서 "실패 이벤트·시각·해시·금융 미확정"으로 넓힌다(`chk_refund_execution_failure_v40`) |
 
 - paymentId·orderNo·requestEventId·nullable resultEventId와 nullable `(provider, providerTransactionId)`에 각각 유일 제약을 둔다. 문자열 식별자는 대소문자를 구분하고 `(status, nextAttemptAt, id)`·`(buyerSubject, id)` 조회를 지원한다.
 - V1~V10 체크섬을 보존하고 `V11`이 `purchase_payment`를 추가한다. 이후 V12 비용 스냅샷(외부 모의 PG 전환), PortOne 웹훅·checkout·승인 접수·환불 취소/조회·실패 시도 이력·암호화 본문·EXPIRED 허용 등을 후속 마이그레이션으로 쌓았다.
@@ -225,8 +226,9 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | GET/POST | `/api/v1/admin/refund-cancellation-holds` | ADMIN | 운영 중단 목록·상세·재개 |
 | GET/POST | `/api/v1/admin/approval-reviews` | ADMIN | REVIEW_REQUIRED 목록(reason 필터)·상세·조사 이력 GET(종결 기록 포함), append-only 조사 기록 POST |
 | POST | `/api/v1/admin/approval-reviews/{approvalId}/closure` | ADMIN | PG 재조회 근거로 보류 종결(`PORTONE_TEST`만). `no-store`, requestId 멱등. PG 취소·승인 없음 |
-| GET/POST | `/api/v1/admin/refund-delays` | ADMIN | 장기 미확정(`kind=DELAYED`, 기본)·귀속 미확정(`kind=UNATTRIBUTED`) 목록·상세(종결 기록 포함)·조사 이력 GET, 조사 기록 POST |
+| GET/POST | `/api/v1/admin/refund-delays` | ADMIN | 장기 미확정(`kind=DELAYED`, 기본)·귀속 미확정(`kind=UNATTRIBUTED`)·실패 뒤 늦은 전액 취소(`kind=LATE_CANCELLATION`) 목록·상세(종결·실패 종결 기록 포함)·조사 이력 GET, 조사 기록 POST |
 | POST | `/api/v1/admin/refund-delays/{attemptId}/closure` | ADMIN | PG 재조회로 같은 원결제 전액 취소를 확인할 때만 종결·귀속 판정 기록(`PORTONE_TEST`만, 결정 127). `no-store`, requestId 멱등. PG 취소 없음 |
+| POST | `/api/v1/admin/refund-delays/{attemptId}/failure-closure` | ADMIN | 자동 송신이 멈춘 실행을 PG 재조회로 PAID·취소액 0·모든 취소 FAILED를 확인할 때만 실패로 닫고 `RefundExecutionFailed`를 낸다(`PORTONE_TEST`만, 결정 128). `no-store`, requestId 멱등(첫 응답 값 저장). PG 취소 없음. Gateway 허용 목록에 있음 |
 
 - 익명 401, 역할 없음 403, 타인·없는 결제 404, 잘못된 페이지 400. checkout의 로컬 `PAID`/`FAILED`·다른 공급자는 409.
 - MEMBER 조회의 구매자는 `CurrentSubject`의 JWT sub다. 본문·쿼리·헤더·`X-Member-Id`로 소유자를 바꾸지 않는다.
@@ -258,7 +260,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | 수신 | `RefundExecutionRequested` · (환불 접수) | 고정 attemptId·원 PAID 연결로 PG 취소/조회 |
 | 발행 | `RefundPaymentConfirmed` · `stove.payment.v1` | refund/attempt·원 실행 요청·주문·결제·구매자·금액·통화·`PG_QUERY_UNATTRIBUTED` 또는 `PG_RESPONSE`·원 PG 거래·취소 ID들. '우리 실행 성공' 이벤트가 아님 |
 | 발행 | `RefundExecutionSucceeded` · `stove.payment.v1` | 조회 완료가 먼저 확정된 뒤 같은 취소 근거의 직접 성공을 보완. 최초 금융 이벤트 참조 |
-| 발행 | `RefundExecutionFailed` · `stove.payment.v1` | 연결된 취소 ID FAILED와 원결제 전액 미취소를 함께 확인한 실패 근거. Order 이용권 복구의 근거 |
+| 발행 | `RefundExecutionFailed` · `stove.payment.v1` | 연결된 취소 ID FAILED와 원결제 전액 미취소를 함께 확인한 실패 근거, 또는 ADMIN 실패 종결(결정 128)의 PG 재조회 근거. Order 이용권 복구의 근거. 실패 종결은 계약을 바꾸지 않고 같은 이벤트를 쓴다: `cancellationId`는 우리 접수 취소 ID, 없으면 `ADMIN_FAILURE_CLOSURE:<requestId>`(PG 취소 ID가 아님을 드러내는 값), `lookupHash`는 종결 때 PG 응답 원문의 SHA-256. Order는 둘을 실패 지문에만 쓴다 |
 | 발행 | `RefundExecutionPrepared` · `stove.payment.v1` | 최초 준비 시각·3시간 경계를 한 번만 발행. PG 송신·성공을 뜻하지 않음 |
 
 - `RefundPaymentConfirmed`·`RefundExecutionSucceeded`는 선택적 `RefundAmountsSnapshot`(원승인 실결제/할인 쌍, 성공 취소별 ID·총액·선택적 포인트, 제공사 취소 시각)을 담는다. 저장된 성공 근거만 쓰고 반환 현금을 계산하지 않으며, 접수·실패 응답의 금액을 성공 반환으로 전달하지 않는다([결정 36](../../../docs/decisions.md#refund-amount-details)).
@@ -296,7 +298,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | 항목 | 규칙 |
 |---|---|
 | 첫 송신 | `RefundExecutionRequested` 소비자가 접수 커밋 뒤 수행(한 번에 1레코드). 이미 준비된 실행의 재전달은 GET만 |
-| 결과 GET | 최초 준비 후 5·15·35초, 이후 1분. 밀린 단계는 건너뛰고 몰아서 실행하지 않는다. 3시간 뒤에도 GET 유지. 동시 최대 4·대기 큐 0·임대(연결+응답 제한+30초) |
+| 결과 GET | 최초 준비 후 5·15·35초, 이후 1분. 3시간이 지나면, 그리고 실패(PG 확정·실패 종결) 뒤에는 `min(상한, max(시작값, now − 최초 준비))`(결정 122 공식, 기본 60초·10분). 밀린 단계는 건너뛰고 몰아서 실행하지 않는다. 3시간 뒤·실패 뒤에도 GET 유지(실패 뒤에는 전액 취소만 본다). 동시 최대 4·대기 큐 0·임대(연결+응답 제한+30초) |
 | POST 재송신 | 한 회 종료 시각 기준 10초→30초→이후 1분. 임대(HTTP 3회 제한 합+30초)·스캔 1초·작업자 1개. 늦은 소유자의 종료는 새 임대를 덮어쓰지 못한다 |
 | HTTP 분류 | 401·GET 403/404·POST 404 → 미확정, 같은 요청 자동 재개 / POST 403 → 중단 `FORBIDDEN` / 정확한 POST 400 `INVALID_REQUEST` → 중단 `PG_REQUEST_INVALID`. 오류 본문은 파싱·저장하지 않는다 |
 | 활성화 | `PAYMENT_REFUND_LOOKUP_ENABLED`·`PAYMENT_REFUND_EXECUTION_ENABLED`·`PAYMENT_REFUND_RETRY_ENABLED` 기본 false. 송신은 조회, 재송신은 송신·조회 조립이 없으면 기동 실패 |
@@ -309,6 +311,7 @@ main `9fe2e18e`의 `apps/payment/src/main`에서 옮겼다. 새 정책이 아니
 | `PAYMENT_PG_PROVIDER` | `SIMULATED` (`PORTONE_TEST` 선택 가능) |
 | `PAYMENT_PROCESSING_ENABLED` | true. false면 접수·조회만(승인 작업자 포함 중지) |
 | `PAYMENT_POLL_MS` / `PAYMENT_BATCH_SIZE` / `PAYMENT_RETRY_MS` | 1000(100~60000) / 20(1~200) / 5000(100~300000) |
+| `PAYMENT_REFUND_LOOKUP_LATE_INITIAL_MS` / `PAYMENT_REFUND_LOOKUP_LATE_MAX_MS` | 60000(1000~600000) / 600000(1000~600000, 시작값 이상. 줄일 수는 있지만 10분보다 늘릴 수 없다). 3시간 창이 지난 미확정 환불과 실패한 환불의 PG 조회 시작값·상한만 정한다(결정 122·128). 창 안 간격은 고정 |
 | `PAYMENT_REVIEW_RETRY_INITIAL_MS` / `PAYMENT_REVIEW_RETRY_MAX_MS` | 5000(100~300000) / 600000(1000~600000, 시작값 이상. 설정으로 줄일 수는 있지만 결정 122의 10분보다 늘릴 수 없다). 보류(`REVIEW_REQUIRED`) 승인의 PG 재조회 시작값·상한만 정한다([결정 122](../../../docs/decisions.md#approval-review-requery-interval)) |
 | `MOCK_PG_URI` / `MOCK_PG_PAYMENT_KEY` | `http://localhost:8092` / 필수, Payment 전용 승인·조회 키 |
 | `PAYMENT_ORDER_SERVICE_KEY` | Order와 같은 값. Order 내부 승인/실패 API 전용 |
@@ -374,4 +377,23 @@ V36은 `chk_approval_pg_state`를 지우고 CANCELLED를 더해 다시 만든다
 
 Order 시도의 `reconciliationRequired`는 이 종결로 바뀌지 않는다. 기존 계약에서 이를 지우는 것은 `RefundExecutionSucceeded`(우리 취소 ID의 PG 성공 응답. Order는 시도를 `SUCCEEDED`·source `PG_RESPONSE`로 기록)뿐이고, 운영 판정(특히 외부·판단 불가)을 그 이벤트로 보내면 계약의 뜻이 바뀐다. 새 이벤트나 뜻 변경은 새 정책이라 구현하지 않았다(결정 127, `tasks.md`). 지금 Order의 그 필드를 읽는 API·지표는 없다.
 
-V39는 새 표만 더하고 옛 행을 고치지 않는다. 이행 전에 있던 귀속 미확정 실행은 종결 기록이 없으므로 목록·게이지·경보 대상이 된다(결정 104 이행 테스트 `RefundDelayClosureIntegrationTest.v39PreservesExistingExecutionsAddsNoClosuresAndEnforcesAuditConstraints`). 적용 절차: V39는 `CREATE TABLE` 한 문장이고 MySQL 8의 원자적 DDL이라 일부만 남지 않는다. 옛 버전은 이 표를 쓰지 않아 함께 돌아도 문제가 없다. 새 버전 기동 직후 기존 귀속 미확정 건만큼 `RefundsUnattributed`가 울리므로, 알려진 과거 건은 미리 Alertmanager silence를 건다. 부분 실패 복구: `flyway_schema_history`에 V39 실패 행이 있으면 `SHOW TABLES LIKE 'refund_closure';`로 표가 생겼는지 보고, 있으면 `DROP TABLE refund_closure;`를 실행한 뒤 V39 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동한다. 종결 기록이 이미 쌓인 뒤에는 표를 지우지 않는다(감사 기록, 실행 FK RESTRICT).
+V39는 새 표만 더하고 옛 행을 고치지 않는다. 이행 전에 있던 귀속 미확정 실행은 종결 기록이 없으므로 목록·게이지·경보 대상이 된다(결정 104 이행 테스트 `RefundDelayClosureIntegrationTest.v39PreservesExistingExecutionsAddsNoClosuresAndEnforcesAuditConstraints`). 적용 절차: V39는 `CREATE TABLE` 한 문장이고 MySQL 8의 원자적 DDL이라 일부만 남지 않는다. 옛 버전은 이 표를 쓰지 않아 함께 돌아도 문제가 없다. 새 버전 기동 직후 기존 귀속 미확정 건만큼 `RefundsUnattributed`가 울린다. 현재 구성에는 Alertmanager가 없어 경보는 Prometheus 화면에만 보이고 silence로 끌 수 없으므로, 알려진 과거 건은 결정 127 종결로 닫아야 풀린다. 부분 실패 복구: `flyway_schema_history`에 V39 실패 행이 있으면 `SHOW TABLES LIKE 'refund_closure';`로 표가 생겼는지 보고, 있으면 `DROP TABLE refund_closure;`를 실행한 뒤 V39 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동한다. 종결 기록이 이미 쌓인 뒤에는 표를 지우지 않는다(감사 기록, 실행 FK RESTRICT).
+
+### 3시간 뒤·실패 뒤 환불 조회 간격 (결정 122·128)
+
+`ResolveRefundLookup`은 한 회를 끝낼 때(`RefundExecution.finishLookup`) 잠금 안의 현재 상태로 다음 조회 시각을 정한다. 최초 준비 후 3시간 안이고 실패가 아니면 지금처럼 5·10·20·60초 단계다. 3시간이 지났거나 실행이 `FAILED`면 `now + RefundLookupInterval.after(firstPreparedAt, now)` = `now + min(상한, max(시작값, now − firstPreparedAt))`이다. 시작값·상한은 `stove.payment.refund-lookup.late-initial-ms`·`late-max-ms`(기본 60초·10분)이고 `config`의 `RefundLookupProperties`가 범위를 검증하며, `RefundLookupInterval`도 상한 10분 초과를 거절한다. 3시간 뒤의 경과는 늘 10분보다 크므로 기본 설정에서 창 뒤 간격은 10분이다. 창 안에서 확정된 실패는 경과에 비례해 60초부터 늘어난다. 웹훅(`ReceivePortOneWebhook`)은 `wakeAt`을 세워 다음 스캔에서 바로 잡히고, 결정 127·128 종결은 `claimForClosure`로 `nextAt`을 기다리지 않는다(`RefundFailureClosureIntegrationTest`).
+
+### 자동 송신이 멈춘 환불 실패 종결 (결정 128)
+
+`POST /api/v1/admin/refund-delays/{attemptId}/failure-closure`(`PORTONE_TEST`만, ADMIN, `CloseRefundFailure`)는 `{requestId, note}`를 받아 JWT sub를 종결자로 쓴다. 구조는 결정 115·127과 같다. 운영 순서는 [환불 종결 절차서](../../../docs/runbooks/refund-delay-closure.md)다.
+
+1. 같은 requestId의 실패 종결 기록이 있으면 PG를 부르지 않고 내용(대상·종결자·note)을 대조해 최초 영수증을 반환한다. 다르면 `REFUND_CLOSURE_CHANGED`.
+2. payment→execution 잠금 안에서 대상(`RefundExecution.failureClosableAt`: `PENDING`·미확정·준비됨, 취소 POST lease 없음, 활성 중단·잔액 변화 차단·3시간 경과 중 하나)과 결정 127·128 종결 기록 없음을 확인하고, 조회 일정이 살아 있으면 작업자 lease를 잡는다(`REFUND_CLOSURE_BUSY`). 같은 트랜잭션에서 송신 일정(`RefundCancellationSchedule.markClosure`)에 같은 토큰·같은 길이(조회 lease)의 종결 표시를 둔다. 다른 종결의 표시가 살아 있으면 `REFUND_CLOSURE_BUSY`다(PR #166 R1). 표시가 살아 있는 동안 첫 송신·재송신의 송신 claim(`RefundCancellationSchedule.claim`)은 null이라 POST하지 않고, 재송신 후보 조회(`findRetryCandidates`)도 그 실행을 고르지 않는다. ADMIN 재개(`RefundExecution.resumeCancellation`)는 409 `REFUND_CLOSURE_BUSY`로 거절되고 상태·재개 기록을 바꾸지 않는다. 그래서 3번의 GET 뒤에 POST가 시작될 수 없다. 작업자 조회 lease 규칙(R14.3)은 그대로다.
+3. 트랜잭션 없이 `RefundPaymentLookup.inspectUncancelled`로 PG를 읽는다. PortOne 구현은 작업자와 같은 GET·원결제 대조 뒤, `PAID`·취소액 0이고 목록이 모두 원액 `FAILED`일 때만 `PgRefundUncancelled`(FAILED 행·응답 원문 SHA-256)를 준다. 상태가 `PAID`가 아니거나 취소액이 있거나 `REQUESTED`·`SUCCEEDED` 등 다른 행이 있으면 빈 값(`REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED`)이다. 원액이 아닌 FAILED 행·원결제 불일치는 `IllegalArgumentException`(`CLOSURE_PG_INVALID_EVIDENCE`)이다. 다음 시도의 송신 전 대조가 그 행을 기대할 수 없기 때문이다. 우리 취소 접수가 있으면 그 ID가 같은 내용의 FAILED 행으로 있어야 한다.
+4. 다시 잠금 안에서 조회 lease·종결 표시 소유(만료되면 `REFUND_CLOSURE_BUSY`)·같은 실행 요청·대상·우리 취소 접수 불변을 확인한다. 표시가 만료됐다면(조회가 lease보다 오래 걸림) 그 사이 재개·송신이 있었을 수 있으므로, 다시 닫을 수 있는 상태(새 중단, 응답 유실 뒤 3시간 만료)여도 아무것도 저장하지 않는다. 그 밖의 변화는 `REFUND_NOT_FAILURE_CLOSABLE`이다. `RefundExecution.closeAsFailed`가 상태 `FAILED`·실패 이벤트 ID·시각·스냅샷 해시를 쓰고 취소 일정을 멈추며, 조회 일정은 두고 lease만 돌려준다. 종결 표시도 지운다. 거절·조회 예외에서도 lease와 표시를 자기 토큰으로 돌려주고, 종결 프로세스가 죽으면 표시는 만료 시각이 지나 저절로 풀린다. 같은 트랜잭션에 `refund_failure_closure`(관측 FAILED 행 포함)와 `RefundExecutionFailed` Outbox(`RefundConfirmationOutbox.recordFailure`, PG 확정 실패와 같은 코드)를 저장한다. 영수증은 종결 기록에 함께 저장한 첫 응답 값(`FAILED`·실패 확정 시각)과 바뀌지 않는 식별자로만 만든다.
+
+고객 재시도: `ReceiveRefundExecution`은 지금처럼 선행 실행의 `FAILED`·실패 이벤트·시각만 보므로 실패 종결된 선행도 받는다. 받으면 선행의 조회 일정을 멈춘다(`handOverLookupToRetry`). 후행이 같은 결제를 직접 조회하므로, 후행이 일으킨 전액 취소를 선행이 늦은 취소로 올리지 않게 하려는 것이다. `RequestRefundCancellation.previousFailures`는 선행 사슬을 거슬러 오르며, PG 확정 실패는 FAILED 접수를, 실패 종결은 그 종결이 관측한 FAILED 행(선행 실행 ID로 귀속)을 기대 이력에 넣고 거기서 멈춘다(관측은 결제 전체의 목록이라 더 앞 행을 이미 담음). `RefundCancellationPermission`은 이력과 별도로 `predecessorVerified`를 가져, 관측 행이 없는 실패 종결 뒤에도 후행이 보낼 수 있다. 송신 전 대조(`PortOneRefundCancellationGateway.matchesPreviousFailures`)는 그대로 "PG 목록 = 기대 이력"이다.
+
+실패 뒤 조회: PG 확정 실패(`confirmFailure`)와 실패 종결 모두 조회 일정을 멈추지 않는다. 작업자 스캔(`findDueLookups`)은 `PENDING`·`FAILED`를 보고, `ReconcileRefundPayment.executeScheduled`는 `FAILED`면 전액 취소만 조회한다. 찾으면 `recordLateCancellation`이 발견·PG 취소 시각만 쓰고 일정을 멈춘다. 상태·금융 근거·보유권은 바꾸지 않고 이벤트도 없다(결정 128 "자동으로 바꾸지 않는다"). 송신 경로(Kafka·재송신)에서 부르는 `execute`는 `FAILED`면 지금처럼 바로 돌아가 추가 GET을 하지 않는다. 웹훅은 그 결제에서 조회 일정이 살아 있는 최신 실행(`findFirstByPaymentIdAndLookupScheduleNextAtIsNotNullOrderByIdDesc`)을 깨운다. 미확정 실행과 감시 중인 실패 실행이 대상이고, 일정이 멈춘 귀속 미확정 실행은 전처럼 깨우지 않는다. 목록 `kind=LATE_CANCELLATION`·게이지 `stove.payment.refund.failed.late_cancellation`·경보 `RefundCancelledAfterFailure`(`> 0`·`for` 없음·warning, `infra/prometheus/tests/refund-late-cancellation.yml`)가 이 건을 보인다. 경보를 끄는 시스템 동작은 없다(처리 방식은 결정 128대로 실제로 생기면 다시 정함, `tasks.md`).
+
+V40 적용·호환: `refund_execution` 변경(옛 실패 CHECK 제거·늦은 취소 두 열·종결 표시 두 열·새 CHECK 셋)은 한 `ALTER TABLE` 문장이라 MySQL 8의 원자적 DDL로 함께 적용되거나 함께 실패한다. 새 실패 CHECK는 이름을 바꿔(`_v40`) 같은 문장의 옛 이름 제거와 겹치지 않는다. 옛 행은 고치지 않는다. 이행 전 실패한 실행은 조회 일정이 멈춘 채(`next_refund_lookup_at` NULL)라 감시 대상이 아니고, 늦은 취소 열과 종결 표시는 NULL이며(표시가 없으니 재개·송신을 막지 않음) 실패 종결 기록이 없다(결정 104 이행 테스트 `RefundFailureClosureIntegrationTest.v40PreservesExistingExecutionsAndEnforcesTheFailureClosureConstraints`). 옛 버전과 함께 돌면 옛 버전은 새 열·표를 쓰지 않고(옛 버전의 재개·송신은 새 버전 종결의 표시를 보지 않으므로, 실패 종결은 모든 인스턴스가 새 버전이 된 뒤에 쓴다), 옛 실패 확정은 일정을 멈춰 넓어진 CHECK를 만족하며, 옛 스캔은 `PENDING`만 봐 감시 중인 실패 실행을 건드리지 않는다. 옛 버전에서 실패 종결된 선행의 재시도를 보내려 하면 이전 실패 근거가 없다는 409로 멈췄다가 새 버전에서 이어진다. 부분 실패 복구: `flyway_schema_history`에 V40 실패 행이 있으면 `SHOW CREATE TABLE refund_execution`으로 `late_cancel_observed_at`·`chk_refund_execution_failure_v40`이 있는지 본다. 첫 `ALTER`는 원자적이라 둘 다 있거나 둘 다 없다. 없으면 V40 실패 행만 지우고(Flyway `repair`와 같은 동작) 다시 기동한다. 있으면 `SHOW TABLES LIKE 'refund_failure_closure%'`로 표 생성 여부를 보고, 만들어진 표가 비어 있으면 자식 표(`refund_failure_closure_cancellation`)부터 제거한 뒤 `refund_execution`을 V39 모양(늦은 취소 두 열·종결 표시 두 열과 새 CHECK 셋을 빼고 V21의 `chk_refund_execution_failure` 원문을 되살림)으로 한 `ALTER` 문장으로 되돌리고, V40 실패 행을 지운 뒤 다시 기동한다. 실패 종결이 쌓였거나 감시 중인 실패 실행(조회 일정 있음)이 있으면 V21 CHECK로 되돌릴 수 없으므로 되돌리지 않고 V40을 앞으로 고친다.

@@ -123,7 +123,8 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/api/v1/admin/approval-reviews/*/investigations", "/api/v1/admin/approval-reviews/*/closure").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/v1/admin/refund-delays", "/api/v1/admin/refund-delays/*",
                                 "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations", "/api/v1/admin/refund-delays/*/closure").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations", "/api/v1/admin/refund-delays/*/closure",
+                                "/api/v1/admin/refund-delays/*/failure-closure").hasRole("ADMIN")
                         .pathMatchers("/api/v1/orders/**", "/api/v1/payments/**", "/api/v1/library/**",
                                 "/api/v1/storage/**", "/api/v1/downloads/**").hasRole("MEMBER")
                         .anyExchange().denyAll())

@@ -822,11 +822,22 @@
             "enum" : [ "PENDING", "SUCCEEDED", "FAILED" ],
             "type" : "string"
           },
+          "failureClosure" : {
+            "$ref" : "#/components/schemas/RefundFailureClosureRecordResponse"
+          },
           "failureConfirmedAt" : {
             "format" : "date-time",
             "type" : "string"
           },
           "firstPreparedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lateCancellationObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lateCancelledAt" : {
             "format" : "date-time",
             "type" : "string"
           },
@@ -875,6 +886,45 @@
             "type" : "string"
           },
           "refundId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundFailureClosureRecordResponse" : {
+        "properties" : {
+          "closedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "evidence" : {
+            "enum" : [ "NO_LINKED_CANCELLATION", "LINKED_CANCELLATION_FAILED" ],
+            "type" : "string"
+          },
+          "evidenceObservedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "failedCancellationIds" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "operatorSubject" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "snapshotHash" : {
+            "type" : "string"
+          },
+          "stopReason" : {
+            "enum" : [ "CANCELLATION_HOLD", "BALANCE_CHANGED", "WINDOW_ENDED" ],
             "type" : "string"
           }
         },

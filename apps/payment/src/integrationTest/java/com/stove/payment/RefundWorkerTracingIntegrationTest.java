@@ -65,6 +65,8 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -107,6 +109,7 @@ class RefundWorkerTracingIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired PaymentRepository payments;
     @Autowired RefundExecutionRepository executions;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
     @Autowired ObjectMapper mapper;
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
@@ -170,6 +173,30 @@ class RefundWorkerTracingIntegrationTest extends PaymentIntegrationTestBase {
         awaitStatus(execution -> execution.getStatus() == RefundExecutionStatus.SUCCEEDED);
         assertThat(posts).hasSize(2);
         assertContinuesUnder(parent, switched);
+    }
+
+    /** Decision 128 (PR #166): the post-failure watch is a new lookup path; it must keep the saved parent like D-050's paths. */
+    @DisplayName("[D-050·결정 128] 실패 뒤 감시 조회의 PG 조회가 저장된 환불 부모 아래 이어진다")
+    @Test void thePostFailureWatchLooksUpUnderTheSavedRefundParent() throws Exception {
+        mode = Mode.UNKNOWN;
+        String parent = parent();
+        paidRequest(); listeners.start(); awaitConsumed(send(parent));
+        awaitStatus(execution -> execution.getLookupSchedule().getNextAt() != null && posts.size() == 1 && unanswered.get() >= 1
+                && execution.getCancellationSchedule().getLeaseUntil() == null);
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            Payment current = payments.lockByPaymentId(input.paymentId()).orElseThrow();
+            RefundExecution failing = executions.lockByAttemptId(input.attemptId()).orElseThrow();
+            failing.blockAutomaticCancellation(BASE);
+            failing.closeAsFailed(current, id(), "a".repeat(64), BASE);
+        });
+        Instant switched = Instant.now();
+        cancelled.set(true); mode = Mode.SUCCESS; when(clock.instant()).thenReturn(BASE.plusSeconds(5));
+        awaitStatus(execution -> execution.getLateCancellationObservedAt() != null);
+        assertThat(executions.findByAttemptId(input.attemptId()).orElseThrow().getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
+        String trace = parent.substring(3, 35);
+        Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> assertThat(workerCalls(switched))
+                .as("post-failure watch PG calls").isNotEmpty()
+                .allSatisfy(call -> assertThat(call.getTraceId()).as(call.getName()).isEqualTo(trace)));
     }
 
     @DisplayName("저장된 부모가 없는 환불은 작업자가 새 root에서 확정하고 다른 trace를 상속하지 않는다")

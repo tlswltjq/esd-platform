@@ -1,11 +1,13 @@
 package com.stove.payment.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.stove.payment.api.scheduler.RefundLookupScheduler;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.RefundExecutionRepository;
+import com.stove.payment.core.domain.RefundLookupInterval;
 import com.stove.payment.core.service.ReconcileRefundPayment;
 import com.stove.payment.core.service.ResolveRefundLookup;
 import com.stove.payment.core.port.PaymentTracing;
@@ -31,7 +33,8 @@ class RefundLookupConfigurationTest {
             .withBean(PaymentTracing.class, () -> (parent, paymentId, work) -> work.run())
             .withBean(PortOneProperties.class, () -> new PortOneProperties(URI.create("http://127.0.0.1"), "fixture",
                     "store-fixture", "channel-fixture", "fixture", Duration.ofSeconds(2), Duration.ofSeconds(65),
-                    URI.create("https://fixture.example/webhook")));
+                    URI.create("https://fixture.example/webhook")))
+            .withBean(RefundLookupProperties.class, () -> new RefundLookupProperties(true, 60000, 600000));
 
     @Test void enabledLookupUsesABoundedExecutorAndADifferentSchedulerFromPurchaseProcessing() {
         context.withPropertyValues("stove.payment.refund-lookup.enabled=true").run(application -> {
@@ -47,5 +50,18 @@ class RefundLookupConfigurationTest {
     @Test void lookupSchedulingRequiresExplicitActivation() {
         context.run(application -> assertThat(application).doesNotHaveBean(ResolveRefundLookup.class)
                 .doesNotHaveBean(RefundLookupScheduler.class).doesNotHaveBean(ThreadPoolTaskExecutor.class));
+    }
+
+    /** Decisions 122·128: the post-window and post-failure delay comes from its own keys and is capped at 10 minutes. */
+    @Test void theLateLookupIntervalIsBoundFromItsOwnKeys() {
+        assertThat(RefundLookupConfiguration.lateInterval(new RefundLookupProperties(true, 30000, 120000)))
+                .isEqualTo(new RefundLookupInterval(Duration.ofSeconds(30), Duration.ofSeconds(120)));
+        assertThat(RefundLookupConfiguration.lateInterval(new RefundLookupProperties(false, 60000, 600000))).isEqualTo(RefundLookupInterval.DEFAULT);
+        assertThatThrownBy(() -> new RefundLookupProperties(true, 60000, 600001))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("late-max-ms");
+        assertThatThrownBy(() -> new RefundLookupProperties(true, 999, 600000))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("late-initial-ms");
+        assertThatThrownBy(() -> new RefundLookupProperties(true, 120000, 60000))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("late-max-ms");
     }
 }

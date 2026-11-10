@@ -105,6 +105,8 @@ public class RefundExecution {
 
     public void resumeCancellation(String holdId, Instant at) {
         if (!PaymentValues.uuid(holdId) || !PaymentValues.microsecond(at)) throw new IllegalArgumentException("A hold and precise resume time are required");
+        // PR #166 R1: a failure closure is re-inspecting the PG under this stop; a resume now could POST after its GET.
+        if (cancellationSchedule.closureMarkedAt(at)) throw new BusinessException(PaymentErrorCode.REFUND_CLOSURE_BUSY);
         if (!canResumeCancellation(holdId, at))
             throw new BusinessException(ErrorCode.CONFLICT, "현재 중단과 원래 송신 조건 안에서만 재개할 수 있습니다.");
         cancellationSchedule.resume(at); activeCancellationHoldId = null;
@@ -119,7 +121,7 @@ public class RefundExecution {
         return PaymentValues.uuid(holdId) && PaymentValues.microsecond(at) && isCurrentCancellationHold(holdId)
                 && firstCancellationPreparedAt != null && cancellationRequestBody != null && automaticCancellationStoppedAt == null
                 && cancellationBalanceChangedAt == null && receiptCancellationId == null && !at.isBefore(firstCancellationPreparedAt)
-                && at.isBefore(cancellationResumeDeadline());
+                && at.isBefore(cancellationResumeDeadline()) && !cancellationSchedule.closureMarkedAt(at);
     }
 
     public Instant cancellationResumeDeadline() {
@@ -181,9 +183,67 @@ public class RefundExecution {
             throw new BusinessException(ErrorCode.CONFLICT, "환불 완료와 실패 근거가 충돌합니다.");
         recordCancellationReceipt(payment, proof.failedReceipt(), at);
         status = RefundExecutionStatus.FAILED; failureEventId = eventId; failureConfirmedAt = at; failureLookupHash = proof.snapshotHash();
-        lookupSchedule.stop();
+        // The read-only lookup continues at the low post-failure frequency to surface a late full cancellation (decision 128).
         cancellationSchedule.stop();
         return true;
+    }
+
+    /**
+     * Targets of the operator failure closure (decision 128): an unconfirmed execution whose automatic POST has stopped —
+     * a rejection hold (403·400), a balance-change block, or the end of the original 3-hour window — and that has no
+     * cancellation POST in flight.
+     */
+    public boolean failureClosableAt(Instant at) {
+        if (!PaymentValues.microsecond(at)) throw new IllegalArgumentException("Database-precision time is required");
+        if (status != RefundExecutionStatus.PENDING || refundConfirmedAt != null || firstCancellationPreparedAt == null) return false;
+        if (cancellationSchedule.getLeaseUntil() != null && at.isBefore(cancellationSchedule.getLeaseUntil())) return false;
+        return activeCancellationHoldId != null || cancellationBalanceChangedAt != null || !at.isBefore(cancellationResumeDeadline());
+    }
+
+    /**
+     * Records the operator failure closure (decision 128) after a PG re-inspection showed the original payment PAID with no
+     * cancelled amount and no requested or successful cancellation. The execution fails exactly like a PG-confirmed failure,
+     * so the existing {@code RefundExecutionFailed} restores the license and allows the customer's retry. Money is not moved.
+     */
+    public void closeAsFailed(Payment payment, String eventId, String snapshotHash, Instant at) {
+        if (payment == null || !PaymentValues.text(eventId, 64) || snapshotHash == null || !snapshotHash.matches("[a-f0-9]{64}"))
+            throw new IllegalArgumentException("A failure closure needs its event and PG snapshot");
+        payment.requireRefundRequest(request());
+        if (!failureClosableAt(at)) throw new BusinessException(PaymentErrorCode.REFUND_NOT_FAILURE_CLOSABLE);
+        status = RefundExecutionStatus.FAILED; failureEventId = eventId; failureConfirmedAt = at; failureLookupHash = snapshotHash;
+        cancellationSchedule.stop();
+    }
+
+    @Column(name = "late_cancel_observed_at") private Instant lateCancellationObservedAt;
+    @Column(name = "late_cancelled_at") private Instant lateCancelledAt;
+
+    /**
+     * A full cancellation found after the failure was confirmed (decision 128). It is recorded for investigation and the
+     * alert only: the status, the restored license and the customer's refund are not changed, and the lookup stops.
+     */
+    public boolean recordLateCancellation(Payment payment, PgRefundConfirmation confirmation, Instant at) {
+        if (payment == null || confirmation == null || !PaymentValues.microsecond(at) || confirmation.cancelledAt().isAfter(at))
+            throw new IllegalArgumentException("A late cancellation observation is required");
+        payment.requireRefundRequest(request());
+        if (!confirmation.purchase().equals(PgRefundLookupRequest.from(payment)))
+            throw new IllegalArgumentException("Late cancellation does not match the paid purchase");
+        if (status != RefundExecutionStatus.FAILED) throw new IllegalStateException("Only a failed execution records a late cancellation");
+        lookupSchedule.stop();
+        if (lateCancellationObservedAt != null) return false;
+        lateCancellationObservedAt = at; lateCancelledAt = confirmation.cancelledAt();
+        return true;
+    }
+
+    /** Finishes a periodic lookup; the post-window and post-failure delay is {@code interval} (decisions 122·128). */
+    public void finishLookup(RefundLookupClaim claim, Instant at, RefundLookupInterval interval) {
+        if (firstCancellationPreparedAt == null) return;
+        lookupSchedule.finish(claim, firstCancellationPreparedAt, at, interval, status == RefundExecutionStatus.FAILED);
+    }
+
+    /** A received retry observes the same payment itself, so this failed predecessor stops its post-failure lookup. */
+    public void handOverLookupToRetry() {
+        if (status != RefundExecutionStatus.FAILED) throw new IllegalStateException("Only a failed execution has a retry");
+        lookupSchedule.stop();
     }
 
     public String freezeCancellationBody(String body) {

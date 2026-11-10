@@ -25,6 +25,7 @@ import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.RefundExecutionRequest;
 import com.stove.payment.core.domain.RefundCancellationClaim;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
+import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundCancellationHold;
 import com.stove.payment.core.domain.RefundCancellationResumeRequest;
 import com.stove.payment.core.domain.RefundCancellationResumeReceipt;
@@ -112,6 +113,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     @Autowired PaymentTracing tracing;
     @Autowired EntityManager entityManager;
     @Autowired ObjectMapper mapper;
+    @Autowired RefundFailureClosureRepository failureClosures;
     @LocalServerPort int port;
     @MockitoBean Clock clock;
     @MockitoSpyBean RefundExecutionRepository executions;
@@ -506,7 +508,8 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         assertThat(callbackFailure.get()).isNull(); assertThat(bodies).hasSize(1);
         assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
         assertThat(stored().getFailureLookupHash()).matches("[a-f0-9]{64}");
-        assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNull();
+        // Decision 128: the read-only lookup continues at the low post-failure frequency to surface a late full cancellation.
+        assertThat(stored().getRefundConfirmedAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
         assertThat(resultEventCount()).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT event_type FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'", String.class)).isEqualTo("RefundExecutionFailed");
         service(gateway()).execute(current.getAttemptId()); reconcile().execute(current.getAttemptId());
@@ -1485,7 +1488,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         ReconcileRefundPayment reconcile = new ReconcileRefundPayment(payments, executions,
                 new PortOneRefundPaymentLookup(client, STORE, CHANNEL), outbox, transactions, clock);
         return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, clock,
-                new RecordRefundCancellationSuccess(payments, executions, outbox, transactions, clock), Duration.ofMinutes(4), holds, new RecordRefundPreparation(outbox));
+                new RecordRefundCancellationSuccess(payments, executions, outbox, transactions, clock), Duration.ofMinutes(4), holds, new RecordRefundPreparation(outbox), failureClosures);
     }
     private RefundExecution stored() { return executions.findByAttemptId(current.getAttemptId()).orElseThrow(); }
     private int resultEventCount() { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'",Integer.class); }

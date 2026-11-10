@@ -160,7 +160,8 @@ class RefundLookupIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(stored().getAutomaticCancellationStoppedAt()).isNotNull();
         worker(Runnable::run).execute();
         assertThat(reads.get()).isEqualTo(1); assertThat(writes.get()).isZero();
-        assertThat(stored().getLookupSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(14460));
+        // Past the 3-hour window: min(10 min, max(60 s, 4 h)) = 10 minutes (decisions 122·128).
+        assertThat(stored().getLookupSchedule().getNextAt()).isEqualTo(BASE.plusSeconds(14400 + 600));
     }
 
     @Test void twoScannersShareOneCommittedLeaseAndWebhookDuringHttpIsNotLost() throws Exception {

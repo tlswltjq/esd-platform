@@ -17,6 +17,7 @@ import com.stove.payment.core.service.RecordRefundPreparation;
 import com.stove.payment.core.service.ReadRefundDelays;
 import com.stove.payment.core.service.RecordRefundInvestigation;
 import com.stove.payment.core.domain.RefundClosureRepository;
+import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundInvestigationRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -29,13 +30,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration(proxyBeanMethods = false)
 public class RefundReceptionConfiguration {
     @Bean MeterBinder refundConfirmationMetrics(ObjectProvider<ReadRefundDelays> delays) {
-        return new RefundConfirmationMetrics(() -> delays.getObject().count(), () -> delays.getObject().unattributedOpen());
+        return new RefundConfirmationMetrics(() -> delays.getObject().count(), () -> delays.getObject().unattributedOpen(),
+                () -> delays.getObject().lateCancellations());
     }
 
     @Bean ReadRefundDelays readRefundDelays(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationHoldRepository holds, RefundInvestigationRepository investigations, RefundClosureRepository closures,
-            Clock refundReceptionClock) {
-        return new ReadRefundDelays(payments, executions, holds, investigations, closures, refundReceptionClock);
+            RefundFailureClosureRepository failureClosures, Clock refundReceptionClock) {
+        return new ReadRefundDelays(payments, executions, holds, investigations, closures, failureClosures, refundReceptionClock);
     }
 
     @Bean RecordRefundInvestigation recordRefundInvestigation(PaymentRepository payments, RefundExecutionRepository executions,
