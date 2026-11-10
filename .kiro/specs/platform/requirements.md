@@ -91,7 +91,7 @@
 4. WHILE 같은 `partitionKey`의 앞 이벤트가 `PENDING`(재시도 대기)이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 보내지 않는다. IF 앞 이벤트가 `DEAD`이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 계속 보류하고, ADMIN이 앞 이벤트를 회수(`requeue`)해 `SENT`가 된 뒤에만 `id` 순으로 보낸다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2).
 5. WHEN 발행이 실패하면 THEN 릴레이 SHALL 1초부터 두 배씩 5분 상한으로 다시 시도하고(`OutboxEvent.backOffDelay`), `stove.outbox.max-retry`(기본 10)를 넘기면 `DEAD`로 바꿔 지표로 낸다. 운영자가 `DEAD`를 되돌릴 때 `eventId`·본문·키·`traceParent`를 바꾸지 않는다.
 6. 서비스마다 같은 키를 동시에 선점하는 릴레이가 하나뿐이어야 순서가 성립한다. 시스템 SHALL 이 조건을 선점 잠금이나 키 배정으로 코드에서 강제한다(원칙 ⑤, T10).
-7. WHEN ADMIN이 Kafka에서 사라진 이벤트를 재발행하면(결정 129) THEN 시스템 SHALL 그 모듈이 소유한 이벤트 종류만, 같은 `eventId`·본문·키로 `SENT → PENDING` 되돌리고 실행자·시각·사유를 남긴다. 받는 쪽은 Inbox로 거른다. 대상 이벤트 범위는 [결정 필요 PD-9] · T7.
+7. WHEN ADMIN이 Kafka에서 사라진 이벤트를 재발행하면(결정 129) THEN 시스템 SHALL 그 모듈이 소유한 이벤트 종류만, 같은 `eventId`·본문·키로 `SENT → PENDING` 되돌리고 실행자·시각·사유를 남긴다. 받는 쪽은 Inbox로 거른다. 대상은 design 이벤트 목록에서 상태가 "현행"인 모든 이벤트이고, 모듈별 허용 목록은 그 표에서 만든다. 모든 발행 모듈이 재발행 경로(`outbox_republish`, `republish-owner` 설정, ADMIN 운영 API)를 갖는다. 재발행된 이벤트가 정지된 키로 들어가면 회수는 같은 키 안의 발행 순번(헤더)으로 정렬해 원래 순서를 지킨다([결정 161](../../../docs/decisions.md#republish-all-current), T7).
 
 #### P2.3 소비 — Inbox와 업무 멱등
 
