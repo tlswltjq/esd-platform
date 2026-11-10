@@ -14,7 +14,8 @@
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
   - 닫힘 — PD 결정이 이미 답함: RC-6(결정 171), RC-8(결정 164·170), RC-10(결정 167), RC-11(결정 168), RC-12(결정 158·159), RC-15(결정 162), RC-19(결정 158·161 — 지키는 곳은 응답 대기 게이지와 ADMIN 재발행이고, 결정 37의 "자동 재발행·대조 엔진은 만들지 않는다"는 그대로 맞다)
   - 닫힘 — 결정은 그대로이고 구현·문구만 고침(원칙만으로 방향이 정해짐, 결정 150): RC-4(결정 32의 30분은 유지, 기한 정본은 Order — T12·결정 169), RC-5(결정 42의 금융 확인 월은 유지, 선후 비교만 제거 — T3·결정 163), RC-7(결정 128 본문의 이벤트 서술 정정 — 결정 147·148), RC-14(결정 124의 3시간은 adapter 설정으로 — 결정 140 작업), RC-18(결정 29·133의 HTTP 코드 서술은 adapter 메모로 — 결정 140 작업)
-  - 다시 물음: RC-16(결정 29 자동 환불 4시간 기한의 시계), RC-1(결정 115 운영자 보류 종결 이벤트), RC-2(결정 144 보류 사유 칸), RC-13(결정 114·124·126 보류 상태 하나), RC-17(결정 94·96 License 정지 전 상태), RC-3(결정 92 `LicenseGranted` 이름), RC-9(결정 53·54·57 철회 결과 이벤트)
+  - 다시 물어 정함: RC-16 → 결정 173
+  - 다시 물음: RC-1(결정 115 운영자 보류 종결 이벤트), RC-2(결정 144 보류 사유 칸), RC-13(결정 114·124·126 보류 상태 하나), RC-17(결정 94·96 License 정지 전 상태), RC-3(결정 92 `LicenseGranted` 이름), RC-9(결정 53·54·57 철회 결과 이벤트)
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
 ## 코드와 맞출 것
@@ -33,8 +34,8 @@
   - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
   - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
 
-- [ ] **T3. U2 — 다른 모듈·외부 PG 시각과의 선후 비교 13곳 + PG-* 4곳**
-  - 어디서: design "U2" 표 ORD-1~ORD-10·PAY-1·SET-1 — Order `order:core/domain/Refund.java:173`·`:255`, `RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `RefundApprovalStop.java:48`·`:56`·`:67`; Payment `payment:core/service/ReceiveRefundExecution.java:66`; Settlement `settlement:core/domain/RefundMonthInput.java:11`. PG-*(결정 163): `payment:core/domain/RefundExecution.java:164`·`:224`·`:276`, `payment:adapter/pg/PortOneRefundCancellationGateway.java:131`, #166 `recordLateCancellation`. PR #166 diff도 `RefundAttempt.recordRefundFailure`의 비교를 그대로 둔다.
+- [ ] **T3. U2 — 다른 모듈·외부 PG 시각과의 선후 비교 13곳 + PG-* 4곳 + ORD-0(결정 173)**
+  - 어디서: design "U2" 표 ORD-1~ORD-10·PAY-1·SET-1 — Order `order:core/domain/Refund.java:173`·`:255`, `RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `RefundApprovalStop.java:48`·`:56`·`:67`; Payment `payment:core/service/ReceiveRefundExecution.java:66`; Settlement `settlement:core/domain/RefundMonthInput.java:11`. ORD-0(결정 173): `order:core/domain/RefundPolicy.java:9-12`·`RequestRefund.java:35` — 기한 시작을 Order `paid_at`으로. PG-*(결정 163): `payment:core/domain/RefundExecution.java:164`·`:224`·`:276`, `payment:adapter/pg/PortOneRefundCancellationGateway.java:131`, #166 `recordLateCancellation`. PR #166 diff도 `RefundAttempt.recordRefundFailure`의 비교를 그대로 둔다.
   - 목표: P4.5-1·I13. 식별자·상태·잠금으로 판정하고 받은 시각은 값으로 저장(U2 표 "목표 판정 방식"). Settlement는 반영 월 = max(원래 월, 현재 `OPEN` 월). 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지)를 ArchUnit 또는 소스 검사로.
   - 영향: **돈·보유권** — 호스트 시계가 몇 초 어긋나면 금융 완료·실패·복구·재시도 이벤트가 재시도 7초 뒤 DLT, 재투입도 같은 결과. 환불이 `PENDING_PAYMENT_REFUND`·`PENDING_LICENSE_RESTORATION`에 멈춰 돈은 돌려줬는데 회수가 안 되거나 돈도 게임도 없는 상태. SET-1은 환불 조정 누락 → 판매자 과지급.
   - 재현: D-052 방식(고정 `Clock`, 실제 MySQL·Kafka 컨테이너, 상대 이벤트 `occurredAt`을 받는 쪽 시각 ±5초) — License `LicenseRestorationIntegrationTest`를 Order·Payment·Settlement에 복제. 행마다 U2 표 "확인 테스트" 열.

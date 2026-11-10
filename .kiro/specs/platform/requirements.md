@@ -272,7 +272,7 @@
 
 1. WHEN 고객이 `POST /api/v1/orders/{orderNo}/refund`를 보내면 THEN Order SHALL 주문 행 잠금 뒤 본인·`PAID`·환불 없음을 확인하고 `order_refund` 한 행을 저장한 다음 응답한다. 정지·PG 실행은 응답 뒤 비동기로 진행한다(결정 29).
 2. IF 같은 주문에 이미 환불이 있으면 THEN Order SHALL 새 환불을 만들지 않고 기존 `refundId`와 첫 접수 시각을 돌려준다(`uk_order_refund_order`).
-3. WHEN 접수가 자동 환불 기한(4시간) 안이면 THEN Order SHALL `automaticRefundEligible=true`로 저장하고 지급 확인 단계로 보내고, 밖이면 `PENDING_REVIEW`로 저장한다. 기한 시작 시각은 결정 29 하위 "Payment 최초 결제 확정 시각"을 따른다(원칙 ⑥과 부딪혀 소급 RC-16).
+3. WHEN 접수가 자동 환불 기한(4시간) 안이면 THEN Order SHALL `automaticRefundEligible=true`로 저장하고 지급 확인 단계로 보내고, 밖이면 `PENDING_REVIEW`로 저장한다. 기한 시작은 Order가 결제 결과를 받아 주문을 처음 `PAID`로 바꾼 자기 시각(가칭 `paid_at`)이고, 같은 Order 시계의 접수 시각과 비교한다. Payment 확정 시각은 값으로만 남는다([결정 173](../../../docs/decisions.md#refund-window-order-clock), 결정 29의 "기한 시작"을 바꿈).
 4. WHILE 환불이 `PENDING_REVIEW`이면 Order SHALL 보유권을 정지하지 않는다. ADMIN 판정은 회차별로 먼저 커밋된 것만 확정한다.
 
 #### P3.17 지급 확인 대기 (License → Order)
