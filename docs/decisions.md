@@ -1566,6 +1566,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P2.2-7, design 이벤트 수명·흐름 2·3 실패 행·I14·U3, tasks T7
 
+<a id="single-reference-simulator"></a>
+## 162. 개발·여정·실험·통합 테스트의 PG 시뮬레이터는 기준 시뮬레이터 하나로 정리하고 `mock-pg`·`SIMULATED` 경로를 없앤다
+- 문제: 개발용 PG 시뮬레이터가 둘이다. `simulators/mock-pg`(공급자 `SIMULATED`)가 지금 기본 설정이고(`PAYMENT_PG_PROVIDER:SIMULATED`, `SETTLEMENT_PG_PROVIDER:SIMULATED`), 결정 141은 PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)를 기준 시뮬레이터로 정하면서 `mock-pg`·`SIMULATED` 정리는 미뤘다. `SIMULATED` 환경에서는 Settlement `UnavailablePgRefunds`(`UnavailablePgRefunds.java:12`)가 환불 확인을 `UPSTREAM_UNAVAILABLE`로 거절해 판매자 월 순액이 환불분만큼 크게 남고(U4), `mock-pg`는 승인 진행 접수 없이 결과를 확정해 결정 153의 대조와 맞지 않는다(T13). `SIMULATED`가 나오는 곳은 운영 코드 Payment 3·Settlement 10개 파일, 테스트 21개 파일, Compose·검증 스크립트 여러 개다(플랫폼 스펙 PD-10).
+- 선택지: A 기준 시뮬레이터 하나로 정리(`mock-pg`·`SIMULATED` 경로 제거, 모두 PortOne 어댑터 + 흉내 서버) / B 둘 다 두고 `mock-pg`에 환불 조회 계약 추가 / C `SIMULATED`면 PG 재조회 없이 Payment 확인 값으로 반영 / D 지금대로 두고 문서에 명시 (추천: A — 같은 PG를 흉내 내는 시뮬레이터가 둘이면 계약이 바뀔 때마다 두 곳을 맞춰야 하고 이미 어긋났다(원칙 ③). `UnavailablePgRefunds`·`SIMULATED` 분기는 시험 환경 때문에 운영 코드에 들어간 경로다(원칙 ⑦). 중립화 뒤 core에 공급자 상수가 없어야 한다(원칙 ②, 결정 140). 초안끼리 A·B로 갈렸다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 기준 시뮬레이터 하나로 정리해")
+- 선택: A — 결정 141이 미룬 `mock-pg`·`SIMULATED` 정리에 답한다.
+  - 개발·스택 여정·부하·장애 실험·통합 테스트의 PG는 PortOne 어댑터 + 기준 시뮬레이터(흉내 서버) 하나다. 기본 공급자 설정도 흉내 서버를 가리키게 바꾼다.
+  - `simulators/mock-pg` 모듈, `SIMULATED` 공급자 분기, `SimulatedPgHttpGateway`, `UnavailablePgRefunds` 같은 시뮬레이터 전용 경로를 운영 코드에서 없앤다. 그래서 모든 환경이 같은 `PgRefunds` 계약으로 환불을 정산에 반영하고(U4 해소), 모든 확정이 승인 진행 접수를 거친다(T13 해소).
+  - 이미 저장된 `SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트).
+  - Java 통합 테스트가 흉내 서버를 어떻게 띄울지(컨테이너 이미지·Testcontainers)는 테스트 설계에서 정한다. 결정 140의 공급자 중립화와 같은 작업 묶음으로 한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.26-5·P4.3-2, design S13·U4, tasks T9·T13
+
 ---
 
 ## 검증하며 드러난 것

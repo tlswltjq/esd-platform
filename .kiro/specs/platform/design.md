@@ -659,7 +659,7 @@ S14 ADMIN → Payment → Order · Settlement  늦은 취소 반영(RefundLateCa
 | S13 정산 조정·이월 | 늦은 도착 | 환불 확인 월이 이미 마감됨 | Settlement | 현재 OPEN 월에 반영(`CLOSED_MONTH_ROLLOVER`), 원래 월 보존 | 해당 없음 | [표] 결정 42·130 | 없음 |
 | S13 정산 조정·이월 | 상대 상태가 이미 바뀜 | 판매자 월 마감과 환불 반영이 겹쳐 월이 CLOSED로 바뀜 | Settlement | 판매자 잠금으로 직렬화, 월이 바뀌면 3번 재선택 뒤 409 | DLT 재투입 | [표] | 없음 |
 | S13 정산 조정·이월 | 동시 진행 | 같은 판매자의 매출 반영·환불 반영·마감 | Settlement `SellerLockRepository.lock` | 판매자 단위 직렬화, 유일 제약 충돌은 5회 재시도 | 해당 없음 | [표] | 없음 |
-| S13 정산 조정·이월 | 상대 모듈 중단 | 결제 공급자가 `SIMULATED`라 Settlement가 PG 환불 근거를 못 얻음(503 → DLT) | Settlement `UnavailablePgRefunds.require` | 재시도 뒤 DLT | 의도된 미연동, 판매자 순액이 크게 남음 | [표] | U4 — PD-10 |
+| S13 정산 조정·이월 | 상대 모듈 중단 | 결제 공급자가 `SIMULATED`라 Settlement가 PG 환불 근거를 못 얻음(503 → DLT) | Settlement `UnavailablePgRefunds.require` | 재시도 뒤 DLT | 의도된 미연동, 판매자 순액이 크게 남음 | [표] | U4 → 목표: `SIMULATED`·`UnavailablePgRefunds` 제거, 모든 환경이 기준 시뮬레이터로 같은 계약(결정 162) |
 | S14 늦은 취소 반영 | 중복 전달 | ADMIN 요청 재전송 / `RefundLateCancellationConfirmed` 재전달 | Payment 요청 ID·시도당 확인 기록 유일 / Order·Settlement Inbox | 같은 요청이면 같은 결과, 이미 반영된 시도면 409. 소비는 무변화 | 해당 없음 — 사실이 하나로 남는다 | 없음(목표, T4) | T4 |
 | S14 늦은 취소 반영 | 순서 역전 | 늦은 취소 확인이 같은 시도의 실패 사실보다 먼저 Order에 옴 | Order 시도 상태(실패 확정 전) | 해당 없음 — Payment는 실패 확정 기록이 있는 시도에만 반영을 허용하고 같은 키라 결정 155로 순서가 지켜진다 | — | 없음(목표) | T4 |
 | S14 늦은 취소 반영 | 늦은 도착 | 늦은 취소가 반영 월 마감 뒤에 확인됨 | Settlement 판매자 잠금 뒤 마감 월 확인 | 현재 `OPEN` 월에 반영(결정 42·130) | 해당 없음 | 없음(목표) | T4 |
@@ -706,7 +706,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | U1 | `PENDING` 주문의 결과를 기한·`paymentId`와 대조하지 않아, 실패로 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID`·보유권·매출 | I12·I15, P3.12-1·P3.14-1·P4.2-5 | Order `Order.apply` 영수증·`admissionId` 대조 + `purchase_order.payment_admission_id` FK·CHECK; Payment 확정 트랜잭션의 시도 재확인 | 결정 153(거절 사실 `OrderPaymentResultRejected` → Payment 보류)·결정 154(`UnlinkedCharge`), T1·T5·T13 |
 | U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3, PD-11(외부 PG 시각), RC-16(결정 29 4시간 기한) |
 | U3 | 앞 모듈 기록 → 뒤 모듈 반영의 누락을 감지하는 곳 없음 | I14, P4.3-1·P3.9-2·P3.15-5 | 결정 158: 사실을 낸 모듈의 응답 대기 게이지("정방향 응답 쌍"), 재반영은 재발행·DLT 재투입(결정 155) | 기준 시간 결정 159, 보관 결정 160, 재발행 결정 161, T6·T7 |
-| U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | [결정 필요 PD-10], T9 |
+| U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | 결정 162(`mock-pg`·`SIMULATED` 제거, 기준 시뮬레이터 하나), T9 |
 | U5 | 늦은 `RefundExecutionSucceeded`가 정산에 반영된다는 문서와 코드 불일치 | P4.3-3, P3.26-4: Settlement는 소비하지 않는다(정산 금액은 첫 금융 확인 하나, 취소 귀속은 Settlement 자신의 PG 조회) | `settlement:api/listener/RefundEventListener.java:21`(지금 코드가 목표와 같음) | Settlement R6.2 문서 정정 MC-S2 |
 | U6 | PG 비용 확정 경로 | I7은 지켜짐. 비용 확정·대사는 G7(결정 142)·결정 140 범위 | DB `ck_payment_pg_fee`·`ck_pg_fee_money`, `CloseSellerMonth`(비용 미참조) | PD-13(비용 정본), T17 |
 

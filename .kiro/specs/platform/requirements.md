@@ -343,7 +343,7 @@
 2. WHEN 환불의 원래 월(`RefundPaymentConfirmed.confirmedAt`의 KST 월)이 `OPEN`이고 그 뒤 월에 `CLOSED`가 없으면 THEN Settlement SHALL 원래 월에 반영하고, 아니면 현재 `OPEN` 월에 반영하며 `refund_month`를 보존한다. 반영 월은 원래 월보다 앞서지 않는다(결정 42·130, I6). 자기 수신 시각이 확인 시각보다 이르다는 이유로 거절하지 않는다(U2 SET-1).
 3. WHEN 판매자 월을 마감하면 THEN Settlement SHALL 오래된 월부터 마감하고 `payable = max(0, 순액 + carriedIn)`, 음수는 다음 월로 넘긴다(결정 121·130, I5).
 4. Settlement SHALL `RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed`를 소비하지 않는다. 정산 금액은 첫 금융 확인 하나로 정해진다(U5, MC-S2).
-5. IF 결제 공급자가 환불 근거를 줄 수 없는 환경이면 THEN Settlement SHALL P4.3-2의 같은 계약으로 환불을 반영한다. 방법은 [결정 필요 PD-10](U4, T9).
+5. THE 모든 실행 환경(개발·여정·실험·통합 테스트 포함) SHALL 같은 `PgRefunds` 계약으로 환불을 정산에 반영한다. 시뮬레이터 전용 거절 경로(`UnavailablePgRefunds`)나 검증 생략 경로를 두지 않고, 개발·시험의 PG는 기준 시뮬레이터 하나다([결정 162](../../../docs/decisions.md#single-reference-simulator), U4, T9).
 6. IF 원매출보다 환불 확인이 먼저 도착하면 THEN Settlement SHALL DLT로 보내지 않고 받은 환불 확인을 검증해 "매출 대기 환불"(명시 상태)로 Inbox와 같은 트랜잭션에 저장한다. WHEN 같은 주문의 `OrderPaid`가 매출을 기록하면 THEN Settlement SHALL 같은 트랜잭션에서 대기 환불을 원매출과 대조해 환불 조정까지 반영하고(월 규칙은 결정 42·130), 대조가 맞지 않으면 반영하지 않고 경보한다. THE Settlement SHALL 대기 건수와 가장 오래 기다린 시간을 게이지로 낸다([결정 156](../../../docs/decisions.md#refund-awaiting-sale), T8).
 
 #### P3.27 승인 중단 분기 (Order ↔ License)
@@ -375,7 +375,7 @@
 #### P4.3 정방향 반영 (U3·U4·U5 → I14)
 
 1. WHILE 앞 모듈의 기록(`purchase_order.status`=`PAID`, `order_refund.status`=`COMPLETED`, `refund_execution.refund_confirmed_at` 있음)이 있으면 시스템 SHALL 뒤 모듈의 반영(`product_license`·`settlement_sale`, `product_license.status`=`REFUNDED`·`settlement_refund`)을 결국 만든다. 반영이 기준 시간을 넘으면 감지·경보하고, DLT·원본 소실 사건을 같은 이벤트 ID로 다시 반영하는 운영 경로를 둔다(P2.2-7·P2.6-4). 감지는 사실을 낸 모듈이 응답 사실을 받지 못한 자기 기록을 세는 방식이고, 응답 사실이 없는 쌍에는 확인 사실을 새로 둔다(쌍 목록은 design "정방향 응답 쌍", [결정 158](../../../docs/decisions.md#forward-gap-counting)). 기준 시간은 4를 따른다(I14, T6).
-2. THE 정산 환불 반영(I4의 Settlement 다리) SHALL 모든 결제 공급자 환경에서 같은 계약으로 성립한다. 공급자가 환불 근거를 줄 수 없는 환경은 [결정 필요 PD-10](U4, T9).
+2. THE 정산 환불 반영(I4의 Settlement 다리) SHALL 모든 결제 공급자 환경에서 같은 계약으로 성립한다. 시뮬레이터 전용 공급자(`SIMULATED`)는 두지 않는다([결정 162](../../../docs/decisions.md#single-reference-simulator), U4, T9).
 3. THE 정산 금액 SHALL 첫 금융 확인(`RefundPaymentConfirmed`) 하나로 정해지고, Settlement는 귀속 보강 사실(`RefundExecutionSucceeded`)을 소비하지 않는다. 취소 귀속은 Settlement 자신의 PG 조회 근거(`settlement_refund_cancellation`)로 기록한다(U5 → P3.26-4).
 4. THE 정방향 응답 쌍(design "정방향 응답 쌍")의 경보 기준 시간 SHALL 부하·장애 실험(G6)이 잰 정상 지연 분포로 쌍마다 정하고, 정하기 전에는 게이지(대기 건수·가장 오래 기다린 시간)만 낸다. 결정 125의 10분 경계는 그대로 둔다. 모든 쌍의 기준이 정해지기 전에는 G7(실제 PG 연동)을 완료하지 않는다([결정 159](../../../docs/decisions.md#forward-gap-threshold)).
 

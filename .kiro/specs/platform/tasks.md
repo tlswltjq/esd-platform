@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -66,9 +66,9 @@
   - 영향: **돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠짐(과지급).
   - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 DLT, 목표 대기 후 반영.
 
-- [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** [결정 필요 PD-10]
+- [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** ([결정 162](../../../docs/decisions.md#single-reference-simulator))
   - 어디서: `settlement:adapter/UnavailablePgRefunds.java:12`(`SIMULATED`면 `UPSTREAM_UNAVAILABLE`).
-  - 목표: P4.3-2·P3.26-5. 모든 공급자가 같은 `PgRefunds` 계약(PD-10에서 기준 시뮬레이터 연결 또는 모의 PG 확장).
+  - 목표: P4.3-2·P3.26-5. 결정 162: `simulators/mock-pg`·`SIMULATED` 분기·`SimulatedPgHttpGateway`·`UnavailablePgRefunds`를 없애고 개발·여정·실험·통합 테스트를 PortOne 어댑터 + 기준 시뮬레이터로 옮긴다(기본 공급자 설정 포함). 옛 `SIMULATED` 값 읽기는 결정 104 호환 테스트로 유지. 결정 140 중립화와 같은 작업 묶음. 범위: 운영 코드 Payment 3·Settlement 10개 파일, 테스트 21개 파일, Compose·검증 스크립트.
   - 영향: **돈(검증 환경)** — 판매자 월 환불 합계가 빠져 순액이 크게 남는다.
   - 재현: 시뮬레이터 스택에서 환불 완료 → `settlement_refund` 1행.
 
@@ -90,7 +90,7 @@
   - 영향: **돈** — 기한 정책을 바꾸면(예: 40분) `OrderExpired`가 DLT로 가 접수 전 시도가 만료를 모르고 결정 126의 만료 전 PG 재조회도 멈춘다. 결제창이 Order와 다른 시각에 닫힌다. 두 호스트 시계가 어긋나면 기한 안인데 결제창이 닫힌다.
   - 재현: 아키텍처 테스트 — Payment 소스에 결제 기한 계산(`ofMinutes(30)` 등) 0건. 통합 — Order 기한 설정을 바꿔 만료 → Payment가 받아들이는지. 단위 — Payment `Clock`을 1분 앞당겨 29분 30초 주문의 결제창이 거절되면 Red.
 
-- [ ] **T13. 모의 PG 경로가 승인 진행 접수 없이 결과를 확정한다(원칙 ⑦)**
+- [ ] **T13. 모의 PG 경로가 승인 진행 접수 없이 결과를 확정한다(원칙 ⑦)** — 결정 162로 그 경로 자체를 없앤다(T9와 함께)
   - 어디서: `payment:core/service/ResolvePayment.java:99-126`(`gateway.charge`), `payment:adapter/pg/SimulatedPgHttpGateway.java`, Order 설계 상태×이벤트 표의 `PENDING → PAID` 전이.
   - 목표: P3.11-2·I15. 공급자와 무관하게 접수 뒤에만 확정, 모의 PG도 같은 시도·접수 경로. Order 상태 모델에서 `PENDING → PAID`를 없앤다.
   - 영향: **돈·보유권(모의 환경)** — 기한 지난 `PENDING` 주문이 `PAID`(T1과 겹침), 만료된 주문에 성공이 와 DLT. 테스트 공급자 때문에 운영 계약이 넓어졌다.
