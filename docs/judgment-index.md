@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-10 | 재시도로 풀리지 않는 Catalog 공개 작업을 어떻게 끝낼지 | A 재시도 + 경보만 / B 정지 상태 + 운영자 재개·종결 전용 이벤트(추천) / C 상한 뒤 자동 거절 | (선택지 선택만) "B로 정지 상태와 운영자 종결을 둬" | B — 재시도 대기와 정지를 다른 상태로 두고 끝나는 곳을 둔다. 운영자 종결은 자동 거절과 다른 사실이다 | 추천 수용 | [결정 168](decisions.md#publication-blocked-closure) |
 | 2026-11-10 | 공개를 확정하는 Catalog가 심사 승인을 직접 확인할지 | A Studio 신뢰 + 사후 검사 / B Catalog가 Review 승인을 받아 대조(추천) / C Review 지문을 Studio가 전달 | (선택지 선택만) "B로 Catalog가 Review 승인을 직접 대조하게 해" | B — 판매·보유권 지급을 확정하는 곳에 가드를 두고, 승인의 정본인 Review 사실을 직접 받는다 | 추천 수용 | [결정 167](decisions.md#catalog-verifies-approval) |
 | 2026-11-10 | 매출 귀속 월의 기준 시각 | A Order `PAID` 반영 시각 / B Payment 승인 확정 시각(추천, 원칙상 A·B 모두 성립) / C Settlement 수신 시각 | (선택지 선택만) "B로 매출 월을 금융 확인 시각으로 해" | B — 매출과 환불을 같은 금융 확인 기준에 두어 월 마감과 PG 대사를 맞춘다 | 추천 수용 | [결정 166](decisions.md#sale-month-by-payment-confirmation) |
 | 2026-11-10 | PG 비용의 정본을 어느 모듈이 가질지 | A Settlement만(추천) / B Payment가 정본 / C 둘 다 두고 뜻을 나눔 | (선택지 선택만) "A로 PG 비용은 Settlement만 정본으로 해" | A — 정본 하나, 기존 책임 분리(결정 38·39·142)와 같다. Payment는 새 결제에 비용을 쓰지 않는다 | 추천 수용 | [결정 165](decisions.md#pg-fee-owner) |

@@ -1641,6 +1641,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P3.4-2, design 흐름 1 단계·RI-2·실패 표 S3a·이벤트 목록·정방향 응답 쌍, tasks T16
 
+<a id="publication-blocked-closure"></a>
+## 168. 재시도로 풀리지 않는 Catalog 공개 작업은 명시적 정지 상태로 두고, 운영자가 재개하거나 전용 이벤트로 종결한다
+- 문제: Catalog 공개 작업(`catalog_publication_job`)은 실패하면 같은 요청을 5·15·30·60초 간격으로 계속 다시 시도한다(Catalog R10.3, 결정 62, `PublishQueuedReleases.java:44-48`·`CatalogPublicationJob.java:68-79`). 계약 위반(같은 버전 다른 스냅샷, 다른 Project의 코드 충돌, 스냅샷 역직렬화 실패, 소유자 연결 불일치)은 몇 번을 해도 같고, 그동안 작업은 `PENDING`, Studio 출시 요청은 `REQUESTED`로 남아 프로젝트별 진행 중 출시 1건 규칙(결정 63) 때문에 그 Project는 다음 출시를 못 하고 기존 보유자도 업데이트를 못 받는다. 경보가 없다(플랫폼 스펙 PD-16).
+- 선택지: A 재시도 유지 + 경보만 / B 계약 위반이면 정지 상태(`BLOCKED`) + 경보, 운영자가 원인을 고쳐 재개하거나 종결 명령으로 끝내고 Studio에 운영자 종결 전용 이벤트 / C N회 실패 뒤 `ProjectReleaseRejected(reason=PUBLICATION_FAILED)` 자동 거절 (추천: B — 재시도 대기와 정지를 다른 상태로 두고(원칙 ④) 끝나는 곳을 둔다(원칙 ⑤). 운영자 종결은 자동 거절과 다른 사실이라 전용 이벤트로 낸다(원칙 ①, 결정 148과 같은 모양). C는 일시 오류와 계약 위반 구분이 틀리면 정상 출시를 거절한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 정지 상태와 운영자 종결을 둬")
+- 선택: B
+  - 공개 작업 실패를 일시 오류(재시도 대기 `PENDING`)와 재시도로 풀리지 않는 실패(정지 `BLOCKED`)로 나눈다. 분류는 공통 영구 실패 분류(플랫폼 tasks T20)와 같은 기준을 쓴다. `BLOCKED`는 1건부터 경보한다.
+  - 운영자는 원인을 고친 뒤 재개(`BLOCKED` → `PENDING`)하거나, 종결 명령으로 그 출시 요청을 공개 없이 끝낸다. 종결하면 Catalog는 같은 트랜잭션에서 운영자 종결 전용 이벤트(가칭 `ProjectReleaseClosed`, 운영자·요청 ID·사유 근거)를 `stove.release.v1`에 낸다. `ProjectReleaseRejected`의 `reason`에 싣지 않는다.
+  - Studio는 그 사실을 받아 출시 요청을 끝내고 활성 출시 자리를 푼다. 창작자는 새 요청을 낼 수 있다.
+  - 상태 이름·운영 API·Studio 상태 전이는 Catalog·Studio 모듈 스펙에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.5-5, design 이벤트 목표 행·흐름 1 S6 행·S6b 실패 6행, tasks T23
+
 ---
 
 ## 검증하며 드러난 것
