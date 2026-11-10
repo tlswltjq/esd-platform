@@ -1654,6 +1654,18 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P3.5-5, design 이벤트 목표 행·흐름 1 S6 행·S6b 실패 6행, tasks T23
 
+<a id="checkout-open-until-expiry-fact"></a>
+## 169. 결제창은 Order의 만료 사실(`OrderExpired`)을 받을 때까지 열고, Payment는 자기 시계로 결제 기한을 판정하지 않는다
+- 문제: Payment는 `OrderPlaced`를 받을 때 기한을 `occurredAt + 30분`으로 직접 계산하고(`PaymentOrderLifecycle.java:33`), 결제창 정보를 줄 때 자기 시계와 비교해 거절한다(`ReadPaymentCheckout.java:50`). 기한의 정본은 Order 하나이고(플랫폼 tasks T12) 원칙 ⑥은 다른 모듈 시각과 자기 시계를 비교하지 않는다(결정 163). 이 판정을 없애면 기한 직후 Order가 아직 `OrderExpired`를 내지 않은 짧은 사이(만료 처리는 1초 주기)에 고객이 결제창을 열고 인증한 뒤 승인 접수(S4)에서 `ORDER_EXPIRED`를 받을 수 있다. 서버 확정 방식이라 돈은 나가지 않는다. 반대로 지금은 Payment 서버 시계가 1분 빠르면 기한 안인데도 결제창이 막힌다(플랫폼 스펙 PD-17).
+- 선택지: A `OrderExpired`를 받았을 때만 결제창 409 `ORDER_EXPIRED` / B 결제창을 열 때 Order 내부 API로 동기 확인 / C A + `expiresAt`과 Payment 시계로 남은 시간 표시(거절에는 안 씀) / D 지금처럼 Payment 시계로 거절 (추천: A — 기한 판정은 정본인 Order 하나가 하고 그 지점은 이미 동기 호출인 승인 접수다(원칙 ③⑥). B는 결제창까지 Order에 묶고, C의 남은 시간은 다른 모듈 시각과 자기 시계를 섞은 값이며, D는 원칙 ⑥ 위반이 남는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 만료 사실을 받을 때까지 결제창을 열어")
+- 선택: A
+  - Payment는 `OrderPlaced.expiresAt`(T12)을 값으로 저장만 하고, 자기 시계와 비교해 결제창을 막거나 시도를 거절하지 않는다. 만료는 Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신으로만 안다.
+  - 결제창 정보 요청은 그 주문의 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`로 거절한다.
+  - 기한 직후 약 1초 안에 결제를 시작한 고객은 인증 뒤 만료 안내를 받을 수 있다. 돈은 나가지 않고 새 주문으로 안내한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.10-2, design 흐름 2 S2·S3 행, tasks T12
+
 ---
 
 ## 검증하며 드러난 것

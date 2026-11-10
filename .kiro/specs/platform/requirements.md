@@ -218,7 +218,7 @@
 #### P3.10 주문과 결제 기한 (Order)
 
 1. WHEN MEMBER가 `POST /api/v1/orders`로 새 `requestId`의 주문을 만들면 THEN Order SHALL 공개본 근거(상품 ID·코드·제목·`contentVersion`)·정가·할인액·청구액(`amount = listAmount − discountAmount > 0`)·통화·`expiresAt`을 한 트랜잭션에 고정하고 이 값을 모두 실은 `OrderPlaced`를 Outbox에 쓴다(결정 32·89, I1). 판매 상태는 Catalog 내부 조회(`/internal/v1/order-products/{code}`)로 트랜잭션 밖에서 확인한다.
-2. THE 결제 기한 SHALL P1.4-3을 따른다. Payment는 자기 시계를 `OrderPlaced.occurredAt`·`expiresAt`과 비교해 만료를 판정하지 않고, Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신만 만료로 안다(원칙 ⑥, T12). 결제창 단계의 만료 안내는 [결정 필요 PD-17].
+2. THE 결제 기한 SHALL P1.4-3을 따른다. Payment는 자기 시계를 `OrderPlaced.occurredAt`·`expiresAt`과 비교해 만료를 판정하지 않고, Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신만 만료로 안다(원칙 ⑥, T12). WHEN 결제창 정보 요청이 오면 THEN Payment SHALL 그 주문의 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`로 거절하고, 그 전에는 결제창을 연다. 기한 직후 결제를 시작한 고객은 승인 접수에서 만료 안내를 받을 수 있고 돈은 나가지 않는다([결정 169](../../../docs/decisions.md#checkout-open-until-expiry-fact)).
 3. WHEN Payment가 승인 진행 접수(`POST /internal/v1/orders/{orderNo}/payment-admissions`)를 요청하면 THEN Order SHALL 주문 행 잠금(`OrderRepository.lockByOrderNo`) 아래 자기 시계로 기한을 판정한다. 기한 전이고 `PENDING`이면 `PAYMENT_PROCESSING`으로 바꾸고 영수증(`admissionId`·`paymentId`·`admittedAt`)을 저장하며, 기한 뒤면 `EXPIRED`와 `OrderExpired`를 먼저 커밋하고 409 `ORDER_EXPIRED`로 거절한다(결정 32).
 4. WHILE 주문이 `PAYMENT_PROCESSING`이면 Order SHALL 시간 경과만으로 `EXPIRED`·`FAILED`로 바꾸지 않는다(결정 32).
 5. WHEN Order가 기한이 지난 `PENDING` 주문을 관찰하면(만료 스캔 `CloseExpiredOrders` 또는 승인 접수) THEN Order SHALL `EXPIRED`로 한 번 바꾸고 `OrderExpired`(원 `requestEventId`·구매자·청구액·통화·`expiresAt`)를 같은 트랜잭션에 쓴다. 스캔은 `expires_at <= now`로 고른다.

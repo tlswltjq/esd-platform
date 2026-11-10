@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -84,9 +84,9 @@
   - 영향: **돈(유실)** — 오타 토픽이 생겨 이벤트가 사라진다. 파티션 수를 바꾸면 키 순서가 깨진다.
   - 재현: 자동 생성을 끈 브로커에서 없는 토픽으로 보내면 실패하는지.
 
-- [ ] **T12. 결제 기한(30분)이 7곳에서 다시 계산되고, Payment가 자기 시계로 결제창을 막는다** [결정 필요 PD-17]
+- [ ] **T12. 결제 기한(30분)이 7곳에서 다시 계산되고, Payment가 자기 시계로 결제창을 막는다** ([결정 169](../../../docs/decisions.md#checkout-open-until-expiry-fact))
   - 어디서: Order `order:core/domain/Order.java:77`(`createdAt + 30분`, 열 없음), `order:core/service/CloseExpiredOrders.java:38`(스캔 경계 `now − 30분`); Payment `payment:core/domain/PaymentApproval.java:82`(`orderOccurredAt + 30분`), `payment:core/domain/PaymentOrderLifecycle.java:33`·`:36`·`:48`(만료 기한 재계산, `OrderExpired.expiresAt`과 다르면 `conflict()`), `payment:core/service/ReadPaymentCheckout.java:50-51`(Payment 시계로 결제창 `ORDER_EXPIRED`), `payment:core/domain/OrderAdmissionReceipt.java:13-14`(`expiresAt − 30분`). 이벤트에 기한 없음: `common/kafka/.../payload/OrderPlacedEvent.java:9-11`.
-  - 목표: P1.4-3·P3.10-1·P3.10-2. Order 설정 키 하나 + `purchase_order.expires_at` 열, `OrderPlaced.expiresAt`. Payment는 저장만 하고 만료는 접수 거절·`OrderExpired` 사실로만 안다. 결제창 안내는 PD-17.
+  - 목표: P1.4-3·P3.10-1·P3.10-2. Order 설정 키 하나 + `purchase_order.expires_at` 열, `OrderPlaced.expiresAt`. Payment는 저장만 하고 만료는 접수 거절·`OrderExpired` 사실로만 안다. 결정 169: 결제창은 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`(`ReadPaymentCheckout.java:50`의 시계 비교 제거).
   - 영향: **돈** — 기한 정책을 바꾸면(예: 40분) `OrderExpired`가 DLT로 가 접수 전 시도가 만료를 모르고 결정 126의 만료 전 PG 재조회도 멈춘다. 결제창이 Order와 다른 시각에 닫힌다. 두 호스트 시계가 어긋나면 기한 안인데 결제창이 닫힌다.
   - 재현: 아키텍처 테스트 — Payment 소스에 결제 기한 계산(`ofMinutes(30)` 등) 0건. 통합 — Order 기한 설정을 바꿔 만료 → Payment가 받아들이는지. 단위 — Payment `Clock`을 1분 앞당겨 29분 30초 주문의 결제창이 거절되면 Red.
 
