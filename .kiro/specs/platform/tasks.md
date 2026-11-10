@@ -9,7 +9,7 @@
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -17,11 +17,11 @@
 
 모듈 둘 이상에 걸친 차이만 둔다. 돈·보유권 영향이 큰 순서다. 형식: 무엇이 · 어디서(`파일:줄`) · 목표 · 영향 · 재현 테스트 아이디어. 경로 줄임은 [requirements.md](requirements.md)와 같다(`<모듈>:` = `apps/<모듈>/src/main/java/com/stove/<모듈>/`). 줄 번호는 2026-11-09 `docs/spec-foundation` 기준이다.
 
-- [ ] **T1. U1 — Order가 결과를 승인 진행 영수증(`admissionId`)과 대조하지 않는다** [결정 필요 PD-1]
+- [ ] **T1. U1 — Order가 결과를 승인 진행 영수증(`admissionId`)과 대조하지 않는다** ([결정 153](../../../docs/decisions.md#late-success-rejection))
   - 어디서: `order:core/domain/Order.java:152-172`(`PAYMENT_PROCESSING`일 때만 `paymentId` 대조 `:163-164`, `PENDING`이면 그대로 `PAID`), `order:core/service/ApplyPaymentResult.java:50-57`(`PAID`면 `OrderPaid` Outbox), `common/kafka/.../contract/payload/OrderPaymentCompletedEvent.java:11-12`(`admissionId` 칸 없음), `payment/db/V11__purchase_payment.sql:29`(`uk_purchase_payment_order` — 주문당 `paymentId` 고정), Order V10(`purchase_order`에 반영 영수증 열 없음). Payment 쪽: `payment:adapter/pg/AdmittedPortOnePgGateway.java:21-28`가 시도를 잠금 밖에서만 확인, `payment:core/service/ResolvePayment.java:103,112-119`의 확정 트랜잭션은 결제만 잠그고 시도가 여전히 접수된 현재 시도인지 다시 보지 않는다.
-  - 목표: P3.12-1·P3.14-1·P4.2-5, I12·I15. `OrderPaymentCompleted.admissionId`(필수), `OrderPaymentFailed`·`OrderPaymentReviewClosed.admissionId`(접수된 시도일 때만). Order는 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `purchase_order.payment_admission_id` FK + `CHECK (status<>'PAID' OR payment_admission_id IS NOT NULL)`. Payment는 결제 → 시도 잠금 뒤 시도 재확인. 연결되지 않은 성공의 처리는 PD-1. 옛 `PAID` 행(모의 PG·옛 경로)의 이행 방침을 같은 PR에 적는다.
+  - 목표: P3.12-1·P3.14-1·P4.2-5, I12·I15. `OrderPaymentCompleted.admissionId`(필수), `OrderPaymentFailed`·`OrderPaymentReviewClosed.admissionId`(접수된 시도일 때만). Order는 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `purchase_order.payment_admission_id` FK + `CHECK (status<>'PAID' OR payment_admission_id IS NOT NULL)`. Payment는 결제 → 시도 잠금 뒤 시도 재확인하고, 실패 통지·종결·만료로 닫힌 시도의 성공은 결과로 내지 않고 `PAID_WITHOUT_ADMISSION` 보류(A1). 연결값은 맞지만 반영할 수 없는 성공은 Order가 거절 기록 + `OrderPaymentResultRejected`(P3.14-2, 409 → DLT 아님), Payment가 받아 보류 흐름에 올림(P3.13-7, A2) — 결정 153. Payment 기록 자리는 PD-2와 함께(MC-P13). 옛 `PAID` 행(모의 PG·옛 경로)의 이행 방침을 같은 PR에 적는다.
   - 영향: **돈·보유권** — 접수 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·정산 매출. 같은 고객이 새 시도로 이중 청구될 수 있다. 영수증 B가 열려 있을 때 시도 A의 결과도 구분하지 못한다.
-  - 재현: Order 통합 — (1) 접수 → `/failure`로 `PENDING` → 같은 `paymentId`의 `OrderPaymentCompleted` 주입 → `PAID`면 Red (2) `createdAt` 31분 전 `PENDING` 주문(스캔 정지)에 결과 주입 → Red (3) 영수증 B 열림 + 결과 `admissionId`=A → 거절. Payment 경합 — `charge` 직후 시도 A를 실패 종료로 바꾸고 PG를 PAID로 둔 뒤 확정 → 결과가 나오면 Red. 계약 테스트: 스키마에 `admissionId`.
+  - 재현: Order 통합 — (1) 접수 → `/failure`로 `PENDING` → 같은 `paymentId`의 `OrderPaymentCompleted` 주입 → `PAID`면 Red (2) `createdAt` 31분 전 `PENDING` 주문(스캔 정지)에 결과 주입 → Red (3) 영수증 B 열림 + 결과 `admissionId`=A → 거절, (4) `EXPIRED` 주문에 성공 주입 → DLT가 아니라 `OrderPaymentResultRejected` Outbox, Payment 보류 목록에 보임. Payment 경합 — `charge` 직후 시도 A를 실패 종료로 바꾸고 PG를 PAID로 둔 뒤 확정 → 결과가 나오면 Red. 계약 테스트: 스키마에 `admissionId`.
 
 - [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** [결정 필요 PD-3]
   - 어디서: `common/messaging/.../outbox/OutboxEvent.java:204-212`(`holdUntil(null)`은 아무것도 안 함), `OutboxRelay.java:109-113`, `OutboxEventRepository.java:20-28`(`lockPendingBatch`가 `DEAD` 키를 거르지 않음), `common/kafka/.../ops/DltOpsService.java:65-`(재투입이 같은 키의 이후 처리 여부를 보지 않음, `docs/architecture.md` R2).
@@ -43,7 +43,7 @@
 
 - [ ] **T5. 끝난 결제(종결·만료·실패)에 뒤늦게 생긴 PG 청구를 감지하지 않는다** [결정 필요 PD-2]
   - 어디서: `payment:core/domain/Payment.java:172-178`(결제가 `PENDING`이 아니면 웹훅 무시), `payment:core/service/ResolvePayment.java:89`(재개 작업 대상에서 뺌).
-  - 목표: P3.12-5. PD-2(추천: 끝난 결제의 청구를 기록하고 보류 목록·경보·고객 안내에 올림, 시스템은 돈을 움직이지 않음). PD-1 A2를 고르면 같은 기록 자리를 쓴다.
+  - 목표: P3.12-5. PD-2(추천: 끝난 결제의 청구를 기록하고 보류 목록·경보·고객 안내에 올림, 시스템은 돈을 움직이지 않음). 결정 153(A2)의 거절 사실을 Payment가 기록하는 자리와 같은 자리다(MC-P13).
   - 영향: **돈** — READY 근거로 종결한 뒤 콘솔 승인 등으로 청구되면 주문·보류 어디에도 연결되지 않은 청구가 남고, 고객은 "청구된 금액은 없습니다"(`CLOSED_NOT_CHARGED`)를 본다.
   - 재현: 흉내 서버 여정 — 종결(READY 근거) 뒤 `console-approve` → 보류·경보가 없으면 Red.
 

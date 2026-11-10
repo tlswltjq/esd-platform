@@ -1442,6 +1442,20 @@
 - 구분: 직접 제안 — 품질 시나리오를 실험 뒤로 미루는 안은 사용자가 꺼냈고, 실패 분석을 지금 더하는 조정은 AI 제안을 수용
 - 결과: [PR #191](https://github.com/tlswltjq/esd-platform/pull/191)
 
+<a id="late-success-rejection"></a>
+## 153. 승인 진행과 연결되지 않은 늦은 결제 성공은 Payment가 먼저 막고, 그래도 Order에 닿으면 Order가 거절 사실을 이벤트로 낸다
+- 문제: Order `Order.apply`(`Order.java:160-163`)는 `PENDING` 주문에 온 성공 결과를 기한·시도와 대조하지 않고 `PAID`로 받는다(U1). 결과 이벤트에 어느 시도의 결과인지 가리키는 칸(`admissionId`)이 없고 `paymentId`는 주문당 하나라 시도를 구분하지 못한다. 예: 14:02 시도 A가 응답 시간 초과로 실패 통지(`…/payment-admissions/{admissionId}/failure`) → 14:05 시도 B → 14:06 PG가 A를 결제됨으로 보고하면 A의 성공이 B의 것처럼 `PAID`가 되고, B도 성공하면 이중 청구다. 이미 만료된 주문에 온 성공은 409 → DLT로 가서 돈은 나갔는데 보류·경보·고객 안내가 없다. Order가 `admissionId`로 대조하는 것(I12)은 원칙 ⑤로 정해지지만, 그 대조에서 거절된 성공(돈은 이미 나간 결제)을 어떻게 처리할지는 정해져 있지 않았다(플랫폼 스펙 PD-1).
+- 선택지: A1 Payment가 막는다(실패를 통지한 시도·승인 진행 기록 없는 시도의 성공은 `OrderPaymentCompleted`로 내지 않고 `PAID_WITHOUT_ADMISSION` 보류) / A2 Order가 거절하고 거절 사실 이벤트를 내면 Payment가 보류로 올린다 / A1+A2 / B 다른 열린 시도·`PAID`가 없으면 조건부로 `PAID` / (두 초안이 기각) 시스템 자동 전액 취소, DLT 경보만 (추천: A1+A2 — 진행 기록 없는 시도의 성공을 "주문 결제 결과"로 내면 사실이 틀리므로 그것을 아는 Payment가 먼저 막고(원칙 ①), 받는 쪽 대조가 지키는 곳이 되되 거절이 DLT에 묻히지 않게 사실로 드러낸다(원칙 ⑤))
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A1+A2로 Payment가 막고 Order도 거절을 알리게 해")
+- 선택: A1+A2
+  - A1(Payment): 승인 진행 기록이 없거나 실패 통지·종결·만료로 닫힌 시도에서 PG 결제가 관측되면 결과 이벤트를 내지 않고 그 시도를 `PAID_WITHOUT_ADMISSION` 보류로 올린다. 확정 트랜잭션은 결제 → 시도 순으로 잠그고 그 시도가 여전히 접수된 현재 시도인지 다시 확인한다(플랫폼 스펙 P3.12-1·P3.12-5, I15).
+  - Order 대조: 결과의 `admissionId`·`paymentId`가 열린 최신 승인 진행 기록과 같을 때만 `PAID`로 반영한다. 결과 이벤트(`OrderPaymentCompleted`, 접수된 시도의 `OrderPaymentFailed`·`OrderPaymentReviewClosed`)에 `admissionId`를 싣는다(P3.14-1, I12).
+  - A2(Order → Payment): 주문 연결값(`orderNo`·`requestEventId`·`buyerSubject`·`amount`·`currency`)은 맞지만 열린 최신 승인 진행 기록의 성공으로 반영할 수 없는 성공 결과(주문 `PENDING`·`EXPIRED`·`FAILED`, 다른 `admissionId`, 이미 다른 결과로 `PAID`)는 409로 DLT에 보내지 않는다. Order는 같은 트랜잭션에 Inbox·거절 기록과 `OrderPaymentResultRejected`(거절한 결과의 `eventId`·`paymentId`·`admissionId`·거절 사유) Outbox를 쓴다. Payment는 이 사실을 받아 그 결제를 보류 흐름(목록·경보·고객 안내·운영자 콘솔 취소 뒤 PG 근거 종결, 결정 114·115)에 올린다. 시스템은 돈을 움직이지 않는다.
+  - 주문 연결값 자체가 다른 결과는 계약 위반이라 지금처럼 영구 실패(DLT)다.
+  - Payment가 거절 사실을 기록하는 자리(이미 `PAID`로 확정한 결제·`SUCCEEDED` 시도에 붙는 보류)는 끝난 결제의 늦은 청구(PD-2)와 같은 자리라 함께 정한다. 사유 이름·상태 전이·종결 뒤 결제 상태는 Payment 모듈 스펙에서 정한다(결정 144의 처음 사유 유지 규칙을 따른다).
+- 구분: 추천 수용
+- 결과: [PR #191](https://github.com/tlswltjq/esd-platform/pull/191) 플랫폼 스펙 P3.12·P3.13-7·P3.14-2·P4.2-5, 이벤트 목표 행 `OrderPaymentResultRejected`, tasks T1
+
 ---
 
 ## 검증하며 드러난 것

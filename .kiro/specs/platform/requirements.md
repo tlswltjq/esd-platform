@@ -247,13 +247,14 @@
 4. WHEN 종결이 허용되면 THEN Payment SHALL 시도를 `FAILED`로 닫고 운영자·요청 ID·PG 근거를 `approval_closure`에 남기며, 결제·주문을 다음과 같이 끝낸다(같은 주문 재결제 없음, 고객은 새 주문). (a) 접수된 시도 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` 포함) → 주문 `FAILED`. (b) 접수 전 시도 + 만료 사실 있음 → 결제 `EXPIRED`, 이벤트 없음. (c) 접수 전 시도 + 만료 사실 없음 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` null) → 주문 `PENDING → FAILED`. IF `OrderPaymentReviewClosed`가 이미 `EXPIRED`인 주문에 오면 THEN Order SHALL 만료를 유지하고 종결 사실만 기록한다(결정 115. 전용 이벤트는 소급 RC-1, T18).
 5. WHEN 접수된 시도가 확정 송신 기한을 넘겼고 PG가 PENDING·READY이면 THEN Payment SHALL `CONFIRM_WINDOW_EXPIRED`로 보류하고 실패·새 멱등 키·새 결제를 만들지 않으며, 그 뒤 PG PAID·FAILED가 오면 원래 주문으로 끝낸다(결정 124).
 6. WHEN 접수 전 시도가 만료 사실을 받으면 THEN Payment SHALL PG 관측 이력이 없으면 PG를 부르지 않고 시도·결제를 `EXPIRED`로 닫고, 이력이 있으면 PG를 한 번 조회해 PAID → `PAID_WITHOUT_ADMISSION`, 전액 CANCELLED → `PG_CANCELLED`, PENDING → `PG_PENDING_AT_ORDER_EXPIRY`로 보류하며, READY·FAILED면 잠금 안에서 `REQUESTED`를 다시 확인한 뒤 닫는다(결정 126, D-044).
+7. WHEN Payment가 `OrderPaymentResultRejected`를 처음 받으면 THEN Payment SHALL 거절된 결과를 낸 결제를 보류 흐름(목록·경보·고객 안내·운영자 콘솔 취소 뒤 PG 근거 종결)에 올리고, PG 취소를 실행하지 않는다(2와 같음). 기록 자리·사유 이름·종결 뒤 결제 상태는 끝난 결제의 늦은 청구와 같은 자리로 [결정 필요 PD-2]와 함께 정하고, 세부 전이는 Payment 모듈 규칙이다([결정 153](../../../docs/decisions.md#late-success-rejection), MC-P13).
 
 #### P3.14 결과 반영 (Order)
 
 1. WHEN `OrderPaymentCompleted`가 처음 오면 THEN Order SHALL 주문 행 잠금 아래 연결값(`orderNo`·`requestEventId`·`buyerSubject`·`amount`·`currency`)과 `admissionId`·`paymentId`가 이 주문의 열린 최신 승인 진행 영수증(주문 `PAYMENT_PROCESSING`)과 같을 때만 `PAID`로 바꾸고, 같은 트랜잭션에 Inbox(`order-payment-result`)·결과 식별·반영한 영수증 ID(`purchase_order.payment_admission_id`)·`OrderPaid` Outbox를 쓴다(I1·I3·I12, T1).
-2. IF 결과가 열린 최신 영수증과 연결되지 않으면(주문 `PENDING`·`EXPIRED`·`FAILED`, 영수증 실패 종료, 다른 `admissionId`) THEN Order SHALL `PAID`로 반영하지 않고 `OrderPaid`를 만들지 않는다. 받은 뒤의 처리(거절 기록·Payment 보류 연결·보상)는 [결정 필요 PD-1].
+2. IF 성공 결과의 주문 연결값은 맞지만 열린 최신 영수증의 성공으로 반영할 수 없으면(주문 `PENDING`·`EXPIRED`·`FAILED`, 영수증 실패 종료, 다른 `admissionId`, 이미 다른 결과로 `PAID`) THEN Order SHALL `PAID`로 반영하지 않고 `OrderPaid`를 만들지 않으며, 같은 트랜잭션에 Inbox·거절 기록과 `OrderPaymentResultRejected`(거절한 결과의 `eventId`·`paymentId`·`admissionId`·거절 사유) Outbox를 쓴다. 이 결과를 409로 DLT에 보내지 않는다. 주문 연결값 자체가 다르면 계약 위반으로 영구 실패다([결정 153](../../../docs/decisions.md#late-success-rejection)).
 3. WHEN `OrderPaymentFailed`(결제 공급자가 그 결제를 최종 거절함)·`OrderPaymentReviewClosed`가 처음 오고 1과 같은 연결이 맞으면(`admissionId`가 null이면 영수증 없는 `PENDING` 주문) THEN Order SHALL 주문을 `FAILED`로 바꾸고 사유를 기록한다. `OrderPaymentFailed`는 운영자 종결을 싣지 않는다(원칙 ①).
-4. WHEN 결과가 정해진 주문에 결과가 다시 오면 THEN Order SHALL 저장한 결과와 같으면 무변화로 끝내고, 다르거나 그 결과 `eventId`를 다른 주문이 이미 썼으면 영구 실패로 거절한다(I8).
+4. WHEN 결과가 정해진 주문에 결과가 다시 오면 THEN Order SHALL 저장한 결과와 같으면 무변화로 끝낸다. 다른 결과가 성공이면 2를 따르고, 그 밖의 다른 결과이거나 그 결과 `eventId`를 다른 주문이 이미 썼으면 영구 실패로 거절한다(I8).
 5. 시스템(Order) SHALL `OrderPaid`를 최초 `PAID` 트랜잭션에서 한 번만 만들고, 재시도·`DEAD` 재큐잉·재발행은 저장된 `eventId`·키·본문을 그대로 쓴다(결정 129).
 
 #### P3.15 구매 근거와 매출 (Order → License · Settlement)
@@ -363,7 +364,7 @@
 2. THE 구매 근거(`product_license`) SHALL `OrderPaid`로만 생기고 주문당 1행이며, 보유권 `ACTIVE`는 고객·상품당 1개, 구매 근거당 열린 보유권(`ACTIVE`·`SUSPENDED`)은 1개다(I3).
 3. IF `order_refund.status`=`COMPLETED`이면 THEN 같은 `refund_id`의 `refund_execution.refund_confirmed_at` SHALL 있다. IF `product_license.status`=`REFUNDED`이면 THEN 그 주문의 환불 SHALL `COMPLETED`다. IF `settlement_refund` 행이 있으면 THEN 같은 `refund_id`의 `refund_confirmed_at` SHALL 있다(I4).
 4. THE 소비자 SHALL `processed_event`를 업무 변경과 같은 트랜잭션에 쓰고, 업무 기록도 사건 식별자 유일 키로 한 번만 생긴다(I8).
-5. THE `PAID` 주문 SHALL 그 주문의 열린 최신 승인 진행 영수증과 같은 `admissionId`의 성공 결과로만 생긴다. 결제 식별자(`paymentId`)만으로 연결을 판정하지 않는다 — 주문당 `paymentId`가 하나로 고정되어 시도를 구분하지 못한다(`payment/db/V11__purchase_payment.sql:29` `uk_purchase_payment_order`). 연결되지 않은 성공의 처리는 [결정 필요 PD-1](I12, P3.14, T1).
+5. THE `PAID` 주문 SHALL 그 주문의 열린 최신 승인 진행 영수증과 같은 `admissionId`의 성공 결과로만 생긴다. 결제 식별자(`paymentId`)만으로 연결을 판정하지 않는다 — 주문당 `paymentId`가 하나로 고정되어 시도를 구분하지 못한다(`payment/db/V11__purchase_payment.sql:29` `uk_purchase_payment_order`). 연결되지 않은 성공은 Order가 반영하지 않고 거절 사실(`OrderPaymentResultRejected`)로 드러내며 Payment가 보류로 올린다([결정 153](../../../docs/decisions.md#late-success-rejection), I12, P3.14-2, P3.13-7, T1).
 6. THE Payment SHALL 승인 진행 영수증이 없는 시도의 PG 결제로 결과 이벤트를 내지 않는다(I15, P3.11-2·P3.12-5).
 
 #### P4.3 정방향 반영 (U3·U4·U5 → I14)
