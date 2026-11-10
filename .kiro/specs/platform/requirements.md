@@ -263,7 +263,7 @@
 
 1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실(지금 이름 `LicenseGranted`, 이름 정정은 소급 RC-3) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
 2. WHEN Order가 구매 근거 생성 사실을 처음 받으면 THEN Order SHALL 주문이 `PAID`이고 구매자·상품·`paymentId`가 같을 때만 `order_license_grant`를 저장한다(환불 흐름의 입력, P3.17).
-3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월의 기준 시각은 [결정 필요 PD-14].
+3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaid`의 가칭 `paymentConfirmedAt` — Order가 `OrderPaymentCompleted.occurredAt`을 그대로 전달)의 KST 월이고, 그 칸이 없는 옛 `OrderPaid`는 `occurredAt`을 쓴다. 환불 귀속 월(결정 42)과 같은 금융 확인 기준이다([결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)).
 4. IF 매출 기록에 필요한 외부 조회가 실패하거나 대조가 어긋나면 THEN Settlement SHALL 원장·Inbox·월 합계를 만들지 않고 공통 재시도를 받으며, 소진하면 DLT에 원본 그대로 남긴다.
 5. WHILE Order 주문이 `PAID`인데 구매 근거 응답(`LicenseGranted`)이나 매출 기록 확인 사실(가칭 `SettlementSaleRecorded`)을 받지 못했으면 THEN Order SHALL 그 건수를 센다(I14, [결정 158](../../../docs/decisions.md#forward-gap-counting)). 경보 기준 시간은 측정 뒤 정하고, 그 전에는 게이지(건수·최장 대기)만 낸다([결정 159](../../../docs/decisions.md#forward-gap-threshold)).
 
@@ -388,7 +388,7 @@
 #### P4.5 시계와 식별자 (I9 → I13, U2)
 
 1. THE Order·Payment·License·Settlement SHALL 다른 모듈이 찍은 시각(`occurredAt`·`confirmedAt`·`startedAt`·`restoredAt` 등)과 자기 시각, 또는 서로 다른 모듈이 찍은 두 시각의 선후로 이벤트·명령을 거절·분기하지 않는다. 같은 시도·정지·요청인지는 식별자(`attemptId`·`requestEventId`·`suspensionRequestEventId`·`suspensionEventId`·`restorationRequestEventId`·`refundId`·`admissionId`)와 잠금으로만 판정한다(원칙 ⑥, D-052, I13, T3).
-2. WHERE 업무 규칙이 다른 모듈의 시각을 값으로 써야 하면(정산 귀속 월 = `OrderPaid.occurredAt`의 KST 월, 환불 귀속 월 = `RefundPaymentConfirmed.confirmedAt`의 KST 월, 결정 42) 시스템 SHALL 그 값을 그대로 기록에 쓰되 자기 시계와 비교해 거절하지 않는다.
+2. WHERE 업무 규칙이 다른 모듈의 시각을 값으로 써야 하면(매출 귀속 월 = `OrderPaid.paymentConfirmedAt`(가칭, Payment 승인 확정 시각)의 KST 월(결정 166), 환불 귀속 월 = `RefundPaymentConfirmed.confirmedAt`의 KST 월, 결정 42) 시스템 SHALL 그 값을 그대로 기록에 쓰되 자기 시계와 비교해 거절하지 않는다.
 3. WHERE 외부 결제 공급자가 찍은 시각(`requestedAt`·`cancelledAt`)이 근거에 있으면 Payment SHALL 그 값을 그대로 저장하고, 자기 관측 시각과의 선후로 PG 근거를 무효로 보지 않는다. 근거의 진위는 취소 ID·결제 ID·금액·상태로 판정한다([결정 163](../../../docs/decisions.md#external-clock-principle), 원칙 ⑥, T3·MC-P10). PG가 찍은 시각끼리의 순서 검사와 같은 모듈 안 시각끼리의 비교는 이 요구사항의 대상이 아니다.
 
 #### P4.6 Payment 내부 승인 보류 (I10·I11)

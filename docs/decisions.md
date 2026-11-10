@@ -1615,6 +1615,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P1.4-2, design 정본 소유 표·U6, tasks T17
 
+<a id="sale-month-by-payment-confirmation"></a>
+## 166. 매출 귀속 월은 Payment가 승인을 확정한 시각의 KST 월로 정해, 환불 귀속 월(결정 42)과 같은 금융 확인 기준에 둔다
+- 문제: Settlement는 매출 귀속 월(`sale_month`)을 `OrderPaid.occurredAt`의 KST 월로 정한다(`RecordPaidSale.java:78`). 그 값은 Order가 `PAID`를 반영한 시각(`ApplyPaymentResult.java:52`의 `order.getUpdatedAt()`)이라 PG 승인 확정 시각과 Order 소비 지연만큼 다르다. 결정 42는 환불 월만 "최초 금융 확인 월"로 정했다. 예: 10월 31일 23:59:50 KST 승인 확정 → Order가 11월 1일 00:00:20에 `PAID` 반영 → 매출은 11월, PG 정산 명세(G7 대사)는 10월 거래가 된다(플랫폼 스펙 PD-14).
+- 선택지: A 지금대로 Order `PAID` 반영 시각 / B Payment 승인 확정 시각을 `OrderPaid`로 전달해 그 KST 월 / C Settlement 수신 시각 (추천: B — 원칙만으로는 A·B 모두 성립해 정책 선택이라고 밝힌 뒤, 돈이 확정된 사실로 매출과 환불을 같은 시간 축에 두어 결정 130·156과 G7 대사를 맞춘다는 이유로 추천. C는 재처리 때 월이 바뀌어 결정 42 취지와 부딪혀 제외)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 매출 월을 금융 확인 시각으로 해")
+- 선택: B
+  - 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaymentCompleted`의 사실 시각 `occurredAt`)의 KST 월이다.
+  - Order는 이미 그 값을 결과 시각(`resultOccurredAt`)으로 저장한다. `OrderPaid`에 그 값을 새 칸(가칭 `paymentConfirmedAt`)으로 싣고, Settlement는 그 칸의 KST 월을 쓴다. 바뀌는 계약은 `OrderPaid`에 선택 칸 하나를 더하는 호환 변경이다(선택지 설명의 "칸 2개"는 1개로 바로잡는다).
+  - 그 칸이 없는 옛 `OrderPaid`는 지금처럼 `occurredAt`으로 월을 정한다(결정 104 옛 자료 호환).
+  - 마감된 월 처리(현재 `OPEN` 월에 반영하고 원래 월 보존, 결정 42·130)는 그대로다. 다른 모듈 시각을 값으로만 쓰므로 원칙 ⑥과 부딪히지 않는다(P4.5-2).
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.15-3·P4.5-2, design 칸 변경 목표 표, tasks
+
 ---
 
 ## 검증하며 드러난 것

@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-10 | 매출 귀속 월의 기준 시각 | A Order `PAID` 반영 시각 / B Payment 승인 확정 시각(추천, 원칙상 A·B 모두 성립) / C Settlement 수신 시각 | (선택지 선택만) "B로 매출 월을 금융 확인 시각으로 해" | B — 매출과 환불을 같은 금융 확인 기준에 두어 월 마감과 PG 대사를 맞춘다 | 추천 수용 | [결정 166](decisions.md#sale-month-by-payment-confirmation) |
 | 2026-11-10 | PG 비용의 정본을 어느 모듈이 가질지 | A Settlement만(추천) / B Payment가 정본 / C 둘 다 두고 뜻을 나눔 | (선택지 선택만) "A로 PG 비용은 Settlement만 정본으로 해" | A — 정본 하나, 기존 책임 분리(결정 38·39·142)와 같다. Payment는 새 결제에 비용을 쓰지 않는다 | 추천 수용 | [결정 165](decisions.md#pg-fee-owner) |
 | 2026-11-10 | 환불 취소의 귀속(누가 취소했나)을 Order에도 둘지 | A 판정 이벤트를 Order에 복사 / B 귀속은 Payment만(추천) / C 기존 이벤트에 판정을 실음 | (선택지 선택만) "B로 귀속은 Payment만 갖게 해" | B — Order에는 귀속에 따른 업무 반응이 없어 정본은 Payment 하나로 둔다. 소비자가 없어진 `RefundExecutionSucceeded`는 뺀다 | 추천 수용 | [결정 164](decisions.md#attribution-in-payment) |
 | 2026-11-10 | 원칙 ⑥(남의 시계로 판정하지 않는다)을 외부 PG 시계에도 적용할지 | A 외부 공급자 시계까지 넓힘(추천) / B adapter에서 허용 오차로 비교 / C 지금대로 | (선택지 선택만) "A로 원칙 ⑥을 외부 PG 시계까지 넓혀" | A — 우리가 운영하지 않는 시계일수록 맞는다는 보장이 없다. 근거의 진위는 식별자·금액·상태로 판정한다 | 추천 수용 | [결정 163](decisions.md#external-clock-principle) |
