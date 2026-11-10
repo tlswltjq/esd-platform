@@ -1692,6 +1692,17 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 3차 PR. P3.5-6, design 이벤트 목표 행(SP-4), tasks T22
 
+<a id="remove-legacy-contracts"></a>
+## 172. 발행·소비가 없는 Studio·Review 구 계약 이벤트 13개를 제거한다
+- 문제: 플랫폼 스펙 이벤트 목록 #2~#14(`GameRegistered`·`BuildUploaded`·`BuildValidated`·`BuildValidationFailed`·`SubmissionCreated`·`ReleaseScheduled`·`ReleasePublished`·`ReleaseRolledBack`·`ReviewApproved`·`ReviewRejected`·`SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed`)는 발행 코드도 소비 코드도 없다. 현행 출시·심사 흐름은 `Project*` 이벤트다. 열린 질문 Q2(옛 프로젝트 단위 심사 경로를 호환용으로 둘지)·Q10(`ReleaseRolledBack`의 성공 의미) 때문에 남아 있었다. 리뷰어나 새 개발자가 `SubmissionReviewApproved`를 현행 계약으로 읽고 소비자를 붙이면 영원히 오지 않는 이벤트를 기다린다(플랫폼 스펙 PD-20).
+- 선택지: A 13개 유지(구 계약 표시만) / B P2.8-2 절차로 제거, Q2는 "제거"로 닫고 Q10의 롤백 사실은 롤백 기능을 다시 만들 때 새 이벤트로 정의 / C 제거하되 Q10 관련 4개는 Q10 결정까지 유지 (추천: B — 코드가 없는 계약이 목록에 있으면 현행 계약의 정본이 둘이 되고(원칙 ③), 다시 필요하면 그때의 사실로 새로 정의하는 편이 옛 칸을 되살리는 것보다 맞다(원칙 ①))
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 구 계약 13개를 제거해")
+- 선택: B
+  - 13개를 플랫폼 스펙 P2.8-2 절차로 지운다: 모든 서비스 `outbox_event`와 모든 소비 모듈의 실패 보관 표(결정 160)에 그 타입 행이 없고 토픽 보존 기간이 지났다는 근거를 PR에 적고, `EventType` 상수·payload·`EventContractTest.events()`·문서 언급을 지운다. 이미 "제거 대상"인 9개(#16 등)와 결정 164의 `RefundExecutionSucceeded`도 같은 절차로 지운다.
+  - 열린 질문 Q2는 "제거"로 닫는다. Q10의 롤백 사실은 롤백 기능을 다시 만들 때 그때의 사실로 새 이벤트를 정의한다. Q10의 나머지(빌드 검증·공개 직전 검사의 보장 범위)는 열린 채로 둔다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P2.8-3, design 이벤트 목록 #2~#14·상태 집계, tasks T30, `docs/domain/open-questions.md` Q2·Q10
+
 ---
 
 ## 검증하며 드러난 것

@@ -168,8 +168,7 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | 상태 | 수 | 번호 |
 |---|---|---|
 | 현행 | 20 | #1, #15, #17~#25, #28, #29, #33, #34, #38~#42 |
-| 구 계약 | 13 | #2~#14 |
-| 제거 대상 | 9 | #16, #26, #27, #30, #31, #32, #35, #36, #37 |
+| 제거 대상 | 22 | #2~#14(결정 172), #16, #26, #27, #30, #31, #32, #35, #36, #37 |
 | 합계 | 42 | |
 
 현행 20개 가운데 목표 분리안이 붙은 것: #15 `CatalogProductPublished`, #25 `OrderPaymentFailed`, #28 `RefundPaymentConfirmed`. 이름 정정 소급 후보: #33 `LicenseGranted`(RC-3). 짝 이벤트 신설: #38 `RefundExecutionFailed` ↔ design "목표 행" `RefundFailureClosed`.
@@ -178,19 +177,19 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 
 | # | 이벤트 | (구) 사실 | 토픽 | 상태 |
 |---|---|---|---|---|
-| 2 | `GameRegistered` | (구) 프로젝트 단위로 게임 심사를 요청했다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 3 | `BuildUploaded` | (구) 빌드 파일 업로드가 끝났다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 4 | `BuildValidated` | (구) 업로드 빌드가 검증을 통과했다 | `stove.studio.v1` | 구 계약(Q10, PD-20) |
-| 5 | `BuildValidationFailed` | (구) 업로드 빌드가 검증에 실패했다 | `stove.studio.v1` | 구 계약(Q10, PD-20) |
-| 6 | `SubmissionCreated` | (구) 자료·빌드 묶음의 심사를 요청했다 | `stove.studio.v1` | 구 계약(Q2, PD-20). 현행 대체: `ProjectReviewRequested`(design 이벤트 목록(리터럴)) |
-| 7 | `ReleaseScheduled` | (구) 릴리스 공개 시각을 예약했다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 8 | `ReleasePublished` | (구) 재작성 전 LIVE 공개 | `stove.studio.v1` | 구 계약(Q2, PD-20). 현행 대체: `ProjectReleaseRequested` → `ProjectReleaseCompleted` |
-| 9 | `ReleaseRolledBack` | (구) 이전 릴리스로 되돌렸다 | `stove.studio.v1` | 구 계약(Q10: 실패 뒤에도 성공처럼 적재되던 뜻 미정, PD-20) |
-| 10 | `ReviewApproved` | (구) 프로젝트 단위 심사를 승인했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 11 | `ReviewRejected` | (구) 프로젝트 단위 심사를 반려했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 12 | `SubmissionReviewApproved` | (구) 제출물의 한 심사 유형을 승인했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 13 | `ReviewChangesRequested` | (구) 심사자가 자료 보완을 요청했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 14 | `ReviewAppealed` | (구) 같은 심사 사건의 재검토를 시작했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
+| 2 | `GameRegistered` | (구) 프로젝트 단위로 게임 심사를 요청했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 3 | `BuildUploaded` | (구) 빌드 파일 업로드가 끝났다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 4 | `BuildValidated` | (구) 업로드 빌드가 검증을 통과했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 5 | `BuildValidationFailed` | (구) 업로드 빌드가 검증에 실패했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 6 | `SubmissionCreated` | (구) 자료·빌드 묶음의 심사를 요청했다 | `stove.studio.v1` | 제거 대상(결정 172). 현행 대체: `ProjectReviewRequested`(design 이벤트 목록(리터럴))  |
+| 7 | `ReleaseScheduled` | (구) 릴리스 공개 시각을 예약했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 8 | `ReleasePublished` | (구) 재작성 전 LIVE 공개 | `stove.studio.v1` | 제거 대상(결정 172). 현행 대체: `ProjectReleaseRequested` → `ProjectReleaseCompleted`  |
+| 9 | `ReleaseRolledBack` | (구) 이전 릴리스로 되돌렸다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 10 | `ReviewApproved` | (구) 프로젝트 단위 심사를 승인했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 11 | `ReviewRejected` | (구) 프로젝트 단위 심사를 반려했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 12 | `SubmissionReviewApproved` | (구) 제출물의 한 심사 유형을 승인했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 13 | `ReviewChangesRequested` | (구) 심사자가 자료 보완을 요청했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 14 | `ReviewAppealed` | (구) 같은 심사 사건의 재검토를 시작했다 | `stove.review.v1` | 제거 대상(결정 172) |
 | 16 | `ProductChanged` | (구) 재작성 전 상품 마스터가 바뀌었다 | `stove.catalog.v1` | 제거 대상 |
 | 26 | `OrderCreated` | (구) 재작성 전 주문 항목·금액 고정 | `stove.order.v1` | 제거 대상 |
 | 27 | `OrderCanceled` | (구) 재작성 전 주문 취소 | `stove.order.v1` | 제거 대상 |

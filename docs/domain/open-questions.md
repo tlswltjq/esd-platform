@@ -23,7 +23,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 | 질문 | 검토 대상 | 상태 | 필요한 검토 주체 |
 |---|---|---|---|
 | [Q1](#q1) | 표준명·동사·업무 경계 후보 | 초안 검토 대기 | 프로젝트 담당자 |
-| [Q2](#q2) | 프로젝트 심사와 제출물 심사의 공존 | 결정 필요 | 창작·심사 담당 |
+| [Q2](#q2) | 프로젝트 심사와 제출물 심사의 공존 | 닫힘 — 제거([결정 172](../decisions.md#remove-legacy-contracts)) | 창작·심사 담당 |
 | [Q3](#q3) | 공개 시 자동 판매와 판매 중지 유지 | 결정 필요 | 출시·판매 운영 담당 |
 | [Q4](#q4) | 심사 운영 상태·재검토·승인 조건 | 결정 필요 | 심사·출시 담당 |
 | [Q5](#q5) | 상품 종류·수량·반복 구매와 권한 사본 | 결정 필요 | 구매·이용 권한 담당 |
@@ -74,6 +74,8 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 <a id="q2"></a>
 
 ## Q2. 기존 프로젝트 단위 심사 경로의 역할은 무엇인가?
+
+**닫힘(2026-11-10):** 옛 경로의 이벤트 계약(`GameRegistered`·`SubmissionCreated`·`ReviewApproved` 등)은 발행·소비 코드가 없어 제거한다([결정 172](../decisions.md#remove-legacy-contracts)). 현행 흐름은 `Project*` 이벤트다.
 
 **관찰:** `GameProject.submit()`·`GameRegistered`·`ReviewRequest`·`ReviewApproved` 경로가 남아 있고, 새 경로는 `SubmissionCreated`·`ReviewCase`·`SubmissionGate`·`ReleasePublished`를 사용한다. 기존 승인으로 생성한 Product는 공개 릴리스가 없으면 판매할 수 없다. 새 Submission의 준비 상태가 프로젝트의 기존 `status`에 그대로 반영되지는 않는다.
 
@@ -201,6 +203,8 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 <a id="q10"></a>
 
 ## Q10. 빌드 검증·공개 직전 검사·롤백 완료가 보장하는 것은 무엇인가?
+
+**일부 정리(2026-11-10):** `BuildValidated`·`BuildValidationFailed`·`ReleaseScheduled`·`ReleaseRolledBack` 이벤트 계약은 제거하고, 롤백 사실은 롤백 기능을 다시 만들 때 새 이벤트로 정의한다([결정 172](../decisions.md#remove-legacy-contracts)). 빌드 검증·공개 직전 검사의 보장 범위는 아직 열려 있다.
 
 **관찰:** 제출·다운로드 모델은 Windows/Mac/Linux 변형을 다루지만 `BuildValidationService`의 ZIP 검사에는 `.exe` 파일 존재 조건이 있다. `ReleaseSmokeTestService`는 빌드 상태와 저장 객체 크기를 확인하며 실제 실행이나 델타 적용을 검사하지 않는다. `ReleaseService.publish()`는 smoke 실패 시 실패 상태를 기록하고 반환한다. `rollback()`은 그 반환 후에도 `ReleaseRolledBack`과 성공처럼 읽히는 감사 기록을 적재한다.
 
