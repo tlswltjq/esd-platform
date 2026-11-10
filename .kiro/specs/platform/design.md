@@ -119,7 +119,7 @@ OutboxRelay (서비스당 1대, stove.outbox.poll-interval-ms=200)
      ack 성공 : SENT
      실패     : retryCount++, next_attempt_at = 1s,2s,...,5m, 같은 키 뒤 이벤트 holdUntil
      10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표(결정 155): DEAD 키의 뒤 행은 회수 전까지 보류, ADMIN 키 단위 requeue
-Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion[PD-18]·traceparent·(목표) 키 안 발행 순번(결정 161)
+Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion(본문 모양, 결정 170)·traceparent·(목표) 키 안 발행 순번(결정 161)
 소비 리스너 (그룹당 파티션당 스레드 1, ack-mode record)
   EventEnvelope.from (헤더 없으면 거절)
   -> isType 분기 -> *Mapper.from(envelope, payload) (계약 검증, api.listener)
@@ -154,10 +154,10 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | 22 | `OrderExpired` | Order가 결제 기한이 지난 주문의 승인 접수를 안전하게 닫았다(PG 거절이 아님) | Order · `RecordOrderExpiry` | Payment · `payment-order-expiry`(`OrderExpiryListener` → `ApplyOrderExpiry`) | `stove.order.v1` | `orderNo` | 같은 주문의 `OrderPlaced` 뒤 | Payment `uk_payment_order_expiry_event(expiry_event_id)` | `기본` | 현행(칸 `expiresAt` 유지) |
 | 23 | `OrderPlaced` | 단일 상품 주문의 정가·할인액·청구액이 고정됐다 | Order · `CreateOrder` | Payment · `payment-order-request`(`OrderEventListener` → `ReceiveOrderPayment`) | `stove.order.v1` | `orderNo` | 같은 주문의 첫 이벤트 | Payment `uk_purchase_payment_order(order_no)`·`uk_purchase_payment_request(request_event_id)` | `기본` | 현행 → 목표 칸 `expiresAt` 추가(T12) |
 | 24 | `OrderPaymentCompleted` | Payment가 한 `OrderPlaced` 요청(`requestEventId`)의 결제를 최종 승인했다 | **Payment** · `PaymentResultOutbox` | Order · `order-payment-result`(`PaymentEventListener` → `ApplyPaymentResult`) | `stove.payment.v1` | `orderNo` | 주문 요청당 결과 하나. `OrderPaymentFailed`와 함께 존재하지 않음 | Order `uk_purchase_order_result`; Payment `uk_purchase_payment_result(result_event_id)` | `기본` | 현행 → 목표 칸 `admissionId` 추가(U1, T1) |
-| 25 | `OrderPaymentFailed` | Payment가 한 `OrderPlaced` 요청의 결제를 최종 실패로 정했다(지금은 운영자 보류 종결 `reasonCode=REVIEW_CLOSED`도 겸함) | **Payment** · `PaymentResultOutbox`, `ApprovalClosure.REASON_CODE`(`payment:core/domain/ApprovalClosure.java:27`) | Order · `order-payment-result` | `stove.payment.v1` | `orderNo` | #24와 같음 | #24와 같음 | `기본` | 현행 → 목표 분리안(분리안 SP-1, RC-1) |
+| 25 | `OrderPaymentFailed` | Payment가 한 `OrderPlaced` 요청의 결제를 최종 실패로 정했다(지금은 운영자 보류 종결 `reasonCode=REVIEW_CLOSED`도 겸함) | **Payment** · `PaymentResultOutbox`, `ApprovalClosure.REASON_CODE`(`payment:core/domain/ApprovalClosure.java:27`) | Order · `order-payment-result` | `stove.payment.v1` | `orderNo` | #24와 같음 | #24와 같음 | `기본` | 현행 → 목표 분리안(분리안 SP-1, 결정 174) |
 | 28 | `RefundPaymentConfirmed` | Payment가 원결제 전액 취소(돈의 결과)를 처음 확인했다(지금은 `source`로 "이 시도에 귀속됨/귀속 미확정"도 구별) | Payment · `RecordRefundCancellationSuccess:40`(`source=PG_RESPONSE`), `RefundConfirmationOutbox`(`PG_QUERY_UNATTRIBUTED`) | Order · `order-refund-payment-confirmation`(`ApplyRefundPaymentConfirmation`); Settlement · `settlement-confirmed-refund`(`RecordConfirmedRefund`) | `stove.payment.v1` | `orderNo` | 같은 시도의 `RefundExecutionPrepared` 뒤, `RefundExecutionSucceeded`보다 앞 | Order `uk_order_refund_payment_confirmation`; Settlement `uk_refund_event`·`uk_refund_id`·`uk_refund_order`; Payment `uk_refund_execution_confirmation` | Order `환불 팩토리`, Settlement `기본`(SIMULATED면 DLT, U4) | 현행 → 목표 분리안(분리안 SP-5, RC-8) |
 | 29 | `RefundExecutionSucceeded` | Payment가 이미 확인된 전액 취소를 이 환불 시도의 PG 취소 응답에 귀속했다(늦은 직접 응답 보강) | Payment · `RecordRefundCancellationSuccess:46` | 지금 Order · `order-refund-payment-confirmation`(같은 리스너). 목표: 소비자 없음 — Order 소비를 없애고 발행을 멈춰 계약에서 뺀다(결정 164). Settlement는 소비하지 않음(U5) | `stove.payment.v1` | `orderNo` | 같은 시도의 `RefundPaymentConfirmed` 뒤(`confirmationEventId`로 이음) | Order `uk_order_refund_attempt_success(success_event_id)`; Payment `uk_refund_execution_success` | `환불 팩토리` | 현행 → 폐기 대상(결정 164) |
-| 33 | `LicenseGranted` | License가 `OrderPaid` 한 건으로 구매 근거(`product_license`, 보관함 `STORED`)를 만들었다(라이브러리 등록이 아님, 결정 93) | License · `GrantLicense` | Order · `order-license-grant`(`LicenseEventListener` → `ApplyLicenseGrant`) | `stove.license.v1` | `orderNo` | 같은 주문의 `LicenseSuspended`보다 앞(인과) | Order `uk_order_license_grant_event`·`uk_order_license_grant_order`·`uk_order_license_grant_license` | `기본`, `재발행` | 현행(이름이 사실과 다름, RC-3) |
+| 33 | `LicenseGranted` | License가 `OrderPaid` 한 건으로 구매 근거(`product_license`, 보관함 `STORED`)를 만들었다(라이브러리 등록이 아님, 결정 93) | License · `GrantLicense` | Order · `order-license-grant`(`LicenseEventListener` → `ApplyLicenseGrant`) | `stove.license.v1` | `orderNo` | 같은 주문의 `LicenseSuspended`보다 앞(인과) | Order `uk_order_license_grant_event`·`uk_order_license_grant_order`·`uk_order_license_grant_license` | `기본`, `재발행` | 현행 → 목표 이름 `PurchaseRecordStored`(결정 175) |
 | 34 | `LicenseSuspended` | License가 정지 요청 한 건(`requestEventId`)으로 그 구매분을 정지했다 | License · `ApplyLicenseSuspension` | Order · `order-refund-suspension`(`RefundSuspensionEventListener` → `ApplyRefundSuspension`, 승인 정지 중이면 `ApplyApprovalCorrection.handleStoppedSuspension`) | `stove.license.v1` | `orderNo` | 같은 요청의 `LicenseSuspensionRequested` 뒤(인과) | Order `uk_order_refund_attempt_suspension_result(suspension_event_id)`; License `uk_license_suspension_result(completed_event_id)` | `환불 팩토리`, `재발행` | 현행 |
 | 38 | `RefundExecutionFailed` | PG가 이 시도의 취소를 FAILED로 확정했고 이어진 조회에서 원결제가 `PAID`·전액 미취소로 확인됐다(목표: 이 뜻 하나만) | **Payment** · `ReconcileRefundPayment` | **Order만** · `order-refund-restoration`(`RefundRestorationEventListener` → `ApplyRefundRestoration`). Settlement·License는 소비하지 않음 | `stove.payment.v1` | `orderNo` | 같은 시도의 `RefundExecutionPrepared` 뒤. 같은 환불의 `LicenseRestorationRequested`보다 앞(인과) | Payment `uk_refund_execution_failure(failure_event_id)`; Order 시도별 실패 기록(유일 제약 이름 미확인) | `환불 팩토리` | 현행(`RefundFailureClosed`와 짝) |
 | 39 | `LicenseRestorationRequested` | Order가 실패한 환불 시도(`failureEventId`)를 근거로 정지한 구매분의 복구 요청을 등록했다 | **Order** · `ApplyRefundRestoration` | License · `license-restoration`(`ApplyLicenseRestoration`) | `stove.order.v1` | `orderNo` | 같은 환불의 `LicenseSuspensionRequested` 뒤 | License `uk_license_restoration_request(request_event_id)`·`uk_license_restoration_suspension(suspension_request_event_id)` | `기본`, `재발행` | 현행 |
@@ -168,29 +168,28 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | 상태 | 수 | 번호 |
 |---|---|---|
 | 현행 | 20 | #1, #15, #17~#25, #28, #29, #33, #34, #38~#42 |
-| 구 계약 | 13 | #2~#14 |
-| 제거 대상 | 9 | #16, #26, #27, #30, #31, #32, #35, #36, #37 |
+| 제거 대상 | 22 | #2~#14(결정 172), #16, #26, #27, #30, #31, #32, #35, #36, #37 |
 | 합계 | 42 | |
 
-현행 20개 가운데 목표 분리안이 붙은 것: #15 `CatalogProductPublished`, #25 `OrderPaymentFailed`, #28 `RefundPaymentConfirmed`. 이름 정정 소급 후보: #33 `LicenseGranted`(RC-3). 짝 이벤트 신설: #38 `RefundExecutionFailed` ↔ design "목표 행" `RefundFailureClosed`.
+현행 20개 가운데 목표 분리안이 붙은 것: #15 `CatalogProductPublished`, #25 `OrderPaymentFailed`, #28 `RefundPaymentConfirmed`. 이름 정정: #33 `LicenseGranted` → `PurchaseRecordStored`(결정 175). 이 문서에서 `LicenseGranted`는 지금 코드의 이름이다. 짝 이벤트 신설: #38 `RefundExecutionFailed` ↔ design "목표 행" `RefundFailureClosed`.
 
 구 계약·제거 대상 22개(발행·소비 없음, P2.8). 열: 번호 · 이벤트 · (구) 사실 · 토픽 · 상태
 
 | # | 이벤트 | (구) 사실 | 토픽 | 상태 |
 |---|---|---|---|---|
-| 2 | `GameRegistered` | (구) 프로젝트 단위로 게임 심사를 요청했다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 3 | `BuildUploaded` | (구) 빌드 파일 업로드가 끝났다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 4 | `BuildValidated` | (구) 업로드 빌드가 검증을 통과했다 | `stove.studio.v1` | 구 계약(Q10, PD-20) |
-| 5 | `BuildValidationFailed` | (구) 업로드 빌드가 검증에 실패했다 | `stove.studio.v1` | 구 계약(Q10, PD-20) |
-| 6 | `SubmissionCreated` | (구) 자료·빌드 묶음의 심사를 요청했다 | `stove.studio.v1` | 구 계약(Q2, PD-20). 현행 대체: `ProjectReviewRequested`(design 이벤트 목록(리터럴)) |
-| 7 | `ReleaseScheduled` | (구) 릴리스 공개 시각을 예약했다 | `stove.studio.v1` | 구 계약(Q2, PD-20) |
-| 8 | `ReleasePublished` | (구) 재작성 전 LIVE 공개 | `stove.studio.v1` | 구 계약(Q2, PD-20). 현행 대체: `ProjectReleaseRequested` → `ProjectReleaseCompleted` |
-| 9 | `ReleaseRolledBack` | (구) 이전 릴리스로 되돌렸다 | `stove.studio.v1` | 구 계약(Q10: 실패 뒤에도 성공처럼 적재되던 뜻 미정, PD-20) |
-| 10 | `ReviewApproved` | (구) 프로젝트 단위 심사를 승인했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 11 | `ReviewRejected` | (구) 프로젝트 단위 심사를 반려했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 12 | `SubmissionReviewApproved` | (구) 제출물의 한 심사 유형을 승인했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 13 | `ReviewChangesRequested` | (구) 심사자가 자료 보완을 요청했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
-| 14 | `ReviewAppealed` | (구) 같은 심사 사건의 재검토를 시작했다 | `stove.review.v1` | 구 계약(Q2, PD-20) |
+| 2 | `GameRegistered` | (구) 프로젝트 단위로 게임 심사를 요청했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 3 | `BuildUploaded` | (구) 빌드 파일 업로드가 끝났다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 4 | `BuildValidated` | (구) 업로드 빌드가 검증을 통과했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 5 | `BuildValidationFailed` | (구) 업로드 빌드가 검증에 실패했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 6 | `SubmissionCreated` | (구) 자료·빌드 묶음의 심사를 요청했다 | `stove.studio.v1` | 제거 대상(결정 172). 현행 대체: `ProjectReviewRequested`(design 이벤트 목록(리터럴))  |
+| 7 | `ReleaseScheduled` | (구) 릴리스 공개 시각을 예약했다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 8 | `ReleasePublished` | (구) 재작성 전 LIVE 공개 | `stove.studio.v1` | 제거 대상(결정 172). 현행 대체: `ProjectReleaseRequested` → `ProjectReleaseCompleted`  |
+| 9 | `ReleaseRolledBack` | (구) 이전 릴리스로 되돌렸다 | `stove.studio.v1` | 제거 대상(결정 172) |
+| 10 | `ReviewApproved` | (구) 프로젝트 단위 심사를 승인했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 11 | `ReviewRejected` | (구) 프로젝트 단위 심사를 반려했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 12 | `SubmissionReviewApproved` | (구) 제출물의 한 심사 유형을 승인했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 13 | `ReviewChangesRequested` | (구) 심사자가 자료 보완을 요청했다 | `stove.review.v1` | 제거 대상(결정 172) |
+| 14 | `ReviewAppealed` | (구) 같은 심사 사건의 재검토를 시작했다 | `stove.review.v1` | 제거 대상(결정 172) |
 | 16 | `ProductChanged` | (구) 재작성 전 상품 마스터가 바뀌었다 | `stove.catalog.v1` | 제거 대상 |
 | 26 | `OrderCreated` | (구) 재작성 전 주문 항목·금액 고정 | `stove.order.v1` | 제거 대상 |
 | 27 | `OrderCanceled` | (구) 재작성 전 주문 취소 | `stove.order.v1` | 제거 대상 |
@@ -224,14 +223,14 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 
 | # | 지금 | 겸한 뜻 | 받는 쪽 반응 차이 | 목표 이벤트(가칭) | 받는 쪽 목표 | 근거 |
 |---|---|---|---|---|---|---|
-| SP-1 | `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)` | ① PG 거절·시도 소진으로 결제 실패가 확정됨 ② ADMIN이 PG 재조회 근거로 금융 보류 승인을 종결함 | Order는 둘 다 `FAILED`로 받지만, ②는 주문이 이미 `EXPIRED`면 `ExpiredReviewClosure`로 따로 식별해야 하고(`order:core/domain/ExpiredReviewClosure.java:17`, `PaymentResult.java:34`가 문자열 `REVIEW_CLOSED`로 판정), 고객 안내(새 주문)와 운영 기록(ADMIN·근거)이 다르다 | ① `OrderPaymentFailed`(PG·시도 실패만, `reasonCode`는 실패의 하위 분류만) ② `OrderPaymentReviewClosed`(design "목표 행") | Order `PaymentEventListener`가 두 타입을 받아 `PaymentResultMapper`에서 같은 `FAILED` 입력으로 합치되, 결과 종류 enum으로 구별해 `ExpiredReviewClosure`가 문자열 `reasonCode` 대신 그 enum을 본다 | 결정 114·115, RC-1 |
+| SP-1 | `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)` | ① PG 거절·시도 소진으로 결제 실패가 확정됨 ② ADMIN이 PG 재조회 근거로 금융 보류 승인을 종결함 | Order는 둘 다 `FAILED`로 받지만, ②는 주문이 이미 `EXPIRED`면 `ExpiredReviewClosure`로 따로 식별해야 하고(`order:core/domain/ExpiredReviewClosure.java:17`, `PaymentResult.java:34`가 문자열 `REVIEW_CLOSED`로 판정), 고객 안내(새 주문)와 운영 기록(ADMIN·근거)이 다르다 | ① `OrderPaymentFailed`(PG·시도 실패만, `reasonCode`는 실패의 하위 분류만) ② `OrderPaymentReviewClosed`(design "목표 행") | Order `PaymentEventListener`가 두 타입을 받아 `PaymentResultMapper`에서 같은 `FAILED` 입력으로 합치되, 결과 종류 enum으로 구별해 `ExpiredReviewClosure`가 문자열 `reasonCode` 대신 그 enum을 본다 | 결정 114·115·174 |
 | SP-2 | `RefundExecutionFailed`(결정 128 B안은 ADMIN 실패 종결도 이 이벤트로 보내도록 정함) | ① PG가 이 시도의 취소를 FAILED로 확정 ② ADMIN이 PG 재조회 근거(취소액 0·진행 중 취소 없음)로 자동 송신이 멈춘 시도를 실패로 종결 | Order 반응은 같음(보유권 복구 요청 + 고객 재시도). 그러나 ②는 PG 취소 ID가 없을 수 있어 `cancellationId` 칸에 다른 뜻을 넣게 되고(결정 147 문제의 예), 근거가 ADMIN 종결이다 | ① `RefundExecutionFailed` 유지(PG 확정 실패만) ② `RefundFailureClosed`(design "목표 행") | Order `RefundRestorationEventListener`가 두 타입을 받아 같은 실패 확정 입력으로 합치되 실패 근거 enum(예: `PG_CONFIRMED`·`ADMIN_CLOSURE`)을 남긴다. Settlement·License는 둘 다 소비하지 않는다 | 결정 128·147·148, RC-7 |
-| SP-3 | `LicenseGranted` | 이름은 "보유권 지급"이지만 사실은 "구매 근거(`product_license`)가 보관함 `STORED`로 생김". 라이브러리 등록(`license_registration` `ACTIVE`)은 다른 사실이며 이벤트가 없다 | Order는 "지급 확인"으로 읽어 환불 대기(`PENDING_LICENSE_GRANT`)를 푼다. 필요한 사실은 "구매 근거가 있다"이므로 반응은 맞고 이름만 틀림 | 한 뜻이므로 나누지 않고 이름 정정(가칭 `PurchaseRecordStored`, RC-3). 결정 92가 이름 유지를 정했으므로 RC-3로만 올리고 본문 표는 현 이름 유지 | 바꾸면 P2.7-4 순서(소비자 두 타입 → 발행 전환 → 옛 타입 제거) | 결정 92·93, RC-3 |
+| SP-3 | `LicenseGranted` | 이름은 "보유권 지급"이지만 사실은 "구매 근거(`product_license`)가 보관함 `STORED`로 생김". 라이브러리 등록(`license_registration` `ACTIVE`)은 다른 사실이며 이벤트가 없다 | Order는 "지급 확인"으로 읽어 환불 대기(`PENDING_LICENSE_GRANT`)를 푼다. 필요한 사실은 "구매 근거가 있다"이므로 반응은 맞고 이름만 틀림 | 한 뜻이므로 나누지 않고 이름을 `PurchaseRecordStored`로 정정(결정 175). 모듈 이름 License는 유지(결정 92) | 바꾸면 P2.7-4 순서(소비자 두 타입 → 발행 전환 → 옛 타입 제거) | 결정 92·93·175 |
 | SP-4 | `CatalogProductPublished` | ① 최초 공개(`CatalogProduct.publish`) ② 공개본 교체(`product.replace`, `contentVersion` 증가) ③ 판매 상태 변경(`RecordCatalogSaleChange`, 결정 48) ④ 노출 설정 변경(`ChangeCatalogListing`, 결정 51) | Store는 넷 다 사본 덮어쓰기로 반응. 다른 소비자가 생기면(알림·검색 색인·Download 등) "최초 공개"만 골라낼 방법이 버전 추론뿐이다 | ① `CatalogProductFirstPublished`(최초 공개. 옛 `CatalogProductPublished`는 P2.7-4로 이행 뒤 제거 — 옛 타입의 뜻을 좁혀 다시 쓰지 않는다, P2.7-2) ② `CatalogProductReleaseReplaced` ③ `CatalogProductSaleStatusChanged` ④ `CatalogProductListingChanged`. 넷 다 같은 `CatalogProductSnapshot`(전체 공개 사본 + `catalogVersion`)을 싣는다 | Store `CatalogEventListener`가 네 타입을 받아 같은 `ApplyCatalogProduct.execute(snapshot)`로 합친다(P2.3-5 버전 판정 유지) | 결정 48·51, RC-6 |
 | SP-5 | `RefundPaymentConfirmed.source`(`PG_RESPONSE`·`PG_QUERY_UNATTRIBUTED`) | ① 원결제 전액 취소가 확인됨(돈) ② 그 취소가 이 시도의 PG 취소 응답에 귀속됨(`PG_RESPONSE`일 때만) | Settlement는 ①만 필요. Order는 `source`가 `PG_RESPONSE`면 시도 성공까지 기록한다(`order:core/domain/Refund.java:239`). 귀속이 늦게 확인되면 `RefundExecutionSucceeded`로 따로 온다 — 같은 "귀속" 사실이 두 이벤트에 나뉘어 있다(원칙 ③) | ① `RefundPaymentConfirmed`(돈의 결과만, `source` 칸 제거) ② 귀속은 항상 `RefundExecutionSucceeded`로(즉시 응답이면 ①과 같은 트랜잭션에서 둘 다 적재, 늦은 응답이면 나중에 ②만) | Order는 ①로 환불 완료, ②로 시도 귀속을 기록. Settlement 변화 없음. 귀속 미확정 종결(결정 127)은 ①만 나가고 ②가 없다 | 결정 127, RC-8 |
 | SP-6 | `PaymentApproval.lastErrorCode`(이벤트 칸이 아니라 Payment 상태 칸) | 보류 사유·판매 제한 대기·마지막 오류 코드 겸함, CHECK 없음 | 이벤트로 나가지 않아 P2 범위 밖. 다만 design "목표 행" `OrderPaymentReviewClosed`가 보류 사유를 싣는다면 이 칸이 정본이 되므로 먼저 나뉘어야 한다 | Payment 모듈 스펙(보류 사유 enum + 오류 코드 칸 분리) | — | 결정 144, RC-2, MC-P4 |
-| SP-7 | `ProjectReviewWithdrawalResolved`(`ProjectWithdrawalResult.status` `String`) | ① 철회가 이겨 심사가 `WITHDRAWN`됨 ② 판정이 먼저 커밋돼 철회가 거절됨(`status`=`APPROVED`/`REJECTED`). `actor`는 철회자 또는 판정자, `feedback`은 철회 사유 또는 반려 사유(`review:core/domain/ReviewWithdrawal.java:63-68`) | Studio는 ①이면 요청을 `WITHDRAWN`·자리 해제, ②면 명령만 `DENIED`. 판정자·반려 사유는 판정 이벤트가 정본이다 | ① `ProjectReviewWithdrawn`(withdrawalId·reviewRequestId·projectId·contentVersion·productCode·withdrawnBy·withdrawalReason·withdrawnAt·requestEventId) ② `ProjectReviewWithdrawalDenied`(withdrawalId·reviewRequestId·…·`targetStatus` enum {`APPROVED`,`REJECTED`}·requestEventId) | Studio `ProjectResultListener`가 둘을 명령·요청 반영 입력으로 변환 | 결정 53·54, RC-9, T21 |
-| SP-8 | `ProjectReleaseWithdrawalResolved` | ① 공개 확정 전 철회되어 `WITHDRAWN` ② 이미 `COMPLETED`/`REJECTED`라 철회 거절. 판정 아닐 때 `actor`=문자열 `"catalog"`, `feedback`=철회 사유 또는 거절 사유(`catalog:core/domain/ReleaseWithdrawal.java:63-67`) | SP-7과 같음 | ① `ProjectReleaseWithdrawn` ② `ProjectReleaseWithdrawalDenied`(`targetStatus` enum {`COMPLETED`,`REJECTED`}) | SP-7과 같음 | 결정 57, RC-9, T21 |
+| SP-7 | `ProjectReviewWithdrawalResolved`(`ProjectWithdrawalResult.status` `String`) | ① 철회가 이겨 심사가 `WITHDRAWN`됨 ② 판정이 먼저 커밋돼 철회가 거절됨(`status`=`APPROVED`/`REJECTED`). `actor`는 철회자 또는 판정자, `feedback`은 철회 사유 또는 반려 사유(`review:core/domain/ReviewWithdrawal.java:63-68`) | Studio는 ①이면 요청을 `WITHDRAWN`·자리 해제, ②면 명령만 `DENIED`. 판정자·반려 사유는 판정 이벤트가 정본이다 | ① `ProjectReviewWithdrawn`(withdrawalId·reviewRequestId·projectId·contentVersion·productCode·withdrawnBy·withdrawalReason·withdrawnAt·requestEventId) ② `ProjectReviewWithdrawalDenied`(withdrawalId·reviewRequestId·…·`targetStatus` enum {`APPROVED`,`REJECTED`}·requestEventId) | Studio `ProjectResultListener`가 둘을 명령·요청 반영 입력으로 변환 | 결정 53·54·176, T21 |
+| SP-8 | `ProjectReleaseWithdrawalResolved` | ① 공개 확정 전 철회되어 `WITHDRAWN` ② 이미 `COMPLETED`/`REJECTED`라 철회 거절. 판정 아닐 때 `actor`=문자열 `"catalog"`, `feedback`=철회 사유 또는 거절 사유(`catalog:core/domain/ReleaseWithdrawal.java:63-67`) | SP-7과 같음 | ① `ProjectReleaseWithdrawn` ② `ProjectReleaseWithdrawalDenied`(`targetStatus` enum {`COMPLETED`,`REJECTED`}) | SP-7과 같음 | 결정 57·176, T21 |
 
 이번 점검에서 나누지 않기로 본 것: `LicenseSuspensionRequested`는 발행 지점이 5곳이지만(design 이벤트 목록 #18) 모두 "Order가 정지 요청을 등록했다"는 같은 사실이고 `refundId`·`eventId`(= `suspensionRequestEventId`)로 구별된다. `LicenseSuspended`도 환불 정지와 승인 정지(재심사 중) 모두 "정지 요청 한 건이 처리됐다"는 한 사실이고, Order가 `requestEventId`로 어느 요청인지 판정한다.
 
@@ -243,14 +242,14 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 |---|---|---|---|---|---|---|---|---|---|
 | `RefundFailureClosed` | ADMIN이 PG 재조회 근거(원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음)로 자동 송신이 멈춘 환불 시도를 실패로 종결했다 | Payment · `CloseRefundFailure`(종결과 같은 잠금 트랜잭션, P3.23-2) | **Order만** · `order-refund-restoration`(`RefundRestorationEventListener`가 `RefundExecutionFailed`와 함께 받아 같은 내부 입력으로 합침). Settlement·License는 소비하지 않음 | `stove.payment.v1` | `orderNo` | 같은 시도의 `RefundExecutionPrepared` 뒤. 한 시도에 `RefundExecutionFailed`와 둘 다 나가지 않음(I16) | 시도당 실패 사실 1건: Payment `uk_refund_execution_failure`·`refund_failure_closure.failure_event_id` 유일, Order 시도별 실패 기록 | 환불 팩토리 | 결정 128·147·148, T4 |
 | `RefundLateCancellationConfirmed` | ADMIN이 PG 재조회 근거(원결제 전액 `CANCELLED`)로, 실패로 확정된 환불 시도 뒤 실제로 일어난 전액 취소를 확인했다 | Payment · 늦은 취소 반영 서비스(가칭 `ConfirmLateCancellation`, 확인 기록과 같은 잠금 트랜잭션, P3.23-7) | Order(늦은 취소 완료 → `PurchaseRefunded`) · 그룹은 Order 모듈 스펙; Settlement(환불 조정) · `settlement-confirmed-refund`(`RefundPaymentConfirmed`와 같은 내부 입력으로 합침). License는 소비하지 않음(`PurchaseRefunded`로 회수) | `stove.payment.v1` | `orderNo` | 같은 시도의 실패 사실(`RefundExecutionFailed`·`RefundFailureClosed`) 뒤 | 시도당 하나: Payment 늦은 취소 확인 기록 유일(시도 ID), Order·Settlement Inbox | 기본 | 결정 128·157, T4 |
-| `OrderPaymentReviewClosed` | ADMIN이 PG 재조회 근거(전액 CANCELLED·FAILED·READY)로 금융 보류 승인을 종결해 이 주문 요청의 결제가 끝났다 | Payment · 승인 종결 서비스(`CloseApprovalReview`) | Order · `order-payment-result`(Completed·Failed와 **같은 그룹**: 같은 주문의 결과가 한 스레드에서 커밋 순서대로 처리된다, P2.5-1) | `stove.payment.v1` | `orderNo` | 주문 요청당 결과 하나 — `OrderPaymentCompleted`·`OrderPaymentFailed`와 배타 | Order `uk_purchase_order_result`; Payment `uk_purchase_payment_result`·`approval_closure.request_id` | 기본 | 결정 114·115, RC-1, T18 |
+| `OrderPaymentReviewClosed` | ADMIN이 PG 재조회 근거(전액 CANCELLED·FAILED·READY)로 금융 보류 승인을 종결해 이 주문 요청의 결제가 끝났다 | Payment · 승인 종결 서비스(`CloseApprovalReview`) | Order · `order-payment-result`(Completed·Failed와 **같은 그룹**: 같은 주문의 결과가 한 스레드에서 커밋 순서대로 처리된다, P2.5-1) | `stove.payment.v1` | `orderNo` | 주문 요청당 결과 하나 — `OrderPaymentCompleted`·`OrderPaymentFailed`와 배타 | Order `uk_purchase_order_result`; Payment `uk_purchase_payment_result`·`approval_closure.request_id` | 기본 | 결정 114·115·174, T18 |
 | `OrderPaymentResultRejected` | Order가 이 주문 요청의 결제 성공 결과를, 열린 최신 승인 진행 기록의 결과가 아니어서 반영하지 않았다 | Order · `ApplyPaymentResult`(거절 기록과 같은 주문 행 잠금 트랜잭션, P3.14-2) | Payment · (신설) `payment-order-result-rejection` | `stove.order.v1` | `orderNo` | 거절한 결과 뒤(인과). 결과 하나에 거절 하나 | 거절한 결과의 `eventId`: Order 거절 기록 유일 키, Payment Inbox | 기본 | 결정 153, T1 |
 | `SettlementSaleRecorded` (가칭) | Settlement가 한 주문의 매출 배분을 기록했다 | Settlement · `RecordPaidSale`(매출 기록과 같은 트랜잭션) | Order · (신설) `order-settlement-sale` | (목표) `stove.settlement.v1` | `orderNo` | `OrderPaid` 뒤. 주문당 하나 | 주문당 하나(`uk_sale_order_no`), Order Inbox | 기본 | 결정 158, T6 |
 | `SettlementRefundRecorded` (가칭) | Settlement가 한 환불의 정산 조정을 기록했다(매출 대기 환불의 반영 포함) | Settlement · `RecordConfirmedRefund`·`RecordPaidSale`(조정과 같은 트랜잭션, 결정 156) | Payment · (신설) `payment-settlement-refund` | (목표) `stove.settlement.v1` | `orderNo` | 금융 확인·늦은 취소 확인 뒤. 환불당 하나 | 환불당 하나(`uk_refund_id`), Payment Inbox | 기본 | 결정 156·157·158, T6 |
 | `LicenseRefundApplied` (가칭) | License가 전액 환불된 주문의 보유권을 회수(`REFUNDED`)했다 | License · `ApplyPurchaseRefund`(회수와 같은 트랜잭션) | Order · (신설) `order-license-refund` | `stove.license.v1` | `orderNo` | `PurchaseRefunded` 뒤. 구매 근거당 하나 | 구매 근거당 하나, Order Inbox | 기본 | 결정 157·158, T6 |
-| `CatalogProductFirstPublished` · `CatalogProductReleaseReplaced` · `CatalogProductSaleStatusChanged` · `CatalogProductListingChanged` | SP-4 ①~④ | Catalog · `PublishProjectRelease`(①②), `RecordCatalogSaleChange`(③), `ChangeCatalogListing`(④) | Store · `store-catalog-publication`(네 타입을 `ApplyCatalogProduct` 하나로 합침) | `stove.catalog.v1` | `productCode` | `catalogVersion` 순(버전 판정) | 상태 사본 예외(P2.3-5) | 기본 | 결정 48·51, RC-6, [결정 필요 PD-19], T22 |
-| `ProjectReviewWithdrawn` · `ProjectReviewWithdrawalDenied` | SP-7 ①·② | Review · `ReceiveReviewWithdrawal`·`ReceiveProjectReview` | Studio · `studio-project` | `stove.review.v1` | `productCode` | 같은 요청의 철회 요청 뒤(인과) | `withdrawalId` | 기본 | RC-9, T21 |
-| `ProjectReleaseWithdrawn` · `ProjectReleaseWithdrawalDenied` | SP-8 ①·② | Catalog · `ReceiveReleaseWithdrawal`·`PublishProjectRelease` | Studio · `studio-project` | `stove.release.v1` | `productCode` | 같은 요청의 철회 요청 뒤(인과) | `withdrawalId` | 기본 | RC-9, T21 |
+| `CatalogProductFirstPublished` · `CatalogProductReleaseReplaced` · `CatalogProductSaleStatusChanged` · `CatalogProductListingChanged` | SP-4 ①~④ | Catalog · `PublishProjectRelease`(①②), `RecordCatalogSaleChange`(③), `ChangeCatalogListing`(④) | Store · `store-catalog-publication`(네 타입을 `ApplyCatalogProduct` 하나로 합침) | `stove.catalog.v1` | `productCode` | `catalogVersion` 순(버전 판정) | 상태 사본 예외(P2.3-5) | 기본 | 결정 48·51·171(RC-6 닫음), T22 |
+| `ProjectReviewWithdrawn` · `ProjectReviewWithdrawalDenied` | SP-7 ①·② | Review · `ReceiveReviewWithdrawal`·`ReceiveProjectReview` | Studio · `studio-project` | `stove.review.v1` | `productCode` | 같은 요청의 철회 요청 뒤(인과) | `withdrawalId` | 기본 | 결정 176, T21 |
+| `ProjectReleaseWithdrawn` · `ProjectReleaseWithdrawalDenied` | SP-8 ①·② | Catalog · `ReceiveReleaseWithdrawal`·`PublishProjectRelease` | Studio · `studio-project` | `stove.release.v1` | `productCode` | 같은 요청의 철회 요청 뒤(인과) | `withdrawalId` | 기본 | 결정 176, T21 |
 | `ProjectReleaseClosed` (가칭) | ADMIN이 재시도로 풀리지 않는 공개 작업(`BLOCKED`)을 확인하고 그 출시 요청을 공개 없이 종결했다 | Catalog · 운영자 출시 종결 서비스(작업 종결과 같은 트랜잭션) | Studio · `studio-project` | `stove.release.v1` | `productCode` | 같은 요청의 `ProjectReleaseRequested` 뒤. 출시 요청당 결과 하나 — `ProjectReleaseCompleted`·`ProjectReleaseRejected`와 배타 | 출시 요청당 결과 하나(Catalog 결과 유일 키), Studio Inbox | 기본 | 결정 168, T23 |
 
 `OrderPaymentResultRejected` 본문 목표: 주문 연결값 5개(`orderNo`·`requestEventId`·`buyerSubject`·`amount`·`currency`), `rejectedResultEventId`, `paymentId`, `admissionId`(거절한 결과에 있던 값, 없으면 null), `rejectionReason`(enum: `NO_OPEN_ADMISSION` 열린 진행 기록 없음 · `ADMISSION_MISMATCH` 다른 진행 기록 · `ORDER_CLOSED` 주문이 이미 `EXPIRED`·`FAILED`·다른 결과로 `PAID`). 금액·PG 상태는 싣지 않는다 — 청구 근거의 정본은 Payment다(원칙 ③, [결정 153](../../../docs/decisions.md#late-success-rejection)).
@@ -274,7 +273,7 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | `OrderPaymentCompleted` | `admissionId` 추가(결과를 낸 승인 진행 영수증 = 시도 `approvalId`) | 선택 칸 추가 — 옛 행은 null이고 Order는 null 결과를 `PAID`로 받지 않는다(이행 방침은 T1) | I12, 원칙 ⑥ | T1 |
 | `OrderPaymentFailed` | `admissionId` 추가(접수된 시도를 끝낸 실패만 값), `reasonCode`에서 `REVIEW_CLOSED` 제거 | 칸 추가는 호환, `REVIEW_CLOSED` 제거는 SP-1 이행(P2.7-4) 뒤 | SP-1 | T1·T18 |
 | `OrderPaid` | `paymentConfirmedAt`(가칭) 추가 — Payment 승인 확정 시각(Order가 저장한 결과 시각 `resultOccurredAt` 그대로) | 선택 칸 추가 — 호환. 없으면 Settlement는 `occurredAt`으로 월을 정함 | 매출 귀속 월을 금융 확인 기준으로(결정 166, 결정 42와 대칭) | MC-S4 |
-| `RefundPaymentConfirmed` | `source` 삭제 | **비호환**(칸 삭제) — [결정 필요 PD-18]의 버전 방식으로 | SP-5 | T19 |
+| `RefundPaymentConfirmed` | `source` 삭제 | **비호환**(칸 삭제) — 새 `schemaVersion`으로(결정 170, P2.7-5 배포 순서) | SP-5 | T19 |
 | `RefundExecutionFailed` | `cancellationId`는 PG가 준 우리 취소 ID만 | 뜻 고정(지금도 같음) | 결정 147 문제 예시 | T4 |
 | Settlement `settlement_refund.source`(테이블 열) | 새 행에 의미 없는 값으로 동결, 옛 행 호환 | — | SP-5의 사본 | MC-S2 |
 
@@ -506,8 +505,8 @@ core 계약에는 공급자 이름을 쓰지 않았다. 지금 쓰는 공급자(
 | S6 결과 확정·시도 실패 통지 | 상대 상태가 이미 바뀜 | 실패 통지 때 주문에 이미 결과가 있거나 영수증이 최신이 아님 | Order 409 | Payment가 `ORDER_ADMISSION_CONFLICT` 보류(`BusinessException` catch) | ADMIN 조사·종결 | `ResolvePaymentApproval.java:84`, `Order.java:99-100` | 없음 |
 | S6 결과 확정·시도 실패 통지 | 동시 진행 | 결제 `PAID` 확정과 보류 종결이 동시에 | 종결은 잠금 안에서 결제 미확정 재확인(`CLOSURE_PAYMENT_RESOLVED`). `PAID` 커밋은 같은 트랜잭션에서 접수된 보류를 `SUCCEEDED` | 하나만 이김. `PAID`가 이기면 종결 409 | 해당 없음 | `ResolvePayment.java:160-184`(D-051), Payment 설계 종결 행 | 없음 |
 | S6 결과 확정·시도 실패 통지 | 상대 모듈 중단 | 실패 통지 중 Order 중단 / 결과 Outbox 발행 중 Kafka 중단 | 통지 HTTP 실패 / Outbox 릴레이 | 시도 `FAILURE_CONFIRMED` 유지, 다음 회차에 같은 통지 재전송(R4.14). Outbox는 보존 | Outbox `DEAD` 경보·재큐잉 | `ResolvePaymentApproval.java:97-99` | 없음 |
-| S7 승인 보류·종결 | 중복 전달 | ADMIN이 같은 종결 요청(`requestId`)을 다시 보냄 / `OrderPaymentReviewClosed` 재전달 | `approval_closure`(approvalId·requestId 유일) / Order Inbox | 최초 영수증 반환 / Order 무변화 | 해당 없음 | `ApprovalClosure.record`(V37). Order 쪽은 지금 `OrderPaymentFailed` 재전달 대조 | 이벤트 분리(RC-1) |
-| S7 승인 보류·종결 | 순서 역전 | 종결 결과가 Order에 닿기 전에 주문이 스스로 `EXPIRED` | Order 결과 반영 | 만료 유지 + 종결 사실 기록(P3.13-4) | 해당 없음 — 끝은 같은 "새 주문 안내" | `O/core/service/ApplyPaymentResult.java:47,65-72`, `Order.keepsExpiryFor`(`Order.java:147-150`) | 실패 이벤트에 종결을 실어 예외 분기를 만듦(원칙 ①, RC-1) |
+| S7 승인 보류·종결 | 중복 전달 | ADMIN이 같은 종결 요청(`requestId`)을 다시 보냄 / `OrderPaymentReviewClosed` 재전달 | `approval_closure`(approvalId·requestId 유일) / Order Inbox | 최초 영수증 반환 / Order 무변화 | 해당 없음 | `ApprovalClosure.record`(V37). Order 쪽은 지금 `OrderPaymentFailed` 재전달 대조 | 이벤트 분리(결정 174) |
+| S7 승인 보류·종결 | 순서 역전 | 종결 결과가 Order에 닿기 전에 주문이 스스로 `EXPIRED` | Order 결과 반영 | 만료 유지 + 종결 사실 기록(P3.13-4) | 해당 없음 — 끝은 같은 "새 주문 안내" | `O/core/service/ApplyPaymentResult.java:47,65-72`, `Order.keepsExpiryFor`(`Order.java:147-150`) | 실패 이벤트에 종결을 실어 예외 분기를 만듦(원칙 ①) → 목표: 전용 이벤트(결정 174) |
 | S7 승인 보류·종결 | 늦은 도착 | 근거 READY로 종결한 뒤 콘솔 승인 등으로 PG가 PAID가 됨 | 지금: 감지하지 않음(웹훅이 와도 `PENDING`이 아니면 무시) | 목표: 끝난 결제를 공급자 보장 기한까지 주기 조회하고 웹훅이 오면 조회를 앞당김. `PAID`면 결제를 다시 열지 않고 `UnlinkedCharge`(출처 `LATE_CHARGE`) 기록·보류 목록·경보·안내 청구됨([결정 154](../../../docs/decisions.md#unlinked-charge-discovery), P3.13-8·9) | 운영자가 공급자 콘솔에서 취소한 뒤 PG 근거로 기록 종결. 공급자 기한 뒤 청구는 G7 정산 대사가 마지막 안전망. 지금은 운영자가 공급자 콘솔에서만 알 수 있음 | `P/core/domain/Payment.java:174`(`requestRecheck`가 `PENDING` 아니면 반환), `ResolvePayment.java:89` | 청구된 돈이 주문·보류 어디에도 연결되지 않음(원칙 ⑤) |
 | S7 승인 보류·종결 | 상대 상태가 이미 바뀜 | 종결 요청 사이 PG가 PAID로 바뀜 | 종결의 트랜잭션 밖 재조회 | 409 `CLOSURE_PG_PAID`, 보류 유지·다음 조회 시각 복원 | 운영자가 콘솔에서 먼저 취소 | `CloseApprovalReview.refusal`·`release`(Payment 설계 종결 거절 행) | 없음 |
 | S7 승인 보류·종결 | 동시 진행 | 작업자 회차와 ADMIN 종결이 같은 시도에 | lease(`claimForClosure`) | 살아 있는 lease면 409 `APPROVAL_CLOSURE_BUSY`, 잠금 안에서 lease 소유 재확인 | 해당 없음 — ADMIN 재시도(10분 간격이라 드묾, 결정 122) | `PaymentApproval.java:106-120` | 없음 |
@@ -598,7 +597,7 @@ S14 ADMIN → Payment → Order · Settlement  늦은 취소 반영(RefundLateCa
 |---|---|---|---|---|---|---|---|
 | S1 접수 | 중복 전달 | 고객 앱이 같은 환불 POST를 두 번 보냄 | Order `RequestRefund` | 주문 행 잠금 + `uk_order_refund_order`, 기존 refundId 반환 | 해당 없음(수렴) | [표] 기존 refundId·첫 접수 시각 반환 | 없음 |
 | S1 접수 | 순서 역전 | 해당 없음 — 동기 HTTP 한 번이고 앞선 이벤트에 의존하지 않는다(`PAID`는 이미 커밋된 주문 상태) | 해당 없음 | 해당 없음 | 해당 없음 | 해당 없음 | 없음 |
-| S1 접수 | 늦은 도착 | 결제 후 3시간 59분 59초에 보낸 요청이 잠금 대기로 4시간을 넘겨 처리됨 | Order `RequestRefund` | 판정 시각은 잠금 전 수신 시각(`clock.instant()`)으로 고정 | 해당 없음 | [읽음 `RequestRefund.java:35`] 잠금 전 시각 사용 | 비교 상대가 Payment 시각(`resultOccurredAt`)이라 RC-16 |
+| S1 접수 | 늦은 도착 | 결제 후 3시간 59분 59초에 보낸 요청이 잠금 대기로 4시간을 넘겨 처리됨 | Order `RequestRefund` | 판정 시각은 잠금 전 수신 시각(`clock.instant()`)으로 고정 | 해당 없음 | [읽음 `RequestRefund.java:35`] 잠금 전 시각 사용 | 지금은 비교 상대가 Payment 시각(`resultOccurredAt`) → 목표: Order 자기 시각 `paid_at`(결정 173) |
 | S1 접수 | 상대 상태가 이미 바뀜 | 주문이 `PAID`가 아님(만료·실패) | Order `Refund.request` | 409 거절 | 해당 없음 | [표] 모든 환불 쓰기가 원주문 `PAID` 요구 | 없음 |
 | S1 접수 | 동시 진행 | 고객 접수와 다른 기기 접수가 동시에 | Order | 주문 행 비관적 잠금 → 한쪽만 생성, 다른 쪽은 기존 반환 | 해당 없음 | [표] 결정 29 하위 "동시 중복 접수" | 없음 |
 | S1 접수 | 상대 모듈 중단 | 해당 없음 — 접수는 Order 혼자 끝내고 다른 모듈을 동기 호출하지 않는다(결정 29 하위 "첫 응답") | 해당 없음 | 해당 없음 | 해당 없음 | 해당 없음 | 없음 |
@@ -718,7 +717,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | U | 구멍(`docs/domain/workflows.md`) | 목표 계약 | 목표 지키는 곳 | 남은 결정·작업 |
 |---|---|---|---|---|
 | U1 | `PENDING` 주문의 결과를 기한·`paymentId`와 대조하지 않아, 실패로 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID`·보유권·매출 | I12·I15, P3.12-1·P3.14-1·P4.2-5 | Order `Order.apply` 영수증·`admissionId` 대조 + `purchase_order.payment_admission_id` FK·CHECK; Payment 확정 트랜잭션의 시도 재확인 | 결정 153(거절 사실 `OrderPaymentResultRejected` → Payment 보류)·결정 154(`UnlinkedCharge`), T1·T5·T13 |
-| U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3(외부 PG 시각 포함, 결정 163), RC-16(결정 29 4시간 기한) |
+| U2 | 다른 모듈 시각과의 선후 비교로 판정 | I13, P4.5-1 | 식별자·잠금 판정(아래 U2 표 "목표 판정 방식"), 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지) | T3(외부 PG 시각 포함, 결정 163), ORD-0(결정 173로 Order 자기 시각) |
 | U3 | 앞 모듈 기록 → 뒤 모듈 반영의 누락을 감지하는 곳 없음 | I14, P4.3-1·P3.9-2·P3.15-5 | 결정 158: 사실을 낸 모듈의 응답 대기 게이지("정방향 응답 쌍"), 재반영은 재발행·DLT 재투입(결정 155) | 기준 시간 결정 159, 보관 결정 160, 재발행 결정 161, T6·T7 |
 | U4 | `SIMULATED` 공급자에서 Settlement가 환불 확인을 거절(DLT) | P4.3-2, P3.26-5 | 모든 공급자가 같은 `PgRefunds` 계약(검증 생략 경로 없음, 원칙 ⑦) | 결정 162(`mock-pg`·`SIMULATED` 제거, 기준 시뮬레이터 하나), T9 |
 | U5 | 늦은 `RefundExecutionSucceeded`가 정산에 반영된다는 문서와 코드 불일치 | P4.3-3, P3.26-4: Settlement는 소비하지 않는다(정산 금액은 첫 금융 확인 하나, 취소 귀속은 Settlement 자신의 PG 조회) | `settlement:api/listener/RefundEventListener.java:21`(지금 코드가 목표와 같음) | Settlement R6.2 문서 정정 MC-S2 |
@@ -730,7 +729,7 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 
 | 앞 사실 (낸 모듈) | 뒤 반영 (받는 모듈) | 응답 사실 | 세는 모듈 · 세는 기록 |
 |---|---|---|---|
-| `OrderPaid` (Order) | 구매 근거 `product_license` (License) | `LicenseGranted` (있음, 이름 정정 RC-3) | Order · `PAID`인데 구매 근거 응답 없음 |
+| `OrderPaid` (Order) | 구매 근거 `product_license` (License) | `LicenseGranted` → 목표 이름 `PurchaseRecordStored` (있음, 결정 175) | Order · `PAID`인데 구매 근거 응답 없음 |
 | `OrderPaid` (Order) | 매출 `settlement_sale` (Settlement) | (목표) 가칭 `SettlementSaleRecorded` — Settlement Outbox 켬 | Order · `PAID`인데 매출 기록 응답 없음 |
 | `PurchaseRefunded` (Order) | 보유권 `REFUNDED` (License) | (목표) 가칭 `LicenseRefundApplied` | Order · `COMPLETED`(또는 늦은 취소 완료)인데 회수 응답 없음 |
 | `RefundPaymentConfirmed`·`RefundLateCancellationConfirmed` (Payment) | 환불 조정 `settlement_refund` (Settlement) | (목표) 가칭 `SettlementRefundRecorded` | Payment · 금융 확인(또는 늦은 취소 확인)인데 조정 응답 없음 |
@@ -771,12 +770,12 @@ I1~I11은 `docs/domain/workflows.md`(I1~I11)에서 옮겼고 번호를 유지한
 | ORD-10 | `RefundAttempt.java:123` `recordCancellationSuccess` (환불 초안 목록에 없던 곳, 통합 때 코드에서 찾음) | Payment 실행 `occurredAt < startedAt`이면 거절 | Payment vs Order | 이전 시도의 성공이 새 시도에 붙는 것 | `attemptId`·`refundId`·`executionRequestEventId` 일치가 이미 막는다. 비교 지움 | Order 시계 +5초에서 `RefundExecutionSucceeded` 반영 |
 | PAY-1 | `payment:core/service/ReceiveRefundExecution.java:66` | Order 요청 `occurredAt < previous.failureConfirmedAt` 거절 | Order vs Payment | 이전 시도 실패 확정 전에 만든 재시도 | `previous.status == FAILED`·`failureEventId != null`·`findByPreviousAttemptId` 없음·`refund_execution` 잠금이 이미 지킨다(Order는 실패 반영 뒤에만 재시도를 만든다). 비교 지움 | Payment 시계 +5초에서 재시도 `RefundExecutionRequested` |
 | SET-1 | `settlement:core/domain/RefundMonthInput.java:11` | Settlement 수신 `receivedAt < confirmedAt`이면 거절 | Settlement vs Payment | 반영 월이 원래 월보다 앞서는 것(I6) | 거절하지 않는다. 반영 월 = `max(원래 월, 현재 OPEN 월)` 규칙으로 I6을 지킨다(현재 월이 원래 월보다 이르면 원래 월에 반영). 월 선택은 Settlement 잠금 아래서 한다 | KST 월 경계에서 Settlement 시계 −5초(지금 Red 예상) |
-| ORD-0 | `order:core/domain/RefundPolicy.java:9-11` + `RequestRefund.java:35` | 자동 환불: Order 수신 시각 ≤ Payment 결과 시각 + 4시간 | Order vs Payment | 결정 29 하위 "기한 시작" | 결정이 이 비교를 정했다. 바꾸지 않고 RC-16로 올린다 | — |
+| ORD-0 | `order:core/domain/RefundPolicy.java:9-11` + `RequestRefund.java:35` | 자동 환불: Order 수신 시각 ≤ Payment 결과 시각 + 4시간 | Order vs Payment | 결정 29 하위 "기한 시작"(결정 173로 바뀜) | 기한 시작을 Order가 `PAID`를 반영한 자기 시각 `paid_at`으로, 같은 Order 시계로 비교 | 시계 차이 ±5초에서 경계 건 판정이 바뀌지 않음 |
 | PG-* | `payment:core/domain/RefundExecution.java:163-165`·`:224-225`·`:276`, #166 `recordLateCancellation` | PG가 준 `requestedAt`·`cancelledAt`이 Payment 관측 시각보다 뒤면 근거 무효 | PG(외부) vs Payment | 근거 위조·오염 방지 | PG 시각은 값으로만 저장, 근거 진위는 취소 ID·결제 ID·금액·상태(결정 163). adapter `PortOneRefundCancellationGateway.java:131`의 같은 비교도 없앤다 | PG 흉내 서버 시계 +5초 |
 
 같은 모듈 시각끼리의 비교(예: #166 `RefundFailureConfirmation`의 `evidenceObservedAt ≤ occurredAt`, 둘 다 Payment 시계)는 원칙 ⑥ 위반이 아니다. 다만 받는 쪽이 보낸 쪽 불변식을 다시 검사하는 것이라 원칙 ③ 쪽에서 Order 검사는 빼는 것이 목표다(T14).
 
-위 13곳(ORD-1~ORD-10, PAY-1, SET-1 — ORD-1·ORD-5는 한 메서드 안 두 비교)이 T3의 대상이다. ORD-0은 결정 29가 정한 비교라 RC-16으로, PG-*는 결정 163으로 T3에 함께 넣는다.
+위 13곳(ORD-1~ORD-10, PAY-1, SET-1 — ORD-1·ORD-5는 한 메서드 안 두 비교)이 T3의 대상이다. ORD-0(결정 173)과 PG-*(결정 163)도 T3에 함께 넣는다.
 
 ## 품질 속성 시나리오
 

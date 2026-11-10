@@ -74,7 +74,7 @@
 
 #### P2.1 봉투
 
-1. WHEN 모듈이 이벤트를 Kafka로 내보낼 때 THEN 시스템 SHALL 토픽 = 그 이벤트 종류에 고정된 `Topics` 상수, 키 = `partitionKey`(P2.4), 값 = payload JSON, 헤더 = `eventId`(UUID, 64자 이하)·`eventType`(`EventType` 값, 60자 이하)·`occurredAt`(ISO-8601 UTC)·`schemaVersion`([결정 필요 PD-18])·`traceparent`(있을 때만)로 만든다(`common/messaging/.../outbox/OutboxRelay.java:146-157`, `common/kafka/.../EventHeaders.java`).
+1. WHEN 모듈이 이벤트를 Kafka로 내보낼 때 THEN 시스템 SHALL 토픽 = 그 이벤트 종류에 고정된 `Topics` 상수, 키 = `partitionKey`(P2.4), 값 = payload JSON, 헤더 = `eventId`(UUID, 64자 이하)·`eventType`(`EventType` 값, 60자 이하)·`occurredAt`(ISO-8601 UTC)·`schemaVersion`(이벤트 종류별 정수, 그 이벤트 본문의 모양. 헤더가 없는 옛 메시지는 1, [결정 170](../../../docs/decisions.md#schema-version-header))·`traceparent`(있을 때만)로 만든다(`common/messaging/.../outbox/OutboxRelay.java:146-157`, `common/kafka/.../EventHeaders.java`).
 2. 모든 payload SHALL 본문에 `eventId`·`occurredAt`을 담고, 헤더의 같은 이름 값과 같다. 헤더 `occurredAt`에 Outbox 적재 시각을 쓰지 않는다(원칙 ①, T25).
 3. 본문 `occurredAt`은 발행 모듈의 사실 시각이다. 소비 모듈 SHALL 이 값을 기록·표시·기간 귀속 입력으로만 쓰고, 자기 시계나 다른 모듈 시각과 선후를 비교해 이벤트를 거절·분기하는 데 쓰지 않는다(P4.5).
 4. `eventType` 값 SHALL `common/kafka/.../contract/EventType.java`의 상수만 쓴다. payload `eventType()`과 리스너 `isType(...)`은 상수를 참조하고 문자열 리터럴을 쓰지 않는다(원칙 ③, T26).
@@ -108,7 +108,7 @@
 
 1. 시스템 SHALL 파티션 키를 집합체 키로 고정한다: `stove.order.v1`·`stove.payment.v1`·`stove.license.v1` = `orderNo`, `stove.studio.v1`·`stove.review.v1`·`stove.release.v1`·`stove.catalog.v1` = `productCode`, `stove.auth.v1` = `subject`.
 2. THE 한 이벤트 종류의 파티션 키 칸 SHALL 바뀌지 않고, 같은 집합체의 모든 이벤트는 같은 키를 쓴다(`EventContractTest.sameOrderSharesPartitionKey`).
-3. WHILE 키 순서에 기대는 토픽이 운영 중이면 THEN 시스템 SHALL 그 토픽의 파티션 수를 바꾸지 않는다. 늘려야 하면 새 토픽으로 옮긴다. 토픽은 자동 생성이 아니라 선언으로 만든다(T11).
+3. WHILE 키 순서에 기대는 토픽이 운영 중이면 THEN 시스템 SHALL 그 토픽의 파티션 수를 바꾸지 않는다. 늘려야 하면 새 토픽으로 옮긴다. 토픽 이름의 `vN`은 이 파티션 수·키 규칙의 세대이고, 본문 모양 변경으로는 올리지 않는다(결정 170). 토픽은 자동 생성이 아니라 선언으로 만든다(T11).
 
 #### P2.5 순서 보장 범위
 
@@ -129,15 +129,16 @@
 #### P2.7 스키마 호환 (결정 104)
 
 1. WHILE `eventType`과 스키마 버전이 같으면 시스템 SHALL 선택 칸 추가만 허용한다. 새 칸은 없을 때 `null`로 읽히고 소비자는 모르는 칸을 무시한다(`EventContractTest.unknownFieldsAreTolerated`).
-2. 칸 삭제·이름 변경·타입 변경·뜻 변경·필수화·키 칸 변경 SHALL 같은 `eventType`·같은 버전에서 하지 않는다. 뜻이 바뀌면 새 `eventType`, 모양만 바뀌면 새 스키마 버전으로 낸다(버전을 싣는 자리 [결정 필요 PD-18]).
+2. 칸 삭제·이름 변경·타입 변경·뜻 변경·필수화·키 칸 변경 SHALL 같은 `eventType`·같은 버전에서 하지 않는다. 뜻이 바뀌면 새 `eventType`, 모양만 바뀌면 같은 `eventType`의 새 `schemaVersion`으로 낸다. 소비자는 (`eventType`, `schemaVersion`)으로 `*Mapper.from`을 고른다([결정 170](../../../docs/decisions.md#schema-version-header)).
 3. WHEN PR이 이벤트 본문이나 소비자의 중복 대조 지문을 바꾸면 THEN 그 PR SHALL 옛 본문 견본·옛 지문으로 새 소비자가 옛 메시지를 받는 테스트를 더하고, 이행 파일이 옛 행의 뜻을 옮기면 그 모듈 `migrationTest`도 같은 PR에 쓴다(결정 104).
 4. WHEN 새 `eventType`을 도입하거나 한 이벤트를 둘로 나누면 THEN 배포 순서 SHALL ① 소비자가 옛·새 타입을 모두 받는 버전 ② 발행자가 새 타입으로 바꾼 버전 ③ 옛 타입이 모든 서비스의 `outbox_event`(`PENDING`·`DEAD`)와 토픽 보존 기간에서 사라진 것을 확인한 뒤 옛 처리를 지우는 버전 순이다.
+5. WHEN 한 `eventType`의 새 `schemaVersion`을 도입하면 THEN 배포 순서 SHALL ① 소비자가 옛·새 버전을 모두 읽는 판 ② 발행자가 새 버전을 내는 판이고, 옛 버전 읽기는 옛 버전 행이 모든 서비스의 `outbox_event`와 실패 보관 표에서 사라진 뒤에만 지운다([결정 170](../../../docs/decisions.md#schema-version-header)).
 
 #### P2.8 구 계약 처리
 
 1. THE `EventType` 상수마다 design 이벤트 목록 SHALL 상태 하나를 둔다: `현행` · `구 계약`(발행·소비 없음, 유지 여부가 열려 있음) · `제거 대상`(발행·소비 없음, 유지 이유 없음) · `목표 분리안`(현행이지만 원칙 ①에 따라 나눌 것) · `목표`(아직 코드에 없음).
-2. WHEN `제거 대상` 상수를 지우면 THEN 그 PR SHALL 모든 서비스 `outbox_event`에 그 타입의 `PENDING`·`DEAD` 행이 없고 토픽·DLT 보존 기간이 지났다는 근거를 적고, 상수·payload·`EventContractTest.events()`·문서 행을 함께 지운다.
-3. WHILE 상태가 `구 계약`이면 시스템 SHALL 그 상수를 지우지도 새로 소비하지도 않는다. 유지·제거는 [결정 필요 PD-20] · T30.
+2. WHEN `제거 대상` 상수를 지우면 THEN 그 PR SHALL 모든 서비스 `outbox_event`에 그 타입의 `PENDING`·`DEAD` 행이 없고 모든 소비 모듈의 실패 보관 표(결정 160)에 그 타입 행이 없으며 토픽 보존 기간이 지났다는 근거를 적고, 상수·payload·`EventContractTest.events()`·문서 행을 함께 지운다.
+3. THE 시스템 SHALL `구 계약` 상태를 두지 않는다. 발행·소비가 없는 상수는 `제거 대상`이고 2의 절차로 지운다. 옛 기능이 다시 필요하면 그때의 사실로 새 `eventType`을 정의한다([결정 172](../../../docs/decisions.md#remove-legacy-contracts), T30).
 4. 시스템 SHALL `EventType` 상수 목록과 design 이벤트 목록 표를 대조하는 테스트를 둔다(결정 151, T27). 문자열 리터럴 이벤트가 상수로 올라온 뒤(T26) 켠다.
 
 ### P3. 모듈 간 흐름과 실패 처리
@@ -187,7 +188,7 @@
 3. IF 같은 Project·같은 `contentVersion`에 다른 스냅샷이거나 `projectId`·`productCode`·`ownerSubject` 연결이 기존 상품과 다르면 THEN Catalog SHALL 공개하지 않고 계약 위반으로 처리한다. 같은 Project의 동시 최초 공개는 재시도 가능한 경합으로, 다른 Project의 같은 코드만 계약 위반으로 판정한다(D-042).
 4. THE 공개 작업의 일시 실패 SHALL 같은 요청으로 5·15·30·60초 간격 재시도하며 새 요청 ID로 바꾸지 않는다([Catalog R10.3](../catalog/requirements.md)).
 5. IF 공개 작업이 재시도로 성공할 수 없는 실패(계약 위반·식별 충돌)이면 THEN Catalog SHALL 그 작업을 재시도 대기(`PENDING`)와 구분되는 정지 상태(`BLOCKED`)로 두고 1건부터 경보한다. 분류는 공통 영구 실패 분류(T20)와 같다. WHEN ADMIN이 원인을 고쳐 재개하면 THEN Catalog SHALL 작업을 `PENDING`으로 되돌린다. WHEN ADMIN이 종결하면 THEN Catalog SHALL 그 출시 요청을 공개 없이 끝내고 같은 트랜잭션에서 운영자 종결 전용 이벤트(가칭 `ProjectReleaseClosed`)를 낸다. `ProjectReleaseRejected`의 `reason`에 싣지 않는다. WHEN Studio가 그 사실을 받으면 THEN Studio SHALL 출시 요청을 끝내고 활성 출시 자리를 푼다([결정 168](../../../docs/decisions.md#publication-blocked-closure), T23).
-6. WHEN 공개 사본이 바뀌면 THEN Catalog SHALL 같은 트랜잭션 Outbox에 사실별 공개 사본 이벤트(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`, 판매·노출 변경은 `CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`)를 기록하고, 모두 그 시점의 공개 사본 전체와 `catalogVersion`을 싣는다. 나눌지 상태 전달 이벤트 하나로 이름만 바꿀지는 [결정 필요 PD-19] · T22.
+6. WHEN 공개 사본이 바뀌면 THEN Catalog SHALL 같은 트랜잭션 Outbox에 사실별 공개 사본 이벤트(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`, 판매·노출 변경은 `CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`)를 기록하고, 모두 그 시점의 공개 사본 전체와 `catalogVersion`을 싣는다. Store는 네 타입을 `api.listener`에서 같은 내부 입력으로 바꿔 하나의 반영 경로로 합친다. 이행은 P2.7-4 배포 순서를 따른다([결정 171](../../../docs/decisions.md#catalog-copy-events-by-fact), T22).
 7. THE `catalogVersion` SHALL 상품마다 단조 증가하고 현재 공개본 `contentVersion`보다 작지 않다(`catalog:core/domain/CatalogProduct.java:133·148`).
 
 #### P3.6 출시 결과 기록 (Catalog → Studio)
@@ -244,7 +245,7 @@
 1. WHEN 설명되지 않는 금융 상황(보류 사유 8개: `PAID_WITHOUT_ADMISSION`·`PG_REQUEST_REJECTED`·`PG_INVALID_EVIDENCE`·`ORDER_ADMISSION_CONFLICT`·`ORDER_EXPIRY_CONFLICT`·`PG_CANCELLED`·`CONFIRM_WINDOW_EXPIRED`·`PG_PENDING_AT_ORDER_EXPIRY`)이 처음 생기면 THEN Payment SHALL 그 시도의 확정 송신을 멈추고 `REVIEW_REQUIRED`로 바꾼다. 사유별 조건·사유 유지·재조회 간격·고객 안내(`reviewNotice`)·ADMIN 목록·경보는 Payment 모듈 규칙이다([Payment R12·R13](../payment/requirements.md), 결정 114·122·123·132·144, 사유 표 이관 MC-P12).
 2. 시스템 SHALL 보류를 이유로 PG 취소를 실행하지 않는다. 돈을 되돌리는 일은 운영자가 결제 공급자 콘솔에서 하고, 시스템은 PG 재조회로 결과를 확인만 한다(결정 114·115).
 3. WHEN ADMIN이 보류 종결(`POST /api/v1/admin/approval-reviews/{approvalId}/closure`)을 요청하면 THEN Payment SHALL 트랜잭션 밖 PG 재조회 근거가 전액 CANCELLED·FAILED·READY일 때만 종결하고, PAID·PENDING·조회 실패·결제 이미 확정이면 409로 거절하고 보류를 그대로 둔다(결정 115).
-4. WHEN 종결이 허용되면 THEN Payment SHALL 시도를 `FAILED`로 닫고 운영자·요청 ID·PG 근거를 `approval_closure`에 남기며, 결제·주문을 다음과 같이 끝낸다(같은 주문 재결제 없음, 고객은 새 주문). (a) 접수된 시도 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` 포함) → 주문 `FAILED`. (b) 접수 전 시도 + 만료 사실 있음 → 결제 `EXPIRED`, 이벤트 없음. (c) 접수 전 시도 + 만료 사실 없음 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` null) → 주문 `PENDING → FAILED`. IF `OrderPaymentReviewClosed`가 이미 `EXPIRED`인 주문에 오면 THEN Order SHALL 만료를 유지하고 종결 사실만 기록한다(결정 115. 전용 이벤트는 소급 RC-1, T18).
+4. WHEN 종결이 허용되면 THEN Payment SHALL 시도를 `FAILED`로 닫고 운영자·요청 ID·PG 근거를 `approval_closure`에 남기며, 결제·주문을 다음과 같이 끝낸다(같은 주문 재결제 없음, 고객은 새 주문). (a) 접수된 시도 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` 포함) → 주문 `FAILED`. (b) 접수 전 시도 + 만료 사실 있음 → 결제 `EXPIRED`, 이벤트 없음. (c) 접수 전 시도 + 만료 사실 없음 → 결제 `FAILED`, `OrderPaymentReviewClosed`(`admissionId` null) → 주문 `PENDING → FAILED`. IF `OrderPaymentReviewClosed`가 이미 `EXPIRED`인 주문에 오면 THEN Order SHALL 만료를 유지하고 종결 사실만 기록한다(결정 115, 전용 이벤트는 [결정 174](../../../docs/decisions.md#review-closed-event), T18).
 5. WHEN 접수된 시도가 확정 송신 기한을 넘겼고 PG가 PENDING·READY이면 THEN Payment SHALL `CONFIRM_WINDOW_EXPIRED`로 보류하고 실패·새 멱등 키·새 결제를 만들지 않으며, 그 뒤 PG PAID·FAILED가 오면 원래 주문으로 끝낸다(결정 124).
 6. WHEN 접수 전 시도가 만료 사실을 받으면 THEN Payment SHALL PG 관측 이력이 없으면 PG를 부르지 않고 시도·결제를 `EXPIRED`로 닫고, 이력이 있으면 PG를 한 번 조회해 PAID → `PAID_WITHOUT_ADMISSION`, 전액 CANCELLED → `PG_CANCELLED`, PENDING → `PG_PENDING_AT_ORDER_EXPIRY`로 보류하며, READY·FAILED면 잠금 안에서 `REQUESTED`를 다시 확인한 뒤 닫는다(결정 126, D-044).
 7. WHEN Payment가 `OrderPaymentResultRejected`를 처음 받으면 THEN Payment SHALL 거절된 결과를 낸 결제에 대해 9의 기록(출처 `ORDER_REJECTED`)을 만들고, PG 취소를 실행하지 않는다(2와 같음). 그 결제에 이미 보류나 기록이 있으면 처음 사유를 유지하고 사실만 더한다(결정 144). 세부 전이·안내 코드는 Payment 모듈 규칙이다([결정 153](../../../docs/decisions.md#late-success-rejection), MC-P13).
@@ -261,7 +262,7 @@
 
 #### P3.15 구매 근거와 매출 (Order → License · Settlement)
 
-1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실(지금 이름 `LicenseGranted`, 이름 정정은 소급 RC-3) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
+1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실 `PurchaseRecordStored`(지금 이름 `LicenseGranted`, [결정 175](../../../docs/decisions.md#purchase-record-stored)) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
 2. WHEN Order가 구매 근거 생성 사실을 처음 받으면 THEN Order SHALL 주문이 `PAID`이고 구매자·상품·`paymentId`가 같을 때만 `order_license_grant`를 저장한다(환불 흐름의 입력, P3.17).
 3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaid`의 가칭 `paymentConfirmedAt` — Order가 `OrderPaymentCompleted.occurredAt`을 그대로 전달)의 KST 월이고, 그 칸이 없는 옛 `OrderPaid`는 `occurredAt`을 쓴다. 환불 귀속 월(결정 42)과 같은 금융 확인 기준이다([결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)).
 4. IF 매출 기록에 필요한 외부 조회가 실패하거나 대조가 어긋나면 THEN Settlement SHALL 원장·Inbox·월 합계를 만들지 않고 공통 재시도를 받으며, 소진하면 DLT에 원본 그대로 남긴다.
@@ -271,7 +272,7 @@
 
 1. WHEN 고객이 `POST /api/v1/orders/{orderNo}/refund`를 보내면 THEN Order SHALL 주문 행 잠금 뒤 본인·`PAID`·환불 없음을 확인하고 `order_refund` 한 행을 저장한 다음 응답한다. 정지·PG 실행은 응답 뒤 비동기로 진행한다(결정 29).
 2. IF 같은 주문에 이미 환불이 있으면 THEN Order SHALL 새 환불을 만들지 않고 기존 `refundId`와 첫 접수 시각을 돌려준다(`uk_order_refund_order`).
-3. WHEN 접수가 자동 환불 기한(4시간) 안이면 THEN Order SHALL `automaticRefundEligible=true`로 저장하고 지급 확인 단계로 보내고, 밖이면 `PENDING_REVIEW`로 저장한다. 기한 시작 시각은 결정 29 하위 "Payment 최초 결제 확정 시각"을 따른다(원칙 ⑥과 부딪혀 소급 RC-16).
+3. WHEN 접수가 자동 환불 기한(4시간) 안이면 THEN Order SHALL `automaticRefundEligible=true`로 저장하고 지급 확인 단계로 보내고, 밖이면 `PENDING_REVIEW`로 저장한다. 기한 시작은 Order가 결제 결과를 받아 주문을 처음 `PAID`로 바꾼 자기 시각(가칭 `paid_at`)이고, 같은 Order 시계의 접수 시각과 비교한다. Payment 확정 시각은 값으로만 남는다([결정 173](../../../docs/decisions.md#refund-window-order-clock), 결정 29의 "기한 시작"을 바꿈).
 4. WHILE 환불이 `PENDING_REVIEW`이면 Order SHALL 보유권을 정지하지 않는다. ADMIN 판정은 회차별로 먼저 커밋된 것만 확정한다.
 
 #### P3.17 지급 확인 대기 (License → Order)

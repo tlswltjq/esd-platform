@@ -248,7 +248,7 @@
 - 내 의견: "라이선스와 페이먼트는 별개의 서비스라 신뢰하지 않도록 하는것이 기본전재일텐데 그렇다면 외부에서 마구잡이로 들어오는 환불요청에 대해서 계속 메시지 큐나 어딘가에 들고 보관해야하잖아. … 근거를 order가 이미 가지고 있으므로 Order가 지급확인을 기다리는 방식이 좋을것같은데"
 - 선택: B — 검증한 주문을 가진 Order에 대기·재개 책임을 모은다. 비용: 지급부터 정지 반영까지 짧은 접근 틈이 남고, 지급 확인의 지연·누락이 환불을 지연시킨다. 발행자 인증·임의 식별자 폭주는 이 선택으로 막았다고 주장하지 않는다.
 - 구분: AI 주장 정정
-- 결과: [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md), [PG 연동·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md), 남은 질문은 [Q9](domain/open-questions.md#q9)
+- 결과: [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md), [PG 연동·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md), 남은 질문은 [Q9](domain/open-questions.md#q9) 하위 결정 "기한 시작"은 [결정 173](#refund-window-order-clock)으로 바뀌었다(Order가 `PAID`를 반영한 자기 시각).
 - 하위 결정(쟁점: 선택 — 구분 · 내 의견):
   - 요청·승인 주체: 결제 확정 후 n시간 내 자동 환불, 초과는 관리자 승인/반려 — 직접 제안 · "A, 구매후 n시간 이내면 조건없이 환불. n시간 초과시 관리자 승인/반려"
   - 기한 시작: Payment 최초 결제 확정 시각(License 지급 시각 기각) — 사용자 선택(추천 없음) · "사용자의 입장에선 License의 보유권 지급 시각이 가장 좋겠지만 책임의 범위를 생각해본다면 payment를 기준으로 하는것이 좋다고 생각."
@@ -856,7 +856,7 @@
 - 내 의견: "이름 유지하도록 하자"
 - 선택: 이름을 바꾸지 않는다 — 제시한 세 안 모두 고르지 않았다. 이유(맥락으로 추정): 이름 변경은 222개 파일·5개 모듈 계약에 걸치는 반면 얻는 것은 이름의 정확성뿐이라, P4 범위를 넓히지 않고 맡은 일은 스펙 설명으로 드러내는 편을 택했다. 결과: 이름 변경 비용이 없고 P4 PR에 진짜 변경만 남는다. 모듈 이름(License)과 맡은 일(보관함·라이브러리)이 다르게 읽힐 수 있어 스펙의 책임 설명으로 보완한다.
 - 구분: 추천과 다른 선택
-- 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116), 근거 색인 2026-11-06 license·order 행
+- 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116), 근거 색인 2026-11-06 license·order 행 이벤트 이름 `LicenseGranted`는 [결정 175](#purchase-record-stored)로 `PurchaseRecordStored`로 바뀐다(모듈 이름 License는 그대로).
 
 <a id="register-after-payment-choice"></a>
 ## 93. 결제가 끝나면 보관함에 넣고, 고객이 라이브러리 등록을 고른다
@@ -1064,7 +1064,7 @@
 - 내 의견: "B로 해, 주문을 끝내고 새 주문 안내"
 - 선택: B — ADMIN이 종결을 요청하면 시스템이 PG를 다시 조회해 근거를 확인한다. 근거가 맞으면 승인을 끝내고, 주문은 `FAILED`(또는 이미 `EXPIRED`)로 끝난다. 같은 주문은 다시 결제할 수 없고, 고객은 새 주문으로 안내한다. PAID면 종결하지 않는다. 시스템은 PG 취소를 실행하지 않는다. 승인 관측에 전액 CANCELLED를 더하되, 운영자 종결 없이 저절로 닫지는 않는다. 재조회 간격 값과 고객 안내 문구는 따로 정한다.
 - 구분: 추천 수용
-- 결과: (진행 중)
+- 결과: (진행 중) 종결 결과의 전달 이벤트는 [결정 174](#review-closed-event)로 전용 이벤트 `OrderPaymentReviewClosed`로 바뀌었다(정책은 그대로).
 
 <a id="decision-numbers"></a>
 ## 116. 결정 번호는 main의 다음 번호를 쓰고, CI가 번호 중복·순서와 링크 번호를 막는다
@@ -1665,6 +1665,90 @@
   - 기한 직후 약 1초 안에 결제를 시작한 고객은 인증 뒤 만료 안내를 받을 수 있다. 돈은 나가지 않고 새 주문으로 안내한다.
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 2차 PR. P3.10-2, design 흐름 2 S2·S3 행, tasks T12
+
+<a id="schema-version-header"></a>
+## 170. 이벤트 본문 모양의 버전은 헤더 `schemaVersion`에, 토픽 이름의 `vN`은 파티션 수·키 규칙의 세대로 뜻을 나눈다
+- 문제: 토픽 이름에 `v1`이 붙어 있고 `Topics.java` 주석은 이를 "스키마 버전"이라 하지만, 한 토픽에 여러 이벤트 종류가 함께 있어 한 종류의 본문만 바꿔도 토픽 전체를 옮겨야 한다. 헤더·Outbox에는 버전 칸이 없다(플랫폼 tasks T25). 결정 104는 호환 테스트 시점만 정했고 호환되지 않는 변경을 어떻게 내보낼지는 정하지 않았다. 예: 결정 164로 `RefundPaymentConfirmed.source`를 빼려면 토픽 버전만으로는 `stove.payment.v2`로 Payment 이벤트 7종을 모두 옮기고 소비 그룹을 바꿔야 하며, 옮기는 경계에서 같은 키 순서(결정 155)가 끊긴다(플랫폼 스펙 PD-18).
+- 선택지: A 토픽 이름 버전만 / B 헤더 `schemaVersion`만, 토픽 이름은 고정 / C 둘 다 — 헤더 `schemaVersion` = 그 이벤트 본문 모양, 토픽 `vN` = 파티션 수·키 규칙 세대 (추천: C — 이름 하나에 뜻 하나(원칙 ①)이고, 본문 변경이 토픽 이행을 부르지 않아 같은 키 순서가 유지된다. B는 같은 일을 하지만 지금 `.v1`의 뜻이 정해지지 않은 채 남는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "C로 헤더는 본문 모양, 토픽은 파티션 세대로 나눠")
+- 선택: C
+  - 모든 이벤트는 헤더 `schemaVersion`(이벤트 종류별 정수, 1부터)을 싣는다. Outbox에 `schema_version`을 저장하고 릴레이가 헤더로 낸다. 헤더가 없는 옛 메시지는 버전 1로 읽는다.
+  - 소비자는 (`eventType`, `schemaVersion`)으로 `*Mapper.from`을 고른다. 모양만 바뀌면(칸 삭제·이름·타입 변경·필수화) 같은 `eventType`의 새 버전으로 내고, 뜻이 바뀌면 새 `eventType`으로 낸다(P2.7-2).
+  - 배포 순서는 새 `eventType`과 같다: 소비자가 옛·새 버전을 모두 읽는 판을 먼저 내고, 그다음 발행자가 새 버전을 낸다. 옛 버전 읽기는 옛 버전 행이 모든 Outbox·실패 보관 표에서 사라진 뒤에만 지운다.
+  - 토픽 이름의 `vN`은 파티션 수와 키 규칙의 세대다. 파티션을 늘리거나 키 규칙을 바꿀 때만 올린다(P2.4-3). `Topics.java` 주석을 이 뜻으로 고친다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P2.1-1·P2.7-2·P2.7-5·P2.4-3, design 이벤트 수명·칸 변경 목표 표, tasks T19·T25
+
+<a id="catalog-copy-events-by-fact"></a>
+## 171. Catalog 공개 사본 이벤트를 사실별 4개로 나누고, 같은 반응으로 합치는 일은 Store 리스너가 한다
+- 문제: `CatalogProductPublished` 하나가 최초 공개·공개본 교체·판매 상태 변경·노출 변경을 모두 뜻한다(결정 48·51). 본문은 그 시점의 공개 사본 전체와 `catalogVersion`이라 Store는 원인과 무관하게 같은 반응을 한다. 판매를 중지해도 `CatalogProductPublished`가 나가므로, "새로 공개된 게임" 알림 같은 새 소비자가 생기면 판매 중지를 새 공개로 읽는다(플랫폼 스펙 PD-19, 소급 후보 RC-6).
+- 선택지: A 사실별 4개(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`·`CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`), 본문은 모두 `CatalogProductSnapshot`, Store 리스너가 `ApplyCatalogProduct` 하나로 합침 / B 상태 전달 이벤트 하나로 이름만 바꿈(`CatalogProductPublicCopyChanged`) / C 지금대로 (추천: A — 원칙상 A·B 모두 성립한다고 밝힌 뒤, 원칙 ①의 마지막 문장 "받는 쪽이 같은 반응을 하더라도 합치는 일은 받는 쪽의 `api.listener` 변환에서 한다"가 바로 이 경우라 추천. C는 원칙 ① 위반)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 사실별 4개 이벤트로 나눠")
+- 선택: A
+  - Catalog는 공개 사본이 바뀌는 트랜잭션에서 원인에 맞는 이벤트 하나를 낸다: 최초 공개 `CatalogProductFirstPublished`, 공개본 교체 `CatalogProductReleaseReplaced`, 판매 상태 변경 `CatalogProductSaleStatusChanged`, 노출 변경 `CatalogProductListingChanged`. 본문은 모두 그 시점의 공개 사본 전체(`CatalogProductSnapshot`)와 `catalogVersion`이다.
+  - Store는 네 타입을 `api.listener`에서 같은 내부 입력으로 바꿔 `ApplyCatalogProduct` 하나로 반영한다(버전 규칙 그대로).
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다: Store가 옛·새 타입을 모두 받는 판 → Catalog가 새 타입을 내는 판 → 옛 타입이 모든 Outbox·실패 보관 표에서 사라진 뒤 옛 소비 제거.
+  - 결정 48·51의 "판매·노출 변경을 공개 사본 이벤트로 전달한다"는 전달 방식은 유지하고 이벤트 종류만 나눈다. 소급 후보 RC-6은 이 결정으로 닫는다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P3.5-6, design 이벤트 목표 행(SP-4), tasks T22
+
+<a id="remove-legacy-contracts"></a>
+## 172. 발행·소비가 없는 Studio·Review 구 계약 이벤트 13개를 제거한다
+- 문제: 플랫폼 스펙 이벤트 목록 #2~#14(`GameRegistered`·`BuildUploaded`·`BuildValidated`·`BuildValidationFailed`·`SubmissionCreated`·`ReleaseScheduled`·`ReleasePublished`·`ReleaseRolledBack`·`ReviewApproved`·`ReviewRejected`·`SubmissionReviewApproved`·`ReviewChangesRequested`·`ReviewAppealed`)는 발행 코드도 소비 코드도 없다. 현행 출시·심사 흐름은 `Project*` 이벤트다. 열린 질문 Q2(옛 프로젝트 단위 심사 경로를 호환용으로 둘지)·Q10(`ReleaseRolledBack`의 성공 의미) 때문에 남아 있었다. 리뷰어나 새 개발자가 `SubmissionReviewApproved`를 현행 계약으로 읽고 소비자를 붙이면 영원히 오지 않는 이벤트를 기다린다(플랫폼 스펙 PD-20).
+- 선택지: A 13개 유지(구 계약 표시만) / B P2.8-2 절차로 제거, Q2는 "제거"로 닫고 Q10의 롤백 사실은 롤백 기능을 다시 만들 때 새 이벤트로 정의 / C 제거하되 Q10 관련 4개는 Q10 결정까지 유지 (추천: B — 코드가 없는 계약이 목록에 있으면 현행 계약의 정본이 둘이 되고(원칙 ③), 다시 필요하면 그때의 사실로 새로 정의하는 편이 옛 칸을 되살리는 것보다 맞다(원칙 ①))
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 구 계약 13개를 제거해")
+- 선택: B
+  - 13개를 플랫폼 스펙 P2.8-2 절차로 지운다: 모든 서비스 `outbox_event`와 모든 소비 모듈의 실패 보관 표(결정 160)에 그 타입 행이 없고 토픽 보존 기간이 지났다는 근거를 PR에 적고, `EventType` 상수·payload·`EventContractTest.events()`·문서 언급을 지운다. 이미 "제거 대상"인 9개(#16 등)와 결정 164의 `RefundExecutionSucceeded`도 같은 절차로 지운다.
+  - 열린 질문 Q2는 "제거"로 닫는다. Q10의 롤백 사실은 롤백 기능을 다시 만들 때 그때의 사실로 새 이벤트를 정의한다. Q10의 나머지(빌드 검증·공개 직전 검사의 보장 범위)는 열린 채로 둔다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P2.8-3, design 이벤트 목록 #2~#14·상태 집계, tasks T30, `docs/domain/open-questions.md` Q2·Q10
+
+<a id="refund-window-order-clock"></a>
+## 173. 자동 환불 4시간 기한은 Order가 결제 결과를 받아 `PAID`로 반영한 자기 시각부터 잰다(결정 29 하위 "기한 시작"을 다시 고름)
+- 문제: 결정 29는 자동 환불 기한의 시작을 "Payment 최초 결제 확정 시각"으로, 판정 시각을 "서버가 내구 접수한 시각"으로 정했다. 구현(`RefundPolicy.isWithinAutomaticRefundWindow`, `RefundPolicy.java:9-12`, `RequestRefund.java:35`)은 Payment가 찍은 확정 시각(`resultOccurredAt`)과 Order가 찍은 접수 시각을 비교한다. 서로 다른 서버의 시계를 비교하므로 판단 원칙 ⑥(결정 147·163)에 어긋난다. 4시간 경계 근처 건은 시계 차이 몇 초~몇 분으로 자동 환불과 심사 환불이 갈린다(소급 후보 RC-16).
+- 선택지: A Order가 결제 결과를 받아 `PAID`로 반영한 자기 시각을 기한 시작으로(같은 Order 시계로 접수 시각과 비교) / B Payment가 기한 끝(`refundableUntil`)을 값으로 보내고 Order가 자기 접수 시각과 비교 / C 지금대로 두고 원칙 ⑥ 예외로 명시 (추천: A — 결정 29의 의도는 "License 지급이 아니라 결제 확정을 기준으로"였고 A도 그 사건을 기준으로 하되 Order가 받은 자기 시각을 쓴다. B는 비교를 옮길 뿐 원칙 ⑥을 어기고, C는 넓힌 원칙 ⑥ 안에 예외를 만든다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 Order가 PAID를 반영한 시각부터 재")
+- 선택: A — 결정 29의 하위 결정 "기한 시작: Payment 최초 결제 확정 시각"을 이 결정으로 바꾼다. 결정 29의 나머지(판정은 서버가 내구 접수한 시각, 4시간, 정확히 4시간까지 포함)는 그대로다.
+  - Order는 결제 결과를 받아 주문을 처음 `PAID`로 바꾸는 트랜잭션에서 자기 시계 시각(가칭 `purchase_order.paid_at`)을 저장한다. 자동 환불 자격은 같은 Order 시계의 접수 시각 ≤ `paid_at` + 4시간이다.
+  - Payment 확정 시각(`resultOccurredAt`)은 값으로만 남는다(매출 귀속 월, 결정 166).
+  - 정상일 때 차이는 Order 소비 지연(몇 초)이다. 장애로 늦어지면 기한이 그만큼 늦게 시작하며 고객에게 유리한 쪽이다.
+  - 옛 `PAID` 행의 `paid_at` 채우기는 Order 모듈 스펙의 이행 계획에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P3.16-3, design 흐름 3 S1 행·U2 ORD-0, tasks T3
+
+<a id="review-closed-event"></a>
+## 174. 운영자의 승인 보류 종결은 전용 이벤트 `OrderPaymentReviewClosed`로 낸다(결정 115 B의 전달 방식을 다시 고름)
+- 문제: 결정 115 B는 운영자가 PG 근거로 승인 보류를 종결한 결과를 `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)`에 실었다. 이유는 "Order는 이미 `OrderPaymentFailed`를 `FAILED`로 받으므로 계약을 바꾸지 않는다"(비용)였다. 그래서 이벤트 하나가 "PG가 최종 거절했다"와 "운영자가 PG 근거로 종결했다"를 함께 뜻하고, Order는 사유 문자열로 만료 예외를 분기한다(`Order.keepsExpiryFor`, `ApplyPaymentResult.java:65-72`, V31 `ExpiredReviewClosure`)(소급 후보 RC-1).
+- 선택지: 전용 이벤트 `OrderPaymentReviewClosed`로 바꿈 / 결정 115대로 `OrderPaymentFailed`에 둠 (확인 질문 — 원칙 ①로 방향이 정해지고 업무 결과는 같다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "전용 이벤트 OrderPaymentReviewClosed로 바꿔")
+- 선택: 전용 이벤트 — 결정 115의 업무 정책(PG 근거로만 종결, 주문 `FAILED`·새 주문 안내, 이미 만료된 주문은 만료 유지 + 종결 사실 기록)은 그대로이고 전달 이벤트만 바꾼다.
+  - Payment는 종결 결과를 `OrderPaymentReviewClosed`(`admissionId`는 접수된 시도일 때만, 결정 153)로 낸다. `OrderPaymentFailed`는 PG 최종 거절만 뜻한다.
+  - Order 리스너는 두 타입을 받아 결과 종류 enum으로 구별하고, `ExpiredReviewClosure`는 문자열 `reasonCode` 대신 그 enum을 본다.
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따르고, 끝나면 `OrderPaymentFailed`의 `REVIEW_CLOSED` 사유를 없앤다.
+- 구분: 추천 수용(AI가 원칙 ①로 제시한 확인 질문)
+- 결과: 플랫폼 스펙 3차 PR. P3.13-4, design SP-1·목표 행·흐름 2 S7 행, tasks T18
+
+<a id="purchase-record-stored"></a>
+## 175. `LicenseGranted` 이벤트 이름을 실제 사실에 맞게 `PurchaseRecordStored`로 바꾸고, 모듈 이름 License는 그대로 둔다
+- 문제: License는 `OrderPaid`를 받아 구매 근거(`product_license`)를 보관함 상태 `STORED`로 만들고 `LicenseGranted`를 낸다. 결정 93 이후 보유권 등록(`license_registration` `ACTIVE`)은 별도 단계라, 이 이벤트의 실제 사실은 "보유권 지급"이 아니라 "구매 근거가 보관함에 생겼다"다. Order `ApplyLicenseGrant`의 반응(지급 확인)은 맞지만 새 소비자가 이름을 보고 "보유권 활성화"로 오해할 수 있다. 결정 92에서 모듈 이름을 유지하며 이벤트 이름도 함께 유지됐고, 그 이유는 이름 변경 범위(222개 파일)였다(소급 후보 RC-3).
+- 선택지: A 이벤트 이름만 `PurchaseRecordStored`(가칭)로, 모듈 이름 License·토픽 `stove.license.v1`은 유지 / B 결정 92대로 모두 유지하고 뜻은 스펙 설명으로 보충 / C 모듈 이름까지 Library로 (추천: A — 모듈 사이 계약인 이벤트 이름은 사실을 그대로 말해야 한다(원칙 ①). 모듈 이름은 모듈 안쪽 이름표라 원칙 ① 대상이 아니므로 결정 92의 선택은 존중한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 이벤트 이름만 PurchaseRecordStored로 바꿔")
+- 선택: A — 결정 92의 모듈 이름 유지는 그대로다.
+  - 이벤트 종류 이름을 `PurchaseRecordStored`로 바꾼다. 결과 상태 `PurchaseStatus.STORED`와 같은 이름이다. 본문·키·소비 그룹·업무 반응은 그대로다.
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다: Order가 옛·새 타입을 모두 받는 판 → License가 새 타입을 내는 판 → 옛 타입이 모든 Outbox·실패 보관 표에서 사라진 뒤 옛 소비 제거. 재발행 허용 목록(결정 161)도 표에서 생성되므로 같이 바뀐다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P3.15-1, design 이벤트 목록 #33·SP-3·정방향 응답 쌍, tasks T33
+
+<a id="withdrawal-result-events"></a>
+## 176. 심사·출시 철회 결과는 "철회됨"과 "철회 실패"를 다른 이벤트로 낸다
+- 문제: 창작자의 심사·출시 철회는 "먼저 커밋된 결과"를 따른다(결정 53·54·57). 결과는 `ProjectReviewWithdrawalResolved`·`ProjectReleaseWithdrawalResolved` 하나로 나가고, 본문 `ProjectWithdrawalResult`의 `status`(문자열)는 철회 성공이면 `WITHDRAWN`, 실패면 대상의 판정 결과(`APPROVED`·`REJECTED`·`COMPLETED`)를 담는다. `actor`·`feedback`도 철회 결과와 심사 판정을 번갈아 담고 Catalog는 `actor`에 `"catalog"`를 넣는다. Studio는 `status` 문자열로 사실을 가른다(`ProjectResultListener.java:33-49`). 이 형식을 정한 결정 번호는 확인하지 못했다(소급 후보 RC-9).
+- 선택지: 철회됨(`…Withdrawn`)과 철회 실패(`…WithdrawalDenied`, `targetStatus` enum)로 나눔 / 지금처럼 `…WithdrawalResolved` 하나로 둠 (확인 질문 — 원칙 ①로 방향이 정해지고 정책은 같다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "철회 결과를 Withdrawn과 WithdrawalDenied로 나눠")
+- 선택: 나눈다 — 철회 정책(먼저 커밋된 결과 유지)은 그대로다.
+  - Review는 `ProjectReviewWithdrawn` 또는 `ProjectReviewWithdrawalDenied`(`targetStatus` ∈ {`APPROVED`,`REJECTED`})를, Catalog는 `ProjectReleaseWithdrawn` 또는 `ProjectReleaseWithdrawalDenied`(`targetStatus` ∈ {`COMPLETED`,`REJECTED`})를 낸다. 실패 이벤트는 대상 판정의 `actor`·`feedback`을 싣지 않는다(그 사실은 판정 결과 이벤트가 이미 싣는다).
+  - Studio 리스너는 네 타입을 명령·요청 반영 입력으로 변환한다. 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다.
+- 구분: 추천 수용(AI가 원칙 ①로 제시한 확인 질문)
+- 결과: 플랫폼 스펙 3차 PR. design SP-7·SP-8·목표 행, tasks T21
 
 ---
 
