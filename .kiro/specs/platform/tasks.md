@@ -14,8 +14,7 @@
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
   - 닫힘 — PD 결정이 이미 답함: RC-6(결정 171), RC-8(결정 164·170), RC-10(결정 167), RC-11(결정 168), RC-12(결정 158·159), RC-15(결정 162), RC-19(결정 158·161 — 지키는 곳은 응답 대기 게이지와 ADMIN 재발행이고, 결정 37의 "자동 재발행·대조 엔진은 만들지 않는다"는 그대로 맞다)
   - 닫힘 — 결정은 그대로이고 구현·문구만 고침(원칙만으로 방향이 정해짐, 결정 150): RC-4(결정 32의 30분은 유지, 기한 정본은 Order — T12·결정 169), RC-5(결정 42의 금융 확인 월은 유지, 선후 비교만 제거 — T3·결정 163), RC-7(결정 128 본문의 이벤트 서술 정정 — 결정 147·148), RC-14(결정 124의 3시간은 adapter 설정으로 — 결정 140 작업), RC-18(결정 29·133의 HTTP 코드 서술은 adapter 메모로 — 결정 140 작업)
-  - 다시 물어 정함: RC-16 → 결정 173, RC-1 → 결정 174, RC-3 → 결정 175
-  - 다시 물음: RC-9(결정 53·54·57 철회 결과 이벤트)
+  - 다시 물어 정함: RC-16 → 결정 173, RC-1 → 결정 174, RC-3 → 결정 175, RC-9 → 결정 176
   - 모듈 스펙 단계에서 물음(한 모듈 안의 상태 모양이라 상태×트리거 표를 쓸 때): RC-2(결정 144 보류 사유 칸, Payment), RC-13(결정 114·124·126 보류 상태 하나, Payment), RC-17(결정 94·96 정지 전 상태, License)
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -143,9 +142,9 @@
   - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
   - 재현: 헤더 없는 레코드를 넣고 DLT 도착까지 시도 1회 단언.
 
-- [ ] **T21. 철회 결과 이벤트 하나가 "철회됨"과 "철회 거절"을 겸한다** (분리안 SP-7·SP-8, 소급 RC-9)
+- [ ] **T21. 철회 결과 이벤트 하나가 "철회됨"과 "철회 거절"을 겸한다** (분리안 SP-7·SP-8, [결정 176](../../../docs/decisions.md#withdrawal-result-events))
   - 어디서: `review:core/domain/ReviewWithdrawal.java:63-68`, `catalog:core/domain/ReleaseWithdrawal.java:63-67`, payload `ProjectWithdrawalResult.java`(`String status`), Studio `studio:api/listener/ProjectResultListener.java:33-49`.
-  - 목표: P3.2-5·P3.4-5. `ProjectReviewWithdrawn`/`ProjectReviewWithdrawalDenied`, `ProjectReleaseWithdrawn`/`ProjectReleaseWithdrawalDenied`(Denied는 `targetStatus` enum만). Studio 리스너가 변환.
+  - 목표: P3.2-5·P3.4-5. `ProjectReviewWithdrawn`/`ProjectReviewWithdrawalDenied`, `ProjectReleaseWithdrawn`/`ProjectReleaseWithdrawalDenied`(Denied는 `targetStatus` enum만, 대상 판정의 `actor`·`feedback`은 싣지 않음). Studio 리스너가 변환. P2.7-4 순서로 이행(결정 176).
   - 영향: 돈 없음. 창작자 영수증의 `finalActor`·`finalFeedback`이 뜻이 바뀌는 칸이라 화면·알림이 잘못 읽는다.
   - 재현: 판정 뒤 철회 → 결과 이벤트의 `actor`가 심사자, `feedback`이 반려 사유임을 단언(지금 통과) → 목표 계약 테스트로 바꾸면 Red.
 

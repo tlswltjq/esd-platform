@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-10 | 철회 결과 이벤트 하나에 담긴 두 뜻을 나눌지(결정 53·54·57 소급) | 철회됨·철회 실패로 나눔 / 하나로 둠 | (선택지 선택만) "철회 결과를 Withdrawn과 WithdrawalDenied로 나눠" | 나눈다 — 한 이벤트에 한 사실. 먼저 커밋된 결과 정책은 그대로 | 추천 수용 | [결정 176](decisions.md#withdrawal-result-events) |
 | 2026-11-10 | `LicenseGranted` 이벤트 이름을 사실에 맞게 바꿀지(결정 92 소급) | A 이벤트 이름만 `PurchaseRecordStored`(추천) / B 모두 유지 / C 모듈 이름까지 Library | (선택지 선택만) "A로 이벤트 이름만 PurchaseRecordStored로 바꿔" | A — 모듈 사이 계약인 이벤트 이름은 사실을 말해야 한다. 모듈 이름 유지(결정 92)는 그대로 | 추천 수용 | [결정 175](decisions.md#purchase-record-stored) |
 | 2026-11-10 | 운영자의 승인 보류 종결을 전용 이벤트로 바꿀지(결정 115 소급) | 전용 이벤트 `OrderPaymentReviewClosed` / 결정 115대로 `OrderPaymentFailed`에 둠 | (선택지 선택만) "전용 이벤트 OrderPaymentReviewClosed로 바꿔" | 전용 이벤트 — 한 이벤트에 한 사실. 업무 결과는 그대로 | 추천 수용 | [결정 174](decisions.md#review-closed-event) |
 | 2026-11-10 | 자동 환불 4시간 기한을 어느 시계로 잴지(결정 29 소급) | A Order가 `PAID`를 반영한 자기 시각(추천) / B Payment가 기한 끝을 값으로 / C 지금대로 + 원칙 ⑥ 예외 | (선택지 선택만) "A로 Order가 PAID를 반영한 시각부터 재" | A — 기준 사건은 여전히 결제 확정이고 License 지급이 아니다. 같은 시계로 비교한다 | 추천 수용 | [결정 173](decisions.md#refund-window-order-clock) |

@@ -1739,6 +1739,17 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 3차 PR. P3.15-1, design 이벤트 목록 #33·SP-3·정방향 응답 쌍, tasks T33
 
+<a id="withdrawal-result-events"></a>
+## 176. 심사·출시 철회 결과는 "철회됨"과 "철회 실패"를 다른 이벤트로 낸다
+- 문제: 창작자의 심사·출시 철회는 "먼저 커밋된 결과"를 따른다(결정 53·54·57). 결과는 `ProjectReviewWithdrawalResolved`·`ProjectReleaseWithdrawalResolved` 하나로 나가고, 본문 `ProjectWithdrawalResult`의 `status`(문자열)는 철회 성공이면 `WITHDRAWN`, 실패면 대상의 판정 결과(`APPROVED`·`REJECTED`·`COMPLETED`)를 담는다. `actor`·`feedback`도 철회 결과와 심사 판정을 번갈아 담고 Catalog는 `actor`에 `"catalog"`를 넣는다. Studio는 `status` 문자열로 사실을 가른다(`ProjectResultListener.java:33-49`). 이 형식을 정한 결정 번호는 확인하지 못했다(소급 후보 RC-9).
+- 선택지: 철회됨(`…Withdrawn`)과 철회 실패(`…WithdrawalDenied`, `targetStatus` enum)로 나눔 / 지금처럼 `…WithdrawalResolved` 하나로 둠 (확인 질문 — 원칙 ①로 방향이 정해지고 정책은 같다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "철회 결과를 Withdrawn과 WithdrawalDenied로 나눠")
+- 선택: 나눈다 — 철회 정책(먼저 커밋된 결과 유지)은 그대로다.
+  - Review는 `ProjectReviewWithdrawn` 또는 `ProjectReviewWithdrawalDenied`(`targetStatus` ∈ {`APPROVED`,`REJECTED`})를, Catalog는 `ProjectReleaseWithdrawn` 또는 `ProjectReleaseWithdrawalDenied`(`targetStatus` ∈ {`COMPLETED`,`REJECTED`})를 낸다. 실패 이벤트는 대상 판정의 `actor`·`feedback`을 싣지 않는다(그 사실은 판정 결과 이벤트가 이미 싣는다).
+  - Studio 리스너는 네 타입을 명령·요청 반영 입력으로 변환한다. 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다.
+- 구분: 추천 수용(AI가 원칙 ①로 제시한 확인 질문)
+- 결과: 플랫폼 스펙 3차 PR. design SP-7·SP-8·목표 행, tasks T21
+
 ---
 
 ## 검증하며 드러난 것
