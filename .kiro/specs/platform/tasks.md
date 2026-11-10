@@ -7,9 +7,10 @@
 - [x] 평가 방법·완료 조건 결정([결정 152](../../../docs/decisions.md#spec-evaluation))
 - [ ] P1~P4 요구사항과 설계 작성(P3에 흐름 단계별 실패 표) — 초안 5개 통합본(2026-11-09) 검토 대기
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
+- [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 감지 주체 → 결정 158, PD-7 → 결정 158 적용 완료(PD-6 기준 시간은 남음)(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -47,9 +48,9 @@
   - 영향: **돈** — READY 근거로 종결한 뒤 콘솔 승인 등으로 청구되면 주문·보류 어디에도 연결되지 않은 청구가 남고, 고객은 "청구된 금액은 없습니다"(`CLOSED_NOT_CHARGED`)를 본다.
   - 재현: 흉내 서버 여정 — (1) 종결(READY 근거) 뒤 `console-approve`, 웹훅 없이 → 기간 안 조회로 기록·경보가 없으면 Red (2) 같은 상황에서 웹훅 전송 → 조회가 앞당겨지는지 (3) PG 조회 이력 없이 만료된 결제가 뒤에 `PAID` → 기록 (4) 공급자 기한이 지난 결제는 조회하지 않음.
 
-- [ ] **T6. U3 — 정방향 반영 누락을 세는 곳이 없다(모듈 간 확인 SQL 실행 주체 없음)** (감지 주체 [결정 158](../../../docs/decisions.md#forward-gap-counting), 기준 시간 [결정 필요 PD-6])
+- [ ] **T6. U3 — 정방향 반영 누락을 세는 곳이 없다(모듈 간 확인 SQL 실행 주체 없음)** (감지 주체 [결정 158](../../../docs/decisions.md#forward-gap-counting), 기준 시간 [결정 159](../../../docs/decisions.md#forward-gap-threshold))
   - 어디서: `tools/verification/`(불변식 검사기 없음, `docs/domain/workflows.md:136`이 "다음 단계 검사기의 명세"라 함), 게이지는 Order 환불 대기만(`order:adapter/RefundLicenseGrantMetrics.java`, `OrderExpiryMetrics.java`, 결정 125·129), Store 대조 경보는 대조가 도는지만(결정 85). 출시 흐름: Studio↔Review 판정, Studio↔Catalog 출시 결과, RI-2, 활성 자리(RI-7), 원요청 없는 미해결 철회, 장기 `PENDING` 명령을 대조하는 곳 없음.
-  - 목표: P2.6-6·P3.9-2·P3.15-5·P4.3-1, I14. 결정 158: 사실을 낸 모듈이 응답을 받지 못한 자기 기록을 셈(design "정방향 응답 쌍"). 새 확인 사실 3개(가칭 `SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`)와 Settlement Outbox, 모듈별 대기 게이지. 기준 시간은 PD-6. 그리고 design 불변식 표의 확인 SQL(I1~I20)과 출시 정합 조건(RI)을 실제 스택 여정(`verify-*.py`) 끝에서 한 번 돌리는 검사는 둔다.
+  - 목표: P2.6-6·P3.9-2·P3.15-5·P4.3-1, I14. 결정 158: 사실을 낸 모듈이 응답을 받지 못한 자기 기록을 셈(design "정방향 응답 쌍"). 새 확인 사실 3개(가칭 `SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`)와 Settlement Outbox, 모듈별 대기 게이지. 경보 기준 시간은 결정 159: 게이지 먼저, G6 실험 측정 뒤 쌍마다 확정, G7 전 관문(P4.3-4). 그리고 design 불변식 표의 확인 SQL(I1~I20)과 출시 정합 조건(RI)을 실제 스택 여정(`verify-*.py`) 끝에서 한 번 돌리는 검사는 둔다.
   - 영향: **보유권·돈** — `OrderPaid` DLT·유실 시 보유권 미지급, 정산 매출·환불 조정 누락이 조용히 남는다. 출시 결과가 DLT로 빠져도 화면에서만 드러난다.
   - 재현: Settlement 소비자를 멈춘 채 결제 → T 경과 → 게이지·검사기가 1건. 일부러 `stove_order.purchase_order.amount`를 바꾼 픽스처에서 I1 SQL이 1행. 출시 결과를 DLT로 보낸 뒤 Studio `REQUESTED`·Catalog `COMPLETED`를 검사기가 잡는지.
 
