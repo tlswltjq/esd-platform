@@ -248,7 +248,7 @@
 - 내 의견: "라이선스와 페이먼트는 별개의 서비스라 신뢰하지 않도록 하는것이 기본전재일텐데 그렇다면 외부에서 마구잡이로 들어오는 환불요청에 대해서 계속 메시지 큐나 어딘가에 들고 보관해야하잖아. … 근거를 order가 이미 가지고 있으므로 Order가 지급확인을 기다리는 방식이 좋을것같은데"
 - 선택: B — 검증한 주문을 가진 Order에 대기·재개 책임을 모은다. 비용: 지급부터 정지 반영까지 짧은 접근 틈이 남고, 지급 확인의 지연·누락이 환불을 지연시킨다. 발행자 인증·임의 식별자 폭주는 이 선택으로 막았다고 주장하지 않는다.
 - 구분: AI 주장 정정
-- 결과: [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md), [PG 연동·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md), 남은 질문은 [Q9](domain/open-questions.md#q9)
+- 결과: [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md), [PG 연동·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md), 남은 질문은 [Q9](domain/open-questions.md#q9) 하위 결정 "기한 시작"은 [결정 173](#refund-window-order-clock)으로 바뀌었다(Order가 `PAID`를 반영한 자기 시각).
 - 하위 결정(쟁점: 선택 — 구분 · 내 의견):
   - 요청·승인 주체: 결제 확정 후 n시간 내 자동 환불, 초과는 관리자 승인/반려 — 직접 제안 · "A, 구매후 n시간 이내면 조건없이 환불. n시간 초과시 관리자 승인/반려"
   - 기한 시작: Payment 최초 결제 확정 시각(License 지급 시각 기각) — 사용자 선택(추천 없음) · "사용자의 입장에선 License의 보유권 지급 시각이 가장 좋겠지만 책임의 범위를 생각해본다면 payment를 기준으로 하는것이 좋다고 생각."
