@@ -74,7 +74,7 @@
 
 #### P2.1 봉투
 
-1. WHEN 모듈이 이벤트를 Kafka로 내보낼 때 THEN 시스템 SHALL 토픽 = 그 이벤트 종류에 고정된 `Topics` 상수, 키 = `partitionKey`(P2.4), 값 = payload JSON, 헤더 = `eventId`(UUID, 64자 이하)·`eventType`(`EventType` 값, 60자 이하)·`occurredAt`(ISO-8601 UTC)·`schemaVersion`([결정 필요 PD-18])·`traceparent`(있을 때만)로 만든다(`common/messaging/.../outbox/OutboxRelay.java:146-157`, `common/kafka/.../EventHeaders.java`).
+1. WHEN 모듈이 이벤트를 Kafka로 내보낼 때 THEN 시스템 SHALL 토픽 = 그 이벤트 종류에 고정된 `Topics` 상수, 키 = `partitionKey`(P2.4), 값 = payload JSON, 헤더 = `eventId`(UUID, 64자 이하)·`eventType`(`EventType` 값, 60자 이하)·`occurredAt`(ISO-8601 UTC)·`schemaVersion`(이벤트 종류별 정수, 그 이벤트 본문의 모양. 헤더가 없는 옛 메시지는 1, [결정 170](../../../docs/decisions.md#schema-version-header))·`traceparent`(있을 때만)로 만든다(`common/messaging/.../outbox/OutboxRelay.java:146-157`, `common/kafka/.../EventHeaders.java`).
 2. 모든 payload SHALL 본문에 `eventId`·`occurredAt`을 담고, 헤더의 같은 이름 값과 같다. 헤더 `occurredAt`에 Outbox 적재 시각을 쓰지 않는다(원칙 ①, T25).
 3. 본문 `occurredAt`은 발행 모듈의 사실 시각이다. 소비 모듈 SHALL 이 값을 기록·표시·기간 귀속 입력으로만 쓰고, 자기 시계나 다른 모듈 시각과 선후를 비교해 이벤트를 거절·분기하는 데 쓰지 않는다(P4.5).
 4. `eventType` 값 SHALL `common/kafka/.../contract/EventType.java`의 상수만 쓴다. payload `eventType()`과 리스너 `isType(...)`은 상수를 참조하고 문자열 리터럴을 쓰지 않는다(원칙 ③, T26).
@@ -108,7 +108,7 @@
 
 1. 시스템 SHALL 파티션 키를 집합체 키로 고정한다: `stove.order.v1`·`stove.payment.v1`·`stove.license.v1` = `orderNo`, `stove.studio.v1`·`stove.review.v1`·`stove.release.v1`·`stove.catalog.v1` = `productCode`, `stove.auth.v1` = `subject`.
 2. THE 한 이벤트 종류의 파티션 키 칸 SHALL 바뀌지 않고, 같은 집합체의 모든 이벤트는 같은 키를 쓴다(`EventContractTest.sameOrderSharesPartitionKey`).
-3. WHILE 키 순서에 기대는 토픽이 운영 중이면 THEN 시스템 SHALL 그 토픽의 파티션 수를 바꾸지 않는다. 늘려야 하면 새 토픽으로 옮긴다. 토픽은 자동 생성이 아니라 선언으로 만든다(T11).
+3. WHILE 키 순서에 기대는 토픽이 운영 중이면 THEN 시스템 SHALL 그 토픽의 파티션 수를 바꾸지 않는다. 늘려야 하면 새 토픽으로 옮긴다. 토픽 이름의 `vN`은 이 파티션 수·키 규칙의 세대이고, 본문 모양 변경으로는 올리지 않는다(결정 170). 토픽은 자동 생성이 아니라 선언으로 만든다(T11).
 
 #### P2.5 순서 보장 범위
 
@@ -129,14 +129,15 @@
 #### P2.7 스키마 호환 (결정 104)
 
 1. WHILE `eventType`과 스키마 버전이 같으면 시스템 SHALL 선택 칸 추가만 허용한다. 새 칸은 없을 때 `null`로 읽히고 소비자는 모르는 칸을 무시한다(`EventContractTest.unknownFieldsAreTolerated`).
-2. 칸 삭제·이름 변경·타입 변경·뜻 변경·필수화·키 칸 변경 SHALL 같은 `eventType`·같은 버전에서 하지 않는다. 뜻이 바뀌면 새 `eventType`, 모양만 바뀌면 새 스키마 버전으로 낸다(버전을 싣는 자리 [결정 필요 PD-18]).
+2. 칸 삭제·이름 변경·타입 변경·뜻 변경·필수화·키 칸 변경 SHALL 같은 `eventType`·같은 버전에서 하지 않는다. 뜻이 바뀌면 새 `eventType`, 모양만 바뀌면 같은 `eventType`의 새 `schemaVersion`으로 낸다. 소비자는 (`eventType`, `schemaVersion`)으로 `*Mapper.from`을 고른다([결정 170](../../../docs/decisions.md#schema-version-header)).
 3. WHEN PR이 이벤트 본문이나 소비자의 중복 대조 지문을 바꾸면 THEN 그 PR SHALL 옛 본문 견본·옛 지문으로 새 소비자가 옛 메시지를 받는 테스트를 더하고, 이행 파일이 옛 행의 뜻을 옮기면 그 모듈 `migrationTest`도 같은 PR에 쓴다(결정 104).
 4. WHEN 새 `eventType`을 도입하거나 한 이벤트를 둘로 나누면 THEN 배포 순서 SHALL ① 소비자가 옛·새 타입을 모두 받는 버전 ② 발행자가 새 타입으로 바꾼 버전 ③ 옛 타입이 모든 서비스의 `outbox_event`(`PENDING`·`DEAD`)와 토픽 보존 기간에서 사라진 것을 확인한 뒤 옛 처리를 지우는 버전 순이다.
+5. WHEN 한 `eventType`의 새 `schemaVersion`을 도입하면 THEN 배포 순서 SHALL ① 소비자가 옛·새 버전을 모두 읽는 판 ② 발행자가 새 버전을 내는 판이고, 옛 버전 읽기는 옛 버전 행이 모든 서비스의 `outbox_event`와 실패 보관 표에서 사라진 뒤에만 지운다([결정 170](../../../docs/decisions.md#schema-version-header)).
 
 #### P2.8 구 계약 처리
 
 1. THE `EventType` 상수마다 design 이벤트 목록 SHALL 상태 하나를 둔다: `현행` · `구 계약`(발행·소비 없음, 유지 여부가 열려 있음) · `제거 대상`(발행·소비 없음, 유지 이유 없음) · `목표 분리안`(현행이지만 원칙 ①에 따라 나눌 것) · `목표`(아직 코드에 없음).
-2. WHEN `제거 대상` 상수를 지우면 THEN 그 PR SHALL 모든 서비스 `outbox_event`에 그 타입의 `PENDING`·`DEAD` 행이 없고 토픽·DLT 보존 기간이 지났다는 근거를 적고, 상수·payload·`EventContractTest.events()`·문서 행을 함께 지운다.
+2. WHEN `제거 대상` 상수를 지우면 THEN 그 PR SHALL 모든 서비스 `outbox_event`에 그 타입의 `PENDING`·`DEAD` 행이 없고 모든 소비 모듈의 실패 보관 표(결정 160)에 그 타입 행이 없으며 토픽 보존 기간이 지났다는 근거를 적고, 상수·payload·`EventContractTest.events()`·문서 행을 함께 지운다.
 3. WHILE 상태가 `구 계약`이면 시스템 SHALL 그 상수를 지우지도 새로 소비하지도 않는다. 유지·제거는 [결정 필요 PD-20] · T30.
 4. 시스템 SHALL `EventType` 상수 목록과 design 이벤트 목록 표를 대조하는 테스트를 둔다(결정 151, T27). 문자열 리터럴 이벤트가 상수로 올라온 뒤(T26) 켠다.
 

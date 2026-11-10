@@ -119,7 +119,7 @@ OutboxRelay (서비스당 1대, stove.outbox.poll-interval-ms=200)
      ack 성공 : SENT
      실패     : retryCount++, next_attempt_at = 1s,2s,...,5m, 같은 키 뒤 이벤트 holdUntil
      10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표(결정 155): DEAD 키의 뒤 행은 회수 전까지 보류, ADMIN 키 단위 requeue
-Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion[PD-18]·traceparent·(목표) 키 안 발행 순번(결정 161)
+Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion(본문 모양, 결정 170)·traceparent·(목표) 키 안 발행 순번(결정 161)
 소비 리스너 (그룹당 파티션당 스레드 1, ack-mode record)
   EventEnvelope.from (헤더 없으면 거절)
   -> isType 분기 -> *Mapper.from(envelope, payload) (계약 검증, api.listener)
@@ -274,7 +274,7 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | `OrderPaymentCompleted` | `admissionId` 추가(결과를 낸 승인 진행 영수증 = 시도 `approvalId`) | 선택 칸 추가 — 옛 행은 null이고 Order는 null 결과를 `PAID`로 받지 않는다(이행 방침은 T1) | I12, 원칙 ⑥ | T1 |
 | `OrderPaymentFailed` | `admissionId` 추가(접수된 시도를 끝낸 실패만 값), `reasonCode`에서 `REVIEW_CLOSED` 제거 | 칸 추가는 호환, `REVIEW_CLOSED` 제거는 SP-1 이행(P2.7-4) 뒤 | SP-1 | T1·T18 |
 | `OrderPaid` | `paymentConfirmedAt`(가칭) 추가 — Payment 승인 확정 시각(Order가 저장한 결과 시각 `resultOccurredAt` 그대로) | 선택 칸 추가 — 호환. 없으면 Settlement는 `occurredAt`으로 월을 정함 | 매출 귀속 월을 금융 확인 기준으로(결정 166, 결정 42와 대칭) | MC-S4 |
-| `RefundPaymentConfirmed` | `source` 삭제 | **비호환**(칸 삭제) — [결정 필요 PD-18]의 버전 방식으로 | SP-5 | T19 |
+| `RefundPaymentConfirmed` | `source` 삭제 | **비호환**(칸 삭제) — 새 `schemaVersion`으로(결정 170, P2.7-5 배포 순서) | SP-5 | T19 |
 | `RefundExecutionFailed` | `cancellationId`는 PG가 준 우리 취소 ID만 | 뜻 고정(지금도 같음) | 결정 147 문제 예시 | T4 |
 | Settlement `settlement_refund.source`(테이블 열) | 새 행에 의미 없는 값으로 동결, 옛 행 호환 | — | SP-5의 사본 | MC-S2 |
 

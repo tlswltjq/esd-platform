@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169, PD-18 → 결정 170 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -126,9 +126,9 @@
   - 영향: 동작은 같다. 소비자가 사유 문자열로 사실을 구별해 오타·새 소비자 오해 여지.
   - 재현: 계약 테스트 — `OrderPaymentFailed.reasonCode`에 `REVIEW_CLOSED` 0건, Order가 두 타입을 같은 입력으로 합치는지.
 
-- [ ] **T19. `RefundPaymentConfirmed.source`가 "근거 종류"와 "시도 귀속"을 함께 말한다** (분리안 SP-5, 소급 RC-8) [결정 필요 PD-18 선행]
+- [ ] **T19. `RefundPaymentConfirmed.source`가 "근거 종류"와 "시도 귀속"을 함께 말한다** (분리안 SP-5, 소급 RC-8) — 내보내는 방법은 [결정 170](../../../docs/decisions.md#schema-version-header)
   - 어디서: `common/kafka/.../payload/RefundPaymentConfirmedEvent.java`(`source`), Payment `payment:core/service/RecordRefundCancellationSuccess.java:40`(`PG_RESPONSE`), `RefundConfirmationOutbox`(`PG_QUERY_UNATTRIBUTED`), `payment:core/domain/RefundExecution.java:256,292`; Order `order:core/domain/Refund.java:239`, `RefundPaymentConfirmation.java:18-20`; Settlement `settlement_refund.source`(V10).
-  - 목표: P3.21-2. `source` 삭제(칸 삭제는 비호환 — PD-18의 버전 방식으로), 귀속은 Payment 기록만([결정 164](../../../docs/decisions.md#attribution-in-payment)): Order는 `RefundExecutionSucceeded`를 소비하지 않고 `RefundAttempt.reconciliationRequired`를 없앤다. 소비자가 없어진 `RefundExecutionSucceeded`는 발행을 멈추고 계약에서 뺀다(옛 이벤트 읽기는 결정 104 호환).
+  - 목표: P3.21-2. `source` 삭제(칸 삭제는 비호환 — `RefundPaymentConfirmed`의 새 `schemaVersion`으로, P2.7-5 배포 순서, 결정 170), 귀속은 Payment 기록만([결정 164](../../../docs/decisions.md#attribution-in-payment)): Order는 `RefundExecutionSucceeded`를 소비하지 않고 `RefundAttempt.reconciliationRequired`를 없앤다. 소비자가 없어진 `RefundExecutionSucceeded`는 발행을 멈추고 계약에서 뺀다(옛 이벤트 읽기는 결정 104 호환).
   - 영향: 돈 직접 영향 없음. `source` 값 오타는 시도 귀속을 조용히 빠뜨리고, 귀속 판정을 바꾸려면 금융 사실 이벤트의 뜻이 함께 바뀐다(결정 127 후속이 막힌 원인).
   - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
 
@@ -162,9 +162,9 @@
   - 영향: 돈 없음(Order는 Catalog HTTP 정본). 과거 이벤트가 최초 삽입이면 숨긴 상품을 `listed=true`로 보일 수 있다.
   - 재현: 버전 칸 없는 과거 JSON을 빈 Store에 넣어 `listed=true`·`ON_SALE` 사본이 생기는지.
 
-- [ ] **T25. 헤더 `occurredAt`이 Outbox 적재 시각이라 본문 사실 시각과 다르고, `schemaVersion` 헤더가 없다** [결정 필요 PD-18]
+- [ ] **T25. 헤더 `occurredAt`이 Outbox 적재 시각이라 본문 사실 시각과 다르고, `schemaVersion` 헤더가 없다** ([결정 170](../../../docs/decisions.md#schema-version-header))
   - 어디서: `common/messaging/.../outbox/OutboxRelay.java:151-152`, 예 `order:core/service/ApplyApprovalCorrection.java:50-51`(본문은 `stop.getRestorationRequestedAt()`), `common/kafka/.../EventEnvelope.java:17`.
-  - 목표: P2.1-1·P2.1-2. 헤더 `occurredAt` = 본문 값, `schemaVersion`은 PD-18.
+  - 목표: P2.1-1·P2.1-2. 헤더 `occurredAt` = 본문 값. 결정 170: `outbox_event.schema_version`(종류별 정수, 1부터), 릴레이가 헤더 `schemaVersion`으로 냄, 헤더 없는 옛 메시지는 1, 리스너는 (`eventType`, `schemaVersion`)으로 매퍼 선택, `Topics.java` 주석을 "토픽 `vN` = 파티션 수·키 규칙 세대"로 정정.
   - 영향: 헤더를 읽는 도구(추적·DLT 조회 `DltRecordResponse`)와 본문을 읽는 업무 코드가 다른 시각을 본다.
   - 재현: `OutboxRelay` 단위 — 본문 `occurredAt`을 과거로 둔 이벤트의 헤더 값 == 본문 값.
 
