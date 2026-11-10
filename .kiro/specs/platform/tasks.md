@@ -9,7 +9,7 @@
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -35,10 +35,10 @@
   - 영향: **돈·보유권** — 호스트 시계가 몇 초 어긋나면 금융 완료·실패·복구·재시도 이벤트가 재시도 7초 뒤 DLT, 재투입도 같은 결과. 환불이 `PENDING_PAYMENT_REFUND`·`PENDING_LICENSE_RESTORATION`에 멈춰 돈은 돌려줬는데 회수가 안 되거나 돈도 게임도 없는 상태. SET-1은 환불 조정 누락 → 판매자 과지급.
   - 재현: D-052 방식(고정 `Clock`, 실제 MySQL·Kafka 컨테이너, 상대 이벤트 `occurredAt`을 받는 쪽 시각 ±5초) — License `LicenseRestorationIntegrationTest`를 Order·Payment·Settlement에 복제. 행마다 U2 표 "확인 테스트" 열.
 
-- [ ] **T4. 운영자 환불 실패 종결(결정 128·148)이 main에 없고, 참고 구현이 목표와 다르다** (PR #166 이어 가기) [결정 필요 PD-5]
+- [ ] **T4. 운영자 환불 실패 종결(결정 128·148)이 main에 없고, 참고 구현이 목표와 다르다** (PR #166 이어 가기) — 늦은 취소 반영은 [결정 157](../../../docs/decisions.md#late-cancellation-confirmation)
   - 어디서: main에 `RefundFailureClosed`·`CloseRefundFailure` 없음(`common/kafka/.../contract/EventType.java`, `docs/runbooks/refund-delay-closure.md:13` "미구현"). 실패 뒤 낮은 빈도 조회도 main에 없음(`confirmFailure`가 조회 일정을 멈춤, payment `tasks.md:50`). 참고 구현(`esd-worktrees/refund-failure-closure`, 커밋 안 됨): `RefundFailureClosedEvent.observedPaymentStatus`가 언제나 `"PAID"` 상수, Order `RefundFailureConfirmation`이 Payment 시각끼리(`evidenceObservedAt ≤ occurredAt`) 다시 검사, Order V35가 출처를 `failure_reason_code`(고객 안내 코드)와 `failure_closure_id`에 겹쳐 담음, 결정 128의 근거 종류 칸 없음. 문서: `.kiro/specs/order/design.md:201`·`:287`, `.kiro/specs/payment/tasks.md:47`, 결정 128 본문이 아직 "기존 `RefundExecutionFailed`".
   - 목표: P3.23 전체, design "목표 행" `RefundFailureClosed`(본문은 시도 식별자·`closureId`·`failedCancellationId`만, 근거 상세는 Payment `refund_failure_closure`), I16·I19. Order 시도 출처는 사유 코드와 분리한 enum 열(`PG_CANCELLATION_FAILED`·`OPERATOR_FAILURE_CLOSED`) + CHECK. 실패 뒤 낮은 빈도 조회와 `LATE_CANCELLATION` 조사·경보(P3.23-5). 문서 정정.
-  - 영향: **돈·보유권** — 미병합인 동안 PG 형식 거절·잔액 변화·보장 창 종료로 멈춘 환불은 닫을 길이 없어 고객에게 돈도 게임도 없는 상태가 기한 없이 남는다. 실패 뒤 실제 취소가 생겨도 시스템이 모른다(고객이 돈과 게임을 둘 다 가짐 — 처리는 PD-5).
+  - 영향: **돈·보유권** — 미병합인 동안 PG 형식 거절·잔액 변화·보장 창 종료로 멈춘 환불은 닫을 길이 없어 고객에게 돈도 게임도 없는 상태가 기한 없이 남는다. 실패 뒤 실제 취소가 생겨도 시스템이 모른다(고객이 돈과 게임을 둘 다 가짐 — 반영은 결정 157의 ADMIN 근거 반영 S14, #166 다음에 구현).
   - 재현: 결정 128 예(11:00 접수 → 403 → 14:00 창 종료) 뒤 종결 API → Order가 복구 요청을 내고 고객 재시도가 열리는지. #166 `RefundFailureClosureIntegrationTest`(R1 Red→Green). Order에 근거 칸 없는 `RefundFailureClosed`를 넣어 거절되지 않는지. 실패 확정 뒤 흉내 서버에서 전액 취소 → 조사 목록 `LATE_CANCELLATION`.
 
 - [ ] **T5. 끝난 결제(종결·만료·실패)에 뒤늦게 생긴 PG 청구를 감지하지 않는다** ([결정 154](../../../docs/decisions.md#unlinked-charge-discovery))

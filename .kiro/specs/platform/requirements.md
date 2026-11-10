@@ -315,14 +315,16 @@
 2. WHEN Order가 `RefundExecutionFailed`(Payment 토픽만)를 받아 구매·현재 시도·실행 요청·금액이 식별자로 맞고 환불이 `PENDING_PAYMENT_REFUND`·금융 확인 없음이면 THEN Order SHALL 시도를 `FAILED`(출처 `PG_CANCELLATION_FAILED`)로, 환불을 `PENDING_LICENSE_RESTORATION`으로 바꾸고 `LicenseRestorationRequested`를 쓴다.
 3. Settlement·License SHALL `RefundExecutionFailed`를 소비하지 않는다. 보유권 복구는 Order의 `LicenseRestorationRequested`로만 일어난다.
 
-#### P3.23 운영자 실패 종결 (Payment → Order, 결정 128·148)
+#### P3.23 운영자 실패 종결과 늦은 취소 반영 (Payment → Order · Settlement, 결정 128·148·157)
 
 1. WHEN ADMIN이 `POST /api/v1/admin/refund-delays/{attemptId}/failure-closure`를 보내면 THEN Payment SHALL 자동 송신이 멈춘 실행(보류·잔액 변화 차단·보장 창 종료)만 대상으로, 조회 작업자와 같은 lease를 잡고 송신 쪽에도 종결 표시를 건 뒤 트랜잭션 밖에서 PG를 다시 조회한다. 재조회 결과가 원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음이 아니면 닫지 않고 409로 거절한다.
 2. WHEN 재조회 근거가 성립하면 THEN Payment SHALL 별도 잠금 트랜잭션에서 lease·종결 표시를 여전히 가졌고 실행이 여전히 종결 대상이며 PG 접수 응답이 조회 전과 같은지 확인한 뒤, 실행을 `FAILED`로 바꾸고 `refund_failure_closure`(근거 종류·중단 원인·조회 해시·연결된 FAILED 취소 ID·ADMIN·시각)를 저장하고 같은 트랜잭션에서 `RefundFailureClosed`를 쓴다. 같은 `requestId`는 최초 응답을, 다른 내용은 409를 돌려준다.
 3. `RefundFailureClosed` SHALL "운영자가 PG 재조회 근거로 이 시도를 실패로 종결했다"만 뜻하며 `RefundExecutionFailed`로 보내지 않는다. 근거 상세는 Payment `refund_failure_closure`가 정본이고 이벤트에는 시도 식별자·`closureId`·`failedCancellationId`(있을 때만)만 싣는다(원칙 ①③, design "목표 행").
 4. WHEN Order가 `RefundFailureClosed`(Payment 토픽만, 그룹 `order-refund-restoration`)를 받으면 THEN Order SHALL `api.listener`에서 `RefundExecutionFailed`와 같은 내부 입력으로 바꾸되 출처(`OPERATOR_FAILURE_CLOSED`)와 `closureId`를 남기고 P3.22-2와 같은 전이로 잇는다. Settlement·License는 소비하지 않는다.
-5. WHILE 실행이 실패로 닫힌 뒤에도 Payment SHALL 낮은 빈도로 PG를 조회하고, 늦은 전액 취소가 보이면 조사 목록(`LATE_CANCELLATION`)과 경보로 올리되 상태·보유권·환불을 자동으로 바꾸지 않는다. 그런 취소가 실제로 생겼을 때의 처리는 [결정 필요 PD-5] · T4.
+5. WHILE 실행이 실패로 닫힌 뒤에도 Payment SHALL 낮은 빈도로 PG를 조회하고, 늦은 전액 취소가 보이면 조사 목록(`LATE_CANCELLATION`)과 경보로 올리되 상태·보유권·환불을 자동으로 바꾸지 않는다. 그런 취소의 반영은 7·8을 따른다(T4).
 6. WHEN 고객 재시도의 사전 확인이 이전 실패를 찾으면 THEN Payment SHALL PG FAILED 기록이 없는 운영자 종결 실패도 이전 실패로 받는다.
+7. WHEN ADMIN이 실패로 끝난 환불 시도의 늦은 취소 반영을 요청하면 THEN Payment SHALL 트랜잭션 밖 PG 재조회에서 원결제가 전액 `CANCELLED`일 때만 반영하고, 아니면 409로 거절한다. 반영할 때 Payment SHALL 실패한 시도를 다시 열지 않고 그 시도의 `refund_confirmed_at`도 쓰지 않으며(I18), 늦은 취소 확인 기록(ADMIN·요청 ID·PG 근거 스냅샷·시각)과 `RefundLateCancellationConfirmed` Outbox를 한 트랜잭션에 쓴다. 시스템은 이 반영을 스스로 하지 않는다([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), T4).
+8. WHEN Order가 `RefundLateCancellationConfirmed`를 처음 받으면 THEN Order SHALL 그 환불을 명시 전이로 늦은 취소 완료 끝 상태(이름은 Order 모듈 스펙)로 바꾸고 `PurchaseRefunded`를 낸다. WHEN License가 그 `PurchaseRefunded`를 받으면 THEN License SHALL 복구로 `ACTIVE`가 된 보유권도 `REFUNDED`로 바꾼다. WHEN Settlement가 `RefundLateCancellationConfirmed`를 처음 받으면 THEN Settlement SHALL 환불 조정을 기록한다(월 규칙 결정 42·130, 원매출이 없으면 결정 156). 고객에게는 환불 완료와 보유권 회수를 안내한다(결정 157).
 
 #### P3.24 복구와 재신청 (Order → License → Order)
 
@@ -364,7 +366,7 @@
 
 1. WHEN Order가 주문을 처음 `PAID`로 바꾸면 THEN Order SHALL 같은 트랜잭션에서 `OrderPaid`를 쓰고, 그 밖에는 쓰지 않는다(I3).
 2. THE 구매 근거(`product_license`) SHALL `OrderPaid`로만 생기고 주문당 1행이며, 보유권 `ACTIVE`는 고객·상품당 1개, 구매 근거당 열린 보유권(`ACTIVE`·`SUSPENDED`)은 1개다(I3).
-3. IF `order_refund.status`=`COMPLETED`이면 THEN 같은 `refund_id`의 `refund_execution.refund_confirmed_at` SHALL 있다. IF `product_license.status`=`REFUNDED`이면 THEN 그 주문의 환불 SHALL `COMPLETED`다. IF `settlement_refund` 행이 있으면 THEN 같은 `refund_id`의 `refund_confirmed_at` SHALL 있다(I4).
+3. IF `order_refund.status`=`COMPLETED`이면 THEN 같은 `refund_id`의 `refund_execution.refund_confirmed_at` SHALL 있다. IF Order 환불이 늦은 취소 완료 상태이면 THEN Payment의 늦은 취소 확인 기록 SHALL 있다(결정 157). IF `product_license.status`=`REFUNDED`이면 THEN 그 주문의 환불 SHALL `COMPLETED`다. IF `settlement_refund` 행이 있으면 THEN 같은 `refund_id`의 `refund_confirmed_at` SHALL 있다(I4).
 4. THE 소비자 SHALL `processed_event`를 업무 변경과 같은 트랜잭션에 쓰고, 업무 기록도 사건 식별자 유일 키로 한 번만 생긴다(I8).
 5. THE `PAID` 주문 SHALL 그 주문의 열린 최신 승인 진행 영수증과 같은 `admissionId`의 성공 결과로만 생긴다. 결제 식별자(`paymentId`)만으로 연결을 판정하지 않는다 — 주문당 `paymentId`가 하나로 고정되어 시도를 구분하지 못한다(`payment/db/V11__purchase_payment.sql:29` `uk_purchase_payment_order`). 연결되지 않은 성공은 Order가 반영하지 않고 거절 사실(`OrderPaymentResultRejected`)로 드러내며 Payment가 보류로 올린다([결정 153](../../../docs/decisions.md#late-success-rejection), I12, P3.14-2, P3.13-7, T1).
 6. THE Payment SHALL 승인 진행 영수증이 없는 시도의 PG 결제로 결과 이벤트를 내지 않는다(I15, P3.11-2·P3.12-5).
@@ -399,6 +401,7 @@
 2. THE 보유권 복구 SHALL 실패 확정(두 사실 중 하나) 뒤에만 생기고, 정지 1건당 복구 1건이다(I17).
 3. THE 같은 환불 시도 SHALL 금융 완료와 실패를 함께 갖지 않는다(I18).
 4. WHILE 운영자 실패 종결이 진행 중이면 그 실행의 PG 취소 요청 SHALL 나가지 않는다(I19).
+5. THE 실패로 끝난 시도 뒤의 늦은 전액 취소 SHALL ADMIN의 PG 근거 반영(P3.23-7)으로만 Order·License·Settlement에 반영되고, 실패한 시도의 실패 사실과 금융 확인 칸은 바뀌지 않는다(I16·I18, 결정 157).
 
 ### P5. 품질 목표 (실험 뒤, 결정 152)
 
