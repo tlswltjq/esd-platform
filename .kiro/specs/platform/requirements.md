@@ -262,7 +262,7 @@
 
 #### P3.15 구매 근거와 매출 (Order → License · Settlement)
 
-1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실(지금 이름 `LicenseGranted`, 이름 정정은 소급 RC-3) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
+1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실 `PurchaseRecordStored`(지금 이름 `LicenseGranted`, [결정 175](../../../docs/decisions.md#purchase-record-stored)) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
 2. WHEN Order가 구매 근거 생성 사실을 처음 받으면 THEN Order SHALL 주문이 `PAID`이고 구매자·상품·`paymentId`가 같을 때만 `order_license_grant`를 저장한다(환불 흐름의 입력, P3.17).
 3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaid`의 가칭 `paymentConfirmedAt` — Order가 `OrderPaymentCompleted.occurredAt`을 그대로 전달)의 KST 월이고, 그 칸이 없는 옛 `OrderPaid`는 `occurredAt`을 쓴다. 환불 귀속 월(결정 42)과 같은 금융 확인 기준이다([결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)).
 4. IF 매출 기록에 필요한 외부 조회가 실패하거나 대조가 어긋나면 THEN Settlement SHALL 원장·Inbox·월 합계를 만들지 않고 공통 재시도를 받으며, 소진하면 DLT에 원본 그대로 남긴다.

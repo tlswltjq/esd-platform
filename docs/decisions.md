@@ -856,7 +856,7 @@
 - 내 의견: "이름 유지하도록 하자"
 - 선택: 이름을 바꾸지 않는다 — 제시한 세 안 모두 고르지 않았다. 이유(맥락으로 추정): 이름 변경은 222개 파일·5개 모듈 계약에 걸치는 반면 얻는 것은 이름의 정확성뿐이라, P4 범위를 넓히지 않고 맡은 일은 스펙 설명으로 드러내는 편을 택했다. 결과: 이름 변경 비용이 없고 P4 PR에 진짜 변경만 남는다. 모듈 이름(License)과 맡은 일(보관함·라이브러리)이 다르게 읽힐 수 있어 스펙의 책임 설명으로 보완한다.
 - 구분: 추천과 다른 선택
-- 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116), 근거 색인 2026-11-06 license·order 행
+- 결과: [PR #116](https://github.com/tlswltjq/esd-platform/pull/116), 근거 색인 2026-11-06 license·order 행 이벤트 이름 `LicenseGranted`는 [결정 175](#purchase-record-stored)로 `PurchaseRecordStored`로 바뀐다(모듈 이름 License는 그대로).
 
 <a id="register-after-payment-choice"></a>
 ## 93. 결제가 끝나면 보관함에 넣고, 고객이 라이브러리 등록을 고른다
@@ -1727,6 +1727,17 @@
   - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따르고, 끝나면 `OrderPaymentFailed`의 `REVIEW_CLOSED` 사유를 없앤다.
 - 구분: 추천 수용(AI가 원칙 ①로 제시한 확인 질문)
 - 결과: 플랫폼 스펙 3차 PR. P3.13-4, design SP-1·목표 행·흐름 2 S7 행, tasks T18
+
+<a id="purchase-record-stored"></a>
+## 175. `LicenseGranted` 이벤트 이름을 실제 사실에 맞게 `PurchaseRecordStored`로 바꾸고, 모듈 이름 License는 그대로 둔다
+- 문제: License는 `OrderPaid`를 받아 구매 근거(`product_license`)를 보관함 상태 `STORED`로 만들고 `LicenseGranted`를 낸다. 결정 93 이후 보유권 등록(`license_registration` `ACTIVE`)은 별도 단계라, 이 이벤트의 실제 사실은 "보유권 지급"이 아니라 "구매 근거가 보관함에 생겼다"다. Order `ApplyLicenseGrant`의 반응(지급 확인)은 맞지만 새 소비자가 이름을 보고 "보유권 활성화"로 오해할 수 있다. 결정 92에서 모듈 이름을 유지하며 이벤트 이름도 함께 유지됐고, 그 이유는 이름 변경 범위(222개 파일)였다(소급 후보 RC-3).
+- 선택지: A 이벤트 이름만 `PurchaseRecordStored`(가칭)로, 모듈 이름 License·토픽 `stove.license.v1`은 유지 / B 결정 92대로 모두 유지하고 뜻은 스펙 설명으로 보충 / C 모듈 이름까지 Library로 (추천: A — 모듈 사이 계약인 이벤트 이름은 사실을 그대로 말해야 한다(원칙 ①). 모듈 이름은 모듈 안쪽 이름표라 원칙 ① 대상이 아니므로 결정 92의 선택은 존중한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 이벤트 이름만 PurchaseRecordStored로 바꿔")
+- 선택: A — 결정 92의 모듈 이름 유지는 그대로다.
+  - 이벤트 종류 이름을 `PurchaseRecordStored`로 바꾼다. 결과 상태 `PurchaseStatus.STORED`와 같은 이름이다. 본문·키·소비 그룹·업무 반응은 그대로다.
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다: Order가 옛·새 타입을 모두 받는 판 → License가 새 타입을 내는 판 → 옛 타입이 모든 Outbox·실패 보관 표에서 사라진 뒤 옛 소비 제거. 재발행 허용 목록(결정 161)도 표에서 생성되므로 같이 바뀐다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P3.15-1, design 이벤트 목록 #33·SP-3·정방향 응답 쌍, tasks T33
 
 ---
 
