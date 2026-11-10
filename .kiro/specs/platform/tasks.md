@@ -17,6 +17,31 @@
   - 다시 물어 정함: RC-16 → 결정 173, RC-1 → 결정 174, RC-3 → 결정 175, RC-9 → 결정 176
   - 모듈 스펙 단계에서 물음(한 모듈 안의 상태 모양이라 상태×트리거 표를 쓸 때): RC-2(결정 144 보류 사유 칸, Payment), RC-13(결정 114·124·126 보류 상태 하나, Payment), RC-17(결정 94·96 정지 전 상태, License)
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
+  - [x] 1회차: 플랫폼 스펙만(`982cceb3`), Kiro `gpt-5.6-sol`(`xhigh`, 결정 149 대체) — 지적 14건, 아래 "독립 평가 1회차 지적"
+  - [ ] 2회차: 모듈 스펙 11개를 다시 쓴 뒤 플랫폼과 함께 평가. 1회차 지적도 이때 판정·수정한다([결정 178](../../../docs/decisions.md#evaluation-findings-deferred))
+
+## 독립 평가 1회차 지적
+
+> [결정 178](../../../docs/decisions.md#evaluation-findings-deferred): 판정하지 않고 그대로 둔다. 모듈 스펙을 쓸 때 걸리는 곳에 ID를 달되, 고친 것으로 치지 않는다. 판정(결정 112 규칙)과 수정은 2회차 함께 평가에서 한다. 평가 원문(위치·실패 시나리오)은 [PR #194](https://github.com/tlswltjq/esd-platform/pull/194) 본문.
+
+| ID | 심각도 | 문제 | 평가자 수정안 |
+|---|---|---|---|
+| A1 | high | 정방향 응답 쌍에 Payment `PAID`(`OrderPaymentCompleted`) → Order 반영이 없다. 결과가 Order에 닿지 않으면 청구됐는데 주문·보유권이 없고 세는 곳도 없다(I14·I20·흐름 2 S9) | I14에 `purchase_payment.PAID → purchase_order.PAID`를 넣고, Payment가 Order의 수락 사실(예: `OrderPaid`를 새 그룹으로 소비) 또는 `OrderPaymentResultRejected`를 기다리며 센다. 응답 쌍 표·T6에 추가 — **새로 정할 일** |
+| A2·B2 | high | 늦은 취소 회수가 서로 어긋난다: P3.23-8은 복구로 `ACTIVE`인 보유권도 회수, P3.25는 현재 정지와 맞지 않으면 영구 실패. I4(P4.2-3)·확인 SQL은 `REFUNDED`면 환불 `COMPLETED`·`refund_confirmed_at`을 요구해 정상 늦은 취소를 위반으로 잡는다. 재신청 시도 B가 진행 중일 때 B의 송신·상태·정지 ID를 어떻게 닫는지 없다(S14는 모듈 스펙으로 넘김) | P3.25에 늦은 취소 예외(`refundId`·늦은 취소 확인이 맞으면 `ACTIVE`에서도 회수), I4에 "또는 늦은 취소 완료 + Payment 확인 기록". 재신청 시도 B의 처리는 **새로 정할 일**(결정 157은 모듈 스펙으로 넘겼다) |
+| A3 | high | `OrderPaymentCompleted.admissionId`를 "선택 칸 추가라 호환"이라 했지만 Order가 null을 거절하므로 필수화다(P2.7-2). 배포 때 남은 v1 정상 결과를 새 Order가 거절할 수 있다(design 칸 변경 표, T1) | `schemaVersion=2`. P2.7-5 순서: Payment 늦은 성공 차단(결정 153 A1) → Order가 v1(지금 규칙)·v2 둘 다 읽음 → Payment v2 발행 → v1 행이 Outbox·실패 보관 표에서 0건 → v1 읽기 제거 |
+| B1 | high | 재발행 뒤 회수 순서가 둘이다: P2.2-7은 키 안 발행 순번, P2.6-4·5·design 이벤트 수명·T2는 보관 표 offset 순. 재발행된 앞 이벤트는 offset이 커서 offset 순이면 뒤 이벤트가 먼저 재처리돼 키가 풀리지 않는다 | 회수 정렬을 `(발행 순번, offset)` 하나로. 발행 순번은 발행 모듈 `outbox_event.id`를 헤더로, 헤더 없는 옛 레코드만 offset(결정 161) |
+| B3 | high | 승인 대기 출시가 철회(`WITHDRAWN`)된 뒤 늦은 `ProjectReviewApproved`가 오면 P3.4-2·S3a 문구대로 공개 작업이 열린다 | 같은 요청 잠금(`catalog_request_gate`) 아래 출시가 아직 승인 대기일 때만 작업을 연다. `WITHDRAWN`·`REJECTED`·종결이면 승인만 저장. S3a 실패 행·T16 재현에 추가(결정 57·167) |
+| B4 | high | 결정 158의 응답 사실 3개(`SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`)가 이벤트 목표 행에만 있고 P3.15·P3.25·P3.26·흐름 단계에 없다. P3.25-1은 "결과 이벤트는 내지 않는다"고 적었다. 그 단계의 실패 6종 행도 없다 | 세 사실을 반영 트랜잭션의 Outbox로 요구사항에 넣고, 흐름 2·3에 응답 단계와 실패 6종 행을 더한다. T6 대상에 P3.25·P3.26 |
+| A4·B5 | medium | 결정 164·T19·T30은 `RefundExecutionSucceeded`를 없애는데 비동기 의존 S6·SP-5·P3.21-2·흐름 3 S8·U2 ORD-10은 목표에서도 발행·Order 귀속 기록을 적는다 | 목표 문구를 Payment 내부 귀속 기록으로 통일, 옛 이벤트는 P2.8 제거 절차로 |
+| A5 | medium | 목표 이벤트 계약이 덜 닫혔다: `RefundLateCancellationConfirmed`의 Order 소비 그룹을 Order 모듈 스펙으로 미뤘고, 확인 사실 3개는 소비 측 업무 멱등 키 없이 Inbox만 적었다(P2.3-3). 여러 이름이 "가칭" | 정확한 `eventType`·모든 소비 그룹·소비 측 업무 키·내용 불일치 처리를 이벤트 표에서 확정. 늦은 취소는 `RefundFailureClosed`와 같은 그룹이거나 도착 순서와 무관한 상태 판정 |
+| B6 | medium | 주문 상태×결과 표에 `EXPIRED × OrderPaymentFailed`가 없다. P3.14-3은 `FAILED`로 바꾸는 것으로도 읽힌다 | 다섯 주문 상태 × 세 결과 이벤트를 모두 채우고, `EXPIRED × OrderPaymentFailed`의 최종 상태·사실 기록을 S9 역전 행에 |
+| B7 | medium | adapter 메모의 공급자 보장 기한 "3시간"이 흐름 단계·실패 표 본문에 무조건 규칙처럼 적혔고 목표 차이가 "없음"이다(P1.4-5 정본은 adapter가 준 기한) | adapter 메모에만 3시간을 두고, 본문은 `confirmDeadline`·"adapter가 준 보장 기한" |
+| A6 | low | 결정 166의 `OrderPaid.paymentConfirmedAt`(Order 발행·Settlement 소비)이 MC-S4로만 연결되고 플랫폼 T 항목이 없다 | Order 본문·Settlement 매퍼·옛 이벤트 호환·월 경계 테스트를 묶은 T 항목 |
+| A7 | low | 토픽 표의 `stove.order.v1` 현행 이벤트 수 7은 8이다(#17·18·19·21·22·23·39·40) | 8로 고치고 T27 대조 검사에 소유 모듈별 집계 |
+| B8 | low | 흐름 1 단계 목록에 S6b가 없고, S6b 행 이름이 첫 행만 다르다. S6b 순서 역전 행은 다른 발행 모듈·토픽의 순서를 결정 155가 보장한다고 적었다 | 단계 목록에 S6b, 행 이름 통일, 순서 근거는 `BLOCKED` 선행 조건과 Catalog 작업 잠금 |
+| B9 | low | P3.15-5·흐름 3 S2가 목표 응답 이름으로 `LicenseGranted`를 쓴다(목표는 `PurchaseRecordStored`, 결정 175) | 목표 계약에는 `PurchaseRecordStored`만, 옛 이름은 이행 메모에만 |
+
+1회차가 남긴 그 밖의 확인: `EventType` 상수 42개는 이벤트 표에 모두 있다. 흐름 실패 표는 72·72·84행, 빈칸 0. 점검표는 시계 ⑥·테스트 편의 ⑦ 충족, 불변식 ⑤ 미충족, 나머지 부분.
 
 ## 코드와 맞출 것
 
