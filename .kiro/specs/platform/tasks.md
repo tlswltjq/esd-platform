@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -26,7 +26,7 @@
 
 - [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** ([결정 155](../../../docs/decisions.md#key-stop-on-dead))
   - 어디서: `common/messaging/.../outbox/OutboxEvent.java:204-212`(`holdUntil(null)`은 아무것도 안 함), `OutboxRelay.java:109-113`, `OutboxEventRepository.java:20-28`(`lockPendingBatch`가 `DEAD` 키를 거르지 않음), `common/kafka/.../ops/DltOpsService.java:65-`(재투입이 같은 키의 이후 처리 여부를 보지 않음, `docs/architecture.md` R2).
-  - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 세부(표 구조, 정지 기록과 DLT 발행의 트랜잭션 경계)는 common messaging 설계.
+  - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 결정 160: 정지 목록과 실패 레코드 보관을 소비 모듈 DB의 한 표로 둔다(기한 없음, 1건 즉시 경보). DLT 토픽과 `DltOpsService.replay`는 이 표의 키 단위 재처리로 바꾼다. 표 구조·회수 API는 common messaging 설계.
   - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
   - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
 
@@ -54,9 +54,9 @@
   - 영향: **보유권·돈** — `OrderPaid` DLT·유실 시 보유권 미지급, 정산 매출·환불 조정 누락이 조용히 남는다. 출시 결과가 DLT로 빠져도 화면에서만 드러난다.
   - 재현: Settlement 소비자를 멈춘 채 결제 → T 경과 → 게이지·검사기가 1건. 일부러 `stove_order.purchase_order.amount`를 바꾼 픽스처에서 I1 SQL이 1행. 출시 결과를 DLT로 보낸 뒤 Studio `REQUESTED`·Catalog `COMPLETED`를 검사기가 잡는지.
 
-- [ ] **T7. 원본이 사라진 이벤트를 같은 ID로 다시 낼 수 있는 모듈이 Order·License뿐이고, DLT 보존 기간이 재투입 기한이다** [결정 필요 PD-9·PD-8]
+- [ ] **T7. 원본이 사라진 이벤트를 같은 ID로 다시 낼 수 있는 모듈이 Order·License뿐이고, DLT 보존 기간이 재투입 기한이다** [결정 필요 PD-9] · 보관은 [결정 160](../../../docs/decisions.md#dead-letter-store)
   - 어디서: `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`(Order·License 8종), Payment·Settlement `application.yml`에 재발행 설정 없음, DLT 보존 7일(`docs/architecture.md` R9).
-  - 목표: P2.2-7·P2.6-4. 대상 범위는 PD-9(추천: design 이벤트 목록의 현행 이벤트 전부 — 목록은 표에서 생성), 보존·경보는 PD-8.
+  - 목표: P2.2-7·P2.6-4. 대상 범위는 PD-9(추천: design 이벤트 목록의 현행 이벤트 전부 — 목록은 표에서 생성), 보관·경보는 결정 160(소비 모듈 DB 실패 보관 표에 기한 없이, 1건 즉시 경보, Outbox `DEAD`도 즉시 경보).
   - 영향: **돈·보유권** — `RefundPaymentConfirmed` 원본 소실 시 Order 환불 완료·Settlement 환불 조정이 둘 다 멈추고 복구 수단이 없다. `PurchaseRefunded`가 사라지면 회수가 안 된다.
   - 재현: Payment에서 `SENT` 행을 재발행 API로 되돌리면 지금은 400(현 동작 고정) → 확장 뒤 통과로 바꿈.
 
