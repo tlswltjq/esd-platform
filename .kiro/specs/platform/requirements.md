@@ -188,7 +188,7 @@
 3. IF 같은 Project·같은 `contentVersion`에 다른 스냅샷이거나 `projectId`·`productCode`·`ownerSubject` 연결이 기존 상품과 다르면 THEN Catalog SHALL 공개하지 않고 계약 위반으로 처리한다. 같은 Project의 동시 최초 공개는 재시도 가능한 경합으로, 다른 Project의 같은 코드만 계약 위반으로 판정한다(D-042).
 4. THE 공개 작업의 일시 실패 SHALL 같은 요청으로 5·15·30·60초 간격 재시도하며 새 요청 ID로 바꾸지 않는다([Catalog R10.3](../catalog/requirements.md)).
 5. IF 공개 작업이 재시도로 성공할 수 없는 실패(계약 위반·식별 충돌)이면 THEN Catalog SHALL 그 작업을 재시도 대기(`PENDING`)와 구분되는 정지 상태(`BLOCKED`)로 두고 1건부터 경보한다. 분류는 공통 영구 실패 분류(T20)와 같다. WHEN ADMIN이 원인을 고쳐 재개하면 THEN Catalog SHALL 작업을 `PENDING`으로 되돌린다. WHEN ADMIN이 종결하면 THEN Catalog SHALL 그 출시 요청을 공개 없이 끝내고 같은 트랜잭션에서 운영자 종결 전용 이벤트(가칭 `ProjectReleaseClosed`)를 낸다. `ProjectReleaseRejected`의 `reason`에 싣지 않는다. WHEN Studio가 그 사실을 받으면 THEN Studio SHALL 출시 요청을 끝내고 활성 출시 자리를 푼다([결정 168](../../../docs/decisions.md#publication-blocked-closure), T23).
-6. WHEN 공개 사본이 바뀌면 THEN Catalog SHALL 같은 트랜잭션 Outbox에 사실별 공개 사본 이벤트(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`, 판매·노출 변경은 `CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`)를 기록하고, 모두 그 시점의 공개 사본 전체와 `catalogVersion`을 싣는다. 나눌지 상태 전달 이벤트 하나로 이름만 바꿀지는 [결정 필요 PD-19] · T22.
+6. WHEN 공개 사본이 바뀌면 THEN Catalog SHALL 같은 트랜잭션 Outbox에 사실별 공개 사본 이벤트(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`, 판매·노출 변경은 `CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`)를 기록하고, 모두 그 시점의 공개 사본 전체와 `catalogVersion`을 싣는다. Store는 네 타입을 `api.listener`에서 같은 내부 입력으로 바꿔 하나의 반영 경로로 합친다. 이행은 P2.7-4 배포 순서를 따른다([결정 171](../../../docs/decisions.md#catalog-copy-events-by-fact), T22).
 7. THE `catalogVersion` SHALL 상품마다 단조 증가하고 현재 공개본 `contentVersion`보다 작지 않다(`catalog:core/domain/CatalogProduct.java:133·148`).
 
 #### P3.6 출시 결과 기록 (Catalog → Studio)

@@ -10,7 +10,7 @@
 - [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169, PD-18 → 결정 170 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169, PD-18 → 결정 170, PD-19 → 결정 171 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -144,9 +144,9 @@
   - 영향: 돈 없음. 창작자 영수증의 `finalActor`·`finalFeedback`이 뜻이 바뀌는 칸이라 화면·알림이 잘못 읽는다.
   - 재현: 판정 뒤 철회 → 결과 이벤트의 `actor`가 심사자, `feedback`이 반려 사유임을 단언(지금 통과) → 목표 계약 테스트로 바꾸면 Red.
 
-- [ ] **T22. `CatalogProductPublished`가 최초 공개·공개본 교체·판매 상태·노출 변경을 모두 뜻한다** (분리안 SP-4, 소급 RC-6) [결정 필요 PD-19]
+- [ ] **T22. `CatalogProductPublished`가 최초 공개·공개본 교체·판매 상태·노출 변경을 모두 뜻한다** (분리안 SP-4, 소급 RC-6) — [결정 171](../../../docs/decisions.md#catalog-copy-events-by-fact)
   - 어디서: `catalog:core/service/PublishProjectRelease.java:122-148`, `RecordCatalogSaleChange.java:20`, `ChangeCatalogListing.java:64`.
-  - 목표: P3.5-6. PD-19(추천: 사실별 4개, 같은 `CatalogProductSnapshot` 본문, Store 리스너가 합침).
+  - 목표: P3.5-6. 결정 171: 사실별 4개(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`·`CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`), 같은 `CatalogProductSnapshot` 본문, Store `api.listener`가 `ApplyCatalogProduct` 하나로 합침. 이행은 P2.7-4 순서.
   - 영향: 지금 소비자는 Store 하나라 영향 없음. 새 소비자(알림·검색 색인)가 판매 중지를 새 공개로 읽는다.
   - 재현: 판매 중지 명령 뒤 Outbox 유형이 `CatalogProductPublished`임을 단언(지금 통과).
 

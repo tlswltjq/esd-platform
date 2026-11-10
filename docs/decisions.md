@@ -1679,6 +1679,19 @@
 - 구분: 추천 수용
 - 결과: 플랫폼 스펙 3차 PR. P2.1-1·P2.7-2·P2.7-5·P2.4-3, design 이벤트 수명·칸 변경 목표 표, tasks T19·T25
 
+<a id="catalog-copy-events-by-fact"></a>
+## 171. Catalog 공개 사본 이벤트를 사실별 4개로 나누고, 같은 반응으로 합치는 일은 Store 리스너가 한다
+- 문제: `CatalogProductPublished` 하나가 최초 공개·공개본 교체·판매 상태 변경·노출 변경을 모두 뜻한다(결정 48·51). 본문은 그 시점의 공개 사본 전체와 `catalogVersion`이라 Store는 원인과 무관하게 같은 반응을 한다. 판매를 중지해도 `CatalogProductPublished`가 나가므로, "새로 공개된 게임" 알림 같은 새 소비자가 생기면 판매 중지를 새 공개로 읽는다(플랫폼 스펙 PD-19, 소급 후보 RC-6).
+- 선택지: A 사실별 4개(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`·`CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`), 본문은 모두 `CatalogProductSnapshot`, Store 리스너가 `ApplyCatalogProduct` 하나로 합침 / B 상태 전달 이벤트 하나로 이름만 바꿈(`CatalogProductPublicCopyChanged`) / C 지금대로 (추천: A — 원칙상 A·B 모두 성립한다고 밝힌 뒤, 원칙 ①의 마지막 문장 "받는 쪽이 같은 반응을 하더라도 합치는 일은 받는 쪽의 `api.listener` 변환에서 한다"가 바로 이 경우라 추천. C는 원칙 ① 위반)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 사실별 4개 이벤트로 나눠")
+- 선택: A
+  - Catalog는 공개 사본이 바뀌는 트랜잭션에서 원인에 맞는 이벤트 하나를 낸다: 최초 공개 `CatalogProductFirstPublished`, 공개본 교체 `CatalogProductReleaseReplaced`, 판매 상태 변경 `CatalogProductSaleStatusChanged`, 노출 변경 `CatalogProductListingChanged`. 본문은 모두 그 시점의 공개 사본 전체(`CatalogProductSnapshot`)와 `catalogVersion`이다.
+  - Store는 네 타입을 `api.listener`에서 같은 내부 입력으로 바꿔 `ApplyCatalogProduct` 하나로 반영한다(버전 규칙 그대로).
+  - 이행은 새 `eventType` 배포 순서(P2.7-4)를 따른다: Store가 옛·새 타입을 모두 받는 판 → Catalog가 새 타입을 내는 판 → 옛 타입이 모든 Outbox·실패 보관 표에서 사라진 뒤 옛 소비 제거.
+  - 결정 48·51의 "판매·노출 변경을 공개 사본 이벤트로 전달한다"는 전달 방식은 유지하고 이벤트 종류만 나눈다. 소급 후보 RC-6은 이 결정으로 닫는다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 3차 PR. P3.5-6, design 이벤트 목표 행(SP-4), tasks T22
+
 ---
 
 ## 검증하며 드러난 것
