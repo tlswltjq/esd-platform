@@ -56,7 +56,7 @@
 #### P1.4 정본 소유
 
 1. THE 사실·값마다 정본 모듈 SHALL design "정본 소유" 표의 한 모듈이다. 다른 모듈의 값은 사본이고, 받은 근거(이벤트 ID·버전)를 함께 저장한다.
-2. IF 같은 사실을 두 모듈이 각자 외부 공급자에게서 받아 저장하면 THEN 스펙 SHALL 판정에 쓰는 정본을 정하고, 정본이 아닌 쪽은 판정·금액 계산에 쓰지 않는다. PG 비용은 [결정 필요 PD-13] · T17.
+2. IF 같은 사실을 두 모듈이 각자 외부 공급자에게서 받아 저장하면 THEN 스펙 SHALL 판정에 쓰는 정본을 정하고, 정본이 아닌 쪽은 판정·금액 계산에 쓰지 않는다. PG 비용의 정본은 Settlement `settlement_pg_fee` 하나이고, Payment는 새 결제에 비용을 쓰지 않는다([결정 165](../../../docs/decisions.md#pg-fee-owner), T17).
 3. THE 주문 결제 기한(`expiresAt`) SHALL Order가 정본이다. 기한 길이(지금 30분, 결정 32)는 Order 설정 키 하나에 두고 주문 생성 때 `purchase_order.expires_at`에 저장한다. Payment와 다른 모듈은 `OrderPlaced.expiresAt`·접수 응답으로 받은 값을 기록·표시에만 쓰고 다시 계산하지 않는다(T12).
 4. THE 환불 취소 결과 확인 지연 시각(`confirmationDelayAt`) SHALL Payment가 정본이다. Order는 `RefundExecutionPrepared`로 받은 값을 그대로 쓰고 `firstPreparedAt + 3시간`과 대조하지 않는다(T14).
 5. THE 결제 공급자의 멱등 재송신 보장 기한(승인 확정 송신 기한·환불 취소 재송신 창, 지금 3시간) SHALL 결제 공급자 adapter 설정이 정본이다. core는 adapter가 준 기한(`confirmDeadline` 등)을 시도에 기록하고 그 값으로만 판정한다(결정 124·140, 원칙 ②, MC-P2).
@@ -91,7 +91,7 @@
 4. WHILE 같은 `partitionKey`의 앞 이벤트가 `PENDING`(재시도 대기)이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 보내지 않는다. IF 앞 이벤트가 `DEAD`이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 계속 보류하고, ADMIN이 앞 이벤트를 회수(`requeue`)해 `SENT`가 된 뒤에만 `id` 순으로 보낸다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2).
 5. WHEN 발행이 실패하면 THEN 릴레이 SHALL 1초부터 두 배씩 5분 상한으로 다시 시도하고(`OutboxEvent.backOffDelay`), `stove.outbox.max-retry`(기본 10)를 넘기면 `DEAD`로 바꿔 지표로 낸다. 운영자가 `DEAD`를 되돌릴 때 `eventId`·본문·키·`traceParent`를 바꾸지 않는다.
 6. 서비스마다 같은 키를 동시에 선점하는 릴레이가 하나뿐이어야 순서가 성립한다. 시스템 SHALL 이 조건을 선점 잠금이나 키 배정으로 코드에서 강제한다(원칙 ⑤, T10).
-7. WHEN ADMIN이 Kafka에서 사라진 이벤트를 재발행하면(결정 129) THEN 시스템 SHALL 그 모듈이 소유한 이벤트 종류만, 같은 `eventId`·본문·키로 `SENT → PENDING` 되돌리고 실행자·시각·사유를 남긴다. 받는 쪽은 Inbox로 거른다. 대상 이벤트 범위는 [결정 필요 PD-9] · T7.
+7. WHEN ADMIN이 Kafka에서 사라진 이벤트를 재발행하면(결정 129) THEN 시스템 SHALL 그 모듈이 소유한 이벤트 종류만, 같은 `eventId`·본문·키로 `SENT → PENDING` 되돌리고 실행자·시각·사유를 남긴다. 받는 쪽은 Inbox로 거른다. 대상은 design 이벤트 목록에서 상태가 "현행"인 모든 이벤트이고, 모듈별 허용 목록은 그 표에서 만든다. 모든 발행 모듈이 재발행 경로(`outbox_republish`, `republish-owner` 설정, ADMIN 운영 API)를 갖는다. 재발행된 이벤트가 정지된 키로 들어가면 회수는 같은 키 안의 발행 순번(헤더)으로 정렬해 원래 순서를 지킨다([결정 161](../../../docs/decisions.md#republish-all-current), T7).
 
 #### P2.3 소비 — Inbox와 업무 멱등
 
@@ -122,8 +122,8 @@
 1. WHEN 소비 처리에서 재시도 가능 실패가 나면 THEN 시스템 SHALL 블로킹 지수 재시도(1·2·4초, 최초 포함 4회, `common/kafka/.../ConsumerRetryPolicy.java`) 뒤 `<원본 토픽>.DLT`의 같은 파티션으로 원본 헤더를 보존해 보낸다(`DeadLetterTopics.of`, `DeadLetterPublisher.to`).
 2. IF DLT 발행이 실패하면 THEN 시스템 SHALL 원본 오프셋을 넘기지 않는다(`setFailIfSendResultIsError(true)`). DLT 유입은 발행 성공 뒤 `DeadLetterMetrics`로 센다.
 3. IF 실패가 영구 실패(봉투 헤더 없음, 역직렬화 실패, 계약 검증 실패, 식별자 모순, P2.3-4의 내용 불일치)이면 THEN 시스템 SHALL 재시도하지 않고 바로 DLT로 보낸다. 영구 실패는 `common/kafka`의 공통 예외 한 종류로 표시한다(원칙 ③, T20).
-4. WHEN DLT에 레코드가 들어오면 THEN 시스템 SHALL 토픽별 유입 지표로 경보하고, ADMIN 재투입(`DltOpsService.replay`)은 `kafka_dlt-` 헤더만 빼고 원본 헤더를 보존해 원래 토픽으로 보낸다. 보존 기간·재투입 기한·경보 기준은 [결정 필요 PD-8].
-5. WHEN 소비자가 레코드를 DLT로 보내면 THEN 시스템 SHALL 그 (소비 그룹, 토픽, 키)를 그 모듈의 정지 목록에 올리고, 정지된 키의 뒤 레코드는 처리하지 않고 같은 DLT로 보낸다. WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 키 단위로 DLT의 원래 offset 순서대로 처리하고, 그 키의 레코드가 모두 처리된 뒤에만 정지를 푼다. 재투입한 레코드가 다시 실패하면 정지를 유지한다. 그래서 같은 키의 뒤 이벤트가 앞 이벤트보다 먼저 처리되지 않는다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2, `docs/architecture.md` R2). THE 시스템 SHALL 정지된 키 수(발행 `DEAD` 키, 소비 정지 키)를 소비 그룹·모듈별 지표로 내고 경보하며, 회수(`requeue`·재투입) API는 키 단위로 둔다(결정 155).
+4. WHEN 소비자가 재시도를 소진하거나 영구 실패를 만나면 THEN 시스템 SHALL 그 레코드(토픽·파티션·offset·키·원본 헤더·본문·실패 사유)를 소비 모듈 DB의 실패 보관 표에 기한 없이 저장하고, 같은 트랜잭션에서 그 (소비 그룹, 토픽, 키)를 정지하며(5), 저장 1건부터 즉시 경보한다. Outbox `DEAD`도 1건부터 즉시 경보한다. WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 소비 모듈 안에서 보관 표를 키 단위 offset 순으로 읽어 같은 리스너 경로(`*Mapper.from` → 서비스)로 다시 처리하고 결과를 표에 남긴다([결정 160](../../../docs/decisions.md#dead-letter-store)). 이 문서에서 "DLT"는 목표 계약에서 이 실패 보관 표를 뜻한다.
+5. WHEN 소비자가 레코드를 실패 보관 표에 저장하면(4) THEN 시스템 SHALL 같은 트랜잭션에서 그 (소비 그룹, 토픽, 키)를 정지하고, 정지된 키의 뒤 레코드는 처리하지 않고 같은 표에 저장한다(정지 목록과 실패 보관은 한 표, 결정 160). WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 키 단위로 보관 표의 원래 offset 순서대로 처리하고, 그 키의 레코드가 모두 처리된 뒤에만 정지를 푼다. 재투입한 레코드가 다시 실패하면 정지를 유지한다. 그래서 같은 키의 뒤 이벤트가 앞 이벤트보다 먼저 처리되지 않는다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2, `docs/architecture.md` R2). THE 시스템 SHALL 정지된 키 수(발행 `DEAD` 키, 소비 정지 키)를 소비 그룹·모듈별 지표로 내고 경보하며, 회수(`requeue`·재투입) API는 키 단위로 둔다(결정 155).
 6. THE 모든 이벤트 SHALL 집합체 키와 업무 식별자를 실어, 사실이 다른 모듈에 끝내 반영되지 않은 것(정방향 누락, U3)을 P4.3의 감지가 셀 수 있게 한다.
 
 #### P2.7 스키마 호환 (결정 104)
@@ -173,7 +173,7 @@
 #### P3.4 출시 요청·철회 (Studio → Catalog)
 
 1. WHEN Studio가 출시 요청을 접수하면 THEN Studio SHALL Project 잠금 안에서 (a) 현재 버전 심사 `APPROVED` (b) 진행 중 출시 없음 또는 같은 요청 (c) 저장소 HEAD 크기 = 스냅샷 `fileSize`를 확인하고, 승인된 심사 요청의 스냅샷 그대로 `ProjectReleaseRequested`(`releaseRequestId`·`reviewRequestId`·`snapshot`)를 Outbox에 기록한다(`studio:core/service/release/RequestProjectRelease.java:44-67`).
-2. THE 출시 요청의 스냅샷 SHALL 그 `reviewRequestId`로 Review가 승인한 스냅샷과 값이 같다(RI-2). 공개를 확정하는 Catalog가 이를 직접 확인할지는 [결정 필요 PD-15] · T16.
+2. THE 출시 요청의 스냅샷 SHALL 그 `reviewRequestId`로 Review가 승인한 스냅샷과 값이 같다(RI-2). WHEN Catalog가 출시 요청을 받으면 THEN Catalog SHALL 공개를 확정하기 전에 Review에게서 직접 받은 승인 사실(`ProjectReviewApproved`)과 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 대조한다. 맞는 승인이 아직 없으면 출시를 승인 대기로 보류하고 승인이 오면 같은 잠금 안에서 공개 작업을 연다. 승인과 값이 다르면 공개하지 않고 출시를 거절한다(`ProjectReleaseRejected`). 승인 대기 건수는 Catalog가 센다([결정 167](../../../docs/decisions.md#catalog-verifies-approval)·결정 158, T16).
 3. THE 프로젝트별 진행 중 출시 SHALL 1건이며, 앞선 출시의 최종 결과를 Studio가 기록한 뒤에만 다음 출시를 연다(결정 63, `uk_studio_active_release`).
 4. WHEN Catalog가 `ProjectReleaseRequested`를 그룹 `catalog-project-release`에서 받으면 THEN Catalog SHALL 공개하지 않고 원요청·불변 스냅샷·Inbox를 `catalog_publication_job`(`PENDING`)으로 먼저 저장한다(결정 62).
 5. WHEN Catalog가 출시 철회를 받으면 THEN Catalog SHALL 공개 확정과 같은 요청 잠금(`catalog_request_gate`) 안에서, 공개 확정 전이면 `catalog_release`를 `WITHDRAWN`으로 확정하고 `ProjectReleaseWithdrawn`을, 이미 `COMPLETED`/`REJECTED`이면 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied`(`targetStatus`)를 발행한다(결정 57, T21).
@@ -186,7 +186,7 @@
 2. THE 신구 판정 SHALL Studio가 발급한 `contentVersion`으로만 한다: 공개본 없음 → 최초 공개, 더 높음 → 교체, 같은 버전·같은 스냅샷 → 기존 공개본 유지하고 `COMPLETED`(결정 58), 더 낮음 → `STALE_CONTENT_VERSION`으로 `REJECTED`.
 3. IF 같은 Project·같은 `contentVersion`에 다른 스냅샷이거나 `projectId`·`productCode`·`ownerSubject` 연결이 기존 상품과 다르면 THEN Catalog SHALL 공개하지 않고 계약 위반으로 처리한다. 같은 Project의 동시 최초 공개는 재시도 가능한 경합으로, 다른 Project의 같은 코드만 계약 위반으로 판정한다(D-042).
 4. THE 공개 작업의 일시 실패 SHALL 같은 요청으로 5·15·30·60초 간격 재시도하며 새 요청 ID로 바꾸지 않는다([Catalog R10.3](../catalog/requirements.md)).
-5. IF 공개 작업이 재시도로 성공할 수 없는 실패(계약 위반·식별 충돌)이면 THEN Catalog SHALL 그 작업을 재시도 대기와 구분되는 명시적 상태로 두고 경보한다. 그 요청을 Studio에 어떻게 끝낼지는 [결정 필요 PD-16] · T23.
+5. IF 공개 작업이 재시도로 성공할 수 없는 실패(계약 위반·식별 충돌)이면 THEN Catalog SHALL 그 작업을 재시도 대기(`PENDING`)와 구분되는 정지 상태(`BLOCKED`)로 두고 1건부터 경보한다. 분류는 공통 영구 실패 분류(T20)와 같다. WHEN ADMIN이 원인을 고쳐 재개하면 THEN Catalog SHALL 작업을 `PENDING`으로 되돌린다. WHEN ADMIN이 종결하면 THEN Catalog SHALL 그 출시 요청을 공개 없이 끝내고 같은 트랜잭션에서 운영자 종결 전용 이벤트(가칭 `ProjectReleaseClosed`)를 낸다. `ProjectReleaseRejected`의 `reason`에 싣지 않는다. WHEN Studio가 그 사실을 받으면 THEN Studio SHALL 출시 요청을 끝내고 활성 출시 자리를 푼다([결정 168](../../../docs/decisions.md#publication-blocked-closure), T23).
 6. WHEN 공개 사본이 바뀌면 THEN Catalog SHALL 같은 트랜잭션 Outbox에 사실별 공개 사본 이벤트(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`, 판매·노출 변경은 `CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`)를 기록하고, 모두 그 시점의 공개 사본 전체와 `catalogVersion`을 싣는다. 나눌지 상태 전달 이벤트 하나로 이름만 바꿀지는 [결정 필요 PD-19] · T22.
 7. THE `catalogVersion` SHALL 상품마다 단조 증가하고 현재 공개본 `contentVersion`보다 작지 않다(`catalog:core/domain/CatalogProduct.java:133·148`).
 
@@ -218,7 +218,7 @@
 #### P3.10 주문과 결제 기한 (Order)
 
 1. WHEN MEMBER가 `POST /api/v1/orders`로 새 `requestId`의 주문을 만들면 THEN Order SHALL 공개본 근거(상품 ID·코드·제목·`contentVersion`)·정가·할인액·청구액(`amount = listAmount − discountAmount > 0`)·통화·`expiresAt`을 한 트랜잭션에 고정하고 이 값을 모두 실은 `OrderPlaced`를 Outbox에 쓴다(결정 32·89, I1). 판매 상태는 Catalog 내부 조회(`/internal/v1/order-products/{code}`)로 트랜잭션 밖에서 확인한다.
-2. THE 결제 기한 SHALL P1.4-3을 따른다. Payment는 자기 시계를 `OrderPlaced.occurredAt`·`expiresAt`과 비교해 만료를 판정하지 않고, Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신만 만료로 안다(원칙 ⑥, T12). 결제창 단계의 만료 안내는 [결정 필요 PD-17].
+2. THE 결제 기한 SHALL P1.4-3을 따른다. Payment는 자기 시계를 `OrderPlaced.occurredAt`·`expiresAt`과 비교해 만료를 판정하지 않고, Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신만 만료로 안다(원칙 ⑥, T12). WHEN 결제창 정보 요청이 오면 THEN Payment SHALL 그 주문의 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`로 거절하고, 그 전에는 결제창을 연다. 기한 직후 결제를 시작한 고객은 승인 접수에서 만료 안내를 받을 수 있고 돈은 나가지 않는다([결정 169](../../../docs/decisions.md#checkout-open-until-expiry-fact)).
 3. WHEN Payment가 승인 진행 접수(`POST /internal/v1/orders/{orderNo}/payment-admissions`)를 요청하면 THEN Order SHALL 주문 행 잠금(`OrderRepository.lockByOrderNo`) 아래 자기 시계로 기한을 판정한다. 기한 전이고 `PENDING`이면 `PAYMENT_PROCESSING`으로 바꾸고 영수증(`admissionId`·`paymentId`·`admittedAt`)을 저장하며, 기한 뒤면 `EXPIRED`와 `OrderExpired`를 먼저 커밋하고 409 `ORDER_EXPIRED`로 거절한다(결정 32).
 4. WHILE 주문이 `PAYMENT_PROCESSING`이면 Order SHALL 시간 경과만으로 `EXPIRED`·`FAILED`로 바꾸지 않는다(결정 32).
 5. WHEN Order가 기한이 지난 `PENDING` 주문을 관찰하면(만료 스캔 `CloseExpiredOrders` 또는 승인 접수) THEN Order SHALL `EXPIRED`로 한 번 바꾸고 `OrderExpired`(원 `requestEventId`·구매자·청구액·통화·`expiresAt`)를 같은 트랜잭션에 쓴다. 스캔은 `expires_at <= now`로 고른다.
@@ -263,7 +263,7 @@
 
 1. WHEN License가 `OrderPaid`를 처음 받으면 THEN License SHALL 구매 근거 한 행(`product_license`, `STORED`)·Inbox(`license-paid-order`)·구매 근거 생성 사실(지금 이름 `LicenseGranted`, 이름 정정은 소급 RC-3) Outbox를 한 트랜잭션에 저장한다. 같은 고객이 같은 상품을 이미 가져도 막지 않고, 식별자가 다른 주문에 쓰였으면 영구 실패다(결정 89·93, I3·I8).
 2. WHEN Order가 구매 근거 생성 사실을 처음 받으면 THEN Order SHALL 주문이 `PAID`이고 구매자·상품·`paymentId`가 같을 때만 `order_license_grant`를 저장한다(환불 흐름의 입력, P3.17).
-3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월의 기준 시각은 [결정 필요 PD-14].
+3. WHEN Settlement가 `OrderPaid`를 처음 받으면 THEN Settlement SHALL 트랜잭션 밖에서 PG 승인과 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금(`SellerLockRepository.lock`) 아래 매출·배분·PG 거래·Inbox(`settlement-paid-order`)·월 합계를 한 트랜잭션에 저장한다. 귀속 월이나 그 뒤 월이 `CLOSED`면 현재 KST `OPEN` 월에 반영하고 원래 월을 보존한다(결정 42·130, I5·I6). 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaid`의 가칭 `paymentConfirmedAt` — Order가 `OrderPaymentCompleted.occurredAt`을 그대로 전달)의 KST 월이고, 그 칸이 없는 옛 `OrderPaid`는 `occurredAt`을 쓴다. 환불 귀속 월(결정 42)과 같은 금융 확인 기준이다([결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)).
 4. IF 매출 기록에 필요한 외부 조회가 실패하거나 대조가 어긋나면 THEN Settlement SHALL 원장·Inbox·월 합계를 만들지 않고 공통 재시도를 받으며, 소진하면 DLT에 원본 그대로 남긴다.
 5. WHILE Order 주문이 `PAID`인데 구매 근거 응답(`LicenseGranted`)이나 매출 기록 확인 사실(가칭 `SettlementSaleRecorded`)을 받지 못했으면 THEN Order SHALL 그 건수를 센다(I14, [결정 158](../../../docs/decisions.md#forward-gap-counting)). 경보 기준 시간은 측정 뒤 정하고, 그 전에는 게이지(건수·최장 대기)만 낸다([결정 159](../../../docs/decisions.md#forward-gap-threshold)).
 
@@ -305,7 +305,7 @@
 
 1. WHEN Payment가 PG 근거로 원결제 전액 취소를 처음 확인하면 THEN Payment SHALL 실행에 금융 확인을 한 번만 기록하고 같은 트랜잭션에서 `RefundPaymentConfirmed`를 쓴다. 근거는 우리 취소 응답 성공이거나 PG 조회로 확인한 같은 원결제의 전액 취소다(결정 29).
 2. `RefundPaymentConfirmed` SHALL "원결제 전액이 PG에서 취소됐음을 Payment가 확인했다"만 뜻한다. 그 취소가 이 시도의 우리 요청 때문인지(귀속)는 싣지 않고, 귀속이 확인되면 `RefundExecutionSucceeded`로 따로 낸다. 우리 응답으로 확인한 경우 두 이벤트를 같은 트랜잭션에 쓴다(원칙 ①, T19).
-3. WHEN Order가 `RefundPaymentConfirmed`를 받아 주문·환불·현재 시도·실행 요청·금액(= 주문 청구액)이 식별자로 맞으면 THEN Order SHALL 환불을 `COMPLETED`로 바꾸고 같은 트랜잭션에서 `PurchaseRefunded`를 쓴다. 두 이벤트가 어떤 순서로 와도 첫 금융 확인 ID·시각과 시도 결과는 같다. Order 시도가 귀속을 가질지는 [결정 필요 PD-12].
+3. WHEN Order가 `RefundPaymentConfirmed`를 받아 주문·환불·현재 시도·실행 요청·금액(= 주문 청구액)이 식별자로 맞으면 THEN Order SHALL 환불을 `COMPLETED`로 바꾸고 같은 트랜잭션에서 `PurchaseRefunded`를 쓴다. 두 이벤트가 어떤 순서로 와도 첫 금융 확인 ID·시각과 시도 결과는 같다. Order 시도는 귀속을 갖지 않는다. 금융 완료면 시도는 `COMPLETED` 하나이고, 귀속(우리 요청·외부 취소·미확정)과 그 조사·종결은 Payment 기록이 정본이다([결정 164](../../../docs/decisions.md#attribution-in-payment)).
 4. WHEN ADMIN이 장기 미확정·귀속 미확정 실행을 종결하면 THEN Payment SHALL 트랜잭션 밖 PG 재조회로 같은 원결제의 전액 취소가 확인될 때만 닫고, 미완료 건은 1과 같은 `RefundPaymentConfirmed`로 완료하며, 귀속 판정·ADMIN·근거를 Payment에 남긴다. 시스템은 PG 취소를 실행하지 않는다(결정 127).
 5. IF 금융 확인 뒤 실패 근거가, 실패 확정 뒤 성공 근거가 관측되면 THEN Payment SHALL 이미 정한 끝 상태를 바꾸지 않는다(I18). 실패 뒤 늦은 전액 취소는 P3.23-5.
 
@@ -343,7 +343,7 @@
 2. WHEN 환불의 원래 월(`RefundPaymentConfirmed.confirmedAt`의 KST 월)이 `OPEN`이고 그 뒤 월에 `CLOSED`가 없으면 THEN Settlement SHALL 원래 월에 반영하고, 아니면 현재 `OPEN` 월에 반영하며 `refund_month`를 보존한다. 반영 월은 원래 월보다 앞서지 않는다(결정 42·130, I6). 자기 수신 시각이 확인 시각보다 이르다는 이유로 거절하지 않는다(U2 SET-1).
 3. WHEN 판매자 월을 마감하면 THEN Settlement SHALL 오래된 월부터 마감하고 `payable = max(0, 순액 + carriedIn)`, 음수는 다음 월로 넘긴다(결정 121·130, I5).
 4. Settlement SHALL `RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed`를 소비하지 않는다. 정산 금액은 첫 금융 확인 하나로 정해진다(U5, MC-S2).
-5. IF 결제 공급자가 환불 근거를 줄 수 없는 환경이면 THEN Settlement SHALL P4.3-2의 같은 계약으로 환불을 반영한다. 방법은 [결정 필요 PD-10](U4, T9).
+5. THE 모든 실행 환경(개발·여정·실험·통합 테스트 포함) SHALL 같은 `PgRefunds` 계약으로 환불을 정산에 반영한다. 시뮬레이터 전용 거절 경로(`UnavailablePgRefunds`)나 검증 생략 경로를 두지 않고, 개발·시험의 PG는 기준 시뮬레이터 하나다([결정 162](../../../docs/decisions.md#single-reference-simulator), U4, T9).
 6. IF 원매출보다 환불 확인이 먼저 도착하면 THEN Settlement SHALL DLT로 보내지 않고 받은 환불 확인을 검증해 "매출 대기 환불"(명시 상태)로 Inbox와 같은 트랜잭션에 저장한다. WHEN 같은 주문의 `OrderPaid`가 매출을 기록하면 THEN Settlement SHALL 같은 트랜잭션에서 대기 환불을 원매출과 대조해 환불 조정까지 반영하고(월 규칙은 결정 42·130), 대조가 맞지 않으면 반영하지 않고 경보한다. THE Settlement SHALL 대기 건수와 가장 오래 기다린 시간을 게이지로 낸다([결정 156](../../../docs/decisions.md#refund-awaiting-sale), T8).
 
 #### P3.27 승인 중단 분기 (Order ↔ License)
@@ -375,7 +375,7 @@
 #### P4.3 정방향 반영 (U3·U4·U5 → I14)
 
 1. WHILE 앞 모듈의 기록(`purchase_order.status`=`PAID`, `order_refund.status`=`COMPLETED`, `refund_execution.refund_confirmed_at` 있음)이 있으면 시스템 SHALL 뒤 모듈의 반영(`product_license`·`settlement_sale`, `product_license.status`=`REFUNDED`·`settlement_refund`)을 결국 만든다. 반영이 기준 시간을 넘으면 감지·경보하고, DLT·원본 소실 사건을 같은 이벤트 ID로 다시 반영하는 운영 경로를 둔다(P2.2-7·P2.6-4). 감지는 사실을 낸 모듈이 응답 사실을 받지 못한 자기 기록을 세는 방식이고, 응답 사실이 없는 쌍에는 확인 사실을 새로 둔다(쌍 목록은 design "정방향 응답 쌍", [결정 158](../../../docs/decisions.md#forward-gap-counting)). 기준 시간은 4를 따른다(I14, T6).
-2. THE 정산 환불 반영(I4의 Settlement 다리) SHALL 모든 결제 공급자 환경에서 같은 계약으로 성립한다. 공급자가 환불 근거를 줄 수 없는 환경은 [결정 필요 PD-10](U4, T9).
+2. THE 정산 환불 반영(I4의 Settlement 다리) SHALL 모든 결제 공급자 환경에서 같은 계약으로 성립한다. 시뮬레이터 전용 공급자(`SIMULATED`)는 두지 않는다([결정 162](../../../docs/decisions.md#single-reference-simulator), U4, T9).
 3. THE 정산 금액 SHALL 첫 금융 확인(`RefundPaymentConfirmed`) 하나로 정해지고, Settlement는 귀속 보강 사실(`RefundExecutionSucceeded`)을 소비하지 않는다. 취소 귀속은 Settlement 자신의 PG 조회 근거(`settlement_refund_cancellation`)로 기록한다(U5 → P3.26-4).
 4. THE 정방향 응답 쌍(design "정방향 응답 쌍")의 경보 기준 시간 SHALL 부하·장애 실험(G6)이 잰 정상 지연 분포로 쌍마다 정하고, 정하기 전에는 게이지(대기 건수·가장 오래 기다린 시간)만 낸다. 결정 125의 10분 경계는 그대로 둔다. 모든 쌍의 기준이 정해지기 전에는 G7(실제 PG 연동)을 완료하지 않는다([결정 159](../../../docs/decisions.md#forward-gap-threshold)).
 
@@ -388,8 +388,8 @@
 #### P4.5 시계와 식별자 (I9 → I13, U2)
 
 1. THE Order·Payment·License·Settlement SHALL 다른 모듈이 찍은 시각(`occurredAt`·`confirmedAt`·`startedAt`·`restoredAt` 등)과 자기 시각, 또는 서로 다른 모듈이 찍은 두 시각의 선후로 이벤트·명령을 거절·분기하지 않는다. 같은 시도·정지·요청인지는 식별자(`attemptId`·`requestEventId`·`suspensionRequestEventId`·`suspensionEventId`·`restorationRequestEventId`·`refundId`·`admissionId`)와 잠금으로만 판정한다(원칙 ⑥, D-052, I13, T3).
-2. WHERE 업무 규칙이 다른 모듈의 시각을 값으로 써야 하면(정산 귀속 월 = `OrderPaid.occurredAt`의 KST 월, 환불 귀속 월 = `RefundPaymentConfirmed.confirmedAt`의 KST 월, 결정 42) 시스템 SHALL 그 값을 그대로 기록에 쓰되 자기 시계와 비교해 거절하지 않는다.
-3. WHERE 외부 결제 공급자가 찍은 시각(`requestedAt`·`cancelledAt`)이 근거에 있으면 Payment SHALL 그 값을 그대로 저장한다. 자기 관측 시각과의 선후로 PG 근거를 무효로 볼지는 [결정 필요 PD-11] · MC-P10. 같은 모듈 안 시각끼리의 비교는 이 요구사항의 대상이 아니다.
+2. WHERE 업무 규칙이 다른 모듈의 시각을 값으로 써야 하면(매출 귀속 월 = `OrderPaid.paymentConfirmedAt`(가칭, Payment 승인 확정 시각)의 KST 월(결정 166), 환불 귀속 월 = `RefundPaymentConfirmed.confirmedAt`의 KST 월, 결정 42) 시스템 SHALL 그 값을 그대로 기록에 쓰되 자기 시계와 비교해 거절하지 않는다.
+3. WHERE 외부 결제 공급자가 찍은 시각(`requestedAt`·`cancelledAt`)이 근거에 있으면 Payment SHALL 그 값을 그대로 저장하고, 자기 관측 시각과의 선후로 PG 근거를 무효로 보지 않는다. 근거의 진위는 취소 ID·결제 ID·금액·상태로 판정한다([결정 163](../../../docs/decisions.md#external-clock-principle), 원칙 ⑥, T3·MC-P10). PG가 찍은 시각끼리의 순서 검사와 같은 모듈 안 시각끼리의 비교는 이 요구사항의 대상이 아니다.
 
 #### P4.6 Payment 내부 승인 보류 (I10·I11)
 
@@ -406,4 +406,4 @@
 
 ### P5. 품질 목표 (실험 뒤, 결정 152)
 
-수치 목표(처리량·지연·복구 시간·정합성 회복 시간)는 부하·장애 실험으로 기준선을 잰 뒤 더한다. 실험 가설은 [design.md](design.md#모듈-간-흐름)의 흐름별 실패 표 행이고, 정방향 반영 기준 시간 T(결정 159: 게이지 먼저, 측정 뒤 확정, G7 전 관문)와 DLT 재투입 기한([결정 필요 PD-8])도 그때 수치로 정한다.
+수치 목표(처리량·지연·복구 시간·정합성 회복 시간)는 부하·장애 실험으로 기준선을 잰 뒤 더한다. 실험 가설은 [design.md](design.md#모듈-간-흐름)의 흐름별 실패 표 행이고, 정방향 반영 기준 시간 T(결정 159: 게이지 먼저, 측정 뒤 확정, G7 전 관문)도 그때 수치로 정한다. 실패 보관 표는 기한 없이 보관하므로 재투입 기한은 두지 않는다(결정 160).

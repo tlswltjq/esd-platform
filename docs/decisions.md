@@ -1539,6 +1539,133 @@
 - 구분: 추천 수용
 - 결과: [PR #191](https://github.com/tlswltjq/esd-platform/pull/191) 플랫폼 스펙 P3.2-7·P3.7-4·P3.9-2·P3.15-5·P4.3-1·P4.3-4·P5, design 정합 조건·실패 표·I14·U3·"정방향 응답 쌍", tasks T6, 로드맵 G7
 
+<a id="dead-letter-store"></a>
+## 160. 소비에 실패한 레코드는 소비 모듈 DB의 실패 보관 표에 기한 없이 저장하고, 결정 155의 키 정지와 같은 표·같은 트랜잭션으로 둔다
+- 문제: 소비 재시도가 소진된 레코드는 `<토픽>.DLT` Kafka 토픽에 들어가고, 그 보존 기간(이 서버 브로커 7일, `docs/architecture.md` R9)이 곧 재투입 기한이다. 경보 기준도 없다. 예: 금요일 밤 `settlement-confirmed-refund`의 환불 조정이 DLT로 가고 8일째 확인하면 레코드는 지워졌고 Payment 이벤트는 재발행 대상도 아니어서 판매자 환불 조정이 영구 누락된다. 결정 155로 소비 모듈마다 DB에 정지 키 목록이 생기는데, 레코드는 Kafka에 따로 있으면 두 곳이 어긋날 수 있고 키 단위 회수 때 DLT 토픽 전체를 훑어야 한다(플랫폼 스펙 PD-8).
+- 선택지: A DLT 토픽 7일 유지 + 1건 즉시 경보 / B DLT 토픽 보존 무기한 + 즉시 경보 / C 실패 레코드를 소비 모듈 DB 보관 표에 영구 저장하고 결정 155의 정지 키 목록과 같은 표로 둠 + 즉시 경보 (추천: C — 레코드 저장과 키 정지가 한 트랜잭션이라 두 곳이 어긋나지 않고(원칙 ③⑤), 결정 155의 키 단위 offset 순 회수가 조회 한 번이 된다. 초안 추천 B는 결정 155 전에 쓴 것이다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "C로 모듈 DB 표에 영구 보관해")
+- 선택: C
+  - 소비자가 재시도를 소진하거나 영구 실패를 만나면, 그 레코드(토픽·파티션·offset·키·원본 헤더·본문·실패 사유)를 소비 모듈 DB의 실패 보관 표에 저장하고 같은 트랜잭션에서 그 (소비 그룹, 토픽, 키)를 정지한다. 정지된 키의 뒤 레코드도 같은 표에 저장한다. 보관에 기한을 두지 않는다.
+  - 저장 1건부터 즉시 경보한다. Outbox `DEAD`도 1건부터 즉시 경보한다. 이 값은 "한 건도 그냥 두지 않는다"는 원칙이라 측정 대상이 아니다(결정 159와 별개).
+  - 재투입은 소비 모듈 안에서 보관 표를 키 단위 offset 순으로 읽어 같은 리스너 경로(`*Mapper.from` → 서비스)로 다시 처리하고, 결과를 표에 남긴다. 그 키의 레코드가 모두 처리되면 정지를 푼다.
+  - 표·에러 핸들러·회수 API는 `processed_event`처럼 공통 메시징 라이브러리가 자동 구성한다. DLT 토픽과 `DltOpsService.replay`는 이 표의 재처리로 바뀐다. 결정 19의 "DLT + HTTP 재투입 API" 중 보관 위치를 바꾸는 것이다. 결정 19가 공통 DB 방식을 기각한 이유(ES·Mongo 서비스에 RDB를 요구함)는 지금 소비 모듈이 모두 RDB(Store도 `common:jpa`·Flyway)라 해당하지 않는다.
+  - 결정 155에서 미뤄 둔 "정지 기록과 DLT 발행의 트랜잭션 경계"는 한 표·한 트랜잭션으로 없어진다.
+- 구분: 추천 수용
+- 결과: [PR #191](https://github.com/tlswltjq/esd-platform/pull/191) 플랫폼 스펙 P2.6-4·5·P5, design "이벤트 하나의 수명"·토픽 표·S9-R·U3, tasks T2·T7
+
+<a id="republish-all-current"></a>
+## 161. 운영 재발행은 모든 모듈의 현행 이벤트로 넓히고, 허용 목록은 플랫폼 스펙 이벤트 표에서 만든다
+- 문제: 결정 129는 Kafka 원본이 사라진 `SENT` Outbox 행을 같은 이벤트 ID·본문·키로 다시 발행하는 ADMIN 경로를 두었지만, 허용 목록(`OutboxRepublishTargets.java:27-37`)은 지급 확인을 기다리는 환불을 잇기 위한 Order 4종·License 4종뿐이다. Payment·Settlement·Studio·Review·Catalog는 다시 낼 방법이 없다. 결정 160으로 소비 실패 레코드는 사라지지 않지만, 소비되기 전에 원본이 사라지는 경우(브로커 디스크 유실 R7, 소비가 보존 기간보다 오래 멈춤)는 남는다. 예: `RefundPaymentConfirmed`가 Order에 닿기 전에 사라지면 결정 158 게이지가 잡아내도 Payment가 다시 낼 수 없어, 돈은 돌려줬는데 Order는 `PENDING_PAYMENT_REFUND`·보유권 정지로 남는다(플랫폼 스펙 PD-9).
+- 선택지: A Order·License 8종 유지 / B 환불 흐름 7종을 더함 / C Order·Payment·License·Settlement의 현행 이벤트 / D 모든 모듈의 현행 이벤트, 허용 목록은 이벤트 표에서 생성 (추천: D — 결정 158이 모든 응답 쌍의 누락을 감지하므로 되살리는 경로도 모든 쌍에 있어야 하고(원칙 ⑤), 허용 목록을 표에서 만들어 정본을 하나로 둔다(원칙 ③). B·C는 비용을 줄인 중간 단계다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "D로 모든 현행 이벤트를 재발행 가능하게 해")
+- 선택: D
+  - 재발행 대상은 플랫폼 스펙 design 이벤트 목록에서 상태가 "현행"인 모든 이벤트다. 모듈별 허용 목록(`OutboxRepublishTargets`)은 그 표에서 생성하거나 표와 대조하는 테스트로 지킨다.
+  - 모든 발행 모듈이 재발행 경로를 갖는다: `outbox_republish` 이행 파일, `republish-owner` 설정, ADMIN 운영 API(결정 129와 같은 규칙 — ADMIN만, 한 번에 한 건, 실행자·시각·사유 기록, 같은 `eventId`·본문·키로 `SENT → PENDING`).
+  - 결정 155·160과 맞물리는 설계: 재발행된 앞 이벤트가 이미 정지된 키로 들어오면 보관 표에서 뒤 이벤트보다 offset이 커진다. 그래서 같은 키 안의 발행 순번을 헤더에 싣고, 회수할 때 그 순번으로 정렬해 원래 순서를 지킨다. 세부는 공통 메시징 설계에서 정한다.
+  - Outbox 행까지 없는 건(발행 모듈 기록 자체가 없음)은 재발행으로 덮이지 않는다. 그 종결은 결정 125의 조사·종결 후속으로 남는다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P2.2-7, design 이벤트 수명·흐름 2·3 실패 행·I14·U3, tasks T7
+
+<a id="single-reference-simulator"></a>
+## 162. 개발·여정·실험·통합 테스트의 PG 시뮬레이터는 기준 시뮬레이터 하나로 정리하고 `mock-pg`·`SIMULATED` 경로를 없앤다
+- 문제: 개발용 PG 시뮬레이터가 둘이다. `simulators/mock-pg`(공급자 `SIMULATED`)가 지금 기본 설정이고(`PAYMENT_PG_PROVIDER:SIMULATED`, `SETTLEMENT_PG_PROVIDER:SIMULATED`), 결정 141은 PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)를 기준 시뮬레이터로 정하면서 `mock-pg`·`SIMULATED` 정리는 미뤘다. `SIMULATED` 환경에서는 Settlement `UnavailablePgRefunds`(`UnavailablePgRefunds.java:12`)가 환불 확인을 `UPSTREAM_UNAVAILABLE`로 거절해 판매자 월 순액이 환불분만큼 크게 남고(U4), `mock-pg`는 승인 진행 접수 없이 결과를 확정해 결정 153의 대조와 맞지 않는다(T13). `SIMULATED`가 나오는 곳은 운영 코드 Payment 3·Settlement 10개 파일, 테스트 21개 파일, Compose·검증 스크립트 여러 개다(플랫폼 스펙 PD-10).
+- 선택지: A 기준 시뮬레이터 하나로 정리(`mock-pg`·`SIMULATED` 경로 제거, 모두 PortOne 어댑터 + 흉내 서버) / B 둘 다 두고 `mock-pg`에 환불 조회 계약 추가 / C `SIMULATED`면 PG 재조회 없이 Payment 확인 값으로 반영 / D 지금대로 두고 문서에 명시 (추천: A — 같은 PG를 흉내 내는 시뮬레이터가 둘이면 계약이 바뀔 때마다 두 곳을 맞춰야 하고 이미 어긋났다(원칙 ③). `UnavailablePgRefunds`·`SIMULATED` 분기는 시험 환경 때문에 운영 코드에 들어간 경로다(원칙 ⑦). 중립화 뒤 core에 공급자 상수가 없어야 한다(원칙 ②, 결정 140). 초안끼리 A·B로 갈렸다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 기준 시뮬레이터 하나로 정리해")
+- 선택: A — 결정 141이 미룬 `mock-pg`·`SIMULATED` 정리에 답한다.
+  - 개발·스택 여정·부하·장애 실험·통합 테스트의 PG는 PortOne 어댑터 + 기준 시뮬레이터(흉내 서버) 하나다. 기본 공급자 설정도 흉내 서버를 가리키게 바꾼다.
+  - `simulators/mock-pg` 모듈, `SIMULATED` 공급자 분기, `SimulatedPgHttpGateway`, `UnavailablePgRefunds` 같은 시뮬레이터 전용 경로를 운영 코드에서 없앤다. 그래서 모든 환경이 같은 `PgRefunds` 계약으로 환불을 정산에 반영하고(U4 해소), 모든 확정이 승인 진행 접수를 거친다(T13 해소).
+  - 이미 저장된 `SIMULATED` 값은 읽을 수 있어야 한다(결정 104의 옛 자료 호환 테스트).
+  - Java 통합 테스트가 흉내 서버를 어떻게 띄울지(컨테이너 이미지·Testcontainers)는 테스트 설계에서 정한다. 결정 140의 공급자 중립화와 같은 작업 묶음으로 한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.26-5·P4.3-2, design S13·U4, tasks T9·T13
+
+<a id="external-clock-principle"></a>
+## 163. 판단 원칙 ⑥을 외부 공급자 시계까지 넓혀, PG가 찍은 시각을 자기 시계와 비교해 근거를 거절하지 않는다
+- 문제: Payment는 PG 응답에 찍힌 시각을 자기가 관측한 시각과 비교해 PG 시각이 더 뒤면 근거를 무효로 본다(`RefundExecution.java:164`·`:224`·`:276`, adapter `PortOneRefundCancellationGateway.java:131`). PG 서버 시계가 3초 빠르면 정상 취소 성공의 `cancelledAt`이 관측 시각보다 뒤로 찍혀 `IllegalArgumentException`이 되고, 조회가 실패로 반복되다 3시간 뒤 경보가 나며 환불이 늦어진다(추정, 미재현). 원칙 ⑥은 "다른 모듈의 시계"라고만 적혀 외부 PG가 포함되는지 문구로 알 수 없었다(플랫폼 스펙 PD-11).
+- 선택지: A 원칙 ⑥을 외부 공급자 시계까지 넓히고, PG 시각은 값으로만 저장하며 근거의 진위는 취소 ID·결제 ID·금액·상태로 판정 / B 비교를 adapter로 옮기고 허용 오차를 공급자 설정에 둠 / C 지금대로 (추천: A — "다른 시계는 우리와 맞는다는 보장이 없다"는 원칙 ⑥의 취지는 우리가 운영하지 않는 외부 시계에 더 강하게 맞는다. 위조 방지는 식별자로 하고 시각 비교는 그 위에 더하는 것이 없다. B의 허용 오차는 근거 없는 수치이고 문제를 줄일 뿐 없애지 못한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 원칙 ⑥을 외부 PG 시계까지 넓혀")
+- 선택: A
+  - `docs/architecture.md` 판단 원칙 ⑥을 "다른 모듈과 외부 공급자의 시계에 판정을 기대지 않는다"로 고친다. 자기 시계와 다른 모듈·외부 공급자가 찍은 시각을 비교해 거절·분기하지 않고, 그 시각은 값으로만 저장한다. 순서·동일성·근거의 진위는 식별자·금액·상태와 잠금으로 판정한다.
+  - 한 시계 안의 순서 검사(예: PG가 찍은 취소 시각이 PG가 찍은 결제 시각보다 앞서면 무효)와 같은 모듈 안 시각끼리의 비교는 대상이 아니다.
+  - Payment core의 비교 3곳과 adapter의 같은 비교 1곳, #166 `recordLateCancellation`의 같은 비교를 없앤다(플랫폼 tasks T3).
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. `docs/architecture.md` 원칙 ⑥, 플랫폼 스펙 P4.5-3, design U2·PG-*, tasks T3
+
+<a id="attribution-in-payment"></a>
+## 164. 환불 취소의 귀속(누가 취소했나)은 Payment만 갖고, Order 환불 시도는 귀속을 갖지 않는다
+- 문제: 첫 취소 응답이 유실된 뒤 조회로 전액 취소를 확인하면 그 취소가 우리 요청인지 외부·콘솔 취소인지 모른다(`PG_QUERY_UNATTRIBUTED`). 고객 환불은 금융 확인으로 `COMPLETED`가 되고 Order 시도에는 `reconciliationRequired=true`(`RefundAttempt.java:141`)가 남는다. 나중에 ADMIN이 결정 127 종결로 판정해도 Payment만 닫히고 Order 표시는 남는다. 이 표시를 읽는 Order 업무 동작은 없다(`RefundAttempt` 밖 사용처 0곳). Order는 `RefundExecutionSucceeded`를 시도를 `SUCCEEDED`로 바꾸는 데만 쓴다(플랫폼 스펙 PD-12).
+- 선택지: A Payment가 판정 사실 이벤트(가칭 `RefundAttributionResolved`)를 내고 Order가 시도에 기록 / B Order는 귀속을 갖지 않고 귀속·조사는 Payment가 정본 / C `RefundExecutionSucceeded`로 운영자 판정도 보냄 (추천: B — Order에는 귀속에 따른 업무 반응이 없어 귀속 사실의 정본은 Payment 하나여야 한다(원칙 ③). A는 반응 없는 사실을 복사하고, C는 "우리 취소 성공"과 "운영자 판정"을 한 이벤트에 섞는다(원칙 ①))
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 귀속은 Payment만 갖게 해")
+- 선택: B
+  - Order 환불 시도는 귀속을 갖지 않는다. 금융 완료면 시도는 `COMPLETED` 하나다. Order 시도 상태는 `PENDING`·`COMPLETED`·`FAILED`(와 결정 157의 늦은 취소 완료)다. `RefundAttempt.reconciliationRequired`를 없앤다.
+  - 귀속(우리 요청·외부 취소·미확정)과 그 조사·종결(결정 127)은 Payment 기록(`refund_execution`·`refund_closure`)이 정본이다. ADMIN은 Payment 화면 하나로 조사한다.
+  - Order는 `RefundExecutionSucceeded`를 소비하지 않는다. 그러면 이 이벤트는 소비자가 없으므로(Settlement도 소비하지 않음) 발행을 멈추고 이벤트 계약에서 뺀다. 옛 이벤트 읽기는 결정 104 호환 규칙을 따른다.
+  - `RefundPaymentConfirmed.source`(근거 종류와 귀속을 함께 말하는 칸)는 귀속 뜻을 잃으므로 플랫폼 tasks T19대로 없앤다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.21-3, design Order 환불 상태 절·흐름 3 S8·이벤트 목록 `RefundExecutionSucceeded`, tasks T19
+
+<a id="pg-fee-owner"></a>
+## 165. PG 비용의 정본은 Settlement 하나로 두고, Payment는 새 결제에 비용을 쓰지 않는다
+- 문제: PG 비용 확인·대사는 Settlement 책임이고 판매자 마감과 분리돼 있다(결정 38·39·142, `settlement_pg_fee`). 그런데 Payment도 승인 응답의 비용을 `purchase_payment.pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount`(V12)에 저장한다. 이 칸을 채우는 곳은 `mock-pg` 응답(`SimulatedPgHttpGateway.java:43-45`)뿐이다. 시뮬레이터가 승인 응답에 330원, 지급 명세에 300원을 보고하면 두 모듈에 다른 값이 남아 플랫폼 순액의 근거를 정할 수 없다(플랫폼 스펙 PD-13).
+- 선택지: A Settlement만 정본, Payment는 새 행에 쓰지 않고 옛 값은 읽기만 / B Payment가 정본, Settlement는 이벤트로 받음 / C 둘 다 두되 Payment는 "승인 응답 관측", Settlement는 확정 비용으로 뜻을 나눔 (추천: A — 정본 하나(원칙 ③)이고 결정 38·39·142의 책임 분리와 같다. B는 Settlement R4.1 "Payment 경유 없음"과 부딪히고, C는 원칙 ③을 이름으로만 피한다. 결정 162로 Payment 칸을 채우던 유일한 경로도 사라진다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 PG 비용은 Settlement만 정본으로 해")
+- 선택: A
+  - PG 비용(정책·요율·금액)의 정본은 Settlement `settlement_pg_fee` 하나다. 플랫폼 순액 등 비용을 쓰는 판정·계산은 이 값만 쓴다.
+  - Payment는 새 결제에 `pg_fee_*`를 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. 이미 저장된 값은 읽을 수 있어야 한다(결정 104 옛 자료 호환 테스트). 칸을 없앨지·언제 없앨지는 Payment 모듈 스펙의 이행 계획에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P1.4-2, design 정본 소유 표·U6, tasks T17
+
+<a id="sale-month-by-payment-confirmation"></a>
+## 166. 매출 귀속 월은 Payment가 승인을 확정한 시각의 KST 월로 정해, 환불 귀속 월(결정 42)과 같은 금융 확인 기준에 둔다
+- 문제: Settlement는 매출 귀속 월(`sale_month`)을 `OrderPaid.occurredAt`의 KST 월로 정한다(`RecordPaidSale.java:78`). 그 값은 Order가 `PAID`를 반영한 시각(`ApplyPaymentResult.java:52`의 `order.getUpdatedAt()`)이라 PG 승인 확정 시각과 Order 소비 지연만큼 다르다. 결정 42는 환불 월만 "최초 금융 확인 월"로 정했다. 예: 10월 31일 23:59:50 KST 승인 확정 → Order가 11월 1일 00:00:20에 `PAID` 반영 → 매출은 11월, PG 정산 명세(G7 대사)는 10월 거래가 된다(플랫폼 스펙 PD-14).
+- 선택지: A 지금대로 Order `PAID` 반영 시각 / B Payment 승인 확정 시각을 `OrderPaid`로 전달해 그 KST 월 / C Settlement 수신 시각 (추천: B — 원칙만으로는 A·B 모두 성립해 정책 선택이라고 밝힌 뒤, 돈이 확정된 사실로 매출과 환불을 같은 시간 축에 두어 결정 130·156과 G7 대사를 맞춘다는 이유로 추천. C는 재처리 때 월이 바뀌어 결정 42 취지와 부딪혀 제외)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 매출 월을 금융 확인 시각으로 해")
+- 선택: B
+  - 매출 귀속 월은 Payment가 승인을 확정한 시각(`OrderPaymentCompleted`의 사실 시각 `occurredAt`)의 KST 월이다.
+  - Order는 이미 그 값을 결과 시각(`resultOccurredAt`)으로 저장한다. `OrderPaid`에 그 값을 새 칸(가칭 `paymentConfirmedAt`)으로 싣고, Settlement는 그 칸의 KST 월을 쓴다. 바뀌는 계약은 `OrderPaid`에 선택 칸 하나를 더하는 호환 변경이다(선택지 설명의 "칸 2개"는 1개로 바로잡는다).
+  - 그 칸이 없는 옛 `OrderPaid`는 지금처럼 `occurredAt`으로 월을 정한다(결정 104 옛 자료 호환).
+  - 마감된 월 처리(현재 `OPEN` 월에 반영하고 원래 월 보존, 결정 42·130)는 그대로다. 다른 모듈 시각을 값으로만 쓰므로 원칙 ⑥과 부딪히지 않는다(P4.5-2).
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.15-3·P4.5-2, design 칸 변경 목표 표, tasks
+
+<a id="catalog-verifies-approval"></a>
+## 167. 공개를 확정하는 Catalog가 Review의 승인 사실을 직접 받아 출시 요청과 대조한다
+- 문제: "공개본은 Review가 승인한 스냅샷이다"(RI-2)를 지키는 곳은 Studio `RequestProjectRelease`뿐이다. Catalog는 Studio 명령을 신뢰하고 `reviewRequestId`를 저장만 한다. 승인의 정본은 Review이고 Studio의 승인 기록은 사본이다. 예: Studio 결함으로 다른 버전 승인을 근거로 출시 요청을 내거나, `stove.studio.v1` 생산 권한을 가진 다른 서비스가 출시 요청을 넣거나, 운영자가 Studio DB를 고쳐 `APPROVED`로 만들면 승인 안 된 자료가 판매되고 그 자료로 보유권이 지급된다(플랫폼 스펙 PD-15).
+- 선택지: A Studio 신뢰 유지 + 주기 검사기로 사후 감지 / B Catalog가 `ProjectReviewApproved`를 소비해 보관하고 출시 요청과 대조, 맞는 승인이 없으면 보류 / C Review가 스냅샷 지문을 싣고 Studio가 전달해 Catalog가 지문만 비교 (추천: B — 돌이킬 수 없는 판매·보유권 지급을 확정하는 Catalog에 가드를 두고(원칙 ⑤), 정본인 Review가 낸 사실을 직접 받는다(원칙 ③). A는 운영 경로에 모든 스키마를 읽는 검사기를 두지 않기로 한 결정 158과 부딪히고, C는 Studio 결함·위조를 막지 못한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 Catalog가 Review 승인을 직접 대조하게 해")
+- 선택: B
+  - Catalog는 `ProjectReviewApproved`(`stove.review.v1`)를 새 소비 그룹으로 받아 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 보관한다.
+  - 출시 요청을 받으면 공개를 확정하기 전에 그 보관 승인과 대조한다. 맞는 승인이 아직 없으면(토픽이 달라 출시 요청이 먼저 올 수 있다) 출시를 승인 대기 상태로 보류하고, 승인이 오면 같은 잠금 안에서 공개 작업을 연다. 승인은 있는데 값이 다르면 공개하지 않고 출시를 거절한다(`ProjectReleaseRejected`).
+  - 승인 대기로 보류된 출시 요청은 Catalog가 센다(결정 158 방식의 게이지, 경보 기준은 결정 159).
+  - Catalog 설계의 "Studio 명령을 신뢰하되 생산 권한은 좁힌다"는 "승인은 Review 사실로 확인하고, 생산 권한도 좁힌다"로 바뀐다. 상태 이름·보관 표·철회된 승인의 처리는 Catalog 모듈 스펙에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.4-2, design 흐름 1 단계·RI-2·실패 표 S3a·이벤트 목록·정방향 응답 쌍, tasks T16
+
+<a id="publication-blocked-closure"></a>
+## 168. 재시도로 풀리지 않는 Catalog 공개 작업은 명시적 정지 상태로 두고, 운영자가 재개하거나 전용 이벤트로 종결한다
+- 문제: Catalog 공개 작업(`catalog_publication_job`)은 실패하면 같은 요청을 5·15·30·60초 간격으로 계속 다시 시도한다(Catalog R10.3, 결정 62, `PublishQueuedReleases.java:44-48`·`CatalogPublicationJob.java:68-79`). 계약 위반(같은 버전 다른 스냅샷, 다른 Project의 코드 충돌, 스냅샷 역직렬화 실패, 소유자 연결 불일치)은 몇 번을 해도 같고, 그동안 작업은 `PENDING`, Studio 출시 요청은 `REQUESTED`로 남아 프로젝트별 진행 중 출시 1건 규칙(결정 63) 때문에 그 Project는 다음 출시를 못 하고 기존 보유자도 업데이트를 못 받는다. 경보가 없다(플랫폼 스펙 PD-16).
+- 선택지: A 재시도 유지 + 경보만 / B 계약 위반이면 정지 상태(`BLOCKED`) + 경보, 운영자가 원인을 고쳐 재개하거나 종결 명령으로 끝내고 Studio에 운영자 종결 전용 이벤트 / C N회 실패 뒤 `ProjectReleaseRejected(reason=PUBLICATION_FAILED)` 자동 거절 (추천: B — 재시도 대기와 정지를 다른 상태로 두고(원칙 ④) 끝나는 곳을 둔다(원칙 ⑤). 운영자 종결은 자동 거절과 다른 사실이라 전용 이벤트로 낸다(원칙 ①, 결정 148과 같은 모양). C는 일시 오류와 계약 위반 구분이 틀리면 정상 출시를 거절한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 정지 상태와 운영자 종결을 둬")
+- 선택: B
+  - 공개 작업 실패를 일시 오류(재시도 대기 `PENDING`)와 재시도로 풀리지 않는 실패(정지 `BLOCKED`)로 나눈다. 분류는 공통 영구 실패 분류(플랫폼 tasks T20)와 같은 기준을 쓴다. `BLOCKED`는 1건부터 경보한다.
+  - 운영자는 원인을 고친 뒤 재개(`BLOCKED` → `PENDING`)하거나, 종결 명령으로 그 출시 요청을 공개 없이 끝낸다. 종결하면 Catalog는 같은 트랜잭션에서 운영자 종결 전용 이벤트(가칭 `ProjectReleaseClosed`, 운영자·요청 ID·사유 근거)를 `stove.release.v1`에 낸다. `ProjectReleaseRejected`의 `reason`에 싣지 않는다.
+  - Studio는 그 사실을 받아 출시 요청을 끝내고 활성 출시 자리를 푼다. 창작자는 새 요청을 낼 수 있다.
+  - 상태 이름·운영 API·Studio 상태 전이는 Catalog·Studio 모듈 스펙에서 정한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.5-5, design 이벤트 목표 행·흐름 1 S6 행·S6b 실패 6행, tasks T23
+
+<a id="checkout-open-until-expiry-fact"></a>
+## 169. 결제창은 Order의 만료 사실(`OrderExpired`)을 받을 때까지 열고, Payment는 자기 시계로 결제 기한을 판정하지 않는다
+- 문제: Payment는 `OrderPlaced`를 받을 때 기한을 `occurredAt + 30분`으로 직접 계산하고(`PaymentOrderLifecycle.java:33`), 결제창 정보를 줄 때 자기 시계와 비교해 거절한다(`ReadPaymentCheckout.java:50`). 기한의 정본은 Order 하나이고(플랫폼 tasks T12) 원칙 ⑥은 다른 모듈 시각과 자기 시계를 비교하지 않는다(결정 163). 이 판정을 없애면 기한 직후 Order가 아직 `OrderExpired`를 내지 않은 짧은 사이(만료 처리는 1초 주기)에 고객이 결제창을 열고 인증한 뒤 승인 접수(S4)에서 `ORDER_EXPIRED`를 받을 수 있다. 서버 확정 방식이라 돈은 나가지 않는다. 반대로 지금은 Payment 서버 시계가 1분 빠르면 기한 안인데도 결제창이 막힌다(플랫폼 스펙 PD-17).
+- 선택지: A `OrderExpired`를 받았을 때만 결제창 409 `ORDER_EXPIRED` / B 결제창을 열 때 Order 내부 API로 동기 확인 / C A + `expiresAt`과 Payment 시계로 남은 시간 표시(거절에는 안 씀) / D 지금처럼 Payment 시계로 거절 (추천: A — 기한 판정은 정본인 Order 하나가 하고 그 지점은 이미 동기 호출인 승인 접수다(원칙 ③⑥). B는 결제창까지 Order에 묶고, C의 남은 시간은 다른 모듈 시각과 자기 시계를 섞은 값이며, D는 원칙 ⑥ 위반이 남는다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 만료 사실을 받을 때까지 결제창을 열어")
+- 선택: A
+  - Payment는 `OrderPlaced.expiresAt`(T12)을 값으로 저장만 하고, 자기 시계와 비교해 결제창을 막거나 시도를 거절하지 않는다. 만료는 Order 승인 접수의 `ORDER_EXPIRED` 거절과 `OrderExpired` 수신으로만 안다.
+  - 결제창 정보 요청은 그 주문의 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`로 거절한다.
+  - 기한 직후 약 1초 안에 결제를 시작한 고객은 인증 뒤 만료 안내를 받을 수 있다. 돈은 나가지 않고 새 주문으로 안내한다.
+- 구분: 추천 수용
+- 결과: 플랫폼 스펙 2차 PR. P3.10-2, design 흐름 2 S2·S3 행, tasks T12
+
 ---
 
 ## 검증하며 드러난 것
