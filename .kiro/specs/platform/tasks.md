@@ -9,7 +9,7 @@
 - [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
 - [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
 - [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
-- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155 완료(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
 - [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
 - [ ] 독립 아키텍처 평가 → 수정 → 재평가
 
@@ -23,9 +23,9 @@
   - 영향: **돈·보유권** — 접수 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·정산 매출. 같은 고객이 새 시도로 이중 청구될 수 있다. 영수증 B가 열려 있을 때 시도 A의 결과도 구분하지 못한다.
   - 재현: Order 통합 — (1) 접수 → `/failure`로 `PENDING` → 같은 `paymentId`의 `OrderPaymentCompleted` 주입 → `PAID`면 Red (2) `createdAt` 31분 전 `PENDING` 주문(스캔 정지)에 결과 주입 → Red (3) 영수증 B 열림 + 결과 `admissionId`=A → 거절, (4) `EXPIRED` 주문에 성공 주입 → DLT가 아니라 `OrderPaymentResultRejected` Outbox, Payment 보류 목록에 보임. Payment 경합 — `charge` 직후 시도 A를 실패 종료로 바꾸고 PG를 PAID로 둔 뒤 확정 → 결과가 나오면 Red. 계약 테스트: 스키마에 `admissionId`.
 
-- [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** [결정 필요 PD-3]
+- [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** ([결정 155](../../../docs/decisions.md#key-stop-on-dead))
   - 어디서: `common/messaging/.../outbox/OutboxEvent.java:204-212`(`holdUntil(null)`은 아무것도 안 함), `OutboxRelay.java:109-113`, `OutboxEventRepository.java:20-28`(`lockPendingBatch`가 `DEAD` 키를 거르지 않음), `common/kafka/.../ops/DltOpsService.java:65-`(재투입이 같은 키의 이후 처리 여부를 보지 않음, `docs/architecture.md` R2).
-  - 목표: P2.2-4·P2.6-5. 방법은 PD-3(추천: 키 정지 — Outbox는 `DEAD` 키의 뒤 행 보류, 소비는 DLT로 보낸 키를 그룹별 정지 목록에 올림, 회수는 키 단위 원래 순서).
+  - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 세부(표 구조, 정지 기록과 DLT 발행의 트랜잭션 경계)는 common messaging 설계.
   - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
   - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
 

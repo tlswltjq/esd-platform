@@ -117,7 +117,7 @@ OutboxRelay (서비스당 1대, stove.outbox.poll-interval-ms=200)
   -> 키별 체인으로 묶어 웨이브 발행
      ack 성공 : SENT
      실패     : retryCount++, next_attempt_at = 1s,2s,...,5m, 같은 키 뒤 이벤트 holdUntil
-     10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표: 뒤 이벤트도 멈춤 [PD-3]
+     10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표(결정 155): DEAD 키의 뒤 행은 회수 전까지 보류, ADMIN 키 단위 requeue
 Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion[PD-18]·traceparent
 소비 리스너 (그룹당 파티션당 스레드 1, ack-mode record)
   EventEnvelope.from (헤더 없으면 거절)
@@ -126,7 +126,7 @@ Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt
   -> 커밋 뒤 오프셋 커밋
   실패: 재시도 가능 -> 1·2·4초 재시도 -> <topic>.DLT 같은 파티션 (DeadLetterMetrics)
         영구 실패   -> 재시도 없이 DLT (목표, P2.6-3)
-DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inbox가 중복 거름   -- 순서 [PD-3]
+DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inbox가 중복 거름   -- 목표(결정 155): DLT로 보낸 (그룹, 토픽, 키)를 정지 목록에 올리고 뒤 레코드도 같은 DLT로. 재투입은 키 단위 offset 순, 다 처리되면 정지 해제
 ```
 
 ### `EventType` 상수 (42개) — 현행·목표 분리안
@@ -507,7 +507,7 @@ core 계약에는 공급자 이름을 쓰지 않았다. 지금 쓰는 공급자(
 | S9-R 거절 사실 | 늦은 도착 | 운영자가 PG 콘솔 취소 뒤 이미 그 결제를 종결한 다음 거절 사실이 옴 | Payment 결제 행 잠금 뒤 보류·종결 기록 확인 | 거절 사실만 기록하고 종결 결과를 바꾸지 않음(결정 115·144) | 보류 목록에 사실 이력으로 보임 | 없음(목표 이벤트) | T1·MC-P13 |
 | S9-R 거절 사실 | 상대 상태가 이미 바뀜 | 그 결제가 이미 다른 사유로 보류 중 | Payment 결제·시도 잠금 | 처음 보류 사유를 유지하고 거절 사실을 추가로 기록(결정 144). 보류가 없으면 새로 올림 | 보류 목록·경보 | 없음(목표 이벤트) | T1·MC-P13 |
 | S9-R 거절 사실 | 동시 진행 | 거절 처리와 같은 결제의 웹훅·재조회·ADMIN 종결이 동시에 | Payment 결제 → 시도 잠금 순서(P3.12-1) | 직렬화 | 해당 없음 — 잠금으로 끝난다 | 없음(목표 이벤트) | T1 |
-| S9-R 거절 사실 | 상대 모듈 중단 | Payment 중단 / 처리 예외 반복 | Kafka 소비 지연 / 공통 재시도 | Kafka 보존, 기동 뒤 반영. 그 사이 고객은 Order 안내만 봄 | DLT·경보, 키 정지·재투입은 [결정 필요 PD-3]·PD-8 | 없음(목표 이벤트) | T1 |
+| S9-R 거절 사실 | 상대 모듈 중단 | Payment 중단 / 처리 예외 반복 | Kafka 소비 지연 / 공통 재시도 | Kafka 보존, 기동 뒤 반영. 그 사이 고객은 Order 안내만 봄 | DLT·경보, 키 정지·키 단위 재투입(결정 155), 보존·경보 기준은 PD-8 | 없음(목표 이벤트) | T1 |
 | S10 구매 근거 | 중복 전달 | `OrderPaid` 재전달 / 구매 근거 생성 사실 재전달 | `GrantLicense.verifyRedelivery`(13개 값) / Order Inbox(`order-license-grant`) | 같으면 무변화, 다르면 `CONFLICT` | DLT | `L/core/service/GrantLicense.java:32-35,52-56` | 없음 |
 | S10 구매 근거 | 순서 역전 | 해당 없음(이 흐름 안) — `OrderPaid`는 주문당 하나이고 앞선 License 입력이 없다. 지급 전 정지 요청의 역전은 흐름 3(License 설계 찾은 불일치 7) | — | — | — | — | F 경계 3 |
 | S10 구매 근거 | 늦은 도착 | `OrderPaid` 전달 지연으로 고객 보관함이 비어 있음, 그 사이 환불 접수 | Order `PENDING_LICENSE_GRANT` 진입 시각 | 늦게 와도 그대로 생성. 대기 환불은 지급 확인 뒤 정지 요청 | 10분 경계 게이지·경보 `RefundLicenseGrantsDelayed`(결정 125). 환불이 없으면 경보 없음(U3) | Order 설계 환불 처리 요약 | 환불 없는 지급 지연은 보이지 않음(PD-6) |

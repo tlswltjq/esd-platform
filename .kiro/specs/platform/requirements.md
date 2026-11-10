@@ -88,7 +88,7 @@
 1. WHEN 업무 상태를 바꾸는 트랜잭션이 다른 모듈에 알릴 사실을 만들면 THEN 시스템 SHALL 같은 트랜잭션·같은 DB에 `OutboxRecorder.record(aggregateType, aggregateId, event)`로 `outbox_event`를 적재한다(`Propagation.MANDATORY`, `common/messaging/.../outbox/OutboxRecorder.java:32-43`). 업무 코드는 `KafkaTemplate.send`를 직접 부르지 않는다.
 2. THE 이벤트 종류마다, 토픽마다 발행 모듈 SHALL 하나다. 요청 사실(`LicenseSuspensionRequested` 등)은 요청한 모듈의 토픽에 낸다.
 3. 릴레이(`OutboxRelay`) SHALL `PENDING`이고 `next_attempt_at`이 지난 행을 `id` 순으로 선점해 at-least-once로 보내며, 브로커 확인(`acks=all`, 멱등 프로듀서) 뒤에만 `SENT`로 바꾼다.
-4. WHILE 같은 `partitionKey`의 앞 이벤트가 `PENDING`(재시도 대기)이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 보내지 않는다. 앞 이벤트가 `DEAD`가 된 뒤의 처리는 [결정 필요 PD-3] · T2.
+4. WHILE 같은 `partitionKey`의 앞 이벤트가 `PENDING`(재시도 대기)이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 보내지 않는다. IF 앞 이벤트가 `DEAD`이면 THEN 릴레이 SHALL 그 키의 뒤 이벤트를 계속 보류하고, ADMIN이 앞 이벤트를 회수(`requeue`)해 `SENT`가 된 뒤에만 `id` 순으로 보낸다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2).
 5. WHEN 발행이 실패하면 THEN 릴레이 SHALL 1초부터 두 배씩 5분 상한으로 다시 시도하고(`OutboxEvent.backOffDelay`), `stove.outbox.max-retry`(기본 10)를 넘기면 `DEAD`로 바꿔 지표로 낸다. 운영자가 `DEAD`를 되돌릴 때 `eventId`·본문·키·`traceParent`를 바꾸지 않는다.
 6. 서비스마다 같은 키를 동시에 선점하는 릴레이가 하나뿐이어야 순서가 성립한다. 시스템 SHALL 이 조건을 선점 잠금이나 키 배정으로 코드에서 강제한다(원칙 ⑤, T10).
 7. WHEN ADMIN이 Kafka에서 사라진 이벤트를 재발행하면(결정 129) THEN 시스템 SHALL 그 모듈이 소유한 이벤트 종류만, 같은 `eventId`·본문·키로 `SENT → PENDING` 되돌리고 실행자·시각·사유를 남긴다. 받는 쪽은 Inbox로 거른다. 대상 이벤트 범위는 [결정 필요 PD-9] · T7.
@@ -123,7 +123,7 @@
 2. IF DLT 발행이 실패하면 THEN 시스템 SHALL 원본 오프셋을 넘기지 않는다(`setFailIfSendResultIsError(true)`). DLT 유입은 발행 성공 뒤 `DeadLetterMetrics`로 센다.
 3. IF 실패가 영구 실패(봉투 헤더 없음, 역직렬화 실패, 계약 검증 실패, 식별자 모순, P2.3-4의 내용 불일치)이면 THEN 시스템 SHALL 재시도하지 않고 바로 DLT로 보낸다. 영구 실패는 `common/kafka`의 공통 예외 한 종류로 표시한다(원칙 ③, T20).
 4. WHEN DLT에 레코드가 들어오면 THEN 시스템 SHALL 토픽별 유입 지표로 경보하고, ADMIN 재투입(`DltOpsService.replay`)은 `kafka_dlt-` 헤더만 빼고 원본 헤더를 보존해 원래 토픽으로 보낸다. 보존 기간·재투입 기한·경보 기준은 [결정 필요 PD-8].
-5. WHEN 재투입하는 레코드보다 뒤의 같은 키 이벤트가 이미 처리됐으면 THEN 시스템 SHALL 재투입으로 상태가 거꾸로 가지 않게 한다. 방법은 [결정 필요 PD-3](T2, `docs/architecture.md` R2).
+5. WHEN 소비자가 레코드를 DLT로 보내면 THEN 시스템 SHALL 그 (소비 그룹, 토픽, 키)를 그 모듈의 정지 목록에 올리고, 정지된 키의 뒤 레코드는 처리하지 않고 같은 DLT로 보낸다. WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 키 단위로 DLT의 원래 offset 순서대로 처리하고, 그 키의 레코드가 모두 처리된 뒤에만 정지를 푼다. 재투입한 레코드가 다시 실패하면 정지를 유지한다. 그래서 같은 키의 뒤 이벤트가 앞 이벤트보다 먼저 처리되지 않는다([결정 155](../../../docs/decisions.md#key-stop-on-dead), T2, `docs/architecture.md` R2). THE 시스템 SHALL 정지된 키 수(발행 `DEAD` 키, 소비 정지 키)를 소비 그룹·모듈별 지표로 내고 경보하며, 회수(`requeue`·재투입) API는 키 단위로 둔다(결정 155).
 6. THE 모든 이벤트 SHALL 집합체 키와 업무 식별자를 실어, 사실이 다른 모듈에 끝내 반영되지 않은 것(정방향 누락, U3)을 P4.3의 감지가 셀 수 있게 한다.
 
 #### P2.7 스키마 호환 (결정 104)
