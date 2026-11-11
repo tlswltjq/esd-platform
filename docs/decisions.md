@@ -1924,6 +1924,17 @@
 - 구분: 추천 수용
 - 결과: Payment R17.7·R14.4·종결 표·API 계약
 
+<a id="no-alert-silence"></a>
+## 191. 종결할 수 없는 과거 보류는 없으므로 경보 억제 장치를 두지 않고, "Alertmanager silence" 안내문만 사실대로 고친다
+- 문제: 옛 tasks에서 넘어온 항목이다. 승인 보류·환불 지연 종결 API(결정 114·127) 이전의 과거 보류가 종결 조건을 채우지 못하면 경보를 끌 방법이 필요하다고 봤다. `infra/prometheus/alerts.yml`의 `PaymentApprovalsRequireReview`·`RefundsUnattributed` 안내문과 규칙 시험(`infra/prometheus/tests/approval-review.yml`)은 "알려진 과거 보류는 Alertmanager silence로 관리한다"고 적었지만 저장소에는 Alertmanager가 없고, 절차서 `docs/runbooks/refund-delay-closure.md`는 "silence로 끌 수 없다, 종결하면 다음 평가에서 풀린다"고 적어 서로 맞지 않는다(M-PA-5, Payment R12.8).
+- 선택지: A Alertmanager 도입 + silence 절차 / B Payment DB에 경보 억제 표 / C 안내문만 정정 (추천: C — 결정 182·187로 종결 API 이전의 과거 보류 행이 없고 지금 보류는 모두 종결 API로 닫혀 게이지에서 빠지므로, 끌 대상이 없는 억제 장치를 만들 이유가 없다. 모듈 초안 메모의 추천은 A였으나 과거 데이터가 없어진 뒤 C로 바꿨다. B는 업무 DB에 운영 표시를 섞는다(원칙 3))
+- 내 의견: "C안으로 안내문만 정정해"
+- 선택: C
+  - 경보 안내문과 규칙 시험의 "Alertmanager silence" 문장을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾼다(`.yml` 변경이라 별도 코드 PR, Codex 교차 리뷰 대상). Payment R12.8은 "끌 수 없는 과거 보류 없음"으로 닫는다.
+  - Alertmanager가 없어 경보가 Prometheus 화면의 firing으로만 보이고 누구에게도 전달되지 않는다는 점은 이 결정의 범위가 아니다. 사용자는 이번에 G5 항목 등록을 고르지 않았다.
+- 구분: 추천 수용
+- 결과: Payment R12.8. 안내문 정정은 별도 PR
+
 ---
 
 ## 검증하며 드러난 것

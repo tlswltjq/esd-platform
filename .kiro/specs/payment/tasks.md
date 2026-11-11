@@ -212,7 +212,8 @@
 
 ## 진행 중 / 남음
 
-- [ ] [결정 필요 M-PA-5·M-PA-6] notes D의 답을 받은 뒤 해당 항목(R12.8·R9.3)을 목표 문장으로 바꾼다. M-PA-1은 결정 188(R3.11), M-PA-2는 결정 189(R20.3), M-PA-3은 결정 179, M-PA-4는 결정 190(R17.7)으로 확정.
+- [ ] [결정 필요 M-PA-6] notes D의 답을 받은 뒤 R9.3을 목표 문장으로 바꾼다. M-PA-1은 결정 188(R3.11), M-PA-2는 결정 189(R20.3), M-PA-3은 결정 179, M-PA-4는 결정 190(R17.7), M-PA-5는 결정 191(R12.8)로 확정.
+- [ ] 경보 안내문 정정([결정 191](../../../docs/decisions.md#no-alert-silence)): `infra/prometheus/alerts.yml`의 "Alertmanager silence" 안내 3곳과 `infra/prometheus/tests/approval-review.yml`의 기대 안내문 3곳을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾸고 `promtool test rules`로 확인(별도 PR, Codex 교차 리뷰).
 - [ ] [나중에 따로 — 사용자 지시 2026-11-11] 주기 PG 거래 대사: 발견(R16)에서 놓친 청구와 오래 열린 `unlinked_charge`를 PG 거래 목록·정산 자료로 다시 찾는다. 맡을 모듈(Payment / Settlement — Settlement면 연결되지 않은 청구를 이벤트로 받아야 함, P1.1-2)·주기는 그때 정한다. 열린 기록의 가장 오래된 나이 게이지·재경보도 함께 다룬다(지금 게이지 `stove.payment.unlinked-charge.open{source}`는 건수만).
 - [ ] 소급 후보 RC-2·RC-13 재질문(notes E) 뒤 MC-P4·MC-P5의 목표 모양 확정.
 - [ ] [외부 대기] 실제 PG 오류(형식 거절·`INVALID_REQUEST` 등) 뒤 운영 재개를 실제 ADMIN 경로로 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))

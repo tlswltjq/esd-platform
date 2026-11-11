@@ -212,7 +212,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 5. THE Payment SHALL 사유별 현재 보류 건수를 게이지로 내고 `PAID_WITHOUT_ADMISSION`은 critical, 나머지는 warning으로 경보한다. 알려진 사유 밖 값은 `OTHER`로 센다.
 6. WHEN 상세·조사 이력을 조회하면 THEN Payment SHALL 과거에 보류된 시도도 현재 상태와 함께 주고, 한 번도 보류되지 않은 시도는 404다. 조사 POST는 현재 `REVIEW_REQUIRED`에만 허용한다.
 7. WHEN 조회가 실패하면 THEN Payment SHALL 마지막 조회 시각과 오류 종류(`INVALID_EVIDENCE`·`UNAVAILABLE`)를 기록한다. 성공은 오류를 지운다. 최신 관측 상태는 마지막 유효 관측이다. lease를 잃은 뒤에는 저장하지 않는다.
-8. THE 종결할 수 없는 과거 보류의 경보를 끄는 방법 SHALL `[결정 필요 M-PA-5]`를 따른다.
+8. THE Payment SHALL 경보 억제 장치를 두지 않는다. 종결 API 이전의 과거 보류는 없고(결정 182·187), 보류는 종결(R13)로 닫히면 게이지에서 빠져 다음 경보 평가에서 풀린다. 경보 안내문도 이렇게 적는다([결정 191](../../../docs/decisions.md#no-alert-silence)).
 9. THE DB SHALL 관측 상태 집합·관측 상태/시각 쌍·보류 시각 순서(같은 Payment 시계)를 CHECK로 지킨다.
 10. WHEN 이미 `REVIEW_REQUIRED`인 시도에 새 송신 중단 사유가 오면 THEN Payment SHALL 송신 중단을 유지하고 처음 사유와 `reviewStartedAt`을 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 그 사유로 한 번 올리고, 그 뒤에는 바꾸지 않는다. 버린 사유는 로그로만 남긴다([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason), P4.6-1, I10).
 11. WHILE 시도가 `REVIEW_REQUIRED`이면 THE 승인 작업자 SHALL 다음 PG 조회 시각을 `now + min(상한, max(시작값, now − reviewStartedAt))`로 잡는다(시작값 5초·상한 10분, [결정 122](../../../docs/decisions.md#approval-review-requery-interval)). `reviewStartedAt`이 없는 옛 행은 상한을 쓴다.
