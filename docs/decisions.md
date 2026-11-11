@@ -1933,7 +1933,17 @@
   - 경보 안내문과 규칙 시험의 "Alertmanager silence" 문장을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾼다(`.yml` 변경이라 별도 코드 PR, Codex 교차 리뷰 대상). Payment R12.8은 "끌 수 없는 과거 보류 없음"으로 닫는다.
   - Alertmanager가 없어 경보가 Prometheus 화면의 firing으로만 보이고 누구에게도 전달되지 않는다는 점은 이 결정의 범위가 아니다. 사용자는 이번에 G5 항목 등록을 고르지 않았다.
 - 구분: 추천 수용
-- 결과: Payment R12.8. 안내문 정정은 별도 PR
+- 결과: Payment R12.8. 안내문 정정은 [PR #197](https://github.com/tlswltjq/esd-platform/pull/197)
+
+<a id="drop-payment-pg-fee"></a>
+## 192. Payment의 옛 PG 비용 칸은 그 값을 쓰는 모의 PG 경로를 없앨 때 함께 지운다
+- 문제: 결정 165는 PG 비용의 정본을 Settlement `settlement_pg_fee` 하나로 정하고, Payment는 새 결제에 비용을 쓰지 않되 이미 저장된 값은 읽도록 했다(결정 104). 칸을 없앨지·언제 없앨지는 Payment 모듈 스펙에 넘겼다(M-PA-6). `purchase_payment.pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount`(V12, `ck_payment_pg_fee`)를 쓰는 곳은 모의 PG 경로 `SimulatedPgHttpGateway`뿐이고(결정 162로 없어질 예정), 읽는 곳은 `Payment.java`의 결과 재구성 하나다. API 응답·이벤트 본문에는 나가지 않는다.
+- 선택지: A G7 정산 대사 확정까지 읽기 전용으로 두고 그 뒤 이행으로 삭제 / B 쓰는 경로를 없앨 때(결정 162·T13 또는 PA-T16) 함께 삭제 / C 영구 유지 (추천: B — 메모 초안 추천 A는 옛 값 읽기를 전제로 했지만 결정 182·187로 보존할 옛 행이 없다. 유일한 쓰는 경로가 곧 없어지므로 그때 쓰는 곳·읽는 곳·칸을 함께 지우면 정본이 Settlement 하나로 남는다(원칙 3). C는 정본이 둘처럼 보인다)
+- 내 의견: "B안으로 쓰는 경로 제거 때 함께 삭제해"
+- 선택: B
+  - 모의 PG 경로 제거(결정 162, 플랫폼 T13) 또는 PA-T16 가운데 먼저 하는 PR에서 `pg_fee_*` 세 칸·`ck_payment_pg_fee`·`Payment`의 비용 필드·`PgFee`·`PgResult.fee`를 함께 지운다. 이행 파일은 Flyway 기준선 압축(결정 187, T34) 뒤의 V2 이후 증분으로 낸다. 옛 값 백업·호환 읽기는 두지 않는다(보존할 데이터 없음).
+- 구분: 추천 수용
+- 결과: Payment R9.3·데이터 모델·PA-T16
 
 ---
 

@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-11 | Payment의 옛 PG 비용 칸(`pg_fee_*`)을 언제 없앨지 | A G7까지 읽기 전용 / B 쓰는 경로 제거 때 함께 삭제(추천) / C 영구 유지 | "B안으로 쓰는 경로 제거 때 함께 삭제해" | B — 보존할 옛 값이 없고 유일한 쓰는 경로가 곧 없어진다. 정본은 Settlement 하나 | 추천 수용 | [결정 192](decisions.md#drop-payment-pg-fee) |
 | 2026-11-11 | 종결할 수 없는 과거 보류의 경보를 끄는 방법 | A Alertmanager + silence / B 경보 억제 표 / C 안내문만 정정(추천) | "C안으로 안내문만 정정해" | C — 과거 보류가 없어(결정 182·187) 끌 대상이 없다. 사실과 다른 "silence" 안내만 고친다 | 추천 수용 | [결정 191](decisions.md#no-alert-silence) |
 | 2026-11-11 | Order가 거절한 청구를 환불로 닫은 뒤 결제를 고객에게 어떻게 보일지 | A `PAID`+안내 / B 새 끝 상태 / C 응답만 `CHARGE_RETURNED` 계산(추천, 원칙상 A·C 성립) | "C안만 정하고 대사는 나중에 따로 다뤄" | C — 저장 상태는 결정 154대로 두고 고객이 보는 값만 정본에서 계산. 주기 PG 대사는 별도 과제로 미룸 | 추천 수용 | [결정 190](decisions.md#charge-returned-view) |
 | 2026-11-11 | 결제 `PAID` → Order 반영 누락을 누가 어떻게 셀지(1회차 지적 A1) | A 기존 `OrderPaid`를 응답으로(추천) / B 새 응답 사실 / C 세지 않음 | (선택지 선택만) "A안으로 OrderPaid를 응답으로 세" | A — `OrderPaid`가 그 반영 사실이고 상관 ID(`paymentResultEventId`)가 이미 있다. Payment가 응답 없는 `PAID` 결제를 센다 | 추천 수용 | [결정 189](decisions.md#payment-order-response) |

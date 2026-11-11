@@ -173,7 +173,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 #### 수용 기준
 1. THE PG 승인·조회·취소·통지 계약 SHALL `core.port`에 공급자 중립 이름과 core 값으로 두고, HTTP 구현·응답 분류·보장 기한은 `adapter`, 주소·키·기한 설정 조립은 `config`에 둔다(P1.1-3·P1.1-4).
 2. THE 개발·여정·실험·통합 테스트 SHALL 운영과 같은 PG adapter와 기준 시뮬레이터 하나로 돌고, 운영 코드에 시뮬레이터 전용 공급자 값·adapter·분기를 두지 않는다([결정 162](../../../docs/decisions.md#single-reference-simulator), 원칙 ⑦). 이미 저장된 옛 공급자 값은 읽을 수 있어야 한다(결정 104).
-3. THE Payment SHALL 새 결제에 PG 비용(정책·요율·금액)을 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. 이미 저장된 비용 값은 읽기만 한다. 칸 제거 시점은 `[결정 필요 M-PA-6]`이다([결정 165](../../../docs/decisions.md#pg-fee-owner), P1.4-2).
+3. THE Payment SHALL 새 결제에 PG 비용(정책·요율·금액)을 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. `pg_fee_*` 칸·CHECK·비용 필드는 그 값을 쓰는 모의 PG 경로를 없앨 때 함께 지우고, 옛 값 호환 읽기는 두지 않는다(보존할 데이터 없음, [결정 192](../../../docs/decisions.md#drop-payment-pg-fee)) ([결정 165](../../../docs/decisions.md#pg-fee-owner), P1.4-2).
 4. THE Settlement SHALL PG 명세를 직접 조회하며, Payment에 정산 중계 API를 두지 않는다.
 5. THE Payment 승인·조회 키와 Settlement 읽기 키 SHALL 분리하고, 시뮬레이터 제어 키를 업무 앱에 주지 않는다.
 

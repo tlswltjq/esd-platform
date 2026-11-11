@@ -191,7 +191,7 @@
   - 재현: ArchUnit + 통합 — 새 경로로 서명 통지 접수.
 - [ ] **PA-T16. Payment가 새 결제에 PG 비용을 쓴다** ([결정 165](../../../docs/decisions.md#pg-fee-owner), 플랫폼 T17)
   - 어디서: `Payment.java:131-133`(`confirm`), `payment:core/domain/PgResult.java`의 `fee`, V12.
-  - 목표: R9.3. 새 행 `pg_fee_*` NULL, core 계약에서 비용 제거, 옛 값 읽기. 칸 제거는 M-PA-6.
+  - 목표: R9.3. core 계약에서 비용 제거와 함께 `pg_fee_*` 세 칸·`ck_payment_pg_fee`·`Payment` 비용 필드·`PgFee`·`PgResult.fee`를 지운다. 쓰는 경로(`SimulatedPgHttpGateway`, 결정 162·T13)와 같은 PR이거나 그 뒤. 이행은 Flyway 기준선(T34) 뒤 V2 이후 증분, 옛 값 백업 없음([결정 192](../../../docs/decisions.md#drop-payment-pg-fee)).
   - 영향: 없음(채우던 곳은 `SimulatedPgHttpGateway`뿐).
   - 재현: 단위 — 비용이 있는 응답으로 확정해도 칸 NULL.
 - [ ] **PA-T2. 실패 시도 이력이 PG 실패 시각과 자기 시각을 비교한다** (결정 163)
@@ -212,7 +212,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] [결정 필요 M-PA-6] notes D의 답을 받은 뒤 R9.3을 목표 문장으로 바꾼다. M-PA-1은 결정 188(R3.11), M-PA-2는 결정 189(R20.3), M-PA-3은 결정 179, M-PA-4는 결정 190(R17.7), M-PA-5는 결정 191(R12.8)로 확정.
+- [x] Payment `[결정 필요]` 6건 확정: M-PA-1 결정 188(R3.11), M-PA-2 결정 189(R20.3), M-PA-3 결정 179, M-PA-4 결정 190(R17.7), M-PA-5 결정 191(R12.8), M-PA-6 결정 192(R9.3·PA-T16).
 - [ ] 경보 안내문 정정([결정 191](../../../docs/decisions.md#no-alert-silence)): `infra/prometheus/alerts.yml`의 "Alertmanager silence" 안내 3곳과 `infra/prometheus/tests/approval-review.yml`의 기대 안내문 3곳을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾸고 `promtool test rules`로 확인(별도 PR, Codex 교차 리뷰).
 - [ ] [나중에 따로 — 사용자 지시 2026-11-11] 주기 PG 거래 대사: 발견(R16)에서 놓친 청구와 오래 열린 `unlinked_charge`를 PG 거래 목록·정산 자료로 다시 찾는다. 맡을 모듈(Payment / Settlement — Settlement면 연결되지 않은 청구를 이벤트로 받아야 함, P1.1-2)·주기는 그때 정한다. 열린 기록의 가장 오래된 나이 게이지·재경보도 함께 다룬다(지금 게이지 `stove.payment.unlinked-charge.open{source}`는 건수만).
 - [ ] 소급 후보 RC-2·RC-13 재질문(notes E) 뒤 MC-P4·MC-P5의 목표 모양 확정.

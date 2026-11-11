@@ -35,7 +35,7 @@
 | `next_failure_lookup_at`·`failure_history_checked_at` | 실패 시도 이력 수집 일정(상태 아님) | — |
 | `pg_paid_amount`·`pg_discount_amount` | PG 결제 구성 | `ck_payment_provider_amounts`(NULL 일치·`PAID`만·합계=amount) |
 | `order_response_kind`·`order_response_event_id` (목표 신설) | Order 반영 응답(`APPLIED` = `OrderPaid`, `REJECTED` = `OrderPaymentResultRejected`)과 그 `eventId` | CHECK 값 2개, 둘 다 NULL이거나 둘 다 값, `PAID`일 때만 `APPLIED`, `uk_purchase_payment_order_response(order_response_event_id)`. 응답 없는 `PAID` 결제를 게이지로 셈([결정 189](../../../docs/decisions.md#payment-order-response)) |
-| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본(읽기 전용) | `ck_payment_pg_fee`. 새 행에 쓰지 않음(결정 165, PA-T16), 칸 제거는 `[결정 필요 M-PA-6]` |
+| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본 — **목표: 삭제** | `ck_payment_pg_fee`. 쓰는 곳은 `SimulatedPgHttpGateway`뿐이라, 그 경로를 없애는 PR(결정 162·T13 또는 PA-T16)에서 칸·CHECK·`Payment` 필드·`PgFee`·`PgResult.fee`를 함께 지운다([결정 192](../../../docs/decisions.md#drop-payment-pg-fee)) |
 | (목표) `(payment_id, amount)` 유일 키 | 환불 실행 금액 FK 대상 | MC-P1 |
 
 ### `payment_order_lifecycle` (주문 생명주기 사본, V31)
