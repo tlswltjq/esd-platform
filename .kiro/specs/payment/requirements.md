@@ -314,7 +314,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 #### 수용 기준
 1. WHEN Payment가 `SettlementRefundRecorded`(가칭)를 처음 받으면 THEN Payment SHALL Inbox(`payment-settlement-refund`)와 그 실행(또는 늦은 취소 확인 기록)의 정산 반영 응답 ID를 같은 트랜잭션에 기록한다(플랫폼 design "정방향 응답 쌍", (1회차 지적 B4, 판정 전)).
 2. WHILE 실행에 금융 확인이 있거나 늦은 취소 확인 기록이 있는데 정산 반영 응답이 없으면 THE Payment SHALL 그 건수와 가장 오래 기다린 시간을 게이지로 낸다. 경보 기준 시간은 측정 뒤 정한다(P4.3-4, 결정 159).
-3. THE 결제 `PAID` → Order 반영의 응답 대기 SHALL `[결정 필요 M-PA-2]`를 따른다((1회차 지적 A1, 판정 전)).
+3. WHEN Payment가 `OrderPaid`(그룹 `payment-order-paid`)를 처음 받아 `paymentResultEventId`가 결제의 `result_event_id`이고 `paymentId`·`orderNo`가 같으면 THEN Payment SHALL Inbox와 같은 트랜잭션에 그 결제의 Order 반영 응답(`APPLIED`, 응답 `eventId`)을 기록한다. WHEN `OrderPaymentResultRejected`를 받으면 THEN 같은 칸에 `REJECTED`를 기록한다. 응답은 결제마다 하나이고 바꾸지 않으며, 식별자가 다르면 영구 실패다. WHILE 결제가 `PAID`인데 Order 반영 응답이 없으면 THE Payment SHALL 그 건수와 가장 오래 기다린 시간(`result_occurred_at`부터, Payment 시계)을 게이지로 낸다. 경보 기준 시간은 측정 뒤 정한다(결정 159, [결정 189](../../../docs/decisions.md#payment-order-response), (1회차 지적 A1, 판정 전)).
 4. THE Payment SHALL 자기가 소유한 현행 이벤트를 같은 `eventId`·본문·키로 다시 낼 수 있는 운영 재발행 경로를 둔다(P2.2-7, [결정 161](../../../docs/decisions.md#republish-all-current), T7).
 
 ### R21. 상태 모델과 DB 제약 (원칙 ④⑤)

@@ -34,6 +34,7 @@
 | `next_attempt_at`·`last_error_code` | 결제 재개 일정과 마지막 오류(상태 아님) | `PENDING`만 `next_attempt_at` NOT NULL |
 | `next_failure_lookup_at`·`failure_history_checked_at` | 실패 시도 이력 수집 일정(상태 아님) | — |
 | `pg_paid_amount`·`pg_discount_amount` | PG 결제 구성 | `ck_payment_provider_amounts`(NULL 일치·`PAID`만·합계=amount) |
+| `order_response_kind`·`order_response_event_id` (목표 신설) | Order 반영 응답(`APPLIED` = `OrderPaid`, `REJECTED` = `OrderPaymentResultRejected`)과 그 `eventId` | CHECK 값 2개, 둘 다 NULL이거나 둘 다 값, `PAID`일 때만 `APPLIED`, `uk_purchase_payment_order_response(order_response_event_id)`. 응답 없는 `PAID` 결제를 게이지로 셈([결정 189](../../../docs/decisions.md#payment-order-response)) |
 | `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본(읽기 전용) | `ck_payment_pg_fee`. 새 행에 쓰지 않음(결정 165, PA-T16), 칸 제거는 `[결정 필요 M-PA-6]` |
 | (목표) `(payment_id, amount)` 유일 키 | 환불 실행 금액 FK 대상 | MC-P1 |
 
@@ -406,7 +407,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | `RefundExecutionRequested`(#19) | `RefundExecutionEventListener` → `RefundExecutionMapper.from` → `ReceiveRefundExecution` | `payment-refund-execution`(결제 환불 팩토리) | 봉투·식별자·금액·통화 | `uk_refund_execution_attempt`·`_request`·`_suspension`·`_previous` | 결제 없음·선행 모순 영구, 일시 오류 재시도 |
 | `OrderPaymentResultRejected`(목표 행) | (가칭) `OrderPaymentResultRejectionListener` → `OrderPaymentResultRejectedMapper.from` → `RecordUnlinkedCharge` | (신설) `payment-order-result-rejection` | 연결값 5개·`rejectedResultEventId`·`paymentId`·`admissionId`(null 허용)·`rejectionReason` enum | `uk_unlinked_charge_rejection`, `uk_unlinked_charge_source` | 결과 ID 불일치 영구 |
 | `SettlementRefundRecorded`(목표 행, 가칭) | (가칭) `SettlementRefundListener` → `SettlementRefundMapper.from` → `RecordSettlementRefundResponse` | (신설) `payment-settlement-refund` | 봉투·`refundId`·`attemptId`·키 | 실행·늦은 취소 기록당 응답 ID 하나 | 대상 없음·이미 다른 응답 영구 |
-| (결정 필요 M-PA-2) `OrderPaid`(#17) 또는 새 응답 사실 | — | (신설 후보) `payment-order-paid` | — | — | — |
+| `OrderPaid`(#17) | (목표) `OrderPaidListener` → `OrderPaidResponseMapper.from` → `RecordOrderPaymentResponse` | (신설) `payment-order-paid` | 봉투·키=`orderNo`·`paymentResultEventId`·`paymentId` | 결제당 응답 하나(`order_response_event_id` 유일) | 결제 없음·식별자 불일치 = 영구 실패. 같은 응답 재전달 무변화 ([결정 189](../../../docs/decisions.md#payment-order-response)) |
 
 여러 토픽을 받는 리스너는 (토픽, `eventType`) 짝을 대조한다(P2.3-8). Payment 리스너는 지금 토픽 하나씩이다.
 

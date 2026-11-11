@@ -1899,6 +1899,18 @@
 - 구분: AI 주장 정정
 - 결과: Payment R3.11·시도 상태 표 #10·#21, 플랫폼 P3.12-5
 
+<a id="payment-order-response"></a>
+## 189. 결제 `PAID` → Order 반영은 Payment가 기존 `OrderPaid`·`OrderPaymentResultRejected`를 응답으로 받아 응답 없는 `PAID` 결제를 센다
+- 문제: 결정 158은 사실을 낸 모듈이 응답 사실을 받지 못한 자기 기록을 센다고 했지만, 플랫폼 "정방향 응답 쌍"과 I14에 Payment `OrderPaymentCompleted` → Order `PAID` 반영이 없다(1회차 지적 A1). 지금은 Order 소비 영구 실패(실패 보관·키 정지), 이미 정지된 키, 소비 그룹 정지·지연, Payment Outbox `DEAD`, Kafka 보존 기간 경과가 모두 레코드·파티션 단위 경보이거나 아무 경보도 없어 "돈을 받았는데 주문에 반영되지 않은 결제 N건, 가장 오래된 것 M분"을 아무도 세지 않는다(M-PA-2).
+- 선택지: A Payment가 기존 `OrderPaid`(본문 `paymentResultEventId`·`paymentId`)를 새 그룹 `payment-order-paid`로 받아 응답으로 쓰고 `OrderPaymentResultRejected`도 응답으로 침 / B Order가 새 응답 사실(가칭 `OrderPaymentResultApplied`)을 냄 / C 세지 않음 (추천: A — 결정 158 "응답 사실이 이미 있는 쌍은 그것을 쓴다", `OrderPaid`가 "Order가 이 결제 결과를 반영했다"는 바로 그 사실이고 상관 ID(`paymentResultEventId`)가 이미 본문에 있다. B는 같은 사실을 둘로 내고, C는 소비 정지·보존 경과를 놓친다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 OrderPaid를 응답으로 세". 결정 전 질문: "Payment가 결제 완료 이벤트A 발행 -> Order에서 이벤트 소비, PAID로 변경, 이벤트A아이디 담아 반영됨 이벤트 발행 -> Payment의 새로운 이벤트 소비그룹 에서 소비함 의 흐름인거지?")
+- 선택: A
+  - Payment: 새 소비 그룹 `payment-order-paid`가 `stove.order.v1`의 `OrderPaid`를 받아, `paymentResultEventId` = 결제의 `result_event_id`이고 `paymentId`·`orderNo`가 같으면 `purchase_payment`의 Order 반영 응답 칸(가칭 `order_response_kind` = `APPLIED`, `order_response_event_id`)을 Inbox와 같은 트랜잭션에 쓴다. 식별자가 다르면 영구 실패(계약 위반). `OrderPaymentResultRejected`(그룹 `payment-order-result-rejection`, 결정 153)를 받으면 같은 칸에 `REJECTED`를 쓴다. 응답은 결제마다 하나이고 한 번 쓰면 바꾸지 않는다.
+  - 셈: `status='PAID'`인데 응답 칸이 빈 결제의 건수와 가장 오래 기다린 시간(`result_occurred_at`부터, Payment 시계)을 게이지로 낸다. 경보 기준 시간은 측정 뒤(결정 159). 자동 재발행·재처리는 하지 않고, 운영자가 실패 보관 재처리(결정 160)나 재발행(결정 161)으로 잇는다.
+  - Order 코드는 바뀌지 않는다. `OrderPaid`의 소비자가 License·Settlement·Payment 셋이 된다.
+- 구분: 추천 수용
+- 결과: Payment R20.3·데이터 모델·소비 표, 플랫폼 이벤트 표 `OrderPaid` 행·"정방향 응답 쌍"·I14. 1회차 지적 A1 판정은 2회차 함께 평가(결정 178)
+
 ---
 
 ## 검증하며 드러난 것
