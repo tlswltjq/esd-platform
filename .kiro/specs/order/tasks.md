@@ -38,7 +38,7 @@
 
 - [ ] **T1(Order 몫) — 결과를 열린 최신 영수증(`admissionId`)과 대조하지 않는다**([결정 153](../../../docs/decisions.md#late-success-rejection))
   - 어디서: `order:core/domain/Order.java:152-172`(`PENDING`이면 대조 없이 `PAID`, `:163-164`는 `PAYMENT_PROCESSING`일 때 `paymentId`만), `order:core/domain/PaymentResult.java:191-209`(`admissionId` 칸 없음), `order:api/listener/PaymentResultMapper.java`, `order/db/V10`(`payment_admission_id` 열 없음).
-  - 목표: R4.1·R4.9·R4.10, 주문 표 O7~O10, OI6. 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `payment_admission_id` FK + CHECK(옛 행은 M-OR-4), `admissionId` 없는 본문은 M-OR-3.
+  - 목표: R4.1·R4.9·R4.10, 주문 표 O7~O10, OI6. 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `payment_admission_id` FK + CHECK(옛 행은 M-OR-4), `admissionId` 없는 본문은 거절 사실(호환 분기 없음, [결정 186](../../../docs/decisions.md#admission-id-no-compat)).
   - 영향: **돈·보유권** — 시도 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·매출, 새 시도와 이중 청구.
   - 재현: 플랫폼 T1 재현 (1)~(4)를 `OrderPaymentLifecycleIntegrationTest`에.
 - [ ] **OR-T3. 반영할 수 없는 성공이 409 → DLT로 묻힌다(거절 기록·`OrderPaymentResultRejected` 없음)**(결정 153 A2, T1)
@@ -159,8 +159,8 @@
 
 ## 진행 중 / 남음
 
-- [ ] `[결정 필요 M-OR-3]`·`M-OR-4` 결정 뒤 해당 행(R4.14, T1 이행)을 확정한다. M-OR-1은 결정 179(MC-O3), M-OR-2는 결정 185(OR-T2)로 확정.
-- [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3 + M-OR-3·M-OR-4 이행(Payment A1 먼저 배포, P2.7-5) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
+- [ ] `[결정 필요 M-OR-4]` 결정 뒤 T1 이행 행을 확정한다. M-OR-1은 결정 179(MC-O3), M-OR-2는 결정 185(OR-T2), M-OR-3은 결정 186(T1, 호환 기간 없음)으로 확정.
+- [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3 + M-OR-4 이행(Payment v2 발행과 Order 엄격 판을 같은 배포에, 결정 186) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
 - [ ] [외부 대기] 재심사·잘못된 승인 중단·늦은 취소 반영의 실제 사용자 흐름: 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정 — G2 후속
 - [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), 결정 110·111). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인
 - [ ] 응답 대기 게이지(R10)의 경보 기준 시간 — G6 실험 측정 뒤(결정 159, G7 관문)

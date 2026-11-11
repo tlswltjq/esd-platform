@@ -1862,6 +1862,17 @@
 - 구분: 추천 수용
 - 결과: Order R4.10·상태 표 `EXPIRED` 행·데이터 모델·소비 표, 플랫폼 P3.14-3. 1회차 지적 B6 판정은 2회차 함께 평가(결정 178)
 
+<a id="admission-id-no-compat"></a>
+## 186. 결제 결과의 `admissionId` 필수화는 개발 중이라 호환 기간 없이 한 번에 바꾼다
+- 문제: 결정 153으로 `OrderPaymentCompleted`는 `admissionId`를 싣고 Order는 열린 최신 영수증과 같을 때만 `PAID`로 반영한다. 사실상 필수 칸이라 `schemaVersion` 2다(결정 170, 1회차 지적 A3). 지금 본문에는 `admissionId`가 없고 Order는 `PAYMENT_PROCESSING`·`paymentId`만 본다. 배포 순간 Payment Outbox에 남은 v1 결과를 새 Order가 `NO_OPEN_ADMISSION`으로 거절하면 결제된 주문이 보류로 간다(M-OR-3).
+- 선택지: A 기간 한정 v1 규칙 + 5단계 배포 순서(Payment 늦은 성공 차단 → Order 두 버전 읽기 → Payment v2 → v1 0건 → v1 읽기 제거) / B v1은 모두 거절 / C 결제 중단 창의 배포 관문 (추천: A — 결정 170 P2.7-5 순서를 그대로 적용. AI가 처음 추천했다)
+- 내 의견: "배포된 서비스가 아니고 개발중인데 중요한가?" / "한번에 바꾸고"
+- 선택: B(호환 기간 없음) — 사용자 지적대로 실사용 결제가 없는 개발 환경이라 배포 순간의 v1 잔량이 사실상 0이고, 남아도 버릴 수 있는 개발 자료다(결정 74·182와 같은 전제). A의 v1 분기와 배포 단계는 나중에 지울 코드·절차를 미리 만드는 일이다.
+  - Payment v2(`admissionId` 포함) 발행과 Order 엄격 판(열린 최신 영수증과 `admissionId`·`paymentId` 일치만 `PAID`)을 같은 배포에 넣는다. v1 읽기 분기를 두지 않는다. 남은 v1 결과는 지금 계약대로 거절 사실(`OrderPaymentResultRejected`)이 된다.
+  - 운영 데이터·실사용자가 생긴 뒤의 이벤트 본문 변경은 결정 170(P2.7-5) 배포 순서를 따른다. 이 결정은 그 순서를 바꾸지 않고 이번 변경에만 호환 기간을 두지 않는다.
+- 구분: AI 주장 정정
+- 결과: Order R4.14·소비 표·T1, 플랫폼 design 칸 변경 표 `OrderPaymentCompleted` 행. 1회차 지적 A3 판정은 2회차 함께 평가(결정 178)
+
 ---
 
 ## 검증하며 드러난 것

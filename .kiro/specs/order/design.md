@@ -324,7 +324,7 @@
 
 | 이벤트(플랫폼 행) | 그룹 · 리스너 → Mapper → 서비스 | 업무 멱등 키 | 실패 처리 |
 |---|---|---|---|
-| `OrderPaymentCompleted`(#24) | `order-payment-result` · `PaymentEventListener` → `PaymentResultMapper.from` → `ApplyPaymentResult` | `uk_purchase_order_result`, 거절 `rejected_result_event_id` 유일 | 연결값 불일치·다른 주문 `eventId` ✕. 반영 불가 성공은 거절 사실(DLT 아님). `admissionId` 없는 본문은 M-OR-3 |
+| `OrderPaymentCompleted`(#24) | `order-payment-result` · `PaymentEventListener` → `PaymentResultMapper.from` → `ApplyPaymentResult` | `uk_purchase_order_result`, 거절 `rejected_result_event_id` 유일 | 연결값 불일치·다른 주문 `eventId` ✕. 반영 불가 성공은 거절 사실(DLT 아님). `admissionId` 없는 본문은 거절 사실, 호환 분기 없음([결정 186](../../../docs/decisions.md#admission-id-no-compat)) |
 | `OrderPaymentFailed`(#25) | 같은 그룹·리스너 | `uk_purchase_order_result` | 이행 기간 `reasonCode=REVIEW_CLOSED`는 Mapper에서 `REVIEW_CLOSED` 결과 종류로 바꿈(결정 174). `EXPIRED`는 만료 결과 기록(`DECLINED`, [결정 185](../../../docs/decisions.md#expired-order-declined)) |
 | `OrderPaymentReviewClosed`(목표 행) | 같은 그룹(같은 주문 결과의 순서 보장, P2.5-1) | `uk_purchase_order_result`, `order_expired_review_closure` 유일 | 주문 표 O10 |
 | `LicenseGranted` → `PurchaseRecordStored`(#33, 결정 175) | `order-license-grant` · `LicenseEventListener` → `LicenseGrantMapper.from` → `ApplyLicenseGrant` | `uk_order_license_grant_event`·`_order`·`_license` | 이행 기간 두 타입을 같은 입력으로(P2.7-4). 불일치 ✕ |

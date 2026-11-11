@@ -96,7 +96,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 11. THE 반영한 결과의 사실 종류 SHALL 결과 종류 enum 열(`payment_result_kind`)에 저장하고 DB CHECK가 `COMPLETED`·`DECLINED`·`REVIEW_CLOSED`만 허용한다. 종류를 사유 문자열(`failure_reason_code`)로 판정하지 않는다(원칙 ①④, [결정 174](../../../docs/decisions.md#review-closed-event)).
 12. WHEN `OrderPaid`를 쓰면 THEN Order SHALL 본문에 저장한 결과 시각(`resultOccurredAt`)을 그대로 `paymentConfirmedAt`(가칭)으로 싣는다. Order는 이 값을 판정에 쓰지 않는다([P3.15-3](../platform/requirements.md), [결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)). (1회차 지적 A6, 판정 전)
 13. WHEN 주문을 처음 `PAID`로 바꾸면 THEN Order SHALL 그 트랜잭션의 Order 시계 시각을 `paid_at`에 저장하고, DB CHECK가 `status <> 'PAID' OR paid_at IS NOT NULL`을 지킨다. 이 값은 자동 환불 기한(R6.4)과 응답 대기(R10)의 시작이다([결정 173](../../../docs/decisions.md#refund-window-order-clock), MC-O4).
-14. WHEN 결과 이벤트에 `admissionId`가 없으면(이 칸을 싣기 전의 옛 본문) THEN Order SHALL [결정 필요 M-OR-3]을 따른다. 소비자는 (`eventType`, `schemaVersion`)으로 `PaymentResultMapper`를 고른다([P2.7-2](../platform/requirements.md), [결정 170](../../../docs/decisions.md#schema-version-header)). (1회차 지적 A3, 판정 전)
+14. WHEN 결과 이벤트에 `admissionId`가 없으면(이 칸을 싣기 전의 옛 본문) THEN Order SHALL 그 결과를 `PAID`·`FAILED`로 반영하지 않고 R4.9의 거절 사실로 둔다. 옛 본문을 읽는 호환 분기는 두지 않는다 — 개발 중이라 Payment v2 발행과 이 엄격 판을 같은 배포에 넣는다([결정 186](../../../docs/decisions.md#admission-id-no-compat)). 운영 데이터가 생긴 뒤의 본문 변경은 P2.7-5 순서를 따른다. 소비자는 (`eventType`, `schemaVersion`)으로 `PaymentResultMapper`를 고른다([P2.7-2](../platform/requirements.md), [결정 170](../../../docs/decisions.md#schema-version-header)). (1회차 지적 A3, 판정 전)
 
 ### R5. 내 주문 조회와 최소 보안
 **사용자 스토리:** 구매자로서, 내 주문만 목록·상세로 보고 싶다. 그래야 타인 주문이 노출되지 않는다.

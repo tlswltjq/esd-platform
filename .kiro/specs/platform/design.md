@@ -271,7 +271,7 @@ DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inb
 | 이벤트 | 변경 | 호환(P2.7) | 이유 | 작업 |
 |---|---|---|---|---|
 | `OrderPlaced` | `expiresAt` 추가(Order가 정한 결제 기한) | 선택 칸 추가 — 호환 | 정본 하나(P1.4-3). `OrderExpired.expiresAt`과 같은 이름·같은 뜻 | T12 |
-| `OrderPaymentCompleted` | `admissionId` 추가(결과를 낸 승인 진행 영수증 = 시도 `approvalId`) | 선택 칸 추가 — 옛 행은 null이고 Order는 null 결과를 `PAID`로 받지 않는다(이행 방침은 T1) | I12, 원칙 ⑥ | T1 |
+| `OrderPaymentCompleted` | `admissionId` 추가(결과를 낸 승인 진행 영수증 = 시도 `approvalId`) | 사실상 필수 칸(`schemaVersion` 2) — Order는 null 결과를 `PAID`로 받지 않는다. 개발 중이라 호환 기간 없이 Payment v2와 Order 엄격 판을 같은 배포에 넣는다([결정 186](../../../docs/decisions.md#admission-id-no-compat)) | I12, 원칙 ⑥ | T1 |
 | `OrderPaymentFailed` | `admissionId` 추가(접수된 시도를 끝낸 실패만 값), `reasonCode`에서 `REVIEW_CLOSED` 제거 | 칸 추가는 호환, `REVIEW_CLOSED` 제거는 SP-1 이행(P2.7-4) 뒤 | SP-1 | T1·T18 |
 | `OrderPaid` | `paymentConfirmedAt`(가칭) 추가 — Payment 승인 확정 시각(Order가 저장한 결과 시각 `resultOccurredAt` 그대로) | 선택 칸 추가 — 호환. 없으면 Settlement는 `occurredAt`으로 월을 정함 | 매출 귀속 월을 금융 확인 기준으로(결정 166, 결정 42와 대칭) | MC-S4 |
 | `RefundPaymentConfirmed` | `source` 삭제 | **비호환**(칸 삭제) — 새 `schemaVersion`으로(결정 170, P2.7-5 배포 순서) | SP-5 | T19 |
