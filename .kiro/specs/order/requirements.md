@@ -182,7 +182,7 @@ Order는 공개 상품 하나의 주문을 받아 **주문 당시의 상품·금
 #### 수용 기준
 1. THE `purchase_order.status`·`order_payment_admission.status`·`order_refund.status`·`order_refund_attempt.status`·`order_refund_review_round.decision`·승인 중단 단계(`stop_stage`)·`payment_result_kind`·`failure_source`·거절 사유 SHALL 각각 enum 값 목록을 갖고 DB CHECK가 그 값만 허용한다(원칙 ④, MC-O1·MC-O2).
 2. THE Order SHALL 보조 칸의 null 조합으로 하위 상태를 만들지 않는다. 영수증의 열림/닫힘·시도의 귀속 미확정·승인 중단 단계는 상태 열로 표현한다(지금 코드와 다른 곳은 tasks).
-3. WHEN 이행 파일이 새 상태 열·`paid_at`·`expires_at`·`failure_source`를 더하면 THEN 그 이행 SHALL 옛 행을 기록된 Order 사실로만 채우고(규칙은 design "데이터 모델 — 이행"), 다른 모듈 시각으로 채우지 않으며, 같은 PR에 옛 행 호환 테스트(`OrderMigrationIntegrationTest`)를 쓴다(결정 104). 영수증 없이 결과가 반영된 옛 주문 행의 `payment_admission_id`는 [결정 필요 M-OR-4]를 따른다.
+3. WHEN 이행 파일이 새 상태 열·`paid_at`·`expires_at`·`failure_source`를 더하면 THEN 그 이행 SHALL 옛 행을 기록된 Order 사실로만 채우고(규칙은 design "데이터 모델 — 이행"), 다른 모듈 시각으로 채우지 않으며, 같은 PR에 옛 행 호환 테스트(`OrderMigrationIntegrationTest`)를 쓴다(결정 104). 보존할 운영 데이터가 없는 동안은 Flyway 기준선(V1) 뒤의 새 열·제약을 채움 없이 낸다. 영수증 없이 결과가 반영된 옛 주문 행은 없다([결정 187](../../../docs/decisions.md#flyway-baseline)).
 4. THE 심사 판정의 정본 SHALL `order_refund_review_round` 하나다. `order_refund`의 1회차 판정 사본 칸(`review_request_id`·`review_decision`·`review_operator_subject`·`review_reason`·`reviewed_at`)은 새 행에 쓰지 않고, 옛 행 읽기 호환 뒤 지운다(원칙 ③).
 
 ## 범위 밖(후속)

@@ -244,3 +244,8 @@
   - 목표: P3.15-1. 새 `eventType` `PurchaseRecordStored`(같은 본문·키), P2.7-4 순서로 이행. 모듈 이름 License·토픽은 그대로.
   - 영향: 동작은 같다. 새 소비자가 "보유권 활성화"로 오해할 여지를 없앤다.
   - 재현: 계약 테스트 — Order가 옛·새 타입을 모두 같은 내부 입력으로 받는지.
+- [ ] **T34. 모듈마다 Flyway 스크립트가 쌓여(9개 모듈 164개) 스펙이 옛 이력·채움 작업에 묶여 있다** ([결정 187](../../../docs/decisions.md#flyway-baseline))
+  - 어디서: `apps/<모듈>/src/main/resources/db/migration/V*.sql`(payment 39·order 34·studio 27·catalog 15·settlement 15·license 12·review 11·auth 6·store 5), 과거 이행 테스트 18개(`*Migration*Test`), 모듈 스펙의 V번호 참조 295곳.
+  - 목표: 모듈마다 `V1__baseline.sql` = 지금 마지막 스크립트까지 적용한 스키마. 옛 체인과 새 V1의 `information_schema` 비교 차이 0을 근거 색인 한 행으로. 이행 테스트 18개 삭제(D-045·D-046 방어선은 현재 스키마 테스트로 먼저 옮김), `migrationTest` 작업은 유지. 모듈 스펙의 V번호 참조를 표·제약 이름으로, 옛 행 채움 작업 삭제. 로컬 MySQL 볼륨 초기화는 실행 전 사용자 확인.
+  - 영향: 동작 없음. 이후 스키마 변경(V2부터)이 옛 이력과 채움 없이 단순해진다.
+  - 재현: 스키마 비교 스크립트 — 지금은 비교 대상(V1 기준선)이 없다.

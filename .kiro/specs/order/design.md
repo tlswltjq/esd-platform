@@ -33,7 +33,7 @@
 | `expires_at` | 결제 기한(생성 시각 + `stove.order.payment-window`) | 목표 NOT NULL, `CHECK (expires_at > created_at)`, 색인 `ix_purchase_order_expiry(status, expires_at)` (T12, OR-T1) |
 | `request_event_id` | 최초 `OrderPlaced.eventId` | `uk_purchase_order_event` |
 | `payment_id` | Payment 결제 식별자(불투명). 접수 때 연결, 시도 실패로 되돌리면 null, 결과 반영 때 결과 값 | — |
-| `payment_admission_id` | 결과를 반영한 영수증 ID | 목표 FK → `order_payment_admission(admission_id)`, `chk_purchase_order_paid_admission`([결정 필요 M-OR-4], T1) |
+| `payment_admission_id` | 결과를 반영한 영수증 ID | 목표 FK → `order_payment_admission(admission_id)`, `chk_purchase_order_paid_admission`(`status<>'PAID' OR payment_admission_id IS NOT NULL`, 옛 행이 없어 별도 열 없음 — [결정 187](../../../docs/decisions.md#flyway-baseline), T1) |
 | `payment_result_event_id`·`result_occurred_at` | 반영한 결과 이벤트 ID·Payment 사실 시각(값으로만) | `uk_purchase_order_result` |
 | `payment_result_kind` | 결과 종류 | 목표 `CHECK (payment_result_kind IN ('COMPLETED','DECLINED','REVIEW_CLOSED'))`, `CHECK ((status IN ('PAID','FAILED')) = (payment_result_kind IS NOT NULL))`, `status='PAID' ⇔ kind='COMPLETED'` (OR-T2) |
 | `paid_at` | 처음 `PAID`로 바꾼 Order 시계 시각 | 목표 `chk_purchase_order_paid_at CHECK (status<>'PAID' OR paid_at IS NOT NULL)` (MC-O4) |
@@ -120,7 +120,7 @@
 | `purchase_order.expires_at` | `created_at + INTERVAL 30 MINUTE`(V10 이후 기한 규칙 그대로) | T12 |
 | `purchase_order.paid_at` | `status='PAID'` 행은 `updated_at`(`Order.apply`가 `PAID` 때 쓴 Order 시각. `PAID` 뒤 `purchase_order`를 바꾸는 코드 경로 없음 — 이행 PR에서 다시 확인). 그 밖은 NULL | 결정 173, MC-O4 |
 | `purchase_order.payment_result_kind` | `PAID` → `COMPLETED`, `FAILED`이고 `failure_reason_code='REVIEW_CLOSED'` → `REVIEW_CLOSED`, 그 밖 `FAILED` → `DECLINED` | 결정 174 |
-| `purchase_order.payment_admission_id` | `PAID`·`FAILED` 행: 같은 주문의 가장 최근 영수증이 `closed_at IS NULL`이고 `payment_id`가 같으면 그 `admission_id`. 영수증 없는 옛 결과 행은 [결정 필요 M-OR-4] | T1 |
+| `purchase_order.payment_admission_id` | `PAID`·`FAILED` 행: 같은 주문의 가장 최근 영수증이 `closed_at IS NULL`이고 `payment_id`가 같으면 그 `admission_id`. 영수증 없는 옛 결과 행은 없다(기준선 압축, [결정 187](../../../docs/decisions.md#flyway-baseline)) | T1 |
 | `order_payment_admission.status` | `closed_at IS NOT NULL` → `ATTEMPT_FAILED`; 주문 `PAYMENT_PROCESSING`인 최신 열린 행 → `OPEN`; 주문 `PAID`·`FAILED`인 최신 열린 행 → `RESULT_APPLIED`(`closed_at`=주문 `updated_at`, `closed_order_status`=주문 상태). 그 밖의 조합은 이행 전 확인 쿼리로 0행을 확인하고, 있으면 이행을 멈추고 조사 | MC-O1 |
 | `order_refund.status` CHECK | 채움 없음(`LATE_CANCELLATION_COMPLETED`는 새 값) | MC-O1·O3 |
 | `order_refund.purchase_refunded_at` | `COMPLETED` 행: 그 환불의 `PurchaseRefunded` Outbox 행 `created_at`(V30 채움 행 포함), 없으면 금융 확인 이벤트의 Inbox `processed_event` 처리 시각, 없으면 `received_at`(실제보다 늦지 않음 — V32와 같은 원칙) | OR-T11 |
