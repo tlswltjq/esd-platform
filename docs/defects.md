@@ -76,6 +76,7 @@
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
 | [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
+| [D-053](#d-053) | Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남 | 간헐 500(조회는 재시도로 회복, `POST`는 처리 여부 불명) | **원인 확인 · 미수정** | main 야간 CI run 42916206138 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -636,6 +637,17 @@
 - **원인** 요청 `occurredAt`은 Order 시계, `suspendedAt`·`restoredAt`은 License 시계다. 두 가드와 CHECK는 서로 다른 호스트 시계의 선후를 업무 규칙처럼 강제했다. 같은 정지에 대한 요청인지는 이미 `licenseId`·`suspensionRequestEventId`·`suspensionEventId`(정지 결과 eventId)·`refundId` 대조, `License.restore`의 현재 정지 ID 대조, 이력 테이블의 `suspension_request_event_id` 유일 키·FK로 확인하므로 시각 비교가 막는 낡은 요청은 따로 없다. 요구사항 R8-3("발생 시각의 모듈 간 선후관계나 수신 시각만으로 정상 입력을 거부하지 않는다")과 어긋난다.
 - **수정** 두 서비스의 시각 비교와 두 기록 생성 가드의 시각 비교를 뺐다(마이크로초 정밀도 검사는 남김). V12 `V12__restoration_cross_module_time.sql`이 두 CHECK를 지운다. `request_occurred_at`(받은 값)·`restored_at`(License 처리 시각)의 저장 값·뜻은 바꾸지 않았다. 옛 행은 옛 CHECK를 이미 만족하므로 그대로다(`LicenseMigrationIntegrationTest#v12KeepsExistingRestorationAndCorrectionRowsAndAllowsRestoredAtBeforeTheOrderClock`).
 - **망가뜨리기 확인(결정 102)** 운영 코드 수정 전에는 위 Red 4건. 수정 뒤 V12만 빼고 `#restoresWhenTheLicenseClockIsBehindTheOrderClock` 2건을 돌리면 `JpaSystemException: … Check constraint 'chk_license_restoration_time' is violated.`·`'chk_license_correction_time' is violated.`로 실패하고, 되돌리면 통과한다.
+
+
+<a id="d-053"></a>
+## D-053 Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남
+
+**상태** 원인 확인 · 미수정(재현 테스트 없음) · **영향** Gateway → 업무 서비스 연결이 약 60초 쉬다가 다시 쓰이는 순간 하류 Tomcat이 그 연결을 닫으면, Gateway가 `PrematureCloseException: Connection prematurely closed BEFORE response`를 받고 500을 돌려준다. 조회는 다시 부르면 회복되지만 `POST`(결제 승인 접수 등)는 클라이언트가 처리 여부를 알 수 없다. 돈·상태는 바뀌지 않았다(하류가 요청을 처리하기 전에 닫힘).
+**발견** main 야간 예약 CI run 42916206138(`4227def0`, 2026-11-10 22:37 UTC)의 "fake PortOne approval expiry (31 min)". 최근 야간 5회 중 1회.
+
+- **근거** 산출물 `approval-expiry-run`: `verify-expiry-journeys.py`의 대기 루프가 60초마다 주문·결제를 조회한다(`time.sleep(min(60, …))`). 두 번째 회차(22:44:13쯤)의 마지막 Order 요청 뒤 약 60초가 지난 세 번째 회차 첫 요청(22:45:13.4, `GET /api/v1/orders/ff8aa8e5-…`)에서 Gateway 로그에 `[152448c5-4, L:/127.0.0.1:47188 ! R:127.0.0.1:18082] … PrematureCloseException`, 이어 `500 Server Error`. Order 로그에는 그 시각 오류가 없고, 바로 뒤의 종료 기록은 실패 뒤 정리다.
+- **원인(판독)** Gateway(Spring Cloud Gateway 4.3.0)의 `spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time` 기본값이 null(제한 없음)이고 `apps/gateway/src/main/resources/application.yml`에도 없다. 하류 서비스의 Tomcat 10.1.46은 keep-alive 유휴 시간이 `connectionTimeout` 기본값 60000ms(`org.apache.coyote.http11.Constants.DEFAULT_CONNECTION_TIMEOUT`)이고 각 서비스 `application.yml`에 Tomcat 설정이 없다. 조회 주기(60초)와 유휴 닫기(60초)가 겹쳐 Tomcat이 닫는 순간 Gateway가 그 연결을 고르는 짧은 경합에서만 실패한다.
+- **수정 방향(미착수)** Gateway 풀 `max-idle-time`을 하류 유휴 닫기보다 짧게(예: 30초) 둔다. 재현 테스트: 유휴 K초를 넘긴 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청"이 지금 500·수정 뒤 200(Red→Green). 설정 계약 테스트: Gateway `max-idle-time` < 하류 유휴 닫기(D-035 방식). 검증 스크립트에 재시도를 넣지 않는다(결정 113). 코드 PR은 Codex 교차 리뷰 대상.
 
 ---
 
