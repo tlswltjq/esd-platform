@@ -119,7 +119,7 @@
 
 ### 플랫폼 T 항목 중 Catalog 코드가 바뀌는 것 (본문은 플랫폼 tasks)
 - [ ] T16 — MC-C2와 같은 작업.
-- [ ] T21 — `ProjectReleaseWithdrawalResolved`(`catalog:core/domain/ReleaseWithdrawal.java:63-67`, `actor="catalog"`)를 `ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied(targetStatus)`로. `CLOSED` 값은 M-CA-5.
+- [ ] T21 — `ProjectReleaseWithdrawalResolved`(`catalog:core/domain/ReleaseWithdrawal.java:63-67`, `actor="catalog"`)를 `ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied(targetStatus)`로. `targetStatus`는 {`COMPLETED`,`REJECTED`,`CLOSED`}([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)).
 - [ ] T22 — `CatalogProductPublished`를 사실별 4종으로(`PublishProjectRelease.java:122-148`, `RecordCatalogSaleChange.java:20`, `ChangeCatalogListing.java:64`). P2.7-4 순서(Store 먼저).
 - [ ] T23 — MC-C3와 같은 작업.
 - [ ] T20 — 공통 영구 실패 예외. Catalog 매퍼·입력 검증(`BusinessException(INVALID_REQUEST)`)·`CONFLICT`를 영구 실패로 표시.
@@ -136,7 +136,7 @@
 - [ ] [결정 필요 M-CA-2] 다운로드 제한 저장소 적용 실패의 경보 기준.
 - [x] 원요청과 맞지 않는 선행 철회의 처리 — [결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)(CA-T4).
 - [x] 승인 사실의 스냅샷 값 전달 방식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체(MC-C2).
-- [ ] [결정 필요 M-CA-5] 종결된 출시에 온 철회의 거절 결과(`targetStatus=CLOSED`).
+- [x] 종결된 출시에 온 철회의 거절 결과 — [결정 184](../../../docs/decisions.md#withdrawal-denied-closed): `targetStatus=CLOSED`.
 - [ ] [외부 대기] 공유 환경의 정책/계정 준비와 실제 배포 — G4 이후
 - [ ] [결정 필요] G4 전체 완료 판정(실제 운영 여정 전체) — G4. 최신 전체 여정은 2026-11-08 통과([근거 색인](../../../docs/evidence.md) G4 행). 남은 G4 `[결정 필요]` 4건(Catalog 변경 이력·허용 지연 SLA, Download 대기·정지 구분 안내·노출 중지 안내)을 G4 안에서 정할지 다음 단계로 넘길지 사용자가 정한 뒤 판정
 

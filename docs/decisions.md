@@ -1838,6 +1838,18 @@
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R6.10·철회 보관 표·RV-T7, Catalog R9.8·표 1·표 3·CA-T4, 플랫폼 P3.1-6
 
+<a id="withdrawal-denied-closed"></a>
+## 184. 운영자가 종결한 출시에 온 철회는 `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)`로 거절한다
+- 문제: 결정 176은 `ProjectReleaseWithdrawalDenied.targetStatus` ∈ {`COMPLETED`,`REJECTED`}("대상의 최종 상태")로 정했고, 결정 168은 운영자 종결로 새 끝 상태 `CLOSED`(`ProjectReleaseClosed`)를 만들었다. 두 결정을 함께 적용하면 종결된 출시에 온 철회를 거절할 값이 없다. 예: 14:00 공개 작업 `BLOCKED` → 14:10 운영자 종결(`CLOSED`, `ProjectReleaseClosed`) → 14:10:01 그 사실이 Studio에 닿기 전 창작자가 철회 → Catalog는 먼저 커밋된 결과를 유지해 거절해야 한다(M-CA-5, Studio notes F1).
+- 선택지: A `targetStatus`에 `CLOSED` 추가 / B 결과를 내지 않고 Studio가 `ProjectReleaseClosed`를 받을 때 대기 철회 명령도 닫음 (추천: A — 철회 명령마다 응답 사실이 하나라 Studio 대기 게이지(결정 158)가 예외 없이 비고, 결정 176의 `targetStatus` 뜻을 그대로 쓰며 값만 늘린다(원칙 ①). B는 한 모듈의 응답을 다른 사실로 대신 끝내 응답 쌍 규칙에 예외를 만든다)
+- 내 의견: "A안으로 targetStatus에 CLOSED를 더해"
+- 선택: A
+  - Catalog: `CLOSED` 출시에 온 새 철회는 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)`를 낸다. `targetStatus` enum은 {`COMPLETED`,`REJECTED`,`CLOSED`}다.
+  - Studio: 이 값을 받아 철회 명령을 `DENIED`로 닫는다(초안 E12·`denied_target_status` CHECK 가정을 확정). 출시 결과는 같은 그룹(`studio-project`)·토픽·키로 오므로 `ProjectReleaseClosed`가 먼저 와 요청은 이미 `CLOSED`다. 요청이 아직 `REQUESTED`인 칸은 다른 Denied 값과 같은 모양의 방어 칸으로 둔다.
+  - Review 쪽 `ProjectReviewWithdrawalDenied.targetStatus`({`APPROVED`,`REJECTED`})는 바꾸지 않는다(Review에는 운영자 종결이 없다).
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Catalog 표 1 `CLOSED` 행·발행 표·T21, Studio E12·소비 표, 플랫폼 SP-8·목표 행
+
 ---
 
 ## 검증하며 드러난 것

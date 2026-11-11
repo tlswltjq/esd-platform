@@ -108,7 +108,7 @@
 | (목표) `pending_target` 생성 열 `CASE WHEN state='PENDING' THEN CONCAT(kind, ':', target_request_id) END`, `uk_studio_command_pending_target` | 대상당 `PENDING` 철회 1건 | 없음 — 코드 검사만(ST-T3) |
 
 종류·상태 CHECK(목표): `(kind IN ('REQUEST_REVIEW','REQUEST_RELEASE') AND state='ACCEPTED') OR (kind IN ('WITHDRAW_REVIEW','WITHDRAW_RELEASE') AND state IN ('PENDING','WITHDRAWN','DENIED'))`, `(state IN ('WITHDRAWN','DENIED')) = (finalized_at IS NOT NULL)`, `(state='DENIED') = (denied_target_status IS NOT NULL)`, `denied_target_status IS NULL OR (kind='WITHDRAW_REVIEW' AND denied_target_status IN ('APPROVED','REJECTED')) OR (kind='WITHDRAW_RELEASE' AND denied_target_status IN ('COMPLETED','REJECTED','CLOSED'))`.
-`CLOSED`는 플랫폼 이벤트 계약이 철회 거절의 `targetStatus`에 그 값을 넣을 때만 쓴다(notes F1).
+`denied_target_status`의 `CLOSED`는 운영자가 종결한 출시에 온 철회의 거절에 쓴다([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)).
 
 ### 공통 표
 
@@ -137,7 +137,7 @@
 | E4 · E5 | 소비 | `ProjectReviewWithdrawalDenied(targetStatus=APPROVED · REJECTED)` (이행 중: `…Resolved(status=APPROVED·REJECTED)`) |
 | E6 · E7 · E8 | 소비 | `ProjectReleaseCompleted` · `ProjectReleaseRejected` · `ProjectReleaseClosed`(가칭) |
 | E9 | 소비 | `ProjectReleaseWithdrawn` (이행 중: `ProjectReleaseWithdrawalResolved(status=WITHDRAWN)`) |
-| E10 · E11 · E12 | 소비 | `ProjectReleaseWithdrawalDenied(targetStatus=COMPLETED · REJECTED · CLOSED)` (E12는 notes F1 확정 전 가정) |
+| E10 · E11 · E12 | 소비 | `ProjectReleaseWithdrawalDenied(targetStatus=COMPLETED · REJECTED · CLOSED)` (E12는 [결정 184](../../../docs/decisions.md#withdrawal-denied-closed)) |
 | EX | 소비 | 위 이벤트 가운데 식별자가 맞지 않는 것: 대상 요청·명령 없음, `projectId`·`contentVersion`·`productCode` 불일치, 출시 결과의 `requestEventId` ≠ 원요청 이벤트 ID, 철회 결과의 `withdrawalId`·종류·행위자 불일치, (토픽, `eventType`) 짝 불일치, 봉투·본문 계약 위반 |
 | J1 | 예약 작업 | 정방향 대기 게이지 집계(R10, 읽기 전용) |
 | O1 | 운영자 | ADMIN Outbox 재발행·`DEAD` 회수(같은 `eventId`) |
@@ -207,7 +207,7 @@ Studio에는 업무 상태를 직접 바꾸는 운영자 명령이 없다(운영
 | 상태 \ 트리거 | H6(새 `requestId`) | H6r · H6x | H8 | H8r · H8x | E6 | E7 | E8 | E9 | E10 | E11 | E12 | EX | 그 밖(H2~H5·H7·E1~E5) | J1·O1 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 없음 | 판정표 11이면 허용 → `REQUESTED` | 쌍 없음 → 무변화 | 거절 404 | 쌍 없음 → 무변화 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 무변화 | 무변화 |
-| `REQUESTED` | 같은 버전·철회 없음: 무변화(영수증만) · 그 밖 거절 409 | 무변화 · 거절 409 | 철회 명령 없으면 허용: 행 무변화, 명령 `PENDING` · 있으면 거절 409 | 무변화 · 거절 409 | 허용 → `COMPLETED`, 자리 해제 | 허용 → `REJECTED`(`reject_reason`), 자리 해제 | 허용 → `CLOSED`(`closed_by`·`close_reason`), 자리 해제(R7.7) | 허용 → `WITHDRAWN`(`withdrawn_by`·`withdrawal_reason`), 자리 해제, 명령 `WITHDRAWN` | 허용 → `COMPLETED`, 자리 해제, 명령 `DENIED` | 허용 → `REJECTED`(`reject_reason` NULL, E7이 채움), 자리 해제, 명령 `DENIED` | 허용 → `CLOSED`(`closed_by` 미상 — notes F1), 자리 해제, 명령 `DENIED` | 영구 실패 | 무변화 | 무변화 |
+| `REQUESTED` | 같은 버전·철회 없음: 무변화(영수증만) · 그 밖 거절 409 | 무변화 · 거절 409 | 철회 명령 없으면 허용: 행 무변화, 명령 `PENDING` · 있으면 거절 409 | 무변화 · 거절 409 | 허용 → `COMPLETED`, 자리 해제 | 허용 → `REJECTED`(`reject_reason`), 자리 해제 | 허용 → `CLOSED`(`closed_by`·`close_reason`), 자리 해제(R7.7) | 허용 → `WITHDRAWN`(`withdrawn_by`·`withdrawal_reason`), 자리 해제, 명령 `WITHDRAWN` | 허용 → `COMPLETED`, 자리 해제, 명령 `DENIED` | 허용 → `REJECTED`(`reject_reason` NULL, E7이 채움), 자리 해제, 명령 `DENIED` | 허용 → `CLOSED`(`closed_by`는 E8이 채움. 같은 그룹·토픽·키라 E8이 먼저 오므로 방어 칸, [결정 184](../../../docs/decisions.md#withdrawal-denied-closed)), 자리 해제, 명령 `DENIED` | 영구 실패 | 무변화 | 무변화 |
 | `COMPLETED` | 현재 버전이면 무변화(영수증만, 판정표 8) · 과거 버전이면 무변화 | 무변화 · 거절 409 | 거절 409(이미 최종) | 무변화 · 거절 409 | 무변화 | 영구 실패(MC-ST2) | 영구 실패 | 영구 실패 | 무변화 | 영구 실패 | 영구 실패 | 영구 실패 | 무변화 | 무변화 |
 | `REJECTED` | 무변화(새 행 — R4.8) | 무변화 · 거절 409 | 거절 409 | 무변화 · 거절 409 | 영구 실패(MC-ST2) | 같은 사유 무변화, NULL이면 채움 · 다른 사유 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 무변화 | 영구 실패 | 영구 실패 | 무변화 | 무변화 |
 | `WITHDRAWN` | 무변화(새 행 — 결정 58) | 무변화 · 거절 409 | 거절 409 | 무변화 · 거절 409 | 영구 실패(MC-ST2, **1회차 지적 B3, 판정 전** — 철회된 요청이 늦은 승인으로 공개되면 여기서 드러난다) | 영구 실패 | 영구 실패 | 같은 `withdrawalId` 무변화 · 다르면 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 영구 실패 | 무변화 | 무변화 |
@@ -288,7 +288,7 @@ E8 행은 플랫폼 흐름 1의 S6b다(단계 목록에 S6b가 빠진 것은 **1
 | `ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied` (review) | [목표 행](../platform/design.md#목표-행-아직-코드에-없음) SP-7, S2 | 위 봉투 규칙 + `withdrawalId`·`reviewRequestId`·`projectId`·`contentVersion`·`requestEventId`, Denied는 `targetStatus` ∈ {`APPROVED`,`REJECTED`} | `RecordProjectWithdrawalResult`: Inbox → Project 잠금 → 명령 → 대상 요청 잠금 → 철회 명령 표·심사 요청 표 E3~E5 | 명령 `withdrawalId` + 상태 |
 | `ProjectReleaseCompleted`·`ProjectReleaseRejected` (release) | 이벤트 목록(리터럴), S7 | 봉투 규칙, `requestEventId` 1~64자, 거절이면 `reason` ∈ Catalog `ReleaseRejectReason` | `RecordProjectReleaseResult`: Inbox → Project 잠금 → 요청 행 잠금 → 식별자 + `requestEventId` 대조 → 출시 요청 표 E6·E7 | 출시 요청 상태 |
 | `ProjectReleaseClosed`(가칭) (release) | 목표 행, S6b | 봉투 규칙, `releaseRequestId`·`projectId`·`contentVersion`·`productCode`·`requestEventId`·운영자·사유 | (목표) `RecordProjectReleaseClosure` → 출시 요청 표 E8 | 출시 요청 상태 |
-| `ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied` (release) | 목표 행 SP-8, S5 | Denied `targetStatus` ∈ {`COMPLETED`,`REJECTED`}(+`CLOSED`, notes F1) | `RecordProjectWithdrawalResult` → 철회 명령 표·출시 요청 표 E9~E12 | 명령 `withdrawalId` + 상태 |
+| `ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied` (release) | 목표 행 SP-8, S5 | Denied `targetStatus` ∈ {`COMPLETED`,`REJECTED`,`CLOSED`}([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)) | `RecordProjectWithdrawalResult` → 철회 명령 표·출시 요청 표 E9~E12 | 명령 `withdrawalId` + 상태 |
 | (이행 중) `ProjectReviewWithdrawalResolved`·`ProjectReleaseWithdrawalResolved` | 현행 → SP-7·SP-8 | `status` 문자열을 Withdrawn/Denied 입력으로 바꾼다. `actor`·`feedback`은 Withdrawn일 때만 철회자·사유로 쓴다 | 같음 | 같음 |
 
 - (토픽, `eventType`) 짝: review 토픽은 심사 결과 4종(+이행 1종), release 토픽은 출시 결과 5종(+이행 1종)만 받는다. 다른 짝은 영구 실패(R7.8, MC-ST1). 모르는 `eventType`은 건너뛰고 지표로 센다([P2.3-7](../platform/requirements.md#p23-소비--inbox와-업무-멱등), T31).

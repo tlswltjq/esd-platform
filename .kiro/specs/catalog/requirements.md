@@ -119,7 +119,7 @@ Catalog는 Studio가 보낸 출시 요청을 내구 접수하고, Review에게�
 #### 수용 기준
 1. WHEN `ProjectReleaseWithdrawalRequested`를 받으면 THEN Catalog SHALL 공개 확정과 같은 요청 잠금(`catalog_request_gate`) 안에서 조정한다([결정 57](../../../docs/decisions.md#release-withdrawal-before-publication), 플랫폼 P3.4-5).
 2. IF 그 요청의 출시 결과가 아직 없으면(작업 `AWAITING_APPROVAL`·`PENDING`·`BLOCKED`) THEN Catalog SHALL 출시 결과를 `WITHDRAWN`으로, 작업을 `COMPLETED`로 같은 트랜잭션에 저장하고 `ProjectReleaseWithdrawn`을 낸다.
-3. IF 출시 결과가 이미 `COMPLETED`·`REJECTED`·`CLOSED`이면 THEN Catalog SHALL 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied`(`targetStatus`)를 낸다([결정 176](../../../docs/decisions.md#withdrawal-result-events)). `targetStatus`의 허용 값에 `CLOSED`를 넣는 것은 [결정 필요 M-CA-5]다.
+3. IF 출시 결과가 이미 `COMPLETED`·`REJECTED`·`CLOSED`이면 THEN Catalog SHALL 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied`(`targetStatus`)를 낸다([결정 176](../../../docs/decisions.md#withdrawal-result-events)). `targetStatus` 허용 값은 `COMPLETED`·`REJECTED`·`CLOSED`다([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)).
 4. IF 출시 결과가 이미 `WITHDRAWN`이면 THEN Catalog SHALL 같은 `withdrawalId`는 무변화로, 다른 `withdrawalId`는 결과를 바꾸지 않고 `ProjectReleaseWithdrawn`을 그 철회에 다시 회신한다.
 5. WHEN 철회가 원요청보다 먼저 오면 THEN Catalog SHALL 철회를 미해결로 보관하고 원요청 접수 트랜잭션에서 `WITHDRAWN`으로 확정한다. 철회로 끝난 요청은 이후 재전달로도 공개되지 않는다(플랫폼 P3.4-6).
 6. THE 철회 SHALL 고정 유예시간을 두지 않으며 공개 전 철회 시간을 보장하지 않는다(결정 62). 공개 작업자의 기본 주기(200ms)는 최소 철회 시간이 아니다.

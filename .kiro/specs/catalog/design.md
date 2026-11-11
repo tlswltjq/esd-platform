@@ -74,7 +74,7 @@
 | `COMPLETED` | 무변화(결과 재발행 없음) | 거절(영구 실패) | 허용(결과 불변) → `ProjectReleaseWithdrawalDenied(targetStatus=COMPLETED)` | 무변화 | 거절(영구 실패) |
 | `REJECTED` | 무변화 | 거절(영구 실패) | 허용(결과 불변) → `ProjectReleaseWithdrawalDenied(targetStatus=REJECTED)` | 무변화 | 거절(영구 실패) |
 | `WITHDRAWN` | 무변화(공개하지 않음, RI-8) | 거절(영구 실패) | 허용(결과 불변) → 이 철회에 `ProjectReleaseWithdrawn` 회신 | 무변화 | 거절(영구 실패) |
-| `CLOSED` | 무변화 | 거절(영구 실패) | 허용(결과 불변) → `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)` [결정 필요 M-CA-5] | 무변화 | 거절(영구 실패) |
+| `CLOSED` | 무변화 | 거절(영구 실패) | 허용(결과 불변) → `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)`([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)) | 무변화 | 거절(영구 실패) |
 
 | 상태 \ 트리거 | A= | A≠ | J | OR | OC |
 |---|---|---|---|---|---|
@@ -213,7 +213,7 @@
 | `ProjectReleaseCompleted` · 리터럴 표 | `stove.release.v1` · `productCode` | `PublishProjectRelease`(공개 확정) | 결과 행 INSERT와 같은 트랜잭션, 요청당 한 번(`catalog_release` PK). `requestEventId` = 원요청 이벤트 ID |
 | `ProjectReleaseRejected` · 리터럴 표 | 같음 | `PublishProjectRelease`(`STALE_CONTENT_VERSION`), `ReceiveProjectRelease`·`ReceiveReviewApproval`(`APPROVAL_MISMATCH`) | `reason`은 `ReleaseRejectReason` enum 값만(플랫폼 design "`ProjectReleaseRejected.reason`은 enum") |
 | `ProjectReleaseWithdrawn` · 목표 행(SP-8 ①) | 같음 | `ReceiveReleaseWithdrawal`, `ReceiveProjectRelease`(선행 철회) | 철회마다 하나. 업무 키 `withdrawalId`(결정 176) |
-| `ProjectReleaseWithdrawalDenied` · 목표 행(SP-8 ②) | 같음 | `ReceiveReleaseWithdrawal` | `targetStatus` enum {`COMPLETED`,`REJECTED`}(+`CLOSED`, M-CA-5). 대상 판정의 `actor`·`feedback`을 싣지 않는다 |
+| `ProjectReleaseWithdrawalDenied` · 목표 행(SP-8 ②) | 같음 | `ReceiveReleaseWithdrawal` | `targetStatus` enum {`COMPLETED`,`REJECTED`,`CLOSED`}([결정 184](../../../docs/decisions.md#withdrawal-denied-closed)). 대상 판정의 `actor`·`feedback`을 싣지 않는다 |
 | `ProjectReleaseClosed`(가칭) · 목표 행 | 같음 | `CloseBlockedRelease`(목표, 운영자 종결) | 결과 `CLOSED` INSERT와 같은 트랜잭션, `Completed`·`Rejected`·`Withdrawn`과 배타(PK). 본문: `releaseRequestId`·`projectId`·`contentVersion`·`productCode`·`requestEventId`·`closedBy`·`reason`·`blockCode` |
 | `CatalogProductFirstPublished` · `CatalogProductReleaseReplaced` · 목표 행(SP-4 ①②) | `stove.catalog.v1` · `productCode` | `PublishProjectRelease` | 공개 사본이 바뀐 공개 확정에서만(같은 승인본 재출시 제외). 본문 `CatalogProductSnapshot` 전체 + `catalogVersion` |
 | `CatalogProductSaleStatusChanged` · 목표 행(SP-4 ③) | 같음 | `RecordCatalogSaleChange` | 판매 조건이 실제로 바뀐 명령에서만, 감사 행과 같은 트랜잭션 |
