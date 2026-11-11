@@ -81,7 +81,7 @@ groups:
             {{ $value }}건이 PG 전액 취소로 환불됐지만 우리 시도의 취소인지 판정되지 않았다.
             GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED에서 대상을 찾고,
             POST /api/v1/admin/refund-delays/{attemptId}/closure로 PG 재조회 근거와 귀속 판정을 남겨 종결한다.
-            알려진 과거 건은 Alertmanager silence로 알림을 관리한다.
+            종결하면 대상이 없어져 다음 평가에서 풀린다(경보 억제 장치는 두지 않는다).
 
       # License 단계 이벤트를 기다리다 멈춘 환불(결정 125, 정지·복구·승인 중단으로 범위 확장).
       # LicenseGranted·LicenseSuspended·LicenseRestored·LicenseApprovalCorrected(또는 그 요청)가 DEAD·DLT로 가거나 Kafka에서 사라지면
@@ -118,7 +118,7 @@ groups:
             {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
             GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
             PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
-            알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+            종결하면 대상이 없어져 다음 평가에서 풀린다(경보 억제 장치는 두지 않는다).
 
       - alert: PaymentApprovalsRequireReview
         expr: stove_payment_approval_review_required{reason!="PAID_WITHOUT_ADMISSION"} > 0
@@ -130,7 +130,7 @@ groups:
             {{ $value }}건의 승인 보류가 {{ $labels.reason }} 사유로 조사 대기 중이다.
             GET /api/v1/admin/approval-reviews에서 저장된 PG 관측과 조사 기록을 확인한다.
             PG 콘솔에서 처리한 뒤 POST /api/v1/admin/approval-reviews/{approvalId}/closure로 PG 재조회 근거를 확인해 종결한다.
-            알려진 과거 보류는 Alertmanager silence로 알림을 관리한다.
+            종결하면 대상이 없어져 다음 평가에서 풀린다(경보 억제 장치는 두지 않는다).
 
       # 만료 스윕이 살아 있는가.
       #
