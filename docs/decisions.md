@@ -1945,6 +1945,18 @@
 - 구분: 추천 수용
 - 결과: Payment R9.3·데이터 모델·PA-T16
 
+<a id="split-suspended-status"></a>
+## 193. 구매 근거의 정지 상태를 정지 전 상태별 두 값으로 나누고 보조 칸 `suspended_from`을 없앤다 (결정 94·96 소급 RC-17)
+- 문제: 결정 96은 구매 근거 상태를 `STORED`/`REGISTERED`/`SUSPENDED`(정지 전 상태 기억)/`REFUNDED`로 정했고, 구현은 `product_license.status='SUSPENDED'` 한 값에 보조 칸 `suspended_from`(`STORED`·`REGISTERED`, V10)을 둔다(`License.java:64-67`). 이 칸이 복구 갈래(`:102`·`:128`), 회수 때 보유권 종료 여부, 보관함 조회 포함(`LicenseRepository.findStorage`)을 정하지만 값·조합 CHECK가 없다. 예: 등록 뒤 정지된 행의 `suspended_from`이 수동 SQL·결함으로 NULL이 되면 복구가 `STORED` 갈래로 가 열린 `SUSPENDED` 보유권이 남고, 재등록도 `uk_license_registration_open`에 막혀 고객이 게임을 쓰지 못한다(M-LI-1, LI-T2). 업무 정책(정지 대상, 세 갈래 복구, 보관함 반환)은 결정 94·96 그대로이고 상태 모양만 고른다.
+- 선택지: 1 상태를 `SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`로 나누고 `suspended_from` 삭제, CHECK 허용 값 5개 / 2 `SUSPENDED` + 직교 칸 + CHECK(`suspended_from ∈ {STORED, REGISTERED}` ∧ `(status='SUSPENDED') = (suspended_from IS NOT NULL)`) / 3 `suspended_from`을 지우고 열린 보유권 표에서 유도 (추천: 1 — 원칙 4 "명시적 상태 모델"을 그대로 만족하고 복구 갈래가 상태 값 하나로 정해진다. 2도 원칙 4의 "불가피하면 직교 칸"에 맞아 원칙만으로 1·2가 모두 성립하므로 사용자가 고른다(결정 147). 값 둘이면 충분해 직교 칸이 "불가피"하지 않다. 1의 비용이던 옛 행 이행은 결정 182·187로 없어졌고, 보관함 응답 값은 api 계층에서 유지할 수 있다. 3은 숨은 상태를 다른 표로 옮길 뿐이다)
+- 내 의견: "1안으로 정지 상태를 둘로 나눠"
+- 선택: 1
+  - `PurchaseStatus`: `STORED`·`REGISTERED`·`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`·`REFUNDED`. `chk_product_license_status`가 이 다섯 값만 허용하고 `suspended_from` 열을 지운다. 복구·회수·보관함 조회는 상태 값으로 갈래를 정한다.
+  - 보관함 응답 `StorageItemResponse.status`는 api 계층에서 두 정지 값을 지금처럼 `SUSPENDED`로 바꿔 내보내 클라이언트 계약을 유지한다(보관함에는 `SUSPENDED_FROM_STORED`만 나온다).
+  - 이행은 Flyway 기준선 압축(결정 187, T34) 뒤 V2 이후 증분이며 옛 행 채움·`migrationTest` 대응은 두지 않는다(보존할 데이터 없음).
+- 구분: 추천 수용
+- 결과: License 용어·R9-5·R12-2·design 상태 모델·제약·LI-T2, 플랫폼 tasks RC-17
+
 ---
 
 ## 검증하며 드러난 것

@@ -36,11 +36,11 @@
   - 영향: **보유권(감지)** — License가 `PurchaseRefunded`를 실패 보관에 둔 채 멈춰도 Order가 셀 응답이 없어 환불 완료 주문의 보유권 정지·라이브러리 노출이 조용히 남는다(U3).
   - 재현: `PurchaseStorageIntegrationTest`에 회수 뒤 `outbox_event`의 `LicenseRefundApplied` 1행 단언(지금 Red), 같은 `PurchaseRefunded` 재전달 뒤에도 1행, 같은 정지·다른 `eventId`는 `uk_product_license_refund_event`로 거절.
 
-- [ ] **LI-T2. 정지 전 상태가 `SUSPENDED` + `suspended_from` 보조 칸이고 CHECK가 없다** (소급 RC-17, `[결정 필요 M-LI-1]`)
+- [ ] **LI-T2. 정지 전 상태가 `SUSPENDED` + `suspended_from` 보조 칸이고 CHECK가 없다** (소급 RC-17, [결정 193](../../../docs/decisions.md#split-suspended-status))
   - 어디서: `license:core/domain/License.java:64-67`·`:88-89`·`:102`·`:128`, `license:core/domain/PurchaseStatus.java:9-10`, `license:core/domain/LicenseRepository.java:31-34`(보관함 조회가 `suspendedFrom`으로 분기), `license/db/V10:37`·`:41`(열·옮김, 값·조합 CHECK 없음).
-  - 목표: R12-2, design "상태 모델". M-LI-1 ①이면 enum 값 둘 + `suspended_from` 제거 이행, ②이면 `chk_product_license_suspended_from`. 어느 쪽이든 `migrationTest`로 옛 행 대응(R9-5).
+  - 목표: R12-2, design "상태 모델". `PurchaseStatus` 값 둘(`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`) + `chk_product_license_status` 다섯 값 + `suspended_from` 열 삭제. 복구·회수·`findStorage`를 상태 값으로. `StorageItemResponse.status`는 두 값을 `SUSPENDED`로 매핑. 이행은 Flyway 기준선(T34) 뒤 증분, 옛 행 채움 없음(R9-5).
   - 영향: **보유권** — `SUSPENDED`인데 `suspended_from`이 NULL이거나 잘못된 값인 행(수동 SQL·결함)이 생겨도 DB가 막지 않는다. 그 행의 복구는 `STORED` 갈래로 가서 열린 `SUSPENDED` 보유권이 남고(`uk_license_registration_open`로 재등록도 막힘) 고객은 게임을 못 쓴다.
-  - 재현: 이행 테스트 — `status='SUSPENDED', suspended_from=NULL` 행 삽입이 지금 성공(Red), 목표에서 CHECK 위반. ①이면 옛 `SUSPENDED`+`REGISTERED` 행이 `SUSPENDED_FROM_REGISTERED`로 옮겨지는지.
+  - 재현: 통합 — `status='SUSPENDED', suspended_from=NULL` 행 삽입이 지금 성공(Red), 목표에서는 `status='SUSPENDED'` 자체가 CHECK 위반. 상태×트리거 표의 `정지·S`·`정지·R` 열 전이 단위 테스트.
 
 - [ ] **LI-T3. 상태에 딸린 식별자 칸의 조합을 DB가 지키지 않는다**
   - 어디서: `license/db/V5`·`V10:36-39`(`suspension_request_event_id`·`refunded_suspension_request_event_id`·`refunded_at` 모두 NULL 허용, CHECK 없음), `license:core/domain/License.java:90`·`:115-116`·`:133-136`.
@@ -86,7 +86,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] `[결정 필요 M-LI-1]` 정지 전 상태 표현(소급 RC-17) — 사용자에게 묻고 결정 번호로 바꾼 뒤 LI-T2를 진행한다. notes D.
+- [x] 정지 전 상태 표현(소급 RC-17) — [결정 193](../../../docs/decisions.md#split-suspended-status): 상태 값 둘로 나눔 → LI-T2.
 - [x] 늦은 취소 회수 때 같은 구매 근거가 재신청 정지로 정지 중인 경우 — [결정 179](../../../docs/decisions.md#late-cancellation-during-retry)로 정함(R11-4, MC-L1).
 - [ ] 2회차 독립 평가에서 1회차 지적 A2·B2·B4·B9(+A5)의 판정을 받는다(결정 178). 이 초안은 지적을 고친 것으로 치지 않는다.
 - [ ] [외부 대기] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/실패 보관 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
