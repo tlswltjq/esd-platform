@@ -1,5 +1,7 @@
 # 작업: Order
 
+> 목표 계약은 [requirements.md](requirements.md)·[design.md](design.md). 모듈 둘 이상에 걸친 차이는 [플랫폼 tasks](../platform/tasks.md)(T 번호)가 정본이고, 여기에는 Order 쪽 몫만 그 번호를 달아 둔다. 줄 번호는 2026-11-09 `docs/spec-foundation` 기준. 경로 줄임 `order:` = `apps/order/src/main/java/com/stove/order/`, `order/db/Vn` = Flyway.
+
 ## 완료 (검증 결과는 [근거 색인](../../../docs/evidence.md))
 
 - [x] 단일 상품 주문 생성, Catalog 내부 근거 조회·기대 버전/금액 비교, 스냅샷(정가·할인 0·청구액) 고정과 `OrderPlaced` Outbox 원자 저장 — 2026-10-16
@@ -19,29 +21,155 @@
 - [x] 실제 ADMIN 수동 심사 PG 환불 1건(할인 거래, 취소 총액·보고 포인트 상세·결제수단 반환액 NULL) — 2026-10-30
 - [x] 공개 상세 B·판매 상태: `publicDetailAllowed` false 신규 주문 404, 관리자 BLOCKED 새 승인 접수 차단, 판매자 STOPPED가 기존 주문·기한 미변경 — 2026-11-02
 - [x] [결정 115](../../../docs/decisions.md#approval-review-closure-outcome): 이미 `EXPIRED`인 주문에 늦게 온 운영자 종결 실패(`REVIEW_CLOSED`)는 만료를 유지하고 결과 식별을 따로 기록(V31). 같은 재전달만 무효과, 바뀐 재전달·eventId 재사용·기록 없는 Inbox 중복은 충돌(재시도·DLT), 그 밖의 결과는 충돌 유지 — 2026-11-07
+- [x] G1 종료 검증([결정 119](../../../docs/decisions.md#g1-exit-verification)): 흉내 서버 시도 이력·콘솔 제어, `verify-approval-journeys.py`(승인 근거 없는 PAID 보류 → 콘솔 취소 → `closure` → 주문 `FAILED`·새 주문, 시도 실패 뒤 같은 주문 재결제), 이탈/재진입 조합(결정 120)·접수 전 PAY_PENDING 만료(D-044)·3시간 조합 — 2026-11-08
+- [x] G2 지급 확인 누락의 Order 측 감지([결정 125](../../../docs/decisions.md#license-grant-wait-detection)): V32 진입 시각, 게이지 `stove.order.refund.license.grant.delayed`·경보 `RefundLicenseGrantsDelayed`, ADMIN `licenseGrantWaitStartedAt`, 고객 `processingNotice` — [PR #151](https://github.com/tlswltjq/esd-platform/pull/151)
+- [x] 환불 후 재구매(P4): 구매 슬롯·유일 제약 제거, 환불 완료 시 `PurchaseRefunded` 발행, 복구의 보관함 반환을 환불 응답에 표시 — [결정 89~98](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban)
+- [x] 원본이 사라진 지급·지급 확인 이벤트의 같은 ID 재발행([결정 129](../../../docs/decisions.md#orphan-license-grant-republish)): 공통 `OutboxRepublishController`·`OutboxRepublishService`, 허용 목록 `OutboxRepublishTargets`, Order V33 `outbox_republish` — [PR #164](https://github.com/tlswltjq/esd-platform/pull/164), 2026-11-08
+- [x] G2 정지·복구·승인 정정 대기 환불의 유실 감지·같은 ID 재발행(결정 125·129 범위 확장): V34 진입 시각 3개, 게이지 `status` 라벨 4개, ADMIN 진입 시각, 고객 안내 3종, 재발행 허용 목록 소유 모듈별 분리 — PR #167, 2026-11-08
+- [x] 환불 자격 시간 역전의 테스트·문구 고정(Q8 조사): `RefundPolicyTest` "결제 확정보다 1마이크로초 앞선 접수 → 자동 자격" — [PR #159](https://github.com/tlswltjq/esd-platform/pull/159). 기한 시작은 결정 173으로 바뀌어 MC-O4에서 다시 고친다
+- [x] 실패한 환불의 고객 안내([결정 134](../../../docs/decisions.md#refund-failure-customer-notice)): `failureNotice`(`PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`), 재신청으로만 새 시도 — [PR #159](https://github.com/tlswltjq/esd-platform/pull/159)
+- [x] 환불 조사 이후 조치·종결의 정책 결정(결정 127·128·129·131) — 2026-11-08
+- [x] 새 환불 흐름의 Tempo 연결과 PG 오류·응답 유실 뒤 환불 전체 검증의 흉내 서버 부분(`verify-refund-tracing.py`) — 2026-11-09
+- [x] PG 확정 실패 뒤 보유권 복구 경로의 Tempo 연결(흉내 서버, `restoration`) — 2026-11-09
 
-## 진행 중 / 남음 (일반화 공백)
+## 코드와 맞출 것
 
-- [x] G1 종료 검증([결정 119](../../../docs/decisions.md#g1-exit-verification)): PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)에 FAILED 시도 이력·PAY_PENDING·승인 근거 없는 PAID 생성을 검증 도구 쪽에만 더한다. 그 서버로 11개 서비스 실제 스택 여정을 만들어 시도 실패 뒤 같은 주문 재결제, `PAID_WITHOUT_ADMISSION` 보류 → 콘솔 취소 → `closure` 종결을 검증한다. 남은 이탈/재진입 조합은 [결정 120](../../../docs/decisions.md#g1-reentry-scope)의 범위로 Payment 항목에서 더한다. 금융 보류 건의 다음 행동과 `EXPIRED` 주문에 승인 근거 없이 도착한 성공(`PAID_WITHOUT_ADMISSION`)의 운영 대응은 운영자 조사·PG 재조회 근거 종결로 정했다([결정 114](../../../docs/decisions.md#approval-review-hold-closure)·[115](../../../docs/decisions.md#approval-review-closure-outcome)). 시스템 자동 취소는 지표로 빈도를 본 뒤 다시 정한다 — G1
-  - 진행(2026-11-08): 흉내 서버에 시도별 이력과 콘솔 전용 제어(`fail-attempt`·`arm-confirm`·`settle`·`console-approve`·`console-cancel`)를 더했다. `tools/verification/verify-approval-journeys.py`가 승인 근거 없는 PAID 보류 → 콘솔 취소 → `closure` → 주문 `FAILED`·새 주문, 그 새 주문의 결제창 실패·confirm 실패 뒤 같은 주문 재결제 PAID·License를 검증하고 야간 CI에서 돈다([근거 색인](../../../docs/evidence.md) 2026-11-08). 이탈/재진입 조합은 결정 120 범위로 30분 안 조합과 기한을 넘는 두 조합을 더했다(Payment 항목 진행 참고). 접수 전 PAY_PENDING 만료(D-044, 기한 여정 p1: 주문 `EXPIRED` 유지, 보류 종결 뒤 새 주문)와 3시간 조합(통합 테스트)까지 Payment 항목에서 끝냈다. 실제 PortOne 재확인은 결정 119대로 G1 종료 조건이 아니며 Payment `[외부 대기]`에 남는다 — 2026-11-08
-- [x] G2 지급 확인 누락의 Order 측 감지([결정 125](../../../docs/decisions.md#license-grant-wait-detection)): V32 진입 시각(옛 행 호환 테스트), 게이지 `stove.order.refund.license.grant.delayed`·경보 `RefundLicenseGrantsDelayed`, ADMIN 목록·상세 `licenseGrantWaitStartedAt`, 고객 `processingNotice`(`LICENSE_GRANT_CONFIRMATION_DELAYED`). 복구는 결정 37 절차 — G2, [PR #151](https://github.com/tlswltjq/esd-platform/pull/151)
-- [x] 환불 후 재구매(P4): 구매 슬롯·유일 제약 제거(판매 금지만 거절), 환불 완료 시 `PurchaseRefunded` 발행, 복구의 보관함 반환을 환불 응답에 표시 — [결정 89~98](../../../docs/decisions.md#purchase-blocked-only-by-sale-ban)
-- [ ] [외부 대기] 재심사·잘못된 승인 중단의 실제 사용자 흐름: 계약·API·DB/Kafka 검증은 완료. 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정은 남음 — G2 후속
-- [x] 원본이 사라진 지급·지급 확인 이벤트의 같은 ID 재발행([결정 129](../../../docs/decisions.md#orphan-license-grant-republish)): 이벤트를 소유한 모듈(License `LicenseGranted`, Order `OrderPaid`)의 Outbox 운영 API에 `SENT` 행 재발행(예: `POST /api/v1/ops/outbox/{eventId}/republish`)을 더한다. ADMIN만, 한 건씩, 실행자·시각·사유 기록, 원래 `event_id`·본문·키 유지, 새 ID 없음. 이미 처리된 이벤트의 재발행이 받는 쪽 Inbox에서 효과가 없음과, 미처리 건이 `PENDING_LICENSE_GRANT`를 정지 요청으로 잇는 것을 테스트한다. 절차서의 "원본 없음"을 "Outbox 행도 없음"으로 좁히고 재발행 전 확인 순서를 적는다 — G2, [PR #164](https://github.com/tlswltjq/esd-platform/pull/164)
-  - 완료(2026-11-08): 공통 `OutboxRepublishController`·`OutboxRepublishService`(ops 스위치 아래, `stove.messaging.ops.republish-enabled=true`인 Order·License만), 허용 목록 `OutboxRepublishTargets` 한 곳, 기록 표 `outbox_republish`(Order V33·License V11, 새 표만). 없는 행·`SENT` 아닌 행 404, 허용 목록 밖 타입·사유 없음 400. Gateway 미노출·ADMIN 전용은 기존 ops 규칙 그대로
-- [x] G2 정지·복구·승인 정정 대기 환불의 유실 감지·같은 ID 재발행([결정 125](../../../docs/decisions.md#license-grant-wait-detection)·[결정 129](../../../docs/decisions.md#orphan-license-grant-republish)의 범위 확장, 새 정책 없음): Order는 환불이 `PENDING_LICENSE_SUSPENSION`·`PENDING_LICENSE_RESTORATION`·`PENDING_APPROVAL_STOP`에 들어간 시각을 저장한다(새 이행·옛 행 호환 테스트, 진입 경로는 지급 확인·자동 접수·심사 승인·재심사 승인·재시도·확정 실패·승인 중단 전부). 상태별 10분 초과 건수를 결정 125 게이지에 `status` 라벨로 더하고 경보를 같은 규칙으로 넓힌다. ADMIN 환불 목록·상세에 진입 시각을 보이고, 같은 경계를 넘은 고객 조회에 기존 지연 안내 모양의 `processingNotice`를 붙인다(`PENDING_LICENSE_RESTORATION`은 PG 실패가 확정된 상태라 문구를 상태에 맞게 고른다). 결정 129의 `SENT` 재발행 대상에 `LicenseSuspensionRequested`·`LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested`(Order 소유)와 `LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`(License 소유)를 더한다. License는 이미 처리한 요청을 다시 받아도 결과 이벤트를 다시 내지 않으므로, 결과 이벤트 유실은 License 쪽 Outbox 행을 재발행해야 한다. 이미 처리된 재발행이 받는 쪽 Inbox에서 효과가 없음과, 미처리 `LicenseSuspended`가 `PENDING_LICENSE_SUSPENSION`을 PG 실행 요청으로, `LicenseRestored`가 `PENDING_LICENSE_RESTORATION`을 `FAILED`로 잇는 것을 테스트한다. 절차서 `license-event-recovery-runbook.md`에 여섯 이벤트의 DEAD·DLT·`SENT` 행과 재발행 전 확인 순서(Outbox `SENT`·상대 Inbox 없음·Order 환불이 그 요청 ID의 대기 상태에 있음)를 더한다 — G2, PR #167
-  - 완료(2026-11-08): V34 진입 시각 3개 열(`license_suspension_wait_started_at`·`license_restoration_wait_started_at`·`approval_stop_wait_started_at`, 상태별 NOT NULL CHECK·색인, 옛 대기 행은 기록된 사실로 채움). 게이지 이름·식은 그대로 두고 `status` 라벨 4개(`PENDING_LICENSE_GRANT`·`PENDING_LICENSE_SUSPENSION`·`PENDING_LICENSE_RESTORATION`·`PENDING_APPROVAL_STOP`), 경보 `RefundLicenseGrantsDelayed`는 상태별로 울림(라벨 없는 옛 시계열도 같은 식). ADMIN `licenseSuspensionWaitStartedAt`·`licenseRestorationWaitStartedAt`·`approvalStopWaitStartedAt`, 고객 `processingNotice` `LICENSE_SUSPENSION_CONFIRMATION_DELAYED`·`LICENSE_RESTORATION_CONFIRMATION_DELAYED`·`APPROVAL_STOP_CONFIRMATION_DELAYED`. 재발행 허용 목록을 `OutboxRepublishTargets`에서 소유 모듈별로 나누고 `stove.messaging.ops.republish-owner`로 고른다. Gateway·ops 경로 변경 없음
-- [x] 환불 자격 시간 역전의 테스트·문구 고정(2026-11-08 Q8 조사, 새 정책 없음): `RefundPolicyTest`에 "결제 확정보다 1마이크로초 앞선 접수 → 자동 자격"을 더하고, design에 "확정 시각보다 이른 접수도 자격 안"을 적는다. 접수 시각은 잠금 전 요청 수신 시각이라 스펙 문장을 "요청 수신 시각"으로 맞추고, tasks의 "`createdAt+30분` 고정 기한"은 저장이 아니라 매번 계산이라는 점을 바로잡는다 — G2, [PR #159](https://github.com/tlswltjq/esd-platform/pull/159)
-- [x] 실패한 환불의 고객 안내([결정 134](../../../docs/decisions.md#refund-failure-customer-notice)): 고객 환불 응답(`FAILED`)에 고객용 실패 사유 코드(저장된 `RefundAttempt.failureReasonCode`에서 옮김, 내부 PG 오류 원문 비노출)와 "다시 신청하면 환불됩니다" 안내를 넣는다. 새 시도는 지금처럼 고객 재신청(`POST /api/v1/orders/{orderNo}/refund/retries`)으로만 만든다. 운영 절차서에 "환불해 줄 건이면 실패 종결보다 콘솔 취소 → 결정 127 종결을 먼저"를 적는다. OpenAPI 스냅샷을 갱신한다 — G2, [PR #159](https://github.com/tlswltjq/esd-platform/pull/159). 응답 `failureNotice`(`PG_CANCELLATION_FAILED` → `PAYMENT_NOT_CANCELLED`). 절차서 문장은 main에 환불 절차서가 없어 결정 127 구현 [PR #157](https://github.com/tlswltjq/esd-platform/pull/157)의 `docs/runbooks/refund-delay-closure.md`에 둔다(병합 대기)
-- [x] 환불 조사 이후 조치·종결의 정책 결정(구현은 Payment·Order 각 항목): 공통 종결은 PG 재조회 근거의 Payment ADMIN 종결로 정했다([결정 127](../../../docs/decisions.md#refund-delay-closure), 구현은 Payment 항목). PG가 취소를 거절한 건의 실패 종결도 Payment ADMIN 실패 종결로 정했다([결정 128](../../../docs/decisions.md#refund-failure-closure), 종결 뒤에는 기존 보유권 복구·고객 재시도를 쓴다). 원본 이벤트가 Kafka에서 사라진 `PENDING_LICENSE_GRANT`는 원래 Outbox 이벤트의 같은 ID 재발행으로 잇기로 정했다([결정 129](../../../docs/decisions.md#orphan-license-grant-republish), 구현은 아래 항목). 정지·복구·승인 정정 이벤트 유실은 결정 125·129의 이유가 그대로 맞아 새 정책 없이 범위를 넓혀 구현한다(아래 항목). 담당 배정은 두지 않고 Payment 조사 목록에 마지막 조사자·시각만 보인다([결정 131](../../../docs/decisions.md#investigation-trail-no-assignee)). 원래 3시간 경계 유지, 시간만으로 실패/복구/새 금융 동작 추가 금지 — 2026-11-08
-- [x] 새 환불 흐름의 Tempo 연결과 PG 오류·응답 유실 뒤 환불 전체 검증의 흉내 서버 부분 — 2026-11-09 `verify-refund-tracing.py`. 실제 10개 앱·흉내 PortOne에서 정상·응답 유실(첫 재조회 503)·PG 5xx 뒤 환불이 모두 주문 `COMPLETED`·보유권 `REFUNDED`·정산 환불 1건으로 끝난다. 세 경우 모두 환불 요청 trace 하나로 이어진다(작업자 경로의 끊김은 [D-050](../../../docs/defects.md#d-050)으로 Payment에서 고침). 보유권 지급 확인 전 접수한 환불은 이후 정지·실행이 `LicenseGranted` 소비, 즉 구매 trace에서 이어진다(관찰)
-- [x] PG 확정 실패 뒤 보유권 복구 경로의 Tempo 연결(흉내 서버 부분) — 2026-11-09 `verify-refund-tracing.py` `restoration`. 흉내 서버 `arm-cancel` `FAILED`(취소 200 + `FAILED` 취소 행, 원결제 `PAID`·취소액 0)로 Payment가 확정 실패를 판정하고, 환불 `FAILED`(`PAYMENT_NOT_CANCELLED`)·보유권 원래 상태(`STORED`) 복구·정산 환불 0으로 끝난다. `RefundExecutionFailed` → `LicenseRestorationRequested` → `LicenseRestored`까지 Outbox 7행이 환불 요청 trace 하나(root 1·부모 누락 0)에 이어진다. 끊김 없음
-- [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), [결정 110·111](../../../docs/decisions.md#portone-fake-journey)). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인한다(흉내 서버 응답은 Payment 어댑터 기준의 추정)
+형식: 무엇이 · 어디서 · 목표 · 영향 · 재현 테스트. 돈·보유권 영향 순. `MC-O*`는 플랫폼 스펙 정리 때 넘긴 이월 항목 번호(초안 폴더 `module-carryover.md`), `OR-T*`는 이 초안에서 새로 찾은 것.
+
+- [ ] **T1(Order 몫) — 결과를 열린 최신 영수증(`admissionId`)과 대조하지 않는다**([결정 153](../../../docs/decisions.md#late-success-rejection))
+  - 어디서: `order:core/domain/Order.java:152-172`(`PENDING`이면 대조 없이 `PAID`, `:163-164`는 `PAYMENT_PROCESSING`일 때 `paymentId`만), `order:core/domain/PaymentResult.java:191-209`(`admissionId` 칸 없음), `order:api/listener/PaymentResultMapper.java`, `order/db/V10`(`payment_admission_id` 열 없음).
+  - 목표: R4.1·R4.9·R4.10, 주문 표 O7~O10, OI6. 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `payment_admission_id` FK + CHECK(옛 행은 M-OR-4), `admissionId` 없는 본문은 M-OR-3.
+  - 영향: **돈·보유권** — 시도 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·매출, 새 시도와 이중 청구.
+  - 재현: 플랫폼 T1 재현 (1)~(4)를 `OrderPaymentLifecycleIntegrationTest`에.
+- [ ] **OR-T3. 반영할 수 없는 성공이 409 → DLT로 묻힌다(거절 기록·`OrderPaymentResultRejected` 없음)**(결정 153 A2, T1)
+  - 어디서: `order:core/domain/Order.java:161-162`(`EXPIRED` 409), `:155-156`(다른 결과 409), `order:core/service/ApplyPaymentResult.java:116-120`.
+  - 목표: R4.9, `order_payment_result_rejection` 표, 주문 표 ⑥, OI7·OI8, 재발행 허용 목록에 추가(R8.15).
+  - 영향: **돈** — 돈은 나갔는데 보류·경보·고객 안내가 없다.
+  - 재현: `EXPIRED`·`FAILED`·`PAID`(다른 `eventId`)·`PENDING` 주문에 성공 주입 → Outbox `OrderPaymentResultRejected` 1행, 주문 불변, 같은 재전달 0행 추가.
+- [ ] **MC-O4. 자동 환불 기한이 Payment 결과 시각부터 잰다**([결정 173](../../../docs/decisions.md#refund-window-order-clock), T3 ORD-0)
+  - 어디서: `order:core/domain/Refund.java:289-290`, `order:core/domain/RefundPolicy.java:9-12`, `order:core/service/RequestRefund.java:35`, `paid_at` 열 없음.
+  - 목표: R4.13·R6.4, OI10, 이행 채움 `paid_at = updated_at`(design "이행").
+  - 영향: **돈** — 4시간 경계 근처 접수가 두 호스트 시계 차이로 자동 환불·심사로 갈린다.
+  - 재현: `RefundPolicyTest` — Payment 결과 시각을 Order 시계보다 ±5초 어긋나게 둔 경계 회귀, 이행 테스트(옛 `PAID` 행 채움).
+- [ ] **T3(Order 몫) — 다른 모듈 시각과의 선후 비교 10곳**(U2 ORD-1~ORD-10)
+  - 어디서: `order:core/domain/RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `order:core/domain/Refund.java:173`·`:255`, `order:core/domain/RefundApprovalStop.java:48`·`:56`·`:67`.
+  - 목표: R7.8·R8.2·R8.6, OI20. 플랫폼 U2 "목표 판정 방식" 그대로.
+  - 영향: **돈·보유권** — 시계가 몇 초 어긋나면 금융 완료·실패·복구가 DLT, 환불이 정지 상태로 멈춤.
+  - 재현: D-052 방식(고정 `Clock`, 상대 `occurredAt` ±5초) — 행마다 플랫폼 U2 "확인 테스트".
+- [ ] **OR-T4. 시도 실패 통지의 `failedAt`(Payment·공급자 시각)을 Order 시계와 비교한다**(U2 목록에 없던 곳)
+  - 어디서: `order:core/service/RecordOrderPaymentAttemptFailure.java:34`(`input.failedAt().isAfter(at)`면 409).
+  - 목표: R3.10. 비교를 지우고 값으로만 저장(원칙 ⑥).
+  - 영향: **돈** — Payment 시계가 빠르면 검증된 실패가 409로 거절돼 주문이 `PAYMENT_PROCESSING`에 남고 같은 주문 재결제가 막힌다(Payment는 다음 회차에 같은 통지를 반복).
+  - 재현: Order `Clock`을 `failedAt`보다 1초 뒤로 둔 통지 → 지금 409(Red), 목표 `PENDING`.
+- [ ] **MC-O3. 늦은 취소 완료 상태가 없다**([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), T4)
+  - 어디서: `order:core/domain/RefundStatus.java`, `RefundAttemptStatus.java`, `RefundRestorationEventListener.java:28-33`(타입 없음).
+  - 목표: R7.7, 환불 `LATE_CANCELLATION_COMPLETED`·시도 `LATE_CANCELLED`, 그룹 `order-refund-restoration`, `PurchaseRefunded`, `completionNotice`. 재신청 진행 중(재정지 대기·Payment가 받기 전의 새 시도)은 늦은 취소로 끝내고 새 시도를 `SUPERSEDED`로 닫으며, 늦게 온 재신청 정지는 기록만([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)). Payment 반영 API(MC-P15) 다음에 구현.
+  - 영향: **돈·보유권** — 실패 뒤 실제 취소가 생기면 고객이 돈과 게임을 둘 다 갖고 판매자 과지급.
+  - 재현: 실패 확정 → 복구 → `RefundLateCancellationConfirmed` 주입 → 환불 끝 상태·`PurchaseRefunded` 1행; `PENDING_LICENSE_RESTORATION`에서 먼저 온 경우 뒤의 `LicenseRestored`가 `=`.
+- [ ] **T4(Order 몫) — `RefundFailureClosed` 소비와 실패 출처 열**
+  - 어디서: main에 없음. 참고 구현 Order V35는 출처를 `failure_reason_code`·`failure_closure_id`에 겹쳐 담고 `RefundFailureConfirmation`이 Payment 시각끼리 검사.
+  - 목표: R7.3, `failure_source` enum + CHECK(I16), Mapper가 근거 상세 칸 없이 받음, 고객 `failureNotice.code`는 `failure_source`에서.
+  - 영향: **돈·보유권** — 멈춘 환불을 닫을 길이 없다.
+  - 재현: 근거 칸 없는 `RefundFailureClosed` → `PENDING_LICENSE_RESTORATION` + `LicenseRestorationRequested`, 시도 `failure_source=OPERATOR_FAILURE_CLOSED`.
+- [ ] **OR-T6. 실행 요청 뒤 Payment가 받지 못한 환불을 세지 않는다**(T15, 결정 158·125)
+  - 어디서: `order:core/service/ReadLicenseGrantDelays.java`, `order:adapter/RefundLicenseGrantMetrics.java`(라벨 4개), `Refund.licenseWaitStartedAt`(`Refund.java:143-151`, `PENDING_PAYMENT_REFUND` 없음).
+  - 목표: R8.14 — 라벨 `PENDING_PAYMENT_REFUND`(현재 시도 준비 없음, 시작 = 시도 `startedAt`), `REFUND_EXECUTION_RECEIPT_DELAYED`.
+  - 영향: **보유권** — Payment 소비 중단·DLT 때 보유권 정지·고객 `PROCESSING`이 경보 없이 남는다.
+  - 재현: Payment 소비 정지 + 10분 → 게이지 1, 고객 안내.
+- [ ] **OR-T11. 정방향 응답 대기를 세지 않는다**(T6, 결정 158·159)
+  - 어디서: 없음(`PAID`인데 구매 근거 없음·매출 응답 없음·회수 응답 없음을 세는 곳 없음).
+  - 목표: R10, `order_forward_response`, `purchase_refunded_at`, 그룹 `order-settlement-sale`·`order-license-refund`, 게이지만(경보는 측정 뒤).
+  - 영향: **보유권·돈** — `OrderPaid`가 License·Settlement에서 DLT·유실되면 미지급·매출 누락이 조용히 남는다.
+  - 재현: License 소비 정지 뒤 결제 → 게이지 건수 1·최장 대기 증가.
+- [ ] **OR-T5. 금액 사본 검증이 결제 공급자 취소 시각과 Payment 확인 시각을 비교한다**(U2 목록에 없던 곳)
+  - 어디서: `order:core/domain/RefundPaymentConfirmation.java:25`(`providerCancelledAt().isAfter(occurredAt)`면 거절).
+  - 목표: R9.3, 비교 삭제(두 다른 시계, P4.5-1·결정 163).
+  - 영향: **돈** — 공급자 시계가 빠르면 정상 금융 완료가 거절돼 환불이 `PENDING_PAYMENT_REFUND`에 멈춘다(추정, 미재현).
+  - 재현: `providerCancelledAt = occurredAt + 3초`인 확인 → 지금 거절(Red).
+- [ ] **T12(Order 몫) / OR-T1. 결제 기한을 저장하지 않고 상수로 두 곳에서 계산한다**([결정 169](../../../docs/decisions.md#checkout-open-until-expiry-fact))
+  - 어디서: `order:core/domain/Order.java:77`, `order:core/service/CloseExpiredOrders.java:38`, `common/kafka/.../payload/OrderPlacedEvent.java:9-11`(`expiresAt` 없음).
+  - 목표: R1.4·R3.2·R3.14, 설정 `stove.order.payment-window`, `purchase_order.expires_at`, `OrderPlaced.expiresAt`.
+  - 영향: **돈** — 기한을 바꾸면 Payment 계산과 어긋나 `OrderExpired`가 거절된다(플랫폼 T12).
+  - 재현: 설정 40분으로 주문 생성 → `expires_at`·`OrderPlaced.expiresAt` 40분, 스캔이 그 값으로 고름.
+- [ ] **T14(Order 몫) — `confirmationDelayAt`을 `firstPreparedAt + 3h`로 다시 계산한다**
+  - 어디서: `order:core/domain/RefundPreparationConfirmation.java:17`.
+  - 목표: R8.7, 받은 값 그대로.
+  - 영향: **보유권** — 보장 기한이 3시간이 아니면 정상 준비 사실을 거절(추정).
+  - 재현: 2시간 경계 준비 사실을 받아들이는지.
+- [ ] **MC-O1. 상태 열 CHECK가 없고, 영수증 열림/닫힘이 nullable 조합이다**
+  - 어디서: `order/db/V10`·`V12`·`V14`(`status IN` CHECK 없음), `order/db/V25__payment_admission_failure.sql:1-9`.
+  - 목표: R3.1·R6.3·R11.1, 영수증 `status`(`OPEN`·`ATTEMPT_FAILED`·`RESULT_APPLIED`)와 주문당 `OPEN` 하나(OI3·OI5), 이행 채움은 design "이행".
+  - 영향: 잘못된 상태 값을 DB가 막지 않고 I12 판정이 null 조합에 기댄다.
+  - 재현: 이행 테스트 — 허용 밖 상태 INSERT 실패, 옛 행 변환, 같은 주문에 `OPEN` 두 행 INSERT 실패.
+- [ ] **MC-O2 / T19(Order 몫) / OR-T13. 시도가 취소 귀속을 가진다(`reconciliationRequired`, `source` 분기, `RefundExecutionSucceeded` 소비)**([결정 164](../../../docs/decisions.md#attribution-in-payment))
+  - 어디서: `order:core/domain/RefundAttempt.java:79`·`:120-142`, `order:core/domain/Refund.java:213-223`·`:239-240`, `order:core/domain/RefundPaymentConfirmation.java:18-20`, `order:api/listener/RefundPaymentConfirmationEventListener.java:32`.
+  - 목표: R7.1·R7.2, 시도 `PENDING`·`COMPLETED`·`FAILED`·`LATE_CANCELLED`, 귀속 칸 제거(이행), `RefundExecutionSucceeded` 건너뜀, 새 `schemaVersion`(`source` 없음) 읽기.
+  - 영향: 돈 영향 없음(운영 조사 표시만). 귀속 판정을 바꾸려면 금융 사실 뜻이 함께 바뀌던 결합을 푼다.
+  - 재현: 이행 호환(결정 104) — 옛 `SUCCEEDED`·`PENDING+true` 행 → `COMPLETED`; `source` 없는 본문 수용.
+- [ ] **OR-T2 / T18(Order 몫). 운영자 종결을 사유 문자열로 판정한다**([결정 174](../../../docs/decisions.md#review-closed-event))
+  - 어디서: `order:core/domain/PaymentResult.java:194`·`:217-219`, `order:core/domain/Order.java:147-150`, `order:core/service/ApplyPaymentResult.java:117`·`:135-142`, `order/db/V31:17`.
+  - 목표: R4.8·R4.11, `payment_result_kind`, `OrderPaymentReviewClosed` 소비, 이행 기간 옛 사유 변환, OI9.
+  - 영향: 동작은 같다. 오타·새 소비자 오해 여지.
+  - 재현: 두 타입이 같은 내부 입력·같은 결과 종류가 되는 Mapper 테스트, 이행 채움 테스트.
+- [ ] **OR-T10. 회차 미판정이 null, 승인 중단 단계가 null 조합이다**
+  - 어디서: `order:core/domain/RefundReviewRound.java`(`decision` null), `order/db/V22__refund_approval_stop.sql:32-51`(`chk_review_stop_*`), `RefundApprovalStop.canReopen`.
+  - 목표: R11.1·R11.2, `decision` NOT NULL(`PENDING`), `stop_stage` enum.
+  - 영향: 돈 없음. 숨은 상태(원칙 ④).
+  - 재현: 이행 테스트 — 옛 중단 행 단계 채움.
+- [ ] **OR-T9. 1회차 판정이 `order_refund`와 회차 표 두 곳에 있다**(원칙 ③)
+  - 어디서: `order:core/domain/Refund.java:55-59`·`:112-129`, `order:core/service/DecideRefund.java:48`(두 곳에 쓰고 결과가 다르면 409), `order/db/V20`·`V22:57-68`.
+  - 목표: R6.7·R11.4, 정본은 회차 표.
+  - 영향: 돈 없음. 두 사본이 어긋나면 판정이 409로 막힌다.
+  - 재현: ADMIN 응답이 회차 표에서 같은 값을 내는지(옛 행 포함).
+- [ ] **T33(Order 몫) / OR-T17. `LicenseGranted`만 받는다**([결정 175](../../../docs/decisions.md#purchase-record-stored))
+  - 어디서: `order:api/listener/LicenseEventListener.java:22`.
+  - 목표: R6.8, 옛·새 타입을 같은 입력으로(P2.7-4 ①단계).
+  - 영향: 동작은 같다.
+  - 재현: 두 타입 계약 테스트.
+- [ ] **MC-S4(Order 몫) / OR-T20. `OrderPaid`에 결제 확정 시각이 없다**([결정 166](../../../docs/decisions.md#sale-month-by-payment-confirmation)) (1회차 지적 A6, 판정 전)
+  - 어디서: `order:core/service/ApplyPaymentResult.java:122-125`(`occurredAt = updatedAt`만).
+  - 목표: R4.12.
+  - 영향: **돈(정산 월)** — 월 경계에서 매출 귀속 월이 PG 명세와 어긋난다.
+  - 재현: 23:59:50 KST 결과 → 00:00:20 반영 → `paymentConfirmedAt`이 결과 시각.
+- [ ] **T7(Order 몫) / OR-T18. 재발행 허용 목록이 Order 4종뿐이다**([결정 161](../../../docs/decisions.md#republish-all-current))
+  - 어디서: `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`.
+  - 목표: R8.15(현행 8종 + `OrderPaymentResultRejected`), 표 대조 테스트.
+  - 영향: **보유권·돈** — `OrderPlaced`·`OrderExpired`·`RefundExecutionRequested`·`PurchaseRefunded` 원본 소실 때 복구 수단이 없다.
+  - 재현: `SENT` `PurchaseRefunded` 재발행 → 지금 400(Red).
+- [ ] **OR-T7. 도메인이 `Instant.now()`를 직접 부른다**
+  - 어디서: `order:core/domain/Order.java:73`·`:171`, `order:core/service/ApplyPaymentResult.java:140`.
+  - 목표: 주입 `Clock`(설계 "설정"). `paid_at`이 이 시각이라 MC-O4와 함께.
+  - 영향: 돈 없음(시험 재현성).
+  - 재현: 고정 `Clock`으로 `paid_at`·`updated_at` 단언.
+- [ ] **OR-T8. 스냅샷 열이 JPA에서 갱신 가능하다**
+  - 어디서: `order:core/domain/Order.java:27-37`(`updatable=false` 없음).
+  - 목표: R1.5, OI1.
+  - 영향: 돈(잠재) — 코드 실수로 청구액이 바뀌어도 막지 않는다.
+  - 재현: 엔티티 필드 변경 뒤 flush → 값 불변.
+- [ ] **OR-T12. 운영 설정에 테스트·개발용 스위치·기본값이 있다**(원칙 ⑦)
+  - 어디서: `apps/order/src/main/resources/application.yml:66`(`expiry-enabled`, 끄는 곳은 `OrderIntegrationTestBase.java:26`뿐), `:68`(`catalog-base-url` 기본 `http://localhost:8081`).
+  - 목표: 만료 스캔은 항상 켜고 테스트는 `Clock`으로 제어, `catalog-base-url`은 기본값 없이 미설정 시 기동 실패.
+  - 영향: 운영에서 스위치를 잘못 끄면 만료·`OrderExpired`가 멈춘다.
+  - 재현: 설정 없이 기동 실패 테스트.
+- [ ] **T20·T31·T25(Order 몫) — 영구 실패 분류·건너뛴 타입 지표·헤더 시각**
+  - 어디서: `order:config/RefundKafkaConfiguration.java:20`(환불 팩토리만 재시도 제외), 리스너의 `return`(`RefundSuspensionEventListener.java:27` 등), `order:core/service/ApplyApprovalCorrection.java:50-51`.
+  - 목표: 공통 영구 실패 예외로 통일, (그룹, 타입) 건너뜀 지표, 헤더 `occurredAt` = 본문.
+  - 영향: 계약 위반 한 건이 같은 키를 7초 이상 막음.
+  - 재현: 플랫폼 T20·T31·T25 재현을 Order 그룹에.
+
+## 진행 중 / 남음
+
+- [ ] `[결정 필요 M-OR-2]`~`M-OR-4` 결정 뒤 해당 행(R4.10, R4.14, T1 이행)을 확정한다. M-OR-1은 결정 179로 확정(MC-O3).
+- [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3 + M-OR-3·M-OR-4 이행(Payment A1 먼저 배포, P2.7-5) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
+- [ ] [외부 대기] 재심사·잘못된 승인 중단·늦은 취소 반영의 실제 사용자 흐름: 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정 — G2 후속
+- [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), 결정 110·111). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인
+- [ ] 응답 대기 게이지(R10)의 경보 기준 시간 — G6 실험 측정 뒤(결정 159, G7 관문)
+- [ ] `docs/` 정리: 옛 design "사용 안내"의 "같은 주문의 결제 실패 뒤에는 기한 안에서 같은 주문으로 재결제" 문구를 "검증된 시도 실패 통지 뒤"로(옛 불일치 3)
 
 ## 범위 밖(후속)
 
-- 장바구니·복수 상품·수량 선택·선물·쿠폰·할인 조합·다중 통화·무료 상품 지급. 구매→보관함→사용/등록 흐름은 제품 확장 제안이며 현재 구매 제한·자동 지급·환불 계약을 바꾸지 않음.
+- 장바구니·복수 상품·수량 선택·선물·쿠폰·할인 조합·다중 통화·무료 상품 지급. 구매→보관함→사용/등록 흐름은 제품 확장 제안이며 현재 구매·자동 지급·환불 계약을 바꾸지 않음.
 - 부분 환불·다중 PG·조사 담당 배정([결정 131](../../../docs/decisions.md#investigation-trail-no-assignee))·추가 알림.
-- 기한 정책 변경의 과거 주문 적용([Q9](../../../docs/domain/open-questions.md#q9)): 자동 환불 4시간(`RefundPolicy`)·주문 30분(`Order.getExpiresAt`)·재심사 7일(`RefundReviewRound.reconsiderationDeadline`)은 코드 상수다. 접수된 환불의 자동 자격만 `automatic_refund_eligible`로 행에 고정되고, 아직 접수하지 않은 주문·`PENDING` 주문·반려된 회차는 배포한 새 값으로 계산된다. 기한을 바꿀 계획이 없고(4시간은 사업 근거 없는 초기값, 결정 29) G1·G2 완료 조건이 아니라 범위 밖으로 둔다. 기한 값을 바꾸는 첫 PR에서 적용 기준(새 주문부터 / 배포 시점부터 전부 / 고객에게 유리한 쪽)을 사용자에게 묻는다(2026-11-08 조사).
-- (해소, 2026-11-08) 접수 시각이 결제 확정 시각보다 앞서는 경우: 결제 확정 시각은 Payment 서버 시각이고 환불은 Order가 `PAID`일 때만 접수하므로, 역전은 서비스 간 시계 차이로만 생긴다. 결정 29 하위 "기한 시작: Payment 최초 확정"·"기한 판정: 접수 시각 고정"에 따라 4시간 안으로 보고 자동 환불한다(새 정책 없음). `RefundPolicyTest`로 고정했다([PR #159](https://github.com/tlswltjq/esd-platform/pull/159)).
-- 주문 전용 지표·전용 운영 화면·성능/처리량 고도화.
+- 기한 정책 변경의 과거 주문 적용([Q9](../../../docs/domain/open-questions.md#q9)): 자동 환불 4시간(`RefundPolicy`)·재심사 7일(`RefundReviewRound`)은 core 상수, 결제 기한은 목표에서 설정 + 주문별 저장(새 주문부터 적용). 기한 값을 바꾸는 첫 PR에서 적용 기준을 사용자에게 묻는다.
+- Outbox 행까지 없는 이벤트의 종결(결정 161·125 후속).
+- 주문 전용 운영 화면·성능/처리량 고도화.

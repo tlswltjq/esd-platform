@@ -1773,6 +1773,83 @@
 - 구분: 직접 제안
 - 결과: [PR #194](https://github.com/tlswltjq/esd-platform/pull/194). 플랫폼 `tasks.md` "독립 평가 1회차 지적", 근거 색인 한 행
 
+<a id="late-cancellation-during-retry"></a>
+## 179. 재신청 중 이전 시도의 늦은 취소는 진행 중인 실행이 있으면 그 실행이 끝내고, 없을 때만 늦은 취소로 끝낸다
+- 문제: 결정 157이 Order·Payment 모듈 스펙으로 넘긴 "고객이 이미 재신청해 새 환불 시도가 진행 중일 때"다(1회차 지적 A2·B2). 예: 9,000원, 11:41 시도 A 실패 종결 → 보유권 복구 → 12:00 고객 재신청 → 12:30 PG 콘솔 전액 취소 → 12:35 ADMIN이 A의 늦은 취소 반영. PG는 취소 가능 잔액이 0인 결제를 더 취소하지 않아 돈이 두 번 나가지는 않는다. 그러나 같은 PG 취소에서 `RefundLateCancellationConfirmed(A)`와 재신청 시도 B의 `RefundPaymentConfirmed`가 함께 나올 수 있고, 지금 계약으로는 Order·License·Settlement가 뒤 사실을 영구 실패로 받아 그 주문의 키가 멈춘다. 재신청이 ① 재정지 대기, ② 시도 B를 만들었지만 Payment가 아직 받기 전, ③ Payment에 B 실행 있음, ④ B도 실패 확정 중 어디까지 갔는지에 따라 칸이 갈린다.
+- 선택지: A 진행 중인 실행이 있으면 그 실행이 끝내고, 없을 때만 늦은 취소로 끝낸다 / B 늦은 취소가 언제나 이긴다(Order가 B를 닫고, 이미 나간 B의 확인은 Order·Settlement가 흡수, B를 멈추려면 Order → Payment 새 사실) / C 둘 다 허용하고 먼저 온 쪽이 끝내며, 뒤 사실은 같은 취소 ID 집합이면 세 모듈이 기록만 (추천: A — 같은 돈의 결과를 금융 확인 사실 하나로 끝내고(원칙 ③), Payment가 반영과 후속 실행 생성을 같은 실행 잠금으로 직렬화해 둘이 함께 나올 수 없다. ③④는 기존 경로로 끝나고, Payment가 볼 수 없는 틈 ①②만 Order가 닫는다. B·C는 같은 PG 취소를 사실 두 개로 남기고 세 모듈에 흡수 규칙을 늘린다. Payment가 반영 전에 Order에 동기로 묻는 안은 P1.2-6 위반이라 제외)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 해")
+- 선택: A
+  - Payment: 늦은 취소 반영은 대상이 그 환불의 마지막 실행이고 `FAILED`일 때만 받는다. 뒤 실행이 있으면 409(가칭 `LATE_CANCELLATION_SUPERSEDED`)로 거절하고, 뒤 실행은 자기 경로(송신 직전 조회·응답의 잔액 변화 → `BALANCE_BLOCKED` → 조회의 전액 취소 확인 → `RefundPaymentConfirmed`, 조회가 멈추면 결정 127 종결)로 끝난다. 선행 실행에 늦은 취소 확인이 있는 후속 실행 요청이 오면 실행을 만들지 않고 PG도 부르지 않으며 수신만 기록한다(영구 실패 아님). 반영과 후속 실행 생성은 선행 실행의 같은 잠금으로 직렬화한다.
+  - Order: Payment가 아직 재신청 시도를 모르는 틈(① 재정지 대기 `PENDING_LICENSE_SUSPENSION`, ② 새 시도를 만들었지만 Payment가 받기 전)에 직전 실패 시도를 가리키는 늦은 취소가 오면, 환불을 `LATE_CANCELLATION_COMPLETED`로, 그 시도를 `LATE_CANCELLED`로 끝낸다. ②의 새 시도는 새 끝 상태(가칭 `SUPERSEDED`)로 닫고, 뒤에 오는 재신청 정지 결과는 기록만 한다(새 시도를 만들지 않음). `PurchaseRefunded`의 정지 요청 ID는 늦은 취소가 확인된 시도의 것이다.
+  - License: `PurchaseRefunded`가 가리킨 정지에 복구 기록이 있으면, 같은 `refundId`의 재신청 정지로 다시 정지돼 있어도 회수한다(구매 근거 `REFUNDED`, 열린 보유권 `ENDED`, 현재 정지 비움). 정지 요청과 회수는 소비 그룹이 달라(`license-suspension`·`license-purchase-refund`) 회수가 먼저 처리될 수 있으므로, `REFUNDED`에 같은 `refundId`의 새 정지 요청이 오면 무변화(Inbox만, 결과 이벤트 없음)다.
+  - Settlement: 같은 환불의 금융 확인 사실은 하나뿐이므로 지금 규칙(두 번째는 영구 실패)을 유지해 결함으로 드러낸다. 모듈 초안 메모의 "같은 취소 ID면 멱등" 안은 택하지 않았다.
+  - 고객: 어느 시점이든 환불 완료와 보유권 회수가 한 번 보인다. ①②는 늦은 취소 완료 안내(`completionNotice`), ③④는 일반 환불 완료다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Order R7.7·시도 상태, Payment R19.3·R19.6·상태 모델 7, License R11-4·E2·E7, Settlement R6.8, 플랫폼 P3.23-9·흐름 3 S14. 1회차 지적 A2·B2 판정은 2회차 함께 평가(결정 178)
+
+<a id="account-access-revocation"></a>
+## 180. 계정 정지·역할 변경은 Auth 사실 이벤트를 Gateway가 받아 BFF 세션과 그 전에 발급된 access token을 즉시 끊는다
+- 문제: 결정 84는 "정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 즉시 끊는다"로 정했지만, 구현(`ManageAccount` → `TokenRevocationPort.revokeSubject`)은 Refresh Token 계열만 폐기하고 access token은 수명(`studio-web`·`swagger-ui` 15분, `gateway-bff` 기본 900초)까지 유효하다. Gateway `oauth2ResourceServer().jwt()`는 서명·만료·역할만 보고, BFF 세션은 다음 갱신 실패 때 지워진다. 예: 15:00에 운영자 B의 `ADMIN`을 회수해도 B는 15:15까지 관리자 환불 판정·늦은 취소 반영을 할 수 있고, 정지된 `CREATOR`는 15분 동안 출시 요청을 낼 수 있다(M-AU-6·M-GW-7, 결정 150 재검토 대상).
+- 선택지: A 결정 84를 지금 동작대로 다시 고름(Refresh만 즉시, access는 수명까지) / B Auth가 계정 접근 변경 사실을 Outbox로 내고 Gateway가 받아 BFF 세션을 지우고 변경 시각 전에 발급된 토큰을 거절 / C Gateway가 요청마다 Auth에 동기 확인(introspection) / D access token 수명 단축(수치는 측정 뒤) (추천: B — 결정 84의 "즉시"를 지키는 곳이 생기고(원칙 ⑤), 사실 하나를 정본 Auth가 내며(원칙 ①③), 모든 외부 요청이 지나는 Gateway에서 BFF와 Bearer를 함께 막고, `iat`와 변경 시각이 모두 Auth 시계라 원칙 ⑥을 지킨다. C는 Auth를 모든 요청의 동기 의존으로 만들고, D는 위험을 줄일 뿐 없애지 못한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B안으로 해")
+- 선택: B
+  - Auth: 상태·역할이 바뀌면 Refresh Token 계열 폐기와 같은 트랜잭션에서 계정 접근 변경 사실(가칭 `AccountAccessChanged`, `stove.auth.v1`, 키 `subject`, 본문 `subject`·변경 시각(Auth 시계)·변경 종류)을 Outbox에 쓴다. 이 사실은 "그 계정의 이전 접근 근거가 더는 유효하지 않다"만 뜻한다.
+  - Gateway: 처음으로 Kafka 소비자가 된다(소비 그룹은 Gateway 스펙). 받으면 그 `subject`의 BFF 세션·저장된 토큰을 지우고, Redis에 `subject`별 "이 시각 전에 발급된 토큰 거절" 기준을 최대 access 수명 이상 남긴다. JWT 검증에서 `iat` < 기준이면 401이다. 멱등은 Redis(`eventId`)로 한다. 같은 `subject`의 기준은 더 늦은 값만 덮는다.
+  - 늦음: Kafka 전달 지연만큼 늦다. Gateway 소비가 멈추거나 Redis 기준을 잃으면 지금처럼 access 수명까지 남으므로, Gateway가 소비 지연을 게이지로 낸다(경보 기준은 측정 뒤, 결정 159).
+  - 업무 모듈의 JWT 검증은 바꾸지 않는다. 외부 진입은 Gateway뿐이다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Auth R7.6·AU-T6, Gateway R5.6~5.8·상태 표 19·20행·GW-T18, 플랫폼 이벤트 표 목표 행. Gateway 소비 실패 보관 위치는 `[결정 필요 M-GW-8]`
+
+<a id="approval-snapshot-payload"></a>
+## 181. Review 승인 사실은 Review가 보관한 스냅샷 전체를 싣고, Catalog는 출시 요청 스냅샷과 레코드 동등으로 대조한다
+- 문제: 결정 167은 Catalog가 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 보관해 출시 요청과 대조한다고 정했지만, `ProjectReviewApprovedEvent`에는 `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`만 있어 스냅샷 값이 없다. 싣는 형식은 정하지 않았다. 예: Studio 결함으로 v3 승인(요청 100)을 근거로 `contentVersion`은 같고 `price` 9,000 → 900원·승인 안 된 `storagePath`인 출시 요청이 오면, ID·버전만 비교하는 Catalog는 통과시켜 승인 안 된 빌드가 판매되고 보유권이 지급된다(M-RV-1·M-CA-4).
+- 선택지: A 승인 이벤트 v2에 `ProjectSnapshot` 전체 / B Review가 계산한 지문(정규화 JSON의 SHA-256)만 / C ID·버전만 대조 (추천: A — 값 동등 규칙이 이미 공통 계약(`ProjectSnapshot` 레코드 동등)에 하나 있고 Review도 같은 규칙을 쓴다. B는 해시 정규화라는 두 번째 판정 규칙을 만들고(원칙 ③) 어긋나면 정상 출시가 거절된다. A의 비용은 메시지 크기뿐인데 같은 크기의 `ProjectReviewRequested`가 이미 흐른다. C는 결정 167을 사실상 되돌린다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 스냅샷 전체를 실어")
+- 선택: A
+  - Review: `ProjectReviewApproved`에 `snapshot`(`ProjectSnapshot`, Review `project_review`에 보관한 값 그대로)을 더해 같은 `eventType`의 `schemaVersion` 2로 낸다. 배포 순서는 P2.7-5(Studio·Catalog가 v1·v2를 모두 읽는 판 → Review 발행 전환, 결정 170).
+  - Catalog: `catalog_review_approval.snapshot`에 받은 스냅샷을 불변 보관하고, 출시 요청의 `ProjectReleaseRequested.snapshot`과 `ProjectSnapshot` 레코드 동등(장르 목록 순서 포함)으로 비교한다. 다르면 `ProjectReleaseRejected`(`APPROVAL_MISMATCH`). 별도 정규화·해시 규칙을 두지 않는다.
+  - v1(스냅샷 없음) 승인 사실을 Catalog가 어떻게 다룰지와 이미 `APPROVED`인 심사의 이행은 결정 182로 이어서 정했다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.1·RV-T4·발행 표, Catalog R11.1·데이터 모델, 플랫폼 이벤트 표 `ProjectReviewApproved` 행
+
+<a id="no-approval-migration"></a>
+## 182. 결정 167 전에 승인된 심사는 Catalog로 이행하지 않고, 스냅샷 없는 v1 승인 사실은 대조 근거로 보관하지 않는다
+- 문제: 결정 167·181로 Catalog는 `snapshot`이 있는 승인 사실(v2)을 보관해야 공개를 확정한다. 이 계약 전에 `APPROVED`가 된 심사는 Catalog에 보관 승인이 없다. 옛 v1 이벤트는 브로커 기본 보존(7일) 밖이면 읽을 수 없고, 읽어도 `snapshot`이 없으며, 재발행(P2.2-7)은 같은 본문만 낸다. 예: 9월 승인 요청 50으로 11월에 같은 승인본을 출시·재출시(결정 58)하면 Catalog가 `AWAITING_APPROVAL`에 계속 둔다(M-RV-2).
+- 선택지: A Review ADMIN 이행 명령이 기존 `APPROVED`마다 v2를 새 `eventId`로 발행 / B Catalog가 v1을 받아 ID·버전만 대조 / C Catalog가 Review에서 동기 조회·스키마 교차 읽기 / D 이행하지 않음, 옛 승인본 출시는 새 심사 요청으로만 (추천: 보존할 운영 데이터가 있으면 A — 정본 Review가 자기 사실을 다시 알리고 경계를 깨지 않는다, 없으면 D — 결정 74처럼 비용 0. B는 옛 승인에서 결정 181 가드를 비우고, C는 P1.1-2·P1.2를 깬다. 데이터 유무는 사용자가 확인)
+- 내 의견: "보존할 데이터 없으니 D안으로 해"
+- 선택: D — 보존할 운영 데이터가 없어 이행 명령과 RV-I12 예외를 만들 이유가 없다(결정 74와 같은 전제).
+  - Review: 이행 명령을 두지 않는다. RV-I12("한 `reviewRequestId`의 판정 이벤트는 많아야 하나")는 예외 없이 그대로다.
+  - Catalog: `snapshot`이 없는 v1 승인 사실은 대조 근거로 보관하지 않고 Inbox만 쓴다(무변화, 실패 보관 아님). 그 승인을 근거로 한 출시는 `AWAITING_APPROVAL`에 남으며, 창작자는 새 심사를 요청해 v2 승인을 받는다. P2.7-5 배포 순서(Catalog가 v1·v2를 읽는 판 → Review v2 발행 전환) 사이에 나온 v1 승인도 같다.
+  - 운영 데이터가 생긴 뒤 승인 이벤트 모양을 다시 바꾸게 되면 이 결정을 다시 연다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.4·RV-T13, Catalog R11.1
+
+<a id="isolate-conflicted-withdrawal"></a>
+## 183. 원요청보다 먼저 보관된 철회가 원요청과 맞지 않으면 원요청은 접수하고, 그 철회만 충돌 상태로 격리해 경보한다
+- 문제: 결정 57·62로 Review·Catalog는 원요청보다 먼저 온 철회를 대조 없이 보관하고, 원요청 접수 트랜잭션 안에서 대조해 적용한다. Studio 결함·수동 수정으로 보관 철회(`withdrawalId` 7)가 `contentVersion` 3이나 다른 `ownerSubject`를 들고 있고 나중에 온 원요청 100이 정상 `contentVersion` 4이면, 지금은 `ReviewWithdrawal.resolve`(`ReviewWithdrawal.java:57-60`)·Catalog `ReleaseWithdrawal.resolve`·`CatalogRelease.withdrawn`이 예외를 던져 원요청 접수 전체가 롤백된다. 맞는 원요청이 실패 보관으로 가고 결정 155·160으로 그 상품 키(`stove.studio.v1`, `productCode`)가 정지돼 같은 상품의 뒤 출시·철회가 모두 멈춘다(M-RV-3·M-CA-3, Review RV-T7·Catalog CA-T4).
+- 선택지: A 지금대로 원요청을 영구 실패·키 정지(P3.1-6 글자 그대로) / B 원요청은 접수하고, 맞지 않는 보관 철회는 적용하지 않은 채 `CONFLICTED`로 남겨 1건부터 경보, 결과 이벤트 없음 / C 원요청 접수 + 맞지 않는 철회에 `…WithdrawalDenied` 회신 (추천: B — 위반한 레코드만 격리하고 맞는 원요청은 막지 않는다. 정상 순서면 위반 철회 레코드가 실패 보관으로 가고, 선행 보관 철회는 실패시킬 레코드가 없으므로 명시적 상태와 경보가 같은 역할을 한다(원칙 ④⑤). A는 맞는 입력을 실패시켜 상품 흐름 전체를 멈추고, C는 Denied(결정 176 "판정·결과가 먼저 확정됨")에 다른 사실을 실어 원칙 ①에 어긋난다. P3.1-6의 두 해석이 갈려 사용자가 고른다)
+- 내 의견: "B안으로 원요청은 받고 철회만 격리해"
+- 선택: B
+  - Review·Catalog: 철회 보관의 상태를 두 값(`resolved`)에서 명시적 세 값으로 바꾼다(Review `PENDING`·`RESOLVED`·`CONFLICTED`, Catalog `RECEIVED`·`RESOLVED`·`CONFLICTED`, CHECK). 원요청 접수 때 보관 철회가 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)과 맞지 않으면 원요청은 평소대로 접수하고, 그 철회는 같은 트랜잭션에서 `CONFLICTED`로 바꾸며 적용하지 않는다. 결과 이벤트는 내지 않는다.
+  - `CONFLICTED` 철회 건수를 게이지로 내고 1건부터 경보한다(계약 위반이라 측정 전 기준이 필요 없다). Studio 철회 명령은 `PENDING`으로 남아 Studio 대기 게이지가 센다. 정리는 Studio 결함 조사 뒤 창작자의 새 철회 명령으로 한다.
+  - 원요청이 먼저 있고 맞지 않는 철회가 뒤에 오는 정상 순서는 지금처럼 그 철회 레코드를 영구 실패로 보낸다.
+  - 대가: 정리 전까지 창작자의 철회가 반영되지 않아 그사이 심사 승인·출시 공개가 진행될 수 있다. 그 철회 명령 자체가 계약을 어겨 적용할 근거가 없다.
+  - 플랫폼 P3.1-6에 "선행 보관 기록이 나중의 맞는 입력과 어긋나면 위반한 보관 기록만 충돌 상태로 격리하고 경보한다"를 더한다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R6.10·철회 보관 표·RV-T7, Catalog R9.8·표 1·표 3·CA-T4, 플랫폼 P3.1-6
+
+<a id="withdrawal-denied-closed"></a>
+## 184. 운영자가 종결한 출시에 온 철회는 `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)`로 거절한다
+- 문제: 결정 176은 `ProjectReleaseWithdrawalDenied.targetStatus` ∈ {`COMPLETED`,`REJECTED`}("대상의 최종 상태")로 정했고, 결정 168은 운영자 종결로 새 끝 상태 `CLOSED`(`ProjectReleaseClosed`)를 만들었다. 두 결정을 함께 적용하면 종결된 출시에 온 철회를 거절할 값이 없다. 예: 14:00 공개 작업 `BLOCKED` → 14:10 운영자 종결(`CLOSED`, `ProjectReleaseClosed`) → 14:10:01 그 사실이 Studio에 닿기 전 창작자가 철회 → Catalog는 먼저 커밋된 결과를 유지해 거절해야 한다(M-CA-5, Studio notes F1).
+- 선택지: A `targetStatus`에 `CLOSED` 추가 / B 결과를 내지 않고 Studio가 `ProjectReleaseClosed`를 받을 때 대기 철회 명령도 닫음 (추천: A — 철회 명령마다 응답 사실이 하나라 Studio 대기 게이지(결정 158)가 예외 없이 비고, 결정 176의 `targetStatus` 뜻을 그대로 쓰며 값만 늘린다(원칙 ①). B는 한 모듈의 응답을 다른 사실로 대신 끝내 응답 쌍 규칙에 예외를 만든다)
+- 내 의견: "A안으로 targetStatus에 CLOSED를 더해"
+- 선택: A
+  - Catalog: `CLOSED` 출시에 온 새 철회는 결과를 바꾸지 않고 `ProjectReleaseWithdrawalDenied(targetStatus=CLOSED)`를 낸다. `targetStatus` enum은 {`COMPLETED`,`REJECTED`,`CLOSED`}다.
+  - Studio: 이 값을 받아 철회 명령을 `DENIED`로 닫는다(초안 E12·`denied_target_status` CHECK 가정을 확정). 출시 결과는 같은 그룹(`studio-project`)·토픽·키로 오므로 `ProjectReleaseClosed`가 먼저 와 요청은 이미 `CLOSED`다. 요청이 아직 `REQUESTED`인 칸은 다른 Denied 값과 같은 모양의 방어 칸으로 둔다.
+  - Review 쪽 `ProjectReviewWithdrawalDenied.targetStatus`({`APPROVED`,`REJECTED`})는 바꾸지 않는다(Review에는 운영자 종결이 없다).
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Catalog 표 1 `CLOSED` 행·발행 표·T21, Studio E12·소비 표, 플랫폼 SP-8·목표 행
+
 ---
 
 ## 검증하며 드러난 것
