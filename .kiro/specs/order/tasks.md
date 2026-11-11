@@ -108,7 +108,7 @@
   - 재현: 이행 호환(결정 104) — 옛 `SUCCEEDED`·`PENDING+true` 행 → `COMPLETED`; `source` 없는 본문 수용.
 - [ ] **OR-T2 / T18(Order 몫). 운영자 종결을 사유 문자열로 판정한다**([결정 174](../../../docs/decisions.md#review-closed-event))
   - 어디서: `order:core/domain/PaymentResult.java:194`·`:217-219`, `order:core/domain/Order.java:147-150`, `order:core/service/ApplyPaymentResult.java:117`·`:135-142`, `order/db/V31:17`.
-  - 목표: R4.8·R4.11, `payment_result_kind`, `OrderPaymentReviewClosed` 소비, 이행 기간 옛 사유 변환, OI9.
+  - 목표: R4.8·R4.11, `payment_result_kind`, `OrderPaymentReviewClosed` 소비, 이행 기간 옛 사유 변환, OI9. `order_expired_review_closure.result_kind IN ('REVIEW_CLOSED','DECLINED')`과 `EXPIRED` 주문의 결제 최종 거절 기록(R4.10, [결정 185](../../../docs/decisions.md#expired-order-declined)) — 지금 `Order.java:161-162`의 `CONFLICT`를 대체한다.
   - 영향: 동작은 같다. 오타·새 소비자 오해 여지.
   - 재현: 두 타입이 같은 내부 입력·같은 결과 종류가 되는 Mapper 테스트, 이행 채움 테스트.
 - [ ] **OR-T10. 회차 미판정이 null, 승인 중단 단계가 null 조합이다**
@@ -159,7 +159,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] `[결정 필요 M-OR-2]`~`M-OR-4` 결정 뒤 해당 행(R4.10, R4.14, T1 이행)을 확정한다. M-OR-1은 결정 179로 확정(MC-O3).
+- [ ] `[결정 필요 M-OR-3]`·`M-OR-4` 결정 뒤 해당 행(R4.14, T1 이행)을 확정한다. M-OR-1은 결정 179(MC-O3), M-OR-2는 결정 185(OR-T2)로 확정.
 - [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3 + M-OR-3·M-OR-4 이행(Payment A1 먼저 배포, P2.7-5) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
 - [ ] [외부 대기] 재심사·잘못된 승인 중단·늦은 취소 반영의 실제 사용자 흐름: 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정 — G2 후속
 - [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), 결정 110·111). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인

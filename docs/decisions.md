@@ -1850,6 +1850,18 @@
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Catalog 표 1 `CLOSED` 행·발행 표·T21, Studio E12·소비 표, 플랫폼 SP-8·목표 행
 
+<a id="expired-order-declined"></a>
+## 185. 이미 만료된 주문에 결제 최종 거절이 오면 만료를 유지하고 그 결과를 기록만 한다
+- 문제: 플랫폼 "주문 상태 × 결과" 표에 `EXPIRED × OrderPaymentFailed` 칸이 없다(1회차 지적 B6). 영수증 없는 `PENDING` 주문이 30분 기한으로 만료되는 순간, Payment가 아직 `OrderExpired`를 받기 전에 PG 최종 거절을 확정해 `OrderPaymentFailed`(`admissionId` null)를 내면 생긴다. 결정 169로 결제창은 만료 사실을 받을 때까지 열려 있어 기한 경계의 정상 경합이다. 예: 14:29:59 `PENDING`(카드 입력 중) → 14:30:00 스캔 `EXPIRED`·`OrderExpired` → 14:30:00.5 PG 카드 거절로 `OrderPaymentFailed`. 지금 `Order.apply`(`Order.java:161-162`)는 `EXPIRED`면 `CONFLICT`라 영구 실패·실패 보관·키 정지·경보가 된다(M-OR-2).
+- 선택지: A `EXPIRED` 유지 + 결과 식별 불변 기록(결정 115 종결 기록과 같은 모양, `order_expired_review_closure`를 결과 종류 열로 일반화) / B 지금대로 영구 실패 / C `FAILED`로 덮음 (추천: A — 돈이 움직이지 않았고 고객의 끝(새 주문 안내)이 같다는 결정 115의 이유가 그대로 맞고, 끝 상태를 다시 열지 않는다(원칙 ④). B는 정상 경합을 결함 경보로 만들고, C는 끝 상태를 바꾼다)
+- 내 의견: "A안으로 만료 유지하고 거절 기록만 남겨"
+- 선택: A
+  - Order: `EXPIRED` 주문에 연결값이 맞는 `OrderPaymentFailed`(`admissionId` null)가 처음 오면 주문은 `EXPIRED`로 두고, 결과 `eventId`·결과 종류 `DECLINED`·사유 코드를 만료 주문 결과 기록에 남긴다. 지금 `order_expired_review_closure`(V31, 결정 115)를 만료 주문 결과 기록으로 일반화해 `result_kind ∈ {REVIEW_CLOSED, DECLINED}`, 주문당 하나·결과 `eventId` 유일로 둔다. 결과 `eventId`가 세 곳 가운데 한 곳에만 쓰인다는 OI7은 그대로다.
+  - 같은 결과 재전달은 무변화, 다른 결과는 영구 실패(P3.14-4). `admissionId`가 있는 거절(영수증이 있던 결제)은 `EXPIRED`가 될 수 없으므로(`PAYMENT_PROCESSING`은 시간으로 만료되지 않음) 영구 실패로 둔다.
+  - 고객에게는 지금처럼 만료·새 주문 안내만 보인다. 경보는 없다.
+- 구분: 추천 수용
+- 결과: Order R4.10·상태 표 `EXPIRED` 행·데이터 모델·소비 표, 플랫폼 P3.14-3. 1회차 지적 B6 판정은 2회차 함께 평가(결정 178)
+
 ---
 
 ## 검증하며 드러난 것
