@@ -250,7 +250,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | ADMIN 같은 `requestId` 다른 내용 | 404 | 거절 409 `UNLINKED_CHARGE_CLOSURE_CHANGED` | 같음 | R17.6 |
 | ADMIN 조사 기록 | 404 | 무변화(기록 추가) | 거절 409 | R17.8 |
 
-결제·시도 상태는 이 표의 어떤 전이로도 바뀌지 않는다(결정 154 "다시 열지 않는다"). 종결 뒤 결제의 고객 표현은 `[결정 필요 M-PA-4]`.
+결제·시도 상태는 이 표의 어떤 전이로도 바뀌지 않는다(결정 154 "다시 열지 않는다"). 종결 뒤 결제의 고객 표현: 저장 `PAID` + 닫힌 `ORDER_REJECTED` 기록이면 응답 `status`만 `CHARGE_RETURNED`(가칭)로 계산한다(R17.7, [결정 190](../../../docs/decisions.md#charge-returned-view)).
 
 ### 5. 청구 감시 `payment_charge_watch.status` (목표 신설, 결정 154)
 
@@ -348,7 +348,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 메서드 · 경로 | 역할 | 요청 → 응답 | 오류 코드 | 요구사항 |
 |---|---|---|---|---|
 | `GET /api/v1/payments?page&size` | MEMBER | 본인 결제 목록(`createdAt DESC, id DESC`, `size 1~100`), `reviewNotice=null` | 400 | R8.1~8.4 |
-| `GET /api/v1/payments/{orderNo}` | MEMBER | 결제 상세 + `reviewNotice` | 404 | R8.4, R14 |
+| `GET /api/v1/payments/{orderNo}` | MEMBER | 결제 상세 + `reviewNotice`. 응답 `status`는 저장 값, 단 R17.7 조건이면 `CHARGE_RETURNED`(응답 전용, [결정 190](../../../docs/decisions.md#charge-returned-view)) | 404 | R8.4, R14, R17.7 |
 | `GET /api/v1/payments/{orderNo}/checkout` | MEMBER | 결제창 공개 설정, `no-store` | 409 `ORDER_EXPIRED`(만료 사실 수신 뒤만)·`APPROVAL_IN_PROGRESS`·끝 상태 409, 404 | R4.8, R4.16 |
 | `POST /api/v1/payments/{orderNo}/approvals` | MEMBER | `{requestId, supplierAttemptId, paymentToken}` → 202 `{requestId, orderNo, paymentId, receivedAt}` + Location | 409 `APPROVAL_IN_PROGRESS`·`CONFLICT`, 404 | R4.1·R4.2 |
 | `GET /api/v1/payments/{orderNo}/approvals/{requestId}` | MEMBER | 상태·접수·종결 시각 + `reviewNotice`, `no-store` | 404 | R4.14, R14 |

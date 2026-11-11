@@ -239,7 +239,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 1. WHERE 결제 상세(`GET /api/v1/payments/{orderNo}`)와 승인 조회(`GET …/approvals/{requestId}`)인 경우 THE Payment SHALL 시도가 보류 중이거나 운영자 종결로 끝났거나 그 결제에 주문에 연결되지 않은 청구 기록이 있으면 `reviewNotice {code, message, since}`를 돌려주고, 그 밖에는 `null`로 둔다. 결제 목록에는 넣지 않는다.
 2. WHILE 시도가 보류 중이면 THE Payment SHALL `PG_INVALID_EVIDENCE`는 관측과 관계없이 `CHARGE_UNCONFIRMED`로 두고, 그 밖의 사유는 마지막 유효 PG 관측으로 정한다: `PAID` → `CHARGED`, 전액 `CANCELLED` → `CHARGE_CANCELLED`, `READY`·`FAILED` → `NOT_CHARGED`, `PENDING`·마지막 조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`.
 3. WHEN 운영자 종결로 끝난 시도이면 THEN Payment SHALL 종결 근거로 `CLOSED_CHARGE_CANCELLED`(전액 `CANCELLED`) 또는 `CLOSED_NOT_CHARGED`(`READY`·`FAILED`)를 돌려준다.
-4. WHEN 그 결제에 열린 주문에 연결되지 않은 청구 기록이 있으면 THEN Payment SHALL 시도 안내보다 우선해 `CHARGED`를 돌려주고, 그 기록이 전액 `CANCELLED` 근거로 닫혔으면 `CLOSED_CHARGE_CANCELLED`를 돌려준다. `since`는 기록 생성 시각이다(결정 154 "고객 안내를 청구됨으로 바꾼다").
+4. WHEN 그 결제에 열린 주문에 연결되지 않은 청구 기록이 있으면 THEN Payment SHALL 시도 안내보다 우선해 `CHARGED`를 돌려주고, 그 기록이 전액 `CANCELLED` 근거로 닫혔으면 `CLOSED_CHARGE_CANCELLED`를 돌려준다(저장 `PAID` 결제의 응답 `status`는 R17.7의 `CHARGE_RETURNED`, [결정 190](../../../docs/decisions.md#charge-returned-view)). `since`는 기록 생성 시각이다(결정 154 "고객 안내를 청구됨으로 바꾼다").
 5. THE 문구 SHALL 결정 123의 한국어 원문을 그대로 쓰고, 금액은 주문 청구액이다. 처리 시점은 약속하지 않는다.
 6. WHEN 결제창이 진행 중 시도로 409 `APPROVAL_IN_PROGRESS`를 내면 THEN Payment SHALL 보류 중 시도에는 2의 문구를, 그 밖에는 "기존 결제 승인을 처리하고 있습니다."를 메시지로 쓴다.
 7. THE 고객 응답 SHALL 보류 사유 코드·공급자 시도 ID·토큰을 넣지 않는다.
@@ -282,7 +282,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 4. WHILE 그 결제의 시도가 이미 다른 사유로 보류 중이면 THE Payment SHALL 보류 사유를 바꾸지 않고 기록만 더한다(결정 144, 흐름 2 S9-R "상대 상태가 이미 바뀜").
 5. WHEN 기록이 생기면 THEN Payment SHALL 그 기록을 ADMIN 목록(`GET /api/v1/admin/unlinked-charges`)과 게이지 `stove.payment.unlinked-charge.open{source}`에 올리고 critical로 경보하며, 고객 안내를 R14.4로 바꾼다. 시스템은 PG 취소를 실행하지 않는다(P3.13-9).
 6. WHEN ADMIN이 `POST /api/v1/admin/unlinked-charges/{chargeId}/closure`(`{requestId, note}`)를 보내면 THEN Payment SHALL 감시 lease를 잡고 트랜잭션 밖에서 PG를 조회해, 원결제가 전액 `CANCELLED`일 때만 같은 트랜잭션에서 기록을 `CLOSED`로 바꾸고 종결자·근거 상태·관측 시각을 남긴다. `PAID`면 409 `CLOSURE_PG_PAID`, 그 밖의 근거는 409 `CLOSURE_PG_NOT_CANCELLED`, 근거 불일치·조회 장애는 `CLOSURE_PG_INVALID_EVIDENCE`·`CLOSURE_PG_UNAVAILABLE`이다. 같은 `requestId`·내용은 최초 결과, 다른 내용은 409 `UNLINKED_CHARGE_CLOSURE_CHANGED`(가칭)다.
-7. THE 기록 종결 SHALL 결제·시도 상태를 바꾸지 않는다. 종결 뒤 결제의 고객 상태 표현은 `[결정 필요 M-PA-4]`를 따른다.
+7. THE 기록 종결 SHALL 결제·시도 상태를 바꾸지 않는다. WHEN 저장 상태가 `PAID`인 결제의 `ORDER_REJECTED` 기록이 전액 `CANCELLED` 근거로 닫혔으면 THEN 결제 상세 응답 SHALL `status`를 `CHARGE_RETURNED`(가칭, 응답 전용 값)로 계산해 내고, 저장 상태·전이는 바꾸지 않으며 환불 실행을 시작하지 않는다. `LATE_CHARGE`는 저장 상태가 `PAID`가 아니므로 계산하지 않는다([결정 190](../../../docs/decisions.md#charge-returned-view)).
 8. WHEN ADMIN이 기록에 조사 내용을 남기면 THEN Payment SHALL R12.3과 같은 규칙으로 추가 전용 저장하고 상태를 바꾸지 않는다.
 
 ### R18. 운영자 환불 실패 종결 ([결정 128](../../../docs/decisions.md#refund-failure-closure)·결정 148)

@@ -1911,6 +1911,19 @@
 - 구분: 추천 수용
 - 결과: Payment R20.3·데이터 모델·소비 표, 플랫폼 이벤트 표 `OrderPaid` 행·"정방향 응답 쌍"·I14. 1회차 지적 A1 판정은 2회차 함께 평가(결정 178)
 
+<a id="charge-returned-view"></a>
+## 190. Order가 거절한 청구를 전액 취소 근거로 닫은 결제는 저장 상태 `PAID`를 두고, 고객 응답의 상태만 `CHARGE_RETURNED`로 계산해 보인다
+- 문제: 결정 153·154로 Order가 거절한 성공 결제는 연결되지 않은 청구(`unlinked_charge`, `ORDER_REJECTED`)로 남고, 운영자가 PG 콘솔에서 취소한 뒤 PG 근거(전액 `CANCELLED`)로 닫는다. 결정 154("다시 열지 않음")로 `purchase_payment.status`는 `PAID`로 남아, 고객 결제 상세(`GET /api/v1/payments/{orderNo}`)에 `status=PAID`가 보이는데 주문은 `EXPIRED`·`FAILED`이고 돈은 돌아갔다. 결정 153이 "종결 뒤 결제 상태"를 Payment 모듈 스펙에 넘겼다(M-PA-4).
+- 선택지: A 저장·응답 모두 `PAID`, 안내 `CLOSED_CHARGE_CANCELLED`로만 구별 / B 결제에 새 끝 상태 `PAID → CHARGE_RETURNED` 전이 / C 저장은 `PAID`, 고객 응답의 `status`만 정본(닫힌 `unlinked_charge`)에서 계산 (추천: C — 원칙만으로 A·C 모두 성립해 사용자가 고른다. C는 응답 값을 정본에서 파생하고(원칙 3) 클라이언트가 `status`만 봐도 오해하지 않는다. B는 결정 154 "끝난 결제는 다시 열지 않음"과 부딪힌다)
+- 내 의견: "C안만 정하고 대사는 나중에 따로 다뤄" (결정 전 질문: "C안이라면 CHARGE_RETURNED(가칭)으로 보여주고 환불프로세스를 실행하게 하겠다는거지?", "끝끝내 고객이 발견못 할 수도 있잖아. 이런건 대사를 통해 정기적으로 확인하는 작업을 거쳐야할까?")
+- 선택: C
+  - Payment: 결제 상세 응답을 만들 때, 저장 상태가 `PAID`이고 그 결제의 `ORDER_REJECTED` 연결되지 않은 청구가 전액 `CANCELLED` 근거로 닫혔으면 응답 `status`를 `CHARGE_RETURNED`(가칭)로 낸다. 그 밖에는 저장 값을 그대로 낸다. 저장 상태·전이·CHECK는 바꾸지 않는다. 안내 코드(`CLOSED_CHARGE_CANCELLED`, R14.4)는 그대로 함께 낸다.
+  - `CHARGE_RETURNED`는 "청구됐다가 운영자가 PG에서 취소해 돌려받음"을 보이는 응답 값일 뿐이고 환불 실행을 시작하지 않는다. 시스템은 PG 취소를 실행하지 않는다(결정 154).
+  - `LATE_CHARGE`(끝난 결제의 늦은 청구)는 저장 상태가 `EXPIRED`·`FAILED`라 `PAID` 오해가 없으므로 이 계산을 하지 않는다.
+  - 주기 PG 거래 대사(발견에서 놓친 청구·오래 열린 기록을 PG 자료로 다시 찾기)와 열린 기록의 나이 경보는 사용자 지시로 나중에 따로 다룬다(Payment tasks에 남김).
+- 구분: 추천 수용
+- 결과: Payment R17.7·R14.4·종결 표·API 계약
+
 ---
 
 ## 검증하며 드러난 것
