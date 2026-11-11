@@ -238,7 +238,7 @@
 2. WHEN 접수된 시도의 PG 조회가 검증된 시도 실패(FAILED)이면 THEN Payment SHALL 시도를 `FAILURE_CONFIRMED`로 바꾸고 Order에 시도 실패 통지(`POST …/payment-admissions/{admissionId}/failure`)를 보낸다. Order는 그 영수증이 최신이고 결과가 없을 때만 기한 전이면 `PENDING`(같은 주문 재결제), 기한 뒤면 `EXPIRED`+`OrderExpired`로 바꾸고 영수증을 실패 종료로 닫는다. Payment는 실패 영수증을 받은 뒤 시도를 `FAILED`로 닫는다.
 3. IF PG 결과가 미확정(응답 유실·PG PENDING·조회 장애·결과 트랜잭션 실패)이면 THEN Payment SHALL 상태를 유지하고 다음 조회를 예약하며, 시간 경과나 재시도 횟수만으로 실패를 만들지 않는다.
 4. 시스템(Payment) SHALL 결제당 최종 결과를 한 번만 정한다. 같은 결과의 재확정은 무변화, 다른 결과는 `CONFLICT`다(I8).
-5. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 그 시도를 보류(`PAID_WITHOUT_ADMISSION`)로 올리며, 다른 시도의 성공으로 돌리지 않는다(결정 114·126, I15). 이미 끝난(종결·만료·실패) 결제에 뒤늦게 생긴 청구는 P3.13-8·9로 찾는다.
+5. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 접수 전 진행 중 시도는 보류(`PAID_WITHOUT_ADMISSION`)로 올리고, 닫힌 시도는 다시 열지 않고 근거 충돌로 거절하며(진행 시도의 근거 대조 실패 보류·결제 종료 뒤 늦은 청구 감시로 드러남, [결정 188](../../../docs/decisions.md#closed-attempt-charge)), 다른 시도의 성공으로 돌리지 않는다(결정 114·126, I15). 이미 끝난(종결·만료·실패) 결제에 뒤늦게 생긴 청구는 P3.13-8·9로 찾는다.
 
 #### P3.13 승인 보류와 종결 (Payment → Order)
 

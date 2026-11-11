@@ -1887,6 +1887,18 @@
 - 구분: 직접 제안
 - 결과: (압축 코드 PR 예정 — `.sql`·테스트 변경이라 Codex 교차 리뷰 대상) docs/architecture.md Flyway 문단, Order M-OR-4·T1
 
+<a id="closed-attempt-charge"></a>
+## 188. 닫힌 결제 시도에서 뒤늦게 보인 PG 결제는 새 경로를 만들지 않고 기존 근거 대조와 늦은 청구 감시로 드러낸다
+- 문제: 결정 153 A1은 "실패 통지·종결·만료로 닫힌 시도에서 PG 결제가 관측되면 그 시도를 `PAID_WITHOUT_ADMISSION` 보류로 올린다"고 했고, 결정 154는 "끝난 결제·시도는 다시 열지 않는다"고 했다. 결제는 열려 있고 시도만 닫힌 경우(`FAILURE_CONFIRMED`·`FAILED`·`EXPIRED` × PG `PAID`) 두 결정이 부딪히고, 결제당 진행 시도 하나(`uk_payment_approval_active`) 때문에 새 시도 B가 진행 중이면 A를 보류로 되돌릴 수 없다(M-PA-1).
+- 선택지: A 끝난 시도는 두고 `unlinked_charge` 새 출처로 기록 + 진행 시도 B의 확정 송신 정지·보류 / B 끝난 시도를 보류로 되돌림(유일 키 변경) / C 감지하지 않음 (추천: A — AI가 C를 "보이지 않음, 이중 청구 가능"으로 설명했다)
+- 내 의견: "PG가 같은 멱등키로 두 번 응답 한다는 것이잖아. 일어날 수 있는 일이야?" / "새 경로 없이 기존 근거 대조로 확정해"
+- 선택: 새 경로 없음(기존 근거 대조) — 사용자 질문으로 코드(`PortOnePaymentApprovalGateway`)를 다시 확인해 AI 설명을 정정했다. PortOne 결제(`paymentId`) 하나에 시도마다 거래(`txId` = `supplierAttemptId`, `Idempotency-Key` = `approvalId`)가 따로 있어, 사례는 "같은 멱등 키의 두 번째 응답"이 아니라 "A 거래가 검증된 `FAILED` 뒤 `PAID`로 바뀜"이다. Payment는 검증된 PG `FAILED`에서만 실패를 확정하므로(시도 표 #11) PG 결함이 아니면 생기지 않는다. 생겨도 ① PortOne은 이미 `PAID`인 결제의 두 번째 확정을 `ALREADY_PAID`로 거절해 이중 청구가 없고, ② 진행 시도 B를 조회하면 결제 `PAID`의 거래 ID가 B가 아니라서 근거 대조 실패(`PG_INVALID_EVIDENCE` 보류, 고객 `CHARGE_UNCONFIRMED`)로 운영자 목록에 뜨며, ③ B가 없으면 주문 만료로 결제가 끝난 뒤 늦은 청구 감시(R16·R17, 결정 154)가 `unlinked_charge`로 찾는다.
+  - Payment: `FAILURE_CONFIRMED`·`FAILED`·`EXPIRED` 시도에 PG `PAID`가 관측되면 끝난 시도를 바꾸지 않고 근거 충돌로 거절한다(실패 통지는 되돌리지 않는다). 새 출처 값·감지 경로·진행 시도 정지는 두지 않는다.
+  - 결정 153 A1의 "닫힌 시도를 `PAID_WITHOUT_ADMISSION` 보류로 올린다"는 접수 전 진행 중 시도에만 적용하고, 닫힌 시도는 이 결정의 경로를 따른다(결정 154의 "다시 열지 않음"과 맞춘다).
+  - 대가: 이 경우의 보류 사유가 `PG_INVALID_EVIDENCE`라 운영자가 원인을 직접 조사한다. PG 결함 수준의 드문 경우라 받아들인다.
+- 구분: AI 주장 정정
+- 결과: Payment R3.11·시도 상태 표 #10·#21, 플랫폼 P3.12-5
+
 ---
 
 ## 검증하며 드러난 것

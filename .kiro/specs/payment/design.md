@@ -184,7 +184,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 7 | 작업자: Order 연계 장애(연결 실패·5xx) | 무변화 | 무변화(같은 `admissionId` 재요청) | 무변화 | 무변화 | 무변화 | 무변화(통지 재요청) | 무변화 | R4.17 |
 | 8 | 작업자: 확정 송신(`READY`, `confirm_deadline` 전, lease 유효) | 무변화 | 거절(송신 가드: 영수증 없음) | 무변화(송신 뒤 조회) | 거절(송신 금지) | 거절(송신 금지) | 거절(송신 금지) | 거절(송신 금지) | R4.3·R4.5 |
 | 9 | 작업자: 확정 송신 형식 거절 | 무변화 | 무변화(송신 없음) | → `RV-후`(`PG_REQUEST_REJECTED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.12 |
-| 10 | 작업자: PG `PAID` | 무변화 | → `RV-전`(`PAID_WITHOUT_ADMISSION`) | → `SUCCEEDED` + 결제 `PAID`(결제 표 #3) | 무변화 + 사유를 `PAID_WITHOUT_ADMISSION`으로 한 번 올림 | → `SUCCEEDED` + 결제 `PAID` | 거절(근거 충돌) → `[결정 필요 M-PA-1]` | `SUCCEEDED` 무변화 / `FAILED`·`EXPIRED`: 결제가 열려 있으면 `[결정 필요 M-PA-1]`, 끝났으면 청구 감시(R16) | R3.1·R3.11, 결정 144·153 |
+| 10 | 작업자: PG `PAID` | 무변화 | → `RV-전`(`PAID_WITHOUT_ADMISSION`) | → `SUCCEEDED` + 결제 `PAID`(결제 표 #3) | 무변화 + 사유를 `PAID_WITHOUT_ADMISSION`으로 한 번 올림 | → `SUCCEEDED` + 결제 `PAID` | 거절(근거 충돌, 시도 무변화, 실패 통지 유지 — [결정 188](../../../docs/decisions.md#closed-attempt-charge)) | `SUCCEEDED` 무변화 / `FAILED`·`EXPIRED`: 무변화(근거 충돌 기록). 결제가 열려 있으면 진행 시도가 #14로 보류되고, 끝났으면 청구 감시(R16) — [결정 188](../../../docs/decisions.md#closed-attempt-charge) | R3.1·R3.11, 결정 144·153 |
 | 11 | 작업자: 검증된 PG `FAILED` | 무변화 | → `FAILED`(접수 전 실패, Order 통지 없음, 만료 사실 있으면 결제 `EXPIRED`) | → `FC` | → `FAILED`(접수 전 실패) | → `FC` | 같은 근거 무변화 / 다른 근거 거절 | 무변화 | R4.13, R5.1 |
 | 12 | 작업자: 같은 시도 PG 전액 `CANCELLED` | 무변화 | → `RV-전`(`PG_CANCELLED`) | → `RV-후`(`PG_CANCELLED`) | 무변화(관측만, 사유 유지) | 무변화(관측만) | 무변화(관측만) | 무변화 | R13.8 |
 | 13 | 작업자: `confirm_deadline` 지남 + PG `PENDING`·`READY` | 무변화 | 무변화(기한 없음) | → `RV-후`(`CONFIRM_WINDOW_EXPIRED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.6, 결정 124 |

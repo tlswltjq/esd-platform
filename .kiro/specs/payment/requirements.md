@@ -75,7 +75,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 8. WHEN 동시 처리가 같은 최종 결과를 내면 THEN Payment SHALL 먼저 커밋한 결과·결과 이벤트를 유지하고 추가 Outbox를 만들지 않는다.
 9. THE 끝 상태 SHALL 공급자 거래·결정 시각(값으로만 저장, R7.18)과 결과 이벤트 ID·시각을 함께 갖고, 확정 때 재시도 예약·오류 분류를 정리한다.
 10. THE 결과 이벤트 `amount` SHALL 고객 청구액이며 PG 비용 공제 뒤 금액으로 대신 쓰지 않는다.
-11. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패 통지·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 다른 시도의 성공으로 돌리지 않는다. 접수 전 진행 중 시도는 `PAID_WITHOUT_ADMISSION` 보류로 올리고(R12), 닫힌 시도는 `[결정 필요 M-PA-1]`, 끝난 결제는 R16·R17을 따른다(P3.12-5, I15, 결정 153 A1).
+11. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패 통지·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 다른 시도의 성공으로 돌리지 않는다. 접수 전 진행 중 시도는 `PAID_WITHOUT_ADMISSION` 보류로 올리고(R12), 닫힌 시도(`FAILURE_CONFIRMED`·`FAILED`·`EXPIRED`)는 다시 열지 않고 근거 충돌로 거절한다 — 같은 결제의 진행 시도는 조회 근거 대조 실패로 `PG_INVALID_EVIDENCE` 보류가 되고(결제 공급자는 이미 결제된 결제의 두 번째 확정을 거절한다), 결제가 끝나면 R16·R17의 늦은 청구 감시가 찾는다([결정 188](../../../docs/decisions.md#closed-attempt-charge)). 끝난 결제는 R16·R17을 따른다(P3.12-5, I15, 결정 153 A1).
 12. THE `OrderPaymentCompleted` SHALL `admissionId`를 필수 칸으로 싣고, `admissionId`가 없는 옛 모양과 구별되도록 새 `schemaVersion`으로 낸다. 배포 순서는 P2.7-5를 따른다(T1, (1회차 지적 A3, 판정 전)).
 
 ### R4. 승인 시도와 결제창 정보
