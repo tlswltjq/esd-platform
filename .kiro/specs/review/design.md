@@ -73,7 +73,7 @@ ALTER TABLE project_review
 | `resolved` | BOOLEAN — 미해결(`false`) / 해결(`true`). 해결 결과(철회됨·거절)는 저장하지 않고 `project_review.status`가 정본 |
 | `created_at`·`updated_at` | Review 시계. `created_at`이 원요청 없는 철회 대기 시간의 기준(R10.1) |
 
-인덱스 `idx_review_withdrawal_pending(request_id, resolved, withdrawal_id)`. 목표: `chk_review_withdrawal_resolved CHECK (resolved IN (0,1))`(MySQL BOOLEAN은 TINYINT(1)이라 다른 값을 막지 않는다, RV-T1). [결정 필요 M-RV-3]에서 "대상 불일치로 접수를 막지 않는" 안을 고르면 이 열은 enum `ReviewWithdrawalState {PENDING, RESOLVED, CONFLICTED}` + CHECK로 바뀐다.
+인덱스 `idx_review_withdrawal_pending(request_id, resolved, withdrawal_id)`. 목표: `chk_review_withdrawal_resolved CHECK (resolved IN (0,1))`(MySQL BOOLEAN은 TINYINT(1)이라 다른 값을 막지 않는다, RV-T1). 목표: 이 열을 상태 열 `state`(enum `ReviewWithdrawalState {PENDING, RESOLVED, CONFLICTED}`) + `chk_review_withdrawal_state CHECK (state IN ('PENDING','RESOLVED','CONFLICTED'))`로 바꾼다([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal), RV-T7). 옛 `resolved=0/1`은 `PENDING`/`RESOLVED`로 옮긴다.
 
 ### `review_request_gate` (V11)
 
@@ -111,7 +111,7 @@ ALTER TABLE project_review
 | E4 `ProjectReviewWithdrawalRequested`, 새 `withdrawalId`, 대상 일치 | 허용: 철회 보관(미해결), 심사 행은 계속 없음, 발행 없음 | 허용 → `WITHDRAWN`, 철회 해결, `ProjectReviewWithdrawn` 발행 | 무변화 + 철회 해결, `ProjectReviewWithdrawalDenied(targetStatus=APPROVED)` 발행 | 무변화 + 철회 해결, `ProjectReviewWithdrawalDenied(targetStatus=REJECTED)` 발행 | 무변화 + 철회 해결, `ProjectReviewWithdrawn`을 이 `withdrawalId`로 발행 |
 | E5 같은 `withdrawalId`, 같은 내용(다른 `eventId` 또는 재전달) | 무변화(보관 유지) | 해결된 명령이면 무변화(멱등). 미해결로 남아 있으면 E4로 해결 | 해결된 명령이면 무변화. 미해결이면 E4 | 같음 | 같음 |
 | E6 같은 `withdrawalId`, 다른 내용 | 거절(영구 실패), 보관 내용 유지 | 거절(영구 실패) | 거절(영구 실패) | 거절(영구 실패) | 거절(영구 실패) |
-| E7 새 `withdrawalId`, 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)이 행과 다름 | 대조할 행이 없어 E4로 보관. 원요청이 나중에 오면 E1 안에서 불일치가 드러난다 → [결정 필요 M-RV-3] | 거절(영구 실패), 무변화, 철회 행도 저장 안 함 | 거절(영구 실패) | 거절(영구 실패) | 거절(영구 실패) |
+| E7 새 `withdrawalId`, 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)이 행과 다름 | 대조할 행이 없어 E4로 보관. 원요청이 나중에 오면 E1에서 원요청은 접수하고 이 철회는 `CONFLICTED`([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)) | 거절(영구 실패), 무변화, 철회 행도 저장 안 함 | 거절(영구 실패) | 거절(영구 실패) | 거절(영구 실패) |
 | H1 `POST …/approve` | 거절(404 `NOT_FOUND`) | 허용 → `APPROVED`, `ProjectReviewApproved` 발행 | 무변화(200, 최초 `actor`·`decidedAt`) | 거절(409 `CONFLICT`) | 거절(409 `CONFLICT`) |
 | H2 `POST …/reject`, 유효한 `feedback` | 거절(404) | 허용 → `REJECTED`, `ProjectReviewRejected` 발행 | 거절(409) | 같은 사유면 무변화(200), 다른 사유면 거절(409) | 거절(409) |
 | H3 `POST …/reject`, `feedback` 없음·공백·2000자 초과 또는 모르는 본문 칸 | 거절(400 `INVALID_REQUEST`, 본문 검증이 먼저) | 거절(400), 무변화 | 거절(400) | 거절(400) | 거절(400) |
@@ -133,7 +133,7 @@ ALTER TABLE project_review
 | 같은 `withdrawalId`·같은 내용 | — | 심사 행 있으면 → 해결(E4), 없으면 무변화 | 무변화(멱등) |
 | 같은 `withdrawalId`·다른 내용 | — | 거절(영구 실패) | 거절(영구 실패) |
 | 원요청 접수(E1), 대상 일치 | — | 허용 → 해결, `ProjectReviewWithdrawn` 발행 | 무변화 |
-| 원요청 접수(E1), 대상 불일치 | — | [결정 필요 M-RV-3](지금: 접수 전체 거절) | 무변화 |
+| 원요청 접수(E1), 대상 불일치 | — | 허용 → `CONFLICTED`(적용 안 함, 결과 이벤트 없음, 경보 게이지 +1). 원요청은 접수([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)) | 무변화 |
 | 예약: 게이지 | — | 무변화(원요청 없는 철회로 셈) | 무변화 |
 
 "—"는 그 상태에서 그 트리거가 성립하지 않는다는 뜻이다(행 존재 여부가 트리거 조건이다).

@@ -1824,6 +1824,20 @@
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.4·RV-T13, Catalog R11.1
 
+<a id="isolate-conflicted-withdrawal"></a>
+## 183. 원요청보다 먼저 보관된 철회가 원요청과 맞지 않으면 원요청은 접수하고, 그 철회만 충돌 상태로 격리해 경보한다
+- 문제: 결정 57·62로 Review·Catalog는 원요청보다 먼저 온 철회를 대조 없이 보관하고, 원요청 접수 트랜잭션 안에서 대조해 적용한다. Studio 결함·수동 수정으로 보관 철회(`withdrawalId` 7)가 `contentVersion` 3이나 다른 `ownerSubject`를 들고 있고 나중에 온 원요청 100이 정상 `contentVersion` 4이면, 지금은 `ReviewWithdrawal.resolve`(`ReviewWithdrawal.java:57-60`)·Catalog `ReleaseWithdrawal.resolve`·`CatalogRelease.withdrawn`이 예외를 던져 원요청 접수 전체가 롤백된다. 맞는 원요청이 실패 보관으로 가고 결정 155·160으로 그 상품 키(`stove.studio.v1`, `productCode`)가 정지돼 같은 상품의 뒤 출시·철회가 모두 멈춘다(M-RV-3·M-CA-3, Review RV-T7·Catalog CA-T4).
+- 선택지: A 지금대로 원요청을 영구 실패·키 정지(P3.1-6 글자 그대로) / B 원요청은 접수하고, 맞지 않는 보관 철회는 적용하지 않은 채 `CONFLICTED`로 남겨 1건부터 경보, 결과 이벤트 없음 / C 원요청 접수 + 맞지 않는 철회에 `…WithdrawalDenied` 회신 (추천: B — 위반한 레코드만 격리하고 맞는 원요청은 막지 않는다. 정상 순서면 위반 철회 레코드가 실패 보관으로 가고, 선행 보관 철회는 실패시킬 레코드가 없으므로 명시적 상태와 경보가 같은 역할을 한다(원칙 ④⑤). A는 맞는 입력을 실패시켜 상품 흐름 전체를 멈추고, C는 Denied(결정 176 "판정·결과가 먼저 확정됨")에 다른 사실을 실어 원칙 ①에 어긋난다. P3.1-6의 두 해석이 갈려 사용자가 고른다)
+- 내 의견: "B안으로 원요청은 받고 철회만 격리해"
+- 선택: B
+  - Review·Catalog: 철회 보관의 상태를 두 값(`resolved`)에서 명시적 세 값으로 바꾼다(Review `PENDING`·`RESOLVED`·`CONFLICTED`, Catalog `RECEIVED`·`RESOLVED`·`CONFLICTED`, CHECK). 원요청 접수 때 보관 철회가 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)과 맞지 않으면 원요청은 평소대로 접수하고, 그 철회는 같은 트랜잭션에서 `CONFLICTED`로 바꾸며 적용하지 않는다. 결과 이벤트는 내지 않는다.
+  - `CONFLICTED` 철회 건수를 게이지로 내고 1건부터 경보한다(계약 위반이라 측정 전 기준이 필요 없다). Studio 철회 명령은 `PENDING`으로 남아 Studio 대기 게이지가 센다. 정리는 Studio 결함 조사 뒤 창작자의 새 철회 명령으로 한다.
+  - 원요청이 먼저 있고 맞지 않는 철회가 뒤에 오는 정상 순서는 지금처럼 그 철회 레코드를 영구 실패로 보낸다.
+  - 대가: 정리 전까지 창작자의 철회가 반영되지 않아 그사이 심사 승인·출시 공개가 진행될 수 있다. 그 철회 명령 자체가 계약을 어겨 적용할 근거가 없다.
+  - 플랫폼 P3.1-6에 "선행 보관 기록이 나중의 맞는 입력과 어긋나면 위반한 보관 기록만 충돌 상태로 격리하고 경보한다"를 더한다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R6.10·철회 보관 표·RV-T7, Catalog R9.8·표 1·표 3·CA-T4, 플랫폼 P3.1-6
+
 ---
 
 ## 검증하며 드러난 것

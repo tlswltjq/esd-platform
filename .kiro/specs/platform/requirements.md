@@ -152,7 +152,7 @@
 3. THE 흐름의 모든 판정 SHALL 식별자(요청 ID·`requestEventId`·`admissionId`·`attemptId`·정지 요청 ID 등)·행 잠금·lease·단조 버전(`contentVersion`·`catalogVersion`)으로 하고, 다른 모듈이 찍은 시각과의 선후 비교로 하지 않는다(P4.5).
 4. THE 흐름의 모든 상태 SHALL 명시적 enum이고 DB CHECK가 허용 값을 지킨다(원칙 ④). 보조 칸의 null 조합으로 하위 상태를 만들지 않는다. 열별 목표 enum은 각 모듈 스펙에 둔다.
 5. THE 소비 모듈 SHALL 이벤트로 받은 규칙 값(기한·지연 경계·금액)을 그대로 쓰고 다시 계산하지 않는다(P1.3-3·P1.4).
-6. IF 이벤트 입력이 계약을 어기거나 같은 요청 ID에 다른 내용이 오면 THEN 받는 모듈 SHALL 기존 기록을 덮어쓰지 않고 영구 실패로 DLT·경보에 보낸다(P2.3-4·P2.6-3). 조용히 성공 처리하지 않는다.
+6. IF 이벤트 입력이 계약을 어기거나 같은 요청 ID에 다른 내용이 오면 THEN 받는 모듈 SHALL 기존 기록을 덮어쓰지 않고 영구 실패로 DLT·경보에 보낸다(P2.3-4·P2.6-3). 조용히 성공 처리하지 않는다. IF 원요청보다 먼저 보관한 기록(선행 철회 등)이 나중에 온 맞는 원요청과 어긋나면 THEN 받는 모듈 SHALL 맞는 원요청은 접수하고, 위반한 보관 기록만 명시적 충돌 상태로 격리해 1건부터 경보한다([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)).
 
 #### P3.2 심사 요청·철회 (Studio → Review)
 

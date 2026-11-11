@@ -23,7 +23,7 @@
 | `catalog_request_gate` | `request_id`(PK) | 원요청보다 먼저 온 철회에도 잠글 대상이 있게 하는 잠금 행 |
 | `catalog_review_gate`(목표) | `review_request_id`(PK) | 승인과 출시 접수를 같은 `reviewRequestId`로 직렬화하는 잠금 행(승인·출시 중 먼저 온 쪽이 만든다) |
 | `catalog_review_approval`(목표) | `review_request_id`(PK)·`approval_event_id`·`project_id`·`content_version`·`product_code`·`snapshot`(받은 `ProjectSnapshot` 전체, [결정 181](../../../docs/decisions.md#approval-snapshot-payload))·`approved_at`(Review 사실 시각, 값으로만)·`received_at` | `uk_catalog_review_approval_event(approval_event_id)`, 갱신 없음(INSERT만) |
-| `catalog_release_withdrawal` | `withdrawal_id`(PK)·`request_id`·`project_id`·`content_version`·`product_code`·`owner_subject`·`reason`·`requested_at`(Studio 사실 시각)·`resolved`·`created_at`·`updated_at` | `idx_catalog_withdrawal_pending(request_id, resolved, withdrawal_id)`. `resolved`는 두 값의 명시적 상태다(module-carryover 공통 표). M-CA-3이 A안이면 `state IN ('RECEIVED','RESOLVED','CONFLICTED')` enum으로 바꾼다 |
+| `catalog_release_withdrawal` | `withdrawal_id`(PK)·`request_id`·`project_id`·`content_version`·`product_code`·`owner_subject`·`reason`·`requested_at`(Studio 사실 시각)·`resolved`·`created_at`·`updated_at` | `idx_catalog_withdrawal_pending(request_id, resolved, withdrawal_id)`. 목표: `resolved`를 `state IN ('RECEIVED','RESOLVED','CONFLICTED')` enum + CHECK로 바꾼다([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal), CA-T4). 옛 `resolved=0/1`은 `RECEIVED`/`RESOLVED`로 옮긴다 |
 | `catalog_release_closure`(목표) | `request_id`(PK, FK `catalog_release`)·`closed_by`·`reason`·`block_code`·`closed_at` | `CHAR_LENGTH(TRIM(reason)) > 0`, 출시 결과 `CLOSED`와 같은 트랜잭션 |
 | `catalog_publication_job_action`(목표) | `id`·`request_id`·`action`·`actor_subject`·`reason`·`from_state`·`acted_at` | `action IN ('RESUME','CLOSE')`, `reason` 공백 불가. 운영 이력, 갱신 없음 |
 | `catalog_sale_change` | 판매 조건 전후·`previous_version`·`catalog_version`·`actor_subject`·`authority`·`changed_at` | `uk_catalog_sale_change(product_id, catalog_version)`, `ck_catalog_sale_change_version (catalog_version = previous_version + 1)`, `ck_catalog_sale_change_authority IN ('CREATOR','ADMIN')` |
@@ -67,7 +67,7 @@
 
 | 상태 \ 트리거 | R= | R≠ | W+ | W= | W≠ |
 |---|---|---|---|---|---|
-| `NONE` | 허용 → 접수(R1.2): 신원·같은 버전 대조 실패면 거절(영구 실패, R2.4). 미해결 선행 철회가 있으면 → `WITHDRAWN`(작업 `COMPLETED`, 철회마다 `ProjectReleaseWithdrawn`). 없으면 승인 대조: 맞음 → `PENDING` / 보관 없음 → `AWAITING_APPROVAL` / 다름 → `REJECTED`(`APPROVAL_MISMATCH`, `ProjectReleaseRejected`) | 거절(영구 실패 — 이 이벤트 ID가 다른 요청에 쓰임) | 허용 → `NONE` 유지, 철회 미해결 보관(결과 이벤트 없음, 원요청 없는 철회 게이지) | 무변화(이미 보관) | 같은 `withdrawalId` 다른 내용: 거절(영구 실패). 신원 불일치는 원요청이 없어 이 시점에 판정할 수 없다 → 보관, 원요청 접수 때 [결정 필요 M-CA-3] |
+| `NONE` | 허용 → 접수(R1.2): 신원·같은 버전 대조 실패면 거절(영구 실패, R2.4). 미해결 선행 철회가 있으면 → `WITHDRAWN`(작업 `COMPLETED`, 철회마다 `ProjectReleaseWithdrawn`). 없으면 승인 대조: 맞음 → `PENDING` / 보관 없음 → `AWAITING_APPROVAL` / 다름 → `REJECTED`(`APPROVAL_MISMATCH`, `ProjectReleaseRejected`) | 거절(영구 실패 — 이 이벤트 ID가 다른 요청에 쓰임) | 허용 → `NONE` 유지, 철회 미해결 보관(결과 이벤트 없음, 원요청 없는 철회 게이지) | 무변화(이미 보관) | 같은 `withdrawalId` 다른 내용: 거절(영구 실패). 신원 불일치는 원요청이 없어 이 시점에 판정할 수 없다 → 보관, 원요청 접수 때 그 철회만 `CONFLICTED`([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)) |
 | `AWAITING_APPROVAL` | 무변화(멱등) | 거절(영구 실패, 기존 작업 유지) | 허용 → `WITHDRAWN`, 작업 `COMPLETED`, `ProjectReleaseWithdrawn` | 무변화 | 거절(영구 실패, 철회 적용 안 함) |
 | `PENDING` | 무변화 | 거절(영구 실패) | 허용 → `WITHDRAWN`, 작업 `COMPLETED`, `ProjectReleaseWithdrawn` | 무변화 | 거절(영구 실패) |
 | `BLOCKED` | 무변화 | 거절(영구 실패) | 허용 → `WITHDRAWN`, 작업 `COMPLETED`, `ProjectReleaseWithdrawn`(창작자가 정지 요청을 스스로 끝낼 수 있다) | 무변화 | 거절(영구 실패) |
@@ -114,7 +114,7 @@
 | 상태 \ 트리거 | 새 철회 도착 | 같은 `withdrawalId`·같은 내용 | 같은 `withdrawalId`·다른 내용 | 원요청 접수 | 공개 작업자 실행 |
 |---|---|---|---|---|---|
 | 없음 | 허용 → 미해결(원요청 없음) 또는 해결(원요청 있음, 표 1) | 해당 없음 — 행이 없으면 "새 철회"다 | 해당 없음 — 같은 이유 | 무변화 | 무변화 |
-| 미해결 | 해당 없음 — 행이 있으면 같은 `withdrawalId`다 | 무변화 | 거절(영구 실패) | 허용 → 해결(`WITHDRAWN` 확정, 표 1 `NONE × R=`). 신원 불일치는 [결정 필요 M-CA-3] | 해당 없음 — 원요청이 접수되면 같은 트랜잭션에서 해결되므로 작업과 미해결 철회가 함께 있을 수 없다(CI-10) |
+| 미해결 | 해당 없음 — 행이 있으면 같은 `withdrawalId`다 | 무변화 | 거절(영구 실패) | 허용 → 해결(`WITHDRAWN` 확정, 표 1 `NONE × R=`). 신원 불일치 → `CONFLICTED`(적용 안 함, 결과 이벤트 없음, 경보 게이지 +1), 원요청은 표 1대로 접수([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)) | 해당 없음 — 원요청이 접수되면 같은 트랜잭션에서 해결되므로 작업과 미해결 철회가 함께 있을 수 없다(CI-10) |
 | 해결 | 해당 없음 | 무변화 | 거절(영구 실패) | 해당 없음 — 해결은 원요청 접수 뒤에만 생긴다 | 무변화 |
 
 ### 4. 판매 조건 (`sale_status` × `platform_restricted` → 공개 판매 상태)

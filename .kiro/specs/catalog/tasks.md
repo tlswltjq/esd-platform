@@ -35,10 +35,10 @@
 - 영향: **그 Project의 출시 요청이 Studio `REQUESTED`로 남아 다음 출시가 모두 409 — 기존 보유자가 업데이트 빌드를 받지 못한다.** 돈 영향은 없다.
 - 재현: 같은 Project·같은 버전에 다른 스냅샷을 공개 시점에 만들어(접수 뒤 다른 요청이 먼저 공개) 작업 실행 → 1회 실패 뒤 `BLOCKED`·경보 1건(지금 Red: `PENDING`·`attemptCount` 증가만). 재개 → `PENDING`, 종결 → `CLOSED`·`ProjectReleaseClosed` 1건·작업 `COMPLETED`.
 
-### CA-T4. 원요청보다 먼저 보관된 철회가 대상과 맞지 않으면 원요청 접수 자체가 실패한다 [결정 필요 M-CA-3]
+### CA-T4. 원요청보다 먼저 보관된 철회가 대상과 맞지 않으면 원요청 접수 자체가 실패한다 ([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal))
 - 무엇이: 선행 철회는 대상 신원을 확인하지 못한 채 보관되고, 원요청 접수 트랜잭션의 `withdrawals.resume`이 `ReleaseWithdrawal.resolve`(`CONFLICT`) 또는 `CatalogRelease.withdrawn`(`FORBIDDEN`)을 던져 접수 전체가 롤백된다. 원요청 레코드가 재시도 뒤 실패 보관·키 정지로 가 같은 `productCode`의 뒤 레코드가 모두 멈춘다.
 - 어디서: `catalog:core/service/ReceiveProjectRelease.java:62`, `ReceiveReleaseWithdrawal.java:59-64·75-77`, `catalog:core/domain/ReleaseWithdrawal.java:57-61`, `CatalogRelease.java:72-76`.
-- 목표: R9.8, design 표 1 `NONE × W≠`·표 3. 처리 방식은 M-CA-3 결과(추천 A: 원요청은 정상 접수, 맞지 않는 철회는 적용하지 않고 `CONFLICTED`로 보관·1건 경보).
+- 목표: R9.8, design 표 1 `NONE × W≠`·표 3. 원요청은 정상 접수, 맞지 않는 철회는 적용하지 않고 `CONFLICTED`로 보관·1건 경보([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)). 상태 열·CHECK·이행 포함.
 - 영향: **정상 출시 요청 하나가 Studio 쪽 계약 결함 하나로 그 상품의 모든 뒤 출시 처리를 멈춘다(보유자 업데이트 지연).**
 - 재현: 소유자가 다른 철회를 먼저 넣고 원요청 → 지금은 원요청이 실패 보관으로 감(Red), 목표는 작업 생성 + 철회 `CONFLICTED`.
 
@@ -134,7 +134,7 @@
 - [ ] [결정 필요] 허용 지연 SLA와 실제 운영 경보·화면 — G4. 결정 158·159로 게이지는 R13에서 먼저 내고 경보 기준은 G6 측정 뒤.
 - [ ] [결정 필요 M-CA-1] 승인 대기가 끝나지 않는 출시의 운영자 처리.
 - [ ] [결정 필요 M-CA-2] 다운로드 제한 저장소 적용 실패의 경보 기준.
-- [ ] [결정 필요 M-CA-3] 원요청과 맞지 않는 선행 철회의 처리(CA-T4).
+- [x] 원요청과 맞지 않는 선행 철회의 처리 — [결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)(CA-T4).
 - [x] 승인 사실의 스냅샷 값 전달 방식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체(MC-C2).
 - [ ] [결정 필요 M-CA-5] 종결된 출시에 온 철회의 거절 결과(`targetStatus=CLOSED`).
 - [ ] [외부 대기] 공유 환경의 정책/계정 준비와 실제 배포 — G4 이후

@@ -102,7 +102,7 @@ Review는 Studio 작업본을 읽거나 바꾸지 않고, 심사 요청을 대�
 7. WHEN 철회가 원요청보다 먼저 오면 THEN Review SHALL 철회 명령을 `review_withdrawal`에 미해결로 보관하고 결과 이벤트를 내지 않으며, 원요청 접수 트랜잭션에서 같은 `reviewRequestId`로 대조해 `WITHDRAWN`을 확정하고 `ProjectReviewWithdrawn`을 낸다. 원요청 없이 심사 행을 만들지 않는다([P3.2-6](../platform/requirements.md#p32-심사-요청철회-studio--review)).
 8. THE 철회 완료 SHALL `WITHDRAWN`이며 반려가 아니다. `withdrawnBy`·`withdrawalReason`(선택)·`withdrawnAt`을 판정 칸(`actor`·`feedback`·`decidedAt`)과 따로 기록하고, `withdrawnAt`은 Review 시계로 정한다.
 9. WHEN 같은 `withdrawalId`의 철회가 다른 `eventId`로 다시 오면 THEN Review SHALL 내용이 같으면 최초 결과로 수렴하고(새 결과 없음, 미해결이면 해결 시도) 끝난 요청을 다시 열지 않는다. WHEN `WITHDRAWN`인 요청에 다른 `withdrawalId`의 철회가 오면 THEN Review SHALL 상태를 바꾸지 않고 `ProjectReviewWithdrawn`을 그 `withdrawalId`로 다시 낸다(Studio 명령마다 응답 하나).
-10. IF 같은 `withdrawalId`에 내용이 다른 명령이 오거나, 철회 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)이 `project_review`와 다르면 THEN Review SHALL 기존 기록을 바꾸지 않고 영구 실패로 거절한다. 원요청보다 먼저 보관한 철회가 나중에 온 원요청과 대상이 다를 때 어느 레코드를 거절하고 원요청을 접수할지는 [결정 필요 M-RV-3]이다.
+10. IF 같은 `withdrawalId`에 내용이 다른 명령이 오거나, 철회 대상(`projectId`·`contentVersion`·`productCode`·`ownerSubject`)이 `project_review`와 다르면 THEN Review SHALL 기존 기록을 바꾸지 않고 영구 실패로 거절한다. WHEN 원요청보다 먼저 보관한 철회가 나중에 온 원요청과 대상이 다르면 THEN Review SHALL 원요청은 평소대로 접수하고, 그 철회는 같은 트랜잭션에서 `CONFLICTED`로 바꾸며 적용하지 않는다. 결과 이벤트는 내지 않고, `CONFLICTED` 철회 건수를 게이지로 내 1건부터 경보한다([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)).
 
 ### R7. 접근 권한
 

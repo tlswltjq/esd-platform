@@ -47,11 +47,11 @@
   - 영향: 돈 없음. 계약 위반 한 건이 `review-project` 파티션을 7초 이상 멈춰 같은 상품의 뒤 철회 요청을 늦춘다. 활성 키 위반이 일시 오류인지 계약 위반인지 운영자가 구분하지 못한다.
   - 재현: 같은 `reviewRequestId`·다른 스냅샷 레코드를 넣고 실패 보관까지 처리 시도 1회 단언.
 
-- [ ] **RV-T7. 원요청 없는 철회를 세지 않고, 대상이 다른 보관 철회가 원요청 접수를 막는다** ([P3.2-7](../platform/requirements.md#p32-심사-요청철회-studio--review), 결정 158, [결정 필요 M-RV-3])
+- [ ] **RV-T7. 원요청 없는 철회를 세지 않고, 대상이 다른 보관 철회가 원요청 접수를 막는다** ([P3.2-7](../platform/requirements.md#p32-심사-요청철회-studio--review), 결정 158, [결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal))
   - 어디서: 게이지 없음(`review:` 전체에 `MeterRegistry` 사용 없음), `review:core/service/ReceiveProjectReview.java:51-54`(보관 철회의 `resolve`가 `CONFLICT`를 던지면 원요청 접수 전체가 롤백), `ReviewWithdrawal.java:57-60`.
-  - 목표: R10.1 게이지(건수·최장 대기, Review 시계 `created_at` 기준, 이름 예 `stove_review_withdrawals_without_request`·`…_oldest_seconds`). 대상 불일치 처리는 M-RV-3 결과대로.
+  - 목표: R10.1 게이지(건수·최장 대기, Review 시계 `created_at` 기준, 이름 예 `stove_review_withdrawals_without_request`·`…_oldest_seconds`). 대상 불일치 보관 철회는 `CONFLICTED`(상태 열·CHECK·이행), 원요청은 접수, `CONFLICTED` 건수 게이지와 1건 경보([결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal)).
   - 영향: 돈 없음. 원요청이 끝내 안 오면 Studio 철회 명령이 `PENDING`, 활성 심사 자리가 점유된 채 아무도 모른다. 대상 불일치 철회 하나가 원요청을 실패 보관에 묶고 그 상품 키를 정지시킨다(결정 155).
-  - 재현: 철회만 넣고 게이지 1·대기 시간 증가 단언. 대상 `contentVersion`이 다른 철회 → 원요청 순서로 넣고 원요청이 접수되지 않음을 확인(지금 동작 고정) → M-RV-3 결과로 바꿈.
+  - 재현: 철회만 넣고 게이지 1·대기 시간 증가 단언. 대상 `contentVersion`이 다른 철회 → 원요청 순서로 넣고 지금은 원요청이 접수되지 않음(Red) → 목표는 심사 행 `REQUESTED` + 철회 `CONFLICTED` + 결과 이벤트 없음.
 
 - [ ] **RV-T8. 실패 보관 표·키 정지·재발행 경로가 없고 운영 API가 기본 꺼져 있다** (플랫폼 T2·T7, [결정 155](../../../docs/decisions.md#key-stop-on-dead)·[160](../../../docs/decisions.md#dead-letter-store)·[161](../../../docs/decisions.md#republish-all-current))
   - 어디서: `review/db/`에 실패 보관 표·`outbox_republish` 없음, `apps/review/src/main/resources/application.yml:60-63`(`stove.messaging.ops.enabled: false`), 재발행 허용 목록 `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`에 Review 이벤트 없음.
@@ -93,7 +93,7 @@
 
 - [x] 승인 이벤트의 대조 값 형식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체 → RV-T4.
 - [x] 결정 167 이전 승인 사실의 Catalog 이행 — [결정 182](../../../docs/decisions.md#no-approval-migration): 이행하지 않음 → RV-T13 닫음.
-- [ ] [결정 필요 M-RV-3] 원요청보다 먼저 보관한 철회의 대상이 원요청과 다를 때 → RV-T7.
+- [x] 원요청보다 먼저 보관한 철회의 대상이 원요청과 다를 때 — [결정 183](../../../docs/decisions.md#isolate-conflicted-withdrawal): 원요청 접수, 철회 `CONFLICTED`·경보 → RV-T7.
 - [ ] [결정 필요 M-RV-4] 종료된 심사의 빌드 열람 URL 발급 범위(R3.8).
 - [ ] [결정 필요] 심사 목록/상태 조회의 사용성 개선 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Review 행).
 - [ ] [결정 필요] 진행 중 요청 철회/보류 시 창작자 통지 계약 — G4(플랫폼 흐름 1 S1 "상대 모듈 중단" 행의 통지 공백과 같은 항목).
