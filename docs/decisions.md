@@ -1808,9 +1808,21 @@
 - 선택: A
   - Review: `ProjectReviewApproved`에 `snapshot`(`ProjectSnapshot`, Review `project_review`에 보관한 값 그대로)을 더해 같은 `eventType`의 `schemaVersion` 2로 낸다. 배포 순서는 P2.7-5(Studio·Catalog가 v1·v2를 모두 읽는 판 → Review 발행 전환, 결정 170).
   - Catalog: `catalog_review_approval.snapshot`에 받은 스냅샷을 불변 보관하고, 출시 요청의 `ProjectReleaseRequested.snapshot`과 `ProjectSnapshot` 레코드 동등(장르 목록 순서 포함)으로 비교한다. 다르면 `ProjectReleaseRejected`(`APPROVAL_MISMATCH`). 별도 정규화·해시 규칙을 두지 않는다.
-  - v1(스냅샷 없음) 승인 사실을 Catalog가 어떻게 다룰지와 이미 `APPROVED`인 심사의 이행은 `[결정 필요 M-RV-2]`로 이어서 정한다.
+  - v1(스냅샷 없음) 승인 사실을 Catalog가 어떻게 다룰지와 이미 `APPROVED`인 심사의 이행은 결정 182로 이어서 정했다.
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.1·RV-T4·발행 표, Catalog R11.1·데이터 모델, 플랫폼 이벤트 표 `ProjectReviewApproved` 행
+
+<a id="no-approval-migration"></a>
+## 182. 결정 167 전에 승인된 심사는 Catalog로 이행하지 않고, 스냅샷 없는 v1 승인 사실은 대조 근거로 보관하지 않는다
+- 문제: 결정 167·181로 Catalog는 `snapshot`이 있는 승인 사실(v2)을 보관해야 공개를 확정한다. 이 계약 전에 `APPROVED`가 된 심사는 Catalog에 보관 승인이 없다. 옛 v1 이벤트는 브로커 기본 보존(7일) 밖이면 읽을 수 없고, 읽어도 `snapshot`이 없으며, 재발행(P2.2-7)은 같은 본문만 낸다. 예: 9월 승인 요청 50으로 11월에 같은 승인본을 출시·재출시(결정 58)하면 Catalog가 `AWAITING_APPROVAL`에 계속 둔다(M-RV-2).
+- 선택지: A Review ADMIN 이행 명령이 기존 `APPROVED`마다 v2를 새 `eventId`로 발행 / B Catalog가 v1을 받아 ID·버전만 대조 / C Catalog가 Review에서 동기 조회·스키마 교차 읽기 / D 이행하지 않음, 옛 승인본 출시는 새 심사 요청으로만 (추천: 보존할 운영 데이터가 있으면 A — 정본 Review가 자기 사실을 다시 알리고 경계를 깨지 않는다, 없으면 D — 결정 74처럼 비용 0. B는 옛 승인에서 결정 181 가드를 비우고, C는 P1.1-2·P1.2를 깬다. 데이터 유무는 사용자가 확인)
+- 내 의견: "보존할 데이터 없으니 D안으로 해"
+- 선택: D — 보존할 운영 데이터가 없어 이행 명령과 RV-I12 예외를 만들 이유가 없다(결정 74와 같은 전제).
+  - Review: 이행 명령을 두지 않는다. RV-I12("한 `reviewRequestId`의 판정 이벤트는 많아야 하나")는 예외 없이 그대로다.
+  - Catalog: `snapshot`이 없는 v1 승인 사실은 대조 근거로 보관하지 않고 Inbox만 쓴다(무변화, 실패 보관 아님). 그 승인을 근거로 한 출시는 `AWAITING_APPROVAL`에 남으며, 창작자는 새 심사를 요청해 v2 승인을 받는다. P2.7-5 배포 순서(Catalog가 v1·v2를 읽는 판 → Review v2 발행 전환) 사이에 나온 v1 승인도 같다.
+  - 운영 데이터가 생긴 뒤 승인 이벤트 모양을 다시 바꾸게 되면 이 결정을 다시 연다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.4·RV-T13, Catalog R11.1
 
 ---
 

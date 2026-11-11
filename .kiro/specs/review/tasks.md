@@ -13,11 +13,11 @@
 
 - [ ] **RV-T4. 승인 이벤트가 Catalog가 대조할 스냅샷 값을 싣지 않는다** ([결정 167](../../../docs/decisions.md#catalog-verifies-approval), 플랫폼 T16·MC-C2의 Review 쪽)
   - 어디서: `common/kafka/.../contract/payload/ProjectReviewApprovedEvent.java`(칸: `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`뿐), `review:core/service/DecideProjectReview.java:28-33`.
-  - 목표: R9.1·R9.2. 승인 이벤트에 Review가 저장한 `ProjectSnapshot` 전체를 `snapshot` 칸으로 싣는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)). 같은 `eventType`의 새 `schemaVersion`, P2.7-5 순서(Studio·Catalog가 두 버전을 읽는 판 → Review 발행 전환). 이미 `APPROVED`인 심사의 승인 사실 이행은 [결정 필요 M-RV-2] (RV-T13).
+  - 목표: R9.1·R9.2. 승인 이벤트에 Review가 저장한 `ProjectSnapshot` 전체를 `snapshot` 칸으로 싣는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)). 같은 `eventType`의 새 `schemaVersion`, P2.7-5 순서(Studio·Catalog가 두 버전을 읽는 판 → Review 발행 전환). 이미 `APPROVED`인 심사의 승인 사실은 이행하지 않는다([결정 182](../../../docs/decisions.md#no-approval-migration), RV-T13).
   - 영향: **돈·보유권** — 이 칸이 없으면 Catalog가 결정 167 대조를 할 수 없어 RI-2 가드(T16)가 성립하지 않는다. Studio 결함·위조된 출시 요청·수동 수정된 Studio `APPROVED`로 승인 안 된 자료가 공개·판매되고 그 자료로 보유권이 지급된다.
   - 재현: 승인 API 호출 뒤 `outbox_event.payload`에 저장 스냅샷과 같은 값(또는 같은 지문)이 있는지 단언 — 지금 Red.
 
-- [ ] **RV-T13. 결정 167 이전에 승인된 심사의 승인 사실을 Catalog가 받을 길이 없다** ([결정 필요 M-RV-2])
+- [x] **RV-T13. 결정 167 이전에 승인된 심사의 승인 사실을 Catalog가 받을 길이 없다** — [결정 182](../../../docs/decisions.md#no-approval-migration): 이행하지 않음(작업 없음). 아래 기록은 판단 근거로 남긴다.
   - 어디서: `stove_review.project_review`(`status='APPROVED'` 기존 행), 재발행 경로는 같은 `eventId`·본문만 다시 낸다(P2.2-7)라 새 칸을 실을 수 없다.
   - 목표: R9.4. 정해진 이행 방법으로 기존 승인 사실을 Catalog `catalog-review-approval`에 보관시킨다. 정해지기 전에는 그 승인을 근거로 한 출시가 Catalog 승인 대기에 머문다.
   - 영향: **판매(출시 정지)** — 위험한 쪽은 아니지만(공개 안 함), 이미 승인된 자료의 새 출시·재출시(결정 58)가 Catalog 승인 대기에서 멈춘다.
@@ -92,7 +92,7 @@
 ## 진행 중 / 남음
 
 - [x] 승인 이벤트의 대조 값 형식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체 → RV-T4.
-- [ ] [결정 필요 M-RV-2] 결정 167 이전 승인 사실의 Catalog 이행 → RV-T13.
+- [x] 결정 167 이전 승인 사실의 Catalog 이행 — [결정 182](../../../docs/decisions.md#no-approval-migration): 이행하지 않음 → RV-T13 닫음.
 - [ ] [결정 필요 M-RV-3] 원요청보다 먼저 보관한 철회의 대상이 원요청과 다를 때 → RV-T7.
 - [ ] [결정 필요 M-RV-4] 종료된 심사의 빌드 열람 URL 발급 범위(R3.8).
 - [ ] [결정 필요] 심사 목록/상태 조회의 사용성 개선 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Review 행).
