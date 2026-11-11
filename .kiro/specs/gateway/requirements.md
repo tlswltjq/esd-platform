@@ -90,7 +90,9 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 3. WHEN `POST /bff/logout` 요청이 오면 THEN Gateway SHALL Auth에 Refresh Token 폐기를 요청하고 토큰 기록과 BFF 세션을 지운 뒤 auth OIDC 로그아웃(`end_session_endpoint`)으로 이동한다.
 4. IF 로그아웃 중 Auth 폐기 요청이 실패하면 THEN Gateway SHALL [결정 필요 M-GW-3]을 따른다(새 번호).
 5. WHEN BFF 세션이 어떤 경로로 끝나면(로그아웃·갱신 거절·검증 실패·세션 만료·재로그인으로 토큰 기록 교체) THEN Gateway SHALL 그 세션의 토큰 기록도 남기지 않는다. 버려지는 Refresh Token을 Auth에서 폐기할지는 [결정 필요 M-GW-3](새 번호).
-6. WHEN Auth가 계정 상태·역할을 바꿔 Refresh Token 계열을 폐기하면 THEN Gateway SHALL 그 계정의 BFF 세션을 [결정 필요 M-GW-7]에 따라 끝낸다. 정해지기 전에는 다음 갱신(R4.6)에서 끝낸다(결정 84, 새 번호).
+6. WHEN Gateway가 Auth의 계정 접근 변경 사실 `AccountAccessChanged`(가칭, 토픽 `stove.auth.v1`, 키 `subject`, 그룹 가칭 `gateway-account-access`)를 처음 받으면 THEN Gateway SHALL 그 `subject`의 모든 BFF 세션과 토큰 기록을 지우고, 세션 저장소(Redis)에 `subject`별 거절 기준 `changedAt`을 최대 access token 수명 이상(설정 키, R8) 남긴다. 같은 `subject`의 기준은 더 늦은 `changedAt`만 덮는다. 멱등은 `eventId`를 기준과 같은 수명으로 Redis에 두어 지킨다(결정 84, [결정 180](../../../docs/decisions.md#account-access-revocation)).
+7. WHILE `subject`의 거절 기준이 있으면 THE Gateway SHALL JWT `iat`가 기준(초 단위로 올림)보다 이른 access token을 세션 릴레이·Bearer 요청 모두 401로 거절하고, 세션 요청이면 그 세션을 `NONE`으로 끝낸다. `iat`와 `changedAt`은 모두 Auth 시계라 원칙 ⑥ 예외가 아니다([결정 180](../../../docs/decisions.md#account-access-revocation)).
+8. THE Gateway SHALL `gateway-account-access` 소비 지연(가장 오래 처리하지 못한 레코드의 나이)을 게이지로 낸다. 소비가 멈추거나 거절 기준을 잃으면 끊기가 access token 수명까지 늦어지기 때문이다. 경보 기준은 측정 뒤 정한다(결정 159). 이 소비의 실패 보관 위치는 `[결정 필요 M-GW-8]`(Gateway에 DB가 없어 P2.6-4·5를 그대로 따를 수 없다).
 
 ### R6. 다중 Gateway와 세션 저장소 장애
 **사용자 스토리:** 운영자로서, Gateway를 여러 개 띄우고도 세션이 공유되기를 바란다. 그래야 가용성이 유지된다.

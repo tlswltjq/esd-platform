@@ -109,7 +109,7 @@ Auth는 계정과 역할의 정본이다([플랫폼 design "정본 소유"](../p
 3. WHEN 운영자가 역할을 부여하면 THEN Auth SHALL 그 역할을 더한다. 이미 가진 역할의 부여는 무변화(멱등)이고 감사·폐기도 하지 않는다(AU-T5). WHEN 운영자가 역할을 회수하면 THEN Auth SHALL 그 역할을 뺀다. `MEMBER` 회수와 가지지 않은 역할의 회수는 409 `CONFLICT`.
 4. IF 변경 대상이 요청자 자신이면 THEN Auth SHALL 상태·역할 변경을 403 `FORBIDDEN`으로 거절한다.
 5. THE 활성 운영자 수 SHALL 1 이상이다. IF 상태 변경(`LOCKED`·`DISABLED`)이나 `ADMIN` 회수가 활성 운영자를 0명으로 만들면 THEN Auth SHALL 409 `CONFLICT`로 거절한다. 동시에 들어온 변경 둘이 함께 0명을 만들지 못하도록 직렬화한다(AU-T4).
-6. WHEN 상태·역할이 바뀌면 THEN Auth SHALL 같은 트랜잭션에서 대상 계정의 모든 토큰 계열을 폐기한다. 이미 발급된 access token을 변경 즉시 쓰지 못하게 하는 방식은 `[결정 필요 M-AU-6]`(결정 84 본문 "기존 토큰 만료까지 미뤄지지 않게 한다"와 지금 동작이 다르다, notes E-1).
+6. WHEN 상태·역할이 바뀌면 THEN Auth SHALL 같은 트랜잭션에서 대상 계정의 모든 토큰 계열을 폐기하고, 계정 접근 변경 사실(가칭 `AccountAccessChanged`, 토픽 `stove.auth.v1`, 키 `subject`, 본문 `subject`·`changedAt`(Auth 시계)·`changeKind`(`STATUS`·`ROLE`))을 Outbox에 쓴다. 이 사실은 "그 계정의 이전 접근 근거가 더는 유효하지 않다"만 뜻한다. 이미 발급된 access token은 Gateway가 이 사실로 거절한다(Gateway R4.6, [결정 180](../../../docs/decisions.md#account-access-revocation)). 무변화(이미 가진 역할의 부여)는 사실을 내지 않는다.
 7. WHEN 상태·역할이 바뀌면 THEN Auth SHALL 같은 트랜잭션에 `role_audit_log`를 남긴다: 수행 주체(요청자 `subject`), 행동(`STATUS_CHANGED`·`ROLE_GRANTED`·`ROLE_REVOKED`), 변경 뒤 상태와 변경 뒤 역할 집합을 각자의 칸에(AU-T5).
 8. IF 대상 계정이 없으면 THEN Auth SHALL 404 `NOT_FOUND`로 거절한다.
 

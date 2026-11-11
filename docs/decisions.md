@@ -1787,6 +1787,19 @@
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Order R7.7·시도 상태, Payment R19.3·R19.6·상태 모델 7, License R11-4·E2·E7, Settlement R6.8, 플랫폼 P3.23-9·흐름 3 S14. 1회차 지적 A2·B2 판정은 2회차 함께 평가(결정 178)
 
+<a id="account-access-revocation"></a>
+## 180. 계정 정지·역할 변경은 Auth 사실 이벤트를 Gateway가 받아 BFF 세션과 그 전에 발급된 access token을 즉시 끊는다
+- 문제: 결정 84는 "정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 즉시 끊는다"로 정했지만, 구현(`ManageAccount` → `TokenRevocationPort.revokeSubject`)은 Refresh Token 계열만 폐기하고 access token은 수명(`studio-web`·`swagger-ui` 15분, `gateway-bff` 기본 900초)까지 유효하다. Gateway `oauth2ResourceServer().jwt()`는 서명·만료·역할만 보고, BFF 세션은 다음 갱신 실패 때 지워진다. 예: 15:00에 운영자 B의 `ADMIN`을 회수해도 B는 15:15까지 관리자 환불 판정·늦은 취소 반영을 할 수 있고, 정지된 `CREATOR`는 15분 동안 출시 요청을 낼 수 있다(M-AU-6·M-GW-7, 결정 150 재검토 대상).
+- 선택지: A 결정 84를 지금 동작대로 다시 고름(Refresh만 즉시, access는 수명까지) / B Auth가 계정 접근 변경 사실을 Outbox로 내고 Gateway가 받아 BFF 세션을 지우고 변경 시각 전에 발급된 토큰을 거절 / C Gateway가 요청마다 Auth에 동기 확인(introspection) / D access token 수명 단축(수치는 측정 뒤) (추천: B — 결정 84의 "즉시"를 지키는 곳이 생기고(원칙 ⑤), 사실 하나를 정본 Auth가 내며(원칙 ①③), 모든 외부 요청이 지나는 Gateway에서 BFF와 Bearer를 함께 막고, `iat`와 변경 시각이 모두 Auth 시계라 원칙 ⑥을 지킨다. C는 Auth를 모든 요청의 동기 의존으로 만들고, D는 위험을 줄일 뿐 없애지 못한다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B안으로 해")
+- 선택: B
+  - Auth: 상태·역할이 바뀌면 Refresh Token 계열 폐기와 같은 트랜잭션에서 계정 접근 변경 사실(가칭 `AccountAccessChanged`, `stove.auth.v1`, 키 `subject`, 본문 `subject`·변경 시각(Auth 시계)·변경 종류)을 Outbox에 쓴다. 이 사실은 "그 계정의 이전 접근 근거가 더는 유효하지 않다"만 뜻한다.
+  - Gateway: 처음으로 Kafka 소비자가 된다(소비 그룹은 Gateway 스펙). 받으면 그 `subject`의 BFF 세션·저장된 토큰을 지우고, Redis에 `subject`별 "이 시각 전에 발급된 토큰 거절" 기준을 최대 access 수명 이상 남긴다. JWT 검증에서 `iat` < 기준이면 401이다. 멱등은 Redis(`eventId`)로 한다. 같은 `subject`의 기준은 더 늦은 값만 덮는다.
+  - 늦음: Kafka 전달 지연만큼 늦다. Gateway 소비가 멈추거나 Redis 기준을 잃으면 지금처럼 access 수명까지 남으므로, Gateway가 소비 지연을 게이지로 낸다(경보 기준은 측정 뒤, 결정 159).
+  - 업무 모듈의 JWT 검증은 바꾸지 않는다. 외부 진입은 Gateway뿐이다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Auth R7.6·AU-T6, Gateway R4.6·상태 표 19행, 플랫폼 이벤트 표 목표 행
+
 ---
 
 ## 검증하며 드러난 것

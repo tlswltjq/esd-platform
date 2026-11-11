@@ -121,17 +121,23 @@ Gateway에 넘어온 MC-* 이월 항목은 없다(`module-carryover.md`에 Gatew
 
 - [ ] GW-T17. BFF 세션 상태×트리거 표와 갱신 규칙의 단위 테스트가 없다
   - 어디서: 단위는 `BffAuthenticationFilterTest` 1건(7행), `BffUnavailableHandlerTest` 1건(18행). GW-I3·I5·I6은 실제 스택 스크립트(`tools/verification/auth-bff.py`)로만 확인.
-  - 목표: design 상태 표 19행 × 3열과 lease 표의 모든 칸을 core `ResolveSessionToken`·`EndSession` 단위 테스트로(GW-T7 뒤).
+  - 목표: design 상태 표 20행 × 3열과 lease 표의 모든 칸을 core `ResolveSessionToken`·`EndSession` 단위 테스트로(GW-T7 뒤).
   - 영향: 회귀를 실제 스택 검증 전에는 모른다.
   - 재현: 표 대조 테스트.
+- [ ] **GW-T18. 계정 정지·역할 회수 뒤에도 BFF 세션과 access token이 수명까지 통한다** ([결정 180](../../../docs/decisions.md#account-access-revocation))
+  - 어디서: `SecurityConfig` `oauth2ResourceServer().jwt()`(서명·만료·역할만), `BffTokens`(갱신 실패 때만 세션 삭제), Kafka 의존 없음.
+  - 목표: R5.6~5.8, design 상태 표 19·20행, 이벤트 "소비". Gateway Kafka 소비(`gateway-account-access`), subject → 세션·토큰 기록 색인, Redis 거절 기준·`eventId` 멱등, JWT `iat` 검사(세션·Bearer), 소비 지연 게이지, 거절 기준 수명 설정 키. Auth AU-T6 발행 뒤 배포. 실패 보관은 M-GW-8 결정 뒤.
+  - 영향: **간접 돈·보유권** — `ADMIN`을 회수당한 운영자가 최대 15분 동안 관리자 환불 판정·늦은 취소 반영을 할 수 있다.
+  - 재현: 통합 — 로그인한 BFF 세션·Bearer 토큰을 가진 계정의 `ADMIN` 회수 사실을 넣은 뒤 같은 세션·토큰으로 관리자 API → 지금 200, 목표 401.
 
 ## 진행 중 / 남음
 
 - [ ] [결정 필요] 최신 API의 실제 역할별 여정과 오류/진행 응답 확인 — G4. 남은 범위: 구매·승인·지급·공개 출시·심사 판정·환불 전이를 실제 업무 상태로 잇는 역할별 전체 여정(위 완료 두 검증은 픽스처 기반 구매 근거·HTTP 픽스처를 사용). G5 "역할별 전체 여정의 단일 기준"과 같은 결정에 묶인다([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) 4절 Gateway 행).
 - [ ] [결정 필요 M-GW-1] 결제 공급자 통지의 공개 수신 경로와 재현 가능한 실행 구성 — G4/G5·G7. 수신 경로(Gateway 경유/edge 직접)를 먼저 정하고(GW-T1), 그다음 기준 시뮬레이터가 서명한 통지를 실제 스택으로 재현할지, 실제 공급자 공개 HTTPS 수신(전용 가맹점 `[외부 대기]`)을 스크립트로 재현할지 정한다.
-- [ ] [결정 필요] 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 — G5. 관리자 경로의 공개 진입점 분리는 [결정 필요 M-GW-6](로드맵 3절 "운영 API 구조"), 상태·역할 변경 때 BFF 세션을 끊는 시점은 [결정 필요 M-GW-7].
+- [ ] [결정 필요] 계정 복구/상태/운영 권한의 최소 절차와 역할별 전체 여정의 단일 기준 확정 — G5. 관리자 경로의 공개 진입점 분리는 [결정 필요 M-GW-6](로드맵 3절 "운영 API 구조"), 상태·역할 변경 때 BFF 세션을 끊는 시점은 [결정 180](../../../docs/decisions.md#account-access-revocation)으로 정함(GW-T18).
   - [ ] 남은 범위: 서비스 키 교체·배포 비밀 관리, 다중 Gateway 장애·복구, 실제 메일, 공통 운영 전체.
 - [ ] [결정 필요 M-GW-2] Access Token 만료(`exp`) 검증과 판단 원칙 ⑥ — 원칙 문구의 예외로 둘지 확인(동작 변경 없음 추천).
+- [ ] [결정 필요 M-GW-8] `AccountAccessChanged` 소비 실패 보관 위치 — Gateway에 DB가 없어 P2.6-4·5(모듈 DB 실패 보관 표·키 정지)를 그대로 따를 수 없다. GW-T18 구현 전.
 
 ## 범위 밖(후속)
 

@@ -74,7 +74,8 @@
 | 16 | 쿠키 인증 변경 요청에 CSRF 없음·틀림(로그아웃 포함) | 거절 403, 무변화 | 거절 403, 무변화 | 거절 403, 무변화 | 같음 |
 | 17 | 세션 무활동 7일(Redis TTL) | 무변화 | 허용 → `NONE` | 허용 → `NONE`. 토큰 기록은 자기 TTL까지 남음 — R5.5·[결정 필요 M-GW-3] | 토큰 기록 남음(GW-T4) |
 | 18 | 세션 저장소 접근 실패 | 거절 503 `SESSION_STORE_UNAVAILABLE`, 무변화 | 같음 | 같음(인증 우회 없음) | 같음. Bearer·공개 GET도 503인지 미확인(GW-T13, M-GW-4) |
-| 19 | Auth가 계정 상태·역할 변경으로 Refresh Token 계열 폐기(Gateway 밖 사실) | 무변화 | 무변화 | 무변화 — 다음 갱신(7행)에서 `NONE`. 결정 84 "즉시 끊기"와의 차이는 [결정 필요 M-GW-7] | 같음 |
+| 19 | `AccountAccessChanged` 수신(그 세션의 subject, 첫 `eventId`) | 무변화 | 무변화 | 허용 → `NONE`(토큰 기록 삭제, 세션 무효화, 거절 기준 저장 — R5.6) | 소비 없음 — 다음 갱신(7행)까지 남음([결정 180](../../../docs/decisions.md#account-access-revocation), GW-T18) |
+| 20 | 세션·Bearer 요청, JWT `iat` < 그 subject의 거절 기준 | 거절 401 | 거절 401 | 허용 → `NONE`(11행과 같음, 401) — Bearer는 상태 없이 401 | 검사 없음(GW-T18) |
 
 ### 갱신 lease — 직교 필드
 
@@ -140,7 +141,17 @@
 
 ## 이벤트
 
-Gateway는 이벤트를 발행·소비하지 않는다. [플랫폼 design 이벤트 목록](../platform/design.md)에 Gateway가 발행 모듈·소비 그룹인 행이 없고, Outbox·Inbox 표도 없다. 공급자 통지(웹훅)는 이벤트가 아니라 HTTP 전달이다(R7).
+지금 Gateway는 이벤트를 발행·소비하지 않는다. 공급자 통지(웹훅)는 이벤트가 아니라 HTTP 전달이다(R7).
+
+### 소비 — `AccountAccessChanged` (가칭, 목표, [결정 180](../../../docs/decisions.md#account-access-revocation))
+
+| 사실 | 그룹 · 리스너 → 매퍼 → 서비스 | 멱등 | 실패 |
+|---|---|---|---|
+| `AccountAccessChanged`(플랫폼 이벤트 목표 행, Auth 토픽 `stove.auth.v1`, 키 `subject`) | `gateway-account-access` · (목표) `AccountAccessEventListener` → `AccountAccessChangedMapper.from`(봉투·`subject`·`changedAt`·`changeKind` 검증) → core `RevokeSubjectAccess` | Redis `eventId` 기록(거절 기준과 같은 수명). 기준은 더 늦은 `changedAt`만 덮어 순서·중복과 무관하게 같은 결과 | 재시도 가능(Redis 장애)·영구(봉투·본문 오류). 실패 보관 위치는 `[결정 필요 M-GW-8]` |
+
+- 세션 찾기: subject로 BFF 세션과 토큰 기록을 찾을 색인이 필요하다(지금 토큰 기록은 `clientKey` 키). Spring Session의 principal 이름 색인 또는 `subject → clientKey 집합` 기록을 쓴다(GW-T18).
+- 거절 기준 수명: 모든 클라이언트의 최대 access token 수명(`studio-web`·`swagger-ui` 15분, `gateway-bff` `BFF_ACCESS_TOKEN_SECONDS`) 이상. Auth 설정과 Gateway 설정이 따로 있으므로 Gateway 설정 키로 두고, 기동 때 값이 0 이하면 실패한다(R8).
+- 배포 순서: Auth 발행(AU-T6) → Gateway 소비. 소비 전 발행된 사실은 Kafka 보존 기간 안이면 처리되고, 그 사이 끊기는 지금처럼 수명까지다.
 
 ## 모듈 안 불변식
 

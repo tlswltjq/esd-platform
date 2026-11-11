@@ -10,7 +10,7 @@
 - 의존 방향([플랫폼 design "모듈과 외부 공급자"·"동기 의존"](../platform/design.md#모듈-경계와-의존-방향))
   - 들어옴: Gateway → Auth `/oauth2/token`·`/oauth2/jwks`·`/userinfo`(BFF 로그인·토큰 릴레이), Gateway 라우트 `/api/v1/auth/**`·`/oauth2/**`·`/login`·`/logout`·`/.well-known/**`·`/api/v1/admin/accounts/**`. 모든 자원 서버는 `/oauth2/jwks`의 공개 키로 토큰을 검증한다.
   - 나감: 다른 업무 모듈 동기 호출 없음. 외부 공급자는 메일 하나(`core.port.PasswordResetMailPort` → `adapter/mail`).
-  - 비동기: `UserRegistered` 발행만, 소비 없음([플랫폼 design "비동기 의존"](../platform/design.md#비동기-의존-요청--사실-응답-쌍-p13-2) 단방향 행).
+  - 비동기: `UserRegistered`·(목표) `AccountAccessChanged` 발행만, 소비 없음([플랫폼 design "비동기 의존"](../platform/design.md#비동기-의존-요청--사실-응답-쌍-p13-2) 단방향 행). `AccountAccessChanged`의 소비자는 Gateway다([결정 180](../../../docs/decisions.md#account-access-revocation)).
 - Spring Authorization Server SPI 구현(`OAuth2AuthorizationService`·`AuthenticationProvider`·`UserDetailsService`)은 프레임워크 연동이라 `adapter`에 둔다. **토큰을 받을 자격(계정 `ACTIVE`, 현재 역할)의 판정은 업무 규칙이라 core 서비스가 갖고, adapter·config는 그 서비스를 부른다**(원칙 ②). 지금은 판정이 `adapter/oauth/RotatingRefreshProvider.java:38-39`, `config/AuthSecurityConfig.java:316-327`, `adapter/security/AccountUserDetailsService.java:27`에 흩어져 있다(AU-T13).
 - 조립: 설정 바인딩·`RegisteredClient` 등록·서명 키·`RecoverPassword` 조립은 `config`(AGENTS.md 3절).
 
@@ -162,6 +162,13 @@
 - 이 모듈이 지키는 방법: `RegisterAccount.register`(`auth:core/service/RegisterAccount.java:35-52`) 한 트랜잭션 안에서 `saveAndFlush`(이메일 유일 제약) → `OutboxRecorder.record("UserAccount", subject, UserRegisteredEvent)` → `role_audit_log` 저장. 계정이 롤백되면 이벤트도 없다.
 - 본문: `eventId`·`occurredAt`·`subject`·`email`(`common/kafka/.../payload/UserRegisteredEvent.java`). 목표 `occurredAt` = `user_account.created_at`(지금은 `UserRegisteredEvent.of`의 `Instant.now()`, AU-T14). `email` 칸은 notes F-2.
 - 재발행: [P2.2-7](../platform/requirements.md#p22-발행--transactional-outbox) — Auth는 `stove.messaging.ops.republish-owner=auth`, `outbox_republish` 이행, ADMIN 경로를 갖고, 허용 목록은 플랫폼 이벤트 표의 Auth 현행 행(`UserRegistered`)에서 만든다(AU-T10). 같은 키 안 발행 순번 헤더와 회수 정렬은 플랫폼 계약(1회차 지적 B1, 판정 전).
+
+### 발행 — `AccountAccessChanged` (가칭, 목표, [결정 180](../../../docs/decisions.md#account-access-revocation))
+
+- 계약 정본: 플랫폼 design 이벤트 목표 행(사실 "계정의 상태·역할이 바뀌어 이전 접근 근거가 더는 유효하지 않다", 토픽 `stove.auth.v1`, 키 `subject`, 소비자 Gateway).
+- 이 모듈이 지키는 방법: `ManageAccount`의 상태 변경·역할 부여·역할 회수가 실제로 바뀐 경우에만, `TokenRevocationPort.revokeSubject`·`role_audit_log`와 같은 트랜잭션에서 `OutboxRecorder.record("UserAccount", subject, …)`를 부른다. 무변화(이미 가진 역할 부여)·거절(409·403·404)은 내지 않는다.
+- 본문: `eventId`·`occurredAt`·`subject`·`changedAt`(`role_audit_log` 행의 Auth 시각)·`changeKind`(`STATUS`·`ROLE`). Gateway는 `changedAt`을 JWT `iat`(Auth가 발급한 시각)와 비교한다 — 두 값 모두 Auth 시계다(원칙 ⑥). 변경 뒤 상태·역할은 싣지 않는다(Gateway는 끊기만 하고, 새 토큰의 역할은 Auth가 발급 때 정한다).
+- 재발행: `UserRegistered`와 같은 경로. 허용 목록에 이 행을 더한다(AU-T6).
 
 ### 소비
 

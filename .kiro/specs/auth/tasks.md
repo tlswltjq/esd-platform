@@ -50,9 +50,9 @@
   - 영향: 감사 조회가 칸 뜻을 행동별로 해석해야 한다(원칙 ① 취지). 멱등 부여가 대상 사용자의 모든 세션을 끊는다.
   - 재현: `ManageAccountTest` — 이미 `CREATOR`인 계정에 `CREATOR` 부여 → 감사 0행·폐기 호출 0회.
 
-- [ ] **AU-T6. 운영자 명령이 요청자의 현재 권한을 DB에서 확인하지 않고, 상태·역할 변경 뒤에도 access token이 수명까지 유효하다** `[결정 필요 M-AU-6]`
+- [ ] **AU-T6. 운영자 명령이 요청자의 현재 권한을 DB에서 확인하지 않고, 상태·역할 변경 뒤에도 access token이 수명까지 유효하다** ([결정 180](../../../docs/decisions.md#account-access-revocation))
   - 어디서: `auth:core/service/ManageAccount.java:72-78`(요청자는 `subject` 비교에만 씀), `AccountAdminController`(`principal.getName()`만 전달). 결정 84 본문 "정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 한다" ↔ 지금 R7.6(옛)·`ManageAccount` 주석 "기존 access token은 수명(기본 15분)까지 유효".
-  - 목표: R7.1 — `ManageAccount`가 요청자 계정을 읽어 활성 운영자가 아니면 403(Auth 안에서 끝나는 부분, 결정 없이 진행 가능). R7.6의 access token 즉시 무효는 M-AU-6 결정 뒤.
+  - 목표: R7.1 — `ManageAccount`가 요청자 계정을 읽어 활성 운영자가 아니면 403(Auth 안에서 끝나는 부분, 결정 없이 진행 가능). R7.6 — 변경과 같은 트랜잭션에 `AccountAccessChanged` Outbox(결정 180), 재발행 허용 목록에 추가, 이벤트 계약 테스트. access token 거절 자체는 Gateway GW 작업(Gateway R4.6)이며 Auth 발행이 먼저 배포돼야 한다.
   - 영향: **간접 돈·보유권** — `ADMIN`을 회수당하거나 `LOCKED`된 운영자가 최대 15분 동안 계정 관리·관리자 환불을 계속할 수 있다. Gateway BFF 세션은 다음 갱신 실패 때 지워지지만(Gateway R4.6) 그 전까지 Redis의 access token이 쓰인다.
   - 재현: 통합 — A가 B의 `ADMIN` 회수 뒤 B의 기존 토큰으로 `…/roles/grant` → 지금 200, 목표(R7.1) 403.
 
@@ -135,7 +135,7 @@
 - [ ] [결정 필요 M-AU-3] 쓰지 않은 복구 토큰의 무효화 시점 → AU-T11.
 - [ ] [결정 필요 M-AU-4] 복구 요청 발급 수 제한 → R6.9.
 - [ ] [결정 필요 M-AU-5] `LOCKED`·`DISABLED` 계정의 복구와 `DISABLED` 계정의 역할 변경 → AU-T11, 상태 표.
-- [ ] [결정 필요 M-AU-6] 상태·역할 변경 즉시 access token 무효(결정 84 본문과 지금 동작의 차이, 소급 후보 notes E-1) → AU-T6. Gateway·모든 자원 서버에 닿으므로 플랫폼 스펙에 행이 필요할 수 있다(notes F-1).
+- [x] 상태·역할 변경 즉시 access token 무효 — [결정 180](../../../docs/decisions.md#account-access-revocation)(B: Auth 사실 이벤트 → Gateway 거절)으로 정함 → AU-T6, 플랫폼 이벤트 목표 행.
 - [ ] [결정 필요 M-AU-7] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 → AU-T8·AU-T9.
 - [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T6의 R7.1 부분, AU-T8(M-AU-7 제외), AU-T9, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
 
