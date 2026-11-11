@@ -5,14 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.Container.ExecResult;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.utility.DockerImageName;
 
-@Tag("known-defect")
+@Timeout(240)
 class KafkaStarterPublicationIntegrationTest {
     private static final String RELEASE = "/tmp/copy-release";
     private static final String OPEN = "/tmp/copy-open";

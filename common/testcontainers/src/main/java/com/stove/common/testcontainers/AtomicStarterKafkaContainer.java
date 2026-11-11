@@ -23,11 +23,11 @@ class AtomicStarterKafkaContainer extends ConfluentKafkaContainer {
             return;
         }
         copyStarterScript(file);
-        // Red baseline: the consumer sees the copy destination immediately.
+        publishStarterScript();
     }
 
     protected void copyStarterScript(Transferable file) {
-        super.copyFileToContainer(file, STARTER_SCRIPT);
+        super.copyFileToContainer(file, STAGED_STARTER_SCRIPT);
     }
 
     private void publishStarterScript() {
