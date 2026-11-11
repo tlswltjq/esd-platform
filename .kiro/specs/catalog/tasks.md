@@ -24,7 +24,7 @@
 ### MC-C2. 공개를 확정하기 전에 Review 승인을 대조하지 않는다 (결정 167, 플랫폼 T16)
 - 무엇이: `reviewRequestId`를 저장만 하고 Review 승인 사실을 받지도 대조하지도 않는다. 승인 보관 표·승인 잠금·`AWAITING_APPROVAL` 상태·`catalog-review-approval` 소비 그룹·`APPROVAL_MISMATCH` 사유·승인 대기 게이지가 없다.
 - 어디서: `catalog:core/service/ReceiveProjectRelease.java:38-63`(승인 확인 없이 `PENDING` 작업 저장), `PublishProjectRelease.java:50-170`(공개 트랜잭션에 승인 재확인 없음), `catalog:api/listener/`(Review 리스너 없음), 이전 설계 "Studio 명령을 신뢰"(`.kiro/specs/catalog/design.md:8·20`).
-- 목표: R11 전체, design 표 1(A=·A≠ 열)·표 2, 데이터 모델 `catalog_review_gate`·`catalog_review_approval`, CI-8·CI-11. 승인이 철회·거절·종결로 끝난 요청을 열지 않는 조건 포함(1회차 지적 B3, 판정 전). 승인 본문의 스냅샷 값은 M-CA-4 결과에 따른다(Review 쪽 `ProjectReviewApproved` 본문 변경 필요, notes F).
+- 목표: R11 전체, design 표 1(A=·A≠ 열)·표 2, 데이터 모델 `catalog_review_gate`·`catalog_review_approval`, CI-8·CI-11. 승인이 철회·거절·종결로 끝난 요청을 열지 않는 조건 포함(1회차 지적 B3, 판정 전). 승인 본문의 스냅샷 값은 `snapshot`(Review 보관 `ProjectSnapshot` 전체)이고 레코드 동등으로 비교한다(결정 181, Review RV-T4 먼저 배포).
 - 영향: **승인되지 않은 자료가 공개·판매되고 그 자료로 보유권이 지급될 수 있다**(Studio 결함·생산 권한 오남용·Studio DB 수정, 결정 167 문제).
 - 재현: ① 승인 보관 없이 출시 요청 → 작업이 `AWAITING_APPROVAL`이고 작업자가 공개하지 않음(지금 Red: 공개됨) ② 승인 값과 다른 `contentVersion`의 출시 → `REJECTED(APPROVAL_MISMATCH)` ③ 승인 대기 중 철회 → `WITHDRAWN` → 뒤늦은 승인 → 작업이 열리지 않음(B3) ④ 출시·승인 동시 도착 두 순서 모두 같은 결과.
 
@@ -129,13 +129,13 @@
 
 ## 진행 중 / 남음
 
-- [ ] MC-C2·MC-C3·CA-T4·CA-T5·CA-T1을 한 묶음으로: 출시 요청 상태 모델(design 표 1~3)을 한 PR에서 구현하고 표의 모든 칸을 통합 테스트로 덮는다. 순서: 상태 CHECK(MC-C1) → 잠금 순서(CA-T1) → 승인 대조(MC-C2) → 정지·종결(MC-C3) → 이벤트 분리(T21·T22). Studio의 `CLOSED` 끝 상태·`ProjectReleaseClosed` 소비와 Review 승인 본문 변경(M-CA-4)이 먼저 또는 같이 배포돼야 한다(notes F).
+- [ ] MC-C2·MC-C3·CA-T4·CA-T5·CA-T1을 한 묶음으로: 출시 요청 상태 모델(design 표 1~3)을 한 PR에서 구현하고 표의 모든 칸을 통합 테스트로 덮는다. 순서: 상태 CHECK(MC-C1) → 잠금 순서(CA-T1) → 승인 대조(MC-C2) → 정지·종결(MC-C3) → 이벤트 분리(T21·T22). Studio의 `CLOSED` 끝 상태·`ProjectReleaseClosed` 소비와 Review 승인 본문 v2(`snapshot`, 결정 181·RV-T4)가 먼저 또는 같이 배포돼야 한다(notes F).
 - [ ] [결정 필요] 공개본 변경 이력의 조회 계약·사용성 — G4 ([일반화 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md) Catalog 행 "공개본 변경 이력")
 - [ ] [결정 필요] 허용 지연 SLA와 실제 운영 경보·화면 — G4. 결정 158·159로 게이지는 R13에서 먼저 내고 경보 기준은 G6 측정 뒤.
 - [ ] [결정 필요 M-CA-1] 승인 대기가 끝나지 않는 출시의 운영자 처리.
 - [ ] [결정 필요 M-CA-2] 다운로드 제한 저장소 적용 실패의 경보 기준.
 - [ ] [결정 필요 M-CA-3] 원요청과 맞지 않는 선행 철회의 처리(CA-T4).
-- [ ] [결정 필요 M-CA-4] 승인 사실의 스냅샷 값 전달 방식(MC-C2).
+- [x] 승인 사실의 스냅샷 값 전달 방식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체(MC-C2).
 - [ ] [결정 필요 M-CA-5] 종결된 출시에 온 철회의 거절 결과(`targetStatus=CLOSED`).
 - [ ] [외부 대기] 공유 환경의 정책/계정 준비와 실제 배포 — G4 이후
 - [ ] [결정 필요] G4 전체 완료 판정(실제 운영 여정 전체) — G4. 최신 전체 여정은 2026-11-08 통과([근거 색인](../../../docs/evidence.md) G4 행). 남은 G4 `[결정 필요]` 4건(Catalog 변경 이력·허용 지연 SLA, Download 대기·정지 구분 안내·노출 중지 안내)을 G4 안에서 정할지 다음 단계로 넘길지 사용자가 정한 뒤 판정

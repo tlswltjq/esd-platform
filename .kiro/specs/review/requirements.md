@@ -136,7 +136,7 @@ Review는 Studio 작업본을 읽거나 바꾸지 않고, 심사 요청을 대�
 
 #### 수용 기준
 
-1. THE `ProjectReviewApproved` SHALL Catalog가 [P3.4-2](../platform/requirements.md#p34-출시-요청철회-studio--catalog)의 대조(`reviewRequestId`, `projectId`, `contentVersion`, 스냅샷 값)를 다른 모듈에 묻지 않고 할 수 있는 값을 싣는다. 그 값은 Review가 저장한 스냅샷에서만 만든다. 싣는 형식(스냅샷 전체 / Review가 계산한 지문)은 [결정 필요 M-RV-1]이다.
+1. THE `ProjectReviewApproved` SHALL Catalog가 [P3.4-2](../platform/requirements.md#p34-출시-요청철회-studio--catalog)의 대조(`reviewRequestId`, `projectId`, `contentVersion`, 스냅샷 값)를 다른 모듈에 묻지 않고 할 수 있는 값을 싣는다. 그 값은 Review가 `project_review`에 저장한 `ProjectSnapshot` 전체(`snapshot` 칸)이고, 저장한 값을 바꾸거나 다시 만들지 않는다. 지문·해시는 싣지 않는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)).
 2. WHEN 승인 이벤트 본문 모양을 바꾸면 THEN Review SHALL 같은 `eventType`의 새 `schemaVersion`으로 내고 P2.7-5 배포 순서(소비자 Studio·Catalog가 옛·새 버전을 모두 읽은 뒤 발행 전환)를 따른다([결정 170](../../../docs/decisions.md#schema-version-header)).
 3. THE Review SHALL 한 `reviewRequestId`에 승인 사실을 많아야 하나 내고, 승인 뒤 그 심사를 `WITHDRAWN`·`REJECTED`로 바꾸지 않는다(R5.4). 승인 사실이 나간 뒤 Catalog 쪽 출시가 철회·거절·종결된 경우의 처리는 Catalog가 정한다(Review는 승인을 다시 내거나 거두지 않는다, (1회차 지적 B3, 판정 전)).
 4. THE 이 계약 이전에 이미 `APPROVED`인 심사의 승인 사실을 Catalog가 갖게 하는 이행 방법 SHALL [결정 필요 M-RV-2]로 정한다. 정해지기 전에는 Catalog가 그 승인을 근거로 공개를 확정할 수 없다(승인 대기, 안전한 쪽).

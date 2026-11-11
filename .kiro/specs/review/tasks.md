@@ -13,7 +13,7 @@
 
 - [ ] **RV-T4. 승인 이벤트가 Catalog가 대조할 스냅샷 값을 싣지 않는다** ([결정 167](../../../docs/decisions.md#catalog-verifies-approval), 플랫폼 T16·MC-C2의 Review 쪽)
   - 어디서: `common/kafka/.../contract/payload/ProjectReviewApprovedEvent.java`(칸: `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`뿐), `review:core/service/DecideProjectReview.java:28-33`.
-  - 목표: R9.1·R9.2. 승인 이벤트에 Review가 저장한 스냅샷에서 만든 대조 값을 싣는다(형식은 [결정 필요 M-RV-1]). 같은 `eventType`의 새 `schemaVersion`, P2.7-5 순서(Studio·Catalog가 두 버전을 읽는 판 → Review 발행 전환). 이미 `APPROVED`인 심사의 승인 사실 이행은 [결정 필요 M-RV-2] (RV-T13).
+  - 목표: R9.1·R9.2. 승인 이벤트에 Review가 저장한 `ProjectSnapshot` 전체를 `snapshot` 칸으로 싣는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)). 같은 `eventType`의 새 `schemaVersion`, P2.7-5 순서(Studio·Catalog가 두 버전을 읽는 판 → Review 발행 전환). 이미 `APPROVED`인 심사의 승인 사실 이행은 [결정 필요 M-RV-2] (RV-T13).
   - 영향: **돈·보유권** — 이 칸이 없으면 Catalog가 결정 167 대조를 할 수 없어 RI-2 가드(T16)가 성립하지 않는다. Studio 결함·위조된 출시 요청·수동 수정된 Studio `APPROVED`로 승인 안 된 자료가 공개·판매되고 그 자료로 보유권이 지급된다.
   - 재현: 승인 API 호출 뒤 `outbox_event.payload`에 저장 스냅샷과 같은 값(또는 같은 지문)이 있는지 단언 — 지금 Red.
 
@@ -91,7 +91,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] [결정 필요 M-RV-1] 승인 이벤트의 대조 값 형식(스냅샷 전체 / Review 계산 지문) → RV-T4.
+- [x] 승인 이벤트의 대조 값 형식 — [결정 181](../../../docs/decisions.md#approval-snapshot-payload): 스냅샷 전체 → RV-T4.
 - [ ] [결정 필요 M-RV-2] 결정 167 이전 승인 사실의 Catalog 이행 → RV-T13.
 - [ ] [결정 필요 M-RV-3] 원요청보다 먼저 보관한 철회의 대상이 원요청과 다를 때 → RV-T7.
 - [ ] [결정 필요 M-RV-4] 종료된 심사의 빌드 열람 URL 발급 범위(R3.8).

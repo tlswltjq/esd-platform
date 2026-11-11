@@ -140,9 +140,9 @@ Catalog는 Studio가 보낸 출시 요청을 내구 접수하고, Review에게�
 **사용자 스토리:** 플랫폼으로서, 공개를 확정하는 Catalog가 정본인 Review의 승인 사실을 직접 확인하길 원한다. 그래야 승인되지 않은 자료가 판매되고 보유권이 지급되는 일이 없다.
 
 #### 수용 기준
-1. WHEN `ProjectReviewApproved`(`stove.review.v1`)를 새 그룹 `catalog-review-approval`에서 받으면 THEN Catalog SHALL `ReviewApprovalMapper.from`에서 봉투·키를 검증하고, `reviewRequestId`를 유일 키로 `(reviewRequestId, projectId, contentVersion, productCode, 스냅샷 값)`을 Inbox와 같은 트랜잭션에 불변 보관한다. 승인 시각(`occurredAt`)은 값으로만 저장한다([플랫폼 P2.1-3](../platform/requirements.md)). 승인 본문의 스냅샷 전달 방식은 [결정 필요 M-CA-4]다.
+1. WHEN `ProjectReviewApproved`(`stove.review.v1`)를 새 그룹 `catalog-review-approval`에서 받으면 THEN Catalog SHALL `ReviewApprovalMapper.from`에서 봉투·키를 검증하고, `reviewRequestId`를 유일 키로 `(reviewRequestId, projectId, contentVersion, productCode, 스냅샷 값)`을 Inbox와 같은 트랜잭션에 불변 보관한다. 승인 시각(`occurredAt`)은 값으로만 저장한다([플랫폼 P2.1-3](../platform/requirements.md)). 스냅샷 값은 승인 본문의 `snapshot`(Review가 보관한 `ProjectSnapshot` 전체)이다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)).
 2. IF 같은 `reviewRequestId`의 승인이 다른 값으로 다시 오면 THEN Catalog SHALL 기존 보관을 덮어쓰지 않고 영구 실패로 보낸다. 같은 값이면 무변화다.
-3. WHEN 출시 요청을 접수하면 THEN Catalog SHALL 승인 잠금(`reviewRequestId`) → 요청 잠금 순서로 잡고 보관 승인과 `(reviewRequestId, projectId, contentVersion, productCode, 스냅샷 값)`을 대조한다. 맞으면 작업을 `PENDING`으로, 보관 승인이 없으면 `AWAITING_APPROVAL`로 저장한다.
+3. WHEN 출시 요청을 접수하면 THEN Catalog SHALL 승인 잠금(`reviewRequestId`) → 요청 잠금 순서로 잡고 보관 승인과 `(reviewRequestId, projectId, contentVersion, productCode, 스냅샷 값)`을 대조한다. 스냅샷 값은 출시 요청의 `ProjectReleaseRequested.snapshot`과 보관 `snapshot`의 `ProjectSnapshot` 레코드 동등(장르 목록 순서 포함)으로 비교하고, 따로 정규화·해시하지 않는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)). 맞으면 작업을 `PENDING`으로, 보관 승인이 없으면 `AWAITING_APPROVAL`로 저장한다.
 4. IF 보관 승인이 있는데 값이 하나라도 다르면 THEN Catalog SHALL 공개하지 않고 같은 트랜잭션에서 출시 결과 `REJECTED`(`APPROVAL_MISMATCH`)·작업 `COMPLETED`·`ProjectReleaseRejected`를 저장한다(결정 167).
 5. WHEN 승인을 보관하면 THEN Catalog SHALL 같은 승인 잠금 안에서 그 `reviewRequestId`를 가진 `AWAITING_APPROVAL` 작업마다 요청 잠금을 잡고, 그 작업이 아직 `AWAITING_APPROVAL`이고 출시 결과가 없을 때만 R11.3·R11.4대로 `PENDING`으로 열거나 거절한다. 철회(`WITHDRAWN`)·거절·종결로 이미 끝난 요청에는 승인만 보관하고 작업을 열지 않는다(1회차 지적 B3, 판정 전).
 6. THE 공개 확정 트랜잭션 SHALL 보관 승인과의 대조를 다시 확인한다. IF 맞는 보관 승인이 없거나 값이 다르면 THEN Catalog SHALL 공개하지 않고 R12에 따라 작업을 `BLOCKED`로 둔다(돌이킬 수 없는 공개 지점의 가드, 원칙 ⑤).

@@ -1798,7 +1798,19 @@
   - 늦음: Kafka 전달 지연만큼 늦다. Gateway 소비가 멈추거나 Redis 기준을 잃으면 지금처럼 access 수명까지 남으므로, Gateway가 소비 지연을 게이지로 낸다(경보 기준은 측정 뒤, 결정 159).
   - 업무 모듈의 JWT 검증은 바꾸지 않는다. 외부 진입은 Gateway뿐이다.
 - 구분: 추천 수용
-- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Auth R7.6·AU-T6, Gateway R4.6·상태 표 19행, 플랫폼 이벤트 표 목표 행
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Auth R7.6·AU-T6, Gateway R5.6~5.8·상태 표 19·20행·GW-T18, 플랫폼 이벤트 표 목표 행. Gateway 소비 실패 보관 위치는 `[결정 필요 M-GW-8]`
+
+<a id="approval-snapshot-payload"></a>
+## 181. Review 승인 사실은 Review가 보관한 스냅샷 전체를 싣고, Catalog는 출시 요청 스냅샷과 레코드 동등으로 대조한다
+- 문제: 결정 167은 Catalog가 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)`을 보관해 출시 요청과 대조한다고 정했지만, `ProjectReviewApprovedEvent`에는 `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`만 있어 스냅샷 값이 없다. 싣는 형식은 정하지 않았다. 예: Studio 결함으로 v3 승인(요청 100)을 근거로 `contentVersion`은 같고 `price` 9,000 → 900원·승인 안 된 `storagePath`인 출시 요청이 오면, ID·버전만 비교하는 Catalog는 통과시켜 승인 안 된 빌드가 판매되고 보유권이 지급된다(M-RV-1·M-CA-4).
+- 선택지: A 승인 이벤트 v2에 `ProjectSnapshot` 전체 / B Review가 계산한 지문(정규화 JSON의 SHA-256)만 / C ID·버전만 대조 (추천: A — 값 동등 규칙이 이미 공통 계약(`ProjectSnapshot` 레코드 동등)에 하나 있고 Review도 같은 규칙을 쓴다. B는 해시 정규화라는 두 번째 판정 규칙을 만들고(원칙 ③) 어긋나면 정상 출시가 거절된다. A의 비용은 메시지 크기뿐인데 같은 크기의 `ProjectReviewRequested`가 이미 흐른다. C는 결정 167을 사실상 되돌린다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 스냅샷 전체를 실어")
+- 선택: A
+  - Review: `ProjectReviewApproved`에 `snapshot`(`ProjectSnapshot`, Review `project_review`에 보관한 값 그대로)을 더해 같은 `eventType`의 `schemaVersion` 2로 낸다. 배포 순서는 P2.7-5(Studio·Catalog가 v1·v2를 모두 읽는 판 → Review 발행 전환, 결정 170).
+  - Catalog: `catalog_review_approval.snapshot`에 받은 스냅샷을 불변 보관하고, 출시 요청의 `ProjectReleaseRequested.snapshot`과 `ProjectSnapshot` 레코드 동등(장르 목록 순서 포함)으로 비교한다. 다르면 `ProjectReleaseRejected`(`APPROVAL_MISMATCH`). 별도 정규화·해시 규칙을 두지 않는다.
+  - v1(스냅샷 없음) 승인 사실을 Catalog가 어떻게 다룰지와 이미 `APPROVED`인 심사의 이행은 `[결정 필요 M-RV-2]`로 이어서 정한다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Review R9.1·RV-T4·발행 표, Catalog R11.1·데이터 모델, 플랫폼 이벤트 표 `ProjectReviewApproved` 행
 
 ---
 

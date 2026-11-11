@@ -178,7 +178,7 @@ ALTER TABLE project_review
 
 | 이벤트(플랫폼 행) | 발행 지점(같은 트랜잭션) | 본문 칸 출처 | 상태 |
 |---|---|---|---|
-| `ProjectReviewApproved` ([리터럴 표](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26), S3·S3a) | `DecideProjectReview.execute`(`decide`가 true일 때만) | `reviewRequestId`·`projectId`·`contentVersion`·`productCode` = `project_review`, `actor` = JWT `sub`. 목표: Catalog 대조 값(R9.1, M-RV-1) 추가, 새 `schemaVersion` | 현행(리터럴) → 칸 추가 목표 |
+| `ProjectReviewApproved` ([리터럴 표](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26), S3·S3a) | `DecideProjectReview.execute`(`decide`가 true일 때만) | `reviewRequestId`·`projectId`·`contentVersion`·`productCode` = `project_review`, `actor` = JWT `sub`. 목표: `snapshot`(저장 `ProjectSnapshot` 전체, R9.1) 추가, `schemaVersion` 2([결정 181](../../../docs/decisions.md#approval-snapshot-payload)) | 현행(리터럴) → 칸 추가 목표 |
 | `ProjectReviewRejected` (같은 표, S3) | 같음 | 위 + `feedback` = 확정 사유 | 현행(리터럴) |
 | `ProjectReviewWithdrawn` ([목표 행](../platform/design.md#목표-행-아직-코드에-없음), SP-7 ①) | `ReceiveReviewWithdrawal`(E4 `REQUESTED`·`WITHDRAWN`), `ReceiveProjectReview`(E1 미해결 철회) | `withdrawalId`, `reviewRequestId`, `projectId`, `contentVersion`, `productCode` = 철회 명령·행, `withdrawnBy`·`withdrawalReason`·`withdrawnAt` = `project_review`, `requestEventId` = `project_review.request_event_id` | 목표(결정 176, T21) |
 | `ProjectReviewWithdrawalDenied` (목표 행, SP-7 ②) | `ReceiveReviewWithdrawal`(E4 `APPROVED`·`REJECTED`) | `withdrawalId`·`reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`targetStatus`(enum {`APPROVED`,`REJECTED`})·`requestEventId`. `actor`·`feedback` 없음 | 목표(결정 176, T21) |
