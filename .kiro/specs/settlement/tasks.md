@@ -92,7 +92,7 @@
 
 - [ ] **SE-T4. `RefundLateCancellationConfirmed`를 소비하지 않는다(결정 157)** (플랫폼 T4, 1회차 지적 A2·B2·A5, 판정 전)
   - 어디서: `S/api/listener/RefundEventListener.java:47`(`REFUND_PAYMENT_CONFIRMED`만), `S/api/listener/SettlementRefundMapper.java`.
-  - 목표: R6.1·R6.12·R6.13. 같은 그룹에서 받아 같은 `ConfirmedRefund`로 바꾸고, `settlement_refund.confirmation_event_type`(가칭)에 받은 타입을 남긴다. 같은 주문의 두 번째 금융 확인 사실은 `[결정 필요 M-SE-2]`. 이벤트 본문은 Payment 모듈·플랫폼 표에서 확정 뒤.
+  - 목표: R6.1·R6.12·R6.13. 같은 그룹에서 받아 같은 `ConfirmedRefund`로 바꾸고, `settlement_refund.confirmation_event_type`(가칭)에 받은 타입을 남긴다. 같은 주문의 두 번째 금융 확인 사실은 영구 실패([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)). 이벤트 본문은 Payment 모듈·플랫폼 표에서 확정 뒤.
   - 영향: **판매자 돈** — 실패 시도 뒤 실제 취소가 반영돼도 판매자 과지급이 남는다.
   - 재현: 실패 종결 → 늦은 취소 반영 → `settlement_refund` 1행(`CONFIRMED_MONTH`/`CLOSED_MONTH_ROLLOVER`), 원매출 없으면 `AWAITING_SALE`.
 
@@ -117,7 +117,7 @@
 ## 진행 중 / 남음
 
 - [ ] [결정 필요 M-SE-1] 매출 대기 환불 `CONFLICTED`·끝내 매출이 오지 않는 `AWAITING_SALE`의 운영자 처리 — MC-S3 구현 전에 정한다
-- [ ] [결정 필요 M-SE-2] 같은 주문에 같은 PG 취소를 가리키는 두 번째 금융 확인 사실 — SE-T4 전에, 플랫폼 1회차 지적 A2·B2 판정과 함께
+- [x] 같은 주문에 같은 PG 취소를 가리키는 두 번째 금융 확인 사실 — [결정 179](../../../docs/decisions.md#late-cancellation-during-retry): 지금 규칙(영구 실패) 유지, SE-T4 구현 때 두 번째 사실 거절 테스트를 둔다
 - [ ] [외부 대기] PG 비용 실거래 확정: 실제 가맹점 키·거래 키 대응 검증과 `identity-mapping-verified` 활성화 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
 - [ ] [결정 필요 M-SE-3] 실거래 승인 근거 수용의 도메인·스키마·조회 계약 — G7. 선행: SE-T1. 그 뒤 정상 실거래 입력 → 비용 저장·SQL 집계, 동시 첫 비용 INSERT(`uk_pg_cost_source`), INSERT 실패 롤백을 루프백 응답 서버 + MySQL Testcontainers로 검증(결정 46: 저장된 TEST 근거를 SQL로 LIVE로 바꾸는 우회 금지)
 - [ ] [외부 대기] V13 이전 순서 없는 마감 자료 탐지: 마감된 월 뒤 `OPEN` 행이 남은 판매자, 원장 없는 `CLOSED` 월이 연속하며 앞쪽이 음수인 판매자를 읽기 전용 SQL로 센다(공유 환경 자료가 생기면). 행이 나오면 처리 방법을 사용자에게 묻는다 — G3

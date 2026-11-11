@@ -110,7 +110,7 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 5. WHERE 환불 반영 월을 고를 때 THE Settlement SHALL `REFUND_CONFIRMED_MONTH_V1`로 확인 월(R6.13)이 `OPEN`이고 뒤 월에 `CLOSED`가 없으면 그 월(`CONFIRMED_MONTH`), 아니면 현재 KST `OPEN` 월(`CLOSED_MONTH_ROLLOVER`)을 고르고 확인 월은 보존한다(R3.5, R3.12).
 6. IF 확인 월과 현재 월이 모두 `CLOSED`이면 THEN Settlement SHALL 임의 월을 고르지 않고 재시도 가능 실패로 끝낸다.
 7. IF 원매출보다 금융 확인 사실이 먼저 오면 THEN Settlement SHALL R11로 처리하고 실패 보관 표로 보내지 않는다([P3.26-6](../platform/requirements.md), [결정 156](../../../docs/decisions.md#refund-awaiting-sale)).
-8. WHEN 같은 환불 근거가 다시 오면(같은 `eventId`, 또는 같은 `refundId`·주문·확인 시각·취소 근거) THEN Settlement SHALL PG 장애·월 마감 뒤에도 최초 반영 월·정책·금액을 그대로 두고 외부 조회를 하지 않는다. IF 같은 주문을 다른 환불·다른 본문으로 다시 상계하려 하면 THEN Settlement SHALL 영구 실패로 거절한다. 같은 주문에 두 금융 확인 사실이 같은 PG 취소를 가리키는 경우는 `[결정 필요 M-SE-2]`(1회차 지적 A2·B2, 판정 전).
+8. WHEN 같은 환불 근거가 다시 오면(같은 `eventId`, 또는 같은 `refundId`·주문·확인 시각·취소 근거) THEN Settlement SHALL PG 장애·월 마감 뒤에도 최초 반영 월·정책·금액을 그대로 두고 외부 조회를 하지 않는다. IF 같은 주문을 다른 환불·다른 본문으로 다시 상계하려 하면 THEN Settlement SHALL 영구 실패로 거절한다. 같은 주문에 다른 금융 확인 사실이 같은 PG 취소를 가리키는 경우도 같은 영구 실패다. Payment가 한 환불에 금융 확인 사실을 하나만 내므로(늦은 취소 반영과 후속 실행 생성의 직렬화), 두 번째 사실은 흡수하지 않고 결함으로 드러낸다([결정 179](../../../docs/decisions.md#late-cancellation-during-retry), 1회차 지적 A2·B2, 판정 전).
 9. WHERE 원매출도 늦게 온 경우에서 THE Settlement SHALL PG가 보고한 원결제가 전액 취소됐고 원승인·결제 구성·성공 취소 합계가 검증될 때만 그 원매출을 접수한다. 부분·진행 중 취소나 불명확한 채널·거래·결제 구성은 전액 취소로 보지 않는다.
 10. IF PG가 취소 행의 시각을 보고하지 않으면 THEN Settlement SHALL 그 칸을 NULL로 보존하고 다른 시각으로 채우지 않는다. PG가 찍은 시각은 값으로만 저장하고 Settlement 시계와 비교하지 않는다([결정 163](../../../docs/decisions.md#external-clock-principle)).
 11. THE 월 마감 SHALL 매출 원장 합계와 환불 원장 합계를 각각 월 행과 대조하며, 환불 반영이 원매출·기존 `CLOSED` 월·최초 `closedAt`을 바꾸지 않는다.

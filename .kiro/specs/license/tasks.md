@@ -26,7 +26,7 @@
 
 - [ ] **MC-L1. 복구된 구매 근거에 늦은 취소의 `PurchaseRefunded`가 오면 회수하지 못하고 영구 실패한다** ([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), 1회차 지적 A2·B2, 판정 전)
   - 어디서: `license:core/domain/License.java:121-138`(`refund`: `status == SUSPENDED && 현재 정지 == 요청 정지`만 허용, `:127`), `license:core/service/ApplyPurchaseRefund.java:29-40`(정지 기록·복구 기록을 보지 않음).
-  - 목표: R11-4, design 구매 근거 표 E7의 "늦은 취소 가드" — 요청 정지 ID가 이 구매 근거의 `license_suspension`이고 그 정지의 `license_restoration`이 있으면 `STORED`·`REGISTERED`에서도 `REFUNDED`, 열린 보유권(`ACTIVE` 포함) `ENDED`, `LicenseRefundApplied`(LI-T1). 승인 정정으로 끝난 정지·기록 없는 정지는 영구 실패. 그 사이 다른 정지가 진행 중이면 `[결정 필요 M-LI-2]`.
+  - 목표: R11-4, design 구매 근거 표 E7의 "늦은 취소 가드" — 요청 정지 ID가 이 구매 근거의 `license_suspension`이고 그 정지의 `license_restoration`이 있으면 `STORED`·`REGISTERED`에서도 `REFUNDED`, 열린 보유권(`ACTIVE` 포함) `ENDED`, `LicenseRefundApplied`(LI-T1). 승인 정정으로 끝난 정지·기록 없는 정지는 영구 실패. 그 사이 같은 `refundId`의 재신청 정지가 진행 중이어도 회수하고 현재 정지를 비우며, 회수 뒤 늦게 온 같은 `refundId`의 정지 요청은 Inbox만 쓴다(E2 `REFUNDED` 칸, [결정 179](../../../docs/decisions.md#late-cancellation-during-retry)).
   - 영향: **보유권·돈** — 늦은 취소 반영 뒤 고객이 환불받은 돈과 `ACTIVE` 보유권을 함께 갖는다. `PurchaseRefunded`가 실패 보관·키 정지로 가 같은 주문의 뒤 이벤트도 멈춘다.
   - 재현: 통합 — 정지 → `LicenseRestorationRequested`로 `REGISTERED`·`ACTIVE` 복구 → 같은 정지 ID의 `PurchaseRefunded` 주입 → 지금 `CONFLICT`(Red), 목표 `REFUNDED`·보유권 `ENDED`·Outbox `LicenseRefundApplied` 1건. 보관함 반환 뒤(`STORED`)·재등록 뒤(새 `ACTIVE`) 변형, 승인 정정으로 끝난 정지를 가리키면 거절.
 
@@ -87,7 +87,7 @@
 ## 진행 중 / 남음
 
 - [ ] `[결정 필요 M-LI-1]` 정지 전 상태 표현(소급 RC-17) — 사용자에게 묻고 결정 번호로 바꾼 뒤 LI-T2를 진행한다. notes D.
-- [ ] `[결정 필요 M-LI-2]` 늦은 취소 회수 때 같은 구매 근거가 다른 정지(재신청 시도)로 정지 중인 경우 — Order·Payment 모듈 스펙의 재신청 시도 처리(MC-O3·MC-P15, 1회차 지적 A2·B2)와 함께 묻는다. notes D.
+- [x] 늦은 취소 회수 때 같은 구매 근거가 재신청 정지로 정지 중인 경우 — [결정 179](../../../docs/decisions.md#late-cancellation-during-retry)로 정함(R11-4, MC-L1).
 - [ ] 2회차 독립 평가에서 1회차 지적 A2·B2·B4·B9(+A5)의 판정을 받는다(결정 178). 이 초안은 지적을 고친 것으로 치지 않는다.
 - [ ] [외부 대기] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/실패 보관 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
 - [x] (닫힘) 구성 결함 후보(Kafka 보존 7일이 DLT 재투입 기한) — [결정 160](../../../docs/decisions.md#dead-letter-store)으로 실패 레코드를 소비 모듈 DB 보관 표에 기한 없이 두고, 토픽 선언·자동 생성 끄기는 플랫폼 T11. License 쪽 할 일은 공통 라이브러리 적용뿐(플랫폼 T2·T7)

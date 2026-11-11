@@ -63,7 +63,7 @@
   - 재현: Order `Clock`을 `failedAt`보다 1초 뒤로 둔 통지 → 지금 409(Red), 목표 `PENDING`.
 - [ ] **MC-O3. 늦은 취소 완료 상태가 없다**([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), T4)
   - 어디서: `order:core/domain/RefundStatus.java`, `RefundAttemptStatus.java`, `RefundRestorationEventListener.java:28-33`(타입 없음).
-  - 목표: R7.7, 환불 `LATE_CANCELLATION_COMPLETED`·시도 `LATE_CANCELLED`, 그룹 `order-refund-restoration`, `PurchaseRefunded`, `completionNotice`. 재신청 진행 중은 M-OR-1. Payment 반영 API(MC-P15) 다음에 구현.
+  - 목표: R7.7, 환불 `LATE_CANCELLATION_COMPLETED`·시도 `LATE_CANCELLED`, 그룹 `order-refund-restoration`, `PurchaseRefunded`, `completionNotice`. 재신청 진행 중(재정지 대기·Payment가 받기 전의 새 시도)은 늦은 취소로 끝내고 새 시도를 `SUPERSEDED`로 닫으며, 늦게 온 재신청 정지는 기록만([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)). Payment 반영 API(MC-P15) 다음에 구현.
   - 영향: **돈·보유권** — 실패 뒤 실제 취소가 생기면 고객이 돈과 게임을 둘 다 갖고 판매자 과지급.
   - 재현: 실패 확정 → 복구 → `RefundLateCancellationConfirmed` 주입 → 환불 끝 상태·`PurchaseRefunded` 1행; `PENDING_LICENSE_RESTORATION`에서 먼저 온 경우 뒤의 `LicenseRestored`가 `=`.
 - [ ] **T4(Order 몫) — `RefundFailureClosed` 소비와 실패 출처 열**
@@ -159,7 +159,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] `[결정 필요 M-OR-1]`~`M-OR-4` 결정 뒤 해당 행(MC-O3, R4.10, R4.14, T1 이행)을 확정한다.
+- [ ] `[결정 필요 M-OR-2]`~`M-OR-4` 결정 뒤 해당 행(R4.10, R4.14, T1 이행)을 확정한다. M-OR-1은 결정 179로 확정(MC-O3).
 - [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3 + M-OR-3·M-OR-4 이행(Payment A1 먼저 배포, P2.7-5) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
 - [ ] [외부 대기] 재심사·잘못된 승인 중단·늦은 취소 반영의 실제 사용자 흐름: 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정 — G2 후속
 - [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), 결정 110·111). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인

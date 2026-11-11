@@ -1773,6 +1773,20 @@
 - 구분: 직접 제안
 - 결과: [PR #194](https://github.com/tlswltjq/esd-platform/pull/194). 플랫폼 `tasks.md` "독립 평가 1회차 지적", 근거 색인 한 행
 
+<a id="late-cancellation-during-retry"></a>
+## 179. 재신청 중 이전 시도의 늦은 취소는 진행 중인 실행이 있으면 그 실행이 끝내고, 없을 때만 늦은 취소로 끝낸다
+- 문제: 결정 157이 Order·Payment 모듈 스펙으로 넘긴 "고객이 이미 재신청해 새 환불 시도가 진행 중일 때"다(1회차 지적 A2·B2). 예: 9,000원, 11:41 시도 A 실패 종결 → 보유권 복구 → 12:00 고객 재신청 → 12:30 PG 콘솔 전액 취소 → 12:35 ADMIN이 A의 늦은 취소 반영. PG는 취소 가능 잔액이 0인 결제를 더 취소하지 않아 돈이 두 번 나가지는 않는다. 그러나 같은 PG 취소에서 `RefundLateCancellationConfirmed(A)`와 재신청 시도 B의 `RefundPaymentConfirmed`가 함께 나올 수 있고, 지금 계약으로는 Order·License·Settlement가 뒤 사실을 영구 실패로 받아 그 주문의 키가 멈춘다. 재신청이 ① 재정지 대기, ② 시도 B를 만들었지만 Payment가 아직 받기 전, ③ Payment에 B 실행 있음, ④ B도 실패 확정 중 어디까지 갔는지에 따라 칸이 갈린다.
+- 선택지: A 진행 중인 실행이 있으면 그 실행이 끝내고, 없을 때만 늦은 취소로 끝낸다 / B 늦은 취소가 언제나 이긴다(Order가 B를 닫고, 이미 나간 B의 확인은 Order·Settlement가 흡수, B를 멈추려면 Order → Payment 새 사실) / C 둘 다 허용하고 먼저 온 쪽이 끝내며, 뒤 사실은 같은 취소 ID 집합이면 세 모듈이 기록만 (추천: A — 같은 돈의 결과를 금융 확인 사실 하나로 끝내고(원칙 ③), Payment가 반영과 후속 실행 생성을 같은 실행 잠금으로 직렬화해 둘이 함께 나올 수 없다. ③④는 기존 경로로 끝나고, Payment가 볼 수 없는 틈 ①②만 Order가 닫는다. B·C는 같은 PG 취소를 사실 두 개로 남기고 세 모듈에 흡수 규칙을 늘린다. Payment가 반영 전에 Order에 동기로 묻는 안은 P1.2-6 위반이라 제외)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 해")
+- 선택: A
+  - Payment: 늦은 취소 반영은 대상이 그 환불의 마지막 실행이고 `FAILED`일 때만 받는다. 뒤 실행이 있으면 409(가칭 `LATE_CANCELLATION_SUPERSEDED`)로 거절하고, 뒤 실행은 자기 경로(송신 직전 조회·응답의 잔액 변화 → `BALANCE_BLOCKED` → 조회의 전액 취소 확인 → `RefundPaymentConfirmed`, 조회가 멈추면 결정 127 종결)로 끝난다. 선행 실행에 늦은 취소 확인이 있는 후속 실행 요청이 오면 실행을 만들지 않고 PG도 부르지 않으며 수신만 기록한다(영구 실패 아님). 반영과 후속 실행 생성은 선행 실행의 같은 잠금으로 직렬화한다.
+  - Order: Payment가 아직 재신청 시도를 모르는 틈(① 재정지 대기 `PENDING_LICENSE_SUSPENSION`, ② 새 시도를 만들었지만 Payment가 받기 전)에 직전 실패 시도를 가리키는 늦은 취소가 오면, 환불을 `LATE_CANCELLATION_COMPLETED`로, 그 시도를 `LATE_CANCELLED`로 끝낸다. ②의 새 시도는 새 끝 상태(가칭 `SUPERSEDED`)로 닫고, 뒤에 오는 재신청 정지 결과는 기록만 한다(새 시도를 만들지 않음). `PurchaseRefunded`의 정지 요청 ID는 늦은 취소가 확인된 시도의 것이다.
+  - License: `PurchaseRefunded`가 가리킨 정지에 복구 기록이 있으면, 같은 `refundId`의 재신청 정지로 다시 정지돼 있어도 회수한다(구매 근거 `REFUNDED`, 열린 보유권 `ENDED`, 현재 정지 비움). 정지 요청과 회수는 소비 그룹이 달라(`license-suspension`·`license-purchase-refund`) 회수가 먼저 처리될 수 있으므로, `REFUNDED`에 같은 `refundId`의 새 정지 요청이 오면 무변화(Inbox만, 결과 이벤트 없음)다.
+  - Settlement: 같은 환불의 금융 확인 사실은 하나뿐이므로 지금 규칙(두 번째는 영구 실패)을 유지해 결함으로 드러낸다. 모듈 초안 메모의 "같은 취소 ID면 멱등" 안은 택하지 않았다.
+  - 고객: 어느 시점이든 환불 완료와 보유권 회수가 한 번 보인다. ①②는 늦은 취소 완료 안내(`completionNotice`), ③④는 일반 환불 완료다.
+- 구분: 추천 수용
+- 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Order R7.7·시도 상태, Payment R19.3·R19.6·상태 모델 7, License R11-4·E2·E7, Settlement R6.8, 플랫폼 P3.23-9·흐름 3 S14. 1회차 지적 A2·B2 판정은 2회차 함께 평가(결정 178)
+
 ---
 
 ## 검증하며 드러난 것

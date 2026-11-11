@@ -80,7 +80,7 @@
   - 재현: 흉내 서버가 형식 갖춘 409 → 첫 응답 뒤 `HELD`, 재송신 0.
 - [ ] **PA-T12. 운영자 실패 종결·실패 뒤 감시·늦은 취소 반영이 main에 없다** (플랫폼 T4, 결정 128·148·157, (1회차 지적 A2·B2, 판정 전))
   - 어디서: `RefundFailureClosed`·`CloseRefundFailure` 없음(참고 구현 `esd-worktrees/refund-failure-closure`, 커밋 안 됨), `RefundExecution.confirmFailure`가 조회 일정을 멈춤(V21 `chk_refund_execution_failure`가 `FAILED`의 일정 NULL 요구), 웹훅 `wake`는 `refundConfirmedAt is null`만.
-  - 목표: R18·R19, design 상태 모델 6 #14~#17·7. `refund_failure_closure`·`refund_late_cancellation` 표, `FAILED` 실행의 실패 뒤 감시 일정 허용 CHECK, `kind=LATE_CANCELLATION` 목록·경보, 늦은 취소 반영 API(뒤 실행 처리는 M-PA-3), 고객 재시도 사전 확인이 종결 실패를 받음.
+  - 목표: R18·R19, design 상태 모델 6 #14~#17·7. `refund_failure_closure`·`refund_late_cancellation` 표, `FAILED` 실행의 실패 뒤 감시 일정 허용 CHECK, `kind=LATE_CANCELLATION` 목록·경보, 늦은 취소 반영 API(뒤 실행 있으면 409, 확인 뒤 후속 실행 요청은 실행 없이 기록 — 결정 179), 고객 재시도 사전 확인이 종결 실패를 받음.
   - 영향: **돈·보유권** — 실패 종결이 없어 송신이 멈춘 환불이 끝나지 않고, 늦은 취소가 생기면 고객이 돈과 게임을 함께 갖고 판매자가 과지급된다.
   - 재현: #166 `RefundFailureClosureIntegrationTest`(R1 Red→Green 포함), 늦은 취소 — 실패 종결 → 흉내 서버 콘솔 취소 → 조사 목록 → 반영 → `RefundLateCancellationConfirmed` 1건·재요청 무변화.
 - [ ] **MC-P1. 환불 실행 금액 = 원결제액을 DB가 지키지 않는다** (I2)
@@ -208,7 +208,7 @@
 ### 이월 항목 중 이 문서로 옮긴 표
 
 - [x] **MC-P12. 승인 보류 사유 표를 Payment 모듈 설계로 옮긴다** — design "승인 보류 사유 표". 사유 칸 분리는 MC-P4.
-- [ ] **MC-P15. 늦은 취소 반영 API와 확인 기록** (결정 157) — 구현은 PA-T12에 묶었다. 정할 것 중 "같은 결제의 새 실행이 진행 중일 때"는 M-PA-3.
+- [ ] **MC-P15. 늦은 취소 반영 API와 확인 기록** (결정 157) — 구현은 PA-T12에 묶었다. "같은 결제의 새 실행이 진행 중일 때"는 [결정 179](../../../docs/decisions.md#late-cancellation-during-retry)로 정했다(R19.3·R19.6).
 
 ## 진행 중 / 남음
 

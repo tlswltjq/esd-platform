@@ -122,7 +122,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | (없음) | E1 | 같은 주문의 대기 환불 `AWAITING_SALE`이 대조와 PG 근거를 통과 | 허용 → `RECORDED`(사유는 R6.5 규칙) | 대기 환불 `APPLIED`, 월 `addRefund`, `SettlementRefundRecorded` Outbox — 매출 기록과 같은 트랜잭션 | R11.3, 결정 156 |
 | `RECORDED` | E2 | 같은 `eventId`(Inbox 있음) 또는 같은 `refundId`·주문·확인 시각·취소 근거 | 무변화(최초 월·정책·금액, 외부 조회 없음) | 없음 | R6.8 |
 | `RECORDED` | E2 | 다른 `refundId`·다른 본문으로 같은 주문 | 거절 · 영구 실패(`CONFLICT`) | 없음 | R6.8, P2.3-4 |
-| `RECORDED` | E2 | 다른 금융 확인 사실이 같은 `refundId`·결제·금액·취소 ID 집합을 가리킴(재신청 시도의 확인과 실패 시도의 늦은 취소 확인) | `[결정 필요 M-SE-2]`(1회차 지적 A2·B2, 판정 전) | — | R6.8 |
+| `RECORDED` | E2 | 다른 금융 확인 사실이 같은 `refundId`·결제·금액·취소 ID 집합을 가리킴(재신청 시도의 확인과 실패 시도의 늦은 취소 확인) | 거절 · 영구 실패(`CONFLICT`) — Payment 계약 위반을 드러냄(결정 179, 1회차 지적 A2·B2, 판정 전) | 없음 | R6.8 |
 | (없음)·`RECORDED` | E3·H1~H4·J1~J3·O2·O3·Q | — | 무변화(H1·J2·H4는 읽기만) | — | — |
 
 ### 매출 대기 환불 (`AwaitingSaleRefund`, 가칭 — 목표, MC-S3)
@@ -148,7 +148,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | (없음) | E1 | 같은 주문의 대기 환불 없음 | 무변화 | — | — |
 | `AWAITING_SALE` | E2 | 같은 `eventId`(Inbox 있음) | 무변화 | 없음 | R11.2 |
 | `AWAITING_SALE` | E2 | 다른 `eventId`, 같은 주문, 다른 `refundId`나 금액·취소 ID | 거절 · 영구 실패(`CONFLICT`) | 없음 | R11.2 |
-| `AWAITING_SALE` | E2 | 다른 금융 확인 사실이 같은 `refundId`·금액·취소 ID 집합 | `[결정 필요 M-SE-2]` | — | R6.8 |
+| `AWAITING_SALE` | E2 | 다른 금융 확인 사실이 같은 `refundId`·금액·취소 ID 집합 | 거절 · 영구 실패(`CONFLICT`) — Payment 계약 위반을 드러냄(결정 179) | 없음 | R6.8 |
 | `AWAITING_SALE` | E1 | 매출 기록 성공, 원매출 대조와 PG 취소 근거 통과 | 허용 → `APPLIED` | 환불 조정 `RECORDED`(같은 트랜잭션), `applied_at`·`refund_record_id`, `SettlementRefundRecorded` Outbox | R11.3 |
 | `AWAITING_SALE` | E1 | 매출 기록 성공, 원매출과 다름 | 허용 → `CONFLICTED`(`SALE_MISMATCH`) | 매출만 기록, 경보 지표 | R11.4 |
 | `AWAITING_SALE` | E1 | 매출 기록 성공, PG 취소 근거가 전액 취소 아님·취소 ID 다름 | 허용 → `CONFLICTED`(`PG_REFUND_MISMATCH`) | 매출만 기록, 경보 지표 | R11.4 |
@@ -324,7 +324,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 |---|---|---|---|---|
 | `OrderPaid` ([#17](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-paid-order` · `OrderEventListener`(`Topics.ORDER`) | `SettlementOrderMapper.from`: 봉투·본문 `eventId`·`eventType`·키 = `orderNo` 일치, (`eventType`, `schemaVersion`)으로 모양 선택(결정 170, SE-T9), 주문 사실 값 13개 + 선택 칸 `paymentConfirmedAt`(가칭, 없으면 null — 옛 이벤트). `PaidOrder` 생성 검증(UUID `orderNo`, 64자 식별자, `amount > 0`, KRW, 마이크로초 시각) | `RecordPaidSale.execute`. Inbox `(eventId, settlement-paid-order)` + `uk_sale_order_no`·`uk_sale_event_id`·`uk_sale_request_event_id`·`uk_sale_payment_result_event_id`·`uk_sale_payment_id`. 중복 판정 지문 = 주문 사실 값 + `paymentConfirmedAt`(옛 행은 null과 비교, P2.7-3 호환 테스트, MC-S4) | 외부 조회 실패·월 선택 실패 = 재시도 가능, 계약·값 불일치·출처 재사용 = 영구 실패(T20). 소진·영구 실패는 실패 보관 표·키 정지(결정 155·160) |
 | `RefundPaymentConfirmed` ([#28](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-confirmed-refund` · `RefundEventListener`(`Topics.PAYMENT`) | `SettlementRefundMapper.from`: 봉투·본문·키 일치, `schemaVersion` 1(`source` 있음)·2(`source` 없음, T19) 모두 받음. 내부 입력 `ConfirmedRefund`는 `source`를 갖지 않는다(MC-S2) | `RecordConfirmedRefund.execute`. Inbox + `uk_refund_id`·`uk_refund_event`·`uk_refund_order`, 대기 환불 PK `order_no`·`uk_awaiting_refund_id`·`uk_awaiting_event`, 취소 PK `(provider, cancellation_id)` | 원매출 없음 = 대기 환불(R11, 실패 아님). PG 조회 실패·월 선택 실패 = 재시도 가능, 값 불일치·취소 재사용 = 영구 실패 |
-| `RefundLateCancellationConfirmed` ([목표 행](../platform/design.md#목표-행-아직-코드에-없음)) | `settlement-confirmed-refund` · `RefundEventListener`(같은 리스너, 같은 그룹) | `SettlementRefundMapper.from`이 타입별 모양으로 읽어 같은 `ConfirmedRefund`로 바꾼다. 확인 시각 = 이 이벤트의 늦은 취소 확인 시각(R6.13). 필요한 칸(`refundId`·`attemptId`·`requestEventId`·`orderNo`·`paymentId`·`buyerSubject`·`amount`·`currency`·`providerTransactionId`·`cancellationIds`)이 본문에 있어야 한다(초안 메모 F) | 위와 같음. Inbox `event_type`은 받은 값 그대로(P2.1-6) | 위와 같음. 같은 주문에 다른 금융 확인 사실이 이미 반영된 경우는 `[결정 필요 M-SE-2]`(1회차 지적 A2·B2·A5, 판정 전) |
+| `RefundLateCancellationConfirmed` ([목표 행](../platform/design.md#목표-행-아직-코드에-없음)) | `settlement-confirmed-refund` · `RefundEventListener`(같은 리스너, 같은 그룹) | `SettlementRefundMapper.from`이 타입별 모양으로 읽어 같은 `ConfirmedRefund`로 바꾼다. 확인 시각 = 이 이벤트의 늦은 취소 확인 시각(R6.13). 필요한 칸(`refundId`·`attemptId`·`requestEventId`·`orderNo`·`paymentId`·`buyerSubject`·`amount`·`currency`·`providerTransactionId`·`cancellationIds`)이 본문에 있어야 한다(초안 메모 F) | 위와 같음. Inbox `event_type`은 받은 값 그대로(P2.1-6) | 위와 같음. 같은 주문에 다른 금융 확인 사실이 이미 반영된 경우는 영구 실패([결정 179](../../../docs/decisions.md#late-cancellation-during-retry), 1회차 지적 A2·B2·A5, 판정 전) |
 | `Topics.ORDER`·`Topics.PAYMENT`의 그 밖의 타입(`RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed` 포함) | 위 두 그룹 | `EventEnvelope.from`만(헤더 없으면 거절) | 건너뜀, (그룹, 타입) 지표(P2.3-7, SE-T10) | 없음. Settlement는 귀속 보강·실패 사실을 소비하지 않는다(P3.26-4, U5, MC-S2, 1회차 지적 A4·B5, 판정 전) |
 
 ### 발행 (목표, 결정 158 — SE-T3)

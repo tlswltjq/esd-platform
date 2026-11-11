@@ -122,7 +122,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | `refund_cancellation_hold`(V24·V25) | 송신 보류(`HELD`의 근거·재개) | `uq_cancel_hold_id`·`_owner`·`uq_cancel_resume_request`. 목표 사유에 `PG_REQUEST_REJECTED`(결정 133, MC-P9) 추가 | 보류 기록(활성 여부는 `dispatch_state`가 정본) |
 | `refund_closure`(V39) | 장기·귀속 미확정 종결과 귀속 판정 | `uq_refund_closure_request`·`_attempt`, `chk_refund_closure_attribution`·`_outcome`·`_receipt` | 추가 전용 |
 | `refund_failure_closure`(목표, #166 참고 구현) | 운영자 실패 종결 근거 | `attempt_id`·`request_id`·`failure_event_id` 각각 유일 | 추가 전용 |
-| `refund_late_cancellation`(목표 신설, 결정 157) | 늦은 취소 확인 | `attempt_id`·`request_id`·`event_id` 각각 유일, FK RESTRICT, 대상 실행 `FAILED`(코드 가드) | 상태 하나(`CONFIRMED`) — 상태 모델 참조 |
+| `refund_late_cancellation`(목표 신설, 결정 157) | 늦은 취소 확인 | `attempt_id`·`request_id`·`event_id` 각각 유일, FK RESTRICT, 대상 실행 `FAILED`·뒤 실행 없음(코드 가드, 결정 179). `superseded_request_event_id`(만들지 않은 후속 실행 요청, NULL 허용·유일) | 상태 하나(`CONFIRMED`) — 상태 모델 참조 |
 | `refund_investigation`(V27) | 환불 조사 | — | 추가 전용 |
 | `payment_pg_webhook`(V15) | 통지 접수 | 통지 ID 유일 | 추가 전용 |
 | `failed_payment_attempt`(V28) | 실패 시도 이력 | 공급자 거래 ID 유일 | 추가 전용 |
@@ -293,7 +293,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | # | 트리거 \ `status` | (없음) | `PENDING` | `CONFIRMED_UNATTRIBUTED` | `SUCCEEDED` | `FAILED` | 근거 |
 |---|---|---|---|---|---|---|---|
 | 1 | `RefundExecutionRequested` 첫 수신(결제 `PAID`·연결값·금액 일치) | → `PENDING`/`NOT_PREPARED` | 같은 `attemptId`·같은 요청 무변화 / 다른 요청 거절(영구) | 같음 | 같음 | 같음 | R7.1, P3.19-1 |
-| 2 | 후속 실행 요청(`previousAttemptId` = 이 행) | 거절 `CONFLICT`(선행 없음) | 거절 `CONFLICT`(선행 미확정) | 거절 `CONFLICT` | 거절 `CONFLICT` | 후행 없음 → 무변화(후행 새 행 `PENDING`) / 있음 → 거절 `CONFLICT` | R7.14, P3.19-2 |
+| 2 | 후속 실행 요청(`previousAttemptId` = 이 행) | 거절 `CONFLICT`(선행 없음) | 거절 `CONFLICT`(선행 미확정) | 거절 `CONFLICT` | 거절 `CONFLICT` | 늦은 취소 확인 기록 있음 → 무변화(후행 행 만들지 않음, PG 호출 없음, 요청 `eventId`를 확인 기록에 남김, 결정 179) / 후행 없음 → 무변화(후행 새 행 `PENDING`) / 있음 → 거절 `CONFLICT` | R7.14, R19.6, P3.19-2 |
 | 3 | 첫 송신 준비 | — | `NOT_PREPARED` → `SENDING` + `RefundExecutionPrepared`(`confirmationDelayAt`=adapter 기한) / 이미 준비 → 무변화(조회만) | 무변화 | 무변화 | 무변화 | R7.17 |
 | 4 | 송신 응답: PG 접수(받아 둠·실패 기록) | — | `SENDING` → `RECEIPTED` | 무변화 | 무변화 | 무변화 | R7.11 |
 | 5 | 송신 응답: 형식 거절(adapter 분류) | — | `SENDING` → `HELD` + `refund_cancellation_hold` | 무변화 | 무변화 | 무변화 | R7.8, 결정 133 |
@@ -307,7 +307,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 13 | ADMIN 장기·귀속 미확정 종결(근거 맞음) | 404 | 금융 미확정·기한 지남 → `CONFIRMED_UNATTRIBUTED`/`STOPPED` + `RefundPaymentConfirmed` + `refund_closure`(`COMPLETED`) / 기한 전 409 `REFUND_NOT_CLOSABLE` | 종결 기록 없음 → 무변화 + `refund_closure`(`RECORDED`) / 있음 409 | 409 `REFUND_NOT_CLOSABLE` | 409 `REFUND_NOT_CLOSABLE` | R15 |
 | 14 | ADMIN 실패 종결(근거 맞음) | 404 | `HELD`·`BALANCE_BLOCKED`·`WINDOW_ENDED` → `FAILED`/`STOPPED` + `refund_failure_closure` + `RefundFailureClosed` / `SENDING`·`RECEIPTED`·`NOT_PREPARED` 409 `REFUND_NOT_FAILURE_CLOSABLE` | 409 | 409 | 409 | R18 |
 | 15 | ADMIN 실패 종결 근거 아님·장애·lease 경합 | 404 | 무변화 + 409(`REFUND_NOT_FAILURE_CLOSABLE`·`CLOSURE_PG_UNAVAILABLE`·`REFUND_CLOSURE_BUSY`) | 409 | 409 | 409 | R18.3 |
-| 16 | ADMIN 늦은 취소 반영 | 404 | 409 `LATE_CANCELLATION_NOT_ELIGIBLE`(가칭) | 409 | 409 | 근거 전액 `CANCELLED`·확인 기록 없음 → 무변화 + `refund_late_cancellation` + `RefundLateCancellationConfirmed`(뒤 실행 있음은 M-PA-3) / 근거 아님 409 | R19.3·R19.4 |
+| 16 | ADMIN 늦은 취소 반영 | 404 | 409 `LATE_CANCELLATION_NOT_ELIGIBLE`(가칭) | 409 | 409 | 근거 전액 `CANCELLED`·확인 기록 없음 → 무변화 + `refund_late_cancellation` + `RefundLateCancellationConfirmed` / 뒤 실행 있음 → 409 `LATE_CANCELLATION_SUPERSEDED`(PG 조회 없음, 결정 179) / 근거 아님 409 | R19.3·R19.4 |
 | 17 | 실패 뒤 감시 조회 | — | 무변화(대상 아님) | 무변화 | 무변화 | 무변화(전액 취소면 #9 마지막 칸) | R19.1 |
 | 18 | 공급자 취소 계열 통지 | — | 무변화(조회 앞당김) | 무변화 | 무변화 | 무변화(실패 뒤 감시 앞당김) | R6.7·R6.9 |
 | 19 | `SettlementRefundRecorded` 수신 | 거절(영구) | 거절(영구: 금융 확인 없음) | 무변화 + 정산 응답 ID 기록 | 같음 | 늦은 취소 확인 있음 → 그 기록에 응답 ID / 없음 → 거절(영구) | R20.1 |
@@ -336,9 +336,9 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | ADMIN 반영 요청, 근거가 전액 `CANCELLED` 아님·대조 실패 | 거절 409(기록 없음) | 거절 409 | R19.3 |
 | ADMIN 반영 요청, PG 조회 장애 | 거절 409 `CLOSURE_PG_UNAVAILABLE` | 거절 409 | 흐름 3 S14 |
 | ADMIN 반영 요청, 실행이 `FAILED` 아님 | 거절 409 `LATE_CANCELLATION_NOT_ELIGIBLE` | — | R19.3 |
-| ADMIN 반영 요청, 같은 환불의 뒤 실행 있음 | `[결정 필요 M-PA-3]` | 거절 409 | R19.3 |
+| ADMIN 반영 요청, 같은 환불의 뒤 실행 있음 | 거절 409 `LATE_CANCELLATION_SUPERSEDED`(가칭, 기록 없음, PG 조회 없음 — 뒤 실행이 자기 경로로 끝남, 결정 179) | 거절 409 | R19.3 |
 | `SettlementRefundRecorded` 수신 | 거절(영구) | 무변화 + 응답 ID 기록 | R20.1 |
-| 고객 재시도 사전 확인(같은 결제) | 무변화(이전 실패로 봄) | 거절(이미 환불된 결제) | R19.6 |
+| 고객 재시도 사전 확인(같은 결제) | 무변화(이전 실패로 봄) | 이미 환불된 결제로 봄 → 후속 실행을 만들지 않고 PG를 부르지 않음, `superseded_request_event_id` 기록(영구 실패 아님, 결정 179) | R19.6 |
 
 ## API 계약
 

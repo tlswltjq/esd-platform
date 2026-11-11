@@ -303,10 +303,10 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 #### 수용 기준
 1. WHILE 실행이 `FAILED`(PG 확정 실패·운영자 종결 실패)이면 THE Payment SHALL 낮은 빈도로 PG를 계속 조회한다. 간격은 `min(상한, max(시작값, 경과))`(결정 122 모양, 상한 10분 이하, 환불 전용 설정 키)이고, 상태·보유권·환불을 자동으로 바꾸지 않는다(P3.23-5).
 2. WHEN 그 조회가 원결제 전액 취소를 보면 THEN Payment SHALL 실행을 다시 열지 않고 조사 목록(`kind=LATE_CANCELLATION`)과 경보에 올린다. 실패한 실행의 `refund_confirmed_at`은 쓰지 않는다(I18).
-3. WHEN ADMIN이 늦은 취소 반영(가칭 `POST /api/v1/admin/refund-delays/{attemptId}/late-cancellation`, `{requestId, note}`)을 요청하면 THEN Payment SHALL 대상이 그 환불의 `FAILED` 실행이고 늦은 취소 확인 기록이 없을 때만, 트랜잭션 밖 PG 재조회에서 원결제가 전액 `CANCELLED`인지 확인한다. 같은 환불의 뒤 실행이 있을 때의 처리는 `[결정 필요 M-PA-3]`이다((1회차 지적 A2·B2, 판정 전), MC-P15).
+3. WHEN ADMIN이 늦은 취소 반영(가칭 `POST /api/v1/admin/refund-delays/{attemptId}/late-cancellation`, `{requestId, note}`)을 요청하면 THEN Payment SHALL 대상이 그 환불의 `FAILED` 실행이고 늦은 취소 확인 기록이 없을 때만, 트랜잭션 밖 PG 재조회에서 원결제가 전액 `CANCELLED`인지 확인한다. IF 같은 환불에 그 실행을 `previousAttemptId`로 가리키는 뒤 실행이 있으면 THEN Payment SHALL PG를 조회하지 않고 409 `LATE_CANCELLATION_SUPERSEDED`(가칭)로 거절하며, 뒤 실행은 자기 경로(R7.3 `BALANCE_BLOCKED` → R7.4 조회 확인, 멈추면 R15 종결)로 끝난다([결정 179](../../../docs/decisions.md#late-cancellation-during-retry), (1회차 지적 A2·B2, 판정 전), MC-P15).
 4. WHEN 근거가 성립하면 THEN Payment SHALL 실행 잠금 트랜잭션에서 대상 조건을 다시 확인하고, 늦은 취소 확인 기록(`refund_late_cancellation`: 시도 ID·ADMIN·`requestId`·PG 근거 스냅샷·관측 시각·확인 시각)과 `RefundLateCancellationConfirmed` Outbox를 한 트랜잭션에 쓴다. 근거가 아니면 409로 거절한다(P3.23-7, P4.7-5).
 5. THE 시스템 SHALL 늦은 취소 반영을 스스로 하지 않는다. ADMIN 요청만 반영한다(결정 128 C 기각 유지).
-6. THE 늦은 취소 반영과 실패 뒤 조회·고객 재시도 사전 확인 SHALL 같은 실행 잠금으로 직렬화하고, 반영 뒤의 재시도 사전 확인은 이미 환불된 결제로 본다(흐름 3 S14 "동시 진행").
+6. THE 늦은 취소 반영과 실패 뒤 조회·고객 재시도 사전 확인 SHALL 같은 실행 잠금으로 직렬화하고, 반영 뒤의 재시도 사전 확인은 이미 환불된 결제로 본다(흐름 3 S14 "동시 진행"). WHEN 선행 실행에 늦은 취소 확인 기록이 있는 후속 실행 요청(`RefundExecutionRequested`, `previousAttemptId`)을 받으면 THEN Payment SHALL 실행을 만들지 않고 PG를 부르지 않으며, Inbox와 수신 기록만 남긴다(영구 실패 아님). Order는 같은 늦은 취소 확인으로 그 시도를 `SUPERSEDED`로 닫는다([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)).
 
 ### R20. 정방향 응답 대기 ([결정 158](../../../docs/decisions.md#forward-gap-counting)·[결정 159](../../../docs/decisions.md#forward-gap-threshold))
 **사용자 스토리:** 운영자로서, Payment가 낸 돈의 사실이 다른 모듈에 끝내 반영되지 않은 건을 Payment 자기 기록으로 세고 싶다.

@@ -326,6 +326,7 @@
 6. WHEN 고객 재시도의 사전 확인이 이전 실패를 찾으면 THEN Payment SHALL PG FAILED 기록이 없는 운영자 종결 실패도 이전 실패로 받는다.
 7. WHEN ADMIN이 실패로 끝난 환불 시도의 늦은 취소 반영을 요청하면 THEN Payment SHALL 트랜잭션 밖 PG 재조회에서 원결제가 전액 `CANCELLED`일 때만 반영하고, 아니면 409로 거절한다. 반영할 때 Payment SHALL 실패한 시도를 다시 열지 않고 그 시도의 `refund_confirmed_at`도 쓰지 않으며(I18), 늦은 취소 확인 기록(ADMIN·요청 ID·PG 근거 스냅샷·시각)과 `RefundLateCancellationConfirmed` Outbox를 한 트랜잭션에 쓴다. 시스템은 이 반영을 스스로 하지 않는다([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), T4).
 8. WHEN Order가 `RefundLateCancellationConfirmed`를 처음 받으면 THEN Order SHALL 그 환불을 명시 전이로 늦은 취소 완료 끝 상태(이름은 Order 모듈 스펙)로 바꾸고 `PurchaseRefunded`를 낸다. WHEN License가 그 `PurchaseRefunded`를 받으면 THEN License SHALL 복구로 `ACTIVE`가 된 보유권도 `REFUNDED`로 바꾼다. WHEN Settlement가 `RefundLateCancellationConfirmed`를 처음 받으면 THEN Settlement SHALL 환불 조정을 기록한다(월 규칙 결정 42·130, 원매출이 없으면 결정 156). 고객에게는 환불 완료와 보유권 회수를 안내한다(결정 157).
+9. IF 같은 환불에 고객 재신청이 이미 접수돼 있으면 THEN 시스템 SHALL 그 환불의 금융 확인 사실을 하나만 낸다. Payment는 마지막 실행이 `FAILED`일 때만 늦은 취소를 반영하고 뒤 실행이 있으면 409로 거절하며(뒤 실행이 자기 조회로 끝남), 반영 뒤 온 후속 실행 요청으로는 실행을 만들지 않는다. Payment가 아직 재신청을 모르는 틈에 반영되면 Order는 늦은 취소 완료로 끝내고 만든 새 시도를 닫으며, License는 같은 `refundId`의 재신청 정지 중에도 회수한다. Settlement는 두 번째 사실을 흡수하지 않는다([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)).
 
 #### P3.24 복구와 재신청 (Order → License → Order)
 

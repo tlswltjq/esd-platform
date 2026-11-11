@@ -83,7 +83,7 @@
 | 열 | 뜻 | 제약 |
 |---|---|---|
 | `attempt_id`·`refund_id`·`attempt_no`·`previous_attempt_id`·`started_at` | 식별·순번·이전 시도·Order 시각 | `uk_order_refund_attempt_id`, `uk_order_refund_attempt_no(refund_id, attempt_no)`, `previous_attempt_id` 유일, FK |
-| `status` | 시도 상태 | 목표 `CHECK (status IN ('PENDING','COMPLETED','FAILED','LATE_CANCELLED'))` (MC-O2, 결정 164) |
+| `status` | 시도 상태 | 목표 `CHECK (status IN ('PENDING','COMPLETED','FAILED','LATE_CANCELLED','SUPERSEDED'))` (MC-O2, 결정 164·179) |
 | `suspension_request_event_id`·`suspension_event_id`·`suspension_occurred_at`·`license_id` | 이 시도의 정지 근거 | 유일 |
 | `execution_request_event_id` | `RefundExecutionRequested.eventId` | 유일 |
 | `preparation_event_id`·`first_refund_prepared_at`·`confirmation_delay_at`·`preparation_fingerprint` | 준비 사실(받은 값 그대로) | `uk_order_attempt_preparation` |
@@ -214,14 +214,14 @@
 | (없음) | = (지급 근거만 저장, 주문 표 ⑪) | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | = (소비 안 함) |
 | `PENDING_REVIEW` | = (근거 저장) | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | = |
 | `PENDING_LICENSE_GRANT` | 첫 근거·연결 일치 → `PENDING_LICENSE_SUSPENSION` + `LicenseSuspensionRequested` / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | = |
-| `PENDING_LICENSE_SUSPENSION` | 재전달 = / ✕ | 현재 정지 요청과 일치: 첫 정지 → `PENDING_PAYMENT_REFUND` + 시도 1 + `RefundExecutionRequested`, 재신청 → `PENDING_PAYMENT_REFUND` + 시도 n+1(`previousAttemptId`) + `RefundExecutionRequested` / 재전달 = / ✕ | 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | ✕ | 이전 시도 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | 재신청 접수됨(지정 = 현재 실패 시도): M-OR-1 / 첫 정지: ✕ | ✕ | = |
+| `PENDING_LICENSE_SUSPENSION` | 재전달 = / ✕ | 현재 정지 요청과 일치: 첫 정지 → `PENDING_PAYMENT_REFUND` + 시도 1 + `RefundExecutionRequested`, 재신청 → `PENDING_PAYMENT_REFUND` + 시도 n+1(`previousAttemptId`) + `RefundExecutionRequested` / 재전달 = / ✕ | 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | ✕ | 이전 시도 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | 재신청 접수됨·지정 = 현재 실패 시도(①) → `LATE_CANCELLATION_COMPLETED` + 시도 `LATE_CANCELLED` + `PurchaseRefunded`(정지 = 지정 시도의 정지), 늦게 오는 재신청 정지는 기록만([결정 179](../../../docs/decisions.md#late-cancellation-during-retry)) / 첫 정지: ✕ | ✕ | = |
 | `PENDING_APPROVAL_STOP` | 재전달 = / ✕ | 중단된 정지 요청과 일치·첫 → = (중단 단계 `SUSPENSION_OBSERVED` + `LicenseApprovalCorrectionRequested`) / 재전달 = / ✕ | 중단·복구 요청·정지·`licenseId` 일치 → `PENDING_REVIEW`(정정 회차, 단계 `REOPENED`, `suspension_request_event_id` 비움) / ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | = |
-| `PENDING_PAYMENT_REFUND` | 재전달 = / ✕ | 현재 시도 정지 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도·식별자 일치·첫 → = (시도에 준비 기록) / 재전달 = / ✕ | 현재 시도 `PENDING`·식별자·금액 일치 → `COMPLETED` + 시도 `COMPLETED` + `PurchaseRefunded` / ✕ | 현재 시도 `PENDING` 일치 → `PENDING_LICENSE_RESTORATION` + 시도 `FAILED` + `LicenseRestorationRequested` / 이전 시도 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | 지정 = 이전 실패 시도(새 시도 진행 중): M-OR-1 / ✕ | ✕ | = |
-| `PENDING_LICENSE_RESTORATION` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도 일치 → = (늦게 온 준비 기록) / 재전달 = / ✕ | ✕ (I18) | 같은 실패 재전달 = / ✕ | 현재 시도·복구 요청·실패·정지·`licenseId` 일치 → `FAILED`(+ `purchase_returned_to_storage`) / ✕ | 지정 = 현재 시도 → `LATE_CANCELLATION_COMPLETED` + 시도 `LATE_CANCELLED` + `PurchaseRefunded` / 지정 ≠ 현재(재신청 시도가 다시 실패): M-OR-1 / ✕ | ✕ | = |
-| `FAILED` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도 일치 → = / 재전달 = / ✕ | ✕ (I18) | 재전달 = / ✕ | 재전달 = / ✕ | 지정 = 현재 시도 → `LATE_CANCELLATION_COMPLETED` + 시도 `LATE_CANCELLED` + `PurchaseRefunded` / 지정 ≠ 현재: M-OR-1 / ✕ | ✕ | = |
+| `PENDING_PAYMENT_REFUND` | 재전달 = / ✕ | 현재 시도 정지 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도·식별자 일치·첫 → = (시도에 준비 기록) / 재전달 = / ✕ | 현재 시도 `PENDING`·식별자·금액 일치 → `COMPLETED` + 시도 `COMPLETED` + `PurchaseRefunded` / ✕ | 현재 시도 `PENDING` 일치 → `PENDING_LICENSE_RESTORATION` + 시도 `FAILED` + `LicenseRestorationRequested` / 이전 시도 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | 지정 = 직전 실패 시도·현재 시도 `PENDING`(②) → `LATE_CANCELLATION_COMPLETED` + 지정 시도 `LATE_CANCELLED` + 현재 시도 `SUPERSEDED` + `PurchaseRefunded`(정지 = 지정 시도의 정지). Payment는 현재 시도의 실행 요청을 받아도 실행을 만들지 않는다(결정 179) / ✕ | ✕ | = |
+| `PENDING_LICENSE_RESTORATION` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도 일치 → = (늦게 온 준비 기록) / 재전달 = / ✕ | ✕ (I18) | 같은 실패 재전달 = / ✕ | 현재 시도·복구 요청·실패·정지·`licenseId` 일치 → `FAILED`(+ `purchase_returned_to_storage`) / ✕ | 지정 = 현재 시도 → `LATE_CANCELLATION_COMPLETED` + 시도 `LATE_CANCELLED` + `PurchaseRefunded` / 지정 ≠ 현재: ✕ (Payment는 그 환불의 마지막 실행에만 반영, 결정 179) | ✕ | = |
+| `FAILED` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도 일치 → = / 재전달 = / ✕ | ✕ (I18) | 재전달 = / ✕ | 재전달 = / ✕ | 지정 = 현재 시도 → `LATE_CANCELLATION_COMPLETED` + 시도 `LATE_CANCELLED` + `PurchaseRefunded` / 지정 ≠ 현재: ✕ (결정 179) | ✕ | = |
 | `REJECTED` | = (근거 저장) | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | = |
 | `COMPLETED` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 현재 시도 일치 → = / 재전달 = / ✕ | 같은 지문 = / ✕ | 이전 시도 재전달 = / ✕ | 이전 시도 재전달 = / ✕ | ✕ | 환불·구매 연결 일치 → = (응답 기록, R10.3) / ✕ | = |
-| `LATE_CANCELLATION_COMPLETED` | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | 재전달 = / ✕ | 현재 시도 복구 요청과 일치(복구 대기 중 늦은 취소가 먼저 반영된 경우) → = (복구 근거·보관함 반환 기록) / 재전달 = / ✕ | 같은 확인 재전달 = / ✕ | 연결 일치 → = (응답 기록) / ✕ | = |
+| `LATE_CANCELLATION_COMPLETED` | 재전달 = / ✕ | 지정 시도의 재신청 정지(`retry_suspension_request_event_id`)와 일치 → = (기록만, 새 시도 없음, 결정 179) / 재전달 = / ✕ | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | 재전달 = / ✕ | 현재 시도 복구 요청과 일치(복구 대기 중 늦은 취소가 먼저 반영된 경우) → = (복구 근거·보관함 반환 기록) / 재전달 = / ✕ | 같은 확인 재전달 = / ✕ | 연결 일치 → = (응답 기록) / ✕ | = |
 
 | 직교 칸 | 동작 |
 |---|---|
@@ -239,16 +239,18 @@
 | `COMPLETED` | 원결제 전액 취소가 확인돼 이 시도로 환불이 끝남(귀속은 Payment 정본, 결정 164) |
 | `FAILED` | 실패 확정(출처 `failure_source`). 복구 완료·재신청 접수는 근거 ID로 남고 상태는 환불 표가 정본 |
 | `LATE_CANCELLED` | 실패 확정 뒤 늦은 전액 취소가 확인됨(끝). 실패 사실은 지우지 않음 |
+| `SUPERSEDED`(가칭) | 재신청으로 만든 시도인데 PG 실행 전에 직전 시도의 늦은 취소로 환불이 끝나 닫힘(끝, 결정 179). 금융 결과·실패 사실 없음. 환불이 `LATE_CANCELLATION_COMPLETED`일 때만 생긴다(코드 가드) |
 
 트리거: E2 `LicenseSuspended`(이 시도를 만드는 정지 / 이 시도의 정지 재전달) · E4 · E5 · E6 · E7 · H6 재신청(이 시도를 `previousAttemptId`로 지정) · E8 · E10.
 
 | 상태 \ 트리거 | E2 | E4 | E5 | E6 | E7 | H6 | E8 | E10 |
 |---|---|---|---|---|---|---|---|---|
 | (없음) | → `PENDING`(순번 1 또는 이전+1, 정지 근거·`licenseId`·`executionRequestEventId`) | ✕ | ✕ | ✕ | ✕ | 409 | ✕ | = |
-| `PENDING` | 재전달 = / ✕ | 첫 → = (준비 기록, 받은 값 그대로) / 재전달 = / ✕ | → `COMPLETED` | → `FAILED`(`failure_source`·`failure_event_id`·`closure_id`·복구 요청 ID·`restoration_requested_at`) | ✕ | 409 | ✕ | = |
+| `PENDING` | 재전달 = / ✕ | 첫 → = (준비 기록, 받은 값 그대로) / 재전달 = / ✕ | → `COMPLETED` | → `FAILED`(`failure_source`·`failure_event_id`·`closure_id`·복구 요청 ID·`restoration_requested_at`) | ✕ | 409 | 환불 표 E8 ② → `SUPERSEDED`(결정 179) / ✕ | = |
 | `COMPLETED` | 재전달 = / ✕ | 첫 → = / 재전달 = / ✕ | 같은 지문 = / ✕ | ✕ (I18) | ✕ | 409 | ✕ | = |
-| `FAILED` | 재신청 정지 → 이 시도 = (새 시도 생성, 환불 표) / 재전달 = / ✕ | 첫 → = / 재전달 = / ✕ | ✕ (I18) | 같은 실패 = / ✕ | 복구 요청·실패·정지·`licenseId` 일치·첫 → = (`restored_event_id`·`restored_at`(License 값)) / 재전달 = / ✕ | 복구 완료(`restored_event_id` 있음)·현재 시도·첫 → = (`retry_requested_at`·`retry_suspension_request_event_id`) / 같은 지정 = / 복구 전 409 | 환불 표 E8 허용 조건 → `LATE_CANCELLED` / M-OR-1 / ✕ | = |
+| `FAILED` | 재신청 정지 → 이 시도 = (새 시도 생성, 환불 표) / 재전달 = / ✕ | 첫 → = / 재전달 = / ✕ | ✕ (I18) | 같은 실패 = / ✕ | 복구 요청·실패·정지·`licenseId` 일치·첫 → = (`restored_event_id`·`restored_at`(License 값)) / 재전달 = / ✕ | 복구 완료(`restored_event_id` 있음)·현재 시도·첫 → = (`retry_requested_at`·`retry_suspension_request_event_id`) / 같은 지정 = / 복구 전 409 | 환불 표 E8 허용 조건(재신청 ①·②의 지정 시도 포함, 결정 179) → `LATE_CANCELLED` / ✕ | = |
 | `LATE_CANCELLED` | 재전달 = / ✕ | 재전달 = / ✕ | ✕ | 재전달 = / ✕ | 늦은 복구 완료 일치 → = (근거 기록) / ✕ | 409 | 재전달 = / ✕ | = |
+| `SUPERSEDED` | 재전달 = / ✕ | ✕ | ✕ | ✕ | ✕ | 409 | 같은 확인 재전달 = / ✕ | = |
 
 ### 심사 회차 `RefundReviewRound.decision`과 승인 중단 `stop_stage`(`order_refund_review_round`)
 
@@ -334,7 +336,7 @@
 | `RefundExecutionFailed`(#38, Payment 토픽만) | `order-refund-restoration` · `RefundRestorationEventListener`(토픽·타입 짝 대조) → `RefundFailureConfirmationMapper` → `ApplyRefundRestoration` | 시도 `failure_event_id` 유일 | 환불 표 E6 |
 | `RefundFailureClosed`(목표 행, Payment 토픽만) | 같은 그룹·리스너, Mapper가 같은 입력 + 출처 `OPERATOR_FAILURE_CLOSED`·`closureId` | `failure_event_id` 유일 | 근거 상세 칸이 없어도 거절하지 않음(T4) |
 | `LicenseRestored`(#42, License 토픽만) | 같은 그룹·리스너 → `LicenseRestorationConfirmationMapper` → `ApplyRefundRestoration` | 시도 `restored_event_id` 유일 | 환불 표 E7 |
-| `RefundLateCancellationConfirmed`(목표 행, Payment 토픽만) | `order-refund-restoration`(실패 사실과 같은 토픽·키·그룹이라 실패 확정 뒤에 처리됨) · `RefundRestorationEventListener` → (목표) `LateCancellationMapper` → `ApplyLateCancellation` | `order_refund.late_cancellation_event_id` 유일 | 환불 표 E8, 재신청 진행 중은 M-OR-1 (1회차 지적 A5, 판정 전) |
+| `RefundLateCancellationConfirmed`(목표 행, Payment 토픽만) | `order-refund-restoration`(실패 사실과 같은 토픽·키·그룹이라 실패 확정 뒤에 처리됨) · `RefundRestorationEventListener` → (목표) `LateCancellationMapper` → `ApplyLateCancellation` | `order_refund.late_cancellation_event_id` 유일 | 환불 표 E8, 재신청 진행 중은 결정 179 (1회차 지적 A5, 판정 전) |
 | `SettlementSaleRecorded`(가칭, 목표 행) | (신설) `order-settlement-sale` · `SettlementEventListener` → `RecordForwardResponse` | `order_forward_response(order_no, response_type)` | 주문 `PAID` 아님·연결 불일치 ✕ (1회차 지적 B4, 판정 전) |
 | `LicenseRefundApplied`(가칭, 목표 행) | (신설) `order-license-refund` · `LicenseEventListener`(License 토픽) → `RecordForwardResponse` | 같음 | 환불 `COMPLETED`·`LATE_CANCELLATION_COMPLETED` 아님 ✕ |
 
