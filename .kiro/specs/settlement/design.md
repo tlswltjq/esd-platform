@@ -19,6 +19,7 @@
 | `seller_monthly_settlement` (`SellerMonthlySettlement`) | `uk_seller_month(seller_subject, settlement_month)` | `ck_month_allocation`(V8), `ck_month_refund_allocation`(V10), `ck_month_closed`(V6: `OPEN`이면 `closed_at` NULL, `CLOSED`면 NOT NULL — 이 식이 `status`를 두 값으로 제한한다) | 목표: `CLOSED` 행의 합계·건수·`closed_at`·`status` 변경을 DB가 거절(트리거, MC-S1) |
 | `settlement_refund` (`SettlementRefund`) + `settlement_refund_cancellation` | `uk_refund_id`·`uk_refund_order`·`uk_refund_event`, FK `fk_refund_sale(order_no, payment_id, provider, provider_transaction_id)`, 취소 PK `(provider, cancellation_id)` | `ck_refund_money`, `ck_refund_source`. 목표 추가: `month_reason IN ('CONFIRMED_MONTH','CLOSED_MONTH_ROLLOVER')`, `settlement_month >= refund_month`(SE-T6), `source IS NULL OR source IN (…)`(MC-S2) | 불변. `source`는 SP-5의 사본이라 새 행은 NULL, 옛 행 호환(MC-S2, T19). 목표 칸 `confirmation_event_type`(어느 금융 확인 사실로 반영했는지, SE-T4) |
 | (목표) `settlement_refund_awaiting_sale` (`AwaitingSaleRefund`, 가칭) + `settlement_refund_awaiting_cancellation` | PK `order_no`(주문당 하나), `uk_awaiting_refund_id(refund_id)`, `uk_awaiting_event(event_id)`, 취소 PK `(order_no, cancellation_id)` | `status IN ('AWAITING_SALE','APPLIED','CONFLICTED')`; `AWAITING_SALE` ⇔ `applied_at`·`refund_record_id`·`conflict_code` 모두 NULL; `APPLIED` ⇔ `applied_at`·`refund_record_id` NOT NULL, `conflict_code` NULL; `CONFLICTED` ⇔ `conflict_code IN ('SALE_MISMATCH','PG_REFUND_MISMATCH')`·`conflicted_at` NOT NULL. `amount>0`·KRW | 받은 확인의 칸 전부(`event_id`·`event_type`·`confirmed_at`·`refund_id`·`attempt_id`·`request_event_id`·`payment_id`·`buyer_subject`·`amount`·`currency`·`provider_transaction_id`)와 `received_at`. FK `refund_record_id → settlement_refund(id)`(MC-S3) |
+| (목표) 매출 대기 환불 재검증 이력 | 보관 환불과 실행 건 식별 | 성공·불일치 결과와 근거를 보존 | 실행자(JWT `sub`)·실행 사유·검사 시각·결과·대조 근거 식별자. 이력은 추가만 하고 받은 금융 확인 사실은 수정하지 않는다(R11.8~10, 결정 195) |
 | `settlement_seller_lock` (`SellerLock`) | PK `seller_subject` | — | V14. 업무 값 없음. 첫 반영·마감 때 삽입 |
 | `settlement_seller_carryover` (`SellerCarryover`) | `uk_seller_carryover_month(seller_subject, settlement_month)`, `uk_seller_carryover_source(seller_subject, source_month)`(V15) | `ck_seller_carryover_amount`·`ck_seller_carryover_source`(V13) | 마감 트랜잭션에서 한 번 삽입, 불변 |
 | `settlement_pg_transaction` (`PgTransactionRecord`) | `uk_pg_transaction_payment`·`_order`·`_identity`·`_link` | `ck_pg_transaction_money`, `ck_pg_transaction_funding`(V9: 전부 없음 또는 전부 검증) | 불변. 목표: V9 CHECK의 공급자 상수(`provider='PORTONE_TEST'`·`provider_channel_type='TEST'`·`provider_pg_provider='TOSSPAY_V2'`)를 중립 환경 칸 기준으로 바꾸되 옛 행 호환(SE-T1, M-SE-3) |
@@ -74,7 +75,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | J3 | 대기 환불 게이지 수집 | 예약 작업(지표) | (목표) 대기 환불 게이지 |
 | O1 | 실패 보관 표 재투입 | 운영자 | 공통(결정 160) → E1·E2와 같은 행 |
 | O2 | Outbox 재발행 | 운영자 | 공통(결정 161). Outbox 행만 `SENT → PENDING`, 업무 상태 무변화 |
-| O3 | 매출 대기 환불 운영자 처리 | 운영자 | `[결정 필요 M-SE-1]` |
+| O3 | (목표, 가칭) `POST /api/v1/settlements/awaiting-refunds/{orderNo}/revalidate` | HTTP(ADMIN) | `RevalidateAwaitingRefund`(가칭), R11.8~12·결정 195 |
 | Q | 모든 `GET` 조회 | HTTP | 상태를 바꾸지 않고 행을 만들지 않는다(R8.6) |
 
 ### 원매출 (`SettlementSale`)
@@ -131,8 +132,8 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 |---|---|
 | (없음) | 기다리는 환불이 없다 |
 | `AWAITING_SALE` | 받을 때 검증을 마친 금융 확인을 보관했고 원매출을 기다린다 |
-| `APPLIED` | 원매출 기록 트랜잭션에서 대조를 통과해 환불 조정(`refund_record_id`)으로 반영했다. 끝 상태 |
-| `CONFLICTED` | 원매출 또는 PG 취소 근거와 맞지 않아 반영하지 않았다(`conflict_code`). 경보. 처리 경로는 `[결정 필요 M-SE-1]` |
+| `APPLIED` | 원매출 접수 또는 운영자 재검증 트랜잭션에서 대조를 통과해 환불 조정(`refund_record_id`)으로 반영했다. 끝 상태 |
+| `CONFLICTED` | 원매출 또는 PG 취소 근거와 맞지 않아 반영하지 않았다(`conflict_code`). 경보. 원인 해소 뒤 O3로 재검증(R11.8~12, 결정 195) |
 
 받을 때와 반영할 때의 검증 경계([결정 156](../../../docs/decisions.md#refund-awaiting-sale)이 모듈 스펙에 맡김):
 
@@ -154,13 +155,13 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | `AWAITING_SALE` | E1 | 매출 기록 성공, PG 취소 근거가 전액 취소 아님·취소 ID 다름 | 허용 → `CONFLICTED`(`PG_REFUND_MISMATCH`) | 매출만 기록, 경보 지표 | R11.4 |
 | `AWAITING_SALE` | E1 | PG 승인·소유자·취소 조회 실패, 매출 대조 실패, 월 선택 실패 | 무변화(매출 트랜잭션과 함께 롤백, E1은 재시도 가능 또는 영구 실패) | 없음 | R11.3 |
 | `AWAITING_SALE` | J3 | — | 무변화 | 건수·최장 대기 게이지에 셈 | R11.6 |
-| `AWAITING_SALE` | O3 | — | `[결정 필요 M-SE-1]`(원매출이 끝내 오지 않는 경우 포함, 경보 기준은 결정 159) | — | R11.4·R11.6 |
+| `AWAITING_SALE` | O3 | 원매출 없음 / 있음 | 없음이면 409·무변화 / 있으면 R11.8~10의 재검증 | 일치 시 환불 조정·`APPLIED`·확인 Outbox·이력, 불일치 시 `CONFLICTED`·이력 | R11.8~12, 결정 195 |
 | `APPLIED` | E1·E2 | 재전달 | 무변화(원매출·환불 조정의 멱등이 처리) | 없음 | R1.4·R6.8 |
 | `CONFLICTED` | E1 | 재전달 | 무변화 | 없음 | R1.4 |
 | `CONFLICTED` | E2 | 같은 `eventId` / 그 밖 | 무변화 / 거절 · 영구 실패(`CONFLICT`) | 없음 | R11.2 |
 | `CONFLICTED` | J3 | — | 무변화 | `CONFLICTED` 게이지(1건부터 경보) | R11.6 |
-| `CONFLICTED` | O3 | — | `[결정 필요 M-SE-1]` | — | R11.4 |
-| `APPLIED` | J3·O3 | — | 무변화 / 거절(`CONFLICT`, 끝난 건) | — | — |
+| `CONFLICTED` | O3 | 원매출·PG 취소 근거와 재대조 | 일치 → `APPLIED` / 불일치 → `CONFLICTED`·409 | 일치 시 환불 조정·월 환불 합계·확인 Outbox·성공 이력, 불일치 시 사유·대조 이력 | R11.8~12, 결정 195 |
+| `APPLIED` | J3·O3 | — | 무변화 | J3: 대기 게이지 제외. O3: 외부 조회 없이 최초 반영 결과 반환 | R11.11, 결정 195 |
 | 모두 | E3·H1~H4·J1·J2·O2·Q | — | 무변화(H1은 대기 환불을 읽지 않는다, R11.7) | — | R11.7 |
 
 ### 판매자 월 (`SellerMonthlySettlement`)
@@ -197,7 +198,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | `settlement_seller_carryover` | 없음 / 있음(불변) | 마감 때 한 번 삽입. `sourceMonth` = 앞의 마지막 `CLOSED` 월(없으면 NULL, `carriedIn = 0`) | `CloseSellerMonth.carry`(`:145`), `SellerMonthBalance.settle`·`of` |
 | 월 응답 `carriedIn`·`payable`·`carriedOut` | `OPEN`이면 `null` / `CLOSED`·원장 있음이면 원장 값 / `CLOSED`·원장 없음(V13 이전)이면 `carriedIn = 0`과 순액으로 계산 | 조회 때 계산, 저장 값 불변 | `SellerMonthBalance.of` |
 
-잠금 순서: 환불은 원매출 행(`lockByOrderNo`) → 판매자 잠금 → 월 행. 매출은 판매자 잠금 → 월 행 → (원매출 삽입 뒤) 대기 환불. 마감은 판매자 잠금 → 월 행. 마감은 원매출·대기 환불을 잠그지 않아 순환 대기가 없다. 대기 환불 저장은 원매출 잠금 읽기만 하고 판매자 잠금을 잡지 않는다(판매자 미정).
+잠금 순서: 환불은 원매출 행(`lockByOrderNo`) → 판매자 잠금 → 월 행. 매출은 판매자 잠금 → 월 행 → (원매출 삽입 뒤) 대기 환불. 마감은 판매자 잠금 → 월 행. O3 재검증도 원매출 → 판매자 → 월 → 보관 환불 순서로 잠그고 반영 직전 상태를 다시 확인한다. PG 조회는 잠금·업무 트랜잭션 밖이다. 마감은 원매출·대기 환불을 잠그지 않아 순환 대기가 없다. 대기 환불 저장은 원매출 잠금 읽기만 하고 판매자 잠금을 잡지 않는다(판매자 미정).
 
 ### PG 승인 근거·비용 (`PgTransactionRecord`·`PgFeeRecord`)
 
@@ -310,7 +311,8 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | GET | `/api/v1/settlements/pg-payouts` · `/items` | ADMIN | 월·필터 | 보고 지급일 기준 월별 거래액·수수료·VAT·순액, 정본 거래 페이지(R8.9) | — |
 | GET | `/api/v1/settlements/pg-receipts` · `/{providerSettlementId}` | ADMIN | 필터 | 옛 지급 명세(읽기 전용, R5.2). 없으면 404 | — |
 | ~~POST~~ | ~~`/api/v1/settlements/pg-receipts`~~ · ~~`/{providerSettlementId}/reconcile`~~ | — | — | 목표: 제거(R5.1, SE-T2) | — |
-| GET | (목표, 가칭) `/api/v1/settlements/awaiting-refunds` | ADMIN | `status`·`page`·`size` | 매출 대기 환불 목록(상태·사유·받은 시각, 읽기만). 운영자 처리 API는 `[결정 필요 M-SE-1]` | — |
+| GET | (목표, 가칭) `/api/v1/settlements/awaiting-refunds` | ADMIN | `status`·`page`·`size` | 매출 대기 환불 목록(상태·사유·받은 시각, 읽기만). 운영자 재검증은 아래 POST(R11.8~12, 결정 195) | — |
+| POST | (목표, 가칭) `/api/v1/settlements/awaiting-refunds/{orderNo}/revalidate` | ADMIN | 실행 사유만 | 보관 환불과 반영 결과. 404(보관 환불 없음), 409(원매출 없음·재대조 불일치), 503(PG 조회 실패). 실행·검사 이력 보존 | `APPLIED`이면 외부 조회 없이 최초 반영 결과. 동시 호출도 조정·확인 사실 각 1건(R11.8~12, 결정 195) |
 
 월·매출 응답 금액 필드는 지금 계약 그대로다: `pgCostStatus`(매출 `CONFIRMED`/`UNCONFIRMED`, 월은 `PARTIAL` 추가), `confirmedPgFeeAmount`·`salePgFeeAmount`·`pendingPgCostCount`, 환불 양수 합계 4개, `net*` 순액 3개(음수 허용), 이월 3값(`OPEN`이면 `null`), 환불 비용 반환·VAT·`confirmedNetPgCostAmount`, `pgFeeAmount`·`platformNetAmount`(미확인이 하나라도 있으면 NULL). 공개 명세는 `apps/settlement/src/integrationTest/resources/openapi/settlement.json`.
 

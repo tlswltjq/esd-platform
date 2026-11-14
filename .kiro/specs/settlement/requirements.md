@@ -150,7 +150,7 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 1. THE Settlement SHALL 서명·issuer·만료·`esd-api` audience·역할을 검증하고 나머지 경로는 기본 거부한다.
 2. IF JWT `sub`가 없거나 공백·100자 초과이면 THEN Settlement SHALL 401로 거절한다.
 3. WHERE CREATOR 본인 조회(`/me/**`)에서 THE Settlement SHALL `sellerSubject`를 JWT `sub`로 제한하고 구매자·PG 비용·플랫폼 잔여액·다른 판매자 정보를 보이지 않는다.
-4. WHERE 전체·판매자별 조회, 지난 월 마감, PG 정산 자료 수집·재대사, 승인 근거 재조회, 매출 대기 환불 조회에서 THE Settlement SHALL ADMIN을 요구하고, 고객이 PG 금액·수령 상태를 입력하지 못하게 한다.
+4. WHERE 전체·판매자별 조회, 지난 월 마감, PG 정산 자료 수집·재대사, 승인 근거 재조회, 매출 대기 환불 조회·재검증에서 THE Settlement SHALL ADMIN을 요구하고, 고객이 PG 금액·수령 상태를 입력하지 못하게 한다.
 5. THE ADMIN 매출 응답 SHALL `sellerSubject`·PG 비용·플랫폼 잔여액·정책·결제 연결 근거를 더 보이되 공급자 자격 증명·키·원문은 보이지 않는다.
 6. THE 목록 SHALL `page=0`·`size=20`(page ≥ 0, 1 ≤ size ≤ 100), 매출은 `occurredAt DESC, id DESC`, 월은 `settlementMonth DESC, id DESC`로 정렬하고, 조회가 월 행을 만들지 않는다.
 7. THE 월 금융 요약 SHALL 미확인 비용이 하나라도 있으면 `pgFeeAmount`·`platformNetAmount`를 NULL로 두고, 환불 반영 월의 순비용·플랫폼 잔여액은 음수를 허용한다([P4.4-3](../platform/requirements.md), I7).
@@ -195,10 +195,16 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 1. IF 금융 확인 사실을 받았는데 같은 `orderNo`의 원매출이 없으면 THEN Settlement SHALL 실패 보관 표로 보내지 않고, 받을 때 검증(본문·식별자·금액·통화·취소 ID 목록 형식)을 마친 확인을 매출 대기 환불 `AWAITING_SALE`로 Inbox와 같은 트랜잭션에 저장한다([P3.26-6](../platform/requirements.md)). 그 키는 정지 대상이 아니다.
 2. THE 매출 대기 환불 SHALL 주문당 최대 한 건이고 전액 환불만 담는다. 같은 `eventId`의 재전달은 무변화, 같은 주문에 내용이 다른 확인은 영구 실패다.
 3. WHEN `OrderPaid`가 그 주문의 매출을 기록하면 THEN Settlement SHALL 같은 트랜잭션에서 대기 환불을 원매출과 대조하고(주문·결제 키·구매자·금액·통화·PG 거래 ID), 트랜잭션 밖에서 미리 받아 둔 PG 취소 근거(R6.4와 같은 `PgRefunds` 조회)로 전액 취소·취소 ID 목록을 확인한 뒤, 환불 조정·월 환불 합계·환불 조정 확인 사실 Outbox를 쓰고 대기 환불을 `APPLIED`로 바꾼다. 반영 월은 R6.5·R6.13을 따른다(결정 42·130).
-4. IF 대조나 PG 취소 근거가 맞지 않으면 THEN Settlement SHALL 매출은 기록하되 환불 조정은 반영하지 않고 대기 환불을 `CONFLICTED`(사유 코드 포함)로 바꾸며 경보 지표를 낸다. `CONFLICTED`의 운영자 처리는 `[결정 필요 M-SE-1]`.
+4. IF 대조나 PG 취소 근거가 맞지 않으면 THEN Settlement SHALL 매출은 기록하되 환불 조정은 반영하지 않고 대기 환불을 `CONFLICTED`(사유 코드 포함)로 바꾸며 경보 지표를 낸다. `CONFLICTED`의 운영자 재검증은 8~12를 따른다([결정 195](../../../docs/decisions.md#settlement-refund-revalidation)).
 5. THE 같은 `orderNo`의 대기 환불 저장과 매출 기록 SHALL 직렬화되어, 둘이 동시에 커밋돼도 대기 환불이 `AWAITING_SALE`로 남지 않는다.
 6. THE Settlement SHALL 대기 건수(`AWAITING_SALE`, `CONFLICTED` 라벨)와 가장 오래 기다린 시간을 게이지로 낸다. `AWAITING_SALE`의 경보 기준 시간은 측정 뒤 정하고([결정 159](../../../docs/decisions.md#forward-gap-threshold)), `CONFLICTED`는 1건부터 경보한다.
 7. WHILE 대기 환불이 `AWAITING_SALE`이면 THE 판매자 월 마감 SHALL 그 건을 읽지 않는다(판매자가 아직 정해지지 않았다).
+
+8. WHEN ADMIN이 보관한 환불의 재검증을 요청하면 THEN Settlement SHALL 저장된 확인 사실을 내부 입력으로 읽고, 원매출과 PG 취소 근거를 R6.4·R11.3과 같은 규칙으로 다시 검증한다. 요청은 실행 사유만 받고 실행자는 JWT `sub`에서 식별한다. 금액·결제 키·취소 ID를 요청 값으로 대체하지 않는다([결정 195](../../../docs/decisions.md#settlement-refund-revalidation)).
+9. WHEN 재검증이 일치하면 THEN Settlement SHALL PG 조회를 트랜잭션 밖에서 마친 뒤, 원매출·판매자·월·보관 환불을 잠그고 상태를 다시 확인해 환불 조정·월 환불 합계·`APPLIED`·`SettlementRefundRecorded` Outbox·성공 이력을 한 트랜잭션에 기록한다. 반영 월은 R6.5·R6.13을 따른다. 같은 명령의 반복·동시 실행에도 환불 조정과 반영 확인 사실은 한 번만 생긴다.
+10. IF 재검증에서도 값이 맞지 않으면 THEN Settlement SHALL 반영하지 않고 `CONFLICTED`와 사유를 유지·갱신하며, 실행자·사유·검사 시각·결과·대조 근거 식별자를 이력으로 남긴 뒤 `CONFLICT`(409)를 반환한다. 받은 원본과 기존 원장을 수정하거나 근거 없이 종결하지 않는다. 원본 사실 자체의 오류를 정정하는 계약은 이번 결정의 범위 밖이다.
+11. IF 보관 환불이 없으면 THEN 재검증 SHALL 404, 원매출이 없으면 상태를 유지하고 409, PG 조회가 실패하면 업무 상태를 유지하고 503을 반환한다. 이미 `APPLIED`이면 PG를 다시 조회하지 않고 최초 반영 결과를 반환한다. 원매출이 끝내 오지 않는 건은 Order의 원인 해소·실패 보관 재처리·같은 `OrderPaid` 재발행으로 복구하며, 이 명령이 매출을 만들어 내지 않는다.
+12. THE 재검증 SHALL 이벤트 재소비와 구분된 운영자 명령이며 Inbox와 저장된 이벤트의 식별자·본문을 보존한다. 자동 주기 재검증·배치 정산 전환은 도입하지 않는다. 미해결 환불이 있을 때 정산 마감을 허용할 범위는 별도 `[결정 필요]`이며, 이 결정이 마감 차단이나 제외를 확정하지 않는다.
 
 ### R12. 반영 확인 사실 발행 (결정 158)
 
@@ -207,7 +213,7 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 #### 수용 기준
 
 1. WHEN Settlement가 원매출을 처음 기록하면 THEN Settlement SHALL 같은 트랜잭션에서 `SettlementSaleRecorded`(가칭)를 Outbox(`stove.settlement.v1`, 키 `orderNo`)에 쓴다([design "목표 행"](../platform/design.md#목표-행-아직-코드에-없음), [design "정방향 응답 쌍"](../platform/design.md#정방향-응답-쌍-결정-158), 1회차 지적 B4·A5, 판정 전).
-2. WHEN Settlement가 환불 조정을 처음 기록하면(매출 대기 환불의 반영 포함) THEN Settlement SHALL 같은 트랜잭션에서 `SettlementRefundRecorded`(가칭)를 Outbox에 쓴다. 대기 환불이 `AWAITING_SALE`·`CONFLICTED`인 동안에는 쓰지 않는다(Payment가 응답 없음으로 센다).
+2. WHEN Settlement가 환불 조정을 처음 기록하면(매출 대기 환불의 자동 반영·운영자 재검증 반영 포함) THEN Settlement SHALL 같은 트랜잭션에서 `SettlementRefundRecorded`(가칭)를 Outbox에 쓴다. 대기 환불이 `AWAITING_SALE`·`CONFLICTED`인 동안에는 쓰지 않는다(Payment가 응답 없음으로 센다).
 3. THE 두 사실 SHALL 반영당 한 번만 생기고, 같은 입력의 재전달·재투입은 새 사실을 만들지 않는다. 원본이 사라지면 ADMIN 재발행(같은 `eventId`·본문·키)으로만 다시 낸다([P2.2-7](../platform/requirements.md), [결정 161](../../../docs/decisions.md#republish-all-current)).
 4. THE Settlement SHALL 공통 Outbox 릴레이를 켜고, `outbox_republish`·`republish-owner`·ADMIN 재발행 경로를 갖는다([P2.2](../platform/requirements.md)).
 5. THE 두 사실의 본문 SHALL 응답 쌍을 잇는 식별자만 싣고(금액·판매자·월은 싣지 않는다), 칸 목록은 플랫폼 이벤트 표에서 확정한다(design "이벤트" 발행 절의 제안, 1회차 지적 A5, 판정 전).
