@@ -29,7 +29,7 @@ tests:
                 1건이 PG 전액 취소로 환불됐지만 우리 시도의 취소인지 판정되지 않았다.
                 GET /api/v1/admin/refund-delays?kind=UNATTRIBUTED에서 대상을 찾고,
                 POST /api/v1/admin/refund-delays/{attemptId}/closure로 PG 재조회 근거와 귀속 판정을 남겨 종결한다.
-                알려진 과거 건은 Alertmanager silence로 알림을 관리한다.
+                종결하면 대상이 없어져 다음 평가에서 풀린다(경보 억제 장치는 두지 않는다).
       - eval_time: 1m
         alertname: RefundConfirmationsDelayed
         exp_alerts: []

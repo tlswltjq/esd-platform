@@ -32,6 +32,12 @@ class SharedContainersTest {
     private static final Duration EXPECTED = Duration.ofMinutes(3);
 
     @Test
+    @DisplayName("[D-054] 공유 Kafka는 복사가 끝난 시작 스크립트만 실행 경로에 게시한다")
+    void sharedKafkaPublishesOnlyCompleteStarterScripts() {
+        assertThat(SharedContainers.KAFKA).isInstanceOf(AtomicStarterKafkaContainer.class);
+    }
+
+    @Test
     @DisplayName("[D-043] 공유 컨테이너는 모두 기본값(60초·120초)이 아닌 3분 시작 대기를 갖는다")
     void everySharedContainerWaitsThreeMinutesForStartup() throws ReflectiveOperationException {
         Map<String, Duration> actual = new LinkedHashMap<>();
