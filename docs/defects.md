@@ -77,6 +77,7 @@
 | [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
 | [D-053](#d-053) | Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남 | 간헐 500(조회는 재시도로 회복, `POST`는 처리 여부 불명) | **원인 확인 · 미수정** | main 야간 CI run 42916206138 |
+| [D-054](#d-054) | Kafka 시작 스크립트가 복사 중 실행돼 `Text file busy`(126)로 테스트 컨텍스트 시작 실패 | CI 불안정(업무 코드 영향 없음) | **수정됨** | PR #196 CI run 43001134598 |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -638,7 +639,6 @@
 - **수정** 두 서비스의 시각 비교와 두 기록 생성 가드의 시각 비교를 뺐다(마이크로초 정밀도 검사는 남김). V12 `V12__restoration_cross_module_time.sql`이 두 CHECK를 지운다. `request_occurred_at`(받은 값)·`restored_at`(License 처리 시각)의 저장 값·뜻은 바꾸지 않았다. 옛 행은 옛 CHECK를 이미 만족하므로 그대로다(`LicenseMigrationIntegrationTest#v12KeepsExistingRestorationAndCorrectionRowsAndAllowsRestoredAtBeforeTheOrderClock`).
 - **망가뜨리기 확인(결정 102)** 운영 코드 수정 전에는 위 Red 4건. 수정 뒤 V12만 빼고 `#restoresWhenTheLicenseClockIsBehindTheOrderClock` 2건을 돌리면 `JpaSystemException: … Check constraint 'chk_license_restoration_time' is violated.`·`'chk_license_correction_time' is violated.`로 실패하고, 되돌리면 통과한다.
 
-
 <a id="d-053"></a>
 ## D-053 Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남
 
@@ -648,6 +648,18 @@
 - **근거** 산출물 `approval-expiry-run`: `verify-expiry-journeys.py`의 대기 루프가 60초마다 주문·결제를 조회한다(`time.sleep(min(60, …))`). 두 번째 회차(22:44:13쯤)의 마지막 Order 요청 뒤 약 60초가 지난 세 번째 회차 첫 요청(22:45:13.4, `GET /api/v1/orders/ff8aa8e5-…`)에서 Gateway 로그에 `[152448c5-4, L:/127.0.0.1:47188 ! R:127.0.0.1:18082] … PrematureCloseException`, 이어 `500 Server Error`. Order 로그에는 그 시각 오류가 없고, 바로 뒤의 종료 기록은 실패 뒤 정리다.
 - **원인(판독)** Gateway(Spring Cloud Gateway 4.3.0)의 `spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time` 기본값이 null(제한 없음)이고 `apps/gateway/src/main/resources/application.yml`에도 없다. 하류 서비스의 Tomcat 10.1.46은 keep-alive 유휴 시간이 `connectionTimeout` 기본값 60000ms(`org.apache.coyote.http11.Constants.DEFAULT_CONNECTION_TIMEOUT`)이고 각 서비스 `application.yml`에 Tomcat 설정이 없다. 조회 주기(60초)와 유휴 닫기(60초)가 겹쳐 Tomcat이 닫는 순간 Gateway가 그 연결을 고르는 짧은 경합에서만 실패한다.
 - **수정 방향(미착수)** Gateway 풀 `max-idle-time`을 하류 유휴 닫기보다 짧게(예: 30초) 둔다. 재현 테스트: 유휴 K초를 넘긴 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청"이 지금 500·수정 뒤 200(Red→Green). 설정 계약 테스트: Gateway `max-idle-time` < 하류 유휴 닫기(D-035 방식). 검증 스크립트에 재시도를 넣지 않는다(결정 113). 코드 PR은 Codex 교차 리뷰 대상.
+
+<a id="d-054"></a>
+## D-054 Kafka 시작 스크립트가 복사 중 실행돼 테스트 컨텍스트 시작에 실패
+
+**상태** 수정됨 · **영향** 테스트 인프라(CI 불안정), 업무 코드 변경 없음 · **위치** `common/testcontainers` · [PR #198](https://github.com/tlswltjq/esd-platform/pull/198)
+
+- **실측** [PR #196 CI run 43001134598](https://github.com/tlswltjq/esd-platform/actions/runs/43001134598)의 `PaymentAttemptFailureIntegrationTest#v28PreservesOriginalPurchasesAndSchedulesOnlyReadOnlyHistoryWithoutInventingAttempts`가 컨텍스트 초기화 중 실패했다. Kafka stderr는 `sh: /tmp/testcontainers_start.sh: Text file busy`, 종료 코드는 126이었다. 3분 준비 대기 뒤 보고됐으며 D-043의 단순 시작 지연과 구분한다.
+- **원인** Testcontainers 1.21.4의 `KafkaHelper.COMMAND`는 시작 파일의 존재만 기다린 뒤 실행한다. `ConfluentKafkaContainer.containerIsStarting`은 같은 경로에 Docker archive로 스크립트를 복사한다. 파일이 보이는 시점과 쓰기가 닫히는 시점 사이에서 실행하면 열린 쓰기 FD 때문에 실행이 거부된다.
+- **재현** `KafkaStarterPublicationIntegrationTest#executingAFileOpenForWritingFailsWithTextFileBusy`(전제 확인, 수정 코드를 거치지 않음): FIFO로 제어하는 별도 셸이 실행 파일의 쓰기 FD를 보유한 상태에서 실행해 126·`Text file busy`를 확인한다. `#kafkaStartsOnlyAfterTheStarterCopyHasClosedItsWriter`: 실제 Kafka의 복사 후 훅에서 실행 경로가 아직 없음을 확인하고, 임시 파일의 inode를 기록한 뒤 쓰기 FD를 잡아 같은 거부를 확인하고 닫는다. 기동 뒤 archive 복사 목적지가 임시 경로 한 번뿐이고(실행 경로로는 복사하지 않음), 실행 경로의 inode가 임시 파일과 같고 임시 파일이 남지 않아야 하며(이름 변경으로 게시), 실제 브로커 기동·내장 CLI 조회가 성공해야 한다. 전송 속도·러너 부하를 확률적으로 반복하는 대신 파일 가시성·복사 목적지·inode·쓰기 FD를 제어한다.
+- **수정** `AtomicStarterKafkaContainer`가 시작 파일만 같은 디렉터리의 `.copying` 이름으로 복사하고 복사 반환 후 `mv`로 실행 경로에 원자적으로 게시한다. Docker가 root 소유 파일을 만들고 `/tmp`에 sticky bit가 있으므로 이 고정 경로의 이름 변경만 `ExecConfig.user("root")`로 실행한다. Kafka 본체의 실행 사용자·이미지·리스너 설정·준비 로그·3분 대기는 유지한다. 다른 경로의 복사는 기본 구현에 위임한다. 모든 archive 복사는 `copyArchive`를 거치므로 테스트가 목적지를 확인할 수 있다.
+- **Red → Green·반례** 직접 실행 경로에 복사하면 `consumer path ... expected: 1 but was: 0`으로 실패한다. 재현 상태는 `eca046a1`에 `known-defect` 태그로 보존했다. 원자 게시를 제거한 반례도 같은 단언에서 실패한다. 게시를 `mv` 대신 `cp`로 바꾼 반례는 실행 경로가 새 inode라 `Publication must rename the staged copy` 단언에서 실패한다. 게시 뒤 실행 경로로 한 번 더 복사한 반례는 `The starter must be copied once, to the staging path only` 단언에서 실패한다. 원복 후 태그를 제거한 기본 검사가 통과한다. 최종 로컬 검증은 근거 조각과 PR 본문에 기록한다.
+- **운영 범위** 공유 테스트 픽스처에만 적용한다. 실제 운영 Kafka나 결제 상태·금융 동작은 바꾸지 않는다.
 
 ---
 
