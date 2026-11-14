@@ -54,7 +54,7 @@ public final class SharedContainers {
      * 새 대기 객체를 준다.
      */
     public static final ConfluentKafkaContainer KAFKA =
-            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
+            new AtomicStarterKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
                     .waitingFor(kafkaReady());
 
     public static final GenericContainer<?> REDIS =
