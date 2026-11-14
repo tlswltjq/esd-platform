@@ -19,7 +19,7 @@ class AtomicStarterKafkaContainer extends ConfluentKafkaContainer {
     @Override
     public void copyFileToContainer(Transferable file, String containerPath) {
         if (!STARTER_SCRIPT.equals(containerPath)) {
-            super.copyFileToContainer(file, containerPath);
+            copyArchive(file, containerPath);
             return;
         }
         copyStarterScript(file);
@@ -27,7 +27,12 @@ class AtomicStarterKafkaContainer extends ConfluentKafkaContainer {
     }
 
     protected void copyStarterScript(Transferable file) {
-        super.copyFileToContainer(file, STAGED_STARTER_SCRIPT);
+        copyArchive(file, STAGED_STARTER_SCRIPT);
+    }
+
+    /** Every archive copy passes through here, so a test can check that none targets the starter path. */
+    protected void copyArchive(Transferable file, String containerPath) {
+        super.copyFileToContainer(file, containerPath);
     }
 
     private void publishStarterScript() {
