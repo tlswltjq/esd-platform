@@ -1850,6 +1850,122 @@
 - 구분: 추천 수용
 - 결과: [PR #195](https://github.com/tlswltjq/esd-platform/pull/195) Catalog 표 1 `CLOSED` 행·발행 표·T21, Studio E12·소비 표, 플랫폼 SP-8·목표 행
 
+<a id="expired-order-declined"></a>
+## 185. 이미 만료된 주문에 결제 최종 거절이 오면 만료를 유지하고 그 결과를 기록만 한다
+- 문제: 플랫폼 "주문 상태 × 결과" 표에 `EXPIRED × OrderPaymentFailed` 칸이 없다(1회차 지적 B6). 영수증 없는 `PENDING` 주문이 30분 기한으로 만료되는 순간, Payment가 아직 `OrderExpired`를 받기 전에 PG 최종 거절을 확정해 `OrderPaymentFailed`(`admissionId` null)를 내면 생긴다. 결정 169로 결제창은 만료 사실을 받을 때까지 열려 있어 기한 경계의 정상 경합이다. 예: 14:29:59 `PENDING`(카드 입력 중) → 14:30:00 스캔 `EXPIRED`·`OrderExpired` → 14:30:00.5 PG 카드 거절로 `OrderPaymentFailed`. 지금 `Order.apply`(`Order.java:161-162`)는 `EXPIRED`면 `CONFLICT`라 영구 실패·실패 보관·키 정지·경보가 된다(M-OR-2).
+- 선택지: A `EXPIRED` 유지 + 결과 식별 불변 기록(결정 115 종결 기록과 같은 모양, `order_expired_review_closure`를 결과 종류 열로 일반화) / B 지금대로 영구 실패 / C `FAILED`로 덮음 (추천: A — 돈이 움직이지 않았고 고객의 끝(새 주문 안내)이 같다는 결정 115의 이유가 그대로 맞고, 끝 상태를 다시 열지 않는다(원칙 ④). B는 정상 경합을 결함 경보로 만들고, C는 끝 상태를 바꾼다)
+- 내 의견: "A안으로 만료 유지하고 거절 기록만 남겨"
+- 선택: A
+  - Order: `EXPIRED` 주문에 연결값이 맞는 `OrderPaymentFailed`(`admissionId` null)가 처음 오면 주문은 `EXPIRED`로 두고, 결과 `eventId`·결과 종류 `DECLINED`·사유 코드를 만료 주문 결과 기록에 남긴다. 지금 `order_expired_review_closure`(V31, 결정 115)를 만료 주문 결과 기록으로 일반화해 `result_kind ∈ {REVIEW_CLOSED, DECLINED}`, 주문당 하나·결과 `eventId` 유일로 둔다. 결과 `eventId`가 세 곳 가운데 한 곳에만 쓰인다는 OI7은 그대로다.
+  - 같은 결과 재전달은 무변화, 다른 결과는 영구 실패(P3.14-4). `admissionId`가 있는 거절(영수증이 있던 결제)은 `EXPIRED`가 될 수 없으므로(`PAYMENT_PROCESSING`은 시간으로 만료되지 않음) 영구 실패로 둔다.
+  - 고객에게는 지금처럼 만료·새 주문 안내만 보인다. 경보는 없다.
+- 구분: 추천 수용
+- 결과: Order R4.10·상태 표 `EXPIRED` 행·데이터 모델·소비 표, 플랫폼 P3.14-3. 1회차 지적 B6 판정은 2회차 함께 평가(결정 178)
+
+<a id="admission-id-no-compat"></a>
+## 186. 결제 결과의 `admissionId` 필수화는 개발 중이라 호환 기간 없이 한 번에 바꾼다
+- 문제: 결정 153으로 `OrderPaymentCompleted`는 `admissionId`를 싣고 Order는 열린 최신 영수증과 같을 때만 `PAID`로 반영한다. 사실상 필수 칸이라 `schemaVersion` 2다(결정 170, 1회차 지적 A3). 지금 본문에는 `admissionId`가 없고 Order는 `PAYMENT_PROCESSING`·`paymentId`만 본다. 배포 순간 Payment Outbox에 남은 v1 결과를 새 Order가 `NO_OPEN_ADMISSION`으로 거절하면 결제된 주문이 보류로 간다(M-OR-3).
+- 선택지: A 기간 한정 v1 규칙 + 5단계 배포 순서(Payment 늦은 성공 차단 → Order 두 버전 읽기 → Payment v2 → v1 0건 → v1 읽기 제거) / B v1은 모두 거절 / C 결제 중단 창의 배포 관문 (추천: A — 결정 170 P2.7-5 순서를 그대로 적용. AI가 처음 추천했다)
+- 내 의견: "배포된 서비스가 아니고 개발중인데 중요한가?" / "한번에 바꾸고"
+- 선택: B(호환 기간 없음) — 사용자 지적대로 실사용 결제가 없는 개발 환경이라 배포 순간의 v1 잔량이 사실상 0이고, 남아도 버릴 수 있는 개발 자료다(결정 74·182와 같은 전제). A의 v1 분기와 배포 단계는 나중에 지울 코드·절차를 미리 만드는 일이다.
+  - Payment v2(`admissionId` 포함) 발행과 Order 엄격 판(열린 최신 영수증과 `admissionId`·`paymentId` 일치만 `PAID`)을 같은 배포에 넣는다. v1 읽기 분기를 두지 않는다. 남은 v1 결과는 지금 계약대로 거절 사실(`OrderPaymentResultRejected`)이 된다.
+  - 운영 데이터·실사용자가 생긴 뒤의 이벤트 본문 변경은 결정 170(P2.7-5) 배포 순서를 따른다. 이 결정은 그 순서를 바꾸지 않고 이번 변경에만 호환 기간을 두지 않는다.
+- 구분: AI 주장 정정
+- 결과: Order R4.14·소비 표·T1, 플랫폼 design 칸 변경 표 `OrderPaymentCompleted` 행. 1회차 지적 A3 판정은 2회차 함께 평가(결정 178)
+
+<a id="flyway-baseline"></a>
+## 187. 쌓인 Flyway 스크립트를 모듈마다 현재 스키마와 같은 기준선 하나로 한 번 압축하고, 이후 변경은 V2부터 증분으로 쌓는다
+- 문제: 9개 모듈에 Flyway 스크립트 164개(payment 39·order 34·studio 27·catalog 15·settlement 15·license 12·review 11·auth 6·store 5)가 쌓였고, 과거 DB를 올리는 이행 테스트가 18개(Order·Payment `migrationTest`, 나머지 `integrationTest`) 있다. 모듈 스펙은 V번호 참조 295곳(22개 파일)과 "옛 행 채움" 작업(예: 결정 183 `resolved` → 상태 옮김, M-OR-4 영수증 없이 `PAID`인 옛 행)에 묶여 있다. 보존할 운영 데이터는 없다(결정 74·182). 사용자 제안: "추가로 쌓인 flyway등 스키마 관리 스크립트가 있다면 최신 버전 하나로 정립하고싶어".
+- 선택지: A 지금 한 번 압축(모듈마다 `V1__baseline.sql` = 지금 V최신까지 적용한 스키마), 이후 V2부터 증분 / B 압축 뒤 첫 운영 배포까지 V1만 직접 수정 / C 그대로 (추천: A — 옛 이력이 지킬 데이터가 없어 기준선 하나로 스펙의 채움 작업·V번호 참조가 함께 사라진다. 적용된 스크립트를 바꾸지 않는 Flyway 규칙·체크섬 검증은 유지해 스키마를 바꿀 때마다 로컬 DB를 초기화하지 않아도 되고 `migrationTest`도 앞으로의 이행 검증에 남는다. B는 운영 전환 시점을 사람이 기억해야 한다. 첫 운영 직전 재압축은 A에서도 할 수 있다)
+- 내 의견: "한번에 바꾸고, 추가로 쌓인 flyway등 스키마 관리 스크립트가 있다면 최신 버전 하나로 정립하고싶어" / "A안으로 지금 한 번 압축하고 이후 증분"
+- 선택: A
+  - 각 모듈의 `V1__baseline.sql`은 지금 마지막 스크립트까지 적용한 스키마와 같아야 한다. 검증: 옛 체인과 새 V1을 각각 빈 DB에 적용해 `information_schema`의 테이블·열(타입·NULL·기본값)·제약(PK·UK·FK·CHECK)·인덱스를 비교해 차이 0. 결과는 근거 색인 한 행. 목표 스펙의 새 제약은 기준선에 넣지 않고 V2부터 증분으로 낸다(기준선은 현재와 같음만 증명한다).
+  - 과거 이행 테스트 18개는 지운다. 그중 결함 회귀 방어선(`SettlementMigrationIntegrationTest`의 D-045·D-046)은 지우기 전에 현재 스키마·현재 코드에서 같은 결함을 막는 테스트로 옮긴다. `migrationTest` 작업은 남겨 V2 이후 이행 검증에 쓴다.
+  - 보존할 데이터가 없으므로 모듈 스펙의 "옛 행 채움" 작업을 지우고, 새 제약은 채움 없이 낸다. M-OR-4(영수증 없이 `PAID`인 옛 행)는 대상 행이 없어 이 결정으로 닫는다 — 목표 CHECK `status<>'PAID' OR payment_admission_id IS NOT NULL`을 별도 열 없이 둔다(모의 PG의 접수 없는 확정 경로는 결정 162·T13으로 없어진다).
+  - 로컬 MySQL 볼륨은 압축 PR 검증 때 초기화해야 한다(되돌릴 수 없음, 개발 자료만). 실행 전에 사용자 확인을 받는다.
+  - 운영 데이터가 생긴 뒤에는 압축하지 않는다. 첫 운영 배포 직전 한 번 더 압축할지는 그때 정한다.
+- 구분: 직접 제안
+- 결과: (압축 코드 PR 예정 — `.sql`·테스트 변경이라 Codex 교차 리뷰 대상) docs/architecture.md Flyway 문단, Order M-OR-4·T1
+
+<a id="closed-attempt-charge"></a>
+## 188. 닫힌 결제 시도에서 뒤늦게 보인 PG 결제는 새 경로를 만들지 않고 기존 근거 대조와 늦은 청구 감시로 드러낸다
+- 문제: 결정 153 A1은 "실패 통지·종결·만료로 닫힌 시도에서 PG 결제가 관측되면 그 시도를 `PAID_WITHOUT_ADMISSION` 보류로 올린다"고 했고, 결정 154는 "끝난 결제·시도는 다시 열지 않는다"고 했다. 결제는 열려 있고 시도만 닫힌 경우(`FAILURE_CONFIRMED`·`FAILED`·`EXPIRED` × PG `PAID`) 두 결정이 부딪히고, 결제당 진행 시도 하나(`uk_payment_approval_active`) 때문에 새 시도 B가 진행 중이면 A를 보류로 되돌릴 수 없다(M-PA-1).
+- 선택지: A 끝난 시도는 두고 `unlinked_charge` 새 출처로 기록 + 진행 시도 B의 확정 송신 정지·보류 / B 끝난 시도를 보류로 되돌림(유일 키 변경) / C 감지하지 않음 (추천: A — AI가 C를 "보이지 않음, 이중 청구 가능"으로 설명했다)
+- 내 의견: "PG가 같은 멱등키로 두 번 응답 한다는 것이잖아. 일어날 수 있는 일이야?" / "새 경로 없이 기존 근거 대조로 확정해"
+- 선택: 새 경로 없음(기존 근거 대조) — 사용자 질문으로 코드(`PortOnePaymentApprovalGateway`)를 다시 확인해 AI 설명을 정정했다. PortOne 결제(`paymentId`) 하나에 시도마다 거래(`txId` = `supplierAttemptId`, `Idempotency-Key` = `approvalId`)가 따로 있어, 사례는 "같은 멱등 키의 두 번째 응답"이 아니라 "A 거래가 검증된 `FAILED` 뒤 `PAID`로 바뀜"이다. Payment는 검증된 PG `FAILED`에서만 실패를 확정하므로(시도 표 #11) PG 결함이 아니면 생기지 않는다. 생겨도 ① PortOne은 이미 `PAID`인 결제의 두 번째 확정을 `ALREADY_PAID`로 거절해 이중 청구가 없고, ② 진행 시도 B를 조회하면 결제 `PAID`의 거래 ID가 B가 아니라서 근거 대조 실패(`PG_INVALID_EVIDENCE` 보류, 고객 `CHARGE_UNCONFIRMED`)로 운영자 목록에 뜨며, ③ B가 없으면 주문 만료로 결제가 끝난 뒤 늦은 청구 감시(R16·R17, 결정 154)가 `unlinked_charge`로 찾는다.
+  - Payment: `FAILURE_CONFIRMED`·`FAILED`·`EXPIRED` 시도에 PG `PAID`가 관측되면 끝난 시도를 바꾸지 않고 근거 충돌로 거절한다(실패 통지는 되돌리지 않는다). 새 출처 값·감지 경로·진행 시도 정지는 두지 않는다.
+  - 결정 153 A1의 "닫힌 시도를 `PAID_WITHOUT_ADMISSION` 보류로 올린다"는 접수 전 진행 중 시도에만 적용하고, 닫힌 시도는 이 결정의 경로를 따른다(결정 154의 "다시 열지 않음"과 맞춘다).
+  - 대가: 이 경우의 보류 사유가 `PG_INVALID_EVIDENCE`라 운영자가 원인을 직접 조사한다. PG 결함 수준의 드문 경우라 받아들인다.
+- 구분: AI 주장 정정
+- 결과: Payment R3.11·시도 상태 표 #10·#21, 플랫폼 P3.12-5
+
+<a id="payment-order-response"></a>
+## 189. 결제 `PAID` → Order 반영은 Payment가 기존 `OrderPaid`·`OrderPaymentResultRejected`를 응답으로 받아 응답 없는 `PAID` 결제를 센다
+- 문제: 결정 158은 사실을 낸 모듈이 응답 사실을 받지 못한 자기 기록을 센다고 했지만, 플랫폼 "정방향 응답 쌍"과 I14에 Payment `OrderPaymentCompleted` → Order `PAID` 반영이 없다(1회차 지적 A1). 지금은 Order 소비 영구 실패(실패 보관·키 정지), 이미 정지된 키, 소비 그룹 정지·지연, Payment Outbox `DEAD`, Kafka 보존 기간 경과가 모두 레코드·파티션 단위 경보이거나 아무 경보도 없어 "돈을 받았는데 주문에 반영되지 않은 결제 N건, 가장 오래된 것 M분"을 아무도 세지 않는다(M-PA-2).
+- 선택지: A Payment가 기존 `OrderPaid`(본문 `paymentResultEventId`·`paymentId`)를 새 그룹 `payment-order-paid`로 받아 응답으로 쓰고 `OrderPaymentResultRejected`도 응답으로 침 / B Order가 새 응답 사실(가칭 `OrderPaymentResultApplied`)을 냄 / C 세지 않음 (추천: A — 결정 158 "응답 사실이 이미 있는 쌍은 그것을 쓴다", `OrderPaid`가 "Order가 이 결제 결과를 반영했다"는 바로 그 사실이고 상관 ID(`paymentResultEventId`)가 이미 본문에 있다. B는 같은 사실을 둘로 내고, C는 소비 정지·보존 경과를 놓친다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A안으로 OrderPaid를 응답으로 세". 결정 전 질문: "Payment가 결제 완료 이벤트A 발행 -> Order에서 이벤트 소비, PAID로 변경, 이벤트A아이디 담아 반영됨 이벤트 발행 -> Payment의 새로운 이벤트 소비그룹 에서 소비함 의 흐름인거지?")
+- 선택: A
+  - Payment: 새 소비 그룹 `payment-order-paid`가 `stove.order.v1`의 `OrderPaid`를 받아, `paymentResultEventId` = 결제의 `result_event_id`이고 `paymentId`·`orderNo`가 같으면 `purchase_payment`의 Order 반영 응답 칸(가칭 `order_response_kind` = `APPLIED`, `order_response_event_id`)을 Inbox와 같은 트랜잭션에 쓴다. 식별자가 다르면 영구 실패(계약 위반). `OrderPaymentResultRejected`(그룹 `payment-order-result-rejection`, 결정 153)를 받으면 같은 칸에 `REJECTED`를 쓴다. 응답은 결제마다 하나이고 한 번 쓰면 바꾸지 않는다.
+  - 셈: `status='PAID'`인데 응답 칸이 빈 결제의 건수와 가장 오래 기다린 시간(`result_occurred_at`부터, Payment 시계)을 게이지로 낸다. 경보 기준 시간은 측정 뒤(결정 159). 자동 재발행·재처리는 하지 않고, 운영자가 실패 보관 재처리(결정 160)나 재발행(결정 161)으로 잇는다.
+  - Order 코드는 바뀌지 않는다. `OrderPaid`의 소비자가 License·Settlement·Payment 셋이 된다.
+- 구분: 추천 수용
+- 결과: Payment R20.3·데이터 모델·소비 표, 플랫폼 이벤트 표 `OrderPaid` 행·"정방향 응답 쌍"·I14. 1회차 지적 A1 판정은 2회차 함께 평가(결정 178)
+
+<a id="charge-returned-view"></a>
+## 190. Order가 거절한 청구를 전액 취소 근거로 닫은 결제는 저장 상태 `PAID`를 두고, 고객 응답의 상태만 `CHARGE_RETURNED`로 계산해 보인다
+- 문제: 결정 153·154로 Order가 거절한 성공 결제는 연결되지 않은 청구(`unlinked_charge`, `ORDER_REJECTED`)로 남고, 운영자가 PG 콘솔에서 취소한 뒤 PG 근거(전액 `CANCELLED`)로 닫는다. 결정 154("다시 열지 않음")로 `purchase_payment.status`는 `PAID`로 남아, 고객 결제 상세(`GET /api/v1/payments/{orderNo}`)에 `status=PAID`가 보이는데 주문은 `EXPIRED`·`FAILED`이고 돈은 돌아갔다. 결정 153이 "종결 뒤 결제 상태"를 Payment 모듈 스펙에 넘겼다(M-PA-4).
+- 선택지: A 저장·응답 모두 `PAID`, 안내 `CLOSED_CHARGE_CANCELLED`로만 구별 / B 결제에 새 끝 상태 `PAID → CHARGE_RETURNED` 전이 / C 저장은 `PAID`, 고객 응답의 `status`만 정본(닫힌 `unlinked_charge`)에서 계산 (추천: C — 원칙만으로 A·C 모두 성립해 사용자가 고른다. C는 응답 값을 정본에서 파생하고(원칙 3) 클라이언트가 `status`만 봐도 오해하지 않는다. B는 결정 154 "끝난 결제는 다시 열지 않음"과 부딪힌다)
+- 내 의견: "C안만 정하고 대사는 나중에 따로 다뤄" (결정 전 질문: "C안이라면 CHARGE_RETURNED(가칭)으로 보여주고 환불프로세스를 실행하게 하겠다는거지?", "끝끝내 고객이 발견못 할 수도 있잖아. 이런건 대사를 통해 정기적으로 확인하는 작업을 거쳐야할까?")
+- 선택: C
+  - Payment: 결제 상세 응답을 만들 때, 저장 상태가 `PAID`이고 그 결제의 `ORDER_REJECTED` 연결되지 않은 청구가 전액 `CANCELLED` 근거로 닫혔으면 응답 `status`를 `CHARGE_RETURNED`(가칭)로 낸다. 그 밖에는 저장 값을 그대로 낸다. 저장 상태·전이·CHECK는 바꾸지 않는다. 안내 코드(`CLOSED_CHARGE_CANCELLED`, R14.4)는 그대로 함께 낸다.
+  - `CHARGE_RETURNED`는 "청구됐다가 운영자가 PG에서 취소해 돌려받음"을 보이는 응답 값일 뿐이고 환불 실행을 시작하지 않는다. 시스템은 PG 취소를 실행하지 않는다(결정 154).
+  - `LATE_CHARGE`(끝난 결제의 늦은 청구)는 저장 상태가 `EXPIRED`·`FAILED`라 `PAID` 오해가 없으므로 이 계산을 하지 않는다.
+  - 주기 PG 거래 대사(발견에서 놓친 청구·오래 열린 기록을 PG 자료로 다시 찾기)와 열린 기록의 나이 경보는 사용자 지시로 나중에 따로 다룬다(Payment tasks에 남김).
+- 구분: 추천 수용
+- 결과: Payment R17.7·R14.4·종결 표·API 계약
+
+<a id="no-alert-silence"></a>
+## 191. 종결할 수 없는 과거 보류는 없으므로 경보 억제 장치를 두지 않고, "Alertmanager silence" 안내문만 사실대로 고친다
+- 문제: 옛 tasks에서 넘어온 항목이다. 승인 보류·환불 지연 종결 API(결정 114·127) 이전의 과거 보류가 종결 조건을 채우지 못하면 경보를 끌 방법이 필요하다고 봤다. `infra/prometheus/alerts.yml`의 `PaymentApprovalsRequireReview`·`RefundsUnattributed` 안내문과 규칙 시험(`infra/prometheus/tests/approval-review.yml`)은 "알려진 과거 보류는 Alertmanager silence로 관리한다"고 적었지만 저장소에는 Alertmanager가 없고, 절차서 `docs/runbooks/refund-delay-closure.md`는 "silence로 끌 수 없다, 종결하면 다음 평가에서 풀린다"고 적어 서로 맞지 않는다(M-PA-5, Payment R12.8).
+- 선택지: A Alertmanager 도입 + silence 절차 / B Payment DB에 경보 억제 표 / C 안내문만 정정 (추천: C — 결정 182·187로 종결 API 이전의 과거 보류 행이 없고 지금 보류는 모두 종결 API로 닫혀 게이지에서 빠지므로, 끌 대상이 없는 억제 장치를 만들 이유가 없다. 모듈 초안 메모의 추천은 A였으나 과거 데이터가 없어진 뒤 C로 바꿨다. B는 업무 DB에 운영 표시를 섞는다(원칙 3))
+- 내 의견: "C안으로 안내문만 정정해"
+- 선택: C
+  - 경보 안내문과 규칙 시험의 "Alertmanager silence" 문장을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾼다(`.yml` 변경이라 별도 코드 PR, Codex 교차 리뷰 대상). Payment R12.8은 "끌 수 없는 과거 보류 없음"으로 닫는다.
+  - Alertmanager가 없어 경보가 Prometheus 화면의 firing으로만 보이고 누구에게도 전달되지 않는다는 점은 이 결정의 범위가 아니다. 사용자는 이번에 G5 항목 등록을 고르지 않았다.
+- 구분: 추천 수용
+- 결과: Payment R12.8. 안내문 정정은 [PR #197](https://github.com/tlswltjq/esd-platform/pull/197)
+
+<a id="drop-payment-pg-fee"></a>
+## 192. Payment의 옛 PG 비용 칸은 그 값을 쓰는 모의 PG 경로를 없앨 때 함께 지운다
+- 문제: 결정 165는 PG 비용의 정본을 Settlement `settlement_pg_fee` 하나로 정하고, Payment는 새 결제에 비용을 쓰지 않되 이미 저장된 값은 읽도록 했다(결정 104). 칸을 없앨지·언제 없앨지는 Payment 모듈 스펙에 넘겼다(M-PA-6). `purchase_payment.pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount`(V12, `ck_payment_pg_fee`)를 쓰는 곳은 모의 PG 경로 `SimulatedPgHttpGateway`뿐이고(결정 162로 없어질 예정), 읽는 곳은 `Payment.java`의 결과 재구성 하나다. API 응답·이벤트 본문에는 나가지 않는다.
+- 선택지: A G7 정산 대사 확정까지 읽기 전용으로 두고 그 뒤 이행으로 삭제 / B 쓰는 경로를 없앨 때(결정 162·T13 또는 PA-T16) 함께 삭제 / C 영구 유지 (추천: B — 메모 초안 추천 A는 옛 값 읽기를 전제로 했지만 결정 182·187로 보존할 옛 행이 없다. 유일한 쓰는 경로가 곧 없어지므로 그때 쓰는 곳·읽는 곳·칸을 함께 지우면 정본이 Settlement 하나로 남는다(원칙 3). C는 정본이 둘처럼 보인다)
+- 내 의견: "B안으로 쓰는 경로 제거 때 함께 삭제해"
+- 선택: B
+  - 모의 PG 경로 제거(결정 162, 플랫폼 T13) 또는 PA-T16 가운데 먼저 하는 PR에서 `pg_fee_*` 세 칸·`ck_payment_pg_fee`·`Payment`의 비용 필드·`PgFee`·`PgResult.fee`를 함께 지운다. 이행 파일은 Flyway 기준선 압축(결정 187, T34) 뒤의 V2 이후 증분으로 낸다. 옛 값 백업·호환 읽기는 두지 않는다(보존할 데이터 없음).
+- 구분: 추천 수용
+- 결과: Payment R9.3·데이터 모델·PA-T16
+
+<a id="split-suspended-status"></a>
+## 193. 구매 근거의 정지 상태를 정지 전 상태별 두 값으로 나누고 보조 칸 `suspended_from`을 없앤다 (결정 94·96 소급 RC-17)
+- 문제: 결정 96은 구매 근거 상태를 `STORED`/`REGISTERED`/`SUSPENDED`(정지 전 상태 기억)/`REFUNDED`로 정했고, 구현은 `product_license.status='SUSPENDED'` 한 값에 보조 칸 `suspended_from`(`STORED`·`REGISTERED`, V10)을 둔다(`License.java:64-67`). 이 칸이 복구 갈래(`:102`·`:128`), 회수 때 보유권 종료 여부, 보관함 조회 포함(`LicenseRepository.findStorage`)을 정하지만 값·조합 CHECK가 없다. 예: 등록 뒤 정지된 행의 `suspended_from`이 수동 SQL·결함으로 NULL이 되면 복구가 `STORED` 갈래로 가 열린 `SUSPENDED` 보유권이 남고, 재등록도 `uk_license_registration_open`에 막혀 고객이 게임을 쓰지 못한다(M-LI-1, LI-T2). 업무 정책(정지 대상, 세 갈래 복구, 보관함 반환)은 결정 94·96 그대로이고 상태 모양만 고른다.
+- 선택지: 1 상태를 `SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`로 나누고 `suspended_from` 삭제, CHECK 허용 값 5개 / 2 `SUSPENDED` + 직교 칸 + CHECK(`suspended_from ∈ {STORED, REGISTERED}` ∧ `(status='SUSPENDED') = (suspended_from IS NOT NULL)`) / 3 `suspended_from`을 지우고 열린 보유권 표에서 유도 (추천: 1 — 원칙 4 "명시적 상태 모델"을 그대로 만족하고 복구 갈래가 상태 값 하나로 정해진다. 2도 원칙 4의 "불가피하면 직교 칸"에 맞아 원칙만으로 1·2가 모두 성립하므로 사용자가 고른다(결정 147). 값 둘이면 충분해 직교 칸이 "불가피"하지 않다. 1의 비용이던 옛 행 이행은 결정 182·187로 없어졌고, 보관함 응답 값은 api 계층에서 유지할 수 있다. 3은 숨은 상태를 다른 표로 옮길 뿐이다)
+- 내 의견: "1안으로 정지 상태를 둘로 나눠"
+- 선택: 1
+  - `PurchaseStatus`: `STORED`·`REGISTERED`·`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`·`REFUNDED`. `chk_product_license_status`가 이 다섯 값만 허용하고 `suspended_from` 열을 지운다. 복구·회수·보관함 조회는 상태 값으로 갈래를 정한다.
+  - 보관함 응답 `StorageItemResponse.status`는 api 계층에서 두 정지 값을 지금처럼 `SUSPENDED`로 바꿔 내보내 클라이언트 계약을 유지한다(보관함에는 `SUSPENDED_FROM_STORED`만 나온다).
+  - 이행은 Flyway 기준선 압축(결정 187, T34) 뒤 V2 이후 증분이며 옛 행 채움·`migrationTest` 대응은 두지 않는다(보존할 데이터 없음).
+- 구분: 추천 수용
+- 결과: License 용어·R9-5·R12-2·design 상태 모델·제약·LI-T2, 플랫폼 tasks RC-17
+
+<a id="keep-decision-number-cap"></a>
+## 194. 결정 번호 상한(main 최대 + 10)은 그대로 둔다
+- 문제: [결정 139](#decision-number-reservation)는 번호 예약과 빈 번호 허용을 함께 정하면서, 잘못 적은 큰 번호(예: `1940`)를 막으려고 "PR의 새 번호는 main 최대 + 10 이하"(`tools/ci/decision_numbers.py`의 `NEW_NUMBER_SLACK = 10`)를 뒀다. 이 상한은 main 기준이라 PR 하나에 결정이 10건을 넘게 쌓이면 막혀, 결정을 연달아 정하는 세션마다 중간 병합이 생긴다(2026-11-10 #191·#192, 2026-11-11 #195, 지금 #196). md만 바꾼 PR도 build가 약 17분 돈다.
+- 선택지: A 그대로 / B 상한만 키움(예: + 30) / C 간격 상한으로 바꿈(PR 새 번호를 정렬해 앞 번호와의 간격이 10 이하면 통과, 개수 제한 없음) / D 상한 없앰 (추천: C — 큰 점프를 잡는 원래 목적을 지키면서 개수 제한만 없앤다. B는 같은 문제를 미루고 D는 실수 방지를 버린다)
+- 내 의견: "그대로 두고m-se-1물어봐"
+- 선택: A — 상한과 검사를 바꾸지 않는다. 결정이 10건을 넘게 쌓이면 지금처럼 PR을 나눠 병합한다.
+- 구분: 추천과 다른 선택
+- 결과: 변경 없음
+
 ---
 
 ## 검증하며 드러난 것

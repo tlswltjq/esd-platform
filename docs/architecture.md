@@ -14,7 +14,7 @@ License는 OrderPaid를 근거로 상품 보유권·주문별 구매 근거와 �
 Download는 License 보유권·Catalog 현재 공개 빌드를 HTTP로 확인하고 전체 ZIP의 S3/MinIO 만료 URL을 발급한다. DB·보유권 사본·Kafka 없이 요청마다 조회하며 연계 장애 중 새 발급은 실패한다.
 Settlement는 OrderPaid·외부 모의 PG 거래/비용·Catalog 소유자를 대조해 매출·배분·월 마감을 저장하고, PG 지급 명세를 직접 조회해 모의 수령을 대사한다. [완료 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)를 따른다.
 
-MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 구 MongoDB 자료는 보존하지만 새 업무에서는 읽거나 쓰지 않는다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
+MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 모듈마다 `V1__baseline.sql`(그 시점 스키마와 같은 기준선)에서 시작해 V2부터 증분으로 쌓고, 적용된 스크립트는 고치지 않는다. 보존할 운영 데이터가 없는 동안은 새 열·제약을 채움 없이 낸다([결정 187](decisions.md#flyway-baseline)). 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 구 MongoDB 자료는 보존하지만 새 업무에서는 읽거나 쓰지 않는다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
 일반적인 서비스의 `core`에는 모델·Spring Data 리포지토리·업무 처리·외부 기능의 포트가 있다. `api`는 HTTP·Kafka·스케줄러 진입점과 처리 단계를 조율하는 파사드를, `adapter`는 다른 업무 서비스의 HTTP 호출·S3·PG·프레임워크 연동 구현을 담는다. `core.service → core.port ← adapter`의 의존 방향을 유지하며 구현체의 외부 조립은 `config`가 맡는다. 2026-10-18 `infrastructure`에서 이름을 바꿨으며 하위 패키지(`oauth`·`security`·`storage`·`pg`·`tax`)와 클래스 이름은 유지했다. 연결 도메인별 하위 패키지나 `adapter.in/out`은 두지 않는다([결정 26](decisions.md#26-외부-연동-구현-패키지를-adapter로-부른다), [변경 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/adapter-package-rename-plan.md)). 실제 연동과 mock의 범위는 [서비스 명세](services.md), 모듈 경계의 이유는 [설계 결정](decisions.md)에 있다.
 

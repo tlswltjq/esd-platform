@@ -75,7 +75,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 8. WHEN 동시 처리가 같은 최종 결과를 내면 THEN Payment SHALL 먼저 커밋한 결과·결과 이벤트를 유지하고 추가 Outbox를 만들지 않는다.
 9. THE 끝 상태 SHALL 공급자 거래·결정 시각(값으로만 저장, R7.18)과 결과 이벤트 ID·시각을 함께 갖고, 확정 때 재시도 예약·오류 분류를 정리한다.
 10. THE 결과 이벤트 `amount` SHALL 고객 청구액이며 PG 비용 공제 뒤 금액으로 대신 쓰지 않는다.
-11. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패 통지·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 다른 시도의 성공으로 돌리지 않는다. 접수 전 진행 중 시도는 `PAID_WITHOUT_ADMISSION` 보류로 올리고(R12), 닫힌 시도는 `[결정 필요 M-PA-1]`, 끝난 결제는 R16·R17을 따른다(P3.12-5, I15, 결정 153 A1).
+11. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패 통지·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 다른 시도의 성공으로 돌리지 않는다. 접수 전 진행 중 시도는 `PAID_WITHOUT_ADMISSION` 보류로 올리고(R12), 닫힌 시도(`FAILURE_CONFIRMED`·`FAILED`·`EXPIRED`)는 다시 열지 않고 근거 충돌로 거절한다 — 같은 결제의 진행 시도는 조회 근거 대조 실패로 `PG_INVALID_EVIDENCE` 보류가 되고(결제 공급자는 이미 결제된 결제의 두 번째 확정을 거절한다), 결제가 끝나면 R16·R17의 늦은 청구 감시가 찾는다([결정 188](../../../docs/decisions.md#closed-attempt-charge)). 끝난 결제는 R16·R17을 따른다(P3.12-5, I15, 결정 153 A1).
 12. THE `OrderPaymentCompleted` SHALL `admissionId`를 필수 칸으로 싣고, `admissionId`가 없는 옛 모양과 구별되도록 새 `schemaVersion`으로 낸다. 배포 순서는 P2.7-5를 따른다(T1, (1회차 지적 A3, 판정 전)).
 
 ### R4. 승인 시도와 결제창 정보
@@ -173,7 +173,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 #### 수용 기준
 1. THE PG 승인·조회·취소·통지 계약 SHALL `core.port`에 공급자 중립 이름과 core 값으로 두고, HTTP 구현·응답 분류·보장 기한은 `adapter`, 주소·키·기한 설정 조립은 `config`에 둔다(P1.1-3·P1.1-4).
 2. THE 개발·여정·실험·통합 테스트 SHALL 운영과 같은 PG adapter와 기준 시뮬레이터 하나로 돌고, 운영 코드에 시뮬레이터 전용 공급자 값·adapter·분기를 두지 않는다([결정 162](../../../docs/decisions.md#single-reference-simulator), 원칙 ⑦). 이미 저장된 옛 공급자 값은 읽을 수 있어야 한다(결정 104).
-3. THE Payment SHALL 새 결제에 PG 비용(정책·요율·금액)을 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. 이미 저장된 비용 값은 읽기만 한다. 칸 제거 시점은 `[결정 필요 M-PA-6]`이다([결정 165](../../../docs/decisions.md#pg-fee-owner), P1.4-2).
+3. THE Payment SHALL 새 결제에 PG 비용(정책·요율·금액)을 쓰지 않고, 공급자 승인 응답의 비용을 core 계약으로 받지 않는다. `pg_fee_*` 칸·CHECK·비용 필드는 그 값을 쓰는 모의 PG 경로를 없앨 때 함께 지우고, 옛 값 호환 읽기는 두지 않는다(보존할 데이터 없음, [결정 192](../../../docs/decisions.md#drop-payment-pg-fee)) ([결정 165](../../../docs/decisions.md#pg-fee-owner), P1.4-2).
 4. THE Settlement SHALL PG 명세를 직접 조회하며, Payment에 정산 중계 API를 두지 않는다.
 5. THE Payment 승인·조회 키와 Settlement 읽기 키 SHALL 분리하고, 시뮬레이터 제어 키를 업무 앱에 주지 않는다.
 
@@ -212,7 +212,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 5. THE Payment SHALL 사유별 현재 보류 건수를 게이지로 내고 `PAID_WITHOUT_ADMISSION`은 critical, 나머지는 warning으로 경보한다. 알려진 사유 밖 값은 `OTHER`로 센다.
 6. WHEN 상세·조사 이력을 조회하면 THEN Payment SHALL 과거에 보류된 시도도 현재 상태와 함께 주고, 한 번도 보류되지 않은 시도는 404다. 조사 POST는 현재 `REVIEW_REQUIRED`에만 허용한다.
 7. WHEN 조회가 실패하면 THEN Payment SHALL 마지막 조회 시각과 오류 종류(`INVALID_EVIDENCE`·`UNAVAILABLE`)를 기록한다. 성공은 오류를 지운다. 최신 관측 상태는 마지막 유효 관측이다. lease를 잃은 뒤에는 저장하지 않는다.
-8. THE 종결할 수 없는 과거 보류의 경보를 끄는 방법 SHALL `[결정 필요 M-PA-5]`를 따른다.
+8. THE Payment SHALL 경보 억제 장치를 두지 않는다. 종결 API 이전의 과거 보류는 없고(결정 182·187), 보류는 종결(R13)로 닫히면 게이지에서 빠져 다음 경보 평가에서 풀린다. 경보 안내문도 이렇게 적는다([결정 191](../../../docs/decisions.md#no-alert-silence)).
 9. THE DB SHALL 관측 상태 집합·관측 상태/시각 쌍·보류 시각 순서(같은 Payment 시계)를 CHECK로 지킨다.
 10. WHEN 이미 `REVIEW_REQUIRED`인 시도에 새 송신 중단 사유가 오면 THEN Payment SHALL 송신 중단을 유지하고 처음 사유와 `reviewStartedAt`을 바꾸지 않는다. 새 사유가 `PAID_WITHOUT_ADMISSION`이면 그 사유로 한 번 올리고, 그 뒤에는 바꾸지 않는다. 버린 사유는 로그로만 남긴다([결정 144](../../../docs/decisions.md#held-approval-keeps-first-reason), P4.6-1, I10).
 11. WHILE 시도가 `REVIEW_REQUIRED`이면 THE 승인 작업자 SHALL 다음 PG 조회 시각을 `now + min(상한, max(시작값, now − reviewStartedAt))`로 잡는다(시작값 5초·상한 10분, [결정 122](../../../docs/decisions.md#approval-review-requery-interval)). `reviewStartedAt`이 없는 옛 행은 상한을 쓴다.
@@ -239,7 +239,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 1. WHERE 결제 상세(`GET /api/v1/payments/{orderNo}`)와 승인 조회(`GET …/approvals/{requestId}`)인 경우 THE Payment SHALL 시도가 보류 중이거나 운영자 종결로 끝났거나 그 결제에 주문에 연결되지 않은 청구 기록이 있으면 `reviewNotice {code, message, since}`를 돌려주고, 그 밖에는 `null`로 둔다. 결제 목록에는 넣지 않는다.
 2. WHILE 시도가 보류 중이면 THE Payment SHALL `PG_INVALID_EVIDENCE`는 관측과 관계없이 `CHARGE_UNCONFIRMED`로 두고, 그 밖의 사유는 마지막 유효 PG 관측으로 정한다: `PAID` → `CHARGED`, 전액 `CANCELLED` → `CHARGE_CANCELLED`, `READY`·`FAILED` → `NOT_CHARGED`, `PENDING`·마지막 조회 실패·관측 없음 → `CHARGE_UNCONFIRMED`.
 3. WHEN 운영자 종결로 끝난 시도이면 THEN Payment SHALL 종결 근거로 `CLOSED_CHARGE_CANCELLED`(전액 `CANCELLED`) 또는 `CLOSED_NOT_CHARGED`(`READY`·`FAILED`)를 돌려준다.
-4. WHEN 그 결제에 열린 주문에 연결되지 않은 청구 기록이 있으면 THEN Payment SHALL 시도 안내보다 우선해 `CHARGED`를 돌려주고, 그 기록이 전액 `CANCELLED` 근거로 닫혔으면 `CLOSED_CHARGE_CANCELLED`를 돌려준다. `since`는 기록 생성 시각이다(결정 154 "고객 안내를 청구됨으로 바꾼다").
+4. WHEN 그 결제에 열린 주문에 연결되지 않은 청구 기록이 있으면 THEN Payment SHALL 시도 안내보다 우선해 `CHARGED`를 돌려주고, 그 기록이 전액 `CANCELLED` 근거로 닫혔으면 `CLOSED_CHARGE_CANCELLED`를 돌려준다(저장 `PAID` 결제의 응답 `status`는 R17.7의 `CHARGE_RETURNED`, [결정 190](../../../docs/decisions.md#charge-returned-view)). `since`는 기록 생성 시각이다(결정 154 "고객 안내를 청구됨으로 바꾼다").
 5. THE 문구 SHALL 결정 123의 한국어 원문을 그대로 쓰고, 금액은 주문 청구액이다. 처리 시점은 약속하지 않는다.
 6. WHEN 결제창이 진행 중 시도로 409 `APPROVAL_IN_PROGRESS`를 내면 THEN Payment SHALL 보류 중 시도에는 2의 문구를, 그 밖에는 "기존 결제 승인을 처리하고 있습니다."를 메시지로 쓴다.
 7. THE 고객 응답 SHALL 보류 사유 코드·공급자 시도 ID·토큰을 넣지 않는다.
@@ -282,7 +282,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 4. WHILE 그 결제의 시도가 이미 다른 사유로 보류 중이면 THE Payment SHALL 보류 사유를 바꾸지 않고 기록만 더한다(결정 144, 흐름 2 S9-R "상대 상태가 이미 바뀜").
 5. WHEN 기록이 생기면 THEN Payment SHALL 그 기록을 ADMIN 목록(`GET /api/v1/admin/unlinked-charges`)과 게이지 `stove.payment.unlinked-charge.open{source}`에 올리고 critical로 경보하며, 고객 안내를 R14.4로 바꾼다. 시스템은 PG 취소를 실행하지 않는다(P3.13-9).
 6. WHEN ADMIN이 `POST /api/v1/admin/unlinked-charges/{chargeId}/closure`(`{requestId, note}`)를 보내면 THEN Payment SHALL 감시 lease를 잡고 트랜잭션 밖에서 PG를 조회해, 원결제가 전액 `CANCELLED`일 때만 같은 트랜잭션에서 기록을 `CLOSED`로 바꾸고 종결자·근거 상태·관측 시각을 남긴다. `PAID`면 409 `CLOSURE_PG_PAID`, 그 밖의 근거는 409 `CLOSURE_PG_NOT_CANCELLED`, 근거 불일치·조회 장애는 `CLOSURE_PG_INVALID_EVIDENCE`·`CLOSURE_PG_UNAVAILABLE`이다. 같은 `requestId`·내용은 최초 결과, 다른 내용은 409 `UNLINKED_CHARGE_CLOSURE_CHANGED`(가칭)다.
-7. THE 기록 종결 SHALL 결제·시도 상태를 바꾸지 않는다. 종결 뒤 결제의 고객 상태 표현은 `[결정 필요 M-PA-4]`를 따른다.
+7. THE 기록 종결 SHALL 결제·시도 상태를 바꾸지 않는다. WHEN 저장 상태가 `PAID`인 결제의 `ORDER_REJECTED` 기록이 전액 `CANCELLED` 근거로 닫혔으면 THEN 결제 상세 응답 SHALL `status`를 `CHARGE_RETURNED`(가칭, 응답 전용 값)로 계산해 내고, 저장 상태·전이는 바꾸지 않으며 환불 실행을 시작하지 않는다. `LATE_CHARGE`는 저장 상태가 `PAID`가 아니므로 계산하지 않는다([결정 190](../../../docs/decisions.md#charge-returned-view)).
 8. WHEN ADMIN이 기록에 조사 내용을 남기면 THEN Payment SHALL R12.3과 같은 규칙으로 추가 전용 저장하고 상태를 바꾸지 않는다.
 
 ### R18. 운영자 환불 실패 종결 ([결정 128](../../../docs/decisions.md#refund-failure-closure)·결정 148)
@@ -314,7 +314,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 #### 수용 기준
 1. WHEN Payment가 `SettlementRefundRecorded`(가칭)를 처음 받으면 THEN Payment SHALL Inbox(`payment-settlement-refund`)와 그 실행(또는 늦은 취소 확인 기록)의 정산 반영 응답 ID를 같은 트랜잭션에 기록한다(플랫폼 design "정방향 응답 쌍", (1회차 지적 B4, 판정 전)).
 2. WHILE 실행에 금융 확인이 있거나 늦은 취소 확인 기록이 있는데 정산 반영 응답이 없으면 THE Payment SHALL 그 건수와 가장 오래 기다린 시간을 게이지로 낸다. 경보 기준 시간은 측정 뒤 정한다(P4.3-4, 결정 159).
-3. THE 결제 `PAID` → Order 반영의 응답 대기 SHALL `[결정 필요 M-PA-2]`를 따른다((1회차 지적 A1, 판정 전)).
+3. WHEN Payment가 `OrderPaid`(그룹 `payment-order-paid`)를 처음 받아 `paymentResultEventId`가 결제의 `result_event_id`이고 `paymentId`·`orderNo`가 같으면 THEN Payment SHALL Inbox와 같은 트랜잭션에 그 결제의 Order 반영 응답(`APPLIED`, 응답 `eventId`)을 기록한다. WHEN `OrderPaymentResultRejected`를 받으면 THEN 같은 칸에 `REJECTED`를 기록한다. 응답은 결제마다 하나이고 바꾸지 않으며, 식별자가 다르면 영구 실패다. WHILE 결제가 `PAID`인데 Order 반영 응답이 없으면 THE Payment SHALL 그 건수와 가장 오래 기다린 시간(`result_occurred_at`부터, Payment 시계)을 게이지로 낸다. 경보 기준 시간은 측정 뒤 정한다(결정 159, [결정 189](../../../docs/decisions.md#payment-order-response), (1회차 지적 A1, 판정 전)).
 4. THE Payment SHALL 자기가 소유한 현행 이벤트를 같은 `eventId`·본문·키로 다시 낼 수 있는 운영 재발행 경로를 둔다(P2.2-7, [결정 161](../../../docs/decisions.md#republish-all-current), T7).
 
 ### R21. 상태 모델과 DB 제약 (원칙 ④⑤)

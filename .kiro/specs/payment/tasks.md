@@ -55,7 +55,7 @@
   - 재현: 흉내 서버 여정 — `READY` 종결 → `console-approve` → 기록 `OPEN`·경보·`reviewNotice=CHARGED`. 만료 뒤 `PAID`도 같음.
 - [ ] **MC-P13. `OrderPaymentResultRejected`를 소비하지 않는다** ([결정 153](../../../docs/decisions.md#late-success-rejection), 플랫폼 T1)
   - 어디서: 리스너 없음(`payment:api/listener/`), 이벤트 없음(Order 쪽 T1).
-  - 목표: R17.1~17.4, 그룹 `payment-order-result-rejection`, `unlinked_charge`(`ORDER_REJECTED`), 결제 `PAID`·시도 `SUCCEEDED` 불변. 종결 뒤 표현은 M-PA-4.
+  - 목표: R17.1~17.4, 그룹 `payment-order-result-rejection`, `unlinked_charge`(`ORDER_REJECTED`), 결제 `PAID`·시도 `SUCCEEDED` 불변. 종결 뒤 표현은 응답 `status` `CHARGE_RETURNED` 계산(R17.7, [결정 190](../../../docs/decisions.md#charge-returned-view)).
   - 영향: **돈** — Order가 거절한 성공(돈은 나감)이 지금은 409 → DLT로 묻힌다.
   - 재현: Payment 통합 — `PAID` 결제의 결과 ID로 거절 사실 주입 → 기록 1건·게이지 1·재전달 무변화·다른 결과 ID 영구 실패.
 - [ ] **PA-T11. 결과 이벤트가 시도를 가리키지 않고, 확정 트랜잭션이 시도를 다시 확인하지 않는다** (플랫폼 T1·T18, 결정 153·174, (1회차 지적 A3, 판정 전))
@@ -95,7 +95,7 @@
   - 재현: 단위 — 조합 생성 시 게이지 1.
 - [ ] **PA-T14. 정산 환불 반영 응답을 받지 않고 세지 않는다** ([결정 158](../../../docs/decisions.md#forward-gap-counting), 플랫폼 T6, (1회차 지적 B4, 판정 전))
   - 어디서: 리스너 없음, `stove.settlement.v1` 토픽 없음(Settlement Outbox 꺼짐).
-  - 목표: R20.1·20.2. 그룹 `payment-settlement-refund`, 실행·늦은 취소 기록에 응답 ID, 대기 게이지(건수·최장). `PAID` → Order 반영 응답은 M-PA-2((1회차 지적 A1, 판정 전)).
+  - 목표: R20.1·20.2. 그룹 `payment-settlement-refund`, 실행·늦은 취소 기록에 응답 ID, 대기 게이지(건수·최장). `PAID` → Order 반영 응답은 [결정 189](../../../docs/decisions.md#payment-order-response)(그룹 `payment-order-paid`, `order_response_*` 칸, 응답 없는 `PAID` 게이지) ((1회차 지적 A1, 판정 전)).
   - 영향: **돈** — 환불 조정이 DLT에 묻히면 판매자 과지급이 아무 데도 세어지지 않는다(U3).
   - 재현: Settlement 소비를 막고 금융 확인 → 게이지 1, 응답 주입 → 0.
 - [ ] **PA-T13. Payment에 운영 재발행 경로가 없다** (플랫폼 T7, 결정 161)
@@ -191,7 +191,7 @@
   - 재현: ArchUnit + 통합 — 새 경로로 서명 통지 접수.
 - [ ] **PA-T16. Payment가 새 결제에 PG 비용을 쓴다** ([결정 165](../../../docs/decisions.md#pg-fee-owner), 플랫폼 T17)
   - 어디서: `Payment.java:131-133`(`confirm`), `payment:core/domain/PgResult.java`의 `fee`, V12.
-  - 목표: R9.3. 새 행 `pg_fee_*` NULL, core 계약에서 비용 제거, 옛 값 읽기. 칸 제거는 M-PA-6.
+  - 목표: R9.3. core 계약에서 비용 제거와 함께 `pg_fee_*` 세 칸·`ck_payment_pg_fee`·`Payment` 비용 필드·`PgFee`·`PgResult.fee`를 지운다. 쓰는 경로(`SimulatedPgHttpGateway`, 결정 162·T13)와 같은 PR이거나 그 뒤. 이행은 Flyway 기준선(T34) 뒤 V2 이후 증분, 옛 값 백업 없음([결정 192](../../../docs/decisions.md#drop-payment-pg-fee)).
   - 영향: 없음(채우던 곳은 `SimulatedPgHttpGateway`뿐).
   - 재현: 단위 — 비용이 있는 응답으로 확정해도 칸 NULL.
 - [ ] **PA-T2. 실패 시도 이력이 PG 실패 시각과 자기 시각을 비교한다** (결정 163)
@@ -212,7 +212,9 @@
 
 ## 진행 중 / 남음
 
-- [ ] [결정 필요 M-PA-1~M-PA-6] notes D의 답을 받은 뒤 해당 항목(R3.11·R20.3·R19.3·R17.7·R12.8·R9.3)을 목표 문장으로 바꾼다.
+- [x] Payment `[결정 필요]` 6건 확정: M-PA-1 결정 188(R3.11), M-PA-2 결정 189(R20.3), M-PA-3 결정 179, M-PA-4 결정 190(R17.7), M-PA-5 결정 191(R12.8), M-PA-6 결정 192(R9.3·PA-T16).
+- [ ] 경보 안내문 정정([결정 191](../../../docs/decisions.md#no-alert-silence)): `infra/prometheus/alerts.yml`의 "Alertmanager silence" 안내 3곳과 `infra/prometheus/tests/approval-review.yml`의 기대 안내문 3곳을 "종결 API로 닫으면 다음 평가에서 풀린다"로 바꾸고 `promtool test rules`로 확인(별도 PR, Codex 교차 리뷰).
+- [ ] [나중에 따로 — 사용자 지시 2026-11-11] 주기 PG 거래 대사: 발견(R16)에서 놓친 청구와 오래 열린 `unlinked_charge`를 PG 거래 목록·정산 자료로 다시 찾는다. 맡을 모듈(Payment / Settlement — Settlement면 연결되지 않은 청구를 이벤트로 받아야 함, P1.1-2)·주기는 그때 정한다. 열린 기록의 가장 오래된 나이 게이지·재경보도 함께 다룬다(지금 게이지 `stove.payment.unlinked-charge.open{source}`는 건수만).
 - [ ] 소급 후보 RC-2·RC-13 재질문(notes E) 뒤 MC-P4·MC-P5의 목표 모양 확정.
 - [ ] [외부 대기] 실제 PG 오류(형식 거절·`INVALID_REQUEST` 등) 뒤 운영 재개를 실제 ADMIN 경로로 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
 - [ ] `INVALID_REQUEST` 정정 절차를 운영 절차서에 적는다(결정 133): 같은 시도 본문은 고치지 않고 원인을 고친 뒤 실패 종결(R18) → 고객 재신청(새 `attemptId`·본문·기한) — G2

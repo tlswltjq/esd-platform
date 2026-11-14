@@ -21,7 +21,7 @@ License는 결제 완료 주문 1건을 근거로 **구매 근거**(보관함 �
 - **쓸 수 있는 보유권**: `ACTIVE` 보유권. 고객·상품당 최대 1개.
 - **열린 보유권**: `ACTIVE` 또는 `SUSPENDED` 보유권. 구매 근거당 최대 1개.
 - **현재 정지**: 구매 근거가 정지 상태일 때 그 정지를 만든 정지 요청 ID(`suspensionRequestEventId` = 그 `LicenseSuspensionRequested.eventId`).
-- **정지 전 상태**: 정지될 때의 구매 근거 상태(`STORED` 또는 `REGISTERED`). 복구가 돌아갈 곳을 정한다. 표현 방식은 `[결정 필요 M-LI-1]`(소급 RC-17).
+- **정지 전 상태**: 정지될 때의 구매 근거 상태(`STORED` 또는 `REGISTERED`). 복구가 돌아갈 곳을 정한다. 상태 값 `SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`로 표현한다([결정 193](../../../docs/decisions.md#split-suspended-status), 소급 RC-17).
 - **처리 기록**: 정지·복구·승인 정정 요청 한 건을 처리한 불변 기록(`license_suspension`·`license_restoration`·`license_approval_correction`). 상태 열이 없다.
 - **늦은 취소 회수**: 실패로 끝나 복구된 환불 시도 뒤 실제 전액 취소가 ADMIN 근거로 반영돼 Order가 낸 `PurchaseRefunded`로 구매 근거를 끝내는 것([결정 157](../../../docs/decisions.md#late-cancellation-confirmation), MC-L1).
 - **Inbox**: `(eventId, consumerGroup)` 수신 멱등 가드(`processed_event`). 소비 그룹은 `license-paid-order`·`license-suspension`·`license-restoration`·`license-approval-correction`·`license-purchase-refund` 다섯이다.
@@ -134,7 +134,7 @@ License는 결제 완료 주문 1건을 근거로 **구매 근거**(보관함 �
 2. IF V5 전환 대상에 복수·누락·불일치 출처, 상품·제목 불일치, 누락·고아·다른 유형 Inbox가 있으면 THEN 이행 SHALL 업무 컬럼 추가 전에 전환을 거부한다.
 3. THE 이행 SHALL 복수 구매 근거를 임의로 한 출처로 줄이거나 PAID 주문을 삭제·실패 처리해 제약을 통과시키지 않는다.
 4. WHEN 공유 환경에 전환하기 전 THEN 운영자 SHALL 쓰기를 멈춘 대상 DB에 읽기 전용 점검 SQL을 실행하고 미발행 `OrderPaid` Outbox·Kafka 미소비·실패 보관 자료를 대조한다.
-5. WHEN 상태 표현을 바꾸는 이행(M-LI-1)을 하면 THEN 이행 SHALL 기존 행의 뜻을 그대로 옮기고 `migrationTest`로 옛 행 → 새 값 대응을 확인한다([P2.7-3](../platform/requirements.md), 결정 104).
+5. WHEN 상태 표현을 바꾸는 이행([결정 193](../../../docs/decisions.md#split-suspended-status))을 하면 THEN 이행 SHALL Flyway 기준선(결정 187) 뒤의 증분으로 내고, 보존할 운영 데이터가 없는 동안은 옛 행 채움·`migrationTest` 대응을 두지 않는다. 운영 데이터가 생긴 뒤의 상태 표현 변경은 기존 행의 뜻을 그대로 옮기고 `migrationTest`로 확인한다([P2.7-3](../platform/requirements.md), 결정 104).
 
 ### R10. 보관함과 라이브러리 등록
 **사용자 스토리:** 구매자로서, 산 상품을 바로 라이브러리에 넣을지 보관함에 둘지 고르고 싶다. 그래야 이미 가진 상품을 다시 사도 나중에 쓸 수 있다([결정 90](../../../docs/decisions.md#storage-box-in-p4)·[93](../../../docs/decisions.md#register-after-payment-choice)).
@@ -164,7 +164,7 @@ License는 결제 완료 주문 1건을 근거로 **구매 근거**(보관함 �
 
 #### 수용 기준
 1. THE 구매 근거·보유권 상태 SHALL enum 값이고, DB CHECK가 허용 값을 지킨다(`chk_product_license_status`·`chk_license_registration_status`).
-2. THE 정지 전 상태 SHALL 복구 갈래를 정하는 정보로 명시적으로 표현하고 DB가 상태와의 조합을 지킨다. 표현 방식(정지 상태 둘로 나눔 / 직교 칸 + CHECK)은 `[결정 필요 M-LI-1]`(소급 RC-17).
+2. THE 정지 전 상태 SHALL 복구 갈래를 정하는 정보로 명시적으로 표현하고 DB가 상태와의 조합을 지킨다. 정지 상태를 `SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED` 두 값으로 나누고 CHECK가 다섯 값만 허용한다. 보조 칸 `suspended_from`은 없다([결정 193](../../../docs/decisions.md#split-suspended-status), 소급 RC-17).
 3. THE 상태에 딸린 식별자 칸 SHALL 상태와 함께만 값을 가진다: 현재 정지 요청 ID는 정지 상태일 때만, 회수 근거(정지 요청 ID·회수 시각·`PurchaseRefunded` 식별자)는 `REFUNDED`일 때만, `ended_at`은 `ENDED`일 때만 있다(DB CHECK).
 4. THE 처리 기록(정지·복구·정정) SHALL 상태 열이 없는 불변 기록이고, 요청 `eventId`·대상 정지·결과 `eventId`가 각각 유일하다.
 

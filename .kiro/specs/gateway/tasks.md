@@ -129,6 +129,11 @@ Gateway에 넘어온 MC-* 이월 항목은 없다(`module-carryover.md`에 Gatew
   - 목표: R5.6~5.8, design 상태 표 19·20행, 이벤트 "소비". Gateway Kafka 소비(`gateway-account-access`), subject → 세션·토큰 기록 색인, Redis 거절 기준·`eventId` 멱등, JWT `iat` 검사(세션·Bearer), 소비 지연 게이지, 거절 기준 수명 설정 키. Auth AU-T6 발행 뒤 배포. 실패 보관은 M-GW-8 결정 뒤.
   - 영향: **간접 돈·보유권** — `ADMIN`을 회수당한 운영자가 최대 15분 동안 관리자 환불 판정·늦은 취소 반영을 할 수 있다.
   - 재현: 통합 — 로그인한 BFF 세션·Bearer 토큰을 가진 계정의 `ADMIN` 회수 사실을 넣은 뒤 같은 세션·토큰으로 관리자 API → 지금 200, 목표 401.
+- [ ] **GW-T19. 하류 서비스가 막 닫는 유휴 연결을 다시 써 간헐 500이 난다** ([D-053](../../../docs/defects.md#d-053))
+  - 어디서: `apps/gateway/src/main/resources/application.yml`에 `spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time` 없음(기본 무제한), 하류 Tomcat keep-alive 유휴 닫기 기본 60초.
+  - 목표: Gateway 풀 `max-idle-time` < 하류 유휴 닫기(예: 30초), 설정 계약 테스트.
+  - 영향: 간헐 500. `POST`는 클라이언트가 처리 여부를 모른다.
+  - 재현: 유휴 K초 넘은 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청" — 지금 500, 목표 200.
 
 ## 진행 중 / 남음
 

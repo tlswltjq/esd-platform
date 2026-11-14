@@ -33,7 +33,7 @@
 | `expires_at` | 결제 기한(생성 시각 + `stove.order.payment-window`) | 목표 NOT NULL, `CHECK (expires_at > created_at)`, 색인 `ix_purchase_order_expiry(status, expires_at)` (T12, OR-T1) |
 | `request_event_id` | 최초 `OrderPlaced.eventId` | `uk_purchase_order_event` |
 | `payment_id` | Payment 결제 식별자(불투명). 접수 때 연결, 시도 실패로 되돌리면 null, 결과 반영 때 결과 값 | — |
-| `payment_admission_id` | 결과를 반영한 영수증 ID | 목표 FK → `order_payment_admission(admission_id)`, `chk_purchase_order_paid_admission`([결정 필요 M-OR-4], T1) |
+| `payment_admission_id` | 결과를 반영한 영수증 ID | 목표 FK → `order_payment_admission(admission_id)`, `chk_purchase_order_paid_admission`(`status<>'PAID' OR payment_admission_id IS NOT NULL`, 옛 행이 없어 별도 열 없음 — [결정 187](../../../docs/decisions.md#flyway-baseline), T1) |
 | `payment_result_event_id`·`result_occurred_at` | 반영한 결과 이벤트 ID·Payment 사실 시각(값으로만) | `uk_purchase_order_result` |
 | `payment_result_kind` | 결과 종류 | 목표 `CHECK (payment_result_kind IN ('COMPLETED','DECLINED','REVIEW_CLOSED'))`, `CHECK ((status IN ('PAID','FAILED')) = (payment_result_kind IS NOT NULL))`, `status='PAID' ⇔ kind='COMPLETED'` (OR-T2) |
 | `paid_at` | 처음 `PAID`로 바꾼 Order 시계 시각 | 목표 `chk_purchase_order_paid_at CHECK (status<>'PAID' OR paid_at IS NOT NULL)` (MC-O4) |
@@ -55,7 +55,7 @@
 | 표 | 뜻 | 제약 |
 |---|---|---|
 | `order_payment_result_rejection`(목표, OR-T3) | 반영하지 않은 성공 결과 하나(결정 153) | `rejected_result_event_id` 유일, `order_no` FK, `payment_id`, `admission_id`(null 가능), `rejection_reason CHECK IN ('NO_OPEN_ADMISSION','ADMISSION_MISMATCH','ORDER_CLOSED')`, `rejected_at`(Order 시계), `rejection_event_id`(낸 `OrderPaymentResultRejected.eventId`) 유일. 주문당 여러 행 가능 |
-| `order_expired_review_closure`(V31) | `EXPIRED` 주문에 온 운영자 종결 하나 | `uq_…_order`·`uq_…_event`, FK. 목표: `reason_code='REVIEW_CLOSED'` CHECK 대신 `result_kind='REVIEW_CLOSED'` 열을 보고 `reason_code`는 값으로만(결정 174, OR-T2) |
+| `order_expired_review_closure`(V31) | `EXPIRED` 주문에 온 결과 하나(운영자 종결 또는 결제 최종 거절) | `uq_…_order`·`uq_…_event`, FK. 목표: `reason_code='REVIEW_CLOSED'` CHECK 대신 `result_kind IN ('REVIEW_CLOSED','DECLINED')` 열과 CHECK를 두고 `reason_code`는 값으로만(결정 174, [결정 185](../../../docs/decisions.md#expired-order-declined), OR-T2). 표 이름 변경은 하지 않는다 |
 | `order_forward_response`(목표, OR-T11) | 응답 대기의 응답 사실(결정 158) | `(order_no, response_type)` 유일, `event_id` 유일, `response_type CHECK IN ('SETTLEMENT_SALE_RECORDED','LICENSE_REFUND_APPLIED')`, `received_at`(Order 시계) |
 | `order_license_grant`(V13) | 구매 근거 생성 사실(지급 근거) | `uk_order_license_grant_event`·`_license`·`_order`, FK |
 
@@ -120,7 +120,7 @@
 | `purchase_order.expires_at` | `created_at + INTERVAL 30 MINUTE`(V10 이후 기한 규칙 그대로) | T12 |
 | `purchase_order.paid_at` | `status='PAID'` 행은 `updated_at`(`Order.apply`가 `PAID` 때 쓴 Order 시각. `PAID` 뒤 `purchase_order`를 바꾸는 코드 경로 없음 — 이행 PR에서 다시 확인). 그 밖은 NULL | 결정 173, MC-O4 |
 | `purchase_order.payment_result_kind` | `PAID` → `COMPLETED`, `FAILED`이고 `failure_reason_code='REVIEW_CLOSED'` → `REVIEW_CLOSED`, 그 밖 `FAILED` → `DECLINED` | 결정 174 |
-| `purchase_order.payment_admission_id` | `PAID`·`FAILED` 행: 같은 주문의 가장 최근 영수증이 `closed_at IS NULL`이고 `payment_id`가 같으면 그 `admission_id`. 영수증 없는 옛 결과 행은 [결정 필요 M-OR-4] | T1 |
+| `purchase_order.payment_admission_id` | `PAID`·`FAILED` 행: 같은 주문의 가장 최근 영수증이 `closed_at IS NULL`이고 `payment_id`가 같으면 그 `admission_id`. 영수증 없는 옛 결과 행은 없다(기준선 압축, [결정 187](../../../docs/decisions.md#flyway-baseline)) | T1 |
 | `order_payment_admission.status` | `closed_at IS NOT NULL` → `ATTEMPT_FAILED`; 주문 `PAYMENT_PROCESSING`인 최신 열린 행 → `OPEN`; 주문 `PAID`·`FAILED`인 최신 열린 행 → `RESULT_APPLIED`(`closed_at`=주문 `updated_at`, `closed_order_status`=주문 상태). 그 밖의 조합은 이행 전 확인 쿼리로 0행을 확인하고, 있으면 이행을 멈추고 조사 | MC-O1 |
 | `order_refund.status` CHECK | 채움 없음(`LATE_CANCELLATION_COMPLETED`는 새 값) | MC-O1·O3 |
 | `order_refund.purchase_refunded_at` | `COMPLETED` 행: 그 환불의 `PurchaseRefunded` Outbox 행 `created_at`(V30 채움 행 포함), 없으면 금융 확인 이벤트의 Inbox `processed_event` 처리 시각, 없으면 `received_at`(실제보다 늦지 않음 — V32와 같은 원칙) | OR-T11 |
@@ -155,7 +155,7 @@
 | `PAYMENT_PROCESSING` | = | = | 409 | = (최초 영수증) | → `PENDING` / → `EXPIRED` + `OrderExpired` ⑧ / 409 | = (R3.6) | → `PAID` + `OrderPaid` ⑨ | = + 거절 `ADMISSION_MISMATCH` ⑥ | → `FAILED`(`DECLINED`) ⑩ / ✕ | → `FAILED`(`REVIEW_CLOSED`) ⑩ / ✕ | = | ✕ | 409 | ✕ |
 | `PAID` | = | = | 409 | = (최초 영수증) | = (닫힌 같은 통지) / 409 | = | 해당 없음(영수증 `RESULT_APPLIED` → O8 또는 O11) | = + 거절 `ORDER_CLOSED` ⑥ | ✕ | ✕ | = | ✕ | 허용(주문 불변) | = (지급 근거 저장) ⑪ |
 | `FAILED` | = | = | 409 | = (최초 영수증) | = (닫힌 같은 통지) / 409 | = | 해당 없음(→ O8) | = + 거절 `ORDER_CLOSED` ⑥ | ✕ | ✕ | = | ✕ | 409 | ✕ |
-| `EXPIRED` | = | = | 409 `ORDER_EXPIRED`(새 `OrderExpired` 없음) | = (최초 영수증) | = (닫힌 같은 통지) / 409 | = | 해당 없음(→ O8) | = + 거절 `ORDER_CLOSED` ⑥ | M-OR-2 | = + 종결 기록 ⑫ / ✕ | = | ✕ | 409 | ✕ |
+| `EXPIRED` | = | = | 409 `ORDER_EXPIRED`(새 `OrderExpired` 없음) | = (최초 영수증) | = (닫힌 같은 통지) / 409 | = | 해당 없음(→ O8) | = + 거절 `ORDER_CLOSED` ⑥ | `admissionId` null·첫 → = + 만료 결과 기록(`DECLINED`, [결정 185](../../../docs/decisions.md#expired-order-declined)) / 같은 결과 = / ✕ | = + 종결 기록 ⑫ / ✕ | = | ✕ | 409 | ✕ |
 
 ① 공개·판매·가격·기대 값 검증(R1). ② Order 시계 < `expires_at`, 연결값 일치, 판매 제한 아님 → `OPEN` 영수증. 판매 제한이면 409 `PRODUCT_SALE_RESTRICTED`, 연결값 불일치 409(상태 불변). ③ Order 시계 ≥ `expires_at` → `EXPIRED` + `OrderExpired` 커밋 뒤 409 `ORDER_EXPIRED`. ④ 같은 `admissionId`·다른 내용은 409. ⑤ `expires_at <= now`면 전이, 아니면 `=`. ⑥ 결과 거절 기록 + `OrderPaymentResultRejected` Outbox + Inbox(R4.9, 결정 153). ⑦ `admissionId`가 null일 때만 허용, 값이 있으면 ✕(닫힌 영수증의 결과). ⑧ 열린 최신 영수증·결과 없음일 때 Order 시계 < `expires_at` → `PENDING`, ≥ → `EXPIRED`. 최신 아님·내용 다름 409. `failedAt`은 비교하지 않음. ⑨ 영수증 → `RESULT_APPLIED`, `payment_admission_id`·`paid_at`·결과 식별 저장. ⑩ `admissionId`·`paymentId` = 열린 최신 영수증일 때 허용(영수증 `RESULT_APPLIED`), 다르면 ✕. ⑪ 주문 연결·`paymentId`·상품 일치, 주문의 첫 근거, `eventId`·`licenseId`를 다른 주문이 쓰지 않음. 기다리던 환불이 있으면 환불 표 E1. ⑫ 첫 종결이면 종결 기록 + Inbox, 같은 종결 재전달 `=`, 같은 주문의 다른 종결 ✕(R4.8).
 
@@ -324,8 +324,8 @@
 
 | 이벤트(플랫폼 행) | 그룹 · 리스너 → Mapper → 서비스 | 업무 멱등 키 | 실패 처리 |
 |---|---|---|---|
-| `OrderPaymentCompleted`(#24) | `order-payment-result` · `PaymentEventListener` → `PaymentResultMapper.from` → `ApplyPaymentResult` | `uk_purchase_order_result`, 거절 `rejected_result_event_id` 유일 | 연결값 불일치·다른 주문 `eventId` ✕. 반영 불가 성공은 거절 사실(DLT 아님). `admissionId` 없는 본문은 M-OR-3 |
-| `OrderPaymentFailed`(#25) | 같은 그룹·리스너 | `uk_purchase_order_result` | 이행 기간 `reasonCode=REVIEW_CLOSED`는 Mapper에서 `REVIEW_CLOSED` 결과 종류로 바꿈(결정 174). `EXPIRED`는 M-OR-2 |
+| `OrderPaymentCompleted`(#24) | `order-payment-result` · `PaymentEventListener` → `PaymentResultMapper.from` → `ApplyPaymentResult` | `uk_purchase_order_result`, 거절 `rejected_result_event_id` 유일 | 연결값 불일치·다른 주문 `eventId` ✕. 반영 불가 성공은 거절 사실(DLT 아님). `admissionId` 없는 본문은 거절 사실, 호환 분기 없음([결정 186](../../../docs/decisions.md#admission-id-no-compat)) |
+| `OrderPaymentFailed`(#25) | 같은 그룹·리스너 | `uk_purchase_order_result` | 이행 기간 `reasonCode=REVIEW_CLOSED`는 Mapper에서 `REVIEW_CLOSED` 결과 종류로 바꿈(결정 174). `EXPIRED`는 만료 결과 기록(`DECLINED`, [결정 185](../../../docs/decisions.md#expired-order-declined)) |
 | `OrderPaymentReviewClosed`(목표 행) | 같은 그룹(같은 주문 결과의 순서 보장, P2.5-1) | `uk_purchase_order_result`, `order_expired_review_closure` 유일 | 주문 표 O10 |
 | `LicenseGranted` → `PurchaseRecordStored`(#33, 결정 175) | `order-license-grant` · `LicenseEventListener` → `LicenseGrantMapper.from` → `ApplyLicenseGrant` | `uk_order_license_grant_event`·`_order`·`_license` | 이행 기간 두 타입을 같은 입력으로(P2.7-4). 불일치 ✕ |
 | `LicenseSuspended`(#34) | `order-refund-suspension` · `RefundSuspensionEventListener` → `ApplyRefundSuspension`(중단 중이면 `ApplyApprovalCorrection.handleStoppedSuspension`, 같은 그룹 Inbox) | 시도 `suspension_event_id`, 회차 `stop_suspension_event_id` 유일 | 환불 표 E2 |

@@ -34,7 +34,7 @@
 
 | 제약(가칭) | 내용 | 근거 |
 |---|---|---|
-| 정지 전 상태 표현 | `[결정 필요 M-LI-1]`의 선택에 따라 ① `chk_product_license_status`가 `STORED`·`REGISTERED`·`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`·`REFUNDED`를 허용하고 `suspended_from` 열을 없앤다, 또는 ② `chk_product_license_suspended_from`: `suspended_from IN ('STORED','REGISTERED')` 이고 `(status='SUSPENDED') = (suspended_from IS NOT NULL)` | R12-2, RC-17 |
+| 정지 전 상태 표현 | `chk_product_license_status`가 `STORED`·`REGISTERED`·`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`·`REFUNDED`만 허용하고 `suspended_from` 열을 없앤다([결정 193](../../../docs/decisions.md#split-suspended-status)) | R12-2, RC-17 |
 | `chk_product_license_suspension` | `(status가 정지) = (suspension_request_event_id IS NOT NULL)` | R12-3 |
 | `chk_product_license_refund` | `(status='REFUNDED') = (refunded_suspension_request_event_id IS NOT NULL) = (refunded_at IS NOT NULL) = (refunded_event_id IS NOT NULL)` | R12-3 |
 | `refunded_event_id`·`refunded_refund_id` 열 + `uk_product_license_refund_event(refunded_event_id)` | 회수에 쓴 `PurchaseRefunded.eventId`·`refundId`. 같은 회수가 다른 `eventId`로 다시 오는 것을 업무 키로 막고(P2.3-3), `LicenseRefundApplied` 본문의 근거가 된다 | R11-1·R11-2, 결정 158 |
@@ -51,7 +51,7 @@
 | 정지(정지 전 `REGISTERED`) | 등록 뒤 환불로 정지됐다 | `SUSPENDED` 1개 | 안 보임 | 보임(정지 표시) |
 | `REFUNDED` | 환불이 끝났다. 끝 상태 | 없음(`ENDED`만) | 안 보임 | 안 보임(결정 97) |
 
-정지 상태의 표현 — `[결정 필요 M-LI-1]`(소급 RC-17): 지금은 `SUSPENDED` 한 값 + `suspended_from` 칸이다. 목표 후보는 ① enum 값 둘(`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`) ② `SUSPENDED` + 직교 칸 `suspended_from`(CHECK로 조합 강제, 원칙 ④ "불가피하면 직교 필드"). 아래 표는 두 정지를 다른 열로 적어 어느 안이든 같은 전이다. 표에서 줄여 `정지·S`(정지 전 `STORED`), `정지·R`(정지 전 `REGISTERED`)로 쓴다.
+정지 상태의 표현 — 지금은 `SUSPENDED` 한 값 + `suspended_from` 칸이다. 목표는 enum 값 둘(`SUSPENDED_FROM_STORED`·`SUSPENDED_FROM_REGISTERED`)이고 `suspended_from`은 없앤다([결정 193](../../../docs/decisions.md#split-suspended-status), 소급 RC-17). 보관함 응답은 api 계층에서 두 값을 `SUSPENDED`로 내보낸다. 표에서 줄여 `정지·S`(정지 전 `STORED`), `정지·R`(정지 전 `REGISTERED`)로 쓴다.
 
 상태에 딸린 식별자(하위 상태가 아니라 그 상태의 근거 값이다. R12-3의 CHECK로 상태와 묶는다): 정지 상태의 `suspension_request_event_id`(현재 정지), `REFUNDED`의 `refunded_suspension_request_event_id`·`refunded_at`·`refunded_event_id`(목표).
 

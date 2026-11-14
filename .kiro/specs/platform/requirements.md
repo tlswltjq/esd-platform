@@ -238,7 +238,7 @@
 2. WHEN 접수된 시도의 PG 조회가 검증된 시도 실패(FAILED)이면 THEN Payment SHALL 시도를 `FAILURE_CONFIRMED`로 바꾸고 Order에 시도 실패 통지(`POST …/payment-admissions/{admissionId}/failure`)를 보낸다. Order는 그 영수증이 최신이고 결과가 없을 때만 기한 전이면 `PENDING`(같은 주문 재결제), 기한 뒤면 `EXPIRED`+`OrderExpired`로 바꾸고 영수증을 실패 종료로 닫는다. Payment는 실패 영수증을 받은 뒤 시도를 `FAILED`로 닫는다.
 3. IF PG 결과가 미확정(응답 유실·PG PENDING·조회 장애·결과 트랜잭션 실패)이면 THEN Payment SHALL 상태를 유지하고 다음 조회를 예약하며, 시간 경과나 재시도 횟수만으로 실패를 만들지 않는다.
 4. 시스템(Payment) SHALL 결제당 최종 결과를 한 번만 정한다. 같은 결과의 재확정은 무변화, 다른 결과는 `CONFLICT`다(I8).
-5. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 그 시도를 보류(`PAID_WITHOUT_ADMISSION`)로 올리며, 다른 시도의 성공으로 돌리지 않는다(결정 114·126, I15). 이미 끝난(종결·만료·실패) 결제에 뒤늦게 생긴 청구는 P3.13-8·9로 찾는다.
+5. IF 승인 진행 영수증이 없는 시도(접수 전 시도, 실패·종결·만료로 닫힌 시도)에서 PG 결제가 관측되면 THEN Payment SHALL 결과 이벤트를 내지 않고 접수 전 진행 중 시도는 보류(`PAID_WITHOUT_ADMISSION`)로 올리고, 닫힌 시도는 다시 열지 않고 근거 충돌로 거절하며(진행 시도의 근거 대조 실패 보류·결제 종료 뒤 늦은 청구 감시로 드러남, [결정 188](../../../docs/decisions.md#closed-attempt-charge)), 다른 시도의 성공으로 돌리지 않는다(결정 114·126, I15). 이미 끝난(종결·만료·실패) 결제에 뒤늦게 생긴 청구는 P3.13-8·9로 찾는다.
 
 #### P3.13 승인 보류와 종결 (Payment → Order)
 
@@ -256,7 +256,7 @@
 
 1. WHEN `OrderPaymentCompleted`가 처음 오면 THEN Order SHALL 주문 행 잠금 아래 연결값(`orderNo`·`requestEventId`·`buyerSubject`·`amount`·`currency`)과 `admissionId`·`paymentId`가 이 주문의 열린 최신 승인 진행 영수증(주문 `PAYMENT_PROCESSING`)과 같을 때만 `PAID`로 바꾸고, 같은 트랜잭션에 Inbox(`order-payment-result`)·결과 식별·반영한 영수증 ID(`purchase_order.payment_admission_id`)·`OrderPaid` Outbox를 쓴다(I1·I3·I12, T1).
 2. IF 성공 결과의 주문 연결값은 맞지만 열린 최신 영수증의 성공으로 반영할 수 없으면(주문 `PENDING`·`EXPIRED`·`FAILED`, 영수증 실패 종료, 다른 `admissionId`, 이미 다른 결과로 `PAID`) THEN Order SHALL `PAID`로 반영하지 않고 `OrderPaid`를 만들지 않으며, 같은 트랜잭션에 Inbox·거절 기록과 `OrderPaymentResultRejected`(거절한 결과의 `eventId`·`paymentId`·`admissionId`·거절 사유) Outbox를 쓴다. 이 결과를 409로 DLT에 보내지 않는다. 주문 연결값 자체가 다르면 계약 위반으로 영구 실패다([결정 153](../../../docs/decisions.md#late-success-rejection)).
-3. WHEN `OrderPaymentFailed`(결제 공급자가 그 결제를 최종 거절함)·`OrderPaymentReviewClosed`가 처음 오고 1과 같은 연결이 맞으면(`admissionId`가 null이면 영수증 없는 `PENDING` 주문) THEN Order SHALL 주문을 `FAILED`로 바꾸고 사유를 기록한다. `OrderPaymentFailed`는 운영자 종결을 싣지 않는다(원칙 ①).
+3. WHEN `OrderPaymentFailed`(결제 공급자가 그 결제를 최종 거절함)·`OrderPaymentReviewClosed`가 처음 오고 1과 같은 연결이 맞으면(`admissionId`가 null이면 영수증 없는 `PENDING` 주문) THEN Order SHALL 주문을 `FAILED`로 바꾸고 사유를 기록한다. IF 주문이 이미 `EXPIRED`이면(영수증 없는 결제의 거절·종결) THEN Order SHALL `EXPIRED`를 유지하고 결과만 불변 기록으로 남긴다([결정 115](../../../docs/decisions.md)·[결정 185](../../../docs/decisions.md#expired-order-declined)). `OrderPaymentFailed`는 운영자 종결을 싣지 않는다(원칙 ①).
 4. WHEN 결과가 정해진 주문에 결과가 다시 오면 THEN Order SHALL 저장한 결과와 같으면 무변화로 끝낸다. 다른 결과가 성공이면 2를 따르고, 그 밖의 다른 결과이거나 그 결과 `eventId`를 다른 주문이 이미 썼으면 영구 실패로 거절한다(I8).
 5. 시스템(Order) SHALL `OrderPaid`를 최초 `PAID` 트랜잭션에서 한 번만 만들고, 재시도·`DEAD` 재큐잉·재발행은 저장된 `eventId`·키·본문을 그대로 쓴다(결정 129).
 

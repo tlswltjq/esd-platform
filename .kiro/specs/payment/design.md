@@ -34,7 +34,8 @@
 | `next_attempt_at`·`last_error_code` | 결제 재개 일정과 마지막 오류(상태 아님) | `PENDING`만 `next_attempt_at` NOT NULL |
 | `next_failure_lookup_at`·`failure_history_checked_at` | 실패 시도 이력 수집 일정(상태 아님) | — |
 | `pg_paid_amount`·`pg_discount_amount` | PG 결제 구성 | `ck_payment_provider_amounts`(NULL 일치·`PAID`만·합계=amount) |
-| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본(읽기 전용) | `ck_payment_pg_fee`. 새 행에 쓰지 않음(결정 165, PA-T16), 칸 제거는 `[결정 필요 M-PA-6]` |
+| `order_response_kind`·`order_response_event_id` (목표 신설) | Order 반영 응답(`APPLIED` = `OrderPaid`, `REJECTED` = `OrderPaymentResultRejected`)과 그 `eventId` | CHECK 값 2개, 둘 다 NULL이거나 둘 다 값, `PAID`일 때만 `APPLIED`, `uk_purchase_payment_order_response(order_response_event_id)`. 응답 없는 `PAID` 결제를 게이지로 셈([결정 189](../../../docs/decisions.md#payment-order-response)) |
+| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본 — **목표: 삭제** | `ck_payment_pg_fee`. 쓰는 곳은 `SimulatedPgHttpGateway`뿐이라, 그 경로를 없애는 PR(결정 162·T13 또는 PA-T16)에서 칸·CHECK·`Payment` 필드·`PgFee`·`PgResult.fee`를 함께 지운다([결정 192](../../../docs/decisions.md#drop-payment-pg-fee)) |
 | (목표) `(payment_id, amount)` 유일 키 | 환불 실행 금액 FK 대상 | MC-P1 |
 
 ### `payment_order_lifecycle` (주문 생명주기 사본, V31)
@@ -184,7 +185,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 7 | 작업자: Order 연계 장애(연결 실패·5xx) | 무변화 | 무변화(같은 `admissionId` 재요청) | 무변화 | 무변화 | 무변화 | 무변화(통지 재요청) | 무변화 | R4.17 |
 | 8 | 작업자: 확정 송신(`READY`, `confirm_deadline` 전, lease 유효) | 무변화 | 거절(송신 가드: 영수증 없음) | 무변화(송신 뒤 조회) | 거절(송신 금지) | 거절(송신 금지) | 거절(송신 금지) | 거절(송신 금지) | R4.3·R4.5 |
 | 9 | 작업자: 확정 송신 형식 거절 | 무변화 | 무변화(송신 없음) | → `RV-후`(`PG_REQUEST_REJECTED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.12 |
-| 10 | 작업자: PG `PAID` | 무변화 | → `RV-전`(`PAID_WITHOUT_ADMISSION`) | → `SUCCEEDED` + 결제 `PAID`(결제 표 #3) | 무변화 + 사유를 `PAID_WITHOUT_ADMISSION`으로 한 번 올림 | → `SUCCEEDED` + 결제 `PAID` | 거절(근거 충돌) → `[결정 필요 M-PA-1]` | `SUCCEEDED` 무변화 / `FAILED`·`EXPIRED`: 결제가 열려 있으면 `[결정 필요 M-PA-1]`, 끝났으면 청구 감시(R16) | R3.1·R3.11, 결정 144·153 |
+| 10 | 작업자: PG `PAID` | 무변화 | → `RV-전`(`PAID_WITHOUT_ADMISSION`) | → `SUCCEEDED` + 결제 `PAID`(결제 표 #3) | 무변화 + 사유를 `PAID_WITHOUT_ADMISSION`으로 한 번 올림 | → `SUCCEEDED` + 결제 `PAID` | 거절(근거 충돌, 시도 무변화, 실패 통지 유지 — [결정 188](../../../docs/decisions.md#closed-attempt-charge)) | `SUCCEEDED` 무변화 / `FAILED`·`EXPIRED`: 무변화(근거 충돌 기록). 결제가 열려 있으면 진행 시도가 #14로 보류되고, 끝났으면 청구 감시(R16) — [결정 188](../../../docs/decisions.md#closed-attempt-charge) | R3.1·R3.11, 결정 144·153 |
 | 11 | 작업자: 검증된 PG `FAILED` | 무변화 | → `FAILED`(접수 전 실패, Order 통지 없음, 만료 사실 있으면 결제 `EXPIRED`) | → `FC` | → `FAILED`(접수 전 실패) | → `FC` | 같은 근거 무변화 / 다른 근거 거절 | 무변화 | R4.13, R5.1 |
 | 12 | 작업자: 같은 시도 PG 전액 `CANCELLED` | 무변화 | → `RV-전`(`PG_CANCELLED`) | → `RV-후`(`PG_CANCELLED`) | 무변화(관측만, 사유 유지) | 무변화(관측만) | 무변화(관측만) | 무변화 | R13.8 |
 | 13 | 작업자: `confirm_deadline` 지남 + PG `PENDING`·`READY` | 무변화 | 무변화(기한 없음) | → `RV-후`(`CONFIRM_WINDOW_EXPIRED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.6, 결정 124 |
@@ -249,7 +250,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | ADMIN 같은 `requestId` 다른 내용 | 404 | 거절 409 `UNLINKED_CHARGE_CLOSURE_CHANGED` | 같음 | R17.6 |
 | ADMIN 조사 기록 | 404 | 무변화(기록 추가) | 거절 409 | R17.8 |
 
-결제·시도 상태는 이 표의 어떤 전이로도 바뀌지 않는다(결정 154 "다시 열지 않는다"). 종결 뒤 결제의 고객 표현은 `[결정 필요 M-PA-4]`.
+결제·시도 상태는 이 표의 어떤 전이로도 바뀌지 않는다(결정 154 "다시 열지 않는다"). 종결 뒤 결제의 고객 표현: 저장 `PAID` + 닫힌 `ORDER_REJECTED` 기록이면 응답 `status`만 `CHARGE_RETURNED`(가칭)로 계산한다(R17.7, [결정 190](../../../docs/decisions.md#charge-returned-view)).
 
 ### 5. 청구 감시 `payment_charge_watch.status` (목표 신설, 결정 154)
 
@@ -347,7 +348,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 메서드 · 경로 | 역할 | 요청 → 응답 | 오류 코드 | 요구사항 |
 |---|---|---|---|---|
 | `GET /api/v1/payments?page&size` | MEMBER | 본인 결제 목록(`createdAt DESC, id DESC`, `size 1~100`), `reviewNotice=null` | 400 | R8.1~8.4 |
-| `GET /api/v1/payments/{orderNo}` | MEMBER | 결제 상세 + `reviewNotice` | 404 | R8.4, R14 |
+| `GET /api/v1/payments/{orderNo}` | MEMBER | 결제 상세 + `reviewNotice`. 응답 `status`는 저장 값, 단 R17.7 조건이면 `CHARGE_RETURNED`(응답 전용, [결정 190](../../../docs/decisions.md#charge-returned-view)) | 404 | R8.4, R14, R17.7 |
 | `GET /api/v1/payments/{orderNo}/checkout` | MEMBER | 결제창 공개 설정, `no-store` | 409 `ORDER_EXPIRED`(만료 사실 수신 뒤만)·`APPROVAL_IN_PROGRESS`·끝 상태 409, 404 | R4.8, R4.16 |
 | `POST /api/v1/payments/{orderNo}/approvals` | MEMBER | `{requestId, supplierAttemptId, paymentToken}` → 202 `{requestId, orderNo, paymentId, receivedAt}` + Location | 409 `APPROVAL_IN_PROGRESS`·`CONFLICT`, 404 | R4.1·R4.2 |
 | `GET /api/v1/payments/{orderNo}/approvals/{requestId}` | MEMBER | 상태·접수·종결 시각 + `reviewNotice`, `no-store` | 404 | R4.14, R14 |
@@ -406,7 +407,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | `RefundExecutionRequested`(#19) | `RefundExecutionEventListener` → `RefundExecutionMapper.from` → `ReceiveRefundExecution` | `payment-refund-execution`(결제 환불 팩토리) | 봉투·식별자·금액·통화 | `uk_refund_execution_attempt`·`_request`·`_suspension`·`_previous` | 결제 없음·선행 모순 영구, 일시 오류 재시도 |
 | `OrderPaymentResultRejected`(목표 행) | (가칭) `OrderPaymentResultRejectionListener` → `OrderPaymentResultRejectedMapper.from` → `RecordUnlinkedCharge` | (신설) `payment-order-result-rejection` | 연결값 5개·`rejectedResultEventId`·`paymentId`·`admissionId`(null 허용)·`rejectionReason` enum | `uk_unlinked_charge_rejection`, `uk_unlinked_charge_source` | 결과 ID 불일치 영구 |
 | `SettlementRefundRecorded`(목표 행, 가칭) | (가칭) `SettlementRefundListener` → `SettlementRefundMapper.from` → `RecordSettlementRefundResponse` | (신설) `payment-settlement-refund` | 봉투·`refundId`·`attemptId`·키 | 실행·늦은 취소 기록당 응답 ID 하나 | 대상 없음·이미 다른 응답 영구 |
-| (결정 필요 M-PA-2) `OrderPaid`(#17) 또는 새 응답 사실 | — | (신설 후보) `payment-order-paid` | — | — | — |
+| `OrderPaid`(#17) | (목표) `OrderPaidListener` → `OrderPaidResponseMapper.from` → `RecordOrderPaymentResponse` | (신설) `payment-order-paid` | 봉투·키=`orderNo`·`paymentResultEventId`·`paymentId` | 결제당 응답 하나(`order_response_event_id` 유일) | 결제 없음·식별자 불일치 = 영구 실패. 같은 응답 재전달 무변화 ([결정 189](../../../docs/decisions.md#payment-order-response)) |
 
 여러 토픽을 받는 리스너는 (토픽, `eventType`) 짝을 대조한다(P2.3-8). Payment 리스너는 지금 토픽 하나씩이다.
 
