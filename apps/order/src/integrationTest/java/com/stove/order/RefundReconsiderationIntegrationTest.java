@@ -338,7 +338,7 @@ class RefundReconsiderationIntegrationTest extends OrderIntegrationTestBase {
         suspension.execute(new LicenseSuspensionConfirmation(id(), BASE.plusSeconds(3), approved.getSuspensionRequestEventId(), approved.getRefundId(),
                 granted.licenseId(), fixture.order().getOrderNo(), "usr_buyer", fixture.order().getProductId(), fixture.order().getProductCode(), fixture.order().getPaymentId()));
         RefundAttempt attempt = attempts.findByAttemptId(current(fixture).getCurrentAttemptId()).orElseThrow(); when(clock.instant()).thenReturn(BASE.plusSeconds(6));
-        restore.execute(new RefundFailureConfirmation(id(), BASE.plusSeconds(5), approved.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
+        restore.execute(RefundFailureConfirmation.pgCancellationFailed(id(), BASE.plusSeconds(5), approved.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
                 fixture.order().getOrderNo(), fixture.order().getPaymentId(), "usr_buyer", 10000, "KRW", "pg-original", "failed-cancel", "a".repeat(64)));
         RefundAttempt failed = attempts.findByAttemptId(attempt.getAttemptId()).orElseThrow();
         restore.execute(new LicenseRestorationConfirmation(id(), BASE.plusSeconds(7), failed.getRestorationRequestEventId(), approved.getRefundId(),

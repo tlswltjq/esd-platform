@@ -202,8 +202,9 @@ public class RefundExecution {
 
     /**
      * Records the operator failure closure (decision 128) after a PG re-inspection showed the original payment PAID with no
-     * cancelled amount and no requested or successful cancellation. The execution fails exactly like a PG-confirmed failure,
-     * so the existing {@code RefundExecutionFailed} restores the license and allows the customer's retry. Money is not moved.
+     * cancelled amount and no requested or successful cancellation. The execution fails like a PG-confirmed failure, but the
+     * fact is published as its own {@code RefundFailureClosed} (decision 148), which Order answers the same way: it restores
+     * the license and allows the customer's retry. Money is not moved.
      */
     public void closeAsFailed(Payment payment, String eventId, String snapshotHash, Instant at) {
         if (payment == null || !PaymentValues.text(eventId, 64) || snapshotHash == null || !snapshotHash.matches("[a-f0-9]{64}"))

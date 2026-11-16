@@ -5,6 +5,7 @@ import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.kafka.contract.payload.RefundFailureClosedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundFailureConfirmation;
@@ -25,11 +26,14 @@ public class RefundRestorationEventListener {
         RefundFailureConfirmation failure = null; LicenseRestorationConfirmation restored = null;
         try {
             EventEnvelope envelope = EventEnvelope.from(record);
-            if ((envelope.isType(EventType.REFUND_EXECUTION_FAILED) && !Topics.PAYMENT.equals(record.topic()))
+            boolean paymentFailure = envelope.isType(EventType.REFUND_EXECUTION_FAILED) || envelope.isType(EventType.REFUND_FAILURE_CLOSED);
+            if ((paymentFailure && !Topics.PAYMENT.equals(record.topic()))
                     || (envelope.isType(EventType.LICENSE_RESTORED) && !Topics.LICENSE.equals(record.topic())))
                 throw new RefundCompletionRejected("실패/복구 이벤트의 발행 모듈 토픽이 다릅니다.");
             if (envelope.isType(EventType.REFUND_EXECUTION_FAILED))
                 failure = RefundFailureConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionFailedEvent.class));
+            else if (envelope.isType(EventType.REFUND_FAILURE_CLOSED))
+                failure = RefundFailureClosureMapper.from(envelope, envelope.payloadAs(mapper, RefundFailureClosedEvent.class));
             else if (envelope.isType(EventType.LICENSE_RESTORED))
                 restored = LicenseRestorationConfirmationMapper.from(envelope, envelope.payloadAs(mapper, LicenseRestoredEvent.class));
             else return;

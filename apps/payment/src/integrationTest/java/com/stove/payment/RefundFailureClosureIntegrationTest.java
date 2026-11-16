@@ -96,7 +96,8 @@ import org.testcontainers.containers.MySQLContainer;
 /**
  * Decision 128: an operator closes a refund execution whose automatic POST stopped as failed only when the PG, re-inspected
  * at closure time, shows the original payment PAID with nothing cancelled and no requested or successful cancellation. The
- * failure is published as the existing {@code RefundExecutionFailed}; the lookup continues at the low post-failure frequency
+ * closure is published as its own {@code RefundFailureClosed} (decision 148), never as the PG-confirmed
+ * {@code RefundExecutionFailed}; the lookup continues at the low post-failure frequency
  * (decisions 122·128) and a late full cancellation is raised for investigation only. Real HTTP, JWT and MySQL; the PortOne
  * lookup and cancellation gateway are contract fixtures.
  */
@@ -149,7 +150,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment"); jdbc.update("DELETE FROM processed_event"); jdbc.update("DELETE FROM outbox_event");
     }
 
-    @Test void aForbiddenHoldIsClosedAsFailedOnAnUncancelledPaymentAndPublishesTheExistingFailure() {
+    @Test void aForbiddenHoldIsClosedAsFailedOnAnUncancelledPaymentAndPublishesTheFailureClosureNotAPgFailure() {
         RefundExecution execution = held(); Payment payment = payment(execution);
         // The worker's next lookup is far away; the closure re-inspects the PG directly, regardless of the lookup delay.
         jdbc.update("UPDATE refund_execution SET next_refund_lookup_at=? WHERE attempt_id=?", BASE.plusSeconds(600), execution.getAttemptId());
@@ -176,13 +177,28 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         assertThat(stored.getRefundConfirmedAt()).isNull();
         assertThat(stored.getLookupSchedule().getNextAt()).as("still watched after the failure").isEqualTo(BASE.plusSeconds(600));
         assertThat(stored.getLookupSchedule().getLeaseUntil()).isNull(); assertThat(stored.getLookupSchedule().getClaimId()).isNull();
-        // The existing failure notice, exactly once, so Order restores the license and allows the customer's retry.
-        JsonNode event = failureEvent();
+        // Decision 148: the operator closure is its own fact, exactly once, so Order restores the license and allows the retry.
+        // It is never published as the PG-confirmed RefundExecutionFailed, and no field carries a value of another meaning.
+        JsonNode event = closureEvent();
         assertThat(event.path("eventId").asText()).isEqualTo(stored.getFailureEventId());
+        assertThat(event.path("occurredAt").asText()).isEqualTo(BASE.plusSeconds(62).toString());
+        assertThat(event.path("refundId").asText()).isEqualTo(execution.getRefundId());
         assertThat(event.path("attemptId").asText()).isEqualTo(execution.getAttemptId());
-        assertThat(event.path("cancellationId").asText()).isEqualTo("ADMIN_FAILURE_CLOSURE:" + command);
+        assertThat(event.path("requestEventId").asText()).isEqualTo(execution.getRequestEventId());
+        assertThat(event.path("orderNo").asText()).isEqualTo(execution.getOrderNo());
+        assertThat(event.path("paymentId").asText()).isEqualTo(execution.getPaymentId());
+        assertThat(event.path("buyerSubject").asText()).isEqualTo(execution.getBuyerSubject());
+        assertThat(event.path("amount").asLong()).isEqualTo(execution.getAmount());
+        assertThat(event.path("providerTransactionId").asText()).isEqualTo(payment.getProviderTransactionId());
+        assertThat(event.path("closureId").asText()).isEqualTo(command);
+        assertThat(event.path("observedPaymentStatus").asText()).isEqualTo("PAID");
+        assertThat(event.path("evidenceObservedAt").asText()).isEqualTo(BASE.plusSeconds(62).toString());
         assertThat(event.path("lookupHash").asText()).isEqualTo(HASH);
-        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+        assertThat(event.path("failedCancellationId").isNull()).as("no linked PG cancellation").isTrue();
+        assertThat(event.has("cancellationId")).isFalse();
+        assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isEqualTo(1);
+        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).as("not a PG-confirmed failure").isZero();
+        assertThat(jdbc.queryForObject("SELECT failed_cancellation_id FROM refund_failure_closure WHERE request_id=?", String.class, command)).isNull();
         JsonNode detail = http("GET", path(execution), null, admin()).data();
         assertThat(detail.path("failureClosure").path("requestId").asText()).isEqualTo(command);
         assertThat(detail.path("executionStatus").asText()).isEqualTo("FAILED");
@@ -209,7 +225,8 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                 .isEqualTo("REFUND_CLOSURE_CHANGED");
         assertThat(code(fail(execution, id(), "두 번째 종결"))).isEqualTo("REFUND_NOT_FAILURE_CLOSABLE");
         assertThat(snapshot()).isEqualTo(before);
-        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+        assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isEqualTo(1);
+        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
         verify(lookup, times(1)).inspectUncancelled(any());
     }
 
@@ -231,7 +248,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         }
     }
 
-    /** Our own cancellation, when the PG returned one, must be listed FAILED; then it is the event's cancellation ID. */
+    /** Our own cancellation, when the PG returned one, must be listed FAILED; then it is the closure event's failed cancellation ID. */
     @Test void aLinkedFailedCancellationIsTheEvidenceAndAMissingOneIsInvalid() {
         RefundExecution execution = prepared(); Payment payment = payment(execution);
         PgRefundCancellationReceipt own = new PgRefundCancellationReceipt(PgRefundLookupRequest.from(payment), execution.getAttemptId(),
@@ -255,7 +272,10 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         assertThat(closed.status()).isEqualTo(200);
         assertThat(closed.data().path("failureClosure").path("evidence").asText()).isEqualTo("LINKED_CANCELLATION_FAILED");
         assertThat(closed.data().path("failureClosure").path("failedCancellationIds").toString()).isEqualTo("[\"console-failed\",\"own-cancel\"]");
-        assertThat(failureEvent().path("cancellationId").asText()).isEqualTo("own-cancel");
+        assertThat(closureEvent().path("failedCancellationId").asText()).isEqualTo("own-cancel");
+        assertThat(closureEvent().path("closureId").asText()).isEqualTo(command);
+        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
+        assertThat(jdbc.queryForObject("SELECT failed_cancellation_id FROM refund_failure_closure WHERE request_id=?", String.class, command)).isEqualTo("own-cancel");
         verify(lookup, never()).inspect(any(), any());
     }
 
@@ -300,7 +320,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
             release.countDown();
             assertThat(first.get(15, TimeUnit.SECONDS).status()).isEqualTo(200);
         } finally { release.countDown(); pool.shutdownNow(); }
-        assertThat(closures.count()).isEqualTo(1); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+        assertThat(closures.count()).isEqualTo(1); assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isEqualTo(1); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
     }
 
     /**
@@ -330,7 +350,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         assertThat(stored.getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
         assertThat(stored.getCancellationSchedule().getClosureId()).as("released on success").isNull();
         assertThat(stored.getCancellationSchedule().getClosureUntil()).isNull();
-        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+        assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isEqualTo(1); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
     }
 
     /** PR #166 R1 (B): hold A → closure GET → ADMIN resume (refused) → no POST, so no new hold B; the closure closes under A. */
@@ -352,7 +372,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         assertThat(holds.count()).as("no POST, so no second hold").isEqualTo(1);
         assertThat(closed.data().path("failureClosure").path("stopReason").asText()).isEqualTo("CANCELLATION_HOLD");
         assertThat(stored(execution).getStatus()).isEqualTo(RefundExecutionStatus.FAILED);
-        assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isEqualTo(1);
+        assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isEqualTo(1); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
     }
 
     /**
@@ -429,7 +449,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         RefundExecution stored = stored(execution);
         assertThat(stored.getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
         assertThat(stored.getActiveCancellationHoldId()).isNotNull().isNotEqualTo(execution.getActiveCancellationHoldId());
-        assertThat(closures.count()).isZero(); assertThat(events(EventType.REFUND_EXECUTION_FAILED)).isZero();
+        assertThat(closures.count()).isZero(); assertThat(events(EventType.REFUND_FAILURE_CLOSED)).isZero();
     }
 
     /**
@@ -585,16 +605,21 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                     + "closed_at,failure_event_id,failed_cancellation_id,execution_status,failure_confirmed_at) "
                     + "VALUES(?,?,?,?,?,?,?,'2026-11-08 02:00:00','2026-11-08 02:00:01',?,?,'FAILED','2026-11-08 02:00:01')";
             String command = id(); String event = id();
-            legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, event, "ADMIN_FAILURE_CLOSURE:" + command);
-            assertThatThrownBy(() -> legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), "x"))
+            // Decision 148: no linked PG cancellation means no cancellation ID, and a linked one requires it.
+            assertThatThrownBy(() -> legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, event, "ADMIN_FAILURE_CLOSURE:" + command))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_linked");
+            assertThatThrownBy(() -> legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "LINKED_CANCELLATION_FAILED", "WINDOW_ENDED", HASH, event, null))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_linked");
+            legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, event, null);
+            assertThatThrownBy(() -> legacy.update(insert, command, open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), null))
                     .isInstanceOf(DataIntegrityViolationException.class);
-            assertThatThrownBy(() -> legacy.update(insert, id(), open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), "x"))
+            assertThatThrownBy(() -> legacy.update(insert, id(), open.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), null))
                     .isInstanceOf(DataIntegrityViolationException.class);
-            assertThatThrownBy(() -> legacy.update(insert, id(), id(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), "x"))
+            assertThatThrownBy(() -> legacy.update(insert, id(), id(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "WINDOW_ENDED", HASH, id(), null))
                     .isInstanceOf(DataIntegrityViolationException.class);
-            assertThatThrownBy(() -> legacy.update(insert, id(), failedBefore.getAttemptId(), "usr_admin", "근거", "CONSOLE", "WINDOW_ENDED", HASH, id(), "x"))
+            assertThatThrownBy(() -> legacy.update(insert, id(), failedBefore.getAttemptId(), "usr_admin", "근거", "CONSOLE", "WINDOW_ENDED", HASH, id(), null))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_evidence");
-            assertThatThrownBy(() -> legacy.update(insert, id(), failedBefore.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "LATER", HASH, id(), "x"))
+            assertThatThrownBy(() -> legacy.update(insert, id(), failedBefore.getAttemptId(), "usr_admin", "근거", "NO_LINKED_CANCELLATION", "LATER", HASH, id(), null))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_stop");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_failure_closure SET execution_status='PENDING' WHERE request_id=?", command))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_receipt");
@@ -651,8 +676,8 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
         return new PgRefundConfirmation(PgRefundLookupRequest.from(payment), List.of(new RefundCancellation(cancellationId, payment.getAmount(), at)));
     }
     private long events(String type) { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type=?", Long.class, type); }
-    private JsonNode failureEvent() {
-        try { return mapper.readTree(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type=?", String.class, EventType.REFUND_EXECUTION_FAILED)); }
+    private JsonNode closureEvent() {
+        try { return mapper.readTree(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type=?", String.class, EventType.REFUND_FAILURE_CLOSED)); }
         catch (Exception invalid) { throw new IllegalStateException(invalid); }
     }
     private Map<String, List<Map<String, Object>>> snapshot() {

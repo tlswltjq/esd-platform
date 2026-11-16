@@ -12,6 +12,7 @@ import com.stove.order.core.domain.RefundAttempt;
 import com.stove.order.core.domain.RefundAttemptRepository;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundFailureConfirmation;
+import com.stove.order.core.domain.RefundFailureSource;
 import com.stove.order.core.domain.LicenseRestorationConfirmation;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
@@ -36,7 +37,9 @@ public class ApplyRefundRestoration {
         Refund refund = refunds.findByOrderNo(input.orderNo()).orElseThrow(() -> new RefundCompletionRejected("환불 접수가 없습니다."));
         RefundAttempt attempt = attempts.findByAttemptId(input.attemptId()).orElseThrow(() -> new RefundCompletionRejected("실행 접수가 없습니다."));
         boolean changed = refund.recordFailure(order, attempt, input, clock.instant());
-        boolean first = inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, EventType.REFUND_EXECUTION_FAILED);
+        // 결정 148: 두 실패 사실은 같은 소비 그룹·잠금·Inbox 규칙을 따르고, Inbox에는 받은 이벤트 종류를 그대로 남긴다.
+        String type = input.source() == RefundFailureSource.OPERATOR_FAILURE_CLOSED ? EventType.REFUND_FAILURE_CLOSED : EventType.REFUND_EXECUTION_FAILED;
+        boolean first = inbox.firstDelivery(input.eventId(), CONSUMER_GROUP, type);
         if (changed != first) throw new RefundCompletionRejected("실패 기록과 Inbox가 다릅니다.");
         if (changed) outbox.record("Order", order.getOrderNo(), new LicenseRestorationRequestedEvent(attempt.getRestorationRequestEventId(),
                 attempt.getRestorationRequestedAt(), refund.getRefundId(), attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(),

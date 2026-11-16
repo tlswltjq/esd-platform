@@ -37,8 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Operator failure closure of a refund execution whose automatic POST stopped (decision 128). Same shape as decisions 115
  * and 127: take the lookup worker's lease, re-inspect the PG with no transaction open, then lock payment → execution and
  * close atomically. It closes only when the original payment is PAID with no cancelled amount and every cancellation the
- * PG lists is FAILED. The execution then fails like a PG-confirmed failure and the existing {@code RefundExecutionFailed}
- * leads Order to restore the license and allow the customer's retry. It never cancels at the PG.
+ * PG lists is FAILED. The execution then fails like a PG-confirmed failure, and {@code RefundFailureClosed} (decision 148,
+ * never {@code RefundExecutionFailed}) leads Order to restore the license and allow the customer's retry. It never cancels at the PG.
  */
 @Slf4j
 public class CloseRefundFailure {
@@ -124,7 +124,7 @@ public class CloseRefundFailure {
                 releaseBoth(execution, token);
                 RefundFailureClosure closure = RefundFailureClosure.record(execution, request, reason, observed, observedAt);
                 closures.saveAndFlush(closure);
-                RefundConfirmationOutbox.recordFailure(outbox, payment, execution, closure.getFailedCancellationId());
+                RefundConfirmationOutbox.recordFailureClosure(outbox, payment, execution, closure);
                 executions.flush();
                 return receipt(closure, execution);
             });

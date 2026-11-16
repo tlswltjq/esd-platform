@@ -76,7 +76,7 @@ public class ReconcileRefundPayment {
             if (failed != null) {
                 if (current.getRefundConfirmedAt() != null) return;
                 if (!current.confirmFailure(currentPayment, failed, UUID.randomUUID().toString(), clock.instant())) return;
-                RefundConfirmationOutbox.recordFailure(outbox, currentPayment, current, current.getReceiptCancellationId());
+                RefundConfirmationOutbox.recordFailure(outbox, currentPayment, current);
                 executions.flush(); return;
             }
             if (!current.confirmRefund(currentPayment, verified.orElseThrow(), UUID.randomUUID().toString(), clock.instant())) return;

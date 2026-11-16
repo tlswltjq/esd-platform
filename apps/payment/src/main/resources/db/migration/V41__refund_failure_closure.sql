@@ -39,7 +39,8 @@ CREATE TABLE refund_failure_closure (
     evidence_observed_at DATETIME(6) NOT NULL,
     closed_at DATETIME(6) NOT NULL,
     failure_event_id VARCHAR(64) COLLATE utf8mb4_bin NOT NULL,
-    failed_cancellation_id VARCHAR(100) COLLATE utf8mb4_bin NOT NULL,
+    -- Decision 148: the PG cancellation linked to the attempt and FAILED at closure, NULL when the PG never returned one.
+    failed_cancellation_id VARCHAR(100) COLLATE utf8mb4_bin NULL,
     -- The execution facts the first response reported; a replay returns these values.
     execution_status VARCHAR(20) NOT NULL,
     failure_confirmed_at DATETIME(6) NOT NULL,
@@ -50,6 +51,9 @@ CREATE TABLE refund_failure_closure (
     -- No ON DELETE CASCADE: deleting the execution must not silently erase this audit record.
     CONSTRAINT fk_refund_failure_closure_execution FOREIGN KEY (attempt_id) REFERENCES refund_execution(attempt_id),
     CONSTRAINT chk_refund_failure_closure_evidence CHECK (evidence IN ('NO_LINKED_CANCELLATION','LINKED_CANCELLATION_FAILED')),
+    CONSTRAINT chk_refund_failure_closure_linked CHECK (
+        (evidence = 'NO_LINKED_CANCELLATION' AND failed_cancellation_id IS NULL)
+        OR (evidence = 'LINKED_CANCELLATION_FAILED' AND failed_cancellation_id IS NOT NULL)),
     CONSTRAINT chk_refund_failure_closure_stop CHECK (stop_reason IN ('CANCELLATION_HOLD','BALANCE_CHANGED','WINDOW_ENDED')),
     CONSTRAINT chk_refund_failure_closure_time CHECK (closed_at >= evidence_observed_at AND failure_confirmed_at = closed_at),
     CONSTRAINT chk_refund_failure_closure_receipt CHECK (execution_status = 'FAILED'),

@@ -216,7 +216,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
         Suspending f = suspending();
         suspensionEvents.receive(record(Topics.LICENSE, f.suspended()));
         RefundAttempt attempt = attempts.findByAttemptId(refund(f.order()).getCurrentAttemptId()).orElseThrow();
-        restoration.execute(new RefundFailureConfirmation(id(), now(), attempt.getRefundId(), attempt.getAttemptId(),
+        restoration.execute(RefundFailureConfirmation.pgCancellationFailed(id(), now(), attempt.getRefundId(), attempt.getAttemptId(),
                 attempt.getExecutionRequestEventId(), f.order().getOrderNo(), f.order().getPaymentId(), f.order().getBuyerSubject(),
                 f.order().getAmount(), f.order().getCurrency(), "pg-original", "cancel-own", "a".repeat(64)));
         assertThat(refundStatus(f.order())).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);

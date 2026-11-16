@@ -160,7 +160,7 @@ class RefundDelayNoticeIntegrationTest extends OrderIntegrationTestBase {
     @Test void actualFailureRestorationAndANewAttemptSuppressOldPreparationAndUseTheNewTimer() {
         Fixture f=executing(); RefundAttempt old=attempt(f); RefundPreparationConfirmation oldFact=fact(f,FIRST);
         when(clock.instant()).thenReturn(FIRST.plusSeconds(60)); String failed=id();
-        restore.execute(new RefundFailureConfirmation(failed,FIRST.plusSeconds(60),f.refund().getRefundId(),old.getAttemptId(),old.getExecutionRequestEventId(),
+        restore.execute(RefundFailureConfirmation.pgCancellationFailed(failed,FIRST.plusSeconds(60),f.refund().getRefundId(),old.getAttemptId(),old.getExecutionRequestEventId(),
                 f.order().getOrderNo(),f.order().getPaymentId(),f.order().getBuyerSubject(),f.order().getAmount(),"KRW","pg-original","pg-failed","a".repeat(64)));
         when(clock.instant()).thenReturn(DELAY); preparation.execute(oldFact);
         assertThat(customer(f).data().path("status").asText()).isEqualTo("PROCESSING");

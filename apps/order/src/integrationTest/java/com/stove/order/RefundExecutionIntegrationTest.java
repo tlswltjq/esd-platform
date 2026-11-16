@@ -445,7 +445,7 @@ class RefundExecutionIntegrationTest {
 
     private RefundFailureConfirmation failure(Fixture fixture) {
         Refund current = stored(fixture); RefundAttempt attempt = attempts.findByAttemptId(current.getCurrentAttemptId()).orElseThrow();
-        return new RefundFailureConfirmation(id(), EXECUTION_AT.plusSeconds(1), current.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
+        return RefundFailureConfirmation.pgCancellationFailed(id(), EXECUTION_AT.plusSeconds(1), current.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
                 current.getOrderNo(), fixture.order().getPaymentId(), fixture.order().getBuyerSubject(), fixture.order().getAmount(), fixture.order().getCurrency(),
                 "pg-original", "cancel-own", "a".repeat(64));
     }

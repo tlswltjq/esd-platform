@@ -75,6 +75,35 @@ class RefundFailureTest {
         assertThat(refund.getLateCancellationObservedAt()).isEqualTo(deadline.plusSeconds(600));
     }
 
+    /**
+     * Decision 148: the closure record carries a PG cancellation ID only when the PG returned one for this attempt and listed
+     * it FAILED. Without a linked cancellation it carries none; no value of another meaning takes its place.
+     */
+    @Test void aFailureClosureCarriesTheLinkedFailedCancellationOrNone() {
+        prepare();
+        Instant deadline = NOW.plusSeconds(10800);
+        refund.closeAsFailed(payment, "failure-event", "b".repeat(64), deadline);
+        RefundFailureClosureRequest command = new RefundFailureClosureRequest(id(), refund.getAttemptId(), "usr_admin", "3시간 창 종료");
+        PgRefundUncancelled none = new PgRefundUncancelled(purchase(), List.of(), "b".repeat(64));
+        RefundFailureClosure unlinked = RefundFailureClosure.record(refund, command, RefundFailureClosure.StopReason.WINDOW_ENDED, none, deadline);
+        assertThat(unlinked.getEvidence()).isEqualTo(RefundFailureClosure.Evidence.NO_LINKED_CANCELLATION);
+        assertThat(unlinked.getFailedCancellationId()).isNull();
+        assertThat(unlinked.getRequestId()).isEqualTo(command.requestId());
+        assertThat(unlinked.getEvidenceObservedAt()).isEqualTo(deadline);
+
+        prepare();
+        refund.recordCancellationReceipt(payment, receipt(), NOW);
+        refund.recordCancellationReceipt(payment, receipt().failed(), NOW.plusSeconds(1));
+        refund.blockAutomaticCancellation(NOW.plusSeconds(2));
+        refund.closeAsFailed(payment, "failure-event", "b".repeat(64), NOW.plusSeconds(3));
+        PgRefundUncancelled own = new PgRefundUncancelled(purchase(),
+                List.of(new RefundFailedCancellation("cancel-own", NOW, 0, 0, "ESD refund " + refund.getRefundId(), null)), "b".repeat(64));
+        RefundFailureClosure linked = RefundFailureClosure.record(refund, new RefundFailureClosureRequest(id(), refund.getAttemptId(), "usr_admin", "PG FAILED"),
+                RefundFailureClosure.StopReason.BALANCE_CHANGED, own, NOW.plusSeconds(3));
+        assertThat(linked.getEvidence()).isEqualTo(RefundFailureClosure.Evidence.LINKED_CANCELLATION_FAILED);
+        assertThat(linked.getFailedCancellationId()).isEqualTo("cancel-own");
+    }
+
     private PgRefundConfirmation confirmation() {
         return new PgRefundConfirmation(PgRefundLookupRequest.from(payment), List.of(new RefundCancellation("console-1", payment.getAmount(), NOW.plusSeconds(10800 + 300))));
     }

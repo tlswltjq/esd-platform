@@ -159,6 +159,42 @@ class OrderMigrationIntegrationTest extends OrderIntegrationTestBase {
         });
     }
 
+    /**
+     * 결정 148: V35는 옛 실패 시도를 바꾸지 않는다(모두 PG 확정 실패, 종결 ID 없음). 이행 뒤 종결 ID는 운영자 종결 코드에만 붙고,
+     * 운영자 종결 코드에는 종결 ID가 있어야 한다. 옛 버전이 쓰는 PG 확정 실패(종결 ID 없음)는 그대로 받는다.
+     */
+    @Test void v35KeepsExistingFailuresAndTiesTheClosureIdToTheOperatorClosureCode() {
+        withVersion("34", source -> {
+            JdbcTemplate jdbc = new JdbcTemplate(source);
+            Instant received = Instant.parse("2026-11-09T10:00:00.123456Z");
+            String failedRefund = refund(jdbc, received, true, "PENDING_LICENSE_RESTORATION", null);
+            String failed = attempt(jdbc, failedRefund, received.plusSeconds(10), received.plusSeconds(20), null, null);
+            jdbc.update("UPDATE order_refund SET license_restoration_wait_started_at=? WHERE refund_id=?", Timestamp.from(received.plusSeconds(20)), failedRefund);
+            String closingRefund = refund(jdbc, received, true, "PENDING_LICENSE_RESTORATION", null);
+            String closing = attempt(jdbc, closingRefund, received.plusSeconds(10), received.plusSeconds(20), null, null);
+            jdbc.update("UPDATE order_refund SET license_restoration_wait_started_at=? WHERE refund_id=?", Timestamp.from(received.plusSeconds(20)), closingRefund);
+            List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM order_refund_attempt ORDER BY id");
+
+            Flyway flyway = Flyway.configure().dataSource(source).locations(LOCATION).target("35").load(); flyway.migrate(); flyway.validate();
+
+            List<Map<String, Object>> after = jdbc.queryForList("SELECT * FROM order_refund_attempt ORDER BY id");
+            assertThat(after).hasSize(before.size());
+            for (int index = 0; index < before.size(); index++) {
+                Map<String, Object> unchanged = new HashMap<>(after.get(index));
+                assertThat(unchanged.remove("failure_closure_id")).as("옛 실패에 종결 ID를 만들어 내지 않는다").isNull();
+                assertThat(unchanged).isEqualTo(before.get(index));
+            }
+            assertThatThrownBy(() -> jdbc.update("UPDATE order_refund_attempt SET failure_closure_id=? WHERE attempt_id=?", id(), failed))
+                    .as("PG 확정 실패에는 종결 ID가 없다").isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_source");
+            assertThatThrownBy(() -> jdbc.update("UPDATE order_refund_attempt SET failure_reason_code='OPERATOR_FAILURE_CLOSED' WHERE attempt_id=?", failed))
+                    .as("운영자 종결에는 종결 ID가 있다").isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_failure_closure_source");
+            String closure = id();
+            jdbc.update("UPDATE order_refund_attempt SET failure_reason_code='OPERATOR_FAILURE_CLOSED', failure_closure_id=? WHERE attempt_id=?", closure, closing);
+            assertThat(jdbc.queryForObject("SELECT failure_closure_id FROM order_refund_attempt WHERE attempt_id=?", String.class, closing)).isEqualTo(closure);
+            assertThat(jdbc.queryForObject("SELECT failure_reason_code FROM order_refund_attempt WHERE attempt_id=?", String.class, failed)).isEqualTo("PG_CANCELLATION_FAILED");
+        });
+    }
+
     /** 확정 실패한 시도. restored·retried가 있으면 실제 복구와 재접수까지 끝난 시도다. */
     private String attempt(JdbcTemplate jdbc, String refundId, Instant started, Instant failed, Instant restored, Instant retried) {
         String attemptId = id();

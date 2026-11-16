@@ -132,7 +132,7 @@ class RefundLicenseStepWaitTest {
     }
 
     private static RefundFailureConfirmation failure(Fixture f) {
-        return new RefundFailureConfirmation(id(), BASE.plusSeconds(100), f.refund().getRefundId(), f.attempt().getAttemptId(),
+        return RefundFailureConfirmation.pgCancellationFailed(id(), BASE.plusSeconds(100), f.refund().getRefundId(), f.attempt().getAttemptId(),
                 f.attempt().getExecutionRequestEventId(), f.order().getOrderNo(), f.order().getPaymentId(), f.order().getBuyerSubject(),
                 f.order().getAmount(), f.order().getCurrency(), "pg-original", "cancel-own", "a".repeat(64));
     }

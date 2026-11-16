@@ -24,15 +24,18 @@ import lombok.NoArgsConstructor;
 /**
  * Append-only operator failure closure of a stopped refund execution (decision 128). It is written only after a PG
  * re-inspection showed the original payment PAID with no cancelled amount and only FAILED cancellations, in the same
- * transaction that fails the execution and records {@code RefundExecutionFailed}. It never moves money.
+ * transaction that fails the execution and records {@code RefundFailureClosed} (decision 148). It never moves money.
  */
 @Entity
 @Table(name = "refund_failure_closure")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefundFailureClosure {
-    /** The cancellation ID {@code RefundExecutionFailed} carries when no PG cancellation is linked to the attempt. */
-    public static final String UNLINKED_CANCELLATION_PREFIX = "ADMIN_FAILURE_CLOSURE:";
+    /**
+     * The original payment status the PG re-inspection showed. {@link PgRefundUncancelled} exists only for a PAID purchase
+     * with nothing cancelled, so every closure stands on this status.
+     */
+    public static final String OBSERVED_PAYMENT_STATUS = "PAID";
 
     /** What tied the PG evidence to the attempt. */
     public enum Evidence {
@@ -56,7 +59,8 @@ public class RefundFailureClosure {
     @Column(nullable = false, updatable = false) private Instant evidenceObservedAt;
     @Column(nullable = false, updatable = false) private Instant closedAt;
     @Column(nullable = false, unique = true, updatable = false, length = 64) private String failureEventId;
-    @Column(nullable = false, updatable = false, length = 100) private String failedCancellationId;
+    /** The PG cancellation returned for this attempt and FAILED in the re-inspection; null when none was linked (decision 148). */
+    @Column(updatable = false, length = 100) private String failedCancellationId;
     // The execution facts the first response reported, frozen so that a replay returns them unchanged.
     @Enumerated(EnumType.STRING) @Column(nullable = false, updatable = false, length = 20) private RefundExecutionStatus executionStatus;
     @Column(nullable = false, updatable = false) private Instant failureConfirmedAt;
@@ -83,7 +87,7 @@ public class RefundFailureClosure {
         closure.stopReason = stopReason; closure.snapshotHash = observed.snapshotHash();
         closure.evidenceObservedAt = observedAt; closure.closedAt = at;
         closure.failureEventId = execution.getFailureEventId();
-        closure.failedCancellationId = linked == null ? UNLINKED_CANCELLATION_PREFIX + request.requestId() : linked;
+        closure.failedCancellationId = linked;
         closure.executionStatus = execution.getStatus(); closure.failureConfirmedAt = at;
         closure.failedCancellations = new ArrayList<>(observed.failedCancellations());
         return closure;

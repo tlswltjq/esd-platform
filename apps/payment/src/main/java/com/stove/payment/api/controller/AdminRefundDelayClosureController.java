@@ -51,7 +51,7 @@ public class AdminRefundDelayClosureController {
     @Operation(operationId = "closeRefundFailure", summary = "관리자 자동 송신이 멈춘 환불의 실패 종결",
             description = "자동 취소 POST가 멈춘 시도(403·400 중단, 잔액 변화 차단, 최초 준비 후 3시간 경과)만 대상입니다. PG를 다시 조회해 원결제가 PAID이고 "
                     + "취소액이 0이며 목록의 취소가 모두 FAILED(진행 중·성공 취소 없음)일 때만 실패로 닫습니다. 근거 종류·중단 원인·PG 조회 스냅샷 해시·FAILED 취소 ID·ADMIN·시각을 저장하고 "
-                    + "기존 RefundExecutionFailed를 보내 Order가 보유권 복구와 고객 재신청으로 잇습니다. 취소액이 있거나 REQUESTED·SUCCEEDED 취소가 있으면 409 "
+                    + "운영자 실패 종결 이벤트 RefundFailureClosed(PG 확정 실패 RefundExecutionFailed와 다른 이벤트)를 보내 Order가 보유권 복구와 고객 재신청으로 잇습니다. 취소액이 있거나 REQUESTED·SUCCEEDED 취소가 있으면 409 "
                     + "REFUND_FAILURE_CLOSURE_PG_NOT_UNCANCELLED, 대상이 아니면 409 REFUND_NOT_FAILURE_CLOSABLE입니다. 같은 requestId·내용은 최초 응답을 그대로 반환하고 "
                     + "다른 내용은 409입니다. 실패 뒤에도 PG를 낮은 빈도로 조회해 늦은 전액 취소를 조사 목록(kind=LATE_CANCELLATION)·경보로 올리며 상태·보유권은 바꾸지 않습니다. "
                     + "PG 취소를 실행하지 않습니다.")
