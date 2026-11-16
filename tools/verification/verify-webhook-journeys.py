@@ -14,10 +14,12 @@ w2 redelivery: A's Transaction.Paid again with the same id and body -> 200, stil
 w3 forged: the same message signed with another key -> 401, no receipt added.
 w4 cancellation hint: orders C and D are paid and refunded; the PG accepts both cancels as REQUESTED (still
    pending), so each refund lookup reads "undecided" and backs off (RefundLookupSchedule 10/20/60 s). After
-   three such lookups the PG finishes both cancels. C's Transaction.Cancelled is delivered -> the refund
-   lookup is woken and the refund COMPLETES while D, whose message is held, waits for its own schedule.
-   A failed lookup is retried at the next scan instead (RefundLookupSchedule.abandon), so lost responses or
-   PG errors would not show the hint.
+   three such lookups, and once both refunds' next scheduled lookup is at least QUIET_SECONDS away (read from
+   refund_execution.next_refund_lookup_at), the PG finishes both cancels. C's Transaction.Cancelled is
+   delivered -> the refund lookup is woken and the refund COMPLETES while D, whose message is held, waits for
+   its own schedule. A lost cancel response with N failing lookups did not show the hint (2026-11-09 run):
+   several Payment paths read the PG after a lost cancel, used up the N failures within ~11 s and one of
+   them completed the refund before any webhook.
 
 The real PortOne delivery (public HTTPS, provider format) stays an external wait (Gateway tasks.md).
 """
@@ -31,6 +33,10 @@ from support.fake_portone_stack import FakePortOneStack  # noqa: E402
 RETRY_MS = 180000
 HINT_WINDOW = 30      # seconds a delivered hint may take; far below the 180 s retry and the 60 s refund stage
 UNDECIDED_LOOKUPS = 3
+# The PG finishes the cancels only when both refunds' next scheduled lookup is at least this far away, so a
+# refund that COMPLETES within HINT_WINDOW was woken by its webhook, not by its own schedule. Counting lookups
+# alone is not enough: the cancel's own first check may be one of them and leave the next lookup ~20 s away.
+QUIET_SECONDS = HINT_WINDOW + 15
 
 
 def receipts(stack, payment_id, message_id=None):
@@ -51,6 +57,19 @@ def lookups_after_cancel(stack, payment_id):
         return 0
     return len([r for r in requests[cancel + 1:] if r["method"] == "GET" and r["caller"] == "payment" and r["status"] == 200
                 and r["path"].split("?")[0] == "/payments/" + payment_id])
+
+
+def next_lookup(stack, payment_id):
+    """(stage, seconds until next_refund_lookup_at) of the payment's pending refund (RefundLookupSchedule, UTC)."""
+    row = stack.sql("SELECT refund_lookup_stage, TIMESTAMPDIFF(MICROSECOND, UTC_TIMESTAMP(6), next_refund_lookup_at) "
+                    "FROM stove_payment.refund_execution WHERE payment_id='" + payment_id + "' AND status='PENDING' "
+                    "ORDER BY id DESC LIMIT 1").split()
+    return (int(row[0]), int(row[1]) / 1e6) if len(row) == 2 and row[1] != "NULL" else (None, None)
+
+
+def quiet(stack, payment_id):
+    seconds = next_lookup(stack, payment_id)[1]
+    return seconds is not None and seconds >= QUIET_SECONDS
 
 
 def refund_status(stack, order_no):
@@ -150,12 +169,14 @@ def cancellation_hint(stack):
         status, _, raw = stack.buyer.request("POST", "/api/v1/orders/" + order_no + "/refund")
         assert status in {200, 202}, name + " refund HTTP " + str(status) + " " + raw.decode()
     (woken_order, woken_payment), (waiting_order, waiting_payment) = orders["w4-woken"], orders["w4-waiting"]
-    wait_for(lambda: lookups_after_cancel(stack, woken_payment) >= UNDECIDED_LOOKUPS
-             and lookups_after_cancel(stack, waiting_payment) >= UNDECIDED_LOOKUPS, "three undecided refund lookups each", 180, 1)
+    wait_for(lambda: all(lookups_after_cancel(stack, p) >= UNDECIDED_LOOKUPS and quiet(stack, p) for p in (woken_payment, waiting_payment)),
+             "three undecided refund lookups each and both next lookups >= " + str(QUIET_SECONDS) + " s away", 180, 1)
     for _, payment_id in orders.values():
         assert [r["status"] for r in stack.requests_for(payment_id, "/cancel")] == [200], payment_id
     assert refund_status(stack, woken_order) != "COMPLETED" and refund_status(stack, waiting_order) != "COMPLETED"
     record("w4a cancel REQUESTED and " + str(UNDECIDED_LOOKUPS) + " undecided lookups: both refunds unconfirmed", "yes")
+    record("w4a next scheduled lookup stage|seconds woken / control",
+           "/".join("%s|%.1f" % next_lookup(stack, p) for p in (woken_payment, waiting_payment)))
 
     fake.webhook_mode(waiting_payment, "hold")
     stack.console(woken_payment, "settle-cancel")
@@ -167,8 +188,11 @@ def cancellation_hint(stack):
     cancelled = deliveries(stack, woken_payment, "Transaction.Cancelled", "delivered")
     assert [d["status"] for d in cancelled] == [200], cancelled
     assert refund_status(stack, waiting_order) != "COMPLETED", "the control refund must still wait for its schedule"
+    control_wait = next_lookup(stack, waiting_payment)[1]
+    assert control_wait is not None and control_wait > 0, "the control refund's next lookup must still be ahead: " + str(control_wait)
     assert deliveries(stack, waiting_payment, "Transaction.Cancelled", "delivered") == []
-    record("w4b woken: Transaction.Cancelled status|refund|control refund", "200|COMPLETED|not yet")
+    record("w4b woken: Transaction.Cancelled status|refund|control refund|control next lookup in s",
+           "200|COMPLETED|not yet|%.1f" % control_wait)
     record("w4b woken: seconds from PG cancel to refund COMPLETED", woken_seconds)
 
     wait_for(lambda: refund_status(stack, waiting_order) == "COMPLETED", "control refund COMPLETED on its schedule", 180, 2)
