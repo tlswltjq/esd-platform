@@ -28,11 +28,11 @@
   - 영향: **보유권** — 보유자가 License 쪽 경로 문제로 "미보유" 안내를 받는다(잘못된 거절, 장애 경보는 `ServiceDown`에 안 잡힘). 돈 영향 없음.
   - 재현: `DownloadHttpClientsTest`에 `status=404, body="broken"`·`body=""`·`body={"success":false,"error":{"code":"OTHER"}}` → License·Catalog 모두 `UPSTREAM_UNAVAILABLE` 기대(지금 Red). 계약 본문 404는 지금 결과 유지.
 
-- [ ] **DL-T2. 열린 보유권 없음과 정지가 같은 오류 코드 `FORBIDDEN`이다** — [결정 필요 M-DL-1] 결정 뒤
-  - 어디서: `download:adapter/LicenseHttpClient.java:23`(404 → `ErrorCode.FORBIDDEN` "보유하지 않은 상품입니다."), `:31`(`SUSPENDED` → `ErrorCode.FORBIDDEN` "이용이 정지된 상품입니다."), `:25`(License 403 → `FORBIDDEN`).
-  - 목표: R3.11 — M-DL-1의 선택에 따른 오류 코드(예: `DownloadError`에 사유별 상수).
-  - 영향: **보유권 안내** — 클라이언트가 메시지 문자열로만 사유를 가른다(보관함 미등록 고객이 재구매로 갈 수 있다). 돈 영향은 재구매가 생길 때만(결정 89로 재구매 허용).
-  - 재현: 통합 — License 404·`SUSPENDED`·Catalog 제한 세 경우의 `error.code`가 서로 다른지.
+- [ ] **DL-T2. 열린 보유권 없음·보관함 미등록·정지가 같은 오류 코드 `FORBIDDEN`이다** ([결정 196](../../../docs/decisions.md#download-denial-reasons))
+  - 어디서: `download:adapter/LicenseHttpClient.java:23`(404 → `ErrorCode.FORBIDDEN` "보유하지 않은 상품입니다."), `:31`(`SUSPENDED` → `ErrorCode.FORBIDDEN` "이용이 정지된 상품입니다."). License 403의 처리(`:25`)는 M-DL-2.
+  - 목표: R3.11, 판정 표 J12·J12a·J16 — `DownloadError`에 `LICENSE_NOT_OWNED`·`LICENSE_REGISTRATION_REQUIRED`·`LICENSE_SUSPENDED`(모두 403). 404 본문 `error.code` 해석은 DL-T1과 같은 `HttpResponseValues`의 의미별 메서드로. License LI-T10과 같은 PR.
+  - 영향: **보유권 안내** — 결제하고 등록하지 않은 고객이 "미보유"로 안내되고, API 사용자는 메시지 문자열로만 사유를 가른다. 돈·보유권 상태는 바뀌지 않는다(구매 때 안내는 Order M-OR-5).
+  - 재현: 통합 — License 404 `NOT_FOUND`·404 `PURCHASE_IN_STORAGE`·`SUSPENDED`·Catalog 제한 네 경우의 `error.code`가 각각 위 코드인지(지금 Red).
 
 - [ ] **DL-T3. JWT issuer·JWK 주소에 로컬 기본값이 있어 설정 누락에도 기동한다**
   - 어디서: `apps/download/src/main/resources/application.yml:12-13`(`${JWT_ISSUER_URI:http://localhost:8091}` 등). 같은 패턴이 9개 모듈 `application.yml`에 있다(notes F-5).
@@ -72,7 +72,7 @@
 
 ## 진행 중 / 남음
 
-- [ ] [결정 필요 M-DL-1] `403` 거절 사유(열린 보유권 없음·보관함 미등록·정지·다운로드 제한)를 고객에게 구분해 알리는 계약 — 옛 항목 "결제/지급 대기·정지·파일 없음을 구분해 전달하는 계약(G4)"을 이 항목으로 옮김. "파일 없음"은 이미 409로 구분된다. 결정 뒤 DL-T2.
+- [x] ~~[결정 필요 M-DL-1] `403` 거절 사유(열린 보유권 없음·보관함 미등록·정지·다운로드 제한)를 고객에게 구분해 알리는 계약~~ → [결정 196](../../../docs/decisions.md#download-denial-reasons)(B): 사유별 오류 코드, 보관함 미등록은 License가 알린다. 구현은 DL-T2·License LI-T10. 구매 때 보유 안내는 Order M-OR-5로 분리.
 - [ ] [결정 필요 M-DL-2] License가 사용자 토큰에 `401`·`403`을 줄 때 그대로 전달할지, 연동 장애(503)로 볼지.
 - [x] ~~[결정 필요] 공개 노출 중지와 기존 구매자 다운로드 금지를 분리한 정책의 일관된 안내·거절 — G4~~ → 정책은 결정 48·50·51·52가 이미 정했다(판매·노출은 다운로드 판단에 쓰지 않음, 다운로드 제한은 독립, R5.4). G4 여정 `enforcesIndependentSalesAndListingControls`로 확인됨(2026-11-08). 남은 "안내" 부분은 M-DL-1로 합침.
 - [ ] [외부 대기] 다운로드 제한의 공유 환경 적용: 읽기 계정 IAM 태그 거절 정책·Catalog 태그 계정 준비와 배포(격리 검증만 완료) — 미수행

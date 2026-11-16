@@ -139,7 +139,7 @@
 | 메서드 | 경로 | 역할 | 요청 | 응답 | 오류 | 멱등 |
 |---|---|---|---|---|---|---|
 | GET | `/api/v1/library?page=0&size=20` | MEMBER | `page ≥ 0`, `1 ≤ size ≤ 100` | `ApiResponse<LicensePage>`: `content[LicenseResponse]`·`page`·`size`·`totalElements`·`totalPages`. 정렬 `registeredAt DESC, id DESC` | 400 `INVALID_REQUEST`, 401, 403 | 조회 |
-| GET | `/api/v1/library/{productCode}` | MEMBER | `productCode` `[A-Za-z0-9][A-Za-z0-9._-]{0,49}` | `ApiResponse<LicenseResponse>` — `ACTIVE` 우선, 없으면 id가 가장 큰 `SUSPENDED` | 400, 401, 403, 404 `NOT_FOUND` | 조회 |
+| GET | `/api/v1/library/{productCode}` | MEMBER | `productCode` `[A-Za-z0-9][A-Za-z0-9._-]{0,49}` | `ApiResponse<LicenseResponse>` — `ACTIVE` 우선, 없으면 id가 가장 큰 `SUSPENDED` | 400, 401, 403, 404 `NOT_FOUND`, 404 `PURCHASE_IN_STORAGE`(열린 보유권 없음 + 등록 가능한 `STORED` 구매 근거, R4.11·결정 196) | 조회 |
 | GET | `/api/v1/storage?page=0&size=20` | MEMBER | 위와 같음 | `ApiResponse<StoragePage>`: `content[StorageItemResponse]`. 정렬 `acquiredAt DESC, id DESC` | 400, 401, 403 | 조회 |
 | POST | `/api/v1/storage/{licenseId}/registration` | MEMBER | `licenseId` UUID, 본문 없음 | `ApiResponse<LicenseResponse>`(새 보유권 또는 이미 있는 `ACTIVE`) | 400, 401, 403, 404, 409 `PRODUCT_ALREADY_OWNED`, 409 `PURCHASE_NOT_REGISTRABLE` | 자연 키 `licenseId`: 이미 등록된 같은 구매 근거는 같은 보유권을 돌려준다 |
 | GET | `/api/v1/ops/dlt`, `/api/v1/ops/outbox/dead` | ADMIN | 공통 운영 API | 공통 | 400, 401, 403 | 조회 |

@@ -73,6 +73,7 @@ License는 결제 완료 주문 1건을 근거로 **구매 근거**(보관함 �
 8. WHERE `OrderPaid` 전달이 늦어 구매 근거가 아직 없는 맥락에서 License SHALL 목록에서 빼거나 상세 404를 반환하고, 조회로 구매 근거·보유권을 만들지 않는다.
 9. IF 페이지 값이나 상품 코드 형식이 잘못되면 THEN License SHALL 400을 반환한다.
 10. WHILE Catalog가 중단되었거나 상품 정보가 바뀐 동안 License SHALL 저장된 최초 제목·상품 정보로 조회한다.
+11. (새) IF 라이브러리 상세에서 본인의 그 상품에 열린 보유권이 없고 등록할 수 있는 `STORED` 구매 근거가 있으면 THEN License SHALL `404`·오류 코드 `PURCHASE_IN_STORAGE`를 반환한다. 그 밖의 열린 보유권 없음(구매 근거 없음·`REFUNDED`·등록 전 정지)은 R4.4의 `404 NOT_FOUND`다. 이 구분은 본인 자료만 보고, 구매 근거 ID·주문·환불 이력을 노출하지 않는다([결정 196](../../../docs/decisions.md#download-denial-reasons), LI-T10).
 11. WHEN Download가 고객 토큰으로 상세를 조회하면 THEN License SHALL 같은 규칙으로 응답하고, Download는 `status=ACTIVE`일 때만 이용 권한으로 본다([P3.8-1](../platform/requirements.md)).
 
 ### R5. 수신 처리와 결과 발행의 트랜잭션 원자성

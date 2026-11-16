@@ -12,7 +12,7 @@ Download는 **무상태**다. 업무 DB·영속 엔티티·Kafka 소비/발행·
 
 - **티켓(ticket)**: `GET /api/v1/downloads/{productCode}/ticket`의 성공 응답. `productCode`·`version`·`fileSize`·`checksum`·`downloadUrl`·`expiresAt` 여섯 값.
 - **보유권**: License `license_registration` 한 행(`ACTIVE`·`SUSPENDED`·`ENDED`, 결정 95). Download는 License 라이브러리 상세(`GET /api/v1/library/{productCode}`)가 돌려준 상태 값만 본다. 정본은 License다([design "정본 소유"](../platform/design.md) "구매 근거·보유권 상태" 행).
-- **열린 보유권 없음**: 라이브러리 상세가 `404`인 경우. 구매 근거가 없음, 구매 근거가 보관함(`STORED`)에만 있고 등록하지 않음(결정 93), 환불 완료로 `ENDED`(결정 97)가 모두 여기에 든다. Download는 이 셋을 구별할 입력을 받지 못한다([결정 필요 M-DL-1]).
+- **열린 보유권 없음**: 라이브러리 상세가 `404`인 경우. 구매 근거가 없음, 구매 근거가 보관함(`STORED`)에만 있고 등록하지 않음(결정 93), 환불 완료로 `ENDED`(결정 97)가 모두 여기에 든다. 이 가운데 보관함 미등록만 License가 404 오류 코드 `PURCHASE_IN_STORAGE`로 알리고, 나머지는 구별하지 않는다([결정 196](../../../docs/decisions.md#download-denial-reasons)).
 - **현재 공개본**: Catalog `catalog_product.current_release_request_id`가 가리키는 `COMPLETED` `catalog_release`의 불변 스냅샷(전체 ZIP 하나). 정본은 Catalog다(RI-3).
 - **다운로드 제한**: Catalog `catalog_product.download_restricted`가 정본인 상품 단위 제한([P1.4-7](../platform/requirements.md), 결정 50). 저장소 객체의 차단 표시는 Catalog가 정본에서 만든 적용 사본이다.
 - **만료 서명 URL**: 객체 저장소가 서명한 유효기간 있는 GET URL. 만료 전에는 가진 사람이 반복 사용·공유할 수 있다(일회용 아님, 결정 29 "URL 회수 범위").
@@ -53,7 +53,7 @@ Download는 **무상태**다. 업무 DB·영속 엔티티·Kafka 소비/발행·
 8. WHERE Order 주문이 `PAID`여도 License에 구매 근거가 아직 없거나(구매 근거 생성 사실 `PurchaseRecordStored` 전, 결정 175 — 1회차 지적 B9, 판정 전) 고객이 보관함 항목을 등록하지 않았으면 THE Download SHALL 열린 보유권 없음(R3.4)으로 처리하고, Order·Payment를 조회해 임시 권한을 만들지 않는다.
 9. (새) IF License의 `404` 본문이 R3.4의 계약 오류 본문이 아니면(본문 없음·형식 오류·다른 오류 코드) THEN Download SHALL 열린 보유권 없음으로 바꾸지 않고 `503`으로 끝낸다(P1.2-5, R9.3).
 10. (새) IF 라이브러리 상세 `200`의 상태가 없거나 `ACTIVE`·`SUSPENDED`가 아닌 값(`ENDED`·알 수 없는 값·대소문자 다른 값)이면 THEN Download SHALL `503`으로 끝낸다. 라이브러리 상세는 열린 보유권만 돌려주는 계약이므로 그 밖의 값은 계약 위반이다(License와 맞출 경계, PR 본문).
-11. (새) THE `403` 거절의 오류 코드 구분(열린 보유권 없음 R3.4 · 정지 R3.5 · 다운로드 제한 R5.1, 열린 보유권 없음 안의 보관함 미등록) SHALL [결정 필요 M-DL-1]을 따른다. 결정 전에는 R3.4·R3.5가 같은 `FORBIDDEN`(메시지만 다름)이고 R5.1만 `PRODUCT_DOWNLOAD_RESTRICTED`다.
+11. (새) THE `403` 거절 SHALL 사유마다 다른 오류 코드를 쓴다([결정 196](../../../docs/decisions.md#download-denial-reasons)): License 404 `NOT_FOUND`(R3.4) → `LICENSE_NOT_OWNED`, License 404 `PURCHASE_IN_STORAGE`(License R4.11) → `LICENSE_REGISTRATION_REQUIRED`("보관함에 있는 상품입니다. 라이브러리에 등록하면 다운로드할 수 있습니다."), `SUSPENDED`(R3.5) → `LICENSE_SUSPENDED`, 다운로드 제한(R5.1) → `PRODUCT_DOWNLOAD_RESTRICTED`. 두 404 본문 모두 R3.4의 계약 본문(`success=false`)이고, 그 밖의 404는 R3.9대로 `503`이다. 지금 코드는 앞의 셋이 같은 `FORBIDDEN`이다(DL-T2).
 
 ### R4. 현재 공개 빌드 확인 (Catalog 내부 조회)
 **사용자 스토리:** 구매자로서, 지금 공개된 전체 빌드 하나를 받고 싶다. 그래야 미출시·심사 중 빌드를 받지 않는다.

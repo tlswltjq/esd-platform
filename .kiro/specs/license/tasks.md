@@ -84,6 +84,12 @@
   - 영향: 회귀를 막는 테스트 공백. 지금 동작은 맞다.
   - 재현: 위 각 항목이 테스트 자체다.
 
+- [ ] **LI-T10. 라이브러리 상세 404가 보관함 미등록을 알리지 않는다** ([결정 196](../../../docs/decisions.md#download-denial-reasons))
+  - 어디서: `license:core/service/ReadLicense.java:30`(열린 보유권이 없으면 언제나 `NOT_FOUND`).
+  - 목표: R4.11 — 열린 보유권이 없고 같은 구매자·상품의 `STORED` 구매 근거가 있으면 `404`·`error.code=PURCHASE_IN_STORAGE`, 그 밖은 지금처럼 `404 NOT_FOUND`. 등록 전 정지된 구매 근거·`REFUNDED`는 `STORED`로 세지 않는다. Download DL-T2와 같은 PR에 넣는다.
+  - 영향: **보유권 안내** — 결제하고 등록하지 않은 고객이 다운로드에서 "미보유"로 안내된다. 돈·보유권 상태는 바뀌지 않는다.
+  - 재현: 통합 — 구매 근거 `STORED`만 있음 → `PURCHASE_IN_STORAGE`(지금 Red), 구매 근거 없음·`REFUNDED`·등록 전 정지 → `NOT_FOUND`, `ACTIVE`·`SUSPENDED` 보유권 있음 → 지금 응답 유지.
+
 ## 진행 중 / 남음
 
 - [x] 정지 전 상태 표현(소급 RC-17) — [결정 193](../../../docs/decisions.md#split-suspended-status): 상태 값 둘로 나눔 → LI-T2.
