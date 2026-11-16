@@ -93,8 +93,9 @@ public class MessagingAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ProcessedEventGuard processedEventGuard(ProcessedEventRepository repository) {
-        return new ProcessedEventGuard(repository);
+    public ProcessedEventGuard processedEventGuard(ProcessedEventRepository repository,
+                                                   ObjectProvider<MeterRegistry> meterRegistry) {
+        return new ProcessedEventGuard(repository, meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
     }
 
 }

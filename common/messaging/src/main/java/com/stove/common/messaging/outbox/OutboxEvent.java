@@ -92,6 +92,13 @@ public class OutboxEvent {
     /** Kafka 브로커가 이벤트 수신을 확인한 시각. */
     private Instant sentAt;
 
+    /**
+     * 릴레이가 브로커로 보내기 직전 시각. 브로커 구간 지연(이 시각 → 소비 모듈 {@code processed_event.processed_at})
+     * 측정용이다([결정 204] B). {@link #sentAt}은 ack 뒤라 소비가 먼저 끝나면 구간이 음수가 될 수 있어 따로 둔다.
+     * 재시도하면 마지막 송신 시각으로 덮는다.
+     */
+    private Instant publishedAt;
+
     private OutboxEvent(String eventId, String aggregateType, String aggregateId, String eventType,
                         String topic, String partitionKey, String payload, String traceParent) {
         this.eventId = eventId;
@@ -122,6 +129,11 @@ public class OutboxEvent {
                                       String topic, String partitionKey, String payload, String traceParent) {
         return new OutboxEvent(eventId, aggregateType, aggregateId, eventType, topic, partitionKey,
                 payload, traceParent);
+    }
+
+    /** 브로커로 보내기 직전에 부른다. 같은 값을 {@code x-published-at} 헤더로도 싣는다. */
+    public void markPublishing(Instant at) {
+        this.publishedAt = at;
     }
 
     public void markSent() {
