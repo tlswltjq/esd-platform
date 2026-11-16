@@ -1,24 +1,26 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
 import com.stove.payment.core.service.ApplyOrderExpiry;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class OrderExpiryListener {
+@EventSubscriber(topics = Topics.ORDER, group = ApplyOrderExpiry.CONSUMER_GROUP)
+public class OrderExpiryListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ApplyOrderExpiry apply;
-    @KafkaListener(topics=Topics.ORDER,groupId=ApplyOrderExpiry.CONSUMER_GROUP)
-    public void receive(ConsumerRecord<String,String> record) {
-        EventEnvelope envelope=EventEnvelope.from(record);
+    @Override
+    public void receive(InboundMessage message) {
+        EventEnvelope envelope=EventEnvelope.from(message);
         if(envelope.isType(EventType.ORDER_EXPIRED))apply.execute(OrderExpiryMapper.from(envelope,envelope.payloadAs(mapper,OrderExpiredEvent.class)));
     }
 }

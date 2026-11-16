@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
@@ -33,7 +34,7 @@ class LicenseEventListenerTest {
     @Test
     void mapsTheConfirmedGrantToInternalInput() throws Exception {
         LicenseGrantedEvent event = event();
-        listener.receive(record(event, event.eventType(), mapper.writeValueAsString(event)));
+        listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), mapper.writeValueAsString(event))));
         verify(apply).execute(new LicenseGrant(event.eventId(), event.occurredAt(), event.licenseId(),
                 event.orderNo(), event.buyerSubject(), event.productId(), event.productCode(), event.paymentId()));
     }
@@ -59,7 +60,7 @@ class LicenseEventListenerTest {
         LicenseGrantedEvent event = event();
         ObjectNode body = mapper.valueToTree(event);
         body.putNull(field);
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), body.toString())))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), body.toString()))))
                 .isInstanceOf(BusinessException.class);
         verifyNoInteractions(apply);
     }
@@ -69,7 +70,7 @@ class LicenseEventListenerTest {
         LicenseGrantedEvent event = event();
         ObjectNode body = mapper.valueToTree(event);
         body.put("productId", 1.5);
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), body.toString())))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), body.toString()))))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(apply);
     }
@@ -77,8 +78,8 @@ class LicenseEventListenerTest {
     @Test
     void unrelatedEventsAreIgnoredAndMissingHeadersAreRejected() {
         LicenseGrantedEvent event = event();
-        listener.receive(record(event, "Unrelated", "{}"));
-        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.LICENSE, 0, 0, event.orderNo(), "{}")))
+        listener.receive(KafkaInboundMessages.from(record(event, "Unrelated", "{}")));
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.LICENSE, 0, 0, event.orderNo(), "{}"))))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(apply);
     }

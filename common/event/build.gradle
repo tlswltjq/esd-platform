@@ -1,0 +1,11 @@
+apply plugin: 'java-library'
+
+// 업무 모듈이 메시지를 받는 자리(수신 포트)다. 브로커 라이브러리를 하나도 모른다(결정 202).
+//
+// 리스너는 @EventSubscriber 로 "어느 토픽을 어느 그룹으로 받는가"만 선언하고, InboundMessage 를 받는다.
+// 그 선언을 실제 브로커 구독으로 바꾸는 일은 adapter(지금은 common:kafka 의 KafkaEventSubscriptions)가 한다.
+// 그래서 브로커를 바꿀 때 리스너·Mapper·업무 서비스는 고치지 않는다.
+dependencies {
+    // 공용 라이브러리 방향 검증 (ArchUnit)
+    testImplementation project(':common:archunit')
+}

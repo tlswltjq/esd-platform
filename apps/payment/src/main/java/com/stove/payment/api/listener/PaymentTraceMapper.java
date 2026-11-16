@@ -3,23 +3,21 @@ package com.stove.payment.api.listener;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.payment.core.domain.PaymentTraceContext;
 import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.header.Header;
-import org.apache.kafka.common.header.Headers;
 
 @Slf4j
 public final class PaymentTraceMapper {
     private PaymentTraceMapper() {}
 
-    public static PaymentTraceContext from(Headers headers) {
-        Iterator<Header> parents = headers.headers(EventHeaders.TRACE_PARENT).iterator();
-        if (!parents.hasNext()) return PaymentTraceContext.NONE;
-        byte[] value = parents.next().value();
-        if (parents.hasNext()) return ignored("DUPLICATE");
-        if (value == null || value.length > 64) return ignored("INVALID_LENGTH");
+    /** @param traceParents 수신 메시지의 {@link EventHeaders#TRACE_PARENT} 값 전부({@code InboundMessage#headerValues}). */
+    public static PaymentTraceContext from(List<String> traceParents) {
+        if (traceParents.isEmpty()) return PaymentTraceContext.NONE;
+        if (traceParents.size() > 1) return ignored("DUPLICATE");
+        String value = traceParents.get(0);
+        if (value.isEmpty() || value.getBytes(StandardCharsets.UTF_8).length > 64) return ignored("INVALID_LENGTH");
         try {
-            return new PaymentTraceContext(new String(value, StandardCharsets.UTF_8));
+            return new PaymentTraceContext(value);
         } catch (IllegalArgumentException invalid) {
             return ignored("INVALID_FORMAT");
         }

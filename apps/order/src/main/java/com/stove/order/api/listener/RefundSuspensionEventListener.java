@@ -1,6 +1,9 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
@@ -9,21 +12,19 @@ import com.stove.order.core.domain.LicenseSuspensionConfirmation;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.service.ApplyRefundSuspension;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor
-public class RefundSuspensionEventListener {
+@EventSubscriber(topics = Topics.LICENSE, group = ApplyRefundSuspension.CONSUMER_GROUP, noRetryFor = RefundCompletionRejected.class)
+public class RefundSuspensionEventListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ApplyRefundSuspension apply;
 
-    @KafkaListener(topics = Topics.LICENSE, groupId = ApplyRefundSuspension.CONSUMER_GROUP,
-            containerFactory = "orderRefundListenerContainerFactory")
-    public void receive(ConsumerRecord<String, String> record) {
+    @Override
+    public void receive(InboundMessage message) {
         LicenseSuspensionConfirmation input;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
+            EventEnvelope envelope = EventEnvelope.from(message);
             if (!envelope.isType(EventType.LICENSE_SUSPENDED)) return;
             input = RefundSuspensionMapper.from(envelope, envelope.payloadAs(mapper, LicenseSuspendedEvent.class));
         } catch (IllegalStateException malformed) {
