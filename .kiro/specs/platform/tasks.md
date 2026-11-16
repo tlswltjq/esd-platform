@@ -58,6 +58,9 @@
   - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 결정 160: 정지 목록과 실패 레코드 보관을 소비 모듈 DB의 한 표로 둔다(기한 없음, 1건 즉시 경보). DLT 토픽과 `DltOpsService.replay`는 이 표의 키 단위 재처리로 바꾼다. 표 구조·회수 API는 common messaging 설계.
   - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
   - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
+  - [x] 발행 쪽 — 2026-11-16 [PR #203](https://github.com/tlswltjq/esd-platform/pull/203). `lockPendingBatch`가 같은 키의 앞 행이 `DEAD`이거나 재시도 대기면 뒤 행을 집지 않는다(D-055·D-056, `OutboxPendingQueryTest`). 8개 모듈 `idx_outbox_key_order` 이행.
+  - [ ] 릴레이 여러 인스턴스의 같은 키 경합(`SKIP LOCKED`로 같은 키를 나눠 집음) — 지금은 단일 인스턴스 전제라 발생하지 않는다([결정 205](../../../docs/decisions.md#relay-key-order-single-instance)). 여러 인스턴스로 늘리기 전에 고친다.
+  - [ ] 소비 쪽 정지 목록·키 단위 재투입(결정 155·160) — 메시징 포트 범위 결정에 따른다.
 
 - [ ] **T3. U2 — 다른 모듈·외부 PG 시각과의 선후 비교 13곳 + PG-* 4곳 + ORD-0(결정 173)**
   - 어디서: design "U2" 표 ORD-1~ORD-10·PAY-1·SET-1 — Order `order:core/domain/Refund.java:173`·`:255`, `RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `RefundApprovalStop.java:48`·`:56`·`:67`; Payment `payment:core/service/ReceiveRefundExecution.java:66`; Settlement `settlement:core/domain/RefundMonthInput.java:11`. ORD-0(결정 173): `order:core/domain/RefundPolicy.java:9-12`·`RequestRefund.java:35` — 기한 시작을 Order `paid_at`으로. PG-*(결정 163): `payment:core/domain/RefundExecution.java:164`·`:224`·`:276`, `payment:adapter/pg/PortOneRefundCancellationGateway.java:131`, #166 `recordLateCancellation`. PR #166 diff도 `RefundAttempt.recordRefundFailure`의 비교를 그대로 둔다.
