@@ -4,6 +4,8 @@ package com.stove.common.messaging.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -18,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -87,6 +91,17 @@ class OutboxRelayTest {
                 .filter(this::attemptDue)
                 .limit(invocation.<Integer>getArgument(0))
                 .toList());
+        // 실제 findUnsentPositions 와 같은 조건 — 배치에 든 키의 SENT 아닌 행, maxId 까지, id 순.
+        when(repository.findUnsentPositions(any(), anyLong(), any())).thenAnswer(invocation -> {
+            Collection<String> keys = invocation.getArgument(0);
+            long maxId = invocation.getArgument(1);
+            return store.stream()
+                    .filter(event -> keys.contains(event.getPartitionKey()))
+                    .filter(event -> event.getStatus() != OutboxStatus.SENT)
+                    .filter(event -> event.getId() <= maxId)
+                    .map(event -> new OutboxKeyPosition(event.getPartitionKey(), event.getId()))
+                    .toList();
+        });
 
         relay = new OutboxRelay(repository, kafkaTemplate,
                 BATCH_SIZE, MAX_RETRY, MAX_BATCHES_PER_CYCLE,
@@ -126,6 +141,8 @@ class OutboxRelayTest {
         OutboxEvent event = OutboxEvent.pending(eventId, "Payment", partitionKey,
                 EventType.PAYMENT_COMPLETED, Topics.PAYMENT, partitionKey,
                 "{\"orderNo\":\"" + partitionKey + "\"}", traceParent);
+        // id 는 DB 가 적재 순서로 매긴다(IDENTITY). store 의 삽입 순서를 그대로 쓴다.
+        ReflectionTestUtils.setField(event, "id", (long) store.size() + 1);
         store.add(event);
         return event;
     }
@@ -432,8 +449,8 @@ class OutboxRelayTest {
     }
 
     @Test
-    @DisplayName("[D-014] 앞 이벤트가 DEAD 가 되면 막힌 키가 풀린다 — 영구 정지를 막는 탈출구")
-    void deadBlockerReleasesTheKey() {
+    @DisplayName("[D-055·결정 155] 앞 이벤트가 DEAD 면 그 키는 회수 전까지 멈추고, 회수하면 적재 순서대로 나간다")
+    void deadBlockerHoldsTheKeyUntilRequeued() {
         OutboxEvent blocker = record("EVT-1");
         OutboxEvent held = record("EVT-2");
 
@@ -446,12 +463,24 @@ class OutboxRelayTest {
         brokerHealthy();
         pollAfterBackOff();
 
-        // 순서 보장을 포기하는 유일한 지점이다. 대안은 그 키의 영구 정지인데,
-        // 영원히 나가지 않을 이벤트 뒤에 키 전체를 묶어두는 쪽이 더 나쁘다.
-        // 그래서 DEAD 알람이 이 설계의 짝이다(docs/event-ordering.md 6절 A-2).
+        // D-014 는 여기서 키를 풀었다(영구 정지보다 낫다는 절충, DEAD 알람이 짝).
+        // 결정 155 는 순서를 지키는 쪽을 골랐다 — 그 키만 멈추고 DEAD 경보로 드러내며, 운영자가 회수한다.
         assertThat(held.getStatus())
-                .as("DEAD 뒤에 묶여 있던 이벤트")
-                .isEqualTo(OutboxStatus.SENT);
+                .as("DEAD 뒤에 묶여 있던 이벤트는 앞이 회수될 때까지 나가지 않는다")
+                .isEqualTo(OutboxStatus.PENDING);
+
+        blocker.requeue();
+        pollAfterBackOff();
+
+        assertThat(blocker.getStatus()).isEqualTo(OutboxStatus.SENT);
+        assertThat(held.getStatus()).isEqualTo(OutboxStatus.SENT);
+        ArgumentCaptor<ProducerRecord<String, String>> sent = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate, atLeastOnce()).send(sent.capture());
+        List<String> deliveredAfterRecovery = sent.getAllValues().stream()
+                .map(record -> header(record, EventHeaders.EVENT_ID))
+                .toList();
+        assertThat(deliveredAfterRecovery.subList(deliveredAfterRecovery.size() - 2, deliveredAfterRecovery.size()))
+                .containsExactly("EVT-1", "EVT-2");
     }
 
     @Test

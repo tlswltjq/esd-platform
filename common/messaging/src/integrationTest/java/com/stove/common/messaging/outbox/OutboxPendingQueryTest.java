@@ -3,13 +3,18 @@ package com.stove.common.messaging.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.testcontainers.InfraContainers;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * {@code lockPendingBatch} 의 의미를 <b>이 모듈에서</b> 실제 MySQL 로 검증한다.
@@ -36,10 +41,33 @@ class OutboxPendingQueryTest {
     @Autowired
     OutboxEventRepository repository;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @Autowired
+    TransactionTemplate transactions;
+
+    /** 조회가 DB의 {@code NOW(6)}로 판정하므로 재시도 시각도 같은 시계로 둔다. {@code interval}은 테스트 상수만 쓴다. */
+    private void setNextAttemptFromDbNow(OutboxEvent event, String interval) {
+        jdbc.update("UPDATE outbox_event SET next_attempt_at = NOW(6) + " + interval + " WHERE id = ?", event.getId());
+    }
+
+    /** 키마다 순서를 지키므로, 다른 테스트가 남긴 행이 끼어들지 않게 테스트마다 키를 새로 만든다. */
     private OutboxEvent pendingEvent() {
+        return pendingEvent("ORD-" + UUID.randomUUID());
+    }
+
+    private OutboxEvent pendingEvent(String partitionKey) {
         return repository.save(OutboxEvent.pending(
-                UUID.randomUUID().toString(), "Order", "ORD-" + UUID.randomUUID(),
-                "OrderCreated", "stove.order.v1", "ORD-1", "{}"));
+                UUID.randomUUID().toString(), "Order", partitionKey,
+                "OrderCreated", "stove.order.v1", partitionKey, "{}"));
+    }
+
+    private OutboxEvent dead(OutboxEvent event) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            event.markFailed("broker down", 10);
+        }
+        return repository.save(event);
     }
 
     private boolean isPicked(OutboxEvent event) {
@@ -109,6 +137,139 @@ class OutboxPendingQueryTest {
         assertThat(batch).hasSize(2);
         assertThat(batch).extracting(OutboxEvent::getId).isSorted();
         assertThat(created).extracting(OutboxEvent::getId).isSorted();
+    }
+
+    @Test
+    @DisplayName("[D-055·결정 155] 같은 키의 앞 이벤트가 DEAD면 뒤 이벤트를 집지 않고, 다른 키는 그대로 집는다")
+    void deadEarlierEventHoldsLaterEventsOfTheSameKey() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = dead(pendingEvent(key));
+        OutboxEvent second = pendingEvent(key);
+        OutboxEvent otherKey = pendingEvent();
+
+        assertThat(first.getStatus()).isEqualTo(OutboxEvent.OutboxStatus.DEAD);
+        assertThat(isPicked(second))
+                .as("앞이 DEAD인데 뒤가 나가면 소비자는 순서가 뒤집힌 채 받는다")
+                .isFalse();
+        assertThat(isPicked(otherKey)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[D-055·결정 155] DEAD인 앞 이벤트를 회수하면 같은 키의 앞뒤가 적재 순서대로 다시 대상이 된다")
+    void requeuingTheDeadEarlierEventReleasesTheKeyInOrder() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = dead(pendingEvent(key));
+        OutboxEvent second = pendingEvent(key);
+
+        first.requeue();
+        repository.save(first);
+
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("[D-056] 같은 키의 앞 이벤트가 재시도 대기면, 그 뒤에 적재된 이벤트를 먼저 집지 않는다")
+    void backedOffEarlierEventHoldsALaterEventOutsideItsBatch() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        first.markFailed("timeout", 10);
+        repository.save(first);
+        // 백오프 1초에 기대면 느린 실행에서 앞도 발행 가능해져 거짓 실패한다. DB 시각 기준 한 시간 뒤로 고정한다.
+        setNextAttemptFromDbNow(first, "INTERVAL 1 HOUR");
+        // 앞 이벤트가 실패한 배치에 없던 뒤 이벤트다. holdRemainder는 같은 배치 안에서만 미룬다.
+        OutboxEvent second = pendingEvent(key);
+
+        assertThat(second.getNextAttemptAt()).isNull();
+        assertThat(isPicked(second))
+                .as("앞이 재시도를 기다리는 사이 뒤가 먼저 나가면 같은 키의 순서가 뒤집힌다")
+                .isFalse();
+
+        // 앞의 대기가 끝나면 앞뒤가 적재 순서대로 함께 대상이 된다.
+        setNextAttemptFromDbNow(first, "INTERVAL -1 SECOND");
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("같은 키의 앞뒤가 모두 발행 가능하면 한 배치에 함께 집는다(키 웨이브 유지)")
+    void eligibleEventsOfTheSameKeyArePickedTogether() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        OutboxEvent second = pendingEvent(key);
+
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("같은 키의 앞 이벤트가 발행을 마쳤으면 뒤 이벤트를 집는다")
+    void sentEarlierEventDoesNotHoldTheKey() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        first.markSent();
+        repository.save(first);
+        OutboxEvent second = pendingEvent(key);
+
+        assertThat(isPicked(second)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[PR #203 R1] 다른 트랜잭션이 같은 키의 앞 행을 잠그면, 하위 조회는 뒤 행을 통과시키지만 릴레이 거름이 뒤 행을 뺀다")
+    void aLockedEarlierEventKeepsTheLaterEventOutOfTheReleasedBatch() throws InterruptedException {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        OutboxEvent second = pendingEvent(key);
+
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        // 운영 재발행(OutboxRepublishService)처럼 상태 확인 전에 앞 행을 잠그고 쥐고 있는 트랜잭션.
+        Thread operator = new Thread(() -> transactions.executeWithoutResult(status -> {
+            repository.lockByEventId(first.getEventId()).orElseThrow();
+            locked.countDown();
+            awaitQuietly(release);
+        }));
+        operator.start();
+        try {
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+
+            List<Long> lockedIds = new ArrayList<>();
+            List<Long> releasedIds = new ArrayList<>();
+            transactions.executeWithoutResult(status -> {
+                List<OutboxEvent> batch = repository.lockPendingBatch(500).stream()
+                        .filter(event -> event.getPartitionKey().equals(key))
+                        .toList();
+                batch.forEach(event -> lockedIds.add(event.getId()));
+                List<OutboxKeyPosition> unsent = repository.findUnsentPositions(
+                        List.of(key), second.getId(), OutboxEvent.OutboxStatus.SENT);
+                KeyOrderGuard.releasable(batch, unsent).forEach(event -> releasedIds.add(event.getId()));
+            });
+
+            assertThat(lockedIds)
+                    .as("SKIP LOCKED 가 앞 행을 건너뛰고 하위 조회는 잠금을 보지 않아 뒤 행만 잡힌다 — 거름 없이는 뒤가 먼저 나간다")
+                    .containsExactly(second.getId());
+            assertThat(releasedIds).isEmpty();
+        } finally {
+            release.countDown();
+            operator.join(10_000);
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Test
