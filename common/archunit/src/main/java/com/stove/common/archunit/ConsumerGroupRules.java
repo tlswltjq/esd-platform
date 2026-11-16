@@ -21,20 +21,21 @@ import java.util.TreeSet;
 public final class ConsumerGroupRules {
 
     private static final String KAFKA_LISTENER = "org.springframework.kafka.annotation.KafkaListener";
+    private static final String EVENT_SUBSCRIBER = "com.stove.common.event.EventSubscriber";
+    private static final String GROUP = "group";
     private static final String PROCESSED_EVENT_GUARD = "com.stove.common.messaging.inbox.ProcessedEventGuard";
     private static final String CONSUMER_GROUP_FIELD = "CONSUMER_GROUP";
-    private static final String GROUP_ID = "groupId";
 
     private ConsumerGroupRules() {
     }
 
-    /** Kafka 컨슈머 그룹과 Inbox 멱등 키는 같은 값이다. 집합끼리 비교한다. */
+    /** 소비자 그룹({@code @EventSubscriber(group)})과 Inbox 멱등 키는 같은 값이다. 집합끼리 비교한다. */
     @ArchTest
     static void 컨슈머_그룹과_멱등키가_같다(JavaClasses classes) {
-        Set<String> kafkaGroups = kafkaGroups(classes);
+        Set<String> subscriberGroups = subscriberGroups(classes);
 
         // 제외 대상은 "상수가 없는 앱" 이 아니라 "가드를 쓰지 않는 앱" 이다 — 공허 통과 방지. [D-021]
-        if (kafkaGroups.isEmpty() || !usesInboxGuard(classes)) {
+        if (subscriberGroups.isEmpty() || !usesInboxGuard(classes)) {
             return;
         }
 
@@ -42,20 +43,20 @@ public final class ConsumerGroupRules {
         if (idempotencyKeys.isEmpty()) {
             throw new AssertionError("""
                     %s 를 쓰는데 %s 상수가 없다.
-                      @KafkaListener(groupId) : %s
+                      @EventSubscriber(group) : %s
                     가드에 넘기는 멱등 키가 상수 밖에 있으면 이 규칙이 대조할 것을 잃는다.
                     멱등 키를 서비스의 %s (static) 로 되돌릴 것."""
-                    .formatted(PROCESSED_EVENT_GUARD, CONSUMER_GROUP_FIELD, kafkaGroups, CONSUMER_GROUP_FIELD));
+                    .formatted(PROCESSED_EVENT_GUARD, CONSUMER_GROUP_FIELD, subscriberGroups, CONSUMER_GROUP_FIELD));
         }
-        if (!kafkaGroups.equals(idempotencyKeys)) {
+        if (!subscriberGroups.equals(idempotencyKeys)) {
             throw new AssertionError("""
-                    Kafka 컨슈머 그룹과 Inbox 멱등 키가 다르다.
-                      @KafkaListener(groupId) : %s
+                    소비자 그룹과 Inbox 멱등 키가 다르다.
+                      @EventSubscriber(group) : %s
                       %s 상수            : %s
                     둘은 한 값으로 두기로 했다(결정 16). 리스너가 서비스의 %s 를 참조하도록 되돌릴 것.
                     값을 정말 바꿔야 한다면 상수 한 곳만 고치면 양쪽이 함께 움직인다 —
                     다만 멱등 키가 바뀌면 그 그룹의 과거 처리 기록이 전부 무효가 된다."""
-                    .formatted(kafkaGroups, CONSUMER_GROUP_FIELD, idempotencyKeys, CONSUMER_GROUP_FIELD));
+                    .formatted(subscriberGroups, CONSUMER_GROUP_FIELD, idempotencyKeys, CONSUMER_GROUP_FIELD));
         }
     }
 
@@ -63,35 +64,55 @@ public final class ConsumerGroupRules {
      * 리스너는 컨슈머 그룹을 명시한다.
      *
      * <p>{@code application.yml} 의 {@code spring.kafka.consumer.group-id} 는 지웠다.
-     * 모든 {@code @KafkaListener} 가 {@code groupId} 를 덮어쓰고 있어 한 번도 쓰이지 않으면서
+     * 모든 리스너가 그룹을 덮어쓰고 있어 한 번도 쓰이지 않으면서
      * "여기가 그룹 이름을 정하는 자리"처럼 보이던 값이라, 재처리하려는 사람이 그쪽을 고치면
-     * 아무 일도 일어나지 않았다. 대신 빠뜨린 리스너를 여기서 잡는다.
+     * 아무 일도 일어나지 않았다. 대신 빈 그룹을 단 리스너를 여기서 잡는다.
      */
     @ArchTest
     static void 리스너는_컨슈머_그룹을_명시한다(JavaClasses classes) {
         Set<String> offenders = new TreeSet<>();
         for (JavaClass javaClass : classes) {
-            for (JavaMethod method : javaClass.getMethods()) {
-                if (isKafkaListener(method) && declaredGroupId(method).isEmpty()) {
-                    offenders.add(method.getFullName());
-                }
+            if (isEventSubscriber(javaClass) && declaredGroup(javaClass).isEmpty()) {
+                offenders.add(javaClass.getName());
             }
         }
         if (!offenders.isEmpty()) {
             throw new AssertionError("""
-                    @KafkaListener 에 groupId 가 없다: %s
+                    @EventSubscriber 의 group 이 비어 있다: %s
                     application.yml 의 group-id 기본값은 제거했으므로 그룹 이름은 리스너가 명시해야 한다.
                     Inbox 가드를 쓰는 서비스라면 그 서비스의 %s 를 참조할 것."""
                     .formatted(offenders, CONSUMER_GROUP_FIELD));
         }
     }
 
-    private static Set<String> kafkaGroups(JavaClasses classes) {
-        Set<String> groups = new TreeSet<>();
+    /**
+     * 업무 리스너는 브로커 리스너({@code @KafkaListener})를 직접 달지 않는다(결정 202).
+     *
+     * <p>{@code @EventSubscriber} + {@code EventHandler} 로 선언하면 adapter(common:kafka)가 구독을 만든다.
+     * 직접 달면 그 리스너만 브로커를 바꿀 때 따라오지 않고, 위 그룹 대조에서도 빠진다.
+     */
+    @ArchTest
+    static void 업무_리스너는_브로커_리스너를_직접_달지_않는다(JavaClasses classes) {
+        Set<String> offenders = new TreeSet<>();
         for (JavaClass javaClass : classes) {
             for (JavaMethod method : javaClass.getMethods()) {
-                declaredGroupId(method).ifPresent(groups::add);
+                if (isKafkaListener(method)) {
+                    offenders.add(method.getFullName());
+                }
             }
+        }
+        if (!offenders.isEmpty()) {
+            throw new AssertionError("""
+                    @KafkaListener 를 직접 달았다: %s
+                    클래스에 @EventSubscriber(topics, group) 를 달고 EventHandler#receive(InboundMessage) 로 받을 것."""
+                    .formatted(offenders));
+        }
+    }
+
+    private static Set<String> subscriberGroups(JavaClasses classes) {
+        Set<String> groups = new TreeSet<>();
+        for (JavaClass javaClass : classes) {
+            declaredGroup(javaClass).ifPresent(groups::add);
         }
         return groups;
     }
@@ -132,12 +153,16 @@ public final class ConsumerGroupRules {
                 .anyMatch(annotation -> annotation.getRawType().getName().equals(KAFKA_LISTENER));
     }
 
-    /** 선언된 {@code groupId}. 비어 있으면(= yml 기본값에 기대는 상태) 없는 것으로 본다. */
-    private static Optional<String> declaredGroupId(JavaMethod method) {
-        return method.getAnnotations().stream()
-                .filter(annotation -> annotation.getRawType().getName().equals(KAFKA_LISTENER))
-                .findFirst()
-                .flatMap(annotation -> annotation.get(GROUP_ID))
+    private static boolean isEventSubscriber(JavaClass javaClass) {
+        return javaClass.isAnnotatedWith(EVENT_SUBSCRIBER);
+    }
+
+    /** 선언된 {@code group}. 비어 있으면 없는 것으로 본다. */
+    private static Optional<String> declaredGroup(JavaClass javaClass) {
+        if (!isEventSubscriber(javaClass)) {
+            return Optional.empty();
+        }
+        return javaClass.getAnnotationOfType(EVENT_SUBSCRIBER).get(GROUP)
                 .map(String::valueOf)
                 .filter(value -> !value.isBlank());
     }

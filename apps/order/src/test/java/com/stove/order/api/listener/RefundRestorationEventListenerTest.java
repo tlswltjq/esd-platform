@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.Topics;
@@ -25,13 +26,13 @@ class RefundRestorationEventListenerTest {
     @Test void aFailureOnTheLicenseTopicCannotAuthorizeRestoration() throws Exception {
         RefundExecutionFailedEvent event = new RefundExecutionFailedEvent(id(), Instant.parse("2026-10-27T01:02:00Z"), id(), id(), id(), id(),
                 id(), "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64));
-        assertThatThrownBy(() -> listener.receive(record(event, Topics.LICENSE))).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, Topics.LICENSE)))).isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }
     @Test void aRestorationClaimOnThePaymentTopicCannotCompleteTheWorkflow() throws Exception {
         LicenseRestoredEvent event = new LicenseRestoredEvent(id(), Instant.parse("2026-10-27T01:03:00Z"), id(), id(), id(), id(), id(), id(),
                 "buyer", 1L, "PRODUCT-1", "payment-1", id(), id(), false);
-        assertThatThrownBy(() -> listener.receive(record(event, Topics.PAYMENT))).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, Topics.PAYMENT)))).isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }
     private ConsumerRecord<String, String> record(DomainEvent event, String topic) throws Exception {

@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
@@ -190,28 +191,28 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
     void alreadyProcessedSuspensionRestorationAndCorrectionRequestsHaveNoEffectWhenRepublished() throws Exception {
         License restoring = registered(1L);
         LicenseSuspensionRequestedEvent suspension = suspension(restoring);
-        suspensionEvents.receive(record(suspension));
+        suspensionEvents.receive(KafkaInboundMessages.from(record(suspension)));
         assertThat(count("license_suspension")).isEqualTo(1);
-        assertRepeatHasNoEffect(() -> suspensionEvents.receive(record(suspension)));
+        assertRepeatHasNoEffect(() -> suspensionEvents.receive(KafkaInboundMessages.from(record(suspension))));
 
         LicenseSuspension suspended = suspensions.findByRequestEventId(suspension.eventId()).orElseThrow();
         LicenseRestorationRequestedEvent restoration = new LicenseRestorationRequestedEvent(id(), now(), suspension.refundId(), id(), id(),
                 restoring.getLicenseId(), restoring.getOrderNo(), restoring.getBuyerSubject(), restoring.getProductId(), restoring.getProductCode(),
                 restoring.getPaymentId(), suspension.eventId(), suspended.getCompletedEventId());
-        restorationEvents.receive(record(restoration));
+        restorationEvents.receive(KafkaInboundMessages.from(record(restoration)));
         assertThat(count("license_restoration")).isEqualTo(1);
-        assertRepeatHasNoEffect(() -> restorationEvents.receive(record(restoration)));
+        assertRepeatHasNoEffect(() -> restorationEvents.receive(KafkaInboundMessages.from(record(restoration))));
 
         License correcting = registered(2L);
         LicenseSuspensionRequestedEvent stopped = suspension(correcting);
-        suspensionEvents.receive(record(stopped));
+        suspensionEvents.receive(KafkaInboundMessages.from(record(stopped)));
         LicenseSuspension stoppedSuspension = suspensions.findByRequestEventId(stopped.eventId()).orElseThrow();
         LicenseApprovalCorrectionRequestedEvent correction = new LicenseApprovalCorrectionRequestedEvent(id(), now(), stopped.refundId(), id(), id(),
                 correcting.getLicenseId(), correcting.getOrderNo(), correcting.getBuyerSubject(), correcting.getProductId(), correcting.getProductCode(),
                 correcting.getPaymentId(), stopped.eventId(), stoppedSuspension.getCompletedEventId());
-        correctionEvents.receive(record(correction));
+        correctionEvents.receive(KafkaInboundMessages.from(record(correction)));
         assertThat(count("license_approval_correction")).isEqualTo(1);
-        assertRepeatHasNoEffect(() -> correctionEvents.receive(record(correction)));
+        assertRepeatHasNoEffect(() -> correctionEvents.receive(KafkaInboundMessages.from(record(correction))));
         assertThat(jdbc.queryForList("SELECT DISTINCT consumer_group FROM processed_event", String.class)).contains(
                 ApplyLicenseSuspension.CONSUMER_GROUP, ApplyLicenseRestoration.CONSUMER_GROUP, ApplyApprovalCorrection.CONSUMER_GROUP);
     }
@@ -265,13 +266,13 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
     void aRepublishedOrderPaidThatLicenseAlreadyProcessedHasNoEffect() throws Exception {
         PaidOrder order = paid();
         OrderPaidEvent paid = event(order);
-        orderEvents.receive(orderPaid(paid));
+        orderEvents.receive(KafkaInboundMessages.from(orderPaid(paid)));
         Map<String, List<Map<String, Object>>> afterFirst = snapshot();
         assertThat(count("product_license")).isEqualTo(1);
         assertThat(count("processed_event")).isEqualTo(1);
         assertThat(count("outbox_event")).isEqualTo(1);
 
-        orderEvents.receive(orderPaid(paid));
+        orderEvents.receive(KafkaInboundMessages.from(orderPaid(paid)));
 
         assertThat(snapshot()).isEqualTo(afterFirst);
     }

@@ -18,6 +18,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
@@ -886,7 +887,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         invalid.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));invalid.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
         ConsumerRecord<String,String> malformed=new ConsumerRecord<String,String>(Topics.ORDER,0,0,input.orderNo(),mapper.writeValueAsString(event));
         malformed.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));malformed.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
-        assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(malformed),event)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(KafkaInboundMessages.from(malformed)),event)).isInstanceOf(BusinessException.class);
         HashMap<String,Object> configuration=new HashMap<String,Object>();configuration.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
         configuration.put("group.id","settlement-dlt-"+id());configuration.put("auto.offset.reset","earliest");
         configuration.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");configuration.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");

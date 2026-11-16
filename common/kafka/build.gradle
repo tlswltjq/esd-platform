@@ -6,6 +6,8 @@ apply plugin: 'java-library'
 // 딸려와서, 저장소가 JPA 가 아닌 store(ES)·download(Mongo) 가 쓸 수 없었다.
 // 그 둘은 결과적으로 스프링 기본값(FixedBackOff(0ms, 9회) + 로그 후 건너뛰기)으로 돌고 있었다.
 dependencies {
+    // 업무 리스너가 쓰는 수신 포트(@EventSubscriber·InboundMessage). 이 모듈은 그 Kafka adapter 다.
+    api project(':common:event')
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     // DLT 운영 API 가 공통 응답 봉투를 쓰고, DLT 레코드에서 계약 헤더를 읽는다.

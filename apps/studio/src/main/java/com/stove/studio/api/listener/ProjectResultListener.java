@@ -1,6 +1,9 @@
 package com.stove.studio.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
@@ -13,23 +16,20 @@ import com.stove.studio.core.service.project.RecordProjectWithdrawalResult;
 import com.stove.studio.core.service.release.RecordProjectReleaseResult;
 import com.stove.studio.core.service.review.RecordProjectReviewResult;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class ProjectResultListener {
+@EventSubscriber(topics = {Topics.REVIEW, Topics.RELEASE}, group = RecordProjectReviewResult.CONSUMER_GROUP)
+public class ProjectResultListener implements EventHandler {
     private final ObjectMapper mapper;
     private final RecordProjectReviewResult recordProjectReviewResult;
     private final RecordProjectReleaseResult recordProjectReleaseResult;
     private final RecordProjectWithdrawalResult recordProjectWithdrawalResult;
 
-    @KafkaListener(
-            topics = {Topics.REVIEW, Topics.RELEASE},
-            groupId = RecordProjectReviewResult.CONSUMER_GROUP)
-    public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope e = EventEnvelope.from(record);
+    @Override
+    public void receive(InboundMessage message) {
+        EventEnvelope e = EventEnvelope.from(message);
         if (e.isType("ProjectReviewWithdrawalResolved")) {
             recordProjectWithdrawalResult.execute(ProjectWithdrawalResultMapper.from(
                     e, e.payloadAs(mapper, ProjectReviewWithdrawalResolvedEvent.class)));

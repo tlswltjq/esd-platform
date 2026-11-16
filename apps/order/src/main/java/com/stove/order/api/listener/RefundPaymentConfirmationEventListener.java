@@ -1,6 +1,9 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
@@ -11,22 +14,20 @@ import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundPaymentConfirmation;
 import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor
-public class RefundPaymentConfirmationEventListener {
+@EventSubscriber(topics = Topics.PAYMENT, group = ApplyRefundPaymentConfirmation.CONSUMER_GROUP, noRetryFor = RefundCompletionRejected.class)
+public class RefundPaymentConfirmationEventListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ApplyRefundPaymentConfirmation apply;
 
-    @KafkaListener(topics = Topics.PAYMENT, groupId = ApplyRefundPaymentConfirmation.CONSUMER_GROUP,
-            containerFactory = "orderRefundListenerContainerFactory")
-    public void receive(ConsumerRecord<String, String> record) {
+    @Override
+    public void receive(InboundMessage message) {
         RefundPaymentConfirmation input = null;
         RefundExecutionSuccess success = null;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
+            EventEnvelope envelope = EventEnvelope.from(message);
             if (envelope.isType(EventType.REFUND_PAYMENT_CONFIRMED))
                 input = RefundPaymentConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundPaymentConfirmedEvent.class));
             else if (envelope.isType(EventType.REFUND_EXECUTION_SUCCEEDED))

@@ -3,10 +3,8 @@ package com.stove.payment.api.listener;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventHeaders;
 import com.stove.payment.core.domain.PaymentTraceContext;
-import java.nio.charset.StandardCharsets;
-import org.apache.kafka.common.header.internals.RecordHeaders;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -21,13 +19,10 @@ class PaymentTraceMapperTest {
     }
 
     @Test void absentNullAndDuplicateHeadersDoNotRejectBusinessInput() {
-        assertThat(PaymentTraceMapper.from(new RecordHeaders())).isEqualTo(PaymentTraceContext.NONE);
-        RecordHeaders missingValue = new RecordHeaders();
-        missingValue.add(EventHeaders.TRACE_PARENT, null);
-        assertThat(PaymentTraceMapper.from(missingValue)).isEqualTo(PaymentTraceContext.NONE);
-        RecordHeaders duplicate = headers(PREFIX + "01");
-        duplicate.add(EventHeaders.TRACE_PARENT, (PREFIX + "00").getBytes(StandardCharsets.UTF_8));
-        assertThat(PaymentTraceMapper.from(duplicate)).isEqualTo(PaymentTraceContext.NONE);
+        assertThat(PaymentTraceMapper.from(List.of())).isEqualTo(PaymentTraceContext.NONE);
+        // Kafka adapter 는 값이 null 인 헤더를 빈 문자열로 넘긴다(KafkaInboundMessages).
+        assertThat(PaymentTraceMapper.from(List.of(""))).isEqualTo(PaymentTraceContext.NONE);
+        assertThat(PaymentTraceMapper.from(List.of(PREFIX + "01", PREFIX + "00"))).isEqualTo(PaymentTraceContext.NONE);
     }
 
     @ParameterizedTest
@@ -47,9 +42,7 @@ class PaymentTraceMapperTest {
         assertThat(PaymentTraceMapper.from(headers("a".repeat(1000)))).isEqualTo(PaymentTraceContext.NONE);
     }
 
-    private static RecordHeaders headers(String value) {
-        RecordHeaders headers = new RecordHeaders();
-        headers.add(EventHeaders.TRACE_PARENT, value.getBytes(StandardCharsets.UTF_8));
-        return headers;
+    private static List<String> headers(String value) {
+        return List.of(value);
     }
 }

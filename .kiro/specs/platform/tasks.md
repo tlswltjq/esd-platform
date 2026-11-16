@@ -165,7 +165,7 @@
   - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
 
 - [ ] **T20. 영구 실패도 4회 재시도하고, 공통 분류가 없다**
-  - 어디서: `common/kafka/.../KafkaConsumerAutoConfiguration.java:37-43`, 재시도 제외는 Order `order:config/RefundKafkaConfiguration.java:20`의 `RefundCompletionRejected` 하나(R11).
+  - 어디서: `common/kafka/.../KafkaConsumerAutoConfiguration.java:37-43`, 재시도 제외는 Order 환불 리스너 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)` 하나(R11).
   - 목표: P2.6-3. `common/kafka`에 영구 실패 예외 하나, 공통 핸들러가 재시도에서 뺀다.
   - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
   - 재현: 헤더 없는 레코드를 넣고 DLT 도착까지 시도 1회 단언.

@@ -1,6 +1,9 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
@@ -11,22 +14,20 @@ import com.stove.order.core.domain.RefundFailureConfirmation;
 import com.stove.order.core.domain.LicenseRestorationConfirmation;
 import com.stove.order.core.service.ApplyRefundRestoration;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor
-public class RefundRestorationEventListener {
+@EventSubscriber(topics = {Topics.PAYMENT, Topics.LICENSE}, group = ApplyRefundRestoration.CONSUMER_GROUP, noRetryFor = RefundCompletionRejected.class)
+public class RefundRestorationEventListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ApplyRefundRestoration apply;
-    @KafkaListener(topics = {Topics.PAYMENT, Topics.LICENSE}, groupId = ApplyRefundRestoration.CONSUMER_GROUP,
-            containerFactory = "orderRefundListenerContainerFactory")
-    public void receive(ConsumerRecord<String, String> record) {
+    @Override
+    public void receive(InboundMessage message) {
         RefundFailureConfirmation failure = null; LicenseRestorationConfirmation restored = null;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
-            if ((envelope.isType(EventType.REFUND_EXECUTION_FAILED) && !Topics.PAYMENT.equals(record.topic()))
-                    || (envelope.isType(EventType.LICENSE_RESTORED) && !Topics.LICENSE.equals(record.topic())))
+            EventEnvelope envelope = EventEnvelope.from(message);
+            if ((envelope.isType(EventType.REFUND_EXECUTION_FAILED) && !Topics.PAYMENT.equals(message.topic()))
+                    || (envelope.isType(EventType.LICENSE_RESTORED) && !Topics.LICENSE.equals(message.topic())))
                 throw new RefundCompletionRejected("실패/복구 이벤트의 발행 모듈 토픽이 다릅니다.");
             if (envelope.isType(EventType.REFUND_EXECUTION_FAILED))
                 failure = RefundFailureConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionFailedEvent.class));

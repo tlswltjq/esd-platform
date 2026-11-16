@@ -1,6 +1,9 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
@@ -8,17 +11,16 @@ import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
 import com.stove.order.core.service.ApplyPaymentResult;
 import lombok.RequiredArgsConstructor;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor
-public class PaymentEventListener {
+@EventSubscriber(topics = Topics.PAYMENT, group = ApplyPaymentResult.CONSUMER_GROUP)
+public class PaymentEventListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ApplyPaymentResult applyPaymentResult;
-    @KafkaListener(topics = Topics.PAYMENT, groupId = ApplyPaymentResult.CONSUMER_GROUP)
-    public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
+    @Override
+    public void receive(InboundMessage message) {
+        EventEnvelope envelope = EventEnvelope.from(message);
         if (envelope.isType(EventType.ORDER_PAYMENT_COMPLETED))
             applyPaymentResult.execute(envelope.eventType(), PaymentResultMapper.from(
                     envelope, envelope.payloadAs(mapper, OrderPaymentCompletedEvent.class)));

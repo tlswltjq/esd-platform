@@ -1,17 +1,15 @@
 package com.stove.common.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
+import com.stove.common.event.InboundMessage;
 
 /**
- * 컨슈머가 다루기 쉬운 형태로 정규화한 Kafka 레코드.
+ * 컨슈머가 다루기 쉬운 형태로 정규화한 수신 메시지. 어느 브로커에서 왔는지 모른다.
  * 헤더에서 eventId/eventType 을 꺼내 멱등 판단과 라우팅을 body 파싱 없이 수행한다.
  *
  * @param eventId 서비스 간 전달 시 유지하는 이벤트 고유 식별자.
  * @param eventType 전달하거나 처리한 업무 이벤트 종류.
- * @param key 이벤트의 Kafka 메시지 키.
+ * @param key 이벤트의 순서 키.
  * @param payload 전달할 이벤트 본문.
  */
 public record EventEnvelope(String eventId, String eventType, String key, String payload) {
@@ -27,20 +25,20 @@ public record EventEnvelope(String eventId, String eventType, String key, String
      * <p>판단할 수 없는 입력은 부수효과 이전에 거부한다. 이후 처리는 컨슈머의 에러 핸들러
      * 정책이 맡는다(재시도 소진 후 기록하고 건너뛴다).
      */
-    public static EventEnvelope from(ConsumerRecord<String, String> record) {
-        String eventId = header(record, EventHeaders.EVENT_ID);
-        String eventType = header(record, EventHeaders.EVENT_TYPE);
-        requireHeader(eventId, EventHeaders.EVENT_ID, record);
-        requireHeader(eventType, EventHeaders.EVENT_TYPE, record);
+    public static EventEnvelope from(InboundMessage message) {
+        String eventId = message.header(EventHeaders.EVENT_ID);
+        String eventType = message.header(EventHeaders.EVENT_TYPE);
+        requireHeader(eventId, EventHeaders.EVENT_ID, message);
+        requireHeader(eventType, EventHeaders.EVENT_TYPE, message);
 
-        return new EventEnvelope(eventId, eventType, record.key(), record.value());
+        return new EventEnvelope(eventId, eventType, message.key(), message.payload());
     }
 
-    private static void requireHeader(String value, String name, ConsumerRecord<String, String> record) {
+    private static void requireHeader(String value, String name, InboundMessage message) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(
-                    "이벤트 계약 위반: %s 헤더가 없다 topic=%s partition=%d offset=%d key=%s"
-                            .formatted(name, record.topic(), record.partition(), record.offset(), record.key()));
+                    "이벤트 계약 위반: %s 헤더가 없다 topic=%s %s key=%s"
+                            .formatted(name, message.topic(), message.origin(), message.key()));
         }
     }
 
@@ -54,10 +52,5 @@ public record EventEnvelope(String eventId, String eventType, String key, String
         } catch (Exception e) {
             throw new IllegalStateException("이벤트 역직렬화 실패: " + eventType, e);
         }
-    }
-
-    private static String header(ConsumerRecord<String, String> record, String name) {
-        Header header = record.headers().lastHeader(name);
-        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 }
