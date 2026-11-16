@@ -1,6 +1,7 @@
 package com.stove.common.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.MessagePublisher;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -21,7 +22,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -83,11 +83,11 @@ public class MessagingAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "stove.outbox", name = "relay-enabled", havingValue = "true", matchIfMissing = true)
     public OutboxRelay outboxRelay(OutboxEventRepository repository,
-                                   KafkaTemplate<String, String> kafkaTemplate,
+                                   MessagePublisher publisher,
                                    OutboxProperties properties,
                                    OutboxMetrics metrics,
                                    PlatformTransactionManager transactionManager) {
-        return new OutboxRelay(repository, kafkaTemplate, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
+        return new OutboxRelay(repository, publisher, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
                 new TransactionTemplate(transactionManager));
     }
 

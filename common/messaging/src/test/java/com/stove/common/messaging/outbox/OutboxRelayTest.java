@@ -11,26 +11,23 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.stove.common.event.MessagePublisher;
+import com.stove.common.event.OutboundMessage;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -41,7 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 지금까지 검증은 ArchUnit(파일 위치) 하나뿐이었다.
  *
  * <p>Kafka 를 띄우지 않는다. 검증 대상은 브로커 구현이 아니라
- * <b>실패했을 때 릴레이가 무엇을 하는가</b>이므로 {@link KafkaTemplate} 을 대역으로 세우고
+ * <b>실패했을 때 릴레이가 무엇을 하는가</b>이므로 {@link MessagePublisher} 을 대역으로 세우고
  * 폴링 주기를 {@code relay()} 호출 횟수로 모사한다.
  */
 class OutboxRelayTest {
@@ -62,7 +59,7 @@ class OutboxRelayTest {
 
     private final OutboxEventRepository repository = mock(OutboxEventRepository.class);
     @SuppressWarnings("unchecked")
-    private final KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+    private final MessagePublisher publisher = mock(MessagePublisher.class);
 
     private final List<OutboxEvent> store = new ArrayList<>();
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -103,7 +100,7 @@ class OutboxRelayTest {
                     .toList();
         });
 
-        relay = new OutboxRelay(repository, kafkaTemplate,
+        relay = new OutboxRelay(repository, publisher,
                 BATCH_SIZE, MAX_RETRY, MAX_BATCHES_PER_CYCLE,
                 new OutboxMetrics(meterRegistry, repository),
                 directTransactionTemplate());
@@ -149,13 +146,13 @@ class OutboxRelayTest {
 
     @SuppressWarnings("unchecked")
     private void brokerHealthy() {
-        when(kafkaTemplate.send(any(ProducerRecord.class)))
-                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+        when(publisher.publish(any(OutboundMessage.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
     }
 
     @SuppressWarnings("unchecked")
     private void brokerDown() {
-        when(kafkaTemplate.send(any(ProducerRecord.class)))
+        when(publisher.publish(any(OutboundMessage.class)))
                 .thenReturn(CompletableFuture.failedFuture(
                         new IllegalStateException("Broker not available")));
     }
@@ -181,9 +178,9 @@ class OutboxRelayTest {
 
         relay.relay();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate).send(captor.capture());
-        ProducerRecord<String, String> sent = captor.getValue();
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher).publish(captor.capture());
+        OutboundMessage sent = captor.getValue();
 
         assertThat(sent.topic()).isEqualTo(Topics.PAYMENT);
         assertThat(sent.key()).isEqualTo("ORD-1");
@@ -202,8 +199,8 @@ class OutboxRelayTest {
 
         relay.relay();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate).send(captor.capture());
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher).publish(captor.capture());
         assertThat(event.getPublishedAt()).isNotNull().isAfterOrEqualTo(before);
         assertThat(event.getPublishedAt())
                 .as("ack 뒤 시각(sent_at)이 아니라 보내기 직전 시각이어야 소비가 먼저 끝나도 구간이 음수가 되지 않는다")
@@ -226,8 +223,8 @@ class OutboxRelayTest {
 
         relay.relay();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate).send(captor.capture());
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher).publish(captor.capture());
 
         assertThat(header(captor.getValue(), EventHeaders.TRACE_PARENT)).isEqualTo(captured);
     }
@@ -245,10 +242,10 @@ class OutboxRelayTest {
 
         relay.relay();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate).send(captor.capture());
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher).publish(captor.capture());
 
-        assertThat(captor.getValue().headers().lastHeader(EventHeaders.TRACE_PARENT)).isNull();
+        assertThat(captor.getValue().headers()).doesNotContainKey(EventHeaders.TRACE_PARENT);
     }
 
     /**
@@ -268,8 +265,8 @@ class OutboxRelayTest {
         brokerHealthy();
         pollAfterBackOff();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate, times(2)).send(captor.capture());
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher, times(2)).publish(captor.capture());
 
         assertThat(captor.getAllValues())
                 .allSatisfy(sent -> assertThat(header(sent, EventHeaders.TRACE_PARENT)).isEqualTo(captured));
@@ -284,7 +281,7 @@ class OutboxRelayTest {
         relay.relay();
         relay.relay();
 
-        verify(kafkaTemplate, times(1)).send(any(ProducerRecord.class));
+        verify(publisher, times(1)).publish(any(OutboundMessage.class));
     }
 
     @Test
@@ -325,11 +322,11 @@ class OutboxRelayTest {
         OutboxEvent second = recordWithKey("EVT-2", "ORD-2");
         OutboxEvent third = recordWithKey("EVT-3", "ORD-3");
 
-        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
-            ProducerRecord<String, String> sent = invocation.getArgument(0);
+        when(publisher.publish(any(OutboundMessage.class))).thenAnswer(invocation -> {
+            OutboundMessage sent = invocation.getArgument(0);
             return "ORD-2".equals(sent.key())
                     ? CompletableFuture.failedFuture(new IllegalStateException("record too large"))
-                    : CompletableFuture.completedFuture(mock(SendResult.class));
+                    : CompletableFuture.completedFuture(null);
         });
 
         relay.relay();
@@ -399,11 +396,11 @@ class OutboxRelayTest {
         OutboxEvent earlier = record("EVT-1");
         OutboxEvent later = record("EVT-2");
 
-        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
-            ProducerRecord<String, String> sent = invocation.getArgument(0);
+        when(publisher.publish(any(OutboundMessage.class))).thenAnswer(invocation -> {
+            OutboundMessage sent = invocation.getArgument(0);
             return "EVT-1".equals(header(sent, EventHeaders.EVENT_ID))
                     ? CompletableFuture.failedFuture(new IllegalStateException("broker rejected"))
-                    : CompletableFuture.completedFuture(mock(SendResult.class));
+                    : CompletableFuture.completedFuture(null);
         });
 
         relay.relay();
@@ -493,8 +490,8 @@ class OutboxRelayTest {
 
         assertThat(blocker.getStatus()).isEqualTo(OutboxStatus.SENT);
         assertThat(held.getStatus()).isEqualTo(OutboxStatus.SENT);
-        ArgumentCaptor<ProducerRecord<String, String>> sent = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate, atLeastOnce()).send(sent.capture());
+        ArgumentCaptor<OutboundMessage> sent = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher, atLeastOnce()).publish(sent.capture());
         List<String> deliveredAfterRecovery = sent.getAllValues().stream()
                 .map(record -> header(record, EventHeaders.EVENT_ID))
                 .toList();
@@ -508,11 +505,11 @@ class OutboxRelayTest {
         OutboxEvent blocked = recordWithKey("EVT-1", "ORD-1");
         OutboxEvent other = recordWithKey("EVT-2", "ORD-2");
 
-        when(kafkaTemplate.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
-            ProducerRecord<String, String> sent = invocation.getArgument(0);
+        when(publisher.publish(any(OutboundMessage.class))).thenAnswer(invocation -> {
+            OutboundMessage sent = invocation.getArgument(0);
             return "ORD-1".equals(sent.key())
                     ? CompletableFuture.failedFuture(new IllegalStateException("broker rejected"))
-                    : CompletableFuture.completedFuture(mock(SendResult.class));
+                    : CompletableFuture.completedFuture(null);
         });
 
         relay.relay();
@@ -531,8 +528,8 @@ class OutboxRelayTest {
 
         relay.relay();
 
-        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(kafkaTemplate, times(3)).send(captor.capture());
+        ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+        verify(publisher, times(3)).publish(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(sent -> header(sent, EventHeaders.EVENT_ID))
                 .containsExactly("EVT-1", "EVT-2", "EVT-3");
@@ -610,8 +607,7 @@ class OutboxRelayTest {
         assertThat(counter("stove.outbox.dead")).isEqualTo(1.0);
     }
 
-    private static String header(ProducerRecord<String, String> record, String name) {
-        Header header = record.headers().lastHeader(name);
-        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
+    private static String header(OutboundMessage message, String name) {
+        return message.headers().get(name);
     }
 }
