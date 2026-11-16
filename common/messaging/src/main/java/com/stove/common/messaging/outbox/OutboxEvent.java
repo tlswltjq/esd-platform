@@ -146,7 +146,9 @@ public class OutboxEvent {
     /**
      * 같은 키의 앞 이벤트가 재시도 대기에 들어가서 함께 보류된다. [D-014]
      * <b>{@code retryCount} 를 늘리지 않는다</b> — 실패한 것이 아니라 양보한 것이다.
-     * 앞이 DEAD 면({@code until} 이 null) 보류하지 않는다 — 그 키가 영구 정지한다.
+     * 앞이 DEAD 면({@code until} 이 null) 시각으로 보류하지 않는다. 그 키는 회수 전까지
+     * {@link OutboxEventRepository#lockPendingBatch}가 뒤 이벤트를 집지 않아 멈춘다(D-055).
+     * 이 보류는 같은 배치 안의 뒤 이벤트에만 닿는다. 배치 밖의 뒤 이벤트도 같은 조회가 막는다(D-056).
      *
      */
     public void holdUntil(Instant until) {
