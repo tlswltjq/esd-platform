@@ -16,12 +16,27 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
      *
      * <p>{@code next_attempt_at} 이 지난 것만 집는다 — 실패한 이벤트를 곧바로 다시 시도하면
      * 재시도 예산이 폴링 주기만큼의 시간 안에 소진되어 짧은 장애도 넘기지 못한다.
+     *
+     * <p><b>같은 키의 앞 이벤트가 이번에 나갈 수 없으면 뒤 이벤트도 집지 않는다</b>([결정 155] 발행 쪽).
+     * 앞 이벤트가 {@code DEAD}(회수 전까지 그 키는 멈춘다, D-055)이거나 재시도 시각을 기다리는
+     * {@code PENDING}(그 배치에 없던 뒤 이벤트가 먼저 나가지 않게, D-056)이면 뒤를 건너뛴다.
+     * 앞도 지금 나갈 수 있으면 둘 다 집어 릴레이의 키 웨이브가 순서대로 보낸다.
+     * 이 판정은 릴레이가 한 인스턴스라는 전제에서 완전하다. 여러 인스턴스가 {@code SKIP LOCKED}로
+     * 같은 키를 나눠 집는 경우는 다루지 않는다([결정 205]).
+     * 하위 조회는 {@code idx_outbox_key_order (partition_key, id)}를 쓴다. 바깥 {@code FOR UPDATE}는
+     * 하위 조회의 행을 잠그지 않는다.
      */
     @Query(value = """
-            SELECT * FROM outbox_event
-             WHERE status = 'PENDING'
-               AND (next_attempt_at IS NULL OR next_attempt_at <= NOW(6))
-             ORDER BY id
+            SELECT * FROM outbox_event o
+             WHERE o.status = 'PENDING'
+               AND (o.next_attempt_at IS NULL OR o.next_attempt_at <= NOW(6))
+               AND NOT EXISTS (
+                     SELECT 1 FROM outbox_event earlier
+                      WHERE earlier.partition_key = o.partition_key
+                        AND earlier.id < o.id
+                        AND (earlier.status = 'DEAD'
+                             OR (earlier.status = 'PENDING' AND earlier.next_attempt_at > NOW(6))))
+             ORDER BY o.id
              LIMIT :size
              FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)

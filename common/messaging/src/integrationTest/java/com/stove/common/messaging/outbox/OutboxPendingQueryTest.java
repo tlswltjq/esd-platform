@@ -36,10 +36,22 @@ class OutboxPendingQueryTest {
     @Autowired
     OutboxEventRepository repository;
 
+    /** 키마다 순서를 지키므로, 다른 테스트가 남긴 행이 끼어들지 않게 테스트마다 키를 새로 만든다. */
     private OutboxEvent pendingEvent() {
+        return pendingEvent("ORD-" + UUID.randomUUID());
+    }
+
+    private OutboxEvent pendingEvent(String partitionKey) {
         return repository.save(OutboxEvent.pending(
-                UUID.randomUUID().toString(), "Order", "ORD-" + UUID.randomUUID(),
-                "OrderCreated", "stove.order.v1", "ORD-1", "{}"));
+                UUID.randomUUID().toString(), "Order", partitionKey,
+                "OrderCreated", "stove.order.v1", partitionKey, "{}"));
+    }
+
+    private OutboxEvent dead(OutboxEvent event) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            event.markFailed("broker down", 10);
+        }
+        return repository.save(event);
     }
 
     private boolean isPicked(OutboxEvent event) {
@@ -109,6 +121,81 @@ class OutboxPendingQueryTest {
         assertThat(batch).hasSize(2);
         assertThat(batch).extracting(OutboxEvent::getId).isSorted();
         assertThat(created).extracting(OutboxEvent::getId).isSorted();
+    }
+
+    @Test
+    @DisplayName("[D-055·결정 155] 같은 키의 앞 이벤트가 DEAD면 뒤 이벤트를 집지 않고, 다른 키는 그대로 집는다")
+    void deadEarlierEventHoldsLaterEventsOfTheSameKey() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = dead(pendingEvent(key));
+        OutboxEvent second = pendingEvent(key);
+        OutboxEvent otherKey = pendingEvent();
+
+        assertThat(first.getStatus()).isEqualTo(OutboxEvent.OutboxStatus.DEAD);
+        assertThat(isPicked(second))
+                .as("앞이 DEAD인데 뒤가 나가면 소비자는 순서가 뒤집힌 채 받는다")
+                .isFalse();
+        assertThat(isPicked(otherKey)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[D-055·결정 155] DEAD인 앞 이벤트를 회수하면 같은 키의 앞뒤가 적재 순서대로 다시 대상이 된다")
+    void requeuingTheDeadEarlierEventReleasesTheKeyInOrder() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = dead(pendingEvent(key));
+        OutboxEvent second = pendingEvent(key);
+
+        first.requeue();
+        repository.save(first);
+
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("[D-056] 같은 키의 앞 이벤트가 재시도 대기면, 그 뒤에 적재된 이벤트를 먼저 집지 않는다")
+    void backedOffEarlierEventHoldsALaterEventOutsideItsBatch() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        first.markFailed("timeout", 10);
+        repository.save(first);
+        // 앞 이벤트가 실패한 배치에 없던 뒤 이벤트다. holdRemainder는 같은 배치 안에서만 미룬다.
+        OutboxEvent second = pendingEvent(key);
+
+        assertThat(first.getNextAttemptAt()).isNotNull();
+        assertThat(second.getNextAttemptAt()).isNull();
+        assertThat(isPicked(second))
+                .as("앞이 재시도를 기다리는 사이 뒤가 먼저 나가면 같은 키의 순서가 뒤집힌다")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("같은 키의 앞뒤가 모두 발행 가능하면 한 배치에 함께 집는다(키 웨이브 유지)")
+    void eligibleEventsOfTheSameKeyArePickedTogether() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        OutboxEvent second = pendingEvent(key);
+
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    @DisplayName("같은 키의 앞 이벤트가 발행을 마쳤으면 뒤 이벤트를 집는다")
+    void sentEarlierEventDoesNotHoldTheKey() {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        first.markSent();
+        repository.save(first);
+        OutboxEvent second = pendingEvent(key);
+
+        assertThat(isPicked(second)).isTrue();
     }
 
     @Test
