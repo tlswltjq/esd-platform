@@ -7,6 +7,7 @@ import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundLookupClaim;
+import com.stove.payment.core.domain.RefundLookupInterval;
 import com.stove.payment.core.port.PaymentTracing;
 import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import java.time.Clock;
@@ -36,12 +37,20 @@ public class ResolveRefundLookup {
     private final int batchSize;
     private final RefundExecutionTraceContexts traceContexts;
     private final PaymentTracing tracing;
+    private final RefundLookupInterval interval;
 
     public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
             PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize,
             RefundExecutionTraceContexts traceContexts, PaymentTracing tracing) {
-        if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0 || batchSize < 1 || batchSize > 100)
-            throw new IllegalArgumentException("A bounded lookup batch and positive lease are required");
+        this(payments, executions, reconcile, transactions, clock, executor, lease, batchSize, traceContexts, tracing, RefundLookupInterval.DEFAULT);
+    }
+
+    public ResolveRefundLookup(PaymentRepository payments, RefundExecutionRepository executions, ReconcileRefundPayment reconcile,
+            PlatformTransactionManager transactions, Clock clock, Executor executor, Duration lease, int batchSize,
+            RefundExecutionTraceContexts traceContexts, PaymentTracing tracing, RefundLookupInterval interval) {
+        if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0 || batchSize < 1 || batchSize > 100 || interval == null)
+            throw new IllegalArgumentException("A bounded lookup batch, positive lease and refund lookup interval are required");
+        this.interval = interval;
         this.payments = payments; this.executions = executions; this.reconcile = reconcile; this.clock = clock;
         this.executor = executor; this.lease = lease; this.batchSize = batchSize;
         this.traceContexts = traceContexts; this.tracing = tracing;
@@ -63,19 +72,21 @@ public class ResolveRefundLookup {
         RefundLookupClaim claim = transaction.execute(tx -> {
             Payment payment = payments.lockByPaymentId(received.getPaymentId()).orElseThrow();
             RefundExecution execution = executions.lockByAttemptId(attemptId).orElseThrow();
-            if (!"PORTONE_TEST".equals(payment.getProvider()) || execution.getRefundConfirmedAt() != null || execution.getStatus() != RefundExecutionStatus.PENDING) return null;
+            // A failed execution keeps a low-frequency lookup for a late full cancellation (decision 128).
+            if (!"PORTONE_TEST".equals(payment.getProvider()) || execution.getRefundConfirmedAt() != null
+                    || execution.getStatus() == RefundExecutionStatus.SUCCEEDED) return null;
             payment.requireRefundRequest(execution.request());
             return execution.getLookupSchedule().claim(UUID.randomUUID().toString(), clock.instant(), lease);
         });
         if (claim == null) return;
         try {
-            // Each lookup is a new child of the parent saved at reception (decision 28, D-050); none means a new root.
+            // Each lookup is a new child of the parent saved at reception (decision 28, D-050); none means a new root. The
+            // post-failure watch (decision 128) runs through the same path, so it keeps the same parent.
             executor.execute(() -> tracing.run(parent(attemptId), received.getPaymentId(), () -> {
-                try { reconcile.execute(attemptId); }
+                try { reconcile.executeScheduled(attemptId); }
                 catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 finally {
-                    try { update(received, execution -> execution.getLookupSchedule()
-                            .finish(claim, execution.getFirstCancellationPreparedAt(), clock.instant())); }
+                    try { update(received, execution -> execution.finishLookup(claim, clock.instant(), interval)); }
                     catch (RuntimeException failure) { logFailure(attemptId, failure); }
                 }
             }));

@@ -128,7 +128,7 @@ class RefundLicenseStepWaitIntegrationTest extends OrderIntegrationTestBase {
         RefundAttempt attempt = attempts.findByAttemptId(stored(order).getCurrentAttemptId()).orElseThrow();
         Instant failed = suspended.plusSeconds(10);
         at(failed);
-        restoration.execute(new RefundFailureConfirmation(id(), suspended.plusSeconds(5), refund.getRefundId(), attempt.getAttemptId(),
+        restoration.execute(RefundFailureConfirmation.pgCancellationFailed(id(), suspended.plusSeconds(5), refund.getRefundId(), attempt.getAttemptId(),
                 attempt.getExecutionRequestEventId(), order.getOrderNo(), order.getPaymentId(), order.getBuyerSubject(), order.getAmount(),
                 order.getCurrency(), "pg-original", "cancel-own", "a".repeat(64)));
         assertThat(status(order)).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);

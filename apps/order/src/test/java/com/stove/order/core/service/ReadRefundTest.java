@@ -88,6 +88,17 @@ class ReadRefundTest {
                 .isEqualTo(status == RefundStatus.FAILED ? RefundFailureReason.PAYMENT_NOT_CANCELLED : null);
     }
 
+    /** 결정 148: 운영자 실패 종결도 원결제 미취소를 확인한 실패라 고객에게는 같은 사유로 보인다. */
+    @Test void anOperatorFailureClosureShowsTheCustomerTheSameNotCancelledReason() {
+        Order order = paidOrder();
+        Refund refund = refund(order);
+        RefundAttempt attempt = failedAttempt(refund, RefundAttempt.OPERATOR_FAILURE_CLOSED);
+        ReflectionTestUtils.setField(refund, "status", RefundStatus.FAILED);
+        ReflectionTestUtils.setField(refund, "currentAttemptId", attempt.getAttemptId());
+        when(attempts.findByAttemptId(attempt.getAttemptId())).thenReturn(Optional.of(attempt));
+        assertThat(read.execute(order.getOrderNo(), "usr_buyer").failureReason()).isEqualTo(RefundFailureReason.PAYMENT_NOT_CANCELLED);
+    }
+
     @Test void aFailedRefundWhoseAttemptOrStoredCodeCannotBeExplainedIsAConflictNotAGuess() {
         Order order = paidOrder();
         Refund refund = refund(order);

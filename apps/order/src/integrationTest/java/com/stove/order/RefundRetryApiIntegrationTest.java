@@ -270,7 +270,7 @@ class RefundRetryApiIntegrationTest extends OrderIntegrationTestBase {
     }
     private void failAndRestore(Order order, RefundAttempt attempt, Instant failedAt, boolean restored, boolean returnedToStorage) {
         when(clock.instant()).thenReturn(failedAt.plusSeconds(1));
-        restore.execute(new RefundFailureConfirmation(id(), failedAt, attempt.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
+        restore.execute(RefundFailureConfirmation.pgCancellationFailed(id(), failedAt, attempt.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
                 order.getOrderNo(), order.getPaymentId(), "usr_buyer", order.getAmount(), "KRW", "pg-original", "cancel-" + attempt.getAttemptNo(), "a".repeat(64)));
         if (restored) {
             RefundAttempt failed = currentAttempt(order);

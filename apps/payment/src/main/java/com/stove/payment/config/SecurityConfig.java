@@ -28,7 +28,8 @@ public class SecurityConfig {
             a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-cancellation-holds/*/resume").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.GET, "/api/v1/admin/refund-delays", "/api/v1/admin/refund-delays/*",
                     "/api/v1/admin/refund-delays/*/investigations").hasRole("ADMIN");
-            a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations", "/api/v1/admin/refund-delays/*/closure").hasRole("ADMIN");
+            a.requestMatchers(HttpMethod.POST, "/api/v1/admin/refund-delays/*/investigations", "/api/v1/admin/refund-delays/*/closure",
+                    "/api/v1/admin/refund-delays/*/failure-closure").hasRole("ADMIN");
             a.requestMatchers(HttpMethod.GET, "/api/v1/payments", "/api/v1/payments/*", "/api/v1/payments/*/checkout", "/api/v1/payments/*/attempt-failures")
                     .hasRole("MEMBER");
             a.requestMatchers(HttpMethod.POST,"/api/v1/payments/*/approvals").hasRole("MEMBER");

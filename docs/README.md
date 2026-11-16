@@ -44,7 +44,7 @@
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
 | [백업과 장애 복구](backup-restore.md) | MySQL 전체 백업 + binlog 연속 복사, 빌드 연속 미러, 복구 순서와 격리 연습 결과 |
 | [License 이벤트 복구 절차](license-event-recovery-runbook.md) | 지급·확인 이벤트의 DLT 재투입·재큐잉 |
-| [환불 지연·귀속 미확정 종결 절차](runbooks/refund-delay-closure.md) | 장기·귀속 미확정 환불의 콘솔 취소 → PG 재조회 근거 종결(결정 127) |
+| [환불 지연·귀속 미확정 종결 절차](runbooks/refund-delay-closure.md) | 장기·귀속 미확정 환불의 콘솔 취소 → PG 재조회 근거 종결(결정 127), 자동 송신이 멈춘 환불의 실패 종결·늦은 전액 취소 조사(결정 128) |
 | [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록 (현재 License에 적용하지 않음) |
 | [tools 안내](../tools/README.md) | 검증·관측·DB 실험 도구 |
 

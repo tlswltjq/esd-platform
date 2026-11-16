@@ -23,7 +23,7 @@ class RefundRestorationTest {
     }
     @Test void unrelatedFailureDoesNotAuthorizeRestoration() {
         prepare(); RefundFailureConfirmation original = failure();
-        RefundFailureConfirmation other = new RefundFailureConfirmation(original.eventId(), NOW, original.refundId(), id(),
+        RefundFailureConfirmation other = RefundFailureConfirmation.pgCancellationFailed(original.eventId(), NOW, original.refundId(), id(),
                 original.requestEventId(), original.orderNo(), original.paymentId(), original.buyerSubject(), original.amount(),
                 original.currency(), original.providerTransactionId(), original.cancellationId(), original.lookupHash());
         assertThatThrownBy(() -> refund.recordFailure(paid, attempt, other, NOW)).isInstanceOf(RefundCompletionRejected.class);
@@ -90,7 +90,7 @@ class RefundRestorationTest {
     @Test void lateRedeliveryOfTheFirstRetryCannotCreateAThirdAttemptAfterTheSecondAttemptAlsoFailedAndWasRestored() {
         prepare(); refund.recordFailure(paid, attempt, failure(), NOW.plusSeconds(1)); refund.confirmRestoration(paid, attempt, restored());
         refund.requestRetry(paid, attempt, NOW.plusSeconds(86400)); RefundAttempt next = second();
-        RefundFailureConfirmation failed = new RefundFailureConfirmation(id(), NOW.plusSeconds(86403), refund.getRefundId(), next.getAttemptId(),
+        RefundFailureConfirmation failed = RefundFailureConfirmation.pgCancellationFailed(id(), NOW.plusSeconds(86403), refund.getRefundId(), next.getAttemptId(),
                 next.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW", "pg-original", "cancel-second", "b".repeat(64));
         refund.recordFailure(paid, next, failed, NOW.plusSeconds(86404));
         LicenseRestorationConfirmation restored = new LicenseRestorationConfirmation(id(), NOW.plusSeconds(86405), next.getRestorationRequestEventId(),
@@ -101,6 +101,61 @@ class RefundRestorationTest {
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.FAILED); assertThat(next.getRetryRequestedAt()).isNull();
         assertThat(refund.requestRetry(paid, next, NOW.plusSeconds(172800))).isTrue();
         assertThat(next.getRetryRequestedAt()).isEqualTo(NOW.plusSeconds(172800));
+    }
+
+    /**
+     * 결정 148: 운영자 실패 종결은 PG 확정 실패와 같은 업무 결과(복구 대기·복구 요청)를 내고, 출처와 종결 ID를 시도에 남긴다.
+     * 같은 종결의 재전달은 바꾸지 않고, 같은 시도에 다른 실패 근거(PG 확정 실패 포함)는 받지 않는다.
+     */
+    @Test void anOperatorFailureClosureFailsTheAttemptLikeAPgFailureAndRecordsItsSourceAndClosure() {
+        prepare(); String closureId = id(); RefundFailureConfirmation closed = closure(closureId, null);
+        assertThat(refund.recordFailure(paid, attempt, closed, NOW.plusSeconds(1))).isTrue();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);
+        assertThat(attempt.getStatus()).isEqualTo(RefundAttemptStatus.FAILED);
+        assertThat(attempt.getFailureReasonCode()).isEqualTo(RefundAttempt.OPERATOR_FAILURE_CLOSED);
+        assertThat(RefundFailureReason.fromAttemptCode(attempt.getFailureReasonCode())).contains(RefundFailureReason.PAYMENT_NOT_CANCELLED);
+        assertThat(attempt.getFailureClosureId()).isEqualTo(closureId);
+        assertThat(attempt.getFailureEventId()).isEqualTo(closed.eventId());
+        assertThat(attempt.getRestorationRequestEventId()).isNotNull(); assertThat(attempt.getRestorationRequestedAt()).isEqualTo(NOW.plusSeconds(1));
+        assertThat(refund.recordFailure(paid, attempt, closed, NOW.plusSeconds(2))).as("재전달").isFalse();
+        RefundFailureConfirmation pg = RefundFailureConfirmation.pgCancellationFailed(closed.eventId(), closed.occurredAt(), closed.refundId(),
+                closed.attemptId(), closed.requestEventId(), closed.orderNo(), closed.paymentId(), closed.buyerSubject(), closed.amount(),
+                closed.currency(), closed.providerTransactionId(), "cancel-own", closed.lookupHash());
+        assertThat(pg.fingerprint()).isNotEqualTo(closed.fingerprint());
+        assertThatThrownBy(() -> refund.recordFailure(paid, attempt, pg, NOW.plusSeconds(3))).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> refund.recordFailure(paid, attempt, closure(id(), "cancel-own"), NOW.plusSeconds(3))).isInstanceOf(RefundCompletionRejected.class);
+        assertThat(attempt.getFailureClosureId()).isEqualTo(closureId);
+    }
+
+    @Test void aPgFailureRecordsNoClosureAndKeepsItsStoredCode() {
+        prepare();
+        assertThat(refund.recordFailure(paid, attempt, failure(), NOW.plusSeconds(1))).isTrue();
+        assertThat(attempt.getFailureReasonCode()).isEqualTo(RefundAttempt.PG_CANCELLATION_FAILED);
+        assertThat(attempt.getFailureClosureId()).isNull();
+    }
+
+    /** 출처마다 근거가 다르다. 한 출처의 칸을 다른 출처의 값으로 채우지 않는다. */
+    @Test void eachFailureSourceRequiresItsOwnEvidence() {
+        prepare(); RefundFailureConfirmation pg = failure();
+        assertThatThrownBy(() -> RefundFailureConfirmation.pgCancellationFailed(pg.eventId(), pg.occurredAt(), pg.refundId(), pg.attemptId(),
+                pg.requestEventId(), pg.orderNo(), pg.paymentId(), pg.buyerSubject(), pg.amount(), pg.currency(), pg.providerTransactionId(), null, pg.lookupHash()))
+                .as("PG 확정 실패의 취소 ID").isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> new RefundFailureConfirmation(pg.eventId(), pg.occurredAt(), pg.refundId(), pg.attemptId(), pg.requestEventId(),
+                pg.orderNo(), pg.paymentId(), pg.buyerSubject(), pg.amount(), pg.currency(), pg.providerTransactionId(), pg.cancellationId(), pg.lookupHash(),
+                RefundFailureSource.PG_CANCELLATION_FAILED, id(), null)).as("PG 확정 실패에 종결 ID").isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> closure("not-a-closure-id", null)).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> RefundFailureConfirmation.operatorClosed(id(), NOW, refund.getRefundId(), attempt.getAttemptId(),
+                attempt.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW",
+                "pg-original", null, "b".repeat(64), id(), NOW.plusNanos(1000))).as("관측이 종결보다 늦음").isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> new RefundFailureConfirmation(pg.eventId(), pg.occurredAt(), pg.refundId(), pg.attemptId(), pg.requestEventId(),
+                pg.orderNo(), pg.paymentId(), pg.buyerSubject(), pg.amount(), pg.currency(), pg.providerTransactionId(), pg.cancellationId(), pg.lookupHash(),
+                null, null, null)).as("출처 없음").isInstanceOf(RefundCompletionRejected.class);
+    }
+
+    private RefundFailureConfirmation closure(String closureId, String failedCancellationId) {
+        return RefundFailureConfirmation.operatorClosed(id(), NOW, refund.getRefundId(), attempt.getAttemptId(), attempt.getExecutionRequestEventId(),
+                paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW", "pg-original", failedCancellationId,
+                "b".repeat(64), closureId, NOW.minusSeconds(1));
     }
 
     private RefundAttempt second() {
@@ -115,7 +170,7 @@ class RefundRestorationTest {
             refund.getRefundId(), attempt.getAttemptId(), attempt.getFailureEventId(), attempt.getLicenseId(), paid.getOrderNo(), paid.getBuyerSubject(),
             paid.getProductId(), paid.getProductCode(), paid.getPaymentId(), attempt.getSuspensionRequestEventId(), attempt.getSuspensionEventId(), returnedToStorage); }
 
-    private RefundFailureConfirmation failure() { return new RefundFailureConfirmation(id(), NOW, refund.getRefundId(), attempt.getAttemptId(),
+    private RefundFailureConfirmation failure() { return RefundFailureConfirmation.pgCancellationFailed(id(), NOW, refund.getRefundId(), attempt.getAttemptId(),
             attempt.getExecutionRequestEventId(), paid.getOrderNo(), paid.getPaymentId(), paid.getBuyerSubject(), paid.getAmount(), "KRW",
             "pg-original", "cancel-own", "a".repeat(64)); }
     private void prepare() {

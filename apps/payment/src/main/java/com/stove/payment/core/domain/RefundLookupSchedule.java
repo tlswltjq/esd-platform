@@ -33,19 +33,34 @@ public class RefundLookupSchedule {
     }
 
     public void finish(RefundLookupClaim claim, Instant firstPreparedAt, Instant at) {
+        finish(claim, firstPreparedAt, at, RefundLookupInterval.DEFAULT, false);
+    }
+
+    /**
+     * Schedules the next periodic lookup. Inside the original window the delays are 5, 10, 20, then 60 seconds. Once the
+     * window has passed, or after the failure is confirmed ({@code failed}), the delay is {@code interval} (decisions 122·128).
+     * A webhook wake ({@code wakeAt}) and an operator closure's own re-inspection are not bound by either delay.
+     */
+    public void finish(RefundLookupClaim claim, Instant firstPreparedAt, Instant at, RefundLookupInterval interval, boolean failed) {
         requireTime(at); requireTime(firstPreparedAt);
+        if (interval == null) throw new IllegalArgumentException("A refund lookup interval is required");
         if (!owns(claim)) return;
         if (at.isBefore(claim.startedAt())) {
             // A backwards clock must not create a tighter catch-up loop.
             at = claim.startedAt();
         }
         if (!at.isBefore(nextAt)) {
-            long age = Duration.between(firstPreparedAt, at).getSeconds();
-            int elapsedStage = age >= 35 ? 3 : age >= 15 ? 2 : 1;
-            stage = Math.min(3, Math.max(stage + 1, elapsedStage));
-            long delay = stage == 1 ? 10 : stage == 2 ? 20 : 60;
-            Instant target = claim.startedAt().plusSeconds(delay);
-            nextAt = target.isAfter(at) ? target : at.plusSeconds(delay);
+            Duration delay;
+            if (failed || !at.isBefore(RefundCancellationWindow.deadline(firstPreparedAt))) {
+                stage = 3; delay = interval.after(firstPreparedAt, at);
+            } else {
+                long age = Duration.between(firstPreparedAt, at).getSeconds();
+                int elapsedStage = age >= 35 ? 3 : age >= 15 ? 2 : 1;
+                stage = Math.min(3, Math.max(stage + 1, elapsedStage));
+                delay = Duration.ofSeconds(stage == 1 ? 10 : stage == 2 ? 20 : 60);
+            }
+            Instant target = claim.startedAt().plus(delay);
+            nextAt = target.isAfter(at) ? target : at.plus(delay);
         }
         claimId = null; leaseUntil = null;
     }

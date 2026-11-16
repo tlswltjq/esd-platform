@@ -53,6 +53,7 @@ import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.kafka.contract.payload.RefundFailureClosedEvent;
 import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.kafka.contract.payload.ReleasePublishedEvent;
 import com.stove.common.kafka.contract.payload.ReleaseRolledBackEvent;
@@ -137,6 +138,19 @@ class EventContractTest {
         assertThat(decoded.pgPaidAmount()).isNull(); assertThat(decoded.cancellations().getFirst().pointAmount()).isNull();
     }
 
+    @Test void aFailureClosureWithoutALinkedCancellationCarriesNoCancellationIdAndKeepsItsOwnType() throws Exception {
+        // 결정 148: 연결된 PG 취소가 없으면 취소 ID 칸은 비어 있다. 다른 뜻의 값(종결 ID 등)을 넣지 않는다.
+        RefundFailureClosedEvent event = new RefundFailureClosedEvent("closed-1", Instant.parse("2026-10-27T01:03:00.123456Z"),
+                "refund-1", "attempt-1", "request-1", "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "closure-1", "PAID",
+                Instant.parse("2026-10-27T01:02:59.123456Z"), "b".repeat(64), null);
+        String wire = MAPPER.writeValueAsString(event);
+        assertThat(MAPPER.readValue(wire, RefundFailureClosedEvent.class)).isEqualTo(event);
+        assertThat(MAPPER.readValue(wire, RefundFailureClosedEvent.class).failedCancellationId()).isNull();
+        assertThat(event.eventType()).isEqualTo("RefundFailureClosed").isNotEqualTo(EventType.REFUND_EXECUTION_FAILED);
+        assertThat(event.topic()).isEqualTo(Topics.PAYMENT);
+        assertThat(event.partitionKey()).isEqualTo("order-1");
+    }
+
     @Test void anInitialExecutionWithoutTheNewPredecessorFieldStillDeserializesAsAnInitialRequest() throws Exception {
         RefundExecutionRequestedEvent initial = new RefundExecutionRequestedEvent("request-1", Instant.parse("2026-10-27T01:00:00Z"),
                 "refund-1", "attempt-1", "order-1", "payment-1", "buyer", 9000, "KRW", "stop-1");
@@ -188,6 +202,9 @@ class EventContractTest {
                         "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1",true),
                 new RefundExecutionFailedEvent("failure-1", Instant.parse("2026-10-27T01:03:00Z"), "refund-1", "attempt-1", "request-1",
                         "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64)),
+                new RefundFailureClosedEvent("closed-1", Instant.parse("2026-10-27T01:03:00.123456Z"), "refund-1", "attempt-1", "request-1",
+                        "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "closure-1", "PAID",
+                        Instant.parse("2026-10-27T01:02:59.123456Z"), "b".repeat(64), "cancel-own"),
                 new LicenseRestorationRequestedEvent("restore-1", Instant.parse("2026-10-27T01:04:00Z"), "refund-1", "attempt-1", "failure-1",
                         "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
                 new LicenseRestoredEvent("restored-1", Instant.parse("2026-10-27T01:05:00Z"), "restore-1", "refund-1", "attempt-1", "failure-1",

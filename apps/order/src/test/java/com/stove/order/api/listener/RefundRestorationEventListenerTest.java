@@ -2,7 +2,9 @@ package com.stove.order.api.listener;
 
 import static com.stove.order.OrderFixtures.id;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,8 +12,11 @@ import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.DomainEvent;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.kafka.contract.payload.RefundFailureClosedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
+import com.stove.order.core.domain.RefundFailureConfirmation;
+import com.stove.order.core.domain.RefundFailureSource;
 import com.stove.order.core.service.ApplyRefundRestoration;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -27,6 +32,16 @@ class RefundRestorationEventListenerTest {
                 id(), "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64));
         assertThatThrownBy(() -> listener.receive(record(event, Topics.LICENSE))).isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
+    }
+    /** 결정 148: 운영자 실패 종결도 Payment 토픽에서만 받고, 같은 실패 유스케이스로 넘긴다. */
+    @Test void anOperatorFailureClosureIsReceivedOnlyFromThePaymentTopicAndAppliedAsAFailure() throws Exception {
+        RefundFailureClosedEvent event = new RefundFailureClosedEvent(id(), Instant.parse("2026-10-27T01:02:00Z"), id(), id(), id(), id(),
+                id(), "buyer", 9000, "KRW", "pg-original", id(), "PAID", Instant.parse("2026-10-27T01:01:00Z"), "b".repeat(64), null);
+        assertThatThrownBy(() -> listener.receive(record(event, Topics.LICENSE))).isInstanceOf(RefundCompletionRejected.class);
+        verifyNoInteractions(apply);
+        listener.receive(record(event, Topics.PAYMENT));
+        verify(apply).execute(argThat((RefundFailureConfirmation input) -> input.source() == RefundFailureSource.OPERATOR_FAILURE_CLOSED
+                && input.closureId().equals(event.closureId()) && input.eventId().equals(event.eventId())));
     }
     @Test void aRestorationClaimOnThePaymentTopicCannotCompleteTheWorkflow() throws Exception {
         LicenseRestoredEvent event = new LicenseRestoredEvent(id(), Instant.parse("2026-10-27T01:03:00Z"), id(), id(), id(), id(), id(), id(),

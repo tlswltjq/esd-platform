@@ -65,6 +65,8 @@ public final class EventType {
     // payment
     public static final String REFUND_PAYMENT_CONFIRMED = "RefundPaymentConfirmed";
     public static final String REFUND_EXECUTION_SUCCEEDED = "RefundExecutionSucceeded";
+    /** 운영자가 PG 재조회 근거로 환불 시도를 실패로 종결했음을 나타낸다(결정 128·148). PG 확정 실패는 RefundExecutionFailed. */
+    public static final String REFUND_FAILURE_CLOSED = "RefundFailureClosed";
     /** 결제 승인 완료를 나타내는 이벤트 타입. */
     public static final String PAYMENT_COMPLETED = "PaymentCompleted";
     /** 결제 환불 완료를 나타내는 이벤트 타입. */

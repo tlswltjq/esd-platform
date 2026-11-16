@@ -21,6 +21,7 @@ import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
 import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
 import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.kafka.contract.payload.RefundFailureClosedEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
 import com.stove.common.kafka.contract.payload.LicenseRestorationRequestedEvent;
 import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
@@ -46,6 +47,7 @@ import com.stove.order.core.domain.RefundAttemptStatus;
 import com.stove.order.core.service.ApplyRefundSuspension;
 import com.stove.order.core.service.ApplyLicenseGrant;
 import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
+import com.stove.order.core.service.ApplyRefundRestoration;
 import com.stove.order.core.service.RequestRefund;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -299,6 +301,68 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
             assertThat(executionRequests()).isEqualTo(2); assertThat(attempts.count()).isEqualTo(2);
         });
     }
+    /**
+     * 결정 148: 실제 Kafka로 온 운영자 실패 종결(연결된 PG 취소 없음)은 PG 확정 실패와 같은 업무 결과(복구 요청 한 번, 복구 뒤 고객 재시도)를
+     * 내고, 시도에 출처·종결 ID를, Inbox에 받은 이벤트 종류를 남긴다. 재전달은 아무것도 더하지 않는다.
+     */
+    @Test void realKafkaOperatorFailureClosureRestoresLikeAPgFailureAndRecordsItsSourceAndClosure() throws Exception {
+        Fixture fixture = fixture(); RefundPaymentConfirmedEvent purchase = fixture.event();
+        when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(5));
+        String closureId = id();
+        RefundFailureClosedEvent closed = new RefundFailureClosedEvent(id(), STOPPED_AT.plusSeconds(3), purchase.refundId(), purchase.attemptId(),
+                purchase.requestEventId(), purchase.orderNo(), purchase.paymentId(), purchase.buyerSubject(), purchase.amount(), purchase.currency(),
+                "pg-original", closureId, "PAID", STOPPED_AT.plusSeconds(2), "b".repeat(64), null);
+        listeners.start(); send(closed); send(closed);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(refunds.findByOrderNo(purchase.orderNo()).orElseThrow().getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_RESTORATION);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=? AND event_id=? AND event_type='RefundFailureClosed'",
+                    Integer.class, ApplyRefundRestoration.CONSUMER_GROUP, closed.eventId())).isEqualTo(1);
+        });
+        RefundAttempt failedAttempt = attempts.findByAttemptId(purchase.attemptId()).orElseThrow();
+        assertThat(failedAttempt.getStatus()).isEqualTo(RefundAttemptStatus.FAILED);
+        assertThat(failedAttempt.getFailureReasonCode()).isEqualTo(RefundAttempt.OPERATOR_FAILURE_CLOSED);
+        assertThat(failedAttempt.getFailureClosureId()).isEqualTo(closureId);
+        assertThat(failedAttempt.getFailureEventId()).isEqualTo(closed.eventId());
+        LicenseRestorationRequestedEvent requested = mapper.readValue(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_type='LicenseRestorationRequested'", String.class), LicenseRestorationRequestedEvent.class);
+        assertThat(requested.failureEventId()).isEqualTo(closed.eventId());
+        LicenseRestoredEvent restored = new LicenseRestoredEvent(id(), STOPPED_AT.plusSeconds(6), requested.eventId(), requested.refundId(), requested.attemptId(),
+                requested.failureEventId(), requested.licenseId(), requested.orderNo(), requested.buyerSubject(), requested.productId(), requested.productCode(),
+                requested.paymentId(), requested.suspensionRequestEventId(), requested.suspensionEventId(), false);
+        send(restored); send(closed);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(refunds.findByOrderNo(purchase.orderNo()).orElseThrow().getStatus()).isEqualTo(RefundStatus.FAILED);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=?", Integer.class, ApplyRefundRestoration.CONSUMER_GROUP)).isEqualTo(2);
+        });
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isEqualTo(1);
+        when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(86400));
+        RefundRetryReceipt receipt = retry.execute(new RefundRetryRequest(purchase.buyerSubject(), purchase.orderNo(), purchase.attemptId()));
+        assertThat(receipt.suspensionRequestEventId()).isNotNull();
+        assertThat(refunds.findByOrderNo(purchase.orderNo()).orElseThrow().getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
+    }
+
+    /** 결정 148: 미취소 결제가 아닌 관측이나 키가 다른 종결은 업무 상태를 바꾸지 않고 원문 그대로 DLT에 격리한다. */
+    @Test void anOperatorFailureClosureWithInvalidEvidenceOrKeyIsQuarantinedWithoutRestoration() throws Exception {
+        Fixture fixture = fixture(); RefundPaymentConfirmedEvent purchase = fixture.event();
+        when(clock.instant()).thenReturn(STOPPED_AT.plusSeconds(5));
+        RefundFailureClosedEvent cancelled = new RefundFailureClosedEvent(id(), STOPPED_AT.plusSeconds(3), purchase.refundId(), purchase.attemptId(),
+                purchase.requestEventId(), purchase.orderNo(), purchase.paymentId(), purchase.buyerSubject(), purchase.amount(), purchase.currency(),
+                "pg-original", id(), "CANCELLED", STOPPED_AT.plusSeconds(2), "b".repeat(64), null);
+        RefundFailureClosedEvent otherKey = new RefundFailureClosedEvent(id(), STOPPED_AT.plusSeconds(3), purchase.refundId(), purchase.attemptId(),
+                purchase.requestEventId(), purchase.orderNo(), purchase.paymentId(), purchase.buyerSubject(), purchase.amount(), purchase.currency(),
+                "pg-original", id(), "PAID", STOPPED_AT.plusSeconds(2), "b".repeat(64), null);
+        try (KafkaConsumer<String, String> consumer = dltConsumer()) {
+            listeners.start(); send(cancelled); send(otherKey, id());
+            Map<String, ConsumerRecord<String, String>> dead = receiveDlt(consumer, ApplyRefundRestoration.CONSUMER_GROUP, cancelled.eventId(), otherKey.eventId());
+            assertThat(dead.get(cancelled.eventId()).value()).isEqualTo(mapper.writeValueAsString(cancelled));
+            assertThat(dead.get(otherKey.eventId()).value()).isEqualTo(mapper.writeValueAsString(otherKey));
+        }
+        assertThat(refunds.findByOrderNo(purchase.orderNo()).orElseThrow().getStatus()).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
+        assertThat(attempts.findByAttemptId(purchase.attemptId()).orElseThrow().getStatus()).isEqualTo(RefundAttemptStatus.PENDING);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type='LicenseRestorationRequested'", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=?", Integer.class, ApplyRefundRestoration.CONSUMER_GROUP)).isZero();
+    }
+
     private Fixture fixture() {
         Order paid = order();
         paid.apply(new PaymentResult(id(), PAID_AT, paid.getOrderNo(), paid.getRequestEventId(), id(),
@@ -396,9 +460,11 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         assertThat(inboxCount()).isEqualTo(1);
     }
 
-    private RecordMetadata send(DomainEvent event) throws Exception {
+    private RecordMetadata send(DomainEvent event) throws Exception { return send(event, event.partitionKey()); }
+
+    private RecordMetadata send(DomainEvent event, String key) throws Exception {
         Message<String> message = MessageBuilder.withPayload(mapper.writeValueAsString(event))
-                .setHeader(KafkaHeaders.TOPIC, event.topic()).setHeader(KafkaHeaders.KEY, event.partitionKey())
+                .setHeader(KafkaHeaders.TOPIC, event.topic()).setHeader(KafkaHeaders.KEY, key)
                 .setHeader(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8))
                 .setHeader(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8)).build();
         return kafka.send(message).get(10, TimeUnit.SECONDS).getRecordMetadata();
@@ -445,6 +511,20 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
             }
         }
         throw new AssertionError("전액 취소 확인 원문이 DLT에 보존되지 않았습니다: " + event.eventId());
+    }
+
+    private Map<String, ConsumerRecord<String, String>> receiveDlt(KafkaConsumer<String, String> consumer, String group, String... eventIds) {
+        Map<String, ConsumerRecord<String, String>> found = new HashMap<>();
+        long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
+        while (System.nanoTime() < deadline && found.size() < eventIds.length) {
+            for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(300))) {
+                if (record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP) == null
+                        || !new String(record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP).value(), StandardCharsets.UTF_8).equals(group)) continue;
+                for (String eventId : eventIds) if (record.value().contains(eventId)) found.put(eventId, record);
+            }
+        }
+        if (found.size() < eventIds.length) throw new AssertionError("원문이 DLT에 보존되지 않았습니다: " + List.of(eventIds) + ", 찾은 것 " + found.keySet());
+        return found;
     }
 
     private void awaitConsumed(AdminClient admin, RecordMetadata record) {

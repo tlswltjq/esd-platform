@@ -31,6 +31,7 @@ import com.stove.payment.core.domain.PgRefundCancellationReceipt;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
+import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundCancellationHold;
 import com.stove.payment.core.port.RefundCancellationGateway;
 import java.time.Clock;
@@ -61,6 +62,7 @@ class RequestRefundCancellationTest {
     @Mock PlatformTransactionManager transactions;
     @Mock RecordRefundCancellationSuccess successes;
     @Mock RefundCancellationHoldRepository holds;
+    @Mock RefundFailureClosureRepository failureClosures;
 
     @Test void theFirstWireSnapshotIsCommittedBeforeAnyExternalSubmission() {
         RefundExecution received = fixture();
@@ -238,6 +240,6 @@ class RequestRefundCancellationTest {
     }
     private RequestRefundCancellation service(Clock clock) {
         return new RequestRefundCancellation(payments, executions, gateway, reconcile, transactions, clock, successes,
-                Duration.ofMinutes(4), holds, new RecordRefundPreparation(mock(OutboxRecorder.class)));
+                Duration.ofMinutes(4), holds, new RecordRefundPreparation(mock(OutboxRecorder.class)), failureClosures);
     }
 }

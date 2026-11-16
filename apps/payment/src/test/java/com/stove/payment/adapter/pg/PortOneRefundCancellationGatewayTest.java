@@ -324,6 +324,33 @@ class PortOneRefundCancellationGatewayTest {
             assertThat(gateway.send(retry, purchase, body())).isEqualTo(RefundCancellationDispatch.NOT_READY); server.verify();
         }
     }
+    /** Decision 128: a predecessor closed as failed by an operator has no failed receipt; its closure rows (maybe none) are expected. */
+    @Test void aRetryAfterAnOperatorFailureClosureWithNoListedCancellationPostsWhenThePgListsNone() {
+        RefundCancellationPermission closed = closureRetryPermission(List.of());
+        assertThat(closed.maySendAt(FIRST.plusSeconds(1))).isTrue();
+        expectRead(paid());
+        server.expect(requestTo(url()+"/cancel")).andExpect(method(HttpMethod.POST))
+                .andExpect(header("Idempotency-Key", "\""+closed.request().attemptId()+"\""))
+                .andExpect(content().string(body())).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        assertThat(gateway.send(closed, purchase, body())).isEqualTo(RefundCancellationDispatch.UNCONFIRMED); server.verify();
+        // A cancellation that appeared after the closure is not the closure's observation: no POST.
+        server.reset(); expectRead(paid().replace("\"cancellations\":[]", "\"cancellations\":["+previousFailure()+"]"));
+        assertThat(gateway.send(closed, purchase, body())).isEqualTo(RefundCancellationDispatch.NOT_READY); server.verify();
+    }
+
+    @Test void aRetryAfterAnOperatorFailureClosureExpectsExactlyTheFailedRowsTheClosureObserved() {
+        RefundCancellationPermission retry = retryPermission();
+        PgRefundCancellationReceipt observed = retry.previousFailures().getFirst();
+        RefundCancellationPermission closed = closureRetryPermission(List.of(new PgRefundCancellationReceipt(purchase,
+                retry.request().previousAttemptId(), observed.cancellationId(), PgRefundCancellationReceipt.State.FAILED, observed.requestedAt(),
+                0, 0, observed.reason())));
+        expectRead(paid().replace("\"cancellations\":[]", "\"cancellations\":["+previousFailure()+"]"));
+        server.expect(requestTo(url()+"/cancel")).andExpect(method(HttpMethod.POST)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        assertThat(gateway.send(closed, purchase, body())).isEqualTo(RefundCancellationDispatch.UNCONFIRMED); server.verify();
+        server.reset(); expectRead(paid());
+        assertThat(gateway.send(closed, purchase, body())).as("an observed row vanished").isEqualTo(RefundCancellationDispatch.NOT_READY); server.verify();
+    }
+
     @Test void aPreparationWithoutVerifiedPredecessorEvidenceCannotSendEvenWithinItsNewWindow() {
         RefundCancellationPermission allowed = retryPermission();
         RefundCancellationPermission missing = new RefundCancellationPermission(allowed.request(), FIRST, false);
@@ -337,6 +364,13 @@ class PortOneRefundCancellationGatewayTest {
         PgRefundCancellationReceipt failure = new PgRefundCancellationReceipt(purchase, previous, "cancel-prior", PgRefundCancellationReceipt.State.FAILED,
                 FIRST, 0, 0, "ESD refund " + request.refundId());
         return new RefundCancellationPermission(retry, FIRST.plusSeconds(1), false, List.of(failure));
+    }
+    private RefundCancellationPermission closureRetryPermission(List<PgRefundCancellationReceipt> observed) {
+        RefundExecutionRequest retry = retryPermission().request();
+        String previous = observed.isEmpty() ? retry.previousAttemptId() : observed.getFirst().attemptId();
+        RefundExecutionRequest request = new RefundExecutionRequest(retry.eventId(), retry.occurredAt(), retry.refundId(), retry.attemptId(),
+                retry.orderNo(), retry.paymentId(), retry.buyerSubject(), retry.amount(), retry.currency(), retry.licenseSuspensionEventId(), previous);
+        return new RefundCancellationPermission(request, FIRST.plusSeconds(1), false, observed, true, null);
     }
     private String previousFailure() {
         return "{\"id\":\"cancel-prior\",\"status\":\"FAILED\",\"totalAmount\":9000,\"taxFreeAmount\":0,\"vatAmount\":0,\"requestedAt\":\""+FIRST+"\",\"reason\":\"ESD refund "+request.refundId()+"\"}";

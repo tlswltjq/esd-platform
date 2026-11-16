@@ -67,6 +67,8 @@ public class ReceiveRefundExecution {
                     || executions.findByPreviousAttemptId(previous.getAttemptId()).isPresent())
                 throw new BusinessException(ErrorCode.CONFLICT, "이전 시도가 미확정이거나 이미 다음 실행이 있습니다.");
             payment.requireRefundRequest(previous.request());
+            // The retry observes the same payment itself; the predecessor's post-failure lookup (decision 128) stops here.
+            previous.handOverLookupToRetry();
         }
         if (executions.findByLicenseSuspensionEventId(request.licenseSuspensionEventId()).isPresent())
             throw new BusinessException(ErrorCode.CONFLICT, "실제 정지 완료가 이미 다른 실행에 사용됐습니다.");

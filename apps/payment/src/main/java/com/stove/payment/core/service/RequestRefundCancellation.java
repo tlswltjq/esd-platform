@@ -15,13 +15,17 @@ import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundCancellationClaim;
 import com.stove.payment.core.domain.RefundCancellationHold;
 import com.stove.payment.core.domain.RefundCancellationHoldRepository;
+import com.stove.payment.core.domain.RefundFailedCancellation;
+import com.stove.payment.core.domain.RefundFailureClosure;
+import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.port.RefundCancellationGateway;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import com.stove.payment.core.domain.PgRefundCancellationReceipt;
@@ -41,10 +45,14 @@ public class RequestRefundCancellation {
     private final Duration lease;
     private final RefundCancellationHoldRepository holds;
     private final RecordRefundPreparation preparationEvents;
+    private final RefundFailureClosureRepository failureClosures;
 
     public RequestRefundCancellation(PaymentRepository payments, RefundExecutionRepository executions,
             RefundCancellationGateway gateway, ReconcileRefundPayment reconcile, PlatformTransactionManager transactions, Clock clock,
-            RecordRefundCancellationSuccess successes, Duration lease, RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents) {
+            RecordRefundCancellationSuccess successes, Duration lease, RefundCancellationHoldRepository holds, RecordRefundPreparation preparationEvents,
+            RefundFailureClosureRepository failureClosures) {
+        if (failureClosures == null) throw new IllegalArgumentException("Failure closures are required to verify a retry");
+        this.failureClosures = failureClosures;
         if (lease == null || lease.isNegative() || lease.isZero() || lease.getNano() % 1000 != 0)
             throw new IllegalArgumentException("A bounded dispatch lease is required");
         this.payments = payments; this.executions = executions; this.gateway = gateway; this.reconcile = reconcile; this.clock = clock;
@@ -55,20 +63,36 @@ public class RequestRefundCancellation {
         this.successes = successes;
     }
 
+    /**
+     * The FAILED cancellations the preflight expects, walking the explicit predecessor chain. A PG-confirmed failure adds its
+     * failed receipt. An operator failure closure (decision 128) has no PG FAILED proof of its own: it adds the FAILED rows
+     * the PG listed at closure time — a whole-payment observation that already contains every older row — and ends the walk.
+     */
     private List<PgRefundCancellationReceipt> previousFailures(Payment payment, RefundExecution current) {
-        List<PgRefundCancellationReceipt> failures = new ArrayList<>(); Set<String> visited = new HashSet<>();
+        Map<String, PgRefundCancellationReceipt> failures = new LinkedHashMap<>(); Set<String> visited = new HashSet<>();
         String previousId = current.getPreviousAttemptId();
         while (previousId != null) {
             if (!visited.add(previousId)) throw new BusinessException(ErrorCode.CONFLICT, "이전 실행 연결이 순환합니다.");
             RefundExecution previous = executions.findByAttemptId(previousId).orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT));
             payment.requireRefundRequest(previous.request());
             if (previous.getStatus() != RefundExecutionStatus.FAILED || previous.getFailureEventId() == null
-                    || previous.getFailureConfirmedAt() == null || !previous.getRefundId().equals(current.getRefundId())
-                    || previous.cancellationReceipt(payment) == null)
+                    || previous.getFailureConfirmedAt() == null || !previous.getRefundId().equals(current.getRefundId()))
                 throw new BusinessException(ErrorCode.CONFLICT, "검증된 이전 실패 근거가 필요합니다.");
-            failures.add(previous.cancellationReceipt(payment)); previousId = previous.getPreviousAttemptId();
+            RefundFailureClosure closure = failureClosures.findByAttemptId(previousId).orElse(null);
+            if (closure != null) {
+                if (!closure.getFailureEventId().equals(previous.getFailureEventId()))
+                    throw new BusinessException(ErrorCode.CONFLICT, "검증된 이전 실패 근거가 필요합니다.");
+                PgRefundLookupRequest purchase = PgRefundLookupRequest.from(payment);
+                for (RefundFailedCancellation row : closure.getFailedCancellations())
+                    failures.putIfAbsent(row.getCancellationId(), row.receipt(purchase, previousId));
+                break;
+            }
+            PgRefundCancellationReceipt receipt = previous.cancellationReceipt(payment);
+            if (receipt == null) throw new BusinessException(ErrorCode.CONFLICT, "검증된 이전 실패 근거가 필요합니다.");
+            failures.putIfAbsent(receipt.cancellationId(), receipt);
+            previousId = previous.getPreviousAttemptId();
         }
-        return List.copyOf(failures);
+        return List.copyOf(failures.values());
     }
 
     /** Kafka redelivery must not implicitly choose a POST retry policy for an ambiguous dispatch. */
@@ -154,8 +178,10 @@ public class RequestRefundCancellation {
             RefundCancellationClaim owner = retryClaim;
             if (owner == null) owner = current.getCancellationSchedule().claim(UUID.randomUUID().toString(), clock.instant(), lease, false);
             if (owner == null || !current.getCancellationSchedule().ownsAt(owner, clock.instant())) return null;
+            // previousFailures throws unless the whole predecessor chain is verified as failed.
             RefundCancellationPermission permission = new RefundCancellationPermission(base.request(), base.firstPreparedAt(),
-                    base.automaticCancellationStopped(), previousFailures(currentPayment, current), current.getCancellationSchedule().getLeaseUntil());
+                    base.automaticCancellationStopped(), previousFailures(currentPayment, current), current.getPreviousAttemptId() != null,
+                    current.getCancellationSchedule().getLeaseUntil());
             String body = current.getCancellationRequestBody();
             executions.flush();
             return new PreparedRefundCancellation(permission, body, owner);
