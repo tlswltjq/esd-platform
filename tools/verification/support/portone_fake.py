@@ -326,6 +326,7 @@ class PortOneFake:
         attempt.setdefault('cancellations', []).append(copy.deepcopy(cancellation))
         return cancellation
 
+    @staticmethod
     def request_cancel(attempt, reason):
         """PG accepted the cancel but has not finished it: the attempt stays PAID with a REQUESTED row."""
         remaining = attempt['amount']['paid'] - attempt['amount']['cancelled']
