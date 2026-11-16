@@ -44,11 +44,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>상품 하나를 출시하고 구매자 N명을 만든 뒤, 정해진 도착률로 주문을 만든다. 응답을 기다렸다가 다음 요청을
  * 보내는 닫힌 모델은 시스템이 느려지면 요청도 줄어 지연을 과소평가하므로, 요청 시각은 스케줄러가 정하고
- * 보내기는 별도 스레드 풀이 맡는다. 업무 완료 시간·브로커 구간 지연은 DB 시각으로 따로 잰다
+ * 보내기는 요청마다 가상 스레드 하나가 맡는다(고정 크기 풀은 응답이 느려지면 대기열에 쌓여 실제 도착률이 줄어든다).
+ * 예정 시각보다 늦게 출발한 요청은 {@code lateMs}로 남기고, 수집 쪽이 회차 유효성에 반영한다.
+ * 앞쪽 {@code load-warmup-secs} 동안의 주문은 {@code warmup=true}로 표시하고 집계에서 뺀다([결정 204] G 예열 제외). 업무 완료 시간·브로커 구간 지연은 DB 시각으로 따로 잰다
  * ({@code tools/measurement}). 여기서는 주문번호, 요청 시각, HTTP 응답 지연(대조군)과 최종 상태만 남긴다.
  *
  * <p>속성: {@code stove.e2e.load-rate}(초당 주문, 기본 2), {@code load-duration-secs}(기본 60),
- * {@code load-buyers}(기본 20), {@code load-evidence}(결과 JSON 경로, 필수).
+ * {@code load-buyers}(기본 20), {@code load-warmup-secs}(기본 10, 측정 앞에 더한다), {@code load-evidence}(결과 JSON 경로, 필수).
  */
 @Tag("messaging-load")
 class MessagingLoadTest {
@@ -60,6 +62,7 @@ class MessagingLoadTest {
         double rate = Double.parseDouble(property("load-rate", "2"));
         int seconds = Integer.parseInt(property("load-duration-secs", "60"));
         int buyerCount = Integer.parseInt(property("load-buyers", "20"));
+        int warmupSeconds = Integer.parseInt(property("load-warmup-secs", "10"));
         Path evidence = Path.of(System.getProperty("stove.e2e.load-evidence"));
 
         JsonNode product = publishProduct();
@@ -68,13 +71,14 @@ class MessagingLoadTest {
             buyers.set(index, account(false));
         }
 
-        int total = (int) Math.round(rate * seconds);
+        int warmup = (int) Math.round(rate * warmupSeconds);
+        int total = warmup + (int) Math.round(rate * seconds);
         long periodNanos = Math.round(1_000_000_000L / rate);
         ConcurrentLinkedQueue<ObjectNode> results = new ConcurrentLinkedQueue<>();
         AtomicInteger sequence = new AtomicInteger();
         CountDownLatch sent = new CountDownLatch(total);
         ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor();
-        ExecutorService senders = Executors.newFixedThreadPool(32);
+        ExecutorService senders = Executors.newVirtualThreadPerTaskExecutor();
         Instant startedAt = Instant.now();
         ScheduledFuture<?> schedule = ticker.scheduleAtFixedRate(() -> {
             int number = sequence.getAndIncrement();
@@ -84,13 +88,13 @@ class MessagingLoadTest {
             Instant scheduledAt = Instant.now();
             senders.submit(() -> {
                 try {
-                    results.add(order(product, buyers, number % buyerCount, scheduledAt));
+                    results.add(order(product, buyers, number % buyerCount, scheduledAt).put("warmup", number < warmup));
                 } finally {
                     sent.countDown();
                 }
             });
         }, 0, periodNanos, TimeUnit.NANOSECONDS);
-        boolean finished = sent.await(seconds + 120L, TimeUnit.SECONDS);
+        boolean finished = sent.await(warmupSeconds + seconds + 120L, TimeUnit.SECONDS);
         schedule.cancel(false);
         ticker.shutdownNow();
         senders.shutdown();
@@ -122,6 +126,7 @@ class MessagingLoadTest {
                 .put("settledAt", Instant.now().toString())
                 .put("rate", rate)
                 .put("durationSeconds", seconds)
+                .put("warmupSeconds", warmupSeconds)
                 .put("planned", total)
                 .put("accepted", accepted.size())
                 .put("productCode", product.path("productCode").asText());
@@ -160,6 +165,7 @@ class MessagingLoadTest {
                     "expectedContentVersion", product.path("contentVersion").asLong(),
                     "expectedAmount", product.path("price").asLong());
             long startedNanos = System.nanoTime();
+            result.put("lateMs", Duration.between(scheduledAt, Instant.now()).toNanos() / 1_000_000.0);
             E2eClient.Response response = Stove.gateway.post("/api/v1/orders", input, buyers.get(index).headers());
             if (response.status() == 401) {
                 // 토큰 만료. 다시 로그인해 같은 요청을 한 번만 다시 보낸다(같은 requestId라 중복 주문이 생기지 않는다).

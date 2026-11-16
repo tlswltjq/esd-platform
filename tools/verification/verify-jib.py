@@ -47,6 +47,7 @@ def main():
     parser.add_argument("--load-rate", type=float, default=2.0, help="Orders per second for --measure")
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
+    parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
         parser.error("--prometheus-only cannot be combined with tracing modes")
@@ -272,7 +273,10 @@ def main():
         elif args.measure:
             from support.messaging_measurement import measure
             result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
-                                            args.load_rate, args.load_duration, args.load_buyers)
+                                            args.load_rate, args.load_duration, args.load_buyers, args.load_warmup)
+            if not result["measurement"]["validity"]["valid"]:
+                # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
+                raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
             print("PASS: messaging measurement " + json.dumps(result["measurement"], ensure_ascii=False), flush=True)
         elif tracing:
             tracing.verify(result, list(PORTS), keys["pg-db"])

@@ -32,6 +32,34 @@ class QueryTest(unittest.TestCase):
             broker_latency.latency_sql(["order"], ["license"], "2026-11-16' OR '1", "2026-11-16 10:10:00")
 
 
+class KeyScopeTest(unittest.TestCase):
+    def test_limits_events_to_the_run_order_numbers(self):
+        # 시각 창은 마지막 구매의 후속 이벤트를 자르고 다른 업무 이벤트를 섞는다(PR #206 R3).
+        sql = broker_latency.latency_sql_for_keys(["order"], ["license"], ["ORD-1", "ORD-2"])
+        self.assertIn("o.partition_key IN ('ORD-1','ORD-2')", sql)
+        self.assertNotIn("o.published_at >=", sql)
+
+    def test_rejects_unsafe_keys_and_empty_scope(self):
+        with self.assertRaises(ValueError):
+            broker_latency.latency_sql_for_keys(["order"], ["license"], ["ORD-1' OR '1"])
+        with self.assertRaises(ValueError):
+            broker_latency.latency_sql_for_keys(["order"], ["license"], [])
+
+    def test_takes_only_accepted_measured_orders_as_keys(self):
+        evidence = {"orders": [{"status": 200, "orderNo": "W-1", "warmup": True},
+                               {"status": 200, "orderNo": "ORD-1", "warmup": False},
+                               {"status": 500, "error": "x"}]}
+        self.assertEqual(broker_latency.keys_from(evidence), ["ORD-1"])
+
+
+class PasswordTest(unittest.TestCase):
+    def test_the_password_never_appears_on_the_command_line(self):
+        # 명령행 인수는 ps와 CalledProcessError 로그에 그대로 보인다(PR #206 R6).
+        command = broker_latency.mysql_command("mysql-id", "SELECT 1")
+        self.assertIn("MYSQL_PWD", command)
+        self.assertFalse(any(part.startswith("MYSQL_PWD=") for part in command))
+
+
 class SummaryTest(unittest.TestCase):
     def test_summarizes_per_consumer_group_in_milliseconds(self):
         rows = [("license-paid-order", "OrderPaid", str(us)) for us in (1000, 2000, 3000, 4000)]

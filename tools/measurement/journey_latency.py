@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import broker_latency
 
@@ -30,12 +31,12 @@ def purchase_sql(since, until):
             raise ValueError("시각은 'YYYY-MM-DD HH:MM:SS[.ffffff]' 형식이어야 한다: " + value)
     return ("SELECT o.order_no,"
             " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
-            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at)"
+            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at), o.status"
             " FROM stove_order.purchase_order o JOIN stove_license.product_license lp"
             " ON lp.order_no = o.order_no"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             "\nUNION ALL\n"
-            "SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o"
+            "SELECT o.order_no, NULL, NULL, o.status FROM stove_order.purchase_order o"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             " AND NOT EXISTS (SELECT 1 FROM stove_license.product_license lp"
             " WHERE lp.order_no = o.order_no)")
@@ -47,9 +48,9 @@ _JOIN = ("FROM stove_order.purchase_order o JOIN stove_license.product_license l
 
 
 def order_numbers(evidence):
-    """부하 드라이버 결과(``MessagingLoadTest``)에서 접수된(200) 주문번호만 꺼낸다."""
+    """부하 드라이버 결과(``MessagingLoadTest``)에서 접수된(200) 측정 주문번호만 꺼낸다. 예열 주문은 뺀다."""
     return [order["orderNo"] for order in evidence.get("orders", [])
-            if order.get("status") == 200 and order.get("orderNo")]
+            if order.get("status") == 200 and order.get("orderNo") and not order.get("warmup")]
 
 
 def _in_list(numbers):
@@ -64,10 +65,10 @@ def purchase_sql_for_orders(numbers):
     in_list = _in_list(numbers)
     return ("SELECT o.order_no,"
             " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
-            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at) "
+            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at), o.status "
             + _JOIN + f" WHERE o.order_no IN {in_list}"
             "\nUNION ALL\n"
-            f"SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}"
+            f"SELECT o.order_no, NULL, NULL, o.status FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}"
             " AND NOT EXISTS (SELECT 1 FROM stove_license.product_license lp"
             " WHERE lp.order_no = o.order_no)")
 
@@ -88,16 +89,20 @@ def diagnosis_sql(numbers):
 
 
 def summarize(rows):
+    """``failed``: 결제 실패로 끝난 주문(구매 근거가 생기지 않는 것이 맞다). ``incomplete``: 그 밖에 구매 근거가 아직 없는 주문."""
     created, paid = [], []
-    incomplete = 0
-    for _order_no, created_micros, paid_micros in rows:
+    incomplete = failed = 0
+    for _order_no, created_micros, paid_micros, status in rows:
         if created_micros in (None, "NULL"):
-            incomplete += 1
+            if status == "FAILED":
+                failed += 1
+            else:
+                incomplete += 1
             continue
         created.append(int(created_micros))
         if paid_micros not in (None, "NULL"):
             paid.append(int(paid_micros))
-    return {"completed": len(created), "incomplete": incomplete,
+    return {"completed": len(created), "incomplete": incomplete, "failed": failed,
             "created_to_basis": _span(created), "paid_to_basis": _span(paid)}
 
 
@@ -108,12 +113,19 @@ def _span(values):
             "max_ms": broker_latency._ms(max(values) if values else None)}
 
 
+def _collect(container, password, sql):
+    output = broker_latency._mysql(container, password, sql)
+    return summarize([tuple(line.split("\t")) for line in output.splitlines() if line.strip()])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--container", required=True)
     parser.add_argument("--evidence", help="부하 드라이버 결과 JSON. 주면 그 주문번호로 거르고 측정 창을 DB에서 뽑는다")
     parser.add_argument("--since", help="측정 창 시작(DB 시각, 주문 생성 기준). --evidence가 없을 때")
     parser.add_argument("--until", help="측정 창 끝(포함하지 않음). --evidence가 없을 때")
+    parser.add_argument("--wait-secs", type=int, default=0,
+                        help="구매 근거가 아직 없는 주문이 남아 있으면 이만큼(5초 간격) 더 기다린다")
     parser.add_argument("--out")
     args = parser.parse_args()
     password = os.environ.get("MYSQL_ROOT_PASSWORD", "root1234")
@@ -128,16 +140,20 @@ def main():
         window["diagnosis"] = {"orders_in_db": counts[0], "matched_orders": counts[1],
                                "matched_purchases": counts[2], "latest_order_numbers": counts[3],
                                "evidence_sample": numbers[:2]}
-        if window["since"] == "NULL":
-            sys.stderr.write("주문번호로 찾은 구매 근거가 없다: " + json.dumps(window, ensure_ascii=False) + "\n")
+        if window["diagnosis"]["matched_orders"] in ("0", "NULL"):
+            # 표 이름이 바뀌었거나 다른 스택을 보고 있다. 0건 요약을 결과처럼 남기지 않는다.
+            sys.stderr.write("주문번호로 찾은 주문이 없다: " + json.dumps(window, ensure_ascii=False) + "\n")
             sys.exit(2)
     elif args.since and args.until:
         sql = purchase_sql(args.since, args.until)
     else:
         parser.error("--evidence 또는 --since/--until이 필요하다")
-    output = broker_latency._mysql(args.container, password, sql)
-    rows = [tuple(line.split("\t")) for line in output.splitlines() if line.strip()]
-    text = json.dumps({"window": window, "purchase": summarize(rows)}, ensure_ascii=False, indent=2)
+    deadline = time.monotonic() + args.wait_secs
+    summary = _collect(args.container, password, sql)
+    while summary["incomplete"] and time.monotonic() < deadline:
+        time.sleep(5)
+        summary = _collect(args.container, password, sql)
+    text = json.dumps({"window": window, "purchase": summary}, ensure_ascii=False, indent=2)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(text + "\n")

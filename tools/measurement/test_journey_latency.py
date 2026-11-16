@@ -35,8 +35,9 @@ class PurchaseQueryTest(unittest.TestCase):
 class OrderListTest(unittest.TestCase):
     def test_reads_accepted_order_numbers_from_the_load_evidence(self):
         evidence = {"orders": [{"status": 200, "orderNo": "ORD-1"}, {"status": 500, "error": "x"},
+                               {"status": 200, "orderNo": "W-1", "warmup": True},
                                {"status": 200, "orderNo": "ORD-2"}]}
-        self.assertEqual(journey_latency.order_numbers(evidence), ["ORD-1", "ORD-2"])
+        self.assertEqual(journey_latency.order_numbers(evidence), ["ORD-1", "ORD-2"], "예열 주문은 뺀다(R7)")
 
     def test_filters_by_order_numbers_instead_of_a_time_window(self):
         sql = journey_latency.purchase_sql_for_orders(["ORD-1", "ORD-2"])
@@ -62,10 +63,12 @@ class DiagnosisTest(unittest.TestCase):
 
 class SummaryTest(unittest.TestCase):
     def test_summarizes_both_spans_and_counts_orders_without_a_purchase_basis(self):
-        rows = [("ORD-1", "3000", "1000"), ("ORD-2", "5000", "2000"), ("ORD-3", "NULL", "NULL")]
+        rows = [("ORD-1", "3000", "1000", "PAID"), ("ORD-2", "5000", "2000", "PAID"), ("ORD-3", "NULL", "NULL", "PAID"),
+                ("ORD-4", "NULL", "NULL", "FAILED")]
         summary = journey_latency.summarize(rows)
         self.assertEqual(summary["completed"], 2)
         self.assertEqual(summary["incomplete"], 1)
+        self.assertEqual(summary["failed"], 1, "결제 실패는 미완료와 따로 센다(R5)")
         self.assertEqual(summary["created_to_basis"]["p50_ms"], 3.0)
         self.assertEqual(summary["paid_to_basis"]["max_ms"], 2.0)
 
