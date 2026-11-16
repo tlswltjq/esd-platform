@@ -190,7 +190,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 12 | 작업자: 같은 시도 PG 전액 `CANCELLED` | 무변화 | → `RV-전`(`PG_CANCELLED`) | → `RV-후`(`PG_CANCELLED`) | 무변화(관측만, 사유 유지) | 무변화(관측만) | 무변화(관측만) | 무변화 | R13.8 |
 | 13 | 작업자: `confirm_deadline` 지남 + PG `PENDING`·`READY`(조회 장애 회차는 마지막 유효 관측 `latestPgState`) | 무변화 | 무변화(기한 없음) | → `RV-후`(`CONFIRM_WINDOW_EXPIRED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.6, 결정 124, D-049 |
 | 14 | 작업자: 근거 대조 실패 | 무변화 | → `RV-전`(`PG_INVALID_EVIDENCE`) | → `RV-후`(`PG_INVALID_EVIDENCE`) | 무변화(사유 유지, 오류 기록) | 같음 | 무변화(오류 기록) | 무변화 | R4.12, R12.10 |
-| 15 | 작업자: PG 조회 장애 | 무변화 | 무변화(오류 기록) | 무변화(오류 기록). 단 `confirm_deadline` 지남 + 마지막 유효 관측 `PENDING`·`READY`면 #13 | 무변화(오류 기록) | 같음 | 같음 | 무변화 | R12.7, R4.6·D-049 |
+| 15 | 작업자: PG 조회 장애 | 무변화 | 무변화(오류 기록) | 무변화(오류 기록). 단 `confirm_deadline` 지남 + 마지막 유효 관측 `PENDING`·`READY`면 #13 | 무변화(오류 기록) | 같음 | 같음 | 무변화 | R12.7, R4.6·D-049·결정 200 |
 | 16 | 작업자: Order 실패 영수증 수신 | 무변화 | 무변화(통지 없음) | 무변화 | 무변화 | 무변화 | → `FAILED`(결제 표 #6) | 무변화 | R4.13 |
 | 17 | 작업자: 만료 사실 + 접수 전 + PG 관측 이력 없음 | 무변화 | → `EXPIRED`(PG 호출 없음, 결제 `EXPIRED`) | 해당 없음 → 무변화(#19) | 무변화(보류 유지, ADMIN 종결 (b)) | 무변화 | 무변화 | 무변화 | R11.5, 결정 126 |
 | 18 | 작업자: 만료 사실 + 접수 전 + 이력 있음 → PG 한 번 조회 | 무변화 | `PAID` → `RV-전`(`PAID_WITHOUT_ADMISSION`) / `CANCELLED` → `RV-전`(`PG_CANCELLED`) / `PENDING` → `RV-전`(`PG_PENDING_AT_ORDER_EXPIRY`) / `READY`·`FAILED` → `EXPIRED`(잠금 안 `REQ` 재확인) / 장애 → 무변화 | 무변화 | 무변화(#20만 예외) | 무변화 | 무변화 | 무변화 | R11.5, D-044 |
