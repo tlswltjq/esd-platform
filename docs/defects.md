@@ -713,6 +713,7 @@
 - **원인** 바깥 `FOR UPDATE SKIP LOCKED`는 잠긴 앞 행을 건너뛰지만, `NOT EXISTS` 하위 조회는 잠금 없이 읽어 앞 행을 "지금 나갈 수 있는 `PENDING`"으로 보고 뒤 행을 막지 않는다.
 - **재현** `OutboxPendingQueryTest#aLockedEarlierEventKeepsTheLaterEventOutOfTheReleasedBatch`: 다른 스레드의 트랜잭션이 `lockByEventId`로 앞 행을 쥔 상태에서 `lockPendingBatch`가 같은 키의 **뒤 행만** 잡는 것을 단언한다(조회만으로는 순서가 깨지는 상태).
 - **수정** 릴레이가 잠근 배치에 대해 같은 키의 미발행 행 위치를 한 번 더 읽고(`findUnsentPositions`), 앞의 미발행 행이 모두 같은 배치에 있는 행만 보낸다(`KeyOrderGuard`). 걸러진 행은 `PENDING` 그대로 다음 폴링에서 다시 판정된다. 같은 테스트가 거른 결과가 비어 있음을 단언하고, `KeyOrderGuardTest`가 규칙을 단위로 지킨다.
+- **알려진 한계(교차 재리뷰 R4, 기각)** 앞 행이 잠긴 키의 뒤 행이 배치 크기(기본 200, Payment 일부 20)만큼 쌓여 있으면 그 회차 배치가 모두 걸러져 다른 키도 그 잠금이 풀릴 때까지 발행되지 않는다. 순서는 깨지지 않고 잠금이 풀리면 스스로 회복한다. 지금 앞 행을 잠그는 주체는 짧은 운영 재발행 트랜잭션뿐이고 한 주문의 이벤트는 많아야 10개 안팎이라 고치지 않는다. 같은 키 적재량이나 잠금 경로가 늘면 걸러진 키를 빼고 다시 조회하는 방식을 검토한다.
 
 ---
 

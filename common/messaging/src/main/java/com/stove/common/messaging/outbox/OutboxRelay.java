@@ -75,6 +75,9 @@ public class OutboxRelay {
     /**
      * 같은 키의 앞 미발행 행이 이 배치에 없으면(다른 트랜잭션이 잠가 {@code SKIP LOCKED}로 빠짐) 그 키의 뒤 행은
      * 이번에 보내지 않는다. 걸러진 행은 {@code PENDING} 그대로 다음 폴링에서 다시 판정된다(PR #203 R1).
+     *
+     * <p>알려진 한계(D-057, 재리뷰 R4 기각): 걸러진 키의 뒤 행이 배치를 가득 채우면 그 잠금이 풀릴 때까지
+     * 다른 키도 이 회차에 나가지 못한다. 순서는 지켜지고 잠금이 풀리면 회복한다.
      */
     private List<OutboxEvent> releasableInKeyOrder(List<OutboxEvent> locked) {
         Set<String> keys = new LinkedHashSet<>();
