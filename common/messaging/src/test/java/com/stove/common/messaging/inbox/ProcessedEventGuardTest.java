@@ -25,7 +25,7 @@ class ProcessedEventGuardTest {
     private static final String GROUP = "license";
 
     private final ProcessedEventRepository repository = mock(ProcessedEventRepository.class);
-    private final ProcessedEventGuard guard = new ProcessedEventGuard(repository);
+    private final ProcessedEventGuard guard = new ProcessedEventGuard(repository, new SimpleMeterRegistry());
 
     @Test
     @DisplayName("최초 수신이면 처리를 허용하고 수신 기록을 남긴다")

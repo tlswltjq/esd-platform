@@ -2,7 +2,6 @@ package com.stove.common.messaging.inbox;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +21,7 @@ public class ProcessedEventGuard {
     private final ProcessedEventRepository repository;
     private final MeterRegistry meterRegistry;
 
-    /** 지표 없이 쓰는 테스트·대역용. 로컬 레지스트리에 센다. */
-    public ProcessedEventGuard(ProcessedEventRepository repository) {
-        this(repository, new SimpleMeterRegistry());
-    }
-
+    /** 레지스트리는 조립 쪽(자동 구성·테스트)이 넘긴다(AGENTS.md 3절, PR #204 R3). */
     public ProcessedEventGuard(ProcessedEventRepository repository, MeterRegistry meterRegistry) {
         this.repository = repository;
         this.meterRegistry = meterRegistry;

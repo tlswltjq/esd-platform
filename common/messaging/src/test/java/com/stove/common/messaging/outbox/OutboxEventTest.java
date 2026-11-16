@@ -25,6 +25,24 @@ class OutboxEventTest {
     /** {@code OutboxProperties} 의 max-retry 기본값 */
     private static final int DEFAULT_MAX_RETRY = 10;
 
+    @Test
+    @DisplayName("[PR #204 R1·R2] 발행 시각은 첫 송신 때 마이크로초로 잘라 한 번만 찍고, 재시도·재발행·회수에도 덮지 않는다")
+    void publishTimeIsTheFirstSendTruncatedToMicros() {
+        OutboxEvent event = pending();
+        Instant first = Instant.parse("2026-11-16T10:00:00.123456789Z");
+
+        event.markPublishing(first);
+        event.markFailed("ack lost", DEFAULT_MAX_RETRY);
+        event.markPublishing(first.plusSeconds(5));
+        event.markSent();
+        event.republish();
+        event.markPublishing(first.plusSeconds(60));
+
+        assertThat(event.getPublishedAt())
+                .as("Inbox가 최초 processed_at을 지키므로 다시 보낼 때 덮으면 구간이 음수가 된다")
+                .isEqualTo(Instant.parse("2026-11-16T10:00:00.123456Z"));
+    }
+
     private static OutboxEvent pending() {
         return OutboxEvent.pending("EVT-1", "Payment", "ORD-1",
                 EventType.PAYMENT_COMPLETED, Topics.PAYMENT, "ORD-1", "{}");
