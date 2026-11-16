@@ -75,6 +75,15 @@ def window_sql(numbers):
             + f" WHERE o.order_no IN {_in_list(numbers)}")
 
 
+def diagnosis_sql(numbers):
+    """주문번호가 DB와 맞는지 확인한다: 전체 주문 수, 이 목록과 맞는 주문 수, 맞는 구매 근거 수, 표본 주문번호."""
+    in_list = _in_list(numbers)
+    return ("SELECT (SELECT COUNT(*) FROM stove_order.orders),"
+            f" (SELECT COUNT(*) FROM stove_order.orders o WHERE o.order_no IN {in_list}),"
+            f" (SELECT COUNT(*) FROM stove_license.license_purchase lp WHERE lp.order_no IN {in_list}),"
+            " (SELECT GROUP_CONCAT(order_no) FROM (SELECT order_no FROM stove_order.orders ORDER BY id DESC LIMIT 2) s)")
+
+
 def summarize(rows):
     created, paid = [], []
     incomplete = 0
@@ -112,6 +121,13 @@ def main():
         sql = purchase_sql_for_orders(numbers)
         bounds = broker_latency._mysql(args.container, password, window_sql(numbers)).split("\t")
         window = {"since": bounds[0].strip(), "until": bounds[1].strip(), "orders": len(numbers)}
+        counts = broker_latency._mysql(args.container, password, diagnosis_sql(numbers)).strip().split("\t")
+        window["diagnosis"] = {"orders_in_db": counts[0], "matched_orders": counts[1],
+                               "matched_purchases": counts[2], "latest_order_numbers": counts[3],
+                               "evidence_sample": numbers[:2]}
+        if window["since"] == "NULL":
+            sys.stderr.write("주문번호로 찾은 구매 근거가 없다: " + json.dumps(window, ensure_ascii=False) + "\n")
+            sys.exit(2)
     elif args.since and args.until:
         sql = purchase_sql(args.since, args.until)
     else:

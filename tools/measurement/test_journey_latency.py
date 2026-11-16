@@ -37,6 +37,13 @@ class OrderListTest(unittest.TestCase):
         self.assertIn("MAX(lp.received_at)", sql)
 
 
+class DiagnosisTest(unittest.TestCase):
+    def test_counts_orders_and_purchases_for_the_evidence_numbers(self):
+        sql = journey_latency.diagnosis_sql(["ORD-1"])
+        self.assertIn("FROM stove_order.orders o WHERE o.order_no IN ('ORD-1')", sql)
+        self.assertIn("FROM stove_license.license_purchase lp WHERE lp.order_no IN ('ORD-1')", sql)
+
+
 class SummaryTest(unittest.TestCase):
     def test_summarizes_both_spans_and_counts_orders_without_a_purchase_basis(self):
         rows = [("ORD-1", "3000", "1000"), ("ORD-2", "5000", "2000"), ("ORD-3", "NULL", "NULL")]
