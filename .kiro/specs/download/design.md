@@ -52,8 +52,8 @@
 | J7 | 입력 | 상품 코드 형식 위반 | 400 `INVALID_REQUEST` | 없음 | R2.2, `DownloadRequest.java:10-11` |
 | J8 | License | 연결 실패·제한 시간 초과 | 503 `UPSTREAM_UNAVAILABLE` | License | R9.3·R9.4 |
 | J9 | License | 3xx(리다이렉트를 따르지 않음) | 503 | License | R6.10, `DownloadClientConfiguration.java:24-25` |
-| J10 | License | 401 | 401 `UNAUTHORIZED` | License | R3.6 — [결정 필요 M-DL-2] |
-| J11 | License | 403 | 403 `FORBIDDEN` | License | R3.6 — [결정 필요 M-DL-2] |
+| J10 | License | 401 | 503 `UPSTREAM_UNAVAILABLE` | License | R3.6, 결정 197 — **코드 차이 DL-T9**(지금 401 `UNAUTHORIZED`) |
+| J11 | License | 403 | 503 `UPSTREAM_UNAVAILABLE` | License | R3.6, 결정 197 — **코드 차이 DL-T9**(지금 403 `FORBIDDEN`) |
 | J12 | License | 404 + 계약 본문(`success=false`, `error.code=NOT_FOUND`) | 403 `LICENSE_NOT_OWNED` | License | R3.4·R3.8·R3.11, 결정 93·96·97·196 — **코드 차이 DL-T2**(지금 `FORBIDDEN`) |
 | J12a | License | 404 + 계약 본문(`success=false`, `error.code=PURCHASE_IN_STORAGE`) | 403 `LICENSE_REGISTRATION_REQUIRED` | License | R3.11, License R4.11, 결정 196 — **코드 차이 DL-T2·LI-T10**(지금 License가 이 코드를 내지 않음) |
 | J13 | License | 404 + 그 밖의 본문 | 503 | License | R3.9 — **코드 차이 DL-T1**(지금 403) |

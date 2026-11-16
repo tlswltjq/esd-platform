@@ -48,7 +48,7 @@ Download는 **무상태**다. 업무 DB·영속 엔티티·Kafka 소비/발행·
 3. THE Download SHALL 라이브러리 상세의 상태가 명시적 `ACTIVE`일 때만 다음 단계로 간다(결정 96: Download는 `ACTIVE` 보유권만 권한으로 본다).
 4. IF License가 계약된 오류 본문(`success=false`, 오류 코드 `NOT_FOUND`)의 `404`를 돌려주면(열린 보유권 없음 — 구매 근거 없음·보관함 미등록·환불 완료) THEN Download SHALL `403`으로 거절하고 Catalog·저장소를 부르지 않는다. 늦은 취소 회수로 `ACTIVE` 보유권이 끝난 경우도 같다(1회차 지적 A2·B2, 판정 전 — Download는 License 응답만 보고 회수 경로를 구별하지 않는다).
 5. IF 라이브러리 상세의 상태가 `SUSPENDED`이면 THEN Download SHALL `403`으로 거절하고 Catalog·저장소를 부르지 않는다([P3.18-4](../platform/requirements.md)).
-6. IF License가 사용자 토큰에 `401`·`403`을 돌려주면 THEN Download SHALL 각각 `401`·`403`으로 끝낸다. 이 전달이 맞는지는 [결정 필요 M-DL-2]다.
+6. IF License가 사용자 토큰에 `401`·`403`을 돌려주면 THEN Download SHALL 그 응답을 고객에게 전달하지 않고 `503`(`UPSTREAM_UNAVAILABLE`)으로 끝낸다. Download가 같은 토큰을 같은 규칙으로 이미 통과시켰으므로 이 거절은 모듈 간 설정·규칙 불일치로 본다([결정 197](../../../docs/decisions.md#download-license-auth-rejection)). Download 자신의 인증 거절(R1)은 그대로 `401`·`403`이다. 지금 코드는 그대로 전달한다(DL-T9).
 7. THE Download SHALL 다른 사용자의 보유권을 조회하지 않는다.
 8. WHERE Order 주문이 `PAID`여도 License에 구매 근거가 아직 없거나(구매 근거 생성 사실 `PurchaseRecordStored` 전, 결정 175 — 1회차 지적 B9, 판정 전) 고객이 보관함 항목을 등록하지 않았으면 THE Download SHALL 열린 보유권 없음(R3.4)으로 처리하고, Order·Payment를 조회해 임시 권한을 만들지 않는다.
 9. (새) IF License의 `404` 본문이 R3.4의 계약 오류 본문이 아니면(본문 없음·형식 오류·다른 오류 코드) THEN Download SHALL 열린 보유권 없음으로 바꾸지 않고 `503`으로 끝낸다(P1.2-5, R9.3).

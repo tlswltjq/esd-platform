@@ -1992,6 +1992,17 @@
 - 구분: AI 주장 정정
 - 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Download R3·판정 표 J12·J16·DL-T2, License R4.11·LI-T10, Order M-OR-5 신설, 판단 색인 행
 
+<a id="download-license-auth-rejection"></a>
+## 197. Download가 통과시킨 사용자 토큰을 License가 401·403으로 거절하면 연동 장애(503)로 본다
+- 문제: Download는 사용자 토큰을 검증하고 `MEMBER`를 확인한 뒤 같은 토큰으로 License 라이브러리 상세를 부른다. 두 모듈은 같은 `ApiJwtSecurity.decoder`(서명·issuer·만료 허용 오차 60초·`aud=esd-api`)와 같은 `hasRole("MEMBER")`를 쓴다. 그런데도 License가 401·403을 주면 지금은 그대로 401 `UNAUTHORIZED`·403 `FORBIDDEN`으로 전달한다(`LicenseHttpClient.java:24-25`, M-DL-2). 이 경우의 원인은 만료 직전 토큰과 서버 간 시계 차이(드묾), License의 issuer·JWK 설정 불일치, 두 모듈 보안 규칙의 불일치다. 뒤의 둘은 시스템 결함인데 고객의 인증·권한 문제로 보인다(코드·설정에서 추론, 재현하지 않음).
+- 선택지: A 그대로 전달(지금) / B 401·403 모두 503 `UPSTREAM_UNAVAILABLE` / C 401만 전달하고 403은 503 (추천: B — 같은 토큰을 같은 규칙으로 이미 통과시켰으므로 그 뒤의 거절은 대부분 모듈 간 불일치다. 장애를 고객 인증 문제로 바꾸지 않는다는 R3.9·R9.3의 원칙과 맞다)
+- 내 의견: "M-DL-2는 B로 해줘" (결정 전 질문: "503 UPSTREAM_UNAVAILABLE 이 어떤 예외야?")
+- 선택: B — License의 401·403은 다른 계약 밖 응답처럼 `HttpResponseValues.invalid()`로 503 `UPSTREAM_UNAVAILABLE`이 된다. Download가 직접 하는 인증(R1, 401·403)은 그대로다. 상세 계약은 Download R3.6, 판정 표 J10·J11이 정본이다.
+  - 비용: 만료 직전 토큰이 두 서버 시계 차이로 License에서만 거절되면 고객은 401 대신 503을 한 번 받는다. 그 토큰이 정말 만료됐다면 허용 오차가 지난 뒤 Download의 1단계 검사가 401을 내므로, 재시도하면 정상 갱신 흐름으로 이어진다.
+  - 503이 어떤 경보에 잡히는지는 이 결정에서 정하지 않는다. 이 결정은 응답 분류만 바꾼다.
+- 구분: 추천 수용
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Download R3.6·판정 표 J10·J11·DL-T9
+
 ---
 
 ## 검증하며 드러난 것
