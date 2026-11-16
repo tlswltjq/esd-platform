@@ -127,6 +127,42 @@ class RefundCancellationHoldTest {
         assertThat(fixture.execution().getFirstCancellationPreparedAt()).isEqualTo(BASE);
     }
 
+    /** Decision 133: a formal rejection keeps its status and type and uses the same resume path as the other holds. */
+    @Test void aFormalRejectionHoldKeepsItsStatusAndTypeAndCanUseTheExistingResumeReceipt() {
+        Fixture fixture = fixture();
+        RefundCancellationHold rejected = RefundCancellationHold.rejected(fixture.execution().getAttemptId(), fixture.claim(), BASE.plusSeconds(1), true,
+                new PgCancellationRejection(409, "PAYMENT_NOT_PAID"));
+        assertThat(rejected.getReason()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(rejected.getRejectionStatus()).isEqualTo(409); assertThat(rejected.getRejectionType()).isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(fixture.hold().getRejectionStatus()).isNull(); assertThat(fixture.hold().getRejectionType()).isNull();
+        fixture.execution().holdCancellation(rejected.getHoldId(), fixture.claim());
+        RefundCancellationResumeRequest request = command(rejected);
+        assertThat(rejected.recordResume(request, BASE.plusSeconds(10))).isTrue();
+        fixture.execution().resumeCancellation(rejected.getHoldId(), BASE.plusSeconds(10));
+        assertThat(fixture.execution().getActiveCancellationHoldId()).isNull();
+        assertThat(fixture.execution().getCancellationRequestBody()).isEqualTo("frozen-body");
+        assertThatThrownBy(() -> RefundCancellationHold.rejected(fixture.execution().getAttemptId(), fixture.claim(), BASE.plusSeconds(1), true, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** The rejection value keeps the decision 133 boundaries: other statuses and the three existing 4xx meanings are refused. */
+    @Test void aFormalRejectionExcludesStatusesAndTypesThatKeepTheirOwnMeaning() {
+        assertThat(PgCancellationRejection.rejects(400, "OTHER_ERROR")).isTrue();
+        assertThat(PgCancellationRejection.rejects(409, "PAYMENT_NOT_PAID")).isTrue();
+        assertThat(PgCancellationRejection.rejects(422, "A_1")).isTrue();
+        for (int status : new int[] {399, 401, 403, 404, 408, 429, 500, 502})
+            assertThat(PgCancellationRejection.rejects(status, "OTHER_ERROR")).isFalse();
+        assertThat(PgCancellationRejection.rejects(400, "INVALID_REQUEST")).isFalse();
+        assertThat(PgCancellationRejection.rejects(409, "CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN")).isFalse();
+        assertThat(PgCancellationRejection.rejects(409, "IDEMPOTENCY_OUTSTANDING_REQUEST")).isFalse();
+        for (String type : new String[] {null, "", " ", "\t"})
+            assertThat(PgCancellationRejection.rejects(409, type)).isFalse();
+        for (String type : new String[] {"lower", "1ABC", "A B", "INVALID_REQUEST ", "결제 오류", "A".repeat(65), "X".repeat(5000)})
+            assertThat(PgCancellationRejection.rejects(409, type)).as(type).isTrue();
+        assertThat(PgCancellationRejection.rejects(400, "INVALID_REQUEST ")).isTrue();
+        assertThatThrownBy(() -> new PgCancellationRejection(429, "TOO_MANY_REQUESTS")).isInstanceOf(IllegalArgumentException.class);
+    }
+
     private RefundCancellationResumeRequest command(RefundCancellationHold hold) {
         return new RefundCancellationResumeRequest(id(), hold.getAttemptId(), hold.getHoldId(), "operator", "provider rejection reviewed");
     }

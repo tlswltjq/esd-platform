@@ -1151,7 +1151,7 @@
 - 내 의견: "D안으로 해줘"
 - 선택: D — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 대상은 `ADMITTED`이고 `firstPreparedAt + 3시간`이 지났으며 최신 PG 상태가 `PENDING` 또는 `READY`인 승인이다. 작업자가 조회한 직후 `stopPosts`로 새 사유를 붙여 보류한다. 늦은 PAID·FAILED는 지금처럼 원래 주문으로 끝낸다. 보류 게이지의 사유 목록, 경보 테스트, R4.6·R12.4 문구를 갱신하고, PAY_PENDING으로 3시간을 넘기는 통합 테스트를 더한다. 기존 행은 다음 조회 때 저절로 올라오므로 별도 이행 작업은 두지 않는다. 고객 안내는 결정 123의 묶음을 따른다(PG `PENDING`이면 `CHARGE_UNCONFIRMED`, `READY`면 `NOT_CHARGED`). R4.6의 "시간만으로 실패·새 키·새 결제를 만들지 않는다"는 그대로 지킨다.
 - 구분: 추천 수용
-- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)(사유 `CONFIRM_WINDOW_EXPIRED`), 근거 색인 2026-11-08 confirm 기한 경과 보류 행
+- 결과: [PR #143](https://github.com/tlswltjq/esd-platform/pull/143) (기록), 구현 [PR #152](https://github.com/tlswltjq/esd-platform/pull/152)(사유 `CONFIRM_WINDOW_EXPIRED`), 근거 색인 2026-11-08 confirm 기한 경과 보류 행. 조회 장애 회차에도 마지막 유효 관측으로 판정한다([결정 200](#confirm-window-hold-last-observation))
 
 <a id="license-grant-wait-detection"></a>
 ## 125. 지급 확인을 기다리다 멈춘 환불은 Order가 진입 시각으로 감지해 경보·안내하고, 복구는 결정 37 절차를 그대로 쓴다
@@ -1232,7 +1232,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "B로 해, 형식 갖춘 4xx는 바로 멈춰")
 - 선택: B — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). 환불 취소 POST가 정상 JSON에 type이 있는 4xx(400·409·그 밖)를 받으면 자동 POST를 멈추고 새 중단 사유(가칭 `PG_REQUEST_REJECTED`)와 응답 상태·type을 남긴다. 401·404는 결정 29대로 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃은 미확정으로 계속 재송신, 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`은 지금대로 잔액 변화 차단, 403·`INVALID_REQUEST`는 지금대로다. 운영자는 3시간 안에서 재개(R7.16)하거나 언제든 결정 128 실패 종결을 쓴다. 조회는 계속해 늦은 성공을 놓치지 않는다. R7.11·R7.15 문구를 고친다. 502 `PG_PROVIDER`의 분류와 실제 PortOne 오류 타입 확인은 전용 테스트 가맹점 뒤로 미룬다. `INVALID_REQUEST` 본문은 같은 시도 안에서 고치지 않는다(R4.4·R7.10, 같은 키에 다른 본문은 멱등 충돌). 원인을 고친 뒤 결정 128 실패 종결 → 고객 재시도(새 attemptId·본문·3시간 창)로 잇고 운영 절차서에 적는다.
 - 구분: 추천 수용
-- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현은 후속 PR
+- 결과: [PR #153](https://github.com/tlswltjq/esd-platform/pull/153) (기록), 구현 [PR #168](https://github.com/tlswltjq/esd-platform/pull/168)(중단 사유 `PG_REQUEST_REJECTED`·V40 상태/type, `INVALID_REQUEST` 정정 절차서, D-048·D-049), 근거 색인 2026-11-08 payment 결정 133 행. 저장 본문·설정 불일치 환불은 Payment `tasks.md` `[결정 필요]`로 남김
 
 <a id="refund-failure-customer-notice"></a>
 ## 134. 실패로 닫은 환불의 새 시도는 고객 재신청으로만 만들고, 고객 환불 응답에 실패 사유와 재신청 안내를 보인다
@@ -1976,6 +1976,17 @@
   - 최초 제안의 "PG 재조회로만 닫음"을 "원인 해소 후 같은 검증으로 재평가·반영"으로 좁혔다. PG 취소 ID 변경은 확인된 공급자 동작이 아니며, 현재 판매자 송금은 실행하지 않는다. 주기 재검증·배치 정산 전환·미해결 환불의 마감 허용 여부는 이 선택으로 확정하지 않는다.
 - 구분: AI 주장 정정
 - 결과: [PR #199](https://github.com/tlswltjq/esd-platform/pull/199) — Settlement R11.8~12·O3·상태 표·ADMIN API·MC-S3, 플랫폼 반영 확인 사실 발행 경로, 판단 색인 행
+
+<a id="confirm-window-hold-last-observation"></a>
+## 200. confirm 기한이 지난 접수 승인은 PG 조회가 실패해도 마지막 유효 관측으로 보류에 올린다
+- 문제: [결정 124](#confirm-window-expired-hold)는 최초 준비 + 3시간이 지나고 PG가 `PENDING`·`READY`인 `ADMITTED` 승인을 "작업자가 조회한 직후" `REVIEW_REQUIRED`(`CONFIRM_WINDOW_EXPIRED`)로 올린다. 구현은 그 회 조회가 성공했을 때만 판정해서, GET이 5xx·타임아웃으로 계속 실패하면 3시간이 지나도 `ADMITTED`로 남고 게이지·경보·ADMIN 목록 어디에도 보이지 않았다(D-049). PR #168은 조회 장애로 끝난 회차에 저장된 마지막 유효 관측 `latestPgState`로 같은 판정을 하도록 고쳤고, 교차 리뷰(PR #168 R3)는 이것이 결정 124의 "조회한 직후" 조건을 바꾼다고 지적했다. main 재정의 스펙의 Payment design 상태 표 #15도 "PG 조회 장애 → 무변화"였다.
+- 선택지: A 마지막 유효 관측 기준으로 보류하고(PR #168 동작), 결정 124를 그렇게 읽고 상태 표 #15에 예외를 적는다 / B 결정 124를 그 회 조회 성공으로 엄격히 두고 D-049 수정을 되돌리며, 3시간 넘게 조회 장애인 승인용 경보를 따로 둔다 / C A처럼 보류하되 관측 없이 보류된 건은 재조회 간격을 5초로 유지한다 (추천: A — 상태가 아는 사실(마지막 관측·기한 경과)만 나타내고 금융 동작은 바뀌지 않는다. B는 같은 상황을 보류 흐름 밖에서 따로 다루고, C는 장애 중 PG를 계속 5초마다 조회하며 간격 규칙이 보류 경위에 따라 갈린다)
+- 내 의견: (선택지 선택만, 본인 발언 없음 — 고른 선택지: "A로 해, 마지막 관측 기준 보류")
+- 선택: A — 추천 이유를 받아들인 것으로 본다(맥락으로 추정). `ADMITTED`이고 `firstPreparedAt + 3시간`이 지난 승인의 조회가 장애로 끝나면, 저장된 `latestPgState`가 `PENDING`·`READY`일 때 같은 lease로 `CONFIRM_WINDOW_EXPIRED` 보류에 올린다. 유효 관측이 없으면 바꾸지 않는다. 고객 안내는 `lastInspectionError`가 있으므로 `CHARGE_UNCONFIRMED`(결정 123·132). 이후 재조회 간격·종결·늦은 PAID/FAILED 처리는 결정 115·122·124 그대로다.
+  - 마지막 관측이 낡았을 수 있다(그 사이 실제 PG는 PAID). 그래도 보류는 표시·안내·간격만 바꾸고, ADMIN 종결은 PG를 다시 조회해 PAID면 거절하므로 금전 결과는 바뀌지 않는다. PG 회복 뒤 늦은 PAID 반영이 재조회 상한(10분)만큼 늦어질 수 있다. 이 상한이 장애 중에도 적절한지는 측정한 값이 아니다.
+  - 보류는 장애 중 주문을 풀거나 같은 상품의 새 주문을 막지 않는다. 주문 정리는 PG 회복 뒤 ADMIN 종결로 한다.
+- 구분: 추천 수용
+- 결과: [PR #168](https://github.com/tlswltjq/esd-platform/pull/168) — D-049 수정, Payment design 상태 표 #15 예외·R4.6, R3 판정, 판단 색인 행
 
 ---
 

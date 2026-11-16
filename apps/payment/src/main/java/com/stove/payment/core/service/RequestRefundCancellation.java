@@ -193,7 +193,8 @@ public class RequestRefundCancellation {
                 executions.flush();
             });
         }
-        if (observation.equals(RefundCancellationDispatch.FORBIDDEN) || observation.equals(RefundCancellationDispatch.INVALID_REQUEST))
+        if (observation.equals(RefundCancellationDispatch.FORBIDDEN) || observation.equals(RefundCancellationDispatch.INVALID_REQUEST)
+                || observation.rejection() != null)
             recordRejection(attemptId, prepared.claim(), observation);
         reconcile.execute(attemptId);
     }
@@ -207,7 +208,9 @@ public class RequestRefundCancellation {
             RefundCancellationHold known = holds.findByAttemptIdAndClaimId(attemptId, claim.token()).orElse(null);
             if (known != null) { known.requireObservation(attemptId, claim); return; }
             boolean activate = !finished(current) && current.getCancellationSchedule().ownsClaim(claim);
-            RefundCancellationHold hold = observation.equals(RefundCancellationDispatch.FORBIDDEN)
+            RefundCancellationHold hold = observation.rejection() != null
+                    ? RefundCancellationHold.rejected(attemptId, claim, clock.instant(), activate, observation.rejection())
+                    : observation.equals(RefundCancellationDispatch.FORBIDDEN)
                     ? RefundCancellationHold.forbidden(attemptId, claim, clock.instant(), activate)
                     : RefundCancellationHold.invalidRequest(attemptId, claim, clock.instant(), activate);
             holds.saveAndFlush(hold);

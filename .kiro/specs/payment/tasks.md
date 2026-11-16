@@ -73,7 +73,7 @@
   - 목표: R7.18, P4.5-3. 값으로만 저장, 진위는 취소 ID·결제 ID·금액·상태.
   - 영향: **돈·보유권 지연** — 정상 성공·취소 근거가 `IllegalArgumentException`, 3시간 뒤 경보(추정, 미재현).
   - 재현: PA-T1과 같은 시험(단위: 고정 `Clock`).
-- [ ] **MC-P9. 결정 133(형식 갖춘 거절 즉시 중단)이 구현되지 않았다** (옛 tasks:41)
+- [x] **MC-P9. 결정 133(형식 갖춘 거절 즉시 중단)이 구현되지 않았다** (옛 tasks:41) — PR #168, 2026-11-08. `PortOneRefundCancellationGateway`가 정상 JSON 객체에 비어 있지 않은 문자열 `type`이 있는 400·409·그 밖 4xx를 받으면 자동 송신을 멈추고 `PG_REQUEST_REJECTED`와 응답 상태·`type`을 남긴다(V40 `rejection_status`·`rejection_type`, `type`은 형식·길이 제한 없이 원문 저장, 옛 행 호환 이행 테스트). 401·404 자동 재개, 409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·408·429·5xx·깨진 본문·`type` 없음·타임아웃 미확정, 409 잔액 변화·403·400 `INVALID_REQUEST`는 지금대로(408은 구현 판단으로 미확정). ADMIN 보류 상세는 `rejectionStatus`·`rejectionType`, 목록은 앞 200자 미리보기·길이만. 사유별 경보는 원래 없고 기한 뒤 `RefundConfirmationsDelayed`가 사유와 관계없이 잡는다. 보류 활성은 지금도 `refund_cancellation_hold` 활성 행이며, `dispatch_state=HELD` 칸 이행은 MC-P8에 남는다. 분류·용량·V40 적용 절차는 design adapter 메모
   - 어디서: `payment:adapter/pg/PortOneRefundCancellationGateway.java`(분류), `payment:core/service/RequestRefundCancellation.java`(`recordRejection`), V24·V25 보류 사유 CHECK.
   - 목표: R7.8, P3.20-2. 형식 거절이면 첫 응답 뒤 `dispatch_state=HELD`, 보류 사유 `PG_REQUEST_REJECTED`·상태·`type` 저장. 분류표는 design adapter 메모.
   - 영향: **보유권·돈 지연** — 409 형식 거절이면 기한까지 약 180번 재송신, 그동안 보유권 정지·고객 `PROCESSING`, 실패 종결도 기한 뒤에야 가능.
@@ -217,8 +217,9 @@
 - [ ] [나중에 따로 — 사용자 지시 2026-11-11] 주기 PG 거래 대사: 발견(R16)에서 놓친 청구와 오래 열린 `unlinked_charge`를 PG 거래 목록·정산 자료로 다시 찾는다. 맡을 모듈(Payment / Settlement — Settlement면 연결되지 않은 청구를 이벤트로 받아야 함, P1.1-2)·주기는 그때 정한다. 열린 기록의 가장 오래된 나이 게이지·재경보도 함께 다룬다(지금 게이지 `stove.payment.unlinked-charge.open{source}`는 건수만).
 - [ ] 소급 후보 RC-2·RC-13 재질문(notes E) 뒤 MC-P4·MC-P5의 목표 모양 확정.
 - [ ] [외부 대기] 실제 PG 오류(형식 거절·`INVALID_REQUEST` 등) 뒤 운영 재개를 실제 ADMIN 경로로 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
-- [ ] `INVALID_REQUEST` 정정 절차를 운영 절차서에 적는다(결정 133): 같은 시도 본문은 고치지 않고 원인을 고친 뒤 실패 종결(R18) → 고객 재신청(새 `attemptId`·본문·기한) — G2
-- [ ] 결함 후보 재현(2026-11-08 HTTP 오류 조사): ① 환불 409 본문이 깨지거나 `type`이 없으면 `IllegalArgumentException`이 새어 그 회 조회를 건너뛰고 첫 송신이 Kafka 재전달이 된다 ② 승인 조회가 계속 실패하면 `confirm_deadline`이 지나도 `CONFIRM_WINDOW_EXPIRED`에 오르지 않는다 ③ 환불 저장 본문이 현재 설정과 달라지면 `requireBody` 예외로 보류 기록 없이 영원히 보내지 못한다. 재현되면 결함 대장 — G2
+- [x] `INVALID_REQUEST` 정정 절차를 운영 절차서에 적는다(결정 133): [환불 종결 절차서](../../../docs/runbooks/refund-delay-closure.md) "INVALID_REQUEST 정정"에 같은 시도 본문은 고치지 않음 → 원인(코드 결함·`PORTONE_STORE_ID` 같은 설정 변경) 수정 → 실패 종결(R18, 결정 128 — API는 PA-T12) → 고객 재신청(새 `attemptId`·본문·기한) 순서를 적었다 — G2, 2026-11-08 PR #168
+- [x] 결함 후보 재현(2026-11-08 HTTP 오류 조사): 1. 재현됨 → [D-048](../../../docs/defects.md#d-048), 409 깨진 본문·`type` 없음을 미확정(`PgUnavailable`)으로 고쳐 같은 회 조회를 잇는다 2. 재현됨 → [D-049](../../../docs/defects.md#d-049), 조회 장애 회차에도 마지막 유효 관측(`latestPgState`)이 `PENDING`·`READY`면 결정 124 `CONFIRM_WINDOW_EXPIRED` 보류(R4.6) 3. 동작은 재현됨(`RequestRefundCancellationTest#aStoredBodyThatNoLongerMatchesTheConfigurationIsRefusedEveryRoundWithoutAHold`: 매 회 HTTP 전에 `IllegalArgumentException`, 보류 기록 없음, 재송신 일정 유지, 그 회 결과 조회 없음. 게이트웨이 쪽은 `PortOneRefundCancellationGatewayTest#changedOrUnsafeBodiesAndWrongPurchaseEvidenceNeverReachACancelPost`가 `storeId` 변경 본문의 HTTP 0회를 보인다). 현행 계약(R7.9 "검증 불가면 그 회에는 보내지 않는다")과 어긋나지 않고 조회 작업자가 GET을 이어 가며 기한 뒤 `RefundConfirmationsDelayed`·지연 목록에 오르므로 결함 대장에 올리지 않고 아래 `[결정 필요]`로 남겼다 — G2, 2026-11-08 PR #168
+- [ ] [결정 필요] 저장 본문이 현재 설정과 달라진 환불(후보 3): 예: 11:00 환불 첫 송신 응답 유실 → 11:10 `PORTONE_STORE_ID` 교체 → 이후 재송신은 매분 `requireBody`에서 막혀 HTTP 없이 끝난다. 기한까지 보류 기록·ADMIN 보류 목록·경보에 보이지 않고, 같은 시도는 본문을 고칠 수 없으므로(R4.4·R7.10) 끝내 보낼 수 없다. 바로 보류로 올리려면 새 보류 사유(예: 저장 본문 불일치)와 그 재개 규칙(설정을 되돌리면 재개 허용인지)이 필요하고, 그대로 두면 기한 뒤 지연 경보 → 실패 종결(R18) → 고객 재신청으로 잇는다. 어느 쪽인지 정해야 한다 — G2
 - [ ] [외부 대기] 502 `PG_PROVIDER` 분류와 실제 공급자 환불 오류 타입 확인(결정 133) — G7
 - [ ] 운영 조사 목록의 조사 흔적([결정 131](../../../docs/decisions.md#investigation-trail-no-assignee)): 환불 지연·승인 보류·(목표)연결되지 않은 청구 목록 항목에 `investigationCount`·`lastInvestigatedBy`·`lastInvestigatedAt`(R8.9) — G2
 - [ ] 기한 뒤 미확정 환불과 실패 뒤 감시의 조회 간격(결정 122 모양, 결정 128 "낮은 빈도"): `min(10분, max(60초, 경과))`, 환불 전용 설정 키, 통지·종결 API의 직접 재조회는 간격과 무관(R19.1) — G2. 구현은 PA-T12와 같이.

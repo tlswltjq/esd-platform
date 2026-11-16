@@ -11,7 +11,7 @@
 | `RefundConfirmationsDelayed`(critical) | 최초 취소 준비 + 3시간이 지났는데 PG 결과가 미확정(`GET /api/v1/admin/refund-delays`) | **맞다.** 고객에게 환불할 건이면 아래 1번부터 |
 | `RefundsUnattributed`(warning) | PG 조회로 전액 취소는 확인돼 고객 환불은 끝났지만, 우리 시도의 취소인지 모름(`?kind=UNATTRIBUTED`) | **맞다.** 아래 3번부터(콘솔 취소 불필요) |
 | PG가 취소를 거절했고 지금 환불할 수 없는 건 | 돈이 움직이지 않은 실패 | **아니다.** [결정 128](../decisions.md#refund-failure-closure) 실패 종결(미구현) |
-| 3시간 창 안의 `POST 403`·`400 INVALID_REQUEST` 중단 | 운영 중단 | **아니다.** `/api/v1/admin/refund-cancellation-holds` 재개 |
+| 3시간 창 안의 `POST 403`(`PG_REQUEST_FORBIDDEN`)·`400 INVALID_REQUEST`(`PG_REQUEST_INVALID`)·형식 갖춘 그 밖 4xx(`PG_REQUEST_REJECTED`, [결정 133](../decisions.md#refund-formal-rejection-stop)) 중단 | 운영 중단 | **아니다.** `/api/v1/admin/refund-cancellation-holds`에서 `reason`·`rejectionStatus`·`rejectionType`을 보고 원인을 고친 뒤 재개. `INVALID_REQUEST`는 재개로 풀리지 않으므로 아래 "INVALID_REQUEST 정정" |
 
 **환불해 줄 건이면 실패 종결보다 콘솔 취소 → 결정 127 종결을 먼저 한다**([결정 134](../decisions.md#refund-failure-customer-notice)). 실패 종결은 지금 환불할 수 없는 건에만 쓴다. 실패로 닫으면 보유권이 복구되고, 새 환불은 고객이 다시 신청해야만 생기기 때문이다.
 
@@ -37,6 +37,17 @@
 | `CLOSURE_PG_UNAVAILABLE` / `CLOSURE_PG_INVALID_EVIDENCE` | PG 조회 장애 / 응답이 원결제와 맞지 않음 | 장애는 회복 뒤 재시도. 근거 불일치는 콘솔 결제·상점·채널을 조사 |
 | `REFUND_NOT_CLOSABLE` | 3시간 창 안의 미확정, 이미 성공·실패로 끝남, 이미 종결됨 | 상세의 `executionStatus`·`closure` 확인. 창 안이면 자동 조회를 기다림 |
 | `CONFLICT` | 귀속 미확정 건의 PG 취소 내역이 처음 확인한 내역과 다르다 | 종결하지 말고 콘솔 내역을 조사 |
+
+## INVALID_REQUEST 정정 — 같은 시도는 고치지 않고 새 시도로 잇는다
+
+[결정 133](../decisions.md#refund-formal-rejection-stop)의 절차다. 취소 POST가 400 `INVALID_REQUEST`를 받으면 중단 사유 `PG_REQUEST_INVALID`로 자동 POST가 멈춘다. 형식 갖춘 그 밖 4xx(`PG_REQUEST_REJECTED`)도 원인이 요청 본문·설정이면 같은 순서를 따른다. 조회는 계속 돈다.
+
+1. **같은 시도의 본문은 고치지 않는다.** 저장된 본문(`refund_execution.cancellation_request_body`)과 `Idempotency-Key`(attemptId)는 한 묶음이다(R4.4·R7.10). 같은 키로 다른 본문을 보내면 PortOne 멱등 충돌이다. SQL로 본문을 바꾸거나 재개(`…/resume`)로 같은 본문을 다시 보내 풀려고 하지 않는다. 재개해도 같은 400을 받는다.
+2. **원인을 고친다.** 코드 결함이면 수정·배포하고, `PORTONE_STORE_ID` 같은 설정이 틀렸으면 설정을 고친다. 설정을 바꿔도 이미 저장한 본문은 바뀌지 않으며, 바뀐 설정과 저장 본문의 `storeId`가 다르면 그 시도는 송신 직전 검증에서 막혀 다시 보내지 못한다(Payment `tasks.md`의 `[결정 필요]` 항목).
+3. **[결정 128](../decisions.md#refund-failure-closure) 실패 종결.** 중단된 실행은 "자동 송신이 멈춘 실행"이라 실패 종결 대상이다. PG 재조회에서 원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음이 확인될 때만 닫히고, `RefundExecutionFailed`로 Order가 보유권을 복구한다. 실패 종결 API는 아직 main에 없다(구현 PR 병합 전).
+4. **고객 재시도로 잇는다.** 새 시도는 고객 재신청(`POST /api/v1/orders/{orderNo}/refund/retries`, [결정 134](../decisions.md#refund-failure-customer-notice))으로만 생긴다. 새 attemptId·새 본문(고친 설정으로 다시 만든 본문)·새 3시간 창을 가진다.
+
+환불해 줄 건이면 3번 대신 콘솔 취소 → 위 결정 127 종결을 먼저 검토한다(결정 134).
 
 ## 하지 않는 것
 

@@ -84,6 +84,7 @@ public class ResolvePaymentApproval {
         catch (BusinessException conflict) { stop(id,token,"ORDER_ADMISSION_CONFLICT"); }
         catch (RuntimeException unavailable) {
             log.warn("Approval remains unconfirmed: id={}, errorType={}",id,unavailable.getClass().getSimpleName());
+            holdAfterUnavailableLookup(id,token);
         } finally {
             locked(id,(payment,approval)->{ Instant at=now(); return approval.finish(token,at,nextCheck(approval,at)); });
         }
@@ -189,6 +190,16 @@ public class ResolvePaymentApproval {
     private boolean holdAfterConfirmWindow(String id,String token,ApprovalObservation observed) {
         Boolean held=locked(id,(payment,approval)->approval.owns(token,now()) && approval.holdAfterConfirmWindow(observed,now()));
         return Boolean.TRUE.equals(held);
+    }
+    /**
+     * D-049: a lookup that keeps failing must not hide an admitted approval past its confirm window. The last valid PG state
+     * decides the decision 124 hold; a failure to record it leaves the approval to the next round like any unavailable PG.
+     */
+    private void holdAfterUnavailableLookup(String id,String token) {
+        try { locked(id,(payment,approval)->approval.owns(token,now()) && approval.holdAfterConfirmWindowWithoutLookup(now())); }
+        catch (RuntimeException recordingFailure) {
+            log.warn("Approval confirm window hold not recorded: id={}, errorType={}",id,recordingFailure.getClass().getSimpleName());
+        }
     }
     private ApprovalObservation inspect(String id, String token, PaymentApproval current) {
         ApprovalObservation observation;

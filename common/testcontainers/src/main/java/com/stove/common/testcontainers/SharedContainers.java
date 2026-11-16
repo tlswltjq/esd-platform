@@ -37,8 +37,14 @@ public final class SharedContainers {
         return Wait.forLogMessage(KAFKA_READY_LOG, 1).withStartupTimeout(STARTUP_TIMEOUT);
     }
 
+    /**
+     * Testcontainers의 기본 my.cnf는 {@code max_allowed_packet = 1M}이라 {@code docker-compose.yml}의 MySQL 8 기본값(64MB)과
+     * 다르다. 같은 값으로 맞춰, 운영에서는 저장되는 큰 행(예: Payment 형식 거절 type 최대 60,000,000바이트)이 테스트에서만
+     * 실패하거나, 반대로 테스트가 운영 한도를 넘는 값을 모르고 통과하지 않게 한다.
+     */
     public static final MySQLContainer<?> MYSQL =
             new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
+                    .withCommand("--max-allowed-packet=67108864")
                     .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds());
 
     /**
