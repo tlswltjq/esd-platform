@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """구매 업무 완료 시간(결정 204 A)을 DB 시각으로 잰다. 업무 데이터는 읽기만 한다.
 
-- 주문 생성 → 구매 근거: ``stove_order.purchase_order.created_at`` → ``stove_license.license_purchase.received_at``
-- 결제 확정 → 구매 근거: ``purchase_order.result_occurred_at``(Payment가 결제를 확정한 시각) → ``license_purchase.received_at``
+- 주문 생성 → 구매 근거: ``stove_order.purchase_order.created_at`` → ``stove_license.product_license.received_at``
+- 결제 확정 → 구매 근거: ``purchase_order.result_occurred_at``(Payment가 결제를 확정한 시각) → ``product_license.received_at``
 
-주문 표는 ``purchase_order``다(V10). ``orders``는 옛 표라 비어 있다. 두 ``order_no``는 모두 ascii_bin이다.
+주문 표는 ``purchase_order``(Order V10), 구매 근거 표는 ``product_license``(License V5에서 ``license_purchase``를 합침)다.
+옛 표 ``orders``·``license_purchase``는 비어 있다. 두 ``order_no``는 모두 ascii_bin이다.
 
 끝점을 보유권 ``ACTIVE``가 아니라 보관함의 구매 근거로 둔다. 결정 93(결제 뒤 보유권은 보관함에 생기고
 구매자가 등록해야 라이브러리에 나타난다) 때문에 등록 시각은 사람의 행동이라 브로커 비교에 맞지 않는다.
@@ -30,18 +31,18 @@ def purchase_sql(since, until):
     return ("SELECT o.order_no,"
             " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
             " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at)"
-            " FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp"
+            " FROM stove_order.purchase_order o JOIN stove_license.product_license lp"
             " ON lp.order_no = o.order_no"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             "\nUNION ALL\n"
             "SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
-            " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
+            " AND NOT EXISTS (SELECT 1 FROM stove_license.product_license lp"
             " WHERE lp.order_no = o.order_no)")
 
 
 _ORDER_NO = re.compile(r"^[A-Za-z0-9-]{1,40}$")
-_JOIN = ("FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp"
+_JOIN = ("FROM stove_order.purchase_order o JOIN stove_license.product_license lp"
          " ON lp.order_no = o.order_no")
 
 
@@ -67,7 +68,7 @@ def purchase_sql_for_orders(numbers):
             + _JOIN + f" WHERE o.order_no IN {in_list}"
             "\nUNION ALL\n"
             f"SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}"
-            " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
+            " AND NOT EXISTS (SELECT 1 FROM stove_license.product_license lp"
             " WHERE lp.order_no = o.order_no)")
 
 
@@ -82,7 +83,7 @@ def diagnosis_sql(numbers):
     in_list = _in_list(numbers)
     return ("SELECT (SELECT COUNT(*) FROM stove_order.purchase_order),"
             f" (SELECT COUNT(*) FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}),"
-            f" (SELECT COUNT(*) FROM stove_license.license_purchase lp WHERE lp.order_no IN {in_list}),"
+            f" (SELECT COUNT(*) FROM stove_license.product_license lp WHERE lp.order_no IN {in_list}),"
             " (SELECT GROUP_CONCAT(order_no) FROM (SELECT order_no FROM stove_order.purchase_order ORDER BY id DESC LIMIT 2) s)")
 
 

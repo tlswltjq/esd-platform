@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import journey_latency
 
@@ -9,10 +10,19 @@ class PurchaseQueryTest(unittest.TestCase):
         sql = journey_latency.purchase_sql_for_orders(["ORD-1"])
         self.assertIn("stove_order.purchase_order", sql)
         self.assertNotIn("stove_order.orders ", sql)
+        self.assertNotIn("license_purchase", sql)
+
+    def test_the_tables_it_reads_are_the_ones_the_entities_write(self):
+        # 표 이름이 바뀌면 수집기가 0건을 조용히 내지 않고 여기서 멈추게 한다.
+        root = Path(__file__).resolve().parents[2]
+        order = (root / "apps/order/src/main/java/com/stove/order/core/domain/Order.java").read_text()
+        license = (root / "apps/license/src/main/java/com/stove/license/core/domain/License.java").read_text()
+        self.assertIn('@Table(name = "purchase_order")', order)
+        self.assertIn('@Table(name = "product_license")', license)
 
     def test_joins_paid_orders_with_license_purchases_by_order_number(self):
         sql = journey_latency.purchase_sql("2026-11-16 10:00:00", "2026-11-16 10:10:00")
-        self.assertIn("FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp", sql)
+        self.assertIn("FROM stove_order.purchase_order o JOIN stove_license.product_license lp", sql)
         self.assertIn("TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at)", sql)
         self.assertIn("TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at)", sql)
         self.assertIn("o.created_at >= '2026-11-16 10:00:00'", sql)
@@ -47,7 +57,7 @@ class DiagnosisTest(unittest.TestCase):
     def test_counts_orders_and_purchases_for_the_evidence_numbers(self):
         sql = journey_latency.diagnosis_sql(["ORD-1"])
         self.assertIn("FROM stove_order.purchase_order o WHERE o.order_no IN ('ORD-1')", sql)
-        self.assertIn("FROM stove_license.license_purchase lp WHERE lp.order_no IN ('ORD-1')", sql)
+        self.assertIn("FROM stove_license.product_license lp WHERE lp.order_no IN ('ORD-1')", sql)
 
 
 class SummaryTest(unittest.TestCase):
