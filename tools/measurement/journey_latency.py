@@ -15,6 +15,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 
 import broker_latency
@@ -35,6 +36,43 @@ def purchase_sql(since, until):
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
             " WHERE lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin)")
+
+
+_ORDER_NO = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+_JOIN = ("FROM stove_order.orders o JOIN stove_license.license_purchase lp"
+         " ON lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin")
+
+
+def order_numbers(evidence):
+    """부하 드라이버 결과(``MessagingLoadTest``)에서 접수된(200) 주문번호만 꺼낸다."""
+    return [order["orderNo"] for order in evidence.get("orders", [])
+            if order.get("status") == 200 and order.get("orderNo")]
+
+
+def _in_list(numbers):
+    for number in numbers:
+        if not _ORDER_NO.match(number):
+            raise ValueError("주문번호 형식이 아니다: " + number)
+    return "(" + ",".join("'" + number + "'" for number in numbers) + ")"
+
+
+def purchase_sql_for_orders(numbers):
+    """시각 창 대신 주문번호로 거른다. DB 시간대를 추측하지 않아도 된다."""
+    in_list = _in_list(numbers)
+    return ("SELECT o.order_no,"
+            " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
+            " TIMESTAMPDIFF(MICROSECOND, o.paid_at, lp.received_at) "
+            + _JOIN + f" WHERE o.order_no IN {in_list}"
+            "\nUNION ALL\n"
+            f"SELECT o.order_no, NULL, NULL FROM stove_order.orders o WHERE o.order_no IN {in_list}"
+            " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
+            " WHERE lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin)")
+
+
+def window_sql(numbers):
+    """이 주문들의 DB 시각 범위(첫 주문 생성 ~ 마지막 구매 근거). 브로커 구간 지연의 측정 창으로 쓴다."""
+    return (f"SELECT MIN(o.created_at), MAX(lp.received_at) " + _JOIN
+            + f" WHERE o.order_no IN {_in_list(numbers)}")
 
 
 def summarize(rows):
@@ -61,15 +99,26 @@ def _span(values):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--container", required=True)
-    parser.add_argument("--since", required=True, help="측정 창 시작(UTC, 주문 생성 기준)")
-    parser.add_argument("--until", required=True, help="측정 창 끝(UTC, 포함하지 않음)")
+    parser.add_argument("--evidence", help="부하 드라이버 결과 JSON. 주면 그 주문번호로 거르고 측정 창을 DB에서 뽑는다")
+    parser.add_argument("--since", help="측정 창 시작(DB 시각, 주문 생성 기준). --evidence가 없을 때")
+    parser.add_argument("--until", help="측정 창 끝(포함하지 않음). --evidence가 없을 때")
     parser.add_argument("--out")
     args = parser.parse_args()
     password = os.environ.get("MYSQL_ROOT_PASSWORD", "root1234")
-    output = broker_latency._mysql(args.container, password, purchase_sql(args.since, args.until))
+    window = {"since": args.since, "until": args.until}
+    if args.evidence:
+        with open(args.evidence, encoding="utf-8") as handle:
+            numbers = order_numbers(json.load(handle))
+        sql = purchase_sql_for_orders(numbers)
+        bounds = broker_latency._mysql(args.container, password, window_sql(numbers)).split("\t")
+        window = {"since": bounds[0].strip(), "until": bounds[1].strip(), "orders": len(numbers)}
+    elif args.since and args.until:
+        sql = purchase_sql(args.since, args.until)
+    else:
+        parser.error("--evidence 또는 --since/--until이 필요하다")
+    output = broker_latency._mysql(args.container, password, sql)
     rows = [tuple(line.split("\t")) for line in output.splitlines() if line.strip()]
-    text = json.dumps({"window": {"since": args.since, "until": args.until}, "purchase": summarize(rows)},
-                      ensure_ascii=False, indent=2)
+    text = json.dumps({"window": window, "purchase": summarize(rows)}, ensure_ascii=False, indent=2)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(text + "\n")
