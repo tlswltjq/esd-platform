@@ -80,7 +80,8 @@ public class ResolveRefundLookup {
         });
         if (claim == null) return;
         try {
-            // Each lookup is a new child of the parent saved at reception (decision 28, D-050); none means a new root.
+            // Each lookup is a new child of the parent saved at reception (decision 28, D-050); none means a new root. The
+            // post-failure watch (decision 128) runs through the same path, so it keeps the same parent.
             executor.execute(() -> tracing.run(parent(attemptId), received.getPaymentId(), () -> {
                 try { reconcile.executeScheduled(attemptId); }
                 catch (RuntimeException failure) { logFailure(attemptId, failure); }

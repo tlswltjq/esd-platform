@@ -1,6 +1,6 @@
 # 런북 — 장기 미확정·귀속 미확정 환불을 닫을 때, 자동 송신이 멈춘 환불을 실패로 닫을 때
 
-[결정 127](../decisions.md#refund-delay-closure)(완료 종결)과 [결정 128](../decisions.md#refund-failure-closure)(실패 종결)의 운영 절차다. 계약은 [Payment R14·R15](../../.kiro/specs/payment/requirements.md)와 [설계](../../.kiro/specs/payment/design.md)를 정본으로 한다.
+[결정 127](../decisions.md#refund-delay-closure)(완료 종결)과 [결정 128](../decisions.md#refund-failure-closure)(실패 종결)의 운영 절차다. 계약은 [Payment R14·R18·R19](../../.kiro/specs/payment/requirements.md)와 [설계](../../.kiro/specs/payment/design.md)를 정본으로 한다.
 
 시스템은 PG 취소를 실행하지 않는다. 돈은 운영자가 PortOne 콘솔에서 움직이고, 시스템은 PG를 다시 조회해 **같은 원결제의 전액 취소**가 확인될 때만 완료로 닫고, **원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음**이 확인될 때만 실패로 닫는다.
 
@@ -56,7 +56,7 @@
 
 ## 하지 않는 것
 
-- SQL로 `refund_execution`·`refund_closure`·`refund_failure_closure`를 고치지 않는다. 종결 기록은 append-only이고 실행 삭제를 막는다(V39·V40).
+- SQL로 `refund_execution`·`refund_closure`·`refund_failure_closure`를 고치지 않는다. 종결 기록은 append-only이고 실행 삭제를 막는다(V39·V41).
 - 시간만으로 실패·보유권 복구·새 취소 요청을 만들지 않는다([결정 29](../decisions.md#full-refund-policy) 하위). 실패 종결도 운영자 요청과 PG 재조회 근거로만 한다.
 - 실패 종결 뒤 ADMIN이 고객 대신 새 시도를 만들지 않는다(결정 134).
 - Order 시도의 조사 표시(`reconciliationRequired`)는 이 종결로 지워지지 않는다. Payment 상세의 `reconciliationRequired`는 종결 뒤 `false`다. Order 쪽 해제는 남은 결정이다(Payment `tasks.md`).

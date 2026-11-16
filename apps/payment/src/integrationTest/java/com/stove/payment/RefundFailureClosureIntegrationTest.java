@@ -44,7 +44,9 @@ import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundFailedCancellation;
 import com.stove.payment.core.domain.RefundFailureClosureRepository;
 import com.stove.payment.core.domain.RefundLookupInterval;
+import com.stove.payment.core.port.PaymentTracing;
 import com.stove.payment.core.port.RefundCancellationGateway;
+import com.stove.payment.core.port.RefundExecutionTraceContexts;
 import com.stove.payment.core.port.RefundPaymentLookup;
 import com.stove.payment.core.service.ReadRefundDelays;
 import com.stove.payment.core.service.ReceivePortOneWebhook;
@@ -128,6 +130,8 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     @Autowired ReceivePortOneWebhook webhook;
     @Autowired PlatformTransactionManager transactions;
     @Autowired MeterRegistry meters;
+    @Autowired RefundExecutionTraceContexts traceContexts;
+    @Autowired PaymentTracing tracing;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @MockitoBean RefundPaymentLookup lookup;
@@ -516,11 +520,11 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     }
 
     /**
-     * Decision 104: V40 keeps every V39 row. A row failed before it keeps its stopped lookup and NULL late columns and has no
+     * Decision 104: V41 keeps every V39 row. A row failed before it keeps its stopped lookup and NULL late columns and has no
      * failure closure; the relaxed failure check accepts a failure without a PG receipt; the audit keeps its constraints.
      */
     @Tag("migration")
-    @Test void v40PreservesExistingExecutionsAndEnforcesTheFailureClosureConstraints() {
+    @Test void v41PreservesExistingExecutionsAndEnforcesTheFailureClosureConstraints() {
         RefundExecution failedBefore = prepared(); RefundExecution open = prepared();
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
             Payment payment = payments.lockByPaymentId(failedBefore.getPaymentId()).orElseThrow();
@@ -553,12 +557,12 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_failure");
             Map<String, List<Map<String, Object>>> before = new LinkedHashMap<>();
             for (String table : tables) before.put(table, legacy.queryForList("SELECT * FROM " + table));
-            Flyway flyway = Flyway.configure().dataSource(source).locations(location).target("40").load(); flyway.migrate(); flyway.validate();
+            Flyway flyway = Flyway.configure().dataSource(source).locations(location).target("41").load(); flyway.migrate(); flyway.validate();
             for (String table : tables) {
                 List<Map<String, Object>> after = legacy.queryForList("SELECT * FROM " + table);
                 if (table.equals("refund_execution")) after.forEach(row -> {
                     assertThat(row.remove("late_cancel_observed_at")).isNull(); assertThat(row.remove("late_cancelled_at")).isNull();
-                    // PR #166 R1 (B): no old row carries a closure mark, so V40 blocks no resume and no POST.
+                    // PR #166 R1 (B): no old row carries a closure mark, so V41 blocks no resume and no POST.
                     assertThat(row.remove("cancel_closure_id")).isNull(); assertThat(row.remove("cancel_closure_until")).isNull();
                 });
                 assertThat(after).as(table).isEqualTo(before.get(table));
@@ -570,7 +574,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
             legacy.update("UPDATE refund_execution SET status='FAILED', failure_event_id=?, failure_confirmed_at=?, failure_lookup_hash=? WHERE attempt_id=?",
                     id(), DELAY, HASH, open.getAttemptId());
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET failure_lookup_hash=NULL WHERE attempt_id=?", open.getAttemptId()))
-                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_failure_v40");
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_failure_v41");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET late_cancel_observed_at=? WHERE attempt_id=?", DELAY.plusSeconds(60), open.getAttemptId()))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("chk_refund_execution_late_cancel");
             assertThatThrownBy(() -> legacy.update("UPDATE refund_execution SET cancel_closure_id=? WHERE attempt_id=?", id(), open.getAttemptId()))
@@ -618,7 +622,7 @@ class RefundFailureClosureIntegrationTest extends PaymentDatabaseIntegrationTest
     private ResolveRefundLookup worker() { return worker(Duration.ofSeconds(60), Duration.ofMinutes(10)); }
     private ResolveRefundLookup worker(Duration initial, Duration max) {
         return new ResolveRefundLookup(payments, executions, reconcile, transactions, clock, Runnable::run, Duration.ofSeconds(97), 20,
-                new RefundLookupInterval(initial, max));
+                traceContexts, tracing, new RefundLookupInterval(initial, max));
     }
     private Payment paid() {
         Payment payment = Payment.receive(request(), "PORTONE_TEST");

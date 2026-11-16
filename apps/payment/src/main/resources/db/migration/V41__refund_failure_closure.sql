@@ -17,7 +17,7 @@ ALTER TABLE refund_execution
     ADD COLUMN cancel_closure_until DATETIME(6) NULL,
     ADD CONSTRAINT chk_refund_cancel_closure_mark CHECK (
         (cancel_closure_id IS NULL AND cancel_closure_until IS NULL) OR (cancel_closure_id IS NOT NULL AND cancel_closure_until IS NOT NULL)),
-    ADD CONSTRAINT chk_refund_execution_failure_v40 CHECK (
+    ADD CONSTRAINT chk_refund_execution_failure_v41 CHECK (
         (status<>'FAILED' AND failure_event_id IS NULL AND failure_confirmed_at IS NULL AND failure_lookup_hash IS NULL)
         OR (status='FAILED' AND failure_event_id IS NOT NULL AND failure_confirmed_at IS NOT NULL AND failure_confirmed_at >= received_at
             AND failure_lookup_hash IS NOT NULL AND refund_confirmed_at IS NULL)),

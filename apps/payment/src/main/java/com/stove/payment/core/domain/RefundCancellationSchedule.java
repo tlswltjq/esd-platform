@@ -16,7 +16,7 @@ public class RefundCancellationSchedule {
     @Column(name = "cancel_retry_lease_until") private Instant leaseUntil;
     @Column(name = "cancel_retry_finished_at") private Instant lastFinishedAt;
     /**
-     * The operator failure closure's mark (V40, PR #166 R1). While it is live the closure is re-inspecting the PG, and no
+     * The operator failure closure's mark (V41, PR #166 R1). While it is live the closure is re-inspecting the PG, and no
      * dispatch claim — first send or retry — and no operator resume may start: a POST after the GET could move money the
      * observation does not show. It lasts as long as the closure's lookup lease and simply expires if the closure dies.
      */
