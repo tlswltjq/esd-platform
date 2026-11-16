@@ -143,7 +143,7 @@ class MessagingLoadTest {
         waitForResult(project.id(), review, creator, "APPROVED");
         E2eClient.Response release = Stove.gateway.post(path(project.id()) + "/release-requests",
                 ReviewJourney.submission(path(project.id()), creator.headers()), creator.headers());
-        assertThat(release.status()).as(release.toString()).isEqualTo(200);
+        assertThat(release.status()).as(release.toString()).isEqualTo(202);
         Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(
                 data(project.id(), creator).path("currentReleaseRequest").path("status").asText()).isEqualTo("COMPLETED"));
         String code = data(project.id(), creator).path("productCode").asText();
