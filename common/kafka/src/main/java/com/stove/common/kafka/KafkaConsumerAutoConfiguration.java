@@ -2,18 +2,14 @@ package com.stove.common.kafka;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
-import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 
 /**
@@ -34,19 +30,6 @@ public class KafkaConsumerAutoConfiguration {
     public DefaultErrorHandler stoveKafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
                                                       DeadLetterMetrics metrics) {
         return DeadLetterErrorHandlers.create(DeadLetterPublisher.to(kafkaTemplate, metrics));
-    }
-
-    /**
-     * 업무 리스너({@code @EventSubscriber})를 Kafka 구독으로 등록한다. 리스너는 Kafka 를 모른다(결정 202).
-     */
-    @Bean
-    public KafkaEventSubscriptions stoveKafkaEventSubscriptions(
-            ListableBeanFactory beans, ObjectProvider<ConcurrentKafkaListenerContainerFactoryConfigurer> configurer,
-            ObjectProvider<ConsumerFactory<Object, Object>> consumers, KafkaTemplate<String, String> kafkaTemplate,
-            DeadLetterMetrics metrics) {
-        ConsumerRecordRecoverer deadLetters = DeadLetterPublisher.to(kafkaTemplate, metrics);
-        // 조건부 빈으로 두지 않는다. 조건이 빗나가면 리스너가 조용히 아무것도 받지 않는다 — 없으면 등록 시점에 실패시킨다.
-        return new KafkaEventSubscriptions(beans, configurer::getIfAvailable, consumers::getIfAvailable, deadLetters);
     }
 
     /** DLT 유입 계측. <b>지표 수집 여부가 실패 처리 가능 여부를 좌우해서는 안 된다.</b> */

@@ -9,14 +9,22 @@ import com.stove.common.event.InboundMessage;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.AbstractMessageListenerContainer;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.MessageListenerContainer;
@@ -28,7 +36,8 @@ import org.springframework.kafka.listener.MessageListenerContainer;
 class KafkaEventSubscriptionsTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class, KafkaConsumerAutoConfiguration.class))
+            .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration.class, KafkaConsumerAutoConfiguration.class,
+                    KafkaSubscriptionAutoConfiguration.class))
             .withPropertyValues("spring.kafka.bootstrap-servers=127.0.0.1:1", "spring.kafka.listener.auto-startup=false");
 
     @Test
@@ -83,6 +92,42 @@ class KafkaEventSubscriptionsTest {
     }
 
     @Test
+    void dedicatedFactoriesGetTheApplicationContextLikeABean() {
+        // 컨테이너는 시작할 때 컨텍스트에서 ObservationRegistry 를 찾는다. 빠지면 이 리스너만 소비 관측이 꺼진다(PR #205 R1).
+        runner.withBean("rejectingHandler", RejectingHandler.class).run(context -> {
+            AbstractMessageListenerContainer<?, ?> container = (AbstractMessageListenerContainer<?, ?>) context
+                    .getBean(KafkaListenerEndpointRegistry.class).getListenerContainer("rejectingHandler");
+            assertThat(container.getApplicationEventPublisher()).isSameAs(context.getSourceApplicationContext());
+        });
+    }
+
+    @Test
+    void consumerOnlySetupsWithoutAKafkaTemplateStillSubscribe() {
+        // KafkaTemplate 조건에 묶이면 소비 전용 구성에서 구독이 조용히 빠진다(PR #205 R2).
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(KafkaConsumerAutoConfiguration.class,
+                        KafkaSubscriptionAutoConfiguration.class))
+                .withUserConfiguration(ConsumerOnlyKafka.class)
+                .withBean("plainHandler", PlainHandler.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(KafkaListenerEndpointRegistry.class).getListenerContainer("plainHandler"))
+                            .isNotNull();
+                });
+    }
+
+    @Test
+    void subscribersWithoutKafkaListenerInfrastructureStopTheStartup() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(KafkaSubscriptionAutoConfiguration.class))
+                .withBean("plainHandler", PlainHandler.class)
+                .run(context -> assertThat(context).hasFailed());
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(KafkaSubscriptionAutoConfiguration.class))
+                .run(context -> assertThat(context).as("구독자가 없으면 계약만 쓰는 구성도 뜬다").hasNotFailed());
+    }
+
+    @Test
     void oneAtATimeLimitsEachPollToOneRecord() {
         runner.withBean("slowHandler", SlowHandler.class).run(context -> {
             MessageListenerContainer container = context.getBean(KafkaListenerEndpointRegistry.class)
@@ -96,6 +141,26 @@ class KafkaEventSubscriptionsTest {
     void refusesASubscriberThatIsNotAHandler() {
         runner.withBean("notAHandler", NotAHandler.class).run(context ->
                 assertThat(context).hasFailed());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableKafka
+    static class ConsumerOnlyKafka {
+        @Bean
+        ConsumerFactory<Object, Object> consumerFactory() {
+            return new DefaultKafkaConsumerFactory<>(Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:1",
+                    ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                    ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class));
+        }
+
+        @Bean
+        ConcurrentKafkaListenerContainerFactory<Object, Object> kafkaListenerContainerFactory(
+                ConsumerFactory<Object, Object> consumerFactory) {
+            ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+            factory.setConsumerFactory(consumerFactory);
+            factory.setAutoStartup(false);
+            return factory;
+        }
     }
 
     private static CommonErrorHandler errorHandler(MessageListenerContainer container) {

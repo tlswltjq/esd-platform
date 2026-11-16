@@ -8,8 +8,9 @@ import java.util.Properties;
 import java.util.function.Supplier;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.kafka.annotation.KafkaListenerConfigurer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistrar;
@@ -27,22 +28,28 @@ import org.springframework.messaging.handler.annotation.support.DefaultMessageHa
  *
  * <p>컨테이너 팩토리: 선언에 특별한 것이 없으면 Boot 기본 팩토리(공용 오류 처리기 {@code stoveKafkaErrorHandler})를 쓴다.
  * {@link EventSubscriber#noRetryFor()} 나 {@link EventSubscriber#oneAtATime()} 이 있으면 그 핸들러 전용 팩토리를 만든다
- * — 예전에 앱마다 두던 {@code RefundKafkaConfiguration} 이 하던 일이다.
+ * — 예전에 앱마다 두던 {@code RefundKafkaConfiguration} 이 하던 일이다. 전용 팩토리도 빈처럼 애플리케이션 컨텍스트를
+ * 받는다. 컨테이너가 시작할 때 컨텍스트에서 {@code ObservationRegistry} 를 찾기 때문이다(없으면 소비 관측이 빠진다).
+ *
+ * <p>구독자가 있는데 Spring Kafka 가 이 등록기를 한 번도 부르지 않았으면(예: {@code @EnableKafka} 없음) 기동을 멈춘다.
+ * 조용히 아무것도 받지 않는 리스너가 가장 나쁘다.
  */
-public class KafkaEventSubscriptions implements KafkaListenerConfigurer {
+public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLifecycle {
 
     private static final Method ON_MESSAGE = onMessage();
 
-    private final ListableBeanFactory beans;
+    private final ApplicationContext beans;
     private final Supplier<ConcurrentKafkaListenerContainerFactoryConfigurer> configurer;
     private final Supplier<ConsumerFactory<Object, Object>> consumers;
-    private final ConsumerRecordRecoverer deadLetters;
+    private final Supplier<ConsumerRecordRecoverer> deadLetters;
+    private volatile boolean configured;
+    private volatile boolean running;
 
-    /** {@code configurer}·{@code consumers} 는 전용 팩토리가 필요할 때만 꺼낸다. 그때 없으면 기동을 멈춘다. */
-    public KafkaEventSubscriptions(ListableBeanFactory beans,
+    /** {@code configurer}·{@code consumers}·{@code deadLetters} 는 전용 팩토리가 필요할 때만 꺼낸다. 그때 없으면 기동을 멈춘다. */
+    public KafkaEventSubscriptions(ApplicationContext beans,
                                    Supplier<ConcurrentKafkaListenerContainerFactoryConfigurer> configurer,
                                    Supplier<ConsumerFactory<Object, Object>> consumers,
-                                   ConsumerRecordRecoverer deadLetters) {
+                                   Supplier<ConsumerRecordRecoverer> deadLetters) {
         this.beans = beans;
         this.configurer = configurer;
         this.consumers = consumers;
@@ -51,6 +58,7 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer {
 
     @Override
     public void configureKafkaListeners(KafkaListenerEndpointRegistrar registrar) {
+        configured = true;
         DefaultMessageHandlerMethodFactory methods = new DefaultMessageHandlerMethodFactory();
         methods.afterPropertiesSet();
         for (Map.Entry<String, Object> entry : beans.getBeansWithAnnotation(EventSubscriber.class).entrySet()) {
@@ -84,7 +92,14 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer {
             throw new IllegalStateException("전용 리스너 팩토리를 만들 Boot Kafka 설정(KafkaAutoConfiguration)이 없다");
         }
         boot.configure(factory, consumerFactory);
-        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(deadLetters, subscription.noRetryFor()));
+        // 빈이 아니라서 Spring 이 대신 넣어 주지 않는다. 빠지면 이 리스너들만 관측(추적 span)이 꺼진다.
+        factory.setApplicationContext(beans);
+        factory.setApplicationEventPublisher(beans);
+        ConsumerRecordRecoverer recoverer = deadLetters.get();
+        if (recoverer == null) {
+            throw new IllegalStateException("격리(DLT)에 쓸 KafkaTemplate 이 없다");
+        }
+        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(recoverer, subscription.noRetryFor()));
         if (subscription.oneAtATime()) {
             Properties properties = new Properties();
             properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1");
@@ -93,6 +108,26 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer {
                     container.getContainerProperties().setKafkaConsumerProperties(properties));
         }
         return factory;
+    }
+
+    /** 기동 마지막(모든 빈과 리스너 등록 뒤)에 확인한다. */
+    @Override
+    public void start() {
+        if (!configured && !beans.getBeansWithAnnotation(EventSubscriber.class).isEmpty()) {
+            throw new IllegalStateException(
+                    "@EventSubscriber 가 있는데 Kafka 리스너 등록이 일어나지 않았다(@EnableKafka·Boot Kafka 설정 확인)");
+        }
+        running = true;
+    }
+
+    @Override
+    public void stop() {
+        running = false;
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
     }
 
     private static Method onMessage() {
