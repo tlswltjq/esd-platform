@@ -160,7 +160,7 @@
 ## 진행 중 / 남음
 
 - [x] Order `[결정 필요]` 4건 확정: M-OR-1 결정 179(MC-O3), M-OR-2 결정 185(OR-T2), M-OR-3 결정 186(T1, 호환 기간 없음), M-OR-4 결정 187(옛 행 없음, T1 CHECK만).
-- [ ] [결정 필요 M-OR-5] 같은 상품을 이미 라이브러리에 보유하거나 보관함(`STORED`)에 가진 고객이 다시 구매할 때 "이미 보유 중인데 구매하시겠습니까" 안내를 둘지와 그 방식 — [결정 196](../../../docs/decisions.md#download-denial-reasons)에서 분리(사용자 제안). 정할 것: 보유 여부 확인 주체(Order가 License에 질의 / 클라이언트가 License API로 먼저 확인), 확인 없이 온 주문을 받을지·한 번 확인을 요구할지. 결정 89(구매를 막는 업무 사유는 판매 금지뿐, 중복 보유는 License 등록이 막음)와 충돌하지 않아야 한다. 지금 `CreateOrder`는 보유 여부를 보지 않는다.
+- [x] ~~[결정 필요 M-OR-5] 같은 상품을 이미 보유·보관한 고객의 재구매 안내를 둘지와 그 방식~~ → [결정 198](../../../docs/decisions.md#repurchase-notice-client)(A): 클라이언트가 주문 전에 License 라이브러리 상세로 확인해 안내한다. Order는 바뀌지 않는다(R2.10). 남은 일은 License LI-T10 구현 뒤 `docs/api-demo.md` 구매 절차에 사전 확인 단계를 넣는 것(LI-T10에 포함).
 - [ ] 위 "코드와 맞출 것"을 PR 단위로 나눈다. 순서 제안: (1) T1 + OR-T3(Payment v2 발행과 Order 엄격 판을 같은 배포에, 결정 186. Flyway 기준선 압축 T34 뒤) (2) MC-O4 + OR-T7 (3) T3 + OR-T4 + OR-T5 (4) MC-O1·OR-T10 CHECK 이행 (5) T4(Order 몫) → MC-O3 (6) MC-O2·OR-T2·OR-T17(이행 판 ①) (7) OR-T6·OR-T11 게이지 (8) T12·T14·T7·OR-T8·OR-T9·OR-T12.
 - [ ] [외부 대기] 재심사·잘못된 승인 중단·늦은 취소 반영의 실제 사용자 흐름: 실제 ADMIN 계정·운영 화면·실제 PG를 잇는 전체 여정 — G2 후속
 - [ ] [외부 대기] 실제 PortOne·PG 오류·응답 유실·취소 거절 뒤 환불 전체 검증 — G7([결정 140](../../../docs/decisions.md#defer-real-pg), 결정 110·111). 실제 PortOne이 취소 거절을 `FAILED` cancellation(200)으로 답하는지도 이때 확인
