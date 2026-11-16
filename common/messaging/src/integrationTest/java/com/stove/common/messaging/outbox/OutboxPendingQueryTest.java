@@ -3,6 +3,7 @@ package com.stove.common.messaging.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.testcontainers.InfraContainers;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -96,6 +97,21 @@ class OutboxPendingQueryTest {
         assertThat(isPicked(event))
                 .as("시간 조건이 빠지면 재시도 예산이 폴링 주기만큼의 시간에 소진된다")
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("[PR #204 R2] 저장했다 다시 읽은 published_at 이 헤더에 싣는 값과 같다(DATETIME(6))")
+    void storedPublishTimeEqualsTheHeaderValue() {
+        OutboxEvent event = pendingEvent();
+        event.markPublishing(Instant.parse("2026-11-16T10:00:00.123456789Z"));
+        String header = event.getPublishedAt().toString();
+        repository.save(event);
+
+        Instant reloaded = repository.findById(event.getId()).orElseThrow().getPublishedAt();
+
+        assertThat(reloaded.toString())
+                .as("나노초를 자르지 않으면 DB 왕복 뒤 값이 달라져 헤더와 행의 대응이 깨진다")
+                .isEqualTo(header);
     }
 
     @Test

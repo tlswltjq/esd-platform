@@ -291,7 +291,9 @@ class PaymentAttemptFailureIntegrationTest {
             Flyway flyway = Flyway.configure().dataSource(source).locations(location).load(); flyway.migrate(); flyway.validate();
             List<Map<String, Object>> after = legacy.queryForList("SELECT * FROM purchase_payment ORDER BY id");
             for (int i = 0; i < before.size(); i++) assertThat(after.get(i)).containsAllEntriesOf(before.get(i));
-            assertThat(legacy.queryForList("SELECT * FROM outbox_event ORDER BY id")).isEqualTo(oldOutbox); assertThat(legacy.queryForObject("SELECT COUNT(*) FROM failed_payment_attempt", Integer.class)).isZero();
+            List<Map<String, Object>> newOutbox = legacy.queryForList("SELECT * FROM outbox_event ORDER BY id"); assertThat(newOutbox).hasSameSizeAs(oldOutbox);
+            // 뒤 이관이 outbox_event에 열을 더할 수 있다(V42 published_at). 기존 열 값만 그대로인지 본다.
+            for (int i = 0; i < oldOutbox.size(); i++) assertThat(newOutbox.get(i)).containsAllEntriesOf(oldOutbox.get(i)); assertThat(legacy.queryForObject("SELECT COUNT(*) FROM failed_payment_attempt", Integer.class)).isZero();
             for (Payment value : List.of(pending, paid)) assertThat(legacy.queryForObject("SELECT next_failure_lookup_at FROM purchase_payment WHERE payment_id=?", Timestamp.class, value.getPaymentId())).isNotNull();
             assertThat(legacy.queryForObject("SELECT next_failure_lookup_at FROM purchase_payment WHERE payment_id=?", Timestamp.class, simulated.getPaymentId())).isNull();
             assertThat(legacy.queryForObject("SELECT COUNT(*) FROM purchase_payment WHERE failure_history_checked_at IS NOT NULL", Integer.class)).isZero();

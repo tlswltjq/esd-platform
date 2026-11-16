@@ -24,6 +24,7 @@ import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.LicenseGrant;
 import com.stove.order.core.domain.OrderLicenseGrantRepository;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.order.core.service.ApplyLicenseGrant;
 import com.stove.order.core.domain.OrderRepository;
@@ -88,7 +89,7 @@ class RefundReceptionIntegrationTest {
     static class OutboxConfiguration {
         @Bean
         ProcessedEventGuard inboxGuard(ProcessedEventRepository repository) {
-            return new ProcessedEventGuard(repository);
+            return new ProcessedEventGuard(repository, new SimpleMeterRegistry());
         }
 
         @Bean

@@ -105,6 +105,8 @@ public class OutboxRelay {
             for (List<OutboxEvent> chain : chains) {
                 if (wave < chain.size()) {
                     OutboxEvent event = chain.get(wave);
+                    // 브로커 구간 지연의 시작점. ack 뒤 시각(sentAt)과 달리 소비보다 늦을 수 없다([결정 204] B).
+                    event.markPublishing(Instant.now());
                     attempts.add(new Attempt(chain, event, kafkaTemplate.send(toRecord(event))));
                 }
             }
@@ -174,6 +176,10 @@ public class OutboxRelay {
         record.headers().add(EventHeaders.EVENT_TYPE, event.getEventType().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.OCCURRED_AT,
                 event.getCreatedAt().toString().getBytes(StandardCharsets.UTF_8));
+        if (event.getPublishedAt() != null) {
+            record.headers().add(EventHeaders.PUBLISHED_AT,
+                    event.getPublishedAt().toString().getBytes(StandardCharsets.UTF_8));
+        }
         String traceParent = event.getTraceParent();
         if (traceParent != null && !traceParent.isBlank()) {
             record.headers().add(EventHeaders.TRACE_PARENT, traceParent.getBytes(StandardCharsets.UTF_8));

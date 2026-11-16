@@ -192,6 +192,25 @@ class OutboxRelayTest {
         assertThat(header(sent, EventHeaders.OCCURRED_AT)).isEqualTo(event.getCreatedAt().toString());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("[결정 204 측정] 보내기 직전 시각을 행의 published_at 과 x-published-at 헤더에 같은 값으로 남긴다")
+    void recordsThePublishTimeBeforeSending() {
+        OutboxEvent event = record("EVT-1");
+        brokerHealthy();
+        Instant before = Instant.now();
+
+        relay.relay();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate).send(captor.capture());
+        assertThat(event.getPublishedAt()).isNotNull().isAfterOrEqualTo(before);
+        assertThat(event.getPublishedAt())
+                .as("ack 뒤 시각(sent_at)이 아니라 보내기 직전 시각이어야 소비가 먼저 끝나도 구간이 음수가 되지 않는다")
+                .isBeforeOrEqualTo(event.getSentAt());
+        assertThat(header(captor.getValue(), EventHeaders.PUBLISHED_AT)).isEqualTo(event.getPublishedAt().toString());
+    }
+
     /**
      * 이 릴레이가 도는 스레드는 스케줄러다. 자동 계측에 맡기면 여기서 만들어진 컨텍스트가 실려
      * 컨슈머가 "폴링 회차"를 부모로 삼는다. 이어야 할 것은 이벤트를 낳은 요청이므로,

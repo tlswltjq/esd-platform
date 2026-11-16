@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.stove.common.kafka.contract.EventType;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -24,7 +25,7 @@ class ProcessedEventGuardTest {
     private static final String GROUP = "license";
 
     private final ProcessedEventRepository repository = mock(ProcessedEventRepository.class);
-    private final ProcessedEventGuard guard = new ProcessedEventGuard(repository);
+    private final ProcessedEventGuard guard = new ProcessedEventGuard(repository, new SimpleMeterRegistry());
 
     @Test
     @DisplayName("최초 수신이면 처리를 허용하고 수신 기록을 남긴다")
@@ -40,6 +41,26 @@ class ProcessedEventGuardTest {
         assertThat(captor.getValue().getEventId()).isEqualTo("EVT-1");
         assertThat(captor.getValue().getConsumerGroup()).isEqualTo(GROUP);
         assertThat(captor.getValue().getEventType()).isEqualTo(EventType.PAYMENT_COMPLETED);
+    }
+
+    @Test
+    @DisplayName("[결정 204 측정] 중복 수신을 소비 그룹·이벤트 종류별로 센다")
+    void duplicateDeliveriesAreCountedPerConsumerGroup() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ProcessedEventGuard counted = new ProcessedEventGuard(repository, registry);
+        when(repository.existsByEventIdAndConsumerGroup("EVT-1", GROUP)).thenReturn(true);
+        when(repository.existsByEventIdAndConsumerGroup("EVT-2", GROUP)).thenReturn(false);
+
+        counted.firstDelivery("EVT-1", GROUP, EventType.PAYMENT_COMPLETED);
+        counted.firstDelivery("EVT-1", GROUP, EventType.PAYMENT_COMPLETED);
+        counted.firstDelivery("EVT-2", GROUP, EventType.PAYMENT_COMPLETED);
+
+        assertThat(registry.get(ProcessedEventGuard.DUPLICATES_METRIC)
+                .tag("consumer_group", GROUP)
+                .tag("event_type", EventType.PAYMENT_COMPLETED)
+                .counter().count())
+                .as("최초 수신은 세지 않고 이미 처리한 이벤트만 센다")
+                .isEqualTo(2.0);
     }
 
     @Test
