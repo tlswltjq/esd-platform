@@ -5,7 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +55,11 @@ public class OutboxRelay {
     private int relayOneBatch() {
         Integer processed = transactionTemplate.execute(status -> {
             long startedAt = System.nanoTime();
-            List<OutboxEvent> batch = repository.lockPendingBatch(batchSize);
+            List<OutboxEvent> locked = repository.lockPendingBatch(batchSize);
+            if (locked.isEmpty()) {
+                return 0;
+            }
+            List<OutboxEvent> batch = releasableInKeyOrder(locked);
             if (batch.isEmpty()) {
                 return 0;
             }
@@ -64,6 +70,21 @@ public class OutboxRelay {
             return batch.size();
         });
         return processed == null ? 0 : processed;
+    }
+
+    /**
+     * 같은 키의 앞 미발행 행이 이 배치에 없으면(다른 트랜잭션이 잠가 {@code SKIP LOCKED}로 빠짐) 그 키의 뒤 행은
+     * 이번에 보내지 않는다. 걸러진 행은 {@code PENDING} 그대로 다음 폴링에서 다시 판정된다(PR #203 R1).
+     */
+    private List<OutboxEvent> releasableInKeyOrder(List<OutboxEvent> locked) {
+        Set<String> keys = new LinkedHashSet<>();
+        long maxId = 0;
+        for (OutboxEvent event : locked) {
+            keys.add(event.getPartitionKey());
+            maxId = Math.max(maxId, event.getId());
+        }
+        List<OutboxKeyPosition> unsent = repository.findUnsentPositions(keys, maxId, OutboxEvent.OutboxStatus.SENT);
+        return KeyOrderGuard.releasable(locked, unsent);
     }
 
     /**

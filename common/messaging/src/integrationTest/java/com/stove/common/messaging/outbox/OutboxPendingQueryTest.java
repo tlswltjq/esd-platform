@@ -3,14 +3,18 @@ package com.stove.common.messaging.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.testcontainers.InfraContainers;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * {@code lockPendingBatch} 의 의미를 <b>이 모듈에서</b> 실제 MySQL 로 검증한다.
@@ -39,6 +43,9 @@ class OutboxPendingQueryTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    TransactionTemplate transactions;
 
     /** 조회가 DB의 {@code NOW(6)}로 판정하므로 재시도 시각도 같은 시계로 둔다. {@code interval}은 테스트 상수만 쓴다. */
     private void setNextAttemptFromDbNow(OutboxEvent event, String interval) {
@@ -214,6 +221,55 @@ class OutboxPendingQueryTest {
         OutboxEvent second = pendingEvent(key);
 
         assertThat(isPicked(second)).isTrue();
+    }
+
+    @Test
+    @DisplayName("[PR #203 R1] 다른 트랜잭션이 같은 키의 앞 행을 잠그면, 하위 조회는 뒤 행을 통과시키지만 릴레이 거름이 뒤 행을 뺀다")
+    void aLockedEarlierEventKeepsTheLaterEventOutOfTheReleasedBatch() throws InterruptedException {
+        String key = "ORD-" + UUID.randomUUID();
+        OutboxEvent first = pendingEvent(key);
+        OutboxEvent second = pendingEvent(key);
+
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        // 운영 재발행(OutboxRepublishService)처럼 상태 확인 전에 앞 행을 잠그고 쥐고 있는 트랜잭션.
+        Thread operator = new Thread(() -> transactions.executeWithoutResult(status -> {
+            repository.lockByEventId(first.getEventId()).orElseThrow();
+            locked.countDown();
+            awaitQuietly(release);
+        }));
+        operator.start();
+        try {
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+
+            List<Long> lockedIds = new ArrayList<>();
+            List<Long> releasedIds = new ArrayList<>();
+            transactions.executeWithoutResult(status -> {
+                List<OutboxEvent> batch = repository.lockPendingBatch(500).stream()
+                        .filter(event -> event.getPartitionKey().equals(key))
+                        .toList();
+                batch.forEach(event -> lockedIds.add(event.getId()));
+                List<OutboxKeyPosition> unsent = repository.findUnsentPositions(
+                        List.of(key), second.getId(), OutboxEvent.OutboxStatus.SENT);
+                KeyOrderGuard.releasable(batch, unsent).forEach(event -> releasedIds.add(event.getId()));
+            });
+
+            assertThat(lockedIds)
+                    .as("SKIP LOCKED 가 앞 행을 건너뛰고 하위 조회는 잠금을 보지 않아 뒤 행만 잡힌다 — 거름 없이는 뒤가 먼저 나간다")
+                    .containsExactly(second.getId());
+            assertThat(releasedIds).isEmpty();
+        } finally {
+            release.countDown();
+            operator.join(10_000);
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Test

@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014·D-055·D-056), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -82,6 +82,7 @@
 | [D-054](#d-054) | Kafka 시작 스크립트가 복사 중 실행돼 `Text file busy`(126)로 테스트 컨텍스트 시작 실패 | CI 불안정(업무 코드 영향 없음) | **수정됨** | PR #196 CI run 43001134598 |
 | [D-055](#d-055) | 같은 키의 앞 Outbox 행이 `DEAD`여도 릴레이가 뒤 행을 발행해 소비자가 순서가 뒤집힌 채 받음 | 돈·보유권(추정, 결정 155 예: 환불된 고객의 보유권이 열린 채 남음) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
 | [D-056](#d-056) | 같은 키의 앞 행이 재시도 대기인 사이, 그 배치에 없던 뒤 행이 먼저 발행됨 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
+| [D-057](#d-057) | 다른 트랜잭션이 같은 키의 앞 행을 잠그면(예: 중복 운영 재발행) 릴레이가 뒤 행을 먼저 발행함 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | PR #203 교차 리뷰 R1, `OutboxPendingQueryTest` |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -240,7 +241,7 @@
 
 - **증상** 앞 이벤트는 실패로 `next_attempt_at`이 미래가 되어 조회에서 빠지고, 보류된 뒤 이벤트는 `NULL`이라 다음 회차에 혼자 발행됐다.
 - **원인** 키 순서는 대역 테스트(`OutboxRelayTest`), 시간 조건은 실 MySQL 테스트가 따로 검증해 둘이 만나는 지점을 아무도 보지 않았다. 대역에 시간 필터를 넣자 바로 재현됐다.
-- **수정** 실패 시 같은 키의 뒤 이벤트에 앞의 `next_attempt_at`을 전파한다(`OutboxRelay#holdRemainder` → `OutboxEvent#holdUntil`). `retryCount`는 늘리지 않는다. 앞 이벤트가 DEAD가 되면 키를 푼다(영구 정지보다 낫다, DEAD 알람이 짝).
+- **수정** 실패 시 같은 키의 뒤 이벤트에 앞의 `next_attempt_at`을 전파한다(`OutboxRelay#holdRemainder` → `OutboxEvent#holdUntil`). `retryCount`는 늘리지 않는다. 앞 이벤트가 DEAD가 되면 키를 푼다(영구 정지보다 낫다, DEAD 알람이 짝). 이 절충은 [결정 155](decisions.md#key-stop-on-dead)가 "회수 전까지 그 키를 멈춘다"로 바꿨다(D-055, PR #203).
 
 ---
 
@@ -690,8 +691,8 @@
 
 **상태** 수정됨 · **영향** 같은 키 순서 역전. 결정 155의 예처럼 `OrderPaid`가 `DEAD`인 사이 환불의 `LicenseSuspensionRequested`가 먼저 나가면 환불된 고객의 보유권이 열린 채 남을 수 있다(돈·보유권, 추정 — 업무 흐름 재현은 하지 않음) · **위치** `common/messaging/.../outbox/OutboxEventRepository.lockPendingBatch`, `OutboxEvent.holdUntil` · [PR #203](https://github.com/tlswltjq/esd-platform/pull/203)
 
-- **원인** `lockPendingBatch`는 `status = 'PENDING'`과 재시도 시각만 보고 같은 키의 앞 행을 보지 않았다. `holdUntil(null)`(앞이 `DEAD`일 때)은 아무것도 하지 않으며, 주석의 "그 키가 영구 정지한다"는 실제 동작과 달랐다. 다음 폴링에서 뒤 행이 그대로 나갔다(플랫폼 T2).
-- **재현** `OutboxPendingQueryTest#deadEarlierEventHoldsLaterEventsOfTheSameKey`: 같은 키의 앞 행을 `DEAD`로 만들고 뒤 행이 배치에 집히는지 본다. 수정 전 `[앞이 DEAD인데 뒤가 나가면 소비자는 순서가 뒤집힌 채 받는다] Expecting value to be false but was true`.
+- **원인** 재작성 때의 설계(D-014 수정)는 앞 행이 `DEAD`가 되면 **일부러** 그 키를 풀었다 — "영구 정지보다 낫다, DEAD 알람이 짝"(`OutboxRelayTest#deadBlockerReleasesTheKey`). 그래서 `holdUntil(null)`은 보류하지 않고 `lockPendingBatch`는 `PENDING`과 재시도 시각만 봤다. 이후 [결정 155](decisions.md#key-stop-on-dead)가 이 절충을 "그 키를 회수 전까지 멈춘다"로 바꿨지만 구현이 따르지 않았다(플랫폼 T2). 즉 자기 설계를 어긴 코드가 아니라 바뀐 계약을 따르지 않은 코드다.
+- **재현** `OutboxPendingQueryTest#deadEarlierEventHoldsLaterEventsOfTheSameKey`: 같은 키의 앞 행을 `DEAD`로 만들고 뒤 행이 배치에 집히는지 본다. 수정 전 `[앞이 DEAD인데 뒤가 나가면 소비자는 순서가 뒤집힌 채 받는다] Expecting value to be false but was true`. 기존 탈출구 테스트는 결정 155 동작(`#deadBlockerHoldsTheKeyUntilRequeued`: 회수 전 `PENDING`, 회수 뒤 적재 순서대로 `SENT`)으로 바꿨다.
 - **수정** `lockPendingBatch`에 같은 `partition_key`의 더 작은 `id`가 `DEAD`이면 뒤 행을 빼는 `NOT EXISTS`를 더했다. 회수(`requeue`)하면 앞뒤가 적재 순서로 다시 대상이 된다(`#requeuingTheDeadEarlierEventReleasesTheKeyInOrder`). 하위 조회용 인덱스 `idx_outbox_key_order (partition_key, id)`를 8개 모듈 이행으로 둔다.
 - **범위** 릴레이가 한 인스턴스라는 전제에서 완전하다(결정 205). 소비 쪽 DLT 이후 같은 키 정지(결정 155 소비 쪽)는 다루지 않는다.
 
@@ -702,7 +703,16 @@
 
 - **원인** 앞 행이 실패하면 `holdRemainder`가 **같은 배치 안의** 같은 키 뒤 행만 앞의 재시도 시각까지 미룬다(D-014). 그 배치 뒤에 적재됐거나 `LIMIT` 밖이던 뒤 행은 `next_attempt_at`이 비어 있어 다음 폴링에 집히고, 앞 행은 재시도 시각이 미래라 빠진다.
 - **재현** `OutboxPendingQueryTest#backedOffEarlierEventHoldsALaterEventOutsideItsBatch`: 앞 행을 `markFailed`로 재시도 대기로 두고 그 뒤에 같은 키 행을 적재한다. 수정 전 `[앞이 재시도를 기다리는 사이 뒤가 먼저 나가면 같은 키의 순서가 뒤집힌다] Expecting value to be false but was true`.
-- **수정** D-055와 같은 `NOT EXISTS`에 "앞 행이 `PENDING`이고 `next_attempt_at`이 미래" 조건을 더했다. 앞 행도 지금 나갈 수 있으면 둘 다 집어 키 웨이브를 유지한다(`#eligibleEventsOfTheSameKeyArePickedTogether`).
+- **수정** D-055와 같은 `NOT EXISTS`에 "앞 행이 `PENDING`이고 `next_attempt_at`이 미래" 조건을 더했다. 앞 행도 지금 나갈 수 있으면 둘 다 집어 키 웨이브를 유지한다(`#eligibleEventsOfTheSameKeyArePickedTogether`). 재현 테스트는 재시도 시각을 DB 시계 기준 한 시간 뒤로 고정한다(교차 리뷰 R3).
+
+<a id="d-057"></a>
+## D-057 다른 트랜잭션이 같은 키의 앞 행을 잠그면 릴레이가 뒤 행을 먼저 발행함
+
+**상태** 수정됨 · **영향** 같은 키 순서 역전(D-055와 같은 결과). 릴레이가 한 인스턴스여도 생긴다. 예: 운영 재발행([결정 129](decisions.md#orphan-license-grant-republish))으로 `PENDING`이 된 앞 행에 중복 재발행 요청이 들어와 `OutboxRepublishService`가 상태 확인 전에 `lockByEventId`로 잠근 동안 · **위치** `OutboxEventRepository.lockPendingBatch`, `OutboxRelay` · [PR #203](https://github.com/tlswltjq/esd-platform/pull/203) 교차 리뷰 R1
+
+- **원인** 바깥 `FOR UPDATE SKIP LOCKED`는 잠긴 앞 행을 건너뛰지만, `NOT EXISTS` 하위 조회는 잠금 없이 읽어 앞 행을 "지금 나갈 수 있는 `PENDING`"으로 보고 뒤 행을 막지 않는다.
+- **재현** `OutboxPendingQueryTest#aLockedEarlierEventKeepsTheLaterEventOutOfTheReleasedBatch`: 다른 스레드의 트랜잭션이 `lockByEventId`로 앞 행을 쥔 상태에서 `lockPendingBatch`가 같은 키의 **뒤 행만** 잡는 것을 단언한다(조회만으로는 순서가 깨지는 상태).
+- **수정** 릴레이가 잠근 배치에 대해 같은 키의 미발행 행 위치를 한 번 더 읽고(`findUnsentPositions`), 앞의 미발행 행이 모두 같은 배치에 있는 행만 보낸다(`KeyOrderGuard`). 걸러진 행은 `PENDING` 그대로 다음 폴링에서 다시 판정된다. 같은 테스트가 거른 결과가 비어 있음을 단언하고, `KeyOrderGuardTest`가 규칙을 단위로 지킨다.
 
 ---
 
