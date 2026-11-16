@@ -4,11 +4,17 @@ import journey_latency
 
 
 class PurchaseQueryTest(unittest.TestCase):
+    def test_reads_the_current_order_table_not_the_legacy_one(self):
+        # 실측 3회에서 옛 표 orders를 읽어 0건이 나왔다. 주문 엔티티는 purchase_order다(V10).
+        sql = journey_latency.purchase_sql_for_orders(["ORD-1"])
+        self.assertIn("stove_order.purchase_order", sql)
+        self.assertNotIn("stove_order.orders ", sql)
+
     def test_joins_paid_orders_with_license_purchases_by_order_number(self):
         sql = journey_latency.purchase_sql("2026-11-16 10:00:00", "2026-11-16 10:10:00")
-        self.assertIn("FROM stove_order.orders o JOIN stove_license.license_purchase lp", sql)
+        self.assertIn("FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp", sql)
         self.assertIn("TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at)", sql)
-        self.assertIn("TIMESTAMPDIFF(MICROSECOND, o.paid_at, lp.received_at)", sql)
+        self.assertIn("TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at)", sql)
         self.assertIn("o.created_at >= '2026-11-16 10:00:00'", sql)
 
     def test_rejects_unsafe_times(self):
@@ -40,7 +46,7 @@ class OrderListTest(unittest.TestCase):
 class DiagnosisTest(unittest.TestCase):
     def test_counts_orders_and_purchases_for_the_evidence_numbers(self):
         sql = journey_latency.diagnosis_sql(["ORD-1"])
-        self.assertIn("FROM stove_order.orders o WHERE o.order_no IN ('ORD-1')", sql)
+        self.assertIn("FROM stove_order.purchase_order o WHERE o.order_no IN ('ORD-1')", sql)
         self.assertIn("FROM stove_license.license_purchase lp WHERE lp.order_no IN ('ORD-1')", sql)
 
 

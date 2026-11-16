@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """구매 업무 완료 시간(결정 204 A)을 DB 시각으로 잰다. 업무 데이터는 읽기만 한다.
 
-- 주문 생성 → 구매 근거: ``stove_order.orders.created_at`` → ``stove_license.license_purchase.received_at``
-- 결제 확정 → 구매 근거: ``orders.paid_at`` → ``license_purchase.received_at``
+- 주문 생성 → 구매 근거: ``stove_order.purchase_order.created_at`` → ``stove_license.license_purchase.received_at``
+- 결제 확정 → 구매 근거: ``purchase_order.result_occurred_at``(Payment가 결제를 확정한 시각) → ``license_purchase.received_at``
+
+주문 표는 ``purchase_order``다(V10). ``orders``는 옛 표라 비어 있다. 두 ``order_no``는 모두 ascii_bin이다.
 
 끝점을 보유권 ``ACTIVE``가 아니라 보관함의 구매 근거로 둔다. 결정 93(결제 뒤 보유권은 보관함에 생기고
 구매자가 등록해야 라이브러리에 나타난다) 때문에 등록 시각은 사람의 행동이라 브로커 비교에 맞지 않는다.
@@ -27,20 +29,20 @@ def purchase_sql(since, until):
             raise ValueError("시각은 'YYYY-MM-DD HH:MM:SS[.ffffff]' 형식이어야 한다: " + value)
     return ("SELECT o.order_no,"
             " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
-            " TIMESTAMPDIFF(MICROSECOND, o.paid_at, lp.received_at)"
-            " FROM stove_order.orders o JOIN stove_license.license_purchase lp"
-            " ON lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin"
+            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at)"
+            " FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp"
+            " ON lp.order_no = o.order_no"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             "\nUNION ALL\n"
-            "SELECT o.order_no, NULL, NULL FROM stove_order.orders o"
+            "SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o"
             f" WHERE o.created_at >= '{since}' AND o.created_at < '{until}'"
             " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
-            " WHERE lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin)")
+            " WHERE lp.order_no = o.order_no)")
 
 
 _ORDER_NO = re.compile(r"^[A-Za-z0-9-]{1,40}$")
-_JOIN = ("FROM stove_order.orders o JOIN stove_license.license_purchase lp"
-         " ON lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin")
+_JOIN = ("FROM stove_order.purchase_order o JOIN stove_license.license_purchase lp"
+         " ON lp.order_no = o.order_no")
 
 
 def order_numbers(evidence):
@@ -61,12 +63,12 @@ def purchase_sql_for_orders(numbers):
     in_list = _in_list(numbers)
     return ("SELECT o.order_no,"
             " TIMESTAMPDIFF(MICROSECOND, o.created_at, lp.received_at),"
-            " TIMESTAMPDIFF(MICROSECOND, o.paid_at, lp.received_at) "
+            " TIMESTAMPDIFF(MICROSECOND, o.result_occurred_at, lp.received_at) "
             + _JOIN + f" WHERE o.order_no IN {in_list}"
             "\nUNION ALL\n"
-            f"SELECT o.order_no, NULL, NULL FROM stove_order.orders o WHERE o.order_no IN {in_list}"
+            f"SELECT o.order_no, NULL, NULL FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}"
             " AND NOT EXISTS (SELECT 1 FROM stove_license.license_purchase lp"
-            " WHERE lp.order_no = CONVERT(o.order_no USING ascii) COLLATE ascii_bin)")
+            " WHERE lp.order_no = o.order_no)")
 
 
 def window_sql(numbers):
@@ -78,10 +80,10 @@ def window_sql(numbers):
 def diagnosis_sql(numbers):
     """주문번호가 DB와 맞는지 확인한다: 전체 주문 수, 이 목록과 맞는 주문 수, 맞는 구매 근거 수, 표본 주문번호."""
     in_list = _in_list(numbers)
-    return ("SELECT (SELECT COUNT(*) FROM stove_order.orders),"
-            f" (SELECT COUNT(*) FROM stove_order.orders o WHERE o.order_no IN {in_list}),"
+    return ("SELECT (SELECT COUNT(*) FROM stove_order.purchase_order),"
+            f" (SELECT COUNT(*) FROM stove_order.purchase_order o WHERE o.order_no IN {in_list}),"
             f" (SELECT COUNT(*) FROM stove_license.license_purchase lp WHERE lp.order_no IN {in_list}),"
-            " (SELECT GROUP_CONCAT(order_no) FROM (SELECT order_no FROM stove_order.orders ORDER BY id DESC LIMIT 2) s)")
+            " (SELECT GROUP_CONCAT(order_no) FROM (SELECT order_no FROM stove_order.purchase_order ORDER BY id DESC LIMIT 2) s)")
 
 
 def summarize(rows):
