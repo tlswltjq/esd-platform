@@ -42,9 +42,16 @@ def main():
     parser.add_argument("--prometheus-only", action="store_true", help="Verify real production scrape targets and metrics")
     parser.add_argument("--backup-restore", action="store_true",
                         help="Lose MySQL and MinIO between purchase phases and restore them from continuous copies")
+    parser.add_argument("--measure", action="store_true",
+                        help="Run one messaging comparison round (decision 204) instead of the purchase phases")
+    parser.add_argument("--load-rate", type=float, default=2.0, help="Orders per second for --measure")
+    parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
+    parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
         parser.error("--prometheus-only cannot be combined with tracing modes")
+    if args.measure and (args.prometheus_only or args.tracing or args.foundation_only or args.backup_restore):
+        parser.error("--measure cannot be combined with other verification modes")
     if args.backup_restore and (args.prometheus_only or args.tracing or args.foundation_only):
         parser.error("--backup-restore cannot be combined with other verification modes")
     if args.foundation_only:
@@ -53,7 +60,8 @@ def main():
     output_root = Path(scratch) if scratch and (args.prometheus_only or args.backup_restore) else ROOT / "runs"
     output_root.mkdir(exist_ok=True)
     prefix = "prometheus-validation-" if args.prometheus_only else (
-        "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else "jib-validation-"))
+        "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else (
+            "messaging-measure-" if args.measure else "jib-validation-")))
     output = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
     output.chmod(0o700)
     project = output.name
@@ -261,6 +269,11 @@ def main():
             print("PASS: " + name, flush=True)
         if prometheus:
             prometheus.verify(docker, run, result)
+        elif args.measure:
+            from support.messaging_measurement import measure
+            result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
+                                            args.load_rate, args.load_duration, args.load_buyers)
+            print("PASS: messaging measurement " + json.dumps(result["measurement"], ensure_ascii=False), flush=True)
         elif tracing:
             tracing.verify(result, list(PORTS), keys["pg-db"])
         else:
