@@ -120,7 +120,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 |---|---|---|---|
 | `approval_closure`(V37) | 승인 보류 종결 | `uq_approval_closure_request`·`_approval`, 근거 `CANCELLED`·`FAILED`·`READY` | 추가 전용 기록(상태 없음) |
 | `approval_investigation`(V34·V38) | 보류 조사 | FK RESTRICT | 추가 전용 |
-| `refund_cancellation_hold`(V24·V25) | 송신 보류(`HELD`의 근거·재개) | `uq_cancel_hold_id`·`_owner`·`uq_cancel_resume_request`. 목표 사유에 `PG_REQUEST_REJECTED`(결정 133, MC-P9) 추가 | 보류 기록(활성 여부는 `dispatch_state`가 정본) |
+| `refund_cancellation_hold`(V24·V25·V40) | 송신 보류(`HELD`의 근거·재개) | `uq_cancel_hold_id`·`_owner`·`uq_cancel_resume_request`. 사유 `PG_REQUEST_FORBIDDEN`·`PG_REQUEST_INVALID`·`PG_REQUEST_REJECTED`(V40, 결정 133). V40 `rejection_status`(INT)·`rejection_type`(LONGTEXT, 받은 type 원문) + `ck_cancel_hold_rejection`: 형식 거절이면 상태(401·403·404·408·429를 뺀 4xx)·비어 있지 않은 type 필수, 아니면 둘 다 NULL(각 칸 `IS NOT NULL` 명시 — NULL이 CHECK를 UNKNOWN으로 통과시키지 않게) | 보류 기록(활성 여부는 `dispatch_state`가 정본) |
 | `refund_closure`(V39) | 장기·귀속 미확정 종결과 귀속 판정 | `uq_refund_closure_request`·`_attempt`, `chk_refund_closure_attribution`·`_outcome`·`_receipt` | 추가 전용 |
 | `refund_failure_closure`(목표, #166 참고 구현) | 운영자 실패 종결 근거 | `attempt_id`·`request_id`·`failure_event_id` 각각 유일 | 추가 전용 |
 | `refund_late_cancellation`(목표 신설, 결정 157) | 늦은 취소 확인 | `attempt_id`·`request_id`·`event_id` 각각 유일, FK RESTRICT, 대상 실행 `FAILED`·뒤 실행 없음(코드 가드, 결정 179). `superseded_request_event_id`(만들지 않은 후속 실행 요청, NULL 허용·유일) | 상태 하나(`CONFIRMED`) — 상태 모델 참조 |
@@ -188,9 +188,9 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | 10 | 작업자: PG `PAID` | 무변화 | → `RV-전`(`PAID_WITHOUT_ADMISSION`) | → `SUCCEEDED` + 결제 `PAID`(결제 표 #3) | 무변화 + 사유를 `PAID_WITHOUT_ADMISSION`으로 한 번 올림 | → `SUCCEEDED` + 결제 `PAID` | 거절(근거 충돌, 시도 무변화, 실패 통지 유지 — [결정 188](../../../docs/decisions.md#closed-attempt-charge)) | `SUCCEEDED` 무변화 / `FAILED`·`EXPIRED`: 무변화(근거 충돌 기록). 결제가 열려 있으면 진행 시도가 #14로 보류되고, 끝났으면 청구 감시(R16) — [결정 188](../../../docs/decisions.md#closed-attempt-charge) | R3.1·R3.11, 결정 144·153 |
 | 11 | 작업자: 검증된 PG `FAILED` | 무변화 | → `FAILED`(접수 전 실패, Order 통지 없음, 만료 사실 있으면 결제 `EXPIRED`) | → `FC` | → `FAILED`(접수 전 실패) | → `FC` | 같은 근거 무변화 / 다른 근거 거절 | 무변화 | R4.13, R5.1 |
 | 12 | 작업자: 같은 시도 PG 전액 `CANCELLED` | 무변화 | → `RV-전`(`PG_CANCELLED`) | → `RV-후`(`PG_CANCELLED`) | 무변화(관측만, 사유 유지) | 무변화(관측만) | 무변화(관측만) | 무변화 | R13.8 |
-| 13 | 작업자: `confirm_deadline` 지남 + PG `PENDING`·`READY` | 무변화 | 무변화(기한 없음) | → `RV-후`(`CONFIRM_WINDOW_EXPIRED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.6, 결정 124 |
+| 13 | 작업자: `confirm_deadline` 지남 + PG `PENDING`·`READY`(조회 장애 회차는 마지막 유효 관측 `latestPgState`) | 무변화 | 무변화(기한 없음) | → `RV-후`(`CONFIRM_WINDOW_EXPIRED`) | 무변화 | 무변화 | 무변화 | 무변화 | R4.6, 결정 124, D-049 |
 | 14 | 작업자: 근거 대조 실패 | 무변화 | → `RV-전`(`PG_INVALID_EVIDENCE`) | → `RV-후`(`PG_INVALID_EVIDENCE`) | 무변화(사유 유지, 오류 기록) | 같음 | 무변화(오류 기록) | 무변화 | R4.12, R12.10 |
-| 15 | 작업자: PG 조회 장애 | 무변화 | 무변화(오류 기록) | 같음 | 같음 | 같음 | 같음 | 무변화 | R12.7 |
+| 15 | 작업자: PG 조회 장애 | 무변화 | 무변화(오류 기록) | 무변화(오류 기록). 단 `confirm_deadline` 지남 + 마지막 유효 관측 `PENDING`·`READY`면 #13 | 무변화(오류 기록) | 같음 | 같음 | 무변화 | R12.7, R4.6·D-049 |
 | 16 | 작업자: Order 실패 영수증 수신 | 무변화 | 무변화(통지 없음) | 무변화 | 무변화 | 무변화 | → `FAILED`(결제 표 #6) | 무변화 | R4.13 |
 | 17 | 작업자: 만료 사실 + 접수 전 + PG 관측 이력 없음 | 무변화 | → `EXPIRED`(PG 호출 없음, 결제 `EXPIRED`) | 해당 없음 → 무변화(#19) | 무변화(보류 유지, ADMIN 종결 (b)) | 무변화 | 무변화 | 무변화 | R11.5, 결정 126 |
 | 18 | 작업자: 만료 사실 + 접수 전 + 이력 있음 → PG 한 번 조회 | 무변화 | `PAID` → `RV-전`(`PAID_WITHOUT_ADMISSION`) / `CANCELLED` → `RV-전`(`PG_CANCELLED`) / `PENDING` → `RV-전`(`PG_PENDING_AT_ORDER_EXPIRY`) / `READY`·`FAILED` → `EXPIRED`(잠금 안 `REQ` 재확인) / 장애 → 무변화 | 무변화 | 무변화(#20만 예외) | 무변화 | 무변화 | 무변화 | R11.5, D-044 |
@@ -215,7 +215,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | `ORDER_ADMISSION_CONFLICT` | Order 접수·실패 통지가 409(만료·판매 제한 밖) | 전·후 | 관측대로 | 접수 후면 PG `PAID`·`FAILED`로 위와 같음 | → (a)·(b)·(c) |
 | `ORDER_EXPIRY_CONFLICT` | 접수된 시도에 만료 사실 도착(정상 경로에서는 생기지 않는 방어) | 후 | 관측대로 | PG `PAID`·`FAILED`로 위와 같음 | → (a) |
 | `PG_CANCELLED` | 같은 시도 PG 전액 `CANCELLED`, 보류 전이었음 | 전·후 | `CHARGE_CANCELLED` | 없음 | `CANCELLED` 근거 → (a)·(b)·(c) |
-| `CONFIRM_WINDOW_EXPIRED` | 접수 후 `confirm_deadline` 지남 + PG `PENDING`·`READY` | 후 | `PENDING` → `CHARGE_UNCONFIRMED`, `READY` → `NOT_CHARGED` | 늦은 `PAID` → 원래 주문 `PAID`, 늦은 `FAILED` → 실패 통지 | → (a) |
+| `CONFIRM_WINDOW_EXPIRED` | 접수 후 `confirm_deadline` 지남 + PG `PENDING`·`READY`(조회 장애 회차는 마지막 유효 관측, D-049) | 후 | `PENDING` → `CHARGE_UNCONFIRMED`, `READY` → `NOT_CHARGED` | 늦은 `PAID` → 원래 주문 `PAID`, 늦은 `FAILED` → 실패 통지 | → (a) |
 | `PG_PENDING_AT_ORDER_EXPIRY` | 접수 전 + 만료 사실 + 관측 이력 + 조회 `PENDING` | 전 | `CHARGE_UNCONFIRMED` | 늦은 `PAID` → 사유 `PAID_WITHOUT_ADMISSION`, `FAILED` → 접수 전 실패(결제 `EXPIRED`) | → (b) |
 
 ### 3. 주문 생명주기 `payment_order_lifecycle.status` (목표 신설 칸, PA-T6)
@@ -464,6 +464,10 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 - 끝난 결제 감시 기한(`watch_until`): PortOne이 READY 결제를 더 이상 승인할 수 없다고 보장하는 시점. 공급자 문서로 확인 전 `[외부 대기]`(결정 154). 간격 설정도 adapter.
 - 확정 송신 거절 분류: 형식 갖춘 400·403·일반 409 → `ApprovalPostRejected`(core 사유 `PG_REQUEST_REJECTED`).
 - 환불 취소 응답 분류(결정 29 하위·133): 401 → 인증·설정 오류(키 수정 뒤 자동 재개). 403·400 `INVALID_REQUEST`·정상 JSON에 `type`이 있는 400·409·그 밖 4xx → 형식 거절(`HELD`). 409 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN` → 잔액 변화(`BALANCE_BLOCKED`). GET 403/404·POST 404·409 `IDEMPOTENCY_OUTSTANDING_REQUEST`·429·5xx·깨진 본문·타임아웃 → 미확정. 502 `PG_PROVIDER`는 G7 확인. 오류 본문은 분류에만 쓰고 저장하지 않는다(형식 거절은 상태·`type`만 보류 기록에).
+  - 지금 구현(PR #168, 결정 133): 403 → `PG_REQUEST_FORBIDDEN`, 정확한 400 `INVALID_REQUEST` → `PG_REQUEST_INVALID`, 정상 JSON 객체에 비어 있지 않은 문자열 `type`이 있는 그 밖 4xx(형식·길이 제한 없음) → `PG_REQUEST_REJECTED`(`PgCancellationRejection`, 상태·`type` 저장). 408은 "타임아웃"으로 보아 미확정에 넣었다(구현 판단). 4xx 본문은 한 번만 읽고, 깨진 본문·`type` 없음·비문자·빈 문자열은 상태와 관계없이 `PgUnavailable`(미확정, 같은 회 조회 뒤 재송신 — D-048).
+  - 용량(PR #168 R4·R5): 오류 본문 파서는 JSON 문자열을 `MAX_SUPPLIER_STRING_LENGTH` = 20,000,000자(Jackson 2.19 기본값을 명시해 고정)까지 읽고, 더 긴 문자열은 파싱 실패(깨진 본문, 미확정)다. 한도 안 `type`은 UTF-8 최대 60,000,000바이트라 LONGTEXT에 자르지 않고 저장한다(MEDIUMTEXT로는 저장이 실패해 중단이 기록되지 않았다). 이 행을 넣으려면 MySQL `max_allowed_packet` 64MB(MySQL 8 기본, `docker-compose.yml`)가 필요하고, 공유 테스트 MySQL도 64MB로 맞췄다(Testcontainers 기본 1M). 파서 경계는 단위 테스트가 실제 한도로, 저장 경계는 통합 테스트가 생성자로 낮춘 한도 6,000,000자(MEDIUMTEXT 초과)로 확인한다. 환불 취소 RestClient(`SimpleClientHttpRequestFactory`, 연결 2초·읽기 65초)는 오류 본문 전체를 메모리로 읽으며 바이트 상한은 없다(읽기 사이 65초 제한과 힙만 막음).
+  - ADMIN 송신 보류 목록은 원문을 읽지 않는다: `findForAdministration`이 `RefundCancellationHoldSummary` 투영으로 DB에서 앞 200자와 문자 수만 가져와 `rejectionTypePreview`·`rejectionTypeLength`로 보이고, 원문 `rejectionType`은 상세에만 있다.
+  - V40 적용·되돌림: `ALTER TABLE` 한 문장(MySQL 8 InnoDB 원자적 DDL)이라 칸·CHECK가 일부만 남지 않는다. 옛 FORBIDDEN·INVALID 행과 재개 기록은 값이 그대로이고 새 칸만 NULL이며, 과거 일반 오류를 형식 거절로 다시 해석하지 않는다(결정 104 이행 테스트 `RefundCancellationDispatchIntegrationTest.v40MigrationKeepsExistingHoldsWithoutRejectionDetailAndRequiresItOnlyForFormalRejections`). 옛 버전은 새 칸을 모르고 FORBIDDEN·INVALID만 써서 함께 돌 수 있고, 옛 버전으로 되돌려도 `reason` 문자열로 `PG_REQUEST_REJECTED` 보류가 목록·재개에 보이며 상태·`type`만 응답에서 빠진다. 부분 실패 복구: `flyway_schema_history`에 V40 실패 행이 있으면 `SHOW CREATE TABLE refund_cancellation_hold;`로 `rejection_status`를 본다. 없으면 실패 행을 지우고(Flyway `repair`와 같은 동작) 다시 기동하고, 있으면 실패 행만 성공으로 고치지 말고 원인을 조사한다. PR #166의 이행은 V41을 쓴다.
 - 취소 요청: `Idempotency-Key`는 `attemptId`를 RFC 8941 문자열로 감싼 값, `amount`·`currentCancellableAmount`에 원결제액, `reason`은 `refundId` 기반 상관값.
 - 실패 종결 미취소 판정(`PgRefundUncancelled`): 결제 `PAID`·`amount.cancelled == 0`·취소 목록이 모두 `FAILED`일 때만 "미취소 확인됨"을 준다.
 - 통지 검증: Standard Webhooks `webhook-id`·`webhook-timestamp`(±5분)·`webhook-signature`(HMAC-SHA256, 회전 중 복수 서명), 원문 64 KiB 제한, 중복 헤더 거절. 종류 `Transaction.*`는 adapter가 "결제 조회 힌트"·"취소 조회 힌트"로 바꾼다. 통지 경로 이름의 `portone`은 중립 경로로 옮긴다(T28·PA-T17, edge·공급자 콘솔 주소 변경 필요).
