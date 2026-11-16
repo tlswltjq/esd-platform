@@ -2014,6 +2014,17 @@
 - 구분: 추천 수용
 - 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Order R2.10·M-OR-5 닫음, License R4.11 주석·LI-T10 함께 할 일, 판단 색인 행
 
+<a id="close-with-unresolved-refunds"></a>
+## 199. 반영하지 못한 보관 환불(`CONFLICTED`)이 있어도 판매자 월 마감을 허용하고, 그 건수를 마감·월 응답에 보인다
+- 문제: 결정 156·195의 보관 환불 가운데 `CONFLICTED`는 매출은 그 판매자 월에 들어갔지만 대조 불일치로 환불 차감이 빠진 상태다. 이때 그 월을 마감하면 지급 기준액(`payable`)이 이미 환불된 주문의 판매자 몫만큼 크게 확정된다. 결정 195가 마감 허용 범위를 별도 쟁점으로 남겼다. `AWAITING_SALE`은 매출이 없어 마감 금액에 들어가지 않으므로 R11.7이 이미 정했다. 보관 환불·재검증은 아직 구현되지 않았고(MC-S3), 판매자 실제 송금도 없어 지금 영향은 보고 금액에 그친다.
+- 선택지: A 마감 허용 + 그 판매자·월의 `CONFLICTED` 건수·주문 표시 / B 그 판매자의 그 월 이하에 `CONFLICTED`가 있으면 마감 409 / C 문제 주문의 판매자 몫만 보류하고 마감 (추천: A — 마감 뒤 늦은 사실의 현재 `OPEN` 월 반영(R3.5)과 음수 이월(결정 121)이 이미 있어 금액이 사라지지 않는다. B는 R3.8 순서 규칙 때문에 한 건이 그 판매자의 뒤 월 마감을 모두 멈추고, C는 원장 구조를 바꾼다)
+- 내 의견: "A로 해줘"
+- 선택: A — 마감은 `CONFLICTED`를 막거나 빼지 않는다. 마감 뒤 재검증이 일치하면 환불 조정은 현재 `OPEN` 월에 반영되고 음수 순액은 이월된다. 마감 응답과 ADMIN 월 응답은 원매출 귀속 월이 그 월 이하인 `CONFLICTED` 건수(`conflictedRefundCount`)를 담고, ADMIN 보관 환불 목록은 `sellerSubject`·`saleMonth`로 걸러 주문번호를 보인다. 상세 계약은 Settlement R11.13이 정본이다.
+  - 하지 않는 것: 마감된 월의 `payable`은 고치지 않는다(`CLOSED`는 바뀌지 않는다, R9.9).
+  - 메모: 차단이 필요한 시점은 마감이 아니라 실제 송금이다. 송금 전 `CONFLICTED` 차단 여부는 M-SE-4에서 함께 정한다.
+- 구분: 추천 수용
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Settlement R11.13·design API 표·MC-S3 목표, M-SE-4 메모
+
 ---
 
 ## 검증하며 드러난 것

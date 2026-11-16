@@ -301,9 +301,9 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | GET | `/api/v1/settlements/me/months` | CREATOR | `page`·`size` | 본인 월 합계, `CLOSED`면 이월 3값(R8.11) | — |
 | GET | `/api/v1/settlements/me/refunds` | CREATOR | `page`·`size` | 본인 환불 조정(음수 조정액·확인/반영 월·사유). 구매자·PG 실행 정보 없음 | — |
 | GET | `/api/v1/settlements/sales` | ADMIN | `sellerSubject`·`month`·`page`·`size` | 매출 + `sellerSubject`·PG 비용·플랫폼 잔여액·정책(R8.5) | — |
-| GET | `/api/v1/settlements/months` | ADMIN | 같음 | 월 금융 요약(R8.7·R8.8) | — |
+| GET | `/api/v1/settlements/months` | ADMIN | 같음 | 월 금융 요약(R8.7·R8.8). 목표: 판매자 월마다 `conflictedRefundCount`(R11.13, 결정 199) | — |
 | GET | `/api/v1/settlements/refunds` · `/{refundId}` | ADMIN | 필터 | 환불 목록·상세(취소별 근거). 없으면 404 | — |
-| POST | `/api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | ADMIN | 본문 없음 | 월 응답. 409(현재·미래 월, 이전 월 `OPEN`, 이후 월 `CLOSED`, 합계 불일치, 재시도 소진) | 같은 판매자·월은 최초 결과(R3.4) |
+| POST | `/api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | ADMIN | 본문 없음 | 월 응답(목표: `conflictedRefundCount` 포함, `CONFLICTED`가 있어도 마감 — R11.13, 결정 199). 409(현재·미래 월, 이전 월 `OPEN`, 이후 월 `CLOSED`, 합계 불일치, 재시도 소진) | 같은 판매자·월은 최초 결과(R3.4) |
 | POST | `/api/v1/settlements/pg-transactions/{paymentId}/refresh` | ADMIN | 본문 없음 | 거래 응답. 404(거래 없음), 409(다른 근거·비용), 503(PG 조회 실패) | 같은 비용이면 무변화(R10) |
 | POST | `/api/v1/settlements/pg-statements` | ADMIN | `{"dateType":"DUE"\|"SETTLE","baseDate":"yyyy-MM-dd"}` | 수집본 응답. 400(미래·범위 밖), 409(공개 전·정본 거래 충돌), 503(미설정·수집 실패) | 같은 지문이면 최초 수집본(R7.11) |
 | GET | `/api/v1/settlements/pg-statements` · `/{id}` · `/{id}/items` · `/{id}/pages/{position}` | ADMIN | 필터·페이지 | 수집본·항목·원문 페이지. 키는 응답하지 않음 | — |
@@ -311,7 +311,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 | GET | `/api/v1/settlements/pg-payouts` · `/items` | ADMIN | 월·필터 | 보고 지급일 기준 월별 거래액·수수료·VAT·순액, 정본 거래 페이지(R8.9) | — |
 | GET | `/api/v1/settlements/pg-receipts` · `/{providerSettlementId}` | ADMIN | 필터 | 옛 지급 명세(읽기 전용, R5.2). 없으면 404 | — |
 | ~~POST~~ | ~~`/api/v1/settlements/pg-receipts`~~ · ~~`/{providerSettlementId}/reconcile`~~ | — | — | 목표: 제거(R5.1, SE-T2) | — |
-| GET | (목표, 가칭) `/api/v1/settlements/awaiting-refunds` | ADMIN | `status`·`page`·`size` | 매출 대기 환불 목록(상태·사유·받은 시각, 읽기만). 운영자 재검증은 아래 POST(R11.8~12, 결정 195) | — |
+| GET | (목표, 가칭) `/api/v1/settlements/awaiting-refunds` | ADMIN | `status`·`sellerSubject`·`saleMonth`·`page`·`size` | 매출 대기 환불 목록(상태·사유·받은 시각·주문번호, 읽기만). 판매자·귀속 월 필터는 원매출이 있는 건(`CONFLICTED`)에만 맞는다(R11.13, 결정 199). 운영자 재검증은 아래 POST(R11.8~12, 결정 195) | — |
 | POST | (목표, 가칭) `/api/v1/settlements/awaiting-refunds/{orderNo}/revalidate` | ADMIN | 실행 사유만 | 보관 환불과 반영 결과. 404(보관 환불 없음), 409(원매출 없음·재대조 불일치), 503(PG 조회 실패). 실행·검사 이력 보존 | `APPLIED`이면 외부 조회 없이 최초 반영 결과. 동시 호출도 조정·확인 사실 각 1건(R11.8~12, 결정 195) |
 
 월·매출 응답 금액 필드는 지금 계약 그대로다: `pgCostStatus`(매출 `CONFIRMED`/`UNCONFIRMED`, 월은 `PARTIAL` 추가), `confirmedPgFeeAmount`·`salePgFeeAmount`·`pendingPgCostCount`, 환불 양수 합계 4개, `net*` 순액 3개(음수 허용), 이월 3값(`OPEN`이면 `null`), 환불 비용 반환·VAT·`confirmedNetPgCostAmount`, `pgFeeAmount`·`platformNetAmount`(미확인이 하나라도 있으면 NULL). 공개 명세는 `apps/settlement/src/integrationTest/resources/openapi/settlement.json`.

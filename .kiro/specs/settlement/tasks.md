@@ -32,7 +32,7 @@
 
 - [ ] **MC-S3. 매출 대기 환불이 없다 — 원매출보다 먼저 온 환불 확인이 404 → DLT** ([결정 156](../../../docs/decisions.md#refund-awaiting-sale), 플랫폼 T8)
   - 어디서: `S/core/service/RecordConfirmedRefund.java:63`(`NOT_FOUND` "환불에 대응하는 원매출이 아직 없습니다."), `S/core/service/RecordPaidSale.java:74-101`(대기 환불을 보지 않음).
-  - 목표: R11·design "매출 대기 환불". 새 이행 파일로 `settlement_refund_awaiting_sale`(PK `order_no`, `uk_awaiting_refund_id`·`uk_awaiting_event`, 상태 CHECK `AWAITING_SALE`·`APPLIED`·`CONFLICTED`와 칸 짝 CHECK, FK `refund_record_id`)·`settlement_refund_awaiting_cancellation`. `RecordConfirmedRefund`는 원매출이 없으면 Inbox와 함께 `AWAITING_SALE` 저장 뒤 원매출 잠금 읽기로 경쟁을 확인. `RecordPaidSale`은 트랜잭션 밖에서 대기 환불이 있으면 `PgRefunds`도 조회하고, 원매출 삽입 뒤 대기 환불을 잠금 읽기해 `APPLIED`(환불 조정 + `SettlementRefundRecorded`) 또는 `CONFLICTED`(`SALE_MISMATCH`·`PG_REFUND_MISMATCH`, 경보). 게이지 `AWAITING_SALE`·`CONFLICTED` 건수·최장 대기. ADMIN 목록(가칭 `GET /awaiting-refunds`, 읽기만)·재검증 명령(가칭 `POST /awaiting-refunds/{orderNo}/revalidate`, 결정 195, R11.8~12). 보관한 사실·원매출·새 PG 근거를 같은 검증으로 대조하고, 일치하면 환불 조정·월 합계·`APPLIED`·확인 Outbox·성공 이력을 원자 기록한다. 불일치 시 반영하지 않고 사유·검사 이력을 남긴다. 실행자·사유·검사 시각·근거 식별자를 기록하며 최초 접수 Inbox·원본을 보존한다.
+  - 목표: R11·design "매출 대기 환불". 새 이행 파일로 `settlement_refund_awaiting_sale`(PK `order_no`, `uk_awaiting_refund_id`·`uk_awaiting_event`, 상태 CHECK `AWAITING_SALE`·`APPLIED`·`CONFLICTED`와 칸 짝 CHECK, FK `refund_record_id`)·`settlement_refund_awaiting_cancellation`. `RecordConfirmedRefund`는 원매출이 없으면 Inbox와 함께 `AWAITING_SALE` 저장 뒤 원매출 잠금 읽기로 경쟁을 확인. `RecordPaidSale`은 트랜잭션 밖에서 대기 환불이 있으면 `PgRefunds`도 조회하고, 원매출 삽입 뒤 대기 환불을 잠금 읽기해 `APPLIED`(환불 조정 + `SettlementRefundRecorded`) 또는 `CONFLICTED`(`SALE_MISMATCH`·`PG_REFUND_MISMATCH`, 경보). 게이지 `AWAITING_SALE`·`CONFLICTED` 건수·최장 대기. ADMIN 목록(가칭 `GET /awaiting-refunds`, 읽기만)·재검증 명령(가칭 `POST /awaiting-refunds/{orderNo}/revalidate`, 결정 195, R11.8~12). 보관한 사실·원매출·새 PG 근거를 같은 검증으로 대조하고, 일치하면 환불 조정·월 합계·`APPLIED`·확인 Outbox·성공 이력을 원자 기록한다. 불일치 시 반영하지 않고 사유·검사 이력을 남긴다. 실행자·사유·검사 시각·근거 식별자를 기록하며 최초 접수 Inbox·원본을 보존한다. 마감은 `CONFLICTED`가 있어도 허용하고, 마감·ADMIN 월 응답에 `conflictedRefundCount`, 목록에 `sellerSubject`·`saleMonth` 필터를 둔다(R11.13, [결정 199](../../../docs/decisions.md#close-with-unresolved-refunds)).
   - 영향: **판매자 돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠져 지급 기준액이 실제보다 크게 계산될 수 있고, 마감 후 반영은 현재 OPEN 월로 넘어간다. 실제 판매자 송금은 현재 범위 밖이다.
   - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 DLT / 목표 `AWAITING_SALE` 뒤 `OrderPaid`로 `APPLIED`·월 환불 합계 1건. 원매출과 금액이 다른 대기 환불 → `CONFLICTED`·매출만 기록. 대기 환불 저장과 매출 기록 동시 실행(두 스레드 + 실제 MySQL) → `AWAITING_SALE`이 남지 않음. 재검증 테스트: 정상 근거를 검증 결함으로 거절한 상태를 구성 → 검증 수정 후 명령으로 `APPLIED`·환불 조정·확인 Outbox 각 1건. 반복·동시 호출도 각 1건, 이미 반영됐으면 PG 조회 없음. 원본 오류·금액/취소 ID 불일치가 계속되면 409·미반영·검사 이력 보존. PG 장애 503·상태 무변화, 원매출 없음 409, 보관 기록 없음 404, 권한 검사, 원본·Inbox 보존. 이 상태 구성은 설계 검증이며 실제 PG 불일치를 재현했다는 근거로 쓰지 않는다.
 
@@ -117,12 +117,12 @@
 ## 진행 중 / 남음
 
 - [x] M-SE-1 운영자 처리 — [결정 195](../../../docs/decisions.md#settlement-refund-revalidation): 원인 해소 후 운영자 재검증 명령. 구현·검증은 MC-S3의 미완료 범위다. 원매출 미도착은 원천 이벤트 복구 경로를 쓴다.
-- [ ] [결정 필요] 미해결 환불이 있는 정산의 마감 허용 범위 — 결정 195와 별개로 다룬다. 현 R11.7은 유지하며 마감 차단·제외 범위를 미리 확정하지 않는다.
+- [x] ~~[결정 필요] 미해결 환불이 있는 정산의 마감 허용 범위~~ → [결정 199](../../../docs/decisions.md#close-with-unresolved-refunds)(A): 마감 허용 + 미해결 건 표시(R11.13). 구현은 MC-S3. 송금 전 차단 여부는 M-SE-4에서 다시 본다.
 - [x] 같은 주문에 같은 PG 취소를 가리키는 두 번째 금융 확인 사실 — [결정 179](../../../docs/decisions.md#late-cancellation-during-retry): 지금 규칙(영구 실패) 유지, SE-T4 구현 때 두 번째 사실 거절 테스트를 둔다
 - [ ] [외부 대기] PG 비용 실거래 확정: 실제 가맹점 키·거래 키 대응 검증과 `identity-mapping-verified` 활성화 — G7([결정 140](../../../docs/decisions.md#defer-real-pg))
 - [ ] [결정 필요 M-SE-3] 실거래 승인 근거 수용의 도메인·스키마·조회 계약 — G7. 선행: SE-T1. 그 뒤 정상 실거래 입력 → 비용 저장·SQL 집계, 동시 첫 비용 INSERT(`uk_pg_cost_source`), INSERT 실패 롤백을 루프백 응답 서버 + MySQL Testcontainers로 검증(결정 46: 저장된 TEST 근거를 SQL로 LIVE로 바꾸는 우회 금지)
 - [ ] [외부 대기] V13 이전 순서 없는 마감 자료 탐지: 마감된 월 뒤 `OPEN` 행이 남은 판매자, 원장 없는 `CLOSED` 월이 연속하며 앞쪽이 음수인 판매자를 읽기 전용 SQL로 센다(공유 환경 자료가 생기면). 행이 나오면 처리 방법을 사용자에게 묻는다 — G3
-- [ ] [결정 필요 M-SE-4] 판매자 실제 송금·청구/회수 정책 — G3 이후(결정 121은 이월·지급 기준액만)
+- [ ] [결정 필요 M-SE-4] 판매자 실제 송금·청구/회수 정책 — G3 이후(결정 121은 이월·지급 기준액만). 함께 정할 것: 송금 전에 `CONFLICTED` 보관 환불이 있는 판매자의 송금을 막을지(결정 199 메모)
 - [ ] [외부 대기] 정산 자료 수집을 실제 스택에서 켜고 런타임 검증 — G7. 가맹점 키와 거래 키 대응 검증이 있어야 한다. 정산 자료 흉내 서버는 없고 HTTP 계약은 `TossPayStatementHttpTest`의 루프백 응답 서버로만 확인
 - [ ] [외부 대기] 승인·취소 읽기 adapter를 실제 PG에 연결해 확인 — G7(결정 110·111 후속)
 - [ ] [외부 대기] 실제 PG 지급 수령 확인: 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G7
