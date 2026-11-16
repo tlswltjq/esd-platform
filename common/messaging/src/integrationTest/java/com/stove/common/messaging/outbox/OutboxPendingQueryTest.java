@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * {@code lockPendingBatch} 의 의미를 <b>이 모듈에서</b> 실제 MySQL 로 검증한다.
@@ -35,6 +36,14 @@ class OutboxPendingQueryTest {
 
     @Autowired
     OutboxEventRepository repository;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    /** 조회가 DB의 {@code NOW(6)}로 판정하므로 재시도 시각도 같은 시계로 둔다. {@code interval}은 테스트 상수만 쓴다. */
+    private void setNextAttemptFromDbNow(OutboxEvent event, String interval) {
+        jdbc.update("UPDATE outbox_event SET next_attempt_at = NOW(6) + " + interval + " WHERE id = ?", event.getId());
+    }
 
     /** 키마다 순서를 지키므로, 다른 테스트가 남긴 행이 끼어들지 않게 테스트마다 키를 새로 만든다. */
     private OutboxEvent pendingEvent() {
@@ -162,14 +171,23 @@ class OutboxPendingQueryTest {
         OutboxEvent first = pendingEvent(key);
         first.markFailed("timeout", 10);
         repository.save(first);
+        // 백오프 1초에 기대면 느린 실행에서 앞도 발행 가능해져 거짓 실패한다. DB 시각 기준 한 시간 뒤로 고정한다.
+        setNextAttemptFromDbNow(first, "INTERVAL 1 HOUR");
         // 앞 이벤트가 실패한 배치에 없던 뒤 이벤트다. holdRemainder는 같은 배치 안에서만 미룬다.
         OutboxEvent second = pendingEvent(key);
 
-        assertThat(first.getNextAttemptAt()).isNotNull();
         assertThat(second.getNextAttemptAt()).isNull();
         assertThat(isPicked(second))
                 .as("앞이 재시도를 기다리는 사이 뒤가 먼저 나가면 같은 키의 순서가 뒤집힌다")
                 .isFalse();
+
+        // 앞의 대기가 끝나면 앞뒤가 적재 순서대로 함께 대상이 된다.
+        setNextAttemptFromDbNow(first, "INTERVAL -1 SECOND");
+        List<Long> picked = repository.lockPendingBatch(500).stream()
+                .filter(event -> event.getPartitionKey().equals(key))
+                .map(OutboxEvent::getId)
+                .toList();
+        assertThat(picked).containsExactly(first.getId(), second.getId());
     }
 
     @Test
