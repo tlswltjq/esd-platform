@@ -1,5 +1,6 @@
 package com.stove.common.kafka;
 
+import com.stove.common.event.KeyQuarantine;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,9 +30,10 @@ public class KafkaSubscriptionAutoConfiguration {
             ObjectProvider<ConsumerFactory<Object, Object>> consumers,
             ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate,
             ObjectProvider<DeadLetterMetrics> metrics,
-            ObjectProvider<MeterRegistry> meterRegistry) {
+            ObjectProvider<MeterRegistry> meterRegistry,
+            ObjectProvider<KeyQuarantine> quarantine) {
         return new KafkaEventSubscriptions(context, configurer::getIfAvailable, consumers::getIfAvailable,
-                () -> deadLetters(kafkaTemplate, metrics, meterRegistry));
+                () -> deadLetters(kafkaTemplate, metrics, meterRegistry), quarantine::getIfAvailable);
     }
 
     private static ConsumerRecordRecoverer deadLetters(ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate,

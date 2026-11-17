@@ -1,5 +1,6 @@
 package com.stove.settlement;
 
+import com.stove.common.messaging.quarantine.QuarantineReplay;
 import static com.stove.settlement.SettlementFixtures.NOW;
 import static com.stove.settlement.SettlementFixtures.id;
 import static com.stove.settlement.SettlementFixtures.order;
@@ -72,7 +73,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,7 +86,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Arrays;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -131,6 +130,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
     @Autowired ReadPgReceipts receipts;
     @Autowired SettlementSaleRepository sales;
     @Autowired JdbcTemplate jdbc;
+    @Autowired QuarantineReplay quarantineReplay;
     @Autowired ObjectMapper mapper;
     @Autowired PlatformTransactionManager transactions;
     @Autowired KafkaTemplate<String,String> kafka;
@@ -841,25 +841,22 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         assertThat(groups).as("%s listener group must match the Inbox group for %s", topic, eventId).containsExactly(inboxGroup);
     }
 
-    @Test void refundBeforeOriginalSaleGoesToDltAndOriginalReplayPostsOnceDespiteLateExecutionEnrichment() throws Exception {
+    /** 결정 155·206: 원매출보다 먼저 온 환불 확인은 Settlement DB 에 격리되고 키가 멈춘다. 매출을 기록한 뒤 키를 다시 넣으면 한 번만 반영된다. */
+    @Test void refundBeforeOriginalSaleIsQuarantinedAndTheKeyReplayPostsOnceDespiteLateExecutionEnrichment() throws Exception {
         PaidOrder input=order(); prepare(input); ConfirmedRefund confirmation=prepareRefund(input);
         RefundPaymentConfirmedEvent financial=event(confirmation);
-        Map<String,Object> configuration=new HashMap<>();
-        configuration.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        configuration.put("group.id","settlement-refund-dlt-"+id()); configuration.put("auto.offset.reset","earliest");
-        configuration.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
-        configuration.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
-        try(KafkaConsumer<String,String> consumer=new KafkaConsumer<>(configuration);
-                AdminClient admin=AdminClient.create(Map.of("bootstrap.servers",configuration.get("bootstrap.servers")))) {
-            consumer.subscribe(List.of(Topics.PAYMENT+".DLT")); listeners.start(); sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
-            boolean found=false; long deadline=System.nanoTime()+Duration.ofSeconds(35).toNanos();
-            while(!found && System.nanoTime()<deadline) for(ConsumerRecord<String,String> failure:consumer.poll(Duration.ofMillis(300)))
-                if(failure.value().contains(financial.eventId())) found=true;
-            assertThat(found).isTrue(); assertThat(count("settlement_refund")).isZero(); assertThat(count("processed_event")).isZero();
+        try(AdminClient admin=AdminClient.create(Map.of("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers")))) {
+            listeners.start(); sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
+            Awaitility.await().atMost(Duration.ofSeconds(35)).untilAsserted(() -> assertThat(held(RecordConfirmedRefund.CONSUMER_GROUP,input.orderNo())).isEqualTo(1));
+            assertThat(count("settlement_refund")).isZero(); assertThat(count("processed_event")).isZero();
             record.execute(input);
             sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
-            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_refund")).isEqualTo(1));
-            sendRefundEvent(financial.eventId(),financial.eventType(),input.orderNo(),financial);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(RecordConfirmedRefund.CONSUMER_GROUP,input.orderNo())).isEqualTo(2));
+            assertThat(count("settlement_refund")).as("멈춘 키는 다시 넣기 전까지 처리하지 않는다").isZero();
+            assertThat(quarantineReplay.replay(RecordConfirmedRefund.CONSUMER_GROUP,Topics.PAYMENT,input.orderNo()))
+                    .isEqualTo(new QuarantineReplay.ReplayResult(2,0,null));
+            // Inbox: 직접 기록한 매출 1 + 다시 넣은 환불 1(두 번째 환불은 중복으로 걸러진다).
+            assertThat(count("settlement_refund")).isEqualTo(1); assertThat(count("processed_event")).isEqualTo(2);
             RefundExecutionSucceededEvent late=new RefundExecutionSucceededEvent(id(),NOW,financial.eventId(),financial.refundId(),financial.attemptId(),
                     financial.requestEventId(),financial.orderNo(),financial.paymentId(),financial.buyerSubject(),financial.amount(),financial.currency(),
                     financial.providerTransactionId(),financial.cancellationIds().getFirst());
@@ -873,13 +870,20 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
             assertThat(jdbc.queryForObject("SELECT seller_payout_amount-refunded_seller_payout_amount FROM seller_monthly_settlement",Long.class)).isZero();
         } finally { listeners.stop(); }
     }
+    private int held(String group,String key) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group=? AND partition_key=? AND status='HELD'",Integer.class,group,key);
+    }
     RecordMetadata sendRefundEvent(String eventId,String eventType,String orderNo,Object body) throws Exception {
         ProducerRecord<String,String> message=new ProducerRecord<>(Topics.PAYMENT,orderNo,mapper.writeValueAsString(body));
         message.headers().add(EventHeaders.EVENT_ID,eventId.getBytes(StandardCharsets.UTF_8));
         message.headers().add(EventHeaders.EVENT_TYPE,eventType.getBytes(StandardCharsets.UTF_8));
         return kafka.send(message).get(10,TimeUnit.SECONDS).getRecordMetadata();
     }
-    @Test void mapperValidatesEnvelopeAndKafkaFailureCanBeReplayedWithOriginalIdentity() throws Exception {
+    /**
+     * 결정 155·206: 봉투와 본문의 eventId 가 다른 매출은 격리되고 키가 멈춘다. 올바른 원본이 다시 와도 뒤에 쌓인다.
+     * 깨진 메시지는 다시 넣어도 또 실패하므로 그 자리에서 멈추고 정지를 유지한다(결정 155). 폐기 동작은 아직 없다.
+     */
+    @Test void mapperValidatesEnvelopeAndAMismatchedSaleStopsItsKeyUntilReplayedInOrder() throws Exception {
         PaidOrder input=order();prepare(input);
         OrderPaidEvent event=new OrderPaidEvent(input.eventId(),input.occurredAt(),input.orderNo(),input.requestEventId(),input.paymentResultEventId(),
                 input.paymentId(),input.buyerSubject(),input.productId(),input.productCode(),input.title(),input.contentVersion(),input.amount(),input.currency());
@@ -888,18 +892,18 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         ConsumerRecord<String,String> malformed=new ConsumerRecord<String,String>(Topics.ORDER,0,0,input.orderNo(),mapper.writeValueAsString(event));
         malformed.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));malformed.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
         assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(KafkaInboundMessages.from(malformed)),event)).isInstanceOf(BusinessException.class);
-        HashMap<String,Object> configuration=new HashMap<String,Object>();configuration.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        configuration.put("group.id","settlement-dlt-"+id());configuration.put("auto.offset.reset","earliest");
-        configuration.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");configuration.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
-        try(KafkaConsumer<String,String> consumer=new KafkaConsumer<String,String>(configuration)) {
-            consumer.subscribe(List.of(Topics.ORDER+".DLT"));listeners.start();kafka.send(invalid).get(10,TimeUnit.SECONDS);
-            boolean found=false;long deadline=System.nanoTime()+Duration.ofSeconds(35).toNanos();
-            while(!found && System.nanoTime()<deadline) for(ConsumerRecord<String,String> failure:consumer.poll(Duration.ofMillis(300))) if(failure.value().contains(input.eventId())) found=true;
-            assertThat(found).isTrue();assertThat(count("settlement_sale")).isZero();
-            ProducerRecord<String,String> replay=new ProducerRecord<String,String>(Topics.ORDER,input.orderNo(),mapper.writeValueAsString(event));
-            replay.headers().add(EventHeaders.EVENT_ID,input.eventId().getBytes(StandardCharsets.UTF_8));replay.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
-            kafka.send(replay).get(10,TimeUnit.SECONDS);
-            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("settlement_sale")).isEqualTo(1));
+        try {
+            listeners.start();kafka.send(invalid).get(10,TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(35)).untilAsserted(() -> assertThat(held(RecordPaidSale.CONSUMER_GROUP,input.orderNo())).isEqualTo(1));
+            assertThat(count("settlement_sale")).isZero();
+            ProducerRecord<String,String> original=new ProducerRecord<String,String>(Topics.ORDER,input.orderNo(),mapper.writeValueAsString(event));
+            original.headers().add(EventHeaders.EVENT_ID,input.eventId().getBytes(StandardCharsets.UTF_8));original.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
+            kafka.send(original).get(10,TimeUnit.SECONDS);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(RecordPaidSale.CONSUMER_GROUP,input.orderNo())).isEqualTo(2));
+            assertThat(count("settlement_sale")).as("앞이 깨진 키는 올바른 뒤 메시지도 처리하지 않는다").isZero();
+            QuarantineReplay.ReplayResult result=quarantineReplay.replay(RecordPaidSale.CONSUMER_GROUP,Topics.ORDER,input.orderNo());
+            assertThat(result.replayed()).isZero(); assertThat(result.remaining()).isEqualTo(2); assertThat(result.stoppedBecause()).isNotNull();
+            assertThat(count("settlement_sale")).isZero();
         } finally { listeners.stop(); }
     }
     @Test void disabledStatementSourceReturnsUnavailableRatherThanAnEmptyFinancialReport() {

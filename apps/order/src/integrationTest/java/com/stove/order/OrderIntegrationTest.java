@@ -1,5 +1,6 @@
 package com.stove.order;
 
+import com.stove.common.messaging.quarantine.QuarantineReplay;
 import static com.stove.order.OrderFixtures.completed;
 import static com.stove.order.OrderFixtures.envelope;
 import static com.stove.order.OrderFixtures.failed;
@@ -70,8 +71,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,6 +100,7 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
     @Autowired RefundRepository refunds;
     @MockitoSpyBean OrderRepository orders;
     @Autowired JdbcTemplate jdbc;
+    @Autowired QuarantineReplay quarantineReplay;
     @Autowired ObjectMapper mapper;
     @Autowired KafkaTemplate<String, String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
@@ -574,28 +574,34 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(http("POST", "/api/v1/orders", invalid, bearer).status()).isEqualTo(400);
         assertThat(count("purchase_order")).isZero();
     }
-    @Test void kafkaRetriesInvalidResultToDltAndReplaysOriginalAfterOrderRecovery() throws Exception {
+    /**
+     * 결정 155·206: 처리할 수 없는 결제 결과는 재시도 뒤 Order DB 에 격리되고 그 주문번호 키가 멈춘다.
+     * 멈춘 동안 같은 키로 다시 온 결과도 처리하지 않고 뒤에 쌓는다. 원인(주문 행)을 되살린 뒤 운영자가 키 단위로
+     * 다시 넣으면 원래 순서대로 처리되고 정지가 풀린다. 두 번째 건은 Inbox 가 중복으로 거른다.
+     */
+    @Test void kafkaQuarantinesInvalidResultAndReplaysTheKeyInOrderAfterOrderRecovery() throws Exception {
         Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
         // A missing request is recoverable by restoring its original Order row.
         jdbc.update("UPDATE purchase_order SET order_no=? WHERE id=?", id(), o.getId());
-        HashMap<String, Object> config = new HashMap<String,Object>();
-        config.put("bootstrap.servers", kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        config.put("group.id", "order-dlt-" + id()); config.put("auto.offset.reset", "earliest");
-        config.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        config.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<String,String>(config)) {
-            consumer.subscribe(List.of(Topics.PAYMENT + ".DLT")); listeners.start();
+        try {
+            listeners.start();
             send(e);
-            boolean found = false; long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
-            while (!found && System.nanoTime() < deadline)
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) if (record.value().contains(e.eventId())) found = true;
-            assertThat(found).isTrue(); assertThat(count("processed_event")).isZero();
+            Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(held(o)).isEqualTo(1));
+            assertThat(count("processed_event")).isZero();
             jdbc.update("UPDATE purchase_order SET order_no=? WHERE id=?", o.getOrderNo(), o.getId());
-            send(e); send(e);
-            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                    assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID));
+            send(e);
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(o)).isEqualTo(2));
+            assertThat(stored(o).getStatus()).as("멈춘 키는 원인을 고쳐도 다시 넣기 전까지 처리하지 않는다").isNotEqualTo(OrderStatus.PAID);
+            assertThat(quarantineReplay.replay(ApplyPaymentResult.CONSUMER_GROUP, Topics.PAYMENT, o.getOrderNo()))
+                    .isEqualTo(new QuarantineReplay.ReplayResult(2, 0, null));
+            assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PAID);
             assertThat(count("processed_event")).isEqualTo(1);
+            assertThat(held(o)).isZero();
         } finally { listeners.stop(); }
+    }
+    private int held(Order order) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE partition_key=? AND consumer_group=? AND status='HELD'",
+                Integer.class, order.getOrderNo(), ApplyPaymentResult.CONSUMER_GROUP);
     }
     private void send(DomainEvent e) throws Exception {
         ProducerRecord<String, String> record = new ProducerRecord<String,String>(e.topic(), e.partitionKey(), mapper.writeValueAsString(e));

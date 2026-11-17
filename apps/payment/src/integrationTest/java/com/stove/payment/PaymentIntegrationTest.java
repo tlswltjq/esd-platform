@@ -45,7 +45,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
@@ -55,8 +54,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
@@ -330,21 +327,27 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         for(String path:List.of("/api/v1/payments/prepare","/api/v1/payments/callback","/api/v1/payments/simulator/approve","/api/v1/payments/refund","/api/v1/ops/dlt"))
             assertThat(http("POST",path,good).status()).isEqualTo(403);
     }
-    @Test void kafkaInvalidRequestReachesDltWithoutReceiptAndOriginalCanBeReplayed() throws Exception {
+    /**
+     * 결정 155·206: 계약이 틀린 요청은 재시도 뒤 Payment DB 에 격리되고 그 주문번호 키가 멈춘다.
+     * 멈춘 키의 뒤 메시지(올바른 원본 재전송)도 처리하지 않고 뒤에 쌓는다 — 키 순서를 지키기 위해서다.
+     * (예전에는 DLT 로 보낸 뒤 원본을 다시 보내면 처리됐다. DLT 토픽 구독 대기는 간헐 실패도 냈다, run 44021240279)
+     */
+    @Test void kafkaInvalidRequestIsQuarantinedAndStopsItsKey() throws Exception {
         PaymentOrderRequest r=request(); OrderPlacedEvent event=event(r); JsonNode invalid=mapper.valueToTree(event); ((ObjectNode)invalid).put("amount",9800);
-        HashMap<String, Object> config=new HashMap<String,Object>();
-        config.put("bootstrap.servers",kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        config.put("group.id","payment-dlt-"+id()); config.put("auto.offset.reset","earliest");
-        config.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer"); config.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
-        try(KafkaConsumer<String, String> consumer=new KafkaConsumer<String,String>(config)) {
-            consumer.subscribe(List.of(Topics.ORDER+".DLT")); listeners.start(); send(event,mapper.writeValueAsString(invalid));
-            boolean found=false; long deadline=System.nanoTime()+Duration.ofSeconds(40).toNanos();
-            while(!found && System.nanoTime()<deadline) for(ConsumerRecord<String, String> record:consumer.poll(Duration.ofMillis(500))) if(record.value().contains(r.eventId())) found=true;
-            assertThat(found).isTrue(); assertThat(count("purchase_payment")).isZero(); assertThat(count("processed_event")).isZero();
-            send(event,mapper.writeValueAsString(event)); send(event,mapper.writeValueAsString(event));
-            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(count("purchase_payment")).isEqualTo(1));
-            assertThat(count("processed_event")).isEqualTo(1); assertThat(count("pg_charge")).isZero();
+        try {
+            listeners.start(); send(event,mapper.writeValueAsString(invalid));
+            Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(held(event.partitionKey())).isEqualTo(1));
+            assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE partition_key=? AND consumer_group=?",
+                    String.class,event.partitionKey(),ReceiveOrderPayment.CONSUMER_GROUP)).isEqualTo(r.eventId());
+            assertThat(count("purchase_payment")).isZero(); assertThat(count("processed_event")).isZero();
+            send(event,mapper.writeValueAsString(event));
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(event.partitionKey())).isEqualTo(2));
+            assertThat(count("purchase_payment")).as("멈춘 키는 처리하지 않는다").isZero(); assertThat(count("pg_charge")).isZero();
         } finally { listeners.stop(); }
+    }
+    private int held(String key) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE partition_key=? AND consumer_group=? AND status='HELD'",
+                Integer.class,key,ReceiveOrderPayment.CONSUMER_GROUP);
     }
     private void send(DomainEvent event,String payload) throws Exception {
         ProducerRecord<String, String> record=new ProducerRecord<String,String>(event.topic(),event.partitionKey(),payload);
