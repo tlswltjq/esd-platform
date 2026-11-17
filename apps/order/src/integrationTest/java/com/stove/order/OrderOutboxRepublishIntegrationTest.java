@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.kafka.KafkaMessagePublisher;
 import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
@@ -402,7 +403,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
     }
 
     private OutboxRelay relay() {
-        return new OutboxRelay(rows, kafka, 200, 1, 1,
+        return new OutboxRelay(rows, new KafkaMessagePublisher(kafka), 200, 1, 1,
                 new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
     }
 

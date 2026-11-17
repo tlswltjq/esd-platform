@@ -1,5 +1,6 @@
 package com.stove.common.kafka;
 
+import com.stove.common.event.MessagePublisher;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -30,6 +31,13 @@ public class KafkaConsumerAutoConfiguration {
     public DefaultErrorHandler stoveKafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
                                                       DeadLetterMetrics metrics) {
         return DeadLetterErrorHandlers.create(DeadLetterPublisher.to(kafkaTemplate, metrics));
+    }
+
+    /** Outbox 릴레이가 쓰는 발행 포트의 Kafka 구현. 다른 브로커 adapter 가 있으면 그쪽을 쓴다. */
+    @Bean
+    @ConditionalOnMissingBean(MessagePublisher.class)
+    public MessagePublisher stoveKafkaMessagePublisher(KafkaTemplate<String, String> kafkaTemplate) {
+        return new KafkaMessagePublisher(kafkaTemplate);
     }
 
     /** DLT 유입 계측. <b>지표 수집 여부가 실패 처리 가능 여부를 좌우해서는 안 된다.</b> */

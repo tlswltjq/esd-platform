@@ -1,20 +1,19 @@
 package com.stove.common.messaging.outbox;
 
+import com.stove.common.event.MessagePublisher;
+import com.stove.common.event.OutboundMessage;
 import com.stove.common.kafka.EventHeaders;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -29,7 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class OutboxRelay {
 
     private final OutboxEventRepository repository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final MessagePublisher publisher;
     private final int batchSize;
     private final int maxRetry;
     private final int maxBatchesPerCycle;
@@ -107,7 +106,7 @@ public class OutboxRelay {
                     OutboxEvent event = chain.get(wave);
                     // 브로커 구간 지연의 시작점. ack 뒤 시각(sentAt)과 달리 소비보다 늦을 수 없다([결정 204] B).
                     event.markPublishing(Instant.now());
-                    attempts.add(new Attempt(chain, event, kafkaTemplate.send(toRecord(event))));
+                    attempts.add(new Attempt(chain, event, publisher.publish(toMessage(event))));
                 }
             }
             if (attempts.isEmpty()) {
@@ -140,7 +139,7 @@ public class OutboxRelay {
     }
 
     /** @return 발행에 성공했으면 true — 이 키의 다음 이벤트를 보내도 된다는 뜻이다 */
-    private boolean awaitAck(OutboxEvent event, CompletableFuture<SendResult<String, String>> ack) {
+    private boolean awaitAck(OutboxEvent event, CompletableFuture<Void> ack) {
         try {
             ack.get();
             event.markSent();
@@ -162,28 +161,25 @@ public class OutboxRelay {
 
     /** 전송에 걸어둔 한 건. 어느 키 체인에 속하는지 함께 들고 있어야 후속 웨이브를 결정할 수 있다. */
     private record Attempt(List<OutboxEvent> chain, OutboxEvent event,
-                           CompletableFuture<SendResult<String, String>> ack) {
+                           CompletableFuture<Void> ack) {
     }
 
     /**
      * 계약 헤더 셋에 더해 적재 시점의 추적 컨텍스트를 <b>되살린다.</b>
-     * 자동 계측에 맡기면 안 되고 {@code spring.kafka.template.observation-enabled} 도 꺼야 한다.
+     * 자동 계측에 맡기면 안 되고 브로커 클라이언트의 자동 관측(Kafka {@code spring.kafka.template.observation-enabled})도 꺼야 한다.
      */
-    private ProducerRecord<String, String> toRecord(OutboxEvent event) {
-        ProducerRecord<String, String> record =
-                new ProducerRecord<>(event.getTopic(), event.getPartitionKey(), event.getPayload());
-        record.headers().add(EventHeaders.EVENT_ID, event.getEventId().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(EventHeaders.EVENT_TYPE, event.getEventType().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(EventHeaders.OCCURRED_AT,
-                event.getCreatedAt().toString().getBytes(StandardCharsets.UTF_8));
+    private OutboundMessage toMessage(OutboxEvent event) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put(EventHeaders.EVENT_ID, event.getEventId());
+        headers.put(EventHeaders.EVENT_TYPE, event.getEventType());
+        headers.put(EventHeaders.OCCURRED_AT, event.getCreatedAt().toString());
         if (event.getPublishedAt() != null) {
-            record.headers().add(EventHeaders.PUBLISHED_AT,
-                    event.getPublishedAt().toString().getBytes(StandardCharsets.UTF_8));
+            headers.put(EventHeaders.PUBLISHED_AT, event.getPublishedAt().toString());
         }
         String traceParent = event.getTraceParent();
         if (traceParent != null && !traceParent.isBlank()) {
-            record.headers().add(EventHeaders.TRACE_PARENT, traceParent.getBytes(StandardCharsets.UTF_8));
+            headers.put(EventHeaders.TRACE_PARENT, traceParent);
         }
-        return record;
+        return new OutboundMessage(event.getTopic(), event.getPartitionKey(), event.getPayload(), headers);
     }
 }
