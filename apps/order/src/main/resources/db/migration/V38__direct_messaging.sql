@@ -9,6 +9,9 @@ CREATE TABLE direct_cursor
     topic          VARCHAR(100) NOT NULL,
     sent_at        DATETIME(6)  NOT NULL,
     row_id         BIGINT       NOT NULL,
+    -- 같은 그룹의 여러 인스턴스 가운데 한 곳만 읽는다(PR #210 R1). 점유 기한은 DB 시각으로 잰다.
+    owner          VARCHAR(64)  NULL,
+    lease_until    DATETIME(6)  NULL,
     PRIMARY KEY (consumer_group, topic)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;

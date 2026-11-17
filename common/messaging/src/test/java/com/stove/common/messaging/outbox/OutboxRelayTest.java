@@ -20,6 +20,7 @@ import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -270,6 +271,21 @@ class OutboxRelayTest {
 
         assertThat(captor.getAllValues())
                 .allSatisfy(sent -> assertThat(header(sent, EventHeaders.TRACE_PARENT)).isEqualTo(captured));
+    }
+
+    @Test
+    @DisplayName("[PR #210 R2] 시계가 표의 마지막 sent_at 보다 뒤에 있어도 sent_at 은 그보다 크게, 서로 다르게 찍힌다")
+    void sentAtNeverGoesBackwardsEvenWhenTheClockDoes() {
+        Instant latestInTable = Instant.now().plus(Duration.ofHours(1)).truncatedTo(ChronoUnit.MICROS);
+        when(repository.findLatestSentAt()).thenReturn(latestInTable);
+        OutboxEvent first = recordWithKey("EVT-1", "ORD-1");
+        OutboxEvent second = recordWithKey("EVT-2", "ORD-2");
+        brokerHealthy();
+
+        relay.relay();
+
+        assertThat(first.getSentAt()).isAfter(latestInTable);
+        assertThat(second.getSentAt()).isAfter(first.getSentAt());
     }
 
     @Test

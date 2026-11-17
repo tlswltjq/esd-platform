@@ -1,6 +1,7 @@
 package com.stove.common.messaging.outbox;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +62,10 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
                                                 @Param("sent") OutboxEvent.OutboxStatus sent);
 
     long countByStatus(OutboxEvent.OutboxStatus status);
+
+    /** 릴레이가 {@code sent_at} 을 이 값보다 크게 찍기 위한 시작점. 행이 없으면 null. */
+    @Query("SELECT MAX(e.sentAt) FROM OutboxEvent e")
+    Instant findLatestSentAt();
 
     /** 운영 회수용. 원인을 제거한 뒤 {@link OutboxEvent#requeue()} 로 되살린다. */
     List<OutboxEvent> findByStatusOrderByIdAsc(OutboxEvent.OutboxStatus status);

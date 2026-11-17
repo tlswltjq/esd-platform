@@ -4,6 +4,7 @@ import com.stove.common.event.MessagePublisher;
 import com.stove.common.event.OutboundMessage;
 import com.stove.common.kafka.EventHeaders;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -34,6 +35,8 @@ public class OutboxRelay {
     private final int maxBatchesPerCycle;
     private final OutboxMetrics metrics;
     private final TransactionTemplate transactionTemplate;
+    /** 마지막으로 찍은 {@code sent_at}. 처음에는 표의 최댓값에서 시작한다(스케줄러 한 스레드에서만 쓴다). */
+    private Instant lastSentAt;
 
     /**
      * 폴링 진입점. <b>비울 게 남아 있는 동안은 다음 폴링을 기다리지 않는다.</b>
@@ -138,11 +141,25 @@ public class OutboxRelay {
         }
     }
 
+    /**
+     * 이전에 찍은 값보다 반드시 큰 {@code sent_at}(마이크로초). 브로커 없음 기준선은 {@code (sent_at, id)} 를 읽기 위치로 쓰므로,
+     * 시계가 뒤로 가서 새 행이 위치보다 작게 찍히면 영영 읽히지 않는다(PR #210 R2). 시계가 정상이면 지금 시각 그대로다.
+     */
+    private Instant nextSentAt() {
+        if (lastSentAt == null) {
+            Instant latest = repository.findLatestSentAt();
+            lastSentAt = latest == null ? Instant.EPOCH : latest.truncatedTo(ChronoUnit.MICROS);
+        }
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        lastSentAt = now.isAfter(lastSentAt) ? now : lastSentAt.plus(1, ChronoUnit.MICROS);
+        return lastSentAt;
+    }
+
     /** @return 발행에 성공했으면 true — 이 키의 다음 이벤트를 보내도 된다는 뜻이다 */
     private boolean awaitAck(OutboxEvent event, CompletableFuture<Void> ack) {
         try {
             ack.get();
-            event.markSent();
+            event.markSent(nextSentAt());
             metrics.recordPublished();
             return true;
         } catch (InterruptedException e) {

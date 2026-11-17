@@ -10,6 +10,7 @@ import com.stove.common.messaging.trace.MicrometerReplayTracing;
 import com.stove.common.messaging.trace.ReplayTracing;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,10 +32,19 @@ public class DirectMessagingAutoConfiguration {
     @Bean
     public MessagePublisher directMessagePublisher(DirectMessagingProperties properties,
                                                    ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate) {
-        KafkaTemplate<String, String> template = kafkaTemplate.getIfAvailable();
-        MessagePublisher fallback = template == null || properties.alsoKafkaTopics().isEmpty()
-                ? null : new KafkaMessagePublisher(template);
-        return new DirectMessagePublisher(properties.alsoKafkaTopics(), fallback);
+        return publisher(properties.alsoKafkaTopics(), kafkaTemplate.getIfAvailable());
+    }
+
+    /** Kafka 로도 보낼 토픽이 있는데 {@link KafkaTemplate} 이 없으면 기동을 멈춘다 — 조용히 SENT 로만 남기지 않는다(PR #210 R3). */
+    static DirectMessagePublisher publisher(Set<String> alsoKafkaTopics, KafkaTemplate<String, String> template) {
+        if (alsoKafkaTopics.isEmpty()) {
+            return new DirectMessagePublisher(alsoKafkaTopics, null);
+        }
+        if (template == null) {
+            throw new IllegalStateException("stove.messaging.direct.also-kafka-topics=" + alsoKafkaTopics
+                    + " 인데 KafkaTemplate 이 없다");
+        }
+        return new DirectMessagePublisher(alsoKafkaTopics, new KafkaMessagePublisher(template));
     }
 
     @Bean

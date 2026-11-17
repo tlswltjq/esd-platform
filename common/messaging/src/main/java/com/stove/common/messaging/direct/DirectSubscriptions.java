@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -34,13 +35,21 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>실패: Kafka adapter 와 같이 제자리 재시도(1·2·4초, {@code noRetryFor} 는 생략) 뒤 {@link KeyQuarantine} 에 보관하고 키를 멈춘다.
  * 멈춘 키의 뒤 행은 처리하지 않고 쌓는다. 보관이 실패하면 위치를 넘기지 않고 다음 주기에 그 행부터 다시 읽는다.
+ *
+ * <p>인스턴스가 여럿이면: (그룹, 토픽)마다 {@code direct_cursor} 한 줄을 한 인스턴스만 점유해 읽는다(기한 {@link #LEASE}, DB 시각).
+ * 그래서 소비 인스턴스를 늘려도 한 토픽은 한 곳에서만 처리된다 — Kafka 의 파티션 같은 나눔이 없는 이 기준선의 한계다.
  */
 @Slf4j
 public class DirectSubscriptions implements SmartLifecycle {
 
     static final List<Duration> RETRY_DELAYS = List.of(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(4));
     private static final Pattern TABLE = Pattern.compile("^[a-z_]+(\\.[a-z_]+)?$");
-    private static final Timestamp START = Timestamp.from(Instant.EPOCH);
+    private static final Timestamp START = Timestamp.from(Instant.parse("2000-01-01T00:00:00Z"));
+    /**
+     * 점유 기한. 한 행의 재시도(1+2+4초)와 처리보다 넉넉해야 한다. 처리가 이보다 길어 다른 인스턴스가 이어받아도
+     * 업무는 Inbox 로 한 번만 반영되고, 늦은 쪽은 펜싱으로 위치를 되돌리지 못한다.
+     */
+    static final Duration LEASE = Duration.ofSeconds(60);
 
     private final ApplicationContext beans;
     private final JdbcTemplate jdbc;
@@ -50,6 +59,7 @@ public class DirectSubscriptions implements SmartLifecycle {
     private final long pollIntervalMs;
     private final int batchSize;
     private final List<Duration> retryDelays;
+    private final String instanceId = UUID.randomUUID().toString();
     private ScheduledExecutorService pollers;
     private volatile boolean running;
 
@@ -109,7 +119,13 @@ public class DirectSubscriptions implements SmartLifecycle {
         running = false;
         if (pollers != null) {
             pollers.shutdownNow();
+            try {
+                pollers.awaitTermination(LEASE.toSeconds(), TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
+        releaseAll();
     }
 
     @Override
@@ -126,8 +142,14 @@ public class DirectSubscriptions implements SmartLifecycle {
         }
     }
 
-    /** 한 주기. 처리한 행까지만 위치를 넘긴다. */
+    /**
+     * 한 주기. 그 (그룹, 토픽)의 점유를 얻은 인스턴스만 읽고, 처리한 행까지만 위치를 넘긴다.
+     * 위치를 넘길 때 점유가 아직 내 것인지 확인한다(펜싱) — 점유를 잃었으면 위치를 건드리지 않고 멈춘다(PR #210 R1).
+     */
     void poll(Subscription subscription) {
+        if (!claim(subscription)) {
+            return;
+        }
         Cursor cursor = cursor(subscription);
         List<Row> rows = jdbc.query("SELECT id, event_id, event_type, partition_key, payload, created_at, published_at,"
                         + " trace_parent, sent_at FROM " + subscription.source()
@@ -148,9 +170,37 @@ public class DirectSubscriptions implements SmartLifecycle {
             } else {
                 deliver(subscription, message);
             }
-            jdbc.update("INSERT INTO direct_cursor (consumer_group, topic, sent_at, row_id) VALUES (?, ?, ?, ?)"
-                            + " ON DUPLICATE KEY UPDATE sent_at = VALUES(sent_at), row_id = VALUES(row_id)",
-                    subscription.group(), subscription.topic(), row.sentAt(), row.id());
+            int advanced = jdbc.update("UPDATE direct_cursor SET sent_at = ?, row_id = ?,"
+                            + " lease_until = NOW(6) + INTERVAL ? SECOND"
+                            + " WHERE consumer_group = ? AND topic = ? AND owner = ?",
+                    row.sentAt(), row.id(), LEASE.toSeconds(), subscription.group(), subscription.topic(), instanceId);
+            if (advanced == 0) {
+                log.warn("점유를 잃어 위치를 넘기지 않고 멈춘다 group={} topic={} row={}",
+                        subscription.group(), subscription.topic(), row.id());
+                return;
+            }
+        }
+    }
+
+    /**
+     * (그룹, 토픽) 한 줄을 이 인스턴스가 점유한다. 비어 있거나, 이미 내 것이거나, 기한이 지났으면 가져온다.
+     * 기한은 DB 시각({@code NOW(6)})으로 재므로 인스턴스끼리 시계가 달라도 된다.
+     */
+    private boolean claim(Subscription subscription) {
+        jdbc.update("INSERT IGNORE INTO direct_cursor (consumer_group, topic, sent_at, row_id) VALUES (?, ?, ?, 0)",
+                subscription.group(), subscription.topic(), START);
+        return jdbc.update("UPDATE direct_cursor SET owner = ?, lease_until = NOW(6) + INTERVAL ? SECOND"
+                        + " WHERE consumer_group = ? AND topic = ?"
+                        + " AND (owner IS NULL OR owner = ? OR lease_until < NOW(6))",
+                instanceId, LEASE.toSeconds(), subscription.group(), subscription.topic(), instanceId) == 1;
+    }
+
+    /** 멈출 때 점유를 놓아 다른 인스턴스가 기한을 기다리지 않고 이어받게 한다. */
+    private void releaseAll() {
+        try {
+            jdbc.update("UPDATE direct_cursor SET owner = NULL, lease_until = NULL WHERE owner = ?", instanceId);
+        } catch (RuntimeException failure) {
+            log.warn("점유 해제 실패, 기한이 지나면 다른 인스턴스가 이어받는다", failure);
         }
     }
 

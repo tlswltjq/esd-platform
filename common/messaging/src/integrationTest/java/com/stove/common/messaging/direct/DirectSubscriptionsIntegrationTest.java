@@ -135,6 +135,50 @@ class DirectSubscriptionsIntegrationTest {
         assertThat(quarantine.stopped(group, topic, key)).isTrue();
     }
 
+    private DirectSubscriptions anotherInstance() {
+        return new DirectSubscriptions(context, jdbc, quarantine, ReplayTracing.NONE,
+                Map.of(topic, "outbox_event"), 200, 100, List.of(Duration.ofMillis(10)));
+    }
+
+    @Test
+    void anotherInstanceOfTheSameGroupDoesNotReadWhileTheLeaseIsHeld() {
+        OutboxEvent first = row("K-" + UUID.randomUUID(), true);
+        Recording other = new Recording();
+        subscriptions.poll(subscription);
+        OutboxEvent second = row("K-" + UUID.randomUUID(), true);
+
+        anotherInstance().poll(new DirectSubscriptions.Subscription(group, topic, "outbox_event", other, new Class[0]));
+        subscriptions.poll(subscription);
+
+        assertThat(other.received).as("점유 중인 인스턴스가 있으면 같은 그룹의 다른 인스턴스는 읽지 않는다").isEmpty();
+        assertThat(deliveredIds()).containsExactly(first.getEventId(), second.getEventId());
+    }
+
+    @Test
+    void anExpiredLeaseIsTakenOverAndTheFormerOwnerCannotMoveTheCursor() {
+        String key = "K-" + UUID.randomUUID();
+        OutboxEvent first = row(key, true);
+        OutboxEvent second = row(key, true);
+        DirectSubscriptions successor = anotherInstance();
+        Recording next = new Recording();
+        DirectSubscriptions.Subscription successorSubscription =
+                new DirectSubscriptions.Subscription(group, topic, "outbox_event", next, new Class[0]);
+        // 첫 행을 처리하는 동안 점유 기한이 지나 다른 인스턴스가 이어받는다.
+        handler.onReceive = () -> {
+            jdbc.update("UPDATE direct_cursor SET lease_until = NOW(6) - INTERVAL 1 SECOND WHERE consumer_group = ?", group);
+            successor.poll(successorSubscription);
+        };
+
+        subscriptions.poll(subscription);
+
+        assertThat(deliveredIds()).as("점유를 잃은 쪽은 위치를 넘기지 못하고 멈춘다").containsExactly(first.getEventId());
+        assertThat(next.received.stream().map(message -> message.header(EventHeaders.EVENT_ID)).toList())
+                .as("이어받은 쪽은 저장된 위치부터 읽는다(앞 행은 Inbox 가 중복을 막는다)")
+                .containsExactly(first.getEventId(), second.getEventId());
+        assertThat(jdbc.queryForObject("SELECT row_id FROM direct_cursor WHERE consumer_group = ?", Long.class, group))
+                .as("늦게 끝난 옛 점유자가 위치를 되돌리지 않는다").isEqualTo(second.getId());
+    }
+
     static class Rejected extends RuntimeException {
         Rejected() {
             super("rejected");
@@ -146,6 +190,8 @@ class DirectSubscriptionsIntegrationTest {
         final List<String> tried = new ArrayList<>();
         volatile String failOn;
         volatile String rejectOn;
+        /** 첫 수신 때 한 번 실행한다(처리 도중의 상황을 만든다). */
+        volatile Runnable onReceive;
 
         int attempts(String eventId) {
             return (int) tried.stream().filter(eventId::equals).count();
@@ -162,6 +208,11 @@ class DirectSubscriptionsIntegrationTest {
                 throw new Rejected();
             }
             received.add(message);
+            Runnable once = onReceive;
+            if (once != null) {
+                onReceive = null;
+                once.run();
+            }
         }
     }
 }
