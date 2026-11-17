@@ -23,7 +23,14 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
 
 # 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
 MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
-BROKERS = ("kafka", "direct")
+BROKERS = ("kafka", "direct", "rabbitmq")
+# 비교하는 브로커가 모두 같은 병렬도를 갖게 한다: Kafka 토픽 파티션 수 = RabbitMQ (그룹, 토픽)당 큐 수.
+# docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
+PARALLELISM = 3
+RABBIT_USER = "stove"
+RABBIT_PASSWORD = "stove1234"
+# RabbitMQ 로 받는 @EventSubscriber 가 없는 토픽(발행 앱 → 토픽). auth 는 아무도 받지 않고, catalog 는 Store 가 Kafka 로만 받는다.
+RABBIT_OPTIONAL_TOPICS = {"auth": "stove.auth.v1", "catalog": "stove.catalog.v1"}
 
 
 def broker_environment(app, broker):
@@ -36,7 +43,27 @@ def broker_environment(app, broker):
     if broker == "direct" and app == "catalog":
         # Store 는 Outbox 를 직접 읽을 수 없어(DB 없음) catalog 토픽만 Kafka 로도 보낸다. 구매 여정 밖이라 측정에 섞이지 않는다.
         environment["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    if broker == "rabbitmq":
+        environment.update(SPRING_RABBITMQ_HOST="rabbitmq", SPRING_RABBITMQ_PORT="5672",
+                           SPRING_RABBITMQ_USERNAME=RABBIT_USER, SPRING_RABBITMQ_PASSWORD=RABBIT_PASSWORD,
+                           STOVE_MESSAGING_RABBITMQ_QUEUESPERTOPIC=str(PARALLELISM))
+        if app in RABBIT_OPTIONAL_TOPICS:
+            # 이 토픽은 RabbitMQ 로 받는 소비자가 없다. 받을 큐가 없어 되돌아와도 발행 성공으로 친다(PR #211 R3).
+            environment["STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS"] = RABBIT_OPTIONAL_TOPICS[app]
+        if app == "catalog":
+            # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
+            environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"
     return environment
+
+
+def infra_services(broker):
+    """그 브로커 회차에만 더 띄울 기반 서비스(Compose 서비스 정의). Kafka 는 Store 때문에 언제나 뜬다."""
+    if broker != "rabbitmq":
+        return {}
+    return {"rabbitmq": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
+                         "environment": {"RABBITMQ_DEFAULT_USER": RABBIT_USER, "RABBITMQ_DEFAULT_PASS": RABBIT_PASSWORD},
+                         "healthcheck": {"test": ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"],
+                                         "interval": "3s", "timeout": "10s", "retries": 60}}}
 
 
 def load_command(offset, rate, seconds, buyers, evidence, warmup=10):

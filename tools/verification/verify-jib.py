@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
-    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct"],
+    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq"],
                         help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
@@ -144,6 +144,12 @@ def main():
                                   "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT", "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
                                   "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
                                   "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true"}}}
+    from support.messaging_measurement import PARALLELISM, infra_services
+    # 고른 브로커에만 필요한 기반 서비스(RabbitMQ 등). 앱 환경(broker_environment)과 같은 조건이다(PR #211 R4).
+    services.update(infra_services(args.broker))
+    if args.measure:
+        # 비교하는 브로커가 같은 병렬도를 갖게 한다(Kafka 파티션 수 = RabbitMQ 그룹·토픽당 큐 수).
+        services["kafka"]["environment"]["KAFKA_NUM_PARTITIONS"] = str(PARALLELISM)
     for name, port in PORTS.items():
         configured = base["services"][name]
         if "build" in configured:
@@ -224,7 +230,8 @@ def main():
              "-p", project, "-f", str(compose), "--timeout", "30", *selected], "stack-status" + suffix)
 
     try:
-        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio"], "infra")
+        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio",
+                     *(["rabbitmq"] if "rabbitmq" in services else [])], "infra")
         provision_storage()
         denied = subprocess.run(mc + ["pipe", "reader/stove-builds/forbidden.zip"], input=b"forbidden", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if denied.returncode == 0:
