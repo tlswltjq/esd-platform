@@ -19,6 +19,7 @@
 | [E9](#resilience) | 중단·복구 시나리오 R-01~R-08 | 2026-08-17, OCI | 재작성 전 |
 | [E10](#tempo) | Tempo 분산 추적 도입·Payment 추적 복원 | 2026-10-24, 로컬 OrbStack | 재작성 후 (`d7fc8d4`) |
 | [E11](#jib-oci) | Dockerfile vs Jib 이미지 빌드·실행 | 2026-10-19, OCI Ampere A1 | 재작성 후 (`2ccad87`) |
+| [E12](#messaging-comparison) | 메시징 기술 비교: Kafka·RabbitMQ·Redis Streams·브로커 없음 (평시 부하) | 2026-11-17, OCI Ampere A1 | 재작성 후 (`8b8260fa`) |
 
 <a id="measuring"></a>
 
@@ -377,3 +378,48 @@
 
 **해석·한계** — 가장 분명한 효과는 이미지 생성·게시 시간과 변경 레이어·이미지 사이 중복 blob의 감소다. 기존 Store 이미지의 약 80.84MiB JAR 복사·소유권 변경 레이어 중복이 크기 차이에 작용했고, Dockerfile에도 `COPY --chown`·레이어 분리를 적용할 수 있으므로 Jib의 고유 우위로 일반화하지 않는다. clean-output Store digest는 양쪽 모두 3종류라 재현성은 주장하지 않는다. 빌드 시간 감소를 CI 시간 감소로 환산하지 않는다. 예비 회차(인증 필요 readiness 경로, 12개 JVM 동시 기동)는 집계에서 제외했다. 이후 2026-10-21부터 기본 실행은 Jib이며 Dockerfile은 0개다.
 원문: [jib-oci-comparison.md](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/jib-oci-comparison.md), 재현 도구 [tools/image-benchmark](../tools/image-benchmark/README.md)
+
+<a id="messaging-comparison"></a>
+
+## E12. 메시징 기술 비교 — Kafka·RabbitMQ·Redis Streams·브로커 없음 (2026-11-17, 평시 부하)
+
+**질문** — 같은 업무 코드(핸들러·Outbox·Inbox·격리)를 두고 브로커만 바꾸면 구매 여정의 완료 시간과 브로커 구간 지연이 달라지는가. 그리고 같은 보장(결정 202: 같은 키는 보낸 순서대로 한 번에 하나, 실패는 제자리 재시도 뒤 격리)을 지키려면 기술마다 무엇을 직접 만들어야 하는가. 비교 대상은 [결정 203](decisions.md#messaging-comparison-targets), 지표는 [결정 204](decisions.md#messaging-comparison-metrics)이며 이번 회차는 그중 **A 업무 완료 시간·B 브로커 구간 지연·G 대조군(HTTP)** 만 잰다.
+
+**조건**
+- 코드 `8b8260fa`(4개 adapter와 리뷰 수정이 모두 든 같은 코드, [PR #210](https://github.com/tlswltjq/esd-platform/pull/210)·[#211](https://github.com/tlswltjq/esd-platform/pull/211)·[#212](https://github.com/tlswltjq/esd-platform/pull/212)). 선택은 `stove.messaging.broker` 하나다. Store는 격리 보관 DB가 없어 모든 회차에서 Kafka로 받는다(catalog 토픽만 Kafka로도 보냄, 구매 여정 밖).
+- `verify-jib.py --measure --broker <기술> --load-rate 2 --load-duration 60 --load-buyers 10`: 격리 스택(12개 앱 Jib 이미지, 회차마다 빈 DB·브로커), 열린 모델 초당 2주문 60초(예열 10초 제외, 측정 120주문), 릴레이 폴링 200ms(모든 기술 같음).
+- 병렬도 3으로 맞춤: Kafka 토픽 파티션 3 = RabbitMQ (그룹, 토픽)당 키 해시 큐 3(`x-single-active-consumer`) = Redis Streams 토픽당 키 해시 스트림 3. 브로커 없음은 (그룹, 토픽)마다 한 인스턴스가 발행 모듈 `outbox_event`를 200ms마다 읽는다. Redis Streams는 게이트웨이 세션용과 따로 띄우고 AOF `everysec`.
+- 순서: Kafka → 브로커 없음 → RabbitMQ → Redis Streams를 두 바퀴(조건당 2회, 섞인 순서). 측정 중 같은 호스트에서 다른 테스트를 돌리지 않았다(원칙 11). 회차마다 기존 컨테이너·볼륨 보존을 대조했다.
+- 지표 A = 결제 확정(`result_occurred_at`)·주문 생성 → 보관함 구매 근거 생성(`product_license.received_at`, [결정 208](decisions.md#journey-endpoint-purchase-basis)). 지표 B = 릴레이가 보내기 직전 시각(`x-published-at`) → 소비 그룹의 `processed_event.processed_at`, 구매 여정의 5개 소비 그룹. 회차 유효성: HTTP 실패 0, 출발 지연 100ms 초과 0, 주문 실패·미완료 0, 5개 그룹 모두 120건, 음수 구간 0.
+
+**결과** — 8회 모두 유효(120주문 완료, 실패 0). 값은 회차 1 / 회차 2.
+
+| 지표 | Kafka | RabbitMQ | Redis Streams | 브로커 없음 |
+|---|---|---|---|---|
+| 결제 확정 → 구매 근거 p50 | 265 / 278ms | 259 / 251ms | 257 / 260ms | **503 / 451ms** |
+| 결제 확정 → 구매 근거 p95 | 494 / 403ms | 360 / 372ms | 515 / 344ms | **726 / 634ms** |
+| 주문 생성 → 구매 근거 p50 | 1053 / 1000ms | 1042 / 989ms | 1025 / 986ms | **1386 / 1288ms** |
+| 주문 생성 → 구매 근거 p95 | 1573 / 1500ms | 1547 / 1526ms | 1629 / 1518ms | **1911 / 1795ms** |
+| 소비 그룹별 브로커 구간 p50(5개 그룹 범위) | 25~113 / 24~104ms | 19~97 / 19~94ms | 23~116 / 17~104ms | **126~210 / 120~197ms** |
+| 소비 그룹별 브로커 구간 p95(5개 그룹 범위) | 70~216 / 73~228ms | 50~207 / 49~200ms | 86~377 / 50~210ms | **239~404 / 214~341ms** |
+| HTTP p95(대조군) | 96 / 95ms | 90 / 99ms | 205 / 89ms | 127 / 75ms |
+
+**같은 보장을 지키려고 기술마다 직접 만든 것**(구현·교차 리뷰에서 드러난 차이)
+
+| 항목 | Kafka | RabbitMQ | Redis Streams | 브로커 없음 |
+|---|---|---|---|---|
+| 같은 키 순서 | 키 → 파티션(브로커) | 키 해시 큐 N개 + 단일 활성 소비자를 앱이 구성 | 키 해시 스트림 N개를 앱이 구성 | `(sent_at, id)` 커서 + 릴레이 단조 `sent_at`(#210 R2) |
+| 같은 그룹 인스턴스 여럿일 때 한 곳만 처리 | 소비 그룹 코디네이터가 파티션을 세대(generation)로 배정 | 큐마다 단일 활성 소비자(브로커). 다만 인스턴스 사이로 큐를 나눠 주지 않는다 | consumer group은 항목을 소비자끼리 **나눠** 키 순서를 깬다 → 스트림마다 잠금 키·연장·Lua 점유 확인 읽기를 앱이 구현(#212 R1~R3) | 커서 줄 점유·펜싱을 앱이 구현(#210 R1) |
+| 받는 쪽이 늦게 붙어도 지난 메시지 | 로그에 남음 | 받을 큐가 없으면 버림 → mandatory·returns로 실패 처리, 소비자 없는 토픽을 설정으로 알림(#211 R3) | 로그처럼 남음(그룹 위치 `0`) | Outbox 표에 남음 |
+| 처리 실패 시 뒤 메시지 추월 방지 | 오류 처리기가 남은 레코드를 되감음 | requeue하면 prefetch한 뒤 메시지가 앞지름 → 붙잡고 다시 처리(#211 R1) | 같은 붙잡기 공용 사용 | 커서를 넘기지 않음 |
+| 발행 확인 | ack(`acks`) | publisher confirm·returns 필수, 10초 한도(#211 R2) | `XADD` id | 행 `SENT`(전달 없음) |
+| 교차 리뷰 high 지적(순서·유실·동시 처리) | — (포트 분리 #205의 high 2건은 배선) | 3건 | 3건 | 1건 |
+
+**해석·한계**
+- 이 부하(초당 2주문, 병렬도 3)에서는 **Kafka·RabbitMQ·Redis Streams의 완료 시간·브로커 구간 지연 차이가 회차 사이 편차 안에 있다**(예: 결제 확정 → 구매 근거 p50 251~278ms). 원칙 9에 따라 이 셋 사이에는 "이 조건에서 차이 없음"까지만 말한다. 지연으로 Kafka를 고를 근거는 없다.
+- 브로커 없음은 두 회차 모두 세 기술보다 느리다(결제 확정 → 구매 근거 p50 약 1.8배, 그룹별 브로커 구간 p50 약 5배). 소비자가 200ms마다 조회하므로 전달마다 평균 약 100ms가 더해지고, 구매 여정은 여러 번 전달을 거친다.
+- Redis Streams 회차 1의 HTTP p95 205ms는 회차 2(89ms)와 다른 기술 범위를 벗어난다. 대조군이 크게 바뀐 회차로 보고, 그 회차의 p95 값(515ms·377ms)은 해석에 쓰지 않는다.
+- 기술 사이 차이는 수치보다 **구현에서** 나왔다. 같은 보장을 지키려고 RabbitMQ·Redis Streams·브로커 없음은 순서·점유·유실 방지를 앱이 직접 만들었고, 그 부분에서 교차 리뷰 high 지적이 기술마다 1~3건 나왔다. Kafka는 같은 역할(키 → 파티션, 소비 그룹 배정, 로그 보존)을 브로커가 맡는다. Redis Streams의 잠금 기한 방식은 Redis에 기한(60초) 넘게 닿지 못하는 동안 처리 중인 핸들러가 새 점유자와 겹칠 수 있는 한계가 남는다(업무 반영은 Inbox가 한 번으로 막는다).
+- 이번에 재지 않은 것: 결정 204의 **C 처리량·확장성**(포화 처리량, 소비 인스턴스 1 → 3), **D 장애 수복**(브로커 중단·재시작, 독 메시지, 느린 소비자의 RTO·RPO), **E 비용**, **F 합격 조건의 기계 검증**(키마다 순서 위반·중복 반영을 `event_id`로 대조 — 이번 유효성은 완료·건수만 본다). 순서·점유는 기술마다 통합 테스트(실 브로커)로만 확인했다. 평시 한 부하점의 결과라 처리 용량이나 장애 시 거동으로 일반화하지 않는다.
+- 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
+
