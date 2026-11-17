@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -72,6 +73,22 @@ class BrokerEnvironmentTest(unittest.TestCase):
         streams = messaging_measurement.infra_services("redis-streams")["streams"]
         self.assertIn("--appendonly", streams["command"])
 
+    def test_db_rate_is_per_second_change_of_the_mysql_counters(self):
+        before = {"Com_select": 100, "Questions": 300}
+        after = {"Com_select": 600, "Questions": 1300}
+        self.assertEqual(messaging_measurement.db_rate(before, after, 10), {"Com_select": 50.0, "Questions": 100.0})
+
+    def test_db_counters_reads_show_global_status_output(self):
+        seen = {}
+
+        def capture(command, **kwargs):
+            seen["command"], seen["input"] = command, kwargs.get("input")
+            return "Com_select\t42\nQuestions\t99"
+
+        self.assertEqual(messaging_measurement.db_counters(capture, "c1"), {"Com_select": 42, "Questions": 99})
+        self.assertEqual(seen["command"][:4], ["docker", "exec", "-i", "c1"])
+        self.assertIn("Com_select", seen["input"])
+
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
             messaging_measurement.broker_environment("order", "nats")
@@ -116,13 +133,24 @@ class MeasureTest(unittest.TestCase):
                     self.assertIn("--keys-from", command)
                     (output / "broker.json").write_text(json.dumps({"groups": broker(2)}))
 
-            summary = messaging_measurement.measure("/repo", ["docker", "compose"], run,
-                                                    lambda command: "mysql-id", output, 300, 5, 1, 2, 1)
+            selects = iter([100, 150, 450])
+
+            def capture(command, **kwargs):
+                if command[:2] == ["docker", "exec"]:
+                    value = next(selects)
+                    return "Com_select\t%d\nQuestions\t%d" % (value, value * 2)
+                return "mysql-id"
+
+            with mock.patch.object(messaging_measurement.time, "sleep"):
+                summary = messaging_measurement.measure("/repo", ["docker", "compose"], run, capture,
+                                                        output, 300, 5, 1, 2, 1)
 
         self.assertEqual(calls, ["measure-load", "measure-journey", "measure-broker"])
         self.assertEqual(summary["planned"], 2, "예열 주문은 집계에서 뺀다")
         self.assertEqual(summary["http_p95_ms"], 30.0)
         self.assertTrue(summary["validity"]["valid"])
+        self.assertEqual(summary["db_load"]["idle_per_second"]["Com_select"], 5.0, "유휴 10초 동안 50건")
+        self.assertIn("load_run_per_second", summary["db_load"])
 
 
 if __name__ == "__main__":

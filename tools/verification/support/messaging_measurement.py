@@ -10,7 +10,10 @@
 ``verify-jib.py``가 실패로 끝낸다.
 """
 import json
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 SETTLE_SECONDS = 120
@@ -129,11 +132,44 @@ def validity(measured, journey, broker):
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
+# 업무 DB(모든 모듈 스키마가 한 MySQL 서버)가 받은 조회 수. 브로커 없음은 소비자가 이 서버를 폴링한다.
+DB_LOAD_SQL = "SHOW GLOBAL STATUS WHERE Variable_name IN ('Com_select', 'Questions');"
+IDLE_SECONDS = 10
+
+
+def db_counters(capture, container):
+    """업무 MySQL 의 누적 조회 수(``Com_select``)와 전체 문장 수(``Questions``)."""
+    password = os.environ.get("MYSQL_ROOT_PASSWORD", "root1234")
+    text = capture(["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-N", "-B"],
+                   input=DB_LOAD_SQL, stderr=subprocess.DEVNULL)
+    counters = {}
+    for line in text.splitlines():
+        name, _, value = line.partition("\t")
+        counters[name.strip()] = int(value.strip())
+    return counters
+
+
+def db_rate(before, after, seconds):
+    """두 시점 사이 초당 조회 수·문장 수."""
+    return {name: round((after[name] - before[name]) / seconds, 1) for name in ("Com_select", "Questions")}
+
+
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10):
-    """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다."""
+    """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
+
+    부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
+    초당 조회 수를 같이 남긴다.
+    """
     load = Path(output) / "load.json"
-    run(load_command(offset, rate, seconds, buyers, load, warmup), "measure-load")
     container = capture(docker + ["ps", "-q", "mysql"])
+    idle_start = db_counters(capture, container)
+    time.sleep(IDLE_SECONDS)
+    idle_end = db_counters(capture, container)
+    load_started = time.monotonic()
+    run(load_command(offset, rate, seconds, buyers, load, warmup), "measure-load")
+    load_end = db_counters(capture, container)
+    db_load = {"idle_per_second": db_rate(idle_start, idle_end, IDLE_SECONDS),
+               "load_run_per_second": db_rate(idle_end, load_end, time.monotonic() - load_started)}
     journey_file = Path(output) / "journey.json"
     run(journey_command(root, container, load, journey_file), "measure-journey")
     broker_file = Path(output) / "broker.json"
@@ -147,4 +183,4 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     return {"rate": rate, "duration_seconds": seconds, "warmup_seconds": warmup, "buyers": buyers,
             "planned": len(measured), "accepted": sum(1 for order in measured if order.get("status") == 200),
             "http_p95_ms": _nearest_rank(http, 95), "late_start_max_ms": max(late) if late else None,
-            "journey": journey, "broker": broker, "validity": validity(measured, journey, broker)}
+            "journey": journey, "broker": broker, "db_load": db_load, "validity": validity(measured, journey, broker)}
