@@ -132,7 +132,7 @@ python3 -B tools/verification/verify-approval-journeys.py        # 로컬 fake P
 python3 -B tools/verification/verify-expiry-journeys.py          # 로컬 fake PortOne 주문 기한을 넘는 승인 조합·접수 전 PAY_PENDING 만료(31분 대기, 별도 야간 작업, 결정 120·126)
 ```
 
-CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 PR·main push마다 `./gradlew build`(L0~L5·과거 이행)를, 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`)을 돌린다. 공개 저장소라 self-hosted 러너를 쓰지 않고, 실제 PortOne 결제·환불과 비밀 값은 CI에 넣지 않는다.
+CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 main push마다 `./gradlew build`(L0~L5·과거 이행)를, PR에서는 바뀐 범위만 돌린다([결정 207](decisions.md#ci-build-scope): 문서만이면 생략, `apps/<앱>/` 안만이면 그 앱의 `build`, 그 밖은 전체). 또 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`)을 돌린다. 공개 저장소라 self-hosted 러너를 쓰지 않고, 실제 PortOne 결제·환불과 비밀 값은 CI에 넣지 않는다.
 
 L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
 컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.
