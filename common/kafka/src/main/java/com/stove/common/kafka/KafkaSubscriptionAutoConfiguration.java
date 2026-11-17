@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -21,6 +22,8 @@ import org.springframework.kafka.listener.ConsumerRecordRecoverer;
  * 필요한 Kafka 설정이 정말 없으면 등록기가 기동을 멈춘다.
  */
 @AutoConfiguration(after = {KafkaAutoConfiguration.class, KafkaConsumerAutoConfiguration.class})
+// 다른 adapter(브로커 없음 기준선 등)를 고르면 Kafka 구독을 만들지 않는다(결정 203).
+@ConditionalOnProperty(prefix = "stove.messaging", name = "broker", havingValue = "kafka", matchIfMissing = true)
 public class KafkaSubscriptionAutoConfiguration {
 
     @Bean

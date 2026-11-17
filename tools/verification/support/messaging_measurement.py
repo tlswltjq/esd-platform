@@ -21,6 +21,24 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
                    "order-license-grant", "settlement-paid-order"]
 
 
+# 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
+MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
+BROKERS = ("kafka", "direct")
+
+
+def broker_environment(app, broker):
+    """결정 203 비교 대상 adapter 를 고르는 앱 환경 변수. kafka 는 기본값이라 아무것도 넣지 않는다."""
+    if broker not in BROKERS:
+        raise ValueError("알 수 없는 broker: " + broker)
+    if broker == "kafka" or app not in MESSAGING_APPS:
+        return {}
+    environment = {"STOVE_MESSAGING_BROKER": broker}
+    if broker == "direct" and app == "catalog":
+        # Store 는 Outbox 를 직접 읽을 수 없어(DB 없음) catalog 토픽만 Kafka 로도 보낸다. 구매 여정 밖이라 측정에 섞이지 않는다.
+        environment["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    return environment
+
+
 def load_command(offset, rate, seconds, buyers, evidence, warmup=10):
     return ["./gradlew", ":e2e:messagingLoadTest", "--no-daemon", "--console=plain",
             "-Dstove.e2e.port-offset=" + str(offset),
