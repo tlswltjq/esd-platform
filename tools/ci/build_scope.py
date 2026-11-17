@@ -4,7 +4,10 @@
 규칙(보수적으로, 모르면 전부 빌드):
 - PR이 아니면(main push·수동·예약) 항상 ``build``(전체). main은 매번 전체로 한 번 더 지킨다.
 - 바뀐 파일이 전부 ``*.md``이면 Gradle을 돌리지 않는다(빈 목록).
-- ``apps/<앱>/`` 아래만 바뀌었으면(``*.md`` 제외) 그 앱들만 ``:apps:<앱>:build``. 앱끼리는 프로젝트 의존이 없다.
+- ``apps/<앱>/`` 아래만 바뀌었으면(``*.md`` 제외) 그 앱들의 ``:apps:<앱>:build``와 ``:common:test:test``.
+  앱끼리는 프로젝트 의존이 없지만, ``common:test``의 배포 계약 테스트가 모든 앱의 ``application.yml``을 읽는다
+  (``common/test/build.gradle``의 ``inputs.files``, PR #208 R1).
+- 이름 바꾸기는 옛 경로와 새 경로를 둘 다 본다(``--no-renames``, PR #208 R2).
 - 그 밖의 경로(``common/``, 빌드 설정, ``simulators/``, ``infra/``, ``tools/``, ``.github/``, ``e2e/`` 등)가 하나라도 있으면 전체.
 - 변경 목록이 비었으면(얻지 못했으면) 전체.
 
@@ -17,6 +20,8 @@ import subprocess
 import sys
 
 FULL = ["build"]
+# 앱 파일을 입력으로 읽는 공통 테스트. 다른 공통 모듈이 앱 파일을 읽게 되면 여기에 더한다.
+APP_FILE_READERS = ":common:test:test"
 _APP = re.compile(r"^apps/([a-z][a-z-]*)/")
 
 
@@ -32,7 +37,9 @@ def decide(event, paths, apps):
         if match is None or match.group(1) not in apps:
             return list(FULL)
         selected.add(match.group(1))
-    return [":apps:%s:build" % name for name in sorted(selected)]
+    if not selected:
+        return []
+    return [":apps:%s:build" % name for name in sorted(selected)] + [APP_FILE_READERS]
 
 
 def output_line(tasks):
@@ -40,9 +47,10 @@ def output_line(tasks):
 
 
 def changed_paths(base):
-    output = subprocess.run(["git", "diff", "--name-only", base, "HEAD"], check=True,
+    # 이름 바꾸기를 삭제+추가로 보아 옛 경로도 분류한다. -z 는 특수 문자가 든 파일 이름을 그대로 둔다.
+    output = subprocess.run(["git", "diff", "--no-renames", "--name-only", "-z", base, "HEAD"], check=True,
                             capture_output=True, text=True).stdout
-    return [line.strip() for line in output.splitlines() if line.strip()]
+    return [path for path in output.split("\0") if path]
 
 
 def main():

@@ -2078,13 +2078,14 @@
 - 선택: A·B·D — 문서 PR 생략에 더해, 한 앱 안에서 끝나는 PR도 그 앱만 빌드해 대기를 줄인다.
   - 규칙(`tools/ci/build_scope.py`, 모르면 전체):
     - 바뀐 파일이 전부 `*.md`면 Gradle을 생략한다.
-    - `apps/<앱>/` 아래만 바뀌면 그 앱들의 `:apps:<앱>:build`만 돈다. 앱끼리는 프로젝트 의존이 없다.
+    - `apps/<앱>/` 아래만 바뀌면 그 앱들의 `:apps:<앱>:build`와 `:common:test:test`만 돈다. 앱끼리는 프로젝트 의존이 없지만, `common:test`의 배포 계약 테스트가 모든 앱의 `application.yml`을 읽는다(PR #208 R1).
+    - 이름 바꾸기는 옛 경로와 새 경로를 둘 다 본다(PR #208 R2).
     - 그 밖의 경로가 하나라도 있으면 전체를 돈다: `common/`, 빌드 설정, `simulators/`(Payment가 mock-pg jar에 기댐), `infra/`(Catalog가 MinIO 정책에 기댐), `tools/`, `.github/`, `e2e/`.
     - 변경 목록을 못 얻으면 전체를 돈다.
-  - main push·예약·수동 실행은 항상 전체다. B가 놓친 것은 병합 직후 main에서 잡히고, main CI 실패는 다음 작업보다 먼저 고친다(AGENTS.md 5절).
+  - main push와 수동 실행은 항상 전체다(예약 실행은 원래대로 `build` 작업을 건너뛰고 실제 스택 E2E만 돈다). B가 놓친 것은 병합 직후 main에서 잡히고, main CI 실패는 다음 작업보다 먼저 고친다(AGENTS.md 5절).
   - 작업 단위 `if`가 아니라 단계 `if`로 건너뛴다. `build` 작업은 늘 돌아 결정 107(main 규칙셋의 필수 검사)·결정 137(draft 건너뛰기)과 어긋나지 않는다. `tools/ci/test_workflows.py`가 이 배선을 지킨다.
   - D는 규칙이 아니라 작업 방식이다. 리뷰 지적은 모아 한 번에 push하고, 독립 작업은 앞 PR 위에 쌓아 CI 대기와 겹친다.
-  - 비용: 공통 코드는 바꾸지 않고 한 앱만 바꾼 PR이 다른 앱의 테스트를 깨뜨리면, PR이 아니라 main CI에서 드러난다. 앱끼리 프로젝트 의존이 없어 경로로 생기는 일은 없고, 이벤트 계약(`common/kafka/contract`)은 `common/`이라 전체 빌드 대상이다.
+  - 비용: 공통 코드는 바꾸지 않고 한 앱만 바꾼 PR이 다른 앱의 테스트를 깨뜨리면, PR이 아니라 main CI에서 드러난다. 앱 파일을 읽는 공통 테스트(`common:test`)는 함께 돌리고, 이벤트 계약(`common/kafka/contract`)은 `common/`이라 전체 빌드 대상이다.
 - 구분: 추천과 다른 선택
 - 결과: PR #208, 근거 색인 행
 
