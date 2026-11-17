@@ -42,6 +42,23 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(messaging_measurement.broker_environment("catalog", "direct")["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"],
                          "stove.catalog.v1")
 
+    def test_rabbitmq_points_messaging_apps_at_the_broker_with_the_shared_parallelism(self):
+        order = messaging_measurement.broker_environment("order", "rabbitmq")
+        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "rabbitmq")
+        self.assertEqual(order["SPRING_RABBITMQ_HOST"], "rabbitmq")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQ_QUEUESPERTOPIC"], str(messaging_measurement.PARALLELISM))
+        self.assertNotIn("STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS", order)
+        self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq")["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"],
+                         "stove.catalog.v1")
+        self.assertEqual(messaging_measurement.broker_environment("store", "rabbitmq"), {})
+
+    def test_only_the_rabbitmq_run_starts_a_rabbitmq_service(self):
+        self.assertEqual(messaging_measurement.infra_services("kafka"), {})
+        self.assertEqual(messaging_measurement.infra_services("direct"), {})
+        rabbit = messaging_measurement.infra_services("rabbitmq")["rabbitmq"]
+        self.assertEqual(rabbit["environment"]["RABBITMQ_DEFAULT_USER"], messaging_measurement.RABBIT_USER)
+        self.assertIn("healthcheck", rabbit)
+
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
             messaging_measurement.broker_environment("order", "nats")

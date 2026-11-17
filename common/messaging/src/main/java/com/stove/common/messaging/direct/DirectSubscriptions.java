@@ -1,10 +1,11 @@
 package com.stove.common.messaging.direct;
 
 import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
 import com.stove.common.kafka.EventHeaders;
+import com.stove.common.messaging.delivery.InPlaceDelivery;
+import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -42,7 +43,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Slf4j
 public class DirectSubscriptions implements SmartLifecycle {
 
-    static final List<Duration> RETRY_DELAYS = List.of(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(4));
     private static final Pattern TABLE = Pattern.compile("^[a-z_]+(\\.[a-z_]+)?$");
     private static final Timestamp START = Timestamp.from(Instant.parse("2000-01-01T00:00:00Z"));
     /**
@@ -53,31 +53,27 @@ public class DirectSubscriptions implements SmartLifecycle {
 
     private final ApplicationContext beans;
     private final JdbcTemplate jdbc;
-    private final KeyQuarantine quarantine;
-    private final ReplayTracing tracing;
+    private final InPlaceDelivery delivery;
     private final Map<String, String> sources;
     private final long pollIntervalMs;
     private final int batchSize;
-    private final List<Duration> retryDelays;
     private final String instanceId = UUID.randomUUID().toString();
     private ScheduledExecutorService pollers;
     private volatile boolean running;
 
     public DirectSubscriptions(ApplicationContext beans, JdbcTemplate jdbc, KeyQuarantine quarantine, ReplayTracing tracing,
                                Map<String, String> sources, long pollIntervalMs, int batchSize) {
-        this(beans, jdbc, quarantine, tracing, sources, pollIntervalMs, batchSize, RETRY_DELAYS);
+        this(beans, jdbc, quarantine, tracing, sources, pollIntervalMs, batchSize, InPlaceDelivery.RETRY_DELAYS);
     }
 
     DirectSubscriptions(ApplicationContext beans, JdbcTemplate jdbc, KeyQuarantine quarantine, ReplayTracing tracing,
                         Map<String, String> sources, long pollIntervalMs, int batchSize, List<Duration> retryDelays) {
         this.beans = beans;
         this.jdbc = jdbc;
-        this.quarantine = quarantine;
-        this.tracing = tracing;
+        this.delivery = new InPlaceDelivery(quarantine, tracing, retryDelays);
         this.sources = sources;
         this.pollIntervalMs = pollIntervalMs;
         this.batchSize = batchSize;
-        this.retryDelays = retryDelays;
     }
 
     /** 토픽을 발행하는 모듈의 Outbox 표. 설정이 없으면 {@code stove.<x>.v1 → stove_<x>.outbox_event}(release 는 catalog). */
@@ -96,15 +92,9 @@ public class DirectSubscriptions implements SmartLifecycle {
     @Override
     public void start() {
         Map<String, Subscription> subscriptions = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : beans.getBeansWithAnnotation(EventSubscriber.class).entrySet()) {
-            if (!(entry.getValue() instanceof EventHandler handler)) {
-                throw new IllegalStateException("@EventSubscriber 는 EventHandler 구현에만 단다: " + entry.getKey());
-            }
-            EventSubscriber subscription = beans.findAnnotationOnBean(entry.getKey(), EventSubscriber.class);
-            for (String topic : subscription.topics()) {
-                subscriptions.put(subscription.group() + "|" + topic,
-                        new Subscription(subscription.group(), topic, sourceOf(topic), handler, subscription.noRetryFor()));
-            }
+        for (SubscribedHandler found : SubscribedHandler.discover(beans)) {
+            subscriptions.put(found.group() + "|" + found.topic(), new Subscription(found.group(), found.topic(),
+                    sourceOf(found.topic()), found.handler(), found.noRetryFor()));
         }
         pollers = Executors.newScheduledThreadPool(Math.max(1, subscriptions.size()));
         for (Subscription subscription : subscriptions.values()) {
@@ -165,11 +155,7 @@ public class DirectSubscriptions implements SmartLifecycle {
                 return;
             }
             InboundMessage message = row.toMessage(subscription.topic(), subscription.source());
-            if (quarantine.stopped(subscription.group(), message.topic(), message.key())) {
-                quarantine.quarantine(subscription.group(), message, null);
-            } else {
-                deliver(subscription, message);
-            }
+            delivery.deliver(subscription.group(), subscription.handler(), subscription.noRetryFor(), message);
             int advanced = jdbc.update("UPDATE direct_cursor SET sent_at = ?, row_id = ?,"
                             + " lease_until = NOW(6) + INTERVAL ? SECOND"
                             + " WHERE consumer_group = ? AND topic = ? AND owner = ?",
@@ -201,44 +187,6 @@ public class DirectSubscriptions implements SmartLifecycle {
             jdbc.update("UPDATE direct_cursor SET owner = NULL, lease_until = NULL WHERE owner = ?", instanceId);
         } catch (RuntimeException failure) {
             log.warn("점유 해제 실패, 기한이 지나면 다른 인스턴스가 이어받는다", failure);
-        }
-    }
-
-    /** 제자리 재시도 뒤 격리. 격리 기록이 실패하면 예외가 나가 위치를 넘기지 않는다. */
-    private void deliver(Subscription subscription, InboundMessage message) {
-        for (int attempt = 0; ; attempt++) {
-            try {
-                tracing.runWithin(message.header(EventHeaders.TRACE_PARENT), () -> subscription.handler().receive(message));
-                return;
-            } catch (RuntimeException failure) {
-                if (noRetry(subscription, failure) || attempt >= retryDelays.size()) {
-                    quarantine.quarantine(subscription.group(), message, failure);
-                    return;
-                }
-                sleep(retryDelays.get(attempt));
-            }
-        }
-    }
-
-    private static boolean noRetry(Subscription subscription, RuntimeException failure) {
-        for (Class<? extends RuntimeException> type : subscription.noRetryFor()) {
-            Throwable cause = failure;
-            while (cause != null) {
-                if (type.isInstance(cause)) {
-                    return true;
-                }
-                cause = cause.getCause();
-            }
-        }
-        return false;
-    }
-
-    private static void sleep(Duration delay) {
-        try {
-            Thread.sleep(delay.toMillis());
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("재시도 대기 중 멈춤", interrupted);
         }
     }
 
