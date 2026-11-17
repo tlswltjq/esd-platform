@@ -32,6 +32,21 @@ class CommandTest(unittest.TestCase):
         self.assertIn("--settle-secs", brokers)
 
 
+class BrokerEnvironmentTest(unittest.TestCase):
+    def test_kafka_is_the_default_and_needs_no_switch(self):
+        self.assertEqual(messaging_measurement.broker_environment("order", "kafka"), {})
+
+    def test_direct_switches_messaging_apps_and_keeps_store_on_kafka(self):
+        self.assertEqual(messaging_measurement.broker_environment("order", "direct"), {"STOVE_MESSAGING_BROKER": "direct"})
+        self.assertEqual(messaging_measurement.broker_environment("store", "direct"), {})
+        self.assertEqual(messaging_measurement.broker_environment("catalog", "direct")["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"],
+                         "stove.catalog.v1")
+
+    def test_unknown_broker_is_rejected(self):
+        with self.assertRaises(ValueError):
+            messaging_measurement.broker_environment("order", "nats")
+
+
 class ValidityTest(unittest.TestCase):
     def test_a_clean_run_is_valid(self):
         measured = [{"status": 200, "lateMs": 1.0}, {"status": 200, "lateMs": 2.0}]

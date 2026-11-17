@@ -1,2 +1,3 @@
 com.stove.common.messaging.MessagingAutoConfiguration
 com.stove.common.messaging.ops.MessagingOpsAutoConfiguration
+com.stove.common.messaging.direct.DirectMessagingAutoConfiguration

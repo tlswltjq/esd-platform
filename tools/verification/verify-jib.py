@@ -48,6 +48,8 @@ def main():
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
+    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct"],
+                        help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
         parser.error("--prometheus-only cannot be combined with tracing modes")
@@ -151,6 +153,8 @@ def main():
             app_env.update(PAYMENT_PG_PROVIDER="SIMULATED", SETTLEMENT_PG_PROVIDER="SIMULATED",
                            SETTLEMENT_TOSSPAY_ENABLED="false")
         app_env.update(JWT_ISSUER_URI=public, TRACING_SAMPLE_RATE="1" if args.tracing else "0")
+        from support.messaging_measurement import broker_environment
+        app_env.update(broker_environment(name, args.broker))
         if name in {"auth", "gateway"}:
             app_env.update(BFF_PUBLIC_AUTH_BASE=public, BFF_REDIRECT_URI=public + "/login/oauth2/code/gateway-bff")
         if name == "auth":
@@ -192,7 +196,7 @@ def main():
             # Parallel Testcontainers tests remove their own containers on completion.
             if not any(key.startswith("org.testcontainers") for key in labels):
                 original.append(container["Id"])
-    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False,
+    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False, "broker": args.broker,
               "started_at": started_at, "host": platform.platform(), "command": sys.argv, "project": project}
     mc = docker + ["exec", "-T", "minio", "mc"]
 
