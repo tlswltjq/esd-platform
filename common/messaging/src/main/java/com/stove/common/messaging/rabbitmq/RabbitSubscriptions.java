@@ -38,10 +38,6 @@ import org.springframework.context.SmartLifecycle;
 @Slf4j
 public class RabbitSubscriptions implements SmartLifecycle {
 
-    /** 격리 보관이 실패했을 때 처음 쉬는 시간. 실패가 이어지면 두 배씩 늘려 {@link #HOLD_MAX} 까지. */
-    static final Duration HOLD_START = Duration.ofSeconds(1);
-    static final Duration HOLD_MAX = Duration.ofSeconds(30);
-
     /** 기동 때(모든 빈이 만들어진 뒤) {@code @EventSubscriber} 를 찾는다. */
     private final Supplier<List<SubscribedHandler>> handlers;
     private final ConnectionFactory connectionFactory;
@@ -55,7 +51,7 @@ public class RabbitSubscriptions implements SmartLifecycle {
 
     public RabbitSubscriptions(Supplier<List<SubscribedHandler>> handlers, ConnectionFactory connectionFactory, AmqpAdmin admin,
                                InPlaceDelivery delivery, int queuesPerTopic, int prefetch) {
-        this(handlers, connectionFactory, admin, delivery, queuesPerTopic, prefetch, HOLD_START);
+        this(handlers, connectionFactory, admin, delivery, queuesPerTopic, prefetch, InPlaceDelivery.HOLD_START);
     }
 
     RabbitSubscriptions(Supplier<List<SubscribedHandler>> handlers, ConnectionFactory connectionFactory, AmqpAdmin admin,
@@ -103,33 +99,10 @@ public class RabbitSubscriptions implements SmartLifecycle {
         container.setPrefetchCount(prefetch);
         container.setAcknowledgeMode(AcknowledgeMode.AUTO);
         container.setDefaultRequeueRejected(true);
-        container.setMessageListener((Message message) -> receive(subscription, toInbound(subscription.topic(), queueName, message)));
+        container.setMessageListener((Message message) -> delivery.deliverHolding(subscription.group(), subscription.handler(),
+                subscription.noRetryFor(), toInbound(subscription.topic(), queueName, message), () -> running, holdStart));
         container.afterPropertiesSet();
         return container;
-    }
-
-    /** 처리(또는 격리 보관)가 끝날 때까지 이 메시지를 붙잡는다. 멈추는 중일 때만 예외를 내보낸다. */
-    private void receive(SubscribedHandler subscription, InboundMessage message) {
-        Duration wait = holdStart;
-        while (true) {
-            try {
-                delivery.deliver(subscription.group(), subscription.handler(), subscription.noRetryFor(), message);
-                return;
-            } catch (RuntimeException failure) {
-                if (!running) {
-                    throw failure;
-                }
-                log.error("격리 보관 실패, 이 메시지를 붙잡고 {}ms 뒤 다시 처리한다 group={} topic={} key={} origin={}",
-                        wait.toMillis(), subscription.group(), message.topic(), message.key(), message.origin(), failure);
-                try {
-                    Thread.sleep(wait.toMillis());
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    throw failure;
-                }
-                wait = wait.multipliedBy(2).compareTo(HOLD_MAX) > 0 ? HOLD_MAX : wait.multipliedBy(2);
-            }
-        }
     }
 
     /** 발행 adapter 가 실은 헤더를 그대로 되살린다. 순서 키는 {@link RabbitTopology#KEY_HEADER}. */

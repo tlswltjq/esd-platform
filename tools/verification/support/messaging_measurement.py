@@ -23,7 +23,7 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
 
 # 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
 MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
-BROKERS = ("kafka", "direct", "rabbitmq")
+BROKERS = ("kafka", "direct", "rabbitmq", "redis-streams")
 # 비교하는 브로커가 모두 같은 병렬도를 갖게 한다: Kafka 토픽 파티션 수 = RabbitMQ (그룹, 토픽)당 큐 수.
 # docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
 PARALLELISM = 3
@@ -53,11 +53,23 @@ def broker_environment(app, broker):
         if app == "catalog":
             # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
             environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    if broker == "redis-streams":
+        environment.update(STOVE_MESSAGING_REDISSTREAMS_URI="redis://streams:6379",
+                           STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC=str(PARALLELISM))
+        if app == "catalog":
+            # 위와 같은 이유(Store 는 Kafka 로만 받는다)로 catalog 토픽만 Kafka 로도 보낸다.
+            environment["STOVE_MESSAGING_REDISSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
     return environment
 
 
 def infra_services(broker):
     """그 브로커 회차에만 더 띄울 기반 서비스(Compose 서비스 정의). Kafka 는 Store 때문에 언제나 뜬다."""
+    if broker == "redis-streams":
+        # 게이트웨이 세션용 redis 와 따로 둔다. AOF(초마다 fsync)를 켜 Kafka 의 디스크 로그와 비슷한 내구성으로 맞춘다.
+        return {"streams": {"image": "redis:7-alpine", "networks": ["app"],
+                            "command": ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"],
+                            "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "3s",
+                                            "retries": 60}}}
     if broker != "rabbitmq":
         return {}
     return {"rabbitmq": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],

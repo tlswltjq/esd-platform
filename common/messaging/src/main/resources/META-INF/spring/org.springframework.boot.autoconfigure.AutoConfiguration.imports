@@ -2,3 +2,4 @@ com.stove.common.messaging.MessagingAutoConfiguration
 com.stove.common.messaging.ops.MessagingOpsAutoConfiguration
 com.stove.common.messaging.direct.DirectMessagingAutoConfiguration
 com.stove.common.messaging.rabbitmq.RabbitMessagingAutoConfiguration
+com.stove.common.messaging.redis.RedisStreamsMessagingAutoConfiguration
