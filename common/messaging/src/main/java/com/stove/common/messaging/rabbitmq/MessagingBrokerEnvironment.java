@@ -13,7 +13,8 @@ import org.springframework.core.env.MapPropertySource;
  *
  * <ul>
  *   <li>RabbitMQ 를 고르지 않았으면 RabbitMQ 상태 검사를 끈다 — 쓰지 않는 브로커 때문에 앱이 DOWN 으로 보이지 않게.</li>
- *   <li>골랐으면 publisher confirm 을 켠다 — 발행 adapter 가 브로커 ack 를 받아야 릴레이가 {@code SENT} 로 바꾼다.</li>
+ *   <li>골랐으면 publisher confirm·returns 를 켠다 — 발행 adapter 가 브로커 ack 를 받고 되돌아온 메시지가 없어야 릴레이가 {@code SENT} 로 바꾼다.
+ *       누가 이 값을 꺼도 발행 adapter 가 기동 때 거절한다.</li>
  * </ul>
  */
 public class MessagingBrokerEnvironment implements EnvironmentPostProcessor {
@@ -27,6 +28,7 @@ public class MessagingBrokerEnvironment implements EnvironmentPostProcessor {
         defaults.put("management.health.rabbit.enabled", Boolean.toString(rabbit));
         if (rabbit) {
             defaults.put("spring.rabbitmq.publisher-confirm-type", "correlated");
+            defaults.put("spring.rabbitmq.publisher-returns", "true");
         }
         environment.getPropertySources().addLast(new MapPropertySource(SOURCE, defaults));
     }

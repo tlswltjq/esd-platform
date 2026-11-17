@@ -1,6 +1,7 @@
 package com.stove.common.messaging.rabbitmq;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.InboundMessage;
@@ -18,16 +19,17 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -71,8 +73,9 @@ class RabbitAdapterIntegrationTest {
     void setUp() {
         connectionFactory = new CachingConnectionFactory(RABBIT.getHost(), RABBIT.getMappedPort(5672));
         connectionFactory.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+        connectionFactory.setPublisherReturns(true);
         admin = new RabbitAdmin(connectionFactory);
-        publisher = new RabbitMessagePublisher(new RabbitTemplate(connectionFactory), admin, QUEUES);
+        publisher = new RabbitMessagePublisher(connectionFactory, admin, QUEUES, Set.of("fixture.optional.v1"));
         group = "fixture-rabbit-" + UUID.randomUUID();
         topic = "fixture.rabbit." + UUID.randomUUID().toString().substring(0, 8);
     }
@@ -84,11 +87,16 @@ class RabbitAdapterIntegrationTest {
     }
 
     private RabbitSubscriptions subscribe(EventHandler handler, Class<? extends RuntimeException>... noRetryFor) {
+        return subscribe(quarantine, handler, noRetryFor);
+    }
+
+    private RabbitSubscriptions subscribe(KeyQuarantine storage, EventHandler handler,
+                                          Class<? extends RuntimeException>... noRetryFor) {
         RabbitSubscriptions subscriptions = new RabbitSubscriptions(
                 () -> List.of(new SubscribedHandler(group, topic, handler, noRetryFor)), connectionFactory, admin,
-                new InPlaceDelivery(quarantine, ReplayTracing.NONE,
+                new InPlaceDelivery(storage, ReplayTracing.NONE,
                         List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10))),
-                QUEUES, 10);
+                QUEUES, 10, Duration.ofMillis(20));
         subscriptions.start();
         started.add(subscriptions);
         return subscriptions;
@@ -96,14 +104,16 @@ class RabbitAdapterIntegrationTest {
 
     private String publish(String key) {
         String eventId = UUID.randomUUID().toString();
+        send(topic, key, eventId).orTimeout(10, TimeUnit.SECONDS).join();
+        return eventId;
+    }
+
+    private CompletableFuture<Void> send(String toTopic, String key, String eventId) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put(EventHeaders.EVENT_ID, eventId);
         headers.put(EventHeaders.EVENT_TYPE, "FixtureHappened");
         headers.put(EventHeaders.OCCURRED_AT, Instant.now().toString());
-        CompletableFuture<Void> confirmed = publisher.publish(
-                new OutboundMessage(topic, key, "{\"key\":\"" + key + "\"}", headers));
-        confirmed.orTimeout(10, TimeUnit.SECONDS).join();
-        return eventId;
+        return publisher.publish(new OutboundMessage(toTopic, key, "{\"key\":\"" + key + "\"}", headers));
     }
 
     private static void await(String what, BooleanSupplier condition) {
@@ -197,6 +207,64 @@ class RabbitAdapterIntegrationTest {
 
         await("격리", () -> quarantine.stopped(group, topic, key));
         assertThat(handler.attempts(rejected)).isEqualTo(1);
+    }
+
+    @Test
+    void aMessageNoQueueCanTakeFailsSoTheRelayKeepsItUnlessTheTopicHasNoRabbitConsumers() {
+        // 소비 앱이 아직 큐를 선언하지 않았다: 성공으로 치면 SENT 뒤에 사라진다(PR #211 R3).
+        assertThatThrownBy(() -> send("fixture.unbound." + UUID.randomUUID().toString().substring(0, 8), "K",
+                UUID.randomUUID().toString()).orTimeout(10, TimeUnit.SECONDS).join())
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("되돌아왔다");
+        // 이 adapter 로 받는 소비자가 없는 토픽은 그대로 성공(Kafka 에서도 아무도 읽지 않는 토픽).
+        send("fixture.optional.v1", "K", UUID.randomUUID().toString()).orTimeout(10, TimeUnit.SECONDS).join();
+    }
+
+    @Test
+    void whenStoringTheFailureFailsTheMessageIsHeldSoALaterMessageOfTheKeyCannotOvertakeIt() {
+        String key = "K-" + UUID.randomUUID();
+        Recording handler = new Recording();
+        handler.failKey = key;
+        FlakyQuarantine storage = new FlakyQuarantine(quarantine, 2);
+        subscribe(storage, handler);
+
+        String first = publish(key);
+        String second = publish(key);
+
+        await("두 건 모두 보관", () -> jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group = ?",
+                Integer.class, group) >= 2);
+        assertThat(storage.failures).as("앞 메시지의 보관이 두 번 실패했다").isEqualTo(2);
+        assertThat(handler.attempts(second)).as("앞 메시지가 붙잡혀 있는 동안 뒤 메시지는 처리되지 않고, 키 정지 뒤 보관된다").isZero();
+        assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure <> 'KEY_STOPPED'",
+                String.class, group)).isEqualTo(first);
+        assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure = 'KEY_STOPPED'",
+                String.class, group)).isEqualTo(second);
+    }
+
+    /** 처음 몇 번의 보관 기록을 실패시킨다(격리 DB 가 잠깐 안 되는 상황). */
+    static class FlakyQuarantine implements KeyQuarantine {
+        private final KeyQuarantine delegate;
+        private final AtomicInteger remainingFailures;
+        volatile int failures;
+
+        FlakyQuarantine(KeyQuarantine delegate, int failures) {
+            this.delegate = delegate;
+            this.remainingFailures = new AtomicInteger(failures);
+        }
+
+        @Override
+        public boolean stopped(String consumerGroup, String topic, String key) {
+            return delegate.stopped(consumerGroup, topic, key);
+        }
+
+        @Override
+        public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
+            if (remainingFailures.getAndDecrement() > 0) {
+                failures++;
+                throw new IllegalStateException("격리 DB 잠깐 안 됨");
+            }
+            delegate.quarantine(consumerGroup, message, failure);
+        }
     }
 
     static class Rejected extends RuntimeException {

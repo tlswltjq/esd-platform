@@ -29,6 +29,8 @@ BROKERS = ("kafka", "direct", "rabbitmq")
 PARALLELISM = 3
 RABBIT_USER = "stove"
 RABBIT_PASSWORD = "stove1234"
+# RabbitMQ 로 받는 @EventSubscriber 가 없는 토픽(발행 앱 → 토픽). auth 는 아무도 받지 않고, catalog 는 Store 가 Kafka 로만 받는다.
+RABBIT_OPTIONAL_TOPICS = {"auth": "stove.auth.v1", "catalog": "stove.catalog.v1"}
 
 
 def broker_environment(app, broker):
@@ -45,6 +47,9 @@ def broker_environment(app, broker):
         environment.update(SPRING_RABBITMQ_HOST="rabbitmq", SPRING_RABBITMQ_PORT="5672",
                            SPRING_RABBITMQ_USERNAME=RABBIT_USER, SPRING_RABBITMQ_PASSWORD=RABBIT_PASSWORD,
                            STOVE_MESSAGING_RABBITMQ_QUEUESPERTOPIC=str(PARALLELISM))
+        if app in RABBIT_OPTIONAL_TOPICS:
+            # 이 토픽은 RabbitMQ 로 받는 소비자가 없다. 받을 큐가 없어 되돌아와도 발행 성공으로 친다(PR #211 R3).
+            environment["STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS"] = RABBIT_OPTIONAL_TOPICS[app]
         if app == "catalog":
             # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
             environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"

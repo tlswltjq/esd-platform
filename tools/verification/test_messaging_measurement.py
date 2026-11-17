@@ -51,6 +51,9 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq")["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"],
                          "stove.catalog.v1")
         self.assertEqual(messaging_measurement.broker_environment("store", "rabbitmq"), {})
+        self.assertEqual(messaging_measurement.broker_environment("auth", "rabbitmq")["STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS"],
+                         "stove.auth.v1")
+        self.assertNotIn("STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS", order)
 
     def test_only_the_rabbitmq_run_starts_a_rabbitmq_service(self):
         self.assertEqual(messaging_measurement.infra_services("kafka"), {})

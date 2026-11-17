@@ -17,7 +17,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration;
@@ -29,8 +28,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 
 /**
  * RabbitMQ adapter(결정 203)를 켠다: {@code stove.messaging.broker=rabbitmq}.
- * 연결·{@link RabbitTemplate}·{@link AmqpAdmin} 은 스프링 부트 {@code spring.rabbitmq.*} 가 만들고,
- * publisher confirm 은 {@link MessagingBrokerEnvironment} 가 켠다. Kafka 의 발행 포트 기본 빈보다 먼저 오고, Kafka 구독 등록은 같은 설정으로 꺼진다.
+ * 연결·{@link AmqpAdmin} 은 스프링 부트 {@code spring.rabbitmq.*} 가 만들고,
+ * publisher confirm·returns 는 {@link MessagingBrokerEnvironment} 가 켠다. Kafka 의 발행 포트 기본 빈보다 먼저 오고, Kafka 구독 등록은 같은 설정으로 꺼진다.
  */
 @AutoConfiguration(after = {MessagingAutoConfiguration.class, RabbitAutoConfiguration.class},
         before = KafkaConsumerAutoConfiguration.class)
@@ -39,10 +38,11 @@ import org.springframework.kafka.core.KafkaTemplate;
 public class RabbitMessagingAutoConfiguration {
 
     @Bean
-    public MessagePublisher rabbitMessagePublisher(RabbitTemplate rabbitTemplate, AmqpAdmin admin,
+    public MessagePublisher rabbitMessagePublisher(ConnectionFactory connectionFactory, AmqpAdmin admin,
                                                    RabbitMessagingProperties properties,
                                                    ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate) {
-        RabbitMessagePublisher rabbit = new RabbitMessagePublisher(rabbitTemplate, admin, properties.queuesPerTopic());
+        RabbitMessagePublisher rabbit = new RabbitMessagePublisher(connectionFactory, admin, properties.queuesPerTopic(),
+                properties.optionalTopics());
         return alsoKafka(rabbit, properties.alsoKafkaTopics(), kafkaTemplate.getIfAvailable());
     }
 

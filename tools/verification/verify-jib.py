@@ -144,11 +144,12 @@ def main():
                                   "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT", "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
                                   "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
                                   "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true"}}}
+    from support.messaging_measurement import PARALLELISM, infra_services
+    # 고른 브로커에만 필요한 기반 서비스(RabbitMQ 등). 앱 환경(broker_environment)과 같은 조건이다(PR #211 R4).
+    services.update(infra_services(args.broker))
     if args.measure:
-        from support.messaging_measurement import PARALLELISM, infra_services
         # 비교하는 브로커가 같은 병렬도를 갖게 한다(Kafka 파티션 수 = RabbitMQ 그룹·토픽당 큐 수).
         services["kafka"]["environment"]["KAFKA_NUM_PARTITIONS"] = str(PARALLELISM)
-        services.update(infra_services(args.broker))
     for name, port in PORTS.items():
         configured = base["services"][name]
         if "build" in configured:

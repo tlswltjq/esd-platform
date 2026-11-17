@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.mock.env.MockEnvironment;
@@ -58,6 +60,32 @@ class RabbitMessagingWiringTest {
         publisher.publish(new OutboundMessage("stove.order.v1", "K", "{}", Map.of())).join();
 
         verifyNoInteractions(kafka);
+    }
+
+    @Test
+    void thePublisherRefusesAConnectionWithoutCorrelatedConfirmsAndReturns() {
+        // 연결은 쓰기 전까지 열리지 않으므로 브로커 없이 설정만 본다(PR #211 R2).
+        CachingConnectionFactory withoutConfirms = new CachingConnectionFactory("localhost");
+        CachingConnectionFactory withoutReturns = new CachingConnectionFactory("localhost");
+        withoutReturns.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+        CachingConnectionFactory complete = new CachingConnectionFactory("localhost");
+        complete.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+        complete.setPublisherReturns(true);
+
+        assertThatThrownBy(() -> new RabbitMessagePublisher(withoutConfirms, mock(AmqpAdmin.class), 3, Set.of()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("publisher-confirm-type=correlated");
+        assertThatThrownBy(() -> new RabbitMessagePublisher(withoutReturns, mock(AmqpAdmin.class), 3, Set.of()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(new RabbitMessagePublisher(complete, mock(AmqpAdmin.class), 3, Set.of())).isNotNull();
+    }
+
+    @Test
+    void inRabbitModeReturnsAreOnToo() {
+        MockEnvironment environment = new MockEnvironment().withProperty("stove.messaging.broker", "rabbitmq");
+
+        new MessagingBrokerEnvironment().postProcessEnvironment(environment, new SpringApplication());
+
+        assertThat(environment.getProperty("spring.rabbitmq.publisher-returns")).isEqualTo("true");
     }
 
     @Test

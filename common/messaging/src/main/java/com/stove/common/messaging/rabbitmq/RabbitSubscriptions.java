@@ -4,6 +4,7 @@ import com.stove.common.event.InboundMessage;
 import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,10 +32,15 @@ import org.springframework.context.SmartLifecycle;
  *
  * <p>순서(결정 202): 같은 키는 같은 큐로 오고, 큐는 {@code x-single-active-consumer} 라 인스턴스가 여럿이어도 한 소비자만 받는다.
  * 실패는 그 자리에서 재시도하므로(요청 큐로 되돌리지 않음) 뒤 메시지가 앞지르지 않는다.
- * 격리 보관이 실패하면 리스너가 예외를 던지고 컨테이너가 메시지를 큐로 되돌려(requeue) 다시 받는다.
+ * 격리 보관(또는 키 정지 확인)이 실패하면 그 메시지를 붙잡은 채 쉬었다 다시 처리한다 — 큐로 되돌리면(requeue) 이미 받아 둔(prefetch)
+ * 같은 키의 뒤 메시지가 먼저 처리되기 때문이다(PR #211 R1). 멈추는 중이면 예외를 던지고, 채널이 닫히며 받지 않은 메시지는 원래 자리로 돌아간다.
  */
 @Slf4j
 public class RabbitSubscriptions implements SmartLifecycle {
+
+    /** 격리 보관이 실패했을 때 처음 쉬는 시간. 실패가 이어지면 두 배씩 늘려 {@link #HOLD_MAX} 까지. */
+    static final Duration HOLD_START = Duration.ofSeconds(1);
+    static final Duration HOLD_MAX = Duration.ofSeconds(30);
 
     /** 기동 때(모든 빈이 만들어진 뒤) {@code @EventSubscriber} 를 찾는다. */
     private final Supplier<List<SubscribedHandler>> handlers;
@@ -43,11 +49,18 @@ public class RabbitSubscriptions implements SmartLifecycle {
     private final InPlaceDelivery delivery;
     private final int queuesPerTopic;
     private final int prefetch;
+    private final Duration holdStart;
     private final List<SimpleMessageListenerContainer> containers = new ArrayList<>();
     private volatile boolean running;
 
     public RabbitSubscriptions(Supplier<List<SubscribedHandler>> handlers, ConnectionFactory connectionFactory, AmqpAdmin admin,
                                InPlaceDelivery delivery, int queuesPerTopic, int prefetch) {
+        this(handlers, connectionFactory, admin, delivery, queuesPerTopic, prefetch, HOLD_START);
+    }
+
+    RabbitSubscriptions(Supplier<List<SubscribedHandler>> handlers, ConnectionFactory connectionFactory, AmqpAdmin admin,
+                        InPlaceDelivery delivery, int queuesPerTopic, int prefetch, Duration holdStart) {
+        this.holdStart = holdStart;
         this.handlers = handlers;
         this.connectionFactory = connectionFactory;
         this.admin = admin;
@@ -75,10 +88,10 @@ public class RabbitSubscriptions implements SmartLifecycle {
                 containers.add(container(subscription, queue.getName()));
             }
         }
+        running = true;
         for (SimpleMessageListenerContainer container : containers) {
             container.start();
         }
-        running = true;
         log.info("RabbitMQ 구독 {}개 시작 (구독마다 큐 {}개)", unique.size(), queuesPerTopic);
     }
 
@@ -90,10 +103,33 @@ public class RabbitSubscriptions implements SmartLifecycle {
         container.setPrefetchCount(prefetch);
         container.setAcknowledgeMode(AcknowledgeMode.AUTO);
         container.setDefaultRequeueRejected(true);
-        container.setMessageListener((Message message) -> delivery.deliver(subscription.group(), subscription.handler(),
-                subscription.noRetryFor(), toInbound(subscription.topic(), queueName, message)));
+        container.setMessageListener((Message message) -> receive(subscription, toInbound(subscription.topic(), queueName, message)));
         container.afterPropertiesSet();
         return container;
+    }
+
+    /** 처리(또는 격리 보관)가 끝날 때까지 이 메시지를 붙잡는다. 멈추는 중일 때만 예외를 내보낸다. */
+    private void receive(SubscribedHandler subscription, InboundMessage message) {
+        Duration wait = holdStart;
+        while (true) {
+            try {
+                delivery.deliver(subscription.group(), subscription.handler(), subscription.noRetryFor(), message);
+                return;
+            } catch (RuntimeException failure) {
+                if (!running) {
+                    throw failure;
+                }
+                log.error("격리 보관 실패, 이 메시지를 붙잡고 {}ms 뒤 다시 처리한다 group={} topic={} key={} origin={}",
+                        wait.toMillis(), subscription.group(), message.topic(), message.key(), message.origin(), failure);
+                try {
+                    Thread.sleep(wait.toMillis());
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw failure;
+                }
+                wait = wait.multipliedBy(2).compareTo(HOLD_MAX) > 0 ? HOLD_MAX : wait.multipliedBy(2);
+            }
+        }
     }
 
     /** 발행 adapter 가 실은 헤더를 그대로 되살린다. 순서 키는 {@link RabbitTopology#KEY_HEADER}. */
