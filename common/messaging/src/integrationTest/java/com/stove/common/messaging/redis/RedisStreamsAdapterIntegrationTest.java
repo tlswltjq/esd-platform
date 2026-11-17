@@ -62,6 +62,7 @@ class RedisStreamsAdapterIntegrationTest {
     private final List<RedisStreamsSubscriptions> started = new ArrayList<>();
     private String group;
     private String topic;
+    private Duration lease = Duration.ofSeconds(60);
 
     @BeforeEach
     void setUp() {
@@ -85,7 +86,7 @@ class RedisStreamsAdapterIntegrationTest {
                 () -> List.of(new SubscribedHandler(group, topic, handler, noRetryFor)), client,
                 new InPlaceDelivery(storage, ReplayTracing.NONE,
                         List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10))),
-                STREAMS, 10, 200, Duration.ofMillis(20));
+                STREAMS, 10, 200, Duration.ofMillis(20), lease);
         subscriptions.start();
         started.add(subscriptions);
         return subscriptions;
@@ -236,6 +237,44 @@ class RedisStreamsAdapterIntegrationTest {
                 String.class, group)).isEqualTo(first);
     }
 
+    @Test
+    void afterLosingTheLeaseMidProcessingTheFormerOwnerNeitherAcknowledgesNorReadsFurther() {
+        lease = Duration.ofMillis(600);
+        String key = "K-" + UUID.randomUUID();
+        String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
+        String lock = RedisStreamTopology.lockKey(group, stream);
+        Recording handler = new Recording();
+        // 첫 항목을 처리하는 동안 다른 인스턴스가 점유를 가져간다(연장 주기가 그것을 알아챌 만큼 오래 처리).
+        handler.onFirst = () -> {
+            connection.sync().set(lock, "another-instance");
+            sleep(Duration.ofMillis(700));
+        };
+        subscribe(handler);
+        String first = publish(key);
+        String second = publish(key);
+
+        await("첫 항목 처리", () -> handler.ids().contains(first));
+        sleep(Duration.ofMillis(800));
+
+        assertThat(handler.ids()).as("점유를 잃은 뒤 같이 읽어 둔 뒤 항목을 처리하지 않는다").containsExactly(first);
+        assertThat(connection.sync().xpending(stream, group).getCount())
+                .as("잃은 쪽은 확인(XACK)하지 않아, 한 번에 읽은 두 항목이 모두 미확인으로 남는다").isEqualTo(2);
+
+        // 다른 인스턴스가 사라졌다(잠금 해제). 다시 점유해 미확인 항목부터 원래 순서대로 처리한다.
+        connection.sync().del(lock);
+        await("이어서 처리", () -> handler.idsOf(key).size() >= 3);
+        assertThat(handler.idsOf(key)).containsExactly(first, first, second);
+    }
+
+    private static void sleep(Duration duration) {
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
+    }
+
     static class FlakyQuarantine implements KeyQuarantine {
         private final KeyQuarantine delegate;
         private final AtomicInteger remainingFailures;
@@ -271,6 +310,8 @@ class RedisStreamsAdapterIntegrationTest {
         final List<InboundMessage> received = Collections.synchronizedList(new ArrayList<>());
         final List<String> tried = Collections.synchronizedList(new ArrayList<>());
         volatile String failKey;
+        /** 첫 수신 때 한 번 실행한다(처리 도중의 상황을 만든다). */
+        volatile Runnable onFirst;
 
         List<String> ids() {
             synchronized (received) {
@@ -298,6 +339,11 @@ class RedisStreamsAdapterIntegrationTest {
                 throw new IllegalStateException("boom");
             }
             received.add(message);
+            Runnable once = onFirst;
+            if (once != null) {
+                onFirst = null;
+                once.run();
+            }
         }
     }
 }

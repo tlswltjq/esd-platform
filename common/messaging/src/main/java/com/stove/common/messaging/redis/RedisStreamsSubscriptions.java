@@ -3,7 +3,6 @@ package com.stove.common.messaging.redis;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
-import io.lettuce.core.Consumer;
 import io.lettuce.core.RedisBusyException;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.ScriptOutputType;
@@ -18,9 +17,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
@@ -29,15 +31,19 @@ import org.springframework.context.SmartLifecycle;
 /**
  * 수신 포트의 Redis Streams adapter(결정 203).
  *
- * <p>흐름: (소비 그룹, 토픽, 스트림 번호)마다 스레드 하나와 연결 하나 →
- * 잠금 키를 얻은 인스턴스만 읽는다({@code SET NX PX}, 기한 {@link #LEASE}, 항목마다 연장) →
- * 처음에 consumer group 을 만든다(없으면 스트림도, 위치 {@code 0} = 처음부터) →
- * 점유를 얻으면 먼저 미확인 항목(앞 점유자가 처리하다 만 것, id {@code 0})부터, 그다음 새 항목({@code >})을 {@code XREADGROUP} 으로 읽는다 →
- * 한 항목씩 {@link InPlaceDelivery#deliverHolding} 에 넘기고 끝나면 {@code XACK}.
+ * <p>흐름: (소비 그룹, 토픽, 스트림 번호)마다 읽기 스레드·연결 하나.
+ * <ol>
+ *   <li>잠금 키({@code SET NX PX}, 기한 {@link #LEASE})를 얻은 인스턴스만 읽는다. 처음에 consumer group 을 만든다(위치 {@code 0} = 처음부터).</li>
+ *   <li>그룹 읽기({@code XREADGROUP})는 Lua 한 번에 "잠금이 내 것인가 확인 + 읽기"로 한다 — 점유를 잃은 스레드가 항목을 가져가
+ *       그룹 위치·미확인 목록을 바꾸지 못하게(PR 리뷰 R2). 미확인 항목(id {@code 0})이 있으면 그것부터, 없으면 새 항목({@code >}).</li>
+ *   <li>새 항목이 없으면 그룹 상태를 바꾸지 않는 {@code XREAD BLOCK} 으로 스트림에 새 항목이 붙기를 기다린다(오면 바로 깬다).</li>
+ *   <li>한 항목씩 {@link InPlaceDelivery#deliverHolding} 에 넘기고 끝나면 {@code XACK}.</li>
+ * </ol>
  *
- * <p>순서(결정 202): 같은 키는 같은 스트림에 쌓이고, 스트림 하나는 한 인스턴스의 한 스레드가 차례로 처리한다.
- * 점유를 잃으면(연장 실패) 그 항목을 처리하지 않고 다시 점유를 기다린다. 처리 중에 기한이 지나 다른 인스턴스가 같은 항목을 처리해도
- * 업무는 Inbox 로 한 번만 반영된다.
+ * <p>점유 유지(R1): 별도 스레드가 기한({@link #LEASE})의 1/3 마다 이 인스턴스가 가진 잠금을 모두 연장한다 — 처리가 길어도 점유가 풀리지 않는다.
+ * 연장에 실패하면(Redis 가 기한 안에 닿지 않음 등) 그 잠금을 잃은 것으로 표시하고, 읽기 스레드는 그 뒤 처리도 {@code XACK} 도 하지 않는다.
+ * 그 항목은 새 점유자가 미확인 목록에서 다시 처리하고, 업무는 Inbox 로 한 번만 반영된다.
+ * 종료(R3): 읽기 스레드가 실제로 끝난 잠금만 놓는다. 끝나지 않은 스레드의 잠금은 연장을 멈춰 기한이 지나야 풀린다.
  */
 @Slf4j
 public class RedisStreamsSubscriptions implements SmartLifecycle {
@@ -47,6 +53,10 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
             + " return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end";
     private static final String RELEASE = "if redis.call('get', KEYS[1]) == ARGV[1] then"
             + " return redis.call('del', KEYS[1]) else return 0 end";
+    /** KEYS[1]=잠금, KEYS[2]=스트림, ARGV = 내 id, 그룹, consumer, 건수, 시작 id. 잠금이 내 것이 아니면 'LOST'. */
+    private static final String FENCED_READ = "if redis.call('get', KEYS[1]) ~= ARGV[1] then return 'LOST' end"
+            + " local r = redis.call('XREADGROUP', 'GROUP', ARGV[2], ARGV[3], 'COUNT', ARGV[4], 'STREAMS', KEYS[2], ARGV[5])"
+            + " if not r then return {} end return r[1][2]";
 
     private final Supplier<List<SubscribedHandler>> handlers;
     private final RedisClient client;
@@ -55,19 +65,27 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
     private final int batchSize;
     private final long blockMs;
     private final Duration holdStart;
+    private final Duration lease;
     private final String instanceId = UUID.randomUUID().toString();
-    private final List<StatefulRedisConnection<String, String>> connections = new ArrayList<>();
+    /** 지금 이 인스턴스가 가진 잠금. 연장 스레드가 잃으면 지운다. */
+    private final Set<String> held = ConcurrentHashMap.newKeySet();
+    /** 읽기 스레드가 끝난 잠금(종료 때 놓아도 되는 것). */
+    private final Set<String> finished = ConcurrentHashMap.newKeySet();
     private final List<String> locks = new ArrayList<>();
+    private final List<StatefulRedisConnection<String, String>> connections = new ArrayList<>();
+    private StatefulRedisConnection<String, String> leaseConnection;
     private ExecutorService readers;
+    private ScheduledExecutorService renewer;
     private volatile boolean running;
 
     public RedisStreamsSubscriptions(Supplier<List<SubscribedHandler>> handlers, RedisClient client, InPlaceDelivery delivery,
                                      int streamsPerTopic, int batchSize, long blockMs) {
-        this(handlers, client, delivery, streamsPerTopic, batchSize, blockMs, InPlaceDelivery.HOLD_START);
+        this(handlers, client, delivery, streamsPerTopic, batchSize, blockMs, InPlaceDelivery.HOLD_START, LEASE);
     }
 
     RedisStreamsSubscriptions(Supplier<List<SubscribedHandler>> handlers, RedisClient client, InPlaceDelivery delivery,
-                              int streamsPerTopic, int batchSize, long blockMs, Duration holdStart) {
+                              int streamsPerTopic, int batchSize, long blockMs, Duration holdStart, Duration lease) {
+        this.lease = lease;
         this.handlers = handlers;
         this.client = client;
         this.delivery = delivery;
@@ -83,26 +101,36 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
         for (SubscribedHandler handler : handlers.get()) {
             unique.put(handler.group() + "|" + handler.topic(), handler);
         }
+        leaseConnection = client.connect();
         readers = Executors.newFixedThreadPool(Math.max(1, unique.size() * streamsPerTopic));
+        renewer = Executors.newSingleThreadScheduledExecutor();
         running = true;
+        renewer.scheduleWithFixedDelay(this::renewHeld, lease.toMillis() / 3, lease.toMillis() / 3, TimeUnit.MILLISECONDS);
         for (SubscribedHandler subscription : unique.values()) {
             for (int shard = 0; shard < streamsPerTopic; shard++) {
                 StatefulRedisConnection<String, String> connection = client.connect();
                 connections.add(connection);
                 String stream = RedisStreamTopology.stream(subscription.topic(), shard);
-                locks.add(RedisStreamTopology.lockKey(subscription.group(), stream));
-                readers.submit(() -> readLoop(subscription, stream, connection.sync()));
+                String lock = RedisStreamTopology.lockKey(subscription.group(), stream);
+                locks.add(lock);
+                readers.submit(() -> {
+                    try {
+                        readLoop(subscription, stream, lock, connection.sync());
+                    } finally {
+                        finished.add(lock);
+                    }
+                });
             }
         }
         log.info("Redis Streams 구독 {}개 시작 (구독마다 스트림 {}개)", unique.size(), streamsPerTopic);
     }
 
-    private void readLoop(SubscribedHandler subscription, String stream, RedisCommands<String, String> redis) {
-        String lock = RedisStreamTopology.lockKey(subscription.group(), stream);
+    private void readLoop(SubscribedHandler subscription, String stream, String lock, RedisCommands<String, String> redis) {
         boolean groupReady = false;
+        String lastSeen = "$";
         while (running) {
             try {
-                if (!acquire(redis, lock)) {
+                if (!held.contains(lock) && !acquire(redis, lock)) {
                     Thread.sleep(1000);
                     continue;
                 }
@@ -110,17 +138,33 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
                     createGroup(redis, subscription.group(), stream);
                     groupReady = true;
                 }
-                // 점유를 얻은 직후에는 미확인 항목(앞 점유자가 처리하다 만 것)부터 비운다.
-                boolean owner = true;
-                List<StreamMessage<String, String>> pending = read(subscription, stream, redis, false);
-                while (running && owner && !pending.isEmpty()) {
-                    owner = process(subscription, stream, redis, lock, pending);
-                    pending = owner ? read(subscription, stream, redis, false) : List.of();
+                // 미확인 항목(앞 점유자가 처리하다 만 것)부터. 없으면 새 항목.
+                List<StreamMessage<String, String>> entries = fencedRead(redis, lock, subscription.group(), stream, "0");
+                if (entries != null && entries.isEmpty()) {
+                    entries = fencedRead(redis, lock, subscription.group(), stream, ">");
                 }
-                // 그다음 새 항목. 점유를 잃으면 바깥으로 나가 다시 점유부터.
-                while (running && owner) {
-                    owner = process(subscription, stream, redis, lock, read(subscription, stream, redis, true))
-                            && renew(redis, lock);
+                if (entries == null) {
+                    held.remove(lock);
+                    continue;
+                }
+                if (entries.isEmpty()) {
+                    lastSeen = awaitNew(redis, stream, lastSeen);
+                    continue;
+                }
+                for (StreamMessage<String, String> entry : entries) {
+                    if (!running || !held.contains(lock)) {
+                        break;
+                    }
+                    if (entry.getBody() != null && !entry.getBody().isEmpty()) {
+                        delivery.deliverHolding(subscription.group(), subscription.handler(), subscription.noRetryFor(),
+                                toInbound(subscription.topic(), stream, entry), () -> running && held.contains(lock), holdStart);
+                    }
+                    if (!held.contains(lock)) {
+                        // 처리하는 사이 점유를 잃었다. 확인하지 않고 둔다 — 새 점유자가 미확인 목록에서 다시 처리한다.
+                        break;
+                    }
+                    redis.xack(stream, subscription.group(), entry.getId());
+                    lastSeen = entry.getId();
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -140,47 +184,66 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
         }
     }
 
-    /** 미확인 항목(id 0 부터) 또는 새 항목({@code >}, 최대 blockMs 기다림)을 읽는다. */
-    private List<StreamMessage<String, String>> read(SubscribedHandler subscription, String stream,
-                                                     RedisCommands<String, String> redis, boolean fresh) {
-        XReadArgs args = fresh ? XReadArgs.Builder.count(batchSize).block(blockMs) : XReadArgs.Builder.count(batchSize);
-        XReadArgs.StreamOffset<String> from = fresh
-                ? XReadArgs.StreamOffset.lastConsumed(stream) : XReadArgs.StreamOffset.from(stream, "0");
-        return redis.xreadgroup(Consumer.from(subscription.group(), RedisStreamTopology.CONSUMER), args, from);
+    /** @return 읽은 항목(없으면 빈 목록), 잠금이 내 것이 아니면 null */
+    @SuppressWarnings("unchecked")
+    private List<StreamMessage<String, String>> fencedRead(RedisCommands<String, String> redis, String lock, String group,
+                                                           String stream, String from) {
+        Object reply = redis.eval(FENCED_READ, ScriptOutputType.MULTI, new String[]{lock, stream},
+                instanceId, group, RedisStreamTopology.CONSUMER, Integer.toString(batchSize), from);
+        if ("LOST".equals(reply) || reply instanceof List<?> list && list.size() == 1 && "LOST".equals(list.get(0))) {
+            return null;
+        }
+        List<StreamMessage<String, String>> entries = new ArrayList<>();
+        if (!(reply instanceof List<?> rows)) {
+            return entries;
+        }
+        for (Object row : rows) {
+            List<Object> pair = (List<Object>) row;
+            String id = (String) pair.get(0);
+            Map<String, String> body = new LinkedHashMap<>();
+            if (pair.size() > 1 && pair.get(1) instanceof List<?> fields) {
+                for (int i = 0; i + 1 < fields.size(); i += 2) {
+                    body.put((String) fields.get(i), (String) fields.get(i + 1));
+                }
+            }
+            entries.add(new StreamMessage<>(stream, id, body));
+        }
+        return entries;
     }
 
     /**
-     * 한 항목씩 처리하고 {@code XACK}. 항목마다 점유를 연장한다.
-     *
-     * @return 점유가 아직 내 것이면 true. 잃었으면 남은 항목을 처리하지 않고 false
+     * 그룹 상태를 바꾸지 않고 스트림에 {@code lastSeen} 뒤 항목이 붙기를 최대 blockMs 기다린다.
+     * @return 다음에 기다릴 기준 id(본 것 가운데 가장 뒤)
      */
-    private boolean process(SubscribedHandler subscription, String stream, RedisCommands<String, String> redis, String lock,
-                            List<StreamMessage<String, String>> entries) {
-        for (StreamMessage<String, String> entry : entries) {
-            if (!running || !renew(redis, lock)) {
-                return false;
-            }
-            // 지워진 항목은 미확인 목록에 본문 없이 남는다. 처리할 것이 없으니 확인만 한다.
-            if (entry.getBody() != null && !entry.getBody().isEmpty()) {
-                delivery.deliverHolding(subscription.group(), subscription.handler(), subscription.noRetryFor(),
-                        toInbound(subscription.topic(), stream, entry), () -> running, holdStart);
-            }
-            redis.xack(stream, subscription.group(), entry.getId());
-        }
-        return true;
+    private String awaitNew(RedisCommands<String, String> redis, String stream, String lastSeen) {
+        List<StreamMessage<String, String>> seen = redis.xread(XReadArgs.Builder.count(1).block(blockMs),
+                XReadArgs.StreamOffset.from(stream, lastSeen));
+        return seen.isEmpty() ? lastSeen : seen.get(seen.size() - 1).getId();
     }
 
     private boolean acquire(RedisCommands<String, String> redis, String lock) {
-        if ("OK".equals(redis.set(lock, instanceId, SetArgs.Builder.nx().px(LEASE.toMillis())))) {
+        if ("OK".equals(redis.set(lock, instanceId, SetArgs.Builder.nx().px(lease.toMillis())))) {
+            held.add(lock);
             return true;
         }
-        return renew(redis, lock);
+        return false;
     }
 
-    private boolean renew(RedisCommands<String, String> redis, String lock) {
-        Long renewed = redis.eval(RENEW, ScriptOutputType.INTEGER, new String[]{lock}, instanceId,
-                Long.toString(LEASE.toMillis()));
-        return renewed != null && renewed == 1L;
+    /** 가진 잠금을 모두 연장한다. 연장되지 않으면 잃은 것으로 둔다. */
+    private void renewHeld() {
+        for (String lock : held) {
+            try {
+                Long renewed = leaseConnection.sync().eval(RENEW, ScriptOutputType.INTEGER, new String[]{lock}, instanceId,
+                        Long.toString(lease.toMillis()));
+                if (renewed == null || renewed != 1L) {
+                    held.remove(lock);
+                    log.warn("점유를 잃었다, 이 스트림의 처리를 멈춘다 lock={}", lock);
+                }
+            } catch (RuntimeException failure) {
+                // 닿지 않으면 다음 주기에 다시. 기한 안에 못 닿으면 다른 인스턴스가 이어받고, 다음 연장이 0 을 받아 여기서 놓는다.
+                log.warn("점유 연장 실패 lock={}", lock, failure);
+            }
+        }
     }
 
     private static void createGroup(RedisCommands<String, String> redis, String group, String stream) {
@@ -209,30 +272,39 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
         if (readers != null) {
             readers.shutdown();
             try {
-                if (!readers.awaitTermination(blockMs + 5000, TimeUnit.MILLISECONDS)) {
+                if (!readers.awaitTermination(blockMs + 10_000, TimeUnit.MILLISECONDS)) {
                     readers.shutdownNow();
+                    readers.awaitTermination(5, TimeUnit.SECONDS);
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                readers.shutdownNow();
             }
         }
-        // 점유를 놓아 다른 인스턴스가 기한을 기다리지 않고 이어받게 한다.
-        if (!connections.isEmpty()) {
-            try {
-                RedisCommands<String, String> redis = connections.get(0).sync();
-                for (String lock : locks) {
-                    redis.eval(RELEASE, ScriptOutputType.INTEGER, new String[]{lock}, instanceId);
+        if (renewer != null) {
+            renewer.shutdownNow();
+        }
+        // 읽기 스레드가 끝난 잠금만 놓는다. 끝나지 않은(처리 중인) 스레드의 잠금은 연장을 멈췄으니 기한이 지나야 풀린다.
+        if (leaseConnection != null) {
+            for (String lock : locks) {
+                if (!finished.contains(lock)) {
+                    log.warn("처리가 끝나지 않아 점유를 놓지 않는다(기한이 지나면 풀린다) lock={}", lock);
+                    continue;
                 }
-            } catch (RuntimeException failure) {
-                log.warn("점유 해제 실패, 기한이 지나면 다른 인스턴스가 이어받는다", failure);
+                try {
+                    leaseConnection.sync().eval(RELEASE, ScriptOutputType.INTEGER, new String[]{lock}, instanceId);
+                } catch (RuntimeException failure) {
+                    log.warn("점유 해제 실패, 기한이 지나면 다른 인스턴스가 이어받는다 lock={}", lock, failure);
+                }
             }
+            leaseConnection.close();
         }
         for (StatefulRedisConnection<String, String> connection : connections) {
             connection.close();
         }
         connections.clear();
         locks.clear();
+        held.clear();
+        finished.clear();
     }
 
     @Override
