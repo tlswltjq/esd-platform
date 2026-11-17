@@ -87,3 +87,20 @@ class DraftSkipContractTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BuildScopeWiringTest(unittest.TestCase):
+    """결정 207: 범위 판단 결과로만 Gradle 태스크를 고르고, 판단 단계를 빼면 잡는다."""
+
+    def setUp(self):
+        self.text = CI.read_text(encoding='utf-8')
+
+    def test_build_runs_the_tasks_chosen_by_the_scope_step(self):
+        self.assertIn('run: python3 -I -B tools/ci/build_scope.py --event "${{ github.event_name }}" --base HEAD^1'
+                      ' >> "$GITHUB_OUTPUT"', self.text)
+        self.assertIn("        if: steps.scope.outputs.tasks != ''\n"
+                      "        run: ./gradlew ${{ steps.scope.outputs.tasks }} --continue --console=plain", self.text)
+
+    def test_the_old_unconditional_full_build_is_gone(self):
+        self.assertNotIn('run: ./gradlew build --continue --console=plain', self.text)
+
