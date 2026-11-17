@@ -1,5 +1,8 @@
 package com.stove.license;
 
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.never;
+import com.stove.common.messaging.quarantine.QuarantineReplay;
 import static com.stove.license.LicenseFixtures.event;
 import static com.stove.license.LicenseFixtures.id;
 import static com.stove.license.LicenseFixtures.paid;
@@ -44,7 +47,6 @@ import com.stove.license.core.service.SearchLicenses;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
@@ -53,8 +55,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,6 +87,8 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     RegisterLicense register;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    QuarantineReplay quarantineReplay;
     @Autowired
     ObjectMapper json;
     @Autowired
@@ -457,39 +459,36 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     @Test
-    void conflictGoesToDltAndOriginalReplayRecoversInANewTransaction() throws Exception {
+    void conflictIsQuarantinedAndTheKeyReplayRecoversInANewTransaction() throws Exception {
         PaidOrder p = paid();
         grant.execute(p);
-        // A damaged Inbox is rejected; restoring it allows the exact original to be consumed again.
+        // A damaged Inbox is rejected; restoring it allows the held originals to be replayed in order (결정 155·206).
         jdbc.update("DELETE FROM processed_event");
-        HashMap<String, Object> config = new HashMap<>();
-        config.put("bootstrap.servers", kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        config.put("group.id", "license-dlt-" + id());
-        config.put("auto.offset.reset", "earliest");
-        config.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        config.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(config)) {
-            consumer.subscribe(List.of(Topics.ORDER + ".DLT"));
+        try {
             listeners.start();
             send(event(p));
-            boolean found = false;
-            long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
-            while (!found && System.nanoTime() < deadline)
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500)))
-                    if (record.value().contains(p.eventId())) {
-                        assertThat(json.readValue(record.value(), OrderPaidEvent.class)).isEqualTo(event(p));
-                        found = true;
-                    }
-            assertThat(found).isTrue();
+            Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(held(p)).isEqualTo(1));
+            assertThat(json.readValue(jdbc.queryForObject(
+                    "SELECT payload FROM consumer_quarantine WHERE event_id=? AND consumer_group=?", String.class,
+                    p.eventId(), GrantLicense.CONSUMER_GROUP), OrderPaidEvent.class)).isEqualTo(event(p));
             counts(1, 0);
             new TransactionTemplate(transactions).executeWithoutResult(tx -> inbox.firstDelivery(p.eventId(), GrantLicense.CONSUMER_GROUP, EventType.ORDER_PAID));
             clearInvocations(grant);
             send(event(p));
             send(event(p));
-            verify(grant, timeout(20000).atLeast(2)).execute(p);
-            Awaitility.await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> counts(1, 1));
+            Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(p)).isEqualTo(3));
+            verify(grant, never()).execute(p);
+            assertThat(quarantineReplay.replay(GrantLicense.CONSUMER_GROUP, Topics.ORDER, p.orderNo()))
+                    .isEqualTo(new QuarantineReplay.ReplayResult(3, 0, null));
+            verify(grant, atLeast(2)).execute(p);
+            counts(1, 1);
         } finally {
             listeners.stop();
         }
+    }
+
+    private int held(PaidOrder p) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE partition_key=? AND consumer_group=? AND status='HELD'",
+                Integer.class, p.orderNo(), GrantLicense.CONSUMER_GROUP);
     }
 }

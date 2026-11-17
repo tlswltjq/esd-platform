@@ -2,6 +2,8 @@ package com.stove.common.kafka;
 
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
+import com.stove.common.event.KeyQuarantine;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Properties;
@@ -42,23 +44,32 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
     private final Supplier<ConcurrentKafkaListenerContainerFactoryConfigurer> configurer;
     private final Supplier<ConsumerFactory<Object, Object>> consumers;
     private final Supplier<ConsumerRecordRecoverer> deadLetters;
+    private final Supplier<KeyQuarantine> quarantine;
     private volatile boolean configured;
     private volatile boolean running;
 
-    /** {@code configurer}·{@code consumers}·{@code deadLetters} 는 전용 팩토리가 필요할 때만 꺼낸다. 그때 없으면 기동을 멈춘다. */
+    /**
+     * {@code configurer}·{@code consumers}·{@code deadLetters} 는 전용 팩토리가 필요할 때만 꺼낸다. 그때 없으면 기동을 멈춘다.
+     *
+     * @param quarantine 소비 모듈 DB 의 격리(결정 206). 있으면 모든 구독이 재시도 소진·재시도 제외 예외를 DLT 대신
+     *                   거기에 보관하고 그 키를 멈춘다. 없으면(DB 없는 Store) 예전처럼 DLT 로 보낸다.
+     */
     public KafkaEventSubscriptions(ApplicationContext beans,
                                    Supplier<ConcurrentKafkaListenerContainerFactoryConfigurer> configurer,
                                    Supplier<ConsumerFactory<Object, Object>> consumers,
-                                   Supplier<ConsumerRecordRecoverer> deadLetters) {
+                                   Supplier<ConsumerRecordRecoverer> deadLetters,
+                                   Supplier<KeyQuarantine> quarantine) {
         this.beans = beans;
         this.configurer = configurer;
         this.consumers = consumers;
         this.deadLetters = deadLetters;
+        this.quarantine = quarantine;
     }
 
     @Override
     public void configureKafkaListeners(KafkaListenerEndpointRegistrar registrar) {
         configured = true;
+        KeyQuarantine keyQuarantine = quarantine.get();
         DefaultMessageHandlerMethodFactory methods = new DefaultMessageHandlerMethodFactory();
         methods.afterPropertiesSet();
         for (Map.Entry<String, Object> entry : beans.getBeansWithAnnotation(EventSubscriber.class).entrySet()) {
@@ -71,10 +82,12 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
             endpoint.setId(name);
             endpoint.setGroupId(subscription.group());
             endpoint.setTopics(subscription.topics());
-            endpoint.setBean(new Receiver(handler));
+            endpoint.setBean(new Receiver(handler, subscription.group(), keyQuarantine));
             endpoint.setMethod(ON_MESSAGE);
             endpoint.setMessageHandlerMethodFactory(methods);
-            registrar.registerEndpoint(endpoint, needsOwnFactory(subscription) ? factoryFor(subscription) : null);
+            // 격리가 있으면 소비 그룹마다 격리 기록기가 달라 모든 구독이 전용 팩토리를 쓴다.
+            boolean ownFactory = keyQuarantine != null || needsOwnFactory(subscription);
+            registrar.registerEndpoint(endpoint, ownFactory ? factoryFor(subscription, keyQuarantine) : null);
         }
     }
 
@@ -83,7 +96,7 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
     }
 
     /** 이 선언만의 팩토리. Boot 설정(직렬화·관측 등)은 기본 팩토리와 같고 오류 처리·가져오는 건수만 다르다. */
-    ConcurrentKafkaListenerContainerFactory<Object, Object> factoryFor(EventSubscriber subscription) {
+    ConcurrentKafkaListenerContainerFactory<Object, Object> factoryFor(EventSubscriber subscription, KeyQuarantine keyQuarantine) {
         // Boot configurer 의 고정 제네릭 시그니처다. 업무 입력을 Object 로 넓혀 전달하지 않는다.
         ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         ConcurrentKafkaListenerContainerFactoryConfigurer boot = configurer.get();
@@ -95,7 +108,8 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
         // 빈이 아니라서 Spring 이 대신 넣어 주지 않는다. 빠지면 이 리스너들만 관측(추적 span)이 꺼진다.
         factory.setApplicationContext(beans);
         factory.setApplicationEventPublisher(beans);
-        ConsumerRecordRecoverer recoverer = deadLetters.get();
+        ConsumerRecordRecoverer recoverer = keyQuarantine != null
+                ? toQuarantine(subscription.group(), keyQuarantine) : deadLetters.get();
         if (recoverer == null) {
             throw new IllegalStateException("격리(DLT)에 쓸 KafkaTemplate 이 없다");
         }
@@ -108,6 +122,17 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
                     container.getContainerProperties().setKafkaConsumerProperties(properties));
         }
         return factory;
+    }
+
+    /**
+     * 재시도를 다 쓴(또는 재시도 제외) 레코드를 소비 모듈 DB 에 보관하고 키를 멈춘다. 보관이 실패하면 예외가 나가
+     * 오류 처리기가 오프셋을 넘기지 않는다(다시 받는다).
+     */
+    @SuppressWarnings("unchecked")
+    static ConsumerRecordRecoverer toQuarantine(String consumerGroup, KeyQuarantine keyQuarantine) {
+        // 리스너 컨테이너는 문자열 레코드만 받는다(Boot 의 StringDeserializer 설정). 오류 처리기 시그니처가 와일드카드라 좁힌다.
+        return (record, exception) -> keyQuarantine.quarantine(consumerGroup,
+                KafkaInboundMessages.from((ConsumerRecord<String, String>) record), exception);
     }
 
     /** 기동 마지막(모든 빈과 리스너 등록 뒤)에 확인한다. */
@@ -138,16 +163,32 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
         }
     }
 
-    /** 리스너 컨테이너가 부르는 대상. Kafka 레코드를 중립 메시지로 바꿔 핸들러에 넘긴다. */
+    /**
+     * 리스너 컨테이너가 부르는 대상. Kafka 레코드를 중립 메시지로 바꿔 핸들러에 넘긴다.
+     * 그 키가 멈춰 있으면 처리하지 않고 격리 뒤에 쌓는다(결정 155: 앞이 빠진 키는 뒤도 멈춘다).
+     */
     public static final class Receiver {
         private final EventHandler handler;
+        private final String consumerGroup;
+        private final KeyQuarantine quarantine;
 
         Receiver(EventHandler handler) {
+            this(handler, null, null);
+        }
+
+        Receiver(EventHandler handler, String consumerGroup, KeyQuarantine quarantine) {
             this.handler = handler;
+            this.consumerGroup = consumerGroup;
+            this.quarantine = quarantine;
         }
 
         public void onMessage(ConsumerRecord<String, String> record) {
-            handler.receive(KafkaInboundMessages.from(record));
+            InboundMessage message = KafkaInboundMessages.from(record);
+            if (quarantine != null && quarantine.stopped(consumerGroup, message.topic(), message.key())) {
+                quarantine.quarantine(consumerGroup, message, null);
+                return;
+            }
+            handler.receive(message);
         }
     }
 }

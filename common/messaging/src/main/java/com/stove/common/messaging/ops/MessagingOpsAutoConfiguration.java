@@ -1,9 +1,11 @@
 package com.stove.common.messaging.ops;
 
+import com.stove.common.messaging.MessagingAutoConfiguration;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import com.stove.common.messaging.quarantine.QuarantineReplay;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -24,7 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>웹 애플리케이션일 때만 뜬다. {@code common:messaging} 은 spring-web 을 {@code compileOnly}
  * 로만 걸어 두므로, 웹이 아닌 실행에서 이 클래스가 없어도 Outbox 는 그대로 돈다.
  */
-@AutoConfiguration
+@AutoConfiguration(after = MessagingAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(name = "com.stove.common.web.response.ApiResponse")
 @ConditionalOnBean(OutboxEventRepository.class)
@@ -42,6 +44,14 @@ public class MessagingOpsAutoConfiguration {
     @ConditionalOnMissingBean
     public OutboxOpsController outboxOpsController(OutboxOpsService outboxOpsService) {
         return new OutboxOpsController(outboxOpsService);
+    }
+
+    /** 멈춘 소비 키 조회·재투입(결정 155·206). */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(QuarantineReplay.class)
+    public QuarantineOpsController quarantineOpsController(QuarantineReplay quarantineReplay) {
+        return new QuarantineOpsController(quarantineReplay);
     }
 
     /**

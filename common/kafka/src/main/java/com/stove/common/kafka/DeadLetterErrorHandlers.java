@@ -4,7 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 
-/** 제자리 재시도({@link ConsumerRetryPolicy}) 뒤 {@code <토픽>.DLT} 로 격리하는 오류 처리기를 만든다. */
+/** 제자리 재시도({@link ConsumerRetryPolicy}) 뒤 recoverer 로 격리하는 오류 처리기를 만든다. 격리처는 소비 모듈 DB(결정 206) 또는 DLT(Store). */
 @Slf4j
 public final class DeadLetterErrorHandlers {
 
@@ -19,7 +19,7 @@ public final class DeadLetterErrorHandlers {
     public static DefaultErrorHandler create(ConsumerRecordRecoverer recoverer,
                                              Class<? extends Exception>... noRetryFor) {
         DefaultErrorHandler handler = new DefaultErrorHandler((record, exception) -> {
-            log.error("재시도 소진 — DLT 로 보낸다 topic={} partition={} offset={} key={}",
+            log.error("재시도 소진(또는 재시도 제외) — 격리한다 topic={} partition={} offset={} key={}",
                     record.topic(), record.partition(), record.offset(), record.key(), exception);
             recoverer.accept(record, exception);
         }, ConsumerRetryPolicy.backOff());

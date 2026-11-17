@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
+import com.stove.common.event.KeyQuarantine;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -128,6 +129,47 @@ class KafkaEventSubscriptionsTest {
     }
 
     @Test
+    void aStoppedKeyIsHeldBehindTheQuarantineWithoutBeingProcessed() {
+        // 결정 155: 앞 메시지가 격리된 키는 뒤 메시지도 처리하지 않고 같은 보관함 뒤에 쌓는다.
+        PlainHandler handler = new PlainHandler();
+        RecordingQuarantine quarantine = new RecordingQuarantine();
+        quarantine.stoppedKeys.add("ORD-1");
+        KafkaEventSubscriptions.Receiver receiver = new KafkaEventSubscriptions.Receiver(handler, "fixture-plain", quarantine);
+
+        receiver.onMessage(new ConsumerRecord<>("fixture.a.v1", 0, 1L, "ORD-1", "{}"));
+        receiver.onMessage(new ConsumerRecord<>("fixture.a.v1", 0, 2L, "ORD-2", "{}"));
+
+        assertThat(quarantine.held).extracting(InboundMessage::key).containsExactly("ORD-1");
+        assertThat(quarantine.failures).containsExactly((Throwable) null);
+        assertThat(handler.received).extracting(InboundMessage::key).containsExactly("ORD-2");
+    }
+
+    @Test
+    void exhaustedRetriesGoToTheConsumerDatabaseInsteadOfTheDeadLetterTopic() {
+        RecordingQuarantine quarantine = new RecordingQuarantine();
+        IllegalStateException failure = new IllegalStateException("boom");
+
+        KafkaEventSubscriptions.toQuarantine("fixture-plain", quarantine)
+                .accept(new ConsumerRecord<>("fixture.a.v1", 2, 7L, "ORD-1", "{}"), failure);
+
+        assertThat(quarantine.groups).containsExactly("fixture-plain");
+        assertThat(quarantine.held.get(0).origin()).isEqualTo("partition=2 offset=7");
+        assertThat(quarantine.failures).containsExactly(failure);
+    }
+
+    @Test
+    void withAQuarantineEverySubscriptionGetsItsOwnErrorHandler() {
+        runner.withBean("plainHandler", PlainHandler.class)
+                .withBean(KeyQuarantine.class, RecordingQuarantine::new)
+                .run(context -> {
+                    MessageListenerContainer container = context.getBean(KafkaListenerEndpointRegistry.class)
+                            .getListenerContainer("plainHandler");
+                    // 공용 처리기는 DLT 로 보낸다. 격리가 있으면 그룹별 격리 기록기를 가진 전용 처리기여야 한다.
+                    assertThat(errorHandler(container)).isNotSameAs(context.getBean("stoveKafkaErrorHandler"));
+                });
+    }
+
+    @Test
     void oneAtATimeLimitsEachPollToOneRecord() {
         runner.withBean("slowHandler", SlowHandler.class).run(context -> {
             MessageListenerContainer container = context.getBean(KafkaListenerEndpointRegistry.class)
@@ -141,6 +183,25 @@ class KafkaEventSubscriptionsTest {
     void refusesASubscriberThatIsNotAHandler() {
         runner.withBean("notAHandler", NotAHandler.class).run(context ->
                 assertThat(context).hasFailed());
+    }
+
+    static class RecordingQuarantine implements KeyQuarantine {
+        final List<String> stoppedKeys = new ArrayList<>();
+        final List<String> groups = new ArrayList<>();
+        final List<InboundMessage> held = new ArrayList<>();
+        final List<Throwable> failures = new ArrayList<>();
+
+        @Override
+        public boolean stopped(String consumerGroup, String topic, String key) {
+            return stoppedKeys.contains(key);
+        }
+
+        @Override
+        public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
+            groups.add(consumerGroup);
+            held.add(message);
+            failures.add(failure);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

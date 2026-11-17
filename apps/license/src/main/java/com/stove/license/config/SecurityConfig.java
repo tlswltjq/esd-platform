@@ -17,8 +17,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay",
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ops/dlt", "/api/v1/ops/quarantine", "/api/v1/ops/outbox/dead").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ops/dlt/replay", "/api/v1/ops/quarantine/replay",
                                 "/api/v1/ops/outbox/dead/*/requeue", "/api/v1/ops/outbox/*/republish").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/library", "/api/v1/library/*", "/api/v1/storage").hasRole("MEMBER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/storage/*/registration").hasRole("MEMBER")

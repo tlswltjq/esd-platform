@@ -17,7 +17,6 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
@@ -39,8 +38,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -50,8 +47,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -68,7 +63,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -260,37 +254,26 @@ class RefundReceptionIntegrationTest extends PaymentIntegrationTestBase {
         verifyNoInteractions(gateway);
     }
 
-    @Test void invalidFinancialFactsReachDltWithoutCreatingARefundOrCallingPg() throws Exception {
+    /** 결정 155·206: 금액이 틀린 환불 요청은 Payment DB 에 그대로 격리되고, 환불·PG 호출은 일어나지 않는다. */
+    @Test void invalidFinancialFactsAreQuarantinedWithoutCreatingARefundOrCallingPg() throws Exception {
         Payment paid = paid();
         RefundExecutionRequest input = execution(paid);
         RefundExecutionRequestedEvent invalid = new RefundExecutionRequestedEvent(input.eventId(), input.occurredAt(), input.refundId(),
                 input.attemptId(), input.orderNo(), input.paymentId(), input.buyerSubject(), 9000, input.currency(), input.licenseSuspensionEventId());
-        HashMap<String, Object> properties = new HashMap<>();
-        properties.putAll(connectionProperties()); properties.put("group.id", "refund-receipt-dlt-" + id());
-        properties.put("auto.offset.reset", "earliest"); properties.put("enable.auto.commit", false);
-        properties.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        properties.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties)) {
-            consumer.subscribe(List.of(Topics.ORDER + ".DLT")); listeners.start();
-            RecordMetadata sent = send(invalid, REFUND_PARENT);
-            ConsumerRecord<String, String> found = null;
-            long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
-            while (found == null && System.nanoTime() < deadline) {
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(300))) {
-                    if (record.value().contains(invalid.eventId()) && record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP) != null
-                            && new String(record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP).value(), StandardCharsets.UTF_8)
-                                    .equals(ReceiveRefundExecution.CONSUMER_GROUP)) found = record;
-                }
-            }
-            assertThat(found).isNotNull();
-            assertThat(found.value()).isEqualTo(mapper.writeValueAsString(invalid));
-            assertThat(found.key()).isEqualTo(invalid.orderNo());
-            awaitConsumed(sent);
-            assertThat(executions.count()).isZero(); assertThat(inboxCount()).isZero();
-            assertThat(payments.findById(paid.getId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isZero();
-            verifyNoInteractions(gateway);
-        }
+        listeners.start();
+        RecordMetadata sent = send(invalid, REFUND_PARENT);
+        String query = "SELECT payload FROM consumer_quarantine WHERE event_id=? AND consumer_group=? AND status='HELD'";
+        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(jdbc.queryForList(
+                query, String.class, invalid.eventId(), ReceiveRefundExecution.CONSUMER_GROUP)).hasSize(1));
+        assertThat(jdbc.queryForObject(query, String.class, invalid.eventId(), ReceiveRefundExecution.CONSUMER_GROUP))
+                .isEqualTo(mapper.writeValueAsString(invalid));
+        assertThat(jdbc.queryForObject("SELECT partition_key FROM consumer_quarantine WHERE event_id=?", String.class, invalid.eventId()))
+                .isEqualTo(invalid.orderNo());
+        awaitConsumed(sent);
+        assertThat(executions.count()).isZero(); assertThat(inboxCount()).isZero();
+        assertThat(payments.findById(paid.getId()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isZero();
+        verifyNoInteractions(gateway);
     }
 
     private Payment paid() {
