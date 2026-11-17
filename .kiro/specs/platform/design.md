@@ -120,17 +120,19 @@ OutboxRelay (서비스당 1대, stove.outbox.poll-interval-ms=200)
      실패     : retryCount++, next_attempt_at = 1s,2s,...,5m, 같은 키 뒤 이벤트 holdUntil
      10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표(결정 155): DEAD 키의 뒤 행은 회수 전까지 보류, ADMIN 키 단위 requeue
 Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion(본문 모양, 결정 170)·traceparent·(목표) 키 안 발행 순번(결정 161)
-소비 리스너 (그룹당 파티션당 스레드 1, ack-mode record)
+소비 리스너 (@EventSubscriber, adapter 가 그룹당 파티션당 스레드 1, ack-mode record 로 구독)
+  KafkaInboundMessages.from -> KeyQuarantine.stopped(그룹, 토픽, 키)?
+     멈춘 키: 처리하지 않고 consumer_quarantine 에 뒤로 쌓음(KEY_STOPPED) -> 오프셋 커밋
   EventEnvelope.from (헤더 없으면 거절)
   -> isType 분기 -> *Mapper.from(envelope, payload) (계약 검증, api.listener)
   -> core 서비스 트랜잭션: ProcessedEventGuard.firstDelivery + 업무 유일 키 + 상태 전이 (+ 다음 이벤트 Outbox)
   -> 커밋 뒤 오프셋 커밋
-  실패: 재시도 가능 -> 1·2·4초 재시도 -> <topic>.DLT 같은 파티션 (DeadLetterMetrics)
-        영구 실패   -> 재시도 없이 DLT (목표, P2.6-3)
-DLT -> ADMIN DltOpsService.replay (원본 헤더 보존) -> 원본 토픽 -> Inbox가 중복 거름
-  -- 목표(결정 155·160): 실패 레코드를 소비 모듈 DB의 실패 보관 표에 기한 없이 저장 + 같은 트랜잭션에서 (그룹, 토픽, 키) 정지,
-  --   정지 키의 뒤 레코드도 같은 표에. 1건 즉시 경보. 재투입은 모듈 안에서 키 단위 offset 순으로 같은 리스너 경로 재처리,
-  --   다 처리되면 정지 해제. DLT 토픽은 쓰지 않는다. 이 문서의 "DLT"는 목표에서 이 표를 뜻한다.
+  실패: 재시도 가능 -> 1·2·4초 재시도 -> consumer_quarantine 보관 = 그 (그룹, 토픽, 키) 정지(결정 155·160·206, 한 행·한 트랜잭션)
+        noRetryFor 예외 -> 재시도 없이 보관
+        보관 실패 -> 오프셋을 넘기지 않음(다시 받음)
+재투입: ADMIN POST /api/v1/ops/quarantine/replay -> 그 키의 맨 앞 행부터 FOR UPDATE 로 점유(REPLAYING) -> 같은 리스너를 프로세스 안에서 직접 호출
+        (원래 traceparent 안) -> 성공 REPLAYED / 다시 실패 HELD 로 되돌리고 멈춤 -> 남은 행이 없으면 정지 해제. Inbox 가 중복을 거른다
+  -- 예외: DB(JPA)가 없는 Store 만 <topic>.DLT 같은 파티션 + DltOpsService.replay(판단 대기)
 ```
 
 ### `EventType` 상수 (42개) — 현행·목표 분리안

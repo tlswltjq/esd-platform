@@ -13,12 +13,15 @@ import com.stove.common.messaging.outbox.OutboxRelay;
 import com.stove.common.messaging.quarantine.JpaKeyQuarantine;
 import com.stove.common.messaging.quarantine.QuarantineReplay;
 import com.stove.common.messaging.quarantine.QuarantinedMessageRepository;
+import com.stove.common.messaging.trace.MicrometerReplayTracing;
 import com.stove.common.messaging.trace.MicrometerTraceContextCapture;
+import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.messaging.trace.TraceContextCapture;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import java.time.Clock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -122,8 +125,13 @@ public class MessagingAutoConfiguration {
     @ConditionalOnMissingBean
     public QuarantineReplay quarantineReplay(QuarantinedMessageRepository repository, ApplicationContext context,
                                              ObjectProvider<ObjectMapper> objectMapper,
-                                             PlatformTransactionManager transactionManager) {
+                                             PlatformTransactionManager transactionManager,
+                                             ObjectProvider<Tracer> tracer, ObjectProvider<Propagator> propagator) {
+        Tracer availableTracer = tracer.getIfAvailable();
+        Propagator availablePropagator = propagator.getIfAvailable();
+        ReplayTracing tracing = availableTracer == null || availablePropagator == null
+                ? ReplayTracing.NONE : new MicrometerReplayTracing(availableTracer, availablePropagator);
         return new QuarantineReplay(repository, context, objectMapper.getIfAvailable(ObjectMapper::new),
-                transactionManager);
+                transactionManager, tracing, Clock.systemUTC());
     }
 }

@@ -37,21 +37,21 @@ public class JpaKeyQuarantine implements KeyQuarantine {
         this.ownTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
-        Gauge.builder(HELD_METRIC, repository, held -> held.countByStatus(QuarantineStatus.HELD))
+        Gauge.builder(HELD_METRIC, repository, held -> held.countByStatusIn(QuarantineStatus.STOPPING))
                 .description("보관 중인(다시 넣지 않은) 소비 실패 메시지 수. 0이 아니면 멈춘 키가 있다")
                 .register(meterRegistry);
     }
 
     @Override
     public boolean stopped(String consumerGroup, String topic, String key) {
-        return repository.existsByConsumerGroupAndTopicAndPartitionKeyAndStatus(
-                consumerGroup, topic, keyOf(key), QuarantineStatus.HELD);
+        return repository.existsByConsumerGroupAndTopicAndPartitionKeyAndStatusIn(
+                consumerGroup, topic, QuarantinedMessage.stopKey(key), QuarantineStatus.STOPPING);
     }
 
     @Override
     public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
         String reason = failure == null ? KEY_STOPPED : describe(failure);
-        QuarantinedMessage held = QuarantinedMessage.held(consumerGroup, message.topic(), keyOf(message.key()),
+        QuarantinedMessage held = QuarantinedMessage.held(consumerGroup, message.topic(), message.key(),
                 message.header(EventHeaders.EVENT_ID), message.header(EventHeaders.EVENT_TYPE), message.payload(),
                 headersJson(message), message.origin(), reason);
         ownTransaction.executeWithoutResult(status -> repository.save(held));
@@ -68,10 +68,6 @@ public class JpaKeyQuarantine implements KeyQuarantine {
             log.error("소비 실패를 격리하고 키를 멈췄다 group={} topic={} key={} {}",
                     consumerGroup, message.topic(), message.key(), message.origin(), failure);
         }
-    }
-
-    static String keyOf(String key) {
-        return key == null ? "" : key;
     }
 
     private String headersJson(InboundMessage message) {
