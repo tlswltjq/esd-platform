@@ -2,19 +2,16 @@ package com.stove.common.messaging.rabbitmq;
 
 import com.stove.common.event.KeyQuarantine;
 import com.stove.common.event.MessagePublisher;
-import com.stove.common.event.OutboundMessage;
 import com.stove.common.kafka.KafkaConsumerAutoConfiguration;
-import com.stove.common.kafka.KafkaMessagePublisher;
 import com.stove.common.messaging.MessagingAutoConfiguration;
 import com.stove.common.messaging.config.RabbitMessagingProperties;
+import com.stove.common.messaging.delivery.AlsoKafka;
 import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.MicrometerReplayTracing;
 import com.stove.common.messaging.trace.ReplayTracing;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -43,23 +40,8 @@ public class RabbitMessagingAutoConfiguration {
                                                    ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate) {
         RabbitMessagePublisher rabbit = new RabbitMessagePublisher(connectionFactory, admin, properties.queuesPerTopic(),
                 properties.optionalTopics());
-        return alsoKafka(rabbit, properties.alsoKafkaTopics(), kafkaTemplate.getIfAvailable());
-    }
-
-    /** Kafka 로도 보낼 토픽은 두 곳 모두 성공해야 성공이다. 그 토픽이 있는데 {@link KafkaTemplate} 이 없으면 기동을 멈춘다. */
-    static MessagePublisher alsoKafka(MessagePublisher primary, Set<String> alsoKafkaTopics,
-                                      KafkaTemplate<String, String> template) {
-        if (alsoKafkaTopics.isEmpty()) {
-            return primary;
-        }
-        if (template == null) {
-            throw new IllegalStateException("stove.messaging.rabbitmq.also-kafka-topics=" + alsoKafkaTopics
-                    + " 인데 KafkaTemplate 이 없다");
-        }
-        KafkaMessagePublisher kafka = new KafkaMessagePublisher(template);
-        return (OutboundMessage message) -> alsoKafkaTopics.contains(message.topic())
-                ? CompletableFuture.allOf(primary.publish(message), kafka.publish(message))
-                : primary.publish(message);
+        return AlsoKafka.wrap(rabbit, properties.alsoKafkaTopics(), kafkaTemplate.getIfAvailable(),
+                "stove.messaging.rabbitmq.also-kafka-topics");
     }
 
     @Bean

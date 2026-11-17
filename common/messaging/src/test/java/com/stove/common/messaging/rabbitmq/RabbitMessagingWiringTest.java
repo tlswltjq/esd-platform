@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.stove.common.event.MessagePublisher;
 import com.stove.common.event.OutboundMessage;
+import com.stove.common.messaging.delivery.AlsoKafka;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -44,10 +45,10 @@ class RabbitMessagingWiringTest {
     void kafkaCopyTopicsWithoutAKafkaTemplateRefuseToStart() {
         MessagePublisher primary = message -> CompletableFuture.completedFuture(null);
 
-        assertThatThrownBy(() -> RabbitMessagingAutoConfiguration.alsoKafka(primary, Set.of("stove.catalog.v1"), null))
+        assertThatThrownBy(() -> AlsoKafka.wrap(primary, Set.of("stove.catalog.v1"), null, "p"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("stove.catalog.v1");
-        assertThat(RabbitMessagingAutoConfiguration.alsoKafka(primary, Set.of(), null)).isSameAs(primary);
+        assertThat(AlsoKafka.wrap(primary, Set.of(), null, "p")).isSameAs(primary);
     }
 
     @Test
@@ -56,7 +57,7 @@ class RabbitMessagingWiringTest {
         MessagePublisher primary = message -> CompletableFuture.completedFuture(null);
         KafkaTemplate<String, String> kafka = mock(KafkaTemplate.class);
 
-        MessagePublisher publisher = RabbitMessagingAutoConfiguration.alsoKafka(primary, Set.of("stove.catalog.v1"), kafka);
+        MessagePublisher publisher = AlsoKafka.wrap(primary, Set.of("stove.catalog.v1"), kafka, "p");
         publisher.publish(new OutboundMessage("stove.order.v1", "K", "{}", Map.of())).join();
 
         verifyNoInteractions(kafka);

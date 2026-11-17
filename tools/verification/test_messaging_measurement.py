@@ -62,6 +62,16 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(rabbit["environment"]["RABBITMQ_DEFAULT_USER"], messaging_measurement.RABBIT_USER)
         self.assertIn("healthcheck", rabbit)
 
+    def test_redis_streams_points_messaging_apps_at_their_own_redis_with_the_shared_parallelism(self):
+        order = messaging_measurement.broker_environment("order", "redis-streams")
+        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "redis-streams")
+        self.assertEqual(order["STOVE_MESSAGING_REDISSTREAMS_URI"], "redis://streams:6379")
+        self.assertEqual(order["STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC"], str(messaging_measurement.PARALLELISM))
+        self.assertEqual(messaging_measurement.broker_environment("catalog", "redis-streams")["STOVE_MESSAGING_REDISSTREAMS_ALSOKAFKATOPICS"],
+                         "stove.catalog.v1")
+        streams = messaging_measurement.infra_services("redis-streams")["streams"]
+        self.assertIn("--appendonly", streams["command"])
+
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
             messaging_measurement.broker_environment("order", "nats")

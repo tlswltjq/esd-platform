@@ -48,7 +48,7 @@ def main():
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
-    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq"],
+    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq", "redis-streams"],
                         help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
@@ -231,7 +231,7 @@ def main():
 
     try:
         run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio",
-                     *(["rabbitmq"] if "rabbitmq" in services else [])], "infra")
+                     *infra_services(args.broker)], "infra")
         provision_storage()
         denied = subprocess.run(mc + ["pipe", "reader/stove-builds/forbidden.zip"], input=b"forbidden", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if denied.returncode == 0:
