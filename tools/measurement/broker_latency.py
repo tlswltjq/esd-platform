@@ -118,14 +118,16 @@ def _existing_schemas(container, password):
     return {line.strip() for line in output.splitlines()}
 
 
-def mysql_command(container, sql):
-    """비밀번호는 명령행에 두지 않는다. ``-e MYSQL_PWD``(이름만)로 자식 환경의 값을 컨테이너에 넘긴다."""
-    return ["docker", "exec", "-i", "-e", "MYSQL_PWD", container, "mysql", "-uroot", "-N", "-B", "-e", sql]
+def mysql_command(container):
+    """비밀번호는 명령행에 두지 않는다. ``-e MYSQL_PWD``(이름만)로 자식 환경의 값을 컨테이너에 넘긴다.
+    SQL도 명령행이 아니라 표준 입력으로 넘긴다 — 키 120개 × 스키마 쌍 56개면 인수 길이 한도를 넘는다."""
+    return ["docker", "exec", "-i", "-e", "MYSQL_PWD", container, "mysql", "-uroot", "-N", "-B"]
 
 
 def _mysql(container, password, sql):
     environment = dict(os.environ, MYSQL_PWD=password)
-    completed = subprocess.run(mysql_command(container, sql), capture_output=True, text=True, env=environment)
+    completed = subprocess.run(mysql_command(container), input=sql + ";\n", capture_output=True, text=True,
+                               env=environment)
     if completed.returncode != 0:
         # CalledProcessError 는 명령 전체(SQL)를 싣는다. 오류 문구만 남긴다.
         raise RuntimeError("mysql 실패(exit %d): %s" % (completed.returncode, completed.stderr.strip()[:500]))

@@ -55,9 +55,13 @@ class KeyScopeTest(unittest.TestCase):
 class PasswordTest(unittest.TestCase):
     def test_the_password_never_appears_on_the_command_line(self):
         # 명령행 인수는 ps와 CalledProcessError 로그에 그대로 보인다(PR #206 R6).
-        command = broker_latency.mysql_command("mysql-id", "SELECT 1")
+        command = broker_latency.mysql_command("mysql-id")
         self.assertIn("MYSQL_PWD", command)
         self.assertFalse(any(part.startswith("MYSQL_PWD=") for part in command))
+
+    def test_sql_goes_through_stdin_not_the_argument_list(self):
+        # 실측 7회차: 키 120개 × 스키마 쌍 56개 SQL이 인수 길이 한도(E2BIG)를 넘었다.
+        self.assertEqual(broker_latency.mysql_command("mysql-id")[-1], "-B", "mysql 뒤에 SQL 인수가 없다")
 
 
 class SummaryTest(unittest.TestCase):
