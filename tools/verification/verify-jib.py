@@ -48,6 +48,8 @@ def main():
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
+    parser.add_argument("--app-env", action="append", default=[], metavar="NAME=VALUE",
+                        help="Extra environment for every application (repeatable), e.g. a messaging setting to compare")
     parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq", "redis-streams"],
                         help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
@@ -175,6 +177,9 @@ def main():
             app_env.update(REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password")
         if name == "download":
             app_env.update(DOWNLOAD_STORAGE_ACCESS_KEY="download-reader", DOWNLOAD_STORAGE_SECRET_KEY="isolated-read-only-password")
+        # 맨 마지막에 둔다: 위의 어떤 값도 덮어쓸 수 있다. 브로커 선택은 --broker 로만 한다(기록한 broker 와 실제가 어긋나지 않게, PR #214 R4).
+        from support.messaging_measurement import extra_environment
+        app_env.update(extra_environment(args.app_env))
         services[name] = {"image": configured["image"], "environment": app_env,
                           "healthcheck": configured["healthcheck"], "stop_grace_period": configured["stop_grace_period"],
                           "ports": ["127.0.0.1:" + str(port + offset) + ":" + str(port)], "mem_limit": "768m",
@@ -202,7 +207,7 @@ def main():
             # Parallel Testcontainers tests remove their own containers on completion.
             if not any(key.startswith("org.testcontainers") for key in labels):
                 original.append(container["Id"])
-    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False, "broker": args.broker,
+    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False, "broker": args.broker, "app_env": args.app_env,
               "started_at": started_at, "host": platform.platform(), "command": sys.argv, "project": project}
     mc = docker + ["exec", "-T", "minio", "mc"]
 
@@ -284,7 +289,8 @@ def main():
         elif args.measure:
             from support.messaging_measurement import measure
             result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
-                                            args.load_rate, args.load_duration, args.load_buyers, args.load_warmup)
+                                            args.load_rate, args.load_duration, args.load_buyers, args.load_warmup,
+                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"])
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
