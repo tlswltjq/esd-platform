@@ -96,7 +96,8 @@ def order_violations(rows):
     """결정 204 F: 같은 (소비 그룹, 발행 모듈, 키) 안에서 발행 순서(Outbox id)대로 처리(processed_event id)했는가.
 
     발행 순서로 정렬했을 때 처리 순서가 줄어드는 이웃 쌍을 위반으로 센다. 다른 발행 모듈(토픽)끼리는 순서를 보장하지 않으므로 비교하지 않는다.
-    @return 소비 그룹별 {"keys": 키 수, "events": 이벤트 수, "violations": 위반 쌍 수}
+    @return 소비 그룹별 {"keys": 키 수, "events": 이벤트 수, "pairs": 비교한 이웃 쌍 수, "violations": 위반 쌍 수}.
+            ``pairs`` 가 0이면 같은 키에 이벤트가 하나뿐이라 위반 0 이 아무것도 증명하지 않는다.
     """
     chains = {}
     for group, publisher, key, outbox_id, processed_id in rows:
@@ -104,9 +105,10 @@ def order_violations(rows):
     summary = {}
     for (group, _publisher, _key), chain in chains.items():
         chain.sort()
-        entry = summary.setdefault(group, {"keys": 0, "events": 0, "violations": 0})
+        entry = summary.setdefault(group, {"keys": 0, "events": 0, "pairs": 0, "violations": 0})
         entry["keys"] += 1
         entry["events"] += len(chain)
+        entry["pairs"] += len(chain) - 1
         entry["violations"] += sum(1 for before, after in zip(chain, chain[1:]) if after[1] < before[1])
     return dict(sorted(summary.items()))
 

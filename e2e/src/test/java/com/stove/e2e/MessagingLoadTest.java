@@ -49,8 +49,13 @@ import org.junit.jupiter.api.Test;
  * 앞쪽 {@code load-warmup-secs} 동안의 주문은 {@code warmup=true}로 표시하고 집계에서 뺀다([결정 204] G 예열 제외). 업무 완료 시간·브로커 구간 지연은 DB 시각으로 따로 잰다
  * ({@code tools/measurement}). 여기서는 주문번호, 요청 시각, HTTP 응답 지연(대조군)과 최종 상태만 남긴다.
  *
+ * <p>환불({@code load-refund-every} N > 0): 모든 주문이 끝 상태에 닿은 뒤, 결제된 측정 주문 N개마다 하나를 같은 도착률로 환불 요청한다.
+ * 같은 주문(순서 키)에 결제 뒤 환불 이벤트가 이어지므로 같은 키 순서 위반 검사([결정 204] F)가 비교할 이웃이 생긴다.
+ * 환불은 끝 상태(COMPLETED·FAILED·REJECTED·PENDING_REVIEW)에 닿을 때까지만 기다린다.
+ *
  * <p>속성: {@code stove.e2e.load-rate}(초당 주문, 기본 2), {@code load-duration-secs}(기본 60),
- * {@code load-buyers}(기본 20), {@code load-warmup-secs}(기본 10, 측정 앞에 더한다), {@code load-evidence}(결과 JSON 경로, 필수).
+ * {@code load-buyers}(기본 20), {@code load-warmup-secs}(기본 10, 측정 앞에 더한다), {@code load-refund-every}(기본 0 = 환불 없음),
+ * {@code load-evidence}(결과 JSON 경로, 필수).
  */
 @Tag("messaging-load")
 class MessagingLoadTest {
@@ -63,6 +68,7 @@ class MessagingLoadTest {
         int seconds = Integer.parseInt(property("load-duration-secs", "60"));
         int buyerCount = Integer.parseInt(property("load-buyers", "20"));
         int warmupSeconds = Integer.parseInt(property("load-warmup-secs", "10"));
+        int refundEvery = Integer.parseInt(property("load-refund-every", "0"));
         Path evidence = Path.of(System.getProperty("stove.e2e.load-evidence"));
 
         JsonNode product = publishProduct();
@@ -120,6 +126,8 @@ class MessagingLoadTest {
             return settled == accepted.size();
         });
 
+        int refunds = refundEvery > 0 ? refund(accepted, buyers, refundEvery, periodNanos) : 0;
+
         ObjectNode output = JSON.createObjectNode()
                 .put("startedAt", startedAt.toString())
                 .put("sentAt", sentAt.toString())
@@ -129,6 +137,8 @@ class MessagingLoadTest {
                 .put("warmupSeconds", warmupSeconds)
                 .put("planned", total)
                 .put("accepted", accepted.size())
+                .put("refundEvery", refundEvery)
+                .put("refunds", refunds)
                 .put("productCode", product.path("productCode").asText());
         ArrayNode orders = output.putArray("orders");
         results.forEach(orders::add);
@@ -136,6 +146,67 @@ class MessagingLoadTest {
 
         assertThat(finished).as("계획한 주문을 모두 보냈다").isTrue();
         assertThat(results).hasSize(total);
+    }
+
+    /**
+     * 결제된 측정 주문 {@code every}개마다 하나를 주문과 같은 도착률로 환불 요청하고, 끝 상태까지 기다린다.
+     * 결과는 주문 결과에 {@code refundStatus}(요청 응답)·{@code refundHttpMs}·{@code refundState}(끝 상태)로 남긴다.
+     *
+     * @return 환불을 요청한 주문 수
+     */
+    private static int refund(List<ObjectNode> accepted, AtomicReferenceArray<Account> buyers, int every, long periodNanos)
+            throws Exception {
+        List<ObjectNode> targets = new ArrayList<>();
+        int paid = 0;
+        for (ObjectNode result : accepted) {
+            if (!result.path("warmup").asBoolean() && "PAID".equals(result.path("finalState").asText()) && paid++ % every == 0) {
+                targets.add(result);
+            }
+        }
+        for (ObjectNode target : targets) {
+            long startedNanos = System.nanoTime();
+            target.put("refundRequestedAt", Instant.now().toString());
+            E2eClient.Response response = authorized(target, buyers,
+                    account -> Stove.gateway.post(refundPath(target), null, account.headers()));
+            target.put("refundHttpMs", (System.nanoTime() - startedNanos) / 1_000_000.0).put("refundStatus", response.status());
+            long remaining = periodNanos - (System.nanoTime() - startedNanos);
+            if (remaining > 0) {
+                TimeUnit.NANOSECONDS.sleep(remaining);
+            }
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(180)).pollInterval(Duration.ofSeconds(2)).until(() -> {
+            int settled = 0;
+            for (ObjectNode target : targets) {
+                E2eClient.Response response = authorized(target, buyers, account -> Stove.gateway.get(refundPath(target), account.headers()));
+                String state = response.status() == 200 ? response.data().path("status").asText() : "HTTP_" + response.status();
+                target.put("refundState", state);
+                if (List.of("COMPLETED", "FAILED", "REJECTED", "PENDING_REVIEW").contains(state)) {
+                    settled++;
+                }
+            }
+            return settled == targets.size();
+        });
+        return targets.size();
+    }
+
+    private static String refundPath(ObjectNode result) {
+        return "/api/v1/orders/" + result.path("orderNo").asText() + "/refund";
+    }
+
+    /** 토큰이 만료(401)됐으면 다시 로그인해 한 번만 다시 보낸다. */
+    private static E2eClient.Response authorized(ObjectNode result, AtomicReferenceArray<Account> buyers, Call call) throws Exception {
+        int index = result.path("buyer").asInt();
+        E2eClient.Response response = call.send(buyers.get(index));
+        if (response.status() == 401) {
+            buyers.set(index, login(buyers.get(index).email(), PASSWORD));
+            response = call.send(buyers.get(index));
+        }
+        return response;
+    }
+
+    @FunctionalInterface
+    private interface Call {
+        E2eClient.Response send(Account account) throws Exception;
     }
 
     /** {@code LicensePurchaseFlowTest#preparePendingPurchase}와 같은 순서로 상품 하나를 출시한다. */

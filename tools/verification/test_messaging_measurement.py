@@ -127,6 +127,20 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(messaging_measurement.redeliveries(fetch, ["http://ok", "http://bad"]),
                          {"by_group": {"g": 4}, "unreadable": ["http://bad"]})
 
+    def test_unfinished_or_rejected_refunds_invalidate_the_run(self):
+        measured = [{"status": 200, "refundStatus": 202, "refundState": "COMPLETED"},
+                    {"status": 200, "refundStatus": 202, "refundState": "PENDING_REVIEW"},
+                    {"status": 200, "refundStatus": 409, "refundState": "HTTP_409"},
+                    {"status": 200}]
+        self.assertEqual(messaging_measurement.refund_problems(measured), (3, 1, 2))
+        reasons = messaging_measurement.validity(measured, {"completed": 0}, {}, {})["reasons"]
+        self.assertIn("환불 요청 거절 1건(요청 3)", reasons)
+        self.assertIn("환불 미완료 2건(요청 3)", reasons)
+
+    def test_load_command_passes_the_refund_interval(self):
+        command = messaging_measurement.load_command(300, 2, 60, 10, "/tmp/load.json", 10, 4)
+        self.assertIn("-Dstove.e2e.load-refund-every=4", command)
+
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
             messaging_measurement.broker_environment("order", "nats")

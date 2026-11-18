@@ -93,8 +93,9 @@ def infra_services(broker):
                                          "interval": "3s", "timeout": "10s", "retries": 60}}}
 
 
-def load_command(offset, rate, seconds, buyers, evidence, warmup=10):
+def load_command(offset, rate, seconds, buyers, evidence, warmup=10, refund_every=0):
     return ["./gradlew", ":e2e:messagingLoadTest", "--no-daemon", "--console=plain",
+            "-Dstove.e2e.load-refund-every=" + str(refund_every),
             "-Dstove.e2e.port-offset=" + str(offset),
             "-Dstove.e2e.load-rate=" + str(rate),
             "-Dstove.e2e.load-duration-secs=" + str(seconds),
@@ -120,8 +121,16 @@ def _nearest_rank(values, p):
     return ordered[max(0, -(-p * len(ordered) // 100) - 1)] if ordered else None
 
 
+def refund_problems(measured):
+    """환불을 요청한 측정 주문 가운데 요청이 거절됐거나 COMPLETED 에 닿지 않은 건."""
+    requested = [order for order in measured if "refundStatus" in order]
+    rejected = sum(1 for order in requested if order["refundStatus"] not in (200, 202))
+    unfinished = sum(1 for order in requested if order.get("refundState") != "COMPLETED")
+    return len(requested), rejected, unfinished
+
+
 def validity(measured, journey, broker, order=None):
-    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반이 하나라도 있으면 무효.
+    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반·환불 미완료가 하나라도 있으면 무효.
 
     순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
     """
@@ -147,6 +156,11 @@ def validity(measured, journey, broker, order=None):
     for group, checked in (order or {}).items():
         if checked.get("violations"):
             reasons.append("%s 같은 키 순서 위반 %d건" % (group, checked["violations"]))
+    requested, rejected, unfinished = refund_problems(measured)
+    if rejected:
+        reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
+    if unfinished:
+        reasons.append("환불 미완료 %d건(요청 %d)" % (unfinished, requested))
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
@@ -211,7 +225,7 @@ def redeliveries(fetch, urls):
 
 
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
-            metrics_urls=(), fetch=None):
+            metrics_urls=(), fetch=None, refund_every=0):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -222,7 +236,7 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     idle_start = db_counters(capture, container, db_password)
     time.sleep(IDLE_SECONDS)
     idle_end = db_counters(capture, container, db_password)
-    run(load_command(offset, rate, seconds, buyers, load, warmup), "measure-load")
+    run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
     load_end = db_counters(capture, container, db_password)
     db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
@@ -241,5 +255,6 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "planned": len(measured), "accepted": sum(1 for order in measured if order.get("status") == 200),
             "http_p95_ms": _nearest_rank(http, 95), "late_start_max_ms": max(late) if late else None,
             "journey": journey, "broker": broker, "order": order,
+            "refunds": dict(zip(("requested", "rejected", "unfinished"), refund_problems(measured))),
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
             "db_load": db_load, "validity": validity(measured, journey, broker, order)}

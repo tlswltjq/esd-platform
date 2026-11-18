@@ -94,8 +94,8 @@ class OrderTest(unittest.TestCase):
                 ("g", "payment", "K2", "20", "203"), ("g", "payment", "K2", "21", "202"),  # 뒤 이벤트가 먼저 처리
                 ("h", "order", "K1", "5", "7")]
         self.assertEqual(broker_latency.order_violations(rows), {
-            "g": {"keys": 2, "events": 4, "violations": 1},
-            "h": {"keys": 1, "events": 1, "violations": 0}})
+            "g": {"keys": 2, "events": 4, "pairs": 2, "violations": 1},
+            "h": {"keys": 1, "events": 1, "pairs": 0, "violations": 0}})
 
     def test_does_not_compare_events_from_different_publishers(self):
         # 다른 토픽(발행 모듈)끼리는 순서를 보장하지 않는다.
