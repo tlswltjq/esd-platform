@@ -10,7 +10,6 @@
 ``verify-jib.py``가 실패로 끝낸다.
 """
 import json
-import os
 import subprocess
 import sys
 import time
@@ -62,6 +61,19 @@ def broker_environment(app, broker):
         if app == "catalog":
             # 위와 같은 이유(Store 는 Kafka 로만 받는다)로 catalog 토픽만 Kafka 로도 보낸다.
             environment["STOVE_MESSAGING_REDISSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    return environment
+
+
+def extra_environment(assignments):
+    """``--app-env NAME=VALUE`` 목록을 앱 환경으로. 형식이 틀리거나 브로커 선택 변수면 거절한다(브로커는 ``--broker`` 로만)."""
+    environment = {}
+    for assignment in assignments:
+        key, separator, value = assignment.partition("=")
+        if not separator or not key:
+            raise SystemExit("--app-env needs NAME=VALUE: " + assignment)
+        if key == "STOVE_MESSAGING_BROKER":
+            raise SystemExit("--app-env cannot set STOVE_MESSAGING_BROKER; use --broker")
+        environment[key] = value
     return environment
 
 
@@ -137,24 +149,34 @@ DB_LOAD_SQL = "SHOW GLOBAL STATUS WHERE Variable_name IN ('Com_select', 'Questio
 IDLE_SECONDS = 10
 
 
-def db_counters(capture, container):
-    """업무 MySQL 의 누적 조회 수(``Com_select``)와 전체 문장 수(``Questions``)."""
-    password = os.environ.get("MYSQL_ROOT_PASSWORD", "root1234")
+def db_counters(capture, container, password):
+    """업무 MySQL 의 누적 조회 수(``Com_select``)와 전체 문장 수(``Questions``), 그리고 읽은 시각.
+
+    ``Com_select`` 는 서버 전체 카운터다 — 모든 앱의 백그라운드 조회(스케줄러·릴레이 폴링 등)와 이 조회 자체가 섞인다.
+    시각은 조회 전후의 가운데(``time.monotonic``)로 잡아 ``docker exec`` 지연이 분모에 덜 섞이게 한다(PR #214 R2).
+    ``password`` 는 격리 DB를 만들 때 넣은 값이다 — 호스트 환경 변수를 따르지 않는다(R1).
+    """
+    started = time.monotonic()
     text = capture(["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-N", "-B"],
                    input=DB_LOAD_SQL, stderr=subprocess.DEVNULL)
+    taken_at = (started + time.monotonic()) / 2
     counters = {}
     for line in text.splitlines():
         name, _, value = line.partition("\t")
         counters[name.strip()] = int(value.strip())
-    return counters
+    return counters, taken_at
 
 
-def db_rate(before, after, seconds):
-    """두 시점 사이 초당 조회 수·문장 수."""
-    return {name: round((after[name] - before[name]) / seconds, 1) for name in ("Com_select", "Questions")}
+def db_rate(before, after):
+    """두 읽기(``db_counters`` 결과) 사이 실제 경과 시간으로 나눈 초당 조회 수·문장 수."""
+    (start, started_at), (end, ended_at) = before, after
+    seconds = ended_at - started_at
+    rates = {name: round((end[name] - start[name]) / seconds, 1) for name in ("Com_select", "Questions")}
+    rates["seconds"] = round(seconds, 2)
+    return rates
 
 
-def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10):
+def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234"):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -162,14 +184,12 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     """
     load = Path(output) / "load.json"
     container = capture(docker + ["ps", "-q", "mysql"])
-    idle_start = db_counters(capture, container)
+    idle_start = db_counters(capture, container, db_password)
     time.sleep(IDLE_SECONDS)
-    idle_end = db_counters(capture, container)
-    load_started = time.monotonic()
+    idle_end = db_counters(capture, container, db_password)
     run(load_command(offset, rate, seconds, buyers, load, warmup), "measure-load")
-    load_end = db_counters(capture, container)
-    db_load = {"idle_per_second": db_rate(idle_start, idle_end, IDLE_SECONDS),
-               "load_run_per_second": db_rate(idle_end, load_end, time.monotonic() - load_started)}
+    load_end = db_counters(capture, container, db_password)
+    db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
     run(journey_command(root, container, load, journey_file), "measure-journey")
     broker_file = Path(output) / "broker.json"

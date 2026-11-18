@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -73,21 +74,34 @@ class BrokerEnvironmentTest(unittest.TestCase):
         streams = messaging_measurement.infra_services("redis-streams")["streams"]
         self.assertIn("--appendonly", streams["command"])
 
-    def test_db_rate_is_per_second_change_of_the_mysql_counters(self):
-        before = {"Com_select": 100, "Questions": 300}
-        after = {"Com_select": 600, "Questions": 1300}
-        self.assertEqual(messaging_measurement.db_rate(before, after, 10), {"Com_select": 50.0, "Questions": 100.0})
+    def test_db_rate_divides_by_the_time_actually_elapsed_between_the_reads(self):
+        before = ({"Com_select": 100, "Questions": 300}, 10.0)
+        after = ({"Com_select": 650, "Questions": 1400}, 21.0)
+        self.assertEqual(messaging_measurement.db_rate(before, after),
+                         {"Com_select": 50.0, "Questions": 100.0, "seconds": 11.0}, "10초가 아니라 실제 11초로 나눈다")
 
-    def test_db_counters_reads_show_global_status_output(self):
+    def test_db_counters_uses_the_given_password_and_the_middle_of_the_read_as_its_time(self):
         seen = {}
 
         def capture(command, **kwargs):
             seen["command"], seen["input"] = command, kwargs.get("input")
             return "Com_select\t42\nQuestions\t99"
 
-        self.assertEqual(messaging_measurement.db_counters(capture, "c1"), {"Com_select": 42, "Questions": 99})
+        with mock.patch.dict(os.environ, {"MYSQL_ROOT_PASSWORD": "host-value"}), \
+                mock.patch.object(messaging_measurement.time, "monotonic", side_effect=[5.0, 7.0]):
+            counters, taken_at = messaging_measurement.db_counters(capture, "c1", "isolated-pw")
+        self.assertEqual(counters, {"Com_select": 42, "Questions": 99})
+        self.assertEqual(taken_at, 6.0)
         self.assertEqual(seen["command"][:4], ["docker", "exec", "-i", "c1"])
+        self.assertIn("-pisolated-pw", seen["command"], "호스트의 MYSQL_ROOT_PASSWORD 가 아니라 격리 DB 값")
         self.assertIn("Com_select", seen["input"])
+
+    def test_extra_environment_parses_assignments_and_refuses_the_broker_switch(self):
+        self.assertEqual(messaging_measurement.extra_environment(["A=1", "B=x=y"]), {"A": "1", "B": "x=y"})
+        with self.assertRaises(SystemExit):
+            messaging_measurement.extra_environment(["NOVALUE"])
+        with self.assertRaises(SystemExit):
+            messaging_measurement.extra_environment(["STOVE_MESSAGING_BROKER=direct"])
 
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -141,7 +155,10 @@ class MeasureTest(unittest.TestCase):
                     return "Com_select\t%d\nQuestions\t%d" % (value, value * 2)
                 return "mysql-id"
 
-            with mock.patch.object(messaging_measurement.time, "sleep"):
+            # 읽기마다 monotonic 두 번(전·후): 유휴 시작 0~0, 유휴 끝 10~10, 부하 끝 70~70
+            clock = iter([0.0, 0.0, 10.0, 10.0, 70.0, 70.0])
+            with mock.patch.object(messaging_measurement.time, "sleep"), \
+                    mock.patch.object(messaging_measurement.time, "monotonic", side_effect=lambda: next(clock)):
                 summary = messaging_measurement.measure("/repo", ["docker", "compose"], run, capture,
                                                         output, 300, 5, 1, 2, 1)
 
@@ -150,7 +167,7 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(summary["http_p95_ms"], 30.0)
         self.assertTrue(summary["validity"]["valid"])
         self.assertEqual(summary["db_load"]["idle_per_second"]["Com_select"], 5.0, "유휴 10초 동안 50건")
-        self.assertIn("load_run_per_second", summary["db_load"])
+        self.assertEqual(summary["db_load"]["load_run_per_second"]["Com_select"], 5.0, "부하 구간 60초 동안 300건")
 
 
 if __name__ == "__main__":
