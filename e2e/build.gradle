@@ -365,7 +365,7 @@ tasks.register('messagingLoadTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform { includeTags 'messaging-load' }
     endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    ['load-rate', 'load-duration-secs', 'load-warmup-secs', 'load-buyers', 'load-evidence'].each { name ->
+    ['load-rate', 'load-duration-secs', 'load-warmup-secs', 'load-buyers', 'load-refund-every', 'load-evidence'].each { name ->
         systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
     }
     maxParallelForks = 1
