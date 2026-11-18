@@ -717,12 +717,14 @@
 
 <a id="d-058"></a>
 
-## D-058 Redis Streams 점유 상실 테스트가 발행 시점에 따라 미확인 건수 1·2로 흔들림
+## D-058 Redis Streams 옛 점유자가 다음 연장 전까지 같이 읽어 둔 항목을 처리·확인할 수 있음, 테스트는 이를 타이밍으로 가림
 
-**상태** 수정됨 · **영향** 테스트 결함(제품 동작 아님). PR #214 CI `build`가 `RedisStreamsAdapterIntegrationTest#afterLosingTheLeaseMidProcessingTheFormerOwnerNeitherAcknowledgesNorReadsFurther`에서 실패([run 44272835972](https://github.com/tlswltjq/esd-platform/actions/runs/44272835972/job/134693466164), `RedisStreamsAdapterIntegrationTest.java:261`), 로컬에서는 통과 · **위치** `RedisStreamsAdapterIntegrationTest`([PR #212](https://github.com/tlswltjq/esd-platform/pull/212))
+**상태** 수정됨 · **영향** 같은 그룹 인스턴스가 여럿일 때 점유가 넘어간 직후 최대 연장 주기(기한의 1/3, 20초) 동안, 옛 점유자가 이미 읽어 둔 같은 키의 뒤 항목을 새 점유자와 동시에 처리하고 `XACK`할 수 있었다(결정 202 한 번에 하나 위반 가능, 업무 반영은 Inbox가 한 번으로 막음). 테스트는 PR #214 CI `build`에서 `RedisStreamsAdapterIntegrationTest.java:261`(미확인 건수 = 2)로 실패했다([run 44272835972](https://github.com/tlswltjq/esd-platform/actions/runs/44272835972/job/134693466164)), 로컬에서는 통과 · **위치** `RedisStreamsSubscriptions` 처리 반복, `RedisStreamsAdapterIntegrationTest`([PR #212](https://github.com/tlswltjq/esd-platform/pull/212)) · [PR #215](https://github.com/tlswltjq/esd-platform/pull/215) 교차 리뷰 R3
 
-- **원인** 테스트가 구독을 먼저 시작하고 두 항목을 차례로 보냈다. 첫 항목이 붙자마자 소비자가 깨어 그것만 읽으면, 처리 도중 점유를 잃어 뒤 항목은 그룹에서 가져가지 않는다(점유 확인과 읽기가 원자적, #212 R2) → 미확인 1. 두 항목이 깨기 전에 다 붙으면 함께 읽혀 미확인 2. 두 결과 모두 맞는 동작인데 단언은 2만 받았다.
-- **재현·수정** 두 경우를 발행 시점을 고정한 테스트로 나눴다: `afterLosingTheLeaseTheFormerOwnerDoesNotProcessOrAcknowledgeWhatItAlreadyRead`(구독 전에 둘 다 보냄 → 함께 읽힘 → 미확인 2, 뒤 항목 미처리), `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`(앞 항목 처리 중 뒤 항목을 보냄 → 옛 점유자는 가져가지 않음 → 미확인 1). 둘 다 다시 점유하면 앞, 앞, 뒤 순서로 처리함을 단언한다. 로컬 3회 반복 8/8 통과.
+- **원인(제품)** 읽기 스레드는 항목을 처리하기 전·`XACK` 전에 로컬 표시(`held`)만 봤다. 그 표시는 연장 스레드가 다음 주기에 Redis에서 잠금이 바뀐 것을 알아챌 때야 지워진다. 그룹 읽기는 Lua로 점유를 확인했지만(#212 R2) 처리와 확인은 그러지 않았다.
+- **원인(테스트)** 구독을 먼저 시작하고 두 항목을 차례로 보내, 첫 항목만 먼저 읽히는지(미확인 1) 함께 읽히는지(미확인 2)가 실행 타이밍에 달렸다. 또 잠금 기한을 600ms로 줄여 연장 스레드가 알아채기를 고정 대기(700·800ms)로 기다렸다.
+- **수정** 항목마다 처리 직전에 Redis에서 점유를 확인(하며 연장)하고, `XACK`도 Lua로 점유를 확인한 뒤에만 한다(`FENCED_ACK`). 잃었으면 그 항목을 처리·확인하지 않고 다시 점유를 기다린다. 남는 한계(처리 도중 기한이 지나 새 점유자와 겹침)는 #212에 적은 그대로다.
+- **재현·검증** 잠금 기한은 60초로 두어 연장 스레드가 끼어들지 못하게 하고 발행 시점을 고정했다: `afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead`(함께 읽은 뒤 첫 항목 처리 중 점유를 뺏김 → 확인하지 않아 미확인 2, 뒤 항목 미처리, 다시 점유하면 앞·앞·뒤 순서), `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`(쉬는 동안 점유를 뺏긴 뒤 새 항목 → 그룹에서 가져가지 않음, 미확인 0). "하지 않음"은 읽기 스레드 재시도 주기(1초)보다 긴 1.5초 창으로 본다. 로컬 3회 반복 8/8 통과.
 
 ---
 

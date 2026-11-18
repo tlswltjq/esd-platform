@@ -238,13 +238,13 @@ class RedisStreamsAdapterIntegrationTest {
     }
 
     /*
-     * 처리 중 점유를 잃는 두 경우(D-058). 어느 쪽인지는 뒤 항목이 앞 항목과 같은 읽기에 들어왔는지로만 갈린다 —
-     * 그래서 테스트마다 발행 시점을 고정한다. 한 테스트에서 시점을 운에 맡기면 CI 에서 미확인 건수가 1·2 로 흔들렸다.
+     * 점유를 잃었을 때(D-058). 잠금 기한은 60초 그대로 두어 연장 스레드(20초 주기)가 끼어들지 못하게 하고,
+     * 읽기 스레드 자신의 확인(항목마다 점유 확인, 점유 확인 뒤 XACK, 점유 확인과 함께 그룹 읽기)만으로 결과가 정해지게 한다.
+     * "하지 않음"은 읽기 스레드의 재시도 주기(1초)보다 긴 창(1.5초) 동안 일어나지 않는지로 본다.
      */
 
     @Test
-    void afterLosingTheLeaseTheFormerOwnerDoesNotProcessOrAcknowledgeWhatItAlreadyRead() {
-        lease = Duration.ofMillis(600);
+    void afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead() {
         String key = "K-" + UUID.randomUUID();
         String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
         String lock = RedisStreamTopology.lockKey(group, stream);
@@ -252,18 +252,15 @@ class RedisStreamsAdapterIntegrationTest {
         String first = publish(key);
         String second = publish(key);
         Recording handler = new Recording();
-        handler.onFirst = () -> {
-            connection.sync().set(lock, "another-instance");
-            sleep(Duration.ofMillis(700));
-        };
+        // 첫 항목을 처리하는 도중 다른 인스턴스가 점유를 가져간다.
+        handler.onFirst = () -> connection.sync().set(lock, "another-instance");
 
         subscribe(handler);
-        await("첫 항목 처리", () -> handler.ids().contains(first));
-        sleep(Duration.ofMillis(800));
-
-        assertThat(handler.ids()).as("같이 읽어 둔 뒤 항목을 점유를 잃은 뒤 처리하지 않는다").containsExactly(first);
+        await("첫 항목 처리 끝", () -> handler.firstDone);
+        stays("점유를 잃은 뒤 같이 읽어 둔 뒤 항목을 처리하지 않는다", Duration.ofMillis(1500),
+                () -> handler.ids().equals(List.of(first)));
         assertThat(connection.sync().xpending(stream, group).getCount())
-                .as("확인(XACK)하지 않아 함께 읽은 두 항목이 모두 미확인으로 남는다").isEqualTo(2);
+                .as("점유를 확인한 뒤에만 확인(XACK)하므로 함께 읽은 두 항목이 모두 미확인으로 남는다").isEqualTo(2);
 
         connection.sync().del(lock);
         await("이어서 처리", () -> handler.idsOf(key).size() >= 3);
@@ -272,31 +269,34 @@ class RedisStreamsAdapterIntegrationTest {
 
     @Test
     void afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup() {
-        lease = Duration.ofMillis(600);
         String key = "K-" + UUID.randomUUID();
         String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
         String lock = RedisStreamTopology.lockKey(group, stream);
-        String[] second = new String[1];
         Recording handler = new Recording();
-        // 뒤 항목은 앞 항목을 처리하는 도중(점유를 잃은 뒤)에 보낸다.
-        handler.onFirst = () -> {
-            connection.sync().set(lock, "another-instance");
-            second[0] = publish(key);
-            sleep(Duration.ofMillis(700));
-        };
         subscribe(handler);
         String first = publish(key);
+        await("첫 항목 처리·확인", () -> handler.firstDone && connection.sync().xpending(stream, group).getCount() == 0);
 
-        await("첫 항목 처리", () -> handler.ids().contains(first));
-        sleep(Duration.ofMillis(800));
-
-        assertThat(handler.ids()).containsExactly(first);
-        assertThat(connection.sync().xpending(stream, group).getCount())
-                .as("점유를 잃은 쪽은 새 항목을 그룹에서 가져가지 않는다(점유 확인과 읽기가 원자적) — 미확인은 앞 항목 하나").isEqualTo(1);
+        // 쉬는 동안(새 항목을 기다리는 중) 다른 인스턴스가 점유를 가져간 뒤 새 항목이 붙는다.
+        connection.sync().set(lock, "another-instance");
+        String second = publish(key);
+        stays("점유 확인과 함께 읽으므로 옛 점유자는 새 항목을 그룹에서 가져가지 않는다", Duration.ofMillis(1500),
+                () -> handler.ids().equals(List.of(first)) && connection.sync().xpending(stream, group).getCount() == 0);
 
         connection.sync().del(lock);
-        await("이어서 처리", () -> handler.idsOf(key).size() >= 3);
-        assertThat(handler.idsOf(key)).containsExactly(first, first, second[0]);
+        await("이어서 처리", () -> handler.idsOf(key).size() >= 2);
+        assertThat(handler.idsOf(key)).containsExactly(first, second);
+    }
+
+    /** {@code duration} 동안 조건이 계속 참인지. 한 번이라도 거짓이면 실패. */
+    private static void stays(String what, Duration duration, BooleanSupplier condition) {
+        long deadline = System.nanoTime() + duration.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (!condition.getAsBoolean()) {
+                throw new AssertionError("유지되지 않았다: " + what);
+            }
+            sleep(Duration.ofMillis(50));
+        }
     }
 
     private static void sleep(Duration duration) {
@@ -345,6 +345,8 @@ class RedisStreamsAdapterIntegrationTest {
         volatile String failKey;
         /** 첫 수신 때 한 번 실행한다(처리 도중의 상황을 만든다). */
         volatile Runnable onFirst;
+        /** 첫 수신의 처리(onFirst 포함)가 끝났다. */
+        volatile boolean firstDone;
 
         List<String> ids() {
             synchronized (received) {
@@ -377,6 +379,7 @@ class RedisStreamsAdapterIntegrationTest {
                 onFirst = null;
                 once.run();
             }
+            firstDone = true;
         }
     }
 }
