@@ -723,8 +723,13 @@
 
 - **원인(제품)** 읽기 스레드는 항목을 처리하기 전·`XACK` 전에 로컬 표시(`held`)만 봤다. 그 표시는 연장 스레드가 다음 주기에 Redis에서 잠금이 바뀐 것을 알아챌 때야 지워진다. 그룹 읽기는 Lua로 점유를 확인했지만(#212 R2) 처리와 확인은 그러지 않았다.
 - **원인(테스트)** 구독을 먼저 시작하고 두 항목을 차례로 보내, 첫 항목만 먼저 읽히는지(미확인 1) 함께 읽히는지(미확인 2)가 실행 타이밍에 달렸다. 또 잠금 기한을 600ms로 줄여 연장 스레드가 알아채기를 고정 대기(700·800ms)로 기다렸다.
-- **수정** 항목마다 처리 직전에 Redis에서 점유를 확인(하며 연장)하고, `XACK`도 Lua로 점유를 확인한 뒤에만 한다(`FENCED_ACK`). 잃었으면 그 항목을 처리·확인하지 않고 다시 점유를 기다린다. 남는 한계(처리 도중 기한이 지나 새 점유자와 겹침)는 #212에 적은 그대로다.
-- **재현·검증** 잠금 기한은 60초로 두어 연장 스레드가 끼어들지 못하게 하고 발행 시점을 고정했다: `afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead`(함께 읽은 뒤 첫 항목 처리 중 점유를 뺏김 → 확인하지 않아 미확인 2, 뒤 항목 미처리, 다시 점유하면 앞·앞·뒤 순서), `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`(쉬는 동안 점유를 뺏긴 뒤 새 항목 → 그룹에서 가져가지 않음, 미확인 0). "하지 않음"은 읽기 스레드 재시도 주기(1초)보다 긴 1.5초 창으로 본다. 로컬 3회 반복 8/8 통과.
+- **수정** 세 시점에 Redis에서 점유를 확인한다. (1) 항목 처리 직전(`RENEW` Lua, 연장 겸): 잃었으면 그 항목을 처리하지 않는다. (2) 처리 실패 뒤 재시도·격리 보관·보관 실패 대기 직전(`InPlaceDelivery.deliver(…, stillMine)`): 잃었으면 재시도도 보관도 하지 않고 멈춘다. (3) `XACK`(`FENCED_ACK` Lua): 잃었으면 확인하지 않는다 — 새 점유자가 미확인 목록에서 다시 처리한다. **이미 시작한 핸들러 실행 한 번은 끝까지 간다**(그 도중 점유가 넘어가면 새 점유자와 겹칠 수 있고, 업무 반영은 Inbox가 한 번으로 막는다). 이 한계는 #212에 적은 그대로다.
+- **재현·검증** 잠금 기한은 60초로 두어 연장 스레드가 끼어들지 못하게 하고 발행 시점을 고정했다. 옛 점유자가 실제로 시도했는지는 관측 훅(읽기 거절 횟수 `lostReads()`, 확인 직후 콜백 `onAcknowledged`)으로 기다린다.
+  - `afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead`: 함께 읽은 뒤 첫 항목 처리 중 점유를 뺏김 → 확인하지 않아 미확인 2, 뒤 항목 미처리 → 다시 점유하면 앞·앞·뒤 순서.
+  - `theOwnershipIsCheckedBeforeEveryEntryNotOnlyWhenTheBatchIsRead`: 첫 항목을 확인한 직후 점유를 뺏김 → 같이 읽어 둔 둘째 항목을 처리하지 않음(미확인 1) — (1)을 직접 본다.
+  - `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`: 쉬는 동안 점유를 뺏긴 뒤 새 항목 → 읽기 거절(`lostReads` ≥ 1)을 기다린 뒤 미확인 0·미처리.
+  - `InPlaceDeliveryTest`: 재시도 도중·보관 직전 점유를 잃으면 재시도·보관 없이 멈춤 — (2)를 본다.
+  - 로컬 3회 반복: Redis Streams 9/9, RabbitMQ 6/6, 브로커 없음 6/6 통과(공용 `InPlaceDelivery` 변경).
 
 ---
 

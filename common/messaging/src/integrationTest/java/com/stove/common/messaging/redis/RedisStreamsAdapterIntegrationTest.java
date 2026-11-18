@@ -240,7 +240,8 @@ class RedisStreamsAdapterIntegrationTest {
     /*
      * 점유를 잃었을 때(D-058). 잠금 기한은 60초 그대로 두어 연장 스레드(20초 주기)가 끼어들지 못하게 하고,
      * 읽기 스레드 자신의 확인(항목마다 점유 확인, 점유 확인 뒤 XACK, 점유 확인과 함께 그룹 읽기)만으로 결과가 정해지게 한다.
-     * "하지 않음"은 읽기 스레드의 재시도 주기(1초)보다 긴 창(1.5초) 동안 일어나지 않는지로 본다.
+     * 옛 점유자가 실제로 시도했는지는 관측 훅(읽기 거절 횟수, 확인 직후 콜백)으로 기다린다. 일어나면 수 ms 안에 일어날 일만
+     * 재시도 주기(1초)보다 긴 창(1.5초) 동안 일어나지 않는지로 본다.
      */
 
     @Test
@@ -273,15 +274,48 @@ class RedisStreamsAdapterIntegrationTest {
         String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
         String lock = RedisStreamTopology.lockKey(group, stream);
         Recording handler = new Recording();
-        subscribe(handler);
+        RedisStreamsSubscriptions subscriptions = subscribe(handler);
         String first = publish(key);
         await("첫 항목 처리·확인", () -> handler.firstDone && connection.sync().xpending(stream, group).getCount() == 0);
 
         // 쉬는 동안(새 항목을 기다리는 중) 다른 인스턴스가 점유를 가져간 뒤 새 항목이 붙는다.
         connection.sync().set(lock, "another-instance");
         String second = publish(key);
-        stays("점유 확인과 함께 읽으므로 옛 점유자는 새 항목을 그룹에서 가져가지 않는다", Duration.ofMillis(1500),
-                () -> handler.ids().equals(List.of(first)) && connection.sync().xpending(stream, group).getCount() == 0);
+        await("옛 점유자가 깨어나 점유 확인 읽기를 시도했다가 거절됨", () -> subscriptions.lostReads() >= 1);
+
+        assertThat(handler.ids()).containsExactly(first);
+        assertThat(connection.sync().xpending(stream, group).getCount())
+                .as("점유 확인과 함께 읽으므로 옛 점유자는 새 항목을 그룹에서 가져가지 않는다").isZero();
+
+        connection.sync().del(lock);
+        await("이어서 처리", () -> handler.idsOf(key).size() >= 2);
+        assertThat(handler.idsOf(key)).containsExactly(first, second);
+    }
+
+    @Test
+    void theOwnershipIsCheckedBeforeEveryEntryNotOnlyWhenTheBatchIsRead() {
+        String key = "K-" + UUID.randomUUID();
+        String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
+        String lock = RedisStreamTopology.lockKey(group, stream);
+        // 둘 다 같은 읽기에 들어오게 구독 전에 보낸다.
+        String first = publish(key);
+        String second = publish(key);
+        Recording handler = new Recording();
+        RedisStreamsSubscriptions subscriptions = subscribe(handler);
+        // 첫 항목을 확인(XACK)한 직후, 둘째 항목을 처리하기 전에 점유가 넘어간다.
+        boolean[] stolen = new boolean[1];
+        subscriptions.onAcknowledged(id -> {
+            if (!stolen[0]) {
+                stolen[0] = true;
+                connection.sync().set(lock, "another-instance");
+            }
+        });
+
+        await("첫 항목 확인 뒤 점유가 넘어감", () -> stolen[0]);
+        // 항목마다 확인하지 않으면 같은 반복에서 곧바로 둘째 항목을 처리한다(수 ms). 재시도 주기(1초)보다 긴 창으로 본다.
+        stays("같이 읽어 둔 둘째 항목을 점유를 잃은 뒤 처리하지 않는다", Duration.ofMillis(1500),
+                () -> handler.ids().equals(List.of(first)));
+        assertThat(connection.sync().xpending(stream, group).getCount()).as("둘째 항목만 미확인").isEqualTo(1);
 
         connection.sync().del(lock);
         await("이어서 처리", () -> handler.idsOf(key).size() >= 2);

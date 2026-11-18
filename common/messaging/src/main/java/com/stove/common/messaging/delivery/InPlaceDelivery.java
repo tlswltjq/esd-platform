@@ -36,21 +36,40 @@ public class InPlaceDelivery {
 
     public void deliver(String group, EventHandler handler, Class<? extends RuntimeException>[] noRetryFor,
                         InboundMessage message) {
+        deliver(group, handler, noRetryFor, message, () -> true);
+    }
+
+    /**
+     * @param stillMine 재시도·격리 보관 직전마다 묻는다. 거짓이면(멈추는 중이거나 점유를 잃음) 그 자리에서 멈추고
+     *                  {@link IllegalStateException} 을 던진다 — 처리를 넘겨받은 쪽과 같은 메시지를 겹쳐 처리하지 않게(D-058).
+     */
+    public void deliver(String group, EventHandler handler, Class<? extends RuntimeException>[] noRetryFor,
+                        InboundMessage message, BooleanSupplier stillMine) {
         if (quarantine.stopped(group, message.topic(), message.key())) {
             quarantine.quarantine(group, message, null);
             return;
         }
         for (int attempt = 0; ; attempt++) {
+            if (attempt > 0) {
+                requireStillMine(stillMine, message);
+            }
             try {
                 tracing.runWithin(message.header(EventHeaders.TRACE_PARENT), () -> handler.receive(message));
                 return;
             } catch (RuntimeException failure) {
                 if (noRetry(noRetryFor, failure) || attempt >= retryDelays.size()) {
+                    requireStillMine(stillMine, message);
                     quarantine.quarantine(group, message, failure);
                     return;
                 }
                 sleep(retryDelays.get(attempt));
             }
+        }
+    }
+
+    private static void requireStillMine(BooleanSupplier stillMine, InboundMessage message) {
+        if (!stillMine.getAsBoolean()) {
+            throw new IllegalStateException("멈추는 중이거나 점유를 잃어 재시도·보관을 멈춘다 origin=" + message.origin());
         }
     }
 
@@ -68,7 +87,7 @@ public class InPlaceDelivery {
         Duration wait = holdStart;
         while (true) {
             try {
-                deliver(group, handler, noRetryFor, message);
+                deliver(group, handler, noRetryFor, message, running);
                 return;
             } catch (RuntimeException failure) {
                 if (!running.getAsBoolean()) {
