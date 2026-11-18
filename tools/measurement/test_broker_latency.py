@@ -80,5 +80,28 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(summary["g"]["count"], 1)
 
 
+class OrderTest(unittest.TestCase):
+    def test_order_query_returns_outbox_and_inbox_ids_for_the_run_keys(self):
+        sql = broker_latency.order_sql_for_keys(["payment"], ["order"], ["ORD-1"])
+        self.assertIn("o.id, p.id", sql)
+        self.assertIn("stove_payment.outbox_event o JOIN stove_order.processed_event p ON p.event_id = o.event_id", sql)
+        self.assertIn("IN ('ORD-1')", sql)
+        with self.assertRaises(ValueError):
+            broker_latency.order_sql_for_keys(["payment"], ["order"], ["ORD-1'; --"])
+
+    def test_counts_a_violation_when_a_later_event_of_the_key_was_processed_first(self):
+        rows = [("g", "payment", "K1", "10", "100"), ("g", "payment", "K1", "11", "101"),  # 순서대로
+                ("g", "payment", "K2", "20", "203"), ("g", "payment", "K2", "21", "202"),  # 뒤 이벤트가 먼저 처리
+                ("h", "order", "K1", "5", "7")]
+        self.assertEqual(broker_latency.order_violations(rows), {
+            "g": {"keys": 2, "events": 4, "violations": 1},
+            "h": {"keys": 1, "events": 1, "violations": 0}})
+
+    def test_does_not_compare_events_from_different_publishers(self):
+        # 다른 토픽(발행 모듈)끼리는 순서를 보장하지 않는다.
+        rows = [("g", "payment", "K1", "10", "200"), ("g", "license", "K1", "3", "100")]
+        self.assertEqual(broker_latency.order_violations(rows)["g"]["violations"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
