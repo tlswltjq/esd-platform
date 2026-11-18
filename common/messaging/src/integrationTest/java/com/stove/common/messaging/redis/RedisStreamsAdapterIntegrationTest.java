@@ -24,9 +24,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,9 @@ class RedisStreamsAdapterIntegrationTest {
     private String group;
     private String topic;
     private Duration lease = Duration.ofSeconds(60);
+    /** 구독을 시작하기 전에 관측 훅을 걸 때 쓴다(시작 뒤에 걸면 이미 처리한 항목을 놓친다). */
+    private Consumer<RedisStreamsSubscriptions> beforeStart = subscriptions -> {
+    };
 
     @BeforeEach
     void setUp() {
@@ -87,6 +93,7 @@ class RedisStreamsAdapterIntegrationTest {
                 new InPlaceDelivery(storage, ReplayTracing.NONE,
                         List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10))),
                 STREAMS, 10, 200, Duration.ofMillis(20), lease);
+        beforeStart.accept(subscriptions);
         subscriptions.start();
         started.add(subscriptions);
         return subscriptions;
@@ -301,17 +308,18 @@ class RedisStreamsAdapterIntegrationTest {
         String first = publish(key);
         String second = publish(key);
         Recording handler = new Recording();
-        RedisStreamsSubscriptions subscriptions = subscribe(handler);
-        // 첫 항목을 확인(XACK)한 직후, 둘째 항목을 처리하기 전에 점유가 넘어간다.
-        boolean[] stolen = new boolean[1];
-        subscriptions.onAcknowledged(id -> {
-            if (!stolen[0]) {
-                stolen[0] = true;
+        // 첫 항목을 확인(XACK)한 직후, 둘째 항목을 처리하기 전에 점유가 넘어간다. 훅은 읽기 시작 전에 건다.
+        AtomicBoolean once = new AtomicBoolean();
+        CountDownLatch stolen = new CountDownLatch(1);
+        beforeStart = subscriptions -> subscriptions.onAcknowledged(id -> {
+            if (once.compareAndSet(false, true)) {
                 connection.sync().set(lock, "another-instance");
+                stolen.countDown();
             }
         });
+        subscribe(handler);
 
-        await("첫 항목 확인 뒤 점유가 넘어감", () -> stolen[0]);
+        await("첫 항목 확인 뒤 점유가 넘어감", () -> stolen.getCount() == 0);
         // 항목마다 확인하지 않으면 같은 반복에서 곧바로 둘째 항목을 처리한다(수 ms). 재시도 주기(1초)보다 긴 창으로 본다.
         stays("같이 읽어 둔 둘째 항목을 점유를 잃은 뒤 처리하지 않는다", Duration.ofMillis(1500),
                 () -> handler.ids().equals(List.of(first)));

@@ -46,6 +46,7 @@ public class InPlaceDelivery {
     public void deliver(String group, EventHandler handler, Class<? extends RuntimeException>[] noRetryFor,
                         InboundMessage message, BooleanSupplier stillMine) {
         if (quarantine.stopped(group, message.topic(), message.key())) {
+            requireStillMine(stillMine, message);
             quarantine.quarantine(group, message, null);
             return;
         }
@@ -99,6 +100,10 @@ public class InPlaceDelivery {
                     Thread.sleep(wait.toMillis());
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
+                    throw failure;
+                }
+                // 기다리는 사이 멈추거나 점유를 잃었으면 다시 들어가지 않는다(PR #215 3차 확인 R1).
+                if (!running.getAsBoolean()) {
                     throw failure;
                 }
                 wait = wait.multipliedBy(2).compareTo(HOLD_MAX) > 0 ? HOLD_MAX : wait.multipliedBy(2);
