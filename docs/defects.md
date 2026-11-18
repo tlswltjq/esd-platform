@@ -715,6 +715,22 @@
 - **수정** 릴레이가 잠근 배치에 대해 같은 키의 미발행 행 위치를 한 번 더 읽고(`findUnsentPositions`), 앞의 미발행 행이 모두 같은 배치에 있는 행만 보낸다(`KeyOrderGuard`). 걸러진 행은 `PENDING` 그대로 다음 폴링에서 다시 판정된다. 같은 테스트가 거른 결과가 비어 있음을 단언하고, `KeyOrderGuardTest`가 규칙을 단위로 지킨다.
 - **알려진 한계(교차 재리뷰 R4, 기각)** 앞 행이 잠긴 키의 뒤 행이 배치 크기(기본 200, Payment 일부 20)만큼 쌓여 있으면 그 회차 배치가 모두 걸러져 다른 키도 그 잠금이 풀릴 때까지 발행되지 않는다. 순서는 깨지지 않고 잠금이 풀리면 스스로 회복한다. 지금 앞 행을 잠그는 주체는 짧은 운영 재발행 트랜잭션뿐이고 한 주문의 이벤트는 많아야 10개 안팎이라 고치지 않는다. 같은 키 적재량이나 잠금 경로가 늘면 걸러진 키를 빼고 다시 조회하는 방식을 검토한다.
 
+<a id="d-058"></a>
+
+## D-058 Redis Streams 옛 점유자가 다음 연장 전까지 같이 읽어 둔 항목을 처리·확인할 수 있음, 테스트는 이를 타이밍으로 가림
+
+**상태** 수정됨 · **영향** 같은 그룹 인스턴스가 여럿일 때 점유가 넘어간 직후 최대 연장 주기(기한의 1/3, 20초) 동안, 옛 점유자가 이미 읽어 둔 같은 키의 뒤 항목을 새 점유자와 동시에 처리하고 `XACK`할 수 있었다(결정 202 한 번에 하나 위반 가능, 업무 반영은 Inbox가 한 번으로 막음). 테스트는 PR #214 CI `build`에서 `RedisStreamsAdapterIntegrationTest.java:261`(미확인 건수 = 2)로 실패했다([run 44272835972](https://github.com/tlswltjq/esd-platform/actions/runs/44272835972/job/134693466164)), 로컬에서는 통과 · **위치** `RedisStreamsSubscriptions` 처리 반복, `RedisStreamsAdapterIntegrationTest`([PR #212](https://github.com/tlswltjq/esd-platform/pull/212)) · [PR #215](https://github.com/tlswltjq/esd-platform/pull/215) 교차 리뷰 R3
+
+- **원인(제품)** 읽기 스레드는 항목을 처리하기 전·`XACK` 전에 로컬 표시(`held`)만 봤다. 그 표시는 연장 스레드가 다음 주기에 Redis에서 잠금이 바뀐 것을 알아챌 때야 지워진다. 그룹 읽기는 Lua로 점유를 확인했지만(#212 R2) 처리와 확인은 그러지 않았다.
+- **원인(테스트)** 구독을 먼저 시작하고 두 항목을 차례로 보내, 첫 항목만 먼저 읽히는지(미확인 1) 함께 읽히는지(미확인 2)가 실행 타이밍에 달렸다. 또 잠금 기한을 600ms로 줄여 연장 스레드가 알아채기를 고정 대기(700·800ms)로 기다렸다.
+- **수정** 세 시점에 Redis에서 점유를 확인한다. (1) 항목 처리 직전(`RENEW` Lua, 연장 겸): 잃었으면 그 항목을 처리하지 않는다. (2) 처리 실패 뒤 재시도 직전·격리 보관 직전(이미 멈춘 키의 보관 포함)·보관 실패로 붙잡고 기다린 뒤 다시 들어가기 직전(`InPlaceDelivery.deliver(…, stillMine)`·`deliverHolding`): 잃었으면 재시도도 보관도 다시 처리도 하지 않고 멈춘다. (3) `XACK`(`FENCED_ACK` Lua): 잃었으면 확인하지 않는다 — 새 점유자가 미확인 목록에서 다시 처리한다. **이미 시작한 핸들러 실행 한 번은 끝까지 간다**(그 도중 점유가 넘어가면 새 점유자와 겹칠 수 있고, 업무 반영은 Inbox가 한 번으로 막는다). 이 한계는 #212에 적은 그대로다.
+- **재현·검증** 잠금 기한은 60초로 두어 연장 스레드가 끼어들지 못하게 하고 발행 시점을 고정했다. 옛 점유자가 실제로 시도했는지는 관측 훅(읽기 거절 횟수 `lostReads()`, 확인 직후 콜백 `onAcknowledged` — 읽기 시작 전에 건다)으로 기다린다.
+  - `afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead`: 함께 읽은 뒤 첫 항목 처리 중 점유를 뺏김 → 확인하지 않아 미확인 2, 뒤 항목 미처리 → 다시 점유하면 앞·앞·뒤 순서.
+  - `theOwnershipIsCheckedBeforeEveryEntryNotOnlyWhenTheBatchIsRead`: 첫 항목을 확인한 직후 점유를 뺏김 → 같이 읽어 둔 둘째 항목을 처리하지 않음(미확인 1) — (1)을 직접 본다.
+  - `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`: 쉬는 동안 점유를 뺏긴 뒤 새 항목 → 읽기 거절(`lostReads` ≥ 1)을 기다린 뒤 미확인 0·미처리.
+  - `InPlaceDeliveryTest`: 재시도 도중·보관 직전·멈춘 키 보관 직전·보관 실패 뒤 다시 들어가기 직전에 점유를 잃으면 멈춤 — (2)를 본다.
+  - 로컬 3회 반복: Redis Streams 9/9, RabbitMQ 6/6, 브로커 없음 6/6 통과(공용 `InPlaceDelivery` 변경).
+
 ---
 
 ## 닫힌 항목

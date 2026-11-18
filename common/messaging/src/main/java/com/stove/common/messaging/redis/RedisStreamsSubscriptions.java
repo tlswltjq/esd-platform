@@ -24,6 +24,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
@@ -41,7 +43,8 @@ import org.springframework.context.SmartLifecycle;
  * </ol>
  *
  * <p>점유 유지(R1): 별도 스레드가 기한({@link #LEASE})의 1/3 마다 이 인스턴스가 가진 잠금을 모두 연장한다 — 처리가 길어도 점유가 풀리지 않는다.
- * 연장에 실패하면(Redis 가 기한 안에 닿지 않음 등) 그 잠금을 잃은 것으로 표시하고, 읽기 스레드는 그 뒤 처리도 {@code XACK} 도 하지 않는다.
+ * 연장에 실패하면(Redis 가 기한 안에 닿지 않음 등) 그 잠금을 잃은 것으로 표시한다. 읽기 스레드는 그와 별개로 항목마다 처리 직전에
+ * Redis 에서 점유를 확인(하며 연장)하고, {@code XACK} 도 Lua 로 점유를 확인한 뒤에만 한다 — 잃었으면 처리도 확인도 하지 않는다(D-058).
  * 그 항목은 새 점유자가 미확인 목록에서 다시 처리하고, 업무는 Inbox 로 한 번만 반영된다.
  * 종료(R3): 읽기 스레드가 실제로 끝난 잠금만 놓는다. 끝나지 않은 스레드의 잠금은 연장을 멈춰 기한이 지나야 풀린다.
  */
@@ -57,6 +60,9 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
     private static final String FENCED_READ = "if redis.call('get', KEYS[1]) ~= ARGV[1] then return 'LOST' end"
             + " local r = redis.call('XREADGROUP', 'GROUP', ARGV[2], ARGV[3], 'COUNT', ARGV[4], 'STREAMS', KEYS[2], ARGV[5])"
             + " if not r then return {} end return r[1][2]";
+    /** KEYS[1]=잠금, KEYS[2]=스트림, ARGV = 내 id, 그룹, 항목 id. 잠금이 내 것일 때만 확인(XACK)한다. 아니면 -1. */
+    private static final String FENCED_ACK = "if redis.call('get', KEYS[1]) ~= ARGV[1] then return -1 end"
+            + " return redis.call('XACK', KEYS[2], ARGV[2], ARGV[3])";
 
     private final Supplier<List<SubscribedHandler>> handlers;
     private final RedisClient client;
@@ -77,6 +83,9 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
     private ExecutorService readers;
     private ScheduledExecutorService renewer;
     private volatile boolean running;
+    private final AtomicInteger lostReads = new AtomicInteger();
+    private volatile Consumer<String> afterAck = id -> {
+    };
 
     public RedisStreamsSubscriptions(Supplier<List<SubscribedHandler>> handlers, RedisClient client, InPlaceDelivery delivery,
                                      int streamsPerTopic, int batchSize, long blockMs) {
@@ -145,6 +154,7 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
                 }
                 if (entries == null) {
                     held.remove(lock);
+                    lostReads.incrementAndGet();
                     continue;
                 }
                 if (entries.isEmpty()) {
@@ -152,18 +162,23 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
                     continue;
                 }
                 for (StreamMessage<String, String> entry : entries) {
-                    if (!running || !held.contains(lock)) {
+                    // 항목마다 Redis 에서 점유를 확인(하며 연장)한다. 연장 스레드의 주기(기한의 1/3)를 기다리면
+                    // 그 사이 같이 읽어 둔 뒤 항목을 새 점유자와 동시에 처리할 수 있다(D-058, PR #215 R3).
+                    if (!running || !renew(redis, lock)) {
+                        held.remove(lock);
                         break;
                     }
                     if (entry.getBody() != null && !entry.getBody().isEmpty()) {
+                        // 재시도·보관 대기 중에도 매번 Redis 에서 점유를 확인한다(PR #215 재리뷰 R1).
                         delivery.deliverHolding(subscription.group(), subscription.handler(), subscription.noRetryFor(),
-                                toInbound(subscription.topic(), stream, entry), () -> running && held.contains(lock), holdStart);
+                                toInbound(subscription.topic(), stream, entry), () -> running && stillMine(redis, lock), holdStart);
                     }
-                    if (!held.contains(lock)) {
+                    if (!fencedAck(redis, lock, subscription.group(), stream, entry.getId())) {
                         // 처리하는 사이 점유를 잃었다. 확인하지 않고 둔다 — 새 점유자가 미확인 목록에서 다시 처리한다.
+                        held.remove(lock);
                         break;
                     }
-                    redis.xack(stream, subscription.group(), entry.getId());
+                    afterAck.accept(entry.getId());
                     lastSeen = entry.getId();
                 }
             } catch (InterruptedException interrupted) {
@@ -219,6 +234,37 @@ public class RedisStreamsSubscriptions implements SmartLifecycle {
         List<StreamMessage<String, String>> seen = redis.xread(XReadArgs.Builder.count(1).block(blockMs),
                 XReadArgs.StreamOffset.from(stream, lastSeen));
         return seen.isEmpty() ? lastSeen : seen.get(seen.size() - 1).getId();
+    }
+
+    /** 잠금이 내 것일 때만 {@code XACK}. @return 확인했으면 true, 점유를 잃었으면 false */
+    private boolean fencedAck(RedisCommands<String, String> redis, String lock, String group, String stream, String id) {
+        Long acked = redis.eval(FENCED_ACK, ScriptOutputType.INTEGER, new String[]{lock, stream}, instanceId, group, id);
+        return acked != null && acked >= 0;
+    }
+
+    /** 잠금이 내 것이면 연장하고 true. 아니면 잃은 것으로 표시하고 false. */
+    private boolean stillMine(RedisCommands<String, String> redis, String lock) {
+        if (renew(redis, lock)) {
+            return true;
+        }
+        held.remove(lock);
+        return false;
+    }
+
+    /** 테스트 관측용: 점유를 잃어 그룹 읽기가 거절된 횟수. */
+    int lostReads() {
+        return lostReads.get();
+    }
+
+    /** 테스트 관측용: 항목을 확인(XACK)한 직후 그 id 로 부른다. */
+    void onAcknowledged(Consumer<String> listener) {
+        this.afterAck = listener;
+    }
+
+    /** 잠금이 내 것이면 기한을 연장하고 true. */
+    private boolean renew(RedisCommands<String, String> redis, String lock) {
+        Long renewed = redis.eval(RENEW, ScriptOutputType.INTEGER, new String[]{lock}, instanceId, Long.toString(lease.toMillis()));
+        return renewed != null && renewed == 1L;
     }
 
     private boolean acquire(RedisCommands<String, String> redis, String lock) {
