@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.awaitility.Awaitility;
+import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -174,6 +175,16 @@ class MessagingLoadTest {
                 TimeUnit.NANOSECONDS.sleep(remaining);
             }
         }
+        // 끝 상태에 닿지 않아도 멈추지 않는다 — 그때 상태를 결과에 남기고, 수집 쪽이 "환불 미완료"로 회차를 무효 처리한다.
+        try {
+            awaitRefunds(targets, buyers);
+        } catch (ConditionTimeoutException timeout) {
+            // 마지막으로 읽은 상태가 refundState 에 남아 있다.
+        }
+        return targets.size();
+    }
+
+    private static void awaitRefunds(List<ObjectNode> targets, AtomicReferenceArray<Account> buyers) {
         Awaitility.await().atMost(Duration.ofSeconds(180)).pollInterval(Duration.ofSeconds(2)).until(() -> {
             int settled = 0;
             for (ObjectNode target : targets) {
@@ -186,7 +197,6 @@ class MessagingLoadTest {
             }
             return settled == targets.size();
         });
-        return targets.size();
     }
 
     private static String refundPath(ObjectNode result) {
