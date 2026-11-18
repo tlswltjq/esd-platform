@@ -103,6 +103,30 @@ class BrokerEnvironmentTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             messaging_measurement.extra_environment(["STOVE_MESSAGING_BROKER=direct"])
 
+    def test_a_same_key_order_violation_invalidates_the_run(self):
+        result = messaging_measurement.validity([], {"completed": 0}, {}, {"order-payment-result": {"keys": 2, "events": 4, "violations": 1}})
+        self.assertFalse(result["valid"])
+        self.assertIn("order-payment-result 같은 키 순서 위반 1건", result["reasons"])
+
+    def test_inbox_duplicates_sums_the_counter_per_consumer_group(self):
+        text = "\n".join([
+            "# TYPE stove_inbox_duplicates_total counter",
+            'stove_inbox_duplicates_total{application="order",consumer_group="order-payment-result",event_type="A"} 2.0',
+            'stove_inbox_duplicates_total{application="order",consumer_group="order-payment-result",event_type="B"} 1.0',
+            'stove_inbox_duplicates_total{application="order",consumer_group="order-license-grant",event_type="A"} 0.0',
+            'jvm_threads_live_threads 30.0'])
+        self.assertEqual(messaging_measurement.inbox_duplicates(text),
+                         {"order-payment-result": 3, "order-license-grant": 0})
+
+    def test_redeliveries_keeps_unreadable_apps_instead_of_counting_them_as_zero(self):
+        def fetch(url):
+            if "bad" in url:
+                raise OSError("refused")
+            return 'stove_inbox_duplicates_total{consumer_group="g"} 4.0'
+
+        self.assertEqual(messaging_measurement.redeliveries(fetch, ["http://ok", "http://bad"]),
+                         {"by_group": {"g": 4}, "unreadable": ["http://bad"]})
+
     def test_unknown_broker_is_rejected(self):
         with self.assertRaises(ValueError):
             messaging_measurement.broker_environment("order", "nats")
@@ -145,7 +169,8 @@ class MeasureTest(unittest.TestCase):
                         {"purchase": {"completed": 2, "incomplete": 0, "failed": 0}}))
                 if label == "measure-broker":
                     self.assertIn("--keys-from", command)
-                    (output / "broker.json").write_text(json.dumps({"groups": broker(2)}))
+                    (output / "broker.json").write_text(json.dumps(
+                        {"groups": broker(2), "order": {"order-payment-result": {"keys": 2, "events": 2, "violations": 0}}}))
 
             selects = iter([100, 150, 450])
 
@@ -168,6 +193,7 @@ class MeasureTest(unittest.TestCase):
         self.assertTrue(summary["validity"]["valid"])
         self.assertEqual(summary["db_load"]["idle_per_second"]["Com_select"], 5.0, "유휴 10초 동안 50건")
         self.assertEqual(summary["db_load"]["load_run_per_second"]["Com_select"], 5.0, "부하 구간 60초 동안 300건")
+        self.assertEqual(summary["order"]["order-payment-result"]["violations"], 0)
 
 
 if __name__ == "__main__":

@@ -120,8 +120,11 @@ def _nearest_rank(values, p):
     return ordered[max(0, -(-p * len(ordered) // 100) - 1)] if ordered else None
 
 
-def validity(measured, journey, broker):
-    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락이 하나라도 있으면 무효."""
+def validity(measured, journey, broker, order=None):
+    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반이 하나라도 있으면 무효.
+
+    순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
+    """
     reasons = []
     http_failures = sum(1 for order in measured if order.get("status") != 200)
     late = sum(1 for order in measured if order.get("lateMs", 0.0) > LATE_START_MS)
@@ -141,6 +144,9 @@ def validity(measured, journey, broker):
             reasons.append("%s 소비 %d건(기대 %d)" % (group, consumed, paid))
         if values.get("negative"):
             reasons.append("%s 음수 구간 %d건" % (group, values["negative"]))
+    for group, checked in (order or {}).items():
+        if checked.get("violations"):
+            reasons.append("%s 같은 키 순서 위반 %d건" % (group, checked["violations"]))
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
@@ -176,7 +182,36 @@ def db_rate(before, after):
     return rates
 
 
-def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234"):
+DUPLICATES_METRIC = "stove_inbox_duplicates_total"
+
+
+def inbox_duplicates(text):
+    """Prometheus 본문에서 소비 그룹별 재전달 차단 수(Inbox 가 이미 처리한 이벤트를 다시 받아 건너뛴 횟수)."""
+    totals = {}
+    for line in text.splitlines():
+        if not line.startswith(DUPLICATES_METRIC + "{"):
+            continue
+        labels, _, value = line.rpartition(" ")
+        group = labels.split('consumer_group="', 1)[1].split('"', 1)[0] if 'consumer_group="' in labels else "unknown"
+        totals[group] = totals.get(group, 0) + int(float(value))
+    return totals
+
+
+def redeliveries(fetch, urls):
+    """앱마다 ``/actuator/prometheus`` 를 읽어 재전달 차단 수를 합친다. 읽지 못한 앱은 ``unreadable`` 에 남긴다(0 으로 적지 않는다)."""
+    totals = {}
+    unreadable = []
+    for url in urls:
+        try:
+            for group, count in inbox_duplicates(fetch(url)).items():
+                totals[group] = totals.get(group, 0) + count
+        except Exception:  # noqa: BLE001 — 측정 보조값이라 회차를 멈추지 않고 읽지 못했다고 남긴다
+            unreadable.append(url)
+    return {"by_group": dict(sorted(totals.items())), "unreadable": unreadable}
+
+
+def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
+            metrics_urls=(), fetch=None):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -197,10 +232,14 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     loaded = json.loads(load.read_text())
     measured = [order for order in loaded["orders"] if not order.get("warmup")]
     journey = json.loads(journey_file.read_text())["purchase"]
-    broker = json.loads(broker_file.read_text())["groups"]
+    collected = json.loads(broker_file.read_text())
+    broker = collected["groups"]
+    order = collected.get("order", {})
     http = [order["httpMs"] for order in measured if "httpMs" in order]
     late = [order["lateMs"] for order in measured if "lateMs" in order]
     return {"rate": rate, "duration_seconds": seconds, "warmup_seconds": warmup, "buyers": buyers,
             "planned": len(measured), "accepted": sum(1 for order in measured if order.get("status") == 200),
             "http_p95_ms": _nearest_rank(http, 95), "late_start_max_ms": max(late) if late else None,
-            "journey": journey, "broker": broker, "db_load": db_load, "validity": validity(measured, journey, broker)}
+            "journey": journey, "broker": broker, "order": order,
+            "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
+            "db_load": db_load, "validity": validity(measured, journey, broker, order)}

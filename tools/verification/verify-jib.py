@@ -287,10 +287,13 @@ def main():
         if prometheus:
             prometheus.verify(docker, run, result)
         elif args.measure:
-            from support.messaging_measurement import measure
+            from support.messaging_measurement import MESSAGING_APPS, measure
             result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
                                             args.load_rate, args.load_duration, args.load_buyers, args.load_warmup,
-                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"])
+                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"],
+                                            ["http://127.0.0.1:%d/actuator/prometheus" % (PORTS[app] + offset)
+                                             for app in sorted(MESSAGING_APPS)],
+                                            lambda url: urllib.request.urlopen(url, timeout=10).read().decode())
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
