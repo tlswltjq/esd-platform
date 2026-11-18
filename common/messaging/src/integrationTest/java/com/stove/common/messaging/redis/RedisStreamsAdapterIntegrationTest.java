@@ -237,33 +237,66 @@ class RedisStreamsAdapterIntegrationTest {
                 String.class, group)).isEqualTo(first);
     }
 
+    /*
+     * 처리 중 점유를 잃는 두 경우(D-058). 어느 쪽인지는 뒤 항목이 앞 항목과 같은 읽기에 들어왔는지로만 갈린다 —
+     * 그래서 테스트마다 발행 시점을 고정한다. 한 테스트에서 시점을 운에 맡기면 CI 에서 미확인 건수가 1·2 로 흔들렸다.
+     */
+
     @Test
-    void afterLosingTheLeaseMidProcessingTheFormerOwnerNeitherAcknowledgesNorReadsFurther() {
+    void afterLosingTheLeaseTheFormerOwnerDoesNotProcessOrAcknowledgeWhatItAlreadyRead() {
         lease = Duration.ofMillis(600);
         String key = "K-" + UUID.randomUUID();
         String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
         String lock = RedisStreamTopology.lockKey(group, stream);
+        // 구독 전에 둘 다 보내 첫 읽기(COUNT 10)에 함께 들어오게 한다.
+        String first = publish(key);
+        String second = publish(key);
         Recording handler = new Recording();
-        // 첫 항목을 처리하는 동안 다른 인스턴스가 점유를 가져간다(연장 주기가 그것을 알아챌 만큼 오래 처리).
         handler.onFirst = () -> {
             connection.sync().set(lock, "another-instance");
             sleep(Duration.ofMillis(700));
         };
+
+        subscribe(handler);
+        await("첫 항목 처리", () -> handler.ids().contains(first));
+        sleep(Duration.ofMillis(800));
+
+        assertThat(handler.ids()).as("같이 읽어 둔 뒤 항목을 점유를 잃은 뒤 처리하지 않는다").containsExactly(first);
+        assertThat(connection.sync().xpending(stream, group).getCount())
+                .as("확인(XACK)하지 않아 함께 읽은 두 항목이 모두 미확인으로 남는다").isEqualTo(2);
+
+        connection.sync().del(lock);
+        await("이어서 처리", () -> handler.idsOf(key).size() >= 3);
+        assertThat(handler.idsOf(key)).as("다시 점유하면 미확인 항목부터 원래 순서대로").containsExactly(first, first, second);
+    }
+
+    @Test
+    void afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup() {
+        lease = Duration.ofMillis(600);
+        String key = "K-" + UUID.randomUUID();
+        String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
+        String lock = RedisStreamTopology.lockKey(group, stream);
+        String[] second = new String[1];
+        Recording handler = new Recording();
+        // 뒤 항목은 앞 항목을 처리하는 도중(점유를 잃은 뒤)에 보낸다.
+        handler.onFirst = () -> {
+            connection.sync().set(lock, "another-instance");
+            second[0] = publish(key);
+            sleep(Duration.ofMillis(700));
+        };
         subscribe(handler);
         String first = publish(key);
-        String second = publish(key);
 
         await("첫 항목 처리", () -> handler.ids().contains(first));
         sleep(Duration.ofMillis(800));
 
-        assertThat(handler.ids()).as("점유를 잃은 뒤 같이 읽어 둔 뒤 항목을 처리하지 않는다").containsExactly(first);
+        assertThat(handler.ids()).containsExactly(first);
         assertThat(connection.sync().xpending(stream, group).getCount())
-                .as("잃은 쪽은 확인(XACK)하지 않아, 한 번에 읽은 두 항목이 모두 미확인으로 남는다").isEqualTo(2);
+                .as("점유를 잃은 쪽은 새 항목을 그룹에서 가져가지 않는다(점유 확인과 읽기가 원자적) — 미확인은 앞 항목 하나").isEqualTo(1);
 
-        // 다른 인스턴스가 사라졌다(잠금 해제). 다시 점유해 미확인 항목부터 원래 순서대로 처리한다.
         connection.sync().del(lock);
         await("이어서 처리", () -> handler.idsOf(key).size() >= 3);
-        assertThat(handler.idsOf(key)).containsExactly(first, first, second);
+        assertThat(handler.idsOf(key)).containsExactly(first, first, second[0]);
     }
 
     private static void sleep(Duration duration) {
