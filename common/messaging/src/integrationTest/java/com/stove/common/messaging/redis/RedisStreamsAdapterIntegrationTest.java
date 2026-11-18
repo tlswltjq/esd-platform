@@ -11,7 +11,6 @@ import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
-import io.lettuce.core.Consumer;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.XGroupCreateArgs;
 import io.lettuce.core.XReadArgs;
@@ -187,7 +186,8 @@ class RedisStreamsAdapterIntegrationTest {
         String stream = RedisStreamTopology.stream(topic, RedisStreamTopology.shard(key, STREAMS));
         // 앞 점유자가 읽기만 하고 확인(XACK) 전에 죽었다.
         connection.sync().xgroupCreate(XReadArgs.StreamOffset.from(stream, "0"), group, XGroupCreateArgs.Builder.mkstream());
-        connection.sync().xreadgroup(Consumer.from(group, RedisStreamTopology.CONSUMER), XReadArgs.Builder.count(10),
+        // java.util.function.Consumer 와 이름이 겹쳐 Lettuce 쪽만 전체 이름으로 쓴다.
+        connection.sync().xreadgroup(io.lettuce.core.Consumer.from(group, RedisStreamTopology.CONSUMER), XReadArgs.Builder.count(10),
                 XReadArgs.StreamOffset.lastConsumed(stream));
         String after = publish(key);
         Recording handler = new Recording();
