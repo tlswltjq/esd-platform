@@ -53,14 +53,17 @@
   - 영향: **돈·보유권** — 접수 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·정산 매출. 같은 고객이 새 시도로 이중 청구될 수 있다. 영수증 B가 열려 있을 때 시도 A의 결과도 구분하지 못한다.
   - 재현: Order 통합 — (1) 접수 → `/failure`로 `PENDING` → 같은 `paymentId`의 `OrderPaymentCompleted` 주입 → `PAID`면 Red (2) `createdAt` 31분 전 `PENDING` 주문(스캔 정지)에 결과 주입 → Red (3) 영수증 B 열림 + 결과 `admissionId`=A → 거절, (4) `EXPIRED` 주문에 성공 주입 → DLT가 아니라 `OrderPaymentResultRejected` Outbox, Payment 보류 목록에 보임. Payment 경합 — `charge` 직후 시도 A를 실패 종료로 바꾸고 PG를 PAID로 둔 뒤 확정 → 결과가 나오면 Red. 계약 테스트: 스키마에 `admissionId`.
 
-- [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** ([결정 155](../../../docs/decisions.md#key-stop-on-dead))
+- [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** ([결정 155](../../../docs/decisions.md#key-stop-on-dead)) — 순서 역전 자체는 발행 쪽 PR #203, 소비 쪽 PR #209로 고쳤다. 아래 "어디서"·"재현"은 수정 전 기록이다. 남은 것은 미완료 하위 항목 둘과 T10
   - 어디서: `common/messaging/.../outbox/OutboxEvent.java:204-212`(`holdUntil(null)`은 아무것도 안 함), `OutboxRelay.java:109-113`, `OutboxEventRepository.java:20-28`(`lockPendingBatch`가 `DEAD` 키를 거르지 않음), `common/kafka/.../ops/DltOpsService.java:65-`(재투입이 같은 키의 이후 처리 여부를 보지 않음, `docs/architecture.md` R2).
   - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 결정 160: 정지 목록과 실패 레코드 보관을 소비 모듈 DB의 한 표로 둔다(기한 없음, 1건 즉시 경보). DLT 토픽과 `DltOpsService.replay`는 이 표의 키 단위 재처리로 바꾼다. 표 구조·회수 API는 common messaging 설계.
   - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
   - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
   - [x] 발행 쪽 — 2026-11-16 [PR #203](https://github.com/tlswltjq/esd-platform/pull/203). `lockPendingBatch`가 같은 키의 앞 행이 `DEAD`이거나 재시도 대기면 뒤 행을 집지 않는다(D-055·D-056), 다른 트랜잭션이 앞 행을 잠근 경우도 `KeyOrderGuard`로 거른다(D-057). `OutboxPendingQueryTest`·`KeyOrderGuardTest`·`OutboxRelayTest`. 8개 모듈 `idx_outbox_key_order` 이행.
-  - [ ] 릴레이 여러 인스턴스의 같은 키 경합(`SKIP LOCKED`로 같은 키를 나눠 집음) — 지금은 단일 인스턴스 전제라 발생하지 않는다([결정 205](../../../docs/decisions.md#relay-key-order-single-instance)). 여러 인스턴스로 늘리기 전에 고친다.
-  - [ ] 소비 쪽 정지 목록·키 단위 재투입(결정 155·160) — 메시징 포트 범위 결정에 따른다.
+  - 릴레이 여러 인스턴스의 같은 키 경합은 T10으로 옮겼다(같은 결함, [결정 205](../../../docs/decisions.md#relay-key-order-single-instance)로 단일 인스턴스 전제).
+  - [x] 소비 쪽 정지 목록·키 단위 재투입(결정 155·160·[206](../../../docs/decisions.md#messaging-port-scope-quarantine)) — 2026-11-17 [PR #209](https://github.com/tlswltjq/esd-platform/pull/209). 재시도를 다 쓴 소비 실패는 소비 모듈 DB `consumer_quarantine`에 보관하고 같은 행으로 (그룹, 토픽, 키)를 멈춘다. 멈춘 키의 뒤 메시지도 처리 없이 쌓고, `POST /api/v1/ops/quarantine/replay`가 키 단위 원래 순서로 다시 넣는다. `KafkaEventSubscriptionsTest`·`KeyQuarantineIntegrationTest`. DB 없는 Store는 DLT 그대로(Store tasks).
+  - [x] 보관 1건 즉시 경보(결정 160) — PR #209 뒤 소비 실패가 DLT로 가지 않아 `MessagesDeadLettered`가 7개 소비 앱에서 울리지 않았다(D-059). `ConsumerKeysQuarantined`(`stove_consumer_quarantine_held > 0`, critical)를 더했다. `infra/prometheus/tests/consumer-quarantine.yml`. 2026-11-19 PR #217.
+  - [ ] [결정 필요] 다시 넣어도 계속 실패하는 메시지(계약 위반 등)의 처리 — 지금은 재투입이 실패하면 정지를 유지할 뿐이라 그 키가 영구히 멈춘다(PR #209 "판단 대기"). 폐기·건너뛰기 허용 여부와 기록 방식을 정한다.
+  - [ ] design의 흐름별 실패 표(S1~S9 행)에 남은 "DLT"·"DLT 재투입" 서술을 격리·키 단위 재투입 기준으로 다시 쓴다. 공통 서술 두 곳은 PR #217에서 고쳤고 행은 그 공통 서술로 읽는다.
 
 - [ ] **T3. U2 — 다른 모듈·외부 PG 시각과의 선후 비교 13곳 + PG-* 4곳 + ORD-0(결정 173)**
   - 어디서: design "U2" 표 ORD-1~ORD-10·PAY-1·SET-1 — Order `order:core/domain/Refund.java:173`·`:255`, `RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `RefundApprovalStop.java:48`·`:56`·`:67`; Payment `payment:core/service/ReceiveRefundExecution.java:66`; Settlement `settlement:core/domain/RefundMonthInput.java:11`. ORD-0(결정 173): `order:core/domain/RefundPolicy.java:9-12`·`RequestRefund.java:35` — 기한 시작을 Order `paid_at`으로. PG-*(결정 163): `payment:core/domain/RefundExecution.java:164`·`:224`·`:276`, `payment:adapter/pg/PortOneRefundCancellationGateway.java:131`, #166 `recordLateCancellation`. PR #166 diff도 `RefundAttempt.recordRefundFailure`의 비교를 그대로 둔다.
@@ -86,17 +89,17 @@
   - 영향: **보유권·돈** — `OrderPaid` DLT·유실 시 보유권 미지급, 정산 매출·환불 조정 누락이 조용히 남는다. 출시 결과가 DLT로 빠져도 화면에서만 드러난다.
   - 재현: Settlement 소비자를 멈춘 채 결제 → T 경과 → 게이지·검사기가 1건. 일부러 `stove_order.purchase_order.amount`를 바꾼 픽스처에서 I1 SQL이 1행. 출시 결과를 DLT로 보낸 뒤 Studio `REQUESTED`·Catalog `COMPLETED`를 검사기가 잡는지.
 
-- [ ] **T7. 원본이 사라진 이벤트를 같은 ID로 다시 낼 수 있는 모듈이 Order·License뿐이고, DLT 보존 기간이 재투입 기한이다** (범위 [결정 161](../../../docs/decisions.md#republish-all-current), 보관 [결정 160](../../../docs/decisions.md#dead-letter-store))
+- [ ] **T7. 원본이 사라진 이벤트를 같은 ID로 다시 낼 수 있는 모듈이 Order·License뿐이다** (범위 [결정 161](../../../docs/decisions.md#republish-all-current), 보관 [결정 160](../../../docs/decisions.md#dead-letter-store)) — 보관 쪽(소비 실패를 기한 없이 DB에 보관, 1건 즉시 경보)은 PR #209·#217로 끝났다(Store만 DLT 7일, Store tasks). 남은 것은 재발행 범위(결정 161)
   - 어디서: `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`(Order·License 8종), Payment·Settlement `application.yml`에 재발행 설정 없음, DLT 보존 7일(`docs/architecture.md` R9).
   - 목표: P2.2-7·P2.6-4. 결정 161: 대상은 design 이벤트 목록의 현행 이벤트 전부, `OutboxRepublishTargets`는 표에서 생성하거나 표 대조 테스트로 지킴, 모든 발행 모듈에 `outbox_republish` 이행·`republish-owner` 설정·ADMIN 경로, 같은 키 안 발행 순번 헤더와 회수 정렬. 보관·경보는 결정 160(소비 모듈 DB 실패 보관 표에 기한 없이, 1건 즉시 경보, Outbox `DEAD`도 즉시 경보).
   - 영향: **돈·보유권** — `RefundPaymentConfirmed` 원본 소실 시 Order 환불 완료·Settlement 환불 조정이 둘 다 멈추고 복구 수단이 없다. `PurchaseRefunded`가 사라지면 회수가 안 된다.
   - 재현: Payment에서 `SENT` 행을 재발행 API로 되돌리면 지금은 400(현 동작 고정) → 확장 뒤 통과로 바꿈.
 
-- [ ] **T8. Settlement에 원매출보다 환불 확인이 먼저 오면 404 → DLT** ([결정 156](../../../docs/decisions.md#refund-awaiting-sale))
+- [ ] **T8. Settlement에 원매출보다 환불 확인이 먼저 오면 404 → 격리(그 주문 키 정지)** ([결정 156](../../../docs/decisions.md#refund-awaiting-sale))
   - 어디서: `settlement:core/domain/ConfirmedRefund.java:22`(`requireSale`), `settlement:core/service/RecordConfirmedRefund.java`(그룹 `settlement-confirmed-refund`). 원매출은 `stove.order.v1`, 환불 확인은 `stove.payment.v1`이라 순서 보장이 없다(P2.5-2).
   - 목표: P3.26-6. 결정 156: 원매출이 없을 때 온 환불 확인은 "매출 대기 환불"로 저장(Inbox와 같은 트랜잭션, DLT 아님), `OrderPaid` 매출 기록 트랜잭션에서 원매출과 대조해 함께 반영, 대조 불일치는 반영하지 않고 경보, 대기 게이지(건수·최장 대기). 상태 이름·표·상태×트리거 표는 Settlement 모듈 스펙(MC-S3).
   - 영향: **돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠짐(과지급).
-  - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 DLT, 목표 대기 후 반영.
+  - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 재시도 뒤 `consumer_quarantine` 보관·키 정지(PR #209 뒤 공통 동작, 이 시나리오 자체는 재현 전), 목표 대기 후 반영.
 
 - [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** ([결정 162](../../../docs/decisions.md#single-reference-simulator))
   - 어디서: `settlement:adapter/UnavailablePgRefunds.java:12`(`SIMULATED`면 `UPSTREAM_UNAVAILABLE`).
@@ -109,6 +112,7 @@
   - 목표: P2.2-6. 선점 잠금(서비스별 리더 잠금 등) 또는 키 배정.
   - 영향: **돈·보유권(순서)** — 앱 인스턴스를 2대로 늘리면 같은 키 순서 보장이 조용히 무효가 되어 T2와 같은 역전이 평시에도 생긴다.
   - 재현: 두 릴레이 인스턴스를 같은 DB에 붙이고 같은 키 3건 중 앞 건 실패를 주입, 뒤 건이 먼저 `SENT`되는지.
+  - 지금은 릴레이 단일 인스턴스 전제로 발생하지 않는다([결정 205](../../../docs/decisions.md#relay-key-order-single-instance), 메시징 비교의 확장 조건도 소비 인스턴스만 늘림). 이전 T2 하위 항목 "릴레이 여러 인스턴스의 같은 키 경합"을 여기로 합쳤다. 릴레이를 여러 인스턴스로 늘리기 전에 고친다.
 
 - [ ] **T11. 토픽 자동 생성, 파티션 수가 코드에 없다**
   - 어디서: `docker-compose.yml:69-73`(자동 생성, 파티션 3, 복제 1, R7).
@@ -168,7 +172,7 @@
   - 어디서: `common/kafka/.../KafkaConsumerAutoConfiguration.java:37-43`, 재시도 제외는 Order 환불 리스너 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)` 하나(R11).
   - 목표: P2.6-3. `common/kafka`에 영구 실패 예외 하나, 공통 핸들러가 재시도에서 뺀다.
   - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
-  - 재현: 헤더 없는 레코드를 넣고 DLT 도착까지 시도 1회 단언.
+  - 재현: 헤더 없는 레코드를 넣고 `consumer_quarantine` 보관까지 시도 1회 단언(PR #209 뒤 DLT 대신 격리).
 
 - [ ] **T21. 철회 결과 이벤트 하나가 "철회됨"과 "철회 거절"을 겸한다** (분리안 SP-7·SP-8, [결정 176](../../../docs/decisions.md#withdrawal-result-events))
   - 어디서: `review:core/domain/ReviewWithdrawal.java:63-68`, `catalog:core/domain/ReleaseWithdrawal.java:63-67`, payload `ProjectWithdrawalResult.java`(`String status`), Studio `studio:api/listener/ProjectResultListener.java:33-49`.

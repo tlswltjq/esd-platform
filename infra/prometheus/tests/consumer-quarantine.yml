@@ -1,0 +1,43 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+# 결정 160: 소비 실패 보관은 1건이라도 즉시 알린다. 보관 중이면 그 키가 멈춰 있으므로
+# 재투입으로 0이 될 때까지 계속 울린다(D-059).
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'stove_consumer_quarantine_held{application="license"}'
+        values: '0 1 3 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: ConsumerKeysQuarantined
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: ConsumerKeysQuarantined
+        exp_alerts:
+          - exp_labels:
+              application: license
+              severity: critical
+            exp_annotations:
+              summary: "license: 소비 실패를 보관하고 그 키를 멈췄다"
+              description: >-
+                보관 중 1건. 같은 키의 뒤 메시지도 처리되지 않고 쌓인다.
+                GET /api/v1/ops/quarantine 로 멈춘 키와 사유를 보고,
+                원인을 고친 뒤 POST /api/v1/ops/quarantine/replay 로 키 단위로 다시 넣는다.
+      - eval_time: 2m
+        alertname: ConsumerKeysQuarantined
+        exp_alerts:
+          - exp_labels:
+              application: license
+              severity: critical
+            exp_annotations:
+              summary: "license: 소비 실패를 보관하고 그 키를 멈췄다"
+              description: >-
+                보관 중 3건. 같은 키의 뒤 메시지도 처리되지 않고 쌓인다.
+                GET /api/v1/ops/quarantine 로 멈춘 키와 사유를 보고,
+                원인을 고친 뒤 POST /api/v1/ops/quarantine/replay 로 키 단위로 다시 넣는다.
+      - eval_time: 3m
+        alertname: ConsumerKeysQuarantined
+        exp_alerts: []

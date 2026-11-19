@@ -341,7 +341,7 @@ Review·Catalog·Studio의 상태×입력 표(원요청·철회·판정 입력�
 
 #### 단계별 실패 표
 
-공통: 수신 실패는 공통 `DefaultErrorHandler`(1·2·4초) 뒤 DLT, 경보 `MessagesDeadLettered`. Outbox가 Kafka로 못 나가면 `OutboxBacklogGrowing`·`OutboxEventsAbandoned`, 소비 정지는 `ConsumerLagGrowing`·`ConsumerStalled`, 앱 중단은 `ServiceDown`(모두 `infra/prometheus/alerts.yml`). DLT·DEAD 재투입은 각 앱 공통 운영 API(Studio·Review·Catalog의 `RecoveryOps*` 테스트가 지킴, Store는 `stove.messaging.ops.enabled=false`).
+공통: 수신 실패는 공통 `DefaultErrorHandler`(1·2·4초) 뒤 소비 모듈 DB `consumer_quarantine`에 보관하고 그 키를 멈추며, 경보 `ConsumerKeysQuarantined`(DB 없는 Store만 DLT·`MessagesDeadLettered`). Outbox가 Kafka로 못 나가면 `OutboxBacklogGrowing`·`OutboxEventsAbandoned`, 소비 정지는 `ConsumerLagGrowing`·`ConsumerStalled`, 앱 중단은 `ServiceDown`(모두 `infra/prometheus/alerts.yml`). 격리 재투입(`/api/v1/ops/quarantine/replay`)·DLT(Store)·DEAD 재투입은 각 앱 공통 운영 API(Studio·Review·Catalog의 `RecoveryOps*` 테스트가 지킴, Store는 `stove.messaging.ops.enabled=false`).
 
 | 단계 | 실패 종류 | 구체 사례 | 감지하는 곳 | 처리(재시도·멱등 키·보상) | 끝내 안 되면(운영자 개입·경보) | 지금 코드 | 목표와 차이 |
 |---|---|---|---|---|---|---|---|
@@ -594,7 +594,7 @@ S14 ADMIN → Payment → Order · Settlement  늦은 취소 반영(RefundLateCa
 
 #### 단계별 실패 표
 
-공통 사실(행마다 반복하지 않음): 소비 실패는 `ConsumerRetryPolicy`(최초 + 3회, 1·2·4초) 뒤 DLT로 가고 `MessagesDeadLettered` 경보가 울린다 [읽음 `common/kafka/.../ConsumerRetryPolicy.java:20-34`]. Outbox 발행 실패는 Outbox 재시도 뒤 `DEAD`·`OutboxEventsAbandoned` [표]. `SENT` 재발행은 Order(`OrderPaid`·`LicenseSuspensionRequested`·`LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested`)와 License(`LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`)만 된다 [읽음 `common/messaging/.../ops/OutboxRepublishTargets.java:29-37`]. Payment·Settlement 설정에는 재발행이 없다 [읽음 `apps/payment/src/main/resources/application.yml`]. Order 쓰기는 모두 `lockByOrderNo` 뒤에 한다 [표].
+공통 사실(행마다 반복하지 않음): 소비 실패는 `ConsumerRetryPolicy`(최초 + 3회, 1·2·4초) 뒤 소비 모듈 DB `consumer_quarantine`에 보관되고 그 키가 멈추며 `ConsumerKeysQuarantined` 경보가 울린다 [읽음 `common/kafka/.../ConsumerRetryPolicy.java:20-34`, `common/messaging/.../quarantine/JpaKeyQuarantine.java`]. 아래 행의 "DLT"·"DLT 재투입"은 이 격리·키 단위 재투입으로 읽는다(결정 206, 행별 갱신은 tasks T2). Outbox 발행 실패는 Outbox 재시도 뒤 `DEAD`·`OutboxEventsAbandoned` [표]. `SENT` 재발행은 Order(`OrderPaid`·`LicenseSuspensionRequested`·`LicenseRestorationRequested`·`LicenseApprovalCorrectionRequested`)와 License(`LicenseGranted`·`LicenseSuspended`·`LicenseRestored`·`LicenseApprovalCorrected`)만 된다 [읽음 `common/messaging/.../ops/OutboxRepublishTargets.java:29-37`]. Payment·Settlement 설정에는 재발행이 없다 [읽음 `apps/payment/src/main/resources/application.yml`]. Order 쓰기는 모두 `lockByOrderNo` 뒤에 한다 [표].
 
 | 단계 | 실패 종류 | 구체 사례 | 감지하는 곳 | 처리(재시도·멱등 키·보상) | 끝내 안 되면(운영자 개입·경보) | 지금 코드 | 목표와 차이 |
 |---|---|---|---|---|---|---|---|

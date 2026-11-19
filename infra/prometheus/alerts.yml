@@ -3,7 +3,7 @@
 # DLT 와 Outbox DEAD 는 유실을 막지만 **알려주지는 않는다.** 아무도 보지 않으면 조용히 쌓이기만
 # 하고, 그건 운영상 유실과 크게 다르지 않다. "포기했다"가 도달해야 복구가 시작된다.
 #
-# 지표 출처는 코드다 — common:messaging 의 OutboxMetrics, common:kafka 의 DeadLetterMetrics.
+# 지표 출처는 코드다 — common:messaging 의 OutboxMetrics·JpaKeyQuarantine, common:kafka 의 DeadLetterMetrics.
 # 예외가 하나 있다: stove-consumer 그룹은 kafka-exporter 가 브로커에서 읽어 온 값을 쓴다.
 # 앱이 같은 이름의 지표를 내지만 믿을 수 없기 때문이고, 그 사연은 그 그룹의 주석에 있다.
 groups:
@@ -32,7 +32,22 @@ groups:
           summary: "{{ $labels.application }}: Outbox 적체가 10분째 해소되지 않는다"
           description: "발행 대기 {{ $value }}건. 브로커 상태와 릴레이 로그를 먼저 본다."
 
-      # 수신 측이 재시도를 소진해 DLT 로 넘긴 메시지.
+      # 소비 모듈 DB(consumer_quarantine)에 보관된 소비 실패(결정 160·206, D-059).
+      # DB 가 있는 소비 앱은 재시도를 다 쓰면 DLT 대신 여기에 보관하고 그 (그룹, 토픽, 키)를 멈춘다.
+      # 보관 중인 동안 그 키의 뒤 메시지도 처리되지 않으므로, 1건이라도 즉시 알리고
+      # 재투입으로 0 이 될 때까지 계속 울린다. 게이지라 첫 건 문제(아래 절)가 없다.
+      - alert: ConsumerKeysQuarantined
+        expr: stove_consumer_quarantine_held > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }}: 소비 실패를 보관하고 그 키를 멈췄다"
+          description: >-
+            보관 중 {{ $value }}건. 같은 키의 뒤 메시지도 처리되지 않고 쌓인다.
+            GET /api/v1/ops/quarantine 로 멈춘 키와 사유를 보고,
+            원인을 고친 뒤 POST /api/v1/ops/quarantine/replay 로 키 단위로 다시 넣는다.
+
+      # 수신 측이 재시도를 소진해 DLT 로 넘긴 메시지. 지금은 격리 표가 없는 앱(DB 없는 Store)만 DLT 를 쓴다.
       # topic 태그가 어느 흐름이 막혔는지 바로 알려준다.
       #
       # 뒤쪽 절이 필요한 이유 -- Micrometer 는 카운터를 **처음 증가할 때 등록**한다.
