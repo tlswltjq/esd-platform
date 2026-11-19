@@ -52,7 +52,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>환불({@code load-refund-every} N > 0): 모든 주문이 끝 상태에 닿은 뒤, 결제된 측정 주문 N개마다 하나를 같은 도착률로 환불 요청한다.
  * 같은 주문(순서 키)에 결제 뒤 환불 이벤트가 이어지므로 같은 키 순서 위반 검사([결정 204] F)가 비교할 이웃이 생긴다.
- * 환불은 끝 상태(COMPLETED·FAILED·REJECTED·PENDING_REVIEW)에 닿을 때까지만 기다린다.
+ * 환불은 끝 상태(COMPLETED·FAILED·REJECTED·PENDING_REVIEW)에 닿을 때까지(최대 180초)만 기다리고, 닿지 않아도 그때 상태를 남긴다.
+ * 격리 스택(모의 PG, {@code SIMULATED})에는 환불 취소 구현이 없고 환불 실행이 꺼져 있어 환불은 PG 결과 대기에서 멈춘다(E12 F).
  *
  * <p>속성: {@code stove.e2e.load-rate}(초당 주문, 기본 2), {@code load-duration-secs}(기본 60),
  * {@code load-buyers}(기본 20), {@code load-warmup-secs}(기본 10, 측정 앞에 더한다), {@code load-refund-every}(기본 0 = 환불 없음),

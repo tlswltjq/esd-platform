@@ -127,7 +127,7 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(messaging_measurement.redeliveries(fetch, ["http://ok", "http://bad"]),
                          {"by_group": {"g": 4}, "unreadable": ["http://bad"]})
 
-    def test_unfinished_or_rejected_refunds_invalidate_the_run(self):
+    def test_rejected_refunds_invalidate_the_run_but_unfinished_ones_are_only_counted(self):
         measured = [{"status": 200, "refundStatus": 202, "refundState": "COMPLETED"},
                     {"status": 200, "refundStatus": 202, "refundState": "PENDING_REVIEW"},
                     {"status": 200, "refundStatus": 409, "refundState": "HTTP_409"},
@@ -135,7 +135,7 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertEqual(messaging_measurement.refund_problems(measured), (3, 1, 2))
         reasons = messaging_measurement.validity(measured, {"completed": 0}, {}, {})["reasons"]
         self.assertIn("환불 요청 거절 1건(요청 3)", reasons)
-        self.assertIn("환불 미완료 2건(요청 3)", reasons)
+        self.assertFalse(any("환불 미완료" in reason for reason in reasons), "모의 PG 스택에서는 환불이 끝날 수 없다")
 
     def test_load_command_passes_the_refund_interval(self):
         command = messaging_measurement.load_command(300, 2, 60, 10, "/tmp/load.json", 10, 4)

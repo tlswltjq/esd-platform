@@ -130,7 +130,7 @@ def refund_problems(measured):
 
 
 def validity(measured, journey, broker, order=None):
-    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반·환불 미완료가 하나라도 있으면 무효.
+    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반·환불 요청 거절이 하나라도 있으면 무효.
 
     순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
     """
@@ -156,11 +156,11 @@ def validity(measured, journey, broker, order=None):
     for group, checked in (order or {}).items():
         if checked.get("violations"):
             reasons.append("%s 같은 키 순서 위반 %d건" % (group, checked["violations"]))
-    requested, rejected, unfinished = refund_problems(measured)
+    # 환불 요청 거절만 무효로 본다. 격리 스택(모의 PG, SIMULATED)에는 환불 취소 구현이 없고 환불 실행이 꺼져 있어
+    # 환불은 PG 결과 대기(PENDING_PAYMENT_REFUND)에서 멈춘다 — 미완료는 진단(refund_diagnosis)으로만 남긴다.
+    requested, rejected, _unfinished = refund_problems(measured)
     if rejected:
         reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
-    if unfinished:
-        reasons.append("환불 미완료 %d건(요청 %d)" % (unfinished, requested))
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
@@ -194,6 +194,33 @@ def db_rate(before, after):
     rates = {name: round((end[name] - start[name]) / seconds, 1) for name in ("Com_select", "Questions")}
     rates["seconds"] = round(seconds, 2)
     return rates
+
+
+# 환불이 끝나지 않았을 때 어디서 멈췄는지 보는 읽기 전용 조회(상태별 건수, 환불 관련 Outbox 이벤트, 격리 보관).
+REFUND_DIAGNOSIS_SQL = " UNION ALL ".join([
+    "SELECT 'order_refund', status, COUNT(*) FROM stove_order.order_refund GROUP BY status",
+    "SELECT 'license_suspension', '-', COUNT(*) FROM stove_license.license_suspension",
+    "SELECT 'refund_execution', status, COUNT(*) FROM stove_payment.refund_execution GROUP BY status",
+] + ["SELECT 'outbox %s', CONCAT(event_type, '/', status), COUNT(*) FROM stove_%s.outbox_event"
+     " WHERE event_type LIKE '%%efund%%' OR event_type LIKE '%%uspen%%' GROUP BY event_type, status" % (app, app)
+     for app in ("order", "license", "payment")]
+  + ["SELECT 'quarantine %s', CONCAT(consumer_group, '/', status), COUNT(*) FROM stove_%s.consumer_quarantine"
+     " GROUP BY consumer_group, status" % (app, app) for app in ("order", "license", "payment")]) + ";"
+
+
+def refund_diagnosis(capture, container, password):
+    """환불 흐름 표의 상태별 건수. 읽지 못하면 오류 문구를 남긴다(측정을 멈추지 않는다)."""
+    try:
+        text = capture(["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-N", "-B"],
+                       input=REFUND_DIAGNOSIS_SQL, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as failure:
+        return {"error": (failure.output or "")[-500:]}
+    rows = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3:
+            rows.setdefault(parts[0], {})[parts[1]] = int(parts[2])
+    return rows
 
 
 DUPLICATES_METRIC = "stove_inbox_duplicates_total"
@@ -237,6 +264,9 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     time.sleep(IDLE_SECONDS)
     idle_end = db_counters(capture, container, db_password)
     run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+    diagnosis = refund_diagnosis(capture, container, db_password) if refund_every else None
+    if diagnosis is not None:
+        print("REFUND DIAGNOSIS " + json.dumps(diagnosis, ensure_ascii=False), flush=True)
     load_end = db_counters(capture, container, db_password)
     db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
@@ -256,5 +286,6 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "http_p95_ms": _nearest_rank(http, 95), "late_start_max_ms": max(late) if late else None,
             "journey": journey, "broker": broker, "order": order,
             "refunds": dict(zip(("requested", "rejected", "unfinished"), refund_problems(measured))),
+            "refund_diagnosis": diagnosis,
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
             "db_load": db_load, "validity": validity(measured, journey, broker, order)}
