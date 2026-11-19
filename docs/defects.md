@@ -83,6 +83,7 @@
 | [D-055](#d-055) | 같은 키의 앞 Outbox 행이 `DEAD`여도 릴레이가 뒤 행을 발행해 소비자가 순서가 뒤집힌 채 받음 | 돈·보유권(추정, 결정 155 예: 환불된 고객의 보유권이 열린 채 남음) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
 | [D-056](#d-056) | 같은 키의 앞 행이 재시도 대기인 사이, 그 배치에 없던 뒤 행이 먼저 발행됨 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
 | [D-057](#d-057) | 다른 트랜잭션이 같은 키의 앞 행을 잠그면(예: 중복 운영 재발행) 릴레이가 뒤 행을 먼저 발행함 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | PR #203 교차 리뷰 R1, `OutboxPendingQueryTest` |
+| [D-059](#d-059) | 소비 실패를 DB에 격리한 뒤(PR #209) 격리 경보가 없어 7개 소비 앱의 소비 실패가 조용히 쌓임 | 운영 감지(멈춘 키의 뒤 메시지까지 처리 안 됨, 결정 160 위반) | **수정됨** | `infra/prometheus/tests/consumer-quarantine.yml` Red(2026-11-19) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -730,6 +731,17 @@
   - `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`: 쉬는 동안 점유를 뺏긴 뒤 새 항목 → 읽기 거절(`lostReads` ≥ 1)을 기다린 뒤 미확인 0·미처리.
   - `InPlaceDeliveryTest`: 재시도 도중·보관 직전·멈춘 키 보관 직전·보관 실패 뒤 다시 들어가기 직전에 점유를 잃으면 멈춤 — (2)를 본다.
   - 로컬 3회 반복: Redis Streams 9/9, RabbitMQ 6/6, 브로커 없음 6/6 통과(공용 `InPlaceDelivery` 변경).
+
+<a id="d-059"></a>
+
+## D-059 소비 실패를 DB에 격리한 뒤 격리 경보가 없어 소비 실패가 조용히 쌓임
+
+**상태** 수정됨 · **영향** DB가 있는 7개 소비 앱에서 소비 실패가 사람에게 알려지지 않는다. 격리된 키는 뒤 메시지까지 멈추므로(결정 155) 그 주문·상품의 흐름이 재투입 전까지 서 있다. 예: License가 `OrderPaid` 처리에 실패하면 구매 근거가 생기지 않은 채 아무 경보도 없다. 결정 160은 "1건 즉시 경보"를 정했다.
+
+- **원인** [PR #209](https://github.com/tlswltjq/esd-platform/pull/209)(결정 206)가 재시도를 다 쓴 소비 실패를 DLT 대신 `consumer_quarantine`에 보관하게 바꾸고 게이지 `stove.consumer.quarantine.held`를 더했지만, `infra/prometheus/alerts.yml`에는 DLT 지표(`stove_kafka_dead_lettered_total`)를 보는 `MessagesDeadLettered`만 있었다. DLT를 쓰는 앱은 이제 Store뿐이다.
+- **재현** `infra/prometheus/tests/consumer-quarantine.yml`: `stove_consumer_quarantine_held{application="license"}`가 0 → 1 → 3 → 0일 때 `ConsumerKeysQuarantined`가 1·2분에 울리고 0이 되면 풀리는지. 수정 전 `promtool test rules`에서 `got:[]`로 실패.
+- **수정** `ConsumerKeysQuarantined`(`stove_consumer_quarantine_held > 0`, critical, `for` 없음)를 더했다. 게이지라 카운터의 첫 건 문제(`MessagesDeadLettered` 주석)가 없고, 보관 중인 동안 계속 울린다. 안내는 `GET /api/v1/ops/quarantine`·`POST /api/v1/ops/quarantine/replay`.
+- **부류** 바꾼 경로의 관측(경보)을 함께 옮기지 않았다. 규칙 테스트(`infra/prometheus/tests`)는 CI에서 돌지 않는다.
 
 ---
 
