@@ -65,8 +65,9 @@ groups:
         annotations:
           summary: "{{ $labels.application }}: {{ $labels.topic }} 처리를 포기해 DLT 로 보냈다"
           description: >-
-            최근 5분간 {{ $value }}건. GET /api/v1/ops/dlt?topic={{ $labels.topic }}.DLT 로 원인을 보고,
-            고친 뒤 POST /api/v1/ops/dlt/replay 로 되돌린다.
+            최근 5분간 {{ $value }}건. 지금 DLT 를 쓰는 Store 는 운영 API 가 꺼져 있어(stove.messaging.ops.enabled=false)
+            재투입 경로가 없다. 사본은 주기 대조(stove.store.sync.reconcile-interval)로 정본에 맞춰지므로,
+            {{ $labels.topic }}.DLT 레코드(브로커 기본 보존 7일)를 Kafka 도구로 읽어 원인(Catalog 결함 등)을 남긴다. 재투입은 Store tasks SO-T6.
 
       # 현재 PortOne TEST 환불의 관리자 지연 목록과 같은 집계다.
       # 최초 취소 준비 + 3시간 경계를 이미 지표에서 적용하므로 for 로 더 기다리지 않는다.

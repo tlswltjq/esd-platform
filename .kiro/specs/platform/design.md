@@ -341,7 +341,7 @@ Review·Catalog·Studio의 상태×입력 표(원요청·철회·판정 입력�
 
 #### 단계별 실패 표
 
-공통: 수신 실패는 공통 `DefaultErrorHandler`(1·2·4초) 뒤 소비 모듈 DB `consumer_quarantine`에 보관하고 그 키를 멈추며, 경보 `ConsumerKeysQuarantined`(DB 없는 Store만 DLT·`MessagesDeadLettered`). Outbox가 Kafka로 못 나가면 `OutboxBacklogGrowing`·`OutboxEventsAbandoned`, 소비 정지는 `ConsumerLagGrowing`·`ConsumerStalled`, 앱 중단은 `ServiceDown`(모두 `infra/prometheus/alerts.yml`). 격리 재투입(`/api/v1/ops/quarantine/replay`)·DLT(Store)·DEAD 재투입은 각 앱 공통 운영 API(Studio·Review·Catalog의 `RecoveryOps*` 테스트가 지킴, Store는 `stove.messaging.ops.enabled=false`).
+공통: 수신 실패는 공통 `DefaultErrorHandler`(1·2·4초) 뒤 소비 모듈 DB `consumer_quarantine`에 보관하고 그 키를 멈추며, 경보 `ConsumerKeysQuarantined`(DB 없는 Store만 DLT·`MessagesDeadLettered`). Outbox가 Kafka로 못 나가면 `OutboxBacklogGrowing`·`OutboxEventsAbandoned`, 소비 정지는 `ConsumerLagGrowing`·`ConsumerStalled`, 앱 중단은 `ServiceDown`(모두 `infra/prometheus/alerts.yml`). 격리 재투입(`/api/v1/ops/quarantine/replay`)·DEAD 재투입은 각 앱 공통 운영 API(Studio·Review·Catalog의 `RecoveryOps*` 테스트가 지킴). Store는 운영 API가 꺼져 있어(`stove.messaging.ops.enabled=false`) DLT 재투입 경로가 없고, 사본은 주기 대조로 수렴한다(Store tasks SO-T6).
 
 | 단계 | 실패 종류 | 구체 사례 | 감지하는 곳 | 처리(재시도·멱등 키·보상) | 끝내 안 되면(운영자 개입·경보) | 지금 코드 | 목표와 차이 |
 |---|---|---|---|---|---|---|---|
