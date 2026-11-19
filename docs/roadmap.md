@@ -27,6 +27,8 @@
 2. RabbitMQ·Redis Streams와 "브로커 없음" 기준선을 같은 포트에 붙인다([결정 203](decisions.md#messaging-comparison-targets)). 넷 모두 같은 계약 테스트를 통과해야 잰다.
 3. 비교 실험: 지표와 합격 조건은 [결정 204](decisions.md#messaging-comparison-metrics)를 따른다. 조건과 가설을 측정 전에 고정하고 [실험 기록](experiments.md)의 절차(A→B→A, 조건당 2회)를 따른다. 차이가 없으면 조건을 더 가혹하게 하되 호스트 한계와 구분한다. 결과는 실험 기록에 남긴다.
 
+**M 상태:** 1 완료(포트·Kafka adapter·격리 중립화, PR #205·#207·#209). 2 완료(브로커 없음·RabbitMQ·Redis Streams, PR #210·#211·#212·#215). 3은 평시 부하의 A 업무 완료 시간·B 브로커 구간 지연·G 대조군과 브로커 없음 폴링 주기 비교까지 완료([E12](experiments.md#messaging-comparison)). F 같은 키 순서 위반은 부하로 검사하려 했으나 측정한 구매·환불 흐름에는 같은 그룹이 같은 키를 두 번 받는 경로가 없어 통합 테스트로만 확인했다. 남은 것: C 처리량·확장성, D 장애 수복, E 비용.
+
 ## 1. 단계의 정의
 
 | 단계 | 완료 기준 |

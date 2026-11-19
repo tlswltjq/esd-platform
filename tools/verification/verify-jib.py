@@ -47,6 +47,8 @@ def main():
     parser.add_argument("--load-rate", type=float, default=2.0, help="Orders per second for --measure")
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
+    parser.add_argument("--load-refund-every", type=int, default=0,
+                        help="Refund one of every N paid measured orders for --measure (same-key order check, decision 204 F)")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
     parser.add_argument("--app-env", action="append", default=[], metavar="NAME=VALUE",
                         help="Extra environment for every application (repeatable), e.g. a messaging setting to compare")
@@ -287,10 +289,14 @@ def main():
         if prometheus:
             prometheus.verify(docker, run, result)
         elif args.measure:
-            from support.messaging_measurement import measure
+            from support.messaging_measurement import MESSAGING_APPS, measure
             result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
                                             args.load_rate, args.load_duration, args.load_buyers, args.load_warmup,
-                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"])
+                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"],
+                                            ["http://127.0.0.1:%d/actuator/prometheus" % (PORTS[app] + offset)
+                                             for app in sorted(MESSAGING_APPS)],
+                                            lambda url: urllib.request.urlopen(url, timeout=10).read().decode(),
+                                            args.load_refund_every)
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))

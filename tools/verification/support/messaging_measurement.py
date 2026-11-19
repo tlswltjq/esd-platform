@@ -93,8 +93,9 @@ def infra_services(broker):
                                          "interval": "3s", "timeout": "10s", "retries": 60}}}
 
 
-def load_command(offset, rate, seconds, buyers, evidence, warmup=10):
+def load_command(offset, rate, seconds, buyers, evidence, warmup=10, refund_every=0):
     return ["./gradlew", ":e2e:messagingLoadTest", "--no-daemon", "--console=plain",
+            "-Dstove.e2e.load-refund-every=" + str(refund_every),
             "-Dstove.e2e.port-offset=" + str(offset),
             "-Dstove.e2e.load-rate=" + str(rate),
             "-Dstove.e2e.load-duration-secs=" + str(seconds),
@@ -120,8 +121,19 @@ def _nearest_rank(values, p):
     return ordered[max(0, -(-p * len(ordered) // 100) - 1)] if ordered else None
 
 
-def validity(measured, journey, broker):
-    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락이 하나라도 있으면 무효."""
+def refund_problems(measured):
+    """환불을 요청한 측정 주문 가운데 요청이 거절됐거나 COMPLETED 에 닿지 않은 건."""
+    requested = [order for order in measured if "refundStatus" in order]
+    rejected = sum(1 for order in requested if order["refundStatus"] not in (200, 202))
+    unfinished = sum(1 for order in requested if order.get("refundState") != "COMPLETED")
+    return len(requested), rejected, unfinished
+
+
+def validity(measured, journey, broker, order=None):
+    """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반·환불 요청 거절이 하나라도 있으면 무효.
+
+    순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
+    """
     reasons = []
     http_failures = sum(1 for order in measured if order.get("status") != 200)
     late = sum(1 for order in measured if order.get("lateMs", 0.0) > LATE_START_MS)
@@ -141,6 +153,14 @@ def validity(measured, journey, broker):
             reasons.append("%s 소비 %d건(기대 %d)" % (group, consumed, paid))
         if values.get("negative"):
             reasons.append("%s 음수 구간 %d건" % (group, values["negative"]))
+    for group, checked in (order or {}).items():
+        if checked.get("violations"):
+            reasons.append("%s 같은 키 순서 위반 %d건" % (group, checked["violations"]))
+    # 환불 요청 거절만 무효로 본다. 격리 스택(모의 PG, SIMULATED)에는 환불 취소 구현이 없고 환불 실행이 꺼져 있어
+    # 환불은 PG 결과 대기(PENDING_PAYMENT_REFUND)에서 멈춘다 — 미완료는 진단(refund_diagnosis)으로만 남긴다.
+    requested, rejected, _unfinished = refund_problems(measured)
+    if rejected:
+        reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
@@ -176,7 +196,63 @@ def db_rate(before, after):
     return rates
 
 
-def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234"):
+# 환불이 끝나지 않았을 때 어디서 멈췄는지 보는 읽기 전용 조회(상태별 건수, 환불 관련 Outbox 이벤트, 격리 보관).
+REFUND_DIAGNOSIS_SQL = " UNION ALL ".join([
+    "SELECT 'order_refund', status, COUNT(*) FROM stove_order.order_refund GROUP BY status",
+    "SELECT 'license_suspension', '-', COUNT(*) FROM stove_license.license_suspension",
+    "SELECT 'refund_execution', status, COUNT(*) FROM stove_payment.refund_execution GROUP BY status",
+] + ["SELECT 'outbox %s', CONCAT(event_type, '/', status), COUNT(*) FROM stove_%s.outbox_event"
+     " WHERE event_type LIKE '%%efund%%' OR event_type LIKE '%%uspen%%' GROUP BY event_type, status" % (app, app)
+     for app in ("order", "license", "payment")]
+  + ["SELECT 'quarantine %s', CONCAT(consumer_group, '/', status), COUNT(*) FROM stove_%s.consumer_quarantine"
+     " GROUP BY consumer_group, status" % (app, app) for app in ("order", "license", "payment")]) + ";"
+
+
+def refund_diagnosis(capture, container, password):
+    """환불 흐름 표의 상태별 건수. 읽지 못하면 오류 문구를 남긴다(측정을 멈추지 않는다)."""
+    try:
+        text = capture(["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-N", "-B"],
+                       input=REFUND_DIAGNOSIS_SQL, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as failure:
+        return {"error": (failure.output or "")[-500:]}
+    rows = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3:
+            rows.setdefault(parts[0], {})[parts[1]] = int(parts[2])
+    return rows
+
+
+DUPLICATES_METRIC = "stove_inbox_duplicates_total"
+
+
+def inbox_duplicates(text):
+    """Prometheus 본문에서 소비 그룹별 재전달 차단 수(Inbox 가 이미 처리한 이벤트를 다시 받아 건너뛴 횟수)."""
+    totals = {}
+    for line in text.splitlines():
+        if not line.startswith(DUPLICATES_METRIC + "{"):
+            continue
+        labels, _, value = line.rpartition(" ")
+        group = labels.split('consumer_group="', 1)[1].split('"', 1)[0] if 'consumer_group="' in labels else "unknown"
+        totals[group] = totals.get(group, 0) + int(float(value))
+    return totals
+
+
+def redeliveries(fetch, urls):
+    """앱마다 ``/actuator/prometheus`` 를 읽어 재전달 차단 수를 합친다. 읽지 못한 앱은 ``unreadable`` 에 남긴다(0 으로 적지 않는다)."""
+    totals = {}
+    unreadable = []
+    for url in urls:
+        try:
+            for group, count in inbox_duplicates(fetch(url)).items():
+                totals[group] = totals.get(group, 0) + count
+        except Exception:  # noqa: BLE001 — 측정 보조값이라 회차를 멈추지 않고 읽지 못했다고 남긴다
+            unreadable.append(url)
+    return {"by_group": dict(sorted(totals.items())), "unreadable": unreadable}
+
+
+def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
+            metrics_urls=(), fetch=None, refund_every=0):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -187,7 +263,10 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     idle_start = db_counters(capture, container, db_password)
     time.sleep(IDLE_SECONDS)
     idle_end = db_counters(capture, container, db_password)
-    run(load_command(offset, rate, seconds, buyers, load, warmup), "measure-load")
+    run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+    diagnosis = refund_diagnosis(capture, container, db_password) if refund_every else None
+    if diagnosis is not None:
+        print("REFUND DIAGNOSIS " + json.dumps(diagnosis, ensure_ascii=False), flush=True)
     load_end = db_counters(capture, container, db_password)
     db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
@@ -197,10 +276,16 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     loaded = json.loads(load.read_text())
     measured = [order for order in loaded["orders"] if not order.get("warmup")]
     journey = json.loads(journey_file.read_text())["purchase"]
-    broker = json.loads(broker_file.read_text())["groups"]
+    collected = json.loads(broker_file.read_text())
+    broker = collected["groups"]
+    order = collected.get("order", {})
     http = [order["httpMs"] for order in measured if "httpMs" in order]
     late = [order["lateMs"] for order in measured if "lateMs" in order]
     return {"rate": rate, "duration_seconds": seconds, "warmup_seconds": warmup, "buyers": buyers,
             "planned": len(measured), "accepted": sum(1 for order in measured if order.get("status") == 200),
             "http_p95_ms": _nearest_rank(http, 95), "late_start_max_ms": max(late) if late else None,
-            "journey": journey, "broker": broker, "db_load": db_load, "validity": validity(measured, journey, broker)}
+            "journey": journey, "broker": broker, "order": order,
+            "refunds": dict(zip(("requested", "rejected", "unfinished"), refund_problems(measured))),
+            "refund_diagnosis": diagnosis,
+            "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
+            "db_load": db_load, "validity": validity(measured, journey, broker, order)}
