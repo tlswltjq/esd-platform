@@ -70,10 +70,12 @@ def latency_sql_for_keys(publishers, consumers, keys):
 
 
 def order_sql_for_keys(publishers, consumers, keys):
-    """순서 검사용: (소비 그룹, 발행 모듈, 순서 키, Outbox id, processed_event id).
+    """순서 검사용: (소비 그룹, 발행 모듈, 토픽, 순서 키, Outbox id, processed_event id).
 
-    Outbox ``id`` 는 같은 키 안에서 발행 순서다(릴레이는 같은 키의 앞 행이 SENT 되기 전 뒤 행을 보내지 않는다, PR #203).
-    ``processed_event.id`` 는 업무 트랜잭션에서 넣는 AUTO_INCREMENT 라 그 소비 모듈의 처리(커밋) 순서다.
+    Outbox ``id`` 는 같은 키 안에서 릴레이가 보내는 순서다(릴레이는 같은 키의 앞 행이 SENT 되기 전 뒤 행을 보내지 않는다, PR #203).
+    ``processed_event.id`` 는 업무 트랜잭션이 Inbox 행을 넣을 때 할당한 AUTO_INCREMENT — **커밋 순서가 아니라 할당 순서**다.
+    같은 키를 한 곳에서 차례로 처리하면(결정 202) 뒤 처리는 앞 처리가 커밋된 뒤 시작하므로 할당 순서가 처리 순서와 같다.
+    두 처리가 겹치면 할당과 커밋 순서가 어긋날 수 있어, 이 검사는 겹친 처리를 항상 잡지는 못한다(PR #216 R1).
     """
     _validate_schemas(publishers, consumers)
     if not keys:
@@ -86,24 +88,25 @@ def order_sql_for_keys(publishers, consumers, keys):
     for publisher in publishers:
         for consumer in consumers:
             parts.append(
-                f"SELECT p.consumer_group, '{publisher}', o.partition_key, o.id, p.id"
+                f"SELECT p.consumer_group, '{publisher}', o.topic, o.partition_key, o.id, p.id"
                 f" FROM stove_{publisher}.outbox_event o JOIN stove_{consumer}.processed_event p ON p.event_id = o.event_id"
                 f" WHERE o.partition_key IN {in_list}")
     return "\nUNION ALL\n".join(parts)
 
 
 def order_violations(rows):
-    """결정 204 F: 같은 (소비 그룹, 발행 모듈, 키) 안에서 발행 순서(Outbox id)대로 처리(processed_event id)했는가.
+    """결정 204 F: 같은 (소비 그룹, 발행 모듈, 토픽, 키) 안에서 발행 순서(Outbox id)대로 처리(processed_event id)했는가.
 
-    발행 순서로 정렬했을 때 처리 순서가 줄어드는 이웃 쌍을 위반으로 센다. 다른 발행 모듈(토픽)끼리는 순서를 보장하지 않으므로 비교하지 않는다.
+    발행 순서로 정렬했을 때 처리 순서가 줄어드는 이웃 쌍을 위반으로 센다. 다른 토픽끼리는 순서를 보장하지 않으므로 비교하지 않는다
+    (한 모듈이 여러 토픽을 발행한다 — catalog 는 catalog·release, PR #216 R2).
     @return 소비 그룹별 {"keys": 키 수, "events": 이벤트 수, "pairs": 비교한 이웃 쌍 수, "violations": 위반 쌍 수}.
             ``pairs`` 가 0이면 같은 키에 이벤트가 하나뿐이라 위반 0 이 아무것도 증명하지 않는다.
     """
     chains = {}
-    for group, publisher, key, outbox_id, processed_id in rows:
-        chains.setdefault((group, publisher, key), []).append((int(outbox_id), int(processed_id)))
+    for group, publisher, topic, key, outbox_id, processed_id in rows:
+        chains.setdefault((group, publisher, topic, key), []).append((int(outbox_id), int(processed_id)))
     summary = {}
-    for (group, _publisher, _key), chain in chains.items():
+    for (group, _publisher, _topic, _key), chain in chains.items():
         chain.sort()
         entry = summary.setdefault(group, {"keys": 0, "events": 0, "pairs": 0, "violations": 0})
         entry["keys"] += 1
