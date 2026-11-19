@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -92,6 +93,15 @@ public class OutboxEvent {
     /** Kafka 브로커가 이벤트 수신을 확인한 시각. */
     private Instant sentAt;
 
+    /**
+     * 릴레이가 브로커로 보내기 직전 시각. 브로커 구간 지연(이 시각 → 소비 모듈 {@code processed_event.processed_at})
+     * 측정용이다([결정 204] B). {@link #sentAt}은 ack 뒤라 소비가 먼저 끝나면 구간이 음수가 될 수 있어 따로 둔다.
+     * <b>첫 송신 시도 때 한 번만 찍는다.</b> Inbox는 최초 {@code processed_at}을 지키므로, ack 유실 뒤 재시도나
+     * 운영 재발행·회수 때 덮으면 구간이 음수가 된다(PR #204 R1). 그래서 이 값은 "처음 보낸 시각"이고 재시도 대기가
+     * 있으면 그만큼 구간에 포함된다. DB {@code DATETIME(6)}과 헤더가 같은 값이 되도록 마이크로초로 자른다(R2).
+     */
+    private Instant publishedAt;
+
     private OutboxEvent(String eventId, String aggregateType, String aggregateId, String eventType,
                         String topic, String partitionKey, String payload, String traceParent) {
         this.eventId = eventId;
@@ -124,9 +134,21 @@ public class OutboxEvent {
                 payload, traceParent);
     }
 
+    /** 브로커로 보내기 직전에 부른다. 같은 값을 {@code x-published-at} 헤더로도 싣는다. */
+    public void markPublishing(Instant at) {
+        if (this.publishedAt == null) {
+            this.publishedAt = at.truncatedTo(ChronoUnit.MICROS);
+        }
+    }
+
     public void markSent() {
+        markSent(Instant.now());
+    }
+
+    /** 릴레이가 단조 증가하는 시각을 넘긴다(브로커 없음 기준선의 읽기 위치가 {@code sent_at} 이다, PR #210 R2). */
+    public void markSent(Instant at) {
         this.status = OutboxStatus.SENT;
-        this.sentAt = Instant.now();
+        this.sentAt = at.truncatedTo(ChronoUnit.MICROS);
         this.lastError = null;
         this.nextAttemptAt = null;
     }
@@ -146,7 +168,9 @@ public class OutboxEvent {
     /**
      * 같은 키의 앞 이벤트가 재시도 대기에 들어가서 함께 보류된다. [D-014]
      * <b>{@code retryCount} 를 늘리지 않는다</b> — 실패한 것이 아니라 양보한 것이다.
-     * 앞이 DEAD 면({@code until} 이 null) 보류하지 않는다 — 그 키가 영구 정지한다.
+     * 앞이 DEAD 면({@code until} 이 null) 시각으로 보류하지 않는다. 그 키는 회수 전까지
+     * {@link OutboxEventRepository#lockPendingBatch}가 뒤 이벤트를 집지 않아 멈춘다(D-055).
+     * 이 보류는 같은 배치 안의 뒤 이벤트에만 닿는다. 배치 밖의 뒤 이벤트도 같은 조회가 막는다(D-056).
      *
      */
     public void holdUntil(Instant until) {

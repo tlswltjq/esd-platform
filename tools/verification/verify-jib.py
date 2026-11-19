@@ -42,9 +42,23 @@ def main():
     parser.add_argument("--prometheus-only", action="store_true", help="Verify real production scrape targets and metrics")
     parser.add_argument("--backup-restore", action="store_true",
                         help="Lose MySQL and MinIO between purchase phases and restore them from continuous copies")
+    parser.add_argument("--measure", action="store_true",
+                        help="Run one messaging comparison round (decision 204) instead of the purchase phases")
+    parser.add_argument("--load-rate", type=float, default=2.0, help="Orders per second for --measure")
+    parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
+    parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
+    parser.add_argument("--load-refund-every", type=int, default=0,
+                        help="Refund one of every N paid measured orders for --measure (same-key order check, decision 204 F)")
+    parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
+    parser.add_argument("--app-env", action="append", default=[], metavar="NAME=VALUE",
+                        help="Extra environment for every application (repeatable), e.g. a messaging setting to compare")
+    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq", "redis-streams"],
+                        help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
         parser.error("--prometheus-only cannot be combined with tracing modes")
+    if args.measure and (args.prometheus_only or args.tracing or args.foundation_only or args.backup_restore):
+        parser.error("--measure cannot be combined with other verification modes")
     if args.backup_restore and (args.prometheus_only or args.tracing or args.foundation_only):
         parser.error("--backup-restore cannot be combined with other verification modes")
     if args.foundation_only:
@@ -53,7 +67,8 @@ def main():
     output_root = Path(scratch) if scratch and (args.prometheus_only or args.backup_restore) else ROOT / "runs"
     output_root.mkdir(exist_ok=True)
     prefix = "prometheus-validation-" if args.prometheus_only else (
-        "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else "jib-validation-"))
+        "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else (
+            "messaging-measure-" if args.measure else "jib-validation-")))
     output = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
     output.chmod(0o700)
     project = output.name
@@ -133,6 +148,12 @@ def main():
                                   "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT", "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
                                   "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
                                   "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true"}}}
+    from support.messaging_measurement import PARALLELISM, infra_services
+    # 고른 브로커에만 필요한 기반 서비스(RabbitMQ 등). 앱 환경(broker_environment)과 같은 조건이다(PR #211 R4).
+    services.update(infra_services(args.broker))
+    if args.measure:
+        # 비교하는 브로커가 같은 병렬도를 갖게 한다(Kafka 파티션 수 = RabbitMQ 그룹·토픽당 큐 수).
+        services["kafka"]["environment"]["KAFKA_NUM_PARTITIONS"] = str(PARALLELISM)
     for name, port in PORTS.items():
         configured = base["services"][name]
         if "build" in configured:
@@ -142,6 +163,8 @@ def main():
             app_env.update(PAYMENT_PG_PROVIDER="SIMULATED", SETTLEMENT_PG_PROVIDER="SIMULATED",
                            SETTLEMENT_TOSSPAY_ENABLED="false")
         app_env.update(JWT_ISSUER_URI=public, TRACING_SAMPLE_RATE="1" if args.tracing else "0")
+        from support.messaging_measurement import broker_environment
+        app_env.update(broker_environment(name, args.broker))
         if name in {"auth", "gateway"}:
             app_env.update(BFF_PUBLIC_AUTH_BASE=public, BFF_REDIRECT_URI=public + "/login/oauth2/code/gateway-bff")
         if name == "auth":
@@ -156,6 +179,9 @@ def main():
             app_env.update(REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password")
         if name == "download":
             app_env.update(DOWNLOAD_STORAGE_ACCESS_KEY="download-reader", DOWNLOAD_STORAGE_SECRET_KEY="isolated-read-only-password")
+        # 맨 마지막에 둔다: 위의 어떤 값도 덮어쓸 수 있다. 브로커 선택은 --broker 로만 한다(기록한 broker 와 실제가 어긋나지 않게, PR #214 R4).
+        from support.messaging_measurement import extra_environment
+        app_env.update(extra_environment(args.app_env))
         services[name] = {"image": configured["image"], "environment": app_env,
                           "healthcheck": configured["healthcheck"], "stop_grace_period": configured["stop_grace_period"],
                           "ports": ["127.0.0.1:" + str(port + offset) + ":" + str(port)], "mem_limit": "768m",
@@ -183,7 +209,7 @@ def main():
             # Parallel Testcontainers tests remove their own containers on completion.
             if not any(key.startswith("org.testcontainers") for key in labels):
                 original.append(container["Id"])
-    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False,
+    result = {"applications": {}, "phases": [], "port_offset": offset, "complete": False, "broker": args.broker, "app_env": args.app_env,
               "started_at": started_at, "host": platform.platform(), "command": sys.argv, "project": project}
     mc = docker + ["exec", "-T", "minio", "mc"]
 
@@ -211,7 +237,8 @@ def main():
              "-p", project, "-f", str(compose), "--timeout", "30", *selected], "stack-status" + suffix)
 
     try:
-        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio"], "infra")
+        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio",
+                     *infra_services(args.broker)], "infra")
         provision_storage()
         denied = subprocess.run(mc + ["pipe", "reader/stove-builds/forbidden.zip"], input=b"forbidden", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if denied.returncode == 0:
@@ -261,6 +288,19 @@ def main():
             print("PASS: " + name, flush=True)
         if prometheus:
             prometheus.verify(docker, run, result)
+        elif args.measure:
+            from support.messaging_measurement import MESSAGING_APPS, measure
+            result["measurement"] = measure(ROOT, docker, run, capture, output, offset,
+                                            args.load_rate, args.load_duration, args.load_buyers, args.load_warmup,
+                                            services["mysql"]["environment"]["MYSQL_ROOT_PASSWORD"],
+                                            ["http://127.0.0.1:%d/actuator/prometheus" % (PORTS[app] + offset)
+                                             for app in sorted(MESSAGING_APPS)],
+                                            lambda url: urllib.request.urlopen(url, timeout=10).read().decode(),
+                                            args.load_refund_every)
+            if not result["measurement"]["validity"]["valid"]:
+                # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
+                raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
+            print("PASS: messaging measurement " + json.dumps(result["measurement"], ensure_ascii=False), flush=True)
         elif tracing:
             tracing.verify(result, list(PORTS), keys["pg-db"])
         else:

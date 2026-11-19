@@ -1,6 +1,9 @@
 package com.stove.catalog.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.EventSubscriber;
+import com.stove.common.event.InboundMessage;
 import com.stove.catalog.core.service.ReceiveReleaseWithdrawal;
 import com.stove.catalog.core.service.ReceiveProjectRelease;
 import com.stove.common.kafka.EventEnvelope;
@@ -10,20 +13,19 @@ import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequested
 
 import lombok.RequiredArgsConstructor;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class StudioReleaseEventListener {
+@EventSubscriber(topics = Topics.STUDIO, group = ReceiveProjectRelease.CONSUMER_GROUP)
+public class StudioReleaseEventListener implements EventHandler {
     private final ObjectMapper mapper;
     private final ReceiveProjectRelease receiveProjectRelease;
     private final ReceiveReleaseWithdrawal receiveReleaseWithdrawal;
 
-    @KafkaListener(topics = Topics.STUDIO, groupId = ReceiveProjectRelease.CONSUMER_GROUP)
-    public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
+    @Override
+    public void receive(InboundMessage message) {
+        EventEnvelope envelope = EventEnvelope.from(message);
         if (envelope.isType("ProjectReleaseRequested")) {
             receiveProjectRelease.execute(
                     ReleaseSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReleaseRequestedEvent.class)));

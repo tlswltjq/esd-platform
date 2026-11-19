@@ -28,12 +28,12 @@ public class SecurityConfig {
                                         // 명시적으로 켠 인스턴스에서도 단건 재처리만 ADMIN에게 연다.
                                         .requestMatchers(
                                                 HttpMethod.GET,
-                                                "/api/v1/ops/dlt",
+                                                "/api/v1/ops/dlt", "/api/v1/ops/quarantine",
                                                 "/api/v1/ops/outbox/dead")
                                         .hasRole("ADMIN")
                                         .requestMatchers(
                                                 HttpMethod.POST,
-                                                "/api/v1/ops/dlt/replay",
+                                                "/api/v1/ops/dlt/replay", "/api/v1/ops/quarantine/replay",
                                                 "/api/v1/ops/outbox/dead/*/requeue")
                                         .hasRole("ADMIN")
                                         .requestMatchers(HttpMethod.GET, "/api/v1/studio/assets/**")

@@ -1,27 +1,35 @@
 package com.stove.common.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.common.event.KeyQuarantine;
+import com.stove.common.event.MessagePublisher;
+import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxMetrics;
-import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.messaging.outbox.OutboxRelay;
+import com.stove.common.messaging.quarantine.JpaKeyQuarantine;
+import com.stove.common.messaging.quarantine.QuarantineReplay;
+import com.stove.common.messaging.quarantine.QuarantinedMessageRepository;
+import com.stove.common.messaging.trace.MicrometerReplayTracing;
 import com.stove.common.messaging.trace.MicrometerTraceContextCapture;
+import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.messaging.trace.TraceContextCapture;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import java.time.Clock;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -83,18 +91,47 @@ public class MessagingAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "stove.outbox", name = "relay-enabled", havingValue = "true", matchIfMissing = true)
     public OutboxRelay outboxRelay(OutboxEventRepository repository,
-                                   KafkaTemplate<String, String> kafkaTemplate,
+                                   MessagePublisher publisher,
                                    OutboxProperties properties,
                                    OutboxMetrics metrics,
                                    PlatformTransactionManager transactionManager) {
-        return new OutboxRelay(repository, kafkaTemplate, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
+        return new OutboxRelay(repository, publisher, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
                 new TransactionTemplate(transactionManager));
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public ProcessedEventGuard processedEventGuard(ProcessedEventRepository repository) {
-        return new ProcessedEventGuard(repository);
+    public ProcessedEventGuard processedEventGuard(ProcessedEventRepository repository,
+                                                   ObjectProvider<MeterRegistry> meterRegistry) {
+        return new ProcessedEventGuard(repository, meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
     }
 
+    /**
+     * 소비 실패 보관과 키 정지(결정 155·160·206). 브로커 adapter 가 이 빈을 찾아 쓴다.
+     * 표 {@code consumer_quarantine} 은 이 모듈을 쓰는 모든 앱의 이관에 있다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(KeyQuarantine.class)
+    public KeyQuarantine keyQuarantine(QuarantinedMessageRepository repository,
+                                       PlatformTransactionManager transactionManager,
+                                       ObjectProvider<ObjectMapper> objectMapper,
+                                       ObjectProvider<MeterRegistry> meterRegistry) {
+        return new JpaKeyQuarantine(repository, transactionManager,
+                objectMapper.getIfAvailable(ObjectMapper::new), meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
+    }
+
+    /** 멈춘 키를 원래 순서대로 다시 넣는다. 운영 API 가 부른다. */
+    @Bean
+    @ConditionalOnMissingBean
+    public QuarantineReplay quarantineReplay(QuarantinedMessageRepository repository, ApplicationContext context,
+                                             ObjectProvider<ObjectMapper> objectMapper,
+                                             PlatformTransactionManager transactionManager,
+                                             ObjectProvider<Tracer> tracer, ObjectProvider<Propagator> propagator) {
+        Tracer availableTracer = tracer.getIfAvailable();
+        Propagator availablePropagator = propagator.getIfAvailable();
+        ReplayTracing tracing = availableTracer == null || availablePropagator == null
+                ? ReplayTracing.NONE : new MicrometerReplayTracing(availableTracer, availablePropagator);
+        return new QuarantineReplay(repository, context, objectMapper.getIfAvailable(ObjectMapper::new),
+                transactionManager, tracing, Clock.systemUTC());
+    }
 }

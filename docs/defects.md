@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`(D-003·D-013·D-014), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-051, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -73,11 +73,16 @@
 | [D-045](#d-045) | 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급 | 금전 손실(과지급)·판매자 마감 정지 | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-046](#d-046) | 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음 | 금전 손실(과소 지급) | **수정됨** | G3 늦은 앞 월 조사 코드 판독 뒤 재현 테스트 |
 | [D-047](#d-047) | Store 최초 삽입 flush의 MySQL 교착(1213)이 재시도를 지나쳐 회차가 실패 | HTTP 대조 회차 실패·Kafka 지연 | **수정됨** | PR #127 교차 리뷰 R3 → Store `tasks.md` |
+| [D-048](#d-048) | 환불 취소 409의 깨진 본문·type 없음이 미확정이 아니라 IllegalArgumentException으로 샘 | 그 회 결과 조회 누락·첫 송신 Kafka 재전달 | **수정됨** | 2026-11-08 HTTP 오류 조사 후보 ① → Payment `tasks.md` |
+| [D-049](#d-049) | 접수 승인의 PG 조회가 계속 실패하면 3시간이 지나도 결정 124 보류에 오르지 않음 | 보이지 않는 장기 미확정(주문 `PAYMENT_PROCESSING` 묶임·재구매 이중 결제 위험) | **수정됨** | 2026-11-08 HTTP 오류 조사 후보 ② → Payment `tasks.md` |
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
 | [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
 | [D-053](#d-053) | Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남 | 간헐 500(조회는 재시도로 회복, `POST`는 처리 여부 불명) | **원인 확인 · 미수정** | main 야간 CI run 42916206138 |
 | [D-054](#d-054) | Kafka 시작 스크립트가 복사 중 실행돼 `Text file busy`(126)로 테스트 컨텍스트 시작 실패 | CI 불안정(업무 코드 영향 없음) | **수정됨** | PR #196 CI run 43001134598 |
+| [D-055](#d-055) | 같은 키의 앞 Outbox 행이 `DEAD`여도 릴레이가 뒤 행을 발행해 소비자가 순서가 뒤집힌 채 받음 | 돈·보유권(추정, 결정 155 예: 환불된 고객의 보유권이 열린 채 남음) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
+| [D-056](#d-056) | 같은 키의 앞 행이 재시도 대기인 사이, 그 배치에 없던 뒤 행이 먼저 발행됨 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
+| [D-057](#d-057) | 다른 트랜잭션이 같은 키의 앞 행을 잠그면(예: 중복 운영 재발행) 릴레이가 뒤 행을 먼저 발행함 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | PR #203 교차 리뷰 R1, `OutboxPendingQueryTest` |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -236,7 +241,7 @@
 
 - **증상** 앞 이벤트는 실패로 `next_attempt_at`이 미래가 되어 조회에서 빠지고, 보류된 뒤 이벤트는 `NULL`이라 다음 회차에 혼자 발행됐다.
 - **원인** 키 순서는 대역 테스트(`OutboxRelayTest`), 시간 조건은 실 MySQL 테스트가 따로 검증해 둘이 만나는 지점을 아무도 보지 않았다. 대역에 시간 필터를 넣자 바로 재현됐다.
-- **수정** 실패 시 같은 키의 뒤 이벤트에 앞의 `next_attempt_at`을 전파한다(`OutboxRelay#holdRemainder` → `OutboxEvent#holdUntil`). `retryCount`는 늘리지 않는다. 앞 이벤트가 DEAD가 되면 키를 푼다(영구 정지보다 낫다, DEAD 알람이 짝).
+- **수정** 실패 시 같은 키의 뒤 이벤트에 앞의 `next_attempt_at`을 전파한다(`OutboxRelay#holdRemainder` → `OutboxEvent#holdUntil`). `retryCount`는 늘리지 않는다. 앞 이벤트가 DEAD가 되면 키를 푼다(영구 정지보다 낫다, DEAD 알람이 짝). 이 절충은 [결정 155](decisions.md#key-stop-on-dead)가 "회수 전까지 그 키를 멈춘다"로 바꿨다(D-055, PR #203).
 
 ---
 
@@ -608,6 +613,26 @@
 - **수정** 두 서비스의 재시도 catch를 `RuntimeException`으로 받고, 새 `RetryableWriteFailure.retryable`이 원인 사슬(최대 16단계)에서 기존 네 타입(Spring `DataIntegrityViolationException`·`TransientDataAccessException`, Hibernate `ConstraintViolationException`·`LockAcquisitionException`)을 찾을 때만 새 트랜잭션으로 다시 시도한다. 재시도 대상은 넓히지 않았고 감싼 예외만 찾는다. 업무 충돌(`BusinessException`)·원인 없는 `OptimisticLockException`(오래된 버전)은 그대로 실패한다. Order `CreateOrder`도 같은 catch 모양이지만 `saveAndFlush`(리포지토리)로 저장해 Spring 변환을 거치므로 해당하지 않는다.
 - **망가뜨리기 확인(결정 102)** `retryable`이 원인 사슬을 보지 않게 바꾸면 두 재현 테스트가 같은 `OptimisticLockException(LockAcquisitionException)`으로 실패(Gradle exit 1)하고, 되돌리면 통과한다.
 
+<a id="d-048"></a>
+## D-048 환불 취소 409의 깨진 본문·type 없음이 미확정이 아니라 IllegalArgumentException으로 샘
+
+**상태** 수정됨([결정 133](decisions.md#refund-formal-rejection-stop) 구현과 함께) · **영향** 그 회의 결과 조회(`ReconcileRefundPayment`)를 건너뛰고, 첫 송신이면 `RequestFirstRefundCancellation`이 `PgUnavailable`만 잡으므로 예외가 Kafka 리스너까지 올라가 재전달된다(재전달은 이미 준비된 실행이라 GET만 하므로 POST가 두 번 나가지는 않음). 재송신 작업자는 `IllegalArgumentException`을 로그만 남겨 다음 회로 넘긴다. R7.11·R7.15의 "깨진 본문은 일반 미확정"에 어긋났다 · **위치** `PortOneRefundCancellationGateway.send`의 POST 409 분기(`read(...)`·`text(error, "type")`가 예외를 그대로 던짐)
+**재현** `PortOneRefundCancellationGatewayTest#malformedOrUntypedConflictsRemainUnconfirmedInsteadOfEscapingAsInvalidInput` — 수정 전 known-defect Red, `Expecting actual throwable to be exactly an instance of PgUnavailable but was IllegalArgumentException: Invalid supplier JSON`. 409에 HTML·빈 본문·`{}`·배열·숫자 type·공백 type·중복 키·뒤따르는 토큰을 차례로 보냈다. 지금은 태그를 뗀 회귀 테스트이고, 실제 HTTP·MySQL에서 같은 회 GET 2회(송신 전 대조+결과 조회)와 재송신 성공을 보는 `RefundCancellationDispatchIntegrationTest#aMalformedConflictIsUnconfirmedLooksUpInTheSameRoundAndIsRetriedWithoutAHold`가 함께 지킨다.
+
+- **원인** 400만 `isInvalidRequestRejection`의 catch로 깨진 본문을 거르고, 409는 `CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN`을 찾으려 본문을 바로 읽었다.
+- **수정** 4xx 본문은 `clientError`가 한 번만 읽고, 정상 JSON 객체의 type을 못 얻으면 상태와 관계없이 `PgUnavailable`(미확정)이다. type이 있으면 결정 133 분류(`PgCancellationRejection`)를 탄다.
+- **망가뜨리기 확인(결정 102)** `errorType`의 catch를 없애면 이 테스트와 400 깨진 본문 테스트·통합 2건이 `IllegalArgumentException`으로 실패했다(Gradle exit 1). 되돌리면 통과한다.
+
+<a id="d-049"></a>
+## D-049 접수 승인의 PG 조회가 계속 실패하면 3시간이 지나도 결정 124 보류에 오르지 않음
+
+**상태** 수정됨 · **영향** 접수(`ADMITTED`)된 승인의 GET이 5xx·타임아웃으로 계속 실패하면, `ResolvePaymentApproval`이 장애를 로그만 남기고 5초 뒤 다시 조회했다. 결정 124 보류는 "조회 결과"를 받은 직후에만 판정해서, 3시간이 지나도 `REVIEW_REQUIRED`·게이지·경보·ADMIN 목록 어디에도 보이지 않았다. 주문은 `PAYMENT_PROCESSING`에 묶이고, 그 사이 고객이 새로 주문하면 결정 124가 막으려던 이중 결제가 다시 열린다 · **위치** `ResolvePaymentApproval.execute`의 `catch (RuntimeException unavailable)`
+**재현** `PaymentApprovalIntegrationTest#anAdmittedApprovalWhoseLookupsKeepFailingPastTheConfirmWindowIsHeldFromItsLastValidState` — 수정 전 known-defect Red, `expected: REVIEW_REQUIRED but was: ADMITTED`. 루프백 PG가 confirm에 503을 주어 승인을 `ADMITTED`·최신 관측 `READY`로 둔 뒤, 모든 GET을 503으로 바꾸고 최초 준비 + 4시간에 작업자를 돌렸다. 지금은 태그를 뗀 회귀 테스트이고 PG가 회복된 뒤 늦은 PAID가 원래 주문을 완료하는 것까지 본다. 도메인 경계는 `PaymentApprovalTest#aFailedLookupPastTheConfirmWindowHoldsFromTheLastValidObservationOnly`가 지킨다.
+
+- **원인** 결정 124는 "최신 PG 상태가 `PENDING`·`READY`"를 조건으로 정했는데, 구현은 그 회 조회가 성공했을 때만 판정했다. 마지막 유효 관측(`latestPgState`, 결정 114 1부)은 이미 저장돼 있었다.
+- **수정** 조회 장애로 끝난 회차에 같은 lease로 `PaymentApproval.holdAfterConfirmWindowWithoutLookup`을 불러 `latestPgState`로 같은 판정을 한다. 유효 관측이 없으면 바꾸지 않는다. 고객 안내는 결정 123·132대로 `lastInspectionError`가 있으므로 `CHARGE_UNCONFIRMED`다. 증거 불일치(`IllegalArgumentException`)는 지금처럼 `PG_INVALID_EVIDENCE` 보류다. 새 사유·이행은 없다.
+- **망가뜨리기 확인(결정 102)** `holdAfterConfirmWindowWithoutLookup`이 항상 `false`를 돌려주게 바꾸면 통합 1건·도메인 1건이 같은 `ADMITTED`로 실패했다(Gradle exit 1).
+
 <a id="d-050"></a>
 ## D-050 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐
 
@@ -660,6 +685,51 @@
 - **수정** `AtomicStarterKafkaContainer`가 시작 파일만 같은 디렉터리의 `.copying` 이름으로 복사하고 복사 반환 후 `mv`로 실행 경로에 원자적으로 게시한다. Docker가 root 소유 파일을 만들고 `/tmp`에 sticky bit가 있으므로 이 고정 경로의 이름 변경만 `ExecConfig.user("root")`로 실행한다. Kafka 본체의 실행 사용자·이미지·리스너 설정·준비 로그·3분 대기는 유지한다. 다른 경로의 복사는 기본 구현에 위임한다. 모든 archive 복사는 `copyArchive`를 거치므로 테스트가 목적지를 확인할 수 있다.
 - **Red → Green·반례** 직접 실행 경로에 복사하면 `consumer path ... expected: 1 but was: 0`으로 실패한다. 재현 상태는 `eca046a1`에 `known-defect` 태그로 보존했다. 원자 게시를 제거한 반례도 같은 단언에서 실패한다. 게시를 `mv` 대신 `cp`로 바꾼 반례는 실행 경로가 새 inode라 `Publication must rename the staged copy` 단언에서 실패한다. 게시 뒤 실행 경로로 한 번 더 복사한 반례는 `The starter must be copied once, to the staging path only` 단언에서 실패한다. 원복 후 태그를 제거한 기본 검사가 통과한다. 최종 로컬 검증은 근거 조각과 PR 본문에 기록한다.
 - **운영 범위** 공유 테스트 픽스처에만 적용한다. 실제 운영 Kafka나 결제 상태·금융 동작은 바꾸지 않는다.
+
+<a id="d-055"></a>
+## D-055 같은 키의 앞 Outbox 행이 `DEAD`여도 릴레이가 뒤 행을 발행함
+
+**상태** 수정됨 · **영향** 같은 키 순서 역전. 결정 155의 예처럼 `OrderPaid`가 `DEAD`인 사이 환불의 `LicenseSuspensionRequested`가 먼저 나가면 환불된 고객의 보유권이 열린 채 남을 수 있다(돈·보유권, 추정 — 업무 흐름 재현은 하지 않음) · **위치** `common/messaging/.../outbox/OutboxEventRepository.lockPendingBatch`, `OutboxEvent.holdUntil` · [PR #203](https://github.com/tlswltjq/esd-platform/pull/203)
+
+- **원인** 재작성 때의 설계(D-014 수정)는 앞 행이 `DEAD`가 되면 **일부러** 그 키를 풀었다 — "영구 정지보다 낫다, DEAD 알람이 짝"(`OutboxRelayTest#deadBlockerReleasesTheKey`). 그래서 `holdUntil(null)`은 보류하지 않고 `lockPendingBatch`는 `PENDING`과 재시도 시각만 봤다. 이후 [결정 155](decisions.md#key-stop-on-dead)가 이 절충을 "그 키를 회수 전까지 멈춘다"로 바꿨지만 구현이 따르지 않았다(플랫폼 T2). 즉 자기 설계를 어긴 코드가 아니라 바뀐 계약을 따르지 않은 코드다.
+- **재현** `OutboxPendingQueryTest#deadEarlierEventHoldsLaterEventsOfTheSameKey`: 같은 키의 앞 행을 `DEAD`로 만들고 뒤 행이 배치에 집히는지 본다. 수정 전 `[앞이 DEAD인데 뒤가 나가면 소비자는 순서가 뒤집힌 채 받는다] Expecting value to be false but was true`. 기존 탈출구 테스트는 결정 155 동작(`#deadBlockerHoldsTheKeyUntilRequeued`: 회수 전 `PENDING`, 회수 뒤 적재 순서대로 `SENT`)으로 바꿨다.
+- **수정** `lockPendingBatch`에 같은 `partition_key`의 더 작은 `id`가 `DEAD`이면 뒤 행을 빼는 `NOT EXISTS`를 더했다. 회수(`requeue`)하면 앞뒤가 적재 순서로 다시 대상이 된다(`#requeuingTheDeadEarlierEventReleasesTheKeyInOrder`). 하위 조회용 인덱스 `idx_outbox_key_order (partition_key, id)`를 8개 모듈 이행으로 둔다.
+- **범위** 릴레이가 한 인스턴스라는 전제에서 완전하다(결정 205). 소비 쪽 DLT 이후 같은 키 정지(결정 155 소비 쪽)는 다루지 않는다.
+
+<a id="d-056"></a>
+## D-056 같은 키의 앞 행이 재시도 대기인 사이 그 배치에 없던 뒤 행이 먼저 발행됨
+
+**상태** 수정됨 · **영향** 같은 키 순서 역전(D-055와 같은 결과). 앞 행 한 건만 전송 시간 초과처럼 따로 실패할 때 드러난다. 같은 키는 Kafka에서 같은 파티션이라, 브로커 쪽 장애에서는 앞뒤가 함께 실패하기 쉬워 덜 드러난다 · **위치** `OutboxEventRepository.lockPendingBatch`, `OutboxRelay.holdRemainder` · [PR #203](https://github.com/tlswltjq/esd-platform/pull/203)
+
+- **원인** 앞 행이 실패하면 `holdRemainder`가 **같은 배치 안의** 같은 키 뒤 행만 앞의 재시도 시각까지 미룬다(D-014). 그 배치 뒤에 적재됐거나 `LIMIT` 밖이던 뒤 행은 `next_attempt_at`이 비어 있어 다음 폴링에 집히고, 앞 행은 재시도 시각이 미래라 빠진다.
+- **재현** `OutboxPendingQueryTest#backedOffEarlierEventHoldsALaterEventOutsideItsBatch`: 앞 행을 `markFailed`로 재시도 대기로 두고 그 뒤에 같은 키 행을 적재한다. 수정 전 `[앞이 재시도를 기다리는 사이 뒤가 먼저 나가면 같은 키의 순서가 뒤집힌다] Expecting value to be false but was true`.
+- **수정** D-055와 같은 `NOT EXISTS`에 "앞 행이 `PENDING`이고 `next_attempt_at`이 미래" 조건을 더했다. 앞 행도 지금 나갈 수 있으면 둘 다 집어 키 웨이브를 유지한다(`#eligibleEventsOfTheSameKeyArePickedTogether`). 재현 테스트는 재시도 시각을 DB 시계 기준 한 시간 뒤로 고정한다(교차 리뷰 R3).
+
+<a id="d-057"></a>
+## D-057 다른 트랜잭션이 같은 키의 앞 행을 잠그면 릴레이가 뒤 행을 먼저 발행함
+
+**상태** 수정됨 · **영향** 같은 키 순서 역전(D-055와 같은 결과). 릴레이가 한 인스턴스여도 생긴다. 예: 운영 재발행([결정 129](decisions.md#orphan-license-grant-republish))으로 `PENDING`이 된 앞 행에 중복 재발행 요청이 들어와 `OutboxRepublishService`가 상태 확인 전에 `lockByEventId`로 잠근 동안 · **위치** `OutboxEventRepository.lockPendingBatch`, `OutboxRelay` · [PR #203](https://github.com/tlswltjq/esd-platform/pull/203) 교차 리뷰 R1
+
+- **원인** 바깥 `FOR UPDATE SKIP LOCKED`는 잠긴 앞 행을 건너뛰지만, `NOT EXISTS` 하위 조회는 잠금 없이 읽어 앞 행을 "지금 나갈 수 있는 `PENDING`"으로 보고 뒤 행을 막지 않는다.
+- **재현** `OutboxPendingQueryTest#aLockedEarlierEventKeepsTheLaterEventOutOfTheReleasedBatch`: 다른 스레드의 트랜잭션이 `lockByEventId`로 앞 행을 쥔 상태에서 `lockPendingBatch`가 같은 키의 **뒤 행만** 잡는 것을 단언한다(조회만으로는 순서가 깨지는 상태).
+- **수정** 릴레이가 잠근 배치에 대해 같은 키의 미발행 행 위치를 한 번 더 읽고(`findUnsentPositions`), 앞의 미발행 행이 모두 같은 배치에 있는 행만 보낸다(`KeyOrderGuard`). 걸러진 행은 `PENDING` 그대로 다음 폴링에서 다시 판정된다. 같은 테스트가 거른 결과가 비어 있음을 단언하고, `KeyOrderGuardTest`가 규칙을 단위로 지킨다.
+- **알려진 한계(교차 재리뷰 R4, 기각)** 앞 행이 잠긴 키의 뒤 행이 배치 크기(기본 200, Payment 일부 20)만큼 쌓여 있으면 그 회차 배치가 모두 걸러져 다른 키도 그 잠금이 풀릴 때까지 발행되지 않는다. 순서는 깨지지 않고 잠금이 풀리면 스스로 회복한다. 지금 앞 행을 잠그는 주체는 짧은 운영 재발행 트랜잭션뿐이고 한 주문의 이벤트는 많아야 10개 안팎이라 고치지 않는다. 같은 키 적재량이나 잠금 경로가 늘면 걸러진 키를 빼고 다시 조회하는 방식을 검토한다.
+
+<a id="d-058"></a>
+
+## D-058 Redis Streams 옛 점유자가 다음 연장 전까지 같이 읽어 둔 항목을 처리·확인할 수 있음, 테스트는 이를 타이밍으로 가림
+
+**상태** 수정됨 · **영향** 같은 그룹 인스턴스가 여럿일 때 점유가 넘어간 직후 최대 연장 주기(기한의 1/3, 20초) 동안, 옛 점유자가 이미 읽어 둔 같은 키의 뒤 항목을 새 점유자와 동시에 처리하고 `XACK`할 수 있었다(결정 202 한 번에 하나 위반 가능, 업무 반영은 Inbox가 한 번으로 막음). 테스트는 PR #214 CI `build`에서 `RedisStreamsAdapterIntegrationTest.java:261`(미확인 건수 = 2)로 실패했다([run 44272835972](https://github.com/tlswltjq/esd-platform/actions/runs/44272835972/job/134693466164)), 로컬에서는 통과 · **위치** `RedisStreamsSubscriptions` 처리 반복, `RedisStreamsAdapterIntegrationTest`([PR #212](https://github.com/tlswltjq/esd-platform/pull/212)) · [PR #215](https://github.com/tlswltjq/esd-platform/pull/215) 교차 리뷰 R3
+
+- **원인(제품)** 읽기 스레드는 항목을 처리하기 전·`XACK` 전에 로컬 표시(`held`)만 봤다. 그 표시는 연장 스레드가 다음 주기에 Redis에서 잠금이 바뀐 것을 알아챌 때야 지워진다. 그룹 읽기는 Lua로 점유를 확인했지만(#212 R2) 처리와 확인은 그러지 않았다.
+- **원인(테스트)** 구독을 먼저 시작하고 두 항목을 차례로 보내, 첫 항목만 먼저 읽히는지(미확인 1) 함께 읽히는지(미확인 2)가 실행 타이밍에 달렸다. 또 잠금 기한을 600ms로 줄여 연장 스레드가 알아채기를 고정 대기(700·800ms)로 기다렸다.
+- **수정** 세 시점에 Redis에서 점유를 확인한다. (1) 항목 처리 직전(`RENEW` Lua, 연장 겸): 잃었으면 그 항목을 처리하지 않는다. (2) 처리 실패 뒤 재시도 직전·격리 보관 직전(이미 멈춘 키의 보관 포함)·보관 실패로 붙잡고 기다린 뒤 다시 들어가기 직전(`InPlaceDelivery.deliver(…, stillMine)`·`deliverHolding`): 잃었으면 재시도도 보관도 다시 처리도 하지 않고 멈춘다. (3) `XACK`(`FENCED_ACK` Lua): 잃었으면 확인하지 않는다 — 새 점유자가 미확인 목록에서 다시 처리한다. **이미 시작한 핸들러 실행 한 번은 끝까지 간다**(그 도중 점유가 넘어가면 새 점유자와 겹칠 수 있고, 업무 반영은 Inbox가 한 번으로 막는다). 이 한계는 #212에 적은 그대로다.
+- **재현·검증** 잠금 기한은 60초로 두어 연장 스레드가 끼어들지 못하게 하고 발행 시점을 고정했다. 옛 점유자가 실제로 시도했는지는 관측 훅(읽기 거절 횟수 `lostReads()`, 확인 직후 콜백 `onAcknowledged` — 읽기 시작 전에 건다)으로 기다린다.
+  - `afterLosingTheLeaseTheFormerOwnerNeitherAcknowledgesNorProcessesWhatItAlreadyRead`: 함께 읽은 뒤 첫 항목 처리 중 점유를 뺏김 → 확인하지 않아 미확인 2, 뒤 항목 미처리 → 다시 점유하면 앞·앞·뒤 순서.
+  - `theOwnershipIsCheckedBeforeEveryEntryNotOnlyWhenTheBatchIsRead`: 첫 항목을 확인한 직후 점유를 뺏김 → 같이 읽어 둔 둘째 항목을 처리하지 않음(미확인 1) — (1)을 직접 본다.
+  - `afterLosingTheLeaseTheFormerOwnerDoesNotTakeNewEntriesFromTheGroup`: 쉬는 동안 점유를 뺏긴 뒤 새 항목 → 읽기 거절(`lostReads` ≥ 1)을 기다린 뒤 미확인 0·미처리.
+  - `InPlaceDeliveryTest`: 재시도 도중·보관 직전·멈춘 키 보관 직전·보관 실패 뒤 다시 들어가기 직전에 점유를 잃으면 멈춤 — (2)를 본다.
+  - 로컬 3회 반복: Redis Streams 9/9, RabbitMQ 6/6, 브로커 없음 6/6 통과(공용 `InPlaceDelivery` 변경).
 
 ---
 

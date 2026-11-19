@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
+import com.stove.payment.core.domain.PgCancellationRejection;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.RefundCancellationClaim;
 import com.stove.payment.core.domain.RefundCancellationHold;
@@ -76,16 +77,42 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
         assertThat(list.status()).isEqualTo(200); assertThat(list.cacheControl()).isEqualTo("no-store");
         assertThat(list.data().path("totalElements").asInt()).isEqualTo(2);
         assertThat(list.data().path("content").get(0).path("holdId").asText()).isEqualTo(first.hold().getHoldId());
+        assertThat(list.data().path("content").get(0).path("rejectionTypePreview").isNull()).isTrue();
+        assertThat(list.data().path("content").get(0).path("rejectionTypeLength").isNull()).isTrue();
         assertThat(http("GET", ROOT + "?size=1&page=1", null, admin()).data().path("content").get(0).path("holdId").asText()).isEqualTo(second.hold().getHoldId());
         Response detail = detail(second);
         assertThat(detail.status()).isEqualTo(200); assertThat(detail.cacheControl()).isEqualTo("no-store");
         assertThat(detail.data().path("reason").asText()).isEqualTo("PG_REQUEST_INVALID");
+        assertThat(detail.data().path("rejectionStatus").isNull()).isTrue(); assertThat(detail.data().path("rejectionType").isNull()).isTrue();
         assertThat(detail.data().path("current").asBoolean()).isTrue(); assertThat(detail.data().path("resumable").asBoolean()).isTrue();
         assertThat(detail.data().path("resumeDeadlineAt").asText()).isEqualTo(BASE.plusSeconds(10800).toString());
         assertThat(detail.data().path("amount").asLong()).isEqualTo(second.execution().getAmount());
         for (String hidden : List.of("cancellationRequestBody", "claimId", "buyerSubject", "apiSecret", "idempotencyKey"))
             assertThat(detail.data().has(hidden)).as(hidden).isFalse();
         assertThat(snapshot()).isEqualTo(before);
+    }
+
+    /** Decision 133: a formal rejection is listed and detailed like the other holds, with its response status and error type. */
+    @Test void aFormalRejectionHoldShowsItsStatusAndTypeInTheListAndDetailAndIsResumable() {
+        // Decision 133 sets no format or length on the type: the received value is stored and shown whole (PR #168 R1).
+        String type = "결제_불가: " + "가".repeat(300); // non-ASCII so the length is in characters, not UTF-8 bytes
+        Fixture fixture = held(false, new PgCancellationRejection(409, type));
+        Response list = http("GET", ROOT, null, admin());
+        assertThat(list.status()).isEqualTo(200);
+        JsonNode listed = list.data().path("content").get(0);
+        assertThat(listed.path("holdId").asText()).isEqualTo(fixture.hold().getHoldId());
+        assertThat(listed.path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
+        // PR #168 R5: the list carries only a bounded preview and the original length; the full type is in the detail.
+        assertThat(listed.path("rejectionStatus").asInt()).isEqualTo(409); assertThat(listed.has("rejectionType")).isFalse();
+        assertThat(listed.path("rejectionTypePreview").asText()).isEqualTo(type.substring(0, 200));
+        assertThat(listed.path("rejectionTypeLength").asLong()).isEqualTo(type.length());
+        Response detail = detail(fixture);
+        assertThat(detail.data().path("reason").asText()).isEqualTo("PG_REQUEST_REJECTED");
+        assertThat(detail.data().path("rejectionStatus").asInt()).isEqualTo(409);
+        assertThat(detail.data().path("rejectionType").asText()).isEqualTo(type);
+        assertThat(detail.data().path("resumable").asBoolean()).isTrue();
+        assertThat(resume(fixture, id()).status()).isEqualTo(200);
+        assertThat(stored(fixture).getActiveCancellationHoldId()).isNull();
     }
 
     @Test void administratorResumeStoresJwtAuditAndOneReceiptWithoutCreatingANewExecutionOrOutbox() {
@@ -239,7 +266,8 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
         before = snapshot(); assertThat(resume(second, command).status()).isEqualTo(409); assertThat(snapshot()).isEqualTo(before);
     }
 
-    private Fixture held(boolean invalid) {
+    private Fixture held(boolean invalid) { return held(invalid, null); }
+    private Fixture held(boolean invalid, PgCancellationRejection rejection) {
         when(clock.instant()).thenReturn(BASE);
         Payment paid = Payment.receive(request(), "PORTONE_TEST");
         paid.confirm(new PgResult("PORTONE_TEST", paid.getPaymentId(), paid.getOrderNo(), paid.getAmount(), "KRW", "pg-" + id(),
@@ -249,7 +277,9 @@ class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBa
             RefundExecution locked = executions.lockByAttemptId(received.getAttemptId()).orElseThrow();
             locked.prepareCancellation(BASE); locked.freezeCancellationBody("{\"amount\":10000,\"currentCancellableAmount\":10000,\"reason\":\"review\"}");
             RefundCancellationClaim claim = locked.getCancellationSchedule().claim(id(), BASE, Duration.ofSeconds(231), false);
-            RefundCancellationHold observation = invalid ? RefundCancellationHold.invalidRequest(locked.getAttemptId(), claim, BASE.plusSeconds(1), true)
+            RefundCancellationHold observation = rejection != null
+                    ? RefundCancellationHold.rejected(locked.getAttemptId(), claim, BASE.plusSeconds(1), true, rejection)
+                    : invalid ? RefundCancellationHold.invalidRequest(locked.getAttemptId(), claim, BASE.plusSeconds(1), true)
                     : RefundCancellationHold.forbidden(locked.getAttemptId(), claim, BASE.plusSeconds(1), true);
             holds.saveAndFlush(observation); locked.holdCancellation(observation.getHoldId(), claim); executions.flush(); return observation;
         });

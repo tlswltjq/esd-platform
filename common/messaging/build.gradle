@@ -11,6 +11,12 @@ dependencies {
     // 구현(브리지)과 수집기는 앱이 고른다 — 라이브러리는 OpenTelemetry 를 강제하지 않는다.
     // 없으면 추적 없이 그대로 돈다(TraceContextCapture.DISABLED).
     api 'io.micrometer:micrometer-tracing'
+    // 결정 203 비교 대상 RabbitMQ adapter. stove.messaging.broker=rabbitmq 일 때만 연결·구독을 만든다
+    // (그 밖에서는 MessagingBrokerEnvironment 가 상태 검사를 끄고, 연결은 쓰기 전까지 열리지 않는다).
+    implementation 'org.springframework.amqp:spring-rabbit'
+    // 결정 203 비교 대상 Redis Streams adapter. 스프링 부트 Redis 자동 구성(spring-data-redis)을 끌어오지 않게
+    // Lettuce 만 쓰고, stove.messaging.broker=redis-streams 일 때만 클라이언트를 만든다.
+    implementation 'io.lettuce:lettuce-core'
 
     // 운영 API(ops)는 HTTP 어댑터라 spring-web 이 필요하다. 다만 이 모듈이 웹을 **요구**하지는 않는다 —
     // 배치 전용 서비스가 생기면 컨트롤러 없이 Outbox 만 쓰면 된다.

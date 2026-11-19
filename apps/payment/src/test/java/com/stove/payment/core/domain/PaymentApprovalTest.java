@@ -121,6 +121,26 @@ class PaymentApprovalTest {
         assertThat(rejected.holdAfterConfirmWindow(ready, window)).isFalse();
         assertThat(rejected.getLastErrorCode()).isEqualTo("PG_REQUEST_REJECTED");
     }
+    /** D-049: a failed lookup past the window holds from the last valid PENDING/READY observation, and never without one. */
+    @Test void aFailedLookupPastTheConfirmWindowHoldsFromTheLastValidObservationOnly() {
+        PaymentApproval unobserved = approval(); unobserved.admit(receipt(unobserved));
+        Instant prepared = at.plusSeconds(2); unobserved.prepare(prepared);
+        Instant window = prepared.plus(PaymentApproval.CONFIRM_WINDOW);
+        assertThat(unobserved.holdAfterConfirmWindowWithoutLookup(window.plusSeconds(60))).isFalse();
+        assertThat(unobserved.getStatus()).isEqualTo(PaymentApprovalStatus.ADMITTED);
+        PaymentApproval approval = approval(); approval.admit(receipt(approval)); approval.prepare(prepared);
+        approval.recordObservation(new ApprovalObservation(ApprovalObservation.State.PENDING, null, null), prepared);
+        approval.recordInspectionFailure("UNAVAILABLE", window.minusSeconds(5));
+        assertThat(approval.holdAfterConfirmWindowWithoutLookup(window.minusNanos(1000))).isFalse();
+        assertThat(approval.holdAfterConfirmWindowWithoutLookup(window)).isTrue();
+        assertThat(approval.getStatus()).isEqualTo(PaymentApprovalStatus.REVIEW_REQUIRED);
+        assertThat(approval.getLastErrorCode()).isEqualTo("CONFIRM_WINDOW_EXPIRED"); assertThat(approval.getReviewStartedAt()).isEqualTo(window);
+        assertThat(approval.getLatestPgState()).isEqualTo(ApprovalObservation.State.PENDING);
+        assertThat(approval.holdAfterConfirmWindowWithoutLookup(window.plusSeconds(60))).isFalse();
+        PaymentApproval failed = approval(); failed.admit(receipt(failed)); failed.prepare(prepared);
+        failed.recordObservation(new ApprovalObservation(ApprovalObservation.State.FAILED, null, prepared), prepared);
+        assertThat(failed.holdAfterConfirmWindowWithoutLookup(window)).isFalse();
+    }
     @Test void aLaterInvalidLookupCannotHideAnObservedUnadmittedPayment() {
         PaymentApproval approval = approval();
         approval.stopPosts("PG_INVALID_EVIDENCE");

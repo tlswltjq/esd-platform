@@ -87,7 +87,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 3. THE Payment SHALL Order의 승인 진행 영수증을 저장한 뒤에만 확정 송신을 하며, 송신 응답 요약만으로 결과를 만들지 않고 다시 조회한다(P3.11-2·P3.11-5).
 4. THE 확정 송신 본문과 토큰 SHALL 암호화해 보관하고 원문을 로그·응답·Order·Kafka에 전달하지 않는다. 재송신은 복호화한 원래 바이트·같은 멱등 키만 쓴다.
 5. WHEN 확정 송신 응답이 유실되면 THEN Payment SHALL 그 시도에 기록한 `confirmDeadline` 전까지 같은 시도 ID·멱등 키·본문으로 재송신하며 조회를 병행하고, 재시작·lease 재획득으로 준비 시각·기한을 다시 정하지 않는다(결정 33·124, (1회차 지적 B7, 판정 전)).
-6. WHEN `confirmDeadline`에 이르면 THEN Payment SHALL 확정 송신을 멈추고 조회만 이어가며, 시간만으로 실패·새 키·새 결제를 만들지 않는다. 그 뒤 접수된 시도의 조회가 PG `PENDING`·`READY`이면 조회 직후 `CONFIRM_WINDOW_EXPIRED`로 보류하고, 늦은 `PAID`·`FAILED`는 원래 주문으로 끝낸다([결정 124](../../../docs/decisions.md#confirm-window-expired-hold), P3.13-5).
+6. WHEN `confirmDeadline`에 이르면 THEN Payment SHALL 확정 송신을 멈추고 조회만 이어가며, 시간만으로 실패·새 키·새 결제를 만들지 않는다. 그 뒤 접수된 시도의 조회가 PG `PENDING`·`READY`이면 조회 직후 `CONFIRM_WINDOW_EXPIRED`로 보류한다. 조회 자체가 장애로 실패한 회차에는 마지막 유효 관측(R12.7)이 `PENDING`·`READY`일 때 같은 사유로 보류하고, 유효 관측이 없으면 바꾸지 않는다([D-049](../../../docs/defects.md#d-049)). 늦은 `PAID`·`FAILED`는 원래 주문으로 끝낸다([결정 124](../../../docs/decisions.md#confirm-window-expired-hold), P3.13-5).
 7. THE Payment SHALL PG `PAID`만 결과로 확정하고 그 밖의 관측은 미확정(재조회 예약)으로 둔다.
 8. WHEN 구매자가 `GET /api/v1/payments/{orderNo}/checkout`을 요청하면 THEN Payment SHALL 본인·결제 `PENDING`일 때만 공개 결제창 설정을 `no-store`로 돌려준다. 그 주문의 `OrderExpired`를 받았으면 409 `ORDER_EXPIRED`, 결제가 끝 상태면 409, 진행 중 시도가 있으면 409 `APPROVAL_IN_PROGRESS`(R14.6), 타인·없는 결제는 404다. Payment는 자기 시계를 주문 시각·`expiresAt`과 비교해 거절하지 않는다(P3.10-2, 결정 169).
 9. THE 확정 송신 본문 SHALL 시도·금액·통화를 고정하고, PG 조회로 원구매·금액·통화·공급자 시도 ID를 대조한다. `READY`·`FAILED` 응답의 금액 값으로 성공을 추정하지 않는다.

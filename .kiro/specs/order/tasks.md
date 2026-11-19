@@ -152,7 +152,7 @@
   - 영향: 운영에서 스위치를 잘못 끄면 만료·`OrderExpired`가 멈춘다.
   - 재현: 설정 없이 기동 실패 테스트.
 - [ ] **T20·T31·T25(Order 몫) — 영구 실패 분류·건너뛴 타입 지표·헤더 시각**
-  - 어디서: `order:config/RefundKafkaConfiguration.java:20`(환불 팩토리만 재시도 제외), 리스너의 `return`(`RefundSuspensionEventListener.java:27` 등), `order:core/service/ApplyApprovalCorrection.java:50-51`.
+  - 어디서: 환불 리스너의 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)`(환불 리스너만 재시도 제외), 리스너의 `return`(`RefundSuspensionEventListener.java:27` 등), `order:core/service/ApplyApprovalCorrection.java:50-51`.
   - 목표: 공통 영구 실패 예외로 통일, (그룹, 타입) 건너뜀 지표, 헤더 `occurredAt` = 본문.
   - 영향: 계약 위반 한 건이 같은 키를 7초 이상 막음.
   - 재현: 플랫폼 T20·T31·T25 재현을 Order 그룹에.

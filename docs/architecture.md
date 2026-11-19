@@ -55,6 +55,8 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 
 같은 키의 정상 흐름에서는 릴레이와 Kafka 파티션이 순서를 지킨다. DEAD 회수·DLT 재투입은 로그 뒤에 새로 보내므로 원래 업무 순서를 복원하지 않는다. 릴레이 인스턴스 수 등의 조건은 [이벤트 순서](event-ordering.md), 관련 위험은 [R2](#r2)·[R13](#r13)을 따른다.
 
+업무 코드는 메시징 기술을 직접 쓰지 않는다. 수신은 `common:event`의 `@EventSubscriber`·`EventHandler`·`InboundMessage`, 발행은 `MessagePublisher`·`OutboundMessage` 포트로 하고([결정 202](decisions.md#messaging-port-key-ordering)), 기술은 `stove.messaging.broker`로 고른다: `kafka`(기본, `common:kafka`), `rabbitmq`(키 해시 큐·단일 활성 소비자), `redis-streams`(키 해시 스트림·스트림별 점유), `direct`(브로커 없음, 소비자가 발행 모듈 `outbox_event`를 읽음)([결정 203](decisions.md#messaging-comparison-targets)). 어느 기술이든 같은 키는 같은 파티션·큐·스트림으로 가고 한 곳에서 차례로 처리하며, 실패는 제자리 재시도 뒤 소비 모듈 DB `consumer_quarantine`에 보관하고 그 키를 멈춘다(재투입은 `/api/v1/ops/quarantine/replay`, [결정 206](decisions.md#messaging-port-scope-quarantine)). DB가 없는 Store만 Kafka DLT를 쓴다. 기술별 측정과 구현 차이는 [E12](experiments.md#messaging-comparison).
+
 ## 결제·지급·환불의 경계
 
 Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.

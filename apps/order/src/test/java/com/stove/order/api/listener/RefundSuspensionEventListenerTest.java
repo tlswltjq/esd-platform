@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.stove.common.kafka.KafkaInboundMessages;
 import com.stove.common.kafka.EventEnvelope;
 import com.stove.common.kafka.EventHeaders;
 import com.stove.common.kafka.contract.EventType;
@@ -35,7 +36,7 @@ class RefundSuspensionEventListenerTest {
     @Test void mapsAValidCompletionToInternalInput() throws Exception {
         LicenseSuspendedEvent event = event();
 
-        listener.receive(record(event, event.eventType(), mapper.writeValueAsString(event)));
+        listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), mapper.writeValueAsString(event))));
 
         verify(apply).execute(new LicenseSuspensionConfirmation(event.eventId(), event.occurredAt(), event.requestEventId(),
                 event.refundId(), event.licenseId(), event.orderNo(), event.buyerSubject(), event.productId(),
@@ -63,7 +64,7 @@ class RefundSuspensionEventListenerTest {
         ObjectNode body = mapper.valueToTree(event);
         body.putNull(field);
 
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), body.toString())))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), body.toString()))))
                 .isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }
@@ -76,30 +77,30 @@ class RefundSuspensionEventListenerTest {
         else if (field.equals("occurredAt")) body.put(field, "2026-10-26T01:00:00.123456001Z");
         else body.put(field, " ");
 
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), body.toString())))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), body.toString()))))
                 .isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }
 
     @Test void malformedJsonAndMissingHeadersAreClassifiedForQuarantine() {
         LicenseSuspendedEvent event = event();
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), "{")))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), "{"))))
                 .isInstanceOf(RefundCompletionRejected.class);
-        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.LICENSE, 0, 0, event.orderNo(), "{}")))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.LICENSE, 0, 0, event.orderNo(), "{}"))))
                 .isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }
 
     @Test void unrelatedEventsDoNotInvokeTheRefundService() {
         LicenseSuspendedEvent event = event();
-        listener.receive(record(event, EventType.LICENSE_GRANTED, "{}"));
+        listener.receive(KafkaInboundMessages.from(record(event, EventType.LICENSE_GRANTED, "{}")));
         verifyNoInteractions(apply);
     }
 
     @Test void aFailureInsideTheServiceIsNotMisclassifiedAsMalformedInput() throws Exception {
         LicenseSuspendedEvent event = event();
         doThrow(new IllegalStateException("outbox insert unavailable")).when(apply).execute(any(LicenseSuspensionConfirmation.class));
-        assertThatThrownBy(() -> listener.receive(record(event, event.eventType(), mapper.writeValueAsString(event))))
+        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, event.eventType(), mapper.writeValueAsString(event)))))
                 .isExactlyInstanceOf(IllegalStateException.class).hasMessage("outbox insert unavailable");
     }
 

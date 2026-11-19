@@ -1,5 +1,6 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
 # - PR·main push: 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build, 이후 결정 번호·기준 판 보존 검사(빌드 실패와 무관)
+#   결정 207: PR은 바뀐 범위만 빌드한다(tools/ci/build_scope.py). main push는 항상 전체.
 # - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정과 승인 보류 종결·실패 시도 재결제·30분 안 재진입 여정,
 #   주문 기한(30분)을 넘기는 승인 여정(31분 대기, 별도 작업) (실제 PortOne·비밀 값 없음)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
@@ -52,8 +53,14 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Docker
         run: docker version --format 'server {{.Server.Version}} api {{.Server.APIVersion}}'
+      # 결정 207: PR은 바뀐 범위만 빌드한다(문서만 → Gradle 생략, 한 앱 안만 → 그 앱, 그 밖 → 전체).
+      # 작업 자체는 늘 돌아 필수 검사 이름이 그대로 보고된다(결정 107). main push는 항상 전체.
+      - name: Build scope
+        id: scope
+        run: python3 -I -B tools/ci/build_scope.py --event "${{ github.event_name }}" --base HEAD^1 >> "$GITHUB_OUTPUT"
       - name: Build
-        run: ./gradlew build --continue --console=plain
+        if: steps.scope.outputs.tasks != ''
+        run: ./gradlew ${{ steps.scope.outputs.tasks }} --continue --console=plain
       - name: Check decision numbers
         if: ${{ !cancelled() }}
         run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1

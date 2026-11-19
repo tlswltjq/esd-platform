@@ -75,6 +75,17 @@ public final class CommonLibraryRules {
             .because("인증·영속성 지원은 HTTP 응답 계약을 실행 의존성으로 요구하지 않는다")
             .allowEmptyShould(true);
 
+    /**
+     * 수신 포트는 브로커를 모른다(결정 202). 업무 리스너가 의존하는 유일한 메시징 타입이라,
+     * 여기에 브로커 타입이 섞이면 브로커를 바꿀 때 리스너도 바뀐다.
+     */
+    @ArchTest
+    public static final ArchRule 수신_포트는_브로커를_모른다 = classes()
+            .that().resideInAPackage("com.stove.common.event..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "com.stove.common.event..")
+            .because("브로커 연동은 adapter(common:kafka 등)의 관심사다")
+            .allowEmptyShould(true);
+
     @ArchTest
     public static final ArchRule 카프카는_JPA와_Outbox를_모른다 = noClasses()
             .that().resideInAPackage("com.stove.common.kafka..")

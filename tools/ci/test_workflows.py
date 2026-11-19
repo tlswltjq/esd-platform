@@ -85,5 +85,48 @@ class DraftSkipContractTest(unittest.TestCase):
                          self.mutate(CONCURRENCY_GROUP, 'ci-${{ github.ref }}'))
 
 
+class BuildScopeWiringTest(unittest.TestCase):
+    """결정 207: 범위 판단 단계(id scope)의 출력으로만 Gradle 태스크를 고른다. 연결이 끊기면 잡는다(PR #208 R3)."""
+
+    PRODUCER = ('      - name: Build scope\n'
+                '        id: scope\n'
+                '        run: python3 -I -B tools/ci/build_scope.py --event "${{ github.event_name }}" --base HEAD^1'
+                ' >> "$GITHUB_OUTPUT"\n')
+    CONSUMER = ("      - name: Build\n"
+                "        if: steps.scope.outputs.tasks != ''\n"
+                "        run: ./gradlew ${{ steps.scope.outputs.tasks }} --continue --console=plain\n")
+
+    def setUp(self):
+        self.text = CI.read_text(encoding='utf-8')
+
+    def problems(self, text):
+        build = re.search(r'^  build:\n((?:(?:    .*)?\n)+)', text, re.M)
+        body = '' if build is None else build.group(1)
+        found = []
+        if self.PRODUCER not in body:
+            found.append('build 작업에 id scope 범위 판단 단계가 없다')
+        if self.CONSUMER not in body:
+            found.append('Build 단계가 steps.scope.outputs.tasks 로 돌지 않는다')
+        elif body.index(self.CONSUMER) < body.index(self.PRODUCER) if self.PRODUCER in body else False:
+            found.append('Build 단계가 범위 판단보다 앞에 있다')
+        if 'run: ./gradlew build --continue --console=plain' in body:
+            found.append('무조건 전체 빌드가 남아 있다')
+        return found
+
+    def test_build_runs_the_tasks_chosen_by_the_scope_step(self):
+        self.assertEqual([], self.problems(self.text))
+
+    def test_removing_or_renaming_the_scope_step_id_is_caught(self):
+        for replacement in ['', '        id: range\n']:
+            mutant = self.text.replace('        id: scope\n', replacement, 1)
+            self.assertNotEqual(self.text, mutant)
+            self.assertIn('build 작업에 id scope 범위 판단 단계가 없다', self.problems(mutant))
+
+    def test_going_back_to_an_unconditional_full_build_is_caught(self):
+        mutant = self.text.replace(self.CONSUMER, '      - name: Build\n        run: ./gradlew build --continue --console=plain\n', 1)
+        self.assertNotEqual(self.text, mutant)
+        self.assertIn('Build 단계가 steps.scope.outputs.tasks 로 돌지 않는다', self.problems(mutant))
+
+
 if __name__ == '__main__':
     unittest.main()

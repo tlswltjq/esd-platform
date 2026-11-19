@@ -20,10 +20,12 @@ CREATE TABLE outbox_event
     last_error      VARCHAR(500) NULL,
     created_at      DATETIME(6)  NOT NULL,
     sent_at         DATETIME(6)  NULL,
+    published_at    DATETIME(6)  NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_outbox_event_id (event_id),
     KEY idx_outbox_status (status, id),
-    KEY idx_outbox_pending (status, next_attempt_at, id)
+    KEY idx_outbox_pending (status, next_attempt_at, id),
+    KEY idx_outbox_key_order (partition_key, id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 

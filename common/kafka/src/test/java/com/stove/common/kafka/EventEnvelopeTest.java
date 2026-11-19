@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stove.common.event.InboundMessage;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.OrderLine;
@@ -23,7 +24,8 @@ class EventEnvelopeTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    private static ConsumerRecord<String, String> record(String payload, String eventId, String eventType) {
+    /** Kafka adapter 가 만드는 그대로의 수신 메시지(위치 정보 포함). */
+    private static InboundMessage record(String payload, String eventId, String eventType) {
         ConsumerRecord<String, String> record =
                 new ConsumerRecord<>(Topics.PAYMENT, 0, 0L, "ORD-1", payload);
         if (eventId != null) {
@@ -32,7 +34,7 @@ class EventEnvelopeTest {
         if (eventType != null) {
             record.headers().add(EventHeaders.EVENT_TYPE, eventType.getBytes(StandardCharsets.UTF_8));
         }
-        return record;
+        return KafkaInboundMessages.from(record);
     }
 
     private static String paymentCompletedJson() throws Exception {
@@ -43,7 +45,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("헤더에서 eventId 와 eventType 을 꺼낸다 — body 파싱 없이 라우팅한다")
     void extractsHeaders() throws Exception {
-        ConsumerRecord<String, String> record =
+        InboundMessage record =
                 record(paymentCompletedJson(), "EVT-1", EventType.PAYMENT_COMPLETED);
 
         EventEnvelope envelope = EventEnvelope.from(record);
@@ -82,7 +84,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] eventId 없는 레코드는 봉투 단계에서 거부된다")
     void rejectsRecordWithoutEventId() throws Exception {
-        ConsumerRecord<String, String> broken =
+        InboundMessage broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
         // 수정 전에는 null 을 반환해 통과시켰다. 그 null 이 멱등 가드까지 흘러가
@@ -96,7 +98,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] eventType 없는 레코드도 봉투 단계에서 거부된다")
     void rejectsRecordWithoutEventType() throws Exception {
-        ConsumerRecord<String, String> broken = record(paymentCompletedJson(), "EVT-1", null);
+        InboundMessage broken = record(paymentCompletedJson(), "EVT-1", null);
 
         // eventType 이 null 이면 isType() 이 전부 false 라 리스너가 조용히 아무것도 안 한다.
         // 이벤트가 유실됐는데 로그에도 흔적이 남지 않는 쪽이 더 나쁘다.
@@ -108,7 +110,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] 거부 메시지에 레코드 위치가 담긴다 — 어느 메시지인지 찾을 수 있어야 한다")
     void rejectionMessageLocatesTheRecord() throws Exception {
-        ConsumerRecord<String, String> broken =
+        InboundMessage broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
         assertThatThrownBy(() -> EventEnvelope.from(broken))

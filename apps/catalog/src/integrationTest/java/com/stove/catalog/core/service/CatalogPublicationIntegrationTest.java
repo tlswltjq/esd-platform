@@ -34,7 +34,6 @@ import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
@@ -42,8 +41,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
@@ -442,30 +439,19 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Test
     void invalidKafkaContractGoesToDltAndOriginalEventCanBeReplayedAfterRepair() throws Exception {
         ProjectReleaseRequestedEvent e = event(id(), 1);
-        HashMap<String, Object> config = new HashMap<String, Object>();
-        config.put(
-                "bootstrap.servers",
-                kafka.getProducerFactory().getConfigurationProperties().get("bootstrap.servers"));
-        config.put("group.id", "catalog-dlt-check-" + id());
-        config.put("auto.offset.reset", "earliest");
-        config.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        config.put(
-                "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        try (KafkaConsumer<String, String> consumer =
-                new KafkaConsumer<String, String>(config)) {
-            consumer.subscribe(List.of(Topics.STUDIO + ".DLT"));
+        try {
             listeners.start();
             ProducerRecord<String, String> bad = new ProducerRecord<String, String>(Topics.STUDIO, "wrong-key", json(e));
             bad.headers().add(EventHeaders.EVENT_ID, e.eventId().getBytes(StandardCharsets.UTF_8));
             bad.headers()
                     .add(EventHeaders.EVENT_TYPE, e.eventType().getBytes(StandardCharsets.UTF_8));
             kafka.send(bad).get(10, TimeUnit.SECONDS);
-            boolean received = false;
-            long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
-            while (!received && System.nanoTime() < deadline)
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500)))
-                    if (record.value().contains(e.eventId())) received = true;
-            assertThat(received).isTrue();
+            // 결정 206: 키가 틀린 메시지는 Catalog DB 의 격리 표에 그 (틀린) 키로 남는다. 올바른 키는 멈추지 않는다.
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(40))
+                    .untilAsserted(() -> assertThat(jdbc.queryForObject(
+                            "SELECT COUNT(*) FROM consumer_quarantine WHERE event_id=? AND partition_key='wrong-key' AND status='HELD'",
+                            Integer.class, e.eventId())).isEqualTo(1));
             assertThat(releases.findById(e.releaseRequestId())).isEmpty();
             assertThat(count("processed_event", "event_id", e.eventId())).isZero();
             ProducerRecord<String, String> repaired =

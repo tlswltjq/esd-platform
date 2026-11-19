@@ -1,10 +1,33 @@
 # 로드맵 — 기능 일반화와 이후 고도화
 
 **목표 (2026-10-29 사용자 결정):** MVP 상태의 전 기능을 일반적인 사용 수준으로 고도화한 뒤, 엣지 케이스·성능 관점으로 추가 고도화한다.
+**범위 동결 (2026-11-16, [결정 201](decisions.md#scope-freeze-verified-journeys)):** 지금 검증된 여정까지를 "기본 기능 완료"로 동결하고, 다음 단계는 메시징 분리·비교(M)다. 아래 G1~G7의 남은 항목은 동결 뒤 백로그다(0절).
 모듈별 남은 작업은 각 `.kiro/specs/<모듈>/tasks.md`, 단계별 검증 결과는 [근거 색인](evidence.md), 정책 선택은 [결정 기록](decisions.md)과 [판단 색인](judgment-index.md)을 따른다.
 이 문서는 단계의 정의·순서·완료 조건만 다룬다. 진행 경위는 적지 않는다.
 
 원문(2026-11-06까지의 날짜별 진행 기록 포함): [platform-generalization-plan.md](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md)
+
+<a id="scope-freeze"></a>
+## 0. 범위 동결과 다음 단계 ([결정 201](decisions.md#scope-freeze-verified-journeys))
+
+**기본 기능 완료 기준:** 아래 여정이 격리 실제 스택에서 재현되고, 매일 밤 CI가 회귀를 확인한다. 이 여정이 다음 단계(M)의 회귀 기준선이다.
+
+| 여정 | 확인 경로 |
+|---|---|
+| 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `verify-gateway-ownership.py` |
+| 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `verify-g4-operations.py` |
+| 구매→지급→다운로드 | 야간 `stack E2E (verify-jib.py)` |
+| 결제 실패·이탈→재진입·종료 | G1, 야간 `fake PortOne approval expiry` (`verify-approval-journeys.py`·`verify-expiry-journeys.py`) |
+| 자동·수동 환불, 확정 실패→복구 | G2(PR #116), 야간 `fake PortOne refund settlement` (`verify-refund-settlement.py`) |
+
+**동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`. 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. 백로그 항목은 M에 필요할 때만 꺼낸다.
+
+**다음 단계 M — 메시징 분리·비교:**
+1. 브로커 결합 분리: 시스템이 요구하는 전달 보장(최소 1회, 소비자 그룹 팬아웃, 재시도 후 격리, 같은 키의 발행 순서대로 한 번에 하나씩 전달 — [결정 202](decisions.md#messaging-port-key-ordering))을 포트 계약으로 정의하고, Kafka 구현을 `adapter`로 옮긴다. 기본 기능 여정이 그대로 통과해야 한다.
+2. RabbitMQ·Redis Streams와 "브로커 없음" 기준선을 같은 포트에 붙인다([결정 203](decisions.md#messaging-comparison-targets)). 넷 모두 같은 계약 테스트를 통과해야 잰다.
+3. 비교 실험: 지표와 합격 조건은 [결정 204](decisions.md#messaging-comparison-metrics)를 따른다. 조건과 가설을 측정 전에 고정하고 [실험 기록](experiments.md)의 절차(A→B→A, 조건당 2회)를 따른다. 차이가 없으면 조건을 더 가혹하게 하되 호스트 한계와 구분한다. 결과는 실험 기록에 남긴다.
+
+**M 상태:** 1 완료(포트·Kafka adapter·격리 중립화, PR #205·#207·#209). 2 완료(브로커 없음·RabbitMQ·Redis Streams, PR #210·#211·#212·#215). 3은 평시 부하의 A 업무 완료 시간·B 브로커 구간 지연·G 대조군과 브로커 없음 폴링 주기 비교까지 완료([E12](experiments.md#messaging-comparison)). F 같은 키 순서 위반은 부하로 검사하려 했으나 측정한 구매·환불 흐름에는 같은 그룹이 같은 키를 두 번 받는 경로가 없어 통합 테스트로만 확인했다. 남은 것: C 처리량·확장성, D 장애 수복, E 비용.
 
 ## 1. 단계의 정의
 

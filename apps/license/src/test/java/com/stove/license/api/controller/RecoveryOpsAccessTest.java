@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.stove.common.messaging.quarantine.QuarantineReplay;
+import com.stove.common.messaging.ops.QuarantineOpsController;
 import com.stove.common.kafka.ops.DltOpsController;
 import com.stove.common.kafka.ops.DltOpsService;
 import com.stove.common.messaging.ops.OutboxOpsController;
@@ -37,14 +39,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
-@WebMvcTest({DltOpsController.class, OutboxOpsController.class, OutboxRepublishController.class})
+@WebMvcTest({DltOpsController.class, OutboxOpsController.class, QuarantineOpsController.class, OutboxRepublishController.class})
 @ContextConfiguration(classes = {SecurityConfig.class, CommonSecurityAutoConfiguration.class,
-        DltOpsController.class, OutboxOpsController.class, OutboxRepublishController.class})
+        DltOpsController.class, OutboxOpsController.class, QuarantineOpsController.class, OutboxRepublishController.class})
 class RecoveryOpsAccessTest {
     @Autowired MockMvc mvc;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean DltOpsService dlt;
     @MockitoBean OutboxOpsService outbox;
+    @MockitoBean QuarantineReplay quarantine;
     @MockitoBean OutboxRepublishService republish;
 
     @BeforeEach
@@ -56,13 +59,15 @@ class RecoveryOpsAccessTest {
         });
         when(dlt.peek(anyString(), anyInt())).thenReturn(List.of());
         when(outbox.deadEvents()).thenReturn(List.of());
+        when(quarantine.stoppedKeys()).thenReturn(List.of());
+        when(quarantine.replay(anyString(), anyString(), anyString())).thenReturn(new QuarantineReplay.ReplayResult(0, 0, null));
         when(outbox.requeue(anyString())).thenReturn(true);
         when(republish.republish(eq("event-1"), eq("operator"), anyString())).thenReturn(new OutboxRepublishResponse(
                 "event-1", "LicenseGranted", "order-1", "PENDING", "operator", Instant.EPOCH));
     }
 
     @ParameterizedTest
-    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay",
+    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay", "GET,/api/v1/ops/quarantine", "POST,/api/v1/ops/quarantine/replay",
             "GET,/api/v1/ops/outbox/dead", "POST,/api/v1/ops/outbox/dead/event-1/requeue",
             "POST,/api/v1/ops/outbox/event-1/republish"})
     void adminCanUseExplicitRecoveryOperations(HttpMethod method, String path) throws Exception {
@@ -71,27 +76,27 @@ class RecoveryOpsAccessTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay",
+    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay", "GET,/api/v1/ops/quarantine", "POST,/api/v1/ops/quarantine/replay",
             "GET,/api/v1/ops/outbox/dead", "POST,/api/v1/ops/outbox/dead/event-1/requeue",
             "POST,/api/v1/ops/outbox/event-1/republish"})
     void memberCannotUseRecoveryOperations(HttpMethod method, String path) throws Exception {
         mvc.perform(operation(method, path).header(HttpHeaders.AUTHORIZATION, "Bearer MEMBER"))
                 .andExpect(status().isForbidden());
-        verifyNoInteractions(dlt, outbox, republish);
+        verifyNoInteractions(dlt, quarantine, outbox, republish);
     }
 
     @ParameterizedTest
-    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay",
+    @CsvSource({"GET,/api/v1/ops/dlt", "POST,/api/v1/ops/dlt/replay", "GET,/api/v1/ops/quarantine", "POST,/api/v1/ops/quarantine/replay",
             "GET,/api/v1/ops/outbox/dead", "POST,/api/v1/ops/outbox/dead/event-1/requeue",
             "POST,/api/v1/ops/outbox/event-1/republish"})
     void anonymousCannotUseRecoveryOperations(HttpMethod method, String path) throws Exception {
         mvc.perform(operation(method, path)).andExpect(status().isUnauthorized());
-        verifyNoInteractions(dlt, outbox, republish);
+        verifyNoInteractions(dlt, quarantine, outbox, republish);
     }
 
     private static MockHttpServletRequestBuilder operation(HttpMethod method, String path) {
         return MockMvcRequestBuilders.request(method, path).param("topic", "stove.order.v1.DLT")
-                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"DLT 보존 기간 경과\"}");
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"DLT 보존 기간 경과\",\"consumerGroup\":\"g\",\"topic\":\"t\",\"key\":\"k\"}");
     }
 
     @Test

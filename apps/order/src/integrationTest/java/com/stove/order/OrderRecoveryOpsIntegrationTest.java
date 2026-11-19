@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import static com.stove.order.OrderFixtures.order;
 import static com.stove.order.OrderFixtures.completed;
 import static com.stove.order.OrderFixtures.result;
+import com.stove.common.kafka.KafkaMessagePublisher;
 import com.stove.common.kafka.contract.EventType;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
@@ -115,7 +116,7 @@ class OrderRecoveryOpsIntegrationTest extends OrderIntegrationTestBase {
     }
 
     private OutboxRelay relay(KafkaTemplate<String, String> template) {
-        return new OutboxRelay(rows, template, 200, 1, 1,
+        return new OutboxRelay(rows, new KafkaMessagePublisher(template), 200, 1, 1,
                 new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
     }
 

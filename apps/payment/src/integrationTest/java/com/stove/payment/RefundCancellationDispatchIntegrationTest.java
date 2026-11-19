@@ -104,6 +104,13 @@ import org.springframework.web.client.RestClient;
 
 class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBase {
     private static final Instant BASE = Payment.now();
+    /**
+     * Parser limit for the large-type boundary test. The production limit (20,000,000 characters, 60,000,000 bytes here)
+     * does not fit the 512 MB test heap next to the cached contexts, so the same boundary is checked at 6,000,000
+     * characters: 18,000,000 UTF-8 bytes, already larger than the MEDIUMTEXT the hold used to have (16,777,215 bytes).
+     */
+    private static final int LARGE_TYPE_LIMIT = 6_000_000;
+    private volatile String largeType;
     @Autowired PaymentRepository payments;
     @Autowired ReceiveRefundExecution receive;
     @Autowired PlatformTransactionManager transactions;
@@ -206,7 +213,10 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
                     if (mode == Mode.DELAYED_INVALID) { responseReady.countDown();
                         if (!releaseResponse.await(20, TimeUnit.SECONDS)) throw new IllegalStateException("invalid reply not released"); }
                 }
-                else if (mode == Mode.UNRECOGNIZED_BAD_REQUEST) { status = 400; reply = "{\"type\":\"OTHER_ERROR\"}"; }
+                else if (mode == Mode.UNRECOGNIZED_BAD_REQUEST) { status = 400; reply = "{\"message\":\"untyped provider detail\"}"; }
+                else if (mode == Mode.FORMAL_REJECTION) { status = 409; reply = "{\"type\":\"PAYMENT_NOT_PAID\",\"message\":\"private-provider-detail\"}"; }
+                else if (mode == Mode.MALFORMED_CONFLICT) { status = 409; reply = "<html>private-provider-detail</html>"; }
+                else if (mode == Mode.LARGEST_REJECTION) { status = 409; reply = "{\"type\":\"" + largeType + "\"}"; }
                 else if (mode == Mode.FORBIDDEN || mode == Mode.FORBIDDEN_LOOKUP_DOWN || mode == Mode.DELAYED_FORBIDDEN) {
                     status = 403; reply = "<html>private-provider-detail</html>";
                     if (mode == Mode.DELAYED_FORBIDDEN) { responseReady.countDown();
@@ -1325,7 +1335,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
         } finally { releaseResponse.countDown(); pool.shutdownNow(); }
     }
 
-    @Test void unrecognized400StaysUnconfirmedWithoutOperatorHold() {
+    @Test void untyped400StaysUnconfirmedWithoutOperatorHold() {
         received(); mode = Mode.UNRECOGNIZED_BAD_REQUEST;
         assertThatThrownBy(() -> service(gateway()).executeFirst(current.getAttemptId())).isExactlyInstanceOf(PgUnavailable.class);
         assertThat(holds.count()).isZero(); assertThat(stored().getActiveCancellationHoldId()).isNull();
@@ -1358,17 +1368,142 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
             String projection = String.join(",", columns);
             migration.update("INSERT INTO refund_execution(" + projection + ") SELECT " + projection + " FROM "
                     + mysql.getDatabaseName() + ".refund_execution WHERE attempt_id=?", current.getAttemptId());
-            migration.update("INSERT INTO refund_cancellation_hold SELECT * FROM " + mysql.getDatabaseName() + ".refund_cancellation_hold WHERE attempt_id=?", current.getAttemptId());
-            List<Map<String, Object>> original = migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id");
+            // Copy only the V24 columns: later migrations (V40) add columns the legacy table does not have yet.
+            String holdColumns = String.join(",", migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=?"
+                    + " AND TABLE_NAME='refund_cancellation_hold' AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema));
+            migration.update("INSERT INTO refund_cancellation_hold(" + holdColumns + ") SELECT " + holdColumns + " FROM " + mysql.getDatabaseName()
+                    + ".refund_cancellation_hold WHERE attempt_id=?", current.getAttemptId());
+            String legacyHolds = "SELECT " + holdColumns + " FROM refund_cancellation_hold ORDER BY id";
+            List<Map<String, Object>> original = migration.queryForList(legacyHolds);
             assertThat(original).hasSize(2);
             Map<String, Object> execution = migration.queryForMap("SELECT * FROM refund_execution");
             Flyway.configure().dataSource(source).locations(location).load().migrate();
-            assertThat(migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id")).isEqualTo(original);
+            assertThat(migration.queryForList(legacyHolds)).isEqualTo(original);
             assertThat(migration.queryForMap("SELECT * FROM refund_execution")).containsAllEntriesOf(execution);
             assertThat(migration.queryForObject("SELECT active_cancel_hold_id FROM refund_execution", String.class)).isEqualTo(active);
             assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='UNKNOWN_REASON' WHERE hold_id=?", active))
                     .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_observation");
-            assertThat(migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id")).isEqualTo(original);
+            assertThat(migration.queryForList(legacyHolds)).isEqualTo(original);
+        } finally { root.execute("DROP DATABASE " + schema); }
+    }
+
+    /** Decision 133: a typed 409 stops automatic POSTs with its status and type, lookup continues, and resume reuses the body. */
+    @Test void aFormalConflictStopsAcrossRecreatedSendersKeepsLookingUpAndResumesWithTheFrozenBody() {
+        received(); mode = Mode.FORMAL_REJECTION; service(gateway()).executeFirst(current.getAttemptId());
+        String frozen = stored().getCancellationRequestBody(); RefundCancellationHold hold = currentHold();
+        assertThat(hold.getReason()).isEqualTo("PG_REQUEST_REJECTED"); assertThat(hold.isActivated()).isTrue();
+        assertThat(hold.getRejectionStatus()).isEqualTo(409); assertThat(hold.getRejectionType()).isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(jdbc.queryForObject("SELECT rejection_type FROM refund_cancellation_hold WHERE hold_id=?", String.class, hold.getHoldId()))
+                .isEqualTo("PAYMENT_NOT_PAID");
+        assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
+        assertThat(stored().getFailureEventId()).isNull(); assertThat(resultEventCount()).isZero();
+        when(clock.instant()).thenReturn(BASE.plusSeconds(60));
+        int previousReads = reads.get(); lookupWorker().execute(); retryWorker().execute();
+        service(gateway()).executeFirst(current.getAttemptId()); service(gateway()).execute(current.getAttemptId());
+        assertThat(reads.get()).isGreaterThan(previousReads); assertThat(bodies).containsExactly(frozen);
+        assertThat(stored().getActiveCancellationHoldId()).isEqualTo(hold.getHoldId());
+        assertThat(stored().getCancellationSchedule().getNextAt()).isNull(); assertThat(stored().getLookupSchedule().getNextAt()).isNotNull();
+        when(clock.instant()).thenReturn(BASE.plusSeconds(70)); resume.execute(resumeCommand(hold));
+        mode = Mode.RETRY_SUCCESS; retryWorker().execute();
+        assertThat(bodies).containsExactly(frozen, frozen); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
+        assertThat(stored().getFirstCancellationPreparedAt()).isEqualTo(BASE);
+    }
+
+    /**
+     * PR #168 R4: a type at the parser limit is stored whole and stops automatic POSTs, and one character more stays an
+     * unconfirmed malformed body. With a column smaller than the parsed type the hold insert failed, no hold was recorded
+     * and the next round would have posted again.
+     */
+    @Test void aRejectionTypeAtTheParserLimitIsStoredWholeAndStopsAutomaticPostsWhileALongerOneStaysUnconfirmed() {
+        received(); largeType = "가".repeat(LARGE_TYPE_LIMIT + 1); mode = Mode.LARGEST_REJECTION;
+        assertThatThrownBy(() -> service(gateway(LARGE_TYPE_LIMIT)).executeFirst(current.getAttemptId())).isExactlyInstanceOf(PgUnavailable.class);
+        assertThat(holds.count()).isZero(); assertThat(stored().getCancellationSchedule().getNextAt()).isNotNull();
+        largeType = largeType.substring(1);
+        when(clock.instant()).thenReturn(BASE.plusSeconds(10)); service(gateway(LARGE_TYPE_LIMIT)).execute(current.getAttemptId());
+        String holdId = stored().getActiveCancellationHoldId();
+        assertThat(holdId).isNotNull(); assertThat(stored().getCancellationSchedule().getNextAt()).isNull();
+        assertThat(jdbc.queryForObject("SELECT CHAR_LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
+                .isEqualTo((long) LARGE_TYPE_LIMIT);
+        assertThat(jdbc.queryForObject("SELECT LENGTH(rejection_type) FROM refund_cancellation_hold WHERE hold_id=?", Long.class, holdId))
+                .isEqualTo(3L * LARGE_TYPE_LIMIT);
+        largeType = null;
+        when(clock.instant()).thenReturn(BASE.plusSeconds(70)); retryWorker().execute();
+        assertThat(bodies).hasSize(2);
+    }
+
+    /** [D-048] A 409 whose body cannot be read is unconfirmed: the same round looks up and the POST is retried, without a hold. */
+    @Test void aMalformedConflictIsUnconfirmedLooksUpInTheSameRoundAndIsRetriedWithoutAHold() {
+        received(); mode = Mode.MALFORMED_CONFLICT; int previousReads = reads.get();
+        assertThatThrownBy(() -> service(gateway()).executeFirst(current.getAttemptId())).isExactlyInstanceOf(PgUnavailable.class);
+        assertThat(reads.get()).isEqualTo(previousReads + 2);
+        assertThat(holds.count()).isZero(); assertThat(stored().getActiveCancellationHoldId()).isNull();
+        assertThat(stored().getCancellationSchedule().getNextAt()).isNotNull();
+        when(clock.instant()).thenReturn(BASE.plusSeconds(10)); mode = Mode.RETRY_SUCCESS; retryWorker().execute();
+        assertThat(bodies).hasSize(2); assertThat(stored().getStatus()).isEqualTo(RefundExecutionStatus.SUCCEEDED);
+    }
+
+    @Tag("migration")
+    @Test void v40MigrationKeepsExistingHoldsWithoutRejectionDetailAndRequiresItOnlyForFormalRejections() {
+        received(); mode = Mode.FORBIDDEN; service(gateway()).executeFirst(current.getAttemptId());
+        when(clock.instant()).thenReturn(BASE.plusSeconds(10)); resume.execute(resumeCommand(currentHold()));
+        mode = Mode.INVALID_REQUEST; retryWorker().execute();
+        String active = currentHold().getHoldId();
+        MySQLContainer<?> mysql = SharedContainers.MYSQL;
+        String schema = "refund_rejection_upgrade_" + id().replace("-", "");
+        String server = "jdbc:mysql://" + mysql.getHost() + ":" + mysql.getMappedPort(3306) + "/";
+        String options = "?useSSL=false&allowPublicKeyRetrieval=true";
+        JdbcTemplate root = new JdbcTemplate(new DriverManagerDataSource(server + mysql.getDatabaseName() + options, "root", mysql.getPassword()));
+        root.execute("CREATE DATABASE " + schema);
+        try {
+            DriverManagerDataSource source = new DriverManagerDataSource(server + schema + options, "root", mysql.getPassword());
+            String location = "filesystem:" + Path.of("src/main/resources/db/migration").toAbsolutePath();
+            Flyway.configure().dataSource(source).locations(location).target("39").load().migrate();
+            JdbcTemplate migration = new JdbcTemplate(source);
+            for (String table : List.of("purchase_payment", "refund_execution", "refund_cancellation_hold")) {
+                String columns = String.join(",", migration.queryForList("SELECT COLUMN_NAME FROM information_schema.COLUMNS"
+                        + " WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND GENERATION_EXPRESSION='' ORDER BY ORDINAL_POSITION", String.class, schema, table));
+                boolean payment = table.equals("purchase_payment");
+                migration.update("INSERT INTO " + table + "(" + columns + ") SELECT " + columns + " FROM " + mysql.getDatabaseName() + "." + table
+                        + (payment ? " WHERE payment_id=?" : " WHERE attempt_id=?"), payment ? current.getPaymentId() : current.getAttemptId());
+            }
+            List<Map<String, Object>> original = migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id");
+            assertThat(original).extracting(row -> row.get("reason")).containsExactly("PG_REQUEST_FORBIDDEN", "PG_REQUEST_INVALID");
+            Map<String, Object> execution = migration.queryForMap("SELECT * FROM refund_execution");
+            Flyway.configure().dataSource(source).locations(location).load().migrate();
+            List<Map<String, Object>> upgraded = migration.queryForList("SELECT * FROM refund_cancellation_hold ORDER BY id");
+            assertThat(upgraded).hasSize(2);
+            for (int row = 0; row < 2; row++)
+                assertThat(upgraded.get(row)).containsAllEntriesOf(original.get(row))
+                        .containsEntry("rejection_status", null).containsEntry("rejection_type", null);
+            assertThat(migration.queryForMap("SELECT * FROM refund_execution")).isEqualTo(execution);
+            assertThat(migration.queryForObject("SELECT active_cancel_hold_id FROM refund_execution", String.class)).isEqualTo(active);
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET rejection_status=409, rejection_type='X' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=429,"
+                    + " rejection_type='TOO_MANY_REQUESTS' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            // A NULL inside the CHECK must not make it UNKNOWN (and so pass): each detail is required on its own.
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=NULL,"
+                    + " rejection_type='PAYMENT_NOT_PAID' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
+                    + " rejection_type=NULL WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
+                    + " rejection_type='' WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_rejection");
+            String received = "payment_not_paid_" + "x".repeat(5000);
+            assertThat(migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=422,"
+                    + " rejection_type=? WHERE hold_id=?", received, active)).isEqualTo(1);
+            assertThat(migration.queryForObject("SELECT rejection_type FROM refund_cancellation_hold WHERE hold_id=?", String.class, active))
+                    .isEqualTo(received);
+            assertThat(migration.update("UPDATE refund_cancellation_hold SET reason='PG_REQUEST_REJECTED', rejection_status=409,"
+                    + " rejection_type='PAYMENT_NOT_PAID' WHERE hold_id=?", active)).isEqualTo(1);
+            assertThatThrownBy(() -> migration.update("UPDATE refund_cancellation_hold SET reason='UNKNOWN_REASON', rejection_status=NULL,"
+                    + " rejection_type=NULL WHERE hold_id=?", active))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_cancel_hold_observation");
         } finally { root.execute("DROP DATABASE " + schema); }
     }
 
@@ -1478,6 +1613,9 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     }
     private RestClient client() { return RestClient.builder().baseUrl("http://127.0.0.1:" + pg.getAddress().getPort()).build(); }
     private PortOneRefundCancellationGateway gateway() { return new PortOneRefundCancellationGateway(client(), STORE, CHANNEL, clock); }
+    private PortOneRefundCancellationGateway gateway(int maxSupplierStringLength) {
+        return new PortOneRefundCancellationGateway(client(), STORE, CHANNEL, clock, maxSupplierStringLength);
+    }
     private RequestRefundCancellation service(RefundCancellationGateway gateway) {
         return service(gateway, client());
     }
@@ -1490,7 +1628,7 @@ class RefundCancellationDispatchIntegrationTest extends PaymentIntegrationTestBa
     private RefundExecution stored() { return executions.findByAttemptId(current.getAttemptId()).orElseThrow(); }
     private int resultEventCount() { return jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE event_type<>'RefundExecutionPrepared'",Integer.class); }
     private int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class); }
-    private enum Mode { COMPLETE, RACE, UNAVAILABLE, COMPLETE_THEN_UNAVAILABLE, DIRECT_SUCCESS, DELAYED_SUCCESS, FAILED_ZERO, FAILED_MANUAL_FULL, FAILED_LOOKUP_DOWN, FAILED_OTHER_PENDING, FAILED_PARTIAL, REQUESTED_THEN_FAILED, RETRY_SUCCESS, RETRY_FAILURE, RETRY_OTHER_PENDING, FORBIDDEN, DELAYED_FORBIDDEN, FORBIDDEN_LOOKUP_DOWN, POST_NOT_FOUND, INVALID_REQUEST, INVALID_LOOKUP_DOWN, DELAYED_INVALID, UNRECOGNIZED_BAD_REQUEST }
+    private enum Mode { COMPLETE, RACE, UNAVAILABLE, COMPLETE_THEN_UNAVAILABLE, DIRECT_SUCCESS, DELAYED_SUCCESS, FAILED_ZERO, FAILED_MANUAL_FULL, FAILED_LOOKUP_DOWN, FAILED_OTHER_PENDING, FAILED_PARTIAL, REQUESTED_THEN_FAILED, RETRY_SUCCESS, RETRY_FAILURE, RETRY_OTHER_PENDING, FORBIDDEN, DELAYED_FORBIDDEN, FORBIDDEN_LOOKUP_DOWN, POST_NOT_FOUND, INVALID_REQUEST, INVALID_LOOKUP_DOWN, DELAYED_INVALID, UNRECOGNIZED_BAD_REQUEST, FORMAL_REJECTION, MALFORMED_CONFLICT, LARGEST_REJECTION }
     private enum AuthenticationGate { NONE, ALL, POST_ONLY, GET_AFTER_POST }
     private enum LookupState { AVAILABLE, NOT_FOUND, NOT_FOUND_AFTER_POST, WRONG_PURCHASE, FORBIDDEN, FORBIDDEN_AFTER_POST }
 }

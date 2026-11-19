@@ -1,6 +1,7 @@
 package com.stove.common.messaging.inbox;
 
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,12 +9,23 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 컨슈머 멱등 가드. <b>비즈니스 처리와 같은 트랜잭션에서 마킹해야 한다</b> —
  * 갈리면 "마킹은 됐는데 처리는 롤백" 된 이벤트가 영구 유실된다.
+ *
+ * <p>이미 처리한 이벤트를 다시 받으면 {@value #DUPLICATES_METRIC}{consumer_group, event_type}을 센다.
+ * 브로커가 얼마나 재전달하는지를 기술마다 비교하는 지표다([결정 204] D 재전달 수).
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ProcessedEventGuard {
 
+    public static final String DUPLICATES_METRIC = "stove.inbox.duplicates";
+
     private final ProcessedEventRepository repository;
+    private final MeterRegistry meterRegistry;
+
+    /** 레지스트리는 조립 쪽(자동 구성·테스트)이 넘긴다(AGENTS.md 3절, PR #204 R3). */
+    public ProcessedEventGuard(ProcessedEventRepository repository, MeterRegistry meterRegistry) {
+        this.repository = repository;
+        this.meterRegistry = meterRegistry;
+    }
 
     /**
      * @return 최초 수신이면 true(계속 처리), 이미 처리한 이벤트면 false(스킵)
@@ -27,6 +39,12 @@ public class ProcessedEventGuard {
         }
         if (repository.existsByEventIdAndConsumerGroup(eventId, consumerGroup)) {
             log.info("중복 이벤트 스킵 eventId={} type={} group={}", eventId, eventType, consumerGroup);
+            Counter.builder(DUPLICATES_METRIC)
+                    .description("이미 처리한 이벤트를 다시 받은 횟수")
+                    .tag("consumer_group", consumerGroup)
+                    .tag("event_type", eventType == null ? "unknown" : eventType)
+                    .register(meterRegistry)
+                    .increment();
             return false;
         }
         repository.save(ProcessedEvent.of(eventId, consumerGroup, eventType));

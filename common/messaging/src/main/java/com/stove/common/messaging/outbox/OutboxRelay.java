@@ -1,18 +1,20 @@
 package com.stove.common.messaging.outbox;
 
+import com.stove.common.event.MessagePublisher;
+import com.stove.common.event.OutboundMessage;
 import com.stove.common.kafka.EventHeaders;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -27,12 +29,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class OutboxRelay {
 
     private final OutboxEventRepository repository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final MessagePublisher publisher;
     private final int batchSize;
     private final int maxRetry;
     private final int maxBatchesPerCycle;
     private final OutboxMetrics metrics;
     private final TransactionTemplate transactionTemplate;
+    /** 마지막으로 찍은 {@code sent_at}. 처음에는 표의 최댓값에서 시작한다(스케줄러 한 스레드에서만 쓴다). */
+    private Instant lastSentAt;
 
     /**
      * 폴링 진입점. <b>비울 게 남아 있는 동안은 다음 폴링을 기다리지 않는다.</b>
@@ -53,7 +57,11 @@ public class OutboxRelay {
     private int relayOneBatch() {
         Integer processed = transactionTemplate.execute(status -> {
             long startedAt = System.nanoTime();
-            List<OutboxEvent> batch = repository.lockPendingBatch(batchSize);
+            List<OutboxEvent> locked = repository.lockPendingBatch(batchSize);
+            if (locked.isEmpty()) {
+                return 0;
+            }
+            List<OutboxEvent> batch = releasableInKeyOrder(locked);
             if (batch.isEmpty()) {
                 return 0;
             }
@@ -64,6 +72,24 @@ public class OutboxRelay {
             return batch.size();
         });
         return processed == null ? 0 : processed;
+    }
+
+    /**
+     * 같은 키의 앞 미발행 행이 이 배치에 없으면(다른 트랜잭션이 잠가 {@code SKIP LOCKED}로 빠짐) 그 키의 뒤 행은
+     * 이번에 보내지 않는다. 걸러진 행은 {@code PENDING} 그대로 다음 폴링에서 다시 판정된다(PR #203 R1).
+     *
+     * <p>알려진 한계(D-057, 재리뷰 R4 기각): 걸러진 키의 뒤 행이 배치를 가득 채우면 그 잠금이 풀릴 때까지
+     * 다른 키도 이 회차에 나가지 못한다. 순서는 지켜지고 잠금이 풀리면 회복한다.
+     */
+    private List<OutboxEvent> releasableInKeyOrder(List<OutboxEvent> locked) {
+        Set<String> keys = new LinkedHashSet<>();
+        long maxId = 0;
+        for (OutboxEvent event : locked) {
+            keys.add(event.getPartitionKey());
+            maxId = Math.max(maxId, event.getId());
+        }
+        List<OutboxKeyPosition> unsent = repository.findUnsentPositions(keys, maxId, OutboxEvent.OutboxStatus.SENT);
+        return KeyOrderGuard.releasable(locked, unsent);
     }
 
     /**
@@ -81,7 +107,9 @@ public class OutboxRelay {
             for (List<OutboxEvent> chain : chains) {
                 if (wave < chain.size()) {
                     OutboxEvent event = chain.get(wave);
-                    attempts.add(new Attempt(chain, event, kafkaTemplate.send(toRecord(event))));
+                    // 브로커 구간 지연의 시작점. ack 뒤 시각(sentAt)과 달리 소비보다 늦을 수 없다([결정 204] B).
+                    event.markPublishing(Instant.now());
+                    attempts.add(new Attempt(chain, event, publisher.publish(toMessage(event))));
                 }
             }
             if (attempts.isEmpty()) {
@@ -113,11 +141,25 @@ public class OutboxRelay {
         }
     }
 
+    /**
+     * 이전에 찍은 값보다 반드시 큰 {@code sent_at}(마이크로초). 브로커 없음 기준선은 {@code (sent_at, id)} 를 읽기 위치로 쓰므로,
+     * 시계가 뒤로 가서 새 행이 위치보다 작게 찍히면 영영 읽히지 않는다(PR #210 R2). 시계가 정상이면 지금 시각 그대로다.
+     */
+    private Instant nextSentAt() {
+        if (lastSentAt == null) {
+            Instant latest = repository.findLatestSentAt();
+            lastSentAt = latest == null ? Instant.EPOCH : latest.truncatedTo(ChronoUnit.MICROS);
+        }
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        lastSentAt = now.isAfter(lastSentAt) ? now : lastSentAt.plus(1, ChronoUnit.MICROS);
+        return lastSentAt;
+    }
+
     /** @return 발행에 성공했으면 true — 이 키의 다음 이벤트를 보내도 된다는 뜻이다 */
-    private boolean awaitAck(OutboxEvent event, CompletableFuture<SendResult<String, String>> ack) {
+    private boolean awaitAck(OutboxEvent event, CompletableFuture<Void> ack) {
         try {
             ack.get();
-            event.markSent();
+            event.markSent(nextSentAt());
             metrics.recordPublished();
             return true;
         } catch (InterruptedException e) {
@@ -136,24 +178,25 @@ public class OutboxRelay {
 
     /** 전송에 걸어둔 한 건. 어느 키 체인에 속하는지 함께 들고 있어야 후속 웨이브를 결정할 수 있다. */
     private record Attempt(List<OutboxEvent> chain, OutboxEvent event,
-                           CompletableFuture<SendResult<String, String>> ack) {
+                           CompletableFuture<Void> ack) {
     }
 
     /**
      * 계약 헤더 셋에 더해 적재 시점의 추적 컨텍스트를 <b>되살린다.</b>
-     * 자동 계측에 맡기면 안 되고 {@code spring.kafka.template.observation-enabled} 도 꺼야 한다.
+     * 자동 계측에 맡기면 안 되고 브로커 클라이언트의 자동 관측(Kafka {@code spring.kafka.template.observation-enabled})도 꺼야 한다.
      */
-    private ProducerRecord<String, String> toRecord(OutboxEvent event) {
-        ProducerRecord<String, String> record =
-                new ProducerRecord<>(event.getTopic(), event.getPartitionKey(), event.getPayload());
-        record.headers().add(EventHeaders.EVENT_ID, event.getEventId().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(EventHeaders.EVENT_TYPE, event.getEventType().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(EventHeaders.OCCURRED_AT,
-                event.getCreatedAt().toString().getBytes(StandardCharsets.UTF_8));
+    private OutboundMessage toMessage(OutboxEvent event) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put(EventHeaders.EVENT_ID, event.getEventId());
+        headers.put(EventHeaders.EVENT_TYPE, event.getEventType());
+        headers.put(EventHeaders.OCCURRED_AT, event.getCreatedAt().toString());
+        if (event.getPublishedAt() != null) {
+            headers.put(EventHeaders.PUBLISHED_AT, event.getPublishedAt().toString());
+        }
         String traceParent = event.getTraceParent();
         if (traceParent != null && !traceParent.isBlank()) {
-            record.headers().add(EventHeaders.TRACE_PARENT, traceParent.getBytes(StandardCharsets.UTF_8));
+            headers.put(EventHeaders.TRACE_PARENT, traceParent);
         }
-        return record;
+        return new OutboundMessage(event.getTopic(), event.getPartitionKey(), event.getPayload(), headers);
     }
 }

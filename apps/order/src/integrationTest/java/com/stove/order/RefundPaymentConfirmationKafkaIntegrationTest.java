@@ -1,5 +1,8 @@
 package com.stove.order;
 
+import com.stove.common.event.KeyQuarantine;
+import com.stove.common.event.InboundMessage;
+import org.springframework.dao.DataAccessResourceFailureException;
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
 import static com.stove.order.OrderFixtures.envelope;
@@ -14,7 +17,6 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.Topics;
 import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
@@ -51,21 +53,15 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.GroupIdNotFoundException;
 import org.awaitility.Awaitility;
@@ -81,7 +77,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -105,6 +100,8 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
     @MockitoSpyBean ApplyRefundPaymentConfirmation apply;
     // Boot @Bean의 반환 계약인 KafkaTemplate<?, ?>를 그대로 사용한다.
     @MockitoSpyBean(name = "kafkaTemplate") KafkaTemplate<?, ?> kafka;
+    // 구현체(JpaKeyQuarantine)를 감싼다. 저장소는 인터페이스 프록시라 callRealMethod 를 쓸 수 없다.
+    @MockitoSpyBean KeyQuarantine quarantined;
 
     @BeforeEach void initialize() { clear(); when(clock.instant()).thenReturn(RECEIVED_AT); }
     @AfterEach void clear() {
@@ -203,14 +200,14 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         Fixture fixture = fixture();
         jdbc.update("DELETE FROM order_refund_attempt ORDER BY id DESC");
         jdbc.update("DELETE FROM order_refund");
-        try (KafkaConsumer<String, String> consumer = dltConsumer(); AdminClient admin = admin()) {
+        try (AdminClient admin = admin()) {
             listeners.start();
             RecordMetadata sent = send(fixture.event());
-            ConsumerRecord<String, String> dead = receiveDlt(consumer, fixture.event());
+            Map<String, Object> dead = receiveQuarantined(fixture.event());
             awaitConsumed(admin, sent);
-            assertThat(dead.key()).isEqualTo(fixture.event().orderNo());
-            assertThat(dead.partition()).isEqualTo(sent.partition());
-            assertThat(dead.value()).isEqualTo(mapper.writeValueAsString(fixture.event()));
+            assertThat(dead.get("partition_key")).isEqualTo(fixture.event().orderNo());
+            assertThat(dead.get("origin")).isEqualTo("partition=" + sent.partition() + " offset=" + sent.offset());
+            assertThat(dead.get("payload")).isEqualTo(mapper.writeValueAsString(fixture.event()));
             verify(apply, times(1)).execute(fixture.input());
             assertThat(refunds.count()).isZero();
             assertThat(attempts.count()).isZero();
@@ -246,8 +243,8 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         jdbc.update("DELETE FROM order_refund");
         AtomicBoolean unavailable = new AtomicBoolean(true);
         AtomicInteger failedPublications = new AtomicInteger();
-        failQuarantinePublication(kafka, fixture.event().eventId(), unavailable, failedPublications);
-        try (KafkaConsumer<String, String> consumer = dltConsumer(); AdminClient admin = admin()) {
+        failQuarantineRecording(quarantined, fixture.event().eventId(), unavailable, failedPublications);
+        try (AdminClient admin = admin()) {
             listeners.start();
             RecordMetadata sent = send(fixture.event());
             Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
@@ -256,7 +253,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
             });
             assertThat(attempts.count()).isZero(); assertThat(executionRequests()).isEqualTo(1);
             unavailable.set(false);
-            receiveDlt(consumer, fixture.event());
+            receiveQuarantined(fixture.event());
             awaitConsumed(admin, sent);
             assertThat(inboxCount()).isZero();
             assertThat(refunds.count()).isZero();
@@ -404,17 +401,17 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
         return kafka.send(message).get(10, TimeUnit.SECONDS).getRecordMetadata();
     }
 
-    private static <K, V> void failQuarantinePublication(KafkaTemplate<K, V> template, String eventId,
-            AtomicBoolean unavailable, AtomicInteger failedPublications) {
+    /** 격리 기록(소비 모듈 DB)이 안 되는 동안은 원본 오프셋을 넘기지 않아야 한다 — 잃지 않고 다시 받는다. */
+    private static void failQuarantineRecording(KeyQuarantine quarantine, String eventId,
+            AtomicBoolean unavailable, AtomicInteger failedRecordings) {
         doAnswer(call -> {
-            ProducerRecord<K, V> record = call.getArgument(0);
-            if (record.topic().equals(Topics.PAYMENT + ".DLT") && record.value() instanceof String payload
-                    && payload.contains(eventId) && unavailable.get()) {
-                failedPublications.incrementAndGet();
-                return CompletableFuture.<SendResult<K, V>>failedFuture(new KafkaException("DLT producer unavailable"));
+            InboundMessage message = call.getArgument(1);
+            if (eventId.equals(message.header(EventHeaders.EVENT_ID)) && unavailable.get()) {
+                failedRecordings.incrementAndGet();
+                throw new DataAccessResourceFailureException("quarantine table unavailable");
             }
             return call.callRealMethod();
-        }).when(template).send(ArgumentMatchers.<ProducerRecord<K, V>>any());
+        }).when(quarantine).quarantine(ArgumentMatchers.anyString(), ArgumentMatchers.any(InboundMessage.class), ArgumentMatchers.any());
     }
 
     private Map<String, Object> connectionProperties() {
@@ -422,29 +419,12 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
     }
     private AdminClient admin() { return AdminClient.create(connectionProperties()); }
 
-    private KafkaConsumer<String, String> dltConsumer() {
-        HashMap<String, Object> properties = new HashMap<>();
-        properties.putAll(connectionProperties());
-        properties.put("group.id", "refund-completion-dlt-" + id());
-        properties.put("auto.offset.reset", "earliest");
-        properties.put("enable.auto.commit", false);
-        properties.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        properties.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties);
-        consumer.subscribe(List.of(Topics.PAYMENT + ".DLT"));
-        return consumer;
-    }
-
-    private ConsumerRecord<String, String> receiveDlt(KafkaConsumer<String, String> consumer, RefundPaymentConfirmedEvent event) {
-        long deadline = System.nanoTime() + Duration.ofSeconds(40).toNanos();
-        while (System.nanoTime() < deadline) {
-            for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(300))) {
-                if (record.value().contains(event.eventId()) && record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP) != null
-                        && new String(record.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP).value(), StandardCharsets.UTF_8)
-                                .equals(ApplyRefundPaymentConfirmation.CONSUMER_GROUP)) return record;
-            }
-        }
-        throw new AssertionError("전액 취소 확인 원문이 DLT에 보존되지 않았습니다: " + event.eventId());
+    /** 결정 155·206: 전액 취소 확인 원문이 Order DB 의 격리 표에 그 그룹·키로 보존된다. */
+    private Map<String, Object> receiveQuarantined(RefundPaymentConfirmedEvent event) {
+        String query = "SELECT partition_key, origin, payload FROM consumer_quarantine WHERE event_id=? AND consumer_group=? AND status='HELD'";
+        Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() -> assertThat(
+                jdbc.queryForList(query, event.eventId(), ApplyRefundPaymentConfirmation.CONSUMER_GROUP)).hasSize(1));
+        return jdbc.queryForMap(query, event.eventId(), ApplyRefundPaymentConfirmation.CONSUMER_GROUP);
     }
 
     private void awaitConsumed(AdminClient admin, RecordMetadata record) {

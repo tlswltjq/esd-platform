@@ -2,6 +2,7 @@ package com.stove.common.messaging;
 
 import com.stove.common.messaging.ops.OutboxOpsController;
 import com.stove.common.messaging.ops.OutboxRepublishController;
+import com.stove.common.messaging.ops.QuarantineOpsController;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
@@ -16,7 +17,7 @@ import org.springframework.context.annotation.FilterType;
  */
 @SpringBootApplication
 @ComponentScan(excludeFilters = @ComponentScan.Filter(
-        type = FilterType.ASSIGNABLE_TYPE, classes = {OutboxOpsController.class, OutboxRepublishController.class}))
+        type = FilterType.ASSIGNABLE_TYPE, classes = {OutboxOpsController.class, OutboxRepublishController.class, QuarantineOpsController.class}))
 public class OutboxQueryTestApplication {
 
     // 이 테스트 앱만 common:messaging 안에 있어서 ops 컨트롤러까지 스캔한다.
