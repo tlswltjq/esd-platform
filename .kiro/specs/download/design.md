@@ -52,13 +52,14 @@
 | J7 | 입력 | 상품 코드 형식 위반 | 400 `INVALID_REQUEST` | 없음 | R2.2, `DownloadRequest.java:10-11` |
 | J8 | License | 연결 실패·제한 시간 초과 | 503 `UPSTREAM_UNAVAILABLE` | License | R9.3·R9.4 |
 | J9 | License | 3xx(리다이렉트를 따르지 않음) | 503 | License | R6.10, `DownloadClientConfiguration.java:24-25` |
-| J10 | License | 401 | 401 `UNAUTHORIZED` | License | R3.6 — [결정 필요 M-DL-2] |
-| J11 | License | 403 | 403 `FORBIDDEN` | License | R3.6 — [결정 필요 M-DL-2] |
-| J12 | License | 404 + 계약 본문(`success=false`, `error.code=NOT_FOUND`) | 403 (열린 보유권 없음, 코드는 [M-DL-1]) | License | R3.4·R3.8, 결정 93·96·97 |
+| J10 | License | 401 | 503 `UPSTREAM_UNAVAILABLE` | License | R3.6, 결정 197 — **코드 차이 DL-T9**(지금 401 `UNAUTHORIZED`) |
+| J11 | License | 403 | 503 `UPSTREAM_UNAVAILABLE` | License | R3.6, 결정 197 — **코드 차이 DL-T9**(지금 403 `FORBIDDEN`) |
+| J12 | License | 404 + 계약 본문(`success=false`, `error.code=NOT_FOUND`) | 403 `LICENSE_NOT_OWNED` | License | R3.4·R3.8·R3.11, 결정 93·96·97·196 — **코드 차이 DL-T2**(지금 `FORBIDDEN`) |
+| J12a | License | 404 + 계약 본문(`success=false`, `error.code=PURCHASE_IN_STORAGE`) | 403 `LICENSE_REGISTRATION_REQUIRED` | License | R3.11, License R4.11, 결정 196 — **코드 차이 DL-T2·LI-T10**(지금 License가 이 코드를 내지 않음) |
 | J13 | License | 404 + 그 밖의 본문 | 503 | License | R3.9 — **코드 차이 DL-T1**(지금 403) |
 | J14 | License | 그 밖의 4xx·5xx | 503 | License | R9.3, `LicenseHttpClient.java:26` |
 | J15 | License | 200, 봉투가 성공 아님·`data`가 객체 아님·JSON 아님 | 503 | License | R9.3, `HttpResponseValues.java:10-14` |
-| J16 | License | 200, `status`=`SUSPENDED` | 403 (정지, 코드는 [M-DL-1]) | License | R3.5, `LicenseHttpClient.java:30-32` |
+| J16 | License | 200, `status`=`SUSPENDED` | 403 `LICENSE_SUSPENDED` | License | R3.5·R3.11, 결정 196, `LicenseHttpClient.java:30-32` — **코드 차이 DL-T2**(지금 `FORBIDDEN`) |
 | J17 | License | 200, `status` 없음·`ACTIVE`/`SUSPENDED` 밖의 값 | 503 | License | R3.10, `LicenseHttpClient.java:33` |
 | J18 | License | 200 `ACTIVE`, `productId`가 양의 정수 아님·`productCode`가 문자열 아님·형식 위반 | 503 | License | R9.3, `OwnedProduct.java:5` |
 | J19 | License | 200 `ACTIVE`, `productCode` ≠ 요청 코드 | 503 | License | R4.3, `LicenseHttpClient.java:36` |
@@ -101,7 +102,7 @@
 | GET | `/api/v1/downloads/{productCode}/ticket` | `MEMBER` | 경로 변수 하나, 본문·쿼리 없음 | 200 `ApiResponse<DownloadTicketResponse>` — `productCode`·`version`·`fileSize`·`checksum`·`downloadUrl`·`expiresAt`, `Cache-Control: no-store` | 판정 표 J1~J35 |
 
 - 멱등 키: 없다. 상태를 만들지 않으므로 같은 요청을 몇 번 보내도 부수 효과가 없고, 요청마다 새 URL(새 `expiresAt`)을 준다(자연 멱등, S10 "중복 전달" 행).
-- 오류 본문은 공통 `ApiResponse.fail`(`common/web`의 `GlobalExceptionHandler`). 오류 코드: `UNAUTHORIZED`·`FORBIDDEN`·`INVALID_REQUEST`·`NOT_FOUND`·`CONFLICT`·`UPSTREAM_UNAVAILABLE`·`INTERNAL_ERROR`(공통 `ErrorCode`), `PRODUCT_DOWNLOAD_RESTRICTED`(`download:core/domain/DownloadError.java`). 403 거절 사유의 코드 구분은 [결정 필요 M-DL-1].
+- 오류 본문은 공통 `ApiResponse.fail`(`common/web`의 `GlobalExceptionHandler`). 오류 코드: `UNAUTHORIZED`·`FORBIDDEN`·`INVALID_REQUEST`·`NOT_FOUND`·`CONFLICT`·`UPSTREAM_UNAVAILABLE`·`INTERNAL_ERROR`(공통 `ErrorCode`), `PRODUCT_DOWNLOAD_RESTRICTED`(`download:core/domain/DownloadError.java`). 403 거절 사유 코드 `LICENSE_NOT_OWNED`·`LICENSE_REGISTRATION_REQUIRED`·`LICENSE_SUSPENDED`도 `DownloadError`에 둔다(R3.11, [결정 196](../../../docs/decisions.md#download-denial-reasons), DL-T2).
 - OpenAPI: 커밋한 스냅샷(`apps/download/src/integrationTest/resources/openapi/download.json`)에 이 경로 하나만 있다(`DownloadIntegrationTest#committedOpenApiHasOneEndpointAndMatchesSnapshot`). Download 운영 API(`/api/v1/ops/**`)는 만들지 않는다.
 - 클라이언트 행동(사용 안내): 401 재인증, 403 보유권·정지·제한 확인, 404 현재 공개 상품 없음, 409 파일 보존 확인 뒤 재요청, 503 잠시 뒤 재요청. 받은 파일은 `fileSize`·`checksum`(SHA-256)과 대조한다. `downloadUrl`의 host·port를 바꾸면 서명이 맞지 않는다.
 

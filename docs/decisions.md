@@ -1977,6 +1977,53 @@
 - 구분: AI 주장 정정
 - 결과: [PR #199](https://github.com/tlswltjq/esd-platform/pull/199) — Settlement R11.8~12·O3·상태 표·ADMIN API·MC-S3, 플랫폼 반영 확인 사실 발행 경로, 판단 색인 행
 
+<a id="download-denial-reasons"></a>
+## 196. 다운로드 거절은 미보유·보관함 미등록·정지·다운로드 제한을 서로 다른 오류 코드로 알린다
+- 문제: 결정 93으로 모든 구매는 보관함(`STORED`)에 먼저 들어가고 고객이 등록해야 보유권이 생긴다. 그런데 다운로드 티켓은 열린 보유권이 없으면 언제나 `403 FORBIDDEN` "보유하지 않은 상품입니다."로 거절해, 결제하고 등록하지 않은 고객도 "미보유" 안내를 받았다. 정지(`SUSPENDED`)도 같은 `FORBIDDEN`이라 API 사용자는 메시지 문자열로만 사유를 갈랐다(M-DL-1). Download는 License 라이브러리 상세의 `404` 하나만 받으므로 혼자서는 보관함 미등록을 구별할 수 없다.
+- 선택지: A Download만 고쳐 미보유(`LICENSE_NOT_OWNED`)·정지(`LICENSE_SUSPENDED`)를 나눈다 / B A에 더해 License 라이브러리 상세가 404 본문으로 "등록할 수 있는 보관함 항목 있음"을 알리고 Download가 `LICENSE_REGISTRATION_REQUIRED`로 전달한다 / C 지금처럼 메시지로만 구분 (추천: B — 결제 뒤 등록하지 않은 경우는 모든 구매에서 생길 수 있고, 다음 행동(등록)을 바로 알려야 한다. 비용은 License 조회 1회와 오류 코드 하나)
+- 내 의견: "B는 동일한 미등록 상품 보관함 보유상태에서 구매 요청시 중복 결제를 막기 위함이라면 그 안내 문구는 "보관함에서 등록하세요"보다 보유중인데 구매하겟냐고 안내하는것이 좋을 듯" → "M-DL-1은 B로, 구매 안내는 새 쟁점으로 따로 다뤄줘" (결정 전 요청: "A B의 설명 더 쉽게해줘.")
+- 선택: B — Download의 `403` 거절 코드는 아래 넷이다. 상세 계약은 Download R3.4·R3.5·R3.11, License R4.11이 정본이다.
+  - `LICENSE_NOT_OWNED`: 구매 근거 없음, 결제 직후 구매 근거 생성 전(`PurchaseRecordStored` 전), 환불 완료(`ENDED`), 등록 전 정지된 보관함 항목. 생성 대기와 환불 이력은 따로 드러내지 않는다(Order 의존을 더하지 않는다, R3.8).
+  - `LICENSE_REGISTRATION_REQUIRED`: 열린 보유권은 없고 같은 상품의 등록 가능한 `STORED` 구매 근거가 있다. 안내는 "보관함에 있는 상품입니다. 라이브러리에 등록하면 다운로드할 수 있습니다."이다.
+  - `LICENSE_SUSPENDED`: 상세 상태가 `SUSPENDED`.
+  - `PRODUCT_DOWNLOAD_RESTRICTED`: 지금과 같다(R5.1).
+  - AI는 처음 B의 이유를 "보관함 고객의 중복 결제를 막는다"로 설명했다. 사용자 지적대로 중복 결제는 구매 요청에서 생기므로 다운로드 응답은 그 방지책이 아니다. 다운로드 응답은 이미 결제한 고객에게 등록이라는 다음 행동을 알리는 것으로 범위를 좁혔다. 구매 때 "이미 보유·보관 중인데 구매하겠습니까" 안내는 Order·License의 새 쟁점 [결정 필요 M-OR-5]로 분리했다(결정 89의 "구매를 막는 것은 판매 금지뿐"과 충돌하지 않는 안내 방식인지 그때 정한다).
+  - 개발 단계라 옛 `FORBIDDEN` 코드를 위한 호환 기간은 두지 않는다.
+- 구분: AI 주장 정정
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Download R3·판정 표 J12·J16·DL-T2, License R4.11·LI-T10, Order M-OR-5 신설, 판단 색인 행
+
+<a id="download-license-auth-rejection"></a>
+## 197. Download가 통과시킨 사용자 토큰을 License가 401·403으로 거절하면 연동 장애(503)로 본다
+- 문제: Download는 사용자 토큰을 검증하고 `MEMBER`를 확인한 뒤 같은 토큰으로 License 라이브러리 상세를 부른다. 두 모듈은 같은 `ApiJwtSecurity.decoder`(서명·issuer·만료 허용 오차 60초·`aud=esd-api`)와 같은 `hasRole("MEMBER")`를 쓴다. 그런데도 License가 401·403을 주면 지금은 그대로 401 `UNAUTHORIZED`·403 `FORBIDDEN`으로 전달한다(`LicenseHttpClient.java:24-25`, M-DL-2). 이 경우의 원인은 만료 직전 토큰과 서버 간 시계 차이(드묾), License의 issuer·JWK 설정 불일치, 두 모듈 보안 규칙의 불일치다. 뒤의 둘은 시스템 결함인데 고객의 인증·권한 문제로 보인다(코드·설정에서 추론, 재현하지 않음).
+- 선택지: A 그대로 전달(지금) / B 401·403 모두 503 `UPSTREAM_UNAVAILABLE` / C 401만 전달하고 403은 503 (추천: B — 같은 토큰을 같은 규칙으로 이미 통과시켰으므로 그 뒤의 거절은 대부분 모듈 간 불일치다. 장애를 고객 인증 문제로 바꾸지 않는다는 R3.9·R9.3의 원칙과 맞다)
+- 내 의견: "M-DL-2는 B로 해줘" (결정 전 질문: "503 UPSTREAM_UNAVAILABLE 이 어떤 예외야?")
+- 선택: B — License의 401·403은 다른 계약 밖 응답처럼 `HttpResponseValues.invalid()`로 503 `UPSTREAM_UNAVAILABLE`이 된다. Download가 직접 하는 인증(R1, 401·403)은 그대로다. 상세 계약은 Download R3.6, 판정 표 J10·J11이 정본이다.
+  - 비용: 만료 직전 토큰이 두 서버 시계 차이로 License에서만 거절되면 고객은 401 대신 503을 한 번 받는다. 그 토큰이 정말 만료됐다면 허용 오차가 지난 뒤 Download의 1단계 검사가 401을 내므로, 재시도하면 정상 갱신 흐름으로 이어진다.
+  - 503이 어떤 경보에 잡히는지는 이 결정에서 정하지 않는다. 이 결정은 응답 분류만 바꾼다.
+- 구분: 추천 수용
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Download R3.6·판정 표 J10·J11·DL-T9
+
+<a id="repurchase-notice-client"></a>
+## 198. 이미 보유·보관한 상품의 재구매 안내는 클라이언트가 주문 전에 License로 확인해 띄운다
+- 문제: 결정 89로 구매를 막는 사유는 판매 금지뿐이어서, 같은 상품을 라이브러리에 보유하거나 보관함(`STORED`)에 가진 고객도 다시 결제할 수 있다. 보유 중에 산 항목은 등록이 거절되고(409 `PRODUCT_ALREADY_OWNED`) 보관함에 남는다. 결정 196 논의에서 사용자가 "보유중인데 구매하겟냐고 안내"를 제안해 새 쟁점으로 분리했다(M-OR-5). 지금 Order `CreateOrder`는 Catalog만 조회하고 License에 의존하지 않는다.
+- 선택지: A 클라이언트가 주문 전 License 라이브러리 상세로 확인해 안내, 서버 변경 없음 / B Order가 주문 생성 때 License에 조회하고, 보유·보관 중이면 요청의 `confirmHeld=true` 없이는 409 `PRODUCT_ALREADY_HELD` / C 안내 없음 (추천: A — 결정 196의 LI-T10 뒤 라이브러리 상세 한 번으로 보유·보관 중·없음을 정확히 알 수 있고, 주문 생성에 License 동기 의존과 그 장애 경로가 생기지 않으며, 결정 89의 경계가 그대로다)
+- 내 의견: "A로 해줘" (쟁점 제기: "B는 동일한 미등록 상품 보관함 보유상태에서 구매 요청시 중복 결제를 막기 위함이라면 그 안내 문구는 "보관함에서 등록하세요"보다 보유중인데 구매하겟냐고 안내하는것이 좋을 듯")
+- 선택: A — Order는 보유·보관 여부를 조회하거나 요구하지 않는다(Order R2.10). 클라이언트는 주문 전에 `GET /api/v1/library/{productCode}`를 부르고, `200`(보유·정지)이나 404 `PURCHASE_IN_STORAGE`(보관함)이면 "이미 보유 중인데 구매하시겠습니까"를 띄운다. 404 `NOT_FOUND`이면 바로 주문한다(License R4.11).
+  - 하지 않는 것: 확인을 건너뛴 API 요청의 중복 구매는 막지 않는다. 서버가 동의를 강제해야 한다면 B로 다시 정한다.
+  - 이 저장소에는 고객 화면이 없어 실행 안내(`docs/api-demo.md`)에 확인 단계를 적는 것으로 계약을 보인다(LI-T10 구현 뒤).
+- 구분: 추천 수용
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Order R2.10·M-OR-5 닫음, License R4.11 주석·LI-T10 함께 할 일, 판단 색인 행
+
+<a id="close-with-unresolved-refunds"></a>
+## 199. 반영하지 못한 보관 환불(`CONFLICTED`)이 있어도 판매자 월 마감을 허용하고, 그 건수를 마감·월 응답에 보인다
+- 문제: 결정 156·195의 보관 환불 가운데 `CONFLICTED`는 매출은 그 판매자 월에 들어갔지만 대조 불일치로 환불 차감이 빠진 상태다. 이때 그 월을 마감하면 지급 기준액(`payable`)이 이미 환불된 주문의 판매자 몫만큼 크게 확정된다. 결정 195가 마감 허용 범위를 별도 쟁점으로 남겼다. `AWAITING_SALE`은 매출이 없어 마감 금액에 들어가지 않으므로 R11.7이 이미 정했다. 보관 환불·재검증은 아직 구현되지 않았고(MC-S3), 판매자 실제 송금도 없어 지금 영향은 보고 금액에 그친다.
+- 선택지: A 마감 허용 + 그 판매자·월의 `CONFLICTED` 건수·주문 표시 / B 그 판매자의 그 월 이하에 `CONFLICTED`가 있으면 마감 409 / C 문제 주문의 판매자 몫만 보류하고 마감 (추천: A — 마감 뒤 늦은 사실의 현재 `OPEN` 월 반영(R3.5)과 음수 이월(결정 121)이 이미 있어 금액이 사라지지 않는다. B는 R3.8 순서 규칙 때문에 한 건이 그 판매자의 뒤 월 마감을 모두 멈추고, C는 원장 구조를 바꾼다)
+- 내 의견: "A로 해줘"
+- 선택: A — 마감은 `CONFLICTED`를 막거나 빼지 않는다. 마감 뒤 재검증이 일치하면 환불 조정은 현재 `OPEN` 월에 반영되고 음수 순액은 이월된다. 마감 응답과 ADMIN 월 응답은 원매출 귀속 월이 그 월 이하인 `CONFLICTED` 건수(`conflictedRefundCount`)를 담고, ADMIN 보관 환불 목록은 `sellerSubject`·`saleMonth`로 걸러 주문번호를 보인다. 상세 계약은 Settlement R11.13이 정본이다.
+  - 하지 않는 것: 마감된 월의 `payable`은 고치지 않는다(`CLOSED`는 바뀌지 않는다, R9.9).
+  - 메모: 차단이 필요한 시점은 마감이 아니라 실제 송금이다. 송금 전 `CONFLICTED` 차단 여부는 M-SE-4에서 함께 정한다.
+- 구분: 추천 수용
+- 결과: [PR #200](https://github.com/tlswltjq/esd-platform/pull/200) — Settlement R11.13·design API 표·MC-S3 목표, M-SE-4 메모
 <a id="confirm-window-hold-last-observation"></a>
 ## 200. confirm 기한이 지난 접수 승인은 PG 조회가 실패해도 마지막 유효 관측으로 보류에 올린다
 - 문제: [결정 124](#confirm-window-expired-hold)는 최초 준비 + 3시간이 지나고 PG가 `PENDING`·`READY`인 `ADMITTED` 승인을 "작업자가 조회한 직후" `REVIEW_REQUIRED`(`CONFIRM_WINDOW_EXPIRED`)로 올린다. 구현은 그 회 조회가 성공했을 때만 판정해서, GET이 5xx·타임아웃으로 계속 실패하면 3시간이 지나도 `ADMITTED`로 남고 게이지·경보·ADMIN 목록 어디에도 보이지 않았다(D-049). PR #168은 조회 장애로 끝난 회차에 저장된 마지막 유효 관측 `latestPgState`로 같은 판정을 하도록 고쳤고, 교차 리뷰(PR #168 R3)는 이것이 결정 124의 "조회한 직후" 조건을 바꾼다고 지적했다. main 재정의 스펙의 Payment design 상태 표 #15도 "PG 조회 장애 → 무변화"였다.
