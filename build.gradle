@@ -77,7 +77,7 @@ subprojects {
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
         if (stagedVerification) {
-            testFixturesImplementation project(':common:kafka')
+            testFixturesImplementation project(':common:messaging-kafka')
             testFixturesCompileOnly 'jakarta.persistence:jakarta.persistence-api'
         }
     }
@@ -431,13 +431,26 @@ tasks.register('verifyCommonRuntimeDependencies') {
     description = '공통 라이브러리의 실행 환경과 의존성 방향을 검증한다'
 
     doLast {
-        def modules = ['web', 'jpa', 'security', 'event', 'kafka', 'messaging']
+        def modules = ['web', 'jpa', 'security', 'event', 'contract', 'messaging',
+                       'messaging-kafka', 'messaging-rabbitmq', 'messaging-redis', 'messaging-direct']
+        // 결정 209: 브로커 클라이언트는 그 adapter 만 런타임에 가진다. 코어(messaging)·계약(contract)·포트(event)는 하나도 갖지 않는다.
+        def brokerClients = [
+                'messaging-kafka'   : { m -> m.group in ['org.apache.kafka', 'org.springframework.kafka'] },
+                'messaging-rabbitmq': { m -> m.group in ['org.springframework.amqp', 'com.rabbitmq'] },
+                'messaging-redis'   : { m -> m.group == 'io.lettuce' || m.module == 'spring-data-redis' },
+        ]
+        def adapters = brokerClients.keySet() + ['messaging-direct']
         modules.each { moduleName ->
             def components = project(":common:${moduleName}").configurations.runtimeClasspath
                     .incoming.resolutionResult.allComponents
             components.each { component ->
                 def id = component.id
                 if (id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
+                    brokerClients.each { adapter, matches ->
+                        if (adapter != moduleName && matches(id)) {
+                            throw new GradleException("common:${moduleName} must not carry the ${adapter} broker client (decision 209): ${id}")
+                        }
+                    }
                     if (id.module in ['spring-webmvc', 'jakarta.servlet-api', 'spring-boot-starter-web',
                                       'spring-boot-starter-tomcat'] || id.group == 'org.apache.tomcat.embed') {
                         throw new GradleException("common:${moduleName} must not provide Servlet runtime: ${id}")
@@ -450,8 +463,14 @@ tasks.register('verifyCommonRuntimeDependencies') {
                     if (moduleName == 'event' && id.projectPath != ':common:event') {
                         throw new GradleException("common:event must not require other modules: ${id}")
                     }
-                    if (moduleName == 'kafka' && id.projectPath in [':common:jpa', ':common:messaging']) {
-                        throw new GradleException("common:kafka must not require database messaging: ${id}")
+                    if (moduleName == 'contract' && !(id.projectPath in [':common:contract', ':common:event'])) {
+                        throw new GradleException("common:contract must require only common:event: ${id}")
+                    }
+                    if (moduleName == 'messaging-kafka' && id.projectPath in [':common:jpa', ':common:messaging']) {
+                        throw new GradleException("common:messaging-kafka must not require database messaging: ${id}")
+                    }
+                    if (adapters.any { id.projectPath == ":common:${it}" } && id.projectPath != ":common:${moduleName}") {
+                        throw new GradleException("common:${moduleName} must not require another messaging adapter (decision 209): ${id}")
                     }
                 }
             }

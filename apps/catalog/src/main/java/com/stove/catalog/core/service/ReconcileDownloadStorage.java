@@ -8,7 +8,7 @@ import com.stove.catalog.core.domain.CatalogRelease;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.DownloadBuildReference;
 import com.stove.catalog.core.port.BuildDistribution;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;

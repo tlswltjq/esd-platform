@@ -3,7 +3,7 @@ package com.stove.store;
 import static com.stove.store.StoreFixtures.product;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.store.core.domain.StoreProductRepository;
 import com.stove.store.core.port.CatalogProducts;

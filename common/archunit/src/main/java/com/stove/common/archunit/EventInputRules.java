@@ -20,7 +20,7 @@ public final class EventInputRules {
     public static final ArchRule core_는_이벤트_봉투를_모른다 = noClasses()
             .that().resideInAPackage("..core..")
             .should().dependOnClassesThat()
-            .haveFullyQualifiedName("com.stove.common.kafka.EventEnvelope")
+            .haveFullyQualifiedName("com.stove.common.contract.EventEnvelope")
             .because("봉투 검증과 외부 이벤트 변환은 api.listener 가 담당한다")
             .allowEmptyShould(true);
 
@@ -28,7 +28,7 @@ public final class EventInputRules {
     public static final ArchRule 도메인_모델은_외부_이벤트를_모른다 = noClasses()
             .that().resideInAPackage("..core.domain..")
             .should().dependOnClassesThat()
-            .areAssignableTo("com.stove.common.kafka.contract.DomainEvent")
+            .areAssignableTo("com.stove.common.contract.DomainEvent")
             .because("도메인 모델은 내부 입력을 받고 공유 스냅샷 값만 재사용한다")
             .allowEmptyShould(true);
 
@@ -44,7 +44,7 @@ public final class EventInputRules {
                             while (element.isArray()) {
                                 element = element.getComponentType();
                             }
-                            if (element.isAssignableTo("com.stove.common.kafka.contract.DomainEvent")) {
+                            if (element.isAssignableTo("com.stove.common.contract.DomainEvent")) {
                                 events.add(SimpleConditionEvent.violated(method,
                                         method.getFullName() + " receives external event " + element.getName()));
                             }

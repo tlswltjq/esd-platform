@@ -9,7 +9,7 @@ import com.stove.payment.core.domain.PgRefundConfirmation;
 import com.stove.payment.core.domain.PgRefundFailureConfirmation;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.domain.RefundExecutionStatus;
-import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.contract.payload.RefundExecutionFailedEvent;
 import com.stove.payment.core.domain.PgRefundLookupRequest;
 import com.stove.payment.core.domain.RefundExecution;
 import com.stove.payment.core.domain.RefundExecutionRepository;

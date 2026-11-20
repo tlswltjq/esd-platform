@@ -6,11 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.review.ReviewFixtures;

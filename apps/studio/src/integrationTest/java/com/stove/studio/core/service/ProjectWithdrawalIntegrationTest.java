@@ -7,11 +7,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.studio.StudioIntegrationTestBase;

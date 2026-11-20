@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.stove.catalog.CatalogIntegrationTestBase;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.core.service.PublishProjectRelease;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.test.OpenApiSnapshot;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

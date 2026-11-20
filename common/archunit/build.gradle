@@ -13,6 +13,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot'
     testImplementation 'org.springframework.data:spring-data-commons'
     testImplementation 'org.springframework.kafka:spring-kafka'
+    // 메시징 경계 규칙 픽스처: Redis 를 세션 용도로 쓰는 앱 코드는 허용한다(결정 209).
+    testImplementation 'io.lettuce:lettuce-core'
 
     // ConsumerGroupRules 는 "가드를 쓰는 앱인가" 를 ProcessedEventGuard 주입 여부로 판정한다.
     // 픽스처가 그 타입을 실제로 주입받아야 규칙이 보는 것과 같은 바이트코드가 나온다.

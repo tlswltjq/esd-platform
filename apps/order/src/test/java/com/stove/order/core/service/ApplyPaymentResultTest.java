@@ -14,9 +14,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.OrderPaidEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.OrderPaidEvent;
+import com.stove.common.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;

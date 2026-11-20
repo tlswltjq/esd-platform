@@ -1,6 +1,6 @@
 package com.stove.review.core.service;
 
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;

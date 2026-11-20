@@ -1,11 +1,11 @@
 package com.stove.studio.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRejectedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRejectedEvent;
+import com.stove.common.contract.payload.ProjectReviewApprovedEvent;
+import com.stove.common.contract.payload.ProjectReviewRejectedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.release.ProjectReleaseResult;

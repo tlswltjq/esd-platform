@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.LicenseRestoredEvent;
 import com.stove.order.core.domain.LicenseRestorationConfirmation;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import java.util.Objects;

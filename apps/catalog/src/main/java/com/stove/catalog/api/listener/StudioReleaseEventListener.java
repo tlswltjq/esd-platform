@@ -6,10 +6,10 @@ import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
 import com.stove.catalog.core.service.ReceiveReleaseWithdrawal;
 import com.stove.catalog.core.service.ReceiveProjectRelease;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
 
 import lombok.RequiredArgsConstructor;
 

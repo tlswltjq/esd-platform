@@ -1,6 +1,6 @@
 package com.stove.store.api.controller;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.response.ApiResponse;
 import com.stove.store.api.controller.dto.StoreProductDetail;
 import com.stove.store.api.controller.dto.StoreProductPage;

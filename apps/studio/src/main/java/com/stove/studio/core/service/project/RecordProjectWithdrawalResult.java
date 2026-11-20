@@ -1,6 +1,6 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;

@@ -11,9 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.web.error.BusinessException;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.settlement.api.listener.SettlementRefundMapper;
 import com.stove.settlement.core.domain.ConfirmedRefund;
 import com.stove.settlement.core.domain.PaidOrder;

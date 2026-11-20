@@ -8,9 +8,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
 import com.stove.payment.core.domain.OrderExpiryInput;

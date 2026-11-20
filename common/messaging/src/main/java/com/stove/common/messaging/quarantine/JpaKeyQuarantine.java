@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;

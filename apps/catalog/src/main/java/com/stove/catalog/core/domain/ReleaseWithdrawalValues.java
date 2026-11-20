@@ -1,6 +1,6 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.contract.payload.ProjectWithdrawalRequest;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.time.Instant;

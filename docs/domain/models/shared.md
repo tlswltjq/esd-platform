@@ -76,7 +76,7 @@
 
 ## EventEnvelope와 이벤트 payload — 전달할 사실
 
-[EventEnvelope](../../../common/kafka/src/main/java/com/stove/common/kafka/EventEnvelope.java)는 `eventId`, `eventType`, `key`, `payload`를 묶은 수신 값이다. 메시지 종류를 판별하고 JSON 본문을 해당 이벤트 record로 읽는다. 개별 업무 이벤트는 [payload 소스](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload)에 있다. 모든 엔티티 필드를 자동으로 직렬화해 전달하는 구조가 아니다.
+[EventEnvelope](../../../common/contract/src/main/java/com/stove/common/contract/EventEnvelope.java)는 `eventId`, `eventType`, `key`, `payload`를 묶은 수신 값이다. 메시지 종류를 판별하고 JSON 본문을 해당 이벤트 record로 읽는다. 개별 업무 이벤트는 [payload 소스](../../../common/contract/src/main/java/com/stove/common/contract/payload)에 있다. 모든 엔티티 필드를 자동으로 직렬화해 전달하는 구조가 아니다.
 
 재작성 완료 모듈의 수신 경계에서는 `api.listener`의 `*Mapper.from(...)`가 봉투·본문·키를 검증하고 내부 입력으로 바꾼다. 업무 서비스와 도메인 모델은 봉투나 외부 이벤트 전체를 입력받지 않는다. 이벤트 ID·종류·발생 시각은 필요한 내부 값으로 전달하며 Inbox와 업무 변경은 서비스의 같은 트랜잭션에 둔다. [작성 규칙](../../use-case-conventions.md#진입점과-설정의-역할)을 따른다.
 
@@ -97,17 +97,17 @@
 | `LicenseIssued`, `LicenseRevoked` | 주문번호·회원·상품 ID 목록 | Download 보유권 사본 갱신 |
 | `LicenseIssueFailed` | 주문번호·회원·실패 사유 | 보상 환불 검토·처리 |
 
-이 표는 대표 흐름이며 모든 이벤트 목록은 [EventType](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/EventType.java)에 있다. 이벤트 타입이 정의됐다는 사실만으로 모든 관련 서비스가 소비한다고 가정하지 않는다. 예를 들어 현재 `OrderCanceled`는 Payment의 주문 리스너에서 처리하지 않는다.
+이 표는 대표 흐름이며 모든 이벤트 목록은 [EventType](../../../common/contract/src/main/java/com/stove/common/contract/EventType.java)에 있다. 이벤트 타입이 정의됐다는 사실만으로 모든 관련 서비스가 소비한다고 가정하지 않는다. 예를 들어 현재 `OrderCanceled`는 Payment의 주문 리스너에서 처리하지 않는다.
 
 <a id="build-variant"></a>
 
 ## BuildVariant — 공개·제출 묶음의 파일 한 개
 
-[모델](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/BuildVariant.java). `buildId`, `platform`, `architecture`, `version`, `fileSize`, `checksum`, `storagePath`, `deltaFromVersion`을 담는다. GameBuild에서 필요한 값만 복사해 심사·공개 이벤트와 PatchManifest에 넣는다. `deltaFromVersion=null`이면 전체 파일이고, 값이 있으면 그 버전에서 적용할 델타다. 빌드 검증 상태·CI 비밀정보·업로드 세션 전체를 전달하지 않는다.
+[모델](../../../common/contract/src/main/java/com/stove/common/contract/payload/BuildVariant.java). `buildId`, `platform`, `architecture`, `version`, `fileSize`, `checksum`, `storagePath`, `deltaFromVersion`을 담는다. GameBuild에서 필요한 값만 복사해 심사·공개 이벤트와 PatchManifest에 넣는다. `deltaFromVersion=null`이면 전체 파일이고, 값이 있으면 그 버전에서 적용할 델타다. 빌드 검증 상태·CI 비밀정보·업로드 세션 전체를 전달하지 않는다.
 
 ## StorefrontSnapshot — 공개된 소개 자료
 
-[모델](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/StorefrontSnapshot.java). ReleaseService가 승인된 상점 자료에서 만드는 값으로 Catalog·Store에 전달한다.
+[모델](../../../common/contract/src/main/java/com/stove/common/contract/payload/StorefrontSnapshot.java). ReleaseService가 승인된 상점 자료에서 만드는 값으로 Catalog·Store에 전달한다.
 
 | 속성 | 담는 내용 |
 |---|---|
@@ -121,6 +121,6 @@ StorePageContent와 닮았지만 `prices`는 포함하지 않는다. 공개 가�
 
 ## PromotionWindow·OrderLine — 가격 일정과 구매 조건
 
-[PromotionWindow](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/PromotionWindow.java)는 `id`, `discountPerUnit`, `bearer`, `startsAt`, `endsAt`을 담는 행사 사본이다. Store가 현재 시각으로 할인 적용 여부를 계산한다. 원본 Promotion의 `sellerId`·`stoppedAt`을 그대로 모두 복제한 객체는 아니다.
+[PromotionWindow](../../../common/contract/src/main/java/com/stove/common/contract/payload/PromotionWindow.java)는 `id`, `discountPerUnit`, `bearer`, `startsAt`, `endsAt`을 담는 행사 사본이다. Store가 현재 시각으로 할인 적용 여부를 계산한다. 원본 Promotion의 `sellerId`·`stoppedAt`을 그대로 모두 복제한 객체는 아니다.
 
-[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 주문 당시 상품·단가·수량·할인·정산 조건이다. 전체 필드 의미는 [OrderItem과의 대응 표](order-payment.md#order-item)에 있다. 행사 일정은 앞으로/지금 적용할 조건이고, OrderLine은 구매 순간 이미 확정된 조건이다.
+[OrderLine](../../../common/contract/src/main/java/com/stove/common/contract/payload/OrderLine.java)은 주문 당시 상품·단가·수량·할인·정산 조건이다. 전체 필드 의미는 [OrderItem과의 대응 표](order-payment.md#order-item)에 있다. 행사 일정은 앞으로/지금 적용할 조건이고, OrderLine은 구매 순간 이미 확정된 조건이다.

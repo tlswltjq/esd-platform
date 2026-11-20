@@ -1,0 +1,12 @@
+apply plugin: 'java-library'
+
+// 이벤트 계약(결정 209): 토픽·이벤트 종류·본문 타입과 봉투(EventEnvelope)·헤더 이름. 브로커와 무관하다.
+// 예전에는 common:kafka 안에 있어, 다른 브로커로 돌려도 업무 모듈이 Kafka 모듈을 끌고 왔다.
+dependencies {
+    api project(':common:event')
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // 공용 라이브러리 방향 검증 (ArchUnit)
+    testImplementation project(':common:archunit')
+}

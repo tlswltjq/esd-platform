@@ -1,0 +1,14 @@
+apply plugin: 'java-library'
+
+// 메시징 Redis Streams adapter(결정 203·209). 스프링 부트 Redis 자동 구성(spring-data-redis)을 끌어오지 않게
+// Lettuce 만 쓰고, stove.messaging.broker=redis-streams 일 때만 클라이언트를 만든다.
+// 코어(common:messaging)에만 의존한다. 다른 adapter 를 모른다.
+dependencies {
+    api project(':common:messaging')
+    implementation 'io.lettuce:lettuce-core'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    testImplementation project(':common:archunit')
+    testImplementation project(':common:test')
+    integrationTestImplementation project(':common:testcontainers')
+}

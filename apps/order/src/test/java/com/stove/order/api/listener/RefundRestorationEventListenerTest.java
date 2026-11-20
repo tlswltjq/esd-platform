@@ -6,12 +6,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.KafkaInboundMessages;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.RefundExecutionFailedEvent;
-import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
+import com.stove.common.messaging.kafka.KafkaInboundMessages;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.contract.payload.LicenseRestoredEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.service.ApplyRefundRestoration;
 import java.nio.charset.StandardCharsets;

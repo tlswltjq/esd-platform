@@ -1,7 +1,7 @@
 package com.stove.payment;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.OrderPlacedEvent;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import com.stove.payment.core.domain.PgResult;

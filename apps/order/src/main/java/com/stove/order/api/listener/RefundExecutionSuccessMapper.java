@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundExecutionSuccess;
 import com.stove.order.core.domain.RefundPaymentConfirmation;

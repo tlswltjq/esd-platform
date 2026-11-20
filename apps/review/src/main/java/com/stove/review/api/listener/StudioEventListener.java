@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
 import com.stove.review.core.service.ReceiveProjectReview;
 import com.stove.review.core.service.ReceiveReviewWithdrawal;
 

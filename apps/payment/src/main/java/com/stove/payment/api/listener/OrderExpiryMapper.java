@@ -1,7 +1,7 @@
 package com.stove.payment.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.payment.core.domain.OrderExpiryInput;

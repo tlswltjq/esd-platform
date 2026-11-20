@@ -6,9 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import static com.stove.license.LicenseFixtures.paid;
-import com.stove.common.kafka.KafkaMessagePublisher;
+import com.stove.common.messaging.kafka.KafkaMessagePublisher;
 import com.stove.license.core.service.GrantLicense;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxMetrics;
 import com.stove.common.messaging.outbox.OutboxRelay;

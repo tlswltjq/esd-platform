@@ -8,10 +8,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
-import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.contract.payload.RefundCancellationAmount;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.order.api.controller.dto.AdminRefundResponse;
 import com.stove.order.api.controller.dto.RefundAmountDetailsResponse;
 import com.stove.order.api.controller.dto.RefundResponse;

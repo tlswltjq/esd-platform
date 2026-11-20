@@ -7,9 +7,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.payload.LicenseRestoredEvent;
-import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.payload.LicenseRestoredEvent;
+import com.stove.common.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;
 import com.stove.license.core.domain.LicenseRegistration;

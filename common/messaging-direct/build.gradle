@@ -1,0 +1,12 @@
+apply plugin: 'java-library'
+
+// 메시징 브로커 없음 기준선(결정 203·209): stove.messaging.broker=direct 면 소비자가 발행 모듈의 Outbox 행을 직접 읽는다.
+// 코어(common:messaging)에만 의존한다. 다른 adapter 를 모른다.
+dependencies {
+    api project(':common:messaging')
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    testImplementation project(':common:archunit')
+    testImplementation project(':common:test')
+    integrationTestImplementation project(':common:testcontainers')
+}

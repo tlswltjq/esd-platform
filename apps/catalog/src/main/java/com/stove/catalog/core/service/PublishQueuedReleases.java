@@ -6,7 +6,7 @@ import com.stove.catalog.core.domain.CatalogPublicationJob;
 import com.stove.catalog.core.domain.CatalogPublicationJobRepository;
 import com.stove.catalog.core.domain.ReleaseSubmission;
 import com.stove.catalog.core.port.PublicationTracing;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

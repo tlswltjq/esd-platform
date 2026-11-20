@@ -1,6 +1,6 @@
 package com.stove.review.api.controller.dto;
 
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.review.core.domain.ProjectReview;
 import com.stove.review.core.domain.ReviewStatus;
 import java.time.Instant;

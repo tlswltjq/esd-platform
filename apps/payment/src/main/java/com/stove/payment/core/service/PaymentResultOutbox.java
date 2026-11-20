@@ -1,7 +1,7 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentStatus;

@@ -1,7 +1,7 @@
 package com.stove.license;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.OrderPaidEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.OrderPaidEvent;
 import com.stove.license.core.domain.PaidOrder;
 
 import java.time.Instant;

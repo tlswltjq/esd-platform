@@ -18,7 +18,7 @@
 | `adapter` | `adapter.storage.S3BuildStorage` |
 | `config` | `SecurityConfig`, `StorageConfiguration`·`ObjectStorageProperties`, `StudioUploadProperties`·`StudioAssetProperties`, `StudioUseCaseConfiguration`, `RequestJsonConfig` |
 
-- core가 받는 결과 입력은 Studio 내부 record다. 공통 계약 payload(`com.stove.common.kafka.contract.payload.*`)는 `api.listener`의 `*Mapper.from`과 Outbox 기록(서비스)에서만 쓰고, 도메인 모델은 payload 타입을 입력·출력으로 갖지 않는다(AGENTS.md 3절, 지금 차이는 ST-T5).
+- core가 받는 결과 입력은 Studio 내부 record다. 공통 계약 payload(`com.stove.common.contract.payload.*`)는 `api.listener`의 `*Mapper.from`과 Outbox 기록(서비스)에서만 쓰고, 도메인 모델은 payload 타입을 입력·출력으로 갖지 않는다(AGENTS.md 3절, 지금 차이는 ST-T5).
 - 서비스가 Inbox(`ProcessedEventGuard`)·Project 행 잠금·업무 변경·Outbox(`OutboxRecorder`)를 한 트랜잭션에서 조율한다.
 
 ## 데이터 모델

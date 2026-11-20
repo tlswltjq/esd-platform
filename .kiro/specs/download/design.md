@@ -9,7 +9,7 @@
 - 동기 의존(플랫폼 design "동기 의존" 표의 두 행이 정본): Download → License `GET /api/v1/library/{code}`(사용자 JWT), Download → Catalog `GET /internal/v1/products/{code}/build`(`X-Download-Service-Key`). Download를 부르는 모듈은 Gateway뿐이다(`/api/v1/downloads/**` 라우트, `apps/gateway/src/main/resources/application.yml:165-168`). Download는 순환에 들지 않는다([P1.2-1](../platform/requirements.md)).
 - 비동기 의존 없음: `@KafkaListener`·Outbox가 없고 소비 그룹 21개에 Download 그룹이 없다(플랫폼 design "소비 그룹").
 - 흐름 위치: 흐름 1의 마지막 단계 S10(플랫폼 design "흐름 1" 단계 목록). 끝 상태 E1~E7의 Download 열은 "이 공개본 빌드 발급 / 기존 공개본 / 없음"이고, Download가 바꾸는 상태는 없다.
-- 운영 JAR 의존성: `spring-boot-starter-web`·`validation`·springdoc·`software.amazon.awssdk:s3`·`common:web`·`common:security`뿐이다(`apps/download/build.gradle`). JPA·Kafka·`common:messaging`·`common:kafka`·MongoDB 의존이 없다.
+- 운영 JAR 의존성: `spring-boot-starter-web`·`validation`·springdoc·`software.amazon.awssdk:s3`·`common:web`·`common:security`뿐이다(`apps/download/build.gradle`). JPA·Kafka·`common:messaging`·`common:messaging-kafka`·MongoDB 의존이 없다.
 
 ## 데이터 모델
 

@@ -117,7 +117,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 |---|---|---|---|---|---|---|
 | **L0 도메인** | 상태 전이, 금액 계산 | 없음 | `test` | `apps/*/core/domain` | ms | 매 빌드 |
 | **L1 서비스** | 트랜잭션 경계, 멱등, Outbox 적재 | MySQL/Mongo | `integrationTest` | `apps/*/core/service` | 초 | 매 빌드 |
-| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/kafka` | ms | 매 빌드 |
+| **L2 어댑터·계약** | 봉투 파싱, 라우팅, 실패 분기, 직렬화 | 없음(대역) | `test` | `apps/*/api/listener`, `common/contract`·`common/messaging-*` | ms | 매 빌드 |
 | **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
@@ -580,7 +580,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
   추적이 없어도 적재가 그대로 되는지를 본다(decisions.md 17번).
   `propagation = MANDATORY` 자체는 여전히 무테스트다 — 검증하려면 실 트랜잭션 매니저가 필요하고,
   그 자리는 앱 모듈의 통합 테스트다.
-- **`common/kafka`** (신설, decisions.md 19번) — 수신 실패 처리는 <b>브로커 없이</b> 검증한다.
+- **`common/messaging-kafka`** (옛 `common/kafka`, 신설은 decisions.md 19번, 결정 209로 이름 변경) — 수신 실패 처리는 <b>브로커 없이</b> 검증한다.
   `DltOpsServiceTest` 가 `MockConsumer` 로 재투입을 본다 — 원본 토픽으로 가는가,
   진단 헤더(`kafka_dlt-*`)를 떼는가, 계약 헤더와 `traceparent` 를 남기는가,
   **조회가 커밋하지 않는가**, 발행이 끝난 뒤에만 커밋하는가.
@@ -710,7 +710,7 @@ Red·Green의 JUnit XML, 명령, 소스 사본·SHA-256은 `runs/order-refund-do
 최초 결제 결과는 유지하고 Outbox에는 정지 요청만 한 번 기록해야 한다. 저장된 과거 주문 픽스처의 생성 시각은 결제 확정 2시간 전으로 두어, 주문 생성 시각을 기한 시작으로 쓰는 오구현도 잡도록 했다.
 컴파일에 필요한 RequestRefund 미구현 골격·RefundRepository 저장 계약·LicenseSuspensionRequestedEvent를 추가했다. 서비스는 아직 Spring 빈으로 등록하지 않고, 실제 DB 저장 구현·트랜잭션 조립도 추가하지 않았다.
 새 이벤트는 기존 공통 이벤트 계약 카탈로그에도 등록해 직렬화 왕복·메타데이터·전방 호환·토픽 검증에 포함했다.
-`./gradlew :common:kafka:test :apps:order:test --continue --console=plain` 실행에서 컴파일은 통과했고, Order 144건 중 새 서비스 테스트 1건만 RequestRefund.execute의 미구현 예외로 실패했다. 기존 Order 143건과 공통 Kafka 171건은 실패·오류·건너뜀 없이 통과했다.
+`./gradlew :common:messaging-kafka:test :apps:order:test --continue --console=plain` 실행에서 컴파일은 통과했고, Order 144건 중 새 서비스 테스트 1건만 RequestRefund.execute의 미구현 예외로 실패했다. 기존 Order 143건과 공통 Kafka 171건은 실패·오류·건너뜀 없이 통과했다.
 실행 로그·JUnit XML·명령·기준 커밋·소스 사본과 SHA-256은 `runs/order-refund-reception-red-hswhjlph/`에 보존했다.
 이 Red는 Mockito 기반 서비스 조율 검증이며 실제 DB 원자성·잠금 효과, 동시 접수·실제 메시지 전달·License 업무 완료를 증명하지 않는다. R04의 실제 DB 검증과 R08·R09는 후속 범위다.
 
@@ -720,7 +720,7 @@ Red·Green의 JUnit XML, 명령, 소스 사본·SHA-256은 `runs/order-refund-do
 잠금 대기로 기한을 넘겨도 서비스 진입 시 확보한 접수 시각을 유지하는 회귀와 심사 대기 중복 접수 보존도 보완해 RequestRefundTest는 총 17건이다.
 서비스의 READ_COMMITTED 트랜잭션, JPA Refund·저장소, V12 order_refund의 환불 ID·주문번호 유일 제약과 주문 연결 외래 키, config의 객체 조립을 추가했다.
 운영 Clock은 기존 DATETIME(6) 저장 정밀도에 맞춘 마이크로초 단위이며 초 단위 절삭은 하지 않는다. 최초 접수 시각·자동 허용 판정·주문 연결은 생성 후 갱신하지 않는다.
-`./gradlew :common:kafka:test :apps:order:test :apps:order:compileIntegrationTestJava --continue --console=plain`은 성공했다. Order 160건·공통 Kafka 171건이 통과했고 통합 테스트 소스도 컴파일했다. 공통 Kafka 태스크는 앞선 통과 결과와 소스가 같아 UP-TO-DATE였다.
+`./gradlew :common:messaging-kafka:test :apps:order:test :apps:order:compileIntegrationTestJava --continue --console=plain`은 성공했다. Order 160건·공통 Kafka 171건이 통과했고 통합 테스트 소스도 컴파일했다. 공통 Kafka 태스크는 앞선 통과 결과와 소스가 같아 UP-TO-DATE였다.
 단계별 명령·로그·JUnit XML·소스 사본과 SHA-256은 `runs/order-refund-reception-tdd-opx7e0k1/`의 r04-green·r05-red/green·r07-red/green·guards-red·final-green에 보존했다. R04의 최초 Red는 앞선 `runs/order-refund-reception-red-hswhjlph/`를 함께 사용한다.
 
 [RefundReceptionIntegrationTest](../apps/order/src/integrationTest/java/com/stove/order/RefundReceptionIntegrationTest.java)는 실제 MySQL에서 접수·심사·중복·Outbox 삽입 후 실패 롤백과 재접수·동시 접수·서비스 잠금 우회 시 유일 제약·타인 주문·미결제 주문을 검증할 9건이다. Kafka 없이 DB 경계만 사용한다.

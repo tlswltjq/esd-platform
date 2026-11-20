@@ -1,6 +1,6 @@
 package com.stove.store.core.domain;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.CollectionTable;

@@ -1,0 +1,14 @@
+apply plugin: 'java-library'
+
+// 메시징 RabbitMQ adapter(결정 203·209). stove.messaging.broker=rabbitmq 일 때만 연결·구독을 만든다
+// (그 밖에서는 MessagingBrokerEnvironment 가 상태 검사를 끄고, 연결은 쓰기 전까지 열리지 않는다).
+// 코어(common:messaging)에만 의존한다. 다른 adapter 를 모른다.
+dependencies {
+    api project(':common:messaging')
+    implementation 'org.springframework.amqp:spring-rabbit'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    testImplementation project(':common:archunit')
+    testImplementation project(':common:test')
+    integrationTestImplementation project(':common:testcontainers')
+}

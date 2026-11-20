@@ -11,10 +11,10 @@ import static org.mockito.Mockito.reset;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
-import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.LicenseSuspendedEvent;
+import com.stove.common.contract.payload.LicenseSuspensionRequestedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.license.core.domain.License;

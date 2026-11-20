@@ -13,9 +13,9 @@ import static org.mockito.Mockito.when;
 
 import com.stove.common.event.MessagePublisher;
 import com.stove.common.event.OutboundMessage;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;

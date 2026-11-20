@@ -1,7 +1,7 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;

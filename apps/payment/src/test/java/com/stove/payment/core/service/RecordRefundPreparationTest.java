@@ -10,7 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
+import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.RefundExecution;

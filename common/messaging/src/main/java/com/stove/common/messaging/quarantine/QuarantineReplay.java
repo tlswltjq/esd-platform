@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.trace.ReplayTracing;
 import java.time.Clock;
 import java.time.Duration;

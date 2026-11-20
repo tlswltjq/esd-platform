@@ -1,6 +1,6 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
+import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.core.domain.RefundExecution;
 import lombok.RequiredArgsConstructor;

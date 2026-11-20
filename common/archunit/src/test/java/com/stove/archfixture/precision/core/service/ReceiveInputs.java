@@ -1,8 +1,8 @@
 package com.stove.archfixture.precision.core.service;
 
 import com.stove.archfixture.precision.core.domain.InternalInput;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

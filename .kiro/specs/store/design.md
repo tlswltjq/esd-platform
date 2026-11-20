@@ -8,7 +8,7 @@
 - 패키지: `core/{domain, port, service}` + `api/{controller, listener, scheduler}` + `adapter/` + `config/`. ArchUnit `StoreArchitectureTest`와 공통 `ModulePackageRules`가 지킨다([P1.1-1](../platform/requirements.md)·[P1.5](../platform/requirements.md)).
 - 동기 의존: Store → Catalog 하나(design "동기 의존" Store 행). Store를 부르는 업무 모듈은 없다(Gateway 라우팅만).
 - 비동기 의존: Catalog 공개 사본 이벤트 → Store, 단방향(design "비동기 의존" 단방향 행). 응답 사실은 없고 Store가 정본 대조로 차이를 센다(design "정방향 응답 쌍" 마지막 행, [결정 158](../../../docs/decisions.md#forward-gap-counting)).
-- 의존 라이브러리: `common:jpa`, `common:kafka`(계약·봉투·소비 재시도), 공통 실패 보관 표·재투입 API(결정 160, 공통 메시징 설계). Outbox·Inbox·재발행은 쓰지 않는다.
+- 의존 라이브러리: `common:jpa`, `common:messaging-kafka`(계약·봉투·소비 재시도), 공통 실패 보관 표·재투입 API(결정 160, 공통 메시징 설계). Outbox·Inbox·재발행은 쓰지 않는다.
 
 | 층 | Store의 부품 | 하는 일 |
 |---|---|---|

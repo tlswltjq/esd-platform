@@ -11,9 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.EventType;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.EventType;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PgResult;

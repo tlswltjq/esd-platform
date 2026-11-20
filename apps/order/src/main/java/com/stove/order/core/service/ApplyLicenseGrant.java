@@ -1,7 +1,7 @@
 package com.stove.order.core.service;
 
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.LicenseSuspensionRequestedEvent;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.LicenseSuspensionRequestedEvent;
 
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;

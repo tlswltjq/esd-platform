@@ -1,6 +1,6 @@
 package com.stove.store.core.port;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import java.util.List;
 
 public interface CatalogProducts {

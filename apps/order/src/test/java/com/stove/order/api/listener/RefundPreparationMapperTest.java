@@ -8,10 +8,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.kafka.KafkaInboundMessages;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.payload.RefundExecutionPreparedEvent;
+import com.stove.common.messaging.kafka.KafkaInboundMessages;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.order.core.domain.RefundPreparationConfirmation;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.service.ApplyRefundPreparation;

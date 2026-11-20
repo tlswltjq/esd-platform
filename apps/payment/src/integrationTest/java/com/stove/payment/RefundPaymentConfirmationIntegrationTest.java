@@ -15,8 +15,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.adapter.pg.PortOneRefundPaymentLookup;
 import com.stove.payment.core.domain.Payment;

@@ -1,6 +1,6 @@
 package com.stove.order.core.service;
 
-import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
+import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderStatus;

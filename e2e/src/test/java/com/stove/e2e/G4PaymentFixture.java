@@ -3,11 +3,11 @@ package com.stove.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.OrderPlacedEvent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;

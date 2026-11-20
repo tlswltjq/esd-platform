@@ -2,8 +2,8 @@ package com.stove.license.core.service;
 
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.LicenseSuspendedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.license.core.domain.License;

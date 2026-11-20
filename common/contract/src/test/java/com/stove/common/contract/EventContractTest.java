@@ -1,0 +1,461 @@
+package com.stove.common.contract;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stove.common.contract.payload.BuildUploadedEvent;
+import com.stove.common.contract.payload.BuildValidatedEvent;
+import com.stove.common.contract.payload.BuildValidationFailedEvent;
+import com.stove.common.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.GameRegisteredEvent;
+import com.stove.common.contract.payload.LicenseApprovalCorrectedEvent;
+import com.stove.common.contract.payload.LicenseApprovalCorrectionRequestedEvent;
+import com.stove.common.contract.payload.LicenseGrantedEvent;
+import com.stove.common.contract.payload.LicenseIssueFailedEvent;
+import com.stove.common.contract.payload.LicenseIssuedEvent;
+import com.stove.common.contract.payload.LicenseRestorationRequestedEvent;
+import com.stove.common.contract.payload.LicenseRestoredEvent;
+import com.stove.common.contract.payload.PurchaseRefundedEvent;
+import com.stove.common.contract.payload.LicenseRevokedEvent;
+import com.stove.common.contract.payload.LicenseSuspendedEvent;
+import com.stove.common.contract.payload.LicenseSuspensionRequestedEvent;
+import com.stove.common.contract.payload.OrderCanceledEvent;
+import com.stove.common.contract.payload.OrderCreatedEvent;
+import com.stove.common.contract.payload.OrderExpiredEvent;
+import com.stove.common.contract.payload.OrderLine;
+import com.stove.common.contract.payload.OrderPaidEvent;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.contract.payload.OrderPlacedEvent;
+import com.stove.common.contract.payload.PaymentCancelledEvent;
+import com.stove.common.contract.payload.PaymentCompletedEvent;
+import com.stove.common.contract.payload.PaymentFailedEvent;
+import com.stove.common.contract.payload.ProductChangedEvent;
+import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRejectedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectReviewApprovedEvent;
+import com.stove.common.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.contract.payload.RefundCancellationAmount;
+import com.stove.common.contract.payload.RefundExecutionFailedEvent;
+import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
+import com.stove.common.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.payload.ReleasePublishedEvent;
+import com.stove.common.contract.payload.ReleaseRolledBackEvent;
+import com.stove.common.contract.payload.ReleaseScheduledEvent;
+import com.stove.common.contract.payload.ReviewAppealedEvent;
+import com.stove.common.contract.payload.ReviewApprovedEvent;
+import com.stove.common.contract.payload.ReviewChangesRequestedEvent;
+import com.stove.common.contract.payload.ReviewRejectedEvent;
+import com.stove.common.contract.payload.SubmissionCreatedEvent;
+import com.stove.common.contract.payload.SubmissionReviewApprovedEvent;
+import com.stove.common.contract.payload.UserRegisteredEvent;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AssignableTypeFilter;
+
+/**
+ * 이벤트는 서비스 간 <b>계약</b>이다. 여기서 깨지면 컴파일은 통과하고 운영에서 터진다 — 발행 측과 수신 측이 다른 모듈이라 컴파일러가 불일치를 못 잡기 때문이다.
+ *
+ * <p>그래서 계약의 세 성질을 전수 검사한다.
+ *
+ * <ol>
+ *   <li><b>왕복 가능성</b> — 직렬화 후 역직렬화하면 같은 값이어야 한다
+ *   <li><b>메타데이터 완결성</b> — eventId/eventType/topic/partitionKey 가 비어 있으면 멱등 처리와 순서 보장이 동시에 무너진다
+ *   <li><b>전방 호환</b> — 발행 측이 필드를 추가해도 아직 배포되지 않은 수신 측이 죽지 않아야 한다. 무중단 배포가 성립하는 전제다
+ * </ol>
+ */
+class EventContractTest {
+
+    private static final String PAYLOAD_PACKAGE = "com.stove.common.contract.payload";
+
+    /** 운영과 같은 관용 설정. 스프링 부트가 자동 구성하는 ObjectMapper 의 기본값을 흉내낸다. */
+    private static final ObjectMapper MAPPER =
+            new ObjectMapper()
+                    .registerModule(new JavaTimeModule())
+                    .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+    private static List<OrderLine> lines() {
+        return List.of(new OrderLine(1L, "게임 A", 1001L, 30_000L, 2));
+    }
+
+    @Test void approvalAmountsSurviveTheWireAndAbsentAmountsRemainUnknown() throws Exception {
+        OrderPaymentCompletedEvent event = new OrderPaymentCompletedEvent("approved-1", Instant.parse("2026-10-30T01:00:00Z"),
+                "order-1", "placed-1", "payment-1", "buyer", 9000, "KRW", 8976L, 24L);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(event), OrderPaymentCompletedEvent.class)).isEqualTo(event);
+        String previous = MAPPER.writeValueAsString(new OrderPaymentCompletedEvent("approved-1", event.occurredAt(),
+                "order-1", "placed-1", "payment-1", "buyer", 9000, "KRW"))
+                .replace(",\"pgPaidAmount\":null", "").replace(",\"pgDiscountAmount\":null", "");
+        assertThat(MAPPER.readValue(previous, OrderPaymentCompletedEvent.class).pgPaidAmount()).isNull();
+        assertThat(MAPPER.readValue(previous, OrderPaymentCompletedEvent.class).pgDiscountAmount()).isNull();
+    }
+
+    @Test void cancellationTotalsAndReportedPointsAreSeparateFromTheOriginalApproval() throws Exception {
+        RefundAmountsSnapshot details = new RefundAmountsSnapshot(8976L, 24L,
+                List.of(new RefundCancellationAmount("cancel-1", 9000, 12L)), Instant.parse("2026-10-30T01:02:00Z"));
+        RefundPaymentConfirmedEvent event = new RefundPaymentConfirmedEvent("confirmation-1", Instant.parse("2026-10-30T01:03:00Z"),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW",
+                "PG_QUERY_UNATTRIBUTED", "pg-1", List.of("cancel-1"), details);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(event), RefundPaymentConfirmedEvent.class)).isEqualTo(event);
+        RefundExecutionSucceededEvent late = new RefundExecutionSucceededEvent("success-1", event.occurredAt(), event.eventId(),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW", "pg-1", "cancel-1", details);
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(late), RefundExecutionSucceededEvent.class)).isEqualTo(late);
+    }
+
+    @Test void omittedDetailsAndOmittedPointsDoNotTurnIntoZeroAmounts() throws Exception {
+        RefundPaymentConfirmedEvent event = new RefundPaymentConfirmedEvent("confirmation-1", Instant.parse("2026-10-30T01:03:00Z"),
+                "refund-1", "attempt-1", "requested-1", "order-1", "payment-1", "buyer", 9000, "KRW",
+                "PG_QUERY_UNATTRIBUTED", "pg-1", List.of("cancel-1"));
+        String previous = MAPPER.writeValueAsString(event).replace(",\"amountDetails\":null", "");
+        assertThat(MAPPER.readValue(previous, RefundPaymentConfirmedEvent.class).amountDetails()).isNull();
+        RefundAmountsSnapshot points = new RefundAmountsSnapshot(null, null, List.of(new RefundCancellationAmount("cancel-1", 9000, null)), null);
+        RefundAmountsSnapshot decoded = MAPPER.readValue(MAPPER.writeValueAsString(points), RefundAmountsSnapshot.class);
+        assertThat(decoded.pgPaidAmount()).isNull(); assertThat(decoded.cancellations().getFirst().pointAmount()).isNull();
+    }
+
+    @Test void anInitialExecutionWithoutTheNewPredecessorFieldStillDeserializesAsAnInitialRequest() throws Exception {
+        RefundExecutionRequestedEvent initial = new RefundExecutionRequestedEvent("request-1", Instant.parse("2026-10-27T01:00:00Z"),
+                "refund-1", "attempt-1", "order-1", "payment-1", "buyer", 9000, "KRW", "stop-1");
+        String legacy = MAPPER.writeValueAsString(initial).replace(",\"previousAttemptId\":null", "");
+        assertThat(MAPPER.readValue(legacy, RefundExecutionRequestedEvent.class).previousAttemptId()).isNull();
+    }
+    @Test void retryRequestsRetainTheirExplicitPredecessorThroughTheWireContract() throws Exception {
+        RefundExecutionRequestedEvent retry = new RefundExecutionRequestedEvent("request-2", Instant.parse("2026-10-27T01:01:00Z"),
+                "refund-1", "attempt-2", "order-1", "payment-1", "buyer", 9000, "KRW", "stop-2", "attempt-1");
+        assertThat(MAPPER.readValue(MAPPER.writeValueAsString(retry), RefundExecutionRequestedEvent.class)).isEqualTo(retry);
+    }
+
+    /** 전 payload 카탈로그. 새 이벤트를 추가하면 여기에도 넣어야 계약 검사를 받는다. */
+    static Stream<Named<DomainEvent>> allEvents() {
+        return events().map(event -> Named.of(event.getClass().getSimpleName(), event));
+    }
+
+    private static Stream<DomainEvent> events() {
+        ProjectWithdrawalRequest withdrawal = new ProjectWithdrawalRequest(10L, 1L, 1L, 1, "PROJECT-1", "usr_creator", null);
+        ProjectWithdrawalResult resolution = new ProjectWithdrawalResult(10L, 1L, 1L, 1, "PROJECT-1", "WITHDRAWN", "usr_creator", null,
+                Instant.parse("2026-11-03T00:00:00.123456Z"), "original-event");
+        ProjectSnapshot snapshot =
+                new ProjectSnapshot(
+                        1L,
+                        "PROJECT-1",
+                        "usr_creator",
+                        1,
+                        "Game",
+                        "Description",
+                        "https://example.com/image.png",
+                        null,
+                        "Content",
+                        1000,
+                        "KRW",
+                        1L,
+                        "1.0",
+                        1024,
+                        "abc",
+                        "s3://bucket/key",
+                        List.of("ACTION")
+                );
+        return Stream.of(
+                new OrderExpiredEvent("expired-1",Instant.parse("2026-10-29T01:00:00Z"),"order-1","placed-1","buyer",9000,"KRW",Instant.parse("2026-10-29T01:00:00Z")),
+                new RefundExecutionPreparedEvent("prepared-1",Instant.parse("2026-10-29T01:00:00.123456Z"),"refund-1","attempt-1","request-1", "order-1","payment-1","buyer",9000,"KRW","suspended-1",null,
+                        Instant.parse("2026-10-29T01:00:00.123456Z"),Instant.parse("2026-10-29T04:00:00.123456Z")),
+                new LicenseApprovalCorrectionRequestedEvent("correction-1",Instant.parse("2026-10-29T01:00:00Z"),"refund-1","review-1","stop-1",
+                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1"),
+                new LicenseApprovalCorrectedEvent("corrected-1",Instant.parse("2026-10-29T01:01:00Z"),"correction-1","refund-1","review-1","stop-1",
+                        "license-1","order-1","buyer",1L,"PRODUCT-1","payment-1","suspend-1","suspended-1",true),
+                new RefundExecutionFailedEvent("failure-1", Instant.parse("2026-10-27T01:03:00Z"), "refund-1", "attempt-1", "request-1",
+                        "order-1", "payment-1", "buyer", 9000, "KRW", "pg-original", "cancel-own", "a".repeat(64)),
+                new LicenseRestorationRequestedEvent("restore-1", Instant.parse("2026-10-27T01:04:00Z"), "refund-1", "attempt-1", "failure-1",
+                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1"),
+                new LicenseRestoredEvent("restored-1", Instant.parse("2026-10-27T01:05:00Z"), "restore-1", "refund-1", "attempt-1", "failure-1",
+                        "license-1", "order-1", "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1", "suspended-1", true),
+                new PurchaseRefundedEvent("refunded-1", Instant.parse("2026-10-27T01:06:00Z"), "refund-1", "license-1", "order-1",
+                        "buyer", 1L, "PRODUCT-1", "payment-1", "suspend-1"),
+                new RefundExecutionSucceededEvent("execution-succeeded-1", Instant.parse("2026-10-27T01:03:00Z"),
+                        "refund-confirmed-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                        "execution-requested-1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "pg-original", "cancel-1"),
+                new RefundPaymentConfirmedEvent("refund-confirmed-1", Instant.parse("2026-10-27T01:02:00Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd", "execution-requested-1",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW",
+                        "PG_QUERY_UNATTRIBUTED", "pg-original", List.of("cancel-1")),
+                new OrderPlacedEvent("placed-1", Instant.parse("2026-10-16T00:00:00Z"), "order-1", "usr_buyer",
+                        1L, "PROJECT-1", "Game", 1, 1000, 0, 1000, "KRW"),
+                new OrderPaidEvent("paid-1", Instant.parse("2026-10-17T00:00:00.123456Z"),
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "placed-1", "result-1", "payment-1", "usr_buyer",
+                        1L, "PROJECT-1", "Game", 1, 1000, "KRW"),
+                new LicenseSuspensionRequestedEvent("suspension-requested-1",
+                        Instant.parse("2026-10-25T13:00:00.123456Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new LicenseGrantedEvent("grant-1", Instant.parse("2026-10-25T11:00:00.123456Z"),
+                        "cccccccc-cccc-cccc-cccc-cccccccccccc", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new LicenseSuspendedEvent("suspended-1", Instant.parse("2026-10-26T01:00:00.123456Z"),
+                        "suspension-requested-1", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                        "cccccccc-cccc-cccc-cccc-cccccccccccc", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "usr_buyer", 1L, "PROJECT-1", "payment-1"),
+                new RefundExecutionRequestedEvent("execution-requested-1", Instant.parse("2026-10-26T01:01:00.123456Z"),
+                        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "payment-1", "usr_buyer", 1000, "KRW", "suspended-1"),
+                OrderPaymentCompletedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW"),
+                OrderPaymentFailedEvent.of("order-1", "placed-1", "payment-1", "usr_buyer", 1000, "KRW", "DECLINED", "Declined"),
+                CatalogProductPublishedEvent.of(new CatalogProductSnapshot(
+                        1L,
+                        "PROJECT-1",
+                        "Game",
+                        "Summary",
+                        "https://example.com/thumb.png",
+                        1000,
+                        "KRW",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "Content",
+                        null,
+                        1,
+                        "1.0",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "ON_SALE",
+                        1,
+                        true,
+                        List.of("ACTION")
+                )),
+                ProjectReviewRequestedEvent.of(1L, snapshot),
+                ProjectReviewWithdrawalRequestedEvent.of(withdrawal),
+                ProjectReviewWithdrawalResolvedEvent.of(resolution),
+                ProjectReleaseWithdrawalRequestedEvent.of(withdrawal),
+                ProjectReleaseWithdrawalResolvedEvent.of(resolution),
+                ProjectReviewApprovedEvent.of(1L, 1L, 1, "PROJECT-1", "reviewer"),
+                ProjectReviewRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "feedback", "reviewer"),
+                ProjectReleaseRequestedEvent.of(1L, 1L, snapshot),
+                ProjectReleaseCompletedEvent.of(1L, 1L, 1, "PROJECT-1", "request-1"),
+                ProjectReleaseRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "reason", "request-1"),
+                UserRegisteredEvent.of("usr_001", "creator@example.com"),
+                GameRegisteredEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false),
+                BuildUploadedEvent.of(1L, "GAME-001", "1.0.0", 1024L, "abc123", "s3://bucket/key"),
+                BuildValidatedEvent.of(
+                        2L, 1L, "GAME-001", "abc123", "WINDOWS", "1.0.0", "100", "deadbeef"),
+                BuildValidationFailedEvent.of(3L, 1L, "GAME-001", "MALWARE_DETECTED"),
+                SubmissionCreatedEvent.of(
+                        10L,
+                        1L,
+                        "GAME-001",
+                        1001L,
+                        1L,
+                        1L,
+                        1L,
+                        2L,
+                        "게임 A",
+                        "설명",
+                        30_000L,
+                        "KRW",
+                        "SELF_CLASSIFICATION",
+                        "KR-2026-01",
+                        "KR",
+                        "ALL",
+                        "{\"adultContent\":false,\"cashGambling\":false}",
+                        "1.0.0"),
+                ReviewApprovedEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ALL", false),
+                ReviewRejectedEvent.of(1L, "GAME-001", "VIOLENCE", "선정성 기준 초과"),
+                SubmissionReviewApprovedEvent.of(
+                        20L,
+                        10L,
+                        2L,
+                        1L,
+                        1L,
+                        1L,
+                        "RATING",
+                        "GAME-001",
+                        "ALL",
+                        "CERT-1",
+                        "ESD",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        "KR",
+                        "SELF_CLASSIFICATION",
+                        "KR-2026-01",
+                        null,
+                        null),
+                ReviewChangesRequestedEvent.of(
+                        20L, 10L, "STORE_PAGE", "GAME-001", "METADATA", "설명을 수정해 주세요."),
+                ReviewAppealedEvent.of(20L, 10L, "STORE_PAGE", "GAME-001", "수정 완료"),
+                ReleaseScheduledEvent.of(
+                        30L, 10L, "GAME-001", Instant.parse("2026-01-02T00:00:00Z")),
+                ReleasePublishedEvent.of(
+                        30L,
+                        null,
+                        10L,
+                        1L,
+                        "GAME-001",
+                        1001L,
+                        2L,
+                        1L,
+                        1L,
+                        1L,
+                        "게임 A",
+                        "설명",
+                        30_000L,
+                        "KRW",
+                        "ALL",
+                        "1.0.0",
+                        1024L,
+                        "abc123",
+                        "s3://bucket/key"),
+                ReleaseRolledBackEvent.of(31L, 30L, 2L, "GAME-001"),
+                ProductChangedEvent.of(
+                        1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", "ON_SALE", "ALL"),
+                OrderCreatedEvent.of("ORD-1", 42L, 60_000L, lines()),
+                OrderCanceledEvent.of("ORD-1", 42L, "USER_CANCEL"),
+                PaymentCompletedEvent.of(1L, "ORD-1", 42L, 60_000L, "CARD", lines()),
+                PaymentCancelledEvent.of(1L, "ORD-1", 42L, 60_000L, "USER_REFUND"),
+                PaymentFailedEvent.of(1L, "ORD-1", 42L, "REJECT_CARD_COMPANY", "카드사 거절"),
+                LicenseIssuedEvent.of("ORD-1", 42L, List.of(1L, 2L)),
+                LicenseRevokedEvent.of("ORD-1", 42L, List.of(1L, 2L), "USER_REFUND"),
+                LicenseIssueFailedEvent.of("ORD-1", 42L, "재고 없음"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allEvents")
+    @DisplayName("모든 이벤트는 메타데이터가 완결되어 있다")
+    void eventCarriesCompleteMetadata(DomainEvent event) {
+        assertThat(event.eventId()).as("멱등 처리 키").isNotBlank();
+        assertThat(event.eventType()).as("역직렬화 대상 선택 기준").isNotBlank();
+        assertThat(event.topic()).as("발행 대상").isNotBlank();
+        assertThat(event.partitionKey()).as("순서 보장 단위").isNotBlank();
+        assertThat(event.occurredAt()).isNotNull();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allEvents")
+    @DisplayName("모든 이벤트는 직렬화 왕복 후에도 같은 값이다")
+    void eventSurvivesRoundTrip(DomainEvent event) throws Exception {
+        String json = MAPPER.writeValueAsString(event);
+        Object restored = MAPPER.readValue(json, event.getClass());
+
+        assertThat(restored).isEqualTo(event);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allEvents")
+    @DisplayName("수신 측이 모르는 필드가 늘어나도 역직렬화된다 — 무중단 배포의 전제")
+    void unknownFieldsAreTolerated(DomainEvent event) throws Exception {
+        String json = MAPPER.writeValueAsString(event);
+        // 발행 측이 새 필드를 추가한 상황을 흉내낸다
+        String extended = json.substring(0, json.length() - 1) + ",\"brandNewField\":\"v2\"}";
+
+        Object restored = MAPPER.readValue(extended, event.getClass());
+
+        assertThat(restored).isEqualTo(event);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("allEvents")
+    @DisplayName("토픽은 Topics 상수 중 하나다 — 오타 토픽으로 발행하면 아무도 못 받는다")
+    void topicIsDeclaredConstant(DomainEvent event) {
+        assertThat(event.topic())
+                .isIn(
+                        Topics.AUTH,
+                        Topics.STUDIO,
+                        Topics.REVIEW,
+                        Topics.RELEASE,
+                        Topics.CATALOG,
+                        Topics.ORDER,
+                        Topics.PAYMENT,
+                        Topics.LICENSE);
+    }
+
+    @Test
+    @DisplayName("한 애그리거트의 이벤트는 같은 토픽으로 나간다 — 순서 보장의 전제")
+    void sameAggregateSharesTopic() {
+        assertThat(PaymentCompletedEvent.of(1L, "ORD-1", 42L, 1L, "CARD", lines()).topic())
+                .isEqualTo(PaymentCancelledEvent.of(1L, "ORD-1", 42L, 1L, "R").topic());
+
+        assertThat(LicenseIssuedEvent.of("ORD-1", 42L, List.of(1L)).topic())
+                .isEqualTo(LicenseRevokedEvent.of("ORD-1", 42L, List.of(1L), "R").topic())
+                .isEqualTo(LicenseIssueFailedEvent.of("ORD-1", 42L, "R").topic());
+    }
+
+    @Test
+    @DisplayName("같은 주문의 이벤트는 같은 파티션 키를 쓴다 — 결제→지급→회수 순서가 보장되려면")
+    void sameOrderSharesPartitionKey() {
+        String orderNo = "ORD-20260802-0001";
+
+        assertThat(
+                        Stream.of(
+                                        OrderCreatedEvent.of(orderNo, 42L, 1L, lines())
+                                                .partitionKey(),
+                                        PaymentCompletedEvent.of(
+                                                        1L, orderNo, 42L, 1L, "CARD", lines())
+                                                .partitionKey(),
+                                        PaymentCancelledEvent.of(1L, orderNo, 42L, 1L, "R")
+                                                .partitionKey(),
+                                        LicenseIssuedEvent.of(orderNo, 42L, List.of(1L))
+                                                .partitionKey())
+                                .distinct()
+                                .toList())
+                .containsExactly(orderNo);
+    }
+
+    @Test
+    @DisplayName("eventId 는 발행할 때마다 새로 생성된다 — 재사용하면 컨슈머가 두 번째를 중복으로 버린다")
+    void eventIdIsUniquePerPublication() {
+        String first = PaymentCompletedEvent.of(1L, "ORD-1", 42L, 1L, "CARD", lines()).eventId();
+        String second = PaymentCompletedEvent.of(1L, "ORD-1", 42L, 1L, "CARD", lines()).eventId();
+
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    @DisplayName("금액 계산은 단가 × 수량이다")
+    void lineAmountIsUnitPriceTimesQuantity() {
+        assertThat(new OrderLine(1L, "게임 A", 1001L, 30_000L, 3).lineAmount()).isEqualTo(90_000L);
+    }
+
+    /**
+     * 위 카탈로그는 <b>손으로 유지하는 목록</b>이다. 새 이벤트를 추가하고 여기 넣는 것을 잊으면 그 이벤트는 계약 검사를 <b>한 번도</b> 받지 않는다 — 그런데
+     * 빌드는 초록이다.
+     *
+     * <p>목록을 스캔으로 바꾸지 않고 스캔과 <b>대조</b>하는 이유는, 각 이벤트를 만들려면 의미 있는 인자가 필요해서다(리플렉션으로 만든 빈 껍데기는 왕복 검사의
+     * 값을 떨어뜨린다). 목록은 손으로 두되, 목록이 실제 패키지와 어긋나는 순간 이 테스트가 깨진다.
+     */
+    @Test
+    @DisplayName("payload 패키지의 모든 DomainEvent 가 카탈로그에 있다")
+    void catalogCoversEveryDeclaredEvent() {
+        ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AssignableTypeFilter(DomainEvent.class));
+
+        Set<String> declared =
+                scanner.findCandidateComponents(PAYLOAD_PACKAGE).stream()
+                        .map(BeanDefinition::getBeanClassName)
+                        .collect(Collectors.toSet());
+
+        Set<String> covered =
+                events().map(event -> event.getClass().getName()).collect(Collectors.toSet());
+
+        assertThat(declared).as("스캔 대상이 비었다 — 패키지 이름이 바뀌었는지 확인하라").isNotEmpty();
+        assertThat(covered)
+                .as("카탈로그와 payload 패키지가 어긋났다. 새 이벤트를 events() 에 추가하라")
+                .containsExactlyInAnyOrderElementsOf(declared);
+    }
+}

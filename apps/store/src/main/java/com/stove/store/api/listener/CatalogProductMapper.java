@@ -1,8 +1,8 @@
 package com.stove.store.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.store.core.domain.StoreProductValues;

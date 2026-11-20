@@ -3,9 +3,9 @@ package com.stove.review.api.listener;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectWithdrawalRequest;
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 

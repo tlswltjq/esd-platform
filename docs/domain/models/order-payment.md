@@ -44,7 +44,7 @@ Order 자체의 검증은 결과 픽스처를 사용한다. 실제 Payment 연�
 ## 구 OrderItem·OrderLine의 위치
 
 새 Order는 상품 하나의 스냅샷을 직접 보존하고 OrderItem·Quote를 사용하지 않는다.
-[OrderLine](../../../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/OrderLine.java)은 재작성 전 커머스의 구 계약에 남아 있는 상품·할인·정산 조건이다.
+[OrderLine](../../../common/contract/src/main/java/com/stove/common/contract/payload/OrderLine.java)은 재작성 전 커머스의 구 계약에 남아 있는 상품·할인·정산 조건이다.
 해당 타입의 존재를 새 주문·정산 연동 완료의 근거로 삼지 않는다. 할인 부담·판매자 계약은 기능을 추가할 때 별도 정의한다.
 
 <a id="payment"></a>

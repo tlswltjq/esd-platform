@@ -11,7 +11,7 @@ import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.CatalogRequestGateRepository;
 import com.stove.catalog.core.domain.ReleaseSubmission;
 import com.stove.catalog.core.port.PublicationTracing;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
