@@ -61,7 +61,7 @@ subject에서 조회한다. 세 식별자를 서로 대입하지 않는다. 업�
 5. 공통 런타임 의존성 방향과 auth·gateway의 회귀를 검증한다.
 
 `./gradlew verifyCommonRuntimeDependencies`는 공통 라이브러리가 Servlet 서버·MVC를
-런타임에 전파하지 않고, Kafka adapter가 JPA·메시징 코어를 요구하지 않는지, 코어·계약·포트와 다른 adapter의 런타임 클래스패스에 브로커 클라이언트가 없는지, adapter끼리 의존하지 않는지(결정 209) 검사한다. ArchUnit `CommonLibraryRules`(코어·계약·adapter)와 `MessagingBoundaryRules`(앱)가 같은 경계를 코드에서 다시 본다. 이 검증은
+런타임에 전파하지 않고, Kafka adapter가 JPA·메시징 코어를 요구하지 않는지, 코어·계약·포트와 다른 adapter의 런타임 클래스패스에 브로커 클라이언트(그룹 `org.apache.kafka`·`org.springframework.kafka`, `org.springframework.amqp`·`com.rabbitmq`, `io.lettuce`·`redis.clients`·`org.redisson`·모듈 `spring-data-redis`)가 없는지, adapter끼리 의존하지 않는지(결정 209) 검사한다. ArchUnit `CommonLibraryRules`(코어·계약·adapter)와 `MessagingBoundaryRules`(앱)가 같은 경계를 코드에서 다시 본다. 이 검증은
 루트 `check`에도 포함된다.
 
 테스트 지원과 컨테이너 지원의 분리는 유지한다. 패키지 규칙은 새 계약 위치를 반영하고,

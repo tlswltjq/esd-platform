@@ -437,7 +437,8 @@ tasks.register('verifyCommonRuntimeDependencies') {
         def brokerClients = [
                 'messaging-kafka'   : { m -> m.group in ['org.apache.kafka', 'org.springframework.kafka'] },
                 'messaging-rabbitmq': { m -> m.group in ['org.springframework.amqp', 'com.rabbitmq'] },
-                'messaging-redis'   : { m -> m.group == 'io.lettuce' || m.module == 'spring-data-redis' },
+                // Redis 클라이언트: Lettuce·Jedis·Redisson·spring-data-redis (PR #218 R2)
+                'messaging-redis'   : { m -> m.group in ['io.lettuce', 'redis.clients', 'org.redisson'] || m.module == 'spring-data-redis' },
         ]
         def adapters = brokerClients.keySet() + ['messaging-direct']
         modules.each { moduleName ->
