@@ -1,4 +1,6 @@
 apply plugin: 'java-library'
+// 코어를 실 DB 로 띄우는 테스트 부트 앱·스키마(Flyway)를 adapter 모듈 통합 테스트와 나눠 쓴다(결정 209).
+apply plugin: 'java-test-fixtures'
 
 dependencies {
     api project(':common:jpa')
@@ -25,6 +27,11 @@ dependencies {
     testImplementation project(':common:security')
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    testFixturesImplementation 'org.springframework.boot:spring-boot-autoconfigure'
+    testFixturesCompileOnly 'org.springframework:spring-web'
+    testFixturesCompileOnly project(':common:web')
+    testFixturesCompileOnly project(':common:security')
 
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')

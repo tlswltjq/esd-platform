@@ -43,7 +43,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
  * 실패는 제자리 재시도 뒤 격리하고 그 키만 멈춤.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
+@Import(InfraContainers.MySql.class)
 class RabbitAdapterIntegrationTest {
 
     private static final int QUEUES = 3;

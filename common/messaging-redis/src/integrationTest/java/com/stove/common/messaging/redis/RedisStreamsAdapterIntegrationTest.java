@@ -44,7 +44,7 @@ import org.testcontainers.containers.GenericContainer;
  * 앞 점유자가 처리하다 만(미확인) 항목을 이어받아 처리, 실패는 제자리 재시도 뒤 격리, 보관 실패 땐 메시지를 붙잡음.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, InfraContainers.Redis.class})
+@Import({InfraContainers.MySql.class, InfraContainers.Redis.class})
 class RedisStreamsAdapterIntegrationTest {
 
     private static final int STREAMS = 3;

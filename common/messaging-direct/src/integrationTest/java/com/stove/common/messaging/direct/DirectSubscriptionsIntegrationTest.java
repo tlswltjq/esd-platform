@@ -28,7 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 같은 키는 발행 순서대로 한 번에 하나, 늦게 SENT 된 행도 잃지 않음, 제자리 재시도 뒤 격리와 키 정지.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
-@Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
+@Import(InfraContainers.MySql.class)
 class DirectSubscriptionsIntegrationTest {
 
 

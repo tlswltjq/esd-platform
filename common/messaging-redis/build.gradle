@@ -11,4 +11,6 @@ dependencies {
     testImplementation project(':common:archunit')
     testImplementation project(':common:test')
     integrationTestImplementation project(':common:testcontainers')
+    // 코어 엔티티·스키마로 뜨는 테스트 부트 앱(OutboxQueryTestApplication)과 Flyway 이관을 코어에서 받는다.
+    integrationTestImplementation testFixtures(project(':common:messaging'))
 }
