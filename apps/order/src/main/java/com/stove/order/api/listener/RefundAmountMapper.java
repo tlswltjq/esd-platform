@@ -1,6 +1,6 @@
 package com.stove.order.api.listener;
 
-import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.contract.payload.RefundAmountsSnapshot;
 import com.stove.order.core.domain.ProviderPaymentAmounts;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.ReportedRefundAmounts;

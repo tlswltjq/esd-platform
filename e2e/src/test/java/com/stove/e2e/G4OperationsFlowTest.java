@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.kafka.contract.payload.OrderPlacedEvent;
+import com.stove.common.contract.payload.OrderPlacedEvent;
 import com.stove.e2e.ReviewJourney.Account;
 import com.stove.e2e.ReviewJourney.Project;
 import java.net.URI;

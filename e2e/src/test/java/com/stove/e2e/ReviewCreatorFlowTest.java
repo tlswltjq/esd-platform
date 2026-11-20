@@ -21,12 +21,12 @@ import static com.stove.e2e.ReviewJourney.zip;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.kafka.contract.payload.ProjectReleaseCompletedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

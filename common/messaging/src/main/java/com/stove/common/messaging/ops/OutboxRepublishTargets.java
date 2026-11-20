@@ -1,6 +1,6 @@
 package com.stove.common.messaging.ops;
 
-import com.stove.common.kafka.contract.EventType;
+import com.stove.common.contract.EventType;
 import java.util.Map;
 import java.util.Set;
 

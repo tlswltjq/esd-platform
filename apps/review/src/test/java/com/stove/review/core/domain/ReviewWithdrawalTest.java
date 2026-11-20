@@ -3,8 +3,8 @@ package com.stove.review.core.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
 import com.stove.common.web.error.BusinessException;
 import com.stove.review.ReviewFixtures;
 import java.time.Instant;

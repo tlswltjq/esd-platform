@@ -1,7 +1,7 @@
 package com.stove.review.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.review.core.domain.ReviewWithdrawalInput;

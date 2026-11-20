@@ -7,10 +7,10 @@ import static com.stove.order.OrderFixtures.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderStatus;

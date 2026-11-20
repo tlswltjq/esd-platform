@@ -1,6 +1,6 @@
 package com.stove.payment.api.listener;
 
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import com.stove.payment.core.domain.PaymentTraceContext;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

@@ -3,7 +3,7 @@ package com.stove.review.adapter.storage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.review.ReviewFixtures;
 import com.stove.review.ReviewIntegrationTestBase;

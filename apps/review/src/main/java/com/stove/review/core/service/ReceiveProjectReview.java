@@ -2,8 +2,8 @@ package com.stove.review.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;

@@ -99,7 +99,7 @@
   - 재현: 단위 — 판정 서비스 표(`ACTIVE`·`LOCKED`·`DISABLED`·없음)와, 인가 코드 교환 경로에서 `LOCKED` 계정이 `invalid_grant`인 통합 테스트(지금 없음).
 
 - [ ] **AU-T14. `UserRegistered.occurredAt`이 계정 생성 시각이 아니다**
-  - 어디서: `common/kafka/.../payload/UserRegisteredEvent.java:24`(`Instant.now()`), `RegisterAccount.java:48-49`.
+  - 어디서: `common/contract/.../payload/UserRegisteredEvent.java:24`(`Instant.now()`), `RegisterAccount.java:48-49`.
   - 목표: R8.2 — 본문 `occurredAt` = `user_account.created_at`(같은 트랜잭션 값). 헤더 `occurredAt`=본문은 플랫폼 T25.
   - 영향: 작다(같은 트랜잭션 안 몇 ms). 사실 시각의 정본을 하나로 둔다(원칙 ③).
   - 재현: `RegisterAccountTest#signupCreatesCreatorAndEvent`에 `occurredAt == createdAt` 단언.

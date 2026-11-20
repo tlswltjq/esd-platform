@@ -12,7 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.DomainEvent;
+import com.stove.common.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.order.core.domain.LicenseGrant;
 import com.stove.order.core.domain.LicenseSuspensionConfirmation;

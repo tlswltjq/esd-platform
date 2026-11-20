@@ -1,6 +1,6 @@
 package com.stove.store.api.controller.dto;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;

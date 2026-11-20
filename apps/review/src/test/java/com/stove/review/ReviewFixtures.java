@@ -1,9 +1,9 @@
 package com.stove.review;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.review.core.domain.ProjectReview;
 import com.stove.review.core.domain.ReviewSubmission;
 import java.util.List;

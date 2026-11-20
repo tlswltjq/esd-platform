@@ -9,8 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEvent.OutboxStatus;
 import com.stove.common.messaging.outbox.OutboxEventRepository;

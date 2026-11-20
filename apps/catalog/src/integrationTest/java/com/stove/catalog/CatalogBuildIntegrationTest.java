@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.core.service.PublishProjectRelease;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;

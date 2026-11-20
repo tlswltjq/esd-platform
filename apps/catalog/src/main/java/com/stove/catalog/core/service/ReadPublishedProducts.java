@@ -9,7 +9,7 @@ import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.PublishedProduct;
 import com.stove.catalog.core.domain.ProductPublicAccess;
 import com.stove.catalog.core.domain.ListingPreference;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.util.Map;

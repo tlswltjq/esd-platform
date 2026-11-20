@@ -22,7 +22,7 @@
   - 재현: `SynchronizeCatalogProductsTest`에 식별 충돌 상품 1개 + 정상 상품 갱신을 넣고, 회차 결과가 `PRODUCT_FAILURES`, 정상 상품은 `UPDATED`, `last.complete.timestamp`는 움직이고 `product.failed{type=CONFLICT}=1`인지 단언. Catalog 503 주입 시 `ABORTED`이고 `last.complete.timestamp`가 멈추는지.
 
 - [ ] **SO-T1. 공개 사본 이벤트 4개를 받지 않는다** ([결정 171](../../../docs/decisions.md#catalog-copy-events-by-fact), 플랫폼 T22)
-  - 어디서: `store:api/listener/CatalogEventListener.java:22`(`isType(EventType.CATALOG_PRODUCT_PUBLISHED)`만), `store:api/listener/CatalogProductMapper.java:14`(`CatalogProductPublishedEvent` 하나만 받음). `common/kafka/.../contract/EventType.java:44`에 새 상수 4개 없음.
+  - 어디서: `store:api/listener/CatalogEventListener.java:22`(`isType(EventType.CATALOG_PRODUCT_PUBLISHED)`만), `store:api/listener/CatalogProductMapper.java:14`(`CatalogProductPublishedEvent` 하나만 받음). `common/contract/.../EventType.java:44`에 새 상수 4개 없음.
   - 목표: R5.1·R5.10, design "이벤트" 소비 표. 네 타입과 옛 타입을 같은 Mapper 경로로 받아 같은 사본 입력 → `ApplyCatalogProduct.execute`. 배포 순서 P2.7-4 ①(Store가 다섯 타입을 모두 받는 판)이 Catalog 전환보다 먼저다.
   - 영향: Catalog가 먼저 새 타입을 내면 Store는 지금 코드에서 조용히 건너뛰어(SO-T2) 사본이 다음 대조(기본 1분)까지 뒤처진다. 대조가 메우므로 영구 누락은 없다.
   - 재현: `StoreIntegrationTest`에 네 타입을 각각 실제 Kafka로 넣어 사본이 바뀌는지, 같은 `catalogVersion`의 옛 타입·새 타입 중복이 무변화인지.
@@ -34,19 +34,19 @@
   - 재현: 리스너 단위 테스트에 모르는 타입 레코드 → 서비스 호출 없음 + 카운터 1.
 
 - [ ] **SO-T3. `schemaVersion` 헤더를 읽지 않는다** ([결정 170](../../../docs/decisions.md#schema-version-header), 플랫폼 T19·T25)
-  - 어디서: `store:api/listener/CatalogEventListener.java:21-24`, `CatalogProductMapper.java:14`. 공통 `EventEnvelope`에 아직 `schemaVersion`이 없다(`common/kafka`).
+  - 어디서: `store:api/listener/CatalogEventListener.java:21-24`, `CatalogProductMapper.java:14`. 공통 `EventEnvelope`에 아직 `schemaVersion`이 없다(`common/contract`).
   - 목표: R5.11. (`eventType`, `schemaVersion`)으로 Mapper 변환을 고르고, 헤더가 없으면 1. 모르는 버전은 영구 실패.
   - 영향: 발행자가 본문 모양을 바꾸면 Store가 옛 모양으로 읽다 계약 오류가 된다.
   - 재현: 헤더 없음 → v1 경로, `schemaVersion=2` 견본 → v2 경로, `schemaVersion=99` → 영구 실패.
 
 - [ ] **SO-T4. core 입력이 공통 계약 record `CatalogProductSnapshot`이고, 그 record가 빠진 칸을 기본값으로 만든다** (AGENTS.md 3절, [결정 78](../../../docs/decisions.md), 플랫폼 T24)
-  - 어디서: `common/kafka/src/main/java/com/stove/common/kafka/contract/payload/CatalogProductSnapshot.java:13-19`(`listed` 없으면 판매 상태로 추정, `saleStatus`·`catalogVersion` 없으면 `ON_SALE`·`contentVersion`), `store:api/listener/CatalogProductMapper.java:26`(record를 그대로 반환), `store:core/service/ApplyCatalogProduct.java:30`, `store:core/domain/StoreProduct.java:55`·`:64`·`:81`·`:113`, `store:core/port/CatalogProducts.java:8`, `store:adapter/CatalogHttpClient.java:82`, 컨트롤러 DTO(`StoreProductDetail.java:11`·`StoreProductSummary.java:10`·`StoreProductPage.java:6`).
+  - 어디서: `common/contract/src/main/java/com/stove/common/contract/payload/CatalogProductSnapshot.java:13-19`(`listed` 없으면 판매 상태로 추정, `saleStatus`·`catalogVersion` 없으면 `ON_SALE`·`contentVersion`), `store:api/listener/CatalogProductMapper.java:26`(record를 그대로 반환), `store:core/service/ApplyCatalogProduct.java:30`, `store:core/domain/StoreProduct.java:55`·`:64`·`:81`·`:113`, `store:core/port/CatalogProducts.java:8`, `store:adapter/CatalogHttpClient.java:82`, 컨트롤러 DTO(`StoreProductDetail.java:11`·`StoreProductSummary.java:10`·`StoreProductPage.java:6`).
   - 목표: R5.12·용어 "사본 입력", design "이벤트" Mapper 검증 4. Store core에 사본 입력 값(예: `CatalogProductCopy`)을 두고, Mapper·adapter가 검증 뒤 만든다. 옛 형식 기본값은 공통 record에서 빼고, 남겨야 하면 Store Mapper의 `schemaVersion=1` 변환으로 옮긴다(노출 추정은 Catalog 규칙의 재계산이라 원칙 ③). 남기지 않아도 되는지는 토픽 보존 기간 안에 옛 형식 메시지가 있는지로 판단한다(T24).
   - 영향: 방문자 노출 — 버전 칸 없는 옛 JSON이 빈 Store에 들어오면 `listed=true`·`ON_SALE` 사본이 생긴다(T24 재현). 더 높은 버전의 숨김은 덮지 못한다(`StoreListingTest#olderPayloadWithoutListingUsesAutomaticSalesRuleAndCannotRestoreANewerHiddenCopy`).
   - 재현: 버전·노출 칸 없는 과거 JSON을 빈 Store에 넣음 → 목표에서는 영구 실패(또는 v1 변환 규칙의 결과)이고 공통 record가 값을 만들지 않음.
 
 - [ ] **SO-T5. 영구 실패도 4회 재시도한다** ([P2.6-3](../platform/requirements.md), 플랫폼 T20)
-  - 어디서: 영구 실패를 `BusinessException(INVALID_REQUEST/CONFLICT)`로 던지는 곳 — `store:api/listener/CatalogProductMapper.java:24`, `store:core/domain/StoreProduct.java:67`·`:71`·`:75`·`:77`, `store:core/domain/StoreProductValues.java:26`·`:28`, `store:core/service/ApplyCatalogProduct.java:42`. 재시도 정책은 `common/kafka/.../KafkaConsumerAutoConfiguration.java:37-43`.
+  - 어디서: 영구 실패를 `BusinessException(INVALID_REQUEST/CONFLICT)`로 던지는 곳 — `store:api/listener/CatalogProductMapper.java:24`, `store:core/domain/StoreProduct.java:67`·`:71`·`:75`·`:77`, `store:core/domain/StoreProductValues.java:26`·`:28`, `store:core/service/ApplyCatalogProduct.java:42`. 재시도 정책은 `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java:37-43`.
   - 목표: R5.16. 이 자리들이 공통 영구 실패 예외(T20)로 표시되어 재시도 없이 실패 보관으로 간다. 삽입 경합(`ConcurrencyFailureException`)·DB 장애는 재시도 가능으로 남긴다.
   - 영향: 같은 버전 충돌 한 건이 파티션을 7초+ 멈춰 같은 파티션의 다른 상품 반영이 늦어진다(`docs/architecture.md` R11).
   - 재현: `StoreIntegrationTest#invalidKafkaInputGoesToDltWithoutWritingProduct`에 처리 시도 횟수 단언(1회).

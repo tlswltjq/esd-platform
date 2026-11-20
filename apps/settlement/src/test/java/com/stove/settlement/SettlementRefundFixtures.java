@@ -8,7 +8,7 @@ import com.stove.settlement.core.domain.PaidOrder;
 import com.stove.settlement.core.domain.PgPayment;
 import com.stove.settlement.core.domain.PgRefund;
 import com.stove.settlement.core.domain.PgRefundCancellation;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import java.util.List;
 
 public final class SettlementRefundFixtures {

@@ -130,10 +130,10 @@ License는 `(buyerSubject, productId)`별 보유권 한 개와 완료 주문 하
 | 업로드 세션 / Upload Session | 큰 빌드 파일의 부분 업로드를 관리하는 세션. 빌드·제출·출시 단위와 별개. 현재 Studio에서는 전체 ZIP 한 요청 업로드로 교체됨 |
 | 가격 이력 / Pricing Revision | 심사·출시에 사용할 가격의 특정 판본. 현재 신규 생성은 KR/KRW |
 | 등급 자료 이력 / Rating Revision | 설문·지역·정책 버전·판정 경로를 고정한 자료 |
-| 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/BuildVariant.java) |
+| 빌드 변형 / Build Variant | 같은 대상 제품 버전의 OS·아키텍처·전체/델타 조합. [BuildVariant](../common/contract/src/main/java/com/stove/common/contract/payload/BuildVariant.java) |
 | 기본 빌드 / `buildId` | 제출 요청의 첫 빌드이며 전체 파일이어야 함. `additionalBuildIds`로 다른 대상의 전체·델타 파일을 추가 |
 | 심사 스냅샷 / Submission Snapshot | 구 SubmissionSnapshot은 제거됐다. 현재 Review는 ProjectReviewRequested의 불변 ProjectSnapshot을 ProjectReview에 보존한다. [현재 모델](domain/models/review.md) |
-| 상점 공개 사본 / Storefront Snapshot | LIVE 릴리스의 소개·이미지·요구 사양을 전달하는 사본. [StorefrontSnapshot](../common/kafka/src/main/java/com/stove/common/kafka/contract/payload/StorefrontSnapshot.java) |
+| 상점 공개 사본 / Storefront Snapshot | LIVE 릴리스의 소개·이미지·요구 사양을 전달하는 사본. [StorefrontSnapshot](../common/contract/src/main/java/com/stove/common/contract/payload/StorefrontSnapshot.java) |
 | 검색 문서 / Product Document | 현재 Store의 MySQL 조회 사본은 StoreProduct이며 contentVersion으로 신구를 판단한다. [StoreProduct](../apps/store/src/main/java/com/stove/store/core/domain/StoreProduct.java) |
 | 패치 매니페스트 / Patch Manifest | 구 Download의 배포 파일 사본. 현재 MVP에서 제거하고 Catalog 현재 공개 빌드를 조회 |
 | 다운로드 티켓 / Download Ticket | 권한 확인 뒤 발급하는 만료 시각이 있는 서명 URL과 파일 정보 |

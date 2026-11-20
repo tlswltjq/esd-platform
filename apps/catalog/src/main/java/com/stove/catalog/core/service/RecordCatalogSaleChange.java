@@ -3,7 +3,7 @@ package com.stove.catalog.core.service;
 import com.stove.catalog.core.domain.CatalogProduct;
 import com.stove.catalog.core.domain.CatalogSaleChange;
 import com.stove.catalog.core.domain.CatalogSaleChangeRepository;
-import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;

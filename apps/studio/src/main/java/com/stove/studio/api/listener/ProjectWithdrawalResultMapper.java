@@ -1,10 +1,10 @@
 package com.stove.studio.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalResolvedEvent;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.project.ProjectRequestKind;

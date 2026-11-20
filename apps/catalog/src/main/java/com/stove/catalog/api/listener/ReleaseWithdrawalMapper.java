@@ -1,8 +1,8 @@
 package com.stove.catalog.api.listener;
 
 import com.stove.catalog.core.domain.ReleaseWithdrawalInput;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.util.Objects;

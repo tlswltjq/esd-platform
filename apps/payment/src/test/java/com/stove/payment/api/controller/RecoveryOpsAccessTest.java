@@ -8,8 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.stove.common.messaging.quarantine.QuarantineReplay;
 import com.stove.common.messaging.ops.QuarantineOpsController;
-import com.stove.common.kafka.ops.DltOpsController;
-import com.stove.common.kafka.ops.DltOpsService;
+import com.stove.common.messaging.kafka.ops.DltOpsController;
+import com.stove.common.messaging.kafka.ops.DltOpsService;
 import com.stove.common.messaging.ops.OutboxOpsController;
 import com.stove.common.messaging.ops.OutboxOpsService;
 import com.stove.common.security.CommonSecurityAutoConfiguration;

@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.EventType;
+import com.stove.common.contract.EventType;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.web.error.BusinessException;
 import com.stove.order.core.domain.Order;

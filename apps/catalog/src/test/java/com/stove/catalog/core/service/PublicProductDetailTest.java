@@ -13,7 +13,7 @@ import com.stove.catalog.core.domain.CatalogProduct;
 import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.ListingPreference;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import java.util.Optional;

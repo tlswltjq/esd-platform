@@ -6,8 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.LicenseApprovalCorrectionRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.LicenseApprovalCorrectionRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import java.util.List;

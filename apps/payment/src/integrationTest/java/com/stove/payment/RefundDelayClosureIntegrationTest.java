@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.EventType;
+import com.stove.common.contract.EventType;
 import com.stove.common.testcontainers.SharedContainers;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;

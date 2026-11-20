@@ -6,7 +6,7 @@ import com.stove.auth.core.domain.RoleAuditLog;
 import com.stove.auth.core.domain.RoleAuditLogRepository;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
-import com.stove.common.kafka.contract.payload.UserRegisteredEvent;
+import com.stove.common.contract.payload.UserRegisteredEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;

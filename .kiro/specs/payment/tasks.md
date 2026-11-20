@@ -59,7 +59,7 @@
   - 영향: **돈** — Order가 거절한 성공(돈은 나감)이 지금은 409 → DLT로 묻힌다.
   - 재현: Payment 통합 — `PAID` 결제의 결과 ID로 거절 사실 주입 → 기록 1건·게이지 1·재전달 무변화·다른 결과 ID 영구 실패.
 - [ ] **PA-T11. 결과 이벤트가 시도를 가리키지 않고, 확정 트랜잭션이 시도를 다시 확인하지 않는다** (플랫폼 T1·T18, 결정 153·174, (1회차 지적 A3, 판정 전))
-  - 어디서: `common/kafka/.../payload/OrderPaymentCompletedEvent.java:11-12`(`admissionId` 없음), `payment:core/service/PaymentResultOutbox.java:15·20`, `payment:adapter/pg/AdmittedPortOnePgGateway.java:21-28`(잠금 밖 시도 조회), `payment:core/domain/ApprovalClosure.java:27`·`Payment.java:147-156`(`REVIEW_CLOSED`를 `OrderPaymentFailed`로).
+  - 어디서: `common/contract/.../payload/OrderPaymentCompletedEvent.java:11-12`(`admissionId` 없음), `payment:core/service/PaymentResultOutbox.java:15·20`, `payment:adapter/pg/AdmittedPortOnePgGateway.java:21-28`(잠금 밖 시도 조회), `payment:core/domain/ApprovalClosure.java:27`·`Payment.java:147-156`(`REVIEW_CLOSED`를 `OrderPaymentFailed`로).
   - 목표: R3.1·R3.12·R13.5. `OrderPaymentCompleted` `admissionId` 필수 + 새 `schemaVersion`(P2.7-5 순서: Payment 늦은 성공 차단 → Order가 v1·v2 읽음 → Payment v2 → v1 행 0건 → v1 읽기 제거). 확정 트랜잭션 결제 → 시도 잠금·재확인. 종결은 `OrderPaymentReviewClosed`.
   - 영향: **돈·보유권** — 실패 통지한 시도의 늦은 성공이 다른 시도의 성공처럼 `PAID`가 되면 이중 청구·잘못된 보유권(U1).
   - 재현: Payment 통합 — 확정 직전 시도를 실패 종료로 바꿈 → `OrderPaymentCompleted` 0건. 계약 테스트 — `admissionId` 누락 v2 거절, v1 견본 읽기.

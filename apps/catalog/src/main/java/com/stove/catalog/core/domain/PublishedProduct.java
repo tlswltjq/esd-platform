@@ -1,7 +1,7 @@
 package com.stove.catalog.core.domain;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import java.time.Instant;
 
 public record PublishedProduct(

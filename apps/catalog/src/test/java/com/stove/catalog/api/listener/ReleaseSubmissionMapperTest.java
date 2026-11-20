@@ -4,8 +4,8 @@ import static com.stove.catalog.CatalogFixtures.envelope;
 import static com.stove.catalog.CatalogFixtures.event;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 

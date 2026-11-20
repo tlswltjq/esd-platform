@@ -14,8 +14,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.payload.LicenseSuspendedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.payload.LicenseSuspendedEvent;
 import com.stove.order.core.domain.LicenseGrant;
 import com.stove.order.core.domain.LicenseSuspensionConfirmation;
 import com.stove.order.core.domain.Order;

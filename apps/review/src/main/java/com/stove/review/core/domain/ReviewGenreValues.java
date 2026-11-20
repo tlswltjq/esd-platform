@@ -1,6 +1,6 @@
 package com.stove.review.core.domain;
 
-import com.stove.common.kafka.contract.genre.GenreCatalog;
+import com.stove.common.contract.genre.GenreCatalog;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.util.List;

@@ -31,7 +31,7 @@
   - 재현: 통합 — 정지 → `LicenseRestorationRequested`로 `REGISTERED`·`ACTIVE` 복구 → 같은 정지 ID의 `PurchaseRefunded` 주입 → 지금 `CONFLICT`(Red), 목표 `REFUNDED`·보유권 `ENDED`·Outbox `LicenseRefundApplied` 1건. 보관함 반환 뒤(`STORED`)·재등록 뒤(새 `ACTIVE`) 변형, 승인 정정으로 끝난 정지를 가리키면 거절.
 
 - [ ] **LI-T1. 회수 응답 사실 `LicenseRefundApplied`를 내지 않고, 회수에 쓴 `PurchaseRefunded`를 기록하지 않는다** ([결정 158](../../../docs/decisions.md#forward-gap-counting), 플랫폼 T6, 1회차 지적 B4, 판정 전)
-  - 어디서: `license:core/service/ApplyPurchaseRefund.java:29-40`(Outbox 없음, `OutboxRecorder` 주입 없음), `license:config/LicenseSuspensionConfiguration.java:22-25`, `license/db/V10:36-39`(`refunded_suspension_request_event_id`·`refunded_at`만, `PurchaseRefunded.eventId`·`refundId` 칸 없음). `common/kafka/.../contract/EventType.java`에 상수 없음.
+  - 어디서: `license:core/service/ApplyPurchaseRefund.java:29-40`(Outbox 없음, `OutboxRecorder` 주입 없음), `license:config/LicenseSuspensionConfiguration.java:22-25`, `license/db/V10:36-39`(`refunded_suspension_request_event_id`·`refunded_at`만, `PurchaseRefunded.eventId`·`refundId` 칸 없음). `common/contract/.../EventType.java`에 상수 없음.
   - 목표: R11-1·R11-2, design "발행" `LicenseRefundApplied`(가칭, 제안 본문). `REFUNDED`로 바뀐 트랜잭션에서만 Outbox, 재전달은 내지 않음. 새 열 `refunded_event_id`·`refunded_refund_id` + `uk_product_license_refund_event`(옛 `REFUNDED` 행 채우기 방침과 `migrationTest` 포함 — 옛 행은 `PurchaseRefunded` 식별자를 모름, Order V30 채움 이벤트 포함, 결정 99). Order 소비(`order-license-refund`)는 Order 모듈 스펙. 이름·칸 확정은 플랫폼 이벤트 표(A5).
   - 영향: **보유권(감지)** — License가 `PurchaseRefunded`를 실패 보관에 둔 채 멈춰도 Order가 셀 응답이 없어 환불 완료 주문의 보유권 정지·라이브러리 노출이 조용히 남는다(U3).
   - 재현: `PurchaseStorageIntegrationTest`에 회수 뒤 `outbox_event`의 `LicenseRefundApplied` 1행 단언(지금 Red), 같은 `PurchaseRefunded` 재전달 뒤에도 1행, 같은 정지·다른 `eventId`는 `uk_product_license_refund_event`로 거절.
@@ -49,7 +49,7 @@
   - 재현: 이행 테스트 — 각 위반 조합 삽입이 CHECK에 걸리는지.
 
 - [ ] **LI-T4. 구매 근거 생성 사실의 이름이 `LicenseGranted`다** ([결정 175](../../../docs/decisions.md#purchase-record-stored), 플랫폼 T33, 1회차 지적 B9, 판정 전)
-  - 어디서: `license:core/service/GrantLicense.java:45-48`(`LicenseGrantedEvent`), `common/kafka/.../contract/EventType.java`(`LICENSE_GRANTED`).
+  - 어디서: `license:core/service/GrantLicense.java:45-48`(`LicenseGrantedEvent`), `common/contract/.../EventType.java`(`LICENSE_GRANTED`).
   - 목표: R1-1, design "이름 이행". Order가 두 타입을 받는 판이 먼저 나간 뒤 License가 `PurchaseRecordStored`를 낸다(P2.7-4). 재발행 허용 목록은 이행 동안 두 이름(LI-T8).
   - 영향: 동작은 같다. 새 소비자가 "보유권 활성화"로 오해할 여지를 없앤다.
   - 재현: 계약 테스트 — `GrantLicense`가 `PurchaseRecordStored` 타입·같은 본문·키를 쓰는지, 옛 `LicenseGranted` `SENT` 행 재발행이 이행 중 허용되는지.

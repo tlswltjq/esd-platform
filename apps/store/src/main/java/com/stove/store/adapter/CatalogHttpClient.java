@@ -3,7 +3,7 @@ package com.stove.store.adapter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.store.core.domain.CatalogUnavailableException;
 import com.stove.store.core.domain.StoreProductValues;
 import com.stove.store.core.port.CatalogProducts;

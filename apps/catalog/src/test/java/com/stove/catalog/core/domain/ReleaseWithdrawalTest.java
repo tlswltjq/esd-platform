@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.catalog.CatalogFixtures;
 import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalRequest;
-import com.stove.common.kafka.contract.payload.ProjectWithdrawalResult;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectWithdrawalRequest;
+import com.stove.common.contract.payload.ProjectWithdrawalResult;
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;

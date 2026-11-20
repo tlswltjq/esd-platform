@@ -15,11 +15,11 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.test.PausePoints;
 import com.stove.common.testcontainers.InfraContainers;

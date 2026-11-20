@@ -5,9 +5,9 @@ import static com.stove.payment.PaymentFixtures.request;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.KafkaInboundMessages;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.Topics;
+import com.stove.common.messaging.kafka.KafkaInboundMessages;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.payment.api.listener.OrderEventListener;
 import com.stove.payment.api.scheduler.PendingPaymentScheduler;

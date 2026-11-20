@@ -9,7 +9,7 @@ import com.stove.catalog.core.domain.ListingChange;
 import com.stove.catalog.core.domain.ListingPreference;
 import com.stove.catalog.core.domain.ListingValues;
 import com.stove.catalog.core.domain.PlatformListingChange;
-import com.stove.common.kafka.contract.payload.CatalogProductPublishedEvent;
+import com.stove.common.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;

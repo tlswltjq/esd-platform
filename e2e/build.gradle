@@ -15,7 +15,7 @@ dependencies {
     testImplementation 'org.springframework:spring-web'                 // RestClient
     testImplementation 'com.fasterxml.jackson.core:jackson-databind'
     testImplementation 'org.awaitility:awaitility'
-    testImplementation project(':common:kafka')
+    testImplementation project(':common:messaging-kafka')
 }
 
 // 소스가 없다. 빈 jar 를 만들면 산출물 목록에 모듈이 아닌 것이 섞인다

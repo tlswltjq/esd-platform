@@ -2,7 +2,7 @@ package com.stove.store.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.store.core.domain.CanonicalProduct;

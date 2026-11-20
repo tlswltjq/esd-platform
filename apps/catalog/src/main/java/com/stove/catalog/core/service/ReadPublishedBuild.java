@@ -8,7 +8,7 @@ import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogRelease;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.PublishedBuild;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import lombok.RequiredArgsConstructor;

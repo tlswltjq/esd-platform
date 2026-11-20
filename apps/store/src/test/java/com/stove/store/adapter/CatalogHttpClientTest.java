@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.response.ApiResponse;
 import com.stove.store.config.CatalogClientConfiguration;
 import com.sun.net.httpserver.HttpServer;

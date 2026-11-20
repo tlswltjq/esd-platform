@@ -12,8 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.testcontainers.InfraContainers;

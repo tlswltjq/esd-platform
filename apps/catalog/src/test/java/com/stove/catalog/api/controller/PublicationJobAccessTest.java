@@ -13,7 +13,7 @@ import com.stove.catalog.api.listener.ReleaseSubmissionMapper;
 import com.stove.catalog.config.SecurityConfig;
 import com.stove.catalog.core.domain.CatalogPublicationJob;
 import com.stove.catalog.core.service.ReadPublicationJobs;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.security.CommonSecurityAutoConfiguration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;

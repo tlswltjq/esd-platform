@@ -6,7 +6,7 @@ import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.quarantine.QuarantineReplay.ReplayResult;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;

@@ -1,7 +1,7 @@
 package com.stove.license.api.listener;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.license.core.domain.PurchaseRefund;

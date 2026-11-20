@@ -5,8 +5,8 @@ import static com.stove.order.OrderFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.RefundExecutionSucceededEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;

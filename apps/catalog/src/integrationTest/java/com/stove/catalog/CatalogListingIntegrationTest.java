@@ -16,7 +16,7 @@ import com.stove.catalog.core.domain.ListingPreference;
 import com.stove.catalog.core.service.ChangeCatalogListing;
 import com.stove.catalog.core.service.PublishProjectRelease;
 import com.stove.catalog.core.service.ReadCatalogListing;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

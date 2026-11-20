@@ -12,7 +12,7 @@
 형식: 무엇이 · 어디서(`파일:줄`) · 목표 · 영향 · 재현 테스트. 경로 줄임 `review:` = `apps/review/src/main/java/com/stove/review/`. 줄 번호는 2026-11-10 `docs/spec-foundation` 기준. 돈·보유권 영향 순.
 
 - [ ] **RV-T4. 승인 이벤트가 Catalog가 대조할 스냅샷 값을 싣지 않는다** ([결정 167](../../../docs/decisions.md#catalog-verifies-approval), 플랫폼 T16·MC-C2의 Review 쪽)
-  - 어디서: `common/kafka/.../contract/payload/ProjectReviewApprovedEvent.java`(칸: `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`뿐), `review:core/service/DecideProjectReview.java:28-33`.
+  - 어디서: `common/contract/.../payload/ProjectReviewApprovedEvent.java`(칸: `reviewRequestId`·`projectId`·`contentVersion`·`productCode`·`actor`뿐), `review:core/service/DecideProjectReview.java:28-33`.
   - 목표: R9.1·R9.2. 승인 이벤트에 Review가 저장한 `ProjectSnapshot` 전체를 `snapshot` 칸으로 싣는다([결정 181](../../../docs/decisions.md#approval-snapshot-payload)). 같은 `eventType`의 새 `schemaVersion`, P2.7-5 순서(Studio·Catalog가 두 버전을 읽는 판 → Review 발행 전환). 이미 `APPROVED`인 심사의 승인 사실은 이행하지 않는다([결정 182](../../../docs/decisions.md#no-approval-migration), RV-T13).
   - 영향: **돈·보유권** — 이 칸이 없으면 Catalog가 결정 167 대조를 할 수 없어 RI-2 가드(T16)가 성립하지 않는다. Studio 결함·위조된 출시 요청·수동 수정된 Studio `APPROVED`로 승인 안 된 자료가 공개·판매되고 그 자료로 보유권이 지급된다.
   - 재현: 승인 API 호출 뒤 `outbox_event.payload`에 저장 스냅샷과 같은 값(또는 같은 지문)이 있는지 단언 — 지금 Red.
@@ -42,7 +42,7 @@
   - 재현: `status='APPROVED', actor=NULL` INSERT가 실패함을 단언(지금 성공).
 
 - [ ] **RV-T5. 재시도로 바뀌지 않는 수신 실패를 4회 재시도한다** (플랫폼 T20의 Review 쪽)
-  - 어디서: `review:api/listener/ReviewSubmissionMapper.java:14-18`·`ReviewWithdrawalMapper.java:15-19`(`BusinessException(INVALID_REQUEST)`), `review:core/service/ReceiveProjectReview.java:41`(스냅샷 충돌 `CONFLICT`), `ReceiveReviewWithdrawal.java:40`, `ReviewWithdrawal.java:47-48·60`, 활성 유일 키 위반(`DataIntegrityViolationException`, 분류 코드 없음). 공통 핸들러는 모두 재시도(`common/kafka/.../KafkaConsumerAutoConfiguration.java:37-43`).
+  - 어디서: `review:api/listener/ReviewSubmissionMapper.java:14-18`·`ReviewWithdrawalMapper.java:15-19`(`BusinessException(INVALID_REQUEST)`), `review:core/service/ReceiveProjectReview.java:41`(스냅샷 충돌 `CONFLICT`), `ReceiveReviewWithdrawal.java:40`, `ReviewWithdrawal.java:47-48·60`, 활성 유일 키 위반(`DataIntegrityViolationException`, 분류 코드 없음). 공통 핸들러는 모두 재시도(`common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java:37-43`).
   - 목표: R2.5, design 상태×트리거 표의 "영구 실패" 칸. 위 실패를 공통 영구 실패 예외로 던져 재시도 없이 실패 보관·키 정지.
   - 영향: 돈 없음. 계약 위반 한 건이 `review-project` 파티션을 7초 이상 멈춰 같은 상품의 뒤 철회 요청을 늦춘다. 활성 키 위반이 일시 오류인지 계약 위반인지 운영자가 구분하지 못한다.
   - 재현: 같은 `reviewRequestId`·다른 스냅샷 레코드를 넣고 실패 보관까지 처리 시도 1회 단언.
@@ -78,7 +78,7 @@
   - 재현: 위 단언 추가.
 
 - [ ] **RV-T9. 옛 Review 계약 상수 제거 근거** (플랫폼 T30, [결정 172](../../../docs/decisions.md#remove-legacy-contracts))
-  - 어디서: `common/kafka/.../contract/EventType.java:33-41`(`REVIEW_APPROVED`·`REVIEW_REJECTED`·`SUBMISSION_REVIEW_APPROVED`·`REVIEW_CHANGES_REQUESTED`·`REVIEW_APPEALED`), Review의 V1~V9 시절 Outbox 행.
+  - 어디서: `common/contract/.../EventType.java:33-41`(`REVIEW_APPROVED`·`REVIEW_REJECTED`·`SUBMISSION_REVIEW_APPROVED`·`REVIEW_CHANGES_REQUESTED`·`REVIEW_APPEALED`), Review의 V1~V9 시절 Outbox 행.
   - 목표: R8.6. 제거 PR에 `SELECT event_type, status, COUNT(*) FROM stove_review.outbox_event WHERE event_type IN ('ReviewApproved','ReviewRejected','SubmissionReviewApproved','ReviewChangesRequested','ReviewAppealed') AND status IN ('PENDING','DEAD') GROUP BY 1,2` 0행과 Review 실패 보관 표 0행을 첨부.
   - 영향: 돈 없음.
   - 재현: 위 SQL.

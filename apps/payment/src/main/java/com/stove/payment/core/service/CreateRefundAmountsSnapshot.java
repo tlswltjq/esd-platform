@@ -1,7 +1,7 @@
 package com.stove.payment.core.service;
 
-import com.stove.common.kafka.contract.payload.RefundAmountsSnapshot;
-import com.stove.common.kafka.contract.payload.RefundCancellationAmount;
+import com.stove.common.contract.payload.RefundAmountsSnapshot;
+import com.stove.common.contract.payload.RefundCancellationAmount;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.RefundExecution;
 

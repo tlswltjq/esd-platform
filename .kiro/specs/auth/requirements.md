@@ -128,7 +128,7 @@ Auth는 계정과 역할의 정본이다([플랫폼 design "정본 소유"](../p
 
 #### 수용 기준
 1. THE 메일 발송 계약 SHALL `core.port` `PasswordResetMailPort.sendResetToken(email, rawToken)` 하나이고 공급자 이름·형식·오류 분류를 담지 않는다. 공급자 구현은 `adapter/mail`, 주소·키·타임아웃은 `config`에 둔다([P1.1-3](../platform/requirements.md#p11-경계-코드-수준)·[P1.1-4](../platform/requirements.md#p11-경계-코드-수준)).
-2. THE 메일 발송 SHALL 모듈 간 이벤트(`common/kafka` 계약·Outbox 토픽)로 내지 않는다. 메일은 Auth가 외부 공급자에게 거는 동기 호출이다.
+2. THE 메일 발송 SHALL 모듈 간 이벤트(`common/contract` 계약·Outbox 토픽)로 내지 않는다. 메일은 Auth가 외부 공급자에게 거는 동기 호출이다.
 3. IF 메일 공급자가 응답하지 않거나 거절하면 THEN Auth SHALL 계정·토큰 상태를 추측해 바꾸지 않고, R6.1의 응답을 바꾸지 않는다. 발송 실패를 다시 보낼지·어디에 기록할지는 `[결정 필요 M-AU-2]`.
 4. THE 운영 설정 SHALL 실제 발송 adapter를 조립한다. 로그만 남기는 adapter(`LoggingPasswordResetMailAdapter`)는 운영 기본값이 아니다(원칙 ⑦, AU-T7). 실제 공급자 연동은 `[외부 대기]`(tasks).
 5. THE 발송 adapter와 로그 SHALL 원본 토큰을 기록하지 않는다.

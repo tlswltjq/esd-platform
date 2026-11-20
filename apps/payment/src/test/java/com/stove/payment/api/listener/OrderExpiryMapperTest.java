@@ -5,8 +5,8 @@ import static com.stove.payment.PaymentFixtures.request;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.EventEnvelope;
-import com.stove.common.kafka.contract.payload.OrderExpiredEvent;
+import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import org.junit.jupiter.api.Test;

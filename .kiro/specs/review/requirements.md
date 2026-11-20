@@ -13,7 +13,7 @@ Review는 Studio 작업본을 읽거나 바꾸지 않고, 심사 요청을 대�
 ## 용어
 
 - **`ProjectReview`**(`project_review`): 심사 요청 한 건. PK는 Studio가 발급한 `reviewRequestId`이며 Review는 자체 번호를 발급하지 않는다.
-- **스냅샷**: 공통 계약 `ProjectSnapshot`(`common/kafka/.../contract/payload/ProjectSnapshot.java`) 전체. 받은 그대로 불변 JSON으로 보관한다. 값 동일성은 `ProjectSnapshot` 레코드 동등(장르는 정렬 뒤 비교)이다.
+- **스냅샷**: 공통 계약 `ProjectSnapshot`(`common/contract/.../payload/ProjectSnapshot.java`) 전체. 받은 그대로 불변 JSON으로 보관한다. 값 동일성은 `ProjectSnapshot` 레코드 동등(장르는 정렬 뒤 비교)이다.
 - **판정**: `REQUESTED`에서 `APPROVED` 또는 `REJECTED`로의 전이. 판정자 `actor`는 검증된 JWT `sub`다.
 - **철회 명령**(`review_withdrawal`): Studio가 낸 `ProjectReviewWithdrawalRequested`의 내용(`withdrawalId`가 PK). 원요청보다 먼저 와도 보관한다.
 - **원요청 없는 철회**: 보관했지만 같은 `reviewRequestId`의 `project_review`가 아직 없는 철회 명령([P3.2-7](../platform/requirements.md#p32-심사-요청철회-studio--review)).

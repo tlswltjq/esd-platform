@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.kafka.contract.payload.CatalogProductSnapshot;
+import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.store.core.domain.StoreProduct;
 import com.stove.store.core.domain.StoreProductRepository;

@@ -87,7 +87,7 @@
   - 영향: **돈** — 공급자 시계가 빠르면 정상 금융 완료가 거절돼 환불이 `PENDING_PAYMENT_REFUND`에 멈춘다(추정, 미재현).
   - 재현: `providerCancelledAt = occurredAt + 3초`인 확인 → 지금 거절(Red).
 - [ ] **T12(Order 몫) / OR-T1. 결제 기한을 저장하지 않고 상수로 두 곳에서 계산한다**([결정 169](../../../docs/decisions.md#checkout-open-until-expiry-fact))
-  - 어디서: `order:core/domain/Order.java:77`, `order:core/service/CloseExpiredOrders.java:38`, `common/kafka/.../payload/OrderPlacedEvent.java:9-11`(`expiresAt` 없음).
+  - 어디서: `order:core/domain/Order.java:77`, `order:core/service/CloseExpiredOrders.java:38`, `common/contract/.../payload/OrderPlacedEvent.java:9-11`(`expiresAt` 없음).
   - 목표: R1.4·R3.2·R3.14, 설정 `stove.order.payment-window`, `purchase_order.expires_at`, `OrderPlaced.expiresAt`.
   - 영향: **돈** — 기한을 바꾸면 Payment 계산과 어긋나 `OrderExpired`가 거절된다(플랫폼 T12).
   - 재현: 설정 40분으로 주문 생성 → `expires_at`·`OrderPlaced.expiresAt` 40분, 스캔이 그 값으로 고름.

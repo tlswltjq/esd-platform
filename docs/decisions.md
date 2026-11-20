@@ -2148,6 +2148,19 @@
 - 구분: 추천 수용
 - 결과: [PR #206](https://github.com/tlswltjq/esd-platform/pull/206) `tools/measurement/journey_latency.py`, 판단 색인 행
 
+
+<a id="messaging-symmetric-modules"></a>
+## 209. 메시징은 브로커와 무관한 코어 하나와 같은 모양의 어댑터 모듈 넷으로 나누고, 비교는 한 산출물에서 설정으로 고른다
+- 문제: 메시징 비교(M)는 네 기술의 차이만 재야 한다. 그런데 Kafka 어댑터는 따로 떨어진 `common:kafka` 모듈이고, RabbitMQ·Redis Streams·브로커 없음(`direct`) 어댑터는 `common:messaging` 안에 패키지로 섞여 있다. 게다가 코어인 `common:messaging`이 `api project(':common:kafka')`·`spring-kafka`에 의존해, 다른 브로커로 돌려도 Kafka가 클래스패스에 올라온다. "Kafka 없이 돈다"를 구조로 증명하지 못하고, 어댑터마다 의존 범위·자동 구성 위치가 달라 비교 공정성이 흔들린다. 공통 계약 테스트도 어댑터별로 흩어져 있다.
+- 선택지: A 지금 구조 유지 / B 코어(`common:messaging`, 브로커 의존 0)와 어댑터 모듈 넷(`messaging-kafka`·`messaging-rabbitmq`·`messaging-redis`·`messaging-direct`, 각각 코어에만 의존)으로 나누고, 모든 어댑터가 상속하는 계약 테스트 한 벌을 두며, 앱은 넷을 모두 런타임에 넣고 `stove.messaging.broker`로 고른다. ArchUnit이 앱·코어의 브로커 클라이언트 import를 막는다 / C B와 같은 모듈 구조에서 빌드 시 어댑터 하나만 넣는다 (추천: B — 측정 차이가 곧 전송 계층 차이가 되도록 코어 경로를 한 벌로 두고, 같은 산출물에서 설정만 바꿔 이미지·의존 버전 변수를 뺀다. 실제 서비스로 갈 때는 모듈 구조가 같아 C로 Gradle 의존 한 줄만 바꾼다. 재작성 비용은 트레이드오프로만 본다)
+- 내 의견: "추천 구조로 결정하고 진행해" (결정 전 질문: "다른 기술을 적용하고 비교해보기 위한것이였는데 코드 재작성의 비용을 제외하고 어떤 구조가 적절함?")
+- 선택: B — 추천 수용.
+  - 기술 고유 기능(Kafka 파티션 순서, RabbitMQ DLX, Redis 소비 그룹 기능)은 비교하지 않는다. 같은 보장을 코어가 낼 때의 전송 성능·운영성을 잰다([결정 206](#messaging-port-scope-quarantine)이 이미 받아들인 손실).
+  - 운영 산출물에 쓰지 않는 클라이언트 셋이 함께 들어간다. 비교 프로젝트라 공정성을 앞에 둔다.
+  - DB 없는 Store의 Kafka DLT 직접 사용은 이 결정 밖이다(Store tasks SO-T6, `[결정 필요 M-SO-1]`). 어댑터 모듈 정리에서는 `messaging-kafka`에 남긴다.
+- 구분: 추천 수용
+- 결과: [PR #218](https://github.com/tlswltjq/esd-platform/pull/218) — 판단 색인 행
+
 ---
 
 ## 검증하며 드러난 것

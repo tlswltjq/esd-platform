@@ -1,6 +1,6 @@
 package com.stove.review.api.controller.dto;
 
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;

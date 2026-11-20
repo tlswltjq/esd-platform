@@ -17,7 +17,7 @@ import com.stove.catalog.core.domain.SellerSaleChange;
 import com.stove.catalog.core.service.ChangeCatalogListing;
 import com.stove.catalog.core.service.ChangeSellerSaleStatus;
 import com.stove.catalog.core.service.PublishProjectRelease;
-import com.stove.common.kafka.contract.payload.ProjectReleaseRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;

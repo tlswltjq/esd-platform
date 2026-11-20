@@ -1,8 +1,8 @@
 package com.stove.review.core.service;
 
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewApprovedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewRejectedEvent;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.ProjectReviewApprovedEvent;
+import com.stove.common.contract.payload.ProjectReviewRejectedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;

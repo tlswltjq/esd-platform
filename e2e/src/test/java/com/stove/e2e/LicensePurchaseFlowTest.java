@@ -20,11 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.OrderPaidEvent;
-import com.stove.common.kafka.contract.payload.RefundPaymentConfirmedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.OrderPaidEvent;
+import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;

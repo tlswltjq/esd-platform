@@ -9,7 +9,7 @@ import static com.stove.order.OrderFixtures.result;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.kafka.contract.payload.OrderPaymentCompletedEvent;
+import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.web.error.BusinessException;
 import java.time.Instant;
 import java.util.stream.Stream;

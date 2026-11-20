@@ -1,7 +1,7 @@
 package com.stove.studio.core.service.project;
 
-import com.stove.common.kafka.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
-import com.stove.common.kafka.contract.payload.ProjectReviewWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
+import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;

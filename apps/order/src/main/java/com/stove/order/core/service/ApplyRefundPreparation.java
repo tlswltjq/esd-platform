@@ -1,6 +1,6 @@
 package com.stove.order.core.service;
 
-import com.stove.common.kafka.contract.EventType;
+import com.stove.common.contract.EventType;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;

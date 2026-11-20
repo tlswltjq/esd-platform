@@ -1,7 +1,7 @@
 package com.stove.studio.core.service.project;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import com.stove.studio.core.domain.build.Build;

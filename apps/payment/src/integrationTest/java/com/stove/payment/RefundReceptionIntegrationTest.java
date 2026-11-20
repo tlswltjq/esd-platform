@@ -15,9 +15,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
 import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;

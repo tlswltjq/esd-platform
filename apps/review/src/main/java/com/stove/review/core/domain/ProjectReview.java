@@ -1,7 +1,7 @@
 package com.stove.review.core.domain;
 
 import com.stove.common.jpa.BaseTimeEntity;
-import com.stove.common.kafka.contract.payload.ProjectSnapshot;
+import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import jakarta.persistence.Column;

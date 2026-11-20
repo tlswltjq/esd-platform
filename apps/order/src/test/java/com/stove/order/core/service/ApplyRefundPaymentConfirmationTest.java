@@ -8,8 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.stove.common.kafka.contract.EventType;
-import com.stove.common.kafka.contract.payload.PurchaseRefundedEvent;
+import com.stove.common.contract.EventType;
+import com.stove.common.contract.payload.PurchaseRefundedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.order.core.domain.Order;

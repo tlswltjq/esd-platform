@@ -1,22 +1,18 @@
 apply plugin: 'java-library'
+// 코어를 실 DB 로 띄우는 테스트 부트 앱·스키마(Flyway)를 adapter 모듈 통합 테스트와 나눠 쓴다(결정 209).
+apply plugin: 'java-test-fixtures'
 
 dependencies {
     api project(':common:jpa')
-    // 컨슈머 재시도·DLT 정책. Outbox 를 쓰면 컨슈머도 쓰므로 함께 딸려가게 둔다.
-    api project(':common:kafka')
-    api 'org.springframework.kafka:spring-kafka'
+    // 브로커와 무관한 코어(결정 209): 포트(common:event)·계약(common:contract)만 안다. 어떤 브로커 클라이언트에도 의존하지 않는다.
+    api project(':common:event')
+    api project(':common:contract')
     // 릴레이는 배경 스레드라 지표 없이는 관측 수단이 없다
     api 'io.micrometer:micrometer-core'
     // 추적 컨텍스트를 적재 시점에 붙잡아 발행 시점에 되살리기 위한 추상(Tracer/Propagator).
     // 구현(브리지)과 수집기는 앱이 고른다 — 라이브러리는 OpenTelemetry 를 강제하지 않는다.
     // 없으면 추적 없이 그대로 돈다(TraceContextCapture.DISABLED).
     api 'io.micrometer:micrometer-tracing'
-    // 결정 203 비교 대상 RabbitMQ adapter. stove.messaging.broker=rabbitmq 일 때만 연결·구독을 만든다
-    // (그 밖에서는 MessagingBrokerEnvironment 가 상태 검사를 끄고, 연결은 쓰기 전까지 열리지 않는다).
-    implementation 'org.springframework.amqp:spring-rabbit'
-    // 결정 203 비교 대상 Redis Streams adapter. 스프링 부트 Redis 자동 구성(spring-data-redis)을 끌어오지 않게
-    // Lettuce 만 쓰고, stove.messaging.broker=redis-streams 일 때만 클라이언트를 만든다.
-    implementation 'io.lettuce:lettuce-core'
 
     // 운영 API(ops)는 HTTP 어댑터라 spring-web 이 필요하다. 다만 이 모듈이 웹을 **요구**하지는 않는다 —
     // 배치 전용 서비스가 생기면 컨트롤러 없이 Outbox 만 쓰면 된다.
@@ -32,6 +28,11 @@ dependencies {
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
+    testFixturesImplementation 'org.springframework.boot:spring-boot-autoconfigure'
+    testFixturesCompileOnly 'org.springframework:spring-web'
+    testFixturesCompileOnly project(':common:web')
+    testFixturesCompileOnly project(':common:security')
+
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')
 
@@ -40,4 +41,6 @@ dependencies {
     // 실 MySQL 이 필요하므로 컨테이너는 통합 소스셋에만 건다.
     testImplementation project(':common:test')
     integrationTestImplementation project(':common:testcontainers')
+    // 릴레이 재시작 복구는 실 브로커로 확인한다. 테스트에서만 Kafka adapter 를 쓴다(운영 코드는 모른다).
+    integrationTestImplementation project(':common:messaging-kafka')
 }

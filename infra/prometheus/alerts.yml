@@ -3,7 +3,7 @@
 # DLT 와 Outbox DEAD 는 유실을 막지만 **알려주지는 않는다.** 아무도 보지 않으면 조용히 쌓이기만
 # 하고, 그건 운영상 유실과 크게 다르지 않다. "포기했다"가 도달해야 복구가 시작된다.
 #
-# 지표 출처는 코드다 — common:messaging 의 OutboxMetrics·JpaKeyQuarantine, common:kafka 의 DeadLetterMetrics.
+# 지표 출처는 코드다 — common:messaging 의 OutboxMetrics·JpaKeyQuarantine, common:messaging-kafka 의 DeadLetterMetrics.
 # 예외가 하나 있다: stove-consumer 그룹은 kafka-exporter 가 브로커에서 읽어 온 값을 쓴다.
 # 앱이 같은 이름의 지표를 내지만 믿을 수 없기 때문이고, 그 사연은 그 그룹의 주석에 있다.
 groups:

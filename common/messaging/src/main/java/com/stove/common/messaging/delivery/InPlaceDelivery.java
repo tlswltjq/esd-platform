@@ -3,7 +3,7 @@ package com.stove.common.messaging.delivery;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.trace.ReplayTracing;
 import java.time.Duration;
 import java.util.List;

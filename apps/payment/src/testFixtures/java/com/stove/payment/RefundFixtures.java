@@ -4,7 +4,7 @@ import static com.stove.payment.PaymentFixtures.approved;
 import static com.stove.payment.PaymentFixtures.id;
 import static com.stove.payment.PaymentFixtures.request;
 
-import com.stove.common.kafka.contract.payload.RefundExecutionRequestedEvent;
+import com.stove.common.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.RefundExecutionRequest;
 import java.time.Instant;

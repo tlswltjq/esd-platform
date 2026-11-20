@@ -5,10 +5,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.kafka.KafkaInboundMessages;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.Topics;
-import com.stove.common.kafka.contract.payload.ProjectReviewRequestedEvent;
+import com.stove.common.messaging.kafka.KafkaInboundMessages;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.Topics;
+import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.review.ReviewFixtures;
 import com.stove.review.core.service.ReceiveProjectReview;
 import com.stove.review.core.service.ReceiveReviewWithdrawal;

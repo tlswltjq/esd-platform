@@ -7,9 +7,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.kafka.EventHeaders;
-import com.stove.common.kafka.contract.DomainEvent;
-import com.stove.common.kafka.contract.payload.OrderPaymentFailedEvent;
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.contract.DomainEvent;
+import com.stove.common.contract.payload.OrderPaymentFailedEvent;
 import com.stove.order.core.domain.Order;
 import com.stove.order.core.domain.OrderRepository;
 import com.stove.order.core.domain.OrderStatus;

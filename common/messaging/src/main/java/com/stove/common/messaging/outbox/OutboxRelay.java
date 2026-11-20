@@ -2,7 +2,7 @@ package com.stove.common.messaging.outbox;
 
 import com.stove.common.event.MessagePublisher;
 import com.stove.common.event.OutboundMessage;
-import com.stove.common.kafka.EventHeaders;
+import com.stove.common.contract.EventHeaders;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
