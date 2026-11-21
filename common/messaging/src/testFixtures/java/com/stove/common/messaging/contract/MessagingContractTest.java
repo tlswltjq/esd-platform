@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
@@ -32,19 +33,28 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>계약:
  * <ol>
- *   <li>같은 키는 발행 순서대로, 한 번씩 전달된다.</li>
- *   <li>같은 그룹의 인스턴스가 둘이어도 한 메시지는 한 인스턴스만 처리한다.</li>
+ *   <li>같은 키는 발행 순서대로, 한 번씩, 한 번에 하나씩 처리된다(앞 처리가 끝나기 전에 다음을 시작하지 않는다).</li>
+ *   <li>같은 그룹의 인스턴스가 둘이어도 한 메시지는 한 인스턴스만 처리하고, 같은 키를 두 인스턴스가 동시에 처리하지 않는다.</li>
  *   <li>다른 그룹은 각자 모든 메시지를 받는다(팬아웃).</li>
  *   <li>처리 실패는 제자리에서 재시도(최초 1회 + 재시도 {@value #RETRIES}회)한 뒤 격리하고 그 키만 멈춘다.
  *       멈춘 키의 뒤 메시지는 처리하지 않고 격리 뒤에 쌓는다. 다른 키는 계속 흐른다.</li>
  *   <li>재시도 제외 예외는 첫 실패에 격리한다.</li>
  *   <li>격리 기록이 실패하면 그 메시지를 붙잡아, 같은 키의 뒤 메시지가 추월하지 못한다.</li>
+ *   <li>재시도 도중 성공하면 격리하지 않고, 같은 키의 뒤 메시지는 그 성공 뒤에 처리된다.</li>
  * </ol>
+ *
+ * <p>건수 단언은 목표 건수에 닿은 뒤 {@link #quietPeriod()} 동안 더 오는 것이 없는지 보고 한다 — 닿자마자 세면 직후의 중복 전달을 놓친다.
  */
 public abstract class MessagingContractTest {
 
     /** 최초 배달 뒤 재시도 횟수. Kafka {@code ConsumerRetryPolicy.MAX_RETRIES}·코어 {@code InPlaceDelivery.RETRY_DELAYS} 와 같다. */
     protected static final int RETRIES = 3;
+
+    /**
+     * 순서·동시성 시험에서 메시지마다 처리 중에 머무는 시간. 같은 키의 다음 메시지가 발행 간격(한 건씩 확인을 기다림)보다
+     * 이 시간 안에 도착해야 겹쳐 처리하는 adapter 가 드러난다 — 20ms 로는 비동기로 넘기는 변이도 통과했다(PR #219 R1 변이 확인).
+     */
+    private static final Duration HOLD = Duration.ofMillis(150);
 
     @Autowired
     protected KeyQuarantine quarantine;
@@ -77,6 +87,11 @@ public abstract class MessagingContractTest {
     protected void awaitSubscriptionsReady() {
     }
 
+    /** 목표 건수에 닿은 뒤 더 오는 것(중복 전달)이 없는지 지켜보는 시간. */
+    protected Duration quietPeriod() {
+        return Duration.ofSeconds(2);
+    }
+
     /** 한 단언을 기다리는 최대 시간. 재시도 간격이 긴 adapter(Kafka 1·2·4초)는 늘린다. */
     protected Duration timeout() {
         return Duration.ofSeconds(30);
@@ -91,13 +106,31 @@ public abstract class MessagingContractTest {
 
     @AfterEach
     void stopContractSubscriptions() throws Exception {
-        try {
-            for (AutoCloseable subscription : started) {
+        // 하나가 실패해도 나머지를 모두 닫는다. 살아남은 소비자가 다음 테스트의 공유 표·브로커에 끼어들지 않게.
+        Exception failure = null;
+        for (AutoCloseable subscription : started) {
+            try {
                 subscription.close();
+            } catch (Exception closing) {
+                if (failure == null) {
+                    failure = closing;
+                } else {
+                    failure.addSuppressed(closing);
+                }
             }
-        } finally {
-            started.clear();
+        }
+        started.clear();
+        try {
             closeAdapter();
+        } catch (Exception closing) {
+            if (failure == null) {
+                failure = closing;
+            } else {
+                failure.addSuppressed(closing);
+            }
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 
@@ -148,6 +181,16 @@ public abstract class MessagingContractTest {
         }
     }
 
+    /** 목표에 닿은 뒤 {@link #quietPeriod()} 동안 기다린다. 그 뒤에 정확한 건수를 단언한다. */
+    protected final void settle() {
+        try {
+            Thread.sleep(quietPeriod().toMillis());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
+    }
+
     private int quarantinedCount(String inGroup) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group = ?",
                 Integer.class, inGroup);
@@ -161,8 +204,9 @@ public abstract class MessagingContractTest {
     }
 
     @Test
-    void 같은_키는_발행_순서대로_한_번씩_전달된다() {
-        Recording handler = new Recording();
+    void 같은_키는_발행_순서대로_한_번씩_한_번에_하나씩_처리된다() {
+        PerKeyConcurrency concurrency = new PerKeyConcurrency();
+        Recording handler = new Recording(concurrency, HOLD);
         start(group, handler);
         awaitSubscriptionsReady();
         Map<String, List<String>> sentByKey = new LinkedHashMap<>();
@@ -174,19 +218,22 @@ public abstract class MessagingContractTest {
         }
 
         await("30건 수신", () -> handler.ids().size() >= 30);
+        settle();
 
-        assertThat(handler.ids()).hasSize(30);
+        assertThat(handler.ids()).as("목표 뒤 관찰 구간에도 더 오지 않는다(중복 없음)").hasSize(30);
         for (Map.Entry<String, List<String>> sent : sentByKey.entrySet()) {
             assertThat(handler.idsOf(sent.getKey())).as("키 %s 는 보낸 순서대로 한 번씩", sent.getKey())
                     .containsExactlyElementsOf(sent.getValue());
         }
+        assertThat(concurrency.max()).as("같은 키를 동시에 처리한 최대 수").isEqualTo(1);
         assertThat(handler.firstPayload().replace(" ", "")).startsWith("{\"key\":");
     }
 
     @Test
-    void 같은_그룹_인스턴스_둘은_한_메시지를_함께_처리하지_않는다() {
-        Recording first = new Recording();
-        Recording second = new Recording();
+    void 같은_그룹_인스턴스_둘은_한_메시지를_함께_처리하지_않고_같은_키를_동시에_처리하지_않는다() {
+        PerKeyConcurrency concurrency = new PerKeyConcurrency();
+        Recording first = new Recording(concurrency, HOLD);
+        Recording second = new Recording(concurrency, HOLD);
         start(group, first);
         start(group, second);
         awaitSubscriptionsReady();
@@ -196,10 +243,12 @@ public abstract class MessagingContractTest {
         }
 
         await("20건 수신", () -> first.ids().size() + second.ids().size() >= 20);
+        settle();
 
         List<String> all = new ArrayList<>(first.ids());
         all.addAll(second.ids());
         assertThat(all).as("같은 그룹에서는 한 메시지를 한 인스턴스만 처리한다").containsExactlyInAnyOrderElementsOf(sent);
+        assertThat(concurrency.max()).as("두 인스턴스를 합쳐 같은 키를 동시에 처리한 최대 수").isEqualTo(1);
     }
 
     @Test
@@ -216,6 +265,7 @@ public abstract class MessagingContractTest {
         }
 
         await("두 그룹 모두 10건", () -> mine.ids().size() >= 10 && theirs.ids().size() >= 10);
+        settle();
 
         assertThat(mine.ids()).containsExactlyInAnyOrderElementsOf(sent);
         assertThat(theirs.ids()).containsExactlyInAnyOrderElementsOf(sent);
@@ -280,6 +330,28 @@ public abstract class MessagingContractTest {
         assertThat(keyStoppedEventId(group)).isEqualTo(second);
     }
 
+    @Test
+    void 재시도_도중_성공하면_격리하지_않고_같은_키_뒤_메시지는_그_성공_뒤에_처리된다() {
+        String key = "K-" + UUID.randomUUID();
+        Recording handler = new Recording(null, Duration.ZERO);
+        handler.failFirstMessageOf(key, 2);
+        start(group, handler);
+        awaitSubscriptionsReady();
+
+        String first = send(key);
+        String behind = send(key);
+
+        await("두 건 수신", () -> handler.ids().size() >= 2);
+        settle();
+
+        assertThat(handler.ids()).as("앞 메시지가 성공한 뒤 뒤 메시지").containsExactly(first, behind);
+        assertThat(handler.attempts(first)).as("두 번 실패 뒤 세 번째에 성공").isEqualTo(3);
+        assertThat(handler.firstAttemptIndex(behind)).as("뒤 메시지는 앞 메시지의 마지막 시도 뒤에 처음 시도된다")
+                .isGreaterThan(handler.lastAttemptIndex(first));
+        assertThat(quarantinedCount(group)).as("재시도 안에서 성공하면 격리하지 않는다").isZero();
+        assertThat(quarantine.stopped(group, topic, key)).isFalse();
+    }
+
     /** 처음 몇 번의 보관 기록을 실패시킨다(격리 DB 가 잠깐 안 되는 상황). */
     protected static final class FlakyQuarantine implements KeyQuarantine {
         private final KeyQuarantine delegate;
@@ -317,12 +389,54 @@ public abstract class MessagingContractTest {
         }
     }
 
-    /** 받은 메시지와 시도를 기록한다. {@code failKey} 는 늘 실패, {@code rejectKey} 는 재시도 제외 예외. */
+    /** 같은 키를 동시에 처리 중인 수와 그 최댓값. 여러 인스턴스의 핸들러가 하나를 나눠 쓴다. */
+    protected static final class PerKeyConcurrency {
+        private final Map<String, AtomicInteger> inFlight = new ConcurrentHashMap<>();
+        private final AtomicInteger max = new AtomicInteger();
+
+        void enter(String key) {
+            int now = inFlight.computeIfAbsent(key, ignored -> new AtomicInteger()).incrementAndGet();
+            max.accumulateAndGet(now, Math::max);
+        }
+
+        void exit(String key) {
+            inFlight.get(key).decrementAndGet();
+        }
+
+        public int max() {
+            return max.get();
+        }
+    }
+
+    /**
+     * 받은 메시지와 시도를 기록한다. {@code failKey} 는 늘 실패, {@code rejectKey} 는 재시도 제외 예외,
+     * {@link #failFirstMessageOf} 는 그 키의 첫 메시지만 정한 횟수 실패한 뒤 성공한다.
+     * {@code hold} 만큼 처리 중에 머물러, 같은 키를 겹쳐 처리하는 adapter 가 있으면 {@link PerKeyConcurrency} 에 드러나게 한다.
+     */
     protected static final class Recording implements EventHandler {
         private final List<InboundMessage> received = Collections.synchronizedList(new ArrayList<>());
         private final List<String> tried = Collections.synchronizedList(new ArrayList<>());
+        private final PerKeyConcurrency concurrency;
+        private final Duration hold;
         private volatile String failKey;
         private volatile String rejectKey;
+        private volatile String flakyKey;
+        private volatile String flakyEventId;
+        private final AtomicInteger flakyFailuresLeft = new AtomicInteger();
+
+        public Recording() {
+            this(null, Duration.ZERO);
+        }
+
+        public Recording(PerKeyConcurrency concurrency, Duration hold) {
+            this.concurrency = concurrency;
+            this.hold = hold;
+        }
+
+        void failFirstMessageOf(String key, int failures) {
+            flakyKey = key;
+            flakyFailuresLeft.set(failures);
+        }
 
         List<String> ids() {
             synchronized (received) {
@@ -349,16 +463,52 @@ public abstract class MessagingContractTest {
             }
         }
 
+        int firstAttemptIndex(String eventId) {
+            synchronized (tried) {
+                return tried.indexOf(eventId);
+            }
+        }
+
+        int lastAttemptIndex(String eventId) {
+            synchronized (tried) {
+                return tried.lastIndexOf(eventId);
+            }
+        }
+
         @Override
         public void receive(InboundMessage message) {
-            tried.add(message.header(EventHeaders.EVENT_ID));
-            if (message.key().equals(failKey)) {
-                throw new IllegalStateException("boom");
+            String eventId = message.header(EventHeaders.EVENT_ID);
+            tried.add(eventId);
+            if (concurrency != null) {
+                concurrency.enter(message.key());
             }
-            if (message.key().equals(rejectKey)) {
-                throw new Rejected();
+            try {
+                if (!hold.isZero()) {
+                    Thread.sleep(hold.toMillis());
+                }
+                if (message.key().equals(failKey)) {
+                    throw new IllegalStateException("boom");
+                }
+                if (message.key().equals(rejectKey)) {
+                    throw new Rejected();
+                }
+                if (message.key().equals(flakyKey)) {
+                    if (flakyEventId == null) {
+                        flakyEventId = eventId;
+                    }
+                    if (eventId.equals(flakyEventId) && flakyFailuresLeft.getAndDecrement() > 0) {
+                        throw new IllegalStateException("잠깐 실패");
+                    }
+                }
+                received.add(message);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(interrupted);
+            } finally {
+                if (concurrency != null) {
+                    concurrency.exit(message.key());
+                }
             }
-            received.add(message);
         }
     }
 }

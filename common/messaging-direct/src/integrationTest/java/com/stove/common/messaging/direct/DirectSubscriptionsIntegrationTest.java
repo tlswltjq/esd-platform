@@ -53,7 +53,7 @@ class DirectSubscriptionsIntegrationTest {
         topic = "fixture.direct." + UUID.randomUUID().toString().substring(0, 8);
         subscriptions = new DirectSubscriptions(List::of, jdbc, quarantine, ReplayTracing.NONE,
                 Map.of(topic, "outbox_event"), 200, 100, List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10)));
-        subscription = new DirectSubscriptions.Subscription(group, topic, "outbox_event", handler, new Class[0]);
+        subscription = new DirectSubscriptions.Subscription(group, topic, "outbox_event", handler, none());
     }
 
     private OutboxEvent row(String key, boolean sent) {
@@ -111,7 +111,7 @@ class DirectSubscriptionsIntegrationTest {
         subscriptions.poll(subscription);
         OutboxEvent second = row("K-" + UUID.randomUUID(), true);
 
-        anotherInstance().poll(new DirectSubscriptions.Subscription(group, topic, "outbox_event", other, new Class[0]));
+        anotherInstance().poll(new DirectSubscriptions.Subscription(group, topic, "outbox_event", other, none()));
         subscriptions.poll(subscription);
 
         assertThat(other.received).as("점유 중인 인스턴스가 있으면 같은 그룹의 다른 인스턴스는 읽지 않는다").isEmpty();
@@ -126,7 +126,7 @@ class DirectSubscriptionsIntegrationTest {
         DirectSubscriptions successor = anotherInstance();
         Recording next = new Recording();
         DirectSubscriptions.Subscription successorSubscription =
-                new DirectSubscriptions.Subscription(group, topic, "outbox_event", next, new Class[0]);
+                new DirectSubscriptions.Subscription(group, topic, "outbox_event", next, none());
         // 첫 행을 처리하는 동안 점유 기한이 지나 다른 인스턴스가 이어받는다.
         handler.onReceive = () -> {
             jdbc.update("UPDATE direct_cursor SET lease_until = NOW(6) - INTERVAL 1 SECOND WHERE consumer_group = ?", group);
@@ -141,6 +141,12 @@ class DirectSubscriptionsIntegrationTest {
                 .containsExactly(first.getEventId(), second.getEventId());
         assertThat(jdbc.queryForObject("SELECT row_id FROM direct_cursor WHERE consumer_group = ?", Long.class, group))
                 .as("늦게 끝난 옛 점유자가 위치를 되돌리지 않는다").isEqualTo(second.getId());
+    }
+
+    /** 재시도 제외 예외 없음. 제네릭 배열은 만들 수 없어 한 번 좁힌다(raw type 을 쓰지 않는다, PR #219 R6). */
+    @SuppressWarnings("unchecked")
+    private static Class<? extends RuntimeException>[] none() {
+        return (Class<? extends RuntimeException>[]) new Class<?>[0];
     }
 
     static class Recording implements EventHandler {
