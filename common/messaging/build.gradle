@@ -29,6 +29,8 @@ dependencies {
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     testFixturesImplementation 'org.springframework.boot:spring-boot-autoconfigure'
+    // adapter 공통 계약 테스트(MessagingContractTest, 결정 209): JUnit·AssertJ·Spring Test 로 짠다.
+    testFixturesImplementation 'org.springframework.boot:spring-boot-starter-test'
     testFixturesCompileOnly 'org.springframework:spring-web'
     testFixturesCompileOnly project(':common:web')
     testFixturesCompileOnly project(':common:security')
