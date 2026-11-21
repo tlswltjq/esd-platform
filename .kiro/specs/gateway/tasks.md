@@ -10,6 +10,7 @@
 - [x] `/bff/session`·`/bff/csrf`·`/bff/logout`, 토큰 Redis 보관, 세션 쿠키 — `docs/auth-bff.md`
 - [x] 토큰 릴레이·갱신(Redis 갱신 잠금 15초, 토큰 요청 timeout 5초), 불확실한 전송 실패 시 재로그인 — `docs/auth-bff.md`
 - [x] 쿠키 변경 요청 CSRF 요구, Bearer Token API 접근 유지 — `docs/auth-bff.md`
+- [x] 외부 웹훅의 재현 가능한 실행 구성(흉내 서버) — 2026-11-09, PortOne 흉내 서버가 서명한 웹훅을 Payment로 직접 보내는 실제 스택 여정 `tools/verification/verify-webhook-journeys.py`([결정 138](../../../docs/decisions.md#fake-portone-webhooks), [근거 색인](../../../docs/evidence.md))
 - [x] 다중 Gateway 공유 Redis·세션 namespace·클라이언트 자격증명, LB 공개 주소 구성 — `docs/auth-bff.md`
 - [x] 세션 저장소 장애 시 인증 우회 없이 `503 SESSION_STORE_UNAVAILABLE` 반환·복구 — 2026-10-13, `docs/auth-bff.md`
 - [x] 통합 검증: 실제 스택에서 자동 로그인·토큰 릴레이·다중 Gateway 동시 갱신·RTR 재사용 탐지·BFF/auth 로그아웃·재시작 유지·Redis 장애 503, JWT 변조/만료/issuer/audience (관련 132건) — 2026-10-13, `docs/auth-bff.md`

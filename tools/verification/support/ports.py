@@ -27,6 +27,7 @@ OFFSETS = {
     "verify-refund-settlement": 23000,
     "verify-approval-journeys": 24000,
     "verify-refund-tracing": 9000,
+    "verify-webhook-journeys": 8000,
 }
 
 
