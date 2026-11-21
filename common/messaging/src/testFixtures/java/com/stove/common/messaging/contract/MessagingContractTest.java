@@ -1,0 +1,364 @@
+package com.stove.common.messaging.contract;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.InboundMessage;
+import com.stove.common.event.KeyQuarantine;
+import com.stove.common.event.OutboundMessage;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+/**
+ * 메시징 adapter 공통 계약(결정 202·206·209). 네 adapter(Kafka·RabbitMQ·Redis Streams·브로커 없음)의 통합 테스트가
+ * 이 클래스를 상속해 같은 단언을 통과해야 비교 측정을 한다(결정 203).
+ *
+ * <p>adapter 가 구현할 것은 둘이다: {@link #subscribe} (그룹·토픽 구독 시작)와 {@link #publish} (발행).
+ * 격리는 코어의 {@link KeyQuarantine} (소비 모듈 DB)를 그대로 쓴다 — 기술과 무관하게 같은 격리 경로를 탄다.
+ *
+ * <p>계약:
+ * <ol>
+ *   <li>같은 키는 발행 순서대로, 한 번씩 전달된다.</li>
+ *   <li>같은 그룹의 인스턴스가 둘이어도 한 메시지는 한 인스턴스만 처리한다.</li>
+ *   <li>다른 그룹은 각자 모든 메시지를 받는다(팬아웃).</li>
+ *   <li>처리 실패는 제자리에서 재시도(최초 1회 + 재시도 {@value #RETRIES}회)한 뒤 격리하고 그 키만 멈춘다.
+ *       멈춘 키의 뒤 메시지는 처리하지 않고 격리 뒤에 쌓는다. 다른 키는 계속 흐른다.</li>
+ *   <li>재시도 제외 예외는 첫 실패에 격리한다.</li>
+ *   <li>격리 기록이 실패하면 그 메시지를 붙잡아, 같은 키의 뒤 메시지가 추월하지 못한다.</li>
+ * </ol>
+ */
+public abstract class MessagingContractTest {
+
+    /** 최초 배달 뒤 재시도 횟수. Kafka {@code ConsumerRetryPolicy.MAX_RETRIES}·코어 {@code InPlaceDelivery.RETRY_DELAYS} 와 같다. */
+    protected static final int RETRIES = 3;
+
+    @Autowired
+    protected KeyQuarantine quarantine;
+
+    @Autowired
+    protected JdbcTemplate jdbc;
+
+    protected String group;
+    protected String topic;
+
+    private final List<AutoCloseable> started = new ArrayList<>();
+
+    /**
+     * 구독을 시작한다. 같은 그룹·토픽으로 여러 번 부르면 같은 그룹의 인스턴스가 늘어난다.
+     *
+     * @param storage    격리처. 보통 {@link #quarantine}, 격리 기록 실패를 흉내 낼 때는 감싼 것
+     * @param noRetryFor 재시도해도 결과가 같은 예외
+     */
+    protected abstract AutoCloseable subscribe(String group, String topic, KeyQuarantine storage, EventHandler handler,
+                                               List<Class<? extends RuntimeException>> noRetryFor);
+
+    /** 발행한다. 돌아오면 그 adapter 기준으로 메시지가 내구성 있게 받아들여졌다(발행 포트 계약). */
+    protected abstract void publish(OutboundMessage message);
+
+    /** 테스트 토픽을 준비한다(예: Kafka 는 파티션 여러 개로 만든다). */
+    protected void prepareTopic(String topic) {
+    }
+
+    /** 모든 구독이 메시지를 받을 준비가 될 때까지 기다린다(예: Kafka 는 파티션 배정 완료). 발행 전에 부른다. */
+    protected void awaitSubscriptionsReady() {
+    }
+
+    /** 한 단언을 기다리는 최대 시간. 재시도 간격이 긴 adapter(Kafka 1·2·4초)는 늘린다. */
+    protected Duration timeout() {
+        return Duration.ofSeconds(30);
+    }
+
+    @BeforeEach
+    void prepareContract() {
+        group = "contract-" + UUID.randomUUID();
+        topic = "contract." + UUID.randomUUID().toString().substring(0, 8);
+        prepareTopic(topic);
+    }
+
+    @AfterEach
+    void stopContractSubscriptions() throws Exception {
+        try {
+            for (AutoCloseable subscription : started) {
+                subscription.close();
+            }
+        } finally {
+            started.clear();
+            closeAdapter();
+        }
+    }
+
+    /**
+     * 구독을 모두 멈춘 뒤 adapter 자원(연결 등)을 닫는다. 하위 클래스의 {@code @AfterEach} 는 이 클래스의 것보다 먼저 돌아
+     * 구독이 살아 있는 동안 연결을 닫게 되므로, 정리는 여기서 한다.
+     */
+    protected void closeAdapter() throws Exception {
+    }
+
+    /** 목록을 adapter 들이 받는 배열로 바꾼다. 제네릭 배열은 만들 수 없어 한 번 좁힌다(원소 타입은 목록이 보장한다). */
+    @SuppressWarnings("unchecked")
+    protected static Class<? extends RuntimeException>[] asArray(List<Class<? extends RuntimeException>> noRetryFor) {
+        return (Class<? extends RuntimeException>[]) noRetryFor.toArray(new Class<?>[0]);
+    }
+
+    protected final void start(String inGroup, KeyQuarantine storage, EventHandler handler,
+                               List<Class<? extends RuntimeException>> noRetryFor) {
+        started.add(subscribe(inGroup, topic, storage, handler, noRetryFor));
+    }
+
+    protected final void start(String inGroup, EventHandler handler) {
+        start(inGroup, quarantine, handler, List.of());
+    }
+
+    protected final String send(String key) {
+        String eventId = UUID.randomUUID().toString();
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put(EventHeaders.EVENT_ID, eventId);
+        headers.put(EventHeaders.EVENT_TYPE, "ContractHappened");
+        headers.put(EventHeaders.OCCURRED_AT, Instant.now().toString());
+        publish(new OutboundMessage(topic, key, "{\"key\":\"" + key + "\"}", headers));
+        return eventId;
+    }
+
+    protected final void await(String what, BooleanSupplier condition) {
+        long deadline = System.nanoTime() + timeout().toNanos();
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("기다렸지만 이뤄지지 않았다: " + what);
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+        }
+    }
+
+    private int quarantinedCount(String inGroup) {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group = ?",
+                Integer.class, inGroup);
+        return count == null ? 0 : count;
+    }
+
+    private String keyStoppedEventId(String inGroup) {
+        return jdbc.queryForObject(
+                "SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure = 'KEY_STOPPED'",
+                String.class, inGroup);
+    }
+
+    @Test
+    void 같은_키는_발행_순서대로_한_번씩_전달된다() {
+        Recording handler = new Recording();
+        start(group, handler);
+        awaitSubscriptionsReady();
+        Map<String, List<String>> sentByKey = new LinkedHashMap<>();
+        for (int round = 0; round < 5; round++) {
+            for (int k = 0; k < 6; k++) {
+                String key = "K-" + k;
+                sentByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(send(key));
+            }
+        }
+
+        await("30건 수신", () -> handler.ids().size() >= 30);
+
+        assertThat(handler.ids()).hasSize(30);
+        for (Map.Entry<String, List<String>> sent : sentByKey.entrySet()) {
+            assertThat(handler.idsOf(sent.getKey())).as("키 %s 는 보낸 순서대로 한 번씩", sent.getKey())
+                    .containsExactlyElementsOf(sent.getValue());
+        }
+        assertThat(handler.firstPayload().replace(" ", "")).startsWith("{\"key\":");
+    }
+
+    @Test
+    void 같은_그룹_인스턴스_둘은_한_메시지를_함께_처리하지_않는다() {
+        Recording first = new Recording();
+        Recording second = new Recording();
+        start(group, first);
+        start(group, second);
+        awaitSubscriptionsReady();
+        List<String> sent = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            sent.add(send("K-" + (i % 4)));
+        }
+
+        await("20건 수신", () -> first.ids().size() + second.ids().size() >= 20);
+
+        List<String> all = new ArrayList<>(first.ids());
+        all.addAll(second.ids());
+        assertThat(all).as("같은 그룹에서는 한 메시지를 한 인스턴스만 처리한다").containsExactlyInAnyOrderElementsOf(sent);
+    }
+
+    @Test
+    void 다른_그룹은_각자_모든_메시지를_받는다() {
+        Recording mine = new Recording();
+        Recording theirs = new Recording();
+        String otherGroup = group + "-other";
+        start(group, mine);
+        start(otherGroup, theirs);
+        awaitSubscriptionsReady();
+        List<String> sent = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            sent.add(send("K-" + (i % 3)));
+        }
+
+        await("두 그룹 모두 10건", () -> mine.ids().size() >= 10 && theirs.ids().size() >= 10);
+
+        assertThat(mine.ids()).containsExactlyInAnyOrderElementsOf(sent);
+        assertThat(theirs.ids()).containsExactlyInAnyOrderElementsOf(sent);
+    }
+
+    @Test
+    void 실패는_제자리_재시도_뒤_격리하고_그_키만_멈춘다() {
+        String broken = "K-broken-" + UUID.randomUUID();
+        String healthy = "K-healthy-" + UUID.randomUUID();
+        Recording handler = new Recording();
+        handler.failKey = broken;
+        start(group, handler);
+        awaitSubscriptionsReady();
+
+        String failing = send(broken);
+        String behind = send(broken);
+        String other = send(healthy);
+
+        await("격리 2건", () -> quarantinedCount(group) >= 2);
+        await("다른 키 수신", () -> handler.ids().contains(other));
+
+        assertThat(handler.attempts(failing)).as("최초 1회 + 재시도 %d회", RETRIES).isEqualTo(1 + RETRIES);
+        assertThat(handler.attempts(behind)).as("멈춘 키의 뒤 메시지는 처리하지 않고 보관").isZero();
+        assertThat(quarantine.stopped(group, topic, broken)).isTrue();
+        assertThat(quarantine.stopped(group, topic, healthy)).isFalse();
+        assertThat(keyStoppedEventId(group)).isEqualTo(behind);
+    }
+
+    @Test
+    void 재시도_제외_예외는_첫_실패에_격리한다() {
+        String key = "K-" + UUID.randomUUID();
+        Recording handler = new Recording();
+        handler.rejectKey = key;
+        start(group, quarantine, handler, List.of(Rejected.class));
+        awaitSubscriptionsReady();
+
+        String rejected = send(key);
+
+        await("격리", () -> quarantine.stopped(group, topic, key));
+        assertThat(handler.attempts(rejected)).isEqualTo(1);
+    }
+
+    @Test
+    void 격리_기록이_실패하면_메시지를_붙잡아_같은_키_뒤_메시지가_추월하지_못한다() {
+        String key = "K-" + UUID.randomUUID();
+        Recording handler = new Recording();
+        handler.failKey = key;
+        FlakyQuarantine storage = new FlakyQuarantine(quarantine, 2);
+        start(group, storage, handler, List.of());
+        awaitSubscriptionsReady();
+
+        String first = send(key);
+        String second = send(key);
+
+        await("두 건 모두 보관", () -> quarantinedCount(group) >= 2);
+        assertThat(storage.failures()).as("앞 메시지의 보관이 두 번 실패했다").isEqualTo(2);
+        assertThat(handler.attempts(second)).as("앞 메시지가 붙잡혀 있는 동안 뒤 메시지는 처리되지 않고, 키 정지 뒤 보관된다")
+                .isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure <> 'KEY_STOPPED'",
+                String.class, group)).isEqualTo(first);
+        assertThat(keyStoppedEventId(group)).isEqualTo(second);
+    }
+
+    /** 처음 몇 번의 보관 기록을 실패시킨다(격리 DB 가 잠깐 안 되는 상황). */
+    protected static final class FlakyQuarantine implements KeyQuarantine {
+        private final KeyQuarantine delegate;
+        private final AtomicInteger remainingFailures;
+        private final AtomicInteger failures = new AtomicInteger();
+
+        public FlakyQuarantine(KeyQuarantine delegate, int failures) {
+            this.delegate = delegate;
+            this.remainingFailures = new AtomicInteger(failures);
+        }
+
+        public int failures() {
+            return failures.get();
+        }
+
+        @Override
+        public boolean stopped(String consumerGroup, String topic, String key) {
+            return delegate.stopped(consumerGroup, topic, key);
+        }
+
+        @Override
+        public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
+            if (remainingFailures.getAndDecrement() > 0) {
+                failures.incrementAndGet();
+                throw new IllegalStateException("격리 DB 잠깐 안 됨");
+            }
+            delegate.quarantine(consumerGroup, message, failure);
+        }
+    }
+
+    /** 재시도 제외로 선언하는 예외. */
+    protected static final class Rejected extends RuntimeException {
+        public Rejected() {
+            super("rejected");
+        }
+    }
+
+    /** 받은 메시지와 시도를 기록한다. {@code failKey} 는 늘 실패, {@code rejectKey} 는 재시도 제외 예외. */
+    protected static final class Recording implements EventHandler {
+        private final List<InboundMessage> received = Collections.synchronizedList(new ArrayList<>());
+        private final List<String> tried = Collections.synchronizedList(new ArrayList<>());
+        private volatile String failKey;
+        private volatile String rejectKey;
+
+        List<String> ids() {
+            synchronized (received) {
+                return received.stream().map(message -> message.header(EventHeaders.EVENT_ID)).toList();
+            }
+        }
+
+        List<String> idsOf(String key) {
+            synchronized (received) {
+                return received.stream().filter(message -> key.equals(message.key()))
+                        .map(message -> message.header(EventHeaders.EVENT_ID)).toList();
+            }
+        }
+
+        String firstPayload() {
+            synchronized (received) {
+                return received.get(0).payload();
+            }
+        }
+
+        int attempts(String eventId) {
+            synchronized (tried) {
+                return (int) tried.stream().filter(eventId::equals).count();
+            }
+        }
+
+        @Override
+        public void receive(InboundMessage message) {
+            tried.add(message.header(EventHeaders.EVENT_ID));
+            if (message.key().equals(failKey)) {
+                throw new IllegalStateException("boom");
+            }
+            if (message.key().equals(rejectKey)) {
+                throw new Rejected();
+            }
+            received.add(message);
+        }
+    }
+}

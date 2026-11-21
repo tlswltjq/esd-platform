@@ -19,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -41,9 +40,6 @@ class DirectSubscriptionsIntegrationTest {
     @Autowired
     KeyQuarantine quarantine;
 
-    @Autowired
-    ApplicationContext context;
-
     private final Recording handler = new Recording();
     private String group;
     /** 같은 표를 여러 테스트가 쓰므로 토픽을 테스트마다 따로 둔다(앞 테스트의 행을 다시 읽지 않게). */
@@ -55,9 +51,9 @@ class DirectSubscriptionsIntegrationTest {
     void setUp() {
         group = "fixture-direct-" + UUID.randomUUID();
         topic = "fixture.direct." + UUID.randomUUID().toString().substring(0, 8);
-        subscriptions = new DirectSubscriptions(context, jdbc, quarantine, ReplayTracing.NONE,
+        subscriptions = new DirectSubscriptions(List::of, jdbc, quarantine, ReplayTracing.NONE,
                 Map.of(topic, "outbox_event"), 200, 100, List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10)));
-        subscription = new DirectSubscriptions.Subscription(group, topic, "outbox_event", handler, new Class[]{Rejected.class});
+        subscription = new DirectSubscriptions.Subscription(group, topic, "outbox_event", handler, new Class[0]);
     }
 
     private OutboxEvent row(String key, boolean sent) {
@@ -103,40 +99,8 @@ class DirectSubscriptionsIntegrationTest {
         assertThat(deliveredIds()).containsExactly(early.getEventId(), late.getEventId());
     }
 
-    @Test
-    void aFailureIsRetriedInPlaceThenQuarantinedAndStopsOnlyItsKey() {
-        String broken = "K-broken-" + UUID.randomUUID();
-        String healthy = "K-healthy-" + UUID.randomUUID();
-        OutboxEvent failing = row(broken, true);
-        OutboxEvent behind = row(broken, true);
-        OutboxEvent other = row(healthy, true);
-        handler.failOn = failing.getEventId();
-
-        subscriptions.poll(subscription);
-
-        assertThat(handler.attempts(failing.getEventId())).as("최초 1회 + 재시도 3회").isEqualTo(4);
-        assertThat(quarantine.stopped(group, topic, broken)).isTrue();
-        assertThat(deliveredIds()).as("멈춘 키의 뒤 행은 처리하지 않고, 다른 키는 그대로").containsExactly(other.getEventId());
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group=? AND partition_key=?",
-                Integer.class, group, broken)).isEqualTo(2);
-        assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE consumer_group=? AND failure='KEY_STOPPED'",
-                String.class, group)).isEqualTo(behind.getEventId());
-    }
-
-    @Test
-    void noRetryExceptionsAreQuarantinedOnTheFirstFailure() {
-        String key = "K-" + UUID.randomUUID();
-        OutboxEvent rejected = row(key, true);
-        handler.rejectOn = rejected.getEventId();
-
-        subscriptions.poll(subscription);
-
-        assertThat(handler.attempts(rejected.getEventId())).isEqualTo(1);
-        assertThat(quarantine.stopped(group, topic, key)).isTrue();
-    }
-
     private DirectSubscriptions anotherInstance() {
-        return new DirectSubscriptions(context, jdbc, quarantine, ReplayTracing.NONE,
+        return new DirectSubscriptions(List::of, jdbc, quarantine, ReplayTracing.NONE,
                 Map.of(topic, "outbox_event"), 200, 100, List.of(Duration.ofMillis(10)));
     }
 
@@ -179,34 +143,13 @@ class DirectSubscriptionsIntegrationTest {
                 .as("늦게 끝난 옛 점유자가 위치를 되돌리지 않는다").isEqualTo(second.getId());
     }
 
-    static class Rejected extends RuntimeException {
-        Rejected() {
-            super("rejected");
-        }
-    }
-
     static class Recording implements EventHandler {
         final List<InboundMessage> received = new ArrayList<>();
-        final List<String> tried = new ArrayList<>();
-        volatile String failOn;
-        volatile String rejectOn;
         /** 첫 수신 때 한 번 실행한다(처리 도중의 상황을 만든다). */
         volatile Runnable onReceive;
 
-        int attempts(String eventId) {
-            return (int) tried.stream().filter(eventId::equals).count();
-        }
-
         @Override
         public void receive(InboundMessage message) {
-            String eventId = message.header(EventHeaders.EVENT_ID);
-            tried.add(eventId);
-            if (eventId.equals(failOn)) {
-                throw new IllegalStateException("boom");
-            }
-            if (eventId.equals(rejectOn)) {
-                throw new Rejected();
-            }
             received.add(message);
             Runnable once = onReceive;
             if (once != null) {

@@ -1,0 +1,99 @@
+package com.stove.common.messaging.rabbitmq;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.stove.common.contract.EventHeaders;
+import com.stove.common.event.EventHandler;
+import com.stove.common.event.KeyQuarantine;
+import com.stove.common.event.OutboundMessage;
+import com.stove.common.messaging.contract.MessagingContractTest;
+import com.stove.common.messaging.delivery.InPlaceDelivery;
+import com.stove.common.messaging.delivery.SubscribedHandler;
+import com.stove.common.messaging.trace.ReplayTracing;
+import com.stove.common.testcontainers.InfraContainers;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+
+/** RabbitMQ adapter 가 공통 계약(결정 202·206)을 지키는지 실제 RabbitMQ·MySQL 로 본다(결정 209). RabbitMQ 고유 동작(받을 큐 없는 발행)도 여기서 본다. */
+@SpringBootTest(properties = "stove.outbox.relay-enabled=false")
+@Import(InfraContainers.MySql.class)
+class RabbitContractTest extends MessagingContractTest {
+
+    private static final int QUEUES = 3;
+    /** 이 adapter 로 받는 소비자가 없다고 설정한 토픽. */
+    private static final String OPTIONAL_TOPIC = "fixture.optional.v1";
+    private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
+    private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1-management-alpine")
+            .withExposedPorts(5672)
+            .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))
+            .withStartupTimeout(Duration.ofMinutes(2));
+
+    static {
+        RABBIT.start();
+    }
+
+    private CachingConnectionFactory connectionFactory;
+    private RabbitAdmin admin;
+    private RabbitMessagePublisher publisher;
+
+    @BeforeEach
+    void connect() {
+        connectionFactory = new CachingConnectionFactory(RABBIT.getHost(), RABBIT.getMappedPort(5672));
+        connectionFactory.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+        connectionFactory.setPublisherReturns(true);
+        admin = new RabbitAdmin(connectionFactory);
+        publisher = new RabbitMessagePublisher(connectionFactory, admin, QUEUES, Set.of(OPTIONAL_TOPIC));
+    }
+
+    @Override
+    protected void closeAdapter() {
+        connectionFactory.destroy();
+    }
+
+    @Override
+    protected AutoCloseable subscribe(String group, String topic, KeyQuarantine storage, EventHandler handler,
+                                      List<Class<? extends RuntimeException>> noRetryFor) {
+        RabbitSubscriptions subscriptions = new RabbitSubscriptions(
+                () -> List.of(new SubscribedHandler(group, topic, handler, asArray(noRetryFor))), connectionFactory, admin,
+                new InPlaceDelivery(storage, ReplayTracing.NONE, SHORT_RETRIES), QUEUES, 10, Duration.ofMillis(20));
+        subscriptions.start();
+        return subscriptions::stop;
+    }
+
+    @Override
+    protected void publish(OutboundMessage message) {
+        publisher.publish(message).orTimeout(10, TimeUnit.SECONDS).join();
+    }
+
+    private CompletableFuture<Void> sendTo(String toTopic) {
+        Map<String, String> headers = Map.of(EventHeaders.EVENT_ID, UUID.randomUUID().toString(),
+                EventHeaders.EVENT_TYPE, "FixtureHappened", EventHeaders.OCCURRED_AT, Instant.now().toString());
+        return publisher.publish(new OutboundMessage(toTopic, "K", "{}", headers));
+    }
+
+    /** RabbitMQ 고유: 받을 큐가 없으면 메시지가 버려진다(Kafka·Redis 는 로그에 남는다). 그래서 발행을 실패로 돌린다. */
+    @Test
+    void aMessageNoQueueCanTakeFailsSoTheRelayKeepsItUnlessTheTopicHasNoRabbitConsumers() {
+        // 소비 앱이 아직 큐를 선언하지 않았다: 성공으로 치면 SENT 뒤에 사라진다(PR #211 R3).
+        assertThatThrownBy(() -> sendTo("fixture.unbound." + UUID.randomUUID().toString().substring(0, 8))
+                .orTimeout(10, TimeUnit.SECONDS).join())
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("되돌아왔다");
+        // 이 adapter 로 받는 소비자가 없다고 설정한 토픽은 그대로 성공(Kafka 에서도 아무도 읽지 않는 토픽).
+        sendTo(OPTIONAL_TOPIC).orTimeout(10, TimeUnit.SECONDS).join();
+    }
+}
