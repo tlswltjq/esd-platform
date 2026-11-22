@@ -271,7 +271,8 @@
 - [ ] **T37. 결정 210의 가설·시나리오 S1~S7로 네 메시징 방식을 잰다** ([결정 210](../../../docs/decisions.md#messaging-comparison-hypotheses), [E12 측정 계획](../../../docs/experiments.md#messaging-comparison-plan))
   - 공통: 결정 204 합격 조건(유실·중복 반영·순서 위반 0), 조건당 2회 A→B→A, 측정 하네스는 `verify-jib.py --measure`. 측정 전 예상은 E12 계획 표로 고정돼 있고 결과는 예상과 달라도 그대로 적는다.
   - [x] S6 저부하 지연·운영 비용 — 2026-11-22 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221), [E12 S6 결과](../../../docs/experiments.md#messaging-s6). 세 브로커 지연 차이 없음, 브로커 없음은 업무 MySQL이 비용을 진다(CPU 약 2.5배). RabbitMQ 유휴 CPU 원인은 확인하지 않았다. 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222)에서 RabbitMQ Streams를 더한 다섯 방식 10회로 다시 쟀다(다른 컨테이너 없음, 고친 도구): 네 브로커 지연 차이 없음, 앞선 8회의 지연 순서는 재현되지 않았다.
-  - [ ] S5 독 메시지 1건 — 계속 실패하는 키 A와 같은 분할의 키 B 지연.
+  - [x] S5 독 메시지 1건 — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222), [E12 S5 결과](../../../docs/experiments.md#messaging-s5). 같은 분할 뒤 메시지는 다섯 방식 모두 약 7초 멈춤. Kafka는 리스너 동시성 1 때문에 다른 파티션도 멈춤(동시성 3 확인 실험에서는 168ms).
+  - [ ] Kafka 리스너 동시성 기본값 — `[결정 필요]` 운영 Kafka 소비자를 파티션 수만큼 동시성으로 둘지(지금은 Spring Boot 기본 1이라 한 키의 독 메시지가 그 그룹의 모든 키를 최대 약 7초 멈춘다, E12 S5). 다른 adapter는 분할마다 소비자를 둔다.
   - [ ] S7 브로커 재시작 — 발행 정지·복구 시간, 유실·중복 반영. Redis 영속 설정(AOF)을 조건으로 적는다.
   - [ ] S4 소비 인스턴스 1 → 3 → 6 — 처리량, 인스턴스별 몫, 인계 시간.
   - [ ] S3 소비자 1시간 중단 뒤 회복 — 브로커 메모리·디스크, 생산 쪽 Outbox `PENDING`, 회복 시간, 유실(가정한 규모).

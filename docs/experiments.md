@@ -506,5 +506,24 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 
 이전 회차(2026-11-22 10:34~12:31, [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)) — 네 방식 8회, 도구 수정 전(`a483755f`: 디스크 증가에 수집 단계가, DB 부하 구간에 표본 종료 대기가 섞임), 같은 호스트에 무관한 컨테이너 하나가 떠 있었다. 결제 확정 → 구매 근거 p50 Kafka 267/279·RabbitMQ 240/242·Redis Streams 223/221·브로커 없음 460/472ms, 자원 경향(Redis 최소, 브로커 없음은 업무 MySQL CPU 약 2.5배, RabbitMQ 유휴 CPU 26~47%)은 이 10회와 같다. 지연 순서만 재현되지 않아, 위 표가 이 결과를 대신한다.
 
+<a id="messaging-s5"></a>
+**S5 결과 — 독 메시지 1건**(2026-11-22, [PR #222](https://github.com/tlswltjq/esd-platform/pull/222))
+
+조건 — 전체 스택이 아니라 adapter 수준에서 잰다(업무 흐름에는 계속 실패하는 키를 넣을 경로가 없고, 뒤 메시지가 막히는지는 adapter의 전달 방식이 정한다). 공통 계약 테스트(`MessagingContractTest`)의 S5 측정이 실제 브로커·MySQL에서 운영 재시도 간격(1·2·4초, `InPlaceDelivery.RETRY_DELAYS`; Kafka는 운영 `DefaultErrorHandler`)으로 구독하고, 계속 실패하는 키 A → 같은 분할의 키 B → 다른 분할의 키 C를 차례로 발행해 각 메시지가 처음 처리되기까지의 시간을 잰다. 분할은 adapter마다 3개(브로커 없음은 (그룹, 토픽)마다 커서 하나), 인스턴스 1개, 같은 분할·다른 분할 키는 각 adapter의 배정 함수로 고른다. 조건당 2회.
+
+| 방식 | A 격리까지 | 같은 분할 B 첫 처리 | 다른 분할 C 첫 처리 |
+|---|---|---|---|
+| Kafka(리스너 동시성 1, 운영 기본) | 7330 / 7340ms | 7683 / 7704ms | **7682 / 1158ms** |
+| RabbitMQ | 7339 / 7338ms | 7294 / 7284ms | 148 / 164ms |
+| RabbitMQ Streams | 7362 / 7365ms | 7234 / 7235ms | 148 / 154ms |
+| Redis Streams | 7146 / 7128ms | 7116 / 7117ms | 26 / 17ms |
+| 브로커 없음 | 7257 / 7232ms | 7153 / 7182ms | — (분할 하나) |
+| (확인 실험) Kafka 동시성 3 | 7568ms | 7711ms | 168ms |
+
+**해석·한계**
+- 측정 전 예상대로 모든 방식에서 같은 분할의 뒤 메시지는 독 메시지의 재시도(최초 + 1·2·4초) 동안 약 7초 멈춘다. 순서를 지키려고 제자리에서 재시도하는 설계(결정 155·206)의 공통 비용이고, 기술 사이 차이는 없다.
+- **예상 밖**: Kafka는 다른 파티션의 메시지도 멈췄다(7.7초 또는 1.2초). 리스너 동시성이 설정되지 않아(Spring Boot 기본 1) 소비 스레드 하나가 파티션 3개를 맡고, `DefaultErrorHandler`의 재시도 대기가 그 스레드를 막기 때문이다 — 동시성을 파티션 수(3)로 바꾼 확인 실험에서 다른 파티션은 168ms였다. 1.2초와 7.7초를 가르는 조건(가져온 묶음에 C가 있었는지로 추정)은 확인하지 않았다. 다른 adapter는 분할마다 소비자를 따로 둔다(RabbitMQ 큐마다 컨테이너, Redis 스트림마다 스레드, Streams 연결마다 소비자). 따라서 지금 운영 구성에서는 인스턴스 하나에서 한 키의 독 메시지가 그 소비 그룹의 모든 키를 최대 약 7초 멈춘다. 운영 기본값을 바꿀지는 따로 정한다(플랫폼 T37).
+- adapter 수준 측정이라 업무 여정 전체 지연이 아니라 "뒤 메시지가 처음 처리되기까지"다. 인스턴스가 여럿이면 분할이 인스턴스에 나뉘어 결과가 달라질 수 있다(S4에서 본다).
+
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216), S6 요약 JSON은 이전 8회 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)·재측정 10회 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
 
