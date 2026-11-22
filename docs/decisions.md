@@ -2175,6 +2175,19 @@
 - 구분: 추천 수용
 - 결과: [PR #220](https://github.com/tlswltjq/esd-platform/pull/220) — E12 표 정정·측정 계획, 판단 색인 행
 
+
+<a id="rabbitmq-streams-comparison"></a>
+## 211. RabbitMQ Streams·Super Streams를 다섯 번째 adapter로 만들어 S1~S7을 classic queue와 나란히 잰다
+- 문제: 지금 RabbitMQ adapter는 classic queue라 소비하면 지워지고 큐가 생기기 전 메시지를 받지 못한다. 이 구성만 재면 S1(새 소비 서비스 초기 적재)·S2(과거 재반영)에서 RabbitMQ 실패가 측정 전부터 확실해, "Streams를 쓰면 되지 않나"에 측정으로 답할 수 없다. 결정 210의 주장 자체가 "다른 기술은 상황마다 다른 구성(Streams 등)을 골라야 한다"이다.
+- 선택지: A `messaging-rabbitmq-streams` adapter(Super Streams + 분할마다 단일 활성 소비자)를 만들어 공통 계약 테스트 8개를 통과시킨 뒤 S1~S7을 classic queue와 나란히 잰다 / B 넣지 않고 "Streams는 문서상 지원하나 재지 않았다"를 한계로 적는다 / C classic queue를 Streams로 바꾸고 classic queue는 뺀다 (추천: A — 결정 210 주장의 "다른 구성"을 실제로 재야 검증이 된다. B는 S1·S2 결과가 구성 선택 탓이라는 반박에 답하지 못하고, C는 E12 평시 결과와 끊기고 구성 대비가 사라진다)
+- 내 의견: "결정 211 A로 Streams adapter 추가해"
+- 선택: A — 추천 수용. 측정 전 예상은 [E12 측정 계획](experiments.md#messaging-comparison-plan)에 Streams 행으로 고정한다.
+  - 새 adapter는 결정 209의 대칭 구조(코어는 브로커를 모르고 adapter 모듈이 포트를 구현)를 따르고, 측정 전에 공통 계약 테스트(플랫폼 T36)를 통과해야 한다.
+  - classic queue adapter는 그대로 두고 E12 평시 결과와 이어 간다.
+  - S6·S5·S7·S4는 이 adapter를 기다리지 않고 네 방식으로 먼저 잰 뒤, adapter가 생기면 Streams 회차를 더한다.
+- 구분: 추천 수용
+- 결과: [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)
+
 ---
 
 ## 검증하며 드러난 것

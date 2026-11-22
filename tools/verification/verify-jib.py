@@ -296,7 +296,7 @@ def main():
                                             ["http://127.0.0.1:%d/actuator/prometheus" % (PORTS[app] + offset)
                                              for app in sorted(MESSAGING_APPS)],
                                             lambda url: urllib.request.urlopen(url, timeout=10).read().decode(),
-                                            args.load_refund_every)
+                                            args.load_refund_every, args.broker)
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
