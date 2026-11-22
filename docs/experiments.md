@@ -470,6 +470,8 @@ Kafka가 이 MSA에 맞는다는 가설은 아래 네 특성에서 세운다. �
 | S6 저부하 지연·운영 비용(반대, 결정 204 E) | 초당 2건에서 지연과 브로커 컨테이너 메모리·CPU·디스크 | 지연, 자원 | 지연은 E12처럼 차이 없음. 자원은 Redis·브로커 없음이 가장 적음 |
 | S7 브로커 재시작(결정 204 D) | 부하 중 브로커 강제 종료 → 재시작 | 발행 정지 시간, 복구 시간, 유실·중복 반영 | Redis는 영속 설정(AOF)에 따라 갈림 — 설정을 조건으로 명시 |
 
+**RabbitMQ Streams(Super Streams) 행의 측정 전 예상**([결정 211](decisions.md#rabbitmq-streams-comparison), 측정 전 고정) — S1 생산자 변경 없이 전부(소비자가 offset `first`부터). S2 offset·시각으로 되돌리기. S3 디스크 로그라 생산자 영향 없음(classic queue와 다름). S4 분할 수까지 늘고 단일 활성 소비자가 분할을 인스턴스에 나눠 줌. S5 같은 분할이면 Kafka와 비슷하게 멈춤. S6 지연은 차이 없음, 디스크는 classic queue보다 큼. S7 디스크 로그라 유실 0, 복구 시간은 잰다. 이 행은 Streams adapter가 공통 계약 테스트를 통과한 뒤 잰다.
+
 공통: 결정 204 합격 조건(유실·중복 반영·순서 위반 0), 조건당 2회 A→B→A, 측정 전 공통 계약 테스트(플랫폼 T36) 통과. 실제 부하는 초당 2주문이라 S3·S4는 가정한 규모임을 결과에 적는다. 재처리(S1·S2)는 기술과 무관하게 Inbox(`processed_event`)가 이미 처리한 `eventId`를 건너뛰므로, 같은 그룹으로 재반영할 때는 Inbox 정리 절차를 함께 잰다.
 
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
