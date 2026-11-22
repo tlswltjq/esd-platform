@@ -279,8 +279,9 @@ class BrokerRestart:
     시각은 부하 드라이버 시작 기준이다. 명령 실패는 회차를 멈추지 않고 ``errors`` 에 남긴다(결과에서 장애가 실제로 일어났는지 본다).
     """
 
-    def __init__(self, capture, docker, service, at, down):
+    def __init__(self, capture, docker, service, at, down, diagnose=None):
         self._capture = capture
+        self._diagnose = diagnose
         self._docker = docker
         self.service = service
         self.at = at
@@ -310,7 +311,16 @@ class BrokerRestart:
     def _run(self):
         time.sleep(self.at)
         self.killed_at = self._step(["kill", self.service])
-        time.sleep(self.down)
+        if self._diagnose is not None:
+            # 브로커가 내려가 있는 한가운데에서 누가 DB 연결·잠금을 쥐고 있는지 남긴다(PR #222 S7 원인 조사).
+            time.sleep(self.down / 2)
+            try:
+                self._diagnose()
+            except Exception as failure:  # noqa: BLE001 — 진단 실패가 회차를 멈추지 않게
+                self.errors.append("diagnose: " + str(failure)[-200:])
+            time.sleep(self.down / 2)
+        else:
+            time.sleep(self.down)
         self.started_at = self._step(["start", self.service])
 
     def summary(self):
@@ -318,9 +328,37 @@ class BrokerRestart:
                 "killed_at_s": self.killed_at, "started_at_s": self.started_at, "errors": self.errors}
 
 
+# 장애 중 업무 DB 연결·트랜잭션(읽기 전용). 시스템 스레드는 뺀다.
+RESTART_DB_SQL = ("SELECT id, user, db, command, time, state, LEFT(info, 200) FROM information_schema.processlist"
+                  " WHERE user <> 'system user' AND user <> 'event_scheduler' ORDER BY db, time DESC;"
+                  " SELECT trx_mysql_thread_id, trx_state, trx_started, trx_rows_locked, LEFT(trx_query, 200)"
+                  " FROM information_schema.innodb_trx;")
+
+
+def restart_diagnosis(capture, container, password, fetch, order_base_url, out):
+    """S7 장애 중 진단을 ``out`` 파일에 남긴다: DB 세션·트랜잭션, order 의 Hikari 지표와 스레드 덤프(노출된 경우)."""
+    parts = []
+    try:
+        parts.append("## processlist / innodb_trx\n" + capture(
+            ["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-B"],
+            input=RESTART_DB_SQL, stderr=subprocess.STDOUT))
+    except subprocess.CalledProcessError as failure:
+        parts.append("## db 읽기 실패\n" + (failure.output or "")[-500:])
+    if fetch and order_base_url:
+        for name, path in (("hikari", "/actuator/prometheus"), ("threaddump", "/actuator/threaddump")):
+            try:
+                body = fetch(order_base_url + path)
+                if name == "hikari":
+                    body = "\n".join(line for line in body.splitlines() if line.startswith("hikaricp_"))
+                parts.append("## order " + name + "\n" + body)
+            except Exception as failure:  # noqa: BLE001 — 노출되지 않았으면 그렇다고 남긴다
+                parts.append("## order " + name + " 읽기 실패: " + str(failure)[-200:])
+    Path(out).write_text("\n\n".join(parts))
+
+
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
             metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka",
-            restart_at=None, restart_down=None):
+            restart_at=None, restart_down=None, order_base_url=None):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -346,7 +384,9 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             service = resource_sampling.broker_service(broker_name)
             if service is None:
                 raise SystemExit("--restart-broker-at needs a broker (direct has none)")
-            restart = BrokerRestart(capture, docker, service, restart_at, restart_down).start()
+            restart = BrokerRestart(capture, docker, service, restart_at, restart_down,
+                                    lambda: restart_diagnosis(capture, container, db_password, fetch, order_base_url,
+                                                              Path(output) / "restart-diagnosis.txt")).start()
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
         if restart is not None:
             restart.join()
