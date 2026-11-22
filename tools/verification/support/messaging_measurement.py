@@ -186,6 +186,16 @@ def validity(measured, journey, broker, order=None):
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
+def with_restart(checked, restart):
+    """S7 회차면 장애가 계획대로 일어났는지도 유효 조건에 넣는다(PR #222 R1)."""
+    if restart is None:
+        return checked
+    problems = restart.problems()
+    if problems:
+        checked = dict(checked, valid=False, reasons=checked["reasons"] + ["S7 장애 주입: " + problem for problem in problems])
+    return checked
+
+
 # 업무 DB(모든 모듈 스키마가 한 MySQL 서버)가 받은 조회 수. 브로커 없음은 소비자가 이 서버를 폴링한다.
 DB_LOAD_SQL = "SHOW GLOBAL STATUS WHERE Variable_name IN ('Com_select', 'Questions');"
 IDLE_SECONDS = 10
@@ -273,6 +283,10 @@ def redeliveries(fetch, urls):
     return {"by_group": dict(sorted(totals.items())), "unreadable": unreadable}
 
 
+# 실제 중단 시간이 계획과 이만큼 넘게 다르면 그 회차를 S7 결과로 쓰지 않는다(docker 명령 지연 포함).
+DOWN_TOLERANCE_SECONDS = 2.0
+
+
 class BrokerRestart:
     """S7(결정 210·204 D): 부하 중 ``at`` 초에 브로커 컨테이너를 강제 종료(``docker compose kill``)하고 ``down`` 초 뒤 다시 켠다.
 
@@ -311,6 +325,8 @@ class BrokerRestart:
     def _run(self):
         time.sleep(self.at)
         self.killed_at = self._step(["kill", self.service])
+        # 재시작은 종료 시각 기준 절대 시각에 한다 — 진단이 오래 걸려도 중단 시간이 늘지 않게(PR #222 R3).
+        restart_at = time.monotonic() + self.down
         if self._diagnose is not None:
             # 브로커가 내려가 있는 한가운데에서 누가 DB 연결·잠금을 쥐고 있는지 남긴다(PR #222 S7 원인 조사).
             time.sleep(self.down / 2)
@@ -318,14 +334,31 @@ class BrokerRestart:
                 self._diagnose()
             except Exception as failure:  # noqa: BLE001 — 진단 실패가 회차를 멈추지 않게
                 self.errors.append("diagnose: " + str(failure)[-200:])
-            time.sleep(self.down / 2)
-        else:
-            time.sleep(self.down)
+        time.sleep(max(0.0, restart_at - time.monotonic()))
         self.started_at = self._step(["start", self.service])
+
+    def actual_down(self):
+        if self.killed_at is None or self.started_at is None:
+            return None
+        return round(self.started_at - self.killed_at, 2)
+
+    def problems(self):
+        """장애가 계획대로 일어나지 않았으면 그 이유. 비어 있어야 S7 회차로 쓴다(PR #222 R1)."""
+        reasons = []
+        if self.killed_at is None:
+            reasons.append("브로커 종료 실패")
+        if self.started_at is None:
+            reasons.append("브로커 재시작 실패")
+        down = self.actual_down()
+        if down is not None and abs(down - self.down) > DOWN_TOLERANCE_SECONDS:
+            reasons.append("실제 중단 %.1f초(계획 %.1f초)" % (down, self.down))
+        reasons.extend(error for error in self.errors if not error.startswith("diagnose: "))
+        return reasons
 
     def summary(self):
         return {"service": self.service, "planned_at_s": self.at, "planned_down_s": self.down,
-                "killed_at_s": self.killed_at, "started_at_s": self.started_at, "errors": self.errors}
+                "killed_at_s": self.killed_at, "started_at_s": self.started_at, "actual_down_s": self.actual_down(),
+                "errors": self.errors}
 
 
 # 장애 중 업무 DB 연결·트랜잭션(읽기 전용). 시스템 스레드는 뺀다.
@@ -429,4 +462,4 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
             "db_load": db_load, "resources": resources,
             "broker_restart": restart.summary() if restart is not None else None,
-            "validity": validity(measured, journey, broker, order)}
+            "validity": with_restart(validity(measured, journey, broker, order), restart)}

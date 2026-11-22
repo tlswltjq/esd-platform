@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -300,6 +301,32 @@ class BrokerRestartTest(unittest.TestCase):
         restart.join()
         self.assertIsNone(restart.killed_at)
         self.assertEqual(len(restart.errors), 2)
+
+    def test_a_restart_that_did_not_happen_makes_the_run_invalid(self):
+        def capture(command, **kwargs):
+            if command[-2] == "kill":
+                raise subprocess.CalledProcessError(1, command)
+            return ""
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.0).start()
+        restart.join()
+        checked = messaging_measurement.with_restart({"valid": True, "reasons": []}, restart)
+        self.assertFalse(checked["valid"])
+        self.assertTrue(any("브로커 종료 실패" in reason for reason in checked["reasons"]))
+
+    def test_slow_diagnosis_does_not_lengthen_the_outage(self):
+        def capture(command, **kwargs):
+            return ""
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.2,
+                                                      diagnose=lambda: time.sleep(0.15)).start()
+        restart.join()
+        self.assertLess(restart.actual_down(), 0.35)
+        self.assertEqual(restart.problems(), [])
+
+    def test_no_restart_keeps_validity_as_is(self):
+        checked = {"valid": True, "reasons": []}
+        self.assertIs(messaging_measurement.with_restart(checked, None), checked)
 
     def test_direct_has_no_broker_to_restart(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(messaging_measurement.time, "sleep"):
