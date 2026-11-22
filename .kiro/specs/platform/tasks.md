@@ -270,7 +270,7 @@
 
 - [ ] **T37. 결정 210의 가설·시나리오 S1~S7로 네 메시징 방식을 잰다** ([결정 210](../../../docs/decisions.md#messaging-comparison-hypotheses), [E12 측정 계획](../../../docs/experiments.md#messaging-comparison-plan))
   - 공통: 결정 204 합격 조건(유실·중복 반영·순서 위반 0), 조건당 2회 A→B→A, 측정 하네스는 `verify-jib.py --measure`. 측정 전 예상은 E12 계획 표로 고정돼 있고 결과는 예상과 달라도 그대로 적는다.
-  - [ ] S6 저부하 지연·운영 비용 — 초당 2건 지연과 브로커 컨테이너 메모리·CPU·디스크.
+  - [x] S6 저부하 지연·운영 비용 — 2026-11-22 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221), [E12 S6 결과](../../../docs/experiments.md#messaging-s6). 세 브로커 지연 차이 없음, 브로커 없음은 업무 MySQL이 비용을 진다(CPU 약 2.5배). RabbitMQ 유휴 CPU 원인은 확인하지 않았다. Streams 회차는 adapter 뒤에 더한다.
   - [ ] S5 독 메시지 1건 — 계속 실패하는 키 A와 같은 분할의 키 B 지연.
   - [ ] S7 브로커 재시작 — 발행 정지·복구 시간, 유실·중복 반영. Redis 영속 설정(AOF)을 조건으로 적는다.
   - [ ] S4 소비 인스턴스 1 → 3 → 6 — 처리량, 인스턴스별 몫, 인계 시간.
