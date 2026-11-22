@@ -16,7 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +36,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>계약:
  * <ol>
- *   <li>같은 키는 발행 순서대로, 한 번씩, 한 번에 하나씩 처리된다(앞 처리가 끝나기 전에 다음을 시작하지 않는다).</li>
+ *   <li>같은 키는 발행 순서대로, 한 번씩, 한 번에 하나씩 처리된다. 앞 처리를 붙잡아 둔 동안 뒤 메시지는 어느 인스턴스에서도 시작되지 않는다.</li>
  *   <li>같은 그룹의 인스턴스가 둘이어도 한 메시지는 한 인스턴스만 처리하고, 같은 키를 두 인스턴스가 동시에 처리하지 않는다.</li>
  *   <li>다른 그룹은 각자 모든 메시지를 받는다(팬아웃).</li>
  *   <li>처리 실패는 제자리에서 재시도(최초 1회 + 재시도 {@value #RETRIES}회)한 뒤 격리하고 그 키만 멈춘다.
@@ -252,6 +255,36 @@ public abstract class MessagingContractTest {
     }
 
     @Test
+    void 같은_키의_앞_처리가_끝나기_전에는_어느_인스턴스도_뒤_메시지를_시작하지_않는다() throws InterruptedException {
+        String key = "K-" + UUID.randomUUID();
+        Gate gate = new Gate(key);
+        PerKeyConcurrency concurrency = new PerKeyConcurrency();
+        Recording first = new Recording(concurrency, Duration.ZERO);
+        Recording second = new Recording(concurrency, Duration.ZERO);
+        first.holdFirstMessageOf(gate);
+        second.holdFirstMessageOf(gate);
+        start(group, first);
+        start(group, second);
+        awaitSubscriptionsReady();
+
+        String held = send(key);
+        assertThat(gate.entered.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("앞 메시지 처리가 시작됐다").isTrue();
+        String behind = send(key);
+        settle();
+
+        assertThat(first.attempts(behind) + second.attempts(behind))
+                .as("앞 처리가 붙잡혀 있는 동안 같은 키의 뒤 메시지는 어느 인스턴스에서도 시작되지 않는다").isZero();
+        gate.open();
+        await("두 건 수신", () -> first.ids().size() + second.ids().size() >= 2);
+        settle();
+
+        List<String> all = new ArrayList<>(first.ids());
+        all.addAll(second.ids());
+        assertThat(all).containsExactlyInAnyOrder(held, behind);
+        assertThat(concurrency.max()).isEqualTo(1);
+    }
+
+    @Test
     void 다른_그룹은_각자_모든_메시지를_받는다() {
         Recording mine = new Recording();
         Recording theirs = new Recording();
@@ -286,6 +319,7 @@ public abstract class MessagingContractTest {
 
         await("격리 2건", () -> quarantinedCount(group) >= 2);
         await("다른 키 수신", () -> handler.ids().contains(other));
+        settle();
 
         assertThat(handler.attempts(failing)).as("최초 1회 + 재시도 %d회", RETRIES).isEqualTo(1 + RETRIES);
         assertThat(handler.attempts(behind)).as("멈춘 키의 뒤 메시지는 처리하지 않고 보관").isZero();
@@ -305,6 +339,7 @@ public abstract class MessagingContractTest {
         String rejected = send(key);
 
         await("격리", () -> quarantine.stopped(group, topic, key));
+        settle();
         assertThat(handler.attempts(rejected)).isEqualTo(1);
     }
 
@@ -321,6 +356,7 @@ public abstract class MessagingContractTest {
         String second = send(key);
 
         await("두 건 모두 보관", () -> quarantinedCount(group) >= 2);
+        settle();
         assertThat(storage.failures()).as("앞 메시지의 보관이 두 번 실패했다").isEqualTo(2);
         assertThat(handler.attempts(second)).as("앞 메시지가 붙잡혀 있는 동안 뒤 메시지는 처리되지 않고, 키 정지 뒤 보관된다")
                 .isZero();
@@ -389,6 +425,26 @@ public abstract class MessagingContractTest {
         }
     }
 
+    /** 같은 키의 첫 메시지 처리를 붙잡아 두는 문. 붙잡힌 동안 같은 키의 다른 메시지가 시작되는지 본다(PR #219 R1). */
+    protected static final class Gate {
+        private final String key;
+        private final AtomicReference<String> held = new AtomicReference<>();
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+
+        Gate(String key) {
+            this.key = key;
+        }
+
+        boolean claim(String eventId) {
+            return held.compareAndSet(null, eventId) || eventId.equals(held.get()) && entered.getCount() > 0;
+        }
+
+        void open() {
+            release.countDown();
+        }
+    }
+
     /** 같은 키를 동시에 처리 중인 수와 그 최댓값. 여러 인스턴스의 핸들러가 하나를 나눠 쓴다. */
     protected static final class PerKeyConcurrency {
         private final Map<String, AtomicInteger> inFlight = new ConcurrentHashMap<>();
@@ -420,6 +476,7 @@ public abstract class MessagingContractTest {
         private final Duration hold;
         private volatile String failKey;
         private volatile String rejectKey;
+        private volatile Gate gate;
         private volatile String flakyKey;
         private volatile String flakyEventId;
         private final AtomicInteger flakyFailuresLeft = new AtomicInteger();
@@ -431,6 +488,11 @@ public abstract class MessagingContractTest {
         public Recording(PerKeyConcurrency concurrency, Duration hold) {
             this.concurrency = concurrency;
             this.hold = hold;
+        }
+
+        /** 그 키의 첫 메시지 처리를 {@code gate} 가 열릴 때까지 붙잡는다. 여러 인스턴스의 핸들러가 같은 문을 나눠 쓴다. */
+        void holdFirstMessageOf(Gate shared) {
+            gate = shared;
         }
 
         void failFirstMessageOf(String key, int failures) {
@@ -483,6 +545,13 @@ public abstract class MessagingContractTest {
                 concurrency.enter(message.key());
             }
             try {
+                Gate shared = gate;
+                if (shared != null && shared.key.equals(message.key()) && shared.claim(eventId)) {
+                    shared.entered.countDown();
+                    if (!shared.release.await(2, TimeUnit.MINUTES)) {
+                        throw new IllegalStateException("문이 열리지 않았다");
+                    }
+                }
                 if (!hold.isZero()) {
                     Thread.sleep(hold.toMillis());
                 }
