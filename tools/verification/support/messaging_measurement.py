@@ -27,7 +27,7 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
 
 # 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
 MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
-BROKERS = ("kafka", "direct", "rabbitmq", "redis-streams")
+BROKERS = ("kafka", "direct", "rabbitmq", "rabbitmq-streams", "redis-streams")
 # 비교하는 브로커가 모두 같은 병렬도를 갖게 한다: Kafka 토픽 파티션 수 = RabbitMQ (그룹, 토픽)당 큐 수.
 # docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
 PARALLELISM = 3
@@ -57,6 +57,15 @@ def broker_environment(app, broker):
         if app == "catalog":
             # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
             environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    if broker == "rabbitmq-streams":
+        # 결정 211. stream 프로토콜(5552)로 붙고, 분할 수를 다른 브로커의 병렬도와 맞춘다.
+        environment.update(STOVE_MESSAGING_RABBITMQSTREAMS_HOST="rabbitstreams", STOVE_MESSAGING_RABBITMQSTREAMS_PORT="5552",
+                           STOVE_MESSAGING_RABBITMQSTREAMS_USERNAME=RABBIT_USER,
+                           STOVE_MESSAGING_RABBITMQSTREAMS_PASSWORD=RABBIT_PASSWORD,
+                           STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC=str(PARALLELISM))
+        if app == "catalog":
+            # Store 는 Kafka 로만 받는다(위와 같은 이유).
+            environment["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
     if broker == "redis-streams":
         environment.update(STOVE_MESSAGING_REDISSTREAMS_URI="redis://streams:6379",
                            STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC=str(PARALLELISM))
@@ -87,6 +96,16 @@ def infra_services(broker):
                             "command": ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"],
                             "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "3s",
                                             "retries": 60}}}
+    if broker == "rabbitmq-streams":
+        # classic queue 회차와 같은 이미지(management 포함)에 stream 플러그인만 켠다 — 두 RabbitMQ 구성의 차이가 토폴로지에만 있게.
+        return {"rabbitstreams": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
+                                  "environment": {"RABBITMQ_DEFAULT_USER": RABBIT_USER,
+                                                  "RABBITMQ_DEFAULT_PASS": RABBIT_PASSWORD},
+                                  "command": ["sh", "-c",
+                                              "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server"],
+                                  "healthcheck": {"test": ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener",
+                                                           "5552"],
+                                                  "interval": "3s", "timeout": "10s", "retries": 60}}}
     if broker != "rabbitmq":
         return {}
     return {"rabbitmq": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],

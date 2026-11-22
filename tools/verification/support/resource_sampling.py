@@ -12,10 +12,12 @@ import subprocess
 import threading
 
 # 고른 브로커 → 메시지를 실어 나르는 Compose 서비스. 브로커 없음은 없다(업무 DB 가 대신한다).
-_BROKER_SERVICES = {"kafka": "kafka", "rabbitmq": "rabbitmq", "redis-streams": "streams", "direct": None}
+_BROKER_SERVICES = {"kafka": "kafka", "rabbitmq": "rabbitmq", "rabbitmq-streams": "rabbitstreams",
+                    "redis-streams": "streams", "direct": None}
 # 서비스별 데이터 경로. apache/kafka 이미지는 설정에 따라 두 경로 중 하나를 쓴다 — 있는 쪽만 합친다.
 DATA_PATHS = {"mysql": ["/var/lib/mysql"], "kafka": ["/tmp/kraft-combined-logs", "/tmp/kafka-logs"],
-              "rabbitmq": ["/var/lib/rabbitmq"], "streams": ["/data"]}
+              "rabbitmq": ["/var/lib/rabbitmq"], "rabbitstreams": ["/var/lib/rabbitmq"],
+              "streams": ["/data"]}
 INTERVAL_SECONDS = 2.0
 STATS_FORMAT = "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 _UNITS = {"B": 1, "KiB": 1024, "MiB": 1024 ** 2, "GiB": 1024 ** 3, "kB": 1000, "MB": 1000 ** 2, "GB": 1000 ** 3}

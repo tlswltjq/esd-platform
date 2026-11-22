@@ -36,6 +36,20 @@ class CommandTest(unittest.TestCase):
 
 
 class BrokerEnvironmentTest(unittest.TestCase):
+    def test_rabbitmq_streams_uses_the_stream_port_and_the_same_parallelism(self):
+        order = messaging_measurement.broker_environment("order", "rabbitmq-streams")
+        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "rabbitmq-streams")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_HOST"], "rabbitstreams")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PORT"], "5552")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC"],
+                         str(messaging_measurement.PARALLELISM))
+        self.assertNotIn("STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS", order)
+        self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq-streams")
+                         ["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"], "stove.catalog.v1")
+        service = messaging_measurement.infra_services("rabbitmq-streams")["rabbitstreams"]
+        self.assertIn("rabbitmq_stream", " ".join(service["command"]))
+        self.assertIn("5552", service["healthcheck"]["test"])
+
     def test_kafka_is_the_default_and_needs_no_switch(self):
         self.assertEqual(messaging_measurement.broker_environment("order", "kafka"), {})
 

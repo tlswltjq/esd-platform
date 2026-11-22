@@ -52,7 +52,7 @@ def main():
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
     parser.add_argument("--app-env", action="append", default=[], metavar="NAME=VALUE",
                         help="Extra environment for every application (repeatable), e.g. a messaging setting to compare")
-    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq", "redis-streams"],
+    parser.add_argument("--broker", default="kafka", choices=["kafka", "direct", "rabbitmq", "rabbitmq-streams", "redis-streams"],
                         help="Messaging adapter to compare (decision 203). Default kafka")
     args = parser.parse_args()
     if args.prometheus_only and (args.tracing or args.foundation_only):
