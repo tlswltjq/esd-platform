@@ -275,5 +275,5 @@
   - [ ] S7 브로커 재시작 — 발행 정지·복구 시간, 유실·중복 반영. Redis 영속 설정(AOF)을 조건으로 적는다.
   - [ ] S4 소비 인스턴스 1 → 3 → 6 — 처리량, 인스턴스별 몫, 인계 시간.
   - [ ] S3 소비자 1시간 중단 뒤 회복 — 브로커 메모리·디스크, 생산 쪽 Outbox `PENDING`, 회복 시간, 유실(가정한 규모).
-  - [ ] RabbitMQ Streams adapter([결정 211](../../../docs/decisions.md#rabbitmq-streams-comparison)) — `common:messaging-rabbitmq-streams`(Super Streams + 분할마다 단일 활성 소비자)가 공통 계약 테스트 8개를 통과한다. 통과 뒤 S6·S5·S7·S4에 Streams 회차를 더한다.
+  - [x] RabbitMQ Streams adapter([결정 211](../../../docs/decisions.md#rabbitmq-streams-comparison)) — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222). `common:messaging-rabbitmq-streams`: 토픽마다 super stream(분할 3, 보존 7일), 분할마다 단일 활성 소비자, 처리·격리 보관 뒤 위치 저장, 새 그룹은 `first`부터. 공통 계약 8개 + Streams 고유 1개(붙기 전 발행한 메시지도 새 그룹이 받음) 통과, 변이(단일 활성 소비자 제거) 시 계약 2·3 실패. 측정 하네스 `--broker rabbitmq-streams`.
   - [ ] S1 새 소비 서비스와 초기 적재, S2 버그 수정 뒤 과거 재반영 — 다섯 방식(Streams 포함).
