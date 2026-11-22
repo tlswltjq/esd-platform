@@ -525,5 +525,22 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 - **예상 밖**: Kafka는 다른 파티션의 메시지도 멈췄다(7.7초 또는 1.2초). 리스너 동시성이 설정되지 않아(Spring Boot 기본 1) 소비 스레드 하나가 파티션 3개를 맡고, `DefaultErrorHandler`의 재시도 대기가 그 스레드를 막기 때문이다 — 동시성을 파티션 수(3)로 바꾼 확인 실험에서 다른 파티션은 168ms였다. 1.2초와 7.7초를 가르는 조건(가져온 묶음에 C가 있었는지로 추정)은 확인하지 않았다. 다른 adapter는 분할마다 소비자를 따로 둔다(RabbitMQ 큐마다 컨테이너, Redis 스트림마다 스레드, Streams 연결마다 소비자). 따라서 지금 운영 구성에서는 인스턴스 하나에서 한 키의 독 메시지가 그 소비 그룹의 모든 키를 최대 약 7초 멈춘다. 운영 기본값을 바꿀지는 따로 정한다(플랫폼 T37).
 - adapter 수준 측정이라 업무 여정 전체 지연이 아니라 "뒤 메시지가 처음 처리되기까지"다. 인스턴스가 여럿이면 분할이 인스턴스에 나뉘어 결과가 달라질 수 있다(S4에서 본다).
 
+<a id="messaging-s7"></a>
+**S7 결과 — 브로커 재시작**(2026-11-22, [PR #222](https://github.com/tlswltjq/esd-platform/pull/222))
+
+조건 — S6와 같은 스택·부하(초당 2주문 60초)에서 부하 드라이버 시작 약 40초 뒤 고른 브로커 컨테이너를 `docker compose kill`로 강제 종료하고 약 10초 뒤 `docker compose start`(하네스 `--restart-broker-at 40 --restart-broker-down 10`). 브로커 영속 설정: Kafka 로그 디스크, RabbitMQ durable 큐·persistent 메시지, Streams 디스크 로그, Redis AOF `everysec`. 브로커 없음은 브로커가 없어 해당 없음. 장애 한가운데에서 업무 DB 세션·트랜잭션과 order Hikari 지표를 남겼다(`restart-diagnosis.txt`). 조건당 2회.
+
+| 방식 | 유효 | HTTP 실패(주문 요청) | 완료 / 접수 | 결제 확정 → 구매 근거 p95 / 최대 | Inbox 재전달 차단 |
+|---|---|---|---|---|---|
+| Kafka | 0 / 2 | **39 / 45건** | 81 / 81, 75 / 75 | 2245 / 27677, 2526 / 28532ms | 1 / 1 |
+| RabbitMQ | 1 / 2 | 0 / **5건** | 120, 115 / 115 | 1089 / 20886, 1945 / 21155ms | 1 / 1 |
+| RabbitMQ Streams | 2 / 2 | 0 / 0 | 120 / 120 | 1135 / 32346, 1850 / 4952ms | 1 / 6 |
+| Redis Streams | 2 / 2 | 0 / 0 | 120 / 120 | 1479 / 11527, 1658 / 11601ms | 1 / 1 |
+
+**해석·한계**
+- 접수된 주문은 모든 방식에서 장애 뒤 전부 처리됐다(미완료 0, 유실 0). 재시작 뒤 다시 받은 메시지는 Inbox가 걸러 중복 반영 0이다. 장애 동안 쌓인 메시지가 회복 뒤 처리되며 최대 지연이 5~33초로 늘었다.
+- **예상 밖 — 브로커 장애가 고객 주문 실패로 번졌다**(Kafka 2회 모두, RabbitMQ 1회). 장애 중 진단에서 order의 InnoDB 트랜잭션 다수가 `insert into outbox_event … LOCK WAIT` 상태였고, 주문 요청이 잠금을 기다리며 DB 연결을 쥐다가 풀 대기 시간 초과(`HikariPool … createTimeoutException`)로 500이 났다. Outbox 릴레이는 한 트랜잭션 안에서 `PENDING` 행을 `idx_outbox_status (status, id)` 범위로 `FOR UPDATE SKIP LOCKED` 잠근 채 브로커 확인을 기다리므로, 그 범위 끝의 간격 잠금이 새 `PENDING` 행 INSERT를 막는 것으로 본다(추정 — 잠금 보유 트랜잭션과의 대응은 재현 테스트로 확인한다). 실패 건수는 확인 대기 상한과 함께 커진다: Kafka(producer 대기를 따로 두지 않아 기본 `delivery.timeout.ms` 120초) 39·45건, RabbitMQ(확인 10초 상한) 0·5건. RabbitMQ Streams(같은 10초 상한)·Redis가 0건인 이유는 확인하지 않았다. 이것은 기술의 성질이 아니라 **Outbox 릴레이의 결함**으로 보고 따로 고친다(플랫폼 T37). 고친 뒤 S7을 다시 잰다.
+- 컨테이너 강제 종료 한 번, 10초 중단 한 조건이다. 긴 중단(S3)과 클러스터 노드 장애는 재지 않았다.
+
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216), S6 요약 JSON은 이전 8회 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)·재측정 10회 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
 
