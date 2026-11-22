@@ -511,7 +511,7 @@ public abstract class MessagingContractTest {
             flakyFailuresLeft.set(failures);
         }
 
-        List<String> ids() {
+        public List<String> ids() {
             synchronized (received) {
                 return received.stream().map(message -> message.header(EventHeaders.EVENT_ID)).toList();
             }

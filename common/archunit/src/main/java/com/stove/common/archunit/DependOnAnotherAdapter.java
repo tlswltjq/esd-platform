@@ -10,7 +10,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 final class DependOnAnotherAdapter {
 
     private static final String ADAPTER_ROOT = "com.stove.common.messaging.";
-    private static final String[] ADAPTER_NAMES = {"kafka", "rabbitmq", "redis", "direct"};
+    private static final String[] ADAPTER_NAMES = {"kafka", "rabbitmq", "rabbitstreams", "redis", "direct"};
 
     static final ArchCondition<JavaClass> CONDITION = new ArchCondition<>("다른 메시징 adapter 에 의존한다") {
         @Override
