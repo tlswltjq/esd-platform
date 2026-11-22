@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -188,11 +189,18 @@ class MeasureTest(unittest.TestCase):
 
             selects = iter([100, 150, 450])
 
+            disks = iter(["100\t/var/lib/mysql", "10\t/tmp/kraft-combined-logs",
+                          "160\t/var/lib/mysql", "40\t/tmp/kraft-combined-logs"])
+
             def capture(command, **kwargs):
+                if command[:2] == ["docker", "stats"]:
+                    return "mysql-id\t4.00%\t300MiB / 1GiB\nkafka-id\t2.00%\t500MiB / 2GiB"
+                if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
+                    return next(disks)
                 if command[:2] == ["docker", "exec"]:
                     value = next(selects)
                     return "Com_select\t%d\nQuestions\t%d" % (value, value * 2)
-                return "mysql-id"
+                return command[-1] + "-id"
 
             # 읽기마다 monotonic 두 번(전·후): 유휴 시작 0~0, 유휴 끝 10~10, 부하 끝 70~70
             clock = iter([0.0, 0.0, 10.0, 10.0, 70.0, 70.0])
@@ -208,6 +216,48 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(summary["db_load"]["idle_per_second"]["Com_select"], 5.0, "유휴 10초 동안 50건")
         self.assertEqual(summary["db_load"]["load_run_per_second"]["Com_select"], 5.0, "부하 구간 60초 동안 300건")
         self.assertEqual(summary["order"]["order-payment-result"]["violations"], 0)
+        resources = summary["resources"]
+        self.assertEqual(resources["broker_service"], "kafka")
+        self.assertEqual(resources["disk"]["mysql"]["growth_kib"], 60)
+        self.assertEqual(resources["disk"]["kafka"]["growth_kib"], 30)
+        self.assertEqual(set(resources["load_run"]), {"mysql", "kafka"})
+        self.assertEqual(resources["load_run"]["kafka"]["memory_mib_max"], 500.0)
+        self.assertEqual(resources["stats_partial"], 0)
+        self.assertEqual(resources["disk_errors"], {"before": {}, "after": {}})
+        self.assertEqual(calls.index("measure-load"), 0)
+
+    def test_idle_failure_still_stops_the_sampler(self):
+        started = []
+
+        class Recorder:
+            def __init__(self, capture, containers):
+                self.failures = 0
+                self.partial = 0
+                self.stopped = False
+                started.append(self)
+
+            def start(self):
+                return self
+
+            def stop(self):
+                self.stopped = True
+                return []
+
+        def capture(command, **kwargs):
+            if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
+                return "1\t/x"
+            if command[:2] == ["docker", "exec"]:
+                raise subprocess.CalledProcessError(1, command)
+            return "id"
+
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(messaging_measurement.resource_sampling, "Sampler", Recorder), \
+                mock.patch.object(messaging_measurement.time, "sleep"):
+            with self.assertRaises(subprocess.CalledProcessError):
+                messaging_measurement.measure("/repo", ["docker", "compose"], lambda *a, **k: None, capture,
+                                              Path(directory), 300, 5, 1, 2, 1)
+        self.assertEqual(len(started), 1)
+        self.assertTrue(started[0].stopped, "유휴 읽기가 실패해도 표본 스레드를 멈춘다(R3)")
 
 
 if __name__ == "__main__":
