@@ -254,6 +254,12 @@ public abstract class MessagingContractTest {
         assertThat(concurrency.max()).as("두 인스턴스를 합쳐 같은 키를 동시에 처리한 최대 수").isEqualTo(1);
     }
 
+    /**
+     * 한계(PR #219 R9, 부분 반영): 뒤 메시지가 처리 가능한 단계에 들어간 시점은 브로커마다 달라(Kafka poll·RabbitMQ prefetch·
+     * Redis XREADGROUP·direct 커서) 공통으로 관찰하지 않는다. 관찰 구간({@link #settle()}) 안에 뒤 메시지가 전달되지 않는
+     * adapter라면 동시 처리 결함이 있어도 이 계약은 통과할 수 있다. adapter에 테스트 전용 hook을 두지 않으려고 이 한계를 받아들인다.
+     * Kafka 수신부가 처리를 별도 스레드로 넘기는 변이는 이 계약이 {@code expected: 0 but was: 1}로 잡는다.
+     */
     @Test
     void 같은_키의_앞_처리가_끝나기_전에는_어느_인스턴스도_뒤_메시지를_시작하지_않는다() throws InterruptedException {
         String key = "K-" + UUID.randomUUID();
@@ -268,13 +274,17 @@ public abstract class MessagingContractTest {
         awaitSubscriptionsReady();
 
         String held = send(key);
-        assertThat(gate.entered.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("앞 메시지 처리가 시작됐다").isTrue();
-        String behind = send(key);
-        settle();
+        String behind;
+        try {
+            assertThat(gate.entered.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("앞 메시지 처리가 시작됐다").isTrue();
+            behind = send(key);
+            settle();
 
-        assertThat(first.attempts(behind) + second.attempts(behind))
-                .as("앞 처리가 붙잡혀 있는 동안 같은 키의 뒤 메시지는 어느 인스턴스에서도 시작되지 않는다").isZero();
-        gate.open();
+            assertThat(first.attempts(behind) + second.attempts(behind))
+                    .as("앞 처리가 붙잡혀 있는 동안 같은 키의 뒤 메시지는 어느 인스턴스에서도 시작되지 않는다").isZero();
+        } finally {
+            gate.open();
+        }
         await("두 건 수신", () -> first.ids().size() + second.ids().size() >= 2);
         settle();
 
@@ -437,7 +447,8 @@ public abstract class MessagingContractTest {
         }
 
         boolean claim(String eventId) {
-            return held.compareAndSet(null, eventId) || eventId.equals(held.get()) && entered.getCount() > 0;
+            // 붙잡은 메시지는 재전달·재시도돼도 문이 열릴 때까지 다시 붙잡는다(PR #219 R7). 열린 뒤에는 await가 바로 끝난다.
+            return held.compareAndSet(null, eventId) || eventId.equals(held.get());
         }
 
         void open() {
