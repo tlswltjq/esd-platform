@@ -12,6 +12,7 @@ import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -77,9 +78,19 @@ class RabbitStreamsContractTest extends MessagingContractTest {
                                       List<Class<? extends RuntimeException>> noRetryFor) {
         RabbitStreamsSubscriptions subscriptions = new RabbitStreamsSubscriptions(
                 () -> List.of(new SubscribedHandler(group, topic, handler, asArray(noRetryFor))), environment(),
-                new InPlaceDelivery(storage, ReplayTracing.NONE, SHORT_RETRIES), PARTITIONS, MAX_AGE, Duration.ofMillis(20));
+                new InPlaceDelivery(storage, ReplayTracing.NONE, retryDelays(SHORT_RETRIES)), PARTITIONS, MAX_AGE, Duration.ofMillis(20));
         subscriptions.start();
         return subscriptions::stop;
+    }
+
+    @Override
+    protected Optional<String> keyInSamePartition(String key) {
+        return keyWhere(candidate -> RabbitStreamsTopology.partition(candidate, PARTITIONS) == RabbitStreamsTopology.partition(key, PARTITIONS));
+    }
+
+    @Override
+    protected Optional<String> keyInOtherPartition(String key) {
+        return keyWhere(candidate -> RabbitStreamsTopology.partition(candidate, PARTITIONS) != RabbitStreamsTopology.partition(key, PARTITIONS));
     }
 
     @Override

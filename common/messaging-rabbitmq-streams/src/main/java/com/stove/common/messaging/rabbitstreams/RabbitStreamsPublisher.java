@@ -64,6 +64,7 @@ public class RabbitStreamsPublisher implements MessagePublisher, AutoCloseable {
         return environment.producerBuilder()
                 .superStream(topic)
                 .routing(RabbitStreamsPublisher::routingKeyOf)
+                .hash(RabbitStreamsTopology::hash)
                 .producerBuilder()
                 .build();
     }

@@ -13,6 +13,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.Optional;
+import java.nio.charset.StandardCharsets;
+import org.apache.kafka.common.utils.Utils;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -188,6 +191,21 @@ class KafkaContractTest extends MessagingContractTest {
 
     private static int assigned(List<ConcurrentMessageListenerContainer<Object, Object>> containers) {
         return containers.stream().mapToInt(KafkaContractTest::partitionsOf).sum();
+    }
+
+    @Override
+    protected Optional<String> keyInSamePartition(String key) {
+        return keyWhere(candidate -> partitionOf(candidate) == partitionOf(key));
+    }
+
+    @Override
+    protected Optional<String> keyInOtherPartition(String key) {
+        return keyWhere(candidate -> partitionOf(candidate) != partitionOf(key));
+    }
+
+    /** Kafka 기본 파티셔너(키가 있을 때)와 같은 계산: murmur2(키 바이트) 양수화 % 파티션 수. */
+    private static int partitionOf(String key) {
+        return Utils.toPositive(Utils.murmur2(key.getBytes(StandardCharsets.UTF_8))) % PARTITIONS;
     }
 
     @Override
