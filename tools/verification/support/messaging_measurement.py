@@ -264,21 +264,27 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     container = capture(docker + ["ps", "-q", "mysql"])
     containers = {service: capture(docker + ["ps", "-q", service])
                   for service in resource_sampling.sampled_services(broker_name)}
-    disk_before = resource_sampling.disk_kib(capture, containers)
+    disk_before, disk_errors_before = resource_sampling.disk_kib(capture, containers)
     idle_sampler = resource_sampling.Sampler(capture, containers).start()
-    idle_start = db_counters(capture, container, db_password)
-    time.sleep(IDLE_SECONDS)
-    idle_end = db_counters(capture, container, db_password)
-    idle_samples = idle_sampler.stop()
+    try:
+        idle_start = db_counters(capture, container, db_password)
+        time.sleep(IDLE_SECONDS)
+        idle_end = db_counters(capture, container, db_password)
+    finally:
+        # 유휴 읽기가 실패해도 표본 스레드가 계속 docker 를 부르지 않게 한다(PR #221 R3).
+        idle_samples = idle_sampler.stop()
     load_sampler = resource_sampling.Sampler(capture, containers).start()
     try:
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+        # 부하가 끝난 바로 그때 읽는다. 표본 스레드 종료 대기(최대 표본 간격)가 부하 구간에 섞이지 않게(R4).
+        load_end = db_counters(capture, container, db_password)
     finally:
         load_samples = load_sampler.stop()
+    # 디스크도 부하 직후에 읽는다. 아래 수집 단계(읽기 전용 조회)가 증가량에 섞이지 않게(R6).
+    disk_after, disk_errors_after = resource_sampling.disk_kib(capture, containers)
     diagnosis = refund_diagnosis(capture, container, db_password) if refund_every else None
     if diagnosis is not None:
         print("REFUND DIAGNOSIS " + json.dumps(diagnosis, ensure_ascii=False), flush=True)
-    load_end = db_counters(capture, container, db_password)
     db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
     run(journey_command(root, container, load, journey_file), "measure-journey")
@@ -289,7 +295,9 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
                  "idle": resource_sampling.summarize(idle_samples),
                  "load_run": resource_sampling.summarize(load_samples),
                  "stats_failures": idle_sampler.failures + load_sampler.failures,
-                 "disk": resource_sampling.disk_growth(disk_before, resource_sampling.disk_kib(capture, containers))}
+                 "stats_partial": idle_sampler.partial + load_sampler.partial,
+                 "disk": resource_sampling.disk_growth(disk_before, disk_after),
+                 "disk_errors": {"before": disk_errors_before, "after": disk_errors_after}}
     loaded = json.loads(load.read_text())
     measured = [order for order in loaded["orders"] if not order.get("warmup")]
     journey = json.loads(journey_file.read_text())["purchase"]

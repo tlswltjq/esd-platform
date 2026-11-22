@@ -1,4 +1,6 @@
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -86,6 +88,25 @@ class SamplerTest(unittest.TestCase):
         sampler.start()
         self.assertEqual(len(sampler.stop()), 1)
 
+    def test_reading_missing_a_service_is_counted_as_partial(self):
+        def capture(command, **kwargs):
+            return "id-m\t1.00%\t1MiB / 2MiB"
+
+        sampler = resource_sampling.Sampler(capture, {"mysql": "id-m", "kafka": "id-k"}, interval=60)
+        sampler.start()
+        samples = sampler.stop()
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(sampler.partial, 1)
+
+    def test_complete_reading_is_not_partial(self):
+        def capture(command, **kwargs):
+            return "id-m\t1.00%\t1MiB / 2MiB\nid-k\t1.00%\t1MiB / 2MiB"
+
+        sampler = resource_sampling.Sampler(capture, {"mysql": "id-m", "kafka": "id-k"}, interval=60)
+        sampler.start()
+        sampler.stop()
+        self.assertEqual(sampler.partial, 0)
+
     def test_failed_reading_is_counted_and_does_not_stop_the_run(self):
         def capture(command, **kwargs):
             raise OSError("docker gone")
@@ -105,16 +126,32 @@ class DiskTest(unittest.TestCase):
             commands.append(command)
             return "64\t/var/lib/mysql"
 
-        disk = resource_sampling.disk_kib(capture, {"mysql": "id-m"})
+        disk, errors = resource_sampling.disk_kib(capture, {"mysql": "id-m"})
         self.assertEqual(disk, {"mysql": 64})
+        self.assertEqual(errors, {})
         self.assertEqual(commands[0][:3], ["docker", "exec", "id-m"])
-        self.assertIn("/var/lib/mysql", commands[0][-1])
+        self.assertIn("'/var/lib/mysql'", commands[0][-1])
 
-    def test_unreadable_disk_is_none(self):
+    def test_unreadable_disk_is_none_with_the_reason(self):
         def capture(command, **kwargs):
-            raise OSError("no du")
+            raise subprocess.CalledProcessError(1, command, output="du: cannot read")
 
-        self.assertEqual(resource_sampling.disk_kib(capture, {"mysql": "id-m"}), {"mysql": None})
+        disk, errors = resource_sampling.disk_kib(capture, {"mysql": "id-m"})
+        self.assertEqual(disk, {"mysql": None})
+        self.assertIn("du: cannot read", errors["mysql"])
+
+    def test_du_script_fails_when_no_path_exists_and_sums_only_existing_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            present = Path(directory) / "logs"
+            present.mkdir()
+            (present / "segment").write_bytes(b"x" * 4096)
+            missing = str(Path(directory) / "missing")
+            out = subprocess.run(["sh", "-c", resource_sampling.du_script([missing, str(present)])],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0)
+            self.assertGreater(resource_sampling.parse_du(out.stdout), 0)
+            none = subprocess.run(["sh", "-c", resource_sampling.du_script([missing])], capture_output=True, text=True)
+            self.assertNotEqual(none.returncode, 0, "아무 경로도 없으면 0 KiB 가 아니라 실패다")
 
     def test_growth_is_after_minus_before_and_none_when_either_is_missing(self):
         self.assertEqual(resource_sampling.disk_growth({"mysql": 10, "kafka": None}, {"mysql": 25, "kafka": 4}),

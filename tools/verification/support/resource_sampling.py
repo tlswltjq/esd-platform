@@ -8,6 +8,7 @@
 브로커 없음(``direct``)은 메시지가 업무 DB 의 Outbox 를 거치므로 ``mysql`` 이 그 몫을 진다.
 """
 import re
+import subprocess
 import threading
 
 # 고른 브로커 → 메시지를 실어 나르는 Compose 서비스. 브로커 없음은 없다(업무 DB 가 대신한다).
@@ -79,6 +80,7 @@ class Sampler:
         self._stopped = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self.failures = 0
+        self.partial = 0
 
     def start(self):
         self._thread.start()
@@ -92,13 +94,19 @@ class Sampler:
     def _loop(self):
         command = ["docker", "stats", "--no-stream", "--format", STATS_FORMAT] + list(self._services)
         # 구간이 짧아도 표본이 0개가 되지 않게 먼저 한 번 읽고 나서 멈춤을 본다.
+        expected = sorted(self._services.values())
         while True:
             try:
+                reading = []
                 for line in self._capture(command).splitlines():
                     identifier, cpu, memory = parse_stats_line(line)
                     service = self._service_of(identifier)
                     if service:
-                        self._samples.append((service, cpu, memory))
+                        reading.append((service, cpu, memory))
+                self._samples.extend(reading)
+                # 요청한 서비스가 한 번씩 다 왔는지 본다. 빠지거나 겹친 읽기는 불완전으로 센다(PR #221 R2).
+                if sorted(service for service, _, _ in reading) != expected:
+                    self.partial += 1
             except Exception:  # noqa: BLE001 — 측정 보조값이라 회차를 멈추지 않고 실패만 센다
                 self.failures += 1
             if self._stopped.wait(self._interval):
@@ -112,17 +120,28 @@ class Sampler:
         return None
 
 
+def du_script(paths):
+    """있는 경로마다 ``du -sk``. 하나도 없거나 ``du`` 가 하나라도 실패하면 0이 아닌 종료 코드(PR #221 R1).
+
+    apache/kafka 이미지처럼 설정에 따라 두 경로 중 하나만 쓰는 경우가 있어 "있는 것만"이되, 아무것도 없으면 실패다.
+    """
+    quoted = " ".join("'" + path + "'" for path in paths)
+    return ("set -e; found=0; for p in " + quoted + "; do if [ -e \"$p\" ]; then du -sk \"$p\"; found=1; fi; done; "
+            "[ \"$found\" = 1 ]")
+
+
 def disk_kib(capture, containers):
-    """서비스별 데이터 경로의 KiB 합. 읽지 못하면 None(0 으로 적지 않는다)."""
+    """서비스별 데이터 경로의 KiB 합과 읽지 못한 서비스의 이유. 읽지 못하면 값은 None(0 으로 적지 않는다)."""
     disk = {}
+    errors = {}
     for service, identifier in containers.items():
-        paths = " ".join(DATA_PATHS[service])
         try:
-            disk[service] = parse_du(capture(["docker", "exec", identifier, "sh", "-c",
-                                              "du -sk " + paths + " 2>/dev/null || true"]))
-        except Exception:  # noqa: BLE001 — 위와 같은 이유
+            disk[service] = parse_du(capture(["docker", "exec", identifier, "sh", "-c", du_script(DATA_PATHS[service])],
+                                             stderr=subprocess.STDOUT))
+        except Exception as failure:  # noqa: BLE001 — 측정 보조값이라 회차를 멈추지 않고 이유를 남긴다
             disk[service] = None
-    return disk
+            errors[service] = (getattr(failure, "output", None) or str(failure))[-300:]
+    return disk, errors
 
 
 def disk_growth(before, after):

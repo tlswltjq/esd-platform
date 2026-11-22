@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -221,6 +222,42 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(resources["disk"]["kafka"]["growth_kib"], 30)
         self.assertEqual(set(resources["load_run"]), {"mysql", "kafka"})
         self.assertEqual(resources["load_run"]["kafka"]["memory_mib_max"], 500.0)
+        self.assertEqual(resources["stats_partial"], 0)
+        self.assertEqual(resources["disk_errors"], {"before": {}, "after": {}})
+        self.assertEqual(calls.index("measure-load"), 0)
+
+    def test_idle_failure_still_stops_the_sampler(self):
+        started = []
+
+        class Recorder:
+            def __init__(self, capture, containers):
+                self.failures = 0
+                self.partial = 0
+                self.stopped = False
+                started.append(self)
+
+            def start(self):
+                return self
+
+            def stop(self):
+                self.stopped = True
+                return []
+
+        def capture(command, **kwargs):
+            if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
+                return "1\t/x"
+            if command[:2] == ["docker", "exec"]:
+                raise subprocess.CalledProcessError(1, command)
+            return "id"
+
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(messaging_measurement.resource_sampling, "Sampler", Recorder), \
+                mock.patch.object(messaging_measurement.time, "sleep"):
+            with self.assertRaises(subprocess.CalledProcessError):
+                messaging_measurement.measure("/repo", ["docker", "compose"], lambda *a, **k: None, capture,
+                                              Path(directory), 300, 5, 1, 2, 1)
+        self.assertEqual(len(started), 1)
+        self.assertTrue(started[0].stopped, "유휴 읽기가 실패해도 표본 스레드를 멈춘다(R3)")
 
 
 if __name__ == "__main__":
