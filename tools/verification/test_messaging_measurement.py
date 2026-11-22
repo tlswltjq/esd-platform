@@ -188,11 +188,18 @@ class MeasureTest(unittest.TestCase):
 
             selects = iter([100, 150, 450])
 
+            disks = iter(["100\t/var/lib/mysql", "10\t/tmp/kraft-combined-logs",
+                          "160\t/var/lib/mysql", "40\t/tmp/kraft-combined-logs"])
+
             def capture(command, **kwargs):
+                if command[:2] == ["docker", "stats"]:
+                    return "mysql-id\t4.00%\t300MiB / 1GiB\nkafka-id\t2.00%\t500MiB / 2GiB"
+                if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
+                    return next(disks)
                 if command[:2] == ["docker", "exec"]:
                     value = next(selects)
                     return "Com_select\t%d\nQuestions\t%d" % (value, value * 2)
-                return "mysql-id"
+                return command[-1] + "-id"
 
             # 읽기마다 monotonic 두 번(전·후): 유휴 시작 0~0, 유휴 끝 10~10, 부하 끝 70~70
             clock = iter([0.0, 0.0, 10.0, 10.0, 70.0, 70.0])
@@ -208,6 +215,12 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(summary["db_load"]["idle_per_second"]["Com_select"], 5.0, "유휴 10초 동안 50건")
         self.assertEqual(summary["db_load"]["load_run_per_second"]["Com_select"], 5.0, "부하 구간 60초 동안 300건")
         self.assertEqual(summary["order"]["order-payment-result"]["violations"], 0)
+        resources = summary["resources"]
+        self.assertEqual(resources["broker_service"], "kafka")
+        self.assertEqual(resources["disk"]["mysql"]["growth_kib"], 60)
+        self.assertEqual(resources["disk"]["kafka"]["growth_kib"], 30)
+        self.assertEqual(set(resources["load_run"]), {"mysql", "kafka"})
+        self.assertEqual(resources["load_run"]["kafka"]["memory_mib_max"], 500.0)
 
 
 if __name__ == "__main__":
