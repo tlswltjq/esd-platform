@@ -5,6 +5,7 @@ import com.stove.common.event.MessagePublisher;
 import com.stove.common.event.MirrorPublisher;
 import com.stove.common.messaging.MessagingAutoConfiguration;
 import com.stove.common.messaging.delivery.MirroredTopics;
+import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.direct.config.DirectMessagingProperties;
 import com.stove.common.messaging.trace.MicrometerReplayTracing;
 import com.stove.common.messaging.trace.ReplayTracing;
@@ -48,7 +49,7 @@ public class DirectMessagingAutoConfiguration {
         Propagator availablePropagator = propagator.getIfAvailable();
         ReplayTracing tracing = availableTracer == null || availablePropagator == null
                 ? ReplayTracing.NONE : new MicrometerReplayTracing(availableTracer, availablePropagator);
-        return new DirectSubscriptions(context, jdbc, quarantine, tracing, properties.sources(),
+        return new DirectSubscriptions(() -> SubscribedHandler.discover(context), jdbc, quarantine, tracing, properties.sources(),
                 properties.pollIntervalMs(), properties.batchSize());
     }
 }

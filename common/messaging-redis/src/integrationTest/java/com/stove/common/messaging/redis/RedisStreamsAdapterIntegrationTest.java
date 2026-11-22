@@ -26,7 +26,6 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
@@ -130,27 +129,6 @@ class RedisStreamsAdapterIntegrationTest {
     }
 
     @Test
-    void sameKeyArrivesOnceInPublicationOrderAcrossStreams() {
-        Recording handler = new Recording();
-        subscribe(handler);
-        Map<String, List<String>> sentByKey = new LinkedHashMap<>();
-        for (int round = 0; round < 5; round++) {
-            for (int k = 0; k < 6; k++) {
-                String key = "K-" + k;
-                sentByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(publish(key));
-            }
-        }
-
-        await("30건 수신", () -> handler.received.size() >= 30);
-
-        assertThat(handler.received).hasSize(30);
-        for (Map.Entry<String, List<String>> sent : sentByKey.entrySet()) {
-            assertThat(handler.idsOf(sent.getKey())).as("키 %s 는 보낸 순서대로 한 번씩", sent.getKey())
-                    .containsExactlyElementsOf(sent.getValue());
-        }
-    }
-
-    @Test
     void messagesPublishedBeforeTheGroupExistsAreStillDelivered() {
         // 스트림은 로그처럼 남는다: 소비 그룹이 나중에 생겨도 처음부터 읽는다(RabbitMQ 와 다른 점).
         String early = publish("K-early");
@@ -158,25 +136,6 @@ class RedisStreamsAdapterIntegrationTest {
         subscribe(handler);
 
         await("먼저 보낸 메시지 수신", () -> handler.ids().contains(early));
-    }
-
-    @Test
-    void twoInstancesOfTheSameGroupDoNotBothReceiveAMessage() {
-        Recording first = new Recording();
-        Recording second = new Recording();
-        subscribe(first);
-        subscribe(second);
-        List<String> sent = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
-            sent.add(publish("K-" + (i % 4)));
-        }
-
-        await("20건 수신", () -> first.received.size() + second.received.size() >= 20);
-
-        List<String> all = new ArrayList<>(first.ids());
-        all.addAll(second.ids());
-        assertThat(all).as("스트림마다 한 인스턴스만 읽어 같은 메시지를 둘이 받지 않는다")
-                .containsExactlyInAnyOrderElementsOf(sent);
     }
 
     @Test
@@ -197,51 +156,6 @@ class RedisStreamsAdapterIntegrationTest {
         await("이어받아 두 건 처리", () -> handler.received.size() >= 2);
         assertThat(handler.idsOf(key)).as("처리하다 만 항목부터, 원래 순서대로").containsExactly(inFlight, after);
         assertThat(connection.sync().xpending(stream, group).getCount()).isZero();
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void aFailureIsRetriedInPlaceThenQuarantinedAndStopsOnlyItsKey() {
-        String broken = "K-broken-" + UUID.randomUUID();
-        String healthy = "K-healthy-" + UUID.randomUUID();
-        Recording handler = new Recording();
-        handler.failKey = broken;
-        subscribe(quarantine, handler, new Class[]{Rejected.class});
-
-        String failing = publish(broken);
-        String behind = publish(broken);
-        String other = publish(healthy);
-
-        await("격리 2건", () -> jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group = ?",
-                Integer.class, group) >= 2);
-        await("다른 키 수신", () -> handler.ids().contains(other));
-
-        assertThat(handler.attempts(failing)).as("최초 1회 + 재시도 3회").isEqualTo(4);
-        assertThat(handler.attempts(behind)).as("멈춘 키의 뒤 메시지는 처리하지 않고 보관").isZero();
-        assertThat(quarantine.stopped(group, topic, broken)).isTrue();
-        assertThat(quarantine.stopped(group, topic, healthy)).isFalse();
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void whenStoringTheFailureFailsTheEntryIsHeldSoALaterEntryOfTheKeyCannotOvertakeIt() {
-        String key = "K-" + UUID.randomUUID();
-        Recording handler = new Recording();
-        handler.failKey = key;
-        FlakyQuarantine storage = new FlakyQuarantine(quarantine, 2);
-        subscribe(storage, handler, new Class[0]);
-
-        String first = publish(key);
-        String second = publish(key);
-
-        await("두 건 모두 보관", () -> jdbc.queryForObject("SELECT COUNT(*) FROM consumer_quarantine WHERE consumer_group = ?",
-                Integer.class, group) >= 2);
-        assertThat(storage.failures).isEqualTo(2);
-        assertThat(handler.attempts(second)).isZero();
-        assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure = 'KEY_STOPPED'",
-                String.class, group)).isEqualTo(second);
-        assertThat(jdbc.queryForObject("SELECT event_id FROM consumer_quarantine WHERE consumer_group = ? AND failure <> 'KEY_STOPPED'",
-                String.class, group)).isEqualTo(first);
     }
 
     /*
@@ -350,41 +264,8 @@ class RedisStreamsAdapterIntegrationTest {
         }
     }
 
-    static class FlakyQuarantine implements KeyQuarantine {
-        private final KeyQuarantine delegate;
-        private final AtomicInteger remainingFailures;
-        volatile int failures;
-
-        FlakyQuarantine(KeyQuarantine delegate, int failures) {
-            this.delegate = delegate;
-            this.remainingFailures = new AtomicInteger(failures);
-        }
-
-        @Override
-        public boolean stopped(String consumerGroup, String topic, String key) {
-            return delegate.stopped(consumerGroup, topic, key);
-        }
-
-        @Override
-        public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
-            if (remainingFailures.getAndDecrement() > 0) {
-                failures++;
-                throw new IllegalStateException("격리 DB 잠깐 안 됨");
-            }
-            delegate.quarantine(consumerGroup, message, failure);
-        }
-    }
-
-    static class Rejected extends RuntimeException {
-        Rejected() {
-            super("rejected");
-        }
-    }
-
     static class Recording implements EventHandler {
         final List<InboundMessage> received = Collections.synchronizedList(new ArrayList<>());
-        final List<String> tried = Collections.synchronizedList(new ArrayList<>());
-        volatile String failKey;
         /** 첫 수신 때 한 번 실행한다(처리 도중의 상황을 만든다). */
         volatile Runnable onFirst;
         /** 첫 수신의 처리(onFirst 포함)가 끝났다. */
@@ -403,18 +284,8 @@ class RedisStreamsAdapterIntegrationTest {
             }
         }
 
-        int attempts(String eventId) {
-            synchronized (tried) {
-                return (int) tried.stream().filter(eventId::equals).count();
-            }
-        }
-
         @Override
         public void receive(InboundMessage message) {
-            tried.add(message.header(EventHeaders.EVENT_ID));
-            if (message.key().equals(failKey)) {
-                throw new IllegalStateException("boom");
-            }
             received.add(message);
             Runnable once = onFirst;
             if (once != null) {

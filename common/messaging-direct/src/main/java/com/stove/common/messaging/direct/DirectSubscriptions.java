@@ -18,9 +18,9 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -51,7 +51,7 @@ public class DirectSubscriptions implements SmartLifecycle {
      */
     static final Duration LEASE = Duration.ofSeconds(60);
 
-    private final ApplicationContext beans;
+    private final Supplier<List<SubscribedHandler>> handlers;
     private final JdbcTemplate jdbc;
     private final InPlaceDelivery delivery;
     private final Map<String, String> sources;
@@ -61,14 +61,16 @@ public class DirectSubscriptions implements SmartLifecycle {
     private ScheduledExecutorService pollers;
     private volatile boolean running;
 
-    public DirectSubscriptions(ApplicationContext beans, JdbcTemplate jdbc, KeyQuarantine quarantine, ReplayTracing tracing,
-                               Map<String, String> sources, long pollIntervalMs, int batchSize) {
-        this(beans, jdbc, quarantine, tracing, sources, pollIntervalMs, batchSize, InPlaceDelivery.RETRY_DELAYS);
+    /** @param handlers 구독할 (그룹, 토픽, 핸들러). RabbitMQ·Redis Streams adapter 와 같은 모양이다(결정 209). */
+    public DirectSubscriptions(Supplier<List<SubscribedHandler>> handlers, JdbcTemplate jdbc, KeyQuarantine quarantine,
+                               ReplayTracing tracing, Map<String, String> sources, long pollIntervalMs, int batchSize) {
+        this(handlers, jdbc, quarantine, tracing, sources, pollIntervalMs, batchSize, InPlaceDelivery.RETRY_DELAYS);
     }
 
-    DirectSubscriptions(ApplicationContext beans, JdbcTemplate jdbc, KeyQuarantine quarantine, ReplayTracing tracing,
-                        Map<String, String> sources, long pollIntervalMs, int batchSize, List<Duration> retryDelays) {
-        this.beans = beans;
+    DirectSubscriptions(Supplier<List<SubscribedHandler>> handlers, JdbcTemplate jdbc, KeyQuarantine quarantine,
+                        ReplayTracing tracing, Map<String, String> sources, long pollIntervalMs, int batchSize,
+                        List<Duration> retryDelays) {
+        this.handlers = handlers;
         this.jdbc = jdbc;
         this.delivery = new InPlaceDelivery(quarantine, tracing, retryDelays);
         this.sources = sources;
@@ -92,7 +94,7 @@ public class DirectSubscriptions implements SmartLifecycle {
     @Override
     public void start() {
         Map<String, Subscription> subscriptions = new LinkedHashMap<>();
-        for (SubscribedHandler found : SubscribedHandler.discover(beans)) {
+        for (SubscribedHandler found : handlers.get()) {
             subscriptions.put(found.group() + "|" + found.topic(), new Subscription(found.group(), found.topic(),
                     sourceOf(found.topic()), found.handler(), found.noRetryFor()));
         }
