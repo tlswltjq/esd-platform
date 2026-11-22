@@ -47,6 +47,10 @@ def main():
     parser.add_argument("--load-rate", type=float, default=2.0, help="Orders per second for --measure")
     parser.add_argument("--load-duration", type=int, default=60, help="Seconds of load for --measure")
     parser.add_argument("--load-buyers", type=int, default=20, help="Buyer accounts for --measure")
+    parser.add_argument("--restart-broker-at", type=float, default=None,
+                        help="S7: kill the broker container this many seconds after the load starts (--measure)")
+    parser.add_argument("--restart-broker-down", type=float, default=10.0,
+                        help="S7: seconds the broker stays down before docker compose start")
     parser.add_argument("--load-refund-every", type=int, default=0,
                         help="Refund one of every N paid measured orders for --measure (same-key order check, decision 204 F)")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
@@ -296,7 +300,8 @@ def main():
                                             ["http://127.0.0.1:%d/actuator/prometheus" % (PORTS[app] + offset)
                                              for app in sorted(MESSAGING_APPS)],
                                             lambda url: urllib.request.urlopen(url, timeout=10).read().decode(),
-                                            args.load_refund_every, args.broker)
+                                            args.load_refund_every, args.broker,
+                                            args.restart_broker_at, args.restart_broker_down)
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))

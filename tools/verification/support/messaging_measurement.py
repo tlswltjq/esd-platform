@@ -12,6 +12,7 @@
 import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -272,8 +273,54 @@ def redeliveries(fetch, urls):
     return {"by_group": dict(sorted(totals.items())), "unreadable": unreadable}
 
 
+class BrokerRestart:
+    """S7(결정 210·204 D): 부하 중 ``at`` 초에 브로커 컨테이너를 강제 종료(``docker compose kill``)하고 ``down`` 초 뒤 다시 켠다.
+
+    시각은 부하 드라이버 시작 기준이다. 명령 실패는 회차를 멈추지 않고 ``errors`` 에 남긴다(결과에서 장애가 실제로 일어났는지 본다).
+    """
+
+    def __init__(self, capture, docker, service, at, down):
+        self._capture = capture
+        self._docker = docker
+        self.service = service
+        self.at = at
+        self.down = down
+        self.killed_at = None
+        self.started_at = None
+        self.errors = []
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._origin = None
+
+    def start(self):
+        self._origin = time.monotonic()
+        self._thread.start()
+        return self
+
+    def join(self):
+        self._thread.join()
+
+    def _step(self, command):
+        try:
+            self._capture(self._docker + command)
+            return round(time.monotonic() - self._origin, 2)
+        except Exception as failure:  # noqa: BLE001 — 측정을 멈추지 않고 남긴다
+            self.errors.append("%s: %s" % (" ".join(command), str(failure)[-200:]))
+            return None
+
+    def _run(self):
+        time.sleep(self.at)
+        self.killed_at = self._step(["kill", self.service])
+        time.sleep(self.down)
+        self.started_at = self._step(["start", self.service])
+
+    def summary(self):
+        return {"service": self.service, "planned_at_s": self.at, "planned_down_s": self.down,
+                "killed_at_s": self.killed_at, "started_at_s": self.started_at, "errors": self.errors}
+
+
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
-            metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka"):
+            metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka",
+            restart_at=None, restart_down=None):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -294,7 +341,15 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
         idle_samples = idle_sampler.stop()
     load_sampler = resource_sampling.Sampler(capture, containers).start()
     try:
+        restart = None
+        if restart_at is not None:
+            service = resource_sampling.broker_service(broker_name)
+            if service is None:
+                raise SystemExit("--restart-broker-at needs a broker (direct has none)")
+            restart = BrokerRestart(capture, docker, service, restart_at, restart_down).start()
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+        if restart is not None:
+            restart.join()
         # 부하가 끝난 바로 그때 읽는다. 표본 스레드 종료 대기(최대 표본 간격)가 부하 구간에 섞이지 않게(R4).
         load_end = db_counters(capture, container, db_password)
     finally:
@@ -332,4 +387,6 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "refunds": dict(zip(("requested", "rejected", "unfinished"), refund_problems(measured))),
             "refund_diagnosis": diagnosis,
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
-            "db_load": db_load, "resources": resources, "validity": validity(measured, journey, broker, order)}
+            "db_load": db_load, "resources": resources,
+            "broker_restart": restart.summary() if restart is not None else None,
+            "validity": validity(measured, journey, broker, order)}

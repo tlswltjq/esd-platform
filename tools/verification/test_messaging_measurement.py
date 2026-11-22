@@ -274,5 +274,42 @@ class MeasureTest(unittest.TestCase):
         self.assertTrue(started[0].stopped, "유휴 읽기가 실패해도 표본 스레드를 멈춘다(R3)")
 
 
+class BrokerRestartTest(unittest.TestCase):
+    def test_kills_then_starts_the_broker_service_and_records_when(self):
+        commands = []
+
+        def capture(command, **kwargs):
+            commands.append(command)
+            return ""
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker", "compose", "-p", "x"], "kafka", 0.01, 0.01).start()
+        restart.join()
+        self.assertEqual(commands, [["docker", "compose", "-p", "x", "kill", "kafka"],
+                                    ["docker", "compose", "-p", "x", "start", "kafka"]])
+        summary = restart.summary()
+        self.assertEqual(summary["service"], "kafka")
+        self.assertIsNotNone(summary["killed_at_s"])
+        self.assertGreaterEqual(summary["started_at_s"], summary["killed_at_s"])
+        self.assertEqual(summary["errors"], [])
+
+    def test_failed_command_is_recorded_not_raised(self):
+        def capture(command, **kwargs):
+            raise subprocess.CalledProcessError(1, command)
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "rabbitmq", 0.0, 0.0).start()
+        restart.join()
+        self.assertIsNone(restart.killed_at)
+        self.assertEqual(len(restart.errors), 2)
+
+    def test_direct_has_no_broker_to_restart(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(messaging_measurement.time, "sleep"):
+            with self.assertRaises(SystemExit):
+                messaging_measurement.measure("/repo", ["docker", "compose"], lambda *a, **k: None,
+                                              lambda command, **kwargs: "1\t/x" if "du -sk" in command[-1]
+                                              else ("Com_select\t1\nQuestions\t1" if command[:2] == ["docker", "exec"] else "id"),
+                                              Path(directory), 300, 5, 1, 2, 1, broker_name="direct", restart_at=1.0,
+                                              restart_down=1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
