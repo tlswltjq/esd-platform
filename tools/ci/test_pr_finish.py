@@ -294,6 +294,35 @@ class WaitTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 pr_finish.listed_checks(7, strict=True)
 
+    def test_skipped_plan_is_not_a_started_ci(self):
+        listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1', 'bucket': 'skipping'},
+                             {'name': 'gradle (${{ matrix.shard }})', 'link': 'job/2', 'bucket': 'skipping'}])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
+            self.assertFalse(pr_finish.ci_started(7))
+        running = json.dumps([{'name': 'gradle (unit)', 'link': 'job/3', 'bucket': 'pending'}])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, running, '')):
+            self.assertTrue(pr_finish.ci_started(7))
+
+    def test_edit_during_a_running_ci_waits_for_the_late_build(self):
+        # PR #234에서 본 시간 초과: 본문 수정 전에 시작된 같은 커밋의 CI를 증거로 인정한다.
+        with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as handle:
+            handle.write('새 본문')
+        args = argparse.Namespace(**dict(vars(self.args(register_timeout=-1)), body_file=handle.name))
+        gate_old = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        gate_new = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/9'}
+        build = {'name': 'build (unit)', 'bucket': 'pass', 'link': 'job/8'}
+        running = json.dumps([{'name': 'plan (scope)', 'link': 'job/5', 'bucket': 'pass'}])
+
+        def fake_gh(command, check=True):
+            return (0, running, '') if command[:2] == ['pr', 'checks'] else (0, '', '')
+        with mock.patch.object(pr_finish, 'view', return_value=pr(body='옛 본문', isDraft=False)), \
+                mock.patch.object(pr_finish, 'gh', side_effect=fake_gh), \
+                mock.patch.object(pr_finish, 'required_checks',
+                                  side_effect=[[gate_old], [gate_old, gate_new], [gate_old, gate_new], [gate_new, build]]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.edit(args))
+        Path(handle.name).unlink()
+
     def test_ci_started_ignores_checks_from_before_the_event(self):
         listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1'}, {'name': 'review-gate', 'link': 'job/2'}])
         with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):

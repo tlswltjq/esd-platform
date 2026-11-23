@@ -78,7 +78,7 @@ STARTED = ('plan (', 'gradle (')
 def listed_checks(number, strict=False):
     """필수가 아닌 검사까지 모두(`--required` 없음). 검사가 없으면 gh가 종료 코드 1과 안내를 내므로 빈 목록.
     strict면 그 밖의 조회 실패에서 멈춘다 — 이벤트 전 기록이 비면 이전 plan을 새 CI로 오인한다(PR #234 4차 리뷰)."""
-    code, out, err = gh(['pr', 'checks', str(number), '--json', 'name,link'], check=False)
+    code, out, err = gh(['pr', 'checks', str(number), '--json', 'name,link,bucket'], check=False)
     if not out.strip():
         if strict and code != 0 and not no_checks(err):
             fail(err)
@@ -102,8 +102,10 @@ def fail(err):
 
 
 def ci_started(number, old_links=frozenset()):
-    """이벤트 뒤에 생긴(old_links에 없는) plan·gradle 검사가 있으면 CI가 시작된 것이다."""
-    return any((check.get('name') or '').startswith(STARTED) and check.get('link') not in old_links
+    """CI가 실제로 돌고 있다: 건너뛰지 않은(draft의 `skipping`이 아닌) plan·gradle 검사가 있고, old_links(이벤트 전
+    링크)에 없다. 본문 수정은 커밋이 그대로라 이전 CI도 증거로 인정한다(old_links를 넘기지 않는다)."""
+    return any((check.get('name') or '').startswith(STARTED) and check.get('bucket') != 'skipping'
+               and check.get('link') not in old_links
                for check in listed_checks(number))
 
 
@@ -145,7 +147,7 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
         if renew:
             checks = fresh(checks, renew, old_links)
         # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
-        # (PR #234 3차 리뷰: 이벤트 전 plan·gradle은 old_all로 뺀다).
+        # (PR #234 3차 리뷰: ready 전 plan·gradle은 old_all로, draft의 건너뛴 검사는 bucket으로 뺀다).
         if not registered(checks) and time.time() > register_deadline and not (
                 missing_required(checks) == ['build'] and ci_started(args.number, old_all)):
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
@@ -187,9 +189,9 @@ def edit(args):
         print('본문이 같아 보내지 않았다. 지금 결과로 판정한다.')
         return wait(args)
     old = links(required_checks(args.number))
-    old_all = links(listed_checks(args.number, strict=True))
     gh(['pr', 'edit', str(args.number), '--body-file', args.body_file])
-    return wait(args, RERUN['edit'], old, old_all)
+    # 본문 수정은 build를 다시 돌리지 않는다. 같은 커밋에서 돌고 있는 CI가 늦게 등록할 build를 기다린다.
+    return wait(args, RERUN['edit'], old)
 
 
 def latest(rollup, prefix):
