@@ -136,28 +136,27 @@ def parse_decisions(text):
 
 
 CODE_SPAN = re.compile(r'(`+)(.+?)\1')
-STAR_EMPHASIS = re.compile(r'(\*{1,3})(\S(?:.*?\S)?)\1')
-# `_`는 단어 경계에서만 강조다(snake_case의 `_`는 글자로 남는다).
-UNDERSCORE_EMPHASIS = re.compile(r'(?<![0-9A-Za-z가-힣])(_{1,3})(\S(?:.*?\S)?)\1(?![0-9A-Za-z가-힣])')
+STAR_EMPHASIS = re.compile(r'(?<!\*)(\*{1,3})(?!\*)(\S(?:.*?\S)?)(?<!\*)\1(?!\*)')
+# `_`는 단어 경계에서만 강조다. 앞뒤가 글자·숫자·`_`면 강조가 아니다(snake_case, snake__case__name).
+UNDERSCORE_EMPHASIS = re.compile(r'(?<![0-9A-Za-z가-힣_])(_{1,3})(?!_)(\S(?:.*?\S)?)(?<!_)\1(?![0-9A-Za-z가-힣_])')
+CODE_MARK = '\x00{}\x00'
+CODE_MARK_PATTERN = re.compile('\x00(\\d+)\x00')
 
 
 def rendered_text(heading):
-    """헤딩이 화면에 보이는 글자. 인라인 코드 안은 그대로 두고, 밖에서만 링크·강조 문법을 벗긴다(PR #233 R2)."""
-    parts = []
-    position = 0
-    for code in CODE_SPAN.finditer(heading):
-        parts.append(('text', heading[position:code.start()]))
-        parts.append(('code', code.group(2)))
-        position = code.end()
-    parts.append(('text', heading[position:]))
-    result = []
-    for kind, piece in parts:
-        if kind == 'text':
-            piece = MARKDOWN_LINK.sub(lambda m: m.group(1), piece)
-            piece = STAR_EMPHASIS.sub(lambda m: m.group(2), piece)
-            piece = UNDERSCORE_EMPHASIS.sub(lambda m: m.group(2), piece)
-        result.append(piece)
-    return ''.join(result)
+    """헤딩이 화면에 보이는 글자. 인라인 코드는 자리표시로 가린 채 링크·강조 문법을 벗기고, 마지막에 코드 내용을
+    그대로 되돌린다. 강조가 코드를 감싸도 한 번에 벗겨진다(PR #233 R2·재리뷰)."""
+    codes = []
+
+    def mask(match):
+        codes.append(match.group(2))
+        return CODE_MARK.format(len(codes) - 1)
+
+    text = CODE_SPAN.sub(mask, heading)
+    text = MARKDOWN_LINK.sub(lambda m: m.group(1), text)
+    text = STAR_EMPHASIS.sub(lambda m: m.group(2), text)
+    text = UNDERSCORE_EMPHASIS.sub(lambda m: m.group(2), text)
+    return CODE_MARK_PATTERN.sub(lambda m: codes[int(m.group(1))], text)
 
 
 def slug(heading):

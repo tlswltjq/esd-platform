@@ -124,6 +124,10 @@ class DecisionNumbersTest(Fixture):
         self.assertEqual(decision_numbers.slug('snake_case 이름'), 'snake_case-이름')
         # GFM: 닫는 `_` 바로 뒤에 글자가 붙으면 강조가 아니다.
         self.assertEqual(decision_numbers.slug('_강조_와'), '_강조_와')
+        # 재리뷰: 강조가 코드를 감싸도 벗기고, 단어 안의 `__`는 강조가 아니다.
+        self.assertEqual(decision_numbers.slug('3. _a `x` b_'), '3-a-x-b')
+        self.assertEqual(decision_numbers.slug('3. snake__case__name'), '3-snake__case__name')
+        self.assertEqual(decision_numbers.slug('3. **굵게** `a*b*c`'), '3-굵게-abc')
 
     def test_fences_comments_and_inline_code_are_ignored(self):
         self.write('docs/decisions.md', VALID + '\n```md\n## 99. 예\n```\n~~~\n## 88. 예\n~~~\n<!-- 예시 -->\n`[결정 1](#two)`\n')
