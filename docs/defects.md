@@ -668,7 +668,7 @@
 <a id="d-053"></a>
 ## D-053 Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남
 
-**상태** 원인 확인 · 미수정(재현 테스트 없음) · **영향** Gateway → 업무 서비스 연결이 약 60초 쉬다가 다시 쓰이는 순간 하류 Tomcat이 그 연결을 닫으면, Gateway가 `PrematureCloseException: Connection prematurely closed BEFORE response`를 받고 500을 돌려준다. 조회는 다시 부르면 회복되지만 `POST`(결제 승인 접수 등)는 클라이언트가 처리 여부를 알 수 없다. 돈·상태는 바뀌지 않았다(하류가 요청을 처리하기 전에 닫힘).
+**상태** 재현됨 · 미수정(`GatewayIdleConnectionTest` Red: 두 번째 요청 500, 2026-11-23) · 재발: 야간 CI 2026-11-22 run 45080285504(`7689b111`, 같은 `PrematureCloseException`) · **영향** Gateway → 업무 서비스 연결이 약 60초 쉬다가 다시 쓰이는 순간 하류 Tomcat이 그 연결을 닫으면, Gateway가 `PrematureCloseException: Connection prematurely closed BEFORE response`를 받고 500을 돌려준다. 조회는 다시 부르면 회복되지만 `POST`(결제 승인 접수 등)는 클라이언트가 처리 여부를 알 수 없다. 돈·상태는 바뀌지 않았다(하류가 요청을 처리하기 전에 닫힘).
 **발견** main 야간 예약 CI run 42916206138(`4227def0`, 2026-11-10 22:37 UTC)의 "fake PortOne approval expiry (31 min)". 최근 야간 5회 중 1회.
 
 - **근거** 산출물 `approval-expiry-run`: `verify-expiry-journeys.py`의 대기 루프가 60초마다 주문·결제를 조회한다(`time.sleep(min(60, …))`). 두 번째 회차(22:44:13쯤)의 마지막 Order 요청 뒤 약 60초가 지난 세 번째 회차 첫 요청(22:45:13.4, `GET /api/v1/orders/ff8aa8e5-…`)에서 Gateway 로그에 `[152448c5-4, L:/127.0.0.1:47188 ! R:127.0.0.1:18082] … PrematureCloseException`, 이어 `500 Server Error`. Order 로그에는 그 시각 오류가 없고, 바로 뒤의 종료 기록은 실패 뒤 정리다.
