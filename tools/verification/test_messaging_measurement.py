@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -314,15 +315,37 @@ class BrokerRestartTest(unittest.TestCase):
         self.assertFalse(checked["valid"])
         self.assertTrue(any("브로커 종료 실패" in reason for reason in checked["reasons"]))
 
-    def test_slow_diagnosis_does_not_lengthen_the_outage(self):
+    def test_diagnosis_slower_than_the_outage_does_not_delay_the_restart(self):
+        # 중단 0.2초, 진단은 중단 한가운데(0.1초)에 시작해 0.8초 걸린다. 진단을 기다렸다 재시작하면 중단이 0.9초 이상이 된다(R5·R6).
+        diagnosed = []
+
         def capture(command, **kwargs):
             return ""
 
+        def slow_diagnosis():
+            time.sleep(0.8)
+            diagnosed.append(True)
+
         restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.2,
-                                                      diagnose=lambda: time.sleep(0.15)).start()
+                                                      diagnose=slow_diagnosis).start()
         restart.join()
-        self.assertLess(restart.actual_down(), 0.35)
+        self.assertLess(restart.actual_down(), 0.5, "재시작은 진단을 기다리지 않고 예정 시각에 한다")
+        self.assertEqual(diagnosed, [True], "진단은 재시작 뒤에도 끝까지 돈다")
         self.assertEqual(restart.problems(), [])
+
+    def test_diagnosis_that_never_finishes_is_recorded_and_the_run_goes_on(self):
+        def capture(command, **kwargs):
+            return ""
+
+        stuck = threading.Event()
+        with mock.patch.object(messaging_measurement, "DIAGNOSIS_JOIN_SECONDS", 0.1):
+            restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.05,
+                                                          diagnose=stuck.wait).start()
+            restart.join()
+        stuck.set()
+        self.assertIsNotNone(restart.started_at)
+        self.assertTrue(any("끝나지 않았다" in error for error in restart.errors))
+        self.assertEqual(restart.problems(), [], "진단 실패는 장애 주입 실패가 아니다")
 
     def test_no_restart_keeps_validity_as_is(self):
         checked = {"valid": True, "reasons": []}

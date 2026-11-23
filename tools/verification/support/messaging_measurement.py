@@ -285,6 +285,8 @@ def redeliveries(fetch, urls):
 
 # 실제 중단 시간이 계획과 이만큼 넘게 다르면 그 회차를 S7 결과로 쓰지 않는다(docker 명령 지연 포함).
 DOWN_TOLERANCE_SECONDS = 2.0
+# 재시작 뒤 진단을 이만큼만 더 기다린다. 넘으면 진단 실패로 남기고 회차는 계속한다.
+DIAGNOSIS_JOIN_SECONDS = 30.0
 
 
 class BrokerRestart:
@@ -327,15 +329,25 @@ class BrokerRestart:
         self.killed_at = self._step(["kill", self.service])
         # 재시작은 종료 시각 기준 절대 시각에 한다 — 진단이 오래 걸려도 중단 시간이 늘지 않게(PR #222 R3).
         restart_at = time.monotonic() + self.down
+        diagnosis = None
         if self._diagnose is not None:
             # 브로커가 내려가 있는 한가운데에서 누가 DB 연결·잠금을 쥐고 있는지 남긴다(PR #222 S7 원인 조사).
-            time.sleep(self.down / 2)
-            try:
-                self._diagnose()
-            except Exception as failure:  # noqa: BLE001 — 진단 실패가 회차를 멈추지 않게
-                self.errors.append("diagnose: " + str(failure)[-200:])
+            # 따로 돌려, 진단이 늦거나 멈춰도 재시작이 예정 시각을 지키게 한다(PR #222 R5).
+            diagnosis = threading.Thread(target=self._run_diagnosis, daemon=True)
+            diagnosis.start()
         time.sleep(max(0.0, restart_at - time.monotonic()))
         self.started_at = self._step(["start", self.service])
+        if diagnosis is not None:
+            diagnosis.join(DIAGNOSIS_JOIN_SECONDS)
+            if diagnosis.is_alive():
+                self.errors.append("diagnose: %.0f초 안에 끝나지 않았다" % DIAGNOSIS_JOIN_SECONDS)
+
+    def _run_diagnosis(self):
+        time.sleep(self.down / 2)
+        try:
+            self._diagnose()
+        except Exception as failure:  # noqa: BLE001 — 진단 실패가 회차를 멈추지 않게
+            self.errors.append("diagnose: " + str(failure)[-200:])
 
     def actual_down(self):
         if self.killed_at is None or self.started_at is None:
