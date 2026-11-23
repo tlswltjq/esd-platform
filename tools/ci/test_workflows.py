@@ -132,27 +132,48 @@ class BuildScopeWiringTest(unittest.TestCase):
 class PythonToolTestsWiringTest(unittest.TestCase):
     """결정 216: Gradle이 읽지 않는 도구 경로만 바뀐 PR은 Gradle을 생략한다. 그 Python 테스트는 build 작업이 늘 돌려야 한다."""
 
-    STEP = ("      - name: Python tool tests\n"
-            "        run: |\n"
-            "          python3 -B -m unittest discover -s tools/verification -p 'test_*.py'\n"
-            "          python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'\n")
+    NAME = "      - name: Python tool tests\n"
+    COMMANDS = ("python3 -B -m unittest discover -s tools/verification -p 'test_*.py'",
+                "python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'")
 
     def setUp(self):
         self.text = CI.read_text(encoding='utf-8')
 
-    def problems(self, text):
+    def step(self, text):
+        """build 작업 안의 그 단계 전체(다음 단계 또는 작업 끝까지). 없으면 None."""
         build = re.search(r'^  build:\n((?:(?:    .*)?\n)+)', text, re.M)
         body = '' if build is None else build.group(1)
-        return [] if self.STEP in body else ['build 작업에 조건 없는 Python 도구 테스트 단계가 없다']
+        if self.NAME not in body:
+            return None
+        rest = body[body.index(self.NAME) + len(self.NAME):]
+        following = re.search(r'^      - ', rest, re.M)
+        return rest if following is None else rest[:following.start()]
+
+    def problems(self, text):
+        step = self.step(text)
+        if step is None:
+            return ['build 작업에 Python 도구 테스트 단계가 없다']
+        found = [command + ' 가 없다' for command in self.COMMANDS if command not in step]
+        if re.search(r'^        if:', step, re.M):
+            found.append('Python 도구 테스트 단계에 조건(if)이 붙었다')
+        return found
 
     def test_build_always_runs_the_python_tool_tests(self):
         self.assertEqual([], self.problems(self.text))
 
-    def test_skipping_the_step_when_gradle_is_skipped_is_caught(self):
-        mutant = self.text.replace("      - name: Python tool tests\n        run: |\n",
-                                   "      - name: Python tool tests\n        if: steps.scope.outputs.tasks != ''\n        run: |\n", 1)
+    def test_a_condition_before_or_after_run_is_caught(self):
+        # PR #230 R2: 명령 뒤에 붙은 조건도 잡는다.
+        before = self.text.replace(self.NAME + "        run: |\n",
+                                   self.NAME + "        if: steps.scope.outputs.tasks != ''\n        run: |\n", 1)
+        after = self.text.replace(self.COMMANDS[1] + "\n", self.COMMANDS[1] + "\n        if: false\n", 1)
+        for mutant in (before, after):
+            self.assertNotEqual(self.text, mutant)
+            self.assertIn('Python 도구 테스트 단계에 조건(if)이 붙었다', self.problems(mutant))
+
+    def test_dropping_a_tool_directory_is_caught(self):
+        mutant = self.text.replace("          " + self.COMMANDS[1] + "\n", "", 1)
         self.assertNotEqual(self.text, mutant)
-        self.assertEqual(['build 작업에 조건 없는 Python 도구 테스트 단계가 없다'], self.problems(mutant))
+        self.assertEqual([self.COMMANDS[1] + ' 가 없다'], self.problems(mutant))
 
 if __name__ == '__main__':
     unittest.main()
