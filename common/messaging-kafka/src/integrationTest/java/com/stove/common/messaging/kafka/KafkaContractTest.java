@@ -232,21 +232,23 @@ class KafkaContractTest extends MessagingContractTest {
 
         send(stuck);
         assertThat(retryHolding.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("붙잡힌 키의 첫 재시도가 시작된다").isTrue();
-        send(flowing);
-        flowingSent.countDown();
-        // 붙잡은 쪽의 대기 한도는 발행을 마친 뒤부터 잰다 — 그 전의 테스트 스레드 지연은 판정에 들어가지 않는다(R8·R11).
-        assertThat(holdEnded.await(2 * timeout().toSeconds() + 10, TimeUnit.SECONDS)).as("붙잡은 재시도가 끝난다").isTrue();
+        try {
+            send(flowing);
+        } finally {
+            // 발행이 성공하든 실패하든(publish 는 10초 한도) 반드시 알린다 — 그래서 붙잡은 쪽은 이 신호를 한도 없이 기다린다.
+            flowingSent.countDown();
+        }
+        // 붙잡은 쪽의 처리 대기 한도는 발행을 마친 뒤부터 잰다 — 그 전의 테스트 스레드 지연은 판정에 들어가지 않는다(R8·R11).
+        assertThat(holdEnded.await(timeout().toSeconds() + 10, TimeUnit.SECONDS)).as("붙잡은 재시도가 끝난다").isTrue();
 
         assertThat(held.get()).as("다른 파티션은 붙잡힌 키가 스레드를 쥔 동안 처리된다(동시성 1이면 같은 스레드라 처리되지 않는다)")
                 .isEqualTo("처리됨");
     }
 
-    /** 발행이 끝나길 기다린 뒤, 그때부터 {@code timeout()} 안에 다른 파티션이 처리되는지 본다. 결과를 이유와 함께 돌려준다. */
+    /** 발행이 끝나길(테스트가 finally 로 반드시 알린다) 기다린 뒤, 그때부터 {@code timeout()} 안에 다른 파티션이 처리되는지 본다. 결과를 이유와 함께 돌려준다. */
     private String holdUntilTheOtherPartitionFlows(CountDownLatch flowingSent, CountDownLatch flowed) {
         try {
-            if (!flowingSent.await(timeout().toSeconds(), TimeUnit.SECONDS)) {
-                return "다른 파티션 발행이 끝나지 않음";
-            }
+            flowingSent.await();
             return flowed.await(timeout().toSeconds(), TimeUnit.SECONDS) ? "처리됨" : "발행 뒤 한도 안에 처리되지 않음";
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
