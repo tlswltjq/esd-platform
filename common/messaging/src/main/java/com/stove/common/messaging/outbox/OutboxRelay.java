@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -35,28 +36,29 @@ public class OutboxRelay {
     private final OutboxMetrics metrics;
     private final TransactionTemplate transactionTemplate;
     public OutboxRelay(OutboxEventRepository repository, MessagePublisher publisher, int batchSize, int maxRetry,
-            int maxBatchesPerCycle, OutboxMetrics metrics, TransactionTemplate transactionTemplate) {
+            int maxBatchesPerCycle, OutboxMetrics metrics, PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.publisher = publisher;
         this.batchSize = batchSize;
         this.maxRetry = maxRetry;
         this.maxBatchesPerCycle = maxBatchesPerCycle;
         this.metrics = metrics;
-        this.transactionTemplate = readCommitted(transactionTemplate);
+        this.transactionTemplate = relayTransaction(transactionManager);
     }
 
     /**
-     * 릴레이 트랜잭션은 READ COMMITTED다([결정 215], [D-060]). <b>릴레이 전용 템플릿을 넘긴다</b> — 격리 수준을 여기서 맞춘다.
+     * 릴레이 트랜잭션은 READ COMMITTED다([결정 215], [D-060]). 트랜잭션 매니저만 받고 템플릿은 릴레이가 직접 만든다 —
+     * 조립하는 쪽(자동 구성·테스트)이 격리 수준을 빠뜨리거나, 공유하는 템플릿을 바꾸는 일이 없다(PR #228 R1).
      *
      * <p>배치는 잠근 채 브로커 확인을 기다린다. MySQL 기본값(REPEATABLE READ)이면 {@code FOR UPDATE}가 읽은 범위의
      * 간격까지 잠가, 브로커가 응답하지 않는 동안 다른 주문의 Outbox 삽입이 막히고 커넥션 풀이 고갈된다.
      * 이 잠금의 목적은 집은 행을 다른 트랜잭션이 함께 집지 못하게 하는 것뿐이라 간격 잠금은 필요 없다.
      * 순서 판정({@code lockPendingBatch}의 하위 조회, {@link KeyOrderGuard})은 원래 잠금 없이 커밋된 값을 읽는다.
-     * 조립하는 쪽(자동 구성·테스트)이 빠뜨려도 같은 동작이 되도록 생성자가 맞춘다.
      */
-    private static TransactionTemplate readCommitted(TransactionTemplate relayOnly) {
-        relayOnly.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-        return relayOnly;
+    private static TransactionTemplate relayTransaction(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return template;
     }
 
     /** 마지막으로 찍은 {@code sent_at}. 처음에는 표의 최댓값에서 시작한다(스케줄러 한 스레드에서만 쓴다). */

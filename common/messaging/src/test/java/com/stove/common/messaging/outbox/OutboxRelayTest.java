@@ -30,9 +30,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
-import org.springframework.transaction.support.TransactionCallback;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Outbox 릴레이의 실동작. 9개 서비스 전부가 이 배달원에 의존하는데
@@ -48,12 +49,20 @@ class OutboxRelayTest {
     private static final int BATCH_SIZE = 100;
     private static final int MAX_BATCHES_PER_CYCLE = 10;
 
-    /** 트랜잭션 매니저 없이 콜백만 실행한다 — 검증 대상은 발행 로직이지 트랜잭션이 아니다. */
-    private static TransactionTemplate directTransactionTemplate() {
-        return new TransactionTemplate() {
+    /** 실제 트랜잭션 없이 콜백만 실행되게 한다 — 검증 대상은 발행 로직이지 트랜잭션이 아니다. */
+    private static PlatformTransactionManager directTransactionManager() {
+        return new PlatformTransactionManager() {
             @Override
-            public <T> T execute(TransactionCallback<T> action) {
-                return action.doInTransaction(new SimpleTransactionStatus());
+            public TransactionStatus getTransaction(TransactionDefinition definition) {
+                return new SimpleTransactionStatus();
+            }
+
+            @Override
+            public void commit(TransactionStatus status) {
+            }
+
+            @Override
+            public void rollback(TransactionStatus status) {
             }
         };
     }
@@ -104,7 +113,7 @@ class OutboxRelayTest {
         relay = new OutboxRelay(repository, publisher,
                 BATCH_SIZE, MAX_RETRY, MAX_BATCHES_PER_CYCLE,
                 new OutboxMetrics(meterRegistry, repository),
-                directTransactionTemplate());
+                directTransactionManager());
     }
 
     private double counter(String name) {

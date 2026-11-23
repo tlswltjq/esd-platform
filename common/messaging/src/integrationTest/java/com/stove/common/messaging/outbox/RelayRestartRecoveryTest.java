@@ -20,7 +20,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 시나리오 R-02 — <b>발행 커밋 직후 프로세스가 중단되고 재기동한다.</b>
@@ -76,7 +75,7 @@ class RelayRestartRecoveryTest {
      */
     private OutboxRelay restartedRelay() {
         return new OutboxRelay(repository, new KafkaMessagePublisher(kafkaTemplate), properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
-                new TransactionTemplate(transactionManager));
+                transactionManager);
     }
 
     /** 커밋만 되고 아무도 발행하지 않은 상태 — 중단된 프로세스가 남긴 것. */

@@ -755,7 +755,7 @@
 - **원인** `OutboxRelay.relayOneBatch()`가 한 트랜잭션 안에서 `lockPendingBatch`(`FOR UPDATE SKIP LOCKED`)로 행을 잠그고, 발행한 뒤 `ack.get()`으로 확인을 기다린다. 트랜잭션 격리 수준이 MySQL 기본값(REPEATABLE READ)이라 잠금 읽기가 읽은 범위의 **간격(next-key)까지** 잠그고, 새 행의 삽입이 그 간격에 막힌다. 확인 대기 시간이 그대로 잠금 유지 시간이 된다.
 - **재현** `common/messaging` `RelayLockHoldTest`: 확인을 3초 늦게 주는 발행 포트로 릴레이를 돌리고, 확인 대기 중 다른 주문의 Outbox 행을 삽입한다. 삽입이 2.99초 걸려 1초 미만 단언에 실패한다(`./gradlew :common:messaging:defectTest --tests '*RelayLockHoldTest'`).
 - **원인 확인** 릴레이 트랜잭션만 READ COMMITTED로 바꾼 임시 실험에서 같은 테스트가 통과했다(간격 잠금이 없으면 막히지 않는다). 수정 방식은 [결정 215](decisions.md#outbox-relay-lock-hold)로 정했다.
-- **수정** `OutboxRelay` 생성자가 받은 릴레이 전용 `TransactionTemplate`의 격리 수준을 READ COMMITTED로 맞춘다. 간격 잠금이 없어져 확인 대기 중에도 다른 주문의 삽입이 막히지 않는다. 브로커 장애 동안 릴레이 자신은 커넥션 1개와 집은 행의 잠금을 계속 쥔다(결정 215 남는 것). `RelayLockHoldTest`는 태그를 떼고 회귀 방어로 올렸고, 격리 수준 설정을 지운 변이에서 실패한다.
+- **수정** `OutboxRelay`가 트랜잭션 매니저만 받고 READ COMMITTED 템플릿을 직접 만든다. 간격 잠금이 없어져 확인 대기 중에도 다른 주문의 삽입이 막히지 않는다. 브로커 장애 동안 릴레이 자신은 커넥션 1개와 집은 행의 잠금을 계속 쥔다(결정 215 남는 것). `RelayLockHoldTest`는 태그를 떼고 회귀 방어로 올렸다. 확인을 테스트가 직접 쥐고 그동안 삽입이 끝나는지만 봐 시간에 기대지 않으며, 격리 수준 설정을 지운 변이에서 실패한다.
 - **부류** 외부 호출(브로커 확인)의 대기가 DB 잠금 트랜잭션 안에 들어 있다. 평시에는 확인이 수 ms라 드러나지 않고 장애 때만 나타난다.
 
 ---

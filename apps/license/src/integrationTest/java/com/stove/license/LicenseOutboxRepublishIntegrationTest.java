@@ -64,7 +64,6 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -322,7 +321,7 @@ class LicenseOutboxRepublishIntegrationTest extends LicenseIntegrationTestBase {
 
     private OutboxRelay relay() {
         return new OutboxRelay(rows, new KafkaMessagePublisher(kafka), 200, 1, 1,
-                new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
+                new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
     }
 
     private static Map<String, String> reason() {

@@ -32,7 +32,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Outbox/Inbox 인프라 자동 구성.
@@ -96,7 +95,7 @@ public class MessagingAutoConfiguration {
                                    OutboxMetrics metrics,
                                    PlatformTransactionManager transactionManager) {
         return new OutboxRelay(repository, publisher, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
-                new TransactionTemplate(transactionManager));
+                transactionManager);
     }
 
     @Bean

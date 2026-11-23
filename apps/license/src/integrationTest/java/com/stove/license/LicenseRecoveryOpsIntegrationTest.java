@@ -36,7 +36,6 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 @TestPropertySource(properties = "stove.messaging.ops.enabled=true")
@@ -108,7 +107,7 @@ class LicenseRecoveryOpsIntegrationTest extends LicenseIntegrationTestBase {
 
     private OutboxRelay relay(KafkaTemplate<String, String> template) {
         return new OutboxRelay(rows, new KafkaMessagePublisher(template), 200, 1, 1,
-                new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
+                new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
     }
 
     private String status(String eventId) {
