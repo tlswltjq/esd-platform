@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.mock.env.MockEnvironment;
 
 /** 결정 212: Kafka 리스너 동시성 기본값은 토픽 파티션 수(3)다. 앱이 정한 값이 언제나 이긴다. */
@@ -51,5 +54,33 @@ class KafkaListenerDefaultsTest {
     /** 자동 구성 없이 환경 준비(EnvironmentPostProcessor)만 보려는 빈 구성. */
     @Configuration(proxyBeanMethods = false)
     static class Empty {
+    }
+
+    /** 실제 Kafka 자동 구성: 기본값과 앱 설정이 Boot 리스너 팩토리가 만드는 컨테이너 동시성에 반영된다(PR #223 R6). 브로커는 붙지 않는다. */
+    @Test
+    void theValueReachesTheContainersBootsListenerFactoryCreates() {
+        try (ConfigurableApplicationContext defaults = startWithKafka()) {
+            assertThat(listenerConcurrency(defaults)).isEqualTo(3);
+        }
+        try (ConfigurableApplicationContext overridden = startWithKafka("--spring.kafka.listener.concurrency=1")) {
+            assertThat(listenerConcurrency(overridden)).isEqualTo(1);
+        }
+    }
+
+    private static int listenerConcurrency(ConfigurableApplicationContext context) {
+        // 구독 전용 팩토리(KafkaEventSubscriptions.factoryFor)도 같은 Boot configurer 로 설정되므로 같은 값을 받는다.
+        ConcurrentKafkaListenerContainerFactory<?, ?> factory =
+                context.getBean("kafkaListenerContainerFactory", ConcurrentKafkaListenerContainerFactory.class);
+        return factory.createContainer("defaults-probe").getConcurrency();
+    }
+
+    private static ConfigurableApplicationContext startWithKafka(String... args) {
+        return new SpringApplicationBuilder(WithKafka.class).web(WebApplicationType.NONE)
+                .properties("spring.main.banner-mode=off").run(args);
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ImportAutoConfiguration(KafkaAutoConfiguration.class)
+    static class WithKafka {
     }
 }

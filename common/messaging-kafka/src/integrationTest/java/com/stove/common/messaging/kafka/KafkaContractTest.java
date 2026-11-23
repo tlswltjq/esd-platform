@@ -2,7 +2,6 @@ package com.stove.common.messaging.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.contract.EventHeaders;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.EventSubscriber;
 import com.stove.common.event.KeyQuarantine;
@@ -12,16 +11,15 @@ import com.stove.common.testcontainers.InfraContainers;
 import java.lang.annotation.Annotation;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -31,6 +29,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.ConsumerGroupState;
+import org.apache.kafka.common.errors.GroupIdNotFoundException;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +70,8 @@ class KafkaContractTest extends MessagingContractTest {
     ConcurrentKafkaListenerContainerFactory<Object, Object> defaultFactory;
 
     private DefaultKafkaProducerFactory<String, String> producers;
+    /** 그룹 상태 조회용. 테스트마다 하나를 만들어 대기 조건이 평가될 때마다 다시 쓴다(PR #223 R5). */
+    private Admin admin;
     private KafkaMessagePublisher publisher;
     private final Map<String, List<ConcurrentMessageListenerContainer<Object, Object>>> containersByGroup = new LinkedHashMap<>();
 
@@ -82,6 +83,7 @@ class KafkaContractTest extends MessagingContractTest {
         producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
         producers = new DefaultKafkaProducerFactory<>(producerConfig);
+        admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers()));
         publisher = new KafkaMessagePublisher(new KafkaTemplate<>(producers));
     }
 
@@ -89,6 +91,7 @@ class KafkaContractTest extends MessagingContractTest {
     protected void closeAdapter() {
         containersByGroup.clear();
         producers.destroy();
+        admin.close();
     }
 
     @Override
@@ -193,46 +196,39 @@ class KafkaContractTest extends MessagingContractTest {
     }
 
     /**
-     * 결정 212의 동작: 한 파티션의 키가 제자리 재시도(1·2·4초)에 걸려도 다른 파티션의 키는 진행한다.
-     * 동시성 1이면 소비자 하나가 세 파티션을 한 poll 로 가져오고, 오류 처리기가 실패한 레코드 뒤의 레코드를
-     * <b>파티션과 관계없이</b> 되감아(seek) 재시도 대기를 함께 기다리게 한다(E12 S5: 다른 파티션 7,682ms).
-     * 그래서 실패할 메시지와 다른 파티션 메시지들을 연달아 보내 같은 poll 에 들어가게 한다.
+     * 결정 212의 동작: 한 파티션의 키가 제자리 재시도(1·2·4초)에 걸려 있는 동안 다른 파티션의 키는 진행한다.
+     * 동시성 1이면 소비자 하나가 모든 파티션을 맡아, 재시도 대기 동안 다른 파티션 레코드도 그 대기가 끝날 때까지 늦는다.
+     * 확정적으로 보려고 붙잡힌 키의 세 번째 시도가 시작된 뒤(다음 대기 4초) 다른 파티션 메시지를 보낸다(PR #223 R3·R4).
      */
     @Test
     void whileOnePartitionRetriesAnotherPartitionKeepsFlowing() {
         String stuck = keyOnPartition(0);
-        List<String> flowing = List.of(keyOnPartition(1), keyOnPartition(2), keyOnPartition(1, "B-1-"), keyOnPartition(2, "B-2-"));
+        String flowing = keyOnPartition(1);
         List<String> received = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger stuckAttempts = new AtomicInteger();
+        AtomicInteger stuckAttemptsWhenFlowingArrived = new AtomicInteger(-1);
         start(group, quarantine, message -> {
             if (message.key().equals(stuck)) {
                 stuckAttempts.incrementAndGet();
                 throw new IllegalStateException("boom");
             }
+            stuckAttemptsWhenFlowingArrived.compareAndSet(-1, stuckAttempts.get());
             received.add(message.key());
         }, List.of());
         awaitSubscriptionsReady();
 
+        send(stuck);
+        await("붙잡힌 키의 세 번째 시도(다음 대기 4초)", () -> stuckAttempts.get() >= 3);
         long sentAt = System.nanoTime();
-        // 확인을 기다리지 않고 한꺼번에 보내야 한 poll 에 같이 들어간다(한 건씩 기다리면 실패할 레코드가 혼자 온다).
-        List<CompletableFuture<Void>> sends = new ArrayList<>();
-        sends.add(publisher.publish(message(stuck)));
-        for (String key : flowing) {
-            sends.add(publisher.publish(message(key)));
-        }
-        CompletableFuture.allOf(sends.toArray(new CompletableFuture<?>[0])).orTimeout(10, TimeUnit.SECONDS).join();
-        await("다른 파티션 키 모두 수신", () -> received.containsAll(flowing));
+        send(flowing);
+        await("다른 파티션 키 수신", () -> received.contains(flowing));
         long tookMs = Duration.ofNanos(System.nanoTime() - sentAt).toMillis();
 
-        assertThat(tookMs).as("재시도 한 바퀴(약 7초)를 기다리지 않는다").isLessThan(3_000);
-        assertThat(stuckAttempts.get()).as("그동안 앞 키는 아직 재시도 중이다").isLessThan(1 + RETRIES);
+        assertThat(stuckAttemptsWhenFlowingArrived.get()).as("받을 때 앞 키는 아직 재시도 중(마지막 시도 전)이다")
+                .isEqualTo(3);
+        assertThat(tookMs).as("앞 키의 남은 재시도 대기(4초)를 기다리지 않는다").isLessThan(2_000);
     }
 
-    private OutboundMessage message(String key) {
-        Map<String, String> headers = Map.of(EventHeaders.EVENT_ID, UUID.randomUUID().toString(),
-                EventHeaders.EVENT_TYPE, "ContractHappened", EventHeaders.OCCURRED_AT, Instant.now().toString());
-        return new OutboundMessage(topic, key, "{}", headers);
-    }
 
     /** Kafka 기본 파티셔너(키 바이트 murmur2)로 {@code partition} 에 가는 키를 고른다. */
     private static String keyOnPartition(int partition) {
@@ -262,14 +258,22 @@ class KafkaContractTest extends MessagingContractTest {
         }
     }
 
+    /** 그룹이 Stable 이고 멤버가 {@code members} 명인가. 아직 그룹이 없거나 응답이 늦으면 false, 그 밖의 오류는 그대로 던진다. */
     private boolean stableWith(String inGroup, int members) {
-        Map<String, Object> adminConfig = Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers());
-        try (Admin admin = Admin.create(adminConfig)) {
+        try {
             ConsumerGroupDescription description = admin.describeConsumerGroups(List.of(inGroup))
-                    .describedGroups().get(inGroup).get(10, TimeUnit.SECONDS);
+                    .describedGroups().get(inGroup).get(2, TimeUnit.SECONDS);
             return description.state() == ConsumerGroupState.STABLE && description.members().size() == members;
-        } catch (Exception notYet) {
+        } catch (TimeoutException slow) {
             return false;
+        } catch (ExecutionException failed) {
+            if (failed.getCause() instanceof GroupIdNotFoundException) {
+                return false;
+            }
+            throw new IllegalStateException("소비 그룹을 조회하지 못했다: " + inGroup, failed.getCause());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
         }
     }
 
