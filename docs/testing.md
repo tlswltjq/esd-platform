@@ -1,5 +1,26 @@
 # 테스트 전략
 
+<a id="scope-index"></a>
+## 바뀐 범위별 검증 (먼저 읽는 색인)
+
+바뀐 범위에 맞는 줄만 고른다. Gradle 명령은 `python3 tools/ci/gradle_result.py [--repeat N] -- <명령>`으로 돌려 판정한다([결정 213](decisions.md#ai-procedure-tools)). 순서는 단위·아키텍처 → 필요한 통합 → 최종 게이트(CI)다. 자세한 배경은 링크한 본문 절에 있다([결정 214](decisions.md#agent-context-cost)).
+
+| 바뀐 범위 | 명령 | 본문 |
+|---|---|---|
+| 앱 하나의 `core`(도메인·서비스)·`api` 입력 변환 | `./gradlew :apps:<앱>:test` | [2. 테스트 계층](#2-테스트-계층) |
+| 앱의 `adapter`·DB·리스너·Outbox/Inbox 연결 | 위 + `./gradlew :apps:<앱>:integrationTest` (MinIO를 쓰면 [이미지 재사용](#minio-image)) | [2. 테스트 계층](#2-테스트-계층) |
+| Order·Payment의 Flyway 이행 파일 | 위 + `./gradlew :apps:<앱>:migrationTest` | [2. 테스트 계층](#2-테스트-계층) |
+| `common/<모듈>` | `./gradlew :common:<모듈>:test` + 그 모듈을 쓰는 앱의 `test`. 메시징 adapter는 `:common:messaging-<브로커>:integrationTest`(공통 계약 테스트) | [2. 테스트 계층](#2-테스트-계층) |
+| 패키지 이동·ArchUnit 규칙·모듈 의존 | 구조 검사 묶음 | [구조·보안 경계 검사 실행](#structure-checks) |
+| 배포 비밀·Compose·서비스 접근키·웹훅 경계 | 같은 절의 Python 검사와 `ServiceKey`·`PortOneWebhook` 통합 테스트 | [구조·보안 경계 검사 실행](#structure-checks) |
+| 결함 재현 | `./gradlew defectTest` (실패 = 결함이 살아 있음) | [3. 결함 재현 테스트](#3-결함-재현-테스트) |
+| 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택), 스택이 떠 있으면 `./gradlew :e2e:e2eTest` | [2. 테스트 계층](#2-테스트-계층) |
+| 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다) | [실험 E9](experiments.md#resilience) |
+| 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
+| `tools/ci/` | `python3 -B -m unittest discover -s tools/ci -p 'test_*.py'` | [tools/README.md](../tools/README.md) |
+| `tools/verification/` | `python3 -B -m unittest discover -s tools/verification -p 'test_<대상>.py'` | [tools/README.md](../tools/README.md) |
+| 문서만(`*.md`) | 로컬 Gradle 없음. `python3 tools/ci/decision_numbers.py --root . --base-ref origin/main`(결정을 고쳤을 때) | CI가 Gradle을 생략한다([결정 207](decisions.md#ci-build-scope)) |
+
 2026-11-02 사용자가 요청한 아키텍처 검사 정비를 완료했다. OCI에서 완료 앱 518·공통 규칙 자체 67·공통 라이브러리 30의 **615건**, 실행 의존성과 common ArchUnit check를 통과했다. Settlement 실제 Kafka·DB 계약 **3건**이 통과했으며, 그룹을 서로 바꾼 반례는 정적 검사 47건이 통과해도 새 대응 계약이 실패함을 확인했다. 원복 뒤 같은 계약 1건도 재검증했다. 이 재실행을 중복 합산하지 않는다. 적용 기준은 [아키텍처 검사 범위](architecture.md#archunit-scope), 검증 수치는 [근거 색인](evidence.md), Red/Green·해시·자원 보존 원자료는 [정비 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/architecture-test-improvement-20261102.md)을 따른다. 업무 코드·DB·API·이벤트 계약은 변경하지 않았다.
 
 2026-11-02 아키텍처 점검은 작업별 커밋 후 OCI 격리 사본에서 현재 등록 검사 **477건**과 `verifyCommonRuntimeDependencies`를 통과했다. 별도 진단 **17건**으로 과도한 제약 3유형·검사 공백 8유형과 정상 대조 6개를 재현했으며, Auth 추가 구조/위생 **33건**·Settlement 추가 이벤트 입력 **3건**도 통과했다. 진단 통과는 공백을 수정했다는 뜻이 아니며 업무 코드·운영 규칙·등록은 변경하지 않았다. 수정 전 점검의 반례·권장 수정 순서는 [정비 기록 원문의 "수정 전 점검 요약"](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/architecture-test-improvement-20261102.md)에 흡수했다. 기존 업무 전체 check·DB/PG 여정은 반복하지 않았다.
@@ -31,6 +52,7 @@ Payment 추적 통합은 실제 Micrometer/OpenTelemetry와 메모리 exporter�
 네 번째 시나리오 `restoration`은 흉내 서버 `arm-cancel` `FAILED`(취소 200 + `FAILED` 취소 행, 원결제 `PAID`·취소액 0)로 Payment 확정 실패를 만들고, 환불 `FAILED`·`failureNotice` `PAYMENT_NOT_CANCELLED`·보유권 원래 상태 복구·정산 환불 0을 확인한 뒤 `RefundExecutionFailed`·`LicenseRestorationRequested`·`LicenseRestored`까지 Outbox 7행이 환불 요청 trace에 있는지 판정한다. 이 시나리오의 필수 서비스는 gateway·order·license·payment이고 PG 취소 span은 정확히 1개다.
 범위·시나리오·실행 수는 [실험 E10](experiments.md#tempo), 조회 방법은 [실행 안내](getting-started.md#tempo에서-요청-추적-조회)를 따른다.
 
+<a id="structure-checks"></a>
 ## 구조·보안 경계 검사 실행
 
 아키텍처 범위만 다시 돌릴 때는 공통 규칙 자체 검사·공통 라이브러리·11개 앱의 `*ArchitectureTest`와 실행 의존성을 함께 실행한다. `CI=true`로 테스트 결과 캐시를 쓰지 않는다. `--tests`는 모듈 태스크마다 따로 붙인다.

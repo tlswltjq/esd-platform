@@ -2214,6 +2214,18 @@
 - 구분: 추천 수용
 - 결과: [PR #226](https://github.com/tlswltjq/esd-platform/pull/226)
 
+<a id="agent-context-cost"></a>
+## 214. 에이전트가 매번 읽는 문서는 정본과 겹치는 문장을 지워 링크로 바꾸고, testing.md 앞에 바뀐 범위별 검증 색인을 둔다
+- 문제: `AGENTS.md`(15KB)는 모든 세션이 자동으로 읽고, `docs/testing.md`(160KB)는 검증 때마다, `docs/decisions.md`(414KB)는 결정을 찾을 때 읽는다. AGENTS 5절의 병합 조건·CI 대기 세부는 결정 213으로 `tools/ci/` 스크립트가 정본이 됐는데 문장으로도 남아 있고, testing.md는 "이 범위를 바꾸면 이 명령"을 찾으려면 넓게 읽어야 한다.
+- 선택지: A AGENTS.md에서 스크립트·스펙과 겹치는 세부를 지워 링크로 바꾸고, testing.md 맨 앞에 "바뀐 범위 → 명령" 색인을 둔다(본문은 그대로) / B A에 더해 decisions.md를 번호 구간별 파일로 나눈다(링크·`decision_numbers.py` 수정) / C 그대로 두고 "큰 문서는 grep으로 필요한 절만 읽는다" 규칙만 더한다 (추천: A — 결정 213으로 정본이 된 스크립트와 겹치는 문장은 "정본 하나" 원칙상 지울 대상이다. decisions.md는 현재 규칙을 찾는 곳이 아니므로 크기만으로 나눌 이유가 약하다)
+- 내 의견: "결정 214는 A로 해"
+- 선택: A — 추천 수용.
+  - AGENTS.md에는 정책(무엇을 언제 해도 되나)을 남기고, 판정 세부(head의 최근 build, draft의 SKIPPED, CI 번호 검사 항목)는 해당 스크립트로 링크한다. 정책은 바꾸지 않는다.
+  - testing.md 색인은 범위마다 명령 한 줄과 본문 절 링크만 둔다. 같은 명령을 본문에 다시 풀어 쓰지 않는다.
+  - A 뒤에도 decisions.md를 넓게 읽는 일이 반복되면 B를 다시 검토한다.
+- 구분: 추천 수용
+- 결과: [PR #227](https://github.com/tlswltjq/esd-platform/pull/227)
+
 ---
 
 ## 검증하며 드러난 것
