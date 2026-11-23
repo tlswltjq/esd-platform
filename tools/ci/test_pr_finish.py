@@ -79,6 +79,20 @@ class PendingUserVerdictsTest(unittest.TestCase):
         body = verdict_body([['R5 (high) 무엇', '채택 (사용자 확정 대기)', '이유']])
         self.assertEqual(['R5 (high) 무엇'], pr_finish.pending_user_verdicts(body))
 
+    def test_confirmation_counts_only_in_the_verdict_cell_and_must_be_non_empty(self):
+        # PR #226 R2: 이유 칸의 언급이나 빈 원문은 확정이 아니다.
+        body = verdict_body([['R1 (high) 무엇', '채택', '사용자 확정: "채택"으로 기록할 예정'],
+                             ['R2 (high) 무엇', '채택 (사용자 확정: "")', '이유'],
+                             ['R3 (high) 무엇', '채택 (사용자 확정: "', '이유']])
+        self.assertEqual(['R1 (high) 무엇', 'R2 (high) 무엇', 'R3 (high) 무엇'], pr_finish.pending_user_verdicts(body))
+
+    def test_policy_rows_need_user_confirmation(self):
+        # PR #226 R3: 정책을 바꾸는 지적은 AI 판정 채택이어도 사용자가 판정한다(결정 112).
+        body = verdict_body([['R1 (medium) 재시도 정책을 바꿔야 함', '채택 (AI 판정)', '이유'],
+                             ['R2 (low) 문구', '채택 (AI 판정)', '정책 변경 아님을 확인했다'],
+                             ['R3 (medium) 정책 변경', '채택 (사용자 확정: "채택")', '이유']])
+        self.assertEqual(['R1 (medium) 재시도 정책을 바꿔야 함', 'R2 (low) 문구'], pr_finish.pending_user_verdicts(body))
+
     def test_word_high_inside_other_words_is_not_severity(self):
         body = verdict_body([['R1 (low) highlight 문구', '채택', '이유']])
         self.assertEqual([], pr_finish.pending_user_verdicts(body))
@@ -137,6 +151,17 @@ class WaitTest(unittest.TestCase):
         with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), redirect_stdout(io.StringIO()):
             self.assertEqual(0, pr_finish.wait(self.args()))
 
+    def test_one_required_check_alone_is_not_done(self):
+        # PR #226 R6: review-gate만 먼저 끝나도 build 등록을 기다린다.
+        sequence = [[{'name': 'review-gate', 'bucket': 'pass'}],
+                    [{'name': 'review-gate', 'bucket': 'pass'}, {'name': 'build (unit)', 'bucket': 'fail'}]]
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args()))
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[{'name': 'review-gate', 'bucket': 'pass'}]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+
     def test_skipping_build_is_failure_and_mentions_draft(self):
         checks = [{'name': 'build', 'bucket': 'skipping'}, {'name': 'review-gate', 'bucket': 'pass'}]
         out = io.StringIO()
@@ -153,7 +178,8 @@ class WaitTest(unittest.TestCase):
     def test_waits_until_head_matches(self):
         views = [pr(headRefOid='b' * 40), pr(headRefOid='a' * 40)]
         with mock.patch.object(pr_finish, 'view', side_effect=views), \
-                mock.patch.object(pr_finish, 'required_checks', return_value=[{'name': 'build', 'bucket': 'pass'}]) \
+                mock.patch.object(pr_finish, 'required_checks', return_value=[{'name': 'build', 'bucket': 'pass'},
+                                                                          {'name': 'review-gate', 'bucket': 'pass'}]) \
                 as checks, redirect_stdout(io.StringIO()):
             self.assertEqual(0, pr_finish.wait(self.args(head_sha='a' * 40)))
         self.assertEqual(1, checks.call_count)

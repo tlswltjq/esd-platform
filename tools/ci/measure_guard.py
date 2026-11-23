@@ -3,8 +3,9 @@
     before  컨테이너·볼륨·네트워크를 상태 파일에 남긴다. 측정과 무관한 컨테이너가 실행 중이면
             목록을 내고 실패한다(S6를 kirothon-app-1이 켜진 채 재서 다시 잰 사례). 무관하지 않은
             이름은 `--allow`(앞부분 일치, 여러 번)로 준다. 확인하고 그대로 재려면 `--ignore-running`.
-    after   상태 파일과 지금을 대조한다. 실행 전에 있던 것이 없어졌거나(보존 위반),
-            새로 생긴 것이 남아 있으면(정리 누락) 목록을 내고 실패한다.
+    after   상태 파일과 지금을 대조한다. 실행 전에 있던 것이 없어졌거나 같은 이름으로 다시
+            만들어졌거나 컨테이너 상태가 바뀌었으면(보존 위반), 새로 생긴 것이 남아 있으면(정리 누락)
+            목록을 내고 실패한다.
 
 상태 파일 기본 위치는 저장소의 build/measure-guard/<이름>.json이다. 세션이 재시작돼도 남는다.
 컨테이너를 멈추거나 지우지 않는다. 판단과 조치는 사람·에이전트가 한다.
@@ -35,34 +36,48 @@ def docker(args):
 
 
 def snapshot():
+    # 이름만이 아니라 ID·상태를 함께 남긴다. 같은 이름으로 지웠다 다시 만들었거나 멈춘 것도 잡는다(PR #226 R4).
     containers = {}
-    for line in docker(['ps', '-a', '--format', '{{.Names}}\t{{.State}}']):
-        name, state = (line.split('\t') + [''])[:2]
-        containers[name] = state
-    return {
-        'containers': containers,
-        'volumes': sorted(docker(['volume', 'ls', '-q'])),
-        'networks': sorted(name for name in docker(['network', 'ls', '--format', '{{.Name}}'])
-                           if name not in DEFAULT_NETWORKS),
-    }
+    for line in docker(['ps', '-a', '--no-trunc', '--format', '{{.Names}}\t{{.ID}}\t{{.State}}']):
+        name, identifier, state = (line.split('\t') + ['', ''])[:3]
+        containers[name] = {'id': identifier, 'state': state}
+    networks = {}
+    for line in docker(['network', 'ls', '--no-trunc', '--format', '{{.Name}}\t{{.ID}}']):
+        name, identifier = (line.split('\t') + [''])[:2]
+        if name not in DEFAULT_NETWORKS:
+            networks[name] = {'id': identifier}
+    # 볼륨은 이름이 곧 식별자다.
+    volumes = {name: {} for name in docker(['volume', 'ls', '-q'])}
+    return {'containers': containers, 'volumes': volumes, 'networks': networks}
 
 
 def unrelated_running(state, allow):
-    return sorted(name for name, status in state['containers'].items()
-                  if status == 'running' and not any(name.startswith(prefix) for prefix in allow))
+    return sorted(name for name, info in state['containers'].items()
+                  if info.get('state') == 'running' and not any(name.startswith(prefix) for prefix in allow))
 
 
 def compare(before, after):
     missing = {}
     leftover = {}
+    changed = {}
     for kind in KINDS:
-        old = set(before[kind])
-        new = set(after[kind])
-        if old - new:
-            missing[kind] = sorted(old - new)
-        if new - old:
-            leftover[kind] = sorted(new - old)
-    return missing, leftover
+        old = before[kind]
+        new = after[kind]
+        gone = sorted(set(old) - set(new))
+        added = sorted(set(new) - set(old))
+        differs = []
+        for name in sorted(set(old) & set(new)):
+            if old[name].get('id') != new[name].get('id'):
+                differs.append(name + ' (다시 만들어짐)')
+            elif old[name].get('state') != new[name].get('state'):
+                differs.append('{} ({} → {})'.format(name, old[name].get('state'), new[name].get('state')))
+        if gone:
+            missing[kind] = gone
+        if added:
+            leftover[kind] = added
+        if differs:
+            changed[kind] = differs
+    return missing, leftover, changed
 
 
 def state_path(root, name):
@@ -91,11 +106,12 @@ def after(args):
     path = state_path(args.root, args.name)
     if not path.exists():
         raise SystemExit('실패: 실행 전 기록이 없다: ' + str(path))
-    missing, leftover = compare(json.loads(path.read_text(encoding='utf-8')), snapshot())
-    for title, found in (('보존 위반(실행 전에 있었는데 없어짐)', missing), ('정리 누락(새로 생겨 남음)', leftover)):
+    missing, leftover, changed = compare(json.loads(path.read_text(encoding='utf-8')), snapshot())
+    for title, found in (('보존 위반(실행 전에 있었는데 없어짐)', missing), ('보존 위반(바뀜)', changed),
+                         ('정리 누락(새로 생겨 남음)', leftover)):
         for kind, names in found.items():
             print('{} {}: {}'.format(title, kind, ', '.join(names)))
-    if missing or leftover:
+    if missing or leftover or changed:
         return 1
     print('통과: 실행 전과 같다(컨테이너·볼륨·네트워크)')
     return 0

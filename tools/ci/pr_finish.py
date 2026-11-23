@@ -11,8 +11,10 @@
 - 열린 PR이고 draft가 아니다(draft의 건너뛴 build는 CLEAN으로 보여도 통과가 아니다).
 - `mergeStateStatus`가 CLEAN이다.
 - head 커밋에서 가장 최근에 시작한 `build`·`review-gate` 검사가 모두 COMPLETED·SUCCESS다.
-- `리뷰 판정` 표에 사용자 판정이 남아 있지 않다: 판정이 부분 반영·기각이거나 지적이 high인 행은
-  `(사용자 확정: "<원문>")`이 있어야 한다(`사용자 확정 대기`는 확정이 아니다). 정책을 바꾸는 지적인지는 판정하지 못하므로 사람이 확인한다.
+- `리뷰 판정` 표에 사용자 판정이 남아 있지 않다: 판정이 부분 반영·기각이거나, 지적이 high이거나,
+  지적·판정·이유에 "정책"이 들어간 행은 **판정 칸**에 비어 있지 않은 `사용자 확정: "<원문>"`이 있어야 한다
+  (`사용자 확정 대기`·이유 칸의 언급은 확정이 아니다, PR #226 R2). "정책" 낱말 검사는 정책 변경 지적을
+  놓치지 않으려는 보수적 근사다(R3). 낱말 없이 정책을 바꾸는 지적은 사람이 확인한다.
 
     python3 tools/ci/pr_finish.py wait 226 --head-sha "$(git rev-parse HEAD)"
     python3 tools/ci/pr_finish.py merge 224 225
@@ -31,7 +33,8 @@ import review_gate  # noqa: E402
 REQUIRED = ('build', 'review-gate')
 USER_JUDGED = ('부분 반영', '기각')
 HIGH = re.compile(r'\bhigh\b', re.IGNORECASE)
-USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“]')
+USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*\S[^"”]*["”]')
+POLICY = '정책'
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
 
@@ -57,9 +60,15 @@ def required_checks(number):
         raise SystemExit('실패: 필수 검사를 읽지 못함: ' + err.strip())
 
 
+def registered(checks):
+    # 한쪽만 먼저 등록·완료돼도 통과로 끝내지 않는다(PR #226 R6).
+    names = [check.get('name') or '' for check in checks]
+    return all(any(name.startswith(prefix) for name in names) for prefix in REQUIRED)
+
+
 def check_summary(checks):
     buckets = [check.get('bucket') for check in checks]
-    if not checks or 'pending' in buckets:
+    if not registered(checks) or 'pending' in buckets:
         return 'pending'
     return 'pass' if all(bucket == 'pass' for bucket in buckets) else 'fail'
 
@@ -77,8 +86,9 @@ def wait(args):
                 time.sleep(args.interval)
                 continue
         checks = required_checks(args.number)
-        if not checks and time.time() > register_deadline:
-            print('시간 초과: {}초 동안 필수 검사가 등록되지 않았다.'.format(args.register_timeout))
+        if not registered(checks) and time.time() > register_deadline:
+            print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
+                args.register_timeout, ', '.join(REQUIRED)))
             return 3
         state = check_summary(checks)
         if state != 'pending':
@@ -115,8 +125,8 @@ def pending_user_verdicts(body):
         verdict = row[1].lstrip('*_ ') if len(row) > 1 else ''
         if review_gate.NO_FINDINGS in finding:
             continue
-        needs_user = verdict.startswith(USER_JUDGED) or bool(HIGH.search(finding))
-        if needs_user and not USER_CONFIRMED.search(text):
+        needs_user = verdict.startswith(USER_JUDGED) or bool(HIGH.search(finding)) or POLICY in text
+        if needs_user and not USER_CONFIRMED.search(verdict):
             pending.append(finding[:80])
     return pending
 

@@ -76,6 +76,24 @@ class RunTest(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(1, gradle_result.main(['--root', root, '--', *fake_gradle(script)]))
 
+    def test_build_cache_is_disabled_for_gradle(self):
+        # PR #226 R1: 캐시에서 복원된 XML은 새 mtime이라 실행으로 보인다.
+        self.assertEqual(['./gradlew', ':a:test', '--no-build-cache'], gradle_result.without_cache(['./gradlew', ':a:test']))
+        self.assertEqual(['gradle', 'test', '--no-build-cache'], gradle_result.without_cache(['gradle', 'test', '--no-build-cache']))
+        self.assertEqual(['python3', '-c', 'x'], gradle_result.without_cache(['python3', '-c', 'x']))
+
+    def test_nested_worktrees_are_left_alone(self):
+        # PR #226 R5: 하위 worktree(.git 파일)의 결과는 다른 작업의 것이다.
+        with tempfile.TemporaryDirectory() as root:
+            write_xml(root, 'a')
+            nested = Path(root) / 'other'
+            write_xml(str(nested), 'b')
+            (nested / '.git').write_text('gitdir: /elsewhere\n', encoding='utf-8')
+            write_xml(root, '.claude/worktrees/x')
+            self.assertEqual(1, gradle_result.clear_results(root))
+            self.assertTrue((nested / 'b/build/test-results').exists())
+            self.assertTrue((Path(root) / '.claude/worktrees/x/build/test-results').exists())
+
     def test_only_build_test_results_are_removed(self):
         with tempfile.TemporaryDirectory() as root:
             write_xml(root, 'a')
