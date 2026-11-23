@@ -107,27 +107,34 @@ jobs:
           retention-days: 7
 
   # 결정 217·137: 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 이 작업은 always()로 늘 돌아, plan이 성공하지
-  # 않았거나 Gradle을 돌려야 하는데 gradle 조각이 성공하지 않았으면(실패·취소·건너뜀) 실패한다. draft에서는 기존처럼 건너뛴다.
+  # 않았거나 Gradle을 돌려야 하는데 조각 하나라도 성공하지 않았으면(실패·취소·건너뜀·없음) 실패한다. draft에서는 건너뛴다.
+  # PR #234 R1: matrix의 합친 결과(needs.gradle.result)는 부분 재실행·러너 미배정 취소에서 success로 보고된 사례가 있어
+  # 쓰지 않는다. 이 실행의 작업 목록(filter=latest)에서 조각마다의 최신 결론을 tools/ci/shard_results.py로 본다.
   build:
     name: build (unit · architecture · integration · migration)
     needs: [plan, gradle]
     if: always() && github.event_name != 'schedule' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
       - name: Gather results
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
           PLAN: ${{ needs.plan.result }}
-          GRADLE: ${{ needs.gradle.result }}
           RUN_GRADLE: ${{ needs.plan.outputs.gradle }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
         run: |
-          echo "plan=$PLAN gradle=$GRADLE run_gradle=$RUN_GRADLE"
-          if [ "$PLAN" != success ]; then echo "실패: plan이 $PLAN"; exit 1; fi
-          if [ "$RUN_GRADLE" = true ]; then
-            if [ "$GRADLE" != success ]; then echo "실패: gradle 조각이 $GRADLE"; exit 1; fi
-          elif [ "$RUN_GRADLE" != false ] || [ "$GRADLE" != skipped ]; then
-            echo "실패: Gradle 생략 판단($RUN_GRADLE)과 gradle 결과($GRADLE)가 맞지 않는다"; exit 1
-          fi
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=latest&per_page=100" --jq '.jobs[] | [.name, (.conclusion // .status)] | @tsv' > "$RUNNER_TEMP/jobs.tsv"
+          python3 -I -B tools/ci/shard_results.py --plan "$PLAN" --gradle "$RUN_GRADLE" --matrix "$MATRIX" --jobs "$RUNNER_TEMP/jobs.tsv"
 
   stack:
     name: stack E2E (verify-jib.py)

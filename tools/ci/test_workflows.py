@@ -265,7 +265,10 @@ class PlanStepOrderTest(unittest.TestCase):
 
 
 class AggregateResultTest(unittest.TestCase):
-    """결정 217·107: 필수 검사 이름은 결과를 모으는 build가 갖고, plan·gradle 결과를 모두 본다."""
+    """결정 217·107: 필수 검사 이름은 결과를 모으는 build가 갖고, 조각마다의 최신 결론을 본다(PR #234 R1)."""
+
+    GATHER = ('python3 -I -B tools/ci/shard_results.py --plan "$PLAN" --gradle "$RUN_GRADLE" --matrix "$MATRIX"'
+              ' --jobs "$RUNNER_TEMP/jobs.tsv"')
 
     def setUp(self):
         self.text = CI.read_text(encoding='utf-8')
@@ -277,11 +280,13 @@ class AggregateResultTest(unittest.TestCase):
             found.append('build 작업 이름이 필수 검사 이름이 아니다')
         if '    needs: [plan, gradle]\n' not in build:
             found.append('build가 plan·gradle을 기다리지 않는다')
-        for needed in ('PLAN: ${{ needs.plan.result }}', 'GRADLE: ${{ needs.gradle.result }}',
-                       'RUN_GRADLE: ${{ needs.plan.outputs.gradle }}',
-                       'if [ "$PLAN" != success ]', 'if [ "$GRADLE" != success ]', '[ "$GRADLE" != skipped ]'):
+        for needed in ('PLAN: ${{ needs.plan.result }}', 'RUN_GRADLE: ${{ needs.plan.outputs.gradle }}',
+                       'MATRIX: ${{ needs.plan.outputs.matrix }}', 'RUN_ID: ${{ github.run_id }}',
+                       'jobs?filter=latest', '      actions: read\n', self.GATHER):
             if needed not in build:
-                found.append('결과 모음에 `' + needed + '`가 없다')
+                found.append('결과 모음에 `' + needed.strip() + '`가 없다')
+        if 'needs.gradle.result' in build:
+            found.append('결과 모음이 matrix의 합친 결과(needs.gradle.result)를 쓴다')
         for job in ('plan', 'gradle'):
             name = re.search(r'^    name: (.+)$', job_body(text, job), re.M)
             if name is None or name.group(1).startswith('build'):
@@ -289,18 +294,28 @@ class AggregateResultTest(unittest.TestCase):
                 found.append(job + ' 작업 이름이 `build`로 시작하거나 없다')
         return found
 
-    def test_the_aggregate_checks_every_upstream_result(self):
+    def test_the_aggregate_checks_every_shard(self):
         self.assertEqual([], self.problems(self.text))
 
-    def test_dropping_the_gradle_result_check_is_caught(self):
-        mutant = self.text.replace('if [ "$GRADLE" != success ]', 'if false', 1)
+    def test_going_back_to_the_combined_matrix_result_is_caught(self):
+        mutant = self.text.replace('          MATRIX: ${{ needs.plan.outputs.matrix }}\n',
+                                   '          MATRIX: ${{ needs.plan.outputs.matrix }}\n          GRADLE: ${{ needs.gradle.result }}\n', 1)
         self.assertNotEqual(self.text, mutant)
-        self.assertEqual(['결과 모음에 `if [ "$GRADLE" != success ]`가 없다'], self.problems(mutant))
+        self.assertEqual(['결과 모음이 matrix의 합친 결과(needs.gradle.result)를 쓴다'], self.problems(mutant))
+
+    def test_dropping_the_latest_filter_is_caught(self):
+        mutant = self.text.replace('jobs?filter=latest&', 'jobs?', 1)
+        self.assertNotEqual(self.text, mutant)
+        self.assertEqual(['결과 모음에 `jobs?filter=latest`가 없다'], self.problems(mutant))
 
     def test_a_shard_named_like_the_required_check_is_caught(self):
         mutant = self.text.replace('    name: gradle (${{ matrix.shard }})\n', '    name: build (${{ matrix.shard }})\n', 1)
         self.assertNotEqual(self.text, mutant)
         self.assertEqual(['gradle 작업 이름이 `build`로 시작하거나 없다'], self.problems(mutant))
+
+    def test_the_shard_job_name_matches_the_checker(self):
+        import shard_results
+        self.assertIn('    name: ' + shard_results.SHARD_JOB.format('${{ matrix.shard }}') + '\n', job_body(self.text, 'gradle'))
 
 
 if __name__ == '__main__':
