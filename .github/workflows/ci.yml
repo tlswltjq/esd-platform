@@ -1,6 +1,7 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
 # - PR·main push: 결정 번호·기준 판 보존 검사를 먼저 돌린 뒤 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
 #   결정 207: PR은 바뀐 범위만 빌드한다(tools/ci/build_scope.py). main push는 항상 전체.
+#   결정 217: 전체 빌드는 통합·이행 테스트를 여러 러너로 나눠 동시에 돌리고(tools/ci/build_shards.py), build가 결과를 모은다.
 # - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정과 승인 보류 종결·실패 시도 재결제·30분 안 재진입 여정,
 #   주문 기한(30분)을 넘기는 승인 여정(31분 대기, 별도 작업) (실제 PortOne·비밀 값 없음)
 # 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
@@ -36,36 +37,36 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
-    name: build (unit · architecture · integration · migration)
+  # 결정 217: build를 세 단계로 나눈다. plan(범위·번호·도구 테스트) → gradle(조각별 러너, matrix) → build(결과 모음).
+  # 필수 검사 이름은 결과를 모으는 build 작업이 이어받는다(결정 107). plan·gradle 이름은 `build`로 시작하지 않는다
+  # (tools/ci/pr_finish.py가 `build` 접두로 필수 검사를 찾는다).
+  plan:
+    name: plan (scope · decision numbers · tool tests)
     if: github.event_name != 'schedule' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    outputs:
+      gradle: ${{ steps.shards.outputs.gradle }}
+      matrix: ${{ steps.shards.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      # PR #233 R7: 번호 오류를 빌드(약 20분) 전에 알린다. 이 단계가 실패하면 뒤 단계는 기본 조건(success())이라
-      # 건너뛴다. 번호를 고쳐 다시 push하면 처음부터 다시 돌므로 의도한 동작이다. 작업 이름·필수 검사는 그대로다(결정 107).
+      # PR #233 R7: 번호 오류를 빌드 전에 알린다. 이 단계가 실패하면 뒤 단계는 기본 조건(success())이라 건너뛰고,
+      # plan이 실패하므로 gradle도 돌지 않는다. 번호를 고쳐 다시 push하면 처음부터 다시 돈다.
       - name: Check decision numbers
         if: ${{ !cancelled() }}
         run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1
       # 결정 207: PR은 바뀐 범위만 빌드한다(문서만 → Gradle 생략, 한 앱 안만 → 그 앱, 그 밖 → 전체).
       # 결정 216: Gradle이 읽지 않는다고 확인한 도구 경로(build_scope.py의 허용 목록)만 바뀌어도 Gradle을 생략한다.
-      # 작업 자체는 늘 돌아 필수 검사 이름이 그대로 보고된다(결정 107). main push는 항상 전체.
-      # PR #233 R6: build_scope.py는 Python과 git만 쓰므로 Java·Gradle 준비보다 먼저 돌려, Gradle을 생략하는 PR은 준비도 건너뛴다.
+      # main push는 항상 전체.
       - name: Build scope
         id: scope
         run: python3 -I -B tools/ci/build_scope.py --event "${{ github.event_name }}" --base HEAD^1 >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@v4
-        if: steps.scope.outputs.tasks != ''
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
-        if: steps.scope.outputs.tasks != ''
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      # 결정 217: 전체 빌드는 통합·이행 테스트를 조각으로 나눈다. 앱 범위 빌드는 한 조각, 빈 범위는 Gradle 없음.
+      - name: Build shards
+        id: shards
+        run: python3 -I -B tools/ci/build_shards.py --tasks "${{ steps.scope.outputs.tasks }}" >> "$GITHUB_OUTPUT"
       # 결정 216: 검증·측정 도구의 Python 테스트는 Gradle 범위와 무관하게 늘 돈다(약 15초). Java가 필요 없다.
       # 이 경로만 바뀐 PR은 Gradle을 생략하므로(build_scope.py) 여기가 그 변경을 검증하는 유일한 곳이다.
       # tools/ci 테스트는 review-gate가 돌린다. Docker 장애는 통합 테스트에서 드러나므로 버전 출력 단계는 두지 않는다.
@@ -73,18 +74,60 @@ jobs:
         run: |
           python3 -B -m unittest discover -s tools/verification -p 'test_*.py'
           python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'
+
+  gradle:
+    name: gradle (${{ matrix.shard }})
+    needs: plan
+    if: needs.plan.outputs.gradle == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # 한 조각이 실패해도 나머지를 끝까지 돌려 실패를 한 번에 본다(--continue와 같은 뜻).
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Build
-        if: steps.scope.outputs.tasks != ''
-        run: ./gradlew ${{ steps.scope.outputs.tasks }} --continue --console=plain
+        run: ./gradlew ${{ matrix.tasks }} --continue --console=plain
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ matrix.shard }}
           path: |
             **/build/reports/tests/
             **/build/test-results/
           retention-days: 7
+
+  # 결정 217·137: 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 이 작업은 always()로 늘 돌아, plan이 성공하지
+  # 않았거나 Gradle을 돌려야 하는데 gradle 조각이 성공하지 않았으면(실패·취소·건너뜀) 실패한다. draft에서는 기존처럼 건너뛴다.
+  build:
+    name: build (unit · architecture · integration · migration)
+    needs: [plan, gradle]
+    if: always() && github.event_name != 'schedule' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gather results
+        env:
+          PLAN: ${{ needs.plan.result }}
+          GRADLE: ${{ needs.gradle.result }}
+          RUN_GRADLE: ${{ needs.plan.outputs.gradle }}
+        run: |
+          echo "plan=$PLAN gradle=$GRADLE run_gradle=$RUN_GRADLE"
+          if [ "$PLAN" != success ]; then echo "실패: plan이 $PLAN"; exit 1; fi
+          if [ "$RUN_GRADLE" = true ]; then
+            if [ "$GRADLE" != success ]; then echo "실패: gradle 조각이 $GRADLE"; exit 1; fi
+          elif [ "$RUN_GRADLE" != false ] || [ "$GRADLE" != skipped ]; then
+            echo "실패: Gradle 생략 판단($RUN_GRADLE)과 gradle 결과($GRADLE)가 맞지 않는다"; exit 1
+          fi
 
   stack:
     name: stack E2E (verify-jib.py)
