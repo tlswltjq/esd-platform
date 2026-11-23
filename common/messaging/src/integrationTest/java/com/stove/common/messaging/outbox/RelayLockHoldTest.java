@@ -88,6 +88,7 @@ class RelayLockHoldTest {
 
         Future<?> relaying = relayThread.submit(relay::relay);
         Future<?> inserting = null;
+        Throwable failure = null;
         try {
             assertThat(published.await(10, TimeUnit.SECONDS))
                     .as("릴레이가 첫 행을 집어 발행을 시작해야 그 뒤 삽입이 '확인 대기 중'에 일어난다")
@@ -106,12 +107,33 @@ class RelayLockHoldTest {
             assertThat(heldAck)
                     .as("삽입이 끝난 시점에 릴레이는 아직 확인을 기다리고 있어야 '확인 대기 중' 판정이다")
                     .isNotDone();
-        } finally {
-            heldAck.complete(null);
-            relaying.get(30, TimeUnit.SECONDS);
-            if (inserting != null) {
-                inserting.get(60, TimeUnit.SECONDS);
+        } catch (Throwable thrown) {
+            failure = thrown;
+        }
+        // 확인을 놓고 두 작업을 따로 정리한다. 정리 실패는 원래 실패를 덮지 않고 거기에 붙인다(PR #228 R3).
+        heldAck.complete(null);
+        failure = settle(relaying, 30, failure);
+        if (inserting != null) {
+            failure = settle(inserting, 60, failure);
+        }
+        if (failure instanceof Exception exception) {
+            throw exception;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+    }
+
+    private static Throwable settle(Future<?> work, long seconds, Throwable failure) {
+        try {
+            work.get(seconds, TimeUnit.SECONDS);
+            return failure;
+        } catch (Exception cleanup) {
+            if (failure == null) {
+                return cleanup;
             }
+            failure.addSuppressed(cleanup);
+            return failure;
         }
     }
 }
