@@ -12,7 +12,6 @@ import java.lang.annotation.Annotation;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,6 +20,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.ConsumerGroupDescription;
@@ -197,38 +197,37 @@ class KafkaContractTest extends MessagingContractTest {
 
     /**
      * 결정 212의 동작: 한 파티션의 키가 제자리 재시도(1·2·4초)에 걸려 있는 동안 다른 파티션의 키는 진행한다.
-     * 동시성 1이면 소비자 하나가 모든 파티션을 맡아, 재시도 대기 동안 다른 파티션 레코드도 그 대기가 끝날 때까지 늦는다.
-     * 확정적으로 보려고 붙잡힌 키의 세 번째 시도가 시작된 뒤(다음 대기 4초) 다른 파티션 메시지를 보낸다(PR #223 R3·R4).
+     * 동시성 1이면 소비자 스레드 하나가 모든 파티션을 맡아, 재시도 대기 동안 잠든 그 스레드는 다른 파티션 레코드도 처리하지 못한다.
+     * 그래서 벽시계 기준이 아니라 사건 순서로 본다: 붙잡힌 키의 세 번째 시도 뒤 보낸 다른 파티션 메시지가
+     * 네 번째 시도(4초 대기 끝)보다 먼저 처리됐는가(PR #223 R3·R4·R8).
      */
     @Test
     void whileOnePartitionRetriesAnotherPartitionKeepsFlowing() {
         String stuck = keyOnPartition(0);
         String flowing = keyOnPartition(1);
-        List<String> received = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger stuckAttempts = new AtomicInteger();
-        AtomicInteger stuckAttemptsWhenFlowingArrived = new AtomicInteger(-1);
+        AtomicLong fourthAttemptAt = new AtomicLong();
+        AtomicLong flowingAt = new AtomicLong();
         start(group, quarantine, message -> {
             if (message.key().equals(stuck)) {
-                stuckAttempts.incrementAndGet();
+                if (stuckAttempts.incrementAndGet() == 1 + RETRIES) {
+                    fourthAttemptAt.set(System.nanoTime());
+                }
                 throw new IllegalStateException("boom");
             }
-            stuckAttemptsWhenFlowingArrived.compareAndSet(-1, stuckAttempts.get());
-            received.add(message.key());
+            flowingAt.compareAndSet(0, System.nanoTime());
         }, List.of());
         awaitSubscriptionsReady();
 
         send(stuck);
         await("붙잡힌 키의 세 번째 시도(다음 대기 4초)", () -> stuckAttempts.get() >= 3);
-        long sentAt = System.nanoTime();
         send(flowing);
-        await("다른 파티션 키 수신", () -> received.contains(flowing));
-        long tookMs = Duration.ofNanos(System.nanoTime() - sentAt).toMillis();
+        await("다른 파티션 수신과 붙잡힌 키의 마지막 시도", () -> flowingAt.get() != 0 && fourthAttemptAt.get() != 0);
 
-        assertThat(stuckAttemptsWhenFlowingArrived.get()).as("받을 때 앞 키는 아직 재시도 중(마지막 시도 전)이다")
-                .isEqualTo(3);
-        assertThat(tookMs).as("앞 키의 남은 재시도 대기(4초)를 기다리지 않는다").isLessThan(2_000);
+        long aheadMs = Duration.ofNanos(fourthAttemptAt.get() - flowingAt.get()).toMillis();
+        assertThat(aheadMs).as("다른 파티션은 붙잡힌 키의 마지막 대기가 끝나기 전에 처리된다(동시성 1이면 대기가 끝난 뒤에야)")
+                .isGreaterThan(500);
     }
-
 
     /** Kafka 기본 파티셔너(키 바이트 murmur2)로 {@code partition} 에 가는 키를 고른다. */
     private static String keyOnPartition(int partition) {
