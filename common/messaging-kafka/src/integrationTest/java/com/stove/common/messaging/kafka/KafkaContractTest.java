@@ -202,6 +202,10 @@ class KafkaContractTest extends MessagingContractTest {
      * 다른 파티션 레코드를 처리하지 못한다. 시간 문턱 대신 동기화 지점으로 본다: 붙잡힌 키의 두 번째 시도(첫 재시도)가
      * 다른 파티션 메시지 처리 신호를 기다리며 스레드를 붙든다. 동시성 3이면 다른 소비자가 처리해 신호가 오고,
      * 동시성 1이면 같은 스레드라 신호가 끝내 오지 않는다(PR #223 R3·R4·R8·R11).
+     *
+     * <p>재시도 대기 자체를 붙잡지는 않는다(R12, 부분 반영). 운영 팩토리에 대기 주입 통로를 여는 대신, 스레드가 붙잡히는
+     * 방식(대기로 잠들든 처리 중이든)과 무관하게 다른 소비자 스레드가 진행하는지를 본다. {@code DefaultErrorHandler} 의
+     * 재시도 대기는 그 레코드를 맡은 소비자 스레드만 재운다(Spring Kafka 문서 "DefaultErrorHandler").
      */
     @Test
     void whileOnePartitionRetriesAnotherPartitionKeepsFlowing() throws InterruptedException {
@@ -211,14 +215,17 @@ class KafkaContractTest extends MessagingContractTest {
         CountDownLatch retryHolding = new CountDownLatch(1);
         CountDownLatch flowed = new CountDownLatch(1);
         AtomicBoolean flowedWhileHeld = new AtomicBoolean();
+        CountDownLatch holdEnded = new CountDownLatch(1);
         start(group, quarantine, message -> {
             if (message.key().equals(stuck)) {
                 if (stuckAttempts.incrementAndGet() == 2) {
                     retryHolding.countDown();
                     try {
-                        flowedWhileHeld.set(flowed.await(HOLD_LIMIT.toSeconds(), TimeUnit.SECONDS));
+                        flowedWhileHeld.set(flowed.await(timeout().toSeconds(), TimeUnit.SECONDS));
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
+                    } finally {
+                        holdEnded.countDown();
                     }
                 }
                 throw new IllegalStateException("boom");
@@ -230,14 +237,12 @@ class KafkaContractTest extends MessagingContractTest {
         send(stuck);
         assertThat(retryHolding.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("붙잡힌 키의 첫 재시도가 시작된다").isTrue();
         send(flowing);
-        await("붙잡힌 키가 신호를 기다리다 끝난다", () -> stuckAttempts.get() >= 3);
+        // 붙잡은 쪽이 신호를 받거나 한도(timeout)를 다 기다릴 때까지 본다. 테스트 스레드가 늦어도 판정은 바뀌지 않는다(R8·R11).
+        assertThat(holdEnded.await(timeout().plusSeconds(10).toSeconds(), TimeUnit.SECONDS)).as("붙잡은 재시도가 끝난다").isTrue();
 
         assertThat(flowedWhileHeld).as("다른 파티션은 붙잡힌 키가 스레드를 쥔 동안 처리된다(동시성 1이면 같은 스레드라 처리되지 않는다)")
                 .isTrue();
     }
-
-    /** 붙잡힌 키가 다른 파티션 신호를 기다리는 한도. 동시성 1이면 이만큼 기다린 뒤 실패로 판정한다. */
-    private static final Duration HOLD_LIMIT = Duration.ofSeconds(15);
 
     /** Kafka 기본 파티셔너(키 바이트 murmur2)로 {@code partition} 에 가는 키를 고른다. */
     private static String keyOnPartition(int partition) {
