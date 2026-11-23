@@ -84,6 +84,7 @@
 | [D-056](#d-056) | 같은 키의 앞 행이 재시도 대기인 사이, 그 배치에 없던 뒤 행이 먼저 발행됨 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
 | [D-057](#d-057) | 다른 트랜잭션이 같은 키의 앞 행을 잠그면(예: 중복 운영 재발행) 릴레이가 뒤 행을 먼저 발행함 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | PR #203 교차 리뷰 R1, `OutboxPendingQueryTest` |
 | [D-059](#d-059) | 소비 실패를 DB에 격리한 뒤(PR #209) 격리 경보가 없어 7개 소비 앱의 소비 실패가 조용히 쌓임 | 운영 감지(멈춘 키의 뒤 메시지까지 처리 안 됨, 결정 160 위반) | **수정됨** | `infra/prometheus/tests/consumer-quarantine.yml` Red(2026-11-19) |
+| [D-060](#d-060) | Outbox 릴레이가 브로커 확인을 기다리는 동안 간격 잠금을 쥐어 다른 주문의 Outbox 삽입이 막힘 | 브로커 장애 중 업무 요청 실패(S7 Kafka 주문 39·45건 500) | **재현됨 · 미수정** | `RelayLockHoldTest` Red(2026-11-23, 삽입 2.99초 대기) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -742,6 +743,19 @@
 - **재현** `infra/prometheus/tests/consumer-quarantine.yml`: `stove_consumer_quarantine_held{application="license"}`가 0 → 1 → 3 → 0일 때 `ConsumerKeysQuarantined`가 1·2분에 울리고 0이 되면 풀리는지. 수정 전 `promtool test rules`에서 `got:[]`로 실패.
 - **수정** `ConsumerKeysQuarantined`(`stove_consumer_quarantine_held > 0`, critical, `for` 없음)를 더했다. 게이지라 카운터의 첫 건 문제(`MessagesDeadLettered` 주석)가 없고, 보관 중인 동안 계속 울린다. 안내는 `GET /api/v1/ops/quarantine`·`POST /api/v1/ops/quarantine/replay`.
 - **부류** 바꾼 경로의 관측(경보)을 함께 옮기지 않았다. 규칙 테스트(`infra/prometheus/tests`)는 CI에서 돌지 않는다.
+
+---
+
+<a id="d-060"></a>
+
+## D-060 Outbox 릴레이가 브로커 확인을 기다리는 동안 간격 잠금을 쥐어 다른 주문의 Outbox 삽입이 막힘
+
+**상태** 재현됨 · 미수정 · **영향** 브로커가 응답하지 않는 동안 Outbox를 쓰는 모든 업무 트랜잭션(주문 생성 등)이 잠금을 기다리며 커넥션을 쥔다. 대기가 길면 Hikari 풀이 고갈되어 요청이 500으로 실패한다. S7(결정 210 브로커 재시작)에서 Kafka 중단 동안 주문 39·45건이 실패했다. RabbitMQ·Redis는 연결이 곧바로 거부돼 대기가 짧아 거의 드러나지 않았다.
+
+- **원인** `OutboxRelay.relayOneBatch()`가 한 트랜잭션 안에서 `lockPendingBatch`(`FOR UPDATE SKIP LOCKED`)로 행을 잠그고, 발행한 뒤 `ack.get()`으로 확인을 기다린다. 트랜잭션 격리 수준이 MySQL 기본값(REPEATABLE READ)이라 잠금 읽기가 읽은 범위의 **간격(next-key)까지** 잠그고, 새 행의 삽입이 그 간격에 막힌다. 확인 대기 시간이 그대로 잠금 유지 시간이 된다.
+- **재현** `common/messaging` `RelayLockHoldTest`: 확인을 3초 늦게 주는 발행 포트로 릴레이를 돌리고, 확인 대기 중 다른 주문의 Outbox 행을 삽입한다. 삽입이 2.99초 걸려 1초 미만 단언에 실패한다(`./gradlew :common:messaging:defectTest --tests '*RelayLockHoldTest'`).
+- **원인 확인** 릴레이 트랜잭션만 READ COMMITTED로 바꾼 임시 실험에서 같은 테스트가 통과했다(간격 잠금이 없으면 막히지 않는다). 수정 방식은 결정 215(예약, 미결)에서 정한다.
+- **부류** 외부 호출(브로커 확인)의 대기가 DB 잠금 트랜잭션 안에 들어 있다. 평시에는 확인이 수 ms라 드러나지 않고 장애 때만 나타난다.
 
 ---
 
