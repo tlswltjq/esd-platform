@@ -11,6 +11,7 @@ import com.stove.common.testcontainers.InfraContainers;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,10 +53,20 @@ class RedisStreamsContractTest extends MessagingContractTest {
                                       List<Class<? extends RuntimeException>> noRetryFor) {
         RedisStreamsSubscriptions subscriptions = new RedisStreamsSubscriptions(
                 () -> List.of(new SubscribedHandler(group, topic, handler, asArray(noRetryFor))), client,
-                new InPlaceDelivery(storage, ReplayTracing.NONE, SHORT_RETRIES),
+                new InPlaceDelivery(storage, ReplayTracing.NONE, retryDelays(SHORT_RETRIES)),
                 STREAMS, 10, 200, Duration.ofMillis(20), Duration.ofSeconds(60));
         subscriptions.start();
         return subscriptions::stop;
+    }
+
+    @Override
+    protected Optional<String> keyInSamePartition(String key) {
+        return keyWhere(candidate -> RedisStreamTopology.shard(candidate, STREAMS) == RedisStreamTopology.shard(key, STREAMS));
+    }
+
+    @Override
+    protected Optional<String> keyInOtherPartition(String key) {
+        return keyWhere(candidate -> RedisStreamTopology.shard(candidate, STREAMS) != RedisStreamTopology.shard(key, STREAMS));
     }
 
     @Override

@@ -12,6 +12,7 @@
 import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -27,7 +28,7 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
 
 # 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
 MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
-BROKERS = ("kafka", "direct", "rabbitmq", "redis-streams")
+BROKERS = ("kafka", "direct", "rabbitmq", "rabbitmq-streams", "redis-streams")
 # 비교하는 브로커가 모두 같은 병렬도를 갖게 한다: Kafka 토픽 파티션 수 = RabbitMQ (그룹, 토픽)당 큐 수.
 # docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
 PARALLELISM = 3
@@ -57,6 +58,15 @@ def broker_environment(app, broker):
         if app == "catalog":
             # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
             environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"
+    if broker == "rabbitmq-streams":
+        # 결정 211. stream 프로토콜(5552)로 붙고, 분할 수를 다른 브로커의 병렬도와 맞춘다.
+        environment.update(STOVE_MESSAGING_RABBITMQSTREAMS_HOST="rabbitstreams", STOVE_MESSAGING_RABBITMQSTREAMS_PORT="5552",
+                           STOVE_MESSAGING_RABBITMQSTREAMS_USERNAME=RABBIT_USER,
+                           STOVE_MESSAGING_RABBITMQSTREAMS_PASSWORD=RABBIT_PASSWORD,
+                           STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC=str(PARALLELISM))
+        if app == "catalog":
+            # Store 는 Kafka 로만 받는다(위와 같은 이유).
+            environment["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
     if broker == "redis-streams":
         environment.update(STOVE_MESSAGING_REDISSTREAMS_URI="redis://streams:6379",
                            STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC=str(PARALLELISM))
@@ -87,6 +97,16 @@ def infra_services(broker):
                             "command": ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"],
                             "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "3s",
                                             "retries": 60}}}
+    if broker == "rabbitmq-streams":
+        # classic queue 회차와 같은 이미지(management 포함)에 stream 플러그인만 켠다 — 두 RabbitMQ 구성의 차이가 토폴로지에만 있게.
+        return {"rabbitstreams": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
+                                  "environment": {"RABBITMQ_DEFAULT_USER": RABBIT_USER,
+                                                  "RABBITMQ_DEFAULT_PASS": RABBIT_PASSWORD},
+                                  "command": ["sh", "-c",
+                                              "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server"],
+                                  "healthcheck": {"test": ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener",
+                                                           "5552"],
+                                                  "interval": "3s", "timeout": "10s", "retries": 60}}}
     if broker != "rabbitmq":
         return {}
     return {"rabbitmq": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
@@ -164,6 +184,16 @@ def validity(measured, journey, broker, order=None):
     if rejected:
         reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
+
+
+def with_restart(checked, restart):
+    """S7 회차면 장애가 계획대로 일어났는지도 유효 조건에 넣는다(PR #222 R1)."""
+    if restart is None:
+        return checked
+    problems = restart.problems()
+    if problems:
+        checked = dict(checked, valid=False, reasons=checked["reasons"] + ["S7 장애 주입: " + problem for problem in problems])
+    return checked
 
 
 # 업무 DB(모든 모듈 스키마가 한 MySQL 서버)가 받은 조회 수. 브로커 없음은 소비자가 이 서버를 폴링한다.
@@ -253,8 +283,127 @@ def redeliveries(fetch, urls):
     return {"by_group": dict(sorted(totals.items())), "unreadable": unreadable}
 
 
+# 실제 중단 시간이 계획과 이만큼 넘게 다르면 그 회차를 S7 결과로 쓰지 않는다(docker 명령 지연 포함).
+DOWN_TOLERANCE_SECONDS = 2.0
+# 재시작 뒤 진단을 이만큼만 더 기다린다. 넘으면 진단 실패로 남기고 회차는 계속한다.
+DIAGNOSIS_JOIN_SECONDS = 30.0
+
+
+class BrokerRestart:
+    """S7(결정 210·204 D): 부하 중 ``at`` 초에 브로커 컨테이너를 강제 종료(``docker compose kill``)하고 ``down`` 초 뒤 다시 켠다.
+
+    시각은 부하 드라이버 시작 기준이다. 명령 실패는 회차를 멈추지 않고 ``errors`` 에 남긴다(결과에서 장애가 실제로 일어났는지 본다).
+    """
+
+    def __init__(self, capture, docker, service, at, down, diagnose=None):
+        self._capture = capture
+        self._diagnose = diagnose
+        self._docker = docker
+        self.service = service
+        self.at = at
+        self.down = down
+        self.killed_at = None
+        self.started_at = None
+        self.errors = []
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._origin = None
+
+    def start(self):
+        self._origin = time.monotonic()
+        self._thread.start()
+        return self
+
+    def join(self):
+        self._thread.join()
+
+    def _step(self, command):
+        try:
+            self._capture(self._docker + command)
+            return round(time.monotonic() - self._origin, 2)
+        except Exception as failure:  # noqa: BLE001 — 측정을 멈추지 않고 남긴다
+            self.errors.append("%s: %s" % (" ".join(command), str(failure)[-200:]))
+            return None
+
+    def _run(self):
+        time.sleep(self.at)
+        self.killed_at = self._step(["kill", self.service])
+        # 재시작은 종료 시각 기준 절대 시각에 한다 — 진단이 오래 걸려도 중단 시간이 늘지 않게(PR #222 R3).
+        restart_at = time.monotonic() + self.down
+        diagnosis = None
+        if self._diagnose is not None:
+            # 브로커가 내려가 있는 한가운데에서 누가 DB 연결·잠금을 쥐고 있는지 남긴다(PR #222 S7 원인 조사).
+            # 따로 돌려, 진단이 늦거나 멈춰도 재시작이 예정 시각을 지키게 한다(PR #222 R5).
+            diagnosis = threading.Thread(target=self._run_diagnosis, daemon=True)
+            diagnosis.start()
+        time.sleep(max(0.0, restart_at - time.monotonic()))
+        self.started_at = self._step(["start", self.service])
+        if diagnosis is not None:
+            diagnosis.join(DIAGNOSIS_JOIN_SECONDS)
+            if diagnosis.is_alive():
+                self.errors.append("diagnose: %.0f초 안에 끝나지 않았다" % DIAGNOSIS_JOIN_SECONDS)
+
+    def _run_diagnosis(self):
+        time.sleep(self.down / 2)
+        try:
+            self._diagnose()
+        except Exception as failure:  # noqa: BLE001 — 진단 실패가 회차를 멈추지 않게
+            self.errors.append("diagnose: " + str(failure)[-200:])
+
+    def actual_down(self):
+        if self.killed_at is None or self.started_at is None:
+            return None
+        return round(self.started_at - self.killed_at, 2)
+
+    def problems(self):
+        """장애가 계획대로 일어나지 않았으면 그 이유. 비어 있어야 S7 회차로 쓴다(PR #222 R1)."""
+        reasons = []
+        if self.killed_at is None:
+            reasons.append("브로커 종료 실패")
+        if self.started_at is None:
+            reasons.append("브로커 재시작 실패")
+        down = self.actual_down()
+        if down is not None and abs(down - self.down) > DOWN_TOLERANCE_SECONDS:
+            reasons.append("실제 중단 %.1f초(계획 %.1f초)" % (down, self.down))
+        reasons.extend(error for error in self.errors if not error.startswith("diagnose: "))
+        return reasons
+
+    def summary(self):
+        return {"service": self.service, "planned_at_s": self.at, "planned_down_s": self.down,
+                "killed_at_s": self.killed_at, "started_at_s": self.started_at, "actual_down_s": self.actual_down(),
+                "errors": self.errors}
+
+
+# 장애 중 업무 DB 연결·트랜잭션(읽기 전용). 시스템 스레드는 뺀다.
+RESTART_DB_SQL = ("SELECT id, user, db, command, time, state, LEFT(info, 200) FROM information_schema.processlist"
+                  " WHERE user <> 'system user' AND user <> 'event_scheduler' ORDER BY db, time DESC;"
+                  " SELECT trx_mysql_thread_id, trx_state, trx_started, trx_rows_locked, LEFT(trx_query, 200)"
+                  " FROM information_schema.innodb_trx;")
+
+
+def restart_diagnosis(capture, container, password, fetch, order_base_url, out):
+    """S7 장애 중 진단을 ``out`` 파일에 남긴다: DB 세션·트랜잭션, order 의 Hikari 지표와 스레드 덤프(노출된 경우)."""
+    parts = []
+    try:
+        parts.append("## processlist / innodb_trx\n" + capture(
+            ["docker", "exec", "-i", container, "mysql", "-uroot", "-p" + password, "-B"],
+            input=RESTART_DB_SQL, stderr=subprocess.STDOUT))
+    except subprocess.CalledProcessError as failure:
+        parts.append("## db 읽기 실패\n" + (failure.output or "")[-500:])
+    if fetch and order_base_url:
+        for name, path in (("hikari", "/actuator/prometheus"), ("threaddump", "/actuator/threaddump")):
+            try:
+                body = fetch(order_base_url + path)
+                if name == "hikari":
+                    body = "\n".join(line for line in body.splitlines() if line.startswith("hikaricp_"))
+                parts.append("## order " + name + "\n" + body)
+            except Exception as failure:  # noqa: BLE001 — 노출되지 않았으면 그렇다고 남긴다
+                parts.append("## order " + name + " 읽기 실패: " + str(failure)[-200:])
+    Path(out).write_text("\n\n".join(parts))
+
+
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
-            metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka"):
+            metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka",
+            restart_at=None, restart_down=None, order_base_url=None):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -275,7 +424,17 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
         idle_samples = idle_sampler.stop()
     load_sampler = resource_sampling.Sampler(capture, containers).start()
     try:
+        restart = None
+        if restart_at is not None:
+            service = resource_sampling.broker_service(broker_name)
+            if service is None:
+                raise SystemExit("--restart-broker-at needs a broker (direct has none)")
+            restart = BrokerRestart(capture, docker, service, restart_at, restart_down,
+                                    lambda: restart_diagnosis(capture, container, db_password, fetch, order_base_url,
+                                                              Path(output) / "restart-diagnosis.txt")).start()
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+        if restart is not None:
+            restart.join()
         # 부하가 끝난 바로 그때 읽는다. 표본 스레드 종료 대기(최대 표본 간격)가 부하 구간에 섞이지 않게(R4).
         load_end = db_counters(capture, container, db_password)
     finally:
@@ -313,4 +472,6 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "refunds": dict(zip(("requested", "rejected", "unfinished"), refund_problems(measured))),
             "refund_diagnosis": diagnosis,
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
-            "db_load": db_load, "resources": resources, "validity": validity(measured, journey, broker, order)}
+            "db_load": db_load, "resources": resources,
+            "broker_restart": restart.summary() if restart is not None else None,
+            "validity": with_restart(validity(measured, journey, broker, order), restart)}

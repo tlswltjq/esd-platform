@@ -15,6 +15,7 @@ class ServicesTest(unittest.TestCase):
         self.assertEqual(resource_sampling.sampled_services("direct"), ["mysql", "kafka"])
         self.assertEqual(resource_sampling.sampled_services("rabbitmq"), ["mysql", "kafka", "rabbitmq"])
         self.assertEqual(resource_sampling.sampled_services("redis-streams"), ["mysql", "kafka", "streams"])
+        self.assertEqual(resource_sampling.sampled_services("rabbitmq-streams"), ["mysql", "kafka", "rabbitstreams"])
 
     def test_the_broker_of_a_run_is_the_container_carrying_its_messages(self):
         self.assertEqual(resource_sampling.broker_service("kafka"), "kafka")

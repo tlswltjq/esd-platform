@@ -31,7 +31,8 @@ public final class MessagingBoundaryRules {
     /** 메시징 adapter 패키지. */
     static final String[] ADAPTERS = {
             "com.stove.common.messaging.kafka..", "com.stove.common.messaging.rabbitmq..",
-            "com.stove.common.messaging.redis..", "com.stove.common.messaging.direct.."};
+            "com.stove.common.messaging.rabbitstreams..", "com.stove.common.messaging.redis..",
+            "com.stove.common.messaging.direct.."};
 
     private MessagingBoundaryRules() {
     }

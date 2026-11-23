@@ -17,10 +17,11 @@ include 'common:security'
 include 'common:jpa'
 include 'common:event'
 include 'common:contract'
-// 메시징(결정 209): 브로커와 무관한 코어 하나 + 같은 모양의 adapter 넷. 앱은 넷을 모두 런타임에 넣고 stove.messaging.broker 로 고른다.
+// 메시징(결정 209): 브로커와 무관한 코어 하나 + 같은 모양의 adapter 다섯. 앱은 넷을 모두 런타임에 넣고 stove.messaging.broker 로 고른다.
 include 'common:messaging'
 include 'common:messaging-kafka'
 include 'common:messaging-rabbitmq'
+include 'common:messaging-rabbitmq-streams'
 include 'common:messaging-redis'
 include 'common:messaging-direct'
 include 'common:archunit'
