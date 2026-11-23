@@ -11,11 +11,10 @@ import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.convert.DurationStyle;
+import org.springframework.util.PropertyPlaceholderHelper;
 
 /**
  * [D-053] Gateway 연결 풀 유휴 상한 &lt; 하류 서비스가 유휴 연결을 닫는 시간.
@@ -31,8 +30,11 @@ class GatewayIdleTimeoutContractTest {
     /** Tomcat {@code connectionTimeout} 기본값({@code org.apache.coyote.http11.Constants.DEFAULT_CONNECTION_TIMEOUT}). */
     private static final Duration TOMCAT_DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(60);
 
-    /** {@code ${NAME:기본값}} — 배포가 값을 주지 않을 때 쓰이는 기본값으로 판정한다. */
-    private static final Pattern PLACEHOLDER = Pattern.compile("^\\$\\{[^:}]+:(.*)}$");
+    /**
+     * Spring과 같은 자리표시자 해석기. 배포 값은 모르므로 모든 이름을 비워 두고 <b>기본값</b>으로 판정한다(중첩 기본값 포함,
+     * PR #229 R2). 기본값까지 없으면 해석기가 실패한다.
+     */
+    private static final PropertyPlaceholderHelper PLACEHOLDERS = new PropertyPlaceholderHelper("${", "}", ":", null, false);
 
     private static Map<String, Object> yamlOf(Path app) {
         return loadYaml(app.resolve("src/main/resources/application.yml"));
@@ -46,14 +48,13 @@ class GatewayIdleTimeoutContractTest {
         if (raw == null) {
             return null;
         }
-        String text = raw.toString().trim();
-        Matcher placeholder = PLACEHOLDER.matcher(text);
-        if (placeholder.matches()) {
-            text = placeholder.group(1).trim();
-        } else if (text.contains("${")) {
-            throw new AssertionError(key + "=" + raw + " — 기본값 없는 자리표시자라 배포 값을 알 수 없다");
+        String text;
+        try {
+            text = PLACEHOLDERS.replacePlaceholders(raw.toString().trim(), name -> null);
+        } catch (IllegalArgumentException unresolved) {
+            throw new AssertionError(key + "=" + raw + " — 기본값 없는 자리표시자라 배포 값을 알 수 없다", unresolved);
         }
-        return DurationStyle.detectAndParse(text, ChronoUnit.MILLIS);
+        return DurationStyle.detectAndParse(text.trim(), ChronoUnit.MILLIS);
     }
 
     /** keep-alive 유휴 닫기 시간. 따로 없으면 Tomcat은 connectionTimeout을 쓴다. */
@@ -72,9 +73,12 @@ class GatewayIdleTimeoutContractTest {
         assertThat(springDuration("k", 20000)).isEqualTo(Duration.ofSeconds(20));
         assertThat(springDuration("k", "30s")).isEqualTo(Duration.ofSeconds(30));
         assertThat(springDuration("k", "${TIMEOUT:45s}")).isEqualTo(Duration.ofSeconds(45));
+        assertThat(springDuration("k", "${TIMEOUT:${FALLBACK:45s}}")).isEqualTo(Duration.ofSeconds(45));
         assertThat(springDuration("k", "PT1M")).isEqualTo(Duration.ofMinutes(1));
         assertThat(springDuration("k", null)).isNull();
         assertThatThrownBy(() -> springDuration("k", "${TIMEOUT}"))
+                .isInstanceOf(AssertionError.class).hasMessageContaining("기본값 없는 자리표시자");
+        assertThatThrownBy(() -> springDuration("k", "${TIMEOUT:${FALLBACK}}"))
                 .isInstanceOf(AssertionError.class).hasMessageContaining("기본값 없는 자리표시자");
     }
 
