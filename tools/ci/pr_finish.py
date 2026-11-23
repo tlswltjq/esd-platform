@@ -2,9 +2,13 @@
 
     wait   필수 검사가 등록될 때까지 기다린 뒤(push 직후 바로 감시하면 즉시 끝난다, PR #122),
            모두 끝날 때까지 기다린다. `--head-sha`를 주면 PR head가 그 커밋이 된 뒤부터 센다.
-           `--new-runs`를 주면 이 명령 시작 60초 전 이후에 시작한 검사만 센다. head는 같은데 검사만
-           다시 도는 경우(`gh pr ready`·본문 수정 직후)에 draft 때의 SKIPPED 같은 이전 결과로 끝내지 않는다.
            종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과.
+    ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. head가 같아 이전 결과(draft 때 SKIPPED build)가
+           남으므로, 바꾸기 전 검사 job 링크를 기록해 두고 ready가 다시 돌리는 `build`는 새 링크가 나올
+           때까지 기다린다. `review-gate`는 다시 돌지 않으니 같은 head의 최신 결과를 쓴다(PR #226 R8·R9).
+    edit   `--body-file`로 본문을 바꾸고 wait한다. 본문 수정은 `review-gate`만 다시 돌린다. 본문이 같으면
+           검사가 돌지 않으므로 기다리지 않고 지금 결과로 wait한다.
+           (ci.yml은 ready_for_review에, review-gate.yml은 edited에 돈다. 트리거를 바꾸면 RERUN도 바꾼다.)
     check  병합 조건을 판정만 한다. 여러 PR을 주면 모두 판정한다.
     merge  주어진 순서대로 판정 → `gh pr merge --merge` → MERGED 확인을 하나씩 한다.
            한 PR이라도 조건을 못 채우거나 병합이 실패하면 거기서 멈춘다.
@@ -19,6 +23,8 @@
   놓치지 않으려는 보수적 근사다(R3). 낱말 없이 정책을 바꾸는 지적은 사람이 확인한다.
 
     python3 tools/ci/pr_finish.py wait 226 --head-sha "$(git rev-parse HEAD)"
+    python3 tools/ci/pr_finish.py ready 226
+    python3 tools/ci/pr_finish.py edit 226 --body-file body.md
     python3 tools/ci/pr_finish.py merge 224 225
 """
 import argparse
@@ -33,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import review_gate  # noqa: E402
 
 REQUIRED = ('build', 'review-gate')
+RERUN = {'ready': ('build',), 'edit': ('review-gate',)}
 USER_JUDGED = ('부분 반영', '기각')
 HIGH = re.compile(r'\bhigh\b', re.IGNORECASE)
 # 인용 안에 따옴표·공백이 아닌 글자가 하나 이상 있어야 한다(PR #226 재리뷰: \S는 따옴표도 센다).
@@ -53,7 +60,7 @@ def view(number):
 
 
 def required_checks(number):
-    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link,startedAt'], check=False)
+    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link'], check=False)
     try:
         return json.loads(out) if out.strip() else []
     except ValueError:
@@ -76,20 +83,17 @@ def check_summary(checks):
     return 'pass' if all(bucket == 'pass' for bucket in buckets) else 'fail'
 
 
-NEW_RUN_MARGIN = 60
+def fresh(checks, renew, old_links):
+    # 다시 도는 검사(renew)는 이벤트 전에 있던 job(링크)을 버린다. 시간 여유가 아니라 실행 세대로 구분한다.
+    return [check for check in checks
+            if not ((check.get('name') or '').startswith(renew) and check.get('link') in old_links)]
 
 
-def iso(seconds):
-    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(seconds))
+def links(checks):
+    return {check.get('link') for check in checks if check.get('link')}
 
 
-def fresh(checks, since):
-    # 같은 head의 이전 결과를 버린다. 아직 시작하지 않은 검사는 등록 전으로 본다.
-    return [check for check in checks if (check.get('startedAt') or '') >= since]
-
-
-def wait(args):
-    since = iso(time.time() - NEW_RUN_MARGIN) if args.new_runs else None
+def wait(args, renew=(), old_links=frozenset()):
     deadline = time.time() + args.timeout
     register_deadline = time.time() + args.register_timeout
     while True:
@@ -102,8 +106,8 @@ def wait(args):
                 time.sleep(args.interval)
                 continue
         checks = required_checks(args.number)
-        if since:
-            checks = fresh(checks, since)
+        if renew:
+            checks = fresh(checks, renew, old_links)
         if not registered(checks) and time.time() > register_deadline:
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
                 args.register_timeout, ', '.join(REQUIRED)))
@@ -124,6 +128,26 @@ def wait(args):
             print('시간 초과: {}초 안에 필수 검사가 끝나지 않았다.'.format(args.timeout))
             return 3
         time.sleep(args.interval)
+
+
+def ready(args):
+    if not view(args.number)['isDraft']:
+        print('실패: draft PR이 아니다. ready가 build를 다시 돌리지 않으니 wait를 쓴다.')
+        return 2
+    old = links(required_checks(args.number))
+    gh(['pr', 'ready', str(args.number)])
+    return wait(args, RERUN['ready'], old)
+
+
+def edit(args):
+    body = Path(args.body_file).read_text(encoding='utf-8')
+    current = view(args.number).get('body') or ''
+    old = links(required_checks(args.number))
+    gh(['pr', 'edit', str(args.number), '--body-file', args.body_file])
+    if body.strip() == current.strip():
+        print('본문이 같아 review-gate가 다시 돌지 않는다. 지금 결과로 판정한다.')
+        return wait(args)
+    return wait(args, RERUN['edit'], old)
 
 
 def latest(rollup, prefix):
@@ -218,18 +242,23 @@ def merge(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='결정 213: 필수 검사 대기와 병합 조건 판정')
     commands = parser.add_subparsers(dest='command', required=True)
-    waiting = commands.add_parser('wait')
-    waiting.add_argument('number', type=int)
-    waiting.add_argument('--head-sha', help='PR head가 이 커밋이 된 뒤부터 센다')
-    waiting.add_argument('--timeout', type=int, default=3600)
-    waiting.add_argument('--register-timeout', type=int, default=300)
-    waiting.add_argument('--interval', type=int, default=15)
-    waiting.add_argument('--new-runs', action='store_true', help='이 명령 시작 60초 전 이후에 시작한 검사만 센다')
+    for name in ('wait', 'ready', 'edit'):
+        waiting = commands.add_parser(name)
+        waiting.add_argument('number', type=int)
+        waiting.add_argument('--timeout', type=int, default=3600)
+        waiting.add_argument('--register-timeout', type=int, default=300)
+        waiting.add_argument('--interval', type=int, default=15)
+        if name == 'wait':
+            waiting.add_argument('--head-sha', help='PR head가 이 커밋이 된 뒤부터 센다')
+        else:
+            waiting.set_defaults(head_sha=None)
+        if name == 'edit':
+            waiting.add_argument('--body-file', required=True)
     for name in ('check', 'merge'):
         sub = commands.add_parser(name)
         sub.add_argument('numbers', type=int, nargs='+', help='병합 순서대로')
     args = parser.parse_args(argv)
-    return {'wait': wait, 'check': check, 'merge': merge}[args.command](args)
+    return {'wait': wait, 'ready': ready, 'edit': edit, 'check': check, 'merge': merge}[args.command](args)
 
 
 if __name__ == '__main__':

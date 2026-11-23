@@ -1,5 +1,7 @@
 import argparse
 import io
+from pathlib import Path
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -143,7 +145,7 @@ class MergeTest(unittest.TestCase):
 
 class WaitTest(unittest.TestCase):
     def args(self, **overrides):
-        base = dict(number=7, head_sha=None, timeout=60, register_timeout=30, interval=0, new_runs=False)
+        base = dict(number=7, head_sha=None, timeout=60, register_timeout=30, interval=0)
         base.update(overrides)
         return argparse.Namespace(**base)
 
@@ -165,17 +167,44 @@ class WaitTest(unittest.TestCase):
                 redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
 
-    def test_new_runs_ignores_results_from_before_ready(self):
-        # PR #226: gh pr ready 직후 draft 때의 SKIPPED build를 읽고 끝났다.
-        old = [{'name': 'build (unit)', 'bucket': 'skipping', 'startedAt': '2000-01-01T00:00:00Z'},
-               {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2000-01-01T00:00:00Z'}]
-        new = [{'name': 'build (unit)', 'bucket': 'pass', 'startedAt': '2999-01-01T00:00:00Z'},
-               {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2999-01-01T00:00:00Z'}]
-        with mock.patch.object(pr_finish, 'required_checks', side_effect=[old, old + new]), \
+    def test_ready_waits_for_a_new_build_and_keeps_existing_review_gate(self):
+        # PR #226: ready 직후 draft 때의 SKIPPED build로 끝났다. R8: review-gate는 다시 돌지 않는다.
+        # R9: 시간이 아니라 이벤트 전 job 링크로 구분한다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        old_build = {'name': 'build (unit)', 'bucket': 'skipping', 'link': 'job/2'}
+        new_build = {'name': 'build (unit)', 'bucket': 'pass', 'link': 'job/3'}
+        sequence = [[gate, old_build], [gate, old_build], [gate, old_build, new_build]]
+        with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')) as gh, \
+                mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.ready(self.args()))
+        self.assertEqual(['pr', 'ready', '7'], gh.call_args.args[0])
+
+    def test_ready_refuses_a_non_draft(self):
+        with mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'gh') as gh, redirect_stdout(io.StringIO()):
+            self.assertEqual(2, pr_finish.ready(self.args()))
+        gh.assert_not_called()
+
+    def test_edit_waits_for_a_new_review_gate_only_when_body_changes(self):
+        gate_old = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        gate_new = {'name': 'review-gate', 'bucket': 'fail', 'link': 'job/4'}
+        build = {'name': 'build (unit)', 'bucket': 'pass', 'link': 'job/3'}
+        with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as handle:
+            handle.write('새 본문')
+        args = argparse.Namespace(**dict(vars(self.args()), body_file=handle.name))
+        with mock.patch.object(pr_finish, 'view', return_value=pr(body='옛 본문', isDraft=False)), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')), \
+                mock.patch.object(pr_finish, 'required_checks',
+                                  side_effect=[[gate_old, build], [gate_old, build], [gate_old, build, gate_new]]), \
                 redirect_stdout(io.StringIO()):
-            self.assertEqual(0, pr_finish.wait(self.args(new_runs=True)))
-        not_started = [{'name': 'build (unit)', 'bucket': 'pending', 'startedAt': '0001-01-01T00:00:00Z'}] + new[1:]
-        self.assertEqual(new[1:], pr_finish.fresh(not_started, '2026-01-01T00:00:00Z'))
+            self.assertEqual(1, pr_finish.edit(args))
+        with mock.patch.object(pr_finish, 'view', return_value=pr(body='새 본문')), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')), \
+                mock.patch.object(pr_finish, 'required_checks', return_value=[gate_old, build]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.edit(args))
+        Path(handle.name).unlink()
 
     def test_skipping_build_is_failure_and_mentions_draft(self):
         checks = [{'name': 'build', 'bucket': 'skipping'}, {'name': 'review-gate', 'bucket': 'pass'}]

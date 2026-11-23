@@ -11,7 +11,7 @@
 | [ci/next_decision_number.py](ci/next_decision_number.py) | 착수 때 예약할 다음 결정 번호(main 최대와 열린 PR `맡은 항목`의 `결정 번호:` 중 큰 값 + 1, [결정 139](../docs/decisions.md#decision-number-reservation)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_next_decision_number.py -v` |
 | [ci/start_task.py](ci/start_task.py) | 착수: 번호 예약·worktree·착수 커밋·PR 본문(`prepare`), push 확인 뒤 draft PR(`open`). push는 출력만 한다([결정 213](../docs/decisions.md#ai-procedure-tools)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_start_task.py -v` |
 | [ci/gradle_result.py](ci/gradle_result.py) | Gradle 테스트를 이번 실행이 만든 XML과 종료 코드로만 판정, `--repeat N`([결정 213](../docs/decisions.md#ai-procedure-tools)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_gradle_result.py -v` |
-| [ci/pr_finish.py](ci/pr_finish.py) | 필수 검사 등록·완료 대기(`wait`), 병합 조건 판정(`check`), 순서대로 하나씩 병합(`merge`)([결정 213](../docs/decisions.md#ai-procedure-tools)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_pr_finish.py -v` |
+| [ci/pr_finish.py](ci/pr_finish.py) | 필수 검사 등록·완료 대기(`wait`), ready 전환·본문 수정 뒤 다시 도는 검사만 새 job을 기다림(`ready`·`edit`), 병합 조건 판정(`check`), 순서대로 하나씩 병합(`merge`)([결정 213](../docs/decisions.md#ai-procedure-tools)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_pr_finish.py -v` |
 | [ci/measure_guard.py](ci/measure_guard.py) | 측정·격리 검증 전후 컨테이너·볼륨·네트워크 기록·대조, 무관한 실행 중 컨테이너 경고([결정 213](../docs/decisions.md#ai-procedure-tools)). 테스트: `python3 -B -m unittest discover -s tools/ci -p test_measure_guard.py -v` |
 | [operations/license-recovery.sql](operations/license-recovery.sql) | [운영 재처리 절차](../docs/license-event-recovery-runbook.md)의 주문·지급·확인 읽기 전용 대조 |
 | [db-lab](db-lab/README.md) | 격리 MySQL의 락·동시성 학습 실험 |
