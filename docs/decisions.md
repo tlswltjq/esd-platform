@@ -2250,6 +2250,19 @@
 - 구분: 추천 수용
 - 결과: [PR #230](https://github.com/tlswltjq/esd-platform/pull/230)
 
+<a id="ci-build-shards"></a>
+## 217. CI build의 통합·이행 테스트를 여러 러너로 나눠 동시에 돌리고, 필수 검사 build는 결과를 모으는 작업이 맡는다
+- 문제: CI `build`가 러너 한 대(4코어·16GB)에서 약 20분 걸린다(2026-11-23 main 1223초). 시간을 정하는 것은 컨테이너 스택을 띄우는 `integrationTest`·`migrationTest`인데, 동시 스택 수가 2(`stove.infraTest.maxParallel`)라 두 줄로 차례를 기다린다(프로파일 `29a0d686`: 스로틀 작업 합 약 2650초, payment 통합 405초·order 347초). MinIO 컴파일 캐시(PR #231)는 이 줄 밖이라 22초만 줄었다.
+- 선택지: A CI에서만 동시 스택을 3으로 올려 같은 커밋에서 2와 비교 측정 / B 통합·이행 테스트를 여러 러너(matrix)로 나눠 동시에 돌리고 필수 검사 이름은 결과를 모으는 작업이 이어받음 / C 더 큰 유료 러너 / D 그대로 (추천: A — 한 줄 변경으로 측정부터 하고, 모자라면 B)
+- 내 의견: "결정 B는 B(러너 여러 대)로 해"
+- 선택: B — 추천과 다른 선택. 효과가 가장 큰 쪽을 바로 택했다.
+  - 계획 작업이 범위(결정 207·216)·결정 번호·도구 Python 테스트를 맡고, Gradle을 돌릴 때 나눔 목록(`tools/ci/build_shards.py`)을 matrix로 넘긴다. 전체 빌드는 "통합 테스트를 뺀 build" 한 조각과 통합·이행 테스트 조각 여럿으로 나눈다. 앱 범위 빌드는 나누지 않는다.
+  - 빠짐 방지: 첫 조각은 다른 조각에 배정된 작업만 `-x`로 뺀다. 배정되지 않은 새 통합 테스트는 첫 조각에서 그대로 돈다. `src/integrationTest`가 있는 모듈이 모두 배정됐는지는 `test_build_shards.py`가 지킨다.
+  - 필수 검사 `build (unit · architecture · integration · migration)`는 결과를 모으는 작업이 이름을 이어받는다(결정 107). 이 작업은 `always()`로 돌아, 조각이 실패·취소되면 실패한다(건너뛴 작업은 필수 검사에서 성공으로 보고되기 때문이다 — 결정 137). draft에서는 지금처럼 건너뛴다.
+  - 감수한 비용: 조각마다 checkout·Java·Gradle 준비와 컴파일(캐시 복원)이 반복되고, Gradle 캐시 항목이 조각 수만큼 늘어난다. 러너 비용은 공개 저장소라 없다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #234](https://github.com/tlswltjq/esd-platform/pull/234)
+
 ---
 
 ## 검증하며 드러난 것
