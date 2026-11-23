@@ -6,8 +6,8 @@
     ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. head가 같아 이전 결과(draft 때 SKIPPED build)가
            남으므로, 바꾸기 전 검사 job 링크를 기록해 두고 ready가 다시 돌리는 `build`는 새 링크가 나올
            때까지 기다린다. `review-gate`는 다시 돌지 않으니 같은 head의 최신 결과를 쓴다(PR #226 R8·R9).
-    edit   `--body-file`로 본문을 바꾸고 wait한다. 본문 수정은 `review-gate`만 다시 돌린다. 본문이 같으면
-           검사가 돌지 않으므로 기다리지 않고 지금 결과로 wait한다.
+    edit   `--body-file`로 본문을 바꾸고 wait한다. 본문 수정은 `review-gate`만 다시 돌린다. 본문이 글자 그대로
+           같으면 보내지 않고 지금 결과로 wait한다. 보냈으면 공백만 달라도 새 review-gate를 기다린다.
            (ci.yml은 ready_for_review에, review-gate.yml은 edited에 돈다. 트리거를 바꾸면 RERUN도 바꾼다.)
     check  병합 조건을 판정만 한다. 여러 PR을 주면 모두 판정한다.
     merge  주어진 순서대로 판정 → `gh pr merge --merge` → MERGED 확인을 하나씩 한다.
@@ -142,11 +142,12 @@ def ready(args):
 def edit(args):
     body = Path(args.body_file).read_text(encoding='utf-8')
     current = view(args.number).get('body') or ''
+    if body == current:
+        # 같으면 보내지 않는다. 보낸 뒤에는 공백만 달라도 새 job을 기다린다(PR #226 R10).
+        print('본문이 같아 보내지 않았다. 지금 결과로 판정한다.')
+        return wait(args)
     old = links(required_checks(args.number))
     gh(['pr', 'edit', str(args.number), '--body-file', args.body_file])
-    if body.strip() == current.strip():
-        print('본문이 같아 review-gate가 다시 돌지 않는다. 지금 결과로 판정한다.')
-        return wait(args)
     return wait(args, RERUN['edit'], old)
 
 

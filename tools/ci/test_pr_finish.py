@@ -200,10 +200,18 @@ class WaitTest(unittest.TestCase):
                 redirect_stdout(io.StringIO()):
             self.assertEqual(1, pr_finish.edit(args))
         with mock.patch.object(pr_finish, 'view', return_value=pr(body='새 본문')), \
-                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')) as gh, \
                 mock.patch.object(pr_finish, 'required_checks', return_value=[gate_old, build]), \
                 redirect_stdout(io.StringIO()):
             self.assertEqual(0, pr_finish.edit(args))
+        gh.assert_not_called()
+        # R10: 공백만 달라도 보냈으면 이전 review-gate로 통과하지 않는다.
+        with mock.patch.object(pr_finish, 'view', return_value=pr(body='새 본문\n')), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')) as gh, \
+                mock.patch.object(pr_finish, 'required_checks', return_value=[gate_old, build]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.edit(argparse.Namespace(**dict(vars(args), register_timeout=-1))))
+        self.assertEqual(1, gh.call_count)
         Path(handle.name).unlink()
 
     def test_skipping_build_is_failure_and_mentions_draft(self):
