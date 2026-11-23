@@ -11,13 +11,15 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import unicodedata
 
 HEADING = re.compile(r'^ {0,3}## +(\d+)\. +\S.*$')
 NUMERIC_HEADING = re.compile(r'^ {0,3}##[ \t]+\d')
 RAW_HEADING = re.compile(r'^ {0,3}## +\d+\.')
 ANCHOR = re.compile(r'<a\s+id=["\']([^"\']+)["\']\s*>\s*</a>')
 LINK = re.compile(r'\[결정 +(\d+(?:\s*[·,~]\s*\d+)*)\]\(([^\s)]*)\)')
-AUTO_ANCHOR = re.compile(r'^(\d+)-')
+ANY_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$')
+MARKDOWN_LINK = re.compile(r'!?\[([^\]]*)\]\([^)]*\)')
 INLINE_CODE = re.compile(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 EXCLUDED = {'.git', 'build', 'node_modules'}
@@ -133,6 +135,64 @@ def parse_decisions(text):
     return records, anchors, anchor_lines, errors
 
 
+CODE_SPAN = re.compile(r'(`+)(.+?)\1')
+STAR_EMPHASIS = re.compile(r'(?<!\*)(\*{1,3})(?!\*)(\S(?:.*?\S)?)(?<!\*)\1(?!\*)')
+# `_`는 단어 경계에서만 강조다. 앞뒤가 글자·숫자·`_`면 강조가 아니다(snake_case, snake__case__name).
+UNDERSCORE_EMPHASIS = re.compile(r'(?<![0-9A-Za-z가-힣_])(_{1,3})(?!_)(\S(?:.*?\S)?)(?<!_)\1(?![0-9A-Za-z가-힣_])')
+CODE_MARK = '\x00{}\x00'
+CODE_MARK_PATTERN = re.compile('\x00(\\d+)\x00')
+
+
+def rendered_text(heading):
+    """헤딩이 화면에 보이는 글자. 인라인 코드는 자리표시로 가린 채 링크·강조 문법을 벗기고, 마지막에 코드 내용을
+    그대로 되돌린다. 강조가 코드를 감싸도 한 번에 벗겨진다(PR #233 R2·재리뷰)."""
+    codes = []
+
+    def mask(match):
+        codes.append(match.group(2))
+        return CODE_MARK.format(len(codes) - 1)
+
+    text = CODE_SPAN.sub(mask, heading)
+    text = MARKDOWN_LINK.sub(lambda m: m.group(1), text)
+    text = STAR_EMPHASIS.sub(lambda m: m.group(2), text)
+    text = UNDERSCORE_EMPHASIS.sub(lambda m: m.group(2), text)
+    return CODE_MARK_PATTERN.sub(lambda m: codes[int(m.group(1))], text)
+
+
+def slug(heading):
+    """GitHub 자동 앵커(github-slugger): 보이는 글자를 소문자로 바꾼 뒤 글자·숫자·결합 문자·`_`·`-`·공백 밖을 지우고 공백을 `-`로 바꾼다."""
+    text = rendered_text(heading.strip()).lower()
+    kept = ''.join(char for char in text
+                   if char in '_- ' or unicodedata.category(char)[0] in 'LNM')
+    return kept.replace(' ', '-')
+
+
+def unique_slug(base, occurrences):
+    """github-slugger와 같은 중복 처리: 이미 쓴 앵커(접미사가 붙은 것 포함)와 겹치지 않을 때까지 -N을 올린다(PR #233 R1)."""
+    name = base
+    while name in occurrences:
+        occurrences[base] += 1
+        name = '{}-{}'.format(base, occurrences[base])
+    occurrences[name] = 0
+    return name
+
+
+def auto_anchors(text):
+    """PR #233 R3: 실제 결정 헤딩의 자동 앵커만 번호로 푼다. 같은 slug는 GitHub처럼 -1, -2를 붙인다."""
+    lines, _ = visible_lines(text)
+    occurrences = {}
+    anchors = {}
+    for raw, line in zip(text.splitlines(), lines):
+        if not ANY_HEADING.match(line):
+            continue
+        # 화면 줄은 인라인 코드를 지우므로 slug는 원문 줄에서 만든다.
+        name = unique_slug(slug(ANY_HEADING.match(raw).group(1) or ''), occurrences)
+        decision = HEADING.match(line)
+        if decision:
+            anchors[name] = int(decision.group(1))
+    return anchors
+
+
 def label_contains(label, number):
     for part in re.split(r'[·,]', label):
         ends = [int(item.strip()) for item in part.split('~')]
@@ -146,7 +206,9 @@ def label_contains(label, number):
 def check(root, base_text=None):
     root = Path(root).resolve()
     decisions = root / 'docs/decisions.md'
-    records, anchors, anchor_lines, errors = parse_decisions(decisions.read_text(encoding='utf-8'))
+    decisions_text = decisions.read_text(encoding='utf-8')
+    records, anchors, anchor_lines, errors = parse_decisions(decisions_text)
+    automatic = auto_anchors(decisions_text)
     seen = {}
     previous = 0
     for number, line, names in records:
@@ -191,10 +253,7 @@ def check(root, base_text=None):
                         continue
                 elif path != decisions:
                     continue
-                automatic = AUTO_ANCHOR.match(anchor)
-                actual = anchors.get(anchor)
-                if actual is None and automatic:
-                    actual = int(automatic.group(1))
+                actual = anchors.get(anchor, automatic.get(anchor))
                 checked += 1
                 if actual is None:
                     errors.append('{}:{}: {} — 없는 앵커 {}'.format(
