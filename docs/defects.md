@@ -78,7 +78,7 @@
 | [D-050](#d-050) | 환불 조회·재송신 작업자가 저장된 환불 추적 부모를 복원하지 않아 확정 뒤 흐름이 새 trace로 갈라짐 | 진단 단절(업무 영향 없음) | **수정됨** | `verify-refund-tracing.py` 실제 스택 2회 |
 | [D-051](#d-051) | 결제 PAID 확정 뒤에도 접수된 보류 승인이 다음 보류 재조회까지 남아 고객에게 옛 안내가 나감 | 고객 안내 모순(PAID 건에 재구매 안내 가능, 돈 이동 없음) | **수정됨** | 결정 143 1부 payment 찾은 불일치 3 |
 | [D-052](#d-052) | License 복구·승인 정정이 모듈 간 시계 차이로 정상 요청을 거부해 보유권이 정지된 채 남음 | 보유권 정지 유지(시계 차이가 있을 때) | **수정됨** | License `design.md` 상태×이벤트 표의 찾은 불일치 1(결정 143 1부) |
-| [D-053](#d-053) | Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남 | 간헐 500(조회는 재시도로 회복, `POST`는 처리 여부 불명) | **원인 확인 · 미수정** | main 야간 CI run 42916206138 |
+| [D-053](#d-053) | Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남 | 간헐 500(조회는 재시도로 회복, `POST`는 처리 여부 불명) | **수정됨** | main 야간 CI run 42916206138·45080285504, `GatewayIdleConnectionTest` Red(두 번째 요청 500, 2026-11-23) → Green(PR #229), `GatewayIdleTimeoutContractTest` |
 | [D-054](#d-054) | Kafka 시작 스크립트가 복사 중 실행돼 `Text file busy`(126)로 테스트 컨텍스트 시작 실패 | CI 불안정(업무 코드 영향 없음) | **수정됨** | PR #196 CI run 43001134598 |
 | [D-055](#d-055) | 같은 키의 앞 Outbox 행이 `DEAD`여도 릴레이가 뒤 행을 발행해 소비자가 순서가 뒤집힌 채 받음 | 돈·보유권(추정, 결정 155 예: 환불된 고객의 보유권이 열린 채 남음) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
 | [D-056](#d-056) | 같은 키의 앞 행이 재시도 대기인 사이, 그 배치에 없던 뒤 행이 먼저 발행됨 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | `OutboxPendingQueryTest` Red(2026-11-16) |
@@ -668,12 +668,13 @@
 <a id="d-053"></a>
 ## D-053 Gateway가 하류 서비스가 막 닫는 유휴 연결(약 60초)을 다시 써 요청이 응답 전에 끊기고 500이 남
 
-**상태** 재현됨 · 미수정(`GatewayIdleConnectionTest` Red: 두 번째 요청 500, 2026-11-23) · 재발: 야간 CI 2026-11-22 run 45080285504(`7689b111`, 같은 `PrematureCloseException`) · **영향** Gateway → 업무 서비스 연결이 약 60초 쉬다가 다시 쓰이는 순간 하류 Tomcat이 그 연결을 닫으면, Gateway가 `PrematureCloseException: Connection prematurely closed BEFORE response`를 받고 500을 돌려준다. 조회는 다시 부르면 회복되지만 `POST`(결제 승인 접수 등)는 클라이언트가 처리 여부를 알 수 없다. 돈·상태는 바뀌지 않았다(하류가 요청을 처리하기 전에 닫힘).
+**상태** 수정됨(PR #229) · 재현 `GatewayIdleConnectionTest` Red(두 번째 요청 500) → Green, 2026-11-23 · 재발: 야간 CI 2026-11-22 run 45080285504(`7689b111`, 같은 `PrematureCloseException`) · **영향** Gateway → 업무 서비스 연결이 약 60초 쉬다가 다시 쓰이는 순간 하류 Tomcat이 그 연결을 닫으면, Gateway가 `PrematureCloseException: Connection prematurely closed BEFORE response`를 받고 500을 돌려준다. 조회는 다시 부르면 회복되지만 `POST`(결제 승인 접수 등)는 클라이언트가 처리 여부를 알 수 없다. 돈·상태는 바뀌지 않았다(하류가 요청을 처리하기 전에 닫힘).
 **발견** main 야간 예약 CI run 42916206138(`4227def0`, 2026-11-10 22:37 UTC)의 "fake PortOne approval expiry (31 min)". 최근 야간 5회 중 1회.
 
 - **근거** 산출물 `approval-expiry-run`: `verify-expiry-journeys.py`의 대기 루프가 60초마다 주문·결제를 조회한다(`time.sleep(min(60, …))`). 두 번째 회차(22:44:13쯤)의 마지막 Order 요청 뒤 약 60초가 지난 세 번째 회차 첫 요청(22:45:13.4, `GET /api/v1/orders/ff8aa8e5-…`)에서 Gateway 로그에 `[152448c5-4, L:/127.0.0.1:47188 ! R:127.0.0.1:18082] … PrematureCloseException`, 이어 `500 Server Error`. Order 로그에는 그 시각 오류가 없고, 바로 뒤의 종료 기록은 실패 뒤 정리다.
 - **원인(판독)** Gateway(Spring Cloud Gateway 4.3.0)의 `spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time` 기본값이 null(제한 없음)이고 `apps/gateway/src/main/resources/application.yml`에도 없다. 하류 서비스의 Tomcat 10.1.46은 keep-alive 유휴 시간이 `connectionTimeout` 기본값 60000ms(`org.apache.coyote.http11.Constants.DEFAULT_CONNECTION_TIMEOUT`)이고 각 서비스 `application.yml`에 Tomcat 설정이 없다. 조회 주기(60초)와 유휴 닫기(60초)가 겹쳐 Tomcat이 닫는 순간 Gateway가 그 연결을 고르는 짧은 경합에서만 실패한다.
-- **수정 방향(미착수)** Gateway 풀 `max-idle-time`을 하류 유휴 닫기보다 짧게(예: 30초) 둔다. 재현 테스트: 유휴 K초를 넘긴 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청"이 지금 500·수정 뒤 200(Red→Green). 설정 계약 테스트: Gateway `max-idle-time` < 하류 유휴 닫기(D-035 방식). 검증 스크립트에 재시도를 넣지 않는다(결정 113). 코드 PR은 Codex 교차 리뷰 대상.
+- **수정** Gateway `spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time: 30s`. 동작은 `apps/gateway` `GatewayIdleConnectionTest`(쉰 연결로 온 요청을 응답 없이 끊는 가짜 하류, 상한 + 2초 대기 뒤 두 번째 요청이 새 연결로 200), 설정은 `common/test` `GatewayIdleTimeoutContractTest`(상한 < 하류 열 개의 keep-alive 유휴 닫기)가 지킨다. 아래는 착수 전 적어 둔 방향이다.
+- **수정 방향(착수 전 기록)** Gateway 풀 `max-idle-time`을 하류 유휴 닫기보다 짧게(예: 30초) 둔다. 재현 테스트: 유휴 K초를 넘긴 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청"이 지금 500·수정 뒤 200(Red→Green). 설정 계약 테스트: Gateway `max-idle-time` < 하류 유휴 닫기(D-035 방식). 검증 스크립트에 재시도를 넣지 않는다(결정 113). 코드 PR은 Codex 교차 리뷰 대상.
 
 <a id="d-054"></a>
 ## D-054 Kafka 시작 스크립트가 복사 중 실행돼 테스트 컨텍스트 시작에 실패

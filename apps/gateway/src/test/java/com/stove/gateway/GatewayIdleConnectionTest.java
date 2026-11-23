@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,7 +41,7 @@ import reactor.core.publisher.Mono;
  * Gateway가 자기 유휴 상한을 넘긴 연결을 버리고 새 연결을 쓰면 이 하류도 정상 응답한다.
  *
  * <p>운영 설정({@code application.yml})을 그대로 태운다. 대기 시간은 묶인 {@code max-idle-time}보다 길게 잡으므로
- * 값이 바뀌어도 테스트가 따라간다. 값이 없으면(수정 전) 하류 유휴 닫기 60초의 절반으로 기다려 실패를 본다.
+ * 값이 바뀌어도 테스트가 따라간다. 값이 없으면(수정 전) 30초를 기다려 실패를 본다. 수정 전에는 두 번째 요청이 500이었다(2026-11-23 Red).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("Gateway — 하류 유휴 연결 재사용")
@@ -91,7 +90,6 @@ class GatewayIdleConnectionTest {
     }
 
     @Test
-    @Tag("known-defect")
     @DisplayName("[D-053] 유휴 상한을 넘겨 쉰 하류 연결은 다시 쓰지 않는다 — 두 번째 요청도 200")
     void aConnectionIdleBeyondThePoolLimitIsNotReused() throws InterruptedException {
         get();
@@ -99,7 +97,7 @@ class GatewayIdleConnectionTest {
         Thread.sleep((limit == null ? WITHOUT_LIMIT : limit).plusSeconds(2).toMillis());
 
         // 기대: Gateway가 유휴 상한을 넘긴 연결을 버리고 새 연결로 보낸다.
-        // 실제(수정 전): 상한이 없어 쉰 연결을 다시 쓰고, 하류가 응답 없이 끊어 500이 난다.
+        // 수정 전: 상한이 없어 쉰 연결을 다시 쓰고, 하류가 응답 없이 끊어 500이 난다.
         // 영향: 조회는 다시 부르면 회복되지만 POST(결제 승인 접수 등)는 클라이언트가 처리 여부를 모른다.
         get();
         assertThat(DROPPED.get()).as("Gateway가 하류가 닫은 쉰 연결로 요청을 보냈다").isZero();

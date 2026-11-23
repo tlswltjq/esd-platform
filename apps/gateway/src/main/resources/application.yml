@@ -53,6 +53,12 @@ spring:
     gateway:
       server:
         webflux:
+          # 하류 Tomcat은 keep-alive 유휴 연결을 60초에 닫는다(connectionTimeout 기본값). 풀 유휴 상한이 없으면(기본 null)
+          # 하류가 닫는 바로 그 순간 그 연결을 골라 요청이 응답 전에 끊기고 500이 된다(D-053, 야간 CI 11-10·11-22).
+          # 하류 유휴 닫기보다 짧아야 한다 — common:test GatewayIdleTimeoutContractTest가 지킨다.
+          httpclient:
+            pool:
+              max-idle-time: 30s
           # API와 OAuth token 교환만 CORS 대상이다. 로그인은 같은 출처의 폼/팝업 이동이라
           # CORS가 필요하지 않으며, chrome-error 프레임의 Origin을 여기서 거부하면
           # 브라우저가 /login을 403으로 표시한다.
