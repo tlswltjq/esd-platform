@@ -272,6 +272,24 @@ class WaitTest(unittest.TestCase):
             self.assertEqual(3, pr_finish.ready(self.args(register_timeout=-1)))
         self.assertIn(['pr', 'ready', '7'], calls)
 
+    def test_a_failed_snapshot_before_the_event_stops_before_sending_it(self):
+        # PR #234 4차 리뷰: 이벤트 전 기록이 비면 이전 plan을 새 CI로 오인하므로 ready를 보내지 않고 멈춘다.
+        calls = []
+
+        def fake_gh(command, check=True):
+            calls.append(command)
+            return (1, '', 'HTTP 502') if command[:2] == ['pr', 'checks'] else (0, '', '')
+        with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
+                mock.patch.object(pr_finish, 'gh', side_effect=fake_gh), \
+                mock.patch.object(pr_finish, 'required_checks', return_value=[]), redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                pr_finish.ready(self.args())
+        self.assertNotIn(['pr', 'ready', '7'], calls)
+        with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'no checks reported on the branch')):
+            self.assertEqual([], pr_finish.listed_checks(7, strict=True))
+        with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'HTTP 502')):
+            self.assertEqual([], pr_finish.listed_checks(7))
+
     def test_ci_started_ignores_checks_from_before_the_event(self):
         listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1'}, {'name': 'review-gate', 'link': 'job/2'}])
         with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
