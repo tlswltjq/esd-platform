@@ -29,4 +29,6 @@ perf-results/
 runs/
 
 # 에이전트 작업 공간 — 워크트리와 세션 설정. 리포에 담을 것이 아니다.
-.claude/
+# 단, skills는 tools/ci 스크립트를 가리키는 안내라 담는다(결정 213).
+.claude/*
+!.claude/skills/
