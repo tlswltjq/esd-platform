@@ -54,9 +54,21 @@ class ReviewTableTest(unittest.TestCase):
         self.assertIn('비어', errors[0])
 
     def test_each_verdict_passes(self):
-        for verdict in ('채택', '부분 반영', '기각', '**채택**', '채택 (사용자 확정: "R1·R3도 채택으로 확정해")'):
+        for verdict in ('채택', '부분 반영 (사용자 확정: "R1은 부분 반영해")', '기각 (사용자 확정: "기각해")', '**채택**',
+                        '채택 (사용자 확정: "R1·R3도 채택으로 확정해")'):
             with self.subTest(verdict=verdict):
                 self.assertEqual(review_gate.check(body(['| R1 잠금 전 읽기 | ' + verdict + ' | 이유 |']), CODE), [])
+
+    def test_user_verdicts_without_confirmation_fail_the_required_check(self):
+        """결정 112·PR #232 P4: 사용자 판정 대상은 병합 도구만이 아니라 필수 검사에서도 막는다."""
+        for row in ('| R1 무엇 | 부분 반영 | 이유 |', '| R1 무엇 | 기각 | 이유 |', '| R1 (high) 무엇 | 채택 (AI 판정) | 이유 |',
+                    '| R1 (low) 재시도 정책을 바꿔야 함 | 채택 | 이유 |', '| R1 무엇 | 기각 (사용자 확정: "") | 이유 |'):
+            with self.subTest(row=row):
+                errors = review_gate.check(body([row]), CODE)
+                self.assertEqual(len(errors), 1)
+                self.assertIn('사용자 판정이 남은 지적', errors[0])
+        self.assertEqual(review_gate.check(body(['| R1 (high) 무엇 | 채택 (사용자 확정: "채택해") | 이유 |']), CODE), [])
+        self.assertEqual(review_gate.check(body(['| R1 무엇 | 기각 |']), DOCS), [])
 
     def test_finding_without_verdict_fails_and_names_the_finding(self):
         errors = review_gate.check(body(['| R1 잠금 전 읽기 | 채택 | 이유 |', '| R2 옛 환불 잔류 |  | 검토 중 |']), CODE)
@@ -91,7 +103,7 @@ class ReviewTableTest(unittest.TestCase):
 
     def test_second_table_header_is_not_a_finding(self):
         text = body(['| R1 | 채택 | 이유 |']).replace(
-            '\n## 남은 범위', '\n| 추가 지적 | 판정 |\n|---|---|\n| R2 | 기각 |\n\n## 남은 범위')
+            '\n## 남은 범위', '\n| 추가 지적 | 판정 |\n|---|---|\n| R2 | 기각 (사용자 확정: "기각") |\n\n## 남은 범위')
         self.assertEqual(review_gate.check(text, CODE), [])
 
     def test_escaped_pipe_stays_inside_the_cell(self):
@@ -199,7 +211,16 @@ class CommandLineTest(unittest.TestCase):
         self.assertIn('결정 108', out)
 
     def test_success_exits_zero(self):
-        self.assertEqual(self.run_main(body(['| R1 | 기각 | 이유 |']), CODE)[0], 0)
+        self.assertEqual(self.run_main(body(['| R1 | 기각 (사용자 확정: "기각해") | 이유 |']), CODE)[0], 0)
+
+    def test_r1_a_code_file_renamed_to_markdown_needs_review(self):
+        """PR #232 R1: 이름 변경의 이전 경로도 리뷰 대상이다. 줄 수가 변경 파일 수다."""
+        self.assertEqual(review_gate.read_files('docs/Archived.md\tapps/x/A.java\nREADME.md\n'),
+                         (2, ['docs/Archived.md', 'apps/x/A.java', 'README.md']))
+        code, out = self.run_main('', ['docs/Archived.md\tapps/x/A.java'], expected=1)
+        self.assertEqual(code, 1)
+        self.assertIn('리뷰 판정', out)
+        self.assertEqual(self.run_main('', ['docs/new.md\tdocs/old.md'], expected=1)[0], 0)
 
     def test_markdown_only_exits_zero(self):
         code, out = self.run_main('', DOCS)
@@ -233,6 +254,10 @@ class WorkflowContractTest(unittest.TestCase):
         script_line = next(line for line in self.text.splitlines() if 'tools/ci/review_gate.py' in line)
         self.assertIn('--expected-files', script_line)
         self.assertIn('.changed_files', self.text)
+
+    def test_r1_the_file_list_carries_the_previous_path(self):
+        files_line = next(line for line in self.text.splitlines() if 'files.txt' in line and 'gh api' in line)
+        self.assertIn('previous_filename', files_line)
 
 
 if __name__ == '__main__':

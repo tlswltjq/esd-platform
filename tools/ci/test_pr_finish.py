@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 import pr_finish
+import review_gate
 
 BUILD = 'build (unit · architecture · integration · migration)'
 
@@ -65,21 +66,21 @@ class PendingUserVerdictsTest(unittest.TestCase):
     def test_rejection_and_partial_need_user_confirmation(self):
         body = verdict_body([['R1 (medium) 무엇', '기각 — 이유', '이유'], ['R2 (low) 무엇', '부분 반영', '이유'],
                              ['R3 (medium) 무엇', '채택 (AI 판정)', '이유']])
-        self.assertEqual(['R1 (medium) 무엇', 'R2 (low) 무엇'], pr_finish.pending_user_verdicts(body))
+        self.assertEqual(['R1 (medium) 무엇', 'R2 (low) 무엇'], review_gate.pending_user_verdicts(body))
 
     def test_high_needs_user_confirmation_even_if_adopted(self):
         body = verdict_body([['R1 (high) 무엇', '채택', '이유']])
-        self.assertEqual(['R1 (high) 무엇'], pr_finish.pending_user_verdicts(body))
+        self.assertEqual(['R1 (high) 무엇'], review_gate.pending_user_verdicts(body))
 
     def test_user_confirmed_rows_pass(self):
         body = verdict_body([['R1 (high) 무엇', '채택 (사용자 확정: "채택")', '이유'],
                              ['R2 (low) 무엇', '기각 (사용자 확정: "기각해")', '이유']])
-        self.assertEqual([], pr_finish.pending_user_verdicts(body))
+        self.assertEqual([], review_gate.pending_user_verdicts(body))
 
     def test_waiting_for_user_is_not_confirmed(self):
         # PR #222 R5: "채택 (사용자 확정 대기)"는 아직 사용자 판정 전이다.
         body = verdict_body([['R5 (high) 무엇', '채택 (사용자 확정 대기)', '이유']])
-        self.assertEqual(['R5 (high) 무엇'], pr_finish.pending_user_verdicts(body))
+        self.assertEqual(['R5 (high) 무엇'], review_gate.pending_user_verdicts(body))
 
     def test_confirmation_counts_only_in_the_verdict_cell_and_must_be_non_empty(self):
         # PR #226 R2: 이유 칸의 언급이나 빈 원문은 확정이 아니다.
@@ -89,28 +90,28 @@ class PendingUserVerdictsTest(unittest.TestCase):
                              ['R4 (high) 무엇', '채택 (사용자 확정: "", 메모: "대기")', '이유'],
                              ['R5 (high) 무엇', '채택 (사용자 확정: "  ")', '이유']])
         self.assertEqual(['R1 (high) 무엇', 'R2 (high) 무엇', 'R3 (high) 무엇', 'R4 (high) 무엇', 'R5 (high) 무엇'],
-                         pr_finish.pending_user_verdicts(body))
+                         review_gate.pending_user_verdicts(body))
 
     def test_policy_rows_need_user_confirmation(self):
         # PR #226 R3: 정책을 바꾸는 지적은 AI 판정 채택이어도 사용자가 판정한다(결정 112).
         body = verdict_body([['R1 (medium) 재시도 정책을 바꿔야 함', '채택 (AI 판정)', '이유'],
                              ['R2 (low) 문구', '채택 (AI 판정)', '정책 변경 아님을 확인했다'],
                              ['R3 (medium) 정책 변경', '채택 (사용자 확정: "채택")', '이유']])
-        self.assertEqual(['R1 (medium) 재시도 정책을 바꿔야 함', 'R2 (low) 문구'], pr_finish.pending_user_verdicts(body))
+        self.assertEqual(['R1 (medium) 재시도 정책을 바꿔야 함', 'R2 (low) 문구'], review_gate.pending_user_verdicts(body))
 
     def test_reasoning_level_high_in_reviewer_is_not_severity(self):
         # PR #226: "리뷰어: Codex gpt-6.1-sol high"의 high를 심각도로 읽어 병합을 막았다.
         body = verdict_body([['재리뷰(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', '채택 (AI 판정)', '아래'],
                              ['R8 (high, 리뷰어: Codex) 무엇', '채택 (AI 판정)', '이유'],
                              ['R9 ( High ) 무엇', '채택', '이유']])
-        self.assertEqual(['R8 (high, 리뷰어: Codex) 무엇', 'R9 ( High ) 무엇'], pr_finish.pending_user_verdicts(body))
+        self.assertEqual(['R8 (high, 리뷰어: Codex) 무엇', 'R9 ( High ) 무엇'], review_gate.pending_user_verdicts(body))
 
     def test_word_high_inside_other_words_is_not_severity(self):
         body = verdict_body([['R1 (low) highlight 문구', '채택', '이유']])
-        self.assertEqual([], pr_finish.pending_user_verdicts(body))
+        self.assertEqual([], review_gate.pending_user_verdicts(body))
 
     def test_missing_section_has_nothing_pending(self):
-        self.assertEqual([], pr_finish.pending_user_verdicts('## 무엇을 왜\n'))
+        self.assertEqual([], review_gate.pending_user_verdicts('## 무엇을 왜\n'))
 
 
 class MergeTest(unittest.TestCase):

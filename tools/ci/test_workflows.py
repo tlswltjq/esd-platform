@@ -3,6 +3,7 @@
 job 수준 `if`로 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 draft 건너뛰기만 두고
 `ready_for_review`(또는 기본 이벤트 opened·synchronize·reopened)를 빠뜨리면 ready PR이 build 없이 병합될 수 있다.
 draft 실행이 같은 concurrency 그룹에서 실제 build를 취소해도 같은 일이 생기므로 그룹을 나눈다.
+밤·수동 스택 실행도 main push와 그룹을 나눈다(PR #232 R5: 서로 기다리거나 대기 실행이 밀려 사라진다).
 조건식은 부분 문자열이 아니라 전체를 비교한다(`&& false`처럼 모든 build를 끄는 변경을 잡는다).
 PyYAML 없이 돌도록 ci.yml을 글자로 읽는다(review-gate Self-test는 표준 라이브러리만 쓴다).
 """
@@ -14,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / '.github/workflows/ci.yml'
 REQUIRED_TYPES = ('opened', 'synchronize', 'reopened', 'ready_for_review')
 BUILD_CONDITION = "github.event_name != 'schedule' && github.event.pull_request.draft != true"
-CONCURRENCY_GROUP = "ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || 'build' }}"
+CONCURRENCY_GROUP = "ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'stack' || 'build' }}"
 
 
 def pull_request_types(text):
@@ -42,7 +43,7 @@ def draft_skip_problems(text):
     if job_condition(text, 'build') != BUILD_CONDITION:
         problems.append('build 작업의 if가 `' + BUILD_CONDITION + '`가 아니다')
     if concurrency_group(text) != CONCURRENCY_GROUP:
-        problems.append('concurrency 그룹이 draft 실행과 실제 build 실행을 나누지 않는다')
+        problems.append('concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다')
     types = pull_request_types(text)
     if types is None:
         problems.append('pull_request에 types 목록이 없다')
@@ -81,8 +82,13 @@ class DraftSkipContractTest(unittest.TestCase):
                          self.mutate('draft != true\n', 'draft != true && false\n'))
 
     def test_shared_concurrency_group_is_caught(self):
-        self.assertEqual(['concurrency 그룹이 draft 실행과 실제 build 실행을 나누지 않는다'],
+        self.assertEqual(['concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다'],
                          self.mutate(CONCURRENCY_GROUP, 'ci-${{ github.ref }}'))
+
+    def test_r5_a_stack_run_sharing_the_main_push_group_is_caught(self):
+        shared = "ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || 'build' }}"
+        self.assertEqual(['concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다'],
+                         self.mutate(CONCURRENCY_GROUP, shared))
 
 
 class BuildScopeWiringTest(unittest.TestCase):

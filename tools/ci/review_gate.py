@@ -3,6 +3,11 @@
 변경 파일이 모두 *.md인 PR은 검사하지 않는다. 그 밖의 PR은 `## 리뷰 판정` 절에 표가 있어야 하고,
 지적마다 판정 칸이 채택·부분 반영·기각 중 하나로 시작해야 한다. 지적이 없으면
 `| 지적 없음 (리뷰어: …) |`처럼 리뷰어를 함께 적는다.
+결정 112: 부분 반영·기각, 심각도 high, 정책을 바꾸는 지적은 판정 칸에 `사용자 확정: "원문"`이 있어야 한다
+(병합 도구 pr_finish.py도 이 함수를 쓴다).
+
+변경 파일 목록은 줄마다 `경로` 또는 `경로<TAB>이전 경로`다. 이름 변경은 이전 경로도 리뷰 대상 판단에 넣는다
+(코드 파일을 *.md로 옮겨도 코드 삭제이므로 리뷰 대상이다). 줄 수가 PR의 변경 파일 수다.
 
 표는 템플릿 형식만 센다: 줄 앞뒤에 `|`를 쓰고, 머리 행 바로 다음 줄이 구분 행이며, 빈 줄로 끝난다.
 코드 블록 안, HTML 주석, 빈 행, 다음 H1·H2 제목 뒤는 세지 않는다. 변경 파일 목록이 PR의 변경
@@ -27,6 +32,12 @@ FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 SEPARATOR_CELL = re.compile(r'^:?-{3,}:?$')
 REVIEWER = re.compile(r'리뷰어\s*[:：]\s*[^\s)\]|]')
 ESCAPED_PIPE = '\x00'
+USER_JUDGED = ('부분 반영', '기각')
+# 심각도는 `R1 (high)`·`R8 (high, …)`처럼 괄호 바로 안의 첫 낱말이다. 리뷰어 표기의 추론 수준 high는 아니다.
+HIGH = re.compile(r'\(\s*high\b', re.IGNORECASE)
+# 인용 안에 따옴표·공백이 아닌 글자가 하나 이상 있어야 한다(PR #226 재리뷰: \S는 따옴표도 센다).
+USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*[^"”\s][^"”]*["”]')
+POLICY = '정책'
 TABLE_FORMAT = '표는 템플릿처럼 줄 앞뒤에 `|`를 쓰고, 머리 행 다음 줄에 구분 행(`|---|---|`)을 둔다.'
 
 
@@ -106,9 +117,35 @@ def has_verdict(cell):
     return cell.lstrip('*_ ').startswith(VERDICTS)
 
 
-def check(body, files, expected_files=None):
-    if expected_files is not None and expected_files != len(files):
-        return ['변경 파일 목록이 ' + str(len(files)) + '개로 PR의 변경 파일 ' + str(expected_files)
+def pending_user_verdicts(body):
+    """결정 112: 사용자가 판정해야 하는데 `사용자 확정: "원문"`이 없는 지적."""
+    lines = section_lines(body or '')
+    if lines is None:
+        return []
+    pending = []
+    for row in table_rows(lines):
+        text = ' | '.join(row)
+        finding = row[0]
+        verdict = row[1].lstrip('*_ ') if len(row) > 1 else ''
+        if NO_FINDINGS in finding:
+            continue
+        needs_user = verdict.startswith(USER_JUDGED) or bool(HIGH.search(finding)) or POLICY in text
+        if needs_user and not USER_CONFIRMED.search(verdict):
+            pending.append(finding[:80])
+    return pending
+
+
+def read_files(text):
+    """`경로[<TAB>이전 경로]` 줄 목록 → (변경 항목 수, 리뷰 대상 판단에 쓸 경로 목록)."""
+    entries = [line for line in text.splitlines() if line.strip()]
+    names = [name.strip() for line in entries for name in line.split('\t') if name.strip()]
+    return len(entries), names
+
+
+def check(body, files, expected_files=None, entries=None):
+    entries = len(files) if entries is None else entries
+    if expected_files is not None and expected_files != entries:
+        return ['변경 파일 목록이 ' + str(entries) + '개로 PR의 변경 파일 ' + str(expected_files)
                 + '개와 다르다. 목록이 불완전하면 리뷰 대상인지 판단할 수 없다(API는 3,000개까지만 돌려준다).']
     if not needs_review(files):
         return []
@@ -130,25 +167,28 @@ def check(body, files, expected_files=None):
             errors.append('지적 칸이 빈 행이 있다: ' + ' | '.join(row))
         elif not has_verdict(verdict):
             errors.append('판정(채택·부분 반영·기각)이 없는 지적: ' + finding[:80])
+    for finding in pending_user_verdicts(body):
+        errors.append('사용자 판정이 남은 지적(결정 112: 부분 반영·기각·high·정책은 판정 칸에 '
+                      '`사용자 확정: "원문"`): ' + finding)
     return errors
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--body', required=True, help='PR 본문 파일')
-    parser.add_argument('--files', required=True, help='변경 파일 목록(줄마다 하나)')
+    parser.add_argument('--files', required=True, help='변경 파일 목록(줄마다 `경로[<TAB>이전 경로]`)')
     parser.add_argument('--expected-files', type=int, help='PR의 변경 파일 수(API changed_files)')
     args = parser.parse_args(argv)
     body = Path(args.body).read_text(encoding='utf-8')
-    files = [line.strip() for line in Path(args.files).read_text(encoding='utf-8').splitlines() if line.strip()]
-    errors = check(body, files, args.expected_files)
+    entries, files = read_files(Path(args.files).read_text(encoding='utf-8'))
+    errors = check(body, files, args.expected_files, entries)
     if errors:
         print('실패: 코드가 바뀐 PR은 병합 전에 교차 리뷰를 받고 `리뷰 판정`에 적는다(결정 108·109).')
         for error in errors:
             print('- ' + error)
         return 1
     if not needs_review(files):
-        print('통과: 변경 파일 ' + str(len(files)) + '개가 모두 *.md라 교차 리뷰 대상이 아니다(결정 108).')
+        print('통과: 변경 파일 ' + str(entries) + '개가 모두 *.md라 교차 리뷰 대상이 아니다(결정 108).')
         return 0
     print('통과: `리뷰 판정` 행 ' + str(len(table_rows(section_lines(body)))) + '개, 모든 지적에 판정이 있다.')
     return 0

@@ -30,7 +30,6 @@
 import argparse
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 import time
@@ -40,12 +39,6 @@ import review_gate  # noqa: E402
 
 REQUIRED = ('build', 'review-gate')
 RERUN = {'ready': ('build',), 'edit': ('review-gate',)}
-USER_JUDGED = ('부분 반영', '기각')
-# 심각도는 `R1 (high)`·`R8 (high, …)`처럼 괄호 바로 안의 첫 낱말이다. 리뷰어 표기의 추론 수준 high는 아니다.
-HIGH = re.compile(r'\(\s*high\b', re.IGNORECASE)
-# 인용 안에 따옴표·공백이 아닌 글자가 하나 이상 있어야 한다(PR #226 재리뷰: \S는 따옴표도 센다).
-USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*[^"”\s][^"”]*["”]')
-POLICY = '정책'
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
 
@@ -158,23 +151,6 @@ def latest(rollup, prefix):
     return max(runs, key=lambda item: item.get('startedAt') or '', default=None)
 
 
-def pending_user_verdicts(body):
-    lines = review_gate.section_lines(body or '')
-    if lines is None:
-        return []
-    pending = []
-    for row in review_gate.table_rows(lines):
-        text = ' | '.join(row)
-        finding = row[0]
-        verdict = row[1].lstrip('*_ ') if len(row) > 1 else ''
-        if review_gate.NO_FINDINGS in finding:
-            continue
-        needs_user = verdict.startswith(USER_JUDGED) or bool(HIGH.search(finding)) or POLICY in text
-        if needs_user and not USER_CONFIRMED.search(verdict):
-            pending.append(finding[:80])
-    return pending
-
-
 def problems(pr):
     found = []
     if pr.get('state') != 'OPEN':
@@ -189,7 +165,7 @@ def problems(pr):
             found.append('head에 `' + name + '` 검사가 없다')
         elif run.get('status') != 'COMPLETED' or run.get('conclusion') != 'SUCCESS':
             found.append('head의 최근 `{}`가 {}·{}다'.format(name, run.get('status'), run.get('conclusion')))
-    for finding in pending_user_verdicts(pr.get('body')):
+    for finding in review_gate.pending_user_verdicts(pr.get('body')):
         found.append('사용자 판정이 남은 지적: ' + finding)
     return found
 

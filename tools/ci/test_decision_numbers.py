@@ -218,10 +218,13 @@ class ReviewFindingsTest(Fixture):
         self.assertIn('build/tracked.md', error)
         self.assertNotIn('untracked.md', error)
 
-    def test_missing_base_warns_but_checks_current(self):
+    def test_r2_a_missing_base_fails_instead_of_passing(self):
+        """PR #232 R2: 보존 검사를 요청했는데 기준 판을 못 읽으면 실패한다. 기준 판 없는 검사는 --base-ref 없이 돈다."""
         result = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), '--root', str(self.root), '--base-ref', 'missing'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('기준 판 missing', result.stdout)
+        result = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), '--root', str(self.root)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         self.assertEqual(result.returncode, 0)
-        self.assertIn('경고', result.stdout)
 
 
 class DecisionWorkflowTest(unittest.TestCase):
