@@ -41,7 +41,8 @@ import review_gate  # noqa: E402
 REQUIRED = ('build', 'review-gate')
 RERUN = {'ready': ('build',), 'edit': ('review-gate',)}
 USER_JUDGED = ('부분 반영', '기각')
-HIGH = re.compile(r'\bhigh\b', re.IGNORECASE)
+# 심각도는 `R1 (high)`·`R8 (high, …)`처럼 괄호 바로 안의 첫 낱말이다. 리뷰어 표기의 추론 수준 high는 아니다.
+HIGH = re.compile(r'\(\s*high\b', re.IGNORECASE)
 # 인용 안에 따옴표·공백이 아닌 글자가 하나 이상 있어야 한다(PR #226 재리뷰: \S는 따옴표도 센다).
 USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*[^"”\s][^"”]*["”]')
 POLICY = '정책'

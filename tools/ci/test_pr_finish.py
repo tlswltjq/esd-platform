@@ -98,6 +98,13 @@ class PendingUserVerdictsTest(unittest.TestCase):
                              ['R3 (medium) 정책 변경', '채택 (사용자 확정: "채택")', '이유']])
         self.assertEqual(['R1 (medium) 재시도 정책을 바꿔야 함', 'R2 (low) 문구'], pr_finish.pending_user_verdicts(body))
 
+    def test_reasoning_level_high_in_reviewer_is_not_severity(self):
+        # PR #226: "리뷰어: Codex gpt-6.1-sol high"의 high를 심각도로 읽어 병합을 막았다.
+        body = verdict_body([['재리뷰(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', '채택 (AI 판정)', '아래'],
+                             ['R8 (high, 리뷰어: Codex) 무엇', '채택 (AI 판정)', '이유'],
+                             ['R9 ( High ) 무엇', '채택', '이유']])
+        self.assertEqual(['R8 (high, 리뷰어: Codex) 무엇', 'R9 ( High ) 무엇'], pr_finish.pending_user_verdicts(body))
+
     def test_word_high_inside_other_words_is_not_severity(self):
         body = verdict_body([['R1 (low) highlight 문구', '채택', '이유']])
         self.assertEqual([], pr_finish.pending_user_verdicts(body))
