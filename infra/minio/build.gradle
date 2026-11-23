@@ -37,10 +37,16 @@ gradle.taskGraph.whenReady { graph -> artifactRequested = artifactTaskPaths.any 
 tasks.register('compileMinio', Exec) {
     group = 'build'
     description = '고정 MinIO/mc 소스를 Go 컨테이너에서 Linux 바이너리로 빌드한다'
-    inputs.file('compile.sh')
+    inputs.file('compile.sh').withPathSensitivity(PathSensitivity.NONE)
     inputs.property('architecture', targetArchitecture)
     inputs.property('builderImage', builderImage)
     outputs.dir(rootfs)
+    // 결과는 고정 커밋(compile.sh)·빌더 이미지 이름·아키텍처로 정해진다. 테스트용 이미지는 같은 입력의 결과를 빌드 캐시에서
+    // 쓴다(CI 전체 빌드에서 약 3분, 로컬 6분이 든다 — 2026-11-23 프로파일). 빌더 이미지는 움직이는 태그라 캐시된 결과가
+    // Go 패치·인증서가 조금 오래될 수 있으므로, 배포 산출물(jib 게시·jibBuildTar)을 만들 때는 캐시를 쓰지 않고 새로 컴파일한다.
+    outputs.cacheIf('게시·tar(배포 산출물)를 만들지 않는다') { !artifactRequested }
+    // 캐시를 끄는 것과 최신 판단은 별개다. 테스트 빌드·캐시 복원이 남긴 rootfs를 배포가 UP-TO-DATE로 쓰지 않게 한다(PR #231 R1).
+    outputs.upToDateWhen { !artifactRequested }
     onlyIf('공급 이미지가 없고, 게시·tar를 만들거나 재사용할 로컬 이미지가 없다') {
         !suppliedImage && (artifactRequested || !reuseLocalImage())
     }
