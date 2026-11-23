@@ -542,5 +542,26 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 - **예상 밖 — 브로커 장애가 고객 주문 실패로 번졌다**(Kafka 2회 모두, RabbitMQ 1회). 장애 중 진단에서 order의 InnoDB 트랜잭션 다수가 `insert into outbox_event … LOCK WAIT` 상태였고, 주문 요청이 잠금을 기다리며 DB 연결을 쥐다가 풀 대기 시간 초과(`HikariPool … createTimeoutException`)로 500이 났다. Outbox 릴레이는 한 트랜잭션 안에서 `PENDING` 행을 `idx_outbox_status (status, id)` 범위로 `FOR UPDATE SKIP LOCKED` 잠근 채 브로커 확인을 기다리므로, 그 범위 끝의 간격 잠금이 새 `PENDING` 행 INSERT를 막는 것으로 본다(추정 — 잠금 보유 트랜잭션과의 대응은 재현 테스트로 확인한다). 실패 건수는 확인 대기 상한과 함께 커진다: Kafka(producer 대기를 따로 두지 않아 기본 `delivery.timeout.ms` 120초) 39·45건, RabbitMQ(확인 10초 상한) 0·5건. RabbitMQ Streams(같은 10초 상한)·Redis가 0건인 이유는 확인하지 않았다. 이것은 기술의 성질이 아니라 **Outbox 릴레이의 결함**으로 보고 따로 고친다(플랫폼 T37). 고친 뒤 S7을 다시 잰다.
 - 컨테이너 강제 종료 한 번, 10초 중단 한 조건이다. 긴 중단(S3)과 클러스터 노드 장애는 재지 않았다.
 
+<a id="messaging-s7-rerun"></a>
+**S7 재측정 — Outbox 릴레이 수정 뒤**(2026-11-23, [PR #235](https://github.com/tlswltjq/esd-platform/pull/235))
+
+조건 — 위 S7과 같은 스택·부하·강제 종료(`--restart-broker-at 40 --restart-broker-down 10`)에 [D-060](defects.md#d-060) 수정([결정 215](decisions.md#outbox-relay-lock-hold): 릴레이 트랜잭션 READ COMMITTED, PR #228)만 달라졌다. 순서는 Kafka → RabbitMQ → Streams → Redis → Redis → Streams → RabbitMQ → Kafka(A→B→A), 조건당 2회. 측정 동안 같은 호스트에서 다른 작업(서브에이전트·테스트·빌드)을 돌리지 않았다(시작 전 컨테이너 0·1분 부하 0.19, 전후 `measure_guard` 동일). 같은 날 앞서 다른 작업과 겹쳐 잰 5회는 버렸다.
+
+| 방식 | 유효 | HTTP 실패(주문 요청) | 완료 / 접수 | 결제 확정 → 구매 근거 p95 / 최대 | 주문 생성 → 구매 근거 p95 | Inbox 재전달 차단 |
+|---|---|---|---|---|---|---|
+| Kafka | 2 / 2 | **0 / 0** (이전 39 / 45) | 120 / 120, 120 / 120 | 2461 / 29518, 2187 / 29185ms | 29176, 28605ms | 1 / 1 |
+| RabbitMQ | 2 / 2 | **0 / 0** (이전 0 / 5) | 120 / 120, 120 / 120 | 1030 / 1063, 1743 / 21055ms | 19320, 16132ms | 1 / 1 |
+| RabbitMQ Streams | 2 / 2 | 0 / 0 | 120 / 120, 120 / 120 | 1186 / 1268, 1177 / 32077ms | 33245, 33350ms | 1 / 2 |
+| Redis Streams | 2 / 2 | 0 / 0 | 120 / 120, 120 / 120 | 1871 / 22742, 10891 / 22626ms | 23160, 20948ms | 1 / 1 |
+
+실제 중단은 8회 모두 10.3~10.4초였다.
+
+**해석·한계**
+- 브로커 장애가 고객 주문 실패로 번지던 현상은 네 방식 모두 사라졌다(Kafka 39·45건 → 0). 원인을 릴레이의 간격 잠금으로 본 진단(D-060)과 맞는다. 주문 요청은 장애와 무관하게 받고, 메시지는 Outbox에 쌓였다가 회복 뒤 나간다.
+- 접수된 주문은 모두 처리됐고(미완료 0), 재전달은 Inbox가 걸러 중복 반영 0이다.
+- 장애 동안 쌓인 메시지가 회복 뒤 처리되므로 지연 꼬리는 남는다. "주문 생성 → 구매 근거" p95는 16~33초로, 장애 구간에 만들어진 주문이 회복을 기다린 시간이 들어 있다. "결제 확정 → 구매 근거" 최대는 대부분 21~32초다. RabbitMQ 1회차(최대 1.06초)와 Streams 1회차(1.27초)는 회복 뒤 처리할 메시지가 꼬리에 걸리지 않은 경우로 보인다(추정 — 회차마다 장애 시점에 어느 단계의 메시지가 있었는지는 기록하지 않았다).
+- Redis 2회차의 "결제 확정 → 구매 근거" p95(10.9초)는 1회차(1.9초)와 크게 다르다. 조건당 2회라 이 차이를 기술 차이로 읽지 않는다.
+- 회복 시간(브로커 재시작 → 쌓인 메시지 소진) 자체를 따로 재지는 않았다. 기술 사이 회복 속도 비교는 긴 중단(S3)에서 본다.
+
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216), S6 요약 JSON은 이전 8회 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)·재측정 10회 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
 
