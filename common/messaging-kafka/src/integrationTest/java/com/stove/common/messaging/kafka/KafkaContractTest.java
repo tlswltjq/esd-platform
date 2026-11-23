@@ -230,12 +230,12 @@ class KafkaContractTest extends MessagingContractTest {
         }, List.of());
         awaitSubscriptionsReady();
 
-        send(stuck);
-        assertThat(retryHolding.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("붙잡힌 키의 첫 재시도가 시작된다").isTrue();
         try {
+            send(stuck);
+            assertThat(retryHolding.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("붙잡힌 키의 첫 재시도가 시작된다").isTrue();
             send(flowing);
         } finally {
-            // 발행이 성공하든 실패하든(publish 는 10초 한도) 반드시 알린다 — 그래서 붙잡은 쪽은 이 신호를 한도 없이 기다린다.
+            // 어느 단계에서 실패하든(publish 는 10초 한도) 반드시 알린다 — 그래서 붙잡은 쪽은 이 신호를 한도 없이 기다린다(R13).
             flowingSent.countDown();
         }
         // 붙잡은 쪽의 처리 대기 한도는 발행을 마친 뒤부터 잰다 — 그 전의 테스트 스레드 지연은 판정에 들어가지 않는다(R8·R11).
