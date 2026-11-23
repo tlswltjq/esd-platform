@@ -11,7 +11,7 @@
 | `event` | 메시징 포트: 발행(`MessagePublisher`)·수신(`@EventSubscriber`·`EventHandler`·`InboundMessage`)·격리(`KeyQuarantine`)·미러 발행(`MirrorPublisher`). 의존 없음 |
 | `contract` | 이벤트 계약: 토픽·이벤트 종류·payload, 봉투(`EventEnvelope`)·헤더 이름. `event`와 Jackson만 의존 |
 | `messaging` | 메시징 코어: JPA 트랜잭션과 연결되는 Outbox·릴레이(키 순서)·Inbox, 소비 격리·키 단위 재투입, 운영 API, 추적 전파. 브로커 클라이언트에 의존하지 않는다 |
-| `messaging-kafka` | Kafka adapter: 발행·구독·제자리 재시도(`DefaultErrorHandler`), 격리 포트 연결, 미러 발행기, DB 없는 Store의 DLT. 코어에 의존하지 않는다 |
+| `messaging-kafka` | Kafka adapter: 발행·구독·제자리 재시도(`DefaultErrorHandler`), 격리 포트 연결, 미러 발행기, DB 없는 Store의 DLT. 리스너 동시성 기본값은 파티션 수 3(`KafkaListenerDefaults`, 앱 설정이 이김, [결정 212](decisions.md#kafka-listener-concurrency)). 코어에 의존하지 않는다 |
 | `messaging-rabbitmq` | RabbitMQ adapter. 코어에만 의존 |
 | `messaging-redis` | Redis Streams adapter. 코어에만 의존 |
 | `messaging-direct` | 브로커 없음 기준선(소비자가 Outbox 행을 직접 읽음). 코어에만 의존 |
