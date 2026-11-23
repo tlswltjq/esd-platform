@@ -127,9 +127,16 @@ class RepositoryTest(unittest.TestCase):
         errors = evidence_fragments.lost_rows(self.root, 'HEAD', changes)
         self.assertEqual(1, len(errors))
         self.assertIn('docs/evidence.d/6.md', errors[0])
+        # PR #232 재리뷰 R2: 칸 경계의 공백만 다르게 옮긴 행은 보존된 것이다.
+        (self.root / 'docs/evidence.md').write_text(INDEX + '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n'
+                                                   '|2026-11-09|b|여섯|통과|PR #6|\n', encoding='utf-8')
+        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', changes))
         self.assertIn('읽지 못해', evidence_fragments.lost_rows(self.root, 'missing', changes)[0])
         self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', [('modified', 'apps/x/A.java')]))
         listed = self.write_changes('modified\tdocs/evidence.md\nremoved\tdocs/evidence.d/5.md\nremoved\tdocs/evidence.d/6.md\n')
+        self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
+                                                     '--root', str(self.root), '--base-ref', 'HEAD']))
+        (self.root / 'docs/evidence.md').write_text(INDEX, encoding='utf-8')
         self.assertEqual(1, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
                                                      '--root', str(self.root), '--base-ref', 'HEAD']))
         self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed)]))

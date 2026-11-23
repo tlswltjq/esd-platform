@@ -120,7 +120,8 @@ def lost_rows(root, base_ref, changes):
     if not removed or not any(path == INDEX for _, path in changes):
         return []
     index = (root / INDEX).read_text(encoding='utf-8')
-    present = {line.strip() for line in index.split('\n')}
+    # 칸으로 나눠 비교한다. 칸 경계의 공백만 다른 행은 같은 행이다(PR #232 재리뷰 R2).
+    present = {tuple(cells(line) or [line.strip()]) for line in index.split('\n')}
     errors = []
     for path in sorted(removed):
         text = base_text(root, base_ref, path)
@@ -128,7 +129,7 @@ def lost_rows(root, base_ref, changes):
             errors.append('기준 판 %s의 %s를 읽지 못해 행 보존을 검사할 수 없다' % (base_ref, path))
             continue
         for line in text.split('\n'):
-            if line.strip() and line.strip() not in present:
+            if line.strip() and tuple(cells(line) or [line.strip()]) not in present:
                 errors.append('%s의 행이 docs/evidence.md에 없다(접기는 행을 옮기고 조각을 지운다): %s'
                               % (path, line.strip()[:80]))
     return errors
