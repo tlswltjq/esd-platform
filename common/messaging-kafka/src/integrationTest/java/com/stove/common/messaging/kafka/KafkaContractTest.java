@@ -20,8 +20,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.ConsumerGroupDescription;
@@ -214,19 +214,15 @@ class KafkaContractTest extends MessagingContractTest {
         AtomicInteger stuckAttempts = new AtomicInteger();
         CountDownLatch retryHolding = new CountDownLatch(1);
         CountDownLatch flowed = new CountDownLatch(1);
-        AtomicBoolean flowedWhileHeld = new AtomicBoolean();
+        CountDownLatch flowingSent = new CountDownLatch(1);
+        AtomicReference<String> held = new AtomicReference<>("붙잡지 못함");
         CountDownLatch holdEnded = new CountDownLatch(1);
         start(group, quarantine, message -> {
             if (message.key().equals(stuck)) {
                 if (stuckAttempts.incrementAndGet() == 2) {
                     retryHolding.countDown();
-                    try {
-                        flowedWhileHeld.set(flowed.await(timeout().toSeconds(), TimeUnit.SECONDS));
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        holdEnded.countDown();
-                    }
+                    held.set(holdUntilTheOtherPartitionFlows(flowingSent, flowed));
+                    holdEnded.countDown();
                 }
                 throw new IllegalStateException("boom");
             }
@@ -237,11 +233,25 @@ class KafkaContractTest extends MessagingContractTest {
         send(stuck);
         assertThat(retryHolding.await(timeout().toSeconds(), TimeUnit.SECONDS)).as("붙잡힌 키의 첫 재시도가 시작된다").isTrue();
         send(flowing);
-        // 붙잡은 쪽이 신호를 받거나 한도(timeout)를 다 기다릴 때까지 본다. 테스트 스레드가 늦어도 판정은 바뀌지 않는다(R8·R11).
-        assertThat(holdEnded.await(timeout().plusSeconds(10).toSeconds(), TimeUnit.SECONDS)).as("붙잡은 재시도가 끝난다").isTrue();
+        flowingSent.countDown();
+        // 붙잡은 쪽의 대기 한도는 발행을 마친 뒤부터 잰다 — 그 전의 테스트 스레드 지연은 판정에 들어가지 않는다(R8·R11).
+        assertThat(holdEnded.await(2 * timeout().toSeconds() + 10, TimeUnit.SECONDS)).as("붙잡은 재시도가 끝난다").isTrue();
 
-        assertThat(flowedWhileHeld).as("다른 파티션은 붙잡힌 키가 스레드를 쥔 동안 처리된다(동시성 1이면 같은 스레드라 처리되지 않는다)")
-                .isTrue();
+        assertThat(held.get()).as("다른 파티션은 붙잡힌 키가 스레드를 쥔 동안 처리된다(동시성 1이면 같은 스레드라 처리되지 않는다)")
+                .isEqualTo("처리됨");
+    }
+
+    /** 발행이 끝나길 기다린 뒤, 그때부터 {@code timeout()} 안에 다른 파티션이 처리되는지 본다. 결과를 이유와 함께 돌려준다. */
+    private String holdUntilTheOtherPartitionFlows(CountDownLatch flowingSent, CountDownLatch flowed) {
+        try {
+            if (!flowingSent.await(timeout().toSeconds(), TimeUnit.SECONDS)) {
+                return "다른 파티션 발행이 끝나지 않음";
+            }
+            return flowed.await(timeout().toSeconds(), TimeUnit.SECONDS) ? "처리됨" : "발행 뒤 한도 안에 처리되지 않음";
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return "중단됨";
+        }
     }
 
     /** Kafka 기본 파티셔너(키 바이트 murmur2)로 {@code partition} 에 가는 키를 고른다. */
