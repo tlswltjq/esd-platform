@@ -3,7 +3,8 @@
 
 규칙(보수적으로, 모르면 전부 빌드):
 - PR이 아니면(main push·수동·예약) 항상 ``build``(전체). main은 매번 전체로 한 번 더 지킨다.
-- 바뀐 파일이 전부 ``*.md``이면 Gradle을 돌리지 않는다(빈 목록).
+- 바뀐 파일이 전부 ``*.md``이거나 Gradle이 읽지 않는 경로(``NOT_READ_BY_GRADLE``, 결정 216)이면 Gradle을 돌리지 않는다(빈 목록).
+  그 경로의 Python 테스트는 build 작업의 별도 단계가 늘 돌린다. 목록은 허용 목록이다 — 모르는 경로는 전체다.
 - ``apps/<앱>/`` 아래만 바뀌었으면(``*.md`` 제외) 그 앱들의 ``:apps:<앱>:build``와 ``:common:test:test``.
   앱끼리는 프로젝트 의존이 없지만, ``common:test``의 배포 계약 테스트가 모든 앱의 ``application.yml``을 읽는다
   (``common/test/build.gradle``의 ``inputs.files``, PR #208 R1).
@@ -23,6 +24,17 @@ FULL = ["build"]
 # 앱 파일을 입력으로 읽는 공통 테스트. 다른 공통 모듈이 앱 파일을 읽게 되면 여기에 더한다.
 APP_FILE_READERS = ":common:test:test"
 _APP = re.compile(r"^apps/([a-z][a-z-]*)/")
+# 결정 216: Gradle 빌드가 읽지 않는다고 확인한 경로(2026-11-23 조사: *.gradle의 rootProject.file·inputs).
+# Gradle이 읽는 tools/migrations/**(migrationTest 입력)·infra/**(Catalog 정책)·*.gradle은 넣지 않는다.
+# 새 경로를 넣기 전에 `git grep -n "tools/<경로>" -- '*.gradle'`로 Gradle 입력이 아닌지 확인한다.
+NOT_READ_BY_GRADLE_PREFIXES = ("tools/ci/", "tools/measurement/", "tools/verification/", ".claude/")
+NOT_READ_BY_GRADLE_FILES = (".gitignore",)
+
+
+def not_read_by_gradle(path):
+    if path.endswith(".gradle"):
+        return False
+    return path in NOT_READ_BY_GRADLE_FILES or path.startswith(NOT_READ_BY_GRADLE_PREFIXES)
 
 
 def decide(event, paths, apps):
@@ -31,7 +43,7 @@ def decide(event, paths, apps):
         return list(FULL)
     selected = set()
     for path in paths:
-        if path.endswith(".md"):
+        if path.endswith(".md") or not_read_by_gradle(path):
             continue
         match = _APP.match(path)
         if match is None or match.group(1) not in apps:
@@ -66,7 +78,7 @@ def main():
         sys.stderr.write("변경 목록을 얻지 못해 전체를 빌드한다: %s\n" % error)
         paths = []
     tasks = decide(args.event, paths, apps)
-    sys.stderr.write("바뀐 파일 %d개 → %s\n" % (len(paths), " ".join(tasks) or "(Gradle 생략: 문서만 바뀜)"))
+    sys.stderr.write("바뀐 파일 %d개 → %s\n" % (len(paths), " ".join(tasks) or "(Gradle 생략: 문서·Gradle이 읽지 않는 경로만 바뀜)"))
     print(output_line(tasks))
 
 

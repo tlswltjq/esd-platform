@@ -128,5 +128,31 @@ class BuildScopeWiringTest(unittest.TestCase):
         self.assertIn('Build 단계가 steps.scope.outputs.tasks 로 돌지 않는다', self.problems(mutant))
 
 
+
+class PythonToolTestsWiringTest(unittest.TestCase):
+    """결정 216: Gradle이 읽지 않는 도구 경로만 바뀐 PR은 Gradle을 생략한다. 그 Python 테스트는 build 작업이 늘 돌려야 한다."""
+
+    STEP = ("      - name: Python tool tests\n"
+            "        run: |\n"
+            "          python3 -B -m unittest discover -s tools/verification -p 'test_*.py'\n"
+            "          python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'\n")
+
+    def setUp(self):
+        self.text = CI.read_text(encoding='utf-8')
+
+    def problems(self, text):
+        build = re.search(r'^  build:\n((?:(?:    .*)?\n)+)', text, re.M)
+        body = '' if build is None else build.group(1)
+        return [] if self.STEP in body else ['build 작업에 조건 없는 Python 도구 테스트 단계가 없다']
+
+    def test_build_always_runs_the_python_tool_tests(self):
+        self.assertEqual([], self.problems(self.text))
+
+    def test_skipping_the_step_when_gradle_is_skipped_is_caught(self):
+        mutant = self.text.replace("      - name: Python tool tests\n        run: |\n",
+                                   "      - name: Python tool tests\n        if: steps.scope.outputs.tasks != ''\n        run: |\n", 1)
+        self.assertNotEqual(self.text, mutant)
+        self.assertEqual(['build 작업에 조건 없는 Python 도구 테스트 단계가 없다'], self.problems(mutant))
+
 if __name__ == '__main__':
     unittest.main()
