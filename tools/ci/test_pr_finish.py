@@ -83,8 +83,11 @@ class PendingUserVerdictsTest(unittest.TestCase):
         # PR #226 R2: 이유 칸의 언급이나 빈 원문은 확정이 아니다.
         body = verdict_body([['R1 (high) 무엇', '채택', '사용자 확정: "채택"으로 기록할 예정'],
                              ['R2 (high) 무엇', '채택 (사용자 확정: "")', '이유'],
-                             ['R3 (high) 무엇', '채택 (사용자 확정: "', '이유']])
-        self.assertEqual(['R1 (high) 무엇', 'R2 (high) 무엇', 'R3 (high) 무엇'], pr_finish.pending_user_verdicts(body))
+                             ['R3 (high) 무엇', '채택 (사용자 확정: "', '이유'],
+                             ['R4 (high) 무엇', '채택 (사용자 확정: "", 메모: "대기")', '이유'],
+                             ['R5 (high) 무엇', '채택 (사용자 확정: "  ")', '이유']])
+        self.assertEqual(['R1 (high) 무엇', 'R2 (high) 무엇', 'R3 (high) 무엇', 'R4 (high) 무엇', 'R5 (high) 무엇'],
+                         pr_finish.pending_user_verdicts(body))
 
     def test_policy_rows_need_user_confirmation(self):
         # PR #226 R3: 정책을 바꾸는 지적은 AI 판정 채택이어도 사용자가 판정한다(결정 112).

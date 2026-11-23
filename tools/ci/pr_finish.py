@@ -33,7 +33,8 @@ import review_gate  # noqa: E402
 REQUIRED = ('build', 'review-gate')
 USER_JUDGED = ('부분 반영', '기각')
 HIGH = re.compile(r'\bhigh\b', re.IGNORECASE)
-USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*\S[^"”]*["”]')
+# 인용 안에 따옴표·공백이 아닌 글자가 하나 이상 있어야 한다(PR #226 재리뷰: \S는 따옴표도 센다).
+USER_CONFIRMED = re.compile(r'사용자 확정\s*[:：]\s*["“][^"”]*[^"”\s][^"”]*["”]')
 POLICY = '정책'
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
