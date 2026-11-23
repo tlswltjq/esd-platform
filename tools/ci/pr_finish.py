@@ -2,6 +2,8 @@
 
     wait   필수 검사가 등록될 때까지 기다린 뒤(push 직후 바로 감시하면 즉시 끝난다, PR #122),
            모두 끝날 때까지 기다린다. `--head-sha`를 주면 PR head가 그 커밋이 된 뒤부터 센다.
+           `--new-runs`를 주면 이 명령 시작 60초 전 이후에 시작한 검사만 센다. head는 같은데 검사만
+           다시 도는 경우(`gh pr ready`·본문 수정 직후)에 draft 때의 SKIPPED 같은 이전 결과로 끝내지 않는다.
            종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과.
     check  병합 조건을 판정만 한다. 여러 PR을 주면 모두 판정한다.
     merge  주어진 순서대로 판정 → `gh pr merge --merge` → MERGED 확인을 하나씩 한다.
@@ -51,7 +53,7 @@ def view(number):
 
 
 def required_checks(number):
-    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link'], check=False)
+    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link,startedAt'], check=False)
     try:
         return json.loads(out) if out.strip() else []
     except ValueError:
@@ -74,7 +76,20 @@ def check_summary(checks):
     return 'pass' if all(bucket == 'pass' for bucket in buckets) else 'fail'
 
 
+NEW_RUN_MARGIN = 60
+
+
+def iso(seconds):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(seconds))
+
+
+def fresh(checks, since):
+    # 같은 head의 이전 결과를 버린다. 아직 시작하지 않은 검사는 등록 전으로 본다.
+    return [check for check in checks if (check.get('startedAt') or '') >= since]
+
+
 def wait(args):
+    since = iso(time.time() - NEW_RUN_MARGIN) if args.new_runs else None
     deadline = time.time() + args.timeout
     register_deadline = time.time() + args.register_timeout
     while True:
@@ -87,6 +102,8 @@ def wait(args):
                 time.sleep(args.interval)
                 continue
         checks = required_checks(args.number)
+        if since:
+            checks = fresh(checks, since)
         if not registered(checks) and time.time() > register_deadline:
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
                 args.register_timeout, ', '.join(REQUIRED)))
@@ -207,6 +224,7 @@ def main(argv=None):
     waiting.add_argument('--timeout', type=int, default=3600)
     waiting.add_argument('--register-timeout', type=int, default=300)
     waiting.add_argument('--interval', type=int, default=15)
+    waiting.add_argument('--new-runs', action='store_true', help='이 명령 시작 60초 전 이후에 시작한 검사만 센다')
     for name in ('check', 'merge'):
         sub = commands.add_parser(name)
         sub.add_argument('numbers', type=int, nargs='+', help='병합 순서대로')

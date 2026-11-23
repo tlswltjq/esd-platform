@@ -143,7 +143,7 @@ class MergeTest(unittest.TestCase):
 
 class WaitTest(unittest.TestCase):
     def args(self, **overrides):
-        base = dict(number=7, head_sha=None, timeout=60, register_timeout=30, interval=0)
+        base = dict(number=7, head_sha=None, timeout=60, register_timeout=30, interval=0, new_runs=False)
         base.update(overrides)
         return argparse.Namespace(**base)
 
@@ -164,6 +164,18 @@ class WaitTest(unittest.TestCase):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[{'name': 'review-gate', 'bucket': 'pass'}]), \
                 redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+
+    def test_new_runs_ignores_results_from_before_ready(self):
+        # PR #226: gh pr ready 직후 draft 때의 SKIPPED build를 읽고 끝났다.
+        old = [{'name': 'build (unit)', 'bucket': 'skipping', 'startedAt': '2000-01-01T00:00:00Z'},
+               {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2000-01-01T00:00:00Z'}]
+        new = [{'name': 'build (unit)', 'bucket': 'pass', 'startedAt': '2999-01-01T00:00:00Z'},
+               {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2999-01-01T00:00:00Z'}]
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=[old, old + new]), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args(new_runs=True)))
+        not_started = [{'name': 'build (unit)', 'bucket': 'pending', 'startedAt': '0001-01-01T00:00:00Z'}] + new[1:]
+        self.assertEqual(new[1:], pr_finish.fresh(not_started, '2026-01-01T00:00:00Z'))
 
     def test_skipping_build_is_failure_and_mentions_draft(self):
         checks = [{'name': 'build', 'bucket': 'skipping'}, {'name': 'review-gate', 'bucket': 'pass'}]
