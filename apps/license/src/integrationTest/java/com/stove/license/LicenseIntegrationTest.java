@@ -438,7 +438,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         assertThat(event.paymentId()).isEqualTo(input.paymentId());
         OutboxEventRepository rows = context.getBean(OutboxEventRepository.class);
         OutboxRelay relay = new OutboxRelay(rows, new KafkaMessagePublisher(kafka),
-                200, 10, 5, new OutboxMetrics(new SimpleMeterRegistry(), rows), new TransactionTemplate(transactions));
+                200, 10, 5, new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
         relay.relay();
         assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id=?",
                 String.class, event.eventId())).isEqualTo("SENT");
