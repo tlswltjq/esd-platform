@@ -217,7 +217,11 @@ def main(argv=None):
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             base_text = base.stdout.decode('utf-8')
         except (OSError, UnicodeError, subprocess.CalledProcessError):
-            print('경고: 기준 판 {}을 읽지 못해 기준 판 비교만 건너뜀'.format(args.base_ref))
+            # PR #232 R2: 기준 판을 지정했는데 못 읽으면 보존 검사를 못 한 것이다. 통과로 바꾸지 않는다.
+            print('실패: 기준 판 {}의 docs/decisions.md를 읽지 못해 번호·앵커 보존을 검사할 수 없다. '
+                  'checkout의 fetch-depth와 --base-ref를 확인한다. 기준 판 없이 검사하려면 --base-ref를 빼고 돌린다.'
+                  .format(args.base_ref))
+            return 1
     try:
         errors, counts = check(args.root, base_text)
     except (OSError, UnicodeError) as error:

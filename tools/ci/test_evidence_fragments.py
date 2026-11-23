@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -106,6 +107,39 @@ class RepositoryTest(unittest.TestCase):
         changes.write_text('modified\tapps/x/A.java\nadded\tdocs/evidence.d/7.md\n', encoding='utf-8')
         self.assertEqual(0, evidence_fragments.main(['pr', '--number', '7', '--changes', str(changes)]))
         self.assertEqual(1, evidence_fragments.main(['pr', '--number', '8', '--changes', str(changes)]))
+
+
+    def commit_base(self):
+        git = ['git', '-C', str(self.root), '-c', 'user.name=t', '-c', 'user.email=t@t']
+        subprocess.run(git[:3] + ['init', '-q'], check=True)
+        subprocess.run(git + ['add', '-A'], check=True)
+        subprocess.run(git + ['commit', '-q', '-m', 'base'], check=True)
+
+    def test_r4_a_fold_pr_must_move_every_removed_row_into_the_index(self):
+        """PR #232 R4: 조각을 지우기만 하고 행을 옮기지 않은 접기 PR을 잡는다."""
+        self.fragment('5.md', '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n')
+        self.fragment('6.md', '| 2026-11-09 | b | 여섯 | 통과 | PR #6 |\n')
+        self.commit_base()
+        changes = [('modified', 'docs/evidence.md'), ('removed', 'docs/evidence.d/5.md'), ('removed', 'docs/evidence.d/6.md')]
+        evidence_fragments.fold(self.root)
+        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', changes))
+        (self.root / 'docs/evidence.md').write_text(INDEX + '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n', encoding='utf-8')
+        errors = evidence_fragments.lost_rows(self.root, 'HEAD', changes)
+        self.assertEqual(1, len(errors))
+        self.assertIn('docs/evidence.d/6.md', errors[0])
+        # PR #232 재리뷰 R2: 칸 경계의 공백만 다르게 옮긴 행은 보존된 것이다.
+        (self.root / 'docs/evidence.md').write_text(INDEX + '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n'
+                                                   '|2026-11-09|b|여섯|통과|PR #6|\n', encoding='utf-8')
+        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', changes))
+        self.assertIn('읽지 못해', evidence_fragments.lost_rows(self.root, 'missing', changes)[0])
+        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', [('modified', 'apps/x/A.java')]))
+        listed = self.write_changes('modified\tdocs/evidence.md\nremoved\tdocs/evidence.d/5.md\nremoved\tdocs/evidence.d/6.md\n')
+        self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
+                                                     '--root', str(self.root), '--base-ref', 'HEAD']))
+        (self.root / 'docs/evidence.md').write_text(INDEX, encoding='utf-8')
+        self.assertEqual(1, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
+                                                     '--root', str(self.root), '--base-ref', 'HEAD']))
+        self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed)]))
 
 
 if __name__ == '__main__':

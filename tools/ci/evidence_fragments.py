@@ -8,10 +8,12 @@
           · 코드 PR(`*.md` 밖의 파일을 바꿈)은 자기 번호 조각을 더하거나 고쳐야 한다.
           · 다른 번호의 조각을 더하거나 고치지 않는다. 조각 삭제는 접기 PR만 한다.
           · docs/evidence.md는 접기 PR만 고친다. 접기 PR은 docs/evidence.md와 조각 삭제만 담는다.
+          · --base-ref를 주면 접기 PR이 지운 조각의 행이 모두 docs/evidence.md에 있는지 대조한다(PR #232 R4).
 - fold  : 조각 행을 (날짜, PR 번호) 순으로 docs/evidence.md 끝에 붙이고 조각을 지운다.
 """
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -104,6 +106,35 @@ def check_pr(number, changes):
     return errors
 
 
+def base_text(root, base_ref, path):
+    result = subprocess.run(['git', '-C', str(root), 'show', base_ref + ':' + path],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        return None
+    return result.stdout.decode('utf-8')
+
+
+def lost_rows(root, base_ref, changes):
+    """접기 PR이 지운 조각(기준 판 내용)의 행 중 현재 docs/evidence.md에 없는 행."""
+    removed = [path for status, path in changes if status == 'removed' and NAME.match(path)]
+    if not removed or not any(path == INDEX for _, path in changes):
+        return []
+    index = (root / INDEX).read_text(encoding='utf-8')
+    # 칸으로 나눠 비교한다. 칸 경계의 공백만 다른 행은 같은 행이다(PR #232 재리뷰 R2).
+    present = {tuple(cells(line) or [line.strip()]) for line in index.split('\n')}
+    errors = []
+    for path in sorted(removed):
+        text = base_text(root, base_ref, path)
+        if text is None:
+            errors.append('기준 판 %s의 %s를 읽지 못해 행 보존을 검사할 수 없다' % (base_ref, path))
+            continue
+        for line in text.split('\n'):
+            if line.strip() and tuple(cells(line) or [line.strip()]) not in present:
+                errors.append('%s의 행이 docs/evidence.md에 없다(접기는 행을 옮기고 조각을 지운다): %s'
+                              % (path, line.strip()[:80]))
+    return errors
+
+
 def fold(root):
     errors = check(root)
     if errors:
@@ -150,9 +181,14 @@ def main(argv=None):
     pr = sub.add_parser('pr')
     pr.add_argument('--number', type=int, required=True)
     pr.add_argument('--changes', required=True, help='`상태<TAB>경로` 줄 목록 파일')
+    pr.add_argument('--root', default='.')
+    pr.add_argument('--base-ref', help='지운 조각을 읽을 git 기준 판(접기 PR 행 보존 대조)')
     args = parser.parse_args(argv)
     if args.command == 'pr':
-        errors = check_pr(args.number, read_changes(args.changes))
+        changes = read_changes(args.changes)
+        errors = check_pr(args.number, changes)
+        if args.base_ref:
+            errors += lost_rows(Path(args.root).resolve(), args.base_ref, changes)
         ok = '통과: PR #%d 근거 조각 규칙' % args.number
     elif args.command == 'check':
         errors = check(Path(args.root).resolve())
