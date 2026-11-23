@@ -59,7 +59,7 @@ def required_checks(number):
         return json.loads(out) if out.strip() else []
     except ValueError:
         # 검사가 아직 없으면 gh는 JSON 대신 안내를 낸다.
-        if 'no' in err.lower() and 'check' in err.lower():
+        if no_checks(err):
             return []
         raise SystemExit('실패: 필수 검사를 읽지 못함: ' + err.strip())
 
@@ -68,6 +68,48 @@ def registered(checks):
     # 한쪽만 먼저 등록·완료돼도 통과로 끝내지 않는다(PR #226 R6).
     names = [check.get('name') or '' for check in checks]
     return all(any(name.startswith(prefix) for name in names) for prefix in REQUIRED)
+
+
+# 결정 217: 필수 검사 build는 gradle 조각이 모두 끝난 뒤에야 등록된다(약 7분). 그 전에도 CI가 시작됐는지는 필수가
+# 아닌 plan·gradle 검사로 안다. 이것이 이벤트 뒤에 생겼으면 등록 시간 초과로 끝내지 않고 전체 시간 안에서 기다린다.
+STARTED = ('plan (', 'gradle (')
+
+
+def listed_checks(number, strict=False):
+    """필수가 아닌 검사까지 모두(`--required` 없음). 검사가 없으면 gh가 종료 코드 1과 안내를 내므로 빈 목록.
+    strict면 그 밖의 조회 실패에서 멈춘다 — 이벤트 전 기록이 비면 이전 plan을 새 CI로 오인한다(PR #234 4차 리뷰)."""
+    code, out, err = gh(['pr', 'checks', str(number), '--json', 'name,link'], check=False)
+    if not out.strip():
+        if strict and code != 0 and not no_checks(err):
+            fail(err)
+        return []
+    try:
+        return json.loads(out)
+    except ValueError:
+        if strict:
+            fail(err)
+        return []
+
+
+def no_checks(err):
+    # gh가 검사가 없을 때 내는 안내(`no checks reported on the '<branch>' branch`)만 인정한다. 낱말 포함만 보면
+    # `no such host … check your internet connection` 같은 조회 실패를 검사 없음으로 읽는다(PR #234 5차 리뷰).
+    return 'no checks reported' in err.lower()
+
+
+def fail(err):
+    raise SystemExit('실패: 검사 목록을 읽지 못함: ' + err.strip())
+
+
+def ci_started(number, old_links=frozenset()):
+    """이벤트 뒤에 생긴(old_links에 없는) plan·gradle 검사가 있으면 CI가 시작된 것이다."""
+    return any((check.get('name') or '').startswith(STARTED) and check.get('link') not in old_links
+               for check in listed_checks(number))
+
+
+def missing_required(checks):
+    names = [check.get('name') or '' for check in checks]
+    return [prefix for prefix in REQUIRED if not any(name.startswith(prefix) for name in names)]
 
 
 def check_summary(checks):
@@ -87,7 +129,7 @@ def links(checks):
     return {check.get('link') for check in checks if check.get('link')}
 
 
-def wait(args, renew=(), old_links=frozenset()):
+def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
     deadline = time.time() + args.timeout
     register_deadline = time.time() + args.register_timeout
     while True:
@@ -102,7 +144,10 @@ def wait(args, renew=(), old_links=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
-        if not registered(checks) and time.time() > register_deadline:
+        # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
+        # (PR #234 3차 리뷰: 이벤트 전 plan·gradle은 old_all로 뺀다).
+        if not registered(checks) and time.time() > register_deadline and not (
+                missing_required(checks) == ['build'] and ci_started(args.number, old_all)):
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
                 args.register_timeout, ', '.join(REQUIRED)))
             return 3
@@ -129,8 +174,9 @@ def ready(args):
         print('실패: draft PR이 아니다. ready가 build를 다시 돌리지 않으니 wait를 쓴다.')
         return 2
     old = links(required_checks(args.number))
+    old_all = links(listed_checks(args.number, strict=True))
     gh(['pr', 'ready', str(args.number)])
-    return wait(args, RERUN['ready'], old)
+    return wait(args, RERUN['ready'], old, old_all)
 
 
 def edit(args):
@@ -141,8 +187,9 @@ def edit(args):
         print('본문이 같아 보내지 않았다. 지금 결과로 판정한다.')
         return wait(args)
     old = links(required_checks(args.number))
+    old_all = links(listed_checks(args.number, strict=True))
     gh(['pr', 'edit', str(args.number), '--body-file', args.body_file])
-    return wait(args, RERUN['edit'], old)
+    return wait(args, RERUN['edit'], old, old_all)
 
 
 def latest(rollup, prefix):
