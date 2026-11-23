@@ -2238,6 +2238,18 @@
 - 구분: 추천 수용
 - 결과: [PR #228](https://github.com/tlswltjq/esd-platform/pull/228)
 
+<a id="ci-scope-non-gradle-paths"></a>
+## 216. Gradle이 읽지 않는 도구 경로만 바뀐 PR은 Gradle을 생략하고, 검증·측정 도구의 Python 테스트는 build 작업이 늘 돌린다
+- 문제: [결정 207](#ci-build-scope)의 "그 밖의 경로는 전체 빌드" 때문에 `tools/ci`·`tools/verification`·`tools/measurement`의 Python, `.claude/`, `.gitignore`만 바꾼 PR도 약 17분 전체 빌드를 돌았다(11-09 이후 병합 PR 31개 중 7개). 그런데 `tools/verification`·`tools/measurement`의 Python 테스트 16개 파일(221건)은 CI 어디에서도 돌지 않아, 17분 빌드가 통과해도 바뀐 코드는 검증되지 않았다.
+- 선택지: A 지금처럼 둔다 / B Gradle이 읽지 않는다고 확인한 경로만 허용 목록으로 Gradle을 생략하고, 검증·측정 도구의 Python 테스트를 build 작업에서 늘 돌린다 / C Python 테스트 단계만 더하고 범위 규칙은 그대로 둔다 (추천: B — 검증 공백("통과처럼 읽히는 미실행")을 메우고, 모르는 경로는 전체라는 결정 207의 보수 원칙을 허용 목록으로 지킨다)
+- 내 의견: "결정 216은 B로 해"
+- 선택: B — 추천 수용.
+  - 허용 목록(`tools/ci/build_scope.py`): `tools/ci/`, `tools/measurement/`, `tools/verification/`(`*.gradle` 제외), `.claude/`, `.gitignore`. Gradle 입력인 `tools/migrations/**`(migrationTest)·`infra/**`(Catalog 정책)·`*.gradle`은 넣지 않고, 그 사례를 `test_build_scope.py`가 지킨다.
+  - build 작업의 "Python tool tests" 단계가 범위와 무관하게 `tools/verification`·`tools/measurement`를 돌린다(약 15초). `tools/ci`는 review-gate가 돌린다. 이 단계가 조건 없이 있는지 `test_workflows.py`가 지킨다.
+  - 허용 목록 안의 파일을 나중에 Gradle이 읽게 되면 PR 범위에서는 놓칠 수 있다. main push는 늘 전체 빌드라 병합 직후 잡힌다.
+- 구분: 추천 수용
+- 결과: [PR #230](https://github.com/tlswltjq/esd-platform/pull/230)
+
 ---
 
 ## 검증하며 드러난 것

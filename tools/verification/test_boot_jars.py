@@ -8,7 +8,7 @@ from support.boot_jars import application_jar
 
 class BootJarsTest(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory(dir=os.environ['KIROCREW_SCRATCH'])
+        self.directory = tempfile.TemporaryDirectory(dir=os.environ.get('KIROCREW_SCRATCH'))  # CI에는 없다(PR #230 R1)
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         self.libs = self.root / 'apps/order/build/libs'

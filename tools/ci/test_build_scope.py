@@ -43,8 +43,24 @@ class BuildScopeTest(unittest.TestCase):
         for path in ["common/messaging/src/main/java/X.java", "build.gradle", "settings.gradle",
                      "gradle/libs.versions.toml", "simulators/mock-pg/src/main/java/Y.java",
                      "infra/minio/policies/download-reader.json", ".github/workflows/ci.yml",
-                     "tools/ci/build_scope.py", "e2e/build.gradle", "gradle.properties"]:
+                     "e2e/build.gradle", "gradle.properties"]:
             self.assertEqual(scope([path, "apps/order/src/main/java/A.java"]), ["build"], path)
+
+    def test_paths_gradle_does_not_read_skip_gradle(self):
+        # 결정 216: Python 도구·에이전트 안내·.gitignore는 Gradle 입력이 아니다. 그 테스트는 build 작업의 별도 단계가 돈다.
+        for path in ["tools/ci/build_scope.py", "tools/measurement/broker_latency.py",
+                     "tools/verification/verify-jib.py", "tools/verification/support/minio_image.py",
+                     ".claude/skills/finish-pr/SKILL.md", ".claude/skills/x/run.sh", ".gitignore"]:
+            self.assertEqual(scope([path, "docs/x.md"]), [], path)
+        self.assertEqual(scope(["tools/verification/verify-jib.py", "apps/order/src/main/java/A.java"]),
+                         [":apps:order:build", ":common:test:test"])
+
+    def test_paths_gradle_reads_still_build_everything(self):
+        # 결정 216 허용 목록에 넣으면 안 되는 Gradle 입력: 이행 SQL(migrationTest), 초기화 스크립트, 인프라 정책.
+        for path in ["tools/migrations/order/order-transition.sql", "tools/migrations/mock-pg/migrate.py",
+                     "tools/verification/verify-test-boundaries.gradle", "infra/minio/policies/download-reader.json",
+                     "tools/remote/remote.sh", "tools/observability/collect-lag.sh", "tools/README.md.bak"]:
+            self.assertEqual(scope([path]), ["build"], path)
 
     def test_an_unknown_app_directory_builds_everything(self):
         self.assertEqual(scope(["apps/newapp/src/main/java/A.java"]), ["build"])

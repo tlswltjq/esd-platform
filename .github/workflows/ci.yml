@@ -53,7 +53,15 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Docker
         run: docker version --format 'server {{.Server.Version}} api {{.Server.APIVersion}}'
+      # 결정 216: 검증·측정 도구의 Python 테스트는 Gradle 범위와 무관하게 늘 돈다(약 15초).
+      # 이 경로만 바뀐 PR은 Gradle을 생략하므로(build_scope.py) 여기가 그 변경을 검증하는 유일한 곳이다.
+      # tools/ci 테스트는 review-gate가 돌린다.
+      - name: Python tool tests
+        run: |
+          python3 -B -m unittest discover -s tools/verification -p 'test_*.py'
+          python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'
       # 결정 207: PR은 바뀐 범위만 빌드한다(문서만 → Gradle 생략, 한 앱 안만 → 그 앱, 그 밖 → 전체).
+      # 결정 216: Gradle이 읽지 않는다고 확인한 도구 경로(build_scope.py의 허용 목록)만 바뀌어도 Gradle을 생략한다.
       # 작업 자체는 늘 돌아 필수 검사 이름이 그대로 보고된다(결정 107). main push는 항상 전체.
       - name: Build scope
         id: scope

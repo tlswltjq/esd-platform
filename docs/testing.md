@@ -18,7 +18,7 @@
 | 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다) | [실험 E9](experiments.md#resilience) |
 | 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
 | `tools/ci/` | `python3 -B -m unittest discover -s tools/ci -p 'test_*.py'` | [tools/README.md](../tools/README.md) |
-| `tools/verification/` | `python3 -B -m unittest discover -s tools/verification -p 'test_<대상>.py'` | [tools/README.md](../tools/README.md) |
+| `tools/verification/`·`tools/measurement/` | `python3 -B -m unittest discover -s tools/verification -p 'test_<대상>.py'`. CI는 build 작업이 둘 다 늘 돌리고, 이 경로만 바뀐 PR은 Gradle을 생략한다 | [결정 216](decisions.md#ci-scope-non-gradle-paths) |
 | 문서만(`*.md`) | 로컬 Gradle 없음. `python3 tools/ci/decision_numbers.py --root . --base-ref origin/main`(결정을 고쳤을 때) | CI가 Gradle을 생략한다([결정 207](decisions.md#ci-build-scope)) |
 
 2026-11-02 사용자가 요청한 아키텍처 검사 정비를 완료했다. OCI에서 완료 앱 518·공통 규칙 자체 67·공통 라이브러리 30의 **615건**, 실행 의존성과 common ArchUnit check를 통과했다. Settlement 실제 Kafka·DB 계약 **3건**이 통과했으며, 그룹을 서로 바꾼 반례는 정적 검사 47건이 통과해도 새 대응 계약이 실패함을 확인했다. 원복 뒤 같은 계약 1건도 재검증했다. 이 재실행을 중복 합산하지 않는다. 적용 기준은 [아키텍처 검사 범위](architecture.md#archunit-scope), 검증 수치는 [근거 색인](evidence.md), Red/Green·해시·자원 보존 원자료는 [정비 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/architecture-test-improvement-20261102.md)을 따른다. 업무 코드·DB·API·이벤트 계약은 변경하지 않았다.
