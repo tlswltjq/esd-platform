@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -172,7 +173,7 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
             self.assertEqual(1, pr_finish.wait(self.args()))
         with mock.patch.object(pr_finish, 'required_checks', return_value=[{'name': 'review-gate', 'bucket': 'pass'}]), \
-                redirect_stdout(io.StringIO()):
+                mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
 
     def test_ready_waits_for_a_new_build_and_keeps_existing_review_gate(self):
@@ -215,6 +216,7 @@ class WaitTest(unittest.TestCase):
         gh.assert_not_called()
         # R10: 공백만 달라도 보냈으면 이전 review-gate로 통과하지 않는다.
         with mock.patch.object(pr_finish, 'view', return_value=pr(body='새 본문\n')), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=False), \
                 mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')) as gh, \
                 mock.patch.object(pr_finish, 'required_checks', return_value=[gate_old, build]), \
                 redirect_stdout(io.StringIO()):
@@ -232,8 +234,24 @@ class WaitTest(unittest.TestCase):
 
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
-                redirect_stdout(io.StringIO()):
+                mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+
+    def test_a_started_ci_keeps_waiting_for_the_late_build_check(self):
+        # 결정 217: build는 조각이 끝난 뒤 등록된다. plan·gradle이 이벤트 뒤에 생겼으면 등록 시간 초과로 끝내지 않는다.
+        gate = {'name': 'review-gate', 'bucket': 'pass'}
+        sequence = [[gate], [gate], [gate, {'name': 'build (unit)', 'bucket': 'pass'}]]
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args(register_timeout=-1)))
+
+    def test_ci_started_ignores_checks_from_before_the_event(self):
+        listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1'}, {'name': 'review-gate', 'link': 'job/2'}])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
+            self.assertTrue(pr_finish.ci_started(7))
+            self.assertFalse(pr_finish.ci_started(7, {'job/1'}))
+        with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'no checks reported')):
+            self.assertFalse(pr_finish.ci_started(7))
 
     def test_waits_until_head_matches(self):
         views = [pr(headRefOid='b' * 40), pr(headRefOid='a' * 40)]

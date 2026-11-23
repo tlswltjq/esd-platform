@@ -70,6 +70,21 @@ def registered(checks):
     return all(any(name.startswith(prefix) for name in names) for prefix in REQUIRED)
 
 
+# 결정 217: 필수 검사 build는 gradle 조각이 모두 끝난 뒤에야 등록된다(약 7분). 그 전에도 CI가 시작됐는지는 필수가
+# 아닌 plan·gradle 검사로 안다. 이것이 이벤트 뒤에 생겼으면 등록 시간 초과로 끝내지 않고 전체 시간 안에서 기다린다.
+STARTED = ('plan (', 'gradle (')
+
+
+def ci_started(number, old_links=frozenset()):
+    code, out, _ = gh(['pr', 'checks', str(number), '--json', 'name,link'], check=False)
+    try:
+        checks = json.loads(out) if out.strip() else []
+    except ValueError:
+        return False
+    return any((check.get('name') or '').startswith(STARTED) and check.get('link') not in old_links
+               for check in checks)
+
+
 def check_summary(checks):
     buckets = [check.get('bucket') for check in checks]
     if not registered(checks) or 'pending' in buckets:
@@ -102,7 +117,7 @@ def wait(args, renew=(), old_links=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
-        if not registered(checks) and time.time() > register_deadline:
+        if not registered(checks) and time.time() > register_deadline and not ci_started(args.number, old_links):
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
                 args.register_timeout, ', '.join(REQUIRED)))
             return 3
