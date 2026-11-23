@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.util.PropertyPlaceholderHelper;
+import org.springframework.util.SystemPropertyUtils;
 
 /**
  * [D-053] Gateway 연결 풀 유휴 상한 &lt; 하류 서비스가 유휴 연결을 닫는 시간.
@@ -32,9 +33,12 @@ class GatewayIdleTimeoutContractTest {
 
     /**
      * Spring과 같은 자리표시자 해석기. 배포 값은 모르므로 모든 이름을 비워 두고 <b>기본값</b>으로 판정한다(중첩 기본값 포함,
-     * PR #229 R2). 기본값까지 없으면 해석기가 실패한다.
+     * PR #229 R2). 기본값까지 없으면 해석기가 실패한다. 접두·접미·구분·이스케이프 문자는 Spring Boot 바인딩과 같은
+     * {@link SystemPropertyUtils} 상수를 쓴다(R3: {@code \:}는 구분자가 아니라 이름의 일부다).
      */
-    private static final PropertyPlaceholderHelper PLACEHOLDERS = new PropertyPlaceholderHelper("${", "}", ":", null, false);
+    private static final PropertyPlaceholderHelper PLACEHOLDERS = new PropertyPlaceholderHelper(
+            SystemPropertyUtils.PLACEHOLDER_PREFIX, SystemPropertyUtils.PLACEHOLDER_SUFFIX,
+            SystemPropertyUtils.VALUE_SEPARATOR, SystemPropertyUtils.ESCAPE_CHARACTER, false);
 
     private static Map<String, Object> yamlOf(Path app) {
         return loadYaml(app.resolve("src/main/resources/application.yml"));
@@ -79,6 +83,9 @@ class GatewayIdleTimeoutContractTest {
         assertThatThrownBy(() -> springDuration("k", "${TIMEOUT}"))
                 .isInstanceOf(AssertionError.class).hasMessageContaining("기본값 없는 자리표시자");
         assertThatThrownBy(() -> springDuration("k", "${TIMEOUT:${FALLBACK}}"))
+                .isInstanceOf(AssertionError.class).hasMessageContaining("기본값 없는 자리표시자");
+        assertThatThrownBy(() -> springDuration("k", "${TIMEOUT:${FALLBACK\\:45s}}"))
+                .as("이스케이프된 콜론은 기본값 구분자가 아니다")
                 .isInstanceOf(AssertionError.class).hasMessageContaining("기본값 없는 자리표시자");
     }
 
