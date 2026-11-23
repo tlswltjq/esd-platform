@@ -13,6 +13,7 @@ import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -69,9 +70,19 @@ class RabbitContractTest extends MessagingContractTest {
                                       List<Class<? extends RuntimeException>> noRetryFor) {
         RabbitSubscriptions subscriptions = new RabbitSubscriptions(
                 () -> List.of(new SubscribedHandler(group, topic, handler, asArray(noRetryFor))), connectionFactory, admin,
-                new InPlaceDelivery(storage, ReplayTracing.NONE, SHORT_RETRIES), QUEUES, 10, Duration.ofMillis(20));
+                new InPlaceDelivery(storage, ReplayTracing.NONE, retryDelays(SHORT_RETRIES)), QUEUES, 10, Duration.ofMillis(20));
         subscriptions.start();
         return subscriptions::stop;
+    }
+
+    @Override
+    protected Optional<String> keyInSamePartition(String key) {
+        return keyWhere(candidate -> RabbitTopology.shard(candidate, QUEUES) == RabbitTopology.shard(key, QUEUES));
+    }
+
+    @Override
+    protected Optional<String> keyInOtherPartition(String key) {
+        return keyWhere(candidate -> RabbitTopology.shard(candidate, QUEUES) != RabbitTopology.shard(key, QUEUES));
     }
 
     @Override

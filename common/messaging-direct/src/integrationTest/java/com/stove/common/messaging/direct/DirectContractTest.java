@@ -11,6 +11,7 @@ import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +36,15 @@ class DirectContractTest extends MessagingContractTest {
                                       List<Class<? extends RuntimeException>> noRetryFor) {
         DirectSubscriptions subscriptions = new DirectSubscriptions(
                 () -> List.of(new SubscribedHandler(group, topic, handler, asArray(noRetryFor))), jdbc, storage,
-                ReplayTracing.NONE, Map.of(topic, "outbox_event"), 20, 100, SHORT_RETRIES);
+                ReplayTracing.NONE, Map.of(topic, "outbox_event"), 20, 100, retryDelays(SHORT_RETRIES));
         subscriptions.start();
         return subscriptions::stop;
+    }
+
+    /** (그룹, 토픽)마다 커서 하나라 모든 키가 같은 분할이다. 다른 분할 대조군은 없다. */
+    @Override
+    protected Optional<String> keyInSamePartition(String key) {
+        return keyWhere(candidate -> !candidate.equals(key));
     }
 
     @Override

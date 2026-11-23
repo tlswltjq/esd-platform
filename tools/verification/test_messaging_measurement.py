@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -36,6 +38,20 @@ class CommandTest(unittest.TestCase):
 
 
 class BrokerEnvironmentTest(unittest.TestCase):
+    def test_rabbitmq_streams_uses_the_stream_port_and_the_same_parallelism(self):
+        order = messaging_measurement.broker_environment("order", "rabbitmq-streams")
+        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "rabbitmq-streams")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_HOST"], "rabbitstreams")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PORT"], "5552")
+        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC"],
+                         str(messaging_measurement.PARALLELISM))
+        self.assertNotIn("STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS", order)
+        self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq-streams")
+                         ["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"], "stove.catalog.v1")
+        service = messaging_measurement.infra_services("rabbitmq-streams")["rabbitstreams"]
+        self.assertIn("rabbitmq_stream", " ".join(service["command"]))
+        self.assertIn("5552", service["healthcheck"]["test"])
+
     def test_kafka_is_the_default_and_needs_no_switch(self):
         self.assertEqual(messaging_measurement.broker_environment("order", "kafka"), {})
 
@@ -258,6 +274,91 @@ class MeasureTest(unittest.TestCase):
                                               Path(directory), 300, 5, 1, 2, 1)
         self.assertEqual(len(started), 1)
         self.assertTrue(started[0].stopped, "유휴 읽기가 실패해도 표본 스레드를 멈춘다(R3)")
+
+
+class BrokerRestartTest(unittest.TestCase):
+    def test_kills_then_starts_the_broker_service_and_records_when(self):
+        commands = []
+
+        def capture(command, **kwargs):
+            commands.append(command)
+            return ""
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker", "compose", "-p", "x"], "kafka", 0.01, 0.01).start()
+        restart.join()
+        self.assertEqual(commands, [["docker", "compose", "-p", "x", "kill", "kafka"],
+                                    ["docker", "compose", "-p", "x", "start", "kafka"]])
+        summary = restart.summary()
+        self.assertEqual(summary["service"], "kafka")
+        self.assertIsNotNone(summary["killed_at_s"])
+        self.assertGreaterEqual(summary["started_at_s"], summary["killed_at_s"])
+        self.assertEqual(summary["errors"], [])
+
+    def test_failed_command_is_recorded_not_raised(self):
+        def capture(command, **kwargs):
+            raise subprocess.CalledProcessError(1, command)
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "rabbitmq", 0.0, 0.0).start()
+        restart.join()
+        self.assertIsNone(restart.killed_at)
+        self.assertEqual(len(restart.errors), 2)
+
+    def test_a_restart_that_did_not_happen_makes_the_run_invalid(self):
+        def capture(command, **kwargs):
+            if command[-2] == "kill":
+                raise subprocess.CalledProcessError(1, command)
+            return ""
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.0).start()
+        restart.join()
+        checked = messaging_measurement.with_restart({"valid": True, "reasons": []}, restart)
+        self.assertFalse(checked["valid"])
+        self.assertTrue(any("브로커 종료 실패" in reason for reason in checked["reasons"]))
+
+    def test_diagnosis_slower_than_the_outage_does_not_delay_the_restart(self):
+        # 중단 0.2초, 진단은 중단 한가운데(0.1초)에 시작해 0.8초 걸린다. 진단을 기다렸다 재시작하면 중단이 0.9초 이상이 된다(R5·R6).
+        diagnosed = []
+
+        def capture(command, **kwargs):
+            return ""
+
+        def slow_diagnosis():
+            time.sleep(0.8)
+            diagnosed.append(True)
+
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.2,
+                                                      diagnose=slow_diagnosis).start()
+        restart.join()
+        self.assertLess(restart.actual_down(), 0.5, "재시작은 진단을 기다리지 않고 예정 시각에 한다")
+        self.assertEqual(diagnosed, [True], "진단은 재시작 뒤에도 끝까지 돈다")
+        self.assertEqual(restart.problems(), [])
+
+    def test_diagnosis_that_never_finishes_is_recorded_and_the_run_goes_on(self):
+        def capture(command, **kwargs):
+            return ""
+
+        stuck = threading.Event()
+        with mock.patch.object(messaging_measurement, "DIAGNOSIS_JOIN_SECONDS", 0.1):
+            restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.05,
+                                                          diagnose=stuck.wait).start()
+            restart.join()
+        stuck.set()
+        self.assertIsNotNone(restart.started_at)
+        self.assertTrue(any("끝나지 않았다" in error for error in restart.errors))
+        self.assertEqual(restart.problems(), [], "진단 실패는 장애 주입 실패가 아니다")
+
+    def test_no_restart_keeps_validity_as_is(self):
+        checked = {"valid": True, "reasons": []}
+        self.assertIs(messaging_measurement.with_restart(checked, None), checked)
+
+    def test_direct_has_no_broker_to_restart(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(messaging_measurement.time, "sleep"):
+            with self.assertRaises(SystemExit):
+                messaging_measurement.measure("/repo", ["docker", "compose"], lambda *a, **k: None,
+                                              lambda command, **kwargs: "1\t/x" if "du -sk" in command[-1]
+                                              else ("Com_select\t1\nQuestions\t1" if command[:2] == ["docker", "exec"] else "id"),
+                                              Path(directory), 300, 5, 1, 2, 1, broker_name="direct", restart_at=1.0,
+                                              restart_down=1.0)
 
 
 if __name__ == "__main__":

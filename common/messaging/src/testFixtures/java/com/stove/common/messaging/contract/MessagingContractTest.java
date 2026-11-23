@@ -3,10 +3,16 @@ package com.stove.common.messaging.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.common.contract.EventHeaders;
+import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
 import com.stove.common.event.OutboundMessage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.Optional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +75,7 @@ public abstract class MessagingContractTest {
 
     protected String group;
     protected String topic;
+    private boolean productionRetries;
 
     private final List<AutoCloseable> started = new ArrayList<>();
 
@@ -81,6 +90,37 @@ public abstract class MessagingContractTest {
 
     /** 발행한다. 돌아오면 그 adapter 기준으로 메시지가 내구성 있게 받아들여졌다(발행 포트 계약). */
     protected abstract void publish(OutboundMessage message);
+
+    /**
+     * S5(결정 210): 이 adapter 에서 {@code key} 와 같은 분할(파티션·큐·스트림·커서)로 가는 다른 키. 고를 수 없으면 비워 둔다(측정을 건너뛴다).
+     */
+    protected Optional<String> keyInSamePartition(String key) {
+        return Optional.empty();
+    }
+
+    /** {@code accept} 를 만족하는 첫 키({@code S-0}, {@code S-1} …). 분할 배정 함수로 같은·다른 분할 키를 고를 때 쓴다. */
+    protected static Optional<String> keyWhere(Predicate<String> accept) {
+        for (int i = 0; i < 10_000; i++) {
+            String candidate = "S-" + i;
+            if (accept.test(candidate)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** S5 대조군: {@code key} 와 다른 분할로 가는 키. 분할이 하나뿐인 adapter(브로커 없음)는 비운다. */
+    protected Optional<String> keyInOtherPartition(String key) {
+        return Optional.empty();
+    }
+
+    /**
+     * 구독이 쓸 재시도 간격. 보통은 하위 클래스의 짧은 간격({@code testDefault})이고, S5 측정만 운영 간격
+     * ({@link InPlaceDelivery#RETRY_DELAYS}, 1·2·4초)을 쓴다. 운영 오류 처리기를 그대로 쓰는 adapter(Kafka)는 부르지 않아도 된다.
+     */
+    protected final List<Duration> retryDelays(List<Duration> testDefault) {
+        return productionRetries ? InPlaceDelivery.RETRY_DELAYS : testDefault;
+    }
 
     /** 테스트 토픽을 준비한다(예: Kafka 는 파티션 여러 개로 만든다). */
     protected void prepareTopic(String topic) {
@@ -102,6 +142,7 @@ public abstract class MessagingContractTest {
 
     @BeforeEach
     void prepareContract() {
+        productionRetries = false;
         group = "contract-" + UUID.randomUUID();
         topic = "contract." + UUID.randomUUID().toString().substring(0, 8);
         prepareTopic(topic);
@@ -435,6 +476,56 @@ public abstract class MessagingContractTest {
         }
     }
 
+    /**
+     * S5 독 메시지 1건(결정 210 반대 시나리오). 계속 실패하는 키 A 뒤에 같은 분할의 키 B 와 다른 분할의 키 C 를 보내고,
+     * 운영 재시도 간격(1·2·4초)에서 B·C 가 처음 처리되기까지의 시간을 잰다. 지연은 측정값이라 단언하지 않고
+     * {@code build/s5-poison/} 에 JSON 으로 남긴다. 단언은 "A 는 격리되고, B·C 는 결국 처리된다"뿐이다.
+     */
+    @Test
+    void S5_독_메시지_뒤_같은_분할과_다른_분할의_지연을_잰다() throws IOException {
+        String poison = "P-" + UUID.randomUUID();
+        Optional<String> same = keyInSamePartition(poison);
+        Assumptions.assumeTrue(same.isPresent(), "이 adapter 는 같은 분할 키를 고르지 않는다");
+        Optional<String> other = keyInOtherPartition(poison);
+        productionRetries = true;
+        Recording handler = new Recording();
+        handler.failKey = poison;
+        start(group, handler);
+        awaitSubscriptionsReady();
+
+        long poisonSent = System.nanoTime();
+        send(poison);
+        long behindSent = System.nanoTime();
+        String behind = send(same.get());
+        long asideSent = System.nanoTime();
+        String aside = other.isPresent() ? send(other.get()) : null;
+
+        await("독 메시지 격리", () -> quarantine.stopped(group, topic, poison));
+        long quarantined = System.nanoTime();
+        await("같은 분할 뒤 메시지 수신", () -> handler.ids().contains(behind));
+        if (aside != null) {
+            await("다른 분할 메시지 수신", () -> handler.ids().contains(aside));
+        }
+
+        Long asideFirst = aside == null ? null : handler.firstAttemptNanos(aside);
+        String json = String.format(Locale.ROOT,
+                "{\"adapter\":\"%s\",\"retry_delays_ms\":[1000,2000,4000],\"poison_quarantined_ms\":%.1f,"
+                        + "\"same_partition_first_attempt_ms\":%.1f,\"other_partition_first_attempt_ms\":%s,"
+                        + "\"recorded_at\":\"%s\"}",
+                getClass().getSimpleName(), millis(quarantined - poisonSent),
+                millis(handler.firstAttemptNanos(behind) - behindSent),
+                asideFirst == null ? "null" : String.format(Locale.ROOT, "%.1f", millis(asideFirst - asideSent)),
+                Instant.now());
+        Path directory = Path.of("build", "s5-poison");
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve(getClass().getSimpleName() + "-" + System.currentTimeMillis() + ".json"), json);
+        assertThat(handler.ids()).contains(behind);
+    }
+
+    private static double millis(long nanos) {
+        return nanos / 1_000_000.0;
+    }
+
     /** 같은 키의 첫 메시지 처리를 붙잡아 두는 문. 붙잡힌 동안 같은 키의 다른 메시지가 시작되는지 본다(PR #219 R1). */
     protected static final class Gate {
         private final String key;
@@ -491,6 +582,7 @@ public abstract class MessagingContractTest {
         private volatile String flakyKey;
         private volatile String flakyEventId;
         private final AtomicInteger flakyFailuresLeft = new AtomicInteger();
+        private final Map<String, Long> firstAttemptNanos = new ConcurrentHashMap<>();
 
         public Recording() {
             this(null, Duration.ZERO);
@@ -511,7 +603,7 @@ public abstract class MessagingContractTest {
             flakyFailuresLeft.set(failures);
         }
 
-        List<String> ids() {
+        public List<String> ids() {
             synchronized (received) {
                 return received.stream().map(message -> message.header(EventHeaders.EVENT_ID)).toList();
             }
@@ -536,6 +628,11 @@ public abstract class MessagingContractTest {
             }
         }
 
+        /** 처음 시도한 시각({@link System#nanoTime()}). 아직 시도하지 않았으면 {@code null}. */
+        Long firstAttemptNanos(String eventId) {
+            return firstAttemptNanos.get(eventId);
+        }
+
         int firstAttemptIndex(String eventId) {
             synchronized (tried) {
                 return tried.indexOf(eventId);
@@ -551,6 +648,7 @@ public abstract class MessagingContractTest {
         @Override
         public void receive(InboundMessage message) {
             String eventId = message.header(EventHeaders.EVENT_ID);
+            firstAttemptNanos.putIfAbsent(eventId, System.nanoTime());
             tried.add(eventId);
             if (concurrency != null) {
                 concurrency.enter(message.key());

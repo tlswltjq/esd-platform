@@ -10,6 +10,7 @@ dependencies {
     // 메시징 adapter 넷을 모두 런타임에 넣고 stove.messaging.broker 로 고른다(결정 209). 운영 코드는 adapter 를 모른다.
     runtimeOnly project(':common:messaging-kafka')
     runtimeOnly project(':common:messaging-rabbitmq')
+    runtimeOnly project(':common:messaging-rabbitmq-streams')
     runtimeOnly project(':common:messaging-redis')
     runtimeOnly project(':common:messaging-direct')
     // 통합 테스트는 실 Kafka 로 레코드를 넣고 읽는다.
