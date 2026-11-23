@@ -59,7 +59,7 @@ def required_checks(number):
         return json.loads(out) if out.strip() else []
     except ValueError:
         # 검사가 아직 없으면 gh는 JSON 대신 안내를 낸다.
-        if 'no' in err.lower() and 'check' in err.lower():
+        if no_checks(err):
             return []
         raise SystemExit('실패: 필수 검사를 읽지 못함: ' + err.strip())
 
@@ -92,7 +92,9 @@ def listed_checks(number, strict=False):
 
 
 def no_checks(err):
-    return 'no' in err.lower() and 'check' in err.lower()
+    # gh가 검사가 없을 때 내는 안내(`no checks reported on the '<branch>' branch`)만 인정한다. 낱말 포함만 보면
+    # `no such host … check your internet connection` 같은 조회 실패를 검사 없음으로 읽는다(PR #234 5차 리뷰).
+    return 'no checks reported' in err.lower()
 
 
 def fail(err):

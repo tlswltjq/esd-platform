@@ -289,6 +289,10 @@ class WaitTest(unittest.TestCase):
             self.assertEqual([], pr_finish.listed_checks(7, strict=True))
         with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'HTTP 502')):
             self.assertEqual([], pr_finish.listed_checks(7))
+        offline = 'dial tcp: lookup api.github.com: no such host\ncheck your internet connection'
+        with mock.patch.object(pr_finish, 'gh', return_value=(1, '', offline)):
+            with self.assertRaises(SystemExit):
+                pr_finish.listed_checks(7, strict=True)
 
     def test_ci_started_ignores_checks_from_before_the_event(self):
         listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1'}, {'name': 'review-gate', 'link': 'job/2'}])
