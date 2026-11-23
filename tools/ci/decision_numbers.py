@@ -135,26 +135,59 @@ def parse_decisions(text):
     return records, anchors, anchor_lines, errors
 
 
+CODE_SPAN = re.compile(r'(`+)(.+?)\1')
+STAR_EMPHASIS = re.compile(r'(\*{1,3})(\S(?:.*?\S)?)\1')
+# `_`는 단어 경계에서만 강조다(snake_case의 `_`는 글자로 남는다).
+UNDERSCORE_EMPHASIS = re.compile(r'(?<![0-9A-Za-z가-힣])(_{1,3})(\S(?:.*?\S)?)\1(?![0-9A-Za-z가-힣])')
+
+
+def rendered_text(heading):
+    """헤딩이 화면에 보이는 글자. 인라인 코드 안은 그대로 두고, 밖에서만 링크·강조 문법을 벗긴다(PR #233 R2)."""
+    parts = []
+    position = 0
+    for code in CODE_SPAN.finditer(heading):
+        parts.append(('text', heading[position:code.start()]))
+        parts.append(('code', code.group(2)))
+        position = code.end()
+    parts.append(('text', heading[position:]))
+    result = []
+    for kind, piece in parts:
+        if kind == 'text':
+            piece = MARKDOWN_LINK.sub(lambda m: m.group(1), piece)
+            piece = STAR_EMPHASIS.sub(lambda m: m.group(2), piece)
+            piece = UNDERSCORE_EMPHASIS.sub(lambda m: m.group(2), piece)
+        result.append(piece)
+    return ''.join(result)
+
+
 def slug(heading):
-    """GitHub 자동 앵커: 링크는 글자만 남기고 소문자로 바꾼 뒤 글자·숫자·결합 문자·`_`·`-`·공백 밖을 지우고 공백을 `-`로 바꾼다."""
-    text = MARKDOWN_LINK.sub(lambda m: m.group(1), heading.strip()).lower()
+    """GitHub 자동 앵커(github-slugger): 보이는 글자를 소문자로 바꾼 뒤 글자·숫자·결합 문자·`_`·`-`·공백 밖을 지우고 공백을 `-`로 바꾼다."""
+    text = rendered_text(heading.strip()).lower()
     kept = ''.join(char for char in text
                    if char in '_- ' or unicodedata.category(char)[0] in 'LNM')
     return kept.replace(' ', '-')
 
 
+def unique_slug(base, occurrences):
+    """github-slugger와 같은 중복 처리: 이미 쓴 앵커(접미사가 붙은 것 포함)와 겹치지 않을 때까지 -N을 올린다(PR #233 R1)."""
+    name = base
+    while name in occurrences:
+        occurrences[base] += 1
+        name = '{}-{}'.format(base, occurrences[base])
+    occurrences[name] = 0
+    return name
+
+
 def auto_anchors(text):
     """PR #233 R3: 실제 결정 헤딩의 자동 앵커만 번호로 푼다. 같은 slug는 GitHub처럼 -1, -2를 붙인다."""
     lines, _ = visible_lines(text)
-    used = {}
+    occurrences = {}
     anchors = {}
     for raw, line in zip(text.splitlines(), lines):
         if not ANY_HEADING.match(line):
             continue
         # 화면 줄은 인라인 코드를 지우므로 slug는 원문 줄에서 만든다.
-        base = slug(ANY_HEADING.match(raw).group(1) or '')
-        name = base if base not in used else '{}-{}'.format(base, used[base])
-        used[base] = used.get(base, 0) + 1
+        name = unique_slug(slug(ANY_HEADING.match(raw).group(1) or ''), occurrences)
         decision = HEADING.match(line)
         if decision:
             anchors[name] = int(decision.group(1))

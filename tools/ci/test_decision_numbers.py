@@ -108,6 +108,23 @@ class DecisionNumbersTest(Fixture):
         self.write('README.md', '[결정 1](docs/decisions.md#1-같다-1)')
         self.assertEqual(self.errors(), '')
 
+    def test_r1_suffix_skips_an_anchor_already_taken(self):
+        # PR #233 재리뷰 R1: `같다-1` 헤딩이 먼저 있으면 두 번째 `같다`는 -1이 아니라 -2다(github-slugger).
+        self.write('docs/decisions.md', '# 1. 같다-1\n# 1. 같다\n## 1. 같다\n')
+        self.write('README.md', '[결정 1](docs/decisions.md#1-같다-2)')
+        self.assertEqual(self.errors(), '')
+        self.write('README.md', '[결정 1](docs/decisions.md#1-같다-1)')
+        self.assertIn('없는 앵커 1-같다-1', self.errors())
+
+    def test_r2_slug_uses_the_rendered_text(self):
+        # PR #233 재리뷰 R2: 강조 문법은 벗기고, 인라인 코드 안의 링크 문법은 글자 그대로 둔다.
+        self.write('docs/decisions.md', VALID + '## 3. _강조_ **굵게**\n## 4. `[x](y)` 예\n')
+        self.write('README.md', '[결정 3](docs/decisions.md#3-강조-굵게) [결정 4](docs/decisions.md#4-xy-예)')
+        self.assertEqual(self.errors(), '')
+        self.assertEqual(decision_numbers.slug('snake_case 이름'), 'snake_case-이름')
+        # GFM: 닫는 `_` 바로 뒤에 글자가 붙으면 강조가 아니다.
+        self.assertEqual(decision_numbers.slug('_강조_와'), '_강조_와')
+
     def test_fences_comments_and_inline_code_are_ignored(self):
         self.write('docs/decisions.md', VALID + '\n```md\n## 99. 예\n```\n~~~\n## 88. 예\n~~~\n<!-- 예시 -->\n`[결정 1](#two)`\n')
         self.assertEqual(decision_numbers.check(self.root), ([], (2, 2, 2, 0)))
