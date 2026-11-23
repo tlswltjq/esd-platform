@@ -170,6 +170,7 @@ class KafkaContractTest extends MessagingContractTest {
         assertThat(batch.getContainerProperties().getKafkaConsumerProperties()
                 .getProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG)).isNull();
         assertThat(single.getCommonErrorHandler()).as("격리 오류 처리기가 운영 팩토리에서 붙는다").isNotNull();
+        assertThat(batch.getConcurrency()).as("결정 212: 리스너 동시성 기본값 = 파티션 수").isEqualTo(KafkaListenerDefaults.PARTITIONS);
     }
 
     /** 그룹마다 인스턴스들이 파티션을 모두 나눠 가질 때까지(리밸런스 끝) 기다린다. 도중에 보내면 재배달이 섞인다. */
@@ -177,8 +178,8 @@ class KafkaContractTest extends MessagingContractTest {
     protected void awaitSubscriptionsReady() {
         for (Map.Entry<String, List<ConcurrentMessageListenerContainer<Object, Object>>> entry : containersByGroup.entrySet()) {
             List<ConcurrentMessageListenerContainer<Object, Object>> containers = entry.getValue();
-            await("그룹 " + entry.getKey() + " 파티션 배정", () -> assigned(containers) == PARTITIONS
-                    && containers.stream().allMatch(container -> partitionsOf(container) > 0));
+            // 동시성 3(결정 212)이면 인스턴스 둘 × 소비자 셋 = 6 이 파티션 3을 나눠, 어떤 인스턴스는 하나도 못 받을 수 있다.
+            await("그룹 " + entry.getKey() + " 파티션 배정", () -> assigned(containers) == PARTITIONS);
         }
     }
 
