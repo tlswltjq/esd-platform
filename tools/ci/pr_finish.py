@@ -75,14 +75,24 @@ def registered(checks):
 STARTED = ('plan (', 'gradle (')
 
 
-def ci_started(number, old_links=frozenset()):
-    code, out, _ = gh(['pr', 'checks', str(number), '--json', 'name,link'], check=False)
+def listed_checks(number):
+    """필수가 아닌 검사까지 모두(`--required` 없음). 검사가 없으면 gh가 종료 코드 1과 안내를 내므로 빈 목록."""
+    _, out, _ = gh(['pr', 'checks', str(number), '--json', 'name,link'], check=False)
     try:
-        checks = json.loads(out) if out.strip() else []
+        return json.loads(out) if out.strip() else []
     except ValueError:
-        return False
+        return []
+
+
+def ci_started(number, old_links=frozenset()):
+    """이벤트 뒤에 생긴(old_links에 없는) plan·gradle 검사가 있으면 CI가 시작된 것이다."""
     return any((check.get('name') or '').startswith(STARTED) and check.get('link') not in old_links
-               for check in checks)
+               for check in listed_checks(number))
+
+
+def missing_required(checks):
+    names = [check.get('name') or '' for check in checks]
+    return [prefix for prefix in REQUIRED if not any(name.startswith(prefix) for name in names)]
 
 
 def check_summary(checks):
@@ -102,7 +112,7 @@ def links(checks):
     return {check.get('link') for check in checks if check.get('link')}
 
 
-def wait(args, renew=(), old_links=frozenset()):
+def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
     deadline = time.time() + args.timeout
     register_deadline = time.time() + args.register_timeout
     while True:
@@ -117,7 +127,10 @@ def wait(args, renew=(), old_links=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
-        if not registered(checks) and time.time() > register_deadline and not ci_started(args.number, old_links):
+        # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
+        # (PR #234 3차 리뷰: 이벤트 전 plan·gradle은 old_all로 뺀다).
+        if not registered(checks) and time.time() > register_deadline and not (
+                missing_required(checks) == ['build'] and ci_started(args.number, old_all)):
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
                 args.register_timeout, ', '.join(REQUIRED)))
             return 3
@@ -144,8 +157,9 @@ def ready(args):
         print('실패: draft PR이 아니다. ready가 build를 다시 돌리지 않으니 wait를 쓴다.')
         return 2
     old = links(required_checks(args.number))
+    old_all = links(listed_checks(args.number))
     gh(['pr', 'ready', str(args.number)])
-    return wait(args, RERUN['ready'], old)
+    return wait(args, RERUN['ready'], old, old_all)
 
 
 def edit(args):
@@ -156,8 +170,9 @@ def edit(args):
         print('본문이 같아 보내지 않았다. 지금 결과로 판정한다.')
         return wait(args)
     old = links(required_checks(args.number))
+    old_all = links(listed_checks(args.number))
     gh(['pr', 'edit', str(args.number), '--body-file', args.body_file])
-    return wait(args, RERUN['edit'], old)
+    return wait(args, RERUN['edit'], old, old_all)
 
 
 def latest(rollup, prefix):

@@ -221,7 +221,7 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'required_checks', return_value=[gate_old, build]), \
                 redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.edit(argparse.Namespace(**dict(vars(args), register_timeout=-1))))
-        self.assertEqual(1, gh.call_count)
+        self.assertEqual(1, sum(1 for call in gh.call_args_list if call.args[0][:2] == ['pr', 'edit']))
         Path(handle.name).unlink()
 
     def test_skipping_build_is_failure_and_mentions_draft(self):
@@ -244,6 +244,33 @@ class WaitTest(unittest.TestCase):
         with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
             self.assertEqual(0, pr_finish.wait(self.args(register_timeout=-1)))
+
+    def test_the_grace_applies_only_to_a_missing_build_and_a_new_ci(self):
+        # PR #234 3차 리뷰: review-gate가 없거나, plan·gradle이 이벤트 전 것이면 등록 제한대로 끝낸다.
+        build_only = [{'name': 'build (unit)', 'bucket': 'pass'}]
+        with mock.patch.object(pr_finish, 'required_checks', return_value=build_only), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True) as started, redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+        started.assert_not_called()
+        gate = [{'name': 'review-gate', 'bucket': 'pass'}]
+        listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/old'}])
+        with mock.patch.object(pr_finish, 'required_checks', return_value=gate), \
+                mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')), redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1), (), frozenset(), {'job/old'}))
+
+    def test_ready_records_every_check_from_before_the_event(self):
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        skipped_plan = json.dumps([{'name': 'plan (scope)', 'link': 'job/5'}, gate])
+        calls = []
+
+        def fake_gh(command, check=True):
+            calls.append(command)
+            return (0, skipped_plan, '') if command[:2] == ['pr', 'checks'] else (0, '', '')
+        with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
+                mock.patch.object(pr_finish, 'gh', side_effect=fake_gh), \
+                mock.patch.object(pr_finish, 'required_checks', return_value=[gate]), redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.ready(self.args(register_timeout=-1)))
+        self.assertIn(['pr', 'ready', '7'], calls)
 
     def test_ci_started_ignores_checks_from_before_the_event(self):
         listed = json.dumps([{'name': 'plan (scope)', 'link': 'job/1'}, {'name': 'review-gate', 'link': 'job/2'}])
