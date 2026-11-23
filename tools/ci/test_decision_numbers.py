@@ -89,6 +89,25 @@ class DecisionNumbersTest(Fixture):
         self.write('README.md', '[결정 99](docs/decisions.md#2-둘째)')
         self.assertIn('실제 번호 2', self.errors())
 
+    def test_missing_automatic_anchor_fails(self):
+        # PR #233 R3: 숫자로 시작하는 앵커라도 실제 헤딩이 없으면 그 숫자로 간주하지 않는다.
+        self.write('README.md', '[결정 999](docs/decisions.md#999-missing)')
+        self.assertIn('없는 앵커 999-missing', self.errors())
+
+    def test_automatic_anchor_slug_must_match_heading(self):
+        self.write('README.md', '[결정 2](docs/decisions.md#2-셋째)')
+        self.assertIn('없는 앵커 2-셋째', self.errors())
+
+    def test_real_heading_automatic_anchor_passes(self):
+        self.write('docs/decisions.md', VALID + '## 3. `@Foo`는 [링크](x.md)와 A.B, 둘_째를 쓴다\n')
+        self.write('README.md', '[결정 3](docs/decisions.md#3-foo는-링크와-ab-둘_째를-쓴다)')
+        self.assertEqual(self.errors(), '')
+
+    def test_duplicate_automatic_anchor_gets_suffix(self):
+        self.write('docs/decisions.md', '# 1. 같다\n## 1. 같다\n')
+        self.write('README.md', '[결정 1](docs/decisions.md#1-같다-1)')
+        self.assertEqual(self.errors(), '')
+
     def test_fences_comments_and_inline_code_are_ignored(self):
         self.write('docs/decisions.md', VALID + '\n```md\n## 99. 예\n```\n~~~\n## 88. 예\n~~~\n<!-- 예시 -->\n`[결정 1](#two)`\n')
         self.assertEqual(decision_numbers.check(self.root), ([], (2, 2, 2, 0)))
@@ -239,7 +258,9 @@ class DecisionWorkflowTest(unittest.TestCase):
     def test_build_contract(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text().split('\n  stack:')[0]
         self.assertIn('fetch-depth: 2', text)
-        self.assertLess(text.index('- name: Build'), text.index('- name: Check decision numbers'))
+        # PR #233 R7: 번호 오류를 Gradle 빌드 전에 알린다.
+        self.assertLess(text.index('- name: Check decision numbers'), text.index('- name: Build scope'))
+        self.assertLess(text.index('- name: Check decision numbers'), text.index('- name: Build\n'))
         block = text.split('- name: Check decision numbers')[1].split('- name:')[0]
         self.assertIn('if: ${{ !cancelled() }}', block)
         self.assertIn('--base-ref HEAD^1', block)

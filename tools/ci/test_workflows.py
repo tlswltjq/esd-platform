@@ -181,5 +181,56 @@ class PythonToolTestsWiringTest(unittest.TestCase):
         self.assertNotEqual(self.text, mutant)
         self.assertEqual([self.COMMANDS[1] + ' 가 없다'], self.problems(mutant))
 
+
+class BuildStepOrderTest(unittest.TestCase):
+    """PR #233 R6·R7: 번호 검사 → 범위 판단 → (Gradle을 돌릴 때만) Java·Gradle 준비 → Build 순서를 지킨다."""
+
+    STEPS = {
+        'numbers': ('      - name: Check decision numbers\n'
+                    '        if: ${{ !cancelled() }}\n'
+                    '        run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1\n'),
+        'scope': BuildScopeWiringTest.PRODUCER,
+        'java': "      - uses: actions/setup-java@v4\n        if: steps.scope.outputs.tasks != ''\n",
+        'gradle': "      - uses: gradle/actions/setup-gradle@v4\n        if: steps.scope.outputs.tasks != ''\n",
+        'build': BuildScopeWiringTest.CONSUMER,
+    }
+    ORDER = ('numbers', 'scope', 'java', 'gradle', 'build')
+
+    def setUp(self):
+        self.text = CI.read_text(encoding='utf-8')
+
+    def problems(self, text):
+        build = re.search(r'^  build:\n((?:(?:    .*)?\n)+)', text, re.M)
+        body = '' if build is None else build.group(1)
+        found = [name + ' 단계가 없거나 형식이 다르다' for name, step in self.STEPS.items() if step not in body]
+        if not found:
+            positions = [body.index(self.STEPS[name]) for name in self.ORDER]
+            if positions != sorted(positions):
+                found.append('단계 순서가 ' + ' → '.join(self.ORDER) + '가 아니다')
+            if body.index('      - uses: actions/checkout@v4\n') > positions[0]:
+                found.append('checkout보다 앞에 단계가 있다')
+        if 'docker version' in body:
+            found.append('Docker 버전 출력 단계가 남아 있다')
+        return found
+
+    def test_numbers_and_scope_run_before_java_and_gradle(self):
+        self.assertEqual([], self.problems(self.text))
+
+    def test_numbers_after_build_is_caught(self):
+        numbers = self.STEPS['numbers']
+        mutant = self.text.replace(numbers, '', 1).replace(self.STEPS['build'], self.STEPS['build'] + numbers, 1)
+        self.assertNotEqual(self.text, mutant)
+        self.assertIn('단계 순서가 ' + ' → '.join(self.ORDER) + '가 아니다', self.problems(mutant))
+
+    def test_unconditional_java_setup_is_caught(self):
+        mutant = self.text.replace(self.STEPS['java'], '      - uses: actions/setup-java@v4\n', 1)
+        self.assertNotEqual(self.text, mutant)
+        self.assertEqual(['java 단계가 없거나 형식이 다르다'], self.problems(mutant))
+
+    def test_docker_version_step_is_caught(self):
+        mutant = self.text.replace(self.STEPS['scope'], self.STEPS['scope'] + "      - name: Docker\n        run: docker version\n", 1)
+        self.assertEqual(['Docker 버전 출력 단계가 남아 있다'], self.problems(mutant))
+
+
 if __name__ == '__main__':
     unittest.main()

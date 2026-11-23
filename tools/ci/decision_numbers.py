@@ -11,13 +11,15 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import unicodedata
 
 HEADING = re.compile(r'^ {0,3}## +(\d+)\. +\S.*$')
 NUMERIC_HEADING = re.compile(r'^ {0,3}##[ \t]+\d')
 RAW_HEADING = re.compile(r'^ {0,3}## +\d+\.')
 ANCHOR = re.compile(r'<a\s+id=["\']([^"\']+)["\']\s*>\s*</a>')
 LINK = re.compile(r'\[결정 +(\d+(?:\s*[·,~]\s*\d+)*)\]\(([^\s)]*)\)')
-AUTO_ANCHOR = re.compile(r'^(\d+)-')
+ANY_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$')
+MARKDOWN_LINK = re.compile(r'!?\[([^\]]*)\]\([^)]*\)')
 INLINE_CODE = re.compile(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 EXCLUDED = {'.git', 'build', 'node_modules'}
@@ -133,6 +135,32 @@ def parse_decisions(text):
     return records, anchors, anchor_lines, errors
 
 
+def slug(heading):
+    """GitHub 자동 앵커: 링크는 글자만 남기고 소문자로 바꾼 뒤 글자·숫자·결합 문자·`_`·`-`·공백 밖을 지우고 공백을 `-`로 바꾼다."""
+    text = MARKDOWN_LINK.sub(lambda m: m.group(1), heading.strip()).lower()
+    kept = ''.join(char for char in text
+                   if char in '_- ' or unicodedata.category(char)[0] in 'LNM')
+    return kept.replace(' ', '-')
+
+
+def auto_anchors(text):
+    """PR #233 R3: 실제 결정 헤딩의 자동 앵커만 번호로 푼다. 같은 slug는 GitHub처럼 -1, -2를 붙인다."""
+    lines, _ = visible_lines(text)
+    used = {}
+    anchors = {}
+    for raw, line in zip(text.splitlines(), lines):
+        if not ANY_HEADING.match(line):
+            continue
+        # 화면 줄은 인라인 코드를 지우므로 slug는 원문 줄에서 만든다.
+        base = slug(ANY_HEADING.match(raw).group(1) or '')
+        name = base if base not in used else '{}-{}'.format(base, used[base])
+        used[base] = used.get(base, 0) + 1
+        decision = HEADING.match(line)
+        if decision:
+            anchors[name] = int(decision.group(1))
+    return anchors
+
+
 def label_contains(label, number):
     for part in re.split(r'[·,]', label):
         ends = [int(item.strip()) for item in part.split('~')]
@@ -146,7 +174,9 @@ def label_contains(label, number):
 def check(root, base_text=None):
     root = Path(root).resolve()
     decisions = root / 'docs/decisions.md'
-    records, anchors, anchor_lines, errors = parse_decisions(decisions.read_text(encoding='utf-8'))
+    decisions_text = decisions.read_text(encoding='utf-8')
+    records, anchors, anchor_lines, errors = parse_decisions(decisions_text)
+    automatic = auto_anchors(decisions_text)
     seen = {}
     previous = 0
     for number, line, names in records:
@@ -191,10 +221,7 @@ def check(root, base_text=None):
                         continue
                 elif path != decisions:
                     continue
-                automatic = AUTO_ANCHOR.match(anchor)
-                actual = anchors.get(anchor)
-                if actual is None and automatic:
-                    actual = int(automatic.group(1))
+                actual = anchors.get(anchor, automatic.get(anchor))
                 checked += 1
                 if actual is None:
                     errors.append('{}:{}: {} — 없는 앵커 {}'.format(
