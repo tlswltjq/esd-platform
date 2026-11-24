@@ -61,7 +61,7 @@ class PaymentApprovalSessionIntegrationTest {
         } catch(Exception failure) { throw new ExceptionInInitializerError(failure); }
     }
     @DynamicPropertySource static void payment(DynamicPropertyRegistry registry) {
-        registry.add("PAYMENT_URI",()->"http://127.0.0.1:"+PAYMENT.getAddress().getPort());
+        registry.add("API_GATEWAY_URI",()->"http://127.0.0.1:"+PAYMENT.getAddress().getPort()); // 결정 223: 웹 BFF의 하류는 API 게이트웨이다
     }
     @Autowired WebTestClient http;
     @Autowired ReactiveSessionRepository<?> sessions;
