@@ -2291,6 +2291,20 @@
 - 구분: 직접 제안
 - 결과: [PR #239](https://github.com/tlswltjq/esd-platform/pull/239)
 
+<a id="no-public-clients"></a>
+## 220. 공개 클라이언트 `studio-web`·`swagger-ui`를 없애고, 외부 경로는 개발·시험까지 BFF 세션만 둔다(M-AU-7)
+- 문제: [결정 219](#single-bff)는 OAuth 클라이언트를 `gateway-bff` 하나로 정했지만 Auth에는 공개 클라이언트 둘이 남아 있다. 브라우저에서 `client_id=studio-web` PKCE로 Gateway `/oauth2/token`을 거쳐 Access(15분)·Refresh(7일) Token을 직접 받고, Bearer로 `/api/**` 전체를 쓸 수 있다. Swagger UI(`swagger-ui`), e2e 여정(`OidcLogin`이 `studio-web` 토큰으로 Bearer 호출), 검증·측정 스크립트, Gateway 경로 규칙 테스트가 이 Bearer 경로에 기대고 있어, 웹 사용자가 쓰는 BFF 세션 릴레이 경로는 e2e가 돌지 않는다.
+- 선택지: A 전부 BFF — 두 공개 클라이언트 삭제, 외부 `/oauth2/token`·외부 Bearer 차단(Gateway GW-T20), Swagger·e2e·스크립트·Gateway 테스트를 BFF 세션으로 전환 / B 운영은 닫고 개발·시험 프로필에서만 설정 키로 공개 클라이언트·외부 Bearer를 켬(운영 프로필에서 켜면 시작 실패) / C 유지하고 `studio-web` Refresh Token만 제거(AU-T9) (추천: A — 결정 219를 그대로 지키는 안은 A뿐이고, B는 시험이 운영에 없는 Bearer 경로를 검증하게 된다)
+- 내 의견: "A로 해"
+- 선택: A — 추천 수용.
+  - Auth: `studio-web`·`swagger-ui` 등록과 그 redirect 설정을 지운다. 이미 저장된 등록 행은 시작 때 지운다(개발 단계, 운영 데이터 없음).
+  - Gateway: 외부 요청의 인증은 BFF 세션뿐이다. 외부 `Authorization: Bearer`는 401이고, Auth 라우트에서 `/oauth2/token`을 빼고 그 CORS를 지운다. 하류 서비스로의 Bearer 릴레이와 업무 모듈의 JWT 검증은 그대로다. Studio의 기계 자격 `X-Project-Credential`은 사람이 쓰는 프론트엔드가 아니라 이 결정 밖이다.
+  - 시험: Gateway 경로 규칙 테스트·e2e 여정·검증 스크립트는 BFF 로그인으로 세션을 맺어 호출한다(`tools/verification/auth-bff.py`의 쿠키 로그인 방식).
+  - Swagger: OAuth 보안 스킴을 빼고 BFF 로그인 세션 쿠키로 호출한다. 변경 요청의 CSRF 토큰 전달 방식은 따로 정한다.
+  - 감수한 비용: 고칠 테스트·도구가 많다. Swagger에서 역할을 바꾸려면 다시 로그인하거나 다른 브라우저 프로필을 쓴다. 토큰을 붙여 넣는 수동 API 호출(curl 등)은 쿠키 로그인을 거쳐야 한다.
+- 구분: 추천 수용
+- 결과: [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
+
 ---
 
 ## 검증하며 드러난 것

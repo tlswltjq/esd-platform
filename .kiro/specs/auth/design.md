@@ -151,8 +151,8 @@
 | `client_id` | 인증 | 승인 | 범위 | access token | Refresh Token |
 |---|---|---|---|---|---|
 | `gateway-bff` | `client_secret_basic`(`stove.auth.bff-client-secret`) | `authorization_code`, `refresh_token` | `openid`·`profile`·`studio`·`commerce` | `stove.auth.bff-access-token-seconds`(기본 900) | 7일 절대 상한, 재사용 안 함 |
-| `studio-web` | 없음(공개, PKCE) | `authorization_code` | 같음 | 15분 | **받지 않음**(AU-T9). 운영 등록 여부 M-AU-7 |
-| `swagger-ui` | 없음(공개, PKCE) | `authorization_code` | 같음 | 15분 | 받지 않음. 운영 등록 여부 M-AU-7 |
+
+공개 클라이언트는 등록하지 않는다. 예전 `studio-web`·`swagger-ui` 등록 행은 시작 때 지운다([결정 220](../../../docs/decisions.md#no-public-clients), AU-T9).
 
 ## 이벤트
 
@@ -219,8 +219,7 @@ adapter 메모(공급자·프레임워크 규칙은 여기만)
 | `stove.auth.bff-client-secret` (`BFF_CLIENT_SECRET`) | 없음(필수) | `gateway-bff` 비밀 | 같음 |
 | `stove.auth.bff-redirect-uri` | `http://localhost:8080/login/oauth2/code/gateway-bff`(yml·`@Value`) | BFF callback | 목표: 운영 필수, 코드 기본값 없음(AU-T8) |
 | `stove.auth.bff-access-token-seconds` | 900 | `gateway-bff` access token 수명 | 같은 키. 여정 검증의 25초는 실행 환경 값이지 다른 코드 경로가 아니다 |
-| `stove.auth.redirect-uri` (`STUDIO_REDIRECT_URI`) | `http://localhost:3000/callback` | `studio-web` callback | M-AU-7 |
-| `stove.auth.swagger-redirect-uris` | localhost 주소 3개(yml·`@Value`) | `swagger-ui` callback | M-AU-7 |
+| `stove.auth.redirect-uri`·`stove.auth.swagger-redirect-uris` | localhost 주소(yml·`@Value`) | 예전 공개 클라이언트 callback | 지운다(결정 220, AU-T9) |
 | `stove.auth.app-origin` | `http://localhost:3000` | (yml에만 있고 코드가 읽지 않음 — AU-T8에서 확인·제거) | — |
 | `stove.auth.password-reset.lifetime` | PT30M(코드 `@Value` 기본값만, yml에 없음) | 복구 토큰 유효시간([결정 83](../../../docs/decisions.md)) | 목표: yml에 명시, 기본값 한 곳 |
 | `stove.auth.bootstrap.{admin,reviewer}-{email,password}` | 빈 값 | 부트스트랩(R10) | 목표: 짝이 안 맞으면 시작 실패(AU-T8) |
@@ -230,4 +229,4 @@ adapter 메모(공급자·프레임워크 규칙은 여기만)
 | 메일 adapter 설정(주소·키·타임아웃·발신자) | 없음 | `[외부 대기]` | adapter 설정에만 |
 | 클라이언트별 토큰 수명 | `studio-web`·`swagger-ui` 15분, Refresh 7일 — 코드 상수(`AuthSecurityConfig.java:182-183`·`:201`·`:219`) | R2.3·R3.1 | 목표: 7일 상한은 계약 값이라 상수여도 되지만 한 곳에 둔다(AU-T8) |
 
-운영 계약에 테스트 전용 경로는 없다. 테스트 편의로 넓어진 것으로 보이는 것은 localhost 기본값·DB 비밀번호 기본값·운영 등록되는 `swagger-ui` 클라이언트(M-AU-7)·로그 메일 adapter(AU-T7)다.
+운영 계약에 테스트 전용 경로는 없다. 테스트 편의로 넓어진 것으로 보이는 것은 localhost 기본값·DB 비밀번호 기본값·로그 메일 adapter(AU-T7)다.
