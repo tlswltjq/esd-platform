@@ -6,7 +6,6 @@ import com.stove.license.api.controller.dto.LicensePage;
 import com.stove.license.api.controller.dto.LicenseResponse;
 import com.stove.license.core.service.ReadLicense;
 import com.stove.license.core.service.SearchLicenses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/library")
 public class LibraryController {
     private final SearchLicenses searchLicenses;

@@ -13,7 +13,6 @@ import com.stove.payment.core.service.ReadApprovalReviewNotice;
 import com.stove.payment.core.service.ReadPaymentApproval;
 import com.stove.payment.core.service.RequestPaymentApproval;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.net.URI;
 import java.time.Instant;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/payments/{orderNo}/approvals")
 @ConditionalOnProperty(name="stove.payment.pg.provider",havingValue="PORTONE_TEST")
-@SecurityRequirement(name="oauth2",scopes="commerce")
 public class PaymentApprovalController {
     private final RequestPaymentApproval request;
     private final ReadPaymentApproval read;

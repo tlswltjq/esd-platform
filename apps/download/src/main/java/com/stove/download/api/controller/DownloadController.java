@@ -8,7 +8,6 @@ import com.stove.download.api.controller.dto.DownloadTicketResponse;
 import com.stove.download.core.domain.DownloadRequest;
 import com.stove.download.core.service.ReadBuildDownload;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/downloads")
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 public class DownloadController {
     private final ReadBuildDownload readBuildDownload;
 

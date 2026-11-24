@@ -846,28 +846,10 @@
         },
         "type" : "object"
       }
-    },
-    "securitySchemes" : {
-      "oauth2" : {
-        "description" : "Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.",
-        "flows" : {
-          "authorizationCode" : {
-            "authorizationUrl" : "/oauth2/authorize",
-            "scopes" : {
-              "commerce" : "구매·정산 API",
-              "openid" : "사용자 식별",
-              "profile" : "기본 프로필",
-              "studio" : "크리에이터·심사 API"
-            },
-            "tokenUrl" : "/oauth2/token"
-          }
-        },
-        "type" : "oauth2"
-      }
     }
   },
   "info" : {
-    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.",
+    "description" : "모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.\n실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다\n(`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.\n\n`data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —\n봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.\n\n로그인이 필요한 API는 Gateway BFF 세션 쿠키로 부른다. 먼저 같은 출처에서\n[`/oauth2/authorization/gateway-bff`](/oauth2/authorization/gateway-bff)로 로그인한 뒤 이 화면으로 돌아온다.\n변경 요청의 CSRF 헤더는 Swagger가 `/bff/csrf`에서 받아 붙인다. 역할을 바꾸려면\n`POST /bff/logout` 뒤 다시 로그인한다. `Authorization` 헤더를 보낸 외부 요청은 401이다.",
     "title" : "STOVE order API",
     "version" : "v1"
   },
@@ -917,9 +899,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 환불 목록",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -947,9 +926,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 환불 상세",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -988,9 +964,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 잘못된 환불 승인 중단",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -1029,9 +1002,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 환불 최초 판정",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -1077,9 +1047,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 지정 후속 심사 회차 판정",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -1126,9 +1093,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "관리자 환불 심사 이력",
         "tags" : [ "admin-refund-controller" ]
       }
@@ -1167,9 +1131,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "tags" : [ "order-controller" ]
       },
       "post" : {
@@ -1196,9 +1157,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "tags" : [ "order-controller" ]
       }
     },
@@ -1225,9 +1183,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "tags" : [ "order-controller" ]
       }
     },
@@ -1254,9 +1209,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "tags" : [ "refund-controller" ]
       },
       "post" : {
@@ -1292,9 +1244,6 @@
             "description" : "환불 접수 또는 기존 처리 대기"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "내 주문 전액 환불 접수",
         "tags" : [ "refund-controller" ]
       }
@@ -1333,9 +1282,6 @@
             "description" : "재심사 최초 접수 또는 동일 접수 영수증"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "내 반려 환불 재심사 접수",
         "tags" : [ "refund-controller" ]
       }
@@ -1404,9 +1350,6 @@
             "description" : "지정한 시도가 없거나 현재 실패·복구 완료 조건 불충족"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "내 주문 환불 명시적 재시도",
         "tags" : [ "refund-controller" ]
       }
@@ -1453,9 +1396,6 @@
             "description" : "OK"
           }
         },
-        "security" : [ {
-          "oauth2" : [ "commerce" ]
-        } ],
         "summary" : "내 환불 심사 이력",
         "tags" : [ "refund-controller" ]
       }
