@@ -16,6 +16,32 @@ spring:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
           jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
 
+  # 계정 접근 변경 사실의 거절 기준(GW-T18, 결정 180·225). 웹 BFF와 같은 Redis를 써도 된다(키 접두사가 다르다).
+  # 닿지 못하면 Bearer를 판정하지 않고 503이다(R6.3과 같은 원칙).
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+
+  # Auth의 계정 접근 변경 사실을 받는다(그룹 gateway-account-access). 발행은 하지 않는다 — 프로듀서 설정은 영구 실패를
+  # <원본토픽>.DLT 로 넘기기 위해서다(결정 226, Store와 같음).
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+      observation-enabled: true
+
   # 진행 중인 요청을 기다리는 상한. 컨테이너 종료 유예(40초)보다 짧아야 한다 —
   # 뒤집히면 SIGKILL 이 먼저 도착해 graceful 이 잘린다(D-035).
   lifecycle:
@@ -211,3 +237,11 @@ logging:
     level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     org.springframework.cloud.gateway: INFO
+
+stove:
+  gateway:
+    access-baseline:
+      # 거절 기준·멱등 키 수명. access token 최대 수명(Auth stove.auth.bff-access-token-seconds, 기본 15분) 이상.
+      ttl: ${ACCESS_BASELINE_TTL:20m}
+      # Auth 인스턴스 간 시계 오차 여유. iat < 올림(changedAt) + 이 값이면 거절한다(Auth design 시계 전제).
+      clock-skew: ${ACCESS_BASELINE_CLOCK_SKEW:1s}

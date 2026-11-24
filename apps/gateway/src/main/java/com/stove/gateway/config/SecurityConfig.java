@@ -1,5 +1,8 @@
 package com.stove.gateway.config;
 
+import com.stove.gateway.adapter.redis.BaselineCheckingJwtDecoder;
+import com.stove.gateway.adapter.redis.RedisAccessBaselines;
+import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -22,15 +25,18 @@ import reactor.core.publisher.Flux;
 @Configuration
 public class SecurityConfig {
 
+    /** 서명·issuer·audience·만료 뒤 그 subject의 거절 기준보다 먼저 발급된 토큰을 거절한다(GW-T18, 결정 180·225). */
     @Bean
     ReactiveJwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
-                                  @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+                                  @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
+                                  RedisAccessBaselines baselines,
+                                  @Value("${stove.gateway.access-baseline.clock-skew:1s}") Duration clockSkew) {
         NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefaultWithIssuer(issuer),
                 new JwtClaimValidator<List<String>>("aud",
                         audience -> audience != null && audience.contains("esd-api"))));
-        return decoder;
+        return new BaselineCheckingJwtDecoder(decoder, baselines, clockSkew);
     }
 
     /**
