@@ -220,13 +220,12 @@ adapter 메모(공급자·프레임워크 규칙은 여기만)
 | `stove.auth.bff-redirect-uri` | `http://localhost:8080/login/oauth2/code/gateway-bff`(yml·`@Value`) | BFF callback | 목표: 운영 필수, 코드 기본값 없음(AU-T8) |
 | `stove.auth.bff-access-token-seconds` | 900 | `gateway-bff` access token 수명 | 같은 키. 여정 검증의 25초는 실행 환경 값이지 다른 코드 경로가 아니다 |
 | `stove.auth.redirect-uri`·`stove.auth.swagger-redirect-uris` | localhost 주소(yml·`@Value`) | 예전 공개 클라이언트 callback | 지운다(결정 220, AU-T9) |
-| `stove.auth.app-origin` | `http://localhost:3000` | (yml에만 있고 코드가 읽지 않음 — AU-T8에서 확인·제거) | — |
 | `stove.auth.password-reset.lifetime` | PT30M(코드 `@Value` 기본값만, yml에 없음) | 복구 토큰 유효시간([결정 83](../../../docs/decisions.md)) | 목표: yml에 명시, 기본값 한 곳 |
 | `stove.auth.bootstrap.{admin,reviewer}-{email,password}` | 빈 값 | 부트스트랩(R10) | 목표: 짝이 안 맞으면 시작 실패(AU-T8) |
 | `spring.datasource.*` (`DB_HOST`·`DB_USER`·`DB_PASSWORD`) | `localhost`·`stove`·`stove1234` | DB 연결 | 목표: 운영 비밀번호 기본값 없음(AU-T8, 원칙 ⑦) |
 | `stove.outbox.{relay-enabled,batch-size,poll-interval-ms,max-retry}` | true·200·200·10 | 공통 릴레이([P2.2-3·5](../platform/requirements.md#p22-발행--transactional-outbox)) | 같음 |
 | `stove.messaging.ops.enabled` / `republish-owner` / `republish-enabled` | false / 없음 / 없음 | 공통 운영 API | 목표: 재발행 경로 켬(AU-T10) |
 | 메일 adapter 설정(주소·키·타임아웃·발신자) | 없음 | `[외부 대기]` | adapter 설정에만 |
-| 클라이언트별 토큰 수명 | `studio-web`·`swagger-ui` 15분, Refresh 7일 — 코드 상수(`AuthSecurityConfig.java:182-183`·`:201`·`:219`) | R2.3·R3.1 | 목표: 7일 상한은 계약 값이라 상수여도 되지만 한 곳에 둔다(AU-T8) |
+| 클라이언트별 토큰 수명 | `gateway-bff` Refresh 7일 — 코드 상수(`AuthSecurityConfig`) | R2.3·R3.1 | 목표: 7일 상한은 계약 값이라 상수여도 되지만 한 곳에 둔다(AU-T8) |
 
 운영 계약에 테스트 전용 경로는 없다. 테스트 편의로 넓어진 것으로 보이는 것은 localhost 기본값·DB 비밀번호 기본값·로그 메일 adapter(AU-T7)다.

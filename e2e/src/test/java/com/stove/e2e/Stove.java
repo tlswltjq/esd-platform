@@ -39,8 +39,9 @@ final class Stove {
 
     private static final String HOST = property("host", "http://127.0.0.1");
 
-    static String authBaseUrl() {
-        return HOST + ":" + (8091 + PORT_OFFSET);
+    /** {@link #gateway} 의 주소. BFF 로그인은 브라우저처럼 이 주소의 쿠키 저장소를 쓴다. */
+    static String gatewayBaseUrl() {
+        return HOST + ":" + (8080 + PORT_OFFSET);
     }
 
     /** 유저·창작자·PG 가 두드리는 문. */

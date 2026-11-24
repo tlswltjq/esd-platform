@@ -64,8 +64,12 @@ Gateway와 auth의 재시작은 공유 Redis·MySQL 상태를 유지한다. 세�
 인증을 우회하지 않고 `503 SESSION_STORE_UNAVAILABLE`로 반환한다.
 Docker Compose의 `bff-local-only` 값은 로컬 개발용이며 배포 시 secret으로 대체한다.
 
-기존 `studio-web`, `swagger-ui` 공개 클라이언트는 유지한다. 이 클라이언트는
-Refresh Token을 받지 않는다. Gateway의 Bearer Token API 접근도 기존대로 지원한다.
+OAuth 클라이언트는 `gateway-bff` 하나다. 공개 클라이언트(`studio-web`·`swagger-ui`)는 없고,
+외부 요청에 `Authorization` 헤더가 있으면 Gateway가 경로와 무관하게 401로 끝낸다.
+Gateway는 Auth의 브라우저 로그인 경로(`/oauth2/authorize`, `/login`, `/logout`, `/connect/**`,
+`/.well-known/**`)만 외부에 두고, 토큰·폐기·JWKS·userinfo 엔드포인트는 두지 않는다.
+Swagger UI는 먼저 `/oauth2/authorization/gateway-bff`로 로그인한 세션 쿠키로 호출하고,
+변경 요청의 CSRF 헤더는 `/bff/csrf`에서 받아 붙인다([결정 220·221](decisions.md#no-public-clients)).
 
 ## 검증
 
@@ -74,7 +78,7 @@ Refresh Token을 받지 않는다. Gateway의 Bearer Token API 접근도 기존�
 ```
 
 auth 통합 테스트는 실제 MySQL에서 OIDC, RTR, 재사용, 동시 갱신, 만료, 계정 비활성화,
-폐기를 검증한다. Gateway 테스트는 JWT 변조·만료·issuer·audience를 검증한다.
+폐기를 검증한다. Gateway 테스트는 JWT 변조·만료·issuer·audience와, 역할별 경로 규칙을 BFF 세션(로그인만 대신하는 픽스처)으로 검증한다.
 공유 세션 검증은 두 번째 Gateway를 `--args='--server.port=8081'`로 실행한다.
 테스트용 짧은 Access Token은 auth에 `BFF_ACCESS_TOKEN_SECONDS=30`을 설정한다.
 두 Gateway가 실행된 상태에서 같은 `BFF_CLIENT_SECRET`을 설정하고

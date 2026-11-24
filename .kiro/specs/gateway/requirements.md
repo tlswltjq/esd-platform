@@ -73,12 +73,12 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 2. WHILE 토큰 기록을 갱신하는 동안 THE Gateway SHALL 갱신 lease(기본 15초)를 잡아 같은 토큰 기록의 갱신을 하나만 한다. lease를 못 잡은 요청은 갱신 결과를 기다리되 기다림 상한(기본 12초)을 넘기면 503으로 끝내고 세션을 바꾸지 않는다.
 3. THE Auth 토큰 요청 timeout SHALL 기본 5초이며 lease보다 짧다.
 4. IF 갱신이 불확실하면(타임아웃·연결 끊김·5xx) THEN Gateway SHALL 이전 Refresh Token으로 자동 재시도하지 않고 토큰 기록과 세션을 지우고 401(재로그인)을 반환한다.
-5. THE Bearer Token API 접근 SHALL 세션과 무관하게 지원한다. Bearer 요청은 Gateway가 서명·만료·issuer·`esd-api` audience를 검증한 뒤 받은 헤더 그대로 전달한다.
+5. IF 외부 요청에 `Authorization` 헤더가 있으면 THEN Gateway SHALL 경로·세션과 무관하게 401로 끝내고 하위로 보내지 않는다. 외부 인증은 BFF 세션뿐이다([결정 220](../../../docs/decisions.md#no-public-clients), GW-T20).
 6. IF Auth가 토큰 갱신을 거절하면(4xx: 계정 정지·잠금·역할 회수·재사용 탐지·Refresh Token 상한 도달 등) THEN Gateway SHALL 토큰 기록과 브라우저 세션을 삭제하고 401을 반환하며 하위 요청을 보내지 않는다.
 7. WHEN 허용된 요청을 하위 서비스로 전달하면 THEN Gateway SHALL 하위 응답의 상태(202·4xx·503 포함)·본문·`Location`·`Cache-Control`을 바꾸지 않고 전달한다.
 8. WHEN 갱신 응답을 받으면 THEN Gateway SHALL 새 Access Token을 검증하고 그 `sub`가 토큰 기록의 subject와 같을 때만 저장한다. IF 다르면 THEN 토큰 기록과 세션을 지우고 401을 반환한다(새 번호, design GW-I7).
 9. IF 갱신 응답이 2xx지만 Access Token·Refresh Token·`expires_in` 중 하나라도 없으면 THEN Gateway SHALL 불확실한 갱신(4)으로 다룬다(Refresh Token이 이미 소비됐을 수 있다. 새 번호).
-10. IF Access Token의 서명·issuer·audience·만료 검증이 실패하면 THEN Gateway SHALL Bearer 요청은 401로 거절하고, BFF 세션 요청은 토큰 기록과 세션을 지우고 401을 반환한다. 만료(`exp`) 검증이 판단 원칙 ⑥과 맞는지는 [결정 필요 M-GW-2].
+10. IF Access Token의 서명·issuer·audience·만료 검증이 실패하면 THEN Gateway SHALL 토큰 기록과 세션을 지우고 401을 반환한다. 만료(`exp`) 검증이 판단 원칙 ⑥과 맞는지는 [결정 필요 M-GW-2].
 11. THE 토큰 신선도 판정(갱신 필요 여부) SHALL Gateway가 토큰을 받은 시각 + `expires_in`으로 자기 시계에서 계산한 만료 시각과 자기 시계로 한다. Auth가 찍은 시각과 비교하지 않는다(원칙 ⑥, 결정 163).
 
 ### R5. CSRF와 로그아웃
@@ -86,12 +86,12 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 
 #### 수용 기준
 1. WHEN `GET /bff/csrf` 요청이 오면 THEN Gateway SHALL 변경 요청용 CSRF 헤더 이름과 토큰을 반환한다.
-2. WHERE 쿠키 인증의 변경 요청(`POST`·`PUT`·`PATCH`·`DELETE`)에서 THE Gateway SHALL CSRF 헤더·토큰을 요구한다. Bearer 요청과 Auth에 위임한 브라우저 로그인·가입·비밀번호 복구 경로는 예외다.
+2. WHERE 쿠키 인증의 변경 요청(`POST`·`PUT`·`PATCH`·`DELETE`)에서 THE Gateway SHALL CSRF 헤더·토큰을 요구한다. Auth에 위임한 브라우저 로그인·가입·비밀번호 복구 경로는 예외다.
 3. WHEN `POST /bff/logout` 요청이 오면 THEN Gateway SHALL Auth에 Refresh Token 폐기를 요청하고 토큰 기록과 BFF 세션을 지운 뒤 auth OIDC 로그아웃(`end_session_endpoint`)으로 이동한다.
 4. IF 로그아웃 중 Auth 폐기 요청이 실패하면 THEN Gateway SHALL [결정 필요 M-GW-3]을 따른다(새 번호).
 5. WHEN BFF 세션이 어떤 경로로 끝나면(로그아웃·갱신 거절·검증 실패·세션 만료·재로그인으로 토큰 기록 교체) THEN Gateway SHALL 그 세션의 토큰 기록도 남기지 않는다. 버려지는 Refresh Token을 Auth에서 폐기할지는 [결정 필요 M-GW-3](새 번호).
 6. WHEN Gateway가 Auth의 계정 접근 변경 사실 `AccountAccessChanged`(가칭, 토픽 `stove.auth.v1`, 키 `subject`, 그룹 가칭 `gateway-account-access`)를 처음 받으면 THEN Gateway SHALL 그 `subject`의 모든 BFF 세션과 토큰 기록을 지우고, 세션 저장소(Redis)에 `subject`별 거절 기준 `changedAt`을 최대 access token 수명 이상(설정 키, R8) 남긴다. 같은 `subject`의 기준은 더 늦은 `changedAt`만 덮는다. 멱등은 `eventId`를 기준과 같은 수명으로 Redis에 두어 지킨다(결정 84, [결정 180](../../../docs/decisions.md#account-access-revocation)).
-7. WHILE `subject`의 거절 기준이 있으면 THE Gateway SHALL JWT `iat`가 기준(초 단위로 올림)보다 이른 access token을 세션 릴레이·Bearer 요청 모두 401로 거절하고, 세션 요청이면 그 세션을 `NONE`으로 끝낸다. `iat`와 `changedAt`은 모두 Auth 시계라 원칙 ⑥ 예외가 아니다([결정 180](../../../docs/decisions.md#account-access-revocation)).
+7. WHILE `subject`의 거절 기준이 있으면 THE Gateway SHALL JWT `iat`가 기준(초 단위로 올림)보다 이른 세션의 access token이면 401로 거절하고 그 세션을 `NONE`으로 끝낸다(외부 Bearer는 R4.5로 이미 401). `iat`와 `changedAt`은 모두 Auth 시계라 원칙 ⑥ 예외가 아니다([결정 180](../../../docs/decisions.md#account-access-revocation)).
 8. THE Gateway SHALL `gateway-account-access` 소비 지연(가장 오래 처리하지 못한 레코드의 나이)을 게이지로 낸다. 소비가 멈추거나 거절 기준을 잃으면 끊기가 access token 수명까지 늦어지기 때문이다. 경보 기준은 측정 뒤 정한다(결정 159). 이 소비의 실패 보관 위치는 `[결정 필요 M-GW-8]`(Gateway에 DB가 없어 P2.6-4·5를 그대로 따를 수 없다).
 
 ### R6. 다중 Gateway와 세션 저장소 장애
@@ -102,7 +102,7 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 2. WHERE 로드밸런서 공개 주소 맥락에서 THE Gateway SHALL 인가 주소·redirect URI·로그아웃 주소를 설정한 공개 주소로 만들고, 요청 Host나 인스턴스 내부 주소로 만들지 않는다. Auth의 토큰·JWK 주소는 내부 주소를 쓸 수 있다.
 3. IF 세션 저장소에 접근할 수 없으면 THEN Gateway SHALL 인증을 우회하지 않고 `503 SESSION_STORE_UNAVAILABLE`로 반환한다.
 4. WHEN Gateway·auth가 재시작하면 THEN 세션·토큰 기록 SHALL 공유 Redis·MySQL에 남아 그대로 이어진다.
-5. WHILE 세션 저장소에 접근할 수 없으면 THE Bearer 요청·익명 공개 `GET`·공급자 통지 경로 SHALL [결정 필요 M-GW-4]에 따라 처리한다(새 번호).
+5. WHILE 세션 저장소에 접근할 수 없으면 THE 익명 공개 `GET`·공급자 통지 경로 SHALL [결정 필요 M-GW-4]에 따라 처리한다(새 번호).
 
 ### R7. 결제 공급자 통지의 공개 수신 경로 (새 요구사항)
 **사용자 스토리:** 운영자로서, 결제 공급자가 보내는 결제 상태 변경 통지가 Payment에 닿기를 바란다. 그래야 끝난 결제의 늦은 청구를 주기 조회보다 먼저 알 수 있다(결정 154).

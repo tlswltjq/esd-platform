@@ -105,6 +105,17 @@ class TokenRotationIntegrationTest {
     private HttpResponse<String> refresh(String token) throws Exception {
         return post(HttpClient.newHttpClient(),"/oauth2/token","grant_type=refresh_token&refresh_token="+enc(token),true);
     }
+    /** 결정 220: OAuth 클라이언트는 gateway-bff 하나이고, 예전 공개 클라이언트로는 인가를 시작할 수 없다. */
+    @Test void onlyTheBffClientIsRegisteredAndPublicClientsCannotAuthorize() throws Exception {
+        assertThat(jdbc.queryForList("SELECT client_id FROM oauth2_registered_client", String.class)).containsExactly("gateway-bff");
+        HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+        for (String publicClient : List.of("studio-web", "swagger-ui")) {
+            HttpResponse<String> authorize = get(client, base() + "/oauth2/authorize?response_type=code&client_id=" + publicClient
+                    + "&scope=openid&redirect_uri=" + enc("http://localhost:3000/callback")
+                    + "&code_challenge=" + "a".repeat(43) + "&code_challenge_method=S256");
+            assertThat(authorize.statusCode()).isEqualTo(400);
+        }
+    }
     @Test void rotationReplayRevokesLatestAndLifetimeDoesNotExtend() throws Exception {
         JsonNode initial = login();
         String old = initial.path("refresh_token").asText();

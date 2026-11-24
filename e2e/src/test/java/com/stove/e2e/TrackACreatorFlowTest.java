@@ -50,7 +50,7 @@ class TrackACreatorFlowTest {
 
     @Test
     @Order(1)
-    @DisplayName("OIDC 가입·PKCE 로그인 후 개인 Workspace의 프로젝트를 만든다")
+    @DisplayName("가입·Gateway BFF(PKCE) 로그인 후 개인 Workspace의 프로젝트를 만든다")
     void authenticatesAndCreatesProject() {
         Response signup = Stove.gateway.post("/api/v1/auth/signup", Map.of(
                 "email", CREATOR_EMAIL, "password", CREATOR_PASSWORD));
@@ -58,21 +58,21 @@ class TrackACreatorFlowTest {
         creatorSubject = signup.data().path("subject").asText();
         assertThat(creatorSubject).isNotBlank();
 
-        String creatorToken = OidcLogin.token(CREATOR_EMAIL, CREATOR_PASSWORD);
-        Journey.creatorToken(creatorToken);
-        Journey.otherMember(signup.data().path("memberId").asLong(), creatorToken);
+        BffSession creatorSession = BffSession.login(CREATOR_EMAIL, CREATOR_PASSWORD);
+        Journey.creator(creatorSession);
+        Journey.otherMember(signup.data().path("memberId").asLong(), creatorSession);
         String otherEmail = "customer-" + Journey.STAMP + "@e2e.local";
         String otherPassword = "customer-password-" + Journey.STAMP;
         Response other = Stove.gateway.post("/api/v1/auth/signup/member", Map.of(
                 "email", otherEmail, "password", otherPassword));
         assertThat(other.status()).as("%s", other).isEqualTo(200);
         Journey.member(other.data().path("memberId").asLong(),
-                OidcLogin.token(otherEmail, otherPassword));
+                BffSession.login(otherEmail, otherPassword));
         String reviewerPassword = System.getenv().getOrDefault(
                 "AUTH_REVIEWER_PASSWORD", "reviewer-local-only");
-        Journey.reviewerToken(OidcLogin.token("reviewer@esd.local", reviewerPassword));
+        Journey.reviewer(BffSession.login("reviewer@esd.local", reviewerPassword));
         String adminPassword = System.getenv().getOrDefault("AUTH_ADMIN_PASSWORD", "admin-local-only");
-        Journey.adminToken(OidcLogin.token("admin@esd.local", adminPassword));
+        Journey.admin(BffSession.login("admin@esd.local", adminPassword));
 
         Response created = Stove.gateway.post("/api/v1/studio/games", Map.of(
                 "productCode", PRODUCT_CODE,
@@ -556,7 +556,7 @@ class TrackACreatorFlowTest {
         Response signup = Stove.gateway.post("/api/v1/auth/signup", Map.of(
                 "email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
-        Map<String, String> other = Map.of("Authorization", "Bearer " + OidcLogin.token(email, password));
+        Map<String, String> other = BffSession.login(email, password).headers();
         assertThat(Stove.gateway.get("/api/v1/studio/games", other).data()).isEmpty();
         assertThat(Stove.gateway.get("/api/v1/studio/projects/%d/store-page-revisions"
                 .formatted(Journey.gameId()), other).status()).isEqualTo(403);

@@ -125,15 +125,23 @@ class GatewayRouteTest {
     @ValueSource(
             strings = {
                 "/oauth2/authorize",
-                "/oauth2/token",
                 "/login",
                 "/logout",
+                "/connect/logout",
                 "/default-ui.css",
                 "/.well-known/openid-configuration"
             })
-    @DisplayName("Swagger PKCE에 필요한 브라우저 인증 경로만 auth로 프록시한다")
+    @DisplayName("BFF 로그인에 필요한 브라우저 인증 경로만 auth로 프록시한다")
     void browserAuthenticationRoutesReachAuth(String path) {
         assertThat(matchedRouteId(HttpMethod.GET, path)).isEqualTo("auth-browser");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"/oauth2/token", "/oauth2/revoke", "/oauth2/introspect", "/oauth2/jwks", "/userinfo"})
+    @DisplayName("결정 220: Auth의 토큰·폐기·검사·JWKS·userinfo 엔드포인트는 라우트가 없다")
+    void authTokenEndpointsHaveNoRoute(String path) {
+        assertThat(matchedRouteId(HttpMethod.POST, path)).isNull();
+        assertThat(matchedRouteId(HttpMethod.GET, path)).isNull();
     }
 
     @Test

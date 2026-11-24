@@ -68,7 +68,7 @@
   - 영향: 운영 배포에서 `AUTH_ISSUER`를 빠뜨리면 `iss`=`http://localhost:8091`로 시작해 모든 자원 서버가 토큰을 거절한다(조용한 오설정). 부트스트랩 비밀번호를 빠뜨리면 운영자 없이 시작한다.
   - 재현: 컨텍스트 테스트 — `AUTH_ISSUER` 없이 시작 실패, 부트스트랩 이메일만 있을 때 시작 실패.
 
-- [ ] **AU-T9. 공개 클라이언트 `studio-web`이 Refresh Token을 받는다**
+- [x] **AU-T9. 공개 클라이언트 `studio-web`이 Refresh Token을 받는다** — [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
   - 어디서: `auth:config/AuthSecurityConfig.java:171`(`REFRESH_TOKEN` 승인)·`:183`(7일).
   - 목표: R2.7, [결정 220](../../../docs/decisions.md#no-public-clients). `studio-web`·`swagger-ui` 등록과 redirect 설정을 지우고, 저장된 등록 행은 시작 때 지운다. 외부 경로 차단은 Gateway GW-T20.
   - 영향: 브라우저 저장소의 7일 Refresh Token이 탈취되면 BFF 보호(브라우저에는 세션 쿠키만)를 우회한다.
@@ -137,7 +137,7 @@
 - [ ] [결정 필요 M-AU-5] `LOCKED`·`DISABLED` 계정의 복구와 `DISABLED` 계정의 역할 변경 → AU-T11, 상태 표.
 - [x] 상태·역할 변경 즉시 access token 무효 — [결정 180](../../../docs/decisions.md#account-access-revocation)(B: Auth 사실 이벤트 → Gateway 거절)으로 정함 → AU-T6, 플랫폼 이벤트 목표 행.
 - [x] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 — [결정 220](../../../docs/decisions.md#no-public-clients)(A: 개발·시험까지 없앰)으로 정함 → AU-T9, Gateway GW-T20.
-- [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T6의 R7.1 부분, AU-T8, AU-T9, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
+- [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T6의 R7.1 부분, AU-T8, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
 
 ## 범위 밖(후속)
 
