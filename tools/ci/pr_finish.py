@@ -135,30 +135,37 @@ def started(check):
 
 
 def latest_generation(checks):
-    """같은 필수 검사(이름 앞부분)의 실행이 여럿이면 가장 최근에 시작한 것만 남긴다. 같은 head에 예전 성공 build와 더
-    최근의 건너뛴 build가 함께 보일 때 건너뛴 것만 빼면 예전 성공으로 통과해 버린다(PR #245 리뷰 1)."""
+    """같은 이름(전체 검사 이름)의 실행이 여럿이면 가장 최근에 시작한 것만 남긴다(동률은 모두 남는다). 이름 앞부분으로
+    묶으면 실패한 `build (A)`를 나중에 시작한 `build (B)`의 성공이 지운다(PR #245 재리뷰 2)."""
     newest = {}
     for check in checks:
-        for prefix in REQUIRED:
-            if (check.get('name') or '').startswith(prefix) and started(check):
-                newest[prefix] = max(newest.get(prefix, ''), started(check))
-    def superseded(check):
-        prefix = next((p for p in REQUIRED if (check.get('name') or '').startswith(p)), None)
-        return prefix is not None and started(check) != '' and started(check) < newest.get(prefix, '')
-    return [check for check in checks if not superseded(check)]
+        if started(check):
+            name = check.get('name') or ''
+            newest[name] = max(newest.get(name, ''), started(check))
+    return [check for check in checks
+            if not (started(check) and started(check) < newest.get(check.get('name') or '', ''))]
 
 
 def without_draft_skips(number, checks):
-    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR에서 가장 최근 세대의 skipping build는 draft 때의 지난
-    결과이므로 빼고, 새 build의 등록을 기다린다. 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217), 그 전에 건너뛴
-    build만 보고 실패로 끝내면 안 된다(PR #244: ready 전 링크를 기록할 때 건너뛴 build가 아직 등록되지 않아 fresh()로도
-    걸러지지 않았다). 예전 세대는 latest_generation()이 먼저 버린다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
+    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR의 skipping build는 draft 때의 지난 결과이므로, 그것과 같은
+    이름에서 그 시각 이전(동률 포함)에 시작한 실행까지 모두 빼고 새 build의 등록을 기다린다. 예전 성공이 더 최근의
+    건너뜀을 대신하면 안 되고(PR #245 리뷰 1), 시작 시각이 같은 초라 순서를 알 수 없으면 보수적으로 기다린다(재리뷰 1).
+    새 build는 조각이 끝난 뒤에야 등록되므로(결정 217) 건너뛴 build만 보고 실패로 끝내지도 않는다(PR #244). 아직 시작하지
+    않은 새 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
     checks = latest_generation(checks)
-    def draft_skip(check):
-        return (check.get('name') or '').startswith('build') and check.get('bucket') == 'skipping'
-    if not any(draft_skip(check) for check in checks) or view(number)['isDraft']:
+    skipped_at = {}
+    for check in checks:
+        name = check.get('name') or ''
+        if name.startswith('build') and check.get('bucket') == 'skipping':
+            skipped_at[name] = max(skipped_at.get(name, ''), started(check))
+    if not skipped_at or view(number)['isDraft']:
         return checks
-    return [check for check in checks if not draft_skip(check)]
+    def stale(check):
+        name = check.get('name') or ''
+        if name not in skipped_at:
+            return False
+        return check.get('bucket') == 'skipping' or (started(check) != '' and started(check) <= skipped_at[name])
+    return [check for check in checks if not stale(check)]
 
 
 def links(checks):

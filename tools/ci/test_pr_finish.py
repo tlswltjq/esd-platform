@@ -271,6 +271,25 @@ class WaitTest(unittest.TestCase):
             self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
         self.assertEqual(3, reads.call_count)
 
+    def test_a_tied_start_with_a_skip_waits_and_distinct_names_are_judged_separately(self):
+        # PR #245 재리뷰 1: 예전 성공과 건너뛴 build가 같은 초에 시작했으면 순서를 모르므로 둘 다 버리고 새 build를 기다린다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
+        tied_pass = {'name': BUILD, 'bucket': 'pass', 'startedAt': '2026-11-24T09:10:00Z'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'startedAt': '2026-11-24T09:10:00Z'}
+        new_fail = {'name': BUILD, 'bucket': 'fail', 'startedAt': '2026-11-24T09:11:00Z'}
+        reads = mock.Mock(side_effect=[[gate, tied_pass, skipped], [gate, tied_pass, skipped, new_fail]])
+        with mock.patch.object(pr_finish, 'required_checks', reads), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
+        self.assertEqual(2, reads.call_count)
+        # 재리뷰 2: 이름이 다른 필수 검사는 서로의 세대를 지우지 않는다. 실패한 build (A)는 나중의 build (B) 성공과 별개다.
+        a_fail = {'name': 'build (A)', 'bucket': 'fail', 'startedAt': '2026-11-24T09:00:00Z'}
+        b_pass = {'name': 'build (B)', 'bucket': 'pass', 'startedAt': '2026-11-24T09:05:00Z'}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, a_fail, b_pass]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args()))
+
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
