@@ -64,6 +64,7 @@ import com.stove.common.contract.payload.ReviewRejectedEvent;
 import com.stove.common.contract.payload.SubmissionCreatedEvent;
 import com.stove.common.contract.payload.SubmissionReviewApprovedEvent;
 import com.stove.common.contract.payload.UserRegisteredEvent;
+import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -252,6 +253,7 @@ class EventContractTest {
                 ProjectReleaseCompletedEvent.of(1L, 1L, 1, "PROJECT-1", "request-1"),
                 ProjectReleaseRejectedEvent.of(1L, 1L, 1, "PROJECT-1", "reason", "request-1"),
                 UserRegisteredEvent.of("usr_001", "creator@example.com"),
+                AccountAccessChangedEvent.of("usr_001", Instant.parse("2026-11-24T15:00:00Z"), AccountAccessChangedEvent.ROLE),
                 GameRegisteredEvent.of(1L, "GAME-001", "게임 A", 1001L, 30_000L, "KRW", false),
                 BuildUploadedEvent.of(1L, "GAME-001", "1.0.0", 1024L, "abc123", "s3://bucket/key"),
                 BuildValidatedEvent.of(

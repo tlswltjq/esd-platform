@@ -9,6 +9,8 @@ public final class EventType {
     // auth
     /** 계정 가입 완료를 나타내는 이벤트 타입. */
     public static final String USER_REGISTERED = "UserRegistered";
+    /** 계정 상태·역할 변경으로 이전 접근 근거가 무효가 됨을 나타내는 이벤트 타입(결정 180·225). */
+    public static final String ACCOUNT_ACCESS_CHANGED = "AccountAccessChanged";
 
     // studio
     /** 게임 프로젝트 등록를 나타내는 이벤트 타입. */
