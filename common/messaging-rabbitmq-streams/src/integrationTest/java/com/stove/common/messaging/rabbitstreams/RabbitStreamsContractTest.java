@@ -11,6 +11,7 @@ import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
+import com.stove.common.testcontainers.SharedContainers;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
@@ -34,11 +36,13 @@ class RabbitStreamsContractTest extends MessagingContractTest {
     private static final int PARTITIONS = partitions();
     private static final Duration MAX_AGE = Duration.ofHours(1);
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
-    private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1-management-alpine")
-            .withExposedPorts(5552)
-            .withCommand("sh", "-c", "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server")
-            .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))
-            .withStartupTimeout(Duration.ofMinutes(2));
+    /** S3 측정 때만 메모리 1GB(결정 222). 메모리 경보는 기본값(한도의 40%) 그대로다. */
+    private static final GenericContainer<?> RABBIT = SharedContainers.limitMemoryForS3(
+            new GenericContainer<>("rabbitmq:4.1-management-alpine")
+                    .withExposedPorts(5552)
+                    .withCommand("sh", "-c", "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server")
+                    .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))
+                    .withStartupTimeout(Duration.ofMinutes(2)));
 
     static {
         RABBIT.start();
@@ -62,6 +66,16 @@ class RabbitStreamsContractTest extends MessagingContractTest {
     @Override
     protected void prepareTopic(String topic) {
         RabbitStreamsTopology.declare(environment(), topic, PARTITIONS, MAX_AGE);
+    }
+
+    @Override
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.of(RABBIT);
+    }
+
+    @Override
+    protected String brokerDataDir() {
+        return "/var/lib/rabbitmq";
     }
 
     @Override

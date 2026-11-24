@@ -1,5 +1,7 @@
 package com.stove.common.testcontainers;
 
+import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.model.HostConfig;
 import java.time.Duration;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
@@ -42,10 +44,10 @@ public final class SharedContainers {
      * 다르다. 같은 값으로 맞춰, 운영에서는 저장되는 큰 행(예: Payment 형식 거절 type 최대 60,000,000바이트)이 테스트에서만
      * 실패하거나, 반대로 테스트가 운영 한도를 넘는 값을 모르고 통과하지 않게 한다.
      */
-    public static final MySQLContainer<?> MYSQL =
+    public static final MySQLContainer<?> MYSQL = limitMemoryForS3(
             new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
                     .withCommand("--max-allowed-packet=67108864")
-                    .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds());
+                    .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds()));
 
     /**
      * 로컬 실행은 {@code apache/kafka:3.9.0} 을 쓰지만 테스트는 Confluent 이미지를 쓴다.
@@ -59,16 +61,16 @@ public final class SharedContainers {
      * {@code withStartupTimeout}만 걸면 같은 JVM의 다른 Kafka 컨테이너까지 바뀌므로, 같은 로그 조건으로
      * 새 대기 객체를 준다.
      */
-    public static final ConfluentKafkaContainer KAFKA =
+    public static final ConfluentKafkaContainer KAFKA = s3Kafka(
             new AtomicStarterKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
-                    .waitingFor(kafkaReady());
+                    .waitingFor(kafkaReady()));
 
-    public static final GenericContainer<?> REDIS =
+    public static final GenericContainer<?> REDIS = s3Redis(
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
                     .withExposedPorts(6379)
                     // 새 대기 객체를 쓴다. withStartupTimeout만 걸면 GenericContainer가 모든 컨테이너와
                     // 나눠 쓰는 기본 대기 객체(DEFAULT_WAIT_STRATEGY)의 시간이 바뀐다.
-                    .waitingFor(Wait.forListeningPort().withStartupTimeout(STARTUP_TIMEOUT));
+                    .waitingFor(Wait.forListeningPort().withStartupTimeout(STARTUP_TIMEOUT)));
 
     public static final ElasticsearchContainer ELASTICSEARCH =
             new ElasticsearchContainer(
@@ -81,6 +83,53 @@ public final class SharedContainers {
             new MongoDBContainer(DockerImageName.parse("mongo:7"))
                     .withStartupTimeout(STARTUP_TIMEOUT);
 
+    /** 결정 222: S3 측정을 켜는 시스템 속성. 루트 build.gradle 이 {@code -Pstove.contract.s3=true} 를 넘긴다. */
+    public static final String S3_PROPERTY = "stove.contract.s3";
+
+    /** 결정 222: S3 측정 때 브로커(브로커 없음은 MySQL) 컨테이너에 거는 메모리 한도. 모든 방식이 같다. */
+    public static final long S3_MEMORY_LIMIT_BYTES = 1024L * 1024 * 1024;
+
     private SharedContainers() {
+    }
+
+    /** S3 측정 중인가. 정적 컨테이너는 시작 전에(클래스 초기화 때) 이 값을 본다 — 시스템 속성은 그 전에 들어와 있다. */
+    public static boolean s3Measurement() {
+        return Boolean.getBoolean(S3_PROPERTY);
+    }
+
+    /**
+     * S3 측정 때만 컨테이너 메모리를 {@link #S3_MEMORY_LIMIT_BYTES} 로 묶고 swap 을 막는다(memory-swap = memory).
+     * 평소에는 아무것도 바꾸지 않는다 — 다른 서비스가 같은 공유 컨테이너를 쓴다.
+     */
+    public static <T extends GenericContainer<?>> T limitMemoryForS3(T container) {
+        if (s3Measurement()) {
+            container.withCreateContainerCmdModifier(SharedContainers::limitMemory);
+        }
+        return container;
+    }
+
+    private static void limitMemory(CreateContainerCmd command) {
+        HostConfig hostConfig = command.getHostConfig() == null ? HostConfig.newHostConfig() : command.getHostConfig();
+        command.withHostConfig(hostConfig.withMemory(S3_MEMORY_LIMIT_BYTES).withMemorySwap(S3_MEMORY_LIMIT_BYTES));
+    }
+
+    /** S3: Kafka 는 한도 1GB 안에서 힙 512MB(나머지는 페이지 캐시·JVM 밖 메모리). */
+    private static ConfluentKafkaContainer s3Kafka(ConfluentKafkaContainer container) {
+        if (s3Measurement()) {
+            container.withEnv("KAFKA_HEAP_OPTS", "-Xmx512m -Xms512m");
+        }
+        return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: Redis 는 {@code maxmemory 512mb}·{@code noeviction}(넘치면 쓰기를 거절하고 지우지 않는다)·AOF {@code everysec}
+     * (S6·S7과 같은 영속).
+     */
+    private static GenericContainer<?> s3Redis(GenericContainer<?> container) {
+        if (s3Measurement()) {
+            container.withCommand("redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction",
+                    "--appendonly", "yes", "--appendfsync", "everysec");
+        }
+        return limitMemoryForS3(container);
     }
 }

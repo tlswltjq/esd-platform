@@ -92,6 +92,24 @@ class SharedContainersTest {
                 Map.of("kafka", Duration.ofSeconds(60), "redis", Duration.ofSeconds(60), "mongo", Duration.ofSeconds(60)));
     }
 
+    /**
+     * 결정 222: S3 측정용 한도(메모리 1GB·Kafka 힙·Redis maxmemory)는 {@code stove.contract.s3=true} 일 때만 걸린다.
+     * 다른 서비스도 같은 공유 컨테이너를 쓰므로, 평소에는 같은 종류의 새 컨테이너와 설정이 같아야 한다.
+     */
+    @Test
+    @DisplayName("[결정 222] S3 측정을 켜지 않으면 공유 MySQL·Kafka·Redis 에 메모리 한도·힙·maxmemory 가 걸리지 않는다")
+    void s3LimitsAreOffByDefault() {
+        assertThat(SharedContainers.s3Measurement()).isFalse();
+        int freshModifiers = new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).getCreateContainerCmdModifiers().size();
+        Map<String, Integer> modifiers = new LinkedHashMap<>();
+        modifiers.put("mysql", SharedContainers.MYSQL.getCreateContainerCmdModifiers().size());
+        modifiers.put("kafka", SharedContainers.KAFKA.getCreateContainerCmdModifiers().size());
+        modifiers.put("redis", SharedContainers.REDIS.getCreateContainerCmdModifiers().size());
+        assertThat(modifiers).containsExactlyInAnyOrderEntriesOf(Map.of("mysql", freshModifiers, "kafka", freshModifiers, "redis", freshModifiers));
+        assertThat(SharedContainers.KAFKA.getEnvMap()).doesNotContainKey("KAFKA_HEAP_OPTS");
+        assertThat(SharedContainers.REDIS.getCommandParts()).isEmpty();
+    }
+
     private static WaitStrategy waitStrategy(GenericContainer<?> container) throws ReflectiveOperationException {
         Method method = GenericContainer.class.getDeclaredMethod("getWaitStrategy");
         method.setAccessible(true);

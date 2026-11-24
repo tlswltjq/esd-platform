@@ -47,6 +47,7 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.MessageListener;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 
 /**
@@ -90,6 +91,18 @@ class KafkaContractTest extends MessagingContractTest {
         producers = new DefaultKafkaProducerFactory<>(producerConfig);
         admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers()));
         publisher = new KafkaMessagePublisher(new KafkaTemplate<>(producers));
+    }
+
+    /** S3(결정 222): 공유 Kafka 컨테이너. 측정 때 {@code SharedContainers} 가 메모리 1GB·힙 512MB 를 건다. */
+    @Override
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.of(kafkaContainer);
+    }
+
+    /** cp-kafka 이미지의 로그 디렉터리({@code KAFKA_LOG_DIRS}). */
+    @Override
+    protected String brokerDataDir() {
+        return "/var/lib/kafka/data";
     }
 
     @Override

@@ -11,13 +11,16 @@ import com.stove.common.testcontainers.InfraContainers;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 
 /** Redis Streams adapter 가 공통 계약(결정 202·206)을 지키는지 실제 Redis·MySQL 로 본다(결정 209). */
@@ -41,6 +44,28 @@ class RedisStreamsContractTest extends MessagingContractTest {
         client = RedisClient.create("redis://" + redisContainer.getHost() + ":" + redisContainer.getMappedPort(6379));
         connection = client.connect();
         publisher = new RedisStreamsPublisher(connection, STREAMS);
+    }
+
+    /** S3(결정 222): 공유 Redis 컨테이너. 측정 때 {@code SharedContainers} 가 메모리 1GB·maxmemory 512mb·noeviction·AOF 를 건다. */
+    @Override
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.of(redisContainer);
+    }
+
+    @Override
+    protected String brokerDataDir() {
+        return "/data";
+    }
+
+    /** 한도가 실제로 걸렸는지 결과에 남기려고 쌓기 직전에 서버 설정을 읽는다. */
+    @Override
+    protected Map<String, String> brokerSettings() {
+        Map<String, String> settings = new LinkedHashMap<>();
+        for (String name : List.of("maxmemory", "maxmemory-policy", "appendonly", "appendfsync")) {
+            Map<String, String> value = connection.sync().configGet(name);
+            settings.put(name, value.get(name));
+        }
+        return settings;
     }
 
     @Override

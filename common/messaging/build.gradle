@@ -34,6 +34,8 @@ dependencies {
     testFixturesCompileOnly 'org.springframework:spring-web'
     testFixturesCompileOnly project(':common:web')
     testFixturesCompileOnly project(':common:security')
+    // S3 측정(결정 222): 쌓은 뒤 브로커 컨테이너 안의 cgroup 메모리·데이터 디스크를 읽는다(execInContainer).
+    testFixturesImplementation 'org.testcontainers:testcontainers'
 
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')

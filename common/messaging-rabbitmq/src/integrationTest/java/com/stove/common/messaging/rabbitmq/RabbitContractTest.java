@@ -11,6 +11,7 @@ import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
+import com.stove.common.testcontainers.SharedContainers;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
@@ -39,10 +41,12 @@ class RabbitContractTest extends MessagingContractTest {
     /** 이 adapter 로 받는 소비자가 없다고 설정한 토픽. */
     private static final String OPTIONAL_TOPIC = "fixture.optional.v1";
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
-    private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1-management-alpine")
-            .withExposedPorts(5672)
-            .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))
-            .withStartupTimeout(Duration.ofMinutes(2));
+    /** S3 측정 때만 메모리 1GB(결정 222). 메모리 경보는 기본값(한도의 40%) 그대로다. */
+    private static final GenericContainer<?> RABBIT = SharedContainers.limitMemoryForS3(
+            new GenericContainer<>("rabbitmq:4.1-management-alpine")
+                    .withExposedPorts(5672)
+                    .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))
+                    .withStartupTimeout(Duration.ofMinutes(2)));
 
     static {
         RABBIT.start();
@@ -59,6 +63,16 @@ class RabbitContractTest extends MessagingContractTest {
         connectionFactory.setPublisherReturns(true);
         admin = new RabbitAdmin(connectionFactory);
         publisher = new RabbitMessagePublisher(connectionFactory, admin, QUEUES, Set.of(OPTIONAL_TOPIC));
+    }
+
+    @Override
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.of(RABBIT);
+    }
+
+    @Override
+    protected String brokerDataDir() {
+        return "/var/lib/rabbitmq";
     }
 
     @Override
