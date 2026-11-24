@@ -30,6 +30,7 @@
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -55,7 +56,7 @@ def view(number):
 
 
 def required_checks(number):
-    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link,startedAt'], check=False)
+    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link'], check=False)
     try:
         return json.loads(out) if out.strip() else []
     except ValueError:
@@ -128,43 +129,45 @@ def fresh(checks, renew, old_links):
             if not ((check.get('name') or '').startswith(renew) and check.get('link') in old_links)]
 
 
-def started(check):
-    # 아직 시작하지 않은 검사는 gh가 빈 값이나 0001-01-01을 낸다. 이런 검사는 세대 비교에서 빼지도, 남을 빼지도 않는다.
-    value = check.get('startedAt') or ''
-    return '' if value.startswith('0001-') else value
+def job_order(check):
+    """실행 세대의 순서: 링크의 GitHub job ID(`.../job/<번호>`). job ID는 계속 커지고 겹치지 않는다. 시작 시각은 초 단위라
+    동률이 나 세대를 가르지 못한다(PR #245 2차 재리뷰). 링크가 없으면 None — 세대 비교에서 빼지도, 남을 빼지도 않는다."""
+    found = re.search(r'/job/(\d+)', check.get('link') or '')
+    return int(found.group(1)) if found else None
 
 
 def latest_generation(checks):
-    """같은 이름(전체 검사 이름)의 실행이 여럿이면 가장 최근에 시작한 것만 남긴다(동률은 모두 남는다). 이름 앞부분으로
-    묶으면 실패한 `build (A)`를 나중에 시작한 `build (B)`의 성공이 지운다(PR #245 재리뷰 2)."""
+    """같은 이름(전체 검사 이름)의 실행이 여럿이면 job ID가 가장 큰 것만 남긴다. 이름 앞부분으로 묶으면 실패한 `build (A)`를
+    나중의 `build (B)` 성공이 지운다(PR #245 재리뷰 2)."""
     newest = {}
     for check in checks:
-        if started(check):
+        order = job_order(check)
+        if order is not None:
             name = check.get('name') or ''
-            newest[name] = max(newest.get(name, ''), started(check))
+            newest[name] = max(newest.get(name, order), order)
     return [check for check in checks
-            if not (started(check) and started(check) < newest.get(check.get('name') or '', ''))]
+            if job_order(check) is None or job_order(check) >= newest[check.get('name') or '']]
 
 
 def without_draft_skips(number, checks):
     """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR의 skipping build는 draft 때의 지난 결과이므로, 그것과 같은
-    이름에서 그 시각 이전(동률 포함)에 시작한 실행까지 모두 빼고 새 build의 등록을 기다린다. 예전 성공이 더 최근의
-    건너뜀을 대신하면 안 되고(PR #245 리뷰 1), 시작 시각이 같은 초라 순서를 알 수 없으면 보수적으로 기다린다(재리뷰 1).
-    새 build는 조각이 끝난 뒤에야 등록되므로(결정 217) 건너뛴 build만 보고 실패로 끝내지도 않는다(PR #244). 아직 시작하지
-    않은 새 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
+    이름에서 그보다 앞선 job까지 모두 빼고 새 build를 기다린다. 예전 성공이 더 최근의 건너뜀을 대신하면 안 되고(PR #245
+    리뷰 1), 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217) 건너뛴 build만 보고 실패로 끝내지도 않는다(PR #244).
+    건너뜀보다 뒤의 job과 링크가 없는 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
     checks = latest_generation(checks)
-    skipped_at = {}
+    skipped = {}
     for check in checks:
         name = check.get('name') or ''
         if name.startswith('build') and check.get('bucket') == 'skipping':
-            skipped_at[name] = max(skipped_at.get(name, ''), started(check))
-    if not skipped_at or view(number)['isDraft']:
+            skipped[name] = max(skipped.get(name, -1), job_order(check) if job_order(check) is not None else -1)
+    if not skipped or view(number)['isDraft']:
         return checks
     def stale(check):
         name = check.get('name') or ''
-        if name not in skipped_at:
+        if name not in skipped:
             return False
-        return check.get('bucket') == 'skipping' or (started(check) != '' and started(check) <= skipped_at[name])
+        order = job_order(check)
+        return check.get('bucket') == 'skipping' or (order is not None and order < skipped[name])
     return [check for check in checks if not stale(check)]
 
 

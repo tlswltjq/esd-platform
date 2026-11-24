@@ -258,11 +258,11 @@ class WaitTest(unittest.TestCase):
     def test_an_older_success_does_not_stand_in_for_a_newer_skipped_build(self):
         # PR #245 리뷰 1: 같은 head에 예전 성공 build와 더 최근의 건너뛴 build가 함께 보이면, 건너뛴 것만 빼고 예전
         # 성공으로 통과하지 않는다. 가장 최근 세대만 보고 새 build를 기다린다.
-        gate = {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
-        old_pass = {'name': BUILD, 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
-        skipped = {'name': BUILD, 'bucket': 'skipping', 'startedAt': '2026-11-24T09:10:00Z'}
-        queued = {'name': BUILD, 'bucket': 'pending', 'startedAt': '0001-01-01T00:00:00Z'}
-        new_fail = {'name': BUILD, 'bucket': 'fail', 'startedAt': '2026-11-24T09:11:00Z'}
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        old_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/11'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'https://github.com/o/r/actions/runs/1/job/20'}
+        queued = {'name': BUILD, 'bucket': 'pending', 'link': ''}
+        new_fail = {'name': BUILD, 'bucket': 'fail', 'link': 'https://github.com/o/r/actions/runs/1/job/30'}
         sequence = [[gate, old_pass, skipped], [gate, old_pass, skipped, queued], [gate, old_pass, skipped, new_fail]]
         reads = mock.Mock(side_effect=sequence)
         with mock.patch.object(pr_finish, 'required_checks', reads), \
@@ -271,21 +271,17 @@ class WaitTest(unittest.TestCase):
             self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
         self.assertEqual(3, reads.call_count)
 
-    def test_a_tied_start_with_a_skip_waits_and_distinct_names_are_judged_separately(self):
-        # PR #245 재리뷰 1: 예전 성공과 건너뛴 build가 같은 초에 시작했으면 순서를 모르므로 둘 다 버리고 새 build를 기다린다.
-        gate = {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
-        tied_pass = {'name': BUILD, 'bucket': 'pass', 'startedAt': '2026-11-24T09:10:00Z'}
-        skipped = {'name': BUILD, 'bucket': 'skipping', 'startedAt': '2026-11-24T09:10:00Z'}
-        new_fail = {'name': BUILD, 'bucket': 'fail', 'startedAt': '2026-11-24T09:11:00Z'}
-        reads = mock.Mock(side_effect=[[gate, tied_pass, skipped], [gate, tied_pass, skipped, new_fail]])
-        with mock.patch.object(pr_finish, 'required_checks', reads), \
-                mock.patch.object(pr_finish, 'view', return_value=pr()), \
-                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
-            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
-        self.assertEqual(2, reads.call_count)
+    def test_a_new_build_after_the_skip_is_judged_and_distinct_names_are_separate(self):
+        # PR #245 2차 재리뷰: 건너뜀과 같은 초에 시작한 새 build도 job ID가 더 크면 버리지 않고 판정한다(시간 초과 3이 아님).
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'https://github.com/o/r/actions/runs/1/job/20', 'startedAt': '2026-11-24T09:10:00Z'}
+        new_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/21', 'startedAt': '2026-11-24T09:10:00Z'}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, skipped, new_pass]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args()))
         # 재리뷰 2: 이름이 다른 필수 검사는 서로의 세대를 지우지 않는다. 실패한 build (A)는 나중의 build (B) 성공과 별개다.
-        a_fail = {'name': 'build (A)', 'bucket': 'fail', 'startedAt': '2026-11-24T09:00:00Z'}
-        b_pass = {'name': 'build (B)', 'bucket': 'pass', 'startedAt': '2026-11-24T09:05:00Z'}
+        a_fail = {'name': 'build (A)', 'bucket': 'fail', 'link': 'https://github.com/o/r/actions/runs/1/job/40'}
+        b_pass = {'name': 'build (B)', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/41'}
         with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, a_fail, b_pass]), \
                 mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
             self.assertEqual(1, pr_finish.wait(self.args()))
