@@ -16,10 +16,11 @@ import time
 import urllib.parse
 import urllib.request
 
-REQUIRED_SERVICES = ("gateway", "order", "license", "payment", "settlement")
+# The buyer request enters at the web BFF (the trace root) and passes the internal API gateway (decisions 223/224).
+REQUIRED_SERVICES = ("web-bff", "gateway", "order", "license", "payment", "settlement")
 # Confirmed PG failure: the refund ends FAILED with the license restored and money untouched, so Settlement
 # records nothing (it may still open a consumer span while skipping Payment events; that is not required).
-RESTORATION_SERVICES = ("gateway", "order", "license", "payment")
+RESTORATION_SERVICES = ("web-bff", "gateway", "order", "license", "payment")
 WORKER_SPAN = "payment.process"
 CLIENT_KINDS = ("SPAN_KIND_CLIENT", 3)
 STABLE_READS = 3

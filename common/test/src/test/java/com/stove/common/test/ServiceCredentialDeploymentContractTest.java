@@ -20,7 +20,7 @@ class ServiceCredentialDeploymentContractTest {
             Map.entry("CATALOG_SETTLEMENT_SERVICE_KEY", Set.of("catalog", "settlement")),
             Map.entry("PAYMENT_ORDER_SERVICE_KEY", Set.of("payment", "order")),
             Map.entry("PAYMENT_APPROVAL_PAYLOAD_KEY", Set.of("payment")),
-            Map.entry("BFF_CLIENT_SECRET", Set.of("auth", "gateway")),
+            Map.entry("BFF_CLIENT_SECRET", Set.of("auth", "web-bff")),
             Map.entry("MOCK_PG_PAYMENT_KEY", Set.of("mock-pg", "payment")),
             Map.entry("MOCK_PG_SETTLEMENT_KEY", Set.of("mock-pg", "settlement")),
             Map.entry("MOCK_PG_CONTROL_KEY", Set.of("mock-pg")),

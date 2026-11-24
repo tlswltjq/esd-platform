@@ -8,7 +8,9 @@ _CATALOG_KEYS = {'CATALOG_STORE_SERVICE_KEY', 'CATALOG_ORDER_SERVICE_KEY',
 _READER = {'DOWNLOAD_STORAGE_ACCESS_KEY', 'DOWNLOAD_STORAGE_SECRET_KEY'}
 _ALLOWED = {
     'auth': _DB | _BFF | {'AUTH_ADMIN_PASSWORD', 'AUTH_REVIEWER_PASSWORD'},
-    'gateway': _BFF,
+    # The web BFF holds the OAuth client; the internal API gateway only validates relayed bearer tokens.
+    'web-bff': _BFF,
+    'gateway': set(),
     'studio': _DB | {'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY'},
     'review': _DB | {'REVIEW_STORAGE_ACCESS_KEY', 'REVIEW_STORAGE_SECRET_KEY'},
     # Catalog verifies tagged objects through a separate reader client.

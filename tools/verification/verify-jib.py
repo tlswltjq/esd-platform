@@ -24,7 +24,8 @@ from support.start_apps import copy_launcher
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PORTS = {"auth": 8091, "gateway": 8080, "studio": 8085, "review": 8086,
+# web-bff is the only browser entrance (decision 224); the internal API gateway (8093) gets no host port.
+PORTS = {"auth": 8091, "web-bff": 8080, "gateway": 8093, "studio": 8085, "review": 8086,
          "catalog": 8081, "store": 8087, "order": 8082, "payment": 8083,
          "license": 8084, "download": 8088, "settlement": 8089, "mock-pg": 8092}
 
@@ -111,7 +112,7 @@ def main():
                 continue
     else:
         raise RuntimeError("No isolated MinIO port available")
-    public = "http://127.0.0.1:" + str(PORTS["gateway"] + offset)
+    public = "http://127.0.0.1:" + str(PORTS["web-bff"] + offset)
     keys = {name: secrets.token_urlsafe(32) for name in ["pg-db", "payment", "settlement", "control", "catalog", "download", "store", "order-catalog"]}
     environment = os.environ.copy()
     environment.update(MOCK_PG_DB_PASSWORD=keys["pg-db"], MOCK_PG_DB_ROOT_PASSWORD=keys["pg-db"],
@@ -125,7 +126,7 @@ def main():
                            STORAGE_ACCESS_KEY="stove", STORAGE_SECRET_KEY="stove1234")
     compose_options = ["--env-file", "/dev/null"] if args.prometheus_only else []
     base = json.loads(capture(["docker", "compose", *compose_options, "-f", "docker-compose.apps.yml", "config", "--format", "json"], env=environment))
-    schemas = [name for name in PORTS if name not in {"gateway", "download", "mock-pg"}]
+    schemas = [name for name in PORTS if name not in {"web-bff", "gateway", "download", "mock-pg"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in schemas)
                     + ("\n" + recovery.init_sql() if recovery else ""))
@@ -169,7 +170,7 @@ def main():
         app_env.update(JWT_ISSUER_URI=public, TRACING_SAMPLE_RATE="1" if args.tracing else "0")
         from support.messaging_measurement import broker_environment
         app_env.update(broker_environment(name, args.broker))
-        if name in {"auth", "gateway"}:
+        if name in {"auth", "web-bff"}:
             app_env.update(BFF_PUBLIC_AUTH_BASE=public, BFF_REDIRECT_URI=public + "/login/oauth2/code/gateway-bff")
         if name == "auth":
             app_env.update(AUTH_ISSUER=public, AUTH_REVIEWER_EMAIL="reviewer-check@review.local",
@@ -190,6 +191,8 @@ def main():
                           "healthcheck": configured["healthcheck"], "stop_grace_period": configured["stop_grace_period"],
                           "ports": ["127.0.0.1:" + str(port + offset) + ":" + str(port)], "mem_limit": "768m",
                           "networks": ["app", "pg"] if name == "mock-pg" else ["app"]}
+        if name == "gateway":
+            del services[name]["ports"]
     prometheus = None
     if args.prometheus_only:
         from support.prometheus_verification import PrometheusVerification
@@ -275,7 +278,7 @@ def main():
             if "java" not in command_line or "-Duser.timezone=" + app_timezone not in command_line or "-XX:MaxRAMPercentage=75" not in command_line:
                 raise RuntimeError("JVM is not PID 1 with expected options: " + name)
             result["applications"][name] = {"image_id": info["Image"], "healthy": True, "user": "100:101", "timezone": app_timezone, "restart_count": 0}
-        print("PASS: 12 Jib images, health, user, JVM options and PID 1", flush=True)
+        print("PASS: " + str(len(PORTS)) + " Jib images, health, user, JVM options and PID 1", flush=True)
 
         evidence = output / "settlement.json"
         def phase(name):

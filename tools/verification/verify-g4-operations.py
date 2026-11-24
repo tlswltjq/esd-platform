@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-g4-operations-"))
 project=directory.name
-apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086,"catalog":8081,
+apps={"auth":8091,"studio":8085,"web-bff":8080,"gateway":8093,"review":8086,"catalog":8081,
       "store":8087,"order":8082,"license":8084,"download":8088}
 offset=application_offset("verify-g4-operations","G4_TEST_PORT_OFFSET",apps.values())
 ephemeral_file=Path("/proc/sys/net/ipv4/ip_local_port_range")
@@ -170,7 +170,8 @@ try:
                   CATALOG_DOWNLOAD_STORAGE_ENABLED="true",CATALOG_DOWNLOAD_STORAGE_ENDPOINT=f"http://127.0.0.1:{ports['minio']}",
                   CATALOG_DOWNLOAD_STORAGE_BUCKET="stove-builds",CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY="catalog-tagger",
                   CATALOG_DOWNLOAD_STORAGE_SECRET_KEY="g4-isolated-storage-password")
-    for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    for app,port in apps.items(): common[app.upper().replace("-","_")+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    common["API_GATEWAY_URI"]=common["GATEWAY_URI"]
     def start_app(app,arguments=()):
         port=apps[app]
         jar=application_jar(repo,app)
@@ -190,7 +191,7 @@ try:
         return all(ready(f"http://127.0.0.1:{apps[app]+offset}/actuator/health") for app,process,log in processes)
     # Eight concurrent JVM cold starts can exceed the applications' short initial DB login deadline.
     # This journey verifies business boundaries, so bound startup contention instead of retrying failed checks.
-    for batch in (("auth", "gateway"), ("studio", "review"), ("catalog", "order"), ("license", "download")):
+    for batch in (("auth", "web-bff", "gateway"), ("studio", "review"), ("catalog", "order"), ("license", "download")):
         for app in batch: start_app(app)
         wait_for(apps_ready,"/".join(batch),180)
     start_app("store")

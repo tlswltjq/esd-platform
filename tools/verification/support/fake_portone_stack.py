@@ -14,7 +14,7 @@ from support.minio_image import ensure_minio_image
 from support import ports as port_rules
 from support.portone_fake import PortOneFake
 
-APPS = {"auth": 8091, "studio": 8085, "gateway": 8080, "review": 8086, "catalog": 8081, "store": 8087,
+APPS = {"auth": 8091, "studio": 8085, "web-bff": 8080, "gateway": 8093, "review": 8086, "catalog": 8081, "store": 8087,
         "order": 8082, "payment": 8083, "license": 8084, "settlement": 8089}
 BUYER_PASSWORD = "creator-password-1234"
 # Short, fixed OTel export latency for tracing journeys only (support/refund_tracing.export_bound()).
@@ -375,7 +375,7 @@ volumes:
         self.portone["PORTONE_API_BASE_URL"] = self.fake.base_url
         parsed = urllib.parse.urlsplit(self.fake.base_url)
         assert parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and not parsed.path
-        subprocess.run(["./gradlew", ":apps:auth:bootJar", ":apps:gateway:bootJar", ":apps:studio:bootJar", ":apps:review:bootJar",
+        subprocess.run(["./gradlew", ":apps:auth:bootJar", ":apps:web-bff:bootJar", ":apps:gateway:bootJar", ":apps:studio:bootJar", ":apps:review:bootJar",
                         ":apps:catalog:bootJar", ":apps:store:bootJar", ":apps:order:bootJar", ":apps:payment:bootJar",
                         ":apps:license:bootJar", ":apps:settlement:bootJar", ":e2e:compileTestJava", *self.gradle_network, "--no-daemon", "-q"],
                        check=True, cwd=repo, timeout=900)
@@ -416,7 +416,8 @@ volumes:
         if self.tracing:
             common.update(TRACING_SAMPLE_RATE="1", OTLP_ENDPOINT=f"http://127.0.0.1:{infra['otlp']}/v1/traces", **TRACE_EXPORT_ENV)
         for app, port in APPS.items():
-            common[app.upper() + "_URI"] = f"http://127.0.0.1:{port + offset}"
+            common[app.upper().replace("-", "_") + "_URI"] = f"http://127.0.0.1:{port + offset}"
+        common["API_GATEWAY_URI"] = common["GATEWAY_URI"]
         common["CATALOG_BASE_URL"] = common["CATALOG_URI"]
         common["LICENSE_BASE_URL"] = common["LICENSE_URI"]
 
@@ -442,7 +443,7 @@ volumes:
                     raise AssertionError(app + " stopped; see " + str(self.directory / (app + ".log")))
             return all(self.ready(f"http://127.0.0.1:{APPS[app] + offset}/actuator/health") for app, _, _ in self.processes)
 
-        for app in ["auth", "gateway", "studio", "review", "catalog"]:
+        for app in ["auth", "web-bff", "gateway", "studio", "review", "catalog"]:
             start_app(app)
         self.wait_for(apps_ready, "Auth/Gateway/Studio/Review/Catalog", 300)
         start_app("store")

@@ -1,6 +1,6 @@
 // 실행 앱의 Java 21 Alpine/JVM 옵션/비특권 UID를 공통으로 구성한다.
 // OCI 비교에서는 기반 이미지 다이제스트와 arm64를 명시해 양쪽 런타임을 고정한다.
-def imagePorts = [auth: 8091, gateway: 8080, studio: 8085, review: 8086,
+def imagePorts = [auth: 8091, "web-bff": 8080, gateway: 8093, studio: 8085, review: 8086,
                   catalog: 8081, store: 8087, order: 8082, payment: 8083,
                   license: 8084, download: 8088, settlement: 8089, 'mock-pg': 8092]
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(

@@ -1,0 +1,132 @@
+# 웹 BFF(결정 219·223). 브라우저가 닿는 유일한 문이다(결정 224). 로그인 인계·세션·토큰 보관·CSRF·Swagger를 맡고,
+# API 요청은 세션의 서버 쪽 access token을 붙여 내부 API 게이트웨이로 넘긴다. 역할별 경로 규칙은 게이트웨이가 정한다.
+server:
+  port: 8080
+  forward-headers-strategy: framework
+  # 브라우저 트래픽이 모두 이 문을 지난다. 여기가 먼저 닫히면 뒤에서 마친 응답을 내보낼 문이 없다(D-034).
+  shutdown: graceful
+
+spring:
+  application:
+    name: web-bff
+
+  session:
+    timeout: 7d
+    redis:
+      namespace: stove:bff:sessions
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+  security:
+    oauth2:
+      client:
+        registration:
+          gateway-bff:
+            provider: stove
+            client-id: gateway-bff
+            client-secret: ${BFF_CLIENT_SECRET}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,profile,studio,commerce
+        provider:
+          stove:
+            authorization-uri: ${BFF_PUBLIC_AUTH_BASE:http://localhost:8080}/oauth2/authorize
+            token-uri: ${AUTH_URI:http://localhost:8091}/oauth2/token
+            jwk-set-uri: ${AUTH_URI:http://localhost:8091}/oauth2/jwks
+            user-info-uri: ${AUTH_URI:http://localhost:8091}/userinfo
+            user-name-attribute: sub
+      # 세션의 access token을 넘기기 전에 서명·issuer·audience·만료를 확인하고 역할을 읽는다(BffAuthenticationFilter).
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
+
+  # 진행 중인 요청을 기다리는 상한. 컨테이너 종료 유예(40초)보다 짧아야 한다(D-035).
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # 하류(API 게이트웨이·Auth)가 닫는 유휴 연결을 다시 쓰지 않는다(D-053). 하류 유휴 닫기보다 짧아야 한다.
+          httpclient:
+            pool:
+              max-idle-time: 30s
+          # API만 CORS 대상이다. 외부 /oauth2/token은 없다(결정 220). 로그인은 같은 출처의 폼 이동이라
+          # CORS가 필요하지 않으며, chrome-error 프레임의 Origin을 여기서 거부하면
+          # 브라우저가 /login을 403으로 표시한다.
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/api/**]':
+                allowedOrigins:
+                  - http://127.0.0.1:18080
+                  - http://localhost:18080
+                  - http://127.0.0.1:8080
+                  - http://localhost:8080
+                allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowedHeaders: ['*']
+                allowCredentials: true
+          routes:
+            # 브라우저는 인증 서버 포트를 직접 조합하지 않고 이 한 출처에서 BFF 로그인(인가·로그인 폼·OIDC 로그아웃)을
+            # 한다. 토큰·폐기·JWKS·userinfo 엔드포인트는 외부에 두지 않는다 — OAuth 클라이언트는 gateway-bff 하나이고
+            # Auth에 직접 붙는다(결정 220).
+            - id: auth-browser
+              uri: ${AUTH_URI:http://localhost:8091}
+              predicates:
+                - Path=/oauth2/authorize,/login,/logout,/error,/.well-known/**,/default-ui.css,/connect/**
+              filters:
+                # Spring Authorization Server가 로그인 Location을 브라우저 출처로 만든다.
+                - PreserveHostHeader
+            # 업무 API는 모두 내부 API 게이트웨이로 넘긴다(결정 223·224). 경로 표와 역할 규칙은 게이트웨이에 있다.
+            - id: api-gateway
+              uri: ${API_GATEWAY_URI:http://localhost:8093}
+              predicates:
+                - Path=/api/**
+            # Swagger UI가 같은 출처에서 받는 서비스 명세. 게이트웨이가 각 서비스로 프록시한다(GET 전용).
+            - id: api-docs
+              uri: ${API_GATEWAY_URI:http://localhost:8093}
+              predicates:
+                - Path=/v3/api-docs/auth,/v3/api-docs/store,/v3/api-docs/catalog,/v3/api-docs/order,/v3/api-docs/payment,/v3/api-docs/license,/v3/api-docs/download,/v3/api-docs/studio,/v3/api-docs/review,/v3/api-docs/settlement
+                - Method=GET
+
+# 10개 서비스의 명세를 한 화면에서 드롭다운으로 전환한다.
+#
+# `api-docs.enabled: false` 로 자기 명세를 끄면 Swagger UI 까지 404 가 된다 —
+# springdoc 에서 그 속성은 명세 엔드포인트 하나가 아니라 구성 전체의 스위치다.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - { name: 0. auth (회원가입·OIDC),    url: /v3/api-docs/auth }
+      - { name: 1. store (진열·검색),      url: /v3/api-docs/store }
+      - { name: 2. catalog (상품),         url: /v3/api-docs/catalog }
+      - { name: 3. order (주문),           url: /v3/api-docs/order }
+      - { name: 4. payment (결제),         url: /v3/api-docs/payment }
+      - { name: 5. license (라이선스),      url: /v3/api-docs/license }
+      - { name: 6. download (다운로드),     url: /v3/api-docs/download }
+      - { name: 7. studio (크리에이터),     url: /v3/api-docs/studio }
+      - { name: 8. review (심의·운영),      url: /v3/api-docs/review }
+      - { name: 9. settlement (정산·운영),  url: /v3/api-docs/settlement }
+    # 결정 220·221: Swagger는 BFF 세션 쿠키로 호출한다(먼저 /oauth2/authorization/gateway-bff로 로그인).
+    # 변경 요청의 CSRF 헤더는 SwaggerBffCsrfConfig가 /bff/csrf에서 받아 붙인다.
+    csrf:
+      enabled: true
+
+management:
+  endpoints.web.exposure.include: health,info,prometheus,gateway
+  metrics.tags.application: web-bff
+  # 브라우저 요청의 트레이스가 시작되는 자리. 하류 서비스와 샘플링 비율이 다르면 트레이스가 반쪽만 남는다.
+  tracing.sampling.probability: ${TRACING_SAMPLE_RATE:1.0}
+  otlp.tracing.endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+  level:
+    org.springframework.cloud.gateway: INFO

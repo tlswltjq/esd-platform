@@ -1,44 +1,16 @@
+# API 게이트웨이(결정 223·224). 내부망에만 있고 BFF만 부른다. BFF가 릴레이한 Bearer를 검증하고, 역할별 경로 규칙과
+# 라우팅 표로 업무 서비스에 보낸다. 세션·OAuth 클라이언트·브라우저 입구는 웹 BFF(apps/web-bff)에 있다.
 server:
-  port: 8080
-  forward-headers-strategy: framework
-  # 모든 트래픽이 이 문을 지난다 — PG 콜백도 클라이언트 요청도 창작자 호출도(D-034).
-  # 여기가 빠지면 하류 아홉이 켜 둔 graceful 이 전부 무의미해진다.
-  # 요청을 마치고 닫아도 그 응답을 내보낼 문이 이미 없기 때문이다.
+  port: 8093
+  # 모든 BFF 트래픽이 이 문을 지난다(D-034). 여기가 먼저 닫히면 하류가 마친 응답을 내보낼 문이 없다.
   shutdown: graceful
 
 spring:
   application:
     name: gateway
 
-  session:
-    timeout: 7d
-    redis:
-      namespace: stove:bff:sessions
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      connect-timeout: 2s
-      timeout: 2s
   security:
     oauth2:
-      client:
-        registration:
-          gateway-bff:
-            provider: stove
-            client-id: gateway-bff
-            client-secret: ${BFF_CLIENT_SECRET}
-            client-authentication-method: client_secret_basic
-            authorization-grant-type: authorization_code
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
-            scope: openid,profile,studio,commerce
-        provider:
-          stove:
-            authorization-uri: ${BFF_PUBLIC_AUTH_BASE:http://localhost:8080}/oauth2/authorize
-            token-uri: ${AUTH_URI:http://localhost:8091}/oauth2/token
-            jwk-set-uri: ${AUTH_URI:http://localhost:8091}/oauth2/jwks
-            user-info-uri: ${AUTH_URI:http://localhost:8091}/userinfo
-            user-name-attribute: sub
       resourceserver:
         jwt:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
@@ -59,30 +31,14 @@ spring:
           httpclient:
             pool:
               max-idle-time: 30s
-          # API만 CORS 대상이다. 외부 /oauth2/token은 없다(결정 220). 로그인은 같은 출처의 폼 이동이라
-          # CORS가 필요하지 않으며, chrome-error 프레임의 Origin을 여기서 거부하면
-          # 브라우저가 /login을 403으로 표시한다.
-          globalcors:
-            add-to-simple-url-handler-mapping: true
-            cors-configurations:
-              '[/api/**]':
-                allowedOrigins:
-                  - http://127.0.0.1:18080
-                  - http://localhost:18080
-                  - http://127.0.0.1:8080
-                  - http://localhost:8080
-                allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-                allowedHeaders: ['*']
-                allowCredentials: true
-          # 추적 컨텍스트(traceparent)는 게이트웨이가 트레이스를 열면서 자동으로 만들어
+          # 추적 컨텍스트(traceparent)는 웹 BFF가 트레이스를 열고 이 게이트웨이가 이어받아
           # 하류로 전달한다 — 라우팅 규칙에서 헤더를 손댈 일이 없다.
           # 각 서비스는 그 값을 이어받고, 응답에는 traceId 를 X-Correlation-Id 로 돌려준다
           # (common:web 의 TraceIdResponseFilter).
           routes:
             # ── 회원가입·OIDC ───────────────────────────────────────
-            # 브라우저는 인증 서버 포트를 직접 조합하지 않고 게이트웨이 한 출처에서
-            # 회원가입과 BFF 로그인(인가·로그인 폼·OIDC 로그아웃)을 수행한다. 토큰·폐기·JWKS·userinfo
-            # 엔드포인트는 외부에 두지 않는다 — OAuth 클라이언트는 gateway-bff 하나이고 Auth에 직접 붙는다(결정 220).
+            # 회원가입·비밀번호 등 Auth의 업무 API. 브라우저 로그인 경로(인가·로그인 폼·OIDC 로그아웃)는 웹 BFF가
+            # Auth로 바로 보낸다(결정 223).
             - id: auth-api
               uri: ${AUTH_URI:http://localhost:8091}
               predicates:
@@ -93,13 +49,6 @@ spring:
                 - Path=/api/v1/admin/accounts/**
                 - Method=POST
               filters: [RemoveRequestHeader=X-Member-Id]
-            - id: auth-browser
-              uri: ${AUTH_URI:http://localhost:8091}
-              predicates:
-                - Path=/oauth2/authorize,/login,/logout,/error,/.well-known/**,/default-ui.css,/connect/**
-              filters:
-                # Spring Authorization Server가 로그인 Location을 브라우저 출처로 만든다.
-                - PreserveHostHeader
 
             # ── 유저 대면 ─────────────────────────────────────────
             - id: store
@@ -205,9 +154,7 @@ spring:
                 - Path=/api/v1/settlements/**
 
             # ── API 명세 프록시 (읽기 전용) ────────────────────────
-            # Swagger UI 를 게이트웨이가 서빙하므로 명세도 같은 출처에서 와야 한다.
-            # 이 저장소에는 CORS 설정이 없어서, 브라우저가 8080 에서 받은 화면으로
-            # 8082 를 직접 부르면 막힌다. 그래서 프록시한다.
+            # Swagger UI 는 웹 BFF가 서빙하고, 명세는 웹 BFF → 이 게이트웨이 → 각 서비스로 같은 출처에서 받는다.
             #
             # **명세에 있다고 호출할 수 있는 것은 아니다.** 도달 가능성은 위의 라우팅 표가 정하고,
             # 여기 추가된 것은 /v3/api-docs/* 뿐이다(GET 전용). 그 성질을 GatewayRouteTest 가 지킨다.
@@ -251,30 +198,6 @@ spring:
               uri: ${SETTLEMENT_URI:http://localhost:8089}
               predicates: [Path=/v3/api-docs/settlement, Method=GET]
               filters: [SetPath=/v3/api-docs]
-
-# 10개 서비스의 명세를 한 화면에서 드롭다운으로 전환한다.
-#
-# `api-docs.enabled: false` 로 게이트웨이 자기 명세를 끄려다 **Swagger UI 까지 404 가 됐다** —
-# springdoc 에서 그 속성은 명세 엔드포인트 하나가 아니라 구성 전체의 스위치다.
-# 게이트웨이는 컨트롤러가 없어 자기 명세가 어차피 비어 있으므로 그냥 켜 둔다.
-springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
-    urls:
-      - { name: 0. auth (회원가입·OIDC),    url: /v3/api-docs/auth }
-      - { name: 1. store (진열·검색),      url: /v3/api-docs/store }
-      - { name: 2. catalog (상품),         url: /v3/api-docs/catalog }
-      - { name: 3. order (주문),           url: /v3/api-docs/order }
-      - { name: 4. payment (결제),         url: /v3/api-docs/payment }
-      - { name: 5. license (라이선스),      url: /v3/api-docs/license }
-      - { name: 6. download (다운로드),     url: /v3/api-docs/download }
-      - { name: 7. studio (크리에이터),     url: /v3/api-docs/studio }
-      - { name: 8. review (심의·운영),      url: /v3/api-docs/review }
-      - { name: 9. settlement (정산·운영),  url: /v3/api-docs/settlement }
-    # 결정 220·221: Swagger는 BFF 세션 쿠키로 호출한다(먼저 /oauth2/authorization/gateway-bff로 로그인).
-    # 변경 요청의 CSRF 헤더는 SwaggerBffCsrfConfig가 /bff/csrf에서 받아 붙인다.
-    csrf:
-      enabled: true
 
 management:
   endpoints.web.exposure.include: health,info,prometheus,gateway

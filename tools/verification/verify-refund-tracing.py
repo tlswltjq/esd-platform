@@ -9,11 +9,11 @@ Four automatic refunds run one after another on an isolated stack with its own T
                  nothing cancelled and that FAILED row -> confirmed failure: RefundExecutionFailed ->
                  LicenseRestorationRequested -> LicenseRestored -> refund FAILED, license back, no settlement refund
 
-For every refund the tool reads the buyer's refund trace (Gateway X-Correlation-Id), every refund
+For every refund the tool reads the buyer's refund trace (web BFF X-Correlation-Id), every refund
 Outbox row of Order/License/Payment with its stored traceparent, Payment's saved refund parent, and the
 Tempo spans of each trace it finds. A segment is connected when its Outbox row (or span) belongs to the
 refund trace. The refund trace itself must be complete evidence (support/refund_tracing.py): Tempo lookup
-succeeds with spans, exactly one root, gateway/order/license/payment(/settlement except restoration), no missing parent, and the
+succeeds with spans, exactly one root, web-bff/gateway/order/license/payment(/settlement except restoration), no missing parent, and the
 scenario's PG spans with worker lookups/resends under payment.process. Evidence: runs/refund-tracing-*/refund-tracing.json. The tool fails while any segment is
 broken, after the business outcome itself has been checked.
 """

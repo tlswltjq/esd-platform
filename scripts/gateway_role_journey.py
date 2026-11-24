@@ -125,7 +125,7 @@ def verify(base, login, require, fixtures, password):
         actors[label] = (client, stored, expected)
 
     # Every boundary runs with real cookie authentication. A real signed JWT presented by
-    # the caller is no longer a credential: Gateway rejects any external Authorization header.
+    # the caller is no longer a credential: the web BFF rejects any external Authorization header.
     for label, (client, stored, roles) in actors.items():
         for method, path, destination, required in CASES:
             body = {'probe': 'gateway-role-journey'} if method != 'GET' else None

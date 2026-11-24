@@ -226,7 +226,7 @@ do_stack() {
                 infra) prepare_minio; say "인프라 12종"
                        rexec "bash scripts/check-image-names.sh docker compose ${INFRA[*]} && docker compose ${INFRA[*]} up -d"
                        wait_for_mysql_bootstrap ;;
-                apps)  build_images; say "앱 12종"; rexec "bash scripts/start-apps.sh ${APPS[*]}" ;;
+                apps)  build_images; say "앱 13종"; rexec "bash scripts/start-apps.sh ${APPS[*]}" ;;
                 all)   build_images
                        say "인프라 + 앱"
                        rexec "bash scripts/check-image-names.sh docker compose ${INFRA[*]} && docker compose ${INFRA[*]} up -d" \

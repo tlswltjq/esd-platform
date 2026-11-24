@@ -37,7 +37,7 @@ INFRA_SHARDS = (
         ':apps:settlement:integrationTest',   # 134
         ':apps:studio:integrationTest',       # 113
         ':apps:auth:integrationTest',         # 83
-        ':apps:gateway:integrationTest',      # 63
+        ':apps:web-bff:integrationTest',      # 63 (결정 223: BFF 세션 통합 테스트가 옮겨 옴)
     )),
     ('infra-messaging', (
         ':apps:review:integrationTest',       # 83

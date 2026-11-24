@@ -21,7 +21,7 @@ def client(span_id, parent, url, method=None, start=0):
 
 def complete(scenario):
     """A refund trace with every required service and the scenario's PG spans."""
-    spans = [span("gateway", "http post", "g"), span("order", "http post /refund", "o", "g"),
+    spans = [span("web-bff", "http post", "b"), span("gateway", "http post", "g", "b"), span("order", "http post /refund", "o", "g"),
              span("license", "stove.order.v1 receive", "l", "o"), span("payment", "stove.order.v1 receive", "p", "l"),
              span("settlement", "stove.order.v1 receive", "s", "o"),
              client("c1", "p", PG + "/cancel"), client("g1", "p", PG + "?storeId=s")]
@@ -65,7 +65,7 @@ class TraceProblemsTest(unittest.TestCase):
         self.assertEqual(trace_problems(spans, "normal", PAYMENT), ["no PG cancel span", "no PG lookup span"])
 
     def test_restoration_does_not_require_settlement_but_every_other_service(self):
-        self.assertEqual(refund_tracing.required_services("restoration"), ("gateway", "order", "license", "payment"))
+        self.assertEqual(refund_tracing.required_services("restoration"), ("web-bff", "gateway", "order", "license", "payment"))
         with_settlement = complete("restoration") + [span("settlement", "stove.payment.v1 receive", "s2", "p")]
         self.assertEqual(trace_problems(with_settlement, "restoration", PAYMENT), [])
         spans = [s for s in complete("restoration") if s["service"] != "license"]
@@ -414,7 +414,7 @@ class FetchAndAwaitTest(unittest.TestCase):
         self.assertIn("no PG lookup span", str(failed.exception))
 
     def test_required_services_are_the_refund_flow(self):
-        self.assertEqual(refund_tracing.REQUIRED_SERVICES, ("gateway", "order", "license", "payment", "settlement"))
+        self.assertEqual(refund_tracing.REQUIRED_SERVICES, ("web-bff", "gateway", "order", "license", "payment", "settlement"))
 
 
 if __name__ == "__main__":

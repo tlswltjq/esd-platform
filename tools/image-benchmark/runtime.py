@@ -161,7 +161,7 @@ def benchmark_runtime(root, method, keep=False):
     output.mkdir(exist_ok=True)
     project = state["prefix"] + "-runtime"
     offset = 40000
-    public = "http://127.0.0.1:" + str(8080 + offset)
+    public = "http://127.0.0.1:" + str(MODULES["web-bff"] + offset)
     ports = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"]}
     keys = {name: secrets.token_urlsafe(24) for name in ["catalog", "settlement", "payment", "pg-settlement", "control", "pg-db"]}
     env = os.environ.copy()
@@ -181,7 +181,7 @@ def benchmark_runtime(root, method, keep=False):
             data=manifest, method="PUT", headers={"Content-Type": content_type})
         with urllib.request.urlopen(request):
             pass
-    names = [name for name in MODULES if name not in {"gateway", "download", "mock-pg"}]
+    names = [name for name in MODULES if name not in {"web-bff", "gateway", "download", "mock-pg"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in names))
     minio_image = "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local"  # decision 135
@@ -216,7 +216,7 @@ def benchmark_runtime(root, method, keep=False):
             STORAGE_BUCKET="stove-builds", STUDIO_ASSET_PUBLIC_BASE_URL=public,
             REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password",
             DOWNLOAD_STORAGE_ACCESS_KEY="download-reader", DOWNLOAD_STORAGE_SECRET_KEY="isolated-read-only-password")
-        if name == "gateway":
+        if name == "web-bff":
             app_env["BFF_CLIENT_SECRET"] = "bff-local-only"
         services[name] = {"image": state["registry"] + "/benchmark/" + method + "/" + name + ":runtime",
             "environment": app_env, "mem_limit": "512m", "stop_grace_period": "40s",
@@ -254,7 +254,7 @@ def benchmark_runtime(root, method, keep=False):
         readiness = {}
         # Store's initial snapshot requires a ready Catalog. Limit simultaneous JVM
         # startup on four cores so a 3s DB connect timeout does not measure CPU starvation.
-        groups = [["mock-pg", "auth", "gateway"], ["studio", "review", "catalog"],
+        groups = [["mock-pg", "auth", "gateway", "web-bff"], ["studio", "review", "catalog"],
                   ["store", "order", "payment"], ["license", "download", "settlement"]]
         for index, group in enumerate(groups):
             run(docker + ["up", "-d", *group], source, output / ("apps-up-" + str(index) + ".log"))
@@ -318,7 +318,7 @@ def benchmark_runtime(root, method, keep=False):
         save(results / (label + ".json"), record)
         if keep:
             save(results / "deployment.json", {"project": project, "compose_file": str(compose),
-                "gateway_loopback_port": 8080 + offset, "minio_loopback_port": ports["minio"],
+                "web_bff_loopback_port": MODULES["web-bff"] + offset, "minio_loopback_port": ports["minio"],
                 "application_count": len(MODULES), "variant": method,
                 "images": record["images"]})
         succeeded = True
