@@ -55,7 +55,7 @@ def view(number):
 
 
 def required_checks(number):
-    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link'], check=False)
+    code, out, err = gh(['pr', 'checks', str(number), '--required', '--json', 'name,bucket,state,link,startedAt'], check=False)
     try:
         return json.loads(out) if out.strip() else []
     except ValueError:
@@ -128,11 +128,32 @@ def fresh(checks, renew, old_links):
             if not ((check.get('name') or '').startswith(renew) and check.get('link') in old_links)]
 
 
+def started(check):
+    # 아직 시작하지 않은 검사는 gh가 빈 값이나 0001-01-01을 낸다. 이런 검사는 세대 비교에서 빼지도, 남을 빼지도 않는다.
+    value = check.get('startedAt') or ''
+    return '' if value.startswith('0001-') else value
+
+
+def latest_generation(checks):
+    """같은 필수 검사(이름 앞부분)의 실행이 여럿이면 가장 최근에 시작한 것만 남긴다. 같은 head에 예전 성공 build와 더
+    최근의 건너뛴 build가 함께 보일 때 건너뛴 것만 빼면 예전 성공으로 통과해 버린다(PR #245 리뷰 1)."""
+    newest = {}
+    for check in checks:
+        for prefix in REQUIRED:
+            if (check.get('name') or '').startswith(prefix) and started(check):
+                newest[prefix] = max(newest.get(prefix, ''), started(check))
+    def superseded(check):
+        prefix = next((p for p in REQUIRED if (check.get('name') or '').startswith(p)), None)
+        return prefix is not None and started(check) != '' and started(check) < newest.get(prefix, '')
+    return [check for check in checks if not superseded(check)]
+
+
 def without_draft_skips(number, checks):
-    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR에 남은 skipping build는 draft 때의 지난 결과이므로 뺀다.
-    ready 뒤 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217), 그 전에 건너뛴 build만 보고 실패로 끝내면 안 된다
-    (PR #244: ready 전 링크를 기록할 때 건너뛴 build가 아직 등록되지 않아 fresh()로도 걸러지지 않았다). draft면 그대로
-    둬 `gh pr ready` 안내로 끝낸다."""
+    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR에서 가장 최근 세대의 skipping build는 draft 때의 지난
+    결과이므로 빼고, 새 build의 등록을 기다린다. 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217), 그 전에 건너뛴
+    build만 보고 실패로 끝내면 안 된다(PR #244: ready 전 링크를 기록할 때 건너뛴 build가 아직 등록되지 않아 fresh()로도
+    걸러지지 않았다). 예전 세대는 latest_generation()이 먼저 버린다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
+    checks = latest_generation(checks)
     def draft_skip(check):
         return (check.get('name') or '').startswith('build') and check.get('bucket') == 'skipping'
     if not any(draft_skip(check) for check in checks) or view(number)['isDraft']:

@@ -255,6 +255,22 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
 
+    def test_an_older_success_does_not_stand_in_for_a_newer_skipped_build(self):
+        # PR #245 리뷰 1: 같은 head에 예전 성공 build와 더 최근의 건너뛴 build가 함께 보이면, 건너뛴 것만 빼고 예전
+        # 성공으로 통과하지 않는다. 가장 최근 세대만 보고 새 build를 기다린다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
+        old_pass = {'name': BUILD, 'bucket': 'pass', 'startedAt': '2026-11-24T09:00:00Z'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'startedAt': '2026-11-24T09:10:00Z'}
+        queued = {'name': BUILD, 'bucket': 'pending', 'startedAt': '0001-01-01T00:00:00Z'}
+        new_fail = {'name': BUILD, 'bucket': 'fail', 'startedAt': '2026-11-24T09:11:00Z'}
+        sequence = [[gate, old_pass, skipped], [gate, old_pass, skipped, queued], [gate, old_pass, skipped, new_fail]]
+        reads = mock.Mock(side_effect=sequence)
+        with mock.patch.object(pr_finish, 'required_checks', reads), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
+        self.assertEqual(3, reads.call_count)
+
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
