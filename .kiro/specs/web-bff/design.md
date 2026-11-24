@@ -124,7 +124,7 @@
 
 ## 이벤트
 
-> **위치 미결:** 이 소비를 웹 BFF(세션 삭제)와 API 게이트웨이(`iat` 거절) 중 어디에 둘지는 결정 225에서 정한다. 아래 표는 결정 180 당시(Gateway 하나)의 설계다.
+> **배치([결정 225](../../../docs/decisions.md#revocation-placement)):** 웹 BFF는 이 사실을 받아 `subject`의 세션·토큰 기록을 지운다. 변경 시각 전 발급 토큰의 거절(`iat` < `changedAt`)과 그 기준 저장은 API 게이트웨이가 따로 소비해 맡는다([Gateway design](../gateway/design.md#이벤트)). 아래 표는 결정 180 당시(Gateway 하나)의 설계이며, 거절 기준 부분은 게이트웨이로 읽는다.
 
 ### 소비 — `AccountAccessChanged` (가칭, 목표, [결정 180](../../../docs/decisions.md#account-access-revocation))
 

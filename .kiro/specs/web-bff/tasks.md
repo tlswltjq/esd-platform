@@ -101,4 +101,4 @@
 
 - [ ] [결정 필요 M-GW-2] Access Token 만료(`exp`) 검증과 판단 원칙 ⑥ — 원칙 문구의 예외로 둘지 확인(동작 변경 없음 추천).
 - [ ] [결정 필요 M-GW-8] `AccountAccessChanged` 소비 실패 보관 위치 — Gateway에 DB가 없어 P2.6-4·5(모듈 DB 실패 보관 표·키 정지)를 그대로 따를 수 없다. GW-T18 구현 전.
-- [ ] [결정 필요] 즉시 차단(GW-T18)의 소비 위치 — 웹 BFF(세션 삭제)와 API 게이트웨이(`iat` 거절) 중 어디에 둘지 결정 225.
+- [x] 즉시 차단(GW-T18)의 소비 위치 — [결정 225](../../../docs/decisions.md#revocation-placement)(A): 웹 BFF는 세션·토큰 기록 삭제, API 게이트웨이는 `iat` 거절. 구현은 GW-T18.
