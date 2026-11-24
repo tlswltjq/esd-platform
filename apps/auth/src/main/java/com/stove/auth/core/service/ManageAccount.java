@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>마지막 ADMIN의 ADMIN 역할은 회수할 수 없다(운영자 0명 방지).
  *   <li>상태·역할이 바뀌면 같은 트랜잭션에서 그 계정의 Refresh Token 계열을 폐기하고, 계정 접근 변경 사실
  *       ({@code AccountAccessChanged})을 Outbox에 쓴다(R7.6, 결정 180). 이미 발급된 access token은 받는 쪽(웹 BFF·API
- *       게이트웨이, 결정 225)이 이 사실로 끊는다. 이미 가진 역할의 부여처럼 바뀐 것이 없으면 사실을 내지 않는다.
+ *       게이트웨이, 결정 225)이 이 사실로 끊는다. 이미 가진 역할의 부여처럼 바뀐 것이 없으면 감사·폐기·사실 모두 하지 않는다.
  *   <li>모든 변경을 {@code role_audit_log}에 남긴다.
  * </ul>
  *
@@ -57,13 +57,12 @@ public class ManageAccount {
     @Transactional
     public void grantRole(String actorSubject, String targetSubject, PlatformRole role) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
-        boolean alreadyHeld = target.hasRole(role);
+        if (target.hasRole(role)) {
+            return;
+        }
         target.grantRole(role);
         audits.save(RoleAuditLog.roleChanged(target, actorSubject));
-        tokens.revokeSubject(targetSubject);
-        if (!alreadyHeld) {
-            recordAccessChanged(target, AccountAccessChangedEvent.ROLE);
-        }
+        revokeAccess(target, AccountAccessChangedEvent.ROLE);
     }
 
     @Transactional

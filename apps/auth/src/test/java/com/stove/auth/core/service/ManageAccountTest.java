@@ -171,11 +171,13 @@ class ManageAccountTest {
     }
 
     @Test
-    @DisplayName("이미 가진 역할의 부여는 접근 변경 사실을 쓰지 않는다")
+    @DisplayName("이미 가진 역할의 부여는 감사·토큰 폐기·접근 변경 사실 모두 하지 않는다")
     void grantingAHeldRoleRecordsNothing() {
         service.grantRole(admin.getSubject(), target.getSubject(), PlatformRole.MEMBER);
 
         verify(outbox, never()).record(anyString(), anyString(), any(DomainEvent.class));
+        verify(revocation, never()).revokeSubject(anyString());
+        verify(audits, never()).save(any(RoleAuditLog.class));
     }
 
     @Test

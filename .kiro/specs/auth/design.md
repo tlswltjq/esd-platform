@@ -10,7 +10,7 @@
 - 의존 방향([플랫폼 design "모듈과 외부 공급자"·"동기 의존"](../platform/design.md#모듈-경계와-의존-방향))
   - 들어옴: Gateway → Auth `/oauth2/token`·`/oauth2/jwks`·`/userinfo`(BFF 로그인·토큰 릴레이), Gateway 라우트 `/api/v1/auth/**`·`/oauth2/**`·`/login`·`/logout`·`/.well-known/**`·`/api/v1/admin/accounts/**`. 모든 자원 서버는 `/oauth2/jwks`의 공개 키로 토큰을 검증한다.
   - 나감: 다른 업무 모듈 동기 호출 없음. 외부 공급자는 메일 하나(`core.port.PasswordResetMailPort` → `adapter/mail`).
-  - 비동기: `UserRegistered`·`AccountAccessChanged` 발행만, 소비 없음([플랫폼 design "비동기 의존"](../platform/design.md#비동기-의존-요청--사실-응답-쌍-p13-2) 단방향 행). `AccountAccessChanged`의 소비자는 Gateway다([결정 180](../../../docs/decisions.md#account-access-revocation)).
+  - 비동기: `UserRegistered`·`AccountAccessChanged` 발행만, 소비 없음([플랫폼 design "비동기 의존"](../platform/design.md#비동기-의존-요청--사실-응답-쌍-p13-2) 단방향 행). `AccountAccessChanged`의 소비자는 웹 BFF(세션·토큰 기록 삭제)와 API 게이트웨이(`iat` 거절)다([결정 180](../../../docs/decisions.md#account-access-revocation)·[결정 225](../../../docs/decisions.md#revocation-placement)).
 - Spring Authorization Server SPI 구현(`OAuth2AuthorizationService`·`AuthenticationProvider`·`UserDetailsService`)은 프레임워크 연동이라 `adapter`에 둔다. **토큰을 받을 자격(계정 `ACTIVE`, 현재 역할)의 판정은 업무 규칙이라 core 서비스가 갖고, adapter·config는 그 서비스를 부른다**(원칙 ②). 지금은 판정이 `adapter/oauth/RotatingRefreshProvider.java:38-39`, `config/AuthSecurityConfig.java:316-327`, `adapter/security/AccountUserDetailsService.java:27`에 흩어져 있다(AU-T13).
 - 조립: 설정 바인딩·`RegisteredClient` 등록·서명 키·`RecoverPassword` 조립은 `config`(AGENTS.md 3절).
 

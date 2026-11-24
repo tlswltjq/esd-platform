@@ -29,17 +29,25 @@ public record AccountAccessChangedEvent(
     /** 계정 역할이 부여·회수됐다. */
     public static final String ROLE = "ROLE";
 
-    public static AccountAccessChangedEvent of(String subject, Instant changedAt, String changeKind) {
-        if (subject == null || subject.isBlank()) {
-            throw new IllegalArgumentException("subject는 비어 있을 수 없습니다.");
-        }
-        if (changedAt == null) {
-            throw new IllegalArgumentException("changedAt은 null일 수 없습니다.");
+    public AccountAccessChangedEvent {
+        requireText(eventId, "eventId");
+        requireText(subject, "subject");
+        if (occurredAt == null || changedAt == null) {
+            throw new IllegalArgumentException("occurredAt·changedAt은 null일 수 없습니다.");
         }
         if (!STATUS.equals(changeKind) && !ROLE.equals(changeKind)) {
             throw new IllegalArgumentException("changeKind는 STATUS 또는 ROLE이어야 합니다: " + changeKind);
         }
+    }
+
+    public static AccountAccessChangedEvent of(String subject, Instant changedAt, String changeKind) {
         return new AccountAccessChangedEvent(UUID.randomUUID().toString(), changedAt, subject, changedAt, changeKind);
+    }
+
+    private static void requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + "는 비어 있을 수 없습니다.");
+        }
     }
 
     @Override public String eventType() { return EventType.ACCOUNT_ACCESS_CHANGED; }
