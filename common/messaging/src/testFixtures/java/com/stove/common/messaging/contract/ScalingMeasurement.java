@@ -93,17 +93,18 @@ final class ScalingMeasurement {
     }
 
     /**
-     * 문을 열기 전에 두 번 이상 받은 메시지 수. 쌓는 동안 소유권이 바뀌었다(lease 만료·리밸런스)는 뜻이라 그 회차는
-     * 무효로 적는다(PR #238 R3).
+     * 소유권이 바뀐 메시지 수: {@code before} 전에 서로 다른 인스턴스가 받은 메시지. 닫기 없는 회차는 끝까지, 닫기 회차는
+     * 닫기 전까지 본다. 쌓는 동안의 lease 만료·리밸런스처럼 측정이 일으킨 이동이라 그 회차는 무효로 적는다 — 새 소유자가 문이
+     * 열린 뒤에 받아도 잡힌다(PR #238 R3·재리뷰). 같은 인스턴스의 재시도는 세지 않는다.
      */
-    static int receivedTwiceBeforeRelease(List<Received> receipts, long releasedAt) {
-        Map<String, Integer> counts = new HashMap<>();
+    static int ownershipChanges(List<Received> receipts, long before) {
+        Map<String, Set<Integer>> instances = new HashMap<>();
         for (Received one : receipts) {
-            if (one.nanos() < releasedAt) {
-                counts.merge(one.eventId(), 1, Integer::sum);
+            if (one.nanos() < before) {
+                instances.computeIfAbsent(one.eventId(), ignored -> new HashSet<>()).add(one.instance());
             }
         }
-        return (int) counts.values().stream().filter(count -> count > 1).count();
+        return (int) instances.values().stream().filter(owners -> owners.size() > 1).count();
     }
 
     /** 각 메시지가 처음 처리된 시각 가운데 가장 늦은 것. 다 비운 시각이다. */

@@ -601,7 +601,7 @@ public abstract class MessagingContractTest {
         List<ScalingMeasurement.Received> receipts = measurement.receivedSnapshot();
         long drained = ScalingMeasurement.drainedAt(records);
         List<Double> handover = closeOne ? ScalingMeasurement.handoverMillis(receipts, records, 0, closedAt) : List.of();
-        int twiceBeforeRelease = ScalingMeasurement.receivedTwiceBeforeRelease(receipts, measurement.releasedAt());
+        int ownershipChanges = ScalingMeasurement.ownershipChanges(receipts, closeOne ? closedAt : Long.MAX_VALUE);
         for (AutoCloseable subscription : instancesStarted) {
             if (started.remove(subscription)) {
                 subscription.close();
@@ -610,10 +610,10 @@ public abstract class MessagingContractTest {
         forgetGroup(group);
         assertThat(measurement.distinct()).isEqualTo(messages);
         return String.format(Locale.ROOT,
-                "{\"instances\":%d,\"close_one\":%s,\"valid\":%s,\"received_twice_before_release\":%d,\"publish_ms\":%.1f,"
+                "{\"instances\":%d,\"close_one\":%s,\"valid\":%s,\"ownership_changes\":%d,\"publish_ms\":%.1f,"
                         + "\"drain_ms\":%.1f,\"per_second\":%.1f,\"processed\":%d,\"received\":%d,\"redelivered\":%d,"
                         + "\"per_instance\":%s,\"handover_ms\":%s}",
-                instances, closeOne, twiceBeforeRelease == 0, twiceBeforeRelease, millis(published - publishStarted),
+                instances, closeOne, ownershipChanges == 0, ownershipChanges, millis(published - publishStarted),
                 millis(drained - measurement.releasedAt()), messages / ((drained - measurement.releasedAt()) / 1_000_000_000.0),
                 records.size(), receipts.size(), ScalingMeasurement.redelivered(receipts),
                 ScalingMeasurement.json(ScalingMeasurement.perInstance(records, instances)), ScalingMeasurement.json(handover));
