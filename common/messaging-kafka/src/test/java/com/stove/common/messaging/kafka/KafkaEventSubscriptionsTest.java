@@ -30,6 +30,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.AbstractMessageListenerContainer;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.util.backoff.BackOffExecution;
 
 /**
  * 업무 리스너가 Kafka 를 모르고도 같은 구독(토픽·그룹·재시도·격리)을 받는지 본다.
@@ -181,6 +182,30 @@ class KafkaEventSubscriptionsTest {
     }
 
     @Test
+    void retryUntilSuccessNeverStopsRetryingButStillQuarantinesPermanentFailures() {
+        // 결정 226: 일시 실패는 성공할 때까지 제자리 재시도한다. 대기는 8초를 넘지 않는다.
+        BackOffExecution execution = ConsumerRetryPolicy.untilSuccess().start();
+        long last = 0;
+        for (int attempt = 0; attempt < 1_000; attempt++) {
+            last = execution.nextBackOff();
+            assertThat(last).isNotEqualTo(BackOffExecution.STOP).isLessThanOrEqualTo(8_000L);
+        }
+        assertThat(last).isEqualTo(8_000L);
+        runner.withBean("persistentHandler", PersistentHandler.class).run(context -> {
+            MessageListenerContainer container = context.getBean(KafkaListenerEndpointRegistry.class)
+                    .getListenerContainer("persistentHandler");
+            assertThat(errorHandler(container)).isNotSameAs(context.getBean("stoveKafkaErrorHandler"));
+        });
+        // 영구 실패(noRetryFor)는 성공까지 재시도에서도 바로 격리(DLT)로 간다.
+        List<ConsumerRecord<?, ?>> quarantined = new ArrayList<>();
+        CommonErrorHandler handler = DeadLetterErrorHandlers.create(
+                (record, exception) -> quarantined.add(record), ConsumerRetryPolicy.untilSuccess(), Rejected.class);
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("fixture.a.v1", 0, 0L, "K", "{}");
+        assertThat(handler.handleOne(new Rejected(), record, mock(Consumer.class), mock(MessageListenerContainer.class))).isTrue();
+        assertThat(quarantined).containsExactly(record);
+    }
+
+    @Test
     void refusesASubscriberThatIsNotAHandler() {
         runner.withBean("notAHandler", NotAHandler.class).run(context ->
                 assertThat(context).hasFailed());
@@ -252,6 +277,14 @@ class KafkaEventSubscriptionsTest {
 
     @EventSubscriber(topics = "fixture.a.v1", group = "fixture-slow", oneAtATime = true)
     static class SlowHandler implements EventHandler {
+        @Override
+        public void receive(InboundMessage message) {
+        }
+    }
+
+    @EventSubscriber(topics = "fixture.a.v1", group = "fixture-persistent", noRetryFor = Rejected.class,
+            retryUntilSuccess = true)
+    static class PersistentHandler implements EventHandler {
         @Override
         public void receive(InboundMessage message) {
         }

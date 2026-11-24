@@ -31,4 +31,11 @@ public @interface EventSubscriber {
      * — 여러 건을 한꺼번에 가져오면 뒤 건들이 브로커의 처리 기한을 넘긴다.
      */
     boolean oneAtATime() default false;
+
+    /**
+     * 일시 실패를 격리하지 않고 성공할 때까지 제자리 재시도한다(그동안 그 파티션이 멈춘다). {@link #noRetryFor()} 예외(영구
+     * 실패)만 격리로 간다. 멱등이고 순서에 무관하며 빠지면 안 되는 사실을 DB 없는 모듈이 받을 때만 쓴다(결정 226: 웹 BFF·API
+     * 게이트웨이의 계정 접근 변경). 소비 지연 게이지로 멈춤을 감지해야 한다. Kafka adapter만 지원한다.
+     */
+    boolean retryUntilSuccess() default false;
 }

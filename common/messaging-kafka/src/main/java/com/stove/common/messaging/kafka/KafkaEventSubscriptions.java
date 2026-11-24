@@ -19,6 +19,7 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistrar;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
+import org.springframework.util.backoff.BackOff;
 import org.springframework.messaging.handler.annotation.support.DefaultMessageHandlerMethodFactory;
 
 /**
@@ -92,7 +93,7 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
     }
 
     private static boolean needsOwnFactory(EventSubscriber subscription) {
-        return subscription.noRetryFor().length > 0 || subscription.oneAtATime();
+        return subscription.noRetryFor().length > 0 || subscription.oneAtATime() || subscription.retryUntilSuccess();
     }
 
     /** 이 선언만의 팩토리. Boot 설정(직렬화·관측 등)은 기본 팩토리와 같고 오류 처리·가져오는 건수만 다르다. */
@@ -113,7 +114,8 @@ public class KafkaEventSubscriptions implements KafkaListenerConfigurer, SmartLi
         if (recoverer == null) {
             throw new IllegalStateException("격리(DLT)에 쓸 KafkaTemplate 이 없다");
         }
-        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(recoverer, subscription.noRetryFor()));
+        BackOff backOff = subscription.retryUntilSuccess() ? ConsumerRetryPolicy.untilSuccess() : ConsumerRetryPolicy.backOff();
+        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(recoverer, backOff, subscription.noRetryFor()));
         if (subscription.oneAtATime()) {
             Properties properties = new Properties();
             properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1");

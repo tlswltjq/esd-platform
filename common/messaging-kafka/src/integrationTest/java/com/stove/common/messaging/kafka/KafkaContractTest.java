@@ -182,6 +182,15 @@ class KafkaContractTest extends MessagingContractTest {
             public boolean oneAtATime() {
                 return oneAtATime;
             }
+
+
+            @Override
+
+            public boolean retryUntilSuccess() {
+
+                return false;
+
+            }
         };
     }
 

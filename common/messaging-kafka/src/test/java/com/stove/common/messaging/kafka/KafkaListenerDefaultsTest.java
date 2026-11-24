@@ -128,6 +128,15 @@ class KafkaListenerDefaultsTest {
             public boolean oneAtATime() {
                 return false;
             }
+
+
+            @Override
+
+            public boolean retryUntilSuccess() {
+
+                return false;
+
+            }
         };
     }
 
