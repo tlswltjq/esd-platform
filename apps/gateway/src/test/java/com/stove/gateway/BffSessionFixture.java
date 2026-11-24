@@ -38,11 +38,16 @@ import reactor.core.publisher.Mono;
 /**
  * 결정 220: Gateway 경로 규칙 테스트는 외부 Bearer가 아니라 BFF 세션으로 호출한다.
  *
- * <p>OAuth 로그인(Auth 왕복)만 이 테스트 전용 필터가 대신한다. 요청에 {@link #LOGIN_HEADER}가 있으면 세션에
+ * <p>대신하는 것은 둘이다. (1) OAuth 로그인(Auth 왕복): 요청에 {@link #LOGIN_HEADER}가 있으면 테스트 전용 필터가 세션에
  * 로그인 뒤와 같은 보안 컨텍스트({@code OAuth2AuthenticationToken})와 토큰 기록 키({@code bff.client-key})를 넣는다.
- * 그 뒤의 세션 인증({@code BffAuthenticationFilter}), 하류 Bearer 릴레이, CSRF 검사는 운영 코드 그대로다.
- * 토큰 기록 키를 역할 목록으로 두고, {@link BffTokens#current}가 같은 값을 access token으로 돌려준다. 그래서 하류가
- * 받는 헤더는 {@code Bearer <역할 목록>}이고, 테스트의 JWT 해석 대역이 그 값을 역할로 읽는다.
+ * (2) 서버 쪽 토큰 기록 조회·갱신: {@link BffTokens#current}를 대역으로 두어 토큰 기록 키(역할 목록)를 그대로 access token으로
+ * 돌려준다. 단위 테스트에는 Redis가 없어 세션도 메모리 저장소에 둔다.
+ *
+ * <p>운영 코드 그대로 거치는 것: 세션에서 보안 컨텍스트 읽기, 세션 인증({@code BffAuthenticationFilter})의 JWT 해석과
+ * 역할 판정, 경로 규칙, 하류 Bearer 릴레이({@code BffRelayFilter}), CSRF 검사. 그래서 이 테스트는 "세션 요청의 역할 경계와
+ * 릴레이"를 보장하고, Redis 토큰 기록의 읽기·갱신·재사용 탐지는 보장하지 않는다. 그 부분은 두 Gateway와 Auth를 띄운
+ * 실제 HTTP 검증 {@code tools/verification/auth-bff.py}가 맡는다(Gateway 통합 테스트도 {@code BffTokens}를 대역으로 둔다).
+ * 하류가 받는 헤더는 {@code Bearer <역할 목록>}이고, 테스트의 JWT 해석 대역이 그 값을 역할로 읽는다.
  */
 @TestConfiguration
 public class BffSessionFixture {
