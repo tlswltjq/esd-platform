@@ -183,7 +183,7 @@ class AccountManagementIntegrationTest {
             }));
             assertThat(revoked.await(10, TimeUnit.SECONDS)).isTrue();
             Future<?> grant = pool.submit(() -> manageAccount.grantRole(b.getSubject(), target.getSubject(), PlatformRole.CREATOR));
-            Thread.sleep(1000);
+            awaitLockWait("for update");
             assertThat(grant.isDone()).as("B의 요청은 회수 커밋을 기다린다").isFalse();
             release.countDown();
             revoke.get(10, TimeUnit.SECONDS);
@@ -196,5 +196,24 @@ class AccountManagementIntegrationTest {
             release.countDown();
             pool.shutdownNow();
         }
+    }
+
+    /**
+     * 다른 연결이 {@code user_account} 행 잠금을 기다리는 중임을 DB에서 확인한다(PR #244 R7). 같은 DB 사용자의 연결은
+     * PROCESS 권한 없이도 {@code information_schema.PROCESSLIST}에 보인다. 잠금 질의가 끝나지 않고 남아 있으면 대기 중이다.
+     */
+    private void awaitLockWait(String lockClause) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline) {
+            Integer waiting = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM information_schema.PROCESSLIST
+                    WHERE ID <> CONNECTION_ID() AND COMMAND = 'Query' AND LOWER(INFO) LIKE ?
+                    """, Integer.class, "%from user_account%" + lockClause + "%");
+            if (waiting != null && waiting > 0) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("다른 연결이 user_account " + lockClause + " 잠금을 기다리지 않는다");
     }
 }
