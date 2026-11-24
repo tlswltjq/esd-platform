@@ -69,7 +69,7 @@ public class RecoverPassword {
                 .filter(value -> value.usable(Instant.now()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
                         "복구 링크가 유효하지 않거나 만료되었습니다."));
-        UserAccount account = accounts.findBySubject(token.getSubject())
+        UserAccount account = accounts.lockForChange(token.getSubject())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
                         "복구 링크가 유효하지 않거나 만료되었습니다."));
         account.changePasswordHash(passwords.encode(newPassword));

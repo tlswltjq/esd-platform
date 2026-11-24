@@ -12,6 +12,11 @@ import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +35,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>모든 변경을 {@code role_audit_log}에 남긴다.
  * </ul>
  *
- * <p>{@code changedAt}은 Refresh 계열 폐기 <b>뒤에</b> 잰다. 폐기의 행 잠금을 잡은 뒤라 동시에 진행 중이던 갱신은 그보다 먼저
- * 끝났거나(그 토큰의 {@code iat}가 더 이르다) 잠금을 기다린 뒤 폐기된 계열을 보고 거절된다.
+ * <p>변경은 계정 행 배타 잠금으로 시작하고, 토큰 발급(코드 교환·갱신)은 역할을 읽기 전에 같은 행을 공유 잠금한다
+ * ({@link UserAccountRepository#lockForIssuance}). 그래서 동시 발급은 변경보다 먼저 커밋됐거나(그 토큰의 {@code iat}가 더
+ * 이르고 그 계열은 이 폐기에 걸린다) 변경 커밋을 기다린 뒤 새 역할을 읽는다. {@code changedAt}은 잠금을 잡고 폐기한
+ * <b>뒤에</b> 잰다.
  */
 @Service
 @RequiredArgsConstructor
@@ -90,19 +97,27 @@ public class ManageAccount {
                 AccountAccessChangedEvent.of(target.getSubject(), Instant.now(), changeKind));
     }
 
+    /**
+     * 요청자와 대상의 계정 행을 subject 순서로 배타 잠금한 뒤 판정한다. 요청자의 권한 확인과 그 요청자에 대한 다른 운영자의
+     * 변경이 직렬화되고(확인 직후 ADMIN을 잃어도 진행하는 경합 방지), 고정된 순서라 서로를 바꾸는 두 요청이 교착하지 않는다.
+     */
     private UserAccount requireDifferentTarget(String actorSubject, String targetSubject) {
-        requireActiveOperator(actorSubject);
+        Map<String, Optional<UserAccount>> locked = new TreeMap<>();
+        for (String subject : new TreeSet<>(List.of(actorSubject, targetSubject))) {
+            locked.put(subject, accounts.lockForChange(subject));
+        }
+        requireActiveOperator(locked.get(actorSubject));
         if (actorSubject.equals(targetSubject)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "자기 계정은 상태·역할을 바꿀 수 없습니다.");
         }
-        return accounts.findBySubject(targetSubject)
+        return locked.get(targetSubject)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "대상 계정을 찾을 수 없습니다."));
     }
 
     /** R7.1: 토큰의 ADMIN 역할과 별개로 요청자 계정이 지금도 활성 운영자인지 DB에서 확인한다. */
-    private void requireActiveOperator(String actorSubject) {
-        boolean activeOperator = accounts.findBySubject(actorSubject)
-                .map(actor -> actor.getStatus() == AccountStatus.ACTIVE && actor.hasRole(PlatformRole.ADMIN))
+    private void requireActiveOperator(Optional<UserAccount> actor) {
+        boolean activeOperator = actor
+                .map(value -> value.getStatus() == AccountStatus.ACTIVE && value.hasRole(PlatformRole.ADMIN))
                 .orElse(false);
         if (!activeOperator) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "요청자가 활성 운영자가 아닙니다.");

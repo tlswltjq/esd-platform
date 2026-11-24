@@ -41,6 +41,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "stove.outbox.relay-enabled=false", "stove.auth.bff-client-secret=integration-secret",
@@ -51,6 +53,7 @@ class TokenRotationIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ManageAccount manageAccount;
     @Autowired UserAccountRepository accounts;
+    @Autowired PlatformTransactionManager transactionManager;
     @Autowired PasswordRecoveryIntegrationTest.CapturingMail mail;
     private final ObjectMapper mapper = new ObjectMapper();
     private static final String CALLBACK = "http://localhost:3000/login/oauth2/code/gateway-bff";
@@ -64,7 +67,27 @@ class TokenRotationIntegrationTest {
         if (basic) builder.header("Authorization", "Basic " + Base64.getEncoder().encodeToString("gateway-bff:integration-secret".getBytes(StandardCharsets.UTF_8)));
         return client.send(builder.POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
+    /** 로그인해 인가 코드까지 받는다(토큰 교환 전). */
+    private record Grant(HttpClient client, String email, String code, String verifier) {}
     private JsonNode login() throws Exception {
+        Grant grant = authorize();
+        JsonNode tokens = exchange(grant);
+        HttpResponse<String> userinfo = grant.client().send(HttpRequest.newBuilder(URI.create(base()+"/userinfo"))
+                .header("Authorization","Bearer "+tokens.path("access_token").asText()).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(userinfo.statusCode()).isEqualTo(200);
+        assertThat(mapper.readTree(userinfo.body()).hasNonNull("sub")).isTrue();
+        assertThat(get(grant.client(), base()+"/favicon.ico").statusCode()).isEqualTo(404);
+        return tokens;
+    }
+    private JsonNode exchange(Grant grant) throws Exception {
+        HttpResponse<String> token = post(grant.client(),"/oauth2/token","grant_type=authorization_code&code="+enc(grant.code())
+                +"&redirect_uri="+enc(CALLBACK)+"&code_verifier="+enc(grant.verifier()),true);
+        assertThat(token.statusCode()).isEqualTo(200);
+        JsonNode tokens = mapper.readTree(token.body());
+        assertThat(tokens.hasNonNull("refresh_token")).isTrue();
+        return tokens;
+    }
+    private Grant authorize() throws Exception {
         CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         HttpClient client = HttpClient.newBuilder().cookieHandler(cookies).followRedirects(HttpClient.Redirect.NEVER).build();
         String email = "integration-" + UUID.randomUUID() + "@example.com";
@@ -91,16 +114,7 @@ class TokenRotationIntegrationTest {
         assertThat(location).startsWith(CALLBACK);
         String code = Arrays.stream(URI.create(location).getRawQuery().split("&")).filter(pair -> pair.startsWith("code="))
                 .map(pair -> URLDecoder.decode(pair.substring(5),StandardCharsets.UTF_8)).findFirst().orElseThrow();
-        HttpResponse<String> token = post(client,"/oauth2/token","grant_type=authorization_code&code="+enc(code)+"&redirect_uri="+enc(CALLBACK)+"&code_verifier="+enc(verifier),true);
-        assertThat(token.statusCode()).isEqualTo(200);
-        JsonNode tokens = mapper.readTree(token.body());
-        assertThat(tokens.hasNonNull("refresh_token")).isTrue();
-        HttpResponse<String> userinfo = client.send(HttpRequest.newBuilder(URI.create(base()+"/userinfo"))
-                .header("Authorization","Bearer "+tokens.path("access_token").asText()).GET().build(),HttpResponse.BodyHandlers.ofString());
-        assertThat(userinfo.statusCode()).isEqualTo(200);
-        assertThat(mapper.readTree(userinfo.body()).hasNonNull("sub")).isTrue();
-        assertThat(get(client, base()+"/favicon.ico").statusCode()).isEqualTo(404);
-        return tokens;
+        return new Grant(client, email, code, verifier);
     }
     private HttpResponse<String> refresh(String token) throws Exception {
         return post(HttpClient.newHttpClient(),"/oauth2/token","grant_type=refresh_token&refresh_token="+enc(token),true);
@@ -269,5 +283,44 @@ class TokenRotationIntegrationTest {
                 .header("Authorization", "Bearer " + tokens.path("id_token").asText()).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(401);
+    }
+
+    /**
+     * PR #244 R2 재현: 운영자의 역할 부여 트랜잭션이 대상 계정 행을 잡고 있는 동안 인가 코드를 교환한다. 교환은 그 커밋을
+     * 기다린 뒤 새 역할을 읽어야 한다. 잠금이 없으면 옛 역할의 토큰과 폐기되지 않은 새 계열이 남는다.
+     */
+    @Test void codeExchangeDuringARoleChangeWaitsAndIssuesTheNewRoles() throws Exception {
+        Grant grant = authorize();
+        String subject = accounts.findByEmailIgnoreCase(grant.email()).orElseThrow().getSubject();
+        UserAccount admin = accounts.saveAndFlush(UserAccount.withRoles(
+                "operator-" + UUID.randomUUID() + "@example.com", "{bcrypt}h",
+                Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER)));
+        CountDownLatch changed = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> change = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                manageAccount.grantRole(admin.getSubject(), subject, PlatformRole.CREATOR);
+                changed.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(changed.await(10, TimeUnit.SECONDS)).isTrue();
+            Future<JsonNode> exchanged = pool.submit(() -> exchange(grant));
+            Thread.sleep(1000);
+            assertThat(exchanged.isDone()).as("교환은 계정 변경 커밋을 기다린다").isFalse();
+            release.countDown();
+            change.get(10, TimeUnit.SECONDS);
+
+            JsonNode claims = mapper.readTree(Base64.getUrlDecoder().decode(
+                    exchanged.get(10, TimeUnit.SECONDS).path("access_token").asText().split("\\.")[1]));
+            assertThat(claims.path("roles").toString()).contains("CREATOR");
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
     }
 }

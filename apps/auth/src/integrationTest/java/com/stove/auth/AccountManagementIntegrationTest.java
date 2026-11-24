@@ -16,11 +16,19 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 운영자의 계정 상태·역할 관리를 실제 MySQL에서 검증한다.
@@ -38,6 +46,7 @@ class AccountManagementIntegrationTest {
     @Autowired ManageAccount manageAccount;
     @Autowired UserAccountRepository accounts;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactionManager;
 
     private UserAccount persistAdmin() {
         return accounts.saveAndFlush(UserAccount.withRoles(
@@ -148,5 +157,44 @@ class AccountManagementIntegrationTest {
                 PlatformRole.ADMIN)).isInstanceOfSatisfying(BusinessException.class,
                         rejected -> assertThat(rejected.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
         assertThat(accounts.findBySubject(soleAdmin.getSubject()).orElseThrow().hasRole(PlatformRole.ADMIN)).isTrue();
+    }
+
+    /**
+     * PR #244 R1 재현: A가 B의 ADMIN을 회수하는 트랜잭션이 아직 커밋되지 않은 사이 B가 다른 계정을 바꾸려 한다. B의 요청은
+     * 회수 커밋을 기다린 뒤 403이어야 한다. 잠금이 없으면 커밋 전 스냅샷의 ADMIN을 보고 변경을 해 버린다.
+     */
+    @Test
+    void anOperatorLosingAdminConcurrentlyCannotFinishAChange() throws Exception {
+        UserAccount a = persistAdmin();
+        UserAccount b = persistAdmin();
+        UserAccount target = persistMember();
+        CountDownLatch revoked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> revoke = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                manageAccount.revokeRole(a.getSubject(), b.getSubject(), PlatformRole.ADMIN);
+                revoked.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(revoked.await(10, TimeUnit.SECONDS)).isTrue();
+            Future<?> grant = pool.submit(() -> manageAccount.grantRole(b.getSubject(), target.getSubject(), PlatformRole.CREATOR));
+            Thread.sleep(1000);
+            assertThat(grant.isDone()).as("B의 요청은 회수 커밋을 기다린다").isFalse();
+            release.countDown();
+            revoke.get(10, TimeUnit.SECONDS);
+
+            assertThatThrownBy(() -> grant.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class)
+                    .cause().isInstanceOfSatisfying(BusinessException.class,
+                            rejected -> assertThat(rejected.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+            assertThat(accounts.findBySubject(target.getSubject()).orElseThrow().hasRole(PlatformRole.CREATOR)).isFalse();
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
     }
 }

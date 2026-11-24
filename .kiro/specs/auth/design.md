@@ -167,7 +167,9 @@
 
 - 계약 정본: 플랫폼 design 이벤트 행(사실 "계정의 상태·역할이 바뀌어 이전 접근 근거가 더는 유효하지 않다", 토픽 `stove.auth.v1`, 키 `subject`, 소비자 웹 BFF·Gateway — 소비는 목표, GW-T18). 이벤트 타입 `EventType.ACCOUNT_ACCESS_CHANGED`, 본문 `common/contract/.../payload/AccountAccessChangedEvent.java`.
 - 이 모듈이 지키는 방법: `ManageAccount`의 상태 변경·역할 부여·역할 회수가 실제로 바뀐 경우에만, `TokenRevocationPort.revokeSubject`·`role_audit_log`와 같은 트랜잭션에서 `OutboxRecorder.record("UserAccount", subject, …)`를 부른다. 무변화(이미 가진 역할 부여)·거절(409·403·404)은 내지 않는다.
-- 본문: `eventId`·`occurredAt`·`subject`·`changedAt`·`changeKind`(`STATUS`·`ROLE`). `changedAt`(= `occurredAt`)은 Refresh 계열 폐기 **뒤에** 잰 Auth 시각이다. 폐기의 행 잠금을 잡은 뒤라, 동시에 진행 중이던 갱신은 그보다 먼저 끝났거나(그 토큰의 `iat`가 더 이르다) 잠금을 기다린 뒤 폐기된 계열을 보고 거절된다. 받는 쪽은 `changedAt`을 JWT `iat`(Auth가 발급한 시각)와 비교한다 — 두 값 모두 Auth 시계다(원칙 ⑥). 변경 뒤 상태·역할은 싣지 않는다(받는 쪽은 끊기만 하고, 새 토큰의 역할은 Auth가 발급 때 정한다).
+- 본문: `eventId`·`occurredAt`·`subject`·`changedAt`·`changeKind`(`STATUS`·`ROLE`). `changedAt`(= `occurredAt`)은 Refresh 계열 폐기 **뒤에** 잰 Auth 시각이다.
+- 잠금 순서(계정 행 → 토큰 계열): 계정 상태·역할·비밀번호를 바꾸는 쓰기는 `user_account` 행 배타 잠금(`UserAccountRepository.lockForChange`)으로 시작한다. 운영자 변경은 요청자·대상 행을 subject 순서로 잡아 요청자 권한 확인과 그 요청자에 대한 변경을 직렬화한다. 토큰 발급(코드 교환 `SerializedCodeExchangeProvider`, 갱신 `RotatingRefreshProvider`)은 역할을 읽고 `iat`를 정하기 전에 같은 행을 공유 잠금(`lockForIssuance`)한다. 그래서 동시 발급은 변경보다 먼저 커밋됐거나(그 토큰의 `iat`가 더 이르고 그 계열은 변경이 폐기한다) 변경 커밋을 기다린 뒤 새 역할을 읽는다(PR #244 R1·R2).
+- 시계 전제: `iat`와 `changedAt`은 모두 Auth 인스턴스의 시계다. Auth가 여러 대이면 NTP로 맞추고 오차를 1초 이내로 둔다. 남는 오차는 받는 쪽(API 게이트웨이)이 거절 기준을 초 단위로 올림하고 설정 가능한 여유값만큼 더 거절해 흡수한다(GW-T18, PR #244 R3). 받는 쪽은 `changedAt`을 JWT `iat`(Auth가 발급한 시각)와 비교한다 — 두 값 모두 Auth 시계다(원칙 ⑥). 변경 뒤 상태·역할은 싣지 않는다(받는 쪽은 끊기만 하고, 새 토큰의 역할은 Auth가 발급 때 정한다).
 - 재발행: Auth에는 아직 운영 재발행 경로(`outbox_republish`·소유자 이름)가 없다. `UserRegistered`와 함께 AU-T10에서 허용 목록에 더한다.
 
 ### 소비

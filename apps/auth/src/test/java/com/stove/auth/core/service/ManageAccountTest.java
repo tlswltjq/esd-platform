@@ -49,8 +49,8 @@ class ManageAccountTest {
         admin = UserAccount.withRoles("admin@example.com", "{bcrypt}h",
                 Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER));
         target = UserAccount.member("target@example.com", "{bcrypt}h");
-        when(accounts.findBySubject(admin.getSubject())).thenReturn(Optional.of(admin));
-        when(accounts.findBySubject(target.getSubject())).thenReturn(Optional.of(target));
+        when(accounts.lockForChange(admin.getSubject())).thenReturn(Optional.of(admin));
+        when(accounts.lockForChange(target.getSubject())).thenReturn(Optional.of(target));
     }
 
     // ── 상태 변경 ────────────────────────────────────────────────
@@ -98,7 +98,7 @@ class ManageAccountTest {
     void cannotRevokeLastAdmin() {
         UserAccount otherAdmin = UserAccount.withRoles("admin2@example.com", "{bcrypt}h",
                 Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER));
-        when(accounts.findBySubject(otherAdmin.getSubject())).thenReturn(Optional.of(otherAdmin));
+        when(accounts.lockForChange(otherAdmin.getSubject())).thenReturn(Optional.of(otherAdmin));
         // 플랫폼에 ADMIN이 이 한 명뿐이다.
         when(accounts.countByRole(PlatformRole.ADMIN)).thenReturn(1L);
 
@@ -112,7 +112,7 @@ class ManageAccountTest {
     void canRevokeAdminWhenMoreThanOne() {
         UserAccount otherAdmin = UserAccount.withRoles("admin2@example.com", "{bcrypt}h",
                 Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER));
-        when(accounts.findBySubject(otherAdmin.getSubject())).thenReturn(Optional.of(otherAdmin));
+        when(accounts.lockForChange(otherAdmin.getSubject())).thenReturn(Optional.of(otherAdmin));
         when(accounts.countByRole(PlatformRole.ADMIN)).thenReturn(2L);
 
         service.revokeRole(admin.getSubject(), otherAdmin.getSubject(), PlatformRole.ADMIN);
@@ -131,7 +131,7 @@ class ManageAccountTest {
     @Test
     @DisplayName("존재하지 않는 대상은 거절한다")
     void unknownTargetIsRejected() {
-        when(accounts.findBySubject("usr_ghost")).thenReturn(Optional.empty());
+        when(accounts.lockForChange("usr_ghost")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.changeStatus(admin.getSubject(), "usr_ghost", AccountStatus.LOCKED))
                 .isInstanceOf(BusinessException.class);
     }
@@ -194,7 +194,7 @@ class ManageAccountTest {
     @DisplayName("요청자가 DB에서 ADMIN을 잃었으면 토큰에 ADMIN이 있어도 403이고 아무것도 바꾸지 않는다")
     void actorWithoutAdminInTheDatabaseIsForbidden() {
         UserAccount former = UserAccount.member("former@example.com", "{bcrypt}h");
-        when(accounts.findBySubject(former.getSubject())).thenReturn(Optional.of(former));
+        when(accounts.lockForChange(former.getSubject())).thenReturn(Optional.of(former));
 
         assertThatThrownBy(() -> service.changeStatus(former.getSubject(), target.getSubject(), AccountStatus.LOCKED))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -209,8 +209,8 @@ class ManageAccountTest {
     void lockedOrUnknownActorIsForbidden() {
         UserAccount locked = UserAccount.withRoles("locked@example.com", "{bcrypt}h", Set.of(PlatformRole.ADMIN, PlatformRole.MEMBER));
         locked.changeStatus(AccountStatus.LOCKED);
-        when(accounts.findBySubject(locked.getSubject())).thenReturn(Optional.of(locked));
-        when(accounts.findBySubject("usr_gone")).thenReturn(Optional.empty());
+        when(accounts.lockForChange(locked.getSubject())).thenReturn(Optional.of(locked));
+        when(accounts.lockForChange("usr_gone")).thenReturn(Optional.empty());
 
         for (String actor : new String[]{locked.getSubject(), "usr_gone"}) {
             assertThatThrownBy(() -> service.grantRole(actor, target.getSubject(), PlatformRole.CREATOR))
