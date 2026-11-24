@@ -69,8 +69,8 @@
   - 재현: 컨텍스트 테스트 — `AUTH_ISSUER` 없이 시작 실패, 부트스트랩 이메일만 있을 때 시작 실패.
 
 - [ ] **AU-T9. 공개 클라이언트 `studio-web`이 Refresh Token을 받는다**
-  - 어디서: `auth:config/AuthSecurityConfig.java:171`(`REFRESH_TOKEN` 승인)·`:183`(7일). Gateway design "기존 `studio-web`·`swagger-ui` 공개 클라이언트는 … Refresh Token을 받지 않는다"(`.kiro/specs/gateway/design.md:58`).
-  - 목표: R2.7. `studio-web`에서 `REFRESH_TOKEN` 승인 제거. 운영 등록 여부는 M-AU-7.
+  - 어디서: `auth:config/AuthSecurityConfig.java:171`(`REFRESH_TOKEN` 승인)·`:183`(7일).
+  - 목표: R2.7. `studio-web`에서 `REFRESH_TOKEN` 승인 제거. 운영 등록 여부는 M-AU-7([결정 219](../../../docs/decisions.md#single-bff)에 따라 운영 프론트엔드는 BFF만 쓴다. 외부 경로 차단은 Gateway GW-T20).
   - 영향: 브라우저 저장소의 7일 Refresh Token이 탈취되면 BFF 보호(브라우저에는 세션 쿠키만)를 우회한다.
   - 재현: 통합 — `studio-web` 인가 코드 교환 응답에 `refresh_token`이 없는지.
 
@@ -136,7 +136,7 @@
 - [ ] [결정 필요 M-AU-4] 복구 요청 발급 수 제한 → R6.9.
 - [ ] [결정 필요 M-AU-5] `LOCKED`·`DISABLED` 계정의 복구와 `DISABLED` 계정의 역할 변경 → AU-T11, 상태 표.
 - [x] 상태·역할 변경 즉시 access token 무효 — [결정 180](../../../docs/decisions.md#account-access-revocation)(B: Auth 사실 이벤트 → Gateway 거절)으로 정함 → AU-T6, 플랫폼 이벤트 목표 행.
-- [ ] [결정 필요 M-AU-7] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 → AU-T8·AU-T9.
+- [ ] [결정 필요 M-AU-7] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 → AU-T8·AU-T9. 운영 프론트엔드는 BFF만 쓴다([결정 219](../../../docs/decisions.md#single-bff)). 남은 쟁점은 개발용 Swagger 로그인을 공개 클라이언트로 남길지다(Gateway GW-T20).
 - [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T6의 R7.1 부분, AU-T8(M-AU-7 제외), AU-T9, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
 
 ## 범위 밖(후속)

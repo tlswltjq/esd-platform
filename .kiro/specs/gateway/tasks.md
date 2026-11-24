@@ -134,6 +134,16 @@ Gateway에 넘어온 MC-* 이월 항목은 없다(`module-carryover.md`에 Gatew
   - 목표: Gateway 풀 `max-idle-time` < 하류 유휴 닫기(예: 30초), 설정 계약 테스트.
   - 영향: 간헐 500. `POST`는 클라이언트가 처리 여부를 모른다.
   - 재현: 유휴 K초 넘은 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청" — 지금 500, 목표 200.
+- [ ] **GW-T20. 외부에서 공개 클라이언트로 토큰을 직접 받고 Bearer로 `/api/**`를 쓸 수 있다** ([결정 219](../../../docs/decisions.md#single-bff)) [결정 필요 M-AU-7]
+  - 어디서: `application.yml` Auth 라우트 `Path=/oauth2/**,…`(토큰 엔드포인트 포함)·CORS `'[/oauth2/token]'`, `SecurityConfig` `oauth2ResourceServer().jwt()`(`/api/**` 전체 Bearer 허용)·CSRF 예외(`apiBearer`).
+  - 목표: 운영 외부 경로는 BFF 세션만. 외부에서 `/oauth2/token`을 쓰지 못하고, 외부 Bearer 요청은 401. 개발용 Swagger 로그인을 남길지·어떻게 바꿀지는 M-AU-7.
+  - 영향: 기기에 Access/Refresh Token이 남는 경로가 열려 있어 "토큰 비공개"가 BFF 경로에서만 성립한다. 차단 장치도 세션·Bearer 두 곳에 필요하다.
+  - 재현: 통합 — `studio-web` PKCE로 Gateway 경유 토큰 교환 → 지금 200(토큰 발급), 목표 거절. 그 토큰으로 `/api/v1/library` → 지금 200, 목표 401.
+- [ ] **GW-T21. PC 앱 프론트엔드가 BFF 세션을 맺을 방법이 없다** ([결정 219](../../../docs/decisions.md#single-bff)) [결정 필요]
+  - 어디서: 세션 ID 전달은 쿠키뿐(`WebSessionIdResolver` 설정 없음), 로그인은 브라우저 redirect로만 끝난다(R3.1·R3.2).
+  - 목표: 앱이 시스템 브라우저로 로그인한 결과를 앱 세션으로 넘기는 인계 흐름, 쿠키 밖(헤더) 세션 전달과 그 CSRF 규칙, 앱 세션 수명. 방식·수명은 앱 착수 때 정한다.
+  - 영향: 지금 PC 앱을 붙이면 공개 클라이언트 Bearer 경로를 쓸 수밖에 없다(결정 219와 어긋남).
+  - 재현: 앱 착수 때 계약 테스트로 정한다.
 
 ## 진행 중 / 남음
 
