@@ -2,7 +2,8 @@
 
     wait   필수 검사가 등록될 때까지 기다린 뒤(push 직후 바로 감시하면 즉시 끝난다, PR #122),
            모두 끝날 때까지 기다린다. `--head-sha`를 주면 PR head가 그 커밋이 된 뒤부터 센다.
-           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과.
+           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과. draft가 아닌 PR의 건너뛴 build는 draft 때의
+           지난 결과라 빼고 새 build를 기다린다(ci.yml은 draft에서만 건너뛴다, PR #244).
     ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. head가 같아 이전 결과(draft 때 SKIPPED build)가
            남으므로, 바꾸기 전 검사 job 링크를 기록해 두고 ready가 다시 돌리는 `build`는 새 링크가 나올
            때까지 기다린다. `review-gate`는 다시 돌지 않으니 같은 head의 최신 결과를 쓴다(PR #226 R8·R9).
@@ -29,6 +30,7 @@
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -127,6 +129,53 @@ def fresh(checks, renew, old_links):
             if not ((check.get('name') or '').startswith(renew) and check.get('link') in old_links)]
 
 
+def job_order(check):
+    """실행 세대의 순서: 링크의 GitHub job ID(`.../job/<번호>`). job ID는 계속 커지고 겹치지 않는다. 시작 시각은 초 단위라
+    동률이 나 세대를 가르지 못한다(PR #245 2차 재리뷰). 링크가 없으면 None — 세대 비교에서 빼지도, 남을 빼지도 않는다."""
+    found = re.search(r'(?:^|/)job/(\d+)', check.get('link') or '')
+    return int(found.group(1)) if found else None
+
+
+def latest_generation(checks):
+    """같은 이름(전체 검사 이름)의 실행이 여럿이면 job ID가 가장 큰 것만 남긴다. 이름 앞부분으로 묶으면 실패한 `build (A)`를
+    나중의 `build (B)` 성공이 지운다(PR #245 재리뷰 2)."""
+    newest = {}
+    for check in checks:
+        order = job_order(check)
+        if order is not None:
+            name = check.get('name') or ''
+            newest[name] = max(newest.get(name, order), order)
+    return [check for check in checks
+            if job_order(check) is None or job_order(check) >= newest[check.get('name') or '']]
+
+
+def without_draft_skips(number, checks):
+    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR의 skipping build는 draft 때의 지난 결과이므로, 그것과 같은
+    이름에서 그보다 앞선 job까지 모두 빼고 새 build를 기다린다. 예전 성공이 더 최근의 건너뜀을 대신하면 안 되고(PR #245
+    리뷰 1), 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217) 건너뛴 build만 보고 실패로 끝내지도 않는다(PR #244).
+    건너뜀보다 뒤의 job과 링크가 없는 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
+    checks = latest_generation(checks)
+    skipped = {}
+    unordered = set()
+    for check in checks:
+        name = check.get('name') or ''
+        if name.startswith('build') and check.get('bucket') == 'skipping':
+            if job_order(check) is None:
+                # 링크 없는 건너뜀은 세대를 알 수 없다. 그 이름은 아무것도 빼지 않아 예전 성공으로 통과하지 않는다(3차 재리뷰).
+                unordered.add(name)
+            else:
+                skipped[name] = max(skipped.get(name, -1), job_order(check))
+    if not skipped or view(number)['isDraft']:
+        return checks
+    def stale(check):
+        name = check.get('name') or ''
+        if name not in skipped or name in unordered:
+            return False
+        order = job_order(check)
+        return check.get('bucket') == 'skipping' or (order is not None and order < skipped[name])
+    return [check for check in checks if not stale(check)]
+
+
 def links(checks):
     return {check.get('link') for check in checks if check.get('link')}
 
@@ -146,6 +195,7 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
+        checks = without_draft_skips(args.number, checks)
         # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
         # (PR #234 3차 리뷰: ready 전 plan·gradle은 old_all로, draft의 건너뛴 검사는 bucket으로 뺀다).
         if not registered(checks) and time.time() > register_deadline and not (
