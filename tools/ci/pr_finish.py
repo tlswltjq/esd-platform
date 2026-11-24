@@ -132,7 +132,7 @@ def fresh(checks, renew, old_links):
 def job_order(check):
     """실행 세대의 순서: 링크의 GitHub job ID(`.../job/<번호>`). job ID는 계속 커지고 겹치지 않는다. 시작 시각은 초 단위라
     동률이 나 세대를 가르지 못한다(PR #245 2차 재리뷰). 링크가 없으면 None — 세대 비교에서 빼지도, 남을 빼지도 않는다."""
-    found = re.search(r'/job/(\d+)', check.get('link') or '')
+    found = re.search(r'(?:^|/)job/(\d+)', check.get('link') or '')
     return int(found.group(1)) if found else None
 
 
@@ -156,15 +156,20 @@ def without_draft_skips(number, checks):
     건너뜀보다 뒤의 job과 링크가 없는 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
     checks = latest_generation(checks)
     skipped = {}
+    unordered = set()
     for check in checks:
         name = check.get('name') or ''
         if name.startswith('build') and check.get('bucket') == 'skipping':
-            skipped[name] = max(skipped.get(name, -1), job_order(check) if job_order(check) is not None else -1)
+            if job_order(check) is None:
+                # 링크 없는 건너뜀은 세대를 알 수 없다. 그 이름은 아무것도 빼지 않아 예전 성공으로 통과하지 않는다(3차 재리뷰).
+                unordered.add(name)
+            else:
+                skipped[name] = max(skipped.get(name, -1), job_order(check))
     if not skipped or view(number)['isDraft']:
         return checks
     def stale(check):
         name = check.get('name') or ''
-        if name not in skipped:
+        if name not in skipped or name in unordered:
             return False
         order = job_order(check)
         return check.get('bucket') == 'skipping' or (order is not None and order < skipped[name])

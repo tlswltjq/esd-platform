@@ -286,6 +286,15 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
             self.assertEqual(1, pr_finish.wait(self.args()))
 
+    def test_a_skip_without_a_link_drops_nothing(self):
+        # PR #245 3차 재리뷰: 링크 없는 건너뜀은 세대를 모르므로 같은 이름의 예전 성공으로 통과하지 않는다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        old_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/11'}
+        unlinked = {'name': BUILD, 'bucket': 'skipping', 'link': ''}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, old_pass, unlinked]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertNotEqual(0, pr_finish.wait(self.args()))
+
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
