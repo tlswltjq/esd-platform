@@ -9,6 +9,7 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
 import com.stove.auth.adapter.oauth.RotatingRefreshProvider;
+import com.stove.auth.adapter.oauth.SerializedCodeExchangeProvider;
 import com.stove.auth.core.domain.UserAccount;
 import com.stove.common.security.ApiJwtSecurity;
 import com.stove.auth.core.domain.UserAccountRepository;
@@ -45,6 +46,7 @@ import org.springframework.security.oauth2.server.authorization.JdbcOAuth2Author
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -85,6 +87,9 @@ public class AuthSecurityConfig {
                             for (int i = 0; i < providers.size(); i++) {
                                 if (providers.get(i) instanceof OAuth2RefreshTokenAuthenticationProvider) {
                                     providers.set(i, new RotatingRefreshProvider(providers.get(i), authorizations,
+                                            accounts, rotationTransactions(transactionManager)));
+                                } else if (providers.get(i) instanceof OAuth2AuthorizationCodeAuthenticationProvider) {
+                                    providers.set(i, new SerializedCodeExchangeProvider(providers.get(i), authorizations,
                                             accounts, rotationTransactions(transactionManager)));
                                 }
                             }

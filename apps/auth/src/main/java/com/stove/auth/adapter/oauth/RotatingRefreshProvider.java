@@ -32,11 +32,15 @@ public final class RotatingRefreshProvider implements AuthenticationProvider {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_CLIENT);
         }
         Authentication result = transactions.execute(status -> {
+            // 잠금 순서: 계정 행(공유) → 토큰 계열(배타). 계정 변경(배타 잠금 → 계열 폐기)과 같은 순서라 교착하지 않고,
+            // 진행 중인 변경이 있으면 그 커밋을 기다린 뒤 폐기된 계열·새 역할을 본다(AU-T6).
+            String subject = authorizations.subjectForToken(request.getRefreshToken());
+            if (subject == null) return null;
+            boolean enabled = accounts.lockForIssuance(subject).filter(account -> account.enabled()).isPresent();
             RotatingAuthorizationService.Family family = authorizations.familyForToken(request.getRefreshToken());
             if (family == null || !family.clientId().equals(client.getRegisteredClient().getId())) return null;
             if (family.revoked()) return null;
-            if (family.consumed() || !Instant.now().isBefore(family.expiresAt())
-                    || accounts.findBySubject(family.subject()).filter(account -> account.enabled()).isEmpty()) {
+            if (family.consumed() || !Instant.now().isBefore(family.expiresAt()) || !enabled) {
                 authorizations.revoke(family.id());
                 return null;
             }

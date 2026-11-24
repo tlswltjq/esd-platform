@@ -50,6 +50,15 @@ public final class RotatingAuthorizationService implements OAuth2AuthorizationSe
         });
     }
 
+    /** 잠금 없이 Refresh Token의 계열 소유자를 찾는다. 계열을 잠그기 전에 계정 행을 먼저 잠그려고 쓴다(AU-T6 잠금 순서). */
+    public String subjectForToken(String token) {
+        List<String> subjects = jdbc.query("""
+                SELECT f.subject FROM refresh_token_history h
+                JOIN refresh_token_family f ON f.authorization_id = h.authorization_id WHERE h.token_hash = ?
+                """, (rs, row) -> rs.getString(1), hash(token));
+        return subjects.isEmpty() ? null : subjects.getFirst();
+    }
+
     public Family familyForToken(String token) {
         List<String> ids = jdbc.query("SELECT authorization_id FROM refresh_token_history WHERE token_hash = ?",
                 (rs, row) -> rs.getString(1), hash(token));

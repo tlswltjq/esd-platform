@@ -84,7 +84,7 @@ class RecoverPasswordTest {
         String hash = ResetTokens.hash(raw);
         PasswordResetToken token = PasswordResetToken.issue(hash, account.getSubject(), Instant.now(), 1800);
         when(tokens.findByTokenHash(hash)).thenReturn(Optional.of(token));
-        when(accounts.findBySubject(account.getSubject())).thenReturn(Optional.of(account));
+        when(accounts.lockForChange(account.getSubject())).thenReturn(Optional.of(account));
         when(passwords.encode("brand-new-password")).thenReturn("{bcrypt}new");
 
         service.reset(raw, "brand-new-password");
