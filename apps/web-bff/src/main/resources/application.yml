@@ -45,6 +45,23 @@ spring:
           issuer-uri: ${JWT_ISSUER_URI:http://localhost:8091}
           jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8091/oauth2/jwks}
 
+  # Auth의 계정 접근 변경 사실을 받는다(그룹 web-bff-account-access). 발행은 하지 않는다 — 프로듀서 설정은 영구 실패를
+  # <원본토픽>.DLT 로 넘기기 위해서다(결정 226, Store와 같음).
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+      observation-enabled: true
+
   # 진행 중인 요청을 기다리는 상한. 컨테이너 종료 유예(40초)보다 짧아야 한다(D-035).
   lifecycle:
     timeout-per-shutdown-phase: 30s

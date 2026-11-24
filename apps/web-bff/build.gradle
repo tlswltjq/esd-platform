@@ -9,4 +9,12 @@ dependencies {
     // 웹 BFF는 WebFlux 라 서블릿용 아티팩트를 쓸 수 없다. 자기 API 를 문서화하려는 것이 아니라
     // 10개 서비스의 명세를 한 화면에 모으는 Swagger UI 를 브라우저와 같은 출처(세션 쿠키)에서 서빙하기 위해서다.
     implementation "org.springdoc:springdoc-openapi-starter-webflux-ui:${springdocVersion}"
+
+    // 계정 접근 변경 사실(결정 180·225)로 그 subject의 세션 토큰 기록을 지운다(GW-T18). DB가 없어 코어(격리·Outbox)를 쓰지
+    // 않는다. 일시 실패는 성공까지 재시도, 영구 실패만 DLT(결정 226, Store와 같음).
+    implementation project(':common:contract')
+    runtimeOnly project(':common:messaging-kafka')
+    testImplementation project(':common:messaging-kafka')
+    implementation 'io.micrometer:micrometer-core'
+    integrationTestImplementation project(':common:messaging-kafka')
 }
