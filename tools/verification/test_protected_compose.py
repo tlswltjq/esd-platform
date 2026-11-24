@@ -108,6 +108,7 @@ class ExternalInjectionTest(unittest.TestCase):
             # Compose serializes literal dollars as $$ in reusable config output.
             self.assertEqual(environment['DB_PASSWORD'].replace('$', '$$'),
                              services[app]['environment']['DB_PASSWORD'])
+        self.assertNotIn('DB_PASSWORD', services['web-bff']['environment'])
         self.assertNotIn('DB_PASSWORD', services['gateway']['environment'])
         self.assertNotIn('DB_PASSWORD', services['download']['environment'])
         self.assertEqual(environment['STORAGE_SECRET_KEY'].replace('$', '$$'),
@@ -115,7 +116,7 @@ class ExternalInjectionTest(unittest.TestCase):
         for name, expected in {
                 'CATALOG_ORDER_SERVICE_KEY': {'catalog', 'order'},
                 'PAYMENT_ORDER_SERVICE_KEY': {'payment', 'order'},
-                'BFF_CLIENT_SECRET': {'auth', 'gateway'},
+                'BFF_CLIENT_SECRET': {'auth', 'web-bff'},
                 'MOCK_PG_CONTROL_KEY': {'mock-pg'}}.items():
             self.assertEqual(expected, {app for app, config in services.items()
                                        if name in config.get('environment', {})})

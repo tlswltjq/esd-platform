@@ -8,7 +8,7 @@ from unittest import mock
 from support import ports
 
 TOOLS = Path(__file__).resolve().parent
-APP_PORTS = range(8080, 8093)
+APP_PORTS = range(8080, 8094)  # web-bff 8080 … internal API gateway 8093
 
 
 class PortOffsetsTest(unittest.TestCase):

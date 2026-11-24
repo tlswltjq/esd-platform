@@ -16,7 +16,8 @@ import time
 import urllib.request
 
 
-MODULES = {"auth": 8091, "gateway": 8080, "studio": 8085, "review": 8086,
+# web-bff is the browser entrance (8080); the API gateway it relays to listens on 8093 (decisions 223/224).
+MODULES = {"auth": 8091, "web-bff": 8080, "gateway": 8093, "studio": 8085, "review": 8086,
            "catalog": 8081, "store": 8087, "order": 8082, "payment": 8083,
            "license": 8084, "download": 8088, "settlement": 8089, "mock-pg": 8092}
 
@@ -272,7 +273,7 @@ def main():
             verified[name] = {"health": "healthy", "restarts": 0, "image_digest": digest,
                               "uid_gid": container["Config"]["User"], "loopback_only": True}
         save(root / "results/deployment-verification.json", {"success": True, "applications": verified})
-        print("Verified 12 Jib image identities, healthy states, UID/GID, zero restarts, and loopback ports.")
+        print("Verified " + str(len(MODULES)) + " Jib image identities, healthy states, UID/GID, zero restarts, and loopback ports.")
     else:
         raise RuntimeError("Not implemented: " + args.command)
 

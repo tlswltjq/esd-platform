@@ -19,7 +19,8 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets:
-          - gateway:8080
+          - web-bff:8080
+          - gateway:8093
           - catalog:8081
           - order:8082
           - payment:8083

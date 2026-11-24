@@ -9,7 +9,7 @@ import os, socket, subprocess, time, urllib.request, tempfile
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-studio-check-"))
 project=directory.name
-apps={"auth":8091,"studio":8085,"gateway":8080}
+apps={"auth":8091,"studio":8085,"web-bff":8080,"gateway":8093}
 offset=application_offset("verify-studio","STUDIO_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
@@ -17,7 +17,7 @@ def free_port():
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
-subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%';\n")
 compose=directory/"compose.yml"
@@ -89,7 +89,8 @@ try:
         STORAGE_ENDPOINT=f"http://127.0.0.1:{ports['minio']}",STORAGE_PRESIGN_ENDPOINT=f"http://127.0.0.1:{ports['minio']}",
         STORAGE_ACCESS_KEY="stove",STORAGE_SECRET_KEY="stove1234",STORAGE_ENCRYPTION_ENABLED="false",
         STUDIO_ASSET_PUBLIC_BASE_URL=public,TRACING_SAMPLE_RATE="0")
-    for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    for app,port in apps.items(): common[app.upper().replace("-","_")+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    common["API_GATEWAY_URI"]=common["GATEWAY_URI"]
     for app,port in apps.items():
         jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"w")

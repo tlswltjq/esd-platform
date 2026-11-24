@@ -130,7 +130,7 @@ def main():
     assert initial['refresh'] != updated['refresh']
     assert refresh(initial['refresh'])[0] == 400
     assert refresh(updated['refresh'])[0] == 400
-    print('PASS: concurrent rotation across two gateways and family revocation on replay')
+    print('PASS: concurrent rotation across two web BFF instances and family revocation on replay')
 
     pieces = updated['access'].split('.')
     pieces[2] = ('A' if pieces[2][0] != 'A' else 'B') + pieces[2][1:]

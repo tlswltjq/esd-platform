@@ -9,7 +9,7 @@ import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[2]
 directory=Path(tempfile.mkdtemp(prefix="stove-review-check-"))
 project=directory.name
-apps={"auth":8091,"studio":8085,"gateway":8080,"review":8086}
+apps={"auth":8091,"studio":8085,"web-bff":8080,"gateway":8093,"review":8086}
 offset=application_offset("verify-review","REVIEW_TEST_PORT_OFFSET",apps.values())
 def free_port():
     with socket.socket() as sock:
@@ -17,7 +17,7 @@ def free_port():
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
-subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%';\n")
 compose=directory/"compose.yml"
@@ -111,7 +111,8 @@ try:
         AUTH_REVIEWER_EMAIL="reviewer-check@review.local",AUTH_REVIEWER_PASSWORD="reviewer-password-1234",
         AUTH_ADMIN_EMAIL="admin-check@review.local",AUTH_ADMIN_PASSWORD="admin-password-1234",
         REVIEW_STORAGE_ACCESS_KEY="review-reader",REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password")
-    for app,port in apps.items(): common[app.upper()+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    for app,port in apps.items(): common[app.upper().replace("-","_")+"_URI"]=f"http://127.0.0.1:{port+offset}"
+    common["API_GATEWAY_URI"]=common["GATEWAY_URI"]
     def start_app(app,arguments=()):
         port=apps[app]
         jar=application_jar(repo,app)

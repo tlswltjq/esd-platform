@@ -16,7 +16,7 @@ class ServiceCredentialsTest(unittest.TestCase):
             'CATALOG_SETTLEMENT_SERVICE_KEY': {'catalog', 'settlement'},
             'PAYMENT_ORDER_SERVICE_KEY': {'payment', 'order'},
         }
-        apps = ['auth', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
+        apps = ['auth', 'web-bff', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
                 'payment', 'license', 'download', 'settlement']
         inherited = {name: 'fixture-' + name.lower() for name in expected}
         for name, recipients in expected.items():
@@ -24,7 +24,7 @@ class ServiceCredentialsTest(unittest.TestCase):
             self.assertEqual(recipients, actual, name)
 
     def test_settlement_portone_secret_reaches_only_settlement_and_is_recorded(self):
-        apps = ['auth', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
+        apps = ['auth', 'web-bff', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
                 'payment', 'license', 'download', 'settlement']
         inherited = {'SETTLEMENT_PORTONE_API_SECRET': 'settlement-portone-fixture',
                      'PORTONE_API_SECRET': 'payment-portone-fixture'}
@@ -36,7 +36,8 @@ class ServiceCredentialsTest(unittest.TestCase):
     def test_bootstrap_and_bff_credentials_are_separate(self):
         values = {'BFF_CLIENT_SECRET': 'bff-fixture', 'AUTH_ADMIN_PASSWORD': 'admin-fixture',
                   'AUTH_REVIEWER_PASSWORD': 'reviewer-fixture', 'PAYMENT_APPROVAL_PAYLOAD_KEY': 'payload-fixture'}
-        self.assertEqual({'BFF_CLIENT_SECRET': 'bff-fixture'}, service_environment('gateway', values))
+        self.assertEqual({'BFF_CLIENT_SECRET': 'bff-fixture'}, service_environment('web-bff', values))
+        self.assertEqual({}, service_environment('gateway', values))
         self.assertEqual({'PAYMENT_APPROVAL_PAYLOAD_KEY': 'payload-fixture'}, service_environment('payment', values))
         self.assertEqual({key: value for key, value in values.items() if key != 'PAYMENT_APPROVAL_PAYLOAD_KEY'},
                          service_environment('auth', values))
@@ -50,7 +51,8 @@ class ServiceCredentialsTest(unittest.TestCase):
         self.assertEqual({'STORAGE_SECRET_KEY': 'upload-fixture'}, service_environment('studio', values))
         self.assertEqual({'DOWNLOAD_STORAGE_SECRET_KEY': 'reader-fixture'}, service_environment('download', values))
 
-    def test_no_database_password_reaches_stateless_gateway_or_download(self):
+    def test_no_database_password_reaches_stateless_bff_gateway_or_download(self):
+        self.assertEqual({}, service_environment('web-bff', {'DB_PASSWORD': 'db-fixture'}))
         self.assertEqual({}, service_environment('gateway', {'DB_PASSWORD': 'db-fixture'}))
         self.assertEqual({}, service_environment('download', {'DB_PASSWORD': 'db-fixture'}))
         self.assertEqual({'DB_PASSWORD': 'db-fixture'}, service_environment('order', {'DB_PASSWORD': 'db-fixture'}))
@@ -86,7 +88,7 @@ class ServiceCredentialsTest(unittest.TestCase):
             'CATALOG_SETTLEMENT_SERVICE_KEY': {'catalog', 'settlement'},
             'PAYMENT_ORDER_SERVICE_KEY': {'payment', 'order'},
             'PAYMENT_APPROVAL_PAYLOAD_KEY': {'payment'},
-            'BFF_CLIENT_SECRET': {'auth', 'gateway'},
+            'BFF_CLIENT_SECRET': {'auth', 'web-bff'},
             'MOCK_PG_PAYMENT_KEY': {'payment', 'mock-pg'},
             'MOCK_PG_SETTLEMENT_KEY': {'settlement', 'mock-pg'},
             'MOCK_PG_CONTROL_KEY': {'mock-pg'},
@@ -101,7 +103,7 @@ class ServiceCredentialsTest(unittest.TestCase):
                                  'config', '--format', 'json'], cwd=root, env=environment,
                                 check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         services = json.loads(result.stdout)['services']
-        self.assertGreaterEqual(len(services), 12)
+        self.assertGreaterEqual(len(services), 13)
         for name, recipients in expected.items():
             actual = {app for app, definition in services.items() if name in definition.get('environment', {})}
             self.assertEqual(recipients, actual, name)
