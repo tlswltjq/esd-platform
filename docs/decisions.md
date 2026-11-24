@@ -2298,10 +2298,19 @@
 - 내 의견: "A로 해"
 - 선택: A — 추천 수용.
   - Auth: `studio-web`·`swagger-ui` 등록과 그 redirect 설정을 지운다. 이미 저장된 등록 행은 시작 때 지운다(개발 단계, 운영 데이터 없음).
-  - Gateway: 외부 요청의 인증은 BFF 세션뿐이다. 외부 `Authorization: Bearer`는 401이고, Auth 라우트에서 `/oauth2/token`을 빼고 그 CORS를 지운다. 하류 서비스로의 Bearer 릴레이와 업무 모듈의 JWT 검증은 그대로다. Studio의 기계 자격 `X-Project-Credential`은 사람이 쓰는 프론트엔드가 아니라 이 결정 밖이다.
+  - Gateway: 외부 요청의 인증은 BFF 세션뿐이다. 외부 요청에 `Authorization` 헤더가 있으면 경로와 무관하게 401이다(자원 서버만 지우면 공개 허용 경로에서 외부 Bearer가 하류로 그대로 넘어가 하류 JWT 인증이 Gateway를 우회한다). Auth 라우트는 브라우저 로그인에 필요한 경로만 두고 `/oauth2/token`을 빼며 그 CORS를 지운다. 하류 서비스로의 Bearer 릴레이와 업무 모듈의 JWT 검증은 그대로다. Studio의 기계 자격 `X-Project-Credential`은 사람이 쓰는 프론트엔드가 아니라 이 결정 밖이다.
   - 시험: Gateway 경로 규칙 테스트·e2e 여정·검증 스크립트는 BFF 로그인으로 세션을 맺어 호출한다(`tools/verification/auth-bff.py`의 쿠키 로그인 방식).
-  - Swagger: OAuth 보안 스킴을 빼고 BFF 로그인 세션 쿠키로 호출한다. 변경 요청의 CSRF 토큰 전달 방식은 따로 정한다.
+  - Swagger: OAuth 보안 스킴을 빼고 BFF 로그인 세션 쿠키로 호출한다. 변경 요청의 CSRF 토큰 전달 방식은 [결정 221](#swagger-csrf-session).
   - 감수한 비용: 고칠 테스트·도구가 많다. Swagger에서 역할을 바꾸려면 다시 로그인하거나 다른 브라우저 프로필을 쓴다. 토큰을 붙여 넣는 수동 API 호출(curl 등)은 쿠키 로그인을 거쳐야 한다.
+- 구분: 추천 수용
+- 결과: [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
+
+<a id="swagger-csrf-session"></a>
+## 221. Swagger의 변경 요청은 세션에 둔 CSRF 토큰을 `/bff/csrf`로 받아 붙인다
+- 문제: [결정 220](#no-public-clients)으로 Swagger는 BFF 세션 쿠키로만 호출한다. 세션 쿠키의 변경 요청은 CSRF 헤더가 없으면 403이고(Gateway R5.2), Swagger에는 토큰을 읽어 붙이는 장치가 없다. Gateway는 CSRF 토큰을 세션(Redis)에 두고 `GET /bff/csrf`로 내준다.
+- 선택지: A 쿠키 방식 — `XSRF-TOKEN` 쿠키(`HttpOnly=false`)로 바꾸고 springdoc `swagger-ui.csrf.enabled`로 `X-XSRF-TOKEN`을 붙인다(Gateway 저장소·처리기 교체, 쿠키를 내려주는 필터 추가, R5.1·웹 CSRF 규약 변경) / B 세션 방식 유지 — Swagger 초기화 JS의 `requestInterceptor`가 `/bff/csrf`를 불러 헤더를 붙인다 (추천: B — 계약이 그대로이고, 신뢰할 수 없는 형제 서브도메인이 쿠키를 심어 우회하는 위험이 없으며, 토큰을 서버에 두는 결정 219와 결이 같다)
+- 내 의견: "B로 해"
+- 선택: B — 추천 수용. 감수한 비용: Swagger 전용 정적 JS 파일 하나를 관리한다. 웹 프론트엔드는 세션마다 `/bff/csrf`를 한 번 부른다.
 - 구분: 추천 수용
 - 결과: [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
 
