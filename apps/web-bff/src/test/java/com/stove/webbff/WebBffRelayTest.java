@@ -38,6 +38,9 @@ class WebBffRelayTest {
     private static final AtomicInteger CALLS = new AtomicInteger();
     private static final AtomicReference<String> AUTHORIZATION = new AtomicReference<>();
     private static final AtomicReference<String> COOKIE = new AtomicReference<>();
+    private static final AtomicInteger AUTH_CALLS = new AtomicInteger();
+    private static final AtomicReference<String> AUTH_AUTHORIZATION = new AtomicReference<>();
+    private static final AtomicReference<String> AUTH_COOKIE = new AtomicReference<>();
     private static final HttpServer API_GATEWAY;
 
     static {
@@ -53,6 +56,14 @@ class WebBffRelayTest {
                 exchange.getResponseBody().write(bytes);
                 exchange.close();
             });
+            // 같은 가짜 서버가 Auth 브라우저 경로도 받는다(AUTH_URI). 기록은 API 게이트웨이와 따로 한다.
+            API_GATEWAY.createContext("/connect", exchange -> {
+                AUTH_CALLS.incrementAndGet();
+                AUTH_AUTHORIZATION.set(exchange.getRequestHeaders().getFirst("Authorization"));
+                AUTH_COOKIE.set(String.join("; ", exchange.getRequestHeaders().getOrDefault("Cookie", List.of())));
+                exchange.sendResponseHeaders(204, -1);
+                exchange.close();
+            });
             API_GATEWAY.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> API_GATEWAY.stop(0)));
         } catch (Exception failure) {
@@ -63,6 +74,7 @@ class WebBffRelayTest {
     @DynamicPropertySource
     static void apiGateway(DynamicPropertyRegistry registry) {
         registry.add("API_GATEWAY_URI", () -> "http://127.0.0.1:" + API_GATEWAY.getAddress().getPort());
+        registry.add("AUTH_URI", () -> "http://127.0.0.1:" + API_GATEWAY.getAddress().getPort());
     }
 
     @Autowired WebTestClient http;
@@ -76,6 +88,9 @@ class WebBffRelayTest {
         CALLS.set(0);
         AUTHORIZATION.set(null);
         COOKIE.set(null);
+        AUTH_CALLS.set(0);
+        AUTH_AUTHORIZATION.set(null);
+        AUTH_COOKIE.set(null);
         sessions = BffSessionFixture.sessions(http, tokens, registrations);
         when(decoder.decode(anyString())).thenAnswer(call -> {
             String value = call.getArgument(0, String.class);
@@ -97,10 +112,23 @@ class WebBffRelayTest {
     @Test
     @DisplayName("세션 없는 요청은 자격 증명 없이 넘긴다 — 보호 경로의 401·403은 API 게이트웨이가 정한다")
     void anonymousRequestsAreForwardedWithoutCredentials() {
-        http.get().uri("/api/v1/products/1").exchange().expectStatus().isOk();
+        http.get().uri("/api/v1/products/1").header("Cookie", "SESSION=unknown; tracking=1").exchange().expectStatus().isOk();
 
         assertThat(CALLS.get()).isEqualTo(1);
         assertThat(AUTHORIZATION.get()).isNull();
+        assertThat(COOKIE.get()).as("PR #243 R1: 세션이 없어도 브라우저 쿠키는 하류에 닿지 않는다").isNull();
+    }
+
+    @Test
+    @DisplayName("PR #243 R2: Auth 브라우저 경로에는 세션이 있어도 토큰을 붙이지 않고 쿠키를 그대로 넘긴다")
+    void authBrowserRoutesKeepTheirCookiesAndGetNoToken() {
+        http.get().uri("/connect/logout").headers(sessions.as("MEMBER")).header("Cookie", "JSESSIONID=auth-session")
+                .exchange().expectStatus().isNoContent();
+
+        assertThat(AUTH_CALLS.get()).isEqualTo(1);
+        assertThat(AUTH_AUTHORIZATION.get()).isNull();
+        assertThat(AUTH_COOKIE.get()).contains("JSESSIONID=auth-session");
+        assertThat(CALLS.get()).isZero();
     }
 
     @Test
