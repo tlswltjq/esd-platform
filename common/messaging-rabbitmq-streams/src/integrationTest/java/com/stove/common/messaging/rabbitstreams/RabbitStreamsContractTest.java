@@ -30,7 +30,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 @Import(InfraContainers.MySql.class)
 class RabbitStreamsContractTest extends MessagingContractTest {
 
-    private static final int PARTITIONS = 3;
+    /** 평소 3, S4 측정 때만 6(결정 218, {@link MessagingContractTest#partitions()}). */
+    private static final int PARTITIONS = partitions();
     private static final Duration MAX_AGE = Duration.ofHours(1);
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
     private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1-management-alpine")
