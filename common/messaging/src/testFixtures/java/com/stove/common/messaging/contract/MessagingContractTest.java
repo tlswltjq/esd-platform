@@ -768,6 +768,7 @@ public abstract class MessagingContractTest {
         // 6. 같은 그룹으로 다시 구독해(처리 비용 없음) 성공 발행분을 다 받을 때까지 잰다. 상한(drain-minutes)을 넘기거나
         //    stall-seconds 동안 새로 받은 것이 없으면(진척 없음) 멈춘다. 재개 중 adapter 의 경고·오류 로그를 센다.
         counter.reset();
+        counter.trackSucceeded(succeeded);
         ResumeLog resumeLog = ResumeLog.attach();
         boolean stalled = false;
         long resumed;
@@ -796,7 +797,7 @@ public abstract class MessagingContractTest {
             resumeLog.detach();
         }
         boolean drained = counter.distinctOf(succeeded) == publishedOk;
-        long drainedAt = counter.lastNewAt();
+        long drainedAt = counter.lastSucceededAt();
         Map<String, String> afterResume = brokerStateAfterResume();
 
         // 8. 유실(성공 발행했는데 받지 못함)·중복(같은 eventId 를 두 번 이상 받음).
@@ -1081,6 +1082,9 @@ public abstract class MessagingContractTest {
         private final AtomicLong firstAt = new AtomicLong();
         private final AtomicLong lastNewAt = new AtomicLong();
         private final AtomicLong lastAnyAt = new AtomicLong();
+        private final AtomicLong lastSucceededAt = new AtomicLong();
+        /** 성공 발행분 — 재개 전에 넘겨 받아, 성공분의 마지막 첫 수신 시각을 미확인 발행분 수신과 따로 잰다(PR #242 R6). */
+        private volatile BitSet succeeded = new BitSet();
 
         BacklogCounter(String runId, int messages) {
             this.prefix = "s3-" + runId + "-";
@@ -1101,6 +1105,11 @@ public abstract class MessagingContractTest {
             firstAt.set(0);
             lastNewAt.set(0);
             lastAnyAt.set(0);
+            lastSucceededAt.set(0);
+        }
+
+        void trackSucceeded(BitSet published) {
+            this.succeeded = (BitSet) published.clone();
         }
 
         @Override
@@ -1117,7 +1126,15 @@ public abstract class MessagingContractTest {
             int index = Integer.parseInt(eventId.substring(prefix.length()));
             if (counts.incrementAndGet(index) == 1) {
                 lastNewAt.accumulateAndGet(now, Math::max);
+                if (succeeded.get(index)) {
+                    lastSucceededAt.accumulateAndGet(now, Math::max);
+                }
             }
+        }
+
+        /** 성공 발행분 가운데 마지막으로 처음 받은 시각(성공분 회복 시간의 끝). */
+        long lastSucceededAt() {
+            return lastSucceededAt.get();
         }
 
         int received() {
