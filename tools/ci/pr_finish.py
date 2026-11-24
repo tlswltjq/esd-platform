@@ -2,7 +2,8 @@
 
     wait   필수 검사가 등록될 때까지 기다린 뒤(push 직후 바로 감시하면 즉시 끝난다, PR #122),
            모두 끝날 때까지 기다린다. `--head-sha`를 주면 PR head가 그 커밋이 된 뒤부터 센다.
-           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과.
+           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과. draft가 아닌 PR의 건너뛴 build는 draft 때의
+           지난 결과라 빼고 새 build를 기다린다(ci.yml은 draft에서만 건너뛴다, PR #244).
     ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. head가 같아 이전 결과(draft 때 SKIPPED build)가
            남으므로, 바꾸기 전 검사 job 링크를 기록해 두고 ready가 다시 돌리는 `build`는 새 링크가 나올
            때까지 기다린다. `review-gate`는 다시 돌지 않으니 같은 head의 최신 결과를 쓴다(PR #226 R8·R9).
@@ -127,6 +128,18 @@ def fresh(checks, renew, old_links):
             if not ((check.get('name') or '').startswith(renew) and check.get('link') in old_links)]
 
 
+def without_draft_skips(number, checks):
+    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR에 남은 skipping build는 draft 때의 지난 결과이므로 뺀다.
+    ready 뒤 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217), 그 전에 건너뛴 build만 보고 실패로 끝내면 안 된다
+    (PR #244: ready 전 링크를 기록할 때 건너뛴 build가 아직 등록되지 않아 fresh()로도 걸러지지 않았다). draft면 그대로
+    둬 `gh pr ready` 안내로 끝낸다."""
+    def draft_skip(check):
+        return (check.get('name') or '').startswith('build') and check.get('bucket') == 'skipping'
+    if not any(draft_skip(check) for check in checks) or view(number)['isDraft']:
+        return checks
+    return [check for check in checks if not draft_skip(check)]
+
+
 def links(checks):
     return {check.get('link') for check in checks if check.get('link')}
 
@@ -146,6 +159,7 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
+        checks = without_draft_skips(args.number, checks)
         # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
         # (PR #234 3차 리뷰: ready 전 plan·gradle은 old_all로, draft의 건너뛴 검사는 bucket으로 뺀다).
         if not registered(checks) and time.time() > register_deadline and not (

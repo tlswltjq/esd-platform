@@ -232,6 +232,29 @@ class WaitTest(unittest.TestCase):
             self.assertEqual(1, pr_finish.wait(self.args()))
         self.assertIn('gh pr ready', out.getvalue())
 
+    def test_a_non_draft_ignores_the_skipped_build_from_its_draft_days(self):
+        # PR #244: ready 뒤 새 build가 등록되기 전(결정 217)에는 draft 때 건너뛴 build만 보인다. ci.yml은 draft에서만
+        # build를 건너뛰므로, draft가 아닌 PR의 skipping build는 지난 결과다. 실패로 끝내지 않고 새 build를 기다린다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'job/2'}
+        new_build = {'name': BUILD, 'bucket': 'pass', 'link': 'job/3'}
+        sequence = [[gate, skipped], [gate, skipped], [gate, skipped, new_build]]
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args(register_timeout=-1)))
+        # 새 build가 실패하면 그대로 실패다.
+        failed = {'name': BUILD, 'bucket': 'fail', 'link': 'job/3'}
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=[[gate, skipped], [gate, skipped, failed]]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
+        # 새 CI도 시작되지 않았으면 등록 시간 초과(3)다. 건너뛴 build를 실패(1)로 보고하지 않는다.
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, skipped]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
