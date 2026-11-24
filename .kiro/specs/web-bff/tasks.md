@@ -83,7 +83,7 @@
   - 재현: 표 대조 테스트.
 - [ ] **GW-T18. 계정 정지·역할 회수 뒤에도 BFF 세션과 access token이 수명까지 통한다** ([결정 180](../../../docs/decisions.md#account-access-revocation))
   - 어디서: `SecurityConfig` `oauth2ResourceServer().jwt()`(서명·만료·역할만), `BffTokens`(갱신 실패 때만 세션 삭제), Kafka 의존 없음.
-  - 목표: R5.6~5.8, design 상태 표 19·20행, 이벤트 "소비". Gateway Kafka 소비(`gateway-account-access`), subject → 세션·토큰 기록 색인, Redis 거절 기준·`eventId` 멱등, JWT `iat` 검사(세션·Bearer), 소비 지연 게이지, 거절 기준 수명 설정 키, 시계 오차 여유값 설정 키(`iat` < 올림한 `changedAt` + 여유값이면 거절, [Auth design 시계 전제](../auth/design.md), PR #244 R3). Auth AU-T6 발행 뒤 배포. 실패 보관은 M-GW-8 결정 뒤.
+  - 목표: R5.6~5.8, design 상태 표 19·20행, 이벤트 "소비". Gateway Kafka 소비(`gateway-account-access`), subject → 세션·토큰 기록 색인, Redis 거절 기준·`eventId` 멱등, JWT `iat` 검사(세션·Bearer), 소비 지연 게이지, 거절 기준 수명 설정 키, 시계 오차 여유값 설정 키(`iat` < 올림한 `changedAt` + 여유값이면 거절, [Auth design 시계 전제](../auth/design.md), PR #244 R3). Auth AU-T6 발행 뒤 배포. 실패 처리는 [결정 226](../../../docs/decisions.md#access-change-consumer-failure).
   - 영향: **간접 돈·보유권** — `ADMIN`을 회수당한 운영자가 최대 15분 동안 관리자 환불 판정·늦은 취소 반영을 할 수 있다.
   - 재현: 통합 — 로그인한 BFF 세션·Bearer 토큰을 가진 계정의 `ADMIN` 회수 사실을 넣은 뒤 같은 세션·토큰으로 관리자 API → 지금 200, 목표 401.
 - [x] **GW-T20. 외부에서 공개 클라이언트로 토큰을 직접 받고 Bearer로 `/api/**`를 쓸 수 있다** — [PR #240](https://github.com/tlswltjq/esd-platform/pull/240) ([결정 219](../../../docs/decisions.md#single-bff)·[결정 220](../../../docs/decisions.md#no-public-clients))
@@ -100,5 +100,5 @@
 ## 진행 중 / 남음
 
 - [ ] [결정 필요 M-GW-2] Access Token 만료(`exp`) 검증과 판단 원칙 ⑥ — 원칙 문구의 예외로 둘지 확인(동작 변경 없음 추천).
-- [ ] [결정 필요 M-GW-8] `AccountAccessChanged` 소비 실패 보관 위치 — Gateway에 DB가 없어 P2.6-4·5(모듈 DB 실패 보관 표·키 정지)를 그대로 따를 수 없다. GW-T18 구현 전.
+- [x] `AccountAccessChanged` 소비 실패 보관 위치(M-GW-8) — [결정 226](../../../docs/decisions.md#access-change-consumer-failure)(A): 일시 실패는 성공할 때까지 재시도, 영구 실패만 `stove.auth.v1.DLT`. 구현은 GW-T18.
 - [x] 즉시 차단(GW-T18)의 소비 위치 — [결정 225](../../../docs/decisions.md#revocation-placement)(A): 웹 BFF는 세션·토큰 기록 삭제, API 게이트웨이는 `iat` 거절. 구현은 GW-T18.

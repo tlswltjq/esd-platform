@@ -130,7 +130,7 @@
 
 | 사실 | 그룹 · 리스너 → 매퍼 → 서비스 | 멱등 | 실패 |
 |---|---|---|---|
-| `AccountAccessChanged`(플랫폼 이벤트 목표 행, Auth 토픽 `stove.auth.v1`, 키 `subject`) | `gateway-account-access` · (목표) `AccountAccessEventListener` → `AccountAccessChangedMapper.from`(봉투·`subject`·`changedAt`·`changeKind` 검증) → core `RevokeSubjectAccess` | Redis `eventId` 기록(거절 기준과 같은 수명). 기준은 더 늦은 `changedAt`만 덮어 순서·중복과 무관하게 같은 결과 | 재시도 가능(Redis 장애)·영구(봉투·본문 오류). 실패 보관 위치는 `[결정 필요 M-GW-8]` |
+| `AccountAccessChanged`(플랫폼 이벤트 목표 행, Auth 토픽 `stove.auth.v1`, 키 `subject`) | `gateway-account-access` · (목표) `AccountAccessEventListener` → `AccountAccessChangedMapper.from`(봉투·`subject`·`changedAt`·`changeKind` 검증) → core `RevokeSubjectAccess` | Redis `eventId` 기록(거절 기준과 같은 수명). 기준은 더 늦은 `changedAt`만 덮어 순서·중복과 무관하게 같은 결과 | 재시도 가능(Redis 장애)·영구(봉투·본문 오류). 일시 실패는 성공할 때까지 재시도, 영구 실패만 `stove.auth.v1.DLT`([결정 226](../../../docs/decisions.md#access-change-consumer-failure)) |
 
 - 세션 찾기: subject로 BFF 세션과 토큰 기록을 찾을 색인이 필요하다(지금 토큰 기록은 `clientKey` 키). Spring Session의 principal 이름 색인 또는 `subject → clientKey 집합` 기록을 쓴다(GW-T18).
 - 거절 기준 수명: `gateway-bff`의 최대 access token 수명(`BFF_ACCESS_TOKEN_SECONDS`) 이상(공개 클라이언트는 없다 — 결정 220). Auth 설정과 Gateway 설정이 따로 있으므로 Gateway 설정 키로 두고, 기동 때 값이 0 이하면 실패한다(R8).
