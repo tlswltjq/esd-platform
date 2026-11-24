@@ -2,13 +2,19 @@ package com.stove.common.testcontainers;
 
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.model.HostConfig;
+import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.testcontainers.containers.Container;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -89,6 +95,21 @@ public final class SharedContainers {
     /** 결정 222: S3 측정 때 브로커(브로커 없음은 MySQL) 컨테이너에 거는 메모리 한도. 모든 방식이 같다. */
     public static final long S3_MEMORY_LIMIT_BYTES = 1024L * 1024 * 1024;
 
+    /**
+     * 결정 222: S3 측정 때 Redis {@code maxmemory}. 기본 512mb. 한도 도달 뒤 재개 경로를 짧게 재현할 때만
+     * {@code -Pstove.contract.s3.redis-maxmemory=8mb} 처럼 줄인다(PR #242 R1).
+     */
+    public static final String S3_REDIS_MAXMEMORY_PROPERTY = "stove.contract.s3.redis-maxmemory";
+
+    /**
+     * 결정 222: S3 측정 때 RabbitMQ·Streams 메모리 경보({@code vm_memory_high_watermark.relative}). 기본 0.4(한도의 40%).
+     * RabbitMQ 4.1 기본값은 0.6 이라 명시한다(PR #242 R3). 생산자 차단 경로를 짧게 재현할 때만 줄인다.
+     */
+    public static final String S3_RABBIT_WATERMARK_PROPERTY = "stove.contract.s3.rabbit-watermark";
+
+    /** S3 때 RabbitMQ 컨테이너에 넣는 설정 파일. 이미지의 {@code conf.d} 는 이름 순으로 읽혀 기본값 파일 뒤에 온다. */
+    private static final String RABBIT_S3_CONF = "/etc/rabbitmq/conf.d/90-s3-memory.conf";
+
     private SharedContainers() {
     }
 
@@ -127,9 +148,41 @@ public final class SharedContainers {
      */
     private static GenericContainer<?> s3Redis(GenericContainer<?> container) {
         if (s3Measurement()) {
-            container.withCommand("redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction",
-                    "--appendonly", "yes", "--appendfsync", "everysec");
+            container.withCommand("redis-server", "--maxmemory", System.getProperty(S3_REDIS_MAXMEMORY_PROPERTY, "512mb"),
+                    "--maxmemory-policy", "noeviction", "--appendonly", "yes", "--appendfsync", "everysec");
         }
         return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: RabbitMQ·Streams 컨테이너에 메모리 1GB 를 걸고 메모리 경보를 한도의 40%({@code vm_memory_high_watermark.relative = 0.4})로
+     * 명시한다. 이 호스트(cgroup v1)에서 RabbitMQ 4.1 은 컨테이너 한도가 아니라 호스트 전체 메모리를 읽으므로(확인: 25GB, 경보 약 10GB),
+     * 전체 메모리를 {@code total_memory_available_override_value} 로 컨테이너 한도와 같게 둔다. 평소에는 아무것도 바꾸지 않는다.
+     */
+    public static <T extends GenericContainer<?>> T rabbitForS3(T container) {
+        if (s3Measurement()) {
+            String watermark = System.getProperty(S3_RABBIT_WATERMARK_PROPERTY, "0.4");
+            String conf = "total_memory_available_override_value = " + S3_MEMORY_LIMIT_BYTES + "\n"
+                    + "vm_memory_high_watermark.relative = " + watermark + "\n";
+            container.withCopyToContainer(Transferable.of(conf), RABBIT_S3_CONF);
+        }
+        return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: 실행 중인 RabbitMQ 가 실제로 쓰는 메모리 경보 값과 그 값으로 계산한 절대 한도(바이트)를 읽는다
+     * ({@code rabbitmqctl eval}). 설정 파일이 먹었는지 결과에 남기려는 것이다.
+     */
+    public static Map<String, String> rabbitMemorySettings(ContainerState rabbit) throws IOException, InterruptedException {
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("vm_memory_high_watermark", rabbitEval(rabbit, "vm_memory_monitor:get_vm_memory_high_watermark()."));
+        settings.put("vm_memory_limit_bytes", rabbitEval(rabbit, "vm_memory_monitor:get_memory_limit()."));
+        settings.put("total_memory_bytes", rabbitEval(rabbit, "vm_memory_monitor:get_total_memory()."));
+        return settings;
+    }
+
+    private static String rabbitEval(ContainerState rabbit, String expression) throws IOException, InterruptedException {
+        Container.ExecResult result = rabbit.execInContainer("rabbitmqctl", "eval", expression);
+        return result.getExitCode() == 0 ? result.getStdout().trim() : "error: " + result.getStderr().trim();
     }
 }

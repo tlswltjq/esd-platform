@@ -12,9 +12,12 @@ import com.stove.common.messaging.delivery.SubscribedHandler;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
 import com.stove.common.testcontainers.SharedContainers;
+import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -34,10 +37,15 @@ class RabbitStreamsContractTest extends MessagingContractTest {
 
     /** 평소 3, S4 측정 때만 6(결정 218, {@link MessagingContractTest#partitions()}). */
     private static final int PARTITIONS = partitions();
-    private static final Duration MAX_AGE = Duration.ofHours(1);
+    /**
+     * 분할 로그 보존 기간. 평소 1시간. S3 측정 때는 사실상 끈다(PR #242 R5): 느린 측정에서 재개 전에 오래된 세그먼트가 만료되면
+     * 보존 만료가 {@code lost} 에 섞인다. 클라이언트가 보존 없음({@code null}·0)을 받지 않으므로 10년으로 둔다. 길이 제한
+     * ({@code max-length-bytes})은 원래 걸지 않는다.
+     */
+    private static final Duration MAX_AGE = SharedContainers.s3Measurement() ? Duration.ofDays(3650) : Duration.ofHours(1);
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
-    /** S3 측정 때만 메모리 1GB(결정 222). 메모리 경보는 기본값(한도의 40%) 그대로다. */
-    private static final GenericContainer<?> RABBIT = SharedContainers.limitMemoryForS3(
+    /** S3 측정 때만 메모리 1GB·메모리 경보 한도의 40% 명시(결정 222, PR #242 R3). */
+    private static final GenericContainer<?> RABBIT = SharedContainers.rabbitForS3(
             new GenericContainer<>("rabbitmq:4.1-management-alpine")
                     .withExposedPorts(5552)
                     .withCommand("sh", "-c", "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server")
@@ -76,6 +84,31 @@ class RabbitStreamsContractTest extends MessagingContractTest {
     @Override
     protected String brokerDataDir() {
         return "/var/lib/rabbitmq";
+    }
+
+    /** 실제로 적용된 메모리 경보 값(PR #242 R3)과 분할 보존 기간(PR #242 R5). */
+    @Override
+    protected Map<String, String> brokerSettings() throws IOException, InterruptedException {
+        Map<String, String> settings = new LinkedHashMap<>(SharedContainers.rabbitMemorySettings(RABBIT));
+        settings.put("max_age_seconds", Long.toString(MAX_AGE.toSeconds()));
+        return settings;
+    }
+
+    /**
+     * 생산자는 확인되지 않은 메시지가 한도(기본 1만 건)에 닿으면 {@code send} 안에서 자리가 날 때까지 기다린다. 경보로 확인이
+     * 멈추면 호출이 오래 돌아오지 않을 수 있어 같은 제한을 건다(PR #242 R2).
+     */
+    @Override
+    protected boolean publishCallMayBlock() {
+        return true;
+    }
+
+    /** 막힌 생산자를 닫는다. 재개 소비자는 Environment 의 소비 연결을 쓴다(생산자 연결과 따로다). */
+    @Override
+    protected void abandonBlockedPublisher() {
+        if (publisher != null) {
+            publisher.close();
+        }
     }
 
     @Override

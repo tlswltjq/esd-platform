@@ -68,6 +68,27 @@ class RedisStreamsContractTest extends MessagingContractTest {
         return settings;
     }
 
+    /**
+     * 재개 뒤 메모리(PR #242 R1). {@code noeviction} 으로 꽉 차면 잠금 {@code SET}·{@code XREADGROUP} 같은 쓰기 명령도 OOM 으로
+     * 거절되어 재개 소비자가 진척하지 못한다. 그것이 유실인지 재개 실패인지 결과에서 가르려고 used_memory·maxmemory 를 남긴다.
+     */
+    @Override
+    protected Map<String, String> brokerStateAfterResume() {
+        Map<String, String> state = new LinkedHashMap<>();
+        String info = connection.sync().info("memory");
+        for (String line : info.split("\r?\n")) {
+            int colon = line.indexOf(':');
+            if (colon < 0) {
+                continue;
+            }
+            String name = line.substring(0, colon);
+            if (name.equals("used_memory") || name.equals("maxmemory") || name.equals("maxmemory_policy")) {
+                state.put(name, line.substring(colon + 1).trim());
+            }
+        }
+        return state;
+    }
+
     @Override
     protected void closeAdapter() {
         connection.close();

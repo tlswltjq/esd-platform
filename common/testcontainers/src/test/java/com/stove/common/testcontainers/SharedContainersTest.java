@@ -110,6 +110,21 @@ class SharedContainersTest {
         assertThat(SharedContainers.REDIS.getCommandParts()).isEmpty();
     }
 
+    /** 결정 222·PR #242 R3: RabbitMQ 메모리 1GB·경보 40% 설정 파일도 S3 측정 때만 들어간다. 평소에는 새 컨테이너와 같다. */
+    @Test
+    @DisplayName("[결정 222] S3 측정을 켜지 않으면 RabbitMQ 컨테이너에 메모리 한도·경보 설정 파일이 들어가지 않는다")
+    void rabbitS3SettingsAreOffByDefault() throws ReflectiveOperationException {
+        GenericContainer<?> fresh = new GenericContainer<>(DockerImageName.parse("rabbitmq:4.1-management-alpine"));
+        GenericContainer<?> rabbit = SharedContainers.rabbitForS3(
+                new GenericContainer<>(DockerImageName.parse("rabbitmq:4.1-management-alpine")));
+        assertThat(rabbit.getCreateContainerCmdModifiers()).hasSameSizeAs(fresh.getCreateContainerCmdModifiers());
+        assertThat(rabbit.getCopyToFileContainerPathMap()).isEmpty();
+        // withCopyToContainer(Transferable) 가 쌓는 표는 패키지 밖에서 읽을 수 없어 한 번 연다.
+        Method transferables = GenericContainer.class.getDeclaredMethod("getCopyToTransferableContainerPathMap");
+        transferables.setAccessible(true);
+        assertThat((Map<?, ?>) transferables.invoke(rabbit)).isEmpty();
+    }
+
     private static WaitStrategy waitStrategy(GenericContainer<?> container) throws ReflectiveOperationException {
         Method method = GenericContainer.class.getDeclaredMethod("getWaitStrategy");
         method.setAccessible(true);
