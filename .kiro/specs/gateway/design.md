@@ -50,7 +50,7 @@ BFF 세션·토큰 기록·갱신 lease·BFF 경로·Auth 토큰 연동은 [웹 
 
 ## 이벤트
 
-지금은 발행·소비하지 않는다. 목표([결정 225](../../../docs/decisions.md#revocation-placement)): 계정 접근 변경 사실(결정 180, Auth 토픽 `stove.auth.v1`, 키 `subject`)을 웹 BFF와 다른 그룹으로 소비해 `subject`별 거절 기준(`changedAt`)을 Redis에 두고, `iat`가 기준보다 이른 Bearer를 모든 BFF 경로에서 401로 거절한다. 멱등은 `eventId`, 실패는 [결정 226](../../../docs/decisions.md#access-change-consumer-failure)(일시 실패는 성공까지 재시도, 영구 실패만 DLT). 구현은 GW-T18. 공급자 통지(웹훅)는 이벤트가 아니라 HTTP 전달이다(R7).
+발행은 하지 않는다. 소비([결정 225](../../../docs/decisions.md#revocation-placement), GW-T18·PR #246): 계정 접근 변경 사실(결정 180, Auth 토픽 `stove.auth.v1`, 키 `subject`)을 웹 BFF와 다른 그룹으로 소비해 `subject`별 거절 기준(`changedAt`)을 Redis에 두고, `iat`가 기준보다 이른 Bearer를 모든 BFF 경로에서 401로 거절한다. 멱등은 `eventId`, 실패는 [결정 226](../../../docs/decisions.md#access-change-consumer-failure)(일시 실패는 성공까지 재시도, 영구 실패만 DLT). 기준 저장소에 닿지 못하면 Bearer를 판정하지 않고 503 `ACCESS_BASELINE_STORE_UNAVAILABLE`(R6.3과 같은 원칙). 소비 지연은 `stove.account.access.consumer.lag`. 공급자 통지(웹훅)는 이벤트가 아니라 HTTP 전달이다(R7).
 
 ## 모듈 안 불변식
 

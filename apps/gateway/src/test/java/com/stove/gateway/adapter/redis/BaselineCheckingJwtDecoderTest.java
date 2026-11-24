@@ -1,6 +1,7 @@
 package com.stove.gateway.adapter.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -65,6 +66,13 @@ class BaselineCheckingJwtDecoderTest {
         assertThat(noSkew.issuedBefore(baseline.minusSeconds(1), baseline)).isTrue();
         assertThat(noSkew.issuedBefore(baseline, baseline)).isFalse();
         assertThat(noSkew.issuedBefore(null, baseline)).as("iat 없는 토큰은 기준이 있으면 거절").isTrue();
+    }
+
+    @Test
+    @DisplayName("음수 시계 오차 여유로는 만들 수 없다")
+    void negativeSkewIsRejected() {
+        assertThatThrownBy(() -> new BaselineCheckingJwtDecoder(delegate, baselines, Duration.ofSeconds(-1)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -50,6 +50,8 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # 계정 접근 변경 사실을 받아 그 subject의 세션 토큰 기록을 지운다(GW-T18, 결정 225).
+      KAFKA_BROKERS: kafka:19092
       BFF_CLIENT_SECRET: ${BFF_CLIENT_SECRET:-bff-local-only}
       BFF_PUBLIC_AUTH_BASE: ${BFF_PUBLIC_AUTH_BASE:-http://localhost:8080}
       OTLP_ENDPOINT: http://tempo:4318/v1/traces
@@ -67,6 +69,10 @@ services:
       test: [CMD-SHELL, "wget -qO- http://localhost:8093/actuator/health | grep -q UP || exit 1"]
     environment:
       OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      # 계정 접근 변경 사실을 받아 거절 기준을 Redis에 둔다(GW-T18, 결정 225).
+      KAFKA_BROKERS: kafka:19092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
       JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
       AUTH_URI: http://auth:8091

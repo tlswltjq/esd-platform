@@ -74,8 +74,8 @@
 | 16 | 쿠키 인증 변경 요청에 CSRF 없음·틀림(로그아웃 포함) | 거절 403, 무변화 | 거절 403, 무변화 | 거절 403, 무변화 | 같음 |
 | 17 | 세션 무활동 7일(Redis TTL) | 무변화 | 허용 → `NONE` | 허용 → `NONE`. 토큰 기록은 자기 TTL까지 남음 — R5.5·[결정 필요 M-GW-3] | 토큰 기록 남음(GW-T4) |
 | 18 | 세션 저장소 접근 실패 | 거절 503 `SESSION_STORE_UNAVAILABLE`, 무변화 | 같음 | 같음(인증 우회 없음) | 같음. Bearer·공개 GET도 503인지 미확인(GW-T13, M-GW-4) |
-| 19 | `AccountAccessChanged` 수신(그 세션의 subject, 첫 `eventId`) | 무변화 | 무변화 | 허용 → `NONE`(토큰 기록 삭제, 세션 무효화, 거절 기준 저장 — R5.6) | 소비 없음 — 다음 갱신(7행)까지 남음([결정 180](../../../docs/decisions.md#account-access-revocation), GW-T18) |
-| 20 | 세션·Bearer 요청, JWT `iat` < 그 subject의 거절 기준 | 거절 401 | 거절 401 | 허용 → `NONE`(11행과 같음, 401) — Bearer는 상태 없이 401 | 검사 없음(GW-T18) |
+| 19 | `AccountAccessChanged` 수신(그 세션의 subject, 첫 `eventId`) | 무변화 | 무변화 | 허용 → `NONE`(토큰 기록 삭제, 세션 무효화, 거절 기준 저장 — R5.6) | 같음. 웹 BFF는 subject 색인의 토큰 기록을 지우고(세션은 다음 요청에서 401과 함께 끝남), 거절 기준은 API 게이트웨이가 둔다(결정 225, PR #246) |
+| 20 | 세션·Bearer 요청, JWT `iat` < 그 subject의 거절 기준 | 거절 401 | 거절 401 | 허용 → `NONE`(11행과 같음, 401) — Bearer는 상태 없이 401 | 같음. API 게이트웨이가 401(`iat` < 올림한 기준 + 시계 오차 여유, PR #246) |
 
 ### 갱신 lease — 직교 필드
 
@@ -130,10 +130,10 @@
 
 | 사실 | 그룹 · 리스너 → 매퍼 → 서비스 | 멱등 | 실패 |
 |---|---|---|---|
-| `AccountAccessChanged`(플랫폼 이벤트 목표 행, Auth 토픽 `stove.auth.v1`, 키 `subject`) | `gateway-account-access` · (목표) `AccountAccessEventListener` → `AccountAccessChangedMapper.from`(봉투·`subject`·`changedAt`·`changeKind` 검증) → core `RevokeSubjectAccess` | Redis `eventId` 기록(거절 기준과 같은 수명). 기준은 더 늦은 `changedAt`만 덮어 순서·중복과 무관하게 같은 결과 | 재시도 가능(Redis 장애)·영구(봉투·본문 오류). 일시 실패는 성공할 때까지 재시도, 영구 실패만 `stove.auth.v1.DLT`([결정 226](../../../docs/decisions.md#access-change-consumer-failure)) |
+| `AccountAccessChanged`(플랫폼 이벤트 목표 행, Auth 토픽 `stove.auth.v1`, 키 `subject`) | 웹 BFF `web-bff-account-access` · `AccountAccessEventListener` → `AccountAccessChangedMapper.from`(봉투·키·`subject` 검증) → core `EndSubjectSessions` → `RedisSubjectSessions`(색인 `stove:bff:subject-tokens:<subject>`의 토큰 기록 삭제). API 게이트웨이 `gateway-account-access` · 같은 구조 → `RecordAccessChange` → `RedisAccessBaselines` | 웹 BFF: 삭제가 멱등. 게이트웨이: Redis `eventId` 기록(거절 기준과 같은 수명), 기준은 더 늦은 `changedAt`만 덮어 순서·중복과 무관하게 같은 결과 | 재시도 가능(Redis 장애)·영구(봉투·본문 오류). 일시 실패는 성공할 때까지 재시도, 영구 실패만 `stove.auth.v1.DLT`([결정 226](../../../docs/decisions.md#access-change-consumer-failure)) |
 
-- 세션 찾기: subject로 BFF 세션과 토큰 기록을 찾을 색인이 필요하다(지금 토큰 기록은 `clientKey` 키). Spring Session의 principal 이름 색인 또는 `subject → clientKey 집합` 기록을 쓴다(GW-T18).
-- 거절 기준 수명: `gateway-bff`의 최대 access token 수명(`BFF_ACCESS_TOKEN_SECONDS`) 이상(공개 클라이언트는 없다 — 결정 220). Auth 설정과 Gateway 설정이 따로 있으므로 Gateway 설정 키로 두고, 기동 때 값이 0 이하면 실패한다(R8).
+- 세션 찾기: 토큰 기록을 쓸 때(`RedisAuthorizedClients.write`) `subject → 토큰 기록 키 집합`(`stove:bff:subject-tokens:<subject>`, 토큰 기록과 같은 7일 수명)에 더한다. 삭제 사이에 끼어든 갱신이 토큰을 다시 써도, 그 토큰은 변경 전에 발급돼 게이트웨이가 `iat`로 거절한다.
+- 거절 기준 수명: `gateway-bff`의 최대 access token 수명(`BFF_ACCESS_TOKEN_SECONDS`) 이상(공개 클라이언트는 없다 — 결정 220). Auth 설정과 Gateway 설정이 따로 있으므로 Gateway 설정 키 `stove.gateway.access-baseline.ttl`(기본 20분)로 두고, 기동 때 값이 0 이하면 실패한다(R8). 시계 오차 여유는 `stove.gateway.access-baseline.clock-skew`(기본 1초, 음수면 기동 실패).
 - 배포 순서: Auth 발행(AU-T6) → Gateway 소비. 소비 전 발행된 사실은 Kafka 보존 기간 안이면 처리되고, 그 사이 끊기는 지금처럼 수명까지다.
 
 ## 모듈 안 불변식

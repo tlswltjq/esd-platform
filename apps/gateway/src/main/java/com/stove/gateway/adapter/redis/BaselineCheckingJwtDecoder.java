@@ -21,6 +21,9 @@ public class BaselineCheckingJwtDecoder implements ReactiveJwtDecoder {
     private final Duration clockSkew;
 
     public BaselineCheckingJwtDecoder(ReactiveJwtDecoder delegate, RedisAccessBaselines baselines, Duration clockSkew) {
+        if (clockSkew.isNegative()) {
+            throw new IllegalArgumentException("시계 오차 여유는 음수일 수 없다: " + clockSkew);
+        }
         this.delegate = delegate;
         this.baselines = baselines;
         this.clockSkew = clockSkew;

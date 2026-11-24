@@ -28,6 +28,10 @@ public class AccessRevocationConfig {
     RedisAccessBaselines accessBaselines(ReactiveStringRedisTemplate redis,
             @Value("${stove.gateway.access-baseline.ttl:20m}") Duration ttl,
             @Value("${spring.data.redis.timeout:2s}") Duration timeout) {
+        if (ttl.isZero() || ttl.isNegative()) {
+            // 수명이 없으면 기준이 바로 사라져 이전 토큰이 다시 통한다(web-bff design "거절 기준 수명", R8).
+            throw new IllegalStateException("stove.gateway.access-baseline.ttl은 0보다 커야 한다: " + ttl);
+        }
         return new RedisAccessBaselines(redis, ttl, timeout.plusSeconds(1));
     }
 

@@ -81,7 +81,7 @@
   - 목표: design 상태 표 20행 × 3열과 lease 표의 모든 칸을 core `ResolveSessionToken`·`EndSession` 단위 테스트로(GW-T7 뒤).
   - 영향: 회귀를 실제 스택 검증 전에는 모른다.
   - 재현: 표 대조 테스트.
-- [ ] **GW-T18. 계정 정지·역할 회수 뒤에도 BFF 세션과 access token이 수명까지 통한다** ([결정 180](../../../docs/decisions.md#account-access-revocation))
+- [x] **GW-T18. 계정 정지·역할 회수 뒤에도 BFF 세션과 access token이 수명까지 통한다** — [PR #246](https://github.com/tlswltjq/esd-platform/pull/246) ([결정 180](../../../docs/decisions.md#account-access-revocation))
   - 어디서: `SecurityConfig` `oauth2ResourceServer().jwt()`(서명·만료·역할만), `BffTokens`(갱신 실패 때만 세션 삭제), Kafka 의존 없음.
   - 목표: R5.6~5.8, design 상태 표 19·20행, 이벤트 "소비". Gateway Kafka 소비(`gateway-account-access`), subject → 세션·토큰 기록 색인, Redis 거절 기준·`eventId` 멱등, JWT `iat` 검사(세션·Bearer), 소비 지연 게이지, 거절 기준 수명 설정 키, 시계 오차 여유값 설정 키(`iat` < 올림한 `changedAt` + 여유값이면 거절, [Auth design 시계 전제](../auth/design.md), PR #244 R3). Auth AU-T6 발행 뒤 배포. 실패 처리는 [결정 226](../../../docs/decisions.md#access-change-consumer-failure).
   - 영향: **간접 돈·보유권** — `ADMIN`을 회수당한 운영자가 최대 15분 동안 관리자 환불 판정·늦은 취소 반영을 할 수 있다.
