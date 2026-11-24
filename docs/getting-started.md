@@ -82,7 +82,7 @@ Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실�
 | 이미지 생성과 테스트를 분리해 실행해야 함 | 이미지는 `./gradlew jibDockerBuild`, 검증은 `./gradlew test integrationTest`로 실행 |
 | OAuth 클라이언트·범위를 직접 지정해야 함 | `swagger-ui` 클라이언트와 PKCE, 대상 서비스의 `studio`·`commerce` 범위 설정 확인 |
 
-설정을 바꾼 뒤에는 Gateway 라우트 테스트와 브라우저 인증을 확인한다. `/default-ui.css`의 응답 형식, 허용된 로컬 Origin에 대한 `OPTIONS /oauth2/token`, 로그인·승인 리다이렉트를 함께 본다. 관련 테스트는 `:apps:gateway:test --tests com.stove.gateway.GatewayRouteTest`다.
+설정을 바꾼 뒤에는 웹 BFF·Gateway 라우트 테스트와 브라우저 인증을 확인한다. `/default-ui.css`의 응답 형식, 로그인·승인 리다이렉트를 함께 본다(외부 `/oauth2/token`은 없다, 결정 220). 관련 테스트는 `:apps:web-bff:test --tests com.stove.webbff.WebBffRouteTest`와 `:apps:gateway:test --tests com.stove.gateway.GatewayRouteTest`다.
 
 ## Tempo에서 요청 추적 조회
 

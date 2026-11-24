@@ -10,7 +10,8 @@
 | 구분 | 이름 | 소유 저장소 | 외부와의 경계 |
 |---|---|---|---|
 | 업무 모듈 | Auth | `stove_auth` | 메일 발송(지금 `auth:adapter/mail/LoggingPasswordResetMailAdapter.java` — 로그만) |
-| 업무 모듈 | Gateway | 없음(세션) | 외부 요청 진입점, Auth 토큰 엔드포인트(`gateway:config/bff/BffTokens.java`) |
+| 업무 모듈 | 웹 BFF | 없음(세션 Redis) | 브라우저의 유일한 진입점(결정 224), Auth 토큰 엔드포인트(`web-bff:config/bff/BffTokens.java`) |
+| 업무 모듈 | Gateway | 없음 | 내부 API 게이트웨이: BFF가 릴레이한 Bearer 검증, 역할별 경로 규칙·라우팅(결정 223) |
 | 업무 모듈 | Studio | `stove_studio`, 객체 저장소 빌드 업로드 | 객체 저장소 쓰기(`studio:adapter/storage/S3BuildStorage.java`) |
 | 업무 모듈 | Review | `stove_review` | 객체 저장소 서명 URL 읽기(`review:adapter/storage/S3ReviewBuildStorage.java`) |
 | 업무 모듈 | Catalog | `stove_catalog` | 객체 저장소 태그 쓰기(`catalog:adapter/storage/S3BuildDistribution.java`) |
@@ -32,7 +33,8 @@
 | 호출 모듈 → 대상 | 경로 | 종류 | 호출 코드 | 받는 쪽 보호 | 목적 |
 |---|---|---|---|---|---|
 | Gateway → 각 모듈 | `/api/v1/**` 공개·관리자 경로(라우트 22개) | 라우팅 | `apps/gateway/src/main/resources/application.yml` 라우트 | 각 모듈 JWT·역할 | 외부 요청 전달. `/internal/**` 없음 |
-| Gateway → Auth | `/oauth2/token`·`/oauth2/jwks`·`/userinfo` | 조회 | `gateway:config/bff/BffTokens.java` | OAuth2 | BFF 로그인·토큰 릴레이 |
+| 웹 BFF → Gateway | `/api/**`, `/v3/api-docs/<service>` | 전달 | `apps/web-bff/src/main/resources/application.yml` 라우트 | 세션의 Bearer 릴레이 | 결정 223·224 |
+| 웹 BFF → Auth | `/oauth2/token`·`/oauth2/revoke`·`/oauth2/jwks`·`/userinfo`, 브라우저 로그인 경로 | 조회 | `web-bff:config/bff/BffTokens.java` | OAuth2 | BFF 로그인·토큰 릴레이 |
 | Order → Catalog | `GET /internal/v1/order-products/{code}` | 조회 | `order:adapter/CatalogHttpClient.java:23` | `X-Order-Service-Key` | 주문 생성 때 상품·가격 고정, 승인 접수 전 판매 제한 확인(결정 49) |
 | Payment → Order | `POST /internal/v1/orders/{orderNo}/payment-admissions` | **명령** | `payment:adapter/order/HttpOrderPaymentAdmissions.java:28` | `X-Payment-Service-Key` | PG 확정 전 Order가 기한·상태를 판정하고 승인 진행 영수증을 연다(결정 32·49) |
 | Payment → Order | `POST /internal/v1/orders/{orderNo}/payment-admissions/{admissionId}/failure` | **명령** | `payment:adapter/order/HttpOrderPaymentAdmissions.java:36` | `X-Payment-Service-Key` | 접수된 시도의 PG 실패를 Order 영수증에 닫고 주문을 `PENDING`/`EXPIRED`로 되돌린다 |
@@ -44,7 +46,7 @@
 | Settlement → PG | 거래·취소·지급 명세 조회 | 조회 | `settlement:adapter/*` | 공급자 키 | 매출·환불 근거와 대사(Payment 경유 없음, Settlement R4.1 `.kiro/specs/settlement/requirements.md:66`) |
 | PG → Payment | 통지 수신 | 들어옴 | `payment:api/controller/PortOneWebhookController.java:28` | 서명 검증 | 결제 상태 변경 통지 |
 
-동기 그래프: Gateway → {Auth, Store, Catalog, Order, Payment, License, Download, Studio, Review, Settlement}; Payment → Order → Catalog; Store → Catalog; Settlement → Catalog; Download → {Catalog, License}. **순환 없음**(P1.2-1 충족). Catalog·License·Auth는 다른 업무 모듈을 동기 호출하지 않는다.
+동기 그래프: 웹 BFF → {Auth, Gateway}; Gateway → {Auth, Store, Catalog, Order, Payment, License, Download, Studio, Review, Settlement}; Payment → Order → Catalog; Store → Catalog; Settlement → Catalog; Download → {Catalog, License}. **순환 없음**(P1.2-1 충족). Catalog·License·Auth는 다른 업무 모듈을 동기 호출하지 않는다.
 
 ### 비동기 의존 ("요청 → 사실 응답" 쌍, P1.3-2)
 

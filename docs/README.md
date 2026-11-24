@@ -29,7 +29,7 @@
 | [서비스 명세](services.md) | 서비스별 API·상태·이벤트와 외부 어댑터 |
 | [이벤트 순서](event-ordering.md) | 정상 발행과 재시도·재투입의 순서 보장 조건 |
 | [인증·권한 계약](security.md) | 계정·역할·소유권, 서비스 접근키, 배포 비밀 주입, 웹훅 수신 경계 |
-| [auth·Gateway/BFF](auth-bff.md) | 자동 로그인·RTR·공유 세션 |
+| [auth·웹 BFF·Gateway](auth-bff.md) | 자동 로그인·RTR·공유 세션 |
 | [공통 모듈](common-modules.md) | Web·Security·JPA·Kafka·Messaging 책임과 의존성 |
 | [유스케이스 작성 규칙](use-case-conventions.md) | 책임 분리, 동사형 이름, 트랜잭션 기준 |
 | [테스트 전략](testing.md) | 단위·통합·계약·E2E 범위와 실행 명령 |

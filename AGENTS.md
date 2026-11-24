@@ -65,12 +65,13 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 ## 4. 모듈 책임
 
-재작성 완료(MVP) 모듈은 11개다. 각 모듈의 계약은 스펙을 정본으로 한다.
+재작성 완료(MVP) 모듈은 11개이고, 결정 223으로 Gateway에서 웹 BFF를 나눠 12개다. 각 모듈의 계약은 스펙을 정본으로 한다.
 
 | 모듈 | 책임 |
 |---|---|
 | [auth](.kiro/specs/auth/) | 계정·역할·OAuth2/OIDC 토큰, 비밀번호 복구, 운영자 계정 관리 |
-| [gateway](.kiro/specs/gateway/) | 라우팅·BFF 로그인·세션·토큰 릴레이, 내부 API 차단 |
+| [web-bff](.kiro/specs/web-bff/) | 브라우저의 유일한 입구: BFF 로그인·세션·토큰 보관·릴레이·CSRF, 외부 자격 증명 거절 |
+| [gateway](.kiro/specs/gateway/) | 내부 API 게이트웨이: BFF가 릴레이한 Bearer 검증, 역할별 경로 규칙·라우팅, 내부 API 차단 |
 | [studio](.kiro/specs/studio/) | 출시 상세·빌드, 심사/출시 요청·재요청·철회. 소유자는 JWT `sub`로 식별 |
 | [review](.kiro/specs/review/) | 불변 Project 스냅샷의 수동 승인·반려와 결과 발행 |
 | [catalog](.kiro/specs/catalog/) | 출시 스냅샷을 공개본으로 확정, 공개 상품·판매/노출 상태의 정본 |

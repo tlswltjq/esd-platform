@@ -19,12 +19,13 @@
 
 ## 모듈 (11개)
 
-비즈니스 흐름 순서다 — 창작(A) → 구매(B) → 이용·정산(C), 그리고 공통(Auth·Gateway).
+비즈니스 흐름 순서다 — 창작(A) → 구매(B) → 이용·정산(C), 그리고 공통(Auth·웹 BFF·Gateway).
 
 | 흐름 | 모듈 | 한 줄 책임 |
 |---|---|---|
 | 공통 | [auth](auth/) | 계정·역할·OAuth2/OIDC 토큰 |
-| 공통 | [gateway](gateway/) | 라우팅·BFF 로그인·세션·토큰, 내부 API 차단 |
+| 공통 | [web-bff](web-bff/) | 브라우저 입구: BFF 로그인·세션·토큰 보관·릴레이·CSRF |
+| 공통 | [gateway](gateway/) | 내부 API 게이트웨이: Bearer 검증, 역할별 경로 규칙·라우팅, 내부 API 차단 |
 | A | [studio](studio/) | 출시 상세·빌드·심사/출시 요청 |
 | A | [review](review/) | 불변 스냅샷 수동 승인·반려 |
 | A | [catalog](catalog/) | 출시 처리·공개 상품/공개본 정본 |

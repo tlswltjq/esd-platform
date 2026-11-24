@@ -5,7 +5,7 @@
 업무 용어의 정의·사례·합의 상태는 [도메인 용어집](domain-glossary.md)에서 시작한다.
 도메인별 모델·속성·생성·사용 시점은 [도메인·모델 안내](domain/model-guide.md)에서 찾는다.
 
-**모듈 재작성 현황 (2026-10-18): `auth`, `gateway`, `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`, `settlement` 완료.**
+**모듈 재작성 현황 (2026-10-18): `auth`, `gateway`(2026-11-24 결정 223으로 `web-bff`와 분리), `studio`, `review`, `catalog`, `store`, `order`, `payment`, `license`, `download`, `settlement` 완료.**
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md#재작성-완료-기록)을 본다.
 Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열한 모듈의 계약을 기준으로 한다.
@@ -25,9 +25,10 @@ Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실�
 | C | [license](#license) | 8084 | 상품 이용 권한·구매 근거·내 라이브러리 | MySQL |
 | C | [download](#download) | 8088 | 보유권·현재 공개 빌드 확인, 전체 ZIP 서명 URL | 없음 |
 | C | [settlement](#settlement) | 8089 | 매출 배분·수수료·마감 | MySQL |
-| — | [gateway](#gateway) | 8080 | 라우팅·BFF 로그인·세션·토큰 관리, 내부 API 차단 | Redis |
+| — | [web-bff](#web-bff) | 8080 | 브라우저 입구: BFF 로그인·세션·토큰 관리·CSRF | Redis |
+| — | [gateway](#gateway) | 8093 | 내부 API 게이트웨이: Bearer 검증·역할별 경로 규칙·라우팅, 내부 API 차단 | 없음 |
 
-표의 포트는 서비스 내부 포트다. 로컬 E2E 구성의 호스트 포트는 10000을 더한 값이며, 외부 요청은 보통 Gateway `18080`을 사용한다. [개발 환경과 실행](getting-started.md)을 참고한다.
+표의 포트는 서비스 내부 포트다. 로컬 E2E 구성의 호스트 포트는 10000을 더한 값이며, 외부 요청은 웹 BFF `18080`을 사용한다(API 게이트웨이는 내부망에만 있어 호스트 포트가 없다, 결정 224). [개발 환경과 실행](getting-started.md)을 참고한다.
 
 ---
 
@@ -321,15 +322,21 @@ PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·�
 
 ---
 
+## web-bff
+
+브라우저가 닿는 유일한 문이다(결정 219·223·224). OAuth 기밀 클라이언트 `gateway-bff`로 로그인·토큰 교환·갱신을 수행하고,
+브라우저는 세션 쿠키만 갖는다. 세션과 토큰은 Redis에 공유한다. 업무 API(`/api/**`)는 세션의 access token을 Bearer로 붙여
+내부 API 게이트웨이로 넘기고, Auth 브라우저 로그인 경로(`/oauth2/authorize`, `/login`, `/logout`, `/connect/**`, `/.well-known/**`)는
+Auth로 바로 보낸다. 외부 `Authorization` 헤더는 401이다(결정 220). Swagger UI도 여기서 서빙한다. [상세 구성과 검증](auth-bff.md)을 참고한다.
+
 ## gateway
 
-Spring Cloud Gateway. 라우팅과 함께 **내부 전용 API 를 외부에 노출하지 않는 역할**을 한다.
-재작업 후 BFF를 겸하며 OAuth 기밀 클라이언트로 로그인·토큰 교환·갱신을 수행한다.
-브라우저는 세션 쿠키를 사용하고 세션과 토큰은 Redis에 공유한다. [상세 구성과 검증](auth-bff.md)을 참고한다.
+내부 API 게이트웨이(Spring Cloud Gateway). 웹 BFF가 릴레이한 Bearer를 검증하고, 역할별 경로 규칙과 라우팅 표로
+업무 서비스에 보낸다. **내부 전용 API 를 라우트에 두지 않는 역할**도 한다. 내부망에만 있고 호스트 포트를 공개하지 않는다(결정 224).
 
 | 경로 | 대상 | 비고 |
 |---|---|---|
-| `/api/v1/auth/**`, `/oauth2/**`, `/login`, `/logout`, `/.well-known/**` | auth | 가입·로그인·토큰, 브라우저 경로의 Host 유지 |
+| `/api/v1/auth/**` | auth | 가입·비밀번호 등 Auth 업무 API |
 | `/api/v1/storefront/**` | store | |
 | `/api/v1/products/**` | catalog | **GET 만 허용** |
 | `/api/v1/promotions/**` | catalog | 판매자 `CREATOR`, 플랫폼 `ADMIN` |

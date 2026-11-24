@@ -40,9 +40,10 @@ x-app: &app
   stop_grace_period: 40s
 
 services:
-  gateway:
+  # 웹 BFF(결정 219·223): 브라우저가 닿는 유일한 문(결정 224). 세션·토큰 보관은 Redis, API 요청은 내부 API 게이트웨이로.
+  web-bff:
     <<: *app
-    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/gateway:${STOVE_IMAGE_TAG:-latest}
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/web-bff:${STOVE_IMAGE_TAG:-latest}
     healthcheck:
       <<: *app-health
       test: [CMD-SHELL, "wget -qO- http://localhost:8080/actuator/health | grep -q UP || exit 1"]
@@ -51,6 +52,20 @@ services:
       REDIS_PORT: "6379"
       BFF_CLIENT_SECRET: ${BFF_CLIENT_SECRET:-bff-local-only}
       BFF_PUBLIC_AUTH_BASE: ${BFF_PUBLIC_AUTH_BASE:-http://localhost:8080}
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
+      JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
+      AUTH_URI: http://auth:8091
+      API_GATEWAY_URI: http://gateway:8093
+
+  # API 게이트웨이(결정 223·224): 내부망에만 둔다. 어느 Compose 파일에서도 포트를 공개하지 않는다.
+  gateway:
+    <<: *app
+    image: ${STOVE_JIB_REGISTRY:-localhost/stove}/gateway:${STOVE_IMAGE_TAG:-latest}
+    healthcheck:
+      <<: *app-health
+      test: [CMD-SHELL, "wget -qO- http://localhost:8093/actuator/health | grep -q UP || exit 1"]
+    environment:
       OTLP_ENDPOINT: http://tempo:4318/v1/traces
       JWT_ISSUER_URI: ${AUTH_ISSUER:-http://localhost:8091}
       JWT_JWK_SET_URI: http://auth:8091/oauth2/jwks
