@@ -22,12 +22,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-import com.stove.gateway.config.bff.BffTokens;
-import org.springframework.context.annotation.Import;
-import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(BffSessionFixture.class)
 class RefundRetryGatewayTest {
     private static final String ROOT = "/api/v1/orders/11111111-1111-1111-1111-111111111111/refund";
     private static final String BODY = "{\"previousAttemptId\":\"22222222-2222-2222-2222-222222222222\"}";
@@ -59,14 +55,10 @@ class RefundRetryGatewayTest {
     }
     @Autowired WebTestClient http;
     @MockitoBean ReactiveJwtDecoder decoder;
-    @MockitoBean BffTokens tokens;
-    @Autowired ReactiveClientRegistrationRepository registrations;
-    private BffSessionFixture.Sessions sessions;
     @DynamicPropertySource static void order(DynamicPropertyRegistry properties) {
         properties.add("ORDER_URI", () -> "http://127.0.0.1:" + ORDER.getAddress().getPort());
     }
     @BeforeEach void tokens() {
-        sessions = BffSessionFixture.sessions(http, tokens, registrations);
         CALLS.set(0); MEMBER_HEADER.set(null); AUTHORIZATION.set(null); REQUEST_BODY.set(null); REQUEST_PATH.set(null);
         when(decoder.decode(anyString())).thenAnswer(call -> {
             String role = call.getArgument(0, String.class);
@@ -75,7 +67,7 @@ class RefundRetryGatewayTest {
         });
     }
     @Test void memberRetryPreservesThePathBodyBearerReceiptAndPollingLocation() {
-        http.post().uri(ROOT + "/retries").headers(sessions.as("MEMBER")).header("X-Member-Id", "forged")
+        http.post().uri(ROOT + "/retries").header("Authorization", "Bearer MEMBER").header("X-Member-Id", "forged")
                 .contentType(MediaType.APPLICATION_JSON).bodyValue(BODY).exchange().expectStatus().isAccepted()
                 .expectHeader().valueEquals("Location", ROOT).expectHeader().valueEquals("Cache-Control", "no-store")
                 .expectBody().jsonPath("$.data.previousAttemptId").isEqualTo("22222222-2222-2222-2222-222222222222");
@@ -85,7 +77,7 @@ class RefundRetryGatewayTest {
     }
 
     @Test void aMemberCanReadTheOriginalAmountAndConfirmedCancellationWithoutInventedCashOrPoints() {
-        http.get().uri(ROOT).headers(sessions.as("MEMBER")).header("X-Member-Id", "forged")
+        http.get().uri(ROOT).header("Authorization", "Bearer MEMBER").header("X-Member-Id", "forged")
                 .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store")
                 .expectBody().jsonPath("$.data.amount").isEqualTo(10000)
                 .jsonPath("$.data.amountDetails.pgPaidAmount").isEqualTo(9976)
@@ -95,17 +87,17 @@ class RefundRetryGatewayTest {
         assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER");
     }
     @Test void anonymousAndNonMembersCannotForwardARetry() {
-        // An anonymous browser write is rejected by CSRF before authentication; nothing reaches Order.
-        http.post().uri(ROOT + "/retries").exchange().expectStatus().isForbidden();
+        // 결정 223·224: the API gateway has no CSRF (no cookies); an anonymous write is unauthenticated and nothing reaches Order.
+        http.post().uri(ROOT + "/retries").exchange().expectStatus().isUnauthorized();
         for (String role : new String[]{"ADMIN", "CREATOR", "REVIEWER"})
-            http.post().uri(ROOT + "/retries").headers(sessions.as(role)).contentType(MediaType.APPLICATION_JSON)
+            http.post().uri(ROOT + "/retries").header("Authorization", "Bearer " + role).contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(BODY).exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isZero();
     }
 
     @Test void memberReconsiderationPreservesTheCompleteCommandAndPollingLocation() {
         String body = "{\"requestId\":\"11111111-1111-1111-1111-111111111111\",\"previousReviewId\":\"22222222-2222-2222-2222-222222222222\",\"reason\":\"재심사 요청 사유\"}";
-        http.post().uri(ROOT + "/reconsiderations").headers(sessions.as("MEMBER")).header("X-Member-Id", "forged")
+        http.post().uri(ROOT + "/reconsiderations").header("Authorization", "Bearer MEMBER").header("X-Member-Id", "forged")
                 .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange().expectStatus().isAccepted().expectHeader().valueEquals("Location", ROOT);
         assertThat(REQUEST_PATH.get()).isEqualTo(ROOT + "/reconsiderations"); assertThat(REQUEST_BODY.get()).isEqualTo(body);
         assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER");
@@ -113,8 +105,8 @@ class RefundRetryGatewayTest {
 
     @Test void nonMembersCannotSubmitReconsiderationsOrReadCustomerReviewHistory() {
         for (String role : new String[]{"ADMIN", "CREATOR", "REVIEWER"}) {
-            http.post().uri(ROOT + "/reconsiderations").headers(sessions.as(role)).bodyValue("{}").exchange().expectStatus().isForbidden();
-            http.get().uri(ROOT + "/reviews").headers(sessions.as(role)).exchange().expectStatus().isForbidden();
+            http.post().uri(ROOT + "/reconsiderations").header("Authorization", "Bearer " + role).bodyValue("{}").exchange().expectStatus().isForbidden();
+            http.get().uri(ROOT + "/reviews").header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
         }
         assertThat(CALLS.get()).isZero();
     }

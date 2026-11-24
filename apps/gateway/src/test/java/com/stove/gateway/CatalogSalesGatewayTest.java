@@ -21,12 +21,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-import com.stove.gateway.config.bff.BffTokens;
-import org.springframework.context.annotation.Import;
-import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(BffSessionFixture.class)
 class CatalogSalesGatewayTest {
     private static final String SELLER="/api/v1/products/by-code/game/sales";
     private static final String ADMIN="/api/v1/admin/products/game/sales/restriction";
@@ -51,12 +47,8 @@ class CatalogSalesGatewayTest {
     }
     @Autowired WebTestClient http;
     @MockitoBean ReactiveJwtDecoder decoder;
-    @MockitoBean BffTokens tokens;
-    @Autowired ReactiveClientRegistrationRepository registrations;
-    private BffSessionFixture.Sessions sessions;
     @DynamicPropertySource static void catalog(DynamicPropertyRegistry p) { p.add("CATALOG_URI",() -> "http://127.0.0.1:"+CATALOG.getAddress().getPort()); }
     @BeforeEach void tokens() {
-        sessions = BffSessionFixture.sessions(http, tokens, registrations);
         CALLS.set(0);BODY.set(null);AUTH.set(null);SPOOFED.set(null);
         when(decoder.decode(anyString())).thenAnswer(call -> {
             String role=call.getArgument(0,String.class);
@@ -64,28 +56,28 @@ class CatalogSalesGatewayTest {
         });
     }
     @Test void sellerRouteRelaysOnlyCreatorRequestsAndPreservesTheBearerAndBody() {
-        http.put().uri(SELLER).headers(sessions.as("CREATOR")).header("X-Member-Id","spoof")
+        http.put().uri(SELLER).header("Authorization","Bearer CREATOR").header("X-Member-Id","spoof")
                 .header("Content-Type","application/json").bodyValue("{\"saleStatus\":\"STOPPED\",\"expectedCatalogVersion\":1}")
                 .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control","no-store");
         assertThat(BODY.get()).contains("STOPPED","expectedCatalogVersion"); assertThat(AUTH.get()).isEqualTo("Bearer CREATOR"); assertThat(SPOOFED.get()).isNull();
         int before=CALLS.get();
-        http.put().uri(SELLER).headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
-        http.get().uri(SELLER).headers(sessions.as("MEMBER")).exchange().expectStatus().isForbidden();
+        http.put().uri(SELLER).header("Authorization","Bearer ADMIN").exchange().expectStatus().isForbidden();
+        http.get().uri(SELLER).header("Authorization","Bearer MEMBER").exchange().expectStatus().isForbidden();
         http.get().uri(SELLER).exchange().expectStatus().isUnauthorized();
         assertThat(CALLS.get()).isEqualTo(before);
     }
     @Test void downloadRestrictionRoutePreservesBodyAndRejectsEveryNonAdministrator() {
         String path = "/api/v1/admin/products/game/downloads/restriction";
-        http.put().uri(path).headers(sessions.as("ADMIN")).header("Content-Type", "application/json")
+        http.put().uri(path).header("Authorization", "Bearer ADMIN").header("Content-Type", "application/json")
                 .bodyValue("{\"restricted\":true,\"expectedRestrictionVersion\":1,\"reason\":\"unsafe file\"}")
                 .exchange().expectStatus().isOk();
         assertThat(BODY.get()).contains("unsafe file", "expectedRestrictionVersion");
         assertThat(AUTH.get()).isEqualTo("Bearer ADMIN");
-        http.get().uri(path).headers(sessions.as("ADMIN")).exchange().expectStatus().isOk();
+        http.get().uri(path).header("Authorization", "Bearer ADMIN").exchange().expectStatus().isOk();
         int before = CALLS.get();
         for (String role : List.of("CREATOR", "MEMBER")) {
-            http.get().uri(path).headers(sessions.as(role)).exchange().expectStatus().isForbidden();
-            http.put().uri(path).headers(sessions.as(role)).exchange().expectStatus().isForbidden();
+            http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
+            http.put().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
         }
         http.get().uri(path).exchange().expectStatus().isUnauthorized();
         assertThat(CALLS.get()).isEqualTo(before);
@@ -94,42 +86,42 @@ class CatalogSalesGatewayTest {
     @Test void sellerAndAdministratorListingRoutesHaveIndependentRoles() {
         String own = "/api/v1/products/by-code/game/listing";
         String admin = "/api/v1/admin/products/game/listing/restriction";
-        http.put().uri(own).headers(sessions.as("CREATOR")).header("Content-Type", "application/json")
+        http.put().uri(own).header("Authorization", "Bearer CREATOR").header("Content-Type", "application/json")
                 .header("X-Member-Id", "spoof").bodyValue("{\"preference\":\"AUTO\",\"expectedCatalogVersion\":1}")
                 .exchange().expectStatus().isOk();
         assertThat(AUTH.get()).isEqualTo("Bearer CREATOR"); assertThat(SPOOFED.get()).isNull();
         assertThat(BODY.get()).contains("AUTO");
-        http.get().uri(own).headers(sessions.as("CREATOR")).exchange().expectStatus().isOk();
-        http.put().uri(admin).headers(sessions.as("ADMIN")).header("Content-Type", "application/json")
+        http.get().uri(own).header("Authorization", "Bearer CREATOR").exchange().expectStatus().isOk();
+        http.put().uri(admin).header("Authorization", "Bearer ADMIN").header("Content-Type", "application/json")
                 .bodyValue("{\"hidden\":true,\"expectedCatalogVersion\":1}").exchange().expectStatus().isOk();
-        http.get().uri(admin).headers(sessions.as("ADMIN")).exchange().expectStatus().isOk();
+        http.get().uri(admin).header("Authorization", "Bearer ADMIN").exchange().expectStatus().isOk();
         int before = CALLS.get();
-        http.put().uri(own).headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
-        http.get().uri(own).headers(sessions.as("MEMBER")).exchange().expectStatus().isForbidden();
-        http.put().uri(admin).headers(sessions.as("CREATOR")).exchange().expectStatus().isForbidden();
+        http.put().uri(own).header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
+        http.get().uri(own).header("Authorization", "Bearer MEMBER").exchange().expectStatus().isForbidden();
+        http.put().uri(admin).header("Authorization", "Bearer CREATOR").exchange().expectStatus().isForbidden();
         http.get().uri(admin).exchange().expectStatus().isUnauthorized();
         http.get().uri("/internal/v1/store-products").header("X-Store-Service-Key", "spoof").exchange().expectStatus().isUnauthorized();
         assertThat(CALLS.get()).isEqualTo(before);
     }
 
     @Test void platformRestrictionRouteAcceptsOnlyAdministrators() {
-        http.put().uri(ADMIN).headers(sessions.as("ADMIN")).header("Content-Type","application/json")
+        http.put().uri(ADMIN).header("Authorization","Bearer ADMIN").header("Content-Type","application/json")
                 .bodyValue("{\"restricted\":true,\"expectedCatalogVersion\":1}").exchange().expectStatus().isOk();
         int before=CALLS.get();
-        http.put().uri(ADMIN).headers(sessions.as("CREATOR")).exchange().expectStatus().isForbidden();
+        http.put().uri(ADMIN).header("Authorization","Bearer CREATOR").exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isEqualTo(before);
     }
 
     @Test void publicationJobInspectionIsReadOnlyAndAdministratorOnly() {
         String path = "/api/v1/admin/catalog-release-jobs";
-        http.get().uri(path).headers(sessions.as("ADMIN")).header("X-Member-Id", "spoof")
+        http.get().uri(path).header("Authorization", "Bearer ADMIN").header("X-Member-Id", "spoof")
                 .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store");
-        http.get().uri(path + "/10").headers(sessions.as("ADMIN")).exchange().expectStatus().isOk();
+        http.get().uri(path + "/10").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isOk();
         assertThat(AUTH.get()).isEqualTo("Bearer ADMIN");
         assertThat(SPOOFED.get()).isNull();
         int before = CALLS.get();
         for (String role : List.of("CREATOR", "MEMBER", "REVIEWER"))
-            http.get().uri(path).headers(sessions.as(role)).exchange().expectStatus().isForbidden();
+            http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
         http.get().uri(path).exchange().expectStatus().isUnauthorized();
         assertThat(CALLS.get()).isEqualTo(before);
     }
