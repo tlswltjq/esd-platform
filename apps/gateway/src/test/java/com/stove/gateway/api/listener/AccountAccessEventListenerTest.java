@@ -15,6 +15,7 @@ import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import com.stove.common.event.InboundMessage;
 import com.stove.gateway.adapter.metrics.MicrometerProcessingLag;
 import com.stove.gateway.core.domain.AccessChange;
+import com.stove.gateway.core.domain.AccessChangeRejected;
 import com.stove.gateway.core.port.AccessBaselines;
 import com.stove.gateway.core.service.RecordAccessChange;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -65,8 +66,8 @@ class AccountAccessEventListenerTest {
     void aKeyThatDisagreesWithTheSubjectIsAPermanentFailure() throws Exception {
         AccountAccessChangedEvent event = AccountAccessChangedEvent.of("usr_1", changedAt, AccountAccessChangedEvent.STATUS);
 
-        // noRetryFor(IllegalArgumentException) → 재시도 없이 DLT(결정 226).
-        assertThatThrownBy(() -> listener.receive(message(event, "usr_2"))).isInstanceOf(IllegalArgumentException.class);
+        // noRetryFor(AccessChangeRejected) → 재시도 없이 DLT(결정 226).
+        assertThatThrownBy(() -> listener.receive(message(event, "usr_2"))).isInstanceOf(AccessChangeRejected.class);
         verify(baselines, never()).raise(any());
     }
 
@@ -79,6 +80,24 @@ class AccountAccessEventListenerTest {
         assertThatThrownBy(() -> listener.receive(message(event, "usr_1")))
                 .isInstanceOf(RedisConnectionFailureException.class);
         assertThat(lagSeconds()).isEqualTo(30.0);
+    }
+
+    @Test
+    void aStoreTimeoutIsNotMistakenForAPermanentFailure() {
+        // PR #246 R1: block(timeout)은 IllegalStateException을 던진다. 처리 단계의 예외는 DLT가 아니라 성공까지 재시도다.
+        AccountAccessChangedEvent event = AccountAccessChangedEvent.of("usr_1", changedAt, AccountAccessChangedEvent.ROLE);
+        doThrow(new IllegalStateException("Timeout on blocking read for 3000000000 NANOSECONDS")).when(baselines).raise(any());
+
+        assertThatThrownBy(() -> listener.receive(message(event, "usr_1")))
+                .isInstanceOf(IllegalStateException.class).isNotInstanceOf(AccessChangeRejected.class);
+    }
+
+    @Test
+    void aBrokenEnvelopeIsAPermanentFailure() {
+        InboundMessage noType = new InboundMessage("stove.auth.v1", "usr_1", "{}",
+                Map.of(EventHeaders.EVENT_ID, List.of("evt-1")), "");
+
+        assertThatThrownBy(() -> listener.receive(noType)).isInstanceOf(AccessChangeRejected.class);
     }
 
     @Test

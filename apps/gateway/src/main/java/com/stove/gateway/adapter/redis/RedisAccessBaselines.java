@@ -43,9 +43,18 @@ public class RedisAccessBaselines implements AccessBaselines {
     public boolean raise(AccessChange change) {
         // 소비자 스레드(블로킹)에서 부른다. 실패는 예외로 올려 소비자가 성공할 때까지 다시 시도한다(결정 226).
         Long applied = redis.execute(RAISE, List.of(BASELINE + change.subject(), EVENT + change.eventId()),
-                        List.of(Long.toString(change.changedAt().toEpochMilli()), Long.toString(ttl.toMillis())))
+                        List.of(Long.toString(ceilMillis(change.changedAt())), Long.toString(ttl.toMillis())))
                 .next().block(timeout);
         return applied != null && applied == 1L;
+    }
+
+    /**
+     * 밀리초로 올림한다. 버리면 정초 직후 1ms 미만의 변경이 한 초 앞으로 당겨져, 여유값이 0일 때 변경 전 같은 초에 발급된 토큰이
+     * 통과한다(PR #246 R4). 올림은 거절 쪽으로만 기운다.
+     */
+    static long ceilMillis(Instant instant) {
+        long millis = instant.toEpochMilli();
+        return instant.getNano() % 1_000_000 == 0 ? millis : millis + 1;
     }
 
     /** 그 subject의 거절 기준. 없으면 빈 값. Redis에 닿지 못하면 오류를 그대로 낸다(우회하지 않는다, R6.3). */

@@ -14,6 +14,7 @@ import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import com.stove.common.event.InboundMessage;
 import com.stove.webbff.adapter.metrics.MicrometerProcessingLag;
+import com.stove.webbff.core.domain.AccessChangeRejected;
 import com.stove.webbff.core.port.SubjectSessions;
 import com.stove.webbff.core.service.EndSubjectSessions;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -59,7 +60,7 @@ class AccountAccessEventListenerTest {
     void aKeyThatDisagreesWithTheSubjectIsAPermanentFailure() {
         AccountAccessChangedEvent event = AccountAccessChangedEvent.of("usr_1", changedAt, AccountAccessChangedEvent.ROLE);
 
-        assertThatThrownBy(() -> listener.receive(message(event, "usr_2"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> listener.receive(message(event, "usr_2"))).isInstanceOf(AccessChangeRejected.class);
         verify(sessions, never()).endAll(anyString());
     }
 
@@ -71,6 +72,24 @@ class AccountAccessEventListenerTest {
         assertThatThrownBy(() -> listener.receive(message(event, "usr_1")))
                 .isInstanceOf(RedisConnectionFailureException.class);
         assertThat(lagSeconds()).isEqualTo(30.0);
+    }
+
+    @Test
+    void aStoreTimeoutIsNotMistakenForAPermanentFailure() {
+        // PR #246 R1: block(timeout)은 IllegalStateException을 던진다. 처리 단계의 예외는 DLT가 아니라 성공까지 재시도다.
+        AccountAccessChangedEvent event = AccountAccessChangedEvent.of("usr_1", changedAt, AccountAccessChangedEvent.ROLE);
+        doThrow(new IllegalStateException("Timeout on blocking read for 3000000000 NANOSECONDS")).when(sessions).endAll("usr_1");
+
+        assertThatThrownBy(() -> listener.receive(message(event, "usr_1")))
+                .isInstanceOf(IllegalStateException.class).isNotInstanceOf(AccessChangeRejected.class);
+    }
+
+    @Test
+    void aBrokenEnvelopeIsAPermanentFailure() {
+        InboundMessage noType = new InboundMessage("stove.auth.v1", "usr_1", "{}",
+                Map.of(EventHeaders.EVENT_ID, List.of("evt-1")), "");
+
+        assertThatThrownBy(() -> listener.receive(noType)).isInstanceOf(AccessChangeRejected.class);
     }
 
     @Test
