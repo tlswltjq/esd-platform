@@ -30,9 +30,17 @@ final class ScalingMeasurement {
     record Processed(String eventId, String key, int instance, long nanos) {
     }
 
+    /**
+     * 수신 한 건(처리를 마쳤는지와 무관). {@code nanos} 는 받은 시각. 닫히는 동안 끊긴 처리도 남아 재전달·인계를 셀 수 있다
+     * (PR #238 R1·R2).
+     */
+    record Received(String eventId, String key, int instance, long nanos) {
+    }
+
     private final Duration cost;
     private final CountDownLatch release = new CountDownLatch(1);
     private final List<Processed> processed = Collections.synchronizedList(new ArrayList<>());
+    private final List<Received> received = Collections.synchronizedList(new ArrayList<>());
     private volatile long releasedAt;
 
     ScalingMeasurement(Duration cost) {
@@ -69,6 +77,35 @@ final class ScalingMeasurement {
         }
     }
 
+    List<Received> receivedSnapshot() {
+        synchronized (received) {
+            return new ArrayList<>(received);
+        }
+    }
+
+    /** 재전달 수: 수신 횟수 − 서로 다른 메시지 수. 처리 중에 끊긴 뒤 다시 온 메시지도 센다(PR #238 R1). */
+    static int redelivered(List<Received> receipts) {
+        Set<String> ids = new HashSet<>();
+        for (Received one : receipts) {
+            ids.add(one.eventId());
+        }
+        return receipts.size() - ids.size();
+    }
+
+    /**
+     * 문을 열기 전에 두 번 이상 받은 메시지 수. 쌓는 동안 소유권이 바뀌었다(lease 만료·리밸런스)는 뜻이라 그 회차는
+     * 무효로 적는다(PR #238 R3).
+     */
+    static int receivedTwiceBeforeRelease(List<Received> receipts, long releasedAt) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (Received one : receipts) {
+            if (one.nanos() < releasedAt) {
+                counts.merge(one.eventId(), 1, Integer::sum);
+            }
+        }
+        return (int) counts.values().stream().filter(count -> count > 1).count();
+    }
+
     /** 각 메시지가 처음 처리된 시각 가운데 가장 늦은 것. 다 비운 시각이다. */
     static long drainedAt(List<Processed> records) {
         Map<String, Long> first = new HashMap<>();
@@ -88,13 +125,14 @@ final class ScalingMeasurement {
     }
 
     /**
-     * 인계 시간: {@code closedAt} 전에 {@code closed} 인스턴스가 처리하던 키마다, 닫힌 뒤 다른 인스턴스가 그 키를 처음
-     * 처리하기까지 걸린 시간(ms). 닫힌 뒤 다시 처리되지 않은 키(이미 다 처리됨)는 뺀다.
+     * 인계 시간: {@code closedAt} 전에 {@code closed} 인스턴스가 받은(처리 중이던 것 포함) 키마다, 닫힌 뒤 다른 인스턴스가
+     * 그 키를 처음 처리하기까지 걸린 시간(ms). 소유는 완료가 아니라 수신으로 판정한다(PR #238 R2). 닫힌 뒤 다시 처리되지
+     * 않은 키(이미 다 처리됨)는 뺀다.
      */
-    static List<Double> handoverMillis(List<Processed> records, int closed, long closedAt) {
+    static List<Double> handoverMillis(List<Received> receipts, List<Processed> records, int closed, long closedAt) {
         Set<String> owned = new HashSet<>();
         Map<String, Long> resumed = new HashMap<>();
-        for (Processed one : records) {
+        for (Received one : receipts) {
             if (one.instance() == closed && one.nanos() <= closedAt) {
                 owned.add(one.key());
             }
@@ -138,8 +176,10 @@ final class ScalingMeasurement {
 
         @Override
         public void receive(InboundMessage message) {
+            received.add(new Received(message.header(EventHeaders.EVENT_ID), message.key(), number, System.nanoTime()));
             try {
-                if (!release.await(10, TimeUnit.MINUTES)) {
+                // Kafka 기본 max.poll.interval.ms(5분)보다 짧게 둔다 — 문 대기가 리밸런스를 부르지 않게(PR #238 R3).
+                if (!release.await(4, TimeUnit.MINUTES)) {
                     throw new IllegalStateException("S4 측정 문이 열리지 않았다");
                 }
                 oneAtATime.lock();

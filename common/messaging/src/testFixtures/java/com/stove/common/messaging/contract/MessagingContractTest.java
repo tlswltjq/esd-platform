@@ -598,8 +598,10 @@ public abstract class MessagingContractTest {
         settle();
 
         List<ScalingMeasurement.Processed> records = measurement.snapshot();
+        List<ScalingMeasurement.Received> receipts = measurement.receivedSnapshot();
         long drained = ScalingMeasurement.drainedAt(records);
-        List<Double> handover = closeOne ? ScalingMeasurement.handoverMillis(records, 0, closedAt) : List.of();
+        List<Double> handover = closeOne ? ScalingMeasurement.handoverMillis(receipts, records, 0, closedAt) : List.of();
+        int twiceBeforeRelease = ScalingMeasurement.receivedTwiceBeforeRelease(receipts, measurement.releasedAt());
         for (AutoCloseable subscription : instancesStarted) {
             if (started.remove(subscription)) {
                 subscription.close();
@@ -608,10 +610,12 @@ public abstract class MessagingContractTest {
         forgetGroup(group);
         assertThat(measurement.distinct()).isEqualTo(messages);
         return String.format(Locale.ROOT,
-                "{\"instances\":%d,\"close_one\":%s,\"publish_ms\":%.1f,\"drain_ms\":%.1f,\"per_second\":%.1f,"
-                        + "\"processed\":%d,\"redelivered\":%d,\"per_instance\":%s,\"handover_ms\":%s}",
-                instances, closeOne, millis(published - publishStarted), millis(drained - measurement.releasedAt()),
-                messages / ((drained - measurement.releasedAt()) / 1_000_000_000.0), records.size(), records.size() - messages,
+                "{\"instances\":%d,\"close_one\":%s,\"valid\":%s,\"received_twice_before_release\":%d,\"publish_ms\":%.1f,"
+                        + "\"drain_ms\":%.1f,\"per_second\":%.1f,\"processed\":%d,\"received\":%d,\"redelivered\":%d,"
+                        + "\"per_instance\":%s,\"handover_ms\":%s}",
+                instances, closeOne, twiceBeforeRelease == 0, twiceBeforeRelease, millis(published - publishStarted),
+                millis(drained - measurement.releasedAt()), messages / ((drained - measurement.releasedAt()) / 1_000_000_000.0),
+                records.size(), receipts.size(), ScalingMeasurement.redelivered(receipts),
                 ScalingMeasurement.json(ScalingMeasurement.perInstance(records, instances)), ScalingMeasurement.json(handover));
     }
 
