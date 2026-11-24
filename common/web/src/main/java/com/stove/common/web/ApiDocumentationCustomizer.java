@@ -5,9 +5,6 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
-import io.swagger.v3.oas.models.security.OAuthFlow;
-import io.swagger.v3.oas.models.security.OAuthFlows;
-import io.swagger.v3.oas.models.security.Scopes;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.List;
@@ -20,7 +17,7 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
  * 생성된 API 명세에 <b>코드만 봐서는 알 수 없는 것</b>을 덧붙인다.
  *
  * <p>경로·타입·검증 제약은 springdoc 이 컨트롤러와 DTO 에서 그대로 뽑아낸다.
- * 여기서 채우는 것은 그 위의 맥락이다 — 응답 봉투 규약, OAuth2 로그인,
+ * 여기서 채우는 것은 그 위의 맥락이다 — 응답 봉투 규약, BFF 세션 로그인 안내,
  * 그리고 아직 Studio가 사용하는 신원 헤더의 성격.
  *
  * <p>서비스마다 붙여 넣지 않고 한 곳에 두는 이유는 이 설명이 서비스별 사정이 아니라
@@ -29,7 +26,6 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
 @RequiredArgsConstructor
 public class ApiDocumentationCustomizer implements OpenApiCustomizer {
 
-    public static final String OAUTH2 = "oauth2";
     public static final String PROJECT_CREDENTIAL = "projectCredential";
 
     /** Studio의 남은 스켈레톤 신원 헤더. 커머스 회원 ID는 검증된 토큰에서 읽는다. */
@@ -39,8 +35,6 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
                     스튜디오 API 의 소유권 판정에 쓰인다.""");
 
     private final String applicationName;
-    private final String authorizationUrl;
-    private final String tokenUrl;
 
     @Override
     public void customise(OpenAPI openApi) {
@@ -84,30 +78,20 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
         return replacement;
     }
 
+    /**
+     * 결정 220: Swagger는 OAuth 클라이언트가 아니다. 사용자 API는 Gateway BFF 세션 쿠키로 부르므로 OAuth 스킴을 두지 않는다.
+     * 남는 스킴은 Studio의 기계 자격(CI credential)뿐이다.
+     */
     private void addSecuritySchemes(OpenAPI openApi) {
-        if (!List.of("studio", "review", "order", "payment", "license", "download", "settlement")
-                .contains(applicationName)) {
+        if (!"studio".equals(applicationName)) {
             return;
         }
         Components components = openApi.getComponents() == null ? new Components() : openApi.getComponents();
-        components.addSecuritySchemes(OAUTH2, new SecurityScheme()
-                .type(SecurityScheme.Type.OAUTH2)
-                .description("Swagger UI가 Authorization Code + PKCE 로그인을 수행합니다.")
-                .flows(new OAuthFlows().authorizationCode(new OAuthFlow()
-                        .authorizationUrl(authorizationUrl)
-                        .tokenUrl(tokenUrl)
-                        .scopes(new Scopes()
-                                .addString("openid", "사용자 식별")
-                                .addString("profile", "기본 프로필")
-                                .addString("studio", "크리에이터·심사 API")
-                                .addString("commerce", "구매·정산 API")))));
-        if ("studio".equals(applicationName)) {
-            components.addSecuritySchemes(PROJECT_CREDENTIAL, new SecurityScheme()
-                    .type(SecurityScheme.Type.APIKEY)
-                    .in(SecurityScheme.In.HEADER)
-                    .name("X-Project-Credential")
-                    .description("프로젝트 범위 CI credential입니다. 빌드 업로드와 상태 조회에만 사용합니다."));
-        }
+        components.addSecuritySchemes(PROJECT_CREDENTIAL, new SecurityScheme()
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.HEADER)
+                .name("X-Project-Credential")
+                .description("프로젝트 범위 CI credential입니다. 빌드 업로드와 상태 조회에만 사용합니다."));
         openApi.setComponents(components);
     }
 
@@ -121,7 +105,12 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
                         (`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.
 
                         `data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —
-                        봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.""");
+                        봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.
+
+                        로그인이 필요한 API는 Gateway BFF 세션 쿠키로 부른다. 먼저 같은 출처에서
+                        [`/oauth2/authorization/gateway-bff`](/oauth2/authorization/gateway-bff)로 로그인한 뒤 이 화면으로 돌아온다.
+                        변경 요청의 CSRF 헤더는 Swagger가 `/bff/csrf`에서 받아 붙인다. 역할을 바꾸려면
+                        `POST /bff/logout` 뒤 다시 로그인한다. `Authorization` 헤더를 보낸 외부 요청은 401이다.""");
     }
 
     private void describeIdentityHeaders(OpenAPI openApi) {

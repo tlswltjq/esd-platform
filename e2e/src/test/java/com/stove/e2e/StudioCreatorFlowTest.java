@@ -15,7 +15,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -87,12 +86,11 @@ class StudioCreatorFlowTest {
                         "/api/v1/auth/signup", Map.of("email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
         owner = signup.data().path("subject").asText();
-        String token = OidcLogin.token(email, password);
-        JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
-        assertThat(claims.path("sub").asText()).isEqualTo(owner);
-        assertThat(claims.path("aud").toString()).contains("esd-api");
-        assertThat(claims.path("roles").toString()).contains("CREATOR");
-        creator = Map.of("Authorization", "Bearer " + token);
+        // 토큰은 Gateway 밖으로 나오지 않는다. 검증된 JWT 의 sub·roles 는 /bff/session 으로 본다.
+        BffSession session = BffSession.login(email, password);
+        assertThat(session.subject()).isEqualTo(owner);
+        assertThat(session.roles()).contains("CREATOR");
+        creator = session.headers();
         E2eClient.Response anonymous =
                 Stove.gateway.post(
                         "/api/v1/studio/projects", Map.of("productCode", CODE, "title", "Game"));
@@ -303,7 +301,7 @@ class StudioCreatorFlowTest {
                 password = "account-password-1234";
         E2eClient.Response signup = Stove.gateway.post(signupPath, Map.of("email", email, "password", password));
         assertThat(signup.status()).as("%s", signup).isEqualTo(200);
-        return Map.of("Authorization", "Bearer " + OidcLogin.token(email, password));
+        return BffSession.login(email, password).headers();
     }
 
     private static String project() {

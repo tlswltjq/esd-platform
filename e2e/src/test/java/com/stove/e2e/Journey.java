@@ -73,11 +73,11 @@ final class Journey {
     private static String failPgTxId;
     private static String paymentTraceId;
     private static Instant paidAt;
-    private static String creatorToken;
-    private static String reviewerToken;
-    private static String memberToken;
-    private static String otherMemberToken;
-    private static String adminToken;
+    private static BffSession creator;
+    private static BffSession reviewer;
+    private static BffSession member;
+    private static BffSession otherMember;
+    private static BffSession admin;
 
     private Journey() {
     }
@@ -172,43 +172,41 @@ final class Journey {
         return Duration.between(require(paidAt, "결제 승인 시각", "2장 트랙 B 의 승인 콜백"), Instant.now());
     }
 
-    /** The bearer token determines ownership; a caller-supplied member header has no authority. */
+    /** The BFF session determines ownership; a caller-supplied member header has no authority. */
     static Map<String, String> asMember(long memberId) {
-        String token = memberId == MEMBER ? memberToken
-                : memberId == OTHER_MEMBER ? otherMemberToken : null;
-        return Map.of("Authorization", "Bearer " + require(token, "member access token", "트랙 A 회원 로그인"));
+        BffSession session = memberId == MEMBER ? member
+                : memberId == OTHER_MEMBER ? otherMember : null;
+        return require(session, "member BFF session", "트랙 A 회원 로그인").headers();
     }
 
-    static void member(long id, String token) { MEMBER = id; memberToken = token; }
+    static void member(long id, BffSession session) { MEMBER = id; member = session; }
 
-    static void otherMember(long id, String token) { OTHER_MEMBER = id; otherMemberToken = token; }
+    static void otherMember(long id, BffSession session) { OTHER_MEMBER = id; otherMember = session; }
 
-    static void adminToken(String token) { adminToken = token; }
+    static void admin(BffSession session) { admin = session; }
 
     static Map<String, String> asAdmin() {
-        return Map.of("Authorization", "Bearer " + require(adminToken, "admin access token", "트랙 A 운영자 로그인"));
+        return require(admin, "admin BFF session", "트랙 A 운영자 로그인").headers();
     }
 
     static Map<String, String> asSeller() {
         return asCreator();
     }
 
-    static void creatorToken(String token) {
-        creatorToken = token;
+    static void creator(BffSession session) {
+        creator = session;
     }
 
-    static void reviewerToken(String token) {
-        reviewerToken = token;
+    static void reviewer(BffSession session) {
+        reviewer = session;
     }
 
     static Map<String, String> asCreator() {
-        return Map.of("Authorization", "Bearer " + require(
-                creatorToken, "creator access token", "트랙 A OIDC 로그인"));
+        return require(creator, "creator BFF session", "트랙 A BFF 로그인").headers();
     }
 
     static Map<String, String> asReviewer() {
-        return Map.of("Authorization", "Bearer " + require(
-                reviewerToken, "reviewer access token", "트랙 A 운영자 OIDC 로그인"));
+        return require(reviewer, "reviewer BFF session", "트랙 A 운영자 BFF 로그인").headers();
     }
 
     /**

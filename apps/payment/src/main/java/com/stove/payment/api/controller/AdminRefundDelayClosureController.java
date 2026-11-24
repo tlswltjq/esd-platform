@@ -6,7 +6,6 @@ import com.stove.payment.api.controller.dto.RefundClosureBody;
 import com.stove.payment.api.controller.dto.RefundClosureResponse;
 import com.stove.payment.core.service.CloseRefundDelay;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.net.URI;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.CacheControl;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 /** Operator closure of a delayed or unattributed PortOne refund execution (decision 127). Only PortOne refunds are delay targets. */
 @RestController
 @ConditionalOnProperty(name = "stove.payment.pg.provider", havingValue = "PORTONE_TEST")
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/admin/refund-delays")
 public class AdminRefundDelayClosureController {
     private final CloseRefundDelay close;

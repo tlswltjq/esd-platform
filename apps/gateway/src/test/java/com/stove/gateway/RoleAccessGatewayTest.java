@@ -18,6 +18,9 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import com.stove.gateway.config.bff.BffTokens;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 
 /**
  * 역할별 접근의 전체 여정. <b>어떤 역할이 어디에 들어가고 어디서 막히는가</b>를 게이트웨이 필터 판정으로 지킨다.
@@ -33,15 +36,20 @@ import reactor.core.publisher.Mono;
  * 가능성을 라우트 매칭으로만 보는 것과 같은 결의 경계 검사다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(BffSessionFixture.class)
 class RoleAccessGatewayTest {
 
     @Autowired WebTestClient http;
     @MockitoBean ReactiveJwtDecoder decoder;
+    @MockitoBean BffTokens tokens;
+    @Autowired ReactiveClientRegistrationRepository registrations;
+    private BffSessionFixture.Sessions sessions;
 
     @BeforeEach
     void tokens() {
-        // 토큰 값 하나하나를 역할 목록으로 해석한다. "Bearer MEMBER" → roles=[MEMBER],
-        // "Bearer MEMBER,CREATOR" → roles=[MEMBER, CREATOR]. 서명·발행자 검증은
+        sessions = BffSessionFixture.sessions(http, tokens, registrations);
+        // 세션의 서버 쪽 access token 값을 역할 목록으로 해석한다(BffSessionFixture). "MEMBER" → roles=[MEMBER],
+        // "MEMBER,CREATOR" → roles=[MEMBER, CREATOR]. 서명·발행자 검증은
         // GatewayJwtValidationTest가 따로 지키므로 여기서는 역할 경계만 본다.
         when(decoder.decode(anyString())).thenAnswer(call -> {
             String value = call.getArgument(0, String.class);
@@ -56,7 +64,7 @@ class RoleAccessGatewayTest {
                 ? http.get().uri(path)
                 : http.post().uri(path).bodyValue("{}");
         if (token != null) {
-            request = request.header("Authorization", "Bearer " + token);
+            request = request.headers(sessions.as(token));
             if (method != HttpMethod.GET) {
                 request = ((WebTestClient.RequestBodySpec) request).header("Content-Type", "application/json");
             }
@@ -129,22 +137,19 @@ class RoleAccessGatewayTest {
             "GET,  /api/v1/admin/refunds,         order-refund",
             "POST, /api/v1/reviews/1/approve,     review"
     })
-    @DisplayName("보호 경로는 토큰이 없으면 접근이 막힌다(GET은 401, POST는 CSRF가 먼저 403)")
+    @DisplayName("보호 경로는 세션이 없으면 접근이 막힌다(GET은 401, POST는 CSRF가 먼저 403)")
     void protectedRoutesRequireAuthentication(String method, String path, String ignoredLabel) {
-        // 미인증 거부의 상태 코드는 경로의 방식에 달렸다. GET은 자원 서버가 401을,
-        // 변경 메서드는 CsrfWebFilter가 먼저 403을 낸다(SecurityConfig의 csrfMatcher는
-        // Bearer 없는 변경 요청을 CSRF 대상으로 남긴다). 둘 다 "하위 서비스에 닿지 못함"이
+        // 미인증 거부의 상태 코드는 경로의 방식에 달렸다. GET은 인증 진입점이 401을,
+        // 변경 메서드는 CsrfWebFilter가 먼저 403을 낸다. 둘 다 "하위 서비스에 닿지 못함"이
         // 핵심이므로 401 또는 403 중 하나로 막히는 것을 확인한다.
         call(HttpMethod.valueOf(method), path, null).expectStatus().value(status ->
                 assertThat(status).isIn(401, 403));
     }
 
     @Test
-    @DisplayName("규칙에 없는 /api 경로는 Bearer 인증조차 붙지 않아 401로 막힌다(denyAll 이전 단계)")
+    @DisplayName("규칙에 없는 /api 경로는 모든 역할의 세션으로도 막힌다(denyAll)")
     void undeclaredPathsAreUnreachable() {
-        // 어떤 pathMatcher에도 선언되지 않은 /api 경로. Bearer 토큰을 줘도 401이 난다 —
-        // 선언된 경로만 자원 서버 인증을 통과시키고, 선언되지 않은 경로는 인증 단계에서
-        // 막혀 denyAll까지 가지도 못한다. 어느 쪽이든 외부 도달 불가라는 결론은 같다.
+        // 어떤 pathMatcher에도 선언되지 않은 /api 경로. 모든 역할을 가진 세션이어도 막힌다.
         call(HttpMethod.GET, "/api/v1/unknown-area/thing", "MEMBER,ADMIN,CREATOR,REVIEWER")
                 .expectStatus().value(status -> assertThat(status).isIn(401, 403));
     }
@@ -158,5 +163,37 @@ class RoleAccessGatewayTest {
             call(method, path, all).expectStatus().value(status ->
                     assertThat(status).isNotEqualTo(403));
         }
+    }
+
+    @ParameterizedTest(name = "외부 Authorization 헤더 {0} {1} → 401")
+    @CsvSource({
+            "GET,  /api/v1/products/1",
+            "GET,  /api/v1/storefront/products",
+            "GET,  /api/v1/orders",
+            "POST, /api/v1/orders",
+            "GET,  /bff/session"
+    })
+    @DisplayName("결정 220: 외부가 보낸 Authorization 헤더는 공개 경로든 세션이 있든 401이다")
+    void externalAuthorizationHeaderIsRejectedEverywhere(String method, String path) {
+        // 공개 허용 경로에서 이 헤더가 하류로 넘어가면 하류의 JWT 인증이 Gateway를 우회한다.
+        for (boolean withSession : List.of(false, true)) {
+            WebTestClient.RequestHeadersSpec<?> request = method.equals("GET")
+                    ? http.get().uri(path)
+                    : http.post().uri(path).header("Content-Type", "application/json").bodyValue("{}");
+            if (withSession) {
+                request = request.headers(sessions.as("MEMBER,CREATOR,ADMIN,REVIEWER"));
+            }
+            request.header("Authorization", "Bearer MEMBER").exchange().expectStatus().isUnauthorized();
+        }
+    }
+
+    @ParameterizedTest(name = "{0} → 외부에 없음")
+    @CsvSource({"/oauth2/token", "/oauth2/revoke", "/oauth2/introspect", "/oauth2/jwks", "/userinfo"})
+    @DisplayName("결정 220: Auth의 토큰·폐기·검사·JWKS·userinfo 엔드포인트는 외부로 열지 않는다")
+    void authTokenEndpointsAreNotExposed(String path) {
+        // 라우트가 없고 보안 규칙도 denyAll이다. 미인증 POST는 CSRF가, GET은 인증 진입점이 먼저 막는다.
+        http.post().uri(path).header("Content-Type", "application/x-www-form-urlencoded").bodyValue("grant_type=client_credentials")
+                .exchange().expectStatus().value(status -> assertThat(status).isIn(401, 403));
+        http.get().uri(path).exchange().expectStatus().isUnauthorized();
     }
 }

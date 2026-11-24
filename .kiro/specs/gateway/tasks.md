@@ -134,9 +134,9 @@ Gateway에 넘어온 MC-* 이월 항목은 없다(`module-carryover.md`에 Gatew
   - 목표: Gateway 풀 `max-idle-time` < 하류 유휴 닫기(예: 30초), 설정 계약 테스트.
   - 영향: 간헐 500. `POST`는 클라이언트가 처리 여부를 모른다.
   - 재현: 유휴 K초 넘은 연결의 요청을 응답 없이 끊는 가짜 하류로 "요청 → K초 대기 → 요청" — 지금 500, 목표 200.
-- [ ] **GW-T20. 외부에서 공개 클라이언트로 토큰을 직접 받고 Bearer로 `/api/**`를 쓸 수 있다** ([결정 219](../../../docs/decisions.md#single-bff)) [결정 필요 M-AU-7]
+- [x] **GW-T20. 외부에서 공개 클라이언트로 토큰을 직접 받고 Bearer로 `/api/**`를 쓸 수 있다** — [PR #240](https://github.com/tlswltjq/esd-platform/pull/240) ([결정 219](../../../docs/decisions.md#single-bff)·[결정 220](../../../docs/decisions.md#no-public-clients))
   - 어디서: `application.yml` Auth 라우트 `Path=/oauth2/**,…`(토큰 엔드포인트 포함)·CORS `'[/oauth2/token]'`, `SecurityConfig` `oauth2ResourceServer().jwt()`(`/api/**` 전체 Bearer 허용)·CSRF 예외(`apiBearer`).
-  - 목표: 운영 외부 경로는 BFF 세션만. 외부에서 `/oauth2/token`을 쓰지 못하고, 외부 Bearer 요청은 401. 개발용 Swagger 로그인을 남길지·어떻게 바꿀지는 M-AU-7.
+  - 목표: 운영 외부 경로는 BFF 세션만. 외부에서 `/oauth2/token`을 쓰지 못하고, 외부 Bearer 요청은 401. 개발·시험도 같다(결정 220): 경로 규칙 테스트·e2e·스크립트·Swagger는 BFF 세션으로 호출한다.
   - 영향: 기기에 Access/Refresh Token이 남는 경로가 열려 있어 "토큰 비공개"가 BFF 경로에서만 성립한다. 차단 장치도 세션·Bearer 두 곳에 필요하다.
   - 재현: 통합 — `studio-web` PKCE로 Gateway 경유 토큰 교환 → 지금 200(토큰 발급), 목표 거절. 그 토큰으로 `/api/v1/library` → 지금 200, 목표 401.
 - [ ] **GW-T21. PC 앱 프론트엔드가 BFF 세션을 맺을 방법이 없다** ([결정 219](../../../docs/decisions.md#single-bff)) [결정 필요]

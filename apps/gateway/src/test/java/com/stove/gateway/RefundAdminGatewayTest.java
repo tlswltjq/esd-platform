@@ -23,8 +23,12 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import com.stove.gateway.config.bff.BffTokens;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(BffSessionFixture.class)
 class RefundAdminGatewayTest {
     private static final String ROOT = "/api/v1/admin/refunds";
     private static final HttpServer ORDER;
@@ -54,10 +58,14 @@ class RefundAdminGatewayTest {
     }
     @Autowired WebTestClient http;
     @MockitoBean ReactiveJwtDecoder decoder;
+    @MockitoBean BffTokens tokens;
+    @Autowired ReactiveClientRegistrationRepository registrations;
+    private BffSessionFixture.Sessions sessions;
     @DynamicPropertySource static void order(DynamicPropertyRegistry properties) {
         properties.add("ORDER_URI", () -> "http://127.0.0.1:" + ORDER.getAddress().getPort());
     }
     @BeforeEach void tokens() {
+        sessions = BffSessionFixture.sessions(http, tokens, registrations);
         CALLS.set(0); MEMBER_HEADER.set(null); AUTHORIZATION.set(null); BODY.set(null); REQUEST_PATH.set(null);
         RESPONSE_BODY.set("{\"success\":true}");
         when(decoder.decode(anyString())).thenAnswer(call -> {
@@ -68,9 +76,9 @@ class RefundAdminGatewayTest {
     }
     @Test void administratorReadsAndDecisionReachOrderWithBearerAndWithoutForgedMemberHeader() {
         for (String path : new String[]{ROOT, ROOT + "/example"})
-            http.get().uri(path).header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+            http.get().uri(path).headers(sessions.as("ADMIN")).header("X-Member-Id", "forged")
                     .exchange().expectStatus().isOk();
-        http.post().uri(ROOT + "/example/decision").header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+        http.post().uri(ROOT + "/example/decision").headers(sessions.as("ADMIN")).header("X-Member-Id", "forged")
                 .bodyValue("{}").exchange().expectStatus().isOk();
         assertThat(CALLS.get()).isEqualTo(3); assertThat(MEMBER_HEADER.get()).isNull();
         assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
@@ -81,7 +89,7 @@ class RefundAdminGatewayTest {
                 + "\"orderAmount\":10000,\"pgPaidAmount\":9976,\"pgDiscountAmount\":24,\"confirmedCancellationAmount\":10000,"
                 + "\"confirmedPointRefundAmount\":12,\"confirmedPaymentMethodRefundAmount\":null,"
                 + "\"unconfirmedFields\":[\"confirmedPaymentMethodRefundAmount\"]}}}");
-        http.get().uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").header("X-Member-Id", "forged")
+        http.get().uri(ROOT + "/example").headers(sessions.as("ADMIN")).header("X-Member-Id", "forged")
                 .exchange().expectStatus().isOk().expectHeader().valueEquals("Cache-Control", "no-store")
                 .expectBody().jsonPath("$.data.amount").isEqualTo(10000)
                 .jsonPath("$.data.amountDetails.pgPaidAmount").isEqualTo(9976)
@@ -93,47 +101,47 @@ class RefundAdminGatewayTest {
         http.get().uri(ROOT).exchange().expectStatus().isUnauthorized();
         for (String role : new String[]{"MEMBER", "CREATOR"}) {
             for (String path : new String[]{ROOT, ROOT + "/example"})
-                http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
-            http.post().uri(ROOT + "/example/decision").header("Authorization", "Bearer " + role)
+                http.get().uri(path).headers(sessions.as(role)).exchange().expectStatus().isForbidden();
+            http.post().uri(ROOT + "/example/decision").headers(sessions.as(role))
                     .bodyValue("{}").exchange().expectStatus().isForbidden();
         }
         assertThat(CALLS.get()).isZero();
     }
 
     @Test void administratorCanReachASpecificReconsiderationDecision() {
-        http.post().uri(ROOT + "/example/reconsiderations/review/decision").header("Authorization", "Bearer ADMIN")
+        http.post().uri(ROOT + "/example/reconsiderations/review/decision").headers(sessions.as("ADMIN"))
                 .bodyValue("{}").exchange().expectStatus().isOk();
         assertThat(CALLS.get()).isEqualTo(1);
     }
 
     @Test void reviewHistoryAndSpecificDecisionsRemainAdministratorOnly() {
-        http.get().uri(ROOT + "/example/reviews?page=1&size=10").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isOk();
+        http.get().uri(ROOT + "/example/reviews?page=1&size=10").headers(sessions.as("ADMIN")).exchange().expectStatus().isOk();
         for (String role : new String[]{"MEMBER", "CREATOR", "REVIEWER"}) {
-            http.get().uri(ROOT + "/example/reviews").header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();
-            http.post().uri(ROOT + "/example/reconsiderations/review/decision").header("Authorization", "Bearer " + role)
+            http.get().uri(ROOT + "/example/reviews").headers(sessions.as(role)).exchange().expectStatus().isForbidden();
+            http.post().uri(ROOT + "/example/reconsiderations/review/decision").headers(sessions.as(role))
                     .bodyValue("{}").exchange().expectStatus().isForbidden();
         }
         assertThat(CALLS.get()).isEqualTo(1);
     }
     @Test void approvalStopIsAnAdministratorOnlyCommandAndUnlistedMethodsRemainDenied() {
         String path=ROOT+"/example/approval-stops";
-        http.post().uri(path).header("Authorization","Bearer ADMIN").header("X-Member-Id","forged")
+        http.post().uri(path).headers(sessions.as("ADMIN")).header("X-Member-Id","forged")
                 .bodyValue(Map.of("requestId","command","reviewId","review","reason","wrong approval")).exchange().expectStatus().isAccepted()
                 .expectHeader().valueEquals("Location",ROOT+"/example").expectHeader().valueEquals("Cache-Control","no-store");
         assertThat(REQUEST_PATH.get()).isEqualTo(path); assertThat(BODY.get()).contains("command","review","wrong approval");
         assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
         http.post().uri(path).exchange().expectStatus().isForbidden();
         for (String role:List.of("MEMBER","CREATOR","REVIEWER"))
-            http.post().uri(path).header("Authorization","Bearer "+role).bodyValue("{}").exchange().expectStatus().isForbidden();
-        http.get().uri(path).header("Authorization","Bearer ADMIN").exchange().expectStatus().isForbidden();
+            http.post().uri(path).headers(sessions.as(role)).bodyValue("{}").exchange().expectStatus().isForbidden();
+        http.get().uri(path).headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isEqualTo(1);
     }
 
     @Test void unlistedAdministratorMethodsAndPathsRemainDenied() {
         for (HttpMethod method : new HttpMethod[]{HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH})
-            http.method(method).uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
-        http.post().uri(ROOT + "/example").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
-        http.get().uri(ROOT + "/example/decision").header("Authorization", "Bearer ADMIN").exchange().expectStatus().isForbidden();
+            http.method(method).uri(ROOT + "/example").headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
+        http.post().uri(ROOT + "/example").headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
+        http.get().uri(ROOT + "/example/decision").headers(sessions.as("ADMIN")).exchange().expectStatus().isForbidden();
         assertThat(CALLS.get()).isZero();
     }
 }

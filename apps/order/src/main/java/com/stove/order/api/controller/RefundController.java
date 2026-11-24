@@ -13,7 +13,6 @@ import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundRetry;
 import com.stove.order.core.service.RequestRefundReconsideration;
 import com.stove.order.core.service.ReadRefundReviewRounds;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.net.URI;
@@ -30,7 +29,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/orders/{orderNo}/refund")
 public class RefundController {
     private final RequestRefund request;

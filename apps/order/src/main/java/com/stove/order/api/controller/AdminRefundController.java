@@ -20,7 +20,6 @@ import com.stove.order.core.service.ReadRefundReviews;
 import com.stove.order.core.service.ReadRefundReviewRounds;
 import com.stove.order.core.service.DecideRefundReconsideration;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +32,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/admin/refunds")
 public class AdminRefundController {
     private final RequestRefundApprovalStop stop;

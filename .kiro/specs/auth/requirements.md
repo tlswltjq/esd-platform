@@ -49,7 +49,7 @@ Auth는 계정과 역할의 정본이다([플랫폼 design "정본 소유"](../p
 4. IF 요청이 ID token을 API 자격증명으로 쓰면 THEN Auth와 모든 자원 서버 SHALL `aud`에 `esd-api`가 없으므로 거절한다.
 5. IF 토큰을 발행할 계정이 `ACTIVE`가 아니면 THEN Auth SHALL access token을 발행하지 않고 `invalid_grant`로 거절한다(로그인·인가 코드 교환·갱신 모두).
 6. WHEN 로그인 폼이 이메일·비밀번호를 받으면 THEN Auth SHALL `ACTIVE` 계정의 비밀번호가 맞을 때만 인증한다. `LOCKED`·`DISABLED`는 비밀번호가 맞아도 인증하지 않는다.
-7. THE 기밀 클라이언트 `gateway-bff` SHALL Authorization Code·Refresh Token 승인을 쓰고, 공개 클라이언트(`studio-web`·`swagger-ui`) SHALL Refresh Token을 받지 않는다(AU-T9). 사용자 기기의 프론트엔드는 모두 BFF만 상대하고 OAuth 클라이언트는 `gateway-bff` 하나다([결정 219](../../../docs/decisions.md#single-bff)). 개발용 Swagger 로그인을 위해 공개 클라이언트를 남길지는 `[결정 필요 M-AU-7]`.
+7. THE 기밀 클라이언트 `gateway-bff` SHALL Authorization Code·Refresh Token 승인을 쓰고, Auth SHALL 공개 클라이언트를 등록하지 않는다. 사용자 기기의 프론트엔드는 모두 BFF만 상대하고 OAuth 클라이언트는 `gateway-bff` 하나다([결정 219](../../../docs/decisions.md#single-bff)·[결정 220](../../../docs/decisions.md#no-public-clients), AU-T9).
 
 ### R3. Refresh Token 회전과 재사용 탐지 (RTR)
 **사용자 스토리:** 사용자로서, 세션을 안전하게 갱신하고 싶다. 그래야 토큰 탈취 시 피해가 번지지 않는다.

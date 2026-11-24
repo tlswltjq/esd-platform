@@ -28,6 +28,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import com.stove.gateway.config.bff.BffTokens;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 
 /**
  * [D-053] 하류가 닫는 유휴 연결을 Gateway가 다시 써 요청이 응답 전에 끊기고 500이 나면 안 된다.
@@ -44,6 +47,7 @@ import reactor.core.publisher.Mono;
  * 값이 바뀌어도 테스트가 따라간다. 값이 없으면(수정 전) 30초를 기다려 실패를 본다. 수정 전에는 두 번째 요청이 500이었다(2026-11-23 Red).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(BffSessionFixture.class)
 @DisplayName("Gateway — 하류 유휴 연결 재사용")
 class GatewayIdleConnectionTest {
 
@@ -75,6 +79,9 @@ class GatewayIdleConnectionTest {
     HttpClientProperties httpClient;
     @MockitoBean
     ReactiveJwtDecoder decoder;
+    @MockitoBean BffTokens tokens;
+    @Autowired ReactiveClientRegistrationRepository registrations;
+    private BffSessionFixture.Sessions sessions;
 
     @DynamicPropertySource
     static void downstream(DynamicPropertyRegistry properties) {
@@ -83,6 +90,7 @@ class GatewayIdleConnectionTest {
 
     @BeforeEach
     void member() {
+        sessions = BffSessionFixture.sessions(http, tokens, registrations);
         CONNECTIONS.set(0);
         DROPPED.set(0);
         when(decoder.decode(anyString())).thenAnswer(call -> Mono.just(Jwt.withTokenValue("token").header("alg", "RS256")
@@ -105,7 +113,7 @@ class GatewayIdleConnectionTest {
     }
 
     private void get() {
-        http.get().uri(PATH).header("Authorization", "Bearer MEMBER").exchange().expectStatus().isOk();
+        http.get().uri(PATH).headers(sessions.as("MEMBER")).exchange().expectStatus().isOk();
     }
 
     private static void accept() {

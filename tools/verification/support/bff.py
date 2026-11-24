@@ -19,8 +19,8 @@ class BffClient:
         self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies), urllib.request.ProxyHandler({}), NoRedirect())
         self.audit = []
 
-    def request(self, method, path, body=None, form=False, csrf=True):
-        headers = {}
+    def request(self, method, path, body=None, form=False, csrf=True, headers=None):
+        headers = dict(headers or {})
         if method not in {"GET", "HEAD"} and not form and csrf:
             status, _, raw = self.request("GET", "/bff/csrf")
             assert status == 200, "CSRF token unavailable: " + str(status)
