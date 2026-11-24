@@ -34,7 +34,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 @Import(InfraContainers.MySql.class)
 class RabbitContractTest extends MessagingContractTest {
 
-    private static final int QUEUES = 3;
+    /** 평소 3, S4 측정 때만 6(결정 218, {@link MessagingContractTest#partitions()}). */
+    private static final int QUEUES = partitions();
     /** 이 adapter 로 받는 소비자가 없다고 설정한 토픽. */
     private static final String OPTIONAL_TOPIC = "fixture.optional.v1";
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));

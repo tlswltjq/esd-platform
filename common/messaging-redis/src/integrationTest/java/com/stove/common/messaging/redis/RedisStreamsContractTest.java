@@ -25,7 +25,8 @@ import org.testcontainers.containers.GenericContainer;
 @Import({InfraContainers.MySql.class, InfraContainers.Redis.class})
 class RedisStreamsContractTest extends MessagingContractTest {
 
-    private static final int STREAMS = 3;
+    /** 평소 3, S4 측정 때만 6(결정 218, {@link MessagingContractTest#partitions()}). */
+    private static final int STREAMS = partitions();
     private static final List<Duration> SHORT_RETRIES = List.of(Duration.ofMillis(10), Duration.ofMillis(10), Duration.ofMillis(10));
 
     @Autowired

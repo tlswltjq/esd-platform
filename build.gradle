@@ -159,6 +159,10 @@ subprojects {
         // 리스너 컨테이너(concurrency 1)와 릴레이 정도다. 풀 고갈이 재현되면 이 값을 올린다.
         systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 
+        // 결정 218: 메시징 계약 테스트의 측정 설정(S4 분할 수·인스턴스 수 등)은 -Pstove.contract.<이름>=값 으로만 켠다.
+        // 평소 빌드·CI에는 없으므로 계약 테스트는 기본값(분할 3, S4 측정 꺼짐)으로 돈다.
+        providers.gradlePropertiesPrefixedBy('stove.contract.').get().each { name, value -> systemProperty name, value }
+
         // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
         shouldRunAfter tasks.named('test')
         if (stagedVerification) {

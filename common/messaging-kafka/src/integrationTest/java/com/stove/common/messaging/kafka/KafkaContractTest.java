@@ -60,7 +60,8 @@ import org.testcontainers.kafka.ConfluentKafkaContainer;
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 class KafkaContractTest extends MessagingContractTest {
 
-    private static final int PARTITIONS = 3;
+    /** 평소 3, S4 측정 때만 6(결정 218, {@link MessagingContractTest#partitions()}). */
+    private static final int PARTITIONS = partitions();
 
     @Autowired
     ConfluentKafkaContainer kafkaContainer;
@@ -89,6 +90,11 @@ class KafkaContractTest extends MessagingContractTest {
         producers = new DefaultKafkaProducerFactory<>(producerConfig);
         admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers()));
         publisher = new KafkaMessagePublisher(new KafkaTemplate<>(producers));
+    }
+
+    @Override
+    protected void forgetGroup(String finishedGroup) {
+        containersByGroup.remove(finishedGroup);
     }
 
     @Override

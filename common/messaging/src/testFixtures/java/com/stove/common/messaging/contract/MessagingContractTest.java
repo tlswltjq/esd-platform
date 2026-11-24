@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.StringJoiner;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -120,6 +122,18 @@ public abstract class MessagingContractTest {
      */
     protected final List<Duration> retryDelays(List<Duration> testDefault) {
         return productionRetries ? InPlaceDelivery.RETRY_DELAYS : testDefault;
+    }
+
+    /**
+     * adapter 의 분할 수(파티션·큐·스트림). 평소 계약 테스트는 3이고, S4 측정 때만 {@code -Dstove.contract.partitions=6}
+     * 으로 올린다(결정 218). 하위 클래스는 분할 수 상수를 이 값으로 정한다.
+     */
+    protected static int partitions() {
+        return Integer.getInteger("stove.contract.partitions", 3);
+    }
+
+    /** 끝난 그룹의 구독 기록을 잊는다(S4 회차마다 새 그룹을 쓴다). 그룹별로 구독을 들고 있는 adapter(Kafka)가 덮는다. */
+    protected void forgetGroup(String finishedGroup) {
     }
 
     /** 테스트 토픽을 준비한다(예: Kafka 는 파티션 여러 개로 만든다). */
@@ -520,6 +534,100 @@ public abstract class MessagingContractTest {
         Files.createDirectories(directory);
         Files.writeString(directory.resolve(getClass().getSimpleName() + "-" + System.currentTimeMillis() + ".json"), json);
         assertThat(handler.ids()).contains(behind);
+    }
+
+    /**
+     * S4 소비 인스턴스 확장(결정 210 특성 4, 결정 218). 메시지를 쌓아 둔 뒤 같은 그룹 인스턴스 1·3·6개가 다 비우는 시간,
+     * 인스턴스별 몫, 한 인스턴스를 닫은 뒤 그 키들이 다른 인스턴스에서 다시 처리되기까지의 시간을 잰다. 인스턴스는 한 번에
+     * 한 건만 처리한다({@link ScalingMeasurement}). 측정값은 단언하지 않고 {@code build/s4-scaling/} 에 JSON 으로 남기며,
+     * 단언은 "모든 메시지가 처리된다"뿐이다. 평소 계약 테스트에서는 돌지 않는다({@code -Dstove.contract.s4=true}).
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "stove.contract.s4", matches = "true")
+    void S4_인스턴스를_늘려_쌓인_메시지를_비우는_시간을_잰다() throws Exception {
+        int messages = Integer.getInteger("stove.contract.s4.messages", 6000);
+        Duration cost = Duration.ofMillis(Integer.getInteger("stove.contract.s4.cost-ms", 20));
+        int keys = Integer.getInteger("stove.contract.s4.keys", 600);
+        int handoverInstances = Integer.getInteger("stove.contract.s4.handover-instances", 3);
+        StringJoiner rounds = new StringJoiner(",", "[", "]");
+        for (String count : System.getProperty("stove.contract.s4.instances", "1,3,6").split(",")) {
+            rounds.add(scalingRound(Integer.parseInt(count.trim()), messages, cost, keys, false));
+        }
+        if (handoverInstances > 1) {
+            rounds.add(scalingRound(handoverInstances, messages, cost, keys, true));
+        }
+        String json = String.format(Locale.ROOT,
+                "{\"adapter\":\"%s\",\"partitions\":%d,\"messages\":%d,\"cost_ms\":%d,\"keys\":%d,\"rounds\":%s,"
+                        + "\"recorded_at\":\"%s\"}",
+                getClass().getSimpleName(), partitions(), messages, cost.toMillis(), keys, rounds, Instant.now());
+        Path directory = Path.of("build", "s4-scaling");
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve(getClass().getSimpleName() + "-" + System.currentTimeMillis() + ".json"), json);
+    }
+
+    private String scalingRound(int instances, int messages, Duration cost, int keys, boolean closeOne) throws Exception {
+        group = "contract-" + UUID.randomUUID();
+        topic = "contract." + UUID.randomUUID().toString().substring(0, 8);
+        prepareTopic(topic);
+        ScalingMeasurement measurement = new ScalingMeasurement(cost);
+        List<AutoCloseable> instancesStarted = new ArrayList<>();
+        for (int number = 0; number < instances; number++) {
+            AutoCloseable subscription = subscribe(group, topic, quarantine, measurement.instance(number), List.of());
+            started.add(subscription);
+            instancesStarted.add(subscription);
+        }
+        awaitSubscriptionsReady();
+
+        long publishStarted = System.nanoTime();
+        for (int index = 0; index < messages; index++) {
+            send("S4-" + (index % keys));
+        }
+        long published = System.nanoTime();
+        measurement.release();
+
+        Duration limit = cost.multipliedBy(messages * 2L).plusMinutes(2);
+        long closedAt = 0;
+        if (closeOne) {
+            awaitWithin("S4 인계 전 3분의 1 처리", limit, () -> measurement.distinct() >= messages / 3);
+            closedAt = System.nanoTime();
+            AutoCloseable closing = instancesStarted.get(0);
+            started.remove(closing);
+            closing.close();
+        }
+        awaitWithin("S4 모든 메시지 처리(" + instances + "개)", limit, () -> measurement.distinct() == messages);
+        settle();
+
+        List<ScalingMeasurement.Processed> records = measurement.snapshot();
+        long drained = ScalingMeasurement.drainedAt(records);
+        List<Double> handover = closeOne ? ScalingMeasurement.handoverMillis(records, 0, closedAt) : List.of();
+        for (AutoCloseable subscription : instancesStarted) {
+            if (started.remove(subscription)) {
+                subscription.close();
+            }
+        }
+        forgetGroup(group);
+        assertThat(measurement.distinct()).isEqualTo(messages);
+        return String.format(Locale.ROOT,
+                "{\"instances\":%d,\"close_one\":%s,\"publish_ms\":%.1f,\"drain_ms\":%.1f,\"per_second\":%.1f,"
+                        + "\"processed\":%d,\"redelivered\":%d,\"per_instance\":%s,\"handover_ms\":%s}",
+                instances, closeOne, millis(published - publishStarted), millis(drained - measurement.releasedAt()),
+                messages / ((drained - measurement.releasedAt()) / 1_000_000_000.0), records.size(), records.size() - messages,
+                ScalingMeasurement.json(ScalingMeasurement.perInstance(records, instances)), ScalingMeasurement.json(handover));
+    }
+
+    private static void awaitWithin(String what, Duration limit, BooleanSupplier condition) {
+        long deadline = System.nanoTime() + limit.toNanos();
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("기다렸지만 이뤄지지 않았다: " + what);
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+        }
     }
 
     private static double millis(long nanos) {
