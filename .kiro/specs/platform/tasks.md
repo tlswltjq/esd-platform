@@ -216,6 +216,12 @@
   - 영향: 표와 코드가 어긋나도 CI가 모른다. 새 의존(예: 순환 동기 호출)이 스펙 없이 생긴다.
   - 재현: 표에 없는 상수·HTTP 경로를 둔 픽스처가 실패하는지.
 
+- [ ] **T38. 현행 이벤트의 파티션 키가 P2.4-1 집합체 키인지 검사하는 테스트가 없다**
+  - 어디서: `EventContractTest.sameOrderSharesPartitionKey`·`sameAggregateSharesTopic`(`common/contract/src/test/java/com/stove/common/contract/EventContractTest.java:389-415`)은 `OrderCreatedEvent`·`PaymentCompletedEvent`·`PaymentCancelledEvent`·`LicenseIssuedEvent`만 검사한다. 이 넷은 `apps/*/src/main`에서 쓰는 곳이 0건이다. 현행 payload(예: `OrderPaymentCompletedEvent`, `LicenseGrantedEvent`, `ProjectReleaseCompletedEvent`)의 `partitionKey()`는 어느 테스트도 집합체 키와 비교하지 않는다. `KeyOrderGuardTest`·`OutboxRelayTest`는 받은 키의 순서만 본다.
+  - 목표: P2.4-1. 현행 payload마다 `partitionKey()`가 토픽별 집합체 키(`order`·`payment`·`license` = `orderNo`, `studio`·`review`·`release`·`catalog` = `productCode`, `auth` = `subject`) 값과 같은지 검사. T27의 표 대조보다 먼저 할 수 있다(design 파싱 불필요). 옛 이벤트만 보는 두 테스트는 현행 이벤트로 바꾸거나 옛 payload와 함께 정리.
+  - 영향: **돈(순서)** — 한 이벤트의 키를 다른 식별자(예: `licenseId`)로 바꾸면 같은 주문의 결제→지급→환불 순서가 다른 파티션으로 갈려 깨지는데 CI가 모른다.
+  - 재현: 현행 payload 하나의 `partitionKey()`를 다른 칸으로 바꾼 픽스처에서 테스트가 실패하는지.
+
 - [ ] **T28. core의 공급자 이름을 막는 ArchUnit 규칙이 없다(결정 140)**
   - 어디서: `common/archunit/.../ModulePackageRules.java`(해당 규칙 없음). 예: Payment core 공급자 상수(MC-P3), PG 통지 경로 `/api/v1/payments/webhooks/portone`(`payment:api/controller/PortOneWebhookController.java:28`), 결정 140이 센 core 29곳.
   - 목표: P1.1-4. `core..` 패키지의 공급자 이름 클래스·문자열 금지 규칙. PG 통지 경로 이름 중립화는 결정 140 작업과 함께.
