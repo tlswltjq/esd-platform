@@ -2370,6 +2370,33 @@
 - 구분: 추천 수용
 - 결과: PR #246
 
+<a id="kafka-only-messaging"></a>
+## 227. 메시징을 Kafka 단일 구현으로 되돌리고, 다른 기술과의 비교는 앱 내부 추상화가 아니라 독립 구현과 벤치마크 계약으로 한다
+- 문제: [결정 209](#messaging-symmetric-modules)는 브로커와 무관한 포트(`@EventSubscriber`·`EventHandler`·`InboundMessage`·`MessagePublisher`·`MirrorPublisher`)와 adapter 다섯(`messaging-kafka`·`-rabbitmq`·`-rabbitmq-streams`·`-redis`·`-direct`)을 두고, 앱이 adapter를 모두 런타임에 넣어 `stove.messaging.broker`로 골랐다. 사용자는 기술마다 소비·ACK·재시도·예외 처리·트랜잭션·DLT의 동작과 보장 수준이 달라 공통 인터페이스로 일률 추상화하는 것이 맞지 않다고 판단했다. 이 구조를 남기면 Kafka 고유 동작(파티션 배정, `DefaultErrorHandler`의 제자리 재시도, DLT)이 중립 포트 뒤로 숨고, 비Kafka 용도로만 쓰는 위임 계층(`InPlaceDelivery`, 이중 발행 `MirroredTopics`)과 adapter 대칭 검사가 운영 코드에 남는다.
+- 선택지: A 비Kafka adapter 넷과 브로커 중립 포트를 지우고 Kafka(Spring Kafka 기본 API)를 직접 쓰는 구조로 되돌린 뒤, 실제 앱 기준으로 Kafka의 성능·안정성 기준선을 잰다. 다른 기술은 나중에 같은 업무를 독립 구현해 벤치마크 계약으로 비교한다(사용자 제안) / B 결정 209 구조를 유지한다 (추천 없음 — 사용자가 작업 지시로 직접 제안했다)
+- 내 의견: "메시징 기술마다 메시지 소비, ACK, 재시도, 예외 처리, 트랜잭션, DLT/DLQ 등의 동작과 보장 수준이 다르므로, 이를 일률적인 공통 인터페이스로 추상화하는 것은 적절하지 않다고 판단했다. 따라서 기존 구조를 단순화하고 Kafka만 사용하는 구현으로 복원한 후, 실제 애플리케이션을 기준으로 성능과 안정성을 측정하려 한다." / "향후 RabbitMQ, PostgreSQL Queue 등과 비교할 계획이지만, 이번 작업에서는 다른 기술을 구현하거나 기술 교체를 위한 추상화 계층을 만들지 않는다." / "정상적인 비즈니스 모듈 경계나 책임 분리까지 무조건 제거하지 말 것." / "이 명세는 구현 인터페이스가 아니라 벤치마크 계약(Benchmark Contract)이다." / "벤치마크를 위한 공통 추상화를 애플리케이션 내부에 다시 도입하지 말 것." (2026-11-25 작업 지시문)
+- 선택: A. 지우는 것·바꾸는 것·남기는 것은 다음과 같다.
+  - 지운다(기술 교체 목적만): adapter 넷(`messaging-rabbitmq`·`-rabbitmq-streams`·`-redis`·`-direct`)과 그 테스트·Compose 서비스, `stove.messaging.broker` 선택, `MirrorPublisher`·`MirroredTopics`, `InPlaceDelivery`, adapter 공통 계약 테스트 `MessagingContractTest`와 S3·S4 측정 하네스, adapter 대칭을 강제하던 검사(`verifyCommonRuntimeDependencies`의 브로커 클라이언트 금지, ArchUnit `MessagingBoundaryRules`).
+  - 바꾼다: 업무 리스너는 `@KafkaListener`로 `ConsumerRecord`를 받고, Outbox 릴레이는 `KafkaTemplate`으로 보낸다. 리스너별 재시도 선택(재시도 제외 예외·한 건씩·성공까지 재시도)은 Spring Kafka 컨테이너 팩토리와 `DefaultErrorHandler`로 표현한다.
+  - 남긴다(업무·신뢰성 규칙, 비교 작업보다 먼저 정해짐): Outbox와 릴레이의 같은 키 순서([결정 155](#key-stop-on-dead)·[205](#relay-key-order-single-instance)·[215](#outbox-relay-lock-hold)), Inbox 멱등, 소비 실패의 소비 모듈 DB 보관·키 정지·키 단위 회수(결정 155·160·[206](#messaging-port-scope-quarantine)의 동작), DB 없는 앱의 DLT와 성공까지 재시도([결정 226](#access-change-consumer-failure)), 리스너 동시성 = 파티션 수([결정 212](#kafka-listener-concurrency)), `api.listener`의 `*Mapper.from` 경계, 이벤트 계약 `common:contract`. JPA 코어(`common:messaging`)와 JPA 없는 앱이 쓰는 Kafka 공통 모듈의 분리도 남긴다 — 기술 교체가 아니라 저장소 의존 경계다.
+  - [결정 202](#messaging-port-key-ordering)의 보장(같은 키는 발행 순서대로 한 번에 하나씩, 실패하면 그 키를 막은 채 제자리 재시도)은 "포트 계약"이 아니라 Kafka 파티션과 `DefaultErrorHandler`로 내는 이 시스템의 동작으로 그대로 지킨다.
+  - 결정 [203](#messaging-comparison-targets)·[209](#messaging-symmetric-modules)·[211](#rabbitmq-streams-comparison)은 이 결정으로 대체한다. 남은 비교 측정(결정 [210](#messaging-comparison-hypotheses)·[218](#s4-adapter-level)·[222](#s3-adapter-level-limits))의 처리는 [결정 228](#messaging-comparison-closure)이 정한다.
+  - 앞으로의 기술 비교는 같은 업무를 독립 구현한 앱을 Kafka 기준선과 같은 벤치마크 계약(업무 시나리오·기대 상태·전달 보장·장애 주입·지표)으로 잰다. 계약은 Kafka의 offset·파티션 같은 구현을 다른 기술의 필수 조건으로 두지 않는다.
+- 구분: 직접 제안
+- 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250) — 판단 색인 행
+
+<a id="messaging-comparison-closure"></a>
+## 228. 결정 209 구조로 잰 메시징 비교 결과는 그 구조의 기록으로 남기고, 끝나지 않은 S3는 1회차만 한계와 함께 적은 뒤 비교 측정을 닫는다
+- 문제: [결정 227](#kafka-only-messaging)로 adapter 넷과 공통 계약 테스트를 지우면 S1~S7 비교를 다시 돌릴 수 없다. 병합된 E12 평시·S4~S7 결과와 결정 202~211·218·222가 있고, S3(소비자 장기 정지 뒤 회복, [결정 222](#s3-adapter-level-limits)) 측정은 draft PR #249에서 10회 중 4회(1회차 Kafka·RabbitMQ·Streams·Redis)만 끝났다. 1회차 브로커 없음은 세션 재시작으로 두 번 끊겨 결과가 없다.
+- 선택지: A 병합된 결과는 결정 209 구조에서 잰 기록으로 남기고, S3는 끝난 1회차 4종만 "1회, 브로커 없음 없음, 일반화 불가"로 적은 뒤 #249를 닫는다. 플랫폼 T37은 중단으로 닫는다 / B 지우기 전에 S3 나머지 6회를 끝낸다 / C S3 부분 결과를 버리고 #249를 닫는다 (추천: A — 바뀌지 않은 하네스로 실제로 잰 값이라 사실로 남길 가치가 있고, 한계를 적으면 과장이 없다. 새 방향에서 S3를 끝내도 쓸 곳이 없어 B의 격리 대기 비용을 치를 이유가 약하다)
+- 내 의견: "A로 해, 잰 결과는 기록으로 남기고 #249 닫아"
+- 선택: A — 추천 수용.
+  - E12의 기존 결과(평시·S4~S7)는 고치지 않는다. 측정 당시 구조가 결정 209(중립 포트 + adapter)였다는 것만 앞에 적는다. 그 결과는 지금 코드로 재현할 수 없다.
+  - S3 1회차 결과는 [E12 S3 결과](experiments.md#messaging-s3)에 적는다. 회차 파일(`build/measure-guard/s3*`·결과 JSON)은 실행 호스트의 `esd-worktrees/s3-run`에만 있다.
+  - S1·S2와 S3 나머지 회차는 재지 않는다. 플랫폼 T37의 남은 항목은 이 결정으로 닫는다. "Kafka 리스너 동시성 기본값"은 이미 [결정 212](#kafka-listener-concurrency)로 정해졌다.
+- 구분: 추천 수용
+- 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)
+
 ---
 
 ## 검증하며 드러난 것
