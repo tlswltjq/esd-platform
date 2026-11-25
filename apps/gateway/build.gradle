@@ -5,13 +5,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     // 계정 접근 변경 사실(결정 180·225)로 subject별 거절 기준(changedAt)을 Redis에 두고 이전 토큰을 거절한다(GW-T18).
     implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
-    // DB가 없어 코어(격리·Outbox)를 쓰지 않는다. 계약·수신 포트만 알고 수신은 Kafka adapter가 한다(Store와 같음, 결정 209).
+    // DB가 없어 코어(격리·Outbox)를 쓰지 않는다. 계약과 Kafka 공통 모듈만 쓰고 리스너가 @KafkaListener로 받는다(Store와 같음, 결정 227).
     // 일시 실패는 성공까지 재시도, 영구 실패만 DLT(결정 226).
     implementation project(':common:contract')
-    runtimeOnly project(':common:messaging-kafka')
-    testImplementation project(':common:messaging-kafka')
+    implementation project(':common:messaging-kafka')
     implementation 'io.micrometer:micrometer-core'
     testImplementation 'io.projectreactor:reactor-test'
-    integrationTestImplementation project(':common:messaging-kafka')
     integrationTestImplementation 'org.springframework.kafka:spring-kafka-test'
 }

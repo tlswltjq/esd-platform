@@ -1,2 +1,0 @@
-org.springframework.boot.env.EnvironmentPostProcessor=\
-com.stove.common.messaging.rabbitmq.MessagingBrokerEnvironment

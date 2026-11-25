@@ -1,7 +1,6 @@
 package com.stove.common.messaging.kafka;
 
 import com.stove.common.event.MessagePublisher;
-import com.stove.common.event.MirrorPublisher;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -44,17 +43,6 @@ public class KafkaConsumerAutoConfiguration {
     @ConditionalOnMissingBean(MessagePublisher.class)
     public MessagePublisher stoveKafkaMessagePublisher(KafkaTemplate<String, String> kafkaTemplate) {
         return new KafkaMessagePublisher(kafkaTemplate);
-    }
-
-    /**
-     * 다른 브로커를 고른 앱이 Kafka 로만 받는 소비자(DB 없는 Store)를 위해 일부 토픽을 Kafka 로도 보내는 미러 발행기.
-     * 쓸지는 그 adapter 의 {@code also-kafka-topics} 가 정한다. 비어 있으면 아무도 부르지 않는다.
-     */
-    @Bean
-    @ConditionalOnMissingBean(MirrorPublisher.class)
-    public MirrorPublisher stoveKafkaMirrorPublisher(KafkaTemplate<String, String> kafkaTemplate) {
-        KafkaMessagePublisher kafka = new KafkaMessagePublisher(kafkaTemplate);
-        return kafka::publish;
     }
 
     /** DLT 유입 계측. <b>지표 수집 여부가 실패 처리 가능 여부를 좌우해서는 안 된다.</b> */

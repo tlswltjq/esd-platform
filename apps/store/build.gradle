@@ -5,11 +5,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation project(':common:web')
     implementation project(':common:jpa')
-    // DB 가 없어 코어(격리·Outbox)를 쓰지 않는다. 계약·수신 포트만 알고, 수신은 Kafka adapter 가 한다(결정 209).
-    // 실패는 격리 대신 DLT 로 간다(Store tasks SO-T6). 다른 adapter 는 코어가 필요해 넣지 않는다.
+    // DB 가 없어 코어(격리·Outbox)를 쓰지 않는다. 계약과 Kafka 공통 모듈만 쓰고 리스너가 @KafkaListener 로 받는다(결정 227).
+    // 실패는 격리 대신 DLT 로 간다(Store tasks SO-T6).
     implementation project(':common:contract')
-    runtimeOnly project(':common:messaging-kafka')
-    testImplementation project(':common:messaging-kafka')
+    implementation project(':common:messaging-kafka')
     implementation 'io.micrometer:micrometer-core'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
 }

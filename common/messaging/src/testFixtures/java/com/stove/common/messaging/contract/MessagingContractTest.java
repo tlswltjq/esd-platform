@@ -8,7 +8,6 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.IThrowableProxy;
 import ch.qos.logback.core.AppenderBase;
 import com.stove.common.contract.EventHeaders;
-import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.event.EventHandler;
 import com.stove.common.event.InboundMessage;
 import com.stove.common.event.KeyQuarantine;
@@ -94,7 +93,6 @@ public abstract class MessagingContractTest {
 
     protected String group;
     protected String topic;
-    private boolean productionRetries;
 
     private final List<AutoCloseable> started = new ArrayList<>();
 
@@ -131,14 +129,6 @@ public abstract class MessagingContractTest {
     /** S5 대조군: {@code key} 와 다른 분할로 가는 키. 분할이 하나뿐인 adapter(브로커 없음)는 비운다. */
     protected Optional<String> keyInOtherPartition(String key) {
         return Optional.empty();
-    }
-
-    /**
-     * 구독이 쓸 재시도 간격. 보통은 하위 클래스의 짧은 간격({@code testDefault})이고, S5 측정만 운영 간격
-     * ({@link InPlaceDelivery#RETRY_DELAYS}, 1·2·4초)을 쓴다. 운영 오류 처리기를 그대로 쓰는 adapter(Kafka)는 부르지 않아도 된다.
-     */
-    protected final List<Duration> retryDelays(List<Duration> testDefault) {
-        return productionRetries ? InPlaceDelivery.RETRY_DELAYS : testDefault;
     }
 
     /**
@@ -212,7 +202,6 @@ public abstract class MessagingContractTest {
 
     @BeforeEach
     void prepareContract() {
-        productionRetries = false;
         group = "contract-" + UUID.randomUUID();
         topic = "contract." + UUID.randomUUID().toString().substring(0, 8);
         prepareTopic(topic);
@@ -557,7 +546,6 @@ public abstract class MessagingContractTest {
         Optional<String> same = keyInSamePartition(poison);
         Assumptions.assumeTrue(same.isPresent(), "이 adapter 는 같은 분할 키를 고르지 않는다");
         Optional<String> other = keyInOtherPartition(poison);
-        productionRetries = true;
         Recording handler = new Recording();
         handler.failKey = poison;
         start(group, handler);
