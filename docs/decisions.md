@@ -2392,7 +2392,7 @@
 - 내 의견: "A로 해, 잰 결과는 기록으로 남기고 #249 닫아"
 - 선택: A — 추천 수용.
   - E12의 기존 결과(평시·S4~S7)는 고치지 않는다. 측정 당시 구조가 결정 209(중립 포트 + adapter)였다는 것만 앞에 적는다. 그 결과는 지금 코드로 재현할 수 없다.
-  - S3 1회차 결과는 [E12 S3 결과](experiments.md#messaging-s3)에 적는다. 회차 파일(`build/measure-guard/s3*`·결과 JSON)은 실행 호스트의 `esd-worktrees/s3-run`에만 있다.
+  - S3 1회차 결과는 [E12 S3 결과](experiments.md#messaging-s3)에 적는다. 회차 파일(결과 JSON·`measure_guard` 기록)은 실행 호스트의 `esd-run-archive/s3-2026-11-25/`에만 있다.
   - S1·S2와 S3 나머지 회차는 재지 않는다. 플랫폼 T37의 남은 항목은 이 결정으로 닫는다. "Kafka 리스너 동시성 기본값"은 이미 [결정 212](#kafka-listener-concurrency)로 정해졌다.
 - 구분: 추천 수용
 - 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)

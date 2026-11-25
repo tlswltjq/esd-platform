@@ -612,7 +612,7 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 - **예상 밖 — RabbitMQ classic queue는 생산자를 막지 않았다.** 측정 전 예상은 "한도에서 생산자를 막아 Outbox 증가"였다. 메모리 경보(약 410MiB)를 넘는 양을 넣었는데 발행 호출 10초 상한에 한 번도 걸리지 않았고, 데이터 디스크가 887MiB로 가장 컸다. 메시지가 디스크로 넘어간 것으로 보이나 경보 발생 여부와 페이징 지표는 기록하지 않았다(추정).
 - **Redis Streams는 `maxmemory`에서 발행을 거절했고, 재개도 하지 못했다.** 예상한 "메모리 한도에서 발행 거절"은 맞았다. 재개 뒤에는 adapter의 소비 점유용 쓰기(잠금 `SET`)가 같은 OOM으로 거절돼 2분 동안 한 건도 받지 못했다(`used_memory` 536,946,352 ≥ `maxmemory` 536,870,912). 표의 "받지 못한 성공분"은 브로커에서 지워졌다는 뜻이 아니다. `noeviction`이라 지우지 않는 설정이고, 메모리를 비운 뒤 받을 수 있는지는 재지 않았다. 실제 시스템에서는 발행이 거절된 행이 Outbox `PENDING`으로 남는다(관계로 읽은 것, 직접 재지 않음).
 - 메모리는 cgroup 사용량이라 페이지 캐시가 섞인다. Kafka가 한도에 붙은 것은 로그 파일의 페이지 캐시로 보인다(추정). 조건당 1회이고 브로커 없음이 빠져, 방식 사이 순서나 배수를 결론으로 쓰지 않는다. 업무 여정 전체가 아니라 adapter 수준이다.
-- 이 결과를 낸 adapter 넷과 하네스는 [결정 227](decisions.md#kafka-only-messaging)로 지웠다. 지금 코드로는 재현할 수 없다. 회차 파일은 실행 호스트의 `esd-worktrees/s3-run`(`common/messaging-*/build/s3-backlog/*.json`, `build/measure-guard/s3*.json`)에만 있다.
+- 이 결과를 낸 adapter 넷과 하네스는 [결정 227](decisions.md#kafka-only-messaging)로 지웠다. 지금 코드로는 재현할 수 없다. 회차 파일(결과 JSON 4개, `measure_guard` 전후 기록)은 실행 호스트의 `esd-run-archive/s3-2026-11-25/`에만 있다.
 
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216), S6 요약 JSON은 이전 8회 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)·재측정 10회 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
 
