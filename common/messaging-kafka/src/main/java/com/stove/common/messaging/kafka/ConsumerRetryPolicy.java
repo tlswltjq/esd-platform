@@ -2,6 +2,7 @@ package com.stove.common.messaging.kafka;
 
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.BackOff;
+import org.springframework.util.backoff.ExponentialBackOff;
 
 /**
  * 컨슈머 재시도 정책의 단일 출처.
@@ -23,6 +24,16 @@ public final class ConsumerRetryPolicy {
     private static final double MULTIPLIER = 2.0;
 
     private ConsumerRetryPolicy() {
+    }
+
+    /**
+     * 성공할 때까지 1·2·4·8·8…초로 재시도한다({@code EventSubscriber#retryUntilSuccess}, 결정 226). 한 번의 대기가 8초를 넘지
+     * 않아 {@code max.poll.interval.ms} 안에서 오류 처리기가 다시 가져온다.
+     */
+    public static BackOff untilSuccess() {
+        ExponentialBackOff backOff = new ExponentialBackOff(INITIAL_INTERVAL_MS, MULTIPLIER);
+        backOff.setMaxInterval(MAX_INTERVAL_MS);
+        return backOff;
     }
 
     public static BackOff backOff() {

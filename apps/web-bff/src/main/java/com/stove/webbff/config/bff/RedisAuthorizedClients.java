@@ -1,6 +1,7 @@
 package com.stove.webbff.config.bff;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stove.webbff.adapter.redis.RedisSubjectSessions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
@@ -17,9 +18,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-/** Tokens are server-side only; Redis keys are scoped to the BFF session. */
+/**
+ * Tokens are server-side only; Redis keys are scoped to the BFF session.
+ *
+ * <p>계정 접근 변경(결정 180·225, GW-T18): 토큰 기록을 쓸 때 subject 색인({@link RedisSubjectSessions#SUBJECT_INDEX})에 그 키를
+ * 더한다. 사실을 받으면 {@link RedisSubjectSessions}가 색인의 토큰 기록을 모두 지운다. 다음 요청은 토큰 기록이 없어 401이 되고 그 세션도 끝난다
+ * ({@code BffAuthenticationFilter}, design 상태 표 19행).
+ */
 @Component
 public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepository {
+    private static final Duration TOKEN_LIFETIME = Duration.ofDays(7);
     private final ReactiveStringRedisTemplate redis;
     private final ReactiveClientRegistrationRepository registrations;
     private final ObjectMapper mapper;
@@ -44,10 +52,14 @@ public class RedisAuthorizedClients implements ServerOAuth2AuthorizedClientRepos
     public Mono<Void> write(String key, OAuth2AuthorizedClient client) {
         Stored stored = Stored.from(client);
         try {
-            return redis.opsForValue().set(key, mapper.writeValueAsString(stored), Duration.ofDays(7)).then();
+            String index = RedisSubjectSessions.SUBJECT_INDEX + stored.subject();
+            return redis.opsForValue().set(key, mapper.writeValueAsString(stored), TOKEN_LIFETIME)
+                    .then(redis.opsForSet().add(index, key))
+                    .then(redis.expire(index, TOKEN_LIFETIME)).then();
         } catch (Exception exception) { return Mono.error(exception); }
     }
     public Mono<Void> delete(String key) { return redis.delete(key).then(); }
+
     @Override @SuppressWarnings("unchecked")
     public <T extends OAuth2AuthorizedClient> Mono<T> loadAuthorizedClient(String id, Authentication principal,
             ServerWebExchange exchange) { return key(exchange).flatMap(this::read).map(value -> (T) value); }

@@ -57,7 +57,7 @@
 5. WHEN BFF 세션이 어떤 경로로 끝나면(로그아웃·갱신 거절·검증 실패·세션 만료·재로그인으로 토큰 기록 교체) THEN Gateway SHALL 그 세션의 토큰 기록도 남기지 않는다. 버려지는 Refresh Token을 Auth에서 폐기할지는 [결정 필요 M-GW-3](새 번호).
 6. WHEN Gateway가 Auth의 계정 접근 변경 사실 `AccountAccessChanged`(가칭, 토픽 `stove.auth.v1`, 키 `subject`, 그룹 가칭 `gateway-account-access`)를 처음 받으면 THEN Gateway SHALL 그 `subject`의 모든 BFF 세션과 토큰 기록을 지우고, 세션 저장소(Redis)에 `subject`별 거절 기준 `changedAt`을 최대 access token 수명 이상(설정 키, R8) 남긴다. 같은 `subject`의 기준은 더 늦은 `changedAt`만 덮는다. 멱등은 `eventId`를 기준과 같은 수명으로 Redis에 두어 지킨다(결정 84, [결정 180](../../../docs/decisions.md#account-access-revocation)).
 7. WHILE `subject`의 거절 기준이 있으면 THE Gateway SHALL JWT `iat`가 기준(초 단위로 올림)보다 이른 세션의 access token이면 401로 거절하고 그 세션을 `NONE`으로 끝낸다(외부 Bearer는 R4.5로 이미 401). `iat`와 `changedAt`은 모두 Auth 시계라 원칙 ⑥ 예외가 아니다([결정 180](../../../docs/decisions.md#account-access-revocation)).
-8. THE Gateway SHALL `gateway-account-access` 소비 지연(가장 오래 처리하지 못한 레코드의 나이)을 게이지로 낸다. 소비가 멈추거나 거절 기준을 잃으면 끊기가 access token 수명까지 늦어지기 때문이다. 경보 기준은 측정 뒤 정한다(결정 159). 이 소비의 실패 보관 위치는 `[결정 필요 M-GW-8]`(Gateway에 DB가 없어 P2.6-4·5를 그대로 따를 수 없다).
+8. THE 웹 BFF·API 게이트웨이 SHALL 계정 접근 변경 소비 지연을 낸다: 붙잡고 있는 사실의 나이는 앱 게이지 `stove.account.access.consumer.lag`, 가져오지 못한 적체는 브로커 쪽 그룹 지연(`kafka_consumergroup_lag_sum`, 기존 `ConsumerStalled`·`ConsumerLagGrowing` 경보)으로 본다(PR #246 R3). 소비가 멈추거나 거절 기준을 잃으면 끊기가 access token 수명까지 늦어지기 때문이다. 경보 기준은 측정 뒤 정한다(결정 159). 이 소비는 일시 실패를 성공할 때까지 재시도하고 영구 실패만 DLT로 보낸다([결정 226](../../../docs/decisions.md#access-change-consumer-failure), P2.6-4·5의 예외).
 
 ### R6. 다중 웹 BFF와 세션 저장소 장애
 **사용자 스토리:** 운영자로서, Gateway를 여러 개 띄우고도 세션이 공유되기를 바란다. 그래야 가용성이 유지된다.

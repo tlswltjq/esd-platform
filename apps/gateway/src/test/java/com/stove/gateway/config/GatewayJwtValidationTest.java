@@ -2,15 +2,20 @@ package com.stove.gateway.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import com.stove.gateway.adapter.redis.RedisAccessBaselines;
 import com.stove.gateway.config.SecurityConfig;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.function.Function;
@@ -22,6 +27,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import reactor.core.publisher.Mono;
 
 class GatewayJwtValidationTest {
     @Test
@@ -37,8 +43,11 @@ class GatewayJwtValidationTest {
         });
         server.start();
         try {
+            // 거절 기준이 없는 subject: 서명·issuer·audience·만료 검증만 본다(기준 거절은 BaselineCheckingJwtDecoderTest).
+            RedisAccessBaselines baselines = mock(RedisAccessBaselines.class);
+            when(baselines.baseline(anyString())).thenReturn(Mono.empty());
             ReactiveJwtDecoder decoder = new SecurityConfig().jwtDecoder("https://auth.example",
-                    "http://127.0.0.1:" + server.getAddress().getPort() + "/jwks");
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/jwks", baselines, Duration.ofSeconds(1));
             NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(key)));
             Instant now = Instant.now();
             Function<JwtClaimsSet, String> sign = claims -> encoder.encode(JwtEncoderParameters.from(

@@ -3,6 +3,7 @@ package com.stove.common.messaging.kafka;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.util.backoff.BackOff;
 
 /** 제자리 재시도({@link ConsumerRetryPolicy}) 뒤 recoverer 로 격리하는 오류 처리기를 만든다. 격리처는 소비 모듈 DB(결정 206) 또는 DLT(Store). */
 @Slf4j
@@ -18,11 +19,18 @@ public final class DeadLetterErrorHandlers {
     @SafeVarargs
     public static DefaultErrorHandler create(ConsumerRecordRecoverer recoverer,
                                              Class<? extends Exception>... noRetryFor) {
+        return create(recoverer, ConsumerRetryPolicy.backOff(), noRetryFor);
+    }
+
+    /** {@code backOff}로 재시도한다. {@link ConsumerRetryPolicy#untilSuccess()}면 {@code noRetryFor}만 격리로 간다. */
+    @SafeVarargs
+    public static DefaultErrorHandler create(ConsumerRecordRecoverer recoverer, BackOff backOff,
+                                             Class<? extends Exception>... noRetryFor) {
         DefaultErrorHandler handler = new DefaultErrorHandler((record, exception) -> {
             log.error("재시도 소진(또는 재시도 제외) — 격리한다 topic={} partition={} offset={} key={}",
                     record.topic(), record.partition(), record.offset(), record.key(), exception);
             recoverer.accept(record, exception);
-        }, ConsumerRetryPolicy.backOff());
+        }, backOff);
         if (noRetryFor.length > 0) {
             handler.addNotRetryableExceptions(noRetryFor);
         }

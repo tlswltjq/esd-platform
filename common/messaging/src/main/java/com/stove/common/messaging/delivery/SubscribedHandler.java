@@ -18,6 +18,10 @@ public record SubscribedHandler(String group, String topic, EventHandler handler
                 throw new IllegalStateException("@EventSubscriber 는 EventHandler 구현에만 단다: " + entry.getKey());
             }
             EventSubscriber subscription = beans.findAnnotationOnBean(entry.getKey(), EventSubscriber.class);
+            if (subscription.retryUntilSuccess()) {
+                // DB 격리 adapter는 재시도 상한 뒤 보관이 전제다. 성공까지 재시도는 DB 없는 모듈의 Kafka 소비만 쓴다(결정 226).
+                throw new IllegalStateException("retryUntilSuccess 는 Kafka adapter만 지원한다: " + entry.getKey());
+            }
             for (String topic : subscription.topics()) {
                 found.add(new SubscribedHandler(subscription.group(), topic, handler, subscription.noRetryFor()));
             }

@@ -2345,6 +2345,17 @@
 - 구분: 추천 수용
 - 결과: [PR #243](https://github.com/tlswltjq/esd-platform/pull/243)
 
+<a id="access-change-consumer-failure"></a>
+## 226. 계정 접근 변경 사실의 소비 실패: 일시 실패는 성공할 때까지 재시도하고, 영구 실패만 DLT로 보낸다
+- 문제: [결정 225](#revocation-placement)로 웹 BFF와 API 게이트웨이가 `AccountAccessChanged`를 소비한다. 그런데 두 앱에는 DB가 없어, 소비 실패를 소비 모듈 DB의 실패 보관 표에 두고 키를 정지하는 P2.6-4·5([결정 206](#messaging-port-scope-quarantine))를 그대로 따를 수 없다(M-GW-8). 실패는 대부분 Redis 장애 같은 일시 실패다. 재시도 4회 뒤 격리하면, 운영자가 다시 넣을 때까지 그 차단이 빠진다.
+- 선택지: A 일시 실패는 성공할 때까지 재시도(그동안 파티션 정지, 소비 지연 게이지 경보), 영구 실패만 `<토픽>.DLT`(Store 선례) / B 플랫폼 규칙대로 4회 재시도 뒤 DLT / C Redis에 실패 보관·키 정지 구현 / D 두 앱에 MySQL을 붙여 `JpaKeyQuarantine` 사용 (추천: A — 이 사실은 멱등이고 순서에 무관해 키 정지가 지키려는 순서 보장이 필요 없고, 즉시 차단은 빠지면 안 되므로 일시 실패를 버리지 않는다)
+- 내 의견: "결정 226은 A로 해"
+- 선택: A — 추천 수용.
+  - 웹 BFF·API 게이트웨이의 `AccountAccessChanged` 소비는 일시 실패를 성공할 때까지 블로킹 재시도한다(P2.6-1의 4회 뒤 격리의 예외). 영구 실패(봉투·역직렬화·계약 위반)는 재시도 없이 `stove.auth.v1.DLT`로 보낸다(DB 없는 Store와 같은 방식, P2.6-3).
+  - 감수한 비용: Redis 장애가 길면 그동안 이 토픽의 두 소비 그룹이 멈춘다. 소비 지연 게이지 경보로 알아챈다. 빠지더라도 노출 상한은 access token 수명(기본 15분)이다(Refresh는 Auth가 이미 폐기).
+- 구분: 추천 수용
+- 결과: PR #246
+
 ---
 
 ## 검증하며 드러난 것
