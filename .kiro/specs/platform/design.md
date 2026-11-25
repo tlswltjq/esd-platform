@@ -259,7 +259,7 @@ Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt
 
 `OrderPaymentResultRejected` 본문 목표: 주문 연결값 5개(`orderNo`·`requestEventId`·`buyerSubject`·`amount`·`currency`), `rejectedResultEventId`, `paymentId`, `admissionId`(거절한 결과에 있던 값, 없으면 null), `rejectionReason`(enum: `NO_OPEN_ADMISSION` 열린 진행 기록 없음 · `ADMISSION_MISMATCH` 다른 진행 기록 · `ORDER_CLOSED` 주문이 이미 `EXPIRED`·`FAILED`·다른 결과로 `PAID`). 금액·PG 상태는 싣지 않는다 — 청구 근거의 정본은 Payment다(원칙 ③, [결정 153](../../../docs/decisions.md#late-success-rejection)).
 
-`RefundFailureClosed` 본문 목표(참고 구현 `esd-worktrees/refund-failure-closure`의 `RefundFailureClosedEvent`와 다른 점은 "비고"):
+`RefundFailureClosed` 본문 목표(참고 구현 — 닫힌 [PR #166](https://github.com/tlswltjq/esd-platform/pull/166) head `2d679522` — 의 `RefundFailureClosedEvent`와 다른 점은 "비고"):
 
 | 칸 | 뜻 | 비고 |
 |---|---|---|

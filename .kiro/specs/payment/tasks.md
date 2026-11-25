@@ -79,7 +79,7 @@
   - 영향: **보유권·돈 지연** — 409 형식 거절이면 기한까지 약 180번 재송신, 그동안 보유권 정지·고객 `PROCESSING`, 실패 종결도 기한 뒤에야 가능.
   - 재현: 흉내 서버가 형식 갖춘 409 → 첫 응답 뒤 `HELD`, 재송신 0.
 - [ ] **PA-T12. 운영자 실패 종결·실패 뒤 감시·늦은 취소 반영이 main에 없다** (플랫폼 T4, 결정 128·148·157, (1회차 지적 A2·B2, 판정 전))
-  - 어디서: `RefundFailureClosed`·`CloseRefundFailure` 없음(참고 구현 `esd-worktrees/refund-failure-closure`, 커밋 안 됨), `RefundExecution.confirmFailure`가 조회 일정을 멈춤(V21 `chk_refund_execution_failure`가 `FAILED`의 일정 NULL 요구), 웹훅 `wake`는 `refundConfirmedAt is null`만.
+  - 어디서: `RefundFailureClosed`·`CloseRefundFailure` 없음(참고 구현: 닫힌 [PR #166](https://github.com/tlswltjq/esd-platform/pull/166) head `2d679522`, 브랜치는 지움), `RefundExecution.confirmFailure`가 조회 일정을 멈춤(V21 `chk_refund_execution_failure`가 `FAILED`의 일정 NULL 요구), 웹훅 `wake`는 `refundConfirmedAt is null`만.
   - 목표: R18·R19, design 상태 모델 6 #14~#17·7. `refund_failure_closure`·`refund_late_cancellation` 표, `FAILED` 실행의 실패 뒤 감시 일정 허용 CHECK, `kind=LATE_CANCELLATION` 목록·경보, 늦은 취소 반영 API(뒤 실행 있으면 409, 확인 뒤 후속 실행 요청은 실행 없이 기록 — 결정 179), 고객 재시도 사전 확인이 종결 실패를 받음.
   - 영향: **돈·보유권** — 실패 종결이 없어 송신이 멈춘 환불이 끝나지 않고, 늦은 취소가 생기면 고객이 돈과 게임을 함께 갖고 판매자가 과지급된다.
   - 재현: #166 `RefundFailureClosureIntegrationTest`(R1 Red→Green 포함), 늦은 취소 — 실패 종결 → 흉내 서버 콘솔 취소 → 조사 목록 → 반영 → `RefundLateCancellationConfirmed` 1건·재요청 무변화.
