@@ -47,6 +47,7 @@ INFRA_SHARDS = (
         ':common:messaging-direct:integrationTest',    # 64
         ':common:messaging-redis:integrationTest',     # 63
         ':common:messaging:integrationTest',  # 49
+        ':apps:gateway:integrationTest',      # GW-T18: 접근 기준 시각 Redis 통합 테스트(미측정, 가장 짧은 조각)
     )),
 )
 
