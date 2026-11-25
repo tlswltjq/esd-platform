@@ -88,8 +88,8 @@ class ApprovalReviewAdminGatewayTest {
     }
     @Test void anonymousMembersAndCreatorsCannotReachThePaymentService() {
         http.get().uri(ROOT).exchange().expectStatus().isUnauthorized();
-        // Without a Bearer token the BFF CSRF filter refuses the POST before authentication; either way Payment is not reached.
-        http.post().uri(ROOT + "/example/closure").bodyValue(COMMAND).exchange().expectStatus().is4xxClientError();
+        // 결정 224: the internal gateway has no CSRF; without a Bearer token the POST is unauthenticated and Payment is not reached.
+        http.post().uri(ROOT + "/example/closure").bodyValue(COMMAND).exchange().expectStatus().isUnauthorized();
         for (String role : new String[]{"MEMBER", "CREATOR", "REVIEWER"}) {
             for (String path : new String[]{ROOT, ROOT + "/example", ROOT + "/example/investigations"})
                 http.get().uri(path).header("Authorization", "Bearer " + role).exchange().expectStatus().isForbidden();

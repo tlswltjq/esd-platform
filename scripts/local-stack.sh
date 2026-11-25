@@ -33,7 +33,7 @@ case "${1:-up}" in
     "${APPS[@]}" ps
     ;;
   logs)
-    "${APPS[@]}" logs -f "${2:-gateway}"
+    "${APPS[@]}" logs -f "${2:-web-bff}"
     ;;
   *)
     echo "사용법: $0 {up|down|restart|ps|logs [서비스]}" >&2

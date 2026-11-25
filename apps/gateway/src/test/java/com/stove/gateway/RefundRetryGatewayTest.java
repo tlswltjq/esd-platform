@@ -87,8 +87,8 @@ class RefundRetryGatewayTest {
         assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer MEMBER");
     }
     @Test void anonymousAndNonMembersCannotForwardARetry() {
-        // An anonymous browser write is rejected by CSRF before authentication; nothing reaches Order.
-        http.post().uri(ROOT + "/retries").exchange().expectStatus().isForbidden();
+        // 결정 223·224: the API gateway has no CSRF (no cookies); an anonymous write is unauthenticated and nothing reaches Order.
+        http.post().uri(ROOT + "/retries").exchange().expectStatus().isUnauthorized();
         for (String role : new String[]{"ADMIN", "CREATOR", "REVIEWER"})
             http.post().uri(ROOT + "/retries").header("Authorization", "Bearer " + role).contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(BODY).exchange().expectStatus().isForbidden();

@@ -1,23 +1,19 @@
-# 요구사항: Gateway (라우팅·BFF 로그인·세션·토큰 릴레이, 내부 API 차단)
+# 요구사항: Gateway — API 게이트웨이 (라우팅·역할별 경로 규칙, 내부 API 차단)
 
 > 상태: 작성 중(결정 150·178). 모듈을 넘는 계약은 [플랫폼 스펙](../platform/requirements.md)이 정본이고 이 문서는 링크한다.
 
 ## 개요
 
-Gateway는 플랫폼의 외부 진입점이다. 외부 요청을 라우팅 표의 경로만 업무 모듈로 보내고, 그 밖의 경로(`/internal/**`, 운영 경로, 서비스 간 전용 명령)는 어떤 라우트에도 두지 않는다([P1.2-2](../platform/requirements.md)). 경로마다 요구 역할을 확인하는 1차 경계이고, 소유권·세부 권한은 받는 모듈이 JWT로 다시 판정한다.
+API 게이트웨이는 모든 클라이언트별 BFF가 공유하는 내부 진입점이다([결정 223](../../../docs/decisions.md#per-client-bff)). 내부망에만 있고([결정 224](../../../docs/decisions.md#api-gateway-internal)) BFF가 릴레이한 Bearer만 받는다. 요청을 라우팅 표의 경로만 업무 모듈로 보내고, 그 밖의 경로(`/internal/**`, 운영 경로, 서비스 간 전용 명령)는 어떤 라우트에도 두지 않는다([P1.2-2](../platform/requirements.md)). 경로마다 요구 역할을 확인하는 1차 경계이고, 소유권·세부 권한은 받는 모듈이 JWT로 다시 판정한다.
 
-Gateway는 BFF(Backend for Frontend)를 겸한다. 기밀 OAuth 클라이언트 `gateway-bff`로 Authorization Code + PKCE 로그인을 하고, Access/Refresh Token을 서버 쪽 세션 저장소(Redis)에만 보관한다. 브라우저는 세션 쿠키만 갖는다. 세션 쿠키 요청은 Gateway가 보관한 Access Token으로 바꿔 업무 모듈에 보내고(토큰 릴레이), 만료가 가까우면 Auth에 갱신을 요청한다. 인증·토큰 발급·회전·재사용 탐지는 Auth의 정본 규칙이다([Auth 스펙](../auth/requirements.md)).
+BFF 로그인·세션·토큰 보관·릴레이·CSRF(옛 R3~R6)는 [웹 BFF 스펙](../web-bff/requirements.md)으로 옮겼다. 번호는 그대로 쓴다.
 
-Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플랫폼 design "모듈과 외부 공급자"](../platform/design.md#모듈과-외부-공급자)). 동기 의존은 Gateway → 각 업무 모듈(라우팅)과 Gateway → Auth(토큰 엔드포인트) 두 행이다([플랫폼 design "동기 의존"](../platform/design.md#동기-의존-http)).
+게이트웨이는 업무 DB·세션이 없다. 동기 의존은 게이트웨이 → 각 업무 모듈(라우팅) 한 행이다([플랫폼 design "동기 의존"](../platform/design.md#동기-의존-http)).
 
 경로 줄임: `gateway:` = `apps/gateway/src/main/java/com/stove/gateway/`, `application.yml` = `apps/gateway/src/main/resources/application.yml`.
 
 ## 용어
 
-- **BFF 세션**: Gateway가 발급한 세션 쿠키가 가리키는 Redis의 Spring Session 항목(`stove:bff:sessions:*`). 상태는 design "상태 모델"의 `BffSessionState`다.
-- **토큰 기록**: BFF 세션 하나에 묶인 Access/Refresh Token 한 벌(`stove:bff:tokens:<clientKey>`). `clientKey`는 로그인 때 바뀌는 세션 ID와 독립된 세션 속성 `bff.client-key`다.
-- **갱신 lease**: 한 토큰 기록의 갱신을 한 번에 하나만 하도록 Redis에 잡는 만료 있는 잠금(`<토큰 기록 키>:refresh-lock`, 소유자 값 대조 해제).
-- **불확실한 갱신**: 갱신 요청을 보냈지만 Auth가 Refresh Token을 소비했는지 알 수 없는 결과(타임아웃·연결 끊김·5xx·불완전한 2xx 본문). Refresh Token은 한 번 쓰면 회전되므로 같은 토큰으로 다시 보내면 Auth 재사용 탐지가 계열 전체를 폐기한다.
 - **라우트의 부재**: 외부 노출 통제를 필터 조건이 아니라 라우팅 표에 경로를 두지 않는 것으로 표현하는 방식.
 - **공급자 통지 경로**: 결제 공급자가 서버 대 서버로 보내는 결제 상태 변경 통지(웹훅)를 받는 공개 경로. 통지는 Payment의 조회 힌트일 뿐 상태를 확정하지 않는다([P3.11-5](../platform/requirements.md), [P3.13-8](../platform/requirements.md)).
 - **`esd-api` audience**: 업무 모듈이 Access Token에서 확인하는 대상 값.
@@ -28,7 +24,7 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 **사용자 스토리:** 클라이언트로서, 단일 진입점으로 각 업무 서비스를 호출하고 싶다. 그래야 서비스별 주소를 직접 알 필요가 없다.
 
 #### 수용 기준
-1. WHEN `/api/v1/auth/**`, `/oauth2/**`, `/login`, `/logout`, `/.well-known/**`(브라우저 OIDC 경로: `/error`·`/userinfo`·`/connect/**`·`/default-ui.css` 포함) 요청이 오면 THEN Gateway SHALL auth로 라우팅하고 브라우저 경로의 Host를 유지한다.
+1. WHEN `/api/v1/auth/**` 요청이 오면 THEN Gateway SHALL auth로 라우팅한다. 브라우저 OIDC 경로(`/oauth2/authorize`·`/login`·`/logout`·`/.well-known/**`·`/error`·`/connect/**`·`/default-ui.css`)는 웹 BFF가 Auth로 바로 보낸다(결정 223). 토큰·폐기·JWKS·userinfo 엔드포인트는 어느 쪽에도 라우트가 없다(결정 220).
 2. WHEN `/api/v1/storefront/**` 요청이 오면 THEN Gateway SHALL store로 라우팅하고, 익명 `GET`만 허용한다.
 3. WHERE `/api/v1/products/**` 공개 라우트에서 THE Gateway SHALL `GET`만 허용한다. 판매자 판매·노출 설정(`/api/v1/products/by-code/*/{sales,listing}`)만 별도 라우트로 `GET`·`PUT`을 연다.
 4. WHEN `/api/v1/orders/**`, `/api/v1/payments/**`, `/api/v1/library/**`·`/api/v1/storage/**`, `/api/v1/downloads/**` 요청이 오면 THEN Gateway SHALL 각각 order·payment·license·download로 라우팅하고 `MEMBER` 역할을 요구한다(공급자 통지 경로는 R7).
@@ -53,56 +49,8 @@ Gateway는 업무 DB가 없고 이벤트를 발행·소비하지 않는다([플�
 5. THE Gateway 관리 엔드포인트 SHALL `health`·`info`·`prometheus`만 노출 목록에 둔다. 라우트 조회·갱신(`/actuator/gateway/**`)은 노출 목록에 두지 않는다(보안 거절에만 기대지 않음, 원칙 ⑤).
 6. THE 외부 요청의 서비스 키 헤더(`X-<호출모듈>-Service-Key`, [P1.2-3](../platform/requirements.md)) 처리 SHALL `X-Member-Id`와 함께 [결정 필요 M-GW-5]로 정한다. 지금은 `/internal/**` 라우트가 없어 그 헤더가 서비스 키 검사 경로에 닿지 않는다(1).
 
-### R3. BFF 로그인과 세션
-**사용자 스토리:** 브라우저 사용자로서, 로그인 후 세션 쿠키만으로 API를 쓰고 싶다. 그래야 토큰을 직접 다루지 않는다.
-
-#### 수용 기준
-1. WHEN `GET /oauth2/authorization/gateway-bff` 요청이 오면 THEN Gateway SHALL 기밀 클라이언트 `gateway-bff`로 Authorization Code + PKCE 로그인을 시작하고 인가 요청(state·code_verifier·nonce)을 세션에 보관한다.
-2. WHEN `GET /login/oauth2/code/gateway-bff` callback이 보관한 인가 요청과 맞으면 THEN Gateway SHALL 토큰 교환을 하고, 세션 ID를 바꾸고, 토큰 기록을 저장한 뒤 세션을 `AUTHENTICATED`로 둔다. IF 인가 요청이 없거나 맞지 않거나 교환이 실패하면 THEN Gateway SHALL 401로 끝내고 토큰 기록을 만들지 않는다.
-3. WHEN `GET /bff/session` 요청이 오면 THEN Gateway SHALL 검증된 Access Token의 `sub`·`member_id`·`roles`를 반환하고 토큰 값은 반환하지 않는다.
-4. WHEN 로그인하면 THEN Gateway SHALL Access/Refresh Token을 Redis 토큰 기록에만 보관하고 브라우저에는 세션 쿠키만 내려준다.
-5. THE 토큰 기록 키 SHALL 로그인 때 바뀌는 세션 ID와 독립된 세션 속성(`bff.client-key`)에 연결한다.
-6. THE 토큰 기록 SHALL Refresh Token을 반드시 갖는다. IF 토큰 교환 응답에 Refresh Token이 없으면 THEN Gateway SHALL 로그인을 실패로 끝낸다(`gateway-bff`는 항상 Refresh Token을 받는 클라이언트다. 새 번호, notes I).
-7. WHILE 세션이 `AUTHENTICATED`이면 THE Gateway SHALL 그 세션의 토큰 기록이 있다는 것을 요청마다 확인하고, 없으면 세션을 끝내고 401을 반환한다(design 불변식 GW-I4).
-
-### R4. 토큰 릴레이와 갱신
-**사용자 스토리:** Gateway로서, 세션 쿠키 요청을 업무 서비스의 토큰 요청으로 바꾸고 싶다. 그래야 브라우저가 토큰을 보관하지 않아도 된다.
-
-#### 수용 기준
-1. WHEN `AUTHENTICATED` 세션의 요청을 업무 서비스로 보내면 THEN Gateway SHALL 토큰 기록의 Access Token을 `Authorization: Bearer`로 붙이고 브라우저 `Cookie` 헤더를 하위로 보내지 않는다.
-2. WHILE 토큰 기록을 갱신하는 동안 THE Gateway SHALL 갱신 lease(기본 15초)를 잡아 같은 토큰 기록의 갱신을 하나만 한다. lease를 못 잡은 요청은 갱신 결과를 기다리되 기다림 상한(기본 12초)을 넘기면 503으로 끝내고 세션을 바꾸지 않는다.
-3. THE Auth 토큰 요청 timeout SHALL 기본 5초이며 lease보다 짧다.
-4. IF 갱신이 불확실하면(타임아웃·연결 끊김·5xx) THEN Gateway SHALL 이전 Refresh Token으로 자동 재시도하지 않고 토큰 기록과 세션을 지우고 401(재로그인)을 반환한다.
-5. THE Bearer Token API 접근 SHALL 세션과 무관하게 지원한다. Bearer 요청은 Gateway가 서명·만료·issuer·`esd-api` audience를 검증한 뒤 받은 헤더 그대로 전달한다.
-6. IF Auth가 토큰 갱신을 거절하면(4xx: 계정 정지·잠금·역할 회수·재사용 탐지·Refresh Token 상한 도달 등) THEN Gateway SHALL 토큰 기록과 브라우저 세션을 삭제하고 401을 반환하며 하위 요청을 보내지 않는다.
-7. WHEN 허용된 요청을 하위 서비스로 전달하면 THEN Gateway SHALL 하위 응답의 상태(202·4xx·503 포함)·본문·`Location`·`Cache-Control`을 바꾸지 않고 전달한다.
-8. WHEN 갱신 응답을 받으면 THEN Gateway SHALL 새 Access Token을 검증하고 그 `sub`가 토큰 기록의 subject와 같을 때만 저장한다. IF 다르면 THEN 토큰 기록과 세션을 지우고 401을 반환한다(새 번호, design GW-I7).
-9. IF 갱신 응답이 2xx지만 Access Token·Refresh Token·`expires_in` 중 하나라도 없으면 THEN Gateway SHALL 불확실한 갱신(4)으로 다룬다(Refresh Token이 이미 소비됐을 수 있다. 새 번호).
-10. IF Access Token의 서명·issuer·audience·만료 검증이 실패하면 THEN Gateway SHALL Bearer 요청은 401로 거절하고, BFF 세션 요청은 토큰 기록과 세션을 지우고 401을 반환한다. 만료(`exp`) 검증이 판단 원칙 ⑥과 맞는지는 [결정 필요 M-GW-2].
-11. THE 토큰 신선도 판정(갱신 필요 여부) SHALL Gateway가 토큰을 받은 시각 + `expires_in`으로 자기 시계에서 계산한 만료 시각과 자기 시계로 한다. Auth가 찍은 시각과 비교하지 않는다(원칙 ⑥, 결정 163).
-
-### R5. CSRF와 로그아웃
-**사용자 스토리:** 사용자로서, 쿠키 인증의 변경 요청이 안전하기를 바란다. 그래야 세션 탈취 위험이 줄어든다.
-
-#### 수용 기준
-1. WHEN `GET /bff/csrf` 요청이 오면 THEN Gateway SHALL 변경 요청용 CSRF 헤더 이름과 토큰을 반환한다.
-2. WHERE 쿠키 인증의 변경 요청(`POST`·`PUT`·`PATCH`·`DELETE`)에서 THE Gateway SHALL CSRF 헤더·토큰을 요구한다. Bearer 요청과 Auth에 위임한 브라우저 로그인·가입·비밀번호 복구 경로는 예외다.
-3. WHEN `POST /bff/logout` 요청이 오면 THEN Gateway SHALL Auth에 Refresh Token 폐기를 요청하고 토큰 기록과 BFF 세션을 지운 뒤 auth OIDC 로그아웃(`end_session_endpoint`)으로 이동한다.
-4. IF 로그아웃 중 Auth 폐기 요청이 실패하면 THEN Gateway SHALL [결정 필요 M-GW-3]을 따른다(새 번호).
-5. WHEN BFF 세션이 어떤 경로로 끝나면(로그아웃·갱신 거절·검증 실패·세션 만료·재로그인으로 토큰 기록 교체) THEN Gateway SHALL 그 세션의 토큰 기록도 남기지 않는다. 버려지는 Refresh Token을 Auth에서 폐기할지는 [결정 필요 M-GW-3](새 번호).
-6. WHEN Gateway가 Auth의 계정 접근 변경 사실 `AccountAccessChanged`(가칭, 토픽 `stove.auth.v1`, 키 `subject`, 그룹 가칭 `gateway-account-access`)를 처음 받으면 THEN Gateway SHALL 그 `subject`의 모든 BFF 세션과 토큰 기록을 지우고, 세션 저장소(Redis)에 `subject`별 거절 기준 `changedAt`을 최대 access token 수명 이상(설정 키, R8) 남긴다. 같은 `subject`의 기준은 더 늦은 `changedAt`만 덮는다. 멱등은 `eventId`를 기준과 같은 수명으로 Redis에 두어 지킨다(결정 84, [결정 180](../../../docs/decisions.md#account-access-revocation)).
-7. WHILE `subject`의 거절 기준이 있으면 THE Gateway SHALL JWT `iat`가 기준(초 단위로 올림)보다 이른 access token을 세션 릴레이·Bearer 요청 모두 401로 거절하고, 세션 요청이면 그 세션을 `NONE`으로 끝낸다. `iat`와 `changedAt`은 모두 Auth 시계라 원칙 ⑥ 예외가 아니다([결정 180](../../../docs/decisions.md#account-access-revocation)).
-8. THE Gateway SHALL `gateway-account-access` 소비 지연(가장 오래 처리하지 못한 레코드의 나이)을 게이지로 낸다. 소비가 멈추거나 거절 기준을 잃으면 끊기가 access token 수명까지 늦어지기 때문이다. 경보 기준은 측정 뒤 정한다(결정 159). 이 소비의 실패 보관 위치는 `[결정 필요 M-GW-8]`(Gateway에 DB가 없어 P2.6-4·5를 그대로 따를 수 없다).
-
-### R6. 다중 Gateway와 세션 저장소 장애
-**사용자 스토리:** 운영자로서, Gateway를 여러 개 띄우고도 세션이 공유되기를 바란다. 그래야 가용성이 유지된다.
-
-#### 수용 기준
-1. THE 여러 Gateway SHALL 동일 Redis, 세션 namespace, 클라이언트 자격증명을 사용하고, 어느 인스턴스가 받은 callback·갱신이든 같은 토큰 기록을 본다.
-2. WHERE 로드밸런서 공개 주소 맥락에서 THE Gateway SHALL 인가 주소·redirect URI·로그아웃 주소를 설정한 공개 주소로 만들고, 요청 Host나 인스턴스 내부 주소로 만들지 않는다. Auth의 토큰·JWK 주소는 내부 주소를 쓸 수 있다.
-3. IF 세션 저장소에 접근할 수 없으면 THEN Gateway SHALL 인증을 우회하지 않고 `503 SESSION_STORE_UNAVAILABLE`로 반환한다.
-4. WHEN Gateway·auth가 재시작하면 THEN 세션·토큰 기록 SHALL 공유 Redis·MySQL에 남아 그대로 이어진다.
-5. WHILE 세션 저장소에 접근할 수 없으면 THE Bearer 요청·익명 공개 `GET`·공급자 통지 경로 SHALL [결정 필요 M-GW-4]에 따라 처리한다(새 번호).
+### R3~R6. (웹 BFF로 옮김)
+BFF 로그인과 세션(R3), 토큰 릴레이와 갱신(R4), CSRF와 로그아웃(R5), 다중 BFF와 세션 저장소 장애(R6)는 [웹 BFF 스펙](../web-bff/requirements.md)에 있다.
 
 ### R7. 결제 공급자 통지의 공개 수신 경로 (새 요구사항)
 **사용자 스토리:** 운영자로서, 결제 공급자가 보내는 결제 상태 변경 통지가 Payment에 닿기를 바란다. 그래야 끝난 결제의 늦은 청구를 주기 조회보다 먼저 알 수 있다(결정 154).

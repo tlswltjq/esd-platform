@@ -1,12 +1,6 @@
 dependencies {
+    // API 게이트웨이(결정 223·224): 내부망에서 BFF가 릴레이한 Bearer를 검증하고 역할별 경로 규칙으로 라우팅한다.
+    // 세션·OAuth 클라이언트·Swagger UI는 웹 BFF(apps/web-bff)에 있다.
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
-    implementation 'org.springframework.session:spring-session-data-redis'
-
-    // 게이트웨이는 WebFlux 라 서블릿용 아티팩트를 쓸 수 없다.
-    // 자기 API 를 문서화하려는 것이 아니라(라우팅만 한다) 10개 서비스의 명세를
-    // 한 화면에 모으는 Swagger UI 를 여기서 서빙하기 위해서다.
-    implementation "org.springdoc:springdoc-openapi-starter-webflux-ui:${springdocVersion}"
 }

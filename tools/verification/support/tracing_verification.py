@@ -186,7 +186,7 @@ class TracingVerification:
         self.compose.write_text(json.dumps(configuration, indent=2))
         # Keep the same bounded startup order as scripts/start-apps.sh. Restarting
         # all JVMs together can exhaust DB handshake timeouts on a local machine.
-        for index, group in enumerate([["auth", "gateway"], ["studio", "review", "catalog"],
+        for index, group in enumerate([["auth", "web-bff", "gateway"], ["studio", "review", "catalog"],
                                        ["store", "order", "payment"], ["license", "download", "settlement"]]):
             self.run(self.docker + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "180", *group],
                      "sampling-" + str(probability) + "-" + str(index))

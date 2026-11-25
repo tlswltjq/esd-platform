@@ -121,19 +121,14 @@ class GatewayRouteTest {
         assertThat(matchedRouteId(HttpMethod.valueOf(method), path)).isEqualTo(expectedRouteId);
     }
 
-    @ParameterizedTest(name = "GET {0}")
-    @ValueSource(
-            strings = {
-                "/oauth2/authorize",
-                "/oauth2/token",
-                "/login",
-                "/logout",
-                "/default-ui.css",
-                "/.well-known/openid-configuration"
-            })
-    @DisplayName("Swagger PKCE에 필요한 브라우저 인증 경로만 auth로 프록시한다")
-    void browserAuthenticationRoutesReachAuth(String path) {
-        assertThat(matchedRouteId(HttpMethod.GET, path)).isEqualTo("auth-browser");
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"/oauth2/authorize", "/login", "/logout", "/connect/logout", "/default-ui.css",
+            "/.well-known/openid-configuration", "/oauth2/token", "/oauth2/revoke", "/oauth2/introspect", "/oauth2/jwks",
+            "/userinfo"})
+    @DisplayName("결정 220·223: Auth의 브라우저 로그인·토큰 엔드포인트는 API 게이트웨이에 라우트가 없다(로그인은 웹 BFF가 맡는다)")
+    void authBrowserAndTokenEndpointsHaveNoRoute(String path) {
+        assertThat(matchedRouteId(HttpMethod.POST, path)).isNull();
+        assertThat(matchedRouteId(HttpMethod.GET, path)).isNull();
     }
 
     @Test
@@ -157,7 +152,7 @@ class GatewayRouteTest {
                 "review",
                 "settlement"
             })
-    @DisplayName("10개 서비스의 명세가 게이트웨이를 통해 조회된다 — Swagger UI 가 같은 출처에서 받는다")
+    @DisplayName("10개 서비스의 명세가 게이트웨이를 통해 조회된다 — 웹 BFF의 Swagger UI 가 같은 출처에서 받는다")
     void apiDocsAreProxied(String service) {
         assertThat(matchedRouteId(HttpMethod.GET, "/v3/api-docs/" + service))
                 .isEqualTo("docs-" + service);

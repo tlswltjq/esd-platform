@@ -41,7 +41,8 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 | `apps/download` | 보유권·현재 공개 빌드 확인·전체 ZIP 만료 URL |
 | `apps/settlement` | OrderPaid 매출·판매자 배분·월 마감·PG 지급 명세 수령 대사 |
 | `simulators/mock-pg` | 독립 프로세스·전용 DB·HTTP 결제 결정·비용·모의 지급 명세 |
-| `apps/gateway` | 외부 API와 로그인 진입점 |
+| `apps/web-bff` | 브라우저의 유일한 입구: BFF 로그인·세션·토큰 보관·CSRF |
+| `apps/gateway` | 내부 API 게이트웨이: Bearer 검증·역할별 경로 규칙·라우팅 |
 | `common/` | 이벤트 계약, Outbox·Inbox, 웹·JPA·테스트 지원 |
 | `infra/`, `docker-compose*.yml` | 저장소·메시징·관측 도구와 앱 실행 구성 |
 | `e2e/`, `tools/verification/` | 인수 테스트, 격리 스택·이미지·인증 검증 도구 |

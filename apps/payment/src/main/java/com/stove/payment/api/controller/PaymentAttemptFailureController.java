@@ -6,7 +6,6 @@ import com.stove.payment.api.controller.dto.PaymentAttemptFailurePage;
 import com.stove.payment.core.domain.PaymentFailureHistoryQuery;
 import com.stove.payment.core.service.ReadPaymentFailureHistory;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 public class PaymentAttemptFailureController {
     private final ReadPaymentFailureHistory read;
 

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class ApiDocumentationCustomizerTest {
     private final ApiDocumentationCustomizer customizer =
-            new ApiDocumentationCustomizer("payment", "http://auth/authorize", "http://auth/token");
+            new ApiDocumentationCustomizer("payment");
 
     /** OpenAPI 3.1: `$ref` + `type: "null"` together allow nothing, so a nullable object reference must be `anyOf`. */
     @Test

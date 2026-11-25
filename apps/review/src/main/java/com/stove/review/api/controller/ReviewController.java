@@ -12,7 +12,6 @@ import com.stove.review.core.domain.ReviewStatus;
 import com.stove.review.core.service.DecideProjectReview;
 import com.stove.review.core.service.ReadProjectReviews;
 import com.stove.review.core.service.ReadReviewBuildDownload;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -28,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/reviews")
-@SecurityRequirement(name = "oauth2", scopes = "studio")
 public class ReviewController {
     private final ReadProjectReviews read;
     private final ReadReviewBuildDownload download;

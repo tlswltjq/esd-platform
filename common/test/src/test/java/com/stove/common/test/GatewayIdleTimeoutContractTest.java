@@ -26,7 +26,8 @@ import org.springframework.util.SystemPropertyUtils;
  */
 class GatewayIdleTimeoutContractTest {
 
-    private static final String GATEWAY = "gateway";
+    /** WebFlux 프록시(결정 223): 내부 API 게이트웨이와 웹 BFF. 하류는 나머지 서블릿 앱이다. */
+    private static final List<String> PROXIES = List.of("gateway", "web-bff");
     private static final String POOL_MAX_IDLE = "spring.cloud.gateway.server.webflux.httpclient.pool.max-idle-time";
     /** Tomcat {@code connectionTimeout} 기본값({@code org.apache.coyote.http11.Constants.DEFAULT_CONNECTION_TIMEOUT}). */
     private static final Duration TOMCAT_DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(60);
@@ -90,20 +91,24 @@ class GatewayIdleTimeoutContractTest {
     }
 
     @Test
-    @DisplayName("[D-053] Gateway 연결 풀 유휴 상한은 모든 하류 서비스의 keep-alive 유휴 닫기보다 짧다")
-    void gatewayPoolIdleLimitIsShorterThanEveryDownstreamKeepAlive() {
+    @DisplayName("[D-053] 프록시(API 게이트웨이·웹 BFF)의 연결 풀 유휴 상한은 모든 서블릿 하류 서비스의 keep-alive 유휴 닫기보다 짧다")
+    void proxyPoolIdleLimitIsShorterThanEveryDownstreamKeepAlive() {
         List<Path> apps = appDirectories();
-        Path gateway = apps.stream().filter(app -> app.getFileName().toString().equals(GATEWAY)).findFirst().orElseThrow();
-        List<Path> downstream = apps.stream().filter(app -> !app.equals(gateway)).toList();
+        List<Path> proxies = apps.stream().filter(app -> PROXIES.contains(app.getFileName().toString())).toList();
+        assertThat(proxies).as("프록시 둘(결정 223)").hasSize(PROXIES.size());
+        List<Path> downstream = apps.stream().filter(app -> !proxies.contains(app)).toList();
         assertThat(downstream).as("하류 서비스가 0개면 이 계약은 아무것도 지키지 않는다").hasSizeGreaterThanOrEqualTo(10);
 
-        Duration maxIdle = springDuration(POOL_MAX_IDLE, at(yamlOf(gateway), POOL_MAX_IDLE));
-        assertThat(maxIdle).as("%s가 없으면 상한이 없다(기본값 null) — 하류가 닫은 연결을 다시 쓴다", POOL_MAX_IDLE).isNotNull();
-        for (Path app : downstream) {
-            Duration keepAlive = keepAliveOf(yamlOf(app));
-            assertThat(maxIdle)
-                    .as("%s의 keep-alive 유휴 닫기(%s)보다 Gateway 유휴 상한이 짧아야 한다", app.getFileName(), keepAlive)
-                    .isLessThan(keepAlive);
+        for (Path proxy : proxies) {
+            Duration maxIdle = springDuration(POOL_MAX_IDLE, at(yamlOf(proxy), POOL_MAX_IDLE));
+            assertThat(maxIdle).as("%s의 %s가 없으면 상한이 없다(기본값 null) — 하류가 닫은 연결을 다시 쓴다",
+                    proxy.getFileName(), POOL_MAX_IDLE).isNotNull();
+            for (Path app : downstream) {
+                Duration keepAlive = keepAliveOf(yamlOf(app));
+                assertThat(maxIdle)
+                        .as("%s의 keep-alive 유휴 닫기(%s)보다 %s 유휴 상한이 짧아야 한다", app.getFileName(), keepAlive, proxy.getFileName())
+                        .isLessThan(keepAlive);
+            }
         }
     }
 }

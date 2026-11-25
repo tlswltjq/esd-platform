@@ -107,6 +107,7 @@ class Backends:
 
 
 def verify(base, login, require, fixtures, password):
+    """login(email, role) returns (BffClient, subject, Redis token key, stored tokens)."""
     actors = {}
     for label, signup, expected in [
         ('member', '/api/v1/auth/signup/member', {'MEMBER'}),
@@ -118,39 +119,38 @@ def verify(base, login, require, fixtures, password):
         if signup:
             require(requests.post(base + signup, json={'email': email, 'password': password},
                                   timeout=10).status_code == 200, label + ' registration')
-        session, subject, _, stored = login(email)
-        require(set(session.get(base + '/bff/session', timeout=10).json()['roles']) == expected,
+        client, subject, _, stored = login(email, sorted(expected)[0])
+        require(set(client.call('GET', '/bff/session')[1]['roles']) == expected,
                 label + ' roles from real Auth')
-        actors[label] = (session, stored, expected)
+        actors[label] = (client, stored, expected)
 
-    # Run every boundary with both real cookie authentication and real signed JWTs.
-    for label, (session, stored, roles) in actors.items():
-        csrf = session.get(base + '/bff/csrf', timeout=10).json()
-        for mode in ['cookie', 'bearer']:
-            for method, path, destination, required in CASES:
-                before = len(fixtures.calls)
-                headers = {'X-Member-Id': 'spoofed-member'}
-                if mode == 'bearer':
-                    headers['Authorization'] = 'Bearer ' + stored['access']
-                else:
-                    headers[csrf['headerName']] = csrf['token']
-                client = session if mode == 'cookie' else requests
-                response = client.request(method, base + path, headers=headers,
-                                          json={'probe': 'gateway-role-journey'} if method != 'GET' else None,
-                                          timeout=10, allow_redirects=False)
-                allowed = not required or bool(required & roles)
-                title = label + ' ' + mode + ' ' + method + ' ' + path
-                if allowed:
-                    require(response.status_code == 200 and len(fixtures.calls) == before + 1
-                            and response.headers.get('X-Journey-Backend') == destination,
-                            title + ' reaches expected backend')
-                    call = fixtures.calls[-1]
-                    require(call['authorization'] == 'Bearer ' + stored['access'], title + ' JWT relay')
-                    if destination in {'order', 'payment', 'license', 'download'} or '/api/v1/admin/products/' in path:
-                        require(call['member'] is None, title + ' spoofed member removed')
-                else:
-                    require(response.status_code == 403 and len(fixtures.calls) == before,
-                            title + ' forbidden before backend')
+    # Every boundary runs with real cookie authentication. A real signed JWT presented by
+    # the caller is no longer a credential: the web BFF rejects any external Authorization header.
+    for label, (client, stored, roles) in actors.items():
+        for method, path, destination, required in CASES:
+            body = {'probe': 'gateway-role-journey'} if method != 'GET' else None
+            before = len(fixtures.calls)
+            status, headers, _ = client.request(method, path, body,
+                                                headers={'X-Member-Id': 'spoofed-member'})
+            allowed = not required or bool(required & roles)
+            title = label + ' cookie ' + method + ' ' + path
+            if allowed:
+                require(status == 200 and len(fixtures.calls) == before + 1
+                        and headers.get('X-Journey-Backend') == destination,
+                        title + ' reaches expected backend')
+                call = fixtures.calls[-1]
+                require(call['authorization'] == 'Bearer ' + stored['access'], title + ' JWT relay')
+                if destination in {'order', 'payment', 'license', 'download'} or '/api/v1/admin/products/' in path:
+                    require(call['member'] is None, title + ' spoofed member removed')
+            else:
+                require(status == 403 and len(fixtures.calls) == before,
+                        title + ' forbidden before backend')
+            before = len(fixtures.calls)
+            response = requests.request(method, base + path,
+                                        headers={'Authorization': 'Bearer ' + stored['access']},
+                                        json=body, timeout=10, allow_redirects=False)
+            require(response.status_code == 401 and len(fixtures.calls) == before,
+                    label + ' external bearer ' + method + ' ' + path + ' rejected before backend')
 
     for method, path, _, required in CASES:
         before = len(fixtures.calls)
@@ -159,39 +159,37 @@ def verify(base, login, require, fixtures, password):
                 else (response.status_code == 200 and len(fixtures.calls) == before + 1),
                 'anonymous ' + method + ' ' + path)
 
-    session, stored, _ = actors['member']
+    client, _, _ = actors['member']
     for status in [202, 400, 404, 409, 422, 503]:
-        response = requests.post(base + '/api/v1/payments/order-1/approvals?status=' + str(status),
-                                 headers={'Authorization': 'Bearer ' + stored['access']}, json={'requestId': 'probe'},
-                                 timeout=10)
-        require(response.status_code == status and response.headers.get('Cache-Control') == 'no-store'
-                and response.headers.get('X-Journey-Backend') == 'payment'
-                and response.json()['code'] == ('OK' if status == 202 else 'FIXTURE_ERROR'),
+        code, headers, raw = client.request('POST', '/api/v1/payments/order-1/approvals?status=' + str(status),
+                                            {'requestId': 'probe'})
+        value = json.loads(raw)
+        require(code == status and headers.get('Cache-Control') == 'no-store'
+                and headers.get('X-Journey-Backend') == 'payment'
+                and value['code'] == ('OK' if status == 202 else 'FIXTURE_ERROR'),
                 'downstream status and JSON preserved ' + str(status))
         if status == 202:
-            require(response.headers.get('Location') == '/api/v1/payments/order-1/approvals/request-1'
-                    and response.json()['state'] == 'PENDING', '202 Location and pending state preserved')
+            require(headers.get('Location') == '/api/v1/payments/order-1/approvals/request-1'
+                    and value['state'] == 'PENDING', '202 Location and pending state preserved')
 
     # CSRF must stop real authenticated cookie writes, before any downstream call.
     before = len(fixtures.calls)
-    require(session.post(base + '/api/v1/orders', json={}, timeout=10).status_code == 403
+    require(client.request('POST', '/api/v1/orders', {}, csrf=False)[0] == 403
             and len(fixtures.calls) == before, 'cookie write without CSRF blocked')
 
-    all_roles = actors['admin'][1]['access']
+    admin = actors['admin'][0]
     for method, path in [('POST', '/api/v1/products/quote'), ('GET', '/api/v1/ops/outbox'),
                          ('GET', '/internal/v1/store-products'), ('POST', '/v3/api-docs/catalog'),
                          ('GET', '/v3/api-docs/catalog/internal')]:
         before = len(fixtures.calls)
-        response = requests.request(method, base + path, headers={'Authorization': 'Bearer ' + all_roles},
-                                    timeout=10, allow_redirects=False)
-        require(response.status_code in {401, 403, 404} and len(fixtures.calls) == before,
+        status = admin.request(method, path, {} if method != 'GET' else None)[0]
+        require(status in {401, 403, 404} and len(fixtures.calls) == before,
                 'internal or wrong docs method blocked ' + method + ' ' + path)
 
     # Account management routes reach actual Auth, rather than HTTP fixtures.
-    for label, (_, stored, roles) in actors.items():
+    for label, (client, _, roles) in actors.items():
         for suffix, body in [('status', {'status': 'LOCKED'}), ('roles/grant', {'role': 'CREATOR'}),
                              ('roles/revoke', {'role': 'CREATOR'})]:
-            response = requests.post(base + '/api/v1/admin/accounts/missing-account/' + suffix,
-                                     headers={'Authorization': 'Bearer ' + stored['access']}, json=body, timeout=10)
-            require(response.status_code == (404 if 'ADMIN' in roles else 403),
+            status = client.request('POST', '/api/v1/admin/accounts/missing-account/' + suffix, body)[0]
+            require(status == (404 if 'ADMIN' in roles else 403),
                     label + ' account admin ' + suffix)

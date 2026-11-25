@@ -6,6 +6,7 @@ import static com.stove.e2e.Journey.PRICE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.stove.e2e.E2eClient.Response;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -175,11 +176,10 @@ class TrackBCommerceFlowTest {
 
     @Test
     @Order(11)
-    @DisplayName("다른 회원의 토큰에 X-Member-Id를 붙여도 주문과 결제에 접근할 수 없다")
+    @DisplayName("다른 회원의 BFF 세션에 X-Member-Id를 붙여도 주문과 결제에 접근할 수 없다")
     void forgedMemberHeaderCannotSelectAnotherOwner() {
-        Map<String, String> forged = Map.of(
-                "Authorization", Journey.asMember(OTHER_MEMBER).get("Authorization"),
-                "X-Member-Id", Long.toString(MEMBER));
+        Map<String, String> forged = new HashMap<>(Journey.asMember(OTHER_MEMBER));
+        forged.put("X-Member-Id", Long.toString(MEMBER));
         assertThat(Stove.gateway.get("/api/v1/orders/" + Journey.orderNo(), forged).status()).isEqualTo(403);
         assertThat(Stove.gateway.get("/api/v1/payments/" + Journey.orderNo(), forged).status()).isEqualTo(403);
         assertThat(Stove.gateway.post("/api/v1/payments/" + Journey.orderNo() + "/cancel", null,

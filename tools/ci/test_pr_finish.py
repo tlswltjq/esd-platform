@@ -232,6 +232,69 @@ class WaitTest(unittest.TestCase):
             self.assertEqual(1, pr_finish.wait(self.args()))
         self.assertIn('gh pr ready', out.getvalue())
 
+    def test_a_non_draft_ignores_the_skipped_build_from_its_draft_days(self):
+        # PR #244: ready 뒤 새 build가 등록되기 전(결정 217)에는 draft 때 건너뛴 build만 보인다. ci.yml은 draft에서만
+        # build를 건너뛰므로, draft가 아닌 PR의 skipping build는 지난 결과다. 실패로 끝내지 않고 새 build를 기다린다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'job/2'}
+        new_build = {'name': BUILD, 'bucket': 'pass', 'link': 'job/3'}
+        sequence = [[gate, skipped], [gate, skipped], [gate, skipped, new_build]]
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args(register_timeout=-1)))
+        # 새 build가 실패하면 그대로 실패다.
+        failed = {'name': BUILD, 'bucket': 'fail', 'link': 'job/3'}
+        with mock.patch.object(pr_finish, 'required_checks', side_effect=[[gate, skipped], [gate, skipped, failed]]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
+        # 새 CI도 시작되지 않았으면 등록 시간 초과(3)다. 건너뛴 build를 실패(1)로 보고하지 않는다.
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, skipped]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
+            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+
+    def test_an_older_success_does_not_stand_in_for_a_newer_skipped_build(self):
+        # PR #245 리뷰 1: 같은 head에 예전 성공 build와 더 최근의 건너뛴 build가 함께 보이면, 건너뛴 것만 빼고 예전
+        # 성공으로 통과하지 않는다. 가장 최근 세대만 보고 새 build를 기다린다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        old_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/11'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'https://github.com/o/r/actions/runs/1/job/20'}
+        queued = {'name': BUILD, 'bucket': 'pending', 'link': ''}
+        new_fail = {'name': BUILD, 'bucket': 'fail', 'link': 'https://github.com/o/r/actions/runs/1/job/30'}
+        sequence = [[gate, old_pass, skipped], [gate, old_pass, skipped, queued], [gate, old_pass, skipped, new_fail]]
+        reads = mock.Mock(side_effect=sequence)
+        with mock.patch.object(pr_finish, 'required_checks', reads), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
+        self.assertEqual(3, reads.call_count)
+
+    def test_a_new_build_after_the_skip_is_judged_and_distinct_names_are_separate(self):
+        # PR #245 2차 재리뷰: 건너뜀과 같은 초에 시작한 새 build도 job ID가 더 크면 버리지 않고 판정한다(시간 초과 3이 아님).
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'https://github.com/o/r/actions/runs/1/job/20', 'startedAt': '2026-11-24T09:10:00Z'}
+        new_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/21', 'startedAt': '2026-11-24T09:10:00Z'}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, skipped, new_pass]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, pr_finish.wait(self.args()))
+        # 재리뷰 2: 이름이 다른 필수 검사는 서로의 세대를 지우지 않는다. 실패한 build (A)는 나중의 build (B) 성공과 별개다.
+        a_fail = {'name': 'build (A)', 'bucket': 'fail', 'link': 'https://github.com/o/r/actions/runs/1/job/40'}
+        b_pass = {'name': 'build (B)', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/41'}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, a_fail, b_pass]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertEqual(1, pr_finish.wait(self.args()))
+
+    def test_a_skip_without_a_link_drops_nothing(self):
+        # PR #245 3차 재리뷰: 링크 없는 건너뜀은 세대를 모르므로 같은 이름의 예전 성공으로 통과하지 않는다.
+        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/10'}
+        old_pass = {'name': BUILD, 'bucket': 'pass', 'link': 'https://github.com/o/r/actions/runs/1/job/11'}
+        unlinked = {'name': BUILD, 'bucket': 'skipping', 'link': ''}
+        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, old_pass, unlinked]), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), redirect_stdout(io.StringIO()):
+            self.assertNotEqual(0, pr_finish.wait(self.args()))
+
     def test_no_registration_times_out(self):
         with mock.patch.object(pr_finish, 'required_checks', return_value=[]), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):

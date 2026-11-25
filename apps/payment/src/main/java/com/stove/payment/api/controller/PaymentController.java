@@ -9,7 +9,6 @@ import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.service.ReadApprovalReviewNotice;
 import com.stove.payment.core.service.ReadPayment;
 import com.stove.payment.core.service.SearchPayments;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
 @RequestMapping("/api/v1/payments")
-@SecurityRequirement(name="oauth2",scopes="commerce")
 public class PaymentController {
     private final SearchPayments searchPayments;
     private final ReadPayment readPayment;

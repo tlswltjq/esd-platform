@@ -43,9 +43,6 @@ stove:
     bff-redirect-uri: ${BFF_REDIRECT_URI:http://localhost:8080/login/oauth2/code/gateway-bff}
     bff-access-token-seconds: ${BFF_ACCESS_TOKEN_SECONDS:900}
     issuer: ${AUTH_ISSUER:http://localhost:8091}
-    redirect-uri: ${STUDIO_REDIRECT_URI:http://localhost:3000/callback}
-    app-origin: ${STUDIO_APP_ORIGIN:http://localhost:3000}
-    swagger-redirect-uris: ${AUTH_SWAGGER_REDIRECT_URIS:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}
     bootstrap:
       reviewer-email: ${AUTH_REVIEWER_EMAIL:}
       reviewer-password: ${AUTH_REVIEWER_PASSWORD:}

@@ -122,7 +122,7 @@ class RefundAdminGatewayTest {
                 .expectHeader().valueEquals("Location",ROOT+"/example").expectHeader().valueEquals("Cache-Control","no-store");
         assertThat(REQUEST_PATH.get()).isEqualTo(path); assertThat(BODY.get()).contains("command","review","wrong approval");
         assertThat(MEMBER_HEADER.get()).isNull(); assertThat(AUTHORIZATION.get()).isEqualTo("Bearer ADMIN");
-        http.post().uri(path).exchange().expectStatus().isForbidden();
+        http.post().uri(path).exchange().expectStatus().isUnauthorized(); // 결정 224: no CSRF at the internal gateway
         for (String role:List.of("MEMBER","CREATOR","REVIEWER"))
             http.post().uri(path).header("Authorization","Bearer "+role).bodyValue("{}").exchange().expectStatus().isForbidden();
         http.get().uri(path).header("Authorization","Bearer ADMIN").exchange().expectStatus().isForbidden();

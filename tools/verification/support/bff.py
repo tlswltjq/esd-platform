@@ -1,4 +1,4 @@
-"""Gateway BFF cookie client (adapted from the 2026-10-30 G2 journey). Never sends bearer tokens."""
+"""Web BFF cookie client (adapted from the 2026-10-30 G2 journey). Never sends bearer tokens."""
 import http.cookiejar
 import json
 import re
@@ -19,8 +19,8 @@ class BffClient:
         self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies), urllib.request.ProxyHandler({}), NoRedirect())
         self.audit = []
 
-    def request(self, method, path, body=None, form=False, csrf=True):
-        headers = {}
+    def request(self, method, path, body=None, form=False, csrf=True, headers=None):
+        headers = dict(headers or {})
         if method not in {"GET", "HEAD"} and not form and csrf:
             status, _, raw = self.request("GET", "/bff/csrf")
             assert status == 200, "CSRF token unavailable: " + str(status)
@@ -31,7 +31,7 @@ class BffClient:
             data = (urllib.parse.urlencode(body) if form else json.dumps(body)).encode()
             headers["Content-Type"] = "application/x-www-form-urlencoded" if form else "application/json"
         target = urllib.parse.urljoin(self.gateway, path)
-        assert urllib.parse.urlsplit(target).netloc == urllib.parse.urlsplit(self.gateway).netloc, "calls must stay on Gateway"
+        assert urllib.parse.urlsplit(target).netloc == urllib.parse.urlsplit(self.gateway).netloc, "calls must stay on the web BFF"
         try:
             response = self.client.open(urllib.request.Request(target, data=data, headers=headers, method=method), timeout=30)
         except urllib.error.HTTPError as failure:
@@ -55,7 +55,7 @@ class BffClient:
             if parsed.path == "/login":
                 break
         else:
-            raise RuntimeError("login form not reached through Gateway")
+            raise RuntimeError("login form not reached through the web BFF")
         token = re.search(r'name="_csrf"[^>]*value="([^"]+)"', response[2].decode()).group(1)
         response = self.request("POST", "/login", {"username": email, "password": password, "_csrf": token}, form=True)
         for _ in range(10):
@@ -80,5 +80,5 @@ class BffClient:
     def data(self, path, expected=200):
         status, value = self.call("GET", path)
         if status != expected:
-            raise RuntimeError("Gateway GET " + path + " returned HTTP " + str(status))
+            raise RuntimeError("Web BFF GET " + path + " returned HTTP " + str(status))
         return value.get("data")

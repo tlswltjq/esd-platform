@@ -12,7 +12,6 @@ import com.stove.payment.core.domain.ApprovalReviewQuery;
 import com.stove.payment.core.service.ReadApprovalReviews;
 import com.stove.payment.core.service.RecordApprovalInvestigation;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -26,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/admin/approval-reviews")
 public class AdminApprovalReviewController {
     private final ReadApprovalReviews read;

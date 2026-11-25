@@ -129,14 +129,11 @@ class RoleAccessGatewayTest {
             "GET,  /api/v1/admin/refunds,         order-refund",
             "POST, /api/v1/reviews/1/approve,     review"
     })
-    @DisplayName("보호 경로는 토큰이 없으면 접근이 막힌다(GET은 401, POST는 CSRF가 먼저 403)")
+    @DisplayName("보호 경로는 토큰이 없으면 401로 막힌다")
     void protectedRoutesRequireAuthentication(String method, String path, String ignoredLabel) {
-        // 미인증 거부의 상태 코드는 경로의 방식에 달렸다. GET은 자원 서버가 401을,
-        // 변경 메서드는 CsrfWebFilter가 먼저 403을 낸다(SecurityConfig의 csrfMatcher는
-        // Bearer 없는 변경 요청을 CSRF 대상으로 남긴다). 둘 다 "하위 서비스에 닿지 못함"이
-        // 핵심이므로 401 또는 403 중 하나로 막히는 것을 확인한다.
-        call(HttpMethod.valueOf(method), path, null).expectStatus().value(status ->
-                assertThat(status).isIn(401, 403));
+        // 결정 223·224: 내부 API 게이트웨이에는 세션·CSRF가 없다. 토큰 없는 요청은 방식과 무관하게 401이다
+        // (브라우저 변경 요청의 CSRF는 웹 BFF가 먼저 본다).
+        call(HttpMethod.valueOf(method), path, null).expectStatus().isUnauthorized();
     }
 
     @Test

@@ -61,7 +61,7 @@ class LocalImageRegistryContractTest {
             }
         }
         // 앱 11개 + mock-pg + MinIO
-        assertThat(selfBuilt).as("직접 만드는 이미지").hasSize(13);
+        assertThat(selfBuilt).as("직접 만드는 이미지(결정 223으로 web-bff 추가)").hasSize(14);
     }
 
     private static List<Path> composeFiles() {

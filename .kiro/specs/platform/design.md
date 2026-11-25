@@ -10,7 +10,8 @@
 | 구분 | 이름 | 소유 저장소 | 외부와의 경계 |
 |---|---|---|---|
 | 업무 모듈 | Auth | `stove_auth` | 메일 발송(지금 `auth:adapter/mail/LoggingPasswordResetMailAdapter.java` — 로그만) |
-| 업무 모듈 | Gateway | 없음(세션) | 외부 요청 진입점, Auth 토큰 엔드포인트(`gateway:config/bff/BffTokens.java`) |
+| 업무 모듈 | 웹 BFF | 없음(세션 Redis) | 브라우저의 유일한 진입점(결정 224), Auth 토큰 엔드포인트(`web-bff:config/bff/BffTokens.java`) |
+| 업무 모듈 | Gateway | 없음 | 내부 API 게이트웨이: BFF가 릴레이한 Bearer 검증, 역할별 경로 규칙·라우팅(결정 223) |
 | 업무 모듈 | Studio | `stove_studio`, 객체 저장소 빌드 업로드 | 객체 저장소 쓰기(`studio:adapter/storage/S3BuildStorage.java`) |
 | 업무 모듈 | Review | `stove_review` | 객체 저장소 서명 URL 읽기(`review:adapter/storage/S3ReviewBuildStorage.java`) |
 | 업무 모듈 | Catalog | `stove_catalog` | 객체 저장소 태그 쓰기(`catalog:adapter/storage/S3BuildDistribution.java`) |
@@ -32,7 +33,8 @@
 | 호출 모듈 → 대상 | 경로 | 종류 | 호출 코드 | 받는 쪽 보호 | 목적 |
 |---|---|---|---|---|---|
 | Gateway → 각 모듈 | `/api/v1/**` 공개·관리자 경로(라우트 22개) | 라우팅 | `apps/gateway/src/main/resources/application.yml` 라우트 | 각 모듈 JWT·역할 | 외부 요청 전달. `/internal/**` 없음 |
-| Gateway → Auth | `/oauth2/token`·`/oauth2/jwks`·`/userinfo` | 조회 | `gateway:config/bff/BffTokens.java` | OAuth2 | BFF 로그인·토큰 릴레이 |
+| 웹 BFF → Gateway | `/api/**`, `/v3/api-docs/<service>` | 전달 | `apps/web-bff/src/main/resources/application.yml` 라우트 | 세션의 Bearer 릴레이 | 결정 223·224 |
+| 웹 BFF → Auth | `/oauth2/token`·`/oauth2/revoke`·`/oauth2/jwks`·`/userinfo`, 브라우저 로그인 경로 | 조회 | `web-bff:config/bff/BffTokens.java` | OAuth2 | BFF 로그인·토큰 릴레이 |
 | Order → Catalog | `GET /internal/v1/order-products/{code}` | 조회 | `order:adapter/CatalogHttpClient.java:23` | `X-Order-Service-Key` | 주문 생성 때 상품·가격 고정, 승인 접수 전 판매 제한 확인(결정 49) |
 | Payment → Order | `POST /internal/v1/orders/{orderNo}/payment-admissions` | **명령** | `payment:adapter/order/HttpOrderPaymentAdmissions.java:28` | `X-Payment-Service-Key` | PG 확정 전 Order가 기한·상태를 판정하고 승인 진행 영수증을 연다(결정 32·49) |
 | Payment → Order | `POST /internal/v1/orders/{orderNo}/payment-admissions/{admissionId}/failure` | **명령** | `payment:adapter/order/HttpOrderPaymentAdmissions.java:36` | `X-Payment-Service-Key` | 접수된 시도의 PG 실패를 Order 영수증에 닫고 주문을 `PENDING`/`EXPIRED`로 되돌린다 |
@@ -44,7 +46,7 @@
 | Settlement → PG | 거래·취소·지급 명세 조회 | 조회 | `settlement:adapter/*` | 공급자 키 | 매출·환불 근거와 대사(Payment 경유 없음, Settlement R4.1 `.kiro/specs/settlement/requirements.md:66`) |
 | PG → Payment | 통지 수신 | 들어옴 | `payment:api/controller/PortOneWebhookController.java:28` | 서명 검증 | 결제 상태 변경 통지 |
 
-동기 그래프: Gateway → {Auth, Store, Catalog, Order, Payment, License, Download, Studio, Review, Settlement}; Payment → Order → Catalog; Store → Catalog; Settlement → Catalog; Download → {Catalog, License}. **순환 없음**(P1.2-1 충족). Catalog·License·Auth는 다른 업무 모듈을 동기 호출하지 않는다.
+동기 그래프: 웹 BFF → {Auth, Gateway}; Gateway → {Auth, Store, Catalog, Order, Payment, License, Download, Studio, Review, Settlement}; Payment → Order → Catalog; Store → Catalog; Settlement → Catalog; Download → {Catalog, License}. **순환 없음**(P1.2-1 충족). Catalog·License·Auth는 다른 업무 모듈을 동기 호출하지 않는다.
 
 ### 비동기 의존 ("요청 → 사실 응답" 쌍, P1.3-2)
 
@@ -60,7 +62,7 @@
 | S6 | Order `RefundExecutionRequested` → Payment | Payment `RefundExecutionPrepared`·`RefundPaymentConfirmed`·`RefundExecutionSucceeded`·`RefundExecutionFailed`·(목표)`RefundFailureClosed` → Order, (목표)`RefundLateCancellationConfirmed` → Order·Settlement |
 | S7 | Order `LicenseRestorationRequested` → License | License `LicenseRestored` → Order |
 | S8 | Order `LicenseApprovalCorrectionRequested` → License | License `LicenseApprovalCorrected` → Order |
-| 단방향 | Catalog 공개 사본 이벤트 → Store · Order `OrderPaid` → Settlement · Payment `RefundPaymentConfirmed` → Settlement · Order `PurchaseRefunded` → License · Auth `UserRegistered` → 소비자 없음 · (목표) Auth `AccountAccessChanged` → Gateway(결정 180) | — |
+| 단방향 | Catalog 공개 사본 이벤트 → Store · Order `OrderPaid` → Settlement · Payment `RefundPaymentConfirmed` → Settlement · Order `PurchaseRefunded` → License · Auth `UserRegistered` → 소비자 없음 · Auth `AccountAccessChanged`(발행 현행, AU-T6) → 웹 BFF·Gateway(소비 목표, GW-T18, 결정 180·225) | — |
 
 발행 근거: `order:core/service/{CreateOrder.java:59, ApplyPaymentResult.java:56, RecordOrderExpiry.java:15, ApplyRefundSuspension.java:79, ApplyRefundPaymentConfirmation.java:54, ApplyRefundRestoration.java:41, ApplyApprovalCorrection.java:50, DecideRefund.java:54, DecideRefundReconsideration.java:51, RequestRefundRetry.java:37}`, `payment:core/service/{PaymentResultOutbox.java:15·20, RecordRefundPreparation.java:16, RefundConfirmationOutbox.java:14, RecordRefundCancellationSuccess.java:40·46, ReconcileRefundPayment.java:64}`, `license:core/service/{GrantLicense.java:48, ApplyLicenseSuspension.java:61, ApplyLicenseRestoration.java:61, ApplyApprovalCorrection.java:57}`, `catalog:core/service/{PublishProjectRelease.java:117-161, ReceiveReleaseWithdrawal.java:79-82, RecordCatalogSaleChange.java:20, ChangeCatalogListing.java:64}`, `review:core/service/{ReceiveProjectReview.java:53, DecideProjectReview.java:41, ReceiveReviewWithdrawal.java:45}`, `studio:core/service/{review/RequestProjectReview.java:74, release/RequestProjectRelease.java:67, project/RequestProjectWithdrawal.java:67-70}`, `auth:core/service/RegisterAccount.java:48`.
 
@@ -244,7 +246,7 @@ Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt
 |---|---|---|---|---|---|---|---|---|---|
 | `RefundFailureClosed` | ADMIN이 PG 재조회 근거(원결제 `PAID`·취소액 0·진행 중이거나 성공한 취소 없음)로 자동 송신이 멈춘 환불 시도를 실패로 종결했다 | Payment · `CloseRefundFailure`(종결과 같은 잠금 트랜잭션, P3.23-2) | **Order만** · `order-refund-restoration`(`RefundRestorationEventListener`가 `RefundExecutionFailed`와 함께 받아 같은 내부 입력으로 합침). Settlement·License는 소비하지 않음 | `stove.payment.v1` | `orderNo` | 같은 시도의 `RefundExecutionPrepared` 뒤. 한 시도에 `RefundExecutionFailed`와 둘 다 나가지 않음(I16) | 시도당 실패 사실 1건: Payment `uk_refund_execution_failure`·`refund_failure_closure.failure_event_id` 유일, Order 시도별 실패 기록 | 환불 팩토리 | 결정 128·147·148, T4 |
 | `RefundLateCancellationConfirmed` | ADMIN이 PG 재조회 근거(원결제 전액 `CANCELLED`)로, 실패로 확정된 환불 시도 뒤 실제로 일어난 전액 취소를 확인했다 | Payment · 늦은 취소 반영 서비스(가칭 `ConfirmLateCancellation`, 확인 기록과 같은 잠금 트랜잭션, P3.23-7) | Order(늦은 취소 완료 → `PurchaseRefunded`) · 그룹은 Order 모듈 스펙; Settlement(환불 조정) · `settlement-confirmed-refund`(`RefundPaymentConfirmed`와 같은 내부 입력으로 합침). License는 소비하지 않음(`PurchaseRefunded`로 회수) | `stove.payment.v1` | `orderNo` | 같은 시도의 실패 사실(`RefundExecutionFailed`·`RefundFailureClosed`) 뒤 | 시도당 하나: Payment 늦은 취소 확인 기록 유일(시도 ID), Order·Settlement Inbox | 기본 | 결정 128·157, T4 |
-| `AccountAccessChanged`(가칭) | 운영자가 계정의 상태나 역할을 바꿔, 그 계정의 이전 접근 근거(발급된 토큰·세션)가 더는 유효하지 않다 | Auth · `ManageAccount`(상태·역할이 실제로 바뀐 때만, Refresh Token 계열 폐기·`role_audit_log`와 같은 트랜잭션) | **Gateway만** · `gateway-account-access`(BFF 세션·토큰 기록 삭제, `subject`별 거절 기준 `changedAt` 저장, JWT `iat` < 기준 거절) | `stove.auth.v1` | `subject` | 없음 — 기준은 더 늦은 `changedAt`만 덮으므로 순서와 무관 | Gateway Redis `eventId`(거절 기준과 같은 수명) | Gateway 실패 보관 위치는 Gateway 모듈 `[결정 필요 M-GW-8]`(DB 없음) | 결정 84·180 |
+| `AccountAccessChanged`(가칭) | 운영자가 계정의 상태나 역할을 바꿔, 그 계정의 이전 접근 근거(발급된 토큰·세션)가 더는 유효하지 않다 | Auth · `ManageAccount`(상태·역할이 실제로 바뀐 때만, Refresh Token 계열 폐기·`role_audit_log`와 같은 트랜잭션) | 웹 BFF(세션·토큰 기록 삭제)와 Gateway(`subject`별 거절 기준 `changedAt` 저장, JWT `iat` < 기준 거절)가 그룹을 나눠 소비(결정 225) | `stove.auth.v1` | `subject` | 없음 — 기준은 더 늦은 `changedAt`만 덮으므로 순서와 무관 | Gateway Redis `eventId`(거절 기준과 같은 수명) | Gateway 실패 보관 위치는 Gateway 모듈 `[결정 필요 M-GW-8]`(DB 없음) | 결정 84·180 |
 | `OrderPaymentReviewClosed` | ADMIN이 PG 재조회 근거(전액 CANCELLED·FAILED·READY)로 금융 보류 승인을 종결해 이 주문 요청의 결제가 끝났다 | Payment · 승인 종결 서비스(`CloseApprovalReview`) | Order · `order-payment-result`(Completed·Failed와 **같은 그룹**: 같은 주문의 결과가 한 스레드에서 커밋 순서대로 처리된다, P2.5-1) | `stove.payment.v1` | `orderNo` | 주문 요청당 결과 하나 — `OrderPaymentCompleted`·`OrderPaymentFailed`와 배타 | Order `uk_purchase_order_result`; Payment `uk_purchase_payment_result`·`approval_closure.request_id` | 기본 | 결정 114·115·174, T18 |
 | `OrderPaymentResultRejected` | Order가 이 주문 요청의 결제 성공 결과를, 열린 최신 승인 진행 기록의 결과가 아니어서 반영하지 않았다 | Order · `ApplyPaymentResult`(거절 기록과 같은 주문 행 잠금 트랜잭션, P3.14-2) | Payment · (신설) `payment-order-result-rejection` | `stove.order.v1` | `orderNo` | 거절한 결과 뒤(인과). 결과 하나에 거절 하나 | 거절한 결과의 `eventId`: Order 거절 기록 유일 키, Payment Inbox | 기본 | 결정 153, T1 |
 | `SettlementSaleRecorded` (가칭) | Settlement가 한 주문의 매출 배분을 기록했다 | Settlement · `RecordPaidSale`(매출 기록과 같은 트랜잭션) | Order · (신설) `order-settlement-sale` | (목표) `stove.settlement.v1` | `orderNo` | `OrderPaid` 뒤. 주문당 하나 | 주문당 하나(`uk_sale_order_no`), Order Inbox | 기본 | 결정 158, T6 |

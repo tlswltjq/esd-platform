@@ -2291,6 +2291,29 @@
 - 구분: 직접 제안
 - 결과: [PR #239](https://github.com/tlswltjq/esd-platform/pull/239)
 
+<a id="no-public-clients"></a>
+## 220. 공개 클라이언트 `studio-web`·`swagger-ui`를 없애고, 외부 경로는 개발·시험까지 BFF 세션만 둔다(M-AU-7)
+- 문제: [결정 219](#single-bff)는 OAuth 클라이언트를 `gateway-bff` 하나로 정했지만 Auth에는 공개 클라이언트 둘이 남아 있다. 브라우저에서 `client_id=studio-web` PKCE로 Gateway `/oauth2/token`을 거쳐 Access(15분)·Refresh(7일) Token을 직접 받고, Bearer로 `/api/**` 전체를 쓸 수 있다. Swagger UI(`swagger-ui`), e2e 여정(`OidcLogin`이 `studio-web` 토큰으로 Bearer 호출), 검증·측정 스크립트, Gateway 경로 규칙 테스트가 이 Bearer 경로에 기대고 있어, 웹 사용자가 쓰는 BFF 세션 릴레이 경로는 e2e가 돌지 않는다.
+- 선택지: A 전부 BFF — 두 공개 클라이언트 삭제, 외부 `/oauth2/token`·외부 Bearer 차단(Gateway GW-T20), Swagger·e2e·스크립트·Gateway 테스트를 BFF 세션으로 전환 / B 운영은 닫고 개발·시험 프로필에서만 설정 키로 공개 클라이언트·외부 Bearer를 켬(운영 프로필에서 켜면 시작 실패) / C 유지하고 `studio-web` Refresh Token만 제거(AU-T9) (추천: A — 결정 219를 그대로 지키는 안은 A뿐이고, B는 시험이 운영에 없는 Bearer 경로를 검증하게 된다)
+- 내 의견: "A로 해"
+- 선택: A — 추천 수용.
+  - Auth: `studio-web`·`swagger-ui` 등록과 그 redirect 설정을 지운다. 이미 저장된 등록 행은 시작 때 지운다(개발 단계, 운영 데이터 없음).
+  - Gateway: 외부 요청의 인증은 BFF 세션뿐이다. 외부 요청에 `Authorization` 헤더가 있으면 경로와 무관하게 401이다(자원 서버만 지우면 공개 허용 경로에서 외부 Bearer가 하류로 그대로 넘어가 하류 JWT 인증이 Gateway를 우회한다). Auth 라우트는 브라우저 로그인에 필요한 경로만 두고 `/oauth2/token`을 빼며 그 CORS를 지운다. 하류 서비스로의 Bearer 릴레이와 업무 모듈의 JWT 검증은 그대로다. Studio의 기계 자격 `X-Project-Credential`은 사람이 쓰는 프론트엔드가 아니라 이 결정 밖이다.
+  - 시험: Gateway 경로 규칙 테스트·e2e 여정·검증 스크립트는 BFF 로그인으로 세션을 맺어 호출한다(`tools/verification/auth-bff.py`의 쿠키 로그인 방식).
+  - Swagger: OAuth 보안 스킴을 빼고 BFF 로그인 세션 쿠키로 호출한다. 변경 요청의 CSRF 토큰 전달 방식은 [결정 221](#swagger-csrf-session).
+  - 감수한 비용: 고칠 테스트·도구가 많다. Swagger에서 역할을 바꾸려면 다시 로그인하거나 다른 브라우저 프로필을 쓴다. 토큰을 붙여 넣는 수동 API 호출(curl 등)은 쿠키 로그인을 거쳐야 한다.
+- 구분: 추천 수용
+- 결과: [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
+
+<a id="swagger-csrf-session"></a>
+## 221. Swagger의 변경 요청은 세션에 둔 CSRF 토큰을 `/bff/csrf`로 받아 붙인다
+- 문제: [결정 220](#no-public-clients)으로 Swagger는 BFF 세션 쿠키로만 호출한다. 세션 쿠키의 변경 요청은 CSRF 헤더가 없으면 403이고(Gateway R5.2), Swagger에는 토큰을 읽어 붙이는 장치가 없다. Gateway는 CSRF 토큰을 세션(Redis)에 두고 `GET /bff/csrf`로 내준다.
+- 선택지: A 쿠키 방식 — `XSRF-TOKEN` 쿠키(`HttpOnly=false`)로 바꾸고 springdoc `swagger-ui.csrf.enabled`로 `X-XSRF-TOKEN`을 붙인다(Gateway 저장소·처리기 교체, 쿠키를 내려주는 필터 추가, R5.1·웹 CSRF 규약 변경) / B 세션 방식 유지 — Swagger 초기화 JS의 `requestInterceptor`가 `/bff/csrf`를 불러 헤더를 붙인다 (추천: B — 계약이 그대로이고, 신뢰할 수 없는 형제 서브도메인이 쿠키를 심어 우회하는 위험이 없으며, 토큰을 서버에 두는 결정 219와 결이 같다)
+- 내 의견: "B로 해"
+- 선택: B — 추천 수용. 감수한 비용: Swagger 전용 정적 JS 파일 하나를 관리한다. 웹 프론트엔드는 세션마다 `/bff/csrf`를 한 번 부른다.
+- 구분: 추천 수용
+- 결과: [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
+
 <a id="s3-adapter-level-limits"></a>
 ## 222. S3(소비자 장기 정지 뒤 회복)는 adapter 수준에서 브로커 메모리 한도를 같게 걸고, 소비자 없이 한도를 넘는 양을 쌓은 뒤 재개해 잰다
 - 문제: [결정 210](#messaging-comparison-hypotheses) 특성 3(소비자가 오래 멈춰도 쌓였다가 회복)을 재는 S3 계획은 "License를 멈춘 채 초당 N건 1시간 발행 뒤 재개"였다. 측정용 브로커에는 메모리 한도가 사실상 없고(Redis `maxmemory` 없음, RabbitMQ 기본 호스트 메모리의 60%) 실제 부하(초당 2주문)는 1시간에 약 7200건이라 한도 동작(디스크로 넘김·생산자 차단·발행 거절)이 드러나지 않는다. 계획대로면 다섯 방식 × 2회에 약 12시간이 든다.
@@ -2304,6 +2327,37 @@
   - 한계: 생산 쪽 Outbox `PENDING` 증가는 직접 재지 않는다. 발행이 막히거나 거절되면 실제 시스템에서는 릴레이가 그 행을 `PENDING`으로 남긴다는 관계로 읽고 결과에 적는다. 업무 여정 전체가 아니다.
 - 구분: 추천 수용
 - 결과: [PR #242](https://github.com/tlswltjq/esd-platform/pull/242)
+
+<a id="per-client-bff"></a>
+## 223. Gateway를 클라이언트별 BFF와 단일 API 게이트웨이로 나누고, 지금은 웹 BFF만 둔다
+- 문제: Gateway 한 프로세스가 BFF(로그인 인계·세션·토큰 보관·CSRF·Swagger)와 API 게이트웨이(라우팅·JWT 검증·역할별 경로 규칙·내부 경로 차단)를 함께 맡는다. [결정 219](#single-bff)의 PC 앱이 붙으면 세션 전달 방식·세션 수명·응답 모양이 클라이언트마다 갈리는데, 한 프로세스 안에서 입구별로 갈라야 하고 한 클라이언트의 장애·배포가 다른 클라이언트에 번진다.
+- 선택지: A 합친 형태 유지, PC 앱은 Gateway 안의 입구 하나로(GW-T21) / B 클라이언트별 BFF(각각 기밀 OAuth 클라이언트, 로그인 인계·세션·토큰 보관·클라이언트별 응답) + 단일 API 게이트웨이(모든 BFF 공통의 라우팅·검증·제한), 지금은 웹 BFF만 (추천: A — 지금 클라이언트가 웹 하나라 배포 단위가 적고 한 번만 거친다. 세션 수명이 갈리는 시점에 다시 본다)
+- 내 의견: "이 구조로 변경해줘, 단 현재는 웹bff만 구현하여 대응"
+- 선택: B — 사용자 제안(추천과 다름). 클라이언트별 정책·장애 격리·배포를 BFF 단위로 나누는 구조를 먼저 세우고, PC 앱은 앱 BFF를 더해 붙인다. 결정 219의 원칙(사용자 기기에 토큰 없음, OAuth 클라이언트는 서버 쪽 기밀 클라이언트뿐)은 그대로다.
+  - 감수한 비용: 요청이 BFF와 API 게이트웨이를 한 번 더 거친다(지연은 측정으로 확인). 배포 단위가 하나 는다. 클라이언트별 BFF가 늘면 로그인·세션·갱신 코드가 반복되므로 공통 부분을 묶어야 한다.
+  - 책임 경계 중 정책이 걸린 것(API 게이트웨이의 외부 노출, 역할별 경로 규칙과 즉시 차단의 위치)은 결정 224·225로 따로 정한다.
+- 구분: 직접 제안
+- 결과: [PR #243](https://github.com/tlswltjq/esd-platform/pull/243)
+
+<a id="api-gateway-internal"></a>
+## 224. API 게이트웨이는 내부망에만 두고, 외부 입구는 BFF뿐이다
+- 문제: [결정 223](#per-client-bff)으로 경로가 `브라우저 → 웹 BFF → API 게이트웨이 → 업무 서비스`가 된다. 웹 BFF는 세션의 access token을 Bearer로 붙여 게이트웨이에 보내는데, 게이트웨이가 외부에도 열려 있으면 훔친 토큰으로 게이트웨이를 직접 불러 [결정 220](#no-public-clients)(외부 Bearer 401)을 우회할 수 있다. 지금 Gateway를 외부에서 부르는 것은 브라우저와 그 시험 도구뿐이고, 결제 공급자 통지는 공개 edge가 Payment로 직접 보낸다(M-GW-1 미결).
+- 선택지: A 게이트웨이는 내부 전용 — 외부 입구는 웹 BFF(8080)뿐, 게이트웨이는 BFF가 릴레이한 Bearer를 받고 외부 `Authorization` 401은 웹 BFF가 집행 / B 둘 다 외부 노출 — 외부 Bearer를 막으려면 BFF→게이트웨이 신원 증명(서비스 키·mTLS)을 새로 두고 두 곳에서 집행 (추천: A — 결정 220을 구조로 보장하고, 업무 서비스와 같은 "내부망의 Bearer만" 신뢰 경계를 쓴다. 기계 클라이언트·공급자 통지 입구는 필요가 생길 때 따로 정한다)
+- 내 의견: "결정 224는 A로 해"
+- 선택: A — 추천 수용. 감수한 비용: 내부망 분리가 보안 장치가 되므로 배포 구성에서 게이트웨이 포트를 외부에 공개하지 않는 것을 검사로 지킨다.
+- 구분: 추천 수용
+- 결과: [PR #243](https://github.com/tlswltjq/esd-platform/pull/243)
+
+<a id="revocation-placement"></a>
+## 225. 역할별 경로 규칙과 이전 토큰 거절(`iat`)은 API 게이트웨이가, 세션 삭제는 각 BFF가 맡는다
+- 문제: [결정 223](#per-client-bff)으로 BFF와 API 게이트웨이가 나뉘어, 역할별 경로 규칙과 [결정 180](#account-access-revocation)의 즉시 차단(세션 삭제 + 변경 시각 전 발급 토큰 거절)을 어디에 둘지 정해야 했다. 세션·토큰 기록은 BFF의 Redis에 있어 세션 삭제는 BFF만 할 수 있다. [결정 224](#api-gateway-internal)로 모든 외부 요청은 어떤 BFF를 거쳐 게이트웨이를 지난다. 즉시 차단은 아직 구현 전이다(AU-T6·GW-T18).
+- 선택지: A 역할 규칙·`iat` 거절은 게이트웨이, 세션 삭제는 각 BFF(계정 접근 변경 사실을 둘이 그룹을 나눠 소비, 게이트웨이가 거절 기준을 Redis에 둠) / B 역할 규칙만 게이트웨이, 세션 삭제·`iat` 거절은 각 BFF(게이트웨이는 상태 없음) / C 역할 규칙·차단 모두 각 BFF (추천: A — 결정 180의 근거 "모든 외부 요청이 지나는 한 곳에서 막는다"를 이어받고, BFF가 늘어도 BFF의 책임은 자기 세션 삭제 하나이며 그것을 빠뜨려도 게이트웨이가 이전 토큰을 거절한다)
+- 내 의견: "A와 B에 대해 좀 더 쉽게 비교, 설명해줘" / "결정 225는 A로 해"
+- 선택: A — 추천 수용.
+  - 역할별 경로 규칙은 이 PR에서 게이트웨이에 둔다. 즉시 차단은 AU-T6·GW-T18에서 이 배치대로 구현한다: 웹 BFF는 `subject`의 세션·토큰 기록 삭제, 게이트웨이는 `subject`별 거절 기준(`changedAt`)을 저장하고 `iat` < 기준인 Bearer를 401로 거절한다. 소비 그룹은 둘(이름은 구현 PR에서 정한다), 멱등·실패 보관은 결정 180·M-GW-8을 따른다.
+  - 감수한 비용: 게이트웨이에 Redis 연결과 이벤트 소비가 생겨 "상태 없는 라우터"가 아니다. 소비 지연 게이지·시험이 두 곳에 생긴다.
+- 구분: 추천 수용
+- 결과: [PR #243](https://github.com/tlswltjq/esd-platform/pull/243)
 
 ---
 

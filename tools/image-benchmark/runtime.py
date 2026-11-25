@@ -2,15 +2,11 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-import base64
-import hashlib
 import http.client
-import http.cookiejar
 import json
 import math
 import os
 from pathlib import Path
-import re
 import secrets
 import socket
 import statistics
@@ -18,49 +14,8 @@ import subprocess
 import threading
 import time
 import urllib.request
-import urllib.error
-import urllib.parse
 
 from worker import MODULES, capture, run, save
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, response, code, message, headers, new_url):
-        return None
-
-
-def admin_token(auth):
-    """Use the same Authorization Code + PKCE flow as the existing E2E client."""
-    cookies = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies), NoRedirect())
-    def send(url, fields=None):
-        data = urllib.parse.urlencode(fields).encode() if fields is not None else None
-        request = urllib.request.Request(url, data=data)
-        try:
-            return opener.open(request, timeout=10)
-        except urllib.error.HTTPError as response:
-            return response
-    verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
-    redirect = "http://localhost:3000/callback"
-    authorize = auth + "/oauth2/authorize?" + urllib.parse.urlencode({"response_type": "code", "client_id": "studio-web",
-        "scope": "openid profile studio commerce", "redirect_uri": redirect, "code_challenge": challenge, "code_challenge_method": "S256"})
-    def resolve(location):
-        return urllib.parse.urljoin(auth, location.replace("http://localhost:8091", auth))
-    response = send(authorize)
-    page = send(resolve(response.headers.get("Location", "/login"))).read().decode()
-    csrf = re.search(r'name="_csrf"[^>]*value="([^"]+)"', page).group(1)
-    response = send(auth + "/login", {"username": "admin-check@review.local", "password": "admin-password-1234", "_csrf": csrf})
-    location = response.headers["Location"]
-    for attempt in range(6):
-        if location.startswith(redirect):
-            break
-        response = send(resolve(location))
-        location = response.headers["Location"]
-    code = urllib.parse.parse_qs(urllib.parse.urlsplit(location).query)["code"][0]
-    response = send(auth + "/oauth2/token", {"grant_type": "authorization_code", "client_id": "studio-web",
-        "code": code, "redirect_uri": redirect, "code_verifier": verifier})
-    return json.load(response)["access_token"]
 
 
 def free_port():
@@ -206,7 +161,7 @@ def benchmark_runtime(root, method, keep=False):
     output.mkdir(exist_ok=True)
     project = state["prefix"] + "-runtime"
     offset = 40000
-    public = "http://127.0.0.1:" + str(8080 + offset)
+    public = "http://127.0.0.1:" + str(MODULES["web-bff"] + offset)
     ports = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"]}
     keys = {name: secrets.token_urlsafe(24) for name in ["catalog", "settlement", "payment", "pg-settlement", "control", "pg-db"]}
     env = os.environ.copy()
@@ -226,7 +181,7 @@ def benchmark_runtime(root, method, keep=False):
             data=manifest, method="PUT", headers={"Content-Type": content_type})
         with urllib.request.urlopen(request):
             pass
-    names = [name for name in MODULES if name not in {"gateway", "download", "mock-pg"}]
+    names = [name for name in MODULES if name not in {"web-bff", "gateway", "download", "mock-pg"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in names))
     minio_image = "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local"  # decision 135
@@ -261,7 +216,7 @@ def benchmark_runtime(root, method, keep=False):
             STORAGE_BUCKET="stove-builds", STUDIO_ASSET_PUBLIC_BASE_URL=public,
             REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password",
             DOWNLOAD_STORAGE_ACCESS_KEY="download-reader", DOWNLOAD_STORAGE_SECRET_KEY="isolated-read-only-password")
-        if name == "gateway":
+        if name == "web-bff":
             app_env["BFF_CLIENT_SECRET"] = "bff-local-only"
         services[name] = {"image": state["registry"] + "/benchmark/" + method + "/" + name + ":runtime",
             "environment": app_env, "mem_limit": "512m", "stop_grace_period": "40s",
@@ -299,7 +254,7 @@ def benchmark_runtime(root, method, keep=False):
         readiness = {}
         # Store's initial snapshot requires a ready Catalog. Limit simultaneous JVM
         # startup on four cores so a 3s DB connect timeout does not measure CPU starvation.
-        groups = [["mock-pg", "auth", "gateway"], ["studio", "review", "catalog"],
+        groups = [["mock-pg", "auth", "gateway", "web-bff"], ["studio", "review", "catalog"],
                   ["store", "order", "payment"], ["license", "download", "settlement"]]
         for index, group in enumerate(groups):
             run(docker + ["up", "-d", *group], source, output / ("apps-up-" + str(index) + ".log"))
@@ -323,7 +278,6 @@ def benchmark_runtime(root, method, keep=False):
         for phase_name in ["initialPurchasesAndDownloads", "allocationAndOwnershipAreIsolated"]:
             phase(phase_name)
             print("PASS " + phase_name, flush=True)
-        metrics_token = admin_token("http://127.0.0.1:" + str(MODULES["auth"] + offset))
         # Payment approval, License, actual ZIP download and Settlement allocation have now executed.
         subprocess.run(["./gradlew", "--stop"], cwd=source, stdout=subprocess.DEVNULL, check=True)
         evidence = json.loads((output / "settlement-evidence.json").read_text())
@@ -338,8 +292,8 @@ def benchmark_runtime(root, method, keep=False):
         prometheus = {}
         for name, port in MODULES.items():
             try:
-                request = urllib.request.Request("http://127.0.0.1:" + str(port + offset) + "/actuator/prometheus",
-                    headers={"Authorization": "Bearer " + metrics_token})
+                # Every service permits anonymous GET /actuator/prometheus on its loopback port.
+                request = urllib.request.Request("http://127.0.0.1:" + str(port + offset) + "/actuator/prometheus")
                 with urllib.request.urlopen(request, timeout=5) as response:
                     text = response.read().decode()
                     if "jvm_memory_used_bytes" not in text:
@@ -364,7 +318,7 @@ def benchmark_runtime(root, method, keep=False):
         save(results / (label + ".json"), record)
         if keep:
             save(results / "deployment.json", {"project": project, "compose_file": str(compose),
-                "gateway_loopback_port": 8080 + offset, "minio_loopback_port": ports["minio"],
+                "web_bff_loopback_port": MODULES["web-bff"] + offset, "minio_loopback_port": ports["minio"],
                 "application_count": len(MODULES), "variant": method,
                 "images": record["images"]})
         succeeded = True

@@ -50,7 +50,7 @@
   - 영향: 감사 조회가 칸 뜻을 행동별로 해석해야 한다(원칙 ① 취지). 멱등 부여가 대상 사용자의 모든 세션을 끊는다.
   - 재현: `ManageAccountTest` — 이미 `CREATOR`인 계정에 `CREATOR` 부여 → 감사 0행·폐기 호출 0회.
 
-- [ ] **AU-T6. 운영자 명령이 요청자의 현재 권한을 DB에서 확인하지 않고, 상태·역할 변경 뒤에도 access token이 수명까지 유효하다** ([결정 180](../../../docs/decisions.md#account-access-revocation))
+- [x] **AU-T6. 운영자 명령이 요청자의 현재 권한을 DB에서 확인하지 않고, 상태·역할 변경 뒤에도 access token이 수명까지 유효하다** ([결정 180](../../../docs/decisions.md#account-access-revocation)) — [PR #244](https://github.com/tlswltjq/esd-platform/pull/244). R7.1 요청자 현재 권한 확인, R7.6 `AccountAccessChanged` 발행. 재발행 허용 목록은 AU-T10, 받는 쪽 끊기는 GW-T18
   - 어디서: `auth:core/service/ManageAccount.java:72-78`(요청자는 `subject` 비교에만 씀), `AccountAdminController`(`principal.getName()`만 전달). 결정 84 본문 "정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 한다" ↔ 지금 R7.6(옛)·`ManageAccount` 주석 "기존 access token은 수명(기본 15분)까지 유효".
   - 목표: R7.1 — `ManageAccount`가 요청자 계정을 읽어 활성 운영자가 아니면 403(Auth 안에서 끝나는 부분, 결정 없이 진행 가능). R7.6 — 변경과 같은 트랜잭션에 `AccountAccessChanged` Outbox(결정 180), 재발행 허용 목록에 추가, 이벤트 계약 테스트. access token 거절 자체는 Gateway GW 작업(Gateway R4.6)이며 Auth 발행이 먼저 배포돼야 한다.
   - 영향: **간접 돈·보유권** — `ADMIN`을 회수당하거나 `LOCKED`된 운영자가 최대 15분 동안 계정 관리·관리자 환불을 계속할 수 있다. Gateway BFF 세션은 다음 갱신 실패 때 지워지지만(Gateway R4.6) 그 전까지 Redis의 access token이 쓰인다.
@@ -68,11 +68,11 @@
   - 영향: 운영 배포에서 `AUTH_ISSUER`를 빠뜨리면 `iss`=`http://localhost:8091`로 시작해 모든 자원 서버가 토큰을 거절한다(조용한 오설정). 부트스트랩 비밀번호를 빠뜨리면 운영자 없이 시작한다.
   - 재현: 컨텍스트 테스트 — `AUTH_ISSUER` 없이 시작 실패, 부트스트랩 이메일만 있을 때 시작 실패.
 
-- [ ] **AU-T9. 공개 클라이언트 `studio-web`이 Refresh Token을 받는다**
+- [x] **AU-T9. 공개 클라이언트 `studio-web`이 Refresh Token을 받는다** — [PR #240](https://github.com/tlswltjq/esd-platform/pull/240)
   - 어디서: `auth:config/AuthSecurityConfig.java:171`(`REFRESH_TOKEN` 승인)·`:183`(7일).
-  - 목표: R2.7. `studio-web`에서 `REFRESH_TOKEN` 승인 제거. 운영 등록 여부는 M-AU-7([결정 219](../../../docs/decisions.md#single-bff)에 따라 운영 프론트엔드는 BFF만 쓴다. 외부 경로 차단은 Gateway GW-T20).
+  - 목표: R2.7, [결정 220](../../../docs/decisions.md#no-public-clients). `studio-web`·`swagger-ui` 등록과 redirect 설정을 지우고, 저장된 등록 행은 시작 때 지운다. 외부 경로 차단은 Gateway GW-T20.
   - 영향: 브라우저 저장소의 7일 Refresh Token이 탈취되면 BFF 보호(브라우저에는 세션 쿠키만)를 우회한다.
-  - 재현: 통합 — `studio-web` 인가 코드 교환 응답에 `refresh_token`이 없는지.
+  - 재현: 통합 — `client_id=studio-web`·`swagger-ui` 인가 요청이 거절되고 등록 저장소에 두 행이 없는지.
 
 - [ ] **AU-T10. Auth에 운영 재발행 경로가 없다** (플랫폼 [T7](../platform/tasks.md), [결정 161](../../../docs/decisions.md#republish-all-current))
   - 어디서: `application.yml:37-40`(`stove.messaging.ops.enabled: false`, `republish-owner` 없음), `auth/db/` `outbox_republish` 이행 없음, `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`에 Auth 목록 없음.
@@ -136,8 +136,8 @@
 - [ ] [결정 필요 M-AU-4] 복구 요청 발급 수 제한 → R6.9.
 - [ ] [결정 필요 M-AU-5] `LOCKED`·`DISABLED` 계정의 복구와 `DISABLED` 계정의 역할 변경 → AU-T11, 상태 표.
 - [x] 상태·역할 변경 즉시 access token 무효 — [결정 180](../../../docs/decisions.md#account-access-revocation)(B: Auth 사실 이벤트 → Gateway 거절)으로 정함 → AU-T6, 플랫폼 이벤트 목표 행.
-- [ ] [결정 필요 M-AU-7] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 → AU-T8·AU-T9. 운영 프론트엔드는 BFF만 쓴다([결정 219](../../../docs/decisions.md#single-bff)). 남은 쟁점은 개발용 Swagger 로그인을 공개 클라이언트로 남길지다(Gateway GW-T20).
-- [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T6의 R7.1 부분, AU-T8(M-AU-7 제외), AU-T9, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
+- [x] 공개 클라이언트 `studio-web`·`swagger-ui`의 운영 등록 — [결정 220](../../../docs/decisions.md#no-public-clients)(A: 개발·시험까지 없앰)으로 정함 → AU-T9, Gateway GW-T20.
+- [ ] 결정이 필요 없는 항목(바로 진행 가능): AU-T1, AU-T2, AU-T4, AU-T5, AU-T8, AU-T10(플랫폼 T7과 함께), AU-T12, AU-T13, AU-T14, AU-T15, AU-T16, AU-T18.
 
 ## 범위 밖(후속)
 

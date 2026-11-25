@@ -9,7 +9,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,12 +42,8 @@ final class ReviewJourney {
     }
 
     static Account login(String email, String password) throws Exception {
-        String token = OidcLogin.token(email, password);
-        String subject =
-                JSON.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]))
-                        .path("sub")
-                        .asText();
-        return new Account(email, password, subject, Map.of("Authorization", "Bearer " + token));
+        BffSession session = BffSession.login(email, password);
+        return new Account(email, password, session.subject(), session.headers());
     }
 
     static Project project(Account creator) throws Exception {

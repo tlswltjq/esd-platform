@@ -90,8 +90,8 @@ class RefundDelayAdminGatewayTest {
     /** Decision 127 (PR #157 R1): the operator closure reaches Payment through the gateway; other roles never do. */
     @Test void onlyAnAdministratorClosureReachesPaymentWithBearerAndWithoutForgedMemberHeader() {
         String closure = "{\"requestId\":\"11111111-1111-1111-1111-111111111111\",\"attribution\":\"EXTERNAL_CANCELLATION\",\"note\":\"console\"}";
-        // Without a bearer token a POST is a browser-session request and the CSRF filter refuses it first.
-        http.post().uri(ROOT + "/example/closure").exchange().expectStatus().isForbidden();
+        // 결정 223·224: without a bearer token the internal gateway answers 401 (no browser session or CSRF here).
+        http.post().uri(ROOT + "/example/closure").exchange().expectStatus().isUnauthorized();
         for (String role : new String[]{"MEMBER", "CREATOR", "REVIEWER"})
             http.post().uri(ROOT + "/example/closure").header("Authorization", "Bearer " + role)
                     .contentType(MediaType.APPLICATION_JSON).bodyValue(closure).exchange().expectStatus().isForbidden();

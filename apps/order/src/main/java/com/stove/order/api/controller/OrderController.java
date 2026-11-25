@@ -8,7 +8,6 @@ import com.stove.order.api.controller.dto.OrderResponse;
 import com.stove.order.core.service.CreateOrder;
 import com.stove.order.core.service.ReadOrder;
 import com.stove.order.core.service.SearchOrders;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController @RequiredArgsConstructor
-@SecurityRequirement(name = "oauth2", scopes = "commerce")
 @RequestMapping("/api/v1/orders")
 public class OrderController {
     private final CreateOrder createOrder;

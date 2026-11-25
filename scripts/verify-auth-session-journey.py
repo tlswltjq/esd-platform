@@ -3,7 +3,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import socket
 import subprocess
 import sys
@@ -13,6 +12,9 @@ import uuid
 import requests
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools/verification'))
+from support.bff import BffClient  # noqa: E402
+
 RUN = Path(os.environ['KIROCREW_SCRATCH']) / ('auth-journey-' + uuid.uuid4().hex[:8])
 RUN.mkdir()
 PREFIX = RUN.name
@@ -76,28 +78,22 @@ def launch(module, env):
     processes.append(process)
 
 
-def login(email):
-    session = requests.Session()
-    session.trust_env = False
-    page = session.get(base + '/oauth2/authorization/gateway-bff', timeout=15)
-    csrf = re.search(r'name="_csrf"[^>]*value="([^"]+)"', page.text)
-    require(csrf is not None, 'login form csrf')
-    session.post(base + '/login', data={'username': email, 'password': PASSWORD,
-                                      '_csrf': csrf.group(1)}, timeout=15)
-    response = session.get(base + '/bff/session', timeout=10)
-    require(response.status_code == 200, 'BFF login ' + email.split('@')[0])
-    subject = response.json()['subject']
+def login(email, role='MEMBER'):
+    """Browser login through the web BFF only. Redis is read to observe server-side state, never to call APIs."""
+    client = BffClient(base)
+    subject = client.login(email, PASSWORD, role)
+    require(bool(subject), 'BFF login ' + email.split('@')[0])
     for key in redis('KEYS', 'stove:bff:tokens:*').splitlines():
         stored = json.loads(redis('GET', key))
         if stored['subject'] == subject:
-            return session, subject, key, stored
+            return client, subject, key, stored
     raise AssertionError('stored authorized client missing')
 
 
 before = inventory()
 (RUN / 'before.json').write_text(json.dumps(before, indent=2))
 try:
-    dbport, redisport, authport, gatewayport = (port() for _ in range(4))
+    dbport, redisport, authport, bffport, gatewayport = (port() for _ in range(5))
     mysql, cache = PREFIX + '-mysql', PREFIX + '-redis'
     for name, image, args in [
         (mysql, 'mysql:8.0', ['-p', f'127.0.0.1:{dbport}:3306', '-e',
@@ -107,7 +103,9 @@ try:
         cmd('docker', 'run', '-d', '--rm', '--name', name, *args, image)
         containers.append(name)
     wait_for(lambda: sql('SELECT 1') == '1', 'mysql')
-    base = f'http://127.0.0.1:{gatewayport}'
+    # The browser only reaches the web BFF; it relays API calls to the internal API gateway (decisions 223/224).
+    base = f'http://127.0.0.1:{bffport}'
+    api_gateway = f'http://127.0.0.1:{gatewayport}'
     auth = f'http://127.0.0.1:{authport}'
     common = {'BFF_CLIENT_SECRET': 'journey-client-secret', 'SERVER_ADDRESS': '127.0.0.1'}
     launch('auth', {**common, 'SERVER_PORT': str(authport),
@@ -122,11 +120,15 @@ try:
     if role_mode:
         from gateway_role_journey import Backends, verify
         role_fixtures = Backends()
-    launch('gateway', {**common, **(role_fixtures.environment if role_mode else {}), 'SERVER_PORT': str(gatewayport),
+    launch('gateway', {**(role_fixtures.environment if role_mode else {}), 'SERVER_ADDRESS': '127.0.0.1',
+                      'SERVER_PORT': str(gatewayport), 'AUTH_URI': auth, 'JWT_ISSUER_URI': auth,
+                      'JWT_JWK_SET_URI': auth + '/oauth2/jwks'})
+    wait_for(lambda: requests.get(api_gateway + '/actuator/health', timeout=2).status_code == 200, 'gateway')
+    launch('web-bff', {**common, 'SERVER_PORT': str(bffport),
                       'REDIS_HOST': '127.0.0.1', 'REDIS_PORT': str(redisport),
-                      'AUTH_URI': auth, 'JWT_ISSUER_URI': auth,
-                      'JWT_JWK_SET_URI': auth + '/oauth2/jwks', 'BFF_PUBLIC_AUTH_BASE': base})
-    wait_for(lambda: requests.get(base + '/bff/csrf', timeout=2).status_code == 200, 'gateway')
+                      'AUTH_URI': auth, 'JWT_ISSUER_URI': auth, 'JWT_JWK_SET_URI': auth + '/oauth2/jwks',
+                      'BFF_PUBLIC_AUTH_BASE': base, 'API_GATEWAY_URI': api_gateway})
+    wait_for(lambda: requests.get(base + '/bff/csrf', timeout=2).status_code == 200, 'web-bff')
     if role_mode:
         verify(base, login, require, role_fixtures, PASSWORD)
     for scenario in ([] if role_mode else ['recovery', 'locked', 'role-revoked']):
@@ -137,7 +139,7 @@ try:
         if scenario == 'role-revoked':
             sql("INSERT INTO user_account_role (user_account_id,role) SELECT id,'CREATOR' FROM user_account WHERE email='" + email + "'")
         session, subject, key, stored = login(email)
-        cookie = session.cookies.get('SESSION')
+        cookie = next(item.value for item in session.cookies if item.name == 'SESSION')
         try:
             session_id = str(uuid.UUID(cookie))
         except ValueError:
@@ -157,22 +159,20 @@ try:
                                      json={'token': token, 'newPassword': 'recovered-password-123'}, timeout=10)
             require(response.status_code == 200, 'recovery reset HTTP accepted')
         else:
-            admin_session, actor, _, admin = login('admin@journey.example')
+            admin_session, actor, _, _ = login('admin@journey.example', 'ADMIN')
             action = 'status' if scenario == 'locked' else 'roles/revoke'
             body = {'status': 'LOCKED'} if scenario == 'locked' else {'role': 'CREATOR'}
-            response = requests.post(base + '/api/v1/admin/accounts/' + subject + '/' + action,
-                                     headers={'Authorization': 'Bearer ' + admin['access']}, json=body, timeout=10)
-            require(response.status_code == 200, scenario + ' ADMIN mutation HTTP accepted')
+            status = admin_session.request('POST', '/api/v1/admin/accounts/' + subject + '/' + action, body)[0]
+            require(status == 200, scenario + ' ADMIN mutation HTTP accepted')
             expected_action = 'STATUS_CHANGED' if scenario == 'locked' else 'ROLE_CHANGED'
             require(sql("SELECT COUNT(*) FROM role_audit_log WHERE subject='" + subject + "' AND actor='" + actor + "' AND action='" + expected_action + "'") == '1', scenario + ' actor audit persisted')
         require(sql("SELECT COUNT(*) FROM refresh_token_family WHERE subject='" + subject + "' AND revoked=FALSE") == '0', scenario + ' all refresh families revoked')
-        # Wait until the real access token enters Gateway's refresh window.
+        # Wait until the real access token enters the web BFF's refresh window.
         time.sleep(max(0, stored['expires'] - time.time() - 8))
-        response = session.get(base + '/bff/session', timeout=10)
-        require(response.status_code == 401, scenario + ' browser rejected after refresh')
+        require(session.request('GET', '/bff/session')[0] == 401, scenario + ' browser rejected after refresh')
         require(redis('EXISTS', key) == '0', scenario + ' Redis tokens deleted')
         require(redis('EXISTS', session_key) == '0', scenario + ' Redis browser session deleted')
-        require(session.get(base + '/bff/session', timeout=10).status_code == 401,
+        require(session.request('GET', '/bff/session')[0] == 401,
                 scenario + ' next browser request stays rejected')
     print('JOURNEY SUCCESS', flush=True)
 finally:

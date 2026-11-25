@@ -9,6 +9,7 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.stove.auth.adapter.oauth.RotatingAuthorizationService;
 import com.stove.auth.adapter.oauth.RotatingRefreshProvider;
+import com.stove.auth.adapter.oauth.SerializedCodeExchangeProvider;
 import com.stove.auth.core.domain.UserAccount;
 import com.stove.common.security.ApiJwtSecurity;
 import com.stove.auth.core.domain.UserAccountRepository;
@@ -22,7 +23,6 @@ import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitializat
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcOperations;
@@ -35,7 +35,6 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
-import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -47,6 +46,7 @@ import org.springframework.security.oauth2.server.authorization.JdbcOAuth2Author
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -87,6 +87,9 @@ public class AuthSecurityConfig {
                             for (int i = 0; i < providers.size(); i++) {
                                 if (providers.get(i) instanceof OAuth2RefreshTokenAuthenticationProvider) {
                                     providers.set(i, new RotatingRefreshProvider(providers.get(i), authorizations,
+                                            accounts, rotationTransactions(transactionManager)));
+                                } else if (providers.get(i) instanceof OAuth2AuthorizationCodeAuthenticationProvider) {
+                                    providers.set(i, new SerializedCodeExchangeProvider(providers.get(i), authorizations,
                                             accounts, rotationTransactions(transactionManager)));
                                 }
                             }
@@ -156,53 +159,13 @@ public class AuthSecurityConfig {
     @DependsOnDatabaseInitialization
     RegisteredClientRepository registeredClientRepository(
             JdbcOperations jdbcOperations,
-            @Value("${stove.auth.redirect-uri:http://localhost:3000/callback}") String redirectUri,
-            @Value("${stove.auth.swagger-redirect-uris:http://localhost:8080/swagger-ui/oauth2-redirect.html,http://127.0.0.1:18080/swagger-ui/oauth2-redirect.html,http://localhost:18080/swagger-ui/oauth2-redirect.html}")
-            List<String> swaggerRedirectUris,
             @Value("${stove.auth.bff-client-secret}") String bffSecret,
             @Value("${stove.auth.bff-redirect-uri:http://localhost:8080/login/oauth2/code/gateway-bff}") String bffRedirect,
             @Value("${stove.auth.bff-access-token-seconds:900}") long accessTokenSeconds,
             PasswordEncoder passwordEncoder) {
         JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcOperations);
-        RegisteredClient.Builder studioWeb = RegisteredClient.withId("studio-web")
-                .clientId("studio-web")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri(redirectUri)
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
-                .scope("studio")
-                .scope("commerce")
-                .clientSettings(ClientSettings.builder()
-                        .requireProofKey(true)
-                        .requireAuthorizationConsent(false)
-                        .build())
-                .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(Duration.ofMinutes(15))
-                        .refreshTokenTimeToLive(Duration.ofDays(7))
-                        .reuseRefreshTokens(false)
-                        .build());
-        saveOrUpgrade(repository, jdbcOperations, studioWeb.build());
-
-        RegisteredClient.Builder swagger = RegisteredClient.withId("swagger-ui")
-                .clientId("swagger-ui")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
-                .scope("studio")
-                .scope("commerce")
-                .clientSettings(ClientSettings.builder()
-                        .requireProofKey(true)
-                        .requireAuthorizationConsent(false)
-                        .build())
-                .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(Duration.ofMinutes(15))
-                        .build());
-        swaggerRedirectUris.stream().map(String::trim).filter(value -> !value.isBlank())
-                .forEach(swagger::redirectUri);
-        saveOrUpgrade(repository, jdbcOperations, swagger.build());
+        // 결정 219·220: OAuth 클라이언트는 기밀 클라이언트 gateway-bff 하나다. 공개 클라이언트는 등록하지 않는다
+        // (예전 studio-web·swagger-ui 행은 V11이 지운다).
         RegisteredClient bff = RegisteredClient.withId("gateway-bff")
                 .clientId("gateway-bff")
                 .clientSecret(passwordEncoder.encode(bffSecret))
@@ -221,22 +184,6 @@ public class AuthSecurityConfig {
         RegisteredClient existingBff = repository.findByClientId("gateway-bff");
         repository.save(existingBff == null ? bff : RegisteredClient.from(bff).id(existingBff.getId()).build());
         return repository;
-    }
-
-    private void saveOrUpgrade(JdbcRegisteredClientRepository repository, JdbcOperations jdbcOperations,
-                               RegisteredClient client) {
-        RegisteredClient existing = repository.findByClientId(client.getClientId());
-        if (existing != null) {
-            repository.save(RegisteredClient.from(client).id(existing.getId()).build());
-            return;
-        }
-        try {
-            repository.save(client);
-        } catch (DuplicateKeyException concurrentStartup) {
-            if (repository.findByClientId(client.getClientId()) == null) {
-                throw concurrentStartup;
-            }
-        }
     }
 
     @Bean

@@ -1,10 +1,13 @@
-# auth와 Gateway/BFF
+# auth와 웹 BFF·Gateway
 
 **재작업 완료 모듈: `apps/auth`, `apps/gateway` (2026-10-13).**
 관련 테스트 132개가 통과했으며 실제 스택에서 자동 로그인, 토큰 릴레이, 다중 Gateway의
 동시 갱신과 RTR 재사용 탐지, BFF·auth 로그아웃, 재시작 유지, Redis 장애 시 503 및 복구를 확인했다.
 
-브라우저는 Gateway의 세션 쿠키를 사용한다. Gateway는 기밀 OAuth 클라이언트
+[결정 223](decisions.md#per-client-bff)으로 BFF는 `apps/web-bff`(브라우저 입구, 8080)로, 라우팅·역할 규칙은 내부 API 게이트웨이
+`apps/gateway`(8093, 내부망 전용 — [결정 224](decisions.md#api-gateway-internal))로 나뉘었다.
+
+브라우저는 웹 BFF의 세션 쿠키를 사용한다. 웹 BFF는 기밀 OAuth 클라이언트
 `gateway-bff`로 Authorization Code + PKCE를 수행하고 Access/Refresh Token을 Redis에
 보관한다. auth가 인증, 토큰 발급, 회전 및 재사용 탐지를 담당한다.
 
@@ -19,7 +22,7 @@ export JWT_ISSUER_URI=http://localhost:8080
 ```
 
 다른 터미널에서도 **동일한** `BFF_CLIENT_SECRET`, `AUTH_ISSUER`, `JWT_ISSUER_URI`를 설정하고
-`./gradlew :apps:gateway:bootRun`을 실행한다. 브라우저에서 `http://localhost:8080/`을 열고
+`./gradlew :apps:gateway:bootRun`(8093)과 `./gradlew :apps:web-bff:bootRun`(8080)을 실행한다. 브라우저에서 `http://localhost:8080/`을 열고
 로그인을 누르면 PKCE 생성부터 callback 및 토큰 교환까지 자동 처리된다.
 단독 auth 기동에도 BFF 클라이언트 등록을 위한 secret이 필요하다.
 
@@ -64,17 +67,21 @@ Gateway와 auth의 재시작은 공유 Redis·MySQL 상태를 유지한다. 세�
 인증을 우회하지 않고 `503 SESSION_STORE_UNAVAILABLE`로 반환한다.
 Docker Compose의 `bff-local-only` 값은 로컬 개발용이며 배포 시 secret으로 대체한다.
 
-기존 `studio-web`, `swagger-ui` 공개 클라이언트는 유지한다. 이 클라이언트는
-Refresh Token을 받지 않는다. Gateway의 Bearer Token API 접근도 기존대로 지원한다.
+OAuth 클라이언트는 `gateway-bff` 하나다. 공개 클라이언트(`studio-web`·`swagger-ui`)는 없고,
+외부 요청에 `Authorization` 헤더가 있으면 웹 BFF가 경로와 무관하게 401로 끝낸다.
+웹 BFF는 Auth의 브라우저 로그인 경로(`/oauth2/authorize`, `/login`, `/logout`, `/connect/**`,
+`/.well-known/**`)만 외부에 두고, 토큰·폐기·JWKS·userinfo 엔드포인트는 두지 않는다.
+Swagger UI는 먼저 `/oauth2/authorization/gateway-bff`로 로그인한 세션 쿠키로 호출하고,
+변경 요청의 CSRF 헤더는 `/bff/csrf`에서 받아 붙인다([결정 220·221](decisions.md#no-public-clients)).
 
 ## 검증
 
 ```sh
-./gradlew :apps:auth:test :apps:auth:integrationTest :apps:gateway:test :apps:gateway:integrationTest :common:web:test
+./gradlew :apps:auth:test :apps:auth:integrationTest :apps:gateway:test :apps:web-bff:test :apps:web-bff:integrationTest :common:web:test
 ```
 
 auth 통합 테스트는 실제 MySQL에서 OIDC, RTR, 재사용, 동시 갱신, 만료, 계정 비활성화,
-폐기를 검증한다. Gateway 테스트는 JWT 변조·만료·issuer·audience를 검증한다.
+폐기를 검증한다. Gateway 테스트는 JWT 변조·만료·issuer·audience와, 역할별 경로 규칙을 BFF 세션(로그인만 대신하는 픽스처)으로 검증한다.
 공유 세션 검증은 두 번째 Gateway를 `--args='--server.port=8081'`로 실행한다.
 테스트용 짧은 Access Token은 auth에 `BFF_ACCESS_TOKEN_SECONDS=30`을 설정한다.
 두 Gateway가 실행된 상태에서 같은 `BFF_CLIENT_SECRET`을 설정하고
