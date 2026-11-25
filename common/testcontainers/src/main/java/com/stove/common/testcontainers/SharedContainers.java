@@ -1,12 +1,20 @@
 package com.stove.common.testcontainers;
 
+import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.model.HostConfig;
+import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.testcontainers.containers.Container;
+import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -42,10 +50,10 @@ public final class SharedContainers {
      * 다르다. 같은 값으로 맞춰, 운영에서는 저장되는 큰 행(예: Payment 형식 거절 type 최대 60,000,000바이트)이 테스트에서만
      * 실패하거나, 반대로 테스트가 운영 한도를 넘는 값을 모르고 통과하지 않게 한다.
      */
-    public static final MySQLContainer<?> MYSQL =
+    public static final MySQLContainer<?> MYSQL = limitMemoryForS3(
             new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
                     .withCommand("--max-allowed-packet=67108864")
-                    .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds());
+                    .withStartupTimeoutSeconds((int) STARTUP_TIMEOUT.toSeconds()));
 
     /**
      * 로컬 실행은 {@code apache/kafka:3.9.0} 을 쓰지만 테스트는 Confluent 이미지를 쓴다.
@@ -59,16 +67,16 @@ public final class SharedContainers {
      * {@code withStartupTimeout}만 걸면 같은 JVM의 다른 Kafka 컨테이너까지 바뀌므로, 같은 로그 조건으로
      * 새 대기 객체를 준다.
      */
-    public static final ConfluentKafkaContainer KAFKA =
+    public static final ConfluentKafkaContainer KAFKA = s3Kafka(
             new AtomicStarterKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
-                    .waitingFor(kafkaReady());
+                    .waitingFor(kafkaReady()));
 
-    public static final GenericContainer<?> REDIS =
+    public static final GenericContainer<?> REDIS = s3Redis(
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
                     .withExposedPorts(6379)
                     // 새 대기 객체를 쓴다. withStartupTimeout만 걸면 GenericContainer가 모든 컨테이너와
                     // 나눠 쓰는 기본 대기 객체(DEFAULT_WAIT_STRATEGY)의 시간이 바뀐다.
-                    .waitingFor(Wait.forListeningPort().withStartupTimeout(STARTUP_TIMEOUT));
+                    .waitingFor(Wait.forListeningPort().withStartupTimeout(STARTUP_TIMEOUT)));
 
     public static final ElasticsearchContainer ELASTICSEARCH =
             new ElasticsearchContainer(
@@ -81,6 +89,100 @@ public final class SharedContainers {
             new MongoDBContainer(DockerImageName.parse("mongo:7"))
                     .withStartupTimeout(STARTUP_TIMEOUT);
 
+    /** 결정 222: S3 측정을 켜는 시스템 속성. 루트 build.gradle 이 {@code -Pstove.contract.s3=true} 를 넘긴다. */
+    public static final String S3_PROPERTY = "stove.contract.s3";
+
+    /** 결정 222: S3 측정 때 브로커(브로커 없음은 MySQL) 컨테이너에 거는 메모리 한도. 모든 방식이 같다. */
+    public static final long S3_MEMORY_LIMIT_BYTES = 1024L * 1024 * 1024;
+
+    /**
+     * 결정 222: S3 측정 때 Redis {@code maxmemory}. 기본 512mb. 한도 도달 뒤 재개 경로를 짧게 재현할 때만
+     * {@code -Pstove.contract.s3.redis-maxmemory=8mb} 처럼 줄인다(PR #242 R1).
+     */
+    public static final String S3_REDIS_MAXMEMORY_PROPERTY = "stove.contract.s3.redis-maxmemory";
+
+    /**
+     * 결정 222: S3 측정 때 RabbitMQ·Streams 메모리 경보({@code vm_memory_high_watermark.relative}). 기본 0.4(한도의 40%).
+     * RabbitMQ 4.1 기본값은 0.6 이라 명시한다(PR #242 R3). 생산자 차단 경로를 짧게 재현할 때만 줄인다.
+     */
+    public static final String S3_RABBIT_WATERMARK_PROPERTY = "stove.contract.s3.rabbit-watermark";
+
+    /** S3 때 RabbitMQ 컨테이너에 넣는 설정 파일. 이미지의 {@code conf.d} 는 이름 순으로 읽혀 기본값 파일 뒤에 온다. */
+    private static final String RABBIT_S3_CONF = "/etc/rabbitmq/conf.d/90-s3-memory.conf";
+
     private SharedContainers() {
+    }
+
+    /** S3 측정 중인가. 정적 컨테이너는 시작 전에(클래스 초기화 때) 이 값을 본다 — 시스템 속성은 그 전에 들어와 있다. */
+    public static boolean s3Measurement() {
+        return Boolean.getBoolean(S3_PROPERTY);
+    }
+
+    /**
+     * S3 측정 때만 컨테이너 메모리를 {@link #S3_MEMORY_LIMIT_BYTES} 로 묶고 swap 을 막는다(memory-swap = memory).
+     * 평소에는 아무것도 바꾸지 않는다 — 다른 서비스가 같은 공유 컨테이너를 쓴다.
+     */
+    public static <T extends GenericContainer<?>> T limitMemoryForS3(T container) {
+        if (s3Measurement()) {
+            container.withCreateContainerCmdModifier(SharedContainers::limitMemory);
+        }
+        return container;
+    }
+
+    private static void limitMemory(CreateContainerCmd command) {
+        HostConfig hostConfig = command.getHostConfig() == null ? HostConfig.newHostConfig() : command.getHostConfig();
+        command.withHostConfig(hostConfig.withMemory(S3_MEMORY_LIMIT_BYTES).withMemorySwap(S3_MEMORY_LIMIT_BYTES));
+    }
+
+    /** S3: Kafka 는 한도 1GB 안에서 힙 512MB(나머지는 페이지 캐시·JVM 밖 메모리). */
+    private static ConfluentKafkaContainer s3Kafka(ConfluentKafkaContainer container) {
+        if (s3Measurement()) {
+            container.withEnv("KAFKA_HEAP_OPTS", "-Xmx512m -Xms512m");
+        }
+        return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: Redis 는 {@code maxmemory 512mb}·{@code noeviction}(넘치면 쓰기를 거절하고 지우지 않는다)·AOF {@code everysec}
+     * (S6·S7과 같은 영속).
+     */
+    private static GenericContainer<?> s3Redis(GenericContainer<?> container) {
+        if (s3Measurement()) {
+            container.withCommand("redis-server", "--maxmemory", System.getProperty(S3_REDIS_MAXMEMORY_PROPERTY, "512mb"),
+                    "--maxmemory-policy", "noeviction", "--appendonly", "yes", "--appendfsync", "everysec");
+        }
+        return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: RabbitMQ·Streams 컨테이너에 메모리 1GB 를 걸고 메모리 경보를 한도의 40%({@code vm_memory_high_watermark.relative = 0.4})로
+     * 명시한다. 이 호스트(cgroup v1)에서 RabbitMQ 4.1 은 컨테이너 한도가 아니라 호스트 전체 메모리를 읽으므로(확인: 25GB, 경보 약 10GB),
+     * 전체 메모리를 {@code total_memory_available_override_value} 로 컨테이너 한도와 같게 둔다. 평소에는 아무것도 바꾸지 않는다.
+     */
+    public static <T extends GenericContainer<?>> T rabbitForS3(T container) {
+        if (s3Measurement()) {
+            String watermark = System.getProperty(S3_RABBIT_WATERMARK_PROPERTY, "0.4");
+            String conf = "total_memory_available_override_value = " + S3_MEMORY_LIMIT_BYTES + "\n"
+                    + "vm_memory_high_watermark.relative = " + watermark + "\n";
+            container.withCopyToContainer(Transferable.of(conf), RABBIT_S3_CONF);
+        }
+        return limitMemoryForS3(container);
+    }
+
+    /**
+     * S3: 실행 중인 RabbitMQ 가 실제로 쓰는 메모리 경보 값과 그 값으로 계산한 절대 한도(바이트)를 읽는다
+     * ({@code rabbitmqctl eval}). 설정 파일이 먹었는지 결과에 남기려는 것이다.
+     */
+    public static Map<String, String> rabbitMemorySettings(ContainerState rabbit) throws IOException, InterruptedException {
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("vm_memory_high_watermark", rabbitEval(rabbit, "vm_memory_monitor:get_vm_memory_high_watermark()."));
+        settings.put("vm_memory_limit_bytes", rabbitEval(rabbit, "vm_memory_monitor:get_memory_limit()."));
+        settings.put("total_memory_bytes", rabbitEval(rabbit, "vm_memory_monitor:get_total_memory()."));
+        return settings;
+    }
+
+    private static String rabbitEval(ContainerState rabbit, String expression) throws IOException, InterruptedException {
+        Container.ExecResult result = rabbit.execInContainer("rabbitmqctl", "eval", expression);
+        return result.getExitCode() == 0 ? result.getStdout().trim() : "error: " + result.getStderr().trim();
     }
 }

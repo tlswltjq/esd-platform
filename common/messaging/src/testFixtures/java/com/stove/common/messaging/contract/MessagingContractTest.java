@@ -2,6 +2,11 @@ package com.stove.common.messaging.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.IThrowableProxy;
+import ch.qos.logback.core.AppenderBase;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.delivery.InPlaceDelivery;
 import com.stove.common.event.EventHandler;
@@ -17,6 +22,7 @@ import java.util.StringJoiner;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,8 +30,16 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
@@ -35,7 +49,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.testcontainers.containers.Container;
+import org.testcontainers.containers.ContainerState;
 
 /**
  * 메시징 adapter 공통 계약(결정 202·206·209). 네 adapter(Kafka·RabbitMQ·Redis Streams·브로커 없음)의 통합 테스트가
@@ -134,6 +151,45 @@ public abstract class MessagingContractTest {
 
     /** 끝난 그룹의 구독 기록을 잊는다(S4 회차마다 새 그룹을 쓴다). 그룹별로 구독을 들고 있는 adapter(Kafka)가 덮는다. */
     protected void forgetGroup(String finishedGroup) {
+    }
+
+    /**
+     * S3(결정 222): 메시지가 쌓이는 브로커 컨테이너(브로커 없음은 MySQL). 쌓은 뒤 이 컨테이너 안에서 cgroup 메모리와
+     * {@link #brokerDataDir()} 디스크 사용량을 읽는다. 비우면 그 값을 재지 않는다.
+     */
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.empty();
+    }
+
+    /** S3: {@link #brokerContainer()} 안에서 메시지가 쌓이는 데이터 디렉터리. */
+    protected String brokerDataDir() {
+        return "";
+    }
+
+    /** S3: 결과에 함께 적을 브로커 설정(예: Redis {@code maxmemory}). 쌓기 직전에 컨테이너에서 읽는다. */
+    protected Map<String, String> brokerSettings() throws Exception {
+        return Map.of();
+    }
+
+    /** S3: 재개·관찰이 끝난 뒤 결과에 함께 적을 브로커 상태(예: Redis {@code INFO memory} 의 used_memory·maxmemory, PR #242 R1). */
+    protected Map<String, String> brokerStateAfterResume() throws Exception {
+        return Map.of();
+    }
+
+    /**
+     * S3: 발행 호출 자체가 돌아오지 않을 수 있는가(예: RabbitMQ 메모리 경보로 브로커가 연결 읽기를 멈춰 TCP 송신 버퍼가 차면
+     * 동기 송신이 막힌다, PR #242 R2). {@code true} 면 S3 발행을 단일 스레드에서 돌리고 호출 하나의 진입~반환에 10초 제한을 건다.
+     * 기본 {@code false} — 다른 adapter 의 발행 경로는 그대로다.
+     */
+    protected boolean publishCallMayBlock() {
+        return false;
+    }
+
+    /**
+     * S3: 발행 호출이 제한 안에 돌아오지 않아 발행을 멈춘 뒤 부른다. 막힌 발행 연결 쪽 자원(소켓·생산자)을 정리해 재개 측정이
+     * 이어지게 한다. 5초 제한 안에서 돈다(넘으면 결과에 {@code timeout} 으로 적고 계속한다).
+     */
+    protected void abandonBlockedPublisher() throws Exception {
     }
 
     /** 테스트 토픽을 준비한다(예: Kafka 는 파티션 여러 개로 만든다). */
@@ -617,6 +673,519 @@ public abstract class MessagingContractTest {
                 millis(drained - measurement.releasedAt()), messages / ((drained - measurement.releasedAt()) / 1_000_000_000.0),
                 records.size(), receipts.size(), ScalingMeasurement.redelivered(receipts),
                 ScalingMeasurement.json(ScalingMeasurement.perInstance(records, instances)), ScalingMeasurement.json(handover));
+    }
+
+    /**
+     * S3 소비자 장기 정지 뒤 회복(결정 210 특성 3, 결정 222). 구독을 한 번 열어 큐·그룹·스트림·커서를 만든 뒤 닫고,
+     * 소비자가 없는 동안 1KB 메시지 60만 건을 최대 속도로 순서대로 발행한다. 발행 실패는 세고 계속하되 연속 100건 실패하면
+     * 멈춘다. 발행 호출이 막힐 수 있는 adapter({@link #publishCallMayBlock()})는 호출 하나에 {@link #S3_PUBLISH_CALL_LIMIT}
+     * 제한을 걸고, 넘으면 그 순번을 {@code publisher_blocked_at} 으로 적고 곧바로 발행을 멈춘다(연결 단위 차단이라 연속 100건
+     * 규칙의 예외, PR #242 R2). 쌓은 직후 브로커 컨테이너의 cgroup 메모리·데이터 디스크를 재고, 같은 그룹으로 다시 구독해 성공
+     * 발행분을 다 받기까지의 시간과 유실·중복을 센다. 재개 뒤 {@code stall-seconds}(기본 120초) 동안 새로 받은 것이 없으면
+     * 진척 없음({@code stalled})으로 보고 일찍 끝낸다(PR #242 R1). 성공분을 다 받은 뒤에도 {@link #S3_QUIET} 동안 더 오는 것이
+     * 없을 때까지 지켜봐 실패로 센 발행분의 수신·중복을 센다(PR #242 R4). 재개 중 adapter 가 남긴 경고·오류 로그 수와 첫 오류,
+     * 재개 뒤 브로커 상태({@link #brokerStateAfterResume()})도 적는다. 측정값은 단언하지 않고 {@code build/s3-backlog/} 에
+     * JSON 으로 먼저 남기며, 단언은 "성공 발행분이 모두 처리된다(유실 0)"뿐이다. 평소 계약 테스트에서는 돌지 않는다
+     * ({@code -Dstove.contract.s3=true}). 브로커 메모리 한도(1GB 등)는 {@code SharedContainers} 와 각 adapter 테스트의 정적
+     * 컨테이너가 같은 속성을 보고 건다.
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "stove.contract.s3", matches = "true")
+    void S3_소비자_없이_한도를_넘게_쌓은_뒤_재개해_잰다() throws Exception {
+        int messages = Integer.getInteger("stove.contract.s3.messages", 600_000);
+        int size = Integer.getInteger("stove.contract.s3.size", 1024);
+        int keys = Integer.getInteger("stove.contract.s3.keys", 600);
+        Duration drainLimit = Duration.ofMinutes(Integer.getInteger("stove.contract.s3.drain-minutes", 30));
+        Duration stallLimit = Duration.ofSeconds(Integer.getInteger("stove.contract.s3.stall-seconds", 120));
+        BacklogCounter counter = new BacklogCounter(UUID.randomUUID().toString().substring(0, 8), messages);
+
+        // 1·2. 새 그룹·토픽(@BeforeEach 가 준비)에 구독을 한 번 열어 큐·그룹·스트림·커서를 만든다. 3. 닫는다 — 이제 소비자가 없다.
+        AutoCloseable first = subscribe(group, topic, quarantine, counter, List.of());
+        try {
+            awaitSubscriptionsReady();
+        } finally {
+            first.close();
+            forgetGroup(group);
+        }
+        Map<String, String> settings = brokerSettings();
+
+        // 4. 쌓는다. 실패는 세고 계속하되, 연속 100건 실패하면 멈춘다(그 시점이 결과다). 호출이 막히면 곧바로 멈춘다.
+        BitSet succeeded = new BitSet(messages);
+        int failed = 0;
+        int consecutiveFailures = 0;
+        int firstFailureIndex = -1;
+        String firstFailure = null;
+        int publisherBlockedAt = -1;
+        String publisherBlockedStack = null;
+        String publisherCleanup = null;
+        int attempted = 0;
+        BlockablePublishThread publishThread = publishCallMayBlock() ? new BlockablePublishThread() : null;
+        long publishStarted = System.nanoTime();
+        try {
+            for (int index = 0; index < messages; index++) {
+                attempted++;
+                String eventId = counter.eventId(index);
+                String key = "S3-" + (index % keys);
+                try {
+                    if (publishThread == null) {
+                        publishBacklog(eventId, key, size);
+                    } else {
+                        publishThread.publishWithin(S3_PUBLISH_CALL_LIMIT, () -> publishBacklog(eventId, key, size));
+                    }
+                    succeeded.set(index);
+                    consecutiveFailures = 0;
+                } catch (PublisherBlocked blocked) {
+                    publisherBlockedAt = index;
+                    publisherBlockedStack = blocked.stack();
+                    break;
+                } catch (RuntimeException failure) {
+                    failed++;
+                    consecutiveFailures++;
+                    if (firstFailureIndex < 0) {
+                        firstFailureIndex = index;
+                        firstFailure = describe(failure);
+                    }
+                    if (consecutiveFailures >= 100) {
+                        break;
+                    }
+                }
+            }
+        } finally {
+            if (publishThread != null) {
+                publishThread.shutdown();
+            }
+        }
+        long published = System.nanoTime();
+        int publishedOk = succeeded.cardinality();
+        if (publisherBlockedAt >= 0) {
+            // 막힌 연결을 정리해야 재개 소비자(별도 연결)가 막힌 연결의 영향 없이 돈다. 정리도 막힐 수 있어 제한을 건다.
+            publisherCleanup = runWithin(S3_CLEANUP_LIMIT, this::abandonBlockedPublisher);
+        }
+
+        // 5. 쌓은 직후 브로커 메모리·데이터 디스크.
+        BrokerFootprint footprint = footprint();
+
+        // 6. 같은 그룹으로 다시 구독해(처리 비용 없음) 성공 발행분을 다 받을 때까지 잰다. 상한(drain-minutes)을 넘기거나
+        //    stall-seconds 동안 새로 받은 것이 없으면(진척 없음) 멈춘다. 재개 중 adapter 의 경고·오류 로그를 센다.
+        counter.reset();
+        counter.trackSucceeded(succeeded);
+        ResumeLog resumeLog = ResumeLog.attach();
+        boolean stalled = false;
+        long resumed;
+        try {
+            resumed = System.nanoTime();
+            start(group, quarantine, counter, List.of());
+            long deadline = resumed + drainLimit.toNanos();
+            while (counter.distinctOf(succeeded) < publishedOk && System.nanoTime() < deadline) {
+                long lastProgress = Math.max(resumed, counter.lastNewAt());
+                if (System.nanoTime() - lastProgress >= stallLimit.toNanos()) {
+                    stalled = true;
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            // 7. 성공분을 다 받은 뒤에도 S3_QUIET 동안 더 오는 것이 없을 때까지(상한 안에서) 지켜본다 — 실패로 센 발행분의
+            //    수신·중복 전달을 놓치지 않으려는 것이다(PR #242 R4). 진척 없음이면 이미 그만큼 조용했으므로 건너뛴다.
+            if (!stalled) {
+                long quietFrom = System.nanoTime();
+                while (System.nanoTime() < deadline
+                        && System.nanoTime() - Math.max(quietFrom, counter.lastAnyAt()) < S3_QUIET.toNanos()) {
+                    Thread.sleep(50);
+                }
+            }
+        } finally {
+            resumeLog.detach();
+        }
+        boolean drained = counter.distinctOf(succeeded) == publishedOk;
+        long drainedAt = counter.lastSucceededAt();
+        Map<String, String> afterResume = brokerStateAfterResume();
+
+        // 8. 유실(성공 발행했는데 받지 못함)·중복(같은 eventId 를 두 번 이상 받음).
+        int lost = publishedOk - counter.distinctOf(succeeded);
+        String json = String.format(Locale.ROOT,
+                "{\"adapter\":\"%s\",\"messages\":%d,\"size_bytes\":%d,\"keys\":%d,\"attempted\":%d,"
+                        + "\"published_ok\":%d,\"publish_failed\":%d,\"stopped_early\":%s,\"first_failure_index\":%s,"
+                        + "\"first_failure\":%s,\"publisher_blocked_at\":%s,\"publisher_blocked_stack\":%s,"
+                        + "\"publisher_cleanup\":%s,\"publish_ms\":%.1f,\"broker\":%s,\"broker_settings\":%s,"
+                        + "\"resume_first_ms\":%s,\"drain_ms\":%s,\"drained\":%s,\"stalled\":%s,\"stall_limit_s\":%d,"
+                        + "\"drain_limit_min\":%d,\"resume_errors\":%d,\"resume_first_error\":%s,\"broker_after_resume\":%s,"
+                        + "\"received\":%d,\"lost\":%d,\"duplicates\":%d,\"received_unconfirmed\":%d,"
+                        + "\"recorded_at\":\"%s\"}",
+                getClass().getSimpleName(), messages, size, keys, attempted, publishedOk, failed, attempted < messages,
+                firstFailureIndex < 0 ? "null" : Integer.toString(firstFailureIndex), jsonString(firstFailure),
+                publisherBlockedAt < 0 ? "null" : Integer.toString(publisherBlockedAt), jsonString(publisherBlockedStack),
+                jsonString(publisherCleanup), millis(published - publishStarted), footprint.json(), jsonObject(settings),
+                sinceOrNull(counter.firstAt(), resumed), sinceOrNull(drainedAt, resumed), drained, stalled,
+                stallLimit.toSeconds(), drainLimit.toMinutes(), resumeLog.count(), jsonString(resumeLog.first()),
+                jsonObject(afterResume), counter.received(), lost, counter.duplicates(), counter.receivedOutside(succeeded),
+                Instant.now());
+        Path directory = Path.of("build", "s3-backlog");
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve(getClass().getSimpleName() + "-" + System.currentTimeMillis() + ".json"), json);
+        assertThat(lost).as("성공 발행분은 모두 처리된다(유실 0). 결과: %s", json).isZero();
+    }
+
+    /** S3: 막힐 수 있는 발행 호출 하나의 진입~반환 제한(PR #242 R2). 계약 테스트의 확인 대기({@code orTimeout})와 같은 10초. */
+    private static final Duration S3_PUBLISH_CALL_LIMIT = Duration.ofSeconds(10);
+    /** S3: 막힌 발행 연결 정리({@link #abandonBlockedPublisher()})의 제한. */
+    private static final Duration S3_CLEANUP_LIMIT = Duration.ofSeconds(5);
+    /** S3: 성공분을 다 받은 뒤 더 오는 것이 없는지 지켜보는 시간(PR #242 R4). */
+    private static final Duration S3_QUIET = Duration.ofSeconds(10);
+
+    /** 일을 새 데몬 스레드에서 돌려 {@code limit} 안에 끝나면 {@code "ok"}, 예외면 그 설명, 넘으면 {@code "timeout"}. */
+    private static String runWithin(Duration limit, ThrowingRunnable work) throws InterruptedException {
+        AtomicReference<String> outcome = new AtomicReference<>("timeout");
+        Thread worker = new Thread(() -> {
+            try {
+                work.run();
+                outcome.set("ok");
+            } catch (Exception | Error failure) {
+                outcome.set(describe(failure));
+            }
+        }, "s3-publisher-cleanup");
+        worker.setDaemon(true);
+        worker.start();
+        worker.join(limit.toMillis());
+        return outcome.get();
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    /** S3: 발행 호출이 제한 안에 돌아오지 않았다. 막힌 스레드의 스택 앞부분을 들고 있다. */
+    private static final class PublisherBlocked extends Exception {
+        private final String stack;
+
+        PublisherBlocked(String stack) {
+            super("발행 호출이 제한 안에 돌아오지 않았다");
+            this.stack = stack;
+        }
+
+        String stack() {
+            return stack;
+        }
+    }
+
+    /**
+     * S3 발행 전용 단일 데몬 스레드(PR #242 R2). 호출 하나를 이 스레드에 넘겨 진입~반환 전체에 제한을 건다. 제한을 넘으면
+     * 그 스레드를 버린다 — 소켓 쓰기에 막힌 스레드는 인터럽트로 풀리지 않으므로, 데몬이라 JVM 종료를 붙잡지 않는다.
+     */
+    private static final class BlockablePublishThread {
+        private final AtomicReference<Thread> thread = new AtomicReference<>();
+        private final ExecutorService executor = Executors.newSingleThreadExecutor((Runnable task) -> {
+            Thread created = new Thread(task, "s3-publish");
+            created.setDaemon(true);
+            thread.set(created);
+            return created;
+        });
+
+        void publishWithin(Duration limit, Runnable call) throws PublisherBlocked, InterruptedException {
+            Future<?> pending = executor.submit(call);
+            try {
+                pending.get(limit.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException blocked) {
+                String stack = stackOf(thread.get());
+                pending.cancel(true);
+                throw new PublisherBlocked(stack);
+            } catch (ExecutionException failed) {
+                Throwable cause = failed.getCause();
+                if (cause instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                if (cause instanceof Error error) {
+                    throw error;
+                }
+                throw new IllegalStateException(cause);
+            }
+        }
+
+        void shutdown() {
+            executor.shutdownNow();
+        }
+
+        /** 막힌 스레드가 어디서 멈췄는지(소켓 쓰기·확인 대기 등) 앞 8줄. */
+        private static String stackOf(Thread blocked) {
+            if (blocked == null) {
+                return null;
+            }
+            StringJoiner frames = new StringJoiner(" <- ");
+            StackTraceElement[] trace = blocked.getStackTrace();
+            for (int index = 0; index < Math.min(8, trace.length); index++) {
+                frames.add(trace[index].toString());
+            }
+            return frames.toString();
+        }
+    }
+
+    /**
+     * S3 재개 중 adapter({@code com.stove.common.messaging} 아래)가 남긴 WARN 이상 로그를 센다(PR #242 R1). adapter 는 구독
+     * 읽기 실패(예: Redis 한도 도달 뒤 잠금 {@code SET} 의 OOM 거절)를 로그로만 남기고 재시도하므로, 결과에서 유실과 재개 실패를
+     * 구별하려면 로그를 봐야 한다. 첫 로그의 예외 클래스·메시지 앞 200자(예외가 없으면 로그 문장)를 남긴다.
+     */
+    private static final class ResumeLog extends AppenderBase<ILoggingEvent> {
+        private static final String SCOPE = "com.stove.common.messaging";
+        private final AtomicInteger count = new AtomicInteger();
+        private final AtomicReference<String> first = new AtomicReference<>();
+        private Logger logger;
+
+        static ResumeLog attach() {
+            ResumeLog appender = new ResumeLog();
+            if (LoggerFactory.getLogger(SCOPE) instanceof Logger scoped) {
+                appender.setContext(scoped.getLoggerContext());
+                appender.setName("s3-resume-log");
+                appender.start();
+                scoped.addAppender(appender);
+                appender.logger = scoped;
+            }
+            return appender;
+        }
+
+        void detach() {
+            if (logger != null) {
+                logger.detachAppender(this);
+            }
+            stop();
+        }
+
+        @Override
+        protected void append(ILoggingEvent event) {
+            if (!event.getLevel().isGreaterOrEqual(Level.WARN)) {
+                return;
+            }
+            count.incrementAndGet();
+            if (first.get() == null) {
+                IThrowableProxy thrown = event.getThrowableProxy();
+                String message = thrown == null ? event.getFormattedMessage()
+                        : thrown.getClassName() + ": " + thrown.getMessage();
+                String trimmed = String.valueOf(message);
+                first.compareAndSet(null, event.getLoggerName() + " " + event.getLevel() + " "
+                        + (trimmed.length() > 200 ? trimmed.substring(0, 200) : trimmed));
+            }
+        }
+
+        int count() {
+            return count.get();
+        }
+
+        String first() {
+            return first.get();
+        }
+    }
+
+    /** S3 메시지 하나를 발행한다. 본문은 {@code size} 바이트를 채운 JSON 문자열이다. */
+    private void publishBacklog(String eventId, String key, int size) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put(EventHeaders.EVENT_ID, eventId);
+        headers.put(EventHeaders.EVENT_TYPE, "ContractHappened");
+        headers.put(EventHeaders.OCCURRED_AT, Instant.now().toString());
+        publish(new OutboundMessage(topic, key, backlogPayload(key, size), headers));
+    }
+
+    private static String backlogPayload(String key, int size) {
+        String head = "{\"key\":\"" + key + "\",\"fill\":\"";
+        String tail = "\"}";
+        int fill = Math.max(0, size - head.length() - tail.length());
+        return head + "x".repeat(fill) + tail;
+    }
+
+    /** 발행 예외의 클래스와 메시지 앞 200자. 비동기 발행의 {@link CompletionException} 은 원인을 적는다. */
+    private static String describe(Throwable failure) {
+        Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+        String message = String.valueOf(cause.getMessage());
+        return cause.getClass().getName() + ": " + (message.length() > 200 ? message.substring(0, 200) : message);
+    }
+
+    private static String sinceOrNull(long at, long since) {
+        return at == 0 ? "null" : String.format(Locale.ROOT, "%.1f", millis(at - since));
+    }
+
+    /** 쌓은 직후 브로커 컨테이너의 메모리 한도(docker inspect)·cgroup 사용량·최대치와 데이터 디렉터리 크기. */
+    private BrokerFootprint footprint() throws Exception {
+        Optional<ContainerState> broker = brokerContainer();
+        if (broker.isEmpty()) {
+            return new BrokerFootprint(null, null, null, null, brokerDataDir(), null);
+        }
+        ContainerState container = broker.get();
+        Long limit = container.getContainerInfo() == null || container.getContainerInfo().getHostConfig() == null
+                ? null : container.getContainerInfo().getHostConfig().getMemory();
+        // 호스트는 cgroup v1 이다. 없으면 v2 파일을 읽는다.
+        Long usage = readLong(container,
+                "cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || cat /sys/fs/cgroup/memory.current");
+        Long peak = readLong(container,
+                "cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes 2>/dev/null || cat /sys/fs/cgroup/memory.peak");
+        Long diskKb = brokerDataDir().isEmpty() ? null : readLong(container, "du -sk " + brokerDataDir());
+        return new BrokerFootprint(container.getContainerId(), limit, usage, peak, brokerDataDir(), diskKb);
+    }
+
+    /** 컨테이너 안에서 셸 명령을 돌려 표준 출력의 첫 낱말을 수로 읽는다. 실패하면 {@code null}. */
+    private static Long readLong(ContainerState container, String script) throws Exception {
+        Container.ExecResult result = container.execInContainer("sh", "-c", script);
+        String out = result.getStdout().trim();
+        if (result.getExitCode() != 0 || out.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(out.split("\\s+")[0]);
+        } catch (NumberFormatException notANumber) {
+            return null;
+        }
+    }
+
+    private record BrokerFootprint(String containerId, Long memoryLimitBytes, Long memoryUsageBytes,
+                                   Long memoryPeakBytes, String dataDir, Long dataDiskKb) {
+        String json() {
+            String shortId = containerId == null ? null : containerId.substring(0, Math.min(12, containerId.length()));
+            return String.format(Locale.ROOT,
+                    "{\"container_id\":%s,\"memory_limit_bytes\":%s,\"memory_usage_bytes\":%s,\"memory_peak_bytes\":%s,"
+                            + "\"data_dir\":%s,\"data_disk_kb\":%s}",
+                    jsonString(shortId), memoryLimitBytes, memoryUsageBytes, memoryPeakBytes,
+                    jsonString(dataDir.isEmpty() ? null : dataDir), dataDiskKb);
+        }
+    }
+
+    private static String jsonObject(Map<String, String> values) {
+        StringJoiner joiner = new StringJoiner(",", "{", "}");
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            joiner.add(jsonString(entry.getKey()) + ":" + jsonString(entry.getValue()));
+        }
+        return joiner.toString();
+    }
+
+    private static String jsonString(String value) {
+        if (value == null) {
+            return "null";
+        }
+        StringBuilder escaped = new StringBuilder("\"");
+        for (char c : value.toCharArray()) {
+            if (c == '"' || c == '\\') {
+                escaped.append('\\').append(c);
+            } else if (c < 0x20) {
+                escaped.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+            } else {
+                escaped.append(c);
+            }
+        }
+        return escaped.append('"').toString();
+    }
+
+    /**
+     * S3 수신 기록. eventId 는 {@code s3-<실행>-<순번>} 이라 순번별 수신 횟수를 배열 하나로 센다(60만 건에도 메시지를
+     * 들고 있지 않는다). 처리 비용은 없다.
+     */
+    private static final class BacklogCounter implements EventHandler {
+        private final String prefix;
+        private final AtomicIntegerArray counts;
+        private final AtomicInteger received = new AtomicInteger();
+        private final AtomicInteger foreign = new AtomicInteger();
+        private final AtomicLong firstAt = new AtomicLong();
+        private final AtomicLong lastNewAt = new AtomicLong();
+        private final AtomicLong lastAnyAt = new AtomicLong();
+        private final AtomicLong lastSucceededAt = new AtomicLong();
+        /** 성공 발행분 — 재개 전에 넘겨 받아, 성공분의 마지막 첫 수신 시각을 미확인 발행분 수신과 따로 잰다(PR #242 R6). */
+        private volatile BitSet succeeded = new BitSet();
+
+        BacklogCounter(String runId, int messages) {
+            this.prefix = "s3-" + runId + "-";
+            this.counts = new AtomicIntegerArray(messages);
+        }
+
+        String eventId(int index) {
+            return prefix + index;
+        }
+
+        /** 재개 전 첫 구독이 받은 것(없어야 한다)을 지우고 시각을 처음으로 돌린다. */
+        void reset() {
+            for (int index = 0; index < counts.length(); index++) {
+                counts.set(index, 0);
+            }
+            received.set(0);
+            foreign.set(0);
+            firstAt.set(0);
+            lastNewAt.set(0);
+            lastAnyAt.set(0);
+            lastSucceededAt.set(0);
+        }
+
+        void trackSucceeded(BitSet published) {
+            this.succeeded = (BitSet) published.clone();
+        }
+
+        @Override
+        public void receive(InboundMessage message) {
+            long now = System.nanoTime();
+            firstAt.compareAndSet(0, now);
+            lastAnyAt.accumulateAndGet(now, Math::max);
+            received.incrementAndGet();
+            String eventId = message.header(EventHeaders.EVENT_ID);
+            if (eventId == null || !eventId.startsWith(prefix)) {
+                foreign.incrementAndGet();
+                return;
+            }
+            int index = Integer.parseInt(eventId.substring(prefix.length()));
+            if (counts.incrementAndGet(index) == 1) {
+                lastNewAt.accumulateAndGet(now, Math::max);
+                if (succeeded.get(index)) {
+                    lastSucceededAt.accumulateAndGet(now, Math::max);
+                }
+            }
+        }
+
+        /** 성공 발행분 가운데 마지막으로 처음 받은 시각(성공분 회복 시간의 끝). */
+        long lastSucceededAt() {
+            return lastSucceededAt.get();
+        }
+
+        int received() {
+            return received.get();
+        }
+
+        long firstAt() {
+            return firstAt.get();
+        }
+
+        long lastNewAt() {
+            return lastNewAt.get();
+        }
+
+        /** 이 실행의 것이든 아니든, 중복이든 아니든 마지막으로 받은 시각. */
+        long lastAnyAt() {
+            return lastAnyAt.get();
+        }
+
+        /** 성공 발행분 가운데 한 번 이상 받은 수. */
+        int distinctOf(BitSet succeeded) {
+            int distinct = 0;
+            for (int index = succeeded.nextSetBit(0); index >= 0; index = succeeded.nextSetBit(index + 1)) {
+                if (counts.get(index) > 0) {
+                    distinct++;
+                }
+            }
+            return distinct;
+        }
+
+        /** 같은 eventId 를 두 번 이상 받은 수(eventId 하나를 한 번으로 센다). */
+        int duplicates() {
+            int duplicates = 0;
+            for (int index = 0; index < counts.length(); index++) {
+                if (counts.get(index) > 1) {
+                    duplicates++;
+                }
+            }
+            return duplicates;
+        }
+
+        /** 발행 실패로 셌는데 받은 수(시간 초과 뒤 브로커가 실제로 받아들인 경우)와 이 실행이 아닌 메시지 수. */
+        int receivedOutside(BitSet succeeded) {
+            int outside = foreign.get();
+            for (int index = 0; index < counts.length(); index++) {
+                if (counts.get(index) > 0 && !succeeded.get(index)) {
+                    outside++;
+                }
+            }
+            return outside;
+        }
     }
 
     private static void awaitWithin(String what, Duration limit, BooleanSupplier condition) {

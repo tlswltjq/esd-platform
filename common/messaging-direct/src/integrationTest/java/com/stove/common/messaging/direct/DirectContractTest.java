@@ -17,6 +17,8 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.testcontainers.containers.ContainerState;
+import org.testcontainers.containers.MySQLContainer;
 
 /**
  * 브로커 없음 기준선이 공통 계약(결정 202·206)을 지키는지 실제 MySQL 로 본다(결정 209).
@@ -30,6 +32,20 @@ class DirectContractTest extends MessagingContractTest {
 
     @Autowired
     OutboxEventRepository outbox;
+
+    /** S3(결정 222): 브로커 없음은 Outbox 를 담는 공유 MySQL 이 저장소다. 측정 때 {@code SharedContainers} 가 메모리 1GB 를 건다. */
+    @Autowired
+    MySQLContainer<?> mysqlContainer;
+
+    @Override
+    protected Optional<ContainerState> brokerContainer() {
+        return Optional.of(mysqlContainer);
+    }
+
+    @Override
+    protected String brokerDataDir() {
+        return "/var/lib/mysql";
+    }
 
     @Override
     protected AutoCloseable subscribe(String group, String topic, KeyQuarantine storage, EventHandler handler,
