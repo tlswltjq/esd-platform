@@ -1,4 +1,4 @@
-"""격리 스택에서 메시징 비교 실험 한 회차를 돈다(결정 204). ``verify-jib.py --measure``가 부른다.
+"""격리 스택에서 Kafka 메시징 측정 한 회차를 돈다(결정 204·227). ``verify-jib.py --measure``가 부른다.
 
 순서:
 1. 부하 드라이버(``:e2e:messagingLoadTest``)가 예열 뒤 측정 주문을 보낸다.
@@ -26,93 +26,21 @@ PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-pai
                    "order-license-grant", "settlement-paid-order"]
 
 
-# 메시징을 쓰는 앱(Outbox 발행 또는 @EventSubscriber 소비). Store 는 DB 가 없어 항상 Kafka 로 받는다.
+# 메시징을 쓰는 앱(Outbox 발행 또는 Inbox 소비). 재전달 차단 수를 이 앱들에서 읽는다. Store 는 DB(Inbox)가 없어 넣지 않는다.
 MESSAGING_APPS = {"auth", "studio", "review", "catalog", "order", "payment", "license", "settlement"}
-BROKERS = ("kafka", "direct", "rabbitmq", "rabbitmq-streams", "redis-streams")
-# 비교하는 브로커가 모두 같은 병렬도를 갖게 한다: Kafka 토픽 파티션 수 = RabbitMQ (그룹, 토픽)당 큐 수.
-# docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
+# 측정 회차의 Kafka 토픽 파티션 수(리스너 동시성 = 파티션 수, 결정 212). docker-compose.yml 의 KAFKA_NUM_PARTITIONS 와 같은 값이다.
 PARALLELISM = 3
-RABBIT_USER = "stove"
-RABBIT_PASSWORD = "stove1234"
-# RabbitMQ 로 받는 @EventSubscriber 가 없는 토픽(발행 앱 → 토픽). auth 는 아무도 받지 않고, catalog 는 Store 가 Kafka 로만 받는다.
-RABBIT_OPTIONAL_TOPICS = {"auth": "stove.auth.v1", "catalog": "stove.catalog.v1"}
-
-
-def broker_environment(app, broker):
-    """결정 203 비교 대상 adapter 를 고르는 앱 환경 변수. kafka 는 기본값이라 아무것도 넣지 않는다."""
-    if broker not in BROKERS:
-        raise ValueError("알 수 없는 broker: " + broker)
-    if broker == "kafka" or app not in MESSAGING_APPS:
-        return {}
-    environment = {"STOVE_MESSAGING_BROKER": broker}
-    if broker == "direct" and app == "catalog":
-        # Store 는 Outbox 를 직접 읽을 수 없어(DB 없음) catalog 토픽만 Kafka 로도 보낸다. 구매 여정 밖이라 측정에 섞이지 않는다.
-        environment["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"] = "stove.catalog.v1"
-    if broker == "rabbitmq":
-        environment.update(SPRING_RABBITMQ_HOST="rabbitmq", SPRING_RABBITMQ_PORT="5672",
-                           SPRING_RABBITMQ_USERNAME=RABBIT_USER, SPRING_RABBITMQ_PASSWORD=RABBIT_PASSWORD,
-                           STOVE_MESSAGING_RABBITMQ_QUEUESPERTOPIC=str(PARALLELISM))
-        if app in RABBIT_OPTIONAL_TOPICS:
-            # 이 토픽은 RabbitMQ 로 받는 소비자가 없다. 받을 큐가 없어 되돌아와도 발행 성공으로 친다(PR #211 R3).
-            environment["STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS"] = RABBIT_OPTIONAL_TOPICS[app]
-        if app == "catalog":
-            # Store 는 격리 보관 DB 가 없어 Kafka(DLT)로만 받는다. 위와 같은 이유로 catalog 토픽만 Kafka 로도 보낸다.
-            environment["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"] = "stove.catalog.v1"
-    if broker == "rabbitmq-streams":
-        # 결정 211. stream 프로토콜(5552)로 붙고, 분할 수를 다른 브로커의 병렬도와 맞춘다.
-        environment.update(STOVE_MESSAGING_RABBITMQSTREAMS_HOST="rabbitstreams", STOVE_MESSAGING_RABBITMQSTREAMS_PORT="5552",
-                           STOVE_MESSAGING_RABBITMQSTREAMS_USERNAME=RABBIT_USER,
-                           STOVE_MESSAGING_RABBITMQSTREAMS_PASSWORD=RABBIT_PASSWORD,
-                           STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC=str(PARALLELISM))
-        if app == "catalog":
-            # Store 는 Kafka 로만 받는다(위와 같은 이유).
-            environment["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
-    if broker == "redis-streams":
-        environment.update(STOVE_MESSAGING_REDISSTREAMS_URI="redis://streams:6379",
-                           STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC=str(PARALLELISM))
-        if app == "catalog":
-            # 위와 같은 이유(Store 는 Kafka 로만 받는다)로 catalog 토픽만 Kafka 로도 보낸다.
-            environment["STOVE_MESSAGING_REDISSTREAMS_ALSOKAFKATOPICS"] = "stove.catalog.v1"
-    return environment
 
 
 def extra_environment(assignments):
-    """``--app-env NAME=VALUE`` 목록을 앱 환경으로. 형식이 틀리거나 브로커 선택 변수면 거절한다(브로커는 ``--broker`` 로만)."""
+    """``--app-env NAME=VALUE`` 목록을 앱 환경으로. 형식이 틀리면 거절한다."""
     environment = {}
     for assignment in assignments:
         key, separator, value = assignment.partition("=")
         if not separator or not key:
             raise SystemExit("--app-env needs NAME=VALUE: " + assignment)
-        if key == "STOVE_MESSAGING_BROKER":
-            raise SystemExit("--app-env cannot set STOVE_MESSAGING_BROKER; use --broker")
         environment[key] = value
     return environment
-
-
-def infra_services(broker):
-    """그 브로커 회차에만 더 띄울 기반 서비스(Compose 서비스 정의). Kafka 는 Store 때문에 언제나 뜬다."""
-    if broker == "redis-streams":
-        # 게이트웨이 세션용 redis 와 따로 둔다. AOF(초마다 fsync)를 켜 Kafka 의 디스크 로그와 비슷한 내구성으로 맞춘다.
-        return {"streams": {"image": "redis:7-alpine", "networks": ["app"],
-                            "command": ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"],
-                            "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "3s",
-                                            "retries": 60}}}
-    if broker == "rabbitmq-streams":
-        # classic queue 회차와 같은 이미지(management 포함)에 stream 플러그인만 켠다 — 두 RabbitMQ 구성의 차이가 토폴로지에만 있게.
-        return {"rabbitstreams": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
-                                  "environment": {"RABBITMQ_DEFAULT_USER": RABBIT_USER,
-                                                  "RABBITMQ_DEFAULT_PASS": RABBIT_PASSWORD},
-                                  "command": ["sh", "-c",
-                                              "rabbitmq-plugins enable --offline rabbitmq_stream && exec rabbitmq-server"],
-                                  "healthcheck": {"test": ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener",
-                                                           "5552"],
-                                                  "interval": "3s", "timeout": "10s", "retries": 60}}}
-    if broker != "rabbitmq":
-        return {}
-    return {"rabbitmq": {"image": "rabbitmq:4.1-management-alpine", "networks": ["app"],
-                         "environment": {"RABBITMQ_DEFAULT_USER": RABBIT_USER, "RABBITMQ_DEFAULT_PASS": RABBIT_PASSWORD},
-                         "healthcheck": {"test": ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"],
-                                         "interval": "3s", "timeout": "10s", "retries": 60}}}
 
 
 def load_command(offset, rate, seconds, buyers, evidence, warmup=10, refund_every=0):
@@ -196,7 +124,7 @@ def with_restart(checked, restart):
     return checked
 
 
-# 업무 DB(모든 모듈 스키마가 한 MySQL 서버)가 받은 조회 수. 브로커 없음은 소비자가 이 서버를 폴링한다.
+# 업무 DB(모든 모듈 스키마가 한 MySQL 서버)가 받은 조회 수.
 DB_LOAD_SQL = "SHOW GLOBAL STATUS WHERE Variable_name IN ('Com_select', 'Questions');"
 IDLE_SECONDS = 10
 
@@ -402,7 +330,7 @@ def restart_diagnosis(capture, container, password, fetch, order_base_url, out):
 
 
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
-            metrics_urls=(), fetch=None, refund_every=0, broker_name="kafka",
+            metrics_urls=(), fetch=None, refund_every=0,
             restart_at=None, restart_down=None, order_base_url=None):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
@@ -412,7 +340,7 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     load = Path(output) / "load.json"
     container = capture(docker + ["ps", "-q", "mysql"])
     containers = {service: capture(docker + ["ps", "-q", service])
-                  for service in resource_sampling.sampled_services(broker_name)}
+                  for service in resource_sampling.SAMPLED_SERVICES}
     disk_before, disk_errors_before = resource_sampling.disk_kib(capture, containers)
     idle_sampler = resource_sampling.Sampler(capture, containers).start()
     try:
@@ -426,10 +354,7 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     try:
         restart = None
         if restart_at is not None:
-            service = resource_sampling.broker_service(broker_name)
-            if service is None:
-                raise SystemExit("--restart-broker-at needs a broker (direct has none)")
-            restart = BrokerRestart(capture, docker, service, restart_at, restart_down,
+            restart = BrokerRestart(capture, docker, resource_sampling.BROKER_SERVICE, restart_at, restart_down,
                                     lambda: restart_diagnosis(capture, container, db_password, fetch, order_base_url,
                                                               Path(output) / "restart-diagnosis.txt")).start()
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
@@ -449,8 +374,7 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     run(journey_command(root, container, load, journey_file), "measure-journey")
     broker_file = Path(output) / "broker.json"
     run(broker_command(root, container, load, broker_file), "measure-broker")
-    resources = {"broker_service": resource_sampling.broker_service(broker_name),
-                 "interval_seconds": resource_sampling.INTERVAL_SECONDS,
+    resources = {"interval_seconds": resource_sampling.INTERVAL_SECONDS,
                  "idle": resource_sampling.summarize(idle_samples),
                  "load_run": resource_sampling.summarize(load_samples),
                  "stats_failures": idle_sampler.failures + load_sampler.failures,

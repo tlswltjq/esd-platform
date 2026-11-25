@@ -4,38 +4,22 @@
   섞인다 — Kafka 처럼 디스크 로그를 페이지 캐시로 읽는 브로커는 이 값이 커 보일 수 있다(결과에 조건으로 적는다).
 - 디스크: 회차 전후 각 서비스 데이터 경로의 ``du -sk`` 합.
 
-회차마다 업무 DB(``mysql``)와 Kafka(Store 가 언제나 Kafka 로 받아 늘 뜬다)를 재고, 고른 브로커가 따로 있으면 더한다.
-브로커 없음(``direct``)은 메시지가 업무 DB 의 Outbox 를 거치므로 ``mysql`` 이 그 몫을 진다.
+회차마다 업무 DB(``mysql``)와 브로커(``kafka``)를 잰다(결정 227: 메시징은 Kafka 하나).
 """
 import re
 import subprocess
 import threading
 
-# 고른 브로커 → 메시지를 실어 나르는 Compose 서비스. 브로커 없음은 없다(업무 DB 가 대신한다).
-_BROKER_SERVICES = {"kafka": "kafka", "rabbitmq": "rabbitmq", "rabbitmq-streams": "rabbitstreams",
-                    "redis-streams": "streams", "direct": None}
+# 메시지를 실어 나르는 Compose 서비스. S7 재시작(``BrokerRestart``)도 이 컨테이너를 내린다.
+BROKER_SERVICE = "kafka"
+# 회차마다 재는 Compose 서비스(업무 DB, 브로커).
+SAMPLED_SERVICES = ("mysql", BROKER_SERVICE)
 # 서비스별 데이터 경로. apache/kafka 이미지는 설정에 따라 두 경로 중 하나를 쓴다 — 있는 쪽만 합친다.
-DATA_PATHS = {"mysql": ["/var/lib/mysql"], "kafka": ["/tmp/kraft-combined-logs", "/tmp/kafka-logs"],
-              "rabbitmq": ["/var/lib/rabbitmq"], "rabbitstreams": ["/var/lib/rabbitmq"],
-              "streams": ["/data"]}
+DATA_PATHS = {"mysql": ["/var/lib/mysql"], "kafka": ["/tmp/kraft-combined-logs", "/tmp/kafka-logs"]}
 INTERVAL_SECONDS = 2.0
 STATS_FORMAT = "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 _UNITS = {"B": 1, "KiB": 1024, "MiB": 1024 ** 2, "GiB": 1024 ** 3, "kB": 1000, "MB": 1000 ** 2, "GB": 1000 ** 3}
 _MEMORY = re.compile(r"^([0-9.]+)\s*([A-Za-z]+)$")
-
-
-def broker_service(broker):
-    if broker not in _BROKER_SERVICES:
-        raise ValueError("알 수 없는 broker: " + broker)
-    return _BROKER_SERVICES[broker]
-
-
-def sampled_services(broker):
-    chosen = broker_service(broker)
-    services = ["mysql", "kafka"]
-    if chosen and chosen not in services:
-        services.append(chosen)
-    return services
 
 
 def memory_bytes(text):

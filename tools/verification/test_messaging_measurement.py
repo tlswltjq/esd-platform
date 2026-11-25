@@ -37,60 +37,7 @@ class CommandTest(unittest.TestCase):
         self.assertIn("--settle-secs", brokers)
 
 
-class BrokerEnvironmentTest(unittest.TestCase):
-    def test_rabbitmq_streams_uses_the_stream_port_and_the_same_parallelism(self):
-        order = messaging_measurement.broker_environment("order", "rabbitmq-streams")
-        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "rabbitmq-streams")
-        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_HOST"], "rabbitstreams")
-        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PORT"], "5552")
-        self.assertEqual(order["STOVE_MESSAGING_RABBITMQSTREAMS_PARTITIONSPERTOPIC"],
-                         str(messaging_measurement.PARALLELISM))
-        self.assertNotIn("STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS", order)
-        self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq-streams")
-                         ["STOVE_MESSAGING_RABBITMQSTREAMS_ALSOKAFKATOPICS"], "stove.catalog.v1")
-        service = messaging_measurement.infra_services("rabbitmq-streams")["rabbitstreams"]
-        self.assertIn("rabbitmq_stream", " ".join(service["command"]))
-        self.assertIn("5552", service["healthcheck"]["test"])
-
-    def test_kafka_is_the_default_and_needs_no_switch(self):
-        self.assertEqual(messaging_measurement.broker_environment("order", "kafka"), {})
-
-    def test_direct_switches_messaging_apps_and_keeps_store_on_kafka(self):
-        self.assertEqual(messaging_measurement.broker_environment("order", "direct"), {"STOVE_MESSAGING_BROKER": "direct"})
-        self.assertEqual(messaging_measurement.broker_environment("store", "direct"), {})
-        self.assertEqual(messaging_measurement.broker_environment("catalog", "direct")["STOVE_MESSAGING_DIRECT_ALSOKAFKATOPICS"],
-                         "stove.catalog.v1")
-
-    def test_rabbitmq_points_messaging_apps_at_the_broker_with_the_shared_parallelism(self):
-        order = messaging_measurement.broker_environment("order", "rabbitmq")
-        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "rabbitmq")
-        self.assertEqual(order["SPRING_RABBITMQ_HOST"], "rabbitmq")
-        self.assertEqual(order["STOVE_MESSAGING_RABBITMQ_QUEUESPERTOPIC"], str(messaging_measurement.PARALLELISM))
-        self.assertNotIn("STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS", order)
-        self.assertEqual(messaging_measurement.broker_environment("catalog", "rabbitmq")["STOVE_MESSAGING_RABBITMQ_ALSOKAFKATOPICS"],
-                         "stove.catalog.v1")
-        self.assertEqual(messaging_measurement.broker_environment("store", "rabbitmq"), {})
-        self.assertEqual(messaging_measurement.broker_environment("auth", "rabbitmq")["STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS"],
-                         "stove.auth.v1")
-        self.assertNotIn("STOVE_MESSAGING_RABBITMQ_OPTIONALTOPICS", order)
-
-    def test_only_the_rabbitmq_run_starts_a_rabbitmq_service(self):
-        self.assertEqual(messaging_measurement.infra_services("kafka"), {})
-        self.assertEqual(messaging_measurement.infra_services("direct"), {})
-        rabbit = messaging_measurement.infra_services("rabbitmq")["rabbitmq"]
-        self.assertEqual(rabbit["environment"]["RABBITMQ_DEFAULT_USER"], messaging_measurement.RABBIT_USER)
-        self.assertIn("healthcheck", rabbit)
-
-    def test_redis_streams_points_messaging_apps_at_their_own_redis_with_the_shared_parallelism(self):
-        order = messaging_measurement.broker_environment("order", "redis-streams")
-        self.assertEqual(order["STOVE_MESSAGING_BROKER"], "redis-streams")
-        self.assertEqual(order["STOVE_MESSAGING_REDISSTREAMS_URI"], "redis://streams:6379")
-        self.assertEqual(order["STOVE_MESSAGING_REDISSTREAMS_STREAMSPERTOPIC"], str(messaging_measurement.PARALLELISM))
-        self.assertEqual(messaging_measurement.broker_environment("catalog", "redis-streams")["STOVE_MESSAGING_REDISSTREAMS_ALSOKAFKATOPICS"],
-                         "stove.catalog.v1")
-        streams = messaging_measurement.infra_services("redis-streams")["streams"]
-        self.assertIn("--appendonly", streams["command"])
-
+class HelpersTest(unittest.TestCase):
     def test_db_rate_divides_by_the_time_actually_elapsed_between_the_reads(self):
         before = ({"Com_select": 100, "Questions": 300}, 10.0)
         after = ({"Com_select": 650, "Questions": 1400}, 21.0)
@@ -113,12 +60,12 @@ class BrokerEnvironmentTest(unittest.TestCase):
         self.assertIn("-pisolated-pw", seen["command"], "호스트의 MYSQL_ROOT_PASSWORD 가 아니라 격리 DB 값")
         self.assertIn("Com_select", seen["input"])
 
-    def test_extra_environment_parses_assignments_and_refuses_the_broker_switch(self):
+    def test_extra_environment_parses_assignments_and_refuses_malformed_ones(self):
         self.assertEqual(messaging_measurement.extra_environment(["A=1", "B=x=y"]), {"A": "1", "B": "x=y"})
         with self.assertRaises(SystemExit):
             messaging_measurement.extra_environment(["NOVALUE"])
         with self.assertRaises(SystemExit):
-            messaging_measurement.extra_environment(["STOVE_MESSAGING_BROKER=direct"])
+            messaging_measurement.extra_environment(["=value"])
 
     def test_a_same_key_order_violation_invalidates_the_run(self):
         result = messaging_measurement.validity([], {"completed": 0}, {}, {"order-payment-result": {"keys": 2, "events": 4, "violations": 1}})
@@ -158,9 +105,6 @@ class BrokerEnvironmentTest(unittest.TestCase):
         command = messaging_measurement.load_command(300, 2, 60, 10, "/tmp/load.json", 10, 4)
         self.assertIn("-Dstove.e2e.load-refund-every=4", command)
 
-    def test_unknown_broker_is_rejected(self):
-        with self.assertRaises(ValueError):
-            messaging_measurement.broker_environment("order", "nats")
 
 
 class ValidityTest(unittest.TestCase):
@@ -233,7 +177,6 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual(summary["db_load"]["load_run_per_second"]["Com_select"], 5.0, "부하 구간 60초 동안 300건")
         self.assertEqual(summary["order"]["order-payment-result"]["violations"], 0)
         resources = summary["resources"]
-        self.assertEqual(resources["broker_service"], "kafka")
         self.assertEqual(resources["disk"]["mysql"]["growth_kib"], 60)
         self.assertEqual(resources["disk"]["kafka"]["growth_kib"], 30)
         self.assertEqual(set(resources["load_run"]), {"mysql", "kafka"})
@@ -298,7 +241,7 @@ class BrokerRestartTest(unittest.TestCase):
         def capture(command, **kwargs):
             raise subprocess.CalledProcessError(1, command)
 
-        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "rabbitmq", 0.0, 0.0).start()
+        restart = messaging_measurement.BrokerRestart(capture, ["docker"], "kafka", 0.0, 0.0).start()
         restart.join()
         self.assertIsNone(restart.killed_at)
         self.assertEqual(len(restart.errors), 2)
@@ -351,15 +294,30 @@ class BrokerRestartTest(unittest.TestCase):
         checked = {"valid": True, "reasons": []}
         self.assertIs(messaging_measurement.with_restart(checked, None), checked)
 
-    def test_direct_has_no_broker_to_restart(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(messaging_measurement.time, "sleep"):
-            with self.assertRaises(SystemExit):
-                messaging_measurement.measure("/repo", ["docker", "compose"], lambda *a, **k: None,
+    def test_restart_round_kills_the_kafka_container(self):
+        created = []
+
+        class Recorder:
+            def __init__(self, capture, docker, service, at, down, diagnose=None):
+                self.service, self.at, self.down = service, at, down
+                created.append(self)
+
+            def start(self):
+                return self
+
+        # 부하 드라이버가 실패하면 수집 단계 전에 멈춘다 — 재시작이 어느 컨테이너를 겨누는지만 본다.
+        def run(command, label):
+            raise RuntimeError(label)
+
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(messaging_measurement, "BrokerRestart", Recorder), \
+                mock.patch.object(messaging_measurement.time, "sleep"):
+            with self.assertRaises(RuntimeError):
+                messaging_measurement.measure("/repo", ["docker", "compose"], run,
                                               lambda command, **kwargs: "1\t/x" if "du -sk" in command[-1]
                                               else ("Com_select\t1\nQuestions\t1" if command[:2] == ["docker", "exec"] else "id"),
-                                              Path(directory), 300, 5, 1, 2, 1, broker_name="direct", restart_at=1.0,
-                                              restart_down=1.0)
-
+                                              Path(directory), 300, 5, 1, 2, 1, restart_at=1.0, restart_down=2.0)
+        self.assertEqual([(r.service, r.at, r.down) for r in created], [("kafka", 1.0, 2.0)])
 
 if __name__ == "__main__":
     unittest.main()

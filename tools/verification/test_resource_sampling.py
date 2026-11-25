@@ -10,22 +10,12 @@ from support import resource_sampling  # noqa: E402
 
 
 class ServicesTest(unittest.TestCase):
-    def test_every_run_samples_the_business_db_and_kafka_and_adds_the_chosen_broker(self):
-        self.assertEqual(resource_sampling.sampled_services("kafka"), ["mysql", "kafka"])
-        self.assertEqual(resource_sampling.sampled_services("direct"), ["mysql", "kafka"])
-        self.assertEqual(resource_sampling.sampled_services("rabbitmq"), ["mysql", "kafka", "rabbitmq"])
-        self.assertEqual(resource_sampling.sampled_services("redis-streams"), ["mysql", "kafka", "streams"])
-        self.assertEqual(resource_sampling.sampled_services("rabbitmq-streams"), ["mysql", "kafka", "rabbitstreams"])
+    def test_every_run_samples_the_business_db_and_kafka(self):
+        self.assertEqual(resource_sampling.SAMPLED_SERVICES, ("mysql", "kafka"))
+        self.assertEqual(resource_sampling.BROKER_SERVICE, "kafka")
 
-    def test_the_broker_of_a_run_is_the_container_carrying_its_messages(self):
-        self.assertEqual(resource_sampling.broker_service("kafka"), "kafka")
-        self.assertEqual(resource_sampling.broker_service("rabbitmq"), "rabbitmq")
-        self.assertEqual(resource_sampling.broker_service("redis-streams"), "streams")
-        self.assertIsNone(resource_sampling.broker_service("direct"))
-
-    def test_unknown_broker_is_refused(self):
-        with self.assertRaises(ValueError):
-            resource_sampling.sampled_services("nats")
+    def test_every_sampled_service_has_data_paths(self):
+        self.assertEqual(set(resource_sampling.DATA_PATHS), set(resource_sampling.SAMPLED_SERVICES))
 
 
 class ParseTest(unittest.TestCase):
