@@ -112,7 +112,7 @@
 ### 이행
 
 - 지금까지 V1~V34. V10부터가 현행 자료이고 구 V1~V9 자료·구 Outbox는 자동 이관하지 않는다(전환 SQL `tools/migrations/order/order-transition.sql`).
-- 목표 이행(번호는 그 PR에서 정한다. 참고 구현 `esd-worktrees/refund-failure-closure`가 V35를 쓰므로 겹치지 않게 맞춘다). 모두 결정 104 옛 행 호환 테스트를 `OrderMigrationIntegrationTest`에 같은 PR로 쓴다. 채움은 Order가 기록한 사실로만 하고 다른 모듈 시각으로 채우지 않는다(R11.3).
+- 목표 이행(번호는 그 PR에서 정한다. 참고 구현(닫힌 [PR #166](https://github.com/tlswltjq/esd-platform/pull/166) head `2d679522`)이 V35를 쓰므로 겹치지 않게 맞춘다). 모두 결정 104 옛 행 호환 테스트를 `OrderMigrationIntegrationTest`에 같은 PR로 쓴다. 채움은 Order가 기록한 사실로만 하고 다른 모듈 시각으로 채우지 않는다(R11.3).
 
 | 대상 | 채움 규칙 | 근거 |
 |---|---|---|
