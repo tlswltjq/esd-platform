@@ -17,6 +17,7 @@
 | 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택), 스택이 떠 있으면 `./gradlew :e2e:e2eTest` | [2. 테스트 계층](#2-테스트-계층) |
 | 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다) | [실험 E9](experiments.md#resilience) |
 | 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
+| 층 1 E2E 측정 하네스(`verify-jib.py --measure`·`e2e_baseline.py`·`support/e2e_faults.py`) | `tools/verification`·`tools/measurement` 단위 시험. 실제 스택으로 계측·장애 주입이 맞물리는지는 `python3 -B tools/measurement/e2e_baseline.py smoke`(회차마다 `measure_guard.py`로 감쌈, 30~45분) | [실험 E13](experiments.md#kafka-baseline-layer1) |
 | `benchmarks/messaging`(층 2 메시징 벤치) | `./gradlew :benchmarks:messaging:test`(단위·ArchUnit). 실 Kafka·MySQL로 계측이 맞물리는지는 `measure_guard.py`로 감싼 `python3 -B tools/measurement/bench_messaging.py smoke`(CI 밖, [결정 234](decisions.md#benchmark-messaging-module)) | [실험 E13](experiments.md#kafka-baseline) |
 | `tools/ci/` | `python3 -B -m unittest discover -s tools/ci -p 'test_*.py'` | [tools/README.md](../tools/README.md) |
 | `tools/verification/`·`tools/measurement/` | `python3 -B -m unittest discover -s tools/verification -p 'test_<대상>.py'`. CI는 build 작업이 둘 다 늘 돌리고, 이 경로만 바뀐 PR은 Gradle을 생략한다 | [결정 216](decisions.md#ci-scope-non-gradle-paths) |

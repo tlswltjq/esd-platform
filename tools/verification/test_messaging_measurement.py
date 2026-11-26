@@ -126,6 +126,54 @@ class ValidityTest(unittest.TestCase):
             self.assertIn(expected, text)
 
 
+LAG_DESCRIBE = """
+GROUP              TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+license-paid-order stove.order.v1  0          5               7               2    c-1          /h    c
+license-paid-order stove.order.v1  1          -               3               -    c-2          /h    c
+
+GROUP                 TOPIC          PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+settlement-paid-order stove.order.v1 0          7               7               0    c-3          /h    c
+"""
+
+
+class LagTest(unittest.TestCase):
+    def test_sums_lag_per_group_and_counts_partitions_without_commits(self):
+        groups = messaging_measurement.parse_group_lag(LAG_DESCRIBE)
+        self.assertEqual(groups, {"license-paid-order": {"lag": 2, "unknown": 1},
+                                  "settlement-paid-order": {"lag": 0, "unknown": 0}})
+
+
+class FaultValidityTest(unittest.TestCase):
+    def test_fault_round_validity_is_the_injection_and_business_breaks_become_outcome(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        checked = {"valid": False, "reasons": ["구매 근거 미완료 3건"]}
+        result = messaging_measurement.with_faults(checked, Schedule())
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["outcome"], ["구매 근거 미완료 3건"])
+
+    def test_a_fault_that_did_not_happen_invalidates_the_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return ["db-revoke: 권한 회수 실패"]
+
+        result = messaging_measurement.with_faults({"valid": True, "reasons": []}, Schedule())
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["reasons"], ["db-revoke: 권한 회수 실패"])
+
+    def test_generator_shortfall_invalidates_a_normal_round(self):
+        loaded = {"rate": 10.0, "measuredWindow": {"achievedRate": 9.5}}
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, loaded)
+        self.assertTrue(any("달성률" in reason for reason in checked["reasons"]))
+
+
 class MeasureTest(unittest.TestCase):
     def test_runs_load_then_journey_then_broker_and_excludes_warmup(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -142,6 +190,9 @@ class MeasureTest(unittest.TestCase):
                 if label == "measure-journey":
                     (output / "journey.json").write_text(json.dumps(
                         {"purchase": {"completed": 2, "incomplete": 0, "failed": 0}}))
+                if label == "measure-timeseries":
+                    self.assertIn("--load-ended-us", command)
+                    (output / "timeseries.json").write_text(json.dumps({"unresolved": 0, "drain_seconds": 1.5}))
                 if label == "measure-broker":
                     self.assertIn("--keys-from", command)
                     (output / "broker.json").write_text(json.dumps(
@@ -153,6 +204,8 @@ class MeasureTest(unittest.TestCase):
                           "160\t/var/lib/mysql", "40\t/tmp/kraft-combined-logs"])
 
             def capture(command, **kwargs):
+                if "kafka-consumer-groups.sh" in " ".join(command):
+                    return LAG_DESCRIBE
                 if command[:2] == ["docker", "stats"]:
                     return "mysql-id\t4.00%\t300MiB / 1GiB\nkafka-id\t2.00%\t500MiB / 2GiB"
                 if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
@@ -169,7 +222,9 @@ class MeasureTest(unittest.TestCase):
                 summary = messaging_measurement.measure("/repo", ["docker", "compose"], run, capture,
                                                         output, 300, 5, 1, 2, 1)
 
-        self.assertEqual(calls, ["measure-load", "measure-journey", "measure-broker"])
+        self.assertEqual(calls, ["measure-load", "measure-journey", "measure-timeseries", "measure-broker"])
+        self.assertEqual(summary["timeseries"]["drain_seconds"], 1.5)
+        self.assertIsNone(summary["faults"])
         self.assertEqual(summary["planned"], 2, "예열 주문은 집계에서 뺀다")
         self.assertEqual(summary["http_p95_ms"], 30.0)
         self.assertTrue(summary["validity"]["valid"])
