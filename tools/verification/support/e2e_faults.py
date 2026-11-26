@@ -597,21 +597,7 @@ class DltLimit(Fault):
         # 원본 보존(결정 235 장애 중 검증): 두 건이 들어간 파티션의 커밋 offset 이 첫 건을 넘지 않았고,
         # 다른 파티션은 밀린 것이 없다(PR #254 리뷰 R3).
         offsets_during = self.store_offsets()
-        # 두 건의 파티션은 키로 정해진다(Kafka 기본 파티셔너, 재리뷰 R3). 발행 전 로그 끝은 첫 건의 offset 이 아니다 —
-        # 그 사이 다른 레코드가 끼어들 수 있다. 그 파티션을 발행 전 로그 끝부터 읽어 이 키 두 건의 실제 offset 을 쓴다(재리뷰 2 R2).
         partition = default_partition(key, self.facts["partitions"])
-        published = self.published_records(partition, offsets_before.get(partition, (None, 0))[1], key)
-        self.facts["published_offsets"] = [offset for offset, _ in published]
-        found = [value for _, value in published] == ['{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}']
-        self.facts["target_partition"] = partition if found else None
-        target = self.facts["target_partition"]
-        if target is not None:
-            committed = offsets_during.get(target, (None, None))[0]
-            self.facts["target_first_offset"] = published[0][0]
-            self.facts["target_last_offset"] = published[1][0]
-            self.facts["target_committed_during"] = committed
-            # 커밋 offset 은 다음에 읽을 위치다. 첫 건 이하면 첫 건을 넘기지 않았다.
-            self.facts["original_held_during"] = committed is None or committed <= published[0][0]
         self.facts["other_partitions_lag_during"] = {
             other: (end - (committed or 0)) for other, (committed, end) in offsets_during.items() if other != partition}
         failures_during = self.store_count("stove_kafka_consumer_recovery_failures_total")
@@ -623,6 +609,24 @@ class DltLimit(Fault):
         self.facts["dlt_records_during"] = len(self.dlt_records(key))
         self.restore()
         restored_at = time.monotonic()
+        # 두 건의 파티션은 키로 정해진다(Kafka 기본 파티셔너, 재리뷰 R3). 발행 전 로그 끝은 첫 건의 offset 이 아니다 —
+        # 그 사이 다른 레코드가 끼어들 수 있다. 그 파티션을 발행 전 로그 끝부터 읽어 이 키 두 건의 실제 offset 을 쓴다(재리뷰 2 R2).
+        # 원본 로그는 복원과 무관하므로 복원 뒤에 읽는다 — 읽는 시간만큼 장애가 길어지지 않게(재리뷰 3 R3).
+        published = self.published_records(partition, offsets_before.get(partition, (None, 0))[1], key)
+        self.facts["published_offsets"] = [offset for offset, _ in published]
+        found = [value for _, value in published] == ['{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}']
+        self.facts["target_partition"] = partition if found else None
+        target = self.facts["target_partition"]
+        if target is not None:
+            self.facts["target_first_offset"] = published[0][0]
+            self.facts["target_last_offset"] = published[1][0]
+            # 장애 중 표본에 그 파티션 행이 없으면 원본 보존을 확인할 수 없다. 행은 있고 커밋이 없는 것(`-`)과 구별한다(재리뷰 3 R2).
+            self.facts["target_sampled_during"] = target in offsets_during
+            if target in offsets_during:
+                committed = offsets_during[target][0]
+                self.facts["target_committed_during"] = committed
+                # 커밋 offset 은 다음에 읽을 위치다. 첫 건 이하면 첫 건을 넘기지 않았다.
+                self.facts["original_held_during"] = committed is None or committed <= published[0][0]
         records = []
         while time.monotonic() - restored_at < self.RESTORE_WAIT_SECONDS:
             records = self.dlt_records(key)
@@ -737,7 +741,10 @@ class DltLimit(Fault):
             reasons.append("원본 파티션에서 발행한 두 건을 순서대로 찾지 못했다(찾은 offset %s, 원본 보존을 확인할 수 없다)"
                            % self.facts.get("published_offsets"))
         else:
-            if not self.facts.get("original_held_during"):
+            if not self.facts.get("target_sampled_during"):
+                reasons.append("장애 중 원본 파티션 %s 의 커밋 표본이 없다(원본 보존을 확인할 수 없다)"
+                               % self.facts.get("target_partition"))
+            elif not self.facts.get("original_held_during"):
                 reasons.append("장애 중 원본 offset 이 실패 레코드를 넘어갔다(커밋 %s, 첫 건 %s)" % (
                     self.facts.get("target_committed_during"), self.facts.get("target_first_offset")))
             if self.facts.get("target_committed_after") is None:
@@ -830,10 +837,19 @@ class FaultSchedule:
                 self.unfinished.append(fault.kind)
                 self.errors.append("%s: 장애 스레드가 정리 시한 안에 끝나지 않았다" % fault.kind)
         for fault in self.faults:
+            # 장애 스레드가 아직 복원 명령 중이면 잠금을 기다린다. 시한 안에 못 얻으면 그 장애는 미확인으로 두고
+            # 다른 장애의 복원을 계속한다 — 한 장애가 뒤 장애의 복원을 막지 않게(재리뷰 3 R1).
+            if not fault.restoring.acquire(timeout=CLEANUP_JOIN_SECONDS):
+                if fault.kind not in self.unfinished:
+                    self.unfinished.append(fault.kind)
+                self.errors.append("%s: 복원 잠금을 정리 시한 안에 얻지 못했다" % fault.kind)
+                continue
             try:
                 fault.cleanup()
             except Exception as failure:  # noqa: BLE001
                 fault.errors.append("cleanup: " + str(failure)[-300:])
+            finally:
+                fault.restoring.release()
 
     def restore_unconfirmed(self):
         """복원을 확인하지 못한 장애 종류: 정리 시한 뒤에도 스레드가 돌거나, 되돌릴 것이 남았다."""

@@ -403,6 +403,41 @@ class DltLimitTest(unittest.TestCase):
         # 제한(4096)이 실제 배치(2048)보다 크면 그 회차는 결정 235 조건을 지키지 못한 것이다.
         self.assertTrue(any("작지 않다" in problem for problem in problems))
 
+    def test_a_missing_target_partition_sample_during_the_fault_is_not_a_held_offset(self):
+        stack = FakeStack()
+        fault = e2e_faults.DltLimit(context(stack), {"at": "0", "for": "0", "limit": "512"})
+        fault.prepare()
+        original = fault.store_offsets
+        calls = []
+
+        def without_target_during():
+            offsets = original()
+            calls.append(1)
+            if len(calls) == 2:  # 장애 중 표본에서 대상 파티션 행이 빠진 경우
+                offsets.pop(stack.target, None)
+            return offsets
+
+        fault.store_offsets = without_target_during
+        with mock.patch.object(e2e_faults.time, "sleep"):
+            fault.run()
+        # 행이 없는 것을 "커밋 없음"으로 읽어 원본 보존을 통과시키지 않는다(재리뷰 3 R2).
+        self.assertFalse(fault.facts["target_sampled_during"])
+        self.assertNotIn("original_held_during", fault.facts)
+        self.assertTrue(any("커밋 표본이 없다" in problem for problem in fault.problems()))
+
+    def test_the_published_records_are_read_after_the_limit_is_restored(self):
+        stack = FakeStack()
+        fault = e2e_faults.DltLimit(context(stack), {"at": "0", "for": "0", "limit": "512"})
+        fault.prepare()
+        with mock.patch.object(e2e_faults.time, "sleep"):
+            fault.run()
+        joined = [" ".join(command) for command, _ in stack.commands]
+        restore = next(index for index, text in enumerate(joined) if "--delete-config" in text)
+        read = next(index for index, text in enumerate(joined) if "kafka-console-consumer.sh" in text and "--partition" in text)
+        # 원본 로그 조회(최대 6초)가 장애 창을 늘리지 않게 복원 뒤에 읽는다(재리뷰 3 R3).
+        self.assertGreater(read, restore)
+        self.assertEqual(fault.problems(), [])
+
     def test_cleanup_restores_an_explicit_original_value(self):
         stack = FakeStack()
         stack.max_message_bytes = "1048588"
@@ -476,6 +511,33 @@ class UnconfirmedRestoreTest(unittest.TestCase):
         summary = schedule.summary()
         self.assertEqual(summary["restore_unconfirmed"], ["kill"])
         self.assertIn("kill: 장애 스레드가 정리 시한 안에 끝나지 않았다", schedule.problems())
+
+    def test_a_held_restore_lock_does_not_block_the_other_faults_restores(self):
+        stack = FakeStack()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "load.json.started"
+            schedule = e2e_faults.FaultSchedule(context(stack), ["kill:at=0,for=0,service=license",
+                                                                 "kill:at=0,for=0,service=settlement"], marker, wait=5)
+            first, second = schedule.faults
+            first.down = second.down = True
+            held, release = threading.Event(), threading.Event()
+
+            def hold():
+                with first.restoring:
+                    held.set()
+                    release.wait(5)
+
+            holder = threading.Thread(target=hold)
+            holder.start()
+            held.wait(5)
+            with mock.patch.object(e2e_faults, "CLEANUP_JOIN_SECONDS", 0.05):
+                schedule.cleanup()
+            release.set()
+            holder.join()
+        # 첫 장애의 잠금을 다른 스레드가 쥐고 있어도 둘째 장애는 되돌리고, 첫 장애는 미확인으로 남긴다(재리뷰 3 R1).
+        self.assertIn(["docker", "compose", "start", "settlement"], [command for command, _ in stack.commands])
+        self.assertEqual(schedule.restore_unconfirmed(), ["kill"])
+        self.assertIn("kill: 복원 잠금을 정리 시한 안에 얻지 못했다", schedule.problems())
 
     def test_a_fault_left_unrestored_is_reported_as_unconfirmed(self):
         stack = FakeStack()
