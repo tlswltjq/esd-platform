@@ -79,8 +79,9 @@ def summarize(evidence, rows):
     start, end = window.get("startEpochUs"), window.get("endEpochUs")
     if not rows:
         return {"window": window, "note": "요청 기록이 없다"}
-    origin = min(row[0] for row in rows)
     finished = [row[1] for row in rows if row[1] is not None]
+    # 시각이 뒤집힌 행(끝 < 시작)이 있어도 칸 번호가 음수가 되지 않게 모든 시각 중 가장 이른 것을 원점으로 둔다(PR #254 리뷰 R4).
+    origin = min([row[0] for row in rows] + finished)
     last = max([row[0] for row in rows] + finished)
     buckets = (last - origin) // BUCKET_US + 1
     series = {name: [0] * buckets for name in ("offered", "completed", "failed", "rejected")}
@@ -107,8 +108,10 @@ def summarize(evidence, rows):
         "totals": {kind: sum(1 for row in rows if row[2] == kind) for kind in ("completed", "failed", "rejected", "unresolved")},
         "load_end_us": load_end,
         "unresolved": unresolved,
-        # 부하 종료(마지막 요청) → 마지막 요청이 끝난 시각. 미해소가 남으면 해소되지 않았다(None).
-        "drain_seconds": None if unresolved else round((max(finished) - load_end) / 1e6, 3) if finished else None,
+        "last_finish_us": max(finished) if finished else None,
+        # 업무만 본 해소: 마지막 요청 → 마지막 요청이 끝난 시각(Outstanding 0). 소비 지연까지 0인 E13 Backlog 해소 시간은
+        # 측정 흐름이 지연 표본과 합쳐 ``backlog_drain_seconds``로 낸다. 미해소가 남으면 None.
+        "outstanding_drain_seconds": None if unresolved else round((max(finished) - load_end) / 1e6, 3) if finished else None,
         "clock_check": {"finish_before_start": sum(1 for row in rows if row[1] is not None and row[1] < row[0])},
     }
     if start is not None and end is not None and end > start:

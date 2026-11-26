@@ -125,6 +125,8 @@ class MessagingLoadTest {
         long inWindow = results.stream().filter(result -> !result.path("warmup").asBoolean())
                 .filter(result -> result.path("requestedEpochUs").asLong(Long.MAX_VALUE) < windowEndUs).count();
         long measuredTotal = results.stream().filter(result -> !result.path("warmup").asBoolean()).count();
+        // 부하 종료 = 마지막 요청을 보낸 순간. 결정 231의 10분 관찰 기한을 여기서부터 잰다(Gradle 종료·끝 상태 대기를 섞지 않는다).
+        long lastRequestUs = results.stream().mapToLong(result -> result.path("requestedEpochUs").asLong(0)).max().orElse(0);
 
         List<ObjectNode> accepted = new ArrayList<>();
         for (ObjectNode result : results) {
@@ -134,8 +136,9 @@ class MessagingLoadTest {
         }
         // 끝 상태(PAID·FAILED)에 닿을 때까지만 기다린다. 걸린 시간 자체는 DB 시각으로 잰다. 장애 회차는 끝까지 닿지 않을 수 있으므로
         // 시간이 넘어도 멈추지 않고 마지막 상태를 남긴다. 0이면 묻지 않는다 — 부하 종료 뒤 해소 구간에 HTTP 조회를 더하지 않게.
-        boolean settled = settleSeconds <= 0;
-        if (!settled) {
+        boolean asked = settleSeconds > 0;
+        boolean settled = false;
+        if (asked) {
             try {
                 Awaitility.await().atMost(Duration.ofSeconds(settleSeconds)).pollInterval(Duration.ofSeconds(2)).until(() -> {
                     int finalCount = 0;
@@ -169,7 +172,13 @@ class MessagingLoadTest {
                 .put("refunds", refunds)
                 .put("productCode", product.path("productCode").asText())
                 .put("settleSeconds", settleSeconds)
-                .put("allSettled", settled);
+                .put("lastRequestEpochUs", lastRequestUs);
+        // 묻지 않았으면 모른다(null). 확인한 경우에만 참·거짓을 적는다.
+        if (asked) {
+            output.put("allSettled", settled);
+        } else {
+            output.putNull("allSettled");
+        }
         output.putObject("measuredWindow")
                 .put("startEpochUs", windowStartUs).put("endEpochUs", windowEndUs).put("seconds", seconds)
                 .put("sentInWindow", inWindow).put("sentAfterWindow", measuredTotal - inWindow)

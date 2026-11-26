@@ -43,6 +43,15 @@ class SqlTest(unittest.TestCase):
             journey_timeseries.outcome_sql(["o-1'; DROP"])
 
 
+class ClockTest(unittest.TestCase):
+    def test_a_finish_far_before_its_start_is_counted_not_crashed(self):
+        evidence = {"orders": [order(1, 30 * S)]}
+        outcomes = journey_timeseries.parse_outcomes("o-1\tPAID\t%d\t%d" % (BASE, BASE))
+        result = journey_timeseries.summarize(evidence, journey_timeseries.requests(evidence, outcomes))
+        self.assertEqual(result["clock_check"], {"finish_before_start": 1})
+        self.assertEqual(result["series"]["completed"][0], 1)
+
+
 class SummaryTest(unittest.TestCase):
     def setUp(self):
         outcomes = journey_timeseries.parse_outcomes(OUTCOMES_TEXT)
@@ -69,14 +78,15 @@ class SummaryTest(unittest.TestCase):
 
     def test_unresolved_orders_mean_no_drain_time(self):
         self.assertEqual(self.result["unresolved"], 1)
-        self.assertIsNone(self.result["drain_seconds"])
+        self.assertIsNone(self.result["outstanding_drain_seconds"])
         self.assertEqual(self.result["clock_check"], {"finish_before_start": 0})
 
     def test_drain_time_runs_from_the_last_request_to_the_last_finish(self):
         outcomes = journey_timeseries.parse_outcomes(OUTCOMES_TEXT.replace(
             "o-5\tPENDING\tNULL", "o-5\tPAID\t%d" % (BASE + 40 * S)))
         result = journey_timeseries.summarize(EVIDENCE, journey_timeseries.requests(EVIDENCE, outcomes))
-        self.assertEqual(result["drain_seconds"], 11.0)
+        self.assertEqual(result["outstanding_drain_seconds"], 11.0)
+        self.assertEqual(result["last_finish_us"], BASE + 40 * S)
 
 
 if __name__ == "__main__":

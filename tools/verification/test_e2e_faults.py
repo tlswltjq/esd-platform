@@ -57,6 +57,9 @@ class FakeStack:
         self.dlt_records = []
         self.recovery_failures = 0.0
         self.dead_lettered = 0.0
+        self.killed = False
+        # Store 소비 그룹: 파티션 → [커밋 offset, 로그 끝]. 파티션 1에 두 건이 들어가고, 제한 중에는 커밋이 멈춘다.
+        self.store = {0: [5, 5], 1: [None, 0], 2: [3, 3]}
 
     def capture(self, command, input=None, **_):
         self.commands.append((command, input))
@@ -66,9 +69,18 @@ class FakeStack:
         if "information_schema.tables" in joined:
             return "product_license\nprocessed_event"
         if "information_schema.processlist" in joined:
-            return "11\n12"
+            return "" if self.killed else "11\n12"
+        if command[-1].startswith("KILL "):
+            self.killed = True
+            return ""
+        if "--group store-catalog-publication" in joined:
+            rows = ["GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID"]
+            for partition, (committed, end) in sorted(self.store.items()):
+                rows.append("store-catalog-publication stove.catalog.v1 %d %s %d %s c /h c" % (
+                    partition, "-" if committed is None else committed, end, "-" if committed is None else end - committed))
+            return "\n".join(rows)
         if "FROM stove_license.consumer_quarantine" in joined:
-            return "license-paid-order\nsettlement-paid-order"
+            return "license-paid-order|e13-malformed-r1-0\nsettlement-paid-order|e13-malformed-r1-0"
         if "kafka-consumer-groups.sh" in joined:
             return ("GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG\n"
                     "license-paid-order stove.order.v1 0 1 2 1\nsettlement-paid-order stove.order.v1 0 1 2 1\n"
@@ -84,13 +96,15 @@ class FakeStack:
             return ""
         if "kafka-configs.sh" in joined and "--delete-config" in joined:
             self.max_message_bytes = None
-            # 설정이 풀리면 Store 재시도가 DLT 에 두 건을 순서대로 쓴다.
+            # 설정이 풀리면 Store 재시도가 DLT 에 두 건을 순서대로 쓰고 원본 offset 을 넘긴다.
             self.dlt_records = ['{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}']
             self.dead_lettered += 2
+            self.store[1][0] = 2
             return ""
         if "kafka-console-producer.sh" in joined and "stove.catalog.v1" in joined:
-            # 제한 중에는 DLT 쓰기가 거부돼 Store recoverer 가 실패한다.
+            # 제한 중에는 DLT 쓰기가 거부돼 Store recoverer 가 실패하고 커밋이 멈춘다.
             self.recovery_failures += 3
+            self.store[1][1] += 2
             return ""
         if "kafka-console-consumer.sh" in joined:
             return "\n".join("CreateTime:%d|%s|%s" % (5_000_000_000_000 + i, "e13-dlt-r1", value)
@@ -110,19 +124,47 @@ def context(stack):
     return e2e_faults.Context(stack.capture, ["docker", "compose"], "root1234", stack.fetch, "http://store", run_tag="r1")
 
 
+def setUpModule():
+    # 실제 대기 시간을 없앤다(장애 길이는 시험마다 0초).
+    e2e_faults.DbRevoke.EFFECT_WAIT_SECONDS = 0
+    e2e_faults.DltLimit.SETTLE_SECONDS = 0
+
+
 class DbRevokeTest(unittest.TestCase):
     def test_prepares_table_grants_reconnects_then_revokes_and_restores_insert(self):
         stack = FakeStack()
         fault = e2e_faults.DbRevoke(context(stack), {"at": "0", "for": "0", "table": "stove_license.product_license"})
+        readings = iter([1.0, 4.0])
+        fault.context.app_metrics = {"license": "http://license"}
+        fault.context.fetch = lambda url: "stove_kafka_consumer_failed_deliveries_total %s\n" % next(readings)
         fault.prepare()
-        with mock.patch.object(e2e_faults.time, "sleep"):
-            fault.run()
+        fault.run()
+        fault.cleanup()
         sql = [command[-1] for command, _ in stack.commands if command[-2] == "-e"]
         self.assertTrue(any(statement.startswith("GRANT ALL PRIVILEGES ON stove_license.product_license") for statement in sql))
         self.assertIn("KILL 11;", sql)
         self.assertIn("REVOKE INSERT ON stove_license.product_license FROM 'stove'@'%';", sql)
-        self.assertEqual(sql[-1], "GRANT INSERT ON stove_license.product_license TO 'stove'@'%';")
+        self.assertIn("GRANT INSERT ON stove_license.product_license TO 'stove'@'%';", sql)
+        # 정리에서 원래 스키마 단위 권한으로 되돌리고 표 단위 권한을 지운다(리뷰 R2).
+        self.assertTrue(sql[-1].startswith("GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';"))
+        self.assertIn("REVOKE ALL PRIVILEGES ON stove_license.product_license FROM 'stove'@'%';", sql[-1])
+        self.assertTrue(fault.facts["schema_grant_restored"])
         self.assertEqual(fault.problems(), [])
+
+    def test_a_connection_that_survives_the_kill_is_reported(self):
+        stack = FakeStack()
+        original = stack.capture
+
+        def stubborn(command, input=None, **kwargs):
+            if command[-1].startswith("KILL "):
+                return ""
+            return original(command, input, **kwargs)
+
+        fault = e2e_faults.DbRevoke(e2e_faults.Context(stubborn, ["docker", "compose"], "pw"),
+                                    {"at": "0", "for": "0", "table": "stove_license.product_license"})
+        fault.prepare()
+        self.assertTrue(any("끊지 못했다" in problem for problem in fault.problems()))
+        self.assertTrue(any("효과(소비 실패 수)를 읽지 못했다" in problem for problem in fault.problems()))
 
     def test_a_failed_grant_is_reported_and_retried_on_cleanup(self):
         stack = FakeStack()
@@ -195,10 +237,17 @@ class MalformedTest(unittest.TestCase):
         stack = FakeStack()
         fault = e2e_faults.MalformedEnvelopes(context(stack), {"at": "0", "topic": "stove.order.v1"})
         fault.QUARANTINE_WAIT_SECONDS = 0
-        fault.quarantined_groups = lambda prefix: ["license-paid-order"]
-        with mock.patch.object(e2e_faults.time, "sleep"):
-            fault.run()
-        self.assertTrue(any("격리된 그룹" in problem for problem in fault.problems()))
+        fault.quarantined_pairs = lambda prefix: ["license-paid-order|e13-malformed-r1-0"]
+        fault.run()
+        self.assertTrue(any("격리되지 않은 (그룹|키) 1쌍" in problem for problem in fault.problems()))
+
+
+class OffsetsTest(unittest.TestCase):
+    def test_finds_the_single_partition_that_received_the_records(self):
+        before = {0: (5, 5), 1: (None, 0), 2: (3, 3)}
+        self.assertEqual(e2e_faults.locate_published(before, {0: (5, 5), 1: (None, 2), 2: (3, 3)}, 2), 1)
+        # 다른 파티션도 함께 늘면(업무 이벤트) 어느 쪽인지 단정하지 않는다.
+        self.assertIsNone(e2e_faults.locate_published(before, {0: (5, 7), 1: (None, 2), 2: (3, 3)}, 2))
 
 
 class DltLimitTest(unittest.TestCase):
@@ -213,6 +262,11 @@ class DltLimitTest(unittest.TestCase):
         self.assertEqual(fault.facts["dead_lettered_during"], 0.0)
         self.assertEqual(fault.facts["dlt_records_after"], 2)
         self.assertTrue(fault.facts["limit_below_record"])
+        # 원본 보존: 장애 중 파티션 1의 커밋이 첫 건(0)을 넘지 않았고, 복구 뒤 두 건을 지나 커밋됐다(리뷰 R3).
+        self.assertEqual(fault.facts["target_partition"], 1)
+        self.assertTrue(fault.facts["original_held_during"])
+        self.assertEqual(fault.facts["target_committed_after"], 2)
+        self.assertEqual(fault.facts["other_partitions_lag_during"], {0: 0, 2: 0})
         # 원래 명시 설정이 없었으니 덮어쓰지 않고 지워서 되돌린다(결정 235 안전장치).
         self.assertTrue(any("--delete-config" in command for command, _ in stack.commands))
         self.assertIsNone(stack.max_message_bytes)
@@ -241,6 +295,35 @@ class DltLimitTest(unittest.TestCase):
         fault.cleanup()
         self.assertEqual(stack.max_message_bytes, "1048588")
         self.assertFalse(fault.limited)
+
+
+class CancelTest(unittest.TestCase):
+    def test_cleanup_wakes_a_running_kill_and_brings_the_container_back(self):
+        stack = FakeStack()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "load.json.started"
+            marker.write_text(str(e2e_faults.now_us()))
+            schedule = e2e_faults.FaultSchedule(context(stack), ["kill:at=0,for=3600,service=license"], marker, wait=5)
+            schedule.start()
+            for _ in range(100):
+                if any(command[-2:] == ["kill", "license"] for command, _ in stack.commands):
+                    break
+                e2e_faults.time.sleep(0.01)
+            schedule.cleanup()
+        commands = [command for command, _ in stack.commands]
+        self.assertEqual(commands[-1], ["docker", "compose", "start", "license"])
+        self.assertEqual(schedule.problems(), [])
+
+    def test_faults_not_yet_due_are_not_injected_after_cleanup(self):
+        stack = FakeStack()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "load.json.started"
+            marker.write_text(str(e2e_faults.now_us()))
+            schedule = e2e_faults.FaultSchedule(context(stack), ["kill:at=3600,for=1,service=license"], marker, wait=5)
+            schedule.start()
+            schedule.cleanup()
+        self.assertEqual(stack.commands, [])
+        self.assertIn("kill: 부하가 먼저 끝나 걸지 않았다", schedule.problems())
 
 
 class ScheduleTest(unittest.TestCase):

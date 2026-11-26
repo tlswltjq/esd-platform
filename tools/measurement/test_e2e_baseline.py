@@ -29,12 +29,22 @@ class ArgumentsTest(unittest.TestCase):
         self.assertIsNone(e2e_baseline.evidence_path("no evidence line"))
 
 
+class ConditionsTest(unittest.TestCase):
+    def test_a_series_resumes_only_with_the_same_conditions(self):
+        state = {"stages": {"r2": {}}, "seconds": 180, "warmup": 30, "buyers": 20, "faults": []}
+        same = {"seconds": 180, "warmup": 30, "buyers": 20, "faults": []}
+        self.assertEqual(e2e_baseline.condition_mismatch(state, same), [])
+        self.assertEqual(e2e_baseline.condition_mismatch(state, dict(same, seconds=300, faults=["kill:at=1,for=1,service=x"])),
+                         ["seconds", "faults"])
+        self.assertEqual(e2e_baseline.condition_mismatch({"stages": {}}, dict(same, seconds=1)), [])
+
+
 class SummaryTest(unittest.TestCase):
     def test_stage_summary_keeps_values_without_judging(self):
         result = {"complete": True, "measurement": {
             "validity": {"valid": True, "reasons": [], "outcome": ["구매 근거 미완료 1건"]},
             "generator": {"achievedRate": 4.98}, "journey": {"paid_to_basis": {"p99_ms": 900}},
-            "timeseries": {"rates": {"completed_per_s": 4.9}, "drain_seconds": 3.2, "unresolved": 0},
+            "timeseries": {"rates": {"completed_per_s": 4.9}, "outstanding_drain_seconds": 3.2, "unresolved": 0},
             "faults": {"faults": [{"kind": "kill", "problems": []}]}}}
         summary = e2e_baseline.stage_summary(result)
         self.assertEqual(summary["achieved_rate"], 4.98)

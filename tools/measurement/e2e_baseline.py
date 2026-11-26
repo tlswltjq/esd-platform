@@ -24,6 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_ALLOW = "messaging-measure-"
+# 종료 코드: 0 모두 끝남, 1 실패한 회차가 있음, 2 다른 컨테이너 보존 위반으로 멈춤(다음 회차·smoke 를 돌리지 않는다).
+GUARD_VIOLATION = 2
+CONDITION_KEYS = ("seconds", "warmup", "buyers", "faults")
 _SERIES = re.compile(r"^[a-z0-9][a-z0-9.-]{0,40}$")
 # 장애 4종을 한 회차에 겹치지 않게 넣는다(첫 주문 기준 초). 각 장애의 흔적이 다른 소비 그룹·토픽에 남아 서로 구분된다.
 SMOKE_FAULTS = [
@@ -71,7 +74,8 @@ def stage_summary(result):
             "reasons": (measurement.get("validity") or {}).get("reasons"),
             "outcome": (measurement.get("validity") or {}).get("outcome"),
             "achieved_rate": (measurement.get("generator") or {}).get("achievedRate"),
-            "rates": series.get("rates"), "drain_seconds": series.get("drain_seconds"),
+            "rates": series.get("rates"), "outstanding_drain_seconds": series.get("outstanding_drain_seconds"),
+            "backlog_drain_seconds": series.get("backlog_drain_seconds"),
             "unresolved": series.get("unresolved"),
             "paid_to_basis": journey.get("paid_to_basis"),
             "faults": [{"kind": fault["kind"], "problems": fault["problems"]}
@@ -89,8 +93,14 @@ def run_stages(options):
     series_dir.mkdir(parents=True, exist_ok=True)
     state_file = series_dir / "state.json"
     state = load_state(state_file)
-    state.update({"rates": options.rates, "seconds": options.seconds, "warmup": options.warmup,
-                  "buyers": options.buyers, "faults": options.fault or []})
+    conditions = {"seconds": options.seconds, "warmup": options.warmup, "buyers": options.buyers,
+                  "faults": list(options.fault or [])}
+    mismatch = condition_mismatch(state, conditions)
+    if mismatch:
+        # 조건이 다른 회차를 한 계열로 섞지 않는다(PR #254 리뷰 R3). 새 계열 이름으로 돌린다.
+        raise SystemExit("계열 %s 는 다른 조건으로 시작했다(%s) — 새 --series 를 쓴다" % (options.series, mismatch))
+    state.update(conditions)
+    state["rates"] = sorted(set(state.get("rates", [])) | set(options.rates))
     built = options.skip_build
     failures = 0
     for rate in options.rates:
@@ -106,7 +116,7 @@ def run_stages(options):
         started = time.time()
         with log_file.open("w", encoding="utf-8") as log:
             completed = subprocess.run(verify_command(options, rate, built), cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
-        built = True  # 첫 회차가 이미지를 만들었다. 같은 커밋이면 다시 만들지 않는다.
+
         guard_result = subprocess.run([sys.executable, str(ROOT / "tools/ci/measure_guard.py"), "after", "--name", guard],
                                       cwd=ROOT, capture_output=True, text=True)
         evidence = evidence_path(log_file.read_text(encoding="utf-8"))
@@ -114,6 +124,9 @@ def run_stages(options):
         summary = stage_summary(json.loads(result_file.read_text())) if result_file and result_file.exists() else {
             "complete": False, "error": "result.json 이 없다(verify-jib 종료 %d)" % completed.returncode}
         summary["exit_code"] = completed.returncode
+        # 앱이 떠서 이미지 검사까지 갔으면 이미지가 있다. 그때부터만 다음 회차가 빌드를 건너뛴다(PR #254 리뷰 R5).
+        if result_file and result_file.exists() and json.loads(result_file.read_text()).get("applications"):
+            built = True
         summary["guard"] = {"exit_code": guard_result.returncode, "output": guard_result.stdout.strip()[-500:]}
         if guard_result.returncode != 0:
             summary["complete"] = False
@@ -130,8 +143,15 @@ def run_stages(options):
             if guard_result.returncode != 0:
                 # 다른 컨테이너가 남거나 사라졌다. 다음 회차를 돌리지 않는다(AGENTS 5절 격리·보존).
                 print(guard_result.stdout, flush=True)
-                break
+                return GUARD_VIOLATION
     return 1 if failures else 0
+
+
+def condition_mismatch(state, conditions):
+    """저장된 계열 조건과 지금 조건이 다른 키(처음이면 빈 목록)."""
+    if not state.get("stages"):
+        return []
+    return [key for key in CONDITION_KEYS if key in state and state[key] != conditions[key]]
 
 
 def smoke_problems(state):
@@ -160,9 +180,12 @@ def smoke(options):
         stage_options = argparse.Namespace(series="smoke-%s-%s" % (label, stamp), rates=[2.0], seconds=120, warmup=10,
                                            buyers=20, fault=faults, run_root=options.run_root,
                                            skip_build=options.skip_build or label == "faults")
-        run_stages(stage_options)
+        code = run_stages(stage_options)
         stage = load_state(Path(options.run_root) / stage_options.series / "state.json")["stages"].get(stage_name(2.0), {})
         results[label] = stage
+        if code == GUARD_VIOLATION:
+            print("smoke: 중단 — %s 회차에서 다른 컨테이너 보존 위반(measure_guard)" % label)
+            return GUARD_VIOLATION
     problems = smoke_problems(results)
     for label, stage in results.items():
         print("%s: %s" % (label, stage.get("evidence")))

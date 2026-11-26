@@ -143,7 +143,45 @@ class LagTest(unittest.TestCase):
                                   "settlement-paid-order": {"lag": 0, "unknown": 0}})
 
 
+class DrainTest(unittest.TestCase):
+    S = 1_000_000
+    SAMPLES = [{"at_us": 10 * S, "total": 4}, {"at_us": 20 * S, "total": 0}, {"at_us": 30 * S, "total": 2},
+               {"at_us": 40 * S, "total": 0}]
+
+    def test_backlog_drain_needs_outstanding_and_lag_zero_after_the_last_finish(self):
+        # 업무는 25초에 끝났지만 그 뒤 첫 지연 0 표본은 40초다. 부하 종료 0초 기준 → 40초.
+        self.assertEqual(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 0, self.SAMPLES), 40.0)
+        self.assertIsNone(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 3, self.SAMPLES),
+                          "미해소 주문이 있으면 해소되지 않았다")
+        self.assertIsNone(messaging_measurement.backlog_drain_seconds(0, 45 * self.S, 0, self.SAMPLES), "지연 0을 관측하지 못했다")
+
+    def test_load_end_is_the_drivers_last_request(self):
+        self.assertEqual(messaging_measurement.load_end_time({"lastRequestEpochUs": 123}), 123)
+
+
 class FaultValidityTest(unittest.TestCase):
+    def test_a_failed_broker_restart_stays_an_injection_problem_in_a_fault_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        class Restart:
+            def problems(self):
+                return ["브로커 재시작 실패"]
+
+        result = messaging_measurement.with_faults({"valid": True, "reasons": ["구매 근거 미완료 2건"]}, Schedule(), Restart())
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["reasons"], ["S7 장애 주입: 브로커 재시작 실패"])
+        self.assertEqual(result["outcome"], ["구매 근거 미완료 2건"])
+
+    def test_inverted_driver_and_db_times_invalidate_the_round(self):
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, None,
+                                                 {"clock_check": {"finish_before_start": 3}})
+        self.assertTrue(any("드라이버·DB 시각 불일치" in reason for reason in checked["reasons"]))
+
     def test_fault_round_validity_is_the_injection_and_business_breaks_become_outcome(self):
         class Schedule:
             faults = [object()]
@@ -192,7 +230,7 @@ class MeasureTest(unittest.TestCase):
                         {"purchase": {"completed": 2, "incomplete": 0, "failed": 0}}))
                 if label == "measure-timeseries":
                     self.assertIn("--load-ended-us", command)
-                    (output / "timeseries.json").write_text(json.dumps({"unresolved": 0, "drain_seconds": 1.5}))
+                    (output / "timeseries.json").write_text(json.dumps({"unresolved": 0, "outstanding_drain_seconds": 1.5}))
                 if label == "measure-broker":
                     self.assertIn("--keys-from", command)
                     (output / "broker.json").write_text(json.dumps(
@@ -223,7 +261,7 @@ class MeasureTest(unittest.TestCase):
                                                         output, 300, 5, 1, 2, 1)
 
         self.assertEqual(calls, ["measure-load", "measure-journey", "measure-timeseries", "measure-broker"])
-        self.assertEqual(summary["timeseries"]["drain_seconds"], 1.5)
+        self.assertEqual(summary["timeseries"]["outstanding_drain_seconds"], 1.5)
         self.assertIsNone(summary["faults"])
         self.assertEqual(summary["planned"], 2, "예열 주문은 집계에서 뺀다")
         self.assertEqual(summary["http_p95_ms"], 30.0)

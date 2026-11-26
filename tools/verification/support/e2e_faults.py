@@ -61,6 +61,8 @@ def parse(spec):
         raise ValueError("서비스 이름 형식이 아니다: " + options["service"])
     if "topic" in options and not _TOPIC.match(options["topic"]):
         raise ValueError("토픽 이름 형식이 아니다: " + options["topic"])
+    if "count" in options and (not options["count"].isdigit() or int(options["count"]) < 1):
+        raise ValueError("count 는 1 이상의 정수다: " + options["count"])
     return kind, options
 
 
@@ -79,6 +81,34 @@ def log_dirs_script(topic):
     """두 로그 경로 후보에서 그 토픽의 파티션 폴더를 찾는다. 하나도 없으면 실패(빈 목록을 성공으로 넘기지 않는다)."""
     patterns = " ".join("%s/%s-*" % (base, topic) for base in KAFKA_DATA)
     return "found=0; for d in %s; do if [ -d \"$d\" ]; then echo \"$d\"; found=1; fi; done; [ \"$found\" = 1 ]" % patterns
+
+
+def group_offsets(describe_output, topic):
+    """``kafka-consumer-groups --describe --group`` 출력 → {파티션: (커밋 offset 또는 None, 로그 끝 offset)}."""
+    offsets = {}
+    header = None
+    for line in describe_output.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] == "GROUP":
+            header = fields
+            continue
+        if header is None or len(fields) < 5:
+            continue
+        row = dict(zip(header, fields))
+        if row.get("TOPIC") != topic:
+            continue
+        current = row.get("CURRENT-OFFSET", "-")
+        offsets[int(row["PARTITION"])] = (int(current) if current.isdigit() else None, int(row["LOG-END-OFFSET"]))
+    return offsets
+
+
+def locate_published(before, after, count):
+    """발행 전후 로그 끝 offset 을 비교해 ``count``건이 들어간 파티션. 정확히 하나가 아니면 None."""
+    grown = [partition for partition, (_, end) in after.items()
+             if end - before.get(partition, (None, 0))[1] == count]
+    return grown[0] if len(grown) == 1 else None
 
 
 def topic_config_value(describe_output, key):
@@ -165,6 +195,11 @@ class Fault:
         self.events = []
         self.errors = []
         self.facts = {}
+        self.cancelled = threading.Event()
+
+    def wait(self, seconds):
+        """취소되면 바로 깬다(정리가 끝난 뒤에 장애를 새로 걸지 않게). 취소됐으면 True."""
+        return self.cancelled.wait(max(0.0, seconds))
 
     def mark(self, name):
         self.events.append({"event": name, "at_us": now_us()})
@@ -197,32 +232,44 @@ class Fault:
 
 class DbRevoke(Fault):
     kind = "db-revoke"
+    FAILED_DELIVERIES = "stove_kafka_consumer_failed_deliveries_total"
+    # 복원 뒤 재시도(1·2·4초)가 끝날 시간을 두고 소비 실패 수를 읽는다.
+    EFFECT_WAIT_SECONDS = 8
 
     def __init__(self, context, options):
         super().__init__(context, options)
         self.schema, self.table = options["table"].split(".")
         self.revoked = False
+        self.tables = []
+        self.converted = False
 
     def prepare(self):
-        tables = [line.strip() for line in self.context.mysql(
+        self.tables = [line.strip() for line in self.context.mysql(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = '%s';" % self.schema).splitlines()
             if line.strip()]
-        if self.table not in tables:
+        if self.table not in self.tables:
             self.errors.append("표가 없다: %s.%s" % (self.schema, self.table))
             return
-        self.step("table-grants", lambda: self.context.mysql(table_grant_sql(self.schema, tables)))
-        ids = [line.strip() for line in self.context.mysql(kill_schema_connections_sql(self.schema)).splitlines()
+        if self.step("table-grants", lambda: self.context.mysql(table_grant_sql(self.schema, self.tables))) is None:
+            # 일부만 바뀌었을 수 있다 — 정리에서 스키마 권한으로 되돌린다.
+            self.converted = True
+            return
+        self.converted = True
+        ids = [int(line.strip()) for line in self.context.mysql(kill_schema_connections_sql(self.schema)).splitlines()
                if line.strip()]
         for identifier in ids:
-            # 이미 끊긴 연결이면 실패해도 된다.
             try:
-                self.context.mysql("KILL %d;" % int(identifier))
-            except Exception:  # noqa: BLE001
+                self.context.mysql("KILL %d;" % identifier)
+            except Exception:  # noqa: BLE001 — 이미 끊긴 연결이면 실패한다. 아래에서 남은 연결로 판정한다
                 pass
-        self.facts["prepared_tables"] = len(tables)
+        remaining = [int(line.strip()) for line in self.context.mysql(kill_schema_connections_sql(self.schema)).splitlines()
+                     if line.strip()]
+        survivors = sorted(set(ids) & set(remaining))
+        self.facts["prepared_tables"] = len(self.tables)
         self.facts["reconnected"] = len(ids)
-
-    FAILED_DELIVERIES = "stove_kafka_consumer_failed_deliveries_total"
+        if survivors:
+            # 끊지 못한 연결은 스키마 권한을 그대로 쥐고 있어 표 권한 회수가 듣지 않는다.
+            self.errors.append("스키마 연결을 끊지 못했다: %s" % survivors)
 
     def run(self):
         app = self.schema[len("stove_"):]
@@ -230,10 +277,10 @@ class DbRevoke(Fault):
         sql = "REVOKE INSERT ON %s.%s FROM 'stove'@'%%';" % (self.schema, self.table)
         if self.step("revoke", lambda: self.context.mysql(sql)) is not None:
             self.revoked = True
-        time.sleep(self.duration)
+        self.wait(self.duration)
         self.restore()
-        # 재시도가 끝날 시간(1·2·4초)을 두고 읽는다. 회수 동안 소비 실패가 있었는지가 "장애가 효과를 냈는가"다.
-        time.sleep(8)
+        if self.wait(self.EFFECT_WAIT_SECONDS):
+            return
         after = self.context.app_metric(app, self.FAILED_DELIVERIES)
         self.facts["failed_deliveries_during"] = None if before is None or after is None else after - before
 
@@ -244,8 +291,19 @@ class DbRevoke(Fault):
         if self.step("grant", lambda: self.context.mysql(sql)) is not None:
             self.revoked = False
 
+    def restore_schema_grant(self):
+        """준비에서 바꾼 표 단위 권한을 원래 스키마 단위 ALL 로 되돌린다(PR #254 리뷰 R2)."""
+        if not self.converted:
+            return
+        statements = ["GRANT ALL PRIVILEGES ON %s.* TO 'stove'@'%%';" % self.schema]
+        statements += ["REVOKE ALL PRIVILEGES ON %s.%s FROM 'stove'@'%%';" % (self.schema, table) for table in self.tables]
+        if self.step("schema-grant", lambda: self.context.mysql(" ".join(statements))) is not None:
+            self.converted = False
+            self.facts["schema_grant_restored"] = True
+
     def cleanup(self):
         self.restore()
+        self.restore_schema_grant()
 
     def problems(self):
         reasons = list(self.errors)
@@ -254,7 +312,12 @@ class DbRevoke(Fault):
             reasons.append("권한 회수 실패")
         if self.revoked or "grant" not in names:
             reasons.append("권한 복원 실패")
-        if self.facts.get("failed_deliveries_during") == 0:
+        if self.converted:
+            reasons.append("스키마 권한 복원 실패")
+        effect = self.facts.get("failed_deliveries_during")
+        if effect is None:
+            reasons.append("권한 회수의 효과(소비 실패 수)를 읽지 못했다")
+        elif effect == 0:
             reasons.append("권한 회수 동안 소비 실패가 없었다(장애가 효과를 내지 못했다)")
         return reasons
 
@@ -262,11 +325,27 @@ class DbRevoke(Fault):
 class ContainerKill(Fault):
     kind = "kill"
 
+    def __init__(self, context, options):
+        super().__init__(context, options)
+        self.down = False
+
     def run(self):
         service = self.options["service"]
-        self.step("kill", lambda: self.context.capture(self.context.docker + ["kill", service]))
-        time.sleep(self.duration)
-        self.step("start", lambda: self.context.capture(self.context.docker + ["start", service]))
+        if self.step("kill", lambda: self.context.capture(self.context.docker + ["kill", service])) is not None:
+            self.down = True
+        self.wait(self.duration)
+        self.start()
+
+    def start(self):
+        if not self.down:
+            return
+        service = self.options["service"]
+        if self.step("start", lambda: self.context.capture(self.context.docker + ["start", service])) is not None:
+            self.down = False
+
+    def cleanup(self):
+        # 부하가 실패해 일정 중간에 멈춰도 내린 컨테이너를 다시 올린다(PR #254 리뷰 R1).
+        self.start()
 
     def problems(self):
         reasons = list(self.errors)
@@ -274,6 +353,8 @@ class ContainerKill(Fault):
         for name in ("kill", "start"):
             if name not in names:
                 reasons.append("%s 실패" % name)
+        if self.down:
+            reasons.append("내린 컨테이너를 다시 올리지 못했다")
         return reasons
 
 
@@ -297,16 +378,21 @@ class MalformedEnvelopes(Fault):
             "--property", "parse.key=true", "--property", "key.separator=|",
             stdin=malformed_lines(prefix, count)))
         self.facts["published"] = count
-        expected = sorted(self.subscribed_groups())
-        self.facts["subscribed_groups"] = expected
-        observed = []
+        groups = sorted(self.subscribed_groups())
+        self.facts["subscribed_groups"] = groups
+        keys = ["%s-%d" % (prefix, index) for index in range(count)]
+        # 발행한 키마다, 구독 그룹마다 격리 행이 있어야 한다(PR #254 리뷰 R6).
+        expected = sorted("%s|%s" % (group, key) for group in groups for key in keys)
         started = time.monotonic()
-        while time.monotonic() - started < self.QUARANTINE_WAIT_SECONDS:
-            observed = self.quarantined_groups(prefix)
-            if observed == expected:
+        while True:
+            # 기한이 지나도 한 번은 읽는다.
+            observed = self.quarantined_pairs(prefix)
+            if observed == expected or time.monotonic() - started >= self.QUARANTINE_WAIT_SECONDS or self.wait(5):
                 break
-            time.sleep(5)
-        self.facts["quarantined_groups"] = observed
+        self.facts["expected_pairs"] = len(expected)
+        self.facts["quarantined_pairs"] = len(observed)
+        self.facts["missing_pairs"] = sorted(set(expected) - set(observed))[:20]
+        self.facts["quarantined_groups"] = sorted({pair.split("|", 1)[0] for pair in observed})
 
     def subscribed_groups(self):
         try:
@@ -317,25 +403,25 @@ class MalformedEnvelopes(Fault):
         return sorted({line.split()[0] for line in output.splitlines()
                        if len(line.split()) > 2 and line.split()[1] == self.options["topic"]})
 
-    def quarantined_groups(self, prefix):
+    def quarantined_pairs(self, prefix):
         schemas = [line.strip() for line in self.context.mysql(
             "SELECT table_schema FROM information_schema.tables WHERE table_name = 'consumer_quarantine';").splitlines()
             if line.strip()]
         if not schemas:
             return []
-        union = " UNION ".join("SELECT DISTINCT consumer_group FROM %s.consumer_quarantine WHERE partition_key LIKE '%s-%%'"
-                               % (schema, prefix) for schema in schemas)
+        union = " UNION ".join("SELECT DISTINCT CONCAT(consumer_group, '|', partition_key) FROM %s.consumer_quarantine"
+                               " WHERE partition_key LIKE '%s-%%'" % (schema, prefix) for schema in schemas)
         return sorted(line.strip() for line in self.context.mysql(union + ";").splitlines() if line.strip())
 
     def problems(self):
         reasons = list(self.errors)
         if "publish" not in [event["event"] for event in self.events]:
             reasons.append("발행 실패")
-        expected, observed = self.facts.get("subscribed_groups"), self.facts.get("quarantined_groups")
-        if not expected:
+        if not self.facts.get("subscribed_groups"):
             reasons.append("그 토픽을 구독하는 소비 그룹을 찾지 못했다")
-        elif observed != expected:
-            reasons.append("격리된 그룹 %s ≠ 구독 그룹 %s" % (observed, expected))
+        elif self.facts.get("missing_pairs"):
+            reasons.append("격리되지 않은 (그룹|키) %d쌍: %s" % (
+                self.facts["expected_pairs"] - self.facts["quarantined_pairs"], self.facts["missing_pairs"]))
         return reasons
 
 
@@ -344,6 +430,9 @@ class DltLimit(Fault):
 
     kind = "dlt-limit"
     RESTORE_WAIT_SECONDS = 120
+    # 두 건을 본 뒤에도 늦은 중복 저장이 없는지 더 지켜보는 시간(PR #254 리뷰 R4).
+    SETTLE_SECONDS = 15
+    STORE_GROUP = "store-catalog-publication"  # ApplyCatalogProduct.CONSUMER_GROUP
 
     def __init__(self, context, options):
         super().__init__(context, options)
@@ -380,13 +469,29 @@ class DltLimit(Fault):
         # 카운터는 처음 셀 때 생긴다. 아직 없으면 0으로 읽는다(읽을 수단이 없을 때만 None).
         failures_before = self.store_count("stove_kafka_consumer_recovery_failures_total")
         dead_before = self.store_count("stove_kafka_dead_lettered_total")
+        offsets_before = self.store_offsets()
         if self.step("limit", lambda: self.configs("--alter", "--add-config", "max.message.bytes=%d" % self.limit)) is not None:
             self.limited = True
         self.step("publish", lambda: self.context.kafka(
             "kafka-console-producer.sh", "--bootstrap-server", BOOTSTRAP, "--topic", STORE_TOPIC,
             "--property", "parse.key=true", "--property", "key.separator=|",
             stdin='%s|{"e13":"dlt","seq":0}\n%s|{"e13":"dlt","seq":1}\n' % (key, key)))
-        time.sleep(self.duration)
+        if self.wait(self.duration):
+            return
+        # 원본 보존(결정 235 장애 중 검증): 두 건이 들어간 파티션의 커밋 offset 이 첫 건을 넘지 않았고,
+        # 다른 파티션은 밀린 것이 없다(PR #254 리뷰 R3).
+        offsets_during = self.store_offsets()
+        target = locate_published(offsets_before, offsets_during, 2)
+        self.facts["target_partition"] = target
+        if target is not None:
+            first = offsets_before[target][1]
+            committed = offsets_during[target][0]
+            self.facts["target_first_offset"] = first
+            self.facts["target_committed_during"] = committed
+            self.facts["original_held_during"] = committed is None or committed <= first
+        self.facts["other_partitions_lag_during"] = {
+            partition: (end - (committed or 0)) for partition, (committed, end) in offsets_during.items()
+            if partition != target}
         failures_during = self.store_count("stove_kafka_consumer_recovery_failures_total")
         dead_during = self.store_count("stove_kafka_dead_lettered_total")
         self.facts["recovery_failures_during"] = (None if failures_during is None or failures_before is None
@@ -399,9 +504,16 @@ class DltLimit(Fault):
         records = []
         while time.monotonic() - restored_at < self.RESTORE_WAIT_SECONDS:
             records = self.dlt_records(key)
-            if len(records) >= 2:
+            committed = self.store_offsets().get(target, (None, None))[0] if target is not None else None
+            if len(records) >= 2 and committed is not None and committed >= self.facts["target_first_offset"] + 2:
+                self.facts["target_committed_after"] = committed
                 break
-            time.sleep(2)
+            if self.wait(2):
+                return
+        # 원본 offset 이 넘어간 뒤에도 더 지켜보고 다시 센다 — 늦은 중복 저장을 놓치지 않게.
+        if self.wait(self.SETTLE_SECONDS):
+            return
+        records = self.dlt_records(key)
         self.facts["dlt_records_after"] = len(records)
         self.facts["dlt_order"] = [value for _, value in records]
         if records and self.restored_wall is not None:
@@ -409,6 +521,14 @@ class DltLimit(Fault):
         sizes = self.batch_sizes()
         self.facts["dlt_batch_bytes"] = sizes
         self.facts["limit_below_record"] = bool(sizes) and self.limit < min(sizes)
+
+    def store_offsets(self):
+        try:
+            return group_offsets(self.context.kafka("kafka-consumer-groups.sh", "--bootstrap-server", BOOTSTRAP,
+                                                    "--describe", "--group", self.STORE_GROUP), STORE_TOPIC)
+        except Exception as failure:  # noqa: BLE001
+            self.errors.append("Store 소비 offset 을 읽지 못했다: " + str(failure)[-200:])
+            return {}
 
     def store_count(self, name):
         if self.context.fetch is None or self.context.store_metrics_url is None:
@@ -475,6 +595,17 @@ class DltLimit(Fault):
             reasons.append("복구 뒤 DLT 저장 %s건(기대 2, 중복·유실 0)" % self.facts.get("dlt_records_after"))
         elif self.facts.get("dlt_order") != ['{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}']:
             reasons.append("DLT 순서가 발행 순서와 다르다")
+        if self.facts.get("target_partition") is None:
+            reasons.append("두 건이 들어간 원본 파티션을 찾지 못했다(원본 보존을 확인할 수 없다)")
+        else:
+            if not self.facts.get("original_held_during"):
+                reasons.append("장애 중 원본 offset 이 실패 레코드를 넘어갔다(커밋 %s, 첫 건 %s)" % (
+                    self.facts.get("target_committed_during"), self.facts.get("target_first_offset")))
+            if self.facts.get("target_committed_after") is None:
+                reasons.append("복구 뒤 원본 offset 이 두 건을 지나 커밋되지 않았다")
+        lagging = {partition: lag for partition, lag in (self.facts.get("other_partitions_lag_during") or {}).items() if lag}
+        if lagging:
+            reasons.append("장애 중 다른 파티션이 밀렸다: %s" % lagging)
         if self.facts.get("limit_below_record") is False:
             reasons.append("제한(%d)이 실제 DLT 배치 크기 %s 보다 작지 않다" % (self.limit, self.facts.get("dlt_batch_bytes")))
         return reasons
@@ -494,6 +625,7 @@ class FaultSchedule:
         self.load_started_us = None
         self.errors = []
         self._threads = []
+        self._cancelled = threading.Event()
         self._driver = threading.Thread(target=self._run, daemon=True)
 
     def prepare(self):
@@ -512,11 +644,15 @@ class FaultSchedule:
             if time.monotonic() > deadline:
                 self.errors.append("부하 시작 표시(%s)가 생기지 않았다" % self.marker.name)
                 return
-            time.sleep(0.2)
+            if self._cancelled.wait(0.2):
+                return
         self.load_started_us = int(self.marker.read_text().strip())
         origin = time.monotonic() - max(0.0, (now_us() - self.load_started_us) / 1e6)
         for fault in sorted(self.faults, key=lambda f: f.at):
-            time.sleep(max(0.0, origin + fault.at - time.monotonic()))
+            if self._cancelled.wait(max(0.0, origin + fault.at - time.monotonic())):
+                # 정리가 시작됐다. 아직 걸지 않은 장애는 걸지 않는다.
+                self.errors.append("%s: 부하가 먼저 끝나 걸지 않았다" % fault.kind)
+                continue
             thread = threading.Thread(target=self._guarded, args=(fault,), daemon=True)
             thread.start()
             self._threads.append(thread)
@@ -535,6 +671,14 @@ class FaultSchedule:
             thread.join(timeout)
 
     def cleanup(self):
+        """일정을 멈추고(아직 걸지 않은 장애는 걸지 않는다) 진행 중인 장애를 깨운 뒤 되돌린다(PR #254 리뷰 R1)."""
+        self._cancelled.set()
+        for fault in self.faults:
+            fault.cancelled.set()
+        if self._driver.is_alive():
+            self._driver.join(30)
+        for thread in self._threads:
+            thread.join(30)
         for fault in self.faults:
             try:
                 fault.cleanup()
