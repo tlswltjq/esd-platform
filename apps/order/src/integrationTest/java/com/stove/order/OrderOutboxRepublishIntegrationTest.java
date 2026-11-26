@@ -8,8 +8,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.messaging.kafka.KafkaMessagePublisher;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -46,7 +44,6 @@ import com.stove.order.core.domain.RefundStatus;
 import com.stove.order.core.service.ApplyApprovalCorrection;
 import com.stove.order.core.service.ApplyPaymentResult;
 import com.stove.order.core.service.ApplyRefundRestoration;
-import com.stove.order.core.service.ApplyRefundSuspension;
 import com.stove.order.core.service.DecideRefund;
 import com.stove.order.core.service.RequestRefund;
 import com.stove.order.core.service.RequestRefundApprovalStop;
@@ -198,7 +195,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
         Suspending f = suspending();
         long before = count("outbox_event");
 
-        suspensionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, f.suspended())));
+        suspensionEvents.receive(record(Topics.LICENSE, f.suspended()));
 
         assertThat(refundStatus(f.order())).isEqualTo(RefundStatus.PENDING_PAYMENT_REFUND);
         assertThat(jdbc.queryForList("SELECT event_type FROM outbox_event ORDER BY id", String.class))
@@ -206,7 +203,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
                 .last().isEqualTo(EventType.REFUND_EXECUTION_REQUESTED);
         Map<String, List<Map<String, Object>>> afterFirst = snapshot();
 
-        suspensionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, f.suspended())));
+        suspensionEvents.receive(record(Topics.LICENSE, f.suspended()));
 
         assertThat(snapshot()).as("이미 처리된 재발행은 받는 쪽에서 효과가 없다").isEqualTo(afterFirst);
     }
@@ -215,7 +212,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
     @Test
     void aRepublishedRestorationContinuesTheFailedRefundToFailedAndARepeatHasNoEffect() throws Exception {
         Suspending f = suspending();
-        suspensionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, f.suspended())));
+        suspensionEvents.receive(record(Topics.LICENSE, f.suspended()));
         RefundAttempt attempt = attempts.findByAttemptId(refund(f.order()).getCurrentAttemptId()).orElseThrow();
         restoration.execute(new RefundFailureConfirmation(id(), now(), attempt.getRefundId(), attempt.getAttemptId(),
                 attempt.getExecutionRequestEventId(), f.order().getOrderNo(), f.order().getPaymentId(), f.order().getBuyerSubject(),
@@ -227,12 +224,12 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
                 requested.productId(), requested.productCode(), requested.paymentId(), requested.suspensionRequestEventId(),
                 requested.suspensionEventId(), false);
 
-        restorationEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, restored)));
+        restorationEvents.receive(record(Topics.LICENSE, restored));
 
         assertThat(refundStatus(f.order())).isEqualTo(RefundStatus.FAILED);
         Map<String, List<Map<String, Object>>> afterFirst = snapshot();
 
-        restorationEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, restored)));
+        restorationEvents.receive(record(Topics.LICENSE, restored));
 
         assertThat(snapshot()).as("이미 처리된 재발행은 받는 쪽에서 효과가 없다").isEqualTo(afterFirst);
     }
@@ -242,15 +239,15 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
     void aRepublishedApprovalCorrectionThatOrderAlreadyProcessedHasNoEffect() throws Exception {
         Order order = paidAt(Instant.now().minusSeconds(5 * 3600).truncatedTo(ChronoUnit.MICROS));
         LicenseGrantedEvent granted = granted(order);
-        licenseEvents.receive(KafkaInboundMessages.from(licenseGranted(granted)));
+        licenseEvents.receive(licenseGranted(granted));
         Refund pending = request.execute(order.getBuyerSubject(), order.getOrderNo());
         decide.execute(new RefundReviewRequest(id(), pending.getRefundId(), "usr_admin", RefundReviewDecision.APPROVED, "실행 불가 확인"));
         stop.execute(new RefundApprovalStopRequest(id(), pending.getRefundId(), pending.getRefundId(), "usr_admin", "자료를 잘못 읽어 재검토가 필요합니다"));
         assertThat(refundStatus(order)).isEqualTo(RefundStatus.PENDING_APPROVAL_STOP);
         Refund stopped = refund(order);
-        suspensionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, new LicenseSuspendedEvent(id(), now(), stopped.getSuspensionRequestEventId(),
+        suspensionEvents.receive(record(Topics.LICENSE, new LicenseSuspendedEvent(id(), now(), stopped.getSuspensionRequestEventId(),
                 stopped.getRefundId(), granted.licenseId(), order.getOrderNo(), order.getBuyerSubject(), order.getProductId(),
-                order.getProductCode(), order.getPaymentId()))));
+                order.getProductCode(), order.getPaymentId())));
         LicenseApprovalCorrectionRequestedEvent requested = payload(EventType.LICENSE_APPROVAL_CORRECTION_REQUESTED,
                 LicenseApprovalCorrectionRequestedEvent.class);
         LicenseApprovalCorrectedEvent corrected = new LicenseApprovalCorrectedEvent(id(), now().plusMillis(1), requested.eventId(),
@@ -258,14 +255,14 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
                 requested.buyerSubject(), requested.productId(), requested.productCode(), requested.paymentId(),
                 requested.suspensionRequestEventId(), requested.suspensionEventId(), false);
 
-        correctionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, corrected)));
+        correctionEvents.receive(record(Topics.LICENSE, corrected));
 
         assertThat(refundStatus(order)).isEqualTo(RefundStatus.PENDING_REVIEW);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event WHERE consumer_group=?", Integer.class,
                 ApplyApprovalCorrection.CONSUMER_GROUP)).isEqualTo(1);
         Map<String, List<Map<String, Object>>> afterFirst = snapshot();
 
-        correctionEvents.receive(KafkaInboundMessages.from(record(Topics.LICENSE, corrected)));
+        correctionEvents.receive(record(Topics.LICENSE, corrected));
 
         assertThat(snapshot()).as("이미 처리된 재발행은 받는 쪽에서 효과가 없다").isEqualTo(afterFirst);
     }
@@ -279,7 +276,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
         LicenseGrantedEvent granted = new LicenseGrantedEvent(id(), Instant.now().truncatedTo(ChronoUnit.MICROS), id(),
                 paid.getOrderNo(), paid.getBuyerSubject(), paid.getProductId(), paid.getProductCode(), paid.getPaymentId());
 
-        licenseEvents.receive(KafkaInboundMessages.from(licenseGranted(granted)));
+        licenseEvents.receive(licenseGranted(granted));
 
         assertThat(refundStatus(paid)).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
         assertThat(count("order_license_grant")).isEqualTo(1);
@@ -288,7 +285,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
                 .last().isEqualTo(EventType.LICENSE_SUSPENSION_REQUESTED);
         Map<String, List<Map<String, Object>>> afterFirst = snapshot();
 
-        licenseEvents.receive(KafkaInboundMessages.from(licenseGranted(granted)));
+        licenseEvents.receive(licenseGranted(granted));
 
         assertThat(snapshot()).as("이미 처리된 재발행은 받는 쪽에서 효과가 없다").isEqualTo(afterFirst);
     }
@@ -303,7 +300,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
     private Suspending suspending() throws Exception {
         Order paid = paid();
         LicenseGrantedEvent granted = granted(paid);
-        licenseEvents.receive(KafkaInboundMessages.from(licenseGranted(granted)));
+        licenseEvents.receive(licenseGranted(granted));
         request.execute(paid.getBuyerSubject(), paid.getOrderNo());
         Refund waiting = refund(paid);
         assertThat(waiting.getStatus()).isEqualTo(RefundStatus.PENDING_LICENSE_SUSPENSION);
@@ -402,7 +399,7 @@ class OrderOutboxRepublishIntegrationTest extends OrderIntegrationTestBase {
     }
 
     private OutboxRelay relay() {
-        return new OutboxRelay(rows, new KafkaMessagePublisher(kafka), 200, 1, 1,
+        return new OutboxRelay(rows, kafka, 200, 1, 1,
                 new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
     }
 

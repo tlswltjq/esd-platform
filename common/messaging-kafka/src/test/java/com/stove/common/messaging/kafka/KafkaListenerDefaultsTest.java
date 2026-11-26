@@ -2,10 +2,6 @@ package com.stove.common.messaging.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
-import com.stove.common.event.KeyQuarantine;
-import java.lang.annotation.Annotation;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
@@ -73,7 +69,7 @@ class KafkaListenerDefaultsTest {
         }
     }
 
-    /** 구독 전용 팩토리({@link KafkaEventSubscriptions#factoryFor}, 격리 있는 앱의 모든 구독)도 같은 값을 받는다(PR #223 R9). */
+    /** 재시도 선택이 다른 리스너의 팩토리({@link ListenerContainerFactories})도 같은 값을 받는다(PR #223 R9). */
     @Test
     void theValueReachesTheSubscriptionFactoryToo() {
         try (ConfigurableApplicationContext defaults = startWithKafka()) {
@@ -92,64 +88,13 @@ class KafkaListenerDefaultsTest {
 
     @SuppressWarnings("unchecked")
     private static int subscriptionConcurrency(ConfigurableApplicationContext context) {
-        // Boot 가 등록하는 소비자 팩토리는 와일드카드 타입이라 운영 조립(KafkaSubscriptionAutoConfiguration)처럼 좁힌다.
+        // Boot 가 등록하는 소비자 팩토리는 와일드카드 타입이라 운영 조립(KafkaConsumerAutoConfiguration)처럼 좁힌다.
         ConsumerFactory<Object, Object> consumers = context.getBean(ConsumerFactory.class);
         ConcurrentKafkaListenerContainerFactoryConfigurer configurer =
                 context.getBean(ConcurrentKafkaListenerContainerFactoryConfigurer.class);
-        KafkaEventSubscriptions subscriptions = new KafkaEventSubscriptions(context, () -> configurer, () -> consumers,
-                () -> null, NoQuarantine::new);
-        return subscriptions.factoryFor(declaration(), new NoQuarantine()).createContainer("defaults-probe").getConcurrency();
-    }
-
-    private static EventSubscriber declaration() {
-        return new EventSubscriber() {
-            @Override
-            public Class<? extends Annotation> annotationType() {
-                return EventSubscriber.class;
-            }
-
-            @Override
-            public String[] topics() {
-                return new String[]{"defaults-probe"};
-            }
-
-            @Override
-            public String group() {
-                return "defaults-probe";
-            }
-
-            @Override
-            @SuppressWarnings("unchecked")
-            public Class<? extends RuntimeException>[] noRetryFor() {
-                return (Class<? extends RuntimeException>[]) new Class<?>[0];
-            }
-
-            @Override
-            public boolean oneAtATime() {
-                return false;
-            }
-
-
-            @Override
-
-            public boolean retryUntilSuccess() {
-
-                return false;
-
-            }
-        };
-    }
-
-    /** 격리를 쓰는 구독의 팩토리를 만들기 위한 자리표시. 이 테스트에서는 메시지를 받지 않는다. */
-    static final class NoQuarantine implements KeyQuarantine {
-        @Override
-        public boolean stopped(String consumerGroup, String topic, String key) {
-            return false;
-        }
-
-        @Override
-        public void quarantine(String consumerGroup, InboundMessage message, Throwable failure) {
-        }
+        ListenerContainerFactories factories = new ListenerContainerFactories(() -> configurer, () -> consumers,
+                (record, exception) -> { }, null);
+        return factories.noRetryFor(IllegalArgumentException.class).createContainer("defaults-probe").getConcurrency();
     }
 
     private static ConfigurableApplicationContext startWithKafka(String... args) {

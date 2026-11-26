@@ -159,16 +159,6 @@ subprojects {
         // 리스너 컨테이너(concurrency 1)와 릴레이 정도다. 풀 고갈이 재현되면 이 값을 올린다.
         systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 
-        // 결정 218: 메시징 계약 테스트의 측정 설정(S4 분할 수·인스턴스 수 등)은 -Pstove.contract.<이름>=값 으로만 켠다.
-        // 평소 빌드·CI에는 없으므로 계약 테스트는 기본값(분할 3, S4 측정 꺼짐)으로 돈다.
-        def contractMeasurement = providers.gradlePropertiesPrefixedBy('stove.contract.').get()
-        contractMeasurement.each { name, value -> systemProperty name, value }
-        if (!contractMeasurement.isEmpty()) {
-            // 측정은 매번 새로 돈다. 같은 옵션이면 UP-TO-DATE·캐시 복원으로 측정 JSON 없이 끝난다(PR #238 R4).
-            outputs.upToDateWhen { false }
-            outputs.cacheIf('메시징 측정은 캐시하지 않는다') { false }
-        }
-
         // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
         shouldRunAfter tasks.named('test')
         if (stagedVerification) {
@@ -441,29 +431,13 @@ tasks.register('verifyCommonRuntimeDependencies') {
     description = '공통 라이브러리의 실행 환경과 의존성 방향을 검증한다'
 
     doLast {
-        def modules = ['web', 'jpa', 'security', 'event', 'contract', 'messaging',
-                       'messaging-kafka', 'messaging-rabbitmq', 'messaging-rabbitmq-streams', 'messaging-redis', 'messaging-direct']
-        // 결정 209: 브로커 클라이언트는 그 adapter 만 런타임에 가진다. 코어(messaging)·계약(contract)·포트(event)는 하나도 갖지 않는다.
-        def brokerClients = [
-                'messaging-kafka'   : { m -> m.group in ['org.apache.kafka', 'org.springframework.kafka'] },
-                // classic queue 는 AMQP 클라이언트, Streams 는 stream 프로토콜 클라이언트(결정 211). 둘 다 com.rabbitmq 그룹이라 모듈로 나눈다.
-                'messaging-rabbitmq': { m -> m.group == 'org.springframework.amqp' || (m.group == 'com.rabbitmq' && m.module == 'amqp-client') },
-                'messaging-rabbitmq-streams': { m -> m.group == 'com.rabbitmq' && m.module == 'stream-client' },
-                // Redis 클라이언트: Lettuce·Jedis·Redisson·spring-data-redis (PR #218 R2)
-                'messaging-redis'   : { m -> m.group in ['io.lettuce', 'redis.clients', 'org.redisson'] || m.module == 'spring-data-redis' },
-        ]
-        def adapters = brokerClients.keySet() + ['messaging-direct']
+        def modules = ['web', 'jpa', 'security', 'contract', 'messaging', 'messaging-kafka']
         modules.each { moduleName ->
             def components = project(":common:${moduleName}").configurations.runtimeClasspath
                     .incoming.resolutionResult.allComponents
             components.each { component ->
                 def id = component.id
                 if (id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
-                    brokerClients.each { adapter, matches ->
-                        if (adapter != moduleName && matches(id)) {
-                            throw new GradleException("common:${moduleName} must not carry the ${adapter} broker client (decision 209): ${id}")
-                        }
-                    }
                     if (id.module in ['spring-webmvc', 'jakarta.servlet-api', 'spring-boot-starter-web',
                                       'spring-boot-starter-tomcat'] || id.group == 'org.apache.tomcat.embed') {
                         throw new GradleException("common:${moduleName} must not provide Servlet runtime: ${id}")
@@ -473,17 +447,11 @@ tasks.register('verifyCommonRuntimeDependencies') {
                     if (moduleName != 'web' && id.projectPath == ':common:web') {
                         throw new GradleException("common:${moduleName} must not require common:web at runtime")
                     }
-                    if (moduleName == 'event' && id.projectPath != ':common:event') {
-                        throw new GradleException("common:event must not require other modules: ${id}")
-                    }
-                    if (moduleName == 'contract' && !(id.projectPath in [':common:contract', ':common:event'])) {
-                        throw new GradleException("common:contract must require only common:event: ${id}")
+                    if (moduleName == 'contract' && id.projectPath != ':common:contract') {
+                        throw new GradleException("common:contract must not require other modules: ${id}")
                     }
                     if (moduleName == 'messaging-kafka' && id.projectPath in [':common:jpa', ':common:messaging']) {
                         throw new GradleException("common:messaging-kafka must not require database messaging: ${id}")
-                    }
-                    if (adapters.any { id.projectPath == ":common:${it}" } && id.projectPath != ":common:${moduleName}") {
-                        throw new GradleException("common:${moduleName} must not require another messaging adapter (decision 209): ${id}")
                     }
                 }
             }

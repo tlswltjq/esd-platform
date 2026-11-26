@@ -383,6 +383,8 @@
 
 ## E12. 메시징 기술 비교 — Kafka·RabbitMQ·Redis Streams·브로커 없음 (2026-11-17, 평시 부하)
 
+> 이 실험은 [결정 209](decisions.md#messaging-symmetric-modules) 구조(브로커 중립 포트 + adapter 다섯, 설정으로 고름)에서 쟀다. [결정 227](decisions.md#kafka-only-messaging)로 그 구조를 지워 지금 코드로는 재현할 수 없고, 남은 시나리오(S1·S2, S3 나머지 회차)는 [결정 228](decisions.md#messaging-comparison-closure)로 재지 않는다. 아래 결과는 측정 당시의 기록이다.
+
 **질문** — 같은 업무 코드(핸들러·Outbox·Inbox·격리)를 두고 브로커만 바꾸면 구매 여정의 완료 시간과 브로커 구간 지연이 달라지는가. 그리고 같은 보장(결정 202: 같은 키는 보낸 순서대로 한 번에 하나, 실패는 제자리 재시도 뒤 격리)을 지키려면 기술마다 무엇을 직접 만들어야 하는가. 비교 대상은 [결정 203](decisions.md#messaging-comparison-targets), 지표는 [결정 204](decisions.md#messaging-comparison-metrics)이며 이번 회차는 그중 **A 업무 완료 시간·B 브로커 구간 지연·G 대조군(HTTP)** 만 잰다.
 
 **조건**
@@ -522,7 +524,7 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 
 **해석·한계**
 - 측정 전 예상대로 모든 방식에서 같은 분할의 뒤 메시지는 독 메시지의 재시도(최초 + 1·2·4초) 동안 약 7초 멈춘다. 순서를 지키려고 제자리에서 재시도하는 설계(결정 155·206)의 공통 비용이고, 기술 사이 차이는 없다.
-- **예상 밖**: Kafka는 다른 파티션의 메시지도 멈췄다(7.7초 또는 1.2초). 리스너 동시성이 설정되지 않아(Spring Boot 기본 1) 소비 스레드 하나가 파티션 3개를 맡고, `DefaultErrorHandler`의 재시도 대기가 그 스레드를 막기 때문이다 — 동시성을 파티션 수(3)로 바꾼 확인 실험에서 다른 파티션은 168ms였다. 1.2초와 7.7초를 가르는 조건(가져온 묶음에 C가 있었는지로 추정)은 확인하지 않았다. 다른 adapter는 분할마다 소비자를 따로 둔다(RabbitMQ 큐마다 컨테이너, Redis 스트림마다 스레드, Streams 연결마다 소비자). 따라서 지금 운영 구성에서는 인스턴스 하나에서 한 키의 독 메시지가 그 소비 그룹의 모든 키를 최대 약 7초 멈춘다. 운영 기본값을 바꿀지는 따로 정한다(플랫폼 T37).
+- **예상 밖**: Kafka는 다른 파티션의 메시지도 멈췄다(7.7초 또는 1.2초). 리스너 동시성이 설정되지 않아(Spring Boot 기본 1) 소비 스레드 하나가 파티션 3개를 맡고, `DefaultErrorHandler`의 재시도 대기가 그 스레드를 막기 때문이다 — 동시성을 파티션 수(3)로 바꾼 확인 실험에서 다른 파티션은 168ms였다. 1.2초와 7.7초를 가르는 조건(가져온 묶음에 C가 있었는지로 추정)은 확인하지 않았다. 다른 adapter는 분할마다 소비자를 따로 둔다(RabbitMQ 큐마다 컨테이너, Redis 스트림마다 스레드, Streams 연결마다 소비자). 따라서 측정 당시 운영 구성에서는 인스턴스 하나에서 한 키의 독 메시지가 그 소비 그룹의 모든 키를 최대 약 7초 멈췄다. 이후 [결정 212](decisions.md#kafka-listener-concurrency)로 기본 동시성을 파티션 수(3)로 바꿨다.
 - adapter 수준 측정이라 업무 여정 전체 지연이 아니라 "뒤 메시지가 처음 처리되기까지"다. 인스턴스가 여럿이면 분할이 인스턴스에 나뉘어 결과가 달라질 수 있다(S4에서 본다).
 
 <a id="messaging-s7"></a>
@@ -586,6 +588,31 @@ Kafka 컨테이너는 Store가 언제나 Kafka로 받아 모든 회차에 떠 �
 - 인계는 정상 종료에서 Streams 6초, Redis 13초, RabbitMQ 16초, Kafka 46초였다. 프로세스 강제 종료(세션·lease 만료를 기다리는 경우)는 재지 않았다.
 - adapter 수준 측정이라 업무 여정 전체의 처리량이 아니다. 인스턴스별 처리 한도(한 번에 한 건·20ms)는 가정이다. 인스턴스는 한 JVM 안의 구독이라 CPU를 나눠 쓴다.
 - 원자료: 회차별 JSON은 PR #241 본문, 회차 파일은 실행 호스트의 `esd-run-archive/s4-2026-11-24/`.
+
+<a id="messaging-s3"></a>
+**S3 결과 — 소비자 장기 정지 뒤 회복, 1회차만**(2026-11-25, [결정 222](decisions.md#s3-adapter-level-limits), 하네스 [PR #242](https://github.com/tlswltjq/esd-platform/pull/242), 기록 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250))
+
+조건 — adapter 수준(공통 계약 테스트 `MessagingContractTest`의 S3 측정, `-Pstove.contract.s3=true`, 코드 main `5fed9d91`). 브로커 컨테이너 메모리 한도 1GiB(모두 같게). Kafka 힙 512MB. RabbitMQ·Streams 메모리 경보 0.4(약 410MiB, `total_memory_available_override_value` 1GiB). Streams 보존 기간 10년. Redis `maxmemory 512mb`·`noeviction`·AOF `everysec`. 구독을 멈춘 채 1KB 메시지 60만 건(키 600개)을 최대 속도로 순서대로 발행하고, 구독을 재개해 다 받을 때까지 잰다. 같은 호스트에서 다른 작업 없음(`measure_guard` 전후 대조). 계획은 다섯 방식 × 2회(A→B→A)였으나 [결정 228](decisions.md#messaging-comparison-closure)로 1회차 4종에서 멈췄다. 1회차 브로커 없음은 발행 중 세션 재시작으로 두 번 끊겨 결과가 없다.
+
+| 지표 | Kafka | RabbitMQ | RabbitMQ Streams | Redis Streams |
+|---|---|---|---|---|
+| 발행 성공 / 시도 | 600,000 / 600,000 | 600,000 / 600,000 | 600,000 / 600,000 | **442,150 / 442,250**(연속 100건 실패로 멈춤) |
+| 첫 발행 실패 | — | — | — | 442,150번째, `OOM command not allowed when used memory > 'maxmemory'` |
+| 발행 시간(초당) | 205.6초(약 2,920/s) | 338.7초(약 1,770/s) | 224.9초(약 2,670/s) | 76.8초(약 5,760/s) |
+| 생산자 차단 | 없음 | **없음** | 없음 | 없음(거절) |
+| 쌓은 뒤 컨테이너 메모리(최대) | 1,022.9MiB(1,024.0) | 1,019.6MiB(1,021.6) | 856.1MiB(858.2) | 534.7MiB(536.8) |
+| 쌓은 뒤 데이터 디스크 | 687MiB | 887MiB | 746MiB | 75MiB |
+| 재개 → 첫 수신 | 458ms | 265ms | 164ms | 받지 못함 |
+| 재개 → 다 받음(초당) | 226.1초(약 2,650/s) | 264.1초(약 2,270/s) | 285.6초(약 2,100/s) | **진척 없음**(2분 동안 0건, `stalled`) |
+| 유실 / 중복 | 0 / 0 | 0 / 0 | 0 / 0 | 받지 못한 성공분 442,150 / 0 |
+| 재개 중 adapter 오류 로그 | 0 | 0 | 0 | 360(첫 오류 `RedisStreamsSubscriptions` OOM) |
+
+**해석·한계**
+- Kafka·RabbitMQ·Streams는 한도를 넘는 양을 모두 받아 쌓았고, 재개 뒤 유실·중복 없이 다 처리했다.
+- **예상 밖 — RabbitMQ classic queue는 생산자를 막지 않았다.** 측정 전 예상은 "한도에서 생산자를 막아 Outbox 증가"였다. 메모리 경보(약 410MiB)를 넘는 양을 넣었는데 발행 호출 10초 상한에 한 번도 걸리지 않았고, 데이터 디스크가 887MiB로 가장 컸다. 메시지가 디스크로 넘어간 것으로 보이나 경보 발생 여부와 페이징 지표는 기록하지 않았다(추정).
+- **Redis Streams는 `maxmemory`에서 발행을 거절했고, 재개도 하지 못했다.** 예상한 "메모리 한도에서 발행 거절"은 맞았다. 재개 뒤에는 adapter의 소비 점유용 쓰기(잠금 `SET`)가 같은 OOM으로 거절돼 2분 동안 한 건도 받지 못했다(`used_memory` 536,946,352 ≥ `maxmemory` 536,870,912). 표의 "받지 못한 성공분"은 브로커에서 지워졌다는 뜻이 아니다. `noeviction`이라 지우지 않는 설정이고, 메모리를 비운 뒤 받을 수 있는지는 재지 않았다. 실제 시스템에서는 발행이 거절된 행이 Outbox `PENDING`으로 남는다(관계로 읽은 것, 직접 재지 않음).
+- 메모리는 cgroup 사용량이라 페이지 캐시가 섞인다. Kafka가 한도에 붙은 것은 로그 파일의 페이지 캐시로 보인다(추정). 조건당 1회이고 브로커 없음이 빠져, 방식 사이 순서나 배수를 결론으로 쓰지 않는다. 업무 여정 전체가 아니라 adapter 수준이다.
+- 이 결과를 낸 adapter 넷과 하네스는 [결정 227](decisions.md#kafka-only-messaging)로 지웠다. 지금 코드로는 재현할 수 없다. 회차 파일(결과 JSON 4개, `measure_guard` 전후 기록)은 실행 호스트의 `esd-run-archive/s3-2026-11-25/`에만 있다.
 
 - 원자료: 8회차의 결과 JSON 원문은 [PR #213](https://github.com/tlswltjq/esd-platform/pull/213), 폴링 주기 6회차는 [PR #214](https://github.com/tlswltjq/esd-platform/pull/214), 순서 검사 회차는 [PR #216](https://github.com/tlswltjq/esd-platform/pull/216), S6 요약 JSON은 이전 8회 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221)·재측정 10회 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222) 본문에 그대로 옮겼다. 회차 폴더(`runs/messaging-measure-*`)는 실행 호스트에만 있다.
 

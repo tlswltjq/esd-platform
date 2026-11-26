@@ -1,3 +1,2 @@
 com.stove.common.messaging.kafka.KafkaConsumerAutoConfiguration
 com.stove.common.messaging.kafka.ops.DltOpsAutoConfiguration
-com.stove.common.messaging.kafka.KafkaSubscriptionAutoConfiguration

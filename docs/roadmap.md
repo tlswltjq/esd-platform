@@ -22,12 +22,12 @@
 
 **동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`. 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. 백로그 항목은 M에 필요할 때만 꺼낸다. GitHub 이슈 #96·#97·#98·#100·#101(MVP 후속)도 이 백로그에 속한다.
 
-**다음 단계 M — 메시징 분리·비교:**
-1. 브로커 결합 분리: 시스템이 요구하는 전달 보장(최소 1회, 소비자 그룹 팬아웃, 재시도 후 격리, 같은 키의 발행 순서대로 한 번에 하나씩 전달 — [결정 202](decisions.md#messaging-port-key-ordering))을 포트 계약으로 정의하고, Kafka 구현을 `adapter`로 옮긴다. 기본 기능 여정이 그대로 통과해야 한다.
-2. RabbitMQ·Redis Streams와 "브로커 없음" 기준선을 같은 포트에 붙인다([결정 203](decisions.md#messaging-comparison-targets)). 넷 모두 같은 계약 테스트를 통과해야 잰다.
-3. 비교 실험: 지표와 합격 조건은 [결정 204](decisions.md#messaging-comparison-metrics)를 따른다. 조건과 가설을 측정 전에 고정하고 [실험 기록](experiments.md)의 절차(A→B→A, 조건당 2회)를 따른다. 차이가 없으면 조건을 더 가혹하게 하되 호스트 한계와 구분한다. 결과는 실험 기록에 남긴다.
+**다음 단계 M — Kafka 기준선과 독립 구현 비교([결정 227](decisions.md#kafka-only-messaging)·[228](decisions.md#messaging-comparison-closure)):**
+1. 메시징을 Kafka 단일 구현으로 되돌린다. 업무 리스너는 `@KafkaListener`, 릴레이는 `KafkaTemplate`을 쓰고, 전달 보장(최소 1회, 소비자 그룹 팬아웃, 재시도 후 격리·키 정지, 같은 키의 발행 순서대로 한 번에 하나씩)은 Kafka 파티션과 `DefaultErrorHandler`로 낸다. 기본 기능 여정이 그대로 통과해야 한다.
+2. 실제 앱 기준으로 Kafka의 성능·안정성 기준선을 잰다.
+3. 다른 기술은 같은 업무를 독립 구현한 앱으로, Kafka 기준선과 같은 벤치마크 계약(업무 시나리오·기대 상태·전달 보장·장애 주입·지표)으로 잰다. 앱 안에 기술 교체용 공통 추상화를 두지 않는다.
 
-**M 상태:** 1 완료(포트·Kafka adapter·격리 중립화, PR #205·#207·#209). 2 완료(브로커 없음·RabbitMQ·Redis Streams, PR #210·#211·#212·#215). 3은 평시 부하의 A 업무 완료 시간·B 브로커 구간 지연·G 대조군과 브로커 없음 폴링 주기 비교까지 완료([E12](experiments.md#messaging-comparison)). F 같은 키 순서 위반은 부하로 검사하려 했으나 측정한 구매·환불 흐름에는 같은 그룹이 같은 키를 두 번 받는 경로가 없어 통합 테스트로만 확인했다. 모듈 구조는 [결정 209](decisions.md#messaging-symmetric-modules)로 브로커 무관 코어 + 대칭 adapter 넷으로 나눴다(PR #218). 공통 계약 테스트 한 벌은 네 adapter 모두 통과(PR #219, 플랫폼 T36). S6(저부하 지연·운영 비용)는 네 방식 완료([E12 S6](experiments.md#messaging-s6), PR #221). RabbitMQ Streams를 다섯 번째로 더한다([결정 211](decisions.md#rabbitmq-streams-comparison)). S4(소비 인스턴스 확장, [결과](experiments.md#messaging-s4))·S5(독 메시지)·S7(브로커 재시작, Outbox 릴레이 수정 뒤 [재측정](experiments.md#messaging-s7-rerun)) 완료. 남은 것: [결정 210](decisions.md#messaging-comparison-hypotheses)의 가설·시나리오 S1~S3(C 처리량·확장성, D 장애 수복, E 비용을 포함, [E12 측정 계획](experiments.md#messaging-comparison-plan)).
+**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 PR #250에서 진행 중이다. 2·3은 아직 시작하지 않았다.
 
 ## 1. 단계의 정의
 

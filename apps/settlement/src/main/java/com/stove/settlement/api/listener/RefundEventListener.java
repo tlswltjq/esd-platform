@@ -1,9 +1,6 @@
 package com.stove.settlement.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -11,15 +8,16 @@ import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.settlement.core.service.RecordConfirmedRefund;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
 
 @Component @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.PAYMENT, group = RecordConfirmedRefund.CONSUMER_GROUP)
-public class RefundEventListener implements EventHandler {
+public class RefundEventListener {
     private final ObjectMapper mapper;
     private final RecordConfirmedRefund refunds;
-    @Override
-    public void receive(InboundMessage message) {
-        EventEnvelope envelope = EventEnvelope.from(message);
+    @KafkaListener(topics = Topics.PAYMENT, groupId = RecordConfirmedRefund.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.REFUND_PAYMENT_CONFIRMED))
             refunds.execute(SettlementRefundMapper.from(envelope, envelope.payloadAs(mapper, RefundPaymentConfirmedEvent.class)));
     }

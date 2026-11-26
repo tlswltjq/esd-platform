@@ -1,5 +1,13 @@
 package com.stove.common.contract;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
+
 /** Kafka 메시지 헤더 규약. 컨슈머는 body 를 파싱하기 전에 헤더만 보고 라우팅/멱등 판단을 한다. */
 public final class EventHeaders {
 
@@ -20,5 +28,36 @@ public final class EventHeaders {
     public static final String TRACE_PARENT = "traceparent";
 
     private EventHeaders() {
+    }
+
+    /**
+     * 그 이름의 마지막 값(Kafka {@code lastHeader} 와 같은 선택). 없으면 {@code null}.
+     * 값이 없는(null) 헤더는 빈 문자열로 읽는다 — 버리면 "헤더가 없다"와 "헤더가 깨졌다"가 같아진다.
+     */
+    public static String lastValue(Headers headers, String name) {
+        Header header = headers.lastHeader(name);
+        return header == null ? null : text(header);
+    }
+
+    /** 그 이름의 모든 값(받은 순서). 없으면 빈 목록. 중복 헤더를 거부하는 리스너가 쓴다. */
+    public static List<String> values(Headers headers, String name) {
+        List<String> values = new ArrayList<>();
+        for (Header header : headers.headers(name)) {
+            values.add(text(header));
+        }
+        return values;
+    }
+
+    /** 모든 헤더를 이름 → 값 목록(받은 순서)으로. 격리 보관이 원래 레코드를 다시 만들 때 쓴다. */
+    public static Map<String, List<String>> all(Headers headers) {
+        Map<String, List<String>> all = new LinkedHashMap<>();
+        for (Header header : headers) {
+            all.computeIfAbsent(header.key(), name -> new ArrayList<>()).add(text(header));
+        }
+        return all;
+    }
+
+    private static String text(Header header) {
+        return header.value() == null ? "" : new String(header.value(), StandardCharsets.UTF_8);
     }
 }

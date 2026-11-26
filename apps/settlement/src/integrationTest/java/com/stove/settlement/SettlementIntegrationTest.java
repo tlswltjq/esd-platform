@@ -14,12 +14,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
@@ -35,7 +33,6 @@ import com.stove.common.test.PausePoints.Run;
 import com.stove.common.test.PausePoints.Watch;
 import com.stove.common.web.error.BusinessException;
 import com.stove.settlement.api.listener.SettlementOrderMapper;
-import com.stove.settlement.api.listener.SettlementRefundMapper;
 import com.stove.settlement.core.domain.ConfirmedRefund;
 import com.stove.settlement.core.domain.PgRefund;
 import com.stove.settlement.core.domain.PgRefundCancellation;
@@ -891,7 +888,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         invalid.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));invalid.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
         ConsumerRecord<String,String> malformed=new ConsumerRecord<String,String>(Topics.ORDER,0,0,input.orderNo(),mapper.writeValueAsString(event));
         malformed.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));malformed.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
-        assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(KafkaInboundMessages.from(malformed)),event)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(malformed),event)).isInstanceOf(BusinessException.class);
         try {
             listeners.start();kafka.send(invalid).get(10,TimeUnit.SECONDS);
             Awaitility.await().atMost(Duration.ofSeconds(35)).untilAsserted(() -> assertThat(held(RecordPaidSale.CONSUMER_GROUP,input.orderNo())).isEqualTo(1));

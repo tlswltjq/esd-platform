@@ -169,8 +169,8 @@
   - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
 
 - [ ] **T20. 영구 실패도 4회 재시도하고, 공통 분류가 없다**
-  - 어디서: `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java:37-43`, 재시도 제외는 Order 환불 리스너 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)` 하나(R11).
-  - 목표: P2.6-3. 브로커 무관 `common/event`에 영구 실패 예외 하나, 모든 adapter의 제자리 재시도(Kafka `DefaultErrorHandler`, 코어 `InPlaceDelivery`)가 재시도에서 뺀다(결정 209).
+  - 어디서: `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java`(`stoveKafkaErrorHandler`), 재시도 제외는 앱 config 의 리스너 팩토리뿐이다 — Order 환불 리스너 `RefundKafkaConfiguration`(`RefundCompletionRejected`), 게이트웨이·웹 BFF `AccessChangeKafkaConfiguration`(`AccessChangeRejected`)(R11).
+  - 목표: P2.6-3. Kafka 공통 모듈에 영구 실패 예외 하나, 공용 오류 처리기(`DefaultErrorHandler`)와 `ListenerContainerFactories`의 모든 팩토리가 재시도에서 뺀다(결정 227로 위치만 바뀜).
   - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
   - 재현: 헤더 없는 레코드를 넣고 `consumer_quarantine` 보관까지 시도 1회 단언(PR #209 뒤 DLT 대신 격리).
 
@@ -271,17 +271,18 @@
   - 완료 조건: 1단계 — 주문 하나의 업무 키로 TraceQL 한 쿼리에 Order·Payment·License·Settlement 구간과 각 구간의 전후 상태가 나온다. 2단계 — 그래프 정의의 모든 간선에 기대 시간이 있고, 기대 시간을 넘긴 간선이 경보로 나온다.
 
 - [x] **T36. 메시징 코어와 adapter 넷을 대칭 모듈로 나누고, 넷이 같은 계약 테스트를 통과하게 한다** ([결정 209](../../../docs/decisions.md#messaging-symmetric-modules))
+  - 이 항목과 아래 T37의 adapter·공통 계약 테스트·`--broker` 설명은 당시 구조의 기록이다. [결정 227](../../../docs/decisions.md#kafka-only-messaging)로 adapter 넷·`MessagingContractTest`·`--broker`를 지우고 Kafka 단일 구현으로 되돌렸다(계약 사례는 `KafkaDeliveryIntegrationTest`로 옮김, PR #250).
   - [x] 모듈 분리 — 2026-11-19 [PR #218](https://github.com/tlswltjq/esd-platform/pull/218). 계약을 `common:contract`로, `common:kafka`를 `common:messaging-kafka`로, RabbitMQ·Redis Streams·direct를 `common:messaging-rabbitmq`·`-redis`·`-direct`로 옮겼다. 코어(`common:messaging`)의 Kafka 의존을 없애고 Store용 Kafka 병행 발행(`AlsoKafka`)을 포트 `MirrorPublisher` + `MirroredTopics`로 바꿨다. Kafka 발행 포트도 `stove.messaging.broker`로 고르게 해 자동 구성 순서 의존을 없앴다. 앱 9개는 adapter를 `runtimeOnly`로만 넣는다. `verifyCommonRuntimeDependencies`(코어·계약·포트·다른 adapter에 브로커 클라이언트 없음, adapter 상호 의존 없음)와 ArchUnit `CommonLibraryRules`·`MessagingBoundaryRules`(`MessagingBoundaryRulesTest`)로 강제한다.
   - [x] 공통 계약 테스트 한 벌 — 2026-11-21 [PR #219](https://github.com/tlswltjq/esd-platform/pull/219). 남은 비교 측정([결정 210](../../../docs/decisions.md#messaging-comparison-hypotheses) S1~S7)의 선행 조건이었다. 추상 클래스 `MessagingContractTest`(코어 testFixtures)가 계약 8개 — 같은 키 순서대로 한 번씩·한 번에 하나씩, 같은 그룹 인스턴스 둘은 한 메시지를 함께 처리하지 않음, 앞 처리가 붙잡힌 동안 같은 키 뒤 메시지 미시작, 다른 그룹 팬아웃, 제자리 재시도(최초 1 + 3) 뒤 격리·그 키만 정지, 재시도 제외 예외는 첫 실패에 격리, 격리 기록 실패 시 붙잡아 추월 없음, 재시도 중 성공 시 격리 없음·추월 없음 — 를 정하고, `KafkaContractTest`·`RabbitContractTest`·`RedisStreamsContractTest`·`DirectContractTest`가 구독·발행만 구현해 상속한다(실제 브로커·MySQL). Kafka는 이 보장을 실제 브로커로 검증하는 통합 테스트가 처음 생겼다. adapter별로 흩어져 있던 같은 단언은 지우고 adapter 고유 테스트(Redis 점유 이전, direct 커서, RabbitMQ 받을 큐 없는 발행)만 남겼다. direct 구독은 RabbitMQ·Redis처럼 `Supplier<List<SubscribedHandler>>`를 받는다.
 
-- [ ] **T37. 결정 210의 가설·시나리오 S1~S7로 네 메시징 방식을 잰다** ([결정 210](../../../docs/decisions.md#messaging-comparison-hypotheses), [E12 측정 계획](../../../docs/experiments.md#messaging-comparison-plan))
+- [x] **T37. 결정 210의 가설·시나리오 S1~S7로 네 메시징 방식을 잰다** — S4~S7을 재고 S3는 1회차까지, S1·S2는 재지 않은 채 닫았다([결정 228](../../../docs/decisions.md#messaging-comparison-closure)) ([결정 210](../../../docs/decisions.md#messaging-comparison-hypotheses), [E12 측정 계획](../../../docs/experiments.md#messaging-comparison-plan))
   - 공통: 결정 204 합격 조건(유실·중복 반영·순서 위반 0), 조건당 2회 A→B→A, 측정 하네스는 `verify-jib.py --measure`. 측정 전 예상은 E12 계획 표로 고정돼 있고 결과는 예상과 달라도 그대로 적는다.
   - [x] S6 저부하 지연·운영 비용 — 2026-11-22 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221), [E12 S6 결과](../../../docs/experiments.md#messaging-s6). 세 브로커 지연 차이 없음, 브로커 없음은 업무 MySQL이 비용을 진다(CPU 약 2.5배). RabbitMQ 유휴 CPU 원인은 확인하지 않았다. 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222)에서 RabbitMQ Streams를 더한 다섯 방식 10회로 다시 쟀다(다른 컨테이너 없음, 고친 도구): 네 브로커 지연 차이 없음, 앞선 8회의 지연 순서는 재현되지 않았다.
   - [x] S5 독 메시지 1건 — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222), [E12 S5 결과](../../../docs/experiments.md#messaging-s5). 같은 분할 뒤 메시지는 다섯 방식 모두 약 7초 멈춤. Kafka는 리스너 동시성 1 때문에 다른 파티션도 멈춤(동시성 3 확인 실험에서는 168ms).
-  - [ ] Kafka 리스너 동시성 기본값 — `[결정 필요]` 운영 Kafka 소비자를 파티션 수만큼 동시성으로 둘지(지금은 Spring Boot 기본 1이라 한 키의 독 메시지가 그 그룹의 모든 키를 최대 약 7초 멈춘다, E12 S5). 다른 adapter는 분할마다 소비자를 둔다.
+  - [x] Kafka 리스너 동시성 기본값 — [결정 212](../../../docs/decisions.md#kafka-listener-concurrency)로 파티션 수(3)로 정했다.
   - [x] S7 브로커 재시작 — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222), [E12 S7 결과](../../../docs/experiments.md#messaging-s7). 접수된 주문은 모든 방식에서 유실·중복 반영 0. 브로커 장애 동안 주문 요청 실패: Kafka 39·45건, RabbitMQ 0·5건, Streams·Redis 0.
   - [x] Outbox 릴레이가 행 잠금을 쥔 채 브로커 확인을 기다려 업무 요청이 실패한다 — S7에서 order의 `insert into outbox_event … LOCK WAIT` → Hikari 고갈 → 주문 500. 재현 테스트(격리 MySQL, 확인이 늦는 발행 포트) → `docs/defects.md` 등록 → 수정(확인을 기다리는 동안 행 잠금을 쥐지 않게) → S7 재측정. 재현·수정 완료([D-060](../../../docs/defects.md#d-060), [결정 215](../../../docs/decisions.md#outbox-relay-lock-hold), PR #228). S7 재측정 2026-11-23 [PR #235](https://github.com/tlswltjq/esd-platform/pull/235)([E12 S7 재측정](../../../docs/experiments.md#messaging-s7-rerun)): 네 방식 8회 모두 주문 요청 실패 0(이전 Kafka 39·45건).
   - [x] S4 소비 인스턴스 1 → 3 → 6 — 2026-11-24 [PR #241](https://github.com/tlswltjq/esd-platform/pull/241)([결정 218](../../../docs/decisions.md#s4-adapter-level), [E12 S4 결과](../../../docs/experiments.md#messaging-s4)). 분할을 인스턴스에 고르게 나눈 것은 RabbitMQ Streams뿐(6개 279/s). Kafka는 인스턴스당 동시성 3에서 두 인스턴스에 몰려 2배(98/s)에서 멈춤, RabbitMQ·Redis·브로커 없음은 한 인스턴스가 전부 처리. 인계(정상 종료) 6~46초.
-  - [ ] S3 소비자 1시간 중단 뒤 회복 — 브로커 메모리·디스크, 생산 쪽 Outbox `PENDING`, 회복 시간, 유실(가정한 규모).
+  - [x] S3 소비자 1시간 중단 뒤 회복 — 1회차 4종만 재고 닫았다([결정 228](../../../docs/decisions.md#messaging-comparison-closure), [E12 S3 결과](../../../docs/experiments.md#messaging-s3), PR #250). Kafka·RabbitMQ·Streams는 60만 건 모두 받고 유실·중복 0. RabbitMQ는 생산자를 막지 않음(예상과 다름). Redis는 `maxmemory`에서 발행 거절, 재개도 OOM으로 진척 없음. 브로커 없음과 2회차는 재지 않았다.
   - [x] RabbitMQ Streams adapter([결정 211](../../../docs/decisions.md#rabbitmq-streams-comparison)) — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222). `common:messaging-rabbitmq-streams`: 토픽마다 super stream(분할 3, 보존 7일), 분할마다 단일 활성 소비자, 처리·격리 보관 뒤 위치 저장, 새 그룹은 `first`부터. 공통 계약 8개 + Streams 고유 1개(붙기 전 발행한 메시지도 새 그룹이 받음) 통과, 변이(단일 활성 소비자 제거) 시 계약 2·3 실패. 측정 하네스 `--broker rabbitmq-streams`.
-  - [ ] S1 새 소비 서비스와 초기 적재, S2 버그 수정 뒤 과거 재반영 — 다섯 방식(Streams 포함).
+  - [x] S1 새 소비 서비스와 초기 적재, S2 버그 수정 뒤 과거 재반영 — 재지 않고 닫았다([결정 228](../../../docs/decisions.md#messaging-comparison-closure)). 비교 대상 adapter를 [결정 227](../../../docs/decisions.md#kafka-only-messaging)로 지웠다.

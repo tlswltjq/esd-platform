@@ -1,9 +1,6 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
@@ -15,20 +12,23 @@ import com.stove.payment.core.domain.RefundExecutionRequest;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import com.stove.payment.config.RefundKafkaConfiguration;
 
 @Component @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.ORDER, group = ReceiveRefundExecution.CONSUMER_GROUP, oneAtATime = true)
-public class RefundExecutionEventListener implements EventHandler {
+public class RefundExecutionEventListener {
     private final ObjectMapper mapper;
     private final ReceiveRefundExecution receive;
     private final Optional<RequestFirstRefundCancellation> cancellation;
 
-    @Override
-    public void receive(InboundMessage message) {
-        EventEnvelope envelope = EventEnvelope.from(message);
+    @KafkaListener(topics = Topics.ORDER, groupId = ReceiveRefundExecution.CONSUMER_GROUP,
+            containerFactory = RefundKafkaConfiguration.REFUND_EXECUTION_FACTORY)
+    public void receive(ConsumerRecord<String, String> record) {
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType(EventType.REFUND_EXECUTION_REQUESTED)) {
             RefundExecutionRequest request = RefundExecutionMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionRequestedEvent.class));
-            receive.execute(request, PaymentTraceMapper.from(message.headerValues(EventHeaders.TRACE_PARENT)));
+            receive.execute(request, PaymentTraceMapper.from(EventHeaders.values(record.headers(), EventHeaders.TRACE_PARENT)));
             // The receipt transaction has committed. A duplicate receipt can still need its first dispatch.
             cancellation.ifPresent(first -> first.execute(request.attemptId()));
         }

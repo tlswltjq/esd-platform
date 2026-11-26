@@ -337,29 +337,70 @@ class ArchRuleEnforcementTest {
         }
 
         @Test
-        @DisplayName("group 을 비운 리스너를 잡는다")
+        @DisplayName("groupId 를 비운 리스너를 잡는다")
         void missingGroupIdIsCaught() {
             assertThatThrownBy(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("nogroup")))
-                    .as("group 없는 리스너를 잡지 못했다 — yml 기본값을 지웠으므로 이 리스너는 그룹이 없다")
+                    .as("groupId 없는 리스너를 잡지 못했다 — yml 기본값을 지웠으므로 이 리스너는 그룹이 없다")
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("NoGroupListener");
         }
 
         @Test
-        @DisplayName("group 을 명시한 리스너는 통과시킨다")
-        void declaredGroupIdIsAccepted() {
-            assertThatCode(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("aligned")))
-                    .as("group 을 명시한 리스너를 거부했다")
+        @DisplayName("클래스 수준 @KafkaListener 를 잡는다")
+        void classLevelListenerIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_메서드에_하나만_단다(app("classlevel")))
+                    .as("클래스 수준 리스너가 그룹 규칙을 빠져나갔다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("ClassLevelListener");
+        }
+
+        @Test
+        @DisplayName("한 메서드의 반복 @KafkaListener 를 잡는다")
+        void repeatedListenerIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_메서드에_하나만_단다(app("repeated")))
+                    .as("@KafkaListeners 로 감싼 리스너가 그룹 규칙을 빠져나갔다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("RepeatedListener");
+        }
+
+        @Test
+        @DisplayName("ConsumerRecord 밖의 인자를 받는 리스너를 잡는다")
+        void listenerWithAcknowledgmentIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("ackparam")))
+                    .as("재투입이 줄 수 없는 인자를 받는 리스너를 잡지 못했다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("AckParamListener");
+        }
+
+        @Test
+        @DisplayName("값 타입이 String 이 아닌 ConsumerRecord 를 받는 리스너를 잡는다")
+        void listenerWithNonStringRecordIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("typedrecord")))
+                    .as("재투입이 넘기는 문자열과 다른 값 타입을 받는 리스너를 잡지 못했다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("TypedRecordListener.receive(")
+                    .hasMessageContaining("TypedRecordListener.receiveWildcard(");
+        }
+
+        @Test
+        @DisplayName("ConsumerRecord 하나만 받는 리스너는 통과시킨다")
+        void recordOnlyListenerIsAccepted() {
+            assertThatCode(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("aligned")))
                     .doesNotThrowAnyException();
         }
 
         @Test
-        @DisplayName("브로커 리스너를 직접 단 업무 리스너를 잡는다 — 결정 202")
-        void brokerBoundListenerIsCaught() {
-            assertThatThrownBy(() -> ConsumerGroupRules.업무_리스너는_브로커_리스너를_직접_달지_않는다(app("brokerbound")))
-                    .isInstanceOf(AssertionError.class)
-                    .hasMessageContaining("BrokerBoundListener");
-            assertThatCode(() -> ConsumerGroupRules.업무_리스너는_브로커_리스너를_직접_달지_않는다(app("aligned")))
+        @DisplayName("메서드에 하나씩 단 리스너는 통과시킨다")
+        void singleMethodListenerIsAccepted() {
+            assertThatCode(() -> ConsumerGroupRules.카프카_리스너는_메서드에_하나만_단다(app("aligned")))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("groupId 를 명시한 리스너는 통과시킨다")
+        void declaredGroupIdIsAccepted() {
+            assertThatCode(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("aligned")))
+                    .as("groupId 를 명시한 리스너를 거부했다")
                     .doesNotThrowAnyException();
         }
     }

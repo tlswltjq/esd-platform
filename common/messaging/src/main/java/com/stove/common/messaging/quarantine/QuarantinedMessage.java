@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 소비하지 못한 메시지 한 건과 그 키의 정지(결정 160: 보관과 정지는 같은 표·같은 트랜잭션).
- * 원래 순서는 {@code id} 순이다. 브로커가 무엇이든 같은 모양으로 남는다(결정 206).
+ * 원래 순서는 {@code id} 순이다.
  */
 @Entity
 @Getter

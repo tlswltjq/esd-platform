@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.DomainEvent;
@@ -57,7 +56,7 @@ class ProjectResultMapperTest {
         record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));
         Object input = convert(new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), ""), event);
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         if (input instanceof ProjectReviewResult result) {
             verify(review).execute(result);
             verifyNoInteractions(release);
@@ -68,7 +67,7 @@ class ProjectResultMapperTest {
         record.headers().remove(EventHeaders.EVENT_ID);
         record.headers().add(EventHeaders.EVENT_ID, "changed-header".getBytes(StandardCharsets.UTF_8));
         clearInvocations(review, release);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> listener.receive(record)).isInstanceOf(BusinessException.class);
         verifyNoInteractions(review, release);
     }
 

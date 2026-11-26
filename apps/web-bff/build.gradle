@@ -13,8 +13,6 @@ dependencies {
     // 계정 접근 변경 사실(결정 180·225)로 그 subject의 세션 토큰 기록을 지운다(GW-T18). DB가 없어 코어(격리·Outbox)를 쓰지
     // 않는다. 일시 실패는 성공까지 재시도, 영구 실패만 DLT(결정 226, Store와 같음).
     implementation project(':common:contract')
-    runtimeOnly project(':common:messaging-kafka')
-    testImplementation project(':common:messaging-kafka')
+    implementation project(':common:messaging-kafka')
     implementation 'io.micrometer:micrometer-core'
-    integrationTestImplementation project(':common:messaging-kafka')
 }

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 멈춘 소비 키를 보고 원래 순서대로 다시 넣는 운영 API(결정 155·206). 게이트웨이가 라우팅하지 않고 ADMIN 만 쓴다.
- * 브로커와 무관하다 — 보관은 이 모듈 DB 에, 재투입은 이 앱의 리스너로 직접 한다.
+ * 보관은 이 모듈 DB 에 있고, 재투입은 브로커를 거치지 않고 이 앱의 리스너로 직접 한다.
  */
 @RestController
 @RequestMapping("/api/v1/ops/quarantine")

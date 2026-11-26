@@ -14,7 +14,6 @@ import static org.mockito.Mockito.inOrder;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
@@ -44,8 +43,8 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequest input = execution(paid());
         RefundExecutionRequestedEvent event = event(input);
         ConsumerRecord<String, String> record = record(event, mapper.writeValueAsString(event));
-        listener.receive(KafkaInboundMessages.from(record));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
+        listener.receive(record);
         InOrder calls = inOrder(receive, cancellation);
         calls.verify(receive).execute(input, PaymentTraceContext.NONE);
         calls.verify(cancellation).execute(input.attemptId());
@@ -58,7 +57,7 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequestedEvent event = event(input);
         doThrow(new TransientDataAccessResourceException("receipt commit failed"))
                 .when(receive).execute(input, PaymentTraceContext.NONE);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, mapper.writeValueAsString(event)))))
+        assertThatThrownBy(() -> listener.receive(record(event, mapper.writeValueAsString(event))))
                 .isInstanceOf(TransientDataAccessResourceException.class);
         verifyNoInteractions(cancellation);
     }
@@ -66,7 +65,7 @@ class RefundExecutionEventListenerTest {
     @Test void disabledDispatchStillReceivesDurably() throws Exception {
         RefundExecutionRequest input = execution(paid());
         RefundExecutionRequestedEvent event = event(input);
-        new RefundExecutionEventListener(mapper, receive, Optional.empty()).receive(KafkaInboundMessages.from(record(event, mapper.writeValueAsString(event))));
+        new RefundExecutionEventListener(mapper, receive, Optional.empty()).receive(record(event, mapper.writeValueAsString(event)));
         verify(receive).execute(input, PaymentTraceContext.NONE);
         verifyNoInteractions(cancellation);
     }
@@ -75,11 +74,11 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequest input = execution(paid());
         RefundExecutionRequestedEvent event = event(input);
         ConsumerRecord<String, String> record = record(event, mapper.writeValueAsString(event));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         verify(receive).execute(input, PaymentTraceContext.NONE);
         String parent = "00-11111111111111111111111111111111-2222222222222222-01";
         record.headers().add(EventHeaders.TRACE_PARENT, parent.getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         verify(receive).execute(input, new PaymentTraceContext(parent));
     }
 
@@ -93,7 +92,7 @@ class RefundExecutionEventListenerTest {
         }
         assertThatThrownBy(() -> RefundExecutionMapper.from(
                 new EventEnvelope(event.eventId(), event.eventType(), event.orderNo(), ""), null)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.ORDER, 0, 0, event.orderNo(), "{}"))))
+        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.ORDER, 0, 0, event.orderNo(), "{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
     }
@@ -104,7 +103,7 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequestedEvent event = event(execution(paid()));
         ObjectNode body = mapper.valueToTree(event);
         body.remove(field);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, body.toString())))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> listener.receive(record(event, body.toString()))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(receive);
     }
 
@@ -112,7 +111,7 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequestedEvent event = event(execution(paid()));
         ObjectNode body = mapper.valueToTree(event);
         body.put("amount", 10000.5);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, body.toString())))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> listener.receive(record(event, body.toString()))).isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
     }
 
@@ -123,7 +122,7 @@ class RefundExecutionEventListenerTest {
         if (field.equals("amount")) body.put(field, 0);
         else if (field.equals("occurredAt")) body.put(field, "2026-10-27T01:00:00.123456001Z");
         else body.put(field, field.equals("currency") ? "USD" : "bad-id");
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, body.toString())))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> listener.receive(record(event, body.toString()))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(receive);
     }
 
@@ -132,7 +131,7 @@ class RefundExecutionEventListenerTest {
         RefundExecutionRequestedEvent event = event(input);
         ConsumerRecord<String, String> record = record(event, mapper.writeValueAsString(event));
         record.headers().add(EventHeaders.TRACE_PARENT, "invalid".getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         verify(receive).execute(input, PaymentTraceContext.NONE);
     }
 
@@ -141,7 +140,7 @@ class RefundExecutionEventListenerTest {
         ConsumerRecord<String, String> record = record(event, "{}");
         record.headers().remove(EventHeaders.EVENT_TYPE);
         record.headers().add(EventHeaders.EVENT_TYPE, EventType.ORDER_PLACED.getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         verifyNoInteractions(receive);
     }
 

@@ -1,9 +1,6 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -13,19 +10,22 @@ import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.service.ApplyApprovalCorrection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import com.stove.order.config.RefundKafkaConfiguration;
 
 @Component @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.LICENSE, group = ApplyApprovalCorrection.CONSUMER_GROUP, noRetryFor = RefundCompletionRejected.class)
-public class ApprovalCorrectionEventListener implements EventHandler {
+public class ApprovalCorrectionEventListener {
     private final ObjectMapper mapper;
     private final ApplyApprovalCorrection apply;
-    @Override
-    public void receive(InboundMessage message) {
+    @KafkaListener(topics = Topics.LICENSE, groupId = ApplyApprovalCorrection.CONSUMER_GROUP,
+            containerFactory = RefundKafkaConfiguration.REFUND_COMPLETION_FACTORY)
+    public void receive(ConsumerRecord<String, String> record) {
         ApprovalCorrectionConfirmation input;
         try {
-            EventEnvelope envelope=EventEnvelope.from(message);
+            EventEnvelope envelope=EventEnvelope.from(record);
             if (!envelope.isType(EventType.LICENSE_APPROVAL_CORRECTED)) return;
-            if (!Topics.LICENSE.equals(message.topic())) throw new RefundCompletionRejected("복구 완료의 토픽이 다릅니다.");
+            if (!Topics.LICENSE.equals(record.topic())) throw new RefundCompletionRejected("복구 완료의 토픽이 다릅니다.");
             input=ApprovalCorrectionMapper.from(envelope,envelope.payloadAs(mapper,LicenseApprovalCorrectedEvent.class));
         } catch (IllegalStateException invalid) { throw new RefundCompletionRejected("승인 정정 복구 계약이 올바르지 않습니다.",invalid); }
         apply.execute(input);

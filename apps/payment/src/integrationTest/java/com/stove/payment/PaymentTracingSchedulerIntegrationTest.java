@@ -5,7 +5,6 @@ import static com.stove.payment.PaymentFixtures.request;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -50,7 +49,7 @@ class PaymentTracingSchedulerIntegrationTest extends PaymentIntegrationTestBase 
         record.headers().add(EventHeaders.EVENT_ID, input.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, "OrderPlaced".getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.TRACE_PARENT, ("00-" + trace + "-4444444444444444-01").getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(events.findAll()).anySatisfy(event -> {
                     assertThat(event.getPartitionKey()).isEqualTo(input.orderNo());

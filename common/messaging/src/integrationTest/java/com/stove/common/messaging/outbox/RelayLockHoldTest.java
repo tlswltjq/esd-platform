@@ -1,9 +1,11 @@
 package com.stove.common.messaging.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.fail;
 
-import com.stove.common.event.MessagePublisher;
 import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.testcontainers.InfraContainers;
 import java.util.UUID;
@@ -18,9 +20,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -77,12 +82,9 @@ class RelayLockHoldTest {
     @DisplayName("[D-060] 릴레이가 브로커 확인을 기다리는 동안에도 다른 주문의 Outbox 삽입은 막히지 않아야 한다")
     void businessInsertIsNotBlockedWhileTheRelayAwaitsAck() throws Exception {
         repository.save(pending("ORD-A-" + UUID.randomUUID()));
-        CompletableFuture<Void> heldAck = new CompletableFuture<>();
+        CompletableFuture<SendResult<String, String>> heldAck = new CompletableFuture<>();
         CountDownLatch published = new CountDownLatch(1);
-        MessagePublisher unresponsiveBroker = message -> {
-            published.countDown();
-            return heldAck;
-        };
+        KafkaTemplate<String, String> unresponsiveBroker = unresponsiveBroker(published, heldAck);
         OutboxRelay relay = new OutboxRelay(repository, unresponsiveBroker, properties.batchSize(), properties.maxRetry(),
                 properties.maxBatchesPerCycle(), metrics, transactionManager);
 
@@ -135,5 +137,17 @@ class RelayLockHoldTest {
             failure.addSuppressed(cleanup);
             return failure;
         }
+    }
+
+    /** 보내면 신호만 주고 확인(ack)은 끝내 돌려주지 않는 브로커. 릴레이는 그동안 배치를 잠근 채 기다린다. */
+    @SuppressWarnings("unchecked")
+    private static KafkaTemplate<String, String> unresponsiveBroker(CountDownLatch published,
+                                                                    CompletableFuture<SendResult<String, String>> heldAck) {
+        KafkaTemplate<String, String> template = mock(KafkaTemplate.class);
+        when(template.send(any(ProducerRecord.class))).thenAnswer(invocation -> {
+            published.countDown();
+            return heldAck;
+        });
+        return template;
     }
 }

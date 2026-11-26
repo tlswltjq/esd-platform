@@ -5,7 +5,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
@@ -26,14 +25,14 @@ class StudioEventListenerTest {
     void forwardsTheCurrentProjectRequest() {
         ProjectReviewRequestedEvent e = ReviewFixtures.event(1, 1);
         ConsumerRecord<String, String> record = record(e.eventId(), e.eventType(), ReviewFixtures.json(e));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
         verify(receive).execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
     }
 
     @Test
     void ignoresLegacyAndReleaseEvents() {
-        listener.receive(KafkaInboundMessages.from(record("old", "GameRegistered", "{}")));
-        listener.receive(KafkaInboundMessages.from(record("other", "ProjectReleaseRequested", "{}")));
+        listener.receive(record("old", "GameRegistered", "{}"));
+        listener.receive(record("other", "ProjectReleaseRequested", "{}"));
         verifyNoInteractions(receive);
     }
 
@@ -41,8 +40,8 @@ class StudioEventListenerTest {
     void missingContractHeadersCannotBeAcknowledgedAsAValidRequest() {
         assertThatThrownBy(
                         () ->
-                                listener.receive(KafkaInboundMessages.from(
-                                        new ConsumerRecord<>(Topics.STUDIO, 0, 0, "GAME-1", "{}"))))
+                                listener.receive(
+                                        new ConsumerRecord<>(Topics.STUDIO, 0, 0, "GAME-1", "{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
     }

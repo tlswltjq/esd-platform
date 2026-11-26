@@ -122,29 +122,31 @@ OutboxRelay (서비스당 1대, stove.outbox.poll-interval-ms=200)
      실패     : retryCount++, next_attempt_at = 1s,2s,...,5m, 같은 키 뒤 이벤트 holdUntil
      10회 소진: DEAD (stove.outbox 지표, ADMIN requeue)    -- 목표(결정 155): DEAD 키의 뒤 행은 회수 전까지 보류, ADMIN 키 단위 requeue
 Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt·schemaVersion(본문 모양, 결정 170)·traceparent·(목표) 키 안 발행 순번(결정 161)
-소비 리스너 (@EventSubscriber, adapter 가 그룹당 파티션당 스레드 1, ack-mode record 로 구독)
-  KafkaInboundMessages.from -> KeyQuarantine.stopped(그룹, 토픽, 키)?
-     멈춘 키: 처리하지 않고 consumer_quarantine 에 뒤로 쌓음(KEY_STOPPED) -> 오프셋 커밋
+소비 리스너 (@KafkaListener(topics, groupId, containerFactory), 그룹당 파티션당 스레드 1, ack-mode record)
+  StoppedKeyInterceptor: KeyQuarantine.stopped(소비자 스레드의 그룹, 토픽, 키)?
+     멈춘 키: 리스너를 부르지 않고 consumer_quarantine 에 뒤로 쌓음(KEY_STOPPED) -> 오프셋 커밋
+              (보관 실패는 오류 처리 구간 안에서 던져 재시도, 오프셋을 넘기지 않음)
   EventEnvelope.from (헤더 없으면 거절)
   -> isType 분기 -> *Mapper.from(envelope, payload) (계약 검증, api.listener)
   -> core 서비스 트랜잭션: ProcessedEventGuard.firstDelivery + 업무 유일 키 + 상태 전이 (+ 다음 이벤트 Outbox)
   -> 커밋 뒤 오프셋 커밋
   실패: 재시도 가능 -> 1·2·4초 재시도 -> consumer_quarantine 보관 = 그 (그룹, 토픽, 키) 정지(결정 155·160·206, 한 행·한 트랜잭션)
-        noRetryFor 예외 -> 재시도 없이 보관
+        재시도 제외 예외(리스너 팩토리의 noRetryFor) -> 재시도 없이 보관
         보관 실패 -> 오프셋을 넘기지 않음(다시 받음)
-재투입: ADMIN POST /api/v1/ops/quarantine/replay -> 그 키의 맨 앞 행부터 FOR UPDATE 로 점유(REPLAYING) -> 같은 리스너를 프로세스 안에서 직접 호출
+재투입: ADMIN POST /api/v1/ops/quarantine/replay -> 그 키의 맨 앞 행부터 FOR UPDATE 로 점유(REPLAYING) -> 리스너 레지스트리에서 그 (그룹, 토픽)의
+        @KafkaListener 리스너를 찾아 보관 행으로 되살린 ConsumerRecord 로 프로세스 안에서 직접 호출
         (원래 traceparent 안) -> 성공 REPLAYED / 다시 실패 HELD 로 되돌리고 멈춤 -> 남은 행이 없으면 정지 해제. Inbox 가 중복을 거른다
-  -- 예외: DB(JPA)가 없는 Store 만 <topic>.DLT 같은 파티션 + DltOpsService.replay(판단 대기)
+  -- 예외: DB(JPA)가 없는 Store·게이트웨이·웹 BFF 는 <topic>.DLT 같은 파티션 + DltOpsService.replay(판단 대기)
 ```
 
 ### `EventType` 상수 (42개) — 현행·목표 분리안
 
 열 약어
 
-- **실패 처리**: `기본` = 공통 `DefaultErrorHandler`(4회 시도, 1·2·4초) → 소비 모듈 DB의 `consumer_quarantine`에 보관하고 그 (소비 그룹, 토픽, 키)를 멈춘다([결정 206](../../../docs/decisions.md#messaging-port-scope-quarantine), `common/messaging/.../quarantine/JpaKeyQuarantine.java`). 멈춘 키의 뒤 메시지도 처리하지 않고 쌓으며, 회수는 `POST /api/v1/ops/quarantine/replay`로 키 단위 원래 순서다(결정 155). DB가 없는 Store만 `<토픽>.DLT`. `환불 팩토리` = Order 환불 리스너의 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)`(그 예외는 재시도 없이 격리, 나머지는 `기본`과 같음). `결제 환불 팩토리` = Payment `RefundExecutionEventListener`의 `@EventSubscriber(oneAtATime = true)`(`max.poll.records=1`, 에러 처리는 `기본`). 둘 다 Kafka adapter `common/messaging-kafka/.../KafkaEventSubscriptions.java`가 리스너별 컨테이너 팩토리로 만든다(결정 202). 발행 쪽은 모두 Outbox(최대 10회 → `DEAD`). `재발행` = 결정 129 운영 재발행 허용(`common/messaging/.../ops/OutboxRepublishTargets.java:27-37`).
+- **실패 처리**: `기본` = 공통 `DefaultErrorHandler`(4회 시도, 1·2·4초) → 소비 모듈 DB의 `consumer_quarantine`에 보관하고 그 (소비 그룹, 토픽, 키)를 멈춘다([결정 206](../../../docs/decisions.md#messaging-port-scope-quarantine), `common/messaging/.../quarantine/JpaKeyQuarantine.java`). 멈춘 키의 뒤 메시지도 처리하지 않고 쌓으며, 회수는 `POST /api/v1/ops/quarantine/replay`로 키 단위 원래 순서다(결정 155). DB가 없는 Store·게이트웨이·웹 BFF는 `<토픽>.DLT`. `환불 팩토리` = Order 환불 리스너의 `@KafkaListener(containerFactory = RefundKafkaConfiguration.REFUND_COMPLETION_FACTORY)`(`RefundCompletionRejected`는 재시도 없이 격리, 나머지는 `기본`과 같음). `결제 환불 팩토리` = Payment `RefundExecutionEventListener`의 `REFUND_EXECUTION_FACTORY`(`max.poll.records=1`, 에러 처리는 `기본`). 둘 다 앱 `config`가 `common/messaging-kafka/.../ListenerContainerFactories.java`로 만든 컨테이너 팩토리 빈이다(결정 227). 발행 쪽은 모두 Outbox(최대 10회 → `DEAD`). `재발행` = 결정 129 운영 재발행 허용(`common/messaging/.../ops/OutboxRepublishTargets.java:27-37`).
 - **순서 요구**: 같은 키 안에서 이 이벤트가 어느 이벤트와 순서가 맞아야 하는지. "인과"는 앞 이벤트를 소비한 결과로만 생겨 발행 쪽 순서 보장이 필요 없다는 뜻.
 - **멱등 키**: 모든 소비자의 1층은 Inbox `uk_processed_event(event_id, consumer_group)`(Store 제외). 표에는 2층 = 소비 모듈의 업무 유일 제약(각 모듈 `src/main/resources/db/migration`)을 적는다.
-- 소비 확인 방법: `apps/*/src/main/java/**/api/listener/*.java`의 `@EventSubscriber`·`isType(...)` grep, 소비 그룹은 각 서비스의 `CONSUMER_GROUP` 상수. 발행 확인: `apps/*/src/main/java`에서 payload 생성(`new XxxEvent(`·`XxxEvent.of`) grep.
+- 소비 확인 방법: `apps/*/src/main/java/**/api/listener/*.java`의 `@KafkaListener`·`isType(...)` grep, 소비 그룹은 각 서비스의 `CONSUMER_GROUP` 상수. 발행 확인: `apps/*/src/main/java`에서 payload 생성(`new XxxEvent(`·`XxxEvent.of`) grep.
 
 | # | 이벤트 | 업무 사실 한 문장 | 소유(발행) 모듈 · 발행 지점 | 소비 모듈 · 소비 그룹 | 토픽 | 파티션 키 | 순서 요구 | 멱등 키(2층) | 실패 처리 | 상태 |
 |---|---|---|---|---|---|---|---|---|---|---|

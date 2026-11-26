@@ -12,10 +12,10 @@ import org.springframework.core.env.MapPropertySource;
  * <p>Spring Boot 기본값(1)이면 소비 그룹마다 소비자 하나가 모든 파티션을 맡는다. 한 레코드가 실패하면 오류 처리기가
  * 같은 poll 에서 그 뒤에 남은 레코드를 파티션과 관계없이 되감고, 소비자 스레드가 제자리 재시도 대기(1·2·4초)를 하는 동안
  * 그 레코드와 새로 도착한 다른 파티션 레코드도 기다린다(E12 S5: 다른 파티션 7,682ms). 파티션마다 소비자 하나면 같은 키 순서(결정 202)는 그대로이고
- * 막힘은 그 파티션 안으로 한정된다 — 다른 adapter 가 분할마다 소비자를 두는 것과 같다.
+ * 막힘은 그 파티션 안으로 한정된다.
  *
  * <p>Boot 의 컨테이너 팩토리 설정({@code ConcurrentKafkaListenerContainerFactoryConfigurer})이 이 값을 읽으므로 기본 팩토리와
- * 구독 전용 팩토리({@link KafkaEventSubscriptions#factoryFor}) 모두에 걸린다.
+ * 재시도 선택이 다른 리스너의 팩토리({@link ListenerContainerFactories}) 모두에 걸린다.
  */
 public class KafkaListenerDefaults implements EnvironmentPostProcessor {
 

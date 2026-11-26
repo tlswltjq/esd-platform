@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
@@ -32,7 +31,7 @@ class LicenseSuspensionEventListenerTest {
 
     @Test void onlyValidatedInternalInputReachesTheService() throws Exception {
         LicenseSuspensionRequestedEvent event = event();
-        listener.receive(KafkaInboundMessages.from(record(event, mapper.writeValueAsString(event))));
+        listener.receive(record(event, mapper.writeValueAsString(event)));
         verify(apply).execute(new SuspensionRequest(event.eventId(), event.occurredAt(), event.refundId(),
                 event.orderNo(), event.buyerSubject(), event.productId(), event.productCode(), event.paymentId()));
     }
@@ -54,7 +53,7 @@ class LicenseSuspensionEventListenerTest {
         LicenseSuspensionRequestedEvent event = event();
         ObjectNode body = mapper.valueToTree(event);
         body.putNull(field);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, body.toString())))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> listener.receive(record(event, body.toString()))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(apply);
     }
 
@@ -62,7 +61,7 @@ class LicenseSuspensionEventListenerTest {
         LicenseSuspensionRequestedEvent event = event();
         ObjectNode body = mapper.valueToTree(event);
         body.put("productId", 1.5);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(event, body.toString())))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> listener.receive(record(event, body.toString()))).isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(apply);
     }
 
@@ -71,8 +70,8 @@ class LicenseSuspensionEventListenerTest {
         ConsumerRecord<String, String> other = record(event, "{}");
         other.headers().remove(EventHeaders.EVENT_TYPE);
         other.headers().add(EventHeaders.EVENT_TYPE, "Other".getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(other));
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.ORDER, 0, 0, event.orderNo(), "{}"))))
+        listener.receive(other);
+        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.ORDER, 0, 0, event.orderNo(), "{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(apply);
     }
