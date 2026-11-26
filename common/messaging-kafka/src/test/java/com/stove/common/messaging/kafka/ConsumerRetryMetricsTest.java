@@ -32,7 +32,7 @@ class ConsumerRetryMetricsTest {
         KafkaUtils.setConsumerGroupId("fixture-group");
         List<ConsumerRecord<?, ?>> quarantined = new ArrayList<>();
         // 대기 없이 2회 재시도: 최초 + 2 = 3번 실패한 뒤 격리.
-        CommonErrorHandler handler = DeadLetterErrorHandlers.create(
+        CommonErrorHandler handler = DeadLetterErrorHandlers.createCounting(
                 (failed, exception) -> quarantined.add(failed), new FixedBackOff(0L, 2L), metrics);
         IllegalStateException failure = new IllegalStateException("wrapped", new ArithmeticException("root"));
 
@@ -52,7 +52,7 @@ class ConsumerRetryMetricsTest {
     @Test
     void aFailedRecoveryIsCountedAndTheRecordIsNotTreatedAsHandled() {
         KafkaUtils.setConsumerGroupId("fixture-group");
-        CommonErrorHandler handler = DeadLetterErrorHandlers.create((failed, exception) -> {
+        CommonErrorHandler handler = DeadLetterErrorHandlers.createCounting((failed, exception) -> {
             throw new IllegalStateException("격리 기록 실패");
         }, new FixedBackOff(0L, 0L), metrics);
 

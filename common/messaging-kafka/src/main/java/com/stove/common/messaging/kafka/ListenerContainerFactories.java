@@ -114,7 +114,7 @@ public class ListenerContainerFactories {
         // Boot configurer 의 고정 제네릭 시그니처다. 업무 입력을 Object 로 넓혀 전달하지 않는다.
         ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         configurer.configure(factory, consumerFactory);
-        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(recoverer, backOff, retries, noRetryFor));
+        factory.setCommonErrorHandler(DeadLetterErrorHandlers.createCounting(recoverer, backOff, retries, noRetryFor));
         factory.setRecordInterceptor(stoppedKeys);
         if (oneAtATime) {
             Properties properties = new Properties();

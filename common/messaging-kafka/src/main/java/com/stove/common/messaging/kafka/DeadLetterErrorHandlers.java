@@ -27,15 +27,17 @@ public final class DeadLetterErrorHandlers {
     @SafeVarargs
     public static DefaultErrorHandler create(ConsumerRecordRecoverer recoverer, BackOff backOff,
                                              Class<? extends Exception>... noRetryFor) {
-        return create(recoverer, backOff, null, noRetryFor);
+        return createCounting(recoverer, backOff, null, noRetryFor);
     }
 
     /**
      * @param retries 재시도·격리를 세는 청취자({@link ConsumerRetryMetrics}). {@code null} 이면 세지 않는다. 처리 동작은 바꾸지 않는다.
+     *                {@code create} 와 이름을 나눈 것은 {@code create(recoverer, backOff, null)} 같은 호출이 두 오버로드 사이에서
+     *                모호해지지 않게 하려는 것이다(PR #252 리뷰 R1).
      */
     @SafeVarargs
-    public static DefaultErrorHandler create(ConsumerRecordRecoverer recoverer, BackOff backOff, RetryListener retries,
-                                             Class<? extends Exception>... noRetryFor) {
+    public static DefaultErrorHandler createCounting(ConsumerRecordRecoverer recoverer, BackOff backOff, RetryListener retries,
+                                                     Class<? extends Exception>... noRetryFor) {
         DefaultErrorHandler handler = new DefaultErrorHandler((record, exception) -> {
             log.error("재시도 소진(또는 재시도 제외) — 격리한다 topic={} partition={} offset={} key={}",
                     record.topic(), record.partition(), record.offset(), record.key(), exception);

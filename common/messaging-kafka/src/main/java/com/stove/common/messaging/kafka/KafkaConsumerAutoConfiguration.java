@@ -39,7 +39,7 @@ public class KafkaConsumerAutoConfiguration {
                                                       DeadLetterMetrics metrics,
                                                       ConsumerRetryMetrics retries,
                                                       ObjectProvider<KeyQuarantine> quarantine) {
-        return DeadLetterErrorHandlers.create(
+        return DeadLetterErrorHandlers.createCounting(
                 ListenerContainerFactories.recoverer(kafkaTemplate, metrics, quarantine.getIfAvailable()),
                 ConsumerRetryPolicy.backOff(), retries);
     }
