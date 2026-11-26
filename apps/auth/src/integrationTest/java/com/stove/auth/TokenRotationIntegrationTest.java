@@ -42,6 +42,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -299,7 +300,7 @@ class TokenRotationIntegrationTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<?> change = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Future<?> change = pool.submit(() -> readCommitted().executeWithoutResult(status -> {
                 manageAccount.grantRole(admin.getSubject(), subject, PlatformRole.CREATOR);
                 changed.countDown();
                 try {
@@ -341,5 +342,12 @@ class TokenRotationIntegrationTest {
             Thread.sleep(50);
         }
         throw new AssertionError("다른 연결이 user_account " + lockClause + " 잠금을 기다리지 않는다");
+    }
+
+    /** 운영자 계정 변경은 READ COMMITTED 트랜잭션에서만 판정한다(D-061). 커밋을 늦추려고 감싸는 바깥 트랜잭션도 같게 둔다. */
+    private TransactionTemplate readCommitted() {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return template;
     }
 }

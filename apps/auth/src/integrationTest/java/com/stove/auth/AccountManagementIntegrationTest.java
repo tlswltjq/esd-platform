@@ -27,7 +27,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -177,16 +179,29 @@ class AccountManagementIntegrationTest {
         assertLosingAdminBlocksChange(false);
     }
 
-    /** {@code b} 의 subject 보다 앞(또는 뒤)에 오는 회원을 만든다. subject 는 무작위라 조건이 맞을 때까지 만든다. */
+    /**
+     * {@code b} 의 subject 보다 앞(또는 뒤)에 오는 회원을 만든다. subject 는 무작위라 시험에서 직접 정한다(PR #251 리뷰 R2):
+     * {@code b} 의 subject 에서 마지막 글자를 뗀 값은 항상 앞이고, 글자를 하나 붙인 값은 항상 뒤다. 둘 다 {@code b} 마다 하나뿐이다.
+     */
     private UserAccount persistMemberOrdered(UserAccount b, boolean targetFirst) {
-        for (int attempt = 0; attempt < 100; attempt++) {
-            UserAccount member = persistMember();
-            boolean before = member.getSubject().compareTo(b.getSubject()) < 0;
-            if (before == targetFirst) {
-                return member;
-            }
-        }
-        throw new IllegalStateException("원하는 subject 순서의 회원을 만들지 못했다");
+        UserAccount member = UserAccount.member("member-" + System.nanoTime() + "@example.com", "{bcrypt}h");
+        String subject = targetFirst ? b.getSubject().substring(0, b.getSubject().length() - 1) : b.getSubject() + "z";
+        ReflectionTestUtils.setField(member, "subject", subject);
+        return accounts.saveAndFlush(member);
+    }
+
+    /** PR #251 리뷰 R1: REPEATABLE READ 바깥 트랜잭션에 참여하면 READ COMMITTED 가 적용되지 않으므로 판정 전에 거부한다. */
+    @Test
+    void anAccountChangeJoiningARepeatableReadTransactionIsRejected() {
+        UserAccount admin = persistAdmin();
+        UserAccount target = persistMember();
+        TransactionTemplate repeatableRead = new TransactionTemplate(transactionManager);
+        repeatableRead.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+
+        assertThatThrownBy(() -> repeatableRead.executeWithoutResult(status ->
+                manageAccount.grantRole(admin.getSubject(), target.getSubject(), PlatformRole.CREATOR)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("D-061");
+        assertThat(accounts.findBySubject(target.getSubject()).orElseThrow().hasRole(PlatformRole.CREATOR)).isFalse();
     }
 
     private void assertLosingAdminBlocksChange(boolean targetFirst) throws Exception {
@@ -197,7 +212,7 @@ class AccountManagementIntegrationTest {
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<?> revoke = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Future<?> revoke = pool.submit(() -> readCommitted().executeWithoutResult(status -> {
                 manageAccount.revokeRole(a.getSubject(), b.getSubject(), PlatformRole.ADMIN);
                 revoked.countDown();
                 try {
@@ -240,5 +255,12 @@ class AccountManagementIntegrationTest {
             Thread.sleep(50);
         }
         throw new AssertionError("다른 연결이 user_account " + lockClause + " 잠금을 기다리지 않는다");
+    }
+
+    /** 운영자 계정 변경은 READ COMMITTED 트랜잭션에서만 판정한다(D-061). 커밋을 늦추려고 감싸는 바깥 트랜잭션도 같게 둔다. */
+    private TransactionTemplate readCommitted() {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return template;
     }
 }

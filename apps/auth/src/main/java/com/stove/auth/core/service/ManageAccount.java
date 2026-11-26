@@ -11,6 +11,7 @@ import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 운영자(ADMIN)의 계정 상태·역할 관리. 운영 안전 규칙을 판정한다.
@@ -108,6 +110,7 @@ public class ManageAccount {
      * 변경이 직렬화되고(확인 직후 ADMIN을 잃어도 진행하는 경합 방지), 고정된 순서라 서로를 바꾸는 두 요청이 교착하지 않는다.
      */
     private UserAccount requireDifferentTarget(String actorSubject, String targetSubject) {
+        requireReadCommitted();
         Map<String, Optional<UserAccount>> locked = new TreeMap<>();
         for (String subject : new TreeSet<>(List.of(actorSubject, targetSubject))) {
             locked.put(subject, accounts.lockForChange(subject));
@@ -118,6 +121,17 @@ public class ManageAccount {
         }
         return locked.get(targetSubject)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "대상 계정을 찾을 수 없습니다."));
+    }
+
+    /**
+     * 이미 진행 중인 트랜잭션에 참여하면({@code REQUIRED}) 선언한 READ COMMITTED 가 적용되지 않아 D-061 이 되살아난다
+     * (PR #251 리뷰 R1). 그런 호출은 판정 전에 거부한다.
+     */
+    private static void requireReadCommitted() {
+        Integer isolation = TransactionSynchronizationManager.getCurrentTransactionIsolationLevel();
+        if (isolation == null || isolation != Connection.TRANSACTION_READ_COMMITTED) {
+            throw new IllegalStateException("운영자 계정 변경은 READ COMMITTED 트랜잭션에서만 판정한다(D-061): " + isolation);
+        }
     }
 
     /** R7.1: 토큰의 ADMIN 역할과 별개로 요청자 계정이 지금도 활성 운영자인지 DB에서 확인한다. */
