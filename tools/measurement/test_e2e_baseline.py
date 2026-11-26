@@ -39,6 +39,19 @@ class ConditionsTest(unittest.TestCase):
         self.assertEqual(e2e_baseline.condition_mismatch({"stages": {}}, dict(same, seconds=1)), [])
 
 
+class ImagesBuiltTest(unittest.TestCase):
+    def test_only_a_normal_round_that_reached_the_image_checks_lets_the_next_skip_the_build(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "result.json").write_text(json.dumps({"applications": {"order": {}}}))
+            self.assertTrue(e2e_baseline.images_built({"normal": {"evidence": folder}}))
+            (Path(folder) / "result.json").write_text(json.dumps({"applications": {}}))
+            self.assertFalse(e2e_baseline.images_built({"normal": {"evidence": folder}}))
+        self.assertFalse(e2e_baseline.images_built({"normal": {"evidence": None}}))
+
+
 class SummaryTest(unittest.TestCase):
     def test_stage_summary_keeps_values_without_judging(self):
         result = {"complete": True, "measurement": {

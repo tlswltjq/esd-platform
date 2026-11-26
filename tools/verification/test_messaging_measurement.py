@@ -142,14 +142,21 @@ class LagTest(unittest.TestCase):
         self.assertEqual(groups, {"license-paid-order": {"lag": 2, "unknown": 1},
                                   "settlement-paid-order": {"lag": 0, "unknown": 0}})
 
+    def test_a_partition_with_nothing_to_consume_is_known_zero(self):
+        text = LAG_DESCRIBE.replace("license-paid-order stove.order.v1  1          -               3               -",
+                                    "license-paid-order stove.order.v1  1          -               0               -")
+        self.assertEqual(messaging_measurement.parse_group_lag(text)["license-paid-order"], {"lag": 2, "unknown": 0})
+
 
 class DrainTest(unittest.TestCase):
     S = 1_000_000
-    SAMPLES = [{"at_us": 10 * S, "total": 4}, {"at_us": 20 * S, "total": 0}, {"at_us": 30 * S, "total": 2},
-               {"at_us": 40 * S, "total": 0}]
+    G = {"g": {"lag": 0, "unknown": 0}}
+    SAMPLES = [{"at_us": 10 * S, "total": 4, "unknown": 0, "groups": G}, {"at_us": 20 * S, "total": 0, "unknown": 0, "groups": G},
+               {"at_us": 30 * S, "total": 2, "unknown": 0, "groups": G}, {"at_us": 35 * S, "total": 0, "unknown": 1, "groups": G},
+               {"at_us": 38 * S, "total": 0, "unknown": 0, "groups": {}}, {"at_us": 40 * S, "total": 0, "unknown": 0, "groups": G}]
 
     def test_backlog_drain_needs_outstanding_and_lag_zero_after_the_last_finish(self):
-        # 업무는 25초에 끝났지만 그 뒤 첫 지연 0 표본은 40초다. 부하 종료 0초 기준 → 40초.
+        # 업무는 25초에 끝났다. 35초(모르는 파티션 있음)·38초(그룹 없음)는 지연 0을 안 것이 아니다 → 40초.
         self.assertEqual(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 0, self.SAMPLES), 40.0)
         self.assertIsNone(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 3, self.SAMPLES),
                           "미해소 주문이 있으면 해소되지 않았다")
@@ -171,10 +178,26 @@ class FaultValidityTest(unittest.TestCase):
             def problems(self):
                 return ["브로커 재시작 실패"]
 
-        result = messaging_measurement.with_faults({"valid": True, "reasons": ["구매 근거 미완료 2건"]}, Schedule(), Restart())
+        result = messaging_measurement.with_faults({"valid": True, "reasons": ["구매 근거 미완료 2건"],
+                                                    "business": ["구매 근거 미완료 2건"], "instrument": []}, Schedule(), Restart())
         self.assertFalse(result["valid"])
         self.assertEqual(result["reasons"], ["S7 장애 주입: 브로커 재시작 실패"])
         self.assertEqual(result["outcome"], ["구매 근거 미완료 2건"])
+
+    def test_instrument_problems_stay_invalid_in_a_fault_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, None,
+                                                 {"clock_check": {"finish_before_start": 1}})
+        result = messaging_measurement.with_faults(checked, Schedule())
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("시각 불일치" in reason for reason in result["reasons"]))
+        self.assertFalse(any("시각 불일치" in reason for reason in result["outcome"]))
 
     def test_inverted_driver_and_db_times_invalidate_the_round(self):
         checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in

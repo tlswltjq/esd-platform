@@ -59,7 +59,9 @@ class FakeStack:
         self.dead_lettered = 0.0
         self.killed = False
         # Store 소비 그룹: 파티션 → [커밋 offset, 로그 끝]. 파티션 1에 두 건이 들어가고, 제한 중에는 커밋이 멈춘다.
+        self.target = e2e_faults.default_partition("e13-dlt-r1", 3)
         self.store = {0: [5, 5], 1: [None, 0], 2: [3, 3]}
+        self.store[self.target] = [None, 0]
 
     def capture(self, command, input=None, **_):
         self.commands.append((command, input))
@@ -99,12 +101,12 @@ class FakeStack:
             # 설정이 풀리면 Store 재시도가 DLT 에 두 건을 순서대로 쓰고 원본 offset 을 넘긴다.
             self.dlt_records = ['{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}']
             self.dead_lettered += 2
-            self.store[1][0] = 2
+            self.store[self.target][0] = 2
             return ""
         if "kafka-console-producer.sh" in joined and "stove.catalog.v1" in joined:
             # 제한 중에는 DLT 쓰기가 거부돼 Store recoverer 가 실패하고 커밋이 멈춘다.
             self.recovery_failures += 3
-            self.store[1][1] += 2
+            self.store[self.target][1] += 2
             return ""
         if "kafka-console-consumer.sh" in joined:
             return "\n".join("CreateTime:%d|%s|%s" % (5_000_000_000_000 + i, "e13-dlt-r1", value)
@@ -145,9 +147,10 @@ class DbRevokeTest(unittest.TestCase):
         self.assertIn("KILL 11;", sql)
         self.assertIn("REVOKE INSERT ON stove_license.product_license FROM 'stove'@'%';", sql)
         self.assertIn("GRANT INSERT ON stove_license.product_license TO 'stove'@'%';", sql)
-        # 정리에서 원래 스키마 단위 권한으로 되돌리고 표 단위 권한을 지운다(리뷰 R2).
-        self.assertTrue(sql[-1].startswith("GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';"))
-        self.assertIn("REVOKE ALL PRIVILEGES ON stove_license.product_license FROM 'stove'@'%';", sql[-1])
+        # 정리에서 원래 스키마 단위 권한으로 되돌리고 표 단위 권한을 하나씩 지운다(리뷰 R2).
+        self.assertEqual(sql[-3:], ["GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';",
+                                    "REVOKE ALL PRIVILEGES ON stove_license.product_license FROM 'stove'@'%';",
+                                    "REVOKE ALL PRIVILEGES ON stove_license.processed_event FROM 'stove'@'%';"])
         self.assertTrue(fault.facts["schema_grant_restored"])
         self.assertEqual(fault.problems(), [])
 
@@ -242,12 +245,23 @@ class MalformedTest(unittest.TestCase):
         self.assertTrue(any("격리되지 않은 (그룹|키) 1쌍" in problem for problem in fault.problems()))
 
 
-class OffsetsTest(unittest.TestCase):
-    def test_finds_the_single_partition_that_received_the_records(self):
-        before = {0: (5, 5), 1: (None, 0), 2: (3, 3)}
-        self.assertEqual(e2e_faults.locate_published(before, {0: (5, 5), 1: (None, 2), 2: (3, 3)}, 2), 1)
-        # 다른 파티션도 함께 늘면(업무 이벤트) 어느 쪽인지 단정하지 않는다.
-        self.assertIsNone(e2e_faults.locate_published(before, {0: (5, 7), 1: (None, 2), 2: (3, 3)}, 2))
+class PartitionerTest(unittest.TestCase):
+    def test_murmur2_matches_kafkas_published_vectors(self):
+        # kafka-clients UtilsTest.testMurmur2 의 값.
+        for text, expected in (("21", -973932308), ("foobar", -790332482), ("a-little-bit-long-string", -985981536),
+                               ("a-little-bit-longer-string", -1486304829), ("abc", 479470107),
+                               ("lkjh234lh9fiuh90y23oiuhsafujhadof229phr9h19h89h8", -58897971)):
+            self.assertEqual(e2e_faults.murmur2(text.encode()), expected, text)
+
+    def test_default_partition_is_positive_hash_modulo_partitions(self):
+        self.assertEqual(e2e_faults.default_partition("a-little-bit-longer-string", 3), (-1486304829 & 0x7FFFFFFF) % 3)
+
+
+class GroupOffsetsTest(unittest.TestCase):
+    def test_reads_committed_and_end_offsets(self):
+        text = ("GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID\n"
+                "g stove.catalog.v1 0 5 5 0 c /h c\ng stove.catalog.v1 1 - 2 - c /h c\ng other 0 1 1 0 c /h c")
+        self.assertEqual(e2e_faults.group_offsets(text, "stove.catalog.v1"), {0: (5, 5), 1: (None, 2)})
 
 
 class DltLimitTest(unittest.TestCase):
@@ -263,10 +277,10 @@ class DltLimitTest(unittest.TestCase):
         self.assertEqual(fault.facts["dlt_records_after"], 2)
         self.assertTrue(fault.facts["limit_below_record"])
         # 원본 보존: 장애 중 파티션 1의 커밋이 첫 건(0)을 넘지 않았고, 복구 뒤 두 건을 지나 커밋됐다(리뷰 R3).
-        self.assertEqual(fault.facts["target_partition"], 1)
+        self.assertEqual(fault.facts["target_partition"], stack.target)
         self.assertTrue(fault.facts["original_held_during"])
         self.assertEqual(fault.facts["target_committed_after"], 2)
-        self.assertEqual(fault.facts["other_partitions_lag_during"], {0: 0, 2: 0})
+        self.assertEqual(set(fault.facts["other_partitions_lag_during"].values()), {0})
         # 원래 명시 설정이 없었으니 덮어쓰지 않고 지워서 되돌린다(결정 235 안전장치).
         self.assertTrue(any("--delete-config" in command for command, _ in stack.commands))
         self.assertIsNone(stack.max_message_bytes)
@@ -295,6 +309,16 @@ class DltLimitTest(unittest.TestCase):
         fault.cleanup()
         self.assertEqual(stack.max_message_bytes, "1048588")
         self.assertFalse(fault.limited)
+
+
+class CancelledStepTest(unittest.TestCase):
+    def test_a_cancelled_fault_does_not_inject_but_still_restores(self):
+        stack = FakeStack()
+        fault = e2e_faults.ContainerKill(context(stack), {"at": "0", "for": "0", "service": "license"})
+        fault.cancelled.set()
+        fault.run()
+        self.assertEqual(stack.commands, [])
+        self.assertIn("kill: 취소돼 하지 않았다", fault.problems())
 
 
 class CancelTest(unittest.TestCase):

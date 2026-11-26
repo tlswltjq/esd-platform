@@ -77,6 +77,7 @@ def parse_group_lag(text):
     """``kafka-consumer-groups --describe --all-groups`` 출력 → {그룹: {"lag": 합, "unknown": 커밋 없는 파티션 수}}.
 
     커밋 오프셋이 없는 파티션(``-``)은 합에서 빼고 따로 센다 — 모르는 것을 0으로 적지 않는다(collect-lag.sh 와 같은 계산).
+    다만 로그 끝도 0인 파티션은 소비할 것이 없으므로 지연 0으로 안다(재리뷰 R7).
     """
     groups = {}
     header = None
@@ -94,6 +95,8 @@ def parse_group_lag(text):
         lag = row.get("LAG", "-")
         if lag.lstrip("-").isdigit() and row.get("CURRENT-OFFSET", "-") != "-":
             group["lag"] += int(lag)
+        elif row.get("CURRENT-OFFSET", "-") == "-" and row.get("LOG-END-OFFSET") == "0":
+            pass  # 쌓인 것이 없다
         else:
             group["unknown"] += 1
     return groups
@@ -128,7 +131,7 @@ class LagSampler:
             return False
         deadline = time.monotonic() + max(0.0, seconds)
         while time.monotonic() < deadline:
-            if any(sample["at_us"] >= at_us and sample.get("total") == 0 for sample in list(self.samples)):
+            if any(sample["at_us"] >= at_us and lag_known_zero(sample) for sample in list(self.samples)):
                 return True
             if self._stopped.wait(1.0):
                 return False
@@ -172,21 +175,23 @@ def validity(measured, journey, broker, order=None, loaded=None, timeseries=None
     순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
     """
     reasons = []
+    # 계측 무효(장애 회차에서도 무효): 드라이버가 일정을 못 지켰거나 시각을 한 축에 놓을 수 없다(재리뷰 R8).
+    instrument = []
     http_failures = sum(1 for order in measured if order.get("status") != 200)
     late = sum(1 for order in measured if order.get("lateMs", 0.0) > LATE_START_MS)
     if http_failures:
         reasons.append("HTTP 실패 %d건" % http_failures)
     if late:
-        reasons.append("예정보다 %.0fms 넘게 늦게 출발한 요청 %d건" % (LATE_START_MS, late))
+        instrument.append("예정보다 %.0fms 넘게 늦게 출발한 요청 %d건" % (LATE_START_MS, late))
     inverted = ((timeseries or {}).get("clock_check") or {}).get("finish_before_start")
     if inverted:
         # 드라이버와 DB 시각을 한 시간축에 놓을 수 없다 — 시계열·해소 시간을 쓰지 않는다(PR #254 리뷰 R4).
-        reasons.append("완료가 요청보다 앞선 주문 %d건(드라이버·DB 시각 불일치)" % inverted)
+        instrument.append("완료가 요청보다 앞선 주문 %d건(드라이버·DB 시각 불일치)" % inverted)
     window = (loaded or {}).get("measuredWindow") or {}
     target = (loaded or {}).get("rate")
     if window and target and window.get("achievedRate", 0) < target * 0.99:
         # 결정 231: 부하 발생기가 목표 요청률을 내지 못한 회차는 최대 성능 확정에 쓰지 않는다.
-        reasons.append("부하 발생기 달성률 %.2f/s < 목표 %.2f/s의 99%%" % (window["achievedRate"], target))
+        instrument.append("부하 발생기 달성률 %.2f/s < 목표 %.2f/s의 99%%" % (window["achievedRate"], target))
     if journey.get("failed"):
         reasons.append("결제 실패 주문 %d건" % journey["failed"])
     if journey.get("incomplete"):
@@ -207,7 +212,8 @@ def validity(measured, journey, broker, order=None, loaded=None, timeseries=None
     requested, rejected, _unfinished = refund_problems(measured)
     if rejected:
         reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
-    return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
+    return {"valid": not reasons and not instrument, "reasons": instrument + reasons, "instrument": instrument,
+            "business": reasons, "http_failures": http_failures, "late_starts": late}
 
 
 def app_metrics_by_name(urls, apps):
@@ -225,12 +231,17 @@ def remaining_seconds(load_ended_us):
     return OBSERVATION_SECONDS - (time.time_ns() // 1000 - load_ended_us) / 1e6
 
 
+def lag_known_zero(sample):
+    """지연 0을 **안** 표본: 그룹이 있고, 합이 0이고, 모르는 파티션이 없다(재리뷰 R7)."""
+    return bool(sample.get("groups")) and sample.get("total") == 0 and sample.get("unknown") == 0
+
+
 def backlog_drain_seconds(load_ended_us, last_finish_us, unresolved, samples):
     """E13 Backlog 해소 시간: 부하 종료 → Outstanding 0(마지막 요청이 끝남)이고 소비 지연 0인 첫 표본. 관측 못 하면 None."""
     if unresolved or last_finish_us is None:
         return None
     for sample in samples:
-        if sample["at_us"] >= last_finish_us and sample.get("total") == 0:
+        if sample["at_us"] >= last_finish_us and lag_known_zero(sample):
             return round((sample["at_us"] - load_ended_us) / 1e6, 3)
     return None
 
@@ -244,7 +255,8 @@ def with_faults(checked, schedule, restart=None):
     if schedule is None or not schedule.faults:
         return with_restart(checked, restart)
     problems = schedule.problems() + (["S7 장애 주입: " + problem for problem in restart.problems()] if restart else [])
-    return dict(checked, valid=not problems, reasons=problems, outcome=checked["reasons"])
+    problems += checked.get("instrument", [])
+    return dict(checked, valid=not problems, reasons=problems, outcome=checked.get("business", checked["reasons"]))
 
 
 def with_restart(checked, restart):

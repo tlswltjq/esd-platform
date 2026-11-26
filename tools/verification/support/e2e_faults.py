@@ -26,6 +26,8 @@ STORE_TOPIC = "stove.catalog.v1"
 STORE_DLT = STORE_TOPIC + ".DLT"
 # apache/kafka 이미지는 설정 방식에 따라 둘 중 하나에 로그를 둔다(resource_sampling.DATA_PATHS 와 같은 후보).
 KAFKA_DATA = ("/tmp/kraft-combined-logs", "/tmp/kafka-logs")
+# 장애 명령 하나의 상한. 정리는 이보다 길게 기다려, 진행 중인 명령이 끝난 뒤에 되돌린다(PR #254 재리뷰 R1).
+COMMAND_TIMEOUT_SECONDS = 120
 _TABLE = re.compile(r"^stove_[a-z]+\.[a-z_]+$")
 _SERVICE = re.compile(r"^[a-z][a-z-]*$")
 _TOPIC = re.compile(r"^[a-z0-9.]+$")
@@ -104,11 +106,36 @@ def group_offsets(describe_output, topic):
     return offsets
 
 
-def locate_published(before, after, count):
-    """발행 전후 로그 끝 offset 을 비교해 ``count``건이 들어간 파티션. 정확히 하나가 아니면 None."""
-    grown = [partition for partition, (_, end) in after.items()
-             if end - before.get(partition, (None, 0))[1] == count]
-    return grown[0] if len(grown) == 1 else None
+def murmur2(data):
+    """Kafka ``Utils.murmur2``(기본 파티셔너가 키에 쓰는 해시)와 같은 32비트 결과(부호 있는 int)."""
+    length = len(data)
+    seed, m, r = 0x9747B28C, 0x5BD1E995, 24
+    h = (seed ^ length) & 0xFFFFFFFF
+    for index in range(0, length - length % 4, 4):
+        k = (data[index] | data[index + 1] << 8 | data[index + 2] << 16 | data[index + 3] << 24)
+        k = (k * m) & 0xFFFFFFFF
+        k ^= k >> r
+        k = (k * m) & 0xFFFFFFFF
+        h = (h * m) & 0xFFFFFFFF
+        h ^= k
+    tail = length % 4
+    base = length - tail
+    if tail == 3:
+        h ^= data[base + 2] << 16
+    if tail >= 2:
+        h ^= data[base + 1] << 8
+    if tail >= 1:
+        h ^= data[base]
+        h = (h * m) & 0xFFFFFFFF
+    h ^= h >> 13
+    h = (h * m) & 0xFFFFFFFF
+    h ^= h >> 15
+    return h - (1 << 32) if h & 0x80000000 else h
+
+
+def default_partition(key, partitions):
+    """키가 있는 레코드의 Kafka 기본 파티션: ``toPositive(murmur2(key)) % 파티션 수``."""
+    return (murmur2(key.encode("utf-8")) & 0x7FFFFFFF) % partitions
 
 
 def topic_config_value(describe_output, key):
@@ -162,13 +189,17 @@ class Context:
 
     def mysql(self, sql):
         return self.capture(self.docker + ["exec", "-T", "mysql", "mysql", "-uroot", "-p" + self.mysql_password,
-                                           "-N", "-B", "-e", sql])
+                                           "-N", "-B", "-e", sql], timeout=COMMAND_TIMEOUT_SECONDS)
 
     def kafka(self, tool, *args, stdin=None):
-        return self.capture(self.docker + ["exec", "-T", "kafka", KAFKA_BIN + tool, *args], input=stdin)
+        return self.capture(self.docker + ["exec", "-T", "kafka", KAFKA_BIN + tool, *args], input=stdin,
+                            timeout=COMMAND_TIMEOUT_SECONDS)
 
     def kafka_shell(self, command):
-        return self.capture(self.docker + ["exec", "-T", "kafka", "sh", "-c", command])
+        return self.capture(self.docker + ["exec", "-T", "kafka", "sh", "-c", command], timeout=COMMAND_TIMEOUT_SECONDS)
+
+    def compose(self, *args):
+        return self.capture(self.docker + list(args), timeout=COMMAND_TIMEOUT_SECONDS)
 
     def store_metric(self, name):
         if self.fetch is None or self.store_metrics_url is None:
@@ -204,7 +235,11 @@ class Fault:
     def mark(self, name):
         self.events.append({"event": name, "at_us": now_us()})
 
-    def step(self, name, action):
+    def step(self, name, action, restore=False):
+        """``restore``가 아닌 단계(장애를 거는 단계)는 취소된 뒤에는 하지 않는다 — 정리 뒤에 장애가 새로 걸리지 않게."""
+        if self.cancelled.is_set() and not restore:
+            self.errors.append("%s: 취소돼 하지 않았다" % name)
+            return None
         try:
             result = action()
             self.mark(name)
@@ -288,18 +323,26 @@ class DbRevoke(Fault):
         if not self.revoked:
             return
         sql = "GRANT INSERT ON %s.%s TO 'stove'@'%%';" % (self.schema, self.table)
-        if self.step("grant", lambda: self.context.mysql(sql)) is not None:
+        if self.step("grant", lambda: self.context.mysql(sql), restore=True) is not None:
             self.revoked = False
 
     def restore_schema_grant(self):
         """준비에서 바꾼 표 단위 권한을 원래 스키마 단위 ALL 로 되돌린다(PR #254 리뷰 R2)."""
         if not self.converted:
             return
-        statements = ["GRANT ALL PRIVILEGES ON %s.* TO 'stove'@'%%';" % self.schema]
-        statements += ["REVOKE ALL PRIVILEGES ON %s.%s FROM 'stove'@'%%';" % (self.schema, table) for table in self.tables]
-        if self.step("schema-grant", lambda: self.context.mysql(" ".join(statements))) is not None:
-            self.converted = False
-            self.facts["schema_grant_restored"] = True
+        grant = "GRANT ALL PRIVILEGES ON %s.* TO 'stove'@'%%';" % self.schema
+        if self.step("schema-grant", lambda: self.context.mysql(grant), restore=True) is None:
+            return
+        # 표 단위 권한은 하나씩 지운다. 준비가 중간에 실패해 없는 권한이면 그 표만 실패하고 나머지는 계속 지운다(재리뷰 R2).
+        leftover = []
+        for table in self.tables:
+            try:
+                self.context.mysql("REVOKE ALL PRIVILEGES ON %s.%s FROM 'stove'@'%%';" % (self.schema, table))
+            except Exception:  # noqa: BLE001 — 그 표에 표 단위 권한이 없으면 실패한다
+                leftover.append(table)
+        self.converted = False
+        self.facts["schema_grant_restored"] = True
+        self.facts["table_grants_not_found"] = leftover
 
     def cleanup(self):
         self.restore()
@@ -331,7 +374,7 @@ class ContainerKill(Fault):
 
     def run(self):
         service = self.options["service"]
-        if self.step("kill", lambda: self.context.capture(self.context.docker + ["kill", service])) is not None:
+        if self.step("kill", lambda: self.context.compose("kill", service)) is not None:
             self.down = True
         self.wait(self.duration)
         self.start()
@@ -340,7 +383,7 @@ class ContainerKill(Fault):
         if not self.down:
             return
         service = self.options["service"]
-        if self.step("start", lambda: self.context.capture(self.context.docker + ["start", service])) is not None:
+        if self.step("start", lambda: self.context.compose("start", service), restore=True) is not None:
             self.down = False
 
     def cleanup(self):
@@ -387,11 +430,13 @@ class MalformedEnvelopes(Fault):
         while True:
             # 기한이 지나도 한 번은 읽는다.
             observed = self.quarantined_pairs(prefix)
-            if observed == expected or time.monotonic() - started >= self.QUARANTINE_WAIT_SECONDS or self.wait(5):
+            missing = sorted(set(expected) - set(observed))
+            if not missing or time.monotonic() - started >= self.QUARANTINE_WAIT_SECONDS or self.wait(5):
                 break
         self.facts["expected_pairs"] = len(expected)
-        self.facts["quarantined_pairs"] = len(observed)
-        self.facts["missing_pairs"] = sorted(set(expected) - set(observed))[:20]
+        self.facts["quarantined_pairs"] = len(set(expected) & set(observed))
+        self.facts["missing_count"] = len(missing)
+        self.facts["missing_pairs"] = missing[:20]
         self.facts["quarantined_groups"] = sorted({pair.split("|", 1)[0] for pair in observed})
 
     def subscribed_groups(self):
@@ -420,8 +465,7 @@ class MalformedEnvelopes(Fault):
         if not self.facts.get("subscribed_groups"):
             reasons.append("그 토픽을 구독하는 소비 그룹을 찾지 못했다")
         elif self.facts.get("missing_pairs"):
-            reasons.append("격리되지 않은 (그룹|키) %d쌍: %s" % (
-                self.facts["expected_pairs"] - self.facts["quarantined_pairs"], self.facts["missing_pairs"]))
+            reasons.append("격리되지 않은 (그룹|키) %d쌍: %s" % (self.facts["missing_count"], self.facts["missing_pairs"]))
         return reasons
 
 
@@ -481,10 +525,14 @@ class DltLimit(Fault):
         # 원본 보존(결정 235 장애 중 검증): 두 건이 들어간 파티션의 커밋 offset 이 첫 건을 넘지 않았고,
         # 다른 파티션은 밀린 것이 없다(PR #254 리뷰 R3).
         offsets_during = self.store_offsets()
-        target = locate_published(offsets_before, offsets_during, 2)
-        self.facts["target_partition"] = target
+        # 두 건의 파티션은 키로 정해진다(Kafka 기본 파티셔너). 로그 끝이 실제로 2 이상 늘었는지로 발행을 확인한다(재리뷰 R3).
+        target = default_partition(key, self.facts["partitions"])
+        grown = offsets_during.get(target, (None, 0))[1] - offsets_before.get(target, (None, 0))[1]
+        self.facts["target_partition"] = target if grown >= 2 else None
+        self.facts["target_growth"] = grown
+        target = self.facts["target_partition"]
         if target is not None:
-            first = offsets_before[target][1]
+            first = offsets_before.get(target, (None, 0))[1]
             committed = offsets_during[target][0]
             self.facts["target_first_offset"] = first
             self.facts["target_committed_during"] = committed
@@ -564,7 +612,7 @@ class DltLimit(Fault):
             return
         args = (["--alter", "--delete-config", "max.message.bytes"] if self.original is None
                 else ["--alter", "--add-config", "max.message.bytes=" + self.original])
-        if self.step("restore", lambda: self.configs(*args)) is not None:
+        if self.step("restore", lambda: self.configs(*args), restore=True) is not None:
             self.limited = False
             self.restored_wall = time.time()
             current = topic_config_value(self.configs("--describe"), "max.message.bytes")
@@ -676,9 +724,12 @@ class FaultSchedule:
         for fault in self.faults:
             fault.cancelled.set()
         if self._driver.is_alive():
-            self._driver.join(30)
+            self._driver.join(COMMAND_TIMEOUT_SECONDS + 30)
         for thread in self._threads:
-            thread.join(30)
+            # 진행 중인 명령은 COMMAND_TIMEOUT_SECONDS 안에 끝난다. 끝나야 되돌릴 수 있다.
+            thread.join(COMMAND_TIMEOUT_SECONDS + 30)
+            if thread.is_alive():
+                self.errors.append("장애 스레드가 정리 시한 안에 끝나지 않았다")
         for fault in self.faults:
             try:
                 fault.cleanup()

@@ -173,13 +173,21 @@ def smoke_problems(state):
     return problems
 
 
+def images_built(results):
+    """정상 회차가 앱을 띄워 이미지 검사까지 갔는가(그 회차의 result.json 에 앱 목록이 있다)."""
+    evidence = (results.get("normal") or {}).get("evidence")
+    result_file = Path(evidence) / "result.json" if evidence else None
+    return bool(result_file and result_file.exists() and json.loads(result_file.read_text()).get("applications"))
+
+
 def smoke(options):
     stamp = time.strftime("%Y%m%d%H%M%S")
     results = {}
     for label, faults in (("normal", []), ("faults", SMOKE_FAULTS)):
+        # 장애 회차는 정상 회차가 이미지를 실제로 만들었을 때만 빌드를 건너뛴다(재리뷰 R5).
         stage_options = argparse.Namespace(series="smoke-%s-%s" % (label, stamp), rates=[2.0], seconds=120, warmup=10,
                                            buyers=20, fault=faults, run_root=options.run_root,
-                                           skip_build=options.skip_build or label == "faults")
+                                           skip_build=options.skip_build or (label == "faults" and images_built(results)))
         code = run_stages(stage_options)
         stage = load_state(Path(options.run_root) / stage_options.series / "state.json")["stages"].get(stage_name(2.0), {})
         results[label] = stage
