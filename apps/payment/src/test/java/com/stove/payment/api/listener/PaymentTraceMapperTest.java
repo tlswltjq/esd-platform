@@ -20,7 +20,7 @@ class PaymentTraceMapperTest {
 
     @Test void absentNullAndDuplicateHeadersDoNotRejectBusinessInput() {
         assertThat(PaymentTraceMapper.from(List.of())).isEqualTo(PaymentTraceContext.NONE);
-        // Kafka adapter 는 값이 null 인 헤더를 빈 문자열로 넘긴다(KafkaInboundMessages).
+        // 리스너는 값이 null 인 헤더를 빈 문자열로 읽는다(EventHeaders.values).
         assertThat(PaymentTraceMapper.from(List.of(""))).isEqualTo(PaymentTraceContext.NONE);
         assertThat(PaymentTraceMapper.from(List.of(PREFIX + "01", PREFIX + "00"))).isEqualTo(PaymentTraceContext.NONE);
     }

@@ -15,7 +15,6 @@ rootProject.name = 'stove'
 include 'common:web'
 include 'common:security'
 include 'common:jpa'
-include 'common:event'
 include 'common:contract'
 // 메시징(결정 227): Kafka 단일 구현. JPA 코어(Outbox·Inbox·격리)와 JPA 없는 앱도 쓰는 Kafka 공통 모듈로 나눈다.
 include 'common:messaging'

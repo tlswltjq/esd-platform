@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
@@ -51,8 +50,8 @@ class RefundPreparationMapperTest {
     @Test void wrongPublisherAndMalformedPayloadNeverReachTheService() throws Exception {
         ApplyRefundPreparation apply=mock(ApplyRefundPreparation.class);RefundPreparationEventListener listener=new RefundPreparationEventListener(mapper,apply);
         ConsumerRecord<String,String> wrong=record("stove.order.v1",mapper.writeValueAsString(event));
-        assertThatThrownBy(()->listener.receive(KafkaInboundMessages.from(wrong))).isInstanceOf(RefundCompletionRejected.class);
-        assertThatThrownBy(()->listener.receive(KafkaInboundMessages.from(record(event.topic(),"{malformed")))).isInstanceOf(RefundCompletionRejected.class);verifyNoInteractions(apply);
+        assertThatThrownBy(()->listener.receive(wrong)).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(()->listener.receive(record(event.topic(),"{malformed"))).isInstanceOf(RefundCompletionRejected.class);verifyNoInteractions(apply);
     }
     private ConsumerRecord<String,String> record(String topic,String body) {
         ConsumerRecord<String,String> record=new ConsumerRecord<>(topic,0,0,event.orderNo(),body);record.headers().add(EventHeaders.EVENT_ID,event.eventId().getBytes(StandardCharsets.UTF_8));record.headers().add(EventHeaders.EVENT_TYPE,event.eventType().getBytes(StandardCharsets.UTF_8));return record;

@@ -4,7 +4,6 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.never;
 import com.stove.common.messaging.quarantine.QuarantineReplay;
 import static com.stove.license.LicenseFixtures.event;
-import static com.stove.license.LicenseFixtures.id;
 import static com.stove.license.LicenseFixtures.paid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,13 +13,11 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaMessagePublisher;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -437,7 +434,7 @@ class LicenseIntegrationTest extends LicenseIntegrationTestBase {
         assertThat(event.orderNo()).isEqualTo(input.orderNo());
         assertThat(event.paymentId()).isEqualTo(input.paymentId());
         OutboxEventRepository rows = context.getBean(OutboxEventRepository.class);
-        OutboxRelay relay = new OutboxRelay(rows, new KafkaMessagePublisher(kafka),
+        OutboxRelay relay = new OutboxRelay(rows, kafka,
                 200, 10, 5, new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
         relay.relay();
         assertThat(jdbc.queryForObject("SELECT status FROM outbox_event WHERE event_id=?",

@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import static com.stove.license.LicenseFixtures.paid;
-import com.stove.common.messaging.kafka.KafkaMessagePublisher;
 import com.stove.license.core.service.GrantLicense;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
@@ -106,7 +105,7 @@ class LicenseRecoveryOpsIntegrationTest extends LicenseIntegrationTestBase {
     }
 
     private OutboxRelay relay(KafkaTemplate<String, String> template) {
-        return new OutboxRelay(rows, new KafkaMessagePublisher(template), 200, 1, 1,
+        return new OutboxRelay(rows, template, 200, 1, 1,
                 new OutboxMetrics(new SimpleMeterRegistry(), rows), transactions);
     }
 

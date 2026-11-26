@@ -1,9 +1,6 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
@@ -12,17 +9,18 @@ import com.stove.common.contract.payload.OrderPlacedEvent;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
 
 @Component @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.ORDER, group = ReceiveOrderPayment.CONSUMER_GROUP)
-public class OrderEventListener implements EventHandler {
+public class OrderEventListener {
     private final ObjectMapper mapper;
     private final ReceiveOrderPayment receiveOrderPayment;
-    @Override
-    public void receive(InboundMessage message) {
-        EventEnvelope envelope=EventEnvelope.from(message);
+    @KafkaListener(topics = Topics.ORDER, groupId = ReceiveOrderPayment.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        EventEnvelope envelope=EventEnvelope.from(record);
         if (envelope.isType(EventType.ORDER_PLACED))
             receiveOrderPayment.execute(OrderPaymentMapper.from(envelope,envelope.payloadAs(mapper,OrderPlacedEvent.class)),
-                    PaymentTraceMapper.from(message.headerValues(EventHeaders.TRACE_PARENT)));
+                    PaymentTraceMapper.from(EventHeaders.values(record.headers(), EventHeaders.TRACE_PARENT)));
     }
 }

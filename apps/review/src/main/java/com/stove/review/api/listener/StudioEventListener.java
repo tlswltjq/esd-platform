@@ -1,9 +1,6 @@
 package com.stove.review.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
@@ -14,18 +11,19 @@ import com.stove.review.core.service.ReceiveReviewWithdrawal;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
 
 @Component
 @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.STUDIO, group = ReceiveProjectReview.CONSUMER_GROUP)
-public class StudioEventListener implements EventHandler {
+public class StudioEventListener {
     private final ObjectMapper mapper;
     private final ReceiveProjectReview receiveProjectReview;
     private final ReceiveReviewWithdrawal receiveReviewWithdrawal;
 
-    @Override
-    public void receive(InboundMessage message) {
-        EventEnvelope envelope = EventEnvelope.from(message);
+    @KafkaListener(topics = Topics.STUDIO, groupId = ReceiveProjectReview.CONSUMER_GROUP)
+    public void receive(ConsumerRecord<String, String> record) {
+        EventEnvelope envelope = EventEnvelope.from(record);
         if (envelope.isType("ProjectReviewRequested")) {
             receiveProjectReview.execute(
                     ReviewSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class)));

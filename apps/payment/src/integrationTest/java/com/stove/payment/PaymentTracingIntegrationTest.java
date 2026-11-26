@@ -10,7 +10,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.reset;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.Topics;
@@ -317,7 +316,7 @@ class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
         record.headers().add(EventHeaders.EVENT_ID, input.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, "OrderPlaced".getBytes(StandardCharsets.UTF_8));
         if (parent != null) record.headers().add(EventHeaders.TRACE_PARENT, parent.getBytes(StandardCharsets.UTF_8));
-        listener.receive(KafkaInboundMessages.from(record));
+        listener.receive(record);
     }
 
     private Payment stored(PaymentOrderRequest input) { return payments.findByOrderNo(input.orderNo()).orElseThrow(); }

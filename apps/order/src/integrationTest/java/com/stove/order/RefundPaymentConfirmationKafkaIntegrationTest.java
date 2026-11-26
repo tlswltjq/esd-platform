@@ -1,7 +1,5 @@
 package com.stove.order;
 
-import com.stove.common.event.KeyQuarantine;
-import com.stove.common.event.InboundMessage;
 import org.springframework.dao.DataAccessResourceFailureException;
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
@@ -81,6 +79,8 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import com.stove.common.messaging.kafka.KeyQuarantine;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTestBase {
     private static final Instant PAID_AT = Instant.parse("2026-10-26T01:00:00.123456Z");
@@ -405,13 +405,13 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
     private static void failQuarantineRecording(KeyQuarantine quarantine, String eventId,
             AtomicBoolean unavailable, AtomicInteger failedRecordings) {
         doAnswer(call -> {
-            InboundMessage message = call.getArgument(1);
-            if (eventId.equals(message.header(EventHeaders.EVENT_ID)) && unavailable.get()) {
+            ConsumerRecord<String, String> record = call.getArgument(1);
+            if (eventId.equals(EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_ID)) && unavailable.get()) {
                 failedRecordings.incrementAndGet();
                 throw new DataAccessResourceFailureException("quarantine table unavailable");
             }
             return call.callRealMethod();
-        }).when(quarantine).quarantine(ArgumentMatchers.anyString(), ArgumentMatchers.any(InboundMessage.class), ArgumentMatchers.any());
+        }).when(quarantine).quarantine(ArgumentMatchers.anyString(), ArgumentMatchers.any(ConsumerRecord.class), ArgumentMatchers.any());
     }
 
     private Map<String, Object> connectionProperties() {

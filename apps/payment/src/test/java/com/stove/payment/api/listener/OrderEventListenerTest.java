@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
@@ -37,7 +36,7 @@ class OrderEventListenerTest {
     }
     @Test void delegatesOnlyValidatedInternalFacts() throws Exception {
         PaymentOrderRequest input=request(); OrderPlacedEvent event=event(input);
-        listener.receive(KafkaInboundMessages.from(record(event,event.eventId(),event.eventType(),event.orderNo(),json.writeValueAsString(event))));
+        listener.receive(record(event,event.eventId(),event.eventType(),event.orderNo(),json.writeValueAsString(event)));
         verify(receive).execute(input, PaymentTraceContext.NONE);
     }
     @Test void mismatchedEnvelopeCannotReachTheUseCase() throws Exception {
@@ -45,20 +44,20 @@ class OrderEventListenerTest {
         for (EventEnvelope envelope:new EventEnvelope[]{null,new EventEnvelope("other",e.eventType(),e.orderNo(),body),
                 new EventEnvelope(e.eventId(),"other",e.orderNo(),body),new EventEnvelope(e.eventId(),e.eventType(),"wrong",body)})
             assertThatThrownBy(() -> OrderPaymentMapper.from(envelope,e)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(e,"other",e.eventType(),e.orderNo(),body)))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> listener.receive(record(e,"other",e.eventType(),e.orderNo(),body))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(receive);
     }
     @ParameterizedTest @ValueSource(strings={"amount","listAmount","discountAmount","productId","contentVersion"})
     void fractionalNumbersCannotBeTruncatedIntoAValidCharge(String field) {
         OrderPlacedEvent e=event(request()); JsonNode body=json.valueToTree(e); ((ObjectNode)body).put(field,10000.5);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(e,e.eventId(),e.eventType(),e.orderNo(),body.toString()))))
+        assertThatThrownBy(() -> listener.receive(record(e,e.eventId(),e.eventType(),e.orderNo(),body.toString())))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
     }
     @Test void ignoresLegacyContractsAndRejectsMissingHeaders() {
-        OrderPlacedEvent e=event(request());listener.receive(KafkaInboundMessages.from(record(e,e.eventId(),"OrderCreated",e.orderNo(),"{}")));
-        listener.receive(KafkaInboundMessages.from(record(e,e.eventId(),"OrderPaid",e.orderNo(),"{}")));
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.ORDER,0,0,e.orderNo(),"{}"))))
+        OrderPlacedEvent e=event(request());listener.receive(record(e,e.eventId(),"OrderCreated",e.orderNo(),"{}"));
+        listener.receive(record(e,e.eventId(),"OrderPaid",e.orderNo(),"{}"));
+        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.ORDER,0,0,e.orderNo(),"{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(receive);
     }

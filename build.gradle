@@ -431,7 +431,7 @@ tasks.register('verifyCommonRuntimeDependencies') {
     description = '공통 라이브러리의 실행 환경과 의존성 방향을 검증한다'
 
     doLast {
-        def modules = ['web', 'jpa', 'security', 'event', 'contract', 'messaging', 'messaging-kafka']
+        def modules = ['web', 'jpa', 'security', 'contract', 'messaging', 'messaging-kafka']
         modules.each { moduleName ->
             def components = project(":common:${moduleName}").configurations.runtimeClasspath
                     .incoming.resolutionResult.allComponents
@@ -447,11 +447,8 @@ tasks.register('verifyCommonRuntimeDependencies') {
                     if (moduleName != 'web' && id.projectPath == ':common:web') {
                         throw new GradleException("common:${moduleName} must not require common:web at runtime")
                     }
-                    if (moduleName == 'event' && id.projectPath != ':common:event') {
-                        throw new GradleException("common:event must not require other modules: ${id}")
-                    }
-                    if (moduleName == 'contract' && !(id.projectPath in [':common:contract', ':common:event'])) {
-                        throw new GradleException("common:contract must require only common:event: ${id}")
+                    if (moduleName == 'contract' && id.projectPath != ':common:contract') {
+                        throw new GradleException("common:contract must not require other modules: ${id}")
                     }
                     if (moduleName == 'messaging-kafka' && id.projectPath in [':common:jpa', ':common:messaging']) {
                         throw new GradleException("common:messaging-kafka must not require database messaging: ${id}")

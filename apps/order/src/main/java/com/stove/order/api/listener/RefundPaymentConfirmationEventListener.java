@@ -1,9 +1,6 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -15,19 +12,22 @@ import com.stove.order.core.domain.RefundPaymentConfirmation;
 import com.stove.order.core.service.ApplyRefundPaymentConfirmation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import com.stove.order.config.RefundKafkaConfiguration;
 
 @Component @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.PAYMENT, group = ApplyRefundPaymentConfirmation.CONSUMER_GROUP, noRetryFor = RefundCompletionRejected.class)
-public class RefundPaymentConfirmationEventListener implements EventHandler {
+public class RefundPaymentConfirmationEventListener {
     private final ObjectMapper mapper;
     private final ApplyRefundPaymentConfirmation apply;
 
-    @Override
-    public void receive(InboundMessage message) {
+    @KafkaListener(topics = Topics.PAYMENT, groupId = ApplyRefundPaymentConfirmation.CONSUMER_GROUP,
+            containerFactory = RefundKafkaConfiguration.REFUND_COMPLETION_FACTORY)
+    public void receive(ConsumerRecord<String, String> record) {
         RefundPaymentConfirmation input = null;
         RefundExecutionSuccess success = null;
         try {
-            EventEnvelope envelope = EventEnvelope.from(message);
+            EventEnvelope envelope = EventEnvelope.from(record);
             if (envelope.isType(EventType.REFUND_PAYMENT_CONFIRMED))
                 input = RefundPaymentConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundPaymentConfirmedEvent.class));
             else if (envelope.isType(EventType.REFUND_EXECUTION_SUCCEEDED))

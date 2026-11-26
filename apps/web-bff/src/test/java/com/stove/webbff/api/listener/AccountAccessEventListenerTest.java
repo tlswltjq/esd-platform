@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.payload.AccountAccessChangedEvent;
-import com.stove.common.event.InboundMessage;
 import com.stove.webbff.adapter.metrics.MicrometerProcessingLag;
 import com.stove.webbff.core.domain.AccessChangeRejected;
 import com.stove.webbff.core.port.SubjectSessions;
@@ -21,10 +20,10 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import java.nio.charset.StandardCharsets;
 
 /** 계정 접근 변경 사실 → 그 subject의 세션 토큰 기록 삭제(R5.6), 영구·일시 실패 구분(결정 226), 소비 지연(R5.8). */
 class AccountAccessEventListenerTest {
@@ -38,10 +37,9 @@ class AccountAccessEventListenerTest {
     private final AccountAccessEventListener listener =
             new AccountAccessEventListener(mapper, new EndSubjectSessions(sessions, lag));
 
-    private InboundMessage message(AccountAccessChangedEvent event, String key) throws Exception {
-        return new InboundMessage("stove.auth.v1", key, mapper.writeValueAsString(event),
-                Map.of(EventHeaders.EVENT_ID, List.of(event.eventId()), EventHeaders.EVENT_TYPE, List.of(event.eventType())),
-                "partition=0 offset=1");
+    private ConsumerRecord<String, String> message(AccountAccessChangedEvent event, String key) throws Exception {
+        return record("stove.auth.v1", key, mapper.writeValueAsString(event),
+                EventHeaders.EVENT_ID, event.eventId(), EventHeaders.EVENT_TYPE, event.eventType());
     }
 
     private double lagSeconds() {
@@ -86,17 +84,25 @@ class AccountAccessEventListenerTest {
 
     @Test
     void aBrokenEnvelopeIsAPermanentFailure() {
-        InboundMessage noType = new InboundMessage("stove.auth.v1", "usr_1", "{}",
-                Map.of(EventHeaders.EVENT_ID, List.of("evt-1")), "");
+        ConsumerRecord<String, String> noType = record("stove.auth.v1", "usr_1", "{}", EventHeaders.EVENT_ID, "evt-1");
 
         assertThatThrownBy(() -> listener.receive(noType)).isInstanceOf(AccessChangeRejected.class);
     }
 
     @Test
     void otherFactsOnTheAuthTopicAreIgnored() {
-        listener.receive(new InboundMessage("stove.auth.v1", "usr_1", "{}",
-                Map.of(EventHeaders.EVENT_ID, List.of("evt-1"), EventHeaders.EVENT_TYPE, List.of("UserRegistered")), ""));
+        listener.receive(record("stove.auth.v1", "usr_1", "{}",
+                EventHeaders.EVENT_ID, "evt-1", EventHeaders.EVENT_TYPE, "UserRegistered"));
 
         verify(sessions, never()).endAll(anyString());
+    }
+
+    /** 리스너가 받는 Kafka 레코드. 헤더는 이름·값 쌍으로 받은 순서대로 싣는다. */
+    private static ConsumerRecord<String, String> record(String topic, String key, String value, String... headers) {
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(topic, 0, 1L, key, value);
+        for (int i = 0; i < headers.length; i += 2) {
+            record.headers().add(headers[i], headers[i + 1].getBytes(StandardCharsets.UTF_8));
+        }
+        return record;
     }
 }

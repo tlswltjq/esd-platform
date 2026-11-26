@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.messaging.kafka.KafkaInboundMessages;
 import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
@@ -42,7 +41,7 @@ class OrderEventListenerTest {
     void mapsOnlyValidatedInternalInput() throws Exception {
         PaidOrder p = paid();
         OrderPaidEvent e = event(p);
-        listener.receive(KafkaInboundMessages.from(record(e, e.eventType(), json.writeValueAsString(e))));
+        listener.receive(record(e, e.eventType(), json.writeValueAsString(e)));
         verify(grant).execute(p);
     }
 
@@ -62,7 +61,7 @@ class OrderEventListenerTest {
         OrderPaidEvent e = event(paid());
         ObjectNode body = json.valueToTree(e);
         body.put(field, 1.5);
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(record(e, e.eventType(), body.toString())))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> listener.receive(record(e, e.eventType(), body.toString()))).isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(grant);
     }
 
@@ -70,8 +69,8 @@ class OrderEventListenerTest {
     void ignoresOtherContractsAndRejectsMissingHeaders() {
         OrderPaidEvent e = event(paid());
         for (String type : new String[]{EventType.ORDER_PLACED, EventType.PAYMENT_COMPLETED, EventType.ORDER_PAYMENT_FAILED})
-            listener.receive(KafkaInboundMessages.from(record(e, type, "{}")));
-        assertThatThrownBy(() -> listener.receive(KafkaInboundMessages.from(new ConsumerRecord<>(Topics.ORDER, 0, 0, e.orderNo(), "{}"))))
+            listener.receive(record(e, type, "{}"));
+        assertThatThrownBy(() -> listener.receive(new ConsumerRecord<>(Topics.ORDER, 0, 0, e.orderNo(), "{}")))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(grant);
     }

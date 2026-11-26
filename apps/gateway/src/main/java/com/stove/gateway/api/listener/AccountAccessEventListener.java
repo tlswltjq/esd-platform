@@ -5,14 +5,14 @@ import com.stove.common.contract.EventEnvelope;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.AccountAccessChangedEvent;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
 import com.stove.gateway.core.domain.AccessChange;
 import com.stove.gateway.core.domain.AccessChangeRejected;
 import com.stove.gateway.core.service.RecordAccessChange;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import com.stove.gateway.config.AccessChangeKafkaConfiguration;
 
 /**
  * Auth의 계정 접근 변경 사실을 받아 거절 기준을 남긴다(결정 180·225). 같은 토픽의 다른 사실(가입 등)은 무시한다.
@@ -22,26 +22,26 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@EventSubscriber(topics = Topics.AUTH, group = RecordAccessChange.CONSUMER_GROUP,
-        noRetryFor = AccessChangeRejected.class, retryUntilSuccess = true)
-public class AccountAccessEventListener implements EventHandler {
+public class AccountAccessEventListener {
 
     private final ObjectMapper mapper;
     private final RecordAccessChange recordAccessChange;
 
-    @Override
-    public void receive(InboundMessage message) {
-        EventEnvelope envelope = envelope(message);
+    @KafkaListener(topics = Topics.AUTH, groupId = RecordAccessChange.CONSUMER_GROUP,
+            containerFactory = AccessChangeKafkaConfiguration.ACCESS_CHANGE_FACTORY)
+    public void receive(ConsumerRecord<String, String> record) {
+        EventEnvelope envelope = envelope(record);
         if (envelope.isType(EventType.ACCOUNT_ACCESS_CHANGED)) {
             recordAccessChange.execute(change(envelope));
         }
     }
 
-    private static EventEnvelope envelope(InboundMessage message) {
+    private static EventEnvelope envelope(ConsumerRecord<String, String> record) {
         try {
-            return EventEnvelope.from(message);
+            return EventEnvelope.from(record);
         } catch (IllegalStateException | IllegalArgumentException invalid) {
-            throw new AccessChangeRejected("봉투가 올바르지 않다: " + message.origin(), invalid);
+            throw new AccessChangeRejected(
+                    "봉투가 올바르지 않다: partition=%d offset=%d".formatted(record.partition(), record.offset()), invalid);
         }
     }
 
