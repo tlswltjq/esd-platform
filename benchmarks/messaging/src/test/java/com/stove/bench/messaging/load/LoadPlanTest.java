@@ -82,6 +82,19 @@ class LoadPlanTest {
         assertThat(pacer.scheduledNanos(2)).isEqualTo(1_000 + 500_000_000);
     }
 
+    @Test
+    void 달성률은_예정_시각으로_고정한_창_안에_실제로_보낸_수로_센다() {
+        // 10초 창에 100 msg/s 예정 1,000건. 예열에서 밀려 모든 메시지가 3초씩 늦게 나가면, 마지막 3초 몫(300건)은 창 밖이다.
+        MeasuredWindow window = new MeasuredWindow(5_000_000_000L, 10);
+        for (int i = 0; i < 1000; i++) {
+            window.sent(5_000_000_000L + i * 10_000_000L + 3_000_000_000L);
+        }
+
+        assertThat(window.inWindow()).isEqualTo(700);
+        assertThat(window.afterWindow()).isEqualTo(300);
+        assertThat(window.achievedRate()).isEqualTo(70.0);
+    }
+
     private static List<MessagePlan.Message> plan(LoadOptions options) {
         MessagePlan plan = new MessagePlan(options);
         List<MessagePlan.Message> messages = new ArrayList<>();

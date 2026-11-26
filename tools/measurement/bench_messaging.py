@@ -181,6 +181,9 @@ def smoke_problems(summary, expect_dlt):
         problems.append("일시 실패 뒤 재시도로 완료된 메시지가 없다")
     if counts["attempts"] == 0:
         problems.append("수신 시도 기록이 없다")
+    for key in ("completed_without_attempt_record", "attempt_log_malformed_lines"):
+        if counts.get(key, 0) != 0:
+            problems.append("%s = %s (수신 시도 기록이 빠졌거나 손상됐다)" % (key, counts[key]))
     return problems
 
 
@@ -247,7 +250,7 @@ def describe_lag(kafka):
                               "localhost:19092", "--describe", "--group", CONSUMER_GROUP], check=False))
 
 
-def environment(java):
+def environment(java, run_dir):
     def read(path):
         try:
             return Path(path).read_text(encoding="utf-8")
@@ -262,7 +265,25 @@ def environment(java):
         images[image] = capture(["docker", "image", "inspect", "--format", "{{.Id}}", image], check=False).strip() or None
     return {"host": {"cpus": os.cpu_count(), "memory_kib": int(mem.group(1)) if mem else None,
                      "kernel": platform.release(), "machine": platform.machine()},
-            "java": java_version.strip().splitlines(), "git_commit": commit, "git_dirty": dirty, "images": images}
+            "java": java_version.strip().splitlines(), "git_commit": commit, "git_dirty": dirty, "images": images,
+            "disk": disk_environment(run_dir)}
+
+
+def disk_environment(run_dir):
+    """회차 폴더(시험 앱·발생기 기록)와 Docker 데이터 경로(MySQL·Kafka)가 놓인 파일 시스템(PR #253 리뷰 R3)."""
+    docker_root = capture(["docker", "info", "--format", "{{.DockerRootDir}}\t{{.Driver}}"], check=False).strip()
+    root, _, driver = docker_root.partition("\t")
+    disks = {"docker_storage_driver": driver or None}
+    for name, path in (("run_dir", str(run_dir)), ("docker_root", root)):
+        lines = capture(["df", "-PT", path], check=False).strip().splitlines() if path else []
+        disks[name] = df_line(lines[-1]) if len(lines) >= 2 else None
+    return disks
+
+
+def df_line(line):
+    """``df -PT`` 한 줄 → 장치·파일 시스템 종류·크기(KiB)·마운트 위치."""
+    fields = line.split()
+    return {"device": fields[0], "type": fields[1], "size_kib": int(fields[2]), "mount": fields[6]}
 
 
 class ProcessSampler:
@@ -310,11 +331,14 @@ def run_once(options):
                              "producer": "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
                              "consumer": "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, "
                                          "max.poll.records 지정 없음)",
+                             "serialization": "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
                              "retry": "1·2·4초 총 4회(ConsumerRetryPolicy)", "hikari_maximum_pool_size": 20,
                              "isolation": "READ COMMITTED(RecordBenchMessage)",
                              "app_jvm": options.app_jvm or "JVM 기본값", "generator_jvm": options.generator_jvm or "JVM 기본값"},
-              "environment": environment(java), "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+              "environment": environment(java, run_dir), "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     app = None
+    generator = None
+    sampler = None
     started = []
     try:
         capture(mysql_run_args(mysql, mysql_port))
@@ -371,14 +395,16 @@ def run_once(options):
                 app_sampler.read()
                 next_lag += LAG_INTERVAL_SECONDS
             time.sleep(0.5)
+        # 결정 231의 10분은 부하 종료 순간부터다. 기한을 먼저 고정하고, 기한 안에 끝난 관측만 정착으로 본다(PR #253 리뷰 R2).
+        deadline = time.monotonic() + OBSERVATION_SECONDS
         record["load_ended_us"] = now_us()
+        record["observation_deadline_us"] = record["load_ended_us"] + OBSERVATION_SECONDS * 1_000_000
         if generator.returncode != 0:
             raise RuntimeError("부하 발생기가 실패했다(%d) — %s" % (generator.returncode, run_dir / "generator.log"))
         acked = json.loads((run_dir / "generator.json").read_text())["acked"]
 
-        deadline = time.monotonic() + OBSERVATION_SECONDS
-        record["observation_deadline_us"] = record["load_ended_us"] + OBSERVATION_SECONDS * 1_000_000
         timed_out = True
+        interval = LAG_INTERVAL_SECONDS if options.seconds > 60 else 2
         while time.monotonic() < deadline:
             reading = describe_lag(kafka)
             lag.append(dict(reading, at_us=now_us()))
@@ -386,16 +412,18 @@ def run_once(options):
             counts = final_counts(mysql)
             dead = prometheus_totals(scrape(http_port), ("stove_kafka_dead_lettered_total",))["stove_kafka_dead_lettered_total"]
             counts["final"] = counts["completed"] + counts["quarantined"] + int(dead or 0)
-            if settled(counts, acked, reading["total"]):
+            if settled(counts, acked, reading["total"]) and time.monotonic() <= deadline:
                 timed_out = False
                 break
-            time.sleep(LAG_INTERVAL_SECONDS if options.seconds > 60 else 2)
+            time.sleep(max(0.0, min(interval, deadline - time.monotonic())))
         record["settled_us"] = None if timed_out else now_us()
         record["timed_out"] = timed_out
         record["metrics"] = metric_delta(metrics_before, prometheus_totals(scrape(http_port), METRICS))
         resources = resource_sampling.summarize(sampler.stop())
+        sampler_failures, sampler_partial = sampler.failures, sampler.partial
+        sampler = None
         disk_after, disk_errors = resource_sampling.disk_kib(capture, containers)
-        record["resources"] = {"containers": resources, "sampler_failures": sampler.failures, "sampler_partial": sampler.partial,
+        record["resources"] = {"containers": resources, "sampler_failures": sampler_failures, "sampler_partial": sampler_partial,
                                "disk": resource_sampling.disk_growth(disk_before, disk_after), "disk_errors": disk_errors,
                                "app": app_sampler.summary()}
         record["lag"] = lag
@@ -417,12 +445,23 @@ def run_once(options):
         capture([sys.executable, "-B", str(ROOT / "tools" / "measurement" / "bench_graphs.py"), str(run_dir / "summary.json")])
         return run_dir
     finally:
+        # 예외로 빠져나와도 이 회차가 띄운 것은 모두 거둔다(PR #253 리뷰 R1): 발생기 → 샘플러 → 시험 앱 → 컨테이너.
+        if generator is not None and generator.poll() is None:
+            generator.terminate()
+            try:
+                generator.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                generator.kill()
+                generator.wait(timeout=30)
+        if sampler is not None:
+            sampler.stop()
         if app is not None and app.poll() is None:
             app.terminate()
             try:
                 app.wait(timeout=60)
             except subprocess.TimeoutExpired:
                 app.kill()
+                app.wait(timeout=30)
         for container in reversed(started):
             # --rm 으로 띄웠으므로 멈추면 지워진다. 이 회차가 띄운 이름만 멈춘다.
             capture(["docker", "stop", container], check=False)

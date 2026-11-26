@@ -146,13 +146,15 @@ def latency_svg(summary):
 
 
 def lag_svg(samples):
-    """``[{"at_us": .., "total": ..}, ...]`` → 소비 지연 합 선 그래프. 표본이 없으면 None."""
-    readings = [(s["at_us"], s["total"]) for s in samples if s.get("total") is not None]
-    if not readings:
+    """``[{"at_us": .., "total": ..}, ...]`` → 소비 지연 합 선 그래프. 표본이 없으면 None.
+
+    합을 모르는 표본(``total`` 이 None: 조회 실패·그룹 미배정)에서는 선을 끊는다 — 이어 그리면 모르는 구간이 지연 0처럼 보인다.
+    """
+    if not any(s.get("total") is not None for s in samples):
         return None
-    origin = readings[0][0]
-    span = max(1.0, (readings[-1][0] - origin) / 1e6)
-    top = nice_max(max(total for _, total in readings))
+    origin = samples[0]["at_us"]
+    span = max(1.0, (samples[-1]["at_us"] - origin) / 1e6)
+    top = nice_max(max(s["total"] for s in samples if s.get("total") is not None))
     plot_w, plot_h = WIDTH - LEFT - RIGHT, HEIGHT - TOP - BOTTOM
 
     def x_of(at_us):
@@ -160,6 +162,18 @@ def lag_svg(samples):
 
     def y_of(value):
         return TOP + plot_h - plot_h * value / top
+
+    segments, current, unknown = [], [], 0
+    for sample in samples:
+        if sample.get("total") is None:
+            unknown += 1
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append((sample["at_us"], sample["total"]))
+    if current:
+        segments.append(current)
 
     body = ['<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#333"/>' % (LEFT, TOP + plot_h, LEFT + plot_w, TOP + plot_h),
             '<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#333"/>' % (LEFT, TOP, LEFT, TOP + plot_h)]
@@ -171,9 +185,17 @@ def lag_svg(samples):
         body.append('<text x="%.1f" y="%d" text-anchor="middle">%d</text>'
                     % (LEFT + plot_w * tick / 5, TOP + plot_h + 16, int(seconds)))
     body.append('<text x="%d" y="%d" text-anchor="middle">첫 표본 뒤 초</text>' % (LEFT + plot_w // 2, HEIGHT - 12))
-    body.append('<polyline fill="none" stroke="%s" stroke-width="2" points="%s"/>'
-                % (COLORS[0], " ".join("%.1f,%.1f" % (x_of(at), y_of(total)) for at, total in readings)))
-    body += _legend([("소비 지연 합(건)", COLORS[0])])
+    for segment in segments:
+        if len(segment) == 1:
+            at, total = segment[0]
+            body.append('<circle cx="%.1f" cy="%.1f" r="2" fill="%s"/>' % (x_of(at), y_of(total), COLORS[0]))
+        else:
+            body.append('<polyline fill="none" stroke="%s" stroke-width="2" points="%s"/>'
+                        % (COLORS[0], " ".join("%.1f,%.1f" % (x_of(at), y_of(total)) for at, total in segment)))
+    legend = [("소비 지연 합(건)", COLORS[0])]
+    if unknown:
+        legend.append(("미관측 표본 %d (선 끊김)" % unknown, "#999999"))
+    body += _legend(legend)
     return _svg("소비 지연", body)
 
 

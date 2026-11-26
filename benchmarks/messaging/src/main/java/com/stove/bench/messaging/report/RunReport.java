@@ -67,10 +67,10 @@ public final class RunReport {
         summary.put("schema", 1);
         summary.put("run", in.run());
         summary.put("generator", in.generator());
-        Map<String, Object> window = window(measured);
+        Map<String, Object> window = window(in);
         summary.put("window", window);
         summary.put("counts", counts(in, measured, attempts, table, quarantine, dlt));
-        summary.put("rates", rates(in, window, table));
+        summary.put("rates", rates(in, window, attempts, table));
         summary.put("latency_us", latencies(measured, attempts, table, quarantine, dlt));
         summary.put("retries", retries(in.published(), attempts, table));
         Map<String, Object> integrity = integrity(in.published(), attempts, table, quarantine, dlt);
@@ -81,19 +81,24 @@ public final class RunReport {
         return summary;
     }
 
-    private static Map<String, Object> window(List<Published> measured) {
+    /**
+     * 측정 창 {@code [start_us, end_us)}: 발생기가 예정 시각으로 고정한 창(generator.json {@code measured.window_*}, PR #253 리뷰 R2).
+     * 마지막 예정 시각까지가 아니라 측정 시간 전체다 — 그래야 발행률·처리율을 측정 시간으로 나눌 때 마지막 간격이 빠지지 않는다.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> window(RunInputs in) {
         Map<String, Object> window = new LinkedHashMap<>();
-        if (measured.isEmpty()) {
-            window.put("start_us", null);
-            window.put("end_us", null);
-            window.put("seconds", null);
+        Object measured = in.generator().get("measured");
+        if (measured instanceof Map<?, ?> values && values.get("window_start_us") instanceof Number start
+                && values.get("window_end_us") instanceof Number end && end.longValue() > start.longValue()) {
+            window.put("start_us", start.longValue());
+            window.put("end_us", end.longValue());
+            window.put("seconds", (end.longValue() - start.longValue()) / 1e6);
             return window;
         }
-        long start = measured.stream().mapToLong(Published::scheduledUs).min().orElseThrow();
-        long end = measured.stream().mapToLong(Published::scheduledUs).max().orElseThrow();
-        window.put("start_us", start);
-        window.put("end_us", end);
-        window.put("seconds", (end - start) / 1e6);
+        window.put("start_us", null);
+        window.put("end_us", null);
+        window.put("seconds", null);
         return window;
     }
 
@@ -113,14 +118,18 @@ public final class RunReport {
         counts.put("quarantined_key_stopped", quarantine.values().stream().filter(rows -> rows.stream().allMatch(QuarantineRow::keyStopped)).count());
         counts.put("dead_lettered", dlt.size());
         counts.put("dlt_records", in.dlt().size());
+        counts.put("completed_without_attempt_record", table.keySet().stream().filter(id -> !attempts.containsKey(id)).count());
+        counts.put("attempt_log_malformed_lines", in.attemptDamage().malformedLines());
+        counts.put("attempt_log_duplicate_lines", in.attemptDamage().duplicateLines());
         return counts;
     }
 
-    private static Map<String, Object> rates(RunInputs in, Map<String, Object> window, Map<String, List<TableRow>> table) {
+    private static Map<String, Object> rates(RunInputs in, Map<String, Object> window, Map<String, List<AttemptRow>> attempts,
+                                             Map<String, List<TableRow>> table) {
         Map<String, Object> rates = new LinkedHashMap<>();
         Object start = window.get("start_us");
         Object end = window.get("end_us");
-        if (start == null || ((long) end) <= ((long) start)) {
+        if (start == null) {
             rates.put("note", "측정 구간이 없어 발행률을 셀 수 없다");
             return rates;
         }
@@ -129,7 +138,8 @@ public final class RunReport {
         double seconds = (to - from) / 1e6;
         long requested = in.published().stream().filter(p -> inWindow(p.requestedUs(), from, to)).count();
         long acked = in.published().stream().filter(Published::acked).filter(p -> inWindow(p.ackedAtUs(), from, to)).count();
-        long received = in.attempts().stream().filter(a -> a.attempt() == 1 && inWindow(a.receivedUs(), from, to)).count();
+        // 메시지별 첫 수신만 센다. 시도 번호 1은 프로세스를 다시 띄우면 재전달에도 붙는다(PR #253 리뷰 R5).
+        long received = attempts.values().stream().filter(rows -> inWindow(rows.get(0).receivedUs(), from, to)).count();
         long completed = table.values().stream().filter(rows -> inWindow(rows.get(0).completedUs(), from, to)).count();
         long failed = in.attempts().stream().filter(a -> a.outcome().equals("FAILED") && inWindow(a.finishedUs(), from, to)).count();
         rates.put("requested_per_s", requested / seconds);
@@ -141,8 +151,9 @@ public final class RunReport {
         return rates;
     }
 
+    /** 반열린 창 {@code [from, to)}. */
     private static boolean inWindow(long value, long from, long to) {
-        return value >= from && value <= to;
+        return value >= from && value < to;
     }
 
     private static Map<String, Object> latencies(List<Published> measured, Map<String, List<AttemptRow>> attempts,
@@ -193,6 +204,10 @@ public final class RunReport {
         return latency;
     }
 
+    /**
+     * 재시도 횟수 = 메시지별 시도 수 − 1(E13 지표 정의, PR #253 리뷰 R3). 시도는 첫 반영까지만 센다 — 반영 뒤 재전달(중복 전달)은 재시도가 아니다.
+     * 4번 모두 실패해 격리된 메시지는 재시도 3회다. 재시도 성공률의 분모는 두 번째 시도가 실제로 있었던 메시지다.
+     */
     private static Map<String, Object> retries(List<Published> published, Map<String, List<AttemptRow>> attempts,
                                                Map<String, List<TableRow>> table) {
         Map<Integer, Long> perMessage = new TreeMap<>();
@@ -203,9 +218,9 @@ public final class RunReport {
             if (rows == null) {
                 continue;
             }
-            long failures = rows.stream().filter(a -> a.outcome().equals("FAILED")).count();
-            perMessage.merge((int) failures, 1L, Long::sum);
-            if (failures > 0) {
+            int retriesOfMessage = attemptsUntilApplied(rows) - 1;
+            perMessage.merge(retriesOfMessage, 1L, Long::sum);
+            if (retriesOfMessage > 0) {
                 retried++;
                 if (table.containsKey(message.eventId())) {
                     retrySucceeded++;
@@ -213,13 +228,25 @@ public final class RunReport {
             }
         }
         Map<String, Object> retries = new LinkedHashMap<>();
-        Map<String, Long> byFailures = new LinkedHashMap<>();
-        perMessage.forEach((failures, count) -> byFailures.put(Integer.toString(failures), count));
-        retries.put("messages_by_failed_attempts", byFailures);
+        Map<String, Long> byRetries = new LinkedHashMap<>();
+        perMessage.forEach((count, messages) -> byRetries.put(Integer.toString(count), messages));
+        retries.put("messages_by_retries", byRetries);
         retries.put("retried_messages", retried);
         retries.put("retry_succeeded", retrySucceeded);
         retries.put("retry_success_rate", retried == 0 ? null : (double) retrySucceeded / retried);
         return retries;
+    }
+
+    /** 받은 순서로 첫 {@code APPLIED}·{@code DUPLICATE}까지의 시도 수. 반영이 없으면(격리·진행 중) 모든 실패 시도 수. */
+    static int attemptsUntilApplied(List<AttemptRow> rows) {
+        int count = 0;
+        for (AttemptRow row : rows) {
+            count++;
+            if (!row.outcome().equals("FAILED")) {
+                break;
+            }
+        }
+        return count;
     }
 
     private static Map<String, Object> integrity(List<Published> published, Map<String, List<AttemptRow>> attempts,
@@ -354,7 +381,7 @@ public final class RunReport {
         Object start = window.get("start_us");
         Object end = window.get("end_us");
         series.put("measure_from_bucket", start == null ? null : ((long) start - origin) / BUCKET_US);
-        series.put("measure_to_bucket", end == null ? null : ((long) end - origin) / BUCKET_US);
+        series.put("measure_to_bucket", end == null ? null : ((long) end - 1 - origin) / BUCKET_US);
         events.forEach((name, times) -> {
             long[] counts = new long[buckets];
             for (long time : times) {
@@ -379,6 +406,14 @@ public final class RunReport {
         }
         if (in.attempts().isEmpty() && !in.table().isEmpty()) {
             limits.add("수신 시도 기록이 없다 — 수신·재시도·broker·processing 값을 쓰지 않는다");
+        }
+        Map<String, Object> counts = (Map<String, Object>) summary.get("counts");
+        long withoutRecord = (long) counts.get("completed_without_attempt_record");
+        if (withoutRecord > 0 || in.attemptDamage().malformedLines() > 0) {
+            // kill 없이 이 값이 0이 아니면 시도 기록 쓰기가 실패한 것이다(FileAttemptLog 로그). 그 회차는 다시 잰다.
+            limits.add("수신 시도 기록 누락·손상: 완료됐는데 시도 기록이 없는 메시지 %d건, 버린 줄 %d — 수신·재시도·broker·processing 은 불완전%s"
+                    .formatted(withoutRecord, in.attemptDamage().malformedLines(),
+                            kills instanceof List<?> killed && !killed.isEmpty() ? "" : "(kill 없는 회차라 무효로 본다)"));
         }
         Map<String, Object> latency = (Map<String, Object>) summary.get("latency_us");
         long samples = (long) ((Map<String, Object>) latency.get("e2e_no_retry")).get("count");

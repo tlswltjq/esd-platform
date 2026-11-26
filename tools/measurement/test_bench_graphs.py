@@ -49,7 +49,15 @@ class DrawTest(unittest.TestCase):
 
     def test_lag_graph_needs_samples(self):
         self.assertIsNone(bench_graphs.lag_svg([]))
+        self.assertIsNone(bench_graphs.lag_svg([{"at_us": 0, "total": None}]))
         self.assertIn("<polyline", bench_graphs.lag_svg(SUMMARY["run"]["lag"]))
+
+    def test_lag_line_breaks_at_unknown_samples_instead_of_drawing_zero(self):
+        samples = [{"at_us": 0, "total": 0}, {"at_us": 10_000_000, "total": 5}, {"at_us": 20_000_000, "total": None},
+                   {"at_us": 30_000_000, "total": 0}, {"at_us": 40_000_000, "total": 0}]
+        svg = bench_graphs.lag_svg(samples)
+        self.assertEqual(svg.count("<polyline"), 2)
+        self.assertIn("미관측 표본 1 (선 끊김)", svg)
 
 
 if __name__ == "__main__":

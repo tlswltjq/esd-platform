@@ -9,9 +9,11 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 회차 폴더의 원본(E13·결정 233). 파일 이름과 열은 발생기·시험 앱·측정 스크립트가 쓰는 것과 같다.
@@ -26,7 +28,16 @@ import java.util.Map;
  */
 public record RunInputs(List<Published> published, List<AttemptRow> attempts, List<TableRow> table,
                         List<QuarantineRow> quarantine, List<DltRow> dlt, Map<String, Object> generator,
-                        Map<String, Object> run, List<Path> files) {
+                        Map<String, Object> run, List<Path> files, AttemptLogDamage attemptDamage) {
+
+    /**
+     * 수신 시도 기록의 손상(시험 앱 {@code FileAttemptLog}가 쓰기 실패 뒤 다시 쓴 흔적). 끊긴 줄은 버리고, 같은 줄이 두 번이면 하나만 쓴다.
+     *
+     * @param malformedLines 열 수가 맞지 않아 버린 줄.
+     * @param duplicateLines 같은 내용이 이미 있어 버린 줄.
+     */
+    public record AttemptLogDamage(long malformedLines, long duplicateLines) {
+    }
 
     public record Published(String eventId, String key, String phase, String fail, int payloadBytes, long scheduledUs,
                             long requestedUs, long ackNs, int partition, long offset, String error) {
@@ -65,10 +76,24 @@ public record RunInputs(List<Published> published, List<AttemptRow> attempts, Li
                     Long.parseLong(f[6]), Long.parseLong(f[7]), Integer.parseInt(f[8]), Long.parseLong(f[9]), f[10]));
         }
         List<AttemptRow> attempts = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        long malformed = 0;
+        long duplicates = 0;
         for (Path file : attemptFiles(runDir)) {
-            for (String[] f : csv(file, 8, files)) {
-                attempts.add(new AttemptRow(f[0], Integer.parseInt(f[1]), Integer.parseInt(f[2]), Long.parseLong(f[3]),
-                        Long.parseLong(f[4]), Long.parseLong(f[5]), f[6], f[7]));
+            List<String> lines = lines(file, files);
+            for (String line : lines.subList(Math.min(1, lines.size()), lines.size())) {
+                if (line.isEmpty()) {
+                    continue;
+                }
+                String[] f = line.split(",", -1);
+                AttemptRow row = f.length == 8 ? attemptRow(f) : null;
+                if (row == null) {
+                    malformed++;
+                } else if (!seen.add(line)) {
+                    duplicates++;
+                } else {
+                    attempts.add(row);
+                }
             }
         }
         List<TableRow> table = new ArrayList<>();
@@ -88,7 +113,18 @@ public record RunInputs(List<Published> published, List<AttemptRow> attempts, Li
         }
         Map<String, Object> generator = json(runDir.resolve("generator.json"), files);
         Map<String, Object> run = json(runDir.resolve("run.json"), files);
-        return new RunInputs(published, attempts, table, quarantine, dlt, generator, run, files);
+        return new RunInputs(published, attempts, table, quarantine, dlt, generator, run, files,
+                new AttemptLogDamage(malformed, duplicates));
+    }
+
+    /** 숫자 칸이 숫자가 아니면(끊긴 줄이 다음 줄과 붙은 경우 등) {@code null}. */
+    private static AttemptRow attemptRow(String[] f) {
+        try {
+            return new AttemptRow(f[0], Integer.parseInt(f[1]), Integer.parseInt(f[2]), Long.parseLong(f[3]),
+                    Long.parseLong(f[4]), Long.parseLong(f[5]), f[6], f[7]);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static List<Path> attemptFiles(Path runDir) {

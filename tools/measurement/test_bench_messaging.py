@@ -109,13 +109,21 @@ class WaitTest(unittest.TestCase):
             bench_messaging.wait_until(lambda: bench_messaging.alive(Dead(), "app.log"), 60, "app", interval=0)
 
 
+class DiskTest(unittest.TestCase):
+    def test_reads_device_type_size_and_mount_from_df(self):
+        line = "/dev/sda1      ext4  203056560 81234567 121822000  40% /"
+        self.assertEqual(bench_messaging.df_line(line),
+                         {"device": "/dev/sda1", "type": "ext4", "size_kib": 203056560, "mount": "/"})
+
+
 def summary(**integrity):
     base = {"lost": 0, "duplicate_applied": 0, "order_violations": 0, "injected_but_completed": 0,
             "unexpected_final_failures": 0, "completed_and_failed": 0, "unacked_but_delivered": 0,
             "expected_final_failures": 3, "held_behind_stopped_key": 2}
     base.update(integrity)
     return {"integrity": base,
-            "counts": {"ack_failed": 0, "quarantined_failed": 3, "dead_lettered": 0, "attempts": 100},
+            "counts": {"ack_failed": 0, "quarantined_failed": 3, "dead_lettered": 0, "attempts": 100,
+                       "completed_without_attempt_record": 0, "attempt_log_malformed_lines": 0},
             "retries": {"retry_succeeded": 5}}
 
 
@@ -132,6 +140,11 @@ class SmokeTest(unittest.TestCase):
         problems = bench_messaging.smoke_problems(summary(), expect_dlt=True)
         self.assertIn("최종 실패 0건 ≠ 주입한 영구 실패 3건", problems)
         self.assertIn("DLT 계열인데 키 정지 보관이 있다", problems)
+
+    def test_missing_attempt_records_fail(self):
+        broken = summary()
+        broken["counts"]["completed_without_attempt_record"] = 2
+        self.assertEqual(len(bench_messaging.smoke_problems(broken, expect_dlt=False)), 1)
 
     def test_a_run_without_injected_failures_cannot_pass(self):
         problems = bench_messaging.smoke_problems(summary(expected_final_failures=0, held_behind_stopped_key=0),

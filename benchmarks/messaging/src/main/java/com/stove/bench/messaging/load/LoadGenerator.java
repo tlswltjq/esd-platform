@@ -49,14 +49,15 @@ public final class LoadGenerator {
         AtomicLong failed = new AtomicLong();
         // 예정 시각보다 늦게 보낸 정도(µs). 발생기가 목표 발행률을 냈는지 보는 지표다.
         Histogram behind = new Histogram(TimeUnit.HOURS.toMicros(1), 3);
-        long measuredFirstRequestNanos = -1;
-        long measuredLastRequestNanos = -1;
+        MeasuredWindow window;
+        long windowStartMicros;
 
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(producerConfig);
              PublishedLog log = new PublishedLog(options.runDir().resolve("published.csv"))) {
             long startNanos = System.nanoTime();
             long startWallMicros = wallMicros();
             Pacer pacer = new Pacer(options.rate(), startNanos, System::nanoTime);
+            window = new MeasuredWindow(pacer.scheduledNanos(options.warmupMessages()), options.seconds());
             for (long sequence = 0; sequence < total; sequence++) {
                 MessagePlan.Message message = plan.next(sequence);
                 long requestNanos = pacer.awaitSlot(sequence);
@@ -65,10 +66,7 @@ public final class LoadGenerator {
                 long requestedMicros = startWallMicros + (requestNanos - startNanos) / 1_000;
                 if (message.phase().equals("measure")) {
                     behind.recordValue(Math.min(behind.getHighestTrackableValue(), (requestNanos - scheduledNanos) / 1_000));
-                    if (measuredFirstRequestNanos < 0) {
-                        measuredFirstRequestNanos = requestNanos;
-                    }
-                    measuredLastRequestNanos = requestNanos;
+                    window.sent(requestNanos);
                 }
                 ProducerRecord<String, String> record = new ProducerRecord<>(options.topic(), message.key(), message.payload());
                 record.headers().add(EventHeaders.EVENT_ID, message.eventId().getBytes(StandardCharsets.UTF_8));
@@ -78,9 +76,9 @@ public final class LoadGenerator {
                     record.headers().add(FailurePlan.HEADER, message.failure().getBytes(StandardCharsets.UTF_8));
                 }
                 int payloadBytes = message.payload().length();
-                long sendNanos = System.nanoTime();
+                // 확인 지연의 기준은 요청 시각(requestedMicros)과 같은 순간이다 — 요약기가 확인 시각을 요청 시각 + 확인 지연으로 되살린다.
                 producer.send(record, (metadata, exception) -> {
-                    long ackNanos = System.nanoTime() - sendNanos;
+                    long ackNanos = System.nanoTime() - requestNanos;
                     if (exception == null) {
                         acked.incrementAndGet();
                         log.add(message.eventId(), message.key(), message.phase(), message.failure(), payloadBytes,
@@ -93,16 +91,19 @@ public final class LoadGenerator {
                 });
             }
             producer.flush();
+            windowStartMicros = startWallMicros + (window.startNanos() - startNanos) / 1_000;
         }
 
-        double windowSeconds = (measuredLastRequestNanos - measuredFirstRequestNanos) / 1e9;
-        long measured = options.measuredMessages();
         Map<String, Object> measuredResult = new LinkedHashMap<>();
         measuredResult.put("target_rate", options.rate());
-        measuredResult.put("messages", measured);
-        // n개를 보낸 구간의 길이는 (n − 1) 간격이다. 1개 이하면 발행률을 셀 수 없다.
-        measuredResult.put("achieved_rate", measured > 1 && windowSeconds > 0 ? (measured - 1) / windowSeconds : null);
-        measuredResult.put("window_seconds", windowSeconds);
+        measuredResult.put("messages", options.measuredMessages());
+        // 측정 창은 예정 시각으로 고정한다: [측정 첫 메시지의 예정 시각, + 측정 시간). 늦게 보낸 메시지는 창 밖으로 센다(PR #253 리뷰 R1).
+        measuredResult.put("window_start_us", windowStartMicros);
+        measuredResult.put("window_end_us", windowStartMicros + options.seconds() * 1_000_000L);
+        measuredResult.put("window_seconds", options.seconds());
+        measuredResult.put("sent_in_window", window.inWindow());
+        measuredResult.put("sent_after_window", window.afterWindow());
+        measuredResult.put("achieved_rate", window.achievedRate());
         measuredResult.put("behind_schedule_us", Map.of(
                 "p50", behind.getValueAtPercentile(50), "p99", behind.getValueAtPercentile(99),
                 "max", behind.getMaxValue(), "count", behind.getTotalCount()));

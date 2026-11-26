@@ -51,16 +51,19 @@ class RunReportTest {
                 m6,1,2,1,7010000,7020000,APPLIED,
                 m7,1,2,2,7010000,7015000,APPLIED,
                 """);
-        // 재시작한 프로세스의 기록 파일: m1 재전달을 Inbox가 걸렀다.
+        // 재시작한 프로세스의 기록 파일: m1 재전달을 Inbox가 걸렀다. 쓰기 실패 뒤 다시 쓴 흔적(끊긴 줄, 같은 줄 두 번)도 있다.
         write("attempts-2-200.csv", """
                 event_id,attempt,partition,offset,received_us,finished_us,outcome,error
+                m1,1,0,1,9000000,9001000,DUPLICATE,
+                m1,1,0,1,90
                 m1,1,0,1,9000000,9001000,DUPLICATE,
                 """);
         write("bench_message.tsv", String.join("\n",
                 "1\tw1\tk-A\t1\t1019000", "2\tm1\tk-A\t1\t1029000", "4\tm2\tk-A\t2\t3029000",
                 "5\tm7\tk-D\t1\t7014000", "6\tm6\tk-D\t1\t7019000", "7\tm6\tk-D\t1\t9500000", ""));
         write("quarantine.tsv", "m3\tHELD\t0\t10015000\nm4\tHELD\t1\t10016000\n");
-        write("generator.json", "{\"measured\":{\"target_rate\":1.0,\"achieved_rate\":0.5}}");
+        write("generator.json", "{\"measured\":{\"target_rate\":1.0,\"achieved_rate\":0.5,"
+                + "\"window_start_us\":1000000,\"window_end_us\":9000000}}");
         write("run.json", "{\"recovery\":\"quarantine\",\"kills_us\":[8500000]}");
     }
 
@@ -81,7 +84,22 @@ class RunReportTest {
         assertThat(counts).containsEntry("requested", 9).containsEntry("requested_measure", 8)
                 .containsEntry("acked", 8L).containsEntry("ack_failed", 1L)
                 .containsEntry("completed", 5).containsEntry("failed_attempts", 5L)
-                .containsEntry("quarantined_failed", 1L).containsEntry("quarantined_key_stopped", 1L);
+                .containsEntry("quarantined_failed", 1L).containsEntry("quarantined_key_stopped", 1L)
+                .containsEntry("completed_without_attempt_record", 0L)
+                .containsEntry("attempt_log_malformed_lines", 1L).containsEntry("attempt_log_duplicate_lines", 1L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 발행률은_고정_측정_창으로_나누고_수신은_메시지별_첫_수신만_센다() {
+        Map<String, Object> summary = RunReport.summarize(RunInputs.read(runDir));
+        Map<String, Object> rates = (Map<String, Object>) summary.get("rates");
+
+        assertThat((Map<String, Object>) summary.get("window")).containsEntry("seconds", 8.0);
+        // [1s, 9s) 안 요청: m1~m8 = 8건.
+        assertThat(rates).containsEntry("requested_per_s", 1.0);
+        // 첫 수신이 창 안인 메시지: w1·m1·m2·m3·m6·m7 = 6건. 9s 의 m1 재전달은 다시 세지 않는다.
+        assertThat(rates).containsEntry("received_per_s", 6 / 8.0);
     }
 
     @Test
@@ -91,8 +109,9 @@ class RunReportTest {
         Map<String, Object> retries = (Map<String, Object>) summary.get("retries");
         Map<String, Object> latency = (Map<String, Object>) summary.get("latency_us");
 
-        assertThat((Map<String, Long>) retries.get("messages_by_failed_attempts"))
-                .containsEntry("0", 4L).containsEntry("1", 1L).containsEntry("4", 1L);
+        // 4번 모두 실패해 격리된 m3 는 재시도 3회다(시도 수 − 1).
+        assertThat((Map<String, Long>) retries.get("messages_by_retries"))
+                .containsOnly(Map.entry("0", 4L), Map.entry("1", 1L), Map.entry("3", 1L));
         assertThat(retries).containsEntry("retried_messages", 2L).containsEntry("retry_success_rate", 0.5);
 
         Map<String, Object> noRetry = (Map<String, Object>) latency.get("e2e_no_retry");
@@ -118,7 +137,8 @@ class RunReportTest {
         assertThat(limits).anyMatch(line -> line.contains("하한값"))
                 .anyMatch(line -> line.contains("분류 오차 가능"))
                 .anyMatch(line -> line.contains("표본 3건"))
-                .anyMatch(line -> line.contains("목표 발행률"));
+                .anyMatch(line -> line.contains("목표 발행률"))
+                .anyMatch(line -> line.contains("누락·손상"));
         assertThat((Map<String, String>) summary.get("files")).containsKeys(
                 "published.csv", "attempts-1-100.csv", "attempts-2-200.csv", "bench_message.tsv", "quarantine.tsv",
                 "generator.json", "run.json");

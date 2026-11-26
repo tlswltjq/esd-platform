@@ -58,6 +58,17 @@ class ReceiveBenchMessageTest {
                 tuple(1, Outcome.DUPLICATE));
     }
 
+    @Test
+    void 같은_메시지_ID라도_다른_레코드면_시도_번호를_따로_센다() {
+        BenchMessage message = message(new FailurePlan(1, false));
+        when(service.execute(any(), eq(1))).thenThrow(new BenchInjectedFailure("e-1", 1, message.failure()));
+
+        assertThatThrownBy(() -> receive.receive(message, 0, 1L)).isInstanceOf(BenchInjectedFailure.class);
+        assertThatThrownBy(() -> receive.receive(message, 1, 1L)).isInstanceOf(BenchInjectedFailure.class);
+
+        assertThat(recorded).extracting(Attempt::partition, Attempt::attempt).containsExactly(tuple(0, 1), tuple(1, 1));
+    }
+
     private static BenchMessage message(FailurePlan failure) {
         return new BenchMessage("e-1", "k-00001", 1L, failure, 1024);
     }
