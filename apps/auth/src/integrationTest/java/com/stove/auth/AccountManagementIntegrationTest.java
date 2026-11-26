@@ -27,7 +27,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -162,17 +164,55 @@ class AccountManagementIntegrationTest {
     /**
      * PR #244 R1 재현: A가 B의 ADMIN을 회수하는 트랜잭션이 아직 커밋되지 않은 사이 B가 다른 계정을 바꾸려 한다. B의 요청은
      * 회수 커밋을 기다린 뒤 403이어야 한다. 잠금이 없으면 커밋 전 스냅샷의 ADMIN을 보고 변경을 해 버린다.
+     *
+     * <p>D-061: 잠금은 subject 순서로 잡으므로, 대상이 B보다 앞이면 대상 계정을 먼저 읽는다. 그때 역할을 잠그지 않는 조회로
+     * 읽으면 REPEATABLE READ 스냅샷이 B의 잠금을 얻기 전에 고정돼 B의 역할을 회수 전 값으로 읽는다. subject 가 무작위라
+     * 순서를 두 경우 모두 고정해 확인한다.
      */
     @Test
-    void anOperatorLosingAdminConcurrentlyCannotFinishAChange() throws Exception {
+    void anOperatorLosingAdminConcurrentlyCannotFinishAChangeWhenTargetIsLockedFirst() throws Exception {
+        assertLosingAdminBlocksChange(true);
+    }
+
+    @Test
+    void anOperatorLosingAdminConcurrentlyCannotFinishAChangeWhenActorIsLockedFirst() throws Exception {
+        assertLosingAdminBlocksChange(false);
+    }
+
+    /**
+     * {@code b} 의 subject 보다 앞(또는 뒤)에 오는 회원을 만든다. subject 는 무작위라 시험에서 직접 정한다(PR #251 리뷰 R2):
+     * {@code b} 의 subject 에서 마지막 글자를 뗀 값은 항상 앞이고, 글자를 하나 붙인 값은 항상 뒤다. 둘 다 {@code b} 마다 하나뿐이다.
+     */
+    private UserAccount persistMemberOrdered(UserAccount b, boolean targetFirst) {
+        UserAccount member = UserAccount.member("member-" + System.nanoTime() + "@example.com", "{bcrypt}h");
+        String subject = targetFirst ? b.getSubject().substring(0, b.getSubject().length() - 1) : b.getSubject() + "z";
+        ReflectionTestUtils.setField(member, "subject", subject);
+        return accounts.saveAndFlush(member);
+    }
+
+    /** PR #251 리뷰 R1: REPEATABLE READ 바깥 트랜잭션에 참여하면 READ COMMITTED 가 적용되지 않으므로 판정 전에 거부한다. */
+    @Test
+    void anAccountChangeJoiningARepeatableReadTransactionIsRejected() {
+        UserAccount admin = persistAdmin();
+        UserAccount target = persistMember();
+        TransactionTemplate repeatableRead = new TransactionTemplate(transactionManager);
+        repeatableRead.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+
+        assertThatThrownBy(() -> repeatableRead.executeWithoutResult(status ->
+                manageAccount.grantRole(admin.getSubject(), target.getSubject(), PlatformRole.CREATOR)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("D-061");
+        assertThat(accounts.findBySubject(target.getSubject()).orElseThrow().hasRole(PlatformRole.CREATOR)).isFalse();
+    }
+
+    private void assertLosingAdminBlocksChange(boolean targetFirst) throws Exception {
         UserAccount a = persistAdmin();
         UserAccount b = persistAdmin();
-        UserAccount target = persistMember();
+        UserAccount target = persistMemberOrdered(b, targetFirst);
         CountDownLatch revoked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<?> revoke = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Future<?> revoke = pool.submit(() -> readCommitted().executeWithoutResult(status -> {
                 manageAccount.revokeRole(a.getSubject(), b.getSubject(), PlatformRole.ADMIN);
                 revoked.countDown();
                 try {
@@ -215,5 +255,12 @@ class AccountManagementIntegrationTest {
             Thread.sleep(50);
         }
         throw new AssertionError("다른 연결이 user_account " + lockClause + " 잠금을 기다리지 않는다");
+    }
+
+    /** 운영자 계정 변경은 READ COMMITTED 트랜잭션에서만 판정한다(D-061). 커밋을 늦추려고 감싸는 바깥 트랜잭션도 같게 둔다. */
+    private TransactionTemplate readCommitted() {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return template;
     }
 }

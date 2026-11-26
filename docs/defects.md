@@ -85,6 +85,7 @@
 | [D-057](#d-057) | 다른 트랜잭션이 같은 키의 앞 행을 잠그면(예: 중복 운영 재발행) 릴레이가 뒤 행을 먼저 발행함 | 같은 키 순서 역전(D-055와 같은 결과) | **수정됨** | PR #203 교차 리뷰 R1, `OutboxPendingQueryTest` |
 | [D-059](#d-059) | 소비 실패를 DB에 격리한 뒤(PR #209) 격리 경보가 없어 7개 소비 앱의 소비 실패가 조용히 쌓임 | 운영 감지(멈춘 키의 뒤 메시지까지 처리 안 됨, 결정 160 위반) | **수정됨** | `infra/prometheus/tests/consumer-quarantine.yml` Red(2026-11-19) |
 | [D-060](#d-060) | Outbox 릴레이가 브로커 확인을 기다리는 동안 간격 잠금을 쥐어 다른 주문의 Outbox 삽입이 막힘 | 브로커 장애 중 업무 요청 실패(S7 Kafka 주문 39·45건 500) | **수정됨**(S7 재측정 남음) | `RelayLockHoldTest` Red(2026-11-23, 삽입 2.99초 대기) → Green(PR #228) |
+| [D-061](#d-061) | 운영자 역할 변경이 회수 커밋 전 스냅샷의 요청자 역할로 통과함 | 회수 직후 운영자의 계정 변경이 통과(R7.1), main CI 간헐 실패 | **수정됨** | 순서 고정 재현 테스트 Red(2026-11-26, 대상 먼저인 경우) → Green(PR #251, 3회) |
 
 반복된 부류가 둘 있다. **고쳐 본 자리를 다시 밟는다** — D-027~D-030은 이미 한 번씩 등장한 자리(D-002·D-003·D-010·D-013)에서 나왔고, D-018·D-019는 D-007·D-009가 같은 메서드·같은 이름의 다른 값 객체에 남아 있던 경우다. D-042는 D-040과 같은 최초 삽입 경합이 Catalog에 남아 있던 경우다. **장치가 있는데 그 자리를 지키지 않는다(공허 통과)** — D-021(규칙이 대상 0건 검사)·D-023(게이트가 컨테이너 0개에도 통과)·D-030(회귀 테스트가 없는 경로를 지킴)·D-031(알람이 조건이 참인 내내 침묵)·D-035(설정은 있는데 SIGKILL)이고, D-033은 같은 원인이 반대로 영원히 실패한 경우다.
 
@@ -758,6 +759,18 @@
 - **원인 확인** 릴레이 트랜잭션만 READ COMMITTED로 바꾼 임시 실험에서 같은 테스트가 통과했다(간격 잠금이 없으면 막히지 않는다). 수정 방식은 [결정 215](decisions.md#outbox-relay-lock-hold)로 정했다.
 - **수정** `OutboxRelay`가 트랜잭션 매니저만 받고 READ COMMITTED 템플릿을 직접 만든다. 간격 잠금이 없어져 확인 대기 중에도 다른 주문의 삽입이 막히지 않는다. 브로커 장애 동안 릴레이 자신은 커넥션 1개와 집은 행의 잠금을 계속 쥔다(결정 215 남는 것). `RelayLockHoldTest`는 태그를 떼고 회귀 방어로 올렸다. 확인을 테스트가 직접 쥐고 그동안 삽입이 끝나는지만 봐 시간에 기대지 않으며, 격리 수준 설정을 지운 변이에서 실패한다.
 - **부류** 외부 호출(브로커 확인)의 대기가 DB 잠금 트랜잭션 안에 들어 있다. 평시에는 확인이 수 ms라 드러나지 않고 장애 때만 나타난다.
+
+<a id="d-061"></a>
+
+## D-061 운영자 역할 변경이 회수 커밋 전 스냅샷의 요청자 역할로 통과함 (main CI 간헐 실패)
+
+**상태** 수정됨 · **영향** A가 B의 ADMIN을 회수하는 동안 B가 다른 계정의 역할·상태를 바꾸면, 회수 커밋 뒤에도 B의 변경이 성공할 수 있었다(R7.1 위반). subject가 무작위라 약 절반의 경우에 일어났다. main CI `infra-catalog` 조각에서 PR #244의 재현 테스트가 두 번 실패하고(`54ec0bbf`·`5fed9d91`, run 45581814237·45582810165) 재실행에서 통과했다.
+
+- **원인** `ManageAccount.requireDifferentTarget`은 요청자·대상 계정 행을 subject 순서로 `FOR UPDATE` 잠근다(`UserAccountRepository.lockForChange`). 역할은 EAGER `@ElementCollection`이라 잠금 조회 뒤 **잠그지 않는 별도 SELECT**로 읽힌다. 대상이 요청자보다 앞이면, 대상의 역할 조회가 MySQL 기본 REPEATABLE READ의 읽기 스냅샷을 고정한다. 그 뒤 요청자 행의 잠금을 기다려 얻어도, 요청자의 역할은 회수 커밋 전 스냅샷으로 읽혀 ADMIN이 남아 있다.
+- **재현** `AccountManagementIntegrationTest`의 기존 테스트를 subject 순서별 두 경우로 나눴다(`…WhenTargetIsLockedFirst`·`…WhenActorIsLockedFirst`). 수정 전 코드에서 대상이 먼저인 경우만 `Expecting code to raise a throwable`로 실패한다(`./gradlew :apps:auth:integrationTest --tests '*AccountManagementIntegrationTest'`).
+- **시도한 것** 역할을 잠금 조회에 `LEFT JOIN FETCH`로 붙이면 오히려 두 경우 모두와 `TokenRotationIntegrationTest.codeExchangeDuringARoleChangeWaitsAndIssuesTheNewRoles`가 실패했다. 잠금 조회의 조인된 역할 표가 문장 시작 시점의 스냅샷으로, 즉 잠금을 기다리기 전에 읽히는 것으로 본다(추정, SQL은 기록하지 않았다). 되돌렸다.
+- **수정** `ManageAccount`의 세 변경 트랜잭션을 READ COMMITTED로 돌린다. 문장마다 최신 커밋을 읽어, 잠금을 얻은 뒤의 역할 조회가 회수를 본다. 조회·잠금 순서는 바꾸지 않았다. auth 통합 30개 3회 반복 통과.
+- **부류** 잠금 읽기와 잠그지 않는 읽기가 한 REPEATABLE READ 트랜잭션에 섞여, 잠금으로 직렬화한 줄 알았던 판정이 옛 스냅샷을 본다. [D-060](#d-060)과 같은 격리 수준 문제의 다른 얼굴이다.
 
 ---
 
