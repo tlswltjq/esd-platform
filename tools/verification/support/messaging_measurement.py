@@ -193,6 +193,11 @@ def validity(measured, journey, broker, order=None, loaded=None):
     return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
 
 
+def app_metrics_by_name(urls, apps):
+    """``metrics_urls``와 같은 순서의 앱 이름 → {앱: URL}. 이름을 주지 않았으면 비운다."""
+    return dict(zip(apps, urls)) if apps else {}
+
+
 def with_faults(checked, schedule):
     """장애 회차의 유효성은 "장애가 계획대로 일어나고 되돌려졌는가"다. 업무 결과(미완료·소비 누락 등)는 측정값이라
     ``outcome``으로 옮긴다 — 장애 회차에서 완료가 깨지는 것은 결과이지 무효 사유가 아니다(E13 시나리오 3~6)."""
@@ -419,7 +424,7 @@ def restart_diagnosis(capture, container, password, fetch, order_base_url, out):
 
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
             metrics_urls=(), fetch=None, refund_every=0,
-            restart_at=None, restart_down=None, order_base_url=None, faults=(), store_metrics_url=None):
+            restart_at=None, restart_down=None, order_base_url=None, faults=(), store_metrics_url=None, metrics_apps=()):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -441,7 +446,8 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     schedule = None
     if faults:
         from support.e2e_faults import Context, FaultSchedule
-        context = Context(capture, docker, db_password, fetch, store_metrics_url, run_tag=Path(output).name[-8:].lower())
+        context = Context(capture, docker, db_password, fetch, store_metrics_url, run_tag=Path(output).name[-8:].lower(),
+                          app_metrics=app_metrics_by_name(metrics_urls, metrics_apps))
         schedule = FaultSchedule(context, faults, str(load) + ".started").prepare()
     load_sampler = resource_sampling.Sampler(capture, containers).start()
     lag_sampler = LagSampler(capture, docker).start()

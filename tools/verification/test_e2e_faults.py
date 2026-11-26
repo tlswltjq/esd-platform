@@ -30,6 +30,12 @@ class ParsersTest(unittest.TestCase):
         self.assertEqual(e2e_faults.topic_config_value(explicit, "max.message.bytes"), "512")
         self.assertIsNone(e2e_faults.topic_config_value("Dynamic configs for topic t are:\n", "max.message.bytes"))
 
+    def test_log_dir_script_looks_in_both_kafka_data_paths_and_fails_when_none_exist(self):
+        script = e2e_faults.log_dirs_script("stove.catalog.v1.DLT")
+        self.assertIn("/tmp/kraft-combined-logs/stove.catalog.v1.DLT-*", script)
+        self.assertIn("/tmp/kafka-logs/stove.catalog.v1.DLT-*", script)
+        self.assertTrue(script.endswith('[ "$found" = 1 ]'))
+
     def test_partitions_batches_and_console_records(self):
         self.assertEqual(e2e_faults.partition_count("Topic: t\tTopicId: x\tPartitionCount: 3\tReplicationFactor: 1"), 3)
         dump = "baseOffset: 0 lastOffset: 0 count: 1 size: 4321 magic: 2\n| offset: 0 key: k\nbaseOffset: 1 size: 4400"
@@ -89,7 +95,7 @@ class FakeStack:
         if "kafka-console-consumer.sh" in joined:
             return "\n".join("CreateTime:%d|%s|%s" % (5_000_000_000_000 + i, "e13-dlt-r1", value)
                              for i, value in enumerate(self.dlt_records))
-        if "sh -c ls -d" in joined or (command[-2:-1] == ["-c"] and command[-1].startswith("ls -d")):
+        if command[-2:-1] == ["-c"] and "for d in" in command[-1]:
             return "/tmp/kraft-combined-logs/stove.catalog.v1.DLT-0"
         if "kafka-dump-log.sh" in joined:
             return "baseOffset: 0 lastOffset: 1 count: 2 size: 2048"
@@ -138,6 +144,27 @@ class DbRevokeTest(unittest.TestCase):
         fault.cleanup()
         self.assertFalse(fault.revoked)
         self.assertTrue(any(problem.startswith("grant:") for problem in fault.problems()))
+
+
+class DbRevokeEffectTest(unittest.TestCase):
+    def run_with_failures(self, before, after):
+        stack = FakeStack()
+        readings = iter([before, after])
+        fault = e2e_faults.DbRevoke(context(stack), {"at": "0", "for": "0", "table": "stove_license.product_license"})
+        fault.context.app_metrics = {"license": "http://license"}
+        fault.context.fetch = lambda url: "stove_kafka_consumer_failed_deliveries_total{group=\"g\"} %s\n" % next(readings)
+        with mock.patch.object(e2e_faults.time, "sleep"):
+            fault.run()
+        return fault
+
+    def test_counts_consumer_failures_during_the_revoke(self):
+        fault = self.run_with_failures(2.0, 9.0)
+        self.assertEqual(fault.facts["failed_deliveries_during"], 7.0)
+        self.assertEqual(fault.problems(), [])
+
+    def test_a_revoke_without_any_consumer_failure_had_no_effect(self):
+        fault = self.run_with_failures(2.0, 2.0)
+        self.assertIn("권한 회수 동안 소비 실패가 없었다(장애가 효과를 내지 못했다)", fault.problems())
 
 
 class ContainerKillTest(unittest.TestCase):

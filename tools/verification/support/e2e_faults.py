@@ -24,7 +24,8 @@ KAFKA_BIN = "/opt/kafka/bin/"
 BOOTSTRAP = "localhost:19092"
 STORE_TOPIC = "stove.catalog.v1"
 STORE_DLT = STORE_TOPIC + ".DLT"
-KAFKA_DATA = "/tmp/kraft-combined-logs"
+# apache/kafka 이미지는 설정 방식에 따라 둘 중 하나에 로그를 둔다(resource_sampling.DATA_PATHS 와 같은 후보).
+KAFKA_DATA = ("/tmp/kraft-combined-logs", "/tmp/kafka-logs")
 _TABLE = re.compile(r"^stove_[a-z]+\.[a-z_]+$")
 _SERVICE = re.compile(r"^[a-z][a-z-]*$")
 _TOPIC = re.compile(r"^[a-z0-9.]+$")
@@ -74,6 +75,12 @@ def kill_schema_connections_sql(schema):
     return ("SELECT id FROM information_schema.processlist WHERE user = 'stove' AND db = '%s';" % schema)
 
 
+def log_dirs_script(topic):
+    """두 로그 경로 후보에서 그 토픽의 파티션 폴더를 찾는다. 하나도 없으면 실패(빈 목록을 성공으로 넘기지 않는다)."""
+    patterns = " ".join("%s/%s-*" % (base, topic) for base in KAFKA_DATA)
+    return "found=0; for d in %s; do if [ -d \"$d\" ]; then echo \"$d\"; found=1; fi; done; [ \"$found\" = 1 ]" % patterns
+
+
 def topic_config_value(describe_output, key):
     """``kafka-configs --describe`` 출력에서 토픽에 명시된 값. 명시되지 않았으면 None(기본값을 쓰는 중)."""
     for line in describe_output.splitlines():
@@ -114,13 +121,14 @@ def prometheus_total(text, name):
 class Context:
     """장애가 쓰는 실행 수단. ``capture(args, input=None)``은 명령 출력을 돌려주고 실패면 예외다."""
 
-    def __init__(self, capture, docker, mysql_password, fetch=None, store_metrics_url=None, run_tag="e13"):
+    def __init__(self, capture, docker, mysql_password, fetch=None, store_metrics_url=None, run_tag="e13", app_metrics=None):
         self.capture = capture
         self.docker = docker
         self.mysql_password = mysql_password
         self.fetch = fetch
         self.store_metrics_url = store_metrics_url
         self.run_tag = run_tag
+        self.app_metrics = dict(app_metrics or {})
 
     def mysql(self, sql):
         return self.capture(self.docker + ["exec", "-T", "mysql", "mysql", "-uroot", "-p" + self.mysql_password,
@@ -136,6 +144,12 @@ class Context:
         if self.fetch is None or self.store_metrics_url is None:
             return None
         return prometheus_total(self.fetch(self.store_metrics_url), name)
+
+    def app_metric(self, app, name):
+        """앱 지표 합. 읽을 수단이 없으면 None, 지표가 아직 한 번도 생기지 않았으면 0(카운터는 처음 셀 때 생긴다)."""
+        if self.fetch is None or app not in self.app_metrics:
+            return None
+        return prometheus_total(self.fetch(self.app_metrics[app]), name) or 0.0
 
 
 class Fault:
@@ -208,12 +222,20 @@ class DbRevoke(Fault):
         self.facts["prepared_tables"] = len(tables)
         self.facts["reconnected"] = len(ids)
 
+    FAILED_DELIVERIES = "stove_kafka_consumer_failed_deliveries_total"
+
     def run(self):
+        app = self.schema[len("stove_"):]
+        before = self.context.app_metric(app, self.FAILED_DELIVERIES)
         sql = "REVOKE INSERT ON %s.%s FROM 'stove'@'%%';" % (self.schema, self.table)
         if self.step("revoke", lambda: self.context.mysql(sql)) is not None:
             self.revoked = True
         time.sleep(self.duration)
         self.restore()
+        # 재시도가 끝날 시간(1·2·4초)을 두고 읽는다. 회수 동안 소비 실패가 있었는지가 "장애가 효과를 냈는가"다.
+        time.sleep(8)
+        after = self.context.app_metric(app, self.FAILED_DELIVERIES)
+        self.facts["failed_deliveries_during"] = None if before is None or after is None else after - before
 
     def restore(self):
         if not self.revoked:
@@ -232,6 +254,8 @@ class DbRevoke(Fault):
             reasons.append("권한 회수 실패")
         if self.revoked or "grant" not in names:
             reasons.append("권한 복원 실패")
+        if self.facts.get("failed_deliveries_during") == 0:
+            reasons.append("권한 회수 동안 소비 실패가 없었다(장애가 효과를 내지 못했다)")
         return reasons
 
 
@@ -353,8 +377,9 @@ class DltLimit(Fault):
             return
         key = "e13-dlt-%s" % self.context.run_tag
         self.facts["key"] = key
-        failures_before = self.context.store_metric("stove_kafka_consumer_recovery_failures_total") or 0.0
-        dead_before = self.context.store_metric("stove_kafka_dead_lettered_total") or 0.0
+        # 카운터는 처음 셀 때 생긴다. 아직 없으면 0으로 읽는다(읽을 수단이 없을 때만 None).
+        failures_before = self.store_count("stove_kafka_consumer_recovery_failures_total")
+        dead_before = self.store_count("stove_kafka_dead_lettered_total")
         if self.step("limit", lambda: self.configs("--alter", "--add-config", "max.message.bytes=%d" % self.limit)) is not None:
             self.limited = True
         self.step("publish", lambda: self.context.kafka(
@@ -362,10 +387,12 @@ class DltLimit(Fault):
             "--property", "parse.key=true", "--property", "key.separator=|",
             stdin='%s|{"e13":"dlt","seq":0}\n%s|{"e13":"dlt","seq":1}\n' % (key, key)))
         time.sleep(self.duration)
-        failures_during = self.context.store_metric("stove_kafka_consumer_recovery_failures_total")
-        dead_during = self.context.store_metric("stove_kafka_dead_lettered_total")
-        self.facts["recovery_failures_during"] = None if failures_during is None else failures_during - failures_before
-        self.facts["dead_lettered_during"] = None if dead_during is None else dead_during - dead_before
+        failures_during = self.store_count("stove_kafka_consumer_recovery_failures_total")
+        dead_during = self.store_count("stove_kafka_dead_lettered_total")
+        self.facts["recovery_failures_during"] = (None if failures_during is None or failures_before is None
+                                                  else failures_during - failures_before)
+        self.facts["dead_lettered_during"] = (None if dead_during is None or dead_before is None
+                                              else dead_during - dead_before)
         self.facts["dlt_records_during"] = len(self.dlt_records(key))
         self.restore()
         restored_at = time.monotonic()
@@ -383,6 +410,11 @@ class DltLimit(Fault):
         self.facts["dlt_batch_bytes"] = sizes
         self.facts["limit_below_record"] = bool(sizes) and self.limit < min(sizes)
 
+    def store_count(self, name):
+        if self.context.fetch is None or self.context.store_metrics_url is None:
+            return None
+        return self.context.store_metric(name) or 0.0
+
     def dlt_records(self, key):
         try:
             output = self.context.kafka("kafka-console-consumer.sh", "--bootstrap-server", BOOTSTRAP, "--topic", STORE_DLT,
@@ -394,7 +426,7 @@ class DltLimit(Fault):
 
     def batch_sizes(self):
         try:
-            listing = self.context.kafka_shell("ls -d %s/%s-*" % (KAFKA_DATA, STORE_DLT))
+            listing = self.context.kafka_shell(log_dirs_script(STORE_DLT))
         except Exception as failure:  # noqa: BLE001
             self.errors.append("DLT 로그 위치를 읽지 못했다: " + str(failure)[-200:])
             return []
@@ -433,7 +465,9 @@ class DltLimit(Fault):
             reasons.append("DLT 설정 복원 실패")
         if not self.facts.get("recovery_failures_during"):
             reasons.append("DLT 쓰기 실패를 일으키지 못했다(Store recovery-failures 증가 없음)")
-        if self.facts.get("dead_lettered_during"):
+        if self.facts.get("dead_lettered_during") is None:
+            reasons.append("장애 중 DLT 지표를 읽지 못했다")
+        elif self.facts["dead_lettered_during"]:
             reasons.append("장애 중 DLT 지표가 성공을 셌다 %s" % self.facts["dead_lettered_during"])
         if self.facts.get("dlt_records_during"):
             reasons.append("장애 중 DLT 에 저장됐다 %s건" % self.facts["dlt_records_during"])

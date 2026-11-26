@@ -312,7 +312,8 @@ def main():
                                             args.load_refund_every,
                                             args.restart_broker_at, args.restart_broker_down,
                                             "http://127.0.0.1:%d" % (PORTS["order"] + offset),
-                                            args.fault, "http://127.0.0.1:%d/actuator/prometheus" % (PORTS["store"] + offset))
+                                            args.fault, "http://127.0.0.1:%d/actuator/prometheus" % (PORTS["store"] + offset),
+                                            sorted(MESSAGING_APPS))
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
