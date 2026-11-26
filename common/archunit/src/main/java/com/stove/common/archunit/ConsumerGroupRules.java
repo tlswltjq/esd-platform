@@ -1,5 +1,6 @@
 package com.stove.common.archunit;
 
+import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaField;
@@ -21,6 +22,8 @@ import java.util.TreeSet;
 public final class ConsumerGroupRules {
 
     private static final String KAFKA_LISTENER = "org.springframework.kafka.annotation.KafkaListener";
+    private static final String KAFKA_LISTENERS = "org.springframework.kafka.annotation.KafkaListeners";
+    private static final String CONSUMER_RECORD = "org.apache.kafka.clients.consumer.ConsumerRecord";
     private static final String GROUP_ID = "groupId";
     private static final String PROCESSED_EVENT_GUARD = "com.stove.common.messaging.inbox.ProcessedEventGuard";
     private static final String CONSUMER_GROUP_FIELD = "CONSUMER_GROUP";
@@ -84,6 +87,61 @@ public final class ConsumerGroupRules {
                     Inbox 가드를 쓰는 서비스라면 그 서비스의 %s 를 참조할 것."""
                     .formatted(offenders, CONSUMER_GROUP_FIELD));
         }
+    }
+
+    /**
+     * {@code @KafkaListener} 는 메서드에 하나만 단다. 위 두 규칙은 메서드의 {@code @KafkaListener} 에서 {@code groupId} 를
+     * 읽으므로, 클래스 수준 선언이나 한 메서드의 반복 선언({@code @KafkaListeners} 로 감싸짐)은 그룹 명시·Inbox 대조를 모두
+     * 빠져나간다(PR #250 리뷰 R1). 업무 리스너 23개는 모두 메서드에 하나씩 단다.
+     */
+    @ArchTest
+    static void 카프카_리스너는_메서드에_하나만_단다(JavaClasses classes) {
+        Set<String> offenders = new TreeSet<>();
+        for (JavaClass javaClass : classes) {
+            if (hasAnnotation(javaClass.getAnnotations(), KAFKA_LISTENER)
+                    || hasAnnotation(javaClass.getAnnotations(), KAFKA_LISTENERS)) {
+                offenders.add(javaClass.getName());
+            }
+            for (JavaMethod method : javaClass.getMethods()) {
+                if (hasAnnotation(method.getAnnotations(), KAFKA_LISTENERS)) {
+                    offenders.add(method.getFullName());
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new AssertionError("""
+                    @KafkaListener 를 클래스에 달았거나 한 메서드에 여러 번 달았다: %s
+                    그룹 규칙이 groupId 를 읽지 못한다. 메서드 하나에 @KafkaListener(topics, groupId) 하나로 둘 것."""
+                    .formatted(offenders));
+        }
+    }
+
+    /**
+     * {@code @KafkaListener} 메서드는 {@code ConsumerRecord} 하나만 받는다. 격리 재투입({@code QuarantineReplay})은 브로커 없이
+     * 보관 행을 같은 리스너에 넘기므로 {@code Acknowledgment}·{@code Consumer}·소비 그룹 문맥을 줄 수 없다(PR #250 리뷰 B2 R2).
+     * 예전 {@code EventHandler#receive(InboundMessage)} 와 같은 계약이다.
+     */
+    @ArchTest
+    static void 카프카_리스너는_레코드_하나만_받는다(JavaClasses classes) {
+        Set<String> offenders = new TreeSet<>();
+        for (JavaClass javaClass : classes) {
+            for (JavaMethod method : javaClass.getMethods()) {
+                if (isKafkaListener(method) && !(method.getRawParameterTypes().size() == 1
+                        && method.getRawParameterTypes().get(0).getName().equals(CONSUMER_RECORD))) {
+                    offenders.add(method.getFullName());
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new AssertionError("""
+                    @KafkaListener 메서드가 ConsumerRecord 하나 밖의 인자를 받는다: %s
+                    격리 재투입은 수동 ack·소비자를 넘기지 못한다. ConsumerRecord<String, String> 하나만 받을 것."""
+                    .formatted(offenders));
+        }
+    }
+
+    private static boolean hasAnnotation(Set<? extends JavaAnnotation<?>> annotations, String type) {
+        return annotations.stream().anyMatch(annotation -> annotation.getRawType().getName().equals(type));
     }
 
     private static Set<String> kafkaGroups(JavaClasses classes) {

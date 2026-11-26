@@ -104,8 +104,9 @@ public class QuarantineReplay {
                 return new ReplayResult(replayed, remaining(consumerGroup, topic, partitionKey), claim.busy());
             }
             QuarantinedMessage message = claim.message().get();
-            ConsumerRecord<String, String> record = toRecord(message);
             try {
+                // 복원도 실패 처리 안에 둔다. 밖에서 실패하면 행이 점유 기한까지 REPLAYING 으로 남는다(PR #250 리뷰 B2 R1).
+                ConsumerRecord<String, String> record = toRecord(message);
                 tracing.runWithin(EventHeaders.lastValue(record.headers(), EventHeaders.TRACE_PARENT),
                         () -> deliver(listener, record));
             } catch (RuntimeException thrown) {
@@ -173,8 +174,9 @@ public class QuarantineReplay {
         long offset = origin.matches() ? Long.parseLong(origin.group(2)) : -1L;
         ConsumerRecord<String, String> record = new ConsumerRecord<>(message.getTopic(), partition, offset,
                 message.getMessageKey(), message.getPayload());
+        // 보관 형식은 null 헤더 값을 빈 문자열로 적는다(예전 InboundMessage 와 같다). 그래도 null 이 있으면 null 로 되살린다.
         headers.forEach((name, values) -> values.forEach(value ->
-                record.headers().add(name, value.getBytes(StandardCharsets.UTF_8))));
+                record.headers().add(name, value == null ? null : value.getBytes(StandardCharsets.UTF_8))));
         return record;
     }
 
@@ -199,7 +201,10 @@ public class QuarantineReplay {
         return found.get(0);
     }
 
-    /** 컨테이너가 리스너를 부르는 방식(리스너 종류별)과 같이 부른다. 수동 ack·소비자는 없다. */
+    /**
+     * 컨테이너가 리스너를 부르는 방식(리스너 종류별)과 같이 부른다. 수동 ack·소비자는 없다 — 그래서 업무 리스너는
+     * {@code ConsumerRecord} 하나만 받는다(ArchUnit {@code 카프카_리스너는_레코드_하나만_받는다}, PR #250 리뷰 B2 R2).
+     */
     @SuppressWarnings("unchecked")
     private static void deliver(Object listener, ConsumerRecord<String, String> record) {
         switch (ListenerUtils.determineListenerType(listener)) {

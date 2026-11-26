@@ -98,6 +98,9 @@ public final class CommonLibraryRules {
     public static final ArchRule 이벤트_계약은_리스너_인프라와_메시징_모듈을_모른다 = noClasses()
             .that().resideInAPackage("com.stove.common.contract..")
             .should().dependOnClassesThat().resideInAnyPackage("org.springframework.kafka..", "com.stove.common.messaging..")
+            // Kafka 레코드·헤더(org.apache.kafka) 밖의 브로커 클라이언트는 계약에 들이지 않는다(PR #250 리뷰 R3).
+            .orShould().dependOnClassesThat().resideInAnyPackage("com.rabbitmq..", "org.springframework.amqp..",
+                    "io.lettuce..", "redis.clients..", "org.springframework.data.redis..")
             .because("계약은 봉투·헤더 규약만 가진다")
             .allowEmptyShould(true);
 
