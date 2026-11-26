@@ -162,12 +162,37 @@ class AccountManagementIntegrationTest {
     /**
      * PR #244 R1 재현: A가 B의 ADMIN을 회수하는 트랜잭션이 아직 커밋되지 않은 사이 B가 다른 계정을 바꾸려 한다. B의 요청은
      * 회수 커밋을 기다린 뒤 403이어야 한다. 잠금이 없으면 커밋 전 스냅샷의 ADMIN을 보고 변경을 해 버린다.
+     *
+     * <p>D-061: 잠금은 subject 순서로 잡으므로, 대상이 B보다 앞이면 대상 계정을 먼저 읽는다. 그때 역할을 잠그지 않는 조회로
+     * 읽으면 REPEATABLE READ 스냅샷이 B의 잠금을 얻기 전에 고정돼 B의 역할을 회수 전 값으로 읽는다. subject 가 무작위라
+     * 순서를 두 경우 모두 고정해 확인한다.
      */
     @Test
-    void anOperatorLosingAdminConcurrentlyCannotFinishAChange() throws Exception {
+    void anOperatorLosingAdminConcurrentlyCannotFinishAChangeWhenTargetIsLockedFirst() throws Exception {
+        assertLosingAdminBlocksChange(true);
+    }
+
+    @Test
+    void anOperatorLosingAdminConcurrentlyCannotFinishAChangeWhenActorIsLockedFirst() throws Exception {
+        assertLosingAdminBlocksChange(false);
+    }
+
+    /** {@code b} 의 subject 보다 앞(또는 뒤)에 오는 회원을 만든다. subject 는 무작위라 조건이 맞을 때까지 만든다. */
+    private UserAccount persistMemberOrdered(UserAccount b, boolean targetFirst) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            UserAccount member = persistMember();
+            boolean before = member.getSubject().compareTo(b.getSubject()) < 0;
+            if (before == targetFirst) {
+                return member;
+            }
+        }
+        throw new IllegalStateException("원하는 subject 순서의 회원을 만들지 못했다");
+    }
+
+    private void assertLosingAdminBlocksChange(boolean targetFirst) throws Exception {
         UserAccount a = persistAdmin();
         UserAccount b = persistAdmin();
-        UserAccount target = persistMember();
+        UserAccount target = persistMemberOrdered(b, targetFirst);
         CountDownLatch revoked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);

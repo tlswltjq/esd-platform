@@ -19,6 +19,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -35,6 +36,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>모든 변경을 {@code role_audit_log}에 남긴다.
  * </ul>
  *
+ * <p>트랜잭션은 READ COMMITTED 로 돈다(D-061). 계정 행은 subject 순서로 잠그고, 역할(EAGER {@code @ElementCollection})은
+ * 잠금 조회 뒤 잠그지 않는 별도 SELECT 로 읽힌다. REPEATABLE READ 에서는 먼저 잠근 계정의 역할 조회가 읽기 스냅샷을 고정해,
+ * 뒤에서 잠금을 기다려 얻은 요청자의 역할을 회수 커밋 전 값으로 읽는다(회수 직후 운영자의 변경이 통과). READ COMMITTED 에서는
+ * 문장마다 최신 커밋을 읽어, 잠금을 얻은 뒤의 역할 조회가 회수를 본다.
+ *
  * <p>변경은 계정 행 배타 잠금으로 시작하고, 토큰 발급(코드 교환·갱신)은 역할을 읽기 전에 같은 행을 공유 잠금한다
  * ({@link UserAccountRepository#lockForIssuance}). 그래서 동시 발급은 변경보다 먼저 커밋됐거나(그 토큰의 {@code iat}가 더
  * 이르고 그 계열은 이 폐기에 걸린다) 변경 커밋을 기다린 뒤 새 역할을 읽는다. {@code changedAt}은 잠금을 잡고 폐기한
@@ -49,7 +55,7 @@ public class ManageAccount {
     private final TokenRevocationPort tokens;
     private final OutboxRecorder outbox;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void changeStatus(String actorSubject, String targetSubject, AccountStatus next) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         try {
@@ -61,7 +67,7 @@ public class ManageAccount {
         revokeAccess(target, AccountAccessChangedEvent.STATUS);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void grantRole(String actorSubject, String targetSubject, PlatformRole role) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         if (target.hasRole(role)) {
@@ -72,7 +78,7 @@ public class ManageAccount {
         revokeAccess(target, AccountAccessChangedEvent.ROLE);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void revokeRole(String actorSubject, String targetSubject, PlatformRole role) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         if (role == PlatformRole.ADMIN && accounts.countByRole(PlatformRole.ADMIN) <= 1) {
