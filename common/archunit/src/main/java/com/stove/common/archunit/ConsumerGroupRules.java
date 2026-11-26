@@ -6,8 +6,11 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaModifier;
+import com.tngtech.archunit.core.domain.JavaParameterizedType;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.junit.ArchTest;
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -126,8 +129,7 @@ public final class ConsumerGroupRules {
         Set<String> offenders = new TreeSet<>();
         for (JavaClass javaClass : classes) {
             for (JavaMethod method : javaClass.getMethods()) {
-                if (isKafkaListener(method) && !(method.getRawParameterTypes().size() == 1
-                        && method.getRawParameterTypes().get(0).getName().equals(CONSUMER_RECORD))) {
+                if (isKafkaListener(method) && !takesStringRecordOnly(method)) {
                     offenders.add(method.getFullName());
                 }
             }
@@ -138,6 +140,21 @@ public final class ConsumerGroupRules {
                     격리 재투입은 수동 ack·소비자를 넘기지 못한다. ConsumerRecord<String, String> 하나만 받을 것."""
                     .formatted(offenders));
         }
+    }
+
+    /**
+     * 인자가 {@code ConsumerRecord<String, String>} 하나인가. 원시 타입만 보면 {@code ConsumerRecord<String, SomeEvent>} 나
+     * raw {@code ConsumerRecord} 도 통과해, 문자열을 넘기는 재투입에서 형 변환 오류가 난다(PR #250 재리뷰 R1).
+     */
+    private static boolean takesStringRecordOnly(JavaMethod method) {
+        List<JavaType> parameters = method.getParameterTypes();
+        if (parameters.size() != 1 || !(parameters.get(0) instanceof JavaParameterizedType record)
+                || !record.toErasure().getName().equals(CONSUMER_RECORD)) {
+            return false;
+        }
+        List<JavaType> arguments = record.getActualTypeArguments();
+        return arguments.size() == 2 && arguments.stream()
+                .allMatch(argument -> argument.toErasure().getName().equals(String.class.getName()));
     }
 
     private static boolean hasAnnotation(Set<? extends JavaAnnotation<?>> annotations, String type) {

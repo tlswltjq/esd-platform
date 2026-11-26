@@ -373,6 +373,15 @@ class ArchRuleEnforcementTest {
         }
 
         @Test
+        @DisplayName("값 타입이 String 이 아닌 ConsumerRecord 를 받는 리스너를 잡는다")
+        void listenerWithNonStringRecordIsCaught() {
+            assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("typedrecord")))
+                    .as("재투입이 넘기는 문자열과 다른 값 타입을 받는 리스너를 잡지 못했다")
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("TypedRecordListener");
+        }
+
+        @Test
         @DisplayName("ConsumerRecord 하나만 받는 리스너는 통과시킨다")
         void recordOnlyListenerIsAccepted() {
             assertThatCode(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("aligned")))
