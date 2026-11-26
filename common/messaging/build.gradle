@@ -1,11 +1,12 @@
 apply plugin: 'java-library'
-// 코어를 실 DB 로 띄우는 테스트 부트 앱·스키마(Flyway)를 adapter 모듈 통합 테스트와 나눠 쓴다(결정 209).
+// 코어를 실 DB 로 띄우는 테스트 부트 앱·스키마(Flyway).
 apply plugin: 'java-test-fixtures'
 
 dependencies {
     api project(':common:jpa')
-    // 브로커와 무관한 코어(결정 209): 포트(common:event)·계약(common:contract)만 안다. 어떤 브로커 클라이언트에도 의존하지 않는다.
-    api project(':common:event')
+    // Kafka 단일 구현(결정 227): 릴레이는 KafkaTemplate 으로 보내고, 격리는 Kafka 공통 모듈의 KeyQuarantine 을 구현하며,
+    // 재투입은 리스너 컨테이너 레지스트리로 그 그룹의 리스너를 찾는다.
+    api project(':common:messaging-kafka')
     api project(':common:contract')
     // 릴레이는 배경 스레드라 지표 없이는 관측 수단이 없다
     api 'io.micrometer:micrometer-core'
@@ -29,8 +30,6 @@ dependencies {
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     testFixturesImplementation 'org.springframework.boot:spring-boot-autoconfigure'
-    // adapter 공통 계약 테스트(MessagingContractTest, 결정 209): JUnit·AssertJ·Spring Test 로 짠다.
-    testFixturesImplementation 'org.springframework.boot:spring-boot-starter-test'
     testFixturesCompileOnly 'org.springframework:spring-web'
     testFixturesCompileOnly project(':common:web')
     testFixturesCompileOnly project(':common:security')
@@ -43,6 +42,4 @@ dependencies {
     // 실 MySQL 이 필요하므로 컨테이너는 통합 소스셋에만 건다.
     testImplementation project(':common:test')
     integrationTestImplementation project(':common:testcontainers')
-    // 릴레이 재시작 복구는 실 브로커로 확인한다. 테스트에서만 Kafka adapter 를 쓴다(운영 코드는 모른다).
-    integrationTestImplementation project(':common:messaging-kafka')
 }

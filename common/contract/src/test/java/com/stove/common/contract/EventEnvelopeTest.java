@@ -9,10 +9,9 @@ import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderLine;
 import com.stove.common.contract.payload.PaymentCompletedEvent;
-import com.stove.common.event.InboundMessage;
-import java.util.LinkedHashMap;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -24,16 +23,15 @@ class EventEnvelopeTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
-    /** adapter 가 넘기는 수신 메시지. 봉투는 브로커를 모른다(결정 209). */
-    private static InboundMessage record(String payload, String eventId, String eventType) {
-        Map<String, List<String>> headers = new LinkedHashMap<>();
+    private static ConsumerRecord<String, String> record(String payload, String eventId, String eventType) {
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(Topics.PAYMENT, 0, 0L, "ORD-1", payload);
         if (eventId != null) {
-            headers.put(EventHeaders.EVENT_ID, List.of(eventId));
+            record.headers().add(EventHeaders.EVENT_ID, eventId.getBytes(StandardCharsets.UTF_8));
         }
         if (eventType != null) {
-            headers.put(EventHeaders.EVENT_TYPE, List.of(eventType));
+            record.headers().add(EventHeaders.EVENT_TYPE, eventType.getBytes(StandardCharsets.UTF_8));
         }
-        return new InboundMessage(Topics.PAYMENT, "ORD-1", payload, headers, "partition=0 offset=0");
+        return record;
     }
 
     private static String paymentCompletedJson() throws Exception {
@@ -44,7 +42,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("헤더에서 eventId 와 eventType 을 꺼낸다 — body 파싱 없이 라우팅한다")
     void extractsHeaders() throws Exception {
-        InboundMessage record =
+        ConsumerRecord<String, String> record =
                 record(paymentCompletedJson(), "EVT-1", EventType.PAYMENT_COMPLETED);
 
         EventEnvelope envelope = EventEnvelope.from(record);
@@ -83,7 +81,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] eventId 없는 레코드는 봉투 단계에서 거부된다")
     void rejectsRecordWithoutEventId() throws Exception {
-        InboundMessage broken =
+        ConsumerRecord<String, String> broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
         // 수정 전에는 null 을 반환해 통과시켰다. 그 null 이 멱등 가드까지 흘러가
@@ -97,7 +95,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] eventType 없는 레코드도 봉투 단계에서 거부된다")
     void rejectsRecordWithoutEventType() throws Exception {
-        InboundMessage broken = record(paymentCompletedJson(), "EVT-1", null);
+        ConsumerRecord<String, String> broken = record(paymentCompletedJson(), "EVT-1", null);
 
         // eventType 이 null 이면 isType() 이 전부 false 라 리스너가 조용히 아무것도 안 한다.
         // 이벤트가 유실됐는데 로그에도 흔적이 남지 않는 쪽이 더 나쁘다.
@@ -109,7 +107,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] 거부 메시지에 레코드 위치가 담긴다 — 어느 메시지인지 찾을 수 있어야 한다")
     void rejectionMessageLocatesTheRecord() throws Exception {
-        InboundMessage broken =
+        ConsumerRecord<String, String> broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
         assertThatThrownBy(() -> EventEnvelope.from(broken))
@@ -124,5 +122,30 @@ class EventEnvelopeTest {
         assertThatThrownBy(() -> EventEnvelope.from(
                 record(paymentCompletedJson(), "  ", EventType.PAYMENT_COMPLETED)))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("값이 없는(null) 계약 헤더도 없는 것으로 보고 거부한다")
+    void treatsNullHeaderValueAsMissing() throws Exception {
+        ConsumerRecord<String, String> broken = record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
+        broken.headers().add(EventHeaders.EVENT_ID, null);
+
+        assertThatThrownBy(() -> EventEnvelope.from(broken))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("계약 위반");
+    }
+
+    @Test
+    @DisplayName("같은 이름의 헤더가 여럿이면 마지막 값을 쓰고, 모든 값은 받은 순서대로 읽을 수 있다")
+    void readsLastAndAllHeaderValues() throws Exception {
+        ConsumerRecord<String, String> record = record(paymentCompletedJson(), "EVT-1", EventType.PAYMENT_COMPLETED);
+        record.headers().add(EventHeaders.EVENT_ID, "EVT-2".getBytes(StandardCharsets.UTF_8));
+        record.headers().add(EventHeaders.TRACE_PARENT, null);
+
+        assertThat(EventEnvelope.from(record).eventId()).isEqualTo("EVT-2");
+        assertThat(EventHeaders.values(record.headers(), EventHeaders.EVENT_ID)).containsExactly("EVT-1", "EVT-2");
+        assertThat(EventHeaders.values(record.headers(), EventHeaders.TRACE_PARENT)).containsExactly("");
+        assertThat(EventHeaders.all(record.headers())).containsKeys(EventHeaders.EVENT_ID, EventHeaders.EVENT_TYPE,
+                EventHeaders.TRACE_PARENT);
     }
 }

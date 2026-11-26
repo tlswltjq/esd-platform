@@ -145,7 +145,7 @@ public class OutboxEvent {
         markSent(Instant.now());
     }
 
-    /** 릴레이가 단조 증가하는 시각을 넘긴다(브로커 없음 기준선의 읽기 위치가 {@code sent_at} 이다, PR #210 R2). */
+    /** 릴레이가 단조 증가하는 시각을 넘긴다(PR #210 R2). */
     public void markSent(Instant at) {
         this.status = OutboxStatus.SENT;
         this.sentAt = at.truncatedTo(ChronoUnit.MICROS);

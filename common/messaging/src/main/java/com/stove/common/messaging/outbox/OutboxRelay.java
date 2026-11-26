@@ -1,19 +1,20 @@
 package com.stove.common.messaging.outbox;
 
-import com.stove.common.event.MessagePublisher;
-import com.stove.common.event.OutboundMessage;
 import com.stove.common.contract.EventHeaders;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -24,21 +25,24 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p><b>릴레이는 서비스당 1대여야 한다</b> — {@code FOR UPDATE SKIP LOCKED} 가 파티션 키를
  * 모르므로 여러 대면 순서 보장이 조용히 무효가 된다. {@code docs/event-ordering.md} 7절.
+ *
+ * <p>{@link KafkaTemplate} 으로 직접 보낸다(결정 227). 파티션 키를 Kafka 메시지 키로 써서 같은 키가 같은 파티션에 들어가고,
+ * 브로커 확인(ack)을 기다린 뒤에만 같은 키의 다음 행을 보낸다 — 파티션 안의 순서가 "같은 키는 보낸 순서대로"를 만든다.
  */
 @Slf4j
 public class OutboxRelay {
 
     private final OutboxEventRepository repository;
-    private final MessagePublisher publisher;
+    private final KafkaTemplate<String, String> kafkaTemplate;
     private final int batchSize;
     private final int maxRetry;
     private final int maxBatchesPerCycle;
     private final OutboxMetrics metrics;
     private final TransactionTemplate transactionTemplate;
-    public OutboxRelay(OutboxEventRepository repository, MessagePublisher publisher, int batchSize, int maxRetry,
+    public OutboxRelay(OutboxEventRepository repository, KafkaTemplate<String, String> kafkaTemplate, int batchSize, int maxRetry,
             int maxBatchesPerCycle, OutboxMetrics metrics, PlatformTransactionManager transactionManager) {
         this.repository = repository;
-        this.publisher = publisher;
+        this.kafkaTemplate = kafkaTemplate;
         this.batchSize = batchSize;
         this.maxRetry = maxRetry;
         this.maxBatchesPerCycle = maxBatchesPerCycle;
@@ -135,7 +139,7 @@ public class OutboxRelay {
                     OutboxEvent event = chain.get(wave);
                     // 브로커 구간 지연의 시작점. ack 뒤 시각(sentAt)과 달리 소비보다 늦을 수 없다([결정 204] B).
                     event.markPublishing(Instant.now());
-                    attempts.add(new Attempt(chain, event, publisher.publish(toMessage(event))));
+                    attempts.add(new Attempt(chain, event, kafkaTemplate.send(toRecord(event))));
                 }
             }
             if (attempts.isEmpty()) {
@@ -168,8 +172,8 @@ public class OutboxRelay {
     }
 
     /**
-     * 이전에 찍은 값보다 반드시 큰 {@code sent_at}(마이크로초). 브로커 없음 기준선은 {@code (sent_at, id)} 를 읽기 위치로 쓰므로,
-     * 시계가 뒤로 가서 새 행이 위치보다 작게 찍히면 영영 읽히지 않는다(PR #210 R2). 시계가 정상이면 지금 시각 그대로다.
+     * 이전에 찍은 값보다 반드시 큰 {@code sent_at}(마이크로초). 시계가 뒤로 가도 {@code sent_at} 순서가 발행 순서와 어긋나지
+     * 않는다(PR #210 R2에서 도입). 시계가 정상이면 지금 시각 그대로다.
      */
     private Instant nextSentAt() {
         if (lastSentAt == null) {
@@ -182,7 +186,7 @@ public class OutboxRelay {
     }
 
     /** @return 발행에 성공했으면 true — 이 키의 다음 이벤트를 보내도 된다는 뜻이다 */
-    private boolean awaitAck(OutboxEvent event, CompletableFuture<Void> ack) {
+    private boolean awaitAck(OutboxEvent event, CompletableFuture<SendResult<String, String>> ack) {
         try {
             ack.get();
             event.markSent(nextSentAt());
@@ -204,25 +208,30 @@ public class OutboxRelay {
 
     /** 전송에 걸어둔 한 건. 어느 키 체인에 속하는지 함께 들고 있어야 후속 웨이브를 결정할 수 있다. */
     private record Attempt(List<OutboxEvent> chain, OutboxEvent event,
-                           CompletableFuture<Void> ack) {
+                           CompletableFuture<SendResult<String, String>> ack) {
     }
 
     /**
      * 계약 헤더 셋에 더해 적재 시점의 추적 컨텍스트를 <b>되살린다.</b>
-     * 자동 계측에 맡기면 안 되고 브로커 클라이언트의 자동 관측(Kafka {@code spring.kafka.template.observation-enabled})도 꺼야 한다.
+     * 자동 계측에 맡기면 안 되고 {@code spring.kafka.template.observation-enabled} 도 꺼야 한다.
      */
-    private OutboundMessage toMessage(OutboxEvent event) {
-        Map<String, String> headers = new LinkedHashMap<>();
-        headers.put(EventHeaders.EVENT_ID, event.getEventId());
-        headers.put(EventHeaders.EVENT_TYPE, event.getEventType());
-        headers.put(EventHeaders.OCCURRED_AT, event.getCreatedAt().toString());
+    private ProducerRecord<String, String> toRecord(OutboxEvent event) {
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>(event.getTopic(), event.getPartitionKey(), event.getPayload());
+        header(record, EventHeaders.EVENT_ID, event.getEventId());
+        header(record, EventHeaders.EVENT_TYPE, event.getEventType());
+        header(record, EventHeaders.OCCURRED_AT, event.getCreatedAt().toString());
         if (event.getPublishedAt() != null) {
-            headers.put(EventHeaders.PUBLISHED_AT, event.getPublishedAt().toString());
+            header(record, EventHeaders.PUBLISHED_AT, event.getPublishedAt().toString());
         }
         String traceParent = event.getTraceParent();
         if (traceParent != null && !traceParent.isBlank()) {
-            headers.put(EventHeaders.TRACE_PARENT, traceParent);
+            header(record, EventHeaders.TRACE_PARENT, traceParent);
         }
-        return new OutboundMessage(event.getTopic(), event.getPartitionKey(), event.getPayload(), headers);
+        return record;
+    }
+
+    private static void header(ProducerRecord<String, String> record, String name, String value) {
+        record.headers().add(name, value.getBytes(StandardCharsets.UTF_8));
     }
 }

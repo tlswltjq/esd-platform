@@ -1,14 +1,12 @@
 apply plugin: 'java-library'
 
-// 메시징 Kafka adapter(결정 209): 발행·구독·제자리 재시도(DefaultErrorHandler), 격리 포트 연결, DB 없는 Store 의 DLT.
+// Kafka 공통 모듈(결정 227): 리스너 팩토리·제자리 재시도(DefaultErrorHandler)·멈춘 키 거르기·격리 연결, DB 없는 앱의 DLT.
 // 이벤트 계약은 common:contract 에 있다. 코어(common:messaging)에 의존하지 않는다 — Store 처럼 JPA 가 없는 앱도 쓴다.
 //
 // (이력) common:messaging 에서 떼어냈다. 거기 있는 동안에는 이 정책을 쓰려면 Outbox 와 JPA 까지
 // 딸려와서, 저장소가 JPA 가 아닌 store(ES)·download(Mongo) 가 쓸 수 없었다.
 // 그 둘은 결과적으로 스프링 기본값(FixedBackOff(0ms, 9회) + 로그 후 건너뛰기)으로 돌고 있었다.
 dependencies {
-    // 업무 리스너가 쓰는 수신 포트(@EventSubscriber·InboundMessage). 이 모듈은 그 Kafka adapter 다.
-    api project(':common:event')
     api project(':common:contract')
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
@@ -36,6 +34,4 @@ dependencies {
     // 랙 지표가 실제 미소비 건수를 말하는지는 **실 브로커로만** 확인할 수 있다.
     // 대역으로는 "우리가 짠 대역이 뭘 돌려주나"만 알게 된다(D-026).
     integrationTestImplementation project(':common:testcontainers')
-    // 공통 계약 테스트(결정 209)는 코어의 격리(소비 모듈 DB)와 테스트 부트 앱·스키마를 쓴다. 테스트에서만 코어를 안다 — 운영 코드는 모른다.
-    integrationTestImplementation testFixtures(project(':common:messaging'))
 }

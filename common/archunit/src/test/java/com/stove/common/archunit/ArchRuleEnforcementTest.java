@@ -337,29 +337,19 @@ class ArchRuleEnforcementTest {
         }
 
         @Test
-        @DisplayName("group 을 비운 리스너를 잡는다")
+        @DisplayName("groupId 를 비운 리스너를 잡는다")
         void missingGroupIdIsCaught() {
             assertThatThrownBy(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("nogroup")))
-                    .as("group 없는 리스너를 잡지 못했다 — yml 기본값을 지웠으므로 이 리스너는 그룹이 없다")
+                    .as("groupId 없는 리스너를 잡지 못했다 — yml 기본값을 지웠으므로 이 리스너는 그룹이 없다")
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("NoGroupListener");
         }
 
         @Test
-        @DisplayName("group 을 명시한 리스너는 통과시킨다")
+        @DisplayName("groupId 를 명시한 리스너는 통과시킨다")
         void declaredGroupIdIsAccepted() {
             assertThatCode(() -> ConsumerGroupRules.리스너는_컨슈머_그룹을_명시한다(app("aligned")))
-                    .as("group 을 명시한 리스너를 거부했다")
-                    .doesNotThrowAnyException();
-        }
-
-        @Test
-        @DisplayName("브로커 리스너를 직접 단 업무 리스너를 잡는다 — 결정 202")
-        void brokerBoundListenerIsCaught() {
-            assertThatThrownBy(() -> ConsumerGroupRules.업무_리스너는_브로커_리스너를_직접_달지_않는다(app("brokerbound")))
-                    .isInstanceOf(AssertionError.class)
-                    .hasMessageContaining("BrokerBoundListener");
-            assertThatCode(() -> ConsumerGroupRules.업무_리스너는_브로커_리스너를_직접_달지_않는다(app("aligned")))
+                    .as("groupId 를 명시한 리스너를 거부했다")
                     .doesNotThrowAnyException();
         }
     }

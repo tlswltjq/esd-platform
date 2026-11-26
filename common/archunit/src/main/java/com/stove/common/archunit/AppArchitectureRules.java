@@ -13,7 +13,6 @@ public final class AppArchitectureRules {
     @ArchTest static final ArchTests 이벤트_입력 = ArchTests.in(EventInputRules.class);
     @ArchTest static final ArchTests 이벤트_순서 = ArchTests.in(EventOrderingRules.class);
     @ArchTest static final ArchTests 컨슈머_그룹 = ArchTests.in(ConsumerGroupRules.class);
-    @ArchTest static final ArchTests 메시징_경계 = ArchTests.in(MessagingBoundaryRules.class);
 
     @ArchTest
     static void 앱_검사_대상은_비어있지_않다(JavaClasses classes) {

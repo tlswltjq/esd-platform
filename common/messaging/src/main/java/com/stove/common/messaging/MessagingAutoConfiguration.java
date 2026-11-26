@@ -1,11 +1,10 @@
 package com.stove.common.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.KeyQuarantine;
-import com.stove.common.event.MessagePublisher;
 import com.stove.common.messaging.config.OutboxProperties;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.messaging.inbox.ProcessedEventRepository;
+import com.stove.common.messaging.kafka.KeyQuarantine;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxMetrics;
 import com.stove.common.messaging.outbox.OutboxRecorder;
@@ -28,8 +27,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -38,8 +38,9 @@ import org.springframework.transaction.PlatformTransactionManager;
  * 각 서비스는 build.gradle 에 common:messaging 만 추가하고
  * Application 클래스에서 {@code com.stove.common.messaging} 를 엔티티/리포지토리 스캔 대상에 포함하면 된다.
  *
- * <p>컨슈머 실패 처리(재시도 정책·DLT)는 여기 없다 — {@code common:kafka} 가 가진다.
- * 그쪽은 Outbox 도 JPA 도 필요 없으므로, 저장소가 JPA 가 아닌 서비스(store·download)도 쓸 수 있다.
+ * <p>컨슈머 실패 처리(재시도 정책·리스너 팩토리·DLT)는 여기 없다 — {@code common:messaging-kafka} 가 가진다.
+ * 그쪽은 Outbox 도 JPA 도 필요 없으므로, DB 없는 서비스(store·게이트웨이·웹 BFF)도 쓸 수 있다.
+ * 여기서 만드는 {@link KeyQuarantine} 빈을 그쪽 자동 구성이 보고 격리처를 DLT 대신 소비 모듈 DB 로 바꾼다.
  */
 @Slf4j
 @AutoConfiguration
@@ -90,11 +91,11 @@ public class MessagingAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "stove.outbox", name = "relay-enabled", havingValue = "true", matchIfMissing = true)
     public OutboxRelay outboxRelay(OutboxEventRepository repository,
-                                   MessagePublisher publisher,
+                                   KafkaTemplate<String, String> kafkaTemplate,
                                    OutboxProperties properties,
                                    OutboxMetrics metrics,
                                    PlatformTransactionManager transactionManager) {
-        return new OutboxRelay(repository, publisher, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
+        return new OutboxRelay(repository, kafkaTemplate, properties.batchSize(), properties.maxRetry(), properties.maxBatchesPerCycle(), metrics,
                 transactionManager);
     }
 
@@ -106,7 +107,7 @@ public class MessagingAutoConfiguration {
     }
 
     /**
-     * 소비 실패 보관과 키 정지(결정 155·160·206). 브로커 adapter 가 이 빈을 찾아 쓴다.
+     * 소비 실패 보관과 키 정지(결정 155·160·206). Kafka 공통 모듈의 리스너 팩토리가 이 빈을 찾아 쓴다.
      * 표 {@code consumer_quarantine} 은 이 모듈을 쓰는 모든 앱의 이관에 있다.
      */
     @Bean
@@ -122,7 +123,7 @@ public class MessagingAutoConfiguration {
     /** 멈춘 키를 원래 순서대로 다시 넣는다. 운영 API 가 부른다. */
     @Bean
     @ConditionalOnMissingBean
-    public QuarantineReplay quarantineReplay(QuarantinedMessageRepository repository, ApplicationContext context,
+    public QuarantineReplay quarantineReplay(QuarantinedMessageRepository repository, KafkaListenerEndpointRegistry listeners,
                                              ObjectProvider<ObjectMapper> objectMapper,
                                              PlatformTransactionManager transactionManager,
                                              ObjectProvider<Tracer> tracer, ObjectProvider<Propagator> propagator) {
@@ -130,7 +131,7 @@ public class MessagingAutoConfiguration {
         Propagator availablePropagator = propagator.getIfAvailable();
         ReplayTracing tracing = availableTracer == null || availablePropagator == null
                 ? ReplayTracing.NONE : new MicrometerReplayTracing(availableTracer, availablePropagator);
-        return new QuarantineReplay(repository, context, objectMapper.getIfAvailable(ObjectMapper::new),
+        return new QuarantineReplay(repository, listeners, objectMapper.getIfAvailable(ObjectMapper::new),
                 transactionManager, tracing, Clock.systemUTC());
     }
 }

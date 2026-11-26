@@ -56,8 +56,8 @@ public final class CommonLibraryRules {
     /**
      * 이벤트 계약은 영속성을 모른다.
      *
-     * <p>{@code common:contract} 의 의존은 Jackson 과 수신 포트까지다 —
-     * 봉투 규약은 포함하되 JPA·브로커는 포함하지 않는다(결정 209).
+     * <p>{@code common:contract} 의 의존은 Jackson 과 Kafka 클라이언트(레코드·헤더 타입)까지다 —
+     * 봉투 규약은 포함하되 JPA 는 포함하지 않는다(결정 227).
      * 페이로드에 엔티티가 섞이면 이벤트가 발행 측 스키마에 묶인다.
      */
     @ArchTest
@@ -76,55 +76,29 @@ public final class CommonLibraryRules {
             .because("인증·영속성 지원은 HTTP 응답 계약을 실행 의존성으로 요구하지 않는다")
             .allowEmptyShould(true);
 
-    /**
-     * 수신 포트는 브로커를 모른다(결정 202). 업무 리스너가 의존하는 유일한 메시징 타입이라,
-     * 여기에 브로커 타입이 섞이면 브로커를 바꿀 때 리스너도 바뀐다.
-     */
-    @ArchTest
-    public static final ArchRule 수신_포트는_브로커를_모른다 = classes()
-            .that().resideInAPackage("com.stove.common.event..")
-            .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "com.stove.common.event..")
-            .because("브로커 연동은 adapter(common:messaging-kafka 등)의 관심사다")
-            .allowEmptyShould(true);
-
-    /** 메시징 코어 = {@code com.stove.common.messaging} 아래에서 adapter 패키지를 뺀 것(결정 209). */
+    /** 메시징 코어 = {@code com.stove.common.messaging} 아래에서 Kafka 공통 모듈 패키지를 뺀 것(Outbox·Inbox·격리, JPA). */
     private static final DescribedPredicate<JavaClass> MESSAGING_CORE =
             DescribedPredicate.describe("메시징 코어의 클래스",
                     javaClass -> resideInAPackage("com.stove.common.messaging..").test(javaClass)
-                            && !resideInAnyPackage(MessagingBoundaryRules.ADAPTERS).test(javaClass));
+                            && !resideInAPackage("com.stove.common.messaging.kafka..").test(javaClass));
 
     @ArchTest
     public static final ArchRule 카프카는_JPA와_Outbox를_모른다 = noClasses()
             .that().resideInAPackage("com.stove.common.messaging.kafka..")
             .should().dependOnClassesThat(MESSAGING_CORE)
             .orShould().dependOnClassesThat().resideInAnyPackage("com.stove.common.jpa..", "jakarta.persistence..")
-            .because("Kafka 소비만 필요한 앱(DB 없는 Store)에는 DB 트랜잭션 인프라를 요구하지 않는다")
+            .because("Kafka 소비만 필요한 앱(DB 없는 Store·게이트웨이·웹 BFF)에는 DB 트랜잭션 인프라를 요구하지 않는다")
             .allowEmptyShould(true);
 
-    /** 결정 209: 코어는 어느 브로커도 모른다. 같은 코어 경로를 네 adapter 가 함께 타야 비교 차이가 전송 계층 차이만 남는다. */
+    /**
+     * 이벤트 계약(토픽·종류·본문·봉투·헤더)은 Kafka 레코드 타입만 안다. 리스너 기반(Spring Kafka)과 메시징 모듈은 모른다 —
+     * 계약을 쓰는 곳(업무 모듈·Store)이 리스너 인프라나 코어를 끌고 오지 않게(결정 227).
+     */
     @ArchTest
-    public static final ArchRule 메시징_코어는_브로커를_모른다 = noClasses()
-            .that(MESSAGING_CORE)
-            .should().dependOnClassesThat().resideInAnyPackage(MessagingBoundaryRules.BROKER_CLIENTS)
-            .orShould().dependOnClassesThat().resideInAnyPackage(MessagingBoundaryRules.ADAPTERS)
-            .because("브로커 연동은 adapter 모듈의 관심사다(결정 209)")
-            .allowEmptyShould(true);
-
-    /** 이벤트 계약(토픽·종류·본문·봉투·헤더 이름)은 브로커와 무관하다(결정 209). */
-    @ArchTest
-    public static final ArchRule 이벤트_계약은_브로커를_모른다 = noClasses()
+    public static final ArchRule 이벤트_계약은_리스너_인프라와_메시징_모듈을_모른다 = noClasses()
             .that().resideInAPackage("com.stove.common.contract..")
-            .should().dependOnClassesThat().resideInAnyPackage(MessagingBoundaryRules.BROKER_CLIENTS)
-            .orShould().dependOnClassesThat().resideInAnyPackage(MessagingBoundaryRules.ADAPTERS)
-            .orShould().dependOnClassesThat(MESSAGING_CORE)
-            .because("계약을 쓰는 곳(업무 모듈·Store)이 브로커나 코어를 끌고 오지 않게")
-            .allowEmptyShould(true);
-
-    /** adapter 는 서로를 모른다. Store 용 Kafka 병행 발행도 포트(MirrorPublisher)로만 잇는다(결정 209). */
-    @ArchTest
-    public static final ArchRule 메시징_adapter는_서로를_모른다 = noClasses()
-            .that().resideInAnyPackage(MessagingBoundaryRules.ADAPTERS)
-            .should(DependOnAnotherAdapter.CONDITION)
+            .should().dependOnClassesThat().resideInAnyPackage("org.springframework.kafka..", "com.stove.common.messaging..")
+            .because("계약은 봉투·헤더 규약만 가진다")
             .allowEmptyShould(true);
 
     @ArchTest

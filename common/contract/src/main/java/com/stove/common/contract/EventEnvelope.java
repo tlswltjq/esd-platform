@@ -1,15 +1,15 @@
 package com.stove.common.contract;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.InboundMessage;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 /**
- * 컨슈머가 다루기 쉬운 형태로 정규화한 수신 메시지. 어느 브로커에서 왔는지 모른다.
+ * 컨슈머가 다루기 쉬운 형태로 정규화한 Kafka 레코드.
  * 헤더에서 eventId/eventType 을 꺼내 멱등 판단과 라우팅을 body 파싱 없이 수행한다.
  *
  * @param eventId 서비스 간 전달 시 유지하는 이벤트 고유 식별자.
  * @param eventType 전달하거나 처리한 업무 이벤트 종류.
- * @param key 이벤트의 순서 키.
+ * @param key 이벤트의 Kafka 메시지 키(순서 키).
  * @param payload 전달할 이벤트 본문.
  */
 public record EventEnvelope(String eventId, String eventType, String key, String payload) {
@@ -23,22 +23,22 @@ public record EventEnvelope(String eventId, String eventType, String key, String
      * 리스너가 아무 분기도 타지 않고 정상 리턴하므로 <b>로그에도 흔적이 남지 않는다.</b>
      *
      * <p>판단할 수 없는 입력은 부수효과 이전에 거부한다. 이후 처리는 컨슈머의 에러 핸들러
-     * 정책이 맡는다(재시도 소진 후 기록하고 건너뛴다).
+     * 정책이 맡는다(재시도 소진 후 격리한다).
      */
-    public static EventEnvelope from(InboundMessage message) {
-        String eventId = message.header(EventHeaders.EVENT_ID);
-        String eventType = message.header(EventHeaders.EVENT_TYPE);
-        requireHeader(eventId, EventHeaders.EVENT_ID, message);
-        requireHeader(eventType, EventHeaders.EVENT_TYPE, message);
+    public static EventEnvelope from(ConsumerRecord<String, String> record) {
+        String eventId = EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_ID);
+        String eventType = EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_TYPE);
+        requireHeader(eventId, EventHeaders.EVENT_ID, record);
+        requireHeader(eventType, EventHeaders.EVENT_TYPE, record);
 
-        return new EventEnvelope(eventId, eventType, message.key(), message.payload());
+        return new EventEnvelope(eventId, eventType, record.key(), record.value());
     }
 
-    private static void requireHeader(String value, String name, InboundMessage message) {
+    private static void requireHeader(String value, String name, ConsumerRecord<String, String> record) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(
-                    "이벤트 계약 위반: %s 헤더가 없다 topic=%s %s key=%s"
-                            .formatted(name, message.topic(), message.origin(), message.key()));
+                    "이벤트 계약 위반: %s 헤더가 없다 topic=%s partition=%d offset=%d key=%s"
+                            .formatted(name, record.topic(), record.partition(), record.offset(), record.key()));
         }
     }
 

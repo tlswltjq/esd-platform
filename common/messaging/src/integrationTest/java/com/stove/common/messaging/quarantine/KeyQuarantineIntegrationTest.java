@@ -1,19 +1,17 @@
 package com.stove.common.messaging.quarantine;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.event.EventHandler;
-import com.stove.common.event.EventSubscriber;
-import com.stove.common.event.InboundMessage;
-import com.stove.common.event.KeyQuarantine;
 import com.stove.common.contract.EventHeaders;
+import com.stove.common.messaging.kafka.KeyQuarantine;
 import com.stove.common.messaging.quarantine.QuarantineReplay.ReplayResult;
 import com.stove.common.messaging.trace.ReplayTracing;
 import com.stove.common.testcontainers.InfraContainers;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -21,19 +19,21 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * 결정 155·160·206 — 소비 실패를 소비 모듈 DB 에 보관하고 그 키를 멈추며, 키 단위로 원래 순서대로 다시 넣는다.
- * 실제 MySQL 로 본다(정지 판단과 순서가 SQL 에 달려 있다).
+ * 실제 MySQL 로 본다(정지 판단과 순서가 SQL 에 달려 있다). 재투입은 운영처럼 등록된 {@code @KafkaListener} 컨테이너의 리스너로 간다.
  */
 @SpringBootTest(properties = "stove.outbox.relay-enabled=false")
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class, KeyQuarantineIntegrationTest.Handlers.class})
@@ -55,7 +55,7 @@ class KeyQuarantineIntegrationTest {
     RecordingHandler handler;
 
     @Autowired
-    ApplicationContext context;
+    KafkaListenerEndpointRegistry listeners;
 
     @Autowired
     PlatformTransactionManager transactions;
@@ -67,10 +67,21 @@ class KeyQuarantineIntegrationTest {
         handler.blockOn = null;
     }
 
-    private static InboundMessage message(String key, String eventId) {
-        return new InboundMessage(TOPIC, key, "{\"n\":\"" + eventId + "\"}",
-                Map.of(EventHeaders.EVENT_ID, List.of(eventId), EventHeaders.EVENT_TYPE, List.of("Fixture"),
-                        EventHeaders.TRACE_PARENT, List.of("tp-1", "tp-2")), "partition=0 offset=1");
+    private static ConsumerRecord<String, String> message(String key, String eventId) {
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(TOPIC, 0, 1L, key, "{\"n\":\"" + eventId + "\"}");
+        header(record, EventHeaders.EVENT_ID, eventId);
+        header(record, EventHeaders.EVENT_TYPE, "Fixture");
+        header(record, EventHeaders.TRACE_PARENT, "tp-1");
+        header(record, EventHeaders.TRACE_PARENT, "tp-2");
+        return record;
+    }
+
+    private static void header(ConsumerRecord<String, String> record, String name, String value) {
+        record.headers().add(name, value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String eventId(ConsumerRecord<String, String> record) {
+        return EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_ID);
     }
 
     @Test
@@ -93,10 +104,12 @@ class KeyQuarantineIntegrationTest {
         ReplayResult result = replay.replay(GROUP, TOPIC, key);
 
         assertThat(result).isEqualTo(new ReplayResult(3, 0, null));
-        assertThat(handler.received).extracting(m -> m.header(EventHeaders.EVENT_ID))
+        assertThat(handler.received).extracting(KeyQuarantineIntegrationTest::eventId)
                 .containsExactly("E-1-" + key, "E-2-" + key, "E-3-" + key);
-        assertThat(handler.received.get(0).headerValues(EventHeaders.TRACE_PARENT))
+        assertThat(EventHeaders.values(handler.received.get(0).headers(), EventHeaders.TRACE_PARENT))
                 .as("보관된 헤더를 그대로 되살린다(중복 포함)").containsExactly("tp-1", "tp-2");
+        assertThat(handler.received.get(0).partition()).as("원래 위치를 되살린다").isZero();
+        assertThat(handler.received.get(0).offset()).isEqualTo(1L);
         assertThat(quarantine.stopped(GROUP, TOPIC, key)).isFalse();
         assertThat(repository.findByConsumerGroupAndTopicAndPartitionKeyAndStatusOrderByIdAsc(
                 GROUP, TOPIC, key, QuarantineStatus.REPLAYED)).hasSize(3);
@@ -143,7 +156,7 @@ class KeyQuarantineIntegrationTest {
             assertThat(second.stoppedBecause()).contains("다른 재투입");
             release.countDown();
             assertThat(running.get(10, TimeUnit.SECONDS)).isEqualTo(new ReplayResult(2, 0, null));
-            assertThat(handler.received).extracting(m -> m.header(EventHeaders.EVENT_ID))
+            assertThat(handler.received).extracting(KeyQuarantineIntegrationTest::eventId)
                     .containsExactly("E-1-" + key, "E-2-" + key);
         } finally {
             release.countDown();
@@ -158,7 +171,7 @@ class KeyQuarantineIntegrationTest {
         for (int i = 1; i <= 3; i++) {
             quarantine.quarantine(GROUP, message(key, "E-" + i + "-" + key), i == 1 ? new IllegalStateException("boom") : null);
         }
-        QuarantineReplay limited = new QuarantineReplay(repository, context, new ObjectMapper(), transactions,
+        QuarantineReplay limited = new QuarantineReplay(repository, listeners, new ObjectMapper(), transactions,
                 ReplayTracing.NONE, Clock.systemUTC(), 2);
 
         ReplayResult result = limited.replay(GROUP, TOPIC, key);
@@ -175,7 +188,7 @@ class KeyQuarantineIntegrationTest {
         String key = "K-" + UUID.randomUUID();
         quarantine.quarantine(GROUP, message(key, "E-1-" + key), new IllegalStateException("boom"));
         List<String> parents = new ArrayList<>();
-        QuarantineReplay traced = new QuarantineReplay(repository, context, new ObjectMapper(), transactions,
+        QuarantineReplay traced = new QuarantineReplay(repository, listeners, new ObjectMapper(), transactions,
                 (traceParent, work) -> {
                     parents.add(traceParent);
                     work.run();
@@ -198,7 +211,7 @@ class KeyQuarantineIntegrationTest {
         handler.received.clear();
         assertThat(replay.replay(GROUP, TOPIC, key)).isEqualTo(new ReplayResult(1, 0, null));
         assertThat(handler.received.get(0).key()).isEqualTo(key);
-        assertThat(handler.received.get(0).header(EventHeaders.EVENT_ID)).isEqualTo(eventId);
+        assertThat(eventId(handler.received.get(0))).isEqualTo(eventId);
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -209,17 +222,17 @@ class KeyQuarantineIntegrationTest {
         }
     }
 
-    @EventSubscriber(topics = TOPIC, group = GROUP)
-    static class RecordingHandler implements EventHandler {
-        final List<InboundMessage> received = new CopyOnWriteArrayList<>();
+    /** 운영 리스너와 같은 모양: 그 그룹·토픽의 {@code @KafkaListener}. 재투입이 이 컨테이너의 리스너를 찾아 부른다. */
+    static class RecordingHandler {
+        final List<ConsumerRecord<String, String>> received = new CopyOnWriteArrayList<>();
         volatile String failOn;
         volatile String blockOn;
         volatile CountDownLatch inside;
         volatile CountDownLatch release;
 
-        @Override
-        public void receive(InboundMessage message) {
-            String eventId = message.header(EventHeaders.EVENT_ID);
+        @KafkaListener(topics = TOPIC, groupId = GROUP)
+        public void receive(ConsumerRecord<String, String> record) {
+            String eventId = eventId(record);
             if (eventId.equals(failOn)) {
                 throw new IllegalStateException("still broken");
             }
@@ -231,7 +244,17 @@ class KeyQuarantineIntegrationTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            received.add(message);
+            received.add(record);
         }
+    }
+
+    @Test
+    void replayOfAGroupWithoutAListenerIsRefusedBeforeClaimingAnything() {
+        String key = "K-" + UUID.randomUUID();
+        quarantine.quarantine("no-such-group", message(key, "E-1-" + key), new IllegalStateException("boom"));
+
+        assertThatThrownBy(() -> replay.replay("no-such-group", TOPIC, key))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(quarantine.stopped("no-such-group", TOPIC, key)).as("점유하지 않아 그대로 멈춰 있다").isTrue();
     }
 }

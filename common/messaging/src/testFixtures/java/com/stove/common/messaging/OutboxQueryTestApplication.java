@@ -15,15 +15,14 @@ import org.springframework.context.annotation.FilterType;
  * 그러면 9개 서비스가 의존하는 쿼리의 회귀 방어선이 앱 하나에 인질로 잡힌다 —
  * 그 앱이 테스트를 옮기거나 지우면 조용히 사라진다.
  *
- * <p>adapter 모듈(결정 209)의 통합 테스트도 testFixtures 로 이 앱과 스키마를 받아, 코어 엔티티·저장소와 함께 뜬다.
  */
 @SpringBootApplication
 @ComponentScan(excludeFilters = {
         @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
                 classes = {OutboxOpsController.class, OutboxRepublishController.class, QuarantineOpsController.class}),
-        // adapter 패키지(com.stove.common.messaging.kafka 등, 결정 209)도 이 패키지 아래라 스캔에 걸린다.
-        // 실제 서비스처럼 adapter 는 자동 구성으로만 들어와야 한다(Kafka 의 DltOpsController 가 서비스 빈 없이 등록되던 문제).
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.stove\\.common\\.messaging\\.(kafka|rabbitmq|redis|direct)\\..*")})
+        // Kafka 공통 모듈(com.stove.common.messaging.kafka)도 이 패키지 아래라 스캔에 걸린다.
+        // 실제 서비스처럼 자동 구성으로만 들어와야 한다(DltOpsController 가 서비스 빈 없이 등록되던 문제).
+        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.stove\\.common\\.messaging\\.kafka\\..*")})
 public class OutboxQueryTestApplication {
 
     // 이 테스트 앱만 common:messaging 안에 있어서 ops 컨트롤러까지 스캔한다.
