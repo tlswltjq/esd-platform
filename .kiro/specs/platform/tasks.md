@@ -289,8 +289,8 @@
 
 - [ ] **T39. Kafka 단일 구현의 성능·안정성 기준선을 잰다(작업 B)** ([결정 227](../../../docs/decisions.md#kafka-only-messaging)·[229](../../../docs/decisions.md#benchmark-fault-injection)~[235](../../../docs/decisions.md#dlt-write-failure-injection), [E13 지표·계약](../../../docs/experiments.md#kafka-baseline))
   - 정본: 지표 정의·벤치마크 계약·판정식은 E13, 부하 조건은 결정 230, 판정 기준은 결정 231(잠정 벤치마크 기준, SLO 아님), 결과 보관은 결정 233.
-  - [ ] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
-  - [ ] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke.
+  - [x] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
+  - [x] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke — PR #253([E13 층 2 실행](../../../docs/experiments.md#kafka-baseline-layer2)).
   - [ ] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 봉투 발행·DLT `max.message.bytes`), smoke.
   - [ ] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/`.
   - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.

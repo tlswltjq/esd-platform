@@ -1,0 +1,68 @@
+# 층 2 시험 앱(E13). Kafka·DB 설정은 운영 앱(apps/*/application.yml)과 같은 값을 쓴다 — 다르면 기존 설정 결과와 섞인다(결정 230).
+# 접속 정보·회차 폴더는 측정 스크립트(tools/measurement/bench_messaging.py)가 환경 변수로 준다.
+server:
+  port: ${BENCH_HTTP_PORT:18080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: bench-messaging
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:stove_bench}?serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${DB_USER:stove}
+    password: ${DB_PASSWORD:stove1234}
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 3000
+      initialization-fail-timeout: 60000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+      # 리스너 동시성은 common:messaging-kafka 의 기본값(파티션 수 3, 결정 212)을 받는다. 계열을 바꿀 때만 환경으로 덮는다.
+
+stove:
+  bench:
+    topic: ${BENCH_TOPIC:bench.messages.v1}
+    run-dir: ${BENCH_RUN_DIR}
+    attempt-flush-ms: 1000
+    recovery: quarantine
+  outbox:
+    # 시험 앱은 발행하지 않는다. 릴레이를 켜 두면 빈 표를 200ms마다 조회해 DB 부하만 더한다.
+    relay-enabled: false
+  messaging:
+    ops:
+      enabled: false
+
+management:
+  endpoints.web.exposure.include: health,prometheus
+  metrics.tags.application: bench-messaging
+  tracing.enabled: false
+
+logging:
+  level:
+    root: INFO
