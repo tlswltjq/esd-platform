@@ -169,8 +169,8 @@
   - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
 
 - [ ] **T20. 영구 실패도 4회 재시도하고, 공통 분류가 없다**
-  - 어디서: `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java:37-43`, 재시도 제외는 Order 환불 리스너 `@EventSubscriber(noRetryFor = RefundCompletionRejected.class)` 하나(R11).
-  - 목표: P2.6-3. 브로커 무관 `common/event`에 영구 실패 예외 하나, 모든 adapter의 제자리 재시도(Kafka `DefaultErrorHandler`, 코어 `InPlaceDelivery`)가 재시도에서 뺀다(결정 209).
+  - 어디서: `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java`(`stoveKafkaErrorHandler`), 재시도 제외는 앱 config 의 리스너 팩토리뿐이다 — Order 환불 리스너 `RefundKafkaConfiguration`(`RefundCompletionRejected`), 게이트웨이·웹 BFF `AccessChangeKafkaConfiguration`(`AccessChangeRejected`)(R11).
+  - 목표: P2.6-3. Kafka 공통 모듈에 영구 실패 예외 하나, 공용 오류 처리기(`DefaultErrorHandler`)와 `ListenerContainerFactories`의 모든 팩토리가 재시도에서 뺀다(결정 227로 위치만 바뀜).
   - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
   - 재현: 헤더 없는 레코드를 넣고 `consumer_quarantine` 보관까지 시도 1회 단언(PR #209 뒤 DLT 대신 격리).
 

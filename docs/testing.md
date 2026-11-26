@@ -10,7 +10,7 @@
 | 앱 하나의 `core`(도메인·서비스)·`api` 입력 변환 | `./gradlew :apps:<앱>:test` | [2. 테스트 계층](#2-테스트-계층) |
 | 앱의 `adapter`·DB·리스너·Outbox/Inbox 연결 | 위 + `./gradlew :apps:<앱>:integrationTest` (MinIO를 쓰면 [이미지 재사용](#minio-image)) | [2. 테스트 계층](#2-테스트-계층) |
 | Order·Payment의 Flyway 이행 파일 | 위 + `./gradlew :apps:<앱>:migrationTest` | [2. 테스트 계층](#2-테스트-계층) |
-| `common/<모듈>` | `./gradlew :common:<모듈>:test` + 그 모듈을 쓰는 앱의 `test`. 메시징 adapter는 `:common:messaging-<브로커>:integrationTest`(공통 계약 테스트) | [2. 테스트 계층](#2-테스트-계층) |
+| `common/<모듈>` | `./gradlew :common:<모듈>:test` + 그 모듈을 쓰는 앱의 `test`. 메시징(`contract`·`messaging`·`messaging-kafka`)은 위 + `:common:messaging:integrationTest`(실 Kafka·MySQL 전달 보장 `KafkaDeliveryIntegrationTest`·격리 재투입·릴레이)·`:common:messaging-kafka:integrationTest` | [2. 테스트 계층](#2-테스트-계층) |
 | 패키지 이동·ArchUnit 규칙·모듈 의존 | 구조 검사 묶음 | [구조·보안 경계 검사 실행](#structure-checks) |
 | 배포 비밀·Compose·서비스 접근키·웹훅 경계 | 같은 절의 Python 검사와 `ServiceKey`·`PortOneWebhook` 통합 테스트 | [구조·보안 경계 검사 실행](#structure-checks) |
 | 결함 재현 | `./gradlew defectTest` (실패 = 결함이 살아 있음) | [3. 결함 재현 테스트](#3-결함-재현-테스트) |
@@ -603,6 +603,8 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
   `propagation = MANDATORY` 자체는 여전히 무테스트다 — 검증하려면 실 트랜잭션 매니저가 필요하고,
   그 자리는 앱 모듈의 통합 테스트다.
 - **`common/messaging-kafka`** (옛 `common/kafka`, 신설은 decisions.md 19번, 결정 209로 이름 변경) — 수신 실패 처리는 <b>브로커 없이</b> 검증한다.
+  `ListenerContainerFactoriesTest` 가 리스너 팩토리의 재시도 선택·멈춘 키 인터셉터·격리 그룹을 본다.
+  같은 정책이 실 브로커에서 지키는 보장(키 순서·격리·키 정지·보관 실패 붙잡기)은 `common:messaging` 의 `KafkaDeliveryIntegrationTest` 가 본다.
   `DltOpsServiceTest` 가 `MockConsumer` 로 재투입을 본다 — 원본 토픽으로 가는가,
   진단 헤더(`kafka_dlt-*`)를 떼는가, 계약 헤더와 `traceparent` 를 남기는가,
   **조회가 커밋하지 않는가**, 발행이 끝난 뒤에만 커밋하는가.

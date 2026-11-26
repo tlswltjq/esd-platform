@@ -10,7 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 public final class PaymentTraceMapper {
     private PaymentTraceMapper() {}
 
-    /** @param traceParents 수신 메시지의 {@link EventHeaders#TRACE_PARENT} 값 전부({@code InboundMessage#headerValues}). */
+    /** @param traceParents 수신 레코드의 {@link EventHeaders#TRACE_PARENT} 값 전부({@link EventHeaders#values}, 받은 순서). */
     public static PaymentTraceContext from(List<String> traceParents) {
         if (traceParents.isEmpty()) return PaymentTraceContext.NONE;
         if (traceParents.size() > 1) return ignored("DUPLICATE");
