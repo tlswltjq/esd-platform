@@ -378,7 +378,8 @@ class ArchRuleEnforcementTest {
             assertThatThrownBy(() -> ConsumerGroupRules.카프카_리스너는_레코드_하나만_받는다(app("typedrecord")))
                     .as("재투입이 넘기는 문자열과 다른 값 타입을 받는 리스너를 잡지 못했다")
                     .isInstanceOf(AssertionError.class)
-                    .hasMessageContaining("TypedRecordListener");
+                    .hasMessageContaining("TypedRecordListener.receive(")
+                    .hasMessageContaining("TypedRecordListener.receiveWildcard(");
         }
 
         @Test

@@ -153,8 +153,9 @@ public final class ConsumerGroupRules {
             return false;
         }
         List<JavaType> arguments = record.getActualTypeArguments();
+        // 와일드카드({@code ? extends String})는 소거하면 String 이 되므로 구체 클래스인지도 본다(PR #250 2차 재리뷰 R2).
         return arguments.size() == 2 && arguments.stream()
-                .allMatch(argument -> argument.toErasure().getName().equals(String.class.getName()));
+                .allMatch(argument -> argument instanceof JavaClass type && type.getName().equals(String.class.getName()));
     }
 
     private static boolean hasAnnotation(Set<? extends JavaAnnotation<?>> annotations, String type) {
