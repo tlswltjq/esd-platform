@@ -22,14 +22,17 @@ import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import java.sql.Connection;
 import java.util.Optional;
 import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** 운영자의 계정 상태·역할 관리. 자기 보호와 마지막 ADMIN 보호, 즉시 토큰 폐기, 감사 기록을 지킨다. */
 class ManageAccountTest {
@@ -51,6 +54,23 @@ class ManageAccountTest {
         target = UserAccount.member("target@example.com", "{bcrypt}h");
         when(accounts.lockForChange(admin.getSubject())).thenReturn(Optional.of(admin));
         when(accounts.lockForChange(target.getSubject())).thenReturn(Optional.of(target));
+        // 운영에서는 @Transactional(READ_COMMITTED) 가 거는 값이다. 대역 시험은 그 트랜잭션 안이라고 둔다(D-061).
+        TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED);
+    }
+
+    @AfterEach
+    void clearIsolation() {
+        TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(null);
+    }
+
+    @Test
+    @DisplayName("READ COMMITTED 트랜잭션 밖(또는 다른 격리 수준의 트랜잭션 참여)에서는 판정 전에 거부한다(D-061)")
+    void rejectsWithoutReadCommitted() {
+        TransactionSynchronizationManager.setCurrentTransactionIsolationLevel(null);
+
+        assertThatThrownBy(() -> service.grantRole(admin.getSubject(), target.getSubject(), PlatformRole.CREATOR))
+                .isInstanceOf(IllegalStateException.class);
+        verify(accounts, never()).lockForChange(anyString());
     }
 
     // ── 상태 변경 ────────────────────────────────────────────────

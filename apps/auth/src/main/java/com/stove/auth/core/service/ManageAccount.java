@@ -11,6 +11,7 @@ import com.stove.common.contract.payload.AccountAccessChangedEvent;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
+import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,9 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 운영자(ADMIN)의 계정 상태·역할 관리. 운영 안전 규칙을 판정한다.
@@ -35,6 +38,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>모든 변경을 {@code role_audit_log}에 남긴다.
  * </ul>
  *
+ * <p>트랜잭션은 READ COMMITTED 로 돈다(D-061). 계정 행은 subject 순서로 잠그고, 역할(EAGER {@code @ElementCollection})은
+ * 잠금 조회 뒤 잠그지 않는 별도 SELECT 로 읽힌다. REPEATABLE READ 에서는 먼저 잠근 계정의 역할 조회가 읽기 스냅샷을 고정해,
+ * 뒤에서 잠금을 기다려 얻은 요청자의 역할을 회수 커밋 전 값으로 읽는다(회수 직후 운영자의 변경이 통과). READ COMMITTED 에서는
+ * 문장마다 최신 커밋을 읽어, 잠금을 얻은 뒤의 역할 조회가 회수를 본다.
+ *
  * <p>변경은 계정 행 배타 잠금으로 시작하고, 토큰 발급(코드 교환·갱신)은 역할을 읽기 전에 같은 행을 공유 잠금한다
  * ({@link UserAccountRepository#lockForIssuance}). 그래서 동시 발급은 변경보다 먼저 커밋됐거나(그 토큰의 {@code iat}가 더
  * 이르고 그 계열은 이 폐기에 걸린다) 변경 커밋을 기다린 뒤 새 역할을 읽는다. {@code changedAt}은 잠금을 잡고 폐기한
@@ -49,7 +57,7 @@ public class ManageAccount {
     private final TokenRevocationPort tokens;
     private final OutboxRecorder outbox;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void changeStatus(String actorSubject, String targetSubject, AccountStatus next) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         try {
@@ -61,7 +69,7 @@ public class ManageAccount {
         revokeAccess(target, AccountAccessChangedEvent.STATUS);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void grantRole(String actorSubject, String targetSubject, PlatformRole role) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         if (target.hasRole(role)) {
@@ -72,7 +80,7 @@ public class ManageAccount {
         revokeAccess(target, AccountAccessChangedEvent.ROLE);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void revokeRole(String actorSubject, String targetSubject, PlatformRole role) {
         UserAccount target = requireDifferentTarget(actorSubject, targetSubject);
         if (role == PlatformRole.ADMIN && accounts.countByRole(PlatformRole.ADMIN) <= 1) {
@@ -102,6 +110,7 @@ public class ManageAccount {
      * 변경이 직렬화되고(확인 직후 ADMIN을 잃어도 진행하는 경합 방지), 고정된 순서라 서로를 바꾸는 두 요청이 교착하지 않는다.
      */
     private UserAccount requireDifferentTarget(String actorSubject, String targetSubject) {
+        requireReadCommitted();
         Map<String, Optional<UserAccount>> locked = new TreeMap<>();
         for (String subject : new TreeSet<>(List.of(actorSubject, targetSubject))) {
             locked.put(subject, accounts.lockForChange(subject));
@@ -112,6 +121,17 @@ public class ManageAccount {
         }
         return locked.get(targetSubject)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "대상 계정을 찾을 수 없습니다."));
+    }
+
+    /**
+     * 이미 진행 중인 트랜잭션에 참여하면({@code REQUIRED}) 선언한 READ COMMITTED 가 적용되지 않아 D-061 이 되살아난다
+     * (PR #251 리뷰 R1). 그런 호출은 판정 전에 거부한다.
+     */
+    private static void requireReadCommitted() {
+        Integer isolation = TransactionSynchronizationManager.getCurrentTransactionIsolationLevel();
+        if (isolation == null || isolation != Connection.TRANSACTION_READ_COMMITTED) {
+            throw new IllegalStateException("운영자 계정 변경은 READ COMMITTED 트랜잭션에서만 판정한다(D-061): " + isolation);
+        }
     }
 
     /** R7.1: 토큰의 ADMIN 역할과 별개로 요청자 계정이 지금도 활성 운영자인지 DB에서 확인한다. */
