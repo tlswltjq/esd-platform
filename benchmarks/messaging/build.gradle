@@ -1,0 +1,66 @@
+// Kafka 기준선 층 2 메시징 구간 벤치(결정 234, E13).
+//
+// 세 프로그램이 한 모듈에 있고, 측정 때는 서로 다른 프로세스로 띄운다.
+//   - 시험 앱(com.stove.bench.messaging.app): 운영과 같은 common:messaging·common:messaging-kafka 자동 구성 위의 시험 리스너
+//   - 부하 발생기(com.stove.bench.messaging.load.LoadGenerator): 별도 프로세스의 open-loop 발행
+//   - 요약기(com.stove.bench.messaging.report.RunReport): 회차 폴더의 원본으로 summary.json을 만든다
+//
+// 운영 앱은 이 모듈에 의존하지 않는다(루트 verifyBenchmarksIsolation). Jib 이미지를 만들지 않는다.
+// CI는 컴파일과 단위 시험만 돌린다. 측정 회차는 tools/measurement/bench_messaging.py가 띄운다.
+apply plugin: 'org.springframework.boot'
+
+// 프로젝트 이름이 :common:messaging 과 같아 group 까지 같으면 좌표(com.stove:messaging)가 겹쳐 의존이 자기 자신으로 풀린다.
+group = 'com.stove.benchmarks'
+
+dependencies {
+    implementation project(':common:messaging')
+    implementation project(':common:messaging-kafka')
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // 운영 앱과 같은 웹 서버: 측정 스크립트가 actuator(health·prometheus)를 읽고, Outbox·격리 재투입이 Boot 기본 ObjectMapper 를 받는다.
+    // 운영 API(ops)는 common:web 이 없고 stove.messaging.ops.enabled=false 라 켜지지 않는다.
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.flywaydb:flyway-core'
+    // 지연 분포는 HdrHistogram으로 모은다(E13 지표 정의). 버전은 micrometer-core가 끌어오는 값(2.2.2)과 같게 둔다(Boot BOM이 관리하지 않는다).
+    implementation 'org.hdrhistogram:HdrHistogram:2.2.2'
+    runtimeOnly 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    testImplementation project(':common:archunit')
+}
+
+springBoot {
+    mainClass = 'com.stove.bench.messaging.app.BenchApplication'
+}
+
+// 실행 산출물을 따로 만들지 않는다. 측정 스크립트는 아래 클래스패스 파일로 세 프로그램을 띄운다.
+tasks.named('jar') { enabled = false }
+tasks.named('bootJar') { enabled = false }
+
+// 결정 234의 "Gradle 실행 태스크 둘". 측정 회차는 Gradle 데몬이 같은 호스트 자원을 쓰지 않게 writeBenchClasspath를 쓴다.
+tasks.register('runBenchApp', JavaExec) {
+    group = 'benchmark'
+    description = '층 2 시험 앱을 띄운다(접속 정보는 환경 변수)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.stove.bench.messaging.app.BenchApplication'
+}
+
+tasks.register('runLoadGenerator', JavaExec) {
+    group = 'benchmark'
+    description = '층 2 open-loop 부하 발생기를 띄운다(-Pbench.args="--bootstrap=... --rate=...")'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.stove.bench.messaging.load.LoadGenerator'
+    args = providers.gradleProperty('bench.args').map { it.trim().split(/\s+/).toList() }.getOrElse([])
+}
+
+tasks.register('writeBenchClasspath') {
+    group = 'benchmark'
+    description = '측정 스크립트가 java -cp 로 쓸 실행 클래스패스를 파일로 남긴다'
+    dependsOn tasks.named('classes')
+    def output = layout.buildDirectory.file('bench-classpath.txt')
+    outputs.file(output)
+    doLast {
+        output.get().asFile.text = sourceSets.main.runtimeClasspath.asPath
+    }
+}

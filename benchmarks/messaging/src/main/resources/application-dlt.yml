@@ -1,0 +1,11 @@
+# 격리처를 DLT로 바꾼 계열(E13 시나리오 4). 소비 모듈 DB 격리(KeyQuarantine)를 만드는 자동 구성을 빼면
+# common:messaging-kafka 가 DB 없는 앱처럼 <토픽>.DLT 로 보낸다. Inbox 가드는 DltModeConfiguration 이 다시 세운다.
+spring:
+  autoconfigure:
+    exclude:
+      - com.stove.common.messaging.MessagingAutoConfiguration
+      - com.stove.common.messaging.ops.MessagingOpsAutoConfiguration
+
+stove:
+  bench:
+    recovery: dlt

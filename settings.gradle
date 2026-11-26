@@ -50,6 +50,10 @@ include 'apps:settlement'
 // 외부 공급자 검증용 독립 실행 앱
 include 'simulators:mock-pg'
 
+// ── 벤치마크 ──────────────────────────────────────────────────────
+// Kafka 기준선 층 2 메시징 구간 벤치(결정 234). 운영 앱은 의존하지 않고 이미지도 만들지 않는다.
+include 'benchmarks:messaging'
+
 // 로컬 S3 검증용 MinIO/mc: 고정 Go 소스 빌드와 Jib 이미지 패키징.
 include 'infra:minio'
 

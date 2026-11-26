@@ -421,7 +421,7 @@ configure(subprojects.findAll { it.path.startsWith(':common:') }) {
 
 // apps 와 common 은 자식을 담는 껍데기라 소스가 없다.
 // 빈 jar 를 만들어 두면 common-*.jar 목록에 모듈이 아닌 것이 섞인다.
-configure([project(':apps'), project(':common'), project(':simulators'), project(':infra')]) {
+configure([project(':apps'), project(':common'), project(':simulators'), project(':infra'), project(':benchmarks')]) {
     tasks.named('jar') { enabled = false }
 }
 
@@ -460,8 +460,29 @@ tasks.register('verifyCommonRuntimeDependencies') {
     }
 }
 
+// 결정 234: 벤치 모듈은 운영 산출물에 들어가지 않는다. 벤치 밖의 어떤 모듈도 실행 클래스패스에 :benchmarks:* 를 두지 않는다.
+tasks.register('verifyBenchmarksIsolation') {
+    group = 'verification'
+    description = '운영 앱·공통 모듈·모의 PG가 벤치 모듈에 의존하지 않는지 검증한다'
+
+    doLast {
+        def production = subprojects.findAll { !it.path.startsWith(':benchmarks') && it.configurations.findByName('runtimeClasspath') != null }
+        production.each { candidate ->
+            candidate.configurations.runtimeClasspath.incoming.resolutionResult.allComponents.each { component ->
+                def id = component.id
+                if (id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier
+                        && id.projectPath.startsWith(':benchmarks')) {
+                    throw new GradleException("${candidate.path} must not depend on benchmark module ${id.projectPath} (결정 234)")
+                }
+            }
+        }
+        logger.lifecycle("Benchmark isolation verified: ${production.size()} modules")
+    }
+}
+
 tasks.named('check') {
     dependsOn tasks.named('verifyCommonRuntimeDependencies')
+    dependsOn tasks.named('verifyBenchmarksIsolation')
 }
 
 // ── 결함 재현 테스트 합산 보고 ────────────────────────────────────────
