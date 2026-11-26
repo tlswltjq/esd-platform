@@ -17,6 +17,7 @@
 | 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택), 스택이 떠 있으면 `./gradlew :e2e:e2eTest` | [2. 테스트 계층](#2-테스트-계층) |
 | 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다) | [실험 E9](experiments.md#resilience) |
 | 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
+| `benchmarks/messaging`(층 2 메시징 벤치) | `./gradlew :benchmarks:messaging:test`(단위·ArchUnit). 실 Kafka·MySQL로 계측이 맞물리는지는 `measure_guard.py`로 감싼 `python3 -B tools/measurement/bench_messaging.py smoke`(CI 밖, [결정 234](decisions.md#benchmark-messaging-module)) | [실험 E13](experiments.md#kafka-baseline) |
 | `tools/ci/` | `python3 -B -m unittest discover -s tools/ci -p 'test_*.py'` | [tools/README.md](../tools/README.md) |
 | `tools/verification/`·`tools/measurement/` | `python3 -B -m unittest discover -s tools/verification -p 'test_<대상>.py'`. CI는 build 작업이 둘 다 늘 돌리고, 이 경로만 바뀐 PR은 Gradle을 생략한다 | [결정 216](decisions.md#ci-scope-non-gradle-paths) |
 | 문서만(`*.md`) | 로컬 Gradle 없음. `python3 tools/ci/decision_numbers.py --root . --base-ref origin/main`(결정을 고쳤을 때) | CI가 Gradle을 생략한다([결정 207](decisions.md#ci-build-scope)) |
