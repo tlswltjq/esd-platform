@@ -2468,6 +2468,17 @@
 - 구분: 추천 수용
 - 결과: [PR #252](https://github.com/tlswltjq/esd-platform/pull/252)
 
+<a id="benchmark-messaging-module"></a>
+## 234. 층 2 메시징 구간 벤치(시험 앱·부하 발생기)는 운영 이미지에 들어가지 않는 별도 모듈 `benchmarks:messaging`에 둔다
+- 문제: [결정 229](#benchmark-fault-injection)의 층 2는 실제 Kafka·MySQL에서 운영과 같은 `common:messaging-kafka`·`common:messaging` 자동 구성 위에 헤더대로 실패하는 시험 리스너를 두고, 별도 프로세스의 부하 발생기로 open-loop 발행(최대 10,000 msg/s)한다. 시험 코드는 운영 JAR·이미지에 들어가면 안 된다.
+- 선택지: A 별도 모듈 `benchmarks:messaging` — 시험 앱과 부하 발생기를 각자 `main`으로 두고 `common:messaging`·`-kafka`만 의존, 시험 표 Flyway를 따로 둔다 / B `common:messaging`의 새 소스셋·testFixtures / C Gradle 밖 스크립트(Python 발생기 + 단일 Java 파일) (추천: A — 운영 코드와 경계가 분명하고 `e2e`·`simulators:mock-pg` 선례와 같으며, 공통 라이브러리와 함께 컴파일돼 측정 도구가 낡지 않는다. Java 발생기는 목표율 달성 여부를 같은 지표로 판정한다)
+- 내 의견: "A로 해, benchmarks:messaging 모듈로"
+- 선택: A — 추천 수용.
+  - 운영 앱은 이 모듈에 의존하지 않는다(ArchUnit·Gradle로 강제). 이미지 빌드·게시 대상에서 뺀다. CI는 컴파일과 단위 시험만 돌린다.
+  - 시험 앱과 발생기는 서로 다른 프로세스로 띄운다(Gradle 실행 태스크 둘). 측정 회차 실행은 `tools/measurement/` 스크립트가 맡는다.
+- 구분: 추천 수용
+- 결과: [PR #252](https://github.com/tlswltjq/esd-platform/pull/252)
+
 ---
 
 ## 검증하며 드러난 것
