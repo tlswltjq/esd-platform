@@ -2445,6 +2445,17 @@
 - 구분: 추천 수용(조건 추가)
 - 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)
 
+<a id="drop-direct-messaging-schema"></a>
+## 232. 브로커 없음 기준선 전용 `direct_cursor` 표와 `idx_outbox_direct_read` 색인은 새 마이그레이션으로 지운다
+- 문제: 브로커 없음 기준선([결정 203](#messaging-comparison-targets))을 위해 앱 8개(auth·catalog·license·order·payment·review·settlement·studio)의 `V*__direct_messaging.sql`과 메시징 코어 시험 스키마 `V3__direct_messaging.sql`이 소비 위치 표 `direct_cursor`와 `outbox_event` 색인 `idx_outbox_direct_read (topic, status, sent_at, id)`를 만들었다. [결정 227](#kafka-only-messaging)로 `messaging-direct`를 지워 둘 다 읽는 코드가 없다. 색인은 모든 업무 트랜잭션의 Outbox INSERT마다 갱신 비용을 더해, Kafka 기준선([결정 230](#benchmark-load-conditions))의 쓰기 경로에 쓰지 않는 비용이 섞인다.
+- 선택지: A 앱마다 새 마이그레이션으로 표와 색인을 모두 지운다(기존 V 파일은 Flyway 이력이라 그대로) / B 둘 다 둔다 / C 색인만 지우고 표는 둔다 (추천: A — 결정 227의 "기술 교체 목적만 있는 것은 지운다"와 맞고, 기준선이 Kafka 단일 구현의 실제 쓰기 비용을 잰다. 운영 데이터가 없어 되돌릴 일이 생기면 다시 만들면 된다)
+- 내 의견: "C R2·B3 R1 기각하고 결정 232는 A로 해"
+- 선택: A — 추천 수용.
+  - 앱 8개에 `V<다음>__drop_direct_messaging.sql`(`DROP TABLE IF EXISTS direct_cursor`, `idx_outbox_direct_read` 삭제)을 더한다. 시험 스키마도 `V4__drop_direct_messaging.sql`로 맞춘다. 옛 `V*__direct_messaging.sql`은 고치지 않는다(이미 적용된 DB의 체크섬).
+  - 단조 `sent_at`(릴레이가 발행 시각을 앞 행보다 늦게 적음)은 동작 변화가 없어 그대로 둔다.
+- 구분: 추천 수용
+- 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)
+
 ---
 
 ## 검증하며 드러난 것
