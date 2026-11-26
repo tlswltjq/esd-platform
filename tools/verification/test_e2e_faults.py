@@ -1,4 +1,6 @@
+import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -62,6 +64,12 @@ class FakeStack:
         self.target = e2e_faults.default_partition("e13-dlt-r1", 3)
         self.store = {0: [5, 5], 1: [None, 0], 2: [3, 3]}
         self.store[self.target] = [None, 0]
+        # 원본 토픽 대상 파티션의 레코드 (offset, 키, 값). interloper 면 두 건 앞에 다른 키 한 건이 끼어든다.
+        self.source = []
+        self.interloper = False
+        # 스키마 권한을 표 단위로 바꾼 표들. revoke_errors[표] 가 있으면 그 표의 REVOKE 가 그 오류로 실패한다.
+        self.table_grants = set()
+        self.revoke_errors = {}
 
     def capture(self, command, input=None, **_):
         self.commands.append((command, input))
@@ -70,6 +78,22 @@ class FakeStack:
             return "stove_license\nstove_settlement"
         if "information_schema.tables" in joined:
             return "product_license\nprocessed_event"
+        sql = command[-1]
+        if sql.startswith("SHOW GRANTS"):
+            user = "`stove`@`" + "%`"
+            lines = ["GRANT USAGE ON *.* TO " + user, "GRANT ALL PRIVILEGES ON `stove_license`.* TO " + user]
+            return "\n".join(lines + ["GRANT ALL PRIVILEGES ON `stove_license`.`%s` TO %s" % (table, user)
+                                      for table in sorted(self.table_grants)])
+        if sql.startswith("GRANT ALL PRIVILEGES ON stove_license.") and "REVOKE ALL PRIVILEGES ON stove_license.*" in sql:
+            self.table_grants = {part.split("ON stove_license.")[1].split()[0]
+                                 for part in sql.split(";") if part.strip().startswith("GRANT")}
+            return ""
+        if sql.startswith("REVOKE ALL PRIVILEGES ON stove_license.") and ".*" not in sql:
+            table = sql.split("ON stove_license.")[1].split()[0]
+            if table in self.revoke_errors:
+                raise subprocess.CalledProcessError(1, command, output=self.revoke_errors[table])
+            self.table_grants.discard(table)
+            return ""
         if "information_schema.processlist" in joined:
             return "" if self.killed else "11\n12"
         if command[-1].startswith("KILL "):
@@ -106,8 +130,15 @@ class FakeStack:
         if "kafka-console-producer.sh" in joined and "stove.catalog.v1" in joined:
             # 제한 중에는 DLT 쓰기가 거부돼 Store recoverer 가 실패하고 커밋이 멈춘다.
             self.recovery_failures += 3
-            self.store[self.target][1] += 2
+            if self.interloper:
+                self.source.append((len(self.source), "other", "{}"))
+            for value in ('{"e13":"dlt","seq":0}', '{"e13":"dlt","seq":1}'):
+                self.source.append((len(self.source), "e13-dlt-r1", value))
+            self.store[self.target][1] = len(self.source)
             return ""
+        if "kafka-console-consumer.sh" in joined and "--partition" in joined:
+            start = int(command[command.index("--offset") + 1])
+            return "\n".join("Offset:%d|%s|%s" % record for record in self.source if record[0] >= start)
         if "kafka-console-consumer.sh" in joined:
             return "\n".join("CreateTime:%d|%s|%s" % (5_000_000_000_000 + i, "e13-dlt-r1", value)
                              for i, value in enumerate(self.dlt_records))
@@ -148,11 +179,66 @@ class DbRevokeTest(unittest.TestCase):
         self.assertIn("REVOKE INSERT ON stove_license.product_license FROM 'stove'@'%';", sql)
         self.assertIn("GRANT INSERT ON stove_license.product_license TO 'stove'@'%';", sql)
         # 정리에서 원래 스키마 단위 권한으로 되돌리고 표 단위 권한을 하나씩 지운다(리뷰 R2).
-        self.assertEqual(sql[-3:], ["GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';",
+        # 지울 표는 SHOW GRANTS 로 읽고, 지운 뒤 다시 읽어 하나도 남지 않았는지 확인한다(재리뷰 2 R1).
+        self.assertEqual(sql[-5:], ["GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';",
+                                    "SHOW GRANTS FOR 'stove'@'%';",
+                                    "REVOKE ALL PRIVILEGES ON stove_license.processed_event FROM 'stove'@'%';",
                                     "REVOKE ALL PRIVILEGES ON stove_license.product_license FROM 'stove'@'%';",
-                                    "REVOKE ALL PRIVILEGES ON stove_license.processed_event FROM 'stove'@'%';"])
+                                    "SHOW GRANTS FOR 'stove'@'%';"])
+        self.assertEqual(stack.table_grants, set())
         self.assertTrue(fault.facts["schema_grant_restored"])
+        self.assertTrue(fault.restored())
         self.assertEqual(fault.problems(), [])
+
+    def prepared(self, revoke_errors):
+        stack = FakeStack()
+        stack.revoke_errors = revoke_errors
+        fault = e2e_faults.DbRevoke(context(stack), {"at": "0", "for": "0", "table": "stove_license.product_license"})
+        fault.prepare()
+        return stack, fault
+
+    def test_a_connection_error_on_a_table_revoke_is_a_failed_restore_not_a_missing_grant(self):
+        stack, fault = self.prepared({"processed_event": "ERROR 2013 (HY000): Lost connection to MySQL server during query"})
+        fault.restore_schema_grant()
+        # 한 표가 실패해도 나머지는 지운다. 연결 오류를 "권한 없음"으로 덮지 않는다.
+        self.assertEqual(stack.table_grants, {"processed_event"})
+        self.assertEqual(fault.facts["table_grants_left"], ["processed_event"])
+        self.assertFalse(fault.restored())
+        problems = fault.problems()
+        self.assertIn("스키마 권한 복원 실패", problems)
+        self.assertTrue(any("processed_event" in problem and "Lost connection" in problem for problem in problems))
+
+    def test_mysql_no_such_grant_error_is_an_already_removed_grant(self):
+        stack, fault = self.prepared({"processed_event": "ERROR 1147 (42000): There is no such grant defined for user "
+                                                         "'stove' on host '%' on table 'processed_event'"})
+        original = stack.capture
+
+        def removed_meanwhile(command, input=None, **kwargs):
+            # SHOW GRANTS 로 읽은 뒤 REVOKE 전에 그 표 권한이 이미 없어진 경우: MySQL 은 1147 로 거절한다.
+            if command[-1].startswith("REVOKE ALL PRIVILEGES ON stove_license.processed_event"):
+                stack.table_grants.discard("processed_event")
+            return original(command, input, **kwargs)
+
+        fault.context.capture = removed_meanwhile
+        fault.restore_schema_grant()
+        self.assertEqual(stack.table_grants, set())
+        self.assertTrue(fault.restored())
+        self.assertEqual(fault.errors, [])
+        self.assertNotIn("스키마 권한 복원 실패", fault.problems())
+
+    def test_unreadable_grants_fail_the_restore(self):
+        stack, fault = self.prepared({})
+        original = stack.capture
+
+        def no_show(command, input=None, **kwargs):
+            if command[-1].startswith("SHOW GRANTS"):
+                raise subprocess.TimeoutExpired(command, 120)
+            return original(command, input, **kwargs)
+
+        fault.context.capture = no_show
+        fault.restore_schema_grant()
+        self.assertFalse(fault.restored())
+        self.assertIn("스키마 권한 복원 실패", fault.problems())
 
     def test_a_connection_that_survives_the_kill_is_reported(self):
         stack = FakeStack()
@@ -279,12 +365,30 @@ class DltLimitTest(unittest.TestCase):
         # 원본 보존: 장애 중 파티션 1의 커밋이 첫 건(0)을 넘지 않았고, 복구 뒤 두 건을 지나 커밋됐다(리뷰 R3).
         self.assertEqual(fault.facts["target_partition"], stack.target)
         self.assertTrue(fault.facts["original_held_during"])
+        self.assertEqual(fault.facts["published_offsets"], [0, 1])
         self.assertEqual(fault.facts["target_committed_after"], 2)
+        self.assertTrue(fault.restored())
         self.assertEqual(set(fault.facts["other_partitions_lag_during"].values()), {0})
         # 원래 명시 설정이 없었으니 덮어쓰지 않고 지워서 되돌린다(결정 235 안전장치).
         self.assertTrue(any("--delete-config" in command for command, _ in stack.commands))
         self.assertIsNone(stack.max_message_bytes)
         self.assertEqual(fault.problems(), [])
+
+    def test_offsets_come_from_the_published_records_not_the_log_end_before_publishing(self):
+        stack = FakeStack()
+        stack.interloper = True
+        fault = e2e_faults.DltLimit(context(stack), {"at": "0", "for": "0", "limit": "512"})
+        fault.RESTORE_WAIT_SECONDS = 0
+        fault.prepare()
+        with mock.patch.object(e2e_faults.time, "sleep"):
+            fault.run()
+        # 발행 전 로그 끝은 0 이었지만 다른 키 한 건이 0 에 끼어 두 건은 1·2 다.
+        # 복구 뒤 커밋 2 는 두 번째 건(2)을 지나지 않았다 — 통과시키지 않는다(재리뷰 2 R2).
+        self.assertEqual(fault.facts["published_offsets"], [1, 2])
+        self.assertEqual(fault.facts["target_first_offset"], 1)
+        self.assertEqual(fault.facts["target_last_offset"], 2)
+        self.assertIsNone(fault.facts.get("target_committed_after"))
+        self.assertIn("복구 뒤 원본 offset 이 두 건을 지나 커밋되지 않았다", fault.problems())
 
     def test_a_round_that_never_rejected_a_dlt_write_is_invalid(self):
         stack = FakeStack()
@@ -319,6 +423,76 @@ class CancelledStepTest(unittest.TestCase):
         fault.run()
         self.assertEqual(stack.commands, [])
         self.assertIn("kill: 취소돼 하지 않았다", fault.problems())
+
+
+class RestoreLockTest(unittest.TestCase):
+    def test_a_late_fault_thread_and_cleanup_do_not_restore_at_the_same_time(self):
+        stack = FakeStack()
+        fault = e2e_faults.DltLimit(context(stack), {"at": "0", "for": "0", "limit": "512"})
+        fault.inspect()
+        fault.limited = True
+        original = stack.capture
+        entered = threading.Event()
+        active = []
+
+        def slow(command, input=None, **kwargs):
+            if "--delete-config" in command:
+                active.append(1)
+                entered.set()
+                self.assertEqual(len(active), 1, "복원 두 개가 함께 돌았다")
+                e2e_faults.time.sleep(0.2)
+                active.pop()
+            return original(command, input, **kwargs)
+
+        fault.context.capture = slow
+        late = threading.Thread(target=fault.restore)
+        late.start()
+        entered.wait(5)
+        # 장애 스레드가 아직 복원 중이면 정리는 그 복원이 끝나길 기다리고, 이미 되돌려졌으면 다시 하지 않는다.
+        fault.cleanup()
+        late.join()
+        self.assertEqual(sum(1 for command, _ in stack.commands if "--delete-config" in command), 1)
+        self.assertTrue(fault.restored())
+
+
+class UnconfirmedRestoreTest(unittest.TestCase):
+    def test_a_fault_thread_alive_after_the_cleanup_limit_leaves_the_restore_unconfirmed(self):
+        stack = FakeStack()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "load.json.started"
+            marker.write_text(str(e2e_faults.now_us()))
+            schedule = e2e_faults.FaultSchedule(context(stack), ["kill:at=0,for=0,service=license"], marker, wait=5)
+            release = threading.Event()
+            fault = schedule.faults[0]
+            fault.run = lambda: release.wait(5)
+            schedule.start()
+            for _ in range(100):
+                if schedule._threads:
+                    break
+                e2e_faults.time.sleep(0.01)
+            with mock.patch.object(e2e_faults, "CLEANUP_JOIN_SECONDS", 0.05):
+                schedule.cleanup()
+            release.set()
+        summary = schedule.summary()
+        self.assertEqual(summary["restore_unconfirmed"], ["kill"])
+        self.assertIn("kill: 장애 스레드가 정리 시한 안에 끝나지 않았다", schedule.problems())
+
+    def test_a_fault_left_unrestored_is_reported_as_unconfirmed(self):
+        stack = FakeStack()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "load.json.started"
+            schedule = e2e_faults.FaultSchedule(context(stack), ["kill:at=0,for=0,service=license"], marker, wait=5)
+            schedule.faults[0].down = True
+            original = stack.capture
+
+            def broken(command, input=None, **kwargs):
+                if command[-2:] == ["start", "license"]:
+                    raise RuntimeError("daemon unavailable")
+                return original(command, input, **kwargs)
+
+            schedule.context.capture = broken
+            schedule.cleanup()
+        self.assertEqual(schedule.summary()["restore_unconfirmed"], ["kill"])
 
 
 class CancelTest(unittest.TestCase):

@@ -64,6 +64,16 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(summary["outcome"], ["구매 근거 미완료 1건"])
         self.assertEqual(summary["faults"], [{"kind": "kill", "problems": []}])
         self.assertEqual(summary["paid_to_basis"], {"p99_ms": 900})
+        self.assertEqual(summary["restore_unconfirmed"], [])
+
+    def test_a_round_with_an_unconfirmed_restore_stops_the_series(self):
+        # 다른 컨테이너 보존 위반이 먼저, 그다음 복원 미확인 장애(재리뷰 2). 둘 다 없으면 계속한다.
+        self.assertIsNone(e2e_baseline.stop_code({"restore_unconfirmed": []}, 0))
+        self.assertEqual(e2e_baseline.stop_code({"restore_unconfirmed": ["kill"]}, 0), e2e_baseline.RESTORE_UNCONFIRMED)
+        self.assertEqual(e2e_baseline.stop_code({"restore_unconfirmed": ["kill"]}, 1), e2e_baseline.GUARD_VIOLATION)
+        self.assertEqual(e2e_baseline.stage_summary({"measurement": {"faults": {"faults": [],
+                                                                               "restore_unconfirmed": ["dlt-limit"]}}})
+                         ["restore_unconfirmed"], ["dlt-limit"])
 
 
 def stage(complete=True, valid=True, unresolved=0, faults=None, reasons=None):

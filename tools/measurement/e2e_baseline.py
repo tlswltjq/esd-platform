@@ -24,8 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_ALLOW = "messaging-measure-"
-# 종료 코드: 0 모두 끝남, 1 실패한 회차가 있음, 2 다른 컨테이너 보존 위반으로 멈춤(다음 회차·smoke 를 돌리지 않는다).
+# 종료 코드: 0 모두 끝남, 1 실패한 회차가 있음, 2 다른 컨테이너 보존 위반으로 멈춤, 3 장애 복원을 확인하지 못해 멈춤.
+# 2·3 은 다음 회차·smoke 를 돌리지 않는다.
 GUARD_VIOLATION = 2
+RESTORE_UNCONFIRMED = 3
 CONDITION_KEYS = ("seconds", "warmup", "buyers", "faults")
 _SERIES = re.compile(r"^[a-z0-9][a-z0-9.-]{0,40}$")
 # 장애 4종을 한 회차에 겹치지 않게 넣는다(첫 주문 기준 초). 각 장애의 흔적이 다른 소비 그룹·토픽에 남아 서로 구분된다.
@@ -79,7 +81,17 @@ def stage_summary(result):
             "unresolved": series.get("unresolved"),
             "paid_to_basis": journey.get("paid_to_basis"),
             "faults": [{"kind": fault["kind"], "problems": fault["problems"]}
-                       for fault in ((measurement.get("faults") or {}).get("faults") or [])]}
+                       for fault in ((measurement.get("faults") or {}).get("faults") or [])],
+            "restore_unconfirmed": (measurement.get("faults") or {}).get("restore_unconfirmed") or []}
+
+
+def stop_code(summary, guard_returncode):
+    """이 회차 뒤 계열을 멈출 종료 코드(계속하면 None). 다른 컨테이너 보존 위반, 그다음 복원을 확인하지 못한 장애."""
+    if guard_returncode != 0:
+        return GUARD_VIOLATION
+    if summary.get("restore_unconfirmed"):
+        return RESTORE_UNCONFIRMED
+    return None
 
 
 def load_state(path):
@@ -128,7 +140,8 @@ def run_stages(options):
         if result_file and result_file.exists() and json.loads(result_file.read_text()).get("applications"):
             built = True
         summary["guard"] = {"exit_code": guard_result.returncode, "output": guard_result.stdout.strip()[-500:]}
-        if guard_result.returncode != 0:
+        stop = stop_code(summary, guard_result.returncode)
+        if stop is not None:
             summary["complete"] = False
         state["stages"][name] = {"rate": rate, "evidence": evidence, "seconds_taken": round(time.time() - started),
                                  "summary": summary}
@@ -140,10 +153,14 @@ def run_stages(options):
         print("%s: %s %s" % (name, "끝남" if ok else "실패", evidence), flush=True)
         if not ok:
             failures += 1
-            if guard_result.returncode != 0:
+            if stop == GUARD_VIOLATION:
                 # 다른 컨테이너가 남거나 사라졌다. 다음 회차를 돌리지 않는다(AGENTS 5절 격리·보존).
                 print(guard_result.stdout, flush=True)
                 return GUARD_VIOLATION
+            if stop == RESTORE_UNCONFIRMED:
+                # 장애를 되돌렸는지 확인하지 못했다. 다음 회차를 돌리지 않는다(PR #254 재리뷰 2).
+                print("복원 미확인 장애: %s" % summary["restore_unconfirmed"], flush=True)
+                return RESTORE_UNCONFIRMED
     return 1 if failures else 0
 
 
@@ -194,6 +211,9 @@ def smoke(options):
         if code == GUARD_VIOLATION:
             print("smoke: 중단 — %s 회차에서 다른 컨테이너 보존 위반(measure_guard)" % label)
             return GUARD_VIOLATION
+        if code == RESTORE_UNCONFIRMED:
+            print("smoke: 중단 — %s 회차에서 장애 복원을 확인하지 못했다" % label)
+            return RESTORE_UNCONFIRMED
     problems = smoke_problems(results)
     for label, stage in results.items():
         print("%s: %s" % (label, stage.get("evidence")))
