@@ -52,6 +52,7 @@ public final class LoadGenerator {
         MeasuredWindow window;
         long windowStartMicros;
         long finishedMicros;
+        long finishedNanos;
 
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(producerConfig);
              PublishedLog log = new PublishedLog(options.runDir().resolve("published.csv"))) {
@@ -93,7 +94,10 @@ public final class LoadGenerator {
             }
             producer.flush();
             // 부하 종료 = 마지막 확인까지 받은 순간. 측정 스크립트가 결정 231의 10분 관찰 기한을 이 시각부터 잰다.
-            finishedMicros = startWallMicros + (System.nanoTime() - startNanos) / 1_000;
+            // 같은 순간을 단조 시계로도 남긴다. Linux 에서 System.nanoTime 은 CLOCK_MONOTONIC 이라 같은 호스트의 다른 프로세스
+            // (측정 스크립트의 time.monotonic)와 비교할 수 있고, 벽시계 보정에 흔들리지 않는다(PR #253 재리뷰 R7).
+            finishedNanos = System.nanoTime();
+            finishedMicros = startWallMicros + (finishedNanos - startNanos) / 1_000;
             windowStartMicros = startWallMicros + (window.startNanos() - startNanos) / 1_000;
         }
 
@@ -122,6 +126,7 @@ public final class LoadGenerator {
         result.put("ack_failed", failed.get());
         result.put("measured", measuredResult);
         result.put("finished_us", finishedMicros);
+        result.put("finished_monotonic_ns", finishedNanos);
         write(options, result);
         return result;
     }

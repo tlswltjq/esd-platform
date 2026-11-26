@@ -155,10 +155,16 @@ def proc_rss_bytes(status_text):
     return None
 
 
-def observation_deadline(monotonic_now, wall_now_us, load_ended_us):
-    """부하 종료(벽시계 µs)에서 ``OBSERVATION_SECONDS`` 뒤를 지금의 단조 시계 값으로 옮긴다. 이미 지난 시간만큼 앞당긴다."""
+def observation_deadline(monotonic_now_ns, finished_monotonic_ns, wall_now_us, load_ended_us):
+    """부하 종료 뒤 ``OBSERVATION_SECONDS`` 를 지금의 ``time.monotonic()`` 값(초)으로 낸다.
+
+    발생기가 남긴 단조 시계 값(Java ``System.nanoTime`` = Linux ``CLOCK_MONOTONIC``, 이 스크립트의 ``time.monotonic`` 과 같은 시계)을
+    먼저 쓴다 — 벽시계가 보정돼도 흔들리지 않는다(PR #253 재리뷰 R7). 그 값이 없거나 지금보다 미래면(다른 시계) 벽시계 차이로 되돌아간다.
+    """
+    if finished_monotonic_ns is not None and 0 <= monotonic_now_ns - finished_monotonic_ns:
+        return finished_monotonic_ns / 1e9 + OBSERVATION_SECONDS
     elapsed = max(0.0, (wall_now_us - load_ended_us) / 1e6)
-    return monotonic_now + OBSERVATION_SECONDS - elapsed
+    return monotonic_now_ns / 1e9 + OBSERVATION_SECONDS - elapsed
 
 
 def settled(counts, acked, lag_total):
@@ -409,7 +415,8 @@ def run_once(options):
         # 기준으로 기한을 고정하고, 기한 안에 끝난 관측만 정착으로 본다(PR #253 리뷰 R2·재리뷰).
         record["load_ended_us"] = result["finished_us"]
         record["observation_deadline_us"] = record["load_ended_us"] + OBSERVATION_SECONDS * 1_000_000
-        deadline = observation_deadline(time.monotonic(), now_us(), record["load_ended_us"])
+        deadline = observation_deadline(time.monotonic_ns(), result.get("finished_monotonic_ns"), now_us(),
+                                        record["load_ended_us"])
 
         timed_out = True
         interval = LAG_INTERVAL_SECONDS if options.seconds > 60 else 2

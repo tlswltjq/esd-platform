@@ -30,11 +30,17 @@ class LagTest(unittest.TestCase):
 
 
 class DeadlineTest(unittest.TestCase):
-    def test_deadline_counts_from_the_generator_end_not_from_when_it_was_noticed(self):
-        # 부하 종료 3초 뒤에 알아챘다면 남은 관찰 시간은 597초다.
-        self.assertAlmostEqual(bench_messaging.observation_deadline(1000.0, 13_000_000, 10_000_000), 1597.0)
-        # 시계가 어긋나 종료가 미래로 보여도 기한을 늘리지 않는다.
-        self.assertAlmostEqual(bench_messaging.observation_deadline(1000.0, 9_000_000, 10_000_000), 1600.0)
+    def test_deadline_counts_from_the_generator_end_on_the_shared_monotonic_clock(self):
+        # 단조 시계로 부하 종료 3초 뒤에 알아챘다면 기한은 종료 + 600초다. 벽시계 값(앞으로 1시간 뛴 상태)은 쓰지 않는다.
+        self.assertAlmostEqual(
+            bench_messaging.observation_deadline(1_003_000_000_000, 1_000_000_000_000, 3_610_000_000, 10_000_000), 1600.0)
+
+    def test_falls_back_to_the_wall_clock_without_a_usable_monotonic_end(self):
+        # 단조 값이 없으면 벽시계 차이(3초)만큼 앞당긴다.
+        self.assertAlmostEqual(bench_messaging.observation_deadline(1_000_000_000_000, None, 13_000_000, 10_000_000), 1597.0)
+        # 단조 값이 지금보다 미래면 다른 시계로 보고 벽시계로 되돌아간다. 벽시계도 미래면 기한을 늘리지 않는다.
+        self.assertAlmostEqual(
+            bench_messaging.observation_deadline(1_000_000_000_000, 2_000_000_000_000, 9_000_000, 10_000_000), 1600.0)
 
 
 class SettledTest(unittest.TestCase):
