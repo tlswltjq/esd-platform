@@ -51,6 +51,7 @@ public final class LoadGenerator {
         Histogram behind = new Histogram(TimeUnit.HOURS.toMicros(1), 3);
         MeasuredWindow window;
         long windowStartMicros;
+        long finishedMicros;
 
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(producerConfig);
              PublishedLog log = new PublishedLog(options.runDir().resolve("published.csv"))) {
@@ -91,6 +92,8 @@ public final class LoadGenerator {
                 });
             }
             producer.flush();
+            // 부하 종료 = 마지막 확인까지 받은 순간. 측정 스크립트가 결정 231의 10분 관찰 기한을 이 시각부터 잰다.
+            finishedMicros = startWallMicros + (System.nanoTime() - startNanos) / 1_000;
             windowStartMicros = startWallMicros + (window.startNanos() - startNanos) / 1_000;
         }
 
@@ -118,6 +121,7 @@ public final class LoadGenerator {
         result.put("acked", acked.get());
         result.put("ack_failed", failed.get());
         result.put("measured", measuredResult);
+        result.put("finished_us", finishedMicros);
         write(options, result);
         return result;
     }

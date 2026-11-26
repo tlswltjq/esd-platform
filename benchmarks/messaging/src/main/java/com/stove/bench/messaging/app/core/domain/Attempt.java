@@ -34,11 +34,15 @@ public record Attempt(String eventId, int attempt, int partition, long offset, l
         }
     }
 
-    /** CSV 한 줄. 열 순서는 {@link #CSV_HEADER}. 값에 쉼표가 들어가지 않는다(UUID·숫자·예외 클래스 이름). */
+    /**
+     * CSV 한 줄. 열 순서는 {@link #CSV_HEADER}. 값에 쉼표가 들어가지 않는다(UUID·숫자·예외 클래스 이름).
+     * 마지막 칸 {@link #END}는 줄이 끝까지 쓰였다는 표시다 — 쓰기가 마지막 칸 중간에서 끊겨도 끊긴 줄로 가려낸다(PR #253 재리뷰 R6).
+     */
     public String toCsv() {
         return String.join(",", eventId, Integer.toString(attempt), Integer.toString(partition), Long.toString(offset),
-                Long.toString(receivedAtMicros), Long.toString(finishedAtMicros), outcome.name(), error);
+                Long.toString(receivedAtMicros), Long.toString(finishedAtMicros), outcome.name(), error, END);
     }
 
-    public static final String CSV_HEADER = "event_id,attempt,partition,offset,received_us,finished_us,outcome,error";
+    public static final String END = "#";
+    public static final String CSV_HEADER = "event_id,attempt,partition,offset,received_us,finished_us,outcome,error,end";
 }

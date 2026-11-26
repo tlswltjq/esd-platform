@@ -39,24 +39,25 @@ class RunReportTest {
                 m8,k-E,measure,,64,8000000,8000000,9000000,-1,-1,TimeoutException
                 """);
         write("attempts-1-100.csv", """
-                event_id,attempt,partition,offset,received_us,finished_us,outcome,error
-                w1,1,0,0,1010000,1020000,APPLIED,
-                m1,1,0,1,1010000,1030000,APPLIED,
-                m2,1,0,2,2010000,2020000,FAILED,BenchInjectedFailure
-                m2,2,0,2,3020000,3030000,APPLIED,
-                m3,1,1,0,3010000,3011000,FAILED,BenchInjectedFailure
-                m3,2,1,0,4011000,4012000,FAILED,BenchInjectedFailure
-                m3,3,1,0,6012000,6013000,FAILED,BenchInjectedFailure
-                m3,4,1,0,10013000,10014000,FAILED,BenchInjectedFailure
-                m6,1,2,1,7010000,7020000,APPLIED,
-                m7,1,2,2,7010000,7015000,APPLIED,
+                event_id,attempt,partition,offset,received_us,finished_us,outcome,error,end
+                w1,1,0,0,1010000,1020000,APPLIED,,#
+                m1,1,0,1,1010000,1030000,APPLIED,,#
+                m2,1,0,2,2010000,2020000,FAILED,BenchInjectedFailure,#
+                m2,2,0,2,3020000,3030000,APPLIED,,#
+                m3,1,1,0,3010000,3011000,FAILED,BenchInjectedFailure,#
+                m3,2,1,0,4011000,4012000,FAILED,BenchInjectedFailure,#
+                m3,3,1,0,6012000,6013000,FAILED,BenchInjectedFailure,#
+                m3,4,1,0,10013000,10014000,FAILED,BenchInjectedFailure,#
+                m6,1,2,1,7010000,7020000,APPLIED,,#
+                m7,1,2,2,7010000,7015000,APPLIED,,#
                 """);
         // 재시작한 프로세스의 기록 파일: m1 재전달을 Inbox가 걸렀다. 쓰기 실패 뒤 다시 쓴 흔적(끊긴 줄, 같은 줄 두 번)도 있다.
         write("attempts-2-200.csv", """
-                event_id,attempt,partition,offset,received_us,finished_us,outcome,error
-                m1,1,0,1,9000000,9001000,DUPLICATE,
+                event_id,attempt,partition,offset,received_us,finished_us,outcome,error,end
+                m1,1,0,1,9000000,9001000,DUPLICATE,,#
                 m1,1,0,1,90
-                m1,1,0,1,9000000,9001000,DUPLICATE,
+                m3,1,1,0,3010000,3011000,FAILED,BenchInj
+                m1,1,0,1,9000000,9001000,DUPLICATE,,#
                 """);
         write("bench_message.tsv", String.join("\n",
                 "1\tw1\tk-A\t1\t1019000", "2\tm1\tk-A\t1\t1029000", "4\tm2\tk-A\t2\t3029000",
@@ -86,7 +87,7 @@ class RunReportTest {
                 .containsEntry("completed", 5).containsEntry("failed_attempts", 5L)
                 .containsEntry("quarantined_failed", 1L).containsEntry("quarantined_key_stopped", 1L)
                 .containsEntry("completed_without_attempt_record", 0L)
-                .containsEntry("attempt_log_malformed_lines", 1L).containsEntry("attempt_log_duplicate_lines", 1L);
+                .containsEntry("attempt_log_malformed_lines", 2L).containsEntry("attempt_log_duplicate_lines", 1L);
     }
 
     @Test

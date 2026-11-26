@@ -86,7 +86,8 @@ public record RunInputs(List<Published> published, List<AttemptRow> attempts, Li
                     continue;
                 }
                 String[] f = line.split(",", -1);
-                AttemptRow row = f.length == 8 ? attemptRow(f) : null;
+                // 마지막 칸이 끝 표시(#)인 줄만 끝까지 쓰인 줄이다(FileAttemptLog 가 쓰다 끊긴 줄을 가린다).
+                AttemptRow row = f.length == 9 && f[8].equals("#") ? attemptRow(f) : null;
                 if (row == null) {
                     malformed++;
                 } else if (!seen.add(line)) {

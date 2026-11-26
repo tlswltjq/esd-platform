@@ -155,6 +155,12 @@ def proc_rss_bytes(status_text):
     return None
 
 
+def observation_deadline(monotonic_now, wall_now_us, load_ended_us):
+    """부하 종료(벽시계 µs)에서 ``OBSERVATION_SECONDS`` 뒤를 지금의 단조 시계 값으로 옮긴다. 이미 지난 시간만큼 앞당긴다."""
+    elapsed = max(0.0, (wall_now_us - load_ended_us) / 1e6)
+    return monotonic_now + OBSERVATION_SECONDS - elapsed
+
+
 def settled(counts, acked, lag_total):
     """최종 상태(반영·격리·DLT) 수가 확인된 발행 수에 닿고 소비 지연이 0이면 끝."""
     return lag_total == 0 and counts["final"] >= acked
@@ -395,13 +401,15 @@ def run_once(options):
                 app_sampler.read()
                 next_lag += LAG_INTERVAL_SECONDS
             time.sleep(0.5)
-        # 결정 231의 10분은 부하 종료 순간부터다. 기한을 먼저 고정하고, 기한 안에 끝난 관측만 정착으로 본다(PR #253 리뷰 R2).
-        deadline = time.monotonic() + OBSERVATION_SECONDS
-        record["load_ended_us"] = now_us()
-        record["observation_deadline_us"] = record["load_ended_us"] + OBSERVATION_SECONDS * 1_000_000
         if generator.returncode != 0:
             raise RuntimeError("부하 발생기가 실패했다(%d) — %s" % (generator.returncode, run_dir / "generator.log"))
-        acked = json.loads((run_dir / "generator.json").read_text())["acked"]
+        result = json.loads((run_dir / "generator.json").read_text())
+        acked = result["acked"]
+        # 결정 231의 10분은 부하 종료 순간부터다. 종료를 알아챈 때가 아니라 발생기가 남긴 종료 시각(마지막 확인까지 받은 순간)을
+        # 기준으로 기한을 고정하고, 기한 안에 끝난 관측만 정착으로 본다(PR #253 리뷰 R2·재리뷰).
+        record["load_ended_us"] = result["finished_us"]
+        record["observation_deadline_us"] = record["load_ended_us"] + OBSERVATION_SECONDS * 1_000_000
+        deadline = observation_deadline(time.monotonic(), now_us(), record["load_ended_us"])
 
         timed_out = True
         interval = LAG_INTERVAL_SECONDS if options.seconds > 60 else 2

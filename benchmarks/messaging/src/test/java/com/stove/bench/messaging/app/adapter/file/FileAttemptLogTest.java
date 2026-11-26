@@ -30,8 +30,8 @@ class FileAttemptLogTest {
 
         assertThat(Files.readAllLines(log.file())).containsExactly(
                 Attempt.CSV_HEADER,
-                "e-1,1,0,5,10,20,FAILED,BenchInjectedFailure",
-                "e-1,2,0,5,30,40,APPLIED,");
+                "e-1,1,0,5,10,20,FAILED,BenchInjectedFailure,#",
+                "e-1,2,0,5,30,40,APPLIED,,#");
     }
 
     @Test
@@ -50,7 +50,7 @@ class FileAttemptLogTest {
         log.close();
 
         assertThat(Files.readAllLines(log.file())).containsExactly(
-                "e-0,1,0,4,1", "e-1,1,0,5,10,20,APPLIED,", "e-2,1,0,6,30,40,APPLIED,");
+                "e-0,1,0,4,1", "e-1,1,0,5,10,20,APPLIED,,#", "e-2,1,0,6,30,40,APPLIED,,#");
     }
 
     @Test

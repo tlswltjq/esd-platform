@@ -29,6 +29,14 @@ class LagTest(unittest.TestCase):
         self.assertEqual(lag, {"total": None, "partitions": {}, "members": 0})
 
 
+class DeadlineTest(unittest.TestCase):
+    def test_deadline_counts_from_the_generator_end_not_from_when_it_was_noticed(self):
+        # 부하 종료 3초 뒤에 알아챘다면 남은 관찰 시간은 597초다.
+        self.assertAlmostEqual(bench_messaging.observation_deadline(1000.0, 13_000_000, 10_000_000), 1597.0)
+        # 시계가 어긋나 종료가 미래로 보여도 기한을 늘리지 않는다.
+        self.assertAlmostEqual(bench_messaging.observation_deadline(1000.0, 9_000_000, 10_000_000), 1600.0)
+
+
 class SettledTest(unittest.TestCase):
     def test_needs_every_acked_message_in_a_final_state_and_no_lag(self):
         self.assertTrue(bench_messaging.settled({"final": 10}, 10, 0))
