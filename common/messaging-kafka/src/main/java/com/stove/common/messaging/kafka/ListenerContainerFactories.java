@@ -10,6 +10,7 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.RecordInterceptor;
+import org.springframework.kafka.listener.RetryListener;
 import org.springframework.util.backoff.BackOff;
 
 /**
@@ -39,6 +40,7 @@ public class ListenerContainerFactories {
     private final Supplier<ConsumerFactory<Object, Object>> consumers;
     private final ConsumerRecordRecoverer recoverer;
     private final RecordInterceptor<Object, Object> stoppedKeys;
+    private final RetryListener retries;
 
     /**
      * @param boot Boot 리스너 팩토리 설정. 팩토리를 만들 때 꺼낸다. 그때 없으면(Boot Kafka 설정이 없음) 예외.
@@ -50,10 +52,20 @@ public class ListenerContainerFactories {
                                       Supplier<ConsumerFactory<Object, Object>> consumers,
                                       ConsumerRecordRecoverer recoverer,
                                       RecordInterceptor<Object, Object> stoppedKeys) {
+        this(boot, consumers, recoverer, stoppedKeys, null);
+    }
+
+    /** @param retries 재시도·격리를 세는 청취자({@link ConsumerRetryMetrics}). {@code null} 이면 세지 않는다. 처리 동작은 같다. */
+    public ListenerContainerFactories(Supplier<ConcurrentKafkaListenerContainerFactoryConfigurer> boot,
+                                      Supplier<ConsumerFactory<Object, Object>> consumers,
+                                      ConsumerRecordRecoverer recoverer,
+                                      RecordInterceptor<Object, Object> stoppedKeys,
+                                      RetryListener retries) {
         this.boot = boot;
         this.consumers = consumers;
         this.recoverer = recoverer;
         this.stoppedKeys = stoppedKeys;
+        this.retries = retries;
     }
 
     /**
@@ -102,7 +114,7 @@ public class ListenerContainerFactories {
         // Boot configurer 의 고정 제네릭 시그니처다. 업무 입력을 Object 로 넓혀 전달하지 않는다.
         ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         configurer.configure(factory, consumerFactory);
-        factory.setCommonErrorHandler(DeadLetterErrorHandlers.create(recoverer, backOff, noRetryFor));
+        factory.setCommonErrorHandler(DeadLetterErrorHandlers.createCounting(recoverer, backOff, retries, noRetryFor));
         factory.setRecordInterceptor(stoppedKeys);
         if (oneAtATime) {
             Properties properties = new Properties();

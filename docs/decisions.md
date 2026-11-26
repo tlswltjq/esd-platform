@@ -2456,6 +2456,44 @@
 - 구분: 추천 수용
 - 결과: [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)
 
+<a id="benchmark-result-storage"></a>
+## 233. Kafka 기준선 측정의 회차 요약·그래프는 저장소 `docs/experiments.d/E13/`에 두고, 메시지별 원본·로그는 실행 호스트에 둔다
+- 문제: E12까지는 회차 폴더(`runs/<id>/`, `.gitignore`)와 호스트 보관(`esd-run-archive/`)에만 원본을 두고 저장소에는 요약 표만 남겼다. [결정 231](#benchmark-sustainable-throughput)은 서비스 SLO가 정해지면 기술 사이 공통 기준으로 다시 판정할 수 있게 원본 측정값을 보존하기로 했는데, p50·p95·p99 요약 표로는 다른 지연 기준을 다시 계산할 수 없다. 층 2의 메시지별 원본은 1,000 msg/s × 15분이면 회차당 약 90만 행(50~100MB)이라 저장소에 넣기 크다.
+- 선택지: A 지금 관례(원본은 호스트, 저장소에는 요약 표) / B 회차 요약 파일(설정·해상도를 보존한 지연 히스토그램·10초 시계열·정합성 집계의 `summary.json`과 CSV)과 그래프 SVG를 저장소 `docs/experiments.d/E13/<회차>/`에 두고, 메시지별 원본·로그는 호스트에 체크섬과 함께 둔다 / C B에 더해 메시지별 원본 tar를 GitHub Release 자산으로 올린다 (추천: B — 지연 분포·시계열이 저장소에 남아 SLO 재판정·기술 비교를 저장소만으로 할 수 있고, 메시지별 원본은 유실·중복 결과가 이미 요약에 들어가 다시 볼 일이 드물다. C는 공개 저장소에 외부 게시가 생겨 영구 보존이 꼭 필요할 때만 더한다)
+- 내 의견: "B로 해, 요약·그래프는 저장소에"
+- 선택: B — 추천 수용.
+  - 회차 폴더는 설정·결과·완료 여부를 담고(결정 230), 측정 PR이 그 요약 파일과 그래프만 `docs/experiments.d/E13/<회차>/`로 옮긴다. `docs/experiments.md` E13 본문은 표와 해석을 쓰고 이 폴더를 링크한다.
+  - 메시지별 원본·컨테이너 로그는 실행 호스트 `esd-run-archive/E13/<회차>/`에 두고, 그 파일들의 SHA-256을 `summary.json`에 적는다.
+  - 그래프는 요약 파일에서 다시 그리는 스크립트로 만든다(손으로 그리지 않는다).
+- 구분: 추천 수용
+- 결과: [PR #252](https://github.com/tlswltjq/esd-platform/pull/252)
+
+<a id="benchmark-messaging-module"></a>
+## 234. 층 2 메시징 구간 벤치(시험 앱·부하 발생기)는 운영 이미지에 들어가지 않는 별도 모듈 `benchmarks:messaging`에 둔다
+- 문제: [결정 229](#benchmark-fault-injection)의 층 2는 실제 Kafka·MySQL에서 운영과 같은 `common:messaging-kafka`·`common:messaging` 자동 구성 위에 헤더대로 실패하는 시험 리스너를 두고, 별도 프로세스의 부하 발생기로 open-loop 발행(최대 10,000 msg/s)한다. 시험 코드는 운영 JAR·이미지에 들어가면 안 된다.
+- 선택지: A 별도 모듈 `benchmarks:messaging` — 시험 앱과 부하 발생기를 각자 `main`으로 두고 `common:messaging`·`-kafka`만 의존, 시험 표 Flyway를 따로 둔다 / B `common:messaging`의 새 소스셋·testFixtures / C Gradle 밖 스크립트(Python 발생기 + 단일 Java 파일) (추천: A — 운영 코드와 경계가 분명하고 `e2e`·`simulators:mock-pg` 선례와 같으며, 공통 라이브러리와 함께 컴파일돼 측정 도구가 낡지 않는다. Java 발생기는 목표율 달성 여부를 같은 지표로 판정한다)
+- 내 의견: "A로 해, benchmarks:messaging 모듈로"
+- 선택: A — 추천 수용.
+  - 운영 앱은 이 모듈에 의존하지 않는다(ArchUnit·Gradle로 강제). 이미지 빌드·게시 대상에서 뺀다. CI는 컴파일과 단위 시험만 돌린다.
+  - 시험 앱과 발생기는 서로 다른 프로세스로 띄운다(Gradle 실행 태스크 둘). 측정 회차 실행은 `tools/measurement/` 스크립트가 맡는다.
+- 구분: 추천 수용
+- 결과: [PR #252](https://github.com/tlswltjq/esd-platform/pull/252)
+
+<a id="dlt-write-failure-injection"></a>
+## 235. DLT 발행 실패는 DLT 토픽 하나의 `max.message.bytes`를 실제 DLT 레코드보다 낮춰 일으키고, 원본 보존과 복구 뒤 단일 DLT 저장을 검증한다
+- 문제: [결정 229](#benchmark-fault-injection)의 시나리오 4는 "DLT 발행 실패 시 원본 메시지 보존"을 잰다. DB 없는 앱(store·gateway·web-bff)의 `DeadLetterPublisher`는 `setFailIfSendResultIsError(true)`라 DLT 발행이 실패하면 recoverer 예외가 되어 원본 offset을 넘기지 않는 것으로 코드상 보이나 측정으로 확인하지 않았다. 브로커가 1대라 브로커를 멈추면 원본 토픽도 멈춰, DLT 쓰기만 실패시킬 방법이 필요하다.
+- 선택지: A DLT 토픽에 `min.insync.replicas=2`(복제 1, `acks=all`)를 걸어 쓰기를 거부시키고 되돌린다 / B DLT 토픽 `max.message.bytes`를 DLT 레코드보다 낮춰 거부시키고 되돌린다 / C 시험 앱의 DLT 발행기를 실패하는 가짜로 바꾼다 (AI 추천: A — 일시적 브로커 장애와 같은 종류라 회복까지 잴 수 있다고 봄)
+- 내 의견: "결정 235: A안은 채택하지 않고, B안(DLT 토픽의 메시지 크기 제한)을 채택합니다." / "현재 프로젝트는 Kafka 3.9.0을 사용합니다. Kafka 3.7 이후에는 유효한 min.insync.replicas가 실제 복제본 수를 초과하지 않도록 제한되므로, 단일 브로커에서 min.insync.replicas=2를 설정해도 DLT 쓰기 실패가 발생하지 않을 수 있습니다." / "테스트를 위해 운영 코드의 DLT 발행기를 가짜 구현체로 교체하지 마세요." / "이번 결정의 목적은 DLT 발행 실패 자체가 아니라, DLT 발행 실패 시에도 원본 메시지가 손실되지 않고 복구 후 정상적으로 격리되는지를 검증하는 것입니다." / "DLT 저장 성공 직후 Offset Commit 실패는 별도 장애 시나리오로 다루는 것이 기술적으로 정확합니다." (조건 1~4의 원문 전체는 PR #252 본문 "이번 PR의 결정"에 그대로 옮겼다)
+- 선택: B — 사용자가 A의 전제(단일 브로커에서 `min.insync.replicas=2`면 쓰기가 거부된다)를 Kafka 3.9.0·KIP-966(유효 최소 ISR = min(설정, 복제 수))로 정정했다. AI는 3.9.0에서 이 동작이 기본으로 적용되는지 직접 확인하지 않았다. B는 사전 검증으로 쓰기 거부를 확인할 수 있다.
+  - 주입: 원본 토픽과 브로커는 정상으로 둔다. 실제 DLT 레코드 크기(본문·원래 헤더·`kafka_dlt-*` 진단 헤더·배치 오버헤드)를 재고, DLT 토픽을 미리 만들어 파티션 수를 확인한 뒤 그 토픽에만 `max.message.bytes`를 레코드보다 낮게 건다. DLT 발행이 실제로 거부되는지 먼저 확인하고, 정한 시간 뒤 원래 설정으로 되돌린다. 이것은 DLT 토픽의 일시적 쓰기 불가를 재현할 뿐, 네트워크·브로커 장애와 같은 고장 형태가 아니다(크기 초과는 영구 실패 종류라 producer 재시도 없이 바로 실패한다).
+  - 경로: 실제 업무 리스너·Spring Kafka 오류 처리기·`DeadLetterPublishingRecoverer`를 그대로 쓴다. 전송 결과 확인(`setFailIfSendResultIsError`)이 켜져 있는지, DLT 발행 실패가 recoverer 예외로 전파되는지, recoverer 실패 뒤 원본 offset이 넘어가지 않는지, 장애 해제 뒤 DLT 발행과 이후 소비가 재개되는지 확인한다. 가짜 DLT 발행기를 쓰지 않는다.
+  - 장애 중 검증: 원본 유실 0, DLT 발행 실패가 실제로 발생, 실패한 원본 offset 미처리 유지, 같은 파티션의 뒤 메시지가 실패 레코드를 앞지르지 않음, 다른 파티션의 처리 상태 기록, DLT 지표가 실패를 성공으로 세지 않음.
+  - 복구 뒤 검증: 실패한 메시지가 DLT에 저장, 원본 처리 상태 확정, 같은 파티션의 뒤 메시지 처리 재개, 최종 유실 0, 대상 메시지의 DLT 중복 저장 0, 장애 해제부터 정상 재개까지 시간. DLT 중복 0은 이 통제된 시나리오의 기대 결과로만 검증하고 모든 장애에서 exactly-once라고 일반화하지 않는다.
+  - 안전장치: 운영 환경에서 실행하지 않는다. 시험 전 DLT 토픽의 설정·파티션 구성을 저장하고, 정상·오류 종료 모두에서 복원을 시도한다. 원래 명시 설정이 없었으면 기본값을 덮어쓰지 않고 설정을 지워 원래 상태로 돌린다. 복원 뒤 설정값과 정상 DLT 발행을 다시 확인한다. 원본 토픽에 영향이 있었거나 DLT 쓰기 실패를 실제로 일으키지 못했으면 그 회차는 무효다. 시간 초과·예상 밖 오류·설정 복원 실패는 별도 실패 상태로 적는다.
+  - 범위 밖(별도 시나리오): DLT 저장 성공 직후 원본 offset 커밋 실패 — 재전달로 DLT 중복이 생길 수 있다.
+- 구분: AI 주장 정정
+- 결과: [PR #252](https://github.com/tlswltjq/esd-platform/pull/252)
+
 ---
 
 ## 검증하며 드러난 것
