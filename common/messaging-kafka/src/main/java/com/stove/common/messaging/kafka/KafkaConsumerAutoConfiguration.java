@@ -37,9 +37,11 @@ public class KafkaConsumerAutoConfiguration {
     @ConditionalOnMissingBean(CommonErrorHandler.class)
     public DefaultErrorHandler stoveKafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
                                                       DeadLetterMetrics metrics,
+                                                      ConsumerRetryMetrics retries,
                                                       ObjectProvider<KeyQuarantine> quarantine) {
         return DeadLetterErrorHandlers.create(
-                ListenerContainerFactories.recoverer(kafkaTemplate, metrics, quarantine.getIfAvailable()));
+                ListenerContainerFactories.recoverer(kafkaTemplate, metrics, quarantine.getIfAvailable()),
+                ConsumerRetryPolicy.backOff(), retries);
     }
 
     /**
@@ -53,11 +55,12 @@ public class KafkaConsumerAutoConfiguration {
             ObjectProvider<ConsumerFactory<Object, Object>> consumers,
             KafkaTemplate<String, String> kafkaTemplate,
             DeadLetterMetrics metrics,
+            ConsumerRetryMetrics retries,
             ObjectProvider<KeyQuarantine> quarantine,
             ObjectProvider<StoppedKeyInterceptor> stoppedKeys) {
         return new ListenerContainerFactories(configurer::getIfAvailable, consumers::getIfAvailable,
                 ListenerContainerFactories.recoverer(kafkaTemplate, metrics, quarantine.getIfAvailable()),
-                stoppedKeys.getIfAvailable());
+                stoppedKeys.getIfAvailable(), retries);
     }
 
     /** DLT 유입 계측. <b>지표 수집 여부가 실패 처리 가능 여부를 좌우해서는 안 된다.</b> */
@@ -65,6 +68,13 @@ public class KafkaConsumerAutoConfiguration {
     @ConditionalOnMissingBean
     public DeadLetterMetrics deadLetterMetrics(ObjectProvider<MeterRegistry> meterRegistry) {
         return new DeadLetterMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
+    }
+
+    /** 소비 재시도·격리 계측(결정 229). 모든 팩토리의 오류 처리기가 같은 청취자를 받는다. */
+    @Bean
+    @ConditionalOnMissingBean
+    public ConsumerRetryMetrics consumerRetryMetrics(ObjectProvider<MeterRegistry> meterRegistry) {
+        return new ConsumerRetryMetrics(meterRegistry.getIfAvailable(SimpleMeterRegistry::new));
     }
 
     /** 격리 있는 앱(소비 모듈 DB)만: 멈춘 키의 레코드를 처리하지 않고 보관함 뒤에 쌓는다. Boot 기본 팩토리가 이 빈을 받는다. */
