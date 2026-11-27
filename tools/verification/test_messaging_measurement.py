@@ -126,6 +126,115 @@ class ValidityTest(unittest.TestCase):
             self.assertIn(expected, text)
 
 
+LAG_DESCRIBE = """
+GROUP              TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+license-paid-order stove.order.v1  0          5               7               2    c-1          /h    c
+license-paid-order stove.order.v1  1          -               3               -    c-2          /h    c
+
+GROUP                 TOPIC          PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID  HOST  CLIENT-ID
+settlement-paid-order stove.order.v1 0          7               7               0    c-3          /h    c
+"""
+
+
+class LagTest(unittest.TestCase):
+    def test_sums_lag_per_group_and_counts_partitions_without_commits(self):
+        groups = messaging_measurement.parse_group_lag(LAG_DESCRIBE)
+        self.assertEqual(groups, {"license-paid-order": {"lag": 2, "unknown": 1},
+                                  "settlement-paid-order": {"lag": 0, "unknown": 0}})
+
+    def test_a_partition_with_nothing_to_consume_is_known_zero(self):
+        text = LAG_DESCRIBE.replace("license-paid-order stove.order.v1  1          -               3               -",
+                                    "license-paid-order stove.order.v1  1          -               0               -")
+        self.assertEqual(messaging_measurement.parse_group_lag(text)["license-paid-order"], {"lag": 2, "unknown": 0})
+
+
+class DrainTest(unittest.TestCase):
+    S = 1_000_000
+    G = {"g": {"lag": 0, "unknown": 0}}
+    SAMPLES = [{"at_us": 10 * S, "total": 4, "unknown": 0, "groups": G}, {"at_us": 20 * S, "total": 0, "unknown": 0, "groups": G},
+               {"at_us": 30 * S, "total": 2, "unknown": 0, "groups": G}, {"at_us": 35 * S, "total": 0, "unknown": 1, "groups": G},
+               {"at_us": 38 * S, "total": 0, "unknown": 0, "groups": {}}, {"at_us": 40 * S, "total": 0, "unknown": 0, "groups": G}]
+
+    def test_backlog_drain_needs_outstanding_and_lag_zero_after_the_last_finish(self):
+        # 업무는 25초에 끝났다. 35초(모르는 파티션 있음)·38초(그룹 없음)는 지연 0을 안 것이 아니다 → 40초.
+        self.assertEqual(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 0, self.SAMPLES), 40.0)
+        self.assertIsNone(messaging_measurement.backlog_drain_seconds(0, 25 * self.S, 3, self.SAMPLES),
+                          "미해소 주문이 있으면 해소되지 않았다")
+        self.assertIsNone(messaging_measurement.backlog_drain_seconds(0, 45 * self.S, 0, self.SAMPLES), "지연 0을 관측하지 못했다")
+
+    def test_load_end_is_the_drivers_last_request(self):
+        self.assertEqual(messaging_measurement.load_end_time({"lastRequestEpochUs": 123}), 123)
+
+
+class FaultValidityTest(unittest.TestCase):
+    def test_a_failed_broker_restart_stays_an_injection_problem_in_a_fault_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        class Restart:
+            def problems(self):
+                return ["브로커 재시작 실패"]
+
+        result = messaging_measurement.with_faults({"valid": True, "reasons": ["구매 근거 미완료 2건"],
+                                                    "business": ["구매 근거 미완료 2건"], "instrument": []}, Schedule(), Restart())
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["reasons"], ["S7 장애 주입: 브로커 재시작 실패"])
+        self.assertEqual(result["outcome"], ["구매 근거 미완료 2건"])
+
+    def test_instrument_problems_stay_invalid_in_a_fault_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, None,
+                                                 {"clock_check": {"finish_before_start": 1}})
+        result = messaging_measurement.with_faults(checked, Schedule())
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("시각 불일치" in reason for reason in result["reasons"]))
+        self.assertFalse(any("시각 불일치" in reason for reason in result["outcome"]))
+
+    def test_inverted_driver_and_db_times_invalidate_the_round(self):
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, None,
+                                                 {"clock_check": {"finish_before_start": 3}})
+        self.assertTrue(any("드라이버·DB 시각 불일치" in reason for reason in checked["reasons"]))
+
+    def test_fault_round_validity_is_the_injection_and_business_breaks_become_outcome(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return []
+
+        checked = {"valid": False, "reasons": ["구매 근거 미완료 3건"]}
+        result = messaging_measurement.with_faults(checked, Schedule())
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["outcome"], ["구매 근거 미완료 3건"])
+
+    def test_a_fault_that_did_not_happen_invalidates_the_round(self):
+        class Schedule:
+            faults = [object()]
+
+            def problems(self):
+                return ["db-revoke: 권한 회수 실패"]
+
+        result = messaging_measurement.with_faults({"valid": True, "reasons": []}, Schedule())
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["reasons"], ["db-revoke: 권한 회수 실패"])
+
+    def test_generator_shortfall_invalidates_a_normal_round(self):
+        loaded = {"rate": 10.0, "measuredWindow": {"achievedRate": 9.5}}
+        checked = messaging_measurement.validity([], {"completed": 0}, {group: {"count": 0} for group in
+                                                                          messaging_measurement.PURCHASE_GROUPS}, {}, loaded)
+        self.assertTrue(any("달성률" in reason for reason in checked["reasons"]))
+
+
 class MeasureTest(unittest.TestCase):
     def test_runs_load_then_journey_then_broker_and_excludes_warmup(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -142,6 +251,9 @@ class MeasureTest(unittest.TestCase):
                 if label == "measure-journey":
                     (output / "journey.json").write_text(json.dumps(
                         {"purchase": {"completed": 2, "incomplete": 0, "failed": 0}}))
+                if label == "measure-timeseries":
+                    self.assertIn("--load-ended-us", command)
+                    (output / "timeseries.json").write_text(json.dumps({"unresolved": 0, "outstanding_drain_seconds": 1.5}))
                 if label == "measure-broker":
                     self.assertIn("--keys-from", command)
                     (output / "broker.json").write_text(json.dumps(
@@ -153,6 +265,8 @@ class MeasureTest(unittest.TestCase):
                           "160\t/var/lib/mysql", "40\t/tmp/kraft-combined-logs"])
 
             def capture(command, **kwargs):
+                if "kafka-consumer-groups.sh" in " ".join(command):
+                    return LAG_DESCRIBE
                 if command[:2] == ["docker", "stats"]:
                     return "mysql-id\t4.00%\t300MiB / 1GiB\nkafka-id\t2.00%\t500MiB / 2GiB"
                 if command[:2] == ["docker", "exec"] and "du -sk" in command[-1]:
@@ -169,7 +283,9 @@ class MeasureTest(unittest.TestCase):
                 summary = messaging_measurement.measure("/repo", ["docker", "compose"], run, capture,
                                                         output, 300, 5, 1, 2, 1)
 
-        self.assertEqual(calls, ["measure-load", "measure-journey", "measure-broker"])
+        self.assertEqual(calls, ["measure-load", "measure-journey", "measure-timeseries", "measure-broker"])
+        self.assertEqual(summary["timeseries"]["outstanding_drain_seconds"], 1.5)
+        self.assertIsNone(summary["faults"])
         self.assertEqual(summary["planned"], 2, "예열 주문은 집계에서 뺀다")
         self.assertEqual(summary["http_p95_ms"], 30.0)
         self.assertTrue(summary["validity"]["valid"])

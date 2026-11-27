@@ -55,10 +55,10 @@ def _legend(entries):
     return body
 
 
-def throughput_svg(summary):
+def throughput_svg(summary, labels=THROUGHPUT_SERIES, title="처리량 (10초 칸)"):
     series = summary.get("timeseries_10s") or {}
     bucket_s = (series.get("bucket_us") or 10_000_000) / 1e6
-    columns = [(name, label, [count / bucket_s for count in series.get(name, [])]) for name, label in THROUGHPUT_SERIES]
+    columns = [(name, label, [count / bucket_s for count in series.get(name, [])]) for name, label in labels]
     buckets = max((len(values) for _, _, values in columns), default=0)
     plot_w, plot_h = WIDTH - LEFT - RIGHT, HEIGHT - TOP - BOTTOM
     top = nice_max(max((v for _, _, values in columns for v in values), default=0))
@@ -95,7 +95,7 @@ def throughput_svg(summary):
             body.append('<polyline fill="none" stroke="%s" stroke-width="2" points="%s"/>' % (color, points))
         legend.append((label if values else label + " (표본 없음)", color))
     body += _legend(legend)
-    return _svg("처리량 (10초 칸)", body)
+    return _svg(title, body)
 
 
 def latency_svg(summary):
@@ -145,7 +145,7 @@ def latency_svg(summary):
     return _svg("지연 백분위", body)
 
 
-def lag_svg(samples):
+def lag_svg(samples, label="소비 지연 합(건)", title="소비 지연"):
     """``[{"at_us": .., "total": ..}, ...]`` → 소비 지연 합 선 그래프. 표본이 없으면 None.
 
     합을 모르는 표본(``total`` 이 None: 조회 실패·그룹 미배정)에서는 선을 끊는다 — 이어 그리면 모르는 구간이 지연 0처럼 보인다.
@@ -192,11 +192,11 @@ def lag_svg(samples):
         else:
             body.append('<polyline fill="none" stroke="%s" stroke-width="2" points="%s"/>'
                         % (COLORS[0], " ".join("%.1f,%.1f" % (x_of(at), y_of(total)) for at, total in segment)))
-    legend = [("소비 지연 합(건)", COLORS[0])]
+    legend = [(label, COLORS[0])]
     if unknown:
         legend.append(("미관측 표본 %d (선 끊김)" % unknown, "#999999"))
     body += _legend(legend)
-    return _svg("소비 지연", body)
+    return _svg(title, body)
 
 
 def draw(summary_path):

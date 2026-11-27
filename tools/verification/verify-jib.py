@@ -55,6 +55,9 @@ def main():
     parser.add_argument("--load-refund-every", type=int, default=0,
                         help="Refund one of every N paid measured orders for --measure (same-key order check, decision 204 F)")
     parser.add_argument("--load-warmup", type=int, default=10, help="Warm-up seconds excluded from --measure results")
+    parser.add_argument("--fault", action="append", default=[], metavar="KIND:KEY=VALUE,...",
+                        help="External fault for --measure (repeatable): db-revoke, kill, malformed, dlt-limit "
+                             "(tools/verification/support/e2e_faults.py, decisions 229·235)")
     parser.add_argument("--app-env", action="append", default=[], metavar="NAME=VALUE",
                         help="Extra environment for every application (repeatable), e.g. a messaging setting to compare")
     args = parser.parse_args()
@@ -62,6 +65,15 @@ def main():
         parser.error("--prometheus-only cannot be combined with tracing modes")
     if args.measure and (args.prometheus_only or args.tracing or args.foundation_only or args.backup_restore):
         parser.error("--measure cannot be combined with other verification modes")
+    if args.fault:
+        if not args.measure:
+            parser.error("--fault needs --measure")
+        from support.e2e_faults import parse as parse_fault
+        for spec in args.fault:
+            try:
+                parse_fault(spec)
+            except ValueError as invalid:
+                parser.error(str(invalid))
     if args.backup_restore and (args.prometheus_only or args.tracing or args.foundation_only):
         parser.error("--backup-restore cannot be combined with other verification modes")
     if args.foundation_only:
@@ -299,7 +311,9 @@ def main():
                                             lambda url: urllib.request.urlopen(url, timeout=10).read().decode(),
                                             args.load_refund_every,
                                             args.restart_broker_at, args.restart_broker_down,
-                                            "http://127.0.0.1:%d" % (PORTS["order"] + offset))
+                                            "http://127.0.0.1:%d" % (PORTS["order"] + offset),
+                                            args.fault, "http://127.0.0.1:%d/actuator/prometheus" % (PORTS["store"] + offset),
+                                            sorted(MESSAGING_APPS))
             if not result["measurement"]["validity"]["valid"]:
                 # 수치는 result.json 에 남기되, 결론에 쓸 수 없는 회차는 실패로 끝낸다.
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))

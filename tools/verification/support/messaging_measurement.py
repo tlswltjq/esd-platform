@@ -19,6 +19,10 @@ from pathlib import Path
 from support import resource_sampling
 
 SETTLE_SECONDS = 120
+# 결정 231: 복구 관찰 제한시간은 부하 종료 뒤 10분. 업무 완료·Outstanding 시계열은 이만큼까지 기다린다.
+OBSERVATION_SECONDS = 600
+# 소비 지연 표본 간격(E13 시계열 10초 칸). 브로커에 직접 묻는다 — 앱의 records.lag 는 멈춘 동안 0을 보고한다(D-026).
+LAG_INTERVAL_SECONDS = 10
 # 예정 시각보다 이만큼 늦게 출발한 요청이 있으면 도착률을 지키지 못한 회차다.
 LATE_START_MS = 100.0
 # 결제 성공 주문 하나마다 한 번씩 처리해야 하는 소비 그룹(구매 여정, 2026-11-16 실측 기준).
@@ -44,8 +48,11 @@ def extra_environment(assignments):
 
 
 def load_command(offset, rate, seconds, buyers, evidence, warmup=10, refund_every=0):
+    # 환불이 없으면 드라이버가 끝 상태를 HTTP로 묻지 않는다(0) — 부하 종료 뒤 해소 구간에 조회 부하를 더하지 않게.
+    # 끝 상태는 DB 시각으로 따로 잰다(journey_timeseries).
     return ["./gradlew", ":e2e:messagingLoadTest", "--no-daemon", "--console=plain",
             "-Dstove.e2e.load-refund-every=" + str(refund_every),
+            "-Dstove.e2e.load-settle-secs=" + ("180" if refund_every else "0"),
             "-Dstove.e2e.port-offset=" + str(offset),
             "-Dstove.e2e.load-rate=" + str(rate),
             "-Dstove.e2e.load-duration-secs=" + str(seconds),
@@ -56,8 +63,91 @@ def load_command(offset, rate, seconds, buyers, evidence, warmup=10, refund_ever
 
 def journey_command(root, container, evidence, out):
     return [sys.executable, "-B", str(Path(root) / "tools/measurement/journey_latency.py"),
-            "--container", container, "--evidence", str(evidence), "--wait-secs", str(SETTLE_SECONDS),
+            "--container", container, "--evidence", str(evidence), "--wait-secs", str(OBSERVATION_SECONDS),
             "--out", str(out)]
+
+
+def timeseries_command(root, container, evidence, out, load_ended_us):
+    return [sys.executable, "-B", str(Path(root) / "tools/measurement/journey_timeseries.py"),
+            "--container", container, "--evidence", str(evidence), "--wait-secs", str(OBSERVATION_SECONDS),
+            "--load-ended-us", str(load_ended_us), "--out", str(out)]
+
+
+def parse_group_lag(text):
+    """``kafka-consumer-groups --describe --all-groups`` 출력 → {그룹: {"lag": 합, "unknown": 커밋 없는 파티션 수}}.
+
+    커밋 오프셋이 없는 파티션(``-``)은 합에서 빼고 따로 센다 — 모르는 것을 0으로 적지 않는다(collect-lag.sh 와 같은 계산).
+    다만 로그 끝도 0인 파티션은 소비할 것이 없으므로 지연 0으로 안다(재리뷰 R7).
+    """
+    groups = {}
+    header = None
+    for line in text.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] == "GROUP":
+            header = fields
+            continue
+        if header is None or len(fields) < 6:
+            continue
+        row = dict(zip(header, fields))
+        group = groups.setdefault(row["GROUP"], {"lag": 0, "unknown": 0})
+        lag = row.get("LAG", "-")
+        if lag.lstrip("-").isdigit() and row.get("CURRENT-OFFSET", "-") != "-":
+            group["lag"] += int(lag)
+        elif row.get("CURRENT-OFFSET", "-") == "-" and row.get("LOG-END-OFFSET") == "0":
+            pass  # 쌓인 것이 없다
+        else:
+            group["unknown"] += 1
+    return groups
+
+
+class LagSampler:
+    """``interval``초마다 브로커의 소비 그룹 지연을 읽는다. 읽기 실패는 세기만 한다(측정을 멈추지 않는다)."""
+
+    def __init__(self, capture, docker, interval=LAG_INTERVAL_SECONDS):
+        self._command = docker + ["exec", "-T", "kafka", "/opt/kafka/bin/kafka-consumer-groups.sh",
+                                  "--bootstrap-server", "localhost:19092", "--describe", "--all-groups"]
+        self._capture = capture
+        self._interval = interval
+        self._stopped = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self.samples = []
+        self.failures = 0
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self._stopped.set()
+        if self._thread.is_alive():
+            self._thread.join()
+        return self.samples
+
+    def wait_for_zero_after(self, at_us, seconds):
+        """``at_us`` 뒤에 지연 합 0 표본이 생길 때까지(최대 ``seconds``) 기다린다. ``at_us``가 없으면(미해소) 기다리지 않는다."""
+        if at_us is None:
+            return False
+        deadline = time.monotonic() + max(0.0, seconds)
+        while time.monotonic() < deadline:
+            if any(sample["at_us"] >= at_us and lag_known_zero(sample) for sample in list(self.samples)):
+                return True
+            if self._stopped.wait(1.0):
+                return False
+        return False
+
+    def _loop(self):
+        while True:
+            try:
+                groups = parse_group_lag(self._capture(self._command, stderr=subprocess.DEVNULL))
+                self.samples.append({"at_us": time.time_ns() // 1000, "groups": groups,
+                                     "total": sum(group["lag"] for group in groups.values()),
+                                     "unknown": sum(group["unknown"] for group in groups.values())})
+            except Exception:  # noqa: BLE001 — 측정 보조값이라 회차를 멈추지 않고 실패만 센다
+                self.failures += 1
+            if self._stopped.wait(self._interval):
+                return
 
 
 def broker_command(root, container, evidence, out):
@@ -79,18 +169,29 @@ def refund_problems(measured):
     return len(requested), rejected, unfinished
 
 
-def validity(measured, journey, broker, order=None):
+def validity(measured, journey, broker, order=None, loaded=None, timeseries=None):
     """회차를 결론에 써도 되는지와 그 이유. 실패·미완료·도착률 미달·소비 누락·같은 키 순서 위반·환불 요청 거절이 하나라도 있으면 무효.
 
     순서 위반(결정 204 F)은 합격 조건이라, 위반이 있으면 그 회차 수치는 비교에 쓰지 않는다.
     """
     reasons = []
+    # 계측 무효(장애 회차에서도 무효): 드라이버가 일정을 못 지켰거나 시각을 한 축에 놓을 수 없다(재리뷰 R8).
+    instrument = []
     http_failures = sum(1 for order in measured if order.get("status") != 200)
     late = sum(1 for order in measured if order.get("lateMs", 0.0) > LATE_START_MS)
     if http_failures:
         reasons.append("HTTP 실패 %d건" % http_failures)
     if late:
-        reasons.append("예정보다 %.0fms 넘게 늦게 출발한 요청 %d건" % (LATE_START_MS, late))
+        instrument.append("예정보다 %.0fms 넘게 늦게 출발한 요청 %d건" % (LATE_START_MS, late))
+    inverted = ((timeseries or {}).get("clock_check") or {}).get("finish_before_start")
+    if inverted:
+        # 드라이버와 DB 시각을 한 시간축에 놓을 수 없다 — 시계열·해소 시간을 쓰지 않는다(PR #254 리뷰 R4).
+        instrument.append("완료가 요청보다 앞선 주문 %d건(드라이버·DB 시각 불일치)" % inverted)
+    window = (loaded or {}).get("measuredWindow") or {}
+    target = (loaded or {}).get("rate")
+    if window and target and window.get("achievedRate", 0) < target * 0.99:
+        # 결정 231: 부하 발생기가 목표 요청률을 내지 못한 회차는 최대 성능 확정에 쓰지 않는다.
+        instrument.append("부하 발생기 달성률 %.2f/s < 목표 %.2f/s의 99%%" % (window["achievedRate"], target))
     if journey.get("failed"):
         reasons.append("결제 실패 주문 %d건" % journey["failed"])
     if journey.get("incomplete"):
@@ -111,7 +212,51 @@ def validity(measured, journey, broker, order=None):
     requested, rejected, _unfinished = refund_problems(measured)
     if rejected:
         reasons.append("환불 요청 거절 %d건(요청 %d)" % (rejected, requested))
-    return {"valid": not reasons, "reasons": reasons, "http_failures": http_failures, "late_starts": late}
+    return {"valid": not reasons and not instrument, "reasons": instrument + reasons, "instrument": instrument,
+            "business": reasons, "http_failures": http_failures, "late_starts": late}
+
+
+def app_metrics_by_name(urls, apps):
+    """``metrics_urls``와 같은 순서의 앱 이름 → {앱: URL}. 이름을 주지 않았으면 비운다."""
+    return dict(zip(apps, urls)) if apps else {}
+
+
+def load_end_time(loaded):
+    """드라이버가 남긴 마지막 요청 시각(epoch µs). 없으면(옛 드라이버) 지금."""
+    return loaded.get("lastRequestEpochUs") or time.time_ns() // 1000
+
+
+def remaining_seconds(load_ended_us):
+    """부하 종료 뒤 ``OBSERVATION_SECONDS`` 기한까지 남은 초."""
+    return OBSERVATION_SECONDS - (time.time_ns() // 1000 - load_ended_us) / 1e6
+
+
+def lag_known_zero(sample):
+    """지연 0을 **안** 표본: 그룹이 있고, 합이 0이고, 모르는 파티션이 없다(재리뷰 R7)."""
+    return bool(sample.get("groups")) and sample.get("total") == 0 and sample.get("unknown") == 0
+
+
+def backlog_drain_seconds(load_ended_us, last_finish_us, unresolved, samples):
+    """E13 Backlog 해소 시간: 부하 종료 → Outstanding 0(마지막 요청이 끝남)이고 소비 지연 0인 첫 표본. 관측 못 하면 None."""
+    if unresolved or last_finish_us is None:
+        return None
+    for sample in samples:
+        if sample["at_us"] >= last_finish_us and lag_known_zero(sample):
+            return round((sample["at_us"] - load_ended_us) / 1e6, 3)
+    return None
+
+
+def with_faults(checked, schedule, restart=None):
+    """장애 회차의 유효성은 "장애가 계획대로 일어나고 되돌려졌는가"다. 업무 결과(미완료·소비 누락 등)는 측정값이라
+    ``outcome``으로 옮긴다 — 장애 회차에서 완료가 깨지는 것은 결과이지 무효 사유가 아니다(E13 시나리오 3~6).
+
+    ``checked``는 업무 판정(``validity``)만 담은 것이어야 한다. 브로커 재시작(S7)의 주입 실패도 주입 실패라 무효 사유로 합친다
+    (PR #254 리뷰 R1). 장애 계획이 없으면 기존처럼 S7 문제만 더한다."""
+    if schedule is None or not schedule.faults:
+        return with_restart(checked, restart)
+    problems = schedule.problems() + (["S7 장애 주입: " + problem for problem in restart.problems()] if restart else [])
+    problems += checked.get("instrument", [])
+    return dict(checked, valid=not problems, reasons=problems, outcome=checked.get("business", checked["reasons"]))
 
 
 def with_restart(checked, restart):
@@ -331,7 +476,7 @@ def restart_diagnosis(capture, container, password, fetch, order_base_url, out):
 
 def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, warmup=10, db_password="root1234",
             metrics_urls=(), fetch=None, refund_every=0,
-            restart_at=None, restart_down=None, order_base_url=None):
+            restart_at=None, restart_down=None, order_base_url=None, faults=(), store_metrics_url=None, metrics_apps=()):
     """한 회차를 돌고 요약을 돌려준다. ``run``·``capture``는 ``verify-jib.py``의 것을 받는다.
 
     부하 전 ``IDLE_SECONDS`` 동안의 업무 DB 초당 조회 수(유휴 비용)와 부하 드라이버 실행 구간(기동·예열 포함)의
@@ -350,20 +495,39 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     finally:
         # 유휴 읽기가 실패해도 표본 스레드가 계속 docker 를 부르지 않게 한다(PR #221 R3).
         idle_samples = idle_sampler.stop()
+    schedule = None
+    if faults:
+        from support.e2e_faults import Context, FaultSchedule
+        context = Context(capture, docker, db_password, fetch, store_metrics_url, run_tag=Path(output).name[-8:].lower(),
+                          app_metrics=app_metrics_by_name(metrics_urls, metrics_apps))
+        schedule = FaultSchedule(context, faults, str(load) + ".started").prepare()
     load_sampler = resource_sampling.Sampler(capture, containers).start()
+    lag_sampler = LagSampler(capture, docker).start()
     try:
+        if schedule is not None:
+            schedule.start()
         restart = None
         if restart_at is not None:
             restart = BrokerRestart(capture, docker, resource_sampling.BROKER_SERVICE, restart_at, restart_down,
                                     lambda: restart_diagnosis(capture, container, db_password, fetch, order_base_url,
                                                               Path(output) / "restart-diagnosis.txt")).start()
         run(load_command(offset, rate, seconds, buyers, load, warmup, refund_every), "measure-load")
+        # 부하 종료 = 드라이버의 마지막 요청 시각(결정 231 관찰 기한의 기준, PR #254 리뷰 R2). Gradle 종료·끝 상태 대기를 섞지 않는다.
+        load_ended_us = load_end_time(json.loads(load.read_text()))
         if restart is not None:
             restart.join()
         # 부하가 끝난 바로 그때 읽는다. 표본 스레드 종료 대기(최대 표본 간격)가 부하 구간에 섞이지 않게(R4).
         load_end = db_counters(capture, container, db_password)
+        if schedule is not None:
+            # 부하보다 늦게 끝나는 장애(복구 확인 포함)를 관찰 기한 안에서 기다린다. 그동안에도 소비 지연 표본은 쌓인다.
+            schedule.join(max(0.0, remaining_seconds(load_ended_us)))
+    except BaseException:
+        lag_sampler.stop()
+        raise
     finally:
         load_samples = load_sampler.stop()
+        if schedule is not None:
+            schedule.cleanup()
     # 디스크도 부하 직후에 읽는다. 아래 수집 단계(읽기 전용 조회)가 증가량에 섞이지 않게(R6).
     disk_after, disk_errors_after = resource_sampling.disk_kib(capture, containers)
     diagnosis = refund_diagnosis(capture, container, db_password) if refund_every else None
@@ -371,7 +535,16 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
         print("REFUND DIAGNOSIS " + json.dumps(diagnosis, ensure_ascii=False), flush=True)
     db_load = {"idle_per_second": db_rate(idle_start, idle_end), "load_run_per_second": db_rate(idle_end, load_end)}
     journey_file = Path(output) / "journey.json"
-    run(journey_command(root, container, load, journey_file), "measure-journey")
+    timeseries_file = Path(output) / "timeseries.json"
+    try:
+        run(journey_command(root, container, load, journey_file), "measure-journey")
+        run(timeseries_command(root, container, load, timeseries_file, load_ended_us), "measure-timeseries")
+        last_finish_us = json.loads(timeseries_file.read_text()).get("last_finish_us")
+        # E13 Backlog 해소 = 부하 종료 뒤 Outstanding 0 이고 소비 지연 0. 업무가 끝난 뒤 지연 0 표본이 올 때까지(기한 안) 더 잰다.
+        lag_sampler.wait_for_zero_after(last_finish_us, remaining_seconds(load_ended_us))
+    finally:
+        # 수집이 실패해도 지연 표본이 docker 를 계속 부르지 않게 한다(PR #254 리뷰 R3).
+        lag_samples = lag_sampler.stop()
     broker_file = Path(output) / "broker.json"
     run(broker_command(root, container, load, broker_file), "measure-broker")
     resources = {"interval_seconds": resource_sampling.INTERVAL_SECONDS,
@@ -387,6 +560,11 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
     collected = json.loads(broker_file.read_text())
     broker = collected["groups"]
     order = collected.get("order", {})
+    timeseries = json.loads(timeseries_file.read_text())
+    timeseries["lag"] = {"interval_seconds": LAG_INTERVAL_SECONDS, "failures": lag_sampler.failures, "samples": lag_samples}
+    timeseries["backlog_drain_seconds"] = backlog_drain_seconds(load_ended_us, timeseries.get("last_finish_us"),
+                                                                timeseries.get("unresolved"), lag_samples)
+    timeseries_file.write_text(json.dumps(timeseries, ensure_ascii=False, indent=2))
     http = [order["httpMs"] for order in measured if "httpMs" in order]
     late = [order["lateMs"] for order in measured if "lateMs" in order]
     return {"rate": rate, "duration_seconds": seconds, "warmup_seconds": warmup, "buyers": buyers,
@@ -398,4 +576,10 @@ def measure(root, docker, run, capture, output, offset, rate, seconds, buyers, w
             "redeliveries": redeliveries(fetch, metrics_urls) if fetch else None,
             "db_load": db_load, "resources": resources,
             "broker_restart": restart.summary() if restart is not None else None,
-            "validity": with_restart(validity(measured, journey, broker, order), restart)}
+            "generator": loaded.get("measuredWindow"),
+            "timeseries": {key: timeseries.get(key) for key in ("rates", "measured_orders", "totals", "unresolved",
+                                                                 "outstanding_drain_seconds", "backlog_drain_seconds",
+                                                                 "clock_check", "observation")},
+            "load_ended_us": load_ended_us,
+            "faults": schedule.summary() if schedule is not None else None,
+            "validity": with_faults(validity(measured, journey, broker, order, loaded, timeseries), schedule, restart)}

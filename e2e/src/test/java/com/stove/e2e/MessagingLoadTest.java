@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +60,12 @@ import org.junit.jupiter.api.Test;
  *
  * <p>속성: {@code stove.e2e.load-rate}(초당 주문, 기본 2), {@code load-duration-secs}(기본 60),
  * {@code load-buyers}(기본 20), {@code load-warmup-secs}(기본 10, 측정 앞에 더한다), {@code load-refund-every}(기본 0 = 환불 없음),
- * {@code load-evidence}(결과 JSON 경로, 필수).
+ * {@code load-settle-secs}(기본 180, 0이면 끝 상태를 HTTP로 묻지 않는다), {@code load-evidence}(결과 JSON 경로, 필수).
+ *
+ * <p>예정 시각은 요청마다 미리 정한다({@code 시작 + n × 주기}). 스케줄러가 늦게 깨어나도 늦은 만큼이 {@code lateMs}에 남는다.
+ * 요청마다 예정·실제 요청·응답 시각을 epoch µs({@code scheduledEpochUs}·{@code requestedEpochUs}·{@code respondedEpochUs})로 남기고,
+ * 측정 창({@code measuredWindow}: 예정 시각으로 고정한 {@code [측정 첫 예정 시각, + 측정 시간)})에 실제로 보낸 측정 주문 수로
+ * 달성률을 낸다(E13·결정 231: 부하 발생기가 목표 요청률을 냈는가). 업무 완료·Outstanding 시계열은 DB 시각으로 따로 잰다.
  */
 @Tag("messaging-load")
 class MessagingLoadTest {
@@ -73,6 +79,7 @@ class MessagingLoadTest {
         int buyerCount = Integer.parseInt(property("load-buyers", "20"));
         int warmupSeconds = Integer.parseInt(property("load-warmup-secs", "10"));
         int refundEvery = Integer.parseInt(property("load-refund-every", "0"));
+        int settleSeconds = Integer.parseInt(property("load-settle-secs", "180"));
         Path evidence = Path.of(System.getProperty("stove.e2e.load-evidence"));
 
         JsonNode product = publishProduct();
@@ -90,12 +97,15 @@ class MessagingLoadTest {
         ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor();
         ExecutorService senders = Executors.newVirtualThreadPerTaskExecutor();
         Instant startedAt = Instant.now();
+        // 첫 주문의 예정 시각을 바로 남긴다. 장애 주입(tools/verification/support/e2e_faults.py)이 이 시각부터 잰다 —
+        // Gradle 기동·상품 출시가 장애 시각에 섞이지 않게.
+        Files.writeString(Path.of(evidence + ".started"), Long.toString(epochMicros(startedAt)));
         ScheduledFuture<?> schedule = ticker.scheduleAtFixedRate(() -> {
             int number = sequence.getAndIncrement();
             if (number >= total) {
                 return;
             }
-            Instant scheduledAt = Instant.now();
+            Instant scheduledAt = startedAt.plusNanos(number * periodNanos);
             senders.submit(() -> {
                 try {
                     results.add(order(product, buyers, number % buyerCount, scheduledAt).put("warmup", number < warmup));
@@ -110,6 +120,13 @@ class MessagingLoadTest {
         senders.shutdown();
         senders.awaitTermination(30, TimeUnit.SECONDS);
         Instant sentAt = Instant.now();
+        long windowStartUs = epochMicros(startedAt.plusNanos(warmup * periodNanos));
+        long windowEndUs = windowStartUs + seconds * 1_000_000L;
+        long inWindow = results.stream().filter(result -> !result.path("warmup").asBoolean())
+                .filter(result -> result.path("requestedEpochUs").asLong(Long.MAX_VALUE) < windowEndUs).count();
+        long measuredTotal = results.stream().filter(result -> !result.path("warmup").asBoolean()).count();
+        // 부하 종료 = 마지막 요청을 보낸 순간. 결정 231의 10분 관찰 기한을 여기서부터 잰다(Gradle 종료·끝 상태 대기를 섞지 않는다).
+        long lastRequestUs = results.stream().mapToLong(result -> result.path("requestedEpochUs").asLong(0)).max().orElse(0);
 
         List<ObjectNode> accepted = new ArrayList<>();
         for (ObjectNode result : results) {
@@ -117,18 +134,28 @@ class MessagingLoadTest {
                 accepted.add(result);
             }
         }
-        // 끝 상태(PAID·FAILED)에 닿을 때까지만 기다린다. 걸린 시간 자체는 DB 시각으로 잰다.
-        Awaitility.await().atMost(Duration.ofSeconds(180)).pollInterval(Duration.ofSeconds(2)).until(() -> {
-            int settled = 0;
-            for (ObjectNode result : accepted) {
-                String state = orderState(result, buyers);
-                result.put("finalState", state);
-                if ("PAID".equals(state) || "FAILED".equals(state)) {
-                    settled++;
-                }
+        // 끝 상태(PAID·FAILED)에 닿을 때까지만 기다린다. 걸린 시간 자체는 DB 시각으로 잰다. 장애 회차는 끝까지 닿지 않을 수 있으므로
+        // 시간이 넘어도 멈추지 않고 마지막 상태를 남긴다. 0이면 묻지 않는다 — 부하 종료 뒤 해소 구간에 HTTP 조회를 더하지 않게.
+        boolean asked = settleSeconds > 0;
+        boolean settled = false;
+        if (asked) {
+            try {
+                Awaitility.await().atMost(Duration.ofSeconds(settleSeconds)).pollInterval(Duration.ofSeconds(2)).until(() -> {
+                    int finalCount = 0;
+                    for (ObjectNode result : accepted) {
+                        String state = orderState(result, buyers);
+                        result.put("finalState", state);
+                        if ("PAID".equals(state) || "FAILED".equals(state)) {
+                            finalCount++;
+                        }
+                    }
+                    return finalCount == accepted.size();
+                });
+                settled = true;
+            } catch (ConditionTimeoutException timeout) {
+                // 마지막으로 읽은 상태가 finalState 에 남아 있다.
             }
-            return settled == accepted.size();
-        });
+        }
 
         int refunds = refundEvery > 0 ? refund(accepted, buyers, refundEvery, periodNanos) : 0;
 
@@ -143,7 +170,19 @@ class MessagingLoadTest {
                 .put("accepted", accepted.size())
                 .put("refundEvery", refundEvery)
                 .put("refunds", refunds)
-                .put("productCode", product.path("productCode").asText());
+                .put("productCode", product.path("productCode").asText())
+                .put("settleSeconds", settleSeconds)
+                .put("lastRequestEpochUs", lastRequestUs);
+        // 묻지 않았으면 모른다(null). 확인한 경우에만 참·거짓을 적는다.
+        if (asked) {
+            output.put("allSettled", settled);
+        } else {
+            output.putNull("allSettled");
+        }
+        output.putObject("measuredWindow")
+                .put("startEpochUs", windowStartUs).put("endEpochUs", windowEndUs).put("seconds", seconds)
+                .put("sentInWindow", inWindow).put("sentAfterWindow", measuredTotal - inWindow)
+                .put("achievedRate", (double) inWindow / seconds);
         ArrayNode orders = output.putArray("orders");
         results.forEach(orders::add);
         Files.writeString(evidence, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(output));
@@ -249,14 +288,17 @@ class MessagingLoadTest {
                     "expectedContentVersion", product.path("contentVersion").asLong(),
                     "expectedAmount", product.path("price").asLong());
             long startedNanos = System.nanoTime();
-            result.put("lateMs", Duration.between(scheduledAt, Instant.now()).toNanos() / 1_000_000.0);
+            Instant requestedAt = Instant.now();
+            result.put("scheduledEpochUs", epochMicros(scheduledAt)).put("requestedEpochUs", epochMicros(requestedAt))
+                    .put("lateMs", Duration.between(scheduledAt, requestedAt).toNanos() / 1_000_000.0);
             E2eClient.Response response = Stove.gateway.post("/api/v1/orders", input, buyers.get(index).headers());
             if (response.status() == 401) {
                 // 토큰 만료. 다시 로그인해 같은 요청을 한 번만 다시 보낸다(같은 requestId라 중복 주문이 생기지 않는다).
                 buyers.set(index, login(buyers.get(index).email(), PASSWORD));
                 response = Stove.gateway.post("/api/v1/orders", input, buyers.get(index).headers());
             }
-            result.put("httpMs", (System.nanoTime() - startedNanos) / 1_000_000.0).put("status", response.status());
+            result.put("httpMs", (System.nanoTime() - startedNanos) / 1_000_000.0).put("status", response.status())
+                    .put("respondedEpochUs", epochMicros(Instant.now()));
             if (response.status() == 200) {
                 result.put("orderNo", response.data().path("orderNo").asText());
             } else {
@@ -277,6 +319,10 @@ class MessagingLoadTest {
             response = Stove.gateway.get(path, buyers.get(index).headers());
         }
         return response.status() == 200 ? response.data().path("status").asText() : "HTTP_" + response.status();
+    }
+
+    private static long epochMicros(Instant instant) {
+        return ChronoUnit.MICROS.between(Instant.EPOCH, instant);
     }
 
     private static String property(String name, String fallback) {
