@@ -348,9 +348,8 @@
   - 검증: 격리 스택(`verify-jib.py`)에서 traceId로 로그가 검색되는지 본다.
 - [x] **T46. "봉투"라는 용어를 걷어낸다** — PR #274 ([결정 remove-envelope-term](../../docs/decisions.md#remove-envelope-term))
   - 응답은 "공통 응답 형식", 이벤트 식별 값은 "헤더", 수신 단위는 "이벤트 메시지"(`EventMessage`, 옛 이름 `EventEnvelope`)로 쓴다. 지난 기록 문서(`docs/decisions.md`의 이전 결정, `docs/evidence.md`·`docs/evidence.d/`, `docs/experiments.md`)는 고치지 않았다.
-- [ ] **T47. Studio `UploadExceptionHandler`가 413을 `INVALID_REQUEST` 코드로 답한다** [결정 필요]
-  - 어디서: `apps/studio/.../api/controller/UploadExceptionHandler.java`. 상태(413)와 코드가 어긋난다. `ErrorCode.PAYLOAD_TOO_LARGE`가 PR #271로 생겼다.
-  - 정할 것: Studio 응답 계약의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꿀지(클라이언트가 보는 값이 바뀐다).
+- [x] **T47. Studio `UploadExceptionHandler`가 413을 `INVALID_REQUEST` 코드로 답한다** — PR #291 ([결정 studio-upload-413-code](../../docs/decisions.md#studio-upload-413-code)): multipart 상한 초과의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꿨다.
+- [x] **T53. Studio의 업무 상한(빌드 1GiB·썸네일 5MiB) 초과는 400 `INVALID_REQUEST`로 답한다** — PR #291 ([결정 studio-business-limit-413](../../docs/decisions.md#studio-business-limit-413)): `UploadFiles.stage`의 상한 초과를 413 `PAYLOAD_TOO_LARGE`로 바꿨다. 빈 파일과 픽셀 상한은 400 그대로다.
 
 
 ## CI·PR 도구

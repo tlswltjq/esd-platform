@@ -40,7 +40,7 @@ public final class UploadFiles {
             while ((read = input.read(buffer)) != -1) {
                 size += read;
                 if (size > limit)
-                    throw new BusinessException(ErrorCode.INVALID_REQUEST, "파일 최대 크기를 초과했습니다.");
+                    throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE, "파일 최대 크기를 초과했습니다.");
                 output.write(buffer, 0, read);
             }
             if (size == 0)

@@ -2879,6 +2879,24 @@
 - 구분: 추천 수용
 - 결과: [PR #289](https://github.com/tlswltjq/esd-platform/pull/289)(기록)
 
+<a id="studio-upload-413-code"></a>
+## Studio의 업로드 크기 초과(413)는 오류 코드도 `PAYLOAD_TOO_LARGE`로 답한다
+- 문제: Studio `UploadExceptionHandler`가 multipart 상한 초과에 HTTP 413을 주면서 본문의 `error.code`는 `INVALID_REQUEST`(400의 코드)로 답했다. 상태와 코드가 어긋나고, [결정 mvc-standard-exceptions](#mvc-standard-exceptions)로 `PAYLOAD_TOO_LARGE`가 생긴 뒤에는 Studio만 다른 앱과 다르게 답한다. Studio가 이 예외를 직접 받고 있어 그때는 바꾸지 않았다.
+- 선택지: A 그대로 둔다 — 클라이언트가 보는 값이 바뀌지 않는다 / B `error.code`를 `PAYLOAD_TOO_LARGE`로 바꾼다 (추천: B — 상태와 코드가 같은 뜻을 말하고 다른 앱과 같아진다. 이 값에 기대는 외부 클라이언트가 아직 없다)
+- 내 의견: "T47의 PAYLOAD_TOO_LARGE는 비즈니스에러를 말하는거야 HTTPResponse를 말하는거야?" → "PAYLOAD_TOO_LARGE로 바꿔"
+- 선택: B — 본문의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꾼다. HTTP 상태(413)와 문구("파일 최대 크기를 초과했습니다.")는 그대로다. 업무 상한(빌드·썸네일 크기) 초과가 400 `INVALID_REQUEST`로 나가는 경로는 이 결정의 범위가 아니고 플랫폼 T53으로 남긴다(AI 해석).
+- 구분: 추천 수용
+- 결과: [PR #291](https://github.com/tlswltjq/esd-platform/pull/291), 근거 색인 2026-11-29 Studio 413 오류 코드 행
+
+<a id="studio-business-limit-413"></a>
+## Studio의 업무 상한(빌드·썸네일 크기) 초과도 413 `PAYLOAD_TOO_LARGE`로 답한다
+- 문제: Studio에는 크기 제한이 두 겹이다. multipart 상한(파일 1GB·요청 1025MB) 초과는 413 `PAYLOAD_TOO_LARGE`([결정 studio-upload-413-code](#studio-upload-413-code))인데, 그보다 작은 업무 상한(빌드 1GiB, 썸네일 5MiB)에 먼저 걸리면 `UploadFiles.stage`가 같은 문구("파일 최대 크기를 초과했습니다.")를 400 `INVALID_REQUEST`로 답한다. 예: 6MiB 썸네일은 400, 1GB를 넘는 요청은 413. 사용자가 흔히 만나는 크기 초과는 400 쪽이다.
+- 선택지: A 그대로 둔다 — 업무 규칙 위반은 400, 전송 한도 초과는 413 / B 업무 상한 초과도 413 `PAYLOAD_TOO_LARGE`로 맞춘다 (추천: B — 클라이언트에게 두 경우는 같은 문제(파일이 너무 크다)이고 대응도 같다. 지금은 같은 문구가 크기에 따라 다른 상태로 나가 어느 한도에 걸렸는지 알아야 처리할 수 있다)
+- 내 의견: "T53은 B로 적용해."
+- 선택: B — `UploadFiles.stage`가 상한을 넘으면 `PAYLOAD_TOO_LARGE`(413)로 던진다. 빌드 등록과 썸네일 업로드가 같은 메서드를 쓴다. 빈 파일, ZIP 형식 위반, 썸네일의 픽셀 상한(8192) 초과는 크기 한도가 아니라 입력 형식 문제라 400 `INVALID_REQUEST` 그대로 둔다(AI 해석).
+- 구분: 추천 수용
+- 결과: [PR #291](https://github.com/tlswltjq/esd-platform/pull/291), 근거 색인 2026-11-29 Studio 413 오류 코드 행
+
 ---
 
 ## 검증하며 드러난 것
