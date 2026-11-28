@@ -2,15 +2,12 @@ package com.stove.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPlacedEvent;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -60,9 +57,9 @@ final class G4PaymentFixture {
     }
 
     static E2eClient.Response admit(String number, Object body) throws Exception {
-        JsonNode secrets = ReviewJourney.JSON.readTree(Files.readString(Path.of(System.getProperty("stove.e2e.g4-secrets"))));
+        // LocalStack이 Order에 준 Payment 접근키를 내어 준다.
         return Stove.consumers.get("order").post("/internal/v1/orders/" + number + "/payment-admissions", body,
-                Map.of("X-Payment-Service-Key", secrets.path("paymentOrderServiceKey").asText()));
+                Map.of("X-Payment-Service-Key", System.getProperty("stove.e2e.payment-order-service-key")));
     }
 
     static void complete(OrderPlacedEvent placed, String paymentId) throws Exception {

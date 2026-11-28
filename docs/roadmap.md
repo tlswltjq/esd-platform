@@ -15,7 +15,7 @@
 | 여정 | 확인 경로 |
 |---|---|
 | 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `:e2e:ownershipE2eTest` |
-| 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `verify-g4-operations.py` |
+| 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `:e2e:g4OperationsE2eTest` |
 | 구매→지급→다운로드 | `verify-jib.py`(`:e2e:purchaseE2eTest`). CI의 야간 `stack E2E` 작업도 이것을 돌린다 |
 
 결제 실패·이탈→재진입·종료와 자동·수동 환불(확정 실패→복구) 여정은 PG 어댑터를 걷어내며 기준선에서 뺐다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)).

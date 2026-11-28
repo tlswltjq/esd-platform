@@ -330,7 +330,7 @@
     - [x] `verify-payment.py` → `paymentE2eTest` — PR #285
     - [x] `verify-license.py` → `licenseE2eTest` — PR #286
     - [x] `verify-download.py` → `downloadE2eTest` — PR #287
-    - [ ] `verify-g4-operations.py` → `g4OperationsE2eTest`
+    - [x] `verify-g4-operations.py` → `g4OperationsE2eTest` — PR #288
     - [ ] `verify-tracing.py` → `tracingE2eTest`
     - [ ] 마무리: 작업 표에서 `phase` 구조를 걷어내고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, Store가 있는 스택에서 브로커 무응답 중 Catalog가 낸 공개 알림이 복구 뒤 Store 사본에 닿는지 보는 단언을 더하고(PR #282에서 잡지 못한 변형), `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
   - 옮기지 않는 것: `verify-jib.py`(Jib 이미지 스택, 구매 여정·백업 복구·Prometheus·측정).

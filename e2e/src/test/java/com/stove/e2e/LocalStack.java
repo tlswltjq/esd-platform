@@ -60,8 +60,12 @@ final class LocalStack implements AutoCloseable {
     private static final String DB_PASSWORD = "stove1234";
     private static final String STORAGE_USER = "stove";
     private static final String STORAGE_PASSWORD = "stove1234";
-    private static final String READER_PASSWORD = "isolated-read-only-password";
-    private static final String BUCKET = "stove-builds";
+    /** 저장소의 제한된 계정(읽기 전용·태그 전용)이 쓰는 비밀번호. 여정이 환경 변수 재정의에 쓴다. */
+    static final String READER_PASSWORD = "isolated-read-only-password";
+    static final String BUILD_BUCKET = "stove-builds";
+    /** 환경 변수 재정의 값에 쓰면 이 스택의 저장소 주소로 바뀐다. */
+    static final String STORAGE_ENDPOINT_TOKEN = "{storage-endpoint}";
+    private static final String BUCKET = BUILD_BUCKET;
     private static final List<String> SCHEMAS = List.of("auth", "studio", "review", "catalog", "store", "order",
             "payment", "license", "settlement");
     private static final Duration APP_STOP_LIMIT = Duration.ofSeconds(40);
@@ -77,6 +81,7 @@ final class LocalStack implements AutoCloseable {
     private final GenericContainer<?> minio;
     private final Map<String, String> environment = new LinkedHashMap<>();
     private final Set<StackApp> apps;
+    private final Map<String, String> overrides;
     private final Map<StackApp, Process> processes = new EnumMap<>(StackApp.class);
     private final Map<String, Set<String>> credentialRecipients = new TreeMap<>();
     private final String settlementServiceKey = secret();
@@ -84,8 +89,9 @@ final class LocalStack implements AutoCloseable {
     private boolean kafkaPaused;
     private final Thread shutdownHook = new Thread(this::stopProcesses, "local-stack-shutdown");
 
-    private LocalStack(Path repository, Path directory, int offset, Set<StackApp> apps) {
+    private LocalStack(Path repository, Path directory, int offset, Set<StackApp> apps, Map<String, String> overrides) {
         this.apps = apps;
+        this.overrides = Map.copyOf(overrides);
         this.repository = repository;
         this.directory = directory;
         this.offset = offset;
@@ -118,6 +124,14 @@ final class LocalStack implements AutoCloseable {
      * 처음 건드리기 전에 불려야 한다({@link LocalStackExtension}).
      */
     static LocalStack start(Set<StackApp> apps) {
+        return start(apps, Map.of());
+    }
+
+    /**
+     * {@code overrides}는 이 스택의 모든 앱에 처음부터 주는 환경 변수다. 스택이 정하는 값보다 앞선다(예: Store의 대조
+     * 주기를 줄인다, Catalog에 태그 전용 저장소 계정을 준다).
+     */
+    static LocalStack start(Set<StackApp> apps, Map<String, String> overrides) {
         Path repository = Path.of(required("stove.e2e.repo-root")).toAbsolutePath();
         int offset = portOffset();
         System.setProperty("stove.e2e.port-offset", Integer.toString(offset));
@@ -126,7 +140,7 @@ final class LocalStack implements AutoCloseable {
         }
         String run = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now());
         Path directory = runDirectory(repository.resolve("e2e/build/local-stack"), run);
-        LocalStack stack = new LocalStack(repository, directory, offset, EnumSet.copyOf(apps));
+        LocalStack stack = new LocalStack(repository, directory, offset, EnumSet.copyOf(apps), overrides);
         try {
             Instant began = Instant.now();
             stack.startInfrastructure();
@@ -181,6 +195,40 @@ final class LocalStack implements AutoCloseable {
         }
         processes.remove(app);
         return process.exitValue();
+    }
+
+    /** 이 스택을 띄울 때 준 환경 변수 재정의. */
+    Map<String, String> overrides() {
+        return overrides;
+    }
+
+    /** 떠 있는 앱의 프로세스 ID. 스스로 복구했는지(다시 띄우지 않았는지)를 볼 때 쓴다. */
+    long pid(StackApp app) {
+        Process process = processes.get(app);
+        if (process == null) {
+            throw new IllegalStateException(app.module() + " 은 떠 있지 않다");
+        }
+        return process.pid();
+    }
+
+    /** 여러 칸·여러 줄 조회. 줄마다 탭으로 나눈 칸을 돌려준다. JSON 칸은 이스케이프 없이 온다. */
+    List<List<String>> sqlRows(String query) {
+        try {
+            Container.ExecResult result = mysql.execInContainer(
+                    "mysql", "-u" + DB_USER, "-p" + DB_PASSWORD, "-N", "-B", "--raw", "-e", query);
+            if (result.getExitCode() != 0) {
+                throw new IllegalStateException("조회 실패: " + result.getStderr());
+            }
+            List<List<String>> rows = new ArrayList<>();
+            for (String line : result.getStdout().split("\n")) {
+                if (!line.isEmpty()) {
+                    rows.add(List.of(line.split("\t", -1)));
+                }
+            }
+            return rows;
+        } catch (IOException | InterruptedException failure) {
+            throw new IllegalStateException("조회를 실행하지 못했다", failure);
+        }
     }
 
     /** 떠 있는 앱 집합. */
@@ -360,11 +408,48 @@ final class LocalStack implements AutoCloseable {
                  {"Effect":"Allow","Action":["s3:ListBucket"],"Resource":["arn:aws:s3:::%s"]}]}
                 """.formatted(BUCKET, BUCKET)), "/tmp/build-read-policy.json");
         mc("admin", "policy", "create", "admin", "build-read", "/tmp/build-read-policy.json");
-        for (String reader : List.of("review-reader", "download-reader")) {
-            mc("admin", "user", "add", "admin", reader, READER_PASSWORD);
-            mc("admin", "policy", "attach", "admin", "build-read", "--user", reader);
-        }
+        mc("admin", "user", "add", "admin", "review-reader", READER_PASSWORD);
+        mc("admin", "policy", "attach", "admin", "build-read", "--user", "review-reader");
         requireReadOnly("review-reader");
+        // Download의 읽기 계정과 Catalog의 태그 전용 계정은 운영과 같은 정책 파일(infra/minio/policies)로 만든다.
+        storageAccount("download-reader", "download-reader.json");
+        storageAccount("catalog-tagger", "catalog-download-tagger.json");
+        requireSeparatedDuties();
+    }
+
+    private void storageAccount(String user, String policyFile) throws IOException, InterruptedException {
+        String policy = Files.readString(repository.resolve("infra/minio/policies").resolve(policyFile));
+        minio.copyFileToContainer(Transferable.of(policy), "/tmp/" + policyFile);
+        mc("admin", "policy", "create", "admin", user, "/tmp/" + policyFile);
+        mc("admin", "user", "add", "admin", user, READER_PASSWORD);
+        mc("admin", "policy", "attach", "admin", user, "--user", user);
+        mc("alias", "set", user, "http://localhost:9000", user, READER_PASSWORD);
+    }
+
+    /**
+     * 내용 읽기와 태그 쓰기가 다른 계정에 나뉘어 있는지 확인한다: 둘 다 내용을 쓰거나 지우지 못하고, 읽기 계정은 태그를
+     * 달지 못하고, 태그 계정은 내용을 읽지 못한다. 이 전제가 깨진 채로는 다운로드 차단 여정의 통과가 뜻이 없다.
+     */
+    private void requireSeparatedDuties() throws IOException, InterruptedException {
+        String object = BUCKET + "/iam-check.bin";
+        for (String user : List.of("download-reader", "catalog-tagger")) {
+            if (minio.execInContainer("sh", "-c", "printf forbidden | mc pipe " + user + "/" + BUCKET
+                    + "/write-must-fail.bin").getExitCode() == 0) {
+                throw new IllegalStateException(user + " 계정이 빌드 저장소에 쓸 수 있다");
+            }
+            if (minio.execInContainer("mc", "rm", user + "/" + object).getExitCode() == 0) {
+                throw new IllegalStateException(user + " 계정이 빌드 저장소에서 지울 수 있다");
+            }
+        }
+        mc("cat", "download-reader/" + object);
+        if (minio.execInContainer("mc", "tag", "set", "download-reader/" + object, "stove-download-blocked=true")
+                .getExitCode() == 0) {
+            throw new IllegalStateException("download-reader 계정이 태그를 달 수 있다");
+        }
+        if (minio.execInContainer("mc", "cat", "catalog-tagger/" + object).getExitCode() == 0) {
+            throw new IllegalStateException("catalog-tagger 계정이 내용을 읽을 수 있다");
+        }
+        mc("stat", "admin/" + object);
     }
 
     /**
@@ -404,6 +489,9 @@ final class LocalStack implements AutoCloseable {
         Runtime.getRuntime().addShutdownHook(shutdownHook);
         environment.putAll(System.getenv());
         environment.putAll(baseEnvironment());
+        environment.putAll(resolvedOverrides());
+        // Payment 없이 결제 접수를 계약 픽스처로 넣는 여정(G4)이 Order의 내부 API를 Payment처럼 부를 때 쓴다.
+        System.setProperty("stove.e2e.payment-order-service-key", environment.get("PAYMENT_ORDER_SERVICE_KEY"));
         // 기동 순서는 의존을 따른다: 발급자와 입구 → 공개 조회 사본 → 구매 → 다운로드 → 정산.
         launchAndAwait(Duration.ofSeconds(240), StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY,
                 StackApp.REVIEW, StackApp.CATALOG);
@@ -414,8 +502,17 @@ final class LocalStack implements AutoCloseable {
         environment.put("DOWNLOAD_STORAGE_ACCESS_KEY", "download-reader");
         environment.put("DOWNLOAD_STORAGE_SECRET_KEY", READER_PASSWORD);
         environment.put("DOWNLOAD_BUILD_URL_TTL", "PT5M");
+        environment.putAll(resolvedOverrides());
         launchAndAwait(Duration.ofSeconds(180), StackApp.DOWNLOAD);
         launchAndAwait(Duration.ofSeconds(180), StackApp.SETTLEMENT);
+    }
+
+    /** 재정의 값의 {@link #STORAGE_ENDPOINT_TOKEN}을 이 스택의 저장소 주소로 바꾼다(포트는 띄울 때 정해진다). */
+    private Map<String, String> resolvedOverrides() {
+        Map<String, String> resolved = new LinkedHashMap<>();
+        overrides.forEach((name, value) ->
+                resolved.put(name, value.replace(STORAGE_ENDPOINT_TOKEN, "http://127.0.0.1:" + storagePort)));
+        return resolved;
     }
 
     private Map<String, String> baseEnvironment() {

@@ -2,6 +2,8 @@ package com.stove.e2e;
 
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -36,15 +38,32 @@ final class LocalStackExtension implements BeforeAllCallback, ParameterResolver 
 
     private static LocalStack stack(ExtensionContext context) {
         Set<StackApp> wanted = wanted(context);
+        Map<String, String> overrides = overrides(context);
         LocalStack stack = context.getRoot().getStore(NAMESPACE)
-                .getOrComputeIfAbsent(Running.class, key -> new Running(LocalStack.start(wanted)), Running.class)
+                .getOrComputeIfAbsent(Running.class, key -> new Running(LocalStack.start(wanted, overrides)), Running.class)
                 .stack();
-        if (!stack.apps().equals(wanted)) {
-            // 실행 한 번에 스택은 하나다. 앱 구성이 다른 여정은 다른 Gradle 태스크로 나눈다.
+        if (!stack.apps().equals(wanted) || !stack.overrides().equals(overrides)) {
+            // 실행 한 번에 스택은 하나다. 앱 구성이나 환경이 다른 여정은 다른 Gradle 태스크로 나눈다.
             throw new IllegalStateException(context.getRequiredTestClass().getSimpleName() + " 은 " + wanted
-                    + " 을 원하지만 이 실행의 스택은 " + stack.apps() + " 로 떠 있다");
+                    + " 과 환경 " + overrides.keySet() + " 을 원하지만 이 실행의 스택은 " + stack.apps()
+                    + " 과 환경 " + stack.overrides().keySet() + " 으로 떠 있다");
         }
         return stack;
+    }
+
+    private static Map<String, String> overrides(ExtensionContext context) {
+        LocalStackEnvironment declared = context.getRequiredTestClass().getAnnotation(LocalStackEnvironment.class);
+        Map<String, String> values = new LinkedHashMap<>();
+        if (declared != null) {
+            for (String entry : declared.value()) {
+                int separator = entry.indexOf('=');
+                if (separator < 1) {
+                    throw new IllegalArgumentException("환경 변수는 이름=값으로 쓴다: " + entry);
+                }
+                values.put(entry.substring(0, separator), entry.substring(separator + 1));
+            }
+        }
+        return values;
     }
 
     private static Set<StackApp> wanted(ExtensionContext context) {
