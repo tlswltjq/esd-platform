@@ -213,7 +213,7 @@ class TrackCFulfillmentFlowTest {
     void revokesLicense() {
         Await.untilResponse("license 라이선스 회수",
                 () -> library(MEMBER),
-                // 응답 자체가 실패한 것을 '없어졌다' 로 읽지 않는다 — 봉투를 먼저 본다.
+                // 응답 자체가 실패한 것을 '없어졌다' 로 읽지 않는다 — 응답의 `success`를 먼저 본다.
                 r -> r.status() == 200 && r.itemWhere("orderNo", Journey.orderNo()).isMissingNode());
     }
 

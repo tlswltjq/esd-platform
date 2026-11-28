@@ -137,7 +137,7 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 
 받을 때와 반영할 때의 검증 경계([결정 156](../../docs/decisions.md#refund-awaiting-sale)이 모듈 스펙에 맡김):
 
-- **받을 때(E2, 원매출 없음)**: `SettlementRefundMapper.from`의 봉투·본문·키 검증과 `ConfirmedRefund` 생성 검증(식별자 형식, `amount > 0`, KRW, 취소 ID 목록 비어 있지 않고 중복 없음). PG를 조회하지 않는다 — 원매출이 없으면 PG 승인 근거 행도 없어 조회할 결제 근거가 없다.
+- **받을 때(E2, 원매출 없음)**: `SettlementRefundMapper.from`의 헤더·본문·키 검증과 `ConfirmedRefund` 생성 검증(식별자 형식, `amount > 0`, KRW, 취소 ID 목록 비어 있지 않고 중복 없음). PG를 조회하지 않는다 — 원매출이 없으면 PG 승인 근거 행도 없어 조회할 결제 근거가 없다.
 - **반영할 때(E1)**: `RecordPaidSale`이 트랜잭션 밖에서 PG 승인·소유자를 조회할 때, 같은 주문의 `AWAITING_SALE`이 있으면 `PgRefunds`도 함께 조회한다. 트랜잭션 안에서 대기 환불을 잠그고 원매출과 대조(`ConfirmedRefund.requireSale`과 같은 칸)·PG 근거 대조(`PgRefund.requireOriginal`·`requireConfirmation`)를 한다. PG 조회가 실패하면 매출 기록도 재시도 가능 실패로 끝난다(둘이 한 트랜잭션이므로).
 - **직렬화(R11.5)**: 대기 환불 저장 트랜잭션은 저장 뒤 같은 `orderNo`의 원매출을 잠금 읽기(`SettlementSaleRepository.lockByOrderNo`)로 다시 확인하고, 매출 기록 트랜잭션은 원매출 삽입 뒤 같은 `orderNo`의 대기 환불을 잠금 읽기로 확인한다. InnoDB 잠금 읽기는 상대가 삽입하고 아직 커밋하지 않은 행에서 기다리므로 둘 중 하나는 상대 행을 본다. 교착은 두 서비스의 기존 5회 재시도(`TransientDataAccessException`)가 새 트랜잭션에서 다시 판정한다. 원매출이 그 사이 생겼으면 대기 환불 저장 쪽은 롤백하고 원매출 있는 경로(위 "환불 조정")로 다시 처리한다.
 
@@ -318,16 +318,16 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 
 ## 이벤트
 
-공통: 봉투·Inbox·키·재시도·실패 보관·재발행은 [P2](../platform/requirements.md)를 따른다. 소비 레코드 하나는 리스너 스레드 안에서 끝내고 커밋 뒤 오프셋을 커밋한다.
+공통: 이벤트 메시지·Inbox·키·재시도·실패 보관·재발행은 [P2](../platform/requirements.md)를 따른다. 소비 레코드 하나는 리스너 스레드 안에서 끝내고 커밋 뒤 오프셋을 커밋한다.
 
 ### 소비
 
 | 이벤트 (플랫폼 행) | 소비 그룹 · 리스너 | `*Mapper.from` 검증 | 서비스 · 업무 멱등 키 | 실패 처리 |
 |---|---|---|---|---|
-| `OrderPaid` ([#17](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-paid-order` · `OrderEventListener`(`Topics.ORDER`) | `SettlementOrderMapper.from`: 봉투·본문 `eventId`·`eventType`·키 = `orderNo` 일치, (`eventType`, `schemaVersion`)으로 모양 선택(결정 170, SE-T9), 주문 사실 값 13개 + 선택 칸 `paymentConfirmedAt`(가칭, 없으면 null — 옛 이벤트). `PaidOrder` 생성 검증(UUID `orderNo`, 64자 식별자, `amount > 0`, KRW, 마이크로초 시각) | `RecordPaidSale.execute`. Inbox `(eventId, settlement-paid-order)` + `uk_sale_order_no`·`uk_sale_event_id`·`uk_sale_request_event_id`·`uk_sale_payment_result_event_id`·`uk_sale_payment_id`. 중복 판정 지문 = 주문 사실 값 + `paymentConfirmedAt`(옛 행은 null과 비교, P2.7-3 호환 테스트, MC-S4) | 외부 조회 실패·월 선택 실패 = 재시도 가능, 계약·값 불일치·출처 재사용 = 영구 실패(T20). 소진·영구 실패는 실패 보관 표·키 정지(결정 155·160) |
-| `RefundPaymentConfirmed` ([#28](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-confirmed-refund` · `RefundEventListener`(`Topics.PAYMENT`) | `SettlementRefundMapper.from`: 봉투·본문·키 일치, `schemaVersion` 1(`source` 있음)·2(`source` 없음, T19) 모두 받음. 내부 입력 `ConfirmedRefund`는 `source`를 갖지 않는다(MC-S2) | `RecordConfirmedRefund.execute`. Inbox + `uk_refund_id`·`uk_refund_event`·`uk_refund_order`, 대기 환불 PK `order_no`·`uk_awaiting_refund_id`·`uk_awaiting_event`, 취소 PK `(provider, cancellation_id)` | 원매출 없음 = 대기 환불(R11, 실패 아님). PG 조회 실패·월 선택 실패 = 재시도 가능, 값 불일치·취소 재사용 = 영구 실패 |
+| `OrderPaid` ([#17](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-paid-order` · `OrderEventListener`(`Topics.ORDER`) | `SettlementOrderMapper.from`: 헤더·본문 `eventId`·`eventType`·키 = `orderNo` 일치, (`eventType`, `schemaVersion`)으로 모양 선택(결정 170, SE-T9), 주문 사실 값 13개 + 선택 칸 `paymentConfirmedAt`(가칭, 없으면 null — 옛 이벤트). `PaidOrder` 생성 검증(UUID `orderNo`, 64자 식별자, `amount > 0`, KRW, 마이크로초 시각) | `RecordPaidSale.execute`. Inbox `(eventId, settlement-paid-order)` + `uk_sale_order_no`·`uk_sale_event_id`·`uk_sale_request_event_id`·`uk_sale_payment_result_event_id`·`uk_sale_payment_id`. 중복 판정 지문 = 주문 사실 값 + `paymentConfirmedAt`(옛 행은 null과 비교, P2.7-3 호환 테스트, MC-S4) | 외부 조회 실패·월 선택 실패 = 재시도 가능, 계약·값 불일치·출처 재사용 = 영구 실패(T20). 소진·영구 실패는 실패 보관 표·키 정지(결정 155·160) |
+| `RefundPaymentConfirmed` ([#28](../platform/design.md#eventtype-상수-42개--현행목표-분리안)) | `settlement-confirmed-refund` · `RefundEventListener`(`Topics.PAYMENT`) | `SettlementRefundMapper.from`: 헤더·본문·키 일치, `schemaVersion` 1(`source` 있음)·2(`source` 없음, T19) 모두 받음. 내부 입력 `ConfirmedRefund`는 `source`를 갖지 않는다(MC-S2) | `RecordConfirmedRefund.execute`. Inbox + `uk_refund_id`·`uk_refund_event`·`uk_refund_order`, 대기 환불 PK `order_no`·`uk_awaiting_refund_id`·`uk_awaiting_event`, 취소 PK `(provider, cancellation_id)` | 원매출 없음 = 대기 환불(R11, 실패 아님). PG 조회 실패·월 선택 실패 = 재시도 가능, 값 불일치·취소 재사용 = 영구 실패 |
 | `RefundLateCancellationConfirmed` ([목표 행](../platform/design.md#목표-행-아직-코드에-없음)) | `settlement-confirmed-refund` · `RefundEventListener`(같은 리스너, 같은 그룹) | `SettlementRefundMapper.from`이 타입별 모양으로 읽어 같은 `ConfirmedRefund`로 바꾼다. 확인 시각 = 이 이벤트의 늦은 취소 확인 시각(R6.13). 필요한 칸(`refundId`·`attemptId`·`requestEventId`·`orderNo`·`paymentId`·`buyerSubject`·`amount`·`currency`·`providerTransactionId`·`cancellationIds`)이 본문에 있어야 한다(초안 메모 F) | 위와 같음. Inbox `event_type`은 받은 값 그대로(P2.1-6) | 위와 같음. 같은 주문에 다른 금융 확인 사실이 이미 반영된 경우는 영구 실패([결정 179](../../docs/decisions.md#late-cancellation-during-retry), 1회차 지적 A2·B2·A5, 판정 전) |
-| `Topics.ORDER`·`Topics.PAYMENT`의 그 밖의 타입(`RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed` 포함) | 위 두 그룹 | `EventEnvelope.from`만(헤더 없으면 거절) | 건너뜀, (그룹, 타입) 지표(P2.3-7, SE-T10) | 없음. Settlement는 귀속 보강·실패 사실을 소비하지 않는다(P3.26-4, U5, MC-S2, 1회차 지적 A4·B5, 판정 전) |
+| `Topics.ORDER`·`Topics.PAYMENT`의 그 밖의 타입(`RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed` 포함) | 위 두 그룹 | `EventMessage.from`만(헤더 없으면 거절) | 건너뜀, (그룹, 타입) 지표(P2.3-7, SE-T10) | 없음. Settlement는 귀속 보강·실패 사실을 소비하지 않는다(P3.26-4, U5, MC-S2, 1회차 지적 A4·B5, 판정 전) |
 
 ### 발행 (목표, 결정 158 — SE-T3)
 

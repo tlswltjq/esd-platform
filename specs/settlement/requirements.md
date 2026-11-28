@@ -33,7 +33,7 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 
 #### 수용 기준
 
-1. WHEN `settlement-paid-order` 그룹이 `OrderPaid`([design "이벤트 목록" #17](../platform/design.md#eventtype-상수-42개--현행목표-분리안))를 받으면 THEN Settlement SHALL `SettlementOrderMapper.from`에서 봉투·본문의 `eventId`·`eventType`·키(`orderNo`)가 같은지, (`eventType`, `schemaVersion`)이 아는 모양인지 확인하고 주문 사실 값과 선택 칸 `paymentConfirmedAt`(가칭)을 내부 입력 `PaidOrder`로 바꾼다([P2.1](../platform/requirements.md)·[P2.7-2](../platform/requirements.md)).
+1. WHEN `settlement-paid-order` 그룹이 `OrderPaid`([design "이벤트 목록" #17](../platform/design.md#eventtype-상수-42개--현행목표-분리안))를 받으면 THEN Settlement SHALL `SettlementOrderMapper.from`에서 헤더·본문의 `eventId`·`eventType`·키(`orderNo`)가 같은지, (`eventType`, `schemaVersion`)이 아는 모양인지 확인하고 주문 사실 값과 선택 칸 `paymentConfirmedAt`(가칭)을 내부 입력 `PaidOrder`로 바꾼다([P2.1](../platform/requirements.md)·[P2.7-2](../platform/requirements.md)).
 2. WHEN 새 매출을 접수하면 THEN Settlement SHALL DB 트랜잭션 밖에서 PG 승인 근거와 Catalog 불변 소유자를 조회·대조한 뒤, 판매자 잠금 아래 Inbox·`SettlementSale`·PG 승인 근거·판매자 월 합계·매출 기록 확인 사실 Outbox(R12)를 한 트랜잭션에 저장한다([P3.15-3](../platform/requirements.md)).
 3. WHILE PG·Catalog를 조회하는 동안 THE Settlement SHALL 업무 트랜잭션·판매자 잠금·월 잠금을 잡지 않는다([P1.2-4](../platform/requirements.md)).
 4. WHEN 같은 주문의 이벤트가 같은 본문으로 다시 오면 THEN Settlement SHALL 기존 원장·월 합계·시각을 유지하고 새 Outbox 행을 쓰지 않으며, PG·Catalog가 중단돼도 외부 조회 없이 처리한다.
@@ -103,7 +103,7 @@ Settlement는 자기 반영 사실(매출 기록·환불 조정 기록)을 Outbo
 
 #### 수용 기준
 
-1. WHEN `settlement-confirmed-refund` 그룹이 금융 확인 사실(`RefundPaymentConfirmed` [#28](../platform/design.md#eventtype-상수-42개--현행목표-분리안), `RefundLateCancellationConfirmed` [목표 행](../platform/design.md#목표-행-아직-코드에-없음))을 받으면 THEN Settlement SHALL `api.listener`에서 봉투·본문·키를 검증하고 두 사실을 같은 내부 입력(`ConfirmedRefund`)으로 바꾸되, 받은 `eventType`을 Inbox에 그대로 남긴다([P2.1-6](../platform/requirements.md)).
+1. WHEN `settlement-confirmed-refund` 그룹이 금융 확인 사실(`RefundPaymentConfirmed` [#28](../platform/design.md#eventtype-상수-42개--현행목표-분리안), `RefundLateCancellationConfirmed` [목표 행](../platform/design.md#목표-행-아직-코드에-없음))을 받으면 THEN Settlement SHALL `api.listener`에서 헤더·본문·키를 검증하고 두 사실을 같은 내부 입력(`ConfirmedRefund`)으로 바꾸되, 받은 `eventType`을 Inbox에 그대로 남긴다([P2.1-6](../platform/requirements.md)).
 2. THE Settlement SHALL `RefundExecutionSucceeded`·`RefundExecutionFailed`·`RefundFailureClosed`를 소비하지 않는다. 정산 금액은 첫 금융 확인 사실 하나로 정해지고, 취소 귀속은 Settlement 자신의 `PgRefunds` 조회 근거로 기록한다([P3.26-4](../platform/requirements.md)·[P4.3-3](../platform/requirements.md), U5, 1회차 지적 A4·B5, 판정 전).
 3. WHEN 전액 환불을 배분하면 THEN Settlement SHALL `FULL_REFUND_REVERSE_ORIGINAL_V1`로 원매출의 금액·플랫폼 수수료·판매자 몫을 그대로 음수 상계하고, 현재 요율로 다시 계산하거나 외부 혜택만큼 판매자 몫을 줄이지 않는다([결정 41](../../docs/decisions.md#settlement-full-refund-allocation), I2).
 4. WHEN 원매출이 있는 환불을 기록하면 THEN Settlement SHALL 트랜잭션 밖에서 `PgRefunds`로 같은 결제를 조회해 전액 취소·성공 취소 ID 전체·합계·원승인 결제 구성을 확인한 뒤, 원매출 잠금 → 판매자 잠금 아래 Inbox·환불 조정·취소 근거·월 환불 합계·환불 조정 확인 사실 Outbox(R12)를 한 트랜잭션에 저장한다([P3.26-1](../platform/requirements.md)).

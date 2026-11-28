@@ -30,7 +30,7 @@ class ErrorCodeTest {
     @DisplayName("모든 코드는 4xx 아니면 5xx 다")
     void everyCodeIsAnErrorStatus(ErrorCode code) {
         // 오류 코드가 2xx·3xx 로 매핑되면 클라이언트는 실패를 성공으로 읽는다.
-        // 봉투의 success=false 와 상태코드가 어긋나는 순간 파싱 규칙이 하나로 유지되지 않는다.
+        // 응답의 success=false 와 상태코드가 어긋나는 순간 파싱 규칙이 하나로 유지되지 않는다.
         assertThat(code.status().isError())
                 .as("%s 가 %s 로 매핑됐다", code, code.status())
                 .isTrue();

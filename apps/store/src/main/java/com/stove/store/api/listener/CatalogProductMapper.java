@@ -1,6 +1,6 @@
 package com.stove.store.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.CatalogProductPublishedEvent;
 import com.stove.common.contract.payload.CatalogProductSnapshot;
 import com.stove.common.web.error.BusinessException;
@@ -11,13 +11,13 @@ import java.util.Objects;
 public final class CatalogProductMapper {
     private CatalogProductMapper() {}
 
-    public static CatalogProductSnapshot from(EventEnvelope envelope, CatalogProductPublishedEvent event) {
-        if (envelope == null || event == null || event.eventId() == null || event.eventId().isBlank()
+    public static CatalogProductSnapshot from(EventMessage message, CatalogProductPublishedEvent event) {
+        if (message == null || event == null || event.eventId() == null || event.eventId().isBlank()
                 || event.eventId().length() > 64
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
+                || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType())
                 || event.occurredAt() == null || event.product() == null
-                || !Objects.equals(envelope.key(), event.product().productCode())
+                || !Objects.equals(message.key(), event.product().productCode())
                 || (!"ON_SALE".equals(event.product().saleStatus()) && !"STOPPED".equals(event.product().saleStatus())
                     && !"BLOCKED".equals(event.product().saleStatus()))
                 || event.product().catalogVersion() < event.product().contentVersion())

@@ -44,7 +44,7 @@ class PublicationJobAccessTest {
     void administratorSeesRetryMetadataWithoutStorageOrTheFullSubmission() throws Exception {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(130, 1);
         CatalogPublicationJob job = CatalogPublicationJob.accept(
-                ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event), CatalogFixtures.json(event.snapshot()), null);
+                ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event), CatalogFixtures.json(event.snapshot()), null);
         when(read.list(0, 20)).thenReturn(List.of(job));
         mvc.perform(get("/api/v1/admin/catalog-release-jobs").header("Authorization", "Bearer ADMIN"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))

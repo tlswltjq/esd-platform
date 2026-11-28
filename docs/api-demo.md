@@ -107,7 +107,7 @@ ZIP은 manifest나 특정 플랫폼 실행 파일을 요구하지 않는다.
 
 당시 `docker-compose.apps.yml`, `docker-compose.apps.ci.yml`, `docker-compose.apps.e2e.yml` 순으로 적용한 로컬 스택은 Payment를 `demo` 프로필로 실행하고 Gateway를 `http://127.0.0.1:18080`에 열었다. 아래 설정과 API는 재작성 전 Payment의 기록이다. `STOVE_PAYMENT_SIMULATOR_BASE_URL`은 구매자 브라우저에서 접근 가능한 Gateway 주소다. `demo` 또는 `test` 프로필에서만 시뮬레이터 제어 API가 생성되고, `prod` 프로필이 함께 켜져도 생성되지 않는다. 프로필 없이 실행하면 기존 mock 결제창 URL만 반환한다.
 
-먼저 [창작자 출시 절차](api-demo.md#creator-demo)로 KRW 상품 한 개를 출시한다. `POST /api/v1/auth/signup/member`로 구매자를 만들고 [OAuth2 Authorization Code + PKCE](security.md)로 `commerce` 범위의 회원 access token을 받는다. 운영자 토큰은 시뮬레이터 제어에만 쓴다. 아래 변수는 `BASE=http://127.0.0.1:18080`, `PRODUCT_CODE`, `MEMBER_TOKEN`, `ADMIN_TOKEN`이다. 각 응답은 `success/data/error` 봉투이며, 명령은 `jq`와 `curl`을 사용한다.
+먼저 [창작자 출시 절차](api-demo.md#creator-demo)로 KRW 상품 한 개를 출시한다. `POST /api/v1/auth/signup/member`로 구매자를 만들고 [OAuth2 Authorization Code + PKCE](security.md)로 `commerce` 범위의 회원 access token을 받는다. 운영자 토큰은 시뮬레이터 제어에만 쓴다. 아래 변수는 `BASE=http://127.0.0.1:18080`, `PRODUCT_CODE`, `MEMBER_TOKEN`, `ADMIN_TOKEN`이다. 각 응답은 `success/data/error` 공통 응답 형식이며, 명령은 `jq`와 `curl`을 사용한다.
 
 ### 구매와 지급
 

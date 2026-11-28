@@ -1,6 +1,6 @@
 package com.stove.order.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPaymentFailedEvent;
@@ -14,26 +14,26 @@ import java.util.Objects;
 public final class PaymentResultMapper {
     private PaymentResultMapper() {}
 
-    public static PaymentResult from(EventEnvelope envelope, OrderPaymentCompletedEvent event) {
-        validate(envelope, event);
+    public static PaymentResult from(EventMessage message, OrderPaymentCompletedEvent event) {
+        validate(message, event);
         return new PaymentResult(event.eventId(), event.occurredAt(), event.orderNo(),
                 event.requestEventId(), event.paymentId(), event.buyerSubject(), event.amount(),
                 event.currency(), OrderStatus.PAID, null, null,
                 ProviderPaymentAmounts.fromNullable(event.pgPaidAmount(), event.pgDiscountAmount()));
     }
 
-    public static PaymentResult from(EventEnvelope envelope, OrderPaymentFailedEvent event) {
-        validate(envelope, event);
+    public static PaymentResult from(EventMessage message, OrderPaymentFailedEvent event) {
+        validate(message, event);
         return new PaymentResult(event.eventId(), event.occurredAt(), event.orderNo(),
                 event.requestEventId(), event.paymentId(), event.buyerSubject(), event.amount(),
                 event.currency(), OrderStatus.FAILED, event.reasonCode(), event.reason());
     }
 
-    private static void validate(EventEnvelope envelope, DomainEvent event) {
-        if (envelope == null || event == null
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || !Objects.equals(envelope.key(), event.partitionKey()))
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "결제 결과 이벤트 봉투와 본문이 다릅니다.");
+    private static void validate(EventMessage message, DomainEvent event) {
+        if (message == null || event == null
+                || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType())
+                || !Objects.equals(message.key(), event.partitionKey()))
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "결제 결과 이벤트 헤더와 본문이 다릅니다.");
     }
 }

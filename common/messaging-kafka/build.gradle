@@ -12,7 +12,7 @@ dependencies {
     api project(':common:contract')
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-    // DLT 운영 API 가 공통 응답 봉투를 쓰고, DLT 레코드에서 계약 헤더를 읽는다.
+    // DLT 운영 API 가 공통 응답 형식을 쓰고, DLT 레코드에서 계약 헤더를 읽는다.
     api 'org.springframework.kafka:spring-kafka'
     api 'org.springframework.boot:spring-boot-autoconfigure'
     // 실패 처리는 무엇을 포기했는지 남기는 것이 절반이다 — 로깅 API 를 직접 건다

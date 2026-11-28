@@ -11,7 +11,7 @@ public record CatalogProductSnapshot(
         String content, String videoUrl, long contentVersion, String buildVersion,
         Instant updatedAt, String saleStatus, long catalogVersion, Boolean listed, List<String> genres) {
     public CatalogProductSnapshot {
-        // Preserve the existing sale/listing envelope behavior; genres have no legacy default.
+        // Preserve the existing sale/listing message behavior; genres have no legacy default.
         if (listed == null) listed = saleStatus == null || "ON_SALE".equals(saleStatus);
         if (saleStatus == null && catalogVersion == 0) {
             saleStatus = "ON_SALE";

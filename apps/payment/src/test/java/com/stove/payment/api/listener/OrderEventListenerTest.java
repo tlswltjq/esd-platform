@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderPlacedEvent;
@@ -39,11 +39,11 @@ class OrderEventListenerTest {
         listener.receive(record(event,event.eventId(),event.eventType(),event.orderNo(),json.writeValueAsString(event)));
         verify(receive).execute(input, PaymentTraceContext.NONE);
     }
-    @Test void mismatchedEnvelopeCannotReachTheUseCase() throws Exception {
+    @Test void mismatchedMessageCannotReachTheUseCase() throws Exception {
         OrderPlacedEvent e=event(request()); String body=json.writeValueAsString(e);
-        for (EventEnvelope envelope:new EventEnvelope[]{null,new EventEnvelope("other",e.eventType(),e.orderNo(),body),
-                new EventEnvelope(e.eventId(),"other",e.orderNo(),body),new EventEnvelope(e.eventId(),e.eventType(),"wrong",body)})
-            assertThatThrownBy(() -> OrderPaymentMapper.from(envelope,e)).isInstanceOf(BusinessException.class);
+        for (EventMessage message:new EventMessage[]{null,new EventMessage("other",e.eventType(),e.orderNo(),body),
+                new EventMessage(e.eventId(),"other",e.orderNo(),body),new EventMessage(e.eventId(),e.eventType(),"wrong",body)})
+            assertThatThrownBy(() -> OrderPaymentMapper.from(message,e)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> listener.receive(record(e,"other",e.eventType(),e.orderNo(),body))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(receive);
     }

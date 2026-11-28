@@ -1,6 +1,6 @@
 package com.stove.payment.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
@@ -9,10 +9,10 @@ import java.util.Objects;
 
 public final class OrderExpiryMapper {
     private OrderExpiryMapper() { }
-    public static OrderExpiryInput from(EventEnvelope envelope,OrderExpiredEvent event) {
-        if(envelope==null || event==null || !Objects.equals(envelope.eventId(),event.eventId())
-                || !Objects.equals(envelope.eventType(),event.eventType()) || !Objects.equals(envelope.key(),event.orderNo()))
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,"Order expiry envelope and purchase do not match");
+    public static OrderExpiryInput from(EventMessage message,OrderExpiredEvent event) {
+        if(message==null || event==null || !Objects.equals(message.eventId(),event.eventId())
+                || !Objects.equals(message.eventType(),event.eventType()) || !Objects.equals(message.key(),event.orderNo()))
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,"Order expiry message and purchase do not match");
         return new OrderExpiryInput(event.eventId(),event.occurredAt(),event.orderNo(),event.requestEventId(),event.buyerSubject(),event.amount(),event.currency(),event.expiresAt());
     }
 }

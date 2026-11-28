@@ -118,7 +118,7 @@ Auth는 계정과 역할의 정본이다([플랫폼 design "정본 소유"](../p
 
 #### 수용 기준
 1. WHEN 공개 가입이 계정을 만들면 THEN Auth SHALL 같은 트랜잭션에 `OutboxRecorder.record("UserAccount", subject, UserRegisteredEvent)`로 적재한다. 뜻·토픽 `stove.auth.v1`·파티션 키 `subject`·소비자는 [플랫폼 design 이벤트 목록 #1](../platform/design.md#eventtype-상수-42개--현행목표-분리안)이 정본이다([P2.2-1](../platform/requirements.md#p22-발행--transactional-outbox)·[P2.4-1](../platform/requirements.md#p24-파티션-키)).
-2. THE 본문 `occurredAt` SHALL 계정 생성 시각(`user_account.created_at`)과 같다([P2.1-2](../platform/requirements.md#p21-봉투)·[P2.1-3](../platform/requirements.md#p21-봉투)).
+2. THE 본문 `occurredAt` SHALL 계정 생성 시각(`user_account.created_at`)과 같다([P2.1-2](../platform/requirements.md#p21-이벤트-메시지)·[P2.1-3](../platform/requirements.md#p21-이벤트-메시지)).
 3. THE 부트스트랩·운영자 역할 변경 SHALL `UserRegistered`를 내지 않는다(가입 사실이 아니다).
 4. THE Auth SHALL 현행 이벤트를 소유한 발행 모듈로서 운영 재발행 경로(`outbox_republish`, `stove.messaging.ops.republish-owner`, ADMIN 운영 API)를 갖는다([P2.2-7](../platform/requirements.md#p22-발행--transactional-outbox), [결정 161](../../docs/decisions.md#republish-all-current), 플랫폼 T7, AU-T10). 재발행 이벤트의 같은 키 안 발행 순번 헤더와 회수 정렬은 플랫폼 계약을 따른다(1회차 지적 B1, 판정 전).
 5. THE Auth SHALL 이벤트를 소비하지 않는다. 소비를 더하면 [P2.3](../platform/requirements.md#p23-소비--inbox와-업무-멱등)·[P2.6](../platform/requirements.md#p26-재시도dlt)를 따른다.

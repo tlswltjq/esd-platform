@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
@@ -23,10 +23,10 @@ public class RefundPreparationEventListener {
     public void receive(ConsumerRecord<String, String> record) {
         RefundPreparationConfirmation input;
         try {
-            EventEnvelope envelope=EventEnvelope.from(record);
-            if (!envelope.isType(EventType.REFUND_EXECUTION_PREPARED)) return;
+            EventMessage message=EventMessage.from(record);
+            if (!message.isType(EventType.REFUND_EXECUTION_PREPARED)) return;
             if (!Topics.PAYMENT.equals(record.topic())) throw new RefundCompletionRejected("준비 이벤트 발행 토픽이 다릅니다.");
-            input=RefundPreparationMapper.from(envelope,envelope.payloadAs(mapper,RefundExecutionPreparedEvent.class));
+            input=RefundPreparationMapper.from(message,message.payloadAs(mapper,RefundExecutionPreparedEvent.class));
         } catch (IllegalStateException malformed) { throw new RefundCompletionRejected("준비 이벤트 계약이 올바르지 않습니다.",malformed); }
         apply.execute(input);
     }

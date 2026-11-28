@@ -1,13 +1,13 @@
 package com.stove.order.api.listener;
 
 import static com.stove.order.OrderFixtures.completed;
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static com.stove.order.OrderFixtures.failed;
 import static com.stove.order.OrderFixtures.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPaymentFailedEvent;
@@ -26,30 +26,30 @@ class PaymentResultMapperTest {
         return Stream.of(completed(order), failed(order));
     }
 
-    private PaymentResult convert(EventEnvelope envelope, DomainEvent event) {
+    private PaymentResult convert(EventMessage message, DomainEvent event) {
         return switch (event) {
-            case OrderPaymentCompletedEvent completed -> PaymentResultMapper.from(envelope, completed);
-            case OrderPaymentFailedEvent failed -> PaymentResultMapper.from(envelope, failed);
+            case OrderPaymentCompletedEvent completed -> PaymentResultMapper.from(message, completed);
+            case OrderPaymentFailedEvent failed -> PaymentResultMapper.from(message, failed);
             default -> throw new IllegalArgumentException();
         };
     }
 
     @ParameterizedTest @MethodSource("outcomes")
-    void rejectsMismatchedEnvelopeForEitherOutcome(DomainEvent event) {
-        for (EventEnvelope envelope : new EventEnvelope[]{null,
-                new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
-                new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
-                new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
-            assertThatThrownBy(() -> convert(envelope, event)).isInstanceOf(BusinessException.class);
+    void rejectsMismatchedHeaderForEitherOutcome(DomainEvent event) {
+        for (EventMessage message : new EventMessage[]{null,
+                new EventMessage("other", event.eventType(), event.partitionKey(), ""),
+                new EventMessage(event.eventId(), "other", event.partitionKey(), ""),
+                new EventMessage(event.eventId(), event.eventType(), "other", "")})
+            assertThatThrownBy(() -> convert(message, event)).isInstanceOf(BusinessException.class);
     }
 
     @Test
     void translatesBothOutcomesWithoutLosingFailureInformation() {
         Order order = order();
         OrderPaymentCompletedEvent success = completed(order);
-        assertThat(PaymentResultMapper.from(envelope(success), success).status()).isEqualTo(OrderStatus.PAID);
+        assertThat(PaymentResultMapper.from(message(success), success).status()).isEqualTo(OrderStatus.PAID);
         OrderPaymentFailedEvent failure = failed(order);
-        PaymentResult result = PaymentResultMapper.from(envelope(failure), failure);
+        PaymentResult result = PaymentResultMapper.from(message(failure), failure);
         assertThat(result.status()).isEqualTo(OrderStatus.FAILED);
         assertThat(result.reasonCode()).isEqualTo("DECLINED");
         assertThat(result.reason()).isEqualTo(failure.reason());

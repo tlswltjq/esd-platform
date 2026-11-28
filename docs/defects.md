@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventMessageTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -131,12 +131,12 @@
 <a id="d-004"></a>
 ## D-004 계약 헤더 없는 메시지의 실패가 트랜잭션 한복판으로 미뤄짐
 
-**상태** 수정됨 · **영향** 가용성 (poison message) · **위치** `common/event/.../kafka/EventEnvelope.java`, `common/messaging/.../inbox/ProcessedEventGuard.java`
-**재현** `EventEnvelopeTest#rejectsRecordWithoutEventId`, `#rejectsRecordWithoutEventType`, `ProcessedEventGuardTest#rejectsNullEventId`
+**상태** 수정됨 · **영향** 가용성 (poison message) · **위치** `common/event/.../kafka/EventMessage.java`, `common/messaging/.../inbox/ProcessedEventGuard.java`
+**재현** `EventMessageTest#rejectsRecordWithoutEventId`, `#rejectsRecordWithoutEventType`, `ProcessedEventGuardTest#rejectsNullEventId`
 
 - **증상** `eventId` 헤더가 없으면 업무 로직이 실행된 뒤 `event_id NOT NULL`에서 롤백되고 재전송된다. `eventType`이 없으면 어떤 분기도 타지 않고 흔적 없이 정상 리턴한다.
-- **원인** `EventEnvelope.from()`이 null을 그대로 반환하고, 가드도 null을 "처음 본 이벤트"로 허용했다. 컨슈머 에러 핸들러 정책이 어느 서비스에도 없었다.
-- **수정** 봉투 생성 시점에 계약 위반을 `IllegalStateException`(topic/partition/offset/key 포함)으로 거부하고 가드도 빈 `eventId`를 거부한다. 지수 백오프(1→2→4초) 기본 `DefaultErrorHandler`를 자동 구성했다. 이후 [결정 19](decisions.md#19-포기한-메시지를-버리지-않고-되살릴-문을-단다)로 정책이 `common:kafka`로 옮겨져 9개 서비스 전부에 적용되고, 소진 시 `<원본토픽>.DLT`로 보낸다.
+- **원인** `EventMessage.from()`이 null을 그대로 반환하고, 가드도 null을 "처음 본 이벤트"로 허용했다. 컨슈머 에러 핸들러 정책이 어느 서비스에도 없었다.
+- **수정** 이벤트 메시지 생성 시점에 계약 위반을 `IllegalStateException`(topic/partition/offset/key 포함)으로 거부하고 가드도 빈 `eventId`를 거부한다. 지수 백오프(1→2→4초) 기본 `DefaultErrorHandler`를 자동 구성했다. 이후 [결정 19](decisions.md#19-포기한-메시지를-버리지-않고-되살릴-문을-단다)로 정책이 `common:kafka`로 옮겨져 9개 서비스 전부에 적용되고, 소진 시 `<원본토픽>.DLT`로 보낸다.
 
 ---
 

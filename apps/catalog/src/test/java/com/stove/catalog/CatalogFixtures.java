@@ -1,7 +1,7 @@
 package com.stove.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.contract.payload.ProjectSnapshot;
 import java.util.List;
@@ -45,7 +45,7 @@ public final class CatalogFixtures {
         }
     }
 
-    public static EventEnvelope envelope(ProjectReleaseRequestedEvent e) {
-        return new EventEnvelope(e.eventId(), e.eventType(), e.partitionKey(), json(e));
+    public static EventMessage message(ProjectReleaseRequestedEvent e) {
+        return new EventMessage(e.eventId(), e.eventType(), e.partitionKey(), json(e));
     }
 }

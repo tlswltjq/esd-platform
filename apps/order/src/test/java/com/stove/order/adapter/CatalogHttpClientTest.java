@@ -112,7 +112,7 @@ class CatalogHttpClientTest {
         response = "{\"success\":true,\"data\":{}}";
         assertThatThrownBy(() -> client.detail("Game-1")).isInstanceOf(BusinessException.class);
     }
-    @Test void rejectsWrongCodeCurrencyAndMalformedEnvelopes() {
+    @Test void rejectsWrongCodeCurrencyAndMalformedMessages() {
         for (String invalid : new String[]{response.replace("Game-1", "game-1"), response.replace("KRW", "USD"),
                 response.replace("true", "false"), "not-json", "{}"}) {
             response = invalid;

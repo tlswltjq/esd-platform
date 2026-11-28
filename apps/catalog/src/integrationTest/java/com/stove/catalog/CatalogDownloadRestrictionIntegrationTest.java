@@ -1,6 +1,6 @@
 package com.stove.catalog;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -194,7 +194,7 @@ class CatalogDownloadRestrictionIntegrationTest extends CatalogIntegrationTestBa
                 s.genres()
         );
         ProjectReleaseRequestedEvent event = ProjectReleaseRequestedEvent.of(template.releaseRequestId(), template.reviewRequestId(), snapshot);
-        publish.execute(ReleaseSubmissionMapper.from(envelope(event), event));
+        publish.execute(ReleaseSubmissionMapper.from(message(event), event));
         return s.productCode();
     }
     String url(long project, long version) {

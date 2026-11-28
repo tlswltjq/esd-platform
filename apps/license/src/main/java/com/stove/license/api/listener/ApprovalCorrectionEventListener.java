@@ -1,7 +1,7 @@
 package com.stove.license.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.LicenseApprovalCorrectionRequestedEvent;
@@ -17,10 +17,10 @@ public class ApprovalCorrectionEventListener {
     private final ApplyApprovalCorrection apply;
     @KafkaListener(topics = Topics.ORDER, groupId = ApplyApprovalCorrection.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope=EventEnvelope.from(record);
-        if (envelope.isType(EventType.LICENSE_APPROVAL_CORRECTION_REQUESTED)) {
+        EventMessage message=EventMessage.from(record);
+        if (message.isType(EventType.LICENSE_APPROVAL_CORRECTION_REQUESTED)) {
             if (!Topics.ORDER.equals(record.topic())) throw new IllegalStateException("승인 정정 요청 토픽이 다릅니다.");
-            apply.execute(ApprovalCorrectionMapper.from(envelope,envelope.payloadAs(mapper,LicenseApprovalCorrectionRequestedEvent.class)));
+            apply.execute(ApprovalCorrectionMapper.from(message,message.payloadAs(mapper,LicenseApprovalCorrectionRequestedEvent.class)));
         }
     }
 }

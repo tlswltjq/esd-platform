@@ -16,10 +16,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 봉투(Envelope)는 모든 컨슈머의 첫 관문이다. 여기서 꺼낸 {@code eventId} 가
+ * `EventMessage`는 모든 컨슈머의 첫 관문이다. 여기서 꺼낸 {@code eventId} 가
  * 그대로 멱등 판단 키가 되므로, 이 클래스의 실패 처리 방식이 곧 시스템의 멱등성 한계다.
  */
-class EventEnvelopeTest {
+class EventMessageTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
@@ -45,22 +45,22 @@ class EventEnvelopeTest {
         ConsumerRecord<String, String> record =
                 record(paymentCompletedJson(), "EVT-1", EventType.PAYMENT_COMPLETED);
 
-        EventEnvelope envelope = EventEnvelope.from(record);
+        EventMessage message = EventMessage.from(record);
 
-        assertThat(envelope.eventId()).isEqualTo("EVT-1");
-        assertThat(envelope.eventType()).isEqualTo(EventType.PAYMENT_COMPLETED);
-        assertThat(envelope.key()).isEqualTo("ORD-1");
-        assertThat(envelope.isType(EventType.PAYMENT_COMPLETED)).isTrue();
-        assertThat(envelope.isType(EventType.PAYMENT_CANCELLED)).isFalse();
+        assertThat(message.eventId()).isEqualTo("EVT-1");
+        assertThat(message.eventType()).isEqualTo(EventType.PAYMENT_COMPLETED);
+        assertThat(message.key()).isEqualTo("ORD-1");
+        assertThat(message.isType(EventType.PAYMENT_COMPLETED)).isTrue();
+        assertThat(message.isType(EventType.PAYMENT_CANCELLED)).isFalse();
     }
 
     @Test
     @DisplayName("payload 를 지정한 타입으로 역직렬화한다")
     void deserializesPayload() throws Exception {
-        EventEnvelope envelope = EventEnvelope.from(
+        EventMessage message = EventMessage.from(
                 record(paymentCompletedJson(), "EVT-1", EventType.PAYMENT_COMPLETED));
 
-        PaymentCompletedEvent event = envelope.payloadAs(MAPPER, PaymentCompletedEvent.class);
+        PaymentCompletedEvent event = message.payloadAs(MAPPER, PaymentCompletedEvent.class);
 
         assertThat(event.orderNo()).isEqualTo("ORD-1");
         assertThat(event.amount()).isEqualTo(30_000L);
@@ -70,16 +70,16 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("깨진 payload 는 IllegalStateException 으로 감싼다")
     void wrapsDeserializationFailure() {
-        EventEnvelope envelope = EventEnvelope.from(
+        EventMessage message = EventMessage.from(
                 record("{not json", "EVT-1", EventType.PAYMENT_COMPLETED));
 
-        assertThatThrownBy(() -> envelope.payloadAs(MAPPER, PaymentCompletedEvent.class))
+        assertThatThrownBy(() -> message.payloadAs(MAPPER, PaymentCompletedEvent.class))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("역직렬화 실패");
     }
 
     @Test
-    @DisplayName("[D-004] eventId 없는 레코드는 봉투 단계에서 거부된다")
+    @DisplayName("[D-004] eventId 없는 레코드는 이벤트 메시지 생성 단계에서 거부된다")
     void rejectsRecordWithoutEventId() throws Exception {
         ConsumerRecord<String, String> broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
@@ -87,19 +87,19 @@ class EventEnvelopeTest {
         // 수정 전에는 null 을 반환해 통과시켰다. 그 null 이 멱등 가드까지 흘러가
         // 비즈니스 로직이 실행된 뒤 event_id NOT NULL 제약에서 터졌다 —
         // 실패 지점이 입구가 아니라 트랜잭션 한복판이었다.
-        assertThatThrownBy(() -> EventEnvelope.from(broken))
+        assertThatThrownBy(() -> EventMessage.from(broken))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("계약 위반");
     }
 
     @Test
-    @DisplayName("[D-004] eventType 없는 레코드도 봉투 단계에서 거부된다")
+    @DisplayName("[D-004] eventType 없는 레코드도 이벤트 메시지 생성 단계에서 거부된다")
     void rejectsRecordWithoutEventType() throws Exception {
         ConsumerRecord<String, String> broken = record(paymentCompletedJson(), "EVT-1", null);
 
         // eventType 이 null 이면 isType() 이 전부 false 라 리스너가 조용히 아무것도 안 한다.
         // 이벤트가 유실됐는데 로그에도 흔적이 남지 않는 쪽이 더 나쁘다.
-        assertThatThrownBy(() -> EventEnvelope.from(broken))
+        assertThatThrownBy(() -> EventMessage.from(broken))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("계약 위반");
     }
@@ -110,7 +110,7 @@ class EventEnvelopeTest {
         ConsumerRecord<String, String> broken =
                 record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
 
-        assertThatThrownBy(() -> EventEnvelope.from(broken))
+        assertThatThrownBy(() -> EventMessage.from(broken))
                 .hasMessageContaining(Topics.PAYMENT)
                 .hasMessageContaining("offset=")
                 .hasMessageContaining("ORD-1");
@@ -119,7 +119,7 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("[D-004] 빈 문자열 헤더도 없는 것으로 본다")
     void treatsBlankHeaderAsMissing() throws Exception {
-        assertThatThrownBy(() -> EventEnvelope.from(
+        assertThatThrownBy(() -> EventMessage.from(
                 record(paymentCompletedJson(), "  ", EventType.PAYMENT_COMPLETED)))
                 .isInstanceOf(IllegalStateException.class);
     }
@@ -130,7 +130,7 @@ class EventEnvelopeTest {
         ConsumerRecord<String, String> broken = record(paymentCompletedJson(), null, EventType.PAYMENT_COMPLETED);
         broken.headers().add(EventHeaders.EVENT_ID, null);
 
-        assertThatThrownBy(() -> EventEnvelope.from(broken))
+        assertThatThrownBy(() -> EventMessage.from(broken))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("계약 위반");
     }
@@ -142,7 +142,7 @@ class EventEnvelopeTest {
         record.headers().add(EventHeaders.EVENT_ID, "EVT-2".getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.TRACE_PARENT, null);
 
-        assertThat(EventEnvelope.from(record).eventId()).isEqualTo("EVT-2");
+        assertThat(EventMessage.from(record).eventId()).isEqualTo("EVT-2");
         assertThat(EventHeaders.values(record.headers(), EventHeaders.EVENT_ID)).containsExactly("EVT-1", "EVT-2");
         assertThat(EventHeaders.values(record.headers(), EventHeaders.TRACE_PARENT)).containsExactly("");
         assertThat(EventHeaders.all(record.headers())).containsKeys(EventHeaders.EVENT_ID, EventHeaders.EVENT_TYPE,

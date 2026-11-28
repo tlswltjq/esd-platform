@@ -1,11 +1,11 @@
 package com.stove.order.api.listener;
 
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static com.stove.order.OrderFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import java.time.Instant;
@@ -16,20 +16,20 @@ class RefundExecutionSuccessMapperTest {
             id(), id(), id(), id(), id(), id(), "buyer", 9000, "KRW", "pg-original", "cancel-1");
 
     @Test void preservesTheFirstMoneyEventLinkWhileAttributingOnlyThisExecution() {
-        assertThat(RefundExecutionSuccessMapper.from(envelope(event), event).confirmationEventId()).isEqualTo(event.confirmationEventId());
-        assertThat(RefundExecutionSuccessMapper.from(envelope(event), event).execution().source()).isEqualTo("PG_RESPONSE");
+        assertThat(RefundExecutionSuccessMapper.from(message(event), event).confirmationEventId()).isEqualTo(event.confirmationEventId());
+        assertThat(RefundExecutionSuccessMapper.from(message(event), event).execution().source()).isEqualTo("PG_RESPONSE");
     }
 
-    @Test void envelopeKeyAndIdentityCannotBeReusedForAnotherExecution() {
-        EventEnvelope wrong = new EventEnvelope(event.eventId(), event.eventType(), id(), "");
+    @Test void messageKeyAndIdentityCannotBeReusedForAnotherExecution() {
+        EventMessage wrong = new EventMessage(event.eventId(), event.eventType(), id(), "");
         assertThatThrownBy(() -> RefundExecutionSuccessMapper.from(wrong, event)).isInstanceOf(RefundCompletionRejected.class);
     }
 
     @Test void aLateSuccessCannotReuseTheMoneyEventIdOrOmitItsCancellationIdentity() {
         RefundExecutionSucceededEvent reused = copy(event.eventId(), "cancel-1");
         RefundExecutionSucceededEvent missing = copy(event.confirmationEventId(), null);
-        assertThatThrownBy(() -> RefundExecutionSuccessMapper.from(envelope(reused), reused)).isInstanceOf(RefundCompletionRejected.class);
-        assertThatThrownBy(() -> RefundExecutionSuccessMapper.from(envelope(missing), missing)).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> RefundExecutionSuccessMapper.from(message(reused), reused)).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> RefundExecutionSuccessMapper.from(message(missing), missing)).isInstanceOf(RefundCompletionRejected.class);
     }
 
     private RefundExecutionSucceededEvent copy(String confirmationId, String cancellationId) {

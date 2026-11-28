@@ -14,7 +14,7 @@ class CatalogPublicationJobTest {
     @Test
     void acceptanceIsDurableWorkAndRetryDoesNotReplaceItsOriginalInputOrTrace() {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(120, 2);
-        ReleaseSubmission input = ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event);
+        ReleaseSubmission input = ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event);
         String json = CatalogFixtures.json(event.snapshot());
         String trace = "00-" + "a".repeat(32) + "-" + "b".repeat(16) + "-01";
         CatalogPublicationJob job = CatalogPublicationJob.accept(input, json, trace);
@@ -40,7 +40,7 @@ class CatalogPublicationJobTest {
     @Test
     void sameRequestCannotAcquireDifferentInputEvenWithTheSameEventId() {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(121, 2);
-        ReleaseSubmission input = ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event);
+        ReleaseSubmission input = ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event);
         CatalogPublicationJob job = CatalogPublicationJob.accept(input, CatalogFixtures.json(event.snapshot()), null);
         assertThatThrownBy(() -> job.requireSame(input, CatalogFixtures.event(121, 3).snapshot()))
                 .isInstanceOf(BusinessException.class);

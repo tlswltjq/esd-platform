@@ -121,7 +121,7 @@ Studio가 끼는 모듈 간 흐름은 [플랫폼 흐름 1 출시 → 공개](../
 6. THE Studio SHALL 다음 결과 사실을 받는다: Review의 `ProjectReviewApproved`·`ProjectReviewRejected`·`ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied`(`stove.review.v1`), Catalog의 `ProjectReleaseCompleted`·`ProjectReleaseRejected`·`ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied`·`ProjectReleaseClosed`(가칭)(`stove.release.v1`). 이행 중에는 옛 `ProjectReviewWithdrawalResolved`·`ProjectReleaseWithdrawalResolved`도 받는다(결정 176, [P2.7-4](../platform/requirements.md#p27-스키마-호환-결정-104)).
 7. (신규) WHEN Studio가 `ProjectReleaseClosed`를 받으면 THEN Studio SHALL 대상 출시 요청을 `CLOSED`로 끝내고 활성 출시 자리를 푼다([P3.5-5](../platform/requirements.md#p35-공개-확정-catalog), 결정 168).
 8. (신규) THE `studio-project` 리스너 SHALL (토픽, `eventType`) 짝을 대조해 review 토픽의 출시 결과·release 토픽의 심사 결과를 영구 실패로 거절한다([P2.3-8](../platform/requirements.md#p23-소비--inbox와-업무-멱등), MC-ST1).
-9. (신규) THE 결과 사실의 행위자·시각 SHALL 기록·표시에만 쓰고, Studio 시계와 선후를 비교해 거절·분기하지 않는다([P2.1-3](../platform/requirements.md#p21-봉투), 원칙 ⑥).
+9. (신규) THE 결과 사실의 행위자·시각 SHALL 기록·표시에만 쓰고, Studio 시계와 선후를 비교해 거절·분기하지 않는다([P2.1-3](../platform/requirements.md#p21-이벤트-메시지), 원칙 ⑥).
 
 ### R8. 목록 페이지 조회
 **사용자 스토리:** 창작자로서, 프로젝트·빌드·요청 이력을 페이지로 조회하고 싶다. 그래야 이력이 늘어도 다룰 수 있다.

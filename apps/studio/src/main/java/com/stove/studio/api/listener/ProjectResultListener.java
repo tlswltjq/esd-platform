@@ -1,7 +1,7 @@
 package com.stove.studio.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.contract.payload.ProjectReleaseRejectedEvent;
@@ -27,7 +27,7 @@ public class ProjectResultListener {
 
     @KafkaListener(topics = {Topics.REVIEW, Topics.RELEASE}, groupId = RecordProjectReviewResult.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope e = EventEnvelope.from(record);
+        EventMessage e = EventMessage.from(record);
         if (e.isType("ProjectReviewWithdrawalResolved")) {
             recordProjectWithdrawalResult.execute(ProjectWithdrawalResultMapper.from(
                     e, e.payloadAs(mapper, ProjectReviewWithdrawalResolvedEvent.class)));

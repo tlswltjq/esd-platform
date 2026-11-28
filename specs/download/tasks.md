@@ -23,7 +23,7 @@
 
 - [ ] **DL-T1. License·Catalog의 `404`를 본문 확인 없이 "열린 보유권 없음"·"공개 상품 없음"으로 바꾼다**
   - 무엇이: 어떤 `404`든(본문 없음·HTML·다른 오류 코드) License면 403, Catalog면 404로 끝난다. 잘못 설정된 base URL·경로 변경·앞단 프록시의 404가 고객에게 "보유하지 않은 상품"으로 보이고 장애가 가려진다.
-  - 어디서: `download:adapter/LicenseHttpClient.java:23`, `download:adapter/CatalogBuildHttpClient.java:37-38`. 테스트가 지금 동작을 고정: `DownloadHttpClientsTest#distinguishesLibraryDenialsAndAvailability`(`404,FORBIDDEN`)·`#mapsCatalogStatuses`(`404,NOT_FOUND`, 본문은 성공 봉투 그대로).
+  - 어디서: `download:adapter/LicenseHttpClient.java:23`, `download:adapter/CatalogBuildHttpClient.java:37-38`. 테스트가 지금 동작을 고정: `DownloadHttpClientsTest#distinguishesLibraryDenialsAndAvailability`(`404,FORBIDDEN`)·`#mapsCatalogStatuses`(`404,NOT_FOUND`, 본문은 성공 응답 형식 그대로).
   - 목표: R3.4·R3.9·R4.4·R4.7, 판정 표 J12·J13·J24·J25. `404`이고 본문이 `success=false`·`error.code=NOT_FOUND`일 때만 각 의미로, 그 밖은 `UPSTREAM_UNAVAILABLE`(503). 본문 해석은 `HttpResponseValues`에 의미별 메서드 하나로(J22의 403 해석과 같은 방식).
   - 영향: **보유권** — 보유자가 License 쪽 경로 문제로 "미보유" 안내를 받는다(잘못된 거절, 장애 경보는 `ServiceDown`에 안 잡힘). 돈 영향 없음.
   - 재현: `DownloadHttpClientsTest`에 `status=404, body="broken"`·`body=""`·`body={"success":false,"error":{"code":"OTHER"}}` → License·Catalog 모두 `UPSTREAM_UNAVAILABLE` 기대(지금 Red). 계약 본문 404는 지금 결과 유지.

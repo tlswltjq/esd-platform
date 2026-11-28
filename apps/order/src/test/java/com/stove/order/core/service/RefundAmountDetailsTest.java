@@ -1,6 +1,6 @@
 package com.stove.order.core.service;
 
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,7 +55,7 @@ class RefundAmountDetailsTest {
         Order order = order();
         OrderPaymentCompletedEvent event = new OrderPaymentCompletedEvent(id(), PAID_AT, order.getOrderNo(),
                 order.getRequestEventId(), id(), order.getBuyerSubject(), 10000, "KRW", 9976L, 24L);
-        assertThat(PaymentResultMapper.from(envelope(event), event).paymentAmounts()).isEqualTo(new ProviderPaymentAmounts(9976, 24));
+        assertThat(PaymentResultMapper.from(message(event), event).paymentAmounts()).isEqualTo(new ProviderPaymentAmounts(9976, 24));
     }
 
     @Test void aPendingRefundExposesApprovalAmountsWithoutInventingReturnAmounts() {
@@ -123,7 +123,7 @@ class RefundAmountDetailsTest {
             RefundPaymentConfirmedEvent event = new RefundPaymentConfirmedEvent(proof.eventId(), proof.occurredAt(), proof.refundId(), proof.attemptId(),
                     proof.requestEventId(), proof.orderNo(), proof.paymentId(), proof.buyerSubject(), proof.amount(), proof.currency(),
                     proof.source(), proof.providerTransactionId(), proof.cancellationIds(), invalid);
-            assertThatThrownBy(() -> RefundPaymentConfirmationMapper.from(envelope(event), event)).isInstanceOf(RefundCompletionRejected.class);
+            assertThatThrownBy(() -> RefundPaymentConfirmationMapper.from(message(event), event)).isInstanceOf(RefundCompletionRejected.class);
         }
     }
 

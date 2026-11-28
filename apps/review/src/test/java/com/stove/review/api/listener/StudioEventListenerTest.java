@@ -26,7 +26,7 @@ class StudioEventListenerTest {
         ProjectReviewRequestedEvent e = ReviewFixtures.event(1, 1);
         ConsumerRecord<String, String> record = record(e.eventId(), e.eventType(), ReviewFixtures.json(e));
         listener.receive(record);
-        verify(receive).execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
+        verify(receive).execute(ReviewSubmissionMapper.from(ReviewFixtures.message(e), e));
     }
 
     @Test

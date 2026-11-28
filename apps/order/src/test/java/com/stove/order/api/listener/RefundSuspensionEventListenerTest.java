@@ -11,7 +11,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -42,16 +42,16 @@ class RefundSuspensionEventListenerTest {
                 event.productCode(), event.paymentId()));
     }
 
-    @Test void envelopeMismatchesAreRejectedBeforeBusinessWork() {
+    @Test void headerMismatchesAreRejectedBeforeBusinessWork() {
         LicenseSuspendedEvent event = event();
-        for (EventEnvelope envelope : new EventEnvelope[]{null,
-                new EventEnvelope(id(), event.eventType(), event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), EventType.LICENSE_GRANTED, event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), event.eventType(), id(), "")}) {
-            assertThatThrownBy(() -> RefundSuspensionMapper.from(envelope, event)).isInstanceOf(RefundCompletionRejected.class);
+        for (EventMessage message : new EventMessage[]{null,
+                new EventMessage(id(), event.eventType(), event.orderNo(), ""),
+                new EventMessage(event.eventId(), EventType.LICENSE_GRANTED, event.orderNo(), ""),
+                new EventMessage(event.eventId(), event.eventType(), id(), "")}) {
+            assertThatThrownBy(() -> RefundSuspensionMapper.from(message, event)).isInstanceOf(RefundCompletionRejected.class);
         }
         assertThatThrownBy(() -> RefundSuspensionMapper.from(
-                new EventEnvelope(event.eventId(), event.eventType(), event.orderNo(), ""), null))
+                new EventMessage(event.eventId(), event.eventType(), event.orderNo(), ""), null))
                 .isInstanceOf(RefundCompletionRejected.class);
         verifyNoInteractions(apply);
     }

@@ -1,6 +1,6 @@
 package com.stove.payment;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.OrderPlacedEvent;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
@@ -18,7 +18,7 @@ public final class PaymentFixtures {
         return new OrderPlacedEvent(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),r.productId(),r.productCode(),r.title(),
                 r.contentVersion(),r.listAmount(),r.discountAmount(),r.amount(),r.currency());
     }
-    public static EventEnvelope envelope(OrderPlacedEvent e) { return new EventEnvelope(e.eventId(),e.eventType(),e.orderNo(),""); }
+    public static EventMessage message(OrderPlacedEvent e) { return new EventMessage(e.eventId(),e.eventType(),e.orderNo(),""); }
     public static PgResult approved(Payment p) { return result(p,PgResult.Decision.APPROVED); }
     public static PgResult result(Payment p,PgResult.Decision decision) {
         return new PgResult("SIMULATED",p.getPaymentId(),p.getOrderNo(),p.getAmount(),p.getCurrency(),id(),

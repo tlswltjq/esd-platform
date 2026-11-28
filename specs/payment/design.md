@@ -7,7 +7,7 @@
 
 - 경계·의존 방향은 [플랫폼 P1](../platform/requirements.md)과 design "모듈 경계와 의존 방향"을 따른다. Payment는 자기 스키마 `stove_payment`만 읽고 쓴다(P1.1-2).
 - 패키지: `core/{domain, port, service}` · `api/{controller, listener, scheduler}` · `adapter/{pg, order, crypto, trace}` · `config`.
-  - `api.listener`: `OrderEventListener`(`OrderPlaced`), `OrderExpiryListener`(`OrderExpired`), `RefundExecutionEventListener`(`RefundExecutionRequested`), 목표 `OrderPaymentResultRejectionListener`(가칭, `OrderPaymentResultRejected`), 목표 `SettlementRefundListener`(가칭, `SettlementRefundRecorded`). 각 리스너는 `*Mapper.from(envelope, payload)`로 봉투·본문·키를 검증해 내부 입력으로 바꾼다. 서비스·도메인은 이벤트 전체를 받지 않는다(AGENTS.md 3절).
+  - `api.listener`: `OrderEventListener`(`OrderPlaced`), `OrderExpiryListener`(`OrderExpired`), `RefundExecutionEventListener`(`RefundExecutionRequested`), 목표 `OrderPaymentResultRejectionListener`(가칭, `OrderPaymentResultRejected`), 목표 `SettlementRefundListener`(가칭, `SettlementRefundRecorded`). 각 리스너는 `*Mapper.from(message, payload)`로 헤더·본문·키를 검증해 내부 입력으로 바꾼다. 서비스·도메인은 이벤트 전체를 받지 않는다(AGENTS.md 3절).
   - `api.scheduler`: 위임만 한다. `PendingPaymentScheduler` → `ResolvePayment`, `PaymentApprovalScheduler` → `ResolvePaymentApproval`, `RefundLookupScheduler` → `ResolveRefundLookup`, `RefundRetryScheduler` → `ResolveRefundRetry`, 목표 `ChargeWatchScheduler`(가칭) → `ResolveChargeWatch`(가칭, R16).
   - `core.port`: `PgPaymentApprovalGateway`·`PaymentAttemptLookup`·`RefundCancellationGateway`·`RefundPaymentLookup`(PG), `OrderPaymentAdmissions`(Order 내부 명령 HTTP), 목표 `ProviderNotificationVerifier`·`ProviderNotificationReceipts`(가칭, 지금 `PortOneWebhookVerifier`·`PortOneWebhookReceipts`). 공급자 이름은 port 이름·값에 없다(R22).
   - `adapter.pg`: 공급자 HTTP·서명·응답 분류·보장 기한 계산. `config`가 주소·키·기한 설정을 바인딩해 adapter에 값만 주입한다. 지금은 공급자 adapter를 모두 걷어내고([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)) 외부 호출 없이 바로 승인하는 `ImmediateApprovalPgGateway` 하나만 있다([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)).
@@ -402,12 +402,12 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 
 | 이벤트(플랫폼 행) | 리스너 → Mapper → 서비스 | 소비 그룹 | Mapper 검증 | 업무 멱등 키 | 실패 처리 |
 |---|---|---|---|---|---|
-| `OrderPlaced`(#23) | `OrderEventListener` → `OrderPaymentMapper.from` → `ReceiveOrderPayment` | `payment-order-request` | 봉투·키=`orderNo`·가격 일관성·식별자 길이·`expiresAt`(선택) | `uk_purchase_payment_order`·`uk_purchase_payment_request` | 계약 위반 영구 |
-| `OrderExpired`(#22) | `OrderExpiryListener` → `OrderExpiryMapper.from` → `ApplyOrderExpiry` | `payment-order-expiry` | 봉투·연결값·`expiresAt` 값(재계산 대조 없음) | `uk_payment_order_expiry_event` | 연결값 불일치 영구 |
-| `RefundExecutionRequested`(#19) | `RefundExecutionEventListener` → `RefundExecutionMapper.from` → `ReceiveRefundExecution` | `payment-refund-execution`(결제 환불 팩토리) | 봉투·식별자·금액·통화 | `uk_refund_execution_attempt`·`_request`·`_suspension`·`_previous` | 결제 없음·선행 모순 영구, 일시 오류 재시도 |
+| `OrderPlaced`(#23) | `OrderEventListener` → `OrderPaymentMapper.from` → `ReceiveOrderPayment` | `payment-order-request` | 헤더·키=`orderNo`·가격 일관성·식별자 길이·`expiresAt`(선택) | `uk_purchase_payment_order`·`uk_purchase_payment_request` | 계약 위반 영구 |
+| `OrderExpired`(#22) | `OrderExpiryListener` → `OrderExpiryMapper.from` → `ApplyOrderExpiry` | `payment-order-expiry` | 헤더·연결값·`expiresAt` 값(재계산 대조 없음) | `uk_payment_order_expiry_event` | 연결값 불일치 영구 |
+| `RefundExecutionRequested`(#19) | `RefundExecutionEventListener` → `RefundExecutionMapper.from` → `ReceiveRefundExecution` | `payment-refund-execution`(결제 환불 팩토리) | 헤더·식별자·금액·통화 | `uk_refund_execution_attempt`·`_request`·`_suspension`·`_previous` | 결제 없음·선행 모순 영구, 일시 오류 재시도 |
 | `OrderPaymentResultRejected`(목표 행) | (가칭) `OrderPaymentResultRejectionListener` → `OrderPaymentResultRejectedMapper.from` → `RecordUnlinkedCharge` | (신설) `payment-order-result-rejection` | 연결값 5개·`rejectedResultEventId`·`paymentId`·`admissionId`(null 허용)·`rejectionReason` enum | `uk_unlinked_charge_rejection`, `uk_unlinked_charge_source` | 결과 ID 불일치 영구 |
-| `SettlementRefundRecorded`(목표 행, 가칭) | (가칭) `SettlementRefundListener` → `SettlementRefundMapper.from` → `RecordSettlementRefundResponse` | (신설) `payment-settlement-refund` | 봉투·`refundId`·`attemptId`·키 | 실행·늦은 취소 기록당 응답 ID 하나 | 대상 없음·이미 다른 응답 영구 |
-| `OrderPaid`(#17) | (목표) `OrderPaidListener` → `OrderPaidResponseMapper.from` → `RecordOrderPaymentResponse` | (신설) `payment-order-paid` | 봉투·키=`orderNo`·`paymentResultEventId`·`paymentId` | 결제당 응답 하나(`order_response_event_id` 유일) | 결제 없음·식별자 불일치 = 영구 실패. 같은 응답 재전달 무변화 ([결정 189](../../docs/decisions.md#payment-order-response)) |
+| `SettlementRefundRecorded`(목표 행, 가칭) | (가칭) `SettlementRefundListener` → `SettlementRefundMapper.from` → `RecordSettlementRefundResponse` | (신설) `payment-settlement-refund` | 헤더·`refundId`·`attemptId`·키 | 실행·늦은 취소 기록당 응답 ID 하나 | 대상 없음·이미 다른 응답 영구 |
+| `OrderPaid`(#17) | (목표) `OrderPaidListener` → `OrderPaidResponseMapper.from` → `RecordOrderPaymentResponse` | (신설) `payment-order-paid` | 헤더·키=`orderNo`·`paymentResultEventId`·`paymentId` | 결제당 응답 하나(`order_response_event_id` 유일) | 결제 없음·식별자 불일치 = 영구 실패. 같은 응답 재전달 무변화 ([결정 189](../../docs/decisions.md#payment-order-response)) |
 
 여러 토픽을 받는 리스너는 (토픽, `eventType`) 짝을 대조한다(P2.3-8). Payment 리스너는 지금 토픽 하나씩이다.
 

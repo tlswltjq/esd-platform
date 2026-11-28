@@ -58,7 +58,7 @@
 | J12a | License | 404 + 계약 본문(`success=false`, `error.code=PURCHASE_IN_STORAGE`) | 403 `LICENSE_REGISTRATION_REQUIRED` | License | R3.11, License R4.11, 결정 196 — **코드 차이 DL-T2·LI-T10**(지금 License가 이 코드를 내지 않음) |
 | J13 | License | 404 + 그 밖의 본문 | 503 | License | R3.9 — **코드 차이 DL-T1**(지금 403) |
 | J14 | License | 그 밖의 4xx·5xx | 503 | License | R9.3, `LicenseHttpClient.java:26` |
-| J15 | License | 200, 봉투가 성공 아님·`data`가 객체 아님·JSON 아님 | 503 | License | R9.3, `HttpResponseValues.java:10-14` |
+| J15 | License | 200, 응답 형식이 성공 아님·`data`가 객체 아님·JSON 아님 | 503 | License | R9.3, `HttpResponseValues.java:10-14` |
 | J16 | License | 200, `status`=`SUSPENDED` | 403 `LICENSE_SUSPENDED` | License | R3.5·R3.11, 결정 196, `LicenseHttpClient.java:30-32` — **코드 차이 DL-T2**(지금 `FORBIDDEN`) |
 | J17 | License | 200, `status` 없음·`ACTIVE`/`SUSPENDED` 밖의 값 | 503 | License | R3.10, `LicenseHttpClient.java:33` |
 | J18 | License | 200 `ACTIVE`, `productId`가 양의 정수 아님·`productCode`가 문자열 아님·형식 위반 | 503 | License | R9.3, `OwnedProduct.java:5` |
@@ -70,7 +70,7 @@
 | J24 | Catalog | 404 + 계약 본문(`error.code=NOT_FOUND`) | 404 `NOT_FOUND` | License, Catalog | R4.4 |
 | J25 | Catalog | 404 + 그 밖의 본문 | 503 | License, Catalog | R4.7 — **코드 차이 DL-T1**(지금 404) |
 | J26 | Catalog | 그 밖의 4xx·5xx(Catalog 정합 실패 500 포함) | 503 | License, Catalog | R9.3, `CatalogBuildHttpClient.java:39` |
-| J27 | Catalog | 200, 봉투·칸 타입·값 규칙 위반(ID·크기 ≤ 0, `checksum` 형식, `version`·`storagePath` 길이) | 503 | License, Catalog | R9.3, `PublishedBuild.java:7-11` |
+| J27 | Catalog | 200, 응답 형식·칸 타입·값 규칙 위반(ID·크기 ≤ 0, `checksum` 형식, `version`·`storagePath` 길이) | 503 | License, Catalog | R9.3, `PublishedBuild.java:7-11` |
 | J28 | Catalog | 200, `productCode` ≠ 요청 코드 | 503 | License, Catalog | R4.3, `CatalogBuildHttpClient.java:47` |
 | J29 | Catalog | 200, `productId` ≠ License `productId` | 503 | License, Catalog | R4.3·RI-6, `ReadBuildDownload.java:26-27` |
 | J30 | 저장 참조 | `storagePath`가 설정 버킷 밖·키 비어 있음 | 503 | License, Catalog | R6.2, `S3BuildStorage.java:34-36` |

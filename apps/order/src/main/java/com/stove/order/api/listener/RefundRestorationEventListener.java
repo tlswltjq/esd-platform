@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.RefundExecutionFailedEvent;
@@ -25,14 +25,14 @@ public class RefundRestorationEventListener {
     public void receive(ConsumerRecord<String, String> record) {
         RefundFailureConfirmation failure = null; LicenseRestorationConfirmation restored = null;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
-            if ((envelope.isType(EventType.REFUND_EXECUTION_FAILED) && !Topics.PAYMENT.equals(record.topic()))
-                    || (envelope.isType(EventType.LICENSE_RESTORED) && !Topics.LICENSE.equals(record.topic())))
+            EventMessage message = EventMessage.from(record);
+            if ((message.isType(EventType.REFUND_EXECUTION_FAILED) && !Topics.PAYMENT.equals(record.topic()))
+                    || (message.isType(EventType.LICENSE_RESTORED) && !Topics.LICENSE.equals(record.topic())))
                 throw new RefundCompletionRejected("실패/복구 이벤트의 발행 모듈 토픽이 다릅니다.");
-            if (envelope.isType(EventType.REFUND_EXECUTION_FAILED))
-                failure = RefundFailureConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionFailedEvent.class));
-            else if (envelope.isType(EventType.LICENSE_RESTORED))
-                restored = LicenseRestorationConfirmationMapper.from(envelope, envelope.payloadAs(mapper, LicenseRestoredEvent.class));
+            if (message.isType(EventType.REFUND_EXECUTION_FAILED))
+                failure = RefundFailureConfirmationMapper.from(message, message.payloadAs(mapper, RefundExecutionFailedEvent.class));
+            else if (message.isType(EventType.LICENSE_RESTORED))
+                restored = LicenseRestorationConfirmationMapper.from(message, message.payloadAs(mapper, LicenseRestoredEvent.class));
             else return;
         } catch (IllegalStateException invalid) { throw new RefundCompletionRejected("실패/복구 이벤트 계약이 올바르지 않습니다.", invalid); }
         if (failure != null) apply.execute(failure); else apply.execute(restored);

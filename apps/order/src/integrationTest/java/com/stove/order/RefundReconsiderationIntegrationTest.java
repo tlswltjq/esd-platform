@@ -300,8 +300,8 @@ class RefundReconsiderationIntegrationTest extends OrderIntegrationTestBase {
                 fixture.order().getOrderNo(), "usr_buyer", fixture.order().getProductId(), fixture.order().getProductCode(), fixture.order().getPaymentId());
         JsonNode payload = mapper.readTree(jdbc.queryForObject("SELECT payload FROM outbox_event WHERE event_id=?", String.class, expected.eventId()));
         assertThat(payload).isEqualTo(mapper.readTree(mapper.writeValueAsString(expected)));
-        Map<String, Object> envelope = jdbc.queryForMap("SELECT aggregate_type,aggregate_id,event_type,topic,partition_key,status FROM outbox_event WHERE event_id=?", expected.eventId());
-        assertThat(envelope).containsEntry("aggregate_type", "Order").containsEntry("aggregate_id", fixture.order().getOrderNo())
+        Map<String, Object> message = jdbc.queryForMap("SELECT aggregate_type,aggregate_id,event_type,topic,partition_key,status FROM outbox_event WHERE event_id=?", expected.eventId());
+        assertThat(message).containsEntry("aggregate_type", "Order").containsEntry("aggregate_id", fixture.order().getOrderNo())
                 .containsEntry("event_type", expected.eventType()).containsEntry("topic", expected.topic())
                 .containsEntry("partition_key", fixture.order().getOrderNo()).containsEntry("status", "PENDING");
         when(clock.instant()).thenReturn(BASE.plusSeconds(4));

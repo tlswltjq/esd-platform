@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.LicenseSuspendedEvent;
@@ -24,9 +24,9 @@ public class RefundSuspensionEventListener {
     public void receive(ConsumerRecord<String, String> record) {
         LicenseSuspensionConfirmation input;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
-            if (!envelope.isType(EventType.LICENSE_SUSPENDED)) return;
-            input = RefundSuspensionMapper.from(envelope, envelope.payloadAs(mapper, LicenseSuspendedEvent.class));
+            EventMessage message = EventMessage.from(record);
+            if (!message.isType(EventType.LICENSE_SUSPENDED)) return;
+            input = RefundSuspensionMapper.from(message, message.payloadAs(mapper, LicenseSuspendedEvent.class));
         } catch (IllegalStateException malformed) {
             throw new RefundCompletionRejected("정지 완료 메시지 계약이 올바르지 않습니다.", malformed);
         }

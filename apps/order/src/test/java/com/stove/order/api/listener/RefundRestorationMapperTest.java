@@ -1,11 +1,11 @@
 package com.stove.order.api.listener;
 
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static com.stove.order.OrderFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.RefundExecutionFailedEvent;
 import com.stove.common.contract.payload.LicenseRestoredEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
@@ -19,20 +19,20 @@ class RefundRestorationMapperTest {
     private final LicenseRestoredEvent restored = new LicenseRestoredEvent(id(), Instant.parse("2026-10-27T01:03:00Z"), id(), failed.refundId(), failed.attemptId(),
             failed.eventId(), id(), failed.orderNo(), failed.buyerSubject(), 1L, "PRODUCT-1", failed.paymentId(), id(), id(), true);
     @Test void mapsFailureAndRestorationWithAllTheirDifferentCorrelationKeys() {
-        assertThat(RefundFailureConfirmationMapper.from(envelope(failed), failed).lookupHash()).isEqualTo(failed.lookupHash());
-        assertThat(LicenseRestorationConfirmationMapper.from(envelope(restored), restored).failureEventId()).isEqualTo(failed.eventId());
-        assertThat(LicenseRestorationConfirmationMapper.from(envelope(restored), restored).returnedToStorage()).isTrue();
+        assertThat(RefundFailureConfirmationMapper.from(message(failed), failed).lookupHash()).isEqualTo(failed.lookupHash());
+        assertThat(LicenseRestorationConfirmationMapper.from(message(restored), restored).failureEventId()).isEqualTo(failed.eventId());
+        assertThat(LicenseRestorationConfirmationMapper.from(message(restored), restored).returnedToStorage()).isTrue();
     }
-    @Test void wrongEnvelopeIdsTypesAndKeysNeverReachInternalState() {
-        for (EventEnvelope invalid : List.of(new EventEnvelope(id(), failed.eventType(), failed.orderNo(), ""),
-                new EventEnvelope(failed.eventId(), "Other", failed.orderNo(), ""), new EventEnvelope(failed.eventId(), failed.eventType(), id(), "")))
+    @Test void wrongHeaderIdsTypesAndKeysNeverReachInternalState() {
+        for (EventMessage invalid : List.of(new EventMessage(id(), failed.eventType(), failed.orderNo(), ""),
+                new EventMessage(failed.eventId(), "Other", failed.orderNo(), ""), new EventMessage(failed.eventId(), failed.eventType(), id(), "")))
             assertThatThrownBy(() -> RefundFailureConfirmationMapper.from(invalid, failed)).isInstanceOf(RefundCompletionRejected.class);
-        assertThatThrownBy(() -> LicenseRestorationConfirmationMapper.from(new EventEnvelope(restored.eventId(), restored.eventType(), id(), ""), restored))
+        assertThatThrownBy(() -> LicenseRestorationConfirmationMapper.from(new EventMessage(restored.eventId(), restored.eventType(), id(), ""), restored))
                 .isInstanceOf(RefundCompletionRejected.class);
     }
     @Test void missingFinancialProofCannotBeInventedFromAFailureFlag() {
         RefundExecutionFailedEvent invalid = new RefundExecutionFailedEvent(failed.eventId(), failed.occurredAt(), failed.refundId(), failed.attemptId(),
                 failed.requestEventId(), failed.orderNo(), failed.paymentId(), failed.buyerSubject(), failed.amount(), failed.currency(), failed.providerTransactionId(), failed.cancellationId(), null);
-        assertThatThrownBy(() -> RefundFailureConfirmationMapper.from(envelope(invalid), invalid)).isInstanceOf(RefundCompletionRejected.class);
+        assertThatThrownBy(() -> RefundFailureConfirmationMapper.from(message(invalid), invalid)).isInstanceOf(RefundCompletionRejected.class);
     }
 }

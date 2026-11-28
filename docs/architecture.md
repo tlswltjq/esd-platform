@@ -31,7 +31,7 @@ MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변�
 |---|---|---|
 | 포트 | `.core.port`와 그 하위 패키지의 포트를 core에서 구현 | adapter의 포트 구현, config 조립 |
 | 계층 의존 | core → api·adapter·config, controller의 구현체 직접 접근, core·controller·adapter의 Bean 팩토리 | config → inbound, config의 Bean 팩토리 |
-| 이벤트 입력 | core의 `EventEnvelope` 의존, 서비스 메서드 인자의 외부 이벤트(제네릭 구성 타입·배열 요소·wildcard 포함), 도메인 모델의 외부 이벤트 의존 | 내부 입력, 순수 공유 스냅샷, 발행 이벤트 반환 |
+| 이벤트 입력 | core의 `EventMessage` 의존, 서비스 메서드 인자의 외부 이벤트(제네릭 구성 타입·배열 요소·wildcard 포함), 도메인 모델의 외부 이벤트 의존 | 내부 입력, 순수 공유 스냅샷, 발행 이벤트 반환 |
 | 순서 | 클래스·메서드 `@Async`, `Executor`와 그 하위 타입, 논블로킹 재시도 | 동기 리스너 |
 | 트랜잭션 | 인바운드(controller·listener·scheduler)의 `TransactionOperations`·`TransactionManager` 계열 의존 | 서비스, Auth OAuth 프로토콜 어댑터의 프로그램 방식 트랜잭션 |
 | 앱 간 경계 | 다른 `com.stove.<앱>` 구현으로의 직접 코드 의존(앱 목록 하드코딩 없음) | 자기 앱, `com.stove.common` 계약 |
@@ -57,13 +57,13 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 
 메시징은 Kafka 단일 구현이다([결정 227](decisions.md#kafka-only-messaging)). 업무 리스너는 `api.listener`에서 `@KafkaListener(topics, groupId = 서비스의 CONSUMER_GROUP)`로 `ConsumerRecord`를 받고 `*Mapper.from`으로 내부 입력을 만든다. Outbox 릴레이는 `KafkaTemplate`으로 파티션 키를 메시지 키로 보내고 브로커 확인 뒤에만 같은 키의 다음 행을 보낸다. 같은 키는 같은 파티션에서 차례로 처리되고, 실패는 `DefaultErrorHandler`가 제자리 재시도(1·2·4초)한 뒤 소비 모듈 DB `consumer_quarantine`에 보관하고 그 (그룹, 토픽, 키)를 멈춘다. 멈춘 키의 뒤 레코드는 `StoppedKeyInterceptor`가 처리 전에 보관함 뒤에 쌓는다(재투입은 `/api/v1/ops/quarantine/replay`가 그 그룹·토픽의 리스너를 직접 부른다, [결정 206](decisions.md#messaging-port-scope-quarantine)). DB가 없는 Store·게이트웨이·웹 BFF는 Kafka DLT를 쓴다. 리스너 동시성은 파티션 수다([결정 212](decisions.md#kafka-listener-concurrency)).
 
-모듈은 계약(`common:contract`, 토픽·payload·봉투), JPA 코어(`common:messaging`, Outbox·릴레이·Inbox·격리·재투입), JPA 없는 앱도 쓰는 Kafka 공통 모듈(`common:messaging-kafka`, 오류 처리기·멈춘 키 인터셉터·리스너 팩토리·DLT)로 나뉜다(표는 [공통 모듈](common-modules.md)). 재시도 선택(재시도 제외·한 건씩·성공까지)은 앱 `config`의 리스너 팩토리 빈으로 표현한다. Gradle `verifyCommonRuntimeDependencies`와 ArchUnit `CommonLibraryRules`가 Kafka 공통 모듈이 JPA·코어를 모르는지, `ConsumerGroupRules`가 `@KafkaListener(groupId)`와 Inbox 멱등 키가 같은지(결정 16) 강제한다. 결정 209 구조(브로커 중립 포트·adapter 다섯)에서 잰 기술 비교는 [E12](experiments.md#messaging-comparison)에 기록으로 남는다.
+모듈은 계약(`common:contract`, 토픽·payload·이벤트 메시지), JPA 코어(`common:messaging`, Outbox·릴레이·Inbox·격리·재투입), JPA 없는 앱도 쓰는 Kafka 공통 모듈(`common:messaging-kafka`, 오류 처리기·멈춘 키 인터셉터·리스너 팩토리·DLT)로 나뉜다(표는 [공통 모듈](common-modules.md)). 재시도 선택(재시도 제외·한 건씩·성공까지)은 앱 `config`의 리스너 팩토리 빈으로 표현한다. Gradle `verifyCommonRuntimeDependencies`와 ArchUnit `CommonLibraryRules`가 Kafka 공통 모듈이 JPA·코어를 모르는지, `ConsumerGroupRules`가 `@KafkaListener(groupId)`와 Inbox 멱등 키가 같은지(결정 16) 강제한다. 결정 209 구조(브로커 중립 포트·adapter 다섯)에서 잰 기술 비교는 [E12](experiments.md#messaging-comparison)에 기록으로 남는다.
 
 ## 결제·지급·환불의 경계
 
 Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.
 HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다. 최초 PAID이면 OrderPaid Outbox도 함께 저장한다.
-Payment는 고정 paymentId로 `PgGateway` 포트를 호출한다. 지금 구현은 외부 호출 없이 바로 승인하는 어댑터 하나다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
+Payment는 고정 paymentId로 `PgGateway` 포트를 호출한다. 지금 구현은 외부 호출 없이 바로 승인하는 어댑터 하나다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 헤더·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
 출처와 권한은 License 한 행에 저장한다. Order의 DB 유일 제약은 동일 상품의 PENDING·PAID 주문을 합쳐 한 건으로 제한하며 최종 FAILED에서만 새 구매를 허용한다. Order PAID와 라이브러리 반영 사이에는 전달 지연이 있다.
 환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행하는 계약이다. Payment의 PG 취소·조회 어댑터는 걷어내 지금은 조립되지 않는다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). [Payment 실행·검증](../tools/verification/README.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](../tools/verification/README.md)
 
@@ -384,7 +384,7 @@ Hikari 는 `minimumIdle` 기본값이 최대치라 **기동하자마자** 전부
 
 ### R11. 재시도해도 성공할 수 없는 실패도 네 번 시도한다
 
-**[확인됨]** 에러 핸들러에 비재시도 예외를 추가하지 않았다. 스프링 기본 비재시도 목록(역직렬화·변환 계열 여섯)에 이 프로젝트의 계약 위반(`EventEnvelope` 의 `IllegalStateException`)과 도메인 거절(`BusinessException`)은 없다.
+**[확인됨]** 에러 핸들러에 비재시도 예외를 추가하지 않았다. 스프링 기본 비재시도 목록(역직렬화·변환 계열 여섯)에 이 프로젝트의 계약 위반(`EventMessage` 의 `IllegalStateException`)과 도메인 거절(`BusinessException`)은 없다.
 그래서 헤더가 빠진 메시지도 1·2·4초를 기다려 네 번 시도하는 동안 파티션을 세운 뒤 DLT 로 간다.
 
 **[권장 개선안]** 계약 위반은 전용 예외로 바꿔 `addNotRetryableExceptions` 에 넣는다. `BusinessException` 전체를 넣지는 않는다 — R3 의 CONFLICT 처럼 **순서가 바로잡히면 풀리는** 거절도 있어서, 영구 거절만 골라야 한다.

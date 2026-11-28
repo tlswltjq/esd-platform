@@ -120,7 +120,7 @@ License는 결제 완료 주문 1건을 근거로 **구매 근거**(보관함 �
 **사용자 스토리:** 플랫폼으로서, 받은 이벤트를 저장 전에 검증하고 싶다. 그래야 잘못된 근거로 권한이 생기지 않는다.
 
 #### 수용 기준
-1. WHEN 이벤트를 받으면 THEN License SHALL 리스너의 `*Mapper.from`에서 이벤트 종류, 봉투·본문 `eventId`·`eventType` 일치, Kafka 키 = 본문 `orderNo`를 검증한 뒤 내부 입력(`PaidOrder`·`SuspensionRequest`·`RestorationRequest`·`ApprovalCorrectionRequest`·`PurchaseRefund`)으로 바꾼다.
+1. WHEN 이벤트를 받으면 THEN License SHALL 리스너의 `*Mapper.from`에서 이벤트 종류, 헤더·본문 `eventId`·`eventType` 일치, Kafka 키 = 본문 `orderNo`를 검증한 뒤 내부 입력(`PaidOrder`·`SuspensionRequest`·`RestorationRequest`·`ApprovalCorrectionRequest`·`PurchaseRefund`)으로 바꾼다.
 2. IF 필수 값 누락·ID/금액 범위 오류·잘못된 상품 코드·시각 정밀도 오류·소수의 정수 절삭이 필요한 값이면 THEN License SHALL 저장 전에 영구 실패로 거절한다.
 3. THE License SHALL 다른 모듈이 찍은 시각(`occurredAt` 등)과 자기 시각, 또는 다른 모듈 시각끼리의 선후로 받은 이벤트를 거절·분기하지 않는다. 그 시각은 값으로만 저장하고 같은 정지·요청인지는 식별자와 잠금으로만 판정한다([P4.5-1](../platform/requirements.md), I9·I13, D-052).
 4. THE License SHALL 같은 주문의 `OrderPaid`를 **13개 값 전체**로 비교하며, Inbox만 먼저 보고 내용 비교를 생략하지 않는다.

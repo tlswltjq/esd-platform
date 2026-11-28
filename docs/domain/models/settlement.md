@@ -26,7 +26,7 @@ PG 근거는 Settlement의 PG 포트로 공급자에서 직접 확인하는 계�
 - OrderPaid의 13개 값 전체, sellerSubject, 플랫폼 정책·적용 요율·금액을 보존한다.
 - PG 거래의 paymentId·공급자·거래 ID를 참조한다. PG 비용과 플랫폼 잔여액은 이 매출 엔티티에 저장하지 않는다.
 - orderNo·원본 eventId·requestEventId·paymentResultEventId·paymentId와 PG 거래 연결은 각각 재사용을 거부한다.
-- api.listener의 Mapper가 봉투·본문·키를 검증하고 PaidOrder로 변환한다. RecordPaidSale가 외부 조회 뒤 Inbox·매출·월 합계·검증한 PG 거래와 있으면 확정 비용을 같은 트랜잭션으로 저장한다.
+- api.listener의 Mapper가 헤더·본문·키를 검증하고 PaidOrder로 변환한다. RecordPaidSale가 외부 조회 뒤 Inbox·매출·월 합계·검증한 PG 거래와 있으면 확정 비용을 같은 트랜잭션으로 저장한다.
 - 같은 입력은 전체 내용 비교 후 최초 원장·금액·반영 월을 유지한다. PG·Catalog 장애 중에도 저장된 중복은 처리한다.
 
 saleMonth는 Order가 최초 PAID를 반영한 occurredAt의 KST 월이다. settlementMonth는 실제 월 합계에 반영한 월이다.
@@ -48,7 +48,7 @@ CLOSED는 금액 마감이며 실제 송금 완료가 아니다. [결정 39](../
 
 저장: settlement_refund·settlement_refund_cancellation. 원매출의 배분 정책/금액·판매자/상품 스냅샷, 최초 금융 확인·접수 시각, 환불/시도/요청·주문/결제 키, 배분/월 정책과 선택 사유, 독립 PG 조회의 성공 취소 ID/금액/시각을 보존한다. 취소 행의 제공사 시각이 없으면 NULL이며 전체 취소 시각과 구분한다. 환불 ID·주문·사건과 공급자별 취소 ID의 유일 제약으로 중복 상계를 막는다.
 
-`RefundPaymentConfirmed`의 봉투·본문·키를 Mapper에서 검증한 뒤 내부 입력을 받는다. 원매출/원승인·전액 성공 취소/ID·합계·지급 구성을 직접 대조하고 업무 트랜잭션에서 Inbox·원장·월 환불 합계를 저장한다. 금융 확인 월이 OPEN이면 해당 월, CLOSED이면 현재 OPEN 월을 잠근다. 동일 재처리는 PG 조회나 정책 재선택 없이 최초 기록을 반환한다. 늦은 `RefundExecutionSucceeded`는 새 상계로 처리하지 않는다.
+`RefundPaymentConfirmed`의 헤더·본문·키를 Mapper에서 검증한 뒤 내부 입력을 받는다. 원매출/원승인·전액 성공 취소/ID·합계·지급 구성을 직접 대조하고 업무 트랜잭션에서 Inbox·원장·월 환불 합계를 저장한다. 금융 확인 월이 OPEN이면 해당 월, CLOSED이면 현재 OPEN 월을 잠근다. 동일 재처리는 PG 조회나 정책 재선택 없이 최초 기록을 반환한다. 늦은 `RefundExecutionSucceeded`는 새 상계로 처리하지 않는다.
 
 원매출이 아직 없으면 저장 없이 재시도/DLT로 남는다. 완전히 CANCELLED된 거래에서도 검증한 원승인으로 원매출을 복구한 뒤 원래 금융 확인 사건을 재처리할 수 있다. 부분 취소·미확정은 거절한다. V10은 기존 매출/거래/비용/명세/마감을 보존하고 과거 환불을 추정 생성하지 않는다. ADMIN만 취소별/금융 상세를 조회하며 CREATOR는 자기 판매자 조정 요약만 조회한다.
 

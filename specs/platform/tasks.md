@@ -199,7 +199,7 @@
   - 재현: 버전 칸 없는 과거 JSON을 빈 Store에 넣어 `listed=true`·`ON_SALE` 사본이 생기는지.
 
 - [ ] **T25. 헤더 `occurredAt`이 Outbox 적재 시각이라 본문 사실 시각과 다르고, `schemaVersion` 헤더가 없다** ([결정 170](../../docs/decisions.md#schema-version-header))
-  - 어디서: `common/messaging/.../outbox/OutboxRelay.java:151-152`, 예 `order:core/service/ApplyApprovalCorrection.java:50-51`(본문은 `stop.getRestorationRequestedAt()`), `common/contract/.../EventEnvelope.java:17`.
+  - 어디서: `common/messaging/.../outbox/OutboxRelay.java:151-152`, 예 `order:core/service/ApplyApprovalCorrection.java:50-51`(본문은 `stop.getRestorationRequestedAt()`), `common/contract/.../EventMessage.java:17`.
   - 목표: P2.1-1·P2.1-2. 헤더 `occurredAt` = 본문 값. 결정 170: `outbox_event.schema_version`(종류별 정수, 1부터), 릴레이가 헤더 `schemaVersion`으로 냄, 헤더 없는 옛 메시지는 1, 리스너는 (`eventType`, `schemaVersion`)으로 매퍼 선택, `Topics.java` 주석을 "토픽 `vN` = 파티션 수·키 규칙 세대"로 정정.
   - 영향: 헤더를 읽는 도구(추적·DLT 조회 `DltRecordResponse`)와 본문을 읽는 업무 코드가 다른 시각을 본다.
   - 재현: `OutboxRelay` 단위 — 본문 `occurredAt`을 과거로 둔 이벤트의 헤더 값 == 본문 값.
@@ -291,7 +291,7 @@
   - 정본: 지표 정의·벤치마크 계약·판정식은 E13, 부하 조건은 결정 230, 판정 기준은 결정 231(잠정 벤치마크 기준, SLO 아님), 결과 보관은 결정 233.
   - [x] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
   - [x] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke — PR #253([E13 층 2 실행](../../docs/experiments.md#kafka-baseline-layer2)).
-  - [x] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 봉투 발행·DLT `max.message.bytes`), smoke — PR #254([E13 층 1 실행](../../docs/experiments.md#kafka-baseline-layer1)).
+  - [x] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 이벤트 메시지 발행·DLT `max.message.bytes`), smoke — PR #254([E13 층 1 실행](../../docs/experiments.md#kafka-baseline-layer1)).
   - [x] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/` — PR #255([E13 결과](../../docs/experiments.md#kafka-baseline-results)). 최대 지속 처리량 층 1 [6, 7)주문/s·층 2 [100, 110) msg/s, 층 2 기준 발행률은 [결정 236](../../docs/decisions.md#layer2-base-rate).
   - 완료 조건: 시나리오 1~6마다 결과 또는 미측정 사유·실행 방법이 E13에 있고, 최대 지속 처리량이 결정 231 판정식으로 [통과 단계, 실패 단계) 구간으로 적혀 있다.
 
@@ -320,9 +320,8 @@
   - 할 일 3: 앱 12개의 콘솔 로그를 구조화(JSON) 형식으로 낸다. Spring Boot 3.5의 `logging.structured.format.console`로 켤 수 있다. 값 안의 개행이 이스케이프되므로 `GlobalExceptionHandler`의 `malformed request` 로그에 요청 값이 실려 로그 줄을 위조할 수 있는 경로([결정 remove-unknown-property-net](../../docs/decisions.md#remove-unknown-property-net)의 선택지 C)가 함께 닫히는지 확인한다. 정할 것: 형식(ecs·logstash 등), 컨테이너 배포에서만 켤지 로컬 `bootRun`·테스트에서도 켤지. 로그를 읽는 검증 도구(`tools/verification`)가 평문 형식에 기대는지 먼저 확인한다.
   - 할 일 4: `docker-compose.yml`에 Loki와 수집기를 더하고 Grafana 데이터 소스를 등록한다(`infra/grafana/provisioning/datasources/datasources.yml`의 "로그 수집기(Loki)는 스택에 없다" 주석, Tempo의 트레이스→로그 연결). 정할 것: 수집 방식(수집기가 Docker 소켓으로 컨테이너 로그를 읽는 방식은 소켓 마운트가 필요하다 — `test_protected_compose.py`·`common/test`의 배포 계약 테스트와 맞는지 확인), 이미지 버전 고정, 보존 기간.
   - 검증: 격리 스택(`verify-jib.py`)에서 traceId로 로그가 검색되는지 본다.
-- [ ] **T46. "봉투"라는 용어를 걷어낸다** [결정 필요]
-  - 사용자 지시(2026-11-28): "봉투 라는 용어 걷어낼 것". PR #271·#273에서 새로 쓴 글에는 쓰지 않았다. 기존 코드·문서에는 153곳(2026-11-28 `grep` 기준)이 남아 있다: `AGENTS.md` 3절, ArchUnit 규칙 이름 `core_는_이벤트_봉투를_모른다`, `docs/common-modules.md`, specs 10여 개, Java 주석.
-  - 정할 것: 대체어(두 개념에 쓰인다 — 응답 `ApiResponse`와 이벤트 `EventEnvelope`. AI 추천은 "공통 응답 형식"·"이벤트 헤더"), 클래스 이름 `EventEnvelope`까지 바꿀지.
+- [x] **T46. "봉투"라는 용어를 걷어낸다** — PR #274 ([결정 remove-envelope-term](../../docs/decisions.md#remove-envelope-term))
+  - 응답은 "공통 응답 형식", 이벤트 식별 값은 "헤더", 수신 단위는 "이벤트 메시지"(`EventMessage`, 옛 이름 `EventEnvelope`)로 쓴다. 지난 기록 문서(`docs/decisions.md`의 이전 결정, `docs/evidence.md`·`docs/evidence.d/`, `docs/experiments.md`)는 고치지 않았다.
 - [ ] **T47. Studio `UploadExceptionHandler`가 413을 `INVALID_REQUEST` 코드로 답한다** [결정 필요]
   - 어디서: `apps/studio/.../api/controller/UploadExceptionHandler.java`. 상태(413)와 코드가 어긋난다. `ErrorCode.PAYLOAD_TOO_LARGE`가 PR #271로 생겼다.
   - 정할 것: Studio 응답 계약의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꿀지(클라이언트가 보는 값이 바뀐다).

@@ -33,7 +33,7 @@ import org.springframework.web.client.RestClient;
  * 방어선이 있지만 서비스 <i>사이</i> 의 거절은 여기서만 확인된다. {@link RestClient} 의 기본 동작(4xx/5xx 에 예외)을 그대로 쓰면 <b>기대한
  * 실패와 진짜 실패가 같은 모양</b>이 되므로 {@code exchange} 로 받는다.
  *
- * <p>응답은 봉투째 들고 다닌다({@code success}/{@code data}/{@code error}). 상태코드만 보던 셸과 달리 {@code error.code}
+ * <p>응답은 공통 응답 형식 그대로 들고 다닌다({@code success}/{@code data}/{@code error}). 상태코드만 보던 셸과 달리 {@code error.code}
  * 까지 대조할 수 있고, 그래야 "409 이긴 한데 다른 이유로 409" 를 가른다.
  */
 public final class E2eClient {
@@ -231,12 +231,12 @@ public final class E2eClient {
      * 응답 하나.
      *
      * @param status HTTP 상태코드
-     * @param body 봉투 전체 ({@code success}/{@code data}/{@code error})
+     * @param body 응답 본문 전체 ({@code success}/{@code data}/{@code error})
      * @param headers 응답 헤더 — {@code X-Correlation-Id} 로 traceId 가 돌아온다
      */
     public record Response(int status, JsonNode body, HttpHeaders headers) {
 
-        /** 봉투를 벗긴 알맹이. 없으면 {@code MissingNode} 라 {@code path()} 체인이 계속 살아 있다. */
+        /** `data` 칸의 값. 없으면 {@code MissingNode} 라 {@code path()} 체인이 계속 살아 있다. */
         public JsonNode data() {
             return body.path("data");
         }
@@ -250,7 +250,7 @@ public final class E2eClient {
          * {@code data} 배열에서 필드 값이 일치하는 첫 원소. 없으면 {@link MissingNode} 라 뒤따르는 {@code path()} 체인이 NPE
          * 없이 이어진다 — <b>"없다" 도 단언할 수 있는 값</b>이다.
          *
-         * <p>목록 응답이 전부 평평한 배열이라 이 하나로 충분하다(페이지 봉투가 아니다).
+         * <p>목록 응답이 전부 평평한 배열이라 이 하나로 충분하다(페이지 객체로 감싸지 않는다).
          */
         public JsonNode itemWhere(String field, String value) {
             for (JsonNode item : data()) {

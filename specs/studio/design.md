@@ -138,7 +138,7 @@
 | E6 · E7 · E8 | 소비 | `ProjectReleaseCompleted` · `ProjectReleaseRejected` · `ProjectReleaseClosed`(가칭) |
 | E9 | 소비 | `ProjectReleaseWithdrawn` (이행 중: `ProjectReleaseWithdrawalResolved(status=WITHDRAWN)`) |
 | E10 · E11 · E12 | 소비 | `ProjectReleaseWithdrawalDenied(targetStatus=COMPLETED · REJECTED · CLOSED)` (E12는 [결정 184](../../docs/decisions.md#withdrawal-denied-closed)) |
-| EX | 소비 | 위 이벤트 가운데 식별자가 맞지 않는 것: 대상 요청·명령 없음, `projectId`·`contentVersion`·`productCode` 불일치, 출시 결과의 `requestEventId` ≠ 원요청 이벤트 ID, 철회 결과의 `withdrawalId`·종류·행위자 불일치, (토픽, `eventType`) 짝 불일치, 봉투·본문 계약 위반 |
+| EX | 소비 | 위 이벤트 가운데 식별자가 맞지 않는 것: 대상 요청·명령 없음, `projectId`·`contentVersion`·`productCode` 불일치, 출시 결과의 `requestEventId` ≠ 원요청 이벤트 ID, 철회 결과의 `withdrawalId`·종류·행위자 불일치, (토픽, `eventType`) 짝 불일치, 헤더·본문 계약 위반 |
 | J1 | 예약 작업 | 정방향 대기 게이지 집계(R10, 읽기 전용) |
 | O1 | 운영자 | ADMIN Outbox 재발행·`DEAD` 회수(같은 `eventId`) |
 | O2 | 운영자 | ADMIN 실패 보관 표 재투입 → 같은 리스너 경로이므로 그 레코드의 E열과 같다 |
@@ -239,7 +239,7 @@ E8 행은 플랫폼 흐름 1의 S6b다(단계 목록에 S6b가 빠진 것은 **1
 
 ## API 계약
 
-`/api/v1/studio` 아래. 응답 봉투는 공통 `ApiResponse`. 공개 썸네일 외에는 CREATOR와 소유권을 확인한다(R9). 요청 본문 검증 실패는 400, 업로드 상한 초과는 413.
+`/api/v1/studio` 아래. 응답 형식은 공통 `ApiResponse`. 공개 썸네일 외에는 CREATOR와 소유권을 확인한다(R9). 요청 본문 검증 실패는 400, 업로드 상한 초과는 413.
 
 | 메서드 · 경로 | 역할 | 요청 | 응답 | 오류 | 멱등 |
 |---|---|---|---|---|---|
@@ -284,10 +284,10 @@ E8 행은 플랫폼 흐름 1의 S6b다(단계 목록에 S6b가 빠진 것은 **1
 
 | 이벤트(토픽) | 플랫폼 행 | `*Mapper.from` 검증 | 서비스 · 전이 | 업무 멱등 키(2층) |
 |---|---|---|---|---|
-| `ProjectReviewApproved`·`ProjectReviewRejected` (review) | 이벤트 목록(리터럴), S3 | 봉투 `eventId`·`eventType` = 본문, 키 = `productCode`, ID·버전 양수, 거절이면 `feedback` 1~2000자, 승인이면 `feedback` 없음, `actor` 1~100자 | `RecordProjectReviewResult`: Inbox → Project 잠금 → 요청 행 잠금 → 식별자(ID·`projectId`·`contentVersion`·`productCode`) 대조 → 심사 요청 표 E1·E2 | 심사 요청 상태(최종이면 같은 결과만 무변화). Inbox `uk_processed_event` |
-| `ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied` (review) | [목표 행](../platform/design.md#목표-행-아직-코드에-없음) SP-7, S2 | 위 봉투 규칙 + `withdrawalId`·`reviewRequestId`·`projectId`·`contentVersion`·`requestEventId`, Denied는 `targetStatus` ∈ {`APPROVED`,`REJECTED`} | `RecordProjectWithdrawalResult`: Inbox → Project 잠금 → 명령 → 대상 요청 잠금 → 철회 명령 표·심사 요청 표 E3~E5 | 명령 `withdrawalId` + 상태 |
-| `ProjectReleaseCompleted`·`ProjectReleaseRejected` (release) | 이벤트 목록(리터럴), S7 | 봉투 규칙, `requestEventId` 1~64자, 거절이면 `reason` ∈ Catalog `ReleaseRejectReason` | `RecordProjectReleaseResult`: Inbox → Project 잠금 → 요청 행 잠금 → 식별자 + `requestEventId` 대조 → 출시 요청 표 E6·E7 | 출시 요청 상태 |
-| `ProjectReleaseClosed`(가칭) (release) | 목표 행, S6b | 봉투 규칙, `releaseRequestId`·`projectId`·`contentVersion`·`productCode`·`requestEventId`·운영자·사유 | (목표) `RecordProjectReleaseClosure` → 출시 요청 표 E8 | 출시 요청 상태 |
+| `ProjectReviewApproved`·`ProjectReviewRejected` (review) | 이벤트 목록(리터럴), S3 | 헤더 `eventId`·`eventType` = 본문, 키 = `productCode`, ID·버전 양수, 거절이면 `feedback` 1~2000자, 승인이면 `feedback` 없음, `actor` 1~100자 | `RecordProjectReviewResult`: Inbox → Project 잠금 → 요청 행 잠금 → 식별자(ID·`projectId`·`contentVersion`·`productCode`) 대조 → 심사 요청 표 E1·E2 | 심사 요청 상태(최종이면 같은 결과만 무변화). Inbox `uk_processed_event` |
+| `ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied` (review) | [목표 행](../platform/design.md#목표-행-아직-코드에-없음) SP-7, S2 | 위 헤더 규칙 + `withdrawalId`·`reviewRequestId`·`projectId`·`contentVersion`·`requestEventId`, Denied는 `targetStatus` ∈ {`APPROVED`,`REJECTED`} | `RecordProjectWithdrawalResult`: Inbox → Project 잠금 → 명령 → 대상 요청 잠금 → 철회 명령 표·심사 요청 표 E3~E5 | 명령 `withdrawalId` + 상태 |
+| `ProjectReleaseCompleted`·`ProjectReleaseRejected` (release) | 이벤트 목록(리터럴), S7 | 헤더 규칙, `requestEventId` 1~64자, 거절이면 `reason` ∈ Catalog `ReleaseRejectReason` | `RecordProjectReleaseResult`: Inbox → Project 잠금 → 요청 행 잠금 → 식별자 + `requestEventId` 대조 → 출시 요청 표 E6·E7 | 출시 요청 상태 |
+| `ProjectReleaseClosed`(가칭) (release) | 목표 행, S6b | 헤더 규칙, `releaseRequestId`·`projectId`·`contentVersion`·`productCode`·`requestEventId`·운영자·사유 | (목표) `RecordProjectReleaseClosure` → 출시 요청 표 E8 | 출시 요청 상태 |
 | `ProjectReleaseWithdrawn`·`ProjectReleaseWithdrawalDenied` (release) | 목표 행 SP-8, S5 | Denied `targetStatus` ∈ {`COMPLETED`,`REJECTED`,`CLOSED`}([결정 184](../../docs/decisions.md#withdrawal-denied-closed)) | `RecordProjectWithdrawalResult` → 철회 명령 표·출시 요청 표 E9~E12 | 명령 `withdrawalId` + 상태 |
 | (이행 중) `ProjectReviewWithdrawalResolved`·`ProjectReleaseWithdrawalResolved` | 현행 → SP-7·SP-8 | `status` 문자열을 Withdrawn/Denied 입력으로 바꾼다. `actor`·`feedback`은 Withdrawn일 때만 철회자·사유로 쓴다 | 같음 | 같음 |
 
@@ -328,7 +328,7 @@ E8 행은 플랫폼 흐름 1의 S6b다(단계 목록에 S6b가 빠진 것은 **1
 | ST-I7 | (Project, 종류, `requestId`)마다 명령 1건, 같은 키는 같은 내용 | `uk_studio_command` + `ProjectRequestCommand.requireSubmission`·`requireWithdrawal` | `ProjectRequestCommandTest#oldSubmissionKeysKeepTheirOriginalVersionAndTarget`, `#optionalReasonAndAWithdrawalReceiptAreStableAcrossRetries` |
 | ST-I8 | 대상 요청마다 `PENDING` 철회 명령 ≤ 1 | 지금: 코드 검사(`RequestProjectWithdrawal.java:52-53`)만. 목표: `uk_studio_command_pending_target` | 없음 → tasks ST-T3 |
 | ST-I9 | 철회 명령 `WITHDRAWN` ⇔ 대상 요청 `WITHDRAWN`(같은 트랜잭션) | `RecordProjectWithdrawalResult.execute` | `ProjectWithdrawalIntegrationTest#withdrawalWaitsForFinalResultThenSameContentCanBeSubmittedWithoutRevivingOldCommands` |
-| ST-I10 | 결과는 식별자가 모두 맞는 요청·명령에만 기록 | `RecordProject*Result`, `ProjectRequestCommand.resolve` | `ProjectWithdrawalIntegrationTest#aResultWithTheWrongOriginOrReusedEnvelopeCannotFinalizeAnotherCommand`, `ProjectResultMapperTest#requiresMatchingIdTypeAndProductKey`. `productCode` 불일치·출시 `requestEventId` 불일치 → 없음 → MC-ST2·ST-T8 |
+| ST-I10 | 결과는 식별자가 모두 맞는 요청·명령에만 기록 | `RecordProject*Result`, `ProjectRequestCommand.resolve` | `ProjectWithdrawalIntegrationTest#aResultWithTheWrongOriginOrReusedMessageCannotFinalizeAnotherCommand`, `ProjectResultMapperTest#requiresMatchingIdTypeAndProductKey`. `productCode` 불일치·출시 `requestEventId` 불일치 → 없음 → MC-ST2·ST-T8 |
 | ST-I11 | `contentVersion` ≥ 1, 실제 변경 때만 1 증가 | `Project.changed`·`update`·`selectBuild`, 목표 CHECK | `ProjectGenreTest#aGenreOnlyEditChangesTheVersionButReorderingDoesNot`, `ProjectTest#projectOwnerAndEditVersionProtectMetadata` |
 | ST-I12 | 가격 ≥ 0 정수 | DTO `@PositiveOrZero`, 목표 도메인 검사 + `chk_studio_project_price` | `ProjectAccessTest#fractionalPriceIsRejectedInsteadOfSilentlyTruncated`. 음수 → 없음 → ST-T6 |
 | ST-I13 | 대표 빌드는 같은 Project의 빌드다 | 코드: `RegisterBuild`·`RequestProjectReview.java:60-63`. 목표: 복합 FK | `ProjectRequestIntegrationTest#anotherOwnerAndFailedFileCannotReplaceCurrentBuild` |

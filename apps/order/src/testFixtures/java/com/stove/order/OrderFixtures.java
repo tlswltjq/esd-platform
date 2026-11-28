@@ -1,6 +1,6 @@
 package com.stove.order;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPaymentFailedEvent;
@@ -23,7 +23,7 @@ public final class OrderFixtures {
     public static OrderPaymentFailedEvent failed(Order o) {
         return OrderPaymentFailedEvent.of(o.getOrderNo(), o.getRequestEventId(), id(), o.getBuyerSubject(), o.getAmount(), o.getCurrency(), "DECLINED", "승인이 거절되었습니다.");
     }
-    public static EventEnvelope envelope(DomainEvent e) { return new EventEnvelope(e.eventId(), e.eventType(), e.partitionKey(), ""); }
+    public static EventMessage message(DomainEvent e) { return new EventMessage(e.eventId(), e.eventType(), e.partitionKey(), ""); }
     public static PaymentResult result(OrderPaymentCompletedEvent e) {
         return new PaymentResult(e.eventId(), e.occurredAt(), e.orderNo(), e.requestEventId(), e.paymentId(), e.buyerSubject(), e.amount(), e.currency(), OrderStatus.PAID, null, null);
     }

@@ -1,6 +1,6 @@
 package com.stove.catalog.api.contract;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +34,7 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
     @Test
     void publicApiExposesOnlyPublishedFieldsAndRejectsInvalidPagingAndWrites() {
         ProjectReleaseRequestedEvent e = event(id(), 1);
-        publish.execute(ReleaseSubmissionMapper.from(envelope(e), e));
+        publish.execute(ReleaseSubmissionMapper.from(message(e), e));
         ResponseEntity<String> detail =
                 http.getForEntity("/api/v1/products/by-code/" + e.partitionKey(), String.class);
         assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -64,8 +64,8 @@ class CatalogOpenApiContractTest extends CatalogIntegrationTestBase {
     void paginationUsesProductIdAsTieBreakerForEqualPublicationTimes() {
         ProjectReleaseRequestedEvent first = event(id(), 1);
         ProjectReleaseRequestedEvent second = event(id(), 1);
-        publish.execute(ReleaseSubmissionMapper.from(envelope(first), first));
-        publish.execute(ReleaseSubmissionMapper.from(envelope(second), second));
+        publish.execute(ReleaseSubmissionMapper.from(message(first), first));
+        publish.execute(ReleaseSubmissionMapper.from(message(second), second));
         jdbc.update(
                 "UPDATE catalog_product SET published_at='2100-01-01 00:00:00' WHERE product_code"
                     + " IN (?,?)",

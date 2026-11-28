@@ -8,7 +8,7 @@
 - 패키지: `core/{domain, port, service}` + `api/{controller, listener, scheduler}` + `adapter/` + `config/`. ArchUnit `StoreArchitectureTest`와 공통 `ModulePackageRules`가 지킨다([P1.1-1](../platform/requirements.md)·[P1.5](../platform/requirements.md)).
 - 동기 의존: Store → Catalog 하나(design "동기 의존" Store 행). Store를 부르는 업무 모듈은 없다(Gateway 라우팅만).
 - 비동기 의존: Catalog 공개 사본 이벤트 → Store, 단방향(design "비동기 의존" 단방향 행). 응답 사실은 없고 Store가 정본 대조로 차이를 센다(design "정방향 응답 쌍" 마지막 행, [결정 158](../../docs/decisions.md#forward-gap-counting)).
-- 의존 라이브러리: `common:jpa`, `common:messaging-kafka`(계약·봉투·소비 재시도), 공통 실패 보관 표·재투입 API(결정 160, 공통 메시징 설계). Outbox·Inbox·재발행은 쓰지 않는다.
+- 의존 라이브러리: `common:jpa`, `common:messaging-kafka`(계약·이벤트 메시지·소비 재시도), 공통 실패 보관 표·재투입 API(결정 160, 공통 메시징 설계). Outbox·Inbox·재발행은 쓰지 않는다.
 
 | 층 | Store의 부품 | 하는 일 |
 |---|---|---|
@@ -208,9 +208,9 @@ Store가 스스로 전이시키는 상태는 다섯 가지다. 정본(Catalog) �
 
 ```
 CatalogEventListener.receive(record)
-  EventEnvelope.from(record)                      -- eventId·eventType 헤더 없으면 영구 실패(P2.1-5)
+  EventMessage.from(record)                      -- eventId·eventType 헤더 없으면 영구 실패(P2.1-5)
   switch (eventType, schemaVersion)               -- 결정 170, 헤더 없으면 1
-    공개 사본 4개 · 옛 CatalogProductPublished(v1) -> CatalogProductMapper.from(envelope, payload) -> 사본 입력
+    공개 사본 4개 · 옛 CatalogProductPublished(v1) -> CatalogProductMapper.from(message, payload) -> 사본 입력
     그 밖                                          -> 건너뜀 지표, return
   ApplyCatalogProduct.execute(사본 입력)
     TransactionTemplate(READ_COMMITTED), 최대 3회:
@@ -222,7 +222,7 @@ CatalogEventListener.receive(record)
 
 Mapper 검증(`CatalogProductMapper.from`, 영구 실패면 공통 영구 실패 예외 — T20)
 
-1. 봉투 `eventId` = 본문 `eventId`(1~64자), 봉투 `eventType` = 받은 타입 상수, 본문 `occurredAt` 있음, 본문 사본 있음.
+1. 헤더 `eventId` = 본문 `eventId`(1~64자), 헤더 `eventType` = 받은 타입 상수, 본문 `occurredAt` 있음, 본문 사본 있음.
 2. Kafka 키 = 본문 `product.productCode`([P2.4-1](../platform/requirements.md)).
 3. 사본 값: `productId > 0`, `contentVersion > 0`, `catalogVersion >= contentVersion`, `saleStatus ∈ CatalogSaleStatus`, `listed` 명시, 문자열 칸 길이(코드 50·제목 200·소개 500·URL 1000·본문 100,000·빌드 100), 코드 형식 `[A-Za-z0-9][A-Za-z0-9._-]{0,49}`, `price >= 0`, `currency = KRW`, `publishedAt`·`updatedAt` 있음, 장르 1~3개가 `GenreCatalog` 안에 있고 중복 없음.
 4. 칸이 없을 때 기본값을 만들지 않는다. 옛 형식(버전·노출 칸 없음) 메시지를 받아야 하면 그 규칙은 공통 record가 아니라 이 Mapper의 `schemaVersion=1` 변환에 두고, 결과가 더 높은 버전의 중지·숨김을 덮지 못함을 테스트로 지킨다(플랫폼 T24, design 흐름 1 S8 "순서 역전" 행).
@@ -237,7 +237,7 @@ Mapper 검증(`CatalogProductMapper.from`, 영구 실패면 공통 영구 실패
 | ID | 불변식 | 지키는 곳 | 확인 테스트 |
 |---|---|---|---|
 | SO-I1 | 사본의 `catalog_version`은 내려가지 않는다(RI-9) | `StoreProduct.apply`(`StoreProduct.java:68`), `StoreProduct.reconcile`(`:86`), 행 잠금 `StoreProductRepository.lockById` | `StoreProductTest#repeatedAndOlderSnapshotsCannotRevertCurrentPublication`, `StoreReconciliationIntegrationTest#delayedHttpResponseCannotOverwriteANewerKafkaProjection`, `StoreIntegrationTest#concurrentHttpAndEventInsertsConvergeToHighestVersion` |
-| SO-I2 | 식별 값(`productId`·`productCode`·`publishedAt`)은 한 사본에서 바뀌지 않고, 한 `productCode`는 한 `productId`에만 연결된다 | `StoreProduct.apply:65-67`, `reconcile:83-85`, `ApplyCatalogProduct.java:38-43`, `ReconcileCatalogProduct.java:57-62`, `CanonicalProduct` 생성자, PK·`uk_store_product_code` | `StoreProductTest#identityCannotChangeEvenInANewerVersion`, `StoreReconciliationIntegrationTest#changedPublicationIdentityIsNeverAutomaticallyRepaired`, `#canonicalCodeMismatchCannotCreateAnotherProduct`, `StoreIntegrationTest#invalidEnvelopeAndIdentityConflictDoNotChangeProjection` |
+| SO-I2 | 식별 값(`productId`·`productCode`·`publishedAt`)은 한 사본에서 바뀌지 않고, 한 `productCode`는 한 `productId`에만 연결된다 | `StoreProduct.apply:65-67`, `reconcile:83-85`, `ApplyCatalogProduct.java:38-43`, `ReconcileCatalogProduct.java:57-62`, `CanonicalProduct` 생성자, PK·`uk_store_product_code` | `StoreProductTest#identityCannotChangeEvenInANewerVersion`, `StoreReconciliationIntegrationTest#changedPublicationIdentityIsNeverAutomaticallyRepaired`, `#canonicalCodeMismatchCannotCreateAnotherProduct`, `StoreIntegrationTest#invalidMessageAndIdentityConflictDoNotChangeProjection` |
 | SO-I3 | 같은 `catalog_version`이면 공개 내용이 같다. Kafka 입력은 같은 버전 사본을 바꾸지 않고, 바꾸는 것은 검증한 정본의 `REPAIRED`뿐이다(결정 67) | `StoreProduct.apply:69-72`, `reconcile:87-91` | `StoreProductTest#sameVersionConflictsPreserveOriginalSnapshot`, `StoreIntegrationTest#newerVersionWinsAndSameVersionConflictsAreRolledBack`, `StoreSaleStatusTest#conflictingSalesAtTheSameCatalogVersionDoNotOverwriteTheProjection`, `StoreReconciliationIntegrationTest#verifiedCanonicalSnapshotRepairsSameVersionAndRecordsBeforeAndAfterAtomically` |
 | SO-I4 | `catalog_version >= content_version` | `ck_store_catalog_version`(V2), `StoreProductValues.requireSnapshot`(`:25`), Mapper | 없음 → tasks SO-T14(CHECK 위반 INSERT 거절 테스트) |
 | SO-I5 | 더 높은 `catalog_version`에서 `content_version`은 내려가지 않고, 같은 `content_version`이면 콘텐츠 칸이 같다(판매·노출만 바뀜) | `StoreProduct.apply:74-77` | 같은 콘텐츠 버전의 판매 변경: `StoreSaleStatusTest#salesChangesAtTheSameContentVersionSurviveOldPublicationAndHttpSnapshots`, `StoreListingTest#sameVersionListingConflictIsRejectedAndHigherVersionChangesOnlyVisibility`. 콘텐츠 버전 하향·같은 콘텐츠 버전의 콘텐츠 차이 거절: 없음 → SO-T14 |
@@ -265,7 +265,7 @@ Mapper 검증(`CatalogProductMapper.from`, 영구 실패면 공통 영구 실패
 
 - 경로: `GET {CATALOG_BASE_URL}/internal/v1/store-products?page={n}&size=100`, `GET {CATALOG_BASE_URL}/internal/v1/store-products/{code}`. 헤더 `X-Store-Service-Key: {CATALOG_STORE_SERVICE_KEY}`(Catalog `config/SecurityConfig.java:29`이 이 두 GET에만 허용). 키가 비어 있으면 호출하지 않고 실패(공개 경로로 우회 금지).
 - 연결 3초·읽기 10초, 리다이렉트 따르지 않음(`CatalogClientConfiguration`).
-- 응답 봉투 `ApiResponse`: `success=true`이고 `data`가 객체여야 한다.
+- 응답 형식 `ApiResponse`: `success=true`이고 `data`가 객체여야 한다.
 - 목록 검증: `content` 배열, `page`=요청 값, `size`=100, `totalElements`·`totalPages` 0 이상 정수이고 서로 맞음, `content` 길이 = 남은 수(최대 100), 코드 형식·중복 없음.
 - 상세 검증: `listed` boolean 명시, `productId`·`price`·`contentVersion`·`catalogVersion` 정수(소수 거절), 필수 문자열 칸, `videoUrl` 문자열 또는 없음, `genres` 문자열 배열, 사본 값 검증(Mapper 3과 같음), 응답 코드 = 요청 코드. 공통 record의 옛 형식 기본값은 HTTP 경로에 적용되지 않는다(검증이 먼저).
 - 오류 분류: 연결 실패·시간 초과(`ResourceAccessException`), 5xx, 429, **401·403(키 거절)** → 접근 실패. 그 밖의 4xx·형식 오류 → 계약 오류. 지금 401·403은 계약 오류로 분류된다(SO-T8).

@@ -139,9 +139,9 @@ class ArchRuleEnforcementTest {
         }
 
         @Test
-        void eventEnvelopeStaysOutsideCore() {
-            assertCatchesViolation(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");
-            assertAcceptsCompliant(EventInputRules.core_는_이벤트_봉투를_모른다, "core_는_이벤트_봉투를_모른다");
+        void eventMessageStaysOutsideCore() {
+            assertCatchesViolation(EventInputRules.core_는_이벤트_메시지를_모른다, "core_는_이벤트_메시지를_모른다");
+            assertAcceptsCompliant(EventInputRules.core_는_이벤트_메시지를_모른다, "core_는_이벤트_메시지를_모른다");
         }
 
         @Test

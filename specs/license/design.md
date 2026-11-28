@@ -9,7 +9,7 @@
 - 의존 방향([플랫폼 design "모듈 경계와 의존 방향"](../platform/design.md#모듈-경계와-의존-방향)):
   - 동기(받기만): Gateway → License(`/api/v1/library/**`·`/api/v1/storage/**`), Download → License(`GET /api/v1/library/{code}`, 고객 JWT 전달). License는 어떤 업무 모듈도 동기 호출하지 않는다.
   - 비동기: Order ⇄ License "요청 → 사실 응답" 쌍 S4·S5·S7·S8과 단방향 `PurchaseRefunded` → License(목표: 응답 `LicenseRefundApplied`로 쌍이 됨, 결정 158). 받는 토픽 `stove.order.v1`, 내는 토픽 `stove.license.v1`, 키는 모두 `orderNo`.
-- 리스너는 봉투 해석·`*Mapper.from` 검증·서비스 위임만 하고 트랜잭션·Inbox·Outbox는 서비스가 소유한다(결정 6). 리스너에 `@Transactional`을 두지 않는다.
+- 리스너는 이벤트 메시지 해석·`*Mapper.from` 검증·서비스 위임만 하고 트랜잭션·Inbox·Outbox는 서비스가 소유한다(결정 6). 리스너에 `@Transactional`을 두지 않는다.
 - Gateway가 MEMBER 조건으로 라우팅하고, License도 `ApiJwtSecurity`로 서명·issuer·만료·`aud=esd-api`·역할을 다시 검증한다(`license:config/SecurityConfig.java:15-27`).
 - 모든 처리 트랜잭션은 `READ_COMMITTED`이고, 실패하면 업무 변경·처리 기록·Inbox·Outbox가 함께 롤백된다.
 
@@ -154,13 +154,13 @@
 
 ## 이벤트
 
-공통: 봉투·Outbox·Inbox·키·재시도·실패 보관·재발행은 [플랫폼 P2](../platform/requirements.md)를 따른다. 이 절은 License가 그 계약을 지키는 방법만 적는다. 행 번호는 [플랫폼 design "이벤트 목록"](../platform/design.md#이벤트-목록).
+공통: 이벤트 메시지·Outbox·Inbox·키·재시도·실패 보관·재발행은 [플랫폼 P2](../platform/requirements.md)를 따른다. 이 절은 License가 그 계약을 지키는 방법만 적는다. 행 번호는 [플랫폼 design "이벤트 목록"](../platform/design.md#이벤트-목록).
 
 ### 소비
 
 | 이벤트(플랫폼 행) | 리스너 → Mapper 검증 → 서비스 | 소비 그룹 | 업무 멱등 키(Inbox 밖) | 실패 처리 |
 |---|---|---|---|---|
-| `OrderPaid` (#17, P3.15-1) | `OrderEventListener` → `LicenseOrderMapper.from`(봉투·본문 `eventId`·`eventType`, 키 = `orderNo`) → `PaidOrder` 생성자 검증(R8-2) → `GrantLicense.execute` | `license-paid-order` | `uk_product_license_order`·`_event`·`_request`·`_result`·`_payment`, 같은 주문은 13개 값 비교(`License.verify`) | 형식·불일치·출처 ID 재사용·Inbox 불일치 = 영구 |
+| `OrderPaid` (#17, P3.15-1) | `OrderEventListener` → `LicenseOrderMapper.from`(헤더·본문 `eventId`·`eventType`, 키 = `orderNo`) → `PaidOrder` 생성자 검증(R8-2) → `GrantLicense.execute` | `license-paid-order` | `uk_product_license_order`·`_event`·`_request`·`_result`·`_payment`, 같은 주문은 13개 값 비교(`License.verify`) | 형식·불일치·출처 ID 재사용·Inbox 불일치 = 영구 |
 | `LicenseSuspensionRequested` (#18, P3.18) | `LicenseSuspensionEventListener` → `LicenseSuspensionMapper.from` → `SuspensionRequest` → `ApplyLicenseSuspension.execute` | `license-suspension` | `uk_license_suspension_request`, 정지 기록 본문 비교(`LicenseSuspension.verify`) | 구매 근거 없음 = 재시도(`NOT_FOUND`), 그 밖 = 영구 |
 | `LicenseRestorationRequested` (#39, P3.24-1) | `LicenseRestorationEventListener` → `RestorationRequestMapper.from` → `RestorationRequest` → `ApplyLicenseRestoration.execute` | `license-restoration` | `uk_license_restoration_request`·`_suspension`, 요청 지문 비교 | 같음 |
 | `LicenseApprovalCorrectionRequested` (#40, P3.27-1) | `ApprovalCorrectionEventListener` → `ApprovalCorrectionMapper.from` → `ApprovalCorrectionRequest` → `ApplyApprovalCorrection.execute` | `license-approval-correction` | PK 요청 `eventId`, `uk_license_correction_stop`·`_suspension`, 지문 비교 | 같음 |

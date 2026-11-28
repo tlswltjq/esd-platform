@@ -1,6 +1,6 @@
 package com.stove.license.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.LicenseApprovalCorrectionRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
@@ -9,10 +9,10 @@ import java.util.Objects;
 
 public final class ApprovalCorrectionMapper {
     private ApprovalCorrectionMapper() { }
-    public static ApprovalCorrectionRequest from(EventEnvelope envelope, LicenseApprovalCorrectionRequestedEvent event) {
-        if (envelope==null || event==null || !Objects.equals(envelope.eventId(),event.eventId())
-                || !Objects.equals(envelope.eventType(),event.eventType()) || !Objects.equals(envelope.key(),event.orderNo()))
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,"승인 정정 봉투·본문·키가 다릅니다.");
+    public static ApprovalCorrectionRequest from(EventMessage message, LicenseApprovalCorrectionRequestedEvent event) {
+        if (message==null || event==null || !Objects.equals(message.eventId(),event.eventId())
+                || !Objects.equals(message.eventType(),event.eventType()) || !Objects.equals(message.key(),event.orderNo()))
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,"승인 정정 헤더·본문·키가 다릅니다.");
         return new ApprovalCorrectionRequest(event.eventId(),event.occurredAt(),event.refundId(),event.reviewId(),event.stopRequestId(),event.licenseId(),event.orderNo(),event.buyerSubject(),event.productId(),event.productCode(),event.paymentId(),event.suspensionRequestEventId(),event.suspensionEventId());
     }
 }

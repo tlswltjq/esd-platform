@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -877,10 +877,10 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         return kafka.send(message).get(10,TimeUnit.SECONDS).getRecordMetadata();
     }
     /**
-     * 결정 155·206: 봉투와 본문의 eventId 가 다른 매출은 격리되고 키가 멈춘다. 올바른 원본이 다시 와도 뒤에 쌓인다.
+     * 결정 155·206: 헤더와 본문의 eventId 가 다른 매출은 격리되고 키가 멈춘다. 올바른 원본이 다시 와도 뒤에 쌓인다.
      * 깨진 메시지는 다시 넣어도 또 실패하므로 그 자리에서 멈추고 정지를 유지한다(결정 155). 폐기 동작은 아직 없다.
      */
-    @Test void mapperValidatesEnvelopeAndAMismatchedSaleStopsItsKeyUntilReplayedInOrder() throws Exception {
+    @Test void mapperValidatesMessageAndAMismatchedSaleStopsItsKeyUntilReplayedInOrder() throws Exception {
         PaidOrder input=order();prepare(input);
         OrderPaidEvent event=new OrderPaidEvent(input.eventId(),input.occurredAt(),input.orderNo(),input.requestEventId(),input.paymentResultEventId(),
                 input.paymentId(),input.buyerSubject(),input.productId(),input.productCode(),input.title(),input.contentVersion(),input.amount(),input.currency());
@@ -888,7 +888,7 @@ class SettlementIntegrationTest extends SettlementIntegrationTestBase {
         invalid.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));invalid.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
         ConsumerRecord<String,String> malformed=new ConsumerRecord<String,String>(Topics.ORDER,0,0,input.orderNo(),mapper.writeValueAsString(event));
         malformed.headers().add(EventHeaders.EVENT_ID,id().getBytes(StandardCharsets.UTF_8));malformed.headers().add(EventHeaders.EVENT_TYPE,EventType.ORDER_PAID.getBytes(StandardCharsets.UTF_8));
-        assertThatThrownBy(() -> SettlementOrderMapper.from(EventEnvelope.from(malformed),event)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> SettlementOrderMapper.from(EventMessage.from(malformed),event)).isInstanceOf(BusinessException.class);
         try {
             listeners.start();kafka.send(invalid).get(10,TimeUnit.SECONDS);
             Awaitility.await().atMost(Duration.ofSeconds(35)).untilAsserted(() -> assertThat(held(RecordPaidSale.CONSUMER_GROUP,input.orderNo())).isEqualTo(1));

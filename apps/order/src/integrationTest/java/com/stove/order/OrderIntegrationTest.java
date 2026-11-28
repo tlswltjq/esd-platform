@@ -2,7 +2,7 @@ package com.stove.order;
 
 import com.stove.common.messaging.quarantine.QuarantineReplay;
 import static com.stove.order.OrderFixtures.completed;
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static com.stove.order.OrderFixtures.failed;
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.Topics;
@@ -136,8 +136,8 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         return Map.of("requestId", r.requestId(), "productCode", r.productCode(),
                 "expectedContentVersion", r.expectedContentVersion(), "expectedAmount", r.expectedAmount());
     }
-    private void accept(OrderPaymentCompletedEvent e) { apply.execute(e.eventType(), PaymentResultMapper.from(envelope(e), e)); }
-    private void accept(OrderPaymentFailedEvent e) { apply.execute(e.eventType(), PaymentResultMapper.from(envelope(e), e)); }
+    private void accept(OrderPaymentCompletedEvent e) { apply.execute(e.eventType(), PaymentResultMapper.from(message(e), e)); }
+    private void accept(OrderPaymentFailedEvent e) { apply.execute(e.eventType(), PaymentResultMapper.from(message(e), e)); }
 
     @Test void savesSnapshotAndOneEventAndReusesRequestWithoutCatalog() throws Exception {
         OrderRequest input = request(); Order o = create.execute("usr_buyer", input);
@@ -458,10 +458,10 @@ class OrderIntegrationTest extends OrderIntegrationTestBase {
         assertThat(count("processed_event")).isZero(); assertThat(stored(o).getStatus()).isEqualTo(OrderStatus.PENDING);
         accept(good);
     }
-    @Test void invalidEnvelopeMissingOrderAndIncompleteFailureAreNotMarkedProcessed() {
+    @Test void invalidMessageMissingOrderAndIncompleteFailureAreNotMarkedProcessed() {
         Order o = saved("usr_buyer"); OrderPaymentCompletedEvent e = completed(o);
-        assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventEnvelope("wrong", e.eventType(), e.orderNo(), ""), e))).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventEnvelope(e.eventId(), e.eventType(), "wrong", ""), e))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventMessage("wrong", e.eventType(), e.orderNo(), ""), e))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> apply.execute(e.eventType(), PaymentResultMapper.from(new EventMessage(e.eventId(), e.eventType(), "wrong", ""), e))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> accept(completed(order()))).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> accept(new OrderPaymentFailedEvent(id(), e.occurredAt(), e.orderNo(), e.requestEventId(), e.paymentId(), e.buyerSubject(), e.amount(), e.currency(), "", null)))
                 .isInstanceOf(BusinessException.class);

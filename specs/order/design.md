@@ -9,7 +9,7 @@
   - `core.domain`: `Order`·`OrderPaymentAdmission`·`Refund`·`RefundAttempt`·`RefundReviewRound`·`RefundApprovalStop`과 값 객체·리포지토리. 상태 전이와 가드는 여기만 둔다.
   - `core.port`: `CatalogProducts`(Catalog 내부 조회 계약) 하나.
   - `core.service`: 유스케이스 하나에 서비스 하나. 주문 행 잠금(`OrderRepository.lockByOrderNo`)·Inbox(`ProcessedEventGuard`)·상태 변경·Outbox(`OutboxRecorder`)의 트랜잭션을 조율한다.
-  - `api.listener`: `*Mapper.from(envelope, payload)`가 봉투·본문·키·(`eventType`, `schemaVersion`)을 검증해 내부 입력으로 바꾼다. 같은 반응을 하는 다른 이벤트(`RefundExecutionFailed`·`RefundFailureClosed`, `OrderPaymentFailed(REVIEW_CLOSED)`·`OrderPaymentReviewClosed` 이행 기간)는 여기서 합친다(원칙 ①).
+  - `api.listener`: `*Mapper.from(message, payload)`가 헤더·본문·키·(`eventType`, `schemaVersion`)을 검증해 내부 입력으로 바꾼다. 같은 반응을 하는 다른 이벤트(`RefundExecutionFailed`·`RefundFailureClosed`, `OrderPaymentFailed(REVIEW_CLOSED)`·`OrderPaymentReviewClosed` 이행 기간)는 여기서 합친다(원칙 ①).
   - `api.scheduler`: `OrderExpiryScheduler`(만료 스캔). 게이지 수집은 `adapter`의 Micrometer 바인더(`RefundLicenseGrantMetrics`·`OrderExpiryMetrics`·목표 `OrderForwardResponseMetrics`).
   - `adapter`: `CatalogHttpClient`, 지표 바인더.
   - `config`: JWT·권한·서비스 키·Kafka 컨테이너 팩토리·Catalog 클라이언트·설정 바인딩(`RefundConfiguration`·`OrderPaymentLifecycleConfiguration`).

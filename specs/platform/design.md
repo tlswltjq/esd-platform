@@ -126,8 +126,8 @@ Kafka   topic=Topics.*, key=partitionKey, headers eventId·eventType·occurredAt
   StoppedKeyInterceptor: KeyQuarantine.stopped(소비자 스레드의 그룹, 토픽, 키)?
      멈춘 키: 리스너를 부르지 않고 consumer_quarantine 에 뒤로 쌓음(KEY_STOPPED) -> 오프셋 커밋
               (보관 실패는 오류 처리 구간 안에서 던져 재시도, 오프셋을 넘기지 않음)
-  EventEnvelope.from (헤더 없으면 거절)
-  -> isType 분기 -> *Mapper.from(envelope, payload) (계약 검증, api.listener)
+  EventMessage.from (헤더 없으면 거절)
+  -> isType 분기 -> *Mapper.from(message, payload) (계약 검증, api.listener)
   -> core 서비스 트랜잭션: ProcessedEventGuard.firstDelivery + 업무 유일 키 + 상태 전이 (+ 다음 이벤트 Outbox)
   -> 커밋 뒤 오프셋 커밋
   실패: 재시도 가능 -> 1·2·4초 재시도 -> consumer_quarantine 보관 = 그 (그룹, 토픽, 키) 정지(결정 155·160·206, 한 행·한 트랜잭션)

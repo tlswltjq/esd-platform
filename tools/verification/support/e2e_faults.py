@@ -10,7 +10,7 @@
 - ``malformed:at=60,topic=stove.order.v1,count=1`` — 계약 헤더(``eventId``·``eventType``)가 없는 레코드를 직접 발행한다.
   키는 업무 주문과 겹치지 않는 ``e13-malformed-...``라 키 정지가 업무 주문을 막지 않는다. 그 토픽의 소비 그룹마다 격리 표에 남는다.
 - ``dlt-limit:at=60,for=20,limit=512`` — 결정 235: Store DLT(``stove.catalog.v1.DLT``) 하나의 ``max.message.bytes``를 낮추고
-  같은 키의 잘못된 봉투 2건을 ``stove.catalog.v1``에 넣는다. 거부(Store ``recovery-failures`` 증가)를 확인하고 ``for``초 뒤
+  같은 키의 잘못된 이벤트 메시지 2건을 ``stove.catalog.v1``에 넣는다. 거부(Store ``recovery-failures`` 증가)를 확인하고 ``for``초 뒤
   설정을 되돌린 뒤, 두 건이 순서대로 한 번씩 DLT에 저장되는지 본다. 설정 복원은 정상·오류 종료 모두에서 시도한다.
 
 장애가 계획대로 일어나지 않았거나 되돌리지 못했으면 ``problems()``가 이유를 낸다. 그런 회차는 그 장애의 결과로 쓰지 않는다.
@@ -476,8 +476,8 @@ def malformed_lines(key_prefix, count):
     return "".join('%s-%d|{"e13":"malformed","seq":%d}\n' % (key_prefix, index, index) for index in range(count))
 
 
-class MalformedEnvelopes(Fault):
-    """계약 헤더 없는 레코드는 소비 그룹마다 봉투 검증에서 거절돼 재시도(1·2·4초) 뒤 격리된다. 구독 그룹마다 격리 표 행을 확인한다."""
+class MalformedMessages(Fault):
+    """계약 헤더 없는 레코드는 소비 그룹마다 이벤트 메시지 검증에서 거절돼 재시도(1·2·4초) 뒤 격리된다. 구독 그룹마다 격리 표 행을 확인한다."""
 
     kind = "malformed"
     QUARANTINE_WAIT_SECONDS = 60
@@ -757,7 +757,7 @@ class DltLimit(Fault):
         return reasons
 
 
-FAULTS = {"db-revoke": DbRevoke, "kill": ContainerKill, "malformed": MalformedEnvelopes, "dlt-limit": DltLimit}
+FAULTS = {"db-revoke": DbRevoke, "kill": ContainerKill, "malformed": MalformedMessages, "dlt-limit": DltLimit}
 
 
 class FaultSchedule:

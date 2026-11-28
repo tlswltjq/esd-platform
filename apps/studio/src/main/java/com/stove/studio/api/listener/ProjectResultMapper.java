@@ -1,6 +1,6 @@
 package com.stove.studio.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.contract.payload.ProjectReleaseRejectedEvent;
@@ -15,35 +15,35 @@ import java.util.Objects;
 public final class ProjectResultMapper {
     private ProjectResultMapper() {}
 
-    public static ProjectReviewResult from(EventEnvelope envelope, ProjectReviewApprovedEvent event) {
-        validate(envelope, event);
+    public static ProjectReviewResult from(EventMessage message, ProjectReviewApprovedEvent event) {
+        validate(message, event);
         return new ProjectReviewResult(event.eventId(), event.eventType(), event.reviewRequestId(),
                 event.projectId(), event.contentVersion(), true, null, event.actor());
     }
 
-    public static ProjectReviewResult from(EventEnvelope envelope, ProjectReviewRejectedEvent event) {
-        validate(envelope, event);
+    public static ProjectReviewResult from(EventMessage message, ProjectReviewRejectedEvent event) {
+        validate(message, event);
         return new ProjectReviewResult(event.eventId(), event.eventType(), event.reviewRequestId(),
                 event.projectId(), event.contentVersion(), false, event.feedback(), event.actor());
     }
 
-    public static ProjectReleaseResult from(EventEnvelope envelope, ProjectReleaseCompletedEvent event) {
-        validate(envelope, event);
+    public static ProjectReleaseResult from(EventMessage message, ProjectReleaseCompletedEvent event) {
+        validate(message, event);
         return new ProjectReleaseResult(event.eventId(), event.eventType(), event.releaseRequestId(),
                 event.projectId(), event.contentVersion(), true, null, event.requestEventId());
     }
 
-    public static ProjectReleaseResult from(EventEnvelope envelope, ProjectReleaseRejectedEvent event) {
-        validate(envelope, event);
+    public static ProjectReleaseResult from(EventMessage message, ProjectReleaseRejectedEvent event) {
+        validate(message, event);
         return new ProjectReleaseResult(event.eventId(), event.eventType(), event.releaseRequestId(),
                 event.projectId(), event.contentVersion(), false, event.reason(), event.requestEventId());
     }
 
-    private static void validate(EventEnvelope envelope, DomainEvent event) {
-        if (envelope == null || event == null || event.occurredAt() == null
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || !Objects.equals(envelope.key(), event.partitionKey())
+    private static void validate(EventMessage message, DomainEvent event) {
+        if (message == null || event == null || event.occurredAt() == null
+                || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType())
+                || !Objects.equals(message.key(), event.partitionKey())
                 || event.partitionKey() == null
                 || !event.partitionKey().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,49}"))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "외부 결과 이벤트 계약이 올바르지 않습니다.");

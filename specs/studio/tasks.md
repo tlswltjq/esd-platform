@@ -46,7 +46,7 @@
   - 재현: review 토픽에 `ProjectReleaseCompleted`를 넣고 영구 실패 단언.
 
 - [ ] **ST-T8. 소비 실패를 분류하지 않고, `productCode`를 Project와 대조하지 않는다** (플랫폼 [T20](../platform/tasks.md))
-  - 어디서: `studio:core/service/review/RecordProjectReviewResult.java:26-33`·`RecordProjectReleaseResult.java:28-34`(대상 없음 `NOT_FOUND`, 불일치 `CONFLICT` — 모두 공통 핸들러가 4회 재시도), `ProjectResultMapper.java:42-50`(봉투 키 = 본문 `productCode`만 확인, Project의 코드와는 대조 안 함).
+  - 어디서: `studio:core/service/review/RecordProjectReviewResult.java:26-33`·`RecordProjectReleaseResult.java:28-34`(대상 없음 `NOT_FOUND`, 불일치 `CONFLICT` — 모두 공통 핸들러가 4회 재시도), `ProjectResultMapper.java:42-50`(메시지 키 = 본문 `productCode`만 확인, Project의 코드와는 대조 안 함).
   - 목표: design "이벤트 > 소비" 실패 분류. 대상 없음·식별자 불일치·모순은 공통 영구 실패 예외, `productCode` = `studio_project.product_code` 대조(ST-I10).
   - 영향: 계약 위반 한 건이 같은 `productCode` 키를 7초 넘게 멈춘다. ID가 맞고 코드가 다른 결과가 기록된다.
   - 재현: 다른 `productCode`의 승인 결과 → 지금 `APPROVED` 기록 → 목표 영구 실패, 시도 1회.
@@ -83,7 +83,7 @@
 
 - [ ] **ST-T14. 현행 이벤트 이름이 문자열 리터럴이고 도메인에까지 있다** (플랫폼 [T26](../platform/tasks.md))
   - 어디서: `ProjectResultListener.java:33-48`(`isType("…")` 6곳), `studio:core/domain/project/WithdrawalResolution.java:21·24`(도메인 record가 `eventType` 문자열을 비교).
-  - 목표: [P2.1-4](../platform/requirements.md#p21-봉투). `EventType` 상수 참조, 종류 판정은 리스너가 하고 도메인 입력은 종류 enum만 받는다. T21(ST-T1)과 같은 PR이면 새 이름으로 바로 올린다.
+  - 목표: [P2.1-4](../platform/requirements.md#p21-이벤트-메시지). `EventType` 상수 참조, 종류 판정은 리스너가 하고 도메인 입력은 종류 enum만 받는다. T21(ST-T1)과 같은 PR이면 새 이름으로 바로 올린다.
   - 영향: 한쪽만 이름을 바꾸면 리스너가 조용히 건너뛴다.
   - 재현: 소스 검사 `isType("` 0건.
 

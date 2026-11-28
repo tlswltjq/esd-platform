@@ -6,7 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
@@ -57,7 +57,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
 
     private ProjectReviewRequestedEvent submit(long id, long project) {
         ProjectReviewRequestedEvent e = ReviewFixtures.event(id, project);
-        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(e), e));
         return e;
     }
 
@@ -65,10 +65,10 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     void duplicateReceptionPreservesTheSnapshotAndIndependentRerequests() {
         long id = id(), project = id();
         ProjectReviewRequestedEvent event = submit(id, project);
-        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(event), event));
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(event), event));
         decide.execute(id, "reviewer", ReviewStatus.REJECTED, "Fix");
         ProjectReviewRequestedEvent duplicate = ProjectReviewRequestedEvent.of(id, event.snapshot());
-        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(duplicate), duplicate));
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(duplicate), duplicate));
         assertThat(read.get(id).getStatus()).isEqualTo(ReviewStatus.REJECTED);
         ProjectReviewRequestedEvent newRequest = submit(id(), project);
         assertThat(read.list(null, project, 0, 20).getTotalElements()).isEqualTo(2);
@@ -95,7 +95,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                         List.of("ACTION")
                 );
         ProjectReviewRequestedEvent conflict = ProjectReviewRequestedEvent.of(id, changed);
-        assertThatThrownBy(() -> receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(conflict), conflict)))
+        assertThatThrownBy(() -> receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(conflict), conflict)))
                 .isInstanceOf(BusinessException.class);
         assertThat(
                         jdbc.queryForObject(
@@ -107,11 +107,11 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
     }
 
     @Test
-    void malformedEnvelopeDoesNotCreateAnInboxMarker() {
+    void malformedMessageDoesNotCreateAnInboxMarker() {
         ProjectReviewRequestedEvent e = ReviewFixtures.event(id(), id());
         assertThatThrownBy(
                         () ->
-                                receive.execute(ReviewSubmissionMapper.from(new EventEnvelope(
+                                receive.execute(ReviewSubmissionMapper.from(new EventMessage(
                                                 e.eventId(),
                                                 e.eventType(),
                                                 "wrong",
@@ -204,7 +204,7 @@ class ProjectReviewIntegrationTest extends ReviewIntegrationTestBase {
                     start.await();
                     for (int attempt = 0; ; attempt++) {
                         try {
-                            receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(e), e));
+                            receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(e), e));
                             return null;
                         } catch (DataAccessException conflict) {
                             if (attempt == 3) throw conflict;

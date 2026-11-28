@@ -1,7 +1,7 @@
 package com.stove.bench.messaging.app.core.domain;
 
 /**
- * 시험 리스너가 받은 메시지의 내부 입력. 봉투 검증은 {@code api.listener.BenchMessageMapper}가 한다.
+ * 시험 리스너가 받은 메시지의 내부 입력. 헤더 검증은 {@code api.listener.BenchMessageMapper}가 한다.
  *
  * @param eventId 메시지 ID(헤더 {@code eventId}, UUID). Inbox 멱등 키다.
  * @param key 순서 키.

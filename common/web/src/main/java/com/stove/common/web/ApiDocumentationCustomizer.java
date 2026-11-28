@@ -17,7 +17,7 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
  * 생성된 API 명세에 <b>코드만 봐서는 알 수 없는 것</b>을 덧붙인다.
  *
  * <p>경로·타입·검증 제약은 springdoc 이 컨트롤러와 DTO 에서 그대로 뽑아낸다.
- * 여기서 채우는 것은 그 위의 맥락이다 — 응답 봉투 규약, BFF 세션 로그인 안내,
+ * 여기서 채우는 것은 그 위의 맥락이다 — 응답 형식 규약, BFF 세션 로그인 안내,
  * 그리고 아직 Studio가 사용하는 신원 헤더의 성격.
  *
  * <p>서비스마다 붙여 넣지 않고 한 곳에 두는 이유는 이 설명이 서비스별 사정이 아니라
@@ -100,12 +100,12 @@ public class ApiDocumentationCustomizer implements OpenApiCustomizer {
                 .title("STOVE %s API".formatted(applicationName))
                 .version("v1")
                 .description("""
-                        모든 응답은 공통 봉투 `{success, data, error}` 로 감싼다.
+                        모든 응답은 공통 응답 형식 `{success, data, error}` 로 감싼다.
                         실패면 `success=false` 이고 `error.code` 에 `ErrorCode` 이름이 들어간다
                         (`PRICE_MISMATCH`, `PAYMENT_AMOUNT_MISMATCH` 등). HTTP 상태는 그 코드가 정한다.
 
                         `data` 가 없는 성공 응답(`ApiResponse.ok()`)에서는 `data` 필드 자체가 빠진다 —
-                        봉투에 `@JsonInclude(NON_NULL)` 이 걸려 있다.
+                        응답 형식에 `@JsonInclude(NON_NULL)` 이 걸려 있다.
 
                         로그인이 필요한 API는 Gateway BFF 세션 쿠키로 부른다. 먼저 같은 출처에서
                         [`/oauth2/authorization/gateway-bff`](/oauth2/authorization/gateway-bff)로 로그인한 뒤 이 화면으로 돌아온다.

@@ -187,7 +187,7 @@ class DltOpsServiceTest {
     }
 
     /**
-     * 계약 헤더가 빠지면 컨슈머 입구({@code EventEnvelope.from})가 거부하고,
+     * 계약 헤더가 빠지면 컨슈머 입구({@code EventMessage.from})가 거부하고,
      * traceparent 가 빠지면 재투입분이 원래 요청과 이어지지 않는다.
      */
     @Test
