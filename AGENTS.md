@@ -29,8 +29,8 @@ Claude Code·Codex 등 이 저장소에서 일하는 모든 에이전트가 따�
 
 - `tasks.md` 미완료 항목 중 정책 선택이 필요한 항목은 `[결정 필요]`로 표시한다. 사용자가 준비할 외부 자원(전용 PG 가맹점·공유 환경·실제 금융 동작 합의)이 필요한 항목은 `[외부 대기]`로 표시한다. 표시 없는 항목은 에이전트가 바로 진행할 수 있다.
 - 다음 작업은 묻지 않고 고른다. 현재 단계와 그 작업 목록은 [로드맵 0절](docs/roadmap.md#scope-freeze)을 따른다. 동결 뒤 백로그(G1~G7의 남은 항목, 모듈 `tasks.md`의 `[결정 필요]`)는 현재 단계에 필요할 때만 꺼낸다([결정 201](docs/decisions.md#scope-freeze-verified-journeys)). 그 안에서 표시가 없고 선행 조건을 충족한 항목을 순서대로 고른다. 진행 중 정책 쟁점이 드러나면 그 항목에 `[결정 필요]`를 달고 멈춘다.
-- 고르기 전에 `gh pr list --state open --limit 1000 --json number,isDraft,body`로(기본값은 30건만 가져온다) 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치는 항목은 건너뛴다. 착수하면 바로 `tools/ci/start_task.py`로 착수 커밋·draft PR을 연다(`맡은 항목`에 항목 원문). draft에서는 CI `build`가 돌지 않으니 검증을 마치면 `tools/ci/pr_finish.py ready`로 바꾼다([결정 137](docs/decisions.md#claim-draft-pr)·[결정 213](docs/decisions.md#ai-procedure-tools)).
-- 근거 색인 행은 PR마다 `docs/evidence.d/<PR번호>.md`에 근거 색인 형식(다섯 칸)으로 쓴다. 코드 PR은 필수이고 review-gate가 검사한다. `docs/evidence.md`는 접기 PR만 고친다: 조각이 5개 이상 쌓이거나 하루가 지나면 `python3 tools/ci/evidence_fragments.py fold`로 접고 그 결과만 담은 문서 PR을 연다([결정 146](docs/decisions.md#evidence-fragments)).
+- 고르기 전에 `gh pr list --state open --limit 1000 --json number,isDraft,body`로(기본값은 30건만 가져온다) 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치는 항목은 건너뛴다. 착수하면 바로 `tools/ci/start_task.py`로 착수 커밋·draft PR을 연다(`맡은 항목`에 항목 원문). draft에서도 push마다 CI `build`가 돈다. 검증을 마치면 `tools/ci/pr_finish.py ready`로 바꾼다([결정 137](docs/decisions.md#claim-draft-pr)·[결정 build-on-draft](docs/decisions.md#build-on-draft)·[결정 213](docs/decisions.md#ai-procedure-tools)).
+- 근거 색인 행은 PR마다 `docs/evidence.d/<PR번호>.md`에 근거 색인 형식(다섯 칸)으로 쓴다. 코드 PR은 필수이고 review-gate가 검사한다. 조각은 접지 않는다. `docs/evidence.md`는 그 이전 기록으로 고정했고 고치지 않는다([결정 146](docs/decisions.md#evidence-fragments)·[결정 evidence-fragments-permanent](docs/decisions.md#evidence-fragments-permanent)).
 - 결정 설명(위 2번 형식)은 미리 준비하되, 사용자에게는 한 번에 하나만 낸다. 답을 기다리는 동안 표시 없는 작업을 계속한다. 표시 없는 작업이 모두 막혔을 때만 멈추고 알린다.
 - 작업 하나(PR 하나)가 끝나면 상태를 PR 본문과 `tasks.md`에 남기고, 다음 작업은 새 문맥에서 시작한다.
 
@@ -42,7 +42,7 @@ Claude Code·Codex 등 이 저장소에서 일하는 모든 에이전트가 따�
 | 모듈 둘 이상에 걸친 계약(이벤트의 사실·소유자·소비자·키·순서·멱등, 모듈 간 흐름, 돈 불변식, 품질 목표)과 그 남은 작업 | `specs/platform/` (같은 세 파일). 모듈 스펙은 이 행을 링크하고 다시 적지 않는다([결정 151](docs/decisions.md#platform-spec)) |
 | 왜 그렇게 했고 무엇을 버렸나 | [docs/decisions.md](docs/decisions.md) |
 | 사용자의 판단 이력 | [docs/judgment-index.md](docs/judgment-index.md) |
-| 검증 결과 (날짜·대상·수치·근거) | PR의 `docs/evidence.d/<PR번호>.md`에 **한 행** → 접기 PR이 [docs/evidence.md](docs/evidence.md)로 옮긴다 |
+| 검증 결과 (날짜·대상·수치·근거) | PR의 `docs/evidence.d/<PR번호>.md`에 **한 행**(접지 않는다). 2026-11-28까지의 기록은 [docs/evidence.md](docs/evidence.md) |
 | 재현된 결함 | [docs/defects.md](docs/defects.md) (재현 테스트 필수) |
 | 실험(성능·장애) | [docs/experiments.md](docs/experiments.md) |
 | 단계·순서·완료 조건 | [docs/roadmap.md](docs/roadmap.md) |
@@ -92,12 +92,12 @@ Claude Code·Codex 등 이 저장소에서 일하는 모든 에이전트가 따�
 - 검증마다 작업 디렉터리·포트·DB·컨테이너를 격리하고, 기존 컨테이너·볼륨·공유 자료를 실행 전후 대조해 보존한다(`tools/ci/measure_guard.py`). Gradle 테스트 통과는 `tools/ci/gradle_result.py`의 판정으로만 보고한다([결정 213](docs/decisions.md#ai-procedure-tools)).
 - 테스트 범위·실행 명령은 [testing.md 앞의 바뀐 범위별 검증](docs/testing.md#scope-index)에서 고르고, 병목 진단은 그 본문을 따른다([결정 214](docs/decisions.md#agent-context-cost)). 관련 단위·아키텍처 검사 → 필요한 통합 검증 → 최종 게이트 순서로 실행하고, 변경하지 않은 범위의 전체 검증을 이유 없이 반복하지 않는다.
 - 실제 금융 동작(PortOne TEST 결제·환불)은 사용자와 합의한 사례에서만 실행한다.
-- `main`은 PR과 CI `build` 통과로만 바뀐다([결정 107](docs/decisions.md#main-branch-protection)). 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](docs/defects.md)에 남긴다.
+- `main`은 PR과 CI `build` 통과로만 바뀐다([결정 107](docs/decisions.md#main-branch-protection)). 규칙셋을 끄거나 고치는 일은 사용자 지시가 있을 때만 한다. main CI가 실패하면 다음 작업보다 먼저 원인을 확인해 고치고, 재현되면 [결함 대장](docs/defects.md)에 남긴다. main CI가 실패해 있는 동안은 그 실패를 고치는 PR(본문에 실패한 run의 `actions/runs/<번호>`를 적는다)만 병합한다([결정 stop-merge-on-red-main](docs/decisions.md#stop-merge-on-red-main)).
 - CI 테스트가 가끔 실패해도 자동 재시도나 격리를 하지 않는다. 병합이 막히면 실패한 작업만 한 번 다시 돌릴 수 있다. 이때 실패한 테스트와 run을 PR 본문에 적고, 재현 테스트와 함께 결함 대장에 올려 고친다([결정 113](docs/decisions.md#flaky-tests)).
 - 계획·코드 작성·수정·테스트 등 작업의 대부분은 Claude가 하고, 교차 리뷰는 Codex가 맡는다([결정 117](docs/decisions.md#review-roles)).
-- 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델(Codex)이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 심각도가 high이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 `채택 (AI 판정)`으로 적는다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)).
-- Codex 교차 리뷰는 추론 수준 `high`로 한다. 입력은 `tools/ci/review_packet.py`가 만든 리뷰 묶음(AGENTS 3절, 이 PR의 결정 원문, 언급된 R 절, diff)이다. 재리뷰는 `--since <리뷰한 커밋> --previous <이전 지적>`으로 그 뒤 차분과 이전 지적만 넘긴다. Codex는 테스트를 실행하지 않고 CI 결과를 근거로 쓴다([결정 145](docs/decisions.md#review-packet)). 호출과 실제 모델·추론 수준 확인은 `tools/ci/cross_review.py`로 하고([cross-review](.claude/skills/cross-review/SKILL.md)), 확인을 통과한 리뷰어 줄을 `리뷰 판정`에 적는다([결정 237](docs/decisions.md#cross-review-invocation)).
-- PR이 필수 검사(`build`·`review-gate`)를 통과하고 `mergeStateStatus`가 `CLEAN`이며 draft가 아니고 사용자 판정이 남아 있지 않으면, 에이전트가 사용자 지시 없이 병합한다([결정 118](docs/decisions.md#continuous-development)·[결정 137](docs/decisions.md#claim-draft-pr)). 이 조건의 판정(head에서 가장 최근 build, draft의 SKIPPED 등)과 CI 대기·병합은 `tools/ci/pr_finish.py`로 한다([결정 213](docs/decisions.md#ai-procedure-tools)). 다른 세션이 작업 중인 브랜치는 병합만 할 수 있고, 커밋·main 병합·번호 변경은 그 세션에 맡긴다.
+- 변경 파일이 모두 `*.md`인 PR이 아니면, 병합 전에 구현한 모델과 다른 모델(Codex)이 독립 문맥(읽기 전용)으로 교차 리뷰한다([결정 108](docs/decisions.md#cross-review-before-merge)). 지적과 판정은 PR 본문 `리뷰 판정`에 적고, 지적이 없으면 리뷰어와 "지적 없음"을 적는다. 필수 검사 `review-gate`가 이 표를 확인한다([결정 109](docs/decisions.md#review-gate)). AI 초안이 `부분 반영`·`기각`이거나, 정책을 바꾸는 지적은 사용자가 판정하고 `(사용자 확정: "<원문>")`을 붙인다. 그 밖의 채택은 high라도 `채택 (AI 판정)`으로 적는다. high는 완료 보고에서 따로 알린다. 사용자 판정이 남아 있으면 병합하지 않는다([결정 112](docs/decisions.md#review-judge)·[결정 ai-judges-adopted-high](docs/decisions.md#ai-judges-adopted-high)).
+- Codex 교차 리뷰는 추론 수준 `high`로 한다. 입력은 `tools/ci/review_packet.py`가 만든 리뷰 묶음(AGENTS 3절, 이 PR의 결정 원문, 언급된 R 절, diff)이다. 재리뷰는 `--since <리뷰한 커밋> --previous <이전 지적>`으로 그 뒤 차분과 이전 지적만 넘긴다. 재리뷰는 2회까지 하고, 그 뒤 새로 나온 medium·low는 `할 일로 이관`(옮긴 `tasks.md` 또는 `D-NNN`을 함께 적는다)하고 병합한다. high는 상한 없이 그 PR에서 고친다([결정 rereview-cap-two](docs/decisions.md#rereview-cap-two)). 묶음이 300KB를 넘으면 도구가 문서 diff를 목록으로 바꾼다([결정 packet-size-cap](docs/decisions.md#packet-size-cap)). Codex는 테스트를 실행하지 않고 CI 결과를 근거로 쓴다([결정 145](docs/decisions.md#review-packet)). 호출과 실제 모델·추론 수준 확인은 `tools/ci/cross_review.py`로 하고([cross-review](.claude/skills/cross-review/SKILL.md)), 확인을 통과한 리뷰어 줄을 `리뷰 판정`에 적는다([결정 237](docs/decisions.md#cross-review-invocation)).
+- PR이 필수 검사(`build`·`review-gate`)를 통과하고 `mergeStateStatus`가 `CLEAN`이며 draft가 아니고 사용자 판정이 남아 있지 않으면, 에이전트가 사용자 지시 없이 병합한다([결정 118](docs/decisions.md#continuous-development)·[결정 137](docs/decisions.md#claim-draft-pr)). 이 조건의 판정(head에서 가장 최근 build, main CI 상태 등)과 CI 대기·병합은 `tools/ci/pr_finish.py`로 한다([결정 213](docs/decisions.md#ai-procedure-tools)). 다른 세션이 작업 중인 브랜치는 병합만 할 수 있고, 커밋·main 병합·번호 변경은 그 세션에 맡긴다.
 - Codex 사용 한도를 아낀다. 관련된 작은 수정은 한 PR로 묶고, 재리뷰는 앞선 리뷰 이후 바뀐 diff만 맡긴다. 한도에 걸리면 PR을 리뷰 대기로 두고 다음 작업을 계속한다. 한도가 풀리면 쌓인 PR을 리뷰한다. 리뷰 없이 병합하지 않는다.
 
 ## 6. 현재 상태

@@ -7,7 +7,7 @@
 1. [아키텍처](architecture.md) — 서비스 경계, 트랜잭션·이벤트 처리, ArchUnit으로 강제하는 규칙
 2. [도메인·모델 안내](domain/model-guide.md) → [업무 흐름](domain/workflows.md) → [용어집](domain-glossary.md)
 3. [판단 색인](judgment-index.md) — 어떤 쟁점에서 누가 무엇을 골랐나 (대화 원문 인용)
-4. [근거 색인](evidence.md) — 검증 결과 한 줄씩 (날짜·대상·수치·원문)
+4. [근거 색인](evidence.md) — 검증 결과 한 줄씩 (날짜·대상·수치·원문). 2026-11-28 이후는 [`evidence.d/`](evidence.d/)의 PR별 조각
 
 ## 역할별 정본
 
@@ -17,7 +17,7 @@
 | 단계·순서·완료 조건 | [로드맵](roadmap.md) |
 | 왜 그렇게 했고 무엇을 버렸나 | [설계 결정](decisions.md) |
 | 사용자의 판단 이력 | [판단 색인](judgment-index.md) |
-| 검증 결과 | [근거 색인](evidence.md) |
+| 검증 결과 | [근거 색인](evidence.md)(고정) + [`evidence.d/`](evidence.d/)(PR별 조각) |
 | 재현된 결함 | [결함 대장](defects.md) |
 | 성능·장애 실험 | [실험 기록](experiments.md) |
 | 미결 업무 정책 | [미결 질문](domain/open-questions.md) |
@@ -50,7 +50,7 @@
 
 ## 문서를 갱신할 때
 
-- 새 문서를 만들지 않는다. 계획과 검증 상세는 PR 본문에, 결과 한 줄은 [근거 색인](evidence.md)에 둔다.
+- 새 문서를 만들지 않는다. 계획과 검증 상세는 PR 본문에, 결과 한 줄은 PR별 근거 조각(`evidence.d/<PR번호>.md`)에 둔다.
 - 같은 내용을 두 곳에 쓰지 않는다. 계약은 스펙, 이유는 결정, 수치는 근거 색인에 두고 나머지는 링크한다.
 - 날짜가 있는 결정·결함·실험 기록은 당시의 근거다. 다시 검증하지 않은 결과를 최신 상태로 바꾸지 않는다.
 - 2026-11-06 문서 통합 전의 계획·검증·인계 문서 원문은 고정 커밋 [`0cc225bf`](https://github.com/tlswltjq/esd-platform/tree/0cc225bf/docs)에서 볼 수 있다.
