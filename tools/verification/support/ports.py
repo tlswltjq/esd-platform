@@ -18,7 +18,6 @@ OFFSETS = {
     "verify-license": 16000,
     "verify-order": 17000,
     "verify-payment": 18000,
-    "verify-store": 21000,
 }
 
 

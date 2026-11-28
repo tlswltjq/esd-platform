@@ -324,15 +324,15 @@
   - 방법: 스크립트 하나에 PR 하나. 테스트가 `LocalStack`으로 스택을 띄우고, 단계(`phase`)로 나뉜 메서드와 증거 파일은 재시작·장애를 직접 부르는 한 흐름으로 합친다. 옮긴 뒤 그 스크립트와 `ports.py`의 자리, 작업 표의 `phase`·`props`를 지운다. 스크립트가 단계 사이에 하던 제어(검증 전용 장애 설정으로 띄우기, 릴레이 정지, DB 권한 회수, Kafka 주입)는 필요한 만큼 `LocalStack`에 더한다. PR마다 운영 코드를 망가뜨린 실행(결정 102)과 `measure_guard`를 남긴다.
   - 순서(작은 것부터, 뒤 여정이 앞 여정의 앱 구성을 포함한다):
     - [x] `verify-studio.py` → `studioE2eTest` — PR #281
-    - [x] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest` — PR #282. 브로커 장애는 컨테이너 일시 정지로 만든다(`LocalStack.pauseKafka`). 같은 키의 앞 이벤트(Store로 가는 공개 알림)만 유실되는 경우는 이 스택에 소비자가 없어 잡지 못한다 — `verify-store.py`를 옮길 때 본다.
-    - [ ] `verify-store.py` → `storeE2eTest`
+    - [x] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest` — PR #282. 브로커 장애는 컨테이너 일시 정지로 만든다(`LocalStack.pauseKafka`). 같은 키의 앞 이벤트(Store로 가는 공개 알림)만 유실되는 경우는 이 스택에 소비자가 없어 잡지 못한다. Store 여정(PR #283)에도 넣지 않았다 — 아래 마무리 항목.
+    - [x] `verify-store.py` → `storeE2eTest` — PR #283
     - [ ] `verify-order.py` → `orderE2eTest`
     - [ ] `verify-payment.py` → `paymentE2eTest`
     - [ ] `verify-license.py` → `licenseE2eTest`
     - [ ] `verify-download.py` → `downloadE2eTest`
     - [ ] `verify-g4-operations.py` → `g4OperationsE2eTest`
     - [ ] `verify-tracing.py` → `tracingE2eTest`
-    - [ ] 마무리: 작업 표에서 `phase` 구조를 걷어내고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
+    - [ ] 마무리: 작업 표에서 `phase` 구조를 걷어내고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, Store가 있는 스택에서 브로커 무응답 중 Catalog가 낸 공개 알림이 복구 뒤 Store 사본에 닿는지 보는 단언을 더하고(PR #282에서 잡지 못한 변형), `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
   - 옮기지 않는 것: `verify-jib.py`(Jib 이미지 스택, 구매 여정·백업 복구·Prometheus·측정).
 - [x] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** — PR #279 ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild))
   - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.
