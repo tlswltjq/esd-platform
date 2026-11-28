@@ -142,6 +142,23 @@ class BuildTest(unittest.TestCase):
         self.assertIn('## 스펙 위치\n- 문제: 루트', packet)
         self.assertIn('- 1. 첫째', packet)
 
+    def test_packet_over_the_cap_lists_documents_instead_of_their_diff(self):
+        # 결정 packet-size-cap: 상한을 넘으면 문서 diff를 목록으로 바꾸고, 문서 diff의 R 번호는 세지 않는다.
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int v; }\n')
+        self.write('specs/payment/design.md', ''.join('R2 링크 줄 %d\n' % i for i in range(400)))
+        self.commit('docs: 큰 문서')
+        small, _, _ = review_packet.build(self.root, self.base, 'HEAD', size_cap=10 ** 9)
+        self.assertIn('R2 링크 줄 399', small)
+        self.assertIn('### R2. 조회', small)
+        self.assertNotIn('크기 상한', small)
+        packet, files, _ = review_packet.build(self.root, self.base, 'HEAD', size_cap=2000)
+        self.assertIn('specs/payment/design.md', files)
+        self.assertIn('크기 상한', packet)
+        self.assertIn('- specs/payment/design.md (+400 -0)', packet)
+        self.assertNotIn('R2 링크 줄', packet)
+        self.assertNotIn('### R2. 조회', packet)
+        self.assertIn('int v', packet)
+
     def test_rereview_only_carries_the_new_commits_and_previous_findings(self):
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int x; }\n')
         self.commit('first')
