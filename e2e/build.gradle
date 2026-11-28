@@ -20,6 +20,10 @@ dependencies {
     testImplementation 'com.fasterxml.jackson.core:jackson-databind'
     testImplementation 'org.awaitility:awaitility'
     testImplementation project(':common:messaging-kafka')
+    // LocalStack 이 인프라를 띄운다(결정 e2e-stack-in-junit). 앱은 컨테이너가 아니라 bootJar 프로세스다.
+    testImplementation project(':common:testcontainers')
+    // MySQLContainer 가 준비 여부를 JDBC 접속으로 확인한다.
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
 }
 
 // 소스가 없다. 빈 jar 를 만들면 산출물 목록에 모듈이 아닌 것이 섞인다
@@ -43,7 +47,13 @@ def endpoints = ['host', 'port-offset']
 //   optional : 주어졌을 때만 넘기는 `stove.e2e.<이름>`
 //   phase    : `stove.e2e.<property>` 로 고르는 테스트 메서드 하나(재시작을 사이에 둔 단계 실행)
 //   expected : 실행 건수. 다르거나 건너뜀이 있으면 failure 문구로 실패한다. 없으면 세지 않는다
+//   localStack: 테스트가 스택을 직접 띄운다(LocalStackExtension). bootJar·MinIO 이미지를 먼저 준비한다
 def suites = [
+    // 열두 앱. 테스트가 스택을 띄우고 내린다(결정 e2e-stack-in-junit, 시범 1)
+    [task: 'ownershipE2eTest', tag: 'ownership',
+     description: '실제 BFF 로그인으로 구매자·창작자·운영자가 자기 것만 보고 자기 문만 여는지 검증한다 (스택을 직접 띄운다)',
+     localStack: true,
+     expected: 3, failure: 'Ownership verification requires 3 executed checks without skips'],
     // Auth·Gateway·Studio
     [task: 'studioE2eTest', tag: 'studio',
      description: 'Auth·Gateway·Studio만으로 로그인, 소유권, 업로드와 이벤트 처리 경계를 검증한다',
@@ -248,6 +258,11 @@ tasks.register('chaosTest', Test) {
     }
 }
 
+// LocalStack 이 띄우는 앱(StackApp 과 같은 목록)과 MinIO 이미지 선택(루트 build.gradle).
+def localStackApps = ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment',
+                      'license', 'download', 'settlement']
+def minioImageSelection = rootProject.ext.minioImageSelection
+
 // ── 표의 태스크 등록 ───────────────────────────────────────────────────
 suites.each { suite ->
     tasks.register(suite.task, Test) {
@@ -262,6 +277,16 @@ suites.each { suite ->
         (suite.optional ?: []).each { name ->
             if (providers.systemProperty("stove.e2e.${name}").isPresent())
                 systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").get()
+        }
+        if (suite.localStack) {
+            localStackApps.each { app -> dependsOn ":apps:${app}:bootJar" }
+            systemProperty 'stove.e2e.repo-root', rootDir.absolutePath
+            // 기동 시간 같은 숫자를 콘솔에 남긴다.
+            testLogging.showStandardStreams = true
+            environment 'STOVE_TEST_MINIO_IMAGE', minioImageSelection.testImage
+            if (minioImageSelection.fromSource) {
+                dependsOn ':infra:minio:tagTestImage'
+            }
         }
         if (suite.phase) {
             String method = providers.systemProperty("stove.e2e.${suite.phase.property}").getOrElse(suite.phase.first)
