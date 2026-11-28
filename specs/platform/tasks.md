@@ -318,9 +318,10 @@
 - [ ] **T49. 재시작 여정 하나를 단계 없이 한 테스트로 옮긴다(시범 2)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit)) — T44 뒤
   - 대상: `reviewRestartE2eTest`(`verify-review.py`가 단계 사이에 Review를 재시작한다). 테스트가 `stack.restart(...)`를 직접 불러 `phase` 속성·증거 파일 없이 재시작 전후를 한 메서드에서 단언하게 한다.
   - 판단: 되면 나머지 `verify-*.py` 여정의 이전 여부를 사용자에게 묻는다(그때 `e2eTest`의 관측 두 건을 여정 뒤에 붙이는 자리도 정한다). 안 되면 T44 상태에서 멈추고 이유를 결정 기록에 더한다. `verify-jib.py`(Jib 이미지 스택, 야간 구매 E2E와 측정)는 옮기지 않는다.
-- [ ] **T48. `chaosTest`(`ServiceOutageChaosTest`)가 돌지 못한다** [결정 필요]
-  - 어디서: 회원 세션을 옛 트랙 A가 `Journey`에 채워 주던 구조라 따로 돌리면 선행 단계 실패로 끝나고, 지금 Download에 없는 `/api/v1/downloads/{code}/manifests`를 부른다. T43에서 트랙 A를 지워 세션을 만드는 곳이 없다.
-  - 정할 것: 지울지, 새 스택 제어(T44·T49) 위에서 "License를 멈춰도 다운로드와 Gateway가 산다"를 다시 세울지. 층 1 하네스의 장애 주입(`support/e2e_faults.py`)과 겹치는 범위도 함께 본다. `docs/testing.md`의 L7 행이 이 결정에 달려 있다.
+- [ ] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild)) — T49 뒤
+  - 지금: 회원 세션을 옛 트랙 A가 `Journey`에 채워 주던 구조라 선행 단계 실패로 끝나고, 지금 Download에 없는 `/api/v1/downloads/{code}/manifests`를 부른다. T43에서 트랙 A를 지워 세션을 만드는 곳이 없다.
+  - 할 일: T44·T49의 스택 제어로 "License를 멈춰도 다운로드와 Gateway가 살고, 되살리면 복구된다"를 한 테스트로 다시 쓴다. 구매는 실제 API로 만들고 지금 있는 `/api/v1/downloads/{code}/ticket`으로 확인한다. 옮긴 뒤 `Journey`와 옛 `chaosTest` 구성을 정리하고 `docs/testing.md`의 L7 행을 맞춘다.
+  - 볼 것: 층 1 하네스의 장애 주입(`support/e2e_faults.py`)과 겹치는 범위. T49가 안 되면(스택 제어를 JUnit에 둘 수 없으면) 이 항목을 다시 묻는다.
 - [ ] **T50. `docs/api-demo.md`가 걷어낸 결제 시뮬레이터·콜백 API를 안내한다**
   - 어디서: "결제 시뮬레이터" 절의 `/payments/{orderNo}/prepare`·`/payments/simulator/*`·`/payments/{orderNo}/cancel`과 "자동 검증은 `:e2e:e2eTest`" 문장. payment에 이 경로가 없다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)).
   - 할 일: 지금 API(프로세스 안 승인, [결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval))로 다시 쓰거나 절을 지운다.

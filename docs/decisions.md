@@ -2850,6 +2850,15 @@
 - 구분: 추천 수용
 - 결과: T43 [PR #275](https://github.com/tlswltjq/esd-platform/pull/275). T44·T49는 후속 PR에서 이 줄을 채운다
 
+<a id="chaos-test-rebuild"></a>
+## 돌지 못하는 `chaosTest`는 지우지 않고 새 스택 제어 위에서 다시 세운다
+- 문제: `ServiceOutageChaosTest`(`:e2e:chaosTest`, 테스트 계층 L7)는 회원 세션을 옛 트랙 A 여정이 채워 주던 구조이고 Download에 없는 `/api/v1/downloads/{code}/manifests`를 불러 돌지 못한다. 트랙 A는 T43(PR #275)에서 지웠다. 지우면 "서비스 하나를 멈춰도 나머지가 살고 되살리면 복구된다"를 보는 계층이 없어진다.
+- 선택지: A 지운다 — 장애 주입은 층 1 하네스(`e2e_faults.py`)와 모듈별 재시작 여정이 다룬다 / B [결정 e2e-stack-in-junit](#e2e-stack-in-junit)의 스택 제어 위에서 다시 세운다 (추천: B — 테스트가 스택을 직접 멈추고 되살리는 구조에서 가장 자연스러운 사례이고, 시범 2(T49) 뒤에 판단해도 늦지 않다)
+- 내 의견: "t48은 B로 해"
+- 선택: B — T49 뒤에 다시 쓴다. 그때까지 `ServiceOutageChaosTest`는 돌지 못하는 채로 두고 `docs/testing.md` L7 행에 그렇게 적어 둔다. T49가 안 되면 다시 묻는다.
+- 구분: 추천 수용
+- 결과: [PR #276](https://github.com/tlswltjq/esd-platform/pull/276)(기록). 구현은 플랫폼 T48
+
 ---
 
 ## 검증하며 드러난 것
