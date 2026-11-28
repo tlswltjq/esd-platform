@@ -159,6 +159,27 @@ class BuildTest(unittest.TestCase):
         self.assertNotIn('### R2. 조회', packet)
         self.assertIn('int v', packet)
 
+    def test_packet_over_the_reviewer_input_cap_also_lists_deleted_files(self):
+        # 결정 packet-deleted-files: 문서를 목록으로 바꾼 뒤에도 리뷰어 입력 한도를 넘으면 통째로 지운 파일의 diff를 목록으로 바꾼다.
+        self.write('apps/payment/src/main/java/a/Gone.java', ''.join('class Gone%d {}\n' % i for i in range(400)))
+        self.commit('feat: 지울 파일')
+        base = self.git('rev-parse', 'HEAD').strip()
+        self.git('rm', '-q', 'apps/payment/src/main/java/a/Gone.java')
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int v; }\n')
+        self.commit('chore: 삭제')
+        full, _, _ = review_packet.build(self.root, base, 'HEAD')
+        self.assertIn('-class Gone399 {}', full)
+        self.assertNotIn('목록으로 바꾼 삭제 파일', full)
+        # 문서만 줄이면 되는 크기에서는 삭제 파일 diff를 그대로 둔다.
+        docs_only, _, _ = review_packet.build(self.root, base, 'HEAD', size_cap=2000)
+        self.assertIn('-class Gone399 {}', docs_only)
+        packet, files, _ = review_packet.build(self.root, base, 'HEAD', size_cap=2000, input_cap=2000)
+        self.assertIn('apps/payment/src/main/java/a/Gone.java', files)
+        self.assertIn('- apps/payment/src/main/java/a/Gone.java (+0 -400)', packet)
+        self.assertNotIn('class Gone399', packet)
+        self.assertIn('int v', packet)
+        self.assertIn('결정 packet-deleted-files', packet)
+
     def test_rereview_only_carries_the_new_commits_and_previous_findings(self):
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int x; }\n')
         self.commit('first')
