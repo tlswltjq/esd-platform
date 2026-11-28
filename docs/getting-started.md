@@ -1,12 +1,12 @@
 # 개발 환경과 실행
 
-[문서 목록](README.md) · [전체 흐름 검증](../.kiro/specs/settlement/design.md#사용-안내) · [인증·권한 계약](security.md)
+[문서 목록](README.md) · [전체 흐름 검증](../specs/settlement/design.md#사용-안내) · [인증·권한 계약](security.md)
 
 명령은 저장소 루트에서 실행한다. 전체 스택에는 여러 JVM과 저장소가 함께 올라가므로 Docker에 충분한 메모리를 할당한다. 필요한 모듈별 격리 검증을 선택한다. 현재 개발·검증은 로컬 호스트(Linux, Docker)에서 수행한다.
 
 ## 개발 환경과 테스트
 
-Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gradle`의 foojay 리졸버가 조달한다. Wrapper 실행용 JVM은 JDK 17 이상이 필요하다. 전체 스택·통합 테스트에는 Docker와 Compose가 필요하고, 전체 흐름 검증은 [Settlement 안내](../.kiro/specs/settlement/design.md#사용-안내)를 따른다.
+Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gradle`의 foojay 리졸버가 조달한다. Wrapper 실행용 JVM은 JDK 17 이상이 필요하다. 전체 스택·통합 테스트에는 Docker와 Compose가 필요하고, 전체 흐름 검증은 [Settlement 안내](../specs/settlement/design.md#사용-안내)를 따른다.
 
 | 검증 | 명령 | 실행 조건 |
 |---|---|---|
@@ -39,7 +39,7 @@ Compose는 기본 정의 2개와 로컬 오버라이드 2개를 사용한다. �
 Settlement가 PortOne TEST 원승인·취소를 직접 조회하게 하려면 앱 Compose에 `-f docker-compose.settlement-portone.yml`을 더한다. `SETTLEMENT_PORTONE_API_BASE_URL`·`SETTLEMENT_PORTONE_API_SECRET`(Payment의 `PORTONE_API_SECRET`과 별개)·`PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`를 셸 환경으로 넣어야 하며, 하나라도 없으면 Compose가 멈춘다. 이 파일을 빼면 Settlement는 기본 SIMULATED(모의 PG)로 돈다. 토스페이 정산 수집(`SETTLEMENT_TOSSPAY_ENABLED`)은 켜지 않는다.
 
 신규 빈 스택은 외부 모의 PG의 세 역할 키와 전용 DB 비밀번호, Catalog 정산 조회 키를 먼저 설정한다.
-기존 V11 내장 PG 자료가 있으면 [이관 절차](../.kiro/specs/settlement/design.md#사용-안내)를 거쳐 연결한다.
+기존 V11 내장 PG 자료가 있으면 [이관 절차](../specs/settlement/design.md#사용-안내)를 거쳐 연결한다.
 
 ```bash
 export MOCK_PG_PAYMENT_KEY="$(openssl rand -hex 32)"
@@ -60,7 +60,7 @@ export CATALOG_SETTLEMENT_SERVICE_KEY="$(openssl rand -hex 32)"
 ```
 
 `up`은 `jibDockerBuild`로 업무 앱·외부 모의 PG·MinIO 이미지를 생성하고 인프라와 앱을 순서대로 시작한다. 앱은 health 성공을 확인하며 최대 세 개씩 시작하고 Store는 Catalog 다음에 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다.
-현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 tools/verification/verify-settlement.py`를 사용한다. [정산 실행 안내](../.kiro/specs/settlement/design.md#사용-안내)를 따른다.
+현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 tools/verification/verify-settlement.py`를 사용한다. [정산 실행 안내](../specs/settlement/design.md#사용-안내)를 따른다.
 
 MinIO와 mc는 `:infra:minio:compileMinio`가 고정 커밋의 공식 소스를 Go 컨테이너에서 빌드하고 Jib이 Alpine 이미지에 패키징한다. 호스트에 Go를 설치할 필요는 없다. 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
 
@@ -70,7 +70,7 @@ Studio·Review·Download 통합 테스트도 기본적으로 같은 이미지를
 
 브라우저에서 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 열고 대상 서비스를 선택한다. Authorize는 공개 클라이언트 `swagger-ui`의 Authorization Code + PKCE를 사용한다. 창작·심사는 `studio`, 구매·결제는 `commerce` 범위를 요청하고 필요한 계정으로 로그인한다. 한 세션에서 `localhost`와 `127.0.0.1`을 섞지 않는다.
 
-Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실행·출시](../.kiro/specs/studio/design.md#사용-안내)를 따른다.
+Studio의 전체 ZIP 업로드·단일 심사·출시·재출시는 [Studio 실행·출시](../specs/studio/design.md#사용-안내)를 따른다.
 
 ### Swagger OAuth 문제 해결
 

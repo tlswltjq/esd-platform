@@ -10,7 +10,7 @@ Studio 단순화 이후 Q2·Q4·Q7·Q10·Q11의 구 Studio 관찰은 과거 구�
 
 2026-10-18 Settlement 재작성으로 Q5·Q6·Q8·Q12의 구 정산 관찰도 과거 구현 기록으로 보존한다.
 현재는 단일 상품·JWT sub 판매자·고정 플랫폼 수수료·플랫폼 부담 PG 비용·매출월/반영월 분리·한 번의 월 마감·PG 명세 대사를 사용한다.
-환불·재마감·이월·판매자 송금·세무 정책의 미결 사항은 남아 있다. 현재 계약은 [정산 모델](models/settlement.md)과 [실행 안내](../../.kiro/specs/settlement/design.md#사용-안내)를 따른다.
+환불·재마감·이월·판매자 송금·세무 정책의 미결 사항은 남아 있다. 현재 계약은 [정산 모델](models/settlement.md)과 [실행 안내](../../specs/settlement/design.md#사용-안내)를 따른다.
 
 2026-11-02 G3의 전액 환불 원배분 상계·금융 확인 월/마감 시 현재 OPEN 월 A와 실제 원장/월 합계 연결은 [120건 검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-refund-ledger-verification.md)을 따른다. Q6·Q12의 아래 과거 관찰과 구분하며 PG 비용 반환·음수 잔액 자동 이월·실제 지급/회수는 미결로 유지한다.
 

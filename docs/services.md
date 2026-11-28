@@ -50,7 +50,7 @@ Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실�
 
 Studio의 책임은 출시용 상세정보·빌드 관리, 심사 요청·재요청, 출시 요청·재요청이다.
 심사 판정과 실제 출시·공개 상품 관리는 외부 업무이며 결과는 요청 기록에만 표시한다.
-[모델](domain/models/studio.md) · [실행·요청 예제](../.kiro/specs/studio/design.md#사용-안내)
+[모델](domain/models/studio.md) · [실행·요청 예제](../specs/studio/design.md#사용-안내)
 
 소유자는 Auth JWT sub이며 Workspace·sellerId 매핑은 없다. 실제 연계는 Auth·Gateway·Studio·Review·Catalog 여정으로 확인한다.
 
@@ -93,7 +93,7 @@ ProjectReviewWithdrawalRequested·ProjectReleaseWithdrawalRequested를 발행하
 ## review
 
 Review는 Studio의 요청 당시 상세정보·전체 ZIP 스냅샷을 접수하고 수동 승인·반려의 원본을 관리한다.
-[모델](domain/models/review.md) · [실행·검증](../.kiro/specs/review/design.md#사용-안내) · [개선 계획·완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md)
+[모델](domain/models/review.md) · [실행·검증](../specs/review/design.md#사용-안내) · [개선 계획·완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md)
 
 REVIEWER·ADMIN만 접근하며 판정자는 Auth JWT sub로 기록한다.
 요청 ID는 Studio의 reviewRequestId와 같고 REQUESTED에서 APPROVED·REJECTED·WITHDRAWN 중 하나로 최종 전이한다.
@@ -160,7 +160,7 @@ ProjectReleaseWithdrawalRequested를 수신하고 공개 확정과 같은 종료
 
 ## store
 
-Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-mvp-plan.md) · [실행·수동 확인](../.kiro/specs/store/design.md#사용-안내).
+Catalog 공개 상품의 검색·조회 사본을 MySQL에 저장한다. [MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-mvp-plan.md) · [실행·수동 확인](../specs/store/design.md#사용-안내).
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -183,7 +183,7 @@ Kafka 반영은 catalogVersion으로 공개 사본을 교체하고 중복·역�
 ## order
 
 공개 상품 하나의 주문 스냅샷·청구액을 고정하고 내 주문 조회·최종 결제 결과 반영을 담당한다.
-[MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-mvp-plan.md) · [실행·결과 확인](../.kiro/specs/order/design.md#사용-안내)
+[MVP 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-mvp-plan.md) · [실행·결과 확인](../specs/order/design.md#사용-안내)
 
 상품 근거는 CATALOG_ORDER_SERVICE_KEY·X-Order-Service-Key로 보호한 Catalog `/internal/v1/order-products/{code}`에서 조회한다. 상품 식별·가격·판매 상태·publicDetailAllowed만 받고 공개 본문·저장 경로는 받지 않는다. 새 주문은 공개 상세 허용 근거가 false이면 404이며 같은 requestId의 기존 주문 재전송·기존 주문 승인 접수는 원래 계약을 유지한다. 기존 관리자 판매 제한의 승인 접수 차단은 유지한다. [정책·연계 오류·검증 경계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/public-product-detail-plan.md)를 따른다.
 
@@ -215,7 +215,7 @@ Catalog의 코드별 내부 주문 근거를 DB 트랜잭션 밖에서 읽고 �
 최초 내구 접수가 결제 확정 후 정확히 4시간 이내면 자동 허용하고, 이후에는 관리자 심사한다. 먼저 커밋된 판정이 확정되며 같은 명령·판정자·내용만 최초 판정 영수증으로 재전송 처리한다. 판정 변경·다른 명령은 409다.
 승인은 실제 License 지급 확인과 함께 정지 요청을 발행하고, 실제 정지 확인 뒤에만 RefundExecutionRequested를 발행한다. 조회/판정은 no-store이며 관리자 200은 환불 완료를 의미하지 않는다. 현재 고객 재시도 HTTP는 없고 반려 후 재심사는 미결이다. [계약·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md).
 구 견적·다중 항목·Redis·만료·취소·정산 계산을 사용하지 않는다.
-Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 Payment 앱을 사용한다.
+Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](../specs/payment/design.md#사용-안내)은 실제 Payment 앱을 사용한다.
 
 ---
 
@@ -224,7 +224,7 @@ Order 독립 검증은 결과 픽스처를, [Payment 연계 검증](../.kiro/spe
 Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다. Payment는 REQUESTED와 ORDER_SALE_RESTRICTED를 저장하고 PG 승인 POST 없이 원래 기한 내 재확인한다. 제한 해제·만료·기존 영수증의 처리는 [판매 상태 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/catalog-sales-policy-plan.md)을 따른다.
 
 확정된 주문의 결제 접수, 외부 PG 승인/조회, 미확정 건 재개·내 결제 조회와 허용된 환불의 PG 실행/결과 확인을 담당한다.
-[모델](domain/models/order-payment.md#payment) · [실행](../.kiro/specs/payment/design.md#사용-안내) · [MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-mvp-plan.md)
+[모델](domain/models/order-payment.md#payment) · [실행](../specs/payment/design.md#사용-안내) · [MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-mvp-plan.md)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -246,7 +246,7 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 PortOne의 개별 FAILED는 별도 이력이며 최종 OrderPaymentFailed로 바꾸지 않는다. 같은 orderNo·paymentId·금액의 PENDING checkout으로 재결제한다. 서버가 원구매와 대조한 실패 근거를 V28에 보존하며, 승인·Outbox 커밋 뒤 별도로 수집한다. 이력 조회 실패는 내구 재예약하고 PAID 뒤에도 이력 GET만 재개한다. 종료/만료 정책과 실제 TEST 재결제 전체 검증은 후속이다.
 
 기본 결제는 purchase_payment에 저장한다. 모의 PG의 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
-V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](../.kiro/specs/payment/design.md#사용-안내)를 따른다.
+V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](../specs/payment/design.md#사용-안내)를 따른다.
 환불은 RefundExecutionRequested를 내구 접수한 뒤 고정 attemptId/본문과 최초 준비 3시간 창으로 취소·조회한다. 같은 실행의 재송신/조회 예약과 운영 중단 이력을 별도로 보존한다. 확인된 전액 취소/실행 성공/확정 실패는 결과 이벤트를 발행하며 원 purchase_payment의 PAID는 바꾸지 않는다. 오류별 자동 복구·운영 중단과 실제 TEST 범위는 [환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)을 따른다.
 Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다. 실제 운영 자금 이동·정산 환불 조정은 후속이다.
 
@@ -255,7 +255,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 ## license
 
 구매자·상품별 영구 이용 권한과 주문별 불변 구매 근거를 보존한다.
-[MVP 범위·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md) · [조회·실행 안내](../.kiro/specs/license/design.md#사용-안내)
+[MVP 범위·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md) · [조회·실행 안내](../specs/license/design.md#사용-안내)
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -278,7 +278,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 ## download
 
 본인의 상품 보유권과 현재 공개 빌드를 조회해 전체 ZIP의 만료 URL을 발급한다.
-업무 DB·MongoDB·Kafka·보유권/공개본 사본은 사용하지 않는다. [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행](../.kiro/specs/download/design.md#사용-안내)
+업무 DB·MongoDB·Kafka·보유권/공개본 사본은 사용하지 않는다. [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행](../specs/download/design.md#사용-안내)
 
 | 메서드 | 경로 | 응답 |
 |---|---|---|
@@ -297,7 +297,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 
 ## settlement
 
-[실행](../.kiro/specs/settlement/design.md#사용-안내) · [모델](domain/models/settlement.md) · [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)
+[실행](../specs/settlement/design.md#사용-안내) · [모델](domain/models/settlement.md) · [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)
 
 기존 OrderPaid를 소비해 판매자 매출·배분·월 마감과 PG 지급 명세 수령 대사를 담당한다.
 PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·결제·이용권 계약은 유지한다.
@@ -409,4 +409,4 @@ Payment·Settlement는 각자의 포트와 어댑터를 사용하고 공급자 �
 
 PG의 Payment·Settlement·제어 키는 서로 다르며 제어 키는 검증 운영자만 사용한다.
 잘못된 키는 401, 유효한 다른 역할 키의 접근은 403이다. 키 미설정·중복이면 PG는 기동하지 않는다.
-Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](../.kiro/specs/settlement/design.md#사용-안내)를 따른다.
+Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](../specs/settlement/design.md#사용-안내)를 따른다.

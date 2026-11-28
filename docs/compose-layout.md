@@ -11,7 +11,7 @@
 | 파일 | 역할 |
 |---|---|
 | `docker-compose.yml` | 인프라 서비스·네트워크·볼륨. 호스트 포트 없음 |
-| `docker-compose.apps.yml` | 업무 앱 11개·외부 모의 PG·전용 PG DB. 호스트 포트 없음 |
+| `docker-compose.apps.yml` | 업무 앱 12개(웹 BFF·Gateway 포함)·외부 모의 PG·전용 PG DB. 호스트 포트 없음 |
 | `docker-compose.local.yml` | 인프라의 `127.0.0.1` 포트 바인딩 |
 | `docker-compose.apps.local.yml` | 앱의 `127.0.0.1` 포트와 브라우저용 OAuth·업로드 주소 |
 
