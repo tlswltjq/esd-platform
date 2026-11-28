@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">처리량 (10초 칸)</text>
+<rect x="302.7" y="30" width="329.7" height="340" fill="#eeeeee"/>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0</text>
+<line x1="70" y1="370.0" x2="710" y2="370.0" stroke="#dddddd"/>
+<text x="64" y="289.0" text-anchor="end">125</text>
+<line x1="70" y1="285.0" x2="710" y2="285.0" stroke="#dddddd"/>
+<text x="64" y="204.0" text-anchor="end">250</text>
+<line x1="70" y1="200.0" x2="710" y2="200.0" stroke="#dddddd"/>
+<text x="64" y="119.0" text-anchor="end">375</text>
+<line x1="70" y1="115.0" x2="710" y2="115.0" stroke="#dddddd"/>
+<text x="64" y="34.0" text-anchor="end">500</text>
+<line x1="70" y1="30.0" x2="710" y2="30.0" stroke="#dddddd"/>
+<text x="70.0" y="386" text-anchor="middle">0</text>
+<text x="128.2" y="386" text-anchor="middle">30</text>
+<text x="186.4" y="386" text-anchor="middle">60</text>
+<text x="244.5" y="386" text-anchor="middle">90</text>
+<text x="302.7" y="386" text-anchor="middle">120</text>
+<text x="360.9" y="386" text-anchor="middle">150</text>
+<text x="419.1" y="386" text-anchor="middle">180</text>
+<text x="477.3" y="386" text-anchor="middle">210</text>
+<text x="535.5" y="386" text-anchor="middle">240</text>
+<text x="593.6" y="386" text-anchor="middle">270</text>
+<text x="651.8" y="386" text-anchor="middle">300</text>
+<text x="710.0" y="386" text-anchor="middle">330</text>
+<text x="390" y="408" text-anchor="middle">회차 시작 뒤 초(음영: 측정 구간)</text>
+<text x="14" y="200" transform="rotate(-90 14 200)" text-anchor="middle">msg/s</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,200.0 89.4,200.0 108.8,200.0 128.2,200.0 147.6,200.0 167.0,200.0 186.4,200.0 205.8,200.0 225.2,200.0 244.5,200.0 263.9,200.0 283.3,200.0 302.7,200.0 322.1,200.0 341.5,200.0 360.9,200.0 380.3,200.0 399.7,200.0 419.1,200.0 438.5,200.0 457.9,200.0 477.3,200.0 496.7,200.0 516.1,200.0 535.5,200.0 554.8,200.0 574.2,200.0 593.6,200.0 613.0,200.0 632.4,200.0 651.8,370.0 671.2,370.0 690.6,370.0 710.0,370.0"/>
+<polyline fill="none" stroke="#D55E00" stroke-width="2" points="70.0,301.0 89.4,261.8 108.8,247.6 128.2,222.7 147.6,208.2 167.0,208.6 186.4,203.7 205.8,202.1 225.2,204.4 244.5,198.5 263.9,198.4 283.3,202.9 302.7,201.8 322.1,196.9 341.5,196.9 360.9,193.1 380.3,200.0 399.7,203.8 419.1,199.8 438.5,200.5 457.9,204.2 477.3,203.3 496.7,202.7 516.1,205.0 535.5,206.4 554.8,196.9 574.2,204.6 593.6,203.1 613.0,204.2 632.4,206.5 651.8,296.6 671.2,295.4 690.6,296.9 710.0,301.5"/>
+<polyline fill="none" stroke="#009E73" stroke-width="2" points="70.0,370.0 89.4,370.0 108.8,370.0 128.2,370.0 147.6,370.0 167.0,370.0 186.4,370.0 205.8,370.0 225.2,370.0 244.5,370.0 263.9,370.0 283.3,370.0 302.7,370.0 322.1,370.0 341.5,370.0 360.9,370.0 380.3,370.0 399.7,370.0 419.1,370.0 438.5,370.0 457.9,370.0 477.3,370.0 496.7,370.0 516.1,370.0 535.5,370.0 554.8,370.0 574.2,370.0 593.6,370.0 613.0,370.0 632.4,370.0 651.8,370.0 671.2,370.0 690.6,370.0 710.0,370.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">발행 요청</text>
+<line x1="725" y1="58" x2="743" y2="58" stroke="#D55E00" stroke-width="2"/>
+<text x="749" y="62">처리 완료</text>
+<line x1="725" y1="76" x2="743" y2="76" stroke="#009E73" stroke-width="2"/>
+<text x="749" y="80">실패 시도</text></svg>

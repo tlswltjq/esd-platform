@@ -57,7 +57,8 @@ tasks.register('runLoadGenerator', JavaExec) {
 tasks.register('writeBenchClasspath') {
     group = 'benchmark'
     description = '측정 스크립트가 java -cp 로 쓸 실행 클래스패스를 파일로 남긴다'
-    dependsOn tasks.named('classes')
+    // 클래스패스에 적는 의존 모듈 jar(common:messaging 등)도 만든다. classes 만으로는 새 worktree에서 jar가 없다(PR #255).
+    dependsOn sourceSets.main.runtimeClasspath
     def output = layout.buildDirectory.file('bench-classpath.txt')
     outputs.file(output)
     doLast {

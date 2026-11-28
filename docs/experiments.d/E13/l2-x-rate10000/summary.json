@@ -1,0 +1,1028 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-x-rate10000",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 10000.0,
+      "warmup_seconds" : 60,
+      "seconds" : 180,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "cded999c7bbe836ddff69b8f5fe88a898807c66e",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-27T13:37:33.647280+00:00",
+    "load_started_us" : 1795786690753356,
+    "load_ended_us" : 1795786931469093,
+    "observation_deadline_us" : 1795787531469093,
+    "settled_us" : null,
+    "timed_out" : true,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 1.255,
+      "jvm_gc_pause_seconds_count" : 337.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 4.1168E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 187,
+          "cpu_percent_mean" : 48.51,
+          "cpu_percent_max" : 187.32,
+          "memory_mib_mean" : 931.4,
+          "memory_mib_max" : 1025.0
+        },
+        "mysql" : {
+          "samples" : 187,
+          "cpu_percent_mean" : 66.58,
+          "cpu_percent_max" : 93.82,
+          "memory_mib_mean" : 445.4,
+          "memory_mib_max" : 494.9
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 2759452,
+          "growth_kib" : 2758716
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 429392,
+          "growth_kib" : 223016
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 72,
+        "cpu_seconds" : 405.21,
+        "cpu_percent_mean" : 48.92,
+        "rss_mib_max" : 605.8
+      }
+    },
+    "lag" : [ {
+      "total" : 5485,
+      "partitions" : {
+        "0" : 1801,
+        "1" : 1842,
+        "2" : 1842
+      },
+      "members" : 3,
+      "at_us" : 1795786693358453
+    }, {
+      "total" : 131719,
+      "partitions" : {
+        "0" : 40790,
+        "1" : 41461,
+        "2" : 49468
+      },
+      "members" : 3,
+      "at_us" : 1795786705119965
+    }, {
+      "total" : 222462,
+      "partitions" : {
+        "0" : 68876,
+        "1" : 70047,
+        "2" : 83539
+      },
+      "members" : 3,
+      "at_us" : 1795786714305608
+    }, {
+      "total" : 318027,
+      "partitions" : {
+        "0" : 98468,
+        "1" : 100140,
+        "2" : 119419
+      },
+      "members" : 3,
+      "at_us" : 1795786724018513
+    }, {
+      "total" : 423526,
+      "partitions" : {
+        "0" : 131152,
+        "1" : 133332,
+        "2" : 159042
+      },
+      "members" : 3,
+      "at_us" : 1795786734662424
+    }, {
+      "total" : 519482,
+      "partitions" : {
+        "0" : 160848,
+        "1" : 163546,
+        "2" : 195088
+      },
+      "members" : 3,
+      "at_us" : 1795786744400316
+    }, {
+      "total" : 616046,
+      "partitions" : {
+        "0" : 190763,
+        "1" : 193930,
+        "2" : 231353
+      },
+      "members" : 3,
+      "at_us" : 1795786754227246
+    }, {
+      "total" : 716757,
+      "partitions" : {
+        "0" : 221949,
+        "1" : 225626,
+        "2" : 269182
+      },
+      "members" : 3,
+      "at_us" : 1795786764439288
+    }, {
+      "total" : 814755,
+      "partitions" : {
+        "0" : 252289,
+        "1" : 256449,
+        "2" : 306017
+      },
+      "members" : 3,
+      "at_us" : 1795786774435760
+    }, {
+      "total" : 910042,
+      "partitions" : {
+        "0" : 281797,
+        "1" : 286440,
+        "2" : 341805
+      },
+      "members" : 3,
+      "at_us" : 1795786784119771
+    }, {
+      "total" : 1004075,
+      "partitions" : {
+        "0" : 310825,
+        "1" : 316057,
+        "2" : 377193
+      },
+      "members" : 3,
+      "at_us" : 1795786793782046
+    }, {
+      "total" : 1106809,
+      "partitions" : {
+        "0" : 342695,
+        "1" : 348340,
+        "2" : 415774
+      },
+      "members" : 3,
+      "at_us" : 1795786804131655
+    }, {
+      "total" : 1205936,
+      "partitions" : {
+        "0" : 373393,
+        "1" : 379565,
+        "2" : 452978
+      },
+      "members" : 3,
+      "at_us" : 1795786814229665
+    }, {
+      "total" : 1305547,
+      "partitions" : {
+        "0" : 404223,
+        "1" : 410908,
+        "2" : 490416
+      },
+      "members" : 3,
+      "at_us" : 1795786824385687
+    }, {
+      "total" : 1399654,
+      "partitions" : {
+        "0" : 433358,
+        "1" : 440535,
+        "2" : 525761
+      },
+      "members" : 3,
+      "at_us" : 1795786833920617
+    }, {
+      "total" : 1497388,
+      "partitions" : {
+        "0" : 463605,
+        "1" : 471278,
+        "2" : 562505
+      },
+      "members" : 3,
+      "at_us" : 1795786843913950
+    }, {
+      "total" : 1597153,
+      "partitions" : {
+        "0" : 494500,
+        "1" : 502664,
+        "2" : 599989
+      },
+      "members" : 3,
+      "at_us" : 1795786854075334
+    }, {
+      "total" : 1687783,
+      "partitions" : {
+        "0" : 522544,
+        "1" : 531195,
+        "2" : 634044
+      },
+      "members" : 3,
+      "at_us" : 1795786863258681
+    }, {
+      "total" : 1790722,
+      "partitions" : {
+        "0" : 554417,
+        "1" : 563584,
+        "2" : 672721
+      },
+      "members" : 3,
+      "at_us" : 1795786873748115
+    }, {
+      "total" : 1895069,
+      "partitions" : {
+        "0" : 586698,
+        "1" : 596423,
+        "2" : 711948
+      },
+      "members" : 3,
+      "at_us" : 1795786884432165
+    }, {
+      "total" : 1985301,
+      "partitions" : {
+        "0" : 614673,
+        "1" : 624801,
+        "2" : 745827
+      },
+      "members" : 3,
+      "at_us" : 1795786893807086
+    }, {
+      "total" : 2085481,
+      "partitions" : {
+        "0" : 645651,
+        "1" : 656350,
+        "2" : 783480
+      },
+      "members" : 3,
+      "at_us" : 1795786903792037
+    }, {
+      "total" : 2185072,
+      "partitions" : {
+        "0" : 676492,
+        "1" : 687681,
+        "2" : 820899
+      },
+      "members" : 3,
+      "at_us" : 1795786913908102
+    }, {
+      "total" : 2285148,
+      "partitions" : {
+        "0" : 707470,
+        "1" : 719160,
+        "2" : 858518
+      },
+      "members" : 3,
+      "at_us" : 1795786924119249
+    }, {
+      "total" : 2361045,
+      "partitions" : {
+        "0" : 730988,
+        "1" : 743051,
+        "2" : 887006
+      },
+      "members" : 3,
+      "at_us" : 1795786933693111
+    }, {
+      "total" : 2360343,
+      "partitions" : {
+        "0" : 730754,
+        "1" : 742819,
+        "2" : 886770
+      },
+      "members" : 3,
+      "at_us" : 1795786936665462
+    }, {
+      "total" : 2357147,
+      "partitions" : {
+        "0" : 729690,
+        "1" : 741751,
+        "2" : 885706
+      },
+      "members" : 3,
+      "at_us" : 1795786949411552
+    }, {
+      "total" : 2353917,
+      "partitions" : {
+        "0" : 728612,
+        "1" : 740669,
+        "2" : 884636
+      },
+      "members" : 3,
+      "at_us" : 1795786962040651
+    }, {
+      "total" : 2350619,
+      "partitions" : {
+        "0" : 727509,
+        "1" : 739576,
+        "2" : 883534
+      },
+      "members" : 3,
+      "at_us" : 1795786974735787
+    }, {
+      "total" : 2347246,
+      "partitions" : {
+        "0" : 726391,
+        "1" : 738442,
+        "2" : 882413
+      },
+      "members" : 3,
+      "at_us" : 1795786987549350
+    }, {
+      "total" : 2343960,
+      "partitions" : {
+        "0" : 725301,
+        "1" : 737352,
+        "2" : 881307
+      },
+      "members" : 3,
+      "at_us" : 1795787000344986
+    }, {
+      "total" : 2340556,
+      "partitions" : {
+        "0" : 724166,
+        "1" : 736224,
+        "2" : 880166
+      },
+      "members" : 3,
+      "at_us" : 1795787013125663
+    }, {
+      "total" : 2337305,
+      "partitions" : {
+        "0" : 723080,
+        "1" : 735150,
+        "2" : 879075
+      },
+      "members" : 3,
+      "at_us" : 1795787025628049
+    }, {
+      "total" : 2334024,
+      "partitions" : {
+        "0" : 721984,
+        "1" : 734054,
+        "2" : 877986
+      },
+      "members" : 3,
+      "at_us" : 1795787038187819
+    }, {
+      "total" : 2330644,
+      "partitions" : {
+        "0" : 720848,
+        "1" : 732942,
+        "2" : 876854
+      },
+      "members" : 3,
+      "at_us" : 1795787050807782
+    }, {
+      "total" : 2327355,
+      "partitions" : {
+        "0" : 719751,
+        "1" : 731851,
+        "2" : 875753
+      },
+      "members" : 3,
+      "at_us" : 1795787063456158
+    }, {
+      "total" : 2323952,
+      "partitions" : {
+        "0" : 718617,
+        "1" : 730716,
+        "2" : 874619
+      },
+      "members" : 3,
+      "at_us" : 1795787076044900
+    }, {
+      "total" : 2320365,
+      "partitions" : {
+        "0" : 717419,
+        "1" : 729523,
+        "2" : 873423
+      },
+      "members" : 3,
+      "at_us" : 1795787088924754
+    }, {
+      "total" : 2316965,
+      "partitions" : {
+        "0" : 716287,
+        "1" : 728392,
+        "2" : 872286
+      },
+      "members" : 3,
+      "at_us" : 1795787101545476
+    }, {
+      "total" : 2313749,
+      "partitions" : {
+        "0" : 715214,
+        "1" : 727319,
+        "2" : 871216
+      },
+      "members" : 3,
+      "at_us" : 1795787114185037
+    }, {
+      "total" : 2310432,
+      "partitions" : {
+        "0" : 714099,
+        "1" : 726215,
+        "2" : 870118
+      },
+      "members" : 3,
+      "at_us" : 1795787126836316
+    }, {
+      "total" : 2307170,
+      "partitions" : {
+        "0" : 713004,
+        "1" : 725131,
+        "2" : 869035
+      },
+      "members" : 3,
+      "at_us" : 1795787139592366
+    }, {
+      "total" : 2303797,
+      "partitions" : {
+        "0" : 711874,
+        "1" : 724010,
+        "2" : 867913
+      },
+      "members" : 3,
+      "at_us" : 1795787152305065
+    }, {
+      "total" : 2300403,
+      "partitions" : {
+        "0" : 710741,
+        "1" : 722885,
+        "2" : 866777
+      },
+      "members" : 3,
+      "at_us" : 1795787164986654
+    }, {
+      "total" : 2296858,
+      "partitions" : {
+        "0" : 709561,
+        "1" : 721699,
+        "2" : 865598
+      },
+      "members" : 3,
+      "at_us" : 1795787177853307
+    }, {
+      "total" : 2293372,
+      "partitions" : {
+        "0" : 708400,
+        "1" : 720537,
+        "2" : 864435
+      },
+      "members" : 3,
+      "at_us" : 1795787190568906
+    }, {
+      "total" : 2289862,
+      "partitions" : {
+        "0" : 707232,
+        "1" : 719361,
+        "2" : 863269
+      },
+      "members" : 3,
+      "at_us" : 1795787203145324
+    }, {
+      "total" : 2286514,
+      "partitions" : {
+        "0" : 706125,
+        "1" : 718242,
+        "2" : 862147
+      },
+      "members" : 3,
+      "at_us" : 1795787215792330
+    }, {
+      "total" : 2283078,
+      "partitions" : {
+        "0" : 704976,
+        "1" : 717099,
+        "2" : 861003
+      },
+      "members" : 3,
+      "at_us" : 1795787228584127
+    }, {
+      "total" : 2279522,
+      "partitions" : {
+        "0" : 703791,
+        "1" : 715915,
+        "2" : 859816
+      },
+      "members" : 3,
+      "at_us" : 1795787241273345
+    }, {
+      "total" : 2275990,
+      "partitions" : {
+        "0" : 702615,
+        "1" : 714735,
+        "2" : 858640
+      },
+      "members" : 3,
+      "at_us" : 1795787254092212
+    }, {
+      "total" : 2272426,
+      "partitions" : {
+        "0" : 701425,
+        "1" : 713549,
+        "2" : 857452
+      },
+      "members" : 3,
+      "at_us" : 1795787266936717
+    }, {
+      "total" : 2269020,
+      "partitions" : {
+        "0" : 700292,
+        "1" : 712415,
+        "2" : 856313
+      },
+      "members" : 3,
+      "at_us" : 1795787279797300
+    }, {
+      "total" : 2265600,
+      "partitions" : {
+        "0" : 699154,
+        "1" : 711269,
+        "2" : 855177
+      },
+      "members" : 3,
+      "at_us" : 1795787292683685
+    }, {
+      "total" : 2262291,
+      "partitions" : {
+        "0" : 698055,
+        "1" : 710159,
+        "2" : 854077
+      },
+      "members" : 3,
+      "at_us" : 1795787305326179
+    }, {
+      "total" : 2258909,
+      "partitions" : {
+        "0" : 696927,
+        "1" : 709030,
+        "2" : 852952
+      },
+      "members" : 3,
+      "at_us" : 1795787317963956
+    }, {
+      "total" : 2255537,
+      "partitions" : {
+        "0" : 695802,
+        "1" : 707901,
+        "2" : 851834
+      },
+      "members" : 3,
+      "at_us" : 1795787330528904
+    }, {
+      "total" : 2252097,
+      "partitions" : {
+        "0" : 694654,
+        "1" : 706753,
+        "2" : 850690
+      },
+      "members" : 3,
+      "at_us" : 1795787343444961
+    }, {
+      "total" : 2248817,
+      "partitions" : {
+        "0" : 693559,
+        "1" : 705664,
+        "2" : 849594
+      },
+      "members" : 3,
+      "at_us" : 1795787356131723
+    }, {
+      "total" : 2245238,
+      "partitions" : {
+        "0" : 692359,
+        "1" : 704472,
+        "2" : 848407
+      },
+      "members" : 3,
+      "at_us" : 1795787368773016
+    }, {
+      "total" : 2241720,
+      "partitions" : {
+        "0" : 691189,
+        "1" : 703298,
+        "2" : 847233
+      },
+      "members" : 3,
+      "at_us" : 1795787381262437
+    }, {
+      "total" : 2238209,
+      "partitions" : {
+        "0" : 690018,
+        "1" : 702130,
+        "2" : 846061
+      },
+      "members" : 3,
+      "at_us" : 1795787394048622
+    }, {
+      "total" : 2235038,
+      "partitions" : {
+        "0" : 688964,
+        "1" : 701077,
+        "2" : 844997
+      },
+      "members" : 3,
+      "at_us" : 1795787406685447
+    }, {
+      "total" : 2231635,
+      "partitions" : {
+        "0" : 687830,
+        "1" : 699945,
+        "2" : 843860
+      },
+      "members" : 3,
+      "at_us" : 1795787419587435
+    }, {
+      "total" : 2228087,
+      "partitions" : {
+        "0" : 686650,
+        "1" : 698755,
+        "2" : 842682
+      },
+      "members" : 3,
+      "at_us" : 1795787432357810
+    }, {
+      "total" : 2224459,
+      "partitions" : {
+        "0" : 685450,
+        "1" : 697539,
+        "2" : 841470
+      },
+      "members" : 3,
+      "at_us" : 1795787445086927
+    }, {
+      "total" : 2221024,
+      "partitions" : {
+        "0" : 684305,
+        "1" : 696398,
+        "2" : 840321
+      },
+      "members" : 3,
+      "at_us" : 1795787457978637
+    }, {
+      "total" : 2217679,
+      "partitions" : {
+        "0" : 683198,
+        "1" : 695273,
+        "2" : 839208
+      },
+      "members" : 3,
+      "at_us" : 1795787470942447
+    }, {
+      "total" : 2214181,
+      "partitions" : {
+        "0" : 682022,
+        "1" : 694113,
+        "2" : 838046
+      },
+      "members" : 3,
+      "at_us" : 1795787483837536
+    }, {
+      "total" : 2210825,
+      "partitions" : {
+        "0" : 680908,
+        "1" : 692990,
+        "2" : 836927
+      },
+      "members" : 3,
+      "at_us" : 1795787496369064
+    }, {
+      "total" : 2207280,
+      "partitions" : {
+        "0" : 679725,
+        "1" : 691811,
+        "2" : 835744
+      },
+      "members" : 3,
+      "at_us" : 1795787509064445
+    }, {
+      "total" : 2203901,
+      "partitions" : {
+        "0" : 678601,
+        "1" : 690683,
+        "2" : 834617
+      },
+      "members" : 3,
+      "at_us" : 1795787521682263
+    } ],
+    "export_at_us" : 1795787533270817,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "payload_bytes" : 1024,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 60,
+      "rate" : 10000.0,
+      "seconds" : 180,
+      "keys" : 600,
+      "topic" : "bench.messages.v1",
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:52915",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 2400000,
+    "acked" : 2400000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 10000.0,
+      "messages" : 1800000,
+      "window_start_us" : 1795786751460294,
+      "window_end_us" : 1795786931460294,
+      "window_seconds" : 180,
+      "sent_in_window" : 1800000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 10000.0,
+      "behind_schedule_us" : {
+        "max" : 26479,
+        "p50" : 65,
+        "p99" : 2245,
+        "count" : 1800000
+      }
+    },
+    "finished_us" : 1795786931469093,
+    "finished_monotonic_ns" : 15389240372706233
+  },
+  "window" : {
+    "start_us" : 1795786751460294,
+    "end_us" : 1795786931460294,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 2400000,
+    "requested_measure" : 1800000,
+    "acked" : 2400000,
+    "ack_failed" : 0,
+    "received" : 200400,
+    "attempts" : 200400,
+    "failed_attempts" : 0,
+    "completed" : 199311,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 10000.0,
+    "acked_per_s" : 9999.972222222223,
+    "received_per_s" : 172.55,
+    "completed_per_s" : 172.55,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 9827.422222222222
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 1800000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 2783,
+      "p95" : 24255,
+      "p99" : 259199,
+      "p999" : 444159,
+      "mean" : 11152.452293333334,
+      "max" : 558591,
+      "curve" : [ [ 0.0, 234 ], [ 10.0, 1191 ], [ 25.0, 1777 ], [ 50.0, 2783 ], [ 75.0, 4971 ], [ 90.0, 10407 ], [ 95.0, 24255 ], [ 99.0, 259199 ], [ 99.5, 320767 ], [ 99.9, 444159 ], [ 99.99, 545279 ], [ 100.0, 558591 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "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",
+        "highest" : 3600000000
+      }
+    },
+    "broker" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "processing" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_all" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 200400
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 2200689,
+    "lost_sample" : [ "07c2a441-c69e-41c2-ba0d-e883e61d95b4", "6b91c8cd-e427-4059-b6d2-66e651d8521c", "e2f54f8a-b5ee-40bf-ae57-ef05b997af2c", "7d869af2-8cde-49ca-9e29-b63378347f38", "676d4134-004a-402c-b1e6-f03514968d83", "0612c008-6751-4900-b4a9-ecd913edf390", "cd3372ab-d10a-4c1c-8537-367d18452eaf", "7e60d684-a683-4982-8426-bd7fccfab9f6", "f3a2922b-d72a-4163-bf04-fb1037a21360", "c578a8c2-dfbf-4860-8cd1-b845e7f4c304", "40077a2d-645a-4e69-8b3d-100d463e3dca", "1ac4f2e2-761c-4d9e-bb60-e7b3c6ad227e", "d31a6825-8a5a-4ac4-beff-882ef0107f20", "e25913bf-db54-48fe-9b8d-3e52ce62dd99", "fb3830e3-c25d-4ed2-be3f-91c4897e99b0", "b73744e9-4d2b-4a72-a659-8d46d5dd6176", "f7fcdcb9-1865-4199-b00c-c3f23f35d2c1", "d85ae616-be64-45c0-9a97-ce57cd3f2f43", "646afe1f-acbe-4bbb-af06-60b0ac888dac", "e211bde8-ebc1-4a3b-b969-3c0e176e35ea" ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795786691460294,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 6,
+    "measure_to_bucket" : 23,
+    "requested" : [ 100000, 100000, 99973, 100027, 100000, 100000, 100000, 99992, 100008, 99994, 100004, 100002, 100000, 100000, 100000, 100000, 100000, 100000, 99996, 100004, 100000, 100000, 100000, 100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "acked" : [ 99660, 100262, 100051, 99969, 100035, 99963, 99905, 100123, 99991, 100012, 99967, 99983, 100006, 100052, 99998, 99994, 99021, 100958, 100030, 100002, 99980, 99892, 100071, 100010, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "received" : [ 591, 1147, 1488, 1001, 1595, 1689, 1486, 1660, 1766, 1907, 1443, 1811, 1923, 1362, 1900, 1954, 1578, 1858, 1967, 1959, 1226, 1890, 1961, 1408, 2434, 2439, 2603, 2697, 2583, 2520, 2589, 2746, 2610, 2568, 2658, 2614, 2689, 2671, 2713, 2764, 2658, 2619, 2611, 2502, 2575, 2666, 2766, 2646, 2752, 2734, 2845, 2689, 2653, 2658, 2798, 2835, 2759, 2699, 2636, 2651, 2660, 2618, 2667, 2687, 2696, 2532, 2773, 2785, 2816, 2819, 2620, 2412, 2705, 2782, 2927, 2666, 2610, 2583, 2764, 2659, 2775, 2706, 2672, 2643, 1603 ],
+    "completed" : [ 591, 1145, 1490, 1001, 1595, 1689, 1486, 1658, 1767, 1907, 1443, 1811, 1924, 1360, 1901, 1955, 1578, 1857, 1968, 1957, 1228, 1890, 1961, 1408, 2432, 2440, 2603, 2698, 2583, 2519, 2590, 2745, 2608, 2571, 2656, 2616, 2689, 2671, 2713, 2764, 2657, 2620, 2609, 2504, 2574, 2667, 2763, 2649, 2751, 2735, 2845, 2688, 2653, 2659, 2797, 2836, 2759, 2699, 2636, 2650, 2660, 2618, 2666, 2688, 2696, 2533, 2772, 2786, 2814, 2821, 2620, 2411, 2706, 2782, 2926, 2666, 2611, 2583, 2764, 2657, 2776, 2707, 2672, 2642, 515 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ "e2e_no_retry 표본 0건 < 1000 — p99 판정에 쓰지 않는다(결정 231)" ],
+  "files" : {
+    "published.csv" : "5e954ad205fea29512e0c2e40d1ad83708932fc309068228f427b5ff8e5ea583",
+    "attempts-1795786678029-1720233.csv" : "1a3de5da414af2cec463128b921f3bb5dccae574199ad724b0125f772c249ff3",
+    "bench_message.tsv" : "bf88cafca10ae8cc7b371fb9e4c67eafd017ea387b50e32cdc6911eb5d1d865e",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "509bf711b16518f466afa1d0389b9ceed0af277915b8b134cde49aac0712cb64",
+    "run.json" : "f525ba2a518184b7008f8bbdedc3bae45832fac97242d858c4888fdbc29ab115"
+  }
+}

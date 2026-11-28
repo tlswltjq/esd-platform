@@ -1,0 +1,1028 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-x-rate2000",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 2000.0,
+      "warmup_seconds" : 60,
+      "seconds" : 180,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "cded999c7bbe836ddff69b8f5fe88a898807c66e",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-27T13:07:21.628927+00:00",
+    "load_started_us" : 1795784879236419,
+    "load_ended_us" : 1795785119978143,
+    "observation_deadline_us" : 1795785719978143,
+    "settled_us" : null,
+    "timed_out" : true,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 1.151,
+      "jvm_gc_pause_seconds_count" : 315.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 4.232E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 186,
+          "cpu_percent_mean" : 47.61,
+          "cpu_percent_max" : 192.11,
+          "memory_mib_mean" : 896.2,
+          "memory_mib_max" : 991.8
+        },
+        "mysql" : {
+          "samples" : 186,
+          "cpu_percent_mean" : 68.97,
+          "cpu_percent_max" : 98.18,
+          "memory_mib_mean" : 448.6,
+          "memory_mib_max" : 497.0
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 589104,
+          "growth_kib" : 588368
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 428180,
+          "growth_kib" : 221804
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 72,
+        "cpu_seconds" : 416.36,
+        "cpu_percent_mean" : 50.3,
+        "rss_mib_max" : 615.2
+      }
+    },
+    "lag" : [ {
+      "total" : 3351,
+      "partitions" : {
+        "0" : 1027,
+        "1" : 1052,
+        "2" : 1272
+      },
+      "members" : 3,
+      "at_us" : 1795784882083483
+    }, {
+      "total" : 25894,
+      "partitions" : {
+        "0" : 8002,
+        "1" : 8127,
+        "2" : 9765
+      },
+      "members" : 3,
+      "at_us" : 1795784893800040
+    }, {
+      "total" : 42177,
+      "partitions" : {
+        "0" : 13032,
+        "1" : 13233,
+        "2" : 15912
+      },
+      "members" : 3,
+      "at_us" : 1795784902466518
+    }, {
+      "total" : 61181,
+      "partitions" : {
+        "0" : 18886,
+        "1" : 19188,
+        "2" : 23107
+      },
+      "members" : 3,
+      "at_us" : 1795784912807681
+    }, {
+      "total" : 79280,
+      "partitions" : {
+        "0" : 24460,
+        "1" : 24862,
+        "2" : 29958
+      },
+      "members" : 3,
+      "at_us" : 1795784922757245
+    }, {
+      "total" : 97104,
+      "partitions" : {
+        "0" : 29946,
+        "1" : 30440,
+        "2" : 36718
+      },
+      "members" : 3,
+      "at_us" : 1795784932534546
+    }, {
+      "total" : 115513,
+      "partitions" : {
+        "0" : 35606,
+        "1" : 36192,
+        "2" : 43715
+      },
+      "members" : 3,
+      "at_us" : 1795784942806743
+    }, {
+      "total" : 133497,
+      "partitions" : {
+        "0" : 41134,
+        "1" : 41812,
+        "2" : 50551
+      },
+      "members" : 3,
+      "at_us" : 1795784952782391
+    }, {
+      "total" : 150711,
+      "partitions" : {
+        "0" : 46424,
+        "1" : 47192,
+        "2" : 57095
+      },
+      "members" : 3,
+      "at_us" : 1795784962448037
+    }, {
+      "total" : 169104,
+      "partitions" : {
+        "0" : 52079,
+        "1" : 52947,
+        "2" : 64078
+      },
+      "members" : 3,
+      "at_us" : 1795784972707407
+    }, {
+      "total" : 186917,
+      "partitions" : {
+        "0" : 57549,
+        "1" : 58530,
+        "2" : 70838
+      },
+      "members" : 3,
+      "at_us" : 1795784982681507
+    }, {
+      "total" : 205209,
+      "partitions" : {
+        "0" : 63166,
+        "1" : 64253,
+        "2" : 77790
+      },
+      "members" : 3,
+      "at_us" : 1795784992890931
+    }, {
+      "total" : 222550,
+      "partitions" : {
+        "0" : 68492,
+        "1" : 69667,
+        "2" : 84391
+      },
+      "members" : 3,
+      "at_us" : 1795785002635881
+    }, {
+      "total" : 241267,
+      "partitions" : {
+        "0" : 74262,
+        "1" : 75524,
+        "2" : 91481
+      },
+      "members" : 3,
+      "at_us" : 1795785012888592
+    }, {
+      "total" : 258178,
+      "partitions" : {
+        "0" : 79459,
+        "1" : 80818,
+        "2" : 97901
+      },
+      "members" : 3,
+      "at_us" : 1795785022326853
+    }, {
+      "total" : 276565,
+      "partitions" : {
+        "0" : 85113,
+        "1" : 86567,
+        "2" : 104885
+      },
+      "members" : 3,
+      "at_us" : 1795785032601785
+    }, {
+      "total" : 295510,
+      "partitions" : {
+        "0" : 90945,
+        "1" : 92499,
+        "2" : 112066
+      },
+      "members" : 3,
+      "at_us" : 1795785043101774
+    }, {
+      "total" : 313301,
+      "partitions" : {
+        "0" : 96400,
+        "1" : 98070,
+        "2" : 118831
+      },
+      "members" : 3,
+      "at_us" : 1795785053046062
+    }, {
+      "total" : 331460,
+      "partitions" : {
+        "0" : 101995,
+        "1" : 103746,
+        "2" : 125719
+      },
+      "members" : 3,
+      "at_us" : 1795785063089264
+    }, {
+      "total" : 348873,
+      "partitions" : {
+        "0" : 107355,
+        "1" : 109195,
+        "2" : 132323
+      },
+      "members" : 3,
+      "at_us" : 1795785072750115
+    }, {
+      "total" : 366650,
+      "partitions" : {
+        "0" : 112809,
+        "1" : 114753,
+        "2" : 139088
+      },
+      "members" : 3,
+      "at_us" : 1795785082689812
+    }, {
+      "total" : 384263,
+      "partitions" : {
+        "0" : 118230,
+        "1" : 120257,
+        "2" : 145776
+      },
+      "members" : 3,
+      "at_us" : 1795785092525461
+    }, {
+      "total" : 402572,
+      "partitions" : {
+        "0" : 123860,
+        "1" : 125983,
+        "2" : 152729
+      },
+      "members" : 3,
+      "at_us" : 1795785102704001
+    }, {
+      "total" : 421164,
+      "partitions" : {
+        "0" : 129580,
+        "1" : 131794,
+        "2" : 159790
+      },
+      "members" : 3,
+      "at_us" : 1795785113126291
+    }, {
+      "total" : 433756,
+      "partitions" : {
+        "0" : 133446,
+        "1" : 135727,
+        "2" : 164583
+      },
+      "members" : 3,
+      "at_us" : 1795785122157568
+    }, {
+      "total" : 433052,
+      "partitions" : {
+        "0" : 133209,
+        "1" : 135493,
+        "2" : 164350
+      },
+      "members" : 3,
+      "at_us" : 1795785125163761
+    }, {
+      "total" : 429938,
+      "partitions" : {
+        "0" : 132170,
+        "1" : 134462,
+        "2" : 163306
+      },
+      "members" : 3,
+      "at_us" : 1795785137816931
+    }, {
+      "total" : 426690,
+      "partitions" : {
+        "0" : 131090,
+        "1" : 133381,
+        "2" : 162219
+      },
+      "members" : 3,
+      "at_us" : 1795785150537552
+    }, {
+      "total" : 423258,
+      "partitions" : {
+        "0" : 129947,
+        "1" : 132237,
+        "2" : 161074
+      },
+      "members" : 3,
+      "at_us" : 1795785163195489
+    }, {
+      "total" : 419876,
+      "partitions" : {
+        "0" : 128816,
+        "1" : 131116,
+        "2" : 159944
+      },
+      "members" : 3,
+      "at_us" : 1795785176060142
+    }, {
+      "total" : 416623,
+      "partitions" : {
+        "0" : 127729,
+        "1" : 130024,
+        "2" : 158870
+      },
+      "members" : 3,
+      "at_us" : 1795785188805822
+    }, {
+      "total" : 413425,
+      "partitions" : {
+        "0" : 126664,
+        "1" : 128962,
+        "2" : 157799
+      },
+      "members" : 3,
+      "at_us" : 1795785201513461
+    }, {
+      "total" : 410129,
+      "partitions" : {
+        "0" : 125563,
+        "1" : 127865,
+        "2" : 156701
+      },
+      "members" : 3,
+      "at_us" : 1795785214189847
+    }, {
+      "total" : 406695,
+      "partitions" : {
+        "0" : 124417,
+        "1" : 126718,
+        "2" : 155560
+      },
+      "members" : 3,
+      "at_us" : 1795785226844939
+    }, {
+      "total" : 403290,
+      "partitions" : {
+        "0" : 123274,
+        "1" : 125592,
+        "2" : 154424
+      },
+      "members" : 3,
+      "at_us" : 1795785239432144
+    }, {
+      "total" : 399886,
+      "partitions" : {
+        "0" : 122133,
+        "1" : 124461,
+        "2" : 153292
+      },
+      "members" : 3,
+      "at_us" : 1795785252264392
+    }, {
+      "total" : 396510,
+      "partitions" : {
+        "0" : 121006,
+        "1" : 123335,
+        "2" : 152169
+      },
+      "members" : 3,
+      "at_us" : 1795785264817205
+    }, {
+      "total" : 393233,
+      "partitions" : {
+        "0" : 119914,
+        "1" : 122238,
+        "2" : 151081
+      },
+      "members" : 3,
+      "at_us" : 1795785277537768
+    }, {
+      "total" : 389818,
+      "partitions" : {
+        "0" : 118771,
+        "1" : 121098,
+        "2" : 149949
+      },
+      "members" : 3,
+      "at_us" : 1795785290314903
+    }, {
+      "total" : 386582,
+      "partitions" : {
+        "0" : 117689,
+        "1" : 120025,
+        "2" : 148868
+      },
+      "members" : 3,
+      "at_us" : 1795785302899071
+    }, {
+      "total" : 383261,
+      "partitions" : {
+        "0" : 116588,
+        "1" : 118913,
+        "2" : 147760
+      },
+      "members" : 3,
+      "at_us" : 1795785315547747
+    }, {
+      "total" : 379844,
+      "partitions" : {
+        "0" : 115453,
+        "1" : 117780,
+        "2" : 146611
+      },
+      "members" : 3,
+      "at_us" : 1795785328302798
+    }, {
+      "total" : 376502,
+      "partitions" : {
+        "0" : 114343,
+        "1" : 116669,
+        "2" : 145490
+      },
+      "members" : 3,
+      "at_us" : 1795785340933733
+    }, {
+      "total" : 373159,
+      "partitions" : {
+        "0" : 113226,
+        "1" : 115565,
+        "2" : 144368
+      },
+      "members" : 3,
+      "at_us" : 1795785353594991
+    }, {
+      "total" : 369732,
+      "partitions" : {
+        "0" : 112085,
+        "1" : 114421,
+        "2" : 143226
+      },
+      "members" : 3,
+      "at_us" : 1795785366300633
+    }, {
+      "total" : 366419,
+      "partitions" : {
+        "0" : 110980,
+        "1" : 113322,
+        "2" : 142117
+      },
+      "members" : 3,
+      "at_us" : 1795785378916648
+    }, {
+      "total" : 363026,
+      "partitions" : {
+        "0" : 109847,
+        "1" : 112187,
+        "2" : 140992
+      },
+      "members" : 3,
+      "at_us" : 1795785391790926
+    }, {
+      "total" : 359581,
+      "partitions" : {
+        "0" : 108702,
+        "1" : 111033,
+        "2" : 139846
+      },
+      "members" : 3,
+      "at_us" : 1795785404441674
+    }, {
+      "total" : 356189,
+      "partitions" : {
+        "0" : 107570,
+        "1" : 109907,
+        "2" : 138712
+      },
+      "members" : 3,
+      "at_us" : 1795785417092148
+    }, {
+      "total" : 352813,
+      "partitions" : {
+        "0" : 106447,
+        "1" : 108783,
+        "2" : 137583
+      },
+      "members" : 3,
+      "at_us" : 1795785429856541
+    }, {
+      "total" : 349464,
+      "partitions" : {
+        "0" : 105329,
+        "1" : 107671,
+        "2" : 136464
+      },
+      "members" : 3,
+      "at_us" : 1795785442608408
+    }, {
+      "total" : 346226,
+      "partitions" : {
+        "0" : 104246,
+        "1" : 106589,
+        "2" : 135391
+      },
+      "members" : 3,
+      "at_us" : 1795785455254632
+    }, {
+      "total" : 342830,
+      "partitions" : {
+        "0" : 103119,
+        "1" : 105454,
+        "2" : 134257
+      },
+      "members" : 3,
+      "at_us" : 1795785467907447
+    }, {
+      "total" : 339446,
+      "partitions" : {
+        "0" : 101985,
+        "1" : 104332,
+        "2" : 133129
+      },
+      "members" : 3,
+      "at_us" : 1795785480525472
+    }, {
+      "total" : 336011,
+      "partitions" : {
+        "0" : 100831,
+        "1" : 103187,
+        "2" : 131993
+      },
+      "members" : 3,
+      "at_us" : 1795785493381490
+    }, {
+      "total" : 332752,
+      "partitions" : {
+        "0" : 99747,
+        "1" : 102105,
+        "2" : 130900
+      },
+      "members" : 3,
+      "at_us" : 1795785505990164
+    }, {
+      "total" : 329496,
+      "partitions" : {
+        "0" : 98666,
+        "1" : 101013,
+        "2" : 129817
+      },
+      "members" : 3,
+      "at_us" : 1795785518599662
+    }, {
+      "total" : 326093,
+      "partitions" : {
+        "0" : 97530,
+        "1" : 99880,
+        "2" : 128683
+      },
+      "members" : 3,
+      "at_us" : 1795785531429312
+    }, {
+      "total" : 322833,
+      "partitions" : {
+        "0" : 96438,
+        "1" : 98797,
+        "2" : 127598
+      },
+      "members" : 3,
+      "at_us" : 1795785544118117
+    }, {
+      "total" : 319450,
+      "partitions" : {
+        "0" : 95314,
+        "1" : 97666,
+        "2" : 126470
+      },
+      "members" : 3,
+      "at_us" : 1795785556989244
+    }, {
+      "total" : 316128,
+      "partitions" : {
+        "0" : 94204,
+        "1" : 96559,
+        "2" : 125365
+      },
+      "members" : 3,
+      "at_us" : 1795785569670471
+    }, {
+      "total" : 312672,
+      "partitions" : {
+        "0" : 93048,
+        "1" : 95413,
+        "2" : 124211
+      },
+      "members" : 3,
+      "at_us" : 1795785582471292
+    }, {
+      "total" : 309281,
+      "partitions" : {
+        "0" : 91924,
+        "1" : 94277,
+        "2" : 123080
+      },
+      "members" : 3,
+      "at_us" : 1795785594977164
+    }, {
+      "total" : 305886,
+      "partitions" : {
+        "0" : 90795,
+        "1" : 93154,
+        "2" : 121937
+      },
+      "members" : 3,
+      "at_us" : 1795785607743147
+    }, {
+      "total" : 302567,
+      "partitions" : {
+        "0" : 89687,
+        "1" : 92049,
+        "2" : 120831
+      },
+      "members" : 3,
+      "at_us" : 1795785620471478
+    }, {
+      "total" : 299134,
+      "partitions" : {
+        "0" : 88540,
+        "1" : 90905,
+        "2" : 119689
+      },
+      "members" : 3,
+      "at_us" : 1795785633322221
+    }, {
+      "total" : 295716,
+      "partitions" : {
+        "0" : 87397,
+        "1" : 89769,
+        "2" : 118550
+      },
+      "members" : 3,
+      "at_us" : 1795785645996617
+    }, {
+      "total" : 292473,
+      "partitions" : {
+        "0" : 86314,
+        "1" : 88686,
+        "2" : 117473
+      },
+      "members" : 3,
+      "at_us" : 1795785658740878
+    }, {
+      "total" : 289217,
+      "partitions" : {
+        "0" : 85226,
+        "1" : 87601,
+        "2" : 116390
+      },
+      "members" : 3,
+      "at_us" : 1795785671297619
+    }, {
+      "total" : 285751,
+      "partitions" : {
+        "0" : 84070,
+        "1" : 86445,
+        "2" : 115236
+      },
+      "members" : 3,
+      "at_us" : 1795785684252642
+    }, {
+      "total" : 282503,
+      "partitions" : {
+        "0" : 82988,
+        "1" : 85358,
+        "2" : 114157
+      },
+      "members" : 3,
+      "at_us" : 1795785696963512
+    }, {
+      "total" : 278993,
+      "partitions" : {
+        "0" : 81816,
+        "1" : 84190,
+        "2" : 112987
+      },
+      "members" : 3,
+      "at_us" : 1795785709867922
+    } ],
+    "export_at_us" : 1795785721034027,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "keys" : 600,
+      "topic" : "bench.messages.v1",
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230,
+      "payload_bytes" : 1024,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 60,
+      "rate" : 2000.0,
+      "seconds" : 180
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:48481",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 480000,
+    "acked" : 480000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 2000.0,
+      "messages" : 360000,
+      "window_start_us" : 1795784939971004,
+      "window_end_us" : 1795785119971004,
+      "window_seconds" : 180,
+      "sent_in_window" : 360000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 2000.0,
+      "behind_schedule_us" : {
+        "p99" : 977,
+        "count" : 360000,
+        "max" : 13071,
+        "p50" : 72
+      }
+    },
+    "finished_us" : 1795785119978143,
+    "finished_monotonic_ns" : 15387428883821382
+  },
+  "window" : {
+    "start_us" : 1795784939971004,
+    "end_us" : 1795785119971004,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 480000,
+    "requested_measure" : 360000,
+    "acked" : 480000,
+    "ack_failed" : 0,
+    "received" : 205158,
+    "attempts" : 205158,
+    "failed_attempts" : 0,
+    "completed" : 204240,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 2000.0,
+    "acked_per_s" : 1999.9888888888888,
+    "received_per_s" : 205.19444444444446,
+    "completed_per_s" : 205.2,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 1794.7888888888888
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 360000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 1704,
+      "p95" : 8943,
+      "p99" : 14991,
+      "p999" : 27743,
+      "mean" : 2813.066947222222,
+      "max" : 65375,
+      "curve" : [ [ 0.0, 210 ], [ 10.0, 525 ], [ 25.0, 930 ], [ 50.0, 1704 ], [ 75.0, 3473 ], [ 90.0, 6447 ], [ 95.0, 8943 ], [ 99.0, 14991 ], [ 99.5, 18047 ], [ 99.9, 27743 ], [ 99.99, 52447 ], [ 100.0, 65375 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "broker" : {
+      "count" : 85158,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 602406911,
+      "p95" : 727711743,
+      "p99" : 746061823,
+      "p999" : 753926143,
+      "mean" : 5.99041016039644E8,
+      "max" : 754450431,
+      "curve" : [ [ 0.0, 431226880 ], [ 10.0, 475529215 ], [ 25.0, 531628031 ], [ 50.0, 602406911 ], [ 75.0, 671612927 ], [ 90.0, 714080255 ], [ 95.0, 727711743 ], [ 99.0, 746061823 ], [ 99.5, 750256127 ], [ 99.9, 753926143 ], [ 99.99, 754450431 ], [ 100.0, 754450431 ] ],
+      "histogram" : {
+        "data" : "HISTFAAAA0l4nC1UQWsTQRTujP4Dr549iIcipZRcFH9BKaUsJSxhWcIwDMMwDMMSPIiIiEgRLSI9lFJCWEIoIYSlLiGEEEIJQUIpJRaRnsSjJ89+89K8zJuXN9/73nvzdvPwzecHa2v3/62tPvfudhbU9efm2rO/K8ePb3zj8frGRqVS2dyqPN+obG1tPl1/sv7o0YtoO0prQgiVuVfMaC915q3XiZP7SZrUXxrvnW3IVFSTmkqd005nDZ9Z67OXxhiXGW8zK43VWmWZ0Um8t7ObpkLVrdXeKq2NR4y1xjplrcy8c8oYJWWcRPuylmid+obzToDGWSWV9cLrukOE0ULWYyF3t/fTapToupA6EaIusHsLdPhaxDoUKetaxNvVKI4ikVRTI5RSGhTWKF3VWiZWI7vRUpma2t+LajvVvZpyNVQt0U/mFcpUqMA4bTLUql1DJmma1qI4ValU2mvtlUNm3Ig/ZB3WYjk7w95lfawWa8NuYj9lX9gRO2Qn7AN7i/0Q+2t2AP8hO0bMV6wVOugm8eTE1aKTIB3WQ3xgL+gknH9CdIj9COsA8oG9Y13e5SN+xW/5AvqCX/Mh9BDekg+gT/lH3oT+ylt8An8Pp9+xlliXsJaIKHDSAeoAqGOe8yOgBvCO+IzP+RS4EWQC7BSeczDnwI94H8ict7HPcLKSOXhXEQOc5JT9DIgcfJfATe7yf4fMqeYrVFnwT/wLsufIXGB1wT+lnIFtAStEXMLqwe7xE3QyxWqDu0s5F/wXEDeU44YiSnTdw/k5PDPqpwfWC/4H+JB1hb+Bv+Rj4IZU0wKn14jpwy4oY4he0N6F9xjIHOyBYwpc8K0wV1hjutUSPZ9DAvMSyFtwl4gLt9oD6pJ6mWNNeJhfD9K/6/cnZAAJk5zBvoU1htVGNxPS5/Q7ZB3CbqKnVRUX1PUc3jD3M2DDE1DSBKewQv4x3cYUTCPqJcyxAGeJ6At4Z9ChixZ8YdI53f4E1hARZ8QYKi3hK+Hp0IyH6GR4N/k+PB2aUJjkgp6vJd33HPjwfMxIQuwYHG3kKujepvR0zQlRoIMBTWIJ7p/QfUQU0F3+m92w9wyvqY23dxOZKoG/E7zc1mmB/yJl43h3T6aNnf//h+cq",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "processing" : {
+      "count" : 85158,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 9391,
+      "p95" : 13119,
+      "p99" : 16375,
+      "p999" : 23279,
+      "mean" : 9678.238450879542,
+      "max" : 78783,
+      "curve" : [ [ 0.0, 5304 ], [ 10.0, 7643 ], [ 25.0, 8399 ], [ 50.0, 9391 ], [ 75.0, 10551 ], [ 90.0, 11919 ], [ 95.0, 13119 ], [ 99.0, 16375 ], [ 99.5, 18095 ], [ 99.9, 23279 ], [ 99.99, 34655 ], [ 100.0, 78783 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 85158,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 602406911,
+      "p95" : 727711743,
+      "p99" : 746061823,
+      "p999" : 753926143,
+      "mean" : 5.990537680009395E8,
+      "max" : 754450431,
+      "curve" : [ [ 0.0, 431226880 ], [ 10.0, 475529215 ], [ 25.0, 531628031 ], [ 50.0, 602406911 ], [ 75.0, 671612927 ], [ 90.0, 714080255 ], [ 95.0, 727711743 ], [ 99.0, 746061823 ], [ 99.5, 750256127 ], [ 99.9, 753926143 ], [ 99.99, 754450431 ], [ 100.0, 754450431 ] ],
+      "histogram" : {
+        "data" : "HISTFAAAA0p4nC1Uz2sTQRTujP4HXj2LeBApIqWI/gdSSgkhLEsIy7IMwzAMw7DkICLiQUopVopIkVJCCCGEZSkhhlBCCKGUpYQSSi0ixVOPnjz7zdvmZWfnvfe97/2YSR5+2HuwsnL/30r5uXf3Zn653GutvP5bGn7+4KtPnr54vvZy/fna+qs1fF6srj559vjRq9qbatSIRSKdece0slKn1jRlwyVBmNTjpnGp1amIZBBGInZaa5OmqbPGubfKaIuNdTbRRkvlUqMaQW1jM65LGRsjnZVSaactkMo4ZTw7jFrLRAZRpSbCWMnYpc4ZoZvGaiUk4oxOrLbSqkjG9SSpbNSioFpXSSR1XYiGSIRCYmPKxeHrXBIrEWwE1VpYSepBrIWQComUwRooLUKrbOK0kko1ZHWrFm7VKg2pI5WmAjW5pkRmYa3QVmvUaKVrigZmE1bDWNaFVk5RTc6Ypjb7rMvarMP6kIwdY23DUtoO2Vf2jX1mR+wT+8j2sdth79k29H12AMQBMC1g+4RuUWSb9Bb0DnAd1gOrt/XA3YN45Bcw+7w72G2zXWLPec5P+JL/4Qt+wc/4JR9jHcM6wtrnLb6L55B/420+BTLnp7wgXIGIc7yv+TE8GT/i20B9B/oAlhEf8Akw53wG3im4ZsCeInKIfZf34M2A7EKOYZ3BNyXugiImYPC+HfBlqKMP1BI4j1nwOXjL/EtIBt8+5AtxeS0HfgaOKTGfE7vHFvD5vC3UMMfOZ8ipnwX6WPAr1Oh7K/O3wZKhjzMgxnesc35LiCW/wfsKq+91At8QGS6AvIBvBH2ByAXkjKZwgQr6sHxH5x3UVVoG4M8p6oy6mYJ/CaYWGIbwjmjCN5j7CHEZ1V4Qfkmsp9Az6jjDfoI+f/HfqHUE7Rrab5zrnLrv4nzmyNwC1uu+2gkyHIF3RFX4yU9gHdEpd6nzMaRAXDmrHPUNEVvqOW5FB9E5OE/IOqGTKaC14SvA1KGznNNd8AyebwDbGEw+TwZEF7tL7Ms8A1j81A/xlN1f0aksqbo5oc7pHnToVnUgA4qe0e0qaJZ+rmM68SvU9Ivu6AmeIey37Bq3X2prwo3NSEQCP02F/yVrlHDaKRsGlS0ZpZX/3Y3nKg==",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_all" : {
+      "count" : 84240,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 600834047,
+      "p95" : 725090303,
+      "p99" : 742916095,
+      "p999" : 749731839,
+      "mean" : 5.974959845986705E8,
+      "max" : 750780415,
+      "curve" : [ [ 0.0, 431226880 ], [ 10.0, 475004927 ], [ 25.0, 530841599 ], [ 50.0, 600834047 ], [ 75.0, 669515775 ], [ 90.0, 711458815 ], [ 95.0, 725090303 ], [ 99.0, 742916095 ], [ 99.5, 746586111 ], [ 99.9, 749731839 ], [ 99.99, 750780415 ], [ 100.0, 750780415 ] ],
+      "histogram" : {
+        "data" : "HISTFAAAA1B4nC2T34dkRxTHpyr5D5LHPOYhImLFWGOFkL9gjTHaulq72nVdpZRSrmtERKw8rLVidoxYa6zRWrvGaO1qndZaa1drbYw22pisWCsiD/sQ+RPyqerp6qpb55zv+Z4fVfXZ05ef7Ox8/GFn+/vo/iv8cvuys/Pdf1vFH7/L3S+/3t199O3ewz2WR3t7D7958NWDLz7/vvH4sB2naZYV9iehjVO6cK5QbZdGrbSZ/GBzl9siTVTUjFVic21sUQCxRf4je5ubwuZ5aozROi+0bUWNg/2kqbPUWuWgU9YZZ4zVptAmcwV0WtssU1F8+EQ12yZL8qM8t5k5Ms6hd4Z/yl5Z087SVpId7DfiVqOlklQZxHYGKofVWgd57lN0eZboNHrcPIyiRtJqImiltDbaGqWbWqumNS511mtjdfikER1EB7GybV3kCobiKNWOxJwyjlSNcRmquB0nrUaUZnFmVEGFmaVey/9UlKIreuJS9JkVsysukDvo34hX4kScinPxXDzleyxeiJ+ZZ+xfY3/FPAfbx6fEo4Onn37tMc7RXiJ1g65ilkF/jOUE6QW7Z+yeiV9EX17KubyRf8m1vJULuZEzuZITWcmRnMpSduWvsiPP5W+yB24qB7IGuQR7hdc1+DuQc1g68jmoMzxegxrLIegrsDW4GaMGOUez5S3RDMBfMCri+lHDe0X0JbyzgOrIE/kG7iqgNlg87prvGuQ1q896EJiO5SkeFftK+qpqGGpQNbg5rNfkscI2x9qlwppdSVVViLiRb+G6g23JusY2AnXJGGFfwVWFLBbyA9INuHcw3sn3sE3Jtk/FPh8/N+wrvsMgre4zXYbMzmDsgV8Hi890W9cWMwuZjOj3OHB4Th9pRr4+lyl4X8dVqOWGGra1DlmXocvvGBPGIlTyp/znvq89erlgdmCv2Y1CZ4ZEKgN3FXo6hX0SopRkOyT+BNySbsyovY/HCMmfwjTUUoaOd0B53RzvBfhZuDErvLuBdQnTBOsF6zjcFt+xcehaN8TfhDgrLMNwIwac+iDkeMu5vMW+Dqfo2RcBOQXleby/v2mrUKU/qTWIMRWNw0nchhv6r3gv/ua+W/8yeYY22t+PVawyBF44zzotTK7tp/8DD1Hi5w==",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 205158
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 275760,
+    "lost_sample" : [ "9869f360-dacc-4e2f-bc22-8e4480e1b361", "e7eeead8-cd3e-4b4b-9c67-041b813fe577", "0b0f9714-6126-4cad-b485-c9b8cc337f87", "b93c0ab3-3e97-45ea-849c-969087a622bd", "c6399ba7-73d1-4da5-a925-54553f650842", "aa105362-5a0f-439f-8f4c-b358b10af4b9", "41f65d8b-1cc3-443d-ac23-d610d1d0bbe4", "e6c1bb33-e015-4a6e-9b6b-70b0ee33615d", "6ce1f9c6-f67b-4050-8844-b2e90e4e3afd", "b50efb7a-3e10-4578-ac96-6fc86138d657", "505ad2e7-adb3-4fe3-8437-0bd62d33b9b0", "8e0124a3-a57b-423f-a9f4-651bdbae9d7f", "39b6fb6f-1071-491c-b0de-78f9fe92b84f", "aa769c53-caf6-4744-846b-0dbcfbf867f2", "ea3ba386-0365-4ca0-a56b-09688a97e7de", "af9cdffd-4953-473b-82d4-ddbf3fee7e43", "54b97413-53aa-4274-b223-0d3af8efbfd1", "27e4caf1-9eb8-41de-859a-d53bf99d9c35", "35e0a64b-8e43-4a3b-9e1e-733c1b811e1c", "39407f40-d5b5-454a-ab30-25e892921f59" ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795784879971004,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 6,
+    "measure_to_bucket" : 23,
+    "requested" : [ 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000, 19999, 20001, 20000, 20000, 20000, 20000, 20000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "acked" : [ 19985, 20006, 19986, 20018, 20004, 19996, 19991, 19996, 20007, 20009, 19995, 20003, 19992, 20002, 20003, 20002, 19982, 20020, 20002, 19984, 20011, 19987, 20004, 20008, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "received" : [ 599, 1180, 1550, 1746, 1811, 2068, 1900, 2179, 2095, 2110, 2150, 2148, 1741, 2100, 2101, 1963, 2046, 1983, 1970, 2086, 2068, 2082, 2056, 2157, 2347, 2470, 2572, 2774, 2657, 2544, 2507, 2570, 2577, 2657, 2715, 2705, 2713, 2659, 2517, 2662, 2683, 2660, 2567, 2612, 2646, 2674, 2729, 2649, 2628, 2552, 2720, 2738, 2654, 2673, 2597, 2723, 2523, 2621, 2657, 2674, 2728, 2656, 2504, 2571, 2660, 2646, 2594, 2580, 2593, 2799, 2668, 2685, 2603, 2618, 2749, 2689, 2565, 2535, 2617, 2687, 2595, 2592, 2690, 2786, 1233 ],
+    "completed" : [ 599, 1180, 1550, 1746, 1810, 2068, 1900, 2179, 2093, 2111, 2151, 2147, 1743, 2100, 2100, 1963, 2046, 1984, 1967, 2089, 2067, 2083, 2053, 2160, 2346, 2470, 2573, 2774, 2657, 2544, 2507, 2569, 2578, 2655, 2716, 2705, 2712, 2660, 2518, 2659, 2686, 2659, 2568, 2611, 2646, 2675, 2729, 2648, 2629, 2551, 2720, 2738, 2654, 2673, 2597, 2723, 2522, 2623, 2657, 2674, 2728, 2654, 2505, 2572, 2659, 2647, 2594, 2579, 2593, 2800, 2668, 2685, 2603, 2618, 2749, 2689, 2564, 2536, 2616, 2688, 2595, 2591, 2689, 2786, 317 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "dc8ee7a3e43463546c6c2b9d860767fb34fba278ff92d6cf86107991c8198167",
+    "attempts-1795784868303-1642209.csv" : "757bdab352e8bce648431e9e6c9e4a0e020fed5de54345fe20cc875cb37f8337",
+    "bench_message.tsv" : "d48ebd71de9d0543f44954b5dd9927bcabbe016b7887bf50216103cf35a1ed93",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "863e379f1a290387d9fcd061cbbc67b43d5e7288639d9c0f9952cb1c6a723b53",
+    "run.json" : "a1d31fa8e1c578993b1e9688afdab0e18ea436941612ec432624197a128c7696"
+  }
+}

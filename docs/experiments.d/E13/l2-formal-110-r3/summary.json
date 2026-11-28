@@ -1,0 +1,1478 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-formal-110-r3",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 110.0,
+      "warmup_seconds" : 300,
+      "seconds" : 900,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "832baea961f502215f8a02e1e37f97d5a2c934c5",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew/workspace"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T03:40:16.489279+00:00",
+    "load_started_us" : 1795837252914710,
+    "load_ended_us" : 1795838453635018,
+    "observation_deadline_us" : 1795839053635018,
+    "settled_us" : 1795838457499218,
+    "timed_out" : false,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.873,
+      "jvm_gc_pause_seconds_count" : 353.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 3.476E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 268,
+          "cpu_percent_mean" : 48.19,
+          "cpu_percent_max" : 211.55,
+          "memory_mib_mean" : 913.6,
+          "memory_mib_max" : 1098.8
+        },
+        "mysql" : {
+          "samples" : 268,
+          "cpu_percent_mean" : 31.26,
+          "cpu_percent_max" : 45.75,
+          "memory_mib_mean" : 432.6,
+          "memory_mib_max" : 460.7
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 174012,
+          "growth_kib" : 173276
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 357204,
+          "growth_kib" : 150828
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 122,
+        "cpu_seconds" : 345.36,
+        "cpu_percent_mean" : 28.73,
+        "rss_mib_max" : 516.6
+      }
+    },
+    "lag" : [ {
+      "total" : 132,
+      "partitions" : {
+        "2" : 53,
+        "1" : 36,
+        "0" : 43
+      },
+      "members" : 3,
+      "at_us" : 1795837255404649
+    }, {
+      "total" : 68,
+      "partitions" : {
+        "2" : 62,
+        "1" : 2,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837266611114
+    }, {
+      "total" : 9,
+      "partitions" : {
+        "2" : 3,
+        "1" : 3,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837276260058
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837286156641
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837295687811
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837305926482
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837315443982
+    }, {
+      "total" : 10,
+      "partitions" : {
+        "2" : 4,
+        "1" : 2,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837325384109
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837335927372
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837345176975
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 4,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837355471376
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837365247735
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837375655663
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837385358598
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837395649394
+    }, {
+      "total" : 9,
+      "partitions" : {
+        "2" : 1,
+        "1" : 4,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837405474787
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837415214747
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837425466508
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837435219960
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837445427105
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837455058792
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 0,
+        "1" : 4,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837465060873
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837475275994
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837485389952
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837495587385
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837505339754
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837515504017
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837525238195
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837535653250
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837545651209
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837555347678
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837565622352
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837575246214
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837585526013
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837595168683
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837605224573
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837615370966
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837625741405
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837635445009
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837645060157
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 4,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837655211700
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837665442730
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837675065031
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 3,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837685192963
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837695367046
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837705605587
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837715195929
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837725323382
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 3,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837735383697
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837745575654
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837755196871
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837765251475
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837775434761
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837785052462
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837795191425
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837805650025
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795837815260146
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837825610911
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837835431328
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837845421539
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837855090572
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795837865278023
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837875534182
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 1,
+        "1" : 4,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837885265038
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837895347052
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837905441196
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837915086656
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837925393980
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837935619650
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 3,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837945543340
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795837955368349
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837965564750
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795837975588353
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837985436146
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795837995192896
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838005421397
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838014997692
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838025045609
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795838035445276
+    }, {
+      "total" : 9,
+      "partitions" : {
+        "2" : 4,
+        "1" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795838046272360
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838055560050
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838065194005
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 1,
+        "1" : 5,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838075534664
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795838085330628
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838095489740
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838105139548
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795838115257152
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795838125436894
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838134979881
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838145207245
+    }, {
+      "total" : 12,
+      "partitions" : {
+        "2" : 9,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838155761695
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838165350021
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838175528925
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838185301568
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795838195607784
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838205438985
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838215062414
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838225307553
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795838235593540
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "1" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838245534034
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838255165290
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838265237821
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 0,
+        "1" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795838275420863
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838285202603
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838295330797
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838305947923
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 3,
+        "1" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838315187942
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838325161794
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "1" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795838335129376
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "1" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838345385328
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838355443305
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838365110789
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "1" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838375157059
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 0,
+        "1" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838385161322
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "1" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838395584096
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838405330038
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838415565845
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838425214990
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 1,
+        "1" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795838435441050
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "1" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795838445095364
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "2" : 0,
+        "1" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838454993206
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "2" : 0,
+        "1" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795838457303123
+    } ],
+    "export_at_us" : 1795838458909946,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 300,
+      "rate" : 110.0,
+      "seconds" : 900,
+      "keys" : 600,
+      "topic" : "bench.messages.v1",
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230,
+      "payload_bytes" : 1024
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:59909",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 132000,
+    "acked" : 132000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 110.0,
+      "messages" : 99000,
+      "window_start_us" : 1795837553642422,
+      "window_end_us" : 1795838453642422,
+      "window_seconds" : 900,
+      "sent_in_window" : 99000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 110.0,
+      "behind_schedule_us" : {
+        "max" : 9455,
+        "p50" : 74,
+        "p99" : 338,
+        "count" : 99000
+      }
+    },
+    "finished_us" : 1795838453635018,
+    "finished_monotonic_ns" : 15440762540696032
+  },
+  "window" : {
+    "start_us" : 1795837553642422,
+    "end_us" : 1795838453642422,
+    "seconds" : 900.0
+  },
+  "counts" : {
+    "requested" : 132000,
+    "requested_measure" : 99000,
+    "acked" : 132000,
+    "ack_failed" : 0,
+    "received" : 132000,
+    "attempts" : 132000,
+    "failed_attempts" : 0,
+    "completed" : 132000,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 110.0,
+    "acked_per_s" : 110.0,
+    "received_per_s" : 110.0,
+    "completed_per_s" : 110.0,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 0.0
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 717,
+      "p95" : 1489,
+      "p99" : 3547,
+      "p999" : 11503,
+      "mean" : 882.3505353535354,
+      "max" : 160511,
+      "curve" : [ [ 0.0, 324 ], [ 10.0, 520 ], [ 25.0, 599 ], [ 50.0, 717 ], [ 75.0, 889 ], [ 90.0, 1153 ], [ 95.0, 1489 ], [ 99.0, 3547 ], [ 99.5, 5391 ], [ 99.9, 11503 ], [ 99.99, 124543 ], [ 100.0, 160511 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "broker" : {
+      "count" : 98600,
+      "negative" : 400,
+      "overflow" : 0,
+      "p50" : 1214,
+      "p95" : 4787,
+      "p99" : 18287,
+      "p999" : 268031,
+      "mean" : 2716.882454361055,
+      "max" : 573951,
+      "curve" : [ [ 0.0, 1 ], [ 10.0, 844 ], [ 25.0, 975 ], [ 50.0, 1214 ], [ 75.0, 1687 ], [ 90.0, 2821 ], [ 95.0, 4787 ], [ 99.0, 18287 ], [ 99.5, 64159 ], [ 99.9, 268031 ], [ 99.99, 546815 ], [ 100.0, 573951 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "processing" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 7347,
+      "p95" : 10839,
+      "p99" : 14999,
+      "p999" : 48543,
+      "mean" : 7893.096060606061,
+      "max" : 177023,
+      "curve" : [ [ 0.0, 4316 ], [ 10.0, 6263 ], [ 25.0, 6695 ], [ 50.0, 7347 ], [ 75.0, 8415 ], [ 90.0, 9663 ], [ 95.0, 10839 ], [ 99.0, 14999 ], [ 99.5, 18271 ], [ 99.9, 48543 ], [ 99.99, 173311 ], [ 100.0, 177023 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 9487,
+      "p95" : 16319,
+      "p99" : 37375,
+      "p999" : 285183,
+      "mean" : 11474.188343434344,
+      "max" : 598015,
+      "curve" : [ [ 0.0, 5604 ], [ 10.0, 8003 ], [ 25.0, 8567 ], [ 50.0, 9487 ], [ 75.0, 10935 ], [ 90.0, 13527 ], [ 95.0, 16319 ], [ 99.0, 37375 ], [ 99.5, 105023 ], [ 99.9, 285183 ], [ 99.99, 564223 ], [ 100.0, 598015 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "e2e_all" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 3889,
+      "p95" : 8447,
+      "p99" : 24175,
+      "p999" : 272383,
+      "mean" : 5507.550080808081,
+      "max" : 577023,
+      "curve" : [ [ 0.0, 2220 ], [ 10.0, 3033 ], [ 25.0, 3381 ], [ 50.0, 3889 ], [ 75.0, 4651 ], [ 90.0, 6295 ], [ 95.0, 8447 ], [ 99.0, 24175 ], [ 99.5, 77183 ], [ 99.9, 272383 ], [ 99.99, 551935 ], [ 100.0, 577023 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 132000
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 0,
+    "lost_sample" : [ ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795837253642422,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 30,
+    "measure_to_bucket" : 119,
+    "requested" : [ 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100 ],
+    "acked" : [ 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100 ],
+    "received" : [ 1038, 1159, 1102, 1101, 1100, 1100, 1099, 1101, 1099, 1101, 1100, 1100, 1100, 1097, 1102, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1098, 1102, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1098, 1102, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1096, 1104, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100 ],
+    "completed" : [ 1037, 1160, 1102, 1101, 1100, 1100, 1098, 1102, 1099, 1101, 1100, 1100, 1100, 1097, 1102, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1098, 1102, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1099, 1099, 1102, 1100, 1099, 1101, 1100, 1099, 1101, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1096, 1104, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "0210034697f4e2aa3eb135da0e4a7d8cd8183c0ecc2566e3c8583571b2f12c11",
+    "attempts-1795837242085-656474.csv" : "45c49833e7c75bf7aa184a870118a4e3660edbc176166e35306459e8f72ac9cb",
+    "bench_message.tsv" : "12b45113f938a44482579ccfcbeaef380ce1f282f8bc99a4ee8fa9ac3f377bcf",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "2fc97d4ec872a66a4c8bd8080bb3adad35be4fc7a6cad1113cd25e36285dc93e",
+    "run.json" : "0cd3169920a9c56420bf9b71f9c446a012a2944b03748881cdc682707f8bbdac"
+  }
+}

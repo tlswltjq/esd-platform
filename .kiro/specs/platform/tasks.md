@@ -292,6 +292,7 @@
   - [x] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
   - [x] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke — PR #253([E13 층 2 실행](../../../docs/experiments.md#kafka-baseline-layer2)).
   - [x] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 봉투 발행·DLT `max.message.bytes`), smoke — PR #254([E13 층 1 실행](../../../docs/experiments.md#kafka-baseline-layer1)).
-  - [ ] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/`.
+  - [x] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/` — PR #255([E13 결과](../../../docs/experiments.md#kafka-baseline-results)). 최대 지속 처리량 층 1 [6, 7)주문/s·층 2 [100, 110) msg/s, 층 2 기준 발행률은 [결정 236](../../../docs/decisions.md#layer2-base-rate).
+  - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — B4에서 실행 수단이 없어 미측정 사유로 남겼다.
   - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.
   - 완료 조건: 시나리오 1~6마다 결과 또는 미측정 사유·실행 방법이 E13에 있고, 최대 지속 처리량이 결정 231 판정식으로 [통과 단계, 실패 단계) 구간으로 적혀 있다.

@@ -1,0 +1,80 @@
+{
+  "stages": {
+    "r5": {
+      "rate": 5.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-056tuzm8",
+      "seconds_taken": 1515,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 5.0,
+        "rates": {
+          "offered_per_s": 5.0,
+          "completed_per_s": 5.002222222222223,
+          "completed_over_offered": 1.0004444444444445
+        },
+        "outstanding_drain_seconds": 1.091,
+        "backlog_drain_seconds": 2.607,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 279.905,
+          "p95_ms": 407.052,
+          "p99_ms": 445.935,
+          "max_ms": 575.353
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    },
+    "r6": {
+      "rate": 6.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-ax1__bqz",
+      "seconds_taken": 1528,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 6.0,
+        "rates": {
+          "offered_per_s": 6.0,
+          "completed_per_s": 6.001111111111111,
+          "completed_over_offered": 1.0001851851851853
+        },
+        "outstanding_drain_seconds": 0.755,
+        "backlog_drain_seconds": 5.578,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 307.817,
+          "p95_ms": 442.566,
+          "p99_ms": 495.629,
+          "max_ms": 621.691
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 900,
+  "warmup": 300,
+  "buyers": 20,
+  "faults": [],
+  "rates": [
+    5.0,
+    6.0
+  ]
+}

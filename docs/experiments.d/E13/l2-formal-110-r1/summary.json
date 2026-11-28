@@ -1,0 +1,1478 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-formal-110-r1",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 110.0,
+      "warmup_seconds" : 300,
+      "seconds" : 900,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "832baea961f502215f8a02e1e37f97d5a2c934c5",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T02:52:50.786909+00:00",
+    "load_started_us" : 1795834408667253,
+    "load_ended_us" : 1795835609366880,
+    "observation_deadline_us" : 1795836209366880,
+    "settled_us" : 1795835613264447,
+    "timed_out" : false,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.587,
+      "jvm_gc_pause_seconds_count" : 225.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 3.2543E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 266,
+          "cpu_percent_mean" : 41.7,
+          "cpu_percent_max" : 206.05,
+          "memory_mib_mean" : 911.9,
+          "memory_mib_max" : 1099.8
+        },
+        "mysql" : {
+          "samples" : 266,
+          "cpu_percent_mean" : 31.2,
+          "cpu_percent_max" : 43.75,
+          "memory_mib_mean" : 431.7,
+          "memory_mib_max" : 459.6
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 174012,
+          "growth_kib" : 173276
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 357204,
+          "growth_kib" : 150828
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 122,
+        "cpu_seconds" : 323.66,
+        "cpu_percent_mean" : 26.92,
+        "rss_mib_max" : 511.1
+      }
+    },
+    "lag" : [ {
+      "total" : 110,
+      "partitions" : {
+        "1" : 32,
+        "2" : 44,
+        "0" : 34
+      },
+      "members" : 3,
+      "at_us" : 1795834410915081
+    }, {
+      "total" : 24,
+      "partitions" : {
+        "1" : 3,
+        "2" : 21,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834422253428
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834431704020
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834441281458
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834451203006
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "1" : 3,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834461131130
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834471652156
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834481623646
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834491233676
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834500942062
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834511057918
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834521114270
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834531328219
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 5,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834540843614
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834550958345
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 4,
+        "2" : 1,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834560972726
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834571220925
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834580882605
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834591133939
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834601176813
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834610756303
+    }, {
+      "total" : 14,
+      "partitions" : {
+        "1" : 9,
+        "2" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795834621986277
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 3,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834631234555
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834640802544
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834651049624
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834661115944
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834671404778
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834681114204
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834691287256
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 4,
+        "2" : 0,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834701005762
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834711133330
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834721300547
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834730995978
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834741662691
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834751308063
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 3,
+        "2" : 0,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834760977797
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834771160042
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834781344061
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834791024303
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834801044705
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834811118607
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834821142654
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834831418185
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834841093095
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834851214863
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "1" : 2,
+        "2" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834861377724
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834871011026
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834881201580
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834890745522
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 3,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834900869711
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834911098243
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834921311662
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795834930983280
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795834941067355
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834951210513
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795834960839201
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795834970954048
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795834981598917
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795834991115894
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835001266577
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835010923284
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835021035425
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835031163767
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 3,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835040810015
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835051034948
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835061175195
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835070972751
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835081100883
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835091191489
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835101163760
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835110766515
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835120819478
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835131044813
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835141251350
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835150823108
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835160865128
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835170890681
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835180954863
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795835191060052
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835201186951
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835210697739
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835221199817
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835231098478
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835241139536
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835251254605
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 3,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835260791230
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835271123894
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835281220907
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 3,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835291173727
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835300725431
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835310784004
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835320826955
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835330971855
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835341256783
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 4,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835350941975
+    }, {
+      "total" : 14,
+      "partitions" : {
+        "1" : 2,
+        "2" : 8,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795835362326471
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 3,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835370925512
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835380936628
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 2,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835390932496
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835401012828
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835411164309
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835420814454
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795835431144032
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835441435681
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795835451341682
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835460881939
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835471072027
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835481050718
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835491178550
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "2" : 4,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835500800519
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 2,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835510889620
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835520919317
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835530991405
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835541141688
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "2" : 3,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835551398417
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835561209350
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795835570698915
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "2" : 1,
+        "0" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795835580817476
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "2" : 0,
+        "0" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795835590880119
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "2" : 0,
+        "0" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795835601061407
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "1" : 0,
+        "2" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835610900803
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "1" : 0,
+        "2" : 0,
+        "0" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795835613080751
+    } ],
+    "export_at_us" : 1795835613378738,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230,
+      "payload_bytes" : 1024,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 300,
+      "rate" : 110.0,
+      "seconds" : 900,
+      "keys" : 600,
+      "topic" : "bench.messages.v1"
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:34613",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 132000,
+    "acked" : 132000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 110.0,
+      "messages" : 99000,
+      "window_start_us" : 1795834709374068,
+      "window_end_us" : 1795835609374068,
+      "window_seconds" : 900,
+      "sent_in_window" : 99000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 110.0,
+      "behind_schedule_us" : {
+        "p99" : 360,
+        "count" : 99000,
+        "max" : 11231,
+        "p50" : 73
+      }
+    },
+    "finished_us" : 1795835609366880,
+    "finished_monotonic_ns" : 15437918272560794
+  },
+  "window" : {
+    "start_us" : 1795834709374068,
+    "end_us" : 1795835609374068,
+    "seconds" : 900.0
+  },
+  "counts" : {
+    "requested" : 132000,
+    "requested_measure" : 99000,
+    "acked" : 132000,
+    "ack_failed" : 0,
+    "received" : 132000,
+    "attempts" : 132000,
+    "failed_attempts" : 0,
+    "completed" : 132000,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 110.0,
+    "acked_per_s" : 110.0,
+    "received_per_s" : 110.0,
+    "completed_per_s" : 110.0,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 0.0
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 711,
+      "p95" : 1541,
+      "p99" : 3095,
+      "p999" : 9079,
+      "mean" : 874.4273535353535,
+      "max" : 163711,
+      "curve" : [ [ 0.0, 322 ], [ 10.0, 521 ], [ 25.0, 597 ], [ 50.0, 711 ], [ 75.0, 885 ], [ 90.0, 1157 ], [ 95.0, 1541 ], [ 99.0, 3095 ], [ 99.5, 4323 ], [ 99.9, 9079 ], [ 99.99, 133631 ], [ 100.0, 163711 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "broker" : {
+      "count" : 98796,
+      "negative" : 204,
+      "overflow" : 0,
+      "p50" : 1195,
+      "p95" : 4535,
+      "p99" : 28399,
+      "p999" : 220799,
+      "mean" : 2813.298230697599,
+      "max" : 367359,
+      "curve" : [ [ 0.0, 12 ], [ 10.0, 842 ], [ 25.0, 966 ], [ 50.0, 1195 ], [ 75.0, 1644 ], [ 90.0, 2671 ], [ 95.0, 4535 ], [ 99.0, 28399 ], [ 99.5, 105471 ], [ 99.9, 220799 ], [ 99.99, 330751 ], [ 100.0, 367359 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "processing" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 7287,
+      "p95" : 10791,
+      "p99" : 15519,
+      "p999" : 31567,
+      "mean" : 7825.592888888889,
+      "max" : 185087,
+      "curve" : [ [ 0.0, 4392 ], [ 10.0, 6227 ], [ 25.0, 6659 ], [ 50.0, 7287 ], [ 75.0, 8343 ], [ 90.0, 9583 ], [ 95.0, 10791 ], [ 99.0, 15519 ], [ 99.5, 19007 ], [ 99.9, 31567 ], [ 99.99, 176127 ], [ 100.0, 185087 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 9391,
+      "p95" : 15863,
+      "p99" : 50975,
+      "p999" : 243199,
+      "mean" : 11504.240707070707,
+      "max" : 379391,
+      "curve" : [ [ 0.0, 5572 ], [ 10.0, 7959 ], [ 25.0, 8527 ], [ 50.0, 9391 ], [ 75.0, 10783 ], [ 90.0, 13151 ], [ 95.0, 15863 ], [ 99.0, 50975 ], [ 99.5, 132991 ], [ 99.9, 243199 ], [ 99.99, 351999 ], [ 100.0, 379391 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAC614nEVXDWgUWRLu9zNvejo9nbbtbXv72tlmLjs3F7Jhbi6XG0LIhRDCICGEIEEkiIQgcogECRIWWURCEBERVyRICCKyiEgQEQlyiIjIsoiILCIisreIiCwiIscictxX73W8mel+/eq/qqvq1aRL32+1rGDFMh+Rr4xuT76/ZP3jnQH8+2/8S/4XXuZFXsDVKQXHAz1Liwte4vgUFLewSGkrCZiiLQBSKMuWlrQUdyRg0sFNAeAqiyvbIQ5LgoUr7knbs6Vj25bNbaWU4xKtklJ6UioX9ApI7ji2K23b9l3sXNfxHc92XN/3vMCR3PMdJwC3HxE0dl3PtiNbOZ4XepFUduT5tuf5cRR4ASR4rh04kR1FkR9hG0ZBKithELhB5IaeH1YC1w3dJIwDkLhhGjqQE8dJ6KVJkCXVpB4miR9UMtfvAl/kVbNK5NWd1I3TSlTxwko1rCdJVzXrqsXVrkpPmuK5Ua2ntaxeyyqVane91qhWan1drUozjWvV1sBgbWiw0d/TP9jf6q51D/QODdS76pXunoGhwZ5mb6PZ3x4dHmhNDE4Mjk21h9rt8fGJscbY0PjkyPjw+Mjc5MD0rvFdY+M7R3eP7JzZMTWxf9+R/XPjcwt7x/fv27V76sD05Pz83Ozs/J75I/88MLdreokdXmYL84uLC4dPssXvDh5jx9jCMm77ZlfZkfPsHDvDTuL67jSW0+wsO477KrvAbrGDR9k9dhGAM2wJ90vsMjuP/SruP+BaZdfYXdyvgvgKcGu4LrOjoL4DMTfYT4CeAtdt4O9iTyJvs6fA3mA32Tq4f8R1D7gH7Dq7D/jP+D4HxRNAn7EX0PKCnRNHxSP+TqyJ4+IG7lfEU7EqnosfxTWxIjfEe3FP3BG3sP4knogHYkl+wnpXvBW/i8fiV7Es3+H+Gt834LkPiifgOymvyQfYfRDn5GX5Eeua2JCn5EvN/xHQs/iekvfkOfkrJN2V5+UbuSpfy2W5gvWNWJMX5HvxjGyQb8VDcRSYT+KlOAb64/KJuCmfQtaafA3IG/GLeCGuyougeSbWYddjWP0QfqyKj/wtPyNe4P6Of+Kv+ENxUZwV7/lx8Y4vi7f8Fr/EV/ld/i9+hT/lj/l7UN7mb/jvuD6CflW84kviE78H7AP+C7/If+MXwP8Q0KPiMT8q3vAnkP2R3QTuHb/Df+aPQPeYX+PrfINf5mv8Bv8Jes5Bz3Vc5wG9CZ67WG8Ae5ZfxfNDUKzDil/BvwEpD7C/Bdp10N7C/josuA2ZH/h9yPwBmKt8mZ8BnrB3+QvIeggd57D+ztb4S/6BXQXkNF/hx3BtgOcCfw7ay9idwEpaH8AeisAG+N6z8/wtOw0vXoB/FR6tAn6Gv2Mr/BT0Xcbzb+w/bAnyzvNn7BP7L3vFPiKjTvBX7AMy6i3y7DUy7Rn7F3vJ3uhMe4D1EXuMLKR8fIYMvcc22EPs15F968hIytbXyOiryN+ryNI7gP4CmsuoheeA38L3R2AeYb8BvuvA3wf8Gjt8EcsJXU3H2QqbXWfL2K4BsIKLauMsauQmqusM+NZQeN9eYAtnUZMrkH4F3xNYT4J28QQkHGO7vjsGEUts/tBJtn+J7TvKFo+c0+V7ie2ZOTi7ePDIoYVvz7P52VNsceHg3oXDx9juQ4cW9i+z+cW9oJ6fW5zZNzkyOTezsHdy/4Gxqd2z03t27Ni3sHv/zMHdE7P7Jtpze3dNTe+cmNjRnpidHprcM7R3eGZ211j7QHvP8Mz4+I7h9vzU5MjY8Mjk1PDk6O6Bdntn/57R6dboSP/4aKPeHhse7xtuDEyPDE+MNNG6RmaafVPDfWOjQ+2Rkb6RgdZoq9nTPzRYG2w2+psDzVar1l9rNfr6a83+vmZPd6PVag30tceH+ge7+prNarOnq9bMGrUmumlXT7OnWm+gyzarY3299b7Bdq051uppNrJavdJXH2j2Zr1dfbWsWq/V+5vVWr07rmVx2tdoVBq1StLbrPZ3D1ZaWVd1MKs1aoO1SrUrS3uzrLc7q1Sj7kZvWkUnT7OuMK70xt1xXO9OEtDEUSXLwkoaxFmWpN1JFnf5aRwlPRW0/qia1YKwFtSiMAgzJw2TuJ4EQZIEUexXwZ9UoiCOQpwaYZTESeQGsR91Z34cVnw/Tf0kCoIwjrwMOz9xgjAKo9TDgRPBjsAJAxWHceyEcej6MU4rHHFB1cXR50cBdPoBVjuqxkHih6EfxbYf2m5ARxkwIY46H+eb7cswcHzXTtxYeQ7ORJyb4LZl4Hmup3DGSjuK3Ui5CY7IIFQq8BWOSMeOcJh7Mc5iz/FDP6w6pNYLqlFSSfyoAtfSNKvD98BLEZU4TN0UZiXSi90g9ZJQBXHqwpcsTFIcvFAb+jhjfVLjZo4ThU6SRji0oc4PnQwntOOEjoutp2CnrVzHgnmuDAIc8Q7mA4RCeQEmAt8OpONgRHCV48jA92MVYI/xQWJycDA3uGaaiOEo5g7btTFyuMTh2MqWmCkwmShP+jb4PbiPDXRgQsFIIiUmE4V46ckEd2U5NmYQSHFd7nBNgWEklEQGuM1VyG3wQwcmGcd1FKTiyVMcgi1MQCQYPNDAlcQIBSqI8TmNUdLhkIfpyXYVjUvYSA8owmgFGKq4QyKgCSMP7jwfzfDBiAQoly5QmKwUpi+Hxi9w0bwGev2My4FqDqs0DPY6hLcxtyEUWioZ45BwjIEwCFItKIFYMhmjGzEZoTamQmy5QBj1xEfEhJBkIE2HpMuQQghJgipCOw7GRQTYIgIlC1LvJHFrRy0zdtKj1FulmWEIPIMXgGhgEVETxEfkhLGAN89kmLETrllQgYlWUMQU4ckSbKUGKX3hSXAjavPXAQh9LZp7SaeeibWmAhlkC7IUjhelRhRyO0qQJoWxiuwTJIyMBhNNv5CnytyYoc3RckhRHnbM48o4DMmCFNDQrd+E0CO4fixQ0M2gLjWXNoBG9zJJondPQ7oewynyRfMGyDVbL5JMUblAMAuylPwkp0kUsXMKnjLx1bYSWOeVCTUxCJCQScoyYSyawFJYCrC7qIRRBqYSyAs69JYskzsF2Esxhc+yYKIotLfwV5v2+d+Ifi4iFpY2EMQlWYDo7SbsXGpZREwE5K3SAksmpvR2y8TCSQTfCswWTk8lraJDEslXWkkn7TWL9g1XSSukP0o6DAL/nTqw7TBGlZR58UKnjKVpy8YlsktI2cm3kRMd0ijbroTUfv+JbC9zI1nrLGptBe0wNkVoEnlUyjD4K9kBWFluyc3WDHCG5JDrJa32ay1O3zpxlQlNbpCVjtBitQrLaC5wk8gUI8Kqosl7jZCf05ObIjKakJoF87ZNYVHMirl6iq6V55CWUqT/jDlnhzZpG1gQkLLOz80XXaIIfEmJLOlfqFZcNoVX0n9AiX8LRXobSS/mySN1UiLklDNaa8lUo8yNoygUctuNSX8m5QW5+fILJmmRkMU8mXRQRV5RlukHRb0xZaoZtVGm7slHbVxZW6ujvakMUd2qif5AuZjHKDeRU1y0OGniTQleNtWndEiNXhB0fhaIzDUl+dkzcnWzBekygXP6JWjB1D5K2t3cW+MParZoStaisycvWetz+lFMqeXLPOmlNFEocLXZJI0N6HhaCD0XJDd0gm9+pFag1aLhFHI8UVp5kcn/Bxke6YwwVuV4Q1c0XcccD3TKWNpYYd6/jmyujpueCSZbx0Oak6Sg6U0m6V4rTGsw2kycLdOkc7W61ZmYK40WukrytiFRaKaMCtLk73a+mSpIJp0s+RlS1BUi/wgak2JFnmdTGYI79GvUb6+s5aBTbDFG4bddGyKpwraZV4I822K0CJPj6Ap537eogHRxwLyv+DdIlZL8gn8h/w45XwP9DVBbdKuihtMBaEmnFKnu0K2BkmqrTv/cyG3QhizTrUcAyfMgbON5++zQ/EWdMQXSgugXZVmTI+CdGqzzlJzs3GxVRdRhJ2T/VTcEgnzB/weup0Xc",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "e2e_all" : {
+      "count" : 99000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 3831,
+      "p95" : 8035,
+      "p99" : 35167,
+      "p999" : 228863,
+      "mean" : 5587.997848484849,
+      "max" : 371455,
+      "curve" : [ [ 0.0, 2222 ], [ 10.0, 3003 ], [ 25.0, 3343 ], [ 50.0, 3831 ], [ 75.0, 4567 ], [ 90.0, 6055 ], [ 95.0, 8035 ], [ 99.0, 35167 ], [ 99.5, 115583 ], [ 99.9, 228863 ], [ 99.99, 339711 ], [ 100.0, 371455 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64"
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 132000
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 0,
+    "lost_sample" : [ ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795834409374068,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 30,
+    "measure_to_bucket" : 119,
+    "requested" : [ 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100 ],
+    "acked" : [ 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1099, 1101, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100, 1100 ],
+    "received" : [ 1073, 1123, 1090, 1114, 1100, 1100, 1099, 1101, 1087, 1113, 1100, 1100, 1100, 1100, 1096, 1104, 1100, 1100, 1100, 1100, 1086, 1114, 1100, 1100, 1100, 1100, 1094, 1106, 1100, 1100, 1100, 1098, 1092, 1110, 1100, 1100, 1100, 1100, 1093, 1107, 1100, 1100, 1100, 1100, 1085, 1115, 1100, 1100, 1100, 1100, 1093, 1107, 1100, 1100, 1100, 1100, 1081, 1119, 1100, 1100, 1100, 1100, 1090, 1110, 1100, 1100, 1100, 1100, 1084, 1116, 1100, 1100, 1100, 1100, 1090, 1110, 1100, 1100, 1100, 1100, 1086, 1114, 1100, 1100, 1100, 1100, 1095, 1104, 1101, 1100, 1100, 1100, 1090, 1110, 1094, 1106, 1100, 1100, 1092, 1108, 1100, 1100, 1100, 1100, 1090, 1110, 1100, 1100, 1100, 1100, 1092, 1108, 1100, 1100, 1100, 1099, 1089, 1112, 1100, 1100 ],
+    "completed" : [ 1073, 1123, 1090, 1114, 1100, 1100, 1099, 1101, 1086, 1114, 1100, 1100, 1100, 1100, 1096, 1104, 1100, 1100, 1100, 1100, 1085, 1115, 1100, 1100, 1100, 1100, 1093, 1107, 1100, 1100, 1100, 1098, 1089, 1113, 1100, 1100, 1100, 1100, 1093, 1107, 1100, 1100, 1100, 1100, 1085, 1115, 1100, 1100, 1100, 1100, 1093, 1107, 1100, 1100, 1100, 1100, 1080, 1120, 1100, 1100, 1100, 1100, 1088, 1112, 1100, 1100, 1100, 1100, 1083, 1117, 1100, 1100, 1100, 1100, 1089, 1111, 1100, 1100, 1100, 1100, 1086, 1114, 1100, 1100, 1100, 1100, 1095, 1104, 1101, 1100, 1100, 1100, 1090, 1110, 1093, 1107, 1100, 1100, 1090, 1110, 1100, 1100, 1100, 1100, 1089, 1111, 1100, 1100, 1100, 1100, 1092, 1108, 1100, 1100, 1100, 1098, 1090, 1112, 1100, 1100 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "31f39f65339f293ed5550e956e12fed92476f1b36d2b7c1e06912c431ff6f0cf",
+    "attempts-1795834396065-514773.csv" : "3983b19079ecb5c9ec7957791df118ff5e7852b4436e9f0f4ebb2eaf8de81058",
+    "bench_message.tsv" : "c74a1315c7e63f478a9f068662989e8da670b7fe7ed1ad851b5f5c9f81e8ad31",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "4ac813a2e5f6149ba38ed7754a4f8285ef00eac0c3dcc05863dee77ae218b84b",
+    "run.json" : "3b0c08b9593feabd291e649bf2246781dea907ba5137485dad5bc173ecad0a1e"
+  }
+}

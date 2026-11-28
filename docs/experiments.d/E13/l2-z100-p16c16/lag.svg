@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">소비 지연</text>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0</text>
+<text x="64" y="289.0" text-anchor="end">25</text>
+<text x="64" y="204.0" text-anchor="end">50</text>
+<text x="64" y="119.0" text-anchor="end">75</text>
+<text x="64" y="34.0" text-anchor="end">100</text>
+<text x="70.0" y="386" text-anchor="middle">0</text>
+<text x="198.0" y="386" text-anchor="middle">60</text>
+<text x="326.0" y="386" text-anchor="middle">120</text>
+<text x="454.0" y="386" text-anchor="middle">181</text>
+<text x="582.0" y="386" text-anchor="middle">241</text>
+<text x="710.0" y="386" text-anchor="middle">302</text>
+<text x="390" y="408" text-anchor="middle">첫 표본 뒤 초</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,77.6 92.6,329.2 113.4,336.0 133.7,342.8 154.4,346.2 176.7,336.0 197.7,336.0 218.4,342.8 239.0,349.6 261.1,346.2 281.7,353.0 303.4,336.0 324.0,346.2 346.0,349.6 366.4,356.4 387.9,346.2 408.7,342.8 430.7,353.0 451.4,346.2 473.1,349.6 493.5,353.0 515.1,349.6 535.4,356.4 556.9,349.6 578.7,349.6 599.3,349.6 620.8,346.2 642.4,349.6 662.8,353.0 684.9,346.2 705.1,370.0 710.0,370.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">소비 지연 합(건)</text></svg>

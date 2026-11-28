@@ -1,0 +1,1028 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-x-rate5000",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 5000.0,
+      "warmup_seconds" : 60,
+      "seconds" : 180,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "cded999c7bbe836ddff69b8f5fe88a898807c66e",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-27T13:22:26.876242+00:00",
+    "load_started_us" : 1795785783128354,
+    "load_ended_us" : 1795786023844620,
+    "observation_deadline_us" : 1795786623844620,
+    "settled_us" : null,
+    "timed_out" : true,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 1.115,
+      "jvm_gc_pause_seconds_count" : 274.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 4.1211E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 186,
+          "cpu_percent_mean" : 53.38,
+          "cpu_percent_max" : 187.49,
+          "memory_mib_mean" : 930.4,
+          "memory_mib_max" : 1015.0
+        },
+        "mysql" : {
+          "samples" : 186,
+          "cpu_percent_mean" : 67.91,
+          "cpu_percent_max" : 96.61,
+          "memory_mib_mean" : 446.2,
+          "memory_mib_max" : 494.8
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 1410332,
+          "growth_kib" : 1409596
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 426752,
+          "growth_kib" : 220376
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 72,
+        "cpu_seconds" : 405.77,
+        "cpu_percent_mean" : 48.99,
+        "rss_mib_max" : 633.0
+      }
+    },
+    "lag" : [ {
+      "total" : 2993,
+      "partitions" : {
+        "1" : 951,
+        "0" : 1007,
+        "2" : 1035
+      },
+      "members" : 3,
+      "at_us" : 1795785785494105
+    }, {
+      "total" : 67745,
+      "partitions" : {
+        "1" : 21304,
+        "0" : 20991,
+        "2" : 25450
+      },
+      "members" : 3,
+      "at_us" : 1795785798018978
+    }, {
+      "total" : 112583,
+      "partitions" : {
+        "1" : 35414,
+        "0" : 34862,
+        "2" : 42307
+      },
+      "members" : 3,
+      "at_us" : 1795785807153392
+    }, {
+      "total" : 157323,
+      "partitions" : {
+        "1" : 49461,
+        "0" : 48709,
+        "2" : 59153
+      },
+      "members" : 3,
+      "at_us" : 1795785816388044
+    }, {
+      "total" : 206683,
+      "partitions" : {
+        "1" : 65004,
+        "0" : 63967,
+        "2" : 77712
+      },
+      "members" : 3,
+      "at_us" : 1795785826512152
+    }, {
+      "total" : 256481,
+      "partitions" : {
+        "1" : 80642,
+        "0" : 79374,
+        "2" : 96465
+      },
+      "members" : 3,
+      "at_us" : 1795785836811476
+    }, {
+      "total" : 303825,
+      "partitions" : {
+        "1" : 95493,
+        "0" : 94009,
+        "2" : 114323
+      },
+      "members" : 3,
+      "at_us" : 1795785846699862
+    }, {
+      "total" : 351386,
+      "partitions" : {
+        "1" : 110488,
+        "0" : 108706,
+        "2" : 132192
+      },
+      "members" : 3,
+      "at_us" : 1795785856457643
+    }, {
+      "total" : 401255,
+      "partitions" : {
+        "1" : 126148,
+        "0" : 124130,
+        "2" : 150977
+      },
+      "members" : 3,
+      "at_us" : 1795785866867412
+    }, {
+      "total" : 449255,
+      "partitions" : {
+        "1" : 141234,
+        "0" : 138970,
+        "2" : 169051
+      },
+      "members" : 3,
+      "at_us" : 1795785876814391
+    }, {
+      "total" : 496439,
+      "partitions" : {
+        "1" : 156072,
+        "0" : 153550,
+        "2" : 186817
+      },
+      "members" : 3,
+      "at_us" : 1795785886616358
+    }, {
+      "total" : 544572,
+      "partitions" : {
+        "1" : 171184,
+        "0" : 168427,
+        "2" : 204961
+      },
+      "members" : 3,
+      "at_us" : 1795785896626333
+    }, {
+      "total" : 591483,
+      "partitions" : {
+        "1" : 185927,
+        "0" : 182926,
+        "2" : 222630
+      },
+      "members" : 3,
+      "at_us" : 1795785906409776
+    }, {
+      "total" : 637872,
+      "partitions" : {
+        "1" : 200508,
+        "0" : 197266,
+        "2" : 240098
+      },
+      "members" : 3,
+      "at_us" : 1795785916067163
+    }, {
+      "total" : 689184,
+      "partitions" : {
+        "1" : 216622,
+        "0" : 213129,
+        "2" : 259433
+      },
+      "members" : 3,
+      "at_us" : 1795785926715558
+    }, {
+      "total" : 736066,
+      "partitions" : {
+        "1" : 231367,
+        "0" : 227620,
+        "2" : 277079
+      },
+      "members" : 3,
+      "at_us" : 1795785936509652
+    }, {
+      "total" : 783612,
+      "partitions" : {
+        "1" : 246322,
+        "0" : 242308,
+        "2" : 294982
+      },
+      "members" : 3,
+      "at_us" : 1795785946337530
+    }, {
+      "total" : 831923,
+      "partitions" : {
+        "1" : 261485,
+        "0" : 257248,
+        "2" : 313190
+      },
+      "members" : 3,
+      "at_us" : 1795785956385590
+    }, {
+      "total" : 880215,
+      "partitions" : {
+        "1" : 276670,
+        "0" : 272175,
+        "2" : 331370
+      },
+      "members" : 3,
+      "at_us" : 1795785966410590
+    }, {
+      "total" : 928961,
+      "partitions" : {
+        "1" : 291981,
+        "0" : 287247,
+        "2" : 349733
+      },
+      "members" : 3,
+      "at_us" : 1795785976518505
+    }, {
+      "total" : 977175,
+      "partitions" : {
+        "1" : 307143,
+        "0" : 302138,
+        "2" : 367894
+      },
+      "members" : 3,
+      "at_us" : 1795785986537001
+    }, {
+      "total" : 1025578,
+      "partitions" : {
+        "1" : 322336,
+        "0" : 317105,
+        "2" : 386137
+      },
+      "members" : 3,
+      "at_us" : 1795785996628256
+    }, {
+      "total" : 1071124,
+      "partitions" : {
+        "1" : 336667,
+        "0" : 331171,
+        "2" : 403286
+      },
+      "members" : 3,
+      "at_us" : 1795786006116910
+    }, {
+      "total" : 1123172,
+      "partitions" : {
+        "1" : 353007,
+        "0" : 347263,
+        "2" : 422902
+      },
+      "members" : 3,
+      "at_us" : 1795786016926310
+    }, {
+      "total" : 1157743,
+      "partitions" : {
+        "1" : 363892,
+        "0" : 357933,
+        "2" : 435918
+      },
+      "members" : 3,
+      "at_us" : 1795786026045981
+    }, {
+      "total" : 1157064,
+      "partitions" : {
+        "1" : 363673,
+        "0" : 357707,
+        "2" : 435684
+      },
+      "members" : 3,
+      "at_us" : 1795786029004323
+    }, {
+      "total" : 1153877,
+      "partitions" : {
+        "1" : 362615,
+        "0" : 356639,
+        "2" : 434623
+      },
+      "members" : 3,
+      "at_us" : 1795786041464347
+    }, {
+      "total" : 1150669,
+      "partitions" : {
+        "1" : 361544,
+        "0" : 355571,
+        "2" : 433554
+      },
+      "members" : 3,
+      "at_us" : 1795786054175661
+    }, {
+      "total" : 1147105,
+      "partitions" : {
+        "1" : 360354,
+        "0" : 354380,
+        "2" : 432371
+      },
+      "members" : 3,
+      "at_us" : 1795786067275626
+    }, {
+      "total" : 1143781,
+      "partitions" : {
+        "1" : 359250,
+        "0" : 353270,
+        "2" : 431261
+      },
+      "members" : 3,
+      "at_us" : 1795786079733667
+    }, {
+      "total" : 1140489,
+      "partitions" : {
+        "1" : 358151,
+        "0" : 352173,
+        "2" : 430165
+      },
+      "members" : 3,
+      "at_us" : 1795786092288415
+    }, {
+      "total" : 1137140,
+      "partitions" : {
+        "1" : 357039,
+        "0" : 351060,
+        "2" : 429041
+      },
+      "members" : 3,
+      "at_us" : 1795786104887205
+    }, {
+      "total" : 1133870,
+      "partitions" : {
+        "1" : 355948,
+        "0" : 349971,
+        "2" : 427951
+      },
+      "members" : 3,
+      "at_us" : 1795786117438587
+    }, {
+      "total" : 1130363,
+      "partitions" : {
+        "1" : 354775,
+        "0" : 348803,
+        "2" : 426785
+      },
+      "members" : 3,
+      "at_us" : 1795786130385523
+    }, {
+      "total" : 1126949,
+      "partitions" : {
+        "1" : 353634,
+        "0" : 347672,
+        "2" : 425643
+      },
+      "members" : 3,
+      "at_us" : 1795786142992011
+    }, {
+      "total" : 1123526,
+      "partitions" : {
+        "1" : 352493,
+        "0" : 346534,
+        "2" : 424499
+      },
+      "members" : 3,
+      "at_us" : 1795786155667456
+    }, {
+      "total" : 1120044,
+      "partitions" : {
+        "1" : 351337,
+        "0" : 345369,
+        "2" : 423338
+      },
+      "members" : 3,
+      "at_us" : 1795786168430637
+    }, {
+      "total" : 1116660,
+      "partitions" : {
+        "1" : 350203,
+        "0" : 344248,
+        "2" : 422209
+      },
+      "members" : 3,
+      "at_us" : 1795786181157022
+    }, {
+      "total" : 1113327,
+      "partitions" : {
+        "1" : 349096,
+        "0" : 343140,
+        "2" : 421091
+      },
+      "members" : 3,
+      "at_us" : 1795786193715781
+    }, {
+      "total" : 1109967,
+      "partitions" : {
+        "1" : 347974,
+        "0" : 342026,
+        "2" : 419967
+      },
+      "members" : 3,
+      "at_us" : 1795786206390931
+    }, {
+      "total" : 1106714,
+      "partitions" : {
+        "1" : 346890,
+        "0" : 340944,
+        "2" : 418880
+      },
+      "members" : 3,
+      "at_us" : 1795786219070944
+    }, {
+      "total" : 1103405,
+      "partitions" : {
+        "1" : 345785,
+        "0" : 339841,
+        "2" : 417779
+      },
+      "members" : 3,
+      "at_us" : 1795786231965093
+    }, {
+      "total" : 1100014,
+      "partitions" : {
+        "1" : 344652,
+        "0" : 338704,
+        "2" : 416658
+      },
+      "members" : 3,
+      "at_us" : 1795786244705691
+    }, {
+      "total" : 1096596,
+      "partitions" : {
+        "1" : 343510,
+        "0" : 337571,
+        "2" : 415515
+      },
+      "members" : 3,
+      "at_us" : 1795786257271624
+    }, {
+      "total" : 1093319,
+      "partitions" : {
+        "1" : 342420,
+        "0" : 336477,
+        "2" : 414422
+      },
+      "members" : 3,
+      "at_us" : 1795786269890881
+    }, {
+      "total" : 1089870,
+      "partitions" : {
+        "1" : 341270,
+        "0" : 335333,
+        "2" : 413267
+      },
+      "members" : 3,
+      "at_us" : 1795786282513424
+    }, {
+      "total" : 1086711,
+      "partitions" : {
+        "1" : 340213,
+        "0" : 334276,
+        "2" : 412222
+      },
+      "members" : 3,
+      "at_us" : 1795786295323371
+    }, {
+      "total" : 1083383,
+      "partitions" : {
+        "1" : 339101,
+        "0" : 333163,
+        "2" : 411119
+      },
+      "members" : 3,
+      "at_us" : 1795786308051543
+    }, {
+      "total" : 1080049,
+      "partitions" : {
+        "1" : 337994,
+        "0" : 332044,
+        "2" : 410011
+      },
+      "members" : 3,
+      "at_us" : 1795786320569965
+    }, {
+      "total" : 1076681,
+      "partitions" : {
+        "1" : 336873,
+        "0" : 330922,
+        "2" : 408886
+      },
+      "members" : 3,
+      "at_us" : 1795786333212261
+    }, {
+      "total" : 1073155,
+      "partitions" : {
+        "1" : 335690,
+        "0" : 329751,
+        "2" : 407714
+      },
+      "members" : 3,
+      "at_us" : 1795786345908412
+    }, {
+      "total" : 1069829,
+      "partitions" : {
+        "1" : 334579,
+        "0" : 328640,
+        "2" : 406610
+      },
+      "members" : 3,
+      "at_us" : 1795786358429244
+    }, {
+      "total" : 1066408,
+      "partitions" : {
+        "1" : 333440,
+        "0" : 327501,
+        "2" : 405467
+      },
+      "members" : 3,
+      "at_us" : 1795786371063302
+    }, {
+      "total" : 1063152,
+      "partitions" : {
+        "1" : 332355,
+        "0" : 326416,
+        "2" : 404381
+      },
+      "members" : 3,
+      "at_us" : 1795786383689607
+    }, {
+      "total" : 1059655,
+      "partitions" : {
+        "1" : 331193,
+        "0" : 325245,
+        "2" : 403217
+      },
+      "members" : 3,
+      "at_us" : 1795786396434400
+    }, {
+      "total" : 1056138,
+      "partitions" : {
+        "1" : 330006,
+        "0" : 324092,
+        "2" : 402040
+      },
+      "members" : 3,
+      "at_us" : 1795786409223493
+    }, {
+      "total" : 1052812,
+      "partitions" : {
+        "1" : 328901,
+        "0" : 322979,
+        "2" : 400932
+      },
+      "members" : 3,
+      "at_us" : 1795786421888191
+    }, {
+      "total" : 1049459,
+      "partitions" : {
+        "1" : 327786,
+        "0" : 321858,
+        "2" : 399815
+      },
+      "members" : 3,
+      "at_us" : 1795786434585286
+    }, {
+      "total" : 1046142,
+      "partitions" : {
+        "1" : 326690,
+        "0" : 320748,
+        "2" : 398704
+      },
+      "members" : 3,
+      "at_us" : 1795786447861853
+    }, {
+      "total" : 1042698,
+      "partitions" : {
+        "1" : 325542,
+        "0" : 319600,
+        "2" : 397556
+      },
+      "members" : 3,
+      "at_us" : 1795786460736621
+    }, {
+      "total" : 1039437,
+      "partitions" : {
+        "1" : 324450,
+        "0" : 318518,
+        "2" : 396469
+      },
+      "members" : 3,
+      "at_us" : 1795786473414742
+    }, {
+      "total" : 1036025,
+      "partitions" : {
+        "1" : 323314,
+        "0" : 317377,
+        "2" : 395334
+      },
+      "members" : 3,
+      "at_us" : 1795786486045874
+    }, {
+      "total" : 1032599,
+      "partitions" : {
+        "1" : 322169,
+        "0" : 316233,
+        "2" : 394197
+      },
+      "members" : 3,
+      "at_us" : 1795786498697141
+    }, {
+      "total" : 1029279,
+      "partitions" : {
+        "1" : 321062,
+        "0" : 315121,
+        "2" : 393096
+      },
+      "members" : 3,
+      "at_us" : 1795786511551062
+    }, {
+      "total" : 1025903,
+      "partitions" : {
+        "1" : 319935,
+        "0" : 313999,
+        "2" : 391969
+      },
+      "members" : 3,
+      "at_us" : 1795786524338804
+    }, {
+      "total" : 1022458,
+      "partitions" : {
+        "1" : 318778,
+        "0" : 312853,
+        "2" : 390827
+      },
+      "members" : 3,
+      "at_us" : 1795786536991569
+    }, {
+      "total" : 1018934,
+      "partitions" : {
+        "1" : 317607,
+        "0" : 311674,
+        "2" : 389653
+      },
+      "members" : 3,
+      "at_us" : 1795786549907928
+    }, {
+      "total" : 1015372,
+      "partitions" : {
+        "1" : 316421,
+        "0" : 310485,
+        "2" : 388466
+      },
+      "members" : 3,
+      "at_us" : 1795786562831570
+    }, {
+      "total" : 1011819,
+      "partitions" : {
+        "1" : 315234,
+        "0" : 309301,
+        "2" : 387284
+      },
+      "members" : 3,
+      "at_us" : 1795786575562854
+    }, {
+      "total" : 1008356,
+      "partitions" : {
+        "1" : 314081,
+        "0" : 308147,
+        "2" : 386128
+      },
+      "members" : 3,
+      "at_us" : 1795786588092583
+    }, {
+      "total" : 1004978,
+      "partitions" : {
+        "1" : 312948,
+        "0" : 307023,
+        "2" : 385007
+      },
+      "members" : 3,
+      "at_us" : 1795786601027627
+    }, {
+      "total" : 1001463,
+      "partitions" : {
+        "1" : 311776,
+        "0" : 305853,
+        "2" : 383834
+      },
+      "members" : 3,
+      "at_us" : 1795786613687898
+    } ],
+    "export_at_us" : 1795786624612140,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "seconds" : 180,
+      "rate" : 5000.0,
+      "warmup_seconds" : 60,
+      "permanent_ratio" : 0.0,
+      "payload_bytes" : 1024,
+      "seed" : 230,
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "topic" : "bench.messages.v1",
+      "keys" : 600
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:55255",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 1200000,
+    "acked" : 1200000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 5000.0,
+      "messages" : 900000,
+      "window_start_us" : 1795785843840381,
+      "window_end_us" : 1795786023840381,
+      "window_seconds" : 180,
+      "sent_in_window" : 900000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 5000.0,
+      "behind_schedule_us" : {
+        "p50" : 73,
+        "max" : 14655,
+        "count" : 900000,
+        "p99" : 1476
+      }
+    },
+    "finished_us" : 1795786023844620,
+    "finished_monotonic_ns" : 15388332750290351
+  },
+  "window" : {
+    "start_us" : 1795785843840381,
+    "end_us" : 1795786023840381,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 1200000,
+    "requested_measure" : 900000,
+    "acked" : 1200000,
+    "ack_failed" : 0,
+    "received" : 202954,
+    "attempts" : 202954,
+    "failed_attempts" : 0,
+    "completed" : 201804,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 5000.0,
+    "acked_per_s" : 5000.05,
+    "received_per_s" : 189.38333333333333,
+    "completed_per_s" : 189.38333333333333,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 4810.666666666667
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 900000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 2511,
+      "p95" : 9823,
+      "p99" : 18431,
+      "p999" : 55999,
+      "mean" : 3668.9657755555554,
+      "max" : 138623,
+      "curve" : [ [ 0.0, 215 ], [ 10.0, 1051 ], [ 25.0, 1600 ], [ 50.0, 2511 ], [ 75.0, 4259 ], [ 90.0, 7251 ], [ 95.0, 9823 ], [ 99.0, 18431 ], [ 99.5, 25359 ], [ 99.9, 55999 ], [ 99.99, 121535 ], [ 100.0, 138623 ] ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "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7dOL9x87P/zx9vVfb9uedL792PHm05fOD587nv328u3Lj58+vn//vPPjy45X7e87X7e/lNur3169fP715evXr56/bXjz9Fl7a+vLV5+etT/vbHr24s3rjs5Xb168bW5t+tTxpOlV5/MPnU9anne8fvbsXcvTjvb2lob65pedHW9etL969eIVVt48f930+u2b5oa2Z211bc+a21vam1vrW188efqko6X1efureGtj42/Nz+ubGtpbOxqetL541dn+rPlJW1tDW23j06aG1+1tz+tb2562NT578fxZQ0v984bGuub25pbGeGus8WlDc1Prs462ltizutampvjLJ/UtTS3l1R0vWhufNHPWP62N11c219W31LW2NTS3N1Y/qW9ueFJXW9cQr6iJtdQ0PWkoa2pprG9ujDdU1Va11pQ21rc015XH6mLxhurmprq66ljN07p4fWtVrOVZVXNVTVVtJd7Wt8Qra2LVdVUN5VW1DfH62qrGplh9U0t9vLm+KhaLxWtqqktb62tjdfG66goxVV8fjbfWlJc315Q9iZbFa6vrq6tj1TU1LWXx6sp4PFpXWV9a01AXj8XrKspKIzXNVRW15ZGyaFWspqwqFq8tq2gsLauoilXWVJVVVpbFos2A19TGQqVRXKopryirL4uHwrF4ebS6ujpSVl4RrSmvrKqsriipLauKxOKoxMorq6OhaCQSra6sjJeGK0CqqKysqo9VxKLBaLy8rOVp9ZvOJzUdbbXVDGdHa2MHI1xf21ldF2+q63wajz8lf9XV9Q1N1bVPOsurmlsqWmprW6LVzXU1sYqnhF37pLmmua2ltqK+uq2uvDpeVRuNx+tr6mMtVdX1tTXRhlhDTUWM0CuqK5tqGxrqKpvDpbXlpKCqnnQ3VZbW1tdWNleWNNTGymPl8XBVrLwqVltDMPFYXVlNQ6SqjFCqqkrKorFoJF5SQlgVldHyaGlFZaS8PFxdESsNhatCZRXR0tLKWFm0sjwQLSkrj1aUloUry0qqopHSkmgkGg2Xl8q/aHmstLSiPBIMx6LRsmi0KhANVkVLYtHScKS0sjISjpaUl5WGyyrLKisiQVBCoUh5ZXm8iuEoC0UDFdFQOFISLAkHguFoeaQ0GAkGwqVBH2mOlITCwVDYF/aF6EAsCQUi/khJoDQaCLuRqM+PTqCiNOjX4VAwXBoJRwjJF/UHAiWRALChgC8QCvq03x8JBUNuwA0GA/6wP8T/oC8QCPhDoJf4QwG3JBjxB3y+UIhOSdgfdEsD9IOBQDgY9gWDoUDQDQZCAeWDEAj7w7jk4luoBOe0P4QlfyAUwqEIED5PsCzoD4pe0O8LhoioxA1jFT9LENS+sJhHwoVfGi0hLkD9YPrD+IwfQb8/rAPcAwEMaVdaWjp4HiwhS0ETgl+F3ZBf60DA59d+nwu68im/Dro+nxsCyBfwuQEM+v3+gOv3+VWQdAQDrvZpchvxgxUJ+EuCfsIKkb+A1j4C8AmIdjmVzx/UGNCoKNR9ygcaPIz7tPbToaXDQa3kb7PQ8eOQh+TBdoP89wBDNsIBfPKLX672CLq0XO2KAT9mwHU9rg8KmjAURpUbAFL5XOV3lYZH26cwot2QqzwaIEJCyCNUpeTPwpS45XqQ0TqkPa5SCnGATUMbCVf7PRhwJRZygd+iLr7jBLhYITQXFQ8NJT66IW5+VCMhVzLKP4/rBlUAC64fP+i5AUY4qMORiJZYowFIYck3KQlIxlwJmRHwecwfrzHAIsIgMEhaB6MyN5ilAU9QBUN+zNAl7oBHEiJ6KsAICCDKHEH5aziQSBhaCBo6ejK+HgAkHMbO7/F7DE/+A4CChOdKkBoGiRdHTJyuDAxGZbBcyRUjixFmpWK0ZfAkSdqDhFboeSSzfoZKR0MAa4/R80jOyRxaLoMjtrWsHplJKHrImSQavk/MMrRKSIDTga5cE9qjEWk9/mPQ/cXBIuNEIbPAVxxMV6aADJgW912PYlK5MluMvBl5m+wYOBzwyDyCwdiZaQKKjDVYqIuwz7QJ1CPAyMl/8UZsiYLIe2SCytQyEwVQZPzKcNBVMnLSMDLFv2E0ZoTtkYUg2jZoHsNS2naNNRMK/nn1o6Qril7jgZFXts9ASoQCbOSKwnLzgqSK/wTQRswRc7aWXIkLmrZWRXlDl5uEb6tiVgTYFm2AtHaUiU3cNAZEWysHvxy36IcgukVEseQxKfMYY4/okJQXgEfnipeivyIiiVYwlXIExdFyR8CW4XMkJiRtyaUjyRBtr8gKsG20tME0iSxmWBnFx/TrYi4MqldgHTMW4ppZ9GbeiDtFp/7tmvITtBLfzDwyNzS0yYVbnAWSNxln45kRFT+KruhiEjzG06LfxSE2qZIZLcTH/Bf/2/pR/d9R2NJ0ikrCLR6/xCEZOEN2in3pPBrUhmBu0v8F7BSngzFo7DhmrnBop5jToqPinHHBKU4W7Xl0vuipnL8wjYOPnEcfXbFjuyaGomu/IA1dy1SWHAvN+cV9XDaex1yae3HwioriiFNMo2v/GrTiKmNA/o/5A2LbBGla+p8I/LNILVp3ijlQ/zCMooX/rR/Fi6q/wsaHf6p/j6HRKE68//Wo988i2VAe02H/j8NhXv8N+f8fzMV/mKnsMb4UUf72wPM/rn/f/4byAPDvv5eW0f9HMXlOEUcbCc+vufVrjhWX42PD8/dkksv/A07h4nI=",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "broker" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "processing" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "e2e_all" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 202954
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 998196,
+    "lost_sample" : [ "065ad263-fa0e-42d3-a31e-fc942144c852", "9a3ebebf-2f0f-4adb-b900-d5a39932f1dc", "a8ebeae0-7d0a-4e0d-b621-36970f4399a8", "861498c3-05ab-42a2-a07c-7cae97605b34", "525c7e15-2f27-4136-8f81-d61954b4d69e", "2d6e1715-ef78-4e2c-b15f-a54e47030e6b", "ba54de93-39c7-4b3e-8767-e524dfb7a56b", "ce24a316-9318-4b84-a668-edb5e10de136", "67a021f7-6bed-4fbd-b4b4-070e425005cd", "488737c4-7c90-4b1c-9a4e-27eae19ff8e9", "c403885f-dd1e-477d-ba42-958ccbfa30e2", "ec9edd79-b4d8-4cfc-8dd2-762ac5d8de18", "cb743473-43ba-4f58-a1bf-40f8eb60017f", "ac3fd18a-f8e7-49a6-b64b-dcc7b026f880", "82164044-b75e-433f-a17a-d23423abe776", "18e69a10-632f-462f-b8c5-bcca30712a60", "f05e5215-f5f2-4d2e-bf9a-d292071b51b9", "b91d979b-639c-4b90-a841-1e671ba5cf65", "cd5bdaa0-cc7b-40db-8d7c-c5a84cfe3be2", "4a5bbe9a-41ce-4841-9d8a-5a5c1555b81f" ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795785783840381,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 6,
+    "measure_to_bucket" : 23,
+    "requested" : [ 50000, 49999, 50001, 49999, 50000, 50001, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 49999, 50001, 50000, 50000, 50000, 50000, 50000, 50000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "acked" : [ 49979, 49973, 50019, 50004, 50001, 50007, 50008, 49981, 49985, 50027, 49977, 49997, 49723, 50288, 50007, 49968, 50032, 50002, 50003, 50001, 50002, 49988, 50011, 50009, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "received" : [ 570, 1090, 1330, 1420, 1606, 1751, 1608, 1942, 1943, 1793, 2023, 2006, 1923, 1833, 1863, 1934, 1734, 1930, 1889, 1790, 1953, 1984, 1936, 2005, 2455, 2529, 2506, 2748, 2747, 2599, 2590, 2693, 2613, 2679, 2708, 2649, 2752, 2786, 2593, 2646, 2664, 2782, 2511, 2554, 2499, 2704, 2779, 2615, 2644, 2678, 2519, 2566, 2651, 2639, 2661, 2828, 2704, 2649, 2635, 2562, 2829, 2762, 2634, 2614, 2642, 2698, 2389, 2652, 2565, 2821, 2671, 2611, 2558, 2632, 2811, 2716, 2712, 2716, 2862, 2796, 2612, 2637, 2751, 2894, 1376 ],
+    "completed" : [ 569, 1091, 1328, 1422, 1606, 1750, 1608, 1941, 1944, 1793, 2023, 2006, 1924, 1832, 1863, 1935, 1733, 1931, 1887, 1792, 1952, 1985, 1936, 2004, 2455, 2530, 2506, 2747, 2747, 2598, 2592, 2693, 2613, 2678, 2709, 2648, 2750, 2789, 2592, 2647, 2661, 2784, 2512, 2554, 2498, 2704, 2780, 2615, 2644, 2676, 2521, 2564, 2650, 2642, 2660, 2828, 2703, 2650, 2636, 2561, 2827, 2764, 2632, 2617, 2642, 2698, 2386, 2655, 2565, 2821, 2670, 2611, 2559, 2631, 2811, 2717, 2710, 2716, 2863, 2796, 2613, 2637, 2750, 2895, 226 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ "e2e_no_retry 표본 0건 < 1000 — p99 판정에 쓰지 않는다(결정 231)" ],
+  "files" : {
+    "published.csv" : "a03e141e845539157637a96073d6e298558a26656b2673b3cf660021d1956ed9",
+    "attempts-1795785772457-1681307.csv" : "aec6b6e9a7c69baa0e685029064fb3d25cabb5777374e59155bab2f36e62b82c",
+    "bench_message.tsv" : "ee5f944373e1c1d887e9075ecfbedff61b508762ef4f34496b81c60b9ca41650",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "1c7fe1a88280912e1e58cc66e442c8928678419023198824b9aa9d2c2606594a",
+    "run.json" : "fb14f015c58fe1ea9dc18e3adee2f1b8ea9693df2f75e48b24c72db02fb40653"
+  }
+}

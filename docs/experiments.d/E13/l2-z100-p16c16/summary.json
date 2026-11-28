@@ -1,0 +1,1084 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-z100-p16c16",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 100.0,
+      "warmup_seconds" : 120,
+      "seconds" : 180,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 16,
+      "concurrency" : 16,
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "832baea961f502215f8a02e1e37f97d5a2c934c5",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T02:37:16.561130+00:00",
+    "load_started_us" : 1795833473181783,
+    "load_ended_us" : 1795833773942242,
+    "observation_deadline_us" : 1795834373942242,
+    "settled_us" : 1795833777940109,
+    "timed_out" : false,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.318,
+      "jvm_gc_pause_seconds_count" : 58.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 1.1238E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 44.44,
+          "cpu_percent_max" : 191.07,
+          "memory_mib_mean" : 686.9,
+          "memory_mib_max" : 979.3
+        },
+        "mysql" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 27.39,
+          "cpu_percent_max" : 36.52,
+          "memory_mib_mean" : 448.8,
+          "memory_mib_max" : 457.0
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 1048,
+          "after_kib" : 40524,
+          "growth_kib" : 39476
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 253404,
+          "growth_kib" : 47028
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 32,
+        "cpu_seconds" : 109.66,
+        "cpu_percent_mean" : 36.31,
+        "rss_mib_max" : 535.3
+      }
+    },
+    "lag" : [ {
+      "total" : 86,
+      "partitions" : {
+        "4" : 5,
+        "6" : 1,
+        "0" : 7,
+        "2" : 6,
+        "14" : 3,
+        "13" : 7,
+        "8" : 8,
+        "7" : 7,
+        "1" : 10,
+        "11" : 1,
+        "5" : 11,
+        "12" : 3,
+        "9" : 7,
+        "3" : 4,
+        "10" : 2,
+        "15" : 4
+      },
+      "members" : 16,
+      "at_us" : 1795833475683682
+    }, {
+      "total" : 12,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 1,
+        "1" : 0,
+        "11" : 1,
+        "5" : 1,
+        "12" : 1,
+        "9" : 2,
+        "3" : 1,
+        "10" : 3,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833486335400
+    }, {
+      "total" : 10,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 2,
+        "8" : 0,
+        "7" : 0,
+        "1" : 1,
+        "11" : 1,
+        "5" : 1,
+        "12" : 1,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 4
+      },
+      "members" : 16,
+      "at_us" : 1795833496180926
+    }, {
+      "total" : 8,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 2,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 0,
+        "12" : 0,
+        "9" : 2,
+        "3" : 1,
+        "10" : 1,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833505726915
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 1,
+        "14" : 1,
+        "13" : 0,
+        "8" : 1,
+        "7" : 1,
+        "1" : 1,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 1,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833515510203
+    }, {
+      "total" : 10,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 2,
+        "8" : 2,
+        "7" : 0,
+        "1" : 2,
+        "11" : 1,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 2
+      },
+      "members" : 16,
+      "at_us" : 1795833526049517
+    }, {
+      "total" : 10,
+      "partitions" : {
+        "4" : 1,
+        "6" : 1,
+        "0" : 1,
+        "2" : 1,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 3,
+        "10" : 0,
+        "15" : 3
+      },
+      "members" : 16,
+      "at_us" : 1795833535965409
+    }, {
+      "total" : 8,
+      "partitions" : {
+        "4" : 1,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 1,
+        "10" : 3,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833545732920
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 1,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 1,
+        "8" : 0,
+        "7" : 1,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 2
+      },
+      "members" : 16,
+      "at_us" : 1795833555440190
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 1,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 1,
+        "12" : 0,
+        "9" : 2,
+        "3" : 1,
+        "10" : 0,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833565849225
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 2,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 1,
+        "10" : 1,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833575593912
+    }, {
+      "total" : 10,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 1,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 0,
+        "12" : 2,
+        "9" : 1,
+        "3" : 3,
+        "10" : 2,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833585846640
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 1,
+        "14" : 0,
+        "13" : 2,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 1,
+        "12" : 1,
+        "9" : 0,
+        "3" : 1,
+        "10" : 1,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833595539278
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 1,
+        "0" : 0,
+        "2" : 1,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 1,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 1,
+        "10" : 2,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833605938141
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 2,
+        "14" : 1,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833615553970
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 1,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 0,
+        "12" : 0,
+        "9" : 1,
+        "3" : 0,
+        "10" : 1,
+        "15" : 2
+      },
+      "members" : 16,
+      "at_us" : 1795833625732036
+    }, {
+      "total" : 8,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 1,
+        "13" : 0,
+        "8" : 1,
+        "7" : 1,
+        "1" : 1,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 1,
+        "10" : 1,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833635524306
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 2,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 1,
+        "10" : 2,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833645902192
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 3,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 1,
+        "3" : 1,
+        "10" : 0,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833655654815
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 1,
+        "8" : 0,
+        "7" : 0,
+        "1" : 1,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 2,
+        "10" : 2,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833665914861
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "4" : 0,
+        "6" : 1,
+        "0" : 1,
+        "2" : 1,
+        "14" : 1,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 1,
+        "3" : 0,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833675566957
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 1,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 2,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 1,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833685745561
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 2,
+        "13" : 1,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833695318461
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 1,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 1,
+        "8" : 0,
+        "7" : 1,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 2
+      },
+      "members" : 16,
+      "at_us" : 1795833705476591
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 1,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 0,
+        "12" : 0,
+        "9" : 1,
+        "3" : 0,
+        "10" : 1,
+        "15" : 2
+      },
+      "members" : 16,
+      "at_us" : 1795833715736184
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 1,
+        "0" : 0,
+        "2" : 0,
+        "14" : 1,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 1,
+        "9" : 0,
+        "3" : 0,
+        "10" : 1,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833725497821
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 1,
+        "14" : 1,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 1,
+        "5" : 1,
+        "12" : 0,
+        "9" : 0,
+        "3" : 1,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833735602078
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 1,
+        "12" : 0,
+        "9" : 2,
+        "3" : 0,
+        "10" : 0,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833745819652
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 1,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 1,
+        "1" : 1,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 1
+      },
+      "members" : 16,
+      "at_us" : 1795833755445548
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 1,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 1,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 2,
+        "9" : 0,
+        "3" : 1,
+        "10" : 2,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833765887892
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833775396300
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "4" : 0,
+        "6" : 0,
+        "0" : 0,
+        "2" : 0,
+        "14" : 0,
+        "13" : 0,
+        "8" : 0,
+        "7" : 0,
+        "1" : 0,
+        "11" : 0,
+        "5" : 0,
+        "12" : 0,
+        "9" : 0,
+        "3" : 0,
+        "10" : 0,
+        "15" : 0
+      },
+      "members" : 16,
+      "at_us" : 1795833777717891
+    } ],
+    "export_at_us" : 1795833778082912,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "seconds" : 180,
+      "keys" : 600,
+      "topic" : "bench.messages.v1",
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230,
+      "payload_bytes" : 1024,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 120,
+      "rate" : 100.0
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:44727",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 30000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 100.0,
+      "messages" : 18000,
+      "window_start_us" : 1795833593947948,
+      "window_end_us" : 1795833773947948,
+      "window_seconds" : 180,
+      "sent_in_window" : 18000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 100.0,
+      "behind_schedule_us" : {
+        "p99" : 330,
+        "count" : 18000,
+        "max" : 6135,
+        "p50" : 75
+      }
+    },
+    "finished_us" : 1795833773942242,
+    "finished_monotonic_ns" : 15436082847922606
+  },
+  "window" : {
+    "start_us" : 1795833593947948,
+    "end_us" : 1795833773947948,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 30000,
+    "requested_measure" : 18000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "received" : 30000,
+    "attempts" : 30000,
+    "failed_attempts" : 0,
+    "completed" : 30000,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 100.0,
+    "acked_per_s" : 100.0,
+    "received_per_s" : 99.99444444444444,
+    "completed_per_s" : 99.99444444444444,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 0.005555555555555556
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 769,
+      "p95" : 1485,
+      "p99" : 2649,
+      "p999" : 6427,
+      "mean" : 875.6944444444445,
+      "max" : 17055,
+      "curve" : [ [ 0.0, 393 ], [ 10.0, 579 ], [ 25.0, 642 ], [ 50.0, 769 ], [ 75.0, 957 ], [ 90.0, 1206 ], [ 95.0, 1485 ], [ 99.0, 2649 ], [ 99.5, 3473 ], [ 99.9, 6427 ], [ 99.99, 12695 ], [ 100.0, 17055 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABR54nD1Vz4+bRhSeDOMxZgnLsixxCXWoQwhFFkGIUseixLUsy0IWstzVartaRdtVKrVpTj313l57qPIv9G/qtX9AL+2h935vcGrMDPN+fO97j5lH8Mv7c8aG/7L+px3nBzT88f539urvXvCb5CN+zrnGOeMDmk+FJgZY4K8eBBdMCNILrnNMlhTSENwwpBC6oZt41qUwddvRTdu2xmN3YhmO5VqBY1mJG/mu41tlMA7jPA4XbpzOirCKsqxo51UVFmVRlov5uspW8/WyXHX7RZttm+VqsVnm2269ut7tN4v91eVmd7V9W78+dNeH7f7+7d1N+2Z/111fv7u7a6+xvP/p+nJ7t97tr7rv9vf3N7e3N93tjzc3q92bd+tle9ttuttuf3l1+7rd15eb7dV6064PQD/Ul+v8UHfb9XXbIe6q2WyaZbup66bb7Lb33bJctmnbLvdpM1/Pbw7NMmur+mpf1dV+WW2KZLdqDkV3udrvd02eUi6XWb7drrN1iRTKJi+6NtvVeV2ETVXMgZJsynzdpPNyvpgtFmlVlatomlXhtpq306ZcbMtVDdkir6qiiRZJXWSTss6LOinLdNKkVTMbp/k8mRZ1mZRxmtZhEc/8KCyWeZMvZkU2S8JolkyDME4nURzHWZSWXjaLlv40jtN5nFZRNIumflZEsyCcFVGeVNMsKMZ+Nh8neZA4cZGkcT6J8bqmyRQoaewHQZ6ksygZh8nEn4RBGIwjfxwWiReGyWziuc7EDXwz8nzbDuE+Dn039IJw6tmh6048P3C8IPAiJxhbbugYvu25rmNPA9fyDGDY46lhYsMEgXRty/fGGC3TMh0ffnjUHfpbtm6btjOGwoPWcl3h+oalm65rSM/XDcuwbds0TMPwbJgb8MB2dXUdk2uNPd228JdYmxJgBhZkInQhEdeWcDBMXequxMZ2TEsyz7R0w8BG1zEZptClCV9TOKbAKeAWTomlcx0azBLOQuJwmAYdEBATODQYTZhI+EPJmUnnRnJgmUyCjKHjGAkBFiQXUsXihgSqNKSEAbykoAMJNYOrjjUZCgYRrYQgBIxQckoGMw6rjrNrIojOgADqcGMwkHTGcZSVDSdoGPZgoIcbELCHMxB6YuQjScUMZQWxoFaBnsGoZ3CDRpIhABoDiYitUG66QlP9RFJ3YRQOCthoUjUYYsHpp6kOBKVGlsqJkwaTpEFTzISKADzCgKsk1757IRXJFLcjMFxgQgNTfHoxUxcwhxQDIqZIKqXSqJIpK8HkEQa0qDsqjB4GZUD3JHJaz6DXsQ9sKAUxQBcdcWqpZExMNCKJe9hXhYkhYXDFq0fo6zroBUwRVNyVmGoyPAbCK+AqXyE1nR3j8IHs+/rDnu25cuxpq+4+Qt60XwyNDDRTE5qqjUHlBUeJG7uGGr/6AqiX22cNldoI/StQ8akqw2MpR8DHs8bFCRloKj+uSngGWgAZ9EU9pg4qDKZn/BOVjhgBj4CG/MPHiJ/yD3XlA6GKMupVA1VgtU3oJZ7wE/penQjy5hdC+/89n6ukjxXTYIHFBVD4sSgjXFTGUxKcAQgzTYx/zF+ppzPxTFkO+TmsXvKnKuoj+H0OdMafA0+R+RImz/kz/oJ/hOozjI/4F0jugn/KHyunJ33Yx1BT3gMiS9k+he0TcQZPhpQ1pQYh8YK2zAiLEf8ekb+C6hvMp3B6CehHmC/418D75wH/gf+JAvDPYPsQNDT+8wP+La5fB/yvIf8Pp+ijfQ==",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "broker" : {
+      "count" : 17949,
+      "negative" : 51,
+      "overflow" : 0,
+      "p50" : 1154,
+      "p95" : 2109,
+      "p99" : 3593,
+      "p999" : 36959,
+      "mean" : 1382.9348710234553,
+      "max" : 164351,
+      "curve" : [ [ 0.0, 2 ], [ 10.0, 854 ], [ 25.0, 979 ], [ 50.0, 1154 ], [ 75.0, 1456 ], [ 90.0, 1825 ], [ 95.0, 2109 ], [ 99.0, 3593 ], [ 99.5, 5543 ], [ 99.9, 36959 ], [ 99.99, 158719 ], [ 100.0, 164351 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "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",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "processing" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 6883,
+      "p95" : 10039,
+      "p99" : 13623,
+      "p999" : 108863,
+      "mean" : 7552.122666666667,
+      "max" : 175231,
+      "curve" : [ [ 0.0, 4516 ], [ 10.0, 6179 ], [ 25.0, 6463 ], [ 50.0, 6883 ], [ 75.0, 7839 ], [ 90.0, 9071 ], [ 95.0, 10039 ], [ 99.0, 13623 ], [ 99.5, 16799 ], [ 99.9, 108863 ], [ 99.99, 174335 ], [ 100.0, 175231 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABNh4nC1V0W4jNRSdOo7remdnZ51h8BrjNUM0DKPRUEoI3agKVYiqqIpCiFYhKqUKVVUtVbXsE+IDVuID9gnxCs+ID+ATeOCFf0C88Akcu1t1PPa559x73fSemJevelHE/onufjqv3zt++fvVL9Gn/90Bf31IHpJHZJeQiLxFyB65R7pYI0ofkA6NSIcw7leyRwFGntbxR3Cw7VLsCCLhIVDg8TtKCfOvABKkZAx8RAPqRV0GEvUHSoLCR4HwiHmAUv/LGdaQhXb8w5EAYWBg+WAcUU44J4JTH+MRZVwwxpngjMcgI8o4jVNKOBVJlnDBeSxiwYRMhYnjlOVxmspYp2WmkywTWrokT5XOdGZTmRupXZsXla6sLt3IHDSq3K/LpnL7/aNyWNrG1sPm8HB4PDs+PGzrZjA9GjXj06PV+HQ0GszGs9Hk8HhyPB2PhuvZ/nR7db492Ty9nJ/NT87OTq+eX5ycrhYXm+3Txfjq8na62G7mz85uNovr2WK7OF8vNtuL22fr5cuds83i+fenq83JcvViuVxdPN3cLDeb1c0Pl2fbF9eTs/V6O1lfnc9up/PZzXZ2fXV9cX47Pz9fn07WJ5Pl/PJ8O11Pjk8PV4tn2+nhcnY0msxW89V03M4nk5P1ZDrcX44n++OTyaAdDJbL8aAeHtSb0aBtp8N2sG2PjtrB/kHb7x9Mx83ooD4omnZ8NOhjV9XDqhjV/eFRY2zVVlXVTkqny6ouWlce1MpV/VLqwtmsUc4WSsusbIqs1E2hLf7YlaocL3WptcEHYXSsrMyVUypRRrUQaiVdrguTKGWkzS2Ifdk3VlsXF4W1xsnYpE5mea3TPLUqL4TL8TmKpLBGcwckVons97NEOymUcXkSp7nKde5ipXNrsVNZavIkz42SuY1VYVIpU5VJF2dlkkutTGZExhORGa1jK1OQZZZVumld1apiv6lL45rKOmvrviuK0lrXuKp0tnXaoWlTlaZfl65V2tnSZkYpbbOsSdO6cGWbqTw1lXalNMZaC1KaONwSrEKaHDd1tXEqz5VUuImSaZbGBlcrlbSxU2ksTBYzahL0pmQW8yQVSRrzVAh0nUqeSZEwhkiSyJjFUuD/P+O5CCeGSRKCSx4nPMUoYVaw55zSLOOYHCoQZSyLQGVQYsYEdilFSiEwaxhLCh4mN4kFpQLzR/wAxhhYiuH0c0r9dCJG4pjDJ6DxbsEZhhpKIjDggAIeDAHRsPM+wLFE8AhACfNquAODN0T8zkxwZoEePAlqpIIoeIjP5L2Gdz3NG1fEAhRsCXxIce76U4cEAyLB0BBDxV0kDeYGK+swSNmup+36jqiA8/jOYIm0i4V7YnTXE1xy10t6d3V82q43UxrMESk6dzRIQsbXjhisNqAd0oPfduCBe/Bhb8s+Q+d1Zz5JNwjuoTQq3QsG7cG36C6Arndrz4i8i+6FZrzZ90LBB+QxWIg/oj1yH7l7d0kjfDH0EP0sNBU0voMoWHHkLwlCqIeGgL0ZsoWe38DrfV/BN3nfU3qh2w4UD9HAB+RL8h449yD6jnyLIh1o7pPPydtYP8L30UNgTxD/mvyxg82/lPyYkI/JF+S3HejeIb/6/r4iP1PymHxD/twh75JPyO8dnB4A7qLeTwTYE4J8KIdM/wNYXaSP",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 8967,
+      "p95" : 13047,
+      "p99" : 18735,
+      "p999" : 139135,
+      "mean" : 9801.883222222223,
+      "max" : 177407,
+      "curve" : [ [ 0.0, 5952 ], [ 10.0, 7947 ], [ 25.0, 8343 ], [ 50.0, 8967 ], [ 75.0, 10047 ], [ 90.0, 11655 ], [ 95.0, 13047 ], [ 99.0, 18735 ], [ 99.5, 26095 ], [ 99.9, 139135 ], [ 99.99, 176383 ], [ 100.0, 177407 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABP94nD1V32/cRBD2jvf2tput4zpbYxnHci1jDmMO9zi519NxPYWoOqJQqipUoVTRqUJVFYWoisLpFEWhClEpCIREpYofD+WBd/4b+Dd47wuz68Cd7J2dnfm+8Xrnc3T2fMWy2h9Yzc8+H4m+/fX8D+vGP43j5TW4AlfhAqwAtKEFywAX0V4BukxbADb+jZuigXNoUQsdsAQWpXQJWAssAKodehEnFtjU+MzFAJilTXShcW41l83azBjAqUWB6REYo1SvMw6MM5yhFyjXdAyaFcTlTOgZZxYITQG4yJigjDoSU5gQXCczDORSUselVFBfSiGo4EJIyqXDHCE5dQLmMOm4gfQ8DHUiofxYuDzwVBiEvuKJ50YqV0EYBG6QxmHsR1GcqTRQYRylaRRGfhKHURLmeTeP4jxTw7hfZt2oTDCr202zXhb1yiztdOuiyofjMi+7Raes1kfjUVb2qlGR13W1Vm8Wg15vsnFrUE3Wur2yHtVV0dkYjL8n88UpeUoWi+Pd2ebR41/J8Rk5foaew1Ny8BOZHXxH5ndvb+8c7h2e7JySxf4L8oScnJHHv5OTn8n85OTgYG+xf/SMHM8w4ZQcHc4fLXaP93YOXpDdo/nmo8X8Kdk+I6fk8CmZ79+ZLR4+2Pn84WIxO0Oggydkb+f+470H9+7OZnd2793f3Lm/vT27+3BvvLU/nUy3bm5Nbk43h5Pbk9trG9PO5vpWeauupsNRPdqYVL1BPV6vbg76VTEaDKq8uz5Op2vdcmNSFHV31Fnr93u97mA8qId1vxr2+9OqX1bZMAmroleoqNPppFmRpHnWLasiw53PkrjIkrAMEzSjPPQ7cepVfp5nsRdHsadkEMWxCjMMqjt+kJRZEKd+kIVpXmRR3MHXl6koC9JukcikSFQVZ1GoIi9JojhMEk85CjFzP46cKInxdScIE/te4IeR6wTKCyKl0lD5geCu7zuuUolXckfFMnRdrtzA9STDeO4rKT0ZKvTjqfMcT7quwxmeMyFlEDrSZ8LxueM60nG4w0TIPVzxLCGFgyQulVwwpMHDzfHAguP7zONcajjGQ4Hd4gkPD73LOBeeRYXC44ytyQF7wBU4QTZG8RJc6s4RmOnqDqCYQJnUrYWANndwhklCD4wLhwrAKMYkCN1VTGDnISTVDafLwobDzkMcXNeEGhL7EHsUW9USjFMqdVdj51k6jKOJTHjDLGx1Rk0aYqHFdBBrWtnSumGDaXd0GuVgRj1QFIxenGtIQ6YlitpGAiwwCJhIGwGSJlhnaYWxtX7QBvZ/GZItqkvSqoPSpRVPZ2qpA2ZTrWdIpFkQwTa1wfkPN9tmtFE8TY56iQKIDk7NMtMK2EK1NEmYrYVTK+gSuwANhckArbxG22zDahlMUxDVUkpbpjIbFzDEQDXboG+Ieq6vtG0kusm1zNjCVFvowkx0C7GR6sL5k5p9sU3d2t02/Ja+s0u0ifpP0i+CCTHxDc0l48eoJePUZYB5VAu/HW0wT7diSrC1sWye7i2cruB4RSO9C6v0Nf3Z0fA2Gn8Sg20QPzEFteFN8/VB6EtIZcMbcA3e1jEX6UuCCx9j4Cq8j1hLhu8qfIEzGz7E6wcCX8IrgvPL8DdgBb8Q+JZi+HX4Ct6DJazkCnyj6T+DHynyrCLMO/A1gY/gdbgBz230LMOnzXFYht8A46+bV6Y34LIp1sba/wXZgKa8",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "e2e_all" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 3585,
+      "p95" : 5687,
+      "p99" : 8671,
+      "p999" : 32799,
+      "mean" : 3969.3297222222222,
+      "max" : 167039,
+      "curve" : [ [ 0.0, 2448 ], [ 10.0, 3005 ], [ 25.0, 3235 ], [ 50.0, 3585 ], [ 75.0, 4131 ], [ 90.0, 4971 ], [ 95.0, 5687 ], [ 99.0, 8671 ], [ 99.5, 11983 ], [ 99.9, 32799 ], [ 99.99, 162303 ], [ 100.0, 167039 ] ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABUR4nDVVy67sOBXN2eVy+eT4+rrdwe1Op43xjdLGuIMVoiiEqCgdHRp0acQIwQ8wRIgBI8QMxj3oEXMQQ76CL0DiBxgh1BKfwHbqkqryYz/W2nbFy90fvny/qi5fVffn9K5/KM0/v/xz9f3/3g1fvAH4AM4AFZzJU+lewQkqcoIL4OBMsCnzihCo6BmwxZ4CUHJiQCjUaOAE7TgDQhghnJIKCAdKKRc1rwglpK5rdNZMUlYLSrUU0EjuOBFS8EaWp9ZccN6gwQjZqIYJ6ayxjTfWcKOV6oViMnlhjNAmW2F8Z7xWXWddq4fetdZb51Kr7WD6LrUxaYe+2PUu+Vts+9BuLudk4zSnEOMYx8H3OfRT6Fya/N6HbRuGOLlxnYLzIS7TNW7BRJvnZUzjFPZx2YdpXMYxpZctbus4+zR+3m/rvmzXtL5M+foc0/rcTvs1zNm+rCEtaU1bXpZp2dY1zy/bdTDL52Hd1ml5eTvdxi34nK+/WOYUb8O0h2Wc43a16UfXnJe4j/NzP91ezD4NaZ62Ld9ynndMRtA93fa3y/62X7Yp72N+zlPIn41pyuvzOo43LBFDCkwcp7FfXoJLg9/beb/5afwsLaMNt7RipUNOY1h8Xp5x/WO/hQ5L2XGjdp98aPM+dSGmlyXOMQ45+hT6mMcZt2ayJi5uGbrRjsnaYR8H3OUUx5DG1g59n9u5zbY3gw1+SjnYoWy9m1uXYh/6wQ+m9S5aOfWtb3vf+t47HHTJKm1MY0JrOh60k33X9cp76xurXNfhIOTGOCF9MKZT2namdW2nvRqU8U3HrNWmbhNWoaz2XaNMg6n4VuG069raRO1a2XRCN61wrZPemnVIq1/nsZ/GmObQrVeTcwx5DHHovR/2wVqvXPCt1U43usW3zXUxuy6sQzT4BkWE7q13venbXnW2VUbhS6ucM9q33Hipu6ZpOiu9MVoagwtrZG8apbGUxjov2kaaRgqlZedbPB1NwDQlmtrwrm201sZx0zW81pKLRjeNUZpxqVSNBBIDFVMNHrNaSkEYqxW6JJVKCi240LpmlDMupFHlkErGOOeqI4BGKtHVUPQe1ppwhmcaEzCFM4bpEtMRta4VoVTgqRWcKS6okCAo04xSWYsaBC9HX2I2Y6rGCUMjCkZRDRSCgqwJekjF0cgo6gerOTCsl0kORBROXlNaVwgpUGJqyolEJcJQlCBCFNZEGE4przCJ1qQoEEOvQB7KimyRUgSpSsqhYbT0RaxwTGpCUc+Qsggbq1GrirIVJQNgrLpHUWAVDtBSYsv3oEf+isE7DrTS4ipYT/RIR+uZshKOoXVVlLJAFyisgEJVFyBUWuzO5EQPzBKN6osKinZ6RBcxLop6hiKlp4OFHJFnUlixDChaXZUGES8FEIqAlylSHgJOKvj/B+ePd8mHAnwhl4MDgV7f74H7Kg+Ce08wAWdwL+sYlqugUF0K0uORB8V7vi8A7tgH6xFwgic4SnqNlmNK7sHn+/2CtqoUcrQXigCvAI4L6SgW/WiHMzrIfZPgboWyV0/vyKujHIwjr0khLFjn0mP7eEThah8PqtOxC8ce4e+9+wK+UUr8CD7E+aXwV6WEbwF8TLDs93D86lj5+7gxPz7Ino7r8evHFVoIHuHNgf8RFKZvo/XD40L948MBio7yN2LiJ/ADhPkEvgu/x6CPcXxB7wfwKfkZfA3eYCUnjPjTA4ac4afo+CXA7+B78K8H+CZ88QDwV4DfwN8f4CfI9ZdSxM/hHw/wHQT6D8PwX8PfLvAr+C18ReFT5P43kB/C/wDVcKmk",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000,
+        "significant_digits" : 3
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 30000
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 0,
+    "lost_sample" : [ ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795833473947948,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 12,
+    "measure_to_bucket" : 29,
+    "requested" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0 ],
+    "acked" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0 ],
+    "received" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 999, 1 ],
+    "completed" : [ 1000, 999, 1000, 1001, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 999, 1 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "709be1ed142ea069cbc5ec122bbe8565f1e4d413155a38d2001d2c03fa4c66f9",
+    "attempts-1795833461990-494896.csv" : "2c84b3073d91d79286fbd93608f8ab679703fd18904edbf8de7c129e9eaedd22",
+    "bench_message.tsv" : "71365e98496ad9abe22daffaabf27fac0794d300de80cc27c2d692ef12c59540",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "dbefade482aeeb86db256788240a7b7fd4d3b7339cc3c412e7d8a08d80aa25bb",
+    "run.json" : "3476fddff2a68781c0fea0f45a5398bcdee7503ec2c0cb942250d5df23095171"
+  }
+}

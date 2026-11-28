@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">지연 백분위</text>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0.01</text>
+<line x1="70" y1="370.0" x2="710" y2="370.0" stroke="#dddddd"/>
+<text x="64" y="294.9" text-anchor="end">0.1</text>
+<line x1="70" y1="290.9" x2="710" y2="290.9" stroke="#dddddd"/>
+<text x="64" y="215.9" text-anchor="end">1</text>
+<line x1="70" y1="211.9" x2="710" y2="211.9" stroke="#dddddd"/>
+<text x="64" y="136.8" text-anchor="end">10</text>
+<line x1="70" y1="132.8" x2="710" y2="132.8" stroke="#dddddd"/>
+<text x="64" y="57.8" text-anchor="end">100</text>
+<line x1="70" y1="53.8" x2="710" y2="53.8" stroke="#dddddd"/>
+<text x="70.0" y="386" text-anchor="middle">p0</text>
+<text x="128.2" y="386" text-anchor="middle">p10</text>
+<text x="186.4" y="386" text-anchor="middle">p25</text>
+<text x="244.5" y="386" text-anchor="middle">p50</text>
+<text x="302.7" y="386" text-anchor="middle">p75</text>
+<text x="360.9" y="386" text-anchor="middle">p90</text>
+<text x="419.1" y="386" text-anchor="middle">p95</text>
+<text x="477.3" y="386" text-anchor="middle">p99</text>
+<text x="535.5" y="386" text-anchor="middle">p99.5</text>
+<text x="593.6" y="386" text-anchor="middle">p99.9</text>
+<text x="651.8" y="386" text-anchor="middle">p99.99</text>
+<text x="710.0" y="386" text-anchor="middle">p100</text>
+<text x="14" y="200" transform="rotate(-90 14 200)" text-anchor="middle">ms (로그)</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,150.7 128.2,140.7 186.4,138.9 244.5,136.6 302.7,132.4 360.9,127.0 419.1,122.2 477.3,99.3 535.5,63.8 593.6,38.7 651.8,34.8 710.0,34.6"/>
+<polyline fill="none" stroke="#009E73" stroke-width="2" points="70.0,180.9 128.2,174.4 186.4,171.9 244.5,168.2 302.7,162.6 360.9,155.4 419.1,148.4 477.3,116.8 535.5,76.7 593.6,41.4 651.8,37.3 710.0,37.0"/>
+<polyline fill="none" stroke="#CC79A7" stroke-width="2" points="70.0,243.4 128.2,230.1 186.4,226.3 244.5,220.3 302.7,213.0 360.9,204.6 419.1,195.3 477.3,171.5 535.5,157.6 593.6,102.7 651.8,66.4 710.0,61.9"/>
+<polyline fill="none" stroke="#E69F00" stroke-width="2" points="70.0,366.7 128.2,217.9 186.4,213.4 244.5,207.7 302.7,198.6 360.9,188.9 419.1,179.2 477.3,132.8 535.5,81.3 593.6,42.1 651.8,38.0 710.0,37.7"/>
+<polyline fill="none" stroke="#56B4E9" stroke-width="2" points="70.0,161.2 128.2,149.2 186.4,147.7 244.5,145.7 302.7,141.3 360.9,136.6 419.1,133.7 477.3,125.7 535.5,121.7 593.6,72.8 651.8,35.2 710.0,35.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">메시징 종단(재시도 없음) n=18000</text>
+<line x1="725" y1="58" x2="743" y2="58" stroke="#D55E00" stroke-width="2"/>
+<text x="749" y="62">재시도 포함 완료 (표본 없음)</text>
+<line x1="725" y1="76" x2="743" y2="76" stroke="#009E73" stroke-width="2"/>
+<text x="749" y="80">발행→완료(전체) n=18000</text>
+<line x1="725" y1="94" x2="743" y2="94" stroke="#CC79A7" stroke-width="2"/>
+<text x="749" y="98">발행 확인 n=18000</text>
+<line x1="725" y1="112" x2="743" y2="112" stroke="#E69F00" stroke-width="2"/>
+<text x="749" y="116">브로커 구간 n=17937</text>
+<line x1="725" y1="130" x2="743" y2="130" stroke="#56B4E9" stroke-width="2"/>
+<text x="749" y="134">처리 n=18000</text>
+<line x1="725" y1="148" x2="743" y2="148" stroke="#000000" stroke-width="2"/>
+<text x="749" y="152">최종 실패 판정 (표본 없음)</text></svg>

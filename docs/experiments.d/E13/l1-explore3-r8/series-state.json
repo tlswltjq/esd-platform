@@ -1,0 +1,115 @@
+{
+  "stages": {
+    "r6": {
+      "rate": 6.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-rkqrrbf6",
+      "seconds_taken": 891,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 6.0,
+        "rates": {
+          "offered_per_s": 6.0,
+          "completed_per_s": 6.003333333333333,
+          "completed_over_offered": 1.0005555555555556
+        },
+        "outstanding_drain_seconds": 0.765,
+        "backlog_drain_seconds": 8.972,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 317.614,
+          "p95_ms": 450.979,
+          "p99_ms": 507.412,
+          "max_ms": 605.705
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    },
+    "r7": {
+      "rate": 7.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-b9h1ge4w",
+      "seconds_taken": 898,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 7.0,
+        "rates": {
+          "offered_per_s": 7.0,
+          "completed_per_s": 6.986666666666666,
+          "completed_over_offered": 0.9980952380952381
+        },
+        "outstanding_drain_seconds": 1.216,
+        "backlog_drain_seconds": 10.819,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 362.221,
+          "p95_ms": 490.996,
+          "p99_ms": 539.482,
+          "max_ms": 628.317
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    },
+    "r8": {
+      "rate": 8.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-ghh0d20y",
+      "seconds_taken": 907,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 8.0,
+        "rates": {
+          "offered_per_s": 8.0,
+          "completed_per_s": 7.99,
+          "completed_over_offered": 0.99875
+        },
+        "outstanding_drain_seconds": 1.096,
+        "backlog_drain_seconds": 11.749,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 413.536,
+          "p95_ms": 567.423,
+          "p99_ms": 631.321,
+          "max_ms": 688.59
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 300,
+  "warmup": 300,
+  "buyers": 20,
+  "faults": [],
+  "rates": [
+    6.0,
+    7.0,
+    8.0
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "scope": {
+    "keys": 4500
+  },
+  "groups": {
+    "license-paid-order": {
+      "count": 4500,
+      "negative": 0,
+      "p50_ms": 39.717,
+      "p95_ms": 87.514,
+      "p99_ms": 113.952,
+      "max_ms": 166.246
+    },
+    "order-license-grant": {
+      "count": 4500,
+      "negative": 0,
+      "p50_ms": 21.649,
+      "p95_ms": 57.558,
+      "p99_ms": 78.163,
+      "max_ms": 115.332
+    },
+    "order-payment-result": {
+      "count": 4500,
+      "negative": 0,
+      "p50_ms": 28.411,
+      "p95_ms": 65.57,
+      "p99_ms": 89.238,
+      "max_ms": 147.464
+    },
+    "payment-order-request": {
+      "count": 4500,
+      "negative": 0,
+      "p50_ms": 11.314,
+      "p95_ms": 39.704,
+      "p99_ms": 60.77,
+      "max_ms": 141.53
+    },
+    "settlement-paid-order": {
+      "count": 4500,
+      "negative": 0,
+      "p50_ms": 80.097,
+      "p95_ms": 156.432,
+      "p99_ms": 190.961,
+      "max_ms": 264.462
+    }
+  },
+  "order": {
+    "license-paid-order": {
+      "keys": 4500,
+      "events": 4500,
+      "pairs": 0,
+      "violations": 0
+    },
+    "order-license-grant": {
+      "keys": 4500,
+      "events": 4500,
+      "pairs": 0,
+      "violations": 0
+    },
+    "order-payment-result": {
+      "keys": 4500,
+      "events": 4500,
+      "pairs": 0,
+      "violations": 0
+    },
+    "payment-order-request": {
+      "keys": 4500,
+      "events": 4500,
+      "pairs": 0,
+      "violations": 0
+    },
+    "settlement-paid-order": {
+      "keys": 4500,
+      "events": 4500,
+      "pairs": 0,
+      "violations": 0
+    }
+  }
+}

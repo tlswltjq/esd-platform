@@ -1,0 +1,430 @@
+{
+  "applications": {
+    "auth": {
+      "image_id": "sha256:fb1b9bd729a1c8f56c6f554c923bfe7998c9d5081362fbb6b823dc38d43de7ec",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "web-bff": {
+      "image_id": "sha256:1139cf47e83316a3d822f9c7ee8b41f8f8fb12d6a484f9199fad6a2cc9296da6",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "gateway": {
+      "image_id": "sha256:82fa77011c50a8472e0759cd4068972eba7fa23cd85a800b76dee8b20300799b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "studio": {
+      "image_id": "sha256:0e9b010fca0aa95b2e2d572423bff4f87d26fe271214e2c144019254987bf06b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "review": {
+      "image_id": "sha256:086e3f679455d70ccf1eeca63fbfe1146d5dbf5b5c42b9e7368a0d9521d5454d",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "catalog": {
+      "image_id": "sha256:087ebc3f2c3c3549955888433f9949f2d9ee2a0df825af79f0a75170909ea2d9",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "store": {
+      "image_id": "sha256:c7f787894de575cd4b073a94ee0392b48e91b51ff95ed998a338ff6c5394e0fa",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "order": {
+      "image_id": "sha256:e6fa65efdc87c46a7ab849d50b9e7f0a2198c133e02ae4d72bd96204a586c233",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "payment": {
+      "image_id": "sha256:2d462c93dd0dd693f9f585c396179fd34c5efafb25cbd252d2b0fbfc500d72fc",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "license": {
+      "image_id": "sha256:0b76b234c0cdd1eb3d15faa47d80097fc4c05abe8b6f5444cfed31ed558d8d3b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "download": {
+      "image_id": "sha256:f71c19a635229960f233991fc87476f0a17ab92718dd7917f27a46156ee56a01",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "settlement": {
+      "image_id": "sha256:f2707b32e2e54c085c9c36653f3ad768e206566a92083f400d1147b3e96cb021",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "mock-pg": {
+      "image_id": "sha256:55fbfbe9dfaeab71d82bea735578c508d07d3bc866a06dbce7af274c9ff0ad06",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "UTC",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    }
+  },
+  "phases": [],
+  "port_offset": 11000,
+  "complete": true,
+  "app_env": [],
+  "started_at": "2026-11-27T21:41:28.465951+00:00",
+  "host": "Linux-5.15.0-1081-oracle-aarch64-with-glibc2.29",
+  "command": [
+    "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/tools/verification/verify-jib.py",
+    "--measure",
+    "--load-rate",
+    "2",
+    "--load-duration",
+    "600",
+    "--load-warmup",
+    "60",
+    "--load-buyers",
+    "20",
+    "--fault",
+    "dlt-limit:at=180,for=30,limit=512",
+    "--skip-build"
+  ],
+  "project": "messaging-measure-rh4xodoh",
+  "measurement": {
+    "rate": 2.0,
+    "duration_seconds": 600,
+    "warmup_seconds": 60,
+    "buyers": 20,
+    "planned": 1200,
+    "accepted": 1200,
+    "http_p95_ms": 64.54214,
+    "late_start_max_ms": 7.211691,
+    "journey": {
+      "completed": 1200,
+      "incomplete": 0,
+      "failed": 0,
+      "created_to_basis": {
+        "p50_ms": 880.448,
+        "p95_ms": 1411.287,
+        "p99_ms": 1510.707,
+        "max_ms": 1705.513
+      },
+      "paid_to_basis": {
+        "p50_ms": 190.381,
+        "p95_ms": 301.474,
+        "p99_ms": 352.878,
+        "max_ms": 475.705
+      }
+    },
+    "broker": {
+      "license-paid-order": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 19.295,
+        "p95_ms": 55.854,
+        "p99_ms": 83.685,
+        "max_ms": 127.428
+      },
+      "order-license-grant": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 11.306,
+        "p95_ms": 32.74,
+        "p99_ms": 56.306,
+        "max_ms": 292.438
+      },
+      "order-payment-result": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 12.274,
+        "p95_ms": 32.958,
+        "p99_ms": 50.673,
+        "max_ms": 205.624
+      },
+      "payment-order-request": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 12.021,
+        "p95_ms": 30.979,
+        "p99_ms": 50.859,
+        "max_ms": 82.368
+      },
+      "settlement-paid-order": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 48.532,
+        "p95_ms": 105.161,
+        "p99_ms": 145.462,
+        "max_ms": 252.863
+      }
+    },
+    "order": {
+      "license-paid-order": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-license-grant": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-payment-result": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "payment-order-request": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "settlement-paid-order": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      }
+    },
+    "refunds": {
+      "requested": 0,
+      "rejected": 0,
+      "unfinished": 0
+    },
+    "refund_diagnosis": null,
+    "redeliveries": {
+      "by_group": {
+        "catalog-project-release": 1
+      },
+      "unreadable": []
+    },
+    "db_load": {
+      "idle_per_second": {
+        "Com_select": 75.7,
+        "Questions": 248.0,
+        "seconds": 10.08
+      },
+      "load_run_per_second": {
+        "Com_select": 216.3,
+        "Questions": 534.9,
+        "seconds": 719.15
+      }
+    },
+    "resources": {
+      "interval_seconds": 2.0,
+      "idle": {
+        "kafka": {
+          "samples": 3,
+          "cpu_percent_mean": 7.58,
+          "cpu_percent_max": 8.3,
+          "memory_mib_mean": 330.0,
+          "memory_mib_max": 333.5
+        },
+        "mysql": {
+          "samples": 3,
+          "cpu_percent_mean": 9.09,
+          "cpu_percent_max": 9.23,
+          "memory_mib_mean": 532.9,
+          "memory_mib_max": 532.9
+        }
+      },
+      "load_run": {
+        "kafka": {
+          "samples": 159,
+          "cpu_percent_mean": 44.6,
+          "cpu_percent_max": 247.19,
+          "memory_mib_mean": 791.3,
+          "memory_mib_max": 981.7
+        },
+        "mysql": {
+          "samples": 159,
+          "cpu_percent_mean": 16.89,
+          "cpu_percent_max": 29.36,
+          "memory_mib_mean": 554.8,
+          "memory_mib_max": 569.7
+        }
+      },
+      "stats_failures": 0,
+      "stats_partial": 0,
+      "disk": {
+        "kafka": {
+          "before_kib": 1044,
+          "after_kib": 10276,
+          "growth_kib": 9232
+        },
+        "mysql": {
+          "before_kib": 233736,
+          "after_kib": 331156,
+          "growth_kib": 97420
+        }
+      },
+      "disk_errors": {
+        "before": {},
+        "after": {}
+      }
+    },
+    "broker_restart": null,
+    "generator": {
+      "startEpochUs": 1795815971659993,
+      "endEpochUs": 1795816571659993,
+      "seconds": 600,
+      "sentInWindow": 1200,
+      "sentAfterWindow": 0,
+      "achievedRate": 2.0
+    },
+    "timeseries": {
+      "rates": {
+        "offered_per_s": 2.0,
+        "completed_per_s": 2.0,
+        "completed_over_offered": 1.0
+      },
+      "measured_orders": {
+        "requested": 1200,
+        "completed_in_window": 1198,
+        "completed_after_window": 2,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "totals": {
+        "completed": 1320,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "unresolved": 0,
+      "outstanding_drain_seconds": 0.87,
+      "backlog_drain_seconds": 6.622,
+      "clock_check": {
+        "finish_before_start": 0
+      },
+      "observation": {
+        "wait_secs": 600,
+        "timed_out": false
+      }
+    },
+    "load_ended_us": 1795816571162862,
+    "faults": {
+      "load_started_us": 1795815911659993,
+      "faults": [
+        {
+          "kind": "dlt-limit",
+          "options": {
+            "at": "180",
+            "for": "30",
+            "limit": "512"
+          },
+          "events": [
+            {
+              "event": "dlt-topic",
+              "at_us": 1795816095678017
+            },
+            {
+              "event": "limit",
+              "at_us": 1795816103801565
+            },
+            {
+              "event": "publish",
+              "at_us": 1795816106217347
+            },
+            {
+              "event": "restore",
+              "at_us": 1795816148998161
+            }
+          ],
+          "facts": {
+            "partitions": 3,
+            "original_max_message_bytes": "\uae30\ubcf8\uac12(\uba85\uc2dc \uc124\uc815 \uc5c6\uc74c)",
+            "key": "e13-dlt-rh4xodoh",
+            "other_partitions_lag_during": {
+              "0": 0,
+              "2": 0
+            },
+            "recovery_failures_during": 4.0,
+            "dead_lettered_during": 0.0,
+            "dlt_records_during": 0,
+            "restored_value": "\uae30\ubcf8\uac12(\uba85\uc2dc \uc124\uc815 \uc5c6\uc74c)",
+            "published_offsets": [
+              0,
+              1
+            ],
+            "target_partition": 1,
+            "target_first_offset": 0,
+            "target_last_offset": 1,
+            "target_sampled_during": true,
+            "target_committed_during": null,
+            "original_held_during": true,
+            "target_committed_after": 2,
+            "dlt_records_after": 2,
+            "dlt_order": [
+              "{\"e13\":\"dlt\",\"seq\":0}",
+              "{\"e13\":\"dlt\",\"seq\":1}"
+            ],
+            "resume_seconds_after_restore": 1.514,
+            "dlt_batch_bytes": [
+              5232,
+              5232
+            ],
+            "limit_below_record": true
+          },
+          "problems": []
+        }
+      ],
+      "problems": [],
+      "restore_unconfirmed": []
+    },
+    "validity": {
+      "valid": true,
+      "reasons": [],
+      "instrument": [],
+      "business": [],
+      "http_failures": 0,
+      "late_starts": 0,
+      "outcome": []
+    }
+  },
+  "normal_shutdown_count": 13,
+  "original_containers_preserved": true,
+  "finished_at": "2026-11-27T21:56:50.309142+00:00"
+}
