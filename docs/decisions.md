@@ -2857,7 +2857,7 @@
 - 내 의견: "t48은 B로 해"
 - 선택: B — T49 뒤에 다시 쓴다. 그때까지 `ServiceOutageChaosTest`는 돌지 못하는 채로 두고 `docs/testing.md` L7 행에 그렇게 적어 둔다. T49가 안 되면 다시 묻는다.
 - 구분: 추천 수용
-- 결과: [PR #276](https://github.com/tlswltjq/esd-platform/pull/276)(기록). 구현은 플랫폼 T48
+- 결과: [PR #276](https://github.com/tlswltjq/esd-platform/pull/276)(기록), [PR #279](https://github.com/tlswltjq/esd-platform/pull/279)(구현, 플랫폼 T48) — 옛 가설 "Download는 License 없이도 내려받는다"는 지금 구조(사본 없이 License에 묻는다, Download R9.3)와 맞지 않아 "License 없이는 503으로 닫힌 채 실패한다"로 바꿔 세웠다(AI 해석). 근거 색인 2026-11-29 License 정지 장애 주입 행
 
 ---
 

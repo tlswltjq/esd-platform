@@ -322,10 +322,10 @@
 - [ ] **T51. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮길지 정한다** [결정 필요] ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
   - 시범 둘(T44·T49)이 됐다. 남은 것: `verify-studio.py`·`verify-catalog.py`·`verify-store.py`·`verify-order.py`·`verify-payment.py`·`verify-license.py`·`verify-download.py`·`verify-g4-operations.py`(단계 실행과 증거 파일), `verify-tracing.py`. `verify-jib.py`는 옮기지 않는다.
   - 정할 것: 전면 이전 여부와 순서, 범위 동결(결정 201) 안에서 할지, 야간 CI에 어느 여정을 넣을지, `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이는 자리. 스크립트가 단계 사이에 하는 일(릴레이 정지 외에 검증 전용 장애 설정으로 띄우기, DB 권한 회수, Kafka 주입)이 `LocalStack`에 더 필요한지는 스크립트마다 본다.
-- [ ] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild)) — T49 뒤
-  - 지금: 회원 세션을 옛 트랙 A가 `Journey`에 채워 주던 구조라 선행 단계 실패로 끝나고, 지금 Download에 없는 `/api/v1/downloads/{code}/manifests`를 부른다. T43에서 트랙 A를 지워 세션을 만드는 곳이 없다.
-  - 할 일: T44·T49의 스택 제어로 "License를 멈춰도 다운로드와 Gateway가 살고, 되살리면 복구된다"를 한 테스트로 다시 쓴다. 구매는 실제 API로 만들고 지금 있는 `/api/v1/downloads/{code}/ticket`으로 확인한다. 옮긴 뒤 `Journey`와 옛 `chaosTest` 구성을 정리하고 `docs/testing.md`의 L7 행을 맞춘다.
-  - 볼 것: 층 1 하네스의 장애 주입(`support/e2e_faults.py`)과 겹치는 범위. T49가 안 되면(스택 제어를 JUnit에 둘 수 없으면) 이 항목을 다시 묻는다.
+- [x] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** — PR #279 ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild))
+  - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.
+  - 옛 가설("Download는 권한 사본이 있어 License 없이도 내려받는다")은 지금 구조와 맞지 않아 버렸다. Download는 사본 없이 License에 묻고, 응답이 없으면 미보유로 바꾸지 않고 503으로 끝낸다.
+  - 넣지 않은 것: 장애 중에 한 구매가 복구 뒤 지급되는지. License 여정(`verify-license.py`)의 재시작 단계가 다룬다.
 - [ ] **T50. `docs/api-demo.md`가 걷어낸 결제 시뮬레이터·콜백 API를 안내한다**
   - 어디서: "결제 시뮬레이터" 절의 `/payments/{orderNo}/prepare`·`/payments/simulator/*`·`/payments/{orderNo}/cancel`과 "자동 검증은 `:e2e:e2eTest`" 문장. payment에 이 경로가 없다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)).
   - 할 일: 지금 API(프로세스 안 승인, [결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval))로 다시 쓰거나 절을 지운다.
