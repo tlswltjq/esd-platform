@@ -139,7 +139,8 @@ def verify(sessions, thread, model, packet, result):
     path = find_session(sessions, thread)
     if path is None:
         return ['세션 기록을 찾지 못했다: ' + thread + ' (' + str(sessions) + ')']
-    lines = path.read_text(encoding='utf-8').splitlines()
+    # D-062: JSONL은 '\n'으로만 나눈다. splitlines()는 기록 안의 U+2028 등에서도 줄을 끊는다.
+    lines = path.read_text(encoding='utf-8').split('\n')
     return check(lines, model) + packet_errors(lines, packet) + completion_errors(lines, result, packet)
 
 
@@ -172,7 +173,7 @@ def run(args):
                                    capture_output=True, text=True, timeout=args.timeout)
     except (OSError, subprocess.TimeoutExpired) as error:
         return fail(['codex exec 실행: ' + str(error)], out)
-    thread = thread_id(completed.stdout.splitlines())
+    thread = thread_id(completed.stdout.split('\n'))
     reasons = []
     if completed.returncode != 0:
         reasons.append('codex exec 종료 코드 ' + str(completed.returncode) + ': ' + completed.stderr.strip()[-500:])
