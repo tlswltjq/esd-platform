@@ -94,10 +94,8 @@ def suites = [
      phase: [test: 'G4OperationsFlowTest', property: 'g4-phase', first: 'publishesAndPreparesOwnedAndPendingOrders'],
      expected: 1, failure: 'G4 operations requires one executed check without skips'],
     [task: 'storeE2eTest', tag: 'store',
-     description: '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작을 검증한다',
-     props: ['store-evidence'],
-     phase: [test: 'StorePublicationFlowTest', property: 'store-phase',
-             first: 'publishesSearchesAndReplacesOnlyReleasedSnapshots'],
+     description: '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작과 Catalog 정지 중 동작을 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store'],
      expected: 1, failure: 'Store verification requires one executed check without skips'],
     // 일곱 앱. 격리 Order 검증에서 Payment 는 계약 픽스처다
     [task: 'orderE2eTest', tag: 'order',
