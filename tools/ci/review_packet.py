@@ -46,6 +46,17 @@ INPUT_CAP = 1000 * 1000
 MODULE_PATH = re.compile(r'^(?:apps|specs)/([a-z0-9-]+)/')
 
 
+TARGET_LABEL = '리뷰 대상 커밋'
+# diff 본문의 줄은 `+`·`-`·공백으로 시작하므로 줄 머리에서만 찾는다.
+TARGET = re.compile(r'(?m)^' + TARGET_LABEL + r': ([0-9a-f]{40})$')
+
+
+def target_commit(packet):
+    """묶음이 담은 head 커밋. 없으면 None."""
+    found = TARGET.findall(packet)
+    return found[-1] if found else None
+
+
 def git(root, *args):
     return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True).stdout
 
@@ -269,6 +280,8 @@ def compose(root, base, head, since, pr_body, previous, list_docs, list_deleted=
         out.append('## 이전 리뷰 지적 (%s 이후 차분만 본다)\n' % since)
         out.append(previous.rstrip() + '\n')
     out.append('## diff (%s)\n' % rng)
+    # 결정 review-gate-reviewed-commit: cross_review.py가 이 값을 worktree head와 대조해 `리뷰한 커밋:`으로 낸다.
+    out.append('%s: %s\n' % (TARGET_LABEL, git(root, 'rev-parse', '--verify', head + '^{commit}').strip()))
     for _, block in sorted(shown, key=lambda b: (group(b[0]), b[0])):
         out.append('```diff\n' + block + '\n```\n')
     if listed:

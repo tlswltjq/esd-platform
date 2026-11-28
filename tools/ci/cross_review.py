@@ -23,6 +23,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import review_packet  # noqa: E402
+
 MODEL = 'gpt-6.1-terra'
 EFFORT = 'high'
 SANDBOX = 'read-only'
@@ -176,9 +179,14 @@ def run(args):
     out = Path(args.out)
     if out.exists():
         out.unlink()
-    reviewed = head_commit(args.root)
     codex = json.loads(args.codex) if args.codex else default_codex()
     packet = Path(args.packet).read_text(encoding='utf-8')
+    # 리뷰 1 R1(PR #272): 리뷰한 커밋은 묶음이 담은 커밋이다. worktree가 그 뒤로 나아갔으면 리뷰받지 않은 커밋이
+    # 리뷰한 커밋으로 적히므로 리뷰를 시작하지 않는다.
+    reviewed = review_packet.target_commit(packet)
+    current = head_commit(args.root)
+    if reviewed is not None and reviewed != current:
+        return fail(['리뷰 묶음은 %s의 것인데 worktree head는 %s다. 묶음을 다시 만든다.' % (reviewed[:12], (current or '없음')[:12])])
     try:
         completed = subprocess.run(command(codex, args.model, args.root, out), input=packet,
                                    capture_output=True, text=True, timeout=args.timeout)

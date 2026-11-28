@@ -71,6 +71,12 @@ class RepositoryTest(unittest.TestCase):
         self.assertIn('apps/a/A.java', text)
         self.assertIn('apps/c/C.java', text)
 
+    def test_a_mode_change_after_the_review_is_reported(self):
+        # 리뷰 1 R2: 실행 권한만 바뀌면 blob은 같다. 트리의 파일 모드도 비교한다.
+        (self.root / 'apps/a/A.java').chmod(0o755)
+        self.commit('chore: 실행 권한')
+        self.assertIn('apps/a/A.java', ' '.join(self.problems()))
+
     def test_document_changes_after_the_review_do_not_count(self):
         self.write('docs/x.md', 'y\n')
         self.write('docs/evidence.d/1.md', 'row\n')

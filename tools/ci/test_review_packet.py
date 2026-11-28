@@ -180,6 +180,16 @@ class BuildTest(unittest.TestCase):
         self.assertIn('int v', packet)
         self.assertIn('결정 packet-deleted-files', packet)
 
+    def test_packet_names_the_resolved_head_it_was_built_from(self):
+        # 리뷰 1 R1(PR #272): cross_review.py가 리뷰한 커밋으로 적을 값. 이름(HEAD)이 아니라 풀린 커밋이다.
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int v; }\n')
+        self.commit('feat: 변경')
+        head = self.git('rev-parse', 'HEAD').strip()
+        packet, _, _ = review_packet.build(self.root, self.base, 'HEAD')
+        self.assertIn('\n리뷰 대상 커밋: ' + head + '\n', packet)
+        self.assertEqual(head, review_packet.target_commit(packet))
+        self.assertIsNone(review_packet.target_commit('+리뷰 대상 커밋: ' + head + '\n 리뷰 대상 커밋: ' + head + '\n'))
+
     def test_rereview_only_carries_the_new_commits_and_previous_findings(self):
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int x; }\n')
         self.commit('first')

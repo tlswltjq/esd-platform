@@ -2,7 +2,7 @@
 """결정 review-gate-reviewed-commit: 리뷰한 커밋 뒤에 리뷰받지 않은 코드 변경이 있는지 확인한다.
 
 PR 본문 `## 리뷰 판정` 절에 `리뷰한 커밋: <sha>`를 적는다(재리뷰를 받으면 그 줄을 더한다. 마지막 줄을 쓴다).
-PR이 대상 브랜치와 달라지게 한 파일(`git diff <base>...<head>`) 가운데 `*.md`가 아닌 파일의 내용이
+PR이 대상 브랜치와 달라지게 한 파일(`git diff <base>...<head>`) 가운데 `*.md`가 아닌 파일의 내용이나 파일 모드가
 그 커밋과 지금 head에서 다르면 실패한다.
 - main을 PR 브랜치로 병합해 들어온, PR이 바꾸지 않은 파일은 세지 않는다.
 - 병합 충돌 해소나 같은 파일의 자동 병합은 내용이 달라지므로 재리뷰 대상이다.
@@ -45,9 +45,12 @@ def changed_code(root, base, head):
     return sorted(path for path in result.stdout.split('\0') if path and not path.endswith('.md'))
 
 
-def blob(root, revision, path):
-    result = git(root, 'rev-parse', '--verify', '--quiet', '%s:%s' % (revision, path))
-    return result.stdout.strip() if result.returncode == 0 else None
+def entry(root, revision, path):
+    """그 커밋 트리의 `모드 종류 객체`. 파일이 없으면 ''. 실행 권한만 바뀌어도 달라진다(리뷰 1 R2)."""
+    result = git(root, 'ls-tree', revision, '--', path)
+    if result.returncode != 0:
+        raise RuntimeError('%s의 %s를 읽지 못했다: %s' % (revision[:12], path, result.stderr.strip()))
+    return result.stdout.split('\t')[0].strip()
 
 
 def problems(root, base, head, reviewed):
@@ -57,7 +60,7 @@ def problems(root, base, head, reviewed):
         return ['`%s: %s`는 이 PR 브랜치의 커밋이 아니다.' % (LABEL, reviewed)]
     if git(root, 'merge-base', '--is-ancestor', reviewed, base).returncode == 0:
         return ['`%s: %s`는 대상 브랜치에 이미 있는 커밋이라 이 PR 브랜치의 커밋이 아니다.' % (LABEL, reviewed)]
-    stale = [path for path in changed_code(root, base, head) if blob(root, reviewed, path) != blob(root, head, path)]
+    stale = [path for path in changed_code(root, base, head) if entry(root, reviewed, path) != entry(root, head, path)]
     if not stale:
         return []
     return ['리뷰한 커밋 %s 뒤에 바뀐 코드 파일 %d개가 리뷰받지 않았다. 재리뷰(`review_packet.py --since %s`)를 받고 '
