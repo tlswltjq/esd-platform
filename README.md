@@ -60,4 +60,4 @@ python3 tools/verification/verify-jib.py
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.
 
-현재 열 앱의 실제 구매·다운로드 검증은 [Download 독립 검증](tools/verification/README.md)을 사용한다. [전체 API 데모](docs/api-demo.md#full-demo)는 구매·배포·정산 모듈의 재작성 전 참고 기록이다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.
+여정 자동 검증과 손으로 호출해 보는 순서는 [API 데모](docs/api-demo.md#full-demo)를 따른다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.

@@ -338,9 +338,7 @@
   - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.
   - 옛 가설("Download는 권한 사본이 있어 License 없이도 내려받는다")은 지금 구조와 맞지 않아 버렸다. Download는 사본 없이 License에 묻고, 응답이 없으면 미보유로 바꾸지 않고 503으로 끝낸다.
   - 넣지 않은 것: 장애 중에 한 구매가 복구 뒤 지급되는지. License 여정(`verify-license.py`)의 재시작 단계가 다룬다.
-- [ ] **T50. `docs/api-demo.md`가 걷어낸 결제 시뮬레이터·콜백 API를 안내한다**
-  - 어디서: "결제 시뮬레이터" 절의 `/payments/{orderNo}/prepare`·`/payments/simulator/*`·`/payments/{orderNo}/cancel`과 "자동 검증은 `:e2e:e2eTest`" 문장. payment에 이 경로가 없다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)).
-  - 할 일: 지금 API(프로세스 안 승인, [결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval))로 다시 쓰거나 절을 지운다.
+- [x] **T50. `docs/api-demo.md`가 걷어낸 결제 시뮬레이터·콜백 API를 안내한다** — PR #292 ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)): 문서 전체가 재작성 전 기록(없는 `scripts/api-demo.sh`, 시뮬레이터, 할인·월 마감)이어서 지금 있는 여정 작업 목록과 `PurchaseJourney`가 밟는 호출 순서로 다시 썼다. 옛 절차와 실행 기록은 git 이력에 둔다.
 - [ ] **T45. HTTP 오류 관측: 구조화 로그와 로그 수집** ([결정 error-observability](../../docs/decisions.md#error-observability) 3·4)
   - 앞 단계: 1(경보 `HttpServerErrorRateHigh`)·2(`http_server_requests`의 `error_code` 태그)는 PR #273.
   - 할 일 3: 앱 12개의 콘솔 로그를 구조화(JSON) 형식으로 낸다. Spring Boot 3.5의 `logging.structured.format.console`로 켤 수 있다. 값 안의 개행이 이스케이프되므로 `GlobalExceptionHandler`의 `malformed request` 로그에 요청 값이 실려 로그 줄을 위조할 수 있는 경로([결정 remove-unknown-property-net](../../docs/decisions.md#remove-unknown-property-net)의 선택지 C)가 함께 닫히는지 확인한다. 정할 것: 형식(ecs·logstash 등), 컨테이너 배포에서만 켤지 로컬 `bootRun`·테스트에서도 켤지. 로그를 읽는 검증 도구(`tools/verification`)가 평문 형식에 기대는지 먼저 확인한다.
