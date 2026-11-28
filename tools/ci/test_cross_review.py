@@ -2,6 +2,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -146,6 +147,21 @@ class RunTest(unittest.TestCase):
             self.assertEqual(0, code)
             self.assertIn('리뷰어: Codex gpt-6.1-terra, 추론 high, read-only, 세션 ' + THREAD, printed)
             self.assertEqual('지적 없음', out.read_text(encoding='utf-8'))
+
+    def test_verified_review_prints_the_reviewed_commit_of_a_git_worktree(self):
+        # 결정 review-gate-reviewed-commit: 리뷰 판정에 적을 `리뷰한 커밋:` 줄. git 저장소가 아니면 내지 않는다.
+        with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
+            code, printed = self.run_main(fake_codex(sessions, session_lines()), sessions, root, Path(root) / 'review.md')
+            self.assertEqual(0, code)
+            self.assertNotIn('리뷰한 커밋', printed)
+            for arguments in (['init', '-q'], ['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '-q',
+                                              '--allow-empty', '-m', 'c']):
+                subprocess.run(['git', '-C', root, *arguments], check=True, capture_output=True)
+            head = subprocess.run(['git', '-C', root, 'rev-parse', 'HEAD'], check=True, capture_output=True,
+                                  text=True).stdout.strip()
+            code, printed = self.run_main(fake_codex(sessions, session_lines()), sessions, root, Path(root) / 'review.md')
+            self.assertEqual(0, code)
+            self.assertIn('리뷰한 커밋: ' + head + '\n', printed)
 
     def test_unverified_review_fails_and_moves_result_aside(self):
         with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:

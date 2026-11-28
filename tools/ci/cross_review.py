@@ -162,10 +162,21 @@ def fail(reasons, out=None):
     return 1
 
 
+def head_commit(root):
+    """리뷰를 시작할 때의 worktree head. git 저장소가 아니면 None."""
+    try:
+        result = subprocess.run(['git', '-C', str(root), 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}'],
+                                capture_output=True, text=True)
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+
+
 def run(args):
     out = Path(args.out)
     if out.exists():
         out.unlink()
+    reviewed = head_commit(args.root)
     codex = json.loads(args.codex) if args.codex else default_codex()
     packet = Path(args.packet).read_text(encoding='utf-8')
     try:
@@ -186,6 +197,9 @@ def run(args):
     if reasons:
         return fail(reasons, out)
     print('통과: ' + reviewer_line(args.model, thread))
+    if reviewed:
+        # 결정 review-gate-reviewed-commit: 이 줄을 리뷰어 줄과 함께 PR 본문 `리뷰 판정`에 적는다.
+        print('리뷰한 커밋: ' + reviewed)
     print('결과: ' + str(out))
     return 0
 
