@@ -2582,6 +2582,15 @@
 - 구분: 추천과 다른 선택
 - 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
+<a id="stop-merge-on-red-main"></a>
+## main CI가 실패해 있으면 병합을 멈추고, 그 실패를 고치는 PR만 병합한다
+- 문제: PR은 바뀐 범위만 빌드해서([결정 207](#ci-build-scope)·[결정 216](#ci-scope-non-gradle-paths)) 전체 테스트가 병합 뒤 main에서 처음 돈다. 2026-11-24~25에 #245·#246·#248이 연달아 병합되는 동안 main이 세 번 `infra-catalog` 조각에서 실패했다(D-061). #248은 문서 PR이라 원인과 무관했다. 병합 판정(`pr_finish.py`)은 main 상태를 보지 않아, main이 빨간 채로 병합이 계속 쌓였다.
+- 선택지: A 유지 / B `pr_finish.py merge`가 main 최신 CI를 확인해 실패면 막고, 고치는 PR만 통과시킨다 / C 병합 직전 현재 main 위에서 전체 빌드 통과를 병합 조건에 더한다(merge queue 또는 도구가 전체 빌드 요청) / D PR은 늘 전체 빌드 (추천: B를 먼저, C는 merge queue 사용 가능 여부를 확인한 뒤 따로 — B는 작은 비용으로 실패 위에 병합이 쌓이는 것을 막고 AGENTS 5절 "main 실패가 먼저"를 도구로 강제한다. C는 회귀를 병합 전에 잡아 더 정합하지만 결정 207로 줄인 대기가 다시 늘고 사용 가능 여부를 확인하지 않았다)
+- 내 의견: "B"
+- 선택: B — 추천의 앞부분(B)을 골랐다. C는 이번에 정하지 않는다. 탐지는 여전히 병합 뒤 main에서 일어나고, 막는 것은 그 뒤의 병합이다.
+- 구분: 추천 수용
+- 결과: [PR #261](https://github.com/tlswltjq/esd-platform/pull/261)
+
 ---
 
 ## 검증하며 드러난 것
