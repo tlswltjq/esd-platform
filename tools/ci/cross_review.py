@@ -6,7 +6,8 @@
 Claude로 돌았고, `auto` 요청은 추론 수준 [low]로 풀렸다), 리뷰가 끝나면 Codex 세션 기록
 (`~/.codex/sessions/**/rollout-*-<thread>.jsonl`)의 모든 `turn_context`를 읽어 확인한다.
 그 세션의 사용자 입력에 이번 리뷰 묶음 원문이 있어야 하고(시험 호출·다른 작업 세션으로 리뷰어 줄을 받지 않는다),
-세션이 끝난 기록(`task_complete`)의 마지막 답이 결과 파일과 같아야 한다(중간에 끊긴 세션·손으로 쓴 결과를 막는다).
+세션은 작업 하나로 끝나야 하고(`task_started`·`task_complete` 각각 정확히 하나, 완료는 묶음 뒤), 그 답이 결과 파일과 같아야 한다
+(중간에 끊긴 세션·다른 작업의 답·손으로 쓴 결과를 막는다).
 확인에 실패하면 결과 파일을 `<out>.unverified`로 옮기고 실패로 끝난다. 그 결과는 리뷰로 쓰지 않는다.
 
   # 리뷰 묶음(review_packet.py)을 넣어 리뷰를 받는다. 통과하면 PR 본문에 적을 리뷰어 줄을 출력한다.
@@ -101,21 +102,31 @@ def packet_errors(session_lines, packet):
 
 
 def completion_errors(session_lines, result, packet):
-    """리뷰 묶음이 (마지막으로) 들어간 뒤 세션이 끝났고(task_complete), 그 마지막 답이 결과 파일과 같은지 본다.
+    """세션이 작업 하나로 끝났고(task_complete 정확히 하나), 그것이 리뷰 묶음 뒤에 있으며, 답이 결과 파일과 같은지 본다.
 
-    묶음보다 앞서 끝난 다른 작업의 답은 세지 않는다(PR #257 재리뷰 2 R1).
+    `codex exec` 세션은 작업 하나다. 시작·완료 기록이 하나가 아니면 어느 답이 이 묶음의 리뷰인지 가를 수 없으므로
+    받지 않는다(PR #257 재리뷰 2·3: 앞선 작업의 답, 끊긴 묶음 턴 뒤 다른 작업의 답).
     """
     wanted = packet.strip()
-    answers = None
+    packet_seen = False
+    started = 0
+    completions = []
     for record in records(session_lines):
+        event = record['payload'].get('type') if record.get('type') == 'event_msg' else None
         if wanted and carries_packet(record, wanted):
-            answers = []
-        elif answers is not None and record.get('type') == 'event_msg' \
-                and record['payload'].get('type') == 'task_complete':
-            answers.append((record['payload'].get('last_agent_message') or '').strip())
-    if not answers:
-        return ['리뷰 묶음 뒤에 세션이 끝난 기록(task_complete)이 없다']
-    if answers[-1] != result.strip():
+            packet_seen = True
+        elif event == 'task_started':
+            started += 1
+        elif event == 'task_complete':
+            completions.append((packet_seen, (record['payload'].get('last_agent_message') or '').strip()))
+    if started != 1:
+        return ['세션의 작업 시작 기록(task_started)이 하나가 아니다: ' + str(started) + '개']
+    if len(completions) != 1:
+        return ['세션의 끝난 기록(task_complete)이 하나가 아니다: ' + str(len(completions)) + '개']
+    after_packet, answer = completions[0]
+    if not after_packet:
+        return ['세션이 리뷰 묶음보다 먼저 끝났다']
+    if answer != result.strip():
         return ['세션의 마지막 답이 결과 파일과 다르다']
     return []
 

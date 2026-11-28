@@ -15,6 +15,7 @@ PACKET = '# 리뷰 묶음\n'
 def session_lines(model='gpt-6.1-terra', effort='high', sandbox='read-only', turns=1, packet=PACKET,
                   answer='지적 없음', complete=True):
     lines = [{'type': 'session_meta', 'payload': {'id': THREAD, 'originator': 'codex_exec'}},
+             {'type': 'event_msg', 'payload': {'type': 'task_started'}},
              {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
                                                    'content': [{'type': 'input_text', 'text': packet}]}}]
     for _ in range(turns):
@@ -103,8 +104,17 @@ class CompletionTest(unittest.TestCase):
         # PR #257 재리뷰 2 R1: 앞선 작업의 task_complete를 이번 묶음의 답으로 쓰지 않는다.
         earlier = json.dumps({'type': 'event_msg', 'payload': {'type': 'task_complete', 'last_agent_message': '이전 답'}})
         lines = session_lines(complete=False)
-        lines.insert(1, earlier)
+        lines.insert(2, earlier)
         self.assertTrue(cross_review.completion_errors(lines, '이전 답', PACKET))
+
+    def test_session_with_more_than_one_task_does_not_count(self):
+        # PR #257 재리뷰 3 R1: codex exec 세션은 작업 하나다. 묶음 턴이 끊긴 뒤 다른 작업이 끝나거나,
+        # 리뷰 뒤 다른 턴이 이어진 세션은 어느 답이 리뷰인지 가를 수 없으므로 받지 않는다.
+        later = [json.dumps({'type': 'event_msg', 'payload': {'type': 'task_started'}}),
+                 json.dumps({'type': 'event_msg', 'payload': {'type': 'task_complete', 'last_agent_message': '다른 작업'}})]
+        self.assertTrue(cross_review.completion_errors(session_lines(complete=False) + later, '다른 작업', PACKET))
+        self.assertTrue(cross_review.completion_errors(session_lines() + later, '지적 없음', PACKET))
+        self.assertTrue(cross_review.completion_errors(session_lines() + later, '다른 작업', PACKET))
 
 
 class FindSessionTest(unittest.TestCase):
