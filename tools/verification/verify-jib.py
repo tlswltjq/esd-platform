@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 from support.ports import application_offset
 from support.minio_image import ensure_minio_image
 from support.start_apps import copy_launcher
+from support.output_root import output_root
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,13 +79,11 @@ def main():
         parser.error("--backup-restore cannot be combined with other verification modes")
     if args.foundation_only:
         args.tracing = True
-    scratch = os.environ.get("KIROCREW_SCRATCH")
-    output_root = Path(scratch) if scratch and (args.prometheus_only or args.backup_restore) else ROOT / "runs"
-    output_root.mkdir(exist_ok=True)
+    runs = output_root(ROOT)
     prefix = "prometheus-validation-" if args.prometheus_only else (
         "backup-restore-validation-" if args.backup_restore else ("tracing-validation-" if args.tracing else (
             "messaging-measure-" if args.measure else "jib-validation-")))
-    output = Path(tempfile.mkdtemp(prefix=prefix, dir=output_root))
+    output = Path(tempfile.mkdtemp(prefix=prefix, dir=runs))
     output.chmod(0o700)
     project = output.name
     print("Evidence: " + str(output), flush=True)

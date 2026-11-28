@@ -99,7 +99,7 @@
 - [ ] [외부 대기] 공유 환경 자료 전환: 점검 SQL·미발행 OrderPaid Outbox·Kafka 미소비/실패 보관 대조, 기존 복수 구매 근거 자료의 보존·전환 정책(실제 자료 확인 뒤 결정), 과거 PAID 소급 지급 필요성 판단 — 미수행
 - [x] (닫힘) 구성 결함 후보(Kafka 보존 7일이 DLT 재투입 기한) — [결정 160](../../docs/decisions.md#dead-letter-store)으로 실패 레코드를 소비 모듈 DB 보관 표에 기한 없이 두고, 토픽 선언·자동 생성 끄기는 플랫폼 T11. License 쪽 할 일은 공통 라이브러리 적용뿐(플랫폼 T2·T7)
 - [x] (닫힘) 지급 전 정지 요청의 운영 경로(옛 설계 "찾은 불일치 7") — 같은 키 `orderNo`의 `OrderPaid`가 앞에서 실패 보관되면 뒤 `LicenseSuspensionRequested`도 같은 키 정지로 보관돼 원래 순서로 재투입된다([결정 155](../../docs/decisions.md#key-stop-on-dead)·160). 구매 근거 없음은 재시도 가능 실패(R5-4)
-- [ ] License 이벤트 복구 런북(`docs/license-event-recovery-runbook.md`)을 결정 160의 실패 보관 표 재투입·키 단위 회수로 고친다(공통 라이브러리 구현 뒤)
+- [ ] License 이벤트 복구 런북(`docs/runbooks/license-event-recovery.md`)을 결정 160의 실패 보관 표 재투입·키 단위 회수로 고친다(공통 라이브러리 구현 뒤)
 
 ## 범위 밖(후속)
 

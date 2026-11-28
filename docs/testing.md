@@ -1098,7 +1098,7 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 
 ## 지급·지급 확인의 기존 이벤트 복구 — P3 A
 
-2026-10-31 [결정 37](decisions.md#license-event-recovery)의 범위다. [운영 절차](license-event-recovery-runbook.md)에 따라 원인을 해결한 운영자가 기존 이벤트를 재처리하며, 조건부 자동 재투입·별도 지급 엔진·확인 이벤트 재생성의 기대값은 추가하지 않는다.
+2026-10-31 [결정 37](decisions.md#license-event-recovery)의 범위다. [운영 절차](runbooks/license-event-recovery.md)에 따라 원인을 해결한 운영자가 기존 이벤트를 재처리하며, 조건부 자동 재투입·별도 지급 엔진·확인 이벤트 재생성의 기대값은 추가하지 않는다.
 
 | 경계 | 수용 조건과 검증 |
 |---|---|

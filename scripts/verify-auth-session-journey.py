@@ -14,8 +14,9 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools/verification'))
 from support.bff import BffClient  # noqa: E402
+from support.output_root import output_root  # noqa: E402
 
-RUN = Path(os.environ['KIROCREW_SCRATCH']) / ('auth-journey-' + uuid.uuid4().hex[:8])
+RUN = output_root(ROOT) / ('auth-journey-' + uuid.uuid4().hex[:8])
 RUN.mkdir()
 PREFIX = RUN.name
 PASSWORD = 'journey-password-123'

@@ -4,9 +4,10 @@
 묶음은 늘 같은 순서로 쌓는다(앞부분이 같으면 프롬프트 캐시가 맞을 가능성이 높다).
   1. 리뷰 지시(고정 문구)
   2. AGENTS.md 3절 코드 규칙
-  3. 이 PR의 결정(본문 "이번 PR의 결정" 절·커밋 제목)은 원문, 그 밖에 언급된 결정은 제목 목록
+  3. 이 PR의 결정(본문 "이번 PR의 결정" 절·커밋 제목)은 원문, 그 밖에 언급된 결정은 제목 목록.
+     결정은 번호(1~238)나 식별자(결정 decision-name-ids, `결정 spec-root`)로 찾는다
   4. 바뀐 모듈의 요구사항 중 R 번호가 언급된 절은 원문, 바뀐 운영 클래스 이름만 나오는 절은 제목 목록
-  번호는 PR 본문(HTML 주석 제외)·커밋 메시지(병합 커밋 제외)·diff의 추가/삭제 줄에서만 센다.
+  번호·식별자는 PR 본문(HTML 주석 제외)·커밋 메시지(병합 커밋 제외)·diff의 추가/삭제 줄에서만 센다.
   5. 이전 리뷰 지적(재리뷰일 때)
   6. diff — 운영 코드·이행 파일 → 테스트 → 그 밖 → 문서 순
 
@@ -32,8 +33,11 @@ INSTRUCTIONS = """# 리뷰 묶음 (결정 145)
 """
 
 DECISION_REF = re.compile(r'결정\s*(\d+(?:\s*[·,/]\s*\d+)*)')
+DECISION_ID_REF = re.compile(r'결정\s+`?([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`?')
+# decision_numbers.py의 ANCHOR와 같은 모양(따옴표 두 종류·공백)을 받는다(PR #259 R2).
+NAMED_ANCHOR = re.compile(r'^\s*<a\s+id=["\']([a-z][a-z0-9]*(?:-[a-z0-9]+)*)["\']\s*>\s*</a>\s*$')
 REQUIREMENT_REF = re.compile(r'(?<![A-Za-z0-9_])R(\d+)(?:[.\-]\d+)?(?![A-Za-z0-9_])')
-MODULE_PATH = re.compile(r'^(?:apps|\.kiro/specs)/([a-z0-9-]+)/')
+MODULE_PATH = re.compile(r'^(?:apps|specs)/([a-z0-9-]+)/')
 
 
 def git(root, *args):
@@ -86,14 +90,47 @@ def decision_numbers(*texts):
     return sorted(found)
 
 
-def decision_sections(decisions, numbers):
+def named_anchors(decisions):
+    """식별자 → 앵커 줄 위치. 식별자 앵커 바로 다음 줄이 번호 없는 `## ` 헤딩일 때만 이름 결정이다."""
+    lines = decisions.split('\n')
+    found = {}
+    for index, (anchor, heading) in enumerate(zip(lines, lines[1:])):
+        match = NAMED_ANCHOR.match(anchor)
+        if match and heading.startswith('## ') and not heading[3:4].isdigit():
+            found.setdefault(match.group(1), index)
+    return found
+
+
+def decision_ids(decisions, *texts):
+    named = named_anchors(decisions)
+    found = set()
+    for text in texts:
+        found.update(m.group(1) for m in DECISION_ID_REF.finditer(text or '') if m.group(1) in named)
+    return sorted(found)
+
+
+def decision_keys(decisions, *texts):
+    """번호(1~238) 다음에 식별자."""
+    return decision_numbers(*texts) + decision_ids(decisions, *texts)
+
+
+def heading_index(decisions, key):
+    """결정 헤딩의 줄 위치. 식별자는 그 앵커 다음 줄이다(같은 제목·접두어 제목에 흔들리지 않는다, PR #259 R1)."""
+    lines = decisions.split('\n')
+    if isinstance(key, str):
+        anchor = named_anchors(decisions).get(key)
+        return None if anchor is None else anchor + 1
+    return next((i for i, line in enumerate(lines) if line.startswith('## %d. ' % key)), None)
+
+
+def decision_sections(decisions, keys):
     lines = decisions.split('\n')
     parts = []
-    for number in numbers:
-        body = section(decisions, '## %d. ' % number)
+    for key in keys:
+        head = heading_index(decisions, key)
+        body = section('\n'.join(lines[head:]), lines[head]) if head is not None else ''
         if not body:
             continue
-        head = next(i for i, line in enumerate(lines) if line.startswith('## %d. ' % number))
         anchor = lines[head - 1] + '\n' if head > 0 and lines[head - 1].startswith('<a id=') else ''
         parts.append(anchor + body)
     return parts
@@ -135,13 +172,14 @@ def changed_lines(diff_text):
                      if line[:1] in '+-' and not line.startswith(('+++', '---')))
 
 
-def own_decisions(pr_body, subjects):
-    """이 PR이 정한 결정: 본문 "## 이번 PR의 결정" 절과 커밋 제목의 결정 번호."""
-    return decision_numbers(section(without_comments(pr_body), '## 이번 PR의 결정'), subjects)
+def own_decisions(pr_body, subjects, decisions=''):
+    """이 PR이 정한 결정: 본문 "## 이번 PR의 결정" 절과 커밋 제목의 결정 번호·식별자."""
+    return decision_keys(decisions, section(without_comments(pr_body), '## 이번 PR의 결정'), subjects)
 
 
-def decision_titles(decisions, numbers):
-    return ['- ' + line[3:] for n in numbers for line in decisions.split('\n') if line.startswith('## %d. ' % n)]
+def decision_titles(decisions, keys):
+    lines = decisions.split('\n')
+    return ['- ' + lines[head][3:] for head in (heading_index(decisions, key) for key in keys) if head is not None]
 
 
 def group(path):
@@ -167,8 +205,8 @@ def build(root, base, head, since=None, pr_body='', previous=''):
     agents = read_at(root, head, 'AGENTS.md')
 
     out = [INSTRUCTIONS, '## AGENTS.md 3절\n', section(agents, '## 3. ')]
-    numbers = decision_numbers(pr_body, log_text, diff_text)
-    own = own_decisions(pr_body, subjects)
+    numbers = decision_keys(decisions, pr_body, log_text, diff_text)
+    own = own_decisions(pr_body, subjects, decisions)
     out.append('## 이 PR의 결정(원문): %s\n' % (', '.join(map(str, own)) or '없음'))
     out.extend(decision_sections(decisions, own))
     others = [n for n in numbers if n not in own]
@@ -178,7 +216,7 @@ def build(root, base, head, since=None, pr_body='', previous=''):
     refs = requirement_numbers(pr_body, log_text, diff_text)
     classes = changed_classes(files)
     for module in modules(files):
-        path = '.kiro/specs/%s/requirements.md' % module
+        path = 'specs/%s/requirements.md' % module
         requirements = read_at(root, head, path)
         if requirements:
             full, titles = requirement_sections(requirements, refs, classes)

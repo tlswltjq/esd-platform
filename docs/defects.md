@@ -772,6 +772,15 @@
 - **수정** `ManageAccount`의 세 변경 트랜잭션을 READ COMMITTED로 돌린다. 문장마다 최신 커밋을 읽어, 잠금을 얻은 뒤의 역할 조회가 회수를 본다. 조회·잠금 순서는 바꾸지 않았다. auth 통합 30개 3회 반복 통과.
 - **부류** 잠금 읽기와 잠그지 않는 읽기가 한 REPEATABLE READ 트랜잭션에 섞여, 잠금으로 직렬화한 줄 알았던 판정이 옛 스냅샷을 본다. [D-060](#d-060)과 같은 격리 수준 문제의 다른 얼굴이다.
 
+## D-062 교차 리뷰 확인이 U+2028이 든 리뷰 묶음을 "묶음 없음"으로 거절함
+
+**상태** 수정됨 · **영향** 리뷰 묶음에 U+2028(또는 U+2029·U+0085 등 유니코드 줄 구분자)이 들어 있으면, Codex가 실제로 그 묶음을 리뷰했어도 `cross_review.py`가 "세션의 사용자 입력에 이번 리뷰 묶음이 없다"·"세션이 리뷰 묶음보다 먼저 끝났다"로 실패하고 결과를 `.unverified`로 옮겼다. PR #259 첫 리뷰(세션 `01a220ac…`)에서 일어났다. 그 PR이 지운 `test_next_decision_number.py`에 U+2028 문자가 그대로 있었다.
+
+- **원인** Codex 세션 기록(JSONL)은 문자열 안의 U+2028을 이스케이프하지 않고 쓴다. `verify`가 세션 파일을 `str.splitlines()`로 나눠, 리뷰 묶음을 담은 JSON 줄이 그 문자에서 쪼개지고 두 조각 모두 JSON으로 읽히지 않아 버려졌다. 세션의 입력 원문은 묶음과 같았다.
+- **재현** `test_cross_review.VerifyTest.test_d062_packet_with_unicode_line_separator_is_found` — U+2028이 든 묶음을 `ensure_ascii=False`로 쓴 세션에서 `verify`가 수정 전 코드로 1을 돌려준다(`python3 -B -m unittest discover -s tools/ci -p test_cross_review.py`).
+- **수정** 세션 JSONL과 `codex exec --json` 출력을 `'\n'`으로만 나눈다.
+- **부류** 줄 단위 형식(JSONL)을 `splitlines()`로 나누면 내용 속 유니코드 줄 구분자에서 기록이 쪼개진다. `decision_numbers.py`는 반대로 마크다운 줄 번호를 GitHub와 맞추려고 `splitlines()`를 쓴다 — 형식마다 줄의 정의가 다르다.
+
 ---
 
 ## 닫힌 항목

@@ -201,6 +201,16 @@ class VerifyTest(unittest.TestCase):
             self.assertEqual(0, code)
             self.assertIn('세션 ' + THREAD, printed)
 
+    def test_d062_packet_with_unicode_line_separator_is_found(self):
+        # D-062: Codex는 세션 JSON에 U+2028을 이스케이프하지 않고 쓴다. splitlines()로 나누면 그 줄이 쪼개져
+        # 리뷰 묶음을 담은 기록을 읽지 못하고 "묶음이 없다"로 실패했다(PR #259 첫 리뷰).
+        packet = '# 리뷰 묶음\n코드에 든 \u2028 문자\n'
+        lines = [json.loads(line) for line in session_lines(packet=packet)]
+        with tempfile.TemporaryDirectory() as sessions:
+            write_session(sessions, [json.dumps(line, ensure_ascii=False) for line in lines])
+            code, printed = self.verify(sessions, packet)
+            self.assertEqual(0, code, printed)
+
     def test_verify_rejects_session_that_did_not_review_this_packet(self):
         with tempfile.TemporaryDirectory() as sessions:
             write_session(sessions, session_lines(packet='시험 호출'))

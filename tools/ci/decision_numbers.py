@@ -1,7 +1,8 @@
-"""결정 116·139: 결정 번호·앵커·복합 링크와 기준 판의 번호 보존을 검사한다.
+"""결정 116·139·decision-name-ids: 결정 번호·식별자·앵커·링크와 기준 판의 보존을 검사한다.
 
-결정 139부터 번호는 착수 때 열린 PR로 예약하므로 빈 번호를 허용한다. 번호는 중복 없이 파일 순서대로 커져야 하고,
-기준 판에 없던 새 번호는 기준 판 최대 + NEW_NUMBER_SLACK 이하여야 한다(오타 방지).
+번호 결정은 LAST_NUMBER에서 끝났다. 1~LAST_NUMBER는 빈 번호를 허용하되 중복 없이 파일 순서대로 커져야 하고,
+새 번호는 받지 않는다(기준 판에 없던 번호, LAST_NUMBER보다 큰 번호). 새 결정은 `<a id="식별자"></a>` 바로 뒤의
+번호 없는 `## 제목`이고, 식별자는 영문 kebab 하나다. `[결정 식별자](…#앵커)` 링크는 문구와 앵커가 같아야 한다.
 Python 3.8 이상, 외부 패키지 없음. 코드·주석은 줄 번호를 보존해 지운다.
 링크가 아닌 '결정 N' 언급의 의미나 결정 본문 자체의 보존은 검사하지 않는다.
 """
@@ -16,16 +17,20 @@ import unicodedata
 HEADING = re.compile(r'^ {0,3}## +(\d+)\. +\S.*$')
 NUMERIC_HEADING = re.compile(r'^ {0,3}##[ \t]+\d')
 RAW_HEADING = re.compile(r'^ {0,3}## +\d+\.')
+NAMED_HEADING = re.compile(r'^ {0,3}## +(?!\d)\S')
+DECISION_ID = re.compile(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')
 ANCHOR = re.compile(r'<a\s+id=["\']([^"\']+)["\']\s*>\s*</a>')
-LINK = re.compile(r'\[결정 +(\d+(?:\s*[·,~]\s*\d+)*)\]\(([^\s)]*)\)')
+LINK = re.compile(r'\[결정 +(\d+(?:\s*[·,~]\s*\d+)*|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\]\(([^\s)]*)\)')
 ANY_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$')
 MARKDOWN_LINK = re.compile(r'!?\[([^\]]*)\]\([^)]*\)')
 INLINE_CODE = re.compile(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)')
 FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})')
 EXCLUDED = {'.git', 'build', 'node_modules'}
 GUIDANCE = '나중에 병합하는 쪽(이 PR)이 번호를 바꾼다. main의 기존 번호·앵커는 유지한다.'
-ORDER_GUIDANCE = '열린 PR이 예약한 번호가 늦게 병합되면 결정을 번호 자리에 끼워 넣는다(결정 139).'
-NEW_NUMBER_SLACK = 10
+ORDER_GUIDANCE = '번호 결정은 번호 자리에 둔다(결정 139).'
+NAMED_GUIDANCE = '새 결정은 번호 없이 `<a id="식별자"></a>`와 `## 제목`으로 쓴다(결정 decision-name-ids).'
+# 결정 decision-name-ids: 번호를 쓴 마지막 결정. 이 뒤로 번호 결정을 더하지 않는다.
+LAST_NUMBER = 238
 
 
 def visible_lines(text):
@@ -109,11 +114,15 @@ def parse_decisions(text):
         if RAW_HEADING.match(raw) and not lines[index].strip() and index not in fenced:
             errors.append('docs/decisions.md:{}: 코드 펜스 밖 헤딩이 지워짐'.format(index + 1))
     records = []
+    named = []
     anchors = {}
     anchor_lines = {}
     pending = []
+    anchor_line = 0
     for line_number, line in enumerate(lines, 1):
         names = [match.group(1) for match in ANCHOR.finditer(line)]
+        if names:
+            anchor_line = line_number
         for name in names:
             if name in anchor_lines:
                 errors.append('docs/decisions.md:{}: 중복 앵커 {} (첫 줄 {})'.format(
@@ -130,9 +139,26 @@ def parse_decisions(text):
         elif NUMERIC_HEADING.match(line):
             errors.append('docs/decisions.md:{}: 헤딩 형식 오류: {}'.format(line_number, line))
             pending = []
+        elif NAMED_HEADING.match(line) and pending:
+            if anchor_line != line_number - 1:
+                # PR #259 R2: review_packet.py는 앵커 바로 다음 줄만 이름 결정 제목으로 읽는다.
+                errors.append('docs/decisions.md:{}: 식별자 앵커 바로 다음 줄이 제목이어야 한다'.format(line_number))
+            if not line.startswith('## '):
+                # PR #259 재리뷰 R1: review_packet.py와 같은 형식 — 줄 처음의 `## `.
+                errors.append('docs/decisions.md:{}: 식별자 결정의 제목은 들여 쓰지 않는다'.format(line_number))
+            if len(pending) != 1:
+                errors.append('docs/decisions.md:{}: 식별자 앵커는 하나여야 한다: {}'.format(
+                    line_number, ','.join(pending)))
+            for name in pending:
+                if not DECISION_ID.match(name):
+                    errors.append('docs/decisions.md:{}: 식별자 형식 오류 {} (영문 소문자·숫자 kebab, 글자로 시작)'.format(
+                        line_number, name))
+                anchors.setdefault(name, name)
+            named.append((pending[0], line_number))
+            pending = []
         elif ANCHOR.sub('', line).strip():
             pending = []
-    return records, anchors, anchor_lines, errors
+    return records, anchors, anchor_lines, errors, named
 
 
 CODE_SPAN = re.compile(r'(`+)(.+?)\1')
@@ -207,7 +233,7 @@ def check(root, base_text=None):
     root = Path(root).resolve()
     decisions = root / 'docs/decisions.md'
     decisions_text = decisions.read_text(encoding='utf-8')
-    records, anchors, anchor_lines, errors = parse_decisions(decisions_text)
+    records, anchors, anchor_lines, errors, named = parse_decisions(decisions_text)
     automatic = auto_anchors(decisions_text)
     seen = {}
     previous = 0
@@ -221,12 +247,15 @@ def check(root, base_text=None):
         elif number < previous:
             errors.append('docs/decisions.md:{}: 역순 번호 {} (앞 번호 {}). {}'.format(
                 line, number, previous, ORDER_GUIDANCE))
+        if number > LAST_NUMBER:
+            errors.append('docs/decisions.md:{}: 번호 {} — 번호 결정은 {}에서 끝났다. {}'.format(
+                line, number, LAST_NUMBER, NAMED_GUIDANCE))
         seen.setdefault(number, (line, names))
         previous = max(previous, number)
     if not records:
         errors.append('docs/decisions.md: 결정 헤딩이 없다 (기대 번호 1)')
     if base_text is not None:
-        base_records, base_anchors, _, _ = parse_decisions(base_text)
+        base_records, base_anchors, _, _, _ = parse_decisions(base_text)
         for name, number in base_anchors.items():
             if anchors.get(name) != number:
                 errors.append('기준 판 결정 {} 앵커 {}가 변경·삭제됨 (현재 {}). {}'.format(
@@ -235,12 +264,9 @@ def check(root, base_text=None):
             if not names and number not in seen:
                 errors.append('기준 판 {}행 결정 {}가 삭제됨. {}'.format(line, number, GUIDANCE))
         base_numbers = {number for number, _, _ in base_records}
-        base_max = max(base_numbers, default=0)
         for number, line, _ in records:
-            if number not in base_numbers and number > base_max + NEW_NUMBER_SLACK:
-                errors.append('docs/decisions.md:{}: 새 번호 {}이 기준 판 최대 {} + {}을 넘는다. '
-                              '번호는 tools/ci/next_decision_number.py로 받는다(결정 139).'.format(
-                                  line, number, base_max, NEW_NUMBER_SLACK))
+            if number not in base_numbers:
+                errors.append('docs/decisions.md:{}: 새 번호 {}. {}'.format(line, number, NAMED_GUIDANCE))
     checked = 0
     for path in markdown_files(root):
         for line_number, line in enumerate(document_lines(path.read_text(encoding='utf-8')), 1):
@@ -254,14 +280,22 @@ def check(root, base_text=None):
                 elif path != decisions:
                     continue
                 actual = anchors.get(anchor, automatic.get(anchor))
+                label = link.group(1)
                 checked += 1
                 if actual is None:
                     errors.append('{}:{}: {} — 없는 앵커 {}'.format(
                         path.relative_to(root), line_number, link.group(), anchor))
-                elif not label_contains(link.group(1), actual):
+                elif DECISION_ID.match(label):
+                    if actual != label:
+                        errors.append('{}:{}: {} — 식별자 {}와 앵커 {}가 다르다'.format(
+                            path.relative_to(root), line_number, link.group(), label, anchor))
+                elif isinstance(actual, str):
+                    errors.append('{}:{}: {} — 실제 식별자 {}'.format(
+                        path.relative_to(root), line_number, link.group(), actual))
+                elif not label_contains(label, actual):
                     errors.append('{}:{}: {} — 실제 번호 {}'.format(
                         path.relative_to(root), line_number, link.group(), actual))
-    return errors, (len(records), max(seen, default=0), len(anchor_lines), checked)
+    return errors, (len(records) + len(named), max(seen, default=0), len(anchor_lines), checked)
 
 
 def main(argv=None):

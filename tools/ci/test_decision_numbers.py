@@ -47,23 +47,26 @@ class DecisionNumbersTest(Fixture):
         self.write('docs/decisions.md', '## 1. A\n## 3. C\n## 2. B\n')
         error = self.errors()
         self.assertIn('역순 번호 2 (앞 번호 3)', error)
-        self.assertIn('번호 자리에 끼워 넣는다', error)
+        self.assertIn('번호 자리에 둔다', error)
 
     def test_sequence_starts_at_one(self):
         self.write('docs/decisions.md', '## 0. 잘못된 시작\n## 1. 첫째\n')
         self.assertIn('순서 오류 번호 0 (기대 1 이상)', self.errors())
 
-    def test_late_reserved_number_inserted_in_place(self):
+    def test_new_number_not_in_base_is_rejected(self):
+        # 결정 decision-name-ids: 새 결정에는 번호를 쓰지 않는다. 빈 번호 자리에 끼워 넣는 것도 막는다.
         base = '## 1. A\n## 3. C\n'
         self.write('docs/decisions.md', '## 1. A\n## 2. B\n## 3. C\n')
-        self.assertEqual(decision_numbers.check(self.root, base_text=base)[0], [])
+        error = '\n'.join(decision_numbers.check(self.root, base_text=base)[0])
+        self.assertIn('새 번호 2', error)
+        self.assertIn('decision-name-ids', error)
 
-    def test_new_number_bound(self):
-        self.write('docs/decisions.md', VALID + '## 12. 경계\n')
-        self.assertEqual(decision_numbers.check(self.root, base_text=VALID)[0], [])
-        self.write('docs/decisions.md', VALID + '## 13. 오타\n')
-        error = '\n'.join(decision_numbers.check(self.root, base_text=VALID)[0])
-        self.assertIn('새 번호 13이 기준 판 최대 2 + 10을 넘는다', error)
+    def test_number_after_the_last_numbered_decision_is_rejected(self):
+        last = decision_numbers.LAST_NUMBER
+        self.write('docs/decisions.md', VALID + '## %d. 마지막\n' % last)
+        self.assertEqual(self.errors(), '')
+        self.write('docs/decisions.md', VALID + '## %d. 넘음\n' % (last + 1))
+        self.assertIn('번호 결정은 %d에서 끝났다' % last, self.errors())
 
     def test_bound_ignores_numbers_already_in_base(self):
         base = VALID + '## 20. 이미 main에 있음\n'
@@ -152,6 +155,65 @@ class DecisionNumbersTest(Fixture):
     def cli(self):
         return subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), '--root', str(self.root)],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+
+NAMED = VALID + '<a id="spec-root"></a>\n## 스펙은 루트 `specs/`에 둔다\n- 문제: x\n'
+
+
+class NamedDecisionTest(Fixture):
+    def test_named_decision_and_matching_link(self):
+        self.write('docs/decisions.md', NAMED + '[결정 spec-root](#spec-root)\n')
+        self.write('README.md', '[결정 spec-root](docs/decisions.md#spec-root) [결정 기록](docs/decisions.md#x)')
+        errors, counts = decision_numbers.check(self.root)
+        self.assertEqual(errors, [])
+        self.assertEqual(counts, (3, 2, 3, 2))
+
+    def test_label_must_equal_anchor(self):
+        self.write('docs/decisions.md', NAMED + '<a id="other-id"></a>\n## 다른 결정\n')
+        self.write('README.md', '[결정 spec-root](docs/decisions.md#other-id)')
+        self.assertIn('식별자 spec-root와 앵커 other-id가 다르다', self.errors())
+
+    def test_id_label_on_numbered_anchor_fails(self):
+        self.write('docs/decisions.md', NAMED)
+        self.write('README.md', '[결정 one](docs/decisions.md#one)')
+        self.assertIn('식별자 one와 앵커 one가 다르다', self.errors())
+
+    def test_number_label_on_named_anchor_fails(self):
+        self.write('docs/decisions.md', NAMED)
+        self.write('README.md', '[결정 3](docs/decisions.md#spec-root)')
+        self.assertIn('실제 식별자 spec-root', self.errors())
+
+    def test_missing_named_anchor_fails(self):
+        self.write('docs/decisions.md', NAMED)
+        self.write('README.md', '[결정 spec-rooot](docs/decisions.md#spec-rooot)')
+        self.assertIn('없는 앵커 spec-rooot', self.errors())
+
+    def test_named_decision_needs_exactly_one_kebab_anchor(self):
+        self.write('docs/decisions.md', VALID + '<a id="a-b"></a><a id="c-d"></a>\n## 둘\n')
+        self.assertIn('식별자 앵커는 하나', self.errors())
+        for bad in ('Spec_Root', '12', 'x--y', '-x'):
+            self.write('docs/decisions.md', VALID + '<a id="%s"></a>\n## 형식\n' % bad)
+            self.assertIn('식별자 형식', self.errors(), bad)
+
+    def test_r2_named_heading_must_follow_its_anchor_line(self):
+        # PR #259 R2: 리뷰 묶음과 같은 형식 — 식별자 앵커 바로 다음 줄이 제목이다.
+        self.write('docs/decisions.md', VALID + '<a id="spec-root"></a>\n\n## 스펙 위치\n')
+        self.assertIn('앵커 바로 다음 줄', self.errors())
+
+    def test_rr1_named_heading_is_not_indented(self):
+        # PR #259 재리뷰 R1: review_packet.py는 줄 처음의 `## `만 이름 결정 제목으로 읽는다.
+        self.write('docs/decisions.md', VALID + '<a id="spec-root"></a>\n  ## 스펙 위치\n')
+        self.assertIn('들여 쓰지 않는다', self.errors())
+
+    def test_heading_without_anchor_is_not_a_decision(self):
+        self.write('docs/decisions.md', NAMED + '\n---\n\n## 검증하며 드러난 것\n')
+        self.assertEqual(decision_numbers.check(self.root)[1][0], 3)
+
+    def test_named_decision_anchor_is_preserved_against_base(self):
+        self.write('docs/decisions.md', NAMED.replace('spec-root', 'spec-home'))
+        self.assertIn('기준 판', '\n'.join(decision_numbers.check(self.root, base_text=NAMED)[0]))
+        self.write('docs/decisions.md', NAMED)
+        self.assertEqual(decision_numbers.check(self.root, base_text=NAMED)[0], [])
 
 
 class RepositoryTest(unittest.TestCase):

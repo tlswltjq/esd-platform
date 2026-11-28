@@ -1,10 +1,10 @@
 # 지급·지급 확인·정지·복구·승인 정정의 운영 재처리
 
-[결정 37](decisions.md#license-event-recovery)의 A안 절차와, Kafka에서 원본이 사라진 `SENT` 이벤트의 같은 ID 재발행([결정 129](decisions.md#orphan-license-grant-republish))이다. 지급(`OrderPaid`→`LicenseGranted`)에 더해 환불의 정지(`LicenseSuspensionRequested`→`LicenseSuspended`)·복구(`LicenseRestorationRequested`→`LicenseRestored`)·승인 정정(`LicenseApprovalCorrectionRequested`→`LicenseApprovalCorrected`) 이벤트도 같은 절차를 쓴다([결정 125](decisions.md#license-grant-wait-detection)·129의 범위 확장). 정상적인 일시 장애는 기존 재시도가 처리한다. 여기서는 소진된 DEAD/DLT와 DLT 보존 기간이 지나 사라진 원본을 운영자가 확인하고 원래 이벤트의 처리를 재개한다. 재발행 성공과 업무 완료를 각각 확인한다.
+[결정 37](../decisions.md#license-event-recovery)의 A안 절차와, Kafka에서 원본이 사라진 `SENT` 이벤트의 같은 ID 재발행([결정 129](../decisions.md#orphan-license-grant-republish))이다. 지급(`OrderPaid`→`LicenseGranted`)에 더해 환불의 정지(`LicenseSuspensionRequested`→`LicenseSuspended`)·복구(`LicenseRestorationRequested`→`LicenseRestored`)·승인 정정(`LicenseApprovalCorrectionRequested`→`LicenseApprovalCorrected`) 이벤트도 같은 절차를 쓴다([결정 125](../decisions.md#license-grant-wait-detection)·129의 범위 확장). 정상적인 일시 장애는 기존 재시도가 처리한다. 여기서는 소진된 DEAD/DLT와 DLT 보존 기간이 지나 사라진 원본을 운영자가 확인하고 원래 이벤트의 처리를 재개한다. 재발행 성공과 업무 완료를 각각 확인한다.
 
 ## 1. 대상과 원인 확인
 
-경보 `RefundLicenseGrantsDelayed`([결정 125](decisions.md#license-grant-wait-detection))에서 왔다면 경보의 `status` 라벨로 대기 상태를 보고, Order `GET /api/v1/admin/refunds?status=<그 상태>`의 진입 시각으로 10분 넘게 기다린 환불의 orderNo를 찾는다.
+경보 `RefundLicenseGrantsDelayed`([결정 125](../decisions.md#license-grant-wait-detection))에서 왔다면 경보의 `status` 라벨로 대기 상태를 보고, Order `GET /api/v1/admin/refunds?status=<그 상태>`의 진입 시각으로 10분 넘게 기다린 환불의 orderNo를 찾는다.
 
 | `status` | 진입 시각 필드 | 기다리는 이벤트 | 먼저 볼 표 행 |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 
 대상 orderNo, 발견 시각, 담당자, 장애 증거와 원인 해결 내용을 운영 기록에 남긴다. 같은 서비스·DLT 토픽의 재투입은 한 담당자/프로세스가 수행한다. 직접 할당하는 운영 소비자는 컨슈머 그룹 리밸런스로 서로를 배제하지 않기 때문이다.
 
-동일 MySQL 인스턴스에서 두 DB를 읽을 권한이 있다면 [조회 SQL](../tools/operations/license-recovery.sql)을 사용한다. SQL은 읽기 전용 트랜잭션이며 업무·Inbox·Outbox를 수정하지 않는다. DB를 분리한 환경에서는 각 소유 모듈에서 같은 사실을 별도로 조회하고 조회 시각도 기록한다.
+동일 MySQL 인스턴스에서 두 DB를 읽을 권한이 있다면 [조회 SQL](../../tools/operations/license-recovery.sql)을 사용한다. SQL은 읽기 전용 트랜잭션이며 업무·Inbox·Outbox를 수정하지 않는다. DB를 분리한 환경에서는 각 소유 모듈에서 같은 사실을 별도로 조회하고 조회 시각도 기록한다.
 
 ```sql
 SET @order_no = '대상 주문 UUID';
@@ -76,7 +76,7 @@ curl --fail-with-body --silent --show-error --config "$ops_curl_config" -X POST 
 
 ### Kafka에서 원본이 사라진 SENT 이벤트의 재발행
 
-DLT 재투입과 DEAD 재큐잉을 쓸 수 없을 때만 쓴다. 발행은 성공해 원래 Outbox 행이 `SENT`이고, 받는 쪽 DLT 레코드가 보존 기간을 넘겨 사라진 경우다. 저장소의 Compose·코드에는 토픽 보존 설정이 없어 브로커 기본값(7일, [R9](architecture.md#r9))을 따른다. 기본 Compose의 Kafka에는 데이터 볼륨도 없어, 컨테이너를 다시 만들면 보존 기간 안의 원본·DLT도 함께 사라진다. 재발행은 행의 `event_id`·본문·키를 바꾸지 않고 상태만 발행 대기로 돌린다. 새 이벤트 ID를 만들지 않는다. 허용 타입은 소유 모듈별이며([OutboxRepublishTargets](../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxRepublishTargets.java), 모듈 설정 `stove.messaging.ops.republish-owner`), 각 모듈은 자기가 Outbox로 낸 이벤트만 재발행한다. 다른 모듈 타입은 400이다.
+DLT 재투입과 DEAD 재큐잉을 쓸 수 없을 때만 쓴다. 발행은 성공해 원래 Outbox 행이 `SENT`이고, 받는 쪽 DLT 레코드가 보존 기간을 넘겨 사라진 경우다. 저장소의 Compose·코드에는 토픽 보존 설정이 없어 브로커 기본값(7일, [R9](../architecture.md#r9))을 따른다. 기본 Compose의 Kafka에는 데이터 볼륨도 없어, 컨테이너를 다시 만들면 보존 기간 안의 원본·DLT도 함께 사라진다. 재발행은 행의 `event_id`·본문·키를 바꾸지 않고 상태만 발행 대기로 돌린다. 새 이벤트 ID를 만들지 않는다. 허용 타입은 소유 모듈별이며([OutboxRepublishTargets](../../common/messaging/src/main/java/com/stove/common/messaging/ops/OutboxRepublishTargets.java), 모듈 설정 `stove.messaging.ops.republish-owner`), 각 모듈은 자기가 Outbox로 낸 이벤트만 재발행한다. 다른 모듈 타입은 400이다.
 
 | 소유 모듈(재발행 실행 위치) | 재발행 타입 | 받는 모듈 | 받는 쪽 `processed_event.consumer_group`(코드 상수) | 받는 쪽 DLT |
 |---|---|---|---|---|

@@ -1,5 +1,5 @@
 # 결정 101: GitHub 호스팅 러너로 검증한다. 공개 저장소이므로 self-hosted 러너를 쓰지 않는다.
-# - PR·main push: 결정 번호·기준 판 보존 검사를 먼저 돌린 뒤 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
+# - PR·main push: 결정 번호·식별자와 기준 판 보존 검사를 먼저 돌린 뒤 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
 #   결정 207: PR은 바뀐 범위만 빌드한다(tools/ci/build_scope.py). main push는 항상 전체.
 #   결정 217: 전체 빌드는 통합·이행 테스트를 여러 러너로 나눠 동시에 돌리고(tools/ci/build_shards.py), build가 결과를 모은다.
 # - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정과 승인 보류 종결·실패 시도 재결제·30분 안 재진입 여정,

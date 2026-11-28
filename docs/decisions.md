@@ -375,7 +375,7 @@
 - 내 의견: "AtLeastOnece발송과 dlt가 있어도 발생가능한건가?"
 - 선택: 재정의한 A — at-least-once·DLT와 기존 도구를 대조하니 새 엔진이 필요한 근거가 없었다. 원래 이벤트 ID·본문·키를 보존해 재투입한다. 비용: 운영자 대응까지 고객이 기다릴 수 있다. 별도 지급 엔진·조건부 자동 재투입은 범위 밖.
 - 구분: AI 주장 정정
-- 결과: [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-event-recovery-verification.md), [운영 절차](license-event-recovery-runbook.md)
+- 결과: [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-event-recovery-verification.md), [운영 절차](runbooks/license-event-recovery.md)
 
 <a id="settlement-responsibility-separation"></a>
 ## 38. Settlement 내부에서 매출·배분, 판매자 정산, PG 거래·비용·대사의 책임을 분리한다
@@ -812,7 +812,7 @@
 - 내 의견: "C안을 비추천하는 이유는? → A안으로 진행해"
 - 선택: A — 기본 비활성·Gateway 미노출을 유지하고, 활성화해도 ADMIN 권한을 검증한다. 비용: 장애 때 활성화 절차가 한 단계 더 든다.
 - 구분: 추천 수용
-- 결과: [운영 절차](license-event-recovery-runbook.md)
+- 결과: [운영 절차](runbooks/license-event-recovery.md)
 
 ## 88. 백업은 일 1회 전체 백업에 변경 기록 보관을 더한다
 - 문제: 배포 환경의 데이터 백업·복구 수준.
@@ -2531,6 +2531,56 @@
   - 비용: Kafka 기준선에 층 2 kill·replay 시간·DLT 중복 수치가 없다. 독립 구현 비교에서 이 시나리오를 다루려면 T40을 먼저 꺼내야 한다.
 - 구분: 추천 수용
 - 결과: [PR #258](https://github.com/tlswltjq/esd-platform/pull/258)
+
+<a id="spec-root"></a>
+## 모듈 스펙을 `.kiro/specs/`에서 루트 `specs/`로 옮긴다
+- 문제: SDD는 유지하고 Kiro는 걷어 내기로 했다. 그런데 모듈 계약의 정본이 Kiro 전용처럼 보이는 숨김 폴더 `.kiro/specs/`에 있고, 리뷰 묶음 도구(`tools/ci/review_packet.py`)도 이 경로에 묶여 있었다.
+- 선택지: A 루트 `specs/<모듈>/` / B `docs/specs/<모듈>/` / C `.kiro/`에 그대로 두고 언급만 지운다 (추천: A — 계약(`specs/`)과 이유·근거·이력(`docs/`)이 폴더 수준에서 나뉘고, 특정 도구와 무관하다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. `git mv .kiro/specs specs`로 옮기고 상대 링크를 새 위치로 다시 계산했다. `review_packet.py`의 모듈 경로와 요구사항 경로도 `specs/`로 바꿨다. EARS 수용 기준과 `requirements`·`design`·`tasks` 세 파일 구조는 Kiro와 무관한 SDD 형식이라 그대로 둔다.
+- 구분: 추천 수용
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
+
+<a id="history-links-only"></a>
+## 지난 기록의 `.kiro` 경로는 링크 대상만 고치고, 본문 문장·인용은 당시 그대로 둔다
+- 문제: 스펙을 옮기면 결정·근거·결함·실험 기록 속 `.kiro/specs/...` 링크가 깨진다. 같은 기록에는 결정 149의 Kiro 대체 리뷰처럼 당시 사실로서 Kiro가 나오는 문장과 사용자 인용도 있다.
+- 선택지: A 링크 경로만 새 위치로 고치고 본문 문장·인용은 그대로 / B 본문 속 경로 언급까지 `specs/`로 바꾼다 / C 지난 기록은 손대지 않는다 (추천: A — 기록을 당시 근거로 두는 규칙([문서 안내](README.md))과 맞고, 깨진 링크만 없앤다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. 마크다운 링크의 대상만 기계적으로 바꿨다. 링크가 아닌 문장 속 `.kiro/specs/...`(결정 81·151 등), 고정 커밋 URL, 실험 원본 JSON의 실행 호스트 경로는 당시 기록으로 남긴다. 현재 규칙을 말하는 문장(AGENTS·README·결정 기록 머리말·로드맵·PR 템플릿·현재 스펙)은 새 경로로 고쳤다.
+- 구분: 추천 수용
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
+
+<a id="verification-output-root"></a>
+## 실제 스택 검증 산출물은 저장소 `runs/`에 두고, `ESD_SCRATCH`가 있을 때만 그 위치를 쓴다
+- 문제: 검증 스크립트가 Kiro Crew 런타임이 넣어 주던 `KIROCREW_SCRATCH`에서 산출물 위치를 읽었다. 변수가 없으면 `verify-auth-session-journey.py`·`verify-gateway-ownership.py`는 `KeyError`로 바로 실패했다. `verify-jib.py`는 Prometheus·백업 복구 모드만 이 변수를 쓰고 나머지는 `runs/`를 썼다.
+- 선택지: A 이름만 `ESD_SCRATCH`로 바꾼다 / B 기본값을 저장소 `runs/`로 통일하고 `ESD_SCRATCH`가 있을 때만 그 위치를 쓴다 / C 시스템 임시 폴더를 쓴다 (추천: B — 에이전트 런타임 의존이 없어지고, 이미 쓰던 `runs/` 규칙 하나로 모이며, 외부 보관도 변수 하나로 된다)
+- 내 의견: "B"
+- 선택: B — 추천을 받아들였다. 위치는 `tools/verification/support/output_root.py` 한 곳에서 정하고 세 스크립트가 쓴다. 비용: worktree를 지우면 그 안의 `runs/`도 사라지고, 큰 산출물이 저장소 디스크에 쌓인다. 오래 보관할 회차는 `ESD_SCRATCH`로 밖에 둔다.
+- 구분: 추천 수용
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
+
+<a id="runbooks-folder"></a>
+## 운영 절차서는 `docs/runbooks/`에 모은다
+- 문제: 장애 때 따라 하는 절차서가 `docs/runbooks/`와 `docs/license-event-recovery-runbook.md`로 나뉘어 있어, 새 절차서를 어디에 둘지 기준이 없었다. 뒤의 파일은 Prometheus 경보 규칙(`infra/prometheus/alerts.yml`)과 그 테스트도 가리킨다.
+- 선택지: A `docs/runbooks/license-event-recovery.md`로 옮기고 경보·테스트를 포함한 참조를 모두 고친다 / B 그대로 두고 문서 안내 표로만 찾게 한다 / C A에 더해 `docs/backup-restore.md`도 옮긴다 (추천: A — 절차서는 `runbooks/`, 기준 문서는 `docs/`로 나뉜다. `backup-restore.md`는 설계·격리 연습 결과가 섞인 기준 문서라 옮기지 않는다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. 경보 주석과 경보 테스트의 기대 문구를 같은 경로로 바꿨다. `runbooks/license-db-loss.md`(현재 적용하지 않는 참고 기록)는 그대로 둔다.
+- 구분: 추천 수용
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
+
+<a id="decision-name-ids"></a>
+## 새 결정은 번호 대신 영문 kebab 식별자로 부르고, 착수 때 예약하지 않는다
+- 문제: [결정 139](#decision-number-reservation)는 번호가 병합 순서로 바뀌는 문제(2026-11-07~09에 약 7번, 결정 135는 파일 23개 수정)를 막으려고 착수 때 draft PR로 번호를 예약하게 했다. 그 대가로 질문하기 전에 착수 커밋·draft PR이 먼저 있어야 하고(`gh`가 없으면 묻지도 못한다), 예약 도구·빈 번호 허용·끼워 넣기·상한([결정 194](#keep-decision-number-cap))이 붙었다. 번호가 필요한 것은 사용자가 대화에서 결정을 부르기 때문이고, 링크는 이미 이름 앵커다.
+- 선택지: A 그대로 유지(결정 139·194) / B 예약을 없애고 [결정 116](#decision-numbers) 방식(기록 때 main 최대 + 1, 겹치면 나중 병합 쪽이 바꿈) / C 번호를 없애고 이름으로 식별 (추천: A — 동시 세션을 전제로 한 지금 규칙에서 예약이 번호를 고정하는 정합한 방법이고, 막힌 원인인 `gh`는 예약을 없애도 PR에 필요하다. 세션을 하나씩만 돌린다면 B)
+- 내 의견: "작업번호 선점에대한 정책도 논의하고싶어 꼭 필요한가" / "C" / 식별자 모양(a 영문 kebab 앵커 그대로 / b 한글 이름 + 영문 앵커 / c 날짜 + 영문 이름, 추천: a): "a"
+- 선택: C — 추천과 다르게 골랐다. 식별자 모양은 추천(a)을 받아들였다.
+  - 새 결정은 `<a id="<식별자>"></a>` 바로 뒤의 번호 없는 `## <제목>`이다. 식별자는 영문 소문자·숫자 kebab 하나이고, 대화와 문서에서 `결정 <식별자>`로 부른다. 링크는 `[결정 spec-root](decisions.md#spec-root)`처럼 문구와 앵커가 같아야 한다.
+  - 번호 결정은 238에서 끝났다. 1~238은 번호와 앵커를 그대로 두고, 저장소의 "결정 N" 언급도 바꾸지 않는다.
+  - 예약을 없앤다: `tools/ci/next_decision_number.py`, `start_task.py --decisions`, PR 템플릿의 `결정 번호:` 줄. 식별자가 겹치면 나중에 병합하는 쪽이 바꾼다.
+  - CI `decision_numbers.py`는 번호 결정의 중복·순서, 기준 판에 없거나 238보다 큰 새 번호, 식별자 형식·앵커 하나, 앵커 중복, 링크 문구와 앵커 일치를 검사한다. 결정 194의 상한은 새 번호가 없어져 의미를 잃는다. `review_packet.py`는 `결정 <식별자>` 언급으로도 이 PR의 결정 원문을 찾는다.
+  - 비용: 번호보다 부르기 길고, 1~238의 번호 체계와 섞인다. 식별자로는 결정의 순서가 보이지 않는다(파일 순서가 기록 순서다).
+- 구분: 추천과 다른 선택
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 ---
 

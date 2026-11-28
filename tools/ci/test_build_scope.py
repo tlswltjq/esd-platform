@@ -16,7 +16,7 @@ def scope(paths, event="pull_request"):
 
 class BuildScopeTest(unittest.TestCase):
     def test_documentation_only_changes_skip_gradle(self):
-        self.assertEqual(scope(["docs/decisions.md", ".kiro/specs/order/tasks.md", "README.md"]), [])
+        self.assertEqual(scope(["docs/decisions.md", "specs/order/tasks.md", "README.md"]), [])
 
     def test_changes_inside_one_app_build_only_that_app(self):
         self.assertEqual(scope(["apps/order/src/main/java/A.java", "docs/evidence.d/300.md"]),
