@@ -13,8 +13,8 @@
            한 PR이라도 조건을 못 채우거나 병합이 실패하면 거기서 멈춘다.
 
 병합 조건(결정 107·112·118·137·ai-judges-adopted-high·stop-merge-on-red-main):
-- main의 가장 최근에 끝난 push CI가 실패가 아니다. 실패면 본문에 그 run 번호(`actions/runs/<번호>`)를 적은,
-  그 실패를 고치는 PR만 병합한다.
+- main push CI 가운데 성공·실패로 끝난 가장 최근 실행이 실패가 아니다(취소·건너뜀은 해소가 아니다). 실패면
+  본문(주석 밖)에 `- main CI 복구: <그 run URL>` 줄을 적은, 그 실패를 고치는 PR만 병합한다.
 - 열린 PR이고 draft가 아니다(draft는 작업 중이다).
 - `mergeStateStatus`가 CLEAN이다.
 - head 커밋에서 가장 최근에 시작한 `build`·`review-gate` 검사가 모두 COMPLETED·SUCCESS다.
@@ -42,6 +42,8 @@ import review_gate  # noqa: E402
 REQUIRED = ('build', 'review-gate')
 RERUN = {'edit': ('review-gate',)}
 MAIN_FAILURES = ('failure', 'timed_out', 'startup_failure')
+MAIN_SUCCESS = 'success'
+MAIN_FIX = re.compile(r'^\s*(?:[-*]\s+)?main CI 복구\s*[:：]\s*(\S+)', re.MULTILINE)
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
 
@@ -220,28 +222,32 @@ def latest(rollup, prefix):
 
 
 def main_ci_failure():
-    """결정 stop-merge-on-red-main: main의 가장 최근에 끝난 push CI가 실패면 {id, url, sha}, 아니면 None.
-    읽지 못하면 통과로 바꾸지 않고 멈춘다."""
+    """결정 stop-merge-on-red-main: main push CI 가운데 성공·실패로 끝난 가장 최근 실행이 실패면 {id, url, sha},
+    아니면 None. 실패 뒤의 취소·건너뜀은 실패를 해소하지 않는다(PR #261 R1). 읽지 못하면 통과로 바꾸지 않고 멈춘다."""
     code, out, err = gh(['run', 'list', '--workflow', 'ci.yml', '--branch', 'main', '--event', 'push',
-                         '--status', 'completed', '--limit', '1', '--json', 'databaseId,conclusion,headSha,url'],
+                         '--status', 'completed', '--limit', '30', '--json', 'databaseId,conclusion,headSha,url'],
                         check=False)
     if code != 0:
         raise SystemExit('실패: main CI 상태를 읽지 못함: ' + err.strip())
-    runs = json.loads(out or '[]')
-    if not runs or runs[0].get('conclusion') not in MAIN_FAILURES:
-        return None
-    return {'id': runs[0]['databaseId'], 'url': runs[0].get('url'), 'sha': runs[0].get('headSha')}
+    for run in json.loads(out or '[]'):
+        if run.get('conclusion') == MAIN_SUCCESS:
+            return None
+        if run.get('conclusion') in MAIN_FAILURES:
+            return {'id': run['databaseId'], 'url': run.get('url'), 'sha': run.get('headSha')}
+    return None
 
 
 def fixes_main(pr, red):
-    return re.search(r'actions/runs/' + str(red['id']) + r'(?!\d)', pr.get('body') or '') is not None
+    """PR #261 R2: 주석 밖의 `main CI 복구: <URL>` 줄이 이 저장소의 그 run URL과 정확히 같아야 고치는 PR이다."""
+    body = re.sub(r'<!--.*?-->', '', pr.get('body') or '', flags=re.S)
+    return any(link.rstrip('.,)') == red['url'] for link in MAIN_FIX.findall(body))
 
 
 def problems(pr, red=None):
     found = []
     if red is not None and not fixes_main(pr, red):
         found.append('main CI가 실패해 있다(run {}, {}). 그 실패를 고치는 PR만 병합한다 — 고치는 PR은 본문에 '
-                     '`actions/runs/{}`를 적는다(결정 stop-merge-on-red-main)'.format(red['id'], red['url'], red['id']))
+                     '`- main CI 복구: {}` 줄을 적는다(결정 stop-merge-on-red-main)'.format(red['id'], red['url'], red['url']))
     if pr.get('state') != 'OPEN':
         found.append('열린 PR이 아니다: ' + str(pr.get('state')))
     if pr.get('isDraft'):

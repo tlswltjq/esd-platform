@@ -6,7 +6,7 @@
 결정 112·ai-judges-adopted-high: 부분 반영·기각, 정책을 바꾸는 지적, 채택하지 않은 high는 판정 칸에
 `사용자 확정: "원문"`이 있어야 한다. AI가 채택해 고치는 high는 `채택 (AI 판정)`이면 된다
 (병합 도구 pr_finish.py도 이 함수를 쓴다).
-결정 rereview-cap-two: 재리뷰 2회 뒤의 medium·low는 `할 일로 이관`과 옮긴 위치(`tasks.md`·`D-NNN`)를 적는다.
+결정 rereview-cap-two: 재리뷰 2회차 이후의 medium·low(지적 칸에 `재리뷰 N`, N ≥ 2)는 `할 일로 이관`과 옮긴 위치(`tasks.md`·`D-NNN`)를 적는다.
 high는 이관하지 않는다.
 
 변경 파일 목록은 줄마다 `경로` 또는 `경로<TAB>이전 경로`다. 이름 변경은 이전 경로도 리뷰 대상 판단에 넣는다
@@ -30,6 +30,8 @@ ADOPTED = '채택'
 MOVED = '할 일로 이관'
 VERDICTS = (ADOPTED, '부분 반영', '기각', MOVED)
 MOVED_TO = re.compile(r'tasks\.md|\bD-\d{3}\b')
+REREVIEW = re.compile(r'재리뷰\s*(\d+)')
+MOVE_FROM_REREVIEW = 2
 NO_FINDINGS = '지적 없음'
 COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
 SECTION_START = re.compile(r'^ {0,3}## +' + SECTION_TITLE + r'\s*$')
@@ -179,6 +181,9 @@ def check(body, files, expected_files=None, entries=None):
         elif verdict.lstrip('*_ ').startswith(MOVED):
             if HIGH.search(finding):
                 errors.append('high는 이관하지 않는다(결정 rereview-cap-two). 이 PR에서 고친다: ' + finding[:80])
+            elif max([int(n) for n in REREVIEW.findall(finding)] or [0]) < MOVE_FROM_REREVIEW:
+                # PR #261 R3: 이관은 재리뷰 2회차(그 뒤 재리뷰를 하지 않는) 지적만 한다. 지적 칸에 `재리뷰 N`을 적는다.
+                errors.append('`할 일로 이관`은 재리뷰 2회차 이후의 지적만 한다(지적 칸에 `재리뷰 N`): ' + finding[:80])
             elif not MOVED_TO.search(' | '.join(row)):
                 errors.append('`할 일로 이관`에 옮긴 위치(`tasks.md` 또는 `D-NNN`)가 없다: ' + finding[:80])
     for finding in pending_user_verdicts(body):

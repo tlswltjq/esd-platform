@@ -86,6 +86,13 @@ class ReviewTableTest(unittest.TestCase):
         errors = review_gate.check(body(['| 재리뷰 3 R1 (high) 무엇 | 할 일로 이관 — specs/order/tasks.md | 이유 |']), CODE)
         self.assertEqual(1, len(errors))
         self.assertIn('high는 이관하지 않는다', errors[0])
+        # PR #261 R3: 이관은 재리뷰 2회차 이후의 지적만 한다.
+        self.assertEqual([], review_gate.check(body(['| 재리뷰 2 R1 (low) 무엇 | 할 일로 이관 — tasks.md | 이유 |']), CODE))
+        for finding in ('R1 (medium) 무엇', '재리뷰 1 R1 (medium) 무엇'):
+            with self.subTest(finding=finding):
+                errors = review_gate.check(body(['| ' + finding + ' | 할 일로 이관 — tasks.md | 이유 |']), CODE)
+                self.assertEqual(1, len(errors))
+                self.assertIn('재리뷰 2회차', errors[0])
 
     def test_finding_without_verdict_fails_and_names_the_finding(self):
         errors = review_gate.check(body(['| R1 잠금 전 읽기 | 채택 | 이유 |', '| R2 옛 환불 잔류 |  | 검토 중 |']), CODE)

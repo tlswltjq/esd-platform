@@ -69,25 +69,38 @@ class ProblemsTest(unittest.TestCase):
         self.assertEqual(1, len(found))
         self.assertIn('main CI가 실패해 있다', found[0])
         self.assertIn('4611', found[0])
-        fixing = pr(body=pr()['body'] + '\nmain CI 복구: https://github.com/o/r/actions/runs/4611\n')
+        fixing = pr(body='- main CI 복구: https://github.com/o/r/actions/runs/4611\n' + pr()['body'])
         self.assertEqual([], pr_finish.problems(fixing, red))
-        # 숫자가 다른 run 번호의 일부로만 나오면 고치는 PR이 아니다.
-        self.assertTrue(pr_finish.problems(pr(body=pr()['body'] + '\nruns/46110\n'), red))
+        # PR #261 R2: 링크만 있거나, 주석 안이거나, 다른 저장소·다른 run(앞부분만 같은 번호)이면 고치는 PR이 아니다.
+        for text in ('배경: https://github.com/o/r/actions/runs/4611 에서 실패했다',
+                     '<!-- main CI 복구: https://github.com/o/r/actions/runs/4611 -->',
+                     'main CI 복구: https://github.com/x/y/actions/runs/4611',
+                     'main CI 복구: https://github.com/o/r/actions/runs/46110'):
+            with self.subTest(text=text):
+                self.assertTrue(pr_finish.problems(pr(body=text + '\n' + pr()['body']), red))
         self.assertEqual([], pr_finish.problems(pr(), None))
 
 
 class MainCiTest(unittest.TestCase):
-    def test_reads_the_latest_completed_push_run_on_main(self):
+    def test_reads_the_latest_decisive_push_run_on_main(self):
         listed = json.dumps([{'databaseId': 9, 'conclusion': 'failure', 'headSha': 'd' * 40, 'url': 'u9'}])
         with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')) as gh:
             self.assertEqual({'id': 9, 'url': 'u9', 'sha': 'd' * 40}, pr_finish.main_ci_failure())
         command = gh.call_args.args[0]
         for part in (['--workflow', 'ci.yml'], ['--branch', 'main'], ['--event', 'push'], ['--status', 'completed']):
             self.assertIn(' '.join(part), ' '.join(command))
-        for conclusion in ('success', 'cancelled', 'skipped'):
-            listed = json.dumps([{'databaseId': 9, 'conclusion': conclusion, 'headSha': 'd' * 40, 'url': 'u9'}])
-            with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
-                self.assertIsNone(pr_finish.main_ci_failure(), conclusion)
+        listed = json.dumps([{'databaseId': 9, 'conclusion': 'success', 'headSha': 'd' * 40, 'url': 'u9'}])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
+            self.assertIsNone(pr_finish.main_ci_failure())
+        # PR #261 R1: 실패 뒤의 취소·건너뜀은 실패를 해소하지 않는다. 가장 최근의 성공·실패로 판정한다.
+        runs = [{'databaseId': 11, 'conclusion': 'cancelled', 'headSha': 'e' * 40, 'url': 'u11'},
+                {'databaseId': 10, 'conclusion': 'skipped', 'headSha': 'e' * 40, 'url': 'u10'},
+                {'databaseId': 9, 'conclusion': 'failure', 'headSha': 'd' * 40, 'url': 'u9'},
+                {'databaseId': 8, 'conclusion': 'success', 'headSha': 'f' * 40, 'url': 'u8'}]
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(runs), '')):
+            self.assertEqual(9, pr_finish.main_ci_failure()['id'])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(runs[:2] + runs[3:]), '')):
+            self.assertIsNone(pr_finish.main_ci_failure())
         with mock.patch.object(pr_finish, 'gh', return_value=(0, '[]', '')):
             self.assertIsNone(pr_finish.main_ci_failure())
 
@@ -149,7 +162,7 @@ class PendingUserVerdictsTest(unittest.TestCase):
         # PR #226: "리뷰어: Codex gpt-6.1-sol high"의 high를 심각도로 읽어 병합을 막았다.
         # 심각도 high만 이관할 수 없다(결정 rereview-cap-two).
         moved = '할 일로 이관 — specs/order/tasks.md'
-        body = verdict_body([['재리뷰(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', moved, '아래'],
+        body = verdict_body([['재리뷰 2(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', moved, '아래'],
                              ['R8 (high, 리뷰어: Codex) 무엇', moved, '이유'],
                              ['R9 ( High ) 무엇', moved, '이유']])
         errors = review_gate.check(body, ['tools/ci/x.py'])
