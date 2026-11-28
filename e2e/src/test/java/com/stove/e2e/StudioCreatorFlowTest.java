@@ -33,9 +33,12 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /** Real Auth/Gateway/Studio; unfinished external decisions enter only through event fixtures. */
 @Tag("studio")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class StudioCreatorFlowTest {
     private static final ObjectMapper JSON =

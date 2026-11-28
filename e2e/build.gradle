@@ -67,8 +67,8 @@ def suites = [
      expected: 5, failure: 'Chaos verification requires 5 executed checks without skips'],
     // Auth·Gateway·Studio
     [task: 'studioE2eTest', tag: 'studio',
-     description: 'Auth·Gateway·Studio만으로 로그인, 소유권, 업로드와 이벤트 처리 경계를 검증한다',
-     props: ['kafka-brokers'],
+     description: 'Auth·Gateway·Studio만으로 로그인, 소유권, 업로드와 이벤트 처리 경계를 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway'],
      expected: 7, failure: 'Studio E2E requires 7 executed checks without skips'],
     // Auth·Gateway·Studio·Review
     [task: 'reviewE2eTest', tag: 'review',

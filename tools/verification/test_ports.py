@@ -40,14 +40,14 @@ class PortOffsetsTest(unittest.TestCase):
 
     def test_busy_port_fails_before_starting_anything(self):
         with socket.socket() as busy:
-            busy.bind(('127.0.0.1', ports.OFFSETS['verify-license'] + 8084))
+            busy.bind(('127.0.0.1', ports.OFFSETS['verify-jib'] + 8084))
             busy.listen()
             with self.assertRaisesRegex(RuntimeError, 'in use'):
-                ports.application_offset('verify-license', 'LICENSE_TEST_PORT_OFFSET', [8080, 8084])
+                ports.application_offset('verify-jib', 'JIB_TEST_PORT_OFFSET', [8080, 8084])
 
     def test_port_left_in_time_wait_by_a_previous_run_is_not_reported_busy(self):
         # 앞 실행의 앱이 먼저 연결을 끊으면 그 포트가 TIME_WAIT로 남는다. 새로 listen할 수 있으므로 사용 중이 아니다.
-        port = ports.OFFSETS['verify-store'] + 8087
+        port = ports.OFFSETS['verify-jib'] + 8087
         with socket.socket() as server:
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server.bind(('127.0.0.1', port))
@@ -57,23 +57,23 @@ class PortOffsetsTest(unittest.TestCase):
             accepted.close()
             client.recv(1)
             client.close()
-        self.assertEqual(ports.OFFSETS['verify-store'],
-                         ports.application_offset('verify-store', 'STORE_TEST_PORT_OFFSET', [8087]))
+        self.assertEqual(ports.OFFSETS['verify-jib'],
+                         ports.application_offset('verify-jib', 'JIB_TEST_PORT_OFFSET', [8087]))
 
     def test_override_is_checked_against_the_ephemeral_range(self):
-        with mock.patch.dict(os.environ, {'LICENSE_TEST_PORT_OFFSET': '30000'}):
+        with mock.patch.dict(os.environ, {'JIB_TEST_PORT_OFFSET': '30000'}):
             with self.assertRaisesRegex(RuntimeError, 'ephemeral'):
-                ports.application_offset('verify-license', 'LICENSE_TEST_PORT_OFFSET', [8080, 8084])
+                ports.application_offset('verify-jib', 'JIB_TEST_PORT_OFFSET', [8080, 8084])
 
     def test_override_cannot_push_an_application_port_to_zero_or_below(self):
         # PR #118 리뷰: 음수 간격이면 --server.port=0이 되어 앱이 임의 포트로 뜨고 준비 확인이 끝까지 실패한다.
-        with mock.patch.dict(os.environ, {'STUDIO_TEST_PORT_OFFSET': '-8080'}):
+        with mock.patch.dict(os.environ, {'JIB_TEST_PORT_OFFSET': '-8080'}):
             with self.assertRaisesRegex(RuntimeError, 'below 1'):
-                ports.application_offset('verify-studio', 'STUDIO_TEST_PORT_OFFSET', [8080, 8085])
+                ports.application_offset('verify-jib', 'JIB_TEST_PORT_OFFSET', [8080, 8085])
 
     def test_free_default_offset_is_returned(self):
-        self.assertEqual(ports.OFFSETS['verify-studio'],
-                         ports.application_offset('verify-studio', 'STUDIO_TEST_PORT_OFFSET', [8080, 8085]))
+        self.assertEqual(ports.OFFSETS['verify-jib'],
+                         ports.application_offset('verify-jib', 'JIB_TEST_PORT_OFFSET', [8080, 8085]))
 
 
 class ApplicationJarUseTest(unittest.TestCase):
