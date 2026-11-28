@@ -239,7 +239,7 @@ E8 행은 플랫폼 흐름 1의 S6b다(단계 목록에 S6b가 빠진 것은 **1
 
 ## API 계약
 
-`/api/v1/studio` 아래. 응답 형식은 공통 `ApiResponse`. 공개 썸네일 외에는 CREATOR와 소유권을 확인한다(R9). 요청 본문 검증 실패는 400, 업로드 상한 초과는 413.
+`/api/v1/studio` 아래. 응답 형식은 공통 `ApiResponse`. 공개 썸네일 외에는 CREATOR와 소유권을 확인한다(R9). 요청 본문 검증 실패는 400, multipart 상한(`spring.servlet.multipart.max-file-size`·`max-request-size`) 초과는 413 `PAYLOAD_TOO_LARGE`([결정 studio-upload-413-code](../../docs/decisions.md#studio-upload-413-code)).
 
 | 메서드 · 경로 | 역할 | 요청 | 응답 | 오류 | 멱등 |
 |---|---|---|---|---|---|

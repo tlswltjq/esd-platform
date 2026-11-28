@@ -16,7 +16,7 @@ public class UploadExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> tooLarge(MaxUploadSizeExceededException failure) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, "파일 최대 크기를 초과했습니다."));
+                .body(ApiResponse.fail(ErrorCode.PAYLOAD_TOO_LARGE, "파일 최대 크기를 초과했습니다."));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
