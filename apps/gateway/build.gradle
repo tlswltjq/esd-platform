@@ -1,3 +1,7 @@
+plugins {
+    id 'stove.app'
+}
+
 dependencies {
     // API 게이트웨이(결정 223·224): 내부망에서 BFF가 릴레이한 Bearer를 검증하고 역할별 경로 규칙으로 라우팅한다.
     // 세션·OAuth 클라이언트·Swagger UI는 웹 BFF(apps/web-bff)에 있다.

@@ -1,0 +1,36 @@
+// apps/* 의 실행 가능한 부트 애플리케이션. 산출물은 bootJar 와 Jib 이미지다.
+plugins {
+    id 'stove.java-base'
+    id 'org.springframework.boot'
+    id 'stove.image'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    // 분산 추적. 브리지는 Micrometer 의 추상(Tracer/Propagator)을 OpenTelemetry 구현에 잇고,
+    // exporter 는 완성된 스팬을 OTLP 로 수집기(Tempo)에 보낸다 — 둘은 역할이 다르므로 함께 필요하다.
+    //
+    // 이것만으로 HTTP 구간은 자동으로 이어지지만 Kafka 구간은 이어지지 않는다.
+    // Outbox 가 발행을 다른 스레드로 미루기 때문이고, 그 간극은 common:messaging 이 메운다
+    // (OutboxRecorder 가 적재 시점에 붙잡아 저장 -> OutboxRelay 가 발행 시점에 복원).
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+    implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+
+    // 모듈 패키지 구조 검증 규칙 (ArchUnit)
+    testImplementation project(':common:archunit')
+    // 인프라가 필요 없는 테스트 지원 코드 (EventRecords, OpenApiSnapshot)
+    testImplementation project(':common:test')
+    // 컨테이너는 통합 소스셋에만 건다. 이 한 줄이 경계다 —
+    // src/test 에서는 InfraContainers 가 클래스패스에 아예 없다.
+    integrationTestImplementation project(':common:testcontainers')
+}
+
+// 실행 앱의 배포 산출물은 bootJar와 Jib 이미지이며 plain jar는 만들지 않는다.
+tasks.named('jar') { enabled = false }
+
+// 앱은 도메인·서비스 계층만 뮤테이션 대상으로 본다(stove.java-base 의 pitest 블록 참고).
+pitest {
+    targetClasses = ['com.stove.*.core.*']
+}

@@ -1,4 +1,6 @@
-apply plugin: 'java-library'
+plugins {
+    id 'stove.library'
+}
 
 dependencies {
     // 규칙 세트는 각 앱의 testImplementation 으로만 쓰이지만,

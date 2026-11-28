@@ -1,0 +1,10 @@
+// common/* 의 일반 라이브러리 jar.
+plugins {
+    id 'stove.java-base'
+    id 'java-library'
+}
+
+// 디렉터리에서 뺀 common- 접두사를 산출물에서는 되살린다.
+// 경로는 패키지와 1:1 로 두되(common/web → com.stove.common.web),
+// 클래스패스에 core.jar / web.jar / test.jar 로 뜨는 것은 피한다.
+base { archivesName = "common-${project.name}" }

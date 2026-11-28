@@ -1,3 +1,8 @@
+// 실행 모듈(앱·모의 PG)만 이미지로 만든다. 라이브러리와 E2E 모듈에는 적용하지 않는다.
+plugins {
+    id 'com.google.cloud.tools.jib'
+}
+
 // 실행 앱의 Java 21 Alpine/JVM 옵션/비특권 UID를 공통으로 구성한다.
 // OCI 비교에서는 기반 이미지 다이제스트와 arm64를 명시해 양쪽 런타임을 고정한다.
 def imagePorts = [auth: 8091, "web-bff": 8080, gateway: 8093, studio: 8085, review: 8086,

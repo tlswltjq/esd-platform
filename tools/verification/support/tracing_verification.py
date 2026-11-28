@@ -42,7 +42,7 @@ class TracingVerification:
         sources = {}
         for name in capture(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"]).split("\0"):
             source = root / name
-            if source.is_file() and (name.endswith((".java", ".gradle", ".py", ".yml", ".yaml")) or name == "gradle.properties" or "/src/main/resources/" in name):
+            if source.is_file() and (name.endswith((".java", ".gradle", ".groovy", ".toml", ".py", ".yml", ".yaml")) or name == "gradle.properties" or "/src/main/resources/" in name):
                 sources[name] = hashlib.sha256(source.read_bytes()).hexdigest()
         (output / "source-manifest.json").write_text(json.dumps({"revision": self.revision, "dirty": self.dirty, "sha256": sources}, indent=2))
 

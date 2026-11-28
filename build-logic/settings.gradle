@@ -1,0 +1,14 @@
+// 공통 빌드 로직(convention plugin). 루트 settings.gradle 이 includeBuild 로 불러온다(결정 build-logic-convention-plugins).
+dependencyResolutionManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    versionCatalogs {
+        libs {
+            from(files('../gradle/libs.versions.toml'))
+        }
+    }
+}
+
+rootProject.name = 'build-logic'

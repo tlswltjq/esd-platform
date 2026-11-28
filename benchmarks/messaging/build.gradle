@@ -1,3 +1,9 @@
+plugins {
+    id 'stove.java-base'
+}
+
+apply plugin: 'org.springframework.boot'
+
 // Kafka 기준선 층 2 메시징 구간 벤치(결정 234, E13).
 //
 // 세 프로그램이 한 모듈에 있고, 측정 때는 서로 다른 프로세스로 띄운다.
@@ -7,7 +13,6 @@
 //
 // 운영 앱은 이 모듈에 의존하지 않는다(루트 verifyBenchmarksIsolation). Jib 이미지를 만들지 않는다.
 // CI는 컴파일과 단위 시험만 돌린다. 측정 회차는 tools/measurement/bench_messaging.py가 띄운다.
-apply plugin: 'org.springframework.boot'
 
 // 프로젝트 이름이 :common:messaging 과 같아 group 까지 같으면 좌표(com.stove:messaging)가 겹쳐 의존이 자기 자신으로 풀린다.
 group = 'com.stove.benchmarks'

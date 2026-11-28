@@ -1,13 +1,5 @@
-import org.gradle.api.services.BuildService
-import org.gradle.api.services.BuildServiceParameters
-
 plugins {
     id 'java'
-    alias(libs.plugins.spring.boot) apply false
-    alias(libs.plugins.dependency.management) apply false
-    alias(libs.plugins.jib) apply false
-    // 뮤테이션 테스트. 기본 빌드에 얹지 않고 필요할 때만 돌린다 (아래 pitest 블록 참고)
-    alias(libs.plugins.pitest) apply false
 }
 
 allprojects {
@@ -19,308 +11,15 @@ allprojects {
     }
 }
 
-/**
- * 실 인프라를 띄우는 테스트 태스크가 동시에 몇 개까지 돌 수 있는지를 정하는 자리.
- *
- * <p>모듈마다 자기 컨테이너 스택을 띄우므로(common:testcontainers 참고) 동시 실행 수가
- * 곧 동시 컨테이너 수다. 예전에는 이것을 {@code org.gradle.workers.max} 로 눌렀는데,
- * 그 값은 <b>컴파일과 단위 테스트까지 같이</b> 묶는다 — 컨테이너를 지키려고 2 로 낮추면
- * 인프라가 필요 없는 51개 클래스도 함께 느려졌다.
- *
- * <p>공유 빌드 서비스는 그것을 쓰겠다고 선언한 태스크만 센다. 그래서 이제
- * {@code org.gradle.workers.max} 는 머신의 코어 수대로 올리고, 컨테이너 스택만 여기서 조인다.
- */
-abstract class InfraTestThrottle implements BuildService<BuildServiceParameters.None> {
-}
-
-def infraTestThrottle = gradle.sharedServices.registerIfAbsent('infraTestThrottle', InfraTestThrottle) {
-    // Docker 에 준 메모리가 한계선이지 CPU 코어가 아니다(gradle.properties 참고).
-    // 머신마다 다르므로 -Pstove.infraTest.maxParallel=N 으로 덮을 수 있게 둔다.
-    maxParallelUsages = (providers.gradleProperty('stove.infraTest.maxParallel')
-            .getOrElse('2')) as Integer
-}
-
-subprojects {
-    apply plugin: 'java'
-    apply plugin: 'io.spring.dependency-management'
-
-    // 비용을 확인한 두 모듈부터 공유 픽스처와 과거 DB 이행 검사의 경계를 분리한다.
-    def stagedVerification = project.path in [':apps:order', ':apps:payment']
-    if (stagedVerification) {
-        apply plugin: 'java-test-fixtures'
-    }
-
-    java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
-        }
-    }
-
-    // Spring Boot BOM 의 testcontainers.version 을 덮어쓴다 (gradle/libs.versions.toml 참고)
-    ext['testcontainers.version'] = rootProject.libs.versions.testcontainers.get()
-
-    dependencyManagement {
-        imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:${rootProject.libs.versions.spring.boot.get()}"
-            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${rootProject.libs.versions.spring.cloud.get()}"
-            mavenBom "software.amazon.awssdk:bom:${rootProject.libs.versions.aws.sdk.get()}"
-        }
-    }
-
-    dependencies {
-        compileOnly 'org.projectlombok:lombok'
-        annotationProcessor 'org.projectlombok:lombok'
-        testCompileOnly 'org.projectlombok:lombok'
-        testAnnotationProcessor 'org.projectlombok:lombok'
-
-        testImplementation 'org.springframework.boot:spring-boot-starter-test'
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-        if (stagedVerification) {
-            testFixturesImplementation project(':common:messaging-kafka')
-            testFixturesCompileOnly 'jakarta.persistence:jakarta.persistence-api'
-        }
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        options.encoding = 'UTF-8'
-        options.compilerArgs << '-parameters'
-    }
-
-    // ── 테스트 실행 경계 ──────────────────────────────────────────────
-    //
-    // 실행 정책을 **모듈 경계가 아니라 필요 자원**으로 가른다.
-    //
-    // 예전에는 한 모듈의 test 태스크에 컨테이너가 필요 없는 도메인·어댑터 테스트와
-    // MySQL·Kafka 를 띄우는 통합 테스트가 섞여 있었다. 그래서 전체가 가장 느리고
-    // 가장 취약한 쪽의 실행 프로파일을 물려받았다 — 도메인 테스트 한 줄을 고쳐도
-    // Kafka 기동을 기다렸고, 병렬도를 올리면 컨테이너가 죽고 낮추면 단위까지 느려졌다.
-    //
-    // 경계는 규약이 아니라 **클래스패스**가 지킨다. common:testcontainers 가
-    // integrationTest 에만 걸리므로 src/test 의 클래스는 InfraContainers 를
-    // 임포트조차 할 수 없다 — 컨테이너 테스트를 빠른 소스셋에 잘못 두면 컴파일이 막는다.
-    sourceSets {
-        integrationTest {
-            compileClasspath += sourceSets.main.output
-            runtimeClasspath += sourceSets.main.output
-            if (!stagedVerification) {
-                compileClasspath += sourceSets.test.output
-                runtimeClasspath += sourceSets.test.output
-            }
-        }
-    }
-
-    configurations {
-        integrationTestImplementation.extendsFrom testImplementation
-        integrationTestCompileOnly.extendsFrom testCompileOnly
-        integrationTestAnnotationProcessor.extendsFrom testAnnotationProcessor
-        integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
-    }
-
-    if (stagedVerification) {
-        // 실행 앱은 plain jar를 만들지 않으므로 픽스처도 main의 클래스 출력을 직접 쓴다.
-        sourceSets.testFixtures.compileClasspath += sourceSets.main.output
-        sourceSets.testFixtures.runtimeClasspath += sourceSets.main.output
-        sourceSets.test.compileClasspath += sourceSets.main.output
-        sourceSets.test.runtimeClasspath += sourceSets.main.output
-        dependencies {
-            integrationTestImplementation testFixtures(project(project.path))
-        }
-    }
-
-    tasks.register('integrationTest', Test) {
-        group = 'verification'
-        description = '실 인프라(Testcontainers)를 띄우는 테스트만 실행한다'
-        testClassesDirs = sourceSets.integrationTest.output.classesDirs
-        classpath = sourceSets.integrationTest.runtimeClasspath
-
-        // 동시 컨테이너 스택 수를 여기서 조인다. 루트의 InfraTestThrottle 주석 참고.
-        usesService(infraTestThrottle)
-
-        // ── 통합 테스트는 운영 풀 크기를 쓰지 않는다 ────────────────────
-        //
-        // 앱의 `maximum-pool-size: 20` 은 **운영 부하를 받는 인스턴스 한 대**를 위한 값이다.
-        // 그런데 테스트 JVM 하나에는 컨텍스트가 여러 벌 뜬다 — 스프링은 `@SpringBootTest` 의
-        // 프로퍼티 조합마다 컨텍스트를 따로 만들어 **JVM 이 끝날 때까지 캐시에 들고 있고**,
-        // 각 컨텍스트가 자기 HikariCP 를 하나씩 붙든다. Hikari 의 `minimumIdle` 기본값은
-        // `maximumPoolSize` 라 그 20개는 **놀아도 열려 있다.**
-        //
-        // MySQL 기본 `max_connections` 는 151 이므로 컨텍스트 여덟 벌이면 벽에 닿는다.
-        // 실제로 닿았다 — payment 의 통합 테스트에 클래스를 **하나** 더한 회차에서
-        // `Flyway ... Unable to obtain connection from database: Too many connections` 로
-        // 컨텍스트 로딩이 실패했고, 빨개진 것은 새로 넣은 클래스가 아니라 **기존 클래스**였다.
-        // 원인과 증상이 다른 파일에 있어 읽는 사람이 원인을 찾을 방법이 없는 실패다.
-        //
-        // 시스템 프로퍼티로 덮는다. `@SpringBootTest(properties = ...)` 로 덮으면
-        // **그 자체가 컨텍스트 키가 되어** 컨텍스트를 한 벌 더 만든다 — 고치려던 것을 늘리는 셈이다.
-        // 시스템 프로퍼티는 키에 들어가지 않으므로 캐시 재사용을 그대로 두고 풀만 줄인다.
-        //
-        // 5 인 이유: 이 소스셋의 테스트는 단일 스레드이고, 동시에 커넥션을 쥐는 것은
-        // 리스너 컨테이너(concurrency 1)와 릴레이 정도다. 풀 고갈이 재현되면 이 값을 올린다.
-        systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
-
-        // 단위가 먼저 돈다. 컨테이너를 띄우기 전에 깨질 것은 깨지는 편이 빠르다.
-        shouldRunAfter tasks.named('test')
-        if (stagedVerification) {
-            useJUnitPlatform { excludeTags 'migration' }
-        }
-    }
-
-    if (stagedVerification) {
-        tasks.register('migrationTest', Test) {
-            group = 'verification'
-            description = '과거 DB 버전의 데이터 보존·이관을 실제 인프라로 검증한다'
-            testClassesDirs = sourceSets.integrationTest.output.classesDirs
-            classpath = sourceSets.integrationTest.runtimeClasspath
-            usesService(infraTestThrottle)
-            systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
-            useJUnitPlatform {
-                includeTags 'migration'
-                excludeTags 'known-defect'
-            }
-            shouldRunAfter tasks.named('test'), tasks.named('integrationTest')
-        }
-        tasks.named('check') { dependsOn tasks.named('migrationTest') }
-    }
-
-    // 통합 테스트도 `./gradlew build` 로 돈다. 기본 빌드에서 빠지면 아무도 안 돌린다.
-    tasks.named('check') {
-        dependsOn tasks.named('integrationTest')
-    }
-
-    tasks.withType(Test).configureEach {
-        useJUnitPlatform()
-
-        // OpenAPI 스냅샷 갱신 플래그를 테스트 JVM 으로 넘긴다.
-        // 그레이들은 -D 를 자동으로 전달하지 않는다 — 여기서 넘기지 않으면
-        // OpenApiSnapshot 이 플래그를 영영 못 본다.
-        systemProperty 'stove.openapi.update',
-                providers.systemProperty('stove.openapi.update').getOrElse('false')
-
-        // CI 에서는 테스트 결과를 캐시에서 꺼내지 않는다.
-        //
-        // self-hosted 러너는 ~/.gradle 이 잡 사이에 그대로 남는다. 이것이
-        // org.gradle.caching=true 와 만나면 입력이 같을 때 :test 가 통째로 건너뛰어진다.
-        // 실제로 관측했다 — 1회차 "84 executed" 뒤로 2·3회차가 "41 executed, 43 from cache",
-        // 5분 57초가 23초가 됐고 그 23초 동안 테스트는 한 줄도 돌지 않았다.
-        //
-        // 앱 테스트는 Testcontainers 컨텍스트 로딩이라 결과가 소스 입력이 아니라
-        // **환경**(Docker 버전·이미지·메모리·네트워크)에 달려 있다. 그 환경을 검증하는 것이
-        // 이 테스트의 존재 이유인데, 캐시는 소스 입력만 보고 같다고 판단해 검증을 건너뛴다.
-        // compose 나 러너 설정만 바꾼 변경에서 CI 가 그린인데 Docker 를 한 번도 안 건드리게 된다.
-        //
-        // 컴파일은 입력만으로 결정되므로 캐시를 그대로 둔다 — 느려지는 것은 테스트뿐이다.
-        // 로컬도 그대로 둔다. 반복 루프에서는 캐시가 맞고,
-        // **실제로 도는지 증명하는 자리는 CI 다**(decisions.md 12번).
-        if (providers.environmentVariable('CI').isPresent()) {
-            outputs.upToDateWhen { false }   // UP-TO-DATE 로 건너뛰지 않는다
-            outputs.cacheIf { false }        // FROM-CACHE 로 복원하지 않는다
-        }
-    }
-
-    // 결함 재현 테스트(@Tag("known-defect"))는 기본 빌드에서 뺀다.
-    // "실패하는 것이 정상"인 테스트라 CI 를 빨갛게 두면 신호가 아니라 소음이 된다.
-    //
-    // **두 태스크에 각각 건다.** withType 으로 걸면 아래 defectTest 까지 같이 걸러져
-    // 결함 재현 태스크가 0건을 돌고도 초록으로 끝난다.
-    //
-    // integrationTest 가 빠져 있었다. defectTest 는 "결함은 층을 가리지 않는다"며
-    // 통합 소스셋까지 훑는데, 정작 그 소스셋에 결함 테스트를 두면 `./gradlew build` 가
-    // 빨개졌다 — 결함 재현 테스트가 0건인 동안에는 드러나지 않던 구멍이다.
-    // D-026 이 통합 계층(실 브로커가 있어야 재현된다)에 들어오면서 처음 걸렸다.
-    ['test', 'integrationTest'].each { name ->
-        tasks.named(name) {
-            useJUnitPlatform {
-                excludeTags 'known-defect'
-            }
-        }
-    }
-
-    // 결함 재현 테스트만 돌린다. 실패 = 결함이 아직 살아 있다는 증거.
-    // 고쳐서 통과하기 시작하면 태그를 떼고 회귀 방어선으로 승격한다.
-    tasks.register('defectTest', Test) {
-        group = 'verification'
-        description = '알려진 결함을 재현하는 테스트만 실행한다 (docs/defects.md 참고)'
-        // 결함은 층을 가리지 않는다 — 양쪽 소스셋을 다 훑는다.
-        // 한쪽만 보면 통합 쪽 재현 테스트가 조용히 판정에서 빠진다.
-        testClassesDirs = sourceSets.test.output.classesDirs +
-                sourceSets.integrationTest.output.classesDirs
-        classpath = sourceSets.test.runtimeClasspath +
-                sourceSets.integrationTest.runtimeClasspath
-        useJUnitPlatform {
-            includeTags 'known-defect'
-        }
-        // 결함이 여러 모듈에 걸쳐 있으므로 첫 실패에서 멈추지 않고 전부 돌린다
-        ignoreFailures = true
-        testLogging {
-            events 'passed', 'failed'
-            exceptionFormat = 'short'
-        }
-    }
-
-    // ── 뮤테이션 테스트 ────────────────────────────────────────────────
-    // 커버리지는 "거쳐 갔는가"를 재고, 뮤테이션은 "잡아내는가"를 잰다.
-    // 통과하지만 결함을 못 잡는 테스트를 색출하는 것이 목적이다.
-    //
-    // CI 에 넣지 않는다 — 전 모듈 기준 수십 분이 걸려 피드백 루프를 망가뜨린다.
-    // 테스트를 새로 붙인 모듈에 대해 수동으로 돌리고 결과를 판단한다.
-    //   ./gradlew :apps:payment:pitest
-    apply plugin: 'info.solidsoft.pitest'
-
-    pitest {
-        junit5PluginVersion = rootProject.libs.versions.pitest.junit5.plugin.get()
-        // 소스셋을 가른 뒤에도 뮤테이션 판정은 두 쪽을 다 쓴다.
-        // 기본값(test 만)으로 두면 L1 서비스 통합 테스트가 죽이던 뮤턴트가 전부 "생존"으로
-        // 보고돼, 코드가 그대로인데 점수만 떨어진다 — 측정 도구의 사각지대를 다시 만드는 셈이다.
-        testSourceSets = [sourceSets.test, sourceSets.integrationTest]
-        // 앱은 도메인·서비스 계층만 본다. 어댑터는 대부분 위임이라 살아남은 뮤턴트가
-        // 대개 "검증할 가치가 없는 위임"이어서 신호 대 잡음비가 나쁘다.
-        // common 은 계층이 아니라 모듈 자체가 로직이므로 전체를 본다.
-        targetClasses = project.path.startsWith(':apps:')
-                ? ['com.stove.*.core.*']
-                : ['com.stove.common.*']
-        // targetTests 를 지정하지 않으면 pitest 는 targetClasses 패턴을 **테스트 선택에도** 쓴다.
-        // 그러면 api.* 의 테스트(컨트롤러·리스너·파사드)가 판정에 전혀 참여하지 못한다.
-        // 실제로 그랬다 — 전 모듈을 통틀어 뮤턴트를 죽인 테스트가 core.service 와 core.domain
-        // 두 패키지에서만 나왔고, 파사드가 지키는 규칙은 전부 "생존"으로 보고되고 있었다.
-        targetTests = ['com.stove.*']
-        // 결함 재현 테스트는 실패하는 것이 정상이라 뮤테이션 판정에 쓸 수 없다
-        excludedTestClasses = ['*DefectTest']
-        threads = 4
-        timestampedReports = false
-        outputFormats = ['HTML', 'XML']
-    }
-}
-
-// apps/* 는 실행 가능한 부트 애플리케이션, common/* 는 일반 라이브러리 jar
-configure(subprojects.findAll { it.path.startsWith(':apps:') }) {
-    apply plugin: 'org.springframework.boot'
-
-    dependencies {
-        implementation 'org.springframework.boot:spring-boot-starter-actuator'
-        runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
-
-        // 분산 추적. 브리지는 Micrometer 의 추상(Tracer/Propagator)을 OpenTelemetry 구현에 잇고,
-        // exporter 는 완성된 스팬을 OTLP 로 수집기(Tempo)에 보낸다 — 둘은 역할이 다르므로 함께 필요하다.
-        //
-        // 이것만으로 HTTP 구간은 자동으로 이어지지만 Kafka 구간은 이어지지 않는다.
-        // Outbox 가 발행을 다른 스레드로 미루기 때문이고, 그 간극은 common:messaging 이 메운다
-        // (OutboxRecorder 가 적재 시점에 붙잡아 저장 -> OutboxRelay 가 발행 시점에 복원).
-        implementation 'io.micrometer:micrometer-tracing-bridge-otel'
-        implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
-
-        // 모듈 패키지 구조 검증 규칙 (ArchUnit)
-        testImplementation project(':common:archunit')
-        // 인프라가 필요 없는 테스트 지원 코드 (EventRecords, OpenApiSnapshot)
-        testImplementation project(':common:test')
-        // 컨테이너는 통합 소스셋에만 건다. 이 한 줄이 경계다 —
-        // src/test 에서는 InfraContainers 가 클래스패스에 아예 없다.
-        integrationTestImplementation project(':common:testcontainers')
-    }
-
-    // 실행 앱의 배포 산출물은 bootJar와 Jib 이미지이며 plain jar는 만들지 않는다.
-    tasks.named('jar') { enabled = false }
-}
+// 모듈 공통 빌드 구성은 build-logic/ 의 convention plugin 에 있고, 모듈이 자기 build.gradle 에서 적용한다
+// (결정 build-logic-convention-plugins).
+//   stove.java-base                Java 모듈 공통(툴체인·BOM·test / integrationTest / defectTest·pitest)
+//   stove.app                      apps/* 부트 애플리케이션(+ stove.image)
+//   stove.library                  common/* 라이브러리
+//   stove.staged-verification      공유 픽스처와 migrationTest 를 나눈 모듈
+//   stove.minio-integration-test   통합 테스트가 MinIO 이미지를 쓰는 모듈
+//   stove.image                    Jib 이미지(앱·모의 PG)
+// 이 파일에는 여러 모듈이 함께 쓰는 값(이미지 registry·MinIO 이미지 선택)과 전체를 훑는 검증 태스크만 둔다.
 
 // 결정 135: 직접 만드는 이미지(앱·mock-pg·MinIO·mysql-client)의 registry는 여기서 한 번만 정한다.
 // registry 주소가 없는 이름(stove/...)은 Docker Hub의 다른 사람 계정(stove)을 가리키므로, 기본값은 Docker Hub로
@@ -363,12 +62,6 @@ if (registryPath != null && registryPath.size() > 1 && registryPath[0] == 'stove
 ext.stoveImageRegistry = stoveImageRegistry
 ext.requireNotDockerHubStove = requireNotDockerHubStove
 
-// 실행 모듈만 이미지로 만든다. 라이브러리와 E2E 모듈에는 Jib을 적용하지 않는다.
-configure(subprojects.findAll { it.path.startsWith(':apps:') || it.path == ':simulators:mock-pg' }) {
-    apply plugin: 'com.google.cloud.tools.jib'
-    apply from: rootProject.file('gradle/jib.gradle')
-}
-
 // MinIO 이미지 이름은 여기서 한 번만 정한다. :infra:minio와 통합 테스트가 이 값을 쓰고,
 // tools/verification/support/minio_image.py가 같은 규칙을 따른다(docs/testing.md#minio-image).
 // - 빌드 이름(Compose·게시와 같다): -Pstove.minio.image > <registry>/minio:<태그>. 테스트 전용 변수는 바꾸지 않는다.
@@ -398,32 +91,6 @@ ext.minioImageSelection = [
         fromSource    : minioFromSource,
         retagForTest  : minioFromSource && minioTestImage != minioBuildImage,
 ].asImmutable()
-
-// MinIO를 사용하는 통합 테스트는 위에서 정한 이름을 받는다. 소스로 만드는 이름이면 :infra:minio가 준비한다.
-configure(subprojects.findAll { it.path in [':apps:studio', ':apps:review', ':apps:download', ':apps:catalog'] }) {
-    tasks.named('integrationTest') {
-        environment 'STOVE_TEST_MINIO_IMAGE', minioImageSelection.testImage
-        if (minioImageSelection.fromSource) {
-            dependsOn ':infra:minio:tagTestImage'
-        }
-    }
-}
-
-configure(subprojects.findAll { it.path.startsWith(':common:') }) {
-    // 라이브러리는 bootJar 대신 plain jar 를 산출한다
-    tasks.named('jar') { enabled = true }
-
-    // 디렉터리에서 뺀 common- 접두사를 산출물에서는 되살린다.
-    // 경로는 패키지와 1:1 로 두되(common/web → com.stove.common.web),
-    // 클래스패스에 core.jar / web.jar / test.jar 로 뜨는 것은 피한다.
-    base { archivesName = "common-${project.name}" }
-}
-
-// apps 와 common 은 자식을 담는 껍데기라 소스가 없다.
-// 빈 jar 를 만들어 두면 common-*.jar 목록에 모듈이 아닌 것이 섞인다.
-configure([project(':apps'), project(':common'), project(':simulators'), project(':infra'), project(':benchmarks')]) {
-    tasks.named('jar') { enabled = false }
-}
 
 // 클래스의 의존성뿐 아니라 실제 런타임에 웹 서버가 전파되는지도 검증한다.
 tasks.register('verifyCommonRuntimeDependencies') {
@@ -501,7 +168,8 @@ tasks.named('check') {
 tasks.register('defectTest') {
     group = 'verification'
     description = '알려진 결함 재현 테스트를 전 모듈에서 돌리고 결과를 합산한다'
-    dependsOn subprojects.collect { "${it.path}:defectTest" }
+    // 소스가 없는 묶음 프로젝트(apps·common 등)에는 defectTest 가 없다.
+    dependsOn subprojects.collect { sub -> sub.tasks.matching { it.name == 'defectTest' } }
 
     def resultDirs = subprojects.collect { it.layout.buildDirectory.dir('test-results/defectTest') }
 

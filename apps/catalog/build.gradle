@@ -1,3 +1,8 @@
+plugins {
+    id 'stove.app'
+    id 'stove.minio-integration-test'
+}
+
 dependencies {
     implementation 'software.amazon.awssdk:s3'
     integrationTestImplementation 'org.testcontainers:minio'

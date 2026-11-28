@@ -2679,7 +2679,7 @@
 - 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
 - 선택: B
 - 구분: 추천 수용
-- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+- 결과: [PR #267](https://github.com/tlswltjq/esd-platform/pull/267), 근거 색인 2026-11-28 convention plugin 행
 
 <a id="version-catalog"></a>
 ## 의존성·플러그인 버전을 버전 카탈로그로 모은다

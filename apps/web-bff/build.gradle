@@ -1,3 +1,7 @@
+plugins {
+    id 'stove.app'
+}
+
 dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
     // 세션의 access token을 하류(API 게이트웨이)로 보내기 전에 역할을 읽으려고 JWT를 해석한다.

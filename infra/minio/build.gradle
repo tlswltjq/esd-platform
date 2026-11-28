@@ -1,6 +1,8 @@
 plugins {
-    id 'com.google.cloud.tools.jib'
+    id 'stove.java-base'
 }
+
+apply plugin: 'com.google.cloud.tools.jib'
 
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
         System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')

@@ -1,4 +1,6 @@
-apply plugin: 'java-library'
+plugins {
+    id 'stove.library'
+}
 
 // Kafka 공통 모듈(결정 227): 리스너 팩토리·제자리 재시도(DefaultErrorHandler)·멈춘 키 거르기·격리 연결, DB 없는 앱의 DLT.
 // 이벤트 계약은 common:contract 에 있다. 코어(common:messaging)에 의존하지 않는다 — Store 처럼 JPA 가 없는 앱도 쓴다.
