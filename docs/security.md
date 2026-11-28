@@ -53,7 +53,7 @@ PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전�
 Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
 Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-현재 빌드·테스트는 로컬 OrbStack에서 실행한다. 과거 OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+현재 빌드·테스트는 로컬 호스트(Linux, Docker)에서 실행한다. 과거 OrbStack·OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
 API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
 
 ## Settlement와 외부 모의 PG 경계

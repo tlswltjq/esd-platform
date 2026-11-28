@@ -2,7 +2,7 @@
 
 [문서 목록](README.md) · [전체 흐름 검증](../.kiro/specs/settlement/design.md#사용-안내) · [인증·권한 계약](security.md)
 
-명령은 저장소 루트에서 실행한다. 전체 스택에는 여러 JVM과 저장소가 함께 올라가므로 Docker에 충분한 메모리를 할당한다. 필요한 모듈별 격리 검증을 선택한다. 현재 개발·검증은 로컬 OrbStack에서 수행한다.
+명령은 저장소 루트에서 실행한다. 전체 스택에는 여러 JVM과 저장소가 함께 올라가므로 Docker에 충분한 메모리를 할당한다. 필요한 모듈별 격리 검증을 선택한다. 현재 개발·검증은 로컬 호스트(Linux, Docker)에서 수행한다.
 
 ## 개발 환경과 테스트
 
@@ -12,8 +12,8 @@ Gradle Wrapper를 사용한다. 컴파일 툴체인은 JDK 21이며 `settings.gr
 |---|---|---|
 | 단위·어댑터·아키텍처 규칙 | `./gradlew test` | Docker 불필요 |
 | 실제 저장소·메시징 통합 | `./gradlew integrationTest` | Testcontainers용 Docker |
-| 전체 구매·다운로드·정산 | `python3 tools/verification/verify-jib.py` | 로컬 OrbStack, 이미지 빌드 포함 |
-| Payment 내구 재개·Tempo 추적 | `python3 tools/verification/verify-tracing.py` | 로컬 OrbStack, 격리된 Tempo·Grafana와 이미지 빌드 포함 |
+| 전체 구매·다운로드·정산 | `python3 tools/verification/verify-jib.py` | Docker, 이미지 빌드 포함 |
+| Payment 내구 재개·Tempo 추적 | `python3 tools/verification/verify-tracing.py` | Docker, 격리된 Tempo·Grafana와 이미지 빌드 포함 |
 | 테스트 포함 빌드 | `./gradlew build` | Docker 필요 |
 
 macOS에서 Testcontainers가 Docker 소켓을 찾지 못하면 활성 컨텍스트의 값을 전달한다.

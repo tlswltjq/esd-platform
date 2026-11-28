@@ -22,12 +22,12 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 사용자의 판단 이력은 [판단 색인](docs/judgment-index.md)에 모은다. 새 결정이 색인 기준(비즈니스 영향·사용자 판단이 뚜렷함)에 맞으면 한 행을 추가한다.
 
-새 결정의 번호는 착수 때 `tools/ci/start_task.py --decisions N`으로 예약하고, draft PR `맡은 항목`의 `결정 번호:`에 적힌 뒤에 사용자에게 묻거나 기록한다. 빈 번호는 그대로 두고, 예약 번호가 늦게 병합되면 번호 자리에 끼워 넣는다. 같은 번호가 겹치면 나중에 병합하는 쪽이 바꾸고 `git grep '결정 N'`으로 링크가 아닌 언급도 바꾼다. 번호 규칙은 CI의 `tools/ci/decision_numbers.py`가 검사한다([결정 116](docs/decisions.md#decision-numbers)·[결정 139](docs/decisions.md#decision-number-reservation)).
+새 결정의 번호는 착수 때 `tools/ci/start_task.py prepare --decisions <개수>`로 예약하고([start-task](.claude/skills/start-task/SKILL.md)), draft PR `맡은 항목`의 `결정 번호:`에 적힌 뒤에 사용자에게 묻거나 기록한다. 빈 번호는 그대로 두고, 예약 번호가 늦게 병합되면 번호 자리에 끼워 넣는다. 같은 번호가 겹치면 나중에 병합하는 쪽이 바꾸고 `git grep '결정 N'`으로 링크가 아닌 언급도 바꾼다. 번호 규칙은 CI의 `tools/ci/decision_numbers.py`가 검사한다([결정 116](docs/decisions.md#decision-numbers)·[결정 139](docs/decisions.md#decision-number-reservation)).
 
 ### 결정을 기다리는 동안 ([결정 118](docs/decisions.md#continuous-development))
 
 - `tasks.md` 미완료 항목 중 정책 선택이 필요한 항목은 `[결정 필요]`로 표시한다. 사용자가 준비할 외부 자원(전용 PG 가맹점·공유 환경·실제 금융 동작 합의)이 필요한 항목은 `[외부 대기]`로 표시한다. 표시 없는 항목은 에이전트가 바로 진행할 수 있다.
-- 다음 작업은 묻지 않고 고른다. 로드맵 단계 순서(G1→G5)와 각 `tasks.md`의 순서를 따르되, 표시가 없고 선행 조건을 충족한 항목을 고른다. 진행 중 정책 쟁점이 드러나면 그 항목에 `[결정 필요]`를 달고 멈춘다.
+- 다음 작업은 묻지 않고 고른다. 현재 단계와 그 작업 목록은 [로드맵 0절](docs/roadmap.md#scope-freeze)을 따른다. 동결 뒤 백로그(G1~G7의 남은 항목, 모듈 `tasks.md`의 `[결정 필요]`)는 현재 단계에 필요할 때만 꺼낸다([결정 201](docs/decisions.md#scope-freeze-verified-journeys)). 그 안에서 표시가 없고 선행 조건을 충족한 항목을 순서대로 고른다. 진행 중 정책 쟁점이 드러나면 그 항목에 `[결정 필요]`를 달고 멈춘다.
 - 고르기 전에 `gh pr list --state open --limit 1000 --json number,isDraft,body`로(기본값은 30건만 가져온다) 열린 PR(draft 포함)의 `맡은 항목`을 확인하고, 겹치는 항목은 건너뛴다. 착수하면 바로 `tools/ci/start_task.py`로 착수 커밋·draft PR을 연다(`맡은 항목`에 항목 원문과 결정 번호). draft에서는 CI `build`가 돌지 않으니 검증을 마치면 `tools/ci/pr_finish.py ready`로 바꾼다([결정 137](docs/decisions.md#claim-draft-pr)·[결정 213](docs/decisions.md#ai-procedure-tools)).
 - 근거 색인 행은 PR마다 `docs/evidence.d/<PR번호>.md`에 근거 색인 형식(다섯 칸)으로 쓴다. 코드 PR은 필수이고 review-gate가 검사한다. `docs/evidence.md`는 접기 PR만 고친다: 조각이 5개 이상 쌓이거나 하루가 지나면 `python3 tools/ci/evidence_fragments.py fold`로 접고 그 결과만 담은 문서 PR을 연다([결정 146](docs/decisions.md#evidence-fragments)).
 - 결정 설명(위 2번 형식)은 미리 준비하되, 사용자에게는 한 번에 하나만 낸다. 답을 기다리는 동안 표시 없는 작업을 계속한다. 표시 없는 작업이 모두 막혔을 때만 멈추고 알린다.
@@ -65,7 +65,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 ## 4. 모듈 책임
 
-재작성 완료(MVP) 모듈은 11개이고, 결정 223으로 Gateway에서 웹 BFF를 나눠 12개다. 각 모듈의 계약은 스펙을 정본으로 한다.
+업무 모듈은 12개다(MVP 재작성 11개와, 결정 223으로 Gateway에서 나눈 웹 BFF). 각 모듈의 계약은 스펙을 정본으로 한다.
 
 | 모듈 | 책임 |
 |---|---|
@@ -87,7 +87,7 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 ## 5. 실행·검증 환경
 
 - worktree에서 MinIO를 쓰는 통합 테스트를 돌릴 때, MinIO 빌드 입력을 바꾸지 않았다면 이미 만든 이미지를 다시 쓴다([testing.md](docs/testing.md#minio-image)).
-- 빌드·테스트·서비스 실행과 인프라 검증은 로컬 호스트(과거 `ssh sng` OCI 인스턴스)에서 수행한다.
+- 빌드·테스트·서비스 실행과 인프라 검증은 로컬 호스트에서 수행한다.
 - 검증마다 작업 디렉터리·포트·DB·컨테이너를 격리하고, 기존 컨테이너·볼륨·공유 자료를 실행 전후 대조해 보존한다(`tools/ci/measure_guard.py`). Gradle 테스트 통과는 `tools/ci/gradle_result.py`의 판정으로만 보고한다([결정 213](docs/decisions.md#ai-procedure-tools)).
 - 테스트 범위·실행 명령은 [testing.md 앞의 바뀐 범위별 검증](docs/testing.md#scope-index)에서 고르고, 병목 진단은 그 본문을 따른다([결정 214](docs/decisions.md#agent-context-cost)). 관련 단위·아키텍처 검사 → 필요한 통합 검증 → 최종 게이트 순서로 실행하고, 변경하지 않은 범위의 전체 검증을 이유 없이 반복하지 않는다.
 - 실제 금융 동작(PortOne TEST 결제·환불)은 사용자와 합의한 사례에서만 실행한다.
@@ -101,5 +101,4 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 ## 6. 현재 상태
 
-- 목표: MVP 전 기능을 일반 사용 수준으로 고도화한 뒤 엣지 케이스·성능을 고도화한다. 단계(G1~G6)와 완료 조건은 [로드맵](docs/roadmap.md).
-- 다음 작업: 각 모듈 `tasks.md`의 미완료 항목과 로드맵의 단계 상태를 따른다. 이 절에는 진행 경위를 쌓지 않는다.
+- 범위는 [결정 201](docs/decisions.md#scope-freeze-verified-journeys)로 동결했다. 현재 단계·완료 조건·백로그와 다음 작업은 [로드맵 0절](docs/roadmap.md#scope-freeze)을 따른다. 이 절에는 진행 경위를 쌓지 않는다.
