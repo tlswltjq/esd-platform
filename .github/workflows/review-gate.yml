@@ -33,8 +33,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 -I -B tools/ci/decision_numbers.py --root . --base-ref HEAD^1
       - name: Check evidence fragments
-        # 결정 146: 코드 PR은 docs/evidence.d/<PR번호>.md를 더하고, docs/evidence.md는 접기 PR만 고친다.
-        # PR #232 R4: 접기 PR이 지운 조각의 행이 docs/evidence.md에 옮겨졌는지 기준 판(HEAD^1)과 대조한다.
+        # 결정 146·evidence-fragments-permanent: 코드 PR은 docs/evidence.d/<PR번호>.md를 더한다.
+        # 조각은 접지도 지우지도 않고, 고정된 docs/evidence.md는 고치지 않는다.
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,7 +43,7 @@ jobs:
         run: |
           python3 -I -B tools/ci/evidence_fragments.py check --root .
           gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[] | "\(.status)\t\(.filename)\t\(.previous_filename // "")"' > "$RUNNER_TEMP/changes.txt"
-          python3 -I -B tools/ci/evidence_fragments.py pr --number "$PR_NUMBER" --changes "$RUNNER_TEMP/changes.txt" --root . --base-ref HEAD^1
+          python3 -I -B tools/ci/evidence_fragments.py pr --number "$PR_NUMBER" --changes "$RUNNER_TEMP/changes.txt"
       - name: Check review section
         env:
           GH_TOKEN: ${{ github.token }}

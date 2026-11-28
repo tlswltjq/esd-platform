@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""결정 146: 근거 색인을 PR별 조각으로 쓰고, 접기 PR만 docs/evidence.md를 고친다.
+"""결정 146·evidence-fragments-permanent: 근거 색인을 PR별 조각으로 쓴다. 조각은 접지 않는다.
 
 - 조각: `docs/evidence.d/<PR번호>.md`. 근거 색인 표와 같은 다섯 칸 행을 한 줄 이상 둔다.
-  링크는 접힌 뒤의 위치(docs/evidence.md) 기준으로 쓴다.
+  링크는 docs/evidence.md와 같은 기준(docs/)으로 쓴다.
+- `docs/evidence.md`는 2026-11-28까지의 기록으로 고정했다. 어떤 PR도 고치지 않는다.
 - check : 저장소의 모든 조각 형식을 검사한다.
 - pr    : PR의 바뀐 파일(`상태<TAB>경로`)로 규칙을 검사한다.
           · 코드 PR(`*.md` 밖의 파일을 바꿈)은 자기 번호 조각을 더하거나 고쳐야 한다.
-          · 다른 번호의 조각을 더하거나 고치지 않는다. 조각 삭제는 접기 PR만 한다.
-          · docs/evidence.md는 접기 PR만 고친다. 접기 PR은 docs/evidence.md와 조각 삭제만 담는다.
-          · --base-ref를 주면 접기 PR이 지운 조각의 행이 모두 docs/evidence.md에 있는지 대조한다(PR #232 R4).
-- fold  : 조각 행을 (날짜, PR 번호) 순으로 docs/evidence.md 끝에 붙이고 조각을 지운다.
+          · 다른 번호의 조각을 더하거나 고치지 않는다. 조각은 지우지 않는다.
+          · docs/evidence.md를 고치지 않는다.
 """
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -86,74 +84,19 @@ def check_pr(number, changes):
     errors = []
     own = 'docs/evidence.d/%d.md' % number
     code = [path for status, path in changes if not path.endswith('.md')]
-    touched_index = any(path == INDEX for _, path in changes)
     fragments = [(status, path) for status, path in changes if path.startswith(FRAGMENTS + '/')]
     written = [path for status, path in fragments if status != 'removed']
     removed = [path for status, path in fragments if status == 'removed']
-    if touched_index:
-        others = [path for _, path in changes if path != INDEX and path not in removed]
-        if others:
-            errors.append('docs/evidence.md는 접기 PR만 고친다. 접기 PR은 docs/evidence.md와 조각 삭제만 담는다'
-                          '(같이 바뀐 파일: %s). 근거 행은 %s에 쓴다' % (', '.join(sorted(others)), own))
-        return errors
+    if any(path == INDEX for _, path in changes):
+        errors.append('docs/evidence.md는 고정됐다(결정 evidence-fragments-permanent). 근거 행은 %s에 쓴다' % own)
     if removed:
-        errors.append('조각 삭제는 접기 PR만 한다: %s' % ', '.join(sorted(removed)))
+        errors.append('조각은 지우지 않는다(결정 evidence-fragments-permanent): %s' % ', '.join(sorted(removed)))
     foreign = [path for path in written if path != own]
     if foreign:
         errors.append('이 PR(#%d)의 조각은 %s 하나다: %s' % (number, own, ', '.join(sorted(foreign))))
     if code and own not in written:
         errors.append('코드 PR은 근거 조각 %s를 더한다(결정 146)' % own)
     return errors
-
-
-def base_text(root, base_ref, path):
-    result = subprocess.run(['git', '-C', str(root), 'show', base_ref + ':' + path],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        return None
-    return result.stdout.decode('utf-8')
-
-
-def lost_rows(root, base_ref, changes):
-    """접기 PR이 지운 조각(기준 판 내용)의 행 중 현재 docs/evidence.md에 없는 행."""
-    removed = [path for status, path in changes if status == 'removed' and NAME.match(path)]
-    if not removed or not any(path == INDEX for _, path in changes):
-        return []
-    index = (root / INDEX).read_text(encoding='utf-8')
-    # 칸으로 나눠 비교한다. 칸 경계의 공백만 다른 행은 같은 행이다(PR #232 재리뷰 R2).
-    present = {tuple(cells(line) or [line.strip()]) for line in index.split('\n')}
-    errors = []
-    for path in sorted(removed):
-        text = base_text(root, base_ref, path)
-        if text is None:
-            errors.append('기준 판 %s의 %s를 읽지 못해 행 보존을 검사할 수 없다' % (base_ref, path))
-            continue
-        for line in text.split('\n'):
-            if line.strip() and tuple(cells(line) or [line.strip()]) not in present:
-                errors.append('%s의 행이 docs/evidence.md에 없다(접기는 행을 옮기고 조각을 지운다): %s'
-                              % (path, line.strip()[:80]))
-    return errors
-
-
-def fold(root):
-    errors = check(root)
-    if errors:
-        return errors, 0
-    gathered = []
-    paths = fragment_files(root)
-    for path in paths:
-        number = int(NAME.match(path.relative_to(root).as_posix()).group(1))
-        for date, line in rows(path, path.read_text(encoding='utf-8'))[0]:
-            gathered.append((date, number, line))
-    if not gathered:
-        return [], 0
-    index = root / INDEX
-    text = index.read_text(encoding='utf-8').rstrip('\n') + '\n'
-    text += ''.join(line + '\n' for _, _, line in sorted(gathered, key=lambda g: (g[0], g[1])))
-    index.write_text(text, encoding='utf-8')
-    for path in paths:
-        path.unlink()
-    return [], len(gathered)
 
 
 def read_changes(path):
@@ -176,26 +119,18 @@ def read_changes(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='결정 146: 근거 색인 조각')
     sub = parser.add_subparsers(dest='command', required=True)
-    for name in ('check', 'fold'):
-        sub.add_parser(name).add_argument('--root', default='.')
+    sub.add_parser('check').add_argument('--root', default='.')
     pr = sub.add_parser('pr')
     pr.add_argument('--number', type=int, required=True)
     pr.add_argument('--changes', required=True, help='`상태<TAB>경로` 줄 목록 파일')
-    pr.add_argument('--root', default='.')
-    pr.add_argument('--base-ref', help='지운 조각을 읽을 git 기준 판(접기 PR 행 보존 대조)')
     args = parser.parse_args(argv)
     if args.command == 'pr':
         changes = read_changes(args.changes)
         errors = check_pr(args.number, changes)
-        if args.base_ref:
-            errors += lost_rows(Path(args.root).resolve(), args.base_ref, changes)
         ok = '통과: PR #%d 근거 조각 규칙' % args.number
-    elif args.command == 'check':
+    else:
         errors = check(Path(args.root).resolve())
         ok = '통과: 근거 조각 형식'
-    else:
-        errors, count = fold(Path(args.root).resolve())
-        ok = '접음: 행 %d개를 docs/evidence.md에 붙이고 조각을 지웠다' % count
     if errors:
         print('실패: 근거 조각(결정 146)\n' + '\n'.join('- ' + e for e in errors), file=sys.stderr)
         return 1
