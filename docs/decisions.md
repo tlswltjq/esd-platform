@@ -2717,6 +2717,17 @@
 - 구분: 추천과 다른 선택
 - 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268), 판단 색인 행
 
+<a id="in-process-pg-approval"></a>
+## PG 어댑터가 없는 동안 payment는 프로세스 안 "항상 승인" 어댑터 하나로 결제를 확정한다
+- 문제: [결정 remove-pg-adapters](#remove-pg-adapters)로 PG 어댑터를 모두 지우면 `PgGateway` 구현이 없어 payment가 뜨지 않고, order 확정·license 지급·download를 실제 스택에서 검증할 입력(결제 결과 이벤트)이 사라진다. 현재 단계 M의 회귀 기준선도 구매 여정이다.
+- 선택지: 1 모든 PG 포트를 "제공 안 함" 어댑터로 채운다 / 2 payment·settlement를 스택에서 내린다 / 3 payment 안에 외부 호출 없이 바로 승인으로 답하는 어댑터 하나를 두고 settlement의 PG 포트는 "제공 안 함"으로 채운다 (추천: 3 — 완료된 order·license·download의 실제 스택 검증을 클래스 하나로 지킨다)
+- 내 의견: "3"
+- 선택: 3
+  - [결정 201](#scope-freeze-verified-journeys)의 여정 가운데 결제 실패·이탈→재진입·종료와 자동·수동 환불은 기준선에서 빠지고, 야간 fake PortOne 작업도 없앤다. 구매→지급→다운로드는 유지한다.
+  - 실제 PG를 되살릴 때 이 어댑터를 지운다.
+- 구분: 추천 수용
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
+
 ---
 
 ## 검증하며 드러난 것
