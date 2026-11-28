@@ -91,7 +91,7 @@ class AccountAccessEventListenerTest {
     }
 
     @Test
-    void aBrokenEnvelopeIsAPermanentFailure() {
+    void aBrokenMessageIsAPermanentFailure() {
         ConsumerRecord<String, String> noType = record("stove.auth.v1", "usr_1", "{}", EventHeaders.EVENT_ID, "evt-1");
 
         assertThatThrownBy(() -> listener.receive(noType)).isInstanceOf(AccessChangeRejected.class);

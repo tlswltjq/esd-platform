@@ -1,7 +1,7 @@
 package com.stove.license.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.LicenseRestorationRequestedEvent;
@@ -17,8 +17,8 @@ public class LicenseRestorationEventListener {
     private final ApplyLicenseRestoration apply;
     @KafkaListener(topics = Topics.ORDER, groupId = ApplyLicenseRestoration.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.LICENSE_RESTORATION_REQUESTED)) apply.execute(RestorationRequestMapper.from(envelope,
-                envelope.payloadAs(mapper, LicenseRestorationRequestedEvent.class)));
+        EventMessage message = EventMessage.from(record);
+        if (message.isType(EventType.LICENSE_RESTORATION_REQUESTED)) apply.execute(RestorationRequestMapper.from(message,
+                message.payloadAs(mapper, LicenseRestorationRequestedEvent.class)));
     }
 }

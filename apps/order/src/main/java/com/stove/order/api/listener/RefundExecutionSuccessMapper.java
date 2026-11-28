@@ -1,6 +1,6 @@
 package com.stove.order.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.RefundExecutionSucceededEvent;
 import com.stove.order.core.domain.RefundCompletionRejected;
 import com.stove.order.core.domain.RefundExecutionSuccess;
@@ -10,11 +10,11 @@ import java.util.Objects;
 
 public final class RefundExecutionSuccessMapper {
     private RefundExecutionSuccessMapper() { }
-    public static RefundExecutionSuccess from(EventEnvelope envelope, RefundExecutionSucceededEvent event) {
-        if (envelope == null || event == null || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType()) || !Objects.equals(envelope.key(), event.orderNo())
+    public static RefundExecutionSuccess from(EventMessage message, RefundExecutionSucceededEvent event) {
+        if (message == null || event == null || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType()) || !Objects.equals(message.key(), event.orderNo())
                 || event.cancellationId() == null || Objects.equals(event.eventId(), event.confirmationEventId()))
-            throw new RefundCompletionRejected("실행 성공 봉투·본문·키가 다릅니다.");
+            throw new RefundCompletionRejected("실행 성공 헤더·본문·키가 다릅니다.");
         return new RefundExecutionSuccess(new RefundPaymentConfirmation(event.eventId(), event.occurredAt(), event.refundId(),
                 event.attemptId(), event.requestEventId(), event.orderNo(), event.paymentId(), event.buyerSubject(), event.amount(),
                 event.currency(), "PG_RESPONSE", event.providerTransactionId(), List.of(event.cancellationId()),

@@ -3,7 +3,7 @@ package com.stove.order;
 import org.springframework.dao.DataAccessResourceFailureException;
 import static com.stove.order.OrderFixtures.id;
 import static com.stove.order.OrderFixtures.order;
-import static com.stove.order.OrderFixtures.envelope;
+import static com.stove.order.OrderFixtures.message;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
@@ -354,7 +354,7 @@ class RefundPaymentConfirmationKafkaIntegrationTest extends OrderIntegrationTest
 
     @Test void amountProjectionCompletionAndInboxRollBackTogetherAfterRealFlush() {
         Fixture fixture = fixture(); RefundPaymentConfirmedEvent event = withAmounts(fixture.event(), 12L);
-        RefundPaymentConfirmation input = RefundPaymentConfirmationMapper.from(envelope(event), event);
+        RefundPaymentConfirmation input = RefundPaymentConfirmationMapper.from(message(event), event);
         doAnswer(call -> {
             call.callRealMethod();
             assertThat(jdbc.queryForObject("SELECT confirmed_point_refund_amount FROM order_refund WHERE refund_id=?", Long.class,

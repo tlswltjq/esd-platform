@@ -2812,6 +2812,19 @@
 - 구분: 추천 수용
 - 결과: [PR #272](https://github.com/tlswltjq/esd-platform/pull/272)
 
+<a id="remove-envelope-term"></a>
+## "봉투"라는 용어를 걷어내고 `EventEnvelope`를 `EventMessage`로 바꾼다
+- 문제: "봉투"가 서로 다른 세 가지를 가리켰다 — 공통 응답 구조(`ApiResponse`), 본문과 대비되는 이벤트 식별 값(`eventId`·`eventType` 헤더), 헤더·키·본문을 묶은 수신 단위(`EventEnvelope` 클래스). 응답에 쓰기에는 어색한 번역어이고, `EventEnvelope`도 본문을 감싸는 구조가 아니라 Kafka 레코드를 정규화한 값이라 이름이 구조와 맞지 않는다.
+- 선택지: A 한국어 용어만 바꾸고 클래스 이름은 둔다 / B 클래스 이름도 바꾼다 — 후보 `EventMessage`·`EventRecord`·`ReceivedEvent` (추천: B, 응답은 "공통 응답 형식"·식별 값은 "헤더"·클래스는 `EventMessage` — 메시징에서 메시지가 헤더·키·본문을 뜻하고, 본문 타입 `XxxEvent`나 Java `record`와 겹쳐 읽히지 않는다. 처음에는 A를 추천했다가, Kafka 쪽에도 맞는 이름을 붙이려는 것이라는 설명을 듣고 B로 바꿨다)
+- 내 의견: "표준화된 response에 봉투라는 용어가 어색해서 그랬는데 kafka레코드에도 적절하게 이름 적용할여면 어떤게 좋을까" → "추천해준 조합대로 갈게"
+- 선택: B — 응답은 "공통 응답 형식", 이벤트 식별 값은 "헤더", 수신 단위는 "이벤트 메시지"(`EventMessage`). 아래 세부는 구현하며 정했다(AI 해석).
+  - `EventMessage`를 담는 변수·매개변수 `envelope`는 `message`로, 테스트 메서드 이름의 `Envelope`는 뜻에 따라 `Header`(본문과 대조하는 식별 값) 또는 `Message`로 바꿨다. ArchUnit 규칙은 `core_는_이벤트_메시지를_모른다`, 검증 도구의 장애 클래스는 `MalformedMessages`다(CLI 이름 `malformed`는 그대로).
+  - 플랫폼 요구사항 P2.1의 제목과 용어 정의를 "이벤트 메시지"(Kafka 레코드 하나: 키·헤더·본문)와 "헤더"로 나눠 다시 적었다. 요구사항 문장은 바꾸지 않았다.
+  - 예외 메시지·로그 문구·OpenAPI 설명의 "봉투"도 바꿨다. 전송 형식(헤더 이름·본문 JSON·토픽)과 `ApiResponse` 클래스 이름은 그대로다.
+  - 지난 기록(`docs/decisions.md`의 이전 결정, `docs/evidence.md`·`docs/evidence.d/`, `docs/experiments.md`)의 옛 용어·옛 클래스 이름은 고치지 않았다.
+- 구분: 추천 수용
+- 결과: [PR #274](https://github.com/tlswltjq/esd-platform/pull/274), 근거 색인 2026-11-28 "봉투" 용어 제거 행
+
 ---
 
 ## 검증하며 드러난 것

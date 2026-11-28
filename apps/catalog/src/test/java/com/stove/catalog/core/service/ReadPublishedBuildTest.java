@@ -1,6 +1,6 @@
 package com.stove.catalog.core.service;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static com.stove.catalog.CatalogFixtures.json;
@@ -48,7 +48,7 @@ class ReadPublishedBuildTest {
         ProjectReleaseRequestedEvent event = event(id(), 1);
         CatalogProduct product = CatalogProduct.publish(event.snapshot(), event.releaseRequestId(), Instant.now());
         ReflectionTestUtils.setField(product, "id", 1L);
-        CatalogRelease original = CatalogRelease.decided(ReleaseSubmissionMapper.from(envelope(event), event),
+        CatalogRelease original = CatalogRelease.decided(ReleaseSubmissionMapper.from(message(event), event),
                 json(event.snapshot()), false, Instant.now());
         CatalogProductRepository products = mock(CatalogProductRepository.class);
         CatalogReleaseRepository releases = mock(CatalogReleaseRepository.class);

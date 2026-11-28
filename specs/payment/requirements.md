@@ -36,7 +36,7 @@ Payment가 하지 않는 것: 가격·결제 기한 판정(Order 정본, P1.4-3)
 **사용자 스토리:** 구매자로서, 내 주문이 중복 청구나 유실 없이 결제 대기로 접수되길 원한다.
 
 #### 수용 기준
-1. WHEN `OrderPlaced`를 받으면 THEN Payment SHALL `api.listener`의 `OrderPaymentMapper.from`에서 봉투·본문 ID·종류·키와 가격 일관성(`listAmount − discountAmount = amount`, 양의 정수, 통화)을 저장 전에 검증한다(P2.1, I1).
+1. WHEN `OrderPlaced`를 받으면 THEN Payment SHALL `api.listener`의 `OrderPaymentMapper.from`에서 헤더·본문 ID·종류·키와 가격 일관성(`listAmount − discountAmount = amount`, 양의 정수, 통화)을 저장 전에 검증한다(P2.1, I1).
 2. WHEN 새 `orderNo`·새 `requestEventId`의 요청이면 THEN Payment SHALL `PENDING` 결제 한 건(고정 `paymentId`)과 Inbox(`payment-order-request`)를 같은 트랜잭션에 저장하고 PG를 호출하지 않는다(P3.11-1).
 3. WHEN 같은 이벤트 ID·같은 전체 입력이 다시 오면 THEN Payment SHALL 기존 결제를 보존하고 새 결제·Outbox를 만들지 않는다.
 4. IF 같은 이벤트 ID가 다른 주문·입력으로 오면 THEN Payment SHALL 계약 충돌(영구 실패)로 처리하고 결제·Inbox를 바꾸지 않는다(P2.3-4).

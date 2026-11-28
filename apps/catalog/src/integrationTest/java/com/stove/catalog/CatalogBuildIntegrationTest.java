@@ -1,6 +1,6 @@
 package com.stove.catalog;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +30,7 @@ class CatalogBuildIntegrationTest extends CatalogIntegrationTestBase {
         HttpHeaders headers = new HttpHeaders(); headers.set("X-Download-Service-Key", "internal-test-key"); return new HttpEntity<>(headers);
     }
     ResponseEntity<String> build(String code) { return http.exchange("/internal/v1/products/" + code + "/build", HttpMethod.GET, key(), String.class); }
-    void publish(ProjectReleaseRequestedEvent event) { publish.execute(ReleaseSubmissionMapper.from(envelope(event), event)); }
+    void publish(ProjectReleaseRequestedEvent event) { publish.execute(ReleaseSubmissionMapper.from(message(event), event)); }
 
     @Test void onlyConfiguredServiceKeyCanReadCurrentPublishedBuild() throws Exception {
         ProjectReleaseRequestedEvent first = event(id(), 1); publish(first);

@@ -34,7 +34,7 @@
   - 재현: 리스너 단위 테스트에 모르는 타입 레코드 → 서비스 호출 없음 + 카운터 1.
 
 - [ ] **SO-T3. `schemaVersion` 헤더를 읽지 않는다** ([결정 170](../../docs/decisions.md#schema-version-header), 플랫폼 T19·T25)
-  - 어디서: `store:api/listener/CatalogEventListener.java:21-24`, `CatalogProductMapper.java:14`. 공통 `EventEnvelope`에 아직 `schemaVersion`이 없다(`common/contract`).
+  - 어디서: `store:api/listener/CatalogEventListener.java:21-24`, `CatalogProductMapper.java:14`. 공통 `EventMessage`에 아직 `schemaVersion`이 없다(`common/contract`).
   - 목표: R5.11. (`eventType`, `schemaVersion`)으로 Mapper 변환을 고르고, 헤더가 없으면 1. 모르는 버전은 영구 실패.
   - 영향: 발행자가 본문 모양을 바꾸면 Store가 옛 모양으로 읽다 계약 오류가 된다.
   - 재현: 헤더 없음 → v1 경로, `schemaVersion=2` 견본 → v2 경로, `schemaVersion=99` → 영구 실패.

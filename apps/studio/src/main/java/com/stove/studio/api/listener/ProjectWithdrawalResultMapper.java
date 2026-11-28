@@ -1,6 +1,6 @@
 package com.stove.studio.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
 import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
@@ -14,20 +14,20 @@ import java.util.Objects;
 public final class ProjectWithdrawalResultMapper {
     private ProjectWithdrawalResultMapper() {}
 
-    public static WithdrawalResolution from(EventEnvelope envelope, ProjectReviewWithdrawalResolvedEvent event) {
-        return convert(envelope, event, event == null ? null : event.result(), ProjectRequestKind.WITHDRAW_REVIEW);
+    public static WithdrawalResolution from(EventMessage message, ProjectReviewWithdrawalResolvedEvent event) {
+        return convert(message, event, event == null ? null : event.result(), ProjectRequestKind.WITHDRAW_REVIEW);
     }
 
-    public static WithdrawalResolution from(EventEnvelope envelope, ProjectReleaseWithdrawalResolvedEvent event) {
-        return convert(envelope, event, event == null ? null : event.result(), ProjectRequestKind.WITHDRAW_RELEASE);
+    public static WithdrawalResolution from(EventMessage message, ProjectReleaseWithdrawalResolvedEvent event) {
+        return convert(message, event, event == null ? null : event.result(), ProjectRequestKind.WITHDRAW_RELEASE);
     }
 
-    private static WithdrawalResolution convert(EventEnvelope envelope, DomainEvent event,
+    private static WithdrawalResolution convert(EventMessage message, DomainEvent event,
             ProjectWithdrawalResult result, ProjectRequestKind kind) {
-        if (envelope == null || event == null || result == null
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || !Objects.equals(envelope.key(), result.productCode()))
+        if (message == null || event == null || result == null
+                || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType())
+                || !Objects.equals(message.key(), result.productCode()))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "철회 결과 이벤트 계약이 올바르지 않습니다.");
         return new WithdrawalResolution(event.eventId(), event.eventType(), event.occurredAt(), kind, result);
     }

@@ -8,9 +8,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 전 서비스가 공유하는 응답 봉투의 <b>직렬화 계약</b>.
+ * 전 서비스가 공유하는 응답 형식의 <b>직렬화 계약</b>.
  *
- * <p>필드 이름과 존재 여부를 직접 확인하는 이유가 있다. 이 봉투는 자바 타입으로만 소비되지 않는다 —
+ * <p>필드 이름과 존재 여부를 직접 확인하는 이유가 있다. 이 형식은 자바 타입으로만 소비되지 않는다 —
  * 스모크 스크립트가 {@code grep '"success":true'} 로 판정하고, 게이트웨이·프론트·운영도구가
  * 하나의 파싱 규칙을 쓴다. 레코드 컴포넌트 이름을 바꾸거나 {@code @JsonInclude} 를 떼면
  * <b>자바 쪽은 전부 통과하는데 바깥이 조용히 깨진다.</b>
@@ -54,7 +54,7 @@ class ApiResponseTest {
     @Test
     @DisplayName("데이터 없는 성공도 success=true 다")
     void okWithoutDataIsStillSuccess() throws Exception {
-        // 스모크의 부재 판정(lacks)이 이 형태에 의존한다 — 봉투를 먼저 보고
+        // 스모크의 부재 판정(lacks)이 이 형태에 의존한다 — 응답의 `success`를 먼저 보고
         // 응답 자체가 실패한 것을 '없어졌다' 로 착각하지 않으려는 장치다.
         String json = mapper.writeValueAsString(ApiResponse.ok());
 

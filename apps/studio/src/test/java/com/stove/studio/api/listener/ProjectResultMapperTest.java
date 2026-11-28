@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
@@ -35,12 +35,12 @@ class ProjectResultMapperTest {
                 ProjectReleaseRejectedEvent.of(1L, 2L, 3, "game-2", "Stale version", "original-request"));
     }
 
-    private Object convert(EventEnvelope envelope, DomainEvent event) {
+    private Object convert(EventMessage message, DomainEvent event) {
         return switch (event) {
-            case ProjectReviewApprovedEvent approved -> ProjectResultMapper.from(envelope, approved);
-            case ProjectReviewRejectedEvent rejected -> ProjectResultMapper.from(envelope, rejected);
-            case ProjectReleaseCompletedEvent completed -> ProjectResultMapper.from(envelope, completed);
-            case ProjectReleaseRejectedEvent rejected -> ProjectResultMapper.from(envelope, rejected);
+            case ProjectReviewApprovedEvent approved -> ProjectResultMapper.from(message, approved);
+            case ProjectReviewRejectedEvent rejected -> ProjectResultMapper.from(message, rejected);
+            case ProjectReleaseCompletedEvent completed -> ProjectResultMapper.from(message, completed);
+            case ProjectReleaseRejectedEvent rejected -> ProjectResultMapper.from(message, rejected);
             default -> throw new IllegalArgumentException();
         };
     }
@@ -55,7 +55,7 @@ class ProjectResultMapperTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<String, String>(event.topic(), 0, 0, event.partitionKey(), json.writeValueAsString(event));
         record.headers().add(EventHeaders.EVENT_ID, event.eventId().getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.EVENT_TYPE, event.eventType().getBytes(StandardCharsets.UTF_8));
-        Object input = convert(new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), ""), event);
+        Object input = convert(new EventMessage(event.eventId(), event.eventType(), event.partitionKey(), ""), event);
         listener.receive(record);
         if (input instanceof ProjectReviewResult result) {
             verify(review).execute(result);
@@ -73,25 +73,25 @@ class ProjectResultMapperTest {
 
     @ParameterizedTest @MethodSource("results")
     void requiresMatchingIdTypeAndProductKey(DomainEvent event) {
-        for (EventEnvelope envelope : new EventEnvelope[]{null,
-                new EventEnvelope("other", event.eventType(), event.partitionKey(), ""),
-                new EventEnvelope(event.eventId(), "other", event.partitionKey(), ""),
-                new EventEnvelope(event.eventId(), event.eventType(), "other", "")})
-            assertThatThrownBy(() -> convert(envelope, event)).isInstanceOf(BusinessException.class);
+        for (EventMessage message : new EventMessage[]{null,
+                new EventMessage("other", event.eventType(), event.partitionKey(), ""),
+                new EventMessage(event.eventId(), "other", event.partitionKey(), ""),
+                new EventMessage(event.eventId(), event.eventType(), "other", "")})
+            assertThatThrownBy(() -> convert(message, event)).isInstanceOf(BusinessException.class);
     }
 
     @Test
     void incompleteResultsCannotBecomeInternalInput() {
         ProjectReviewApprovedEvent event = ProjectReviewApprovedEvent.of(1L, 2L, 3, "game-2", "reviewer");
-        EventEnvelope envelope = new EventEnvelope(event.eventId(), event.eventType(), event.partitionKey(), "");
-        assertThatThrownBy(() -> ProjectResultMapper.from(envelope,
+        EventMessage message = new EventMessage(event.eventId(), event.eventType(), event.partitionKey(), "");
+        assertThatThrownBy(() -> ProjectResultMapper.from(message,
                 new ProjectReviewApprovedEvent(event.eventId(), null, 1L, 2L, 3, "game-2", "reviewer")))
                 .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> ProjectResultMapper.from(envelope,
+        assertThatThrownBy(() -> ProjectResultMapper.from(message,
                 new ProjectReviewApprovedEvent(event.eventId(), event.occurredAt(), 1L, 2L, 3, "game-2", "")))
                 .isInstanceOf(BusinessException.class);
         ProjectReleaseRejectedEvent rejected = ProjectReleaseRejectedEvent.of(1L, 2L, 3, "game-2", "", "request");
-        assertThatThrownBy(() -> convert(new EventEnvelope(rejected.eventId(), rejected.eventType(), rejected.partitionKey(), ""), rejected))
+        assertThatThrownBy(() -> convert(new EventMessage(rejected.eventId(), rejected.eventType(), rejected.partitionKey(), ""), rejected))
                 .isInstanceOf(BusinessException.class);
     }
 }

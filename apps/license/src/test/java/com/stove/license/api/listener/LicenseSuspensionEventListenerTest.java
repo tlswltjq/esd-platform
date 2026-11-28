@@ -9,7 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.LicenseSuspensionRequestedEvent;
@@ -36,13 +36,13 @@ class LicenseSuspensionEventListenerTest {
                 event.orderNo(), event.buyerSubject(), event.productId(), event.productCode(), event.paymentId()));
     }
 
-    @Test void envelopeBodyAndKeyMustAgree() {
+    @Test void headerBodyAndKeyMustAgree() {
         LicenseSuspensionRequestedEvent event = event();
-        for (EventEnvelope envelope : new EventEnvelope[]{null,
-                new EventEnvelope(id(), event.eventType(), event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), "Other", event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), event.eventType(), id(), "")}) {
-            assertThatThrownBy(() -> LicenseSuspensionMapper.from(envelope, event)).isInstanceOf(BusinessException.class);
+        for (EventMessage message : new EventMessage[]{null,
+                new EventMessage(id(), event.eventType(), event.orderNo(), ""),
+                new EventMessage(event.eventId(), "Other", event.orderNo(), ""),
+                new EventMessage(event.eventId(), event.eventType(), id(), "")}) {
+            assertThatThrownBy(() -> LicenseSuspensionMapper.from(message, event)).isInstanceOf(BusinessException.class);
         }
         verifyNoInteractions(apply);
     }

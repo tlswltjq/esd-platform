@@ -1,7 +1,7 @@
 package com.stove.license.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.PurchaseRefundedEvent;
@@ -18,9 +18,9 @@ public class PurchaseRefundEventListener {
 
     @KafkaListener(topics = Topics.ORDER, groupId = ApplyPurchaseRefund.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.PURCHASE_REFUNDED)) {
-            apply.execute(PurchaseRefundMapper.from(envelope, envelope.payloadAs(mapper, PurchaseRefundedEvent.class)));
+        EventMessage message = EventMessage.from(record);
+        if (message.isType(EventType.PURCHASE_REFUNDED)) {
+            apply.execute(PurchaseRefundMapper.from(message, message.payloadAs(mapper, PurchaseRefundedEvent.class)));
         }
     }
 }

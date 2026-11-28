@@ -74,11 +74,11 @@
 
 **만들고 쓰는 때:** 주문·결제·이용권·정산 등의 수신 처리가 업무 변경과 같은 트랜잭션에 남긴다. 동일 이벤트를 다시 받으면 중복 반영을 막는다. 모든 서비스가 사용하는 것은 아니다. Store·Download는 고정 문서 키 갱신 등의 방식으로 사본을 유지한다. “중복 방어”와 “서로 다른 이벤트의 순서 역전 방어”는 다른 문제다.
 
-## EventEnvelope와 이벤트 payload — 전달할 사실
+## EventMessage와 이벤트 payload — 전달할 사실
 
-[EventEnvelope](../../../common/contract/src/main/java/com/stove/common/contract/EventEnvelope.java)는 `eventId`, `eventType`, `key`, `payload`를 묶은 수신 값이다. 메시지 종류를 판별하고 JSON 본문을 해당 이벤트 record로 읽는다. 개별 업무 이벤트는 [payload 소스](../../../common/contract/src/main/java/com/stove/common/contract/payload)에 있다. 모든 엔티티 필드를 자동으로 직렬화해 전달하는 구조가 아니다.
+[EventMessage](../../../common/contract/src/main/java/com/stove/common/contract/EventMessage.java)는 `eventId`, `eventType`, `key`, `payload`를 묶은 수신 값이다. 메시지 종류를 판별하고 JSON 본문을 해당 이벤트 record로 읽는다. 개별 업무 이벤트는 [payload 소스](../../../common/contract/src/main/java/com/stove/common/contract/payload)에 있다. 모든 엔티티 필드를 자동으로 직렬화해 전달하는 구조가 아니다.
 
-재작성 완료 모듈의 수신 경계에서는 `api.listener`의 `*Mapper.from(...)`가 봉투·본문·키를 검증하고 내부 입력으로 바꾼다. 업무 서비스와 도메인 모델은 봉투나 외부 이벤트 전체를 입력받지 않는다. 이벤트 ID·종류·발생 시각은 필요한 내부 값으로 전달하며 Inbox와 업무 변경은 서비스의 같은 트랜잭션에 둔다. [작성 규칙](../../use-case-conventions.md#진입점과-설정의-역할)을 따른다.
+재작성 완료 모듈의 수신 경계에서는 `api.listener`의 `*Mapper.from(...)`가 헤더·본문·키를 검증하고 내부 입력으로 바꾼다. 업무 서비스와 도메인 모델은 이벤트 메시지나 외부 이벤트 전체를 입력받지 않는다. 이벤트 ID·종류·발생 시각은 필요한 내부 값으로 전달하며 Inbox와 업무 변경은 서비스의 같은 트랜잭션에 둔다. [작성 규칙](../../use-case-conventions.md#진입점과-설정의-역할)을 따른다.
 
 | 사건 | 대표 연결·전달 값 | 받는 쪽의 용도 |
 |---|---|---|

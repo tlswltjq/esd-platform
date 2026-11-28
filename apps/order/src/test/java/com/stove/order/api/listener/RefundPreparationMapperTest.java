@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.payload.RefundExecutionPreparedEvent;
 import com.stove.order.core.domain.RefundPreparationConfirmation;
@@ -27,24 +27,24 @@ class RefundPreparationMapperTest {
     @Test void preservesEveryPurchaseRequestAndPreparationField() {
         RefundPreparationConfirmation expected=new RefundPreparationConfirmation(event.eventId(),first,event.refundId(),event.attemptId(),event.requestEventId(),event.orderNo(),
                 event.paymentId(),event.buyerSubject(),event.amount(),event.currency(),event.licenseSuspensionEventId(),null,first,event.confirmationDelayAt());
-        assertThat(RefundPreparationMapper.from(envelope(),event)).isEqualTo(expected);
+        assertThat(RefundPreparationMapper.from(message(),event)).isEqualTo(expected);
     }
-    @Test void wrongEnvelopeIdentityTypeOrKeyCannotSupplyProgress() {
-        for (EventEnvelope bad:List.of(new EventEnvelope(id(),event.eventType(),event.orderNo(),""),new EventEnvelope(event.eventId(),"Other",event.orderNo(),""),new EventEnvelope(event.eventId(),event.eventType(),id(),"")))
+    @Test void wrongHeaderIdentityTypeOrKeyCannotSupplyProgress() {
+        for (EventMessage bad:List.of(new EventMessage(id(),event.eventType(),event.orderNo(),""),new EventMessage(event.eventId(),"Other",event.orderNo(),""),new EventMessage(event.eventId(),event.eventType(),id(),"")))
             assertThatThrownBy(()->RefundPreparationMapper.from(bad,event)).isInstanceOf(RefundCompletionRejected.class);
     }
     @Test void missingEvidenceInvalidValuesAndAnotherDeadlineAreRejected() throws Exception {
         for (String field:List.of("eventId","occurredAt","refundId","attemptId","requestEventId","orderNo","paymentId","buyerSubject","amount","currency","licenseSuspensionEventId","firstPreparedAt","confirmationDelayAt")) {
             ObjectNode json=mapper.valueToTree(event);json.putNull(field);RefundExecutionPreparedEvent bad=mapper.treeToValue(json,RefundExecutionPreparedEvent.class);
-            assertThatThrownBy(()->RefundPreparationMapper.from(envelope(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
+            assertThatThrownBy(()->RefundPreparationMapper.from(message(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
         }
         for (String field:List.of("refundId","attemptId","orderNo","previousAttemptId")) {
             ObjectNode json=mapper.valueToTree(event);json.put(field,"bad-id");RefundExecutionPreparedEvent bad=mapper.treeToValue(json,RefundExecutionPreparedEvent.class);
-            assertThatThrownBy(()->RefundPreparationMapper.from(envelope(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
+            assertThatThrownBy(()->RefundPreparationMapper.from(message(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
         }
         for (String field:List.of("confirmationDelayAt","firstPreparedAt")) {
             ObjectNode json=mapper.valueToTree(event);json.put(field,first.plusSeconds(3600).toString());RefundExecutionPreparedEvent bad=mapper.treeToValue(json,RefundExecutionPreparedEvent.class);
-            assertThatThrownBy(()->RefundPreparationMapper.from(envelope(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
+            assertThatThrownBy(()->RefundPreparationMapper.from(message(),bad)).as(field).isInstanceOf(RefundCompletionRejected.class);
         }
     }
     @Test void wrongPublisherAndMalformedPayloadNeverReachTheService() throws Exception {
@@ -56,5 +56,5 @@ class RefundPreparationMapperTest {
     private ConsumerRecord<String,String> record(String topic,String body) {
         ConsumerRecord<String,String> record=new ConsumerRecord<>(topic,0,0,event.orderNo(),body);record.headers().add(EventHeaders.EVENT_ID,event.eventId().getBytes(StandardCharsets.UTF_8));record.headers().add(EventHeaders.EVENT_TYPE,event.eventType().getBytes(StandardCharsets.UTF_8));return record;
     }
-    private EventEnvelope envelope() { return new EventEnvelope(event.eventId(),event.eventType(),event.orderNo(),""); }
+    private EventMessage message() { return new EventMessage(event.eventId(),event.eventType(),event.orderNo(),""); }
 }

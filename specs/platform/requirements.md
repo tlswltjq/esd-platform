@@ -70,15 +70,15 @@
 
 ### P2. 이벤트 계약 공통 규칙
 
-용어: **봉투** = Kafka 레코드의 키·헤더와 본문 공통 칸(`eventId`·`occurredAt`). **소비 그룹** = `@KafkaListener(groupId)` 값이며 `processed_event.consumer_group`에 그대로 쓰는 값. **집합체 키** = 파티션 키로 쓰는 업무 식별자(`orderNo`·`productCode`·`subject`). **사실 시각** = 발행 모듈이 그 사실이 생겼다고 기록한 시각(본문 `occurredAt`).
+용어: **이벤트 메시지** = Kafka 레코드 하나(키·헤더·본문). **헤더** = 레코드 헤더에 싣는 `eventId`·`eventType`·`occurredAt`·`schemaVersion`(P2.1-1). **소비 그룹** = `@KafkaListener(groupId)` 값이며 `processed_event.consumer_group`에 그대로 쓰는 값. **집합체 키** = 파티션 키로 쓰는 업무 식별자(`orderNo`·`productCode`·`subject`). **사실 시각** = 발행 모듈이 그 사실이 생겼다고 기록한 시각(본문 `occurredAt`).
 
-#### P2.1 봉투
+#### P2.1 이벤트 메시지
 
 1. WHEN 모듈이 이벤트를 Kafka로 내보낼 때 THEN 시스템 SHALL 토픽 = 그 이벤트 종류에 고정된 `Topics` 상수, 키 = `partitionKey`(P2.4), 값 = payload JSON, 헤더 = `eventId`(UUID, 64자 이하)·`eventType`(`EventType` 값, 60자 이하)·`occurredAt`(ISO-8601 UTC)·`schemaVersion`(이벤트 종류별 정수, 그 이벤트 본문의 모양. 헤더가 없는 옛 메시지는 1, [결정 170](../../docs/decisions.md#schema-version-header))·`traceparent`(있을 때만)로 만든다(`common/messaging/.../outbox/OutboxRelay.java:146-157`, `common/contract/.../EventHeaders.java`).
 2. 모든 payload SHALL 본문에 `eventId`·`occurredAt`을 담고, 헤더의 같은 이름 값과 같다. 헤더 `occurredAt`에 Outbox 적재 시각을 쓰지 않는다(원칙 ①, T25).
 3. 본문 `occurredAt`은 발행 모듈의 사실 시각이다. 소비 모듈 SHALL 이 값을 기록·표시·기간 귀속 입력으로만 쓰고, 자기 시계나 다른 모듈 시각과 선후를 비교해 이벤트를 거절·분기하는 데 쓰지 않는다(P4.5).
 4. `eventType` 값 SHALL `common/contract/.../EventType.java`의 상수만 쓴다. payload `eventType()`과 리스너 `isType(...)`은 상수를 참조하고 문자열 리터럴을 쓰지 않는다(원칙 ③, T26).
-5. IF 받은 레코드에 `eventId`·`eventType` 헤더가 없거나 비어 있으면 THEN 시스템 SHALL 업무 처리 전에 거절하고(`EventEnvelope.from`, `common/contract/.../EventEnvelope.java:30-45`) 재시도 없이 DLT로 보낸다(P2.6-3).
+5. IF 받은 레코드에 `eventId`·`eventType` 헤더가 없거나 비어 있으면 THEN 시스템 SHALL 업무 처리 전에 거절하고(`EventMessage.from`, `common/contract/.../EventMessage.java:30-45`) 재시도 없이 DLT로 보낸다(P2.6-3).
 6. payload 칸 하나 SHALL 한 뜻만 갖는다. 열거 값 칸(`reasonCode` 등)은 같은 사실의 하위 분류만 담고, 받는 쪽이 다르게 반응해야 하는 다른 사실을 구별하는 데 쓰지 않는다. 다른 사실은 다른 `eventType`으로 낸다. 받는 쪽이 같은 반응을 하면 합치는 일은 받는 쪽 `api.listener`의 `*Mapper.from`에서 하고, Inbox에는 받은 `eventType`을 그대로 남긴다(원칙 ①).
 7. payload·`EventType`·`Topics` SHALL 공급자 이름·공급자 상수를 담지 않는다. PG 식별자는 중립 이름(`providerTransactionId`·`cancellationId`·`lookupHash`)으로, PG 상태는 core enum 값으로 싣는다(원칙 ②).
 8. 금액 칸 SHALL 정수 최소 단위(`long`)와 `currency`를 함께 싣고, 확인되지 않은 값은 0이 아니라 `null`이다(I7, `EventContractTest.omittedDetailsAndOmittedPointsDoNotTurnIntoZeroAmounts`).
@@ -121,7 +121,7 @@
 
 1. WHEN 소비 처리에서 재시도 가능 실패가 나면 THEN 시스템 SHALL 블로킹 지수 재시도(1·2·4초, 최초 포함 4회, `common/messaging-kafka/.../ConsumerRetryPolicy.java`) 뒤 `<원본 토픽>.DLT`의 같은 파티션으로 원본 헤더를 보존해 보낸다(`DeadLetterTopics.of`, `DeadLetterPublisher.to`).
 2. IF DLT 발행이 실패하면 THEN 시스템 SHALL 원본 오프셋을 넘기지 않는다(`setFailIfSendResultIsError(true)`). DLT 유입은 발행 성공 뒤 `DeadLetterMetrics`로 센다.
-3. IF 실패가 영구 실패(봉투 헤더 없음, 역직렬화 실패, 계약 검증 실패, 식별자 모순, P2.3-4의 내용 불일치)이면 THEN 시스템 SHALL 재시도하지 않고 바로 격리한다(DB 없는 Store는 DLT, 결정 206. 웹 BFF·API 게이트웨이의 `AccountAccessChanged` 소비는 일시 실패를 성공할 때까지 재시도하고 영구 실패만 DLT, 결정 226). 영구 실패는 브로커와 무관한 공통 예외 한 종류(`common/event`)로 표시해 모든 adapter가 같게 다룬다(원칙 ③, T20, 결정 209).
+3. IF 실패가 영구 실패(헤더 없음, 역직렬화 실패, 계약 검증 실패, 식별자 모순, P2.3-4의 내용 불일치)이면 THEN 시스템 SHALL 재시도하지 않고 바로 격리한다(DB 없는 Store는 DLT, 결정 206. 웹 BFF·API 게이트웨이의 `AccountAccessChanged` 소비는 일시 실패를 성공할 때까지 재시도하고 영구 실패만 DLT, 결정 226). 영구 실패는 브로커와 무관한 공통 예외 한 종류(`common/event`)로 표시해 모든 adapter가 같게 다룬다(원칙 ③, T20, 결정 209).
 4. WHEN 소비자가 재시도를 소진하거나 영구 실패를 만나면 THEN 시스템 SHALL 그 레코드(토픽·파티션·offset·키·원본 헤더·본문·실패 사유)를 소비 모듈 DB의 실패 보관 표에 기한 없이 저장하고, 같은 트랜잭션에서 그 (소비 그룹, 토픽, 키)를 정지하며(5), 저장 1건부터 즉시 경보한다. Outbox `DEAD`도 1건부터 즉시 경보한다. WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 소비 모듈 안에서 보관 표를 키 단위 offset 순으로 읽어 같은 리스너 경로(`*Mapper.from` → 서비스)로 다시 처리하고 결과를 표에 남긴다([결정 160](../../docs/decisions.md#dead-letter-store)). 이 문서에서 "DLT"는 목표 계약에서 이 실패 보관 표를 뜻한다.
 5. WHEN 소비자가 레코드를 실패 보관 표에 저장하면(4) THEN 시스템 SHALL 같은 트랜잭션에서 그 (소비 그룹, 토픽, 키)를 정지하고, 정지된 키의 뒤 레코드는 처리하지 않고 같은 표에 저장한다(정지 목록과 실패 보관은 한 표, 결정 160). WHEN ADMIN이 재투입하면 THEN 시스템 SHALL 키 단위로 보관 표의 원래 offset 순서대로 처리하고, 그 키의 레코드가 모두 처리된 뒤에만 정지를 푼다. 재투입한 레코드가 다시 실패하면 정지를 유지한다. 그래서 같은 키의 뒤 이벤트가 앞 이벤트보다 먼저 처리되지 않는다([결정 155](../../docs/decisions.md#key-stop-on-dead), T2, `docs/architecture.md` R2). THE 시스템 SHALL 정지된 키 수(발행 `DEAD` 키, 소비 정지 키)를 소비 그룹·모듈별 지표로 내고 경보하며, 회수(`requeue`·재투입) API는 키 단위로 둔다(결정 155).
 6. THE 모든 이벤트 SHALL 집합체 키와 업무 식별자를 실어, 사실이 다른 모듈에 끝내 반영되지 않은 것(정방향 누락, U3)을 P4.3의 감지가 셀 수 있게 한다.
@@ -148,7 +148,7 @@
 #### P3.1 흐름 공통 규칙
 
 1. THE 각 흐름 SHALL design의 단계 목록으로 정의되고, 단계마다 실패 종류 6가지(중복 전달·순서 역전·늦은 도착·상대 상태가 이미 바뀜·동시 진행·상대 모듈 중단)의 처리 행을 빈칸 없이 갖는다(결정 152). 해당 없는 행은 이유를 적는다.
-2. THE 흐름의 모든 모듈 간 이벤트 SHALL P2(봉투·Outbox·Inbox·키·재시도·DLT·재발행)를 따른다. 키는 흐름 1이 `productCode`, 흐름 2·3이 `orderNo`다.
+2. THE 흐름의 모든 모듈 간 이벤트 SHALL P2(이벤트 메시지·Outbox·Inbox·키·재시도·DLT·재발행)를 따른다. 키는 흐름 1이 `productCode`, 흐름 2·3이 `orderNo`다.
 3. THE 흐름의 모든 판정 SHALL 식별자(요청 ID·`requestEventId`·`admissionId`·`attemptId`·정지 요청 ID 등)·행 잠금·lease·단조 버전(`contentVersion`·`catalogVersion`)으로 하고, 다른 모듈이 찍은 시각과의 선후 비교로 하지 않는다(P4.5).
 4. THE 흐름의 모든 상태 SHALL 명시적 enum이고 DB CHECK가 허용 값을 지킨다(원칙 ④). 보조 칸의 null 조합으로 하위 상태를 만들지 않는다. 열별 목표 enum은 각 모듈 스펙에 둔다.
 5. THE 소비 모듈 SHALL 이벤트로 받은 규칙 값(기한·지연 경계·금액)을 그대로 쓰고 다시 계산하지 않는다(P1.3-3·P1.4).

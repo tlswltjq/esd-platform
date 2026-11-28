@@ -1,6 +1,6 @@
 package com.stove.license;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.OrderPaidEvent;
 import com.stove.license.core.domain.PaidOrder;
 
@@ -29,7 +29,7 @@ public final class LicenseFixtures {
                 p.paymentId(), p.buyerSubject(), p.productId(), p.productCode(), p.title(), p.contentVersion(), p.amount(), p.currency());
     }
 
-    public static EventEnvelope envelope(OrderPaidEvent e) {
-        return new EventEnvelope(e.eventId(), e.eventType(), e.orderNo(), "");
+    public static EventMessage message(OrderPaidEvent e) {
+        return new EventMessage(e.eventId(), e.eventType(), e.orderNo(), "");
     }
 }

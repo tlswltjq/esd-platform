@@ -57,7 +57,7 @@ public final class CommonLibraryRules {
      * 이벤트 계약은 영속성을 모른다.
      *
      * <p>{@code common:contract} 의 의존은 Jackson 과 Kafka 클라이언트(레코드·헤더 타입)까지다 —
-     * 봉투 규약은 포함하되 JPA 는 포함하지 않는다(결정 227).
+     * 이벤트 메시지 규약은 포함하되 JPA 는 포함하지 않는다(결정 227).
      * 페이로드에 엔티티가 섞이면 이벤트가 발행 측 스키마에 묶인다.
      */
     @ArchTest
@@ -91,7 +91,7 @@ public final class CommonLibraryRules {
             .allowEmptyShould(true);
 
     /**
-     * 이벤트 계약(토픽·종류·본문·봉투·헤더)은 Kafka 레코드 타입만 안다. 리스너 기반(Spring Kafka)과 메시징 모듈은 모른다 —
+     * 이벤트 계약(토픽·종류·본문·이벤트 메시지·헤더)은 Kafka 레코드 타입만 안다. 리스너 기반(Spring Kafka)과 메시징 모듈은 모른다 —
      * 계약을 쓰는 곳(업무 모듈·Store)이 리스너 인프라나 코어를 끌고 오지 않게(결정 227).
      */
     @ArchTest
@@ -101,7 +101,7 @@ public final class CommonLibraryRules {
             // Kafka 레코드·헤더(org.apache.kafka) 밖의 브로커 클라이언트는 계약에 들이지 않는다(PR #250 리뷰 R3).
             .orShould().dependOnClassesThat().resideInAnyPackage("com.rabbitmq..", "org.springframework.amqp..",
                     "io.lettuce..", "redis.clients..", "org.springframework.data.redis..")
-            .because("계약은 봉투·헤더 규약만 가진다")
+            .because("계약은 이벤트 메시지·헤더 규약만 가진다")
             .allowEmptyShould(true);
 
     @ArchTest

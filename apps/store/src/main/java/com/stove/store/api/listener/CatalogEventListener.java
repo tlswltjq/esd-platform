@@ -1,7 +1,7 @@
 package com.stove.store.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.CatalogProductPublishedEvent;
@@ -18,9 +18,9 @@ public class CatalogEventListener {
     private final ApplyCatalogProduct applyCatalogProduct;
     @KafkaListener(topics = Topics.CATALOG, groupId = ApplyCatalogProduct.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.CATALOG_PRODUCT_PUBLISHED))
+        EventMessage message = EventMessage.from(record);
+        if (message.isType(EventType.CATALOG_PRODUCT_PUBLISHED))
             applyCatalogProduct.execute(CatalogProductMapper.from(
-                    envelope, envelope.payloadAs(mapper, CatalogProductPublishedEvent.class)));
+                    message, message.payloadAs(mapper, CatalogProductPublishedEvent.class)));
     }
 }

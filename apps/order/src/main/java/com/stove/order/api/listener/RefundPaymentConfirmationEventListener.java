@@ -1,7 +1,7 @@
 package com.stove.order.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
@@ -27,11 +27,11 @@ public class RefundPaymentConfirmationEventListener {
         RefundPaymentConfirmation input = null;
         RefundExecutionSuccess success = null;
         try {
-            EventEnvelope envelope = EventEnvelope.from(record);
-            if (envelope.isType(EventType.REFUND_PAYMENT_CONFIRMED))
-                input = RefundPaymentConfirmationMapper.from(envelope, envelope.payloadAs(mapper, RefundPaymentConfirmedEvent.class));
-            else if (envelope.isType(EventType.REFUND_EXECUTION_SUCCEEDED))
-                success = RefundExecutionSuccessMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionSucceededEvent.class));
+            EventMessage message = EventMessage.from(record);
+            if (message.isType(EventType.REFUND_PAYMENT_CONFIRMED))
+                input = RefundPaymentConfirmationMapper.from(message, message.payloadAs(mapper, RefundPaymentConfirmedEvent.class));
+            else if (message.isType(EventType.REFUND_EXECUTION_SUCCEEDED))
+                success = RefundExecutionSuccessMapper.from(message, message.payloadAs(mapper, RefundExecutionSucceededEvent.class));
             else return;
         } catch (IllegalStateException malformed) {
             throw new RefundCompletionRejected("전액 취소 확인 메시지 계약이 올바르지 않습니다.", malformed);

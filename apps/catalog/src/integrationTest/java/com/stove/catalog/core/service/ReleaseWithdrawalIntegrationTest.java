@@ -22,7 +22,7 @@ import com.stove.catalog.core.domain.CatalogProduct;
 import com.stove.catalog.core.domain.ListingPreference;
 import com.stove.catalog.core.domain.ReleaseWithdrawalInput;
 import com.stove.catalog.core.port.PublicationTracing;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.ProjectReleaseCompletedEvent;
 import com.stove.common.contract.payload.ProjectReleaseRequestedEvent;
 import com.stove.common.contract.payload.ProjectReleaseWithdrawalRequestedEvent;
@@ -203,7 +203,7 @@ class ReleaseWithdrawalIntegrationTest extends CatalogIntegrationTestBase {
     private long id() { return UUID.randomUUID().getMostSignificantBits() >>> 1; }
     private ProjectReleaseRequestedEvent original() { return CatalogFixtures.event(id(), 1); }
     private void accept(ProjectReleaseRequestedEvent event) {
-        receive.execute(ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event));
+        receive.execute(ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event));
     }
     private CatalogPublicationJob job(ProjectReleaseRequestedEvent event) {
         return jobs.findById(event.releaseRequestId()).orElseThrow();
@@ -213,7 +213,7 @@ class ReleaseWithdrawalIntegrationTest extends CatalogIntegrationTestBase {
                 event.snapshot().projectId(), event.snapshot().contentVersion(), event.partitionKey(), "creator", reason));
     }
     private ReleaseWithdrawalInput input(ProjectReleaseWithdrawalRequestedEvent event) {
-        return ReleaseWithdrawalMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        return ReleaseWithdrawalMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), CatalogFixtures.json(event)), event);
     }
     private int inbox(String eventId) {

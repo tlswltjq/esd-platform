@@ -33,7 +33,7 @@ Review는 Studio 작업본을 읽거나 바꾸지 않고, 심사 요청을 대�
 2. THE Review SHALL 스냅샷의 빌드 ID·버전·저장 경로·크기·SHA-256과 `projectId`·`productCode`·`ownerSubject`·`contentVersion`을 최초 저장 값으로 유지하고 갱신하지 않는다(DB 열 `updatable=false`).
 3. WHILE 심사가 진행 중인 동안 Studio 작업본이 바뀌어도 THE Review SHALL 원래 요청의 스냅샷으로 심사하고 Studio의 최신 Project를 읽지 않는다.
 4. IF 이미 저장된 `reviewRequestId`에 값이 다른 스냅샷이 오면 THEN Review SHALL 기존 행을 덮어쓰지 않고 영구 실패로 거절한다([P2.3-4](../platform/requirements.md#p23-소비--inbox와-업무-멱등)·[P3.1-6](../platform/requirements.md#p31-흐름-공통-규칙)).
-5. WHEN `*Mapper.from`이 레코드를 변환하면 THEN Review SHALL 봉투 `eventId`·`eventType`과 본문 값의 일치, Kafka 키 = 스냅샷 `productCode`, `schemaVersion`이 읽을 수 있는 버전인지, 필수 요청 ID·Project ID·버전·소유자·빌드 값의 형식을 확인하고, 하나라도 어기면 업무 처리 전에 영구 실패로 거절한다([P2.1-1·5](../platform/requirements.md#p21-봉투), [P2.7-2](../platform/requirements.md#p27-스키마-호환-결정-104)). Studio의 소유권·출시 조건은 다시 판정하지 않는다.
+5. WHEN `*Mapper.from`이 레코드를 변환하면 THEN Review SHALL 헤더 `eventId`·`eventType`과 본문 값의 일치, Kafka 키 = 스냅샷 `productCode`, `schemaVersion`이 읽을 수 있는 버전인지, 필수 요청 ID·Project ID·버전·소유자·빌드 값의 형식을 확인하고, 하나라도 어기면 업무 처리 전에 영구 실패로 거절한다([P2.1-1·5](../platform/requirements.md#p21-이벤트-메시지), [P2.7-2](../platform/requirements.md#p27-스키마-호환-결정-104)). Studio의 소유권·출시 조건은 다시 판정하지 않는다.
 6. IF 같은 Project에 이미 `REQUESTED` 심사가 있는데 다른 `reviewRequestId`의 요청이 오면 THEN Review SHALL 새 행을 만들지 않고 영구 실패로 거절한다(`uk_review_active_project`, 결정 76, [P3.2-3](../platform/requirements.md#p32-심사-요청철회-studio--review)).
 
 ### R2. 수신 멱등과 트랜잭션 원자성
@@ -122,8 +122,8 @@ Review는 Studio 작업본을 읽거나 바꾸지 않고, 심사 요청을 대�
 
 #### 수용 기준
 
-1. WHEN `GET /api/v1/reviews` 요청이 오면 THEN Review SHALL 상태·Project 필터와 페이지 조회를 준다(기본 page=0, size=20, 최대 size=100, `requestedAt` 내림차순 다음 `reviewRequestId` 내림차순). `requestedAt`(Studio 사실 시각)은 표시·정렬에만 쓰고 판정에 쓰지 않는다([P2.1-3](../platform/requirements.md#p21-봉투)).
-2. THE Review SHALL `stove.review.v1`에 다음 사실만 낸다: `ProjectReviewApproved`·`ProjectReviewRejected`(판정)·`ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied`(철회 결과). 각 행의 뜻·소비자·키·순서는 [플랫폼 design 이벤트 목록](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26)·["목표 행"](../platform/design.md#목표-행-아직-코드에-없음)이 정본이다. 이벤트 타입은 `EventType` 상수로 쓴다([P2.1-4](../platform/requirements.md#p21-봉투), T26).
+1. WHEN `GET /api/v1/reviews` 요청이 오면 THEN Review SHALL 상태·Project 필터와 페이지 조회를 준다(기본 page=0, size=20, 최대 size=100, `requestedAt` 내림차순 다음 `reviewRequestId` 내림차순). `requestedAt`(Studio 사실 시각)은 표시·정렬에만 쓰고 판정에 쓰지 않는다([P2.1-3](../platform/requirements.md#p21-이벤트-메시지)).
+2. THE Review SHALL `stove.review.v1`에 다음 사실만 낸다: `ProjectReviewApproved`·`ProjectReviewRejected`(판정)·`ProjectReviewWithdrawn`·`ProjectReviewWithdrawalDenied`(철회 결과). 각 행의 뜻·소비자·키·순서는 [플랫폼 design 이벤트 목록](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26)·["목표 행"](../platform/design.md#목표-행-아직-코드에-없음)이 정본이다. 이벤트 타입은 `EventType` 상수로 쓴다([P2.1-4](../platform/requirements.md#p21-이벤트-메시지), T26).
 3. THE 결과 이벤트의 `reviewRequestId`·`projectId`·`contentVersion`·`productCode` SHALL 저장된 `project_review` 값이고, 판정 이벤트의 `actor`는 검증된 JWT `sub`, 반려 `feedback`은 확정한 사유다([P3.3-2](../platform/requirements.md#p33-심사-판정-결과-review--studio)).
 4. THE Kafka 키와 Outbox `aggregateId` SHALL `productCode`다([P2.4-1](../platform/requirements.md#p24-파티션-키)).
 5. WHEN 잘못된 입력·미접수 요청·확정 충돌이면 THEN Review SHALL 각각 400·404·409로 응답한다.

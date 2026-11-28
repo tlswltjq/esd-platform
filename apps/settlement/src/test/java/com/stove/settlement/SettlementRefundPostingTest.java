@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.web.error.BusinessException;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.settlement.api.listener.SettlementRefundMapper;
@@ -33,12 +33,12 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class SettlementRefundPostingTest {
-    @Test void mapperRejectsBrokenEnvelopeAndPreservesOnlyValidatedFinancialInput() {
+    @Test void mapperRejectsBrokenMessageAndPreservesOnlyValidatedFinancialInput() {
         PaidOrder input=order();ConfirmedRefund confirmed=confirmation(input,payment(input,300));RefundPaymentConfirmedEvent event=event(confirmed);
-        assertThat(SettlementRefundMapper.from(new EventEnvelope(event.eventId(),event.eventType(),event.orderNo(),"{}"),event)).isEqualTo(confirmed);
-        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventEnvelope(id(),event.eventType(),event.orderNo(),"{}"),event)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventEnvelope(event.eventId(),EventType.REFUND_EXECUTION_SUCCEEDED,event.orderNo(),"{}"),event)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventEnvelope(event.eventId(),event.eventType(),id(),"{}"),event)).isInstanceOf(BusinessException.class);
+        assertThat(SettlementRefundMapper.from(new EventMessage(event.eventId(),event.eventType(),event.orderNo(),"{}"),event)).isEqualTo(confirmed);
+        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventMessage(id(),event.eventType(),event.orderNo(),"{}"),event)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventMessage(event.eventId(),EventType.REFUND_EXECUTION_SUCCEEDED,event.orderNo(),"{}"),event)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> SettlementRefundMapper.from(new EventMessage(event.eventId(),event.eventType(),id(),"{}"),event)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new ConfirmedRefund(confirmed.eventId(),confirmed.occurredAt(),confirmed.refundId(),confirmed.attemptId(),confirmed.requestEventId(),
                 confirmed.orderNo(),confirmed.paymentId(),confirmed.buyerSubject(),confirmed.amount(),confirmed.currency(),"REQUESTED",confirmed.providerTransactionId(),confirmed.cancellationIds()))
                 .isInstanceOf(BusinessException.class);

@@ -312,7 +312,7 @@ class ContainerKillTest(unittest.TestCase):
 class MalformedTest(unittest.TestCase):
     def test_every_subscribed_group_must_quarantine_the_malformed_record(self):
         stack = FakeStack()
-        fault = e2e_faults.MalformedEnvelopes(context(stack), {"at": "0", "topic": "stove.order.v1"})
+        fault = e2e_faults.MalformedMessages(context(stack), {"at": "0", "topic": "stove.order.v1"})
         fault.QUARANTINE_WAIT_SECONDS = 1
         with mock.patch.object(e2e_faults.time, "sleep"):
             fault.run()
@@ -324,7 +324,7 @@ class MalformedTest(unittest.TestCase):
 
     def test_a_group_that_did_not_quarantine_is_reported(self):
         stack = FakeStack()
-        fault = e2e_faults.MalformedEnvelopes(context(stack), {"at": "0", "topic": "stove.order.v1"})
+        fault = e2e_faults.MalformedMessages(context(stack), {"at": "0", "topic": "stove.order.v1"})
         fault.QUARANTINE_WAIT_SECONDS = 0
         fault.quarantined_pairs = lambda prefix: ["license-paid-order|e13-malformed-r1-0"]
         fault.run()

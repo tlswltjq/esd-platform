@@ -1,6 +1,6 @@
 package com.stove.review.api.listener;
 
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
 import com.stove.common.web.error.BusinessException;
 import com.stove.common.web.error.ErrorCode;
@@ -11,11 +11,11 @@ public final class ReviewWithdrawalMapper {
     private ReviewWithdrawalMapper() {}
 
     public static ReviewWithdrawalInput from(
-            EventEnvelope envelope, ProjectReviewWithdrawalRequestedEvent event) {
-        if (envelope == null || event == null || event.request() == null
-                || !Objects.equals(envelope.eventId(), event.eventId())
-                || !Objects.equals(envelope.eventType(), event.eventType())
-                || !Objects.equals(envelope.key(), event.request().productCode()))
+            EventMessage message, ProjectReviewWithdrawalRequestedEvent event) {
+        if (message == null || event == null || event.request() == null
+                || !Objects.equals(message.eventId(), event.eventId())
+                || !Objects.equals(message.eventType(), event.eventType())
+                || !Objects.equals(message.key(), event.request().productCode()))
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "심사 철회 이벤트 계약이 올바르지 않습니다.");
         return new ReviewWithdrawalInput(event.eventId(), event.eventType(), event.occurredAt(), event.request());
     }

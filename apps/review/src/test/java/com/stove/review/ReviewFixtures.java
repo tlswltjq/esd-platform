@@ -1,7 +1,7 @@
 package com.stove.review;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.contract.payload.ProjectSnapshot;
 import com.stove.review.core.domain.ProjectReview;
@@ -44,8 +44,8 @@ public final class ReviewFixtures {
                 id, snapshot(project, "s3://stove-builds/build.zip", 10));
     }
 
-    public static EventEnvelope envelope(ProjectReviewRequestedEvent event) {
-        return new EventEnvelope(
+    public static EventMessage message(ProjectReviewRequestedEvent event) {
+        return new EventMessage(
                 event.eventId(), event.eventType(), event.partitionKey(), json(event));
     }
 

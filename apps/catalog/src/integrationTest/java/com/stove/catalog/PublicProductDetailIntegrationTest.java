@@ -1,6 +1,6 @@
 package com.stove.catalog;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,7 +54,7 @@ class PublicProductDetailIntegrationTest extends CatalogIntegrationTestBase {
     }
     String publish(long project, long version) {
         ProjectReleaseRequestedEvent e = event(project, version);
-        publish.execute(ReleaseSubmissionMapper.from(envelope(e), e)); return e.partitionKey();
+        publish.execute(ReleaseSubmissionMapper.from(message(e), e)); return e.partitionKey();
     }
     String publicPath(String code) { return "/api/v1/products/by-code/" + code; }
     String storePath(String code) { return "/internal/v1/store-products/" + code; }

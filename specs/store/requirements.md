@@ -19,7 +19,7 @@ Store는 업무 이벤트를 내지 않는다. 받은 이벤트는 Inbox 대신 
 - **`catalogVersion`**: Catalog가 상품마다 매기는 단조 증가 정수. 사본의 신구는 이 값으로만 가린다. 시각으로 가리지 않는다([P1.3-4](../platform/requirements.md)·[P3.5-7](../platform/requirements.md)).
 - **식별 값**: `productId`·`productCode`·`publishedAt`(최초 공개 시각). 한 상품에서 바뀌지 않는다.
 - **공개 사본 이벤트**: 위 4개 이벤트. 본문은 모두 그 시점의 공개 사본 전체(`CatalogProductSnapshot`)와 `catalogVersion`이다. 이행 중에는 옛 `CatalogProductPublished`도 같은 뜻으로 받는다([P2.7-4](../platform/requirements.md)).
-- **사본 입력**: `api.listener`의 Mapper나 정본 조회 adapter가 검증을 마친 뒤 core에 넘기는 Store 내부 값. 이벤트 봉투·공통 계약 record를 core에 넘기지 않는다(AGENTS.md 3절, [결정 78](../../docs/decisions.md)).
+- **사본 입력**: `api.listener`의 Mapper나 정본 조회 adapter가 검증을 마친 뒤 core에 넘기는 Store 내부 값. 이벤트 메시지·공통 계약 record를 core에 넘기지 않는다(AGENTS.md 3절, [결정 78](../../docs/decisions.md)).
 - **정본 대조 회차**: Catalog 내부 목록을 첫 페이지부터 빈 페이지까지 읽고 상품마다 정본 상세와 사본을 맞추는 한 번의 실행. 결과는 `SUCCEEDED`·`PRODUCT_FAILURES`·`ABORTED` 중 하나다(design "상태 모델").
 - **준비 상태**: 프로세스 메모리의 `NOT_READY`·`READY`. `READY` 전에는 업무 조회가 503이다.
 - **상품 단위 실패**: 회차 안에서 상품 하나만 반영하지 못한 실패(식별 충돌, 정본 응답 계약 오류, Store가 모르는 장르 등). Catalog 접근 실패와 다르다.
@@ -87,7 +87,7 @@ Store는 업무 이벤트를 내지 않는다. 받은 이벤트는 Inbox 대신 
 9. THE Store SHALL Inbox(`processed_event`) 없이 버전 규칙으로 멱등하게 처리하고, 처리 트랜잭션이 커밋된 뒤 오프셋을 커밋한다([P2.3-5·6](../platform/requirements.md)). 실패한 레코드는 R5.16·R10으로 보낸다.
 10. WHILE 결정 171의 이행이 끝나지 않은 동안 THE Store SHALL 옛 `CatalogProductPublished`도 같은 사본 입력으로 받는다. 옛 타입 처리는 그 타입이 모든 `outbox_event`와 실패 보관 표에서 사라진 뒤에만 지운다([P2.7-4](../platform/requirements.md)).
 11. THE Mapper SHALL (`eventType`, `schemaVersion`)으로 변환 규칙을 고르고, 헤더가 없는 옛 메시지는 `schemaVersion=1`로 읽는다([P2.1-1](../platform/requirements.md)·[P2.7-2](../platform/requirements.md), [결정 170](../../docs/decisions.md#schema-version-header)).
-12. WHEN Mapper가 변환하면 THEN Mapper SHALL 봉투·본문 `eventId` 일치, 봉투·본문 `eventType` 일치, `occurredAt` 있음, Kafka 키 = 본문 `productCode`, 양수 `productId`·`contentVersion`, `catalogVersion >= contentVersion`, 알려진 `saleStatus`, 명시적 `listed`, 필수 공개 칸·길이, `KRW`, 장르 1~3개(기준 목록 안, 중복 없음)를 검증한 뒤에만 사본 입력을 만든다. 없는 칸을 기본값으로 채우지 않는다(원칙 ①, 플랫폼 T24).
+12. WHEN Mapper가 변환하면 THEN Mapper SHALL 헤더·본문 `eventId` 일치, 헤더·본문 `eventType` 일치, `occurredAt` 있음, Kafka 키 = 본문 `productCode`, 양수 `productId`·`contentVersion`, `catalogVersion >= contentVersion`, 알려진 `saleStatus`, 명시적 `listed`, 필수 공개 칸·길이, `KRW`, 장르 1~3개(기준 목록 안, 중복 없음)를 검증한 뒤에만 사본 입력을 만든다. 없는 칸을 기본값으로 채우지 않는다(원칙 ①, 플랫폼 T24).
 13. WHEN 없는 상품의 이벤트가 오면 THEN Store SHALL 사본을 만든다.
 14. IF 더 높은 `catalogVersion`인데 `contentVersion`이 지금 사본보다 낮거나, `contentVersion`이 같은데 콘텐츠 칸(제목·소개·본문·썸네일·영상·가격·통화·빌드 버전·장르)이 다르면 THEN Store SHALL 영구 실패로 처리한다.
 15. WHEN 같은 상품의 최초 삽입이 정본 대조와 겹쳐 유일 키 충돌·교착이 나면 THEN Store SHALL 새 트랜잭션으로 최대 3회 다시 시도한다. 교착은 JPA가 감싼 예외의 원인 사슬로 판단한다(D-047).

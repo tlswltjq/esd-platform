@@ -64,7 +64,7 @@ class ServiceKeyBoundaryIntegrationTest extends CatalogIntegrationTestBase {
     @BeforeEach
     void publication() {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(CatalogFixtures.id(), 1);
-        publish.execute(ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event));
+        publish.execute(ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event));
         code = event.partitionKey();
     }
 

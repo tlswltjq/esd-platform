@@ -30,7 +30,7 @@ class SettlementHttpContractTest {
         client=RestClient.builder().baseUrl("http://127.0.0.1:"+server.getAddress().getPort()).defaultHeader("X-Settlement-Service-Key","read-only-key").build();
     }
     @AfterEach void close() { server.stop(0); }
-    @Test void ownerLookupRequiresEnvelopeAndMatchingProductIdentity() {
+    @Test void ownerLookupRequiresMessageAndMatchingProductIdentity() {
         CatalogOwnerHttpClient gateway=new CatalogOwnerHttpClient(client);
         response.set("{\"success\":true,\"data\":{\"productId\":1,\"productCode\":\"game-1\",\"ownerSubject\":\"usr_seller\"}}");
         assertThat(gateway.require("game-1").sellerSubject()).isEqualTo("usr_seller");assertUnavailable(() -> gateway.require("game-2"));

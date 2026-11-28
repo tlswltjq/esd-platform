@@ -1,6 +1,6 @@
 package com.stove.catalog.core.service;
 
-import static com.stove.catalog.CatalogFixtures.envelope;
+import static com.stove.catalog.CatalogFixtures.message;
 import static com.stove.catalog.CatalogFixtures.event;
 import static com.stove.catalog.CatalogFixtures.id;
 import static com.stove.catalog.CatalogFixtures.json;
@@ -19,7 +19,7 @@ import com.stove.catalog.core.domain.CatalogProductRepository;
 import com.stove.catalog.core.domain.CatalogPublicationJobRepository;
 import com.stove.catalog.core.domain.CatalogReleaseRepository;
 import com.stove.catalog.core.domain.PublishedProduct;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.CatalogProductPublishedEvent;
@@ -84,11 +84,11 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     @Autowired PlatformTransactionManager transactions;
 
     private void send(ProjectReleaseRequestedEvent e) {
-        publish.execute(ReleaseSubmissionMapper.from(envelope(e), e));
+        publish.execute(ReleaseSubmissionMapper.from(message(e), e));
     }
 
     private void receive(ProjectReleaseRequestedEvent e) {
-        receive.execute(ReleaseSubmissionMapper.from(envelope(e), e));
+        receive.execute(ReleaseSubmissionMapper.from(message(e), e));
     }
 
     private int count(String table, String column, Object value) {
@@ -224,11 +224,11 @@ class CatalogPublicationIntegrationTest extends CatalogIntegrationTestBase {
     }
 
     @Test
-    void invalidEnvelopeNeverMarksInbox() {
+    void invalidMessageNeverMarksInbox() {
         ProjectReleaseRequestedEvent e = event(id(), 1);
         assertThatThrownBy(
                         () ->
-                                publish.execute(ReleaseSubmissionMapper.from(new EventEnvelope(
+                                publish.execute(ReleaseSubmissionMapper.from(new EventMessage(
                                                 e.eventId(), e.eventType(), "wrong", json(e)), e)))
                 .isInstanceOf(BusinessException.class);
         assertThat(count("processed_event", "event_id", e.eventId())).isZero();

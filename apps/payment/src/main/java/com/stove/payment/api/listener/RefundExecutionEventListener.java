@@ -1,7 +1,7 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -25,9 +25,9 @@ public class RefundExecutionEventListener {
     @KafkaListener(topics = Topics.ORDER, groupId = ReceiveRefundExecution.CONSUMER_GROUP,
             containerFactory = RefundKafkaConfiguration.REFUND_EXECUTION_FACTORY)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.REFUND_EXECUTION_REQUESTED)) {
-            RefundExecutionRequest request = RefundExecutionMapper.from(envelope, envelope.payloadAs(mapper, RefundExecutionRequestedEvent.class));
+        EventMessage message = EventMessage.from(record);
+        if (message.isType(EventType.REFUND_EXECUTION_REQUESTED)) {
+            RefundExecutionRequest request = RefundExecutionMapper.from(message, message.payloadAs(mapper, RefundExecutionRequestedEvent.class));
             receive.execute(request, PaymentTraceMapper.from(EventHeaders.values(record.headers(), EventHeaders.TRACE_PARENT)));
             // The receipt transaction has committed. A duplicate receipt can still need its first dispatch.
             cancellation.ifPresent(first -> first.execute(request.attemptId()));

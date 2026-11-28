@@ -15,7 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.CatalogProductPublishedEvent;
@@ -386,10 +386,10 @@ class StoreIntegrationTest {
             return result.getLong(1);
         }
     }
-    @Test void invalidEnvelopeAndIdentityConflictDoNotChangeProjection() {
+    @Test void invalidMessageAndIdentityConflictDoNotChangeProjection() {
         CatalogProductSnapshot p = product(1, 1, "Title", 1000);
         CatalogProductPublishedEvent event = CatalogProductPublishedEvent.of(p);
-        assertThatThrownBy(() -> apply.execute(CatalogProductMapper.from(new EventEnvelope(event.eventId(), event.eventType(), "wrong", ""), event)))
+        assertThatThrownBy(() -> apply.execute(CatalogProductMapper.from(new EventMessage(event.eventId(), event.eventType(), "wrong", ""), event)))
                 .isInstanceOf(BusinessException.class);
         assertThat(products.count()).isZero();
         apply.execute(p);

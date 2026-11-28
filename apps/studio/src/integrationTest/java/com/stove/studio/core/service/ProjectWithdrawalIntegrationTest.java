@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.payload.ProjectReleaseWithdrawalResolvedEvent;
 import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
 import com.stove.common.contract.payload.ProjectReviewWithdrawalResolvedEvent;
@@ -136,7 +136,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
     }
 
     @Test
-    void aResultWithTheWrongOriginOrReusedEnvelopeCannotFinalizeAnotherCommand() throws Exception {
+    void aResultWithTheWrongOriginOrReusedMessageCannotFinalizeAnotherCommand() throws Exception {
         Project project = ready();
         ProjectReviewRequest first = review.execute(project.getId(), project.getOwnerSubject(),
                 new SubmissionCommand("first", project.getContentVersion()));
@@ -176,7 +176,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
                 project.getContentVersion(), project.getProductCode(), "WITHDRAWN", project.getOwnerSubject(), "schedule changed",
                 Instant.now().truncatedTo(ChronoUnit.MICROS), first.getRequestEventId());
         ProjectReleaseWithdrawalResolvedEvent event = ProjectReleaseWithdrawalResolvedEvent.of(fact);
-        resolution.execute(ProjectWithdrawalResultMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        resolution.execute(ProjectWithdrawalResultMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), mapper.writeValueAsString(event)), event));
         assertThat(read.reviewRequest(read.requireOwned(project.getId(), project.getOwnerSubject())).approvedFor(project.getContentVersion())).isTrue();
         ProjectReleaseRequest next = release.execute(project.getId(), project.getOwnerSubject(),
@@ -232,13 +232,13 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
                 .isInstanceOf(BusinessException.class);
         ProjectReleaseWithdrawalResolvedEvent event = ProjectReleaseWithdrawalResolvedEvent.of(
                 fact(cancellation, current, "WITHDRAWN", project.getOwnerSubject(), first.getRequestEventId()));
-        resolution.execute(ProjectWithdrawalResultMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        resolution.execute(ProjectWithdrawalResultMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), mapper.writeValueAsString(event)), event));
         ProjectReleaseRequest next = release.execute(project.getId(), project.getOwnerSubject(), nextIntent);
         assertThat(next.getId()).isNotEqualTo(first.getId());
         assertThat(next.getReviewRequestId()).isEqualTo(nextReview.getId());
         assertThat(read.activeReleaseRequest(current).getId()).isEqualTo(next.getId());
-        resolution.execute(ProjectWithdrawalResultMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        resolution.execute(ProjectWithdrawalResultMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), mapper.writeValueAsString(event)), event));
         assertThat(read.releaseRequest(read.requireOwned(project.getId(), project.getOwnerSubject())).getId()).isEqualTo(next.getId());
         assertThat(count(project, "ProjectReleaseRequested")).isEqualTo(2);
@@ -310,7 +310,7 @@ class ProjectWithdrawalIntegrationTest extends StudioIntegrationTestBase {
         recordReviewEvent(ProjectReviewWithdrawalResolvedEvent.of(fact));
     }
     private void recordReviewEvent(ProjectReviewWithdrawalResolvedEvent event) throws Exception {
-        resolution.execute(ProjectWithdrawalResultMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        resolution.execute(ProjectWithdrawalResultMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), mapper.writeValueAsString(event)), event));
     }
     private int count(Project project, String eventType) {

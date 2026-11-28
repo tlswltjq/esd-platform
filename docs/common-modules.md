@@ -5,10 +5,10 @@
 
 | 모듈 | 책임 |
 |---|---|
-| `web` | 응답 봉투, 확장 가능한 오류 계약, Servlet 예외 처리·추적·API 문서 지원 |
+| `web` | 응답 형식, 확장 가능한 오류 계약, Servlet 예외 처리·추적·API 문서 지원 |
 | `security` | API JWT 검증, 역할 변환, 검증된 principal의 식별 정보 추출·주입 |
 | `jpa` | 영속성 감사와 공통 시간 필드 |
-| `contract` | 이벤트 계약: 토픽·이벤트 종류·payload, 봉투(`EventEnvelope.from(ConsumerRecord)`)·헤더 이름과 읽기(`EventHeaders`). Kafka 클라이언트(레코드·헤더 타입)와 Jackson만 의존 |
+| `contract` | 이벤트 계약: 토픽·이벤트 종류·payload, 이벤트 메시지(`EventMessage.from(ConsumerRecord)`)·헤더 이름과 읽기(`EventHeaders`). Kafka 클라이언트(레코드·헤더 타입)와 Jackson만 의존 |
 | `messaging` | 메시징 코어: JPA 트랜잭션과 연결되는 Outbox·릴레이(`KafkaTemplate`, 키 순서)·Inbox, 소비 격리(`JpaKeyQuarantine`)·키 단위 재투입(리스너 레지스트리로 그 그룹·토픽의 `@KafkaListener`를 부름), 운영 API, 추적 전파. `messaging-kafka`에 의존 |
 | `messaging-kafka` | Kafka 공통 모듈: 공용 오류 처리기(`DefaultErrorHandler`, 1·2·4초 재시도 뒤 격리), 멈춘 키 인터셉터(`StoppedKeyInterceptor`), 재시도 선택별 리스너 팩토리(`ListenerContainerFactories`: 재시도 제외·한 건씩·성공까지), 격리 인터페이스 `KeyQuarantine`(구현은 `messaging`), DB 없는 앱의 DLT와 그 운영 API. 리스너 동시성 기본값은 파티션 수 3(`KafkaListenerDefaults`, 앱 설정이 이김, [결정 212](decisions.md#kafka-listener-concurrency)). JPA·코어에 의존하지 않는다 |
 | `test` | 컨테이너 없는 테스트 지원 |
@@ -43,7 +43,7 @@ subject에서 조회한다. 세 식별자를 서로 대입하지 않는다. 업�
 
 ## 이벤트 계약
 
-`contract`(`com.stove.common.contract`)에는 이벤트 인터페이스·타입·토픽·payload와 봉투·헤더 이름을 둔다. 계약은 JPA 엔티티와
+`contract`(`com.stove.common.contract`)에는 이벤트 인터페이스·타입·토픽·payload와 이벤트 메시지·헤더 이름을 둔다. 계약은 JPA 엔티티와
 앱 구현을 참조하지 않는다. 각 업무 서비스가 자신이 발행하는 계약의 의미와 변경을 책임진다.
 이번 통합에서는 JSON 필드, topic, partition key, event type과 헤더 형식을 유지한다.
 업무 payload의 재설계는 발행·소비 서비스의 재정비 시 함께 검증한다.

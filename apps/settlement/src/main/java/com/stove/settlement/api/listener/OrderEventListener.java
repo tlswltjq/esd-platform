@@ -1,7 +1,7 @@
 package com.stove.settlement.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderPaidEvent;
@@ -22,8 +22,8 @@ public class OrderEventListener {
 
     @KafkaListener(topics = Topics.ORDER, groupId = RecordPaidSale.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType(EventType.ORDER_PAID))
-            recordPaidSale.execute(SettlementOrderMapper.from(envelope, envelope.payloadAs(mapper, OrderPaidEvent.class)));
+        EventMessage message = EventMessage.from(record);
+        if (message.isType(EventType.ORDER_PAID))
+            recordPaidSale.execute(SettlementOrderMapper.from(message, message.payloadAs(mapper, OrderPaidEvent.class)));
     }
 }

@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class CatalogHttpClientTest {
-    @Test void readsExistingPublicEnvelopesWithoutDependingOnCatalogClasses() throws Exception {
+    @Test void readsExistingPublicMessagesWithoutDependingOnCatalogClasses() throws Exception {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules().disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         CatalogProductSnapshot product = product(1, 3, "한글 게임", 2000);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

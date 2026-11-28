@@ -16,7 +16,7 @@ class ReleaseWithdrawalTest {
     @Test
     void aPublicationThatWonTheRaceCannotBeRolledBackByWithdrawal() {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(110, 2);
-        ReleaseSubmission submission = ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event);
+        ReleaseSubmission submission = ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event);
         Instant first = Instant.parse("2026-11-02T03:00:00Z");
         CatalogRelease release = CatalogRelease.decided(submission, CatalogFixtures.json(event.snapshot()), false, first);
         ProjectWithdrawalResult result = command(event, 1).resolve(release, event.snapshot());
@@ -30,7 +30,7 @@ class ReleaseWithdrawalTest {
     @Test
     void withdrawnReleasePreservesTheApprovalReferenceAndOriginalSnapshot() {
         ProjectReleaseRequestedEvent event = CatalogFixtures.event(111, 2);
-        ReleaseSubmission submission = ReleaseSubmissionMapper.from(CatalogFixtures.envelope(event), event);
+        ReleaseSubmission submission = ReleaseSubmissionMapper.from(CatalogFixtures.message(event), event);
         String snapshot = CatalogFixtures.json(event.snapshot());
         Instant first = Instant.parse("2026-11-02T03:00:00Z");
         CatalogRelease release = CatalogRelease.withdrawn(submission, snapshot, first, "creator", null);

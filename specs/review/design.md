@@ -11,7 +11,7 @@
 
 | 층 | 클래스 | 맡는 일 |
 |---|---|---|
-| `api.listener` | `StudioEventListener`, `ReviewSubmissionMapper`, `ReviewWithdrawalMapper` | 레코드 → `EventEnvelope` → (`eventType`, `schemaVersion`)으로 Mapper 선택 → 봉투·본문·키 검증 → 내부 입력 |
+| `api.listener` | `StudioEventListener`, `ReviewSubmissionMapper`, `ReviewWithdrawalMapper` | 레코드 → `EventMessage` → (`eventType`, `schemaVersion`)으로 Mapper 선택 → 헤더·본문·키 검증 → 내부 입력 |
 | `api.controller` | `ReviewController`, `dto/*` | 5개 업무 API, JWT `sub` → `actor` |
 | `core.domain` | `ProjectReview`, `ReviewStatus`, `ReviewSubmission`, `ReviewWithdrawal`, `ReviewWithdrawalInput`, `ReviewWithdrawalValues`, `ReviewGenreValues`, `ReviewRequestGate`, 저장소 인터페이스 | 상태 전이·값 검증 |
 | `core.service` | `ReceiveProjectReview`, `ReceiveReviewWithdrawal`, `DecideProjectReview`, `ReadProjectReviews`, `ReadReviewBuildDownload` | 잠금·Inbox·상태 변경·Outbox 트랜잭션 조율 |
@@ -116,7 +116,7 @@ ALTER TABLE project_review
 | H2 `POST …/reject`, 유효한 `feedback` | 거절(404) | 허용 → `REJECTED`, `ProjectReviewRejected` 발행 | 거절(409) | 같은 사유면 무변화(200), 다른 사유면 거절(409) | 거절(409) |
 | H3 `POST …/reject`, `feedback` 없음·공백·2000자 초과 또는 모르는 본문 칸 | 거절(400 `INVALID_REQUEST`, 본문 검증이 먼저) | 거절(400), 무변화 | 거절(400) | 거절(400) | 거절(400) |
 | H4 `GET` 상세·목록·`build-download` | 상세·열람 404, 목록은 빈 결과 | 무변화(조회; 열람은 200·409·503) | 무변화 | 무변화 | 무변화(종료 심사 URL 발급 범위는 M-RV-4) |
-| L1 Mapper 계약 위반(봉투 헤더·`eventId`/`eventType` 불일치·키 ≠ `productCode`·형식·읽을 수 없는 `schemaVersion`) | 거절(영구 실패, 업무 처리 전, Inbox 표시 없음) | 같음, 무변화 | 같음 | 같음 | 같음 |
+| L1 Mapper 계약 위반(헤더·`eventId`/`eventType` 불일치·키 ≠ `productCode`·형식·읽을 수 없는 `schemaVersion`) | 거절(영구 실패, 업무 처리 전, Inbox 표시 없음) | 같음, 무변화 | 같음 | 같음 | 같음 |
 | L2 `stove.studio.v1`의 다른 `eventType` | 무변화(건너뜀 지표, R8.7) | 무변화 | 무변화 | 무변화 | 무변화 |
 | J1 예약: 원요청 없는 철회 게이지 계산 | 무변화(미해결 철회를 셈) | 무변화 | 무변화 | 무변화 | 무변화 |
 | O1 ADMIN 실패 보관 재투입 | 재투입 레코드의 트리거 행(E1~E7·L1)과 같음 | 같음 | 같음 | 같음 | 같음 |
@@ -168,8 +168,8 @@ ALTER TABLE project_review
 
 | 이벤트(플랫폼 행) | 리스너 → Mapper | Mapper 검증 | 서비스 | 업무 멱등 키 | 실패 처리 |
 |---|---|---|---|---|---|
-| `ProjectReviewRequested` ([design 리터럴 표](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26), 흐름 1 S1) | `StudioEventListener.receive` → `ReviewSubmissionMapper.from` → `ReviewSubmission` | 봉투 `eventId`·`eventType` = 본문, 키 = `snapshot.productCode`, 본문 `snapshot` 있음. `ReviewSubmission` 생성자: ID 양수, 문자열 길이, `productCode` 형식, `currency`, 빌드 ID·크기·SHA-256 64자, `storagePath` 필수, 장르 1~3개 | `ReceiveProjectReview.execute` | PK `review_request_id`(같은 스냅샷이면 무변화, 다르면 충돌) | L1·E2·E3 영구 실패, 그 밖은 공통 재시도 |
-| `ProjectReviewWithdrawalRequested` (같은 표, S2) | 같은 리스너 → `ReviewWithdrawalMapper.from` → `ReviewWithdrawalInput` | 봉투 = 본문, 키 = `request.productCode`, `ReviewWithdrawalValues.requireEvent`·`requireInstruction`(ID 양수·형식·사유 1~2000자 또는 없음) | `ReceiveReviewWithdrawal.execute` | PK `withdrawal_id` + `requireSame` | L1·E6·E7 영구 실패 |
+| `ProjectReviewRequested` ([design 리터럴 표](../platform/design.md#eventtype에-없는-현행-이벤트-문자열-리터럴-10개-t26), 흐름 1 S1) | `StudioEventListener.receive` → `ReviewSubmissionMapper.from` → `ReviewSubmission` | 헤더 `eventId`·`eventType` = 본문, 키 = `snapshot.productCode`, 본문 `snapshot` 있음. `ReviewSubmission` 생성자: ID 양수, 문자열 길이, `productCode` 형식, `currency`, 빌드 ID·크기·SHA-256 64자, `storagePath` 필수, 장르 1~3개 | `ReceiveProjectReview.execute` | PK `review_request_id`(같은 스냅샷이면 무변화, 다르면 충돌) | L1·E2·E3 영구 실패, 그 밖은 공통 재시도 |
+| `ProjectReviewWithdrawalRequested` (같은 표, S2) | 같은 리스너 → `ReviewWithdrawalMapper.from` → `ReviewWithdrawalInput` | 헤더 = 본문, 키 = `request.productCode`, `ReviewWithdrawalValues.requireEvent`·`requireInstruction`(ID 양수·형식·사유 1~2000자 또는 없음) | `ReceiveReviewWithdrawal.execute` | PK `withdrawal_id` + `requireSame` | L1·E6·E7 영구 실패 |
 
 - 목표: 리스너는 `EventType` 상수로 타입을 고르고(T26), (`eventType`, `schemaVersion`)으로 Mapper를 고르며(결정 170), 모르는 타입은 건너뜀 지표를 낸다(T31). 이 리스너는 토픽 하나만 받으므로 (토픽, 타입) 짝 대조(P2.3-8)는 토픽 고정으로 충족한다.
 - 영구 실패 분류는 공통 예외 하나(T20)로 던진다. 지금은 `BusinessException(INVALID_REQUEST/CONFLICT)`·`DataIntegrityViolationException`이 모두 4회 재시도된다(RV-T5).

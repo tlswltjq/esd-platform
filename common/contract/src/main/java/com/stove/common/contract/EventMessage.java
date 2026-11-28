@@ -12,10 +12,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
  * @param key 이벤트의 Kafka 메시지 키(순서 키).
  * @param payload 전달할 이벤트 본문.
  */
-public record EventEnvelope(String eventId, String eventType, String key, String payload) {
+public record EventMessage(String eventId, String eventType, String key, String payload) {
 
     /**
-     * 레코드를 봉투로 정규화한다. 계약 헤더가 없으면 <b>여기서 끊는다.</b>
+     * 레코드를 이벤트 메시지로 정규화한다. 계약 헤더가 없으면 <b>여기서 끊는다.</b>
      *
      * <p>통과시키면 {@code eventId} 가 null 인 채로 멱등 가드까지 흘러가 비즈니스 로직이
      * 실행된 뒤 DB 제약에서 터진다 — 실패 지점이 입구가 아니라 트랜잭션 한복판이 된다.
@@ -25,13 +25,13 @@ public record EventEnvelope(String eventId, String eventType, String key, String
      * <p>판단할 수 없는 입력은 부수효과 이전에 거부한다. 이후 처리는 컨슈머의 에러 핸들러
      * 정책이 맡는다(재시도 소진 후 격리한다).
      */
-    public static EventEnvelope from(ConsumerRecord<String, String> record) {
+    public static EventMessage from(ConsumerRecord<String, String> record) {
         String eventId = EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_ID);
         String eventType = EventHeaders.lastValue(record.headers(), EventHeaders.EVENT_TYPE);
         requireHeader(eventId, EventHeaders.EVENT_ID, record);
         requireHeader(eventType, EventHeaders.EVENT_TYPE, record);
 
-        return new EventEnvelope(eventId, eventType, record.key(), record.value());
+        return new EventMessage(eventId, eventType, record.key(), record.value());
     }
 
     private static void requireHeader(String value, String name, ConsumerRecord<String, String> record) {

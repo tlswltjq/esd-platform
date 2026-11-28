@@ -17,11 +17,11 @@ public final class EventInputRules {
     private EventInputRules() {}
 
     @ArchTest
-    public static final ArchRule core_는_이벤트_봉투를_모른다 = noClasses()
+    public static final ArchRule core_는_이벤트_메시지를_모른다 = noClasses()
             .that().resideInAPackage("..core..")
             .should().dependOnClassesThat()
-            .haveFullyQualifiedName("com.stove.common.contract.EventEnvelope")
-            .because("봉투 검증과 외부 이벤트 변환은 api.listener 가 담당한다")
+            .haveFullyQualifiedName("com.stove.common.contract.EventMessage")
+            .because("이벤트 메시지 검증과 외부 이벤트 변환은 api.listener 가 담당한다")
             .allowEmptyShould(true);
 
     @ArchTest

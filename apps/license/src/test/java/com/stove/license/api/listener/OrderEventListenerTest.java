@@ -1,6 +1,6 @@
 package com.stove.license.api.listener;
 
-import static com.stove.license.LicenseFixtures.envelope;
+import static com.stove.license.LicenseFixtures.message;
 import static com.stove.license.LicenseFixtures.event;
 import static com.stove.license.LicenseFixtures.paid;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,7 +11,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -46,12 +46,12 @@ class OrderEventListenerTest {
     }
 
     @Test
-    void rejectsEnvelopeAndBodyMismatches() {
+    void rejectsHeaderAndBodyMismatches() {
         OrderPaidEvent e = event(paid());
-        for (EventEnvelope env : new EventEnvelope[]{null, new EventEnvelope("wrong", e.eventType(), e.orderNo(), ""),
-                new EventEnvelope(e.eventId(), EventType.ORDER_PLACED, e.orderNo(), ""), new EventEnvelope(e.eventId(), e.eventType(), "wrong", "")})
+        for (EventMessage env : new EventMessage[]{null, new EventMessage("wrong", e.eventType(), e.orderNo(), ""),
+                new EventMessage(e.eventId(), EventType.ORDER_PLACED, e.orderNo(), ""), new EventMessage(e.eventId(), e.eventType(), "wrong", "")})
             assertThatThrownBy(() -> LicenseOrderMapper.from(env, e)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> LicenseOrderMapper.from(envelope(e), null)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> LicenseOrderMapper.from(message(e), null)).isInstanceOf(BusinessException.class);
         verifyNoInteractions(grant);
     }
 

@@ -1,7 +1,7 @@
 package com.stove.payment.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderExpiredEvent;
@@ -18,7 +18,7 @@ public class OrderExpiryListener {
     private final ApplyOrderExpiry apply;
     @KafkaListener(topics = Topics.ORDER, groupId = ApplyOrderExpiry.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope=EventEnvelope.from(record);
-        if(envelope.isType(EventType.ORDER_EXPIRED))apply.execute(OrderExpiryMapper.from(envelope,envelope.payloadAs(mapper,OrderExpiredEvent.class)));
+        EventMessage message=EventMessage.from(record);
+        if(message.isType(EventType.ORDER_EXPIRED))apply.execute(OrderExpiryMapper.from(message,message.payloadAs(mapper,OrderExpiredEvent.class)));
     }
 }

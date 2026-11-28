@@ -158,7 +158,7 @@
 
 ### 발행 — `UserRegistered`
 
-- 계약 정본: [플랫폼 design 이벤트 목록 #1](../platform/design.md#eventtype-상수-42개--현행목표-분리안)(사실 "계정이 가입을 마쳤다", 토픽 `stove.auth.v1`, 키 `subject`, 소비자 없음, 상태 현행). 봉투·Outbox·재시도·`DEAD`는 [P2.1](../platform/requirements.md#p21-봉투)·[P2.2](../platform/requirements.md#p22-발행--transactional-outbox).
+- 계약 정본: [플랫폼 design 이벤트 목록 #1](../platform/design.md#eventtype-상수-42개--현행목표-분리안)(사실 "계정이 가입을 마쳤다", 토픽 `stove.auth.v1`, 키 `subject`, 소비자 없음, 상태 현행). 이벤트 메시지·Outbox·재시도·`DEAD`는 [P2.1](../platform/requirements.md#p21-이벤트-메시지)·[P2.2](../platform/requirements.md#p22-발행--transactional-outbox).
 - 이 모듈이 지키는 방법: `RegisterAccount.register`(`auth:core/service/RegisterAccount.java:35-52`) 한 트랜잭션 안에서 `saveAndFlush`(이메일 유일 제약) → `OutboxRecorder.record("UserAccount", subject, UserRegisteredEvent)` → `role_audit_log` 저장. 계정이 롤백되면 이벤트도 없다.
 - 본문: `eventId`·`occurredAt`·`subject`·`email`(`common/contract/.../payload/UserRegisteredEvent.java`). 목표 `occurredAt` = `user_account.created_at`(지금은 `UserRegisteredEvent.of`의 `Instant.now()`, AU-T14). `email` 칸은 notes F-2.
 - 재발행: [P2.2-7](../platform/requirements.md#p22-발행--transactional-outbox) — Auth는 `stove.messaging.ops.republish-owner=auth`, `outbox_republish` 이행, ADMIN 경로를 갖고, 허용 목록은 플랫폼 이벤트 표의 Auth 현행 행(`UserRegistered`)에서 만든다(AU-T10). 같은 키 안 발행 순번 헤더와 회수 정렬은 플랫폼 계약(1회차 지적 B1, 판정 전).

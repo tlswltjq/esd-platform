@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.DomainEvent;
 import com.stove.common.contract.Topics;
@@ -180,14 +180,14 @@ class ReviewWithdrawalIntegrationTest extends ReviewIntegrationTestBase {
     private long id() { return UUID.randomUUID().getMostSignificantBits() >>> 1; }
     private ProjectReviewRequestedEvent original() { return ReviewFixtures.event(id(), id()); }
     private void receive(ProjectReviewRequestedEvent event) {
-        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.envelope(event), event));
+        receive.execute(ReviewSubmissionMapper.from(ReviewFixtures.message(event), event));
     }
     private ProjectReviewWithdrawalRequestedEvent command(ProjectReviewRequestedEvent original, String reason) {
         return ProjectReviewWithdrawalRequestedEvent.of(new ProjectWithdrawalRequest(id(), original.reviewRequestId(),
                 original.snapshot().projectId(), original.snapshot().contentVersion(), original.partitionKey(), "creator", reason));
     }
     private ReviewWithdrawalInput input(ProjectReviewWithdrawalRequestedEvent event) {
-        return ReviewWithdrawalMapper.from(new EventEnvelope(event.eventId(), event.eventType(),
+        return ReviewWithdrawalMapper.from(new EventMessage(event.eventId(), event.eventType(),
                 event.partitionKey(), ReviewFixtures.json(event)), event);
     }
     private int count(String table, String column, Object value) {

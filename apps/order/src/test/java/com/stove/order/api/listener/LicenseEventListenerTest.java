@@ -9,7 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.Topics;
@@ -39,16 +39,16 @@ class LicenseEventListenerTest {
     }
 
     @Test
-    void rejectsEnvelopeMismatchesBeforeAnyBusinessWork() {
+    void rejectsHeaderMismatchesBeforeAnyBusinessWork() {
         LicenseGrantedEvent event = event();
-        for (EventEnvelope envelope : new EventEnvelope[]{null,
-                new EventEnvelope(id(), event.eventType(), event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), EventType.ORDER_PAID, event.orderNo(), ""),
-                new EventEnvelope(event.eventId(), event.eventType(), id(), "")}) {
-            assertThatThrownBy(() -> LicenseGrantMapper.from(envelope, event)).isInstanceOf(BusinessException.class);
+        for (EventMessage message : new EventMessage[]{null,
+                new EventMessage(id(), event.eventType(), event.orderNo(), ""),
+                new EventMessage(event.eventId(), EventType.ORDER_PAID, event.orderNo(), ""),
+                new EventMessage(event.eventId(), event.eventType(), id(), "")}) {
+            assertThatThrownBy(() -> LicenseGrantMapper.from(message, event)).isInstanceOf(BusinessException.class);
         }
         assertThatThrownBy(() -> LicenseGrantMapper.from(
-                new EventEnvelope(event.eventId(), event.eventType(), event.orderNo(), ""), null))
+                new EventMessage(event.eventId(), event.eventType(), event.orderNo(), ""), null))
                 .isInstanceOf(BusinessException.class);
         verifyNoInteractions(apply);
     }

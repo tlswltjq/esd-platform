@@ -1,7 +1,7 @@
 package com.stove.review.api.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stove.common.contract.EventEnvelope;
+import com.stove.common.contract.EventMessage;
 import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.ProjectReviewRequestedEvent;
 import com.stove.common.contract.payload.ProjectReviewWithdrawalRequestedEvent;
@@ -23,13 +23,13 @@ public class StudioEventListener {
 
     @KafkaListener(topics = Topics.STUDIO, groupId = ReceiveProjectReview.CONSUMER_GROUP)
     public void receive(ConsumerRecord<String, String> record) {
-        EventEnvelope envelope = EventEnvelope.from(record);
-        if (envelope.isType("ProjectReviewRequested")) {
+        EventMessage message = EventMessage.from(record);
+        if (message.isType("ProjectReviewRequested")) {
             receiveProjectReview.execute(
-                    ReviewSubmissionMapper.from(envelope, envelope.payloadAs(mapper, ProjectReviewRequestedEvent.class)));
-        } else if (envelope.isType("ProjectReviewWithdrawalRequested")) {
+                    ReviewSubmissionMapper.from(message, message.payloadAs(mapper, ProjectReviewRequestedEvent.class)));
+        } else if (message.isType("ProjectReviewWithdrawalRequested")) {
             receiveReviewWithdrawal.execute(ReviewWithdrawalMapper.from(
-                    envelope, envelope.payloadAs(mapper, ProjectReviewWithdrawalRequestedEvent.class)));
+                    message, message.payloadAs(mapper, ProjectReviewWithdrawalRequestedEvent.class)));
         }
     }
 }
